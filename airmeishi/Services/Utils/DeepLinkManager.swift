@@ -22,8 +22,8 @@ class DeepLinkManager: DeepLinkManagerProtocol, ObservableObject {
     @Published var lastReceivedCard: BusinessCard?
     @Published var pendingAction: DeepLinkAction?
     
-    private let baseURL = "https://airmeishi.app"
-    private let appClipURL = "https://airmeishi.app/clip"
+    private let baseURL = "https://solidarity.gg"
+    private let appClipURL = "https://solidarity.gg/clip"
     
     private let cardManager = CardManager.shared
     @MainActor private let contactRepository = ContactRepository.shared
@@ -382,9 +382,9 @@ struct URLSchemeConfig {
 
 /// Universal link configuration
 struct UniversalLinkConfig {
-    static let domain = "airmeishi.app"
+    static let domain = "solidarity.gg"
     static let basePath = "/share"
-    
+
     /// Validate if URL is a valid universal link
     static func isValidUniversalLink(_ url: URL) -> Bool {
         return url.host == domain && url.path.hasPrefix(basePath)
