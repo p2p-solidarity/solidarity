@@ -286,36 +286,181 @@ private struct CreateGroupSheet: View {
     private var isNameValid: Bool { trimmedName.count >= 3 }
 
     var body: some View {
-        Form {
-            Section("New Group") {
-                VStack(alignment: .leading, spacing: 6) {
-                    TextField("Group name", text: $groupName)
-                        .textInputAutocapitalization(.words)
-                        .autocorrectionDisabled()
-                        .submitLabel(.done)
-                        .focused($nameFieldFocused)
-                        .onSubmit { if isNameValid { localCreate() } }
-                    if !isNameValid && !groupName.isEmpty {
-                        Text("Name must be at least 3 characters")
-                            .font(.caption)
-                            .foregroundColor(.red)
+        ZStack {
+            // Dark gradient background
+            LinearGradient(
+                colors: [
+                    Color(red: 0.05, green: 0.05, blue: 0.08),
+                    Color(red: 0.08, green: 0.08, blue: 0.12)
+                ],
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
+            )
+            .ignoresSafeArea()
+
+            VStack(spacing: 24) {
+                // Header
+                VStack(spacing: 16) {
+                    Image(systemName: "person.3.fill")
+                        .font(.system(size: 48))
+                        .foregroundColor(.white)
+                        .padding(24)
+                        .background(
+                            Circle()
+                                .fill(
+                                    LinearGradient(
+                                        colors: [
+                                            Color.accentColor.opacity(0.3),
+                                            Color.accentColor.opacity(0.1)
+                                        ],
+                                        startPoint: .topLeading,
+                                        endPoint: .bottomTrailing
+                                    )
+                                )
+                        )
+
+                    VStack(spacing: 8) {
+                        Text("Create New Group")
+                            .font(.title)
+                            .fontWeight(.bold)
+                            .foregroundColor(.white)
+
+                        Text("Build a community with ZK privacy")
+                            .font(.subheadline)
+                            .foregroundColor(.white.opacity(0.7))
                     }
                 }
-                Toggle("Include my identity", isOn: $includeSelf)
-            }
-            Section {
-                Button {
-                    localCreate()
-                } label: {
-                    Text(isCreating ? "Creating..." : "Create Group")
-                        .frame(maxWidth: .infinity, alignment: .center)
+                .padding(.top, 40)
+
+                // Form Content
+                VStack(spacing: 20) {
+                    // Name Input
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("Group Name")
+                            .font(.subheadline)
+                            .fontWeight(.medium)
+                            .foregroundColor(.white.opacity(0.8))
+
+                        TextField("Enter group name", text: $groupName)
+                            .textInputAutocapitalization(.words)
+                            .autocorrectionDisabled()
+                            .submitLabel(.done)
+                            .focused($nameFieldFocused)
+                            .onSubmit { if isNameValid { localCreate() } }
+                            .foregroundColor(.white)
+                            .tint(.accentColor)
+                            .padding(16)
+                            .background(
+                                RoundedRectangle(cornerRadius: 12)
+                                    .fill(Color.white.opacity(0.1))
+                                    .overlay(
+                                        RoundedRectangle(cornerRadius: 12)
+                                            .stroke(
+                                                isNameValid || groupName.isEmpty
+                                                    ? Color.white.opacity(0.2)
+                                                    : Color.red.opacity(0.5),
+                                                lineWidth: 1
+                                            )
+                                    )
+                            )
+
+                        if !isNameValid && !groupName.isEmpty {
+                            HStack(spacing: 4) {
+                                Image(systemName: "exclamationmark.circle.fill")
+                                    .font(.caption2)
+                                Text("Name must be at least 3 characters")
+                                    .font(.caption)
+                            }
+                            .foregroundColor(.red)
+                        }
+                    }
+
+                    // Include Self Toggle
+                    HStack {
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text("Include my identity")
+                                .font(.subheadline)
+                                .fontWeight(.medium)
+                                .foregroundColor(.white)
+
+                            Text("Add yourself as the first member")
+                                .font(.caption)
+                                .foregroundColor(.white.opacity(0.5))
+                        }
+
+                        Spacer()
+
+                        Toggle("", isOn: $includeSelf)
+                            .tint(.accentColor)
+                    }
+                    .padding(16)
+                    .background(
+                        RoundedRectangle(cornerRadius: 12)
+                            .fill(Color.white.opacity(0.1))
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 12)
+                                    .stroke(Color.white.opacity(0.2), lineWidth: 1)
+                            )
+                    )
                 }
-                .buttonStyle(.borderedProminent)
-                .disabled(isCreating || !isNameValid)
+                .padding(.horizontal, 24)
+
+                Spacer()
+
+                // Bottom Button
+                VStack(spacing: 16) {
+                    Button {
+                        guard !isCreating && isNameValid else { return }
+                        localCreate()
+                    } label: {
+                        HStack(spacing: 8) {
+                            if isCreating {
+                                ProgressView()
+                                    .controlSize(.small)
+                                    .tint(.white)
+                            } else {
+                                Image(systemName: "plus.circle.fill")
+                            }
+                            Text(isCreating ? "Creating..." : "Create Group")
+                                .fontWeight(.semibold)
+                        }
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 16)
+                        .background(
+                            RoundedRectangle(cornerRadius: 12)
+                                .fill(
+                                    isNameValid && !isCreating
+                                        ? Color.accentColor
+                                        : Color(red: 0.2, green: 0.2, blue: 0.25)
+                                )
+                        )
+                        .foregroundColor(.white)
+                    }
+                    .disabled(!isNameValid || isCreating)
+
+                    Text("Groups use Semaphore ZK proofs for privacy")
+                        .font(.caption)
+                        .foregroundColor(.white.opacity(0.4))
+                }
+                .padding(.horizontal, 24)
+                .padding(.bottom, 32)
             }
         }
-        .navigationTitle("Create Group")
-        .toolbar { ToolbarItem(placement: .navigationBarTrailing) { Button("Cancel") { dismiss() } } }
+        .navigationTitle("New Group")
+        .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            ToolbarItem(placement: .navigationBarTrailing) {
+                Button {
+                    dismiss()
+                } label: {
+                    Image(systemName: "xmark.circle.fill")
+                        .font(.title3)
+                        .foregroundStyle(.white.opacity(0.8))
+                }
+            }
+        }
+        .toolbarBackground(Color.clear, for: .navigationBar)
+        .toolbarBackground(.hidden, for: .navigationBar)
         .onAppear { nameFieldFocused = true }
     }
 
