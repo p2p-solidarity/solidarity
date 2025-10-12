@@ -22,8 +22,8 @@ class DeepLinkManager: DeepLinkManagerProtocol, ObservableObject {
     @Published var lastReceivedCard: BusinessCard?
     @Published var pendingAction: DeepLinkAction?
     
-    private let baseURL = "https://airmeishi.app"
-    private let appClipURL = "https://airmeishi.app/clip"
+    private let baseURL = "https://solidarity.gg"
+    private let appClipURL = "https://solidarity.gg/clip"
     
     private let cardManager = CardManager.shared
     @MainActor private let contactRepository = ContactRepository.shared
@@ -39,12 +39,17 @@ class DeepLinkManager: DeepLinkManagerProtocol, ObservableObject {
     /// Handle incoming URL from various sources
     func handleIncomingURL(_ url: URL) -> Bool {
         print("Handling incoming URL: \(url)")
-        
+
         guard let components = URLComponents(url: url, resolvingAgainstBaseURL: false) else {
             print("Invalid URL format")
             return false
         }
-        
+
+        // Check for airmeishi:// custom URL scheme
+        if components.scheme == "airmeishi" {
+            return handleCustomSchemeURL(components)
+        }
+
         // Determine the type of URL and handle accordingly
         if isBusinessCardURL(components) {
             return handleBusinessCardURL(components)
@@ -53,7 +58,7 @@ class DeepLinkManager: DeepLinkManagerProtocol, ObservableObject {
         } else if isAppClipURL(components) {
             return handleAppClipURL(components)
         }
-        
+
         return false
     }
     
@@ -166,6 +171,73 @@ class DeepLinkManager: DeepLinkManagerProtocol, ObservableObject {
             .store(in: &cancellables)
     }
     
+    private func handleCustomSchemeURL(_ components: URLComponents) -> Bool {
+        print("Handling custom scheme URL: \(components)")
+
+        // Handle airmeishi://contact?name=...&job=...
+        if components.host == "contact" {
+            return handleContactSchemeURL(components)
+        }
+
+        return false
+    }
+
+    private func handleContactSchemeURL(_ components: URLComponents) -> Bool {
+        guard let queryItems = components.queryItems else {
+            print("No query items in contact URL")
+            return false
+        }
+
+        var name: String?
+        var job: String?
+
+        for item in queryItems {
+            switch item.name {
+            case "name":
+                name = item.value?.removingPercentEncoding
+            case "job":
+                job = item.value?.removingPercentEncoding
+            default:
+                break
+            }
+        }
+
+        guard let contactName = name, !contactName.isEmpty else {
+            print("Missing or empty name in contact URL")
+            return false
+        }
+
+        // Create a minimal business card from the URL parameters
+        let businessCard = BusinessCard(
+            name: contactName,
+            title: job?.isEmpty == false ? job : nil
+        )
+
+        // Save to contacts on main thread
+        Task { @MainActor in
+            let contact = Contact(
+                businessCard: businessCard,
+                source: .qrCode,
+                verificationStatus: .unverified
+            )
+
+            let result = contactRepository.addContact(contact)
+
+            switch result {
+            case .success:
+                lastReceivedCard = businessCard
+                pendingAction = .showReceivedCard(businessCard)
+                print("Successfully received card from airmeishi:// URL: \(contactName)")
+
+            case .failure(let error):
+                pendingAction = .showError("Failed to save card: \(error.localizedDescription)")
+                print("Failed to save card: \(error)")
+            }
+        }
+
+        return true
+    }
+
     private func isBusinessCardURL(_ components: URLComponents) -> Bool {
         return components.path.contains("/card") || components.path.contains("/share")
     }
@@ -310,9 +382,9 @@ struct URLSchemeConfig {
 
 /// Universal link configuration
 struct UniversalLinkConfig {
-    static let domain = "airmeishi.app"
+    static let domain = "solidarity.gg"
     static let basePath = "/share"
-    
+
     /// Validate if URL is a valid universal link
     static func isValidUniversalLink(_ url: URL) -> Bool {
         return url.host == domain && url.path.hasPrefix(basePath)

@@ -183,15 +183,37 @@ class QRCodeManager: NSObject, ObservableObject {
     
     /// Process scanned QR code data
     func processScannedData(_ data: String) {
+        // Check if this is an airmeishi:// URL scheme
+        if data.hasPrefix("airmeishi://") {
+            // Handle via DeepLinkManager
+            let handled = DeepLinkManager.shared.handleQRCodeScan(data)
+            if handled {
+                // DeepLinkManager will handle card creation
+                // We need to wait for it to complete and then set our state
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                    if let receivedCard = DeepLinkManager.shared.lastReceivedCard {
+                        self.lastScannedCard = receivedCard
+                        self.lastVerificationStatus = .unverified
+                        self.scanError = nil
+                    }
+                }
+            } else {
+                DispatchQueue.main.async {
+                    self.scanError = .sharingError("Invalid airmeishi:// URL format")
+                }
+            }
+            return
+        }
+
         // Try to decode as base64 encrypted data
         guard let encryptedData = Data(base64Encoded: data) else {
             scanError = .sharingError("Invalid QR code format")
             return
         }
-        
+
         // Decrypt the payload
         let decryptionResult = encryptionManager.decrypt(encryptedData, as: QRSharingPayload.self)
-        
+
         switch decryptionResult {
         case .success(let payload):
             // Check expiration
@@ -199,7 +221,7 @@ class QRCodeManager: NSObject, ObservableObject {
                 scanError = .sharingError("Shared card has expired")
                 return
             }
-            
+
             // Check usage limits
             if let maxUses = payload.maxUses,
                let currentUses = payload.currentUses,
@@ -207,13 +229,13 @@ class QRCodeManager: NSObject, ObservableObject {
                 scanError = .sharingError("Share link has reached maximum uses")
                 return
             }
-            
+
             // Verify issuer commitment / proof if present
             let status = verifyIssuer(commitment: payload.issuerCommitment, proof: payload.issuerProof, message: payload.shareId.uuidString, scope: payload.sharingLevel.rawValue)
             DispatchQueue.main.async {
                 self.lastVerificationStatus = status
             }
-            
+
             // Optionally verify selective disclosure proof if included
             if let proof = payload.sdProof {
                 let vr = ProofGenerationManager.shared.verifySelectiveDisclosureProof(proof, expectedBusinessCardId: payload.businessCard.id.uuidString)
@@ -222,13 +244,13 @@ class QRCodeManager: NSObject, ObservableObject {
                     DispatchQueue.main.async { self.lastVerificationStatus = .failed }
                 }
             }
-            
+
             // Successfully decoded business card
             DispatchQueue.main.async {
                 self.lastScannedCard = payload.businessCard
                 self.scanError = nil
             }
-            
+
         case .failure(let error):
             scanError = error
         }
