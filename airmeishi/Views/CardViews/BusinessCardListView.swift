@@ -13,21 +13,18 @@ struct BusinessCardListView: View {
     @EnvironmentObject private var proximityManager: ProximityManager
     @EnvironmentObject private var theme: ThemeManager
     @StateObject private var cardManager = CardManager.shared
-    @State private var showingCreateCard = false
-    @State private var showingOCRScanner = false
     @State private var featuredCard: BusinessCard?
     @State private var cardToEdit: BusinessCard?
     @State private var isFeatured = false
-    @State private var isSharing = false
-    @State private var showingAppearance = false
     @State private var showingAddPass = false
     @State private var pendingPass: PKPass?
     @State private var pendingPassCard: BusinessCard?
     @State private var alertMessage: String?
-    @State private var draggedCard: BusinessCard?
-    @State private var dragOffset: CGSize = .zero
-    @State private var deckOrder: [UUID] = []
-    @State private var rotationAngles: [UUID: Double] = [:]
+    @State private var showingPrivacySettings = false
+    @State private var showingCreateCard = false
+    @State private var showingAppearanceSettings = false
+    @State private var showingBackupSettings = false
+    @State private var showingGroupManagement = false
     
     var body: some View {
         NavigationView {
@@ -37,61 +34,25 @@ struct BusinessCardListView: View {
                     ProgressView("Loading cards...")
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
                 } else if cardManager.businessCards.isEmpty {
-                    EmptyWalletView(
-                        onCreate: {
-                            featuredCard = nil
-                            DispatchQueue.main.async {
-                                showingCreateCard = true
-                            }
-                        },
-                        onScan: { showingOCRScanner = true }
-                    )
+                    makeEmptyStateView()
                 } else {
-                    makeStack()
+                    makeSingleCardView()
                 }
             }
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .navigationBarTrailing) {
-                    Menu {
-                        Button(action: {
-                            featuredCard = nil
-                            DispatchQueue.main.async {
-                                showingCreateCard = true
-                            }
-                        }) {
-                            Label("Create Card", systemImage: "plus.circle.fill")
+                    Button(action: {
+                        if let card = cardManager.businessCards.first {
+                            beginEdit(card)
+                        } else {
+                            showingCreateCard = true
                         }
-                        Button(action: { showingOCRScanner = true }) {
-                            Label("Scan Card", systemImage: "camera.fill")
-                        }
-                        Divider()
-                        Button(action: { showingAppearance = true }) {
-                            Label("Appearance", systemImage: "paintbrush.fill")
-                        }
-                    } label: {
-                        // Black & white style button
-                        HStack(spacing: 4) {
-                            Image(systemName: "plus")
-                                .font(.system(size: 16, weight: .bold))
-                            Text("Add")
-                                .font(.system(size: 16, weight: .semibold))
-                        }
-                        .foregroundColor(.white)
-                        .padding(.horizontal, 16)
-                        .padding(.vertical, 8)
-                        .background(
-                            RoundedRectangle(cornerRadius: 20, style: .continuous)
-                                .fill(Color.black)
-                                .shadow(color: Color.black.opacity(0.3), radius: 8, x: 0, y: 4)
-                        )
+                    }) {
+                        Image(systemName: "person.crop.rectangle")
+                            .font(.system(size: 18, weight: .semibold))
+                            .foregroundColor(.white)
                     }
-                }
-            }
-            .sheet(isPresented: $showingCreateCard) {
-                // Create mode: always nil businessCard, always forceCreate
-                BusinessCardFormView(businessCard: nil, forceCreate: true) { saved in
-                    featuredCard = saved
                 }
             }
             .sheet(item: $cardToEdit) { card in
@@ -100,18 +61,41 @@ struct BusinessCardListView: View {
                     cardToEdit = nil
                 }
             }
-            .sheet(isPresented: $showingOCRScanner) {
-                OCRScannerView { extracted in
-                    featuredCard = extracted
-                    isFeatured = true
-                    DispatchQueue.main.async {
-                        showingCreateCard = true
+            .sheet(isPresented: $showingAppearanceSettings) {
+                NavigationView { AppearanceSettingsView() }
+                    .environmentObject(theme)
+            }
+            .sheet(isPresented: $showingBackupSettings) {
+                NavigationView { BackupSettingsView() }
+            }
+            .sheet(isPresented: $showingGroupManagement) {
+                GroupManagementView()
+            }
+            .sheet(isPresented: $showingPrivacySettings) {
+                if let card = cardManager.businessCards.first {
+                    let cardId = card.id
+                    NavigationView {
+                        PrivacySettingsView(sharingPreferences: Binding(
+                            get: {
+                                if let currentCard = cardManager.businessCards.first(where: { $0.id == cardId }) {
+                                    return currentCard.sharingPreferences
+                                }
+                                return card.sharingPreferences
+                            },
+                            set: { newPreferences in
+                                if var updatedCard = cardManager.businessCards.first(where: { $0.id == cardId }) {
+                                    updatedCard.sharingPreferences = newPreferences
+                                    _ = cardManager.updateCard(updatedCard)
+                                }
+                            }
+                        ))
                     }
                 }
             }
-            .sheet(isPresented: $showingAppearance) {
-                NavigationView { AppearanceSettingsView() }
-                    .environmentObject(theme)
+            .sheet(isPresented: $showingCreateCard) {
+                BusinessCardFormView(forceCreate: true) { saved in
+                    showingCreateCard = false
+                }
             }
             .sheet(isPresented: $showingAddPass) {
                 ZStack {
@@ -154,8 +138,6 @@ struct BusinessCardListView: View {
         }
         .overlay(alignment: .top) { sharingBannerTop }
         .overlay { focusedOverlay }
-        .onAppear { initializeDeckOrder() }
-        .onChange(of: cardManager.businessCards) { _, _ in synchronizeDeckWithData() }
     }
 }
 
@@ -163,57 +145,60 @@ struct BusinessCardListView: View {
 
 private extension BusinessCardListView {
     @ViewBuilder
-    func makeStack() -> some View {
-        WalletStackListView(
-            cards: orderedCards,
-            onEdit: beginEdit,
-            onAddToWallet: addToWallet,
-            onFocus: handleFocus,
-            onDrag: handleDragChange,
-            onDragEnd: handleDragEnd,
-            onLongPress: shuffleDeck,
-            rotationFor: rotationFor
-        )
-    }
-    var orderedCards: [BusinessCard] {
-        let idToCard: [UUID: BusinessCard] = Dictionary(uniqueKeysWithValues: cardManager.businessCards.map { ($0.id, $0) })
-        var result: [BusinessCard] = []
-        for id in deckOrder {
-            if let c = idToCard[id] { result.append(c) }
+    func makeSingleCardView() -> some View {
+        ScrollView {
+            VStack(spacing: 0) {
+                if let card = cardManager.businessCards.first {
+                    // Navigation buttons container at top
+                    VStack(spacing: 0) {
+                        NavigationButtonsView(
+                            onPrivacy: {
+                                showingPrivacySettings = true
+                            },
+                            onAppearance: {
+                                showingAppearanceSettings = true
+                            },
+                            onBackup: {
+                                showingBackupSettings = true
+                            },
+                            onGroup: {
+                                showingGroupManagement = true
+                            },
+                            isPrivacyEnabled: true
+                        )
+                        .padding(.horizontal, 16)
+                        .padding(.top, 12)
+                        .padding(.bottom, 12)
+                    }
+                    .background(
+                        RoundedRectangle(cornerRadius: 20, style: .continuous)
+                            .fill(Color.gray.opacity(0.12))
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 20, style: .continuous)
+                                    .stroke(Color.white.opacity(0.08), lineWidth: 1)
+                            )
+                    )
+                    .padding(.horizontal, 16)
+                    .padding(.top, 20)
+                    
+                    // Card section
+                    WalletCardView(
+                        card: card,
+                        onEdit: { beginEdit(card) },
+                        onAddToWallet: { addToWallet(card) }
+                    )
+                    .frame(height: 220)
+                    .padding(.horizontal, 16)
+                    .padding(.top, 20)
+                    .onTapGesture {
+                        handleFocus(card)
+                    }
+                }
+            }
+            .padding(.bottom, 40)
         }
-        // Append any new cards not tracked yet
-        let remaining = cardManager.businessCards.filter { !deckOrder.contains($0.id) }
-        result.append(contentsOf: remaining)
-        return result
     }
-
-    func initializeDeckOrder() {
-        deckOrder = cardManager.businessCards.map { $0.id }
-    }
-
-    func synchronizeDeckWithData() {
-        // Keep deck order stable; append new ids at the end, remove missing ones
-        let currentIds = Set(cardManager.businessCards.map { $0.id })
-        deckOrder = deckOrder.filter { currentIds.contains($0) }
-        for id in cardManager.businessCards.map({ $0.id }) where !deckOrder.contains(id) {
-            deckOrder.append(id)
-        }
-    }
-
-    func shuffleDeck() {
-        let generator = UIImpactFeedbackGenerator(style: .medium)
-        generator.impactOccurred()
-        withAnimation(.spring(response: 0.6, dampingFraction: 0.75)) {
-            deckOrder.shuffle()
-            var angles: [UUID: Double] = [:]
-            for id in deckOrder { angles[id] = Double(Int.random(in: -8...8)) }
-            rotationAngles = angles
-        }
-    }
-    func startSharing(_ card: BusinessCard) {
-        proximityManager.stopAdvertising()
-        proximityManager.startAdvertising(with: card, sharingLevel: .professional)
-    }
+    
     func handleFocus(_ card: BusinessCard) {
         // Add haptic feedback for better UX
         let impact = UIImpactFeedbackGenerator(style: .medium)
@@ -224,20 +209,6 @@ private extension BusinessCardListView {
             isFeatured = true
         }
     }
-
-    func handleDragChange(_ card: BusinessCard, _ offset: CGSize) {
-        draggedCard = card
-        dragOffset = offset
-    }
-
-    func handleDragEnd(_ card: BusinessCard) {
-        withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
-            draggedCard = nil
-            dragOffset = .zero
-        }
-    }
-
-    func rotationFor(_ id: UUID) -> Double { rotationAngles[id] ?? 0 }
 
 
     func beginEdit(_ card: BusinessCard) {
@@ -332,63 +303,53 @@ private extension BusinessCardListView {
         _ = cardManager.deleteCard(id: card.id)
         if featuredCard?.id == card.id { isFeatured = false }
     }
-}
-
-// MARK: - Wallet Stack List (Apple Wallet-like)
-
-private struct WalletStackListView: View {
-    let cards: [BusinessCard]
-    let onEdit: (BusinessCard) -> Void
-    let onAddToWallet: (BusinessCard) -> Void
-    let onFocus: (BusinessCard) -> Void
-    let onDrag: (BusinessCard, CGSize) -> Void
-    let onDragEnd: (BusinessCard) -> Void
-    let onLongPress: () -> Void
-    let rotationFor: (UUID) -> Double
     
-    private let cardHeight: CGFloat = 220
-    private let overlap: CGFloat = 64
-    
-    var body: some View {
-        ScrollView(showsIndicators: false) {
-            LazyVStack(spacing: 0) {
-                ForEach(Array(cards.enumerated()), id: \.offset) { pair in
-                    let index = pair.offset
-                    let card = pair.element
-                    WalletCardView(card: card, onEdit: { onEdit(card) }, onAddToWallet: { onAddToWallet(card) })
-                        .frame(height: cardHeight)
-                        .offset(y: CGFloat(index) * overlap)
-                        .rotationEffect(.degrees(rotationFor(card.id)))
-                        .offset(x: CGFloat(rotationFor(card.id)) * 1.2)
-                        .scaleEffect(1 - CGFloat(min(index, 4)) * 0.02)
-                        .zIndex(Double(index))
-                        .onTapGesture { onFocus(card) }
-                        .simultaneousGesture(
-                            DragGesture()
-                                .onChanged { value in
-                                    let translation = value.translation
-                                    if abs(translation.width) > abs(translation.height) {
-                                        onDrag(card, translation)
-                                    }
-                                }
-                                .onEnded { value in
-                                    let translation = value.translation
-                                    if abs(translation.width) > abs(translation.height) {
-                                        onDragEnd(card)
-                                    }
-                                }
-                        )
-                        .padding(.horizontal, 16)
-                        .padding(.top, index == 0 ? 16 : -overlap)
-                        .padding(.bottom, -overlap)
+    @ViewBuilder
+    func makeEmptyStateView() -> some View {
+        ScrollView {
+            VStack(spacing: 0) {
+                // Navigation buttons container at top
+                VStack(spacing: 0) {
+                    NavigationButtonsView(
+                        onPrivacy: {
+                            // Privacy settings only available when card exists
+                            if !cardManager.businessCards.isEmpty {
+                                showingPrivacySettings = true
+                            }
+                        },
+                        onAppearance: {
+                            showingAppearanceSettings = true
+                        },
+                        onBackup: {
+                            showingBackupSettings = true
+                        },
+                        onGroup: {
+                            showingGroupManagement = true
+                        },
+                        isPrivacyEnabled: false
+                    )
+                    .padding(.horizontal, 16)
+                    .padding(.top, 16)
+                    .padding(.bottom, 16)
                 }
+                .background(
+                    RoundedRectangle(cornerRadius: 20, style: .continuous)
+                        .fill(Color.gray.opacity(0.12))
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 20, style: .continuous)
+                                .stroke(Color.white.opacity(0.08), lineWidth: 1)
+                        )
+                )
+                .padding(.horizontal, 16)
+                .padding(.top, 20)
+                
+                EmptyWalletView()
             }
-            .gesture(LongPressGesture(minimumDuration: 0.6).onEnded { _ in onLongPress() })
-            .padding(.bottom, CGFloat(max(0, cards.count - 1)) * overlap + 160)
+            .padding(.bottom, 40)
         }
-        .scrollDisabled(false)
     }
 }
+
 
 // A single large vertical wallet card with top-right category and edit/share control
 private struct WalletCardView: View {
@@ -572,9 +533,6 @@ private struct CategoryTag: View {
 
 
 private struct EmptyWalletView: View {
-    let onCreate: () -> Void
-    let onScan: () -> Void
-
     var body: some View {
         VStack(spacing: 32) {
             // Animated icon
@@ -596,56 +554,102 @@ private struct EmptyWalletView: View {
             }
 
             VStack(spacing: 12) {
-                Text("No Business Cards")
+                Text("No Business Card")
                     .font(.title.bold())
                     .foregroundColor(.white)
 
-                Text("Create your first card or scan one to get started")
+                Text("You need to create a card first")
                     .font(.body)
                     .foregroundColor(.white.opacity(0.7))
                     .multilineTextAlignment(.center)
                     .padding(.horizontal, 40)
             }
-
-            VStack(spacing: 16) {
-                Button(action: onCreate) {
-                    HStack(spacing: 12) {
-                        Image(systemName: "plus.circle.fill")
-                            .font(.title3)
-                        Text("Create New Card")
-                            .fontWeight(.semibold)
-                    }
-                    .foregroundColor(.black)
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 16)
-                    .background(Color.white)
-                    .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
-                    .shadow(color: .black.opacity(0.2), radius: 8, x: 0, y: 4)
-                }
-
-                Button(action: onScan) {
-                    HStack(spacing: 12) {
-                        Image(systemName: "camera.fill")
-                            .font(.title3)
-                        Text("Scan Business Card")
-                            .fontWeight(.semibold)
-                    }
-                    .foregroundColor(.white)
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 16)
-                    .background(Color.white.opacity(0.15))
-                    .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 16, style: .continuous)
-                            .stroke(Color.white.opacity(0.3), lineWidth: 1.5)
-                    )
-                }
-            }
-            .padding(.horizontal, 32)
         }
         .padding()
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 }
 
+// MARK: - Navigation Buttons View
+
+private struct NavigationButtonsView: View {
+    let onPrivacy: () -> Void
+    let onAppearance: () -> Void
+    let onBackup: () -> Void
+    let onGroup: () -> Void
+    var isPrivacyEnabled: Bool = true
+    
+    var body: some View {
+        HStack(spacing: 12) {
+            NavigationButton(
+                icon: "lock.shield",
+                title: "Privacy",
+                action: onPrivacy,
+                isEnabled: isPrivacyEnabled
+            )
+            
+            NavigationButton(
+                icon: "paintbrush.fill",
+                title: "Appearance",
+                action: onAppearance
+            )
+            
+            NavigationButton(
+                icon: "square.and.arrow.up",
+                title: "Backup",
+                action: onBackup
+            )
+            
+            NavigationButton(
+                icon: "person.3.fill",
+                title: "Group Management",
+                action: onGroup
+            )
+        }
+    }
+}
+
+private struct NavigationButton: View {
+    let icon: String
+    let title: String
+    let action: () -> Void
+    var isEnabled: Bool = true
+    
+    var body: some View {
+        Button(action: {
+            guard isEnabled else { return }
+            let impact = UIImpactFeedbackGenerator(style: .medium)
+            impact.impactOccurred()
+            action()
+        }) {
+            VStack(spacing: 8) {
+                Image(systemName: icon)
+                    .font(.system(size: 22, weight: .semibold))
+                    .foregroundColor(isEnabled ? .white : .white.opacity(0.5))
+                    .frame(width: 44, height: 44)
+                    .background(
+                        RoundedRectangle(cornerRadius: 10, style: .continuous)
+                            .fill(isEnabled ? Color.white.opacity(0.18) : Color.white.opacity(0.08))
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 10, style: .continuous)
+                                    .stroke(Color.white.opacity(isEnabled ? 0.25 : 0.1), lineWidth: 1.5)
+                            )
+                    )
+                
+                Text(title)
+                    .font(.caption2.weight(.semibold))
+                    .foregroundColor(isEnabled ? .white : .white.opacity(0.5))
+                    .multilineTextAlignment(.center)
+                    .lineLimit(2)
+                    .minimumScaleFactor(0.75)
+            }
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 10)
+        }
+        .buttonStyle(PlainButtonStyle())
+        .disabled(!isEnabled)
+    }
+}
+
 #Preview { BusinessCardListView() }
+

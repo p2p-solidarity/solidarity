@@ -176,9 +176,19 @@ struct SharingPreferences: Codable, Equatable {
         expirationDate: Date? = nil,
         useZK: Bool = false
     ) {
-        self.publicFields = publicFields
-        self.professionalFields = professionalFields
-        self.personalFields = personalFields
+        // Ensure name is always included in all levels
+        var publicSet = publicFields
+        publicSet.insert(.name)
+        self.publicFields = publicSet
+        
+        var professionalSet = professionalFields
+        professionalSet.insert(.name)
+        self.professionalFields = professionalSet
+        
+        var personalSet = personalFields
+        personalSet.insert(.name)
+        self.personalFields = personalSet
+        
         self.allowForwarding = allowForwarding
         self.expirationDate = expirationDate
         self.useZK = useZK
@@ -206,9 +216,18 @@ extension SharingPreferences {
 
     init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
-        self.publicFields = try container.decodeIfPresent(Set<BusinessCardField>.self, forKey: .publicFields) ?? [.name, .title, .company]
-        self.professionalFields = try container.decodeIfPresent(Set<BusinessCardField>.self, forKey: .professionalFields) ?? [.name, .title, .company, .email, .skills]
-        self.personalFields = try container.decodeIfPresent(Set<BusinessCardField>.self, forKey: .personalFields) ?? BusinessCardField.allCases.asSet()
+        var publicSet = try container.decodeIfPresent(Set<BusinessCardField>.self, forKey: .publicFields) ?? [.name, .title, .company]
+        publicSet.insert(.name) // Ensure name is always included
+        self.publicFields = publicSet
+        
+        var professionalSet = try container.decodeIfPresent(Set<BusinessCardField>.self, forKey: .professionalFields) ?? [.name, .title, .company, .email, .skills]
+        professionalSet.insert(.name) // Ensure name is always included
+        self.professionalFields = professionalSet
+        
+        var personalSet = try container.decodeIfPresent(Set<BusinessCardField>.self, forKey: .personalFields) ?? BusinessCardField.allCases.asSet()
+        personalSet.insert(.name) // Ensure name is always included
+        self.personalFields = personalSet
+        
         self.allowForwarding = try container.decodeIfPresent(Bool.self, forKey: .allowForwarding) ?? false
         self.expirationDate = try container.decodeIfPresent(Date.self, forKey: .expirationDate)
         self.useZK = try container.decodeIfPresent(Bool.self, forKey: .useZK) ?? false

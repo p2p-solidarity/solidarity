@@ -10,6 +10,12 @@ import SwiftUI
 struct PrivacySettingsView: View {
     @Binding var sharingPreferences: SharingPreferences
     @Environment(\.dismiss) private var dismiss
+    @State private var selectedLevel: SharingLevel = .public
+    
+    // Get all fields except name (which is always required)
+    private var selectableFields: [BusinessCardField] {
+        BusinessCardField.allCases.filter { $0 != .name }
+    }
     
     var body: some View {
         Form {
@@ -23,32 +29,68 @@ struct PrivacySettingsView: View {
                 Text("Zero-Knowledge")
             }
             
-            // Cool level list
-            Section("Privacy Levels") {
-                VStack(spacing: 12) {
-                    LevelCardView(
-                        title: "Public",
-                        subtitle: "Visible to anyone scanning your QR",
-                        icon: "globe",
-                        fields: sharingPreferences.publicFields,
-                        useZK: sharingPreferences.useZK
-                    )
-                    LevelCardView(
-                        title: "Professional",
-                        subtitle: "For business contexts",
-                        icon: "briefcase",
-                        fields: sharingPreferences.professionalFields,
-                        useZK: sharingPreferences.useZK
-                    )
-                    LevelCardView(
-                        title: "Personal",
-                        subtitle: "Full info for trusted contacts",
-                        icon: "person.crop.circle",
-                        fields: sharingPreferences.personalFields,
-                        useZK: sharingPreferences.useZK
-                    )
+            // Privacy Level Selector - Swipeable cards
+            Section {
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 12) {
+                        ForEach(SharingLevel.allCases, id: \.self) { level in
+                            PrivacyLevelCard(
+                                level: level,
+                                isSelected: selectedLevel == level,
+                                fieldCount: fieldsForLevel(level).count
+                            ) {
+                                withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
+                                    selectedLevel = level
+                                }
+                            }
+                        }
+                    }
+                    .padding(.horizontal, 4)
                 }
-                .listRowInsets(EdgeInsets())
+                .frame(height: 100)
+            } header: {
+                Text("Select Privacy Level")
+            }
+            
+            // Fields Selection for Selected Level
+            Section {
+                VStack(alignment: .leading, spacing: 16) {
+                    // Name is always included
+                    HStack {
+                        Image(systemName: "person.fill")
+                            .foregroundColor(.blue)
+                            .frame(width: 24)
+                        Text("Name")
+                            .font(.subheadline.weight(.medium))
+                        Spacer()
+                        Image(systemName: "checkmark.circle.fill")
+                            .foregroundColor(.green)
+                            .font(.system(size: 18))
+                        Text("Required")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                    }
+                    .padding(.vertical, 8)
+                    
+                    Divider()
+                    
+                    // Selectable fields
+                    ForEach(selectableFields, id: \.self) { field in
+                        FieldToggleRow(
+                            field: field,
+                            isEnabled: fieldsForSelectedLevel.contains(field),
+                            onToggle: { enabled in
+                                toggleField(field, enabled: enabled)
+                            }
+                        )
+                    }
+                }
+                .padding(.vertical, 8)
+            } header: {
+                Text("Fields for \(selectedLevel.displayName)")
+            } footer: {
+                Text(footerTextForLevel(selectedLevel))
+                    .font(.caption)
             }
             
             Section("Additional Settings") {
@@ -69,39 +111,6 @@ struct PrivacySettingsView: View {
                 .foregroundColor(.red)
                 .disabled(sharingPreferences.expirationDate == nil)
             }
-            
-            Section {
-                VStack(alignment: .leading, spacing: 8) {
-                    Text("Privacy Levels:")
-                        .font(.headline)
-                    
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text("Public")
-                            .fontWeight(.medium)
-                        Text("Information visible to anyone who scans your QR code")
-                            .font(.caption)
-                            .foregroundColor(.secondary)
-                    }
-                    
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text("Professional")
-                            .fontWeight(.medium)
-                        Text("Information shared in business contexts")
-                            .font(.caption)
-                            .foregroundColor(.secondary)
-                    }
-                    
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text("Personal")
-                            .fontWeight(.medium)
-                        Text("Full information for trusted contacts")
-                            .font(.caption)
-                            .foregroundColor(.secondary)
-                    }
-                }
-            } header: {
-                Text("Guidelines")
-            }
         }
         .navigationTitle("Privacy Settings")
         .navigationBarTitleDisplayMode(.inline)
@@ -114,8 +123,26 @@ struct PrivacySettingsView: View {
         }
     }
     
-    private func updateField(_ field: BusinessCardField, enabled: Bool, for level: SharingLevel) {
+    private func fieldsForLevel(_ level: SharingLevel) -> Set<BusinessCardField> {
         switch level {
+        case .public:
+            return sharingPreferences.publicFields
+        case .professional:
+            return sharingPreferences.professionalFields
+        case .personal:
+            return sharingPreferences.personalFields
+        }
+    }
+    
+    private var fieldsForSelectedLevel: Set<BusinessCardField> {
+        fieldsForLevel(selectedLevel)
+    }
+    
+    private func toggleField(_ field: BusinessCardField, enabled: Bool) {
+        // Name field cannot be toggled - it's always required
+        guard field != .name else { return }
+        
+        switch selectedLevel {
         case .public:
             if enabled {
                 sharingPreferences.publicFields.insert(field)
@@ -135,6 +162,33 @@ struct PrivacySettingsView: View {
                 sharingPreferences.personalFields.remove(field)
             }
         }
+        
+        // Ensure name is always included after any change
+        sharingPreferences.publicFields.insert(.name)
+        sharingPreferences.professionalFields.insert(.name)
+        sharingPreferences.personalFields.insert(.name)
+    }
+    
+    private func iconForLevel(_ level: SharingLevel) -> String {
+        switch level {
+        case .public:
+            return "globe"
+        case .professional:
+            return "briefcase"
+        case .personal:
+            return "person.crop.circle"
+        }
+    }
+    
+    private func footerTextForLevel(_ level: SharingLevel) -> String {
+        switch level {
+        case .public:
+            return "Information visible to anyone who scans your QR code"
+        case .professional:
+            return "Information shared in business contexts"
+        case .personal:
+            return "Full information for trusted contacts"
+        }
     }
 }
 
@@ -145,83 +199,143 @@ struct PrivacySettingsView: View {
 }
 
 // MARK: - Components
-private struct LevelCardView: View {
-    let title: String
-    let subtitle: String
-    let icon: String
-    let fields: Set<BusinessCardField>
-    let useZK: Bool
+
+struct PrivacyLevelCard: View {
+    let level: SharingLevel
+    let isSelected: Bool
+    let fieldCount: Int
+    let onTap: () -> Void
     
     var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            HStack(spacing: 12) {
-                Image(systemName: icon)
-                    .font(.system(size: 22, weight: .semibold))
-                    .foregroundColor(.accentColor)
-                    .frame(width: 32, height: 32)
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(title)
-                        .font(.headline)
-                    Text(subtitle)
-                        .font(.caption)
-                        .foregroundColor(.secondary)
-                }
-                Spacer()
-                if useZK {
-                    HStack(spacing: 6) {
-                        Image(systemName: "shield.checkerboard")
-                            .foregroundColor(.green)
-                        Text("ZK")
-                            .font(.caption2)
-                            .fontWeight(.semibold)
-                            .foregroundColor(.green)
-                            .padding(.horizontal, 6)
-                            .padding(.vertical, 2)
-                            .background(Color.green.opacity(0.12))
-                            .clipShape(Capsule())
-                    }
-                }
+        Button(action: {
+            let impact = UIImpactFeedbackGenerator(style: .medium)
+            impact.impactOccurred()
+            onTap()
+        }) {
+            VStack(spacing: 8) {
+                Image(systemName: iconForLevel(level))
+                    .font(.system(size: 28, weight: .semibold))
+                    .foregroundColor(isSelected ? .white : .primary)
+                    .frame(width: 44, height: 44)
+                    .background(
+                        Circle()
+                            .fill(isSelected ? Color.accentColor : Color(.systemGray5))
+                    )
+                
+                Text(level.displayName)
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundColor(isSelected ? .primary : .secondary)
+                
+                Text("\(fieldCount) fields")
+                    .font(.caption2)
+                    .foregroundColor(.secondary)
             }
-            
-            // Field summary row
-            ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: 8) {
-                    ForEach(Array(fields).sorted { $0.displayName < $1.displayName }) { field in
-                        FieldPill(text: field.displayName)
-                    }
-                }
-                .padding(.vertical, 2)
-            }
+            .frame(width: 110)
+            .padding(.vertical, 12)
+            .padding(.horizontal, 8)
+            .background(
+                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                    .fill(isSelected ? Color.accentColor.opacity(0.1) : Color(.systemGray6))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 12, style: .continuous)
+                            .stroke(isSelected ? Color.accentColor : Color.clear, lineWidth: 2)
+                    )
+            )
         }
-        .padding(14)
-        .background(RoundedRectangle(cornerRadius: 12, style: .continuous)
-            .fill(Color(UIColor.secondarySystemBackground)))
-        .overlay(
-            RoundedRectangle(cornerRadius: 12, style: .continuous)
-                .strokeBorder(Color(UIColor.separator).opacity(0.2), lineWidth: 1)
-        )
-        .padding(.horizontal)
+        .buttonStyle(PlainButtonStyle())
+    }
+    
+    private func iconForLevel(_ level: SharingLevel) -> String {
+        switch level {
+        case .public:
+            return "globe"
+        case .professional:
+            return "briefcase"
+        case .personal:
+            return "person.crop.circle"
+        }
     }
 }
 
-private struct FieldPill: View, Identifiable {
-    let id = UUID()
-    let text: String
+struct FieldToggleRow: View {
+    let field: BusinessCardField
+    let isEnabled: Bool
+    let onToggle: (Bool) -> Void
     
     var body: some View {
-        HStack(spacing: 6) {
-            Circle()
-                .fill(Color.accentColor.opacity(0.9))
-                .frame(width: 6, height: 6)
-            Text(text)
-                .font(.caption2)
-                .fontWeight(.medium)
-                .foregroundColor(.primary)
+        Button(action: {
+            let impact = UIImpactFeedbackGenerator(style: .light)
+            impact.impactOccurred()
+            onToggle(!isEnabled)
+        }) {
+            HStack(spacing: 12) {
+                Image(systemName: iconForField(field))
+                    .foregroundColor(isEnabled ? .blue : .gray)
+                    .frame(width: 24)
+                
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(field.displayName)
+                        .font(.subheadline.weight(.medium))
+                        .foregroundColor(.primary)
+                    
+                    if let description = descriptionForField(field) {
+                        Text(description)
+                            .font(.caption2)
+                            .foregroundColor(.secondary)
+                    }
+                }
+                
+                Spacer()
+                
+                Image(systemName: isEnabled ? "checkmark.circle.fill" : "circle")
+                    .foregroundColor(isEnabled ? .green : .gray)
+                    .font(.system(size: 22))
+            }
+            .padding(.vertical, 8)
+            .contentShape(Rectangle())
         }
-        .padding(.horizontal, 8)
-        .padding(.vertical, 4)
-        .background(
-            Capsule().fill(Color(UIColor.tertiarySystemFill))
-        )
+        .buttonStyle(PlainButtonStyle())
+    }
+    
+    private func iconForField(_ field: BusinessCardField) -> String {
+        switch field {
+        case .name:
+            return "person.fill"
+        case .title:
+            return "briefcase.fill"
+        case .company:
+            return "building.2.fill"
+        case .email:
+            return "envelope.fill"
+        case .phone:
+            return "phone.fill"
+        case .profileImage:
+            return "photo.fill"
+        case .socialNetworks:
+            return "link"
+        case .skills:
+            return "star.fill"
+        }
+    }
+    
+    private func descriptionForField(_ field: BusinessCardField) -> String? {
+        switch field {
+        case .email:
+            return "Contact email"
+        case .phone:
+            return "Phone number"
+        case .title:
+            return "Job title"
+        case .company:
+            return "Company name"
+        case .profileImage:
+            return "Profile photo"
+        case .socialNetworks:
+            return "Social media links"
+        case .skills:
+            return "Your skills"
+        default:
+            return nil
+        }
     }
 }
