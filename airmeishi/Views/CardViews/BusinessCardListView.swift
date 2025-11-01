@@ -602,7 +602,7 @@ private struct NavigationButtonsView: View {
             
             NavigationButton(
                 icon: "person.3.fill",
-                title: "Group Management",
+                title: "Group",
                 action: onGroup
             )
         }
@@ -623,18 +623,21 @@ private struct NavigationButton: View {
             action()
         }) {
             VStack(spacing: 8) {
-                Image(systemName: icon)
-                    .font(.system(size: 22, weight: .semibold))
-                    .foregroundColor(isEnabled ? .white : .white.opacity(0.5))
-                    .frame(width: 44, height: 44)
-                    .background(
-                        RoundedRectangle(cornerRadius: 10, style: .continuous)
-                            .fill(isEnabled ? Color.white.opacity(0.18) : Color.white.opacity(0.08))
-                            .overlay(
-                                RoundedRectangle(cornerRadius: 10, style: .continuous)
-                                    .stroke(Color.white.opacity(isEnabled ? 0.25 : 0.1), lineWidth: 1.5)
-                            )
-                    )
+                ZStack {
+                    RoundedRectangle(cornerRadius: 10, style: .continuous)
+                        .fill(isEnabled ? Color.white.opacity(0.18) : Color.white.opacity(0.08))
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                                .stroke(Color.white.opacity(isEnabled ? 0.25 : 0.1), lineWidth: 1.5)
+                        )
+                        .frame(width: 44, height: 44)
+                    
+                    Image(systemName: icon)
+                        .font(.system(size: 20, weight: .semibold))
+                        .foregroundColor(isEnabled ? .white : .white.opacity(0.5))
+                        .frame(width: 44, height: 44)
+                        .contentShape(Rectangle())
+                }
                 
                 Text(title)
                     .font(.caption2.weight(.semibold))

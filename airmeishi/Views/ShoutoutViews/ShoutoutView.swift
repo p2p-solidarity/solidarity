@@ -7,6 +7,11 @@
 
 import SwiftUI
 
+enum DisplayMode {
+    case grid
+    case list
+}
+
 struct ShoutoutView: View {
     @StateObject private var chartService = ShoutoutChartService.shared
     @State private var showingFilters = false
@@ -15,6 +20,7 @@ struct ShoutoutView: View {
     @State private var showingCreateShoutout = false
     @State private var selectedContact: Contact?
     @State private var isLighteningAnimating = false
+    @State private var displayMode: DisplayMode = .grid
     
     var body: some View {
         NavigationView {
@@ -44,9 +50,22 @@ struct ShoutoutView: View {
             .navigationBarTitleDisplayMode(.large)
             .toolbar {
                 ToolbarItem(placement: .navigationBarTrailing) {
-                    Button(action: { showingFilters.toggle() }) {
-                        Image(systemName: "line.3.horizontal.decrease.circle")
-                            .font(.title2)
+                    HStack(spacing: 16) {
+                        // Display mode toggle
+                        Button(action: {
+                            withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
+                                displayMode = displayMode == .grid ? .list : .grid
+                            }
+                        }) {
+                            Image(systemName: displayMode == .grid ? "list.bullet" : "square.grid.2x2")
+                                .font(.title2)
+                        }
+                        
+                        // Filter button
+                        Button(action: { showingFilters.toggle() }) {
+                            Image(systemName: "line.3.horizontal.decrease.circle")
+                                .font(.title2)
+                        }
                     }
                 }
             }
@@ -180,27 +199,53 @@ struct ShoutoutView: View {
                 .frame(maxWidth: .infinity)
                 .padding(.top, 40)
             } else {
-                LazyVGrid(columns: [
-                    GridItem(.flexible(), spacing: 16),
-                    GridItem(.flexible(), spacing: 16)
-                ], spacing: 16) {
-                    ForEach(chartService.filteredData) { dataPoint in
-                        LighteningCardView(
-                            dataPoint: dataPoint,
-                            isLighteningAnimating: isLighteningAnimating
-                        ) {
-
-                            // Add haptic feedback
-                            let impact = UIImpactFeedbackGenerator(style: .light)
-                            impact.impactOccurred()
-
-                            selectedUser = dataPoint.user
-                        }
-                    }
+                switch displayMode {
+                case .grid:
+                    gridView
+                case .list:
+                    listView
                 }
-                .padding(.horizontal)
             }
         }
+    }
+    
+    private var gridView: some View {
+        LazyVGrid(columns: [
+            GridItem(.flexible(), spacing: 16),
+            GridItem(.flexible(), spacing: 16)
+        ], spacing: 16) {
+            ForEach(chartService.filteredData) { dataPoint in
+                LighteningCardView(
+                    dataPoint: dataPoint,
+                    isLighteningAnimating: isLighteningAnimating
+                ) {
+                    // Add haptic feedback
+                    let impact = UIImpactFeedbackGenerator(style: .light)
+                    impact.impactOccurred()
+                    
+                    selectedUser = dataPoint.user
+                }
+            }
+        }
+        .padding(.horizontal)
+    }
+    
+    private var listView: some View {
+        LazyVStack(spacing: 12) {
+            ForEach(chartService.filteredData) { dataPoint in
+                ContactRowView(
+                    dataPoint: dataPoint,
+                    isLighteningAnimating: isLighteningAnimating
+                ) {
+                    // Add haptic feedback
+                    let impact = UIImpactFeedbackGenerator(style: .light)
+                    impact.impactOccurred()
+                    
+                    selectedUser = dataPoint.user
+                }
+            }
+        }
+        .padding(.horizontal)
     }
     
     // MARK: - Floating Lightening Action Button
@@ -309,7 +354,7 @@ struct LighteningCardView: View {
                         )
                 }
                 
-                // User info
+                // User info with fixed spacing
                 VStack(alignment: .leading, spacing: 4) {
                     Text(dataPoint.user.name)
                         .font(.headline)
@@ -317,21 +362,23 @@ struct LighteningCardView: View {
                         .foregroundColor(.white)
                         .lineLimit(1)
                     
-                    if !dataPoint.user.company.isEmpty {
-                        Text(dataPoint.user.company)
-                            .font(.caption)
-                            .foregroundColor(.gray)
-                            .lineLimit(1)
-                    }
+                    // Always reserve space for company, even if empty
+                    Text(dataPoint.user.company.isEmpty ? " " : dataPoint.user.company)
+                        .font(.caption)
+                        .foregroundColor(dataPoint.user.company.isEmpty ? .clear : .gray)
+                        .lineLimit(1)
+                        .frame(height: 14)
                     
-                    if !dataPoint.user.title.isEmpty {
-                        Text(dataPoint.user.title)
-                            .font(.caption2)
-                            .foregroundColor(.gray.opacity(0.8))
-                            .lineLimit(1)
-                    }
+                    // Always reserve space for title, even if empty
+                    Text(dataPoint.user.title.isEmpty ? " " : dataPoint.user.title)
+                        .font(.caption2)
+                        .foregroundColor(dataPoint.user.title.isEmpty ? .clear : .gray.opacity(0.8))
+                        .lineLimit(1)
+                        .frame(height: 12)
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
+                
+                Spacer(minLength: 0)
                 
                 // Verification status with lightning effect
                 HStack {
@@ -356,6 +403,8 @@ struct LighteningCardView: View {
                 }
             }
             .padding(16)
+            .frame(height: 180)
+            .frame(maxWidth: .infinity)
             .background(
                 RoundedRectangle(cornerRadius: 16)
                     .fill(Color.white.opacity(0.05))
@@ -386,6 +435,152 @@ struct LighteningCardView: View {
                 }
             }
             onTap()
+        }
+    }
+    
+    private var verificationColor: Color {
+        switch dataPoint.user.verificationStatus {
+        case .verified: return .green
+        case .pending: return .orange
+        case .unverified: return .blue
+        case .failed: return .red
+        }
+    }
+}
+
+// MARK: - Contact Row View
+
+struct ContactRowView: View {
+    let dataPoint: ChartDataPoint
+    let isLighteningAnimating: Bool
+    let onTap: () -> Void
+    
+    @State private var isHovering = false
+    
+    var body: some View {
+        Button(action: onTap) {
+            HStack(spacing: 16) {
+                // Profile image with lightning border
+                AsyncImage(url: dataPoint.user.profileImageURL) { image in
+                    image
+                        .resizable()
+                        .aspectRatio(contentMode: .fill)
+                } placeholder: {
+                    Circle()
+                        .fill(
+                            LinearGradient(
+                                colors: [dataPoint.color, dataPoint.color.opacity(0.6)],
+                                startPoint: .topLeading,
+                                endPoint: .bottomTrailing
+                            )
+                        )
+                        .overlay {
+                            Text(dataPoint.user.initials)
+                                .font(.headline)
+                                .fontWeight(.bold)
+                                .foregroundColor(.white)
+                        }
+                }
+                .frame(width: 60, height: 60)
+                .clipShape(Circle())
+                .overlay(
+                    Circle()
+                        .stroke(
+                            isLighteningAnimating ? Color.yellow : dataPoint.color,
+                            lineWidth: isLighteningAnimating ? 3 : 2
+                        )
+                        .scaleEffect(isLighteningAnimating ? 1.1 : 1.0)
+                        .animation(
+                            .easeInOut(duration: 0.5).repeatForever(autoreverses: true),
+                            value: isLighteningAnimating
+                        )
+                )
+                .shadow(
+                    color: isLighteningAnimating ? .yellow.opacity(0.6) : dataPoint.color.opacity(0.5),
+                    radius: isLighteningAnimating ? 8 : 4,
+                    x: 0, y: 2
+                )
+                
+                // User info
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(dataPoint.user.name)
+                        .font(.headline)
+                        .fontWeight(.semibold)
+                        .foregroundColor(.white)
+                        .lineLimit(1)
+                    
+                    HStack(spacing: 8) {
+                        if !dataPoint.user.company.isEmpty {
+                            Text(dataPoint.user.company)
+                                .font(.subheadline)
+                                .foregroundColor(.gray)
+                                .lineLimit(1)
+                        }
+                        
+                        if !dataPoint.user.title.isEmpty {
+                            Text("•")
+                                .font(.subheadline)
+                                .foregroundColor(.gray.opacity(0.5))
+                            
+                            Text(dataPoint.user.title)
+                                .font(.subheadline)
+                                .foregroundColor(.gray)
+                                .lineLimit(1)
+                        }
+                    }
+                    
+                    // Verification status and score
+                    HStack(spacing: 8) {
+                        Image(systemName: dataPoint.user.verificationStatus.systemImageName)
+                            .foregroundColor(verificationColor)
+                            .font(.caption)
+                        
+                        Text(dataPoint.user.verificationStatus.displayName)
+                            .font(.caption2)
+                            .foregroundColor(.gray)
+                        
+                        // Score indicator
+                        HStack(spacing: 2) {
+                            ForEach(0..<3) { index in
+                                Circle()
+                                    .fill(index < Int(dataPoint.user.eventScore * 3) ? Color.yellow : Color.gray.opacity(0.3))
+                                    .frame(width: 4, height: 4)
+                            }
+                        }
+                    }
+                }
+                
+                Spacer()
+                
+                // Lightening bolt indicator
+                Image(systemName: "bolt.fill")
+                    .foregroundColor(isLighteningAnimating ? .yellow : .gray)
+                    .font(.title3)
+                    .scaleEffect(isLighteningAnimating ? 1.2 : 1.0)
+                    .animation(
+                        .easeInOut(duration: 0.3).repeatForever(autoreverses: true),
+                        value: isLighteningAnimating
+                    )
+            }
+            .padding(.horizontal, 16)
+            .padding(.vertical, 12)
+            .background(
+                RoundedRectangle(cornerRadius: 12)
+                    .fill(Color.white.opacity(0.05))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 12)
+                            .stroke(
+                                isLighteningAnimating ? Color.yellow.opacity(0.3) : Color.white.opacity(0.1),
+                                lineWidth: 1
+                            )
+                    )
+            )
+            .scaleEffect(isHovering ? 1.02 : 1.0)
+            .animation(.spring(response: 0.3, dampingFraction: 0.7), value: isHovering)
+        }
+        .buttonStyle(PlainButtonStyle())
+        .onHover { hovering in
+            isHovering = hovering
         }
     }
     

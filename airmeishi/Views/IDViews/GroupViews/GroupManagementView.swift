@@ -1380,6 +1380,8 @@ private struct SimpleNodeRow: View {
                     Image(systemName: icon)
                         .font(.system(size: 20, weight: .medium))
                         .foregroundColor(.white)
+                        .frame(width: 44, height: 44)
+                        .contentShape(Rectangle())
                 }
 
                 VStack(alignment: .leading, spacing: 4) {
@@ -1429,6 +1431,8 @@ private struct SimplePremiumFeatureRow: View {
                 Image(systemName: icon)
                     .font(.system(size: 22, weight: .medium))
                     .foregroundColor(.white)
+                    .frame(width: 50, height: 50)
+                    .contentShape(Rectangle())
             }
 
             VStack(alignment: .leading, spacing: 4) {
@@ -1487,6 +1491,8 @@ private struct SimpleDangerNodeRow: View {
                     Image(systemName: icon)
                         .font(.system(size: 20, weight: .medium))
                         .foregroundColor(.red)
+                        .frame(width: 44, height: 44)
+                        .contentShape(Rectangle())
                 }
 
                 VStack(alignment: .leading, spacing: 4) {
