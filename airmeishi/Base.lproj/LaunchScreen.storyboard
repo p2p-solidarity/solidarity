@@ -1,0 +1,75 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<document type="com.apple.InterfaceBuilder3.CocoaTouch.Storyboard.XIB" version="3.0" toolsVersion="24128" targetRuntime="iOS.CocoaTouch" propertyAccessControl="none" useAutolayout="YES" launchScreen="YES" useTraitCollections="YES" useSafeAreas="YES" colorMatched="YES" initialViewController="LaunchSceneViewController">
+    <device id="retina6_7" orientation="portrait" appearance="light"/>
+    <dependencies>
+        <plugIn identifier="com.apple.InterfaceBuilder.IBCocoaTouchPlugin" version="24063"/>
+        <capability name="Safe area layout guides" minToolsVersion="9.0"/>
+        <capability name="documents saved in the Xcode 8 format" minToolsVersion="8.0"/>
+    </dependencies>
+    <scenes>
+        <!--View Controller-->
+        <scene sceneID="LaunchScene">
+            <objects>
+                <viewController storyboardIdentifier="LaunchScreen" id="LaunchSceneViewController" sceneMemberID="viewController">
+                    <view key="view" contentMode="scaleToFill" id="LaunchRootView">
+                        <rect key="frame" x="0.0" y="0.0" width="430" height="932"/>
+                        <autoresizingMask key="autoresizingMask" flexibleMaxX="YES" flexibleMaxY="YES"/>
+                        <subviews>
+                            <imageView clipsSubviews="YES" userInteractionEnabled="NO" contentMode="scaleAspectFit" image="Wordmark" translatesAutoresizingMaskIntoConstraints="NO" id="WordmarkImage">
+                                <rect key="frame" x="137" y="477.66666666666669" width="156" height="27"/>
+                                <constraints>
+                                    <constraint firstAttribute="height" constant="27" id="WordmarkHeight"/>
+                                    <constraint firstAttribute="width" constant="156" id="WordmarkWidth"/>
+                                </constraints>
+                            </imageView>
+                            <view clipsSubviews="YES" contentMode="scaleToFill" translatesAutoresizingMaskIntoConstraints="NO" id="AnimalsContainer">
+                                <rect key="frame" x="286.66666666666669" y="118" width="143.33333333333331" height="746"/>
+                                <subviews>
+                                    <stackView opaque="NO" contentMode="scaleToFill" axis="vertical" distribution="fillEqually" translatesAutoresizingMaskIntoConstraints="NO" id="AnimalsStack">
+                                        <rect key="frame" x="0.0" y="0.0" width="143.33333333333334" height="746"/>
+                                        <subviews>
+                                            <imageView clipsSubviews="YES" userInteractionEnabled="NO" alpha="0.80000000000000004" contentMode="scaleAspectFill" image="PigWhite" translatesAutoresizingMaskIntoConstraints="NO" id="PigImage">
+                                                <rect key="frame" x="0.0" y="0.0" width="143.33333333333334" height="248.66666666666666"/>
+                                            </imageView>
+                                            <imageView clipsSubviews="YES" userInteractionEnabled="NO" alpha="0.80000000000000004" contentMode="scaleAspectFill" image="HorseWhite" translatesAutoresizingMaskIntoConstraints="NO" id="HorseImage">
+                                                <rect key="frame" x="0.0" y="248.66666666666669" width="143.33333333333334" height="248.66666666666669"/>
+                                            </imageView>
+                                            <imageView clipsSubviews="YES" userInteractionEnabled="NO" alpha="0.80000000000000004" contentMode="scaleAspectFill" image="SheepWhite" translatesAutoresizingMaskIntoConstraints="NO" id="SheepImage">
+                                                <rect key="frame" x="0.0" y="497.33333333333343" width="143.33333333333334" height="248.66666666666669"/>
+                                            </imageView>
+                                        </subviews>
+                                    </stackView>
+                                </subviews>
+                                <color key="backgroundColor" white="0.0" alpha="0.0" colorSpace="custom" customColorSpace="genericGamma22GrayColorSpace"/>
+                                <constraints>
+                                    <constraint firstAttribute="bottom" secondItem="AnimalsStack" secondAttribute="bottom" id="AnimalsStackBottom"/>
+                                    <constraint firstItem="AnimalsStack" firstAttribute="leading" secondItem="AnimalsContainer" secondAttribute="leading" id="AnimalsStackLeading"/>
+                                    <constraint firstItem="AnimalsStack" firstAttribute="top" secondItem="AnimalsContainer" secondAttribute="top" id="AnimalsStackTop"/>
+                                    <constraint firstAttribute="trailing" secondItem="AnimalsStack" secondAttribute="trailing" id="AnimalsStackTrailing"/>
+                                </constraints>
+                            </view>
+                        </subviews>
+                        <viewLayoutGuide key="safeArea" id="LaunchSafeArea"/>
+                        <color key="backgroundColor" red="0.0" green="0.0" blue="0.0" alpha="1" colorSpace="custom" customColorSpace="sRGB"/>
+                        <constraints>
+                            <constraint firstItem="AnimalsContainer" firstAttribute="bottom" secondItem="LaunchSafeArea" secondAttribute="bottom" id="AnimalsContainerBottom"/>
+                            <constraint firstItem="AnimalsContainer" firstAttribute="width" secondItem="LaunchSafeArea" secondAttribute="width" multiplier="0.333" id="AnimalsContainerThirdWidth"/>
+                            <constraint firstItem="AnimalsContainer" firstAttribute="top" secondItem="LaunchSafeArea" secondAttribute="top" id="AnimalsContainerTop"/>
+                            <constraint firstItem="AnimalsContainer" firstAttribute="trailing" secondItem="LaunchSafeArea" secondAttribute="trailing" id="AnimalsContainerTrailing"/>
+                            <constraint firstItem="WordmarkImage" firstAttribute="centerX" secondItem="LaunchSafeArea" secondAttribute="centerX" id="WordmarkCenterX"/>
+                            <constraint firstItem="WordmarkImage" firstAttribute="centerY" secondItem="LaunchSafeArea" secondAttribute="centerY" id="WordmarkCenterY"/>
+                        </constraints>
+                    </view>
+                </viewController>
+                <placeholder placeholderIdentifier="IBFirstResponder" id="LaunchFirstResponder" userLabel="First Responder" sceneMemberID="firstResponder"/>
+            </objects>
+            <point key="canvasLocation" x="52" y="375"/>
+        </scene>
+    </scenes>
+    <resources>
+        <image name="HorseWhite" width="472" height="654"/>
+        <image name="PigWhite" width="380" height="588"/>
+        <image name="SheepWhite" width="386" height="554"/>
+        <image name="Wordmark" width="156" height="27"/>
+    </resources>
+</document>
