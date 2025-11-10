@@ -8,6 +8,7 @@
 
 /* Begin PBXBuildFile section */
 		F1134EA62E757F230097A2A4 /* Semaphore in Frameworks */ = {isa = PBXBuildFile; productRef = F1134EA52E757F230097A2A4 /* Semaphore */; };
+		F18CDB3C2EC2248C005E94B4 /* SpruceIDMobileSdkRs in Frameworks */ = {isa = PBXBuildFile; productRef = F18CDB3B2EC2248C005E94B4 /* SpruceIDMobileSdkRs */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -70,6 +71,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				F1134EA62E757F230097A2A4 /* Semaphore in Frameworks */,
+				F18CDB3C2EC2248C005E94B4 /* SpruceIDMobileSdkRs in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -139,6 +141,7 @@
 			name = airmeishi;
 			packageProductDependencies = (
 				F1134EA52E757F230097A2A4 /* Semaphore */,
+				F18CDB3B2EC2248C005E94B4 /* SpruceIDMobileSdkRs */,
 			);
 			productName = airmeishi;
 			productReference = F1133D7E2E70600A0097A2A4 /* airmeishi.app */;
@@ -224,6 +227,7 @@
 			minimizedProjectReferenceProxies = 1;
 			packageReferences = (
 				F1134EA32E757CE20097A2A4 /* XCRemoteSwiftPackageReference "SemaphoreSwift" */,
+				F18CDB272EC1F68E005E94B4 /* XCRemoteSwiftPackageReference "sprucekit-mobile" */,
 			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = F1133D7F2E70600A0097A2A4 /* Products */;
@@ -663,6 +667,14 @@
 				kind = branch;
 			};
 		};
+		F18CDB272EC1F68E005E94B4 /* XCRemoteSwiftPackageReference "sprucekit-mobile" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/spruceid/sprucekit-mobile";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 0.12.11;
+			};
+		};
 /* End XCRemoteSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
@@ -670,6 +682,11 @@
 			isa = XCSwiftPackageProductDependency;
 			package = F1134EA32E757CE20097A2A4 /* XCRemoteSwiftPackageReference "SemaphoreSwift" */;
 			productName = Semaphore;
+		};
+		F18CDB3B2EC2248C005E94B4 /* SpruceIDMobileSdkRs */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = F18CDB272EC1F68E005E94B4 /* XCRemoteSwiftPackageReference "sprucekit-mobile" */;
+			productName = SpruceIDMobileSdkRs;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};

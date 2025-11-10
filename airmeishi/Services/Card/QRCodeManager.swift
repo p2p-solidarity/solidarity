@@ -22,6 +22,8 @@ class QRCodeManager: NSObject, ObservableObject {
     @Published var scanError: CardError?
     
     private let encryptionManager = EncryptionManager.shared
+    private let oidcService = OIDCService.shared
+    private let vcService = VCService()
     private var captureSession: AVCaptureSession?
     private var previewLayer: AVCaptureVideoPreviewLayer?
     
@@ -183,6 +185,16 @@ class QRCodeManager: NSObject, ObservableObject {
     
     /// Process scanned QR code data
     func processScannedData(_ data: String) {
+        if let url = URL(string: data), url.scheme == "airmeishi", url.host == "oidc" {
+            handleOIDCResponse(url: url)
+            return
+        }
+
+        if data.hasPrefix("openid-vc://") || data.hasPrefix("openid://") {
+            handleOIDCRequest(data)
+            return
+        }
+
         // Check if this is an airmeishi:// URL scheme
         if data.hasPrefix("airmeishi://") {
             // Handle via DeepLinkManager
@@ -257,6 +269,71 @@ class QRCodeManager: NSObject, ObservableObject {
     }
     
     // MARK: - Private Methods
+
+    private func handleOIDCRequest(_ data: String) {
+        let requestResult = oidcService.parseRequest(from: data)
+
+        switch requestResult {
+        case .failure(let error):
+            scanError = error
+        case .success(let request):
+            guard let businessCard = CardManager.shared.businessCards.first else {
+                scanError = .notFound("No business card available to present.")
+                return
+            }
+
+            switch vcService.issueBusinessCardCredential(for: businessCard) {
+            case .failure(let error):
+                scanError = error
+            case .success(let issuedCredential):
+                let responseURLResult = oidcService.buildResponseURL(for: request, vpToken: issuedCredential.jwt)
+                switch responseURLResult {
+                case .failure(let error):
+                    scanError = error
+                case .success(let url):
+                    DispatchQueue.main.async {
+                        UIApplication.shared.open(url, options: [:], completionHandler: nil)
+                        self.lastScannedCard = businessCard
+                        self.lastVerificationStatus = .pending
+                        self.scanError = nil
+                    }
+                }
+            }
+        }
+    }
+
+    private func handleOIDCResponse(url: URL) {
+        switch oidcService.handleResponse(url: url, vcService: vcService) {
+        case .failure(let error):
+            scanError = error
+        case .success(let imported):
+            let verificationOutcome = vcService.verifyStoredCredential(imported.storedCredential)
+            let status: VerificationStatus
+            switch verificationOutcome {
+            case .success(let updated):
+                status = verificationStatus(for: updated.status)
+            case .failure:
+                status = .unverified
+            }
+
+            DispatchQueue.main.async {
+                self.lastScannedCard = imported.businessCard
+                self.lastVerificationStatus = status
+                self.scanError = nil
+            }
+        }
+    }
+
+    private func verificationStatus(for status: VCLibrary.StoredCredential.Status) -> VerificationStatus {
+        switch status {
+        case .verified:
+            return .verified
+        case .unverified:
+            return .unverified
+        case .failed, .revoked:
+            return .failed
+        }
+    }
     
     /// Generate QR code image from string data
     private func generateQRCodeImage(from string: String) -> CardResult<UIImage> {

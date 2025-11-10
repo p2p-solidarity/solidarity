@@ -26,6 +26,8 @@ class DeepLinkManager: DeepLinkManagerProtocol, ObservableObject {
     private let appClipURL = "https://solidarity.gg/clip"
     
     private let cardManager = CardManager.shared
+    private let oidcService = OIDCService.shared
+    private let vcService = VCService()
     @MainActor private let contactRepository = ContactRepository.shared
     
     private var cancellables = Set<AnyCancellable>()
@@ -177,6 +179,8 @@ class DeepLinkManager: DeepLinkManagerProtocol, ObservableObject {
         // Handle airmeishi://contact?name=...&job=...
         if components.host == "contact" {
             return handleContactSchemeURL(components)
+        } else if components.host == "oidc", let url = components.url {
+            return handleOIDCCallback(url)
         }
 
         return false
@@ -288,6 +292,24 @@ class DeepLinkManager: DeepLinkManagerProtocol, ObservableObject {
         }
         
         return processReceivedCardData(data, source: .qrCode)
+    }
+
+    private func handleOIDCCallback(_ url: URL) -> Bool {
+        let result = oidcService.handleResponse(url: url, vcService: vcService)
+
+        switch result {
+        case .failure(let error):
+            Task { @MainActor in
+                self.pendingAction = .showError(error.localizedDescription)
+            }
+            return false
+        case .success(let imported):
+            Task { @MainActor in
+                self.lastReceivedCard = imported.businessCard
+                self.pendingAction = .showReceivedCard(imported.businessCard)
+            }
+            return true
+        }
     }
     
     private func handleShareLinkURL(_ components: URLComponents) -> Bool {
