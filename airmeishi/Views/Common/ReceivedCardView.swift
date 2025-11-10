@@ -8,6 +8,11 @@ struct ReceivedCardView: View {
     @State private var isSaved = false
     @State private var showingSaveConfirmation = false
     @StateObject private var contactRepository = ContactRepository.shared
+    @ObservedObject private var identityCoordinator = IdentityCoordinator.shared
+    
+    private var verificationStatus: VerificationStatus {
+        identityCoordinator.verificationStatus(for: card.id) ?? .unverified
+    }
     
     var body: some View {
         NavigationView {
@@ -105,6 +110,14 @@ struct ReceivedCardView: View {
                                 if let company = card.company {
                                     Text(company)
                                         .font(.subheadline)
+                                        .foregroundColor(.gray)
+                                }
+
+                                HStack(spacing: 6) {
+                                    Image(systemName: verificationStatus.systemImageName)
+                                        .foregroundColor(color(for: verificationStatus))
+                                    Text(verificationStatus.displayName)
+                                        .font(.caption)
                                         .foregroundColor(.gray)
                                 }
                                 
@@ -270,6 +283,15 @@ struct ReceivedCardView: View {
         case .failure(let error):
             print("Failed to save contact: \(error.localizedDescription)")
             // You could show an error alert here if needed
+        }
+    }
+    
+    private func color(for status: VerificationStatus) -> Color {
+        switch status {
+        case .verified: return .green
+        case .pending: return .orange
+        case .unverified: return .gray
+        case .failed: return .red
         }
     }
 }

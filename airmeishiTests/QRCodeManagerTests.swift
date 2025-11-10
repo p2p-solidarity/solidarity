@@ -60,6 +60,28 @@ final class QRCodeManagerTests: XCTestCase {
         }
     }
     
+    func testQRCodeFormats() throws {
+        let formats: [SharingFormat] = [.plaintext, .zkProof, .didSigned]
+
+        for format in formats {
+            var card = testBusinessCard!
+            card.sharingPreferences.sharingFormat = format
+
+            let result = qrManager.generateQRCode(
+                for: card,
+                sharingLevel: .professional
+            )
+
+            switch result {
+            case .success(let image):
+                XCTAssertGreaterThan(image.size.width, 0)
+                XCTAssertGreaterThan(image.size.height, 0)
+            case .failure(let error):
+                XCTFail("Failed to generate QR for format \(format.displayName): \(error.localizedDescription)")
+            }
+        }
+    }
+    
     func testSharingLinkGeneration() throws {
         let result = qrManager.generateSharingLink(
             for: testBusinessCard,

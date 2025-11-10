@@ -167,6 +167,7 @@ struct SharingPreferences: Codable, Equatable {
     var allowForwarding: Bool
     var expirationDate: Date?
     var useZK: Bool
+    var sharingFormat: SharingFormat
     
     init(
         publicFields: Set<BusinessCardField> = [.name, .title, .company],
@@ -174,7 +175,8 @@ struct SharingPreferences: Codable, Equatable {
         personalFields: Set<BusinessCardField> = BusinessCardField.allCases.asSet(),
         allowForwarding: Bool = false,
         expirationDate: Date? = nil,
-        useZK: Bool = false
+        useZK: Bool = false,
+        sharingFormat: SharingFormat = .plaintext
     ) {
         // Ensure name is always included in all levels
         var publicSet = publicFields
@@ -192,6 +194,7 @@ struct SharingPreferences: Codable, Equatable {
         self.allowForwarding = allowForwarding
         self.expirationDate = expirationDate
         self.useZK = useZK
+        self.sharingFormat = sharingFormat
     }
     
     /// Get allowed fields for a specific sharing level
@@ -211,7 +214,7 @@ struct SharingPreferences: Codable, Equatable {
 
 extension SharingPreferences {
     private enum CodingKeys: String, CodingKey {
-        case publicFields, professionalFields, personalFields, allowForwarding, expirationDate, useZK
+        case publicFields, professionalFields, personalFields, allowForwarding, expirationDate, useZK, sharingFormat
     }
 
     init(from decoder: Decoder) throws {
@@ -231,6 +234,7 @@ extension SharingPreferences {
         self.allowForwarding = try container.decodeIfPresent(Bool.self, forKey: .allowForwarding) ?? false
         self.expirationDate = try container.decodeIfPresent(Date.self, forKey: .expirationDate)
         self.useZK = try container.decodeIfPresent(Bool.self, forKey: .useZK) ?? false
+        self.sharingFormat = try container.decodeIfPresent(SharingFormat.self, forKey: .sharingFormat) ?? .plaintext
     }
 
     func encode(to encoder: Encoder) throws {
@@ -241,6 +245,7 @@ extension SharingPreferences {
         try container.encode(allowForwarding, forKey: .allowForwarding)
         try container.encodeIfPresent(expirationDate, forKey: .expirationDate)
         try container.encode(useZK, forKey: .useZK)
+        try container.encode(sharingFormat, forKey: .sharingFormat)
     }
 }
 

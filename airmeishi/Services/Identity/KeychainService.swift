@@ -233,8 +233,15 @@ final class KeychainService {
             return .failure(.keyManagementError("Failed to retrieve signing key: \(statusDescription(status))"))
         }
 
-        let key = item as! SecKey
-        return .success(key)
+        guard let candidate = item else {
+            return .failure(.keyManagementError("Keychain returned empty result for signing key"))
+        }
+
+        guard CFGetTypeID(candidate) == SecKeyGetTypeID() else {
+            return .failure(.keyManagementError("Keychain returned unexpected item type for signing key"))
+        }
+
+        return .success((candidate as! SecKey))
     }
 
     private func jwk(for privateKey: SecKey) -> CardResult<PublicKeyJWK> {

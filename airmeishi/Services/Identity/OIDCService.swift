@@ -69,12 +69,19 @@ final class OIDCService: ObservableObject {
         }
     }
 
-    static let shared = OIDCService()
+    static let shared: OIDCService = OIDCService()
 
     private let queue = DispatchQueue(label: "com.kidneyweakx.airmeishi.oidc", qos: .userInitiated)
     private var activeRequests: [String: PresentationRequest] = [:] // keyed by state
+    private weak var identityCoordinator: IdentityCoordinator?
 
-    private init() {}
+    init(identityCoordinator: IdentityCoordinator? = nil) {
+        self.identityCoordinator = identityCoordinator
+    }
+
+    func attachIdentityCoordinator(_ coordinator: IdentityCoordinator) {
+        identityCoordinator = coordinator
+    }
 
     // MARK: - Request creation
 
@@ -123,6 +130,12 @@ final class OIDCService: ObservableObject {
             let qrString = try encodeRequest(request)
             let context = PresentationRequestContext(request: request, qrString: qrString, createdAt: Date())
             register(request: request)
+            identityCoordinator?.registerOIDCRequest(request)
+            identityCoordinator?.recordOIDCEvent(
+                kind: .requestCreated,
+                state: state,
+                message: "Queued OIDC presentation request"
+            )
             return .success(context)
         } catch {
             return .failure(.invalidData("Failed to encode presentation request: \(error.localizedDescription)"))
@@ -198,15 +211,39 @@ final class OIDCService: ObservableObject {
         }
 
         guard resolveRequest(state: state) != nil else {
-            return .failure(.notFound("No active request for state \(state)"))
+            return .failure(.invalidData("Unknown request state"))
         }
 
-        switch vcService.importPresentedCredential(jwt: vpToken) {
-        case .failure(let error):
-            return .failure(error)
-        case .success(let imported):
-            removeRequest(state: state)
-            return .success(imported)
+        identityCoordinator?.resolveOIDCRequest(state: state)
+
+        return queue.sync {
+            let importResult = vcService.importPresentedCredential(jwt: vpToken)
+            switch importResult {
+            case .failure(let error):
+                identityCoordinator?.recordOIDCEvent(
+                    kind: .error,
+                    state: state,
+                    message: error.localizedDescription
+                )
+                return .failure(error)
+            case .success(let credential):
+                let verificationOutcome = vcService.verifyStoredCredential(credential.storedCredential)
+                let status: VerificationStatus
+                switch verificationOutcome {
+                case .success:
+                    status = .verified
+                case .failure:
+                    status = .unverified
+                }
+
+                identityCoordinator?.updateVerificationStatus(for: credential.businessCard.id, status: status)
+                identityCoordinator?.recordOIDCEvent(
+                    kind: .credentialImported,
+                    state: state,
+                    message: "Imported credential for \(credential.businessCard.name)"
+                )
+                return .success(credential)
+            }
         }
     }
 

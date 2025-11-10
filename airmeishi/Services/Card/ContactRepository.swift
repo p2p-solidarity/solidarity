@@ -35,6 +35,12 @@ class ContactRepository: ContactRepositoryProtocol, ObservableObject {
     
     private init() {
         loadContactsFromStorage()
+        IdentityCoordinator.shared.verificationStatusesPublisher
+            .receive(on: RunLoop.main)
+            .sink { [weak self] statuses in
+                self?.applyVerificationStatuses(statuses)
+            }
+            .store(in: &cancellables)
     }
     
     // MARK: - Public Methods
@@ -258,7 +264,23 @@ class ContactRepository: ContactRepositoryProtocol, ObservableObject {
     
     /// Save contacts to encrypted storage
     private func saveContactsToStorage() -> CardResult<Void> {
-        return storageManager.saveContacts(contacts)
+        storageManager.saveContacts(contacts)
+    }
+
+    private func applyVerificationStatuses(_ statuses: [UUID: VerificationStatus]) {
+        var updatedContacts = contacts
+        var didChange = false
+
+        for (index, contact) in contacts.enumerated() {
+            if let status = statuses[contact.businessCard.id], contact.verificationStatus != status {
+                updatedContacts[index].verificationStatus = status
+                didChange = true
+            }
+        }
+
+        if didChange {
+            contacts = updatedContacts
+        }
     }
 }
 

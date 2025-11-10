@@ -446,27 +446,3 @@ private struct BusinessCardCredentialEnvelope: Decodable {
     }
 }
 
-// MARK: - Data URI helper
-
-private extension Data {
-    init?(dataURI: String) {
-        guard dataURI.hasPrefix("data:") else {
-            return nil
-        }
-
-        guard let commaIndex = dataURI.firstIndex(of: ",") else {
-            return nil
-        }
-
-        let metadata = dataURI[..<commaIndex]
-        let dataPart = dataURI[dataURI.index(after: commaIndex)...]
-
-        let isBase64 = metadata.contains(";base64")
-        if isBase64 {
-            self.init(base64URLEncoded: String(dataPart))
-        } else {
-            self.init(String(dataPart).data(using: .utf8) ?? Data())
-        }
-    }
-}
-

@@ -25,6 +25,8 @@ struct BusinessCardListView: View {
     @State private var showingAppearanceSettings = false
     @State private var showingBackupSettings = false
     @State private var showingGroupManagement = false
+    @ObservedObject private var identityCoordinator = IdentityCoordinator.shared
+    @State private var activeOIDCEvent: IdentityState.OIDCEvent?
     
     var body: some View {
         NavigationView {
@@ -74,8 +76,8 @@ struct BusinessCardListView: View {
             .sheet(isPresented: $showingPrivacySettings) {
                 if let card = cardManager.businessCards.first {
                     let cardId = card.id
-                    NavigationView {
-                        PrivacySettingsView(sharingPreferences: Binding(
+                    IdentityDashboardView(
+                        sharingPreferences: Binding(
                             get: {
                                 if let currentCard = cardManager.businessCards.first(where: { $0.id == cardId }) {
                                     return currentCard.sharingPreferences
@@ -88,8 +90,8 @@ struct BusinessCardListView: View {
                                     _ = cardManager.updateCard(updatedCard)
                                 }
                             }
-                        ))
-                    }
+                        )
+                    )
                 }
             }
             .sheet(isPresented: $showingCreateCard) {
@@ -136,8 +138,23 @@ struct BusinessCardListView: View {
                 Button("OK", role: .cancel) { alertMessage = nil }
             } message: { Text(alertMessage ?? "") }
         }
-        .overlay(alignment: .top) { sharingBannerTop }
+        .overlay(alignment: .top) {
+            VStack(spacing: 8) {
+                oidcBannerView
+                sharingBannerTop
+            }
+            .padding(.top, 10)
+        }
         .overlay { focusedOverlay }
+        .onChange(of: identityCoordinator.state.lastOIDCEvent) { _, event in
+            guard let event = event else { return }
+            activeOIDCEvent = event
+            DispatchQueue.main.asyncAfter(deadline: .now() + 4) {
+                if activeOIDCEvent?.timestamp == event.timestamp {
+                    activeOIDCEvent = nil
+                }
+            }
+        }
     }
 }
 
@@ -149,34 +166,16 @@ private extension BusinessCardListView {
         ScrollView {
             VStack(spacing: 0) {
                 if let card = cardManager.businessCards.first {
-                    // Navigation buttons container at top
-                    VStack(spacing: 0) {
-                        NavigationButtonsView(
-                            onPrivacy: {
-                                showingPrivacySettings = true
-                            },
-                            onAppearance: {
-                                showingAppearanceSettings = true
-                            },
-                            onBackup: {
-                                showingBackupSettings = true
-                            },
-                            onGroup: {
-                                showingGroupManagement = true
-                            },
-                            isPrivacyEnabled: true
-                        )
-                        .padding(.horizontal, 16)
-                        .padding(.top, 12)
-                        .padding(.bottom, 12)
-                    }
-                    .background(
-                        RoundedRectangle(cornerRadius: 20, style: .continuous)
-                            .fill(Color.gray.opacity(0.12))
-                            .overlay(
-                                RoundedRectangle(cornerRadius: 20, style: .continuous)
-                                    .stroke(Color.white.opacity(0.08), lineWidth: 1)
-                            )
+                    BusinessCardHeaderView(
+                        card: card,
+                        onPrivacy: { showingPrivacySettings = true },
+                        onAppearance: { showingAppearanceSettings = true },
+                        onBackup: { showingBackupSettings = true },
+                        onGroup: { showingGroupManagement = true },
+                        isPrivacyEnabled: true,
+                        onFormatChange: { newFormat in
+                            updateSharingFormat(for: card.id, format: newFormat)
+                        }
                     )
                     .padding(.horizontal, 16)
                     .padding(.top, 20)
@@ -248,6 +247,13 @@ private extension BusinessCardListView {
         }
     }
     
+    func updateSharingFormat(for cardId: UUID, format: SharingFormat) {
+        guard var updatedCard = cardManager.businessCards.first(where: { $0.id == cardId }) else { return }
+        updatedCard.sharingPreferences.sharingFormat = format
+        updatedCard.sharingPreferences.useZK = (format == .zkProof)
+        _ = cardManager.updateCard(updatedCard)
+    }
+
     @ViewBuilder
     var sharingBannerTop: some View {
         if proximityManager.isAdvertising {
@@ -308,351 +314,82 @@ private extension BusinessCardListView {
     func makeEmptyStateView() -> some View {
         ScrollView {
             VStack(spacing: 0) {
-                // Navigation buttons container at top
-                VStack(spacing: 0) {
-                    NavigationButtonsView(
-                        onPrivacy: {
-                            // Privacy settings only available when card exists
-                            if !cardManager.businessCards.isEmpty {
-                                showingPrivacySettings = true
-                            }
-                        },
-                        onAppearance: {
-                            showingAppearanceSettings = true
-                        },
-                        onBackup: {
-                            showingBackupSettings = true
-                        },
-                        onGroup: {
-                            showingGroupManagement = true
-                        },
-                        isPrivacyEnabled: false
-                    )
-                    .padding(.horizontal, 16)
-                    .padding(.top, 16)
-                    .padding(.bottom, 16)
-                }
-                .background(
-                    RoundedRectangle(cornerRadius: 20, style: .continuous)
-                        .fill(Color.gray.opacity(0.12))
-                        .overlay(
-                            RoundedRectangle(cornerRadius: 20, style: .continuous)
-                                .stroke(Color.white.opacity(0.08), lineWidth: 1)
-                        )
+                BusinessCardHeaderView(
+                    card: nil,
+                    onPrivacy: {
+                        if !cardManager.businessCards.isEmpty {
+                            showingPrivacySettings = true
+                        }
+                    },
+                    onAppearance: {
+                        showingAppearanceSettings = true
+                    },
+                    onBackup: {
+                        showingBackupSettings = true
+                    },
+                    onGroup: {
+                        showingGroupManagement = true
+                    },
+                    isPrivacyEnabled: false
                 )
                 .padding(.horizontal, 16)
                 .padding(.top, 20)
                 
-                EmptyWalletView()
+                BusinessCardEmptyStateView()
             }
             .padding(.bottom, 40)
         }
     }
-}
 
-
-// A single large vertical wallet card with top-right category and edit/share control
-private struct WalletCardView: View {
-    let card: BusinessCard
-    var onEdit: () -> Void
-    var onAddToWallet: () -> Void
-
-    @State private var isFlipped = false
-    @State private var editAttempted = false
-    @EnvironmentObject private var theme: ThemeManager
-    
-    var body: some View {
-        ZStack(alignment: .topTrailing) {
-            RoundedRectangle(cornerRadius: 20, style: .continuous)
-                .fill(perCardGradient(card: card))
-                .shadow(color: Color.black.opacity(0.45), radius: 24, x: 0, y: 14)
-                .overlay(
-                    RoundedRectangle(cornerRadius: 20, style: .continuous)
-                        .stroke(theme.cardAccent.opacity(0.35), lineWidth: 1)
-                )
-                // Gloss highlight for premium look
-                .overlay(alignment: .topLeading) {
-                    LinearGradient(
-                        colors: [Color.white.opacity(0.45), Color.white.opacity(0.12), Color.clear],
-                        startPoint: .topLeading,
-                        endPoint: .bottomTrailing
+    @ViewBuilder
+    var oidcBannerView: some View {
+        if let event = activeOIDCEvent {
+            HStack(spacing: 8) {
+                Image(systemName: symbol(for: event.kind))
+                    .foregroundColor(.white)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(event.message)
+                        .font(.footnote.weight(.semibold))
+                        .foregroundColor(.white)
+                    Text(event.state)
+                        .font(.caption2)
+                        .foregroundColor(.white.opacity(0.7))
+                }
+                Spacer()
+            }
+            .padding(10)
+            .background(
+                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                    .fill(bannerColor(for: event.kind).opacity(0.85))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 12, style: .continuous)
+                            .stroke(Color.white.opacity(0.2), lineWidth: 1)
                     )
-                    .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
-                    .opacity(0.65)
-                }
-                .overlay {
-                    HStack(alignment: .center, spacing: 14) {
-                        if let animal = card.animal {
-                            ImageProvider.animalImage(for: animal)
-                                .resizable()
-                                .scaledToFill()
-                                .frame(width: 84, height: 84)
-                                .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
-                                .overlay(
-                                    RoundedRectangle(cornerRadius: 18, style: .continuous)
-                                        .stroke(Color.black.opacity(0.06), lineWidth: 1)
-                                )
-                                .padding(.leading, 18)
-                        } else {
-                            Spacer().frame(width: 18)
-                        }
-                        VStack(alignment: .leading, spacing: 6) {
-                            Text(card.name)
-                                .font(.headline.weight(.semibold))
-                                .foregroundColor(.black)
-                                .lineLimit(1)
-                                .minimumScaleFactor(0.8)
-                            if let company = card.company { Text(company).font(.subheadline).foregroundColor(.black.opacity(0.75)) }
-                            if let title = card.title { Text(title).font(.footnote).foregroundColor(.black.opacity(0.65)) }
-                            HStack(spacing: 6) {
-                                ForEach(card.skills.prefix(3)) { skill in
-                                    Text(skill.name)
-                                        .font(.caption2.weight(.semibold))
-                                        .padding(.horizontal, 8)
-                                        .padding(.vertical, 4)
-                                        .background(Color.white.opacity(0.18))
-                                        .clipShape(Capsule())
-                                }
-                            }
-                        }
-                        Spacer(minLength: 0)
-                    }
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-                }
-                .rotation3DEffect(.degrees(isFlipped ? 180 : 0), axis: (x: 0, y: 1, z: 0))
-                .animation(.spring(response: 0.5, dampingFraction: 0.85), value: isFlipped)
-                .cardGlow(theme.cardAccent, enabled: theme.enableGlow)
-
-            HStack(spacing: 10) {
-                CategoryTag(text: category(for: card))
-                Button(action: editTapped) {
-                    Image(systemName: "square.and.pencil")
-                        .font(.system(size: 18, weight: .semibold))
-                        .foregroundColor(.black)
-                        .frame(width: 44, height: 44)
-                        .background(theme.cardAccent.opacity(0.12))
-                        .clipShape(Circle())
-                }
-                .buttonStyle(PlainButtonStyle())
-                .padding(.horizontal, 8)
-                .padding(.top, 12)
-                .padding(.bottom, 8)
-                .contentShape(Rectangle())
-
-                Button(action: addPassTapped) {
-                    Image(systemName: "wallet.pass")
-                        .font(.system(size: 18, weight: .semibold))
-                        .foregroundColor(.black)
-                        .frame(width: 44, height: 44)
-                        .background(theme.cardAccent.opacity(0.12))
-                        .clipShape(Circle())
-                }
-                .buttonStyle(PlainButtonStyle())
-                .padding(.horizontal, 8)
-                .padding(.top, 12)
-                .padding(.bottom, 8)
-                .contentShape(Rectangle())
-            }
-            .allowsHitTesting(true)
+            )
+            .padding(.horizontal, 16)
         }
     }
-    
-    private func editTapped() {
-        // Prevent multiple rapid taps
-        guard !editAttempted else { return }
-        editAttempted = true
 
-        let generator = UIImpactFeedbackGenerator(style: .medium)
-        generator.impactOccurred()
-
-        // Directly open edit without flip animation to avoid gray screen
-        onEdit()
-
-        // Reset after delay
-        DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
-            editAttempted = false
+    private func symbol(for kind: IdentityState.OIDCEvent.Kind) -> String {
+        switch kind {
+        case .requestCreated: return "paperplane"
+        case .credentialImported: return "checkmark.seal"
+        case .error: return "exclamationmark.triangle"
         }
     }
-    
-    private func addPassTapped() {
-        let generator = UIImpactFeedbackGenerator(style: .light)
-        generator.impactOccurred()
-        onAddToWallet()
-    }
-    
-    private func category(for card: BusinessCard) -> String {
-        if let company = card.company, !company.isEmpty { return company }
-        if let title = card.title, !title.isEmpty { return title }
-        return "Card"
-    }
-    
-    private func perCardGradient(card: BusinessCard) -> LinearGradient {
-        // Theme by animal when present
-        if let animal = card.animal {
-            let colors: [Color]
-            switch animal {
-            case .dog:
-                colors = [Color(hex: 0xFFF8E1), Color(hex: 0xFFD54F)]
-            case .horse:
-                colors = [Color(hex: 0xE8EAF6), Color(hex: 0x5C6BC0)]
-            case .pig:
-                colors = [Color(hex: 0xFCE4EC), Color(hex: 0xF06292)]
-            case .sheep:
-                colors = [Color(hex: 0xE8F5E9), Color(hex: 0x66BB6A)]
-            case .dove:
-                colors = [Color(hex: 0xE0F7FA), Color(hex: 0x26C6DA)]
-            }
-            return LinearGradient(colors: colors, startPoint: .topLeading, endPoint: .bottomTrailing)
+
+    private func bannerColor(for kind: IdentityState.OIDCEvent.Kind) -> Color {
+        switch kind {
+        case .requestCreated: return .blue
+        case .credentialImported: return .green
+        case .error: return .red
         }
-        // Fallback deterministic hue by UUID
-        let hash = card.id.uuidString.hashValue
-        let hue = Double(abs(hash % 360)) / 360.0
-        let base = Color(hue: hue, saturation: 0.55, brightness: 0.95)
-        let light = Color.white
-        return LinearGradient(colors: [light, base], startPoint: .topLeading, endPoint: .bottomTrailing)
     }
 }
+
 
 // MARK: - Components
 
 // Simple right-top tag
-private struct CategoryTag: View {
-    let text: String
-    @EnvironmentObject private var theme: ThemeManager
-    var body: some View {
-        Text(text)
-            .font(.caption2.weight(.semibold))
-            .padding(.horizontal, 8)
-            .padding(.vertical, 4)
-            .foregroundColor(.white)
-            .background(theme.cardAccent.opacity(0.25))
-            .clipShape(Capsule())
-            .padding(8)
-    }
-}
-
-
-private struct EmptyWalletView: View {
-    var body: some View {
-        VStack(spacing: 32) {
-            // Animated icon
-            ZStack {
-                Circle()
-                    .fill(
-                        LinearGradient(
-                            colors: [Color.blue.opacity(0.3), Color.purple.opacity(0.2)],
-                            startPoint: .topLeading,
-                            endPoint: .bottomTrailing
-                        )
-                    )
-                    .frame(width: 120, height: 120)
-                    .blur(radius: 20)
-
-                Image(systemName: "person.crop.rectangle.stack")
-                    .font(.system(size: 64, weight: .light))
-                    .foregroundColor(.white.opacity(0.9))
-            }
-
-            VStack(spacing: 12) {
-                Text("No Business Card")
-                    .font(.title.bold())
-                    .foregroundColor(.white)
-
-                Text("You need to create a card first")
-                    .font(.body)
-                    .foregroundColor(.white.opacity(0.7))
-                    .multilineTextAlignment(.center)
-                    .padding(.horizontal, 40)
-            }
-        }
-        .padding()
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-    }
-}
-
-// MARK: - Navigation Buttons View
-
-private struct NavigationButtonsView: View {
-    let onPrivacy: () -> Void
-    let onAppearance: () -> Void
-    let onBackup: () -> Void
-    let onGroup: () -> Void
-    var isPrivacyEnabled: Bool = true
-    
-    var body: some View {
-        HStack(spacing: 12) {
-            NavigationButton(
-                icon: "lock.shield",
-                title: "Privacy",
-                action: onPrivacy,
-                isEnabled: isPrivacyEnabled
-            )
-            
-            NavigationButton(
-                icon: "paintbrush.fill",
-                title: "Appearance",
-                action: onAppearance
-            )
-            
-            NavigationButton(
-                icon: "square.and.arrow.up",
-                title: "Backup",
-                action: onBackup
-            )
-            
-            NavigationButton(
-                icon: "person.3.fill",
-                title: "Group",
-                action: onGroup
-            )
-        }
-    }
-}
-
-private struct NavigationButton: View {
-    let icon: String
-    let title: String
-    let action: () -> Void
-    var isEnabled: Bool = true
-    
-    var body: some View {
-        Button(action: {
-            guard isEnabled else { return }
-            let impact = UIImpactFeedbackGenerator(style: .medium)
-            impact.impactOccurred()
-            action()
-        }) {
-            VStack(spacing: 8) {
-                ZStack {
-                    RoundedRectangle(cornerRadius: 10, style: .continuous)
-                        .fill(isEnabled ? Color.white.opacity(0.18) : Color.white.opacity(0.08))
-                        .overlay(
-                            RoundedRectangle(cornerRadius: 10, style: .continuous)
-                                .stroke(Color.white.opacity(isEnabled ? 0.25 : 0.1), lineWidth: 1.5)
-                        )
-                        .frame(width: 44, height: 44)
-                    
-                    Image(systemName: icon)
-                        .font(.system(size: 20, weight: .semibold))
-                        .foregroundColor(isEnabled ? .white : .white.opacity(0.5))
-                        .frame(width: 44, height: 44)
-                        .contentShape(Rectangle())
-                }
-                
-                Text(title)
-                    .font(.caption2.weight(.semibold))
-                    .foregroundColor(isEnabled ? .white : .white.opacity(0.5))
-                    .multilineTextAlignment(.center)
-                    .lineLimit(2)
-                    .minimumScaleFactor(0.75)
-            }
-            .frame(maxWidth: .infinity)
-            .padding(.vertical, 10)
-        }
-        .buttonStyle(PlainButtonStyle())
-        .disabled(!isEnabled)
-    }
-}
-
 #Preview { BusinessCardListView() }
 

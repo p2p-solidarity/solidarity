@@ -2,68 +2,179 @@
 //  IDView.swift
 //  airmeishi
 //
-//  Identity view with ring interaction for Semaphore identity/group and proof generation
+//  Identity management hub with swipable tabs for identity, groups, and ZK settings.
 //
 
 import SwiftUI
-import UniformTypeIdentifiers
 
-enum EventLayoutMode: String, CaseIterable, Identifiable {
-    case list
-    case grid
-    case timeline
-    var id: String { rawValue }
-    
-    var title: String {
-        switch self {
-        case .list: return "List"
-        case .grid: return "Grid"
-        case .timeline: return "Timeline"
+struct IDView: View {
+    private enum ManagementTab: String, CaseIterable, Identifiable {
+        case overview
+        case group
+        case selective
+
+        var id: String { rawValue }
+
+        var title: String {
+            switch self {
+            case .overview: return "Identity"
+            case .group: return "Groups"
+            case .selective: return "ZK"
+            }
         }
+
+        var systemImage: String {
+            switch self {
+            case .overview: return "person.crop.circle.badge.checkmark"
+            case .group: return "person.3"
+            case .selective: return "lock.shield"
+            }
+        }
+    }
+
+    @ObservedObject private var coordinator = IdentityCoordinator.shared
+    @State private var selection: ManagementTab = .overview
+
+    var body: some View {
+        NavigationStack {
+            VStack(spacing: 20) {
+                summaryCard
+                tabSelector
+                TabView(selection: $selection) {
+                    IdentityQuickActionsTab()
+                        .tag(ManagementTab.overview)
+
+                    GroupIdentityView()
+                        .tag(ManagementTab.group)
+
+                    IdentitySelectiveSettingsTab()
+                        .tag(ManagementTab.selective)
+                }
+                .tabViewStyle(.page(indexDisplayMode: .never))
+                .animation(.easeInOut(duration: 0.2), value: selection)
+            }
+            .padding(.horizontal, 16)
+            .padding(.top, 20)
+            .padding(.bottom, 12)
+            .background(Color(.systemGroupedBackground).ignoresSafeArea())
+            .navigationTitle("Identity Center")
+            .toolbar {
+                ToolbarItem(placement: .navigationBarTrailing) {
+                    Button {
+                        coordinator.refreshIdentity()
+                    } label: {
+                        Image(systemName: "arrow.clockwise")
+                    }
+                }
+            }
+        }
+    }
+
+    private var summaryCard: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text(summaryTitle)
+                .font(.headline)
+
+            if let did = coordinator.state.activeDid?.did {
+                Text(did)
+                    .font(.footnote.monospaced())
+                    .foregroundColor(.secondary)
+            }
+
+            if let event = coordinator.state.lastImportEvent {
+                HStack(spacing: 8) {
+                    Image(systemName: "clock")
+                        .foregroundColor(.secondary)
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(event.summary)
+                            .font(.caption.weight(.semibold))
+                        Text(event.timestamp.formatted(date: .abbreviated, time: .shortened))
+                            .font(.caption2)
+                            .foregroundColor(.secondary)
+                    }
+                }
+            }
+
+            if let error = coordinator.state.lastError {
+                HStack(spacing: 6) {
+                    Image(systemName: "exclamationmark.triangle.fill")
+                        .foregroundColor(.red)
+                    Text(error.localizedDescription)
+                        .font(.caption)
+                        .foregroundColor(.red)
+                }
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(16)
+        .background(
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .fill(Color(.secondarySystemBackground))
+        )
+    }
+
+    private var tabSelector: some View {
+        HStack(spacing: 10) {
+            ForEach(ManagementTab.allCases) { tab in
+                Button {
+                    withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
+                        selection = tab
+                    }
+                } label: {
+                    HStack(spacing: 6) {
+                        Image(systemName: tab.systemImage)
+                        Text(tab.title)
+                            .font(.callout.weight(.semibold))
+                    }
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 10)
+                    .foregroundStyle(selection == tab ? Color.white : Color.primary)
+                    .background(
+                        RoundedRectangle(cornerRadius: 12, style: .continuous)
+                            .fill(selection == tab ? Color.accentColor : Color(.secondarySystemBackground))
+                    )
+                }
+                .buttonStyle(.plain)
+                .contentShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+            }
+        }
+    }
+
+    private var summaryTitle: String {
+        if coordinator.state.isLoading {
+            return "Loading identity…"
+        }
+        if coordinator.state.activeDid != nil {
+            return "Active DID"
+        }
+        return "No Active Identity"
     }
 }
 
-struct IDView: View {
+private struct IdentityQuickActionsTab: View {
     @StateObject private var idm = SemaphoreIdentityManager.shared
     @StateObject private var group = SemaphoreGroupManager.shared
     @State private var showingCreateGroup = false
     @State private var identityCommitment: String = ""
-    @State private var ringActiveCount: Int = 0
-    @State private var isPressing: Bool = false
+    @State private var ringActiveCount = 0
+    @State private var isPressing = false
     @State private var ringTimer: Timer?
-    @State private var isWorking: Bool = false
-    @State private var showErrorAlert: Bool = false
+    @State private var isWorking = false
+    @State private var showErrorAlert = false
     @State private var errorMessage: String?
-    
-    
-    var body: some View {
-        NavigationStack {
-            VStack(spacing: 16) {
-                GeometryReader { geo in
-                    ZStack {
-                        let base = min(geo.size.width, geo.size.height)
-                        // Indices chosen so that 1 = inner, 3 = outer to light from inner -> outer
-                        ringView(size: base * 0.80, index: 3)
-                        ringView(size: base * 0.62, index: 2)
-                        ringView(size: base * 0.46, index: 1)
-                        centerButton(size: base * 0.36)
-                    }
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-                }
-                .frame(height: 360)
 
-                identityPanel()
+    var body: some View {
+        ScrollView {
+            VStack(spacing: 24) {
+                ringStack
+                    .frame(height: 320)
+
+                identityPanel
+
+                quickActions
             }
-            .navigationTitle("ID")
-            .toolbar {
-                ToolbarItem(placement: .navigationBarTrailing) {
-                    NavigationLink {
-                        GroupManagementView()
-                    } label: {
-                        Image(systemName: "person.3")
-                    }
-                }
-            }
+            .padding(.horizontal, 4)
+            .padding(.bottom, 24)
         }
         .sheet(isPresented: $showingCreateGroup) {
             NavigationStack { CreateGroupSheet() }
@@ -75,6 +186,99 @@ struct IDView: View {
         }
         .onAppear {
             if let id = idm.getIdentity() { identityCommitment = id.commitment }
+        }
+    }
+
+    private var ringStack: some View {
+        GeometryReader { geo in
+            let base = min(geo.size.width, geo.size.height)
+            ZStack {
+                ringView(size: base * 0.80, index: 3)
+                ringView(size: base * 0.62, index: 2)
+                ringView(size: base * 0.46, index: 1)
+                centerButton(size: base * 0.36)
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+        }
+    }
+
+    private var identityPanel: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack {
+                Text("Your ID")
+                    .font(.headline)
+                Spacer()
+                if !identityCommitment.isEmpty {
+                    Button {
+                        #if canImport(UIKit)
+                        UIPasteboard.general.string = identityCommitment
+                        #endif
+                    } label: {
+                        Label("Copy", systemImage: "doc.on.doc")
+                    }
+                    .buttonStyle(.bordered)
+                }
+            }
+
+            if identityCommitment.isEmpty {
+                Text("No ID yet. Tap the orb to create your identity.")
+                    .font(.footnote)
+                    .foregroundColor(.secondary)
+            } else {
+                VStack(alignment: .leading, spacing: 6) {
+                    Text(shortCommitment(identityCommitment))
+                        .font(.callout.monospaced())
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 6)
+                        .background(
+                            RoundedRectangle(cornerRadius: 10)
+                                .fill(Color(uiColor: .secondarySystemBackground))
+                        )
+
+                    DisclosureGroup("Show full commitment") {
+                        ScrollView(.horizontal, showsIndicators: true) {
+                            Text(identityCommitment)
+                                .font(.footnote.monospaced())
+                                .textSelection(.enabled)
+                                .padding(.vertical, 4)
+                        }
+                    }
+                }
+            }
+        }
+        .padding(16)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .fill(Color(.secondarySystemBackground))
+        )
+    }
+
+    private var quickActions: some View {
+        VStack(spacing: 12) {
+            NavigationLink {
+                PersonalIdentityView()
+            } label: {
+                Label("View identity details", systemImage: "person.text.rectangle")
+                    .frame(maxWidth: .infinity)
+            }
+            .buttonStyle(.borderedProminent)
+
+            NavigationLink {
+                GroupManagementView()
+            } label: {
+                Label("Open group manager", systemImage: "person.3")
+                    .frame(maxWidth: .infinity)
+            }
+            .buttonStyle(.bordered)
+
+            Button {
+                if !isWorking { showingCreateGroup = true }
+            } label: {
+                Label("Create new group", systemImage: "sparkles")
+                    .frame(maxWidth: .infinity)
+            }
+            .buttonStyle(.bordered)
         }
     }
 
@@ -107,6 +311,7 @@ struct IDView: View {
                             .font(.title2.weight(.bold))
                             .foregroundColor(.white)
                             .shadow(color: .black.opacity(0.35), radius: 3, x: 0, y: 1)
+
                         if !identityCommitment.isEmpty {
                             VStack(spacing: 4) {
                                 Text("Commitment")
@@ -121,7 +326,7 @@ struct IDView: View {
                                     .clipShape(RoundedRectangle(cornerRadius: 6))
                             }
                         } else {
-                            Text("Tap: Create ID\nHold: Create Group")
+                            Text("Tap to create ID\nHold to create group")
                                 .font(.caption2)
                                 .multilineTextAlignment(.center)
                                 .foregroundColor(.white)
@@ -141,7 +346,6 @@ struct IDView: View {
                         UIImpactFeedbackGenerator(style: .light).impactOccurred()
                         #endif
                     } else {
-                        // Keep the rings lit at their last state until action perform finishes
                         stopRingAnimation(reset: false)
                     }
                 }, perform: {
@@ -174,13 +378,13 @@ struct IDView: View {
         isWorking = true
         DispatchQueue.global(qos: .userInitiated).async {
             do {
-                // Ensure identity exists
                 let bundle = try idm.loadOrCreateIdentity()
                 if identityCommitment.isEmpty {
                     DispatchQueue.main.async { identityCommitment = bundle.commitment }
                 }
-                // Ensure membership includes self
-                if !group.members.contains(bundle.commitment) { group.addMember(bundle.commitment) }
+                if !group.members.contains(bundle.commitment) {
+                    group.addMember(bundle.commitment)
+                }
                 DispatchQueue.main.async { isWorking = false }
             } catch {
                 ZKLog.error("Error on tapAction: \(error.localizedDescription)")
@@ -215,56 +419,20 @@ struct IDView: View {
         }
     }
 
-    private func shortCommitment(_ c: String) -> String {
-        if c.count <= 12 { return c }
-        let start = c.prefix(6)
-        let end = c.suffix(6)
+    private func shortCommitment(_ value: String) -> String {
+        guard value.count > 12 else { return value }
+        let start = value.prefix(6)
+        let end = value.suffix(6)
         return String(start) + "…" + String(end)
     }
+}
 
-    // MARK: - Identity panel
+private struct IdentitySelectiveSettingsTab: View {
+    @State private var preferences = SharingPreferences()
 
-    @ViewBuilder
-    private func identityPanel() -> some View {
-        VStack(alignment: .leading, spacing: 8) {
-            HStack {
-                Text("Your ID")
-                    .font(.headline)
-                Spacer()
-                if !identityCommitment.isEmpty {
-                    Button {
-                        #if canImport(UIKit)
-                        UIPasteboard.general.string = identityCommitment
-                        #endif
-                    } label: {
-                        Label("Copy", systemImage: "doc.on.doc")
-                    }
-                    .buttonStyle(.bordered)
-                }
-            }
-            if identityCommitment.isEmpty {
-                Text("No ID yet. Tap the center to create your identity.")
-                    .font(.footnote)
-                    .foregroundColor(.secondary)
-            } else {
-                VStack(alignment: .leading, spacing: 6) {
-                    Text(shortCommitment(identityCommitment))
-                        .font(.callout.monospaced())
-                        .padding(.horizontal, 10)
-                        .padding(.vertical, 6)
-                        .background(RoundedRectangle(cornerRadius: 10).fill(Color(uiColor: .secondarySystemBackground)))
-                    DisclosureGroup("Show full") {
-                        ScrollView(.horizontal, showsIndicators: true) {
-                            Text(identityCommitment)
-                                .font(.footnote.monospaced())
-                                .textSelection(.enabled)
-                                .padding(.vertical, 4)
-                        }
-                    }
-                }
-            }
-        }
-        .padding(.horizontal)
+    var body: some View {
+        SelectiveDisclosureSettingsView(sharingPreferences: $preferences)
+            .scrollContentBackground(.hidden)
     }
 }
 
@@ -287,7 +455,6 @@ private struct CreateGroupSheet: View {
 
     var body: some View {
         ZStack {
-            // Dark gradient background
             LinearGradient(
                 colors: [
                     Color(red: 0.05, green: 0.05, blue: 0.08),
@@ -299,7 +466,6 @@ private struct CreateGroupSheet: View {
             .ignoresSafeArea()
 
             VStack(spacing: 24) {
-                // Header
                 VStack(spacing: 16) {
                     Image(systemName: "person.3.fill")
                         .font(.system(size: 48))
@@ -332,9 +498,7 @@ private struct CreateGroupSheet: View {
                 }
                 .padding(.top, 40)
 
-                // Form Content
                 VStack(spacing: 20) {
-                    // Name Input
                     VStack(alignment: .leading, spacing: 8) {
                         Text("Group Name")
                             .font(.subheadline)
@@ -375,7 +539,6 @@ private struct CreateGroupSheet: View {
                         }
                     }
 
-                    // Include Self Toggle
                     HStack {
                         VStack(alignment: .leading, spacing: 4) {
                             Text("Include my identity")
@@ -407,7 +570,6 @@ private struct CreateGroupSheet: View {
 
                 Spacer()
 
-                // Bottom Button
                 VStack(spacing: 16) {
                     Button {
                         guard !isCreating && isNameValid else { return }
@@ -450,9 +612,7 @@ private struct CreateGroupSheet: View {
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             ToolbarItem(placement: .navigationBarTrailing) {
-                Button {
-                    dismiss()
-                } label: {
+                Button { dismiss() } label: {
                     Image(systemName: "xmark.circle.fill")
                         .font(.title3)
                         .foregroundStyle(.white.opacity(0.8))
@@ -469,7 +629,9 @@ private struct CreateGroupSheet: View {
         guard isNameValid else { return }
         let name = trimmedName
         var members: [String] = []
-        if includeSelf, let bundle = idm.getIdentity() ?? (try? idm.loadOrCreateIdentity()) { members.append(bundle.commitment) }
+        if includeSelf, let bundle = idm.getIdentity() ?? (try? idm.loadOrCreateIdentity()) {
+            members.append(bundle.commitment)
+        }
         let owner = randomEthAddress()
         _ = manager.createGroup(name: name, initialMembers: members, ownerAddress: owner)
         groupName = ""
