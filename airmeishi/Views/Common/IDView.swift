@@ -75,10 +75,30 @@ struct IDView: View {
             Text(summaryTitle)
                 .font(.headline)
 
+            // Show DID if available
             if let did = coordinator.state.activeDid?.did {
-                Text(did)
-                    .font(.footnote.monospaced())
-                    .foregroundColor(.secondary)
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("DID")
+                        .font(.caption.weight(.semibold))
+                        .foregroundColor(.secondary)
+                    Text(did)
+                        .font(.footnote.monospaced())
+                        .foregroundColor(.primary)
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+                }
+            }
+            
+            // Show ZK commitment if available
+            if let zkIdentity = coordinator.state.zkIdentity {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("ZK Commitment")
+                        .font(.caption.weight(.semibold))
+                        .foregroundColor(.secondary)
+                    Text(shortCommitment(zkIdentity.commitment))
+                        .font(.footnote.monospaced())
+                        .foregroundColor(.primary)
+                }
             }
 
             if let event = coordinator.state.lastImportEvent {
@@ -111,6 +131,13 @@ struct IDView: View {
             RoundedRectangle(cornerRadius: 16, style: .continuous)
                 .fill(Color(.secondarySystemBackground))
         )
+    }
+    
+    private func shortCommitment(_ value: String) -> String {
+        guard value.count > 12 else { return value }
+        let start = value.prefix(6)
+        let end = value.suffix(6)
+        return String(start) + "…" + String(end)
     }
 
     private var tabSelector: some View {
@@ -152,6 +179,13 @@ struct IDView: View {
 }
 
 private struct IdentityQuickActionsTab: View {
+    private func shortCommitment(_ value: String) -> String {
+        guard value.count > 12 else { return value }
+        let start = value.prefix(6)
+        let end = value.suffix(6)
+        return String(start) + "…" + String(end)
+    }
+    
     @StateObject private var idm = SemaphoreIdentityManager.shared
     @StateObject private var group = SemaphoreGroupManager.shared
     @State private var showingCreateGroup = false
@@ -376,20 +410,34 @@ private struct IdentityQuickActionsTab: View {
     private func tapAction() {
         if isWorking { return }
         isWorking = true
-        DispatchQueue.global(qos: .userInitiated).async {
+        
+        Task {
             do {
-                let bundle = try idm.loadOrCreateIdentity()
-                if identityCommitment.isEmpty {
-                    DispatchQueue.main.async { identityCommitment = bundle.commitment }
+                // Create or load ZK identity
+                let bundle = try await Task.detached(priority: .userInitiated) {
+                    try idm.loadOrCreateIdentity()
+                }.value
+                
+                await MainActor.run {
+                    identityCommitment = bundle.commitment
+                    
+                    // Add to default group if not already a member
+                    if !group.members.contains(bundle.commitment) {
+                        group.addMember(bundle.commitment)
+                    }
+                    
+                    // Also ensure DID is created
+                    IdentityCoordinator.shared.refreshIdentity()
+                    isWorking = false
                 }
-                if !group.members.contains(bundle.commitment) {
-                    group.addMember(bundle.commitment)
-                }
-                DispatchQueue.main.async { isWorking = false }
+                
+                #if canImport(UIKit)
+                UINotificationFeedbackGenerator().notificationOccurred(.success)
+                #endif
             } catch {
-                ZKLog.error("Error on tapAction: \(error.localizedDescription)")
-                DispatchQueue.main.async {
-                    errorMessage = error.localizedDescription
+                ZKLog.error("Error creating identity: \(error.localizedDescription)")
+                await MainActor.run {
+                    errorMessage = "Failed to create identity: \(error.localizedDescription)"
                     showErrorAlert = true
                     isWorking = false
                 }
@@ -400,18 +448,23 @@ private struct IdentityQuickActionsTab: View {
     private func longPressAction() {
         if isWorking { return }
         isWorking = true
-        DispatchQueue.global(qos: .userInitiated).async {
+        
+        Task {
             do {
-                let bundle = try idm.loadOrCreateIdentity()
-                DispatchQueue.main.async { identityCommitment = bundle.commitment }
-                DispatchQueue.main.async {
+                // Ensure identity exists before creating group
+                let bundle = try await Task.detached(priority: .userInitiated) {
+                    try idm.loadOrCreateIdentity()
+                }.value
+                
+                await MainActor.run {
+                    identityCommitment = bundle.commitment
                     isWorking = false
                     showingCreateGroup = true
                 }
             } catch {
-                ZKLog.error("Error on longPressAction: \(error.localizedDescription)")
-                DispatchQueue.main.async {
-                    errorMessage = error.localizedDescription
+                ZKLog.error("Error creating identity for group: \(error.localizedDescription)")
+                await MainActor.run {
+                    errorMessage = "Failed to prepare for group creation: \(error.localizedDescription)"
                     showErrorAlert = true
                     isWorking = false
                 }
@@ -419,12 +472,6 @@ private struct IdentityQuickActionsTab: View {
         }
     }
 
-    private func shortCommitment(_ value: String) -> String {
-        guard value.count > 12 else { return value }
-        let start = value.prefix(6)
-        let end = value.suffix(6)
-        return String(start) + "…" + String(end)
-    }
 }
 
 private struct IdentitySelectiveSettingsTab: View {

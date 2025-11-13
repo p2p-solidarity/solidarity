@@ -28,14 +28,53 @@ final class DIDService {
 
     /// Returns the descriptor (DID, verification method ID, JWK) for the current did:key identity.
     func currentDidKey(context: LAContext? = nil) -> CardResult<DIDDescriptor> {
+        // First ensure the signing key exists
+        switch keychain.ensureSigningKey() {
+        case .failure(let error):
+            print("[DIDService] Failed to ensure signing key: \(error)")
+            return .failure(error)
+        case .success:
+            break
+        }
+        
         switch keychain.publicJwk(context: context) {
         case .failure(let error):
+            print("[DIDService] Failed to get public JWK: \(error)")
+            
+            // If we get "empty result" error, the key might be corrupted, try resetting it
+            if error.localizedDescription.contains("empty result") {
+                print("[DIDService] Key seems corrupted, attempting reset...")
+                switch keychain.resetSigningKey() {
+                case .failure(let resetError):
+                    print("[DIDService] Failed to reset key: \(resetError)")
+                    return .failure(resetError)
+                case .success:
+                    // Try again after reset
+                    switch keychain.publicJwk(context: context) {
+                    case .failure(let retryError):
+                        print("[DIDService] Still failed after reset: \(retryError)")
+                        return .failure(retryError)
+                    case .success(let jwk):
+                        do {
+                            let did = try didKeyUtils.didFromJwk(jwk: try jwk.jsonString())
+                            print("[DIDService] Successfully derived DID after reset: \(did)")
+                            return .success(descriptor(for: did, jwk: jwk))
+                        } catch {
+                            print("[DIDService] Failed to derive did:key after reset: \(error)")
+                            return .failure(.keyManagementError("Failed to derive did:key: \(error.localizedDescription)"))
+                        }
+                    }
+                }
+            }
+            
             return .failure(error)
         case .success(let jwk):
             do {
                 let did = try didKeyUtils.didFromJwk(jwk: try jwk.jsonString())
+                print("[DIDService] Successfully derived DID: \(did)")
                 return .success(descriptor(for: did, jwk: jwk))
             } catch {
+                print("[DIDService] Failed to derive did:key: \(error)")
                 return .failure(.keyManagementError("Failed to derive did:key: \(error.localizedDescription)"))
             }
         }

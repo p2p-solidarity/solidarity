@@ -161,6 +161,21 @@ final class IdentityCoordinator: ObservableObject {
         Task.detached { [weak self] in
             guard let self else { return }
             await self.loadIdentity(context: context)
+            // Ensure ZK identity is synchronized with DID
+            await self.syncZKIdentity()
+        }
+    }
+    
+    @MainActor
+    private func syncZKIdentity() {
+        // Ensure ZK identity exists and is linked with DID
+        if state.zkIdentity == nil {
+            if let bundle = try? semaphoreManager.loadOrCreateIdentity() {
+                var next = state
+                next.zkIdentity = bundle
+                state = next
+                ZKLog.info("ZK identity synchronized with DID system")
+            }
         }
     }
 

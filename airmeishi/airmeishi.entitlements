@@ -10,5 +10,13 @@
 	<array>
 		<string>$(TeamIdentifierPrefix)pass.kidneyweakx.airmeishi.businesscard</string>
 	</array>
+	<key>com.apple.developer.icloud-container-identifiers</key>
+	<array>
+		<string>iCloud.$(CFBundleIdentifier)</string>
+	</array>
+	<key>com.apple.developer.icloud-services</key>
+	<array>
+		<string>CloudDocuments</string>
+	</array>
 </dict>
 </plist>
