@@ -24,6 +24,9 @@ struct MainTabView: View {
                 
                 IDView()
                     .tag(3)
+                
+                SettingsView()
+                    .tag(4)
             }
             .tabViewStyle(DefaultTabViewStyle())
             .toolbarBackground(.hidden, for: .tabBar)

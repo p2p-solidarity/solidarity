@@ -166,20 +166,6 @@ private extension BusinessCardListView {
         ScrollView {
             VStack(spacing: 0) {
                 if let card = cardManager.businessCards.first {
-                    BusinessCardHeaderView(
-                        card: card,
-                        onPrivacy: { showingPrivacySettings = true },
-                        onAppearance: { showingAppearanceSettings = true },
-                        onBackup: { showingBackupSettings = true },
-                        onGroup: { showingGroupManagement = true },
-                        isPrivacyEnabled: true,
-                        onFormatChange: { newFormat in
-                            updateSharingFormat(for: card.id, format: newFormat)
-                        }
-                    )
-                    .padding(.horizontal, 16)
-                    .padding(.top, 20)
-                    
                     // Card section
                     WalletCardView(
                         card: card,
@@ -314,27 +300,6 @@ private extension BusinessCardListView {
     func makeEmptyStateView() -> some View {
         ScrollView {
             VStack(spacing: 0) {
-                BusinessCardHeaderView(
-                    card: nil,
-                    onPrivacy: {
-                        if !cardManager.businessCards.isEmpty {
-                            showingPrivacySettings = true
-                        }
-                    },
-                    onAppearance: {
-                        showingAppearanceSettings = true
-                    },
-                    onBackup: {
-                        showingBackupSettings = true
-                    },
-                    onGroup: {
-                        showingGroupManagement = true
-                    },
-                    isPrivacyEnabled: false
-                )
-                .padding(.horizontal, 16)
-                .padding(.top, 20)
-                
                 BusinessCardEmptyStateView()
             }
             .padding(.bottom, 40)

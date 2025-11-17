@@ -51,9 +51,9 @@ struct FloatingTabBarBackdrop: View {
                     RoundedRectangle(cornerRadius: 20, style: .continuous)
                         .stroke(Color.white.opacity(0.08), lineWidth: 0.5)
                 )
-                .shadow(color: Color.black.opacity(0.25), radius: 12, y: 6)
         }
         .frame(height: 64)
+        .shadow(color: Color.black.opacity(0.25), radius: 6, y: 3)
         .padding(.horizontal, 16)
         .padding(.bottom, 10)
         .background(Color.clear)
@@ -69,6 +69,7 @@ enum MainAppTab: Int, CaseIterable {
     case sharing = 1
     case shoutout = 2
     case id = 3
+    case settings = 4
 }
 
 // MARK: - Custom Floating Tab Bar
@@ -87,18 +88,22 @@ struct CustomFloatingTabBar: View {
                 TabBarButton(systemName: "list.bullet.rectangle", title: "Glossary", isSelected: selectedTab == MainAppTab.glossary.rawValue) {
                     selectedTab = MainAppTab.glossary.rawValue
                 }
-                Spacer(minLength: 20)
+                Spacer(minLength: 16)
                 TabBarButton(systemName: "circle.grid.2x2", title: "Sharing", isSelected: selectedTab == MainAppTab.sharing.rawValue) {
                     selectedTab = MainAppTab.sharing.rawValue
                 }
-                Spacer(minLength: 20)
+                Spacer(minLength: 16)
                 TabBarButton(systemName: "bolt", title: "Shoutout", isSelected: selectedTab == MainAppTab.shoutout.rawValue) {
                     selectedTab = MainAppTab.shoutout.rawValue
                 }
-                Spacer(minLength: 20)
+                Spacer(minLength: 16)
                 TabBarButton(systemName: "target", title: "ID", isSelected: selectedTab == MainAppTab.id.rawValue) {
                     selectedTab = MainAppTab.id.rawValue
                     onIdTabTapped?()
+                }
+                Spacer(minLength: 16)
+                TabBarButton(systemName: "gearshape.fill", title: "Settings", isSelected: selectedTab == MainAppTab.settings.rawValue) {
+                    selectedTab = MainAppTab.settings.rawValue
                 }
             }
             .frame(height: 64)
