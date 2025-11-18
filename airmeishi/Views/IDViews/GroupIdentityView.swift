@@ -3,7 +3,6 @@ import SwiftUI
 struct GroupIdentityView: View {
     @ObservedObject private var coordinator = IdentityCoordinator.shared
     @ObservedObject private var groupManager = SemaphoreGroupManager.shared
-    @State private var showingManager = false
 
     var body: some View {
         List {
@@ -12,9 +11,6 @@ struct GroupIdentityView: View {
             actionsSection
         }
         .listStyle(.insetGrouped)
-        .sheet(isPresented: $showingManager) {
-            NavigationStack { GroupManagementView() }
-        }
     }
 
     private var headerSection: some View {
@@ -47,9 +43,9 @@ struct GroupIdentityView: View {
                 Text("Group has no members yet.")
                     .foregroundColor(.secondary)
             } else {
-                ForEach(Array(groupManager.members.enumerated()), id: \.offset) { index, member in
-                    LabeledContent("#\(index + 1)", value: member)
-                        .font(.caption.monospacedDigit())
+                ForEach(Array(groupManager.members.enumerated()), id: \.offset) { index, _ in
+                    Text("Member #\(index + 1)")
+                        .font(.subheadline)
                 }
             }
         }
@@ -57,12 +53,6 @@ struct GroupIdentityView: View {
 
     private var actionsSection: some View {
         Section("Actions") {
-            Button {
-                showingManager = true
-            } label: {
-                Label("Open Group Manager", systemImage: "person.3")
-            }
-
             Button {
                 groupManager.recomputeRoot()
             } label: {

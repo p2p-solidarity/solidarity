@@ -11,7 +11,6 @@ struct IDView: View {
     private enum ManagementTab: String, CaseIterable, Identifiable {
         case overview
         case group
-        case selective
 
         var id: String { rawValue }
 
@@ -19,7 +18,6 @@ struct IDView: View {
             switch self {
             case .overview: return "Identity"
             case .group: return "Groups"
-            case .selective: return "ZK"
             }
         }
 
@@ -27,7 +25,6 @@ struct IDView: View {
             switch self {
             case .overview: return "person.crop.circle.badge.checkmark"
             case .group: return "person.3"
-            case .selective: return "lock.shield"
             }
         }
     }
@@ -46,9 +43,6 @@ struct IDView: View {
 
                     GroupIdentityView()
                         .tag(ManagementTab.group)
-
-                    IdentitySelectiveSettingsTab()
-                        .tag(ManagementTab.selective)
                 }
                 .tabViewStyle(.page(indexDisplayMode: .never))
                 .animation(.easeInOut(duration: 0.2), value: selection)
@@ -188,7 +182,7 @@ private struct IdentityQuickActionsTab: View {
     
     @StateObject private var idm = SemaphoreIdentityManager.shared
     @StateObject private var group = SemaphoreGroupManager.shared
-    @State private var showingCreateGroup = false
+    @State private var showingGroupManager = false
     @State private var identityCommitment: String = ""
     @State private var ringActiveCount = 0
     @State private var isPressing = false
@@ -203,15 +197,10 @@ private struct IdentityQuickActionsTab: View {
                 ringStack
                     .frame(height: 320)
 
-                identityPanel
-
-                quickActions
+                identityActions
             }
             .padding(.horizontal, 4)
             .padding(.bottom, 24)
-        }
-        .sheet(isPresented: $showingCreateGroup) {
-            NavigationStack { CreateGroupSheet() }
         }
         .alert("Error", isPresented: $showErrorAlert) {
             Button("OK", role: .cancel) {}
@@ -220,6 +209,9 @@ private struct IdentityQuickActionsTab: View {
         }
         .onAppear {
             if let id = idm.getIdentity() { identityCommitment = id.commitment }
+        }
+        .sheet(isPresented: $showingGroupManager) {
+            NavigationStack { GroupManagementView() }
         }
     }
 
@@ -236,49 +228,18 @@ private struct IdentityQuickActionsTab: View {
         }
     }
 
-    private var identityPanel: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            HStack {
-                Text("Your ID")
-                    .font(.headline)
-                Spacer()
-                if !identityCommitment.isEmpty {
-                    Button {
-                        #if canImport(UIKit)
-                        UIPasteboard.general.string = identityCommitment
-                        #endif
-                    } label: {
-                        Label("Copy", systemImage: "doc.on.doc")
-                    }
-                    .buttonStyle(.bordered)
-                }
-            }
+    private var identityActions: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("Identity Actions")
+                .font(.headline)
 
-            if identityCommitment.isEmpty {
-                Text("No ID yet. Tap the orb to create your identity.")
-                    .font(.footnote)
-                    .foregroundColor(.secondary)
-            } else {
-                VStack(alignment: .leading, spacing: 6) {
-                    Text(shortCommitment(identityCommitment))
-                        .font(.callout.monospaced())
-                        .padding(.horizontal, 10)
-                        .padding(.vertical, 6)
-                        .background(
-                            RoundedRectangle(cornerRadius: 10)
-                                .fill(Color(uiColor: .secondarySystemBackground))
-                        )
-
-                    DisclosureGroup("Show full commitment") {
-                        ScrollView(.horizontal, showsIndicators: true) {
-                            Text(identityCommitment)
-                                .font(.footnote.monospaced())
-                                .textSelection(.enabled)
-                                .padding(.vertical, 4)
-                        }
-                    }
-                }
+            NavigationLink {
+                IdentityDashboardView()
+            } label: {
+                Label("Open Identity Center", systemImage: "person.text.rectangle")
+                    .frame(maxWidth: .infinity)
             }
+            .buttonStyle(.borderedProminent)
         }
         .padding(16)
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -286,34 +247,6 @@ private struct IdentityQuickActionsTab: View {
             RoundedRectangle(cornerRadius: 16, style: .continuous)
                 .fill(Color(.secondarySystemBackground))
         )
-    }
-
-    private var quickActions: some View {
-        VStack(spacing: 12) {
-            NavigationLink {
-                PersonalIdentityView()
-            } label: {
-                Label("View identity details", systemImage: "person.text.rectangle")
-                    .frame(maxWidth: .infinity)
-            }
-            .buttonStyle(.borderedProminent)
-
-            NavigationLink {
-                GroupManagementView()
-            } label: {
-                Label("Open group manager", systemImage: "person.3")
-                    .frame(maxWidth: .infinity)
-            }
-            .buttonStyle(.bordered)
-
-            Button {
-                if !isWorking { showingCreateGroup = true }
-            } label: {
-                Label("Create new group", systemImage: "sparkles")
-                    .frame(maxWidth: .infinity)
-            }
-            .buttonStyle(.bordered)
-        }
     }
 
     private func ringView(size: CGFloat, index: Int) -> some View {
@@ -360,7 +293,7 @@ private struct IdentityQuickActionsTab: View {
                                     .clipShape(RoundedRectangle(cornerRadius: 6))
                             }
                         } else {
-                            Text("Tap to create ID\nHold to create group")
+                            Text("Tap to create ID\nHold to manage groups")
                                 .font(.caption2)
                                 .multilineTextAlignment(.center)
                                 .foregroundColor(.white)
@@ -451,7 +384,7 @@ private struct IdentityQuickActionsTab: View {
         
         Task {
             do {
-                // Ensure identity exists before creating group
+                // Ensure identity exists before managing groups
                 let bundle = try await Task.detached(priority: .userInitiated) {
                     try idm.loadOrCreateIdentity()
                 }.value
@@ -459,12 +392,12 @@ private struct IdentityQuickActionsTab: View {
                 await MainActor.run {
                     identityCommitment = bundle.commitment
                     isWorking = false
-                    showingCreateGroup = true
+                    showingGroupManager = true
                 }
             } catch {
-                ZKLog.error("Error creating identity for group: \(error.localizedDescription)")
+                ZKLog.error("Error preparing identity for group management: \(error.localizedDescription)")
                 await MainActor.run {
-                    errorMessage = "Failed to prepare for group creation: \(error.localizedDescription)"
+                    errorMessage = "Failed to prepare for group management: \(error.localizedDescription)"
                     showErrorAlert = true
                     isWorking = false
                 }
@@ -474,223 +407,7 @@ private struct IdentityQuickActionsTab: View {
 
 }
 
-private struct IdentitySelectiveSettingsTab: View {
-    @State private var preferences = SharingPreferences()
-
-    var body: some View {
-        SelectiveDisclosureSettingsView(sharingPreferences: $preferences)
-            .scrollContentBackground(.hidden)
-    }
-}
-
 #Preview {
     IDView()
 }
 
-// MARK: - Create Group Sheet
-// Note: Local-only group creation (API removed)
-private struct CreateGroupSheet: View {
-    @Environment(\.dismiss) private var dismiss
-    @State private var groupName: String = ""
-    @State private var includeSelf = true
-    @ObservedObject private var idm = SemaphoreIdentityManager.shared
-    @ObservedObject private var manager = SemaphoreGroupManager.shared
-    @State private var isCreating = false
-    @FocusState private var nameFieldFocused: Bool
-    private var trimmedName: String { groupName.trimmingCharacters(in: .whitespacesAndNewlines) }
-    private var isNameValid: Bool { trimmedName.count >= 3 }
-
-    var body: some View {
-        ZStack {
-            LinearGradient(
-                colors: [
-                    Color(red: 0.05, green: 0.05, blue: 0.08),
-                    Color(red: 0.08, green: 0.08, blue: 0.12)
-                ],
-                startPoint: .topLeading,
-                endPoint: .bottomTrailing
-            )
-            .ignoresSafeArea()
-
-            VStack(spacing: 24) {
-                VStack(spacing: 16) {
-                    Image(systemName: "person.3.fill")
-                        .font(.system(size: 48))
-                        .foregroundColor(.white)
-                        .padding(24)
-                        .background(
-                            Circle()
-                                .fill(
-                                    LinearGradient(
-                                        colors: [
-                                            Color.accentColor.opacity(0.3),
-                                            Color.accentColor.opacity(0.1)
-                                        ],
-                                        startPoint: .topLeading,
-                                        endPoint: .bottomTrailing
-                                    )
-                                )
-                        )
-
-                    VStack(spacing: 8) {
-                        Text("Create New Group")
-                            .font(.title)
-                            .fontWeight(.bold)
-                            .foregroundColor(.white)
-
-                        Text("Build a community with ZK privacy")
-                            .font(.subheadline)
-                            .foregroundColor(.white.opacity(0.7))
-                    }
-                }
-                .padding(.top, 40)
-
-                VStack(spacing: 20) {
-                    VStack(alignment: .leading, spacing: 8) {
-                        Text("Group Name")
-                            .font(.subheadline)
-                            .fontWeight(.medium)
-                            .foregroundColor(.white.opacity(0.8))
-
-                        TextField("Enter group name", text: $groupName)
-                            .textInputAutocapitalization(.words)
-                            .autocorrectionDisabled()
-                            .submitLabel(.done)
-                            .focused($nameFieldFocused)
-                            .onSubmit { if isNameValid { localCreate() } }
-                            .foregroundColor(.white)
-                            .tint(.accentColor)
-                            .padding(16)
-                            .background(
-                                RoundedRectangle(cornerRadius: 12)
-                                    .fill(Color.white.opacity(0.1))
-                                    .overlay(
-                                        RoundedRectangle(cornerRadius: 12)
-                                            .stroke(
-                                                isNameValid || groupName.isEmpty
-                                                    ? Color.white.opacity(0.2)
-                                                    : Color.red.opacity(0.5),
-                                                lineWidth: 1
-                                            )
-                                    )
-                            )
-
-                        if !isNameValid && !groupName.isEmpty {
-                            HStack(spacing: 4) {
-                                Image(systemName: "exclamationmark.circle.fill")
-                                    .font(.caption2)
-                                Text("Name must be at least 3 characters")
-                                    .font(.caption)
-                            }
-                            .foregroundColor(.red)
-                        }
-                    }
-
-                    HStack {
-                        VStack(alignment: .leading, spacing: 4) {
-                            Text("Include my identity")
-                                .font(.subheadline)
-                                .fontWeight(.medium)
-                                .foregroundColor(.white)
-
-                            Text("Add yourself as the first member")
-                                .font(.caption)
-                                .foregroundColor(.white.opacity(0.5))
-                        }
-
-                        Spacer()
-
-                        Toggle("", isOn: $includeSelf)
-                            .tint(.accentColor)
-                    }
-                    .padding(16)
-                    .background(
-                        RoundedRectangle(cornerRadius: 12)
-                            .fill(Color.white.opacity(0.1))
-                            .overlay(
-                                RoundedRectangle(cornerRadius: 12)
-                                    .stroke(Color.white.opacity(0.2), lineWidth: 1)
-                            )
-                    )
-                }
-                .padding(.horizontal, 24)
-
-                Spacer()
-
-                VStack(spacing: 16) {
-                    Button {
-                        guard !isCreating && isNameValid else { return }
-                        localCreate()
-                    } label: {
-                        HStack(spacing: 8) {
-                            if isCreating {
-                                ProgressView()
-                                    .controlSize(.small)
-                                    .tint(.white)
-                            } else {
-                                Image(systemName: "plus.circle.fill")
-                            }
-                            Text(isCreating ? "Creating..." : "Create Group")
-                                .fontWeight(.semibold)
-                        }
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 16)
-                        .background(
-                            RoundedRectangle(cornerRadius: 12)
-                                .fill(
-                                    isNameValid && !isCreating
-                                        ? Color.accentColor
-                                        : Color(red: 0.2, green: 0.2, blue: 0.25)
-                                )
-                        )
-                        .foregroundColor(.white)
-                    }
-                    .disabled(!isNameValid || isCreating)
-
-                    Text("Groups use Semaphore ZK proofs for privacy")
-                        .font(.caption)
-                        .foregroundColor(.white.opacity(0.4))
-                }
-                .padding(.horizontal, 24)
-                .padding(.bottom, 32)
-            }
-        }
-        .navigationTitle("New Group")
-        .navigationBarTitleDisplayMode(.inline)
-        .toolbar {
-            ToolbarItem(placement: .navigationBarTrailing) {
-                Button { dismiss() } label: {
-                    Image(systemName: "xmark.circle.fill")
-                        .font(.title3)
-                        .foregroundStyle(.white.opacity(0.8))
-                }
-            }
-        }
-        .toolbarBackground(Color.clear, for: .navigationBar)
-        .toolbarBackground(.hidden, for: .navigationBar)
-        .onAppear { nameFieldFocused = true }
-    }
-
-    private func localCreate() {
-        if isCreating { return }
-        guard isNameValid else { return }
-        let name = trimmedName
-        var members: [String] = []
-        if includeSelf, let bundle = idm.getIdentity() ?? (try? idm.loadOrCreateIdentity()) {
-            members.append(bundle.commitment)
-        }
-        let owner = randomEthAddress()
-        _ = manager.createGroup(name: name, initialMembers: members, ownerAddress: owner)
-        groupName = ""
-        dismiss()
-    }
-
-    private func randomEthAddress() -> String {
-        var bytes = [UInt8](repeating: 0, count: 20)
-        _ = SecRandomCopyBytes(kSecRandomDefault, bytes.count, &bytes)
-        let hex = bytes.map { String(format: "%02x", $0) }.joined()
-        return "0x" + hex
-    }
-}
-
- 

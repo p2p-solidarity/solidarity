@@ -70,28 +70,8 @@ struct ProximitySharingView: View {
                     }
                 }
                 .padding(.horizontal, 24)
-                
-                Text("You're welcome to chill here.")
-                        .font(.caption)
-                    .foregroundColor(Color.white.opacity(0.7))
-                    .padding(.top, 8)
-                
+
                 Spacer()
-                
-                // Small status chip
-                HStack(spacing: 10) {
-                    Label("Nearby: \(proximityManager.nearbyPeers.count)", systemImage: "person.2")
-                    if proximityManager.getSharingStatus().connectedPeersCount > 0 {
-                        Label("Connected: \(proximityManager.getSharingStatus().connectedPeersCount)", systemImage: "link")
-                    }
-                }
-                .font(.caption)
-                .foregroundColor(.white)
-                .padding(.vertical, 8)
-                .padding(.horizontal, 12)
-                .background(Color.white.opacity(0.08))
-                .clipShape(Capsule())
-                .padding(.bottom, 16)
             }
             
             // Close button

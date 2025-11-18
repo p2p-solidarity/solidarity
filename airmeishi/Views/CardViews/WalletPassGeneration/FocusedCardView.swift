@@ -65,24 +65,6 @@ struct FocusedCardView: View {
                                 if value.translation.width > 100 { onEdit() }
                             }
                     )
-
-                // Enhanced edit button - larger for easier tapping
-                Button(action: onEdit) {
-                    Image(systemName: "square.and.pencil")
-                        .font(.system(size: 20, weight: .semibold))
-                        .foregroundColor(.white)
-                        .padding(16)
-                        .background(
-                            LinearGradient(
-                                colors: [theme.cardAccent, theme.cardAccent.opacity(0.7)],
-                                startPoint: .topLeading,
-                                endPoint: .bottomTrailing
-                            )
-                        )
-                        .clipShape(Circle())
-                        .shadow(color: theme.cardAccent.opacity(0.5), radius: 10, x: 0, y: 5)
-                }
-                .padding(16)
             }
 
             // Action buttons with black/white design

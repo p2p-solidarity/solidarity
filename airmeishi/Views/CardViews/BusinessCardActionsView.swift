@@ -194,38 +194,76 @@ struct CategoryTag: View {
 }
 
 struct BusinessCardEmptyStateView: View {
+    var onCreateCard: () -> Void
+    @EnvironmentObject private var theme: ThemeManager
+    
     var body: some View {
-        VStack(spacing: 32) {
-            ZStack {
-                Circle()
-                    .fill(
-                        LinearGradient(
-                            colors: [Color.blue.opacity(0.3), Color.purple.opacity(0.2)],
-                            startPoint: .topLeading,
-                            endPoint: .bottomTrailing
+        VStack {
+            Spacer()
+            
+            VStack(spacing: 32) {
+                ZStack {
+                    Circle()
+                        .fill(
+                            LinearGradient(
+                                colors: [Color.blue.opacity(0.3), Color.purple.opacity(0.2)],
+                                startPoint: .topLeading,
+                                endPoint: .bottomTrailing
+                            )
                         )
-                    )
-                    .frame(width: 120, height: 120)
-                    .blur(radius: 20)
+                        .frame(width: 120, height: 120)
+                        .blur(radius: 20)
 
-                Image(systemName: "person.crop.rectangle.stack")
-                    .font(.system(size: 64, weight: .light))
-                    .foregroundColor(.white.opacity(0.9))
+                    Image(systemName: "person.crop.rectangle.stack")
+                        .font(.system(size: 64, weight: .light))
+                        .foregroundColor(.white.opacity(0.9))
+                }
+                
+                VStack(spacing: 20) {
+                    VStack(spacing: 12) {
+                        Text("No Business Card")
+                            .font(.title.bold())
+                            .foregroundColor(.white)
+
+                        Text("Create your first business card to start sharing")
+                            .font(.body)
+                            .foregroundColor(.white.opacity(0.7))
+                            .multilineTextAlignment(.center)
+                            .padding(.horizontal, 40)
+                    }
+                    
+                    Button(action: {
+                        let impact = UIImpactFeedbackGenerator(style: .medium)
+                        impact.impactOccurred()
+                        onCreateCard()
+                    }) {
+                        HStack(spacing: 12) {
+                            Image(systemName: "plus.circle.fill")
+                                .font(.system(size: 20, weight: .semibold))
+                            Text("Create Card")
+                                .font(.headline.weight(.semibold))
+                        }
+                        .foregroundColor(.white)
+                        .frame(maxWidth: 280)
+                        .padding(.vertical, 16)
+                        .background(
+                            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                                .fill(
+                                    LinearGradient(
+                                        colors: [theme.cardAccent, theme.cardAccent.opacity(0.8)],
+                                        startPoint: .topLeading,
+                                        endPoint: .bottomTrailing
+                                    )
+                                )
+                                .shadow(color: theme.cardAccent.opacity(0.4), radius: 12, x: 0, y: 6)
+                        )
+                    }
+                    .buttonStyle(PlainButtonStyle())
+                }
             }
-
-            VStack(spacing: 12) {
-                Text("No Business Card")
-                    .font(.title.bold())
-                    .foregroundColor(.white)
-
-                Text("You need to create a card first")
-                    .font(.body)
-                    .foregroundColor(.white.opacity(0.7))
-                    .multilineTextAlignment(.center)
-                    .padding(.horizontal, 40)
-            }
+            
+            Spacer()
         }
-        .padding()
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 }

@@ -1,7 +1,7 @@
 import SwiftUI
 
 struct IdentityDashboardView: View {
-    enum Section: String, CaseIterable, Identifiable {
+    enum Section: String, Identifiable {
         case personal
         case group
         case selective
@@ -22,6 +22,10 @@ struct IdentityDashboardView: View {
             case .group: return "person.3"
             case .selective: return "lock.circle"
             }
+        }
+
+        static func available(includeSelective: Bool) -> [Section] {
+            includeSelective ? [.personal, .group, .selective] : [.personal, .group]
         }
     }
 
@@ -45,8 +49,10 @@ struct IdentityDashboardView: View {
                     GroupIdentityView()
                         .tag(Section.group)
 
-                    SelectiveDisclosureSettingsView(sharingPreferences: bindingForSelective())
-                        .tag(Section.selective)
+                    if supportsSelective {
+                        SelectiveDisclosureSettingsView(sharingPreferences: bindingForSelective())
+                            .tag(Section.selective)
+                    }
                 }
                 .tabViewStyle(.page(indexDisplayMode: .never))
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -71,15 +77,6 @@ struct IdentityDashboardView: View {
 
     private var identitySummary: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text(summaryTitle)
-                .font(.headline)
-
-            if let did = coordinator.state.activeDid?.did {
-                Text(did)
-                    .font(.footnote.monospaced())
-                    .foregroundColor(.secondary)
-            }
-
             if let event = coordinator.state.lastImportEvent {
                 HStack(spacing: 8) {
                     Image(systemName: "clock")
@@ -98,19 +95,9 @@ struct IdentityDashboardView: View {
         )
     }
 
-    private var summaryTitle: String {
-        if coordinator.state.isLoading {
-            return "Loading identity…"
-        }
-        if coordinator.state.activeDid != nil {
-            return "Active DID"
-        }
-        return "No Active Identity"
-    }
-
     private var tabSwitcher: some View {
         HStack(spacing: 10) {
-            ForEach(Section.allCases) { section in
+            ForEach(sections) { section in
                 Button {
                     selection = section
                 } label: {
@@ -139,6 +126,14 @@ struct IdentityDashboardView: View {
             return binding
         }
         return .constant(SharingPreferences())
+    }
+
+    private var supportsSelective: Bool {
+        sharingPreferences != nil
+    }
+
+    private var sections: [Section] {
+        Section.available(includeSelective: supportsSelective)
     }
 }
 

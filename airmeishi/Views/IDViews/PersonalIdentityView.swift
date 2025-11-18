@@ -14,7 +14,7 @@ struct PersonalIdentityView: View {
 
     var body: some View {
         List {
-            activeDidSection
+            commitmentSection
             keyMaterialSection
             cacheSection
             statusSection
@@ -44,25 +44,13 @@ struct PersonalIdentityView: View {
 #endif
     }
 
-    private var activeDidSection: some View {
-        Section("Active DID") {
-            if let descriptor = coordinator.state.activeDid {
-                LabeledContent("Identifier", value: descriptor.did)
-                LabeledContent("Verification Method", value: descriptor.verificationMethodId)
-                Button(action: copyDid) {
-                    Label(didCopied ? "Copied" : "Copy DID", systemImage: didCopied ? "checkmark.circle" : "doc.on.doc")
-                }
-                .disabled(didCopied)
-            } else if let error = coordinator.state.lastError {
-                Text(error.localizedDescription)
-                    .foregroundColor(.secondary)
-            } else {
-                Text("No identity is currently available. Refresh to derive your local DID.")
-                    .foregroundColor(.secondary)
-            }
-
+    private var commitmentSection: some View {
+        Section {
             if let commitment = coordinator.state.zkIdentity?.commitment {
                 LabeledContent("Semaphore Commitment", value: commitment)
+            } else {
+                Text("No commitment available. Refresh to derive your identity.")
+                    .foregroundColor(.secondary)
             }
         }
     }

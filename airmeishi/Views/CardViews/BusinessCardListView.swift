@@ -42,21 +42,6 @@ struct BusinessCardListView: View {
                 }
             }
             .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .navigationBarTrailing) {
-                    Button(action: {
-                        if let card = cardManager.businessCards.first {
-                            beginEdit(card)
-                        } else {
-                            showingCreateCard = true
-                        }
-                    }) {
-                        Image(systemName: "person.crop.rectangle")
-                            .font(.system(size: 18, weight: .semibold))
-                            .foregroundColor(.white)
-                    }
-                }
-            }
             .sheet(item: $cardToEdit) { card in
                 BusinessCardFormView(businessCard: card, forceCreate: false) { saved in
                     featuredCard = saved
@@ -163,24 +148,30 @@ struct BusinessCardListView: View {
 private extension BusinessCardListView {
     @ViewBuilder
     func makeSingleCardView() -> some View {
-        ScrollView {
-            VStack(spacing: 0) {
-                if let card = cardManager.businessCards.first {
-                    // Card section
-                    WalletCardView(
-                        card: card,
-                        onEdit: { beginEdit(card) },
-                        onAddToWallet: { addToWallet(card) }
-                    )
-                    .frame(height: 220)
-                    .padding(.horizontal, 16)
-                    .padding(.top, 20)
-                    .onTapGesture {
-                        handleFocus(card)
+        GeometryReader { geometry in
+            ScrollView {
+                VStack(spacing: 0) {
+                    Spacer()
+                        .frame(height: max(0, (geometry.size.height - 220) / 2 - 100))
+                    
+                    if let card = cardManager.businessCards.first {
+                        // Card section
+                        WalletCardView(
+                            card: card,
+                            onEdit: { beginEdit(card) },
+                            onAddToWallet: { addToWallet(card) }
+                        )
+                        .frame(height: 220)
+                        .padding(.horizontal, 16)
+                        .onTapGesture {
+                            handleFocus(card)
+                        }
                     }
+                    
+                    Spacer()
+                        .frame(height: max(0, (geometry.size.height - 220) / 2 - 100))
                 }
             }
-            .padding(.bottom, 40)
         }
     }
     
@@ -194,7 +185,6 @@ private extension BusinessCardListView {
             isFeatured = true
         }
     }
-
 
     func beginEdit(_ card: BusinessCard) {
         // Add haptic feedback
@@ -300,7 +290,9 @@ private extension BusinessCardListView {
     func makeEmptyStateView() -> some View {
         ScrollView {
             VStack(spacing: 0) {
-                BusinessCardEmptyStateView()
+                BusinessCardEmptyStateView(onCreateCard: {
+                    showingCreateCard = true
+                })
             }
             .padding(.bottom, 40)
         }
@@ -351,10 +343,3 @@ private extension BusinessCardListView {
         }
     }
 }
-
-
-// MARK: - Components
-
-// Simple right-top tag
-#Preview { BusinessCardListView() }
-
