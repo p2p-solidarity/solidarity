@@ -57,4 +57,3 @@ struct AppearanceSettingsView: View {
     NavigationView { AppearanceSettingsView().environmentObject(ThemeManager.shared) }
 }
 
-

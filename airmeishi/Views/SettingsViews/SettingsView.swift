@@ -12,6 +12,8 @@ struct SettingsView: View {
     @State private var showingAppearanceSettings = false
     @State private var showingBackupSettings = false
     @State private var showingPrivacySettings = false
+    @State private var showingGroupManagement = false
+    @State private var showingZKSettings = false
     
     var body: some View {
         NavigationStack {
@@ -29,6 +31,21 @@ struct SettingsView: View {
                         PrivacySettingsView(sharingPreferences: .constant(SharingPreferences()))
                     } label: {
                         Label("Privacy Settings", systemImage: "lock.shield.fill")
+                    }
+                    
+                    NavigationLink {
+                        SelectiveDisclosureSettingsView(sharingPreferences: .constant(SharingPreferences()))
+                            .navigationTitle("ZK Settings")
+                    } label: {
+                        Label("ZK Settings", systemImage: "eye.slash.fill")
+                    }
+                }
+                
+                Section("Groups") {
+                    NavigationLink {
+                        GroupManagementView()
+                    } label: {
+                        Label("Group Management", systemImage: "person.3.fill")
                     }
                 }
                 

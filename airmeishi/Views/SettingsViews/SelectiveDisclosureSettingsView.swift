@@ -44,3 +44,4 @@ struct SelectiveDisclosureSettingsView: View {
         SelectiveDisclosureSettingsView(sharingPreferences: .constant(SharingPreferences()))
     }
 }
+

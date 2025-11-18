@@ -21,3 +21,4 @@ struct PrivacySettingsView: View {
 #Preview {
     PrivacySettingsView(sharingPreferences: .constant(SharingPreferences()))
 }
+
