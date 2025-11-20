@@ -171,13 +171,23 @@ struct BusinessCardFormView: View {
                 get: { businessCard.sharingPreferences.useZK },
                 set: { businessCard.sharingPreferences.useZK = $0 }
             )) {
-                Text("Use ZK Selective Disclosure")
+                VStack(alignment: .leading) {
+                    Text("Zero-Knowledge Privacy")
+                        .font(.headline)
+                    Text("Selective Disclosure Enabled")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                }
             }
-            Text("When enabled, your public QR will reveal minimal info. You can switch to Advanced to fine-tune.")
-                .font(.caption)
-                .foregroundColor(.secondary)
+            .tint(.purple) // Make it look premium
+            
+            if businessCard.sharingPreferences.useZK {
+                Text("Your data is cryptographically protected. When you share via QR, only the fields you explicitly allow are revealed. The receiver verifies your identity without seeing hidden data.")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+            }
         } header: {
-            Text("Privacy")
+            Label("Privacy & Security", systemImage: "lock.shield")
         }
     }
 

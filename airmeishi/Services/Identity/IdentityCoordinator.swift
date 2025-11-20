@@ -198,6 +198,47 @@ final class IdentityCoordinator: ObservableObject {
         state.verificationCache[cardId]
     }
 
+    // MARK: - Issuance
+    
+    func issueBusinessCardVC(
+        for card: BusinessCard,
+        context: LAContext? = nil,
+        completion: ((CardResult<VCLibrary.StoredCredential>) -> Void)? = nil
+    ) {
+        queue.async {
+            // 1. Ensure we have an active DID
+            let didResult = self.didService.currentDidKey(context: context)
+            
+            switch didResult {
+            case .failure(let error):
+                DispatchQueue.main.async { completion?(.failure(error)) }
+                return
+                
+            case .success(let descriptor):
+                // 2. Issue the credential using the DID
+                let options = VCService.IssueOptions(
+                    holderDid: descriptor.did,
+                    issuerDid: descriptor.did,
+                    expiration: card.sharingPreferences.expirationDate,
+                    authenticationContext: context
+                )
+                
+                let result = self.vcService.issueAndStoreBusinessCardCredential(
+                    for: card,
+                    options: options
+                )
+                
+                DispatchQueue.main.async {
+                    if case .success(let stored) = result {
+                        // Update verification status immediately since we just issued it
+                        self.updateVerificationStatus(for: card.id, status: .verified)
+                    }
+                    completion?(result)
+                }
+            }
+        }
+    }
+
     // MARK: - Import pipeline
 
     func importIdentity(

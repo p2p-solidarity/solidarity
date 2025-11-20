@@ -11,7 +11,7 @@ struct ShoutoutDetailView: View {
     let user: ShoutoutUser
     @Environment(\.dismiss) private var dismiss
     @State private var showingCreateShoutout = false
-    @State private var isLighteningAnimating = false
+    @State private var isSakuraAnimating = false
     @State private var showingDeleteConfirm = false
     @State private var isLoading = true
 
@@ -72,7 +72,7 @@ struct ShoutoutDetailView: View {
                     }
                 }
             }
-            .navigationTitle("Lightening Profile")
+            .navigationTitle("Sakura Profile")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .navigationBarLeading) {
@@ -94,7 +94,7 @@ struct ShoutoutDetailView: View {
                 Text("Are you sure you want to delete \(user.name)? This action cannot be undone.")
             }
             .onAppear {
-                startLighteningAnimation()
+                startSakuraAnimation()
                 // Simulate loading completion
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
                     isLoading = false
@@ -108,22 +108,15 @@ struct ShoutoutDetailView: View {
         }
     }
     
-    // MARK: - Lightening Header
+    // MARK: - Sakura Header
     
     private var lightningHeader: some View {
         VStack(spacing: 20) {
-            // Lightening bolt and title
+            // Sakura and title
             HStack {
-                Image(systemName: "bolt.fill")
-                    .foregroundColor(.yellow)
-                    .font(.title)
-                    .scaleEffect(isLighteningAnimating ? 1.3 : 1.0)
-                    .animation(
-                        .easeInOut(duration: 0.5).repeatForever(autoreverses: true),
-                        value: isLighteningAnimating
-                    )
+                SakuraIconView(size: 32, color: .pink, isAnimating: isSakuraAnimating)
                 
-                Text("Lightening Profile")
+                Text("Sakura Profile")
                     .font(.title2)
                     .fontWeight(.bold)
                     .foregroundColor(.white)
@@ -131,23 +124,23 @@ struct ShoutoutDetailView: View {
                 Spacer()
             }
             
-            // Profile Image with lightning effects
+            // Profile Image with sakura effects
             ZStack {
-                // Lightening ring
+                // Sakura ring
                 Circle()
                     .stroke(
                         LinearGradient(
-                            colors: [.yellow, .orange, .red],
+                            colors: [.pink.opacity(0.8), .purple.opacity(0.6), .pink.opacity(0.8)],
                             startPoint: .topLeading,
                             endPoint: .bottomTrailing
                         ),
                         lineWidth: 3
                     )
                     .frame(width: 120, height: 120)
-                    .scaleEffect(isLighteningAnimating ? 1.1 : 1.0)
+                    .scaleEffect(isSakuraAnimating ? 1.1 : 1.0)
                     .animation(
                         .easeInOut(duration: 0.8).repeatForever(autoreverses: true),
-                        value: isLighteningAnimating
+                        value: isSakuraAnimating
                     )
                 
                 AsyncImage(url: user.profileImageURL) { image in
@@ -175,15 +168,15 @@ struct ShoutoutDetailView: View {
                 .overlay(
                     Circle()
                         .stroke(verificationColor, lineWidth: 3)
-                        .scaleEffect(isLighteningAnimating ? 1.05 : 1.0)
+                        .scaleEffect(isSakuraAnimating ? 1.05 : 1.0)
                         .animation(
                             .easeInOut(duration: 0.6).repeatForever(autoreverses: true),
-                            value: isLighteningAnimating
+                            value: isSakuraAnimating
                         )
                 )
                 .shadow(
-                    color: isLighteningAnimating ? .yellow.opacity(0.6) : verificationColor.opacity(0.5),
-                    radius: isLighteningAnimating ? 15 : 8,
+                    color: isSakuraAnimating ? .pink.opacity(0.6) : verificationColor.opacity(0.5),
+                    radius: isSakuraAnimating ? 15 : 8,
                     x: 0, y: 4
                 )
             }
@@ -198,7 +191,7 @@ struct ShoutoutDetailView: View {
                 if !user.title.isEmpty {
                     Text(user.title)
                         .font(.headline)
-                        .foregroundColor(.yellow)
+                        .foregroundColor(.pink)
                 }
                 
                 if !user.company.isEmpty {
@@ -208,7 +201,7 @@ struct ShoutoutDetailView: View {
                 }
             }
             
-            // Verification Status with lightning
+            // Verification Status with sakura
             HStack(spacing: 8) {
                 Image(systemName: user.verificationStatus.systemImageName)
                     .foregroundColor(verificationColor)
@@ -218,14 +211,7 @@ struct ShoutoutDetailView: View {
                     .font(.headline)
                     .foregroundColor(.white)
                 
-                Image(systemName: "bolt.fill")
-                    .foregroundColor(.yellow)
-                    .font(.caption)
-                    .scaleEffect(isLighteningAnimating ? 1.2 : 1.0)
-                    .animation(
-                        .easeInOut(duration: 0.3).repeatForever(autoreverses: true),
-                        value: isLighteningAnimating
-                    )
+                SakuraIconView(size: 16, color: .pink, isAnimating: isSakuraAnimating)
             }
             .padding(.horizontal, 16)
             .padding(.vertical, 8)
@@ -240,26 +226,19 @@ struct ShoutoutDetailView: View {
         }
     }
     
-    // MARK: - Lightening Stats Grid
+    // MARK: - Sakura Stats Grid
     
     private var lightningStatsGrid: some View {
         VStack(alignment: .leading, spacing: 16) {
             HStack {
-                Text("Lightening Stats")
+                Text("Sakura Stats")
                     .font(.title2)
                     .fontWeight(.bold)
                     .foregroundColor(.white)
                 
                 Spacer()
                 
-                Image(systemName: "bolt.circle.fill")
-                    .foregroundColor(.yellow)
-                    .font(.title2)
-                    .scaleEffect(isLighteningAnimating ? 1.2 : 1.0)
-                    .animation(
-                        .easeInOut(duration: 0.5).repeatForever(autoreverses: true),
-                        value: isLighteningAnimating
-                    )
+                SakuraIconView(size: 28, color: .pink, isAnimating: isSakuraAnimating)
             }
             
             LazyVGrid(columns: [
@@ -270,8 +249,8 @@ struct ShoutoutDetailView: View {
                     title: "Activity",
                     value: String(format: "%.0f%%", user.eventScore * 100),
                     icon: "bolt.fill",
-                    color: .yellow,
-                    isLighteningAnimating: isLighteningAnimating
+                    color: .pink,
+                    isLighteningAnimating: isSakuraAnimating
                 )
                 
                 LighteningStatCard(
@@ -279,7 +258,7 @@ struct ShoutoutDetailView: View {
                     value: String(format: "%.0f%%", user.typeScore * 100),
                     icon: "briefcase.fill",
                     color: .blue,
-                    isLighteningAnimating: isLighteningAnimating
+                    isLighteningAnimating: isSakuraAnimating
                 )
                 
                 LighteningStatCard(
@@ -287,7 +266,7 @@ struct ShoutoutDetailView: View {
                     value: String(format: "%.0f%%", user.characterScore * 100),
                     icon: "person.fill",
                     color: .green,
-                    isLighteningAnimating: isLighteningAnimating
+                    isLighteningAnimating: isSakuraAnimating
                 )
                 
                 LighteningStatCard(
@@ -295,7 +274,7 @@ struct ShoutoutDetailView: View {
                     value: user.verificationStatus.displayName,
                     icon: user.verificationStatus.systemImageName,
                     color: verificationColor,
-                    isLighteningAnimating: isLighteningAnimating
+                    isLighteningAnimating: isSakuraAnimating
                 )
             }
         }
@@ -305,7 +284,7 @@ struct ShoutoutDetailView: View {
                 .fill(Color.white.opacity(0.05))
                 .overlay(
                     RoundedRectangle(cornerRadius: 16)
-                        .stroke(Color.yellow.opacity(0.3), lineWidth: 1)
+                        .stroke(Color.pink.opacity(0.3), lineWidth: 1)
                 )
         )
     }
@@ -373,22 +352,16 @@ struct ShoutoutDetailView: View {
         .cornerRadius(12)
     }
     
-    // MARK: - Lightening Action Buttons
+    // MARK: - Sakura Action Buttons
     
     private var lightningActionButtons: some View {
         VStack(spacing: 16) {
-            // Primary Lightening Shoutout Button
+            // Primary Ichigoichie Button
             Button(action: { showingCreateShoutout = true }) {
                 HStack(spacing: 12) {
-                    Image(systemName: "bolt.fill")
-                        .font(.title2)
-                        .scaleEffect(isLighteningAnimating ? 1.3 : 1.0)
-                        .animation(
-                            .easeInOut(duration: 0.3).repeatForever(autoreverses: true),
-                            value: isLighteningAnimating
-                        )
+                    SakuraIconView(size: 24, color: .white, isAnimating: isSakuraAnimating)
                     
-                    Text("Send Lightening Shoutout")
+                    Text("Send Sakura")
                         .font(.headline)
                         .fontWeight(.bold)
                 }
@@ -399,12 +372,12 @@ struct ShoutoutDetailView: View {
                     RoundedRectangle(cornerRadius: 16)
                         .fill(
                             LinearGradient(
-                                colors: [.yellow, .orange, .red],
+                                colors: [.pink.opacity(0.8), .purple.opacity(0.6), .pink.opacity(0.8)],
                                 startPoint: .leading,
                                 endPoint: .trailing
                             )
                         )
-                        .shadow(color: .yellow.opacity(0.5), radius: 10, x: 0, y: 0)
+                        .shadow(color: .pink.opacity(0.5), radius: 10, x: 0, y: 0)
                 )
             }
             
@@ -485,8 +458,8 @@ struct ShoutoutDetailView: View {
     
     // MARK: - Animation Control
 
-    private func startLighteningAnimation() {
-        isLighteningAnimating = true
+    private func startSakuraAnimation() {
+        isSakuraAnimating = true
     }
 
     // MARK: - Actions

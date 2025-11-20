@@ -41,7 +41,7 @@ struct ShareCardPickerSheet: View {
                     }
                 }
             }
-            .navigationTitle("Share Card")
+            .navigationTitle("Privacy Level")
             .toolbar {
                 ToolbarItem(placement: .navigationBarLeading) { Button("Cancel") { dismiss() } }
                 ToolbarItem(placement: .navigationBarTrailing) {

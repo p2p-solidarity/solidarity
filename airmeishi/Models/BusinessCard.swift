@@ -175,7 +175,7 @@ struct SharingPreferences: Codable, Equatable {
         personalFields: Set<BusinessCardField> = BusinessCardField.allCases.asSet(),
         allowForwarding: Bool = false,
         expirationDate: Date? = nil,
-        useZK: Bool = false,
+        useZK: Bool = true,
         sharingFormat: SharingFormat = .plaintext
     ) {
         // Ensure name is always included in all levels
@@ -233,7 +233,7 @@ extension SharingPreferences {
         
         self.allowForwarding = try container.decodeIfPresent(Bool.self, forKey: .allowForwarding) ?? false
         self.expirationDate = try container.decodeIfPresent(Date.self, forKey: .expirationDate)
-        self.useZK = try container.decodeIfPresent(Bool.self, forKey: .useZK) ?? false
+        self.useZK = try container.decodeIfPresent(Bool.self, forKey: .useZK) ?? true
         self.sharingFormat = try container.decodeIfPresent(SharingFormat.self, forKey: .sharingFormat) ?? .plaintext
     }
 

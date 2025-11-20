@@ -2,7 +2,7 @@
 //  ShoutoutView.swift
 //  airmeishi
 //
-//  Modern lightning-themed gallery view for shoutout discovery and business card management
+//  Ichigoichie (Sakura) gallery view for business card discovery and management
 //
 
 import SwiftUI
@@ -14,12 +14,11 @@ enum DisplayMode {
 
 struct ShoutoutView: View {
     @StateObject private var chartService = ShoutoutChartService.shared
-    @State private var showingFilters = false
     @State private var selectedUser: ShoutoutUser?
     @State private var searchText = ""
     @State private var showingCreateShoutout = false
     @State private var selectedContact: Contact?
-    @State private var isLighteningAnimating = false
+    @State private var isSakuraAnimating = false
     @State private var displayMode: DisplayMode = .grid
     
     var body: some View {
@@ -46,32 +45,8 @@ struct ShoutoutView: View {
                     cardGallery
                 }
             }
-            .navigationTitle("Shoutout")
+
             .navigationBarTitleDisplayMode(.large)
-            .toolbar {
-                ToolbarItem(placement: .navigationBarTrailing) {
-                    HStack(spacing: 16) {
-                        // Display mode toggle
-                        Button(action: {
-                            withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
-                                displayMode = displayMode == .grid ? .list : .grid
-                            }
-                        }) {
-                            Image(systemName: displayMode == .grid ? "list.bullet" : "square.grid.2x2")
-                                .font(.title2)
-                        }
-                        
-                        // Filter button
-                        Button(action: { showingFilters.toggle() }) {
-                            Image(systemName: "line.3.horizontal.decrease.circle")
-                                .font(.title2)
-                        }
-                    }
-                }
-            }
-            .sheet(isPresented: $showingFilters) {
-                ShoutoutFiltersView()
-            }
             .sheet(item: $selectedUser) { user in
                 ShoutoutDetailView(user: user)
             }
@@ -79,49 +54,53 @@ struct ShoutoutView: View {
                 CreateShoutoutView(selectedUser: selectedUser)
             }
             .overlay(alignment: .bottomTrailing) {
-                // Floating lightning action button
-                lightningActionButton
+                // Floating sakura action button
+                sakuraActionButton
                     .padding(.trailing, 20)
                     .padding(.bottom, 30)
             }
         }
         .preferredColorScheme(.dark)
         .onAppear {
-            startLighteningAnimation()
+            startSakuraAnimation()
         }
     }
     
-    // MARK: - Lightening Header
+    // MARK: - Sakura Header
     
     private var lightningHeader: some View {
         VStack(spacing: 16) {
-            // Animated lightning title
+            // Animated sakura title with grid/list toggle
             HStack {
-                Image(systemName: "bolt.fill")
-                    .foregroundColor(.yellow)
-                    .font(.title)
-                    .scaleEffect(isLighteningAnimating ? 1.2 : 1.0)
-                    .animation(
-                        .easeInOut(duration: 0.5).repeatForever(autoreverses: true),
-                        value: isLighteningAnimating
-                    )
+                SakuraIconView(size: 28, color: .pink, isAnimating: isSakuraAnimating)
                 
-                Text("Lightening Gallery")
+                Text("Sakura Ichigoichie")
                     .font(.title2)
                     .fontWeight(.bold)
                     .foregroundColor(.white)
                 
                 Spacer()
                 
+                // Display mode toggle
+                Button(action: {
+                    withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
+                        displayMode = displayMode == .grid ? .list : .grid
+                    }
+                }) {
+                    Image(systemName: displayMode == .grid ? "list.bullet" : "square.grid.2x2")
+                        .font(.title2)
+                        .foregroundColor(.white)
+                }
+                
                 // Live count with pulsing effect
                 HStack(spacing: 4) {
                     Circle()
                         .fill(Color.green)
                         .frame(width: 8, height: 8)
-                        .scaleEffect(isLighteningAnimating ? 1.3 : 1.0)
+                        .scaleEffect(isSakuraAnimating ? 1.3 : 1.0)
                         .animation(
                             .easeInOut(duration: 1.0).repeatForever(autoreverses: true),
-                            value: isLighteningAnimating
+                            value: isSakuraAnimating
                         )
                     
                     Text("\(chartService.filteredData.count) cards")
@@ -131,10 +110,10 @@ struct ShoutoutView: View {
             }
             .padding(.horizontal)
             
-            // Search bar with lightning accent
+            // Search bar with sakura accent
             HStack {
                 Image(systemName: "magnifyingglass")
-                    .foregroundColor(.yellow)
+                    .foregroundColor(.pink)
                 
                 TextField("Search business cards...", text: $searchText)
                     .textFieldStyle(PlainTextFieldStyle())
@@ -161,7 +140,7 @@ struct ShoutoutView: View {
                         RoundedRectangle(cornerRadius: 12)
                             .stroke(
                                 LinearGradient(
-                                    colors: [.yellow.opacity(0.3), .clear, .yellow.opacity(0.3)],
+                                    colors: [.pink.opacity(0.3), .clear, .pink.opacity(0.3)],
                                     startPoint: .leading,
                                     endPoint: .trailing
                                 ),
@@ -180,9 +159,7 @@ struct ShoutoutView: View {
         ScrollView {
             if chartService.filteredData.isEmpty {
                 VStack(spacing: 16) {
-                    Image(systemName: "bolt.slash.fill")
-                        .font(.system(size: 60))
-                        .foregroundColor(.gray)
+                    SakuraIconView(size: 60, color: .gray, isAnimating: false)
                         .padding(.top, 60)
 
                     Text("No cards found")
@@ -217,7 +194,7 @@ struct ShoutoutView: View {
             ForEach(chartService.filteredData) { dataPoint in
                 LighteningCardView(
                     dataPoint: dataPoint,
-                    isLighteningAnimating: isLighteningAnimating
+                    isLighteningAnimating: isSakuraAnimating
                 ) {
                     // Add haptic feedback
                     let impact = UIImpactFeedbackGenerator(style: .light)
@@ -235,7 +212,7 @@ struct ShoutoutView: View {
             ForEach(chartService.filteredData) { dataPoint in
                 ContactRowView(
                     dataPoint: dataPoint,
-                    isLighteningAnimating: isLighteningAnimating
+                    isLighteningAnimating: isSakuraAnimating
                 ) {
                     // Add haptic feedback
                     let impact = UIImpactFeedbackGenerator(style: .light)
@@ -248,40 +225,33 @@ struct ShoutoutView: View {
         .padding(.horizontal)
     }
     
-    // MARK: - Floating Lightening Action Button
+    // MARK: - Floating Sakura Action Button
     
-    private var lightningActionButton: some View {
+    private var sakuraActionButton: some View {
         Button(action: { showingCreateShoutout = true }) {
             ZStack {
-                // Lightening bolt background
+                // Sakura background
                 Circle()
                     .fill(
                         LinearGradient(
-                            colors: [.yellow, .orange, .red],
+                            colors: [.pink.opacity(0.8), .purple.opacity(0.6), .pink.opacity(0.8)],
                             startPoint: .topLeading,
                             endPoint: .bottomTrailing
                         )
                     )
                     .frame(width: 60, height: 60)
-                    .shadow(color: .yellow.opacity(0.5), radius: 10, x: 0, y: 0)
+                    .shadow(color: .pink.opacity(0.5), radius: 10, x: 0, y: 0)
                 
-                // Lightening icon
-                Image(systemName: "bolt.fill")
-                    .font(.title2)
-                    .foregroundColor(.white)
-                    .scaleEffect(isLighteningAnimating ? 1.3 : 1.0)
-                    .animation(
-                        .easeInOut(duration: 0.3).repeatForever(autoreverses: true),
-                        value: isLighteningAnimating
-                    )
+                // Sakura icon
+                SakuraIconView(size: 30, color: .white, isAnimating: isSakuraAnimating)
             }
         }
     }
     
     // MARK: - Animation Control
     
-    private func startLighteningAnimation() {
-        isLighteningAnimating = true
+    private func startSakuraAnimation() {
+        isSakuraAnimating = true
     }
 }
 
@@ -326,7 +296,7 @@ struct LighteningCardView: View {
                     .overlay(
                         Circle()
                             .stroke(
-                                isLighteningAnimating ? Color.yellow : dataPoint.color,
+                                isLighteningAnimating ? Color.pink : dataPoint.color,
                                 lineWidth: isLighteningAnimating ? 3 : 2
                             )
                             .scaleEffect(isLighteningAnimating ? 1.1 : 1.0)
@@ -336,22 +306,15 @@ struct LighteningCardView: View {
                             )
                     )
                     .shadow(
-                        color: isLighteningAnimating ? .yellow.opacity(0.6) : dataPoint.color.opacity(0.5),
+                        color: isLighteningAnimating ? .pink.opacity(0.6) : dataPoint.color.opacity(0.5),
                         radius: isLighteningAnimating ? 8 : 4,
                         x: 0, y: 2
                     )
                     
                     Spacer()
                     
-                    // Lightening bolt indicator
-                    Image(systemName: "bolt.fill")
-                        .foregroundColor(isLighteningAnimating ? .yellow : .gray)
-                        .font(.caption)
-                        .scaleEffect(isLighteningAnimating ? 1.2 : 1.0)
-                        .animation(
-                            .easeInOut(duration: 0.3).repeatForever(autoreverses: true),
-                            value: isLighteningAnimating
-                        )
+                    // Sakura indicator
+                    SakuraIconView(size: 16, color: isLighteningAnimating ? .pink : .gray, isAnimating: isLighteningAnimating)
                 }
                 
                 // User info with fixed spacing
@@ -396,7 +359,7 @@ struct LighteningCardView: View {
                     HStack(spacing: 2) {
                         ForEach(0..<3) { index in
                             Circle()
-                                .fill(index < Int(dataPoint.user.eventScore * 3) ? Color.yellow : Color.gray.opacity(0.3))
+                                .fill(index < Int(dataPoint.user.eventScore * 3) ? Color.pink : Color.gray.opacity(0.3))
                                 .frame(width: 4, height: 4)
                         }
                     }
@@ -483,23 +446,23 @@ struct ContactRowView: View {
                 }
                 .frame(width: 60, height: 60)
                 .clipShape(Circle())
-                .overlay(
-                    Circle()
-                        .stroke(
-                            isLighteningAnimating ? Color.yellow : dataPoint.color,
-                            lineWidth: isLighteningAnimating ? 3 : 2
-                        )
-                        .scaleEffect(isLighteningAnimating ? 1.1 : 1.0)
-                        .animation(
-                            .easeInOut(duration: 0.5).repeatForever(autoreverses: true),
-                            value: isLighteningAnimating
-                        )
-                )
-                .shadow(
-                    color: isLighteningAnimating ? .yellow.opacity(0.6) : dataPoint.color.opacity(0.5),
-                    radius: isLighteningAnimating ? 8 : 4,
-                    x: 0, y: 2
-                )
+                    .overlay(
+                        Circle()
+                            .stroke(
+                                isLighteningAnimating ? Color.pink : dataPoint.color,
+                                lineWidth: isLighteningAnimating ? 3 : 2
+                            )
+                            .scaleEffect(isLighteningAnimating ? 1.1 : 1.0)
+                            .animation(
+                                .easeInOut(duration: 0.5).repeatForever(autoreverses: true),
+                                value: isLighteningAnimating
+                            )
+                    )
+                    .shadow(
+                        color: isLighteningAnimating ? .pink.opacity(0.6) : dataPoint.color.opacity(0.5),
+                        radius: isLighteningAnimating ? 8 : 4,
+                        x: 0, y: 2
+                    )
                 
                 // User info
                 VStack(alignment: .leading, spacing: 4) {
@@ -541,26 +504,19 @@ struct ContactRowView: View {
                         
                         // Score indicator
                         HStack(spacing: 2) {
-                            ForEach(0..<3) { index in
-                                Circle()
-                                    .fill(index < Int(dataPoint.user.eventScore * 3) ? Color.yellow : Color.gray.opacity(0.3))
-                                    .frame(width: 4, height: 4)
-                            }
+                        ForEach(0..<3) { index in
+                            Circle()
+                                .fill(index < Int(dataPoint.user.eventScore * 3) ? Color.pink : Color.gray.opacity(0.3))
+                                .frame(width: 4, height: 4)
+                        }
                         }
                     }
                 }
                 
                 Spacer()
                 
-                // Lightening bolt indicator
-                Image(systemName: "bolt.fill")
-                    .foregroundColor(isLighteningAnimating ? .yellow : .gray)
-                    .font(.title3)
-                    .scaleEffect(isLighteningAnimating ? 1.2 : 1.0)
-                    .animation(
-                        .easeInOut(duration: 0.3).repeatForever(autoreverses: true),
-                        value: isLighteningAnimating
-                    )
+                // Sakura indicator
+                SakuraIconView(size: 24, color: isLighteningAnimating ? .pink : .gray, isAnimating: isLighteningAnimating)
             }
             .padding(.horizontal, 16)
             .padding(.vertical, 12)
@@ -601,7 +557,7 @@ struct CreateShoutoutView: View {
     @State private var recipient: ShoutoutUser?
     @State private var message = ""
     @State private var showingUserPicker = false
-    @State private var isLighteningAnimating = false
+    @State private var isSakuraAnimating = false
     @State private var showingSuccess = false
     
     init(selectedUser: ShoutoutUser? = nil) {
@@ -625,8 +581,8 @@ struct CreateShoutoutView: View {
                 .ignoresSafeArea()
                 
                 VStack(spacing: 24) {
-                    // Lightening header
-                    lightningHeader
+                    // Sakura header
+                    sakuraHeader
                     
                     // Recipient Selection
                     recipientSelection
@@ -636,12 +592,12 @@ struct CreateShoutoutView: View {
                     
                     Spacer()
                     
-                    // Send Button with lightning effect
-                    lightningSendButton
+                    // Send Button with sakura effect
+                    sakuraSendButton
                 }
                 .padding()
             }
-            .navigationTitle("Lightening Shoutout")
+            .navigationTitle("Sakura Ichigoichie")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .navigationBarLeading) {
@@ -653,40 +609,33 @@ struct CreateShoutoutView: View {
             .sheet(isPresented: $showingUserPicker) {
                 UserPickerView(selectedUser: $recipient)
             }
-            .alert("Shoutout Sent!", isPresented: $showingSuccess) {
+            .alert("Sakura Sent!", isPresented: $showingSuccess) {
                 Button("OK") {
                     dismiss()
                 }
             } message: {
-                Text("Your lightning shoutout has been delivered! ⚡")
+                Text("Your Ichigoichie message has been delivered! 🌸")
             }
             .onAppear {
-                startLighteningAnimation()
+                startSakuraAnimation()
             }
         }
         .preferredColorScheme(.dark)
     }
     
-    // MARK: - Lightening Header
+    // MARK: - Sakura Header
     
-    private var lightningHeader: some View {
+    private var sakuraHeader: some View {
         HStack {
-            Image(systemName: "bolt.fill")
-                .foregroundColor(.yellow)
-                .font(.title)
-                .scaleEffect(isLighteningAnimating ? 1.3 : 1.0)
-                .animation(
-                    .easeInOut(duration: 0.5).repeatForever(autoreverses: true),
-                    value: isLighteningAnimating
-                )
+            SakuraIconView(size: 32, color: .pink, isAnimating: isSakuraAnimating)
             
             VStack(alignment: .leading, spacing: 2) {
-                Text("Send Lightening Shoutout")
+                Text("Send Sakura")
                     .font(.title2)
                     .fontWeight(.bold)
                     .foregroundColor(.white)
                 
-                Text("Power up someone's day ⚡")
+                Text("A once-in-a-lifetime encounter 🌸")
                     .font(.caption)
                     .foregroundColor(.gray)
             }
@@ -707,7 +656,7 @@ struct CreateShoutoutView: View {
                 Spacer()
                 
                 Image(systemName: "person.circle.fill")
-                    .foregroundColor(.yellow)
+                    .foregroundColor(.pink)
                     .font(.title3)
             }
             
@@ -737,11 +686,11 @@ struct CreateShoutoutView: View {
                         .clipShape(Circle())
                         .overlay(
                             Circle()
-                                .stroke(Color.yellow, lineWidth: 2)
-                                .scaleEffect(isLighteningAnimating ? 1.1 : 1.0)
+                                .stroke(Color.pink, lineWidth: 2)
+                                .scaleEffect(isSakuraAnimating ? 1.1 : 1.0)
                                 .animation(
                                     .easeInOut(duration: 0.5).repeatForever(autoreverses: true),
-                                    value: isLighteningAnimating
+                                    value: isSakuraAnimating
                                 )
                         )
                         
@@ -775,7 +724,7 @@ struct CreateShoutoutView: View {
                         .fill(Color.white.opacity(0.05))
                         .overlay(
                             RoundedRectangle(cornerRadius: 12)
-                                .stroke(Color.yellow.opacity(0.3), lineWidth: 1)
+                                .stroke(Color.pink.opacity(0.3), lineWidth: 1)
                         )
                 )
             }
@@ -788,19 +737,17 @@ struct CreateShoutoutView: View {
     private var messageInput: some View {
         VStack(alignment: .leading, spacing: 12) {
             HStack {
-                Text("Lightening Message")
+                Text("Sakura Message")
                     .font(.headline)
                     .foregroundColor(.white)
                 
                 Spacer()
                 
-                Image(systemName: "bolt.circle.fill")
-                    .foregroundColor(.yellow)
-                    .font(.title3)
+                SakuraIconView(size: 24, color: .pink, isAnimating: isSakuraAnimating)
             }
             
             VStack(alignment: .leading, spacing: 8) {
-                TextField("You're absolutely amazing! ⚡", text: $message, axis: .vertical)
+                TextField("A beautiful encounter worth cherishing 🌸", text: $message, axis: .vertical)
                     .textFieldStyle(PlainTextFieldStyle())
                     .foregroundColor(.white)
                     .padding()
@@ -810,7 +757,7 @@ struct CreateShoutoutView: View {
                             .overlay(
                                 RoundedRectangle(cornerRadius: 12)
                                     .stroke(
-                                        isLighteningAnimating ? Color.yellow.opacity(0.5) : Color.white.opacity(0.1),
+                                        isSakuraAnimating ? Color.pink.opacity(0.5) : Color.white.opacity(0.1),
                                         lineWidth: 1
                                     )
                             )
@@ -825,20 +772,14 @@ struct CreateShoutoutView: View {
         }
     }
     
-    // MARK: - Lightening Send Button
+    // MARK: - Sakura Send Button
     
-    private var lightningSendButton: some View {
-        Button(action: sendShoutout) {
+    private var sakuraSendButton: some View {
+        Button(action: sendIchigoichie) {
             HStack(spacing: 12) {
-                Image(systemName: "bolt.fill")
-                    .font(.title2)
-                    .scaleEffect(isLighteningAnimating ? 1.2 : 1.0)
-                    .animation(
-                        .easeInOut(duration: 0.3).repeatForever(autoreverses: true),
-                        value: isLighteningAnimating
-                    )
+                SakuraIconView(size: 24, color: .white, isAnimating: isSakuraAnimating)
                 
-                Text("Send Lightening Shoutout")
+                Text("Send Sakura")
                     .font(.headline)
                     .fontWeight(.bold)
             }
@@ -849,12 +790,12 @@ struct CreateShoutoutView: View {
                 RoundedRectangle(cornerRadius: 16)
                     .fill(
                         LinearGradient(
-                            colors: [.yellow, .orange, .red],
+                            colors: [.pink.opacity(0.8), .purple.opacity(0.6), .pink.opacity(0.8)],
                             startPoint: .leading,
                             endPoint: .trailing
                         )
                     )
-                    .shadow(color: .yellow.opacity(0.5), radius: 10, x: 0, y: 0)
+                    .shadow(color: .pink.opacity(0.5), radius: 10, x: 0, y: 0)
             )
         }
         .disabled(recipient == nil || message.isEmpty || message.count > 200)
@@ -863,10 +804,10 @@ struct CreateShoutoutView: View {
     
     // MARK: - Actions
     
-    private func sendShoutout() {
-        // Simulate sending with lightning effect
+    private func sendIchigoichie() {
+        // Simulate sending with sakura effect
         withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
-            isLighteningAnimating = true
+            isSakuraAnimating = true
         }
         
         DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
@@ -874,8 +815,8 @@ struct CreateShoutoutView: View {
         }
     }
     
-    private func startLighteningAnimation() {
-        isLighteningAnimating = true
+    private func startSakuraAnimation() {
+        isSakuraAnimating = true
     }
 }
 
@@ -886,7 +827,7 @@ struct UserPickerView: View {
     @Environment(\.dismiss) private var dismiss
     @StateObject private var chartService = ShoutoutChartService.shared
     @State private var searchText = ""
-    @State private var isLighteningAnimating = false
+    @State private var isSakuraAnimating = false
     
     var filteredUsers: [ShoutoutUser] {
         if searchText.isEmpty {
@@ -921,7 +862,7 @@ struct UserPickerView: View {
                             ForEach(filteredUsers) { user in
                                 LighteningUserRow(
                                     user: user,
-                                    isLighteningAnimating: isLighteningAnimating
+                                    isLighteningAnimating: isSakuraAnimating
                                 ) {
                                     selectedUser = user
                                     dismiss()
@@ -942,7 +883,7 @@ struct UserPickerView: View {
                 }
             }
             .onAppear {
-                isLighteningAnimating = true
+                isSakuraAnimating = true
             }
         }
         .preferredColorScheme(.dark)
@@ -951,7 +892,7 @@ struct UserPickerView: View {
     private var searchBar: some View {
         HStack {
             Image(systemName: "magnifyingglass")
-                .foregroundColor(.yellow)
+                .foregroundColor(.pink)
             
             TextField("Search contacts...", text: $searchText)
                 .textFieldStyle(PlainTextFieldStyle())
@@ -971,7 +912,7 @@ struct UserPickerView: View {
                 .fill(Color.white.opacity(0.08))
                 .overlay(
                     RoundedRectangle(cornerRadius: 12)
-                        .stroke(Color.yellow.opacity(0.3), lineWidth: 1)
+                        .stroke(Color.pink.opacity(0.3), lineWidth: 1)
                 )
         )
         .padding()
@@ -1014,7 +955,7 @@ struct LighteningUserRow: View {
                 .clipShape(Circle())
                 .overlay(
                     Circle()
-                        .stroke(Color.yellow, lineWidth: 2)
+                        .stroke(Color.pink, lineWidth: 2)
                         .scaleEffect(isLighteningAnimating ? 1.1 : 1.0)
                         .animation(
                             .easeInOut(duration: 0.5).repeatForever(autoreverses: true),
@@ -1043,16 +984,9 @@ struct LighteningUserRow: View {
                 
                 Spacer()
                 
-                // Lightening bolt and verification
+                // Sakura and verification
                 VStack(spacing: 4) {
-                    Image(systemName: "bolt.fill")
-                        .foregroundColor(isLighteningAnimating ? .yellow : .gray)
-                        .font(.title3)
-                        .scaleEffect(isLighteningAnimating ? 1.2 : 1.0)
-                        .animation(
-                            .easeInOut(duration: 0.3).repeatForever(autoreverses: true),
-                            value: isLighteningAnimating
-                        )
+                    SakuraIconView(size: 24, color: isLighteningAnimating ? .pink : .gray, isAnimating: isLighteningAnimating)
                     
                     Image(systemName: user.verificationStatus.systemImageName)
                         .foregroundColor(verificationColor)
