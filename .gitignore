@@ -88,6 +88,10 @@ iOSInjectionProject/
 ### SwiftPackageManager ###
 Packages
 xcuserdata
+# Note: *.xcodeproj ignores the directory, but we need to track:
+# - project.pbxproj (project file)
+# - Package.resolved (for Xcode Cloud - use 'git add -f' to add)
+# These files should be tracked even though *.xcodeproj is ignored
 *.xcodeproj
 
 
