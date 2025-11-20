@@ -578,7 +578,6 @@ struct OIDCRequestView: View {
                                         RoundedRectangle(cornerRadius: 10, style: .continuous)
                                             .fill(Color.accentColor)
                                     )
-                                    .foregroundColor(.white)
                             }
                             .buttonStyle(.plain)
                         }
@@ -587,11 +586,6 @@ struct OIDCRequestView: View {
                             Label(isLoading ? "Generating..." : "Generate OIDC Request", systemImage: "qrcode")
                                 .frame(maxWidth: .infinity)
                                 .padding(.vertical, 12)
-                                .background(
-                                    RoundedRectangle(cornerRadius: 10, style: .continuous)
-                                        .fill(Color.accentColor)
-                                )
-                                .foregroundColor(.white)
                         }
                         .buttonStyle(.plain)
                         .disabled(isLoading)

@@ -56,9 +56,6 @@ struct ShoutoutDetailView: View {
                             // Lightening header with profile
                             lightningHeader
 
-                            // Lightening stats grid
-                            lightningStatsGrid
-
                             // User Information
                             informationSection
 
@@ -224,69 +221,6 @@ struct ShoutoutDetailView: View {
                     )
             )
         }
-    }
-    
-    // MARK: - Sakura Stats Grid
-    
-    private var lightningStatsGrid: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            HStack {
-                Text("Sakura Stats")
-                    .font(.title2)
-                    .fontWeight(.bold)
-                    .foregroundColor(.white)
-                
-                Spacer()
-                
-                SakuraIconView(size: 28, color: .pink, isAnimating: isSakuraAnimating)
-            }
-            
-            LazyVGrid(columns: [
-                GridItem(.flexible()),
-                GridItem(.flexible())
-            ], spacing: 16) {
-                LighteningStatCard(
-                    title: "Activity",
-                    value: String(format: "%.0f%%", user.eventScore * 100),
-                    icon: "bolt.fill",
-                    color: .pink,
-                    isLighteningAnimating: isSakuraAnimating
-                )
-                
-                LighteningStatCard(
-                    title: "Professional",
-                    value: String(format: "%.0f%%", user.typeScore * 100),
-                    icon: "briefcase.fill",
-                    color: .blue,
-                    isLighteningAnimating: isSakuraAnimating
-                )
-                
-                LighteningStatCard(
-                    title: "Character",
-                    value: String(format: "%.0f%%", user.characterScore * 100),
-                    icon: "person.fill",
-                    color: .green,
-                    isLighteningAnimating: isSakuraAnimating
-                )
-                
-                LighteningStatCard(
-                    title: "Verified",
-                    value: user.verificationStatus.displayName,
-                    icon: user.verificationStatus.systemImageName,
-                    color: verificationColor,
-                    isLighteningAnimating: isSakuraAnimating
-                )
-            }
-        }
-        .padding()
-        .background(
-            RoundedRectangle(cornerRadius: 16)
-                .fill(Color.white.opacity(0.05))
-                .overlay(
-                    RoundedRectangle(cornerRadius: 16)
-                        .stroke(Color.pink.opacity(0.3), lineWidth: 1)
-                )
-        )
     }
     
     // MARK: - Information Section
