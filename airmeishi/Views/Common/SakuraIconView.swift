@@ -7,6 +7,10 @@
 
 import SwiftUI
 
+#if canImport(UIKit)
+import UIKit
+#endif
+
 struct SakuraIconView: View {
     let size: CGFloat
     let color: Color
@@ -42,6 +46,27 @@ struct SakuraIconView: View {
             value: isAnimating
         )
     }
+}
+
+// MARK: - UIImage Rendering Helper for Tab Bar
+extension SakuraIconView {
+    #if canImport(UIKit)
+    /// Renders the sakura icon as a UIImage for use in tab bars
+    @available(iOS 26.0, *)
+    static func renderAsImage(size: CGFloat = 19, color: UIColor = .white) -> UIImage? {
+        let view = SakuraIconView(size: size, color: Color(color), isAnimating: false)
+            .frame(width: size, height: size)
+        
+        let renderer = ImageRenderer(content: view)
+        renderer.scale = UIScreen.main.scale
+        
+        if #available(iOS 17.0, *) {
+            renderer.isOpaque = false
+        }
+        
+        return renderer.uiImage
+    }
+    #endif
 }
 
 #Preview {

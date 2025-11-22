@@ -11,6 +11,99 @@ struct MainTabView: View {
     @State private var showingProximityFullscreen = false
     
     var body: some View {
+        Group {
+            if #available(iOS 26.0, *) {
+                nativeTabView
+            } else {
+                customTabView
+            }
+        }
+        .background(Color.black.ignoresSafeArea())
+        .tint(.white)
+        .sheet(isPresented: $showingReceivedCard) {
+            if let card = deepLinkManager.lastReceivedCard {
+                ReceivedCardView(card: card)
+            }
+        }
+        .alert("Error", isPresented: $showingErrorAlert) {
+            Button("OK") { }
+        } message: {
+            Text(errorMessage)
+        }
+        .onReceive(deepLinkManager.$pendingAction) { action in
+            handleDeepLinkAction(action)
+        }
+        .fullScreenCover(isPresented: $showingProximityFullscreen) {
+            ProximitySharingView()
+        }
+    }
+    
+    // MARK: - iOS 26+ Native Tab View
+    @available(iOS 26.0, *)
+    private var nativeTabView: some View {
+        ZStack(alignment: .bottom) {
+            TabView(selection: $selectedTab) {
+                BusinessCardListView()
+                    .tabItem {
+                        nativeTabItem(systemName: "list.bullet.rectangle", title: "Glossary")
+                    }
+                    .tag(0)
+                
+                MatchingView()
+                    .tabItem {
+                        nativeTabItem(systemName: "circle.grid.2x2", title: "Sharing")
+                    }
+                    .tag(1)
+                
+                ShoutoutView()
+                    .tabItem {
+                        nativeTabItem(systemName: "", title: "Sakura", customIcon: "sakura-white")
+                    }
+                    .tag(2)
+                
+                IDView()
+                    .tabItem {
+                        nativeTabItem(systemName: "target", title: "ID")
+                    }
+                    .tag(3)
+                
+                SettingsView()
+                    .tabItem {
+                        nativeTabItem(systemName: "gearshape.fill", title: "Settings")
+                    }
+                    .tag(4)
+            }
+            .toolbarBackground(.black, for: .tabBar)
+            .toolbarBackground(.visible, for: .tabBar)
+            .onChange(of: selectedTab) { _, newTab in
+                if newTab == 1 {
+                    showingProximityFullscreen = true
+                    selectedTab = 0 // Reset to first tab
+                } else if newTab == 3 {
+                    generateIdGroupProofTabAction()
+                }
+            }
+            
+            if let status = tabStatus {
+                VStack {
+                    Spacer()
+                    Text(status)
+                        .font(.footnote.weight(.semibold))
+                        .foregroundColor(.white)
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 8)
+                        .background(.black.opacity(0.6))
+                        .clipShape(Capsule())
+                        .padding(.bottom, 100)
+                }
+                .transition(.opacity)
+                .animation(.easeInOut(duration: 0.2), value: tabStatus)
+            }
+        }
+    }
+    
+    // MARK: - Custom Tab View (iOS < 16)
+    private var customTabView: some View {
         ZStack(alignment: .bottom) {
             TabView(selection: $selectedTab) {
                 BusinessCardListView()
@@ -31,6 +124,12 @@ struct MainTabView: View {
             .tabViewStyle(DefaultTabViewStyle())
             .toolbarBackground(.hidden, for: .tabBar)
             .toolbar(.hidden, for: .tabBar)
+            .onChange(of: selectedTab) { _, newTab in
+                if newTab == 1 {
+                    showingProximityFullscreen = true
+                    selectedTab = 0 // Reset to first tab
+                }
+            }
 
             CustomFloatingTabBar(selectedTab: $selectedTab, onIdTabTapped: { generateIdGroupProofTabAction() })
 
@@ -49,30 +148,6 @@ struct MainTabView: View {
                 .transition(.opacity)
                 .animation(.easeInOut(duration: 0.2), value: tabStatus)
             }
-        }
-        .background(Color.black.ignoresSafeArea())
-        .tint(.white)
-        .sheet(isPresented: $showingReceivedCard) {
-            if let card = deepLinkManager.lastReceivedCard {
-                ReceivedCardView(card: card)
-            }
-        }
-        .alert("Error", isPresented: $showingErrorAlert) {
-            Button("OK") { }
-        } message: {
-            Text(errorMessage)
-        }
-        .onReceive(deepLinkManager.$pendingAction) { action in
-            handleDeepLinkAction(action)
-        }
-        .onChange(of: selectedTab) { _, newTab in
-            if newTab == 1 {
-                showingProximityFullscreen = true
-                selectedTab = 0 // Reset to first tab
-            }
-        }
-        .fullScreenCover(isPresented: $showingProximityFullscreen) {
-            ProximitySharingView()
         }
     }
     
@@ -153,6 +228,31 @@ struct MainTabView: View {
         }
         
         deepLinkManager.clearPendingAction()
+    }
+    
+    // MARK: - Native Tab Item Helper
+    @available(iOS 26.0, *)
+    @ViewBuilder
+    private func nativeTabItem(systemName: String, title: String, customIcon: String? = nil) -> some View {
+        if let customIcon = customIcon, customIcon == "sakura-white", systemName.isEmpty {
+            #if canImport(UIKit)
+            if let sakuraImage = SakuraIconView.renderAsImage(size: 22, color: .white) {
+                Label {
+                    Text(title)
+                } icon: {
+                    Image(uiImage: sakuraImage)
+                        .renderingMode(.template)
+                        .foregroundColor(.white)
+                }
+            } else {
+                Label(title, systemImage: "star")
+            }
+            #else
+            Label(title, systemImage: "star")
+            #endif
+        } else {
+            Label(title, systemImage: systemName)
+        }
     }
 }
 
