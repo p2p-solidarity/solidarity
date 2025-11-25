@@ -79,7 +79,7 @@ struct ProximitySharingView: View {
                 HStack {
                     Spacer()
                     Button(action: {
-                        stopMatchingIfNeeded()
+                        // Just dismiss, keep matching running in background
                         dismiss()
                     }) {
                         Image(systemName: "xmark")
@@ -143,11 +143,11 @@ struct ProximitySharingView: View {
         }
         
         if let card = selectedCard {
-            proximityManager.startAdvertising(with: card, sharingLevel: selectedSharingLevel)
+            proximityManager.startMatching(with: card, sharingLevel: selectedSharingLevel)
         } else {
-            proximityManager.startAdvertisingIdentity(displayName: UIDevice.current.name)
+            proximityManager.startMatching(with: nil)
         }
-        proximityManager.startBrowsing()
+        // proximityManager.startBrowsing() // Handled by startMatching
         isMatching = true
     }
     

@@ -36,6 +36,40 @@ struct MainTabView: View {
         .fullScreenCover(isPresented: $showingProximityFullscreen) {
             ProximitySharingView()
         }
+        .toastOverlay()
+        .onReceive(NotificationCenter.default.publisher(for: .matchingReceivedCard)) { notification in
+            if let card = notification.userInfo?[ProximityEventKey.card] as? BusinessCard {
+                ToastManager.shared.show(
+                    title: "Card Received",
+                    message: "Received business card from \(card.name)",
+                    type: .success
+                )
+            }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .groupInviteReceived)) { notification in
+            if let invite = notification.userInfo?[ProximityEventKey.invite] as? GroupInvitePayload {
+                ToastManager.shared.show(
+                    title: "Group Invite",
+                    message: "Invited to join group: \(invite.groupName)",
+                    type: .info,
+                    duration: 5.0,
+                    action: {
+                        // Action handled by ProximityManager popup usually, 
+                        // but we could add a "View" action here if needed.
+                        // For now, the popup handles it.
+                    }
+                )
+            }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .matchingError)) { notification in
+            if let error = notification.userInfo?[ProximityEventKey.error] as? CardError {
+                ToastManager.shared.show(
+                    title: "Connection Error",
+                    message: error.localizedDescription,
+                    type: .error
+                )
+            }
+        }
     }
     
     // MARK: - iOS 26+ Native Tab View
@@ -99,6 +133,13 @@ struct MainTabView: View {
                 .transition(.opacity)
                 .animation(.easeInOut(duration: 0.2), value: tabStatus)
             }
+            
+            // Matching Bar
+            VStack {
+                Spacer()
+                MatchingBarView()
+                    .padding(.bottom, 90) // Above native tab bar
+            }
         }
     }
     
@@ -147,6 +188,13 @@ struct MainTabView: View {
                 }
                 .transition(.opacity)
                 .animation(.easeInOut(duration: 0.2), value: tabStatus)
+            }
+            
+            // Matching Bar
+            VStack {
+                Spacer()
+                MatchingBarView()
+                    .padding(.bottom, 80) // Above custom floating tab bar
             }
         }
     }

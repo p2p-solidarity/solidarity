@@ -37,6 +37,13 @@ class ProximityManager: NSObject, ProximityManagerProtocol, ObservableObject {
     @Published var pendingGroupInvite: (payload: GroupInvitePayload, from: MCPeerID)?
     private var pendingGroupJoinResponse: (invite: GroupInvitePayload, memberName: String, memberCommitment: String, peerID: MCPeerID)?
     
+    // MARK: - Auto-Pilot & Background Properties
+    private var autoConnectEnabled = false
+    private var isBackground = false
+    private var heartbeatTimer: Timer?
+    private var retryAttempts: [MCPeerID: Int] = [:]
+    private var retryWorkItems: [MCPeerID: DispatchWorkItem] = [:]
+    
     // MARK: - Private Properties
     private let serviceType = "airmeishi-share"
     private let maxPeers = 8
@@ -74,6 +81,22 @@ class ProximityManager: NSObject, ProximityManagerProtocol, ObservableObject {
     }
     
     // MARK: - Public Methods
+    
+    /// Start auto-pilot matching (Advertising + Browsing) with automatic connection and retries
+    func startMatching(with card: BusinessCard?, sharingLevel: SharingLevel = .professional) {
+        autoConnectEnabled = true
+        
+        if let card = card {
+            startAdvertising(with: card, sharingLevel: sharingLevel)
+        } else {
+            startAdvertisingIdentity()
+        }
+        
+        startBrowsing()
+        startHeartbeat()
+        
+        print("Started Auto-Pilot Matching")
+    }
     
     /// Start advertising the current business card for proximity sharing
     func startAdvertising(with card: BusinessCard, sharingLevel: SharingLevel) {
@@ -272,8 +295,11 @@ class ProximityManager: NSObject, ProximityManagerProtocol, ObservableObject {
     
     /// Disconnect from all peers and stop all services
     func disconnect() {
+        autoConnectEnabled = false
         stopAdvertising()
         stopBrowsing()
+        stopHeartbeat()
+        cancelAllRetries()
         
         session.disconnect()
         nearbyPeers.removeAll()
@@ -467,8 +493,30 @@ class ProximityManager: NSObject, ProximityManagerProtocol, ObservableObject {
         // Listen for app state changes
         NotificationCenter.default.publisher(for: UIApplication.didEnterBackgroundNotification)
             .sink { [weak self] _ in
-                self?.stopAdvertising()
-                self?.stopBrowsing()
+                guard let self = self else { return }
+                self.isBackground = true
+                print("App entered background - optimizing P2P resources")
+                
+                // In background, we stop browsing to save battery/resources, 
+                // but keep advertising to remain discoverable if possible.
+                // Note: iOS may still suspend execution unless we have background tasks.
+                self.stopBrowsing()
+                
+                // We do NOT disconnect session here to allow "survival"
+            }
+            .store(in: &cancellables)
+            
+        NotificationCenter.default.publisher(for: UIApplication.willEnterForegroundNotification)
+            .sink { [weak self] _ in
+                guard let self = self else { return }
+                self.isBackground = false
+                print("App entered foreground - restoring P2P services")
+                
+                // Restore browsing if we are in auto-pilot mode
+                if self.autoConnectEnabled {
+                    self.startBrowsing()
+                    self.startHeartbeat()
+                }
             }
             .store(in: &cancellables)
     }
@@ -551,6 +599,78 @@ class ProximityManager: NSObject, ProximityManagerProtocol, ObservableObject {
         // Generic error message
         return "Failed to start browsing: \(error.localizedDescription)"
     }
+    // MARK: - Heartbeat & Retry Logic
+    
+    private func startHeartbeat() {
+        stopHeartbeat()
+        // 30s heartbeat
+        heartbeatTimer = Timer.scheduledTimer(withTimeInterval: 30.0, repeats: true) { [weak self] _ in
+            self?.sendHeartbeat()
+        }
+    }
+    
+    private func stopHeartbeat() {
+        heartbeatTimer?.invalidate()
+        heartbeatTimer = nil
+    }
+    
+    private func sendHeartbeat() {
+        guard !session.connectedPeers.isEmpty else { return }
+        // Simple keep-alive packet (could be empty data or specific type)
+        let heartbeatData = "HEARTBEAT".data(using: .utf8)!
+        do {
+            try session.send(heartbeatData, toPeers: session.connectedPeers, with: .unreliable)
+            // print("Sent heartbeat to \(session.connectedPeers.count) peers")
+        } catch {
+            print("Failed to send heartbeat: \(error)")
+        }
+    }
+    
+    private func scheduleRetry(for peerID: MCPeerID) {
+        guard autoConnectEnabled else { return }
+        
+        let attempt = retryAttempts[peerID] ?? 0
+        let delay = pow(2.0, Double(attempt)) // 1, 2, 4, 8...
+        
+        // Cap at 30s
+        let cappedDelay = min(delay, 30.0)
+        
+        print("Scheduling retry for \(peerID.displayName) in \(cappedDelay)s (Attempt \(attempt + 1))")
+        
+        let workItem = DispatchWorkItem { [weak self] in
+            guard let self = self, self.autoConnectEnabled else { return }
+            // Only retry if still not connected
+            if !self.session.connectedPeers.contains(peerID) {
+                // We need to re-invite. Since we might not have the original context/browser easily accessible 
+                // in this specific flow without tracking it, we rely on the browser finding the peer again 
+                // OR we just wait for the browser to re-discover.
+                // However, 'browser:foundPeer:' is called repeatedly? No, usually once.
+                // So we might need to restart browsing or manually invite if we have the peer object.
+                
+                // Best effort: if we have the peer in nearbyPeers, try to connect
+                if let peer = self.nearbyPeers.first(where: { $0.peerID == peerID }) {
+                    self.connectToPeer(peer)
+                }
+            }
+        }
+        
+        retryWorkItems[peerID] = workItem
+        retryAttempts[peerID] = attempt + 1
+        
+        DispatchQueue.main.asyncAfter(deadline: .now() + cappedDelay, execute: workItem)
+    }
+    
+    private func cancelRetry(for peerID: MCPeerID) {
+        retryWorkItems[peerID]?.cancel()
+        retryWorkItems[peerID] = nil
+        retryAttempts[peerID] = nil
+    }
+    
+    private func cancelAllRetries() {
+        retryWorkItems.values.forEach { $0.cancel() }
+        retryWorkItems.removeAll()
+        retryAttempts.removeAll()
+    }
 }
 
 // MARK: - MCSessionDelegate
@@ -565,10 +685,15 @@ extension ProximityManager: MCSessionDelegate {
                 switch state {
                 case .connected:
                     self.nearbyPeers[index].status = .connected
+                    self.cancelRetry(for: peerID) // Connection successful, cancel retry
                 case .connecting:
                     self.nearbyPeers[index].status = .connecting
                 case .notConnected:
                     self.nearbyPeers[index].status = .disconnected
+                    // If we were connected and lost it, or failed to connect, schedule retry
+                    if self.autoConnectEnabled {
+                        self.scheduleRetry(for: peerID)
+                    }
                 @unknown default:
                     break
                 }
@@ -746,6 +871,20 @@ extension ProximityManager: MCNearbyServiceBrowserDelegate {
                     object: nil,
                     userInfo: [ProximityEventKey.peers: self.nearbyPeers]
                 )
+                
+                // Auto-Pilot: Connect automatically with random delay to avoid collision
+                if self.autoConnectEnabled {
+                    // Random delay 0.5 - 1.5s
+                    let delay = Double.random(in: 0.5...1.5)
+                    DispatchQueue.main.asyncAfter(deadline: .now() + delay) { [weak self] in
+                        guard let self = self, 
+                              self.autoConnectEnabled,
+                              !self.session.connectedPeers.contains(peerID) else { return }
+                        
+                        print("Auto-Pilot: Connecting to \(peerID.displayName)")
+                        self.connectToPeer(peer)
+                    }
+                }
             }
         }
     }
