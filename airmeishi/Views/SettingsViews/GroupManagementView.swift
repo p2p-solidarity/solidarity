@@ -27,7 +27,7 @@ struct GroupManagementView: View {
     @Environment(\.dismiss) private var dismiss
 
     private enum SheetType: String, Identifiable {
-        case root, add, revoke, ens, privacy, terms
+        case root, create, add, revoke, ens, privacy, terms
         var id: String { rawValue }
     }
 
@@ -99,6 +99,7 @@ struct GroupManagementView: View {
 
                             VStack(spacing: 1) {
                                 SimpleNodeRow(icon: "checkmark.seal", title: "View Root", subtitle: "Manage group root and identity") { activeSheet = .root }
+                                SimpleNodeRow(icon: "plus.circle.fill", title: "Create Group", subtitle: "Create a new local group") { activeSheet = .create }
                                 SimpleNodeRow(icon: "person.badge.plus", title: "Add Member", subtitle: "Add new members to your group") { activeSheet = .add }
                                 SimpleNodeRow(icon: "person.badge.minus", title: "Remove Member", subtitle: "Revoke member access") { activeSheet = .revoke }
                                 SimpleNodeRow(icon: "sparkles", title: "ENS Mode", subtitle: "Upgrade or bind to ENS") { activeSheet = .ens }
@@ -221,6 +222,8 @@ struct GroupManagementView: View {
             switch sheet {
             case .root:
                 RootSheet
+            case .create:
+                CreateGroupView()
             case .add:
                 AddMemberSheet
             case .revoke:

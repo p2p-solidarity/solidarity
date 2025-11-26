@@ -144,6 +144,7 @@ final class IdentityCoordinator: ObservableObject {
     private let verificationSubject: CurrentValueSubject<[UUID: VerificationStatus], Never>
     private let verificationUpdateSubject = PassthroughSubject<IdentityState.VerificationEvent, Never>()
     private let oidcEventSubject = PassthroughSubject<IdentityState.OIDCEvent, Never>()
+    private var cancellables = Set<AnyCancellable>()
 
     init(
         keychain: KeychainService = .shared,
@@ -191,6 +192,17 @@ final class IdentityCoordinator: ObservableObject {
         self.verificationSubject = CurrentValueSubject(initialState.verificationCache)
 
         self.oidcService.attachIdentityCoordinator(self)
+
+        // Subscribe to group updates
+        self.groupManager.objectWillChange
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] _ in
+                // Delay slightly to allow state to update
+                DispatchQueue.main.async {
+                    self?.refreshMemberships()
+                }
+            }
+            .store(in: &cancellables)
 
         if autoRefresh { refreshIdentity() }
     }

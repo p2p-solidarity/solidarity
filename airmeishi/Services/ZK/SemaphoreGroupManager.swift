@@ -125,7 +125,13 @@ final class SemaphoreGroupManager: ObservableObject {
 
     @discardableResult
     func createGroup(name: String, initialMembers: [String] = [], ownerAddress: String? = nil) -> ManagedGroup {
-        let g = ManagedGroup(id: UUID(), name: name, createdAt: Date(), members: Array(Set(initialMembers)), root: nil, ownerAddress: ownerAddress)
+        var members = initialMembers
+        // Auto-add current user if they have an identity
+        if let currentCommitment = SemaphoreIdentityManager.shared.getIdentity()?.commitment {
+            members.append(currentCommitment)
+        }
+        
+        let g = ManagedGroup(id: UUID(), name: name, createdAt: Date(), members: Array(Set(members)), root: nil, ownerAddress: ownerAddress)
         onMain { [weak self] in
             guard let self = self else { return }
             self.allGroups.append(g)

@@ -300,9 +300,19 @@ struct IDView: View {
                 
                 // Info
                 VStack(alignment: .leading, spacing: 4) {
-                    Text(membership.name)
-                        .font(.body.weight(.medium))
-                        .foregroundColor(.primary)
+                    HStack(spacing: 6) {
+                        Text(membership.name)
+                            .font(.body.weight(.medium))
+                            .foregroundColor(.primary)
+                        
+                        Text("Local")
+                            .font(.system(size: 10, weight: .bold))
+                            .foregroundColor(.white)
+                            .padding(.horizontal, 6)
+                            .padding(.vertical, 2)
+                            .background(Color.secondary.opacity(0.8))
+                            .clipShape(Capsule())
+                    }
                     
                     if let memberIndex = membership.memberIndex {
                         Text("Member #\(memberIndex + 1)")
