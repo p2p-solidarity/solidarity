@@ -9,7 +9,7 @@ import SwiftUI
 
 struct IDView: View {
     @ObservedObject private var coordinator = IdentityCoordinator.shared
-    @StateObject private var groupManager = SemaphoreGroupManager.shared
+    @StateObject private var groupManager = CloudKitGroupSyncManager.shared
     @StateObject private var idm = SemaphoreIdentityManager.shared
     @StateObject private var oidcService = OIDCService.shared
     
@@ -17,7 +17,7 @@ struct IDView: View {
     @State private var showingGroupManager = false
     @State private var showingOIDCRequest = false
     @State private var showingZKSettings = false
-    @State private var selectedGroupIndex: Int = 0
+    @State private var selectedGroup: GroupModel?
     @State private var isWorking = false
     @State private var showErrorAlert = false
     @State private var errorMessage: String?
@@ -33,10 +33,6 @@ struct IDView: View {
         }
         if profile.zkIdentity == nil {
             return .idle
-        }
-        // Check if any group needs sync
-        if profile.memberships.contains(where: { $0.status == .outdated }) {
-            return .syncNeeded
         }
         return .idle
     }
@@ -109,6 +105,9 @@ struct IDView: View {
             }
             .sheet(isPresented: $showingZKSettings) {
                 ZKSettingsView()
+            }
+            .onAppear {
+                groupManager.startSyncEngine()
             }
         }
     }
@@ -259,13 +258,13 @@ struct IDView: View {
                 
                 Button(action: { showingGroupManager = true }) {
                     Image(systemName: "plus.circle.fill")
-                        .font(.title2)
-                        .foregroundColor(.accentColor)
+                    .font(.title2)
+                    .foregroundColor(.accentColor)
                 }
                 .padding(.trailing, 24)
             }
             
-            if profile.memberships.isEmpty {
+            if groupManager.groups.isEmpty {
                 Text("No group memberships")
                     .font(.subheadline)
                     .foregroundColor(.secondary)
@@ -273,8 +272,8 @@ struct IDView: View {
                     .padding(.vertical, 20)
             } else {
                 LazyVStack(spacing: 12) {
-                    ForEach(Array(profile.memberships.enumerated()), id: \.element.id) { index, membership in
-                        groupRow(membership: membership, index: index)
+                    ForEach(groupManager.groups) { group in
+                        groupRow(group: group)
                     }
                 }
                 .padding(.horizontal, 20)
@@ -282,9 +281,9 @@ struct IDView: View {
         }
     }
     
-    private func groupRow(membership: GroupMembership, index: Int) -> some View {
+    private func groupRow(group: GroupModel) -> some View {
         Button(action: {
-            selectedGroupIndex = index
+            selectedGroup = group
             presentProof()
         }) {
             HStack(spacing: 16) {
@@ -301,34 +300,25 @@ struct IDView: View {
                 // Info
                 VStack(alignment: .leading, spacing: 4) {
                     HStack(spacing: 6) {
-                        Text(membership.name)
+                        Text(group.name)
                             .font(.body.weight(.medium))
                             .foregroundColor(.primary)
                         
-                        Text("Local")
+                        Text("CloudKit")
                             .font(.system(size: 10, weight: .bold))
                             .foregroundColor(.white)
                             .padding(.horizontal, 6)
                             .padding(.vertical, 2)
-                            .background(Color.secondary.opacity(0.8))
+                            .background(Color.blue.opacity(0.8))
                             .clipShape(Capsule())
                     }
                     
-                    if let memberIndex = membership.memberIndex {
-                        Text("Member #\(memberIndex + 1)")
-                            .font(.caption)
-                            .foregroundColor(.secondary)
-                    } else {
-                        Text("Not a member")
-                            .font(.caption)
-                            .foregroundColor(.secondary)
-                    }
+                    Text("\(group.memberCount) members")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
                 }
                 
                 Spacer()
-                
-                // Status
-                statusIcon(for: membership.status)
                 
                 Image(systemName: "chevron.right")
                     .font(.caption)
@@ -341,26 +331,12 @@ struct IDView: View {
         .buttonStyle(.plain)
     }
     
-    private func statusIcon(for status: GroupMembership.MembershipStatus) -> some View {
-        switch status {
-        case .active:
-            return Image(systemName: "checkmark.circle.fill").foregroundColor(.green)
-        case .outdated:
-            return Image(systemName: "exclamationmark.triangle.fill").foregroundColor(.yellow)
-        case .pending:
-            return Image(systemName: "clock.fill").foregroundColor(.gray)
-        case .notMember:
-            return Image(systemName: "circle").foregroundColor(.gray)
-        }
-    }
-    
     private var addButton: some View {
         EmptyView() // Removed in favor of header button
     }
     
     private func presentProof() {
-        guard selectedGroupIndex < profile.memberships.count else { return }
-        _ = profile.memberships[selectedGroupIndex]
+        guard let _ = selectedGroup else { return }
         
         // Logic to present proof for this group
         // For now, just show the OIDC request sheet

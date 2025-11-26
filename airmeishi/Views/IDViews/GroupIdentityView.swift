@@ -2,7 +2,7 @@ import SwiftUI
 
 struct GroupIdentityView: View {
     @ObservedObject private var coordinator = IdentityCoordinator.shared
-    @ObservedObject private var groupManager = SemaphoreGroupManager.shared
+    @ObservedObject private var groupManager = CloudKitGroupSyncManager.shared
 
     var body: some View {
         List {
@@ -15,56 +15,49 @@ struct GroupIdentityView: View {
 
     private var headerSection: some View {
         Section("Selected Group") {
-            if let selection = currentGroup {
-                LabeledContent("Name", value: selection.name)
-                if let root = selection.root {
-                    LabeledContent("Merkle Root", value: root)
-                }
-                Text("Members: \(selection.members.count)")
-                    .font(.caption)
+            // For now, we don't have a "selected group" concept in the manager globally,
+            // but we can list all groups or just show a placeholder.
+            // Or we can iterate over groups.
+            // Given the original view was for a SINGLE selected group, this view might need a redesign.
+            // For MVP, I'll just list the groups.
+            
+            if groupManager.groups.isEmpty {
+                Text("No groups found. Create or join a group.")
                     .foregroundColor(.secondary)
             } else {
-                Text("No group selected. Create or import a group to begin.")
-                    .foregroundColor(.secondary)
-            }
-
-            if let commitment = coordinator.state.currentProfile.zkIdentity?.commitment,
-               let index = groupManager.members.firstIndex(of: commitment) {
-                Text("Your commitment is member #\(index + 1)")
-                    .font(.caption)
-                    .foregroundColor(.secondary)
+                ForEach(groupManager.groups) { group in
+                    VStack(alignment: .leading) {
+                        Text(group.name)
+                            .font(.headline)
+                        Text("Members: \(group.memberCount)")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                    }
+                }
             }
         }
     }
 
     private var membersSection: some View {
-        Section("Members") {
-            if groupManager.members.isEmpty {
-                Text("Group has no members yet.")
-                    .foregroundColor(.secondary)
-            } else {
-                ForEach(Array(groupManager.members.enumerated()), id: \.offset) { index, _ in
-                    Text("Member #\(index + 1)")
-                        .font(.subheadline)
-                }
-            }
+        Section("Members Details") {
+            // CloudKit groups don't expose full member list locally unless fetched.
+            // We only have memberCount in GroupModel.
+            // So we can't list members easily here without fetching.
+            Text("Member details are managed via CloudKit.")
+                .foregroundColor(.secondary)
         }
     }
 
     private var actionsSection: some View {
         Section("Actions") {
             Button {
-                groupManager.recomputeRoot()
+                Task {
+                    try? await groupManager.fetchLatestChanges()
+                }
             } label: {
-                Label("Recompute Root", systemImage: "arrow.triangle.2.circlepath")
+                Label("Refresh Groups", systemImage: "arrow.clockwise")
             }
-            .disabled(groupManager.members.isEmpty)
         }
-    }
-
-    private var currentGroup: SemaphoreGroupManager.ManagedGroup? {
-        guard let id = groupManager.selectedGroupId else { return nil }
-        return groupManager.allGroups.first(where: { $0.id == id })
     }
 }
 

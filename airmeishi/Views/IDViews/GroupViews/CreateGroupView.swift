@@ -9,9 +9,13 @@ import SwiftUI
 
 struct CreateGroupView: View {
     @Environment(\.dismiss) private var dismiss
-    @StateObject private var groupManager = SemaphoreGroupManager.shared
+    @StateObject private var groupManager = CloudKitGroupSyncManager.shared
     @State private var groupName: String = ""
+    @State private var groupDescription: String = ""
+    @State private var isPrivate: Bool = false
     @State private var isCreating: Bool = false
+    @State private var errorMessage: String?
+    @State private var showingError: Bool = false
     
     var body: some View {
         NavigationStack {
@@ -19,8 +23,25 @@ struct CreateGroupView: View {
                 Section {
                     TextField("Group Name", text: $groupName)
                         .textInputAutocapitalization(.words)
+                    
+                    TextField("Description (Optional)", text: $groupDescription)
+                        .textInputAutocapitalization(.sentences)
                 } footer: {
-                    Text("Give your group a recognizable name.")
+                    Text("Give your group a recognizable name and description.")
+                }
+                
+                Section {
+                    Picker("Group Type", selection: $isPrivate) {
+                        Text("Public Group").tag(false)
+                        Text("Private Group").tag(true)
+                    }
+                    .pickerStyle(.segmented)
+                } footer: {
+                    if isPrivate {
+                        Text("Private groups use native iCloud Sharing. Only invited people can join.")
+                    } else {
+                        Text("Public groups use simple link sharing. Anyone with the link can join.")
+                    }
                 }
                 
                 Section {
@@ -47,6 +68,11 @@ struct CreateGroupView: View {
                     }
                 }
             }
+            .alert("Error", isPresented: $showingError) {
+                Button("OK", role: .cancel) {}
+            } message: {
+                Text(errorMessage ?? "Unknown error")
+            }
         }
     }
     
@@ -56,12 +82,20 @@ struct CreateGroupView: View {
         
         isCreating = true
         
-        // Simulate network delay or processing if needed, but for local it's fast.
-        // We'll add a small delay for better UX
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
-            groupManager.createGroup(name: name)
-            isCreating = false
-            dismiss()
+        Task {
+            do {
+                _ = try await groupManager.createGroup(name: name, description: groupDescription, coverImage: nil, isPrivate: isPrivate)
+                await MainActor.run {
+                    isCreating = false
+                    dismiss()
+                }
+            } catch {
+                await MainActor.run {
+                    errorMessage = error.localizedDescription
+                    showingError = true
+                    isCreating = false
+                }
+            }
         }
     }
 }

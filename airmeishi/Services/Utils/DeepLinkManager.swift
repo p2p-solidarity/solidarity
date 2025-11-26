@@ -181,9 +181,30 @@ class DeepLinkManager: DeepLinkManagerProtocol, ObservableObject {
             return handleContactSchemeURL(components)
         } else if components.host == "oidc", let url = components.url {
             return handleOIDCCallback(url)
+        } else if components.host == "group" && components.path == "/join" {
+            return handleGroupJoinURL(components)
         }
 
         return false
+    }
+    
+    private func handleGroupJoinURL(_ components: URLComponents) -> Bool {
+        guard let queryItems = components.queryItems,
+              let token = queryItems.first(where: { $0.name == "token" })?.value else {
+            print("Missing token in group join URL")
+            return false
+        }
+        
+        Task { @MainActor in
+            do {
+                _ = try await CloudKitGroupSyncManager.shared.joinGroup(withInviteToken: token)
+                pendingAction = .showMessage("Successfully joined group!")
+            } catch {
+                pendingAction = .showError("Failed to join group: \(error.localizedDescription)")
+            }
+        }
+        
+        return true
     }
 
     private func handleContactSchemeURL(_ components: URLComponents) -> Bool {
@@ -378,6 +399,7 @@ class DeepLinkManager: DeepLinkManagerProtocol, ObservableObject {
 enum DeepLinkAction {
     case showReceivedCard(BusinessCard)
     case showError(String)
+    case showMessage(String)
     case navigateToSharing
     case navigateToContacts
 }

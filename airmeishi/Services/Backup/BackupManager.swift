@@ -7,6 +7,7 @@
 
 import Foundation
 
+@MainActor
 final class BackupManager: ObservableObject {
     static let shared = BackupManager()
     private init() {}

@@ -268,6 +268,13 @@ struct MainTabView: View {
             errorMessage = message
             showingErrorAlert = true
             
+        case .showMessage(let message):
+            ToastManager.shared.show(
+                title: "Success",
+                message: message,
+                type: .success
+            )
+            
         case .navigateToSharing:
             break
             
