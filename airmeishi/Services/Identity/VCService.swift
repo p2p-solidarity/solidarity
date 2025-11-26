@@ -263,8 +263,8 @@ final class VCService {
 
                 let issuedAt = envelope.issuedAtDate ?? Date()
                 let expiresAt = envelope.expirationDate
-                let holderDid = envelope.payload.sub ?? businessCard.id.uuidString
-                let issuerDid = envelope.payload.iss ?? "did:unknown"
+                let holderDid = envelope.sub ?? businessCard.id.uuidString
+                let issuerDid = envelope.iss ?? "did:unknown"
                 
                 Self.logger.info("Creating issued credential - holderDid: \(holderDid), issuerDid: \(issuerDid)")
                 let issued = IssuedCredential(
@@ -326,7 +326,9 @@ final class VCService {
             do {
                 let envelope = try JSONDecoder().decode(BusinessCardCredentialEnvelope.self, from: decoded.payloadData)
 
-                guard let publicKeyJwk = envelope.payload.vc.credentialSubject.publicKeyJwk else {
+                let credentialSubject = (envelope.vc ?? envelope.payload?.vc)?.credentialSubject
+
+                guard let publicKeyJwk = credentialSubject?.publicKeyJwk else {
                     Self.logger.error("Credential missing public key information")
                     return .failure(.invalidData("Credential missing public key information"))
                 }
@@ -343,7 +345,7 @@ final class VCService {
                 Self.logger.info("Signature verified, checking expiration")
 
                 let now = Date()
-                if let notBefore = envelope.payload.nbf {
+                if let notBefore = envelope.nbf {
                     let nbfDate = Date(timeIntervalSince1970: TimeInterval(notBefore))
                     if now < nbfDate {
                         Self.logger.warning("Credential not yet valid - nbf: \(nbfDate), now: \(now)")
@@ -351,7 +353,7 @@ final class VCService {
                     }
                 }
 
-                if let expiration = envelope.payload.exp {
+                if let expiration = envelope.exp {
                     let expDate = Date(timeIntervalSince1970: TimeInterval(expiration))
                     if now > expDate {
                         Self.logger.warning("Credential expired - exp: \(expDate), now: \(now)")
@@ -494,20 +496,45 @@ private struct BusinessCardCredentialEnvelope: Decodable {
         let publicKeyJwk: PublicKeyJWK?
     }
 
-    let payload: Payload
+    let payload: Payload?
+    let iss: String?
+    let sub: String?
+    let iat: Int?
+    let nbf: Int?
+    let exp: Int?
+    let vc: VerifiableCredential?
 
     var issuedAtDate: Date? {
-        guard let iat = payload.iat else { return nil }
-        return Date(timeIntervalSince1970: TimeInterval(iat))
+        if let iat = iat {
+            return Date(timeIntervalSince1970: TimeInterval(iat))
+        }
+        if let payloadIat = payload?.iat {
+            return Date(timeIntervalSince1970: TimeInterval(payloadIat))
+        }
+        return nil
     }
 
     var expirationDate: Date? {
-        guard let exp = payload.exp else { return nil }
-        return Date(timeIntervalSince1970: TimeInterval(exp))
+        if let exp = exp {
+            return Date(timeIntervalSince1970: TimeInterval(exp))
+        }
+        if let payloadExp = payload?.exp {
+            return Date(timeIntervalSince1970: TimeInterval(payloadExp))
+        }
+        return nil
     }
 
     func toBusinessCard() throws -> BusinessCard {
-        let subject = payload.vc.credentialSubject
+        let envelopeVC: VerifiableCredential
+        if let directVc = vc {
+            envelopeVC = directVc
+        } else if let nestedVc = payload?.vc {
+            envelopeVC = nestedVc
+        } else {
+            throw CardError.invalidData("Credential missing VC payload")
+        }
+
+        let subject = envelopeVC.credentialSubject
         let cardId = UUID(uuidString: subject.businessCardId ?? "") ?? UUID()
         let title = subject.jobTitle?.nilIfEmpty()
         let company = subject.worksFor?.name?.nilIfEmpty()
