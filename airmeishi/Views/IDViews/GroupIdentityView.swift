@@ -28,7 +28,7 @@ struct GroupIdentityView: View {
                     .foregroundColor(.secondary)
             }
 
-            if let commitment = coordinator.state.zkIdentity?.commitment,
+            if let commitment = coordinator.state.currentProfile.zkIdentity?.commitment,
                let index = groupManager.members.firstIndex(of: commitment) {
                 Text("Your commitment is member #\(index + 1)")
                     .font(.caption)

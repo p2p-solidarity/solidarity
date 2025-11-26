@@ -35,18 +35,11 @@ struct PersonalIdentityView: View {
             }
         }
 #endif
-#if canImport(UIKit)
-        .sheet(isPresented: $showingShareSheet, onDismiss: { shareContent = nil }) {
-            if let shareContent {
-                ActivityView(items: [shareContent])
-            }
-        }
-#endif
     }
 
     private var commitmentSection: some View {
         Section {
-            if let commitment = coordinator.state.zkIdentity?.commitment {
+            if let commitment = coordinator.state.currentProfile.zkIdentity?.commitment {
                 LabeledContent("Semaphore Commitment", value: commitment)
             } else {
                 Text("No commitment available. Refresh to derive your identity.")
@@ -57,7 +50,7 @@ struct PersonalIdentityView: View {
 
     private var keyMaterialSection: some View {
         Section("Public Key") {
-            if let did = coordinator.state.activeDid?.did,
+            if let did = coordinator.state.currentProfile.activeDID?.did,
                let jwk = coordinator.state.cachedJwks[did],
                let json = try? jwk.jsonString(prettyPrinted: true) {
                 ScrollView(.horizontal, showsIndicators: false) {
@@ -141,13 +134,13 @@ struct PersonalIdentityView: View {
     }
 
     private func copyDid() {
-        guard let did = coordinator.state.activeDid?.did else { return }
+        guard let did = coordinator.state.currentProfile.activeDID?.did else { return }
         copyToPasteboard(did)
         didCopied = true
     }
 
     private func copyJwk() {
-        guard let did = coordinator.state.activeDid?.did,
+        guard let did = coordinator.state.currentProfile.activeDID?.did,
               let jwk = coordinator.state.cachedJwks[did],
               let json = try? jwk.jsonString(prettyPrinted: true)
         else { return }

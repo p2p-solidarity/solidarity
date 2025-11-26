@@ -3,6 +3,37 @@ import Combine
 import LocalAuthentication
 import Security
 
+import Foundation
+import Combine
+import LocalAuthentication
+import Security
+
+// MARK: - Unified Profile Models
+
+struct UnifiedProfile: Equatable {
+    var zkIdentity: SemaphoreIdentityManager.IdentityBundle?
+    var activeDID: DIDDescriptor?
+    var memberships: [GroupMembership]
+    
+    var isEmpty: Bool {
+        zkIdentity == nil && activeDID == nil
+    }
+}
+
+struct GroupMembership: Equatable, Identifiable {
+    let id: String // Group ID
+    let name: String
+    let status: MembershipStatus
+    let memberIndex: Int?
+    
+    enum MembershipStatus: String, Equatable {
+        case active
+        case outdated
+        case pending
+        case notMember
+    }
+}
+
 struct IdentityState: Equatable {
     struct VerificationEvent: Equatable {
         let cardId: UUID
@@ -30,11 +61,12 @@ struct IdentityState: Equatable {
     }
 
     var isLoading: Bool
-    var activeDid: DIDDescriptor?
+    var currentProfile: UnifiedProfile
+    
+    // Legacy/Internal state
     var didDocument: DIDDocument?
     var cachedDocuments: [String: DIDDocument]
     var cachedJwks: [String: PublicKeyJWK]
-    var zkIdentity: SemaphoreIdentityManager.IdentityBundle?
     var verificationCache: [UUID: VerificationStatus]
     var lastVerificationUpdate: VerificationEvent?
     var lastImportEvent: ImportEvent?
@@ -106,6 +138,7 @@ final class IdentityCoordinator: ObservableObject {
     private let vcService: VCService
     private let oidcService: OIDCService
     private let semaphoreManager: SemaphoreIdentityManager
+    private let groupManager: SemaphoreGroupManager
     private let cacheStore: IdentityCacheStore
     private let queue = DispatchQueue(label: "com.kidneyweakx.airmeishi.identity-coordinator", qos: .userInitiated)
     private let verificationSubject: CurrentValueSubject<[UUID: VerificationStatus], Never>
@@ -118,6 +151,7 @@ final class IdentityCoordinator: ObservableObject {
         vcService: VCService = VCService(),
         oidcService: OIDCService = .shared,
         semaphoreManager: SemaphoreIdentityManager = .shared,
+        groupManager: SemaphoreGroupManager = .shared,
         cacheStore: IdentityCacheStore = IdentityCacheStore(),
         autoRefresh: Bool = true
     ) {
@@ -126,19 +160,25 @@ final class IdentityCoordinator: ObservableObject {
         self.vcService = vcService
         self.oidcService = oidcService
         self.semaphoreManager = semaphoreManager
+        self.groupManager = groupManager
         self.cacheStore = cacheStore
 
         let cachedDocs = cacheStore.loadDocuments()
         let cachedJwks = cacheStore.loadJwks()
         let zkIdentity = semaphoreManager.getIdentity() ?? (try? semaphoreManager.loadOrCreateIdentity())
+        
+        let initialProfile = UnifiedProfile(
+            zkIdentity: zkIdentity,
+            activeDID: nil,
+            memberships: []
+        )
 
         let initialState = IdentityState(
             isLoading: false,
-            activeDid: nil,
+            currentProfile: initialProfile,
             didDocument: nil,
             cachedDocuments: cachedDocs,
             cachedJwks: cachedJwks,
-            zkIdentity: zkIdentity,
             verificationCache: [:],
             lastVerificationUpdate: nil,
             lastImportEvent: nil,
@@ -161,22 +201,89 @@ final class IdentityCoordinator: ObservableObject {
         Task.detached { [weak self] in
             guard let self else { return }
             await self.loadIdentity(context: context)
-            // Ensure ZK identity is synchronized with DID
             await self.syncZKIdentity()
+            await self.refreshMemberships()
+        }
+    }
+    
+    @MainActor
+    func switchDID(method: DIDService.DIDMethod) {
+        Task {
+            setLoading(true)
+            // Update DID Service preference (if we were persisting it)
+            // For now, we just request the specific DID type
+            
+            let result = didService.switchMethod(to: method)
+            
+            switch result {
+            case .success(let descriptor):
+                var next = state
+                next.currentProfile.activeDID = descriptor
+                // Update document if cached
+                if let doc = next.cachedDocuments[descriptor.did] {
+                    next.didDocument = doc
+                } else {
+                    // Generate fresh document
+                    if let doc = try? didService.document(for: descriptor, services: []) {
+                        next.didDocument = doc
+                        next.cachedDocuments[descriptor.did] = doc
+                    }
+                }
+                state = next
+                
+            case .failure(let error):
+                var next = state
+                next.lastError = error
+                state = next
+            }
+            
+            setLoading(false)
         }
     }
     
     @MainActor
     private func syncZKIdentity() {
         // Ensure ZK identity exists and is linked with DID
-        if state.zkIdentity == nil {
+        if state.currentProfile.zkIdentity == nil {
             if let bundle = try? semaphoreManager.loadOrCreateIdentity() {
                 var next = state
-                next.zkIdentity = bundle
+                next.currentProfile.zkIdentity = bundle
                 state = next
                 ZKLog.info("ZK identity synchronized with DID system")
             }
         }
+    }
+    
+    @MainActor
+    private func refreshMemberships() {
+        guard let commitment = state.currentProfile.zkIdentity?.commitment else { return }
+        
+        let groups = groupManager.allGroups
+        let memberships = groups.map { group -> GroupMembership in
+            let isMember = group.members.contains(commitment)
+            let index = group.members.firstIndex(of: commitment)
+            
+            // Determine status
+            let status: GroupMembership.MembershipStatus
+            if isMember {
+                // Simple logic: if root is outdated (simulated check), or if we just want to show active
+                // For now, assume active if member
+                status = .active
+            } else {
+                status = .notMember
+            }
+            
+            return GroupMembership(
+                id: group.id.uuidString,
+                name: group.name,
+                status: status,
+                memberIndex: index
+            )
+        }
+        
+        var next = state
+        next.currentProfile.memberships = memberships
+        state = next
     }
 
     @MainActor
@@ -207,7 +314,7 @@ final class IdentityCoordinator: ObservableObject {
     ) {
         queue.async {
             // 1. Ensure we have an active DID
-            let didResult = self.didService.currentDidKey(context: context)
+            let didResult = self.didService.currentDescriptor(context: context)
             
             switch didResult {
             case .failure(let error):
@@ -229,7 +336,7 @@ final class IdentityCoordinator: ObservableObject {
                 )
                 
                 DispatchQueue.main.async {
-                    if case .success(let stored) = result {
+                    if case .success = result {
                         // Update verification status immediately since we just issued it
                         self.updateVerificationStatus(for: card.id, status: .verified)
                     }
@@ -357,7 +464,7 @@ final class IdentityCoordinator: ObservableObject {
     private func loadIdentity(context: LAContext?) async {
         await setLoading(true)
 
-        let descriptorResult = didService.currentDidKey(context: context)
+        let descriptorResult = didService.currentDescriptor(context: context)
         let cachedDocs = cacheStore.loadDocuments()
         let cachedJwks = cacheStore.loadJwks()
         let identity = semaphoreManager.getIdentity() ?? (try? semaphoreManager.loadOrCreateIdentity())
@@ -367,11 +474,11 @@ final class IdentityCoordinator: ObservableObject {
             next.isLoading = false
             next.cachedDocuments = cachedDocs
             next.cachedJwks = cachedJwks
-            next.zkIdentity = identity ?? next.zkIdentity
+            next.currentProfile.zkIdentity = identity ?? next.currentProfile.zkIdentity
 
             switch descriptorResult {
             case .success(let descriptor):
-                next.activeDid = descriptor
+                next.currentProfile.activeDID = descriptor
                 next.lastError = nil
                 if let doc = cachedDocs[descriptor.did] {
                     next.didDocument = doc
@@ -533,7 +640,7 @@ final class IdentityCoordinator: ObservableObject {
             message = "Cached DID document for \(document.id)"
 
         case .publicJwk(_, let did):
-            let target = did ?? state.activeDid?.did ?? "local identity"
+            let target = did ?? state.currentProfile.activeDID?.did ?? "local identity"
             message = "Cached public JWK for \(target)"
 
         case .zkIdentity(let bundle):
@@ -564,7 +671,7 @@ final class IdentityCoordinator: ObservableObject {
             switch success.payload {
             case .didDocument(let document):
                 next.cachedDocuments[document.id] = document
-                if next.activeDid?.did == document.id {
+                if next.currentProfile.activeDID?.did == document.id {
                     next.didDocument = document
                 }
                 cacheStore.saveDocuments(next.cachedDocuments)
@@ -572,14 +679,14 @@ final class IdentityCoordinator: ObservableObject {
                 refreshIdentity()
 
             case .publicJwk(let jwk, let did):
-                let key = did ?? next.activeDid?.did ?? "local"
+                let key = did ?? next.currentProfile.activeDID?.did ?? "local"
                 next.cachedJwks[key] = jwk
                 cacheStore.saveJwks(next.cachedJwks)
                 state = next
                 refreshIdentity()
 
             case .zkIdentity(let bundle):
-                next.zkIdentity = bundle
+                next.currentProfile.zkIdentity = bundle
                 state = next
                 refreshIdentity()
 
@@ -597,3 +704,4 @@ final class IdentityCoordinator: ObservableObject {
         }
     }
 }
+
