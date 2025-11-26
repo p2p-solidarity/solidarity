@@ -55,6 +55,12 @@ struct SettingsView: View {
                     } label: {
                         Label("Backup & Restore", systemImage: "icloud.fill")
                     }
+                    
+                    NavigationLink {
+                        VCSettingsView()
+                    } label: {
+                        Label("VC Management", systemImage: "doc.text.fill")
+                    }
                 }
                 
                 Section("About") {
