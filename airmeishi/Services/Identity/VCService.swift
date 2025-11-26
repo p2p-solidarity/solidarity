@@ -49,6 +49,11 @@ final class VCService {
         self.library = library
     }
 
+    /// Switches the DID method used for issuance (e.g. did:key or did:ethr).
+    func setDIDMethod(_ method: DIDService.DIDMethod) {
+        _ = didService.switchMethod(to: method)
+    }
+
     /// Issues a self-signed business card credential as a JWT VC.
     func issueBusinessCardCredential(
         for card: BusinessCard,
@@ -66,7 +71,7 @@ final class VCService {
             }
         }
 
-        let descriptorResult = didService.currentDidKey(context: context)
+        let descriptorResult = didService.currentDescriptor(context: context)
         guard case .success(let descriptor) = descriptorResult else {
             if case .failure(let error) = descriptorResult {
                 return .failure(error)

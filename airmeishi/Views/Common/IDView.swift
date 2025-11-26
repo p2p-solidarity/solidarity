@@ -11,7 +11,7 @@ struct IDView: View {
     @ObservedObject private var coordinator = IdentityCoordinator.shared
     @StateObject private var groupManager = CloudKitGroupSyncManager.shared
     @StateObject private var idm = SemaphoreIdentityManager.shared
-    @StateObject private var oidcService = OIDCService.shared
+
     
     // UI State
     @State private var showingGroupManager = false
@@ -341,103 +341,6 @@ struct IDView: View {
         // Logic to present proof for this group
         // For now, just show the OIDC request sheet
         showingOIDCRequest = true
-    }
-}
-
-// MARK: - OIDC Request View (Unchanged)
-
-struct OIDCRequestView: View {
-    @Environment(\.dismiss) private var dismiss
-    @StateObject private var qrManager = QRCodeManager.shared
-    @State private var qrImage: UIImage?
-    @State private var qrString: String?
-    @State private var isLoading = false
-    @State private var errorMessage: String?
-    @State private var showingError = false
-    
-    var body: some View {
-        NavigationStack {
-            ScrollView {
-                VStack(spacing: 24) {
-                    if let qrImage = qrImage {
-                        Image(uiImage: qrImage)
-                            .resizable()
-                            .interpolation(.none)
-                            .scaledToFit()
-                            .frame(width: 300, height: 300)
-                            .padding()
-                            .background(Color.white)
-                            .cornerRadius(16)
-                        
-                        if qrString != nil {
-                            Button(action: copyQRString) {
-                                Label("Copy QR String", systemImage: "doc.on.doc")
-                                    .frame(maxWidth: .infinity)
-                                    .padding(.vertical, 12)
-                                    .background(
-                                        RoundedRectangle(cornerRadius: 10, style: .continuous)
-                                            .fill(Color.accentColor)
-                                    )
-                            }
-                            .buttonStyle(.plain)
-                        }
-                    } else {
-                        Button(action: generateOIDCRequest) {
-                            Label(isLoading ? "Generating..." : "Generate OIDC Request", systemImage: "qrcode")
-                                .frame(maxWidth: .infinity)
-                                .padding(.vertical, 12)
-                        }
-                        .buttonStyle(.plain)
-                        .disabled(isLoading)
-                    }
-                }
-                .padding()
-            }
-            .navigationTitle("OpenID Request")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .navigationBarTrailing) {
-                    Button("Done") {
-                        dismiss()
-                    }
-                }
-            }
-            .alert("Error", isPresented: $showingError) {
-                Button("OK", role: .cancel) {}
-            } message: {
-                Text(errorMessage ?? "Unknown error")
-            }
-        }
-    }
-    
-    private func generateOIDCRequest() {
-        isLoading = true
-        let result = OIDCService.shared.createPresentationRequest()
-        
-        switch result {
-        case .failure(let error):
-            errorMessage = error.localizedDescription
-            showingError = true
-            isLoading = false
-        case .success(let context):
-            qrString = context.qrString
-            let qrResult = qrManager.generateQRCode(from: context.qrString)
-            switch qrResult {
-            case .success(let image):
-                qrImage = image
-            case .failure(let error):
-                errorMessage = error.localizedDescription
-                showingError = true
-            }
-            isLoading = false
-        }
-    }
-    
-    private func copyQRString() {
-        guard let qrString = qrString else { return }
-        #if canImport(UIKit)
-        UIPasteboard.general.string = qrString
-        #endif
     }
 }
 

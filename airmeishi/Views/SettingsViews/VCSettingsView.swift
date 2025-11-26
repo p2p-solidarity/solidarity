@@ -18,7 +18,7 @@ struct VCExportDocument: FileDocument {
     }
     
     init(configuration: ReadConfiguration) throws {
-        let data = try configuration.file.regularFileContents
+        let data = configuration.file.regularFileContents
         guard let data = data else { throw CocoaError(.fileReadCorruptFile) }
         let wrapper = try JSONDecoder().decode(VCExportWrapper.self, from: data)
         self.vcs = wrapper.vcs
@@ -34,7 +34,7 @@ struct VCExportDocument: FileDocument {
 }
 
 struct VCExportWrapper: Codable {
-    let version: Int = 1
+    var version: Int = 1
     let vcs: [String]
 }
 
@@ -97,6 +97,36 @@ class VCSettingsViewModel: ObservableObject {
             }
         }
     }
+    
+    func createVC(method: DIDService.DIDMethod) {
+        vcService.setDIDMethod(method)
+        
+        // Use a sample card for demonstration. In a real app, this would be the user's profile.
+        let card = BusinessCard.sample
+        
+        switch vcService.issueAndStoreBusinessCardCredential(for: card) {
+        case .success(let stored):
+            // Verify immediately to ensure it can be parsed
+            switch vcService.verifyStoredCredential(stored) {
+            case .success:
+                DispatchQueue.main.async {
+                    self.importedCount += 1 // Just to trigger update if needed
+                    self.successMessage = "Successfully created and verified \(method.rawValue) VC."
+                    self.showSuccess = true
+                }
+            case .failure(let error):
+                DispatchQueue.main.async {
+                    self.errorMessage = "Created VC but failed to verify/parse: \(error.localizedDescription)"
+                    self.showError = true
+                }
+            }
+        case .failure(let error):
+            DispatchQueue.main.async {
+                self.errorMessage = "Failed to create VC: \(error.localizedDescription)"
+                self.showError = true
+            }
+        }
+    }
 }
 
 struct VCSettingsView: View {
@@ -114,6 +144,30 @@ struct VCSettingsView: View {
             }
             
             Section("Actions") {
+                Button {
+                    viewModel.createVC(method: .key)
+                } label: {
+                    Label("Create did:key VC", systemImage: "key.fill")
+                }
+                
+                Button {
+                    viewModel.createVC(method: .ethr)
+                } label: {
+                    Label("Create did:ethr VC", systemImage: "link.circle.fill")
+                }
+                
+                Button {
+                    viewModel.createVC(method: .ethr)
+                } label: {
+                    Label("Create did:ethr VC", systemImage: "link.circle.fill")
+                }
+                
+                NavigationLink {
+                    OIDCRequestView()
+                } label: {
+                    Label("Receive Card (OIDC)", systemImage: "qrcode")
+                }
+                
                 Button {
                     let vcs = viewModel.getAllVCs()
                     if !vcs.isEmpty {
