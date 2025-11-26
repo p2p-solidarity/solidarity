@@ -7,6 +7,7 @@
 
 import SwiftUI
 import UniformTypeIdentifiers
+import os
 
 struct VCExportDocument: FileDocument {
     static var readableContentTypes: [UTType] { [.json] }
@@ -39,6 +40,8 @@ struct VCExportWrapper: Codable {
 }
 
 class VCSettingsViewModel: ObservableObject {
+    private static let logger = Logger(subsystem: "com.kidneyweakx.airmeishi", category: "VCSettingsViewModel")
+    
     @Published var importedCount: Int = 0
     @Published var errorMessage: String?
     @Published var showError: Bool = false
@@ -60,19 +63,23 @@ class VCSettingsViewModel: ObservableObject {
     }
     
     func importVCs(from url: URL) {
+        Self.logger.info("Importing VCs from URL: \(url.path)")
         do {
             let data = try Data(contentsOf: url)
             let wrapper = try JSONDecoder().decode(VCExportWrapper.self, from: data)
             
+            Self.logger.info("Found \(wrapper.vcs.count) VCs to import")
             var successCount = 0
             var failureCount = 0
             
-            for jwt in wrapper.vcs {
+            for (index, jwt) in wrapper.vcs.enumerated() {
+                Self.logger.info("Importing VC \(index + 1)/\(wrapper.vcs.count)")
                 switch vcService.importPresentedCredential(jwt: jwt) {
                 case .success:
                     successCount += 1
+                    Self.logger.info("VC \(index + 1) imported successfully")
                 case .failure(let error):
-                    print("Failed to import VC: \(error)")
+                    Self.logger.error("Failed to import VC \(index + 1): \(error.localizedDescription)")
                     failureCount += 1
                 }
             }
@@ -99,28 +106,34 @@ class VCSettingsViewModel: ObservableObject {
     }
     
     func createVC(method: DIDService.DIDMethod) {
+        Self.logger.info("Creating VC with DID method: \(method.rawValue)")
         vcService.setDIDMethod(method)
         
         // Use a sample card for demonstration. In a real app, this would be the user's profile.
         let card = BusinessCard.sample
+        Self.logger.info("Using sample business card: \(card.id.uuidString)")
         
         switch vcService.issueAndStoreBusinessCardCredential(for: card) {
         case .success(let stored):
+            Self.logger.info("VC created successfully, verifying...")
             // Verify immediately to ensure it can be parsed
             switch vcService.verifyStoredCredential(stored) {
             case .success:
+                Self.logger.info("VC verified successfully")
                 DispatchQueue.main.async {
                     self.importedCount += 1 // Just to trigger update if needed
                     self.successMessage = "Successfully created and verified \(method.rawValue) VC."
                     self.showSuccess = true
                 }
             case .failure(let error):
+                Self.logger.error("VC created but verification failed: \(error.localizedDescription)")
                 DispatchQueue.main.async {
                     self.errorMessage = "Created VC but failed to verify/parse: \(error.localizedDescription)"
                     self.showError = true
                 }
             }
         case .failure(let error):
+            Self.logger.error("Failed to create VC: \(error.localizedDescription)")
             DispatchQueue.main.async {
                 self.errorMessage = "Failed to create VC: \(error.localizedDescription)"
                 self.showError = true

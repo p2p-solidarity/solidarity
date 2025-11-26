@@ -60,9 +60,8 @@ extension SakuraIconView {
         let renderer = ImageRenderer(content: view)
         renderer.scale = UIScreen.main.scale
         
-        if #available(iOS 17.0, *) {
-            renderer.isOpaque = false
-        }
+        renderer.isOpaque = false
+        
         
         return renderer.uiImage
     }

@@ -6,6 +6,7 @@
 //
 
 import Foundation
+import os
 
 /// Snapshot of a `BusinessCard` used for credential generation and storage.
 struct BusinessCardSnapshot: Codable, Equatable {
@@ -88,6 +89,7 @@ struct BusinessCardSnapshot: Codable, Equatable {
 
 /// Builds JWT header and payload claims for a self-issued Business Card credential.
 struct BusinessCardCredentialClaims {
+    static let logger = Logger(subsystem: "com.kidneyweakx.airmeishi", category: "BusinessCardCredentialClaims")
     static let contexts = [
         "https://www.w3.org/2018/credentials/v1",
         "https://schema.org"
@@ -128,19 +130,33 @@ struct BusinessCardCredentialClaims {
     }
 
     func headerData(kid: String) throws -> Data {
+        Self.logger.info("Encoding JWT header with kid: \(kid)")
         let header = JWTHeader(kid: kid)
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.sortedKeys]
-        return try encoder.encode(header)
+        do {
+            let data = try encoder.encode(header)
+            Self.logger.info("Header encoded successfully, size: \(data.count) bytes")
+            return data
+        } catch {
+            Self.logger.error("Failed to encode header: \(error.localizedDescription)")
+            throw error
+        }
     }
 
     func payloadData() throws -> Data {
+        Self.logger.info("Creating credential subject from snapshot")
         let subject = CredentialSubject(holderDid: holderDid, snapshot: snapshot, publicKey: publicKeyJwk)
+        Self.logger.info("Credential subject created - id: \(subject.id), name: \(subject.name)")
+        
+        Self.logger.info("Creating VC structure")
         let vc = JWTPayload.VC(
             context: Self.contexts,
             type: Self.types,
             credentialSubject: subject
         )
+        
+        Self.logger.info("Creating JWT payload - jti: \(credentialId.uuidString), iss: \(issuerDid), sub: \(holderDid)")
         let payload = JWTPayload(
             jti: "urn:uuid:\(credentialId.uuidString)",
             iss: issuerDid,
@@ -151,9 +167,27 @@ struct BusinessCardCredentialClaims {
             vc: vc
         )
 
+        Self.logger.info("Encoding payload to JSON")
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.sortedKeys]
-        return try encoder.encode(payload)
+        do {
+            let data = try encoder.encode(payload)
+            Self.logger.info("Payload encoded successfully, size: \(data.count) bytes")
+            
+            // Log payload preview for debugging
+            if let payloadString = String(data: data, encoding: .utf8) {
+                Self.logger.debug("Payload JSON preview: \(payloadString.prefix(200))...")
+            }
+            
+            return data
+        } catch {
+            Self.logger.error("Failed to encode payload: \(error.localizedDescription)")
+            Self.logger.error("Error type: \(String(describing: type(of: error)))")
+            if let encodingError = error as? EncodingError {
+                Self.logger.error("Encoding error details: \(String(describing: encodingError))")
+            }
+            throw error
+        }
     }
 
     func payloadDictionary() throws -> [String: Any] {
@@ -258,7 +292,29 @@ private struct CredentialSubject: Encodable {
     let updatedAt: String?
     let publicKeyJwk: PublicKeyJWK
 
+    enum CodingKeys: String, CodingKey {
+        case id
+        case type = "@type"
+        case name
+        case summary
+        case jobTitle
+        case worksFor
+        case email
+        case telephone
+        case image
+        case sameAs
+        case contactPoint
+        case knowsAbout
+        case hasSkill
+        case preferredAnimal
+        case businessCardId
+        case updatedAt
+        case publicKeyJwk
+    }
+
     init(holderDid: String, snapshot: BusinessCardSnapshot, publicKey: PublicKeyJWK) {
+        BusinessCardCredentialClaims.logger.debug("Initializing CredentialSubject - holderDid: \(holderDid), cardId: \(snapshot.cardId.uuidString)")
+        
         id = holderDid
         type = ["Person", "BusinessCardSubject"]
         name = snapshot.name
@@ -266,6 +322,7 @@ private struct CredentialSubject: Encodable {
         jobTitle = snapshot.title
         if let company = snapshot.company {
             worksFor = Organization(name: company)
+            BusinessCardCredentialClaims.logger.debug("Added worksFor organization: \(company)")
         } else {
             worksFor = nil
         }
@@ -283,6 +340,7 @@ private struct CredentialSubject: Encodable {
                     url: $0.url
                 )
             }
+            BusinessCardCredentialClaims.logger.debug("Added \(snapshot.socialProfiles.count) social profiles")
         }
         knowsAbout = snapshot.categories.isEmpty ? nil : snapshot.categories
         if snapshot.skills.isEmpty {
@@ -295,15 +353,19 @@ private struct CredentialSubject: Encodable {
                     description: $0.proficiency
                 )
             }
+            BusinessCardCredentialClaims.logger.debug("Added \(snapshot.skills.count) skills")
         }
         if let animal = snapshot.animal {
             preferredAnimal = AnimalPreference(id: animal.id, name: animal.displayName)
+            BusinessCardCredentialClaims.logger.debug("Added animal preference: \(animal.id)")
         } else {
             preferredAnimal = nil
         }
         businessCardId = snapshot.cardId.uuidString
         updatedAt = ISO8601DateFormatter.fullFormatter.string(from: snapshot.updatedAt)
         publicKeyJwk = publicKey
+        
+        BusinessCardCredentialClaims.logger.debug("CredentialSubject initialized successfully")
     }
 }
 
