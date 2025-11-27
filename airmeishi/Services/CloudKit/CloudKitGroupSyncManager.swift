@@ -173,6 +173,11 @@ final class CloudKitGroupSyncManager: ObservableObject, GroupSyncManagerProtocol
     
     func createGroup(name: String, description: String, coverImage: Data?, isPrivate: Bool) async throws -> GroupModel {
         print("[CloudKitManager] Creating group: \(name), Private: \(isPrivate)")
+        
+        if currentUserRecordID == nil {
+            await checkAccountStatus()
+        }
+        
         guard let userID = currentUserRecordID else { throw CKError(.notAuthenticated) }
         
         if isPrivate {
@@ -299,23 +304,60 @@ final class CloudKitGroupSyncManager: ObservableObject, GroupSyncManagerProtocol
     }
     
     private func joinPublicGroup(withInviteToken token: String) async throws -> GroupModel {
-        // ... (Copy of previous joinGroup logic) ...
-        guard let userID = currentUserRecordID else { throw CKError(.notAuthenticated) }
+        if currentUserRecordID == nil {
+            print("[CloudKitManager] User ID missing, checking account status...")
+            await checkAccountStatus()
+        }
+        
+        guard let userID = currentUserRecordID else {
+            print("[CloudKitManager] Still no User ID after check.")
+            throw CKError(.notAuthenticated)
+        }
+        
+        // 1. Find the invite record
         let predicate = NSPredicate(format: "token == %@", token)
         let query = CKQuery(recordType: CloudKitRecordType.groupInvite, predicate: predicate)
         let (results, _) = try await publicDB.records(matching: query)
-        guard let firstMatch = results.first, case .success(let inviteRecord) = firstMatch.1,
-              let groupRef = inviteRecord["targetGroup"] as? CKRecord.Reference else { throw CKError(.unknownItem) }
         
-        let groupRecord = try await publicDB.record(for: groupRef.recordID)
+        guard let firstMatch = results.first, case .success(let inviteRecord) = firstMatch.1,
+              let groupRef = inviteRecord["targetGroup"] as? CKRecord.Reference else {
+            throw NSError(domain: "GroupError", code: 404, userInfo: [NSLocalizedDescriptionKey: "Invalid or expired invite token"])
+        }
+        
+        let groupRecordID = groupRef.recordID
+        
+        // 2. Check if already a member
+        let membershipPredicate = NSPredicate(format: "group == %@ AND userRecordID == %@", CKRecord.Reference(recordID: groupRecordID, action: .none), CKRecord.Reference(recordID: userID, action: .none))
+        let membershipQuery = CKQuery(recordType: CloudKitRecordType.groupMembership, predicate: membershipPredicate)
+        let (membershipResults, _) = try await publicDB.records(matching: membershipQuery)
+        
+        if let _ = membershipResults.first {
+            print("[CloudKitManager] User is already a member of this group.")
+            // Fetch group details and return
+            let groupRecord = try await publicDB.record(for: groupRecordID)
+            if var groupModel = mapRecordToGroup(groupRecord) {
+                groupModel.isPrivate = false
+                // Ensure it's in our local list if not already
+                if !self.groups.contains(where: { $0.id == groupModel.id }) {
+                    self.groups.append(groupModel)
+                }
+                return groupModel
+            }
+        }
+        
+        // 3. Join the group
+        let groupRecord = try await publicDB.record(for: groupRecordID)
         let membershipRecord = CKRecord(recordType: CloudKitRecordType.groupMembership)
         membershipRecord["group"] = CKRecord.Reference(recordID: groupRecord.recordID, action: .deleteSelf)
         membershipRecord["userRecordID"] = CKRecord.Reference(recordID: userID, action: .none)
         membershipRecord["role"] = "member"
         membershipRecord["status"] = "active"
+        membershipRecord["joinedAt"] = Date()
         
-        let _ = try await publicDB.modifyRecords(saving: [groupRecord, membershipRecord], deleting: [])
+        // Use modifyRecords to save
+        let _ = try await publicDB.modifyRecords(saving: [membershipRecord], deleting: [])
         
+        // 4. Update local state
         var groupModel = mapRecordToGroup(groupRecord)!
         groupModel.isPrivate = false
         self.groups.append(groupModel)

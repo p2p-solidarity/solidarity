@@ -48,8 +48,16 @@ struct GroupIdentityView: View {
         }
     }
 
+    @State private var showJoinSheet = false
+
     private var actionsSection: some View {
         Section("Actions") {
+            Button {
+                showJoinSheet = true
+            } label: {
+                Label("Join Group", systemImage: "person.badge.plus")
+            }
+            
             Button {
                 Task {
                     try? await groupManager.fetchLatestChanges()
@@ -57,6 +65,9 @@ struct GroupIdentityView: View {
             } label: {
                 Label("Refresh Groups", systemImage: "arrow.clockwise")
             }
+        }
+        .sheet(isPresented: $showJoinSheet) {
+            GroupJoinSheet()
         }
     }
 }
