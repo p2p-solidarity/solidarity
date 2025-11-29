@@ -10,6 +10,7 @@ import SwiftUI
 struct MatchingRootView: View {
     @StateObject private var proximityManager = ProximityManager.shared
     @StateObject private var cardManager = CardManager.shared
+    @ObservedObject private var webRTCManager = WebRTCManager.shared
     @State private var rotateOuter = false
     @State private var rotateMiddle = false
     @State private var rotateInner = false
@@ -38,6 +39,8 @@ struct MatchingRootView: View {
         }
         .onAppear { rotateOuter = true; rotateMiddle = true; rotateInner = true }
         .overlay(shareButton)
+        .overlay(sakuraOverlay)
+        .overlay(latestMessageOverlay)
         .overlay(incomingInvitationOverlay)
         .sheet(isPresented: $showNearbySheet) {
             NearbyPeersSheet(
@@ -93,6 +96,47 @@ struct MatchingRootView: View {
                 .padding()
             }
         }
+    }
+    
+    private var sakuraOverlay: some View {
+        VStack {
+            Spacer()
+            // Only show if WebRTC data channel is actually open
+            if webRTCManager.isChannelOpen {
+                Button(action: {
+                    webRTCManager.sendSakura()
+                    // Also trigger local effect
+                    withAnimation {
+                        // TODO: Add local visual effect
+                    }
+                }) {
+                    Text("🌸")
+                        .font(.system(size: 40))
+                        .padding()
+                        .background(Color.white.opacity(0.2))
+                        .clipShape(Circle())
+                }
+                .padding(.bottom, 100)
+            }
+        }
+    }
+    
+    private var latestMessageOverlay: some View {
+        VStack {
+            if let message = webRTCManager.latestMessage {
+                Text(message.content)
+                    .font(.largeTitle)
+                    .padding()
+                    .background(Color.black.opacity(0.5))
+                    .cornerRadius(10)
+                    .foregroundColor(.white)
+                    .transition(.scale.combined(with: .opacity))
+                    .id(message.timestamp) // Force transition on new message
+            }
+            Spacer()
+        }
+        .padding(.top, 60)
+        .animation(.spring(), value: webRTCManager.latestMessage?.timestamp)
     }
     
     private func orbit(radiusPadding: CGFloat, size: CGFloat) -> some View {

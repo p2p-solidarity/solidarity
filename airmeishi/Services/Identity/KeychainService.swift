@@ -605,7 +605,7 @@ final class KeychainService {
         
         #else
         // Device code with authentication handling
-        var basicQuery: [String: Any] = [
+        let basicQuery: [String: Any] = [
             kSecClass as String: kSecClassKey,
             kSecAttrApplicationTag as String: keyTag,
             kSecAttrKeyType as String: kSecAttrKeyTypeECSECPrimeRandom,

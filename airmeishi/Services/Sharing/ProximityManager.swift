@@ -60,12 +60,23 @@ class ProximityManager: NSObject, ProximityManagerProtocol, ObservableObject {
     private var cancellables = Set<AnyCancellable>()
     private var pendingInvitationHandler: ((Bool, MCSession?) -> Void)?
     
+    // MARK: - WebRTC
+    let webRTCManager = WebRTCManager.shared
+    
     // MARK: - Initialization
     
     override init() {
         // Create unique peer ID based on device
+        // Create unique peer ID based on ZK Identity if available, else device name
         let deviceName = UIDevice.current.name
-        self.localPeerID = MCPeerID(displayName: deviceName)
+        var displayName = deviceName
+        
+        if let identity = SemaphoreIdentityManager.shared.getIdentity() {
+            // Use first 8 chars of commitment as ID for uniqueness and privacy
+            displayName = String(identity.commitment.prefix(8))
+        }
+        
+        self.localPeerID = MCPeerID(displayName: displayName)
         
         // Initialize session
         self.session = MCSession(peer: localPeerID, securityIdentity: nil, encryptionPreference: .required)
@@ -74,6 +85,7 @@ class ProximityManager: NSObject, ProximityManagerProtocol, ObservableObject {
         
         session.delegate = self
         setupNotifications()
+        setupWebRTC()
     }
     
     deinit {
@@ -714,11 +726,18 @@ extension ProximityManager: MCSessionDelegate {
                 self.pendingGroupJoinResponse = nil
                 self.pendingGroupInvite = nil
             }
+            
+            // Trigger WebRTC setup
+            if state == .connected {
+                self.handleNewConnection(peerID)
+            }
         }
     }
     
     func session(_ session: MCSession, didReceive data: Data, fromPeer peerID: MCPeerID) {
-        // Try decoding in order: GroupInvite, GroupJoinResponse, BusinessCard share
+        // Try decoding in order: WebRTC Signaling, GroupInvite, GroupJoinResponse, BusinessCard share
+        if handleWebRTCSignaling(data, from: peerID) { return }
+        
         if let invite = try? JSONDecoder().decode(GroupInvitePayload.self, from: data) {
             DispatchQueue.main.async { [weak self] in
                 guard let self = self else { return }
@@ -796,6 +815,48 @@ extension ProximityManager: MCSessionDelegate {
     
     func session(_ session: MCSession, didReceive stream: InputStream, withName streamName: String, fromPeer peerID: MCPeerID) {
         // Not used for business card sharing
+    }
+    
+    // MARK: - WebRTC Integration
+    
+    private func setupWebRTC() {
+        webRTCManager.onSendSignalingMessage = { [weak self] message in
+            guard let self = self else { return }
+            self.sendWebRTCSignaling(message)
+        }
+    }
+    
+    private func sendWebRTCSignaling(_ message: SignalingMessage) {
+        guard !session.connectedPeers.isEmpty else { return }
+        do {
+            let data = try JSONEncoder().encode(message)
+            // Broadcast to all connected peers for now (usually just one in this context)
+            try session.send(data, toPeers: session.connectedPeers, with: .reliable)
+        } catch {
+            print("Failed to send WebRTC signaling: \(error)")
+        }
+    }
+    
+    private func handleWebRTCSignaling(_ data: Data, from peerID: MCPeerID) -> Bool {
+        if let message = try? JSONDecoder().decode(SignalingMessage.self, from: data) {
+            webRTCManager.handleSignalingMessage(message, from: peerID)
+            return true
+        }
+        return false
+    }
+    
+    private func handleNewConnection(_ peerID: MCPeerID) {
+        // Simple tie-breaker: The one with lexicographically larger ID offers
+        // This avoids both offering or both waiting.
+        // Note: This assumes 1-on-1 WebRTC for now.
+        if localPeerID.displayName > peerID.displayName {
+            print("WebRTC: Initiating offer to \(peerID.displayName)")
+            webRTCManager.setupConnection(for: peerID)
+            webRTCManager.offer()
+        } else {
+            print("WebRTC: Waiting for offer from \(peerID.displayName)")
+            webRTCManager.setupConnection(for: peerID)
+        }
     }
     
     func session(_ session: MCSession, didStartReceivingResourceWithName resourceName: String, fromPeer peerID: MCPeerID, with progress: Progress) {
