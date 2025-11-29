@@ -18,7 +18,7 @@ enum CloudKitRecordType {
 
 // MARK: - Models
 
-struct GroupModel: Identifiable, Hashable {
+struct GroupModel: Identifiable, Hashable, Codable {
     let id: String // Record Name
     var name: String
     var description: String
@@ -71,6 +71,7 @@ struct GroupMemberModel: Identifiable, Hashable {
     
     enum Status: String, Codable {
         case active
+        case pending
         case left
         case kicked
     }

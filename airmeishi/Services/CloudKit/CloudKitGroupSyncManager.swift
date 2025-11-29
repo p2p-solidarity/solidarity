@@ -41,6 +41,7 @@ final class CloudKitGroupSyncManager: ObservableObject, GroupSyncManagerProtocol
     @Published var accountStatus: CKAccountStatus = .couldNotDetermine
     
     private init() {
+        loadGroupsFromLocal()
         Task {
             await checkAccountStatus()
         }
@@ -68,6 +69,36 @@ final class CloudKitGroupSyncManager: ObservableObject, GroupSyncManagerProtocol
     private let zoneName = "AirMeishiGroups"
     private var customZoneID: CKRecordZone.ID {
         CKRecordZone.ID(zoneName: zoneName, ownerName: CKCurrentUserDefaultName)
+    }
+    
+    // MARK: - Local Caching
+    
+    private var localCacheURL: URL {
+        let urls = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)
+        let appSupportURL = urls[0].appendingPathComponent("airmeishi", isDirectory: true)
+        try? FileManager.default.createDirectory(at: appSupportURL, withIntermediateDirectories: true, attributes: nil)
+        return appSupportURL.appendingPathComponent("groups_cache.json")
+    }
+    
+    private func saveGroupsToLocal() {
+        do {
+            let data = try JSONEncoder().encode(groups)
+            try data.write(to: localCacheURL)
+            print("[CloudKitManager] Saved \(groups.count) groups to local cache")
+        } catch {
+            print("[CloudKitManager] Failed to save local cache: \(error)")
+        }
+    }
+    
+    private func loadGroupsFromLocal() {
+        do {
+            let data = try Data(contentsOf: localCacheURL)
+            let cachedGroups = try JSONDecoder().decode([GroupModel].self, from: data)
+            self.groups = cachedGroups
+            print("[CloudKitManager] Loaded \(cachedGroups.count) groups from local cache")
+        } catch {
+            print("[CloudKitManager] Failed to load local cache (might be empty): \(error)")
+        }
     }
     
     // MARK: - Core Sync
@@ -161,6 +192,7 @@ final class CloudKitGroupSyncManager: ObservableObject, GroupSyncManagerProtocol
         }
         
         self.groups = allGroups
+        saveGroupsToLocal()
         print("[CloudKitManager] Successfully updated groups. Total: \(self.groups.count)")
     }
     
@@ -206,6 +238,7 @@ final class CloudKitGroupSyncManager: ObservableObject, GroupSyncManagerProtocol
         var newGroup = mapRecordToGroup(groupRecord)!
         newGroup.isPrivate = false
         self.groups.append(newGroup)
+        saveGroupsToLocal()
         return newGroup
     }
     
@@ -229,6 +262,7 @@ final class CloudKitGroupSyncManager: ObservableObject, GroupSyncManagerProtocol
         var newGroup = mapRecordToGroup(groupRecord)!
         newGroup.isPrivate = true
         self.groups.append(newGroup)
+        saveGroupsToLocal()
         return newGroup
     }
     
@@ -250,6 +284,7 @@ final class CloudKitGroupSyncManager: ObservableObject, GroupSyncManagerProtocol
             if let name = name { updated.name = name }
             if let description = description { updated.description = description }
             self.groups[index] = updated
+            saveGroupsToLocal()
         }
     }
     
@@ -258,6 +293,7 @@ final class CloudKitGroupSyncManager: ObservableObject, GroupSyncManagerProtocol
         let recordID = CKRecord.ID(recordName: group.id, zoneID: group.isPrivate ? customZoneID : CKRecordZone.default().zoneID)
         try await db.deleteRecord(withID: recordID)
         self.groups.removeAll { $0.id == group.id }
+        saveGroupsToLocal()
     }
     
     // MARK: - Sharing (Private Groups)
@@ -340,6 +376,7 @@ final class CloudKitGroupSyncManager: ObservableObject, GroupSyncManagerProtocol
                 // Ensure it's in our local list if not already
                 if !self.groups.contains(where: { $0.id == groupModel.id }) {
                     self.groups.append(groupModel)
+                    saveGroupsToLocal()
                 }
                 return groupModel
             }
@@ -361,6 +398,25 @@ final class CloudKitGroupSyncManager: ObservableObject, GroupSyncManagerProtocol
         var groupModel = mapRecordToGroup(groupRecord)!
         groupModel.isPrivate = false
         self.groups.append(groupModel)
+        saveGroupsToLocal()
+        
+        // 5. Sync with Semaphore (ZK) Manager
+        if let identity = SemaphoreIdentityManager.shared.getIdentity(),
+           let groupUUID = UUID(uuidString: groupModel.id) {
+            
+            print("[CloudKitManager] Syncing with Semaphore Manager for group: \(groupModel.name)")
+            
+            // Ensure group exists in ZK manager
+            SemaphoreGroupManager.shared.ensureGroupFromInvite(
+                id: groupUUID,
+                name: groupModel.name,
+                root: groupModel.merkleRoot
+            )
+            
+            // Add self as member (leaf)
+            SemaphoreGroupManager.shared.addMember(identity.commitment)
+        }
+        
         return groupModel
     }
     
@@ -377,12 +433,60 @@ final class CloudKitGroupSyncManager: ObservableObject, GroupSyncManagerProtocol
             if let match = results.first, case .success(let record) = match.1 {
                 try await publicDB.deleteRecord(withID: record.recordID)
                 self.groups.removeAll { $0.id == group.id }
+                saveGroupsToLocal()
             }
         }
     }
     
     func kickMember(userId: String, from group: GroupModel) async throws {
-        // ...
+        print("[CloudKitManager] Kicking member \(userId) from group \(group.name)")
+        
+        // 1. Find the membership record
+        let predicate = NSPredicate(format: "group == %@ AND userRecordID == %@", CKRecord.Reference(recordID: CKRecord.ID(recordName: group.id), action: .none), CKRecord.Reference(recordID: CKRecord.ID(recordName: userId), action: .none))
+        let query = CKQuery(recordType: CloudKitRecordType.groupMembership, predicate: predicate)
+        let (results, _) = try await publicDB.records(matching: query)
+        
+        guard let match = results.first, case .success(let record) = match.1 else {
+            throw NSError(domain: "GroupError", code: 404, userInfo: [NSLocalizedDescriptionKey: "Member not found"])
+        }
+        
+        // 2. Update status to kicked
+        record["status"] = "kicked"
+        
+        // 3. Save
+        try await publicDB.save(record)
+        print("[CloudKitManager] Member kicked successfully")
+        
+        // 4. Update Semaphore Group (Remove leaf)
+        // We need the identity commitment of the user to remove them from the tree.
+        // This is tricky because we might not have their commitment easily accessible unless it's stored in the membership record.
+        // For now, we just update the CloudKit status. The Semaphore Manager needs to handle tree updates based on this.
+        // Ideally, the membership record should store the merkle leaf/commitment.
+    }
+    
+    func approveMember(userId: String, from group: GroupModel) async throws {
+        print("[CloudKitManager] Approving member \(userId) for group \(group.name)")
+        try await updateMemberStatus(userId: userId, group: group, status: "active")
+    }
+    
+    func rejectMember(userId: String, from group: GroupModel) async throws {
+        print("[CloudKitManager] Rejecting member \(userId) from group \(group.name)")
+        // Rejecting is effectively kicking/removing
+        try await kickMember(userId: userId, from: group)
+    }
+    
+    private func updateMemberStatus(userId: String, group: GroupModel, status: String) async throws {
+        let predicate = NSPredicate(format: "group == %@ AND userRecordID == %@", CKRecord.Reference(recordID: CKRecord.ID(recordName: group.id), action: .none), CKRecord.Reference(recordID: CKRecord.ID(recordName: userId), action: .none))
+        let query = CKQuery(recordType: CloudKitRecordType.groupMembership, predicate: predicate)
+        let (results, _) = try await publicDB.records(matching: query)
+        
+        guard let match = results.first, case .success(let record) = match.1 else {
+            throw NSError(domain: "GroupError", code: 404, userInfo: [NSLocalizedDescriptionKey: "Member not found"])
+        }
+        
+        record["status"] = status
+        try await publicDB.save(record)
+        print("[CloudKitManager] Member status updated to \(status)")
     }
     
     // MARK: - Invite System (Public)
@@ -422,10 +526,14 @@ final class CloudKitGroupSyncManager: ObservableObject, GroupSyncManagerProtocol
     func getMembers(for group: GroupModel) async throws -> [GroupMemberModel] {
         if group.isPrivate {
             // Fetch from CKShare participants?
+            // For MVP, private groups might not support full member listing via this API yet
             return []
         } else {
             let predicate = NSPredicate(format: "group == %@", CKRecord.Reference(recordID: CKRecord.ID(recordName: group.id), action: .none))
             let query = CKQuery(recordType: CloudKitRecordType.groupMembership, predicate: predicate)
+            // Sort by joinedAt
+            query.sortDescriptors = [NSSortDescriptor(key: "joinedAt", ascending: true)]
+            
             let (results, _) = try await publicDB.records(matching: query)
             return results.compactMap { result in
                 guard case .success(let record) = result.1 else { return nil }

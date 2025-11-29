@@ -26,12 +26,14 @@ struct GroupIdentityView: View {
                     .foregroundColor(.secondary)
             } else {
                 ForEach(groupManager.groups) { group in
-                    VStack(alignment: .leading) {
-                        Text(group.name)
-                            .font(.headline)
-                        Text("Members: \(group.memberCount)")
-                            .font(.caption)
-                            .foregroundColor(.secondary)
+                    NavigationLink(destination: GroupDetailView(group: group)) {
+                        VStack(alignment: .leading) {
+                            Text(group.name)
+                                .font(.headline)
+                            Text("Members: \(group.memberCount)")
+                                .font(.caption)
+                                .foregroundColor(.secondary)
+                        }
                     }
                 }
             }

@@ -44,20 +44,23 @@ struct IDView: View {
                 Color(.systemGroupedBackground)
                     .ignoresSafeArea()
                 
-                VStack(spacing: 0) {
-                    // 1. The Mask (DID Switcher)
-                    maskSection
-                        .padding(.top, 20)
-                        .padding(.bottom, 40)
-                    
-                    // 2. The Core (Ripple Button)
-                    coreSection
-                    
-                    Spacer()
-                    
-                    // 3. The Badge (Group Cards)
-                    badgeSection
-                        .padding(.bottom, 20)
+                ScrollView {
+                    VStack(spacing: 0) {
+                        // 1. The Mask (DID Switcher)
+                        maskSection
+                            .padding(.top, 20)
+                            .padding(.bottom, 40)
+                        
+                        // 2. The Core (Ripple Button)
+                        coreSection
+                        
+                        Spacer()
+                            .frame(height: 40)
+                        
+                        // 3. The Badge (Group Cards)
+                        badgeSection
+                            .padding(.bottom, 20)
+                    }
                 }
             }
             .navigationTitle("ID")

@@ -59,6 +59,13 @@ struct GroupJoinSheet: View {
                     }
                     .disabled(inviteToken.isEmpty || isJoining)
                 }
+                Section {
+                    Button {
+                        showingScanner = true
+                    } label: {
+                        Label("Scan QR Code", systemImage: "qrcode.viewfinder")
+                    }
+                }
             }
             .navigationTitle("Join Group")
             .navigationBarTitleDisplayMode(.inline)
@@ -69,6 +76,31 @@ struct GroupJoinSheet: View {
                     }
                 }
             }
+            .sheet(isPresented: $showingScanner) {
+                SimpleQRScannerView(onScan: { code in
+                    showingScanner = false
+                    handleScannedCode(code)
+                }, onCancel: {
+                    showingScanner = false
+                })
+            }
+        }
+    }
+    
+    @State private var showingScanner = false
+    
+    private func handleScannedCode(_ code: String) {
+        // Expected format: airmeishi://group/join?token=XYZ
+        if let url = URL(string: code),
+           let components = URLComponents(url: url, resolvingAgainstBaseURL: false),
+           let queryItems = components.queryItems,
+           let token = queryItems.first(where: { $0.name == "token" })?.value {
+            
+            inviteToken = token
+            // Auto-join? Or just fill? Let's fill for safety.
+            // joinGroup()
+        } else {
+            errorMessage = "Invalid QR Code format"
         }
     }
     
