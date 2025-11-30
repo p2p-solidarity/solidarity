@@ -11,6 +11,8 @@ import Foundation
 
 @main
 struct airmeishiApp: App {
+    @UIApplicationDelegateAdaptor(AppDelegate.self) var appDelegate
+    
     // Initialize core managers
     @StateObject private var cardManager = CardManager.shared
     @StateObject private var contactRepository = ContactRepository.shared

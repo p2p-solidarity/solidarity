@@ -84,7 +84,11 @@ class WebRTCManager: NSObject, ObservableObject {
     func setupConnection(for peerID: MCPeerID) {
         print("[WebRTC] Setting up new peer connection for \(peerID.displayName)")
         close()
-        self.remotePeerID = peerID
+        
+        // Update @Published property on main thread
+        DispatchQueue.main.async {
+            self.remotePeerID = peerID
+        }
         
         let pc = factory.peerConnection(with: rtcConfig, constraints: mediaConstraints, delegate: self)
         self.peerConnection = pc
@@ -164,7 +168,9 @@ class WebRTCManager: NSObject, ObservableObject {
     func handleSignalingMessage(_ message: SignalingMessage, from peerID: MCPeerID) {
         if peerConnection == nil {
             print("[WebRTC] Peer connection is nil, setting up new connection for \(peerID.displayName)")
-            setupConnection(for: peerID)
+            DispatchQueue.main.async {
+                self.setupConnection(for: peerID)
+            }
         }
         // Verify this message is from the current WebRTC peer
         guard let currentRemote = remotePeerID, currentRemote == peerID else {
