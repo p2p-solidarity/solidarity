@@ -796,6 +796,12 @@ extension ProximityManager: MCSessionDelegate {
             }
             return
         }
+        // Check for Heartbeat
+        if let string = String(data: data, encoding: .utf8), string == "HEARTBEAT" {
+            // print("Received heartbeat from \(peerID.displayName)")
+            return
+        }
+
         do {
             let payload = try JSONDecoder().decode(ProximitySharingPayload.self, from: data)
             let status = ProximityVerificationHelper.verify(
@@ -831,9 +837,12 @@ extension ProximityManager: MCSessionDelegate {
                 )
             }
         } catch {
+            let rawString = String(data: data, encoding: .utf8) ?? "Unable to decode as UTF8"
             print("Failed to decode received data: \(error)")
+            print("Raw data: \(rawString)")
+            
             DispatchQueue.main.async { [weak self] in
-                let err: CardError = .sharingError("Failed to decode received data")
+                let err: CardError = .sharingError("Failed to decode received data: \(error.localizedDescription). Raw: \(rawString.prefix(50))")
                 self?.lastError = err
                 NotificationCenter.default.post(
                     name: .matchingError,
