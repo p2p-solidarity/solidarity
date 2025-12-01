@@ -21,6 +21,14 @@ class AppDelegate: UIResponder, UIApplicationDelegate, UNUserNotificationCenterD
     func application(_ application: UIApplication, didRegisterForRemoteNotificationsWithDeviceToken deviceToken: Data) {
         #if !targetEnvironment(simulator)
         let tokenString = deviceToken.map { String(format: "%02.2hhx", $0) }.joined()
+        print("[AppDelegate] Device token: \(tokenString)")
+        // Validate token format to ensure it's not a fallback or malformed
+        guard !tokenString.isEmpty, 
+              !tokenString.contains("simulator_dummy_token"),
+              !tokenString.contains("fallback") else {
+            print("[AppDelegate] Invalid or fallback token detected on device. Ignoring.")
+            return
+        }
         
         Task {
             do {
@@ -43,6 +51,8 @@ class AppDelegate: UIResponder, UIApplicationDelegate, UNUserNotificationCenterD
 
     func application(_ application: UIApplication, didFailToRegisterForRemoteNotificationsWithError error: Error) {
         print("[AppDelegate] Failed to register for remote notifications: \(error)")
+        // Clear any existing sealed route to prevent using a stale or invalid one
+        SecureKeyManager.shared.mySealedRoute = nil
     }
 
     // D. Receive Message - Silent Push Handling (Background Fetch)

@@ -15,12 +15,15 @@ class MessageService: ObservableObject {
         
         var body: [String: Any] = ["device_token": deviceToken]
         
-        #if DEBUG
+        #if targetEnvironment(simulator)
         body["sandbox"] = true
-        print("[MessageService] Sealing token (Sandbox: true)")
+        print("[MessageService] Sealing token (Sandbox: true - Simulator)")
         #else
+        // On physical devices (even in DEBUG), we want real APNs behavior.
+        // If the backend auto-detects based on token, we might not need this,
+        // but setting it to false explicitly signals "not a simulator".
         body["sandbox"] = false
-        print("[MessageService] Sealing token (Sandbox: false)")
+        print("[MessageService] Sealing token (Sandbox: false - Device)")
         #endif
         
         request.httpBody = try JSONSerialization.data(withJSONObject: body)

@@ -101,6 +101,13 @@ struct airmeishiApp: App {
         // We do NOT generate a fallback token here to avoid race conditions where
         // a fallback token is generated before the real APNs token arrives.
         print("[App] Running on device. Waiting for APNs token registration...")
+        
+        // CRITICAL: Clear any potential "simulator" or "fallback" sealed route that might be persisted.
+        // This ensures we ONLY use the real APNs token we are about to receive.
+        SecureKeyManager.shared.mySealedRoute = nil
+        
+        // Also clear any stored simulator token from UserDefaults to be safe
+        UserDefaults.standard.removeObject(forKey: "airmeishi.simulator.deviceToken")
         #endif
     }
     

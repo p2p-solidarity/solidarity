@@ -522,7 +522,10 @@ extension DateFormatter {
             characterScore: 0.6,
             lastInteraction: Date(),
             verificationStatus: .verified,
-            canReceiveSakura: true
+            canReceiveSakura: true,
+            sealedRoute: nil,
+            pubKey: nil,
+            signPubKey: nil
         )
     )
 }

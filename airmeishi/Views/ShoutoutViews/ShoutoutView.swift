@@ -811,46 +811,35 @@ struct CreateShoutoutView: View {
     private func sendIchigoichie() {
         guard let recipient = recipient else { return }
         
+        // Validate that recipient has secure messaging enabled
+        guard recipient.canReceiveSakura,
+              let recipientSealedRoute = recipient.sealedRoute,
+              let recipientPubKey = recipient.pubKey,
+              let recipientSignPubKey = recipient.signPubKey else {
+            Task {
+                await MainActor.run {
+                    ToastManager.shared.show(
+                        title: "Error",
+                        message: "This user hasn't enabled Secure Messaging yet.",
+                        type: .error,
+                        duration: 2.0
+                    )
+                }
+            }
+            return
+        }
+        
         // Use new async MessageService (no need for both users to be online)
         let messageService = MessageService.shared
         
-        // Create a SecureContact from the recipient
-        // NOTE: In a real implementation, you would fetch the actual keys and route from your contact storage
-        // For now, we generate a valid ephemeral key pair to simulate a real recipient and pass the encryption check
-        let mockRecipientKey = Curve25519.KeyAgreement.PrivateKey()
-        let mockRecipientPubKey = mockRecipientKey.publicKey.rawRepresentation.base64EncodedString()
-        
-        let mockRecipientSignKey = Curve25519.Signing.PrivateKey()
-        let mockRecipientSignPubKey = mockRecipientSignKey.publicKey.rawRepresentation.base64EncodedString()
-        
         Task {
             do {
-                // Check if we have a sealed route, if not, try to get one with a dummy token (for Simulator/Testing)
-                var routeToUse = SecureKeyManager.shared.mySealedRoute
-                
-                if routeToUse == nil {
-                    #if targetEnvironment(simulator)
-                    print("[ShoutoutView] No sealed route found. Attempting to seal a dummy token for testing...")
-                    let dummyToken = "simulator_dummy_token_\(UUID().uuidString)"
-                    routeToUse = try await MessageService.shared.sealToken(deviceToken: dummyToken)
-                    SecureKeyManager.shared.mySealedRoute = routeToUse
-                    print("[ShoutoutView] Obtained temporary sealed route for testing.")
-                    #else
-                    print("[ShoutoutView] No sealed route found on device. Waiting for APNs...")
-                    throw NSError(domain: "App", code: -1, userInfo: [NSLocalizedDescriptionKey: "Secure Messaging not ready. Please wait for network initialization."])
-                    #endif
-                }
-                
-                guard let finalRoute = routeToUse else {
-                     throw NSError(domain: "App", code: -1, userInfo: [NSLocalizedDescriptionKey: "Failed to obtain sealed route"])
-                }
-                
-                // Create secure contact with the valid route (either real or dummy-sealed)
+                // Create secure contact with the RECIPIENT's route and keys
                 let secureContact = SecureContact(
                     name: recipient.name,
-                    pubKey: mockRecipientPubKey,
-                    signPubKey: mockRecipientSignPubKey,
-                    sealedRoute: finalRoute
+                    pubKey: recipientPubKey,
+                    signPubKey: recipientSignPubKey,
+                    sealedRoute: recipientSealedRoute  // Use RECIPIENT's route, not sender's!
                 )
                 
                 // Send sakura message (async, works even if recipient is offline)
