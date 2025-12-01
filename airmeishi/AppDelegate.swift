@@ -19,6 +19,7 @@ class AppDelegate: UIResponder, UIApplicationDelegate, UNUserNotificationCenterD
 
     // A. Initialization - Get Device Token
     func application(_ application: UIApplication, didRegisterForRemoteNotificationsWithDeviceToken deviceToken: Data) {
+        #if !targetEnvironment(simulator)
         let tokenString = deviceToken.map { String(format: "%02.2hhx", $0) }.joined()
         
         Task {
@@ -35,6 +36,9 @@ class AppDelegate: UIResponder, UIApplicationDelegate, UNUserNotificationCenterD
                 print("Failed to seal token: \(error)")
             }
         }
+        #else
+        print("[AppDelegate] Simulator detected. Skipping APNs token registration in favor of fallback.")
+        #endif
     }
 
     func application(_ application: UIApplication, didFailToRegisterForRemoteNotificationsWithError error: Error) {
