@@ -29,8 +29,8 @@ struct GroupDetailView: View {
                 // MARK: - Merkle Tree
                 MerkleTreeSection(group: group, semaphoreManager: semaphoreManager)
                 
-                // MARK: - Invite QR
-                InviteQRSection(group: group)
+                // MARK: - Invite
+                InviteSection(group: group)
                 
                 // MARK: - Members
                 MembersSection(
@@ -183,39 +183,77 @@ struct MerkleTreeSection: View {
     }
 }
 
-struct InviteQRSection: View {
+struct InviteSection: View {
     let group: GroupModel
+    @State private var inviteLink: String?
     @State private var qrImage: UIImage?
     @State private var isLoading = false
     @State private var errorMessage: String?
+    @State private var showQRCode = false
     
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text("Invite QR Code")
+            Text("Invite Members")
                 .font(.headline)
                 .foregroundColor(.secondary)
             
             VStack(spacing: 16) {
-                if let image = qrImage {
-                    Image(uiImage: image)
-                        .resizable()
-                        .interpolation(.none)
-                        .scaledToFit()
-                        .frame(width: 200, height: 200)
-                        .padding()
-                        .background(Color.white)
-                        .cornerRadius(12)
-                        .shadow(radius: 2)
-                    
-                    Text("Scan to join this group")
-                        .font(.caption)
-                        .foregroundColor(.secondary)
-                } else if isLoading {
+                if isLoading {
                     ProgressView()
-                        .frame(height: 200)
+                        .frame(height: 100)
+                } else if let link = inviteLink {
+                    // Link Display & Copy
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("Invite Link")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                        
+                        HStack {
+                            Text(link)
+                                .font(.system(.subheadline, design: .monospaced))
+                                .lineLimit(1)
+                                .truncationMode(.middle)
+                                .foregroundColor(.primary)
+                            
+                            Spacer()
+                            
+                            Button(action: {
+                                UIPasteboard.general.string = link
+                            }) {
+                                Image(systemName: "doc.on.doc")
+                                    .foregroundColor(.blue)
+                            }
+                        }
+                        .padding()
+                        .background(Color(.systemGray6))
+                        .cornerRadius(8)
+                    }
+                    
+                    // QR Code Toggle
+                    Button(action: {
+                        withAnimation {
+                            showQRCode.toggle()
+                        }
+                    }) {
+                        Label(showQRCode ? "Hide QR Code" : "Show QR Code", systemImage: "qrcode")
+                    }
+                    .buttonStyle(.bordered)
+                    
+                    if showQRCode, let image = qrImage {
+                        Image(uiImage: image)
+                            .resizable()
+                            .interpolation(.none)
+                            .scaledToFit()
+                            .frame(width: 200, height: 200)
+                            .padding()
+                            .background(Color.white)
+                            .cornerRadius(12)
+                            .shadow(radius: 2)
+                            .transition(.scale.combined(with: .opacity))
+                    }
                 } else {
-                    Button("Generate Invite QR") {
-                        generateQR()
+                    Button("Generate Invite Link") {
+                        generateInvite()
                     }
                     .buttonStyle(.borderedProminent)
                     .frame(maxWidth: .infinity)
@@ -232,9 +270,16 @@ struct InviteQRSection: View {
             .background(Color(.secondarySystemGroupedBackground))
             .cornerRadius(12)
         }
+        .onAppear {
+            // Auto-generate if not present? Maybe wait for user action to avoid spamming tokens.
+            // But user asked for "list/copy interface", implying readiness.
+            // Let's auto-generate if it's cheap, but creating a token involves a server call (CloudKit save).
+            // Better to keep it manual or load existing if possible.
+            // For now, manual trigger is safer but I'll make the UI ready.
+        }
     }
     
-    private func generateQR() {
+    private func generateInvite() {
         isLoading = true
         errorMessage = nil
         
@@ -243,6 +288,7 @@ struct InviteQRSection: View {
                 let link = try await CloudKitGroupSyncManager.shared.createInviteLink(for: group)
                 
                 // Generate QR Image
+                var image: UIImage?
                 if let filter = CIFilter(name: "CIQRCodeGenerator") {
                     filter.setValue(link.data(using: .ascii), forKey: "inputMessage")
                     if let output = filter.outputImage {
@@ -250,18 +296,17 @@ struct InviteQRSection: View {
                         let scaled = output.transformed(by: transform)
                         let context = CIContext()
                         if let cgImage = context.createCGImage(scaled, from: scaled.extent) {
-                            await MainActor.run {
-                                self.qrImage = UIImage(cgImage: cgImage)
-                                self.isLoading = false
-                            }
-                            return
+                            image = UIImage(cgImage: cgImage)
                         }
                     }
                 }
                 
                 await MainActor.run {
-                    self.errorMessage = "Failed to generate image"
+                    self.inviteLink = link
+                    self.qrImage = image
                     self.isLoading = false
+                    // Auto-show QR if generated
+                    // self.showQRCode = true 
                 }
             } catch {
                 await MainActor.run {
@@ -447,26 +492,52 @@ struct MemberRow: View {
 
 struct OIDCSection: View {
     let group: GroupModel
+    @ObservedObject private var cloudKitManager = CloudKitGroupSyncManager.shared
+    @ObservedObject private var semaphoreManager = SemaphoreIdentityManager.shared
     
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text("OIDC Integration")
+            Text("Identity Info")
                 .font(.headline)
                 .foregroundColor(.secondary)
             
             VStack(alignment: .leading, spacing: 12) {
-                Text("Use this group for OIDC authentication.")
-                    .font(.caption)
-                    .foregroundColor(.secondary)
-                
-                // Placeholder for OIDC actions
-                Button(action: {}) {
-                    Label("Configure OIDC", systemImage: "gear")
-                        .frame(maxWidth: .infinity)
+                // User Name (Record ID)
+                if let userID = cloudKitManager.currentUserRecordID?.recordName {
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("User ID")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                        Text(userID)
+                            .font(.system(.caption, design: .monospaced))
+                            .textSelection(.enabled)
+                    }
+                } else {
+                    Text("User ID not available")
+                        .font(.caption)
+                        .foregroundColor(.red)
                 }
-                .buttonStyle(.bordered)
+                
+                Divider()
+                
+                // Leaf Hash (Commitment)
+                if let identity = semaphoreManager.getIdentity() {
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("Leaf Hash (Commitment)")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                        Text(identity.commitment)
+                            .font(.system(.caption, design: .monospaced))
+                            .textSelection(.enabled)
+                    }
+                } else {
+                    Text("Identity not initialized")
+                        .font(.caption)
+                        .foregroundColor(.orange)
+                }
             }
             .padding()
+            .frame(maxWidth: .infinity, alignment: .leading)
             .background(Color(.secondarySystemGroupedBackground))
             .cornerRadius(12)
         }

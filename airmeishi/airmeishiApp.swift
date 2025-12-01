@@ -66,19 +66,42 @@ struct airmeishiApp: App {
         
         // Ensure we have a sealed route for Secure Messaging (Sakura)
         // If APNS fails or is not available (Simulator), we use a generated UUID
-        if SecureKeyManager.shared.mySealedRoute == nil {
-            print("No sealed route found. Initiating fallback sealing...")
-            Task {
-                do {
-                    let dummyToken = "fallback_token_\(UUID().uuidString)"
-                    let route = try await MessageService.shared.sealToken(deviceToken: dummyToken)
-                    SecureKeyManager.shared.mySealedRoute = route
-                    print("Fallback sealing successful. Route: \(route)")
-                } catch {
-                    print("Fallback sealing failed: \(error)")
+        // Ensure we have a sealed route for Secure Messaging (Sakura)
+        // If APNS fails or is not available (Simulator), we use a generated UUID
+        
+        #if targetEnvironment(simulator)
+        // On Simulator, we ALWAYS start polling because APNs is not available
+        MessageService.shared.startPolling()
+        
+        // Also, we force a fallback token update to ensure the backend has a valid token
+        // even if one was previously saved (which might be stale or invalid "simulato")
+        Task {
+            do {
+                // Use a consistent dummy token for this install
+                let defaults = UserDefaults.standard
+                let tokenKey = "airmeishi.simulator.deviceToken"
+                var dummyToken = defaults.string(forKey: tokenKey)
+                
+                if dummyToken == nil {
+                    dummyToken = "simulator_dummy_token_\(UUID().uuidString)"
+                    defaults.set(dummyToken, forKey: tokenKey)
                 }
+                
+                print("[App] Simulator detected. Sealing fallback token: \(dummyToken!)")
+                let route = try await MessageService.shared.sealToken(deviceToken: dummyToken!)
+                SecureKeyManager.shared.mySealedRoute = route
+                print("[App] Fallback sealing successful. Route: \(route)")
+            } catch {
+                print("[App] Fallback sealing failed: \(error)")
             }
         }
+        #else
+        // On Device, we rely on AppDelegate's didRegisterForRemoteNotificationsWithDeviceToken
+        // to obtain the real APNs token and seal it.
+        // We do NOT generate a fallback token here to avoid race conditions where
+        // a fallback token is generated before the real APNs token arrives.
+        print("[App] Running on device. Waiting for APNs token registration...")
+        #endif
     }
     
     /// Handle incoming URLs from various sources

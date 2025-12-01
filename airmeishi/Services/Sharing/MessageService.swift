@@ -1,5 +1,6 @@
 import Foundation
 import Combine
+import UserNotifications
 
 class MessageService: ObservableObject {
     static let shared = MessageService()
@@ -12,7 +13,16 @@ class MessageService: ObservableObject {
         request.httpMethod = "POST"
         request.addValue("application/json", forHTTPHeaderField: "Content-Type")
         
-        let body = ["device_token": deviceToken]
+        var body: [String: Any] = ["device_token": deviceToken]
+        
+        #if DEBUG
+        body["sandbox"] = true
+        print("[MessageService] Sealing token (Sandbox: true)")
+        #else
+        body["sandbox"] = false
+        print("[MessageService] Sealing token (Sandbox: false)")
+        #endif
+        
         request.httpBody = try JSONSerialization.data(withJSONObject: body)
         
         let (data, _) = try await URLSession.shared.data(for: request)
@@ -111,5 +121,100 @@ class MessageService: ObservableObject {
         // This is a placeholder for backward compatibility or if we need to look up contacts
         // In the new model, we pass SecureContact directly
         return nil
+    }
+    
+    // MARK: - Message Processing & Polling
+    
+    private var pollingTimer: AnyCancellable?
+    
+    /// Process incoming messages (Sync -> Decrypt -> Notify -> Ack)
+    /// Returns true if new data was processed
+    func processIncomingMessages() async throws -> Bool {
+        // 1. Pull (Sync)
+        let messages = try await syncMessages()
+        if messages.isEmpty {
+            return false
+        }
+        
+        var processedIds: [String] = []
+        
+        for msg in messages {
+            // 2. Decrypt
+            // We need to find the sender to get their public key
+            if let senderContact = findContact(pubKey: msg.owner_pubkey) {
+                do {
+                    let decryptedText = try SecureKeyManager.shared.decrypt(
+                        blobBase64: msg.blob,
+                        from: senderContact.pubKey
+                    )
+                    
+                    // 3. Local Notification / UI Update
+                    // Dispatch to main thread for UI/Notification
+                    await MainActor.run {
+                        showLocalNotification(text: decryptedText, sender: senderContact.name)
+                    }
+                    
+                    processedIds.append(msg.id)
+                } catch {
+                    print("[MessageService] Failed to decrypt message from \(senderContact.name): \(error)")
+                }
+            } else {
+                print("[MessageService] Received message from unknown sender (PubKey: \(msg.owner_pubkey))")
+            }
+        }
+        
+        // 4. Destroy (Ack)
+        if !processedIds.isEmpty {
+            await ackMessages(ids: processedIds)
+            return true
+        }
+        
+        return false
+    }
+    
+    /// Start polling for messages (Simulator only)
+    func startPolling(interval: TimeInterval = 5.0) {
+        stopPolling()
+        
+        print("[MessageService] Starting polling (interval: \(interval)s)")
+        pollingTimer = Timer.publish(every: interval, on: .main, in: .common)
+            .autoconnect()
+            .sink { [weak self] _ in
+                Task {
+                    do {
+                        _ = try await self?.processIncomingMessages()
+                    } catch {
+                        // Ignore errors during polling to avoid spamming logs
+                        // print("[MessageService] Polling error: \(error)")
+                    }
+                }
+            }
+    }
+    
+    /// Stop polling
+    func stopPolling() {
+        pollingTimer?.cancel()
+        pollingTimer = nil
+    }
+    
+    // Helper: Show Local Notification
+    private func showLocalNotification(text: String, sender: String) {
+        let content = UNMutableNotificationContent()
+        content.title = sender
+        content.body = text
+        content.sound = .default
+        
+        let request = UNNotificationRequest(identifier: UUID().uuidString, content: content, trigger: nil)
+        UNUserNotificationCenter.current().add(request)
+    }
+    
+    // Helper: Find Contact
+    private func findContact(pubKey: String) -> SecureContact? {
+        // TODO: Integrate with ContactRepository
+        // For now, return a mock if not found, or try to find in existing contacts
+        // This is a simplified lookup. In production, use ContactRepository.
+        
+        // Mock lookup for testing
+        return SecureContact(name: "Unknown Sender", pubKey: pubKey, signPubKey: "", sealedRoute: "")
     }
 }

@@ -340,6 +340,7 @@ final class CloudKitGroupSyncManager: ObservableObject, GroupSyncManagerProtocol
     }
     
     private func joinPublicGroup(withInviteToken token: String) async throws -> GroupModel {
+        print("[CloudKitManager] Attempting to join public group with token: \(token)")
         if currentUserRecordID == nil {
             print("[CloudKitManager] User ID missing, checking account status...")
             await checkAccountStatus()
@@ -357,10 +358,12 @@ final class CloudKitGroupSyncManager: ObservableObject, GroupSyncManagerProtocol
         
         guard let firstMatch = results.first, case .success(let inviteRecord) = firstMatch.1,
               let groupRef = inviteRecord["targetGroup"] as? CKRecord.Reference else {
+            print("[CloudKitManager] Invalid or expired invite token")
             throw NSError(domain: "GroupError", code: 404, userInfo: [NSLocalizedDescriptionKey: "Invalid or expired invite token"])
         }
         
         let groupRecordID = groupRef.recordID
+        print("[CloudKitManager] Found invite for group ID: \(groupRecordID.recordName)")
         
         // 2. Check if already a member
         let membershipPredicate = NSPredicate(format: "group == %@ AND userRecordID == %@", CKRecord.Reference(recordID: groupRecordID, action: .none), CKRecord.Reference(recordID: userID, action: .none))
@@ -383,6 +386,7 @@ final class CloudKitGroupSyncManager: ObservableObject, GroupSyncManagerProtocol
         }
         
         // 3. Join the group
+        print("[CloudKitManager] Joining group...")
         let groupRecord = try await publicDB.record(for: groupRecordID)
         let membershipRecord = CKRecord(recordType: CloudKitRecordType.groupMembership)
         membershipRecord["group"] = CKRecord.Reference(recordID: groupRecord.recordID, action: .deleteSelf)
@@ -393,6 +397,7 @@ final class CloudKitGroupSyncManager: ObservableObject, GroupSyncManagerProtocol
         
         // Use modifyRecords to save
         let _ = try await publicDB.modifyRecords(saving: [membershipRecord], deleting: [])
+        print("[CloudKitManager] Successfully joined group in CloudKit")
         
         // 4. Update local state
         var groupModel = mapRecordToGroup(groupRecord)!
@@ -405,6 +410,7 @@ final class CloudKitGroupSyncManager: ObservableObject, GroupSyncManagerProtocol
            let groupUUID = UUID(uuidString: groupModel.id) {
             
             print("[CloudKitManager] Syncing with Semaphore Manager for group: \(groupModel.name)")
+            print("[CloudKitManager] Identity Commitment: \(identity.commitment)")
             
             // Ensure group exists in ZK manager
             SemaphoreGroupManager.shared.ensureGroupFromInvite(
@@ -415,6 +421,9 @@ final class CloudKitGroupSyncManager: ObservableObject, GroupSyncManagerProtocol
             
             // Add self as member (leaf)
             SemaphoreGroupManager.shared.addMember(identity.commitment)
+            print("[CloudKitManager] Added member to Semaphore Group")
+        } else {
+            print("[CloudKitManager] WARNING: Could not sync with Semaphore Manager. Identity or GroupUUID missing.")
         }
         
         return groupModel

@@ -829,11 +829,16 @@ struct CreateShoutoutView: View {
                 var routeToUse = SecureKeyManager.shared.mySealedRoute
                 
                 if routeToUse == nil {
+                    #if targetEnvironment(simulator)
                     print("[ShoutoutView] No sealed route found. Attempting to seal a dummy token for testing...")
                     let dummyToken = "simulator_dummy_token_\(UUID().uuidString)"
                     routeToUse = try await MessageService.shared.sealToken(deviceToken: dummyToken)
                     SecureKeyManager.shared.mySealedRoute = routeToUse
                     print("[ShoutoutView] Obtained temporary sealed route for testing.")
+                    #else
+                    print("[ShoutoutView] No sealed route found on device. Waiting for APNs...")
+                    throw NSError(domain: "App", code: -1, userInfo: [NSLocalizedDescriptionKey: "Secure Messaging not ready. Please wait for network initialization."])
+                    #endif
                 }
                 
                 guard let finalRoute = routeToUse else {

@@ -37,6 +37,10 @@ class AppDelegate: UIResponder, UIApplicationDelegate, UNUserNotificationCenterD
         }
     }
 
+    func application(_ application: UIApplication, didFailToRegisterForRemoteNotificationsWithError error: Error) {
+        print("[AppDelegate] Failed to register for remote notifications: \(error)")
+    }
+
     // D. Receive Message - Silent Push Handling (Background Fetch)
     func application(_ application: UIApplication, didReceiveRemoteNotification userInfo: [AnyHashable : Any], fetchCompletionHandler completionHandler: @escaping (UIBackgroundFetchResult) -> Void) {
         
@@ -50,59 +54,13 @@ class AppDelegate: UIResponder, UIApplicationDelegate, UNUserNotificationCenterD
 
         Task {
             do {
-                // 1. Pull (Sync)
-                let messages = try await MessageService.shared.syncMessages()
-                if messages.isEmpty {
-                    completionHandler(.noData)
-                    return
-                }
-
-                var processedIds: [String] = []
-
-                for msg in messages {
-                    // 2. Decrypt (Note: Need to know who the Sender is,
-                    // To simplify, you might need to attach Sender PubKey before the Blob,
-                    // Or try to match owner_pubkey in Contact list)
-                    // Assuming you can map owner_pubkey to address book
-                    
-                    if let senderContact = findContact(pubKey: msg.owner_pubkey) {
-                        let decryptedText = try SecureKeyManager.shared.decrypt(
-                            blobBase64: msg.blob,
-                            from: senderContact.pubKey // Unwrap using sender's PubKey
-                        )
-                        
-                        // 3. Local Notification
-                        showLocalNotification(text: decryptedText, sender: senderContact.name)
-                        processedIds.append(msg.id)
-                    }
-                }
-
-                // 4. Destroy (Ack)
-                await MessageService.shared.ackMessages(ids: processedIds)
-                
-                completionHandler(.newData)
+                // Use shared logic in MessageService
+                let hasNewData = try await MessageService.shared.processIncomingMessages()
+                completionHandler(hasNewData ? .newData : .noData)
             } catch {
                 print("Sync failed: \(error)")
                 completionHandler(.failed)
             }
         }
-    }
-    
-    // Helper: Show Local Notification
-    func showLocalNotification(text: String, sender: String) {
-        let content = UNMutableNotificationContent()
-        content.title = sender
-        content.body = text
-        content.sound = .default
-        
-        let request = UNNotificationRequest(identifier: UUID().uuidString, content: content, trigger: nil)
-        UNUserNotificationCenter.current().add(request)
-    }
-    
-    // Mock Data Helper: Find Contact
-    func findContact(pubKey: String) -> SecureContact? {
-        // Implementation: Query from CoreData/Realm
-        // Returning mock data for now
-        return SecureContact(name: "Alice", pubKey: pubKey, signPubKey: "...", sealedRoute: "...")
     }
 }
