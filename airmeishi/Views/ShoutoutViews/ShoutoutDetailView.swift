@@ -102,6 +102,7 @@ struct ShoutoutDetailView: View {
         }
         .preferredColorScheme(.dark)
         .onAppear {
+            print("[ShoutoutDetailView] View appeared for user: \(user)")
         }
     }
     
@@ -291,7 +292,10 @@ struct ShoutoutDetailView: View {
     private var lightningActionButtons: some View {
         VStack(spacing: 16) {
             // Primary Ichigoichie Button
-            Button(action: { showingCreateShoutout = true }) {
+            Button(action: { 
+                print("[ShoutoutDetailView] Send Sakura tapped for user: \(user)")
+                showingCreateShoutout = true 
+            }) {
                 HStack(spacing: 12) {
                     SakuraIconView(size: 24, color: .white, isAnimating: isSakuraAnimating)
                     
@@ -517,7 +521,8 @@ extension DateFormatter {
             typeScore: 0.7,
             characterScore: 0.6,
             lastInteraction: Date(),
-            verificationStatus: .verified
+            verificationStatus: .verified,
+            canReceiveSakura: true
         )
     )
 }

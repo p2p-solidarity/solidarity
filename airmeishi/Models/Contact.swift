@@ -18,6 +18,16 @@ struct Contact: Codable, Identifiable, Equatable {
     var verificationStatus: VerificationStatus
     var lastInteraction: Date?
     
+    // Secure Messaging Fields
+    var sealedRoute: String?
+    var pubKey: String?
+    var signPubKey: String?
+    
+    /// Check if this contact supports Sakura (Secure Messaging)
+    var canReceiveSakura: Bool {
+        return sealedRoute != nil && pubKey != nil && signPubKey != nil
+    }
+    
     init(
         id: UUID = UUID(),
         businessCard: BusinessCard,
@@ -26,7 +36,10 @@ struct Contact: Codable, Identifiable, Equatable {
         tags: [String] = [],
         notes: String? = nil,
         verificationStatus: VerificationStatus = .unverified,
-        lastInteraction: Date? = nil
+        lastInteraction: Date? = nil,
+        sealedRoute: String? = nil,
+        pubKey: String? = nil,
+        signPubKey: String? = nil
     ) {
         self.id = id
         self.businessCard = businessCard
@@ -36,6 +49,9 @@ struct Contact: Codable, Identifiable, Equatable {
         self.notes = notes
         self.verificationStatus = verificationStatus
         self.lastInteraction = lastInteraction
+        self.sealedRoute = sealedRoute
+        self.pubKey = pubKey
+        self.signPubKey = signPubKey
     }
     
     /// Update last interaction timestamp

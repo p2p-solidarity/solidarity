@@ -770,31 +770,40 @@ struct CreateShoutoutView: View {
     // MARK: - Sakura Send Button
     
     private var sakuraSendButton: some View {
-        Button(action: sendIchigoichie) {
-            HStack(spacing: 12) {
-                SakuraIconView(size: 24, color: .white, isAnimating: isSakuraAnimating)
-                
-                Text("Send Sakura")
-                    .font(.headline)
-                    .fontWeight(.bold)
-            }
-            .foregroundColor(.white)
-            .frame(maxWidth: .infinity)
-            .padding(.vertical, 16)
-            .background(
-                RoundedRectangle(cornerRadius: 16)
-                    .fill(
-                        LinearGradient(
-                            colors: [.pink.opacity(0.8), .purple.opacity(0.6), .pink.opacity(0.8)],
-                            startPoint: .leading,
-                            endPoint: .trailing
+        VStack(spacing: 0) {
+            Button(action: sendIchigoichie) {
+                HStack(spacing: 12) {
+                    SakuraIconView(size: 24, color: .white, isAnimating: isSakuraAnimating)
+                    
+                    Text("Send Sakura")
+                        .font(.headline)
+                        .fontWeight(.bold)
+                }
+                .foregroundColor(.white)
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 16)
+                .background(
+                    RoundedRectangle(cornerRadius: 16)
+                        .fill(
+                            LinearGradient(
+                                colors: [.pink.opacity(0.8), .purple.opacity(0.6), .pink.opacity(0.8)],
+                                startPoint: .leading,
+                                endPoint: .trailing
+                            )
                         )
-                    )
-                    .shadow(color: .pink.opacity(0.5), radius: 10, x: 0, y: 0)
-            )
+                        .shadow(color: .pink.opacity(0.5), radius: 10, x: 0, y: 0)
+                )
+            }
+            .disabled(recipient == nil || message.isEmpty || message.count > 200 || !(recipient?.canReceiveSakura ?? false))
+            .opacity((recipient == nil || message.isEmpty || message.count > 200 || !(recipient?.canReceiveSakura ?? false)) ? 0.5 : 1.0)
+            
+            if let recipient = recipient, !recipient.canReceiveSakura {
+                Text("This user hasn't enabled Secure Messaging yet.")
+                    .font(.caption)
+                    .foregroundColor(.gray)
+                    .padding(.top, 4)
+            }
         }
-        .disabled(recipient == nil || message.isEmpty || message.count > 200)
-        .opacity((recipient == nil || message.isEmpty || message.count > 200) ? 0.5 : 1.0)
     }
     
     // MARK: - Actions
@@ -813,14 +822,6 @@ struct CreateShoutoutView: View {
         
         let mockRecipientSignKey = Curve25519.Signing.PrivateKey()
         let mockRecipientSignPubKey = mockRecipientSignKey.publicKey.rawRepresentation.base64EncodedString()
-        
-        // Use our own sealed route for testing (Loopback)
-        // This allows the server to successfully unseal the route and send a push notification to this device.
-        // Note: In a real scenario, this would be the recipient's sealed route.
-        // Fallback to a valid Base64 string to pass server's atob() check, though decryption will fail.
-        let validBase64Mock = "bW9ja19zZWFsZWRfcm91dGU=" // "mock_sealed_route" in Base64 (but wait, underscores are bad in source, but encoded is fine)
-        // Let's use a simpler one: "TW9ja1JvdXRl" -> "MockRoute"
-        let fallbackRoute = "TW9ja1JvdXRl" 
         
         Task {
             do {

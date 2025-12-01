@@ -63,6 +63,22 @@ struct airmeishiApp: App {
         
         // Note: Data is automatically loaded in the managers' init methods
         print("App setup completed")
+        
+        // Ensure we have a sealed route for Secure Messaging (Sakura)
+        // If APNS fails or is not available (Simulator), we use a generated UUID
+        if SecureKeyManager.shared.mySealedRoute == nil {
+            print("No sealed route found. Initiating fallback sealing...")
+            Task {
+                do {
+                    let dummyToken = "fallback_token_\(UUID().uuidString)"
+                    let route = try await MessageService.shared.sealToken(deviceToken: dummyToken)
+                    SecureKeyManager.shared.mySealedRoute = route
+                    print("Fallback sealing successful. Route: \(route)")
+                } catch {
+                    print("Fallback sealing failed: \(error)")
+                }
+            }
+        }
     }
     
     /// Handle incoming URLs from various sources

@@ -249,8 +249,16 @@ class ProximityManager: NSObject, ProximityManagerProtocol, ObservableObject {
                 shareId: shareUUID,
                 issuerCommitment: issuerCommitment.isEmpty ? nil : issuerCommitment,
                 issuerProof: issuerProof,
-                sdProof: sdProof
+                sdProof: sdProof,
+                sealedRoute: SecureKeyManager.shared.mySealedRoute,
+                pubKey: SecureKeyManager.shared.myEncPubKey,
+                signPubKey: SecureKeyManager.shared.mySignPubKey
             )
+            
+            print("[ProximityManager] Sending card to \(peer.displayName)")
+            print("[ProximityManager] Sealed Route: \(String(describing: SecureKeyManager.shared.mySealedRoute))")
+            print("[ProximityManager] Pub Key: \(String(describing: SecureKeyManager.shared.myEncPubKey))")
+
             
             let data = try JSONEncoder().encode(payload)
             
@@ -533,7 +541,14 @@ class ProximityManager: NSObject, ProximityManagerProtocol, ObservableObject {
             .store(in: &cancellables)
     }
     
-    private func handleReceivedCard(_ card: BusinessCard, from senderName: String, status: VerificationStatus) {
+    private func handleReceivedCard(
+        _ card: BusinessCard, 
+        from senderName: String, 
+        status: VerificationStatus,
+        sealedRoute: String? = nil,
+        pubKey: String? = nil,
+        signPubKey: String? = nil
+    ) {
         // Add to received cards
         receivedCards.append(card)
         
@@ -542,7 +557,10 @@ class ProximityManager: NSObject, ProximityManagerProtocol, ObservableObject {
             let contact = Contact(
                 businessCard: card,
                 source: .proximity,
-                verificationStatus: status
+                verificationStatus: status,
+                sealedRoute: sealedRoute,
+                pubKey: pubKey,
+                signPubKey: signPubKey
             )
             
             let result = contactRepository.addContact(contact)
@@ -786,13 +804,26 @@ extension ProximityManager: MCSessionDelegate {
                 message: payload.shareId.uuidString,
                 scope: payload.sharingLevel.rawValue
             )
+            
+            print("[ProximityManager] Received payload from \(payload.senderID)")
+            print("[ProximityManager] Sealed Route: \(String(describing: payload.sealedRoute))")
+            print("[ProximityManager] Pub Key: \(String(describing: payload.pubKey))")
+            
             DispatchQueue.main.async { [weak self] in
                 guard let self = self else { return }
                 self.lastReceivedVerification = status
                 if let index = self.nearbyPeers.firstIndex(where: { $0.peerID == peerID }) {
                     self.nearbyPeers[index].verification = status
                 }
-                self.handleReceivedCard(payload.card, from: payload.senderID, status: status)
+                // Pass secure messaging fields to handleReceivedCard
+                self.handleReceivedCard(
+                    payload.card, 
+                    from: payload.senderID, 
+                    status: status,
+                    sealedRoute: payload.sealedRoute,
+                    pubKey: payload.pubKey,
+                    signPubKey: payload.signPubKey
+                )
                 NotificationCenter.default.post(
                     name: .matchingReceivedCard,
                     object: nil,

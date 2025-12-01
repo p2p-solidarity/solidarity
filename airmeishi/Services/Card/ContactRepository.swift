@@ -61,7 +61,10 @@ class ContactRepository: ContactRepositoryProtocol, ObservableObject {
                 tags: mergeTags(existingContact.tags, newTags: contact.tags), // Merge tags
                 notes: contact.notes ?? existingContact.notes, // Prefer new notes, fallback to existing
                 verificationStatus: contact.verificationStatus, // Update verification status
-                lastInteraction: Date() // Update last interaction time
+                lastInteraction: Date(), // Update last interaction time
+                sealedRoute: contact.sealedRoute ?? existingContact.sealedRoute,
+                pubKey: contact.pubKey ?? existingContact.pubKey,
+                signPubKey: contact.signPubKey ?? existingContact.signPubKey
             )
             
             // Store original for rollback
