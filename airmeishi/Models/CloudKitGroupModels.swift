@@ -32,6 +32,14 @@ struct GroupModel: Identifiable, Hashable, Codable {
     // Local metadata
     var isSynced: Bool = true
     
+    // Group VC: List of userRecordIDs allowed to issue credentials
+    var credentialIssuers: [String] = []
+    
+    // Check if a user can issue credentials
+    func canIssueCredentials(userRecordID: String) -> Bool {
+        return ownerRecordID == userRecordID || credentialIssuers.contains(userRecordID)
+    }
+    
     init(id: String = UUID().uuidString,
          name: String,
          description: String = "",
@@ -41,6 +49,7 @@ struct GroupModel: Identifiable, Hashable, Codable {
          merkleTreeDepth: Int = 20,
          memberCount: Int = 1,
          isPrivate: Bool = false,
+         credentialIssuers: [String] = [],
          isSynced: Bool = true) {
         self.id = id
         self.name = name
@@ -51,6 +60,7 @@ struct GroupModel: Identifiable, Hashable, Codable {
         self.merkleTreeDepth = merkleTreeDepth
         self.memberCount = memberCount
         self.isPrivate = isPrivate
+        self.credentialIssuers = credentialIssuers
         self.isSynced = isSynced
     }
 }
@@ -63,6 +73,20 @@ struct GroupMemberModel: Identifiable, Hashable {
     let status: Status
     let merkleIndex: Int
     let joinedAt: Date
+    
+    // Secure Messaging Data (Sakura/Proximity)
+    var sealedRoute: String?      // From deviceToken seal
+    var pubKey: String?          // Encryption Key (X25519)
+    var signPubKey: String?      // Identity Key (Ed25519)
+    var deviceToken: String?     // Only visible to owner (for Proximity)
+    
+    var hasMessagingData: Bool {
+        return sealedRoute != nil && pubKey != nil && signPubKey != nil
+    }
+    
+    var hasDeviceToken: Bool {
+        return deviceToken != nil
+    }
     
     enum Role: String, Codable {
         case owner

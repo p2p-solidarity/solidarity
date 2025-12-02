@@ -8,7 +8,7 @@
 import Foundation
 
 /// Main business card data model with comprehensive contact information and privacy controls
-struct BusinessCard: Codable, Identifiable, Equatable {
+struct BusinessCard: Codable, Identifiable, Equatable, Hashable {
     let id: UUID
     var name: String
     var title: String?
@@ -21,6 +21,7 @@ struct BusinessCard: Codable, Identifiable, Equatable {
     var skills: [Skill]
     var categories: [String]
     var sharingPreferences: SharingPreferences
+    var groupContext: GroupCredentialContext? // Group VC Context
     var createdAt: Date
     var updatedAt: Date
     
@@ -37,6 +38,7 @@ struct BusinessCard: Codable, Identifiable, Equatable {
         skills: [Skill] = [],
         categories: [String] = [],
         sharingPreferences: SharingPreferences = SharingPreferences(),
+        groupContext: GroupCredentialContext? = nil,
         createdAt: Date = Date(),
         updatedAt: Date = Date()
     ) {
@@ -52,6 +54,7 @@ struct BusinessCard: Codable, Identifiable, Equatable {
         self.skills = skills
         self.categories = categories
         self.sharingPreferences = sharingPreferences
+        self.groupContext = groupContext
         self.createdAt = createdAt
         self.updatedAt = updatedAt
     }
@@ -75,12 +78,15 @@ struct BusinessCard: Codable, Identifiable, Equatable {
         if !allowedFields.contains(.socialNetworks) { filtered.socialNetworks = [] }
         if !allowedFields.contains(.skills) { filtered.skills = [] }
         
+        // If sharing level is personal/professional, we might want to strip group context
+        // unless explicitly handled. For now, we keep it as it's part of the credential.
+        
         return filtered
     }
 }
 
 /// Social network information
-struct SocialNetwork: Codable, Identifiable, Equatable {
+struct SocialNetwork: Codable, Identifiable, Equatable, Hashable {
     let id: UUID
     var platform: SocialPlatform
     var username: String
@@ -123,7 +129,7 @@ enum SocialPlatform: String, Codable, CaseIterable {
 }
 
 /// Individual skill with categorization and proficiency levels
-struct Skill: Codable, Identifiable, Equatable {
+struct Skill: Codable, Identifiable, Equatable, Hashable {
     let id: UUID
     var name: String
     var category: String
@@ -160,7 +166,7 @@ enum ProficiencyLevel: String, Codable, CaseIterable {
 }
 
 /// Privacy controls for selective information sharing
-struct SharingPreferences: Codable, Equatable {
+struct SharingPreferences: Codable, Equatable, Hashable {
     var publicFields: Set<BusinessCardField>
     var professionalFields: Set<BusinessCardField>
     var personalFields: Set<BusinessCardField>

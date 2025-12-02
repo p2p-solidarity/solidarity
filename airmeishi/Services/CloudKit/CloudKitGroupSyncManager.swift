@@ -627,6 +627,117 @@ final class CloudKitGroupSyncManager: ObservableObject, GroupSyncManagerProtocol
         }
     }
     
+    // MARK: - Group VC Support
+    
+    func getActiveMembers(for group: GroupModel) async throws -> [GroupMemberModel] {
+        return try await getMembers(for: group).filter { $0.status == .active }
+    }
+    
+    func updateMemberMessagingData(
+        userId: String,
+        group: GroupModel,
+        sealedRoute: String,
+        pubKey: String,
+        signPubKey: String
+    ) async throws {
+        // 1. Find member record
+        let predicate = NSPredicate(format: "group == %@ AND userRecordID == %@",
+                                   CKRecord.Reference(recordID: CKRecord.ID(recordName: group.id), action: .none),
+                                   CKRecord.Reference(recordID: CKRecord.ID(recordName: userId), action: .none))
+        let query = CKQuery(recordType: CloudKitRecordType.groupMembership, predicate: predicate)
+        let (results, _) = try await publicDB.records(matching: query)
+        
+        guard let match = results.first, case .success(let record) = match.1 else {
+            throw NSError(domain: "GroupError", code: 404, userInfo: [NSLocalizedDescriptionKey: "Member not found"])
+        }
+        
+        // 2. Update fields
+        record["sealedRoute"] = sealedRoute
+        record["pubKey"] = pubKey
+        record["signPubKey"] = signPubKey
+        
+        // 3. Save
+        try await publicDB.save(record)
+        print("[CloudKitManager] Updated messaging data for member \(userId)")
+    }
+    
+    func getMembersMessagingData(for group: GroupModel, includeDeviceTokens: Bool = false) async throws -> [GroupMemberModel] {
+        // Only owner can request device tokens
+        if includeDeviceTokens {
+            guard let currentUser = currentUserRecordID, group.ownerRecordID == currentUser.recordName else {
+                throw CKError(.permissionFailure)
+            }
+        }
+        
+        let members = try await getActiveMembers(for: group)
+        
+        // If we are not owner, we shouldn't see deviceTokens (even if they were fetched, which they shouldn't be if we use proper field security, but here we filter in memory for MVP)
+        if !includeDeviceTokens {
+            return members.map { member in
+                var filtered = member
+                filtered.deviceToken = nil
+                return filtered
+            }
+        }
+        
+        return members
+    }
+    
+    func canIssueCredentials(for group: GroupModel) -> Bool {
+        guard let currentUser = currentUserRecordID else { return false }
+        return group.canIssueCredentials(userRecordID: currentUser.recordName)
+    }
+    
+    // MARK: - Credential Issuers Management
+
+    func addCredentialIssuer(userId: String, to group: GroupModel) async throws {
+        guard let currentUser = currentUserRecordID,
+              group.ownerRecordID == currentUser.recordName else {
+            throw CKError(CKError.Code.permissionFailure)
+        }
+        
+        var updatedGroup = group
+        if !updatedGroup.credentialIssuers.contains(userId) {
+            updatedGroup.credentialIssuers.append(userId)
+        }
+        
+        let db = group.isPrivate ? privateDB : publicDB
+        let recordID = CKRecord.ID(recordName: group.id, zoneID: group.isPrivate ? customZoneID : CKRecordZone.default().zoneID)
+        let record = try await db.record(for: recordID)
+        record["credentialIssuers"] = updatedGroup.credentialIssuers
+        
+        try await db.save(record)
+        
+        // Update local state
+        if let index = groups.firstIndex(where: { $0.id == group.id }) {
+            groups[index].credentialIssuers = updatedGroup.credentialIssuers
+            saveGroupsToLocal()
+        }
+    }
+
+    func removeCredentialIssuer(userId: String, from group: GroupModel) async throws {
+        guard let currentUser = currentUserRecordID,
+              group.ownerRecordID == currentUser.recordName else {
+            throw CKError(CKError.Code.permissionFailure)
+        }
+        
+        var updatedGroup = group
+        updatedGroup.credentialIssuers.removeAll { $0 == userId }
+        
+        let db = group.isPrivate ? privateDB : publicDB
+        let recordID = CKRecord.ID(recordName: group.id, zoneID: group.isPrivate ? customZoneID : CKRecordZone.default().zoneID)
+        let record = try await db.record(for: recordID)
+        record["credentialIssuers"] = updatedGroup.credentialIssuers
+        
+        try await db.save(record)
+        
+        // Update local state
+        if let index = groups.firstIndex(where: { $0.id == group.id }) {
+            groups[index].credentialIssuers = updatedGroup.credentialIssuers
+            saveGroupsToLocal()
+        }
+    }
+
     // MARK: - Helpers
     
     private func mapRecordToGroup(_ record: CKRecord) -> GroupModel? {
@@ -642,7 +753,8 @@ final class CloudKitGroupSyncManager: ObservableObject, GroupSyncManagerProtocol
             merkleRoot: record["merkleRoot"] as? String,
             merkleTreeDepth: record["merkleTreeDepth"] as? Int ?? 20,
             memberCount: record["memberCount"] as? Int ?? 0,
-            isPrivate: false // Default, overridden by caller
+            isPrivate: false, // Default, overridden by caller
+            credentialIssuers: (record["credentialIssuers"] as? [String]) ?? []
         )
     }
     
@@ -652,7 +764,7 @@ final class CloudKitGroupSyncManager: ObservableObject, GroupSyncManagerProtocol
               let roleStr = record["role"] as? String,
               let statusStr = record["status"] as? String else { return nil }
         
-        return GroupMemberModel(
+        var member = GroupMemberModel(
             id: record.recordID.recordName,
             groupID: groupRef.recordID.recordName,
             userRecordID: userRef.recordID.recordName,
@@ -661,6 +773,15 @@ final class CloudKitGroupSyncManager: ObservableObject, GroupSyncManagerProtocol
             merkleIndex: record["merkleIndex"] as? Int ?? 0,
             joinedAt: record["joinedAt"] as? Date ?? Date()
         )
+        
+        member.sealedRoute = record["sealedRoute"] as? String
+        member.pubKey = record["pubKey"] as? String
+        member.signPubKey = record["signPubKey"] as? String
+        // deviceToken should ideally be protected or only fetched by owner.
+        // For MVP, we map it if present, but access control is handled in getMembersMessagingData
+        member.deviceToken = record["deviceToken"] as? String
+        
+        return member
     }
 }
 

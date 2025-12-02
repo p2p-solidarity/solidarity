@@ -42,6 +42,15 @@ struct GroupDetailView: View {
                     onReject: rejectMember
                 )
                 
+                // MARK: - Credential Issuers
+                CredentialIssuersSection(group: group)
+                
+                // MARK: - Group VC Issuance
+                GroupVCIssuanceSection(group: group)
+                
+                // MARK: - Delivery Settings
+                DeliverySettingsSection(group: group)
+                
                 // MARK: - OIDC Integration
                 OIDCSection(group: group)
             }

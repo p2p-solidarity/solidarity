@@ -357,6 +357,35 @@ final class IdentityCoordinator: ObservableObject {
             }
         }
     }
+    
+    func issueGroupCredential(
+        for card: BusinessCard,
+        group: GroupModel,
+        targetMembers: [GroupMemberModel]? = nil,
+        expiration: Date? = nil,
+        completion: (([GroupCredentialResult]) -> Void)? = nil
+    ) {
+        Task {
+            do {
+                let results = try await GroupCredentialService.shared.issueGroupCredential(
+                    for: card,
+                    group: group,
+                    targetMembers: targetMembers,
+                    expiration: expiration
+                )
+                
+                DispatchQueue.main.async {
+                    completion?(results)
+                }
+            } catch {
+                // Handle error (maybe log it or callback with empty/failure)
+                print("Failed to issue group credential: \(error)")
+                DispatchQueue.main.async {
+                    completion?([]) // Or change signature to return Result
+                }
+            }
+        }
+    }
 
     // MARK: - Import pipeline
 

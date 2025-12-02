@@ -40,6 +40,7 @@ struct BusinessCardSnapshot: Codable, Equatable {
     let updatedAt: Date
     let profileImageDataURI: String?
     let summary: String?
+    let groupContext: GroupCredentialContext?
 
     init(card: BusinessCard) {
         cardId = card.id
@@ -74,6 +75,7 @@ struct BusinessCardSnapshot: Codable, Equatable {
         } else {
             profileImageDataURI = nil
         }
+        groupContext = card.groupContext
 
         if let title = title, let company = company {
             summary = "\(title) @ \(company)"
@@ -291,6 +293,7 @@ private struct CredentialSubject: Encodable {
     let businessCardId: String
     let updatedAt: String?
     let publicKeyJwk: PublicKeyJWK
+    let groupContext: GroupCredentialContext?
 
     enum CodingKeys: String, CodingKey {
         case id
@@ -310,6 +313,7 @@ private struct CredentialSubject: Encodable {
         case businessCardId
         case updatedAt
         case publicKeyJwk
+        case groupContext
     }
 
     init(holderDid: String, snapshot: BusinessCardSnapshot, publicKey: PublicKeyJWK) {
@@ -364,6 +368,7 @@ private struct CredentialSubject: Encodable {
         businessCardId = snapshot.cardId.uuidString
         updatedAt = ISO8601DateFormatter.fullFormatter.string(from: snapshot.updatedAt)
         publicKeyJwk = publicKey
+        groupContext = snapshot.groupContext
         
         BusinessCardCredentialClaims.logger.debug("CredentialSubject initialized successfully")
     }

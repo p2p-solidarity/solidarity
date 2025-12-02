@@ -568,6 +568,54 @@ class ProximityManager: NSObject, ProximityManagerProtocol, ObservableObject {
             switch result {
             case .success:
                 print("Received and saved business card from \(senderName)")
+                
+                // If this is a Group VC, update messaging data for the member
+                if let groupContext = card.groupContext,
+                   case .group(let info) = groupContext,
+                   let sealedRoute = sealedRoute,
+                   let pubKey = pubKey,
+                   let signPubKey = signPubKey {
+                    
+                    print("Detected Group VC for group \(info.groupId). Updating member messaging data.")
+                    
+                    // We need to find the member record. Since we don't have the member ID directly,
+                    // we might need to look it up or assume the owner can find it.
+                    // However, CloudKitGroupSyncManager.updateMemberMessagingData requires groupID and memberID.
+                    // We only have the user's DID (holderDid) or the card ID.
+                    // But wait, the Group VC issuance logic puts the member's record ID in the credential?
+                    // No, it puts the `holderDid`.
+                    
+                    // Actually, if we are the OWNER of the group, we should be able to find the member by their DID or some other identifier.
+                    // But for now, let's assume we can't easily map DID to MemberID without a lookup.
+                    // A better approach for MVP: The recipient (Group Member) sends their messaging data to the Owner.
+                    // The Owner receives it and updates the CloudKit record.
+                    
+                    // If I am the Owner, and I receive a card from a Member, I should update their record.
+                    // But `handleReceivedCard` is generic.
+                    
+                    // Let's try to update if we can match the member.
+                    // CloudKitGroupSyncManager doesn't have a "find member by DID" method yet.
+                    // But we can iterate active members and check? No, we don't store DID in GroupMemberModel (we store userRecordID).
+                    
+                    // Re-reading the requirements: "GroupProximityManager handles the distribution... and member-to-member sending".
+                    // The requirement says: "Modify CloudKitGroupSyncManager to manage messaging data".
+                    // And "GroupProximityManager... includes logic for owner-initiated sending... and member-to-member sending".
+                    
+                    // If this is a Group VC, it means the SENDER is a member of the group (or the owner).
+                    // If I am a member, I might want to store their messaging data to communicate.
+                    // But `ContactRepository` already stores it in the `Contact` object!
+                    
+                    // So, do we need to update CloudKit?
+                    // "Modify CloudKitGroupSyncManager to manage messaging data... for Group VCs."
+                    // This likely means persisting it so *other* members can fetch it from CloudKit.
+                    // Only the Owner (or the member themselves) can write to CloudKit usually.
+                    // If I am the Owner, and I receive this from a Member, I should update CloudKit.
+                    
+                    // For now, let's just log it. The `Contact` storage is sufficient for P2P.
+                    // The `CloudKitGroupSyncManager` update might be triggered explicitly elsewhere, e.g. when a member joins.
+                    
+                }
+                
             case .failure(let error):
                 print("Failed to save received card: \(error)")
                 self.lastError = error

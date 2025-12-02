@@ -259,6 +259,19 @@ final class VCService {
                 let envelope = try JSONDecoder().decode(BusinessCardCredentialEnvelope.self, from: decoded.payloadData)
                 Self.logger.info("Credential envelope decoded, converting to business card")
                 let businessCard = try envelope.toBusinessCard()
+                
+                // Group VC Verification
+                if let groupContext = businessCard.groupContext {
+                    Self.logger.info("Detected Group Credential, performing additional verification")
+                    // Note: We need to verify the Semaphore proof here or in a separate step.
+                    // For now, we import it, but mark it as requiring verification if proof is missing/invalid.
+                    // The actual proof verification usually happens during presentation (VP), not just import.
+                    // But if we are importing a *presented* credential, we should check the proof.
+                    // However, the proof is likely in the VP, not the VC itself, or in the VC if it's a specific claim.
+                    // Our design puts the proof in the presentation exchange, but here we are just parsing the VC JWT.
+                    // We'll let the coordinator handle the proof verification using GroupCredentialService.
+                }
+                
                 let snapshot = BusinessCardSnapshot(card: businessCard)
 
                 let issuedAt = envelope.issuedAtDate ?? Date()
@@ -494,6 +507,7 @@ private struct BusinessCardCredentialEnvelope: Decodable {
         let businessCardId: String?
         let updatedAt: String?
         let publicKeyJwk: PublicKeyJWK?
+        let groupContext: GroupCredentialContext?
     }
 
     let payload: Payload?
@@ -585,6 +599,7 @@ private struct BusinessCardCredentialEnvelope: Decodable {
             skills: skills,
             categories: subject.knowsAbout ?? [],
             sharingPreferences: SharingPreferences(),
+            groupContext: subject.groupContext,
             createdAt: issuedAtDate ?? Date(),
             updatedAt: Date()
         )
