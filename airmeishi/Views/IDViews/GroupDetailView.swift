@@ -192,41 +192,44 @@ struct InviteSection: View {
     @State private var showQRCode = false
     
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Text("Invite Members")
-                .font(.headline)
-                .foregroundColor(.secondary)
+        VStack(alignment: .leading, spacing: 16) {
+            HStack {
+                Text("Invite Members")
+                    .font(.headline)
+                    .foregroundColor(.secondary)
+                Spacer()
+            }
             
-            VStack(spacing: 16) {
-                if isLoading {
+            if isLoading {
+                HStack {
+                    Spacer()
                     ProgressView()
-                        .frame(height: 100)
-                } else if let link = inviteLink {
-                    // Link Display & Copy
-                    VStack(alignment: .leading, spacing: 8) {
-                        Text("Invite Link")
-                            .font(.caption)
-                            .foregroundColor(.secondary)
+                    Spacer()
+                }
+                .padding()
+            } else if let link = inviteLink {
+                VStack(spacing: 16) {
+                    // Link Display
+                    HStack {
+                        Text(link)
+                            .font(.system(.subheadline, design: .monospaced))
+                            .lineLimit(1)
+                            .truncationMode(.middle)
+                            .foregroundColor(.primary)
+                            .padding(8)
+                            .background(Color(.systemGray6))
+                            .cornerRadius(8)
                         
-                        HStack {
-                            Text(link)
-                                .font(.system(.subheadline, design: .monospaced))
-                                .lineLimit(1)
-                                .truncationMode(.middle)
-                                .foregroundColor(.primary)
-                            
-                            Spacer()
-                            
-                            Button(action: {
-                                UIPasteboard.general.string = link
-                            }) {
-                                Image(systemName: "doc.on.doc")
-                                    .foregroundColor(.blue)
-                            }
+                        Button(action: {
+                            UIPasteboard.general.string = link
+                        }) {
+                            Image(systemName: "doc.on.doc")
+                                .font(.headline)
+                                .foregroundColor(.blue)
+                                .padding(8)
+                                .background(Color(.systemBlue).opacity(0.1))
+                                .clipShape(Circle())
                         }
-                        .padding()
-                        .background(Color(.systemGray6))
-                        .cornerRadius(8)
                     }
                     
                     // QR Code Toggle
@@ -235,7 +238,12 @@ struct InviteSection: View {
                             showQRCode.toggle()
                         }
                     }) {
-                        Label(showQRCode ? "Hide QR Code" : "Show QR Code", systemImage: "qrcode")
+                        HStack {
+                            Image(systemName: "qrcode")
+                            Text(showQRCode ? "Hide QR Code" : "Show QR Code")
+                        }
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 8)
                     }
                     .buttonStyle(.bordered)
                     
@@ -244,47 +252,48 @@ struct InviteSection: View {
                             .resizable()
                             .interpolation(.none)
                             .scaledToFit()
-                            .frame(width: 200, height: 200)
+                            .frame(width: 180, height: 180)
                             .padding()
                             .background(Color.white)
                             .cornerRadius(12)
-                            .shadow(radius: 2)
+                            .shadow(radius: 4)
                             .transition(.scale.combined(with: .opacity))
                     }
-                } else {
-                    Button("Generate Invite Link") {
-                        generateInvite()
-                    }
-                    .buttonStyle(.borderedProminent)
-                    .frame(maxWidth: .infinity)
                 }
-                
-                if let error = errorMessage {
-                    Text(error)
-                        .font(.caption)
-                        .foregroundColor(.red)
+            } else {
+                Button(action: {
+                    loadInviteLink()
+                }) {
+                    Text("Generate Invite Link")
+                        .frame(maxWidth: .infinity)
                 }
+                .buttonStyle(.borderedProminent)
             }
-            .padding()
-            .frame(maxWidth: .infinity)
-            .background(Color(.secondarySystemGroupedBackground))
-            .cornerRadius(12)
+            
+            if let error = errorMessage {
+                Text(error)
+                    .font(.caption)
+                    .foregroundColor(.red)
+            }
         }
+        .padding()
+        .background(Color(.secondarySystemGroupedBackground))
+        .cornerRadius(12)
         .onAppear {
-            // Auto-generate if not present? Maybe wait for user action to avoid spamming tokens.
-            // But user asked for "list/copy interface", implying readiness.
-            // Let's auto-generate if it's cheap, but creating a token involves a server call (CloudKit save).
-            // Better to keep it manual or load existing if possible.
-            // For now, manual trigger is safer but I'll make the UI ready.
+            if inviteLink == nil {
+                loadInviteLink()
+            }
         }
     }
     
-    private func generateInvite() {
+    private func loadInviteLink() {
+        guard !isLoading else { return }
         isLoading = true
         errorMessage = nil
         
         Task {
             do {
+                // This will now reuse existing token if available
                 let link = try await CloudKitGroupSyncManager.shared.createInviteLink(for: group)
                 
                 // Generate QR Image
@@ -305,8 +314,6 @@ struct InviteSection: View {
                     self.inviteLink = link
                     self.qrImage = image
                     self.isLoading = false
-                    // Auto-show QR if generated
-                    // self.showQRCode = true 
                 }
             } catch {
                 await MainActor.run {

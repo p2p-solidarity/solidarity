@@ -191,6 +191,22 @@ final class CloudKitGroupSyncManager: ObservableObject, GroupSyncManagerProtocol
             print("[CloudKitManager] Shared fetch failed: \(error)")
         }
         
+        // After fetching all groups, sync merkle roots to SemaphoreManager
+        for group in allGroups {
+            if let groupUUID = UUID(uuidString: group.id) {
+                let _ = SemaphoreGroupManager.shared.ensureGroupFromInvite(
+                    id: groupUUID,
+                    name: group.name,
+                    root: group.merkleRoot
+                )
+                // If we have a merkle root from CloudKit, update it
+                if let root = group.merkleRoot {
+                    SemaphoreGroupManager.shared.selectGroup(groupUUID)
+                    SemaphoreGroupManager.shared.updateRoot(root)
+                }
+            }
+        }
+        
         self.groups = allGroups
         saveGroupsToLocal()
         print("[CloudKitManager] Successfully updated groups. Total: \(self.groups.count)")
@@ -388,6 +404,8 @@ final class CloudKitGroupSyncManager: ObservableObject, GroupSyncManagerProtocol
         // 3. Join the group
         print("[CloudKitManager] Joining group...")
         let groupRecord = try await publicDB.record(for: groupRecordID)
+        
+        // 3a. Create membership record
         let membershipRecord = CKRecord(recordType: CloudKitRecordType.groupMembership)
         membershipRecord["group"] = CKRecord.Reference(recordID: groupRecord.recordID, action: .deleteSelf)
         membershipRecord["userRecordID"] = CKRecord.Reference(recordID: userID, action: .none)
@@ -395,13 +413,18 @@ final class CloudKitGroupSyncManager: ObservableObject, GroupSyncManagerProtocol
         membershipRecord["status"] = "active"
         membershipRecord["joinedAt"] = Date()
         
-        // Use modifyRecords to save
-        let _ = try await publicDB.modifyRecords(saving: [membershipRecord], deleting: [])
-        print("[CloudKitManager] Successfully joined group in CloudKit")
+        // 3b. Update group's memberCount atomically
+        let currentMemberCount = (groupRecord["memberCount"] as? Int) ?? 1
+        groupRecord["memberCount"] = currentMemberCount + 1
+        
+        // Use modifyRecords to save both atomically
+        let _ = try await publicDB.modifyRecords(saving: [groupRecord, membershipRecord], deleting: [])
+        print("[CloudKitManager] Successfully joined group in CloudKit, memberCount updated to \(currentMemberCount + 1)")
         
         // 4. Update local state
         var groupModel = mapRecordToGroup(groupRecord)!
         groupModel.isPrivate = false
+        groupModel.memberCount = currentMemberCount + 1
         self.groups.append(groupModel)
         saveGroupsToLocal()
         
@@ -412,18 +435,44 @@ final class CloudKitGroupSyncManager: ObservableObject, GroupSyncManagerProtocol
             print("[CloudKitManager] Syncing with Semaphore Manager for group: \(groupModel.name)")
             print("[CloudKitManager] Identity Commitment: \(identity.commitment)")
             
-            // Ensure group exists in ZK manager
-            SemaphoreGroupManager.shared.ensureGroupFromInvite(
+            // Ensure group exists in ZK manager and is selected
+            let _ = SemaphoreGroupManager.shared.ensureGroupFromInvite(
                 id: groupUUID,
                 name: groupModel.name,
                 root: groupModel.merkleRoot
             )
             
+            // Make sure the group is selected before adding member
+            SemaphoreGroupManager.shared.selectGroup(groupUUID)
+            
             // Add self as member (leaf)
             SemaphoreGroupManager.shared.addMember(identity.commitment)
             print("[CloudKitManager] Added member to Semaphore Group")
+            
+            // 6. Sync updated merkle root back to CloudKit
+            // Wait a bit for the root computation to complete
+            try? await Task.sleep(nanoseconds: 100_000_000) // 0.1 seconds
+            
+            if let updatedRoot = SemaphoreGroupManager.shared.merkleRoot {
+                print("[CloudKitManager] Updating merkle root in CloudKit: \(updatedRoot)")
+                let updatedGroupRecord = try await publicDB.record(for: groupRecordID)
+                updatedGroupRecord["merkleRoot"] = updatedRoot
+                try await publicDB.save(updatedGroupRecord)
+                print("[CloudKitManager] Merkle root synced to CloudKit")
+                
+                // Update local model
+                if let index = self.groups.firstIndex(where: { $0.id == groupModel.id }) {
+                    self.groups[index].merkleRoot = updatedRoot
+                    saveGroupsToLocal()
+                }
+            }
         } else {
             print("[CloudKitManager] WARNING: Could not sync with Semaphore Manager. Identity or GroupUUID missing.")
+        }
+        
+        // 7. Trigger a refresh to fetch latest changes (for other users)
+        Task {
+            try? await self.fetchLatestChanges()
         }
         
         return groupModel
@@ -503,15 +552,32 @@ final class CloudKitGroupSyncManager: ObservableObject, GroupSyncManagerProtocol
     func createInviteLink(for group: GroupModel) async throws -> String {
         guard !group.isPrivate else { throw NSError(domain: "GroupError", code: 400, userInfo: [NSLocalizedDescriptionKey: "Use Native Sharing for Private Groups"]) }
         
-        // ... (Existing logic) ...
         guard let userID = currentUserRecordID else { throw CKError(.notAuthenticated) }
+        
+        // 1. Check for existing active token
+        let predicate = NSPredicate(format: "targetGroup == %@ AND createdBy == %@ AND isActive == 1", 
+                                   CKRecord.Reference(recordID: CKRecord.ID(recordName: group.id), action: .none),
+                                   CKRecord.Reference(recordID: userID, action: .none))
+        let query = CKQuery(recordType: CloudKitRecordType.groupInvite, predicate: predicate)
+        query.sortDescriptors = [NSSortDescriptor(key: "creationDate", ascending: false)]
+        
+        let (results, _) = try await publicDB.records(matching: query)
+        if let firstMatch = results.first, case .success(let record) = firstMatch.1, let token = record["token"] as? String {
+            print("[CloudKitManager] Found existing active invite token")
+            return "airmeishi://group/join?token=\(token)"
+        }
+        
+        // 2. Create new token if none exists
         let token = UUID().uuidString
         let inviteRecord = CKRecord(recordType: CloudKitRecordType.groupInvite)
         inviteRecord["token"] = token
         inviteRecord["targetGroup"] = CKRecord.Reference(recordID: CKRecord.ID(recordName: group.id), action: .none)
         inviteRecord["isActive"] = 1
         inviteRecord["createdBy"] = CKRecord.Reference(recordID: userID, action: .none)
+        // CloudKit automatically adds creationDate
+        
         try await publicDB.save(inviteRecord)
+        print("[CloudKitManager] Created new invite token")
         return "airmeishi://group/join?token=\(token)"
     }
     
@@ -538,16 +604,26 @@ final class CloudKitGroupSyncManager: ObservableObject, GroupSyncManagerProtocol
             // For MVP, private groups might not support full member listing via this API yet
             return []
         } else {
-            let predicate = NSPredicate(format: "group == %@", CKRecord.Reference(recordID: CKRecord.ID(recordName: group.id), action: .none))
+            let predicate = NSPredicate(format: "group == %@ AND status == %@",
+                                       CKRecord.Reference(recordID: CKRecord.ID(recordName: group.id), action: .none),
+                                       "active")
             let query = CKQuery(recordType: CloudKitRecordType.groupMembership, predicate: predicate)
             // Sort by joinedAt
             query.sortDescriptors = [NSSortDescriptor(key: "joinedAt", ascending: true)]
             
             let (results, _) = try await publicDB.records(matching: query)
-            return results.compactMap { result in
+            let members = results.compactMap { result -> GroupMemberModel? in
                 guard case .success(let record) = result.1 else { return nil }
                 return mapRecordToMember(record)
             }
+            
+            // Update memberCount if it's different from actual count
+            if members.count != group.memberCount, let groupRecord = try? await publicDB.record(for: CKRecord.ID(recordName: group.id)) {
+                groupRecord["memberCount"] = members.count
+                try? await publicDB.save(groupRecord)
+            }
+            
+            return members
         }
     }
     
