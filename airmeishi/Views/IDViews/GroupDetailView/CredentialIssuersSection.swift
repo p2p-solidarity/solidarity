@@ -56,8 +56,10 @@ struct CredentialIssuersSection: View {
                 )
             }
             
-            if members.filter({ group.credentialIssuers.contains($0.userRecordID) }).isEmpty && !isOwner {
-                Text("No additional issuers")
+            if members.filter({ group.credentialIssuers.contains($0.userRecordID) }).isEmpty {
+                Text(isOwner
+                     ? "No additional issuers configured yet."
+                     : "Only the group owner can assign additional credential issuers.")
                     .font(.caption)
                     .foregroundColor(.secondary)
             }

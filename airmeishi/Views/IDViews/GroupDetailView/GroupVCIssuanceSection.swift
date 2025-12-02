@@ -14,6 +14,8 @@ struct GroupVCIssuanceSection: View {
     @State private var selectedCard: BusinessCard?
     @State private var showIssuanceSheet = false
     
+    @State private var lastIssuanceSummary: String?
+    
     var canIssue: Bool {
         guard let currentUser = groupManager.currentUserRecordID else { return false }
         return group.canIssueCredentials(userRecordID: currentUser.recordName)
@@ -32,10 +34,16 @@ struct GroupVCIssuanceSection: View {
                         .padding(.vertical, 8)
                 }
                 .buttonStyle(.borderedProminent)
+                
+                if let summary = lastIssuanceSummary {
+                    Text(summary)
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                }
             } else {
                 HStack {
                     Image(systemName: "lock.fill")
-                        .foregroundColor(.secondary)
+                    .foregroundColor(.secondary)
                     Text("Only credential issuers can issue Group VCs")
                         .font(.caption)
                         .foregroundColor(.secondary)
@@ -47,6 +55,11 @@ struct GroupVCIssuanceSection: View {
         .cornerRadius(12)
         .sheet(isPresented: $showIssuanceSheet) {
             GroupVCIssuanceView(group: group)
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .groupVCIssuanceDidComplete)) { notification in
+            if let summary = notification.userInfo?["summary"] as? String {
+                lastIssuanceSummary = summary
+            }
         }
     }
 }

@@ -179,10 +179,13 @@ struct GroupManagementView: View {
                             } else {
                                 VStack(spacing: 1) {
                                     ForEach(groupManager.groups) { group in
-                                        GroupRow(group: group) {
-                                            selectedGroupToDelete = group
-                                            showDeleteConfirm = true
+                                        NavigationLink(destination: GroupDetailView(group: group)) {
+                                            GroupRow(group: group) {
+                                                selectedGroupToDelete = group
+                                                showDeleteConfirm = true
+                                            }
                                         }
+                                        .buttonStyle(.plain)
                                     }
                                 }
                                 .padding(4)

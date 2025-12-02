@@ -162,6 +162,11 @@ struct GroupVCIssuanceView: View {
                 await MainActor.run {
                     issuanceResults = results
                     isIssuing = false
+                    
+                    // Notify listeners
+                    let successCount = results.filter { if case .success = $0 { return true } else { return false } }.count
+                    let summary = "Last issuance: \(successCount) successful, \(results.count - successCount) failed at \(Date().formatted(date: .abbreviated, time: .shortened))"
+                    NotificationCenter.default.post(name: .groupVCIssuanceDidComplete, object: nil, userInfo: ["summary": summary])
                 }
             } catch {
                 await MainActor.run {
@@ -172,4 +177,8 @@ struct GroupVCIssuanceView: View {
             }
         }
     }
+}
+
+extension Notification.Name {
+    static let groupVCIssuanceDidComplete = Notification.Name("groupVCIssuanceDidComplete")
 }

@@ -23,6 +23,17 @@ struct GroupDetailView: View {
     var body: some View {
         ScrollView {
             LazyVStack(spacing: 20) {
+                // MARK: - Error Banner
+                if let error = errorMessage {
+                    Text(error)
+                        .font(.caption)
+                        .foregroundColor(.red)
+                        .padding(8)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .background(Color.red.opacity(0.1))
+                        .cornerRadius(8)
+                }
+
                 // MARK: - Group Info
                 GroupInfoSection(group: group)
                 
@@ -42,14 +53,19 @@ struct GroupDetailView: View {
                     onReject: rejectMember
                 )
                 
-                // MARK: - Credential Issuers
-                CredentialIssuersSection(group: group)
-                
-                // MARK: - Group VC Issuance
-                GroupVCIssuanceSection(group: group)
-                
-                // MARK: - Delivery Settings
-                DeliverySettingsSection(group: group)
+                // MARK: - Admin Tools
+                if isOwner || cloudKitManager.canIssueCredentials(for: group) {
+                    VStack(alignment: .leading, spacing: 16) {
+                        Text("Admin Tools")
+                            .font(.headline)
+                            .foregroundColor(.secondary)
+                            .padding(.leading, 4)
+                        
+                        CredentialIssuersSection(group: group)
+                        GroupVCIssuanceSection(group: group)
+                        DeliverySettingsSection(group: group)
+                    }
+                }
                 
                 // MARK: - OIDC Integration
                 OIDCSection(group: group)
@@ -130,6 +146,18 @@ struct GroupInfoSection: View {
                 .font(.headline)
                 .foregroundColor(.secondary)
             
+            if let current = CloudKitGroupSyncManager.shared.currentUserRecordID?.recordName {
+                if group.ownerRecordID == current {
+                    Label("You are the owner", systemImage: "crown.fill")
+                        .font(.caption)
+                        .foregroundColor(.yellow)
+                } else if group.credentialIssuers.contains(current) {
+                    Label("You can issue Group VCs", systemImage: "person.badge.key.fill")
+                        .font(.caption)
+                        .foregroundColor(.blue)
+                }
+            }
+            
             VStack(alignment: .leading, spacing: 8) {
                 LabeledContent("Name", value: group.name)
                 if !group.description.isEmpty {
@@ -184,6 +212,18 @@ struct MerkleTreeSection: View {
                         .frame(maxWidth: .infinity)
                 }
                 .buttonStyle(.bordered)
+                
+                if let commitment = SemaphoreIdentityManager.shared.getIdentity()?.commitment {
+                    if let index = semaphoreManager.indexOf(commitment) {
+                        Text("You are a member of this group (leaf index: \(index)).")
+                            .font(.caption)
+                            .foregroundColor(.green)
+                    } else {
+                        Text("You are currently not a member of this group's Merkle tree.")
+                            .font(.caption)
+                            .foregroundColor(.orange)
+                    }
+                }
             }
             .padding()
             .background(Color(.secondarySystemGroupedBackground))
@@ -357,6 +397,13 @@ struct MembersSection: View {
                     .font(.headline)
                     .foregroundColor(.secondary)
                 Spacer()
+                
+                if members.count != 0 && members.count != CloudKitGroupSyncManager.shared.groups.first(where: { $0.id == members.first?.groupID ?? "" })?.memberCount ?? 0 {
+                     Text("Syncing...")
+                        .font(.caption)
+                        .foregroundColor(.orange)
+                }
+                
                 if isLoading {
                     ProgressView()
                 }
@@ -492,6 +539,12 @@ struct MemberRow: View {
             
             Spacer()
             
+            if member.hasMessagingData {
+                Image(systemName: "bubble.left.and.bubble.right.fill")
+                    .foregroundColor(.pink)
+                    .help("Can receive Sakura / Group VC")
+            }
+            
             if isOwner && member.role != .owner && member.status != .kicked {
                 Button(role: .destructive, action: onKick) {
                     Text("Kick")
@@ -510,6 +563,7 @@ struct OIDCSection: View {
     let group: GroupModel
     @ObservedObject private var cloudKitManager = CloudKitGroupSyncManager.shared
     @ObservedObject private var semaphoreManager = SemaphoreIdentityManager.shared
+    @ObservedObject private var semaphoreGroupManager = SemaphoreGroupManager.shared
     
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -550,6 +604,17 @@ struct OIDCSection: View {
                     Text("Identity not initialized")
                         .font(.caption)
                         .foregroundColor(.orange)
+                }
+                
+                if let identity = semaphoreManager.getIdentity(),
+                   semaphoreGroupManager.indexOf(identity.commitment) != nil {
+                    Button(action: {
+                        // TODO: Generate Proof
+                    }) {
+                        Label("Generate Group Proof", systemImage: "lock.doc.fill")
+                            .frame(maxWidth: .infinity)
+                    }
+                    .buttonStyle(.bordered)
                 }
             }
             .padding()

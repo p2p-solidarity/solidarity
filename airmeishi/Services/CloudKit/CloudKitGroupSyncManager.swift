@@ -559,10 +559,18 @@ final class CloudKitGroupSyncManager: ObservableObject, GroupSyncManagerProtocol
                                    CKRecord.Reference(recordID: CKRecord.ID(recordName: group.id), action: .none),
                                    CKRecord.Reference(recordID: userID, action: .none))
         let query = CKQuery(recordType: CloudKitRecordType.groupInvite, predicate: predicate)
-        query.sortDescriptors = [NSSortDescriptor(key: "creationDate", ascending: false)]
+        // Note: Removed sortDescriptor to avoid CloudKit schema configuration issues
+        // We'll sort in memory instead
         
         let (results, _) = try await publicDB.records(matching: query)
-        if let firstMatch = results.first, case .success(let record) = firstMatch.1, let token = record["token"] as? String {
+        // Sort by creationDate in memory (most recent first)
+        let sortedResults = results.compactMap { result -> (CKRecord, Date)? in
+            guard case .success(let record) = result.1 else { return nil }
+            let creationDate = record.creationDate ?? Date.distantPast
+            return (record, creationDate)
+        }.sorted { $0.1 > $1.1 }
+        
+        if let firstMatch = sortedResults.first, let token = firstMatch.0["token"] as? String {
             print("[CloudKitManager] Found existing active invite token")
             return "airmeishi://group/join?token=\(token)"
         }
