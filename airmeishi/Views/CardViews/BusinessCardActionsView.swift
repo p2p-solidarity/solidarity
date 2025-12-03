@@ -165,6 +165,15 @@ struct WalletCardView: View {
     }
 
     private func category(for card: BusinessCard) -> String {
+        // Prioritize Group Name
+        if let tag = card.categories.first(where: { $0.hasPrefix("group:") }) {
+            let uuidString = String(tag.dropFirst("group:".count))
+            if let id = UUID(uuidString: uuidString),
+               let group = CloudKitGroupSyncManager.shared.getAllGroups().first(where: { $0.id == id.uuidString }) {
+                return group.name
+            }
+        }
+        
         if let company = card.company, !company.isEmpty { return company }
         if let title = card.title, !title.isEmpty { return title }
         return "Card"

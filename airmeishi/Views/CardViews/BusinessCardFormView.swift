@@ -30,6 +30,10 @@ struct BusinessCardFormView: View {
     @State private var emailError: String?
     @State private var phoneError: String?
     
+    // Group Selection
+    @State private var selectedGroupId: String?
+    @State private var availableGroups: [GroupModel] = []
+    
     let onSave: (BusinessCard) -> Void
     
     init(businessCard: BusinessCard? = nil, forceCreate: Bool = false, onSave: @escaping (BusinessCard) -> Void) {
@@ -51,6 +55,18 @@ struct BusinessCardFormView: View {
         } else {
             self._isEditing = State(initialValue: false)
         }
+        
+        // Initialize selectedGroupId from card categories
+        if let tag = initialCard.categories.first(where: { $0.hasPrefix("group:") }) {
+            let uuidString = String(tag.dropFirst("group:".count))
+            self._selectedGroupId = State(initialValue: uuidString)
+        } else if forceCreate, let currentGroupId = SemaphoreGroupManager.shared.selectedGroupId?.uuidString {
+            // Pre-select group if creating from a group context
+            self._selectedGroupId = State(initialValue: currentGroupId)
+        } else {
+            self._selectedGroupId = State(initialValue: nil)
+        }
+        
         self.onSave = onSave
     }
     
@@ -67,7 +83,7 @@ struct BusinessCardFormView: View {
                     .ignoresSafeArea()
 
                 Form {
-                    groupBannerSection
+                    groupSection
                     basicInfoSection
                     contactInfoSection
                     animalSection
@@ -152,6 +168,9 @@ struct BusinessCardFormView: View {
                 }
             }
             .onAppear {
+                // Load available groups
+                availableGroups = CloudKitGroupSyncManager.shared.getAllGroups()
+                
                 // Set loading state to false immediately to prevent gray screen
                 DispatchQueue.main.async {
                     isInitializing = false
@@ -295,12 +314,10 @@ struct BusinessCardFormView: View {
     private func saveBusinessCard() {
         isLoading = true
         
-        // Ensure the card has an issuing group tag. Only set on create or if missing.
-        if businessCard.categories.first(where: { $0.hasPrefix("group:") }) == nil,
-           let gid = SemaphoreGroupManager.shared.selectedGroupId {
-            let tag = "group:\(gid.uuidString)"
-            businessCard.categories.removeAll { $0.hasPrefix("group:") }
-            businessCard.categories.append(tag)
+        // Update group tag based on selection
+        businessCard.categories.removeAll { $0.hasPrefix("group:") }
+        if let gid = selectedGroupId {
+            businessCard.categories.append("group:\(gid)")
         }
 
         let result = isEditing ? 
@@ -420,33 +437,105 @@ struct BusinessCardFormView: View {
         return nil
     }
 
-    // Banner section shown only when the card has an issuing group
-    private var groupBannerSection: some View {
-        Group {
-            if let g = groupForCurrentCard() {
-                Section {
-                    HStack(spacing: 12) {
-                        ZStack {
-                            Circle()
-                                .fill(LinearGradient(colors: [.purple, .blue], startPoint: .topLeading, endPoint: .bottomTrailing))
-                                .frame(width: 28, height: 28)
-                            Image(systemName: "person.3.fill")
-                                .font(.system(size: 14, weight: .semibold))
-                                .foregroundColor(.white)
-                        }
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text(g.name)
-                                .font(.headline)
-                            Text("Issuing Group")
-                                .font(.caption)
-                                .foregroundColor(.secondary)
-                        }
-                        Spacer()
+    // Group Selection Section
+    private var groupSection: some View {
+        Section {
+            if let selectedId = selectedGroupId, let group = availableGroups.first(where: { $0.id == selectedId }) {
+                HStack(spacing: 12) {
+                    ZStack {
+                        Circle()
+                            .fill(LinearGradient(colors: [.purple, .blue], startPoint: .topLeading, endPoint: .bottomTrailing))
+                            .frame(width: 32, height: 32)
+                        Image(systemName: "person.3.fill")
+                            .font(.system(size: 14, weight: .semibold))
+                            .foregroundColor(.white)
                     }
-                    .padding(.vertical, 4)
+                    
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(group.name)
+                            .font(.headline)
+                            .foregroundColor(.primary)
+                        Text("Issuing Group")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                    }
+                    
+                    Spacer()
+                    
+                    Button(action: {
+                        selectedGroupId = nil
+                    }) {
+                        Image(systemName: "xmark.circle.fill")
+                            .foregroundColor(.gray)
+                            .font(.system(size: 22))
+                    }
+                    .buttonStyle(PlainButtonStyle())
+                }
+                .padding(.vertical, 4)
+                
+                NavigationLink("Change Group") {
+                    GroupSelectionView(groups: availableGroups, selectedGroupId: $selectedGroupId)
+                }
+            } else {
+                HStack {
+                    Text("Not linked to any group")
+                        .foregroundColor(.secondary)
+                    Spacer()
+                    NavigationLink("Link to Group") {
+                        GroupSelectionView(groups: availableGroups, selectedGroupId: $selectedGroupId)
+                    }
+                }
+            }
+        } header: {
+            Text("Group Affiliation")
+        }
+    }
+}
+
+struct GroupSelectionView: View {
+    let groups: [GroupModel]
+    @Binding var selectedGroupId: String?
+    @Environment(\.dismiss) private var dismiss
+    
+    var body: some View {
+        List {
+            Section {
+                Button(action: {
+                    selectedGroupId = nil
+                    dismiss()
+                }) {
+                    HStack {
+                        Text("None")
+                            .foregroundColor(.primary)
+                        Spacer()
+                        if selectedGroupId == nil {
+                            Image(systemName: "checkmark")
+                                .foregroundColor(.blue)
+                        }
+                    }
+                }
+            }
+            
+            Section("Available Groups") {
+                ForEach(groups) { group in
+                    Button(action: {
+                        selectedGroupId = group.id
+                        dismiss()
+                    }) {
+                        HStack {
+                            Text(group.name)
+                                .foregroundColor(.primary)
+                            Spacer()
+                            if selectedGroupId == group.id {
+                                Image(systemName: "checkmark")
+                                .foregroundColor(.blue)
+                            }
+                        }
+                    }
                 }
             }
         }
+        .navigationTitle("Select Group")
     }
 }
 

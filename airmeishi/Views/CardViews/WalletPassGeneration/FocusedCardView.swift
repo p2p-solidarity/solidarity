@@ -149,6 +149,18 @@ struct FocusedCardView: View {
             Spacer(minLength: 0)
         }
         .padding(18)
+        .overlay(alignment: .topTrailing) {
+            if let groupName = linkedGroupName() {
+                Text(groupName)
+                    .font(.caption2.weight(.bold))
+                    .foregroundColor(.white)
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 4)
+                    .background(Color.black.opacity(0.6))
+                    .clipShape(Capsule())
+                    .padding(12)
+            }
+        }
     }
     
     private func label(_ icon: String, _ text: String) -> some View {
@@ -167,6 +179,17 @@ struct FocusedCardView: View {
         let c1 = Color(hue: hue, saturation: 0.7, brightness: 1.0)
         let c2 = Color.white
         return LinearGradient(colors: [c2, c1.opacity(0.3)], startPoint: .topLeading, endPoint: .bottomTrailing)
+    }
+    
+    private func linkedGroupName() -> String? {
+        if let tag = card.categories.first(where: { $0.hasPrefix("group:") }) {
+            let uuidString = String(tag.dropFirst("group:".count))
+            if let id = UUID(uuidString: uuidString),
+               let group = CloudKitGroupSyncManager.shared.getAllGroups().first(where: { $0.id == id.uuidString }) {
+                return group.name
+            }
+        }
+        return nil
     }
 }
 

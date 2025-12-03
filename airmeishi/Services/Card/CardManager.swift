@@ -37,7 +37,7 @@ class CardManager: BusinessCardManagerProtocol, ObservableObject {
     
     /// Create a new business card
     func createCard(_ card: BusinessCard) -> CardResult<BusinessCard> {
-        var cardForStorage = normalizedForStorage(card)
+        let cardForStorage = normalizedForStorage(card)
         // Validate the card
         if let validationError = validateCard(cardForStorage) {
             return .failure(validationError)

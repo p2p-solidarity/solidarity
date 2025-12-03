@@ -48,7 +48,7 @@ struct GroupVCIssuanceView: View {
                 }
                 
                 Section("Group Display") {
-                    if let selectedCard = selectedCard {
+                    if let _ = selectedCard {
                         TextField("Name shown in this group", text: $customName)
                             .textInputAutocapitalization(.words)
                             .disableAutocorrection(true)
