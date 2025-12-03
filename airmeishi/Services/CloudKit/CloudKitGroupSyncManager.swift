@@ -649,7 +649,15 @@ final class CloudKitGroupSyncManager: ObservableObject, GroupSyncManagerProtocol
     // MARK: - Invite System (Public)
     
     func createInviteLink(for group: GroupModel) async throws -> String {
-        guard !group.isPrivate else { throw NSError(domain: "GroupError", code: 400, userInfo: [NSLocalizedDescriptionKey: "Use Native Sharing for Private Groups"]) }
+        if group.isPrivate {
+            // For private groups, we use CloudKit Sharing.
+            // We return the Share URL so it can be used as a link.
+            let (share, _) = try await createShare(for: group)
+            guard let url = share.url else {
+                throw NSError(domain: "GroupError", code: 500, userInfo: [NSLocalizedDescriptionKey: "Share created but no URL available. Try again."])
+            }
+            return url.absoluteString
+        }
         
         guard let userID = currentUserRecordID else { throw CKError(.notAuthenticated) }
         
