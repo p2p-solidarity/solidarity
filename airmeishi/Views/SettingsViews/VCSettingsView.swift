@@ -169,12 +169,6 @@ struct VCSettingsView: View {
                     Label("Create did:ethr VC", systemImage: "link.circle.fill")
                 }
                 
-                Button {
-                    viewModel.createVC(method: .ethr)
-                } label: {
-                    Label("Create did:ethr VC", systemImage: "link.circle.fill")
-                }
-                
                 NavigationLink {
                     OIDCRequestView()
                 } label: {

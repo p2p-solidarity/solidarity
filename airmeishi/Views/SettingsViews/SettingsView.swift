@@ -9,6 +9,7 @@ import SwiftUI
 
 struct SettingsView: View {
     @EnvironmentObject private var theme: ThemeManager
+    @StateObject private var cardManager = CardManager.shared
     @State private var showingAppearanceSettings = false
     @State private var showingBackupSettings = false
     @State private var showingPrivacySettings = false
@@ -27,17 +28,38 @@ struct SettingsView: View {
                 }
                 
                 Section("Privacy & Security") {
-                    NavigationLink {
-                        PrivacySettingsView(sharingPreferences: .constant(SharingPreferences()))
-                    } label: {
-                        Label("Privacy Settings", systemImage: "lock.shield.fill")
-                    }
-                    
-                    NavigationLink {
-                        SelectiveDisclosureSettingsView(sharingPreferences: .constant(SharingPreferences()))
-                            .navigationTitle("ZK Settings")
-                    } label: {
-                        Label("ZK Settings", systemImage: "eye.slash.fill")
+                    if let card = cardManager.businessCards.first {
+                        let cardId = card.id
+                        let sharingBinding = Binding(
+                            get: {
+                                if let currentCard = cardManager.businessCards.first(where: { $0.id == cardId }) {
+                                    return currentCard.sharingPreferences
+                                }
+                                return card.sharingPreferences
+                            },
+                            set: { newPreferences in
+                                if var updatedCard = cardManager.businessCards.first(where: { $0.id == cardId }) {
+                                    updatedCard.sharingPreferences = newPreferences
+                                    _ = cardManager.updateCard(updatedCard)
+                                }
+                            }
+                        )
+                        
+                        NavigationLink {
+                            PrivacySettingsView(sharingPreferences: sharingBinding)
+                        } label: {
+                            Label("Privacy Settings", systemImage: "lock.shield.fill")
+                        }
+                        
+                        NavigationLink {
+                            SelectiveDisclosureSettingsView(sharingPreferences: sharingBinding)
+                                .navigationTitle("Privacy / Selective Disclosure")
+                        } label: {
+                            Label("Selective Disclosure", systemImage: "eye.slash.fill")
+                        }
+                    } else {
+                        Text("Please create a card to configure privacy settings")
+                            .foregroundColor(.secondary)
                     }
                 }
                 

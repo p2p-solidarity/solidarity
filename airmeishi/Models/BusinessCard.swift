@@ -278,6 +278,19 @@ enum BusinessCardField: String, Codable, CaseIterable {
         case .skills: return "Skills"
         }
     }
+    
+    var icon: String {
+        switch self {
+        case .name: return "person.text.rectangle"
+        case .title: return "id.card"
+        case .company: return "building.2"
+        case .email: return "envelope"
+        case .phone: return "phone"
+        case .profileImage: return "person.crop.circle"
+        case .socialNetworks: return "link"
+        case .skills: return "star"
+        }
+    }
 }
 
 /// Sharing levels for privacy control
@@ -291,6 +304,22 @@ enum SharingLevel: String, Codable, CaseIterable {
         case .`public`: return "Public"
         case .professional: return "Professional"
         case .personal: return "Personal"
+        }
+    }
+    
+    var icon: String {
+        switch self {
+        case .`public`: return "globe"
+        case .professional: return "briefcase"
+        case .personal: return "person.2"
+        }
+    }
+    
+    var description: String {
+        switch self {
+        case .`public`: return "Fields visible when you share your public card (e.g. QR in slides or website)."
+        case .professional: return "For work contacts and events. Usually includes email and skills."
+        case .personal: return "For close contacts. Typically includes all fields."
         }
     }
 }
