@@ -35,6 +35,7 @@ class ProximityManager: NSObject, ProximityManagerProtocol, ObservableObject {
     @Published var pendingInvitation: PendingInvitation?
     @Published private(set) var isPresentingInvitation = false
     @Published var pendingGroupInvite: (payload: GroupInvitePayload, from: MCPeerID)?
+    @Published var matchingInfoMessage: String? // User-friendly status message for UI
     private var pendingGroupJoinResponse: (invite: GroupInvitePayload, memberName: String, memberCommitment: String, peerID: MCPeerID)?
     
     // MARK: - Auto-Pilot & Background Properties
@@ -190,6 +191,9 @@ class ProximityManager: NSObject, ProximityManagerProtocol, ObservableObject {
         connectionStatus = .browsing
         
         print("Started browsing for nearby peers")
+        
+        // Clear any previous status message since we are starting fresh
+        matchingInfoMessage = nil
     }
     
     /// Stop browsing
@@ -379,7 +383,10 @@ class ProximityManager: NSObject, ProximityManagerProtocol, ObservableObject {
     /// Connect to a specific peer
     func connectToPeer(_ peer: ProximityPeer) {
         guard let browser = browser else {
-            lastError = .sharingError("Browser not available")
+            // Strategy B: Auto-restart browsing + Soft UI hint
+            print("Browser was nil in connectToPeer. Restarting browsing...")
+            startBrowsing()
+            matchingInfoMessage = "Reconnecting... Please wait a moment, then try connecting again."
             return
         }
         
@@ -396,7 +403,10 @@ class ProximityManager: NSObject, ProximityManagerProtocol, ObservableObject {
     /// Invite a peer to join a group using the Multipeer invitation context (no manual connect first)
     func invitePeerToGroup(_ peer: ProximityPeer, group: SemaphoreGroupManager.ManagedGroup, inviterName: String) {
         guard let browser = browser else {
-            lastError = .sharingError("Browser not available")
+            // Strategy B: Auto-restart browsing + Soft UI hint
+            print("Browser was nil in invitePeerToGroup. Restarting browsing...")
+            startBrowsing()
+            matchingInfoMessage = "Reconnecting... Please wait a moment, then try connecting again."
             return
         }
         let payload = GroupInvitePayload(
