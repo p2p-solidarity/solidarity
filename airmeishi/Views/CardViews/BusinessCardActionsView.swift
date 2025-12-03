@@ -233,6 +233,7 @@ struct BusinessCardEmptyStateView: View {
                         Text("No Business Card")
                             .font(.title.bold())
                             .foregroundColor(.white)
+                            .multilineTextAlignment(.center)
 
                         Text("Create your first business card to start sharing")
                             .font(.body)
@@ -240,6 +241,7 @@ struct BusinessCardEmptyStateView: View {
                             .multilineTextAlignment(.center)
                             .padding(.horizontal, 40)
                     }
+                    .frame(maxWidth: .infinity)
                     
                     Button(action: {
                         let impact = UIImpactFeedbackGenerator(style: .medium)

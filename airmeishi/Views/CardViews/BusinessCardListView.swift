@@ -288,14 +288,9 @@ private extension BusinessCardListView {
     
     @ViewBuilder
     func makeEmptyStateView() -> some View {
-        ScrollView {
-            VStack(spacing: 0) {
-                BusinessCardEmptyStateView(onCreateCard: {
-                    showingCreateCard = true
-                })
-            }
-            .padding(.bottom, 40)
-        }
+        BusinessCardEmptyStateView(onCreateCard: {
+            showingCreateCard = true
+        })
     }
 
     @ViewBuilder
