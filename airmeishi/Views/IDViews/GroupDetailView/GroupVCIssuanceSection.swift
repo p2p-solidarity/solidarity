@@ -25,7 +25,6 @@ struct GroupVCIssuanceSection: View {
         VStack(alignment: .leading, spacing: 12) {
             Text("Issue Group Credential")
                 .font(.headline)
-                .foregroundColor(.secondary)
             
             if canIssue {
                 Button(action: { showIssuanceSheet = true }) {
@@ -34,19 +33,17 @@ struct GroupVCIssuanceSection: View {
                         .padding(.vertical, 8)
                 }
                 .buttonStyle(.borderedProminent)
+                .foregroundColor(.black)
                 
                 if let summary = lastIssuanceSummary {
                     Text(summary)
                         .font(.caption)
-                        .foregroundColor(.secondary)
                 }
             } else {
                 HStack {
                     Image(systemName: "lock.fill")
-                    .foregroundColor(.secondary)
                     Text("Only credential issuers can issue Group VCs")
                         .font(.caption)
-                        .foregroundColor(.secondary)
                 }
             }
         }

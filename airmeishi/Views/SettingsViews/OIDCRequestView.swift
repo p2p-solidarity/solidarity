@@ -78,6 +78,7 @@ struct OIDCRequestView: View {
             }
             .buttonStyle(.borderedProminent)
             .padding(.horizontal)
+            .foregroundColor(.black)
             
             Spacer()
         }

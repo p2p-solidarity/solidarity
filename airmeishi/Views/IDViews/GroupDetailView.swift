@@ -35,7 +35,7 @@ struct GroupDetailView: View {
                 }
 
                 // MARK: - Group Info
-                GroupInfoSection(group: group)
+                GroupInfoSection(group: group, memberCount: members.count)
                 
                 // MARK: - Merkle Tree
                 MerkleTreeSection(group: group, semaphoreManager: semaphoreManager)
@@ -95,6 +95,24 @@ struct GroupDetailView: View {
         // Fetch Members
         do {
             members = try await cloudKitManager.getMembers(for: group)
+            
+            // Sync Merkle tree memberships with CloudKit members
+            if let uuid = UUID(uuidString: group.id) {
+                // Make sure the correct group is selected
+                SemaphoreGroupManager.shared.selectGroup(uuid)
+                
+                // Collect all known commitments from members
+                var commitments = members.compactMap { $0.commitment }
+                
+                // Ensure our own commitment is also included if present
+                if let selfCommitment = SemaphoreIdentityManager.shared.getIdentity()?.commitment,
+                   !commitments.contains(selfCommitment) {
+                    commitments.append(selfCommitment)
+                }
+                
+                // Update Semaphore group's members list
+                SemaphoreGroupManager.shared.setMembers(commitments)
+            }
         } catch {
             print("Error fetching members: \(error)")
             errorMessage = error.localizedDescription
@@ -139,6 +157,7 @@ struct GroupDetailView: View {
 
 struct GroupInfoSection: View {
     let group: GroupModel
+    let memberCount: Int
     
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -168,7 +187,7 @@ struct GroupInfoSection: View {
                     .foregroundColor(.secondary)
                     .textSelection(.enabled)
                 
-                LabeledContent("Members", value: "\(group.memberCount)")
+                LabeledContent("Members", value: "\(memberCount)")
             }
             .padding()
             .background(Color(.secondarySystemGroupedBackground))
@@ -398,11 +417,7 @@ struct MembersSection: View {
                     .foregroundColor(.secondary)
                 Spacer()
                 
-                if members.count != 0 && members.count != CloudKitGroupSyncManager.shared.groups.first(where: { $0.id == members.first?.groupID ?? "" })?.memberCount ?? 0 {
-                     Text("Syncing...")
-                        .font(.caption)
-                        .foregroundColor(.orange)
-                }
+                // Syncing indicator removed as it was based on stale data
                 
                 if isLoading {
                     ProgressView()

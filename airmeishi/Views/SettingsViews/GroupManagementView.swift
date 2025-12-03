@@ -190,34 +190,12 @@ struct GroupManagementView: View {
                         )
                         .padding(.horizontal, 20)
 
-                        // Your Groups List (Cards)
-                        VStack(alignment: .leading, spacing: 16) {
-                            Text("Your Groups")
-                                .font(.title3)
-                                .fontWeight(.bold)
-                                .foregroundColor(.white)
-                                .padding(.horizontal, 20)
-                                .padding(.top, 8)
-
-                            if groupManager.groups.isEmpty {
-                                Text("No groups found. Create one to get started.")
-                                    .foregroundColor(.white.opacity(0.6))
-                                    .padding(.horizontal, 20)
-                            } else {
-                                LazyVStack(spacing: 20) {
-                                    ForEach(groupManager.groups) { group in
-                                        NavigationLink(destination: GroupDetailView(group: group)) {
-                                            GroupManagementCardView(group: group) {
-                                                selectedGroupToDelete = group
-                                                showDeleteConfirm = true
-                                            }
-                                        }
-                                        .buttonStyle(.plain)
-                                    }
-                                }
-                                .padding(.horizontal, 20)
-                            }
-                        }
+                        // Your Groups List (Categorized)
+                        YourGroupsSectionView(
+                            groupManager: groupManager,
+                            selectedGroupToDelete: $selectedGroupToDelete,
+                            showDeleteConfirm: $showDeleteConfirm
+                        )
 
                         // Legal & Privacy
                         VStack(alignment: .leading, spacing: 16) {
@@ -398,7 +376,7 @@ struct InviteLinkView: View {
                             
                             Text("This is a private group. Use the native iCloud sharing menu to add or remove people.")
                                 .font(.caption)
-                                .foregroundColor(.secondary)
+                                .foregroundColor(.black)
                         } else {
                             Button(action: { generateLink(for: group) }) {
                                 if isGenerating {
@@ -413,7 +391,7 @@ struct InviteLinkView: View {
                                 VStack(alignment: .leading) {
                                     Text("Invite Link")
                                         .font(.caption)
-                                        .foregroundColor(.secondary)
+                                        .foregroundColor(.black)
                                     Text(link)
                                         .font(.monospaced(.body)())
                                         .textSelection(.enabled)
