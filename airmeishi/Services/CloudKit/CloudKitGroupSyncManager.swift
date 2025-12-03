@@ -244,13 +244,12 @@ final class CloudKitGroupSyncManager: ObservableObject, GroupSyncManagerProtocol
             }
         }
         
-        // Also keep local-only groups that haven't been pushed to Cloud yet (if any logic supports that)
-        // For now, if it's not in Cloud, it might have been deleted remotely OR it's a new local group.
-        // If we have a way to distinguish "New Local" vs "Deleted Remote", we handle it.
-        // Assuming `isSynced == false` implies it's a new local group or modified local group.
+        // Also keep local-only groups that are not present in CloudKit.
+        // Design choice: local cache is the source of truth for "what the user has created locally".
+        // We keep them until the user explicitly deletes them.
         for localGroup in self.groups {
-            if !localGroup.isSynced && !mergedGroups.contains(where: { $0.id == localGroup.id }) {
-                print("[CloudKitManager] Keeping local-only unsynced group: \(localGroup.name)")
+            if !mergedGroups.contains(where: { $0.id == localGroup.id }) {
+                print("[CloudKitManager] Keeping local-only group: \(localGroup.name)")
                 mergedGroups.append(localGroup)
             }
         }
@@ -373,7 +372,14 @@ final class CloudKitGroupSyncManager: ObservableObject, GroupSyncManagerProtocol
         let db = group.isPrivate ? privateDB : publicDB
         let recordID = CKRecord.ID(recordName: group.id, zoneID: group.isPrivate ? customZoneID : CKRecordZone.default().zoneID)
         try await db.deleteRecord(withID: recordID)
+        
+        // Update in-memory list
         self.groups.removeAll { $0.id == group.id }
+        
+        // Delete from local SwiftData cache
+        LocalCacheManager.shared.deleteGroup(group.id)
+        
+        // Persist remaining groups (optional but keeps local mirror consistent)
         saveGroupsToLocal()
     }
     

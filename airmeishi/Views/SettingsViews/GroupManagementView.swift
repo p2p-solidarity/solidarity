@@ -369,14 +369,14 @@ struct InviteLinkView: View {
                                 if isGenerating {
                                     ProgressView()
                                 } else {
-                                    Text("Manage People (Native)")
+                                    Text("Share via iCloud")
                                 }
                             }
                             .disabled(isGenerating)
                             
-                            Text("This is a private group. Use the native iCloud sharing menu to add or remove people.")
+                            Text("This is a private group. Use iCloud sharing to add or remove people.")
                                 .font(.caption)
-                                .foregroundColor(.black)
+                                .foregroundColor(.secondary)
                         } else {
                             Button(action: { generateLink(for: group) }) {
                                 if isGenerating {
