@@ -22,7 +22,8 @@ final class GroupCredentialService: ObservableObject {
         for card: BusinessCard,
         group: GroupModel,
         targetMembers: [GroupMemberModel]? = nil,
-        expiration: Date? = nil
+        expiration: Date? = nil,
+        nameOverride: String? = nil
     ) async throws -> [GroupCredentialResult] {
         
         // 1. Verify permission (must be owner or authorized issuer)
@@ -63,6 +64,13 @@ final class GroupCredentialService: ObservableObject {
             do {
                 // Create a copy of the card with the group context
                 var groupCard = card
+                
+                // Apply optional name override just for this issued credential
+                if let override = nameOverride?.trimmingCharacters(in: .whitespacesAndNewlines),
+                   !override.isEmpty {
+                    groupCard.name = override
+                }
+                
                 groupCard.groupContext = .group(credentialInfo)
                 
                 // Set expiration if provided

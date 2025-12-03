@@ -21,7 +21,18 @@ struct GroupVCIssuanceView: View {
     @State private var isIssuing = false
     @State private var issuanceResults: [GroupCredentialResult] = []
     @State private var availableMembers: [GroupMemberModel] = []
+    @State private var customName: String = ""
+    @State private var rememberSelection: Bool = true
     @Environment(\.dismiss) private var dismiss
+    
+    private var storageKey: String {
+        "group_issuance_binding_\(group.id)"
+    }
+
+    private struct GroupCardBindingSettings: Codable {
+        let cardId: UUID
+        let customName: String?
+    }
     
     var body: some View {
         NavigationView {
@@ -33,6 +44,19 @@ struct GroupVCIssuanceView: View {
                         ForEach(availableCards, id: \.id) { card in
                             Text(card.name).tag(card as BusinessCard?)
                         }
+                    }
+                }
+                
+                Section("Group Display") {
+                    if let selectedCard = selectedCard {
+                        TextField("Name shown in this group", text: $customName)
+                            .textInputAutocapitalization(.words)
+                            .disableAutocorrection(true)
+
+                        Toggle("Remember this card for this group", isOn: $rememberSelection)
+                    } else {
+                        Text("Select a card first")
+                            .foregroundColor(.secondary)
                     }
                 }
                 
@@ -124,12 +148,25 @@ struct GroupVCIssuanceView: View {
             }
             .task {
                 availableMembers = (try? await groupManager.getMembers(for: group)) ?? []
+                loadSavedBindingIfAvailable()
             }
         }
     }
     
     private var availableCards: [BusinessCard] {
         (try? cardManager.getAllCards().get()) ?? []
+    }
+    
+    private func loadSavedBindingIfAvailable() {
+        guard
+            let data = UserDefaults.standard.data(forKey: storageKey),
+            let saved = try? JSONDecoder().decode(GroupCardBindingSettings.self, from: data)
+        else { return }
+
+        if let card = availableCards.first(where: { $0.id == saved.cardId }) {
+            selectedCard = card
+            customName = saved.customName ?? card.name
+        }
     }
     
     private func issueCredential() {
@@ -140,11 +177,19 @@ struct GroupVCIssuanceView: View {
             do {
                 let targetMembers = selectedMembers.isEmpty ? nil : availableMembers.filter { selectedMembers.contains($0.userRecordID) }
                 
+                let effectiveNameOverride: String?
+                if customName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                    effectiveNameOverride = nil
+                } else {
+                    effectiveNameOverride = customName
+                }
+                
                 let results = try await groupService.issueGroupCredential(
                     for: card,
                     group: group,
                     targetMembers: targetMembers,
-                    expiration: expirationDate
+                    expiration: expirationDate,
+                    nameOverride: effectiveNameOverride
                 )
                 
                 // Send via selected delivery method
@@ -160,6 +205,16 @@ struct GroupVCIssuanceView: View {
                 }
                 
                 await MainActor.run {
+                    if rememberSelection {
+                        let settings = GroupCardBindingSettings(
+                            cardId: card.id,
+                            customName: effectiveNameOverride
+                        )
+                        if let data = try? JSONEncoder().encode(settings) {
+                            UserDefaults.standard.set(data, forKey: storageKey)
+                        }
+                    }
+                    
                     issuanceResults = results
                     isIssuing = false
                     
