@@ -79,6 +79,7 @@ struct GroupMemberModel: Identifiable, Hashable {
     var pubKey: String?          // Encryption Key (X25519)
     var signPubKey: String?      // Identity Key (Ed25519)
     var deviceToken: String?     // Only visible to owner (for Proximity)
+    var commitment: String?      // Identity Commitment (for duplicate check)
     
     var hasMessagingData: Bool {
         return sealedRoute != nil && pubKey != nil && signPubKey != nil

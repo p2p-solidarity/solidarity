@@ -73,32 +73,15 @@ final class CloudKitGroupSyncManager: ObservableObject, GroupSyncManagerProtocol
     
     // MARK: - Local Caching
     
-    private var localCacheURL: URL {
-        let urls = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)
-        let appSupportURL = urls[0].appendingPathComponent("airmeishi", isDirectory: true)
-        try? FileManager.default.createDirectory(at: appSupportURL, withIntermediateDirectories: true, attributes: nil)
-        return appSupportURL.appendingPathComponent("groups_cache.json")
-    }
+    // Removed JSON caching in favor of SwiftData via LocalCacheManager
     
     private func saveGroupsToLocal() {
-        do {
-            let data = try JSONEncoder().encode(groups)
-            try data.write(to: localCacheURL)
-            print("[CloudKitManager] Saved \(groups.count) groups to local cache")
-        } catch {
-            print("[CloudKitManager] Failed to save local cache: \(error)")
-        }
+        LocalCacheManager.shared.saveGroups(self.groups)
     }
     
     private func loadGroupsFromLocal() {
-        do {
-            let data = try Data(contentsOf: localCacheURL)
-            let cachedGroups = try JSONDecoder().decode([GroupModel].self, from: data)
-            self.groups = cachedGroups
-            print("[CloudKitManager] Loaded \(cachedGroups.count) groups from local cache")
-        } catch {
-            print("[CloudKitManager] Failed to load local cache (might be empty): \(error)")
-        }
+        self.groups = LocalCacheManager.shared.fetchGroups()
+        print("[CloudKitManager] Loaded \(self.groups.count) groups from SwiftData cache")
     }
     
     // MARK: - Core Sync
@@ -401,6 +384,29 @@ final class CloudKitGroupSyncManager: ObservableObject, GroupSyncManagerProtocol
             }
         }
         
+        // 2b. Check if already a member by commitment (Prevent Double Spending)
+        if let identity = SemaphoreIdentityManager.shared.getIdentity() {
+            let commitment = identity.commitment
+            let commitmentPredicate = NSPredicate(format: "group == %@ AND commitment == %@", CKRecord.Reference(recordID: groupRecordID, action: .none), commitment)
+            let commitmentQuery = CKQuery(recordType: CloudKitRecordType.groupMembership, predicate: commitmentPredicate)
+            let (commitmentResults, _) = try await publicDB.records(matching: commitmentQuery)
+            
+            if let _ = commitmentResults.first {
+                print("[CloudKitManager] User is already a member of this group (verified by commitment).")
+                // Fetch group details and return
+                let groupRecord = try await publicDB.record(for: groupRecordID)
+                if var groupModel = mapRecordToGroup(groupRecord) {
+                    groupModel.isPrivate = false
+                    // Ensure it's in our local list if not already
+                    if !self.groups.contains(where: { $0.id == groupModel.id }) {
+                        self.groups.append(groupModel)
+                        saveGroupsToLocal()
+                    }
+                    return groupModel
+                }
+            }
+        }
+        
         // 3. Join the group
         print("[CloudKitManager] Joining group...")
         let groupRecord = try await publicDB.record(for: groupRecordID)
@@ -412,6 +418,11 @@ final class CloudKitGroupSyncManager: ObservableObject, GroupSyncManagerProtocol
         membershipRecord["role"] = "member"
         membershipRecord["status"] = "active"
         membershipRecord["joinedAt"] = Date()
+        
+        // Save commitment
+        if let identity = SemaphoreIdentityManager.shared.getIdentity() {
+            membershipRecord["commitment"] = identity.commitment
+        }
         
         // 3b. Update group's memberCount atomically
         let currentMemberCount = (groupRecord["memberCount"] as? Int) ?? 1
@@ -626,10 +637,38 @@ final class CloudKitGroupSyncManager: ObservableObject, GroupSyncManagerProtocol
             }
             
             // Update memberCount if it's different from actual count
-            if members.count != group.memberCount, let groupRecord = try? await publicDB.record(for: CKRecord.ID(recordName: group.id)) {
-                groupRecord["memberCount"] = members.count
-                try? await publicDB.save(groupRecord)
+            // Update memberCount if it's different from actual count
+            if members.count != group.memberCount {
+                print("[CloudKitManager] Local member count mismatch. Updating local group model.")
+                if let index = self.groups.firstIndex(where: { $0.id == group.id }) {
+                    self.groups[index].memberCount = members.count
+                    saveGroupsToLocal()
+                }
+                
+                // Optionally update CloudKit if we are the owner or if the count is significantly off?
+                // For now, let's just update CloudKit to keep it consistent for everyone
+                // But this might cause write conflicts if many people do it.
+                // Better to let the join action handle the increment, and here we just sync local view.
+                // However, if we want to self-heal:
+                /*
+                if let groupRecord = try? await publicDB.record(for: CKRecord.ID(recordName: group.id)) {
+                    groupRecord["memberCount"] = members.count
+                    try? await publicDB.save(groupRecord)
+                }
+                */
             }
+            
+            // Update memberCount if it's different from actual count
+            if members.count != group.memberCount {
+                print("[CloudKitManager] Local member count mismatch. Updating local group model.")
+                if let index = self.groups.firstIndex(where: { $0.id == group.id }) {
+                    self.groups[index].memberCount = members.count
+                    saveGroupsToLocal()
+                }
+            }
+            
+            // Save members to local cache
+            LocalCacheManager.shared.saveMembers(members, for: group.id)
             
             return members
         }
@@ -788,6 +827,7 @@ final class CloudKitGroupSyncManager: ObservableObject, GroupSyncManagerProtocol
         // deviceToken should ideally be protected or only fetched by owner.
         // For MVP, we map it if present, but access control is handled in getMembersMessagingData
         member.deviceToken = record["deviceToken"] as? String
+        member.commitment = record["commitment"] as? String
         
         return member
     }
