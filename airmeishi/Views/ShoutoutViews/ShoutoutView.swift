@@ -55,12 +55,7 @@ struct ShoutoutView: View {
             .sheet(isPresented: $showingCreateShoutout) {
                 CreateShoutoutView(selectedUser: selectedUser)
             }
-            .overlay(alignment: .bottomTrailing) {
-                // Floating sakura action button
-                sakuraActionButton
-                    .padding(.trailing, 20)
-                    .padding(.bottom, 30)
-            }
+
         }
         .preferredColorScheme(.dark)
         .onAppear {
@@ -82,6 +77,9 @@ struct ShoutoutView: View {
                     .foregroundColor(.white)
                 
                 Spacer()
+                
+                // Header Sakura Button
+                headerSakuraButton
                 
                 // Display mode toggle
                 Button(action: {
@@ -153,6 +151,27 @@ struct ShoutoutView: View {
             .padding(.horizontal)
         }
         .padding(.vertical)
+    }
+
+    // MARK: - Header Sakura Button
+    
+    private var headerSakuraButton: some View {
+        Button(action: { showingCreateShoutout = true }) {
+            ZStack {
+                Circle()
+                    .fill(
+                        LinearGradient(
+                            colors: [.pink.opacity(0.8), .purple.opacity(0.6), .pink.opacity(0.8)],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        )
+                    )
+                    .frame(width: 44, height: 44)
+                    .shadow(color: .pink.opacity(0.5), radius: 6, x: 0, y: 0)
+                
+                SakuraIconView(size: 20, color: .white, isAnimating: isSakuraAnimating)
+            }
+        }
     }
     
     // MARK: - Card Gallery
@@ -227,28 +246,7 @@ struct ShoutoutView: View {
         .padding(.horizontal)
     }
     
-    // MARK: - Floating Sakura Action Button
-    
-    private var sakuraActionButton: some View {
-        Button(action: { showingCreateShoutout = true }) {
-            ZStack {
-                // Sakura background
-                Circle()
-                    .fill(
-                        LinearGradient(
-                            colors: [.pink.opacity(0.8), .purple.opacity(0.6), .pink.opacity(0.8)],
-                            startPoint: .topLeading,
-                            endPoint: .bottomTrailing
-                        )
-                    )
-                    .frame(width: 60, height: 60)
-                    .shadow(color: .pink.opacity(0.5), radius: 10, x: 0, y: 0)
-                
-                // Sakura icon
-                SakuraIconView(size: 30, color: .white, isAnimating: isSakuraAnimating)
-            }
-        }
-    }
+
     
     // MARK: - Animation Control
     
