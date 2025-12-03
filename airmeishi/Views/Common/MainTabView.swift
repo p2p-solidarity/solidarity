@@ -70,6 +70,34 @@ struct MainTabView: View {
                 )
             }
         }
+        // New: Sakura secure message toast (only shown when App is active)
+        .onReceive(NotificationCenter.default.publisher(for: .secureMessageReceived)) { notification in
+            #if canImport(UIKit)
+            // Ensure toast is only shown in foreground to avoid conflict with APNs banner in background/lock screen
+            guard UIApplication.shared.applicationState == .active else {
+                return
+            }
+            #endif
+
+            let sender = notification.userInfo?[MessageEventKey.senderName] as? String
+            let text = notification.userInfo?[MessageEventKey.text] as? String
+            
+            if let sender = sender {
+                ToastManager.shared.show(
+                    title: "New Sakura from \(sender)",
+                    message: text,
+                    type: .info,
+                    duration: 4.0
+                )
+            } else {
+                ToastManager.shared.show(
+                    title: "New Sakura message",
+                    message: text,
+                    type: .info,
+                    duration: 4.0
+                )
+            }
+        }
     }
     
     // MARK: - iOS 26+ Native Tab View

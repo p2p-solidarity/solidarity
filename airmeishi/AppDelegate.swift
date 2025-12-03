@@ -100,3 +100,39 @@ class AppDelegate: UIResponder, UIApplicationDelegate, UNUserNotificationCenterD
         }
     }
 }
+
+extension AppDelegate {
+    // Delegate already set in application(_:didFinishLaunchingWithOptions:)
+
+    func userNotificationCenter(
+        _ center: UNUserNotificationCenter,
+        willPresent notification: UNNotification,
+        withCompletionHandler completionHandler: @escaping (UNNotificationPresentationOptions) -> Void
+    ) {
+        #if canImport(UIKit)
+        let state = UIApplication.shared.applicationState
+        #else
+        let state: UIApplication.State = .inactive
+        #endif
+
+        let userInfo = notification.request.content.userInfo
+
+        // Special handling only for Sakura backend pushes (containing message_id)
+        if state == .active, userInfo["message_id"] != nil {
+            // Foreground: Suppress system banner / sound
+            completionHandler([])
+
+            // Trigger sync + decrypt immediately -> MessageService posts .secureMessageReceived
+            Task {
+                do {
+                    _ = try await MessageService.shared.processIncomingMessages()
+                } catch {
+                    print("[AppDelegate] Failed to process incoming Sakura messages: \(error)")
+                }
+            }
+        } else {
+            // Other cases (Background / Lock Screen / Other notification types): Show system notification normally
+            completionHandler([.banner, .sound, .badge])
+        }
+    }
+}

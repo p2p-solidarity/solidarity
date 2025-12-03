@@ -152,9 +152,17 @@ class MessageService: ObservableObject {
                     )
                     
                     // 3. Local Notification / UI Update
-                    // Dispatch to main thread for UI/Notification
+                    // Dispatch to main thread for UI-facing events
                     await MainActor.run {
-                        showLocalNotification(text: decryptedText, sender: senderContact.name)
+                        // New: Notify UI that a Sakura message has been decrypted
+                        NotificationCenter.default.post(
+                            name: .secureMessageReceived,
+                            object: nil,
+                            userInfo: [
+                                MessageEventKey.senderName: senderContact.name,
+                                MessageEventKey.text: decryptedText
+                            ]
+                        )
                     }
                     
                     processedIds.append(msg.id)
