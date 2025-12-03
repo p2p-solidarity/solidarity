@@ -1,5 +1,6 @@
 import UIKit
 import UserNotifications
+import CloudKit
 
 class AppDelegate: UIResponder, UIApplicationDelegate, UNUserNotificationCenterDelegate {
 
@@ -58,7 +59,28 @@ class AppDelegate: UIResponder, UIApplicationDelegate, UNUserNotificationCenterD
     // D. Receive Message - Silent Push Handling (Background Fetch)
     func application(_ application: UIApplication, didReceiveRemoteNotification userInfo: [AnyHashable : Any], fetchCompletionHandler completionHandler: @escaping (UIBackgroundFetchResult) -> Void) {
         
-        // Check if it is a silent push (content-available: 1)
+        // 1. Check for CloudKit Notification
+        if let notification = CKNotification(fromRemoteNotificationDictionary: userInfo) {
+            print("[AppDelegate] Received CloudKit notification: \(notification)")
+            
+            if notification.subscriptionID == "private-changes" || 
+               notification.subscriptionID == "shared-changes" ||
+               notification.notificationType == .query {
+                
+                Task {
+                    do {
+                        try await CloudKitGroupSyncManager.shared.fetchLatestChanges()
+                        completionHandler(.newData)
+                    } catch {
+                        print("[AppDelegate] CloudKit sync failed: \(error)")
+                        completionHandler(.failed)
+                    }
+                }
+                return
+            }
+        }
+        
+        // 2. Check for Silent Push (content-available: 1) for MessageService
         guard let aps = userInfo["aps"] as? [String: Any],
               let contentAvailable = aps["content-available"] as? Int,
               contentAvailable == 1 else {

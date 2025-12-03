@@ -572,9 +572,9 @@ class ProximityManager: NSObject, ProximityManagerProtocol, ObservableObject {
                 // If this is a Group VC, update messaging data for the member
                 if let groupContext = card.groupContext,
                    case .group(let info) = groupContext,
-                   let sealedRoute = sealedRoute,
-                   let pubKey = pubKey,
-                   let signPubKey = signPubKey {
+                   let _ = sealedRoute,
+                   let _ = pubKey,
+                   let _ = signPubKey {
                     
                     print("Detected Group VC for group \(info.groupId). Updating member messaging data.")
                     

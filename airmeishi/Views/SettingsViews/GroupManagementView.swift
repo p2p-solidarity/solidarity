@@ -58,9 +58,36 @@ struct GroupManagementView: View {
                                 .font(.system(size: 28, weight: .bold))
                                 .foregroundColor(.white)
 
-                            Text("Manage your groups and members")
-                                .font(.subheadline)
-                                .foregroundColor(.white.opacity(0.6))
+                            HStack {
+                                Text("Manage your groups and members")
+                                    .font(.subheadline)
+                                    .foregroundColor(.white.opacity(0.6))
+                                
+                                Spacer()
+                                
+                                // Sync Status Indicator
+                                switch groupManager.syncStatus {
+                                case .idle:
+                                    EmptyView()
+                                case .syncing:
+                                    HStack(spacing: 4) {
+                                        ProgressView()
+                                            .scaleEffect(0.6)
+                                        Text("Syncing...")
+                                            .font(.caption)
+                                            .foregroundColor(.white.opacity(0.6))
+                                    }
+                                case .error(let error):
+                                    Image(systemName: "exclamationmark.triangle.fill")
+                                        .foregroundColor(.red)
+                                        .onTapGesture {
+                                            print("Sync Error: \(error)")
+                                        }
+                                case .offline:
+                                    Image(systemName: "wifi.slash")
+                                        .foregroundColor(.white.opacity(0.4))
+                                }
+                            }
                         }
 
                         Spacer()
@@ -140,7 +167,7 @@ struct GroupManagementView: View {
                     VStack(alignment: .leading, spacing: 24) {
                         // Group Actions
                         VStack(alignment: .leading, spacing: 16) {
-                            Text("Group Actions")
+                            Text("Actions")
                                 .font(.title3)
                                 .fontWeight(.bold)
                                 .foregroundColor(.white)
@@ -163,7 +190,7 @@ struct GroupManagementView: View {
                         )
                         .padding(.horizontal, 20)
 
-                        // Your Groups List
+                        // Your Groups List (Cards)
                         VStack(alignment: .leading, spacing: 16) {
                             Text("Your Groups")
                                 .font(.title3)
@@ -177,10 +204,10 @@ struct GroupManagementView: View {
                                     .foregroundColor(.white.opacity(0.6))
                                     .padding(.horizontal, 20)
                             } else {
-                                VStack(spacing: 1) {
+                                LazyVStack(spacing: 20) {
                                     ForEach(groupManager.groups) { group in
                                         NavigationLink(destination: GroupDetailView(group: group)) {
-                                            GroupRow(group: group) {
+                                            GroupManagementCardView(group: group) {
                                                 selectedGroupToDelete = group
                                                 showDeleteConfirm = true
                                             }
@@ -188,15 +215,6 @@ struct GroupManagementView: View {
                                         .buttonStyle(.plain)
                                     }
                                 }
-                                .padding(4)
-                                .background(
-                                    RoundedRectangle(cornerRadius: 16)
-                                        .fill(Color.white.opacity(0.06))
-                                        .overlay(
-                                            RoundedRectangle(cornerRadius: 16)
-                                                .stroke(Color.white.opacity(0.12), lineWidth: 1)
-                                        )
-                                )
                                 .padding(.horizontal, 20)
                             }
                         }
@@ -227,6 +245,9 @@ struct GroupManagementView: View {
                         .padding(.horizontal, 20)
                         .padding(.bottom, 40)
                     }
+                }
+                .refreshable {
+                    try? await groupManager.fetchLatestChanges()
                 }
             }
             .safeAreaInset(edge: .top) {
@@ -339,45 +360,7 @@ struct GroupManagementView: View {
 
 // MARK: - Subviews
 
-struct GroupRow: View {
-    let group: GroupModel
-    let onDelete: () -> Void
-    
-    var body: some View {
-        HStack {
-            VStack(alignment: .leading, spacing: 4) {
-                Text(group.name)
-                    .font(.headline)
-                    .foregroundColor(.white)
-                
-                if !group.description.isEmpty {
-                    Text(group.description)
-                        .font(.caption)
-                        .foregroundColor(.white.opacity(0.7))
-                        .lineLimit(1)
-                }
-                
-                HStack {
-                    Image(systemName: "person.2.fill")
-                        .font(.caption2)
-                    Text("\(group.memberCount) members")
-                        .font(.caption2)
-                }
-                .foregroundColor(.white.opacity(0.5))
-            }
-            
-            Spacer()
-            
-            Button(action: onDelete) {
-                Image(systemName: "trash")
-                .foregroundColor(.red.opacity(0.8))
-                .padding(8)
-            }
-        }
-        .padding(16)
-        .background(Color.white.opacity(0.05))
-    }
-}
+// Removed GroupRow in favor of GroupCardView
 
 struct InviteLinkView: View {
     @Environment(\.dismiss) private var dismiss
@@ -451,7 +434,7 @@ struct InviteLinkView: View {
                 if let error = errorMessage {
                     Section {
                         Text(error)
-                            .foregroundColor(.red)
+                        .foregroundColor(.red)
                     }
                 }
             }

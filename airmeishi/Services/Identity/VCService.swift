@@ -261,7 +261,7 @@ final class VCService {
                 let businessCard = try envelope.toBusinessCard()
                 
                 // Group VC Verification
-                if let groupContext = businessCard.groupContext {
+                if let _ = businessCard.groupContext {
                     Self.logger.info("Detected Group Credential, performing additional verification")
                     // Note: We need to verify the Semaphore proof here or in a separate step.
                     // For now, we import it, but mark it as requiring verification if proof is missing/invalid.

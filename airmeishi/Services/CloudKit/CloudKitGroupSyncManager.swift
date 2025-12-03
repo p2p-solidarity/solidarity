@@ -86,12 +86,26 @@ final class CloudKitGroupSyncManager: ObservableObject, GroupSyncManagerProtocol
     
     // MARK: - Core Sync
     
+    public enum SyncStatus {
+        case idle
+        case syncing
+        case error(Error)
+        case offline
+    }
+    
+    @Published var syncStatus: SyncStatus = .idle
+    
+    // MARK: - Core Sync
+    
     func startSyncEngine() {
         print("[CloudKitManager] Starting sync engine...")
-        // MVP: Just fetch initially
         Task {
-            try? await createCustomZoneIfNeeded()
-            try? await fetchLatestChanges()
+            await checkAccountStatus()
+            if isAuthenticated {
+                try? await createCustomZoneIfNeeded()
+                try? await subscribeToChanges()
+                try? await fetchLatestChanges()
+            }
         }
     }
     
@@ -106,14 +120,49 @@ final class CloudKitGroupSyncManager: ObservableObject, GroupSyncManagerProtocol
         }
     }
     
+    private func subscribeToChanges() async throws {
+        // 1. Subscribe to Public Group Changes (Database Subscription not available for Public DB, use Query)
+        // Subscribe to all group memberships for this user
+        if let userID = currentUserRecordID {
+            let predicate = NSPredicate(format: "userRecordID == %@", userID)
+            let subscriptionID = "group-membership-changes"
+            let subscription = CKQuerySubscription(recordType: CloudKitRecordType.groupMembership, predicate: predicate, subscriptionID: subscriptionID, options: [.firesOnRecordCreation, .firesOnRecordUpdate, .firesOnRecordDeletion])
+            
+            let notificationInfo = CKSubscription.NotificationInfo()
+            notificationInfo.shouldSendContentAvailable = true // Silent push
+            subscription.notificationInfo = notificationInfo
+            
+            _ = try? await publicDB.save(subscription)
+            print("[CloudKitManager] Subscribed to public group membership changes")
+        }
+        
+        // 2. Subscribe to Private/Shared Database Changes
+        let privateSubscription = CKDatabaseSubscription(subscriptionID: "private-changes")
+        let privateNotificationInfo = CKSubscription.NotificationInfo()
+        privateNotificationInfo.shouldSendContentAvailable = true
+        privateSubscription.notificationInfo = privateNotificationInfo
+        _ = try? await privateDB.save(privateSubscription)
+        
+        let sharedSubscription = CKDatabaseSubscription(subscriptionID: "shared-changes")
+        let sharedNotificationInfo = CKSubscription.NotificationInfo()
+        sharedNotificationInfo.shouldSendContentAvailable = true
+        sharedSubscription.notificationInfo = sharedNotificationInfo
+        _ = try? await sharedDB.save(sharedSubscription)
+        
+        print("[CloudKitManager] Subscribed to private/shared database changes")
+    }
+    
     func fetchLatestChanges() async throws {
         print("[CloudKitManager] Fetching latest changes...")
+        await MainActor.run { self.syncStatus = .syncing }
+        
         guard let userID = currentUserRecordID else {
             print("[CloudKitManager] Fetch aborted: No User ID")
+            await MainActor.run { self.syncStatus = .idle }
             return
         }
         
-        var allGroups: [GroupModel] = []
+        var fetchedGroups: [GroupModel] = []
         
         // 1. Fetch Public Groups (Existing Logic)
         let publicPredicate = NSPredicate(format: "userRecordID == %@", userID)
@@ -128,20 +177,17 @@ final class CloudKitGroupSyncManager: ObservableObject, GroupSyncManagerProtocol
                     if let groupRecord = try? await publicDB.record(for: groupRecordID) {
                         if var model = mapRecordToGroup(groupRecord) {
                             model.isPrivate = false
-                            allGroups.append(model)
+                            fetchedGroups.append(model)
                         }
                     }
                 }
             }
         } catch {
             print("[CloudKitManager] Public fetch failed: \(error)")
+            await MainActor.run { self.syncStatus = .error(error) }
         }
         
         // 2. Fetch Private/Shared Groups
-        // For private groups, we query the Private DB (owned) and Shared DB (joined)
-        // For MVP simplicity, we'll just query Shared DB for now to see joined groups,
-        // and Private DB for owned groups.
-        
         // Fetch Owned Private Groups
         let privateQuery = CKQuery(recordType: CloudKitRecordType.group, predicate: NSPredicate(value: true))
         do {
@@ -150,7 +196,7 @@ final class CloudKitGroupSyncManager: ObservableObject, GroupSyncManagerProtocol
                 if case .success(let record) = result.1 {
                     if var model = mapRecordToGroup(record) {
                         model.isPrivate = true
-                        allGroups.append(model)
+                        fetchedGroups.append(model)
                     }
                 }
             }
@@ -166,7 +212,7 @@ final class CloudKitGroupSyncManager: ObservableObject, GroupSyncManagerProtocol
                 if case .success(let record) = result.1 {
                     if var model = mapRecordToGroup(record) {
                         model.isPrivate = true
-                        allGroups.append(model)
+                        fetchedGroups.append(model)
                     }
                 }
             }
@@ -174,8 +220,43 @@ final class CloudKitGroupSyncManager: ObservableObject, GroupSyncManagerProtocol
             print("[CloudKitManager] Shared fetch failed: \(error)")
         }
         
+        // 3. Merge Strategy (Conflict Resolution)
+        // We have `fetchedGroups` (Cloud) and `self.groups` (Local).
+        // Goal: Update `self.groups` with `fetchedGroups`, but respect local unsynced changes.
+        
+        var mergedGroups: [GroupModel] = []
+        let localGroupsMap = Dictionary(uniqueKeysWithValues: self.groups.map { ($0.id, $0) })
+        
+        for cloudGroup in fetchedGroups {
+            if let localGroup = localGroupsMap[cloudGroup.id] {
+                if !localGroup.isSynced {
+                    // Local has unsynced changes. Keep Local.
+                    // Ideally we should try to merge fields or warn user, but for now "Keep Local" preserves work.
+                    print("[CloudKitManager] Conflict: Group \(localGroup.name) has local changes. Keeping local version.")
+                    mergedGroups.append(localGroup)
+                } else {
+                    // Local is synced (or unchanged). Overwrite with Cloud.
+                    mergedGroups.append(cloudGroup)
+                }
+            } else {
+                // New from Cloud
+                mergedGroups.append(cloudGroup)
+            }
+        }
+        
+        // Also keep local-only groups that haven't been pushed to Cloud yet (if any logic supports that)
+        // For now, if it's not in Cloud, it might have been deleted remotely OR it's a new local group.
+        // If we have a way to distinguish "New Local" vs "Deleted Remote", we handle it.
+        // Assuming `isSynced == false` implies it's a new local group or modified local group.
+        for localGroup in self.groups {
+            if !localGroup.isSynced && !mergedGroups.contains(where: { $0.id == localGroup.id }) {
+                print("[CloudKitManager] Keeping local-only unsynced group: \(localGroup.name)")
+                mergedGroups.append(localGroup)
+            }
+        }
+        
         // After fetching all groups, sync merkle roots to SemaphoreManager
-        for group in allGroups {
+        for group in mergedGroups {
             if let groupUUID = UUID(uuidString: group.id) {
                 let _ = SemaphoreGroupManager.shared.ensureGroupFromInvite(
                     id: groupUUID,
@@ -190,9 +271,10 @@ final class CloudKitGroupSyncManager: ObservableObject, GroupSyncManagerProtocol
             }
         }
         
-        self.groups = allGroups
+        self.groups = mergedGroups
         saveGroupsToLocal()
         print("[CloudKitManager] Successfully updated groups. Total: \(self.groups.count)")
+        await MainActor.run { self.syncStatus = .idle }
     }
     
     // MARK: - Group Management

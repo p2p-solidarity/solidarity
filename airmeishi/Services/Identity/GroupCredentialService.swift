@@ -123,7 +123,7 @@ final class GroupCredentialService: ObservableObject {
                 // or assume the proof contains the public inputs (root, nullifier, signal) and we verify them.
                 
                 do {
-                    let isValidProof = try await semaphoreManager.verifyProof(proof)
+                    let isValidProof = try semaphoreManager.verifyProof(proof)
                     
                     if !isValidProof {
                         return .invalidProof

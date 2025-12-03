@@ -20,7 +20,7 @@ final class GroupEntity {
     var memberCount: Int
     var isPrivate: Bool
     var isSynced: Bool
-    var credentialIssuers: [String]
+    var credentialIssuers: [String] = []
     
     @Relationship(deleteRule: .cascade, inverse: \MemberEntity.group)
     var members: [MemberEntity] = []

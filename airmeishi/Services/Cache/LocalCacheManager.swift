@@ -16,16 +16,33 @@ final class LocalCacheManager {
     private let modelContext: ModelContext
     
     private init() {
+        // Use a specific file URL to isolate the cache and allow for versioning/resetting
+        let url = URL.documentsDirectory.appending(path: "AirMeishiCache_v2.store")
+        // Explicitly disable CloudKit sync to avoid strict schema requirements (all optionals, no unique constraints)
+        let modelConfiguration = ModelConfiguration(url: url, cloudKitDatabase: .none)
+        
         do {
-            let schema = Schema([
-                GroupEntity.self,
-                MemberEntity.self
-            ])
-            let modelConfiguration = ModelConfiguration(schema: schema, isStoredInMemoryOnly: false)
-            self.modelContainer = try ModelContainer(for: schema, configurations: [modelConfiguration])
+            // Option 2: Use simpler Schema creation (Auto-detection)
+            self.modelContainer = try ModelContainer(for: GroupEntity.self, MemberEntity.self, configurations: modelConfiguration)
             self.modelContext = modelContainer.mainContext
+            print("[LocalCacheManager] Successfully initialized with persistent store at: \(url.path)")
         } catch {
-            fatalError("Could not create ModelContainer: \(error)")
+            print("[LocalCacheManager] Failed to create persistent ModelContainer: \(error). Falling back to in-memory store.")
+            
+            // Fallback: In-Memory Store
+            let memoryConfiguration = ModelConfiguration(isStoredInMemoryOnly: true, cloudKitDatabase: .none)
+            do {
+                self.modelContainer = try ModelContainer(for: GroupEntity.self, MemberEntity.self, configurations: memoryConfiguration)
+                self.modelContext = modelContainer.mainContext
+                print("[LocalCacheManager] Initialized with IN-MEMORY store.")
+            } catch {
+                print("[LocalCacheManager] CRITICAL: Failed to create in-memory container")
+                print("Error type: \(type(of: error))")
+                print("Error description: \(error)")
+                // Check for SwiftData specific errors if possible, though SwiftDataError might not be publicly exposing everything.
+                // We print the error description which usually contains enough info.
+                fatalError("[LocalCacheManager] Critical Error: Could not create even in-memory ModelContainer: \(error)")
+            }
         }
     }
     
