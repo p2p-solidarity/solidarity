@@ -52,7 +52,7 @@ struct SakuraIconView: View {
 extension SakuraIconView {
     #if canImport(UIKit)
     /// Renders the sakura icon as a UIImage for use in tab bars
-    @available(iOS 26.0, *)
+    @available(iOS 16.0, *)
     static func renderAsImage(size: CGFloat = 19, color: UIColor = .white) -> UIImage? {
         let view = SakuraIconView(size: size, color: Color(color), isAnimating: false)
             .frame(width: size, height: size)

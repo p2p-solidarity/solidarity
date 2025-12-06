@@ -144,7 +144,7 @@ class MessageService: ObservableObject {
         for msg in messages {
             // 2. Decrypt
             // We need to find the sender to get their public key
-            if let senderContact = findContact(pubKey: msg.owner_pubkey) {
+            if let senderContact = await findContact(pubKey: msg.owner_pubkey) {
                 do {
                     let decryptedText = try SecureKeyManager.shared.decrypt(
                         blobBase64: msg.blob,
@@ -220,12 +220,31 @@ class MessageService: ObservableObject {
     }
     
     // Helper: Find Contact
-    private func findContact(pubKey: String) -> SecureContact? {
-        // TODO: Integrate with ContactRepository
-        // For now, return a mock if not found, or try to find in existing contacts
-        // This is a simplified lookup. In production, use ContactRepository.
+    private func findContact(pubKey: String) async -> SecureContact? {
+        let result = await ContactRepository.shared.getContact(pubKey: pubKey)
         
-        // Mock lookup for testing
-        return SecureContact(name: "Unknown Sender", pubKey: pubKey, signPubKey: "", sealedRoute: "")
+        switch result {
+        case .success(let contact):
+            // Map to SecureContact
+            // Ensure we have necessary keys. If signPubKey is missing, we might fail or fallback.
+            guard let signPubKey = contact.signPubKey, let sealedRoute = contact.sealedRoute else {
+                print("[MessageService] Contact found but missing secure keys: \(contact.businessCard.name)")
+                return nil
+            }
+            
+            // If contact.pubKey is nil, we might use the passed pubKey if that's what we looked up?
+            // The method signature says `pubKey` (which is usually the signing key in the message owner_pubkey field).
+            // Let's use the found contact's known keys.
+            let encPubKey = contact.pubKey ?? pubKey // Fallback to looked-up key if missing? Unlikely if we found it.
+            
+            return SecureContact(
+                name: contact.businessCard.name,
+                pubKey: encPubKey,
+                signPubKey: signPubKey,
+                sealedRoute: sealedRoute
+            )
+        case .failure:
+            return nil
+        }
     }
 }

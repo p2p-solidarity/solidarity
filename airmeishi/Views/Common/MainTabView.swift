@@ -314,7 +314,7 @@ struct MainTabView: View {
     }
     
     // MARK: - Native Tab Item Helper
-    @available(iOS 26.0, *)
+    @available(iOS 16.0, *)
     @ViewBuilder
     private func nativeTabItem(systemName: String, title: String, customIcon: String? = nil) -> some View {
         if let customIcon = customIcon, customIcon == "sakura-white", systemName.isEmpty {

@@ -15,6 +15,7 @@ protocol ContactRepositoryProtocol {
     func updateContact(_ contact: Contact) -> CardResult<Contact>
     func deleteContact(id: UUID) -> CardResult<Void>
     func getContact(id: UUID) -> CardResult<Contact>
+    func getContact(pubKey: String) -> CardResult<Contact>
     func getAllContacts() -> CardResult<[Contact]>
     func searchContacts(query: String) -> CardResult<[Contact]>
     func getContactsBySource(_ source: ContactSource) -> CardResult<[Contact]>
@@ -165,6 +166,16 @@ class ContactRepository: ContactRepositoryProtocol, ObservableObject {
     /// Get all contacts
     func getAllContacts() -> CardResult<[Contact]> {
         return .success(contacts.sorted { $0.receivedAt > $1.receivedAt })
+    }
+
+    /// Get a specific contact by Public Key (Identity or Encryption)
+    func getContact(pubKey: String) -> CardResult<Contact> {
+        guard let contact = contacts.first(where: {
+            $0.signPubKey == pubKey || $0.pubKey == pubKey
+        }) else {
+            return .failure(.notFound("Contact not found for pubKey"))
+        }
+        return .success(contact)
     }
     
     /// Search contacts by query

@@ -101,11 +101,3 @@ struct GroupMemberModel: Identifiable, Hashable {
         case kicked
     }
 }
-
-struct GroupInviteModel: Identifiable {
-    let id: String
-    let token: String
-    let targetGroupID: String
-    let isActive: Bool
-    let createdBy: String
-}

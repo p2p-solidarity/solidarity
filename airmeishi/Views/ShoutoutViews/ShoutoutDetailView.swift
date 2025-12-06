@@ -14,6 +14,9 @@ struct ShoutoutDetailView: View {
     @State private var isSakuraAnimating = false
     @State private var showingDeleteConfirm = false
     @State private var isLoading = true
+    @State private var showingProfile = false
+    @State private var selectedContact: Contact?
+    @State private var showingShareSheet = false
 
     init(user: ShoutoutUser) {
         self.user = user
@@ -98,6 +101,9 @@ struct ShoutoutDetailView: View {
                 }
             }
             .onDisappear {
+            }
+            .sheet(item: $selectedContact) { contact in
+                ReceivedCardView(card: contact.businessCard)
             }
         }
         .preferredColorScheme(.dark)
@@ -322,7 +328,13 @@ struct ShoutoutDetailView: View {
             // Secondary Actions
             HStack(spacing: 12) {
                 Button(action: {
-                    // TODO: Implement view profile action
+                    if case .success(let contact) = ContactRepository.shared.getContact(id: user.id) {
+                        selectedContact = contact
+                        showingProfile = true
+                    } else {
+                        // If contact not found (e.g. cloud only), maybe show error or handle gracefully
+                        print("Contact not found for user: \(user.id)")
+                    }
                 }) {
                     HStack(spacing: 8) {
                         Image(systemName: "person.circle")
@@ -345,7 +357,7 @@ struct ShoutoutDetailView: View {
                 }
 
                 Button(action: {
-                    // TODO: Implement share action
+                    showingShareSheet = true
                 }) {
                     HStack(spacing: 8) {
                         Image(systemName: "square.and.arrow.up")
@@ -365,6 +377,9 @@ struct ShoutoutDetailView: View {
                                     .stroke(Color.white.opacity(0.2), lineWidth: 1)
                             )
                     )
+                }
+                .sheet(isPresented: $showingShareSheet) {
+                    ActivityViewController(activityItems: ["Check out \(user.name) on Sakura!"])
                 }
             }
 
@@ -528,4 +543,16 @@ extension DateFormatter {
             signPubKey: nil
         )
     )
+}
+
+struct ActivityViewController: UIViewControllerRepresentable {
+    var activityItems: [Any]
+    var applicationActivities: [UIActivity]? = nil
+
+    func makeUIViewController(context: UIViewControllerRepresentableContext<ActivityViewController>) -> UIActivityViewController {
+        let controller = UIActivityViewController(activityItems: activityItems, applicationActivities: applicationActivities)
+        return controller
+    }
+
+    func updateUIViewController(_ uiViewController: UIActivityViewController, context: UIViewControllerRepresentableContext<ActivityViewController>) {}
 }
