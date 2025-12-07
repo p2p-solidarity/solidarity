@@ -20,6 +20,8 @@ final class QRCodeScanService: NSObject {
     private var captureSession: AVCaptureSession?
     private var previewLayer: AVCaptureVideoPreviewLayer?
 
+    private let sessionQueue = DispatchQueue(label: "app.airmeishi.camera.session.queue")
+
     // MARK: - Scanning Lifecycle
 
     func startScanning() -> CardResult<AVCaptureVideoPreviewLayer> {
@@ -50,12 +52,20 @@ final class QRCodeScanService: NSObject {
 
             let previewLayer = AVCaptureVideoPreviewLayer(session: session)
             previewLayer.videoGravity = .resizeAspectFill
+            // Initial frame, will be updated by view
             previewLayer.frame = UIScreen.main.bounds
 
-            captureSession = session
+            // Stop any existing session properly before replacing
+            if let existingSession = self.captureSession {
+                sessionQueue.async {
+                    existingSession.stopRunning()
+                }
+            }
+
+            self.captureSession = session
             self.previewLayer = previewLayer
 
-            DispatchQueue.global(qos: .userInitiated).async {
+            sessionQueue.async {
                 session.startRunning()
             }
 
@@ -67,7 +77,13 @@ final class QRCodeScanService: NSObject {
     }
 
     func stopScanning() {
-        captureSession?.stopRunning()
+        guard let session = captureSession else { return }
+        
+        sessionQueue.async {
+            session.stopRunning()
+        }
+        
+        // Clear references immediately to avoid reusing stopped session
         captureSession = nil
         previewLayer = nil
     }
