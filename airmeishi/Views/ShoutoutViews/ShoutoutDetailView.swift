@@ -17,6 +17,7 @@ struct ShoutoutDetailView: View {
     @State private var showingProfile = false
     @State private var selectedContact: Contact?
     @State private var showingShareSheet = false
+    @State private var latestSakuraMessage: String?
 
     init(user: ShoutoutUser) {
         self.user = user
@@ -109,6 +110,35 @@ struct ShoutoutDetailView: View {
         .preferredColorScheme(.dark)
         .onAppear {
             print("[ShoutoutDetailView] View appeared for user: \(user)")
+            // Load cached message
+            if let cached = SecureMessageStorage.shared.getLastMessage(from: user.name) {
+                latestSakuraMessage = cached
+            }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .secureMessageReceived)) { notification in
+            guard let userInfo = notification.userInfo,
+                  let senderName = userInfo[MessageEventKey.senderName] as? String,
+                  let text = userInfo[MessageEventKey.text] as? String else {
+                return
+            }
+            
+            // Check if message is from this user
+            if senderName == user.name {
+                withAnimation {
+                    latestSakuraMessage = text
+                }
+                
+                // Save to local cache
+                SecureMessageStorage.shared.saveLastMessage(text, from: senderName)
+                
+                // Show Toast
+                ToastManager.shared.show(
+                    title: "Sakura from \(senderName)",
+                    message: text,
+                    type: .success,
+                    duration: 4.0
+                )
+            }
         }
     }
     
@@ -252,6 +282,28 @@ struct ShoutoutDetailView: View {
                     title: "Last Interaction",
                     value: DateFormatter.relativeDate.string(from: user.lastInteraction)
                 )
+                
+                // Sakura Message Display
+                if let message = latestSakuraMessage {
+                    Divider()
+                        .background(Color.white.opacity(0.1))
+                    
+                    HStack(alignment: .top, spacing: 12) {
+                        SakuraIconView(size: 20, color: .pink, isAnimating: true)
+                            .padding(.top, 2)
+                        
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text("Latest Sakura")
+                                .font(.subheadline)
+                                .foregroundColor(.pink)
+                            
+                            Text(message)
+                                .font(.body)
+                                .foregroundColor(.white)
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
+                    }
+                }
             }
         }
         .padding()
