@@ -19,6 +19,10 @@ final class ThemeManager: ObservableObject {
         didSet { persist() }
     }
 
+    @Published var selectedAnimal: AnimalCharacter? {
+        didSet { persist() }
+    }
+
     /// Preset palette to pick from
     let presets: [Color] = [
         Color(red: 0.20, green: 0.60, blue: 1.00), // blue
@@ -32,16 +36,29 @@ final class ThemeManager: ObservableObject {
         let storedHex = UserDefaults.standard.string(forKey: Self.Keys.cardAccentHex)
         self.cardAccent = Color(hex: storedHex) ?? presets.first ?? .blue
         self.enableGlow = UserDefaults.standard.object(forKey: Self.Keys.enableGlow) as? Bool ?? true
+        
+        if let animalString = UserDefaults.standard.string(forKey: Self.Keys.selectedAnimal),
+           let animal = AnimalCharacter(rawValue: animalString) {
+            self.selectedAnimal = animal
+        } else {
+            self.selectedAnimal = nil
+        }
     }
 
     private func persist() {
         UserDefaults.standard.set(cardAccent.toHexString(), forKey: Self.Keys.cardAccentHex)
         UserDefaults.standard.set(enableGlow, forKey: Self.Keys.enableGlow)
+        if let animal = selectedAnimal {
+            UserDefaults.standard.set(animal.rawValue, forKey: Self.Keys.selectedAnimal)
+        } else {
+            UserDefaults.standard.removeObject(forKey: Self.Keys.selectedAnimal)
+        }
     }
 
     private enum Keys {
         static let cardAccentHex = "theme_card_accent_hex"
         static let enableGlow = "theme_enable_glow"
+        static let selectedAnimal = "theme_selected_animal"
     }
 }
 

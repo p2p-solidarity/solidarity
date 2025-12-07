@@ -71,6 +71,8 @@ struct CredentialIssuersSection: View {
             AddIssuerView(group: group, members: members)
         }
         .task {
+            // Refresh data to ensure we see new members
+            try? await groupManager.fetchLatestChanges()
             members = (try? await groupManager.getMembers(for: group)) ?? []
         }
     }

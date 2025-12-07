@@ -20,6 +20,22 @@ struct AppearanceSettingsView: View {
             Section("Effects") {
                 Toggle("Enable Glow", isOn: $theme.enableGlow)
             }
+            
+            Section("Global Animal Theme") {
+                Picker("Select Animal", selection: $theme.selectedAnimal) {
+                    Text("None").tag(Optional<AnimalCharacter>.none)
+                    ForEach(AnimalCharacter.allCases) { animal in
+                        Text(animal.displayName).tag(Optional(animal))
+                    }
+                }
+                .pickerStyle(.menu)
+                
+                if let animal = theme.selectedAnimal {
+                    Text(animal.personality)
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                }
+            }
         }
         .navigationTitle("Appearance")
         .navigationBarTitleDisplayMode(.inline)

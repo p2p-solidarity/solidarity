@@ -50,24 +50,9 @@ struct SettingsView: View {
                         } label: {
                             Label("Privacy Settings", systemImage: "lock.shield.fill")
                         }
-                        
-                        NavigationLink {
-                            SelectiveDisclosureSettingsView(sharingPreferences: sharingBinding)
-                                .navigationTitle("Privacy / Selective Disclosure")
-                        } label: {
-                            Label("Selective Disclosure", systemImage: "eye.slash.fill")
-                        }
                     } else {
                         Text("Please create a card to configure privacy settings")
                             .foregroundColor(.secondary)
-                    }
-                }
-                
-                Section("Groups") {
-                    NavigationLink {
-                        GroupManagementView()
-                    } label: {
-                        Label("Group Management", systemImage: "person.3.fill")
                     }
                 }
                 

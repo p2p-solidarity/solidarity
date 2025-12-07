@@ -84,6 +84,10 @@ struct GroupDetailView: View {
     }
     
     private func loadData() async {
+        // Ensure account status and sync engine are ready
+        await cloudKitManager.checkAccountStatus()
+        cloudKitManager.startSyncEngine()
+        
         isLoadingMembers = true
         defer { isLoadingMembers = false }
         

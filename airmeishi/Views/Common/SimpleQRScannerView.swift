@@ -22,14 +22,20 @@ struct SimpleQRScannerView: View {
             if permissionStatus == .authorized {
                 SimpleQRScannerWrapper(onScan: onScan, onCancel: onCancel)
             } else if permissionStatus == .notDetermined {
-                Color.black
-                    .onAppear {
-                        AVCaptureDevice.requestAccess(for: .video) { granted in
-                            DispatchQueue.main.async {
-                                permissionStatus = granted ? .authorized : .denied
-                            }
+                VStack(spacing: 20) {
+                    ProgressView()
+                        .progressViewStyle(CircularProgressViewStyle(tint: .white))
+                        .scaleEffect(1.5)
+                    Text("Requesting Camera Access...")
+                        .foregroundColor(.white)
+                }
+                .onAppear {
+                    AVCaptureDevice.requestAccess(for: .video) { granted in
+                        DispatchQueue.main.async {
+                            permissionStatus = granted ? .authorized : .denied
                         }
                     }
+                }
             } else {
                 VStack(spacing: 20) {
                     Image(systemName: "camera.fill.badge.ellipsis")

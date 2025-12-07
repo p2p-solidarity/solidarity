@@ -7,6 +7,7 @@ struct SelectiveDisclosureSettingsView: View {
     @Binding var sharingPreferences: SharingPreferences
     @State private var expirationDays: Int = 30
     @State private var selectedLevel: SharingLevel = .public
+    @State private var showDevToggle = false
     
     // Helper for binding to a specific field in a specific level
     private func bindingForField(_ level: SharingLevel, _ field: BusinessCardField) -> Binding<Bool> {
@@ -69,13 +70,52 @@ struct SelectiveDisclosureSettingsView: View {
 
     private var overallSection: some View {
         VStack(spacing: 0) {
-            ToggleRow(
-                title: "Zero-Knowledge Privacy",
-                subtitle: "Use selective disclosure proofs when sharing.",
-                isOn: $sharingPreferences.useZK,
-                icon: "eye.slash.fill",
-                color: .purple
-            )
+            // Zero-Knowledge Privacy (Glitch Toggle)
+            HStack {
+                Image(systemName: sharingPreferences.useZK ? "eye.slash.fill" : "exclamationmark.triangle.fill")
+                    .font(.system(size: 20))
+                    .foregroundColor(sharingPreferences.useZK ? .purple : .red)
+                    .frame(width: 30, height: 30)
+                    .background((sharingPreferences.useZK ? Color.purple : Color.red).opacity(0.1))
+                    .clipShape(RoundedRectangle(cornerRadius: 8))
+                
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Zero-Knowledge Privacy")
+                        .font(.body)
+                        .foregroundColor(.primary)
+                    Text(sharingPreferences.useZK ? "Active" : "Disabled (Unsafe)")
+                        .font(.caption)
+                        .foregroundColor(sharingPreferences.useZK ? .secondary : .red)
+                }
+                
+                Spacer()
+                
+                if showDevToggle {
+                    Toggle("", isOn: $sharingPreferences.useZK)
+                        .labelsHidden()
+                } else {
+                    Text(sharingPreferences.useZK ? "ON" : "OFF")
+                        .font(.callout.weight(.semibold))
+                        .foregroundColor(.secondary)
+                }
+            }
+            .padding()
+            .contentShape(Rectangle())
+            .onTapGesture(count: 3) {
+                withAnimation(.spring(response: 0.3, dampingFraction: 0.4)) {
+                    showDevToggle.toggle()
+                    if !showDevToggle {
+                        // Reset to true if hiding dev mode? No, let them keep it off if they really want.
+                    }
+                    // Glitch effect haptic
+                    #if canImport(UIKit)
+                    let generator = UIImpactFeedbackGenerator(style: .heavy)
+                    generator.impactOccurred()
+                    #endif
+                }
+            }
+            // Add a flashing effect if disabled
+            .opacity(sharingPreferences.useZK ? 1.0 : (showDevToggle ? 1.0 : 0.8))
             
             Divider().padding(.leading, 50)
             

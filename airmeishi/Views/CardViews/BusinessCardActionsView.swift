@@ -140,28 +140,41 @@ struct WalletCardView: View {
     }
 
     private func perCardGradient(card: BusinessCard) -> LinearGradient {
-        if let animal = card.animal {
-            let colors: [Color]
+        // Source of truth: Theme Accent is the base.
+        // If an animal is present (either on card or global theme), we blend it.
+        
+        let baseColor = theme.cardAccent
+        
+        // Check for animal override: Card specific > Global Theme
+        let activeAnimal = card.animal ?? theme.selectedAnimal
+        
+        if let animal = activeAnimal {
+            let animalColors: [Color]
             switch animal {
             case .dog:
-                colors = [Color(hex: 0xFFF8E1), Color(hex: 0xFFD54F)]
+                // Warm/Gold tones mixed with base
+                animalColors = [baseColor.opacity(0.1), Color(hex: 0xFFD54F)]
             case .horse:
-                colors = [Color(hex: 0xE8EAF6), Color(hex: 0x5C6BC0)]
+                // Blue/Indigo tones mixed with base
+                animalColors = [baseColor.opacity(0.1), Color(hex: 0x5C6BC0)]
             case .pig:
-                colors = [Color(hex: 0xFCE4EC), Color(hex: 0xF06292)]
+                // Pink/Rose tones mixed with base
+                animalColors = [baseColor.opacity(0.1), Color(hex: 0xF06292)]
             case .sheep:
-                colors = [Color(hex: 0xE8F5E9), Color(hex: 0x66BB6A)]
+                // Green/Nature tones mixed with base
+                animalColors = [baseColor.opacity(0.1), Color(hex: 0x66BB6A)]
             case .dove:
-                colors = [Color(hex: 0xE0F7FA), Color(hex: 0x26C6DA)]
+                // Cyan/Sky tones mixed with base
+                animalColors = [baseColor.opacity(0.1), Color(hex: 0x26C6DA)]
             }
-            return LinearGradient(colors: colors, startPoint: .topLeading, endPoint: .bottomTrailing)
+            
+            // Create a gradient that starts with light version of base and transitions to animal color
+            return LinearGradient(colors: [Color.white, animalColors[1].opacity(0.6)], startPoint: .topLeading, endPoint: .bottomTrailing)
         }
-
-        let hash = card.id.uuidString.hashValue
-        let hue = Double(abs(hash % 360)) / 360.0
-        let base = Color(hue: hue, saturation: 0.55, brightness: 0.95)
-        let light = Color.white
-        return LinearGradient(colors: [light, base], startPoint: .topLeading, endPoint: .bottomTrailing)
+        
+        // No animal: Use Pure Theme Gradient
+        // A nice gradient from white/light to the accent color
+        return LinearGradient(colors: [Color.white, baseColor.opacity(0.3)], startPoint: .topLeading, endPoint: .bottomTrailing)
     }
 
     private func category(for card: BusinessCard) -> String {
