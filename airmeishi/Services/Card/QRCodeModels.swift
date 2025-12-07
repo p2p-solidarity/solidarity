@@ -95,6 +95,7 @@ struct QRSharingPayload: Codable {
     let issuerProof: String?
     let sdProof: SelectiveDisclosureProof?
     let format: SharingFormat?
+    let sealedRoute: String?
 
     init(
         businessCard: BusinessCard,
@@ -107,7 +108,8 @@ struct QRSharingPayload: Codable {
         issuerCommitment: String? = nil,
         issuerProof: String? = nil,
         sdProof: SelectiveDisclosureProof? = nil,
-        format: SharingFormat? = nil
+        format: SharingFormat? = nil,
+        sealedRoute: String? = nil
     ) {
         self.businessCard = businessCard
         self.sharingLevel = sharingLevel
@@ -120,5 +122,6 @@ struct QRSharingPayload: Codable {
         self.issuerProof = issuerProof
         self.sdProof = sdProof
         self.format = format
+        self.sealedRoute = sealedRoute
     }
 }

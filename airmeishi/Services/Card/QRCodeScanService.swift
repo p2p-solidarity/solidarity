@@ -6,6 +6,7 @@ final class QRCodeScanService: NSObject {
     struct ScanOutcome {
         let card: BusinessCard?
         let verificationStatus: VerificationStatus?
+        let sealedRoute: String?
     }
 
     var onScanOutcome: ((Result<ScanOutcome, CardError>) -> Void)?
@@ -116,8 +117,15 @@ final class QRCodeScanService: NSObject {
                 return
             }
             let card = rebuildCard(from: payload)
+            // Extract sealed route from snapshot if available
+            let sealedRoute = payload.snapshot.sealedRoute
+            
             identityCoordinator.updateVerificationStatus(for: card.id, status: .unverified)
-            onScanOutcome?(.success(ScanOutcome(card: card, verificationStatus: .unverified)))
+            onScanOutcome?(.success(ScanOutcome(
+                card: card, 
+                verificationStatus: .unverified,
+                sealedRoute: sealedRoute
+            )))
 
         case .zkProof:
             guard let base64 = envelope.encryptedPayload else {
@@ -180,12 +188,20 @@ final class QRCodeScanService: NSObject {
                 expectedBusinessCardId: payload.businessCard.id.uuidString
             )
             if case .success(let outcome) = verification, outcome.isValid == false {
-                return .success(ScanOutcome(card: payload.businessCard, verificationStatus: .failed))
+                return .success(ScanOutcome(
+                    card: payload.businessCard,
+                    verificationStatus: .failed,
+                    sealedRoute: payload.sealedRoute
+                ))
             }
         }
 
         identityCoordinator.updateVerificationStatus(for: payload.businessCard.id, status: status)
-        return .success(ScanOutcome(card: payload.businessCard, verificationStatus: status))
+        return .success(ScanOutcome(
+            card: payload.businessCard,
+            verificationStatus: status,
+            sealedRoute: payload.sealedRoute
+        ))
     }
 
     private func handleDidSignedPayload(_ payload: QRDidSignedPayload) -> Result<ScanOutcome, CardError> {
@@ -202,7 +218,7 @@ final class QRCodeScanService: NSObject {
                 status = .unverified
             }
             identityCoordinator.updateVerificationStatus(for: imported.businessCard.id, status: status)
-            return .success(ScanOutcome(card: imported.businessCard, verificationStatus: status))
+            return .success(ScanOutcome(card: imported.businessCard, verificationStatus: status, sealedRoute: nil))
         }
     }
 
@@ -245,7 +261,7 @@ final class QRCodeScanService: NSObject {
                     DispatchQueue.main.async {
                         UIApplication.shared.open(url, options: [:], completionHandler: nil)
                     }
-                    onScanOutcome?(.success(ScanOutcome(card: businessCard, verificationStatus: .pending)))
+                    onScanOutcome?(.success(ScanOutcome(card: businessCard, verificationStatus: .pending, sealedRoute: nil)))
                 }
             }
         }
@@ -265,7 +281,7 @@ final class QRCodeScanService: NSObject {
                 status = .unverified
             }
             identityCoordinator.updateVerificationStatus(for: imported.businessCard.id, status: status)
-            onScanOutcome?(.success(ScanOutcome(card: imported.businessCard, verificationStatus: status)))
+            onScanOutcome?(.success(ScanOutcome(card: imported.businessCard, verificationStatus: status, sealedRoute: nil)))
         }
     }
 
@@ -274,7 +290,7 @@ final class QRCodeScanService: NSObject {
         if handled {
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
                 if let card = DeepLinkManager.shared.lastReceivedCard {
-                    self.onScanOutcome?(.success(ScanOutcome(card: card, verificationStatus: .unverified)))
+                    self.onScanOutcome?(.success(ScanOutcome(card: card, verificationStatus: .unverified, sealedRoute: nil)))
                 } else {
                     self.onScanOutcome?(.failure(.sharingError("No card received from deep link")))
                 }

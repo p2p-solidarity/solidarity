@@ -84,7 +84,9 @@ final class QRCodeGenerationService {
         expirationDate: Date?
     ) -> QRCodeEnvelope {
         let filteredCard = card.filteredCard(for: level)
-        let snapshot = BusinessCardSnapshot(card: filteredCard)
+        // Ensure we include our sealedRoute so the scanner can reply via Sakura
+        let mySealedRoute = SecureKeyManager.shared.mySealedRoute
+        let snapshot = BusinessCardSnapshot(card: filteredCard, sealedRoute: mySealedRoute)
         let shareId = UUID()
         let payload = QRPlaintextPayload(
             snapshot: snapshot,
@@ -142,7 +144,8 @@ final class QRCodeGenerationService {
             issuerCommitment: issuerCommitment,
             issuerProof: issuerProof,
             sdProof: sdProof,
-            format: .zkProof
+            format: .zkProof,
+            sealedRoute: SecureKeyManager.shared.mySealedRoute
         )
 
         switch encryptionManager.encrypt(payload) {

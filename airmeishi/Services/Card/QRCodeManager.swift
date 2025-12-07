@@ -9,6 +9,7 @@ final class QRCodeManager: ObservableObject {
     @Published var isGenerating = false
     @Published var lastScannedCard: BusinessCard?
     @Published var lastVerificationStatus: VerificationStatus?
+    @Published var lastSealedRoute: String?
     @Published var scanError: CardError?
     
     private let generationService: QRCodeGenerationService
@@ -96,6 +97,7 @@ final class QRCodeManager: ObservableObject {
             case .success(let outcome):
                 self.lastScannedCard = outcome.card
                 self.lastVerificationStatus = outcome.verificationStatus
+                self.lastSealedRoute = outcome.sealedRoute
                 self.scanError = nil
             case .failure(let error):
                 self.scanError = error

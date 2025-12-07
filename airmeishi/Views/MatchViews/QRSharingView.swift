@@ -36,17 +36,10 @@ struct QRSharingView: View {
                         businessCard: businessCard.filteredCard(for: selectedSharingLevel)
                     )
                     
-                    // Privacy level selector
-                    PrivacyLevelSelector(
-                        selectedLevel: $selectedSharingLevel,
-                        businessCard: businessCard
-                    )
 
-                    // Sharing mode selector
-                    SharingModeSelector(selectedMode: $qrMode)
-                        .onChange(of: qrMode) { _, _ in
-                            generateQRCode()
-                        }
+
+
+
                     
                     // QR Code display
                     QRCodeDisplay(
@@ -65,6 +58,18 @@ struct QRSharingView: View {
                         onCreateShareLink: createShareLink,
                         onShowShareSheet: { showingShareSheet = true }
                     )
+                    
+                    // Privacy level selector
+                    PrivacyLevelSelector(
+                        selectedLevel: $selectedSharingLevel,
+                        businessCard: businessCard
+                    )
+
+                    // Sharing mode selector
+                    SharingModeSelector(selectedMode: $qrMode)
+                        .onChange(of: qrMode) { _, _ in
+                            generateQRCode()
+                        }
                     
                     // Active share links
                     ActiveShareLinksView(

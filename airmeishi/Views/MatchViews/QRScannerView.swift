@@ -186,7 +186,8 @@ struct QRScannerView: View {
             source: .qrCode,
             tags: [],
             notes: nil,
-            verificationStatus: lastVerification
+            verificationStatus: lastVerification,
+            sealedRoute: qrManager.lastSealedRoute
         )
         
         let result = contactRepository.addContact(contact)

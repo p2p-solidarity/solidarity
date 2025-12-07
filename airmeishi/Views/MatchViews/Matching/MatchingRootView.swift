@@ -38,7 +38,7 @@ struct MatchingRootView: View {
             orbit(radiusPadding: 84, size: 14).rotationEffect(.degrees(rotateInner ? 360 : 0)).animation(.linear(duration: 7).repeatForever(autoreverses: false), value: rotateInner)
         }
         .onAppear { rotateOuter = true; rotateMiddle = true; rotateInner = true }
-        .overlay(shareButton)
+//        .overlay(shareButton)
         .overlay(sakuraOverlay)
         .overlay(latestMessageOverlay)
         .overlay(incomingInvitationOverlay)
@@ -78,6 +78,7 @@ struct MatchingRootView: View {
         }
     }
     
+    /*
     private var shareButton: some View {
         VStack {
             Spacer()
@@ -97,6 +98,7 @@ struct MatchingRootView: View {
             }
         }
     }
+    */
     
     private var sakuraOverlay: some View {
         VStack {

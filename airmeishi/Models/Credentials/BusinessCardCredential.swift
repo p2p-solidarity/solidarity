@@ -41,8 +41,9 @@ struct BusinessCardSnapshot: Codable, Equatable {
     let profileImageDataURI: String?
     let summary: String?
     let groupContext: GroupCredentialContext?
+    let sealedRoute: String?
 
-    init(card: BusinessCard) {
+    init(card: BusinessCard, sealedRoute: String? = nil) {
         cardId = card.id
         name = card.name
         title = card.title?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty()
@@ -76,6 +77,7 @@ struct BusinessCardSnapshot: Codable, Equatable {
             profileImageDataURI = nil
         }
         groupContext = card.groupContext
+        self.sealedRoute = sealedRoute
 
         if let title = title, let company = company {
             summary = "\(title) @ \(company)"

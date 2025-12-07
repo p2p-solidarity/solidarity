@@ -7,8 +7,67 @@
 
 import SwiftUI
 import AVFoundation
+import AVFoundation
 
-struct SimpleQRScannerView: UIViewControllerRepresentable {
+struct SimpleQRScannerView: View {
+    var onScan: (String) -> Void
+    var onCancel: () -> Void
+    
+    @State private var permissionStatus = AVCaptureDevice.authorizationStatus(for: .video)
+    
+    var body: some View {
+        ZStack {
+            Color.black.edgesIgnoringSafeArea(.all)
+            
+            if permissionStatus == .authorized {
+                SimpleQRScannerWrapper(onScan: onScan, onCancel: onCancel)
+            } else if permissionStatus == .notDetermined {
+                Color.black
+                    .onAppear {
+                        AVCaptureDevice.requestAccess(for: .video) { granted in
+                            DispatchQueue.main.async {
+                                permissionStatus = granted ? .authorized : .denied
+                            }
+                        }
+                    }
+            } else {
+                VStack(spacing: 20) {
+                    Image(systemName: "camera.fill.badge.ellipsis")
+                        .font(.system(size: 60))
+                        .foregroundColor(.gray)
+                    
+                    Text("Camera Access Required")
+                        .font(.title2)
+                        .fontWeight(.bold)
+                        .foregroundColor(.white)
+                    
+                    Text("Please enable camera access in Settings to scan QR codes.")
+                        .font(.body)
+                        .foregroundColor(.gray)
+                        .multilineTextAlignment(.center)
+                        .padding(.horizontal)
+                    
+                    Button("Open Settings") {
+                        if let url = URL(string: UIApplication.openSettingsURLString) {
+                            UIApplication.shared.open(url)
+                        }
+                    }
+                    .padding()
+                    .background(Color.blue)
+                    .foregroundColor(.white)
+                    .cornerRadius(10)
+                    
+                    Button("Cancel") {
+                        onCancel()
+                    }
+                    .padding()
+                    .foregroundColor(.white)
+                }
+            }
+        }
+    }
+}
+struct SimpleQRScannerWrapper: UIViewControllerRepresentable {
     var onScan: (String) -> Void
     var onCancel: () -> Void
     
@@ -25,9 +84,9 @@ struct SimpleQRScannerView: UIViewControllerRepresentable {
     }
     
     class Coordinator: NSObject, SimpleQRScannerDelegate {
-        let parent: SimpleQRScannerView
+        let parent: SimpleQRScannerWrapper
         
-        init(parent: SimpleQRScannerView) {
+        init(parent: SimpleQRScannerWrapper) {
             self.parent = parent
         }
         
