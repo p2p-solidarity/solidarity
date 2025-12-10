@@ -16,6 +16,11 @@ struct ProximitySharingPayload: Codable {
     let issuerCommitment: String?
     let issuerProof: String?
     let sdProof: SelectiveDisclosureProof?
+    
+    // Secure Messaging Fields (Optional for backward compatibility)
+    let sealedRoute: String?
+    let pubKey: String?      // Encryption Key (X25519)
+    let signPubKey: String?  // Identity Key (Ed25519)
 }
 
 

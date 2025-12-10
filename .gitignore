@@ -87,8 +87,13 @@ iOSInjectionProject/
 
 ### SwiftPackageManager ###
 Packages
-xcuserdata
-*.xcodeproj
+# Note: xcuserdata/ is already ignored globally (line 10 - User settings section)
+# Note: *.xcodeproj ignores the directory, but we need to track:
+# - project.pbxproj (project file)
+# - Package.resolved (for Xcode Cloud - use 'git add -f' to add)
+# - xcshareddata/xcschemes/*.xcscheme (shared schemes for CI/CD)
+# These files should be tracked even though *.xcodeproj is ignored
+# *.xcodeproj
 
 
 # End of https://www.toptal.com/developers/gitignore/api/swift,swiftpackagemanager

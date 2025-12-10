@@ -2,486 +2,405 @@
 //  IDView.swift
 //  airmeishi
 //
-//  Identity view with ring interaction for Semaphore identity/group and proof generation
+//  Unified identity and group management with ripple animation, OpenID, and ZK settings
 //
 
 import SwiftUI
-import UniformTypeIdentifiers
-
-enum EventLayoutMode: String, CaseIterable, Identifiable {
-    case list
-    case grid
-    case timeline
-    var id: String { rawValue }
-    
-    var title: String {
-        switch self {
-        case .list: return "List"
-        case .grid: return "Grid"
-        case .timeline: return "Timeline"
-        }
-    }
-}
 
 struct IDView: View {
+    @ObservedObject private var coordinator = IdentityCoordinator.shared
+    @StateObject private var groupManager = CloudKitGroupSyncManager.shared
     @StateObject private var idm = SemaphoreIdentityManager.shared
-    @StateObject private var group = SemaphoreGroupManager.shared
-    @State private var showingCreateGroup = false
-    @State private var identityCommitment: String = ""
-    @State private var ringActiveCount: Int = 0
-    @State private var isPressing: Bool = false
-    @State private var ringTimer: Timer?
-    @State private var isWorking: Bool = false
-    @State private var showErrorAlert: Bool = false
+
+    
+    // UI State
+    @State private var showingGroupManager = false
+    @State private var showingOIDCRequest = false
+    @State private var showingZKSettings = false
+    @State private var selectedGroup: GroupModel?
+    @State private var isWorking = false
+    @State private var showErrorAlert = false
     @State private var errorMessage: String?
     
+    // Computed Properties
+    private var profile: UnifiedProfile {
+        coordinator.state.currentProfile
+    }
+    
+    private var rippleState: RippleButtonState {
+        if coordinator.state.isLoading || isWorking {
+            return .processing
+        }
+        if profile.zkIdentity == nil {
+            return .idle
+        }
+        return .idle
+    }
     
     var body: some View {
         NavigationStack {
-            VStack(spacing: 16) {
-                GeometryReader { geo in
-                    ZStack {
-                        let base = min(geo.size.width, geo.size.height)
-                        // Indices chosen so that 1 = inner, 3 = outer to light from inner -> outer
-                        ringView(size: base * 0.80, index: 3)
-                        ringView(size: base * 0.62, index: 2)
-                        ringView(size: base * 0.46, index: 1)
-                        centerButton(size: base * 0.36)
+            ZStack {
+                // Background
+                Color(.systemGroupedBackground)
+                    .ignoresSafeArea()
+                
+                ScrollView {
+                    VStack(spacing: 0) {
+                        // 1. The Mask (DID Switcher)
+                        maskSection
+                            .padding(.top, 20)
+                            .padding(.bottom, 40)
+                        
+                        // 2. The Core (Ripple Button)
+                        coreSection
+                        
+                        Spacer()
+                            .frame(height: 40)
+                        
+                        // 3. The Badge (Group Cards)
+                        badgeSection
+                            .padding(.bottom, 20)
                     }
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
                 }
-                .frame(height: 360)
-
-                identityPanel()
             }
             .navigationTitle("ID")
+            .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .navigationBarTrailing) {
-                    NavigationLink {
-                        GroupManagementView()
-                    } label: {
-                        Image(systemName: "person.3")
-                    }
-                }
-            }
-        }
-        .sheet(isPresented: $showingCreateGroup) {
-            NavigationStack { CreateGroupSheet() }
-        }
-        .alert("Error", isPresented: $showErrorAlert) {
-            Button("OK", role: .cancel) {}
-        } message: {
-            Text(errorMessage ?? "Unknown error")
-        }
-        .onAppear {
-            if let id = idm.getIdentity() { identityCommitment = id.commitment }
-        }
-    }
-
-    private func ringView(size: CGFloat, index: Int) -> some View {
-        Circle()
-            .stroke(lineWidth: 8)
-            .foregroundColor(
-                index == 1
-                ? Color.gray.opacity(0.2)
-                : (index <= ringActiveCount ? Color.accentColor : Color.gray.opacity(0.2))
-            )
-            .frame(width: size, height: size)
-            .animation(.easeInOut(duration: 0.3), value: ringActiveCount)
-    }
-
-    private func centerButton(size: CGFloat) -> some View {
-        let longPressDuration: Double = 1.5
-        return ZStack {
-            Circle()
-                .fill(
-                    identityCommitment.isEmpty
-                    ? LinearGradient(colors: [.accentColor.opacity(0.9), .accentColor.opacity(0.7)], startPoint: .topLeading, endPoint: .bottomTrailing)
-                    : LinearGradient(colors: [.green.opacity(0.95), .blue.opacity(0.75)], startPoint: .topLeading, endPoint: .bottomTrailing)
-                )
-                .frame(width: size, height: size)
-                .shadow(color: .accentColor.opacity(isPressing ? 0.6 : 0.25), radius: isPressing ? 20 : 10)
-                .overlay(
-                    VStack(spacing: 6) {
-                        Text("ID")
-                            .font(.title2.weight(.bold))
-                            .foregroundColor(.white)
-                            .shadow(color: .black.opacity(0.35), radius: 3, x: 0, y: 1)
-                        if !identityCommitment.isEmpty {
-                            VStack(spacing: 4) {
-                                Text("Commitment")
-                                    .font(.caption2)
-                                    .foregroundColor(.white.opacity(0.9))
-                                Text(shortCommitment(identityCommitment))
-                                    .font(.caption.monospaced())
-                                    .foregroundColor(.white)
-                                    .padding(.horizontal, 8)
-                                    .padding(.vertical, 4)
-                                    .background(Color.black.opacity(0.20))
-                                    .clipShape(RoundedRectangle(cornerRadius: 6))
-                            }
-                        } else {
-                            Text("Tap: Create ID\nHold: Create Group")
-                                .font(.caption2)
-                                .multilineTextAlignment(.center)
-                                .foregroundColor(.white)
-                                .padding(.horizontal, 8)
-                                .padding(.vertical, 4)
-                                .background(Color.black.opacity(0.20))
-                                .clipShape(RoundedRectangle(cornerRadius: 6))
+                    HStack {
+                        Button {
+                            showingOIDCRequest = true
+                        } label: {
+                            Image(systemName: "qrcode")
+                                .foregroundColor(.primary)
+                        }
+                        
+                        Button {
+                            coordinator.refreshIdentity()
+                        } label: {
+                            Image(systemName: "arrow.clockwise")
+                                .foregroundColor(.primary)
                         }
                     }
-                )
-                .onTapGesture { tapAction() }
-                .onLongPressGesture(minimumDuration: longPressDuration, maximumDistance: 50, pressing: { pressing in
-                    isPressing = pressing
-                    if pressing {
-                        startRingAnimation()
-                        #if canImport(UIKit)
-                        UIImpactFeedbackGenerator(style: .light).impactOccurred()
-                        #endif
-                    } else {
-                        // Keep the rings lit at their last state until action perform finishes
-                        stopRingAnimation(reset: false)
-                    }
-                }, perform: {
-                    #if canImport(UIKit)
-                    UINotificationFeedbackGenerator().notificationOccurred(.success)
-                    #endif
-                    stopRingAnimation(reset: false)
-                    longPressAction()
-                })
-        }
-    }
-
-    private func startRingAnimation() {
-        ringActiveCount = 1
-        ringTimer?.invalidate()
-        ringTimer = Timer.scheduledTimer(withTimeInterval: 0.5, repeats: true) { timer in
-            ringActiveCount = min(3, ringActiveCount + 1)
-            if ringActiveCount >= 3 { timer.invalidate() }
-        }
-    }
-
-    private func stopRingAnimation(reset: Bool) {
-        ringTimer?.invalidate()
-        ringTimer = nil
-        if reset { ringActiveCount = 0 }
-    }
-
-    private func tapAction() {
-        if isWorking { return }
-        isWorking = true
-        DispatchQueue.global(qos: .userInitiated).async {
-            do {
-                // Ensure identity exists
-                let bundle = try idm.loadOrCreateIdentity()
-                if identityCommitment.isEmpty {
-                    DispatchQueue.main.async { identityCommitment = bundle.commitment }
                 }
-                // Ensure membership includes self
-                if !group.members.contains(bundle.commitment) { group.addMember(bundle.commitment) }
-                DispatchQueue.main.async { isWorking = false }
-            } catch {
-                ZKLog.error("Error on tapAction: \(error.localizedDescription)")
-                DispatchQueue.main.async {
-                    errorMessage = error.localizedDescription
-                    showErrorAlert = true
-                    isWorking = false
-                }
-            }
-        }
-    }
-
-    private func longPressAction() {
-        if isWorking { return }
-        isWorking = true
-        DispatchQueue.global(qos: .userInitiated).async {
-            do {
-                let bundle = try idm.loadOrCreateIdentity()
-                DispatchQueue.main.async { identityCommitment = bundle.commitment }
-                DispatchQueue.main.async {
-                    isWorking = false
-                    showingCreateGroup = true
-                }
-            } catch {
-                ZKLog.error("Error on longPressAction: \(error.localizedDescription)")
-                DispatchQueue.main.async {
-                    errorMessage = error.localizedDescription
-                    showErrorAlert = true
-                    isWorking = false
-                }
-            }
-        }
-    }
-
-    private func shortCommitment(_ c: String) -> String {
-        if c.count <= 12 { return c }
-        let start = c.prefix(6)
-        let end = c.suffix(6)
-        return String(start) + "…" + String(end)
-    }
-
-    // MARK: - Identity panel
-
-    @ViewBuilder
-    private func identityPanel() -> some View {
-        VStack(alignment: .leading, spacing: 8) {
-            HStack {
-                Text("Your ID")
-                    .font(.headline)
-                Spacer()
-                if !identityCommitment.isEmpty {
+                
+                ToolbarItem(placement: .navigationBarLeading) {
                     Button {
-                        #if canImport(UIKit)
-                        UIPasteboard.general.string = identityCommitment
-                        #endif
+                        showingZKSettings = true
                     } label: {
-                        Label("Copy", systemImage: "doc.on.doc")
+                        Image(systemName: "gearshape")
+                            .foregroundColor(.primary)
                     }
-                    .buttonStyle(.bordered)
                 }
             }
-            if identityCommitment.isEmpty {
-                Text("No ID yet. Tap the center to create your identity.")
-                    .font(.footnote)
-                    .foregroundColor(.secondary)
-            } else {
-                VStack(alignment: .leading, spacing: 6) {
-                    Text(shortCommitment(identityCommitment))
-                        .font(.callout.monospaced())
-                        .padding(.horizontal, 10)
-                        .padding(.vertical, 6)
-                        .background(RoundedRectangle(cornerRadius: 10).fill(Color(uiColor: .secondarySystemBackground)))
-                    DisclosureGroup("Show full") {
-                        ScrollView(.horizontal, showsIndicators: true) {
-                            Text(identityCommitment)
-                                .font(.footnote.monospaced())
-                                .textSelection(.enabled)
-                                .padding(.vertical, 4)
-                        }
-                    }
+            .alert("Error", isPresented: $showErrorAlert) {
+                Button("OK", role: .cancel) {}
+            } message: {
+                Text(errorMessage ?? "Unknown error")
+            }
+            .sheet(isPresented: $showingGroupManager) {
+                NavigationStack {
+                    GroupManagementView()
                 }
+            }
+            .sheet(isPresented: $showingOIDCRequest) {
+                OIDCRequestView()
+            }
+            .sheet(isPresented: $showingZKSettings) {
+                ZKSettingsView()
+            }
+            .onAppear {
+                groupManager.startSyncEngine()
             }
         }
-        .padding(.horizontal)
+    }
+    
+    // MARK: - 1. The Mask (DID Switcher)
+    
+    private var maskSection: some View {
+        VStack(spacing: 12) {
+            HStack(spacing: 0) {
+                didCapsule(
+                    title: "Anonymous",
+                    subtitle: "did:key",
+                    isActive: isDidKeyActive,
+                    action: { switchDID(.key) }
+                )
+                
+                Divider()
+                    .frame(height: 24)
+                
+                didCapsule(
+                    title: "Public",
+                    subtitle: "did:ethr",
+                    isActive: !isDidKeyActive,
+                    action: { switchDID(.ethr) }
+                )
+            }
+            .background(Color(.secondarySystemBackground))
+            .clipShape(Capsule())
+            .shadow(color: Color.black.opacity(0.05), radius: 5, x: 0, y: 2)
+            
+            // DID String Display
+            if let did = profile.activeDID?.did {
+                Button(action: {
+                    #if canImport(UIKit)
+                    UIPasteboard.general.string = did
+                    #endif
+                }) {
+                    HStack(spacing: 6) {
+                        Text(shortDid(did))
+                            .font(.caption.monospaced())
+                            .foregroundColor(.secondary)
+                        
+                        Image(systemName: "doc.on.doc")
+                            .font(.caption2)
+                            .foregroundColor(.secondary.opacity(0.7))
+                    }
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 4)
+                    .background(Color(.secondarySystemBackground))
+                    .clipShape(Capsule())
+                }
+                .buttonStyle(.plain)
+            }
+        }
+    }
+    
+    private func didCapsule(title: String, subtitle: String, isActive: Bool, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            VStack(spacing: 2) {
+                Text(title)
+                    .font(.subheadline.weight(.medium))
+                    .foregroundColor(isActive ? .black : .secondary)
+                
+                Text(subtitle)
+                    .font(.caption2)
+                    .foregroundColor(isActive ? .black.opacity(0.8) : .secondary.opacity(0.6))
+            }
+            .frame(width: 120, height: 50)
+            .background(isActive ? Color.white : Color.clear)
+            .clipShape(Capsule())
+            .shadow(color: isActive ? Color.black.opacity(0.1) : Color.clear, radius: 2, x: 0, y: 1)
+        }
+        .buttonStyle(.plain)
+        .animation(.spring(response: 0.3, dampingFraction: 0.7), value: isActive)
+    }
+    
+    private var isDidKeyActive: Bool {
+        guard let did = profile.activeDID?.did else { return true }
+        return did.hasPrefix("did:key")
+    }
+    
+    private func switchDID(_ method: DIDService.DIDMethod) {
+        coordinator.switchDID(method: method)
+    }
+    
+    private func shortDid(_ did: String) -> String {
+        guard did.count > 20 else { return did }
+        let start = did.prefix(12)
+        let end = did.suffix(6)
+        return String(start) + "..." + String(end)
+    }
+    
+    // MARK: - 2. The Core (Ripple Button)
+    
+    private var coreSection: some View {
+        RippleButton(
+            state: rippleState,
+            commitment: profile.zkIdentity?.commitment,
+            onTap: handleCoreTap,
+            onLongPress: handleCoreLongPress
+        )
+        .frame(height: 320)
+    }
+    
+    private func handleCoreTap() {
+        if profile.zkIdentity == nil {
+            createIdentity()
+        } else {
+            // Sync logic
+            coordinator.refreshIdentity()
+        }
+    }
+    
+    private func handleCoreLongPress() {
+        showingGroupManager = true
+    }
+    
+    private func createIdentity() {
+        isWorking = true
+        Task { @MainActor in
+            do {
+                _ = try idm.loadOrCreateIdentity()
+                coordinator.refreshIdentity()
+                isWorking = false
+                
+                #if canImport(UIKit)
+                UINotificationFeedbackGenerator().notificationOccurred(.success)
+                #endif
+            } catch {
+                errorMessage = "Failed to create identity: \(error.localizedDescription)"
+                showErrorAlert = true
+                isWorking = false
+            }
+        }
+    }
+    
+    // MARK: - 3. The Badge (Group List)
+    
+    private var badgeSection: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            HStack {
+                Text("Groups")
+                    .font(.headline)
+                    .foregroundColor(.secondary)
+                    .padding(.horizontal, 24)
+                
+                Spacer()
+                
+                Button(action: { showingGroupManager = true }) {
+                    Image(systemName: "plus.circle.fill")
+                    .font(.title2)
+                    .foregroundColor(.accentColor)
+                }
+                .padding(.trailing, 24)
+            }
+            
+            if groupManager.groups.isEmpty {
+                Text("No group memberships")
+                    .font(.subheadline)
+                    .foregroundColor(.secondary)
+                    .frame(maxWidth: .infinity, alignment: .center)
+                    .padding(.vertical, 20)
+            } else {
+                LazyVStack(spacing: 12) {
+                    ForEach(groupManager.groups) { group in
+                        groupRow(group: group)
+                    }
+                }
+                .padding(.horizontal, 20)
+            }
+        }
+    }
+    
+    private func groupRow(group: GroupModel) -> some View {
+        Button(action: {
+            selectedGroup = group
+            presentProof()
+        }) {
+            HStack(spacing: 16) {
+                // Icon
+                ZStack {
+                    Circle()
+                        .fill(Color.accentColor.opacity(0.1))
+                        .frame(width: 44, height: 44)
+                    
+                    Image(systemName: "person.3.fill")
+                        .foregroundColor(.accentColor)
+                }
+                
+                // Info
+                VStack(alignment: .leading, spacing: 4) {
+                    HStack(spacing: 6) {
+                        Text(group.name)
+                            .font(.body.weight(.medium))
+                            .foregroundColor(.primary)
+                        
+                        Text("CloudKit")
+                            .font(.system(size: 10, weight: .bold))
+                            .foregroundColor(.white)
+                            .padding(.horizontal, 6)
+                            .padding(.vertical, 2)
+                            .background(Color.blue.opacity(0.8))
+                            .clipShape(Capsule())
+                    }
+                    
+                    Text("\(group.memberCount) members")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                }
+                
+                Spacer()
+                
+                Image(systemName: "chevron.right")
+                    .font(.caption)
+                    .foregroundColor(Color(uiColor: .tertiaryLabel))
+            }
+            .padding(12)
+            .background(Color(.secondarySystemGroupedBackground))
+            .cornerRadius(12)
+        }
+        .buttonStyle(.plain)
+    }
+    
+    private var addButton: some View {
+        EmptyView() // Removed in favor of header button
+    }
+    
+    private func presentProof() {
+        guard let _ = selectedGroup else { return }
+        
+        // Logic to present proof for this group
+        // For now, just show the OIDC request sheet
+        showingOIDCRequest = true
+    }
+}
+
+// MARK: - ZK Settings View (Unchanged)
+
+struct ZKSettingsView: View {
+    @Environment(\.dismiss) private var dismiss
+    @StateObject private var idm = SemaphoreIdentityManager.shared
+    @State private var identityCommitment: String?
+    @State private var showingDeleteConfirm = false
+    
+    var body: some View {
+        NavigationStack {
+            List {
+                Section("Identity Status") {
+                    if let commitment = identityCommitment {
+                        LabeledContent("Commitment", value: commitment)
+                            .font(.footnote.monospaced())
+                    } else {
+                        Text("No identity created")
+                            .foregroundColor(.secondary)
+                    }
+                    
+                    LabeledContent("Proofs Supported", value: SemaphoreIdentityManager.proofsSupported ? "Yes" : "No")
+                }
+                
+                Section("Actions") {
+                    Button(role: .destructive, action: { showingDeleteConfirm = true }) {
+                        Label("Delete Identity", systemImage: "trash")
+                    }
+                    .disabled(identityCommitment == nil)
+                }
+            }
+            .navigationTitle("ZK Settings")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .navigationBarTrailing) {
+                    Button("Done") {
+                        dismiss()
+                    }
+                }
+            }
+            .onAppear {
+                identityCommitment = idm.getIdentity()?.commitment
+            }
+            .alert("Delete Identity?", isPresented: $showingDeleteConfirm) {
+                Button("Delete", role: .destructive) {
+                    // TODO: Implement identity deletion
+                }
+                Button("Cancel", role: .cancel) {}
+            } message: {
+                Text("This will permanently delete your ZK identity. This action cannot be undone.")
+            }
+        }
     }
 }
 
 #Preview {
     IDView()
 }
-
-// MARK: - Create Group Sheet
-// Note: Local-only group creation (API removed)
-private struct CreateGroupSheet: View {
-    @Environment(\.dismiss) private var dismiss
-    @State private var groupName: String = ""
-    @State private var includeSelf = true
-    @ObservedObject private var idm = SemaphoreIdentityManager.shared
-    @ObservedObject private var manager = SemaphoreGroupManager.shared
-    @State private var isCreating = false
-    @FocusState private var nameFieldFocused: Bool
-    private var trimmedName: String { groupName.trimmingCharacters(in: .whitespacesAndNewlines) }
-    private var isNameValid: Bool { trimmedName.count >= 3 }
-
-    var body: some View {
-        ZStack {
-            // Dark gradient background
-            LinearGradient(
-                colors: [
-                    Color(red: 0.05, green: 0.05, blue: 0.08),
-                    Color(red: 0.08, green: 0.08, blue: 0.12)
-                ],
-                startPoint: .topLeading,
-                endPoint: .bottomTrailing
-            )
-            .ignoresSafeArea()
-
-            VStack(spacing: 24) {
-                // Header
-                VStack(spacing: 16) {
-                    Image(systemName: "person.3.fill")
-                        .font(.system(size: 48))
-                        .foregroundColor(.white)
-                        .padding(24)
-                        .background(
-                            Circle()
-                                .fill(
-                                    LinearGradient(
-                                        colors: [
-                                            Color.accentColor.opacity(0.3),
-                                            Color.accentColor.opacity(0.1)
-                                        ],
-                                        startPoint: .topLeading,
-                                        endPoint: .bottomTrailing
-                                    )
-                                )
-                        )
-
-                    VStack(spacing: 8) {
-                        Text("Create New Group")
-                            .font(.title)
-                            .fontWeight(.bold)
-                            .foregroundColor(.white)
-
-                        Text("Build a community with ZK privacy")
-                            .font(.subheadline)
-                            .foregroundColor(.white.opacity(0.7))
-                    }
-                }
-                .padding(.top, 40)
-
-                // Form Content
-                VStack(spacing: 20) {
-                    // Name Input
-                    VStack(alignment: .leading, spacing: 8) {
-                        Text("Group Name")
-                            .font(.subheadline)
-                            .fontWeight(.medium)
-                            .foregroundColor(.white.opacity(0.8))
-
-                        TextField("Enter group name", text: $groupName)
-                            .textInputAutocapitalization(.words)
-                            .autocorrectionDisabled()
-                            .submitLabel(.done)
-                            .focused($nameFieldFocused)
-                            .onSubmit { if isNameValid { localCreate() } }
-                            .foregroundColor(.white)
-                            .tint(.accentColor)
-                            .padding(16)
-                            .background(
-                                RoundedRectangle(cornerRadius: 12)
-                                    .fill(Color.white.opacity(0.1))
-                                    .overlay(
-                                        RoundedRectangle(cornerRadius: 12)
-                                            .stroke(
-                                                isNameValid || groupName.isEmpty
-                                                    ? Color.white.opacity(0.2)
-                                                    : Color.red.opacity(0.5),
-                                                lineWidth: 1
-                                            )
-                                    )
-                            )
-
-                        if !isNameValid && !groupName.isEmpty {
-                            HStack(spacing: 4) {
-                                Image(systemName: "exclamationmark.circle.fill")
-                                    .font(.caption2)
-                                Text("Name must be at least 3 characters")
-                                    .font(.caption)
-                            }
-                            .foregroundColor(.red)
-                        }
-                    }
-
-                    // Include Self Toggle
-                    HStack {
-                        VStack(alignment: .leading, spacing: 4) {
-                            Text("Include my identity")
-                                .font(.subheadline)
-                                .fontWeight(.medium)
-                                .foregroundColor(.white)
-
-                            Text("Add yourself as the first member")
-                                .font(.caption)
-                                .foregroundColor(.white.opacity(0.5))
-                        }
-
-                        Spacer()
-
-                        Toggle("", isOn: $includeSelf)
-                            .tint(.accentColor)
-                    }
-                    .padding(16)
-                    .background(
-                        RoundedRectangle(cornerRadius: 12)
-                            .fill(Color.white.opacity(0.1))
-                            .overlay(
-                                RoundedRectangle(cornerRadius: 12)
-                                    .stroke(Color.white.opacity(0.2), lineWidth: 1)
-                            )
-                    )
-                }
-                .padding(.horizontal, 24)
-
-                Spacer()
-
-                // Bottom Button
-                VStack(spacing: 16) {
-                    Button {
-                        guard !isCreating && isNameValid else { return }
-                        localCreate()
-                    } label: {
-                        HStack(spacing: 8) {
-                            if isCreating {
-                                ProgressView()
-                                    .controlSize(.small)
-                                    .tint(.white)
-                            } else {
-                                Image(systemName: "plus.circle.fill")
-                            }
-                            Text(isCreating ? "Creating..." : "Create Group")
-                                .fontWeight(.semibold)
-                        }
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 16)
-                        .background(
-                            RoundedRectangle(cornerRadius: 12)
-                                .fill(
-                                    isNameValid && !isCreating
-                                        ? Color.accentColor
-                                        : Color(red: 0.2, green: 0.2, blue: 0.25)
-                                )
-                        )
-                        .foregroundColor(.white)
-                    }
-                    .disabled(!isNameValid || isCreating)
-
-                    Text("Groups use Semaphore ZK proofs for privacy")
-                        .font(.caption)
-                        .foregroundColor(.white.opacity(0.4))
-                }
-                .padding(.horizontal, 24)
-                .padding(.bottom, 32)
-            }
-        }
-        .navigationTitle("New Group")
-        .navigationBarTitleDisplayMode(.inline)
-        .toolbar {
-            ToolbarItem(placement: .navigationBarTrailing) {
-                Button {
-                    dismiss()
-                } label: {
-                    Image(systemName: "xmark.circle.fill")
-                        .font(.title3)
-                        .foregroundStyle(.white.opacity(0.8))
-                }
-            }
-        }
-        .toolbarBackground(Color.clear, for: .navigationBar)
-        .toolbarBackground(.hidden, for: .navigationBar)
-        .onAppear { nameFieldFocused = true }
-    }
-
-    private func localCreate() {
-        if isCreating { return }
-        guard isNameValid else { return }
-        let name = trimmedName
-        var members: [String] = []
-        if includeSelf, let bundle = idm.getIdentity() ?? (try? idm.loadOrCreateIdentity()) { members.append(bundle.commitment) }
-        let owner = randomEthAddress()
-        _ = manager.createGroup(name: name, initialMembers: members, ownerAddress: owner)
-        groupName = ""
-        dismiss()
-    }
-
-    private func randomEthAddress() -> String {
-        var bytes = [UInt8](repeating: 0, count: 20)
-        _ = SecRandomCopyBytes(kSecRandomDefault, bytes.count, &bytes)
-        let hex = bytes.map { String(format: "%02x", $0) }.joined()
-        return "0x" + hex
-    }
-}
-
- 

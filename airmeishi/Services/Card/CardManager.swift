@@ -37,41 +37,44 @@ class CardManager: BusinessCardManagerProtocol, ObservableObject {
     
     /// Create a new business card
     func createCard(_ card: BusinessCard) -> CardResult<BusinessCard> {
+        let cardForStorage = normalizedForStorage(card)
         // Validate the card
-        if let validationError = validateCard(card) {
+        if let validationError = validateCard(cardForStorage) {
             return .failure(validationError)
         }
         
         // Check for duplicate names
-        if businessCards.contains(where: { $0.name.lowercased() == card.name.lowercased() && $0.id != card.id }) {
+        if businessCards.contains(where: { $0.name.lowercased() == cardForStorage.name.lowercased() && $0.id != cardForStorage.id }) {
             return .failure(.validationError("A business card with this name already exists"))
         }
         
         // Add to local array
-        businessCards.append(card)
+        businessCards.append(cardForStorage)
         
         // Save to storage
         let saveResult = saveCardsToStorage()
         
         switch saveResult {
         case .success:
-            return .success(card)
+            return .success(cardForStorage)
         case .failure(let error):
             // Rollback on failure
-            businessCards.removeAll { $0.id == card.id }
+            businessCards.removeAll { $0.id == cardForStorage.id }
             return .failure(error)
         }
     }
     
     /// Update an existing business card
     func updateCard(_ card: BusinessCard) -> CardResult<BusinessCard> {
+        var cardForStorage = normalizedForStorage(card)
+
         // Validate the card
-        if let validationError = validateCard(card) {
+        if let validationError = validateCard(cardForStorage) {
             return .failure(validationError)
         }
         
         // Find the card to update
-        guard let index = businessCards.firstIndex(where: { $0.id == card.id }) else {
+        guard let index = businessCards.firstIndex(where: { $0.id == cardForStorage.id }) else {
             return .failure(.notFound("Business card not found"))
         }
         
@@ -79,18 +82,17 @@ class CardManager: BusinessCardManagerProtocol, ObservableObject {
         let originalCard = businessCards[index]
         
         // Update the card with new timestamp
-        var updatedCard = card
-        updatedCard.update()
+        cardForStorage.update()
         
         // Update in local array
-        businessCards[index] = updatedCard
+        businessCards[index] = cardForStorage
         
         // Save to storage
         let saveResult = saveCardsToStorage()
         
         switch saveResult {
         case .success:
-            return .success(updatedCard)
+            return .success(cardForStorage)
         case .failure(let error):
             // Rollback on failure
             businessCards[index] = originalCard
@@ -225,6 +227,13 @@ class CardManager: BusinessCardManagerProtocol, ObservableObject {
     }
     
     // MARK: - Private Methods
+    
+    private func normalizedForStorage(_ card: BusinessCard) -> BusinessCard {
+        var normalized = card
+        // Base card should never be permanently tagged as a group VC
+        normalized.groupContext = nil
+        return normalized
+    }
     
     /// Load business cards from encrypted storage
     private func loadCardsFromStorage() {

@@ -489,9 +489,25 @@ extension PassKitManager {
     /// Example: airmeishi://contact?name=John%20Doe&job=Engineer
     func generateImportString(for businessCard: BusinessCard, sharingLevel: SharingLevel) -> String {
         let filtered = businessCard.filteredCard(for: sharingLevel)
-        let nameEncoded = urlEncode(filtered.name)
-        let titleEncoded = urlEncode(filtered.title ?? "")
-        return "airmeishi://contact?name=\(nameEncoded)&job=\(titleEncoded)"
+        var components = URLComponents()
+        components.scheme = "airmeishi"
+        components.host = "contact"
+
+        var queryItems: [URLQueryItem] = [
+            URLQueryItem(name: "name", value: filtered.name),
+            URLQueryItem(name: "job", value: filtered.title ?? "")
+        ]
+
+        switch DIDService().currentDidKey() {
+        case .success(let didDescriptor):
+            queryItems.append(URLQueryItem(name: "did", value: didDescriptor.did))
+        case .failure:
+            break
+        }
+
+        components.queryItems = queryItems
+
+        return components.url?.absoluteString ?? "airmeishi://contact?name=\(urlEncode(filtered.name))&job=\(urlEncode(filtered.title ?? ""))"
     }
 
     private func urlEncode(_ value: String) -> String {

@@ -11,9 +11,13 @@ struct ShoutoutDetailView: View {
     let user: ShoutoutUser
     @Environment(\.dismiss) private var dismiss
     @State private var showingCreateShoutout = false
-    @State private var isLighteningAnimating = false
+    @State private var isSakuraAnimating = false
     @State private var showingDeleteConfirm = false
     @State private var isLoading = true
+    @State private var showingProfile = false
+    @State private var selectedContact: Contact?
+    @State private var showingShareSheet = false
+    @State private var latestSakuraMessage: String?
 
     init(user: ShoutoutUser) {
         self.user = user
@@ -56,9 +60,6 @@ struct ShoutoutDetailView: View {
                             // Lightening header with profile
                             lightningHeader
 
-                            // Lightening stats grid
-                            lightningStatsGrid
-
                             // User Information
                             informationSection
 
@@ -72,7 +73,7 @@ struct ShoutoutDetailView: View {
                     }
                 }
             }
-            .navigationTitle("Lightening Profile")
+            .navigationTitle("Sakura Profile")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .navigationBarLeading) {
@@ -94,7 +95,7 @@ struct ShoutoutDetailView: View {
                 Text("Are you sure you want to delete \(user.name)? This action cannot be undone.")
             }
             .onAppear {
-                startLighteningAnimation()
+                startSakuraAnimation()
                 // Simulate loading completion
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
                     isLoading = false
@@ -102,28 +103,54 @@ struct ShoutoutDetailView: View {
             }
             .onDisappear {
             }
+            .sheet(item: $selectedContact) { contact in
+                ReceivedCardView(card: contact.businessCard)
+            }
         }
         .preferredColorScheme(.dark)
         .onAppear {
+            print("[ShoutoutDetailView] View appeared for user: \(user)")
+            // Load cached message
+            if let cached = SecureMessageStorage.shared.getLastMessage(from: user.name) {
+                latestSakuraMessage = cached
+            }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .secureMessageReceived)) { notification in
+            guard let userInfo = notification.userInfo,
+                  let senderName = userInfo[MessageEventKey.senderName] as? String,
+                  let text = userInfo[MessageEventKey.text] as? String else {
+                return
+            }
+            
+            // Check if message is from this user
+            if senderName == user.name {
+                withAnimation {
+                    latestSakuraMessage = text
+                }
+                
+                // Save to local cache
+                SecureMessageStorage.shared.saveLastMessage(text, from: senderName)
+                
+                // Show Toast
+                ToastManager.shared.show(
+                    title: "Sakura from \(senderName)",
+                    message: text,
+                    type: .success,
+                    duration: 4.0
+                )
+            }
         }
     }
     
-    // MARK: - Lightening Header
+    // MARK: - Sakura Header
     
     private var lightningHeader: some View {
         VStack(spacing: 20) {
-            // Lightening bolt and title
+            // Sakura and title
             HStack {
-                Image(systemName: "bolt.fill")
-                    .foregroundColor(.yellow)
-                    .font(.title)
-                    .scaleEffect(isLighteningAnimating ? 1.3 : 1.0)
-                    .animation(
-                        .easeInOut(duration: 0.5).repeatForever(autoreverses: true),
-                        value: isLighteningAnimating
-                    )
+                SakuraIconView(size: 32, color: .pink, isAnimating: isSakuraAnimating)
                 
-                Text("Lightening Profile")
+                Text("Sakura Profile")
                     .font(.title2)
                     .fontWeight(.bold)
                     .foregroundColor(.white)
@@ -131,23 +158,23 @@ struct ShoutoutDetailView: View {
                 Spacer()
             }
             
-            // Profile Image with lightning effects
+            // Profile Image with sakura effects
             ZStack {
-                // Lightening ring
+                // Sakura ring
                 Circle()
                     .stroke(
                         LinearGradient(
-                            colors: [.yellow, .orange, .red],
+                            colors: [.pink.opacity(0.8), .purple.opacity(0.6), .pink.opacity(0.8)],
                             startPoint: .topLeading,
                             endPoint: .bottomTrailing
                         ),
                         lineWidth: 3
                     )
                     .frame(width: 120, height: 120)
-                    .scaleEffect(isLighteningAnimating ? 1.1 : 1.0)
+                    .scaleEffect(isSakuraAnimating ? 1.1 : 1.0)
                     .animation(
                         .easeInOut(duration: 0.8).repeatForever(autoreverses: true),
-                        value: isLighteningAnimating
+                        value: isSakuraAnimating
                     )
                 
                 AsyncImage(url: user.profileImageURL) { image in
@@ -175,15 +202,15 @@ struct ShoutoutDetailView: View {
                 .overlay(
                     Circle()
                         .stroke(verificationColor, lineWidth: 3)
-                        .scaleEffect(isLighteningAnimating ? 1.05 : 1.0)
+                        .scaleEffect(isSakuraAnimating ? 1.05 : 1.0)
                         .animation(
                             .easeInOut(duration: 0.6).repeatForever(autoreverses: true),
-                            value: isLighteningAnimating
+                            value: isSakuraAnimating
                         )
                 )
                 .shadow(
-                    color: isLighteningAnimating ? .yellow.opacity(0.6) : verificationColor.opacity(0.5),
-                    radius: isLighteningAnimating ? 15 : 8,
+                    color: isSakuraAnimating ? .pink.opacity(0.6) : verificationColor.opacity(0.5),
+                    radius: isSakuraAnimating ? 15 : 8,
                     x: 0, y: 4
                 )
             }
@@ -198,7 +225,7 @@ struct ShoutoutDetailView: View {
                 if !user.title.isEmpty {
                     Text(user.title)
                         .font(.headline)
-                        .foregroundColor(.yellow)
+                        .foregroundColor(.pink)
                 }
                 
                 if !user.company.isEmpty {
@@ -208,7 +235,7 @@ struct ShoutoutDetailView: View {
                 }
             }
             
-            // Verification Status with lightning
+            // Verification Status with sakura
             HStack(spacing: 8) {
                 Image(systemName: user.verificationStatus.systemImageName)
                     .foregroundColor(verificationColor)
@@ -218,14 +245,7 @@ struct ShoutoutDetailView: View {
                     .font(.headline)
                     .foregroundColor(.white)
                 
-                Image(systemName: "bolt.fill")
-                    .foregroundColor(.yellow)
-                    .font(.caption)
-                    .scaleEffect(isLighteningAnimating ? 1.2 : 1.0)
-                    .animation(
-                        .easeInOut(duration: 0.3).repeatForever(autoreverses: true),
-                        value: isLighteningAnimating
-                    )
+                SakuraIconView(size: 16, color: .pink, isAnimating: isSakuraAnimating)
             }
             .padding(.horizontal, 16)
             .padding(.vertical, 8)
@@ -238,76 +258,6 @@ struct ShoutoutDetailView: View {
                     )
             )
         }
-    }
-    
-    // MARK: - Lightening Stats Grid
-    
-    private var lightningStatsGrid: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            HStack {
-                Text("Lightening Stats")
-                    .font(.title2)
-                    .fontWeight(.bold)
-                    .foregroundColor(.white)
-                
-                Spacer()
-                
-                Image(systemName: "bolt.circle.fill")
-                    .foregroundColor(.yellow)
-                    .font(.title2)
-                    .scaleEffect(isLighteningAnimating ? 1.2 : 1.0)
-                    .animation(
-                        .easeInOut(duration: 0.5).repeatForever(autoreverses: true),
-                        value: isLighteningAnimating
-                    )
-            }
-            
-            LazyVGrid(columns: [
-                GridItem(.flexible()),
-                GridItem(.flexible())
-            ], spacing: 16) {
-                LighteningStatCard(
-                    title: "Activity",
-                    value: String(format: "%.0f%%", user.eventScore * 100),
-                    icon: "bolt.fill",
-                    color: .yellow,
-                    isLighteningAnimating: isLighteningAnimating
-                )
-                
-                LighteningStatCard(
-                    title: "Professional",
-                    value: String(format: "%.0f%%", user.typeScore * 100),
-                    icon: "briefcase.fill",
-                    color: .blue,
-                    isLighteningAnimating: isLighteningAnimating
-                )
-                
-                LighteningStatCard(
-                    title: "Character",
-                    value: String(format: "%.0f%%", user.characterScore * 100),
-                    icon: "person.fill",
-                    color: .green,
-                    isLighteningAnimating: isLighteningAnimating
-                )
-                
-                LighteningStatCard(
-                    title: "Verified",
-                    value: user.verificationStatus.displayName,
-                    icon: user.verificationStatus.systemImageName,
-                    color: verificationColor,
-                    isLighteningAnimating: isLighteningAnimating
-                )
-            }
-        }
-        .padding()
-        .background(
-            RoundedRectangle(cornerRadius: 16)
-                .fill(Color.white.opacity(0.05))
-                .overlay(
-                    RoundedRectangle(cornerRadius: 16)
-                        .stroke(Color.yellow.opacity(0.3), lineWidth: 1)
-                )
-        )
     }
     
     // MARK: - Information Section
@@ -332,6 +282,28 @@ struct ShoutoutDetailView: View {
                     title: "Last Interaction",
                     value: DateFormatter.relativeDate.string(from: user.lastInteraction)
                 )
+                
+                // Sakura Message Display
+                if let message = latestSakuraMessage {
+                    Divider()
+                        .background(Color.white.opacity(0.1))
+                    
+                    HStack(alignment: .top, spacing: 12) {
+                        SakuraIconView(size: 20, color: .pink, isAnimating: true)
+                            .padding(.top, 2)
+                        
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text("Latest Sakura")
+                                .font(.subheadline)
+                                .foregroundColor(.pink)
+                            
+                            Text(message)
+                                .font(.body)
+                                .foregroundColor(.white)
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
+                    }
+                }
             }
         }
         .padding()
@@ -373,22 +345,19 @@ struct ShoutoutDetailView: View {
         .cornerRadius(12)
     }
     
-    // MARK: - Lightening Action Buttons
+    // MARK: - Sakura Action Buttons
     
     private var lightningActionButtons: some View {
         VStack(spacing: 16) {
-            // Primary Lightening Shoutout Button
-            Button(action: { showingCreateShoutout = true }) {
+            // Primary Ichigoichie Button
+            Button(action: { 
+                print("[ShoutoutDetailView] Send Sakura tapped for user: \(user)")
+                showingCreateShoutout = true 
+            }) {
                 HStack(spacing: 12) {
-                    Image(systemName: "bolt.fill")
-                        .font(.title2)
-                        .scaleEffect(isLighteningAnimating ? 1.3 : 1.0)
-                        .animation(
-                            .easeInOut(duration: 0.3).repeatForever(autoreverses: true),
-                            value: isLighteningAnimating
-                        )
+                    SakuraIconView(size: 24, color: .white, isAnimating: isSakuraAnimating)
                     
-                    Text("Send Lightening Shoutout")
+                    Text("Send Sakura")
                         .font(.headline)
                         .fontWeight(.bold)
                 }
@@ -399,19 +368,25 @@ struct ShoutoutDetailView: View {
                     RoundedRectangle(cornerRadius: 16)
                         .fill(
                             LinearGradient(
-                                colors: [.yellow, .orange, .red],
+                                colors: [.pink.opacity(0.8), .purple.opacity(0.6), .pink.opacity(0.8)],
                                 startPoint: .leading,
                                 endPoint: .trailing
                             )
                         )
-                        .shadow(color: .yellow.opacity(0.5), radius: 10, x: 0, y: 0)
+                        .shadow(color: .pink.opacity(0.5), radius: 10, x: 0, y: 0)
                 )
             }
             
             // Secondary Actions
             HStack(spacing: 12) {
                 Button(action: {
-                    // TODO: Implement view profile action
+                    if case .success(let contact) = ContactRepository.shared.getContact(id: user.id) {
+                        selectedContact = contact
+                        showingProfile = true
+                    } else {
+                        // If contact not found (e.g. cloud only), maybe show error or handle gracefully
+                        print("Contact not found for user: \(user.id)")
+                    }
                 }) {
                     HStack(spacing: 8) {
                         Image(systemName: "person.circle")
@@ -434,7 +409,7 @@ struct ShoutoutDetailView: View {
                 }
 
                 Button(action: {
-                    // TODO: Implement share action
+                    showingShareSheet = true
                 }) {
                     HStack(spacing: 8) {
                         Image(systemName: "square.and.arrow.up")
@@ -454,6 +429,9 @@ struct ShoutoutDetailView: View {
                                     .stroke(Color.white.opacity(0.2), lineWidth: 1)
                             )
                     )
+                }
+                .sheet(isPresented: $showingShareSheet) {
+                    ActivityViewController(activityItems: ["Check out \(user.name) on Sakura!"])
                 }
             }
 
@@ -485,8 +463,8 @@ struct ShoutoutDetailView: View {
     
     // MARK: - Animation Control
 
-    private func startLighteningAnimation() {
-        isLighteningAnimating = true
+    private func startSakuraAnimation() {
+        isSakuraAnimating = true
     }
 
     // MARK: - Actions
@@ -610,7 +588,23 @@ extension DateFormatter {
             typeScore: 0.7,
             characterScore: 0.6,
             lastInteraction: Date(),
-            verificationStatus: .verified
+            verificationStatus: .verified,
+            canReceiveSakura: true,
+            sealedRoute: nil,
+            pubKey: nil,
+            signPubKey: nil
         )
     )
+}
+
+struct ActivityViewController: UIViewControllerRepresentable {
+    var activityItems: [Any]
+    var applicationActivities: [UIActivity]? = nil
+
+    func makeUIViewController(context: UIViewControllerRepresentableContext<ActivityViewController>) -> UIActivityViewController {
+        let controller = UIActivityViewController(activityItems: activityItems, applicationActivities: applicationActivities)
+        return controller
+    }
+
+    func updateUIViewController(_ uiViewController: UIActivityViewController, context: UIViewControllerRepresentableContext<ActivityViewController>) {}
 }

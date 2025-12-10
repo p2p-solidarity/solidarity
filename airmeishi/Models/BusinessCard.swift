@@ -8,7 +8,7 @@
 import Foundation
 
 /// Main business card data model with comprehensive contact information and privacy controls
-struct BusinessCard: Codable, Identifiable, Equatable {
+struct BusinessCard: Codable, Identifiable, Equatable, Hashable {
     let id: UUID
     var name: String
     var title: String?
@@ -21,6 +21,7 @@ struct BusinessCard: Codable, Identifiable, Equatable {
     var skills: [Skill]
     var categories: [String]
     var sharingPreferences: SharingPreferences
+    var groupContext: GroupCredentialContext? // Group VC Context
     var createdAt: Date
     var updatedAt: Date
     
@@ -37,6 +38,7 @@ struct BusinessCard: Codable, Identifiable, Equatable {
         skills: [Skill] = [],
         categories: [String] = [],
         sharingPreferences: SharingPreferences = SharingPreferences(),
+        groupContext: GroupCredentialContext? = nil,
         createdAt: Date = Date(),
         updatedAt: Date = Date()
     ) {
@@ -52,6 +54,7 @@ struct BusinessCard: Codable, Identifiable, Equatable {
         self.skills = skills
         self.categories = categories
         self.sharingPreferences = sharingPreferences
+        self.groupContext = groupContext
         self.createdAt = createdAt
         self.updatedAt = updatedAt
     }
@@ -75,12 +78,15 @@ struct BusinessCard: Codable, Identifiable, Equatable {
         if !allowedFields.contains(.socialNetworks) { filtered.socialNetworks = [] }
         if !allowedFields.contains(.skills) { filtered.skills = [] }
         
+        // If sharing level is personal/professional, we might want to strip group context
+        // unless explicitly handled. For now, we keep it as it's part of the credential.
+        
         return filtered
     }
 }
 
 /// Social network information
-struct SocialNetwork: Codable, Identifiable, Equatable {
+struct SocialNetwork: Codable, Identifiable, Equatable, Hashable {
     let id: UUID
     var platform: SocialPlatform
     var username: String
@@ -123,7 +129,7 @@ enum SocialPlatform: String, Codable, CaseIterable {
 }
 
 /// Individual skill with categorization and proficiency levels
-struct Skill: Codable, Identifiable, Equatable {
+struct Skill: Codable, Identifiable, Equatable, Hashable {
     let id: UUID
     var name: String
     var category: String
@@ -160,13 +166,14 @@ enum ProficiencyLevel: String, Codable, CaseIterable {
 }
 
 /// Privacy controls for selective information sharing
-struct SharingPreferences: Codable, Equatable {
+struct SharingPreferences: Codable, Equatable, Hashable {
     var publicFields: Set<BusinessCardField>
     var professionalFields: Set<BusinessCardField>
     var personalFields: Set<BusinessCardField>
     var allowForwarding: Bool
     var expirationDate: Date?
     var useZK: Bool
+    var sharingFormat: SharingFormat
     
     init(
         publicFields: Set<BusinessCardField> = [.name, .title, .company],
@@ -174,14 +181,26 @@ struct SharingPreferences: Codable, Equatable {
         personalFields: Set<BusinessCardField> = BusinessCardField.allCases.asSet(),
         allowForwarding: Bool = false,
         expirationDate: Date? = nil,
-        useZK: Bool = false
+        useZK: Bool = true,
+        sharingFormat: SharingFormat = .plaintext
     ) {
-        self.publicFields = publicFields
-        self.professionalFields = professionalFields
-        self.personalFields = personalFields
+        // Ensure name is always included in all levels
+        var publicSet = publicFields
+        publicSet.insert(.name)
+        self.publicFields = publicSet
+        
+        var professionalSet = professionalFields
+        professionalSet.insert(.name)
+        self.professionalFields = professionalSet
+        
+        var personalSet = personalFields
+        personalSet.insert(.name)
+        self.personalFields = personalSet
+        
         self.allowForwarding = allowForwarding
         self.expirationDate = expirationDate
         self.useZK = useZK
+        self.sharingFormat = sharingFormat
     }
     
     /// Get allowed fields for a specific sharing level
@@ -201,17 +220,27 @@ struct SharingPreferences: Codable, Equatable {
 
 extension SharingPreferences {
     private enum CodingKeys: String, CodingKey {
-        case publicFields, professionalFields, personalFields, allowForwarding, expirationDate, useZK
+        case publicFields, professionalFields, personalFields, allowForwarding, expirationDate, useZK, sharingFormat
     }
 
     init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
-        self.publicFields = try container.decodeIfPresent(Set<BusinessCardField>.self, forKey: .publicFields) ?? [.name, .title, .company]
-        self.professionalFields = try container.decodeIfPresent(Set<BusinessCardField>.self, forKey: .professionalFields) ?? [.name, .title, .company, .email, .skills]
-        self.personalFields = try container.decodeIfPresent(Set<BusinessCardField>.self, forKey: .personalFields) ?? BusinessCardField.allCases.asSet()
+        var publicSet = try container.decodeIfPresent(Set<BusinessCardField>.self, forKey: .publicFields) ?? [.name, .title, .company]
+        publicSet.insert(.name) // Ensure name is always included
+        self.publicFields = publicSet
+        
+        var professionalSet = try container.decodeIfPresent(Set<BusinessCardField>.self, forKey: .professionalFields) ?? [.name, .title, .company, .email, .skills]
+        professionalSet.insert(.name) // Ensure name is always included
+        self.professionalFields = professionalSet
+        
+        var personalSet = try container.decodeIfPresent(Set<BusinessCardField>.self, forKey: .personalFields) ?? BusinessCardField.allCases.asSet()
+        personalSet.insert(.name) // Ensure name is always included
+        self.personalFields = personalSet
+        
         self.allowForwarding = try container.decodeIfPresent(Bool.self, forKey: .allowForwarding) ?? false
         self.expirationDate = try container.decodeIfPresent(Date.self, forKey: .expirationDate)
-        self.useZK = try container.decodeIfPresent(Bool.self, forKey: .useZK) ?? false
+        self.useZK = try container.decodeIfPresent(Bool.self, forKey: .useZK) ?? true
+        self.sharingFormat = try container.decodeIfPresent(SharingFormat.self, forKey: .sharingFormat) ?? .plaintext
     }
 
     func encode(to encoder: Encoder) throws {
@@ -222,6 +251,7 @@ extension SharingPreferences {
         try container.encode(allowForwarding, forKey: .allowForwarding)
         try container.encodeIfPresent(expirationDate, forKey: .expirationDate)
         try container.encode(useZK, forKey: .useZK)
+        try container.encode(sharingFormat, forKey: .sharingFormat)
     }
 }
 
@@ -248,6 +278,19 @@ enum BusinessCardField: String, Codable, CaseIterable {
         case .skills: return "Skills"
         }
     }
+    
+    var icon: String {
+        switch self {
+        case .name: return "person.text.rectangle"
+        case .title: return "id.card"
+        case .company: return "building.2"
+        case .email: return "envelope"
+        case .phone: return "phone"
+        case .profileImage: return "person.crop.circle"
+        case .socialNetworks: return "link"
+        case .skills: return "star"
+        }
+    }
 }
 
 /// Sharing levels for privacy control
@@ -261,6 +304,22 @@ enum SharingLevel: String, Codable, CaseIterable {
         case .`public`: return "Public"
         case .professional: return "Professional"
         case .personal: return "Personal"
+        }
+    }
+    
+    var icon: String {
+        switch self {
+        case .`public`: return "globe"
+        case .professional: return "briefcase"
+        case .personal: return "person.2"
+        }
+    }
+    
+    var description: String {
+        switch self {
+        case .`public`: return "Fields visible when you share your public card (e.g. QR in slides or website)."
+        case .professional: return "For work contacts and events. Usually includes email and skills."
+        case .personal: return "For close contacts. Typically includes all fields."
         }
     }
 }

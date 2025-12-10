@@ -54,6 +54,17 @@ struct NearbyPeersSheet: View {
                         peersGrid
                     }
                     if connectedCount > 0 { lightningActionButton }
+                    
+                    // Soft status message
+                    if let message = proximityManager.matchingInfoMessage {
+                        Text(message)
+                            .font(.footnote)
+                            .foregroundColor(.secondary)
+                            .multilineTextAlignment(.center)
+                            .padding(.horizontal)
+                            .padding(.bottom, 8)
+                            .transition(.opacity)
+                    }
                 }
 
                 if let target = connectTarget, showingConnectPopup {

@@ -15,6 +15,9 @@ extension Notification.Name {
     static let groupInviteReceived = Notification.Name("groupInviteReceived")
     static let groupJoinAccepted = Notification.Name("groupJoinAccepted")
     static let groupMembershipUpdated = Notification.Name("groupMembershipUpdated")
+
+    // New: secure Sakura message arrived (after /sync + decrypt)
+    static let secureMessageReceived = Notification.Name("secureMessageReceived")
 }
 
 enum ProximityEventKey {
@@ -25,6 +28,12 @@ enum ProximityEventKey {
     static let invite = "invite"
     static let peerID = "peerID"
     static let groupId = "groupId"
+}
+
+// New: userInfo keys for Sakura message events
+enum MessageEventKey {
+    static let senderName = "senderName"
+    static let text = "text"
 }
 
 

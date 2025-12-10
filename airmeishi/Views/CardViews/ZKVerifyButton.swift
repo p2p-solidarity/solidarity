@@ -54,6 +54,15 @@ struct ZKVerifyButton: View {
                 }
             }
         }
+        .overlay(alignment: .bottom) {
+            if signatureHex != nil {
+                Text("Note: Signatures include a timestamp to prevent replay attacks, so they change on every verification.")
+                    .font(.system(size: 10))
+                    .foregroundColor(.secondary)
+                    .multilineTextAlignment(.center)
+                    .padding(.top, 8)
+            }
+        }
     }
     
     private func verifyTapped() {

@@ -26,6 +26,8 @@ class DeepLinkManager: DeepLinkManagerProtocol, ObservableObject {
     private let appClipURL = "https://solidarity.gg/clip"
     
     private let cardManager = CardManager.shared
+    private let oidcService = OIDCService.shared
+    private let vcService = VCService()
     @MainActor private let contactRepository = ContactRepository.shared
     
     private var cancellables = Set<AnyCancellable>()
@@ -177,9 +179,32 @@ class DeepLinkManager: DeepLinkManagerProtocol, ObservableObject {
         // Handle airmeishi://contact?name=...&job=...
         if components.host == "contact" {
             return handleContactSchemeURL(components)
+        } else if components.host == "oidc", let url = components.url {
+            return handleOIDCCallback(url)
+        } else if components.host == "group" && components.path == "/join" {
+            return handleGroupJoinURL(components)
         }
 
         return false
+    }
+    
+    private func handleGroupJoinURL(_ components: URLComponents) -> Bool {
+        guard let queryItems = components.queryItems,
+              let token = queryItems.first(where: { $0.name == "token" })?.value else {
+            print("Missing token in group join URL")
+            return false
+        }
+        
+        Task { @MainActor in
+            do {
+                _ = try await CloudKitGroupSyncManager.shared.joinGroup(withInviteToken: token)
+                pendingAction = .showMessage("Successfully joined group!")
+            } catch {
+                pendingAction = .showError("Failed to join group: \(error.localizedDescription)")
+            }
+        }
+        
+        return true
     }
 
     private func handleContactSchemeURL(_ components: URLComponents) -> Bool {
@@ -289,6 +314,24 @@ class DeepLinkManager: DeepLinkManagerProtocol, ObservableObject {
         
         return processReceivedCardData(data, source: .qrCode)
     }
+
+    private func handleOIDCCallback(_ url: URL) -> Bool {
+        let result = oidcService.handleResponse(url: url, vcService: vcService)
+
+        switch result {
+        case .failure(let error):
+            Task { @MainActor in
+                self.pendingAction = .showError(error.localizedDescription)
+            }
+            return false
+        case .success(let imported):
+            Task { @MainActor in
+                self.lastReceivedCard = imported.businessCard
+                self.pendingAction = .showReceivedCard(imported.businessCard)
+            }
+            return true
+        }
+    }
     
     private func handleShareLinkURL(_ components: URLComponents) -> Bool {
         // Similar to business card URL but with additional share link logic
@@ -356,6 +399,7 @@ class DeepLinkManager: DeepLinkManagerProtocol, ObservableObject {
 enum DeepLinkAction {
     case showReceivedCard(BusinessCard)
     case showError(String)
+    case showMessage(String)
     case navigateToSharing
     case navigateToContacts
 }

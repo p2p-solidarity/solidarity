@@ -3,21 +3,26 @@ import SwiftUI
 struct ReceivedCardView: View {
     let card: BusinessCard
     @Environment(\.dismiss) private var dismiss
-    @State private var isLighteningAnimating = false
+    @State private var isSakuraAnimating = false
     @State private var showingShoutoutGallery = false
     @State private var isSaved = false
     @State private var showingSaveConfirmation = false
     @StateObject private var contactRepository = ContactRepository.shared
+    @ObservedObject private var identityCoordinator = IdentityCoordinator.shared
+    
+    private var verificationStatus: VerificationStatus {
+        identityCoordinator.verificationStatus(for: card.id) ?? .unverified
+    }
     
     var body: some View {
         NavigationView {
             ZStack {
-                // Dark gradient background with lightning effect
+                // Dark gradient background with sakura effect
                 LinearGradient(
                     colors: [
                         Color.black,
-                        Color.green.opacity(0.1),
-                        Color.blue.opacity(0.05),
+                        Color.pink.opacity(0.1),
+                        Color.purple.opacity(0.05),
                         Color.black
                     ],
                     startPoint: .topLeading,
@@ -27,38 +32,31 @@ struct ReceivedCardView: View {
                 
                 ScrollView {
                     VStack(spacing: 24) {
-                        // Lightening success indicator
+                        // Sakura success indicator
                         VStack(spacing: 16) {
                             ZStack {
-                                // Lightening ring
+                                // Sakura ring
                                 Circle()
                                     .stroke(
                                         LinearGradient(
-                                            colors: [.green, .yellow, .green],
+                                            colors: [.pink.opacity(0.8), .purple.opacity(0.6), .pink.opacity(0.8)],
                                             startPoint: .topLeading,
                                             endPoint: .bottomTrailing
                                         ),
                                         lineWidth: 4
                                     )
                                     .frame(width: 100, height: 100)
-                                    .scaleEffect(isLighteningAnimating ? 1.1 : 1.0)
+                                    .scaleEffect(isSakuraAnimating ? 1.1 : 1.0)
                                     .animation(
                                         .easeInOut(duration: 0.8).repeatForever(autoreverses: true),
-                                        value: isLighteningAnimating
+                                        value: isSakuraAnimating
                                     )
                                 
-                                Image(systemName: "bolt.fill")
-                                    .font(.system(size: 40))
-                                    .foregroundColor(.yellow)
-                                    .scaleEffect(isLighteningAnimating ? 1.2 : 1.0)
-                                    .animation(
-                                        .easeInOut(duration: 0.5).repeatForever(autoreverses: true),
-                                        value: isLighteningAnimating
-                                    )
+                                SakuraIconView(size: 40, color: .pink, isAnimating: isSakuraAnimating)
                             }
                             
                             VStack(spacing: 8) {
-                                Text("Lightening Card Received! ⚡")
+                                Text("Sakura Card Received! 🌸")
                                     .font(.title)
                                     .fontWeight(.bold)
                                     .foregroundColor(.white)
@@ -71,7 +69,7 @@ struct ReceivedCardView: View {
                         }
                         .padding()
                         
-                        // Card preview with lightning theme
+                        // Card preview with sakura theme
                         VStack(alignment: .leading, spacing: 16) {
                             HStack {
                                 Text("Card Details")
@@ -80,14 +78,7 @@ struct ReceivedCardView: View {
                                 
                                 Spacer()
                                 
-                                Image(systemName: "bolt.circle.fill")
-                                    .foregroundColor(.yellow)
-                                    .font(.title2)
-                                    .scaleEffect(isLighteningAnimating ? 1.2 : 1.0)
-                                    .animation(
-                                        .easeInOut(duration: 0.5).repeatForever(autoreverses: true),
-                                        value: isLighteningAnimating
-                                    )
+                                SakuraIconView(size: 28, color: .pink, isAnimating: isSakuraAnimating)
                             }
                             
                             VStack(alignment: .leading, spacing: 12) {
@@ -99,12 +90,20 @@ struct ReceivedCardView: View {
                                 if let title = card.title {
                                     Text(title)
                                         .font(.headline)
-                                        .foregroundColor(.yellow)
+                                        .foregroundColor(.pink)
                                 }
                                 
                                 if let company = card.company {
                                     Text(company)
                                         .font(.subheadline)
+                                        .foregroundColor(.gray)
+                                }
+
+                                HStack(spacing: 6) {
+                                    Image(systemName: verificationStatus.systemImageName)
+                                        .foregroundColor(color(for: verificationStatus))
+                                    Text(verificationStatus.displayName)
+                                        .font(.caption)
                                         .foregroundColor(.gray)
                                 }
                                 
@@ -135,21 +134,21 @@ struct ReceivedCardView: View {
                                 .fill(Color.white.opacity(0.05))
                                 .overlay(
                                     RoundedRectangle(cornerRadius: 16)
-                                        .stroke(Color.yellow.opacity(0.3), lineWidth: 1)
+                                        .stroke(Color.pink.opacity(0.3), lineWidth: 1)
                                 )
                         )
                         
-                        // Lightening action buttons
+                        // Sakura action buttons
                         VStack(spacing: 12) {
                             if !isSaved {
                                 Button(action: saveCard) {
                                     HStack(spacing: 12) {
                                         Image(systemName: "square.and.arrow.down")
                                             .font(.title2)
-                                            .scaleEffect(isLighteningAnimating ? 1.3 : 1.0)
+                                            .scaleEffect(isSakuraAnimating ? 1.3 : 1.0)
                                             .animation(
                                                 .easeInOut(duration: 0.3).repeatForever(autoreverses: true),
-                                                value: isLighteningAnimating
+                                                value: isSakuraAnimating
                                             )
                                         
                                         Text("Save to Contacts")
@@ -174,15 +173,9 @@ struct ReceivedCardView: View {
                             } else {
                                 Button(action: { showingShoutoutGallery = true }) {
                                     HStack(spacing: 12) {
-                                        Image(systemName: "bolt.fill")
-                                            .font(.title2)
-                                            .scaleEffect(isLighteningAnimating ? 1.3 : 1.0)
-                                            .animation(
-                                                .easeInOut(duration: 0.3).repeatForever(autoreverses: true),
-                                                value: isLighteningAnimating
-                                            )
+                                        SakuraIconView(size: 24, color: .white, isAnimating: isSakuraAnimating)
                                         
-                                        Text("View in Lightening Gallery")
+                                        Text("View in Sakura")
                                             .font(.headline)
                                             .fontWeight(.bold)
                                     }
@@ -193,12 +186,12 @@ struct ReceivedCardView: View {
                                         RoundedRectangle(cornerRadius: 16)
                                             .fill(
                                                 LinearGradient(
-                                                    colors: [.yellow, .orange, .red],
+                                                    colors: [.pink.opacity(0.8), .purple.opacity(0.6), .pink.opacity(0.8)],
                                                     startPoint: .leading,
                                                     endPoint: .trailing
                                                 )
                                             )
-                                            .shadow(color: .yellow.opacity(0.5), radius: 10, x: 0, y: 0)
+                                            .shadow(color: .pink.opacity(0.5), radius: 10, x: 0, y: 0)
                                     )
                                 }
                             }
@@ -230,7 +223,7 @@ struct ReceivedCardView: View {
                     .padding()
                 }
             }
-            .navigationTitle("Lightening Received")
+            .navigationTitle("Sakura Received")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .navigationBarTrailing) {
@@ -240,7 +233,7 @@ struct ReceivedCardView: View {
                 }
             }
             .onAppear {
-                isLighteningAnimating = true
+                isSakuraAnimating = true
             }
             .sheet(isPresented: $showingShoutoutGallery) {
                 ShoutoutView()
@@ -270,6 +263,15 @@ struct ReceivedCardView: View {
         case .failure(let error):
             print("Failed to save contact: \(error.localizedDescription)")
             // You could show an error alert here if needed
+        }
+    }
+    
+    private func color(for status: VerificationStatus) -> Color {
+        switch status {
+        case .verified: return .green
+        case .pending: return .orange
+        case .unverified: return .gray
+        case .failed: return .red
         }
     }
 }

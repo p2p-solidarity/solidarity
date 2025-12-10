@@ -67,7 +67,11 @@ class ShoutoutChartService: ObservableObject {
             typeScore: calculateTypeScore(for: contact),
             characterScore: calculateCharacterScore(for: contact),
             lastInteraction: contact.lastInteraction ?? contact.receivedAt,
-            verificationStatus: contact.verificationStatus
+            verificationStatus: contact.verificationStatus,
+            canReceiveSakura: contact.canReceiveSakura,
+            sealedRoute: contact.sealedRoute,
+            pubKey: contact.pubKey,
+            signPubKey: contact.signPubKey
         )
     }
     
@@ -274,6 +278,12 @@ struct ShoutoutUser: Identifiable, Codable {
     let characterScore: Double
     let lastInteraction: Date
     let verificationStatus: VerificationStatus
+    let canReceiveSakura: Bool
+    
+    // Secure Messaging Fields (for sending messages to this user)
+    let sealedRoute: String?
+    let pubKey: String?
+    let signPubKey: String?
     
     var initials: String {
         let components = name.components(separatedBy: " ")

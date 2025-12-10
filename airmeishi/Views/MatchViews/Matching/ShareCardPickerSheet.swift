@@ -2,7 +2,7 @@
 //  ShareCardPickerSheet.swift
 //  airmeishi
 //
-//  Sheet to start/stop advertising a selected business card at a chosen privacy level.
+//  Sheet to start/stop advertising the first business card at a chosen privacy level.
 //
 
 import SwiftUI
@@ -13,19 +13,15 @@ struct ShareCardPickerSheet: View {
     let onStop: () -> Void
     let isAdvertising: Bool
     @Environment(\.dismiss) private var dismiss
-    @State private var selectedCardId: UUID? = nil
     @State private var level: SharingLevel = .professional
+    
+    private var firstCard: BusinessCard? {
+        cards.first
+    }
     
     var body: some View {
         NavigationView {
             Form {
-                Section("Card") {
-                    Picker("Business Card", selection: $selectedCardId) {
-                        ForEach(cards) { card in
-                            Text(card.name).tag(Optional(card.id))
-                        }
-                    }
-                }
                 Section("Privacy Level") {
                     Picker("Level", selection: $level) {
                         ForEach(SharingLevel.allCases, id: \.self) { lvl in
@@ -34,13 +30,18 @@ struct ShareCardPickerSheet: View {
                     }
                     .pickerStyle(.segmented)
                 }
-                if let card = cards.first(where: { $0.id == selectedCardId }) {
+                if let card = firstCard {
                     Section("Preview") {
                         BusinessCardPreview(businessCard: card.filteredCard(for: level))
                     }
+                } else {
+                    Section {
+                        Text("No card available")
+                            .foregroundColor(.secondary)
+                    }
                 }
             }
-            .navigationTitle("Share Card")
+            .navigationTitle("Privacy Level")
             .toolbar {
                 ToolbarItem(placement: .navigationBarLeading) { Button("Cancel") { dismiss() } }
                 ToolbarItem(placement: .navigationBarTrailing) {
@@ -48,17 +49,16 @@ struct ShareCardPickerSheet: View {
                         Button("Stop") { onStop(); dismiss() }
                     } else {
                         Button("Start") {
-                            if let id = selectedCardId, let card = cards.first(where: { $0.id == id }) {
+                            if let card = firstCard {
                                 onStart(card, level)
                                 dismiss()
                             }
                         }
-                        .disabled(selectedCardId == nil)
+                        .disabled(firstCard == nil)
                     }
                 }
             }
         }
-        .onAppear { if selectedCardId == nil { selectedCardId = cards.first?.id } }
     }
 }
 

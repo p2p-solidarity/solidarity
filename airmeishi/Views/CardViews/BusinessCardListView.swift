@@ -13,21 +13,20 @@ struct BusinessCardListView: View {
     @EnvironmentObject private var proximityManager: ProximityManager
     @EnvironmentObject private var theme: ThemeManager
     @StateObject private var cardManager = CardManager.shared
-    @State private var showingCreateCard = false
-    @State private var showingOCRScanner = false
     @State private var featuredCard: BusinessCard?
     @State private var cardToEdit: BusinessCard?
     @State private var isFeatured = false
-    @State private var isSharing = false
-    @State private var showingAppearance = false
     @State private var showingAddPass = false
     @State private var pendingPass: PKPass?
     @State private var pendingPassCard: BusinessCard?
     @State private var alertMessage: String?
-    @State private var draggedCard: BusinessCard?
-    @State private var dragOffset: CGSize = .zero
-    @State private var deckOrder: [UUID] = []
-    @State private var rotationAngles: [UUID: Double] = [:]
+    @State private var showingPrivacySettings = false
+    @State private var showingCreateCard = false
+    @State private var showingAppearanceSettings = false
+    @State private var showingBackupSettings = false
+    @State private var showingGroupManagement = false
+    @ObservedObject private var identityCoordinator = IdentityCoordinator.shared
+    @State private var activeOIDCEvent: IdentityState.OIDCEvent?
     
     var body: some View {
         NavigationView {
@@ -37,81 +36,53 @@ struct BusinessCardListView: View {
                     ProgressView("Loading cards...")
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
                 } else if cardManager.businessCards.isEmpty {
-                    EmptyWalletView(
-                        onCreate: {
-                            featuredCard = nil
-                            DispatchQueue.main.async {
-                                showingCreateCard = true
-                            }
-                        },
-                        onScan: { showingOCRScanner = true }
-                    )
+                    makeEmptyStateView()
                 } else {
-                    makeStack()
+                    makeSingleCardView()
                 }
             }
             .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .navigationBarTrailing) {
-                    Menu {
-                        Button(action: {
-                            featuredCard = nil
-                            DispatchQueue.main.async {
-                                showingCreateCard = true
-                            }
-                        }) {
-                            Label("Create Card", systemImage: "plus.circle.fill")
-                        }
-                        Button(action: { showingOCRScanner = true }) {
-                            Label("Scan Card", systemImage: "camera.fill")
-                        }
-                        Divider()
-                        Button(action: { showingAppearance = true }) {
-                            Label("Appearance", systemImage: "paintbrush.fill")
-                        }
-                    } label: {
-                        // Black & white style button
-                        HStack(spacing: 4) {
-                            Image(systemName: "plus")
-                                .font(.system(size: 16, weight: .bold))
-                            Text("Add")
-                                .font(.system(size: 16, weight: .semibold))
-                        }
-                        .foregroundColor(.white)
-                        .padding(.horizontal, 16)
-                        .padding(.vertical, 8)
-                        .background(
-                            RoundedRectangle(cornerRadius: 20, style: .continuous)
-                                .fill(Color.black)
-                                .shadow(color: Color.black.opacity(0.3), radius: 8, x: 0, y: 4)
-                        )
-                    }
-                }
-            }
-            .sheet(isPresented: $showingCreateCard) {
-                // Create mode: always nil businessCard, always forceCreate
-                BusinessCardFormView(businessCard: nil, forceCreate: true) { saved in
-                    featuredCard = saved
-                }
-            }
             .sheet(item: $cardToEdit) { card in
                 BusinessCardFormView(businessCard: card, forceCreate: false) { saved in
                     featuredCard = saved
                     cardToEdit = nil
                 }
             }
-            .sheet(isPresented: $showingOCRScanner) {
-                OCRScannerView { extracted in
-                    featuredCard = extracted
-                    isFeatured = true
-                    DispatchQueue.main.async {
-                        showingCreateCard = true
-                    }
-                }
-            }
-            .sheet(isPresented: $showingAppearance) {
+            .sheet(isPresented: $showingAppearanceSettings) {
                 NavigationView { AppearanceSettingsView() }
                     .environmentObject(theme)
+            }
+            .sheet(isPresented: $showingBackupSettings) {
+                NavigationView { BackupSettingsView() }
+            }
+            .sheet(isPresented: $showingGroupManagement) {
+                GroupManagementView()
+            }
+            .sheet(isPresented: $showingPrivacySettings) {
+                if let card = cardManager.businessCards.first {
+                    let cardId = card.id
+                    IdentityDashboardView(
+                        sharingPreferences: Binding(
+                            get: {
+                                if let currentCard = cardManager.businessCards.first(where: { $0.id == cardId }) {
+                                    return currentCard.sharingPreferences
+                                }
+                                return card.sharingPreferences
+                            },
+                            set: { newPreferences in
+                                if var updatedCard = cardManager.businessCards.first(where: { $0.id == cardId }) {
+                                    updatedCard.sharingPreferences = newPreferences
+                                    _ = cardManager.updateCard(updatedCard)
+                                }
+                            }
+                        )
+                    )
+                }
+            }
+            .sheet(isPresented: $showingCreateCard) {
+                BusinessCardFormView(forceCreate: true) { saved in
+                    showingCreateCard = false
+                }
             }
             .sheet(isPresented: $showingAddPass) {
                 ZStack {
@@ -152,10 +123,23 @@ struct BusinessCardListView: View {
                 Button("OK", role: .cancel) { alertMessage = nil }
             } message: { Text(alertMessage ?? "") }
         }
-        .overlay(alignment: .top) { sharingBannerTop }
+        .overlay(alignment: .top) {
+            VStack(spacing: 8) {
+                oidcBannerView
+                sharingBannerTop
+            }
+            .padding(.top, 10)
+        }
         .overlay { focusedOverlay }
-        .onAppear { initializeDeckOrder() }
-        .onChange(of: cardManager.businessCards) { _, _ in synchronizeDeckWithData() }
+        .onChange(of: identityCoordinator.state.lastOIDCEvent) { _, event in
+            guard let event = event else { return }
+            activeOIDCEvent = event
+            DispatchQueue.main.asyncAfter(deadline: .now() + 4) {
+                if activeOIDCEvent?.timestamp == event.timestamp {
+                    activeOIDCEvent = nil
+                }
+            }
+        }
     }
 }
 
@@ -163,57 +147,34 @@ struct BusinessCardListView: View {
 
 private extension BusinessCardListView {
     @ViewBuilder
-    func makeStack() -> some View {
-        WalletStackListView(
-            cards: orderedCards,
-            onEdit: beginEdit,
-            onAddToWallet: addToWallet,
-            onFocus: handleFocus,
-            onDrag: handleDragChange,
-            onDragEnd: handleDragEnd,
-            onLongPress: shuffleDeck,
-            rotationFor: rotationFor
-        )
-    }
-    var orderedCards: [BusinessCard] {
-        let idToCard: [UUID: BusinessCard] = Dictionary(uniqueKeysWithValues: cardManager.businessCards.map { ($0.id, $0) })
-        var result: [BusinessCard] = []
-        for id in deckOrder {
-            if let c = idToCard[id] { result.append(c) }
-        }
-        // Append any new cards not tracked yet
-        let remaining = cardManager.businessCards.filter { !deckOrder.contains($0.id) }
-        result.append(contentsOf: remaining)
-        return result
-    }
-
-    func initializeDeckOrder() {
-        deckOrder = cardManager.businessCards.map { $0.id }
-    }
-
-    func synchronizeDeckWithData() {
-        // Keep deck order stable; append new ids at the end, remove missing ones
-        let currentIds = Set(cardManager.businessCards.map { $0.id })
-        deckOrder = deckOrder.filter { currentIds.contains($0) }
-        for id in cardManager.businessCards.map({ $0.id }) where !deckOrder.contains(id) {
-            deckOrder.append(id)
+    func makeSingleCardView() -> some View {
+        GeometryReader { geometry in
+            ScrollView {
+                VStack(spacing: 0) {
+                    Spacer()
+                        .frame(height: max(0, (geometry.size.height - 220) / 2 - 100))
+                    
+                    if let card = cardManager.businessCards.first {
+                        // Card section
+                        WalletCardView(
+                            card: card,
+                            onEdit: { beginEdit(card) },
+                            onAddToWallet: { addToWallet(card) }
+                        )
+                        .frame(height: 220)
+                        .padding(.horizontal, 16)
+                        .onTapGesture {
+                            handleFocus(card)
+                        }
+                    }
+                    
+                    Spacer()
+                        .frame(height: max(0, (geometry.size.height - 220) / 2 - 100))
+                }
+            }
         }
     }
-
-    func shuffleDeck() {
-        let generator = UIImpactFeedbackGenerator(style: .medium)
-        generator.impactOccurred()
-        withAnimation(.spring(response: 0.6, dampingFraction: 0.75)) {
-            deckOrder.shuffle()
-            var angles: [UUID: Double] = [:]
-            for id in deckOrder { angles[id] = Double(Int.random(in: -8...8)) }
-            rotationAngles = angles
-        }
-    }
-    func startSharing(_ card: BusinessCard) {
-        proximityManager.stopAdvertising()
-        proximityManager.startAdvertising(with: card, sharingLevel: .professional)
-    }
+    
     func handleFocus(_ card: BusinessCard) {
         // Add haptic feedback for better UX
         let impact = UIImpactFeedbackGenerator(style: .medium)
@@ -224,21 +185,6 @@ private extension BusinessCardListView {
             isFeatured = true
         }
     }
-
-    func handleDragChange(_ card: BusinessCard, _ offset: CGSize) {
-        draggedCard = card
-        dragOffset = offset
-    }
-
-    func handleDragEnd(_ card: BusinessCard) {
-        withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
-            draggedCard = nil
-            dragOffset = .zero
-        }
-    }
-
-    func rotationFor(_ id: UUID) -> Double { rotationAngles[id] ?? 0 }
-
 
     func beginEdit(_ card: BusinessCard) {
         // Add haptic feedback
@@ -277,6 +223,14 @@ private extension BusinessCardListView {
         }
     }
     
+    func updateSharingFormat(for cardId: UUID, format: SharingFormat) {
+        guard var updatedCard = cardManager.businessCards.first(where: { $0.id == cardId }) else { return }
+        updatedCard.sharingPreferences.sharingFormat = format
+        // Enforce ZK by default as requested
+        updatedCard.sharingPreferences.useZK = true
+        _ = cardManager.updateCard(updatedCard)
+    }
+
     @ViewBuilder
     var sharingBannerTop: some View {
         if proximityManager.isAdvertising {
@@ -332,320 +286,56 @@ private extension BusinessCardListView {
         _ = cardManager.deleteCard(id: card.id)
         if featuredCard?.id == card.id { isFeatured = false }
     }
-}
-
-// MARK: - Wallet Stack List (Apple Wallet-like)
-
-private struct WalletStackListView: View {
-    let cards: [BusinessCard]
-    let onEdit: (BusinessCard) -> Void
-    let onAddToWallet: (BusinessCard) -> Void
-    let onFocus: (BusinessCard) -> Void
-    let onDrag: (BusinessCard, CGSize) -> Void
-    let onDragEnd: (BusinessCard) -> Void
-    let onLongPress: () -> Void
-    let rotationFor: (UUID) -> Double
     
-    private let cardHeight: CGFloat = 220
-    private let overlap: CGFloat = 64
-    
-    var body: some View {
-        ScrollView(showsIndicators: false) {
-            LazyVStack(spacing: 0) {
-                ForEach(Array(cards.enumerated()), id: \.offset) { pair in
-                    let index = pair.offset
-                    let card = pair.element
-                    WalletCardView(card: card, onEdit: { onEdit(card) }, onAddToWallet: { onAddToWallet(card) })
-                        .frame(height: cardHeight)
-                        .offset(y: CGFloat(index) * overlap)
-                        .rotationEffect(.degrees(rotationFor(card.id)))
-                        .offset(x: CGFloat(rotationFor(card.id)) * 1.2)
-                        .scaleEffect(1 - CGFloat(min(index, 4)) * 0.02)
-                        .zIndex(Double(index))
-                        .onTapGesture { onFocus(card) }
-                        .simultaneousGesture(
-                            DragGesture()
-                                .onChanged { value in
-                                    let translation = value.translation
-                                    if abs(translation.width) > abs(translation.height) {
-                                        onDrag(card, translation)
-                                    }
-                                }
-                                .onEnded { value in
-                                    let translation = value.translation
-                                    if abs(translation.width) > abs(translation.height) {
-                                        onDragEnd(card)
-                                    }
-                                }
-                        )
-                        .padding(.horizontal, 16)
-                        .padding(.top, index == 0 ? 16 : -overlap)
-                        .padding(.bottom, -overlap)
-                }
-            }
-            .gesture(LongPressGesture(minimumDuration: 0.6).onEnded { _ in onLongPress() })
-            .padding(.bottom, CGFloat(max(0, cards.count - 1)) * overlap + 160)
-        }
-        .scrollDisabled(false)
+    @ViewBuilder
+    func makeEmptyStateView() -> some View {
+        BusinessCardEmptyStateView(onCreateCard: {
+            showingCreateCard = true
+        })
     }
-}
 
-// A single large vertical wallet card with top-right category and edit/share control
-private struct WalletCardView: View {
-    let card: BusinessCard
-    var onEdit: () -> Void
-    var onAddToWallet: () -> Void
-
-    @State private var isFlipped = false
-    @State private var editAttempted = false
-    @EnvironmentObject private var theme: ThemeManager
-    
-    var body: some View {
-        ZStack(alignment: .topTrailing) {
-            RoundedRectangle(cornerRadius: 20, style: .continuous)
-                .fill(perCardGradient(card: card))
-                .shadow(color: Color.black.opacity(0.45), radius: 24, x: 0, y: 14)
-                .overlay(
-                    RoundedRectangle(cornerRadius: 20, style: .continuous)
-                        .stroke(theme.cardAccent.opacity(0.35), lineWidth: 1)
-                )
-                // Gloss highlight for premium look
-                .overlay(alignment: .topLeading) {
-                    LinearGradient(
-                        colors: [Color.white.opacity(0.45), Color.white.opacity(0.12), Color.clear],
-                        startPoint: .topLeading,
-                        endPoint: .bottomTrailing
-                    )
-                    .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
-                    .opacity(0.65)
-                }
-                .overlay {
-                    HStack(alignment: .center, spacing: 14) {
-                        if let animal = card.animal {
-                            ImageProvider.animalImage(for: animal)
-                                .resizable()
-                                .scaledToFill()
-                                .frame(width: 84, height: 84)
-                                .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
-                                .overlay(
-                                    RoundedRectangle(cornerRadius: 18, style: .continuous)
-                                        .stroke(Color.black.opacity(0.06), lineWidth: 1)
-                                )
-                                .padding(.leading, 18)
-                        } else {
-                            Spacer().frame(width: 18)
-                        }
-                        VStack(alignment: .leading, spacing: 6) {
-                            Text(card.name)
-                                .font(.headline.weight(.semibold))
-                                .foregroundColor(.black)
-                                .lineLimit(1)
-                                .minimumScaleFactor(0.8)
-                            if let company = card.company { Text(company).font(.subheadline).foregroundColor(.black.opacity(0.75)) }
-                            if let title = card.title { Text(title).font(.footnote).foregroundColor(.black.opacity(0.65)) }
-                            HStack(spacing: 6) {
-                                ForEach(card.skills.prefix(3)) { skill in
-                                    Text(skill.name)
-                                        .font(.caption2.weight(.semibold))
-                                        .padding(.horizontal, 8)
-                                        .padding(.vertical, 4)
-                                        .background(Color.white.opacity(0.18))
-                                        .clipShape(Capsule())
-                                }
-                            }
-                        }
-                        Spacer(minLength: 0)
-                    }
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-                }
-                .rotation3DEffect(.degrees(isFlipped ? 180 : 0), axis: (x: 0, y: 1, z: 0))
-                .animation(.spring(response: 0.5, dampingFraction: 0.85), value: isFlipped)
-                .cardGlow(theme.cardAccent, enabled: theme.enableGlow)
-
-            HStack(spacing: 10) {
-                CategoryTag(text: category(for: card))
-                Button(action: editTapped) {
-                    Image(systemName: "square.and.pencil")
-                        .font(.system(size: 18, weight: .semibold))
-                        .foregroundColor(.black)
-                        .frame(width: 44, height: 44)
-                        .background(theme.cardAccent.opacity(0.12))
-                        .clipShape(Circle())
-                }
-                .buttonStyle(PlainButtonStyle())
-                .padding(.horizontal, 8)
-                .padding(.top, 12)
-                .padding(.bottom, 8)
-                .contentShape(Rectangle())
-
-                Button(action: addPassTapped) {
-                    Image(systemName: "wallet.pass")
-                        .font(.system(size: 18, weight: .semibold))
-                        .foregroundColor(.black)
-                        .frame(width: 44, height: 44)
-                        .background(theme.cardAccent.opacity(0.12))
-                        .clipShape(Circle())
-                }
-                .buttonStyle(PlainButtonStyle())
-                .padding(.horizontal, 8)
-                .padding(.top, 12)
-                .padding(.bottom, 8)
-                .contentShape(Rectangle())
-            }
-            .allowsHitTesting(true)
-        }
-    }
-    
-    private func editTapped() {
-        // Prevent multiple rapid taps
-        guard !editAttempted else { return }
-        editAttempted = true
-
-        let generator = UIImpactFeedbackGenerator(style: .medium)
-        generator.impactOccurred()
-
-        // Directly open edit without flip animation to avoid gray screen
-        onEdit()
-
-        // Reset after delay
-        DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
-            editAttempted = false
-        }
-    }
-    
-    private func addPassTapped() {
-        let generator = UIImpactFeedbackGenerator(style: .light)
-        generator.impactOccurred()
-        onAddToWallet()
-    }
-    
-    private func category(for card: BusinessCard) -> String {
-        if let company = card.company, !company.isEmpty { return company }
-        if let title = card.title, !title.isEmpty { return title }
-        return "Card"
-    }
-    
-    private func perCardGradient(card: BusinessCard) -> LinearGradient {
-        // Theme by animal when present
-        if let animal = card.animal {
-            let colors: [Color]
-            switch animal {
-            case .dog:
-                colors = [Color(hex: 0xFFF8E1), Color(hex: 0xFFD54F)]
-            case .horse:
-                colors = [Color(hex: 0xE8EAF6), Color(hex: 0x5C6BC0)]
-            case .pig:
-                colors = [Color(hex: 0xFCE4EC), Color(hex: 0xF06292)]
-            case .sheep:
-                colors = [Color(hex: 0xE8F5E9), Color(hex: 0x66BB6A)]
-            case .dove:
-                colors = [Color(hex: 0xE0F7FA), Color(hex: 0x26C6DA)]
-            }
-            return LinearGradient(colors: colors, startPoint: .topLeading, endPoint: .bottomTrailing)
-        }
-        // Fallback deterministic hue by UUID
-        let hash = card.id.uuidString.hashValue
-        let hue = Double(abs(hash % 360)) / 360.0
-        let base = Color(hue: hue, saturation: 0.55, brightness: 0.95)
-        let light = Color.white
-        return LinearGradient(colors: [light, base], startPoint: .topLeading, endPoint: .bottomTrailing)
-    }
-}
-
-// MARK: - Components
-
-// Simple right-top tag
-private struct CategoryTag: View {
-    let text: String
-    @EnvironmentObject private var theme: ThemeManager
-    var body: some View {
-        Text(text)
-            .font(.caption2.weight(.semibold))
-            .padding(.horizontal, 8)
-            .padding(.vertical, 4)
-            .foregroundColor(.white)
-            .background(theme.cardAccent.opacity(0.25))
-            .clipShape(Capsule())
-            .padding(8)
-    }
-}
-
-
-private struct EmptyWalletView: View {
-    let onCreate: () -> Void
-    let onScan: () -> Void
-
-    var body: some View {
-        VStack(spacing: 32) {
-            // Animated icon
-            ZStack {
-                Circle()
-                    .fill(
-                        LinearGradient(
-                            colors: [Color.blue.opacity(0.3), Color.purple.opacity(0.2)],
-                            startPoint: .topLeading,
-                            endPoint: .bottomTrailing
-                        )
-                    )
-                    .frame(width: 120, height: 120)
-                    .blur(radius: 20)
-
-                Image(systemName: "person.crop.rectangle.stack")
-                    .font(.system(size: 64, weight: .light))
-                    .foregroundColor(.white.opacity(0.9))
-            }
-
-            VStack(spacing: 12) {
-                Text("No Business Cards")
-                    .font(.title.bold())
+    @ViewBuilder
+    var oidcBannerView: some View {
+        if let event = activeOIDCEvent {
+            HStack(spacing: 8) {
+                Image(systemName: symbol(for: event.kind))
                     .foregroundColor(.white)
-
-                Text("Create your first card or scan one to get started")
-                    .font(.body)
-                    .foregroundColor(.white.opacity(0.7))
-                    .multilineTextAlignment(.center)
-                    .padding(.horizontal, 40)
-            }
-
-            VStack(spacing: 16) {
-                Button(action: onCreate) {
-                    HStack(spacing: 12) {
-                        Image(systemName: "plus.circle.fill")
-                            .font(.title3)
-                        Text("Create New Card")
-                            .fontWeight(.semibold)
-                    }
-                    .foregroundColor(.black)
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 16)
-                    .background(Color.white)
-                    .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
-                    .shadow(color: .black.opacity(0.2), radius: 8, x: 0, y: 4)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(event.message)
+                        .font(.footnote.weight(.semibold))
+                        .foregroundColor(.white)
+                    Text(event.state)
+                        .font(.caption2)
+                        .foregroundColor(.white.opacity(0.7))
                 }
-
-                Button(action: onScan) {
-                    HStack(spacing: 12) {
-                        Image(systemName: "camera.fill")
-                            .font(.title3)
-                        Text("Scan Business Card")
-                            .fontWeight(.semibold)
-                    }
-                    .foregroundColor(.white)
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 16)
-                    .background(Color.white.opacity(0.15))
-                    .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+                Spacer()
+            }
+            .padding(10)
+            .background(
+                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                    .fill(bannerColor(for: event.kind).opacity(0.85))
                     .overlay(
-                        RoundedRectangle(cornerRadius: 16, style: .continuous)
-                            .stroke(Color.white.opacity(0.3), lineWidth: 1.5)
+                        RoundedRectangle(cornerRadius: 12, style: .continuous)
+                            .stroke(Color.white.opacity(0.2), lineWidth: 1)
                     )
-                }
-            }
-            .padding(.horizontal, 32)
+            )
+            .padding(.horizontal, 16)
         }
-        .padding()
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+
+    private func symbol(for kind: IdentityState.OIDCEvent.Kind) -> String {
+        switch kind {
+        case .requestCreated: return "paperplane"
+        case .credentialImported: return "checkmark.seal"
+        case .error: return "exclamationmark.triangle"
+        }
+    }
+
+    private func bannerColor(for kind: IdentityState.OIDCEvent.Kind) -> Color {
+        switch kind {
+        case .requestCreated: return .blue
+        case .credentialImported: return .green
+        case .error: return .red
+        }
     }
 }
-
-#Preview { BusinessCardListView() }

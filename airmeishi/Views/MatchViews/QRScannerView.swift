@@ -86,6 +86,9 @@ struct QRScannerView: View {
                     .padding(.horizontal)
                     .padding(.bottom, 50)
                 }
+                .transaction { transaction in
+                    transaction.animation = nil // Prevent animation propagation from scanning line
+                }
             }
         }
         .navigationBarHidden(true)
@@ -94,6 +97,7 @@ struct QRScannerView: View {
         }
         .onDisappear {
             qrManager.stopScanning()
+            cameraPreviewLayer = nil
         }
         .onChange(of: qrManager.lastScannedCard) { _, scannedCard in
             if scannedCard != nil {
@@ -183,7 +187,8 @@ struct QRScannerView: View {
             source: .qrCode,
             tags: [],
             notes: nil,
-            verificationStatus: lastVerification
+            verificationStatus: lastVerification,
+            sealedRoute: qrManager.lastSealedRoute
         )
         
         let result = contactRepository.addContact(contact)
@@ -204,22 +209,39 @@ struct QRScannerView: View {
 struct CameraPreviewView: UIViewRepresentable {
     @Binding var previewLayer: AVCaptureVideoPreviewLayer?
     
-    func makeUIView(context: Context) -> UIView {
-        let view = UIView()
+    func makeUIView(context: Context) -> PreviewContainerView {
+        let view = PreviewContainerView()
         view.backgroundColor = .black
-        view.contentMode = .scaleAspectFill
         return view
     }
     
-    func updateUIView(_ uiView: UIView, context: Context) {
-        // Remove existing layer
-        uiView.layer.sublayers?.forEach { $0.removeFromSuperlayer() }
-        
-        // Add new preview layer if available
+    func updateUIView(_ uiView: PreviewContainerView, context: Context) {
         if let previewLayer = previewLayer {
-            previewLayer.videoGravity = .resizeAspectFill
-            previewLayer.frame = uiView.bounds
-            uiView.layer.addSublayer(previewLayer)
+            uiView.setPreviewLayer(previewLayer)
+        }
+    }
+    
+    // Internal UIView subclass to handle layout updates
+    class PreviewContainerView: UIView {
+        var previewLayer: AVCaptureVideoPreviewLayer?
+        
+        func setPreviewLayer(_ layer: AVCaptureVideoPreviewLayer) {
+            // Remove old layer if exists
+            self.previewLayer?.removeFromSuperlayer()
+            
+            // Set new layer
+            self.previewLayer = layer
+            layer.videoGravity = .resizeAspectFill
+            self.layer.addSublayer(layer)
+            
+            // Initial layout
+            layer.frame = bounds
+        }
+        
+        override func layoutSubviews() {
+            super.layoutSubviews()
+            // Ensure preview layer matches view bounds on layout changes
+            previewLayer?.frame = bounds
         }
     }
 }
@@ -227,8 +249,6 @@ struct CameraPreviewView: UIViewRepresentable {
 // MARK: - Scanning Frame View
 
 struct ScanningFrameView: View {
-    @State private var animationOffset: CGFloat = 0
-    
     var body: some View {
         ZStack {
             // Scanning frame
@@ -252,26 +272,40 @@ struct ScanningFrameView: View {
             }
             .frame(width: 250, height: 250)
             
-            // Scanning line animation
-            Rectangle()
-                .fill(
-                    LinearGradient(
-                        colors: [.clear, .green, .clear],
-                        startPoint: .leading,
-                        endPoint: .trailing
-                    )
-                )
-                .frame(width: 250, height: 2)
-                .offset(y: animationOffset)
-                .onAppear {
-                    withAnimation(
-                        .easeInOut(duration: 2)
-                        .repeatForever(autoreverses: true)
-                    ) {
-                        animationOffset = 100
-                    }
-                }
+            // Scanning line animation - isolated to prevent affecting parent views
+            ScanningLineView()
         }
+        .frame(width: 250, height: 250)
+        .transaction { transaction in
+            transaction.animation = nil // Prevent animation propagation to parent
+        }
+    }
+}
+
+// MARK: - Scanning Line View
+
+struct ScanningLineView: View {
+    @State private var animationOffset: CGFloat = -125
+    
+    var body: some View {
+        Rectangle()
+            .fill(
+                LinearGradient(
+                    colors: [.clear, .green, .clear],
+                    startPoint: .leading,
+                    endPoint: .trailing
+                )
+            )
+            .frame(width: 250, height: 2)
+            .offset(y: animationOffset)
+            .onAppear {
+                withAnimation(
+                    .easeInOut(duration: 2)
+                    .repeatForever(autoreverses: true)
+                ) {
+                    animationOffset = 125
+                }
+            }
     }
 }
 

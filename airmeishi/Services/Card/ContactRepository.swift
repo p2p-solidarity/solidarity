@@ -15,6 +15,7 @@ protocol ContactRepositoryProtocol {
     func updateContact(_ contact: Contact) -> CardResult<Contact>
     func deleteContact(id: UUID) -> CardResult<Void>
     func getContact(id: UUID) -> CardResult<Contact>
+    func getContact(pubKey: String) -> CardResult<Contact>
     func getAllContacts() -> CardResult<[Contact]>
     func searchContacts(query: String) -> CardResult<[Contact]>
     func getContactsBySource(_ source: ContactSource) -> CardResult<[Contact]>
@@ -35,18 +36,58 @@ class ContactRepository: ContactRepositoryProtocol, ObservableObject {
     
     private init() {
         loadContactsFromStorage()
+        IdentityCoordinator.shared.verificationStatusesPublisher
+            .receive(on: RunLoop.main)
+            .sink { [weak self] statuses in
+                self?.applyVerificationStatuses(statuses)
+            }
+            .store(in: &cancellables)
     }
     
     // MARK: - Public Methods
     
-    /// Add a new contact
+    /// Add a new contact, or update if duplicate business card ID exists
     func addContact(_ contact: Contact) -> CardResult<Contact> {
         // Check for duplicate business card IDs
-        if contacts.contains(where: { $0.businessCard.id == contact.businessCard.id }) {
-            return .failure(.validationError("Contact with this business card already exists"))
+        if let existingIndex = contacts.firstIndex(where: { $0.businessCard.id == contact.businessCard.id }) {
+            // Update existing contact instead of returning error
+            let existingContact = contacts[existingIndex]
+            
+            // Create updated contact with merged data
+            let updatedContact = Contact(
+                id: existingContact.id, // Preserve existing Contact ID
+                businessCard: contact.businessCard, // Update business card info
+                receivedAt: existingContact.receivedAt, // Keep original received date
+                source: existingContact.source, // Keep original source
+                tags: mergeTags(existingContact.tags, newTags: contact.tags), // Merge tags
+                notes: contact.notes ?? existingContact.notes, // Prefer new notes, fallback to existing
+                verificationStatus: contact.verificationStatus, // Update verification status
+                lastInteraction: Date(), // Update last interaction time
+                sealedRoute: contact.sealedRoute ?? existingContact.sealedRoute,
+                pubKey: contact.pubKey ?? existingContact.pubKey,
+                signPubKey: contact.signPubKey ?? existingContact.signPubKey
+            )
+            
+            // Store original for rollback
+            let originalContact = contacts[existingIndex]
+            
+            // Update in local array
+            contacts[existingIndex] = updatedContact
+            
+            // Save to storage
+            let saveResult = saveContactsToStorage()
+            
+            switch saveResult {
+            case .success:
+                return .success(updatedContact)
+            case .failure(let error):
+                // Rollback on failure
+                contacts[existingIndex] = originalContact
+                return .failure(error)
+            }
         }
         
-        // Add to local array
+        // Add new contact to local array
         contacts.append(contact)
         
         // Save to storage
@@ -126,6 +167,16 @@ class ContactRepository: ContactRepositoryProtocol, ObservableObject {
     func getAllContacts() -> CardResult<[Contact]> {
         return .success(contacts.sorted { $0.receivedAt > $1.receivedAt })
     }
+
+    /// Get a specific contact by Public Key (Identity or Encryption)
+    func getContact(pubKey: String) -> CardResult<Contact> {
+        guard let contact = contacts.first(where: {
+            $0.signPubKey == pubKey || $0.pubKey == pubKey
+        }) else {
+            return .failure(.notFound("Contact not found for pubKey"))
+        }
+        return .success(contact)
+    }
     
     /// Search contacts by query
     func searchContacts(query: String) -> CardResult<[Contact]> {
@@ -195,6 +246,13 @@ class ContactRepository: ContactRepositoryProtocol, ObservableObject {
     
     // MARK: - Private Methods
     
+    /// Merge tags from existing and new contact, avoiding duplicates
+    private func mergeTags(_ existingTags: [String], newTags: [String]) -> [String] {
+        var merged = Set(existingTags)
+        merged.formUnion(newTags)
+        return Array(merged).sorted()
+    }
+    
     /// Load contacts from encrypted storage
     private func loadContactsFromStorage() {
         isLoading = true
@@ -220,7 +278,23 @@ class ContactRepository: ContactRepositoryProtocol, ObservableObject {
     
     /// Save contacts to encrypted storage
     private func saveContactsToStorage() -> CardResult<Void> {
-        return storageManager.saveContacts(contacts)
+        storageManager.saveContacts(contacts)
+    }
+
+    private func applyVerificationStatuses(_ statuses: [UUID: VerificationStatus]) {
+        var updatedContacts = contacts
+        var didChange = false
+
+        for (index, contact) in contacts.enumerated() {
+            if let status = statuses[contact.businessCard.id], contact.verificationStatus != status {
+                updatedContacts[index].verificationStatus = status
+                didChange = true
+            }
+        }
+
+        if didChange {
+            contacts = updatedContacts
+        }
     }
 }
 

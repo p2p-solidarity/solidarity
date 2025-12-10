@@ -6,6 +6,14 @@ struct TabBarIcon: View {
     let systemName: String
     let title: String
     let isSelected: Bool
+    let customIcon: String?
+    
+    init(systemName: String, title: String, isSelected: Bool, customIcon: String? = nil) {
+        self.systemName = systemName
+        self.title = title
+        self.isSelected = isSelected
+        self.customIcon = customIcon
+    }
     
     var body: some View {
         VStack(spacing: 6) {
@@ -22,11 +30,28 @@ struct TabBarIcon: View {
                         )
                         .frame(width: 20, height: 20)
                 }
-                Image(systemName: systemName)
-                    .symbolRenderingMode(.monochrome)
-                    .font(.system(size: 18, weight: .semibold))
-                    .foregroundColor(isSelected ? .white : Color(white: 0.65))
+                if let customIcon = customIcon, customIcon == "sakura-white", systemName.isEmpty {
+                    // Use SakuraIconView for sakura icon
+                    SakuraIconView(
+                        size: 18,
+                        color: isSelected ? .white : Color(white: 0.65),
+                        isAnimating: false
+                    )
                     .shadow(color: isSelected ? Color.white.opacity(0.45) : Color.clear, radius: isSelected ? 2 : 0)
+                } else if let customIcon = customIcon, systemName.isEmpty {
+                    Image(customIcon)
+                        .resizable()
+                        .renderingMode(.template)
+                        .foregroundColor(isSelected ? .white : Color(white: 0.65))
+                        .frame(width: 18, height: 18)
+                        .shadow(color: isSelected ? Color.white.opacity(0.45) : Color.clear, radius: isSelected ? 2 : 0)
+                } else if !systemName.isEmpty {
+                    Image(systemName: systemName)
+                        .symbolRenderingMode(.monochrome)
+                        .font(.system(size: 18, weight: .semibold))
+                        .foregroundColor(isSelected ? .white : Color(white: 0.65))
+                        .shadow(color: isSelected ? Color.white.opacity(0.45) : Color.clear, radius: isSelected ? 2 : 0)
+                }
             }
             Text(title)
                 .font(.footnote)
@@ -51,9 +76,9 @@ struct FloatingTabBarBackdrop: View {
                     RoundedRectangle(cornerRadius: 20, style: .continuous)
                         .stroke(Color.white.opacity(0.08), lineWidth: 0.5)
                 )
-                .shadow(color: Color.black.opacity(0.25), radius: 12, y: 6)
         }
         .frame(height: 64)
+        .shadow(color: Color.black.opacity(0.25), radius: 6, y: 3)
         .padding(.horizontal, 16)
         .padding(.bottom, 10)
         .background(Color.clear)
@@ -69,6 +94,7 @@ enum MainAppTab: Int, CaseIterable {
     case sharing = 1
     case shoutout = 2
     case id = 3
+    case settings = 4
 }
 
 // MARK: - Custom Floating Tab Bar
@@ -84,22 +110,26 @@ struct CustomFloatingTabBar: View {
                 .padding(.bottom, -6)
             
             HStack {
-                TabBarButton(systemName: "list.bullet.rectangle", title: "Glossary", isSelected: selectedTab == MainAppTab.glossary.rawValue) {
+                TabBarButton(systemName: "list.bullet.rectangle", title: "Glossary", isSelected: selectedTab == MainAppTab.glossary.rawValue, action: {
                     selectedTab = MainAppTab.glossary.rawValue
-                }
-                Spacer(minLength: 20)
-                TabBarButton(systemName: "circle.grid.2x2", title: "Sharing", isSelected: selectedTab == MainAppTab.sharing.rawValue) {
+                })
+                Spacer(minLength: 16)
+                TabBarButton(systemName: "circle.grid.2x2", title: "Sharing", isSelected: selectedTab == MainAppTab.sharing.rawValue, action: {
                     selectedTab = MainAppTab.sharing.rawValue
-                }
-                Spacer(minLength: 20)
-                TabBarButton(systemName: "bolt", title: "Shoutout", isSelected: selectedTab == MainAppTab.shoutout.rawValue) {
+                })
+                Spacer(minLength: 16)
+                TabBarButton(systemName: "", title: "Sakura", isSelected: selectedTab == MainAppTab.shoutout.rawValue, customIcon: "sakura-white", action: {
                     selectedTab = MainAppTab.shoutout.rawValue
-                }
-                Spacer(minLength: 20)
-                TabBarButton(systemName: "target", title: "ID", isSelected: selectedTab == MainAppTab.id.rawValue) {
+                })
+                Spacer(minLength: 16)
+                TabBarButton(systemName: "target", title: "ID", isSelected: selectedTab == MainAppTab.id.rawValue, action: {
                     selectedTab = MainAppTab.id.rawValue
                     onIdTabTapped?()
-                }
+                })
+                Spacer(minLength: 16)
+                TabBarButton(systemName: "gearshape.fill", title: "Settings", isSelected: selectedTab == MainAppTab.settings.rawValue, action: {
+                    selectedTab = MainAppTab.settings.rawValue
+                })
             }
             .frame(height: 64)
             .padding(.horizontal, 28)
@@ -116,11 +146,20 @@ struct TabBarButton: View {
     let systemName: String
     let title: String
     let isSelected: Bool
+    let customIcon: String?
     let action: () -> Void
+    
+    init(systemName: String, title: String, isSelected: Bool, customIcon: String? = nil, action: @escaping () -> Void) {
+        self.systemName = systemName
+        self.title = title
+        self.isSelected = isSelected
+        self.customIcon = customIcon
+        self.action = action
+    }
     
     var body: some View {
         Button(action: action) {
-            TabBarIcon(systemName: systemName, title: title, isSelected: isSelected)
+            TabBarIcon(systemName: systemName, title: title, isSelected: isSelected, customIcon: customIcon)
         }
         .buttonStyle(.plain)
     }

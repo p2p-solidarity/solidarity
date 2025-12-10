@@ -1,6 +1,6 @@
 <div align="center">
 <h1>Solid(ar)ity</h1>
-<p>A privacy-preserving, proximity-based business card sharing app built with zero-knowledge proofs and P2P networking.</p>
+<p>A privacy-preserving, proximity-based business card sharing app built with zero-knowledge proofs, CloudKit-backed group sync, and P2P networking.</p>
 
 <img src="./airmeishi/Assets.xcassets/AppIcon.appiconset/1024.png" width="50%" height="50%"></img>
 
@@ -9,198 +9,65 @@
 
 ## What is Solid(ar)ity?
 
-Solid(ar)ity is a **fully decentralized, privacy-first** business card sharing app that works entirely offline. No servers. No cloud. No tracking. Just pure peer-to-peer magic.
+Solid(ar)ity is a local-first, privacy-first business card sharing app that works offline by default. P2P handles contact exchange; CloudKit is used only to synchronize group metadata and invitations when you opt in. No tracking. No centralized server.
 
-Exchange business cards with people nearby while maintaining complete control over your personal information through zero-knowledge proofs and selective disclosure.
+Exchange business cards with nearby people while keeping full control of your data through zero-knowledge proofs and selective disclosure.
 
 ### Why it matters
 
-In a world where every interaction gets tracked, stored, and monetized, Solid(ar)ity gives you back control. Your data lives on your device. You decide what to share, when, and with whom. Period.
+Your data lives on your device. You decide what to share, when, and with whom.
 
 ### Key Features
 
-- **Truly Offline-First**: Works completely without internet—P2P networking via MultipeerConnectivity
-- **Zero-Knowledge Identity**: Built on Semaphore protocol for anonymous group membership verification
-- **Selective Disclosure**: Share only what's relevant—public, professional, or personal levels
-- **Multiple Sharing Methods**: QR codes, AirDrop, WiFi Direct, ShareLink—whatever works for you
-- **Apple Wallet Integration**: Save contacts directly to Apple Wallet with PassKit
-- **Group Verification**: Create trusted circles with cryptographic proof of membership
-- **No Middleman**: All data stored locally with AES-GCM encryption. No servers, ever.
+- Offline-first P2P via MultipeerConnectivity with QR/ShareLink fallbacks
+- Zero-knowledge identity using SemaphoreSwift + Mopro
+- Selective disclosure: public / professional / personal levels per field
+- Apple Wallet export with PassKit
+- Group verification with cryptographic membership proofs
+- CloudKit group sync: optional metadata + invite syncing; cards stay local
 
-## How it Works
+## Architecture at a Glance
 
-1. **Create your card** with only the information you want to share
-2. **Set privacy levels** for each field (public/professional/personal)
-3. **Share nearby** via P2P, QR code, or AirDrop—no internet needed
-4. **Verify membership** in trusted groups using zero-knowledge proofs
-5. **Everything stays local**—your data never touches a server
+- Storage: AES-GCM encrypted payloads with SwiftData caching for groups; no remote database for cards.
+- Identity & proofs: SemaphoreSwift + Mopro; `SemaphoreGroupManager` maintains Merkle trees per group.
+- Proximity sharing: `ProximityManager` and `GroupProximityManager` handle discovery, QR, AirDrop, and ShareLink handoff.
+- CloudKit sync (opt-in):
+  - `CloudKitGroupSyncManager` manages the `AirMeishiGroups` custom zone.
+  - Public DB for invite tokens; private/shared DBs for owned and joined groups.
+  - Subscribes to silent pushes, merges cloud data with unsynced local changes, and keeps local-only groups.
+  - Only group metadata and membership tokens sync; card content never leaves the device.
+- Caching & conflicts: `LocalCacheManager` keeps local source of truth; CloudKit merges respect unsynced work.
+- Utilities: `DeepLinkManager` and `WebhookManager` support invite links and optional webhook callbacks.
+
+## Data Flows
+
+1. Create/edit card → stored locally (encrypted) → share via P2P or QR → optional Wallet export.
+2. Join or issue group → generate Semaphore identity/proof → optionally sync membership via CloudKit for invite discovery.
+3. CloudKit sync loop:
+   - Start engine, verify account, create custom zone if missing.
+   - Subscribe to public membership changes and private/shared DB changes (silent pushes).
+   - Fetch records, merge with local cache (keep unsynced local edits), then refresh Semaphore trees.
+4. Proximity session: MultipeerConnectivity advertises presence, exchanges payloads, and verifies received proofs before accepting.
+
+## Project Structure
+
+- `airmeishi/AppDelegate.swift`: bootstrap, CloudKit notification handling
+- `airmeishi/Models`: cards, groups, credentials, CloudKit models
+- `airmeishi/Services/CloudKit`: CloudKitGroupSyncManager + models
+- `airmeishi/Services/Sharing`: P2P managers, QR, ShareLink flows
+- `airmeishi/Services/Identity`: Semaphore group management and credential issuance
+- `airmeishi/Services/Cache`: SwiftData-backed local cache
+- `airmeishi/Views`: SwiftUI screens for cards, IDs, groups, settings
+- `airmeishi/Assets.xcassets`: app icon and UI assets
 
 ## Built With
 
-- **SwiftUI** - Native iOS interface
-- **MultipeerConnectivity** - Apple's P2P networking
-- **Semaphore Protocol** - Zero-knowledge proof system via [SemaphoreSwift](https://github.com/zkmopro/SemaphoreSwift)
-- **Mopro** - ZK proof generation with native Swift bindings
-- **PassKit** - Apple Wallet integration
-- **Local Storage** - AES-GCM encrypted file system, no databases
-
-## App Store Launch Checklist
-
-To ship Solid(ar)ity to the App Store, here's what must be done:
-
-### 1. **Core Functionality** ✓
-- [x] Business card creation and editing
-- [x] Proximity-based P2P sharing
-- [x] QR code generation and scanning
-- [x] Zero-knowledge proof integration
-- [x] Group management
-- [x] Local encrypted storage
-- [ ] Apple Wallet (PassKit) support - Moved to v1.1 (requires Pass Certificate)
-
-### 2. **Privacy & Compliance** 🔴 CRITICAL
-- [x] **Privacy Policy** - ✅ Created (`PRIVACY_POLICY.md`) - Needs web hosting
-  - Explains zero data collection
-  - ZK proofs without exposing identity
-  - Local-only storage policy
-  - No third-party data sharing
-- [x] **Terms of Service** - ✅ Created (`TERMS_OF_SERVICE.md`)
-- [x] **Privacy Manifest** (`PrivacyInfo.xcprivacy`) - ✅ Created (needs to be added to Xcode project target)
-- [ ] **App Store Privacy Labels** - Fill out accurately in App Store Connect
-- [ ] Review **Info.plist** permission strings:
-  - `NSLocalNetworkUsageDescription` ✓
-  - `NSBonjourServices` ✓
-  - `NSCameraUsageDescription` (for QR scanning)
-  - `NSContactsUsageDescription` (if accessing Contacts)
-  - `NSPhotoLibraryUsageDescription` (if saving QR codes)
-
-### 3. **App Store Assets** 🔴 CRITICAL
-- [ ] **App Icon** - 1024x1024px without alpha channel
-- [ ] **Screenshots** (Required for all screen sizes):
-  - iPhone 6.7" (iPhone 15 Pro Max)
-  - iPhone 6.5" (iPhone 14 Plus)
-  - iPhone 5.5" (iPhone 8 Plus) - Optional but recommended
-  - iPad Pro 12.9" (if supporting iPad)
-- [ ] **App Preview Videos** (Optional but highly recommended - shows P2P magic)
-- [ ] **Marketing Copy**:
-  - App name (30 characters max)
-  - Subtitle (30 characters max)
-  - Promotional text (170 characters)
-  - Description (4000 characters max)
-  - Keywords (100 characters total)
-
-### 4. **Code Quality & Testing** 🟡 IMPORTANT
-- [ ] **Remove all test code** and debug features
-- [ ] **Crash testing** - Use TestFlight with beta testers
-- [ ] **Performance testing** - Profile with Instruments
-- [ ] **Network permission handling** - Graceful fallback if denied
-- [ ] **Error handling** - No crashes, all edge cases covered
-- [ ] **Memory leaks** - Check with Instruments
-- [ ] **Accessibility** - VoiceOver support, Dynamic Type
-- [ ] **Localization** - At least English, consider Chinese/Japanese
-- [ ] **Dark mode** - Full support for light and dark themes
-
-### 5. **Technical Requirements** 🔴 CRITICAL
-- [x] **Deployment target**: ✅ Set to iOS 16.0 (was 18.5)
-- [ ] **Code signing**: Valid Apple Developer account
-- [ ] **App ID & Provisioning**: Proper configuration
-- [ ] **Entitlements**:
-  - Associated Domains (if using universal links)
-  - Network extensions (for local networking)
-  - Keychain access groups
-- [ ] **Third-party SDKs**: All dependencies must be secure and maintained
-  - ✓ SemaphoreSwift (active)
-  - ✓ Mopro (active)
-  - 🟡 Web3Auth (verify license compliance)
-  - 🟡 Web3.swift (verify license compliance)
-- [x] **Remove backend references**:
-  - ✅ Deleted `APIClient.swift`
-  - ✅ Deleted `APIAuthManager.swift`
-  - ✅ Deleted `APIConfig.swift`
-  - ✅ Deleted `APIModels.swift`
-  - ✅ Removed from CLAUDE.md documentation
-
-### 6. **User Experience Polish** 🟡 IMPORTANT
-- [ ] **Onboarding** - First-time user tutorial (keep it < 3 screens)
-- [ ] **Empty states** - Beautiful placeholders for no cards/contacts
-- [ ] **Loading states** - Smooth animations during ZK proof generation
-- [ ] **Error messages** - User-friendly, actionable (not technical jargon)
-- [ ] **Haptic feedback** - Subtle feedback for key interactions
-- [ ] **App rating prompt** - Implemented with `StoreKit` after positive interactions
-
-### 7. **Security Audit** 🔴 CRITICAL
-- [ ] **Keychain security** - Verify Semaphore private keys are properly protected
-- [ ] **Encryption audit** - AES-GCM implementation review
-- [ ] **ZK proof validation** - Ensure no identity leakage
-- [ ] **Code obfuscation** - Consider for cryptographic components
-- [ ] **Penetration testing** - Test P2P attack vectors
-
-### 8. **App Store Review Preparation** 🔴 CRITICAL
-- [ ] **Demo account** - Not needed (P2P works offline)
-- [ ] **Demo video** - Show how to test with two devices
-- [ ] **Review notes**: Explain clearly:
-  - "App works offline via MultipeerConnectivity"
-  - "Test with two devices on same WiFi network"
-  - "No login required, data stored locally"
-  - "ZK proofs ensure privacy"
-- [ ] **Compliance questions**:
-  - Encryption: YES (AES-GCM, but exempt under self-classification)
-  - COPPA: NO (not targeted at children under 13)
-  - Ads: NO
-  - Third-party analytics: NO
-
-### 9. **Launch Preparation** 🟡 IMPORTANT
-- [ ] **Support infrastructure**:
-  - Support email: support@knyx.dev ✓
-  - Website with FAQ
-  - Community (Discord/Telegram?)
-- [ ] **Beta testing via TestFlight**:
-  - Internal testing (25 users)
-  - External testing (10,000 users max)
-  - Collect feedback, fix critical bugs
-- [ ] **Pricing strategy**:
-  - Free with optional premium features? (Group limits?)
-  - Paid upfront? ($2.99-4.99?)
-  - Freemium with Apple Wallet export as premium?
-- [ ] **Launch date coordination** with marketing
-
-### 10. **Post-Launch** 🟡 IMPORTANT
-- [ ] **Monitor crashes** via App Store Connect
-- [ ] **Respond to reviews** within 24 hours
-- [ ] **Plan v1.1** with user-requested features
-- [ ] **Analytics** (privacy-preserving, on-device only)
-
----
-
-## What Makes This App Store Ready?
-
-**The "One More Thing" Pitch:**
-
-> Most business card apps collect your data, send it to servers, and monetize your connections. Solid(ar)ity is different. It's the **only** business card app that:
-> - Works completely offline
-> - Uses zero-knowledge cryptography
-> - Never touches a server
-> - Respects your privacy by design
->
-> **This is how networking should work.**
-
-### Minimum Viable Launch (MVP)
-Ship with:
-- ✓ Business card creation/editing
-- ✓ QR code sharing (fastest to demo)
-- ✓ Proximity sharing (P2P)
-- ✓ Zero-knowledge identity (Semaphore)
-- ✓ Basic group management
-
-### Post-Launch Features (v1.1+)
-- **Apple Wallet signing** (implementation complete, needs Pass Type ID certificate - see `PASSKIT_CERTIFICATE_SETUP.md`)
-- Advanced selective disclosure
-- ENS integration
-- Shoutout features completion
-- Cross-platform (Android, web)
-
----
-
-**Bottom Line**: You're 70% there. Focus on polish, privacy compliance, and App Store assets. The tech is solid. Make the experience simple enough that your grandmother could use it, but powerful enough that privacy advocates applaud.
+- SwiftUI - Native iOS interface
+- MultipeerConnectivity - Apple's P2P networking
+- Semaphore Protocol - Zero-knowledge proofs via [SemaphoreSwift](https://github.com/zkmopro/SemaphoreSwift)
+- Mopro - Native proof generation
+- PassKit - Apple Wallet integration
+- Local Storage - AES-GCM encrypted file system, no remote DB for cards
 
 ## Development
 

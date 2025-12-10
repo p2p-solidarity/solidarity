@@ -22,6 +22,8 @@ struct QRSharingView: View {
     @State private var errorMessage = ""
     @State private var showingPassGeneration = false
     @State private var showingLinkOptions = false
+    @State private var qrMode: QRShareMode = .oidc
+    @State private var oidcContext: OIDCService.PresentationRequestContext?
     
     @Environment(\.dismiss) private var dismiss
     
@@ -34,17 +36,20 @@ struct QRSharingView: View {
                         businessCard: businessCard.filteredCard(for: selectedSharingLevel)
                     )
                     
-                    // Privacy level selector
-                    PrivacyLevelSelector(
-                        selectedLevel: $selectedSharingLevel,
-                        businessCard: businessCard
-                    )
+
+
+
+
                     
                     // QR Code display
                     QRCodeDisplay(
                         qrImage: generatedQRImage,
                         isGenerating: qrManager.isGenerating
                     )
+
+                    if qrMode == .oidc, let context = oidcContext {
+                        OIDCRequestSummary(context: context)
+                    }
                     
                     // Sharing options
                     SharingOptionsView(
@@ -53,6 +58,18 @@ struct QRSharingView: View {
                         onCreateShareLink: createShareLink,
                         onShowShareSheet: { showingShareSheet = true }
                     )
+                    
+                    // Privacy level selector
+                    PrivacyLevelSelector(
+                        selectedLevel: $selectedSharingLevel,
+                        businessCard: businessCard
+                    )
+
+                    // Sharing mode selector
+                    SharingModeSelector(selectedMode: $qrMode)
+                        .onChange(of: qrMode) { _, _ in
+                            generateQRCode()
+                        }
                     
                     // Active share links
                     ActiveShareLinksView(
@@ -105,17 +122,11 @@ struct QRSharingView: View {
     // MARK: - Private Methods
     
     private func generateQRCode() {
-        let result = qrManager.generateQRCode(
-            for: businessCard,
-            sharingLevel: selectedSharingLevel
-        )
-        
-        switch result {
-        case .success(let image):
-            generatedQRImage = image
-        case .failure(let error):
-            errorMessage = error.localizedDescription
-            showingError = true
+        switch qrMode {
+        case .direct:
+            generateDirectQRCode()
+        case .oidc:
+            generateOIDCRequestQRCode()
         }
     }
     
@@ -125,6 +136,42 @@ struct QRSharingView: View {
     
     private func createShareLink() {
         showingLinkOptions = true
+    }
+
+    private func generateDirectQRCode() {
+        let result = qrManager.generateQRCode(
+            for: businessCard,
+            sharingLevel: selectedSharingLevel
+        )
+
+        switch result {
+        case .success(let image):
+            generatedQRImage = image
+            oidcContext = nil
+        case .failure(let error):
+            errorMessage = error.localizedDescription
+            showingError = true
+        }
+    }
+
+    private func generateOIDCRequestQRCode() {
+        let result = OIDCService.shared.createPresentationRequest()
+
+        switch result {
+        case .failure(let error):
+            errorMessage = error.localizedDescription
+            showingError = true
+        case .success(let context):
+            oidcContext = context
+            let qrResult = qrManager.generateQRCode(from: context.qrString)
+            switch qrResult {
+            case .success(let image):
+                generatedQRImage = image
+            case .failure(let error):
+                errorMessage = error.localizedDescription
+                showingError = true
+            }
+        }
     }
 }
 
@@ -242,6 +289,28 @@ struct PrivacyLevelRow: View {
     }
 }
 
+enum QRShareMode: Int {
+    case oidc
+    case direct
+}
+
+struct SharingModeSelector: View {
+    @Binding var selectedMode: QRShareMode
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("Sharing Mode")
+                .font(.headline)
+
+            Picker("Sharing Mode", selection: $selectedMode) {
+                Text("Request VC (OIDC)").tag(QRShareMode.oidc)
+                Text("Share Direct VC").tag(QRShareMode.direct)
+            }
+            .pickerStyle(SegmentedPickerStyle())
+        }
+    }
+}
+
 // MARK: - QR Code Display
 
 struct QRCodeDisplay: View {
@@ -279,6 +348,44 @@ struct QRCodeDisplay: View {
                     }
                 }
             }
+        }
+    }
+}
+
+struct OIDCRequestSummary: View {
+    let context: OIDCService.PresentationRequestContext
+
+    private var relativeFormatter: RelativeDateTimeFormatter {
+        let formatter = RelativeDateTimeFormatter()
+        formatter.unitsStyle = .abbreviated
+        return formatter
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("OIDC Request Details")
+                .font(.headline)
+
+            VStack(alignment: .leading, spacing: 4) {
+                Text("State: \(context.request.state)")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+
+                Text("Nonce: \(context.request.nonce)")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+
+                Text("Generated \(relativeFormatter.localizedString(for: context.createdAt, relativeTo: Date()))")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+            }
+            .padding()
+            .background(Color(.systemGray6))
+            .cornerRadius(8)
+
+            Text("Ask the other wallet to scan this code to send back a verifiable business card.")
+                .font(.caption)
+                .foregroundColor(.secondary)
         }
     }
 }

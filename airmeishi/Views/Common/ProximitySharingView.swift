@@ -21,6 +21,7 @@ struct ProximitySharingView: View {
     @State private var isMatching: Bool = false
     @State private var showQRScanner: Bool = false
     @State private var showCreateCard: Bool = false
+    @State private var showShareSheet: Bool = false
     @State private var errorMessage: String?
     @Environment(\.dismiss) private var dismiss
     
@@ -60,38 +61,39 @@ struct ProximitySharingView: View {
                             .shadow(color: .black.opacity(0.2), radius: 8, x: 0, y: 4)
                     }
 
-                    Button(action: { showQRScanner = true }) {
-                        HStack(spacing: 6) {
-                            Image(systemName: "qrcode.viewfinder")
-                            Text("Scan QR instead")
+                    HStack(spacing: 20) {
+                        Button(action: { showQRScanner = true }) {
+                            HStack(spacing: 6) {
+                                Image(systemName: "qrcode.viewfinder")
+                                Text("Scan QR")
+                            }
+                            .font(.subheadline)
+                            .foregroundColor(Color.white.opacity(0.9))
+                            .padding(.vertical, 8)
+                            .padding(.horizontal, 12)
+                            .background(Color.white.opacity(0.1))
+                            .cornerRadius(20)
                         }
-                        .font(.subheadline)
-                        .foregroundColor(Color.white.opacity(0.9))
+                        
+                        Button(action: { showShareSheet = true }) {
+                            HStack(spacing: 6) {
+                                Image(systemName: "square.and.arrow.up")
+                                    .font(.system(size: 14))
+                                Text("Share Options")
+                            }
+                            .font(.subheadline)
+                            .foregroundColor(Color.white.opacity(0.9))
+                            .padding(.vertical, 8)
+                            .padding(.horizontal, 12)
+                            .background(Color.white.opacity(0.1))
+                            .cornerRadius(20)
+                        }
                     }
+                    .padding(.bottom, 20)
                 }
                 .padding(.horizontal, 24)
-                
-                Text("You're welcome to chill here.")
-                        .font(.caption)
-                    .foregroundColor(Color.white.opacity(0.7))
-                    .padding(.top, 8)
-                
+
                 Spacer()
-                
-                // Small status chip
-                HStack(spacing: 10) {
-                    Label("Nearby: \(proximityManager.nearbyPeers.count)", systemImage: "person.2")
-                    if proximityManager.getSharingStatus().connectedPeersCount > 0 {
-                        Label("Connected: \(proximityManager.getSharingStatus().connectedPeersCount)", systemImage: "link")
-                    }
-                }
-                .font(.caption)
-                .foregroundColor(.white)
-                .padding(.vertical, 8)
-                .padding(.horizontal, 12)
-                .background(Color.white.opacity(0.08))
-                .clipShape(Capsule())
-                .padding(.bottom, 16)
             }
             
             // Close button
@@ -99,7 +101,7 @@ struct ProximitySharingView: View {
                 HStack {
                     Spacer()
                     Button(action: {
-                        stopMatchingIfNeeded()
+                        // Just dismiss, keep matching running in background
                         dismiss()
                     }) {
                         Image(systemName: "xmark")
@@ -125,6 +127,22 @@ struct ProximitySharingView: View {
             BusinessCardFormView { saved in
                 selectedCard = saved
                 showCreateCard = false
+            }
+        }
+        .sheet(isPresented: $showShareSheet) {
+            if let card = selectedCard {
+                QRSharingView(businessCard: card)
+            } else {
+                VStack(spacing: 16) {
+                    Text("No Business Card Available")
+                        .font(.headline)
+                    Text("Please create a business card first.")
+                        .foregroundColor(.secondary)
+                    Button("Close") {
+                        showShareSheet = false
+                    }
+                }
+                .padding()
             }
         }
         .alert("Error", isPresented: .init(
@@ -163,11 +181,11 @@ struct ProximitySharingView: View {
         }
         
         if let card = selectedCard {
-            proximityManager.startAdvertising(with: card, sharingLevel: selectedSharingLevel)
+            proximityManager.startMatching(with: card, sharingLevel: selectedSharingLevel)
         } else {
-            proximityManager.startAdvertisingIdentity(displayName: UIDevice.current.name)
+            proximityManager.startMatching(with: nil)
         }
-        proximityManager.startBrowsing()
+        // proximityManager.startBrowsing() // Handled by startMatching
         isMatching = true
     }
     
