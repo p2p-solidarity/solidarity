@@ -68,15 +68,6 @@ enum AttributeType: String, Codable, CaseIterable {
     }
 }
 
-// MARK: - Private Supporting Types
-
-struct ProofData: Codable {
-    let businessCardId: String
-    let selectedFields: Set<BusinessCardField>
-    let recipientId: String?
-    let timestamp: Date
-}
-
 struct AttributeProofData: Codable {
     let businessCardId: String
     let attributeType: AttributeType

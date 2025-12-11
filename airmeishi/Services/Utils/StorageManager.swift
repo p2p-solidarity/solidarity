@@ -176,19 +176,3 @@ class StorageManager {
         }
     }
 }
-
-// MARK: - Storage Statistics
-
-struct StorageStatistics: Codable {
-    let totalSize: Int64
-    let businessCardsCount: Int
-    let contactsCount: Int
-    let lastUpdated: Date
-    
-    var formattedSize: String {
-        let formatter = ByteCountFormatter()
-        formatter.allowedUnits = [.useKB, .useMB, .useGB]
-        formatter.countStyle = .file
-        return formatter.string(fromByteCount: totalSize)
-    }
-}

@@ -491,51 +491,6 @@ struct ShoutoutDetailView: View {
     }
 }
 
-// MARK: - Lightening Stat Card
-
-struct LighteningStatCard: View {
-    let title: String
-    let value: String
-    let icon: String
-    let color: Color
-    let isLighteningAnimating: Bool
-    
-    var body: some View {
-        VStack(spacing: 8) {
-            // Icon with lightning effect
-            Image(systemName: icon)
-                .font(.title2)
-                .foregroundColor(color)
-                .scaleEffect(isLighteningAnimating ? 1.2 : 1.0)
-                .animation(
-                    .easeInOut(duration: 0.5).repeatForever(autoreverses: true),
-                    value: isLighteningAnimating
-                )
-            
-            // Value
-            Text(value)
-                .font(.headline)
-                .fontWeight(.bold)
-                .foregroundColor(.white)
-            
-            // Title
-            Text(title)
-                .font(.caption)
-                .foregroundColor(.gray)
-        }
-        .frame(maxWidth: .infinity)
-        .padding()
-        .background(
-            RoundedRectangle(cornerRadius: 12)
-                .fill(Color.white.opacity(0.05))
-                .overlay(
-                    RoundedRectangle(cornerRadius: 12)
-                        .stroke(color.opacity(0.3), lineWidth: 1)
-                )
-        )
-    }
-}
-
 struct ShoutoutInfoRow: View {
     let icon: String
     let title: String

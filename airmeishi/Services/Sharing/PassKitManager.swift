@@ -474,14 +474,6 @@ struct PassRevocation: Codable {
     let reason: String
 }
 
-/// Pass update notification payload
-struct PassUpdatePayload: Codable {
-    let passSerial: String
-    let updatedAt: Date
-    let businessCard: BusinessCard
-    let sharingLevel: SharingLevel
-}
-
 // MARK: - Public Helper (Import String)
 
 extension PassKitManager {

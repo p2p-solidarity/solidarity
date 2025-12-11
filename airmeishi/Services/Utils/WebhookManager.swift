@@ -289,18 +289,3 @@ struct WebhookServerStatus {
     let lastActivity: Date?
     let uptime: TimeInterval
 }
-
-/// Webhook notification payload
-struct WebhookNotification: Codable {
-    let type: NotificationType
-    let serialNumber: String
-    let timestamp: Date
-    let data: [String: String]?
-    
-    enum NotificationType: String, Codable {
-        case passUpdate = "pass_update"
-        case passRevocation = "pass_revocation"
-        case passRegistration = "pass_registration"
-        case passUnregistration = "pass_unregistration"
-    }
-}

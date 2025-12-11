@@ -268,7 +268,6 @@ private final class GroupStorage {
         url = appDir.appendingPathComponent("semaphore_group.json")
     }
 
-    struct StoredGroup: Codable { let id: UUID; var name: String; var createdAt: Date; var members: [String]; var root: String? }
     struct State: Codable { let groups: [SemaphoreGroupManager.ManagedGroup]; let selectedGroupId: UUID? }
 
     func load() -> State {

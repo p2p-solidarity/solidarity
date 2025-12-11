@@ -357,23 +357,3 @@ enum AirDropItem {
     case qrCode(UIImage)
     case text(String)
 }
-
-/// AirDrop sharing options
-struct AirDropSharingOptions {
-    let includeVCard: Bool
-    let includeWalletPass: Bool
-    let includeQRCode: Bool
-    let sharingLevel: SharingLevel
-    
-    init(
-        includeVCard: Bool = true,
-        includeWalletPass: Bool = false,
-        includeQRCode: Bool = false,
-        sharingLevel: SharingLevel = .professional
-    ) {
-        self.includeVCard = includeVCard
-        self.includeWalletPass = includeWalletPass
-        self.includeQRCode = includeQRCode
-        self.sharingLevel = sharingLevel
-    }
-}

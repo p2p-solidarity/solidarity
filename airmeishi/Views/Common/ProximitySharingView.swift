@@ -238,12 +238,3 @@ struct ProximitySharingView: View {
         }
     }
 }
-
-// MARK: - Preview
-
-struct ProximitySharingView_Previews: PreviewProvider {
-    static var previews: some View {
-        ProximitySharingView()
-            .preferredColorScheme(.dark)
-    }
-}

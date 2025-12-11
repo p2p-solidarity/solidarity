@@ -11,15 +11,6 @@ import UIKit
 /// Handles OIDC Authentication Request generation and parsing.
 final class OIDCService: ObservableObject {
     static let shared = OIDCService()
-
-    struct OIDCRequest {
-        let uri: URL
-        let clientId: String
-        let redirectUri: String
-        let nonce: String
-        let state: String?
-        let claims: [String: Any]?
-    }
     
     struct PresentationRequest: Equatable {
         let id: String
@@ -39,10 +30,6 @@ final class OIDCService: ObservableObject {
                 let purpose: String?
             }
         }
-    }
-    
-    struct PresentationContext {
-        let qrString: String
     }
     
     struct PresentationRequestContext: Equatable {

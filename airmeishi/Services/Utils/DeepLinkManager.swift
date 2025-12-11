@@ -403,34 +403,3 @@ enum DeepLinkAction {
     case navigateToSharing
     case navigateToContacts
 }
-
-/// URL scheme configuration
-struct URLSchemeConfig {
-    static let scheme = "airmeishi"
-    static let host = "share"
-    
-    /// Create a custom URL scheme URL
-    static func createSchemeURL(path: String, parameters: [String: String] = [:]) -> URL? {
-        var components = URLComponents()
-        components.scheme = scheme
-        components.host = host
-        components.path = path
-        
-        if !parameters.isEmpty {
-            components.queryItems = parameters.map { URLQueryItem(name: $0.key, value: $0.value) }
-        }
-        
-        return components.url
-    }
-}
-
-/// Universal link configuration
-struct UniversalLinkConfig {
-    static let domain = "solidarity.gg"
-    static let basePath = "/share"
-
-    /// Validate if URL is a valid universal link
-    static func isValidUniversalLink(_ url: URL) -> Bool {
-        return url.host == domain && url.path.hasPrefix(basePath)
-    }
-}
