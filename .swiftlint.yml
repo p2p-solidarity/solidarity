@@ -1,0 +1,49 @@
+disabled_rules:
+  - trailing_whitespace
+  - todo
+
+opt_in_rules:
+  - empty_count
+  - force_cast
+  - force_unwrapping
+  - redundant_nil_coalescing
+
+included:
+  - airmeishi
+  - airmeishiClip
+  - airmeishiTests
+  - airmeishiUITests
+
+excluded:
+  - Pods
+  - DerivedData
+  - Carthage
+  - "**/Generated"
+  - "**/*generated.swift"
+  - "**/*.generated.swift"
+
+line_length:
+  warning: 120
+  error: 140
+
+file_length:
+  warning: 500
+  error: 600
+
+type_body_length:
+  warning: 300
+  error: 400
+
+function_body_length:
+  warning: 80
+  error: 120
+
+identifier_name:
+  min_length:
+    error: 3
+  excluded:
+    - id
+    - URL
+
+strict: false
+reporter: "xcode"

@@ -136,6 +136,7 @@
 			buildRules = (
 			);
 			dependencies = (
+				F1286C072EEB580F0001BBFD /* PBXTargetDependency */,
 			);
 			fileSystemSynchronizedGroups = (
 				F1133D802E70600A0097A2A4 /* airmeishi */,
@@ -232,6 +233,7 @@
 				F1134EA32E757CE20097A2A4 /* XCRemoteSwiftPackageReference "SemaphoreSwift" */,
 				F18CDB272EC1F68E005E94B4 /* XCRemoteSwiftPackageReference "sprucekit-mobile" */,
 				F140CFAA2EDB5612009A2F45 /* XCRemoteSwiftPackageReference "WebRTC" */,
+				F1286C052EEB58030001BBFD /* XCRemoteSwiftPackageReference "SwiftLintPlugins" */,
 			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = F1133D7F2E70600A0097A2A4 /* Products */;
@@ -303,6 +305,10 @@
 			isa = PBXTargetDependency;
 			target = F1133D7D2E70600A0097A2A4 /* airmeishi */;
 			targetProxy = F1133D972E70600C0097A2A4 /* PBXContainerItemProxy */;
+		};
+		F1286C072EEB580F0001BBFD /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			productRef = F1286C062EEB580F0001BBFD /* SwiftLintBuildToolPlugin */;
 		};
 /* End PBXTargetDependency section */
 
@@ -671,6 +677,14 @@
 				kind = branch;
 			};
 		};
+		F1286C052EEB58030001BBFD /* XCRemoteSwiftPackageReference "SwiftLintPlugins" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/SimplyDanny/SwiftLintPlugins";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 0.62.2;
+			};
+		};
 		F140CFAA2EDB5612009A2F45 /* XCRemoteSwiftPackageReference "WebRTC" */ = {
 			isa = XCRemoteSwiftPackageReference;
 			repositoryURL = "https://github.com/stasel/WebRTC.git";
@@ -694,6 +708,11 @@
 			isa = XCSwiftPackageProductDependency;
 			package = F1134EA32E757CE20097A2A4 /* XCRemoteSwiftPackageReference "SemaphoreSwift" */;
 			productName = Semaphore;
+		};
+		F1286C062EEB580F0001BBFD /* SwiftLintBuildToolPlugin */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = F1286C052EEB58030001BBFD /* XCRemoteSwiftPackageReference "SwiftLintPlugins" */;
+			productName = "plugin:SwiftLintBuildToolPlugin";
 		};
 		F140CFAB2EDB561E009A2F45 /* WebRTC */ = {
 			isa = XCSwiftPackageProductDependency;
