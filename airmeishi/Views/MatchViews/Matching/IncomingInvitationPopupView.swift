@@ -58,9 +58,21 @@ struct IncomingInvitationPopupView: View {
         }()
         return HStack(spacing: 12) {
             ZStack {
-                Circle().fill(LinearGradient(colors: [statusColor, statusColor.opacity(0.6)], startPoint: .topLeading, endPoint: .bottomTrailing)).frame(width: 54, height: 54)
-                Text(initials).font(.headline).fontWeight(.bold).foregroundColor(.white)
-                Circle().stroke(Color.yellow, lineWidth: 2).frame(width: 60, height: 60).scaleEffect(isAnimating ? 1.1 : 1.0).animation(.easeInOut(duration: 0.6).repeatForever(autoreverses: true), value: isAnimating)
+                Circle()
+                    .fill(LinearGradient(colors: [statusColor, statusColor.opacity(0.6)],
+                                         startPoint: .topLeading,
+                                         endPoint: .bottomTrailing))
+                    .frame(width: 54, height: 54)
+                Text(initials)
+                    .font(.headline)
+                    .fontWeight(.bold)
+                    .foregroundColor(.white)
+                Circle()
+                    .stroke(Color.yellow, lineWidth: 2)
+                    .frame(width: 60, height: 60)
+                    .scaleEffect(isAnimating ? 1.1 : 1.0)
+                    .animation(.easeInOut(duration: 0.6).repeatForever(autoreverses: true),
+                               value: isAnimating)
             }
             VStack(alignment: .leading, spacing: 6) {
                 Text(name).font(.headline).foregroundColor(.white).lineLimit(1)

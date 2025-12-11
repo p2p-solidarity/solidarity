@@ -201,9 +201,13 @@ struct BusinessCardFormView: View {
             .tint(.purple) // Make it look premium
             
             if businessCard.sharingPreferences.useZK {
-                Text("Your data is cryptographically protected. When you share via QR, only the fields you explicitly allow are revealed. The receiver verifies your identity without seeing hidden data.")
-                    .font(.caption)
-                    .foregroundColor(.secondary)
+                Text("""
+                Your data is cryptographically protected. When you share via QR,
+                only the fields you explicitly allow are revealed.
+                The receiver verifies your identity without seeing hidden data.
+                """)
+                .font(.caption)
+                .foregroundColor(.secondary)
             }
         } header: {
             Label("Privacy & Security", systemImage: "lock.shield")

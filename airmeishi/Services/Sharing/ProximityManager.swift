@@ -36,7 +36,14 @@ class ProximityManager: NSObject, ProximityManagerProtocol, ObservableObject {
     @Published private(set) var isPresentingInvitation = false
     @Published var pendingGroupInvite: (payload: GroupInvitePayload, from: MCPeerID)?
     @Published var matchingInfoMessage: String? // User-friendly status message for UI
-    private var pendingGroupJoinResponse: (invite: GroupInvitePayload, memberName: String, memberCommitment: String, peerID: MCPeerID)?
+    
+    struct PendingGroupJoinResponse {
+        let invite: GroupInvitePayload
+        let memberName: String
+        let memberCommitment: String
+        let peerID: MCPeerID
+    }
+    private var pendingGroupJoinResponse: PendingGroupJoinResponse?
     
     // MARK: - Auto-Pilot & Background Properties
     private var autoConnectEnabled = false
@@ -344,7 +351,12 @@ class ProximityManager: NSObject, ProximityManagerProtocol, ObservableObject {
     /// Accept the most recent pending group invite and defer sending the join response until connected
     func acceptPendingGroupInvite(memberName: String, memberCommitment: String) {
         guard let tuple = pendingGroupInvite else { return }
-        pendingGroupJoinResponse = (invite: tuple.payload, memberName: memberName, memberCommitment: memberCommitment, peerID: tuple.from)
+        pendingGroupJoinResponse = PendingGroupJoinResponse(
+            invite: tuple.payload,
+            memberName: memberName,
+            memberCommitment: memberCommitment,
+            peerID: tuple.from
+        )
         // Accept the Multipeer invitation to establish the session
         respondToPendingInvitation(accept: true)
     }

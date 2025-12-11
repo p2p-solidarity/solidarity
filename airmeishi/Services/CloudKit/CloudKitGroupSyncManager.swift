@@ -152,6 +152,7 @@ final class CloudKitGroupSyncManager: ObservableObject, GroupSyncManagerProtocol
         print("[CloudKitManager] Subscribed to private/shared database changes")
     }
     
+    // swiftlint:disable cyclomatic_complexity
     func fetchLatestChanges() async throws {
         print("[CloudKitManager] Fetching latest changes...")
         await MainActor.run { self.syncStatus = .syncing }
@@ -275,6 +276,7 @@ final class CloudKitGroupSyncManager: ObservableObject, GroupSyncManagerProtocol
         print("[CloudKitManager] Successfully updated groups. Total: \(self.groups.count)")
         await MainActor.run { self.syncStatus = .idle }
     }
+    // swiftlint:enable cyclomatic_complexity
     
     // MARK: - Group Management
     

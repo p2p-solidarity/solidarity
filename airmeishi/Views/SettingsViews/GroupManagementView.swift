@@ -274,9 +274,9 @@ struct GroupManagementView: View {
                     }
                 }
             case .privacy:
-                PrivacySheet
+                privacySheet
             case .terms:
-                TermsSheet
+                termsSheet
             case .share:
                 if let share = activeShare, let container = activeContainer {
                     CloudSharingView(share: share, container: container)
@@ -301,11 +301,11 @@ struct GroupManagementView: View {
     
     // MARK: - Sheets
 
-    private var InviteSheet: some View {
+    private var inviteSheet: some View {
         InviteLinkView()
     }
 
-    private var PrivacySheet: some View {
+    private var privacySheet: some View {
         NavigationView {
             ScrollView {
                 Text("Privacy Policy Content...")
@@ -320,7 +320,7 @@ struct GroupManagementView: View {
         }
     }
 
-    private var TermsSheet: some View {
+    private var termsSheet: some View {
         NavigationView {
             ScrollView {
                 Text("Terms of Service Content...")

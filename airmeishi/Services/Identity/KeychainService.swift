@@ -558,6 +558,7 @@ final class KeychainService {
         }
     }
 
+    // swiftlint:disable cyclomatic_complexity
     private func privateKey(context: LAContext?) -> CardResult<SecKey> {
         // Check for in-memory key first (works for both simulator and device)
         #if targetEnvironment(simulator)
@@ -592,7 +593,10 @@ final class KeychainService {
                 return .failure(.keyManagementError("Keychain returned unexpected item type for signing key"))
             }
             print("[KeychainService] Retrieved simulator key from keychain")
-            return .success((candidate as! SecKey))
+            guard let key = candidate as? SecKey else {
+                return .failure(.keyManagementError("Unexpected key type when casting simulator key"))
+            }
+            return .success(key)
         }
         
         // Key not found - this is expected on first run with a new session tag
@@ -623,7 +627,10 @@ final class KeychainService {
                 return .failure(.keyManagementError("Keychain returned unexpected item type for signing key"))
             }
             print("[KeychainService] Successfully retrieved key without authentication context")
-            return .success((candidate as! SecKey))
+            guard let key = candidate as? SecKey else {
+                return .failure(.keyManagementError("Unexpected key type when casting signing key"))
+            }
+            return .success(key)
         }
         
         // If key requires authentication, try with context
@@ -649,7 +656,10 @@ final class KeychainService {
                     return .failure(.keyManagementError("Keychain returned unexpected item type for signing key"))
                 }
                 print("[KeychainService] Successfully retrieved key with authentication context")
-                return .success((candidate as! SecKey))
+                guard let key = candidate as? SecKey else {
+                    return .failure(.keyManagementError("Unexpected key type when casting signing key with auth context"))
+                }
+                return .success(key)
             }
         }
 
@@ -673,7 +683,10 @@ final class KeychainService {
                     return .failure(.keyManagementError("Keychain returned unexpected item type for signing key"))
                 }
                 print("[KeychainService] Successfully retrieved key after creation")
-                return .success((candidate as! SecKey))
+                guard let key = candidate as? SecKey else {
+                    return .failure(.keyManagementError("Unexpected key type when casting signing key after creation"))
+                }
+                return .success(key)
             }
         }
         
@@ -681,6 +694,7 @@ final class KeychainService {
         return .failure(.keyManagementError("Failed to retrieve signing key: \(statusDescription(status))"))
         #endif
     }
+    // swiftlint:enable cyclomatic_complexity
 
     private func jwk(for privateKey: SecKey) -> CardResult<PublicKeyJWK> {
         guard let publicKey = SecKeyCopyPublicKey(privateKey) else {

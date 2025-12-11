@@ -482,7 +482,7 @@ struct ContentView: View {
         
         // Set name
         let nameComponents = card.name.components(separatedBy: " ")
-        if nameComponents.count > 0 {
+        if !nameComponents.isEmpty {
             contact.givenName = nameComponents[0]
             if nameComponents.count > 1 {
                 contact.familyName = nameComponents.dropFirst().joined(separator: " ")

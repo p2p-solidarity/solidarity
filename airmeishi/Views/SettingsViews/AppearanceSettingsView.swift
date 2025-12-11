@@ -14,7 +14,7 @@ struct AppearanceSettingsView: View {
     var body: some View {
         Form {
             Section("Card Accent Color") {
-                ColorGrid()
+                colorGrid()
             }
 
             Section("Effects") {
@@ -46,7 +46,7 @@ struct AppearanceSettingsView: View {
         }
     }
 
-    private func ColorGrid() -> some View {
+    private func colorGrid() -> some View {
         LazyVGrid(columns: [GridItem(.adaptive(minimum: 44), spacing: 12)], spacing: 12) {
             ForEach(Array(theme.presets.enumerated()), id: \.offset) { _, color in
                 ZStack {

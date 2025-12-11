@@ -12,7 +12,8 @@ import SwiftData
 final class GroupEntity {
     @Attribute(.unique) var id: String
     var name: String
-    var groupDescription: String // 'description' is a reserved word in some contexts, safer to use groupDescription or just description if SwiftData allows. SwiftData usually handles it, but let's stick to 'description' and see if it conflicts with CustomStringConvertible. Actually, let's use 'desc' or keep it 'description' but be careful.
+    // Use groupDescription instead of the reserved name 'description'
+    var groupDescription: String
     var coverImage: Data?
     var ownerRecordID: String
     var merkleRoot: String?
