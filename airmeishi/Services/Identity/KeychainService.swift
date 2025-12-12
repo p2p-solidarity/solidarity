@@ -593,9 +593,9 @@ final class KeychainService {
                 return .failure(.keyManagementError("Keychain returned unexpected item type for signing key"))
             }
             print("[KeychainService] Retrieved simulator key from keychain")
-            guard let key = candidate as? SecKey else {
-                return .failure(.keyManagementError("Unexpected key type when casting simulator key"))
-            }
+            // We verified the type ID above, so this force cast is safe
+            // swiftlint:disable:next force_cast
+            let key = candidate as! SecKey
             return .success(key)
         }
         

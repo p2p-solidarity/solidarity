@@ -22,6 +22,7 @@ class ShoutoutChartService: ObservableObject {
     @Published var selectedTags: Set<String> = []
     @Published var selectedEventType: EventType?
     @Published var selectedCharacterType: CharacterType?
+    @Published var filterOption: FilterOption = .all
     
     private let contactRepository = ContactRepository.shared
     private var cancellables = Set<AnyCancellable>()
@@ -42,6 +43,13 @@ class ShoutoutChartService: ObservableObject {
     }
     
     // MARK: - Data Management
+    
+    func refreshData() {
+        Task {
+            await loadUsers()
+            generateChartData()
+        }
+    }
     
     func loadUsers() async {
         let result = contactRepository.getAllContacts()
@@ -351,4 +359,12 @@ enum CharacterType: String, CaseIterable, Identifiable {
         case .social: return 0.59
         }
     }
+}
+
+enum FilterOption: String, CaseIterable, Identifiable {
+    case all = "All Cards"
+    case verified = "Verified Only"
+    case recent = "Recently Added"
+    
+    var id: String { rawValue }
 }
