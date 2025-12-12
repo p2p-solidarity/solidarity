@@ -32,5 +32,3 @@ extension Array where Element == EventParticipation {
         return self.sorted { $0.eventDate > $1.eventDate }
     }
 }
-
-

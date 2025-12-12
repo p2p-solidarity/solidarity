@@ -76,5 +76,3 @@ struct StatefulPreviewWrapper<Value, Content: View>: View {
         content($value)
     }
 }
-
-

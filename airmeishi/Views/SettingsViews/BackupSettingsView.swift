@@ -119,4 +119,3 @@ struct BackupSettingsView: View {
 #Preview {
     NavigationView { BackupSettingsView() }
 }
-

@@ -138,8 +138,8 @@ extension ProximityManager {
         }
         
         // Check for NSLocalNetworkUsageDescription (try both formats)
-        let hasLocalNetworkDescription = infoPlist["NSLocalNetworkUsageDescription"] as? String != nil ||
-                                       infoPlist["INFOPLIST_KEY_NSLocalNetworkUsageDescription"] as? String != nil
+        let hasLocalNetworkDescription = infoPlist["NSLocalNetworkUsageDescription"] is String ||
+                                       infoPlist["INFOPLIST_KEY_NSLocalNetworkUsageDescription"] is String
         
         guard hasLocalNetworkDescription else {
             print("NSLocalNetworkUsageDescription not found in Info.plist")
@@ -241,7 +241,7 @@ extension ProximityManager: MCNearbyServiceAdvertiserDelegate {
 // MARK: - MCNearbyServiceBrowserDelegate
 
 extension ProximityManager: MCNearbyServiceBrowserDelegate {
-    func browser(_ browser: MCNearbyServiceBrowser, foundPeer peerID: MCPeerID, withDiscoveryInfo info: [String : String]?) {
+    func browser(_ browser: MCNearbyServiceBrowser, foundPeer peerID: MCPeerID, withDiscoveryInfo info: [String: String]?) {
         
         let peer = ProximityPeer(
             peerID: peerID,

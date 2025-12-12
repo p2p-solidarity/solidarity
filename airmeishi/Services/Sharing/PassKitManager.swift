@@ -392,7 +392,6 @@ class PassKitManager: NSObject, ObservableObject {
         return signature
     }
 
-
     /// Create logo image for pass
     private func createLogoImage() -> UIImage {
         let size = CGSize(width: 320, height: 100)  // 160x50 @2x

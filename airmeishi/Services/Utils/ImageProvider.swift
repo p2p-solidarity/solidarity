@@ -49,5 +49,3 @@ struct ImageProvider {
         return nil
     }
 }
-
-

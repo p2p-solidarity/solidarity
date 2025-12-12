@@ -92,7 +92,7 @@ class KeyManager {
     func rotateKeys() -> CardResult<Void> {
         // Delete existing keys
         for keyId in KeyIdentifier.allCases {
-            let _ = keychain.deleteKey(tag: keyId.keychainTag)
+            _ = keychain.deleteKey(tag: keyId.keychainTag)
         }
         
         // Reinitialize with new keys
@@ -128,7 +128,7 @@ class KeyManager {
         
         // Verify key format
         do {
-            let _ = try P256.Signing.PublicKey(rawRepresentation: bundle.signingPublicKey)
+            _ = try P256.Signing.PublicKey(rawRepresentation: bundle.signingPublicKey)
             return .success(true)
         } catch {
             return .success(false)
@@ -256,7 +256,7 @@ private class KeychainManager {
         ]
         
         // Delete existing key first
-        let _ = deleteKey(tag: tag)
+        _ = deleteKey(tag: tag)
         
         let status = SecItemAdd(query as CFDictionary, nil)
         
@@ -297,7 +297,7 @@ private class KeychainManager {
         ]
         
         // Delete existing key first
-        let _ = deleteKey(tag: tag)
+        _ = deleteKey(tag: tag)
         
         let status = SecItemAdd(query as CFDictionary, nil)
         

@@ -86,7 +86,6 @@ struct FloatingTabBarBackdrop: View {
     }
 }
 
-
 // MARK: - App Tabs (for custom bar)
 
 enum MainAppTab: Int, CaseIterable {
@@ -101,7 +100,7 @@ enum MainAppTab: Int, CaseIterable {
 
 struct CustomFloatingTabBar: View {
     @Binding var selectedTab: Int
-    var onIdTabTapped: (() -> Void)? = nil
+    var onIdTabTapped: (() -> Void)?
     
     var body: some View {
         ZStack(alignment: .bottom) {
@@ -164,5 +163,3 @@ struct TabBarButton: View {
         .buttonStyle(.plain)
     }
 }
-
-

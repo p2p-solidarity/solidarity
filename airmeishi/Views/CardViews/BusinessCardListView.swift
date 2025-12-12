@@ -80,7 +80,7 @@ struct BusinessCardListView: View {
                 }
             }
             .sheet(isPresented: $showingCreateCard) {
-                BusinessCardFormView(forceCreate: true) { saved in
+                BusinessCardFormView(forceCreate: true) { _ in
                     showingCreateCard = false
                 }
             }

@@ -194,5 +194,3 @@ private final class IdentityKeychain {
         return try JSONDecoder().decode(SemaphoreIdentityManager.IdentityBundle.self, from: data)
     }
 }
-
-

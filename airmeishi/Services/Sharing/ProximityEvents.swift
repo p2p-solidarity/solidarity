@@ -35,5 +35,3 @@ enum MessageEventKey {
     static let senderName = "senderName"
     static let text = "text"
 }
-
-

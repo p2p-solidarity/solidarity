@@ -97,5 +97,3 @@ struct ZKVerifyButton: View {
         isVerifying = false
     }
 }
-
-

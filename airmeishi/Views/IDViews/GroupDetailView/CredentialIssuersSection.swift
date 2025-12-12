@@ -82,7 +82,7 @@ struct IssuerRow: View {
     let userRecordID: String
     let isOwner: Bool
     let canRemove: Bool
-    var onRemove: (() -> Void)? = nil
+    var onRemove: (() -> Void)?
     
     var body: some View {
         HStack {

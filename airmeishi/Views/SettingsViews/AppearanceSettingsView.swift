@@ -72,4 +72,3 @@ struct AppearanceSettingsView: View {
 #Preview {
     NavigationView { AppearanceSettingsView().environmentObject(ThemeManager.shared) }
 }
-

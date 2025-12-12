@@ -291,4 +291,3 @@ struct DIDServiceEndpoint: Codable, Equatable {
     let type: String
     let serviceEndpoint: String
 }
-

@@ -192,5 +192,3 @@ struct FocusedCardView: View {
         return nil
     }
 }
-
-

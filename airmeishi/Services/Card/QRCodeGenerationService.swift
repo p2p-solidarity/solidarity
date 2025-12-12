@@ -110,7 +110,7 @@ final class QRCodeGenerationService {
         let shareUUID = UUID()
         let expires = expirationDate ?? Date().addingTimeInterval(24 * 60 * 60)
 
-        var sdProof: SelectiveDisclosureProof? = nil
+        var sdProof: SelectiveDisclosureProof?
         if card.sharingPreferences.useZK || card.sharingPreferences.sharingFormat == .zkProof {
             let allowed = card.sharingPreferences.fieldsForLevel(level)
             let proofResult = proofManager.generateSelectiveDisclosureProof(
@@ -125,7 +125,7 @@ final class QRCodeGenerationService {
 
         let identityBundle = semaphoreManager.getIdentity() ?? (try? semaphoreManager.loadOrCreateIdentity())
         let issuerCommitment = identityBundle?.commitment
-        var issuerProof: String? = nil
+        var issuerProof: String?
 
         if let commitment = issuerCommitment, !commitment.isEmpty, SemaphoreIdentityManager.proofsSupported {
             issuerProof = try? semaphoreManager.generateProof(

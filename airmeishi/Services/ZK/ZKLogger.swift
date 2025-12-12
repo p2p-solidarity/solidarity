@@ -21,5 +21,3 @@ enum ZKLog {
         print("[Semaphore][Error] \(message)")
     }
 }
-
-

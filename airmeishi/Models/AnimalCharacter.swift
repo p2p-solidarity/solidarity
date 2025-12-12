@@ -50,5 +50,3 @@ enum AnimalCharacter: String, Codable, CaseIterable, Identifiable, Equatable {
         }
     }
 }
-
-

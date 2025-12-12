@@ -54,7 +54,7 @@ class ErrorHandlingManager {
         logToSystem(entry)
         
         // Save to storage
-        let _ = saveErrorLog()
+        _ = saveErrorLog()
         
         // Handle critical errors
         if error.severity == .critical {

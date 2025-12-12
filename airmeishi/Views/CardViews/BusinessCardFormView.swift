@@ -214,7 +214,6 @@ struct BusinessCardFormView: View {
         }
     }
 
-    
     private var basicInfoSection: some View {
         Section {
             VStack(alignment: .leading, spacing: 4) {
@@ -302,7 +301,6 @@ struct BusinessCardFormView: View {
             }
         }
     }
-    
     
     // MARK: - Computed Properties
     

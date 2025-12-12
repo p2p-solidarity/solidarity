@@ -109,7 +109,7 @@ extension CloudKitGroupSyncManager {
         groupRecord["memberCount"] = currentMemberCount + 1
         
         // Use modifyRecords to save both atomically
-        let _ = try await publicDB.modifyRecords(saving: [groupRecord, membershipRecord], deleting: [])
+        _ = try await publicDB.modifyRecords(saving: [groupRecord, membershipRecord], deleting: [])
         print("[CloudKitManager] Successfully joined group in CloudKit, memberCount updated to \(currentMemberCount + 1)")
         
         // 4. Update local state
@@ -127,7 +127,7 @@ extension CloudKitGroupSyncManager {
             print("[CloudKitManager] Identity Commitment: \(identity.commitment)")
             
             // Ensure group exists in ZK manager and is selected
-            let _ = SemaphoreGroupManager.shared.ensureGroupFromInvite(
+            _ = SemaphoreGroupManager.shared.ensureGroupFromInvite(
                 id: groupUUID,
                 name: groupModel.name,
                 root: groupModel.merkleRoot

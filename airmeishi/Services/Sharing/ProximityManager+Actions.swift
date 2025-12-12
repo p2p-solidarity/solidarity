@@ -25,7 +25,7 @@ extension ProximityManager {
             let shareUUID = UUID()
             let identityBundle = SemaphoreIdentityManager.shared.getIdentity() ?? (try? SemaphoreIdentityManager.shared.loadOrCreateIdentity())
             let issuerCommitment = identityBundle?.commitment ?? ""
-            var issuerProof: String? = nil
+            var issuerProof: String?
             if !issuerCommitment.isEmpty && SemaphoreIdentityManager.proofsSupported {
                 issuerProof = (try? SemaphoreIdentityManager.shared.generateProof(
                     groupCommitments: [issuerCommitment],
@@ -34,7 +34,7 @@ extension ProximityManager {
                 ))
             }
             // Optional SD proof if enabled by sender's prefs
-            var sdProof: SelectiveDisclosureProof? = nil
+            var sdProof: SelectiveDisclosureProof?
             if card.sharingPreferences.useZK {
                 let allowed = card.sharingPreferences.fieldsForLevel(sharingLevel)
                 let sdResult = ProofGenerationManager.shared.generateSelectiveDisclosureProof(
@@ -61,7 +61,6 @@ extension ProximityManager {
             print("[ProximityManager] Sending card to \(peer.displayName)")
             print("[ProximityManager] Sealed Route: \(String(describing: SecureKeyManager.shared.mySealedRoute))")
             print("[ProximityManager] Pub Key: \(String(describing: SecureKeyManager.shared.myEncPubKey))")
-            
             
             let data = try JSONEncoder().encode(payload)
             
@@ -234,7 +233,7 @@ extension ProximityManager {
         receivedCards.removeAll()
     }
     
-    internal func handleReceivedCard(
+    func handleReceivedCard(
         _ card: BusinessCard,
         from senderName: String,
         status: VerificationStatus,

@@ -47,7 +47,7 @@ extension CloudKitGroupSyncManager {
         membershipRecord["role"] = "owner"
         membershipRecord["status"] = "active"
         
-        let _ = try await publicDB.modifyRecords(saving: [groupRecord, membershipRecord], deleting: [])
+        _ = try await publicDB.modifyRecords(saving: [groupRecord, membershipRecord], deleting: [])
         
         var newGroup = mapRecordToGroup(groupRecord)!
         newGroup.isPrivate = false

@@ -170,7 +170,7 @@ class OCRManager: ObservableObject {
         // Look for phone number patterns
         let phonePatterns = [
             #"\+?1?[0-9]{10,}"#,  // Basic 10+ digit pattern
-            #"[0-9]{3}[0-9]{3}[0-9]{4}"#,  // XXX-XXX-XXXX pattern
+            #"[0-9]{3}[0-9]{3}[0-9]{4}"#  // XXX-XXX-XXXX pattern
         ]
         
         for pattern in phonePatterns {
@@ -235,4 +235,3 @@ class OCRManager: ObservableObject {
         return allowedCharacters.isSuperset(of: textCharacterSet)
     }
 }
-

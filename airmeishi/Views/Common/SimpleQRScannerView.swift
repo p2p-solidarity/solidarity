@@ -7,8 +7,6 @@
 
 import SwiftUI
 import AVFoundation
-import AVFoundation
-
 struct SimpleQRScannerView: View {
     var onScan: (String) -> Void
     var onCancel: () -> Void
@@ -131,7 +129,7 @@ class SimpleQRScannerViewController: UIViewController, AVCaptureMetadataOutputOb
             return
         }
         
-        if (captureSession.canAddInput(videoInput)) {
+        if captureSession.canAddInput(videoInput) {
             captureSession.addInput(videoInput)
         } else {
             failed()
@@ -140,7 +138,7 @@ class SimpleQRScannerViewController: UIViewController, AVCaptureMetadataOutputOb
         
         let metadataOutput = AVCaptureMetadataOutput()
         
-        if (captureSession.canAddOutput(metadataOutput)) {
+        if captureSession.canAddOutput(metadataOutput) {
             captureSession.addOutput(metadataOutput)
             
             metadataOutput.setMetadataObjectsDelegate(self, queue: DispatchQueue.main)
@@ -219,7 +217,7 @@ class SimpleQRScannerViewController: UIViewController, AVCaptureMetadataOutputOb
     override func viewWillAppear(_ animated: Bool) {
         super.viewWillAppear(animated)
         
-        if (captureSession?.isRunning == false) {
+        if captureSession?.isRunning == false {
             DispatchQueue.global(qos: .background).async {
                 self.captureSession.startRunning()
             }
@@ -229,7 +227,7 @@ class SimpleQRScannerViewController: UIViewController, AVCaptureMetadataOutputOb
     override func viewWillDisappear(_ animated: Bool) {
         super.viewWillDisappear(animated)
         
-        if (captureSession?.isRunning == true) {
+        if captureSession?.isRunning == true {
             captureSession.stopRunning()
         }
     }

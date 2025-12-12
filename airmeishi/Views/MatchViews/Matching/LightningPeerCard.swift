@@ -148,5 +148,3 @@ struct LighteningPeerCard: View {
         return .blue
     }
 }
-
-

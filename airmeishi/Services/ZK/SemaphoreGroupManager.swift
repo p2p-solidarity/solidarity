@@ -289,5 +289,3 @@ private final class GroupStorage {
         if let data = try? JSONEncoder().encode(state) { try? data.write(to: url) }
     }
 }
-
-

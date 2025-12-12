@@ -23,7 +23,6 @@ struct ProximitySharingPayload: Codable {
     let signPubKey: String?  // Identity Key (Ed25519)
 }
 
-
 /// Payload for inviting a nearby peer to join a Semaphore group
 struct GroupInvitePayload: Codable {
     let groupId: UUID
@@ -40,5 +39,3 @@ struct GroupJoinResponsePayload: Codable {
     let memberName: String
     let timestamp: Date
 }
-
-

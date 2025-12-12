@@ -179,5 +179,3 @@ struct MatchingRootView: View {
         }
     }
 }
-
-

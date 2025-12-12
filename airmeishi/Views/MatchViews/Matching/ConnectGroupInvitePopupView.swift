@@ -20,7 +20,7 @@ struct ConnectGroupInvitePopupView: View {
     let fromPeer: MCPeerID
     @Binding var isPresented: Bool
     var autoDismissOnSuccess: Bool = true
-    var onDismiss: (() -> Void)? = nil
+    var onDismiss: (() -> Void)?
 
     @ObservedObject private var proximityManager = ProximityManager.shared
     @State private var phase: GroupInvitePhase = .idle
@@ -217,5 +217,3 @@ private struct SecondaryButtonStyle: ButtonStyle {
             .scaleEffect(configuration.isPressed ? 0.98 : 1.0)
     }
 }
-
-

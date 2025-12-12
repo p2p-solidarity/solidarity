@@ -51,7 +51,7 @@ struct RippleButton: View {
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
-        .onChange(of: state) { oldValue, newValue in
+        .onChange(of: state) { _, newValue in
             if newValue == .processing {
                 withAnimation(.linear(duration: 2).repeatForever(autoreverses: false)) {
                     rotation = 360

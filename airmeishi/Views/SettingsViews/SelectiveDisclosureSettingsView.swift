@@ -280,4 +280,3 @@ struct PrivacyLevelView: View {
         SelectiveDisclosureSettingsView(sharingPreferences: .constant(SharingPreferences()))
     }
 }
-

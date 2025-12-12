@@ -62,7 +62,6 @@ extension SakuraIconView {
         
         renderer.isOpaque = false
         
-        
         return renderer.uiImage
     }
     #endif
@@ -77,4 +76,3 @@ extension SakuraIconView {
     .padding()
     .background(Color.black)
 }
-

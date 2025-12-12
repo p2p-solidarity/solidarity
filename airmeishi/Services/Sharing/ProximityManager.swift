@@ -25,17 +25,21 @@ class ProximityManager: NSObject, ProximityManagerProtocol, ObservableObject {
     static let shared = ProximityManager()
     
     // MARK: - Published Properties
-    @Published internal(set) var isAdvertising = false
-    @Published internal(set) var isBrowsing = false
-    @Published internal(set) var nearbyPeers: [ProximityPeer] = []
-    @Published internal(set) var connectionStatus: ProximityConnectionStatus = .disconnected
-    @Published internal(set) var lastError: CardError?
-    @Published internal(set) var receivedCards: [BusinessCard] = []
-    @Published internal(set) var lastReceivedVerification: VerificationStatus?
+    @Published var isAdvertising = false
+    @Published var isBrowsing = false
+    @Published var nearbyPeers: [ProximityPeer] = []
+    @Published var activeConnections: [MCPeerID: ProximityConnectionStatus] = [:]
+    @Published var connectionStatus: ProximityConnectionStatus = .disconnected
+    @Published var lastError: CardError?
+    @Published var receivedCards: [BusinessCard] = []
+    @Published var lastReceivedVerification: VerificationStatus?
     @Published var pendingInvitation: PendingInvitation?
-    @Published internal(set) var isPresentingInvitation = false
+    @Published var pendingInvitations: [PendingInvitation] = []
+    @Published var isPresentingInvitation = false
     @Published var pendingGroupInvite: (payload: GroupInvitePayload, from: MCPeerID)?
     @Published var matchingInfoMessage: String? // User-friendly status message for UI
+    @Published var discoveryState: DiscoveryState = .idle
+    @Published var currentSession: MCSession? = nil // Corrected type for MCSession?
     
     internal var pendingGroupJoinResponse: PendingGroupJoinResponse?
     

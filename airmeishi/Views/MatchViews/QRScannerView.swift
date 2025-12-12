@@ -468,7 +468,6 @@ struct ScannedCardView: View {
     }
 }
 
-
 // MARK: - Supporting Views
 // Shared components are now in SharedComponents.swift
 

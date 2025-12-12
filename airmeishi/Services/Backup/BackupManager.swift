@@ -146,5 +146,3 @@ final class BackupManager: ObservableObject {
         let contacts: [Contact]
     }
 }
-
-

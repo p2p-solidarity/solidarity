@@ -34,9 +34,6 @@ struct ContactInfoRow: View {
     }
 }
 
-
-
-
 /// Metadata row for displaying non-interactive information
 struct MetadataRow: View {
     let icon: String
@@ -139,7 +136,6 @@ private struct KeyboardAccessoryHider: UIViewRepresentable {
             label: "Email",
             value: "test@example.com"
         )
-        
         
         MetadataRow(
             icon: "calendar",

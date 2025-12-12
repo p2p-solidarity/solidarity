@@ -88,4 +88,3 @@ struct SettingsView: View {
     SettingsView()
         .environmentObject(ThemeManager.shared)
 }
-

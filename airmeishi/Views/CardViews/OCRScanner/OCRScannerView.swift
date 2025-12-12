@@ -400,9 +400,7 @@ struct ConfidenceBadge: View {
     var body: some View {
         let percentage = Int(confidence * 100)
         let color: Color = {
-            if confidence >= 0.8 { return .green }
-            else if confidence >= 0.6 { return .orange }
-            else { return .red }
+            if confidence >= 0.8 { return .green } else if confidence >= 0.6 { return .orange } else { return .red }
         }()
 
         Text("\(percentage)%")
@@ -443,7 +441,7 @@ struct CameraView: UIViewControllerRepresentable {
             self.onImageCaptured = onImageCaptured
         }
         
-        func imagePickerController(_ picker: UIImagePickerController, didFinishPickingMediaWithInfo info: [UIImagePickerController.InfoKey : Any]) {
+        func imagePickerController(_ picker: UIImagePickerController, didFinishPickingMediaWithInfo info: [UIImagePickerController.InfoKey: Any]) {
             if let image = info[.originalImage] as? UIImage {
                 onImageCaptured(image)
             }
@@ -455,7 +453,6 @@ struct CameraView: UIViewControllerRepresentable {
         }
     }
 }
-
 
 #Preview {
     OCRScannerView { _ in }

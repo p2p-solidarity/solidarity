@@ -3,13 +3,6 @@ import Combine
 import LocalAuthentication
 import Security
 
-import Foundation
-import Combine
-import LocalAuthentication
-import Security
-
-// MARK: - Unified Profile Models
-
 struct UnifiedProfile: Equatable {
     var zkIdentity: SemaphoreIdentityManager.IdentityBundle?
     var activeDID: DIDDescriptor?
@@ -745,4 +738,3 @@ final class IdentityCoordinator: ObservableObject {
         }
     }
 }
-

@@ -109,7 +109,7 @@ class OfflineManager: ObservableObject {
         
         // Update pending operations with only failed ones
         pendingOperations = failedOperations
-        let _ = savePendingOperations()
+        _ = savePendingOperations()
         
         return .success(results)
     }
@@ -207,7 +207,7 @@ class OfflineManager: ObservableObject {
         // Execute pending operations when coming online
         if !wasOnline && isOnline {
             Task {
-                let _ = await executePendingOperationsAsync()
+                _ = await executePendingOperationsAsync()
             }
         }
     }

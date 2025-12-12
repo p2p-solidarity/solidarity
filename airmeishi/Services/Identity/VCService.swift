@@ -611,4 +611,3 @@ private struct BusinessCardCredentialEnvelope: Decodable {
         return card
     }
 }
-

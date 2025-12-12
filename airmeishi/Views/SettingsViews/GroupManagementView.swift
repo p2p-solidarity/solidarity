@@ -13,7 +13,7 @@ import CloudKit
 struct GroupManagementView: View {
     @StateObject private var groupManager = CloudKitGroupSyncManager.shared
     @StateObject private var proximity = ProximityManager.shared
-    @State private var activeSheet: SheetType? = nil
+    @State private var activeSheet: SheetType?
     @State private var showDeleteConfirm: Bool = false
     @State private var selectedGroupToDelete: GroupModel?
     @State private var activeShare: CKShare?

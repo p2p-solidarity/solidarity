@@ -12,7 +12,6 @@ struct IDView: View {
     @StateObject private var groupManager = CloudKitGroupSyncManager.shared
     @StateObject private var idm = SemaphoreIdentityManager.shared
 
-    
     // UI State
     @State private var showingGroupManager = false
     @State private var showingOIDCRequest = false

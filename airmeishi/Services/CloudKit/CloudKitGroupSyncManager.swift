@@ -194,7 +194,7 @@ final class CloudKitGroupSyncManager: ObservableObject, GroupSyncManagerProtocol
         // After fetching all groups, sync merkle roots to SemaphoreManager
         for group in mergedGroups {
             if let groupUUID = UUID(uuidString: group.id) {
-                let _ = SemaphoreGroupManager.shared.ensureGroupFromInvite(
+                _ = SemaphoreGroupManager.shared.ensureGroupFromInvite(
                     id: groupUUID,
                     name: group.name,
                     root: group.merkleRoot

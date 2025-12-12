@@ -338,5 +338,3 @@ struct MainTabView: View {
         }
     }
 }
-
-

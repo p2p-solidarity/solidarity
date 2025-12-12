@@ -284,7 +284,7 @@ final class KeychainService {
             kSecAttrKeyType as String: kSecAttrKeyTypeECSECPrimeRandom,
             kSecAttrKeySizeInBits as String: 256
         ]
-        let _ = SecItemDelete(broadQuery as CFDictionary)
+        _ = SecItemDelete(broadQuery as CFDictionary)
         #endif
     }
 
@@ -837,4 +837,3 @@ private extension LAContext {
         // This method exists to make call sites more expressive.
     }
 }
-

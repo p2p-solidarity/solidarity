@@ -36,11 +36,6 @@ struct QRSharingView: View {
                         businessCard: businessCard.filteredCard(for: selectedSharingLevel)
                     )
                     
-
-
-
-
-                    
                     // QR Code display
                     QRCodeDisplay(
                         qrImage: generatedQRImage,

@@ -80,7 +80,7 @@ class AirDropManager: AirDropManagerProtocol, ObservableObject {
         ]
         
         // Set completion handler
-        activityVC.completionWithItemsHandler = { [weak self] activityType, completed, returnedItems, error in
+        activityVC.completionWithItemsHandler = { [weak self] activityType, completed, _, error in
             DispatchQueue.main.async {
                 self?.isSharing = false
                 
@@ -136,7 +136,7 @@ class AirDropManager: AirDropManagerProtocol, ObservableObject {
         ]
         
         // Set completion handler
-        activityVC.completionWithItemsHandler = { [weak self] activityType, completed, returnedItems, error in
+        activityVC.completionWithItemsHandler = { [weak self] activityType, completed, _, error in
             DispatchQueue.main.async {
                 self?.isSharing = false
                 
@@ -181,7 +181,7 @@ class AirDropManager: AirDropManagerProtocol, ObservableObject {
         )
         
         // Set completion handler
-        activityVC.completionWithItemsHandler = { [weak self] activityType, completed, returnedItems, error in
+        activityVC.completionWithItemsHandler = { [weak self] activityType, completed, _, error in
             DispatchQueue.main.async {
                 self?.isSharing = false
                 
@@ -254,7 +254,7 @@ class AirDropManager: AirDropManagerProtocol, ObservableObject {
         )
         
         // Set completion handler
-        activityVC.completionWithItemsHandler = { [weak self] activityType, completed, returnedItems, error in
+        activityVC.completionWithItemsHandler = { [weak self] activityType, completed, _, error in
             DispatchQueue.main.async {
                 self?.isSharing = false
                 

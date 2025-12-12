@@ -184,5 +184,3 @@ extension View {
             .shadow(color: enabled ? color.opacity(0.25) : .clear, radius: enabled ? 36 : 0, x: 0, y: 0)
     }
 }
-
-

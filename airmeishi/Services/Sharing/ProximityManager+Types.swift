@@ -15,6 +15,14 @@ extension ProximityManager {
         let memberCommitment: String
         let peerID: MCPeerID
     }
+    
+    enum DiscoveryState: Equatable {
+        case idle
+        case scanning
+        case connecting(ProximityPeer)
+        case connected(ProximityPeer)
+        case error(String)
+    }
 }
 
 // MARK: - Supporting Types
@@ -26,7 +34,7 @@ struct ProximityPeer: Identifiable, Equatable {
     let discoveryInfo: [String: String]
     let discoveredAt: Date
     var status: ProximityPeerStatus = .disconnected
-    var verification: VerificationStatus? = nil
+    var verification: VerificationStatus?
     
     var name: String {
         return peerID.displayName

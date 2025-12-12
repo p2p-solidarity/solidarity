@@ -43,5 +43,3 @@ extension ProximityManager {
         print("[Proximity][Debug] =============================================")
     }
 }
-
-

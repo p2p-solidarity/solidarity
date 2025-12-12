@@ -82,5 +82,3 @@ struct RangeProofData: Codable {
     let isInRange: Bool
     let timestamp: Date
 }
-
-
