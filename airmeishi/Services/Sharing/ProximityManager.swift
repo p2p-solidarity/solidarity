@@ -39,7 +39,7 @@ class ProximityManager: NSObject, ProximityManagerProtocol, ObservableObject {
     @Published var pendingGroupInvite: (payload: GroupInvitePayload, from: MCPeerID)?
     @Published var matchingInfoMessage: String? // User-friendly status message for UI
     @Published var discoveryState: DiscoveryState = .idle
-    @Published var currentSession: MCSession? = nil // Corrected type for MCSession?
+    @Published var currentSession: MCSession? // Corrected type for MCSession?
     
     internal var pendingGroupJoinResponse: PendingGroupJoinResponse?
     
@@ -222,7 +222,7 @@ class ProximityManager: NSObject, ProximityManagerProtocol, ObservableObject {
     internal func sendHeartbeat() {
         guard !session.connectedPeers.isEmpty else { return }
         // Simple keep-alive packet (could be empty data or specific type)
-        let heartbeatData = "HEARTBEAT".data(using: .utf8)!
+        let heartbeatData = Data("HEARTBEAT".utf8)
         do {
             try session.send(heartbeatData, toPeers: session.connectedPeers, with: .unreliable)
             // print("Sent heartbeat to \(session.connectedPeers.count) peers")

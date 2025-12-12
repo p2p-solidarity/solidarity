@@ -154,7 +154,7 @@ struct BusinessCardCredentialClaims {
         Self.logger.info("Credential subject created - id: \(subject.id), name: \(subject.name)")
         
         Self.logger.info("Creating VC structure")
-        let vc = JWTPayload.VC(
+        let vc = JWTPayloadVC(
             context: Self.contexts,
             type: Self.types,
             credentialSubject: subject
@@ -213,85 +213,85 @@ private struct JWTHeader: Encodable {
 }
 
 private struct JWTPayload: Encodable {
-    struct VC: Encodable {
-        let context: [String]
-        let type: [String]
-        let credentialSubject: CredentialSubject
-
-        enum CodingKeys: String, CodingKey {
-            case context = "@context"
-            case type
-            case credentialSubject
-        }
-    }
-
     let jti: String
     let iss: String
     let sub: String
     let nbf: Int
     let iat: Int
     let exp: Int?
-    let vc: VC
+    let vc: JWTPayloadVC
+}
+
+private struct JWTPayloadVC: Encodable {
+    let context: [String]
+    let type: [String]
+    let credentialSubject: CredentialSubject
+
+    enum CodingKeys: String, CodingKey {
+        case context = "@context"
+        case type
+        case credentialSubject
+    }
+}
+
+private struct CredentialSubjectOrganization: Encodable {
+    let schemaType: String = "Organization"
+    let name: String
+
+    enum CodingKeys: String, CodingKey {
+        case schemaType = "@type"
+        case name
+    }
+}
+
+private struct CredentialSubjectSkill: Encodable {
+    let schemaType: String = "DefinedTerm"
+    let name: String
+    let inDefinedTermSet: String?
+    let description: String?
+
+    enum CodingKeys: String, CodingKey {
+        case schemaType = "@type"
+        case name
+        case inDefinedTermSet
+        case description
+    }
+}
+
+private struct CredentialSubjectSocialAccount: Encodable {
+    let schemaType: String = "ContactPoint"
+    let contactType: String
+    let identifier: String
+    let url: String?
+
+    enum CodingKeys: String, CodingKey {
+        case schemaType = "@type"
+        case contactType
+        case identifier
+        case url
+    }
+}
+
+private struct CredentialSubjectAnimalPreference: Encodable {
+    let id: String
+    let name: String
 }
 
 private struct CredentialSubject: Encodable {
-    struct Organization: Encodable {
-        let schemaType: String = "Organization"
-        let name: String
-
-        enum CodingKeys: String, CodingKey {
-            case schemaType = "@type"
-            case name
-        }
-    }
-
-    struct Skill: Encodable {
-        let schemaType: String = "DefinedTerm"
-        let name: String
-        let inDefinedTermSet: String?
-        let description: String?
-
-        enum CodingKeys: String, CodingKey {
-            case schemaType = "@type"
-            case name
-            case inDefinedTermSet
-            case description
-        }
-    }
-
-    struct SocialAccount: Encodable {
-        let schemaType: String = "ContactPoint"
-        let contactType: String
-        let identifier: String
-        let url: String?
-
-        enum CodingKeys: String, CodingKey {
-            case schemaType = "@type"
-            case contactType
-            case identifier
-            case url
-        }
-    }
-
-    struct AnimalPreference: Encodable {
-        let id: String
-        let name: String
-    }
-
     let id: String
     let type: [String]
     let name: String
     let summary: String?
     let jobTitle: String?
-    let worksFor: Organization?
+    let worksFor: CredentialSubjectOrganization?
     let email: [String]?
     let telephone: [String]?
     let image: String?
     let sameAs: [String]?
-    let contactPoint: [SocialAccount]?
+    let contactPoint: [CredentialSubjectSocialAccount]?
     let knowsAbout: [String]?
-    let hasSkill: [Skill]?
-    let preferredAnimal: AnimalPreference?
+    let hasSkill: [CredentialSubjectSkill]?
+    let preferredAnimal: CredentialSubjectAnimalPreference?
     let businessCardId: String
     let updatedAt: String?
     let publicKeyJwk: PublicKeyJWK
@@ -327,7 +327,7 @@ private struct CredentialSubject: Encodable {
         summary = snapshot.summary
         jobTitle = snapshot.title
         if let company = snapshot.company {
-            worksFor = Organization(name: company)
+            worksFor = CredentialSubjectOrganization(name: company)
             BusinessCardCredentialClaims.logger.debug("Added worksFor organization: \(company)")
         } else {
             worksFor = nil
@@ -340,7 +340,7 @@ private struct CredentialSubject: Encodable {
             contactPoint = nil
         } else {
             contactPoint = snapshot.socialProfiles.map {
-                SocialAccount(
+                CredentialSubjectSocialAccount(
                     contactType: $0.platform,
                     identifier: $0.username,
                     url: $0.url
@@ -353,7 +353,7 @@ private struct CredentialSubject: Encodable {
             hasSkill = nil
         } else {
             hasSkill = snapshot.skills.map {
-                Skill(
+                CredentialSubjectSkill(
                     name: $0.name,
                     inDefinedTermSet: $0.category.nilIfEmpty(),
                     description: $0.proficiency
@@ -362,7 +362,7 @@ private struct CredentialSubject: Encodable {
             BusinessCardCredentialClaims.logger.debug("Added \(snapshot.skills.count) skills")
         }
         if let animal = snapshot.animal {
-            preferredAnimal = AnimalPreference(id: animal.id, name: animal.displayName)
+            preferredAnimal = CredentialSubjectAnimalPreference(id: animal.id, name: animal.displayName)
             BusinessCardCredentialClaims.logger.debug("Added animal preference: \(animal.id)")
         } else {
             preferredAnimal = nil

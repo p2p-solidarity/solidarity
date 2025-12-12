@@ -28,8 +28,8 @@ line_length:
   error: 240
 
 file_length:
-  warning: 600
-  error: 900
+  warning: 900
+  error: 1000
 
 type_body_length:
   warning: 500

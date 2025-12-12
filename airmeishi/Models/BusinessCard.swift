@@ -229,7 +229,8 @@ extension SharingPreferences {
         publicSet.insert(.name) // Ensure name is always included
         self.publicFields = publicSet
         
-        var professionalSet = try container.decodeIfPresent(Set<BusinessCardField>.self, forKey: .professionalFields) ?? [.name, .title, .company, .email, .skills]
+        var professionalSet = try container.decodeIfPresent(Set<BusinessCardField>.self, forKey: .professionalFields) 
+            ?? [.name, .title, .company, .email, .skills]
         professionalSet.insert(.name) // Ensure name is always included
         self.professionalFields = professionalSet
         
@@ -257,14 +258,14 @@ extension SharingPreferences {
 
 /// Available business card fields for privacy control
 enum BusinessCardField: String, Codable, CaseIterable {
-    case name = "name"
-    case title = "title"
-    case company = "company"
-    case email = "email"
-    case phone = "phone"
-    case profileImage = "profileImage"
-    case socialNetworks = "socialNetworks"
-    case skills = "skills"
+    case name
+    case title
+    case company
+    case email
+    case phone
+    case profileImage
+    case socialNetworks
+    case skills
     
     var displayName: String {
         switch self {
