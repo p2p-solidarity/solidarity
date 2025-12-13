@@ -54,7 +54,13 @@ extension CloudKitGroupSyncManager {
 
     _ = try await publicDB.modifyRecords(saving: [groupRecord, membershipRecord], deleting: [])
 
-    var newGroup = mapRecordToGroup(groupRecord)!
+    guard var newGroup = mapRecordToGroup(groupRecord) else {
+      throw NSError(
+        domain: "GroupError",
+        code: 500,
+        userInfo: [NSLocalizedDescriptionKey: "Failed to map group record"]
+      )
+    }
     newGroup.isPrivate = false
     self.groups.append(newGroup)
     saveGroupsToLocal()
@@ -83,7 +89,13 @@ extension CloudKitGroupSyncManager {
 
     try await privateDB.save(groupRecord)
 
-    var newGroup = mapRecordToGroup(groupRecord)!
+    guard var newGroup = mapRecordToGroup(groupRecord) else {
+      throw NSError(
+        domain: "GroupError",
+        code: 500,
+        userInfo: [NSLocalizedDescriptionKey: "Failed to map group record"]
+      )
+    }
     newGroup.isPrivate = true
     self.groups.append(newGroup)
     saveGroupsToLocal()

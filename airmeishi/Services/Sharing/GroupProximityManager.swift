@@ -40,19 +40,18 @@ final class GroupProximityManager: ObservableObject {
 
     // 4. Send to each target
     let deliveryService = GroupCredentialDeliveryService.shared
-    for target in targets {
-      if target.hasMessagingData {
-        // Use DeliveryService to send via Sakura (since we have sealedRoute)
-        // ProximityManager is for P2P BLE, which requires a session.
-        // If we want to "push" to a remote user via APNs/Sakura, we use DeliveryService.
-        try await deliveryService.sendCredential(
-          credentialCard,
-          to: target.userRecordID,
-          via: .sakura,
-          group: group
-        )
-      }
+    for target in targets where target.hasMessagingData {
+      // Use DeliveryService to send via Sakura (since we have sealedRoute)
+      // ProximityManager is for P2P BLE, which requires a session.
+      // If we want to "push" to a remote user via APNs/Sakura, we use DeliveryService.
+      try await deliveryService.sendCredential(
+        credentialCard,
+        to: target.userRecordID,
+        via: .sakura,
+        group: group
+      )
     }
+
   }
 
   /// Sends a Group Credential to exchanged contacts (Member to Member)

@@ -277,7 +277,9 @@ private final class GroupStorage {
   private let url: URL
 
   init() {
-    let dir = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
+    guard let dir = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first else {
+      fatalError("Could not access application support directory")
+    }
     let appDir = dir.appendingPathComponent("airmeishi", isDirectory: true)
     try? FileManager.default.createDirectory(at: appDir, withIntermediateDirectories: true)
     url = appDir.appendingPathComponent("semaphore_group.json")

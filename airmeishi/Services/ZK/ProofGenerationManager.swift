@@ -187,8 +187,8 @@ class ProofGenerationManager {
       }
 
       // Generate attribute commitment
-      let attributeData = "\(attribute.rawValue):\(value)".data(using: .utf8) ?? Data()
-      let cardIdData = businessCard.id.uuidString.data(using: .utf8) ?? Data()
+      let attributeData = Data("\(attribute.rawValue):\(value)".utf8)
+      let cardIdData = Data(businessCard.id.uuidString.utf8)
 
       let commitment = SHA256.hash(data: attributeData + cardIdData + masterKey.withUnsafeBytes { Data($0) })
 
@@ -319,9 +319,9 @@ class ProofGenerationManager {
     switch keyResult {
     case .success(let masterKey):
       // Generate range commitment
-      let rangeData = "\(attribute.rawValue):\(range.lowerBound)-\(range.upperBound)".data(using: .utf8) ?? Data()
-      let cardIdData = businessCard.id.uuidString.data(using: .utf8) ?? Data()
-      let resultData = isInRange ? "true".data(using: .utf8)! : "false".data(using: .utf8)!
+      let rangeData = Data("\(attribute.rawValue):\(range.lowerBound)-\(range.upperBound)".utf8)
+      let cardIdData = Data(businessCard.id.uuidString.utf8)
+      let resultData = Data((isInRange ? "true" : "false").utf8)
 
       let commitment = SHA256.hash(data: rangeData + cardIdData + resultData + masterKey.withUnsafeBytes { Data($0) })
 
@@ -414,8 +414,8 @@ class ProofGenerationManager {
     } else {
       committedValue = String(value.prefix(3))
     }
-    let fieldData = "\(field.rawValue):\(committedValue)".data(using: .utf8) ?? Data()
-    let recipientData = (recipientId ?? "").data(using: .utf8) ?? Data()
+    let fieldData = Data("\(field.rawValue):\(committedValue)".utf8)
+    let recipientData = Data((recipientId ?? "").utf8)
 
     let commitment = SHA256.hash(data: fieldData + recipientData + masterKey.withUnsafeBytes { Data($0) })
     return Data(commitment)

@@ -111,7 +111,9 @@ final class EventRepository: ObservableObject {
 
   private func getStorageURL() -> URL {
     let fm = FileManager.default
-    let documentsURL = fm.urls(for: .documentDirectory, in: .userDomainMask).first!
+    guard let documentsURL = fm.urls(for: .documentDirectory, in: .userDomainMask).first else {
+      fatalError("Unable to access document directory")
+    }
     return documentsURL.appendingPathComponent("AirmeishiStorage")
   }
 }

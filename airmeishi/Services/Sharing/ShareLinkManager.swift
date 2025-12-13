@@ -126,10 +126,8 @@ class ShareLinkManager: ObservableObject {
 
   /// Deactivate all links for a specific business card
   func deactivateAllLinks(for businessCardId: UUID) -> CardResult<Void> {
-    for index in activeLinks.indices {
-      if activeLinks[index].businessCardId == businessCardId {
-        activeLinks[index].isActive = false
-      }
+    for index in activeLinks.indices where activeLinks[index].businessCardId == businessCardId {
+      activeLinks[index].isActive = false
     }
 
     return saveActiveLinks()

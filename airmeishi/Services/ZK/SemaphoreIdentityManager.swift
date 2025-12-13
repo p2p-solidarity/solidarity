@@ -152,7 +152,7 @@ final class SemaphoreIdentityManager: ObservableObject {
   private static func clampToMax32Bytes(_ input: String) -> String {
     let bytes = Array(input.utf8)
     if bytes.count <= 32 { return input }
-    return String(decoding: bytes.prefix(32), as: UTF8.self)
+    return String(data: Data(bytes.prefix(32)), encoding: .utf8) ?? ""
   }
 
   private func ensureCommitment(bundle: IdentityBundle) -> IdentityBundle {

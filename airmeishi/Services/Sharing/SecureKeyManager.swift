@@ -84,7 +84,13 @@ class SecureKeyManager {
     )
 
     // 2. Encrypt
-    let data = message.data(using: .utf8)!
+    guard let data = message.data(using: .utf8) else {
+      throw NSError(
+        domain: "Crypto",
+        code: -1,
+        userInfo: [NSLocalizedDescriptionKey: "Failed to encode message to UTF-8"]
+      )
+    }
     let sealedBox = try ChaChaPoly.seal(data, using: symmetricKey)
 
     // Returns Base64 of Combined Data (Nonce + Ciphertext + Tag)

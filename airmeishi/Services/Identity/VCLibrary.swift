@@ -192,7 +192,9 @@ final class VCLibrary {
   }
 
   private func storageURL() -> URL {
-    let documents = fileManager.urls(for: .documentDirectory, in: .userDomainMask).first!
+    guard let documents = fileManager.urls(for: .documentDirectory, in: .userDomainMask).first else {
+      fatalError("Unable to access document directory")
+    }
     return
       documents
       .appendingPathComponent(storageDirectoryName, isDirectory: true)

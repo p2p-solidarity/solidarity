@@ -1,4 +1,4 @@
-// swiftlint:disable line_length
+//
 //
 //  KeyManager.swift
 //  airmeishi
@@ -79,7 +79,7 @@ class KeyManager {
 
   /// Generate key derivation for specific purpose
   func deriveKey(from masterKey: SymmetricKey, purpose: String, context: String) -> CardResult<SymmetricKey> {
-    let info = "\(purpose):\(context)".data(using: .utf8) ?? Data()
+    let info = Data("\(purpose):\(context)".utf8)
 
     let derivedKey = HKDF<SHA256>
       .deriveKey(

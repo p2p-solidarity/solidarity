@@ -28,7 +28,7 @@ struct ZIPWriter {
 
       // Write local file header + filename + data (uncompressed)
       archive.append(localHeader)
-      archive.append(file.name.data(using: .utf8)!)
+      archive.append(Data(file.name.utf8))
       archive.append(file.data)
 
       // Central directory file header
@@ -40,7 +40,7 @@ struct ZIPWriter {
       )
 
       centralDirectory.append(centralDirHeader)
-      centralDirectory.append(file.name.data(using: .utf8)!)
+      centralDirectory.append(Data(file.name.utf8))
     }
 
     centralDirectoryOffset = UInt32(archive.count)
@@ -94,7 +94,7 @@ struct ZIPWriter {
     header.append(UInt32ToBytes(uncompressedSize))
 
     // Filename length
-    let filenameData = filename.data(using: .utf8)!
+    let filenameData = Data(filename.utf8)
     header.append(UInt16ToBytes(UInt16(filenameData.count)))
 
     // Extra field length
@@ -142,7 +142,7 @@ struct ZIPWriter {
     header.append(UInt32ToBytes(uncompressedSize))
 
     // Filename length
-    let filenameData = filename.data(using: .utf8)!
+    let filenameData = Data(filename.utf8)
     header.append(UInt16ToBytes(UInt16(filenameData.count)))
 
     // Extra field length

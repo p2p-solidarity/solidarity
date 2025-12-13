@@ -161,7 +161,9 @@ class StorageManager {
 
   /// Get the storage directory URL
   private func getStorageURL() -> URL {
-    let documentsURL = fileManager.urls(for: .documentDirectory, in: .userDomainMask).first!
+    guard let documentsURL = fileManager.urls(for: .documentDirectory, in: .userDomainMask).first else {
+      fatalError("Unable to access document directory")
+    }
     return documentsURL.appendingPathComponent("AirmeishiStorage")
   }
 

@@ -87,10 +87,12 @@ struct airmeishiApp: App {
             defaults.set(dummyToken, forKey: tokenKey)
           }
 
-          print("[App] Simulator detected. Sealing fallback token: \(dummyToken!)")
-          let route = try await MessageService.shared.sealToken(deviceToken: dummyToken!)
-          SecureKeyManager.shared.mySealedRoute = route
-          print("[App] Fallback sealing successful. Route: \(route)")
+          if let token = dummyToken {
+            print("[App] Simulator detected. Sealing fallback token: \(token)")
+            let route = try await MessageService.shared.sealToken(deviceToken: token)
+            SecureKeyManager.shared.mySealedRoute = route
+            print("[App] Fallback sealing successful. Route: \(route)")
+          }
         } catch {
           print("[App] Fallback sealing failed: \(error)")
         }

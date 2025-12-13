@@ -88,7 +88,6 @@ final class CloudKitGroupSyncManager: ObservableObject, GroupSyncManagerProtocol
     }
   }
 
-  // swiftlint:disable cyclomatic_complexity
   func fetchLatestChanges() async throws {
     print("[CloudKitManager] Fetching latest changes...")
     await MainActor.run { self.syncStatus = .syncing }
@@ -203,11 +202,9 @@ final class CloudKitGroupSyncManager: ObservableObject, GroupSyncManagerProtocol
     }
 
     // Keep local-only groups
-    for localGroup in localGroups {
-      if !mergedGroups.contains(where: { $0.id == localGroup.id }) {
-        print("[CloudKitManager] Keeping local-only group: \(localGroup.name)")
-        mergedGroups.append(localGroup)
-      }
+    for localGroup in localGroups where !mergedGroups.contains(where: { $0.id == localGroup.id }) {
+      print("[CloudKitManager] Keeping local-only group: \(localGroup.name)")
+      mergedGroups.append(localGroup)
     }
 
     return mergedGroups

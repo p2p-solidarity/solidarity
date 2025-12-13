@@ -267,8 +267,11 @@ class PassKitManager: NSObject, ObservableObject {
       let passJsonData = try JSONSerialization.data(withJSONObject: passData, options: .prettyPrinted)
 
       // 2. Generate images
-      let logoData = createLogoImage().pngData()!
-      let iconData = createIconImage().pngData()!
+      guard let logoData = createLogoImage().pngData(),
+        let iconData = createIconImage().pngData()
+      else {
+        return .failure(.passGenerationError("Failed to generate pass images"))
+      }
 
       // 3. Create manifest.json with SHA-1 checksums
       var manifest: [String: String] = [:]
@@ -332,7 +335,9 @@ class PassKitManager: NSObject, ObservableObject {
   /// Uses server-side signing API to generate production-ready signatures.
   /// The API handles certificate management and PKCS#7 structure creation.
   private func createSignature(for manifestData: Data) throws -> Data {
-    let apiURL = URL(string: "https://bussiness-card.kidneyweakx.com/sign-pass")!
+    guard let apiURL = URL(string: "https://bussiness-card.kidneyweakx.com/sign-pass") else {
+      throw CardError.passGenerationError("Invalid signing API URL")
+    }
 
     // Create request
     var request = URLRequest(url: apiURL)

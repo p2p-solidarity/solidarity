@@ -53,10 +53,7 @@ struct ProofVerificationResult: Codable {
 }
 
 enum AttributeType: String, Codable, CaseIterable {
-  case skill = "skill"
-  case company = "company"
-  case title = "title"
-  case domain = "domain"
+  case skill, company, title, domain
 
   var displayName: String {
     switch self {

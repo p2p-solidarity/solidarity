@@ -3,12 +3,17 @@ import Foundation
 import UserNotifications
 
 class MessageService: ObservableObject {
+  static let baseURL: URL = {
+    guard let url = URL(string: "https://bussiness-card.kidneyweakx.com") else {
+      fatalError("Invalid Base URL")
+    }
+    return url
+  }()
   static let shared = MessageService()
-  private let baseURL = URL(string: "https://bussiness-card.kidneyweakx.com")!
 
   // 1. Exchange for Envelope (Seal)
   func sealToken(deviceToken: String) async throws -> String {
-    let url = baseURL.appendingPathComponent("seal")
+    let url = MessageService.baseURL.appendingPathComponent("seal")
     var request = URLRequest(url: url)
     request.httpMethod = "POST"
     request.addValue("application/json", forHTTPHeaderField: "Content-Type")
@@ -67,7 +72,7 @@ class MessageService: ObservableObject {
       sender_sig: sig
     )
 
-    let url = baseURL.appendingPathComponent("send")
+    let url = MessageService.baseURL.appendingPathComponent("send")
     var request = URLRequest(url: url)
     request.httpMethod = "POST"
     request.addValue("application/json", forHTTPHeaderField: "Content-Type")
@@ -89,13 +94,32 @@ class MessageService: ObservableObject {
     let sig = SecureKeyManager.shared.sign(content: myPub)
 
     // Assemble Query Params: ?pubkey=...&sig=...
-    var components = URLComponents(url: baseURL.appendingPathComponent("sync"), resolvingAgainstBaseURL: true)!
+    guard
+      var components = URLComponents(
+        url: MessageService.baseURL.appendingPathComponent("sync"),
+        resolvingAgainstBaseURL: true
+      )
+    else {
+      throw NSError(
+        domain: "MessageService",
+        code: -1,
+        userInfo: [NSLocalizedDescriptionKey: "Failed to create URLComponents"]
+      )
+    }
     components.queryItems = [
       URLQueryItem(name: "pubkey", value: myPub),
       URLQueryItem(name: "sig", value: sig),
     ]
 
-    let (data, _) = try await URLSession.shared.data(from: components.url!)
+    guard let url = components.url else {
+      throw NSError(
+        domain: "MessageService",
+        code: -1,
+        userInfo: [NSLocalizedDescriptionKey: "Failed to construct URL from components"]
+      )
+    }
+
+    let (data, _) = try await URLSession.shared.data(from: url)
     let response = try JSONDecoder().decode(SyncResponse.self, from: data)
     return response.messages
   }
@@ -111,7 +135,7 @@ class MessageService: ObservableObject {
 
     let payload = AckRequest(message_ids: ids, pubkey: myPub, sig: sig)
 
-    let url = baseURL.appendingPathComponent("ack")
+    let url = MessageService.baseURL.appendingPathComponent("ack")
     var request = URLRequest(url: url)
     request.httpMethod = "POST"
     request.addValue("application/json", forHTTPHeaderField: "Content-Type")

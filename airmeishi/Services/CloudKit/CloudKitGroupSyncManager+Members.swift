@@ -126,7 +126,13 @@ extension CloudKitGroupSyncManager {
     print("[CloudKitManager] Successfully joined group in CloudKit, memberCount updated to \(currentMemberCount + 1)")
 
     // 4. Update local state
-    var groupModel = mapRecordToGroup(groupRecord)!
+    guard var groupModel = mapRecordToGroup(groupRecord) else {
+      throw NSError(
+        domain: "GroupError",
+        code: 500,
+        userInfo: [NSLocalizedDescriptionKey: "Failed to map group record"]
+      )
+    }
     groupModel.isPrivate = false
     groupModel.memberCount = currentMemberCount + 1
     self.groups.append(groupModel)

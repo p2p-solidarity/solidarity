@@ -350,8 +350,15 @@ final class KeychainService {
   }
 
   private func generateSigningKey(useSecureEnclave: Bool) -> CardResult<Void> {
-    // Simulator-specific simplified key generation
     #if targetEnvironment(simulator)
+      return generateSimulatorSigningKey()
+    #else
+      return generateDeviceSigningKey(useSecureEnclave: useSecureEnclave)
+    #endif
+  }
+
+  #if targetEnvironment(simulator)
+    private func generateSimulatorSigningKey() -> CardResult<Void> {
       // Try generating a non-persistent key first to avoid keychain corruption issues
       var attributes: [String: Any] = [
         kSecAttrKeyType as String: kSecAttrKeyTypeECSECPrimeRandom,
@@ -406,9 +413,11 @@ final class KeychainService {
       }
 
       return .failure(.keyManagementError("Failed to generate simulator key: \(message)"))
+    }
+  #endif
 
-    #else
-      // Device code - try persistent key first, fall back to session-based approach if needed
+  #if !targetEnvironment(simulator)
+    private func generateDeviceSigningKey(useSecureEnclave: Bool) -> CardResult<Void> {
       let flags = accessControlFlags
 
       guard
@@ -458,63 +467,66 @@ final class KeychainService {
         print(
           "[KeychainService] Duplicate error detected (code: \(errorCode)), switching to session-based non-persistent key..."
         )
-
-        // Fall back to non-persistent key approach (similar to simulator)
-        var sessionAttributes: [String: Any] = [
-          kSecAttrKeyType as String: kSecAttrKeyTypeECSECPrimeRandom,
-          kSecAttrKeyClass as String: kSecAttrKeyClassPrivate,
-          kSecAttrKeySizeInBits as String: 256,
-          kSecAttrIsPermanent as String: false,  // Non-persistent to avoid keychain conflicts
-          kSecAttrApplicationTag as String: keyTag,
-          kSecAttrLabel as String: "AirMeishi Session Key",
-        ]
-
-        var sessionError: Unmanaged<CFError>?
-        if let sessionKey = SecKeyCreateRandomKey(sessionAttributes as CFDictionary, &sessionError) {
-          print("[KeychainService] Generated non-persistent session key, attempting to store...")
-
-          // Try to add it to keychain manually
-          let addQuery: [String: Any] = [
-            kSecClass as String: kSecClassKey,
-            kSecValueRef as String: sessionKey,
-            kSecAttrApplicationTag as String: keyTag,
-            kSecAttrAccessible as String: kSecAttrAccessibleWhenUnlockedThisDeviceOnly,
-          ]
-
-          let addStatus = SecItemAdd(addQuery as CFDictionary, nil)
-          if addStatus == errSecSuccess {
-            print("[KeychainService] Successfully stored session key in keychain")
-            return .success(())
-          } else if addStatus == errSecDuplicateItem {
-            print("[KeychainService] Session key already exists (duplicate), considering success")
-            return .success(())
-          } else {
-            print("[KeychainService] Failed to store session key: \(statusDescription(addStatus)), using in-memory key")
-            // Store the key in a static variable as fallback
-            Self.deviceInMemoryKey = sessionKey
-            return .success(())
-          }
-        }
-
-        // Last resort: create completely in-memory key
-        sessionAttributes.removeValue(forKey: kSecAttrApplicationTag as String)
-        if let inMemoryKey = SecKeyCreateRandomKey(sessionAttributes as CFDictionary, nil) {
-          print("[KeychainService] Successfully created in-memory key as fallback")
-          Self.deviceInMemoryKey = inMemoryKey
-          return .success(())
-        }
-
-        let sessionMessage = (sessionError?.takeRetainedValue() as Error?)?.localizedDescription ?? "Unknown error"
-        return .failure(
-          .keyManagementError(
-            "Failed to generate device key (persistent and session methods failed): \(message); session error: \(sessionMessage)"
-          )
-        )
+        return generateSessionBasedDeviceKey()
       }
 
       return .failure(.keyManagementError("Failed to generate device key: \(message)"))
-    #endif
-  }
+    }
+
+    private func generateSessionBasedDeviceKey() -> CardResult<Void> {
+      // Fall back to non-persistent key approach (similar to simulator)
+      var sessionAttributes: [String: Any] = [
+        kSecAttrKeyType as String: kSecAttrKeyTypeECSECPrimeRandom,
+        kSecAttrKeyClass as String: kSecAttrKeyClassPrivate,
+        kSecAttrKeySizeInBits as String: 256,
+        kSecAttrIsPermanent as String: false,  // Non-persistent to avoid keychain conflicts
+        kSecAttrApplicationTag as String: keyTag,
+        kSecAttrLabel as String: "AirMeishi Session Key",
+      ]
+
+      var sessionError: Unmanaged<CFError>?
+      if let sessionKey = SecKeyCreateRandomKey(sessionAttributes as CFDictionary, &sessionError) {
+        print("[KeychainService] Generated non-persistent session key, attempting to store...")
+
+        // Try to add it to keychain manually
+        let addQuery: [String: Any] = [
+          kSecClass as String: kSecClassKey,
+          kSecValueRef as String: sessionKey,
+          kSecAttrApplicationTag as String: keyTag,
+          kSecAttrAccessible as String: kSecAttrAccessibleWhenUnlockedThisDeviceOnly,
+        ]
+
+        let addStatus = SecItemAdd(addQuery as CFDictionary, nil)
+        if addStatus == errSecSuccess {
+          print("[KeychainService] Successfully stored session key in keychain")
+          return .success(())
+        } else if addStatus == errSecDuplicateItem {
+          print("[KeychainService] Session key already exists (duplicate), considering success")
+          return .success(())
+        } else {
+          print("[KeychainService] Failed to store session key: \(statusDescription(addStatus)), using in-memory key")
+          // Store the key in a static variable as fallback
+          Self.deviceInMemoryKey = sessionKey
+          return .success(())
+        }
+      }
+
+      // Last resort: create completely in-memory key
+      sessionAttributes.removeValue(forKey: kSecAttrApplicationTag as String)
+      if let inMemoryKey = SecKeyCreateRandomKey(sessionAttributes as CFDictionary, nil) {
+        print("[KeychainService] Successfully created in-memory key as fallback")
+        Self.deviceInMemoryKey = inMemoryKey
+        return .success(())
+      }
+
+      let sessionMessage = (sessionError?.takeRetainedValue() as Error?)?.localizedDescription ?? "Unknown error"
+      return .failure(
+        .keyManagementError(
+          "Failed to generate device key (persistent and session methods failed); session error: \(sessionMessage)"
+        )
+      )
+    }
+  #endif
 
   private func deleteAllKeysWithTag() {
     // Try multiple deletion strategies to ensure complete cleanup
