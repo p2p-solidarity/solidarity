@@ -112,15 +112,12 @@ final class CloudKitGroupSyncManager: ObservableObject, GroupSyncManagerProtocol
     print("[CloudKitManager] Successfully updated groups. Total: \(self.groups.count)")
     await MainActor.run { self.syncStatus = .idle }
   }
-  // swiftlint:enable cyclomatic_complexity
-
   // MARK: - Sync Helpers
 
   private func fetchPublicGroups(userID: CKRecord.ID) async -> [GroupModel] {
     var fetchedGroups: [GroupModel] = []
     let publicPredicate = NSPredicate(format: "userRecordID == %@", userID)
     let publicQuery = CKQuery(recordType: CloudKitRecordType.groupMembership, predicate: publicPredicate)
-
     do {
       let (matchResults, _) = try await publicDB.records(matching: publicQuery)
       for result in matchResults {
@@ -226,7 +223,6 @@ final class CloudKitGroupSyncManager: ObservableObject, GroupSyncManagerProtocol
       }
     }
   }
-  // swiftlint:enable cyclomatic_complexity
 
   // MARK: - Data Access
 

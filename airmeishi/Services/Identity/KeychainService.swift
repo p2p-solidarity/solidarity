@@ -27,15 +27,15 @@ final class KeychainService {
   }()
 
   #if targetEnvironment(simulator)
-    private static var simulatorInMemoryKey: SecKey?
+    static var simulatorInMemoryKey: SecKey?
   #else
-    private static var deviceInMemoryKey: SecKey?
+    static var deviceInMemoryKey: SecKey?
   #endif
 
   let alias: KeyAlias
 
-  private var keyTag: Data
-  private let accessControlFlags: SecAccessControlCreateFlags
+  var keyTag: Data
+  let accessControlFlags: SecAccessControlCreateFlags
   private let accessPrompt: String
   private let authenticationPolicy: LAPolicy
 
@@ -62,55 +62,6 @@ final class KeychainService {
   }
 
   // MARK: - Public API
-
-  /// Ensures the signing key exists, generating it if needed.
-  func ensureSigningKey() -> CardResult<Void> {
-    if keyExists() {
-      print("[KeychainService] Signing key already exists")
-      return .success(())
-    }
-
-    print("[KeychainService] Signing key not found, generating new key")
-
-    // With session-based tags, cleanup is less critical, but we still try to clean up old keys
-    #if !targetEnvironment(simulator)
-      // Only cleanup if we're not using session-based approach (for backward compatibility)
-      // Since we're now using session tags, this cleanup is mainly for old keys
-      cleanupAllOldKeys()
-    #endif
-
-    // On simulator, skip Secure Enclave and go directly to software-based key
-    #if targetEnvironment(simulator)
-      switch generateSigningKey(useSecureEnclave: false) {
-      case .success:
-        print("[KeychainService] Successfully generated software-based signing key")
-        return .success(())
-      case .failure(let error):
-        print("[KeychainService] Failed to generate signing key: \(error)")
-        return .failure(error)
-      }
-    #else
-      // On device, try Secure Enclave first, then fall back to software
-      // generateSigningKey will automatically handle duplicate errors by switching to session-based approach
-      switch generateSigningKey(useSecureEnclave: true) {
-      case .success:
-        print("[KeychainService] Successfully generated Secure Enclave signing key")
-        return .success(())
-      case .failure(let firstError):
-        print("[KeychainService] Secure Enclave failed: \(firstError), trying software-based key")
-        // Attempt to fall back to software-based key generation if Secure Enclave is unavailable.
-        // generateSigningKey will handle duplicate errors internally by switching to session-based approach
-        switch generateSigningKey(useSecureEnclave: false) {
-        case .success:
-          print("[KeychainService] Successfully generated software-based signing key (fallback)")
-          return .success(())
-        case .failure(let fallbackError):
-          print("[KeychainService] Both key generation methods failed")
-          return .failure(combine(firstError, fallbackError))
-        }
-      }
-    #endif
-  }
 
   /// Retrieves a signing key conforming to SpruceKit's requirements.
   func signingKey(context: LAContext? = nil) -> CardResult<BiometricSigningKey> {
@@ -235,351 +186,28 @@ final class KeychainService {
 
   // MARK: - Private helpers
 
-  private func cleanupAllOldKeys() {
-    // Clean up ALL old keys with any previous tags
-    let oldTags = [
-      "airmeishi.did.signing",  // Original tag
-      "airmeishi.did.signing.v1",  // Previous version 1
-      "airmeishi.did.signing.v2",  // Previous version 2
-      "com.airmeishi.keys.did",  // Might exist from testing
-      "com.airmeishi.signing",  // Might exist from testing
+  /// Checks if a key logic with our tag exists in the keychain.
+  func keyExists() -> Bool {
+    // Check if we have an in-memory key first
+    #if targetEnvironment(simulator)
+      if Self.simulatorInMemoryKey != nil { return true }
+    #else
+      if Self.deviceInMemoryKey != nil { return true }
+    #endif
+
+    // Otherwise check keychain
+    let query: [String: Any] = [
+      kSecClass as String: kSecClassKey,
+      kSecAttrApplicationTag as String: keyTag,
+      kSecAttrKeyType as String: kSecAttrKeyTypeECSECPrimeRandom,
+      kSecMatchLimit as String: kSecMatchLimitOne,
     ]
 
-    // Also clean up any keys with partial matches using a more aggressive approach
-    for tagString in oldTags {
-      let tag = Data(tagString.utf8)
-      let queries: [[String: Any]] = [
-        // Broadest query - just by tag
-        [
-          kSecClass as String: kSecClassKey,
-          kSecAttrApplicationTag as String: tag,
-        ],
-        // EC private keys with tag
-        [
-          kSecClass as String: kSecClassKey,
-          kSecAttrApplicationTag as String: tag,
-          kSecAttrKeyType as String: kSecAttrKeyTypeECSECPrimeRandom,
-          kSecAttrKeyClass as String: kSecAttrKeyClassPrivate,
-        ],
-        // Any EC keys with tag
-        [
-          kSecClass as String: kSecClassKey,
-          kSecAttrApplicationTag as String: tag,
-          kSecAttrKeyType as String: kSecAttrKeyTypeECSECPrimeRandom,
-        ],
-      ]
-
-      for query in queries {
-        let status = SecItemDelete(query as CFDictionary)
-        if status == errSecSuccess {
-          print("[KeychainService] Cleaned up old key with tag: \(tagString)")
-        }
-      }
-    }
-
-    // Extra aggressive cleanup for simulator - delete all EC keys we might have created
-    #if targetEnvironment(simulator)
-      let broadQuery: [String: Any] = [
-        kSecClass as String: kSecClassKey,
-        kSecAttrKeyType as String: kSecAttrKeyTypeECSECPrimeRandom,
-        kSecAttrKeySizeInBits as String: 256,
-      ]
-      _ = SecItemDelete(broadQuery as CFDictionary)
-    #endif
+    var item: CFTypeRef?
+    let status = SecItemCopyMatching(query as CFDictionary, &item)
+    return status == errSecSuccess
   }
 
-  private func keyExists() -> Bool {
-    // Check for in-memory key first (works for both simulator and device)
-    #if targetEnvironment(simulator)
-      if Self.simulatorInMemoryKey != nil {
-        return true
-      }
-    #else
-      if Self.deviceInMemoryKey != nil {
-        return true
-      }
-    #endif
-
-    #if targetEnvironment(simulator)
-      let query: [String: Any] = [
-        kSecClass as String: kSecClassKey,
-        kSecAttrApplicationTag as String: keyTag,
-        kSecReturnRef as String: false,
-      ]
-
-      let status = SecItemCopyMatching(query as CFDictionary, nil)
-      return status == errSecSuccess
-
-    #else
-      // Device code with proper authentication handling
-      let basicQuery: [String: Any] = [
-        kSecClass as String: kSecClassKey,
-        kSecAttrApplicationTag as String: keyTag,
-        kSecAttrKeyType as String: kSecAttrKeyTypeECSECPrimeRandom,
-        kSecReturnRef as String: false,
-      ]
-
-      var status = SecItemCopyMatching(basicQuery as CFDictionary, nil)
-
-      if status == errSecSuccess {
-        return true
-      }
-
-      // Also check with authentication context for keys that require auth
-      if status == errSecItemNotFound {
-        var authQuery = basicQuery
-        let context = LAContext()
-        context.interactionNotAllowed = true
-        authQuery[kSecUseAuthenticationContext as String] = context
-
-        status = SecItemCopyMatching(authQuery as CFDictionary, nil)
-      }
-
-      switch status {
-      case errSecSuccess,
-        errSecInteractionNotAllowed,
-        errSecAuthFailed:
-        return true
-      case errSecItemNotFound:
-        return false
-      default:
-        print("[KeychainService] Unexpected status checking for key existence: \(statusDescription(status))")
-        return false
-      }
-    #endif
-  }
-
-  private func generateSigningKey(useSecureEnclave: Bool) -> CardResult<Void> {
-    #if targetEnvironment(simulator)
-      return generateSimulatorSigningKey()
-    #else
-      return generateDeviceSigningKey(useSecureEnclave: useSecureEnclave)
-    #endif
-  }
-
-  #if targetEnvironment(simulator)
-    private func generateSimulatorSigningKey() -> CardResult<Void> {
-      // Try generating a non-persistent key first to avoid keychain corruption issues
-      var attributes: [String: Any] = [
-        kSecAttrKeyType as String: kSecAttrKeyTypeECSECPrimeRandom,
-        kSecAttrKeyClass as String: kSecAttrKeyClassPrivate,
-        kSecAttrKeySizeInBits as String: 256,
-        kSecAttrIsPermanent as String: false,  // Don't persist to avoid keychain issues
-        kSecAttrApplicationTag as String: keyTag,
-        kSecAttrLabel as String: "AirMeishi Session Key",
-      ]
-
-      var error: Unmanaged<CFError>?
-      if let key = SecKeyCreateRandomKey(attributes as CFDictionary, &error) {
-        print("[KeychainService] Generated non-persistent simulator key, attempting to store...")
-
-        // Now try to add it to keychain manually
-        let addQuery: [String: Any] = [
-          kSecClass as String: kSecClassKey,
-          kSecValueRef as String: key,
-          kSecAttrApplicationTag as String: keyTag,
-          kSecAttrAccessible as String: kSecAttrAccessibleWhenUnlockedThisDeviceOnly,
-        ]
-
-        let status = SecItemAdd(addQuery as CFDictionary, nil)
-        if status == errSecSuccess {
-          print("[KeychainService] Successfully stored simulator key")
-          return .success(())
-        } else if status == errSecDuplicateItem {
-          // If duplicate, that means it's already there somehow, so success
-          print("[KeychainService] Key already exists (duplicate), considering success")
-          return .success(())
-        } else {
-          print("[KeychainService] Failed to store key: \(statusDescription(status)), using in-memory key")
-          // Store the key in a static variable as fallback
-          Self.simulatorInMemoryKey = key
-          return .success(())
-        }
-      }
-
-      // If that failed, just create an in-memory key
-      let cfError = error?.takeRetainedValue()
-      let message = (cfError as Error?)?.localizedDescription ?? "Unknown error"
-      print("[KeychainService] Failed to generate key: \(message), trying in-memory approach")
-
-      // Create a completely in-memory key as last resort
-      attributes[kSecAttrIsPermanent as String] = false
-      attributes.removeValue(forKey: kSecAttrApplicationTag as String)
-
-      if let key = SecKeyCreateRandomKey(attributes as CFDictionary, nil) {
-        print("[KeychainService] Successfully created in-memory key")
-        Self.simulatorInMemoryKey = key
-        return .success(())
-      }
-
-      return .failure(.keyManagementError("Failed to generate simulator key: \(message)"))
-    }
-  #endif
-
-  #if !targetEnvironment(simulator)
-    private func generateDeviceSigningKey(useSecureEnclave: Bool) -> CardResult<Void> {
-      let flags = accessControlFlags
-
-      guard
-        let accessControl = SecAccessControlCreateWithFlags(
-          nil,
-          kSecAttrAccessibleWhenUnlockedThisDeviceOnly,
-          flags,
-          nil
-        )
-      else {
-        return .failure(.keyManagementError("Failed to configure key access control"))
-      }
-
-      // First attempt: try persistent key with Secure Enclave (if requested) or software
-      var attributes: [String: Any] = [
-        kSecAttrKeyType as String: kSecAttrKeyTypeECSECPrimeRandom,
-        kSecAttrKeyClass as String: kSecAttrKeyClassPrivate,
-        kSecAttrKeySizeInBits as String: 256,
-        kSecAttrIsPermanent as String: true,
-        kSecAttrAccessControl as String: accessControl,
-        kSecAttrApplicationTag as String: keyTag,
-        kSecAttrLabel as String: "AirMeishi Device Key",
-      ]
-
-      if useSecureEnclave {
-        attributes[kSecAttrTokenID as String] = kSecAttrTokenIDSecureEnclave
-      }
-
-      var error: Unmanaged<CFError>?
-      if let key = SecKeyCreateRandomKey(attributes as CFDictionary, &error) {
-        print("[KeychainService] Successfully generated persistent device key")
-        return .success(())
-      }
-
-      // If persistent key generation failed, check if it's a duplicate error
-      let cfError = error?.takeRetainedValue()
-      let message =
-        (cfError as Error?)?.localizedDescription
-        ?? "Unknown error (\(statusDescription(errSecParam)))"
-
-      let errorCode = (cfError as? NSError)?.code ?? 0
-      let isDuplicateError =
-        errorCode == -25293 || errorCode == -25299 || message.contains("-25293") || message.contains("-25299")
-        || message.contains("duplicate") || message.contains("errSecDuplicateItem")
-
-      if isDuplicateError {
-        print(
-          "[KeychainService] Duplicate error detected (code: \(errorCode)), switching to session-based non-persistent key..."
-        )
-        return generateSessionBasedDeviceKey()
-      }
-
-      return .failure(.keyManagementError("Failed to generate device key: \(message)"))
-    }
-
-    private func generateSessionBasedDeviceKey() -> CardResult<Void> {
-      // Fall back to non-persistent key approach (similar to simulator)
-      var sessionAttributes: [String: Any] = [
-        kSecAttrKeyType as String: kSecAttrKeyTypeECSECPrimeRandom,
-        kSecAttrKeyClass as String: kSecAttrKeyClassPrivate,
-        kSecAttrKeySizeInBits as String: 256,
-        kSecAttrIsPermanent as String: false,  // Non-persistent to avoid keychain conflicts
-        kSecAttrApplicationTag as String: keyTag,
-        kSecAttrLabel as String: "AirMeishi Session Key",
-      ]
-
-      var sessionError: Unmanaged<CFError>?
-      if let sessionKey = SecKeyCreateRandomKey(sessionAttributes as CFDictionary, &sessionError) {
-        print("[KeychainService] Generated non-persistent session key, attempting to store...")
-
-        // Try to add it to keychain manually
-        let addQuery: [String: Any] = [
-          kSecClass as String: kSecClassKey,
-          kSecValueRef as String: sessionKey,
-          kSecAttrApplicationTag as String: keyTag,
-          kSecAttrAccessible as String: kSecAttrAccessibleWhenUnlockedThisDeviceOnly,
-        ]
-
-        let addStatus = SecItemAdd(addQuery as CFDictionary, nil)
-        if addStatus == errSecSuccess {
-          print("[KeychainService] Successfully stored session key in keychain")
-          return .success(())
-        } else if addStatus == errSecDuplicateItem {
-          print("[KeychainService] Session key already exists (duplicate), considering success")
-          return .success(())
-        } else {
-          print("[KeychainService] Failed to store session key: \(statusDescription(addStatus)), using in-memory key")
-          // Store the key in a static variable as fallback
-          Self.deviceInMemoryKey = sessionKey
-          return .success(())
-        }
-      }
-
-      // Last resort: create completely in-memory key
-      sessionAttributes.removeValue(forKey: kSecAttrApplicationTag as String)
-      if let inMemoryKey = SecKeyCreateRandomKey(sessionAttributes as CFDictionary, nil) {
-        print("[KeychainService] Successfully created in-memory key as fallback")
-        Self.deviceInMemoryKey = inMemoryKey
-        return .success(())
-      }
-
-      let sessionMessage = (sessionError?.takeRetainedValue() as Error?)?.localizedDescription ?? "Unknown error"
-      return .failure(
-        .keyManagementError(
-          "Failed to generate device key (persistent and session methods failed); session error: \(sessionMessage)"
-        )
-      )
-    }
-  #endif
-
-  private func deleteAllKeysWithTag() {
-    // Try multiple deletion strategies to ensure complete cleanup
-    let queries: [[String: Any]] = [
-      // Delete by tag only (broadest match)
-      [
-        kSecClass as String: kSecClassKey,
-        kSecAttrApplicationTag as String: keyTag,
-      ],
-      // Delete EC keys with tag
-      [
-        kSecClass as String: kSecClassKey,
-        kSecAttrApplicationTag as String: keyTag,
-        kSecAttrKeyType as String: kSecAttrKeyTypeECSECPrimeRandom,
-      ],
-      // Delete all private EC keys with our tag
-      [
-        kSecClass as String: kSecClassKey,
-        kSecAttrApplicationTag as String: keyTag,
-        kSecAttrKeyClass as String: kSecAttrKeyClassPrivate,
-      ],
-      // Delete Secure Enclave keys with tag
-      [
-        kSecClass as String: kSecClassKey,
-        kSecAttrApplicationTag as String: keyTag,
-        kSecAttrTokenID as String: kSecAttrTokenIDSecureEnclave,
-      ],
-      // Delete software keys with tag
-      [
-        kSecClass as String: kSecClassKey,
-        kSecAttrApplicationTag as String: keyTag,
-        kSecAttrKeyType as String: kSecAttrKeyTypeECSECPrimeRandom,
-        kSecAttrKeySizeInBits as String: 256,
-      ],
-    ]
-
-    var deletedCount = 0
-    for query in queries {
-      let status = SecItemDelete(query as CFDictionary)
-      if status == errSecSuccess {
-        deletedCount += 1
-        print("[KeychainService] Aggressive cleanup: deleted keys matching query")
-      } else if status != errSecItemNotFound {
-        print("[KeychainService] Cleanup query returned status: \(statusDescription(status))")
-      }
-    }
-
-    if deletedCount > 0 {
-      print("[KeychainService] Cleaned up \(deletedCount) key(s) with tag")
-    }
-  }
-
-  // swiftlint:disable cyclomatic_complexity
   private func privateKey(context: LAContext?) -> CardResult<SecKey> {
     // Check for in-memory key first (works for both simulator and device)
     #if targetEnvironment(simulator)
@@ -587,14 +215,6 @@ final class KeychainService {
         print("[KeychainService] Using in-memory simulator key")
         return .success(inMemoryKey)
       }
-    #else
-      if let inMemoryKey = Self.deviceInMemoryKey {
-        print("[KeychainService] Using in-memory device key")
-        return .success(inMemoryKey)
-      }
-    #endif
-
-    #if targetEnvironment(simulator)
 
       // Try to get from keychain
       let query: [String: Any] = [
@@ -607,26 +227,12 @@ final class KeychainService {
       let status = SecItemCopyMatching(query as CFDictionary, &item)
 
       if status == errSecSuccess {
-        guard let candidate = item else {
-          return .failure(.keyManagementError("Keychain returned empty result for signing key"))
-        }
-        guard CFGetTypeID(candidate) == SecKeyGetTypeID() else {
-          return .failure(.keyManagementError("Keychain returned unexpected item type for signing key"))
-        }
-        print("[KeychainService] Retrieved simulator key from keychain")
-        // We verified the type ID above, so this force cast is safe
         // swiftlint:disable:next force_cast
-        let key = candidate as! SecKey
+        let key = item as! SecKey
         return .success(key)
       }
 
-      // Key not found - this is expected on first run with a new session tag
-      if status == errSecItemNotFound {
-        print("[KeychainService] Simulator key not found (expected for new session)")
-        return .failure(.keyManagementError("Key not found - will be created"))
-      }
-
-      return .failure(.keyManagementError("Failed to retrieve simulator key: \(statusDescription(status))"))
+      return .failure(.keyManagementError("Key not found in simulator keychain and no in-memory key available"))
 
     #else
       // Device code with authentication handling
@@ -638,6 +244,8 @@ final class KeychainService {
       ]
 
       var item: CFTypeRef?
+      // Try to copy matching item *without* auth context first.
+      // If it requires auth, this might fail with errSecAuthFailed or errSecInteractionNotAllowed.
       var status = SecItemCopyMatching(basicQuery as CFDictionary, &item)
 
       if status == errSecSuccess {
@@ -648,9 +256,9 @@ final class KeychainService {
           return .failure(.keyManagementError("Keychain returned unexpected item type for signing key"))
         }
         print("[KeychainService] Successfully retrieved key without authentication context")
-        guard let key = candidate as? SecKey else {
-          return .failure(.keyManagementError("Unexpected key type when casting signing key"))
-        }
+        // Since we verified the type ID above, this cast is safe and redundant for CFTypeRef -> SecKey
+        // swiftlint:disable:next force_cast
+        let key = candidate as! SecKey
         return .success(key)
       }
 
@@ -677,9 +285,8 @@ final class KeychainService {
             return .failure(.keyManagementError("Keychain returned unexpected item type for signing key"))
           }
           print("[KeychainService] Successfully retrieved key with authentication context")
-          guard let key = candidate as? SecKey else {
-            return .failure(.keyManagementError("Unexpected key type when casting signing key with auth context"))
-          }
+          // swiftlint:disable:next force_cast
+          let key = candidate as! SecKey
           return .success(key)
         }
       }
@@ -706,9 +313,8 @@ final class KeychainService {
             return .failure(.keyManagementError("Keychain returned unexpected item type for signing key"))
           }
           print("[KeychainService] Successfully retrieved key after creation")
-          guard let key = candidate as? SecKey else {
-            return .failure(.keyManagementError("Unexpected key type when casting signing key after creation"))
-          }
+          // swiftlint:disable:next force_cast
+          let key = candidate as! SecKey
           return .success(key)
         }
       }
@@ -717,7 +323,6 @@ final class KeychainService {
       return .failure(.keyManagementError("Failed to retrieve signing key: \(statusDescription(status))"))
     #endif
   }
-  // swiftlint:enable cyclomatic_complexity
 
   private func jwk(for privateKey: SecKey) -> CardResult<PublicKeyJWK> {
     guard let publicKey = SecKeyCopyPublicKey(privateKey) else {
@@ -758,99 +363,11 @@ final class KeychainService {
     }
   }
 
-  private func statusDescription(_ status: OSStatus) -> String {
+  internal func statusDescription(_ status: OSStatus) -> String {
     if let message = SecCopyErrorMessageString(status, nil) as String? {
       return message
     }
     return "OSStatus \(status)"
-  }
-}
-
-// MARK: - Signing key wrapper
-
-/// Signing key implementation compatible with SpruceKit.
-final class BiometricSigningKey: SpruceIDMobileSdkRs.SigningKey, @unchecked Sendable {
-  private let privateKey: SecKey
-  private let jwkRepresentation: PublicKeyJWK
-  private let alias: KeyAlias
-
-  init(privateKey: SecKey, jwk: PublicKeyJWK, alias: KeyAlias) {
-    self.privateKey = privateKey
-    self.jwkRepresentation = jwk
-    self.alias = alias
-  }
-
-  func jwk() throws -> String {
-    return try jwkRepresentation.jsonString()
-  }
-
-  func sign(payload: Data) throws -> Data {
-    var error: Unmanaged<CFError>?
-    guard
-      let signature = SecKeyCreateSignature(
-        privateKey,
-        .ecdsaSignatureMessageX962SHA256,
-        payload as CFData,
-        &error
-      ) as Data?
-    else {
-      let cfError = error?.takeRetainedValue()
-      let message = (cfError as Error?)?.localizedDescription ?? "Unknown signing error"
-      throw CardError.keyManagementError("Failed to sign payload: \(message)")
-    }
-
-    guard let normalized = CryptoCurveUtils.secp256r1().ensureRawFixedWidthSignatureEncoding(bytes: signature) else {
-      throw CardError.keyManagementError("Unable to normalise signature for alias \(alias)")
-    }
-
-    return normalized
-  }
-}
-
-// MARK: - Supporting models
-
-/// Minimal JSON Web Key representation for EC P-256 keys.
-struct PublicKeyJWK: Codable, Equatable {
-  let kty: String
-  let crv: String
-  let alg: String
-  let x: String
-  let y: String
-
-  func jsonData(prettyPrinted: Bool = false) throws -> Data {
-    let encoder = JSONEncoder()
-    if prettyPrinted {
-      encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
-    } else {
-      encoder.outputFormatting = [.sortedKeys]
-    }
-    return try encoder.encode(self)
-  }
-
-  func jsonString(prettyPrinted: Bool = false) throws -> String {
-    let data = try jsonData(prettyPrinted: prettyPrinted)
-    guard let string = String(data: data, encoding: .utf8) else {
-      throw CardError.keyManagementError("Unable to encode JWK string")
-    }
-    return string
-  }
-
-  func x963Representation() throws -> Data {
-    guard let xData = Data(base64URLEncoded: x),
-      let yData = Data(base64URLEncoded: y)
-    else {
-      throw CardError.invalidData("Invalid public key encoding")
-    }
-
-    var buffer = Data([0x04])
-    buffer.append(xData)
-    buffer.append(yData)
-    return buffer
-  }
-
-  func toP256PublicKey() throws -> P256.Signing.PublicKey {
-    let data = try x963Representation()
-    return try P256.Signing.PublicKey(x963Representation: data)
   }
 }
 

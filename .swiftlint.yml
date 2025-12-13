@@ -38,7 +38,7 @@ line_length:
   ignores_urls: true
 
 file_length:
-  warning: 900 # 稍微放寬，你的 KeychainService 已經 853 行了
+  warning: 600
   error: 1000
 
 type_body_length:

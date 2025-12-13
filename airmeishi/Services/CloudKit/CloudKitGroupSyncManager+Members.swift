@@ -20,17 +20,59 @@ extension CloudKitGroupSyncManager {
 
   internal func joinPublicGroup(withInviteToken token: String) async throws -> GroupModel {
     print("[CloudKitManager] Attempting to join public group with token: \(token)")
+
+    let userID = try await ensureAuthenticated()
+    let groupRecordID = try await findGroupID(from: token)
+    print("[CloudKitManager] Found invite for group ID: \(groupRecordID.recordName)")
+
+    if let existingGroup = try await checkExistingMembership(groupRecordID: groupRecordID, userID: userID) {
+      return existingGroup
+    }
+
+    // Join the group
+    print("[CloudKitManager] Joining group...")
+    let groupRecord = try await publicDB.record(for: groupRecordID)
+    let currentMemberCount = (groupRecord["memberCount"] as? Int) ?? 1
+
+    // Update count and create membership
+    groupRecord["memberCount"] = currentMemberCount + 1
+    let membershipRecord = createMembershipRecord(group: groupRecord, userID: userID)
+
+    // Atomic save
+    _ = try await publicDB.modifyRecords(saving: [groupRecord, membershipRecord], deleting: [])
+    print("[CloudKitManager] Successfully joined group in CloudKit, memberCount updated to \(currentMemberCount + 1)")
+
+    // Update local state
+    guard var groupModel = mapRecordToGroup(groupRecord) else {
+      throw NSError(domain: "GroupError", code: 500, userInfo: [NSLocalizedDescriptionKey: "Failed to map group record"])
+    }
+    groupModel.isPrivate = false
+    groupModel.memberCount = currentMemberCount + 1
+    self.groups.append(groupModel)
+    saveGroupsToLocal()
+
+    // Sync Semaphore and refresh
+    await syncSemaphore(for: &groupModel, groupRecordID: groupRecordID)
+
+    Task { try? await self.fetchLatestChanges() }
+    return groupModel
+  }
+
+  // MARK: - Join Helpers
+
+  private func ensureAuthenticated() async throws -> CKRecord.ID {
     if currentUserRecordID == nil {
       print("[CloudKitManager] User ID missing, checking account status...")
       await checkAccountStatus()
     }
-
     guard let userID = currentUserRecordID else {
       print("[CloudKitManager] Still no User ID after check.")
       throw CKError(.notAuthenticated)
     }
+    return userID
+  }
 
-    // 1. Find the invite record
+  private func findGroupID(from token: String) async throws -> CKRecord.ID {
     let predicate = NSPredicate(format: "token == %@", token)
     let query = CKQuery(recordType: CloudKitRecordType.groupInvite, predicate: predicate)
     let (results, _) = try await publicDB.records(matching: query)
@@ -39,154 +81,101 @@ extension CloudKitGroupSyncManager {
       let groupRef = inviteRecord["targetGroup"] as? CKRecord.Reference
     else {
       print("[CloudKitManager] Invalid or expired invite token")
-      throw NSError(
-        domain: "GroupError",
-        code: 404,
-        userInfo: [NSLocalizedDescriptionKey: "Invalid or expired invite token"]
-      )
+      throw NSError(domain: "GroupError", code: 404, userInfo: [NSLocalizedDescriptionKey: "Invalid or expired invite token"])
     }
+    return groupRef.recordID
+  }
 
-    let groupRecordID = groupRef.recordID
-    print("[CloudKitManager] Found invite for group ID: \(groupRecordID.recordName)")
-
-    // 2. Check if already a member
+  private func checkExistingMembership(groupRecordID: CKRecord.ID, userID: CKRecord.ID) async throws -> GroupModel? {
+    // 1. Check direct membership
     let membershipPredicate = NSPredicate(
       format: "group == %@ AND userRecordID == %@",
       CKRecord.Reference(recordID: groupRecordID, action: .none),
       CKRecord.Reference(recordID: userID, action: .none)
     )
-    let membershipQuery = CKQuery(recordType: CloudKitRecordType.groupMembership, predicate: membershipPredicate)
-    let (membershipResults, _) = try await publicDB.records(matching: membershipQuery)
-
-    if let _ = membershipResults.first {
+    if try await checkMembershipExists(predicate: membershipPredicate) {
       print("[CloudKitManager] User is already a member of this group.")
-      // Fetch group details and return
-      let groupRecord = try await publicDB.record(for: groupRecordID)
-      if var groupModel = mapRecordToGroup(groupRecord) {
-        groupModel.isPrivate = false
-        // Ensure it's in our local list if not already
-        if !self.groups.contains(where: { $0.id == groupModel.id }) {
-          self.groups.append(groupModel)
-          saveGroupsToLocal()
-        }
-        return groupModel
-      }
+      return try await fetchAndCacheGroup(groupRecordID: groupRecordID)
     }
 
-    // 2b. Check if already a member by commitment (Prevent Double Spending)
+    // 2. Check commitment (double spending)
     if let identity = SemaphoreIdentityManager.shared.getIdentity() {
-      let commitment = identity.commitment
       let commitmentPredicate = NSPredicate(
         format: "group == %@ AND commitment == %@",
         CKRecord.Reference(recordID: groupRecordID, action: .none),
-        commitment
+        identity.commitment
       )
-      let commitmentQuery = CKQuery(recordType: CloudKitRecordType.groupMembership, predicate: commitmentPredicate)
-      let (commitmentResults, _) = try await publicDB.records(matching: commitmentQuery)
-
-      if let _ = commitmentResults.first {
+      if try await checkMembershipExists(predicate: commitmentPredicate) {
         print("[CloudKitManager] User is already a member of this group (verified by commitment).")
-        // Fetch group details and return
-        let groupRecord = try await publicDB.record(for: groupRecordID)
-        if var groupModel = mapRecordToGroup(groupRecord) {
-          groupModel.isPrivate = false
-          // Ensure it's in our local list if not already
-          if !self.groups.contains(where: { $0.id == groupModel.id }) {
-            self.groups.append(groupModel)
-            saveGroupsToLocal()
-          }
-          return groupModel
-        }
+        return try await fetchAndCacheGroup(groupRecordID: groupRecordID)
       }
     }
+    return nil
+  }
 
-    // 3. Join the group
-    print("[CloudKitManager] Joining group...")
+  private func checkMembershipExists(predicate: NSPredicate) async throws -> Bool {
+    let query = CKQuery(recordType: CloudKitRecordType.groupMembership, predicate: predicate)
+    let (results, _) = try await publicDB.records(matching: query)
+    return results.first != nil
+  }
+
+  private func fetchAndCacheGroup(groupRecordID: CKRecord.ID) async throws -> GroupModel? {
     let groupRecord = try await publicDB.record(for: groupRecordID)
+    if var groupModel = mapRecordToGroup(groupRecord) {
+      groupModel.isPrivate = false
+      if !self.groups.contains(where: { $0.id == groupModel.id }) {
+        self.groups.append(groupModel)
+        saveGroupsToLocal()
+      }
+      return groupModel
+    }
+    return nil
+  }
 
-    // 3a. Create membership record
-    let membershipRecord = CKRecord(recordType: CloudKitRecordType.groupMembership)
-    membershipRecord["group"] = CKRecord.Reference(recordID: groupRecord.recordID, action: .deleteSelf)
-    membershipRecord["userRecordID"] = CKRecord.Reference(recordID: userID, action: .none)
-    membershipRecord["role"] = "member"
-    membershipRecord["status"] = "active"
-    membershipRecord["joinedAt"] = Date()
-
-    // Save commitment
+  private func createMembershipRecord(group: CKRecord, userID: CKRecord.ID) -> CKRecord {
+    let record = CKRecord(recordType: CloudKitRecordType.groupMembership)
+    record["group"] = CKRecord.Reference(recordID: group.recordID, action: .deleteSelf)
+    record["userRecordID"] = CKRecord.Reference(recordID: userID, action: .none)
+    record["role"] = "member"
+    record["status"] = "active"
+    record["joinedAt"] = Date()
     if let identity = SemaphoreIdentityManager.shared.getIdentity() {
-      membershipRecord["commitment"] = identity.commitment
+      record["commitment"] = identity.commitment
     }
+    return record
+  }
 
-    // 3b. Update group's memberCount atomically
-    let currentMemberCount = (groupRecord["memberCount"] as? Int) ?? 1
-    groupRecord["memberCount"] = currentMemberCount + 1
-
-    // Use modifyRecords to save both atomically
-    _ = try await publicDB.modifyRecords(saving: [groupRecord, membershipRecord], deleting: [])
-    print("[CloudKitManager] Successfully joined group in CloudKit, memberCount updated to \(currentMemberCount + 1)")
-
-    // 4. Update local state
-    guard var groupModel = mapRecordToGroup(groupRecord) else {
-      throw NSError(
-        domain: "GroupError",
-        code: 500,
-        userInfo: [NSLocalizedDescriptionKey: "Failed to map group record"]
-      )
-    }
-    groupModel.isPrivate = false
-    groupModel.memberCount = currentMemberCount + 1
-    self.groups.append(groupModel)
-    saveGroupsToLocal()
-
-    // 5. Sync with Semaphore (ZK) Manager
-    if let identity = SemaphoreIdentityManager.shared.getIdentity(),
+  private func syncSemaphore(for groupModel: inout GroupModel, groupRecordID: CKRecord.ID) async {
+    guard let identity = SemaphoreIdentityManager.shared.getIdentity(),
       let groupUUID = UUID(uuidString: groupModel.id)
-    {
+    else {
+      print("[CloudKitManager] WARNING: Could not sync with Semaphore Manager. Identity or GroupUUID missing.")
+      return
+    }
 
-      print("[CloudKitManager] Syncing with Semaphore Manager for group: \(groupModel.name)")
-      print("[CloudKitManager] Identity Commitment: \(identity.commitment)")
+    print("[CloudKitManager] Syncing with Semaphore Manager for group: \(groupModel.name)")
+    _ = SemaphoreGroupManager.shared.ensureGroupFromInvite(id: groupUUID, name: groupModel.name, root: groupModel.merkleRoot)
+    SemaphoreGroupManager.shared.selectGroup(groupUUID)
+    SemaphoreGroupManager.shared.addMember(identity.commitment)
+    print("[CloudKitManager] Added member to Semaphore Group")
 
-      // Ensure group exists in ZK manager and is selected
-      _ = SemaphoreGroupManager.shared.ensureGroupFromInvite(
-        id: groupUUID,
-        name: groupModel.name,
-        root: groupModel.merkleRoot
-      )
+    // Wait for root computation
+    try? await Task.sleep(nanoseconds: 100_000_000)
 
-      // Make sure the group is selected before adding member
-      SemaphoreGroupManager.shared.selectGroup(groupUUID)
-
-      // Add self as member (leaf)
-      SemaphoreGroupManager.shared.addMember(identity.commitment)
-      print("[CloudKitManager] Added member to Semaphore Group")
-
-      // 6. Sync updated merkle root back to CloudKit
-      // Wait a bit for the root computation to complete
-      try? await Task.sleep(nanoseconds: 100_000_000)  // 0.1 seconds
-
-      if let updatedRoot = SemaphoreGroupManager.shared.merkleRoot {
-        print("[CloudKitManager] Updating merkle root in CloudKit: \(updatedRoot)")
-        let updatedGroupRecord = try await publicDB.record(for: groupRecordID)
+    if let updatedRoot = SemaphoreGroupManager.shared.merkleRoot {
+      print("[CloudKitManager] Updating merkle root in CloudKit: \(updatedRoot)")
+      if let updatedGroupRecord = try? await publicDB.record(for: groupRecordID) {
         updatedGroupRecord["merkleRoot"] = updatedRoot
-        try await publicDB.save(updatedGroupRecord)
+        _ = try? await publicDB.save(updatedGroupRecord)
         print("[CloudKitManager] Merkle root synced to CloudKit")
 
-        // Update local model
+        groupModel.merkleRoot = updatedRoot
         if let index = self.groups.firstIndex(where: { $0.id == groupModel.id }) {
           self.groups[index].merkleRoot = updatedRoot
           saveGroupsToLocal()
         }
       }
-    } else {
-      print("[CloudKitManager] WARNING: Could not sync with Semaphore Manager. Identity or GroupUUID missing.")
     }
-
-    // 7. Trigger a refresh to fetch latest changes (for other users)
-    Task {
-      try? await self.fetchLatestChanges()
-    }
-
-    return groupModel
   }
 
   func leaveGroup(_ group: GroupModel) async throws {

@@ -106,11 +106,7 @@ final class VCService {
     return signAndIssueCredential(
       claims: claims,
       signingKey: signingKey,
-      verificationMethodId: descriptor.verificationMethodId,
-      issuedAt: issuedAt,
-      expiresAt: options.expiration,
-      holderDid: holderDid,
-      issuerDid: issuerDid
+      verificationMethodId: descriptor.verificationMethodId
     )
   }
 
@@ -126,11 +122,7 @@ final class VCService {
   private func signAndIssueCredential(
     claims: BusinessCardCredentialClaims,
     signingKey: BiometricSigningKey,
-    verificationMethodId: String,
-    issuedAt: Date,
-    expiresAt: Date?,
-    holderDid: String,
-    issuerDid: String
+    verificationMethodId: String
   ) -> CardResult<IssuedCredential> {
     do {
       Self.logger.info("Generating JWT header and payload - kid: \(verificationMethodId)")
@@ -165,10 +157,10 @@ final class VCService {
           header: headerDict,
           payload: payloadDict,
           snapshot: claims.snapshot,
-          issuedAt: issuedAt,
-          expiresAt: expiresAt,
-          holderDid: holderDid,
-          issuerDid: issuerDid
+          issuedAt: claims.issuanceDate,
+          expiresAt: claims.expirationDate,
+          holderDid: claims.holderDid,
+          issuerDid: claims.issuerDid
         )
       )
     } catch let cardError as CardError {
