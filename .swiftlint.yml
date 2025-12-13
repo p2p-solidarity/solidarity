@@ -6,7 +6,7 @@ disabled_rules:
   - inclusive_language
   - nesting
   - opening_brace 
-  - unused_optional_binding # 如果你習慣用 if let _ = 來判斷 nil，可以關掉這個，但建議改用 != nil
+  - unused_optional_binding
 
 opt_in_rules:
   - empty_count
