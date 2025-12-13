@@ -60,7 +60,7 @@ extension KeychainService {
     #endif
   }
 
-  private func cleanupAllOldKeys() {
+  func cleanupAllOldKeys() {
     print("[KeychainService] Cleaning up old/stale keys...")
     deleteAllKeysWithTag()
   }
@@ -163,7 +163,7 @@ extension KeychainService {
       }
 
       var error: Unmanaged<CFError>?
-      if let key = SecKeyCreateRandomKey(attributes as CFDictionary, &error) {
+      if let _ = SecKeyCreateRandomKey(attributes as CFDictionary, &error) {
         print("[KeychainService] Successfully generated persistent device key")
         return .success(())
       }

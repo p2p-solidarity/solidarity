@@ -354,7 +354,7 @@ final class KeychainService {
     return .success(jwk)
   }
 
-  private func combine(_ first: CardError, _ second: CardError) -> CardError {
+  func combine(_ first: CardError, _ second: CardError) -> CardError {
     switch (first, second) {
     case (.keyManagementError(let a), .keyManagementError(let b)):
       return .keyManagementError("\(a); \(b)")
