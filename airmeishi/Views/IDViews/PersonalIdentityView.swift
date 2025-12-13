@@ -74,14 +74,14 @@ struct PersonalIdentityView: View {
         Section("Cached Documents") {
             if let document = coordinator.state.didDocument,
                let json = encode(document) {
-                Button {
+                Button(action: {
 #if canImport(UIKit)
                     shareContent = json
                     showingShareSheet = true
 #endif
-                } label: {
+                }, label: {
                     Label("Export DID Document", systemImage: "square.and.arrow.up")
-                }
+                })
                 LabeledContent("Services", value: "\(document.service?.count ?? 0)")
             } else {
                 Text("No DID document cached yet.")
@@ -118,17 +118,17 @@ struct PersonalIdentityView: View {
 
     private var actionsSection: some View {
         Section("Actions") {
-            Button {
+            Button(action: {
                 coordinator.refreshIdentity()
-            } label: {
+            }, label: {
                 Label("Refresh Identity", systemImage: "arrow.clockwise")
-            }
+            })
 
-            Button {
+            Button(action: {
                 coordinator.clearError()
-            } label: {
+            }, label: {
                 Label("Clear Error State", systemImage: "xmark.circle")
-            }
+            })
             .disabled(coordinator.state.lastError == nil)
         }
     }

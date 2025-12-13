@@ -99,9 +99,26 @@ final class CloudKitGroupSyncManager: ObservableObject, GroupSyncManagerProtocol
             return
         }
         
-        var fetchedGroups: [GroupModel] = []
+        let fetchedPublicGroups = await fetchPublicGroups(userID: userID)
+        let fetchedPrivateAndSharedGroups = await fetchPrivateAndSharedGroups()
         
-        // 1. Fetch Public Groups (Existing Logic)
+        let allFetchedGroups = fetchedPublicGroups + fetchedPrivateAndSharedGroups
+        
+        let mergedGroups = mergeGroups(cloudGroups: allFetchedGroups, localGroups: self.groups)
+        
+        syncMerkleRoots(groups: mergedGroups)
+        
+        self.groups = mergedGroups
+        saveGroupsToLocal()
+        print("[CloudKitManager] Successfully updated groups. Total: \(self.groups.count)")
+        await MainActor.run { self.syncStatus = .idle }
+    }
+    // swiftlint:enable cyclomatic_complexity
+    
+    // MARK: - Sync Helpers
+    
+    private func fetchPublicGroups(userID: CKRecord.ID) async -> [GroupModel] {
+        var fetchedGroups: [GroupModel] = []
         let publicPredicate = NSPredicate(format: "userRecordID == %@", userID)
         let publicQuery = CKQuery(recordType: CloudKitRecordType.groupMembership, predicate: publicPredicate)
         
@@ -123,8 +140,12 @@ final class CloudKitGroupSyncManager: ObservableObject, GroupSyncManagerProtocol
             print("[CloudKitManager] Public fetch failed: \(error)")
             await MainActor.run { self.syncStatus = .error(error) }
         }
+        return fetchedGroups
+    }
+    
+    private func fetchPrivateAndSharedGroups() async -> [GroupModel] {
+        var fetchedGroups: [GroupModel] = []
         
-        // 2. Fetch Private/Shared Groups
         // Fetch Owned Private Groups
         let privateQuery = CKQuery(recordType: CloudKitRecordType.group, predicate: NSPredicate(value: true))
         do {
@@ -157,18 +178,17 @@ final class CloudKitGroupSyncManager: ObservableObject, GroupSyncManagerProtocol
             print("[CloudKitManager] Shared fetch failed: \(error)")
         }
         
-        // 3. Merge Strategy (Conflict Resolution)
-        // We have `fetchedGroups` (Cloud) and `self.groups` (Local).
-        // Goal: Update `self.groups` with `fetchedGroups`, but respect local unsynced changes.
-        
+        return fetchedGroups
+    }
+    
+    private func mergeGroups(cloudGroups: [GroupModel], localGroups: [GroupModel]) -> [GroupModel] {
         var mergedGroups: [GroupModel] = []
-        let localGroupsMap = Dictionary(uniqueKeysWithValues: self.groups.map { ($0.id, $0) })
+        let localGroupsMap = Dictionary(uniqueKeysWithValues: localGroups.map { ($0.id, $0) })
         
-        for cloudGroup in fetchedGroups {
+        for cloudGroup in cloudGroups {
             if let localGroup = localGroupsMap[cloudGroup.id] {
                 if !localGroup.isSynced {
                     // Local has unsynced changes. Keep Local.
-                    // Ideally we should try to merge fields or warn user, but for now "Keep Local" preserves work.
                     print("[CloudKitManager] Conflict: Group \(localGroup.name) has local changes. Keeping local version.")
                     mergedGroups.append(localGroup)
                 } else {
@@ -181,18 +201,19 @@ final class CloudKitGroupSyncManager: ObservableObject, GroupSyncManagerProtocol
             }
         }
         
-        // Also keep local-only groups that are not present in CloudKit.
-        // Design choice: local cache is the source of truth for "what the user has created locally".
-        // We keep them until the user explicitly deletes them.
-        for localGroup in self.groups {
+        // Keep local-only groups
+        for localGroup in localGroups {
             if !mergedGroups.contains(where: { $0.id == localGroup.id }) {
                 print("[CloudKitManager] Keeping local-only group: \(localGroup.name)")
                 mergedGroups.append(localGroup)
             }
         }
         
-        // After fetching all groups, sync merkle roots to SemaphoreManager
-        for group in mergedGroups {
+        return mergedGroups
+    }
+    
+    private func syncMerkleRoots(groups: [GroupModel]) {
+        for group in groups {
             if let groupUUID = UUID(uuidString: group.id) {
                 _ = SemaphoreGroupManager.shared.ensureGroupFromInvite(
                     id: groupUUID,
@@ -206,11 +227,6 @@ final class CloudKitGroupSyncManager: ObservableObject, GroupSyncManagerProtocol
                 }
             }
         }
-        
-        self.groups = mergedGroups
-        saveGroupsToLocal()
-        print("[CloudKitManager] Successfully updated groups. Total: \(self.groups.count)")
-        await MainActor.run { self.syncStatus = .idle }
     }
     // swiftlint:enable cyclomatic_complexity
     

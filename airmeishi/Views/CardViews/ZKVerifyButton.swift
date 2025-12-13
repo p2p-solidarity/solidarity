@@ -39,11 +39,11 @@ struct ZKVerifyButton: View {
                     HStack {
                         Text("Signature").font(.caption).foregroundColor(.secondary)
                         Spacer()
-                        Button {
+                        Button(action: {
                             #if canImport(UIKit)
                             UIPasteboard.general.string = sig
                             #endif
-                        } label: { Image(systemName: "doc.on.doc").font(.caption) }
+                        }, label: { Image(systemName: "doc.on.doc").font(.caption) })
                         .buttonStyle(.plain)
                     }
                     ScrollView(.horizontal) {

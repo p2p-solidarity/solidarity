@@ -157,25 +157,25 @@ struct VCSettingsView: View {
             }
             
             Section("Actions") {
-                Button {
+                Button(action: {
                     viewModel.createVC(method: .key)
-                } label: {
+                }, label: {
                     Label("Create did:key VC", systemImage: "key.fill")
-                }
+                })
                 
-                Button {
+                Button(action: {
                     viewModel.createVC(method: .ethr)
-                } label: {
+                }, label: {
                     Label("Create did:ethr VC", systemImage: "link.circle.fill")
-                }
+                })
                 
-                NavigationLink {
+                NavigationLink(destination: {
                     OIDCRequestView()
-                } label: {
+                }, label: {
                     Label("Receive Card (OIDC)", systemImage: "qrcode")
-                }
+                })
                 
-                Button {
+                Button(action: {
                     let vcs = viewModel.getAllVCs()
                     if !vcs.isEmpty {
                         exportDocument = VCExportDocument(vcs: vcs)
@@ -184,15 +184,15 @@ struct VCSettingsView: View {
                         viewModel.errorMessage = "No VCs found to export."
                         viewModel.showError = true
                     }
-                } label: {
+                }, label: {
                     Label("Export VCs", systemImage: "square.and.arrow.up")
-                }
+                })
                 
-                Button {
+                Button(action: {
                     showingImporter = true
-                } label: {
+                }, label: {
                     Label("Import VCs", systemImage: "square.and.arrow.down")
-                }
+                })
             }
         }
         .navigationTitle("VC Management")
@@ -226,16 +226,16 @@ struct VCSettingsView: View {
                 viewModel.showError = true
             }
         }
-        .alert("Error", isPresented: $viewModel.showError) {
+        .alert("Error", isPresented: $viewModel.showError, actions: {
             Button("OK", role: .cancel) { }
-        } message: {
+        }, message: {
             Text(viewModel.errorMessage ?? "Unknown error")
-        }
-        .alert("Success", isPresented: $viewModel.showSuccess) {
+        })
+        .alert("Success", isPresented: $viewModel.showSuccess, actions: {
             Button("OK", role: .cancel) { }
-        } message: {
+        }, message: {
             Text(viewModel.successMessage ?? "Operation successful")
-        }
+        })
     }
 }
 

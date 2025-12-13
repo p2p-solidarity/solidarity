@@ -54,14 +54,22 @@ class OCRManager: ObservableObject {
     
     // MARK: - Private Methods
     
+    // MARK: - Private Methods
+    
+    private struct OCRTextObservation {
+        let text: String
+        let confidence: Float
+        let boundingBox: CGRect
+    }
+    
     private func processTextObservations(_ observations: [VNRecognizedTextObservation], completion: @escaping (CardResult<BusinessCard>) -> Void) {
-        var extractedTexts: [(text: String, confidence: Float, boundingBox: CGRect)] = []
+        var extractedTexts: [OCRTextObservation] = []
         
         // Extract all text with confidence scores and positions
         for observation in observations {
             guard let topCandidate = observation.topCandidates(1).first else { continue }
             
-            extractedTexts.append((
+            extractedTexts.append(OCRTextObservation(
                 text: topCandidate.string,
                 confidence: topCandidate.confidence,
                 boundingBox: observation.boundingBox
@@ -75,7 +83,7 @@ class OCRManager: ObservableObject {
         completion(.success(businessCard))
     }
     
-    private func extractBusinessCardFields(from texts: [(text: String, confidence: Float, boundingBox: CGRect)]) -> BusinessCard {
+    private func extractBusinessCardFields(from texts: [OCRTextObservation]) -> BusinessCard {
         var name = ""
         var title: String?
         var company: String?
@@ -87,7 +95,9 @@ class OCRManager: ObservableObject {
         
         var processedTexts = Set<String>()
         
-        for (text, confidence, _) in texts {
+        for observation in texts {
+            let text = observation.text
+            let confidence = observation.confidence
             let trimmedText = text.trimmingCharacters(in: .whitespacesAndNewlines)
             
             // Skip if already processed or too short

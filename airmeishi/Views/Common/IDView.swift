@@ -67,36 +67,36 @@ struct IDView: View {
             .toolbar {
                 ToolbarItem(placement: .navigationBarTrailing) {
                     HStack {
-                        Button {
+                        Button(action: {
                             showingOIDCRequest = true
-                        } label: {
+                        }, label: {
                             Image(systemName: "qrcode")
                                 .foregroundColor(.primary)
-                        }
+                        })
                         
-                        Button {
+                        Button(action: {
                             coordinator.refreshIdentity()
-                        } label: {
+                        }, label: {
                             Image(systemName: "arrow.clockwise")
                                 .foregroundColor(.primary)
-                        }
+                        })
                     }
                 }
                 
                 ToolbarItem(placement: .navigationBarLeading) {
-                    Button {
+                    Button(action: {
                         showingZKSettings = true
-                    } label: {
+                    }, label: {
                         Image(systemName: "gearshape")
                             .foregroundColor(.primary)
-                    }
+                    })
                 }
             }
-            .alert("Error", isPresented: $showErrorAlert) {
+            .alert("Error", isPresented: $showErrorAlert, actions: {
                 Button("OK", role: .cancel) {}
-            } message: {
+            }, message: {
                 Text(errorMessage ?? "Unknown error")
-            }
+            })
             .sheet(isPresented: $showingGroupManager) {
                 NavigationStack {
                     GroupManagementView()
@@ -388,14 +388,14 @@ struct ZKSettingsView: View {
             .onAppear {
                 identityCommitment = idm.getIdentity()?.commitment
             }
-            .alert("Delete Identity?", isPresented: $showingDeleteConfirm) {
+            .alert("Delete Identity?", isPresented: $showingDeleteConfirm, actions: {
                 Button("Delete", role: .destructive) {
                     // TODO: Implement identity deletion
                 }
                 Button("Cancel", role: .cancel) {}
-            } message: {
+            }, message: {
                 Text("This will permanently delete your ZK identity. This action cannot be undone.")
-            }
+            })
         }
     }
 }

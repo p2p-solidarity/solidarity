@@ -3,106 +3,7 @@ import Combine
 import LocalAuthentication
 import Security
 
-struct UnifiedProfile: Equatable {
-    var zkIdentity: SemaphoreIdentityManager.IdentityBundle?
-    var activeDID: DIDDescriptor?
-    var memberships: [GroupMembership]
-    
-    var isEmpty: Bool {
-        zkIdentity == nil && activeDID == nil
-    }
-}
-
-struct GroupMembership: Equatable, Identifiable {
-    let id: String // Group ID
-    let name: String
-    let status: MembershipStatus
-    let memberIndex: Int?
-    
-    enum MembershipStatus: String, Equatable {
-        case active
-        case outdated
-        case pending
-        case notMember
-    }
-}
-
-struct IdentityState: Equatable {
-    struct VerificationEvent: Equatable {
-        let cardId: UUID
-        let status: VerificationStatus
-        let timestamp: Date
-    }
-
-    struct ImportEvent: Equatable {
-        let kind: IdentityImportKind
-        let summary: String
-        let timestamp: Date
-    }
-
-    struct OIDCEvent: Equatable {
-        enum Kind: String {
-            case requestCreated
-            case credentialImported
-            case error
-        }
-
-        let kind: Kind
-        let state: String
-        let message: String
-        let timestamp: Date
-    }
-
-    var isLoading: Bool
-    var currentProfile: UnifiedProfile
-    
-    // Legacy/Internal state
-    var didDocument: DIDDocument?
-    var cachedDocuments: [String: DIDDocument]
-    var cachedJwks: [String: PublicKeyJWK]
-    var verificationCache: [UUID: VerificationStatus]
-    var lastVerificationUpdate: VerificationEvent?
-    var lastImportEvent: ImportEvent?
-    var lastError: CardError?
-    var activeOIDCRequests: [String: OIDCService.PresentationRequest]
-    var lastOIDCEvent: OIDCEvent?
-}
-
-enum IdentityImportKind: String {
-    case oidcResponse
-    case qrPayload
-    case file
-    case clipboard
-}
-
-enum IdentityImportSource {
-    case oidcResponse(URL)
-    case qrPayload(String)
-    case fileURL(URL)
-    case clipboard(String)
-
-    var kind: IdentityImportKind {
-        switch self {
-        case .oidcResponse: return .oidcResponse
-        case .qrPayload: return .qrPayload
-        case .fileURL: return .file
-        case .clipboard: return .clipboard
-        }
-    }
-}
-
-struct IdentityImportResult: Equatable {
-    enum Payload: Equatable {
-        case didDocument(DIDDocument)
-        case publicJwk(PublicKeyJWK, did: String?)
-        case zkIdentity(SemaphoreIdentityManager.IdentityBundle)
-        case credential(VCLibrary.StoredCredential)
-        case presentationRequest(OIDCService.PresentationRequest)
-    }
-
-    let payload: Payload
-    let message: String
-}
+// IdentityState and related types moved to IdentityState.swift
 
 /// Coordinates DID, JWK, and Semaphore identity state across services and UI layers.
 final class IdentityCoordinator: ObservableObject {
@@ -134,6 +35,7 @@ final class IdentityCoordinator: ObservableObject {
     private let groupManager: SemaphoreGroupManager
     private let cacheStore: IdentityCacheStore
     private let queue = DispatchQueue(label: "com.kidneyweakx.airmeishi.identity-coordinator", qos: .userInitiated)
+    private let importHelper: IdentityImportHelper
     private let verificationSubject: CurrentValueSubject<[UUID: VerificationStatus], Never>
     private let verificationUpdateSubject = PassthroughSubject<IdentityState.VerificationEvent, Never>()
     private let oidcEventSubject = PassthroughSubject<IdentityState.OIDCEvent, Never>()
@@ -156,6 +58,11 @@ final class IdentityCoordinator: ObservableObject {
         self.semaphoreManager = semaphoreManager
         self.groupManager = groupManager
         self.cacheStore = cacheStore
+        self.importHelper = IdentityImportHelper(
+            oidcService: oidcService,
+            vcService: vcService,
+            semaphoreManager: semaphoreManager
+        )
 
         let cachedDocs = cacheStore.loadDocuments()
         let cachedJwks = cacheStore.loadJwks()
@@ -388,7 +295,7 @@ final class IdentityCoordinator: ObservableObject {
         completion: ((CardResult<IdentityImportResult>) -> Void)? = nil
     ) {
         queue.async {
-            let payloadResult = self.resolvePayload(from: source, context: context)
+            let payloadResult = self.importHelper.resolvePayload(from: source, context: context)
             let result = payloadResult.map { self.makeResult(from: $0, source: source) }
 
             DispatchQueue.main.async {
@@ -525,146 +432,7 @@ final class IdentityCoordinator: ObservableObject {
         }
     }
 
-    private func resolvePayload(
-        from source: IdentityImportSource,
-        context: LAContext?
-    ) -> CardResult<IdentityImportResult.Payload> {
-        switch source {
-        case .oidcResponse(let url):
-            return oidcService.handleResponse(url: url, vcService: vcService)
-                .map { .credential($0.storedCredential) }
-
-        case .qrPayload(let raw), .clipboard(let raw):
-            return parseRawPayload(raw)
-
-        case .fileURL(let url):
-            do {
-                let data = try Data(contentsOf: url)
-                if let string = String(data: data, encoding: .utf8), !string.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                    return parseRawPayload(string)
-                }
-                return parseBinaryPayload(data)
-            } catch {
-                return .failure(.invalidData("Failed to read identity file: \(error.localizedDescription)"))
-            }
-        }
-    }
-
-    private func parseRawPayload(_ raw: String, allowBase64Retry: Bool = true) -> CardResult<IdentityImportResult.Payload> {
-        let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else {
-            return .failure(.invalidData("Import payload is empty"))
-        }
-
-        if let url = URL(string: trimmed), trimmed.hasPrefix("airmeishi://oidc") {
-            return resolvePayload(from: .oidcResponse(url), context: nil)
-        }
-
-        if trimmed.hasPrefix("openid-vc://") || trimmed.hasPrefix("openid://") {
-            return oidcService.parseRequest(from: trimmed)
-                .map { .presentationRequest($0) }
-        }
-
-        if let data = trimmed.data(using: .utf8) {
-            let decoder = JSONDecoder()
-            decoder.keyDecodingStrategy = .useDefaultKeys
-
-            if let document = try? decoder.decode(DIDDocument.self, from: data) {
-                return .success(.didDocument(document))
-            }
-
-            if let jwk = try? decoder.decode(PublicKeyJWK.self, from: data) {
-                return .success(.publicJwk(jwk, did: nil))
-            }
-
-            if let payload = parseEnvelopePayload(from: data) {
-                return payload
-            }
-        }
-
-        let jwtSegments = trimmed.split(separator: ".")
-        if jwtSegments.count == 3 {
-            return importCredential(jwt: trimmed)
-        }
-
-        if allowBase64Retry, let data = Data(base64Encoded: trimmed) {
-            if data.count == 32 || data.count == 64 {
-                return importSemaphoreIdentity(privateKey: data)
-            }
-
-            if let string = String(data: data, encoding: .utf8), string != trimmed {
-                return parseRawPayload(string, allowBase64Retry: false)
-            }
-        }
-
-        return .failure(.invalidData("Unsupported identity payload format"))
-    }
-
-    private func parseBinaryPayload(_ data: Data) -> CardResult<IdentityImportResult.Payload> {
-        if data.count == 32 || data.count == 64 {
-            return importSemaphoreIdentity(privateKey: data)
-        }
-
-        if let string = String(data: data, encoding: .utf8) {
-            return parseRawPayload(string)
-        }
-
-        return .failure(.invalidData("Binary payload cannot be parsed as identity data"))
-    }
-
-    private func parseEnvelopePayload(from data: Data) -> CardResult<IdentityImportResult.Payload>? {
-        guard
-            let object = try? JSONSerialization.jsonObject(with: data, options: []),
-            let json = object as? [String: Any]
-        else { return nil }
-
-        if let documentJSON = json["document"] {
-            if let docData = try? JSONSerialization.data(withJSONObject: documentJSON),
-               let document = try? JSONDecoder().decode(DIDDocument.self, from: docData) {
-                return .success(.didDocument(document))
-            }
-        }
-
-        if let jwkJSON = json["jwk"] {
-            if let jwkData = try? JSONSerialization.data(withJSONObject: jwkJSON),
-               let jwk = try? JSONDecoder().decode(PublicKeyJWK.self, from: jwkData) {
-                let didHint = json["did"] as? String
-                return .success(.publicJwk(jwk, did: didHint))
-            }
-        }
-
-        if let jwkString = json["jwk"] as? String,
-           let jwkData = jwkString.data(using: .utf8),
-           let jwk = try? JSONDecoder().decode(PublicKeyJWK.self, from: jwkData) {
-            let didHint = json["did"] as? String
-            return .success(.publicJwk(jwk, did: didHint))
-        }
-
-        if let privateKey = json["privateKey"] as? String ?? json["semaphorePrivateKey"] as? String,
-           let data = Data(base64Encoded: privateKey) {
-            return importSemaphoreIdentity(privateKey: data)
-        }
-
-        if let credential = json["credential"] as? String {
-            return importCredential(jwt: credential)
-        }
-
-        return nil
-    }
-
-    private func importCredential(jwt: String) -> CardResult<IdentityImportResult.Payload> {
-        vcService.importPresentedCredential(jwt: jwt)
-            .map { .credential($0.storedCredential) }
-    }
-
-    private func importSemaphoreIdentity(privateKey: Data) -> CardResult<IdentityImportResult.Payload> {
-        do {
-            let bundle = try semaphoreManager.importIdentity(privateKey: privateKey)
-            return .success(.zkIdentity(bundle))
-        } catch {
-            return .failure(.cryptographicError("Failed to import Semaphore identity: \(error.localizedDescription)"))
-        }
-    }
+    // Payload resolution logic moved to IdentityImportHelper
 
     private func makeResult(from payload: IdentityImportResult.Payload, source: IdentityImportSource) -> IdentityImportResult {
         let message: String

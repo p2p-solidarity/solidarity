@@ -38,11 +38,11 @@ struct OIDCRequestView: View {
                         .multilineTextAlignment(.center)
                         .padding(.horizontal)
                         .contextMenu {
-                            Button {
+                            Button(action: {
                                 UIPasteboard.general.string = url.absoluteString
-                            } label: {
+                            }, label: {
                                 Label("Copy URL", systemImage: "doc.on.doc")
-                            }
+                            })
                         }
                 }
                 

@@ -20,11 +20,11 @@ struct SettingsView: View {
         NavigationStack {
             Form {
                 Section("Appearance") {
-                    NavigationLink {
+                    NavigationLink(destination: {
                         AppearanceSettingsView()
-                    } label: {
+                    }, label: {
                         Label("Card Appearance", systemImage: "paintbrush.fill")
-                    }
+                    })
                 }
                 
                 Section("Privacy & Security") {
@@ -45,11 +45,11 @@ struct SettingsView: View {
                             }
                         )
                         
-                        NavigationLink {
+                        NavigationLink(destination: {
                             PrivacySettingsView(sharingPreferences: sharingBinding)
-                        } label: {
+                        }, label: {
                             Label("Privacy Settings", systemImage: "lock.shield.fill")
-                        }
+                        })
                     } else {
                         Text("Please create a card to configure privacy settings")
                             .foregroundColor(.secondary)
@@ -57,17 +57,17 @@ struct SettingsView: View {
                 }
                 
                 Section("Data") {
-                    NavigationLink {
+                    NavigationLink(destination: {
                         BackupSettingsView()
-                    } label: {
+                    }, label: {
                         Label("Backup & Restore", systemImage: "icloud.fill")
-                    }
+                    })
                     
-                    NavigationLink {
+                    NavigationLink(destination: {
                         VCSettingsView()
-                    } label: {
+                    }, label: {
                         Label("VC Management", systemImage: "doc.text.fill")
-                    }
+                    })
                 }
                 
                 Section("About") {

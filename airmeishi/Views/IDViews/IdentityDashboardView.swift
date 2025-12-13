@@ -65,11 +65,11 @@ struct IdentityDashboardView: View {
             .navigationTitle("Identity Center")
             .toolbar {
                 ToolbarItem(placement: .navigationBarTrailing) {
-                    Button {
+                    Button(action: {
                         coordinator.refreshIdentity()
-                    } label: {
+                    }, label: {
                         Image(systemName: "arrow.clockwise")
-                    }
+                    })
                 }
             }
         }
@@ -98,9 +98,9 @@ struct IdentityDashboardView: View {
     private var tabSwitcher: some View {
         HStack(spacing: 10) {
             ForEach(sections) { section in
-                Button {
+                Button(action: {
                     selection = section
-                } label: {
+                }, label: {
                     HStack(spacing: 6) {
                         Image(systemName: section.systemImage)
                         Text(section.title)
@@ -113,7 +113,7 @@ struct IdentityDashboardView: View {
                         RoundedRectangle(cornerRadius: 12, style: .continuous)
                             .fill(selection == section ? Color.accentColor.opacity(0.15) : Color(.secondarySystemBackground))
                     )
-                }
+                })
                 .frame(maxWidth: .infinity)
                 .buttonStyle(.plain)
                 .contentShape(RoundedRectangle(cornerRadius: 12, style: .continuous))

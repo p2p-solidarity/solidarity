@@ -163,11 +163,11 @@ struct SelectiveDisclosureSettingsView: View {
     private var levelPicker: some View {
         HStack(spacing: 0) {
             ForEach(SharingLevel.allCases) { level in
-                Button {
+                Button(action: {
                     withAnimation {
                         selectedLevel = level
                     }
-                } label: {
+                }, label: {
                     VStack(spacing: 6) {
                         Image(systemName: level.icon)
                             .font(.system(size: 18, weight: .medium))
@@ -181,7 +181,7 @@ struct SelectiveDisclosureSettingsView: View {
                         RoundedRectangle(cornerRadius: 8)
                             .fill(selectedLevel == level ? Color.accentColor.opacity(0.1) : Color.clear)
                     )
-                }
+                })
             }
         }
         .padding(4)

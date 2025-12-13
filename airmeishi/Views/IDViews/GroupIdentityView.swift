@@ -54,19 +54,19 @@ struct GroupIdentityView: View {
 
     private var actionsSection: some View {
         Section("Actions") {
-            Button {
+            Button(action: {
                 showJoinSheet = true
-            } label: {
+            }, label: {
                 Label("Join Group", systemImage: "person.badge.plus")
-            }
+            })
             
-            Button {
+            Button(action: {
                 Task {
                     try? await groupManager.fetchLatestChanges()
                 }
-            } label: {
+            }, label: {
                 Label("Refresh Groups", systemImage: "arrow.clockwise")
-            }
+            })
         }
         .sheet(isPresented: $showJoinSheet) {
             GroupJoinSheet()

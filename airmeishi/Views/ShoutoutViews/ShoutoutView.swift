@@ -152,7 +152,7 @@ struct ShoutoutView: View {
                 }
                 
                 // Filter button
-                Menu {
+                Menu(content: {
                     Button(action: { chartService.filterOption = .all }) {
                         Label("All Cards", systemImage: "rectangle.stack")
                     }
@@ -162,14 +162,14 @@ struct ShoutoutView: View {
                     Button(action: { chartService.filterOption = .recent }) {
                         Label("Recently Added", systemImage: "clock")
                     }
-                } label: {
+                }, label: {
                     HStack {
                         Image(systemName: "line.3.horizontal.decrease.circle")
                         Text(chartService.filterOption.rawValue)
                     }
                     .font(.caption)
                     .foregroundColor(.gray)
-                }
+                })
             }
             .padding(.horizontal, 16)
             .padding(.vertical, 12)

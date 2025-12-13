@@ -44,9 +44,9 @@ struct GroupJoinSheet: View {
                 }
                 
                 Section {
-                    Button {
+                    Button(action: {
                         joinGroup()
-                    } label: {
+                    }, label: {
                         if isJoining {
                             HStack {
                                 Text("Joining...")
@@ -56,15 +56,15 @@ struct GroupJoinSheet: View {
                         } else {
                             Text("Join Group")
                         }
-                    }
+                    })
                     .disabled(inviteToken.isEmpty || isJoining)
                 }
                 Section {
-                    Button {
+                    Button(action: {
                         showingScanner = true
-                    } label: {
+                    }, label: {
                         Label("Scan QR Code", systemImage: "qrcode.viewfinder")
-                    }
+                    })
                 }
             }
             .navigationTitle("Join Group")
