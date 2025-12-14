@@ -303,3 +303,64 @@ struct ContactRowView: View {
     }
   }
 }
+
+// MARK: - Shoutout Info Row
+
+struct ShoutoutInfoRow: View {
+  let icon: String
+  let title: String
+  let value: String
+
+  var body: some View {
+    HStack {
+      Image(systemName: icon)
+        .foregroundColor(.white)
+        .frame(width: 20)
+
+      VStack(alignment: .leading, spacing: 2) {
+        Text(title)
+          .font(.subheadline)
+          .foregroundColor(.white)
+
+        Text(value)
+          .font(.caption)
+          .foregroundColor(.gray)
+      }
+
+      Spacer()
+    }
+  }
+}
+
+// MARK: - Date Formatter Extension
+
+extension DateFormatter {
+  static let relativeDate: DateFormatter = {
+    let formatter = DateFormatter()
+    formatter.dateStyle = .medium
+    formatter.timeStyle = .short
+    formatter.doesRelativeDateFormatting = true
+    return formatter
+  }()
+}
+
+// MARK: - Activity View Controller
+
+struct ActivityViewController: UIViewControllerRepresentable {
+  var activityItems: [Any]
+  var applicationActivities: [UIActivity]?
+
+  func makeUIViewController(
+    context: UIViewControllerRepresentableContext<ActivityViewController>
+  ) -> UIActivityViewController {
+    UIActivityViewController(
+      activityItems: activityItems,
+      applicationActivities: applicationActivities
+    )
+  }
+
+  func updateUIViewController(
+    _ uiViewController: UIActivityViewController,
+    context: UIViewControllerRepresentableContext<ActivityViewController>
+  ) {}
+}

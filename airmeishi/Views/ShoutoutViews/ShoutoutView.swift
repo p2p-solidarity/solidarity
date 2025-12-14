@@ -68,6 +68,9 @@ struct ShoutoutView: View {
     .onAppear {
       startSakuraAnimation()
     }
+    .sheet(item: $selectedUser) { user in
+      ShoutoutDetailView(user: user)
+    }
   }
 
   // MARK: - Sakura Header
