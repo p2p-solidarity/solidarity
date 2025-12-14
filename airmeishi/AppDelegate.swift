@@ -19,7 +19,29 @@ class AppDelegate: UIResponder, UIApplicationDelegate, UNUserNotificationCenterD
           }
         }
       }
+
+    // 2. Clear badge on app launch
+    clearBadge()
+
+    // 3. Register for foreground notification to clear badge
+    NotificationCenter.default.addObserver(
+      self,
+      selector: #selector(clearBadge),
+      name: UIScene.didActivateNotification,
+      object: nil
+    )
+
     return true
+  }
+
+  @objc private func clearBadge() {
+    DispatchQueue.main.async {
+      UNUserNotificationCenter.current().setBadgeCount(0) { error in
+        if let error {
+          print("[AppDelegate] Failed to clear badge: \(error)")
+        }
+      }
+    }
   }
 
   // A. Initialization - Get Device Token
@@ -144,5 +166,34 @@ extension AppDelegate {
       // Other cases (Background / Lock Screen / Other notification types): Show system notification normally
       completionHandler([.banner, .sound, .badge])
     }
+  }
+
+  // Handle notification tap (when user interacts with a notification)
+  func userNotificationCenter(
+    _ center: UNUserNotificationCenter,
+    didReceive response: UNNotificationResponse,
+    withCompletionHandler completionHandler: @escaping () -> Void
+  ) {
+    // Clear badge when notification is tapped
+    UNUserNotificationCenter.current().setBadgeCount(0) { error in
+      if let error {
+        print("[AppDelegate] Failed to clear badge on notification tap: \(error)")
+      }
+    }
+
+    let userInfo = response.notification.request.content.userInfo
+
+    // Handle Sakura backend pushes (containing message_id)
+    if userInfo["message_id"] != nil {
+      Task {
+        do {
+          _ = try await MessageService.shared.processIncomingMessages()
+        } catch {
+          print("[AppDelegate] Failed to process incoming Sakura messages: \(error)")
+        }
+      }
+    }
+
+    completionHandler()
   }
 }
