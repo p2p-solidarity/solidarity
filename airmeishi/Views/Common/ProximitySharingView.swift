@@ -46,7 +46,7 @@ struct ProximitySharingView: View {
             .font(.footnote)
             .foregroundColor(Color.white.opacity(0.8))
             .multilineTextAlignment(.center)
-            .padding(.horizontal, 24)
+            .adaptivePadding(horizontal: 24, vertical: 0)
         }
 
         VStack(spacing: 12) {
@@ -91,10 +91,11 @@ struct ProximitySharingView: View {
           }
           .padding(.bottom, 20)
         }
-        .padding(.horizontal, 24)
+        .adaptivePadding(horizontal: 24, vertical: 0)
 
         Spacer()
       }
+      .adaptiveMaxWidth(500)
 
       // Close button
       VStack {

@@ -164,7 +164,8 @@ extension BusinessCardListView {
               onAddToWallet: { addToWallet(card) }
             )
             .frame(height: 220)
-            .padding(.horizontal, 16)
+            .adaptivePadding(horizontal: 16, vertical: 0)
+            .adaptiveMaxWidth(500)
             .onTapGesture {
               handleFocus(card)
             }
@@ -173,6 +174,7 @@ extension BusinessCardListView {
           Spacer()
             .frame(height: max(0, (geometry.size.height - 220) / 2 - 100))
         }
+        .frame(maxWidth: .infinity)
       }
     }
   }
@@ -256,7 +258,7 @@ extension BusinessCardListView {
           )
           .cardGlow(theme.cardAccent, enabled: theme.enableGlow)
       )
-      .padding(.horizontal, 16)
+      .adaptivePadding(horizontal: 16, vertical: 0)
       .padding(.top, 10)
     }
   }
@@ -281,7 +283,7 @@ extension BusinessCardListView {
         onDelete: { deleteCard(card) },
         onClose: { withAnimation { isFeatured = false } }
       )
-      .padding(.horizontal, 20)
+      .adaptivePadding(horizontal: 20, vertical: 0)
       .transition(.scale.combined(with: .opacity))
     }
   }
@@ -323,7 +325,7 @@ extension BusinessCardListView {
               .stroke(Color.white.opacity(0.2), lineWidth: 1)
           )
       )
-      .padding(.horizontal, 16)
+      .adaptivePadding(horizontal: 16, vertical: 0)
     }
   }
 

@@ -174,7 +174,7 @@ struct ShoutoutView: View {
           }
         )
       }
-      .padding(.horizontal, 16)
+      .adaptivePadding(horizontal: 16, vertical: 0)
       .padding(.vertical, 12)
       .background(
         RoundedRectangle(cornerRadius: 12)
@@ -246,13 +246,7 @@ struct ShoutoutView: View {
   }
 
   private var gridView: some View {
-    LazyVGrid(
-      columns: [
-        GridItem(.flexible(), spacing: 16),
-        GridItem(.flexible(), spacing: 16),
-      ],
-      spacing: 16
-    ) {
+    AdaptiveGrid(spacing: 16) {
       ForEach(chartService.filteredData) { dataPoint in
         LighteningCardView(
           dataPoint: dataPoint,
@@ -266,7 +260,7 @@ struct ShoutoutView: View {
         }
       }
     }
-    .padding(.horizontal)
+    .adaptivePadding(horizontal: 16, vertical: 0)
   }
 
   private var listView: some View {
@@ -284,7 +278,8 @@ struct ShoutoutView: View {
         }
       }
     }
-    .padding(.horizontal)
+    .adaptivePadding(horizontal: 16, vertical: 0)
+    .adaptiveMaxWidth(800)
   }
 
   // MARK: - Animation Control

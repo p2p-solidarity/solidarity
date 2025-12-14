@@ -91,6 +91,7 @@ struct SettingsView: View {
           }
         }
       }
+      .adaptiveMaxWidth(700)
       .navigationTitle("Settings")
     }
   }

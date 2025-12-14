@@ -97,6 +97,7 @@ struct BusinessCardFormView: View {
             }
           }
         }
+        .adaptiveMaxWidth(700)
         .opacity(isInitializing ? 0 : 1)
 
         if isInitializing {

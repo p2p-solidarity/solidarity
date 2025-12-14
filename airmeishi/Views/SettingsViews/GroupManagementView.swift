@@ -102,7 +102,7 @@ struct GroupManagementView: View {
                 .stroke(Color.white.opacity(0.15), lineWidth: 1)
             )
         )
-        .padding(.horizontal, 20)
+        .adaptivePadding(horizontal: 20, vertical: 0)
         .padding(.top, 20)
         .padding(.bottom, 24)
 
@@ -158,7 +158,7 @@ struct GroupManagementView: View {
             RoundedRectangle(cornerRadius: 12)
               .stroke(Color.yellow.opacity(0.3), lineWidth: 1)
           )
-          .padding(.horizontal, 20)
+          .adaptivePadding(horizontal: 20, vertical: 0)
           .padding(.bottom, 16)
         }
 
@@ -191,7 +191,7 @@ struct GroupManagementView: View {
                     .stroke(Color.white.opacity(0.12), lineWidth: 1)
                 )
             )
-            .padding(.horizontal, 20)
+            .adaptivePadding(horizontal: 20, vertical: 0)
 
             // Your Groups List (Categorized)
             YourGroupsSectionView(
@@ -227,7 +227,7 @@ struct GroupManagementView: View {
                     .stroke(Color.white.opacity(0.12), lineWidth: 1)
                 )
             )
-            .padding(.horizontal, 20)
+            .adaptivePadding(horizontal: 20, vertical: 0)
             .padding(.bottom, 40)
           }
         }
@@ -235,6 +235,7 @@ struct GroupManagementView: View {
           try? await groupManager.fetchLatestChanges()
         }
       }
+      .adaptiveMaxWidth(900)
       .safeAreaInset(edge: .top) {
         HStack {
           Button(action: { dismiss() }) {

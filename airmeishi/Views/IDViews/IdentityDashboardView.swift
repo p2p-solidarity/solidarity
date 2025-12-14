@@ -58,8 +58,8 @@ struct IdentityDashboardView: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .animation(.easeInOut(duration: 0.2), value: selection)
       }
-      .padding(.horizontal, 16)
-      .padding(.vertical, 20)
+      .adaptivePadding()
+      .adaptiveMaxWidth(800)
       .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
       .background(Color(.systemGroupedBackground).ignoresSafeArea())
       .navigationTitle("Identity Center")
