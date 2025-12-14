@@ -209,11 +209,14 @@ class MessageService: ObservableObject {
   }
 
   /// Start polling for messages (Simulator only)
-  func startPolling(interval: TimeInterval = 5.0) {
+  /// Uses interval from NotificationSettingsManager if not specified
+  func startPolling(interval: TimeInterval? = nil) {
     stopPolling()
 
-    print("[MessageService] Starting polling (interval: \(interval)s)")
-    pollingTimer = Timer.publish(every: interval, on: .main, in: .common)
+    let pollingInterval =
+      interval ?? TimeInterval(NotificationSettingsManager.shared.syncIntervalSeconds)
+    print("[MessageService] Starting polling (interval: \(pollingInterval)s)")
+    pollingTimer = Timer.publish(every: pollingInterval, on: .main, in: .common)
       .autoconnect()
       .sink { [weak self] _ in
         Task {
@@ -225,6 +228,21 @@ class MessageService: ObservableObject {
           }
         }
       }
+
+    // Listen for auto-sync setting changes
+    NotificationCenter.default.addObserver(
+      forName: .autoSyncSettingChanged,
+      object: nil,
+      queue: .main
+    ) { [weak self] notification in
+      if let enabled = notification.userInfo?["enabled"] as? Bool {
+        if enabled {
+          self?.startPolling()  // Restart with new interval
+        } else {
+          self?.stopPolling()
+        }
+      }
+    }
   }
 
   /// Stop polling

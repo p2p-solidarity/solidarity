@@ -70,8 +70,13 @@ struct MainTabView: View {
         )
       }
     }
-    // New: Sakura secure message toast (only shown when App is active)
+    // New: Sakura secure message toast (only shown when App is active and enabled)
     .onReceive(NotificationCenter.default.publisher(for: .secureMessageReceived)) { notification in
+      // Check if in-app toast is enabled
+      guard NotificationSettingsManager.shared.enableInAppToast else {
+        return
+      }
+
       #if canImport(UIKit)
         // Ensure toast is only shown in foreground to avoid conflict with APNs banner in background/lock screen
         guard UIApplication.shared.applicationState == .active else {

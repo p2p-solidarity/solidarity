@@ -66,6 +66,9 @@ struct ShoutoutDetailView: View {
               // Tags and Skills
               tagsSection
 
+              // Message History
+              messageHistorySection
+
               // Lightening Action Buttons
               lightningActionButtons
             }
@@ -132,13 +135,15 @@ struct ShoutoutDetailView: View {
         // Save to local cache
         SecureMessageStorage.shared.saveLastMessage(text, from: senderName)
 
-        // Show Toast
-        ToastManager.shared.show(
-          title: "Sakura from \(senderName)",
-          message: text,
-          type: .success,
-          duration: 4.0
-        )
+        // Show Toast only if enabled in settings
+        if NotificationSettingsManager.shared.enableInAppToast {
+          ToastManager.shared.show(
+            title: "Sakura from \(senderName)",
+            message: text,
+            type: .success,
+            duration: 4.0
+          )
+        }
       }
     }
   }
@@ -348,6 +353,90 @@ struct ShoutoutDetailView: View {
     .padding()
     .background(Color.white.opacity(0.05))
     .cornerRadius(12)
+  }
+
+  // MARK: - Message History Section
+
+  private var messageHistorySection: some View {
+    let messages = SecureMessageStorage.shared.getMessageHistory(from: user.name)
+
+    return VStack(alignment: .leading, spacing: 12) {
+      HStack {
+        SakuraIconView(size: 20, color: .pink, isAnimating: isSakuraAnimating)
+
+        Text("Message History")
+          .font(.headline)
+          .foregroundColor(.white)
+
+        Spacer()
+
+        if !messages.isEmpty {
+          Text("\(messages.count)")
+            .font(.caption)
+            .foregroundColor(.gray)
+            .padding(.horizontal, 8)
+            .padding(.vertical, 4)
+            .background(Color.white.opacity(0.1))
+            .cornerRadius(8)
+        }
+      }
+
+      if messages.isEmpty {
+        HStack(spacing: 8) {
+          Image(systemName: "bubble.left.and.bubble.right")
+            .foregroundColor(.gray)
+          Text("No message history yet")
+            .font(.body)
+            .foregroundColor(.gray)
+        }
+        .frame(maxWidth: .infinity, alignment: .center)
+        .padding(.vertical, 16)
+      } else {
+        VStack(spacing: 12) {
+          ForEach(messages.prefix(5)) { message in
+            messageRow(message)
+          }
+
+          if messages.count > 5 {
+            Text("+ \(messages.count - 5) more messages")
+              .font(.caption)
+              .foregroundColor(.pink)
+              .frame(maxWidth: .infinity, alignment: .center)
+              .padding(.top, 4)
+          }
+        }
+      }
+    }
+    .padding()
+    .background(Color.white.opacity(0.05))
+    .cornerRadius(12)
+  }
+
+  private func messageRow(_ message: StoredMessage) -> some View {
+    HStack(alignment: .top, spacing: 12) {
+      Circle()
+        .fill(
+          LinearGradient(
+            colors: [.pink.opacity(0.6), .purple.opacity(0.4)],
+            startPoint: .topLeading,
+            endPoint: .bottomTrailing
+          )
+        )
+        .frame(width: 8, height: 8)
+        .padding(.top, 6)
+
+      VStack(alignment: .leading, spacing: 4) {
+        Text(message.text)
+          .font(.body)
+          .foregroundColor(.white)
+          .fixedSize(horizontal: false, vertical: true)
+
+        Text(message.timestamp, style: .relative)
+          .font(.caption2)
+          .foregroundColor(.gray)
+      }
+    }
+    .padding(.vertical, 4)
   }
 
   // MARK: - Sakura Action Buttons

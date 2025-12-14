@@ -120,6 +120,14 @@ class AppDelegate: UIResponder, UIApplicationDelegate, UNUserNotificationCenterD
       return
     }
 
+    // 3. Check if remote notifications are enabled in settings
+    // If disabled, skip processing to avoid being spammed
+    guard NotificationSettingsManager.shared.enableRemoteNotification else {
+      print("[AppDelegate] Remote notifications disabled in settings, skipping message processing")
+      completionHandler(.noData)
+      return
+    }
+
     Task {
       do {
         // Use shared logic in MessageService
@@ -151,6 +159,12 @@ extension AppDelegate {
 
     // Special handling only for Sakura backend pushes (containing message_id)
     if state == .active, userInfo["message_id"] != nil {
+      // Check if remote notifications are enabled
+      guard NotificationSettingsManager.shared.enableRemoteNotification else {
+        completionHandler([])
+        return
+      }
+
       // Foreground: Suppress system banner / sound
       completionHandler([])
 

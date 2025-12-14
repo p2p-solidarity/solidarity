@@ -70,8 +70,11 @@ struct airmeishiApp: App {
     // If APNS fails or is not available (Simulator), we use a generated UUID
 
     #if targetEnvironment(simulator)
-      // On Simulator, we ALWAYS start polling because APNs is not available
-      MessageService.shared.startPolling()
+      // On Simulator, we start polling because APNs is not available
+      // Only start if auto-sync is enabled in settings
+      if NotificationSettingsManager.shared.enableAutoSync {
+        MessageService.shared.startPolling()
+      }
 
       // Also, we force a fallback token update to ensure the backend has a valid token
       // even if one was previously saved (which might be stale or invalid "simulato")

@@ -19,6 +19,17 @@ struct SettingsView: View {
   var body: some View {
     NavigationStack {
       Form {
+        Section("Notifications") {
+          NavigationLink(
+            destination: {
+              NotificationSettingsView()
+            },
+            label: {
+              Label("Notification Settings", systemImage: "bell.fill")
+            }
+          )
+        }
+
         Section("Appearance") {
           NavigationLink(
             destination: {
