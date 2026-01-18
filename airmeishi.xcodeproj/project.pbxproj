@@ -132,10 +132,12 @@
 				F1133D7A2E70600A0097A2A4 /* Sources */,
 				F1133D7B2E70600A0097A2A4 /* Frameworks */,
 				F1133D7C2E70600A0097A2A4 /* Resources */,
+				F12875C72EED71F20001BBFD /* ShellScript */,
 			);
 			buildRules = (
 			);
 			dependencies = (
+				F1286C072EEB580F0001BBFD /* PBXTargetDependency */,
 			);
 			fileSystemSynchronizedGroups = (
 				F1133D802E70600A0097A2A4 /* airmeishi */,
@@ -232,6 +234,7 @@
 				F1134EA32E757CE20097A2A4 /* XCRemoteSwiftPackageReference "SemaphoreSwift" */,
 				F18CDB272EC1F68E005E94B4 /* XCRemoteSwiftPackageReference "sprucekit-mobile" */,
 				F140CFAA2EDB5612009A2F45 /* XCRemoteSwiftPackageReference "WebRTC" */,
+				F1286C052EEB58030001BBFD /* XCRemoteSwiftPackageReference "SwiftLintPlugins" */,
 			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = F1133D7F2E70600A0097A2A4 /* Products */;
@@ -269,6 +272,27 @@
 		};
 /* End PBXResourcesBuildPhase section */
 
+/* Begin PBXShellScriptBuildPhase section */
+		F12875C72EED71F20001BBFD /* ShellScript */ = {
+			isa = PBXShellScriptBuildPhase;
+			alwaysOutOfDate = 1;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputFileListPaths = (
+			);
+			inputPaths = (
+			);
+			outputFileListPaths = (
+			);
+			outputPaths = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "# Type a script or drag a script file from your workspace to insert its path.\nif [ \"$CI\" = \"TRUE\" ]; then\n  echo \"⚠️ CI environment detected. Skipping formatting.\"\n  exit 0\nfi\n\nexport PATH=\"$PATH:/opt/homebrew/bin:/usr/local/bin\"\n\nCHANGED_FILES=$(git status --porcelain | grep \".swift$\" | sed 's/^...//')\n\nif [ -z \"$CHANGED_FILES\" ]; then\n    echo \"✅ No swift files changed. Skipping format.\"\n    exit 0\nfi\n\n# 4. 檢查是否安裝了 swift-format\nif ! command -v swift-format &> /dev/null && ! xcrun --find swift-format &> /dev/null; then\n    echo \"⚠️ warning: swift-format not found.\"\n    exit 0\nfi\n\necho \"🛠️ Formatting changed files...\"\n\necho \"$CHANGED_FILES\" | while read -r file; do\n    if [ -f \"$file\" ]; then\n        xcrun swift-format format --in-place \"$file\"\n    fi\ndone\n\necho \"✅ Formatting completed.\" \"${SRCROOT}/airmeishi\"\n";
+		};
+/* End PBXShellScriptBuildPhase section */
+
 /* Begin PBXSourcesBuildPhase section */
 		F1133D7A2E70600A0097A2A4 /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
@@ -303,6 +327,10 @@
 			isa = PBXTargetDependency;
 			target = F1133D7D2E70600A0097A2A4 /* airmeishi */;
 			targetProxy = F1133D972E70600C0097A2A4 /* PBXContainerItemProxy */;
+		};
+		F1286C072EEB580F0001BBFD /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			productRef = F1286C062EEB580F0001BBFD /* SwiftLintBuildToolPlugin */;
 		};
 /* End PBXTargetDependency section */
 
@@ -464,7 +492,7 @@
 				LD_RUNPATH_SEARCH_PATHS = "@executable_path/Frameworks";
 				"LD_RUNPATH_SEARCH_PATHS[sdk=macosx*]" = "@executable_path/../Frameworks";
 				MACOSX_DEPLOYMENT_TARGET = 15.5;
-				MARKETING_VERSION = 1.1.0;
+				MARKETING_VERSION = 1.1.1;
 				PRODUCT_BUNDLE_IDENTIFIER = kidneyweakx.airmeishi;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				REGISTER_APP_GROUPS = YES;
@@ -514,7 +542,7 @@
 				LD_RUNPATH_SEARCH_PATHS = "@executable_path/Frameworks";
 				"LD_RUNPATH_SEARCH_PATHS[sdk=macosx*]" = "@executable_path/../Frameworks";
 				MACOSX_DEPLOYMENT_TARGET = 15.5;
-				MARKETING_VERSION = 1.1.0;
+				MARKETING_VERSION = 1.1.1;
 				PRODUCT_BUNDLE_IDENTIFIER = kidneyweakx.airmeishi;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				REGISTER_APP_GROUPS = YES;
@@ -671,6 +699,14 @@
 				kind = branch;
 			};
 		};
+		F1286C052EEB58030001BBFD /* XCRemoteSwiftPackageReference "SwiftLintPlugins" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/SimplyDanny/SwiftLintPlugins";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 0.62.2;
+			};
+		};
 		F140CFAA2EDB5612009A2F45 /* XCRemoteSwiftPackageReference "WebRTC" */ = {
 			isa = XCRemoteSwiftPackageReference;
 			repositoryURL = "https://github.com/stasel/WebRTC.git";
@@ -694,6 +730,11 @@
 			isa = XCSwiftPackageProductDependency;
 			package = F1134EA32E757CE20097A2A4 /* XCRemoteSwiftPackageReference "SemaphoreSwift" */;
 			productName = Semaphore;
+		};
+		F1286C062EEB580F0001BBFD /* SwiftLintBuildToolPlugin */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = F1286C052EEB58030001BBFD /* XCRemoteSwiftPackageReference "SwiftLintPlugins" */;
+			productName = "plugin:SwiftLintBuildToolPlugin";
 		};
 		F140CFAB2EDB561E009A2F45 /* WebRTC */ = {
 			isa = XCSwiftPackageProductDependency;

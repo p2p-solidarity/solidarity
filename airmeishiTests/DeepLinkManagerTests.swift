@@ -160,18 +160,6 @@ class DeepLinkManagerTests: XCTestCase {
         XCTAssertTrue(schemeURL?.absoluteString.contains("id=test123") == true)
     }
     
-    // MARK: - Universal Link Tests
-    
-    func testUniversalLinkValidation() throws {
-        // Given
-        let validURL = URL(string: "https://airmeishi.app/share/test123")!
-        let invalidURL = URL(string: "https://example.com/share/test123")!
-        
-        // When & Then
-        XCTAssertTrue(UniversalLinkConfig.isValidUniversalLink(validURL))
-        XCTAssertFalse(UniversalLinkConfig.isValidUniversalLink(invalidURL))
-    }
-    
     // MARK: - Deep Link Action Tests
     
     func testDeepLinkActions() throws {

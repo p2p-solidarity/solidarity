@@ -8,12 +8,15 @@
 import SwiftUI
 
 struct MatchingOrbitView: View {
-    var body: some View {
-        MatchingView()
-    }
+  var body: some View {
+    MatchingView()
+  }
 }
 
 #Preview {
-    ZStack { Color.black.ignoresSafeArea(); MatchingOrbitView().frame(width: 300, height: 300) }
-        .preferredColorScheme(.dark)
+  ZStack {
+    Color.black.ignoresSafeArea()
+    MatchingOrbitView().frame(width: 300, height: 300)
+  }
+  .preferredColorScheme(.dark)
 }

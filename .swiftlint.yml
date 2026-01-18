@@ -1,0 +1,69 @@
+disabled_rules:
+  - todo
+  - type_name
+  - multiple_closures_with_trailing_closure
+  - trailing_comma
+  - inclusive_language
+  - nesting
+  - opening_brace 
+  - unused_optional_binding
+
+opt_in_rules:
+  - empty_count
+  - force_cast
+  - force_unwrapping
+  - redundant_nil_coalescing
+  - non_optional_string_data_conversion
+  - redundant_string_enum_value
+
+included:
+  - airmeishi
+
+excluded:
+  - Pods
+  - DerivedData
+  - Carthage
+  - airmeishiClip
+  - airmeishiTests
+  - airmeishiUITests
+  - "**/Generated"
+  - "**/*generated.swift"
+  - "**/*.generated.swift"
+
+line_length:
+  warning: 160
+  error: 240
+  ignores_function_declarations: true 
+  ignores_comments: true
+  ignores_urls: true
+
+file_length:
+  warning: 600
+  error: 1000
+
+type_body_length:
+  warning: 600
+  error: 1000
+
+function_body_length:
+  warning: 120
+  error: 200
+
+cyclomatic_complexity:
+  warning: 20
+  error: 30
+
+identifier_name:
+  min_length:
+    warning: 1
+    error: 1
+  allowed_symbols: ["_"]
+  excluded:
+    - id
+    - URL
+    - x
+    - y
+    - i
+
+strict: false
+reporter: "xcode"
