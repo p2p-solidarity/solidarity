@@ -61,12 +61,57 @@ struct IDView: View {
               .padding(.bottom, 20)
           }
         }
+<<<<<<< Updated upstream
+=======
+        if profile.zkIdentity == nil {
+            return .idle
+        }
+        return .idle
+    }
+<<<<<<< Updated upstream
+    
+    var body: some View {
+=======
+    return .idle
+  }
+
+  var body: some View {
+    NavigationStack {
+      ZStack {
+        // Background
+        Color(.systemGroupedBackground)
+          .ignoresSafeArea()
+
+        ScrollView {
+          VStack(spacing: 0) {
+            // 1. The Mask (DID Switcher)
+            maskSection
+              .padding(.top, 20)
+              .padding(.bottom, 40)
+
+            // 2. The Core (Ripple Button)
+            coreSection
+
+            Spacer()
+              .frame(height: 40)
+
+            // 3. The Badge (Group Cards)
+            badgeSection
+              .padding(.bottom, 20)
+          }
+        }
+>>>>>>> Stashed changes
       }
       .navigationTitle("ID")
       .navigationBarTitleDisplayMode(.inline)
       .toolbar {
         ToolbarItem(placement: .navigationBarTrailing) {
+<<<<<<< Updated upstream
           HStack {
+=======
+          HStack(spacing: 12) {
+            MatchingBarView()
+>>>>>>> Stashed changes
             Button(
               action: {
                 showingOIDCRequest = true
@@ -79,6 +124,238 @@ struct IDView: View {
 
             Button(
               action: {
+<<<<<<< Updated upstream
+=======
+                coordinator.refreshIdentity()
+              },
+              label: {
+                Image(systemName: "arrow.clockwise")
+                  .foregroundColor(.primary)
+              }
+            )
+          }
+        }
+
+        ToolbarItem(placement: .navigationBarLeading) {
+          Button(
+            action: {
+              showingZKSettings = true
+            },
+            label: {
+              Image(systemName: "gearshape")
+                .foregroundColor(.primary)
+            }
+          )
+        }
+      }
+      .alert(
+        "Error",
+        isPresented: $showErrorAlert,
+        actions: {
+          Button("OK", role: .cancel) {}
+        },
+        message: {
+          Text(errorMessage ?? "Unknown error")
+        }
+      )
+      .sheet(isPresented: $showingGroupManager) {
+>>>>>>> Stashed changes
+        NavigationStack {
+            ZStack {
+                // Background
+                Color(.systemGroupedBackground)
+                    .ignoresSafeArea()
+                
+                ScrollView {
+                    VStack(spacing: 0) {
+                        // 1. The Mask (DID Switcher)
+                        maskSection
+                            .padding(.top, 20)
+                            .padding(.bottom, 40)
+                        
+                        // 2. The Core (Ripple Button)
+                        coreSection
+                        
+                        Spacer()
+                            .frame(height: 40)
+                        
+                        // 3. The Badge (Group Cards)
+                        badgeSection
+                            .padding(.bottom, 20)
+                    }
+                }
+            }
+            .navigationTitle("ID")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .navigationBarTrailing) {
+                    HStack {
+                        Button {
+                            showingOIDCRequest = true
+                        } label: {
+                            Image(systemName: "qrcode")
+                                .foregroundColor(.primary)
+                        }
+                        
+                        Button {
+                            coordinator.refreshIdentity()
+                        } label: {
+                            Image(systemName: "arrow.clockwise")
+                                .foregroundColor(.primary)
+                        }
+                    }
+                }
+                
+                ToolbarItem(placement: .navigationBarLeading) {
+                    Button {
+                        showingZKSettings = true
+                    } label: {
+                        Image(systemName: "gearshape")
+                            .foregroundColor(.primary)
+                    }
+                }
+            }
+            .alert("Error", isPresented: $showErrorAlert) {
+                Button("OK", role: .cancel) {}
+            } message: {
+                Text(errorMessage ?? "Unknown error")
+            }
+            .sheet(isPresented: $showingGroupManager) {
+                NavigationStack {
+                    GroupManagementView()
+                }
+            }
+            .sheet(isPresented: $showingOIDCRequest) {
+                OIDCRequestView()
+            }
+            .sheet(isPresented: $showingZKSettings) {
+                ZKSettingsView()
+            }
+            .onAppear {
+                groupManager.startSyncEngine()
+            }
+        }
+    }
+    
+    // MARK: - 1. The Mask (DID Switcher)
+    
+    private var maskSection: some View {
+        VStack(spacing: 12) {
+            HStack(spacing: 0) {
+                didCapsule(
+                    title: "Anonymous",
+                    subtitle: "did:key",
+                    isActive: isDidKeyActive,
+                    action: { switchDID(.key) }
+                )
+                
+                Divider()
+                    .frame(height: 24)
+                
+                didCapsule(
+                    title: "Public",
+                    subtitle: "did:ethr",
+                    isActive: !isDidKeyActive,
+                    action: { switchDID(.ethr) }
+                )
+            }
+            .background(Color(.secondarySystemBackground))
+            .clipShape(Capsule())
+            .shadow(color: Color.black.opacity(0.05), radius: 5, x: 0, y: 2)
+            
+            // DID String Display
+            if let did = profile.activeDID?.did {
+                Button(action: {
+                    #if canImport(UIKit)
+                    UIPasteboard.general.string = did
+                    #endif
+                }) {
+                    HStack(spacing: 6) {
+                        Text(shortDid(did))
+                            .font(.caption.monospaced())
+                            .foregroundColor(.secondary)
+                        
+                        Image(systemName: "doc.on.doc")
+                            .font(.caption2)
+                            .foregroundColor(.secondary.opacity(0.7))
+                    }
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 4)
+                    .background(Color(.secondarySystemBackground))
+                    .clipShape(Capsule())
+                }
+                .buttonStyle(.plain)
+            }
+        }
+    }
+    
+    private func didCapsule(title: String, subtitle: String, isActive: Bool, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            VStack(spacing: 2) {
+                Text(title)
+                    .font(.subheadline.weight(.medium))
+                    .foregroundColor(isActive ? .black : .secondary)
+                
+                Text(subtitle)
+                    .font(.caption2)
+                    .foregroundColor(isActive ? .black.opacity(0.8) : .secondary.opacity(0.6))
+            }
+            .frame(width: 120, height: 50)
+            .background(isActive ? Color.white : Color.clear)
+            .clipShape(Capsule())
+            .shadow(color: isActive ? Color.black.opacity(0.1) : Color.clear, radius: 2, x: 0, y: 1)
+        }
+        .buttonStyle(.plain)
+        .animation(.spring(response: 0.3, dampingFraction: 0.7), value: isActive)
+    }
+    
+    private var isDidKeyActive: Bool {
+        guard let did = profile.activeDID?.did else { return true }
+        return did.hasPrefix("did:key")
+    }
+    
+    private func switchDID(_ method: DIDService.DIDMethod) {
+        coordinator.switchDID(method: method)
+    }
+    
+    private func shortDid(_ did: String) -> String {
+        guard did.count > 20 else { return did }
+        let start = did.prefix(12)
+        let end = did.suffix(6)
+        return String(start) + "..." + String(end)
+    }
+    
+    // MARK: - 2. The Core (Ripple Button)
+    
+    private var coreSection: some View {
+        RippleButton(
+            state: rippleState,
+            commitment: profile.zkIdentity?.commitment,
+            onTap: handleCoreTap,
+            onLongPress: handleCoreLongPress
+        )
+        .frame(height: 320)
+    }
+    
+    private func handleCoreTap() {
+        if profile.zkIdentity == nil {
+            createIdentity()
+        } else {
+            // Sync logic
+            coordinator.refreshIdentity()
+        }
+    }
+    
+    private func handleCoreLongPress() {
+        showingGroupManager = true
+    }
+    
+    private func createIdentity() {
+        isWorking = true
+        Task { @MainActor in
+            do {
+                _ = try idm.loadOrCreateIdentity()
+>>>>>>> Stashed changes
                 coordinator.refreshIdentity()
               },
               label: {

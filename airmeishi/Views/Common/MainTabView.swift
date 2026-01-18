@@ -163,6 +163,7 @@ struct MainTabView: View {
             .clipShape(Capsule())
             .padding(.bottom, 100)
         }
+<<<<<<< Updated upstream
         .transition(.opacity)
         .animation(.easeInOut(duration: 0.2), value: tabStatus)
       }
@@ -173,6 +174,15 @@ struct MainTabView: View {
         MatchingBarView()
           .padding(.bottom, 90)  // Above native tab bar
       }
+=======
+<<<<<<< Updated upstream
+        .onReceive(deepLinkManager.$pendingAction) { action in
+            handleDeepLinkAction(action)
+=======
+        .transition(.opacity)
+        .animation(.easeInOut(duration: 0.2), value: tabStatus)
+      }
+>>>>>>> Stashed changes
     }
   }
 
@@ -202,6 +212,10 @@ struct MainTabView: View {
         if newTab == 1 {
           showingProximityFullscreen = true
           selectedTab = 0  // Reset to first tab
+<<<<<<< Updated upstream
+=======
+>>>>>>> Stashed changes
+>>>>>>> Stashed changes
         }
       }
 
@@ -219,6 +233,7 @@ struct MainTabView: View {
             .clipShape(Capsule())
             .padding(.bottom, 86)
         }
+<<<<<<< Updated upstream
         .transition(.opacity)
         .animation(.easeInOut(duration: 0.2), value: tabStatus)
       }
@@ -229,6 +244,49 @@ struct MainTabView: View {
         MatchingBarView()
           .padding(.bottom, 80)  // Above custom floating tab bar
       }
+=======
+<<<<<<< Updated upstream
+        .toastOverlay()
+        .onReceive(NotificationCenter.default.publisher(for: .matchingReceivedCard)) { notification in
+            if let card = notification.userInfo?[ProximityEventKey.card] as? BusinessCard {
+                ToastManager.shared.show(
+                    title: "Card Received",
+                    message: "Received business card from \(card.name)",
+                    type: .success
+                )
+            }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .groupInviteReceived)) { notification in
+            if let invite = notification.userInfo?[ProximityEventKey.invite] as? GroupInvitePayload {
+                ToastManager.shared.show(
+                    title: "Group Invite",
+                    message: "Invited to join group: \(invite.groupName)",
+                    type: .info,
+                    duration: 5.0,
+                    action: {
+                        // Action handled by ProximityManager popup usually, 
+                        // but we could add a "View" action here if needed.
+                        // For now, the popup handles it.
+                    }
+                )
+            }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .matchingError)) { notification in
+            if let error = notification.userInfo?[ProximityEventKey.error] as? CardError {
+                ToastManager.shared.show(
+                    title: "Connection Error",
+                    message: error.localizedDescription,
+                    type: .error
+                )
+            }
+        }
+        // New: Sakura secure message toast (only shown when App is active)
+        .onReceive(NotificationCenter.default.publisher(for: .secureMessageReceived)) { notification in
+=======
+        .transition(.opacity)
+        .animation(.easeInOut(duration: 0.2), value: tabStatus)
+      }
+>>>>>>> Stashed changes
     }
   }
 
@@ -249,6 +307,10 @@ struct MainTabView: View {
           }
           if !SemaphoreIdentityManager.proofsSupported {
             // Fallback: copy commitment
+<<<<<<< Updated upstream
+=======
+>>>>>>> Stashed changes
+>>>>>>> Stashed changes
             #if canImport(UIKit)
               DispatchQueue.main.async {
                 UIPasteboard.general.string = bundle.commitment
