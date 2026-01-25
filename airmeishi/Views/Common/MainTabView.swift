@@ -56,7 +56,7 @@ struct MainTabView: View {
           action: {
             // Action handled by ProximityManager popup usually,
             // but we could add a "View" action here if needed.
-            // For now, the popup handles it.
+            // For now, popup handles it.
           }
         )
       }
@@ -78,10 +78,10 @@ struct MainTabView: View {
       }
 
       #if canImport(UIKit)
-        // Ensure toast is only shown in foreground to avoid conflict with APNs banner in background/lock screen
-        guard UIApplication.shared.applicationState == .active else {
-          return
-        }
+      // Ensure toast is only shown in foreground to avoid conflict with APNs banner in background/lock screen
+      guard UIApplication.shared.applicationState == .active else {
+        return
+      }
       #endif
 
       let sender = notification.userInfo?[MessageEventKey.senderName] as? String
@@ -163,7 +163,6 @@ struct MainTabView: View {
             .clipShape(Capsule())
             .padding(.bottom, 100)
         }
-<<<<<<< Updated upstream
         .transition(.opacity)
         .animation(.easeInOut(duration: 0.2), value: tabStatus)
       }
@@ -174,19 +173,10 @@ struct MainTabView: View {
         MatchingBarView()
           .padding(.bottom, 90)  // Above native tab bar
       }
-=======
-<<<<<<< Updated upstream
-        .onReceive(deepLinkManager.$pendingAction) { action in
-            handleDeepLinkAction(action)
-=======
-        .transition(.opacity)
-        .animation(.easeInOut(duration: 0.2), value: tabStatus)
-      }
->>>>>>> Stashed changes
     }
   }
 
-  // MARK: - Custom Tab View (iOS < 16)
+  // MARK: - Custom Tab View (iOS < 26)
   private var customTabView: some View {
     ZStack(alignment: .bottom) {
       TabView(selection: $selectedTab) {
@@ -212,10 +202,6 @@ struct MainTabView: View {
         if newTab == 1 {
           showingProximityFullscreen = true
           selectedTab = 0  // Reset to first tab
-<<<<<<< Updated upstream
-=======
->>>>>>> Stashed changes
->>>>>>> Stashed changes
         }
       }
 
@@ -233,7 +219,6 @@ struct MainTabView: View {
             .clipShape(Capsule())
             .padding(.bottom, 86)
         }
-<<<<<<< Updated upstream
         .transition(.opacity)
         .animation(.easeInOut(duration: 0.2), value: tabStatus)
       }
@@ -244,49 +229,6 @@ struct MainTabView: View {
         MatchingBarView()
           .padding(.bottom, 80)  // Above custom floating tab bar
       }
-=======
-<<<<<<< Updated upstream
-        .toastOverlay()
-        .onReceive(NotificationCenter.default.publisher(for: .matchingReceivedCard)) { notification in
-            if let card = notification.userInfo?[ProximityEventKey.card] as? BusinessCard {
-                ToastManager.shared.show(
-                    title: "Card Received",
-                    message: "Received business card from \(card.name)",
-                    type: .success
-                )
-            }
-        }
-        .onReceive(NotificationCenter.default.publisher(for: .groupInviteReceived)) { notification in
-            if let invite = notification.userInfo?[ProximityEventKey.invite] as? GroupInvitePayload {
-                ToastManager.shared.show(
-                    title: "Group Invite",
-                    message: "Invited to join group: \(invite.groupName)",
-                    type: .info,
-                    duration: 5.0,
-                    action: {
-                        // Action handled by ProximityManager popup usually, 
-                        // but we could add a "View" action here if needed.
-                        // For now, the popup handles it.
-                    }
-                )
-            }
-        }
-        .onReceive(NotificationCenter.default.publisher(for: .matchingError)) { notification in
-            if let error = notification.userInfo?[ProximityEventKey.error] as? CardError {
-                ToastManager.shared.show(
-                    title: "Connection Error",
-                    message: error.localizedDescription,
-                    type: .error
-                )
-            }
-        }
-        // New: Sakura secure message toast (only shown when App is active)
-        .onReceive(NotificationCenter.default.publisher(for: .secureMessageReceived)) { notification in
-=======
-        .transition(.opacity)
-        .animation(.easeInOut(duration: 0.2), value: tabStatus)
-      }
->>>>>>> Stashed changes
     }
   }
 
@@ -307,14 +249,10 @@ struct MainTabView: View {
           }
           if !SemaphoreIdentityManager.proofsSupported {
             // Fallback: copy commitment
-<<<<<<< Updated upstream
-=======
->>>>>>> Stashed changes
->>>>>>> Stashed changes
             #if canImport(UIKit)
-              DispatchQueue.main.async {
-                UIPasteboard.general.string = bundle.commitment
-              }
+            DispatchQueue.main.async {
+              UIPasteboard.general.string = bundle.commitment
+            }
             #endif
             DispatchQueue.main.async {
               tabStatus = "Commitment copied"
@@ -334,9 +272,9 @@ struct MainTabView: View {
           )
           // Copy result to clipboard for convenience
           #if canImport(UIKit)
-            DispatchQueue.main.async {
-              UIPasteboard.general.string = proof
-            }
+          DispatchQueue.main.async {
+            UIPasteboard.general.string = proof
+          }
           #endif
           DispatchQueue.main.async {
             tabStatus = "ID proof copied"
@@ -387,19 +325,19 @@ struct MainTabView: View {
   private func nativeTabItem(systemName: String, title: String, customIcon: String? = nil) -> some View {
     if let customIcon = customIcon, customIcon == "sakura-white", systemName.isEmpty {
       #if canImport(UIKit)
-        if let sakuraImage = SakuraIconView.renderAsImage(size: 22, color: .white) {
-          Label {
-            Text(title)
-          } icon: {
-            Image(uiImage: sakuraImage)
-              .renderingMode(.template)
-              .foregroundColor(.white)
-          }
-        } else {
-          Label(title, systemImage: "star")
+      if let sakuraImage = SakuraIconView.renderAsImage(size: 22, color: .white) {
+        Label {
+          Text(title)
+        } icon: {
+          Image(uiImage: sakuraImage)
+            .renderingMode(.template)
+            .foregroundColor(.white)
         }
-      #else
+      } else {
         Label(title, systemImage: "star")
+      }
+      #else
+      Label(title, systemImage: "star")
       #endif
     } else {
       Label(title, systemImage: systemName)
