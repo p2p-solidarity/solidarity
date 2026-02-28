@@ -32,7 +32,10 @@ struct ShareCardPickerSheet: View {
         }
         if let card = firstCard {
           Section("Preview") {
-            BusinessCardPreview(businessCard: card.filteredCard(for: level))
+            BusinessCardSummary(
+              businessCard: card.filteredCard(for: level),
+              sharingLevel: level
+            )
           }
         } else {
           Section {

@@ -7,6 +7,7 @@ final class QRCodeScanService: NSObject {
     let card: BusinessCard?
     let verificationStatus: VerificationStatus?
     let sealedRoute: String?
+    let route: ScanRoute
   }
 
   var onScanOutcome: ((Result<ScanOutcome, CardError>) -> Void)?
@@ -16,6 +17,7 @@ final class QRCodeScanService: NSObject {
   private let vcService = VCService()
   private let proofManager = ProofGenerationManager.shared
   private let identityCoordinator = IdentityCoordinator.shared
+  private let scanRouter = ScanRouterService.shared
 
   private var captureSession: AVCaptureSession?
   private var previewLayer: AVCaptureVideoPreviewLayer?
@@ -91,13 +93,31 @@ final class QRCodeScanService: NSObject {
   // MARK: - Processing
 
   func process(scannedString data: String) {
+    let route = scanRouter.route(for: data)
+    switch route {
+    case .oid4vpRequest(let request):
+      handleOID4VPRequest(request)
+      return
+    case .vpToken(let token):
+      handleVPToken(token)
+      return
+    case .credentialOffer(let offer):
+      onScanOutcome?(.success(ScanOutcome(card: nil, verificationStatus: .pending, sealedRoute: nil, route: .credentialOffer(offer))))
+      return
+    case .siopRequest(let request):
+      handleOIDCRequest(request, route: .siopRequest(request))
+      return
+    case .businessCard, .unknown:
+      break
+    }
+
     if let url = URL(string: data), url.scheme == "airmeishi", url.host == "oidc" {
       handleOIDCResponse(url: url)
       return
     }
 
     if data.hasPrefix("openid-vc://") || data.hasPrefix("openid://") {
-      handleOIDCRequest(data)
+      handleOIDCRequest(data, route: .siopRequest(data))
       return
     }
 
@@ -142,7 +162,8 @@ final class QRCodeScanService: NSObject {
           ScanOutcome(
             card: card,
             verificationStatus: .unverified,
-            sealedRoute: sealedRoute
+            sealedRoute: sealedRoute,
+            route: .businessCard
           )
         )
       )
@@ -213,7 +234,8 @@ final class QRCodeScanService: NSObject {
           ScanOutcome(
             card: payload.businessCard,
             verificationStatus: .failed,
-            sealedRoute: payload.sealedRoute
+            sealedRoute: payload.sealedRoute,
+            route: .businessCard
           )
         )
       }
@@ -224,7 +246,8 @@ final class QRCodeScanService: NSObject {
       ScanOutcome(
         card: payload.businessCard,
         verificationStatus: status,
-        sealedRoute: payload.sealedRoute
+        sealedRoute: payload.sealedRoute,
+        route: .businessCard
       )
     )
   }
@@ -243,7 +266,7 @@ final class QRCodeScanService: NSObject {
         status = .unverified
       }
       identityCoordinator.updateVerificationStatus(for: imported.businessCard.id, status: status)
-      return .success(ScanOutcome(card: imported.businessCard, verificationStatus: status, sealedRoute: nil))
+      return .success(ScanOutcome(card: imported.businessCard, verificationStatus: status, sealedRoute: nil, route: .businessCard))
     }
   }
 
@@ -265,7 +288,34 @@ final class QRCodeScanService: NSObject {
 
   // MARK: - OIDC Handlers
 
-  private func handleOIDCRequest(_ data: String) {
+  private func handleOID4VPRequest(_ requestString: String) {
+    onScanOutcome?(
+      .success(
+        ScanOutcome(
+          card: nil,
+          verificationStatus: .pending,
+          sealedRoute: nil,
+          route: .oid4vpRequest(requestString)
+        )
+      )
+    )
+  }
+
+  private func handleVPToken(_ token: String) {
+    let status = verifyVpToken(token)
+    onScanOutcome?(
+      .success(
+        ScanOutcome(
+          card: nil,
+          verificationStatus: status,
+          sealedRoute: nil,
+          route: .vpToken(token)
+        )
+      )
+    )
+  }
+
+  private func handleOIDCRequest(_ data: String, route: ScanRoute) {
     switch oidcService.parseRequest(from: data) {
     case .failure(let error):
       onScanOutcome?(.failure(error))
@@ -286,7 +336,7 @@ final class QRCodeScanService: NSObject {
           DispatchQueue.main.async {
             UIApplication.shared.open(url, options: [:], completionHandler: nil)
           }
-          onScanOutcome?(.success(ScanOutcome(card: businessCard, verificationStatus: .pending, sealedRoute: nil)))
+          onScanOutcome?(.success(ScanOutcome(card: businessCard, verificationStatus: .pending, sealedRoute: nil, route: route)))
         }
       }
     }
@@ -306,7 +356,7 @@ final class QRCodeScanService: NSObject {
         status = .unverified
       }
       identityCoordinator.updateVerificationStatus(for: imported.businessCard.id, status: status)
-      onScanOutcome?(.success(ScanOutcome(card: imported.businessCard, verificationStatus: status, sealedRoute: nil)))
+      onScanOutcome?(.success(ScanOutcome(card: imported.businessCard, verificationStatus: status, sealedRoute: nil, route: .siopRequest(url.absoluteString))))
     }
   }
 
@@ -315,7 +365,7 @@ final class QRCodeScanService: NSObject {
     if handled {
       DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
         if let card = DeepLinkManager.shared.lastReceivedCard {
-          self.onScanOutcome?(.success(ScanOutcome(card: card, verificationStatus: .unverified, sealedRoute: nil)))
+          self.onScanOutcome?(.success(ScanOutcome(card: card, verificationStatus: .unverified, sealedRoute: nil, route: .businessCard)))
         } else {
           self.onScanOutcome?(.failure(.sharingError("No card received from deep link")))
         }
@@ -396,6 +446,23 @@ final class QRCodeScanService: NSObject {
     case .failed, .revoked:
       return .failed
     }
+  }
+
+  private func verifyVpToken(_ token: String) -> VerificationStatus {
+    let parts = token.split(separator: ".")
+    guard parts.count == 3 else { return .failed }
+    guard let payloadData = Data(base64URLEncoded: String(parts[1])),
+      let payloadJSON = try? JSONSerialization.jsonObject(with: payloadData) as? [String: Any]
+    else { return .failed }
+
+    if let exp = payloadJSON["exp"] as? TimeInterval, Date() > Date(timeIntervalSince1970: exp) {
+      return .failed
+    }
+
+    if payloadJSON["vp"] != nil || payloadJSON["vc"] != nil {
+      return .verified
+    }
+    return .pending
   }
 }
 

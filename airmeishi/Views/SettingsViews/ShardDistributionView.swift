@@ -141,7 +141,7 @@ struct ShardDistributionFlow: View {
                 .navigationTitle("Share Shard")
                 .sheet(isPresented: $showingShareSheet) {
                     if let url = shareURL {
-                        ShareSheet(items: [url])
+                        ShareSheet(activityItems: [url])
                     }
                 }
             }

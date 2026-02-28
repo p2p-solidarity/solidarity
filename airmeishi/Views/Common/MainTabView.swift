@@ -5,7 +5,7 @@ struct MainTabView: View {
   @State private var showingReceivedCard = false
   @State private var showingErrorAlert = false
   @State private var errorMessage = ""
-  @State private var selectedTab = 0
+  @State private var selectedTab = MainAppTab.people.rawValue
 
   var body: some View {
     Group {
@@ -90,23 +90,23 @@ struct MainTabView: View {
   @available(iOS 26.0, *)
   private var nativeTabView: some View {
     TabView(selection: $selectedTab) {
-      MeTabView()
-        .tabItem {
-          Label("Me", systemImage: "person.text.rectangle")
-        }
-        .tag(0)
-
       PeopleListView()
         .tabItem {
           Label("People", systemImage: "person.2.fill")
         }
-        .tag(1)
+        .tag(MainAppTab.people.rawValue)
 
       ScanTabView()
         .tabItem {
           Label("Scan", systemImage: "qrcode.viewfinder")
         }
-        .tag(2)
+        .tag(MainAppTab.scan.rawValue)
+
+      MeTabView()
+        .tabItem {
+          Label("Me", systemImage: "person.text.rectangle")
+        }
+        .tag(MainAppTab.me.rawValue)
     }
     .toolbarBackground(Color.Theme.pageBg, for: .tabBar)
     .toolbarBackground(.visible, for: .tabBar)
@@ -116,14 +116,14 @@ struct MainTabView: View {
   private var customTabView: some View {
     ZStack(alignment: .bottom) {
       TabView(selection: $selectedTab) {
-        MeTabView()
-          .tag(0)
-
         PeopleListView()
-          .tag(1)
+          .tag(MainAppTab.people.rawValue)
 
         ScanTabView()
-          .tag(2)
+          .tag(MainAppTab.scan.rawValue)
+
+        MeTabView()
+          .tag(MainAppTab.me.rawValue)
       }
       .tabViewStyle(DefaultTabViewStyle())
       .toolbarBackground(.hidden, for: .tabBar)

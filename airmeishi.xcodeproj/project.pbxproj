@@ -7,7 +7,6 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
-		F1134EA62E757F230097A2A4 /* Semaphore in Frameworks */ = {isa = PBXBuildFile; productRef = F1134EA52E757F230097A2A4 /* Semaphore */; };
 		F140CFAC2EDB561E009A2F45 /* WebRTC in Frameworks */ = {isa = PBXBuildFile; productRef = F140CFAB2EDB561E009A2F45 /* WebRTC */; };
 		F18CDB3C2EC2248C005E94B4 /* SpruceIDMobileSdkRs in Frameworks */ = {isa = PBXBuildFile; productRef = F18CDB3B2EC2248C005E94B4 /* SpruceIDMobileSdkRs */; };
 /* End PBXBuildFile section */
@@ -71,7 +70,6 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				F1134EA62E757F230097A2A4 /* Semaphore in Frameworks */,
 				F140CFAC2EDB561E009A2F45 /* WebRTC in Frameworks */,
 				F18CDB3C2EC2248C005E94B4 /* SpruceIDMobileSdkRs in Frameworks */,
 			);
@@ -144,7 +142,6 @@
 			);
 			name = airmeishi;
 			packageProductDependencies = (
-				F1134EA52E757F230097A2A4 /* Semaphore */,
 				F18CDB3B2EC2248C005E94B4 /* SpruceIDMobileSdkRs */,
 				F140CFAB2EDB561E009A2F45 /* WebRTC */,
 			);
@@ -231,7 +228,6 @@
 			mainGroup = F1133D752E70600A0097A2A4;
 			minimizedProjectReferenceProxies = 1;
 			packageReferences = (
-				F1134EA32E757CE20097A2A4 /* XCRemoteSwiftPackageReference "SemaphoreSwift" */,
 				F18CDB272EC1F68E005E94B4 /* XCRemoteSwiftPackageReference "sprucekit-mobile" */,
 				F140CFAA2EDB5612009A2F45 /* XCRemoteSwiftPackageReference "WebRTC" */,
 				F1286C052EEB58030001BBFD /* XCRemoteSwiftPackageReference "SwiftLintPlugins" */,
@@ -492,7 +488,7 @@
 				LD_RUNPATH_SEARCH_PATHS = "@executable_path/Frameworks";
 				"LD_RUNPATH_SEARCH_PATHS[sdk=macosx*]" = "@executable_path/../Frameworks";
 				MACOSX_DEPLOYMENT_TARGET = 15.5;
-				MARKETING_VERSION = 1.1.1;
+				MARKETING_VERSION = 1.1.2;
 				PRODUCT_BUNDLE_IDENTIFIER = kidneyweakx.airmeishi;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				REGISTER_APP_GROUPS = YES;
@@ -542,7 +538,7 @@
 				LD_RUNPATH_SEARCH_PATHS = "@executable_path/Frameworks";
 				"LD_RUNPATH_SEARCH_PATHS[sdk=macosx*]" = "@executable_path/../Frameworks";
 				MACOSX_DEPLOYMENT_TARGET = 15.5;
-				MARKETING_VERSION = 1.1.1;
+				MARKETING_VERSION = 1.1.2;
 				PRODUCT_BUNDLE_IDENTIFIER = kidneyweakx.airmeishi;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				REGISTER_APP_GROUPS = YES;
@@ -691,14 +687,6 @@
 /* End XCConfigurationList section */
 
 /* Begin XCRemoteSwiftPackageReference section */
-		F1134EA32E757CE20097A2A4 /* XCRemoteSwiftPackageReference "SemaphoreSwift" */ = {
-			isa = XCRemoteSwiftPackageReference;
-			repositoryURL = "https://github.com/zkmopro/SemaphoreSwift";
-			requirement = {
-				branch = main;
-				kind = branch;
-			};
-		};
 		F1286C052EEB58030001BBFD /* XCRemoteSwiftPackageReference "SwiftLintPlugins" */ = {
 			isa = XCRemoteSwiftPackageReference;
 			repositoryURL = "https://github.com/SimplyDanny/SwiftLintPlugins";
@@ -726,11 +714,6 @@
 /* End XCRemoteSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
-		F1134EA52E757F230097A2A4 /* Semaphore */ = {
-			isa = XCSwiftPackageProductDependency;
-			package = F1134EA32E757CE20097A2A4 /* XCRemoteSwiftPackageReference "SemaphoreSwift" */;
-			productName = Semaphore;
-		};
 		F1286C062EEB580F0001BBFD /* SwiftLintBuildToolPlugin */ = {
 			isa = XCSwiftPackageProductDependency;
 			package = F1286C052EEB58030001BBFD /* XCRemoteSwiftPackageReference "SwiftLintPlugins" */;

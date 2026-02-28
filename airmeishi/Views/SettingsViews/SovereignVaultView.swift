@@ -327,7 +327,7 @@ struct VaultItemDetailView: View {
         }
         .sheet(isPresented: $showingShareSheet) {
             if let data = decryptedData {
-                ShareSheet(items: [data])
+                ShareSheet(activityItems: [data])
             }
         }
         .sheet(isPresented: $showingTimeLockSheet) {

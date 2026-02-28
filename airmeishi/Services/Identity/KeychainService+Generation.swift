@@ -21,13 +21,6 @@ extension KeychainService {
 
     print("[KeychainService] Signing key not found, generating new key")
 
-    // With session-based tags, cleanup is less critical, but we still try to clean up old keys
-    #if !targetEnvironment(simulator)
-      // Only cleanup if we're not using session-based approach (for backward compatibility)
-      // Since we're now using session tags, this cleanup is mainly for old keys
-      cleanupAllOldKeys()
-    #endif
-
     // On simulator, skip Secure Enclave and go directly to software-based key
     #if targetEnvironment(simulator)
       switch generateSigningKey(useSecureEnclave: false) {
@@ -94,7 +87,8 @@ extension KeychainService {
           kSecClass as String: kSecClassKey,
           kSecValueRef as String: key,
           kSecAttrApplicationTag as String: keyTag,
-          kSecAttrAccessible as String: kSecAttrAccessibleWhenUnlockedThisDeviceOnly,
+          kSecAttrAccessible as String: kSecAttrAccessibleWhenUnlocked,
+          kSecAttrSynchronizable as String: kCFBooleanTrue as Any,
         ]
 
         let status = SecItemAdd(addQuery as CFDictionary, nil)
@@ -139,7 +133,7 @@ extension KeychainService {
       guard
         let accessControl = SecAccessControlCreateWithFlags(
           nil,
-          kSecAttrAccessibleWhenUnlockedThisDeviceOnly,
+          kSecAttrAccessibleWhenUnlocked,
           flags,
           nil
         )
@@ -155,11 +149,13 @@ extension KeychainService {
         kSecAttrIsPermanent as String: true,
         kSecAttrAccessControl as String: accessControl,
         kSecAttrApplicationTag as String: keyTag,
-        kSecAttrLabel as String: "AirMeishi Device Key",
+        kSecAttrLabel as String: "Solidarity DID Key",
       ]
 
       if useSecureEnclave {
         attributes[kSecAttrTokenID as String] = kSecAttrTokenIDSecureEnclave
+      } else {
+        attributes[kSecAttrSynchronizable as String] = kCFBooleanTrue as Any
       }
 
       var error: Unmanaged<CFError>?
@@ -180,9 +176,7 @@ extension KeychainService {
         || message.contains("duplicate") || message.contains("errSecDuplicateItem")
 
       if isDuplicateError {
-        print(
-          "[KeychainService] Duplicate error detected (code: \(errorCode)), switching to session-based non-persistent key..."
-        )
+        print("[KeychainService] Duplicate error detected (code: \(errorCode)), switching to software fallback key...")
         return generateSessionBasedDeviceKey()
       }
 
@@ -209,7 +203,8 @@ extension KeychainService {
           kSecClass as String: kSecClassKey,
           kSecValueRef as String: sessionKey,
           kSecAttrApplicationTag as String: keyTag,
-          kSecAttrAccessible as String: kSecAttrAccessibleWhenUnlockedThisDeviceOnly,
+          kSecAttrAccessible as String: kSecAttrAccessibleWhenUnlocked,
+          kSecAttrSynchronizable as String: kCFBooleanTrue as Any,
         ]
 
         let addStatus = SecItemAdd(addQuery as CFDictionary, nil)

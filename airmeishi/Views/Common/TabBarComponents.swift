@@ -44,9 +44,9 @@ struct FloatingTabBarBackdrop: View {
 // MARK: - App Tabs
 
 enum MainAppTab: Int, CaseIterable {
-  case me = 0
-  case people = 1
-  case scan = 2
+  case people = 0
+  case scan = 1
+  case me = 2
 }
 
 // MARK: - Custom Floating Tab Bar
@@ -61,13 +61,6 @@ struct CustomFloatingTabBar: View {
 
       HStack {
         TabBarButton(
-          systemName: "person.text.rectangle",
-          title: "Me",
-          isSelected: selectedTab == MainAppTab.me.rawValue,
-          action: { selectedTab = MainAppTab.me.rawValue }
-        )
-        Spacer(minLength: 24)
-        TabBarButton(
           systemName: "person.2.fill",
           title: "People",
           isSelected: selectedTab == MainAppTab.people.rawValue,
@@ -79,6 +72,13 @@ struct CustomFloatingTabBar: View {
           title: "Scan",
           isSelected: selectedTab == MainAppTab.scan.rawValue,
           action: { selectedTab = MainAppTab.scan.rawValue }
+        )
+        Spacer(minLength: 24)
+        TabBarButton(
+          systemName: "person.text.rectangle",
+          title: "Me",
+          isSelected: selectedTab == MainAppTab.me.rawValue,
+          action: { selectedTab = MainAppTab.me.rawValue }
         )
       }
       .frame(height: 64)

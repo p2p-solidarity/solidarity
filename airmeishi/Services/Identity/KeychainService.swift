@@ -14,17 +14,11 @@ import SpruceIDMobileSdkRs
 /// Manages the DID signing key material using the system Keychain.
 final class KeychainService {
   static let shared = KeychainService()
-
-  // Use a single session ID that persists for the app instance
-  private static let sessionId: String = {
-    let defaults = UserDefaults.standard
-    if let existingId = defaults.string(forKey: "airmeishi.keychain.session.id") {
-      return existingId
-    }
-    let newId = UUID().uuidString
-    defaults.set(newId, forKey: "airmeishi.keychain.session.id")
-    return newId
-  }()
+  static let legacyMasterAlias: KeyAlias = "airmeishi.did.signing"
+  static let modernMasterAlias: KeyAlias = "solidarity.master"
+  static let masterAlias: KeyAlias = legacyMasterAlias
+  static let rpAliasPrefix = "airmeishi.did.rp."
+  static let modernRpAliasPrefix = "solidarity.rp."
 
   #if targetEnvironment(simulator)
     static var simulatorInMemoryKey: SecKey?
@@ -40,25 +34,18 @@ final class KeychainService {
   private let authenticationPolicy: LAPolicy
 
   init(
-    alias: KeyAlias = "airmeishi.did.signing",
+    alias: KeyAlias = KeychainService.masterAlias,
     accessControlFlags: SecAccessControlCreateFlags = [.privateKeyUsage],
-    accessPrompt: String = "Authenticate to access your AirMeishi identity key",
+    accessPrompt: String = "Authenticate to access your identity key",
     authenticationPolicy: LAPolicy = .deviceOwnerAuthentication
   ) {
     self.alias = alias
-    // Use a unique tag per app session to avoid keychain conflicts
-    // This works for both simulator and device
-    let uniqueAlias = "airmeishi.did.signing.\(Self.sessionId)"
-    print("[KeychainService] Using session tag: \(uniqueAlias)")
-    self.keyTag = Data(uniqueAlias.utf8)
+    self.keyTag = Data(alias.utf8)
     self.accessControlFlags = accessControlFlags
     self.accessPrompt = accessPrompt
     self.authenticationPolicy = authenticationPolicy
 
-    // For device, clean up old keys. For simulator, skip cleanup since we use unique tags
-    #if !targetEnvironment(simulator)
-      cleanupAllOldKeys()
-    #endif
+    migrateLegacyKeysIfNeeded()
   }
 
   // MARK: - Public API

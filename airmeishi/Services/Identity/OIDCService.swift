@@ -56,10 +56,11 @@ final class OIDCService: ObservableObject {
   /// - Returns: A `CardResult` containing the generated URL.
   func generateRequest(
     redirectUri: String = "airmeishi://oidc-callback",
-    claims: [String: Any]? = nil
+    claims: [String: Any]? = nil,
+    relyingPartyDomain: String? = nil
   ) -> CardResult<URL> {
-    // 1. Get the current DID to use as client_id
-    let descriptorResult = didService.currentDescriptor()
+    let rpDomain = relyingPartyDomain ?? URL(string: redirectUri)?.host
+    let descriptorResult = didService.currentDescriptor(for: rpDomain)
     guard case .success(let descriptor) = descriptorResult else {
       return .failure(.keyManagementError("No active DID found for OIDC request"))
     }

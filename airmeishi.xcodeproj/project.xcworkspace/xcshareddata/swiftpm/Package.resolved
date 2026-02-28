@@ -1,15 +1,6 @@
 {
-  "originHash" : "7a835d92ed8961030378f9765313a23b32d7dc5e6a64d4d9d246390d38494996",
+  "originHash" : "9bc858def4704e872f6a6dcd1eb830081409c6d07e566933f6b5ba71a51299f0",
   "pins" : [
-    {
-      "identity" : "semaphoreswift",
-      "kind" : "remoteSourceControl",
-      "location" : "https://github.com/zkmopro/SemaphoreSwift",
-      "state" : {
-        "branch" : "main",
-        "revision" : "850680a5adcc258d6861005b55a4925bd08a48eb"
-      }
-    },
     {
       "identity" : "sprucekit-mobile",
       "kind" : "remoteSourceControl",

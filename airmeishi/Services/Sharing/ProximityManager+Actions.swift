@@ -5,6 +5,7 @@
 //  Created by AirMeishi Team.
 //
 
+import CryptoKit
 import Foundation
 import MultipeerConnectivity
 
@@ -74,6 +75,117 @@ extension ProximityManager {
       lastError = .sharingError("Failed to send card: \(error.localizedDescription)")
       print("Failed to send card: \(error)")
     }
+  }
+
+  func sendExchangeRequest(
+    card: BusinessCard,
+    to peer: MCPeerID,
+    selectedFields: [BusinessCardField],
+    myEphemeralMessage: String?
+  ) -> CardResult<UUID> {
+    guard session.connectedPeers.contains(peer) else {
+      return .failure(.sharingError("Peer is not connected"))
+    }
+
+    let requestId = UUID()
+    let timestamp = Date()
+    let preview = filteredCard(card, using: selectedFields)
+    let signatureInput = canonicalExchangeString(
+      requestId: requestId,
+      peerName: peer.displayName,
+      card: preview,
+      fields: selectedFields,
+      timestamp: timestamp
+    )
+
+    guard let signature = signExchangeString(signatureInput) else {
+      return .failure(.cryptographicError("Failed to sign exchange request"))
+    }
+
+    let payload = ExchangeRequestPayload(
+      requestId: requestId,
+      senderID: localPeerID.displayName,
+      timestamp: timestamp,
+      selectedFields: selectedFields,
+      cardPreview: preview,
+      myEphemeralMessage: myEphemeralMessage?.prefix(140).description,
+      myExchangeSignature: signature
+    )
+
+    do {
+      let data = try JSONEncoder().encode(payload)
+      try session.send(data, toPeers: [peer], with: .reliable)
+      sentExchangeSignatures[requestId] = signature
+      sentExchangeMessages[requestId] = myEphemeralMessage?.prefix(140).description ?? ""
+      return .success(requestId)
+    } catch {
+      return .failure(.sharingError("Failed to send exchange request: \(error.localizedDescription)"))
+    }
+  }
+
+  func respondToExchangeRequest(
+    _ request: PendingExchangeRequest,
+    with card: BusinessCard,
+    selectedFields: [BusinessCardField],
+    myEphemeralMessage: String?
+  ) -> CardResult<Void> {
+    guard session.connectedPeers.contains(request.fromPeer) else {
+      return .failure(.sharingError("Peer is not connected"))
+    }
+
+    let timestamp = Date()
+    let preview = filteredCard(card, using: selectedFields)
+    let signatureInput = canonicalExchangeString(
+      requestId: request.requestId,
+      peerName: request.fromPeer.displayName,
+      card: preview,
+      fields: selectedFields,
+      timestamp: timestamp
+    )
+    guard let signature = signExchangeString(signatureInput) else {
+      return .failure(.cryptographicError("Failed to sign exchange response"))
+    }
+
+    let payload = ExchangeAcceptPayload(
+      requestId: request.requestId,
+      senderID: localPeerID.displayName,
+      timestamp: timestamp,
+      selectedFields: selectedFields,
+      cardPreview: preview,
+      theirEphemeralMessage: myEphemeralMessage?.prefix(140).description,
+      exchangeSignature: signature,
+      sealedRoute: SecureKeyManager.shared.mySealedRoute,
+      pubKey: SecureKeyManager.shared.myEncPubKey,
+      signPubKey: SecureKeyManager.shared.mySignPubKey
+    )
+
+    do {
+      let data = try JSONEncoder().encode(payload)
+      try session.send(data, toPeers: [request.fromPeer], with: .reliable)
+
+      let persistence = ExchangeEdgePersistencePayload(
+        card: request.payload.cardPreview,
+        sourcePeerName: request.payload.senderID,
+        verificationStatus: .verified,
+        sealedRoute: nil,
+        pubKey: nil,
+        signPubKey: nil,
+        mySignature: signature,
+        theirSignature: request.payload.myExchangeSignature,
+        myMessage: myEphemeralMessage?.prefix(140).description,
+        theirMessage: request.payload.myEphemeralMessage,
+        timestamp: timestamp
+      )
+      persistExchangeEdge(persistence)
+      pendingExchangeRequest = nil
+      return .success(())
+    } catch {
+      return .failure(.sharingError("Failed to send exchange response: \(error.localizedDescription)"))
+    }
+  }
+
+  func declinePendingExchangeRequest() {
+    pendingExchangeRequest = nil
   }
 
   /// Send a group invite to a specific peer
@@ -281,5 +393,73 @@ extension ProximityManager {
         self.lastError = error
       }
     }
+  }
+
+  internal func persistExchangeEdge(_ payload: ExchangeEdgePersistencePayload) {
+    Task { @MainActor in
+      let contact = Contact(
+        businessCard: payload.card,
+        source: .proximity,
+        verificationStatus: payload.verificationStatus,
+        sealedRoute: payload.sealedRoute,
+        pubKey: payload.pubKey,
+        signPubKey: payload.signPubKey
+      )
+
+      let result = contactRepository.addContact(contact)
+      switch result {
+      case .success(let saved):
+        var entity = ContactEntity.fromLegacy(saved)
+        entity.myExchangeSignature = Data(base64Encoded: payload.mySignature)
+        entity.exchangeSignature = Data(base64Encoded: payload.theirSignature)
+        entity.exchangeTimestamp = payload.timestamp
+        entity.myEphemeralMessage = payload.myMessage?.prefix(140).description
+        entity.theirEphemeralMessage = payload.theirMessage?.prefix(140).description
+        entity.didPublicKey = payload.signPubKey
+        entity.graphExportEdgeId = entity.graphExportEdgeId ?? UUID().uuidString
+        entity.commonFriendsHandshakeToken = entity.commonFriendsHandshakeToken ?? UUID().uuidString
+        IdentityDataStore.shared.upsertContact(entity)
+        print("Persisted exchange edge for \(payload.sourcePeerName)")
+      case .failure(let error):
+        self.lastError = error
+      }
+    }
+  }
+
+  private func signExchangeString(_ value: String) -> String? {
+    switch KeyManager.shared.getSigningKeyPair() {
+    case .failure:
+      return nil
+    case .success(let pair):
+      guard let messageData = value.data(using: .utf8),
+        let signature = try? pair.privateKey.signature(for: messageData)
+      else { return nil }
+      return signature.derRepresentation.base64EncodedString()
+    }
+  }
+
+  private func canonicalExchangeString(
+    requestId: UUID,
+    peerName: String,
+    card: BusinessCard,
+    fields: [BusinessCardField],
+    timestamp: Date
+  ) -> String {
+    let orderedFields = fields.map(\.rawValue).sorted().joined(separator: ",")
+    return "\(requestId.uuidString)|\(peerName)|\(card.name)|\(orderedFields)|\(timestamp.timeIntervalSince1970)"
+  }
+
+  private func filteredCard(_ card: BusinessCard, using selectedFields: [BusinessCardField]) -> BusinessCard {
+    let allowed = Set(selectedFields)
+    var filtered = card
+    if !allowed.contains(.name) { filtered.name = "" }
+    if !allowed.contains(.title) { filtered.title = nil }
+    if !allowed.contains(.company) { filtered.company = nil }
+    if !allowed.contains(.email) { filtered.email = nil }
+    if !allowed.contains(.phone) { filtered.phone = nil }
+    if !allowed.contains(.profileImage) { filtered.profileImage = nil }
+    if !allowed.contains(.socialNetworks) { filtered.socialNetworks = [] }
+    if !allowed.contains(.skills) { filtered.skills = [] }
+    return filtered
   }
 }

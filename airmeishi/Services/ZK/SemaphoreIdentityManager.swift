@@ -9,7 +9,7 @@
 import CryptoKit
 import Foundation
 
-#if canImport(Semaphore)
+#if canImport(Semaphore) && !(targetEnvironment(simulator) && arch(x86_64))
   import Semaphore
 #endif
 
@@ -23,7 +23,7 @@ final class SemaphoreIdentityManager: ObservableObject {
 
   // Whether the SemaphoreSwift library is available for proof ops
   static var proofsSupported: Bool {
-    #if canImport(Semaphore)
+    #if canImport(Semaphore) && !(targetEnvironment(simulator) && arch(x86_64))
       return true
     #else
       return false
@@ -58,7 +58,7 @@ final class SemaphoreIdentityManager: ObservableObject {
 
     let secret = randomSecret32()
 
-    #if canImport(Semaphore)
+    #if canImport(Semaphore) && !(targetEnvironment(simulator) && arch(x86_64))
       let identity = Identity(privateKey: secret)
       let commitment = identity.commitment()
       let bundle = IdentityBundle(privateKey: secret, commitment: commitment)
@@ -83,7 +83,7 @@ final class SemaphoreIdentityManager: ObservableObject {
 
   /// Replaces identity with provided secret bytes.
   func importIdentity(privateKey: Data) throws -> IdentityBundle {
-    #if canImport(Semaphore)
+    #if canImport(Semaphore) && !(targetEnvironment(simulator) && arch(x86_64))
       let identity = Identity(privateKey: privateKey)
       let commitment = identity.commitment()
       let bundle = IdentityBundle(privateKey: privateKey, commitment: commitment)
@@ -104,7 +104,7 @@ final class SemaphoreIdentityManager: ObservableObject {
   /// Group members should be provided as commitments (hex/strings) including own commitment.
   func generateProof(groupCommitments: [String], message: String, scope: String, merkleDepth: Int = 16) throws -> String
   {
-    #if canImport(Semaphore)
+    #if canImport(Semaphore) && !(targetEnvironment(simulator) && arch(x86_64))
       guard let bundle = try? keychain.loadIdentity() else { throw Error.notInitialized }
       let identity = Identity(privateKey: bundle.privateKey)
       // Build a minimal group that at least contains our own identity element.
@@ -128,7 +128,7 @@ final class SemaphoreIdentityManager: ObservableObject {
 
   /// Verify a Semaphore proof JSON string.
   func verifyProof(_ proof: String) throws -> Bool {
-    #if canImport(Semaphore)
+    #if canImport(Semaphore) && !(targetEnvironment(simulator) && arch(x86_64))
       return try verifySemaphoreProof(proof: proof)
     #else
       return false
@@ -157,7 +157,7 @@ final class SemaphoreIdentityManager: ObservableObject {
 
   private func ensureCommitment(bundle: IdentityBundle) -> IdentityBundle {
     guard bundle.commitment.isEmpty else { return bundle }
-    #if canImport(Semaphore)
+    #if canImport(Semaphore) && !(targetEnvironment(simulator) && arch(x86_64))
       let identity = Identity(privateKey: bundle.privateKey)
       let commitment = identity.commitment()
       return IdentityBundle(privateKey: bundle.privateKey, commitment: commitment)

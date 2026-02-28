@@ -16,6 +16,7 @@ extension ProximityManager {
   /// Start auto-pilot matching (Advertising + Browsing) with automatic connection and retries
   func startMatching(with card: BusinessCard?, sharingLevel: SharingLevel = .professional) {
     autoConnectEnabled = true
+    autoSendCardOnConnect = false
 
     if let card = card {
       startAdvertising(with: card, sharingLevel: sharingLevel)

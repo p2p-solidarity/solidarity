@@ -38,8 +38,8 @@ extension ProximityManager: MCSessionDelegate {
 
       print("Peer \(peerID.displayName) changed state to: \(state)")
 
-      // Auto-send current card when a connection is established
-      if state == .connected, let card = self.currentCard {
+      // Optional legacy behavior: auto-send current card when a connection is established
+      if state == .connected, self.autoSendCardOnConnect, let card = self.currentCard {
         self.sendCard(card, to: peerID, sharingLevel: self.currentSharingLevel)
       }
 
@@ -63,55 +63,117 @@ extension ProximityManager: MCSessionDelegate {
   }
 
   func session(_ session: MCSession, didReceive data: Data, fromPeer peerID: MCPeerID) {
-    // Try decoding in order: WebRTC Signaling, GroupInvite, GroupJoinResponse, BusinessCard share
     if handleWebRTCSignaling(data, from: peerID) { return }
+    if handleGroupInvitePayload(data, from: peerID) { return }
+    if handleGroupJoinPayload(data) { return }
+    if handleExchangeRequestPayload(data, from: peerID) { return }
+    if handleExchangeAcceptPayload(data) { return }
+    if isHeartbeatPayload(data) { return }
+    handleProximityCardPayload(data, from: peerID)
+  }
 
-    if let invite = try? JSONDecoder().decode(GroupInvitePayload.self, from: data) {
-      DispatchQueue.main.async { [weak self] in
-        guard let self = self else { return }
-        // Ensure the group shows up immediately on the invited device
-        let gm = SemaphoreGroupManager.shared
-        gm.ensureGroupFromInvite(id: invite.groupId, name: invite.groupName, root: invite.groupRoot)
-        self.pendingGroupInvite = (invite, peerID)
-        NotificationCenter.default.post(
-          name: .groupInviteReceived,
-          object: nil,
-          userInfo: [ProximityEventKey.invite: invite, ProximityEventKey.peerID: peerID]
-        )
-      }
-      return
+  private func handleGroupInvitePayload(_ data: Data, from peerID: MCPeerID) -> Bool {
+    guard let invite = try? JSONDecoder().decode(GroupInvitePayload.self, from: data) else {
+      return false
     }
-    if let join = try? JSONDecoder().decode(GroupJoinResponsePayload.self, from: data) {
-      DispatchQueue.main.async { [weak self] in
-        guard let self = self else { return }
-        // Add member to the matching group if it exists locally
-        let gm = SemaphoreGroupManager.shared
-        if let idx = gm.allGroups.firstIndex(where: { $0.id == join.groupId }) {
-          gm.selectGroup(gm.allGroups[idx].id)
-          gm.addMember(join.memberCommitment)
-        }
-        // Create a simple card with the member's name and broadcast as received
-        let card = BusinessCard(name: join.memberName)
-        self.receivedCards.append(card)
-        NotificationCenter.default.post(
-          name: .matchingReceivedCard,
-          object: nil,
-          userInfo: [ProximityEventKey.card: card]
-        )
-        NotificationCenter.default.post(
-          name: .groupMembershipUpdated,
-          object: nil,
-          userInfo: [ProximityEventKey.groupId: join.groupId]
-        )
-      }
-      return
+    DispatchQueue.main.async { [weak self] in
+      guard let self = self else { return }
+      let gm = SemaphoreGroupManager.shared
+      gm.ensureGroupFromInvite(id: invite.groupId, name: invite.groupName, root: invite.groupRoot)
+      self.pendingGroupInvite = (invite, peerID)
+      NotificationCenter.default.post(
+        name: .groupInviteReceived,
+        object: nil,
+        userInfo: [ProximityEventKey.invite: invite, ProximityEventKey.peerID: peerID]
+      )
     }
-    // Check for Heartbeat
-    if let string = String(data: data, encoding: .utf8), string == "HEARTBEAT" {
-      // print("Received heartbeat from \(peerID.displayName)")
-      return
-    }
+    return true
+  }
 
+  private func handleGroupJoinPayload(_ data: Data) -> Bool {
+    guard let join = try? JSONDecoder().decode(GroupJoinResponsePayload.self, from: data) else {
+      return false
+    }
+    DispatchQueue.main.async { [weak self] in
+      guard let self = self else { return }
+      let gm = SemaphoreGroupManager.shared
+      if let idx = gm.allGroups.firstIndex(where: { $0.id == join.groupId }) {
+        gm.selectGroup(gm.allGroups[idx].id)
+        gm.addMember(join.memberCommitment)
+      }
+      let card = BusinessCard(name: join.memberName)
+      self.receivedCards.append(card)
+      NotificationCenter.default.post(
+        name: .matchingReceivedCard,
+        object: nil,
+        userInfo: [ProximityEventKey.card: card]
+      )
+      NotificationCenter.default.post(
+        name: .groupMembershipUpdated,
+        object: nil,
+        userInfo: [ProximityEventKey.groupId: join.groupId]
+      )
+    }
+    return true
+  }
+
+  private func handleExchangeRequestPayload(_ data: Data, from peerID: MCPeerID) -> Bool {
+    guard let exchangeRequest = try? JSONDecoder().decode(ExchangeRequestPayload.self, from: data) else {
+      return false
+    }
+    DispatchQueue.main.async { [weak self] in
+      guard let self = self else { return }
+      self.pendingExchangeRequest = PendingExchangeRequest(
+        requestId: exchangeRequest.requestId,
+        fromPeer: peerID,
+        payload: exchangeRequest
+      )
+    }
+    return true
+  }
+
+  private func handleExchangeAcceptPayload(_ data: Data) -> Bool {
+    guard let exchangeAccept = try? JSONDecoder().decode(ExchangeAcceptPayload.self, from: data) else {
+      return false
+    }
+    DispatchQueue.main.async { [weak self] in
+      guard let self = self else { return }
+      let mySignature = self.sentExchangeSignatures.removeValue(forKey: exchangeAccept.requestId) ?? ""
+      let myMessage = self.sentExchangeMessages.removeValue(forKey: exchangeAccept.requestId)
+
+      let persistence = ExchangeEdgePersistencePayload(
+        card: exchangeAccept.cardPreview,
+        sourcePeerName: exchangeAccept.senderID,
+        verificationStatus: .verified,
+        sealedRoute: exchangeAccept.sealedRoute,
+        pubKey: exchangeAccept.pubKey,
+        signPubKey: exchangeAccept.signPubKey,
+        mySignature: mySignature,
+        theirSignature: exchangeAccept.exchangeSignature,
+        myMessage: myMessage,
+        theirMessage: exchangeAccept.theirEphemeralMessage,
+        timestamp: exchangeAccept.timestamp
+      )
+      self.persistExchangeEdge(persistence)
+
+      self.latestExchangeCompletion = ExchangeCompletionEvent(
+        peerName: exchangeAccept.senderID,
+        card: exchangeAccept.cardPreview,
+        requestId: exchangeAccept.requestId,
+        mySignature: mySignature,
+        theirSignature: exchangeAccept.exchangeSignature,
+        myMessage: myMessage,
+        theirMessage: exchangeAccept.theirEphemeralMessage
+      )
+    }
+    return true
+  }
+
+  private func isHeartbeatPayload(_ data: Data) -> Bool {
+    String(data: data, encoding: .utf8) == "HEARTBEAT"
+  }
+
+  private func handleProximityCardPayload(_ data: Data, from peerID: MCPeerID) {
     do {
       let payload = try JSONDecoder().decode(ProximitySharingPayload.self, from: data)
       let status = ProximityVerificationHelper.verify(
@@ -131,7 +193,6 @@ extension ProximityManager: MCSessionDelegate {
         if let index = self.nearbyPeers.firstIndex(where: { $0.peerID == peerID }) {
           self.nearbyPeers[index].verification = status
         }
-        // Pass secure messaging fields to handleReceivedCard
         self.handleReceivedCard(
           payload.card,
           from: payload.senderID,
@@ -150,7 +211,6 @@ extension ProximityManager: MCSessionDelegate {
       let rawString = String(data: data, encoding: .utf8) ?? "Unable to decode as UTF8"
       print("Failed to decode received data: \(error)")
       print("Raw data: \(rawString)")
-
       DispatchQueue.main.async { [weak self] in
         let err: CardError = .sharingError(
           "Failed to decode received data: \(error.localizedDescription). Raw: \(rawString.prefix(50))"

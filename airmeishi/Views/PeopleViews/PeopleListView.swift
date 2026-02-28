@@ -1,163 +1,145 @@
-//
-//  PeopleListView.swift
-//  airmeishi
-//
-//  Tab root - contact gallery reusing ShoutoutChartService, LighteningCardView, ContactRowView
-//
-
 import SwiftUI
 
 struct PeopleListView: View {
-  @StateObject private var chartService = ShoutoutChartService.shared
-  @Environment(\.colorScheme) private var colorScheme
-  @State private var selectedUser: ShoutoutUser?
-  @State private var displayMode: DisplayMode = .list
-  @State private var isSakuraAnimating = false
-  @State private var showingProximitySharing = false
+  @EnvironmentObject private var identityDataStore: IdentityDataStore
+  @State private var searchQuery = ""
+  @State private var showingExchangeFlow = false
+
+  private var filteredContacts: [ContactEntity] {
+    let all = identityDataStore.contacts.sorted { $0.receivedAt > $1.receivedAt }
+    guard !searchQuery.isEmpty else { return all }
+    let q = searchQuery.lowercased()
+    return all.filter {
+      $0.name.lowercased().contains(q)
+        || ($0.company?.lowercased().contains(q) ?? false)
+        || ($0.title?.lowercased().contains(q) ?? false)
+    }
+  }
+
+  private var verifiedContacts: [ContactEntity] {
+    filteredContacts.filter { $0.verificationStatus == VerificationStatus.verified.rawValue }
+  }
+
+  private var others: [ContactEntity] {
+    filteredContacts.filter { $0.verificationStatus != VerificationStatus.verified.rawValue }
+  }
 
   var body: some View {
     NavigationStack {
       ZStack {
-        Color.Theme.pageBg
-          .ignoresSafeArea()
-
-        VStack(spacing: 0) {
-          headerSection
-          cardGallery
+        Color.Theme.pageBg.ignoresSafeArea()
+        if filteredContacts.isEmpty {
+          emptyState
+        } else {
+          listContent
         }
       }
+      .navigationTitle("People")
       .navigationBarTitleDisplayMode(.inline)
       .toolbar {
-        ToolbarItem(placement: .principal) {
-          Text("people list")
-            .font(.system(size: 18))
-            .foregroundColor(Color.Theme.textPrimary)
-        }
         ToolbarItem(placement: .navigationBarTrailing) {
-          Button(action: { showingProximitySharing = true }) {
+          Button {
+            showingExchangeFlow = true
+          } label: {
             Image(systemName: "plus")
-              .font(.system(size: 18, weight: .medium))
               .foregroundColor(Color.Theme.darkUI)
           }
         }
       }
+      .searchable(text: $searchQuery, prompt: "Search contacts")
     }
-    .onAppear { isSakuraAnimating = true }
-    .sheet(item: $selectedUser) { user in
-      PersonDetailView(user: user)
+    .onAppear {
+      identityDataStore.refreshAll()
     }
-    .fullScreenCover(isPresented: $showingProximitySharing) {
+    .fullScreenCover(isPresented: $showingExchangeFlow, onDismiss: {
+      identityDataStore.refreshAll()
+    }) {
       ProximitySharingView()
     }
   }
 
-  // MARK: - Header
+  private var emptyState: some View {
+    VStack(spacing: 14) {
+      SolidarityPlaceholderCard(
+        screenID: .exchangeDiscovery,
+        title: "No contact edges yet",
+        subtitle: "Start face-to-face exchange to create verified contacts."
+      )
 
-  private var headerSection: some View {
-    VStack(spacing: 0) {
-      // Search bar
-      HStack(spacing: 10) {
-        Image(systemName: "magnifyingglass")
-          .foregroundColor(Color.Theme.textPlaceholder)
+      Button("Start Exchange") {
+        showingExchangeFlow = true
+      }
+      .buttonStyle(ThemedPrimaryButtonStyle())
+      .frame(maxWidth: 260)
+    }
+    .padding(16)
+  }
 
-        TextField("搜索", text: $chartService.searchQuery)
-          .textFieldStyle(PlainTextFieldStyle())
-          .font(.system(size: 14))
-          .foregroundColor(Color.Theme.textPrimary)
+  private var listContent: some View {
+    ScrollView {
+      VStack(alignment: .leading, spacing: 12) {
+        if !verifiedContacts.isEmpty {
+          sectionTitle("Verified")
+          ForEach(verifiedContacts, id: \.id) { contact in
+            contactRow(contact)
+          }
+        }
 
-        if !chartService.searchQuery.isEmpty {
-          Button(action: { chartService.searchQuery = "" }) {
-            Image(systemName: "xmark.circle.fill")
-              .foregroundColor(Color.Theme.textPlaceholder)
+        if !others.isEmpty {
+          sectionTitle("Pending / Unverified")
+          ForEach(others, id: \.id) { contact in
+            contactRow(contact)
           }
         }
       }
-      .padding(.horizontal, 12)
-      .padding(.vertical, 10)
-      .background(
-        RoundedRectangle(cornerRadius: 2, style: .continuous)
-          .fill(Color.Theme.searchBg)
-      )
-      .padding(.horizontal, 16)
-      .padding(.bottom, 12)
+      .padding(16)
+      .padding(.bottom, 90)
     }
   }
 
-  // MARK: - Card Gallery
-
-  private var cardGallery: some View {
-    ScrollView {
-      if chartService.filteredData.isEmpty {
-        emptyState
-      } else {
-        listView
-      }
-    }
+  private func sectionTitle(_ value: String) -> some View {
+    Text(value)
+      .font(.subheadline.weight(.semibold))
+      .foregroundColor(Color.Theme.textSecondary)
   }
 
-  private var emptyState: some View {
-    VStack(spacing: 20) {
-      Spacer().frame(height: 40)
-
-      Image(systemName: "folder")
-        .font(.system(size: 44, weight: .light))
-        .foregroundColor(Color.Theme.textTertiary)
-
-      VStack(spacing: 6) {
-        Text("你的聯絡人通訊錄是空的")
-          .font(.system(size: 16, weight: .medium))
+  private func contactRow(_ contact: ContactEntity) -> some View {
+    VStack(alignment: .leading, spacing: 6) {
+      HStack {
+        Text(contact.name)
+          .font(.subheadline.weight(.semibold))
           .foregroundColor(Color.Theme.textPrimary)
-
-        Text("匯入或手動新增聯絡人")
-          .font(.system(size: 14))
+        Spacer()
+        Text(statusBadge(for: contact.verificationStatus))
+          .font(.caption.weight(.semibold))
           .foregroundColor(Color.Theme.textSecondary)
-          .multilineTextAlignment(.center)
       }
 
-      VStack(spacing: 14) {
-        Button(action: { showingProximitySharing = true }) {
-          Text("匯入手機通訊錄")
-            .font(.system(size: 15, weight: .medium))
-            .foregroundColor(.white)
-            .frame(maxWidth: 260)
-            .padding(.vertical, 14)
-            .background(
-              RoundedRectangle(cornerRadius: 14, style: .continuous)
-                .fill(Color.Theme.accentRose)
-            )
-        }
+      Text([contact.title, contact.company].compactMap { $0 }.joined(separator: " · "))
+        .font(.caption)
+        .foregroundColor(Color.Theme.textSecondary)
 
-        Button(action: { showingProximitySharing = true }) {
-          Text("手動新增")
-            .font(.system(size: 15, weight: .medium))
-            .foregroundColor(Color.Theme.accentRose)
-            .frame(maxWidth: 260)
-            .padding(.vertical, 14)
-            .background(
-              RoundedRectangle(cornerRadius: 14, style: .continuous)
-                .stroke(Color.Theme.accentRose, lineWidth: 1)
-            )
-        }
+      if let message = contact.theirEphemeralMessage, !message.isEmpty {
+        Text("One-time message: \(message)")
+          .font(.caption)
+          .foregroundColor(Color.Theme.textTertiary)
       }
-      .padding(.top, 4)
     }
+    .padding(12)
+    .background(Color.Theme.cardBg)
+    .cornerRadius(10)
   }
 
-  private var listView: some View {
-    LazyVStack(spacing: 0) {
-      ForEach(chartService.filteredData) { dataPoint in
-        ContactRowView(
-          dataPoint: dataPoint,
-          isLighteningAnimating: isSakuraAnimating
-        ) {
-          let impact = UIImpactFeedbackGenerator(style: .light)
-          impact.impactOccurred()
-          selectedUser = dataPoint.user
-        }
-      }
+  private func statusBadge(for status: String) -> String {
+    switch status {
+    case VerificationStatus.verified.rawValue:
+      return "Verified"
+    case VerificationStatus.pending.rawValue:
+      return "Pending"
+    case VerificationStatus.failed.rawValue:
+      return "Failed"
+    default:
+      return "Unverified"
     }
-    .adaptivePadding(horizontal: 16, vertical: 0)
-    .adaptiveMaxWidth(800)
-    .padding(.bottom, 100)
   }
 }

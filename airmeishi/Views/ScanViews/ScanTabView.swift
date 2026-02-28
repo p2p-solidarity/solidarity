@@ -1,85 +1,45 @@
-//
-//  ScanTabView.swift
-//  airmeishi
-//
-//  Tab root - persistent QR scanner tab (no Cancel button, lifecycle-aware)
-//
-
 import AVFoundation
 import SwiftUI
 
 struct ScanTabView: View {
   @StateObject private var qrManager = QRCodeManager.shared
   @StateObject private var contactRepository = ContactRepository.shared
-  @Environment(\.colorScheme) private var colorScheme
 
-  @State private var showingScannedCard = false
-  @State private var showingError = false
-  @State private var lastVerification: VerificationStatus = .unverified
   @State private var cameraPreviewLayer: AVCaptureVideoPreviewLayer?
+  @State private var showingScannedCard = false
   @State private var showingPermissionAlert = false
   @State private var permissionAlertMessage = ""
+  @State private var showingRouteAlert = false
+  @State private var routeAlertMessage = ""
+  @State private var showingPresentationFlow = false
+  @State private var showingVerifierResult = false
+  @State private var showingSelfQr = false
+  @State private var pendingRoutePayload = ""
+  @State private var verificationResult: VpTokenVerificationResult?
+  @State private var lastVerification: VerificationStatus = .unverified
 
   var body: some View {
     NavigationStack {
       ZStack {
-        // Background base
-        Color.Theme.cardBg
-          .ignoresSafeArea()
+        Color.Theme.cardBg.ignoresSafeArea()
+        CameraPreviewView(previewLayer: $cameraPreviewLayer).ignoresSafeArea()
 
-        // Camera preview
-        CameraPreviewView(previewLayer: $cameraPreviewLayer)
-          .ignoresSafeArea()
-
-        // Overlay UI
         VStack {
           Spacer()
-
           ScanningFrameView()
-
           Spacer()
-
-          // Instructions
-          VStack(spacing: 8) {
-            Text("將 QR Code 對準框內")
-              .font(.system(size: 15, weight: .medium))
-              .foregroundColor(Color.Theme.textPrimary)
-
-            if qrManager.isScanning {
-              HStack(spacing: 6) {
-                ProgressView()
-                  .progressViewStyle(CircularProgressViewStyle(tint: Color.Theme.textTertiary))
-                  .scaleEffect(0.8)
-
-                Text("掃描中...")
-                  .font(.system(size: 13))
-                  .foregroundColor(Color.Theme.textSecondary)
-              }
-            }
-          }
-          .padding(.horizontal, 20)
-          .padding(.vertical, 14)
-          .background(
-            RoundedRectangle(cornerRadius: 8, style: .continuous)
-              .fill(Color.Theme.cardBg.opacity(0.95))
-              .overlay(
-                RoundedRectangle(cornerRadius: 8, style: .continuous)
-                  .stroke(Color.Theme.divider, lineWidth: 0.5)
-              )
-          )
-          .padding(.horizontal, 20)
-          .padding(.bottom, 100)
-        }
-        .transaction { transaction in
-          transaction.animation = nil
+          footer
         }
       }
+      .navigationTitle("Scan")
       .navigationBarTitleDisplayMode(.inline)
       .toolbar {
-        ToolbarItem(placement: .principal) {
-          Text("scan")
-            .font(.system(size: 18))
-            .foregroundColor(Color.Theme.textPrimary)
+        ToolbarItem(placement: .navigationBarTrailing) {
+          Button {
+            showingSelfQr = true
+          } label: {
+            Image(systemName: "qrcode")
+          }
         }
       }
     }
@@ -90,16 +50,8 @@ struct ScanTabView: View {
       qrManager.stopScanning()
       cameraPreviewLayer = nil
     }
-    .onChange(of: qrManager.lastScannedCard) { _, scannedCard in
-      if scannedCard != nil {
-        lastVerification = qrManager.lastVerificationStatus ?? .unverified
-        showingScannedCard = true
-      }
-    }
-    .onChange(of: qrManager.scanError) { _, error in
-      if error != nil {
-        showingError = true
-      }
+    .onChange(of: qrManager.lastScanRoute) { _, route in
+      handleRoute(route)
     }
     .sheet(isPresented: $showingScannedCard) {
       if let scannedCard = qrManager.lastScannedCard {
@@ -108,38 +60,77 @@ struct ScanTabView: View {
         }
       }
     }
-    .alert("掃描錯誤", isPresented: $showingError) {
-      Button("重試") {
-        qrManager.scanError = nil
-        ensureCameraPermissionAndStart()
-      }
-      Button("取消", role: .cancel) {}
-    } message: {
-      Text(qrManager.scanError?.localizedDescription ?? "Unknown error occurred")
+    .sheet(isPresented: $showingPresentationFlow) {
+      ProofPresentationFlowSheet(requestPayload: pendingRoutePayload)
     }
-    .alert("相機權限", isPresented: $showingPermissionAlert) {
-      Button("前往設定") {
+    .sheet(isPresented: $showingVerifierResult) {
+      if let verificationResult {
+        VerifierResultSheet(result: verificationResult)
+      }
+    }
+    .sheet(isPresented: $showingSelfQr) {
+      if let card = CardManager.shared.businessCards.first {
+        QRSharingView(businessCard: card)
+      } else {
+        NavigationStack {
+          VStack(spacing: 14) {
+            Text("No identity card available.")
+            Text("Create a card in Me tab first.")
+              .font(.caption)
+              .foregroundColor(.secondary)
+          }
+          .padding(20)
+          .navigationTitle("Present")
+        }
+      }
+    }
+    .alert("Camera Permission", isPresented: $showingPermissionAlert) {
+      Button("Open Settings") {
         if let url = URL(string: UIApplication.openSettingsURLString) {
           UIApplication.shared.open(url)
         }
       }
-      Button("取消", role: .cancel) {}
+      Button("Cancel", role: .cancel) {}
     } message: {
       Text(permissionAlertMessage)
     }
+    .alert("Scan Router", isPresented: $showingRouteAlert) {
+      Button("OK", role: .cancel) {}
+    } message: {
+      Text(routeAlertMessage)
+    }
   }
 
-  // MARK: - Private Methods
+  private var footer: some View {
+    VStack(spacing: 8) {
+      SolidarityPlaceholderCard(
+        screenID: .scanRouter,
+        title: "Protocol Router",
+        subtitle: "Supports OID4VP request, vp_token verify, credential offers, and SIOPv2."
+      )
+
+      if qrManager.isScanning {
+        HStack(spacing: 6) {
+          ProgressView().scaleEffect(0.7)
+          Text("Scanning...")
+            .font(.caption)
+            .foregroundColor(Color.Theme.textSecondary)
+        }
+      }
+    }
+    .padding(.horizontal, 16)
+    .padding(.bottom, 100)
+  }
+
+  // MARK: - Camera
 
   private func startScanning() {
-    let result = qrManager.startScanning()
-
-    switch result {
-    case .success(let previewLayer):
-      self.cameraPreviewLayer = previewLayer
+    switch qrManager.startScanning() {
     case .failure(let error):
-      qrManager.scanError = error
-      showingError = true
+      routeAlertMessage = error.localizedDescription
+      showingRouteAlert = true
+    case .success(let previewLayer):
+      cameraPreviewLayer = previewLayer
     }
   }
 
@@ -153,17 +144,50 @@ struct ScanTabView: View {
           if granted {
             startScanning()
           } else {
-            permissionAlertMessage = "需要相機權限才能掃描 QR Code，請前往設定開啟。"
+            permissionAlertMessage = "Camera access is required to scan QR codes."
             showingPermissionAlert = true
           }
         }
       }
     case .denied, .restricted:
-      permissionAlertMessage = "需要相機權限才能掃描 QR Code，請前往設定開啟。"
+      permissionAlertMessage = "Camera access is required to scan QR codes."
       showingPermissionAlert = true
     @unknown default:
-      permissionAlertMessage = "需要相機權限才能掃描 QR Code。"
+      permissionAlertMessage = "Camera access is required."
       showingPermissionAlert = true
+    }
+  }
+
+  // MARK: - Route Handling
+
+  private func handleRoute(_ route: ScanRoute?) {
+    guard let route else { return }
+    switch route {
+    case .businessCard:
+      if qrManager.lastScannedCard != nil {
+        lastVerification = qrManager.lastVerificationStatus ?? .unverified
+        showingScannedCard = true
+      }
+
+    case .oid4vpRequest(let request):
+      pendingRoutePayload = request
+      showingPresentationFlow = true
+
+    case .siopRequest(let request):
+      pendingRoutePayload = request
+      showingPresentationFlow = true
+
+    case .vpToken(let token):
+      verificationResult = ProofVerifierService.shared.verifyVpToken(token)
+      showingVerifierResult = true
+
+    case .credentialOffer(let offer):
+      routeAlertMessage = "Credential offer detected:\n\(offer)"
+      showingRouteAlert = true
+
+    case .unknown(let payload):
+      routeAlertMessage = "Unknown payload:\n\(payload.prefix(120))"
+      showingRouteAlert = true
     }
   }
 
@@ -179,19 +203,147 @@ struct ScanTabView: View {
       sealedRoute: qrManager.lastSealedRoute
     )
 
-    let result = contactRepository.addContact(contact)
-
-    switch result {
-    case .success:
+    switch contactRepository.addContact(contact) {
+    case .success(let saved):
+      IdentityDataStore.shared.upsertContact(ContactEntity.fromLegacy(saved))
       showingScannedCard = false
-      ToastManager.shared.show(
-        title: "已儲存",
-        message: "聯絡人已新增到通訊錄。",
-        type: .success
-      )
     case .failure(let error):
-      qrManager.scanError = error
-      showingError = true
+      routeAlertMessage = error.localizedDescription
+      showingRouteAlert = true
+    }
+  }
+}
+
+private struct ProofPresentationFlowSheet: View {
+  enum Step {
+    case review
+    case signing
+    case submitted
+  }
+
+  let requestPayload: String
+  @Environment(\.dismiss) private var dismiss
+  @State private var step: Step = .review
+  @State private var submittedToken: String = ""
+  @State private var isWorking = false
+  @State private var showingAlert = false
+  @State private var alertMessage = ""
+
+  var body: some View {
+    NavigationStack {
+      VStack(spacing: 16) {
+        switch step {
+        case .review:
+          SolidarityPlaceholderCard(
+            screenID: .presentReview,
+            title: "Review Request",
+            subtitle: requestPayload
+          )
+          Button("Sign & Submit") {
+            submit()
+          }
+          .buttonStyle(ThemedPrimaryButtonStyle())
+          .disabled(isWorking)
+
+        case .signing:
+          SolidarityPlaceholderCard(
+            screenID: .presentSigning,
+            title: "Signing Proof",
+            subtitle: "Applying pairwise DID and biometric gate."
+          )
+          ProgressView()
+
+        case .submitted:
+          SolidarityPlaceholderCard(
+            screenID: .presentSubmit,
+            title: "Proof Submitted",
+            subtitle: "vp_token generated and dispatched."
+          )
+          Text("\(String(submittedToken.prefix(90)))...")
+            .font(.caption.monospaced())
+            .foregroundColor(.secondary)
+          Button("Done") { dismiss() }
+            .buttonStyle(ThemedPrimaryButtonStyle())
+        }
+      }
+      .padding(16)
+      .navigationTitle("Present Proof")
+      .navigationBarTitleDisplayMode(.inline)
+      .toolbar {
+        ToolbarItem(placement: .navigationBarLeading) {
+          Button("Close") { dismiss() }
+        }
+      }
+      .alert("Proof", isPresented: $showingAlert) {
+        Button("OK", role: .cancel) {}
+      } message: {
+        Text(alertMessage)
+      }
+    }
+  }
+
+  private func submit() {
+    step = .signing
+    isWorking = true
+
+    BiometricGatekeeper.shared.authorizeIfRequired(.presentProof) { result in
+      switch result {
+      case .failure(let error):
+        isWorking = false
+        alertMessage = error.localizedDescription
+        showingAlert = true
+        step = .review
+      case .success:
+        let card = CardManager.shared.businessCards.first ?? BusinessCard(name: "Solidarity User")
+        let options = VCService.IssueOptions(relyingPartyDomain: extractDomain(from: requestPayload))
+        switch VCService().issueBusinessCardCredential(for: card, options: options) {
+        case .failure(let error):
+          isWorking = false
+          alertMessage = error.localizedDescription
+          showingAlert = true
+          step = .review
+        case .success(let credential):
+          isWorking = false
+          submittedToken = credential.jwt
+          step = .submitted
+        }
+      }
+    }
+  }
+
+  private func extractDomain(from payload: String) -> String? {
+    URL(string: payload)?.host
+  }
+}
+
+private struct VerifierResultSheet: View {
+  let result: VpTokenVerificationResult
+  @Environment(\.dismiss) private var dismiss
+
+  var body: some View {
+    NavigationStack {
+      VStack(spacing: 14) {
+        SolidarityPlaceholderCard(
+          screenID: .verifyResult,
+          title: result.title,
+          subtitle: result.reason
+        )
+
+        VStack(alignment: .leading, spacing: 8) {
+          ForEach(result.details, id: \.self) { detail in
+            Text("• \(detail)")
+              .font(.caption)
+              .foregroundColor(.secondary)
+          }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+
+        Button("Close") { dismiss() }
+          .buttonStyle(ThemedPrimaryButtonStyle())
+      }
+      .padding(16)
+      .navigationTitle("Verifier")
+      .navigationBarTitleDisplayMode(.inline)
     }
   }
 }

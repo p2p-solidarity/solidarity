@@ -37,6 +37,8 @@ class ProximityManager: NSObject, ProximityManagerProtocol, ObservableObject {
   @Published var pendingInvitations: [PendingInvitation] = []
   @Published var isPresentingInvitation = false
   @Published var pendingGroupInvite: (payload: GroupInvitePayload, from: MCPeerID)?
+  @Published var pendingExchangeRequest: PendingExchangeRequest?
+  @Published var latestExchangeCompletion: ExchangeCompletionEvent?
   @Published var matchingInfoMessage: String?  // User-friendly status message for UI
   @Published var discoveryState: DiscoveryState = .idle
   @Published var currentSession: MCSession?  // Corrected type for MCSession?
@@ -61,6 +63,9 @@ class ProximityManager: NSObject, ProximityManagerProtocol, ObservableObject {
 
   internal var currentCard: BusinessCard?
   internal var currentSharingLevel: SharingLevel = .professional
+  internal var autoSendCardOnConnect = false
+  internal var sentExchangeSignatures: [UUID: String] = [:]
+  internal var sentExchangeMessages: [UUID: String] = [:]
 
   @MainActor internal let contactRepository = ContactRepository.shared
   internal var cancellables = Set<AnyCancellable>()

@@ -23,6 +23,31 @@ struct ProximitySharingPayload: Codable {
   let signPubKey: String?  // Identity Key (Ed25519)
 }
 
+struct ExchangeRequestPayload: Codable {
+  let requestId: UUID
+  let senderID: String
+  let timestamp: Date
+  let selectedFields: [BusinessCardField]
+  let cardPreview: BusinessCard
+  let myEphemeralMessage: String?
+  let myExchangeSignature: String
+}
+
+struct ExchangeAcceptPayload: Codable {
+  let requestId: UUID
+  let senderID: String
+  let timestamp: Date
+  let selectedFields: [BusinessCardField]
+  let cardPreview: BusinessCard
+  let theirEphemeralMessage: String?
+  let exchangeSignature: String
+
+  // Secure messaging compatibility
+  let sealedRoute: String?
+  let pubKey: String?
+  let signPubKey: String?
+}
+
 /// Payload for inviting a nearby peer to join a Semaphore group
 struct GroupInvitePayload: Codable {
   let groupId: UUID

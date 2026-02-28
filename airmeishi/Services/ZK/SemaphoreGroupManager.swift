@@ -10,10 +10,6 @@ import Combine
 import CryptoKit
 import Foundation
 
-#if canImport(Semaphore)
-  import Semaphore
-#endif
-
 final class SemaphoreGroupManager: ObservableObject {
   static let shared = SemaphoreGroupManager()
   private init() { load() }

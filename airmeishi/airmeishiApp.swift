@@ -19,6 +19,7 @@ struct airmeishiApp: App {
   @StateObject private var proximityManager = ProximityManager.shared
   @StateObject private var deepLinkManager = DeepLinkManager.shared
   @StateObject private var themeManager = ThemeManager.shared
+  @StateObject private var identityDataStore = IdentityDataStore.shared
 
   var body: some Scene {
     WindowGroup {
@@ -28,6 +29,7 @@ struct airmeishiApp: App {
         .environmentObject(proximityManager)
         .environmentObject(deepLinkManager)
         .environmentObject(themeManager)
+        .environmentObject(identityDataStore)
         .preferredColorScheme(themeManager.appColorScheme.colorScheme)
         .onAppear {
           setupApp()
@@ -59,6 +61,8 @@ struct airmeishiApp: App {
 
     // Request necessary permissions
     requestPermissions()
+
+    identityDataStore.runInitialMigrationIfNeeded()
 
     // Note: Data is automatically loaded in the managers' init methods
     print("App setup completed")
