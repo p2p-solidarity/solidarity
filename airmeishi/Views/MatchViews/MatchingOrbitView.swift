@@ -15,8 +15,7 @@ struct MatchingOrbitView: View {
 
 #Preview {
   ZStack {
-    Color.black.ignoresSafeArea()
+    Color.Theme.pageBg.ignoresSafeArea()
     MatchingOrbitView().frame(width: 300, height: 300)
   }
-  .preferredColorScheme(.dark)
 }

@@ -24,10 +24,11 @@ struct ProximitySharingView: View {
   @State private var showShareSheet: Bool = false
   @State private var errorMessage: String?
   @Environment(\.dismiss) private var dismiss
+  @Environment(\.colorScheme) private var colorScheme
 
   var body: some View {
     ZStack {
-      Color.black.ignoresSafeArea()
+      Color.Theme.pageBg.ignoresSafeArea()
 
       VStack(spacing: 24) {
         Spacer()
@@ -40,11 +41,11 @@ struct ProximitySharingView: View {
         VStack(spacing: 8) {
           Text(isMatching ? "Match..." : "Ready to Match")
             .font(.system(size: 32, weight: .semibold))
-            .foregroundColor(.white)
+            .foregroundColor(Color.Theme.textPrimary)
 
           Text("You've entered the matching phase, do not close the app. We'll notify you when you got a match!")
             .font(.footnote)
-            .foregroundColor(Color.white.opacity(0.8))
+            .foregroundColor(Color.Theme.textSecondary)
             .multilineTextAlignment(.center)
             .adaptivePadding(horizontal: 24, vertical: 0)
         }
@@ -53,12 +54,12 @@ struct ProximitySharingView: View {
           Button(action: toggleMatching) {
             Text(isMatching ? "Stop Matching" : "Start Matching")
               .font(.headline)
-              .foregroundColor(isMatching ? .white : .black)
+              .foregroundColor(isMatching ? .white : Color.Theme.darkUI)
               .frame(maxWidth: .infinity)
               .padding(.vertical, 14)
-              .background(isMatching ? Color.red.opacity(0.9) : Color.white)
+              .background(isMatching ? Color.Theme.destructive : Color.Theme.cardBg)
               .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
-              .shadow(color: .black.opacity(0.2), radius: 8, x: 0, y: 4)
+              .shadow(color: Color.black.opacity(0.1), radius: 8, x: 0, y: 4)
           }
 
           HStack(spacing: 20) {
@@ -68,10 +69,10 @@ struct ProximitySharingView: View {
                 Text("Scan QR")
               }
               .font(.subheadline)
-              .foregroundColor(Color.white.opacity(0.9))
+              .foregroundColor(Color.Theme.textPrimary)
               .padding(.vertical, 8)
               .padding(.horizontal, 12)
-              .background(Color.white.opacity(0.1))
+              .background(Color.Theme.searchBg)
               .cornerRadius(20)
             }
 
@@ -82,10 +83,10 @@ struct ProximitySharingView: View {
                 Text("Share Options")
               }
               .font(.subheadline)
-              .foregroundColor(Color.white.opacity(0.9))
+              .foregroundColor(Color.Theme.textPrimary)
               .padding(.vertical, 8)
               .padding(.horizontal, 12)
-              .background(Color.white.opacity(0.1))
+              .background(Color.Theme.searchBg)
               .cornerRadius(20)
             }
           }
@@ -107,11 +108,11 @@ struct ProximitySharingView: View {
           }) {
             Image(systemName: "xmark")
               .font(.system(size: 16, weight: .semibold))
-              .foregroundColor(.white)
+              .foregroundColor(Color.Theme.textPrimary)
               .padding(10)
-              .background(Color.gray.opacity(0.3))
+              .background(Color.Theme.searchBg)
               .clipShape(Circle())
-              .shadow(color: Color.black.opacity(0.5), radius: 6, x: 0, y: 3)
+              .shadow(color: Color.black.opacity(0.1), radius: 6, x: 0, y: 3)
           }
         }
         .padding(.top, 12)

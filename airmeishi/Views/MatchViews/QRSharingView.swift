@@ -201,13 +201,13 @@ struct BusinessCardPreview: View {
         if let email = businessCard.email {
           Text(email)
             .font(.caption)
-            .foregroundColor(.blue)
+            .foregroundColor(Color.Theme.primaryBlue)
         }
 
         if let phone = businessCard.phone {
           Text(phone)
             .font(.caption)
-            .foregroundColor(.blue)
+            .foregroundColor(Color.Theme.primaryBlue)
         }
 
         if !businessCard.skills.isEmpty {
@@ -218,7 +218,7 @@ struct BusinessCardPreview: View {
         }
       }
       .padding()
-      .background(Color(.systemGray6))
+      .background(Color.Theme.cardBg)
       .cornerRadius(12)
     }
   }
@@ -273,11 +273,11 @@ struct PrivacyLevelRow: View {
 
         if isSelected {
           Image(systemName: "checkmark.circle.fill")
-            .foregroundColor(.blue)
+            .foregroundColor(Color.Theme.primaryBlue)
         }
       }
       .padding()
-      .background(isSelected ? Color.blue.opacity(0.1) : Color(.systemGray6))
+      .background(isSelected ? Color.Theme.primaryBlue.opacity(0.1) : Color.Theme.cardBg)
       .cornerRadius(8)
     }
     .buttonStyle(PlainButtonStyle())
@@ -375,7 +375,7 @@ struct OIDCRequestSummary: View {
           .foregroundColor(.secondary)
       }
       .padding()
-      .background(Color(.systemGray6))
+      .background(Color.Theme.cardBg)
       .cornerRadius(8)
 
       Text("Ask the other wallet to scan this code to send back a verifiable business card.")
@@ -442,7 +442,7 @@ struct SharingOptionButton: View {
       HStack(spacing: 12) {
         Image(systemName: icon)
           .font(.title2)
-          .foregroundColor(.blue)
+          .foregroundColor(Color.Theme.primaryBlue)
           .frame(width: 30)
 
         VStack(alignment: .leading, spacing: 2) {
@@ -463,7 +463,7 @@ struct SharingOptionButton: View {
           .foregroundColor(.secondary)
       }
       .padding()
-      .background(Color(.systemGray6))
+      .background(Color.Theme.cardBg)
       .cornerRadius(8)
     }
     .buttonStyle(PlainButtonStyle())
@@ -527,10 +527,10 @@ struct ShareLinkRow: View {
         onDeactivate()
       }
       .font(.caption)
-      .foregroundColor(.red)
+      .foregroundColor(Color.Theme.destructive)
     }
     .padding()
-    .background(Color(.systemGray6))
+    .background(Color.Theme.cardBg)
     .cornerRadius(8)
   }
 }

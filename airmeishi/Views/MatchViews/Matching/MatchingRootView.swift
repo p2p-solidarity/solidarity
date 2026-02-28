@@ -11,6 +11,7 @@ struct MatchingRootView: View {
   @StateObject private var proximityManager = ProximityManager.shared
   @StateObject private var cardManager = CardManager.shared
   @ObservedObject private var webRTCManager = WebRTCManager.shared
+  @Environment(\.colorScheme) private var colorScheme
   @State private var rotateOuter = false
   @State private var rotateMiddle = false
   @State private var rotateInner = false
@@ -20,16 +21,16 @@ struct MatchingRootView: View {
 
   var body: some View {
     ZStack {
-      Circle().stroke(Color.white.opacity(0.2), lineWidth: 2).padding(4)
-      Circle().stroke(Color.white.opacity(0.2), lineWidth: 2).padding(44)
-      Circle().stroke(Color.white.opacity(0.2), lineWidth: 2).padding(84)
+      Circle().stroke(Color.Theme.divider, lineWidth: 2).padding(4)
+      Circle().stroke(Color.Theme.divider, lineWidth: 2).padding(44)
+      Circle().stroke(Color.Theme.divider, lineWidth: 2).padding(84)
       Button(action: { showNearbySheet = true }) {
         ZStack {
-          Circle().fill(Color.white.opacity(0.25)).frame(width: 96, height: 96)
-            .overlay(Circle().stroke(Color.white.opacity(0.35), lineWidth: 1))
+          Circle().fill(Color.Theme.cardSurface(for: colorScheme)).frame(width: 96, height: 96)
+            .overlay(Circle().stroke(Color.Theme.cardBorder(for: colorScheme), lineWidth: 1))
           VStack(spacing: 2) {
-            Text("Nearby").font(.system(size: 12, weight: .semibold)).foregroundColor(.white)
-            Text("\(proximityManager.nearbyPeers.count)").font(.system(size: 14, weight: .bold)).foregroundColor(.white)
+            Text("Nearby").font(.system(size: 12, weight: .semibold)).foregroundColor(Color.Theme.textPrimary)
+            Text("\(proximityManager.nearbyPeers.count)").font(.system(size: 14, weight: .bold)).foregroundColor(Color.Theme.textPrimary)
           }
         }
       }
@@ -124,7 +125,7 @@ struct MatchingRootView: View {
           Text("🌸")
             .font(.system(size: 40))
             .padding()
-            .background(Color.white.opacity(0.2))
+            .background(Color.Theme.cardSurface(for: colorScheme))
             .clipShape(Circle())
         }
         .padding(.bottom, 100)
@@ -138,9 +139,9 @@ struct MatchingRootView: View {
         Text(message.content)
           .font(.largeTitle)
           .padding()
-          .background(Color.black.opacity(0.5))
+          .background(Color.Theme.overlayBg)
           .cornerRadius(10)
-          .foregroundColor(.white)
+          .foregroundColor(Color.Theme.textPrimary)
           .transition(.scale.combined(with: .opacity))
           .id(message.timestamp)  // Force transition on new message
       }
@@ -166,7 +167,7 @@ struct MatchingRootView: View {
   }
 
   private func satellite(size: CGFloat) -> some View {
-    Circle().fill(Color.white.opacity(0.8)).frame(width: size, height: size)
+    Circle().fill(Color.Theme.textPrimary.opacity(0.8)).frame(width: size, height: size)
   }
 
   private var incomingInvitationOverlay: some View {

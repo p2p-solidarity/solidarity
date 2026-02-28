@@ -142,37 +142,40 @@ extension IDView {
 
   // MARK: - 3. The Badge (Group List)
 
+  @ViewBuilder
   internal var badgeSection: some View {
-    VStack(alignment: .leading, spacing: 16) {
-      HStack {
-        Text("Groups")
-          .font(.headline)
-          .foregroundColor(.secondary)
-          .padding(.horizontal, 24)
+    if DeveloperModeManager.shared.isDeveloperMode {
+      VStack(alignment: .leading, spacing: 16) {
+        HStack {
+          Text("Groups")
+            .font(.headline)
+            .foregroundColor(.secondary)
+            .padding(.horizontal, 24)
 
-        Spacer()
+          Spacer()
 
-        Button(action: { showingGroupManager = true }) {
-          Image(systemName: "plus.circle.fill")
-            .font(.title2)
-            .foregroundColor(.accentColor)
-        }
-        .padding(.trailing, 24)
-      }
-
-      if groupManager.groups.isEmpty {
-        Text("No group memberships")
-          .font(.subheadline)
-          .foregroundColor(.secondary)
-          .frame(maxWidth: .infinity, alignment: .center)
-          .padding(.vertical, 20)
-      } else {
-        LazyVStack(spacing: 12) {
-          ForEach(groupManager.groups) { group in
-            groupRow(group: group)
+          Button(action: { showingGroupManager = true }) {
+            Image(systemName: "plus.circle.fill")
+              .font(.title2)
+              .foregroundColor(.accentColor)
           }
+          .padding(.trailing, 24)
         }
-        .padding(.horizontal, 20)
+
+        if groupManager.groups.isEmpty {
+          Text("No group memberships")
+            .font(.subheadline)
+            .foregroundColor(.secondary)
+            .frame(maxWidth: .infinity, alignment: .center)
+            .padding(.vertical, 20)
+        } else {
+          LazyVStack(spacing: 12) {
+            ForEach(groupManager.groups) { group in
+              groupRow(group: group)
+            }
+          }
+          .padding(.horizontal, 20)
+        }
       }
     }
   }

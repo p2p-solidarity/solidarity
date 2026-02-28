@@ -397,7 +397,7 @@ struct ScannedCardView: View {
           }
           .frame(maxWidth: .infinity)
           .padding()
-          .background(Color(.systemGray6))
+          .background(Color.Theme.cardBg)
           .cornerRadius(12)
 
           // Contact information
@@ -422,7 +422,7 @@ struct ScannedCardView: View {
             }
           }
           .padding()
-          .background(Color(.systemGray6))
+          .background(Color.Theme.cardBg)
           .cornerRadius(12)
 
           // Skills
@@ -444,7 +444,7 @@ struct ScannedCardView: View {
               }
             }
             .padding()
-            .background(Color(.systemGray6))
+            .background(Color.Theme.cardBg)
             .cornerRadius(12)
           }
 

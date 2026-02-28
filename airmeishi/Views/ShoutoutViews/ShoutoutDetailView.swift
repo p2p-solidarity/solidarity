@@ -10,6 +10,7 @@ import SwiftUI
 struct ShoutoutDetailView: View {
   let user: ShoutoutUser
   @Environment(\.dismiss) private var dismiss
+  @Environment(\.colorScheme) private var colorScheme
   @State private var showingCreateShoutout = false
   @State private var isSakuraAnimating = false
   @State private var showingDeleteConfirm = false
@@ -31,28 +32,21 @@ struct ShoutoutDetailView: View {
   private var bodyContent: some View {
     NavigationView {
       ZStack {
-        // Dark gradient background with lightning effect
-        LinearGradient(
-          colors: [
-            Color.black,
-            Color.blue.opacity(0.1),
-            Color.purple.opacity(0.05),
-            Color.black,
-          ],
-          startPoint: .topLeading,
-          endPoint: .bottomTrailing
-        )
-        .ignoresSafeArea()
+        Color.Theme.pageBg.ignoresSafeArea()
+
+        // Decorative background
+        DecorativeBlobs()
+          .offset(x: 100, y: -80)
 
         if isLoading {
           VStack(spacing: 20) {
             ProgressView()
-              .progressViewStyle(CircularProgressViewStyle(tint: .white))
+              .progressViewStyle(CircularProgressViewStyle(tint: Color.Theme.textSecondary))
               .scaleEffect(1.5)
 
             Text("Loading profile...")
               .font(.subheadline)
-              .foregroundColor(.white.opacity(0.8))
+              .foregroundColor(Color.Theme.textSecondary)
           }
         } else {
           ScrollView {
@@ -83,7 +77,6 @@ struct ShoutoutDetailView: View {
           Button("Close") {
             dismiss()
           }
-          .foregroundColor(.white)
         }
       }
       .sheet(isPresented: $showingCreateShoutout) {
@@ -110,7 +103,6 @@ struct ShoutoutDetailView: View {
         ReceivedCardView(card: contact.businessCard)
       }
     }
-    .preferredColorScheme(.dark)
     .onAppear {
       print("[ShoutoutDetailView] View appeared for user: \(user)")
       // Load cached message
@@ -154,12 +146,12 @@ struct ShoutoutDetailView: View {
     VStack(spacing: 20) {
       // Sakura and title
       HStack {
-        SakuraIconView(size: 32, color: .pink, isAnimating: isSakuraAnimating)
+        SakuraIconView(size: 32, color: Color.Theme.accentRose, isAnimating: isSakuraAnimating)
 
         Text("Sakura Profile")
           .font(.title2)
           .fontWeight(.bold)
-          .foregroundColor(.white)
+          .foregroundColor(Color.Theme.textPrimary)
 
         Spacer()
       }
@@ -170,7 +162,7 @@ struct ShoutoutDetailView: View {
         Circle()
           .stroke(
             LinearGradient(
-              colors: [.pink.opacity(0.8), .purple.opacity(0.6), .pink.opacity(0.8)],
+              colors: [Color.Theme.accentRose.opacity(0.8), Color.Theme.dustyMauve.opacity(0.6), Color.Theme.accentRose.opacity(0.8)],
               startPoint: .topLeading,
               endPoint: .bottomTrailing
             ),
@@ -191,7 +183,7 @@ struct ShoutoutDetailView: View {
           Circle()
             .fill(
               LinearGradient(
-                colors: [.blue, .purple],
+                colors: [Color.Theme.primaryBlue, Color.Theme.dustyMauve],
                 startPoint: .topLeading,
                 endPoint: .bottomTrailing
               )
@@ -215,7 +207,7 @@ struct ShoutoutDetailView: View {
             )
         )
         .shadow(
-          color: isSakuraAnimating ? .pink.opacity(0.6) : verificationColor.opacity(0.5),
+          color: isSakuraAnimating ? Color.Theme.accentRose.opacity(0.4) : verificationColor.opacity(0.3),
           radius: isSakuraAnimating ? 15 : 8,
           x: 0,
           y: 4
@@ -227,18 +219,18 @@ struct ShoutoutDetailView: View {
         Text(user.name)
           .font(.title)
           .fontWeight(.bold)
-          .foregroundColor(.white)
+          .foregroundColor(Color.Theme.textPrimary)
 
         if !user.title.isEmpty {
           Text(user.title)
             .font(.headline)
-            .foregroundColor(.pink)
+            .foregroundColor(Color.Theme.accentRose)
         }
 
         if !user.company.isEmpty {
           Text(user.company)
             .font(.subheadline)
-            .foregroundColor(.gray)
+            .foregroundColor(Color.Theme.textSecondary)
         }
       }
 
@@ -250,9 +242,9 @@ struct ShoutoutDetailView: View {
 
         Text(user.verificationStatus.displayName)
           .font(.headline)
-          .foregroundColor(.white)
+          .foregroundColor(Color.Theme.textPrimary)
 
-        SakuraIconView(size: 16, color: .pink, isAnimating: isSakuraAnimating)
+        SakuraIconView(size: 16, color: Color.Theme.accentRose, isAnimating: isSakuraAnimating)
       }
       .padding(.horizontal, 16)
       .padding(.vertical, 8)
@@ -273,7 +265,7 @@ struct ShoutoutDetailView: View {
     VStack(alignment: .leading, spacing: 12) {
       Text("Contact")
         .font(.headline)
-        .foregroundColor(.white)
+        .foregroundColor(Color.Theme.textPrimary)
 
       VStack(spacing: 8) {
         if !user.email.isEmpty {
@@ -293,20 +285,20 @@ struct ShoutoutDetailView: View {
         // Sakura Message Display
         if let message = latestSakuraMessage {
           Divider()
-            .background(Color.white.opacity(0.1))
+            .background(Color.Theme.divider)
 
           HStack(alignment: .top, spacing: 12) {
-            SakuraIconView(size: 20, color: .pink, isAnimating: true)
+            SakuraIconView(size: 20, color: Color.Theme.accentRose, isAnimating: true)
               .padding(.top, 2)
 
             VStack(alignment: .leading, spacing: 4) {
               Text("Latest Sakura")
                 .font(.subheadline)
-                .foregroundColor(.pink)
+                .foregroundColor(Color.Theme.accentRose)
 
               Text(message)
                 .font(.body)
-                .foregroundColor(.white)
+                .foregroundColor(Color.Theme.textPrimary)
                 .fixedSize(horizontal: false, vertical: true)
             }
           }
@@ -314,7 +306,7 @@ struct ShoutoutDetailView: View {
       }
     }
     .padding()
-    .background(Color.white.opacity(0.05))
+    .background(Color.Theme.cardSurface(for: colorScheme))
     .cornerRadius(12)
   }
 
@@ -324,12 +316,12 @@ struct ShoutoutDetailView: View {
     VStack(alignment: .leading, spacing: 12) {
       Text("Tags")
         .font(.headline)
-        .foregroundColor(.white)
+        .foregroundColor(Color.Theme.textPrimary)
 
       if user.tags.isEmpty {
         Text("No tags available")
           .font(.body)
-          .foregroundColor(.gray)
+          .foregroundColor(Color.Theme.textSecondary)
           .frame(maxWidth: .infinity, alignment: .leading)
       } else {
         LazyVGrid(
@@ -343,15 +335,15 @@ struct ShoutoutDetailView: View {
               .font(.caption)
               .padding(.horizontal, 8)
               .padding(.vertical, 4)
-              .background(Color.white.opacity(0.06))
-              .foregroundColor(.white)
+              .background(Color.Theme.searchBg)
+              .foregroundColor(Color.Theme.textPrimary)
               .cornerRadius(8)
           }
         }
       }
     }
     .padding()
-    .background(Color.white.opacity(0.05))
+    .background(Color.Theme.cardSurface(for: colorScheme))
     .cornerRadius(12)
   }
 
@@ -362,21 +354,21 @@ struct ShoutoutDetailView: View {
 
     return VStack(alignment: .leading, spacing: 12) {
       HStack {
-        SakuraIconView(size: 20, color: .pink, isAnimating: isSakuraAnimating)
+        SakuraIconView(size: 20, color: Color.Theme.accentRose, isAnimating: isSakuraAnimating)
 
         Text("Message History")
           .font(.headline)
-          .foregroundColor(.white)
+          .foregroundColor(Color.Theme.textPrimary)
 
         Spacer()
 
         if !messages.isEmpty {
           Text("\(messages.count)")
             .font(.caption)
-            .foregroundColor(.gray)
+            .foregroundColor(Color.Theme.textSecondary)
             .padding(.horizontal, 8)
             .padding(.vertical, 4)
-            .background(Color.white.opacity(0.1))
+            .background(Color.Theme.searchBg)
             .cornerRadius(8)
         }
       }
@@ -384,10 +376,10 @@ struct ShoutoutDetailView: View {
       if messages.isEmpty {
         HStack(spacing: 8) {
           Image(systemName: "bubble.left.and.bubble.right")
-            .foregroundColor(.gray)
+            .foregroundColor(Color.Theme.textSecondary)
           Text("No message history yet")
             .font(.body)
-            .foregroundColor(.gray)
+            .foregroundColor(Color.Theme.textSecondary)
         }
         .frame(maxWidth: .infinity, alignment: .center)
         .padding(.vertical, 16)
@@ -400,7 +392,7 @@ struct ShoutoutDetailView: View {
           if messages.count > 5 {
             Text("+ \(messages.count - 5) more messages")
               .font(.caption)
-              .foregroundColor(.pink)
+              .foregroundColor(Color.Theme.accentRose)
               .frame(maxWidth: .infinity, alignment: .center)
               .padding(.top, 4)
           }
@@ -408,7 +400,7 @@ struct ShoutoutDetailView: View {
       }
     }
     .padding()
-    .background(Color.white.opacity(0.05))
+    .background(Color.Theme.cardSurface(for: colorScheme))
     .cornerRadius(12)
   }
 
@@ -417,7 +409,7 @@ struct ShoutoutDetailView: View {
       Circle()
         .fill(
           LinearGradient(
-            colors: [.pink.opacity(0.6), .purple.opacity(0.4)],
+            colors: [Color.Theme.accentRose.opacity(0.6), Color.Theme.dustyMauve.opacity(0.4)],
             startPoint: .topLeading,
             endPoint: .bottomTrailing
           )
@@ -428,12 +420,12 @@ struct ShoutoutDetailView: View {
       VStack(alignment: .leading, spacing: 4) {
         Text(message.text)
           .font(.body)
-          .foregroundColor(.white)
+          .foregroundColor(Color.Theme.textPrimary)
           .fixedSize(horizontal: false, vertical: true)
 
         Text(message.timestamp, style: .relative)
           .font(.caption2)
-          .foregroundColor(.gray)
+          .foregroundColor(Color.Theme.textSecondary)
       }
     }
     .padding(.vertical, 4)
@@ -455,21 +447,8 @@ struct ShoutoutDetailView: View {
             .font(.headline)
             .fontWeight(.bold)
         }
-        .foregroundColor(.white)
-        .frame(maxWidth: .infinity)
-        .padding(.vertical, 16)
-        .background(
-          RoundedRectangle(cornerRadius: 16)
-            .fill(
-              LinearGradient(
-                colors: [.pink.opacity(0.8), .purple.opacity(0.6), .pink.opacity(0.8)],
-                startPoint: .leading,
-                endPoint: .trailing
-              )
-            )
-            .shadow(color: .pink.opacity(0.5), radius: 10, x: 0, y: 0)
-        )
       }
+      .buttonStyle(ThemedRoseButtonStyle())
 
       // Secondary Actions
       HStack(spacing: 12) {
@@ -478,7 +457,6 @@ struct ShoutoutDetailView: View {
             selectedContact = contact
             showingProfile = true
           } else {
-            // If contact not found (e.g. cloud only), maybe show error or handle gracefully
             print("Contact not found for user: \(user.id)")
           }
         }) {
@@ -489,18 +467,8 @@ struct ShoutoutDetailView: View {
               .font(.subheadline)
               .fontWeight(.medium)
           }
-          .foregroundColor(.white)
-          .frame(maxWidth: .infinity)
-          .padding(.vertical, 12)
-          .background(
-            RoundedRectangle(cornerRadius: 12)
-              .fill(Color.white.opacity(0.1))
-              .overlay(
-                RoundedRectangle(cornerRadius: 12)
-                  .stroke(Color.white.opacity(0.2), lineWidth: 1)
-              )
-          )
         }
+        .buttonStyle(ThemedSecondaryButtonStyle())
 
         Button(action: {
           showingShareSheet = true
@@ -512,18 +480,8 @@ struct ShoutoutDetailView: View {
               .font(.subheadline)
               .fontWeight(.medium)
           }
-          .foregroundColor(.white)
-          .frame(maxWidth: .infinity)
-          .padding(.vertical, 12)
-          .background(
-            RoundedRectangle(cornerRadius: 12)
-              .fill(Color.white.opacity(0.1))
-              .overlay(
-                RoundedRectangle(cornerRadius: 12)
-                  .stroke(Color.white.opacity(0.2), lineWidth: 1)
-              )
-          )
         }
+        .buttonStyle(ThemedSecondaryButtonStyle())
         .sheet(isPresented: $showingShareSheet) {
           ActivityViewController(activityItems: ["Check out \(user.name) on Sakura!"])
         }
@@ -540,18 +498,8 @@ struct ShoutoutDetailView: View {
             .font(.subheadline)
             .fontWeight(.medium)
         }
-        .foregroundColor(.red)
-        .frame(maxWidth: .infinity)
-        .padding(.vertical, 12)
-        .background(
-          RoundedRectangle(cornerRadius: 12)
-            .fill(Color.red.opacity(0.1))
-            .overlay(
-              RoundedRectangle(cornerRadius: 12)
-                .stroke(Color.red.opacity(0.3), lineWidth: 1)
-            )
-        )
       }
+      .buttonStyle(ThemedDestructiveButtonStyle())
     }
   }
 
@@ -579,7 +527,7 @@ struct ShoutoutDetailView: View {
     switch user.verificationStatus {
     case .verified: return .green
     case .pending: return .orange
-    case .unverified: return .blue
+    case .unverified: return Color.Theme.primaryBlue
     case .failed: return .red
     }
   }

@@ -28,8 +28,7 @@ struct airmeishiApp: App {
         .environmentObject(proximityManager)
         .environmentObject(deepLinkManager)
         .environmentObject(themeManager)
-        .tint(.black)
-        .preferredColorScheme(.dark)
+        .preferredColorScheme(themeManager.appColorScheme.colorScheme)
         .onAppear {
           setupApp()
         }

@@ -3,6 +3,7 @@ import SwiftUI
 struct ReceivedCardView: View {
   let card: BusinessCard
   @Environment(\.dismiss) private var dismiss
+  @Environment(\.colorScheme) private var colorScheme
   @State private var isSakuraAnimating = false
   @State private var showingShoutoutGallery = false
   @State private var isSaved = false
@@ -17,18 +18,11 @@ struct ReceivedCardView: View {
   var body: some View {
     NavigationView {
       ZStack {
-        // Dark gradient background with sakura effect
-        LinearGradient(
-          colors: [
-            Color.black,
-            Color.pink.opacity(0.1),
-            Color.purple.opacity(0.05),
-            Color.black,
-          ],
-          startPoint: .topLeading,
-          endPoint: .bottomTrailing
-        )
-        .ignoresSafeArea()
+        Color.Theme.pageBg.ignoresSafeArea()
+
+        // Decorative background
+        DecorativeBlobs()
+          .offset(x: 120, y: -60)
 
         ScrollView {
           VStack(spacing: 24) {
@@ -39,7 +33,7 @@ struct ReceivedCardView: View {
                 Circle()
                   .stroke(
                     LinearGradient(
-                      colors: [.pink.opacity(0.8), .purple.opacity(0.6), .pink.opacity(0.8)],
+                      colors: [Color.Theme.accentRose.opacity(0.8), Color.Theme.dustyMauve.opacity(0.6), Color.Theme.accentRose.opacity(0.8)],
                       startPoint: .topLeading,
                       endPoint: .bottomTrailing
                     ),
@@ -52,21 +46,21 @@ struct ReceivedCardView: View {
                     value: isSakuraAnimating
                   )
 
-                SakuraIconView(size: 40, color: .pink, isAnimating: isSakuraAnimating)
+                SakuraIconView(size: 40, color: Color.Theme.accentRose, isAnimating: isSakuraAnimating)
               }
 
               VStack(spacing: 8) {
                 Text("Sakura Card Received! 🌸")
                   .font(.title)
                   .fontWeight(.bold)
-                  .foregroundColor(.white)
+                  .foregroundColor(Color.Theme.textPrimary)
 
                 Text(
                   isSaved
                     ? "Business card has been saved to your contacts" : "Tap save to add this card to your contacts"
                 )
                 .font(.body)
-                .foregroundColor(.gray)
+                .foregroundColor(Color.Theme.textSecondary)
                 .multilineTextAlignment(.center)
               }
             }
@@ -77,29 +71,29 @@ struct ReceivedCardView: View {
               HStack {
                 Text("Card Details")
                   .font(.headline)
-                  .foregroundColor(.white)
+                  .foregroundColor(Color.Theme.textPrimary)
 
                 Spacer()
 
-                SakuraIconView(size: 28, color: .pink, isAnimating: isSakuraAnimating)
+                SakuraIconView(size: 28, color: Color.Theme.accentRose, isAnimating: isSakuraAnimating)
               }
 
               VStack(alignment: .leading, spacing: 12) {
                 Text(card.name)
                   .font(.title2)
                   .fontWeight(.bold)
-                  .foregroundColor(.white)
+                  .foregroundColor(Color.Theme.textPrimary)
 
                 if let title = card.title {
                   Text(title)
                     .font(.headline)
-                    .foregroundColor(.pink)
+                    .foregroundColor(Color.Theme.accentRose)
                 }
 
                 if let company = card.company {
                   Text(company)
                     .font(.subheadline)
-                    .foregroundColor(.gray)
+                    .foregroundColor(Color.Theme.textSecondary)
                 }
 
                 HStack(spacing: 6) {
@@ -107,16 +101,16 @@ struct ReceivedCardView: View {
                     .foregroundColor(color(for: verificationStatus))
                   Text(verificationStatus.displayName)
                     .font(.caption)
-                    .foregroundColor(.gray)
+                    .foregroundColor(Color.Theme.textSecondary)
                 }
 
                 if let email = card.email {
                   HStack {
                     Image(systemName: "envelope.fill")
-                      .foregroundColor(.blue)
+                      .foregroundColor(Color.Theme.primaryBlue)
                     Text(email)
                       .font(.subheadline)
-                      .foregroundColor(.blue)
+                      .foregroundColor(Color.Theme.primaryBlue)
                   }
                 }
 
@@ -134,10 +128,10 @@ struct ReceivedCardView: View {
             .padding()
             .background(
               RoundedRectangle(cornerRadius: 16)
-                .fill(Color.white.opacity(0.05))
+                .fill(Color.Theme.cardSurface(for: colorScheme))
                 .overlay(
                   RoundedRectangle(cornerRadius: 16)
-                    .stroke(Color.pink.opacity(0.3), lineWidth: 1)
+                    .stroke(Color.Theme.accentRose.opacity(0.3), lineWidth: 1)
                 )
             )
 
@@ -158,21 +152,8 @@ struct ReceivedCardView: View {
                       .font(.headline)
                       .fontWeight(.bold)
                   }
-                  .foregroundColor(.white)
-                  .frame(maxWidth: .infinity)
-                  .padding(.vertical, 16)
-                  .background(
-                    RoundedRectangle(cornerRadius: 16)
-                      .fill(
-                        LinearGradient(
-                          colors: [.blue, .purple, .blue],
-                          startPoint: .leading,
-                          endPoint: .trailing
-                        )
-                      )
-                      .shadow(color: .blue.opacity(0.5), radius: 10, x: 0, y: 0)
-                  )
                 }
+                .buttonStyle(ThemedPrimaryButtonStyle())
               } else {
                 Button(action: { showingShoutoutGallery = true }) {
                   HStack(spacing: 12) {
@@ -182,21 +163,8 @@ struct ReceivedCardView: View {
                       .font(.headline)
                       .fontWeight(.bold)
                   }
-                  .foregroundColor(.white)
-                  .frame(maxWidth: .infinity)
-                  .padding(.vertical, 16)
-                  .background(
-                    RoundedRectangle(cornerRadius: 16)
-                      .fill(
-                        LinearGradient(
-                          colors: [.pink.opacity(0.8), .purple.opacity(0.6), .pink.opacity(0.8)],
-                          startPoint: .leading,
-                          endPoint: .trailing
-                        )
-                      )
-                      .shadow(color: .pink.opacity(0.5), radius: 10, x: 0, y: 0)
-                  )
                 }
+                .buttonStyle(ThemedRoseButtonStyle())
               }
 
               Button(action: { dismiss() }) {
@@ -207,18 +175,8 @@ struct ReceivedCardView: View {
                     .font(.headline)
                     .fontWeight(.medium)
                 }
-                .foregroundColor(.white)
-                .frame(maxWidth: .infinity)
-                .padding(.vertical, 12)
-                .background(
-                  RoundedRectangle(cornerRadius: 12)
-                    .fill(Color.white.opacity(0.1))
-                    .overlay(
-                      RoundedRectangle(cornerRadius: 12)
-                        .stroke(Color.white.opacity(0.2), lineWidth: 1)
-                    )
-                )
               }
+              .buttonStyle(ThemedSecondaryButtonStyle())
             }
 
             Spacer()
@@ -247,7 +205,6 @@ struct ReceivedCardView: View {
         Text("The business card has been successfully saved to your contacts.")
       }
     }
-    .preferredColorScheme(.dark)
   }
 
   private func saveCard() {

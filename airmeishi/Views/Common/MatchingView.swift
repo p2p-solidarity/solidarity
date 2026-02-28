@@ -16,30 +16,24 @@ struct MatchingView: View {
 
 // Subviews moved to `Views/Common/Matching/*`
 
-// Subviews moved to `Views/Common/Matching/*`
-
 // MARK: - Peer Detail Sheet
 struct PeerDetailSheet: View {
   let peer: ProximityPeer
   @Environment(\.dismiss) private var dismiss
+  @Environment(\.colorScheme) private var colorScheme
   @State private var isLighteningAnimating = false
 
   var body: some View {
     NavigationView {
       ZStack {
-        LinearGradient(
-          colors: [Color.black, Color.blue.opacity(0.1)],
-          startPoint: .top,
-          endPoint: .bottom
-        )
-        .ignoresSafeArea()
+        Color.Theme.pageBg.ignoresSafeArea()
 
         ScrollView {
           VStack(spacing: 24) {
             // Lightening header
             HStack {
               Image(systemName: "bolt.fill")
-                .foregroundColor(.yellow)
+                .foregroundColor(Color.Theme.featureAccent)
                 .font(.title)
                 .scaleEffect(isLighteningAnimating ? 1.3 : 1.0)
                 .animation(
@@ -50,7 +44,7 @@ struct PeerDetailSheet: View {
               Text("Peer Details")
                 .font(.title2)
                 .fontWeight(.bold)
-                .foregroundColor(.white)
+                .foregroundColor(Color.Theme.textPrimary)
 
               Spacer()
             }
@@ -64,7 +58,7 @@ struct PeerDetailSheet: View {
                   Circle()
                     .fill(
                       LinearGradient(
-                        colors: [.blue, .purple],
+                        colors: [Color.Theme.primaryBlue, Color.Theme.dustyMauve],
                         startPoint: .topLeading,
                         endPoint: .bottomTrailing
                       )
@@ -81,18 +75,18 @@ struct PeerDetailSheet: View {
                   Text(peer.cardName ?? peer.name)
                     .font(.title2)
                     .fontWeight(.bold)
-                    .foregroundColor(.white)
+                    .foregroundColor(Color.Theme.textPrimary)
 
                   if let title = peer.cardTitle {
                     Text(title)
                       .font(.headline)
-                      .foregroundColor(.yellow)
+                      .foregroundColor(Color.Theme.featureAccent)
                   }
 
                   if let company = peer.cardCompany {
                     Text(company)
                       .font(.subheadline)
-                      .foregroundColor(.gray)
+                      .foregroundColor(Color.Theme.textSecondary)
                   }
                 }
               }
@@ -102,7 +96,7 @@ struct PeerDetailSheet: View {
                 HStack {
                   Text("Connection Status")
                     .font(.headline)
-                    .foregroundColor(.white)
+                    .foregroundColor(Color.Theme.textPrimary)
                   Spacer()
                   HStack(spacing: 6) {
                     Circle()
@@ -110,7 +104,7 @@ struct PeerDetailSheet: View {
                       .frame(width: 8, height: 8)
                     Text(peer.status.rawValue)
                       .font(.subheadline)
-                      .foregroundColor(.white)
+                      .foregroundColor(Color.Theme.textPrimary)
                   }
                 }
 
@@ -118,14 +112,14 @@ struct PeerDetailSheet: View {
                   HStack {
                     Text("Verification")
                       .font(.headline)
-                      .foregroundColor(.white)
+                      .foregroundColor(Color.Theme.textPrimary)
                     Spacer()
                     HStack(spacing: 6) {
                       Image(systemName: verification.systemImageName)
                         .foregroundColor(verificationColor)
                       Text(verification.displayName)
                         .font(.subheadline)
-                        .foregroundColor(.white)
+                        .foregroundColor(Color.Theme.textPrimary)
                     }
                   }
                 }
@@ -134,14 +128,14 @@ struct PeerDetailSheet: View {
                   HStack {
                     Text("ZK Capability")
                       .font(.headline)
-                      .foregroundColor(.white)
+                      .foregroundColor(Color.Theme.textPrimary)
                     Spacer()
                     HStack(spacing: 6) {
                       Image(systemName: "shield.checkerboard")
-                        .foregroundColor(.blue)
+                        .foregroundColor(Color.Theme.primaryBlue)
                       Text("Enabled")
                         .font(.subheadline)
-                        .foregroundColor(.white)
+                        .foregroundColor(Color.Theme.textPrimary)
                     }
                   }
                 }
@@ -150,10 +144,10 @@ struct PeerDetailSheet: View {
             .padding()
             .background(
               RoundedRectangle(cornerRadius: 16)
-                .fill(Color.white.opacity(0.05))
+                .fill(Color.Theme.cardSurface(for: colorScheme))
                 .overlay(
                   RoundedRectangle(cornerRadius: 16)
-                    .stroke(Color.yellow.opacity(0.3), lineWidth: 1)
+                    .stroke(Color.Theme.featureAccent.opacity(0.3), lineWidth: 1)
                 )
             )
 
@@ -173,7 +167,6 @@ struct PeerDetailSheet: View {
         isLighteningAnimating = true
       }
     }
-    .preferredColorScheme(.dark)
   }
 
   private var peerAvatarInitials: String {
@@ -196,18 +189,17 @@ struct PeerDetailSheet: View {
       switch verification {
       case .verified: return .green
       case .pending: return .orange
-      case .unverified: return .blue
+      case .unverified: return Color.Theme.primaryBlue
       case .failed: return .red
       }
     }
-    return .blue
+    return Color.Theme.primaryBlue
   }
 }
 
 #Preview {
   ZStack {
-    Color.black.ignoresSafeArea()
+    Color.Theme.pageBg.ignoresSafeArea()
     MatchingView().frame(width: 300, height: 300)
   }
-  .preferredColorScheme(.dark)
 }

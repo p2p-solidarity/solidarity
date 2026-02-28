@@ -11,6 +11,7 @@ import SwiftUI
 
 struct CreateShoutoutView: View {
   @Environment(\.dismiss) private var dismiss
+  @Environment(\.colorScheme) private var colorScheme
   @State private var recipient: ShoutoutUser?
   @State private var message = ""
   @State private var showingUserPicker = false
@@ -23,18 +24,7 @@ struct CreateShoutoutView: View {
   var body: some View {
     NavigationView {
       ZStack {
-        // Dark background with lightning effect
-        LinearGradient(
-          colors: [
-            Color.black,
-            Color.purple.opacity(0.1),
-            Color.blue.opacity(0.05),
-            Color.black,
-          ],
-          startPoint: .topLeading,
-          endPoint: .bottomTrailing
-        )
-        .ignoresSafeArea()
+        Color.Theme.pageBg.ignoresSafeArea()
 
         VStack(spacing: 24) {
           // Sakura header
@@ -70,24 +60,23 @@ struct CreateShoutoutView: View {
         startSakuraAnimation()
       }
     }
-    .preferredColorScheme(.dark)
   }
 
   // MARK: - Sakura Header
 
   private var sakuraHeader: some View {
     HStack {
-      SakuraIconView(size: 32, color: .pink, isAnimating: isSakuraAnimating)
+      SakuraIconView(size: 32, color: Color.Theme.accentRose, isAnimating: isSakuraAnimating)
 
       VStack(alignment: .leading, spacing: 2) {
         Text("Send Sakura")
           .font(.title2)
           .fontWeight(.bold)
-          .foregroundColor(.white)
+          .foregroundColor(Color.Theme.textPrimary)
 
         Text("A once-in-a-lifetime encounter 🌸")
           .font(.caption)
-          .foregroundColor(.gray)
+          .foregroundColor(Color.Theme.textSecondary)
       }
 
       Spacer()
@@ -101,12 +90,12 @@ struct CreateShoutoutView: View {
       HStack {
         Text("Recipient")
           .font(.headline)
-          .foregroundColor(.white)
+          .foregroundColor(Color.Theme.textPrimary)
 
         Spacer()
 
         Image(systemName: "person.circle.fill")
-          .foregroundColor(.pink)
+          .foregroundColor(Color.Theme.accentRose)
           .font(.title3)
       }
 
@@ -121,7 +110,7 @@ struct CreateShoutoutView: View {
               Circle()
                 .fill(
                   LinearGradient(
-                    colors: [.blue, .purple],
+                    colors: [Color.Theme.primaryBlue, Color.Theme.dustyMauve],
                     startPoint: .topLeading,
                     endPoint: .bottomTrailing
                   )
@@ -136,7 +125,7 @@ struct CreateShoutoutView: View {
             .clipShape(Circle())
             .overlay(
               Circle()
-                .stroke(Color.pink, lineWidth: 2)
+                .stroke(Color.Theme.accentRose, lineWidth: 2)
                 .scaleEffect(isSakuraAnimating ? 1.1 : 1.0)
                 .animation(
                   .easeInOut(duration: 0.5).repeatForever(autoreverses: true),
@@ -147,34 +136,34 @@ struct CreateShoutoutView: View {
             VStack(alignment: .leading) {
               Text(recipient.name)
                 .font(.headline)
-                .foregroundColor(.white)
+                .foregroundColor(Color.Theme.textPrimary)
 
               Text(recipient.company)
                 .font(.subheadline)
-                .foregroundColor(.gray)
+                .foregroundColor(Color.Theme.textSecondary)
             }
           } else {
             Image(systemName: "person.circle.dashed")
               .font(.title)
-              .foregroundColor(.gray)
+              .foregroundColor(Color.Theme.textSecondary)
 
             Text("Select Recipient")
               .font(.headline)
-              .foregroundColor(.white)
+              .foregroundColor(Color.Theme.textPrimary)
           }
 
           Spacer()
 
           Image(systemName: "chevron.right")
-            .foregroundColor(.gray)
+            .foregroundColor(Color.Theme.textSecondary)
         }
         .padding()
         .background(
           RoundedRectangle(cornerRadius: 12)
-            .fill(Color.white.opacity(0.05))
+            .fill(Color.Theme.cardSurface(for: colorScheme))
             .overlay(
               RoundedRectangle(cornerRadius: 12)
-                .stroke(Color.pink.opacity(0.3), lineWidth: 1)
+                .stroke(Color.Theme.accentRose.opacity(0.3), lineWidth: 1)
             )
         )
       }
@@ -189,25 +178,25 @@ struct CreateShoutoutView: View {
       HStack {
         Text("Sakura Message")
           .font(.headline)
-          .foregroundColor(.white)
+          .foregroundColor(Color.Theme.textPrimary)
 
         Spacer()
 
-        SakuraIconView(size: 24, color: .pink, isAnimating: isSakuraAnimating)
+        SakuraIconView(size: 24, color: Color.Theme.accentRose, isAnimating: isSakuraAnimating)
       }
 
       VStack(alignment: .leading, spacing: 8) {
         TextField("A beautiful encounter worth cherishing 🌸", text: $message, axis: .vertical)
           .textFieldStyle(PlainTextFieldStyle())
-          .foregroundColor(.white)
+          .foregroundColor(Color.Theme.textPrimary)
           .padding()
           .background(
             RoundedRectangle(cornerRadius: 12)
-              .fill(Color.white.opacity(0.05))
+              .fill(Color.Theme.cardSurface(for: colorScheme))
               .overlay(
                 RoundedRectangle(cornerRadius: 12)
                   .stroke(
-                    isSakuraAnimating ? Color.pink.opacity(0.5) : Color.white.opacity(0.1),
+                    isSakuraAnimating ? Color.Theme.accentRose.opacity(0.5) : Color.Theme.cardBorder(for: colorScheme),
                     lineWidth: 1
                   )
               )
@@ -216,7 +205,7 @@ struct CreateShoutoutView: View {
 
         Text("\(message.count)/200 characters")
           .font(.caption)
-          .foregroundColor(.gray)
+          .foregroundColor(Color.Theme.textSecondary)
           .frame(maxWidth: .infinity, alignment: .trailing)
       }
     }
@@ -234,21 +223,8 @@ struct CreateShoutoutView: View {
             .font(.headline)
             .fontWeight(.bold)
         }
-        .foregroundColor(.white)
-        .frame(maxWidth: .infinity)
-        .padding(.vertical, 16)
-        .background(
-          RoundedRectangle(cornerRadius: 16)
-            .fill(
-              LinearGradient(
-                colors: [.pink.opacity(0.8), .purple.opacity(0.6), .pink.opacity(0.8)],
-                startPoint: .leading,
-                endPoint: .trailing
-              )
-            )
-            .shadow(color: .pink.opacity(0.5), radius: 10, x: 0, y: 0)
-        )
       }
+      .buttonStyle(ThemedRoseButtonStyle())
       .disabled(recipient == nil || message.isEmpty || message.count > 200 || !(recipient?.canReceiveSakura ?? false))
       .opacity(
         (recipient == nil || message.isEmpty || message.count > 200 || !(recipient?.canReceiveSakura ?? false))
@@ -258,7 +234,7 @@ struct CreateShoutoutView: View {
       if let recipient = recipient, !recipient.canReceiveSakura {
         Text("This user hasn't enabled Secure Messaging yet.")
           .font(.caption)
-          .foregroundColor(.gray)
+          .foregroundColor(Color.Theme.textSecondary)
           .padding(.top, 4)
       }
     }

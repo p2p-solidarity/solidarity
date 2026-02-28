@@ -10,6 +10,7 @@ import SwiftUI
 struct SettingsView: View {
   @EnvironmentObject private var theme: ThemeManager
   @StateObject private var cardManager = CardManager.shared
+  @ObservedObject private var devMode = DeveloperModeManager.shared
   @State private var showingAppearanceSettings = false
   @State private var showingBackupSettings = false
   @State private var showingPrivacySettings = false
@@ -78,12 +79,73 @@ struct SettingsView: View {
           }
         }
 
+        // Developer Mode section (only visible when enabled)
+        if devMode.isDeveloperMode {
+          Section {
+            NavigationLink {
+              GroupManagementView()
+            } label: {
+              Label("Group Management", systemImage: "person.3.fill")
+            }
+
+            NavigationLink {
+              ShoutoutView()
+            } label: {
+              Label("Sakura Gallery", systemImage: "star.fill")
+            }
+
+            NavigationLink {
+              IDView()
+            } label: {
+              Label("Identity Dashboard", systemImage: "target")
+            }
+
+            if let card = cardManager.businessCards.first {
+              let cardId = card.id
+              NavigationLink {
+                IdentityDashboardView(
+                  sharingPreferences: Binding(
+                    get: {
+                      if let currentCard = cardManager.businessCards.first(where: { $0.id == cardId }) {
+                        return currentCard.sharingPreferences
+                      }
+                      return card.sharingPreferences
+                    },
+                    set: { newPreferences in
+                      if var updatedCard = cardManager.businessCards.first(where: { $0.id == cardId }) {
+                        updatedCard.sharingPreferences = newPreferences
+                        _ = cardManager.updateCard(updatedCard)
+                      }
+                    }
+                  )
+                )
+              } label: {
+                Label("Selective Disclosure", systemImage: "eye.slash.fill")
+              }
+            }
+          } header: {
+            HStack {
+              Text("Developer")
+              Spacer()
+              Button("Disable") {
+                devMode.disableDeveloperMode()
+              }
+              .font(.caption)
+              .foregroundColor(.orange)
+            }
+          }
+        }
+
         Section("About") {
           HStack {
             Text("Version")
             Spacer()
             Text(Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "Unknown")
               .foregroundColor(.secondary)
+          }
+          .contentShape(Rectangle())
+          .onTapGesture {
+            devMode.registerVersionTap()
           }
         }
       }

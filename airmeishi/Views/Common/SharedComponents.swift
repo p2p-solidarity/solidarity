@@ -16,7 +16,7 @@ struct ContactInfoRow: View {
   var body: some View {
     HStack(spacing: 12) {
       Image(systemName: icon)
-        .foregroundColor(.blue)
+        .foregroundColor(Color.Theme.primaryBlue)
         .frame(width: 20)
 
       VStack(alignment: .leading, spacing: 2) {
@@ -43,7 +43,7 @@ struct MetadataRow: View {
   var body: some View {
     HStack {
       Image(systemName: icon)
-        .foregroundColor(.blue)
+        .foregroundColor(Color.Theme.primaryBlue)
         .frame(width: 20)
 
       VStack(alignment: .leading, spacing: 2) {
@@ -77,8 +77,8 @@ struct SkillChip: View {
     }
     .padding(.horizontal, 8)
     .padding(.vertical, 4)
-    .background(Color.blue.opacity(0.1))
-    .foregroundColor(.blue)
+    .background(Color.Theme.primaryBlue.opacity(0.1))
+    .foregroundColor(Color.Theme.primaryBlue)
     .cornerRadius(8)
   }
 }

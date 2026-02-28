@@ -12,6 +12,7 @@ import SwiftUI
 struct UserPickerView: View {
   @Binding var selectedUser: ShoutoutUser?
   @Environment(\.dismiss) private var dismiss
+  @Environment(\.colorScheme) private var colorScheme
   @StateObject private var chartService = ShoutoutChartService.shared
   @State private var searchText = ""
   @State private var isSakuraAnimating = false
@@ -31,13 +32,7 @@ struct UserPickerView: View {
   var body: some View {
     NavigationView {
       ZStack {
-        // Dark background
-        LinearGradient(
-          colors: [Color.black, Color.blue.opacity(0.1)],
-          startPoint: .top,
-          endPoint: .bottom
-        )
-        .ignoresSafeArea()
+        Color.Theme.pageBg.ignoresSafeArea()
 
         VStack(spacing: 0) {
           // Search bar
@@ -73,33 +68,32 @@ struct UserPickerView: View {
         isSakuraAnimating = true
       }
     }
-    .preferredColorScheme(.dark)
   }
 
   private var searchBar: some View {
     HStack {
       Image(systemName: "magnifyingglass")
-        .foregroundColor(.pink)
+        .foregroundColor(Color.Theme.accentRose)
 
       TextField("Search contacts...", text: $searchText)
         .textFieldStyle(PlainTextFieldStyle())
-        .foregroundColor(.white)
+        .foregroundColor(Color.Theme.textPrimary)
 
       if !searchText.isEmpty {
         Button("Clear") {
           searchText = ""
         }
         .font(.caption)
-        .foregroundColor(.gray)
+        .foregroundColor(Color.Theme.textSecondary)
       }
     }
     .padding()
     .background(
       RoundedRectangle(cornerRadius: 12)
-        .fill(Color.white.opacity(0.08))
+        .fill(Color.Theme.searchBg)
         .overlay(
           RoundedRectangle(cornerRadius: 12)
-            .stroke(Color.pink.opacity(0.3), lineWidth: 1)
+            .stroke(Color.Theme.accentRose.opacity(0.3), lineWidth: 1)
         )
     )
     .padding()
@@ -113,6 +107,7 @@ struct LighteningUserRow: View {
   let isLighteningAnimating: Bool
   let onTap: () -> Void
 
+  @Environment(\.colorScheme) private var colorScheme
   @State private var isHovering = false
 
   var body: some View {
@@ -127,7 +122,7 @@ struct LighteningUserRow: View {
           Circle()
             .fill(
               LinearGradient(
-                colors: [.blue, .purple],
+                colors: [Color.Theme.primaryBlue, Color.Theme.dustyMauve],
                 startPoint: .topLeading,
                 endPoint: .bottomTrailing
               )
@@ -142,7 +137,7 @@ struct LighteningUserRow: View {
         .clipShape(Circle())
         .overlay(
           Circle()
-            .stroke(Color.pink, lineWidth: 2)
+            .stroke(Color.Theme.accentRose, lineWidth: 2)
             .scaleEffect(isLighteningAnimating ? 1.1 : 1.0)
             .animation(
               .easeInOut(duration: 0.5).repeatForever(autoreverses: true),
@@ -154,18 +149,18 @@ struct LighteningUserRow: View {
         VStack(alignment: .leading, spacing: 4) {
           Text(user.name)
             .font(.headline)
-            .foregroundColor(.white)
+            .foregroundColor(Color.Theme.textPrimary)
 
           if !user.company.isEmpty {
             Text(user.company)
               .font(.subheadline)
-              .foregroundColor(.gray)
+              .foregroundColor(Color.Theme.textSecondary)
           }
 
           if !user.title.isEmpty {
             Text(user.title)
               .font(.caption)
-              .foregroundColor(.gray.opacity(0.8))
+              .foregroundColor(Color.Theme.textTertiary)
           }
         }
 
@@ -173,7 +168,7 @@ struct LighteningUserRow: View {
 
         // Sakura and verification
         VStack(spacing: 4) {
-          SakuraIconView(size: 24, color: isLighteningAnimating ? .pink : .gray, isAnimating: isLighteningAnimating)
+          SakuraIconView(size: 24, color: isLighteningAnimating ? Color.Theme.accentRose : Color.Theme.textSecondary, isAnimating: isLighteningAnimating)
 
           Image(systemName: user.verificationStatus.systemImageName)
             .foregroundColor(verificationColor)
@@ -183,11 +178,11 @@ struct LighteningUserRow: View {
       .padding()
       .background(
         RoundedRectangle(cornerRadius: 12)
-          .fill(Color.white.opacity(0.05))
+          .fill(Color.Theme.cardSurface(for: colorScheme))
           .overlay(
             RoundedRectangle(cornerRadius: 12)
               .stroke(
-                isLighteningAnimating ? Color.yellow.opacity(0.3) : Color.white.opacity(0.1),
+                isLighteningAnimating ? Color.Theme.featureAccent.opacity(0.3) : Color.Theme.cardBorder(for: colorScheme),
                 lineWidth: 1
               )
           )
@@ -205,7 +200,7 @@ struct LighteningUserRow: View {
     switch user.verificationStatus {
     case .verified: return .green
     case .pending: return .orange
-    case .unverified: return .blue
+    case .unverified: return Color.Theme.primaryBlue
     case .failed: return .red
     }
   }

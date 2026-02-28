@@ -15,6 +15,7 @@ struct NearbyPeersSheet: View {
   let onHandleViewLatestCard: () -> Void
 
   @Environment(\.dismiss) private var dismiss
+  @Environment(\.colorScheme) private var colorScheme
   @State private var isLighteningAnimating = false
   @State private var searchText = ""
   @State private var selectedPeer: ProximityPeer?
@@ -37,12 +38,7 @@ struct NearbyPeersSheet: View {
   var body: some View {
     NavigationView {
       ZStack {
-        LinearGradient(
-          colors: [Color.black, Color.blue.opacity(0.1), Color.purple.opacity(0.05), Color.black],
-          startPoint: .topLeading,
-          endPoint: .bottomTrailing
-        )
-        .ignoresSafeArea()
+        Color.Theme.pageBg.ignoresSafeArea()
 
         VStack(spacing: 0) {
           lightningHeader
@@ -83,25 +79,24 @@ struct NearbyPeersSheet: View {
         if let peer = selectedPeer { PeerDetailSheet(peer: peer) }
       }
     }
-    .preferredColorScheme(.dark)
   }
 
   private var lightningHeader: some View {
     VStack(spacing: 16) {
       HStack {
-        Image(systemName: "bolt.fill").foregroundColor(.yellow).font(.title)
+        Image(systemName: "bolt.fill").foregroundColor(Color.Theme.featureAccent).font(.title)
           .scaleEffect(isLighteningAnimating ? 1.3 : 1.0)
           .animation(.easeInOut(duration: 0.5).repeatForever(autoreverses: true), value: isLighteningAnimating)
         VStack(alignment: .leading, spacing: 2) {
-          Text("Lightening Peers").font(.title2).fontWeight(.bold).foregroundColor(.white)
-          Text("\(peers.count) nearby connections").font(.caption).foregroundColor(.gray)
+          Text("Lightening Peers").font(.title2).fontWeight(.bold).foregroundColor(Color.Theme.textPrimary)
+          Text("\(peers.count) nearby connections").font(.caption).foregroundColor(Color.Theme.textSecondary)
         }
         Spacer()
         HStack(spacing: 8) {
           Circle().fill(connectedCount > 0 ? .green : .orange).frame(width: 8, height: 8)
             .scaleEffect(isLighteningAnimating ? 1.3 : 1.0)
             .animation(.easeInOut(duration: 1.0).repeatForever(autoreverses: true), value: isLighteningAnimating)
-          Text("\(connectedCount) connected").font(.caption).foregroundColor(.gray)
+          Text("\(connectedCount) connected").font(.caption).foregroundColor(Color.Theme.textSecondary)
         }
       }
       .padding(.horizontal)
@@ -111,18 +106,18 @@ struct NearbyPeersSheet: View {
 
   private var searchBar: some View {
     HStack {
-      Image(systemName: "magnifyingglass").foregroundColor(.yellow)
+      Image(systemName: "magnifyingglass").foregroundColor(Color.Theme.featureAccent)
       TextField("Search peers...", text: $searchText)
-        .textFieldStyle(PlainTextFieldStyle()).foregroundColor(.white)
+        .textFieldStyle(PlainTextFieldStyle()).foregroundColor(Color.Theme.textPrimary)
       if !searchText.isEmpty {
-        Button("Clear") { searchText = "" }.font(.caption).foregroundColor(.gray)
+        Button("Clear") { searchText = "" }.font(.caption).foregroundColor(Color.Theme.textSecondary)
       }
     }
     .padding(.horizontal, 16).padding(.vertical, 12)
     .background(
       RoundedRectangle(cornerRadius: 12)
-        .fill(Color.white.opacity(0.08))
-        .overlay(RoundedRectangle(cornerRadius: 12).stroke(Color.yellow.opacity(0.3), lineWidth: 1))
+        .fill(Color.Theme.searchBg)
+        .overlay(RoundedRectangle(cornerRadius: 12).stroke(Color.Theme.featureAccent.opacity(0.3), lineWidth: 1))
     )
     .padding(.horizontal)
   }
@@ -153,15 +148,15 @@ struct NearbyPeersSheet: View {
   private var emptyState: some View {
     VStack(spacing: 20) {
       ZStack {
-        Circle().stroke(Color.white.opacity(0.1), lineWidth: 2).frame(width: 120, height: 120)
+        Circle().stroke(Color.Theme.divider, lineWidth: 2).frame(width: 120, height: 120)
           .scaleEffect(isLighteningAnimating ? 1.1 : 1.0)
           .animation(.easeInOut(duration: 2.0).repeatForever(autoreverses: true), value: isLighteningAnimating)
-        Image(systemName: "person.2.fill").font(.system(size: 40)).foregroundColor(.gray)
+        Image(systemName: "person.2.fill").font(.system(size: 40)).foregroundColor(Color.Theme.textSecondary)
       }
       VStack(spacing: 8) {
-        Text("No Lightening Peers Yet").font(.title2).fontWeight(.bold).foregroundColor(.white)
+        Text("No Lightening Peers Yet").font(.title2).fontWeight(.bold).foregroundColor(Color.Theme.textPrimary)
         Text("Start matching to discover nearby professionals with lightning-fast connections")
-          .font(.body).foregroundColor(.gray).multilineTextAlignment(.center).padding(.horizontal, 32)
+          .font(.body).foregroundColor(Color.Theme.textSecondary).multilineTextAlignment(.center).padding(.horizontal, 32)
       }
     }
     .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -169,10 +164,10 @@ struct NearbyPeersSheet: View {
 
   private var emptySearchState: some View {
     VStack(spacing: 20) {
-      Image(systemName: "magnifyingglass").font(.system(size: 40)).foregroundColor(.gray)
+      Image(systemName: "magnifyingglass").font(.system(size: 40)).foregroundColor(Color.Theme.textSecondary)
       VStack(spacing: 8) {
-        Text("No Results").font(.title2).fontWeight(.bold).foregroundColor(.white)
-        Text("No peers match your search").font(.body).foregroundColor(.gray)
+        Text("No Results").font(.title2).fontWeight(.bold).foregroundColor(Color.Theme.textPrimary)
+        Text("No peers match your search").font(.body).foregroundColor(Color.Theme.textSecondary)
       }
     }
     .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -193,8 +188,8 @@ struct NearbyPeersSheet: View {
         .padding(.vertical, 16)
         .background(
           RoundedRectangle(cornerRadius: 16)
-            .fill(LinearGradient(colors: [.yellow, .orange, .red], startPoint: .leading, endPoint: .trailing))
-            .shadow(color: .yellow.opacity(0.5), radius: 10, x: 0, y: 0)
+            .fill(LinearGradient(colors: [Color.Theme.featureAccent, .orange, Color.Theme.accentRose], startPoint: .leading, endPoint: .trailing))
+            .shadow(color: Color.Theme.featureAccent.opacity(0.4), radius: 10, x: 0, y: 0)
         )
       }
       .padding(.horizontal)

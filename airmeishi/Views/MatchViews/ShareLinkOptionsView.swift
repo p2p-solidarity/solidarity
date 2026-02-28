@@ -34,7 +34,7 @@ struct ShareLinkOptionsView: View {
           VStack(spacing: 12) {
             Image(systemName: "link.circle")
               .font(.system(size: 60))
-              .foregroundColor(.blue)
+              .foregroundColor(Color.Theme.primaryBlue)
 
             Text("Create Share Link")
               .font(.title2)
@@ -111,7 +111,7 @@ struct ShareLinkOptionsView: View {
             }
           }
           .padding()
-          .background(Color(.systemGray6))
+          .background(Color.Theme.cardBg)
           .cornerRadius(12)
 
           // Security notice
@@ -128,7 +128,7 @@ struct ShareLinkOptionsView: View {
               .foregroundColor(.white)
               .frame(maxWidth: .infinity)
               .padding()
-              .background(Color.blue)
+              .background(Color.Theme.primaryBlue)
               .cornerRadius(12)
             }
 
@@ -203,8 +203,8 @@ struct BusinessCardSummary: View {
           .font(.caption)
           .padding(.horizontal, 8)
           .padding(.vertical, 4)
-          .background(Color.blue.opacity(0.2))
-          .foregroundColor(.blue)
+          .background(Color.Theme.primaryBlue.opacity(0.2))
+          .foregroundColor(Color.Theme.primaryBlue)
           .cornerRadius(4)
       }
 
@@ -236,7 +236,7 @@ struct BusinessCardSummary: View {
       }
     }
     .padding()
-    .background(Color(.systemGray6))
+    .background(Color.Theme.cardBg)
     .cornerRadius(12)
   }
 }
@@ -281,7 +281,7 @@ struct UsesOptionButton: View {
       .foregroundColor(isSelected ? .white : .primary)
       .frame(maxWidth: .infinity)
       .padding(.vertical, 12)
-      .background(isSelected ? Color.blue : Color(.systemGray5))
+      .background(isSelected ? Color.Theme.primaryBlue : Color.Theme.searchBg)
       .cornerRadius(8)
     }
     .buttonStyle(PlainButtonStyle())
@@ -324,7 +324,7 @@ struct ExpirationOptionButton: View {
       .foregroundColor(isSelected ? .white : .primary)
       .frame(maxWidth: .infinity)
       .padding(.vertical, 12)
-      .background(isSelected ? Color.blue : Color(.systemGray5))
+      .background(isSelected ? Color.Theme.primaryBlue : Color.Theme.searchBg)
       .cornerRadius(8)
     }
     .buttonStyle(PlainButtonStyle())
@@ -422,7 +422,7 @@ struct CreatedLinkView: View {
             }
           }
           .padding()
-          .background(Color(.systemGray6))
+          .background(Color.Theme.cardBg)
           .cornerRadius(12)
 
           // Share options
@@ -436,7 +436,7 @@ struct CreatedLinkView: View {
               .foregroundColor(.white)
               .frame(maxWidth: .infinity)
               .padding()
-              .background(Color.blue)
+              .background(Color.Theme.primaryBlue)
               .cornerRadius(12)
             }
 
@@ -446,7 +446,7 @@ struct CreatedLinkView: View {
                 Text("Copy Link")
               }
               .font(.subheadline)
-              .foregroundColor(.blue)
+              .foregroundColor(Color.Theme.primaryBlue)
               .frame(maxWidth: .infinity)
               .padding()
               .background(Color.blue.opacity(0.1))
@@ -498,7 +498,7 @@ struct LinkDetailRow: View {
   var body: some View {
     HStack(alignment: .top, spacing: 12) {
       Image(systemName: icon)
-        .foregroundColor(.blue)
+        .foregroundColor(Color.Theme.primaryBlue)
         .frame(width: 20)
 
       VStack(alignment: .leading, spacing: 2) {
