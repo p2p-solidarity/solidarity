@@ -52,7 +52,7 @@ struct ProximitySharingView: View {
       }
       .padding(16)
       .background(Color.Theme.pageBg.ignoresSafeArea())
-      .navigationTitle("Face-to-Face Exchange")
+      .navigationTitle("sharing")
       .navigationBarTitleDisplayMode(.inline)
       .toolbar {
         ToolbarItem(placement: .navigationBarLeading) {
@@ -104,12 +104,16 @@ struct ProximitySharingView: View {
   private var discoveryStep: some View {
     VStack(alignment: .leading, spacing: 12) {
       HStack {
-        Text("Nearby People")
+        Text("match")
           .font(.subheadline.weight(.semibold))
         Spacer()
-        Button("Refresh") {
-          proximityManager.stopBrowsing()
-          proximityManager.startBrowsing()
+        Button(isMatchingActive ? "stop matching" : "start matching") {
+          if isMatchingActive {
+            proximityManager.stopAdvertising()
+            proximityManager.stopBrowsing()
+          } else {
+            proximityManager.startMatching(with: nil)
+          }
         }
         .font(.caption.weight(.semibold))
       }
@@ -321,7 +325,7 @@ struct ProximitySharingView: View {
 
   private var currentTitle: String {
     switch step {
-    case .discovery: return "Discovery"
+    case .discovery: return "Ready to Match"
     case .scope: return "Confirm Sharing Scope"
     case .awaiting: return "Awaiting Response"
     case .incoming: return "Incoming Request"
@@ -331,7 +335,7 @@ struct ProximitySharingView: View {
 
   private var currentSubtitle: String {
     switch step {
-    case .discovery: return "Find nearby peers and initiate exchange."
+    case .discovery: return "You've entered the matching phase, don't close the app. We'll notify you when you got a match!"
     case .scope: return "Select fields and add one-time message."
     case .awaiting: return "Waiting for peer confirmation."
     case .incoming: return "Review and accept requested exchange."
@@ -405,5 +409,9 @@ struct ProximitySharingView: View {
   private func show(_ message: String) {
     alertMessage = message
     showingAlert = true
+  }
+
+  private var isMatchingActive: Bool {
+    proximityManager.isAdvertising || proximityManager.isBrowsing
   }
 }

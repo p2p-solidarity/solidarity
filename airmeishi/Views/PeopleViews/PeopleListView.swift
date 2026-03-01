@@ -34,7 +34,7 @@ struct PeopleListView: View {
           listContent
         }
       }
-      .navigationTitle("People")
+      .navigationTitle("people list")
       .navigationBarTitleDisplayMode(.inline)
       .toolbar {
         ToolbarItem(placement: .navigationBarTrailing) {
@@ -46,7 +46,7 @@ struct PeopleListView: View {
           }
         }
       }
-      .searchable(text: $searchQuery, prompt: "Search contacts")
+      .searchable(text: $searchQuery, prompt: "搜索")
     }
     .onAppear {
       identityDataStore.refreshAll()
@@ -60,17 +60,36 @@ struct PeopleListView: View {
 
   private var emptyState: some View {
     VStack(spacing: 14) {
-      SolidarityPlaceholderCard(
-        screenID: .exchangeDiscovery,
-        title: "No contact edges yet",
-        subtitle: "Start face-to-face exchange to create verified contacts."
-      )
+      Spacer()
+      Image(systemName: "doc.text.fill")
+        .font(.system(size: 80))
+        .foregroundColor(Color.Theme.textTertiary)
 
-      Button("Start Exchange") {
+      Text("你的聯絡人通訊錄是空的")
+        .font(.system(size: 16, weight: .semibold))
+        .foregroundColor(Color.Theme.textPrimary)
+
+      Button {
         showingExchangeFlow = true
+      } label: {
+        Text("匯入手機通訊錄")
+          .font(.system(size: 14, weight: .semibold))
+          .foregroundColor(.white)
+          .frame(width: 200)
+          .padding(.vertical, 14)
+          .background(Color.Theme.darkUI)
+          .cornerRadius(2)
       }
-      .buttonStyle(ThemedPrimaryButtonStyle())
-      .frame(maxWidth: 260)
+
+      Button {
+        showingExchangeFlow = true
+      } label: {
+        Text("手動新增")
+          .font(.system(size: 14, weight: .medium))
+          .foregroundColor(Color.Theme.darkUI)
+      }
+
+      Spacer()
     }
     .padding(16)
   }
@@ -104,42 +123,69 @@ struct PeopleListView: View {
   }
 
   private func contactRow(_ contact: ContactEntity) -> some View {
-    VStack(alignment: .leading, spacing: 6) {
-      HStack {
-        Text(contact.name)
-          .font(.subheadline.weight(.semibold))
-          .foregroundColor(Color.Theme.textPrimary)
-        Spacer()
-        Text(statusBadge(for: contact.verificationStatus))
-          .font(.caption.weight(.semibold))
-          .foregroundColor(Color.Theme.textSecondary)
-      }
+    VStack(spacing: 0) {
+      HStack(alignment: .top, spacing: 8) {
+        Circle()
+          .fill(Color.Theme.searchBg)
+          .frame(width: 38, height: 38)
+          .overlay(
+            Text(String(contact.name.prefix(1)).uppercased())
+              .font(.system(size: 14, weight: .semibold))
+              .foregroundColor(Color.Theme.textPrimary)
+          )
 
-      Text([contact.title, contact.company].compactMap { $0 }.joined(separator: " · "))
-        .font(.caption)
-        .foregroundColor(Color.Theme.textSecondary)
+        VStack(alignment: .leading, spacing: 0) {
+          HStack {
+            VStack(alignment: .leading, spacing: 2) {
+              Text(contact.name)
+                .font(.system(size: 16, weight: .medium))
+                .foregroundColor(Color.Theme.textPrimary)
+              Text([contact.title, contact.company].compactMap { $0 }.joined(separator: " • "))
+                .font(.system(size: 14))
+                .foregroundColor(Color.Theme.textSecondary)
+            }
+            Spacer()
+            Text(formatDate(contact.receivedAt))
+              .font(.system(size: 10))
+              .foregroundColor(Color.Theme.textSecondary)
+          }
 
-      if let message = contact.theirEphemeralMessage, !message.isEmpty {
-        Text("One-time message: \(message)")
-          .font(.caption)
-          .foregroundColor(Color.Theme.textTertiary)
+          Rectangle()
+            .fill(Color.Theme.divider)
+            .frame(height: 0.5)
+            .padding(.vertical, 8)
+
+          if let notes = contact.notes, !notes.isEmpty {
+            Text(notes)
+              .font(.system(size: 11))
+              .foregroundColor(Color.Theme.textSecondary)
+              .padding(.bottom, 4)
+          } else if let message = contact.theirEphemeralMessage, !message.isEmpty {
+            Text(message)
+              .font(.system(size: 11))
+              .foregroundColor(Color.Theme.textSecondary)
+              .padding(.bottom, 4)
+          }
+
+          if contact.source == "phone_contacts" || contact.verificationStatus == "phone" {
+            Text("#手機通訊錄")
+              .font(.system(size: 10))
+              .foregroundColor(Color.Theme.textSecondary)
+          }
+        }
       }
     }
-    .padding(12)
-    .background(Color.Theme.cardBg)
-    .cornerRadius(10)
+    .padding(.vertical, 12)
+    .overlay(alignment: .top) {
+      Rectangle()
+        .fill(Color.Theme.divider)
+        .frame(height: 0.5)
+    }
   }
 
-  private func statusBadge(for status: String) -> String {
-    switch status {
-    case VerificationStatus.verified.rawValue:
-      return "Verified"
-    case VerificationStatus.pending.rawValue:
-      return "Pending"
-    case VerificationStatus.failed.rawValue:
-      return "Failed"
-    default:
-      return "Unverified"
-    }
+  private func formatDate(_ date: Date) -> String {
+    let formatter = DateFormatter()
+    formatter.dateFormat = "yyyy-MM-dd"
+    return formatter.string(from: date)
   }
 }

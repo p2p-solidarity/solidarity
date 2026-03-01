@@ -109,10 +109,10 @@ struct MeTabView: View {
 
       if identityDataStore.identityCards.isEmpty {
         EmptyMeStateCard(
-          title: "No identity card yet",
-          subtitle: "Scan passport to create your first credential.",
-          primaryTitle: "Scan Passport",
-          secondaryTitle: "Import Credential",
+          title: "建立你的數位身份",
+          subtitle: "掃描護照即可證明年齡與真人身份",
+          primaryTitle: "掃描護照",
+          secondaryTitle: "匯入憑證",
           onPrimaryTap: { showingPassportFlow = true },
           onSecondaryTap: { showingVCSettings = true }
         )
@@ -303,31 +303,31 @@ private struct EmptyMeStateCard: View {
   let onSecondaryTap: () -> Void
 
   var body: some View {
-    VStack(spacing: 10) {
-      Image(systemName: "person.text.rectangle")
-        .font(.title2)
+    VStack(spacing: 12) {
+      Image(systemName: "folder.fill")
+        .font(.system(size: 80))
         .foregroundColor(Color.Theme.textTertiary)
       Text(title)
-        .font(.subheadline.weight(.semibold))
+        .font(.system(size: 16, weight: .semibold))
         .foregroundColor(Color.Theme.textPrimary)
       Text(subtitle)
-        .font(.caption)
+        .font(.system(size: 14))
         .foregroundColor(Color.Theme.textSecondary)
         .multilineTextAlignment(.center)
-      HStack(spacing: 10) {
+      VStack(spacing: 8) {
         Button(primaryTitle) { onPrimaryTap() }
-          .font(.caption.weight(.semibold))
+          .font(.system(size: 14, weight: .semibold))
           .foregroundColor(.white)
-          .padding(.horizontal, 12)
-          .padding(.vertical, 8)
-          .background(Capsule().fill(Color.Theme.darkUI))
+          .padding(.horizontal, 24)
+          .padding(.vertical, 14)
+          .background(Color.Theme.darkUI)
+          .cornerRadius(2)
+          .buttonStyle(.plain)
 
         Button(secondaryTitle) { onSecondaryTap() }
-          .font(.caption.weight(.semibold))
+          .font(.system(size: 14, weight: .semibold))
           .foregroundColor(Color.Theme.darkUI)
-          .padding(.horizontal, 12)
-          .padding(.vertical, 8)
-          .background(Capsule().fill(Color.Theme.searchBg))
+          .buttonStyle(.plain)
       }
     }
     .padding(14)

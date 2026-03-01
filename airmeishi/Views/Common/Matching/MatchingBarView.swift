@@ -79,7 +79,7 @@ struct MatchingBarView: View {
     case .connected: return "Connected"
     case .advertising: return "Visible to others"
     case .browsing: return "Looking for peers"
-    case .advertisingAndBrowsing: return "Matching..."
+    case .advertisingAndBrowsing: return "start matching"
     case .disconnected: return "Offline"
     }
   }
