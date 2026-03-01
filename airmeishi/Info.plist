@@ -46,6 +46,10 @@
 	<string>This app needs access to contacts to save business card information.</string>
 	<key>NSLocalNetworkUsageDescription</key>
 	<string>This app needs access to the local network to discover and connect with nearby devices for business card sharing.</string>
+	<key>com.apple.developer.nfc.readersession.iso7816.select-identifiers</key>
+	<array>
+		<string>A0000002471001</string>
+	</array>
 	<key>NFCReaderUsageDescription</key>
 	<string>Read your passport's NFC chip to create a verified identity credential.</string>
 	<key>NSPhotoLibraryUsageDescription</key>

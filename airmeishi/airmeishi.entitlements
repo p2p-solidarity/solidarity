@@ -21,9 +21,5 @@
 	<array>
 		<string>$(TeamIdentifierPrefix)pass.kidneyweakx.airmeishi.businesscard</string>
 	</array>
-	<key>com.apple.developer.nfc.readersession.iso7816.select-identifiers</key>
-	<array>
-		<string>A0000002471001</string>
-	</array>
 </dict>
 </plist>
