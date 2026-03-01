@@ -187,6 +187,16 @@ struct OnboardingFlowView: View {
           .frame(maxWidth: .infinity)
       }
       .buttonStyle(ThemedPrimaryButtonStyle())
+
+      if passportProof == nil {
+        Button {
+          handleNext()
+        } label: {
+          Text("Skip for now")
+            .frame(maxWidth: .infinity)
+        }
+        .buttonStyle(ThemedSecondaryButtonStyle())
+      }
     }
     .padding(14)
     .background(Color.Theme.cardBg)
@@ -269,8 +279,6 @@ struct OnboardingFlowView: View {
     switch step {
     case .keySetup:
       return !keySetupReady
-    case .passportPrompt:
-      return passportProof == nil
     default:
       return false
     }

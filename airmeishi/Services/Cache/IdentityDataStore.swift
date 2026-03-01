@@ -157,6 +157,19 @@ final class IdentityDataStore: ObservableObject {
     refreshAll()
   }
 
+  func removePassportCredentials() {
+    let passportCards = identityCards.filter { $0.type == "passport" }
+    for card in passportCards {
+      let relatedClaims = provableClaims.filter { $0.identityCardId == card.id }
+      for claim in relatedClaims {
+        modelContext.delete(claim)
+      }
+      modelContext.delete(card)
+    }
+    try? modelContext.save()
+    refreshAll()
+  }
+
   func markClaimPresented(_ claimID: String) {
     guard let claim = findClaim(by: claimID) else { return }
     claim.lastPresentedAt = Date()

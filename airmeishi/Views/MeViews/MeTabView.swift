@@ -8,6 +8,7 @@ struct MeTabView: View {
   @State private var showingCreateCard = false
   @State private var showingVCSettings = false
   @State private var showingProofSheet = false
+  @State private var showingPassportFlow = false
   @State private var selectedClaim: MeClaimType = .ageOver18
   @State private var revealDid = false
 
@@ -50,6 +51,11 @@ struct MeTabView: View {
       .sheet(isPresented: $showingVCSettings) {
         NavigationStack {
           VCSettingsView()
+        }
+      }
+      .sheet(isPresented: $showingPassportFlow) {
+        PassportOnboardingFlowView { _ in
+          showingPassportFlow = false
         }
       }
       .sheet(isPresented: $showingProofSheet) {
@@ -106,7 +112,7 @@ struct MeTabView: View {
           subtitle: "Scan passport to create your first credential.",
           primaryTitle: "Scan Passport",
           secondaryTitle: "Import Credential",
-          onPrimaryTap: { showingCreateCard = true },
+          onPrimaryTap: { showingPassportFlow = true },
           onSecondaryTap: { showingVCSettings = true }
         )
       } else {
@@ -152,7 +158,7 @@ struct MeTabView: View {
 
       VStack(spacing: 10) {
         Button {
-          showingCreateCard = true
+          showingPassportFlow = true
         } label: {
           sectionActionLabel(icon: "plus.circle", title: "Scan Passport")
         }

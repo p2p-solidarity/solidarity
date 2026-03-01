@@ -11,6 +11,11 @@ struct PassportMRZDraft: Equatable {
 struct PassportChipSnapshot: Equatable {
   let documentHash: String
   let mrzDigest: String
+  let chipUID: String
+  let bacVerified: Bool
+  let paceVerified: Bool
+  let passiveAuthPassed: Bool
+  let isSimulated: Bool
   let readAt: Date
 }
 
@@ -50,23 +55,15 @@ final class PassportPipelineService {
       break
     }
 
-    do {
-      try await Task.sleep(nanoseconds: 1_300_000_000)
-    } catch {
-      return .failure(.configurationError("NFC read cancelled"))
+    if shouldSimulateNFC {
+      return await simulatedNFCRead(draft: draft)
     }
 
-    let source = "\(draft.passportNumber)|\(draft.nationalityCode)|\(draft.dateOfBirth.timeIntervalSince1970)|\(draft.expiryDate.timeIntervalSince1970)"
-    let digest = SHA256.hash(data: Data(source.utf8))
-    let digestHex = digest.map { String(format: "%02x", $0) }.joined()
-
-    return .success(
-      PassportChipSnapshot(
-        documentHash: String(digestHex.prefix(32)),
-        mrzDigest: String(digestHex.suffix(32)),
-        readAt: Date()
-      )
-    )
+    #if !targetEnvironment(simulator)
+    return await realNFCRead(draft: draft)
+    #else
+    return await simulatedNFCRead(draft: draft)
+    #endif
   }
 
   func generateProof(chip: PassportChipSnapshot, draft: PassportMRZDraft) async -> CardResult<PassportProofResult> {
@@ -153,4 +150,81 @@ final class PassportPipelineService {
 
     return .success(passportCard)
   }
+
+  // MARK: - Private
+
+  private var shouldSimulateNFC: Bool {
+    #if targetEnvironment(simulator)
+    return true
+    #else
+    return DeveloperModeManager.shared.isDeveloperMode && DeveloperModeManager.shared.simulateNFC
+    #endif
+  }
+
+  private func simulatedNFCRead(draft: PassportMRZDraft) async -> CardResult<PassportChipSnapshot> {
+    do {
+      try await Task.sleep(nanoseconds: 1_300_000_000)
+    } catch {
+      return .failure(.configurationError("NFC read cancelled"))
+    }
+
+    let source = "\(draft.passportNumber)|\(draft.nationalityCode)|\(draft.dateOfBirth.timeIntervalSince1970)|\(draft.expiryDate.timeIntervalSince1970)"
+    let digest = SHA256.hash(data: Data(source.utf8))
+    let digestHex = digest.map { String(format: "%02x", $0) }.joined()
+
+    return .success(
+      PassportChipSnapshot(
+        documentHash: String(digestHex.prefix(32)),
+        mrzDigest: String(digestHex.suffix(32)),
+        chipUID: "SIM-\(String(digestHex.prefix(8)).uppercased())",
+        bacVerified: true,
+        paceVerified: false,
+        passiveAuthPassed: false,
+        isSimulated: true,
+        readAt: Date()
+      )
+    )
+  }
+
+  #if !targetEnvironment(simulator)
+  private func realNFCRead(draft: PassportMRZDraft) async -> CardResult<PassportChipSnapshot> {
+    let dateFormatter = DateFormatter()
+    dateFormatter.dateFormat = "yyMMdd"
+
+    let reader = NFCPassportReaderService()
+    do {
+      let result = try await reader.read(
+        passportNumber: draft.passportNumber.trimmingCharacters(in: .whitespacesAndNewlines),
+        dateOfBirth: dateFormatter.string(from: draft.dateOfBirth),
+        expiryDate: dateFormatter.string(from: draft.expiryDate)
+      )
+
+      let draftMRZSource = "\(draft.passportNumber)|\(draft.nationalityCode)|\(draft.dateOfBirth.timeIntervalSince1970)|\(draft.expiryDate.timeIntervalSince1970)"
+      let mrzDigest = SHA256.hash(data: Data(draftMRZSource.utf8))
+      let mrzDigestHex = mrzDigest.map { String(format: "%02x", $0) }.joined()
+
+      return .success(
+        PassportChipSnapshot(
+          documentHash: result.rawDataHash.count >= 32
+            ? String(result.rawDataHash.prefix(32))
+            : result.rawDataHash,
+          mrzDigest: String(mrzDigestHex.suffix(32)),
+          chipUID: result.chipUID,
+          bacVerified: result.bacSucceeded,
+          paceVerified: result.paceSucceeded,
+          passiveAuthPassed: result.passiveAuthPassed,
+          isSimulated: false,
+          readAt: result.readAt
+        )
+      )
+    } catch let error as NFCPassportReaderService.NFCError {
+      if case .cancelled = error {
+        return .failure(.configurationError("NFC read cancelled"))
+      }
+      return .failure(.configurationError(error.localizedDescription ?? "NFC read failed"))
+    } catch {
+      return .failure(.configurationError("NFC read failed: \(error.localizedDescription)"))
+    }
+  }
+  #endif
 }

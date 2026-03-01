@@ -1,6 +1,24 @@
 {
-  "originHash" : "9bc858def4704e872f6a6dcd1eb830081409c6d07e566933f6b5ba71a51299f0",
+  "originHash" : "51025fe1e4dbd2b08384fe11122a004e12c51d2ff7c01d6bcc9f752b7d9e57c3",
   "pins" : [
+    {
+      "identity" : "nfcpassportreader",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/AndyQ/NFCPassportReader",
+      "state" : {
+        "revision" : "deec44982fa9bf2704a5f2138eb01dab7dcf9299",
+        "version" : "2.3.0"
+      }
+    },
+    {
+      "identity" : "openssl-package",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/krzyzanowskim/OpenSSL-Package.git",
+      "state" : {
+        "revision" : "71dbe0b4514cdaad95961470db72e8231f5943a6",
+        "version" : "3.3.3001"
+      }
+    },
     {
       "identity" : "sprucekit-mobile",
       "kind" : "remoteSourceControl",

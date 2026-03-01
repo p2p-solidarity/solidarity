@@ -12,6 +12,7 @@ struct SettingsView: View {
   @State private var showingResetConfirm = false
   @State private var showingShareSheet = false
   @State private var shareItems: [Any] = []
+  @State private var showingPassportPipeline = false
 
   var body: some View {
     NavigationStack {
@@ -32,6 +33,11 @@ struct SettingsView: View {
         Button("OK", role: .cancel) {}
       } message: {
         Text(alertMessage)
+      }
+      .sheet(isPresented: $showingPassportPipeline) {
+        PassportOnboardingFlowView { _ in
+          showingPassportPipeline = false
+        }
       }
       .confirmationDialog("Reset local app data?", isPresented: $showingResetConfirm, titleVisibility: .visible) {
         Button("Reset", role: .destructive) {
@@ -124,6 +130,20 @@ struct SettingsView: View {
           GroupManagementView()
         } label: {
           Label("Developer Group Management", systemImage: "person.3")
+        }
+
+        Button {
+          showingPassportPipeline = true
+        } label: {
+          Label("Passport Pipeline", systemImage: "passport")
+        }
+
+        Toggle(isOn: $devMode.simulateNFC) {
+          Label("Simulate NFC", systemImage: "wave.3.forward")
+        }
+
+        Button("Reset Passport Credential", role: .destructive) {
+          resetPassportCredential()
         }
       } else {
         Text("Tap version several times to enable developer mode.")
@@ -220,6 +240,12 @@ struct SettingsView: View {
         }
       }
     }
+  }
+
+  private func resetPassportCredential() {
+    IdentityDataStore.shared.removePassportCredentials()
+    alertMessage = "Passport credential has been reset."
+    showingAlert = true
   }
 
   private func resetLocalData() {

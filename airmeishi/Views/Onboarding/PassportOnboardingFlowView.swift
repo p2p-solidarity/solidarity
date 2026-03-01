@@ -72,16 +72,58 @@ struct PassportOnboardingFlowView: View {
 
   private var nfcStep: some View {
     VStack(spacing: 12) {
+      // NFC illustration
+      ZStack {
+        Image(systemName: "iphone")
+          .font(.system(size: 48))
+          .foregroundColor(Color.Theme.textTertiary)
+        Image(systemName: "wave.3.forward")
+          .font(.system(size: 24))
+          .foregroundColor(Color.Theme.darkUI)
+          .offset(x: -40, y: -10)
+      }
+      .frame(height: 80)
+      .frame(maxWidth: .infinity)
+
       Text("Bring your passport close to the device to read NFC chip data.")
         .font(.subheadline)
         .foregroundColor(Color.Theme.textSecondary)
+        .multilineTextAlignment(.center)
 
       if pipeline.isLoading {
-        ProgressView()
+        VStack(spacing: 8) {
+          ProgressView()
+          Text(pipeline.nfcProgressMessage)
+            .font(.caption)
+            .foregroundColor(Color.Theme.textTertiary)
+        }
       }
 
       if let chip = pipeline.chipSnapshot {
         VStack(alignment: .leading, spacing: 6) {
+          if chip.isSimulated {
+            HStack {
+              Image(systemName: "exclamationmark.triangle.fill")
+                .foregroundColor(.orange)
+              Text("Simulated")
+                .font(.caption.weight(.semibold))
+                .foregroundColor(.orange)
+            }
+          }
+
+          HStack {
+            Text("Chip UID:")
+              .font(.caption.weight(.semibold))
+            Text(chip.chipUID)
+              .font(.caption.monospaced())
+          }
+
+          HStack(spacing: 12) {
+            authBadge("BAC", passed: chip.bacVerified)
+            authBadge("PACE", passed: chip.paceVerified)
+            authBadge("PA", passed: chip.passiveAuthPassed)
+          }
+
           Text("Document hash: \(chip.documentHash)")
             .font(.caption.monospaced())
           Text("MRZ digest: \(chip.mrzDigest)")
@@ -105,6 +147,17 @@ struct PassportOnboardingFlowView: View {
     .padding(14)
     .background(Color.Theme.cardBg)
     .cornerRadius(10)
+  }
+
+  private func authBadge(_ label: String, passed: Bool) -> some View {
+    HStack(spacing: 4) {
+      Image(systemName: passed ? "checkmark.circle.fill" : "xmark.circle")
+        .font(.caption2)
+        .foregroundColor(passed ? .green : Color.Theme.textTertiary)
+      Text(label)
+        .font(.caption2.weight(.semibold))
+        .foregroundColor(passed ? .green : Color.Theme.textTertiary)
+    }
   }
 
   private var proofStep: some View {
@@ -185,6 +238,7 @@ private final class PassportPipelineViewModel: ObservableObject {
   @Published var chipSnapshot: PassportChipSnapshot?
   @Published var proofResult: PassportProofResult?
   @Published var isLoading = false
+  @Published var nfcProgressMessage = "Connecting to chip..."
   @Published var showingAlert = false
   @Published var alertMessage = ""
 
@@ -237,8 +291,12 @@ private final class PassportPipelineViewModel: ObservableObject {
 
   func readNFC() {
     isLoading = true
+    nfcProgressMessage = "Connecting to chip..."
     Task {
+      // Show progress steps for simulated mode
+      nfcProgressMessage = "Verifying BAC..."
       let result = await pipeline.readNFCChip(from: draft)
+      nfcProgressMessage = "Reading DG1 data..."
       isLoading = false
       switch result {
       case .success(let snapshot):
