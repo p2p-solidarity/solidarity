@@ -16,7 +16,7 @@ final class KeychainService {
   static let shared = KeychainService()
   static let legacyMasterAlias: KeyAlias = "airmeishi.did.signing"
   static let modernMasterAlias: KeyAlias = "solidarity.master"
-  static let masterAlias: KeyAlias = legacyMasterAlias
+  static let masterAlias: KeyAlias = modernMasterAlias
   static let rpAliasPrefix = "airmeishi.did.rp."
   static let modernRpAliasPrefix = "solidarity.rp."
 

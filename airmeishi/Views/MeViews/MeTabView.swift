@@ -3,6 +3,7 @@ import SwiftUI
 struct MeTabView: View {
   @ObservedObject private var identityCoordinator = IdentityCoordinator.shared
   @StateObject private var cardManager = CardManager.shared
+  @EnvironmentObject private var identityDataStore: IdentityDataStore
 
   @State private var showingSettings = false
   @State private var showingCreateCard = false
@@ -106,7 +107,7 @@ struct MeTabView: View {
         .font(.subheadline.weight(.semibold))
         .foregroundColor(Color.Theme.textSecondary)
 
-      if cardManager.businessCards.isEmpty {
+      if identityDataStore.identityCards.isEmpty {
         EmptyMeStateCard(
           title: "No identity card yet",
           subtitle: "Scan passport to create your first credential.",
@@ -117,13 +118,15 @@ struct MeTabView: View {
         )
       } else {
         VStack(spacing: 10) {
-          IdentityStatusCard(
-            emoji: "🛂",
-            title: "Passport",
-            trustText: "🟢 Government Level",
-            subtitle: "ZKP Verification",
-            ctaTitle: "View Details"
-          )
+          ForEach(identityDataStore.identityCards) { card in
+            IdentityStatusCard(
+              emoji: card.type == "passport" ? "🛂" : "🪪",
+              title: card.title,
+              trustText: card.trustLevel == "green" ? "🟢 High Trust" : "⚪️ Standard",
+              subtitle: card.issuerType,
+              ctaTitle: "View Details"
+            )
+          }
         }
       }
     }
@@ -135,17 +138,27 @@ struct MeTabView: View {
         .font(.subheadline.weight(.semibold))
         .foregroundColor(Color.Theme.textSecondary)
 
-      VStack(spacing: 10) {
-        ClaimRowView(
-          title: "I am over 18",
-          source: "Source: Passport · ZKP",
-          onPresent: { openClaim(.ageOver18) }
-        )
-        ClaimRowView(
-          title: "I am a real person",
-          source: "Source: Passport · ZKP",
-          onPresent: { openClaim(.isHuman) }
-        )
+      if identityDataStore.provableClaims.isEmpty {
+        Text("No provable claims yet.")
+          .font(.caption)
+          .foregroundColor(Color.Theme.textSecondary)
+          .padding(.vertical, 8)
+      } else {
+        VStack(spacing: 10) {
+          ForEach(identityDataStore.provableClaims) { claim in
+            ClaimRowView(
+              title: claim.title,
+              source: "Source: \(claim.source)",
+              onPresent: {
+                if claim.claimType == "age_over_18" {
+                  openClaim(.ageOver18)
+                } else {
+                  openClaim(.isHuman)
+                }
+              }
+            )
+          }
+        }
       }
     }
   }
