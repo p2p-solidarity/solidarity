@@ -45,49 +45,72 @@ struct FloatingTabBarBackdrop: View {
 
 enum MainAppTab: Int, CaseIterable {
   case people = 0
-  case scan = 1
-  case me = 2
+  case me = 1
 }
 
-// MARK: - Custom Floating Tab Bar
+// MARK: - Retro Bottom Tab Bar (Neo-Win98 Style)
 
 struct CustomFloatingTabBar: View {
   @Binding var selectedTab: Int
 
   var body: some View {
-    ZStack(alignment: .bottom) {
-      FloatingTabBarBackdrop()
-        .allowsHitTesting(false)
-
-      HStack {
-        TabBarButton(
-          systemName: "person.2.fill",
-          title: "People",
+    VStack(spacing: 0) {
+      // Top 1px border separator
+      Rectangle()
+        .fill(Color.Theme.divider)
+        .frame(height: 1)
+      
+      HStack(spacing: 0) {
+        RetroTabButton(
+          title: "people",
           isSelected: selectedTab == MainAppTab.people.rawValue,
           action: { selectedTab = MainAppTab.people.rawValue }
         )
-        Spacer(minLength: 24)
-        TabBarButton(
-          systemName: "qrcode.viewfinder",
-          title: "Scan",
-          isSelected: selectedTab == MainAppTab.scan.rawValue,
-          action: { selectedTab = MainAppTab.scan.rawValue }
-        )
-        Spacer(minLength: 24)
-        TabBarButton(
-          systemName: "person.text.rectangle",
-          title: "Me",
+        
+        // Vertical 1px separator
+        Rectangle()
+          .fill(Color.Theme.divider)
+          .frame(width: 1, height: 24)
+        
+        RetroTabButton(
+          title: "me",
           isSelected: selectedTab == MainAppTab.me.rawValue,
           action: { selectedTab = MainAppTab.me.rawValue }
         )
       }
-      .frame(height: 64)
-      .padding(.leading, 16)
-      .padding(.trailing, 16)
-      .padding(.bottom, 50)
-      .padding(.top, 16)
+      .frame(height: 56)
+      .background(Color.Theme.pageBg)
     }
-    .ignoresSafeArea(edges: .bottom)
+  }
+}
+
+// MARK: - Retro Tab Button
+
+struct RetroTabButton: View {
+  let title: String
+  let isSelected: Bool
+  let action: () -> Void
+
+  var body: some View {
+    Button(action: {
+      if !isSelected {
+        HapticFeedbackManager.shared.rigidImpact()
+        action()
+      }
+    }) {
+      Text(title)
+        .font(.system(size: 16, weight: isSelected ? .bold : .regular, design: .monospaced))
+        .foregroundColor(isSelected ? .white : Color.Theme.textTertiary)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        // Only show indicator if selected
+        .overlay(
+          Rectangle()
+            .fill(isSelected ? Color.white : Color.clear)
+            .frame(height: 2),
+          alignment: .bottom
+        )
+    }
+    .buttonStyle(.plain)
   }
 }
 

@@ -58,55 +58,55 @@ struct PeopleListView: View {
     }
   }
 
-  // MARK: - Sharing Entry Card
+  // MARK: - Sharing Entry Card (Radar Match)
 
   private var sharingEntryCard: some View {
     Button {
       showingExchangeFlow = true
     } label: {
       HStack(spacing: 14) {
-        Circle()
-          .fill(
-            LinearGradient(
-              colors: [Color.Theme.accentRose, Color.Theme.dustyMauve],
-              startPoint: .topLeading,
-              endPoint: .bottomTrailing
-            )
-          )
-          .frame(width: 44, height: 44)
-          .overlay(
-            Image(systemName: "antenna.radiowaves.left.and.right")
-              .font(.system(size: 20, weight: .semibold))
-              .foregroundColor(.white)
-          )
+        
+        // Animated Radar Icon Placeholder
+        ZStack {
+          Circle()
+            .stroke(Color.Theme.terminalGreen.opacity(0.3), lineWidth: 1)
+            .frame(width: 44, height: 44)
+          Circle()
+            .fill(Color.Theme.terminalGreen)
+            .frame(width: 8, height: 8)
+          // Simplified radar line
+          Rectangle()
+            .fill(Color.Theme.terminalGreen)
+            .frame(width: 22, height: 1)
+            .offset(x: 11)
+            .rotationEffect(.degrees(-45))
+        }
 
         VStack(alignment: .leading, spacing: 4) {
-          Text("Exchange Cards")
-            .font(.subheadline.weight(.semibold))
-            .foregroundColor(Color.Theme.textPrimary)
-          Text("Exchange cards with nearby people via proximity sharing")
-            .font(.caption)
+          Text("[ SCAN RADAR ]")
+            .font(.system(size: 14, weight: .bold, design: .monospaced))
+            .foregroundColor(Color.Theme.terminalGreen)
+          Text("Initiate proximity handshake protocol")
+            .font(.system(size: 12, weight: .regular))
             .foregroundColor(Color.Theme.textSecondary)
-            .lineLimit(1)
         }
 
         Spacer(minLength: 0)
 
-        Image(systemName: "chevron.right")
-          .font(.caption.weight(.semibold))
-          .foregroundColor(Color.Theme.textPlaceholder)
+        Image(systemName: "circle.dashed")
+          .font(.system(size: 18, weight: .bold))
+          .foregroundColor(Color.Theme.primaryBlue)
       }
-      .padding(14)
-      .background(
-        RoundedRectangle(cornerRadius: 12, style: .continuous)
-          .fill(Color.Theme.cardBg)
-          .overlay(
-            RoundedRectangle(cornerRadius: 12, style: .continuous)
-              .stroke(Color.Theme.accentRose.opacity(0.2), lineWidth: 1)
-          )
+      .padding(16)
+      .background(Color.Theme.searchBg)
+      .overlay(
+        Rectangle()
+          .stroke(Color.Theme.terminalGreen, lineWidth: 1)
       )
     }
     .buttonStyle(.plain)
+    .padding(.horizontal, 16)
+    .padding(.bottom, 16)
   }
 
   // MARK: - Empty State
@@ -138,7 +138,7 @@ struct PeopleListView: View {
         Button("Exchange Cards") {
           showingExchangeFlow = true
         }
-        .buttonStyle(ThemedRoseButtonStyle())
+        .buttonStyle(ThemedPrimaryButtonStyle())
 
         Button("Import Phone Contacts") {
           showingExchangeFlow = true
@@ -179,70 +179,15 @@ struct PeopleListView: View {
   }
 
   private func sectionTitle(_ value: String) -> some View {
-    Text(value)
-      .font(.subheadline.weight(.semibold))
+    Text("— " + value.uppercased())
+      .font(.system(size: 12, weight: .bold, design: .monospaced))
       .foregroundColor(Color.Theme.textSecondary)
+      .padding(.horizontal, 16)
+      .padding(.top, 8)
   }
 
   private func contactRow(_ contact: ContactEntity) -> some View {
-    VStack(spacing: 0) {
-      HStack(alignment: .top, spacing: 8) {
-        Circle()
-          .fill(Color.Theme.searchBg)
-          .frame(width: 38, height: 38)
-          .overlay(
-            Text(String(contact.name.prefix(1)).uppercased())
-              .font(.system(size: 14, weight: .semibold))
-              .foregroundColor(Color.Theme.textPrimary)
-          )
-
-        VStack(alignment: .leading, spacing: 0) {
-          HStack {
-            VStack(alignment: .leading, spacing: 2) {
-              Text(contact.name)
-                .font(.system(size: 16, weight: .medium))
-                .foregroundColor(Color.Theme.textPrimary)
-              Text([contact.title, contact.company].compactMap { $0 }.joined(separator: " • "))
-                .font(.system(size: 14))
-                .foregroundColor(Color.Theme.textSecondary)
-            }
-            Spacer()
-            Text(formatDate(contact.receivedAt))
-              .font(.system(size: 10))
-              .foregroundColor(Color.Theme.textSecondary)
-          }
-
-          Rectangle()
-            .fill(Color.Theme.divider)
-            .frame(height: 0.5)
-            .padding(.vertical, 8)
-
-          if let notes = contact.notes, !notes.isEmpty {
-            Text(notes)
-              .font(.system(size: 11))
-              .foregroundColor(Color.Theme.textSecondary)
-              .padding(.bottom, 4)
-          } else if let message = contact.theirEphemeralMessage, !message.isEmpty {
-            Text(message)
-              .font(.system(size: 11))
-              .foregroundColor(Color.Theme.textSecondary)
-              .padding(.bottom, 4)
-          }
-
-          if contact.source == "phone_contacts" || contact.verificationStatus == "phone" {
-            Text("#Phone Contacts")
-              .font(.system(size: 10))
-              .foregroundColor(Color.Theme.textSecondary)
-          }
-        }
-      }
-    }
-    .padding(.vertical, 12)
-    .overlay(alignment: .top) {
-      Rectangle()
-        .fill(Color.Theme.divider)
-        .frame(height: 0.5)
-    }
+    TrustGraphContactRow(contact: contact)
   }
 
   private func formatDate(_ date: Date) -> String {

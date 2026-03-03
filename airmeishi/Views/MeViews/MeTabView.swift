@@ -16,26 +16,36 @@ struct MeTabView: View {
   var body: some View {
     NavigationStack {
       ScrollView {
-        VStack(spacing: 16) {
+        VStack(spacing: 24) {
           identityHeader
+          
+          Rectangle()
+            .fill(Color.Theme.divider)
+            .frame(height: 1)
+          
           identityCardSection
+          
           provableClaimsSection
+          
           addMoreSection
         }
-        .padding(.horizontal, 16)
-        .padding(.vertical, 12)
+        .padding(.vertical, 24)
         .padding(.bottom, 90)
       }
       .background(Color.Theme.pageBg.ignoresSafeArea())
-      .navigationTitle("Me")
+      .navigationTitle("Vault")
       .navigationBarTitleDisplayMode(.inline)
       .toolbar {
         ToolbarItem(placement: .navigationBarTrailing) {
           Button {
             showingSettings = true
           } label: {
-            Image(systemName: "gearshape")
-              .foregroundColor(Color.Theme.darkUI)
+            Image(systemName: "gearshape.fill")
+              .font(.system(size: 14))
+              .foregroundColor(Color.Theme.textPrimary)
+              .padding(8)
+              .background(Color.Theme.searchBg)
+              .overlay(Rectangle().stroke(Color.Theme.divider, lineWidth: 1))
           }
         }
       }
@@ -66,89 +76,113 @@ struct MeTabView: View {
   }
 
   private var displayName: String {
-    cardManager.businessCards.first?.name ?? String(localized: "Your Identity")
+    cardManager.businessCards.first?.name ?? String(localized: "User Node")
   }
 
   private var displayDid: String {
     identityCoordinator.state.currentProfile.activeDID?.did ?? "did:key:not_initialized"
   }
 
+  // MARK: - Subcomponents
+
   private var identityHeader: some View {
-    VStack(spacing: 10) {
-      Circle()
-        .fill(Color.Theme.searchBg)
-        .frame(width: 72, height: 72)
-        .overlay(
-          Text(String(displayName.prefix(1)).uppercased())
-            .font(.title2.weight(.bold))
-            .foregroundColor(Color.Theme.textPrimary)
-        )
-
-      Text(displayName)
-        .font(.title3.weight(.semibold))
-        .foregroundColor(Color.Theme.textPrimary)
-
-      Button {
-        revealDid.toggle()
-      } label: {
-        Text(revealDid ? displayDid : shortDid(displayDid))
-          .font(.caption.monospaced())
-          .foregroundColor(Color.Theme.textTertiary)
+    HStack(alignment: .top, spacing: 16) {
+      ZStack {
+        Rectangle()
+          .fill(Color.Theme.searchBg)
+          .frame(width: 80, height: 80)
+          .overlay(Rectangle().stroke(Color.Theme.divider, lineWidth: 1))
+        
+        Text(String(displayName.prefix(1)).uppercased())
+          .font(.system(size: 32, weight: .bold, design: .monospaced))
+          .foregroundColor(.white)
       }
-      .buttonStyle(.plain)
+
+      VStack(alignment: .leading, spacing: 8) {
+        Text(displayName)
+          .font(.system(size: 24, weight: .bold))
+          .foregroundColor(Color.Theme.textPrimary)
+
+        Button {
+          revealDid.toggle()
+        } label: {
+          HStack(spacing: 4) {
+            Image(systemName: "key.viewfinder")
+              .font(.system(size: 10))
+            Text(revealDid ? displayDid : shortDid(displayDid))
+              .font(.system(size: 10, weight: .bold, design: .monospaced))
+          }
+          .foregroundColor(Color.Theme.textTertiary)
+          .padding(.horizontal, 8)
+          .padding(.vertical, 4)
+          .background(Color.Theme.searchBg)
+          .overlay(Rectangle().stroke(Color.Theme.divider, lineWidth: 1))
+        }
+        .buttonStyle(.plain)
+      }
+      Spacer()
     }
-    .frame(maxWidth: .infinity)
-    .padding(.vertical, 12)
+    .padding(.horizontal, 24)
   }
 
   private var identityCardSection: some View {
-    VStack(alignment: .leading, spacing: 12) {
-      Text("My Identity Cards")
-        .font(.subheadline.weight(.semibold))
+    VStack(alignment: .leading, spacing: 16) {
+      Text("[ SECURE CREDENTIALS ]")
+        .font(.system(size: 12, weight: .bold, design: .monospaced))
         .foregroundColor(Color.Theme.textSecondary)
+        .padding(.horizontal, 24)
 
       if identityDataStore.identityCards.isEmpty {
         EmptyMeStateCard(
-          title: String(localized: "Build your digital identity"),
-          subtitle: String(localized: "Scan passport to verify age and identity"),
-          primaryTitle: String(localized: "Scan Passport"),
-          secondaryTitle: String(localized: "Import Credential"),
+          title: "Vault Empty",
+          subtitle: "No cryptographic proofs stored.",
+          primaryTitle: "Scan Identity",
+          secondaryTitle: "Import JSON",
           onPrimaryTap: { showingPassportFlow = true },
           onSecondaryTap: { showingVCSettings = true }
         )
+        .padding(.horizontal, 16)
       } else {
-        VStack(spacing: 10) {
+        VStack(spacing: 12) {
           ForEach(identityDataStore.identityCards) { card in
             IdentityStatusCard(
               emoji: card.type == "passport" ? "🛂" : "🪪",
               title: card.title,
-              trustText: card.trustLevel == "green" ? String(localized: "🟢 High Trust") : String(localized: "⚪️ Standard"),
+              trustText: card.trustLevel == "green" ? "🟢 LEVEL 3 TRUST" : "⚪️ LEVEL 1",
               subtitle: card.issuerType,
-              ctaTitle: String(localized: "View Details")
+              ctaTitle: "Inspect"
             )
           }
+          
+          // Demo: Inject a Revoked card just for visual flavor if there are any cards
+          RevokedCredentialCard(
+            title: "Anon Auth Token",
+            subtitle: "Expired Session Proof",
+            revokedDate: Date().addingTimeInterval(-86400 * 3)
+          )
         }
       }
     }
   }
 
   private var provableClaimsSection: some View {
-    VStack(alignment: .leading, spacing: 12) {
-      Text("Things I Can Prove")
-        .font(.subheadline.weight(.semibold))
+    VStack(alignment: .leading, spacing: 16) {
+      Text("[ SELECTIVE DISCLOSURES ]")
+        .font(.system(size: 12, weight: .bold, design: .monospaced))
         .foregroundColor(Color.Theme.textSecondary)
+        .padding(.horizontal, 24)
 
       if identityDataStore.provableClaims.isEmpty {
-        Text("No provable claims yet.")
-          .font(.caption)
-          .foregroundColor(Color.Theme.textSecondary)
-          .padding(.vertical, 8)
+        Text("No derivations available.")
+          .font(.system(size: 12, design: .monospaced))
+          .foregroundColor(Color.Theme.textTertiary)
+          .padding(.horizontal, 24)
       } else {
-        VStack(spacing: 10) {
+        VStack(spacing: 12) {
           ForEach(identityDataStore.provableClaims) { claim in
             ClaimRowView(
               title: claim.title,
-              source: String(format: String(localized: "Source: %@"), claim.source),
+              source: "SRC: \(claim.source)",
               onPresent: {
                 if claim.claimType == "age_over_18" {
                   openClaim(.ageOver18)
@@ -164,48 +198,51 @@ struct MeTabView: View {
   }
 
   private var addMoreSection: some View {
-    VStack(alignment: .leading, spacing: 12) {
-      Text("Add More")
-        .font(.subheadline.weight(.semibold))
+    VStack(alignment: .leading, spacing: 16) {
+      Text("[ ACTIONS ]")
+        .font(.system(size: 12, weight: .bold, design: .monospaced))
         .foregroundColor(Color.Theme.textSecondary)
+        .padding(.horizontal, 24)
 
-      VStack(spacing: 10) {
+      VStack(spacing: 8) {
         Button {
           showingPassportFlow = true
         } label: {
-          sectionActionLabel(icon: "plus.circle", title: String(localized: "Scan Passport"))
+          sectionActionLabel(icon: "plus.viewfinder", title: "Acquire New Proof")
         }
         .buttonStyle(.plain)
 
         Button {
           showingVCSettings = true
         } label: {
-          sectionActionLabel(icon: "square.and.arrow.down", title: String(localized: "Import Credential"))
+          sectionActionLabel(icon: "arrow.down.doc.fill", title: "Import Raw Credential")
         }
         .buttonStyle(.plain)
       }
+      .padding(.horizontal, 16)
     }
   }
 
   private func sectionActionLabel(icon: String, title: String) -> some View {
     HStack {
-      Label(title, systemImage: icon)
-        .font(.subheadline.weight(.medium))
+      Image(systemName: icon)
+        .font(.system(size: 16, weight: .bold))
+        .foregroundColor(Color.Theme.terminalGreen)
+        .frame(width: 24)
+      
+      Text(title)
+        .font(.system(size: 14, weight: .bold))
         .foregroundColor(Color.Theme.textPrimary)
+      
       Spacer()
+      
       Image(systemName: "chevron.right")
-        .font(.caption)
+        .font(.system(size: 10, weight: .bold))
         .foregroundColor(Color.Theme.textPlaceholder)
     }
-    .padding(12)
-    .background(
-      RoundedRectangle(cornerRadius: 12, style: .continuous)
-        .fill(Color.Theme.cardBg)
-        .overlay(
-          RoundedRectangle(cornerRadius: 12, style: .continuous)
-            .stroke(Color.Theme.divider, lineWidth: 0.5)
-        )
-    )
+    .padding(16)
+    .background(Color.Theme.searchBg)
+    .overlay(Rectangle().stroke(Color.Theme.divider, lineWidth: 1))
   }
 
   private func shortDid(_ did: String) -> String {
@@ -226,33 +263,29 @@ private struct ClaimRowView: View {
 
   var body: some View {
     HStack(spacing: 12) {
-      VStack(alignment: .leading, spacing: 4) {
-        Text("🟢 \(title)")
-          .font(.subheadline.weight(.semibold))
+      VStack(alignment: .leading, spacing: 6) {
+        Text(title)
+          .font(.system(size: 16, weight: .bold))
           .foregroundColor(Color.Theme.textPrimary)
         Text(source)
-          .font(.caption)
+          .font(.system(size: 10, weight: .bold, design: .monospaced))
           .foregroundColor(Color.Theme.textSecondary)
       }
       Spacer()
-      Button("Present") {
-        onPresent()
+      Button(action: onPresent) {
+        Text("Generate")
+          .font(.system(size: 12, weight: .bold, design: .monospaced))
+          .foregroundColor(.black)
+          .padding(.horizontal, 12)
+          .padding(.vertical, 8)
+          .background(Color.white)
+          .overlay(Rectangle().stroke(Color.white, lineWidth: 1))
       }
-      .font(.caption.weight(.semibold))
-      .foregroundColor(Color.Theme.darkUI)
-      .padding(.horizontal, 12)
-      .padding(.vertical, 6)
-      .background(Capsule().fill(Color.Theme.searchBg))
     }
-    .padding(12)
-    .background(
-      RoundedRectangle(cornerRadius: 12, style: .continuous)
-        .fill(Color.Theme.cardBg)
-        .overlay(
-          RoundedRectangle(cornerRadius: 12, style: .continuous)
-            .stroke(Color.Theme.divider, lineWidth: 0.5)
-        )
-    )
+    .padding(16)
+    .background(Color.Theme.cardBg)
+    .overlay(Rectangle().stroke(Color.Theme.divider, lineWidth: 1))
+    .padding(.horizontal, 16)
   }
 }
 
@@ -264,33 +297,35 @@ private struct IdentityStatusCard: View {
   let ctaTitle: String
 
   var body: some View {
-    VStack(alignment: .leading, spacing: 8) {
+    VStack(alignment: .leading, spacing: 12) {
       HStack {
         Text("\(emoji) \(title)")
-          .font(.subheadline.weight(.semibold))
+          .font(.system(size: 16, weight: .bold))
           .foregroundColor(Color.Theme.textPrimary)
         Spacer()
+        Text(ctaTitle)
+          .font(.system(size: 10, weight: .bold, design: .monospaced))
+          .foregroundColor(Color.Theme.primaryBlue)
       }
-      Text(trustText)
-        .font(.caption.weight(.medium))
-        .foregroundColor(Color.Theme.textSecondary)
-      Text(subtitle)
-        .font(.caption)
-        .foregroundColor(Color.Theme.textTertiary)
-      Text(ctaTitle)
-        .font(.caption.weight(.semibold))
-        .foregroundColor(Color.Theme.primaryBlue)
+      
+      Rectangle()
+        .fill(Color.Theme.divider)
+        .frame(height: 1)
+      
+      HStack {
+        Text(trustText)
+          .font(.system(size: 10, weight: .bold, design: .monospaced))
+          .foregroundColor(Color.Theme.terminalGreen)
+        Spacer()
+        Text(subtitle.uppercased())
+          .font(.system(size: 10, weight: .bold, design: .monospaced))
+          .foregroundColor(Color.Theme.textTertiary)
+      }
     }
-    .padding(12)
-    .frame(maxWidth: .infinity, alignment: .leading)
-    .background(
-      RoundedRectangle(cornerRadius: 12, style: .continuous)
-        .fill(Color.Theme.cardBg)
-        .overlay(
-          RoundedRectangle(cornerRadius: 12, style: .continuous)
-            .stroke(Color.Theme.divider, lineWidth: 0.5)
-        )
-    )
+    .padding(16)
+    .background(Color.Theme.cardBg)
+    .overlay(Rectangle().stroke(Color.Theme.divider, lineWidth: 1))
+    .padding(.horizontal, 16)
   }
 }
 
@@ -303,35 +338,37 @@ private struct EmptyMeStateCard: View {
   let onSecondaryTap: () -> Void
 
   var body: some View {
-    VStack(spacing: 12) {
-      Image(systemName: "person.text.rectangle")
+    VStack(spacing: 24) {
+      Image(systemName: "lock.shield")
         .font(.system(size: 48))
         .foregroundColor(Color.Theme.textTertiary)
-      Text(title)
-        .font(.system(size: 16, weight: .semibold))
-        .foregroundColor(Color.Theme.textPrimary)
-      Text(subtitle)
-        .font(.system(size: 14))
-        .foregroundColor(Color.Theme.textSecondary)
-        .multilineTextAlignment(.center)
-      VStack(spacing: 10) {
-        Button(primaryTitle) { onPrimaryTap() }
-          .buttonStyle(ThemedPrimaryButtonStyle())
+      
+      VStack(spacing: 8) {
+        Text(title.uppercased())
+          .font(.system(size: 16, weight: .bold, design: .monospaced))
+          .foregroundColor(Color.Theme.textPrimary)
+        Text(subtitle)
+          .font(.system(size: 14))
+          .foregroundColor(Color.Theme.textSecondary)
+          .multilineTextAlignment(.center)
+      }
+      
+      VStack(spacing: 12) {
+        Button(action: onPrimaryTap) {
+          Text(primaryTitle)
+        }
+        .buttonStyle(ThemedPrimaryButtonStyle())
 
-        Button(secondaryTitle) { onSecondaryTap() }
-          .buttonStyle(ThemedSecondaryButtonStyle())
+        Button(action: onSecondaryTap) {
+          Text(secondaryTitle)
+        }
+        .buttonStyle(ThemedSecondaryButtonStyle())
       }
     }
-    .padding(14)
+    .padding(24)
     .frame(maxWidth: .infinity)
-    .background(
-      RoundedRectangle(cornerRadius: 12, style: .continuous)
-        .fill(Color.Theme.cardBg)
-        .overlay(
-          RoundedRectangle(cornerRadius: 12, style: .continuous)
-            .stroke(Color.Theme.divider, lineWidth: 0.5)
-        )
-    )
+    .background(Color.Theme.searchBg)
+    .overlay(Rectangle().stroke(Color.Theme.textTertiary, style: StrokeStyle(lineWidth: 1, dash: [4, 4])))
   }
 }
 
@@ -346,25 +383,42 @@ private struct SelfInitiatedProofSheet: View {
 
   var body: some View {
     NavigationStack {
-      VStack(spacing: 16) {
-        Text("Self-Initiated Proof")
-          .font(.title3.weight(.semibold))
-        Text("Claim: \(claimType.rawValue)")
-          .font(.caption.monospaced())
-          .foregroundColor(.secondary)
-        Text("QR presentation flow is available from Scan tab.")
-          .font(.subheadline)
-          .foregroundColor(.secondary)
-          .multilineTextAlignment(.center)
-          .padding(.horizontal, 20)
-        Spacer()
+      ZStack {
+        Color.Theme.pageBg.ignoresSafeArea()
+        
+        VStack(spacing: 24) {
+          Image(systemName: "terminal")
+            .font(.system(size: 48))
+            .foregroundColor(Color.Theme.primaryBlue)
+          
+          Text("GENERATING PROOF")
+            .font(.system(size: 20, weight: .bold, design: .monospaced))
+            .foregroundColor(.white)
+            
+          Text("Claim: [\(claimType.rawValue)]")
+            .font(.system(size: 14, weight: .bold, design: .monospaced))
+            .foregroundColor(Color.Theme.terminalGreen)
+            
+          Text("QR payload is ready for standard verification protocol.\nProceed to SCAN to broadcast.")
+            .font(.system(size: 14))
+            .foregroundColor(Color.Theme.textSecondary)
+            .multilineTextAlignment(.center)
+            .padding(.horizontal, 32)
+            
+          Spacer()
+        }
+        .padding(.top, 40)
       }
-      .padding(.top, 24)
-      .navigationTitle("Present")
+      .navigationTitle("Initialize Proof")
       .navigationBarTitleDisplayMode(.inline)
       .toolbar {
         ToolbarItem(placement: .navigationBarTrailing) {
-          Button("Close") { dismiss() }
+          Button {
+            dismiss()
+          } label: {
+            Image(systemName: "xmark")
+              .foregroundColor(.white)
+          }
         }
       }
     }

@@ -2,117 +2,123 @@
 //  ThemedButtonStyles.swift
 //  airmeishi
 //
-//  Reusable button styles aligned to the design system.
-//
 
 import SwiftUI
 
-// MARK: - Primary (blue, white text)
+// MARK: - Primary (Neo-Brutalist Dark)
 
 struct ThemedPrimaryButtonStyle: ButtonStyle {
   func makeBody(configuration: Configuration) -> some View {
     configuration.label
-      .fontWeight(.semibold)
+      .font(.system(size: 16, weight: .medium, design: .default))
       .foregroundColor(.white)
       .padding(.horizontal, 24)
       .padding(.vertical, 14)
       .frame(maxWidth: .infinity)
-      .background(Color.Theme.primaryBlue)
-      .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
-      .scaleEffect(configuration.isPressed ? 0.97 : 1)
-      .animation(.spring(response: 0.25, dampingFraction: 0.7), value: configuration.isPressed)
+      // Solid dark gray/black background
+      .background(Color(white: 0.15))
+      // 1px border like the screenshots
+      .overlay(
+        Rectangle()
+          .stroke(Color.white.opacity(0.2), lineWidth: 1)
+      )
+      // Sharp corners
+      .clipShape(Rectangle())
+      .scaleEffect(configuration.isPressed ? 0.98 : 1)
+      .animation(.spring(response: 0.15, dampingFraction: 1), value: configuration.isPressed)
+      .onChange(of: configuration.isPressed) { _, isPressed in
+        if isPressed { HapticFeedbackManager.shared.heavyImpact() }
+      }
   }
 }
 
-// MARK: - Secondary (translucent + border)
+// MARK: - Inverted Button (White bg, black text)
+
+struct ThemedInvertedButtonStyle: ButtonStyle {
+  func makeBody(configuration: Configuration) -> some View {
+    configuration.label
+      .font(.system(size: 16, weight: .medium, design: .default))
+      .foregroundColor(.black)
+      .padding(.horizontal, 24)
+      .padding(.vertical, 14)
+      .frame(maxWidth: .infinity)
+      .background(Color.white)
+      .clipShape(Rectangle())
+      .scaleEffect(configuration.isPressed ? 0.98 : 1)
+      .animation(.spring(response: 0.15, dampingFraction: 1), value: configuration.isPressed)
+      .onChange(of: configuration.isPressed) { _, isPressed in
+        if isPressed { HapticFeedbackManager.shared.heavyImpact() }
+      }
+  }
+}
+
+// MARK: - Secondary (Translucent + Border)
 
 struct ThemedSecondaryButtonStyle: ButtonStyle {
-  @Environment(\.colorScheme) private var colorScheme
-
   func makeBody(configuration: Configuration) -> some View {
     configuration.label
-      .fontWeight(.medium)
+      .font(.system(size: 16, weight: .regular, design: .default))
       .foregroundColor(Color.Theme.textPrimary)
-      .padding(.horizontal, 24)
-      .padding(.vertical, 14)
-      .frame(maxWidth: .infinity)
-      .background(Color.Theme.cardSurface(for: colorScheme))
-      .overlay(
-        RoundedRectangle(cornerRadius: 14, style: .continuous)
-          .stroke(Color.Theme.cardBorder(for: colorScheme), lineWidth: 1)
-      )
-      .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
-      .scaleEffect(configuration.isPressed ? 0.97 : 1)
-      .animation(.spring(response: 0.25, dampingFraction: 0.7), value: configuration.isPressed)
-  }
-}
-
-// MARK: - Rose CTA (pink accent)
-
-struct ThemedRoseButtonStyle: ButtonStyle {
-  func makeBody(configuration: Configuration) -> some View {
-    configuration.label
-      .fontWeight(.semibold)
-      .foregroundColor(.white)
-      .padding(.horizontal, 24)
-      .padding(.vertical, 14)
-      .frame(maxWidth: .infinity)
-      .background(
-        LinearGradient(
-          colors: [Color.Theme.accentRose, Color.Theme.dustyMauve],
-          startPoint: .leading,
-          endPoint: .trailing
-        )
-      )
-      .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
-      .shadow(color: Color.Theme.accentRose.opacity(0.3), radius: 8, x: 0, y: 4)
-      .scaleEffect(configuration.isPressed ? 0.97 : 1)
-      .animation(.spring(response: 0.25, dampingFraction: 0.7), value: configuration.isPressed)
-  }
-}
-
-// MARK: - Outline (white/pageBg bg, blue text + border)
-
-struct ThemedOutlineButtonStyle: ButtonStyle {
-  @Environment(\.colorScheme) private var colorScheme
-
-  func makeBody(configuration: Configuration) -> some View {
-    configuration.label
-      .fontWeight(.medium)
-      .foregroundColor(Color.Theme.primaryBlue)
       .padding(.horizontal, 24)
       .padding(.vertical, 14)
       .frame(maxWidth: .infinity)
       .background(Color.Theme.cardBg)
       .overlay(
-        RoundedRectangle(cornerRadius: 14, style: .continuous)
-          .stroke(Color.Theme.primaryBlue.opacity(0.4), lineWidth: 1)
+        Rectangle()
+          .stroke(Color.Theme.divider, lineWidth: 1)
       )
-      .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
-      .scaleEffect(configuration.isPressed ? 0.97 : 1)
-      .animation(.spring(response: 0.25, dampingFraction: 0.7), value: configuration.isPressed)
+      .clipShape(Rectangle())
+      .scaleEffect(configuration.isPressed ? 0.98 : 1)
+      .animation(.spring(response: 0.15, dampingFraction: 1), value: configuration.isPressed)
+      .onChange(of: configuration.isPressed) { _, isPressed in
+        if isPressed { HapticFeedbackManager.shared.rigidImpact() }
+      }
   }
 }
 
-// MARK: - Destructive (red)
+// MARK: - Dotted Outline (Cyber Blue)
 
-struct ThemedDestructiveButtonStyle: ButtonStyle {
-  @Environment(\.colorScheme) private var colorScheme
-
+struct ThemedDottedOutlineButtonStyle: ButtonStyle {
   func makeBody(configuration: Configuration) -> some View {
     configuration.label
-      .fontWeight(.medium)
+      .font(.system(size: 16, weight: .regular, design: .default))
+      .foregroundColor(Color.Theme.primaryBlue)
+      .padding(.horizontal, 24)
+      .padding(.vertical, 14)
+      .frame(maxWidth: .infinity)
+      .background(Color.clear)
+      .overlay(
+        Rectangle()
+          .stroke(style: StrokeStyle(lineWidth: 1, dash: [4, 4]))
+          .foregroundColor(Color.Theme.primaryBlue)
+      )
+      .clipShape(Rectangle())
+      .scaleEffect(configuration.isPressed ? 0.98 : 1)
+      .animation(.spring(response: 0.15, dampingFraction: 1), value: configuration.isPressed)
+  }
+}
+
+// MARK: - Destructive (Red)
+
+struct ThemedDestructiveButtonStyle: ButtonStyle {
+  func makeBody(configuration: Configuration) -> some View {
+    configuration.label
+      .font(.system(size: 16, weight: .medium, design: .default))
       .foregroundColor(Color.Theme.destructive)
       .padding(.horizontal, 24)
       .padding(.vertical, 14)
       .frame(maxWidth: .infinity)
-      .background(Color.Theme.destructive.opacity(colorScheme == .dark ? 0.15 : 0.08))
+      .background(Color.clear)
       .overlay(
-        RoundedRectangle(cornerRadius: 14, style: .continuous)
-          .stroke(Color.Theme.destructive.opacity(0.3), lineWidth: 1)
+        Rectangle()
+          .stroke(Color.Theme.destructive, lineWidth: 1)
       )
-      .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
-      .scaleEffect(configuration.isPressed ? 0.97 : 1)
-      .animation(.spring(response: 0.25, dampingFraction: 0.7), value: configuration.isPressed)
+      .clipShape(Rectangle())
+      .scaleEffect(configuration.isPressed ? 0.98 : 1)
+      .animation(.spring(response: 0.15, dampingFraction: 1), value: configuration.isPressed)
+      .onChange(of: configuration.isPressed) { _, isPressed in
+        if isPressed { HapticFeedbackManager.shared.rigidImpact() }
+      }
   }
 }
+

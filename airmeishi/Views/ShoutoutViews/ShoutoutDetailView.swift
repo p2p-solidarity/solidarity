@@ -448,7 +448,7 @@ struct ShoutoutDetailView: View {
             .fontWeight(.bold)
         }
       }
-      .buttonStyle(ThemedRoseButtonStyle())
+      .buttonStyle(ThemedPrimaryButtonStyle())
 
       // Secondary Actions
       HStack(spacing: 12) {

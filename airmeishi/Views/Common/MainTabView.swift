@@ -7,12 +7,51 @@ struct MainTabView: View {
   @State private var errorMessage = ""
   @State private var selectedTab = MainAppTab.people.rawValue
 
+  @State private var showingScanFlow = false
+
   var body: some View {
-    Group {
-      if #available(iOS 26.0, *) {
-        nativeTabView
-      } else {
-        customTabView
+    ZStack(alignment: .bottom) {
+      // Main Content Views
+      TabView(selection: $selectedTab) {
+        PeopleListView()
+          .tag(MainAppTab.people.rawValue)
+
+        MeTabView()
+          .tag(MainAppTab.me.rawValue)
+      }
+      .tabViewStyle(DefaultTabViewStyle())
+      .toolbarBackground(.hidden, for: .tabBar)
+      .toolbar(.hidden, for: .tabBar)
+      // Padding for the bottom tab bar to prevent overlap
+      .padding(.bottom, 56)
+
+      // Fixed Elements over the TabView
+      VStack(spacing: 0) {
+        Spacer()
+        
+        // Center Scan Button over the TabBar
+        ScanFloatingActionButton {
+          showingScanFlow = true
+        }
+        
+        // Retro Tab Bar
+        CustomFloatingTabBar(selectedTab: $selectedTab)
+      }
+    }
+    .ignoresSafeArea(edges: .bottom)
+    .fullScreenCover(isPresented: $showingScanFlow) {
+      // Embed ScanTabView in a NavigationView for proper rendering, or adapt as needed
+      NavigationView {
+        ScanTabView()
+          // Inject a close button for the floating flow
+          .toolbar {
+            ToolbarItem(placement: .navigationBarLeading) {
+              Button(action: { showingScanFlow = false }) {
+                Image(systemName: "xmark")
+                  .foregroundColor(.white)
+              }
+            }
+          }
       }
     }
     .sheet(isPresented: $showingReceivedCard) {
@@ -86,52 +125,7 @@ struct MainTabView: View {
     }
   }
 
-  // MARK: - iOS 26+ Native Tab View
-  @available(iOS 26.0, *)
-  private var nativeTabView: some View {
-    TabView(selection: $selectedTab) {
-      PeopleListView()
-        .tabItem {
-          Label("People", systemImage: "person.2.fill")
-        }
-        .tag(MainAppTab.people.rawValue)
-
-      ScanTabView()
-        .tabItem {
-          Label("Scan", systemImage: "qrcode.viewfinder")
-        }
-        .tag(MainAppTab.scan.rawValue)
-
-      MeTabView()
-        .tabItem {
-          Label("Me", systemImage: "person.text.rectangle")
-        }
-        .tag(MainAppTab.me.rawValue)
-    }
-    .toolbarBackground(Color.Theme.pageBg, for: .tabBar)
-    .toolbarBackground(.visible, for: .tabBar)
-  }
-
-  // MARK: - Custom Tab View (iOS < 26)
-  private var customTabView: some View {
-    ZStack(alignment: .bottom) {
-      TabView(selection: $selectedTab) {
-        PeopleListView()
-          .tag(MainAppTab.people.rawValue)
-
-        ScanTabView()
-          .tag(MainAppTab.scan.rawValue)
-
-        MeTabView()
-          .tag(MainAppTab.me.rawValue)
-      }
-      .tabViewStyle(DefaultTabViewStyle())
-      .toolbarBackground(.hidden, for: .tabBar)
-      .toolbar(.hidden, for: .tabBar)
-
-      CustomFloatingTabBar(selectedTab: $selectedTab)
-    }
-  }
+  // MARK: - Native/Custom tab views removed in favor of unified Retro layout
 
   private func handleDeepLinkAction(_ action: DeepLinkAction?) {
     guard let action = action else { return }

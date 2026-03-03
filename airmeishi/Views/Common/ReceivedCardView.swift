@@ -164,7 +164,7 @@ struct ReceivedCardView: View {
                       .fontWeight(.bold)
                   }
                 }
-                .buttonStyle(ThemedRoseButtonStyle())
+                .buttonStyle(ThemedPrimaryButtonStyle())
               }
 
               Button(action: { dismiss() }) {

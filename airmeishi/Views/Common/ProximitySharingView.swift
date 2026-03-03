@@ -32,8 +32,9 @@ struct ProximitySharingView: View {
 
   var body: some View {
     NavigationStack {
-      VStack(spacing: 12) {
+      VStack(spacing: 24) {
         headerCard
+        
         Group {
           switch step {
           case .discovery:
@@ -48,15 +49,21 @@ struct ProximitySharingView: View {
             savedStep
           }
         }
+        
         Spacer(minLength: 0)
       }
-      .padding(16)
+      .padding(24)
       .background(Color.Theme.pageBg.ignoresSafeArea())
-      .navigationTitle("Sharing")
+      .navigationTitle("Radar")
       .navigationBarTitleDisplayMode(.inline)
       .toolbar {
         ToolbarItem(placement: .navigationBarLeading) {
-          Button("Close") { dismiss() }
+          Button {
+            dismiss()
+          } label: {
+            Image(systemName: "xmark")
+              .foregroundColor(Color.Theme.textPrimary)
+          }
         }
       }
       .sheet(isPresented: $showingCreateCard) {
@@ -64,8 +71,8 @@ struct ProximitySharingView: View {
           showingCreateCard = false
         }
       }
-      .alert("Exchange", isPresented: $showingAlert) {
-        Button("OK", role: .cancel) {}
+      .alert("Error", isPresented: $showingAlert) {
+        Button("Dismiss", role: .cancel) {}
       } message: {
         Text(alertMessage)
       }
@@ -73,13 +80,13 @@ struct ProximitySharingView: View {
         guard let request else { return }
         incomingFields = Set(request.payload.selectedFields)
         incomingMessage = ""
-        step = .incoming
+        withAnimation { step = .incoming }
       }
       .onReceive(proximityManager.$latestExchangeCompletion) { completion in
         guard let completion else { return }
         if awaitingRequestID == completion.requestId || awaitingRequestID == nil {
           latestCompletion = completion
-          step = .saved
+          withAnimation { step = .saved }
           awaitingRequestID = nil
         }
       }
@@ -93,33 +100,31 @@ struct ProximitySharingView: View {
     }
   }
 
-  private var headerCard: some View {
-    SolidarityPlaceholderCard(
-      screenID: currentScreenID,
-      title: currentTitle,
-      subtitle: currentSubtitle
-    )
-  }
+  // MARK: - Subcomponents
 
-  private var discoveryStep: some View {
+  private var headerCard: some View {
     VStack(alignment: .leading, spacing: 12) {
       HStack {
-        Text("Match")
-          .font(.subheadline.weight(.semibold))
-          .foregroundColor(Color.Theme.textPrimary)
+        Text(currentScreenID.rawValue.uppercased())
+          .font(.system(size: 10, weight: .bold, design: .monospaced))
+          .foregroundColor(Color.Theme.terminalGreen)
         Spacer()
-        Button(isMatchingActive ? "Stop" : "Start") {
-          if isMatchingActive {
-            proximityManager.stopAdvertising()
-            proximityManager.stopBrowsing()
-          } else {
-            proximityManager.startMatching(with: nil)
-          }
-        }
-        .font(.caption.weight(.semibold))
-        .foregroundColor(Color.Theme.primaryBlue)
+        Image(systemName: "dot.radiowaves.left.and.right")
+          .foregroundColor(isMatchingActive ? Color.Theme.primaryBlue : Color.Theme.textTertiary)
       }
+      Text(currentSubtitle)
+        .font(.system(size: 14))
+        .foregroundColor(Color.Theme.textSecondary)
+    }
+    .padding(16)
+    .background(Color.Theme.searchBg)
+    .overlay(Rectangle().stroke(Color.Theme.divider, lineWidth: 1))
+  }
 
+  // MARK: - Discovery
+
+  private var discoveryStep: some View {
+    VStack(alignment: .leading, spacing: 24) {
       if selectedCard == nil {
         Button("Create Identity Card First") {
           showingCreateCard = true
@@ -128,166 +133,219 @@ struct ProximitySharingView: View {
       }
 
       if proximityManager.nearbyPeers.isEmpty {
-        VStack(spacing: 10) {
+        VStack(spacing: 16) {
           ProgressView()
-          Text("Searching for nearby devices...")
-            .font(.caption)
-            .foregroundColor(Color.Theme.textSecondary)
-          Text("Please make sure both devices have this screen open")
-            .font(.caption)
-            .foregroundColor(Color.Theme.textTertiary)
+            .progressViewStyle(CircularProgressViewStyle(tint: Color.Theme.primaryBlue))
+            .scaleEffect(1.5)
+          
+          Text("SCANNING...")
+            .font(.system(size: 16, weight: .bold, design: .monospaced))
+            .foregroundColor(Color.Theme.primaryBlue)
         }
         .frame(maxWidth: .infinity, alignment: .center)
-        .padding(.vertical, 24)
+        .padding(.vertical, 48)
       } else {
         ScrollView {
-          VStack(spacing: 8) {
+          VStack(spacing: 12) {
             ForEach(proximityManager.nearbyPeers) { peer in
               Button {
+                HapticFeedbackManager.shared.rigidImpact()
                 selectedPeer = peer
                 proximityManager.connectToPeer(peer)
-                step = .scope
+                withAnimation { step = .scope }
               } label: {
-                HStack(spacing: 12) {
-                  Circle()
-                    .fill(
-                      LinearGradient(
-                        colors: [Color.Theme.primaryBlue, Color.Theme.dustyMauve],
-                        startPoint: .topLeading,
-                        endPoint: .bottomTrailing
-                      )
-                    )
-                    .frame(width: 36, height: 36)
-                    .overlay(
-                      Text(String(peer.name.prefix(1)).uppercased())
-                        .font(.system(size: 14, weight: .semibold))
-                        .foregroundColor(.white)
-                    )
-
-                  VStack(alignment: .leading, spacing: 2) {
+                HStack(spacing: 16) {
+                  ZStack {
+                    Rectangle()
+                      .fill(Color.Theme.primaryBlue)
+                      .frame(width: 48, height: 48)
+                    Text(String(peer.name.prefix(1)).uppercased())
+                      .font(.system(size: 20, weight: .bold, design: .monospaced))
+                      .foregroundColor(.white)
+                  }
+                  
+                  VStack(alignment: .leading, spacing: 4) {
                     Text(peer.name)
-                      .font(.subheadline.weight(.semibold))
+                      .font(.system(size: 16, weight: .bold))
                       .foregroundColor(Color.Theme.textPrimary)
-                    Text(peer.cardTitle ?? "Ready for exchange")
-                      .font(.caption)
+                    Text(peer.cardTitle ?? "Peer Node")
+                      .font(.system(size: 12, weight: .regular, design: .monospaced))
                       .foregroundColor(Color.Theme.textSecondary)
                   }
                   Spacer()
-                  Image(systemName: "chevron.right")
-                    .font(.caption)
-                    .foregroundColor(Color.Theme.textPlaceholder)
+                  Text("[ CONNECT ]")
+                    .font(.system(size: 10, weight: .bold, design: .monospaced))
+                    .foregroundColor(Color.Theme.terminalGreen)
                 }
-                .padding(12)
-                .background(
-                  RoundedRectangle(cornerRadius: 12, style: .continuous)
-                    .fill(Color.Theme.cardBg)
-                    .overlay(
-                      RoundedRectangle(cornerRadius: 12, style: .continuous)
-                        .stroke(Color.Theme.divider, lineWidth: 0.5)
-                    )
-                )
+                .padding(16)
+                .background(Color.Theme.cardBg)
+                .overlay(Rectangle().stroke(Color.Theme.divider, lineWidth: 1))
               }
               .buttonStyle(.plain)
             }
           }
         }
       }
+      
+      Spacer()
+      
+      Button(isMatchingActive ? "Stop Scan" : "Start Scan") {
+        if isMatchingActive {
+          proximityManager.stopAdvertising()
+          proximityManager.stopBrowsing()
+        } else {
+          proximityManager.startMatching(with: nil)
+        }
+      }
+      .buttonStyle(ThemedSecondaryButtonStyle())
     }
   }
 
+  // MARK: - Scope (Selective Disclosure)
+
   private var scopeStep: some View {
-    VStack(alignment: .leading, spacing: 12) {
-      Text("Select fields to share with \(selectedPeer?.name ?? "peer")")
-        .font(.subheadline)
-        .foregroundColor(Color.Theme.textSecondary)
-
-      fieldPicker(selection: $selectedFields)
-
-      VStack(alignment: .leading, spacing: 4) {
-        Text("One-time message (\(myMessage.count)/140)")
-          .font(.caption.weight(.semibold))
+    VStack(alignment: .leading, spacing: 24) {
+      VStack(alignment: .leading, spacing: 8) {
+        Text("SELECTIVE DISCLOSURE")
+          .font(.system(size: 12, weight: .bold, design: .monospaced))
+          .foregroundColor(.white)
+        
+        Text("Select the claims you wish to reveal to \(selectedPeer?.name ?? "peer").")
+          .font(.system(size: 14))
           .foregroundColor(Color.Theme.textSecondary)
+      }
+      
+      ScrollView {
+        VStack(spacing: 8) {
+          ForEach(BusinessCardField.allCases) { field in
+            RedactionSwitcherView(
+              label: field.displayName,
+              value: extractValue(from: selectedCard, field: field),
+              isDisclosed: Binding(
+                get: { selectedFields.contains(field) },
+                set: { isOn in
+                  if isOn { selectedFields.insert(field) } else { selectedFields.remove(field) }
+                  selectedFields.insert(.name) // Always required
+                }
+              )
+            )
+          }
+        }
+      }
+      .frame(maxHeight: 280)
+      
+      VStack(alignment: .leading, spacing: 4) {
+        Text("Ephemeral Message (\(myMessage.count)/140)")
+          .font(.system(size: 12, weight: .bold, design: .monospaced))
+          .foregroundColor(Color.Theme.textSecondary)
+        
         TextEditor(text: Binding(
           get: { myMessage },
           set: { myMessage = String($0.prefix(140)) }
         ))
-        .frame(height: 72)
-        .padding(6)
+        .font(.system(size: 14, design: .monospaced))
+        .foregroundColor(Color.Theme.textPrimary)
+        .frame(height: 80)
+        .padding(12)
         .background(Color.Theme.searchBg)
-        .cornerRadius(12)
+        .overlay(Rectangle().stroke(Color.Theme.divider, lineWidth: 1))
       }
-
-      Button {
-        sendExchangeRequest()
-      } label: {
-        Text("Send Exchange Request")
-          .frame(maxWidth: .infinity)
+      
+      VStack(spacing: 12) {
+        Button(action: sendExchangeRequest) {
+          Text("Generate & Transmit ZK Proof")
+            .frame(maxWidth: .infinity)
+        }
+        .buttonStyle(ThemedPrimaryButtonStyle())
+        .disabled(selectedPeer == nil || selectedCard == nil || selectedFields.isEmpty || isWorking)
+        
+        Button("Abort Connection") {
+          withAnimation { step = .discovery }
+        }
+        .buttonStyle(ThemedSecondaryButtonStyle())
       }
-      .buttonStyle(ThemedRoseButtonStyle())
-      .disabled(selectedPeer == nil || selectedCard == nil || selectedFields.isEmpty || isWorking)
-
-      Button("Back to Discovery") {
-        step = .discovery
-      }
-      .buttonStyle(ThemedSecondaryButtonStyle())
     }
   }
 
+  // MARK: - Awaiting
+
   private var awaitingStep: some View {
-    VStack(spacing: 16) {
+    VStack(spacing: 24) {
       Spacer()
-
-      ProgressView()
-        .scaleEffect(1.5)
-
-      Text("Waiting for \(selectedPeer?.name ?? "peer") response...")
-        .font(.subheadline)
-        .foregroundColor(Color.Theme.textSecondary)
-
+      
+      ZStack {
+        Circle()
+          .stroke(Color.Theme.terminalGreen.opacity(0.3), lineWidth: 2)
+          .frame(width: 80, height: 80)
+        Circle()
+          .fill(Color.Theme.terminalGreen)
+          .frame(width: 16, height: 16)
+          // Basic ping animation can be added here
+      }
+      
+      VStack(spacing: 8) {
+        Text("AWAITING PEER")
+          .font(.system(size: 16, weight: .bold, design: .monospaced))
+          .foregroundColor(.white)
+        Text("Handshake initiated with \(selectedPeer?.name ?? "peer").")
+          .font(.system(size: 14))
+          .foregroundColor(Color.Theme.textSecondary)
+      }
+      
       Spacer()
-
-      Button("Cancel Request") {
+      
+      Button("Terminate") {
         awaitingRequestID = nil
-        step = .discovery
+        withAnimation { step = .discovery }
       }
       .buttonStyle(ThemedSecondaryButtonStyle())
     }
     .frame(maxWidth: .infinity)
-    .padding(.vertical, 24)
   }
+
+  // MARK: - Incoming
 
   private var incomingStep: some View {
     Group {
       if let request = proximityManager.pendingExchangeRequest {
-        VStack(alignment: .leading, spacing: 12) {
-          Text("Incoming request from \(request.payload.senderID)")
-            .font(.subheadline)
-            .foregroundColor(Color.Theme.textSecondary)
+        VStack(alignment: .leading, spacing: 24) {
+          VStack(alignment: .leading, spacing: 8) {
+            Text("INBOUND CONNECTION")
+              .font(.system(size: 12, weight: .bold, design: .monospaced))
+              .foregroundColor(Color.Theme.primaryBlue)
+            
+            Text("Connection request from \(request.payload.senderID)")
+              .font(.system(size: 16, weight: .bold))
+              .foregroundColor(.white)
+          }
 
           fieldPicker(selection: $incomingFields)
 
           VStack(alignment: .leading, spacing: 4) {
-            Text("Reply message (\(incomingMessage.count)/140)")
-              .font(.caption.weight(.semibold))
+            Text("Reply Message (\(incomingMessage.count)/140)")
+              .font(.system(size: 12, weight: .bold, design: .monospaced))
               .foregroundColor(Color.Theme.textSecondary)
+            
             TextEditor(text: Binding(
               get: { incomingMessage },
               set: { incomingMessage = String($0.prefix(140)) }
             ))
-            .frame(height: 72)
-            .padding(6)
+            .font(.system(size: 14, design: .monospaced))
+            .foregroundColor(Color.Theme.textPrimary)
+            .frame(height: 80)
+            .padding(12)
             .background(Color.Theme.searchBg)
-            .cornerRadius(12)
+            .overlay(Rectangle().stroke(Color.Theme.divider, lineWidth: 1))
           }
 
-          HStack(spacing: 12) {
-            Button("Decline") {
+          HStack(spacing: 16) {
+            Button("Reject") {
               proximityManager.declinePendingExchangeRequest()
-              step = .discovery
+              withAnimation { step = .discovery }
             }
             .buttonStyle(ThemedSecondaryButtonStyle())
 
-            Button("Accept & Sign") {
+            Button("Sign & Accept") {
               acceptExchange(request)
             }
             .buttonStyle(ThemedPrimaryButtonStyle())
@@ -295,96 +353,108 @@ struct ProximitySharingView: View {
           }
         }
       } else {
-        Text("No pending exchange request.")
-          .font(.caption)
+        Text("No pending stream.")
           .foregroundColor(Color.Theme.textSecondary)
       }
     }
   }
 
+  // MARK: - Saved
+
   private var savedStep: some View {
-    VStack(spacing: 16) {
+    VStack(spacing: 24) {
       Spacer()
+      
+      Image(systemName: "checkmark.seal.fill")
+        .font(.system(size: 64))
+        .foregroundColor(Color.Theme.terminalGreen)
+        .shadow(color: Color.Theme.terminalGreen.opacity(0.5), radius: 10)
 
-      Image(systemName: "checkmark.circle.fill")
-        .font(.system(size: 48))
-        .foregroundColor(.green)
-
-      Text("Exchange Complete")
-        .font(.title3.weight(.semibold))
-        .foregroundColor(Color.Theme.textPrimary)
-
-      Text("Both signatures and messages have been saved")
-        .font(.subheadline)
-        .foregroundColor(Color.Theme.textSecondary)
+      VStack(spacing: 8) {
+        Text("HANDSHAKE COMPLETE")
+          .font(.system(size: 20, weight: .bold, design: .monospaced))
+          .foregroundColor(Color.Theme.textPrimary)
+        
+        Text("Cryptographic signatures successfully exchanged.")
+          .font(.system(size: 14))
+          .foregroundColor(Color.Theme.textSecondary)
+          .multilineTextAlignment(.center)
+      }
 
       if let completion = latestCompletion {
-        VStack(alignment: .leading, spacing: 6) {
-          infoRow(label: String(localized: "Peer"), value: completion.peerName)
-          infoRow(label: String(localized: "My message"), value: completion.myMessage ?? "—")
-          infoRow(label: String(localized: "Their message"), value: completion.theirMessage ?? "—")
+        VStack(alignment: .leading, spacing: 12) {
+          infoRow(label: "NODE ID", value: completion.peerName)
+          infoRow(label: "TX MSG", value: completion.myMessage ?? "—")
+          infoRow(label: "RX MSG", value: completion.theirMessage ?? "—")
         }
-        .padding(14)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(
-          RoundedRectangle(cornerRadius: 12, style: .continuous)
-            .fill(Color.Theme.cardBg)
-            .overlay(
-              RoundedRectangle(cornerRadius: 12, style: .continuous)
-                .stroke(Color.Theme.divider, lineWidth: 0.5)
-            )
-        )
+        .padding(16)
+        .background(Color.Theme.searchBg)
+        .overlay(Rectangle().stroke(Color.Theme.divider, lineWidth: 1))
       }
 
       Spacer()
 
-      Button("Done") {
+      Button("Acknowledge") {
         dismiss()
       }
-      .buttonStyle(ThemedPrimaryButtonStyle())
+      .buttonStyle(ThemedInvertedButtonStyle())
+    }
+  }
+
+  // MARK: - Helpers
+
+  private func extractValue(from card: BusinessCard?, field: BusinessCardField) -> String {
+    guard let card = card else { return "UNKNOWN" }
+    switch field {
+    case .name: return card.name
+    case .title: return card.title ?? "N/A"
+    case .company: return card.company ?? "N/A"
+    case .email: return card.email ?? "N/A"
+    case .phone: return card.phone ?? "N/A"
+    case .profileImage: return "Binary Data"
+    case .socialNetworks: return "\(card.socialNetworks.count) Links"
+    case .skills: return "\(card.skills.count) Verified"
     }
   }
 
   private func infoRow(label: String, value: String) -> some View {
-    HStack(alignment: .top, spacing: 8) {
+    HStack(alignment: .top, spacing: 16) {
       Text(label)
-        .font(.caption.weight(.semibold))
+        .font(.system(size: 10, weight: .bold, design: .monospaced))
         .foregroundColor(Color.Theme.textTertiary)
-        .frame(width: 80, alignment: .leading)
+        .frame(width: 60, alignment: .leading)
       Text(value)
-        .font(.caption)
+        .font(.system(size: 12, weight: .regular, design: .monospaced))
         .foregroundColor(Color.Theme.textPrimary)
     }
   }
 
   private func fieldPicker(selection: Binding<Set<BusinessCardField>>) -> some View {
-    VStack(alignment: .leading, spacing: 8) {
+    VStack(spacing: 1) {
       ForEach(BusinessCardField.allCases) { field in
-        Toggle(isOn: Binding(
-          get: { selection.wrappedValue.contains(field) },
-          set: { isOn in
-            if isOn {
-              selection.wrappedValue.insert(field)
-            } else {
-              selection.wrappedValue.remove(field)
-            }
-            selection.wrappedValue.insert(.name)
+        HStack {
+          Text(field.displayName.uppercased())
+            .font(.system(size: 12, weight: .bold, design: .monospaced))
+            .foregroundColor(selection.wrappedValue.contains(field) ? Color.Theme.terminalGreen : Color.Theme.textSecondary)
+          Spacer()
+          Image(systemName: selection.wrappedValue.contains(field) ? "checkmark.square.fill" : "square")
+            .foregroundColor(selection.wrappedValue.contains(field) ? Color.Theme.terminalGreen : Color.Theme.textTertiary)
+        }
+        .padding(12)
+        .background(Color.Theme.searchBg)
+        .onTapGesture {
+          HapticFeedbackManager.shared.rigidImpact()
+          if selection.wrappedValue.contains(field) {
+            selection.wrappedValue.remove(field)
+          } else {
+            selection.wrappedValue.insert(field)
           }
-        )) {
-          Text(field.displayName)
-            .font(.caption)
+          selection.wrappedValue.insert(.name)
         }
       }
     }
-    .padding(12)
-    .background(
-      RoundedRectangle(cornerRadius: 12, style: .continuous)
-        .fill(Color.Theme.cardBg)
-        .overlay(
-          RoundedRectangle(cornerRadius: 12, style: .continuous)
-            .stroke(Color.Theme.divider, lineWidth: 0.5)
-        )
-    )
+    .clipShape(Rectangle())
+    .overlay(Rectangle().stroke(Color.Theme.divider, lineWidth: 1))
   }
 
   private var currentScreenID: SolidarityScreenID {
@@ -397,23 +467,13 @@ struct ProximitySharingView: View {
     }
   }
 
-  private var currentTitle: String {
-    switch step {
-    case .discovery: return String(localized: "Ready to Match")
-    case .scope: return String(localized: "Confirm Sharing Scope")
-    case .awaiting: return String(localized: "Awaiting Response")
-    case .incoming: return String(localized: "Incoming Request")
-    case .saved: return String(localized: "Exchange Complete")
-    }
-  }
-
   private var currentSubtitle: String {
     switch step {
-    case .discovery: return String(localized: "Keep this screen open. We'll notify you when matching succeeds")
-    case .scope: return String(localized: "Select fields to share and include a message")
-    case .awaiting: return String(localized: "Waiting for the other person to confirm")
-    case .incoming: return String(localized: "Review and accept the exchange request")
-    case .saved: return String(localized: "Both signatures have been saved to contacts")
+    case .discovery: return "Keep this terminal open for physical pairing."
+    case .scope: return "Select payload fields to cryptographically share."
+    case .awaiting: return "Awaiting peer node to accept handshake."
+    case .incoming: return "Review and accept inbound transmission."
+    case .saved: return "Keys generated. Signatures exchanged."
     }
   }
 
@@ -437,7 +497,7 @@ struct ProximitySharingView: View {
         switch sendResult {
         case .success(let requestId):
           awaitingRequestID = requestId
-          step = .awaiting
+          withAnimation { step = .awaiting }
         case .failure(let error):
           show(error.localizedDescription)
         }
@@ -472,7 +532,7 @@ struct ProximitySharingView: View {
             myMessage: incomingMessage,
             theirMessage: request.payload.myEphemeralMessage
           )
-          step = .saved
+          withAnimation { step = .saved }
         case .failure(let error):
           show(error.localizedDescription)
         }

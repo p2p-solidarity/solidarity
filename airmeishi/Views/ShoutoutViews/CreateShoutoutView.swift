@@ -1,54 +1,49 @@
-//
-//  CreateShoutoutView.swift
-//  airmeishi
-//
-//  Created by AirMeishi Team.
-//
-
 import SwiftUI
 
 // MARK: - Create Shoutout View
 
 struct CreateShoutoutView: View {
   @Environment(\.dismiss) private var dismiss
-  @Environment(\.colorScheme) private var colorScheme
   @State private var recipient: ShoutoutUser?
   @State private var message = ""
   @State private var showingUserPicker = false
-  @State private var isSakuraAnimating = false
+  @State private var isTransmitting = false
 
   init(selectedUser: ShoutoutUser? = nil) {
     self._recipient = State(initialValue: selectedUser)
   }
 
   var body: some View {
-    NavigationView {
+    NavigationStack {
       ZStack {
         Color.Theme.pageBg.ignoresSafeArea()
 
         VStack(spacing: 24) {
-          // Sakura header
-          sakuraHeader
+          // Terminal Header
+          terminalHeader
 
-          // Recipient Selection
+          // Target Node Selection
           recipientSelection
 
-          // Message Input
+          // Payload Input
           messageInput
 
           Spacer()
 
-          // Send Button with sakura effect
-          sakuraSendButton
+          // Transmit Button
+          transmitButton
         }
-        .padding()
+        .padding(24)
       }
-      .navigationTitle("Sakura Ichigoichie")
+      .navigationTitle("P2P Message")
       .navigationBarTitleDisplayMode(.inline)
       .toolbar {
         ToolbarItem(placement: .navigationBarLeading) {
-          Button("Cancel") {
+          Button {
             dismiss()
+          } label: {
+            Image(systemName: "xmark")
+              .foregroundColor(Color.Theme.textPrimary)
           }
         }
       }
@@ -56,116 +51,90 @@ struct CreateShoutoutView: View {
         UserPickerView(selectedUser: $recipient)
       }
       .toastOverlay()
-      .onAppear {
-        startSakuraAnimation()
-      }
     }
   }
 
-  // MARK: - Sakura Header
+  // MARK: - Terminal Header
 
-  private var sakuraHeader: some View {
+  private var terminalHeader: some View {
     HStack {
-      SakuraIconView(size: 32, color: Color.Theme.accentRose, isAnimating: isSakuraAnimating)
+      Image(systemName: "envelope.badge.shield.half.filled")
+        .font(.system(size: 32))
+        .foregroundColor(Color.Theme.terminalGreen)
+        .opacity(isTransmitting ? 0.3 : 1.0)
+        .animation(.easeInOut(duration: 0.5).repeatForever(autoreverses: true), value: isTransmitting)
 
-      VStack(alignment: .leading, spacing: 2) {
-        Text("Send Sakura")
-          .font(.title2)
-          .fontWeight(.bold)
+      VStack(alignment: .leading, spacing: 4) {
+        Text("SECURE TRANSMISSION")
+          .font(.system(size: 16, weight: .bold, design: .monospaced))
           .foregroundColor(Color.Theme.textPrimary)
 
-        Text("A once-in-a-lifetime encounter 🌸")
-          .font(.caption)
+        Text("End-to-End Encrypted Payload")
+          .font(.system(size: 12, design: .monospaced))
           .foregroundColor(Color.Theme.textSecondary)
       }
 
       Spacer()
     }
+    .padding(16)
+    .background(Color.Theme.searchBg)
+    .overlay(Rectangle().stroke(Color.Theme.divider, lineWidth: 1))
   }
 
   // MARK: - Recipient Selection
 
   private var recipientSelection: some View {
-    VStack(alignment: .leading, spacing: 12) {
-      HStack {
-        Text("Recipient")
-          .font(.headline)
-          .foregroundColor(Color.Theme.textPrimary)
-
-        Spacer()
-
-        Image(systemName: "person.circle.fill")
-          .foregroundColor(Color.Theme.accentRose)
-          .font(.title3)
-      }
+    VStack(alignment: .leading, spacing: 8) {
+      Text("TARGET NODE")
+        .font(.system(size: 12, weight: .bold, design: .monospaced))
+        .foregroundColor(Color.Theme.textPrimary)
 
       Button(action: { showingUserPicker = true }) {
-        HStack {
+        HStack(spacing: 16) {
           if let recipient = recipient {
-            AsyncImage(url: recipient.profileImageURL) { image in
-              image
-                .resizable()
-                .aspectRatio(contentMode: .fill)
-            } placeholder: {
-              Circle()
-                .fill(
-                  LinearGradient(
-                    colors: [Color.Theme.primaryBlue, Color.Theme.dustyMauve],
-                    startPoint: .topLeading,
-                    endPoint: .bottomTrailing
-                  )
-                )
-                .overlay {
-                  Text(recipient.initials)
-                    .font(.headline)
-                    .foregroundColor(.white)
-                }
+            ZStack {
+              Rectangle()
+                .fill(Color.Theme.primaryBlue)
+                .frame(width: 48, height: 48)
+                .overlay(Rectangle().stroke(Color.Theme.primaryBlue, lineWidth: 1))
+              
+              Text(recipient.initials)
+                .font(.system(size: 16, weight: .bold, design: .monospaced))
+                .foregroundColor(.white)
             }
-            .frame(width: 50, height: 50)
-            .clipShape(Circle())
-            .overlay(
-              Circle()
-                .stroke(Color.Theme.accentRose, lineWidth: 2)
-                .scaleEffect(isSakuraAnimating ? 1.1 : 1.0)
-                .animation(
-                  .easeInOut(duration: 0.5).repeatForever(autoreverses: true),
-                  value: isSakuraAnimating
-                )
-            )
 
-            VStack(alignment: .leading) {
+            VStack(alignment: .leading, spacing: 4) {
               Text(recipient.name)
-                .font(.headline)
+                .font(.system(size: 16, weight: .bold, design: .monospaced))
                 .foregroundColor(Color.Theme.textPrimary)
 
               Text(recipient.company)
-                .font(.subheadline)
+                .font(.system(size: 12, design: .monospaced))
                 .foregroundColor(Color.Theme.textSecondary)
             }
           } else {
-            Image(systemName: "person.circle.dashed")
-              .font(.title)
-              .foregroundColor(Color.Theme.textSecondary)
+            ZStack {
+              Rectangle()
+                .stroke(Color.Theme.divider, style: StrokeStyle(lineWidth: 1, dash: [4, 4]))
+                .frame(width: 48, height: 48)
+              Image(systemName: "person.badge.plus")
+                .foregroundColor(Color.Theme.textSecondary)
+            }
 
-            Text("Select Recipient")
-              .font(.headline)
-              .foregroundColor(Color.Theme.textPrimary)
+            Text("Select Target Node")
+              .font(.system(size: 14, weight: .bold, design: .monospaced))
+              .foregroundColor(Color.Theme.textSecondary)
           }
 
           Spacer()
 
           Image(systemName: "chevron.right")
+            .font(.system(size: 10, weight: .bold))
             .foregroundColor(Color.Theme.textSecondary)
         }
-        .padding()
-        .background(
-          RoundedRectangle(cornerRadius: 12)
-            .fill(Color.Theme.cardSurface(for: colorScheme))
-            .overlay(
-              RoundedRectangle(cornerRadius: 12)
-                .stroke(Color.Theme.accentRose.opacity(0.3), lineWidth: 1)
-            )
-        )
+        .padding(16)
+        .background(Color.Theme.cardBg)
+        .overlay(Rectangle().stroke(Color.Theme.divider, lineWidth: 1))
       }
       .buttonStyle(PlainButtonStyle())
     }
@@ -174,75 +143,57 @@ struct CreateShoutoutView: View {
   // MARK: - Message Input
 
   private var messageInput: some View {
-    VStack(alignment: .leading, spacing: 12) {
-      HStack {
-        Text("Sakura Message")
-          .font(.headline)
-          .foregroundColor(Color.Theme.textPrimary)
+    VStack(alignment: .leading, spacing: 8) {
+      Text("PAYLOAD (MAX 200 BYTES)")
+        .font(.system(size: 12, weight: .bold, design: .monospaced))
+        .foregroundColor(Color.Theme.textPrimary)
 
-        Spacer()
+      VStack(alignment: .trailing, spacing: 8) {
+        TextEditor(text: Binding(
+          get: { message },
+          set: { message = String($0.prefix(200)) }
+        ))
+        .font(.system(size: 14, design: .monospaced))
+        .foregroundColor(Color.Theme.textPrimary)
+        .frame(height: 120)
+        .padding(12)
+        .background(Color.Theme.searchBg)
+        .overlay(Rectangle().stroke(Color.Theme.divider, lineWidth: 1))
 
-        SakuraIconView(size: 24, color: Color.Theme.accentRose, isAnimating: isSakuraAnimating)
-      }
-
-      VStack(alignment: .leading, spacing: 8) {
-        TextField("A beautiful encounter worth cherishing 🌸", text: $message, axis: .vertical)
-          .textFieldStyle(PlainTextFieldStyle())
-          .foregroundColor(Color.Theme.textPrimary)
-          .padding()
-          .background(
-            RoundedRectangle(cornerRadius: 12)
-              .fill(Color.Theme.cardSurface(for: colorScheme))
-              .overlay(
-                RoundedRectangle(cornerRadius: 12)
-                  .stroke(
-                    isSakuraAnimating ? Color.Theme.accentRose.opacity(0.5) : Color.Theme.cardBorder(for: colorScheme),
-                    lineWidth: 1
-                  )
-              )
-          )
-          .lineLimit(3...6)
-
-        Text("\(message.count)/200 characters")
-          .font(.caption)
-          .foregroundColor(Color.Theme.textSecondary)
-          .frame(maxWidth: .infinity, alignment: .trailing)
+        Text("[\(message.count)/200]")
+          .font(.system(size: 10, weight: .bold, design: .monospaced))
+          .foregroundColor(message.count >= 200 ? Color.Theme.destructive : Color.Theme.textSecondary)
       }
     }
   }
 
-  // MARK: - Sakura Send Button
+  // MARK: - Transmit Button
 
-  private var sakuraSendButton: some View {
-    VStack(spacing: 0) {
-      Button(action: sendIchigoichie) {
+  private var transmitButton: some View {
+    VStack(spacing: 8) {
+      Button(action: sendTransmission) {
         HStack(spacing: 12) {
-          SakuraIconView(size: 24, color: .white, isAnimating: isSakuraAnimating)
-
-          Text("Send Sakura")
-            .font(.headline)
-            .fontWeight(.bold)
+          Image(systemName: "paperplane.fill")
+            .font(.system(size: 14))
+          Text(isTransmitting ? "ENCRYPTING & SENDING..." : "TRANSMIT")
+            .font(.system(size: 14, weight: .bold, design: .monospaced))
         }
+        .frame(maxWidth: .infinity)
       }
-      .buttonStyle(ThemedRoseButtonStyle())
-      .disabled(recipient == nil || message.isEmpty || message.count > 200 || !(recipient?.canReceiveSakura ?? false))
-      .opacity(
-        (recipient == nil || message.isEmpty || message.count > 200 || !(recipient?.canReceiveSakura ?? false))
-          ? 0.5 : 1.0
-      )
-
+      .buttonStyle(ThemedPrimaryButtonStyle())
+      .disabled(recipient == nil || message.isEmpty || message.count > 200 || !(recipient?.canReceiveSakura ?? false) || isTransmitting)
+      
       if let recipient = recipient, !recipient.canReceiveSakura {
-        Text("This user hasn't enabled Secure Messaging yet.")
-          .font(.caption)
-          .foregroundColor(Color.Theme.textSecondary)
-          .padding(.top, 4)
+        Text("ERR: Target node has not enabled Secure Messaging.")
+          .font(.system(size: 10, weight: .bold, design: .monospaced))
+          .foregroundColor(Color.Theme.destructive)
       }
     }
   }
 
   // MARK: - Actions
 
-  private func sendIchigoichie() {
+  private func sendTransmission() {
     guard let recipient = recipient else { return }
 
     // Validate that recipient has secure messaging enabled
@@ -254,17 +205,19 @@ struct CreateShoutoutView: View {
       Task {
         await MainActor.run {
           ToastManager.shared.show(
-            title: String(localized: "Error"),
-            message: String(localized: "This user hasn't enabled Secure Messaging yet."),
+            title: "Transmission Failed",
+            message: "Node is not configured for encrypted receive protocol.",
             type: .error,
-            duration: 2.0
+            duration: 3.0
           )
         }
       }
       return
     }
 
-    // Use new async MessageService (no need for both users to be online)
+    isTransmitting = true
+    HapticFeedbackManager.shared.rigidImpact()
+
     let messageService = MessageService.shared
 
     Task {
@@ -274,43 +227,36 @@ struct CreateShoutoutView: View {
           name: recipient.name,
           pubKey: recipientPubKey,
           signPubKey: recipientSignPubKey,
-          sealedRoute: recipientSealedRoute  // Use RECIPIENT's route, not sender's!
+          sealedRoute: recipientSealedRoute // Use RECIPIENT's route
         )
 
-        // Send sakura message (async, works even if recipient is offline)
-        try await messageService.sendMessage(to: secureContact, text: message.isEmpty ? "🌸" : message)
+        // Send P2P message
+        try await messageService.sendMessage(to: secureContact, text: message.isEmpty ? "[Empty Payload]" : message)
 
         await MainActor.run {
-          // UI Feedback
-          withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
-            isSakuraAnimating = true
-          }
-
-          DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
-            ToastManager.shared.show(
-              title: String(localized: "Sakura Sent!"),
-              message: String(localized: "Your Ichigoichie message will be delivered when \(recipient.name) is online! 🌸"),
-              type: .success,
-              duration: 3.0
-            )
-            dismiss()
-          }
+          isTransmitting = false
+          HapticFeedbackManager.shared.successNotification()
+          ToastManager.shared.show(
+            title: "SUCCESS",
+            message: "Payload encrypted and enqueued for \(recipient.name).",
+            type: .success,
+            duration: 3.0
+          )
+          dismiss()
         }
       } catch {
-        print("[ShoutoutView] Error: \(error)")
+        print("[ShoutoutView] Encrypt/Transmit Error: \(error)")
         await MainActor.run {
+          isTransmitting = false
+          HapticFeedbackManager.shared.errorNotification()
           ToastManager.shared.show(
-            title: String(localized: "Error"),
-            message: String(localized: "Failed to send: \(error.localizedDescription)"),
+            title: "CRITICAL ERR",
+            message: "Protocol failure: \(error.localizedDescription)",
             type: .error,
-            duration: 2.0
+            duration: 4.0
           )
         }
       }
     }
-  }
-
-  private func startSakuraAnimation() {
-    isSakuraAnimating = true
   }
 }

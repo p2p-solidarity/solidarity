@@ -3,299 +3,137 @@ import SwiftUI
 struct OnboardingFlowView: View {
   enum Step: Int, CaseIterable {
     case welcome
-    case keySetup
-    case contactImport
-    case passportPrompt
+    case profileSetup
+    case avatarSetup
+    case secureKeys
     case complete
   }
 
   @AppStorage("solidarity.onboarding.completed") private var onboardingCompleted = false
+  @AppStorage("theme_selected_animal") private var savedAvatar: String?
+  @AppStorage("user_profile_name") private var profileName = ""
 
   @State private var step: Step = .welcome
-  @State private var keySetupReady = false
-  @State private var importedContactCount = 0
-  @State private var passportProof: PassportProofResult?
-  @State private var showingPassportFlow = false
+  
+  // Profile Form Data
+  @State private var username = ""
+  @State private var linkText = ""
+  @State private var xTwitter = ""
+  @State private var linkedIn = ""
+  @State private var wallet = ""
+  @State private var selectedAvatar: AnimalCharacter?
+
   @State private var isWorking = false
   @State private var showingAlert = false
   @State private var alertMessage = ""
 
   var body: some View {
-    NavigationStack {
-      ScrollView {
-        VStack(spacing: 16) {
-          stepHeader
-          stepContent
-          stepFooter
+    ZStack {
+      Color.Theme.pageBg.ignoresSafeArea()
+      
+      switch step {
+      case .welcome:
+        TerminalWelcomeScreen {
+          withAnimation(.easeInOut) { step = .profileSetup }
         }
-        .padding(16)
+      case .profileSetup:
+        DarkProfileSetupForm(
+          onNext: {
+            profileName = username // Save name
+            withAnimation(.easeInOut) { step = .avatarSetup }
+          },
+          username: $username,
+          link: $linkText,
+          xTwitter: $xTwitter,
+          linkedIn: $linkedIn,
+          wallet: $wallet
+        )
+      case .avatarSetup:
+        AvatarSelectionGrid(
+          selectedAvatar: $selectedAvatar,
+          onNext: {
+            if let avatar = selectedAvatar {
+              savedAvatar = avatar.rawValue
+            }
+            withAnimation(.easeInOut) { step = .secureKeys }
+          },
+          onBack: {
+            withAnimation(.easeInOut) { step = .profileSetup }
+          }
+        )
+      case .secureKeys:
+        finalizeKeysStep
+      case .complete:
+        finalCompletionStep
       }
-      .background(Color.Theme.pageBg.ignoresSafeArea())
-      .navigationTitle("Welcome")
-      .navigationBarTitleDisplayMode(.inline)
-      .sheet(isPresented: $showingPassportFlow) {
-        PassportOnboardingFlowView { proof in
-          passportProof = proof
+    }
+    .alert("Onboarding Error", isPresented: $showingAlert) {
+      Button("OK", role: .cancel) {}
+    } message: {
+      Text(alertMessage)
+    }
+  }
+
+  private var finalizeKeysStep: some View {
+    VStack(alignment: .leading, spacing: 24) {
+      HStack {
+        Button(action: { withAnimation { step = .avatarSetup } }) {
+          Image(systemName: "chevron.left")
+            .foregroundColor(.white)
+            .padding(12)
+            .overlay(Rectangle().stroke(Color.Theme.divider, lineWidth: 1))
         }
+        Spacer()
       }
-      .alert("Onboarding", isPresented: $showingAlert) {
-        Button("OK", role: .cancel) {}
-      } message: {
-        Text(alertMessage)
-      }
-    }
-  }
-
-  private var stepHeader: some View {
-    VStack(alignment: .leading, spacing: 10) {
-      SolidarityPlaceholderCard(
-        screenID: currentScreenID,
-        title: currentTitle,
-        subtitle: currentSubtitle
-      )
-
-      ProgressView(value: Double(step.rawValue + 1), total: Double(Step.allCases.count))
-        .tint(Color.Theme.darkUI)
-    }
-  }
-
-  @ViewBuilder
-  private var stepContent: some View {
-    switch step {
-    case .welcome:
-      welcomeStep
-    case .keySetup:
-      keySetupStep
-    case .contactImport:
-      contactImportStep
-    case .passportPrompt:
-      passportPromptStep
-    case .complete:
-      completionStep
-    }
-  }
-
-  private var stepFooter: some View {
-    HStack {
-      if step != .welcome {
-        Button("Back") {
-          moveBack()
-        }
-        .buttonStyle(ThemedSecondaryButtonStyle())
-      }
-
-      Button(stepButtonTitle) {
-        handleNext()
-      }
-      .buttonStyle(ThemedPrimaryButtonStyle())
-      .disabled(isNextDisabled || isWorking)
-    }
-  }
-
-  private var welcomeStep: some View {
-    VStack(alignment: .leading, spacing: 10) {
-      Text("Build your verified social graph with privacy-first identity.")
-        .font(.subheadline)
-        .foregroundColor(Color.Theme.textSecondary)
-      Text("You will set up your key, import contacts, and prepare your passport credential.")
-        .font(.caption)
-        .foregroundColor(Color.Theme.textTertiary)
-    }
-    .frame(maxWidth: .infinity, alignment: .leading)
-    .padding(14)
-    .background(Color.Theme.cardBg)
-    .cornerRadius(12)
-  }
-
-  private var keySetupStep: some View {
-    VStack(alignment: .leading, spacing: 12) {
-      Text("Create and unlock your DID master key.")
-        .font(.subheadline)
-        .foregroundColor(Color.Theme.textSecondary)
-
-      Label(
-        keySetupReady ? "Master key is ready" : "Master key not set",
-        systemImage: keySetupReady ? "checkmark.circle.fill" : "exclamationmark.circle"
-      )
-      .foregroundColor(keySetupReady ? .green : .orange)
-      .font(.caption.weight(.semibold))
-
-      Button {
-        setupKeychain()
-      } label: {
-        Text("Authenticate and Setup Key")
-          .frame(maxWidth: .infinity)
-      }
-      .buttonStyle(ThemedPrimaryButtonStyle())
-      .disabled(isWorking)
-    }
-    .padding(14)
-    .background(Color.Theme.cardBg)
-    .cornerRadius(12)
-  }
-
-  private var contactImportStep: some View {
-    VStack(alignment: .leading, spacing: 12) {
-      Text("Import existing contacts as a bootstrap for your graph.")
-        .font(.subheadline)
-        .foregroundColor(Color.Theme.textSecondary)
-
-      Label(
-        "Imported \(importedContactCount) contacts",
-        systemImage: importedContactCount > 0 ? "person.2.fill" : "person.2"
-      )
-      .font(.caption.weight(.semibold))
-      .foregroundColor(Color.Theme.textSecondary)
-
-      Button {
-        importContacts()
-      } label: {
-        Text("Import Contacts")
-          .frame(maxWidth: .infinity)
-      }
-      .buttonStyle(ThemedPrimaryButtonStyle())
-      .disabled(isWorking)
-    }
-    .padding(14)
-    .background(Color.Theme.cardBg)
-    .cornerRadius(12)
-  }
-
-  private var passportPromptStep: some View {
-    VStack(alignment: .leading, spacing: 12) {
-      Text("Scan your passport to unlock high-trust proofs.")
-        .font(.subheadline)
-        .foregroundColor(Color.Theme.textSecondary)
-
-      Label(
-        passportProof == nil ? "Passport not configured" : "Passport credential saved",
-        systemImage: passportProof == nil ? "passport" : "checkmark.seal.fill"
-      )
-      .foregroundColor(passportProof == nil ? .orange : .green)
-      .font(.caption.weight(.semibold))
-
-      if let passportProof {
-        Text(passportProof.generationFailed ? "Fallback: SD-JWT mode" : "ZK proof generation completed")
-          .font(.caption)
+      .padding(.top, 40)
+      
+      VStack(alignment: .leading, spacing: 8) {
+        Text("Final step")
+          .font(.system(size: 28, weight: .bold))
+          .foregroundColor(.white)
+        Text("You're about to begin your journey.\nPlease confirm to generate your DID keys.")
+          .font(.system(size: 14))
           .foregroundColor(Color.Theme.textSecondary)
       }
-
-      Button {
-        showingPassportFlow = true
-      } label: {
-        Text("Start Passport Flow")
+      
+      Spacer()
+      
+      if isWorking {
+        ProgressView()
+          .progressViewStyle(CircularProgressViewStyle(tint: .white))
+          .scaleEffect(1.5)
           .frame(maxWidth: .infinity)
-      }
-      .buttonStyle(ThemedPrimaryButtonStyle())
-
-      if passportProof == nil {
-        Button {
-          handleNext()
-        } label: {
-          Text("Skip for now")
-            .frame(maxWidth: .infinity)
+      } else {
+        Button(action: setupKeychain) {
+          Text("Generate Secure Keys")
         }
-        .buttonStyle(ThemedSecondaryButtonStyle())
+        .buttonStyle(ThemedInvertedButtonStyle())
       }
-    }
-    .padding(14)
-    .background(Color.Theme.cardBg)
-    .cornerRadius(12)
-  }
-
-  private var completionStep: some View {
-    VStack(alignment: .leading, spacing: 12) {
-      Text("You're all set.")
-        .font(.headline)
-      Text("Key ready, contacts imported, and identity proofs prepared.")
-        .font(.subheadline)
-        .foregroundColor(Color.Theme.textSecondary)
-
-      completionRow("Master key", done: keySetupReady)
-      completionRow("Contacts", done: importedContactCount >= 0)
-      completionRow("Passport", done: passportProof != nil)
-    }
-    .frame(maxWidth: .infinity, alignment: .leading)
-    .padding(14)
-    .background(Color.Theme.cardBg)
-    .cornerRadius(12)
-  }
-
-  private func completionRow(_ title: String, done: Bool) -> some View {
-    HStack {
-      Image(systemName: done ? "checkmark.circle.fill" : "circle")
-      Text(title)
+      
       Spacer()
     }
-    .font(.caption.weight(.semibold))
-    .foregroundColor(done ? .green : Color.Theme.textSecondary)
+    .padding(.horizontal, 24)
   }
-
-  private var currentScreenID: SolidarityScreenID {
-    switch step {
-    case .welcome: return .onboardingWelcome
-    case .keySetup: return .onboardingKeySetup
-    case .contactImport: return .onboardingContactImport
-    case .passportPrompt: return .onboardingPassportPrompt
-    case .complete: return .onboardingComplete
+  
+  private var finalCompletionStep: some View {
+    VStack(spacing: 24) {
+      Spacer()
+      Text("[ SYSTEM READY ]")
+        .font(.system(size: 32, weight: .bold, design: .monospaced))
+        .foregroundColor(Color.Theme.terminalGreen)
+        .shadow(color: Color.Theme.terminalGreen.opacity(0.5), radius: 10)
+      
+      Spacer()
+      
+      Button(action: {
+        HapticFeedbackManager.shared.successNotification()
+        onboardingCompleted = true
+      }) {
+        Text("Enter Solidarity")
+      }
+      .buttonStyle(ThemedInvertedButtonStyle())
     }
-  }
-
-  private var currentTitle: String {
-    switch step {
-    case .welcome: return "Welcome to Solidarity"
-    case .keySetup: return "Key Setup"
-    case .contactImport: return "Import Contacts"
-    case .passportPrompt: return "Passport Prompt"
-    case .complete: return "Setup Complete"
-    }
-  }
-
-  private var currentSubtitle: String {
-    switch step {
-    case .welcome:
-      return "Begin your setup journey"
-    case .keySetup:
-      return "Create and activate your master key"
-    case .contactImport:
-      return "Import contacts from address book (optional)"
-    case .passportPrompt:
-      return "Scan passport to enable high-trust proofs"
-    case .complete:
-      return "You have completed all basic setup"
-    }
-  }
-
-  private var stepButtonTitle: String {
-    switch step {
-    case .complete:
-      return "Enter App"
-    default:
-      return "Next"
-    }
-  }
-
-  private var isNextDisabled: Bool {
-    switch step {
-    case .keySetup:
-      return !keySetupReady
-    default:
-      return false
-    }
-  }
-
-  private func moveBack() {
-    guard let current = Step(rawValue: step.rawValue - 1) else { return }
-    step = current
-  }
-
-  private func handleNext() {
-    if step == .complete {
-      onboardingCompleted = true
-      return
-    }
-    guard let next = Step(rawValue: step.rawValue + 1) else { return }
-    step = next
+    .padding(24)
   }
 
   private func setupKeychain() {
@@ -316,36 +154,10 @@ struct OnboardingFlowView: View {
           isWorking = false
           switch pairwiseResult {
           case .success:
-            keySetupReady = true
+            withAnimation { step = .complete }
           case .failure(let error):
             show(error.localizedDescription)
           }
-        }
-      }
-    }
-  }
-
-  private func importContacts() {
-    isWorking = true
-    Task {
-      let permission = await ContactImportService.shared.requestPermission()
-      switch permission {
-      case .failure(let error):
-        isWorking = false
-        show(error.localizedDescription)
-      case .success(let granted):
-        guard granted else {
-          isWorking = false
-          show("Contacts access was denied.")
-          return
-        }
-        let importResult = ContactImportService.shared.importContacts()
-        isWorking = false
-        switch importResult {
-        case .success(let count):
-          importedContactCount = count
-        case .failure(let error):
-          show(error.localizedDescription)
         }
       }
     }
