@@ -71,7 +71,7 @@ struct CreateGroupView: View {
       .alert("Error", isPresented: $showingError) {
         Button("OK", role: .cancel) {}
       } message: {
-        Text(errorMessage ?? "Unknown error")
+        Text(errorMessage ?? String(localized: "Unknown error"))
       }
     }
   }

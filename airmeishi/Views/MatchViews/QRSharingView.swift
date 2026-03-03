@@ -66,8 +66,8 @@ struct QRSharingView: View {
 
   private var modePicker: some View {
     Picker("Mode", selection: $mode) {
-      Text("Solidarity掃碼").tag(QRShareMode.solidarity)
-      Text("通用驗證").tag(QRShareMode.universal)
+      Text("Solidarity Scan").tag(QRShareMode.solidarity)
+      Text("Universal Verify").tag(QRShareMode.universal)
     }
     .pickerStyle(.segmented)
   }
@@ -178,18 +178,18 @@ private enum QRShareMode: String, CaseIterable {
   var title: String {
     switch self {
     case .solidarity:
-      return "Solidarity QR"
+      return String(localized: "Solidarity QR")
     case .universal:
-      return "Universal Verification QR"
+      return String(localized: "Universal Verification QR")
     }
   }
 
   var description: String {
     switch self {
     case .solidarity:
-      return "Use this mode when both users are in Solidarity for direct exchange."
+      return String(localized: "Use this mode when both users are in Solidarity for direct exchange.")
     case .universal:
-      return "Use this mode for verifier-compatible OID4VP style requests."
+      return String(localized: "Use this mode for verifier-compatible OID4VP style requests.")
     }
   }
 }

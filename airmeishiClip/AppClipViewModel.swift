@@ -47,7 +47,7 @@ class AppClipViewModel: ObservableObject {
         
         // Extract components from URL
         guard let components = URLComponents(url: url, resolvingAgainstBaseURL: false) else {
-            state = .error("Invalid URL format")
+            state = .error(String(localized: "Invalid URL format"))
             return
         }
         
@@ -57,7 +57,7 @@ class AppClipViewModel: ObservableObject {
         } else if let shareId = extractShareIdFromURL(components) {
             loadBusinessCardFromShareId(shareId)
         } else {
-            state = .error("Unable to parse business card information from URL")
+            state = .error(String(localized: "Unable to parse business card information from URL"))
         }
     }
     
@@ -118,7 +118,7 @@ class AppClipViewModel: ObservableObject {
             
         } catch {
             print("Failed to decode business card: \(error)")
-            state = .error("Invalid business card data")
+            state = .error(String(localized: "Invalid business card data"))
         }
     }
     
@@ -250,6 +250,19 @@ enum ProficiencyLevel: String, Codable, CaseIterable {
     case intermediate = "Intermediate"
     case advanced = "Advanced"
     case expert = "Expert"
+
+    var displayName: String {
+        switch self {
+        case .beginner:
+            return String(localized: "Beginner")
+        case .intermediate:
+            return String(localized: "Intermediate")
+        case .advanced:
+            return String(localized: "Advanced")
+        case .expert:
+            return String(localized: "Expert")
+        }
+    }
 }
 
 /// Verification status for business cards
@@ -260,7 +273,16 @@ enum VerificationStatus: String, Codable, CaseIterable {
     case pending = "Pending"
     
     var displayName: String {
-        return self.rawValue
+        switch self {
+        case .verified:
+            return String(localized: "Verified")
+        case .unverified:
+            return String(localized: "Unverified")
+        case .failed:
+            return String(localized: "Failed")
+        case .pending:
+            return String(localized: "Pending")
+        }
     }
     
     var systemImageName: String {

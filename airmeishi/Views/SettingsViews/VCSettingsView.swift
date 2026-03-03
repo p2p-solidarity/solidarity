@@ -87,20 +87,21 @@ class VCSettingsViewModel: ObservableObject {
       DispatchQueue.main.async {
         self.importedCount = successCount
         if successCount > 0 {
-          self.successMessage =
-            "Successfully imported \(successCount) VCs." + (failureCount > 0 ? " (\(failureCount) failed)" : "")
+          let base = String(localized: "Successfully imported \(successCount) VCs.")
+          let failedSuffix = failureCount > 0 ? String(localized: " (\(failureCount) failed)") : ""
+          self.successMessage = base + failedSuffix
           self.showSuccess = true
         } else if failureCount > 0 {
-          self.errorMessage = "Failed to import VCs. All \(failureCount) attempts failed."
+          self.errorMessage = String(localized: "Failed to import VCs. All \(failureCount) attempts failed.")
           self.showError = true
         } else {
-          self.errorMessage = "No VCs found in the file."
+          self.errorMessage = String(localized: "No VCs found in the file.")
           self.showError = true
         }
       }
     } catch {
       DispatchQueue.main.async {
-        self.errorMessage = "Failed to read file: \(error.localizedDescription)"
+        self.errorMessage = String(localized: "Failed to read file: \(error.localizedDescription)")
         self.showError = true
       }
     }
@@ -123,20 +124,20 @@ class VCSettingsViewModel: ObservableObject {
         Self.logger.info("VC verified successfully")
         DispatchQueue.main.async {
           self.importedCount += 1  // Just to trigger update if needed
-          self.successMessage = "Successfully created and verified \(method.rawValue) VC."
+          self.successMessage = String(localized: "Successfully created and verified \(method.rawValue) VC.")
           self.showSuccess = true
         }
       case .failure(let error):
         Self.logger.error("VC created but verification failed: \(error.localizedDescription)")
         DispatchQueue.main.async {
-          self.errorMessage = "Created VC but failed to verify/parse: \(error.localizedDescription)"
+          self.errorMessage = String(localized: "Created VC but failed to verify/parse: \(error.localizedDescription)")
           self.showError = true
         }
       }
     case .failure(let error):
       Self.logger.error("Failed to create VC: \(error.localizedDescription)")
       DispatchQueue.main.async {
-        self.errorMessage = "Failed to create VC: \(error.localizedDescription)"
+        self.errorMessage = String(localized: "Failed to create VC: \(error.localizedDescription)")
         self.showError = true
       }
     }
@@ -192,7 +193,7 @@ struct VCSettingsView: View {
               exportDocument = VCExportDocument(vcs: vcs)
               showingExporter = true
             } else {
-              viewModel.errorMessage = "No VCs found to export."
+              viewModel.errorMessage = String(localized: "No VCs found to export.")
               viewModel.showError = true
             }
           },
@@ -249,7 +250,7 @@ struct VCSettingsView: View {
         Button("OK", role: .cancel) {}
       },
       message: {
-        Text(viewModel.errorMessage ?? "Unknown error")
+        Text(viewModel.errorMessage ?? String(localized: "Unknown error"))
       }
     )
     .alert(
@@ -259,7 +260,7 @@ struct VCSettingsView: View {
         Button("OK", role: .cancel) {}
       },
       message: {
-        Text(viewModel.successMessage ?? "Operation successful")
+        Text(viewModel.successMessage ?? String(localized: "Operation successful"))
       }
     )
   }

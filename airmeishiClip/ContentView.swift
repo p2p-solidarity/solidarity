@@ -153,13 +153,13 @@ struct ContentView: View {
             
             VStack(spacing: 8) {
                 if let email = card.email, !email.isEmpty {
-                    contactInfoRow(icon: "envelope", title: "Email", value: email) {
+                    contactInfoRow(icon: "envelope", title: String(localized: "Email"), value: email) {
                         openEmail(email)
                     }
                 }
                 
                 if let phone = card.phone, !phone.isEmpty {
-                    contactInfoRow(icon: "phone", title: "Phone", value: phone) {
+                    contactInfoRow(icon: "phone", title: String(localized: "Phone"), value: phone) {
                         openPhone(phone)
                     }
                 }
@@ -222,7 +222,7 @@ struct ContentView: View {
                 .font(.caption)
                 .fontWeight(.medium)
             
-            Text(skill.proficiencyLevel.rawValue)
+            Text(skill.proficiencyLevel.displayName)
                 .font(.caption2)
                 .foregroundColor(.secondary)
         }
@@ -398,10 +398,10 @@ struct ContentView: View {
                     .multilineTextAlignment(.center)
                 
                 VStack(alignment: .leading, spacing: 12) {
-                    featureRow(icon: "shield.checkered", title: "Privacy First", description: "Control what you share")
-                    featureRow(icon: "qrcode", title: "QR Sharing", description: "Quick and secure sharing")
-                    featureRow(icon: "wallet.pass", title: "Apple Wallet", description: "Integrated with Wallet app")
-                    featureRow(icon: "wave.3.right", title: "Proximity Sharing", description: "Share with nearby devices")
+                    featureRow(icon: "shield.checkered", title: String(localized: "Privacy First"), description: String(localized: "Control what you share"))
+                    featureRow(icon: "qrcode", title: String(localized: "QR Sharing"), description: String(localized: "Quick and secure sharing"))
+                    featureRow(icon: "wallet.pass", title: String(localized: "Apple Wallet"), description: String(localized: "Integrated with Wallet app"))
+                    featureRow(icon: "wave.3.right", title: String(localized: "Proximity Sharing"), description: String(localized: "Share with nearby devices"))
                 }
                 
                 Button("Download from App Store") {
@@ -459,7 +459,8 @@ struct ContentView: View {
     
     private func shareCard(_ card: BusinessCard) {
         // Create share content
-        let shareText = "Business Card: \(card.name)"
+        let format = String(localized: "Business Card: %@")
+        let shareText = String(format: format, locale: Locale.current, card.name)
         let activityVC = UIActivityViewController(activityItems: [shareText], applicationActivities: nil)
         
         // Present share sheet

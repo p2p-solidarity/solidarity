@@ -130,7 +130,7 @@ struct ShoutoutDetailView: View {
         // Show Toast only if enabled in settings
         if NotificationSettingsManager.shared.enableInAppToast {
           ToastManager.shared.show(
-            title: "Sakura from \(senderName)",
+            title: String(localized: "Sakura from \(senderName)"),
             message: text,
             type: .success,
             duration: 4.0
@@ -483,7 +483,7 @@ struct ShoutoutDetailView: View {
         }
         .buttonStyle(ThemedSecondaryButtonStyle())
         .sheet(isPresented: $showingShareSheet) {
-          ActivityViewController(activityItems: ["Check out \(user.name) on Sakura!"])
+          ActivityViewController(activityItems: [String(localized: "Check out \(user.name) on Sakura!")])
         }
       }
 

@@ -209,27 +209,27 @@ struct BusinessCardSummary: View {
       }
 
       VStack(alignment: .leading, spacing: 8) {
-        SharedFieldRow(label: "Name", value: businessCard.name)
+        SharedFieldRow(label: String(localized: "Name"), value: businessCard.name)
 
         if let title = businessCard.title {
-          SharedFieldRow(label: "Title", value: title)
+          SharedFieldRow(label: String(localized: "Title"), value: title)
         }
 
         if let company = businessCard.company {
-          SharedFieldRow(label: "Company", value: company)
+          SharedFieldRow(label: String(localized: "Company"), value: company)
         }
 
         if let email = businessCard.email {
-          SharedFieldRow(label: "Email", value: email)
+          SharedFieldRow(label: String(localized: "Email"), value: email)
         }
 
         if let phone = businessCard.phone {
-          SharedFieldRow(label: "Phone", value: phone)
+          SharedFieldRow(label: String(localized: "Phone"), value: phone)
         }
 
         if !businessCard.skills.isEmpty {
           SharedFieldRow(
-            label: "Skills",
+            label: String(localized: "Skills"),
             value: businessCard.skills.map { $0.name }.joined(separator: ", ")
           )
         }
@@ -275,7 +275,7 @@ struct UsesOptionButton: View {
           .font(.title3)
           .fontWeight(.bold)
 
-        Text(uses == 1 ? "use" : "uses")
+        Text(uses == 1 ? String(localized: "use") : String(localized: "uses"))
           .font(.caption2)
       }
       .foregroundColor(isSelected ? .white : .primary)
@@ -304,10 +304,14 @@ struct ExpirationOptionButton: View {
 
   private var fullText: String {
     if hours < 24 {
-      return hours == 1 ? "1 hour" : "\(hours) hours"
+      if hours == 1 { return String(localized: "1 hour") }
+      let format = String(localized: "%d hours")
+      return String(format: format, hours)
     } else {
       let days = hours / 24
-      return days == 1 ? "1 day" : "\(days) days"
+      if days == 1 { return String(localized: "1 day") }
+      let format = String(localized: "%d days")
+      return String(format: format, days)
     }
   }
 
@@ -398,25 +402,25 @@ struct CreatedLinkView: View {
             VStack(spacing: 12) {
               LinkDetailRow(
                 icon: "link",
-                label: "Share URL",
+                label: String(localized: "Share URL"),
                 value: generatedShareURL
               )
 
               LinkDetailRow(
                 icon: "number",
-                label: "Max Uses",
+                label: String(localized: "Max Uses"),
                 value: "\(shareLink.maxUses)"
               )
 
               LinkDetailRow(
                 icon: "clock",
-                label: "Expires",
+                label: String(localized: "Expires"),
                 value: shareLink.expirationDate.formatted(date: .abbreviated, time: .shortened)
               )
 
               LinkDetailRow(
                 icon: "eye",
-                label: "Privacy Level",
+                label: String(localized: "Privacy Level"),
                 value: shareLink.sharingLevel.displayName
               )
             }

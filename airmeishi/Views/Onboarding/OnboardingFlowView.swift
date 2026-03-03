@@ -254,15 +254,15 @@ struct OnboardingFlowView: View {
   private var currentSubtitle: String {
     switch step {
     case .welcome:
-      return "開始你的設定之旅"
+      return "Begin your setup journey"
     case .keySetup:
-      return "建立並啟用你的主金鑰"
+      return "Create and activate your master key"
     case .contactImport:
-      return "從通訊錄匯入聯絡人（可選）"
+      return "Import contacts from address book (optional)"
     case .passportPrompt:
-      return "掃描護照以啟用高信任度證明"
+      return "Scan passport to enable high-trust proofs"
     case .complete:
-      return "你已完成所有基礎設定"
+      return "You have completed all basic setup"
     }
   }
 

@@ -96,7 +96,7 @@ struct PersonDetailView: View {
 
       if NotificationSettingsManager.shared.enableInAppToast {
         ToastManager.shared.show(
-          title: "Sakura from \(senderName)",
+          title: String(format: String(localized: "Sakura from %@"), senderName),
           message: text,
           type: .success,
           duration: 4.0
@@ -195,12 +195,12 @@ struct PersonDetailView: View {
 
       VStack(spacing: 8) {
         if !user.email.isEmpty {
-          infoRow(icon: "envelope", title: "Email", value: user.email)
+          infoRow(icon: "envelope", title: String(localized: "Email"), value: user.email)
         }
 
         infoRow(
           icon: "calendar",
-          title: "Last Interaction",
+          title: String(localized: "Last Interaction"),
           value: DateFormatter.relativeDate.string(from: user.lastInteraction)
         )
 
@@ -401,7 +401,7 @@ struct PersonDetailView: View {
         )
       }
       .sheet(isPresented: $showingShareSheet) {
-        ActivityViewController(activityItems: ["Check out \(user.name) on AirMeishi!"])
+        ActivityViewController(activityItems: [String(format: String(localized: "Check out %@ on AirMeishi!"), user.name)])
       }
     }
   }

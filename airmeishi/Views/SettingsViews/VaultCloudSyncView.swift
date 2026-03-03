@@ -146,10 +146,10 @@ struct VaultCloudSyncView: View {
 
     private var statusMessage: String {
         switch syncService.syncStatus {
-        case .idle: return "Not synced yet"
-        case .syncing: return "Syncing..."
-        case .synced: return "Up to date"
-        case .conflictsExist: return "Conflicts need resolution"
+        case .idle: return String(localized: "Not synced yet")
+        case .syncing: return String(localized: "Syncing...")
+        case .synced: return String(localized: "Up to date")
+        case .conflictsExist: return String(localized: "Conflicts need resolution")
         case .error(let msg): return msg
         }
     }

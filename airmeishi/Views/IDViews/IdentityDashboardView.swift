@@ -10,9 +10,9 @@ struct IdentityDashboardView: View {
 
     var title: String {
       switch self {
-      case .personal: return "Personal"
-      case .group: return "Group"
-      case .selective: return "Selective"
+      case .personal: return String(localized: "Personal")
+      case .group: return String(localized: "Group")
+      case .selective: return String(localized: "Selective")
       }
     }
 

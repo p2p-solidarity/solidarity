@@ -62,7 +62,10 @@ struct PersonalIdentityView: View {
             .padding(.vertical, 4)
         }
         Button(action: copyJwk) {
-          Label(jwkCopied ? "Copied" : "Copy JWK", systemImage: jwkCopied ? "checkmark.circle" : "doc.on.doc")
+          Label(
+            jwkCopied ? String(localized: "Copied") : String(localized: "Copy JWK"),
+            systemImage: jwkCopied ? "checkmark.circle" : "doc.on.doc"
+          )
         }
         .disabled(jwkCopied)
       } else {

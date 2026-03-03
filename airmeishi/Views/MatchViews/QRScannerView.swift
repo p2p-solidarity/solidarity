@@ -127,7 +127,7 @@ struct QRScannerView: View {
         dismiss()
       }
     } message: {
-      Text(qrManager.scanError?.localizedDescription ?? "Unknown error occurred")
+      Text(qrManager.scanError?.localizedDescription ?? String(localized: "Unknown error occurred"))
     }
     .alert("Camera Permission", isPresented: $showingPermissionAlert) {
       Button("Open Settings") {
@@ -165,16 +165,16 @@ struct QRScannerView: View {
           if granted {
             startScanning()
           } else {
-            permissionAlertMessage = "Camera access is required to scan QR codes. Please enable it in Settings."
+            permissionAlertMessage = String(localized: "Camera access is required to scan QR codes. Please enable it in Settings.")
             showingPermissionAlert = true
           }
         }
       }
     case .denied, .restricted:
-      permissionAlertMessage = "Camera access is required to scan QR codes. Please enable it in Settings."
+      permissionAlertMessage = String(localized: "Camera access is required to scan QR codes. Please enable it in Settings.")
       showingPermissionAlert = true
     @unknown default:
-      permissionAlertMessage = "Camera access is required to scan QR codes."
+      permissionAlertMessage = String(localized: "Camera access is required to scan QR codes.")
       showingPermissionAlert = true
     }
   }
@@ -408,7 +408,7 @@ struct ScannedCardView: View {
             if let email = businessCard.email {
               ContactInfoRow(
                 icon: "envelope.fill",
-                label: "Email",
+                label: String(localized: "Email"),
                 value: email
               )
             }
@@ -416,7 +416,7 @@ struct ScannedCardView: View {
             if let phone = businessCard.phone {
               ContactInfoRow(
                 icon: "phone.fill",
-                label: "Phone",
+                label: String(localized: "Phone"),
                 value: phone
               )
             }

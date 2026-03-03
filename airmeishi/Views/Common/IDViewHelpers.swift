@@ -133,7 +133,7 @@ extension IDView {
         UINotificationFeedbackGenerator().notificationOccurred(.success)
         #endif
       } catch {
-        errorMessage = "Failed to create identity: \(error.localizedDescription)"
+        errorMessage = String(localized: "Failed to create identity: \(error.localizedDescription)")
         showErrorAlert = true
         isWorking = false
       }

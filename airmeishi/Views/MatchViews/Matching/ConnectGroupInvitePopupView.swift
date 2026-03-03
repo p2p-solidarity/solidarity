@@ -180,7 +180,7 @@ struct ConnectGroupInvitePopupView: View {
       return UIDevice.current.name
     }()
     if commitment.isEmpty {
-      withAnimation { phase = .error("Missing identity commitment") }
+      withAnimation { phase = .error(String(localized: "Missing identity commitment")) }
       return
     }
     // Defer actual send until connected by accepting the MP invite now

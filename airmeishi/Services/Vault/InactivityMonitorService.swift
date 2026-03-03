@@ -338,8 +338,9 @@ final class InactivityMonitorService: ObservableObject {
 
     private func scheduleNotification(for pending: PendingUnlock) {
         let content = UNMutableNotificationContent()
-        content.title = "Vault Item Will Unlock Soon"
-        content.body = "\"\(pending.itemName)\" will unlock in \(pending.daysUntilUnlock) day(s). Open the app to record activity."
+        content.title = String(localized: "Vault Item Will Unlock Soon")
+        let bodyFormat = String(localized: "\"%@\" will unlock in %lld day(s). Open the app to record activity.")
+        content.body = String(format: bodyFormat, locale: Locale.current, pending.itemName, pending.daysUntilUnlock)
         content.sound = .default
         content.categoryIdentifier = "VAULT_UNLOCK_WARNING"
 
@@ -380,9 +381,10 @@ struct PendingUnlock: Identifiable {
         var description: String {
             switch self {
             case .inactivity:
-                return "Inactivity unlock"
+                return String(localized: "Inactivity unlock")
             case .fixedDate(let date):
-                return "Scheduled for \(date.formatted(date: .abbreviated, time: .omitted))"
+                let format = String(localized: "Scheduled for %@")
+                return String(format: format, locale: Locale.current, date.formatted(date: .abbreviated, time: .omitted))
             }
         }
     }
@@ -401,11 +403,12 @@ struct ActivityStatus {
 
     var statusMessage: String {
         if daysSinceActivity == 0 {
-            return "Active today"
+            return String(localized: "Active today")
         } else if daysSinceActivity == 1 {
-            return "Last active yesterday"
+            return String(localized: "Last active yesterday")
         } else {
-            return "Last active \(daysSinceActivity) days ago"
+            let format = String(localized: "Last active %lld days ago")
+            return String(format: format, locale: Locale.current, daysSinceActivity)
         }
     }
 }
@@ -420,11 +423,11 @@ enum InactivityError: LocalizedError {
     var errorDescription: String? {
         switch self {
         case .itemNotConfigured:
-            return "Item is not configured for inactivity monitoring"
+            return String(localized: "Item is not configured for inactivity monitoring")
         case .unlockConditionsNotMet:
-            return "Unlock conditions have not been met"
+            return String(localized: "Unlock conditions have not been met")
         case .shardCreationFailed:
-            return "Failed to create key shards"
+            return String(localized: "Failed to create key shards")
         }
     }
 }

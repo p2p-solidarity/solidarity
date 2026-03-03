@@ -254,8 +254,8 @@ struct CreateShoutoutView: View {
       Task {
         await MainActor.run {
           ToastManager.shared.show(
-            title: "Error",
-            message: "This user hasn't enabled Secure Messaging yet.",
+            title: String(localized: "Error"),
+            message: String(localized: "This user hasn't enabled Secure Messaging yet."),
             type: .error,
             duration: 2.0
           )
@@ -288,8 +288,8 @@ struct CreateShoutoutView: View {
 
           DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
             ToastManager.shared.show(
-              title: "Sakura Sent!",
-              message: "Your Ichigoichie message will be delivered when \(recipient.name) is online! 🌸",
+              title: String(localized: "Sakura Sent!"),
+              message: String(localized: "Your Ichigoichie message will be delivered when \(recipient.name) is online! 🌸"),
               type: .success,
               duration: 3.0
             )
@@ -300,8 +300,8 @@ struct CreateShoutoutView: View {
         print("[ShoutoutView] Error: \(error)")
         await MainActor.run {
           ToastManager.shared.show(
-            title: "Error",
-            message: "Failed to send: \(error.localizedDescription)",
+            title: String(localized: "Error"),
+            message: String(localized: "Failed to send: \(error.localizedDescription)"),
             type: .error,
             duration: 2.0
           )

@@ -166,7 +166,7 @@ struct SettingsView: View {
       HStack {
         Text("Version")
         Spacer()
-        Text(Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "Unknown")
+        Text(Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? String(localized: "Unknown"))
           .foregroundColor(.secondary)
       }
       .contentShape(Rectangle())
@@ -190,15 +190,15 @@ struct SettingsView: View {
   private func faceIdLabel(for action: SensitiveAction) -> String {
     switch action {
     case .issueCredential:
-      return "Face ID for credential issuance"
+      return String(localized: "Face ID for credential issuance")
     case .presentProof:
-      return "Face ID for proof presentation"
+      return String(localized: "Face ID for proof presentation")
     case .exportGraph:
-      return "Face ID for graph export"
+      return String(localized: "Face ID for graph export")
     case .rotateMasterKey:
-      return "Face ID for key rotation"
+      return String(localized: "Face ID for key rotation")
     case .revealRecoveryBundle:
-      return "Face ID for recovery bundle access"
+      return String(localized: "Face ID for recovery bundle access")
     }
   }
 
@@ -215,7 +215,7 @@ struct SettingsView: View {
           showingAlert = true
         case .success:
           _ = KeychainService.shared.ensurePairwiseKey(for: "solidarity.gg")
-          alertMessage = "Master key rotated successfully."
+          alertMessage = String(localized: "Master key rotated successfully.")
           showingAlert = true
         }
       }
@@ -244,7 +244,7 @@ struct SettingsView: View {
 
   private func resetPassportCredential() {
     IdentityDataStore.shared.removePassportCredentials()
-    alertMessage = "Passport credential has been reset."
+    alertMessage = String(localized: "Passport credential has been reset.")
     showingAlert = true
   }
 
@@ -258,7 +258,7 @@ struct SettingsView: View {
         _ = StorageManager.shared.clearAllData()
         UserDefaults.standard.removeObject(forKey: "solidarity.onboarding.completed")
         UserDefaults.standard.removeObject(forKey: "solidarity.identity.swiftdata.migrated.v1")
-        alertMessage = "Local data reset completed."
+        alertMessage = String(localized: "Local data reset completed.")
         showingAlert = true
       }
     }

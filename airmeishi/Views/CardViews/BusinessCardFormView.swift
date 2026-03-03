@@ -221,7 +221,7 @@ struct BusinessCardFormView: View {
 
   private func parseSkills(from value: String) -> [Skill] {
     parseCSV(value).map {
-      Skill(name: $0, category: "General", proficiencyLevel: .intermediate)
+      Skill(name: $0, category: String(localized: "General"), proficiencyLevel: .intermediate)
     }
   }
 

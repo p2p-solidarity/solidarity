@@ -32,8 +32,8 @@ struct MainTabView: View {
     .onReceive(NotificationCenter.default.publisher(for: .matchingReceivedCard)) { notification in
       if let card = notification.userInfo?[ProximityEventKey.card] as? BusinessCard {
         ToastManager.shared.show(
-          title: "Card Received",
-          message: "Received business card from \(card.name)",
+          title: String(localized: "Card Received"),
+          message: String(localized: "Received business card from \(card.name)"),
           type: .success
         )
       }
@@ -41,8 +41,8 @@ struct MainTabView: View {
     .onReceive(NotificationCenter.default.publisher(for: .groupInviteReceived)) { notification in
       if let invite = notification.userInfo?[ProximityEventKey.invite] as? GroupInvitePayload {
         ToastManager.shared.show(
-          title: "Group Invite",
-          message: "Invited to join group: \(invite.groupName)",
+          title: String(localized: "Group Invite"),
+          message: String(localized: "Invited to join group: \(invite.groupName)"),
           type: .info,
           duration: 5.0,
           action: {}
@@ -52,7 +52,7 @@ struct MainTabView: View {
     .onReceive(NotificationCenter.default.publisher(for: .matchingError)) { notification in
       if let error = notification.userInfo?[ProximityEventKey.error] as? CardError {
         ToastManager.shared.show(
-          title: "Connection Error",
+          title: String(localized: "Connection Error"),
           message: error.localizedDescription,
           type: .error
         )
@@ -70,14 +70,14 @@ struct MainTabView: View {
 
       if let sender = sender {
         ToastManager.shared.show(
-          title: "New Sakura from \(sender)",
+          title: String(localized: "New Sakura from \(sender)"),
           message: text,
           type: .info,
           duration: 4.0
         )
       } else {
         ToastManager.shared.show(
-          title: "New Sakura message",
+          title: String(localized: "New Sakura message"),
           message: text,
           type: .info,
           duration: 4.0
@@ -146,7 +146,7 @@ struct MainTabView: View {
 
     case .showMessage(let message):
       ToastManager.shared.show(
-        title: "Success",
+        title: String(localized: "Success"),
         message: message,
         type: .success
       )

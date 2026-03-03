@@ -66,7 +66,7 @@ struct MeTabView: View {
   }
 
   private var displayName: String {
-    cardManager.businessCards.first?.name ?? "Your Identity"
+    cardManager.businessCards.first?.name ?? String(localized: "Your Identity")
   }
 
   private var displayDid: String {
@@ -109,10 +109,10 @@ struct MeTabView: View {
 
       if identityDataStore.identityCards.isEmpty {
         EmptyMeStateCard(
-          title: "建立你的數位身份",
-          subtitle: "掃描護照即可證明年齡與真人身份",
-          primaryTitle: "掃描護照",
-          secondaryTitle: "匯入憑證",
+          title: String(localized: "Build your digital identity"),
+          subtitle: String(localized: "Scan passport to verify age and identity"),
+          primaryTitle: String(localized: "Scan Passport"),
+          secondaryTitle: String(localized: "Import Credential"),
           onPrimaryTap: { showingPassportFlow = true },
           onSecondaryTap: { showingVCSettings = true }
         )
@@ -122,9 +122,9 @@ struct MeTabView: View {
             IdentityStatusCard(
               emoji: card.type == "passport" ? "🛂" : "🪪",
               title: card.title,
-              trustText: card.trustLevel == "green" ? "🟢 High Trust" : "⚪️ Standard",
+              trustText: card.trustLevel == "green" ? String(localized: "🟢 High Trust") : String(localized: "⚪️ Standard"),
               subtitle: card.issuerType,
-              ctaTitle: "View Details"
+              ctaTitle: String(localized: "View Details")
             )
           }
         }
@@ -148,7 +148,7 @@ struct MeTabView: View {
           ForEach(identityDataStore.provableClaims) { claim in
             ClaimRowView(
               title: claim.title,
-              source: "Source: \(claim.source)",
+              source: String(format: String(localized: "Source: %@"), claim.source),
               onPresent: {
                 if claim.claimType == "age_over_18" {
                   openClaim(.ageOver18)
@@ -173,14 +173,14 @@ struct MeTabView: View {
         Button {
           showingPassportFlow = true
         } label: {
-          sectionActionLabel(icon: "plus.circle", title: "Scan Passport")
+          sectionActionLabel(icon: "plus.circle", title: String(localized: "Scan Passport"))
         }
         .buttonStyle(.plain)
 
         Button {
           showingVCSettings = true
         } label: {
-          sectionActionLabel(icon: "square.and.arrow.down", title: "Import Credential")
+          sectionActionLabel(icon: "square.and.arrow.down", title: String(localized: "Import Credential"))
         }
         .buttonStyle(.plain)
       }

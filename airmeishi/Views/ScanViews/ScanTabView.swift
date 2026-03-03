@@ -105,8 +105,8 @@ struct ScanTabView: View {
     VStack(spacing: 8) {
       SolidarityPlaceholderCard(
         screenID: .scanRouter,
-        title: "Protocol Router",
-        subtitle: "Supports OID4VP request, vp_token verify, credential offers, and SIOPv2."
+        title: String(localized: "Protocol Router"),
+        subtitle: String(localized: "Supports OID4VP request, vp_token verify, credential offers, and SIOPv2.")
       )
 
       if qrManager.isScanning {
@@ -144,16 +144,16 @@ struct ScanTabView: View {
           if granted {
             startScanning()
           } else {
-            permissionAlertMessage = "Camera access is required to scan QR codes."
+            permissionAlertMessage = String(localized: "Camera access is required to scan QR codes.")
             showingPermissionAlert = true
           }
         }
       }
     case .denied, .restricted:
-      permissionAlertMessage = "Camera access is required to scan QR codes."
+      permissionAlertMessage = String(localized: "Camera access is required to scan QR codes.")
       showingPermissionAlert = true
     @unknown default:
-      permissionAlertMessage = "Camera access is required."
+      permissionAlertMessage = String(localized: "Camera access is required.")
       showingPermissionAlert = true
     }
   }
@@ -182,11 +182,13 @@ struct ScanTabView: View {
       showingVerifierResult = true
 
     case .credentialOffer(let offer):
-      routeAlertMessage = "Credential offer detected:\n\(offer)"
+      let format = String(localized: "Credential offer detected:\n%@")
+      routeAlertMessage = String(format: format, offer)
       showingRouteAlert = true
 
     case .unknown(let payload):
-      routeAlertMessage = "Unknown payload:\n\(payload.prefix(120))"
+      let format = String(localized: "Unknown payload:\n%@")
+      routeAlertMessage = String(format: format, String(payload.prefix(120)))
       showingRouteAlert = true
     }
   }
@@ -236,7 +238,7 @@ private struct ProofPresentationFlowSheet: View {
         case .review:
           SolidarityPlaceholderCard(
             screenID: .presentReview,
-            title: "Review Request",
+            title: String(localized: "Review Request"),
             subtitle: requestPayload
           )
           Button("Sign & Submit") {
@@ -248,16 +250,16 @@ private struct ProofPresentationFlowSheet: View {
         case .signing:
           SolidarityPlaceholderCard(
             screenID: .presentSigning,
-            title: "Signing Proof",
-            subtitle: "Applying pairwise DID and biometric gate."
+            title: String(localized: "Signing Proof"),
+            subtitle: String(localized: "Applying pairwise DID and biometric gate.")
           )
           ProgressView()
 
         case .submitted:
           SolidarityPlaceholderCard(
             screenID: .presentSubmit,
-            title: "Proof Submitted",
-            subtitle: "vp_token generated and dispatched."
+            title: String(localized: "Proof Submitted"),
+            subtitle: String(localized: "vp_token generated and dispatched.")
           )
           Text("\(String(submittedToken.prefix(90)))...")
             .font(.caption.monospaced())
@@ -294,7 +296,7 @@ private struct ProofPresentationFlowSheet: View {
         showingAlert = true
         step = .review
       case .success:
-        let card = CardManager.shared.businessCards.first ?? BusinessCard(name: "Solidarity User")
+        let card = CardManager.shared.businessCards.first ?? BusinessCard(name: String(localized: "Solidarity User"))
         let options = VCService.IssueOptions(relyingPartyDomain: extractDomain(from: requestPayload))
         switch VCService().issueBusinessCardCredential(for: card, options: options) {
         case .failure(let error):

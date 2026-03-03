@@ -156,7 +156,7 @@ class SimpleQRScannerViewController: UIViewController, AVCaptureMetadataOutputOb
 
     // Add Cancel Button
     let cancelButton = UIButton(type: .system)
-    cancelButton.setTitle("Cancel", for: .normal)
+    cancelButton.setTitle(String(localized: "Cancel"), for: .normal)
     cancelButton.tintColor = .white
     cancelButton.backgroundColor = UIColor.black.withAlphaComponent(0.6)
     cancelButton.layer.cornerRadius = 8
@@ -197,7 +197,7 @@ class SimpleQRScannerViewController: UIViewController, AVCaptureMetadataOutputOb
     ])
 
     let label = UILabel()
-    label.text = "Scan Group QR Code"
+    label.text = String(localized: "Scan Group QR Code")
     label.textColor = .white
     label.font = UIFont.systemFont(ofSize: 14, weight: .medium)
     label.translatesAutoresizingMaskIntoConstraints = false
@@ -211,11 +211,11 @@ class SimpleQRScannerViewController: UIViewController, AVCaptureMetadataOutputOb
 
   func failed() {
     let ac = UIAlertController(
-      title: "Scanning not supported",
-      message: "Your device does not support scanning a code from an item. Please use a device with a camera.",
+      title: String(localized: "Scanning not supported"),
+      message: String(localized: "Your device does not support scanning a code from an item. Please use a device with a camera."),
       preferredStyle: .alert
     )
-    ac.addAction(UIAlertAction(title: "OK", style: .default))
+    ac.addAction(UIAlertAction(title: String(localized: "OK"), style: .default))
     present(ac, animated: true)
     captureSession = nil
   }

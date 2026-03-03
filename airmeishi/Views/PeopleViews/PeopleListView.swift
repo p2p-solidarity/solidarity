@@ -46,7 +46,7 @@ struct PeopleListView: View {
           }
         }
       }
-      .searchable(text: $searchQuery, prompt: "搜索")
+      .searchable(text: $searchQuery, prompt: "Search")
     }
     .onAppear {
       identityDataStore.refreshAll()
@@ -81,10 +81,10 @@ struct PeopleListView: View {
           )
 
         VStack(alignment: .leading, spacing: 4) {
-          Text("交換名片")
+          Text("Exchange Cards")
             .font(.subheadline.weight(.semibold))
             .foregroundColor(Color.Theme.textPrimary)
-          Text("透過近距離分享與附近的人交換名片")
+          Text("Exchange cards with nearby people via proximity sharing")
             .font(.caption)
             .foregroundColor(Color.Theme.textSecondary)
             .lineLimit(1)
@@ -123,11 +123,11 @@ struct PeopleListView: View {
           .font(.system(size: 48))
           .foregroundColor(Color.Theme.textTertiary)
 
-        Text("還沒有聯絡人")
+        Text("No contacts yet")
           .font(.system(size: 16, weight: .semibold))
           .foregroundColor(Color.Theme.textPrimary)
 
-        Text("透過近距離交換或匯入通訊錄來新增")
+        Text("Add via proximity exchange or contact import")
           .font(.system(size: 14))
           .foregroundColor(Color.Theme.textSecondary)
           .multilineTextAlignment(.center)
@@ -135,12 +135,12 @@ struct PeopleListView: View {
       .padding(.top, 20)
 
       VStack(spacing: 10) {
-        Button("交換名片") {
+        Button("Exchange Cards") {
           showingExchangeFlow = true
         }
         .buttonStyle(ThemedRoseButtonStyle())
 
-        Button("匯入手機通訊錄") {
+        Button("Import Phone Contacts") {
           showingExchangeFlow = true
         }
         .buttonStyle(ThemedSecondaryButtonStyle())
@@ -160,14 +160,14 @@ struct PeopleListView: View {
         sharingEntryCard
 
         if !verifiedContacts.isEmpty {
-          sectionTitle("Verified")
+          sectionTitle(String(localized: "Verified"))
           ForEach(verifiedContacts, id: \.id) { contact in
             contactRow(contact)
           }
         }
 
         if !others.isEmpty {
-          sectionTitle("Pending / Unverified")
+          sectionTitle(String(localized: "Pending / Unverified"))
           ForEach(others, id: \.id) { contact in
             contactRow(contact)
           }
@@ -230,7 +230,7 @@ struct PeopleListView: View {
           }
 
           if contact.source == "phone_contacts" || contact.verificationStatus == "phone" {
-            Text("#手機通訊錄")
+            Text("#Phone Contacts")
               .font(.system(size: 10))
               .foregroundColor(Color.Theme.textSecondary)
           }

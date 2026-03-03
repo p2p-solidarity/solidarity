@@ -67,10 +67,10 @@ struct TwitterImportWizardView: View {
 
             if importStatus == .idle {
                 Section("Instructions") {
-                    StepRow(number: 1, text: "Request your archive from Twitter Settings > Your Account > Download an archive of your data.")
-                    StepRow(number: 2, text: "Wait for the email (can take 24+ hours).")
-                    StepRow(number: 3, text: "Download and unzip the archive.")
-                    StepRow(number: 4, text: "Select the 'data' folder or specific JS files (e.g., tweet.js) to import.")
+                    StepRow(number: 1, text: String(localized: "Request your archive from Twitter Settings > Your Account > Download an archive of your data."))
+                    StepRow(number: 2, text: String(localized: "Wait for the email (can take 24+ hours)."))
+                    StepRow(number: 3, text: String(localized: "Download and unzip the archive."))
+                    StepRow(number: 4, text: String(localized: "Select the 'data' folder or specific JS files (e.g., tweet.js) to import."))
                 }
 
                 Section {
@@ -173,18 +173,18 @@ struct TwitterImportWizardView: View {
 
     private var statusMessage: String {
         switch importStatus {
-        case .idle: return "Ready"
-        case .reading: return "Reading files..."
-        case .parsing: return "Parsing data..."
-        case .importing: return "Saving to Vault..."
-        case .completed: return "Import Completed Successfully"
-        case .error(let msg): return "Error: \(msg)"
+        case .idle: return String(localized: "Ready")
+        case .reading: return String(localized: "Reading files...")
+        case .parsing: return String(localized: "Parsing data...")
+        case .importing: return String(localized: "Saving to Vault...")
+        case .completed: return String(localized: "Import Completed Successfully")
+        case .error(let msg): return String(localized: "Error: \(msg)")
         }
     }
 
     private func processSelectedURL(_ url: URL) {
         guard url.startAccessingSecurityScopedResource() else {
-            importStatus = .error("Permission denied")
+            importStatus = .error(String(localized: "Permission denied"))
             return
         }
 

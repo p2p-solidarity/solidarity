@@ -130,10 +130,10 @@ struct ProximitySharingView: View {
       if proximityManager.nearbyPeers.isEmpty {
         VStack(spacing: 10) {
           ProgressView()
-          Text("正在搜尋附近的裝置⋯")
+          Text("Searching for nearby devices...")
             .font(.caption)
             .foregroundColor(Color.Theme.textSecondary)
-          Text("請確保兩台裝置都開啟此畫面")
+          Text("Please make sure both devices have this screen open")
             .font(.caption)
             .foregroundColor(Color.Theme.textTertiary)
         }
@@ -240,7 +240,7 @@ struct ProximitySharingView: View {
       ProgressView()
         .scaleEffect(1.5)
 
-      Text("等待 \(selectedPeer?.name ?? "peer") 回應中⋯")
+      Text("Waiting for \(selectedPeer?.name ?? "peer") response...")
         .font(.subheadline)
         .foregroundColor(Color.Theme.textSecondary)
 
@@ -310,19 +310,19 @@ struct ProximitySharingView: View {
         .font(.system(size: 48))
         .foregroundColor(.green)
 
-      Text("交換完成")
+      Text("Exchange Complete")
         .font(.title3.weight(.semibold))
         .foregroundColor(Color.Theme.textPrimary)
 
-      Text("雙方簽章與訊息已儲存")
+      Text("Both signatures and messages have been saved")
         .font(.subheadline)
         .foregroundColor(Color.Theme.textSecondary)
 
       if let completion = latestCompletion {
         VStack(alignment: .leading, spacing: 6) {
-          infoRow(label: "Peer", value: completion.peerName)
-          infoRow(label: "My message", value: completion.myMessage ?? "—")
-          infoRow(label: "Their message", value: completion.theirMessage ?? "—")
+          infoRow(label: String(localized: "Peer"), value: completion.peerName)
+          infoRow(label: String(localized: "My message"), value: completion.myMessage ?? "—")
+          infoRow(label: String(localized: "Their message"), value: completion.theirMessage ?? "—")
         }
         .padding(14)
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -399,21 +399,21 @@ struct ProximitySharingView: View {
 
   private var currentTitle: String {
     switch step {
-    case .discovery: return "Ready to Match"
-    case .scope: return "Confirm Sharing Scope"
-    case .awaiting: return "Awaiting Response"
-    case .incoming: return "Incoming Request"
-    case .saved: return "Exchange Complete"
+    case .discovery: return String(localized: "Ready to Match")
+    case .scope: return String(localized: "Confirm Sharing Scope")
+    case .awaiting: return String(localized: "Awaiting Response")
+    case .incoming: return String(localized: "Incoming Request")
+    case .saved: return String(localized: "Exchange Complete")
     }
   }
 
   private var currentSubtitle: String {
     switch step {
-    case .discovery: return "保持畫面開啟，我們會在配對成功時通知你"
-    case .scope: return "選擇要分享的欄位並附上一則訊息"
-    case .awaiting: return "正在等待對方確認"
-    case .incoming: return "審核並接受交換請求"
-    case .saved: return "雙方簽章已儲存至聯絡人"
+    case .discovery: return String(localized: "Keep this screen open. We'll notify you when matching succeeds")
+    case .scope: return String(localized: "Select fields to share and include a message")
+    case .awaiting: return String(localized: "Waiting for the other person to confirm")
+    case .incoming: return String(localized: "Review and accept the exchange request")
+    case .saved: return String(localized: "Both signatures have been saved to contacts")
     }
   }
 

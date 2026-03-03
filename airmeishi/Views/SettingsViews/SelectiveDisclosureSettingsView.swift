@@ -121,8 +121,8 @@ struct SelectiveDisclosureSettingsView: View {
       Divider().padding(.leading, 50)
 
       ToggleRow(
-        title: "Allow Forwarding",
-        subtitle: "Allow recipients to re-share your card.",
+        title: String(localized: "Allow Forwarding"),
+        subtitle: String(localized: "Allow recipients to re-share your card."),
         isOn: $sharingPreferences.allowForwarding,
         icon: "arrowshape.turn.up.right.fill",
         color: .blue

@@ -163,7 +163,7 @@ struct InviteSection: View {
           }) {
             HStack {
               Image(systemName: "qrcode")
-              Text(showQRCode ? "Hide QR Code" : "Show QR Code")
+              Text(showQRCode ? String(localized: "Hide QR Code") : String(localized: "Show QR Code"))
             }
             .frame(maxWidth: .infinity)
             .padding(.vertical, 8)

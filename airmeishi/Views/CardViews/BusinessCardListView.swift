@@ -218,7 +218,8 @@ extension BusinessCardListView {
         let pass = try PKPass(data: passData)
         pendingPass = pass
       } catch {
-        alertMessage = "Failed to prepare Wallet pass: \(error.localizedDescription)"
+        let format = String(localized: "Failed to prepare Wallet pass: %@")
+        alertMessage = String(format: format, error.localizedDescription)
         showingAddPass = false
       }
     case .failure(let err):
@@ -264,7 +265,7 @@ extension BusinessCardListView {
   }
 
   fileprivate func cardDisplayName() -> String {
-    proximityManager.getSharingStatus().currentCard?.name ?? "Card"
+    proximityManager.getSharingStatus().currentCard?.name ?? String(localized: "Card")
   }
 
   @ViewBuilder
