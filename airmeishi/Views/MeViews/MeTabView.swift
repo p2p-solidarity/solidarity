@@ -199,10 +199,10 @@ struct MeTabView: View {
     }
     .padding(12)
     .background(
-      RoundedRectangle(cornerRadius: 8, style: .continuous)
+      RoundedRectangle(cornerRadius: 12, style: .continuous)
         .fill(Color.Theme.cardBg)
         .overlay(
-          RoundedRectangle(cornerRadius: 8, style: .continuous)
+          RoundedRectangle(cornerRadius: 12, style: .continuous)
             .stroke(Color.Theme.divider, lineWidth: 0.5)
         )
     )
@@ -246,10 +246,10 @@ private struct ClaimRowView: View {
     }
     .padding(12)
     .background(
-      RoundedRectangle(cornerRadius: 8, style: .continuous)
+      RoundedRectangle(cornerRadius: 12, style: .continuous)
         .fill(Color.Theme.cardBg)
         .overlay(
-          RoundedRectangle(cornerRadius: 8, style: .continuous)
+          RoundedRectangle(cornerRadius: 12, style: .continuous)
             .stroke(Color.Theme.divider, lineWidth: 0.5)
         )
     )
@@ -284,10 +284,10 @@ private struct IdentityStatusCard: View {
     .padding(12)
     .frame(maxWidth: .infinity, alignment: .leading)
     .background(
-      RoundedRectangle(cornerRadius: 8, style: .continuous)
+      RoundedRectangle(cornerRadius: 12, style: .continuous)
         .fill(Color.Theme.cardBg)
         .overlay(
-          RoundedRectangle(cornerRadius: 8, style: .continuous)
+          RoundedRectangle(cornerRadius: 12, style: .continuous)
             .stroke(Color.Theme.divider, lineWidth: 0.5)
         )
     )
@@ -304,8 +304,8 @@ private struct EmptyMeStateCard: View {
 
   var body: some View {
     VStack(spacing: 12) {
-      Image(systemName: "folder.fill")
-        .font(.system(size: 80))
+      Image(systemName: "person.text.rectangle")
+        .font(.system(size: 48))
         .foregroundColor(Color.Theme.textTertiary)
       Text(title)
         .font(.system(size: 16, weight: .semibold))
@@ -314,29 +314,21 @@ private struct EmptyMeStateCard: View {
         .font(.system(size: 14))
         .foregroundColor(Color.Theme.textSecondary)
         .multilineTextAlignment(.center)
-      VStack(spacing: 8) {
+      VStack(spacing: 10) {
         Button(primaryTitle) { onPrimaryTap() }
-          .font(.system(size: 14, weight: .semibold))
-          .foregroundColor(.white)
-          .padding(.horizontal, 24)
-          .padding(.vertical, 14)
-          .background(Color.Theme.darkUI)
-          .cornerRadius(2)
-          .buttonStyle(.plain)
+          .buttonStyle(ThemedPrimaryButtonStyle())
 
         Button(secondaryTitle) { onSecondaryTap() }
-          .font(.system(size: 14, weight: .semibold))
-          .foregroundColor(Color.Theme.darkUI)
-          .buttonStyle(.plain)
+          .buttonStyle(ThemedSecondaryButtonStyle())
       }
     }
     .padding(14)
     .frame(maxWidth: .infinity)
     .background(
-      RoundedRectangle(cornerRadius: 8, style: .continuous)
+      RoundedRectangle(cornerRadius: 12, style: .continuous)
         .fill(Color.Theme.cardBg)
         .overlay(
-          RoundedRectangle(cornerRadius: 8, style: .continuous)
+          RoundedRectangle(cornerRadius: 12, style: .continuous)
             .stroke(Color.Theme.divider, lineWidth: 0.5)
         )
     )

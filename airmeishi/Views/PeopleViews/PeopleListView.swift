@@ -34,7 +34,7 @@ struct PeopleListView: View {
           listContent
         }
       }
-      .navigationTitle("people list")
+      .navigationTitle("People")
       .navigationBarTitleDisplayMode(.inline)
       .toolbar {
         ToolbarItem(placement: .navigationBarTrailing) {
@@ -58,45 +58,107 @@ struct PeopleListView: View {
     }
   }
 
+  // MARK: - Sharing Entry Card
+
+  private var sharingEntryCard: some View {
+    Button {
+      showingExchangeFlow = true
+    } label: {
+      HStack(spacing: 14) {
+        Circle()
+          .fill(
+            LinearGradient(
+              colors: [Color.Theme.accentRose, Color.Theme.dustyMauve],
+              startPoint: .topLeading,
+              endPoint: .bottomTrailing
+            )
+          )
+          .frame(width: 44, height: 44)
+          .overlay(
+            Image(systemName: "antenna.radiowaves.left.and.right")
+              .font(.system(size: 20, weight: .semibold))
+              .foregroundColor(.white)
+          )
+
+        VStack(alignment: .leading, spacing: 4) {
+          Text("交換名片")
+            .font(.subheadline.weight(.semibold))
+            .foregroundColor(Color.Theme.textPrimary)
+          Text("透過近距離分享與附近的人交換名片")
+            .font(.caption)
+            .foregroundColor(Color.Theme.textSecondary)
+            .lineLimit(1)
+        }
+
+        Spacer(minLength: 0)
+
+        Image(systemName: "chevron.right")
+          .font(.caption.weight(.semibold))
+          .foregroundColor(Color.Theme.textPlaceholder)
+      }
+      .padding(14)
+      .background(
+        RoundedRectangle(cornerRadius: 12, style: .continuous)
+          .fill(Color.Theme.cardBg)
+          .overlay(
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+              .stroke(Color.Theme.accentRose.opacity(0.2), lineWidth: 1)
+          )
+      )
+    }
+    .buttonStyle(.plain)
+  }
+
+  // MARK: - Empty State
+
   private var emptyState: some View {
-    VStack(spacing: 14) {
+    VStack(spacing: 16) {
       Spacer()
-      Image(systemName: "doc.text.fill")
-        .font(.system(size: 80))
-        .foregroundColor(Color.Theme.textTertiary)
 
-      Text("你的聯絡人通訊錄是空的")
-        .font(.system(size: 16, weight: .semibold))
-        .foregroundColor(Color.Theme.textPrimary)
+      sharingEntryCard
+        .padding(.horizontal, 16)
 
-      Button {
-        showingExchangeFlow = true
-      } label: {
-        Text("匯入手機通訊錄")
-          .font(.system(size: 14, weight: .semibold))
-          .foregroundColor(.white)
-          .frame(width: 200)
-          .padding(.vertical, 14)
-          .background(Color.Theme.darkUI)
-          .cornerRadius(2)
+      VStack(spacing: 12) {
+        Image(systemName: "person.2")
+          .font(.system(size: 48))
+          .foregroundColor(Color.Theme.textTertiary)
+
+        Text("還沒有聯絡人")
+          .font(.system(size: 16, weight: .semibold))
+          .foregroundColor(Color.Theme.textPrimary)
+
+        Text("透過近距離交換或匯入通訊錄來新增")
+          .font(.system(size: 14))
+          .foregroundColor(Color.Theme.textSecondary)
+          .multilineTextAlignment(.center)
       }
+      .padding(.top, 20)
 
-      Button {
-        showingExchangeFlow = true
-      } label: {
-        Text("手動新增")
-          .font(.system(size: 14, weight: .medium))
-          .foregroundColor(Color.Theme.darkUI)
+      VStack(spacing: 10) {
+        Button("交換名片") {
+          showingExchangeFlow = true
+        }
+        .buttonStyle(ThemedRoseButtonStyle())
+
+        Button("匯入手機通訊錄") {
+          showingExchangeFlow = true
+        }
+        .buttonStyle(ThemedSecondaryButtonStyle())
       }
+      .padding(.horizontal, 40)
 
       Spacer()
     }
     .padding(16)
   }
 
+  // MARK: - List Content
+
   private var listContent: some View {
     ScrollView {
       VStack(alignment: .leading, spacing: 12) {
+        sharingEntryCard
+
         if !verifiedContacts.isEmpty {
           sectionTitle("Verified")
           ForEach(verifiedContacts, id: \.id) { contact in

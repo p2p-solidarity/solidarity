@@ -52,7 +52,7 @@ struct ProximitySharingView: View {
       }
       .padding(16)
       .background(Color.Theme.pageBg.ignoresSafeArea())
-      .navigationTitle("sharing")
+      .navigationTitle("Sharing")
       .navigationBarTitleDisplayMode(.inline)
       .toolbar {
         ToolbarItem(placement: .navigationBarLeading) {
@@ -104,10 +104,11 @@ struct ProximitySharingView: View {
   private var discoveryStep: some View {
     VStack(alignment: .leading, spacing: 12) {
       HStack {
-        Text("match")
+        Text("Match")
           .font(.subheadline.weight(.semibold))
+          .foregroundColor(Color.Theme.textPrimary)
         Spacer()
-        Button(isMatchingActive ? "stop matching" : "start matching") {
+        Button(isMatchingActive ? "Stop" : "Start") {
           if isMatchingActive {
             proximityManager.stopAdvertising()
             proximityManager.stopBrowsing()
@@ -116,6 +117,7 @@ struct ProximitySharingView: View {
           }
         }
         .font(.caption.weight(.semibold))
+        .foregroundColor(Color.Theme.primaryBlue)
       }
 
       if selectedCard == nil {
@@ -126,10 +128,17 @@ struct ProximitySharingView: View {
       }
 
       if proximityManager.nearbyPeers.isEmpty {
-        Text("No nearby peers yet. Keep both devices on this screen.")
-          .font(.caption)
-          .foregroundColor(Color.Theme.textSecondary)
-          .frame(maxWidth: .infinity, alignment: .leading)
+        VStack(spacing: 10) {
+          ProgressView()
+          Text("正在搜尋附近的裝置⋯")
+            .font(.caption)
+            .foregroundColor(Color.Theme.textSecondary)
+          Text("請確保兩台裝置都開啟此畫面")
+            .font(.caption)
+            .foregroundColor(Color.Theme.textTertiary)
+        }
+        .frame(maxWidth: .infinity, alignment: .center)
+        .padding(.vertical, 24)
       } else {
         ScrollView {
           VStack(spacing: 8) {
@@ -139,7 +148,22 @@ struct ProximitySharingView: View {
                 proximityManager.connectToPeer(peer)
                 step = .scope
               } label: {
-                HStack {
+                HStack(spacing: 12) {
+                  Circle()
+                    .fill(
+                      LinearGradient(
+                        colors: [Color.Theme.primaryBlue, Color.Theme.dustyMauve],
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                      )
+                    )
+                    .frame(width: 36, height: 36)
+                    .overlay(
+                      Text(String(peer.name.prefix(1)).uppercased())
+                        .font(.system(size: 14, weight: .semibold))
+                        .foregroundColor(.white)
+                    )
+
                   VStack(alignment: .leading, spacing: 2) {
                     Text(peer.name)
                       .font(.subheadline.weight(.semibold))
@@ -153,9 +177,15 @@ struct ProximitySharingView: View {
                     .font(.caption)
                     .foregroundColor(Color.Theme.textPlaceholder)
                 }
-                .padding(10)
-                .background(Color.Theme.cardBg)
-                .cornerRadius(8)
+                .padding(12)
+                .background(
+                  RoundedRectangle(cornerRadius: 12, style: .continuous)
+                    .fill(Color.Theme.cardBg)
+                    .overlay(
+                      RoundedRectangle(cornerRadius: 12, style: .continuous)
+                        .stroke(Color.Theme.divider, lineWidth: 0.5)
+                    )
+                )
               }
               .buttonStyle(.plain)
             }
@@ -184,7 +214,7 @@ struct ProximitySharingView: View {
         .frame(height: 72)
         .padding(6)
         .background(Color.Theme.searchBg)
-        .cornerRadius(8)
+        .cornerRadius(12)
       }
 
       Button {
@@ -193,7 +223,7 @@ struct ProximitySharingView: View {
         Text("Send Exchange Request")
           .frame(maxWidth: .infinity)
       }
-      .buttonStyle(ThemedPrimaryButtonStyle())
+      .buttonStyle(ThemedRoseButtonStyle())
       .disabled(selectedPeer == nil || selectedCard == nil || selectedFields.isEmpty || isWorking)
 
       Button("Back to Discovery") {
@@ -204,12 +234,17 @@ struct ProximitySharingView: View {
   }
 
   private var awaitingStep: some View {
-    VStack(alignment: .leading, spacing: 12) {
-      Text("Waiting for \(selectedPeer?.name ?? "peer") to accept your request.")
+    VStack(spacing: 16) {
+      Spacer()
+
+      ProgressView()
+        .scaleEffect(1.5)
+
+      Text("等待 \(selectedPeer?.name ?? "peer") 回應中⋯")
         .font(.subheadline)
         .foregroundColor(Color.Theme.textSecondary)
 
-      ProgressView()
+      Spacer()
 
       Button("Cancel Request") {
         awaitingRequestID = nil
@@ -217,6 +252,8 @@ struct ProximitySharingView: View {
       }
       .buttonStyle(ThemedSecondaryButtonStyle())
     }
+    .frame(maxWidth: .infinity)
+    .padding(.vertical, 24)
   }
 
   private var incomingStep: some View {
@@ -240,10 +277,10 @@ struct ProximitySharingView: View {
             .frame(height: 72)
             .padding(6)
             .background(Color.Theme.searchBg)
-            .cornerRadius(8)
+            .cornerRadius(12)
           }
 
-          HStack {
+          HStack(spacing: 12) {
             Button("Decline") {
               proximityManager.declinePendingExchangeRequest()
               step = .discovery
@@ -266,26 +303,57 @@ struct ProximitySharingView: View {
   }
 
   private var savedStep: some View {
-    VStack(alignment: .leading, spacing: 12) {
-      Text("Exchange saved")
-        .font(.headline)
-      Text("Dual signatures and one-time messages were persisted.")
+    VStack(spacing: 16) {
+      Spacer()
+
+      Image(systemName: "checkmark.circle.fill")
+        .font(.system(size: 48))
+        .foregroundColor(.green)
+
+      Text("交換完成")
+        .font(.title3.weight(.semibold))
+        .foregroundColor(Color.Theme.textPrimary)
+
+      Text("雙方簽章與訊息已儲存")
         .font(.subheadline)
         .foregroundColor(Color.Theme.textSecondary)
 
       if let completion = latestCompletion {
-        Text("Peer: \(completion.peerName)")
-          .font(.caption)
-        Text("My message: \(completion.myMessage ?? "-")")
-          .font(.caption)
-        Text("Their message: \(completion.theirMessage ?? "-")")
-          .font(.caption)
+        VStack(alignment: .leading, spacing: 6) {
+          infoRow(label: "Peer", value: completion.peerName)
+          infoRow(label: "My message", value: completion.myMessage ?? "—")
+          infoRow(label: "Their message", value: completion.theirMessage ?? "—")
+        }
+        .padding(14)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(
+          RoundedRectangle(cornerRadius: 12, style: .continuous)
+            .fill(Color.Theme.cardBg)
+            .overlay(
+              RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .stroke(Color.Theme.divider, lineWidth: 0.5)
+            )
+        )
       }
+
+      Spacer()
 
       Button("Done") {
         dismiss()
       }
       .buttonStyle(ThemedPrimaryButtonStyle())
+    }
+  }
+
+  private func infoRow(label: String, value: String) -> some View {
+    HStack(alignment: .top, spacing: 8) {
+      Text(label)
+        .font(.caption.weight(.semibold))
+        .foregroundColor(Color.Theme.textTertiary)
+        .frame(width: 80, alignment: .leading)
+      Text(value)
+        .font(.caption)
+        .foregroundColor(Color.Theme.textPrimary)
     }
   }
 
@@ -308,9 +376,15 @@ struct ProximitySharingView: View {
         }
       }
     }
-    .padding(10)
-    .background(Color.Theme.cardBg)
-    .cornerRadius(8)
+    .padding(12)
+    .background(
+      RoundedRectangle(cornerRadius: 12, style: .continuous)
+        .fill(Color.Theme.cardBg)
+        .overlay(
+          RoundedRectangle(cornerRadius: 12, style: .continuous)
+            .stroke(Color.Theme.divider, lineWidth: 0.5)
+        )
+    )
   }
 
   private var currentScreenID: SolidarityScreenID {
@@ -335,11 +409,11 @@ struct ProximitySharingView: View {
 
   private var currentSubtitle: String {
     switch step {
-    case .discovery: return "You've entered the matching phase, don't close the app. We'll notify you when you got a match!"
-    case .scope: return "Select fields and add one-time message."
-    case .awaiting: return "Waiting for peer confirmation."
-    case .incoming: return "Review and accept requested exchange."
-    case .saved: return "Dual signatures persisted to contact edge."
+    case .discovery: return "保持畫面開啟，我們會在配對成功時通知你"
+    case .scope: return "選擇要分享的欄位並附上一則訊息"
+    case .awaiting: return "正在等待對方確認"
+    case .incoming: return "審核並接受交換請求"
+    case .saved: return "雙方簽章已儲存至聯絡人"
     }
   }
 

@@ -104,7 +104,7 @@ struct OnboardingFlowView: View {
     .frame(maxWidth: .infinity, alignment: .leading)
     .padding(14)
     .background(Color.Theme.cardBg)
-    .cornerRadius(10)
+    .cornerRadius(12)
   }
 
   private var keySetupStep: some View {
@@ -131,7 +131,7 @@ struct OnboardingFlowView: View {
     }
     .padding(14)
     .background(Color.Theme.cardBg)
-    .cornerRadius(10)
+    .cornerRadius(12)
   }
 
   private var contactImportStep: some View {
@@ -158,7 +158,7 @@ struct OnboardingFlowView: View {
     }
     .padding(14)
     .background(Color.Theme.cardBg)
-    .cornerRadius(10)
+    .cornerRadius(12)
   }
 
   private var passportPromptStep: some View {
@@ -200,7 +200,7 @@ struct OnboardingFlowView: View {
     }
     .padding(14)
     .background(Color.Theme.cardBg)
-    .cornerRadius(10)
+    .cornerRadius(12)
   }
 
   private var completionStep: some View {
@@ -218,7 +218,7 @@ struct OnboardingFlowView: View {
     .frame(maxWidth: .infinity, alignment: .leading)
     .padding(14)
     .background(Color.Theme.cardBg)
-    .cornerRadius(10)
+    .cornerRadius(12)
   }
 
   private func completionRow(_ title: String, done: Bool) -> some View {
@@ -254,15 +254,15 @@ struct OnboardingFlowView: View {
   private var currentSubtitle: String {
     switch step {
     case .welcome:
-      return "Start your first-run journey."
+      return "開始你的設定之旅"
     case .keySetup:
-      return "Initialize `solidarity.master` and biometric handshake."
+      return "建立並啟用你的主金鑰"
     case .contactImport:
-      return "Optional graph bootstrap from address book."
+      return "從通訊錄匯入聯絡人（可選）"
     case .passportPrompt:
-      return "Run MRZ + NFC + proof pipeline."
+      return "掃描護照以啟用高信任度證明"
     case .complete:
-      return "Enter app with v1 identity foundations."
+      return "你已完成所有基礎設定"
     }
   }
 
