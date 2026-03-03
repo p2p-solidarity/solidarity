@@ -38,11 +38,22 @@ struct PeopleListView: View {
       .navigationBarTitleDisplayMode(.inline)
       .toolbar {
         ToolbarItem(placement: .navigationBarTrailing) {
-          Button {
-            showingExchangeFlow = true
+          Menu {
+            Button {
+              showingExchangeFlow = true
+            } label: {
+              Label("Radar Exchange", systemImage: "antenna.radiowaves.left.and.right")
+            }
+            
+            Button {
+              importPhoneContacts()
+            } label: {
+              Label("Import from Phone", systemImage: "person.crop.circle.badge.down")
+            }
           } label: {
-            Image(systemName: "plus")
-              .foregroundColor(Color.Theme.darkUI)
+            Image(systemName: "plus.circle")
+              .font(.system(size: 20))
+              .foregroundColor(Color.Theme.textPrimary)
           }
         }
       }
@@ -135,13 +146,13 @@ struct PeopleListView: View {
       .padding(.top, 20)
 
       VStack(spacing: 10) {
-        Button("Exchange Cards") {
+        Button("Radar Exchange") {
           showingExchangeFlow = true
         }
         .buttonStyle(ThemedPrimaryButtonStyle())
 
         Button("Import Phone Contacts") {
-          showingExchangeFlow = true
+          importPhoneContacts()
         }
         .buttonStyle(ThemedSecondaryButtonStyle())
       }
@@ -194,5 +205,62 @@ struct PeopleListView: View {
     let formatter = DateFormatter()
     formatter.dateFormat = "yyyy-MM-dd"
     return formatter.string(from: date)
+  }
+
+  // MARK: - Actions
+
+  private func importPhoneContacts() {
+    Task {
+      // 1. Request permission
+      let permissionResult = await ContactImportService.shared.requestPermission()
+      
+      switch permissionResult {
+      case .success(let granted):
+        guard granted else {
+          await MainActor.run {
+            ToastManager.shared.show(
+              title: String(localized: "Access Denied"),
+              message: String(localized: "Please enable Contacts permission in iOS Settings."),
+              type: .error,
+              duration: 3.0
+            )
+          }
+          return
+        }
+
+        // 2. Perform import
+        let importResult = ContactImportService.shared.importContacts()
+        
+        await MainActor.run {
+          switch importResult {
+          case .success(let count):
+            identityDataStore.refreshAll()
+            ToastManager.shared.show(
+              title: String(localized: "Import Complete"),
+              message: String(localized: "Successfully imported \(count) local contacts."),
+              type: .success,
+              duration: 3.0
+            )
+          case .failure(let error):
+            ToastManager.shared.show(
+              title: String(localized: "Import Failed"),
+              message: error.localizedDescription,
+              type: .error,
+              duration: 4.0
+            )
+          }
+        }
+
+      case .failure(let error):
+        await MainActor.run {
+          ToastManager.shared.show(
+            title: String(localized: "Error"),
+            message: error.localizedDescription,
+            type: .error,
+            duration: 4.0
+          )
+        }
+      }
+    }
   }
 }

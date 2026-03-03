@@ -1,58 +1,33 @@
 import SwiftUI
 
-/// A floating action button designed to sit above the tab bar or in the center.
-/// Features high-contrast Neo-Brutalist styling to draw attention.
-struct ScanFloatingActionButton: View {
+struct ShareFloatingActionButton: View {
   let action: () -> Void
-  @State private var isPressed = false
-  
+
   var body: some View {
     Button(action: {
-      HapticFeedbackManager.shared.heavyImpact()
+      HapticFeedbackManager.shared.rigidImpact()
       action()
     }) {
-      HStack(spacing: 8) {
-        Image(systemName: "viewfinder")
-          .font(.system(size: 20, weight: .bold))
-        Text("SCAN")
-          .font(.system(size: 16, weight: .bold, design: .monospaced))
+      ZStack {
+        Circle()
+          .fill(Color.Theme.primaryBlue)
+          .frame(width: 64, height: 64)
+          .shadow(color: Color.Theme.primaryBlue.opacity(0.4), radius: 8, x: 0, y: 4)
+        
+        Image(systemName: "square.dashed.inset.filled")
+          .font(.system(size: 28, weight: .bold))
+          .foregroundColor(.white)
       }
-      .foregroundColor(.black)
-      .padding(.horizontal, 24)
-      .padding(.vertical, 16)
-      // High contrast solid background
-      .background(Color.Theme.terminalGreen)
-      // Sharp, brutalist edges
-      .clipShape(Rectangle())
-      // Solid cyber offset shadow
-      .shadow(color: Color.Theme.primaryBlue, radius: 0, x: 4, y: 4)
-      .overlay(
-        Rectangle()
-          .stroke(Color.black, lineWidth: 2)
-      )
     }
-    .buttonStyle(FABButtonStyle())
+    .buttonStyle(ShareButtonStyle())
     .padding(.bottom, 24)
   }
 }
 
-private struct FABButtonStyle: ButtonStyle {
+private struct ShareButtonStyle: ButtonStyle {
   func makeBody(configuration: Configuration) -> some View {
     configuration.label
-      .scaleEffect(configuration.isPressed ? 0.95 : 1)
-      .offset(
-        x: configuration.isPressed ? 4 : 0,
-        y: configuration.isPressed ? 4 : 0
-      )
-      .shadow(color: Color.Theme.primaryBlue, radius: 0, x: configuration.isPressed ? 0 : 4, y: configuration.isPressed ? 0 : 4)
-      .animation(.spring(response: 0.2, dampingFraction: 0.8), value: configuration.isPressed)
-  }
-}
-
-// Preview
-#Preview {
-  ZStack {
-    Color.Theme.pageBg.ignoresSafeArea()
-    ScanFloatingActionButton(action: {})
+      .scaleEffect(configuration.isPressed ? 0.92 : 1.0)
+      .animation(.spring(response: 0.3, dampingFraction: 0.7), value: configuration.isPressed)
   }
 }

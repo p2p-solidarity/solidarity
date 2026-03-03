@@ -1,46 +1,5 @@
 import SwiftUI
 
-// MARK: - Tab Bar Icon
-
-struct TabBarIcon: View {
-  let systemName: String
-  let title: String
-  let isSelected: Bool
-
-  var body: some View {
-    VStack(spacing: 4) {
-      Image(systemName: systemName)
-        .symbolRenderingMode(.monochrome)
-        .font(.system(size: 18, weight: .medium))
-        .foregroundColor(Color.Theme.darkUI.opacity(isSelected ? 1.0 : 0.5))
-
-      Text(title)
-        .font(.system(size: 11, weight: .medium))
-        .foregroundColor(Color.Theme.darkUI.opacity(isSelected ? 1.0 : 0.5))
-        .lineLimit(1)
-        .minimumScaleFactor(0.85)
-    }
-    .padding(.top, 6)
-    .padding(.bottom, 4)
-  }
-}
-
-// MARK: - Floating Tab Bar Backdrop
-
-struct FloatingTabBarBackdrop: View {
-  var body: some View {
-    Rectangle()
-      .fill(Color.Theme.pageBg)
-      .overlay(alignment: .top) {
-        Rectangle()
-          .fill(Color.Theme.divider)
-          .frame(height: 0.5)
-      }
-      .frame(height: 64)
-      .accessibilityHidden(true)
-  }
-}
-
 // MARK: - App Tabs
 
 enum MainAppTab: Int, CaseIterable {
@@ -48,45 +7,45 @@ enum MainAppTab: Int, CaseIterable {
   case me = 1
 }
 
-// MARK: - Retro Bottom Tab Bar (Neo-Win98 Style)
+// MARK: - Peaceful Floating Tab Bar (1.1.1 Era)
 
 struct CustomFloatingTabBar: View {
   @Binding var selectedTab: Int
 
   var body: some View {
-    VStack(spacing: 0) {
-      // Top 1px border separator
-      Rectangle()
-        .fill(Color.Theme.divider)
-        .frame(height: 1)
+    HStack(spacing: 0) {
+      PeacefulTabButton(
+        systemName: "person.2.fill",
+        title: "Network",
+        isSelected: selectedTab == MainAppTab.people.rawValue,
+        action: { selectedTab = MainAppTab.people.rawValue }
+      )
       
-      HStack(spacing: 0) {
-        RetroTabButton(
-          title: "people",
-          isSelected: selectedTab == MainAppTab.people.rawValue,
-          action: { selectedTab = MainAppTab.people.rawValue }
-        )
-        
-        // Vertical 1px separator
-        Rectangle()
-          .fill(Color.Theme.divider)
-          .frame(width: 1, height: 24)
-        
-        RetroTabButton(
-          title: "me",
-          isSelected: selectedTab == MainAppTab.me.rawValue,
-          action: { selectedTab = MainAppTab.me.rawValue }
-        )
-      }
-      .frame(height: 56)
-      .background(Color.Theme.pageBg)
+      // Spacer to make room for center action button
+      Spacer().frame(width: 80)
+      
+      PeacefulTabButton(
+        systemName: "vault.fill",
+        title: "Vault",
+        isSelected: selectedTab == MainAppTab.me.rawValue,
+        action: { selectedTab = MainAppTab.me.rawValue }
+      )
     }
+    .padding(.horizontal, 24)
+    .padding(.vertical, 12)
+    .background(
+      Capsule()
+        .fill(Color.Theme.cardBg)
+        .shadow(color: Color.black.opacity(0.15), radius: 10, x: 0, y: 5)
+    )
+    .padding(.horizontal, 32)
   }
 }
 
-// MARK: - Retro Tab Button
+// MARK: - Peaceful Tab Button
 
-struct RetroTabButton: View {
+struct PeacefulTabButton: View {
+  let systemName: String
   let title: String
   let isSelected: Bool
   let action: () -> Void
@@ -94,27 +53,30 @@ struct RetroTabButton: View {
   var body: some View {
     Button(action: {
       if !isSelected {
-        HapticFeedbackManager.shared.rigidImpact()
-        action()
+        HapticFeedbackManager.shared.softImpact()
+        withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
+          action()
+        }
       }
     }) {
-      Text(title)
-        .font(.system(size: 16, weight: isSelected ? .bold : .regular, design: .monospaced))
-        .foregroundColor(isSelected ? .white : Color.Theme.textTertiary)
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-        // Only show indicator if selected
-        .overlay(
-          Rectangle()
-            .fill(isSelected ? Color.white : Color.clear)
-            .frame(height: 2),
-          alignment: .bottom
-        )
+      VStack(spacing: 4) {
+        Image(systemName: isSelected ? systemName : systemName.replacingOccurrences(of: ".fill", with: ""))
+          .font(.system(size: 22, weight: .medium))
+          .foregroundColor(isSelected ? Color.Theme.primaryBlue : Color.Theme.textTertiary)
+          .frame(height: 24)
+        
+        Text(title)
+          .font(.system(size: 11, weight: isSelected ? .semibold : .medium))
+          .foregroundColor(isSelected ? Color.Theme.textPrimary : Color.Theme.textTertiary)
+      }
+      .frame(maxWidth: .infinity)
+      .contentShape(Rectangle())
     }
     .buttonStyle(.plain)
   }
 }
 
-// MARK: - Tab Bar Button
+// MARK: - Tab Bar Button (Legacy)
 
 struct TabBarButton: View {
   let systemName: String
@@ -124,7 +86,15 @@ struct TabBarButton: View {
 
   var body: some View {
     Button(action: action) {
-      TabBarIcon(systemName: systemName, title: title, isSelected: isSelected)
+      VStack(spacing: 4) {
+        Image(systemName: systemName)
+          .font(.system(size: 18, weight: .medium))
+          .foregroundColor(Color.Theme.textPrimary.opacity(isSelected ? 1.0 : 0.5))
+
+        Text(title)
+          .font(.system(size: 11, weight: .medium))
+          .foregroundColor(Color.Theme.textPrimary.opacity(isSelected ? 1.0 : 0.5))
+      }
     }
     .buttonStyle(.plain)
   }

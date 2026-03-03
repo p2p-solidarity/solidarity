@@ -6,8 +6,7 @@ struct MainTabView: View {
   @State private var showingErrorAlert = false
   @State private var errorMessage = ""
   @State private var selectedTab = MainAppTab.people.rawValue
-
-  @State private var showingScanFlow = false
+  @State private var showingShareFlow = false
 
   var body: some View {
     ZStack(alignment: .bottom) {
@@ -23,35 +22,54 @@ struct MainTabView: View {
       .toolbarBackground(.hidden, for: .tabBar)
       .toolbar(.hidden, for: .tabBar)
       // Padding for the bottom tab bar to prevent overlap
-      .padding(.bottom, 56)
+      .padding(.bottom, 80)
 
       // Fixed Elements over the TabView
       VStack(spacing: 0) {
         Spacer()
         
-        // Center Scan Button over the TabBar
-        ScanFloatingActionButton {
-          showingScanFlow = true
+        ZStack(alignment: .bottom) {
+          // Retro Tab Bar (Softened Pill)
+          CustomFloatingTabBar(selectedTab: $selectedTab)
+            .padding(.bottom, 24)
+          
+          // Center Share Button overlapping the TabBar
+          ShareFloatingActionButton {
+            showingShareFlow = true
+          }
+          .padding(.bottom, 36)
         }
-        
-        // Retro Tab Bar
-        CustomFloatingTabBar(selectedTab: $selectedTab)
       }
     }
     .ignoresSafeArea(edges: .bottom)
-    .fullScreenCover(isPresented: $showingScanFlow) {
-      // Embed ScanTabView in a NavigationView for proper rendering, or adapt as needed
-      NavigationView {
-        ScanTabView()
-          // Inject a close button for the floating flow
-          .toolbar {
-            ToolbarItem(placement: .navigationBarLeading) {
-              Button(action: { showingScanFlow = false }) {
-                Image(systemName: "xmark")
-                  .foregroundColor(.white)
+    .fullScreenCover(isPresented: $showingShareFlow) {
+      if let myEntity = IdentityDataStore.shared.identityCards.first,
+         let myCard = try? myEntity.toBusinessCard() {
+        NavigationView {
+          // Wrap QRSharingView in a modal container to allow scanning or sharing
+          QRSharingView(businessCard: myCard)
+            .toolbar {
+              ToolbarItem(placement: .navigationBarLeading) {
+                Button(action: { showingShareFlow = false }) {
+                  Image(systemName: "xmark")
+                    .foregroundColor(Color.Theme.textPrimary)
+                }
               }
             }
+        }
+      } else {
+        // Fallback if no card exists
+        NavigationView {
+          VStack {
+            Text("Create a profile first to share your card.")
+              .foregroundColor(Color.Theme.textSecondary)
           }
+          .toolbar {
+            ToolbarItem(placement: .navigationBarTrailing) {
+              Button("Close") { showingShareFlow = false }
+            }
+          }
+        }
       }
     }
     .sheet(isPresented: $showingReceivedCard) {
@@ -125,7 +143,7 @@ struct MainTabView: View {
     }
   }
 
-  // MARK: - Native/Custom tab views removed in favor of unified Retro layout
+  // MARK: - Handlers
 
   private func handleDeepLinkAction(_ action: DeepLinkAction?) {
     guard let action = action else { return }
@@ -147,6 +165,7 @@ struct MainTabView: View {
 
     case .navigateToSharing:
       selectedTab = MainAppTab.people.rawValue
+      showingShareFlow = true
 
     case .navigateToContacts:
       selectedTab = MainAppTab.people.rawValue
