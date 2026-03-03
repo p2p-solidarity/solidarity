@@ -6,7 +6,6 @@ struct MainTabView: View {
   @State private var showingErrorAlert = false
   @State private var errorMessage = ""
   @State private var selectedTab = MainAppTab.people.rawValue
-  @State private var showingShareFlow = false
 
   var body: some View {
     ZStack(alignment: .bottom) {
@@ -14,6 +13,9 @@ struct MainTabView: View {
       TabView(selection: $selectedTab) {
         PeopleListView()
           .tag(MainAppTab.people.rawValue)
+
+        ScanTabView()
+          .tag(MainAppTab.scan.rawValue)
 
         MeTabView()
           .tag(MainAppTab.me.rawValue)
@@ -27,51 +29,12 @@ struct MainTabView: View {
       // Fixed Elements over the TabView
       VStack(spacing: 0) {
         Spacer()
-        
-        ZStack(alignment: .bottom) {
-          // Retro Tab Bar (Softened Pill)
-          CustomFloatingTabBar(selectedTab: $selectedTab)
-            .padding(.bottom, 24)
-          
-          // Center Share Button overlapping the TabBar
-          ShareFloatingActionButton {
-            showingShareFlow = true
-          }
-          .padding(.bottom, 36)
-        }
+
+        CustomFloatingTabBar(selectedTab: $selectedTab)
+          .padding(.bottom, 24)
       }
     }
     .ignoresSafeArea(edges: .bottom)
-    .fullScreenCover(isPresented: $showingShareFlow) {
-      if let myEntity = IdentityDataStore.shared.identityCards.first,
-         let myCard = try? myEntity.toBusinessCard() {
-        NavigationView {
-          // Wrap QRSharingView in a modal container to allow scanning or sharing
-          QRSharingView(businessCard: myCard)
-            .toolbar {
-              ToolbarItem(placement: .navigationBarLeading) {
-                Button(action: { showingShareFlow = false }) {
-                  Image(systemName: "xmark")
-                    .foregroundColor(Color.Theme.textPrimary)
-                }
-              }
-            }
-        }
-      } else {
-        // Fallback if no card exists
-        NavigationView {
-          VStack {
-            Text("Create a profile first to share your card.")
-              .foregroundColor(Color.Theme.textSecondary)
-          }
-          .toolbar {
-            ToolbarItem(placement: .navigationBarTrailing) {
-              Button("Close") { showingShareFlow = false }
-            }
-          }
-        }
-      }
-    }
     .sheet(isPresented: $showingReceivedCard) {
       if let card = deepLinkManager.lastReceivedCard {
         ReceivedCardView(card: card)
@@ -164,8 +127,7 @@ struct MainTabView: View {
       )
 
     case .navigateToSharing:
-      selectedTab = MainAppTab.people.rawValue
-      showingShareFlow = true
+      selectedTab = MainAppTab.scan.rawValue
 
     case .navigateToContacts:
       selectedTab = MainAppTab.people.rawValue

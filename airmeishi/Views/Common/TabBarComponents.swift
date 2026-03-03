@@ -4,7 +4,8 @@ import SwiftUI
 
 enum MainAppTab: Int, CaseIterable {
   case people = 0
-  case me = 1
+  case scan = 1
+  case me = 2
 }
 
 // MARK: - Peaceful Floating Tab Bar (1.1.1 Era)
@@ -20,10 +21,14 @@ struct CustomFloatingTabBar: View {
         isSelected: selectedTab == MainAppTab.people.rawValue,
         action: { selectedTab = MainAppTab.people.rawValue }
       )
-      
-      // Spacer to make room for center action button
-      Spacer().frame(width: 80)
-      
+
+      PeacefulTabButton(
+        systemName: "viewfinder",
+        title: "Scan",
+        isSelected: selectedTab == MainAppTab.scan.rawValue,
+        action: { selectedTab = MainAppTab.scan.rawValue }
+      )
+
       PeacefulTabButton(
         systemName: "vault.fill",
         title: "Vault",

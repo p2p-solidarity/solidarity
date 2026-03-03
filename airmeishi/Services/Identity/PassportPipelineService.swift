@@ -68,32 +68,55 @@ final class PassportPipelineService {
 
   func generateProof(chip: PassportChipSnapshot, draft: PassportMRZDraft) async -> CardResult<PassportProofResult> {
     do {
-      try await Task.sleep(nanoseconds: 900_000_000)
-    } catch {
-      return .failure(.configurationError("Proof generation cancelled"))
-    }
+      let identity = try SemaphoreIdentityManager.shared.loadOrCreateIdentity()
+      let proofJSON = try SemaphoreIdentityManager.shared.generateProof(
+        groupCommitments: [identity.commitment],
+        message: chip.documentHash,
+        scope: "passport:\(draft.nationalityCode)"
+      )
 
-    // Deterministic fallback decision to keep behavior stable in tests and previews.
-    let shouldFallback = chip.documentHash.hasPrefix("0")
-    if shouldFallback {
+      // Build payload with proper JSON serialization
+      var payloadDict: [String: Any] = [
+        "passport_hash": chip.documentHash,
+        "mrz": chip.mrzDigest,
+      ]
+      // proofJSON is a JSON string from Semaphore — parse it to embed as object, not string
+      if let proofData = proofJSON.data(using: .utf8),
+        let proofObj = try? JSONSerialization.jsonObject(with: proofData)
+      {
+        payloadDict["semaphore_proof"] = proofObj
+      } else {
+        payloadDict["semaphore_proof"] = proofJSON
+      }
+      let payloadData = try JSONSerialization.data(withJSONObject: payloadDict)
+      let payloadString = String(data: payloadData, encoding: .utf8) ?? "{}"
+
+      return .success(
+        PassportProofResult(
+          proofType: "semaphore-zk",
+          proofPayload: payloadString,
+          trustLevel: "green",
+          generationFailed: false
+        )
+      )
+    } catch {
+      // Fallback to sd-jwt when Semaphore is unsupported (e.g. simulator) or fails
+      let fallbackDict: [String: String] = [
+        "passport_hash": chip.documentHash,
+        "mrz": chip.mrzDigest,
+      ]
+      let fallbackData = (try? JSONSerialization.data(withJSONObject: fallbackDict)) ?? Data()
+      let fallbackString = String(data: fallbackData, encoding: .utf8) ?? "{}"
+
       return .success(
         PassportProofResult(
           proofType: "sd-jwt-fallback",
-          proofPayload: "{\"passport_hash\":\"\(chip.documentHash)\",\"mrz\":\"\(chip.mrzDigest)\"}",
+          proofPayload: fallbackString,
           trustLevel: "blue",
           generationFailed: true
         )
       )
     }
-
-    return .success(
-      PassportProofResult(
-        proofType: "zkp-noir",
-        proofPayload: "{\"zk_proof\":\"\(chip.documentHash)\",\"mrz\":\"\(chip.mrzDigest)\"}",
-        trustLevel: "green",
-        generationFailed: false
-      )
-    )
   }
 
   func persistPassportCredential(
@@ -126,6 +149,10 @@ final class PassportPipelineService {
 
     IdentityDataStore.shared.addIdentityCard(passportCard)
 
+    // Claims reference the card ID for proof lookup — the full proof data
+    // lives in passportCard.rawCredentialJWT, not duplicated here.
+    let cardRef = ",\"identity_card_id\":\"\(passportCard.id)\""
+
     let ageClaim = ProvableClaimEntity(
       identityCardId: passportCard.id,
       claimType: "age_over_18",
@@ -133,7 +160,7 @@ final class PassportPipelineService {
       issuerType: "government",
       trustLevel: proof.trustLevel,
       source: "Passport",
-      payload: "{\"claim\":\"age_over_18\",\"proof\":\"\(proof.proofType)\"}"
+      payload: "{\"claim\":\"age_over_18\",\"proof\":\"\(proof.proofType)\"\(cardRef)}"
     )
     IdentityDataStore.shared.addProvableClaim(ageClaim)
 
@@ -144,7 +171,7 @@ final class PassportPipelineService {
       issuerType: "government",
       trustLevel: proof.trustLevel,
       source: "Passport",
-      payload: "{\"claim\":\"is_human\",\"proof\":\"\(proof.proofType)\"}"
+      payload: "{\"claim\":\"is_human\",\"proof\":\"\(proof.proofType)\"\(cardRef)}"
     )
     IdentityDataStore.shared.addProvableClaim(humanClaim)
 

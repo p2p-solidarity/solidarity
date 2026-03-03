@@ -5,6 +5,8 @@ struct PassportOnboardingFlowView: View {
 
   @Environment(\.dismiss) private var dismiss
   @StateObject private var pipeline = PassportPipelineViewModel()
+  @State private var showingMRZCamera = false
+  @State private var showManualInput = false
 
   var body: some View {
     NavigationStack {
@@ -41,33 +43,73 @@ struct PassportOnboardingFlowView: View {
       } message: {
         Text(pipeline.alertMessage)
       }
+      .fullScreenCover(isPresented: $showingMRZCamera) {
+        MRZCameraView { draft in
+          pipeline.applyScannedDraft(draft)
+          showManualInput = true
+        }
+      }
     }
   }
 
   private var mrzForm: some View {
     VStack(spacing: 10) {
-      TextField("Passport Number", text: $pipeline.passportNumber)
-        .textInputAutocapitalization(.characters)
-        .textFieldStyle(.roundedBorder)
-      TextField("Nationality (3 letters)", text: $pipeline.nationality)
-        .textInputAutocapitalization(.characters)
-        .textFieldStyle(.roundedBorder)
+      // Dual entry: Scan or Manual
+      if !showManualInput {
+        VStack(spacing: 12) {
+          Button {
+            showingMRZCamera = true
+          } label: {
+            Label("Scan Passport", systemImage: "camera.viewfinder")
+              .frame(maxWidth: .infinity)
+          }
+          .buttonStyle(ThemedPrimaryButtonStyle())
 
-      DatePicker("Date of Birth", selection: $pipeline.birthDate, displayedComponents: .date)
-      DatePicker("Expiry Date", selection: $pipeline.expiryDate, displayedComponents: .date)
+          Button {
+            showManualInput = true
+          } label: {
+            Text("Manual Input")
+              .frame(maxWidth: .infinity)
+          }
+          .buttonStyle(.bordered)
+        }
+        .padding(14)
+        .background(Color.Theme.cardBg)
+        .cornerRadius(10)
+      } else {
+        // Manual form (also shown after scan to let user verify/edit)
+        VStack(spacing: 10) {
+          TextField("Passport Number", text: $pipeline.passportNumber)
+            .textInputAutocapitalization(.characters)
+            .textFieldStyle(.roundedBorder)
+          TextField("Nationality (3 letters)", text: $pipeline.nationality)
+            .textInputAutocapitalization(.characters)
+            .textFieldStyle(.roundedBorder)
 
-      Button {
-        pipeline.validateMRZ()
-      } label: {
-        Text("Continue to NFC")
-          .frame(maxWidth: .infinity)
+          DatePicker("Date of Birth", selection: $pipeline.birthDate, displayedComponents: .date)
+          DatePicker("Expiry Date", selection: $pipeline.expiryDate, displayedComponents: .date)
+
+          Button {
+            pipeline.validateMRZ()
+          } label: {
+            Text("Continue to NFC")
+              .frame(maxWidth: .infinity)
+          }
+          .buttonStyle(ThemedPrimaryButtonStyle())
+          .padding(.top, 8)
+
+          Button {
+            showManualInput = false
+          } label: {
+            Text("Back to Scan")
+              .font(.caption)
+          }
+        }
+        .padding(14)
+        .background(Color.Theme.cardBg)
+        .cornerRadius(10)
       }
-      .buttonStyle(ThemedPrimaryButtonStyle())
-      .padding(.top, 8)
     }
-    .padding(14)
-    .background(Color.Theme.cardBg)
-    .cornerRadius(10)
   }
 
   private var nfcStep: some View {
@@ -278,6 +320,13 @@ private final class PassportPipelineViewModel: ObservableObject {
       dateOfBirth: birthDate,
       expiryDate: expiryDate
     )
+  }
+
+  func applyScannedDraft(_ scanned: PassportMRZDraft) {
+    passportNumber = scanned.passportNumber
+    nationality = scanned.nationalityCode
+    birthDate = scanned.dateOfBirth
+    expiryDate = scanned.expiryDate
   }
 
   func validateMRZ() {
