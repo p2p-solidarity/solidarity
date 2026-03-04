@@ -13,7 +13,7 @@ struct ShareFloatingActionButton: View {
           .fill(Color.Theme.primaryBlue)
           .frame(width: 64, height: 64)
           .shadow(color: Color.Theme.primaryBlue.opacity(0.4), radius: 8, x: 0, y: 4)
-        
+
         Image(systemName: "square.dashed.inset.filled")
           .font(.system(size: 28, weight: .bold))
           .foregroundColor(.white)

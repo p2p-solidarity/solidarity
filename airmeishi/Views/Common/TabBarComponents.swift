@@ -69,7 +69,7 @@ struct PeacefulTabButton: View {
           .font(.system(size: 22, weight: .medium))
           .foregroundColor(isSelected ? Color.Theme.primaryBlue : Color.Theme.textTertiary)
           .frame(height: 24)
-        
+
         Text(title)
           .font(.system(size: 11, weight: isSelected ? .semibold : .medium))
           .foregroundColor(isSelected ? Color.Theme.textPrimary : Color.Theme.textTertiary)

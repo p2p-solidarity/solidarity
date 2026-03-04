@@ -97,7 +97,7 @@ struct CreateShoutoutView: View {
                 .fill(Color.Theme.primaryBlue)
                 .frame(width: 48, height: 48)
                 .overlay(Rectangle().stroke(Color.Theme.primaryBlue, lineWidth: 1))
-              
+
               Text(recipient.initials)
                 .font(.system(size: 16, weight: .bold, design: .monospaced))
                 .foregroundColor(.white)
@@ -182,7 +182,7 @@ struct CreateShoutoutView: View {
       }
       .buttonStyle(ThemedPrimaryButtonStyle())
       .disabled(recipient == nil || message.isEmpty || message.count > 200 || !(recipient?.canReceiveSakura ?? false) || isTransmitting)
-      
+
       if let recipient = recipient, !recipient.canReceiveSakura {
         Text("ERR: Target node has not enabled Secure Messaging.")
           .font(.system(size: 10, weight: .bold, design: .monospaced))

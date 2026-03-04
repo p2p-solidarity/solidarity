@@ -6,7 +6,7 @@ struct RedactionSwitcherView: View {
   let label: String
   let value: String
   @Binding var isDisclosed: Bool
-  
+
   var body: some View {
     HStack(spacing: 16) {
       // Toggle Switch (Rigid Haptics)
@@ -24,7 +24,7 @@ struct RedactionSwitcherView: View {
               Rectangle()
                 .stroke(isDisclosed ? Color.Theme.terminalGreen : Color.Theme.divider, lineWidth: 1)
             )
-          
+
           Rectangle()
             .fill(isDisclosed ? Color.black : Color.Theme.textSecondary)
             .frame(width: 18, height: 18)
@@ -33,19 +33,19 @@ struct RedactionSwitcherView: View {
         }
       }
       .buttonStyle(.plain)
-      
+
       VStack(alignment: .leading, spacing: 4) {
         Text(label.uppercased())
           .font(.system(size: 11, weight: .bold, design: .monospaced))
           .foregroundColor(Color.Theme.textTertiary)
-        
+
         ZStack(alignment: .leading) {
           // Actual Value
           Text(value)
             .font(.system(size: 16, weight: .semibold, design: .default))
             .foregroundColor(Color.Theme.textPrimary)
             .opacity(isDisclosed ? 1 : 0)
-          
+
           // Redacted State
           if !isDisclosed {
             Text("[██████ REDACTED]")
@@ -55,9 +55,9 @@ struct RedactionSwitcherView: View {
           }
         }
       }
-      
+
       Spacer()
-      
+
       // Verified Badge (Only shows if disclosed)
       if isDisclosed {
         Image(systemName: "checkmark.seal.fill")
@@ -79,7 +79,7 @@ struct RedactionSwitcherView: View {
 struct RedactionPreview: View {
   @State private var showName = true
   @State private var showDOB = false
-  
+
   var body: some View {
     ZStack {
       Color.Theme.pageBg.ignoresSafeArea()
@@ -89,7 +89,7 @@ struct RedactionPreview: View {
           value: "Satoshi Nakamoto",
           isDisclosed: $showName
         )
-        
+
         RedactionSwitcherView(
           label: "Date of Birth",
           value: "1975-04-05",

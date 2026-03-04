@@ -7,7 +7,10 @@ struct SecuritySettingsView: View {
 
   var body: some View {
     Form {
-      Section(header: Text("Key Rotation"), footer: Text("Rotating the master key will invalidate active verifiable credentials across your network until re-issued.")) {
+      Section(
+        header: Text("Key Rotation"),
+        footer: Text("Rotating the master key will invalidate active verifiable credentials across your network until re-issued.")
+      ) {
         Button(role: .destructive) {
           rotateMasterKey()
         } label: {

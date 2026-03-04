@@ -18,15 +18,15 @@ struct MeTabView: View {
       ScrollView {
         VStack(spacing: 24) {
           identityHeader
-          
+
           Rectangle()
             .fill(Color.Theme.divider)
             .frame(height: 1)
-          
+
           identityCardSection
-          
+
           provableClaimsSection
-          
+
           addMoreSection
         }
         .padding(.vertical, 24)
@@ -92,7 +92,7 @@ struct MeTabView: View {
           .fill(Color.Theme.searchBg)
           .frame(width: 80, height: 80)
           .overlay(Rectangle().stroke(Color.Theme.divider, lineWidth: 1))
-        
+
         Text(String(displayName.prefix(1)).uppercased())
           .font(.system(size: 32, weight: .bold, design: .monospaced))
           .foregroundColor(.white)
@@ -153,7 +153,7 @@ struct MeTabView: View {
               ctaTitle: "Inspect"
             )
           }
-          
+
           // Demo: Inject a Revoked card just for visual flavor if there are any cards
           RevokedCredentialCard(
             title: "Anon Auth Token",
@@ -229,13 +229,13 @@ struct MeTabView: View {
         .font(.system(size: 16, weight: .bold))
         .foregroundColor(Color.Theme.terminalGreen)
         .frame(width: 24)
-      
+
       Text(title)
         .font(.system(size: 14, weight: .bold))
         .foregroundColor(Color.Theme.textPrimary)
-      
+
       Spacer()
-      
+
       Image(systemName: "chevron.right")
         .font(.system(size: 10, weight: .bold))
         .foregroundColor(Color.Theme.textPlaceholder)
@@ -307,11 +307,11 @@ private struct IdentityStatusCard: View {
           .font(.system(size: 10, weight: .bold, design: .monospaced))
           .foregroundColor(Color.Theme.primaryBlue)
       }
-      
+
       Rectangle()
         .fill(Color.Theme.divider)
         .frame(height: 1)
-      
+
       HStack {
         Text(trustText)
           .font(.system(size: 10, weight: .bold, design: .monospaced))
@@ -342,7 +342,7 @@ private struct EmptyMeStateCard: View {
       Image(systemName: "lock.shield")
         .font(.system(size: 48))
         .foregroundColor(Color.Theme.textTertiary)
-      
+
       VStack(spacing: 8) {
         Text(title.uppercased())
           .font(.system(size: 16, weight: .bold, design: .monospaced))
@@ -352,7 +352,7 @@ private struct EmptyMeStateCard: View {
           .foregroundColor(Color.Theme.textSecondary)
           .multilineTextAlignment(.center)
       }
-      
+
       VStack(spacing: 12) {
         Button(action: onPrimaryTap) {
           Text(primaryTitle)
@@ -385,26 +385,26 @@ private struct SelfInitiatedProofSheet: View {
     NavigationStack {
       ZStack {
         Color.Theme.pageBg.ignoresSafeArea()
-        
+
         VStack(spacing: 24) {
           Image(systemName: "terminal")
             .font(.system(size: 48))
             .foregroundColor(Color.Theme.primaryBlue)
-          
+
           Text("GENERATING PROOF")
             .font(.system(size: 20, weight: .bold, design: .monospaced))
             .foregroundColor(.white)
-            
+
           Text("Claim: [\(claimType.rawValue)]")
             .font(.system(size: 14, weight: .bold, design: .monospaced))
             .foregroundColor(Color.Theme.terminalGreen)
-            
+
           Text("QR payload is ready for standard verification protocol.\nProceed to SCAN to broadcast.")
             .font(.system(size: 14))
             .foregroundColor(Color.Theme.textSecondary)
             .multilineTextAlignment(.center)
             .padding(.horizontal, 32)
-            
+
           Spacer()
         }
         .padding(.top, 40)

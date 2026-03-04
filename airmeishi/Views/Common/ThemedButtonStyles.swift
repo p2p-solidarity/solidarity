@@ -121,4 +121,3 @@ struct ThemedDestructiveButtonStyle: ButtonStyle {
       }
   }
 }
-

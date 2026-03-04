@@ -34,7 +34,7 @@ struct ProximitySharingView: View {
     NavigationStack {
       VStack(spacing: 24) {
         headerCard
-        
+
         Group {
           switch step {
           case .discovery:
@@ -49,7 +49,7 @@ struct ProximitySharingView: View {
             savedStep
           }
         }
-        
+
         Spacer(minLength: 0)
       }
       .padding(24)
@@ -137,7 +137,7 @@ struct ProximitySharingView: View {
           ProgressView()
             .progressViewStyle(CircularProgressViewStyle(tint: Color.Theme.primaryBlue))
             .scaleEffect(1.5)
-          
+
           Text("SCANNING...")
             .font(.system(size: 16, weight: .bold, design: .monospaced))
             .foregroundColor(Color.Theme.primaryBlue)
@@ -163,7 +163,7 @@ struct ProximitySharingView: View {
                       .font(.system(size: 20, weight: .bold, design: .monospaced))
                       .foregroundColor(.white)
                   }
-                  
+
                   VStack(alignment: .leading, spacing: 4) {
                     Text(peer.name)
                       .font(.system(size: 16, weight: .bold))
@@ -186,9 +186,9 @@ struct ProximitySharingView: View {
           }
         }
       }
-      
+
       Spacer()
-      
+
       Button(isMatchingActive ? "Stop Scan" : "Start Scan") {
         if isMatchingActive {
           proximityManager.stopAdvertising()
@@ -209,12 +209,12 @@ struct ProximitySharingView: View {
         Text("SELECTIVE DISCLOSURE")
           .font(.system(size: 12, weight: .bold, design: .monospaced))
           .foregroundColor(.white)
-        
+
         Text("Select the claims you wish to reveal to \(selectedPeer?.name ?? "peer").")
           .font(.system(size: 14))
           .foregroundColor(Color.Theme.textSecondary)
       }
-      
+
       ScrollView {
         VStack(spacing: 8) {
           ForEach(BusinessCardField.allCases) { field in
@@ -233,12 +233,12 @@ struct ProximitySharingView: View {
         }
       }
       .frame(maxHeight: 280)
-      
+
       VStack(alignment: .leading, spacing: 4) {
         Text("Ephemeral Message (\(myMessage.count)/140)")
           .font(.system(size: 12, weight: .bold, design: .monospaced))
           .foregroundColor(Color.Theme.textSecondary)
-        
+
         TextEditor(text: Binding(
           get: { myMessage },
           set: { myMessage = String($0.prefix(140)) }
@@ -250,7 +250,7 @@ struct ProximitySharingView: View {
         .background(Color.Theme.searchBg)
         .overlay(Rectangle().stroke(Color.Theme.divider, lineWidth: 1))
       }
-      
+
       VStack(spacing: 12) {
         Button(action: sendExchangeRequest) {
           Text("Generate & Transmit ZK Proof")
@@ -258,7 +258,7 @@ struct ProximitySharingView: View {
         }
         .buttonStyle(ThemedPrimaryButtonStyle())
         .disabled(selectedPeer == nil || selectedCard == nil || selectedFields.isEmpty || isWorking)
-        
+
         Button("Abort Connection") {
           withAnimation { step = .discovery }
         }
@@ -272,7 +272,7 @@ struct ProximitySharingView: View {
   private var awaitingStep: some View {
     VStack(spacing: 24) {
       Spacer()
-      
+
       ZStack {
         Circle()
           .stroke(Color.Theme.terminalGreen.opacity(0.3), lineWidth: 2)
@@ -282,7 +282,7 @@ struct ProximitySharingView: View {
           .frame(width: 16, height: 16)
           // Basic ping animation can be added here
       }
-      
+
       VStack(spacing: 8) {
         Text("AWAITING PEER")
           .font(.system(size: 16, weight: .bold, design: .monospaced))
@@ -291,9 +291,9 @@ struct ProximitySharingView: View {
           .font(.system(size: 14))
           .foregroundColor(Color.Theme.textSecondary)
       }
-      
+
       Spacer()
-      
+
       Button("Terminate") {
         awaitingRequestID = nil
         withAnimation { step = .discovery }
@@ -313,7 +313,7 @@ struct ProximitySharingView: View {
             Text("INBOUND CONNECTION")
               .font(.system(size: 12, weight: .bold, design: .monospaced))
               .foregroundColor(Color.Theme.primaryBlue)
-            
+
             Text("Connection request from \(request.payload.senderID)")
               .font(.system(size: 16, weight: .bold))
               .foregroundColor(.white)
@@ -325,7 +325,7 @@ struct ProximitySharingView: View {
             Text("Reply Message (\(incomingMessage.count)/140)")
               .font(.system(size: 12, weight: .bold, design: .monospaced))
               .foregroundColor(Color.Theme.textSecondary)
-            
+
             TextEditor(text: Binding(
               get: { incomingMessage },
               set: { incomingMessage = String($0.prefix(140)) }
@@ -364,7 +364,7 @@ struct ProximitySharingView: View {
   private var savedStep: some View {
     VStack(spacing: 24) {
       Spacer()
-      
+
       Image(systemName: "checkmark.seal.fill")
         .font(.system(size: 64))
         .foregroundColor(Color.Theme.terminalGreen)
@@ -374,7 +374,7 @@ struct ProximitySharingView: View {
         Text("HANDSHAKE COMPLETE")
           .font(.system(size: 20, weight: .bold, design: .monospaced))
           .foregroundColor(Color.Theme.textPrimary)
-        
+
         Text("Cryptographic signatures successfully exchanged.")
           .font(.system(size: 14))
           .foregroundColor(Color.Theme.textSecondary)

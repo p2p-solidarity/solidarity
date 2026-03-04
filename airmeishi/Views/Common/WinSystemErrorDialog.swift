@@ -10,7 +10,7 @@ struct WinSystemErrorDialog: View {
   let secondaryActionTitle: String?
   let secondaryAction: (() -> Void)?
   let dismissAction: () -> Void
-  
+
   var body: some View {
     VStack(spacing: 24) {
       // Top Area: Content with Dashed Border
@@ -19,9 +19,9 @@ struct WinSystemErrorDialog: View {
           Text(title)
             .font(.system(size: 18, weight: .bold, design: .default))
             .foregroundColor(.white)
-          
+
           Spacer()
-          
+
           Button(action: {
             HapticFeedbackManager.shared.rigidImpact()
             dismissAction()
@@ -38,7 +38,7 @@ struct WinSystemErrorDialog: View {
               )
           }
         }
-        
+
         Text(message)
           .font(.system(size: 16, weight: .regular))
           .foregroundColor(Color.Theme.textSecondary)
@@ -51,7 +51,7 @@ struct WinSystemErrorDialog: View {
           .stroke(style: StrokeStyle(lineWidth: 1, dash: [4, 4]))
           .foregroundColor(Color.Theme.primaryBlue)
       )
-      
+
       // Bottom Area: Buttons
       VStack(spacing: 12) {
         Button(action: {
@@ -60,7 +60,7 @@ struct WinSystemErrorDialog: View {
           Text(primaryActionTitle)
         }
         .buttonStyle(ThemedInvertedButtonStyle()) // White bg, black text
-        
+
         if let secondaryTitle = secondaryActionTitle, let secondaryAct = secondaryAction {
           Button(action: {
             secondaryAct()
@@ -94,13 +94,13 @@ struct WinSystemErrorModifier: ViewModifier {
   let message: String
   let primaryActionTitle: String
   let primaryAction: () -> Void
-  var secondaryActionTitle: String? = nil
-  var secondaryAction: (() -> Void)? = nil
-  
+  var secondaryActionTitle: String?
+  var secondaryAction: (() -> Void)?
+
   func body(content: Content) -> some View {
     ZStack {
       content
-      
+
       if isPresented {
         Color.black.opacity(0.8)
           .ignoresSafeArea()
@@ -108,7 +108,7 @@ struct WinSystemErrorModifier: ViewModifier {
             // Optional: Dismiss on background tap
           }
           .transition(.opacity)
-        
+
         WinSystemErrorDialog(
           title: title,
           message: message,

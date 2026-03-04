@@ -31,7 +31,7 @@ final class HapticFeedbackManager {
     generator.prepare()
     generator.impactOccurred()
   }
-  
+
   /// For successful operations (e.g., ZKP verified)
   func successNotification() {
     let generator = UINotificationFeedbackGenerator()

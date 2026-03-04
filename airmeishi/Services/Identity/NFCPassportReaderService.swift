@@ -60,8 +60,8 @@ final class NFCPassportReaderService: NSObject {
         value = digit
       } else if char == "<" || char == " " {
         value = 0
-      } else if let ascii = char.asciiValue, ascii >= Character("A").asciiValue! {
-        value = Int(ascii - Character("A").asciiValue!) + 10
+      } else if let ascii = char.asciiValue, let baseA = Character("A").asciiValue, ascii >= baseA {
+        value = Int(ascii - baseA) + 10
       } else {
         value = 0
       }

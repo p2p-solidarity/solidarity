@@ -4,32 +4,32 @@ import SwiftUI
 /// Uses terminal aesthetics, rapid string generation, and haptic feedback to build anticipation.
 struct CryptoCompilingOverlay: View {
   @Binding var isPresented: Bool
-  var onCompletion: (() -> Void)? = nil
-  
+  var onCompletion: (() -> Void)?
+
   @State private var phase: AnimationPhase = .preparing
   @State private var scrollingHashes: [String] = []
   @State private var timer: Timer?
-  
+
   enum AnimationPhase {
     case preparing
     case compiling
     case verified
   }
-  
+
   var body: some View {
     ZStack {
       // Background dimmer
       Color.Theme.pageBg.opacity(0.95)
         .ignoresSafeArea()
-      
+
       VStack(spacing: 32) {
-        
+
         // Status Text (Typewriter / Blinking)
         HStack {
           Text(statusText)
             .font(.system(size: 24, weight: .bold, design: .monospaced))
             .foregroundColor(statusColor)
-          
+
           if phase != .verified {
             Rectangle()
               .fill(Color.Theme.primaryBlue)
@@ -38,7 +38,7 @@ struct CryptoCompilingOverlay: View {
               .animation(Animation.easeInOut(duration: 0.3).repeatForever(), value: phase)
           }
         }
-        
+
         // Scrolling Hashes
         if phase == .compiling {
           ScrollViewReader { proxy in
@@ -61,14 +61,14 @@ struct CryptoCompilingOverlay: View {
               Rectangle()
                 .stroke(Color.Theme.divider, lineWidth: 1)
             )
-            .onChange(of: scrollingHashes.count) { _ in
+            .onChange(of: scrollingHashes.count) {
               withAnimation {
                 proxy.scrollTo(scrollingHashes.count - 1, anchor: .bottom)
               }
             }
           }
         }
-        
+
         // Large Verified Badge
         if phase == .verified {
           Text("[ VERIFIED ]")
@@ -85,7 +85,7 @@ struct CryptoCompilingOverlay: View {
       timer?.invalidate()
     }
   }
-  
+
   private var statusText: String {
     switch phase {
     case .preparing: return "Initializing Circuit..."
@@ -93,7 +93,7 @@ struct CryptoCompilingOverlay: View {
     case .verified: return "Proof Accepted."
     }
   }
-  
+
   private var statusColor: Color {
     switch phase {
     case .preparing: return Color.Theme.textPrimary
@@ -101,19 +101,19 @@ struct CryptoCompilingOverlay: View {
     case .verified: return Color.Theme.terminalGreen
     }
   }
-  
+
   private func startSequence() {
     // 1. Preparing
     phase = .preparing
     HapticFeedbackManager.shared.rigidImpact()
-    
+
     // 2. Compiling (after 0.8s)
     DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) {
       guard isPresented else { return }
       phase = .compiling
       startHashGeneration()
     }
-    
+
     // 3. Verified (after 3.5s)
     DispatchQueue.main.asyncAfter(deadline: .now() + 3.5) {
       guard isPresented else { return }
@@ -122,7 +122,7 @@ struct CryptoCompilingOverlay: View {
         phase = .verified
       }
       HapticFeedbackManager.shared.successNotification()
-      
+
       // Auto-dismiss or call completion
       DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
         if isPresented {
@@ -132,18 +132,18 @@ struct CryptoCompilingOverlay: View {
       }
     }
   }
-  
+
   private func startHashGeneration() {
     timer = Timer.scheduledTimer(withTimeInterval: 0.05, repeats: true) { _ in
       let randomLength = Int.random(in: 24...48)
       let hexChars = "0123456789abcdef"
-      let newHash = "0x" + String((0..<randomLength).map { _ in hexChars.randomElement()! })
-      
+      let newHash = "0x" + String((0..<randomLength).compactMap { _ in hexChars.randomElement() })
+
       scrollingHashes.append(newHash)
       if scrollingHashes.count > 40 {
         scrollingHashes.removeFirst()
       }
-      
+
       // Light haptics for crunching
       if Int.random(in: 0...3) == 0 {
         HapticFeedbackManager.shared.softImpact()
@@ -157,11 +157,11 @@ struct CryptoCompilingOverlay: View {
 struct CryptoCompilingModifier: ViewModifier {
   @Binding var isPresented: Bool
   var onCompletion: (() -> Void)?
-  
+
   func body(content: Content) -> some View {
     ZStack {
       content
-      
+
       if isPresented {
         CryptoCompilingOverlay(isPresented: $isPresented, onCompletion: onCompletion)
           .transition(.opacity)

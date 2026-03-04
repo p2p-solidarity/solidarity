@@ -4,23 +4,23 @@ import SwiftUI
 /// Features a WinCard (Neo-Brutalist) layout, evolving badges, and a notepad snippet for ephemeral messages.
 struct TrustGraphContactRow: View {
   let contact: ContactEntity
-  
+
   // Fake properties for visual demo since CoreData might not have these yet
   // In a real app, these would be derived from the ContactEntity's cryptographic proofs
   private var mutualNodesCount: Int {
     return Int.random(in: 0...5)
   }
-  
+
   private var encounterCount: Int {
     return Int.random(in: 1...4)
   }
-  
+
   var body: some View {
     VStack(alignment: .leading, spacing: 0) {
-      
+
       // Top Area: Identity & Badge
       HStack(alignment: .top, spacing: 12) {
-        
+
         // Avatar Block
         ZStack {
           Rectangle()
@@ -29,19 +29,19 @@ struct TrustGraphContactRow: View {
             .overlay(
               Rectangle().stroke(Color.Theme.divider, lineWidth: 1)
             )
-          
+
           Text(String(contact.name.prefix(1)).uppercased())
             .font(.system(size: 20, weight: .bold, design: .monospaced))
             .foregroundColor(.white)
         }
-        
+
         // Name & Title
         VStack(alignment: .leading, spacing: 4) {
           Text(contact.name)
             .font(.system(size: 18, weight: .bold))
             .foregroundColor(.white)
             .lineLimit(1)
-          
+
           if let title = contact.title, !title.isEmpty {
             Text(title)
               .font(.system(size: 14, weight: .regular, design: .monospaced))
@@ -49,18 +49,18 @@ struct TrustGraphContactRow: View {
               .lineLimit(1)
           }
         }
-        
+
         Spacer()
-        
+
         // Evolving Trust Badge
         EvolvingTrustBadge(encounterCount: encounterCount)
       }
       .padding(16)
-      
+
       Rectangle()
         .fill(Color.Theme.divider)
         .frame(height: 1)
-      
+
       // Middle Area: Ephemeral Message (Notepad Snippet)
       if let message = contact.theirEphemeralMessage, !message.isEmpty {
         HStack(alignment: .top, spacing: 8) {
@@ -68,7 +68,7 @@ struct TrustGraphContactRow: View {
             .font(.system(size: 12, weight: .bold))
             .foregroundColor(Color.Theme.primaryBlue)
             .padding(.top, 2)
-          
+
           Text(message)
             .font(.system(size: 14, weight: .medium, design: .default))
             .foregroundColor(.black)
@@ -85,19 +85,19 @@ struct TrustGraphContactRow: View {
           .foregroundColor(Color.Theme.textSecondary)
           .padding(16)
       }
-      
+
       Rectangle()
         .fill(Color.Theme.divider)
         .frame(height: 1)
-      
+
       // Bottom Area: Terminal Metadata
       HStack {
         Text("[\(formatDate(contact.receivedAt))]")
           .font(.system(size: 10, weight: .bold, design: .monospaced))
           .foregroundColor(Color.Theme.textTertiary)
-        
+
         Spacer()
-        
+
         if mutualNodesCount > 0 {
           Text("[ Mutual Nodes: \(mutualNodesCount) ]")
             .font(.system(size: 10, weight: .bold, design: .monospaced))
@@ -119,7 +119,7 @@ struct TrustGraphContactRow: View {
     .padding(.horizontal, 16)
     .padding(.vertical, 8)
   }
-  
+
   private func formatDate(_ date: Date) -> String {
     let formatter = DateFormatter()
     formatter.dateFormat = "yy.MM.dd HH:mm"
@@ -130,7 +130,7 @@ struct TrustGraphContactRow: View {
 /// A badge that changes complexity based on the number of encounters (signatures) with this person.
 struct EvolvingTrustBadge: View {
   let encounterCount: Int
-  
+
   var body: some View {
     VStack(alignment: .trailing, spacing: 4) {
       if encounterCount >= 3 {

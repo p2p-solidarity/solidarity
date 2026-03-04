@@ -1,4 +1,4 @@
-import AVFoundation
+@preconcurrency import AVFoundation
 import Combine
 import UIKit
 import Vision
@@ -48,22 +48,24 @@ final class MRZScannerService: NSObject, ObservableObject {
     scannedDraft = nil
     errorMessage = nil
     isScanning = true
-    processingQueue.async { [weak self] in
-      self?.captureSession.startRunning()
+    let session = captureSession
+    processingQueue.async {
+      session.startRunning()
     }
   }
 
   func stopScanning() {
     isScanning = false
-    processingQueue.async { [weak self] in
-      self?.captureSession.stopRunning()
+    let session = captureSession
+    processingQueue.async {
+      session.stopRunning()
     }
   }
 
   // MARK: - MRZ Parsing (ICAO 9303 TD3)
 
   /// Parse two MRZ lines (TD3: 2 lines x 44 chars each).
-  static func parseTD3(line1: String, line2: String) -> PassportMRZDraft? {
+  nonisolated static func parseTD3(line1: String, line2: String) -> PassportMRZDraft? {
     let l1 = line1.replacingOccurrences(of: " ", with: "")
     let l2 = line2.replacingOccurrences(of: " ", with: "")
 
@@ -102,22 +104,22 @@ final class MRZScannerService: NSObject, ObservableObject {
 
   // MARK: - ICAO 9303 Check Digit
 
-  private static let mrzWeights = [7, 3, 1]
+  private static nonisolated let mrzWeights = [7, 3, 1]
 
-  static func verifyCheckDigit(_ field: String, expected: Int) -> Bool {
+  nonisolated static func verifyCheckDigit(_ field: String, expected: Int) -> Bool {
     return computeCheckDigit(field) == expected
   }
 
-  static func computeCheckDigit(_ field: String) -> Int {
+  nonisolated static func computeCheckDigit(_ field: String) -> Int {
     var sum = 0
     for (i, char) in field.enumerated() {
       let value: Int
       if char == "<" {
         value = 0
       } else if char.isNumber {
-        value = Int(String(char))!
-      } else if char.isLetter {
-        value = Int(char.asciiValue! - Character("A").asciiValue!) + 10
+        value = Int(String(char)) ?? 0
+      } else if char.isLetter, let ascii = char.asciiValue, let baseA = Character("A").asciiValue {
+        value = Int(ascii - baseA) + 10
       } else {
         value = 0
       }
@@ -128,7 +130,7 @@ final class MRZScannerService: NSObject, ObservableObject {
 
   // MARK: - Date Parsing
 
-  private static func parseDate(_ yymmdd: String, isPast: Bool) -> Date? {
+  private nonisolated static func parseDate(_ yymmdd: String, isPast: Bool) -> Date? {
     let formatter = DateFormatter()
     formatter.dateFormat = "yyMMdd"
     formatter.locale = Locale(identifier: "en_US_POSIX")

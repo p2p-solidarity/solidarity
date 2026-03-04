@@ -229,4 +229,83 @@ final class OIDCService: ObservableObject {
 
     return .success(url)
   }
+
+  // MARK: - VP Token Submission
+
+  /// Submits a vp_token to the verifier's redirect_uri.
+  /// For HTTPS URIs, performs a form POST. For custom schemes, opens via UIApplication.
+  func submitVpToken(token: String, redirectURI: String, state: String?) async -> CardResult<Void> {
+    guard let components = URLComponents(string: redirectURI) else {
+      return .failure(.invalidData("Invalid redirect URI"))
+    }
+
+    let scheme = components.scheme?.lowercased() ?? ""
+
+    // HTTPS → form POST to verifier endpoint (params in body only)
+    if scheme == "https" || scheme == "http" {
+      guard let postURL = components.url else {
+        return .failure(.invalidData("Failed to build POST URL"))
+      }
+
+      // Build URL-encoded body via URLComponents for correct percent-encoding
+      var bodyComponents = URLComponents()
+      var bodyItems = [URLQueryItem(name: "vp_token", value: token)]
+      if let state { bodyItems.append(URLQueryItem(name: "state", value: state)) }
+      bodyComponents.queryItems = bodyItems
+
+      guard let bodyString = bodyComponents.percentEncodedQuery else {
+        return .failure(.invalidData("Failed to encode POST body"))
+      }
+
+      do {
+        var request = URLRequest(url: postURL)
+        request.httpMethod = "POST"
+        request.setValue("application/x-www-form-urlencoded", forHTTPHeaderField: "Content-Type")
+        request.httpBody = bodyString.data(using: .utf8)
+
+        let (_, response) = try await URLSession.shared.data(for: request)
+        guard let httpResponse = response as? HTTPURLResponse,
+              (200...299).contains(httpResponse.statusCode) else {
+          let code = (response as? HTTPURLResponse)?.statusCode ?? -1
+          return .failure(.networkError("Verifier returned HTTP \(code)"))
+        }
+        return .success(())
+      } catch {
+        return .failure(.networkError("Failed to submit vp_token: \(error.localizedDescription)"))
+      }
+    }
+
+    // Custom scheme → append params to URL and open via UIApplication
+    var redirectComponents = components
+    var queryItems = redirectComponents.queryItems ?? []
+    queryItems.append(URLQueryItem(name: "vp_token", value: token))
+    if let state { queryItems.append(URLQueryItem(name: "state", value: state)) }
+    redirectComponents.queryItems = queryItems
+
+    guard let redirectURL = redirectComponents.url else {
+      return .failure(.invalidData("Failed to build redirect URL"))
+    }
+
+    let canOpen = await MainActor.run {
+      UIApplication.shared.canOpenURL(redirectURL)
+    }
+    guard canOpen else {
+      return .failure(.networkError("Unable to open redirect URI: \(redirectURI)"))
+    }
+    await MainActor.run {
+      UIApplication.shared.open(redirectURL)
+    }
+    return .success(())
+  }
+
+  /// Extracts the verifier domain from a request payload string.
+  static func verifierDomain(from payload: String) -> String? {
+    guard let url = URL(string: payload),
+          let components = URLComponents(url: url, resolvingAgainstBaseURL: false),
+          let redirectUri = components.queryItems?.first(where: { $0.name == "redirect_uri" })?.value
+    else {
+      return URL(string: payload)?.host
+    }
+    return URL(string: redirectUri)?.host
+  }
 }

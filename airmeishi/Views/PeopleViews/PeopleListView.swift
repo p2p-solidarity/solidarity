@@ -4,6 +4,7 @@ struct PeopleListView: View {
   @EnvironmentObject private var identityDataStore: IdentityDataStore
   @State private var searchQuery = ""
   @State private var showingExchangeFlow = false
+  @State private var showingVCFPicker = false
 
   private var filteredContacts: [ContactEntity] {
     let all = identityDataStore.contacts.sorted { $0.receivedAt > $1.receivedAt }
@@ -44,11 +45,17 @@ struct PeopleListView: View {
             } label: {
               Label("Radar Exchange", systemImage: "antenna.radiowaves.left.and.right")
             }
-            
+
             Button {
               importPhoneContacts()
             } label: {
               Label("Import from Phone", systemImage: "person.crop.circle.badge.down")
+            }
+
+            Button {
+              showingVCFPicker = true
+            } label: {
+              Label("Import VCF File", systemImage: "doc.badge.plus")
             }
           } label: {
             Image(systemName: "plus.circle")
@@ -61,6 +68,11 @@ struct PeopleListView: View {
     }
     .onAppear {
       identityDataStore.refreshAll()
+    }
+    .sheet(isPresented: $showingVCFPicker) {
+      VCFDocumentPicker { url in
+        importVCFFile(url: url)
+      }
     }
     .fullScreenCover(isPresented: $showingExchangeFlow, onDismiss: {
       identityDataStore.refreshAll()
@@ -76,7 +88,6 @@ struct PeopleListView: View {
       showingExchangeFlow = true
     } label: {
       HStack(spacing: 14) {
-        
         // Animated Radar Icon Placeholder
         ZStack {
           Circle()
@@ -209,11 +220,32 @@ struct PeopleListView: View {
 
   // MARK: - Actions
 
+  private func importVCFFile(url: URL) {
+    let result = ContactImportService.shared.importFromVCF(url: url)
+    switch result {
+    case .success(let count):
+      identityDataStore.refreshAll()
+      ToastManager.shared.show(
+        title: String(localized: "Import Complete"),
+        message: String(localized: "Imported \(count) contacts from VCF file."),
+        type: .success,
+        duration: 3.0
+      )
+    case .failure(let error):
+      ToastManager.shared.show(
+        title: String(localized: "Import Failed"),
+        message: error.localizedDescription,
+        type: .error,
+        duration: 4.0
+      )
+    }
+  }
+
   private func importPhoneContacts() {
     Task {
       // 1. Request permission
       let permissionResult = await ContactImportService.shared.requestPermission()
-      
+
       switch permissionResult {
       case .success(let granted):
         guard granted else {
@@ -230,7 +262,7 @@ struct PeopleListView: View {
 
         // 2. Perform import
         let importResult = ContactImportService.shared.importContacts()
-        
+
         await MainActor.run {
           switch importResult {
           case .success(let count):

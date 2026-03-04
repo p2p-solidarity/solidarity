@@ -6,40 +6,40 @@ struct RevokedCredentialCard: View {
   let title: String
   let subtitle: String
   let revokedDate: Date
-  
+
   var body: some View {
     ZStack {
       // Base Card (Grayscale, Dashed)
       VStack(alignment: .leading, spacing: 12) {
-        
+
         HStack {
           Image(systemName: "doc.text.viewfinder")
             .font(.system(size: 24))
             .foregroundColor(Color.Theme.textTertiary)
-          
+
           VStack(alignment: .leading, spacing: 4) {
             Text(title)
               .font(.system(size: 16, weight: .bold, design: .monospaced))
               .foregroundColor(Color.Theme.textSecondary)
               .strikethrough()
-            
+
             Text(subtitle)
               .font(.system(size: 12, weight: .regular))
               .foregroundColor(Color.Theme.textTertiary)
           }
-          
+
           Spacer()
         }
-        
+
         Rectangle()
           .fill(Color.Theme.divider)
           .frame(height: 1)
-        
+
         HStack {
           Text("REVOKED ON:")
             .font(.system(size: 10, weight: .bold, design: .monospaced))
             .foregroundColor(Color.Theme.textTertiary)
-          
+
           Text(formatDate(revokedDate))
             .font(.system(size: 10, weight: .regular, design: .monospaced))
             .foregroundColor(Color.Theme.textSecondary)
@@ -51,7 +51,7 @@ struct RevokedCredentialCard: View {
         Rectangle()
           .stroke(Color.Theme.textTertiary, style: StrokeStyle(lineWidth: 1, dash: [4, 4]))
       )
-      
+
       // The "Stamp" Overlay
       Text("[ REVOKED ]")
         .font(.system(size: 24, weight: .black, design: .monospaced))
@@ -68,7 +68,7 @@ struct RevokedCredentialCard: View {
     .padding(.horizontal, 16)
     .padding(.vertical, 8)
   }
-  
+
   private func formatDate(_ date: Date) -> String {
     let formatter = DateFormatter()
     formatter.dateFormat = "yyyy.MM.dd HH:mm"

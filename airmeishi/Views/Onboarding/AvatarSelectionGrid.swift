@@ -4,7 +4,7 @@ struct AvatarSelectionGrid: View {
   @Binding var selectedAvatar: AnimalCharacter?
   let onNext: () -> Void
   let onBack: () -> Void
-  
+
   var body: some View {
     VStack(spacing: 24) {
       // Header
@@ -19,7 +19,7 @@ struct AvatarSelectionGrid: View {
         Spacer()
       }
       .padding(.horizontal, 24)
-      
+
       VStack(spacing: 8) {
         Text("Avatar")
           .font(.system(size: 28, weight: .bold))
@@ -28,11 +28,11 @@ struct AvatarSelectionGrid: View {
           .font(.system(size: 14))
           .foregroundColor(Color.Theme.textSecondary)
       }
-      
+
       // Selected Avatar Preview
       ZStack {
         // Subtle background pattern or silhouette could go here logically
-        
+
         if let sel = selectedAvatar {
           Image(sel.imageBasename)
             .resizable()
@@ -54,7 +54,7 @@ struct AvatarSelectionGrid: View {
         }
       }
       .padding(.vertical, 32)
-      
+
       // Grid
       ScrollView(.horizontal, showsIndicators: false) {
         HStack(spacing: 24) {
@@ -74,7 +74,7 @@ struct AvatarSelectionGrid: View {
                     selectedAvatar = animal
                   }
                 }
-              
+
               Text(animal.rawValue.capitalized)
                 .font(.system(size: 12, weight: .medium))
                 .foregroundColor(selectedAvatar == animal ? .white : Color.Theme.textSecondary)
@@ -83,12 +83,12 @@ struct AvatarSelectionGrid: View {
         }
         .padding(.horizontal, 24)
       }
-      
+
       VStack(alignment: .leading, spacing: 8) {
         Text("About avatar")
           .font(.system(size: 14, weight: .bold))
           .foregroundColor(.white)
-        
+
         Text("This avatar will develop alongside your journey, based on the activity level you accumulate. " +
              "As you progress, your avatar will evolve!\n\n" +
              "!!! This can't be changed afterward, so please choose wisely. " +
@@ -101,9 +101,9 @@ struct AvatarSelectionGrid: View {
       .frame(maxWidth: .infinity, alignment: .leading)
       .overlay(Rectangle().stroke(Color.Theme.divider, lineWidth: 1))
       .padding(.horizontal, 24)
-      
+
       Spacer()
-      
+
       Button(action: {
         if selectedAvatar != nil {
           HapticFeedbackManager.shared.heavyImpact()

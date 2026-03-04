@@ -17,6 +17,44 @@ final class ContactImportService {
     }
   }
 
+  // MARK: - VCF File Import
+
+  func importFromVCF(url: URL) -> CardResult<Int> {
+    let accessing = url.startAccessingSecurityScopedResource()
+    defer { if accessing { url.stopAccessingSecurityScopedResource() } }
+
+    do {
+      let data = try Data(contentsOf: url)
+      let cnContacts = try CNContactVCardSerialization.contacts(with: data)
+      var imported = 0
+
+      for contact in cnContacts {
+        let fullName = "\(contact.givenName) \(contact.familyName)".trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !fullName.isEmpty else { continue }
+
+        let entity = ContactEntity(
+          cardId: UUID().uuidString,
+          name: fullName,
+          title: contact.jobTitle.nilIfBlank(),
+          company: contact.organizationName.nilIfBlank(),
+          email: (contact.emailAddresses.first?.value as String?)?.nilIfBlank(),
+          phone: contact.phoneNumbers.first?.value.stringValue.nilIfBlank(),
+          source: ContactSource.manual.rawValue,
+          verificationStatus: VerificationStatus.unverified.rawValue
+        )
+
+        IdentityDataStore.shared.upsertContact(entity)
+        imported += 1
+      }
+
+      return .success(imported)
+    } catch {
+      return .failure(.storageError("Failed to parse VCF file: \(error.localizedDescription)"))
+    }
+  }
+
+  // MARK: - Phone Contacts Import
+
   func importContacts(limit: Int = 50) -> CardResult<Int> {
     let keys: [CNKeyDescriptor] = [
       CNContactGivenNameKey as CNKeyDescriptor,

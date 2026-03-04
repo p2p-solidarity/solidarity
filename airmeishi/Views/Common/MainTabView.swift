@@ -2,6 +2,7 @@ import SwiftUI
 
 struct MainTabView: View {
   @EnvironmentObject var deepLinkManager: DeepLinkManager
+  @Environment(\.scenePhase) private var scenePhase
   @State private var showingReceivedCard = false
   @State private var showingErrorAlert = false
   @State private var errorMessage = ""
@@ -49,6 +50,11 @@ struct MainTabView: View {
       handleDeepLinkAction(action)
     }
     .toastOverlay()
+    .onChange(of: scenePhase) { _, newPhase in
+      if newPhase == .background {
+        BackupManager.shared.triggerAutoBackupIfNeeded()
+      }
+    }
     .onReceive(NotificationCenter.default.publisher(for: .matchingReceivedCard)) { notification in
       if let card = notification.userInfo?[ProximityEventKey.card] as? BusinessCard {
         ToastManager.shared.show(
@@ -56,6 +62,8 @@ struct MainTabView: View {
           message: String(localized: "Received business card from \(card.name)"),
           type: .success
         )
+        // Trigger auto backup after card exchange
+        BackupManager.shared.triggerAutoBackupIfNeeded()
       }
     }
     .onReceive(NotificationCenter.default.publisher(for: .groupInviteReceived)) { notification in

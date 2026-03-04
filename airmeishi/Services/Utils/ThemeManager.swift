@@ -169,28 +169,28 @@ extension Color {
 
     /// Pure black / Obsidian background
     static let pageBg = Color(hex: 0x050505)
-    
+
     /// Dark UI elements
     static let darkUI = Color(white: 0.15)
-    
+
     /// Pure white foreground for high contrast
     static let textPrimary = Color.white
-    
+
     /// 70% foreground
     static let textSecondary = Color(white: 0.70)
-    
+
     /// 50% foreground
     static let textTertiary = Color(white: 0.50)
-    
+
     /// 30% foreground
     static let textPlaceholder = Color(white: 0.30)
-    
+
     /// Extremely subtle background for inputs
     static let searchBg = Color(white: 1.0, opacity: 0.08)
-    
+
     /// Sharp 1px borders
     static let divider = Color(white: 1.0, opacity: 0.15)
-    
+
     /// Card background (slightly lighter than pageBg)
     static let cardBg = Color(hex: 0x111111)
 
@@ -198,7 +198,7 @@ extension Color {
 
     /// Cyber Blue (WinSystem borders, primary highlights)
     static let primaryBlue = Color(hex: 0x00A3FF)
-    
+
     /// Terminal Green (Success, Hashes)
     static let terminalGreen = Color(hex: 0x00FF41)
 

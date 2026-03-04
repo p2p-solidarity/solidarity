@@ -6,18 +6,18 @@ struct TerminalWelcomeScreen: View {
   private let fullText = "Welcome to\nyour new social\nexperiment"
   @State private var showSubtitle = false
   @State private var showNext = false
-  
+
   var body: some View {
     VStack {
       Spacer()
-      
+
       VStack(alignment: .leading, spacing: 16) {
         Text(displayedText)
           .font(.system(size: 32, weight: .bold, design: .default))
           .foregroundColor(.white)
           .multilineTextAlignment(.leading)
           .frame(maxWidth: .infinity, alignment: .leading)
-        
+
         if showSubtitle {
           Text("It's good to have you here <3\nLet's set up your profile...")
             .font(.system(size: 14, weight: .regular))
@@ -27,9 +27,9 @@ struct TerminalWelcomeScreen: View {
         }
       }
       .padding(.horizontal, 32)
-      
+
       Spacer()
-      
+
       if showNext {
         Button(action: {
           HapticFeedbackManager.shared.heavyImpact()
@@ -52,11 +52,11 @@ struct TerminalWelcomeScreen: View {
     .background(Color.Theme.pageBg.ignoresSafeArea())
     .onAppear(perform: startTyping)
   }
-  
+
   private func startTyping() {
     let characters = Array(fullText)
     var index = 0
-    
+
     Timer.scheduledTimer(withTimeInterval: 0.05, repeats: true) { timer in
       if index < characters.count {
         displayedText.append(characters[index])
