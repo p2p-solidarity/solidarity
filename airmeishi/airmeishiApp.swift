@@ -47,6 +47,23 @@ struct airmeishiApp: App {
 
   /// Initialize app components and check permissions
   private func setupApp() {
+    // MARK: - UIAppearance (Dark theme)
+
+    let tabBarAppearance = UITabBarAppearance()
+    tabBarAppearance.configureWithOpaqueBackground()
+    tabBarAppearance.backgroundColor = UIColor(Color.Theme.pageBg)
+    UITabBar.appearance().standardAppearance = tabBarAppearance
+    UITabBar.appearance().scrollEdgeAppearance = tabBarAppearance
+
+    let navBarAppearance = UINavigationBarAppearance()
+    navBarAppearance.configureWithOpaqueBackground()
+    navBarAppearance.backgroundColor = UIColor(Color.Theme.pageBg)
+    navBarAppearance.titleTextAttributes = [.foregroundColor: UIColor.white]
+    navBarAppearance.largeTitleTextAttributes = [.foregroundColor: UIColor.white]
+    UINavigationBar.appearance().standardAppearance = navBarAppearance
+    UINavigationBar.appearance().scrollEdgeAppearance = navBarAppearance
+    UINavigationBar.appearance().compactAppearance = navBarAppearance
+
     // Check if PassKit is available
     if PKPassLibrary.isPassLibraryAvailable() {
       print("PassKit is available")

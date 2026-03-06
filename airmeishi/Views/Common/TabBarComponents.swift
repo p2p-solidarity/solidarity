@@ -6,6 +6,22 @@ enum MainAppTab: Int, CaseIterable {
   case people = 0
   case scan = 1
   case me = 2
+
+  var title: String {
+    switch self {
+    case .people: "Network"
+    case .scan: "Scan"
+    case .me: "Vault"
+    }
+  }
+
+  var systemImage: String {
+    switch self {
+    case .people: "person.2.fill"
+    case .scan: "viewfinder"
+    case .me: "vault.fill"
+    }
+  }
 }
 
 // MARK: - Peaceful Floating Tab Bar (1.1.1 Era)
@@ -15,26 +31,14 @@ struct CustomFloatingTabBar: View {
 
   var body: some View {
     HStack(spacing: 0) {
-      PeacefulTabButton(
-        systemName: "person.2.fill",
-        title: "Network",
-        isSelected: selectedTab == MainAppTab.people.rawValue,
-        action: { selectedTab = MainAppTab.people.rawValue }
-      )
-
-      PeacefulTabButton(
-        systemName: "viewfinder",
-        title: "Scan",
-        isSelected: selectedTab == MainAppTab.scan.rawValue,
-        action: { selectedTab = MainAppTab.scan.rawValue }
-      )
-
-      PeacefulTabButton(
-        systemName: "vault.fill",
-        title: "Vault",
-        isSelected: selectedTab == MainAppTab.me.rawValue,
-        action: { selectedTab = MainAppTab.me.rawValue }
-      )
+      ForEach(MainAppTab.allCases, id: \.rawValue) { tab in
+        PeacefulTabButton(
+          systemName: tab.systemImage,
+          title: tab.title,
+          isSelected: selectedTab == tab.rawValue,
+          action: { selectedTab = tab.rawValue }
+        )
+      }
     }
     .padding(.horizontal, 24)
     .padding(.vertical, 12)
