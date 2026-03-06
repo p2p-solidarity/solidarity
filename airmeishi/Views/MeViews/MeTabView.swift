@@ -1,7 +1,7 @@
 import SwiftUI
 
 struct MeTabView: View {
-  @ObservedObject private var identityCoordinator = IdentityCoordinator.shared
+  @EnvironmentObject private var identityCoordinator: IdentityCoordinator
   @StateObject private var cardManager = CardManager.shared
   @EnvironmentObject private var identityDataStore: IdentityDataStore
 
@@ -72,6 +72,12 @@ struct MeTabView: View {
       .sheet(isPresented: $showingProofSheet) {
         SelfInitiatedProofSheet(claimType: selectedClaim)
       }
+      .onAppear {
+        if identityCoordinator.state.currentProfile.activeDID == nil,
+           !identityCoordinator.state.isLoading {
+          identityCoordinator.refreshIdentity()
+        }
+      }
     }
   }
 
@@ -80,7 +86,16 @@ struct MeTabView: View {
   }
 
   private var displayDid: String {
-    identityCoordinator.state.currentProfile.activeDID?.did ?? "did:key:not_initialized"
+    if let did = identityCoordinator.state.currentProfile.activeDID?.did {
+      return did
+    }
+    if identityCoordinator.state.isLoading {
+      return "Loading..."
+    }
+    if let error = identityCoordinator.state.lastError {
+      return "Error: \(error.localizedDescription)"
+    }
+    return "Initializing..."
   }
 
   // MARK: - Subcomponents
@@ -153,13 +168,6 @@ struct MeTabView: View {
               ctaTitle: "Inspect"
             )
           }
-
-          // Demo: Inject a Revoked card just for visual flavor if there are any cards
-          RevokedCredentialCard(
-            title: "Anon Auth Token",
-            subtitle: "Expired Session Proof",
-            revokedDate: Date().addingTimeInterval(-86400 * 3)
-          )
         }
       }
     }

@@ -169,7 +169,7 @@ struct MatchingRootView: View {
   }
 
   private func satellite(size: CGFloat) -> some View {
-    Circle().fill(Color.Theme.textPrimary.opacity(0.8)).frame(width: size, height: size)
+    Circle().fill(Color.Theme.featureAccent.opacity(0.6)).frame(width: size, height: size)
   }
 
   private var incomingInvitationOverlay: some View {

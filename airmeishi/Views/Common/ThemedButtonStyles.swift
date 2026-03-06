@@ -5,24 +5,28 @@
 
 import SwiftUI
 
-// MARK: - Primary (Neo-Brutalist Dark)
+// MARK: - Primary (Adaptive Square Button)
 
 struct ThemedPrimaryButtonStyle: ButtonStyle {
+  @Environment(\.colorScheme) private var colorScheme
+
   func makeBody(configuration: Configuration) -> some View {
     configuration.label
       .font(.system(size: 16, weight: .medium, design: .default))
-      .foregroundColor(.white)
+      .foregroundColor(colorScheme == .dark ? .white : .white)
       .padding(.horizontal, 24)
       .padding(.vertical, 14)
       .frame(maxWidth: .infinity)
-      // Solid dark gray/black background
-      .background(Color(white: 0.15))
-      // 1px border like the screenshots
+      .background(colorScheme == .dark ? Color(white: 0.15) : Color(hex: 0x2A1A2E))
       .overlay(
         Rectangle()
-          .stroke(Color.white.opacity(0.2), lineWidth: 1)
+          .stroke(
+            colorScheme == .dark
+              ? Color.white.opacity(0.2)
+              : Color(hex: 0x2A1A2E).opacity(0.3),
+            lineWidth: 1
+          )
       )
-      // Sharp corners
       .clipShape(Rectangle())
       .scaleEffect(configuration.isPressed ? 0.98 : 1)
       .animation(.spring(response: 0.15, dampingFraction: 1), value: configuration.isPressed)
@@ -55,6 +59,8 @@ struct ThemedInvertedButtonStyle: ButtonStyle {
 // MARK: - Secondary (Translucent + Border)
 
 struct ThemedSecondaryButtonStyle: ButtonStyle {
+  @Environment(\.colorScheme) private var colorScheme
+
   func makeBody(configuration: Configuration) -> some View {
     configuration.label
       .font(.system(size: 16, weight: .regular, design: .default))
@@ -62,7 +68,7 @@ struct ThemedSecondaryButtonStyle: ButtonStyle {
       .padding(.horizontal, 24)
       .padding(.vertical, 14)
       .frame(maxWidth: .infinity)
-      .background(Color.Theme.cardBg)
+      .background(Color.Theme.cardSurface(for: colorScheme))
       .overlay(
         Rectangle()
           .stroke(Color.Theme.divider, lineWidth: 1)

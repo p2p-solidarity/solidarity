@@ -410,10 +410,18 @@ final class IdentityCoordinator: ObservableObject {
   private func loadIdentity(context: LAContext?) async {
     await setLoading(true)
 
+    print("[IdentityCoordinator] loadIdentity started")
     let descriptorResult = didService.currentDescriptor(context: context)
     let cachedDocs = cacheStore.loadDocuments()
     let cachedJwks = cacheStore.loadJwks()
     let identity = semaphoreManager.getIdentity() ?? (try? semaphoreManager.loadOrCreateIdentity())
+
+    switch descriptorResult {
+    case .success(let descriptor):
+      print("[IdentityCoordinator] DID loaded successfully: \(descriptor.did)")
+    case .failure(let error):
+      print("[IdentityCoordinator] DID loading failed: \(error)")
+    }
 
     await MainActor.run {
       var next = state

@@ -160,109 +160,214 @@ extension Color {
     static var secondaryBackground: Color { Color(.secondarySystemBackground) }
     static var groupedBackground: Color { Color(.systemGroupedBackground) }
 
-    // Soft rose accent used for primary CTA buttons (#E091B3)
-    static var accentRose: Color {
-      Color(hex: 0xE091B3)
-    }
+    // Soft rose accent used for primary CTA buttons
+    static var accentRose: Color { Color(hex: 0xC088A0) }
 
-    // MARK: - Design system colors (Dark Neo-Brutalist / Cyber Terminal)
+    // MARK: - Swiss Sunrise Palette (Light) + Deep Alpine Night (Dark)
 
-    /// Pure black / Obsidian background
-    static let pageBg = Color(hex: 0x050505)
+    /// Page background: soft lavender (light) / deep brown-purple (dark)
+    static let pageBg = Color(.init(dynamicProvider: { traits in
+      traits.userInterfaceStyle == .dark
+        ? UIColor(red: 0.10, green: 0.07, blue: 0.09, alpha: 1)  // #1A1218
+        : UIColor(red: 0.90, green: 0.86, blue: 0.90, alpha: 1)  // #E6DBE6
+    }))
 
     /// Dark UI elements
-    static let darkUI = Color(white: 0.15)
+    static let darkUI = Color(.init(dynamicProvider: { traits in
+      traits.userInterfaceStyle == .dark
+        ? UIColor(white: 0.15, alpha: 1)
+        : UIColor(red: 0.82, green: 0.78, blue: 0.82, alpha: 1)  // #D1C7D1
+    }))
 
-    /// Pure white foreground for high contrast
-    static let textPrimary = Color.white
+    /// Primary text: dark charcoal-purple (light) / off-white lavender (dark)
+    static let textPrimary = Color(.init(dynamicProvider: { traits in
+      traits.userInterfaceStyle == .dark
+        ? UIColor(red: 0.94, green: 0.91, blue: 0.94, alpha: 1)  // #F0E8F0
+        : UIColor(red: 0.16, green: 0.10, blue: 0.18, alpha: 1)  // #2A1A2E
+    }))
 
-    /// 70% foreground
-    static let textSecondary = Color(white: 0.70)
+    /// Secondary text
+    static let textSecondary = Color(.init(dynamicProvider: { traits in
+      traits.userInterfaceStyle == .dark
+        ? UIColor(red: 0.66, green: 0.60, blue: 0.66, alpha: 1)  // #A898A8
+        : UIColor(red: 0.42, green: 0.31, blue: 0.44, alpha: 1)  // #6A5070
+    }))
 
-    /// 50% foreground
-    static let textTertiary = Color(white: 0.50)
+    /// Tertiary text
+    static let textTertiary = Color(.init(dynamicProvider: { traits in
+      traits.userInterfaceStyle == .dark
+        ? UIColor(white: 0.50, alpha: 1)
+        : UIColor(red: 0.60, green: 0.53, blue: 0.60, alpha: 1)  // #998898
+    }))
 
-    /// 30% foreground
-    static let textPlaceholder = Color(white: 0.30)
+    /// Placeholder text
+    static let textPlaceholder = Color(.init(dynamicProvider: { traits in
+      traits.userInterfaceStyle == .dark
+        ? UIColor(white: 0.30, alpha: 1)
+        : UIColor(red: 0.72, green: 0.66, blue: 0.72, alpha: 1)  // #B8A8B8
+    }))
 
-    /// Extremely subtle background for inputs
-    static let searchBg = Color(white: 1.0, opacity: 0.08)
+    /// Search/input background
+    static let searchBg = Color(.init(dynamicProvider: { traits in
+      traits.userInterfaceStyle == .dark
+        ? UIColor(white: 1.0, alpha: 0.08)
+        : UIColor(red: 0.94, green: 0.91, blue: 0.94, alpha: 1)  // #F0E8F0
+    }))
 
-    /// Sharp 1px borders
-    static let divider = Color(white: 1.0, opacity: 0.15)
+    /// Divider / border
+    static let divider = Color(.init(dynamicProvider: { traits in
+      traits.userInterfaceStyle == .dark
+        ? UIColor(white: 1.0, alpha: 0.15)
+        : UIColor(red: 0.80, green: 0.74, blue: 0.80, alpha: 1)  // #CCBDCC
+    }))
 
-    /// Card background (slightly lighter than pageBg)
-    static let cardBg = Color(hex: 0x111111)
+    /// Card background
+    static let cardBg = Color(.init(dynamicProvider: { traits in
+      traits.userInterfaceStyle == .dark
+        ? UIColor(red: 0.07, green: 0.04, blue: 0.07, alpha: 1)  // #111111
+        : UIColor(white: 1.0, alpha: 1)
+    }))
 
     // MARK: - Primary / accent colors
 
-    /// Cyber Blue (WinSystem borders, primary highlights)
-    static let primaryBlue = Color(hex: 0x00A3FF)
+    /// Brand mauve (replaces cyber blue as primary accent)
+    static let primaryBlue = Color(.init(dynamicProvider: { traits in
+      traits.userInterfaceStyle == .dark
+        ? UIColor(red: 0.75, green: 0.53, blue: 0.63, alpha: 1)  // #C088A0
+        : UIColor(red: 0.54, green: 0.31, blue: 0.53, alpha: 1)  // #8A5088
+    }))
 
-    /// Terminal Green (Success, Hashes)
-    static let terminalGreen = Color(hex: 0x00FF41)
+    /// Success green
+    static let terminalGreen = Color(.init(dynamicProvider: { traits in
+      traits.userInterfaceStyle == .dark
+        ? UIColor(red: 0.0, green: 1.0, blue: 0.25, alpha: 1)
+        : UIColor(red: 0.20, green: 0.70, blue: 0.30, alpha: 1)  // #34B34D
+    }))
 
-    /// Dusty mauve for decorative elements (Keep for legacy compatibility, but darken)
-    static let dustyMauve = Color(hex: 0x5C3A4D)
+    /// Dusty mauve decorative
+    static let dustyMauve = Color(hex: 0x7A5070)
 
-    /// Danger / Warning Red (Errors, Revoked badges)
+    /// Danger red
     static let destructive = Color(hex: 0xFF3333)
 
-    /// Warm cream for high-contrast inverted cards
-    static let warmCream = Color(hex: 0xF9F9F6)
+    /// Warm cream for inverted cards
+    static let warmCream = Color(.init(dynamicProvider: { traits in
+      traits.userInterfaceStyle == .dark
+        ? UIColor(red: 0.97, green: 0.97, blue: 0.96, alpha: 1)
+        : UIColor(red: 0.16, green: 0.10, blue: 0.18, alpha: 1)  // inverted for light
+    }))
 
-    /// Feature accent
-    static let featureAccent = Color(hex: 0x00A3FF)
+    /// Feature accent (brand mauve)
+    static let featureAccent = Color(.init(dynamicProvider: { traits in
+      traits.userInterfaceStyle == .dark
+        ? UIColor(red: 0.75, green: 0.53, blue: 0.63, alpha: 1)  // #C088A0
+        : UIColor(red: 0.54, green: 0.31, blue: 0.53, alpha: 1)  // #8A5088
+    }))
+
+    // MARK: - Radar / sharing specific
+    /// Soft glow center for radar
+    static let radarGlow = Color(.init(dynamicProvider: { traits in
+      traits.userInterfaceStyle == .dark
+        ? UIColor(red: 0.75, green: 0.53, blue: 0.63, alpha: 0.3)
+        : UIColor(red: 0.80, green: 0.65, blue: 0.78, alpha: 0.4)
+    }))
+
+    /// Radar ring color
+    static let radarRing = Color(.init(dynamicProvider: { traits in
+      traits.userInterfaceStyle == .dark
+        ? UIColor(red: 0.75, green: 0.53, blue: 0.63, alpha: 0.25)
+        : UIColor(red: 0.70, green: 0.55, blue: 0.70, alpha: 0.25)
+    }))
 
     // MARK: - Overlay / popup
 
-    /// Popup overlay dimmer
-    static let overlayBg = Color(white: 0, opacity: 0.65)
+    static let overlayBg = Color(.init(dynamicProvider: { traits in
+      traits.userInterfaceStyle == .dark
+        ? UIColor(white: 0, alpha: 0.65)
+        : UIColor(red: 0.16, green: 0.10, blue: 0.18, alpha: 0.45)
+    }))
 
-    /// Popup card surface
-    static let popupSurface = Color(hex: 0x111111)
+    static let popupSurface = Color(.init(dynamicProvider: { traits in
+      traits.userInterfaceStyle == .dark
+        ? UIColor(red: 0.07, green: 0.04, blue: 0.07, alpha: 1)
+        : UIColor(white: 1.0, alpha: 1)
+    }))
 
     // MARK: - Tab accent colors
-    static let tabAccentMe = Color(white: 0.15)
+    static let tabAccentMe = Color(.init(dynamicProvider: { traits in
+      traits.userInterfaceStyle == .dark
+        ? UIColor(white: 0.15, alpha: 1)
+        : UIColor(red: 0.94, green: 0.91, blue: 0.94, alpha: 1)
+    }))
     static let tabAccentSakura = Color(hex: 0x222233)
     static let tabAccentGroups = Color(hex: 0x1A2228)
     static let tabAccentSettings = Color(white: 0.18)
 
-    // MARK: - Decorative blob / gradient colors (Converted to Dark theme equivalents)
-    static let blobCenter = Color(hex: 0x151515)
-    static let gradientPeach = Color(hex: 0x1A1512)
-    static let gradientLavender = Color(hex: 0x18121A)
-    static let gradientCream = Color(hex: 0x151210)
+    // MARK: - Decorative gradient colors
+    static let blobCenter = Color(.init(dynamicProvider: { traits in
+      traits.userInterfaceStyle == .dark
+        ? UIColor(red: 0.08, green: 0.06, blue: 0.08, alpha: 1)
+        : UIColor(red: 0.88, green: 0.82, blue: 0.88, alpha: 1)
+    }))
+    static let gradientPeach = Color(.init(dynamicProvider: { traits in
+      traits.userInterfaceStyle == .dark
+        ? UIColor(red: 0.10, green: 0.08, blue: 0.07, alpha: 1)
+        : UIColor(red: 0.92, green: 0.85, blue: 0.88, alpha: 1)  // #EBD9E0
+    }))
+    static let gradientLavender = Color(.init(dynamicProvider: { traits in
+      traits.userInterfaceStyle == .dark
+        ? UIColor(red: 0.09, green: 0.07, blue: 0.10, alpha: 1)
+        : UIColor(red: 0.86, green: 0.80, blue: 0.90, alpha: 1)  // #DBCCE6
+    }))
+    static let gradientCream = Color(.init(dynamicProvider: { traits in
+      traits.userInterfaceStyle == .dark
+        ? UIColor(red: 0.08, green: 0.07, blue: 0.06, alpha: 1)
+        : UIColor(red: 0.93, green: 0.90, blue: 0.92, alpha: 1)  // #EDE5EB
+    }))
 
-    // MARK: - Adaptive page gradient
+    // MARK: - Adaptive functions
 
     static func pageGradient(for scheme: ColorScheme) -> [Color] {
-      return [pageBg, pageBg, pageBg]
+      if scheme == .dark {
+        return [
+          Color(hex: 0x1A1218),
+          Color(hex: 0x16101A),
+          Color(hex: 0x120E16),
+        ]
+      } else {
+        return [
+          Color(hex: 0xE6DBE6),
+          Color(hex: 0xDED0DE),
+          Color(hex: 0xD8C8D8),
+        ]
+      }
     }
 
-    // Translucent card surface
     static func cardSurface(for scheme: ColorScheme) -> Color {
-      return Color.white.opacity(0.05)
+      scheme == .dark
+        ? Color.white.opacity(0.05)
+        : Color.white.opacity(0.85)
     }
 
-    // Subtle card border
     static func cardBorder(for scheme: ColorScheme) -> Color {
-      return Color.white.opacity(0.1)
+      scheme == .dark
+        ? Color.white.opacity(0.1)
+        : Color(hex: 0xC8B8C8).opacity(0.6)
     }
 
-    // Toolbar icon tint
     static func toolbarTint(for scheme: ColorScheme) -> Color {
-      return Color.white.opacity(0.8)
+      scheme == .dark
+        ? Color.white.opacity(0.8)
+        : Color(hex: 0x2A1A2E).opacity(0.8)
     }
 
-    /// 3-stop radial gradient for page backgrounds
     static func backgroundRadialGradient(for scheme: ColorScheme) -> RadialGradient {
       RadialGradient(
         colors: scheme == .dark
           ? [
-              Color(red: 0.14, green: 0.12, blue: 0.16),
-              Color(red: 0.11, green: 0.10, blue: 0.14),
-              Color(red: 0.09, green: 0.08, blue: 0.10),
+              Color(red: 0.14, green: 0.10, blue: 0.14),
+              Color(red: 0.11, green: 0.08, blue: 0.12),
+              Color(red: 0.08, green: 0.06, blue: 0.09),
             ]
           : [gradientPeach, gradientLavender, gradientCream],
         center: .center,

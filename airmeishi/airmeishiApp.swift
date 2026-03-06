@@ -20,6 +20,7 @@ struct airmeishiApp: App {
   @StateObject private var deepLinkManager = DeepLinkManager.shared
   @StateObject private var themeManager = ThemeManager.shared
   @StateObject private var identityDataStore = IdentityDataStore.shared
+  @StateObject private var identityCoordinator = IdentityCoordinator.shared
 
   var body: some Scene {
     WindowGroup {
@@ -30,6 +31,7 @@ struct airmeishiApp: App {
         .environmentObject(deepLinkManager)
         .environmentObject(themeManager)
         .environmentObject(identityDataStore)
+        .environmentObject(identityCoordinator)
         .preferredColorScheme(themeManager.appColorScheme.colorScheme)
         .onAppear {
           setupApp()
@@ -47,19 +49,15 @@ struct airmeishiApp: App {
 
   /// Initialize app components and check permissions
   private func setupApp() {
-    // MARK: - UIAppearance (Dark theme)
+    // MARK: - UIAppearance (Adaptive)
 
     let tabBarAppearance = UITabBarAppearance()
-    tabBarAppearance.configureWithOpaqueBackground()
-    tabBarAppearance.backgroundColor = UIColor(Color.Theme.pageBg)
+    tabBarAppearance.configureWithDefaultBackground()
     UITabBar.appearance().standardAppearance = tabBarAppearance
     UITabBar.appearance().scrollEdgeAppearance = tabBarAppearance
 
     let navBarAppearance = UINavigationBarAppearance()
-    navBarAppearance.configureWithOpaqueBackground()
-    navBarAppearance.backgroundColor = UIColor(Color.Theme.pageBg)
-    navBarAppearance.titleTextAttributes = [.foregroundColor: UIColor.white]
-    navBarAppearance.largeTitleTextAttributes = [.foregroundColor: UIColor.white]
+    navBarAppearance.configureWithDefaultBackground()
     UINavigationBar.appearance().standardAppearance = navBarAppearance
     UINavigationBar.appearance().scrollEdgeAppearance = navBarAppearance
     UINavigationBar.appearance().compactAppearance = navBarAppearance

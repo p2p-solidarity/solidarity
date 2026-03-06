@@ -4,22 +4,22 @@ import SwiftUI
 
 enum MainAppTab: Int, CaseIterable {
   case people = 0
-  case scan = 1
+  case sharing = 1
   case me = 2
 
   var title: String {
     switch self {
-    case .people: "Network"
-    case .scan: "Scan"
-    case .me: "Vault"
+    case .people: "People"
+    case .sharing: "Sharing"
+    case .me: "Me"
     }
   }
 
   var systemImage: String {
     switch self {
-    case .people: "person.2.fill"
-    case .scan: "viewfinder"
-    case .me: "vault.fill"
+    case .people: "hexagon.fill"
+    case .sharing: "dot.radiowaves.up.forward"
+    case .me: "diamond.fill"
     }
   }
 }
@@ -28,6 +28,7 @@ enum MainAppTab: Int, CaseIterable {
 
 struct CustomFloatingTabBar: View {
   @Binding var selectedTab: Int
+  @Environment(\.colorScheme) private var colorScheme
 
   var body: some View {
     HStack(spacing: 0) {
@@ -44,8 +45,12 @@ struct CustomFloatingTabBar: View {
     .padding(.vertical, 12)
     .background(
       Capsule()
-        .fill(Color.Theme.cardBg)
-        .shadow(color: Color.black.opacity(0.15), radius: 10, x: 0, y: 5)
+        .fill(Color.Theme.cardSurface(for: colorScheme))
+        .overlay(
+          Capsule()
+            .stroke(Color.Theme.cardBorder(for: colorScheme), lineWidth: 1)
+        )
+        .shadow(color: Color.Theme.dustyMauve.opacity(0.12), radius: 16, x: 0, y: 6)
     )
     .padding(.horizontal, 32)
   }
