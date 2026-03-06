@@ -17,9 +17,9 @@ enum MainAppTab: Int, CaseIterable {
 
   var systemImage: String {
     switch self {
-    case .people: "hexagon.fill"
+    case .people: "hexagon"
     case .sharing: "dot.radiowaves.up.forward"
-    case .me: "diamond.fill"
+    case .me: "diamond"
     }
   }
 }

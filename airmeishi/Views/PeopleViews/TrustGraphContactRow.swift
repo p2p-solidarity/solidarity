@@ -5,14 +5,18 @@ import SwiftUI
 struct TrustGraphContactRow: View {
   let contact: ContactEntity
 
-  // Fake properties for visual demo since CoreData might not have these yet
-  // In a real app, these would be derived from the ContactEntity's cryptographic proofs
-  private var mutualNodesCount: Int {
-    return Int.random(in: 0...5)
+  /// Whether both sides have exchange signatures (real cryptographic proof).
+  private var hasVerifiedExchange: Bool {
+    contact.exchangeSignature != nil && contact.myExchangeSignature != nil
   }
 
-  private var encounterCount: Int {
-    return Int.random(in: 1...4)
+  /// Verification level derived from real contact data.
+  private var verificationLevel: Int {
+    var level = 0
+    if contact.exchangeSignature != nil { level += 1 }
+    if contact.myExchangeSignature != nil { level += 1 }
+    if contact.didPublicKey != nil { level += 1 }
+    return level
   }
 
   var body: some View {
@@ -52,8 +56,8 @@ struct TrustGraphContactRow: View {
 
         Spacer()
 
-        // Evolving Trust Badge
-        EvolvingTrustBadge(encounterCount: encounterCount)
+        // Trust Badge based on real verification data
+        EvolvingTrustBadge(verificationLevel: verificationLevel)
       }
       .padding(16)
 
@@ -98,15 +102,9 @@ struct TrustGraphContactRow: View {
 
         Spacer()
 
-        if mutualNodesCount > 0 {
-          Text("[ Mutual Nodes: \(mutualNodesCount) ]")
-            .font(.system(size: 10, weight: .bold, design: .monospaced))
-            .foregroundColor(Color.Theme.terminalGreen)
-        } else {
-          Text("[ Isolated Node ]")
-            .font(.system(size: 10, weight: .bold, design: .monospaced))
-            .foregroundColor(Color.Theme.textTertiary)
-        }
+        Text("[ \(contact.source.uppercased()) ]")
+          .font(.system(size: 10, weight: .bold, design: .monospaced))
+          .foregroundColor(hasVerifiedExchange ? Color.Theme.terminalGreen : Color.Theme.textTertiary)
       }
       .padding(.horizontal, 16)
       .padding(.vertical, 12)
@@ -127,23 +125,25 @@ struct TrustGraphContactRow: View {
   }
 }
 
-/// A badge that changes complexity based on the number of encounters (signatures) with this person.
+/// A badge that reflects the real verification level based on cryptographic proof data.
+/// Level 0: No proof — no badge shown.
+/// Level 1: Partial proof (one-way signature).
+/// Level 2: Mutual exchange signatures.
+/// Level 3: Full DID-authenticated exchange.
 struct EvolvingTrustBadge: View {
-  let encounterCount: Int
+  let verificationLevel: Int
 
   var body: some View {
     VStack(alignment: .trailing, spacing: 4) {
-      if encounterCount >= 3 {
-        // High Trust: ASCII Art / Complex
+      if verificationLevel >= 3 {
         Text("(★)")
           .font(.system(size: 16, weight: .black, design: .monospaced))
           .foregroundColor(Color.Theme.terminalGreen)
           .shadow(color: Color.Theme.terminalGreen.opacity(0.5), radius: 4)
-        Text("VERIFIED x\(encounterCount)")
+        Text("DID VERIFIED")
           .font(.system(size: 9, weight: .bold, design: .monospaced))
           .foregroundColor(Color.Theme.terminalGreen)
-      } else if encounterCount == 2 {
-        // Medium Trust: Brighter, solid
+      } else if verificationLevel == 2 {
         Text("VERIFIED")
           .font(.system(size: 10, weight: .bold, design: .monospaced))
           .padding(.horizontal, 6)
@@ -151,15 +151,15 @@ struct EvolvingTrustBadge: View {
           .background(Color.Theme.primaryBlue.opacity(0.2))
           .foregroundColor(Color.Theme.primaryBlue)
           .overlay(Rectangle().stroke(Color.Theme.primaryBlue, lineWidth: 1))
-      } else {
-        // Basic Trust: Standard 1px box
-        Text("VERIFIED")
+      } else if verificationLevel == 1 {
+        Text("PARTIAL")
           .font(.system(size: 10, weight: .bold, design: .monospaced))
           .padding(.horizontal, 6)
           .padding(.vertical, 2)
           .foregroundColor(Color.Theme.textSecondary)
           .overlay(Rectangle().stroke(Color.Theme.divider, lineWidth: 1))
       }
+      // Level 0: no badge shown
     }
   }
 }

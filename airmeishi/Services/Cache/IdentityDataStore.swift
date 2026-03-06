@@ -1,3 +1,4 @@
+import Combine
 import Foundation
 import SwiftData
 
@@ -22,6 +23,8 @@ final class IdentityDataStore: ObservableObject {
   let modelContext: ModelContext
 
   private let migrationMarker = "solidarity.identity.swiftdata.migrated.v1"
+  private let refreshSubject = PassthroughSubject<Void, Never>()
+  private var refreshCancellable: AnyCancellable?
 
   private init() {
     let url = URL.documentsDirectory.appending(path: "SolidarityIdentity_v1.store")
@@ -50,10 +53,21 @@ final class IdentityDataStore: ObservableObject {
       }
     }
 
-    refreshAll()
+    // Debounce rapid writes — coalesce refreshes within 100ms
+    refreshCancellable = refreshSubject
+      .debounce(for: .milliseconds(100), scheduler: RunLoop.main)
+      .sink { [weak self] in
+        self?.performRefresh()
+      }
+
+    performRefresh()
   }
 
   func refreshAll() {
+    refreshSubject.send()
+  }
+
+  private func performRefresh() {
     contacts = fetch(FetchDescriptor<ContactEntity>())
     identityCards = fetch(FetchDescriptor<IdentityCardEntity>())
     provableClaims = fetch(FetchDescriptor<ProvableClaimEntity>())
@@ -62,7 +76,7 @@ final class IdentityDataStore: ObservableObject {
 
   func runInitialMigrationIfNeeded() {
     guard !UserDefaults.standard.bool(forKey: migrationMarker) else {
-      refreshAll()
+      performRefresh()
       return
     }
 
@@ -71,7 +85,7 @@ final class IdentityDataStore: ObservableObject {
 
     try? modelContext.save()
     UserDefaults.standard.set(true, forKey: migrationMarker)
-    refreshAll()
+    performRefresh()
   }
 
   func upsertContact(_ contact: ContactEntity) {

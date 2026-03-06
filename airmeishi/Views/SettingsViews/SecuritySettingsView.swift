@@ -61,12 +61,16 @@ struct SecuritySettingsView: View {
         alertMessage = error.localizedDescription
         showingAlert = true
       case .success:
+        // Clear cached DID descriptor before rotation
+        IdentityCacheStore().clearDescriptor()
         switch KeychainService.shared.resetSigningKey() {
         case .failure(let error):
           alertMessage = error.localizedDescription
           showingAlert = true
         case .success:
           _ = KeychainService.shared.ensurePairwiseKey(for: "solidarity.gg")
+          // Refresh identity to derive and cache new DID
+          IdentityCoordinator.shared.refreshIdentity()
           alertMessage = String(localized: "Master key rotated successfully.")
           showingAlert = true
         }

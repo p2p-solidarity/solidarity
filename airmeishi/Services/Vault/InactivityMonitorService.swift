@@ -57,6 +57,11 @@ final class InactivityMonitorService: ObservableObject {
         requestNotificationPermission()
     }
 
+    deinit {
+        checkTimer?.invalidate()
+        checkTimer = nil
+    }
+
     // MARK: - Public API
 
     /// Record user activity (call on meaningful interactions)

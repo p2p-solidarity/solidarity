@@ -6,6 +6,7 @@ final class IdentityCacheStore {
   private let service = "com.kidneyweakx.airmeishi.identity-cache"
   private let documentsAccount = "did-documents"
   private let jwkAccount = "public-jwks"
+  private let descriptorAccount = "active-did-descriptor"
   private let queue = DispatchQueue(label: "com.kidneyweakx.airmeishi.identity-cache", qos: .utility)
 
   func loadDocuments() -> [String: DIDDocument] {
@@ -35,6 +36,41 @@ final class IdentityCacheStore {
     queue.async {
       guard let data = try? JSONEncoder().encode(jwks) else { return }
       self.store(data, for: self.jwkAccount)
+    }
+  }
+
+  // MARK: - DID Descriptor Cache
+
+  func loadDescriptor() -> DIDDescriptor? {
+    queue.sync {
+      guard let cached = data(for: descriptorAccount),
+            let container = try? JSONDecoder().decode(CachedDescriptor.self, from: cached)
+      else { return nil }
+      return DIDDescriptor(
+        did: container.did,
+        verificationMethodId: container.verificationMethodId,
+        jwk: container.jwk
+      )
+    }
+  }
+
+  func saveDescriptor(_ descriptor: DIDDescriptor) {
+    queue.async {
+      let container = CachedDescriptor(
+        did: descriptor.did,
+        verificationMethodId: descriptor.verificationMethodId,
+        jwk: descriptor.jwk
+      )
+      guard let data = try? JSONEncoder().encode(container) else { return }
+      self.store(data, for: self.descriptorAccount)
+      print("[IdentityCacheStore] Cached DID descriptor: \(descriptor.did)")
+    }
+  }
+
+  func clearDescriptor() {
+    queue.async {
+      self.delete(for: self.descriptorAccount)
+      print("[IdentityCacheStore] Cleared cached DID descriptor")
     }
   }
 
@@ -71,4 +107,21 @@ final class IdentityCacheStore {
       SecItemUpdate(query as CFDictionary, attributes as CFDictionary)
     }
   }
+
+  private func delete(for account: String) {
+    let query: [String: Any] = [
+      kSecClass as String: kSecClassGenericPassword,
+      kSecAttrService as String: service,
+      kSecAttrAccount as String: account,
+    ]
+    SecItemDelete(query as CFDictionary)
+  }
+}
+
+// MARK: - Codable container for DIDDescriptor
+
+private struct CachedDescriptor: Codable {
+  let did: String
+  let verificationMethodId: String
+  let jwk: PublicKeyJWK
 }

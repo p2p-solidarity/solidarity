@@ -9,6 +9,7 @@ import CryptoKit
 import Foundation
 import LocalAuthentication
 import Security
+import SpruceIDMobileSdkRs
 
 extension KeychainService {
 
@@ -94,15 +95,18 @@ extension KeychainService {
         let status = SecItemAdd(addQuery as CFDictionary, nil)
         if status == errSecSuccess {
           print("[KeychainService] Successfully stored simulator key")
+          cachePublicJWK(from: key)
           return .success(())
         } else if status == errSecDuplicateItem {
           // If duplicate, that means it's already there somehow, so success
           print("[KeychainService] Key already exists (duplicate), considering success")
+          cachePublicJWK(from: key)
           return .success(())
         } else {
           print("[KeychainService] Failed to store key: \(statusDescription(status)), using in-memory key")
           // Store the key in a static variable as fallback
           Self.simulatorInMemoryKey = key
+          cachePublicJWK(from: key)
           return .success(())
         }
       }
@@ -119,6 +123,7 @@ extension KeychainService {
       if let key = SecKeyCreateRandomKey(attributes as CFDictionary, nil) {
         print("[KeychainService] Successfully created in-memory key")
         Self.simulatorInMemoryKey = key
+        cachePublicJWK(from: key)
         return .success(())
       }
 
@@ -159,8 +164,9 @@ extension KeychainService {
       }
 
       var error: Unmanaged<CFError>?
-      if let _ = SecKeyCreateRandomKey(attributes as CFDictionary, &error) {
+      if let key = SecKeyCreateRandomKey(attributes as CFDictionary, &error) {
         print("[KeychainService] Successfully generated persistent device key")
+        cachePublicJWK(from: key)
         return .success(())
       }
 
@@ -210,14 +216,17 @@ extension KeychainService {
         let addStatus = SecItemAdd(addQuery as CFDictionary, nil)
         if addStatus == errSecSuccess {
           print("[KeychainService] Successfully stored session key in keychain")
+          cachePublicJWK(from: sessionKey)
           return .success(())
         } else if addStatus == errSecDuplicateItem {
           print("[KeychainService] Session key already exists (duplicate), considering success")
+          cachePublicJWK(from: sessionKey)
           return .success(())
         } else {
           print("[KeychainService] Failed to store session key: \(statusDescription(addStatus)), using in-memory key")
           // Store the key in a static variable as fallback
           Self.deviceInMemoryKey = sessionKey
+          cachePublicJWK(from: sessionKey)
           return .success(())
         }
       }
@@ -227,6 +236,7 @@ extension KeychainService {
       if let inMemoryKey = SecKeyCreateRandomKey(sessionAttributes as CFDictionary, nil) {
         print("[KeychainService] Successfully created in-memory key as fallback")
         Self.deviceInMemoryKey = inMemoryKey
+        cachePublicJWK(from: inMemoryKey)
         return .success(())
       }
 
@@ -238,6 +248,43 @@ extension KeychainService {
       )
     }
   #endif
+
+  /// Immediately cache the public JWK from a freshly generated key reference.
+  /// This avoids needing biometric auth later just to display the DID.
+  private func cachePublicJWK(from privateKey: SecKey) {
+    guard let publicKey = SecKeyCopyPublicKey(privateKey) else {
+      print("[KeychainService] cachePublicJWK: failed to derive public key")
+      return
+    }
+    var error: Unmanaged<CFError>?
+    guard let data = SecKeyCopyExternalRepresentation(publicKey, &error) as Data?,
+          data.count == 65
+    else {
+      print("[KeychainService] cachePublicJWK: failed to export public key")
+      return
+    }
+    let x = data.subdata(in: 1..<33)
+    let y = data.subdata(in: 33..<65)
+    let jwk = PublicKeyJWK(
+      kty: "EC", crv: "P-256", alg: "ES256",
+      x: x.base64URLEncodedString(),
+      y: y.base64URLEncodedString()
+    )
+    do {
+      let didUtils = DidMethodUtils(method: .key)
+      let did = try didUtils.didFromJwk(jwk: try jwk.jsonString())
+      let descriptor = DIDDescriptor(
+        did: did,
+        verificationMethodId: "\(did)#keys-1",
+        jwk: jwk
+      )
+      IdentityCacheStore().saveDescriptor(descriptor)
+      print("[KeychainService] cachePublicJWK: cached DID \(did)")
+    } catch {
+      print("[KeychainService] cachePublicJWK: DID derivation failed: \(error)")
+      // Still useful to cache even without DID for future use
+    }
+  }
 
   private func deleteAllKeysWithTag() {
     // Try multiple deletion strategies to ensure complete cleanup

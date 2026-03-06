@@ -130,6 +130,7 @@ final class KeychainService {
     let query: [String: Any] = [
       kSecClass as String: kSecClassKey,
       kSecAttrApplicationTag as String: keyTag,
+      kSecAttrSynchronizable as String: kSecAttrSynchronizableAny,
     ]
 
     // First attempt to delete without specifying key type (broader match)
@@ -173,7 +174,7 @@ final class KeychainService {
 
   // MARK: - Private helpers
 
-  /// Checks if a key logic with our tag exists in the keychain.
+  /// Checks if a key with our tag exists in the keychain.
   func keyExists() -> Bool {
     // Check if we have an in-memory key first
     #if targetEnvironment(simulator)
@@ -182,11 +183,12 @@ final class KeychainService {
       if Self.deviceInMemoryKey != nil { return true }
     #endif
 
-    // Otherwise check keychain
+    // Otherwise check keychain (include synchronizable to find all keys)
     let query: [String: Any] = [
       kSecClass as String: kSecClassKey,
       kSecAttrApplicationTag as String: keyTag,
       kSecAttrKeyType as String: kSecAttrKeyTypeECSECPrimeRandom,
+      kSecAttrSynchronizable as String: kSecAttrSynchronizableAny,
       kSecMatchLimit as String: kSecMatchLimitOne,
     ]
 
@@ -203,10 +205,11 @@ final class KeychainService {
         return .success(inMemoryKey)
       }
 
-      // Try to get from keychain
+      // Try to get from keychain (include synchronizable to find all keys)
       let query: [String: Any] = [
         kSecClass as String: kSecClassKey,
         kSecAttrApplicationTag as String: keyTag,
+        kSecAttrSynchronizable as String: kSecAttrSynchronizableAny,
         kSecReturnRef as String: true,
       ]
 
@@ -219,7 +222,25 @@ final class KeychainService {
         return .success(key)
       }
 
-      return .failure(.keyManagementError("Key not found in simulator keychain and no in-memory key available"))
+      // Key not found — attempt to generate on the fly
+      print("[KeychainService] Simulator key not found (status: \(statusDescription(status))), generating...")
+      switch ensureSigningKey() {
+      case .failure(let error):
+        return .failure(error)
+      case .success:
+        // Check in-memory key first (ensureSigningKey may have set it)
+        if let inMemoryKey = Self.simulatorInMemoryKey {
+          return .success(inMemoryKey)
+        }
+        // Retry keychain
+        var retryItem: CFTypeRef?
+        let retryStatus = SecItemCopyMatching(query as CFDictionary, &retryItem)
+        if retryStatus == errSecSuccess {
+          // swiftlint:disable:next force_cast
+          return .success(retryItem as! SecKey)
+        }
+        return .failure(.keyManagementError("Key not found after generation (status: \(statusDescription(retryStatus)))"))
+      }
 
     #else
       // Device code with authentication handling
@@ -227,6 +248,7 @@ final class KeychainService {
         kSecClass as String: kSecClassKey,
         kSecAttrApplicationTag as String: keyTag,
         kSecAttrKeyType as String: kSecAttrKeyTypeECSECPrimeRandom,
+        kSecAttrSynchronizable as String: kSecAttrSynchronizableAny,
         kSecReturnRef as String: true,
       ]
 
