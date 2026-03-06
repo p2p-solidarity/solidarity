@@ -238,6 +238,9 @@ extension ProximityManager {
     stopHeartbeat()
     cancelAllRetries()
 
+    // Tear down UWB session
+    NearbyInteractionManager.shared.invalidateSession()
+
     session.disconnect()
     nearbyPeers.removeAll()
     connectionStatus = .disconnected

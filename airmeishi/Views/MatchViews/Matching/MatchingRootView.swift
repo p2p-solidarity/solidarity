@@ -10,6 +10,7 @@ import SwiftUI
 struct MatchingRootView: View {
   @StateObject private var proximityManager = ProximityManager.shared
   @StateObject private var cardManager = CardManager.shared
+  @StateObject private var niManager = NearbyInteractionManager.shared
   @ObservedObject private var webRTCManager = WebRTCManager.shared
   @Environment(\.colorScheme) private var colorScheme
   @State private var rotateOuter = false
@@ -46,8 +47,9 @@ struct MatchingRootView: View {
       rotateOuter = true
       rotateMiddle = true
       rotateInner = true
+      setupSpatialTrigger()
     }
-    //        .overlay(shareButton)
+    .overlay(spatialStatusOverlay)
     .overlay(sakuraOverlay)
     .overlay(latestMessageOverlay)
     .overlay(incomingInvitationOverlay)
@@ -187,6 +189,74 @@ struct MatchingRootView: View {
         )
         .transition(.opacity)
       }
+    }
+  }
+
+  // MARK: - UWB Spatial Trigger
+
+  private func setupSpatialTrigger() {
+    niManager.onSpatialTrigger = { [weak proximityManager] peerID in
+      guard let pm = proximityManager,
+            let card = pm.currentCard else {
+        NearbyInteractionManager.shared.exchangeDidFail()
+        return
+      }
+      pm.sendCard(card, to: peerID, sharingLevel: pm.currentSharingLevel)
+      NearbyInteractionManager.shared.exchangeDidComplete()
+    }
+  }
+
+  private var spatialStatusOverlay: some View {
+    VStack {
+      if niManager.isSupported, niManager.spatialState.isActive {
+        HStack(spacing: 8) {
+          Circle()
+            .fill(spatialStateColor)
+            .frame(width: 8, height: 8)
+          Text(spatialStateLabel)
+            .font(.caption)
+            .fontWeight(.medium)
+            .foregroundColor(Color.Theme.textPrimary)
+          if let distance = niManager.currentDistance {
+            Text(String(format: "%.0f cm", distance * 100))
+              .font(.caption2)
+              .foregroundColor(Color.Theme.textSecondary)
+          }
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 6)
+        .background(
+          Capsule()
+            .fill(Color.Theme.cardSurface(for: colorScheme))
+            .overlay(Capsule().stroke(spatialStateColor.opacity(0.5), lineWidth: 1))
+        )
+        .transition(.scale.combined(with: .opacity))
+      }
+      Spacer()
+    }
+    .padding(.top, 8)
+    .animation(.spring(), value: niManager.spatialState)
+  }
+
+  private var spatialStateColor: Color {
+    switch niManager.spatialState {
+    case .approaching: return .orange
+    case .confirmed, .exchanging: return .green
+    default: return .gray
+    }
+  }
+
+  private var spatialStateLabel: String {
+    switch niManager.spatialState {
+    case .approaching(let frames):
+      let total = niManager.config.requiredFrames
+      return "Detecting... (\(frames)/\(total))"
+    case .confirmed:
+      return "Contact!"
+    case .exchanging:
+      return "Exchanging..."
+    default:
+      return niManager.spatialState.displayName
     }
   }
 }

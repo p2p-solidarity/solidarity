@@ -55,14 +55,17 @@ extension ProximityManager: MCSessionDelegate {
         self.pendingGroupInvite = nil
       }
 
-      // Trigger WebRTC setup
+      // Trigger WebRTC setup + UWB session
       if state == .connected {
         self.handleNewConnection(peerID)
+        NearbyInteractionManager.shared.startSession(with: peerID, via: self)
       }
     }
   }
 
   func session(_ session: MCSession, didReceive data: Data, fromPeer peerID: MCPeerID) {
+    // UWB: intercept NI discovery token (must be checked before other payload decoders)
+    if handleNIDiscoveryToken(data, from: peerID) { return }
     if handleWebRTCSignaling(data, from: peerID) { return }
     if handleGroupInvitePayload(data, from: peerID) { return }
     if handleGroupJoinPayload(data) { return }
@@ -70,6 +73,15 @@ extension ProximityManager: MCSessionDelegate {
     if handleExchangeAcceptPayload(data) { return }
     if isHeartbeatPayload(data) { return }
     handleProximityCardPayload(data, from: peerID)
+  }
+
+  private func handleNIDiscoveryToken(_ data: Data, from peerID: MCPeerID) -> Bool {
+    guard let token = NearbyInteractionManager.decodeDiscoveryToken(from: data) else {
+      return false
+    }
+    print("[NI] Received discovery token from \(peerID.displayName)")
+    NearbyInteractionManager.shared.activateRanging(with: token)
+    return true
   }
 
   private func handleGroupInvitePayload(_ data: Data, from peerID: MCPeerID) -> Bool {

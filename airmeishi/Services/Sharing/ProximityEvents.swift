@@ -18,6 +18,9 @@ extension Notification.Name {
 
   // New: secure Sakura message arrived (after /sync + decrypt)
   static let secureMessageReceived = Notification.Name("secureMessageReceived")
+
+  // UWB spatial trigger fired (contact confirmed via Nearby Interaction)
+  static let spatialTriggerFired = Notification.Name("spatialTriggerFired")
 }
 
 enum ProximityEventKey {
