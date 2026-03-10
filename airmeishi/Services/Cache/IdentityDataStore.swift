@@ -171,6 +171,32 @@ final class IdentityDataStore: ObservableObject {
     refreshAll()
   }
 
+  func deleteContact(by id: String) {
+    guard let contact = findContact(by: id) else { return }
+    modelContext.delete(contact)
+    try? modelContext.save()
+    refreshAll()
+  }
+
+  func clearAllContacts() {
+    for contact in contacts {
+      modelContext.delete(contact)
+    }
+    try? modelContext.save()
+    refreshAll()
+  }
+
+  func clearAllIdentityData() {
+    for card in identityCards {
+      modelContext.delete(card)
+    }
+    for claim in provableClaims {
+      modelContext.delete(claim)
+    }
+    try? modelContext.save()
+    refreshAll()
+  }
+
   func removePassportCredentials() {
     let passportCards = identityCards.filter { $0.type == "passport" }
     for card in passportCards {

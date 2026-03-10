@@ -87,6 +87,9 @@ struct AdvancedSettingsView: View {
         showingAlert = true
       case .success:
         _ = StorageManager.shared.clearAllData()
+        IdentityDataStore.shared.clearAllContacts()
+        IdentityDataStore.shared.clearAllIdentityData()
+        IdentityCacheStore().clearDescriptor()
         UserDefaults.standard.removeObject(forKey: "solidarity.onboarding.completed")
         UserDefaults.standard.removeObject(forKey: "solidarity.identity.swiftdata.migrated.v1")
         alertMessage = String(localized: "Local data reset completed.")

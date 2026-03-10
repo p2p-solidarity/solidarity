@@ -5,6 +5,8 @@ struct PeopleListView: View {
   @State private var searchQuery = ""
   @State private var showingExchangeFlow = false
   @State private var showingVCFPicker = false
+  @State private var contactToDelete: ContactEntity?
+  @State private var showingDeleteConfirm = false
 
   private var filteredContacts: [ContactEntity] {
     let all = identityDataStore.contacts.sorted { $0.receivedAt > $1.receivedAt }
@@ -79,56 +81,23 @@ struct PeopleListView: View {
     }) {
       ProximitySharingView()
     }
-  }
-
-  // MARK: - Sharing Entry Card (Radar Match)
-
-  private var sharingEntryCard: some View {
-    Button {
-      showingExchangeFlow = true
-    } label: {
-      HStack(spacing: 14) {
-        // Animated Radar Icon Placeholder
-        ZStack {
-          Circle()
-            .stroke(Color.Theme.terminalGreen.opacity(0.3), lineWidth: 1)
-            .frame(width: 44, height: 44)
-          Circle()
-            .fill(Color.Theme.terminalGreen)
-            .frame(width: 8, height: 8)
-          // Simplified radar line
-          Rectangle()
-            .fill(Color.Theme.terminalGreen)
-            .frame(width: 22, height: 1)
-            .offset(x: 11)
-            .rotationEffect(.degrees(-45))
+    .confirmationDialog(
+      "Delete \(contactToDelete?.name ?? "contact")?",
+      isPresented: $showingDeleteConfirm,
+      titleVisibility: .visible
+    ) {
+      Button("Delete", role: .destructive) {
+        if let contact = contactToDelete {
+          identityDataStore.deleteContact(by: contact.id)
         }
-
-        VStack(alignment: .leading, spacing: 4) {
-          Text("[ SCAN RADAR ]")
-            .font(.system(size: 14, weight: .bold, design: .monospaced))
-            .foregroundColor(Color.Theme.terminalGreen)
-          Text("Initiate proximity handshake protocol")
-            .font(.system(size: 12, weight: .regular))
-            .foregroundColor(Color.Theme.textSecondary)
-        }
-
-        Spacer(minLength: 0)
-
-        Image(systemName: "circle.dashed")
-          .font(.system(size: 18, weight: .bold))
-          .foregroundColor(Color.Theme.primaryBlue)
+        contactToDelete = nil
       }
-      .padding(16)
-      .background(Color.Theme.searchBg)
-      .overlay(
-        Rectangle()
-          .stroke(Color.Theme.terminalGreen, lineWidth: 1)
-      )
+      Button("Cancel", role: .cancel) {
+        contactToDelete = nil
+      }
+    } message: {
+      Text("This contact will be permanently removed.")
     }
-    .buttonStyle(.plain)
-    .padding(.horizontal, 16)
-    .padding(.bottom, 16)
   }
 
   // MARK: - Empty State
@@ -136,9 +105,6 @@ struct PeopleListView: View {
   private var emptyState: some View {
     VStack(spacing: 16) {
       Spacer()
-
-      sharingEntryCard
-        .padding(.horizontal, 16)
 
       VStack(spacing: 12) {
         Image(systemName: "person.2")
@@ -179,8 +145,6 @@ struct PeopleListView: View {
   private var listContent: some View {
     ScrollView {
       VStack(alignment: .leading, spacing: 12) {
-        sharingEntryCard
-
         if !verifiedContacts.isEmpty {
           sectionTitle(String(localized: "Verified"))
           ForEach(verifiedContacts, id: \.id) { contact in
@@ -210,6 +174,14 @@ struct PeopleListView: View {
 
   private func contactRow(_ contact: ContactEntity) -> some View {
     TrustGraphContactRow(contact: contact)
+      .contextMenu {
+        Button(role: .destructive) {
+          contactToDelete = contact
+          showingDeleteConfirm = true
+        } label: {
+          Label("Delete", systemImage: "trash")
+        }
+      }
   }
 
   private func formatDate(_ date: Date) -> String {

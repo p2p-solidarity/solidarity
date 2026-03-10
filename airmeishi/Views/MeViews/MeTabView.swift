@@ -165,7 +165,11 @@ struct MeTabView: View {
               title: card.title,
               trustText: card.trustLevel == "green" ? "🟢 LEVEL 3 TRUST" : "⚪️ LEVEL 1",
               subtitle: card.issuerType,
-              ctaTitle: "Inspect"
+              ctaTitle: "Regenerate",
+              onCTA: card.type == "passport" ? {
+                identityDataStore.removePassportCredentials()
+                showingPassportFlow = true
+              } : nil
             )
           }
         }
@@ -303,6 +307,7 @@ private struct IdentityStatusCard: View {
   let trustText: String
   let subtitle: String
   let ctaTitle: String
+  var onCTA: (() -> Void)?
 
   var body: some View {
     VStack(alignment: .leading, spacing: 12) {
@@ -311,9 +316,17 @@ private struct IdentityStatusCard: View {
           .font(.system(size: 16, weight: .bold))
           .foregroundColor(Color.Theme.textPrimary)
         Spacer()
-        Text(ctaTitle)
-          .font(.system(size: 10, weight: .bold, design: .monospaced))
-          .foregroundColor(Color.Theme.primaryBlue)
+        if let onCTA {
+          Button(action: onCTA) {
+            Text(ctaTitle)
+              .font(.system(size: 10, weight: .bold, design: .monospaced))
+              .foregroundColor(.black)
+              .padding(.horizontal, 10)
+              .padding(.vertical, 6)
+              .background(Color.Theme.terminalGreen)
+          }
+          .buttonStyle(.plain)
+        }
       }
 
       Rectangle()

@@ -7,7 +7,6 @@ struct QRSharingView: View {
   @Environment(\.dismiss) private var dismiss
   @StateObject private var qrCodeManager = QRCodeManager.shared
 
-  @State private var mode: QRShareMode = .solidarity
   @State private var generatedQRImage: UIImage?
   @State private var countdownSeconds = 45
   @State private var showingShareSheet = false
@@ -19,7 +18,6 @@ struct QRSharingView: View {
   var body: some View {
     NavigationStack {
       VStack(spacing: 18) {
-        modePicker
         qrCard
         countdownBadge
         controls
@@ -36,10 +34,6 @@ struct QRSharingView: View {
         }
       }
       .onAppear {
-        refreshQRCode()
-      }
-      .onChange(of: mode) { _, _ in
-        countdownSeconds = 45
         refreshQRCode()
       }
       .onReceive(timer) { _ in
@@ -64,17 +58,9 @@ struct QRSharingView: View {
     }
   }
 
-  private var modePicker: some View {
-    Picker("Mode", selection: $mode) {
-      Text("Solidarity Scan").tag(QRShareMode.solidarity)
-      Text("Universal Verify").tag(QRShareMode.universal)
-    }
-    .pickerStyle(.segmented)
-  }
-
   private var qrCard: some View {
     VStack(spacing: 12) {
-      Text(mode.title)
+      Text("Universal Verification QR")
         .font(.subheadline.weight(.semibold))
         .foregroundColor(Color.Theme.textPrimary)
 
@@ -95,7 +81,7 @@ struct QRSharingView: View {
       .background(Color.white)
       .cornerRadius(12)
 
-      Text(mode.description)
+      Text("Verifier-compatible OID4VP style request.")
         .font(.caption)
         .foregroundColor(Color.Theme.textSecondary)
         .multilineTextAlignment(.center)
@@ -147,14 +133,8 @@ struct QRSharingView: View {
   }
 
   private func refreshQRCode() {
-    let result: CardResult<UIImage>
-    switch mode {
-    case .solidarity:
-      result = qrCodeManager.generateQRCode(for: businessCard, sharingLevel: .professional)
-    case .universal:
-      let payload = universalPayload()
-      result = qrCodeManager.generateQRCode(from: payload)
-    }
+    let payload = universalPayload()
+    let result = qrCodeManager.generateQRCode(from: payload)
 
     switch result {
     case .success(let image):
@@ -168,29 +148,6 @@ struct QRSharingView: View {
   private func universalPayload() -> String {
     let nonce = UUID().uuidString.replacingOccurrences(of: "-", with: "")
     return "openid4vp://present?claim=profile_card&nonce=\(nonce)"
-  }
-}
-
-private enum QRShareMode: String, CaseIterable {
-  case solidarity
-  case universal
-
-  var title: String {
-    switch self {
-    case .solidarity:
-      return String(localized: "Solidarity QR")
-    case .universal:
-      return String(localized: "Universal Verification QR")
-    }
-  }
-
-  var description: String {
-    switch self {
-    case .solidarity:
-      return String(localized: "Use this mode when both users are in Solidarity for direct exchange.")
-    case .universal:
-      return String(localized: "Use this mode for verifier-compatible OID4VP style requests.")
-    }
   }
 }
 

@@ -3,6 +3,7 @@ import SwiftUI
 struct SettingsView: View {
   @EnvironmentObject private var theme: ThemeManager
   @ObservedObject private var devMode = DeveloperModeManager.shared
+  @State private var showingSolidarityQR = false
 
   var body: some View {
     NavigationStack {
@@ -12,6 +13,12 @@ struct SettingsView: View {
             VCSettingsView()
           } label: {
             Label("Identity Profile", systemImage: "person.text.rectangle")
+          }
+
+          Button {
+            showingSolidarityQR = true
+          } label: {
+            Label("Solidarity QR", systemImage: "qrcode")
           }
         }
 
@@ -49,6 +56,11 @@ struct SettingsView: View {
         }
       }
       .navigationTitle("Settings")
+      .sheet(isPresented: $showingSolidarityQR) {
+        if let card = CardManager.shared.businessCards.first {
+          SolidarityQRView(businessCard: card)
+        }
+      }
     }
   }
 }

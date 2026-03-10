@@ -75,6 +75,46 @@ struct SharingTabView: View {
           .buttonStyle(ThemedPrimaryButtonStyle())
           .padding(.horizontal, 48)
 
+          Spacer().frame(height: 16)
+
+          // QR code quick actions
+          HStack(spacing: 12) {
+            Button {
+              showingScanSheet = true
+            } label: {
+              HStack(spacing: 8) {
+                Image(systemName: "qrcode.viewfinder")
+                  .font(.system(size: 16, weight: .semibold))
+                Text("Scan QR")
+                  .font(.system(size: 14, weight: .semibold))
+              }
+              .frame(maxWidth: .infinity)
+              .padding(.vertical, 12)
+              .foregroundColor(Color.Theme.textPrimary)
+              .background(Color.Theme.searchBg)
+              .overlay(Rectangle().stroke(Color.Theme.divider, lineWidth: 1))
+            }
+            .buttonStyle(.plain)
+
+            Button {
+              showingShareSheet = true
+            } label: {
+              HStack(spacing: 8) {
+                Image(systemName: "qrcode")
+                  .font(.system(size: 16, weight: .semibold))
+                Text("My QR")
+                  .font(.system(size: 14, weight: .semibold))
+              }
+              .frame(maxWidth: .infinity)
+              .padding(.vertical, 12)
+              .foregroundColor(Color.Theme.textPrimary)
+              .background(Color.Theme.searchBg)
+              .overlay(Rectangle().stroke(Color.Theme.divider, lineWidth: 1))
+            }
+            .buttonStyle(.plain)
+          }
+          .padding(.horizontal, 48)
+
           // UWB status pill
           if niManager.isSupported, niManager.spatialState.isActive {
             uwbStatusPill
