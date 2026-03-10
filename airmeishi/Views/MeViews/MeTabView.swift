@@ -10,7 +10,7 @@ struct MeTabView: View {
   @State private var showingVCSettings = false
   @State private var showingProofSheet = false
   @State private var showingPassportFlow = false
-  @State private var selectedClaim: MeClaimType = .ageOver18
+  @State private var selectedClaim: ProvableClaimEntity?
   @State private var revealDid = false
 
   var body: some View {
@@ -70,7 +70,9 @@ struct MeTabView: View {
         }
       }
       .sheet(isPresented: $showingProofSheet) {
-        SelfInitiatedProofSheet(claimType: selectedClaim)
+        if let selectedClaim {
+          SelfInitiatedProofSheet(claim: selectedClaim)
+        }
       }
       .onAppear {
         if identityCoordinator.state.currentProfile.activeDID == nil,
@@ -196,11 +198,8 @@ struct MeTabView: View {
               title: claim.title,
               source: "SRC: \(claim.source)",
               onPresent: {
-                if claim.claimType == "age_over_18" {
-                  openClaim(.ageOver18)
-                } else {
-                  openClaim(.isHuman)
-                }
+                selectedClaim = claim
+                showingProofSheet = true
               }
             )
           }
@@ -262,10 +261,6 @@ struct MeTabView: View {
     return "\(did.prefix(12))...\(did.suffix(8))"
   }
 
-  private func openClaim(_ claimType: MeClaimType) {
-    selectedClaim = claimType
-    showingProofSheet = true
-  }
 }
 
 private struct ClaimRowView: View {
@@ -393,44 +388,52 @@ private struct EmptyMeStateCard: View {
   }
 }
 
-private enum MeClaimType: String {
-  case ageOver18 = "age_over_18"
-  case isHuman = "is_human"
-}
-
 private struct SelfInitiatedProofSheet: View {
-  let claimType: MeClaimType
+  let claim: ProvableClaimEntity
   @Environment(\.dismiss) private var dismiss
+  @StateObject private var qrCodeManager = QRCodeManager.shared
+  @State private var qrImage: UIImage?
+  @State private var errorMessage: String?
 
   var body: some View {
     NavigationStack {
-      ZStack {
-        Color.Theme.pageBg.ignoresSafeArea()
-
+      ScrollView {
         VStack(spacing: 24) {
-          Image(systemName: "terminal")
-            .font(.system(size: 48))
-            .foregroundColor(Color.Theme.primaryBlue)
-
-          Text("GENERATING PROOF")
-            .font(.system(size: 20, weight: .bold, design: .monospaced))
-            .foregroundColor(.white)
-
-          Text("Claim: [\(claimType.rawValue)]")
+          Text("Claim: [\(claim.claimType)]")
             .font(.system(size: 14, weight: .bold, design: .monospaced))
             .foregroundColor(Color.Theme.terminalGreen)
 
-          Text("QR payload is ready for standard verification protocol.\nProceed to SCAN to broadcast.")
+          if let qrImage {
+            Image(uiImage: qrImage)
+              .resizable()
+              .interpolation(.none)
+              .scaledToFit()
+              .frame(maxWidth: 260)
+              .padding(16)
+              .background(Color.white)
+              .cornerRadius(12)
+          } else if let errorMessage {
+            Text(errorMessage)
+              .font(.system(size: 14))
+              .foregroundColor(.red)
+              .multilineTextAlignment(.center)
+              .padding(.horizontal, 32)
+          } else {
+            ProgressView()
+              .frame(height: 260)
+          }
+
+          Text("Present this QR to a verifier for proof disclosure.")
             .font(.system(size: 14))
             .foregroundColor(Color.Theme.textSecondary)
             .multilineTextAlignment(.center)
             .padding(.horizontal, 32)
-
-          Spacer()
         }
-        .padding(.top, 40)
+        .padding(.top, 24)
+        .padding(.horizontal, 16)
       }
-      .navigationTitle("Initialize Proof")
+      .background(Color.Theme.pageBg.ignoresSafeArea())
+      .navigationTitle("Present Proof")
       .navigationBarTitleDisplayMode(.inline)
       .toolbar {
         ToolbarItem(placement: .navigationBarTrailing) {
@@ -442,6 +445,20 @@ private struct SelfInitiatedProofSheet: View {
           }
         }
       }
+      .onAppear { generateQR() }
+    }
+  }
+
+  private func generateQR() {
+    let nonce = UUID().uuidString.replacingOccurrences(of: "-", with: "")
+    let payload = "openid4vp://present?claim=\(claim.claimType)&nonce=\(nonce)&payload=\(claim.payload)"
+    let result = qrCodeManager.generateQRCode(from: payload)
+    switch result {
+    case .success(let image):
+      qrImage = image
+      IdentityDataStore.shared.markClaimPresented(claim.id)
+    case .failure(let error):
+      errorMessage = error.localizedDescription
     }
   }
 }
