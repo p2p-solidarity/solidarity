@@ -7,6 +7,8 @@ struct MainTabView: View {
   @State private var showingErrorAlert = false
   @State private var errorMessage = ""
   @State private var selectedTab = MainAppTab.people.rawValue
+  @State private var showingCredentialImport = false
+  @State private var pendingCredentialOfferURL = ""
 
   var body: some View {
     tabContent
@@ -14,6 +16,9 @@ struct MainTabView: View {
         if let card = deepLinkManager.lastReceivedCard {
           ReceivedCardView(card: card)
         }
+      }
+      .sheet(isPresented: $showingCredentialImport) {
+        CredentialImportFlowSheet(offerURL: pendingCredentialOfferURL)
       }
       .alert("Error", isPresented: $showingErrorAlert) {
         Button("OK") {}
@@ -159,6 +164,10 @@ struct MainTabView: View {
 
     case .navigateToContacts:
       selectedTab = MainAppTab.people.rawValue
+
+    case .credentialOffer(let offerURL):
+      pendingCredentialOfferURL = offerURL
+      showingCredentialImport = true
     }
 
     deepLinkManager.clearPendingAction()

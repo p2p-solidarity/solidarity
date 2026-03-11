@@ -14,6 +14,8 @@ struct ScanTabView: View {
   @State private var showingPresentationFlow = false
   @State private var showingVerifierResult = false
   @State private var showingSelfQr = false
+  @State private var showingCredentialImport = false
+  @State private var pendingCredentialOffer = ""
   @State private var pendingRoutePayload = ""
   @State private var verificationResult: VpTokenVerificationResult?
   @State private var lastVerification: VerificationStatus = .unverified
@@ -67,6 +69,9 @@ struct ScanTabView: View {
       if let verificationResult {
         VerifierResultSheet(result: verificationResult)
       }
+    }
+    .sheet(isPresented: $showingCredentialImport) {
+      CredentialImportFlowSheet(offerURL: pendingCredentialOffer)
     }
     .sheet(isPresented: $showingSelfQr) {
       if let card = CardManager.shared.businessCards.first {
@@ -182,9 +187,8 @@ struct ScanTabView: View {
       showingVerifierResult = true
 
     case .credentialOffer(let offer):
-      let format = String(localized: "Credential offer detected:\n%@")
-      routeAlertMessage = String(format: format, offer)
-      showingRouteAlert = true
+      pendingCredentialOffer = offer
+      showingCredentialImport = true
 
     case .unknown(let payload):
       let format = String(localized: "Unknown payload:\n%@")

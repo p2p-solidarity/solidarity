@@ -30,6 +30,14 @@
 			<key>CFBundleURLName</key>
 			<string>airmeishi.auth</string>
 		</dict>
+		<dict>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>openid-credential-offer</string>
+			</array>
+			<key>CFBundleURLName</key>
+			<string>airmeishi.oid4vci</string>
+		</dict>
 	</array>
 	<key>ITSAppUsesNonExemptEncryption</key>
 	<false/>

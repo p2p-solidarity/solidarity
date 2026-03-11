@@ -52,6 +52,12 @@ class DeepLinkManager: DeepLinkManagerProtocol, ObservableObject {
       return handleCustomSchemeURL(components)
     }
 
+    // OID4VCI credential offer deep link
+    if components.scheme == "openid-credential-offer" {
+      pendingAction = .credentialOffer(url.absoluteString)
+      return true
+    }
+
     // Determine the type of URL and handle accordingly
     if isBusinessCardURL(components) {
       return handleBusinessCardURL(components)
@@ -403,4 +409,5 @@ enum DeepLinkAction {
   case showMessage(String)
   case navigateToSharing
   case navigateToContacts
+  case credentialOffer(String)
 }
