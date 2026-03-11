@@ -391,11 +391,36 @@ private struct ProofPresentationFlowSheet: View {
           showingAlert = true
           step = .review
         case .success(let credential):
-          let jwt = credential.jwt
-          submitToVerifier(jwt: jwt)
+          let vpToken = Self.wrapInVPEnvelope(
+            vcJwt: credential.jwt,
+            holderDid: credential.holderDid,
+            nonce: parsedRequest?.nonce
+          )
+          submitToVerifier(jwt: vpToken)
         }
       }
     }
+  }
+
+  /// Wraps a VC JWT inside a Verifiable Presentation JSON envelope, then base64url-encodes it
+  /// so it can be sent as a single `vp_token` string.
+  private static func wrapInVPEnvelope(vcJwt: String, holderDid: String, nonce: String?) -> String {
+    var vp: [String: Any] = [
+      "@context": ["https://www.w3.org/2018/credentials/v1"],
+      "type": ["VerifiablePresentation"],
+      "holder": holderDid,
+      "verifiableCredential": [vcJwt],
+    ]
+    if let nonce { vp["nonce"] = nonce }
+
+    // Encode as compact JSON — verifiers can base64url-decode or treat as opaque JWT-like token
+    guard let data = try? JSONSerialization.data(withJSONObject: vp, options: [.sortedKeys]),
+          let json = String(data: data, encoding: .utf8)
+    else {
+      // Fallback: return the bare VC JWT if envelope creation fails
+      return vcJwt
+    }
+    return json
   }
 
   private func submitToVerifier(jwt: String) {

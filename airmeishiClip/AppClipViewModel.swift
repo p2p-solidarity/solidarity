@@ -122,58 +122,24 @@ class AppClipViewModel: ObservableObject {
         }
     }
     
-    /// Load business card from share ID (would typically involve server call)
+    /// Load business card from share ID via server lookup.
     private func loadBusinessCardFromShareId(_ shareId: String) {
-        // In a real implementation, this would make a network call to fetch the card
-        // For now, we'll simulate this with a mock card
-        
-        DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) { [weak self] in
-            // Simulate network delay
-            
-            // Create a mock business card for demonstration
-            let mockCard = self?.createMockBusinessCard(for: shareId)
-            
-            if let card = mockCard {
-                self?.verificationStatus = .unverified
-                self?.state = .loaded(card)
-            } else {
-                self?.state = .notFound
-            }
+        guard !shareId.isEmpty else {
+            state = .notFound
+            return
         }
+
+        // TODO: Replace with actual network call to fetch card by shareId
+        state = .error(String(localized: "Server lookup for share links is not yet implemented."))
     }
-    
+
     /// Verify business card authenticity (cryptographic verification)
     private func verifyBusinessCard(_ card: BusinessCard, completion: @escaping (Bool) -> Void) {
-        // In a real implementation, this would perform cryptographic verification
-        // For now, we'll simulate verification
-        
-        DispatchQueue.global(qos: .background).asyncAfter(deadline: .now() + 0.5) {
-            // Simulate verification process
+        // Basic structural check — full cryptographic verification requires the main app
+        DispatchQueue.global(qos: .background).async {
             let isVerified = !card.name.isEmpty && (card.email != nil || card.phone != nil)
             completion(isVerified)
         }
-    }
-    
-    /// Create a mock business card for testing
-    private func createMockBusinessCard(for shareId: String) -> BusinessCard? {
-        // This is for demonstration purposes only
-        // In a real app, this would fetch from a server
-        
-        guard shareId.count > 5 else { return nil }
-        
-        return BusinessCard(
-            name: "John Doe",
-            title: "Software Engineer",
-            company: "Tech Corp",
-            email: "john.doe@techcorp.com",
-            phone: "+1 (555) 123-4567",
-            skills: [
-                Skill(name: "iOS Development", category: "Programming", proficiencyLevel: .expert),
-                Skill(name: "SwiftUI", category: "Framework", proficiencyLevel: .advanced),
-                Skill(name: "Privacy Engineering", category: "Security", proficiencyLevel: .intermediate)
-            ],
-            categories: ["Technology", "Mobile Development"]
-        )
     }
 }
 

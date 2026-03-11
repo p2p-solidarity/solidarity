@@ -451,8 +451,25 @@ private struct SelfInitiatedProofSheet: View {
 
   private func generateQR() {
     let nonce = UUID().uuidString.replacingOccurrences(of: "-", with: "")
-    let payload = "openid4vp://present?claim=\(claim.claimType)&nonce=\(nonce)&payload=\(claim.payload)"
-    let result = qrCodeManager.generateQRCode(from: payload)
+
+    // Build a VP envelope so verifiers can validate directly via standard VP token parsing
+    var vp: [String: Any] = [
+      "@context": ["https://www.w3.org/2018/credentials/v1"],
+      "type": ["VerifiablePresentation"],
+      "verifiableCredential": [claim.payload],
+      "nonce": nonce,
+      "claim_type": claim.claimType,
+    ]
+
+    let qrString: String
+    if let data = try? JSONSerialization.data(withJSONObject: vp, options: [.sortedKeys]),
+       let json = String(data: data, encoding: .utf8) {
+      qrString = json
+    } else {
+      qrString = claim.payload
+    }
+
+    let result = qrCodeManager.generateQRCode(from: qrString)
     switch result {
     case .success(let image):
       qrImage = image

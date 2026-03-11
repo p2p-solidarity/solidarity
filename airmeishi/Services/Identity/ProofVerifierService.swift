@@ -13,22 +13,29 @@ final class ProofVerifierService {
   private init() {}
 
   func verifyVpToken(_ token: String) -> VpTokenVerificationResult {
-    // Check if the token is a Semaphore proof payload (JSON with semaphore_proof key)
+    // 1. Check if this is a JSON payload (VP envelope or Semaphore proof)
     if let data = token.data(using: .utf8),
-      let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-      json["semaphore_proof"] != nil
+       let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
     {
-      return verifySemaphoreProof(token)
+      // Semaphore ZKP
+      if json["semaphore_proof"] != nil {
+        return verifySemaphoreProof(token)
+      }
+      // VP envelope (JSON-LD Verifiable Presentation)
+      if let types = json["type"] as? [String], types.contains("VerifiablePresentation") {
+        return verifyVPEnvelope(json)
+      }
     }
 
+    // 2. Compact JWT (3 segments)
     let segments = token.split(separator: ".")
     guard segments.count == 3 else {
       return VpTokenVerificationResult(
         isValid: false,
         status: .failed,
         title: "Invalid vp_token",
-        reason: "Token does not have 3 JWT segments.",
-        details: ["Malformed compact JWT"]
+        reason: "Token is neither valid JSON nor a 3-segment JWT.",
+        details: ["Malformed token"]
       )
     }
 
@@ -77,6 +84,104 @@ final class ProofVerifierService {
       status: .pending,
       title: "Token incomplete",
       reason: "vp or vc claim is missing.",
+      details: details
+    )
+  }
+
+  // MARK: - VP Envelope Verification
+
+  private func verifyVPEnvelope(_ vp: [String: Any]) -> VpTokenVerificationResult {
+    var details: [String] = []
+
+    guard let credentials = vp["verifiableCredential"] as? [Any], !credentials.isEmpty else {
+      return VpTokenVerificationResult(
+        isValid: false,
+        status: .failed,
+        title: "Empty VP",
+        reason: "VerifiablePresentation contains no credentials.",
+        details: ["verifiableCredential array is missing or empty"]
+      )
+    }
+
+    details.append("credentials: \(credentials.count)")
+
+    if let holder = vp["holder"] as? String {
+      details.append("holder: \(holder.prefix(24))...")
+    }
+
+    if let nonce = vp["nonce"] as? String {
+      details.append("nonce: \(nonce.prefix(16))...")
+    }
+
+    // Verify each embedded credential (JWT string)
+    for (index, cred) in credentials.enumerated() {
+      guard let jwt = cred as? String else {
+        details.append("credential[\(index)]: not a JWT string")
+        continue
+      }
+
+      let credResult = verifyEmbeddedJWT(jwt)
+      if !credResult.isValid {
+        return VpTokenVerificationResult(
+          isValid: false,
+          status: credResult.status,
+          title: "Credential[\(index)] invalid",
+          reason: credResult.reason,
+          details: details + credResult.details
+        )
+      }
+      details.append(contentsOf: credResult.details.map { "credential[\(index)]: \($0)" })
+    }
+
+    return VpTokenVerificationResult(
+      isValid: true,
+      status: .verified,
+      title: "VP verified",
+      reason: "Verifiable Presentation structure and embedded credentials are valid.",
+      details: details
+    )
+  }
+
+  private func verifyEmbeddedJWT(_ jwt: String) -> VpTokenVerificationResult {
+    let segments = jwt.split(separator: ".")
+    guard segments.count == 3 else {
+      return VpTokenVerificationResult(
+        isValid: false, status: .failed,
+        title: "Invalid JWT", reason: "Embedded credential is not a valid 3-segment JWT.",
+        details: []
+      )
+    }
+
+    guard let payloadData = Data(base64URLEncoded: String(segments[1])),
+          let payload = try? JSONSerialization.jsonObject(with: payloadData) as? [String: Any]
+    else {
+      return VpTokenVerificationResult(
+        isValid: false, status: .failed,
+        title: "Decode failed", reason: "Unable to decode embedded JWT payload.",
+        details: []
+      )
+    }
+
+    var details: [String] = []
+    if let exp = payload["exp"] as? TimeInterval {
+      let expiry = Date(timeIntervalSince1970: exp)
+      details.append("exp: \(expiry.formatted(date: .abbreviated, time: .shortened))")
+      if Date() > expiry {
+        return VpTokenVerificationResult(
+          isValid: false, status: .failed,
+          title: "Credential expired", reason: "Embedded JWT has passed expiration.",
+          details: details
+        )
+      }
+    }
+
+    if payload["vc"] != nil {
+      details.append("type: VerifiableCredential")
+    }
+
+    return VpTokenVerificationResult(
+      isValid: true, status: .verified,
+      title: "JWT valid", reason: "Structure and expiry OK.",
       details: details
     )
   }

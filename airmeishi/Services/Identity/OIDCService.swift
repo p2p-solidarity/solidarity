@@ -18,6 +18,7 @@ final class OIDCService: ObservableObject {
     let nonce: String
     let clientId: String
     let redirectUri: String
+    let responseType: String
     let presentationDefinition: PresentationDefinition
 
     struct PresentationDefinition: Equatable {
@@ -28,6 +29,12 @@ final class OIDCService: ObservableObject {
         let id: String
         let name: String?
         let purpose: String?
+        let format: [String: Any]?
+        let constraints: [String: Any]?
+
+        static func == (lhs: InputDescriptor, rhs: InputDescriptor) -> Bool {
+          lhs.id == rhs.id && lhs.name == rhs.name && lhs.purpose == rhs.purpose
+        }
       }
     }
   }
@@ -76,7 +83,7 @@ final class OIDCService: ObservableObject {
     // 3. Build query items
     var queryItems = [
       URLQueryItem(name: "scope", value: "openid"),
-      URLQueryItem(name: "response_type", value: "id_token"),  // For SIOPv2. Add "vp_token" for OIDC4VP if needed.
+      URLQueryItem(name: "response_type", value: "vp_token"),
       URLQueryItem(name: "client_id", value: clientId),
       URLQueryItem(name: "redirect_uri", value: redirectUri),
       URLQueryItem(name: "nonce", value: nonce),
@@ -128,31 +135,52 @@ final class OIDCService: ObservableObject {
   // MARK: - Compatibility Methods
 
   func createPresentationRequest() -> CardResult<PresentationRequestContext> {
-    // Default claims for business card exchange
-    let claims: [String: Any] = [
-      "id_token": [
-        "verifiable_credentials": [
-          "essential": true,
-          "purpose": "To exchange business cards",
-          "credential_type": "BusinessCardCredential",
+    let descriptorResult = didService.currentDescriptor(for: nil)
+    guard case .success(let descriptor) = descriptorResult else {
+      return .failure(.keyManagementError("No active DID found for presentation request"))
+    }
+
+    let nonce = UUID().uuidString
+    let state = UUID().uuidString
+    let redirectUri = "airmeishi://oidc-callback"
+
+    let presentationDefinition = PresentationRequest.PresentationDefinition(
+      id: "business-card-request",
+      inputDescriptors: [
+        PresentationRequest.PresentationDefinition.InputDescriptor(
+          id: "business-card",
+          name: "Business Card",
+          purpose: "Exchange contact info",
+          format: nil,
+          constraints: nil
+        )
+      ]
+    )
+
+    switch generateRequest(
+      redirectUri: redirectUri,
+      claims: [
+        "vp_token": [
+          "presentation_definition": [
+            "id": presentationDefinition.id,
+            "input_descriptors": presentationDefinition.inputDescriptors.map { [
+              "id": $0.id,
+              "name": $0.name ?? "",
+              "purpose": $0.purpose ?? "",
+            ] }
+          ]
         ]
       ]
-    ]
-
-    switch generateRequest(claims: claims) {
+    ) {
     case .success(let url):
-      // In a real implementation, we would register this request with the coordinator
-      // to track state. For now, we just return the QR string.
       let request = PresentationRequest(
         id: UUID().uuidString,
-        state: UUID().uuidString,  // Should match state in URL
-        nonce: UUID().uuidString,  // Should match nonce in URL
-        clientId: "did:example:123",  // Placeholder
-        redirectUri: "airmeishi://oidc-callback",
-        presentationDefinition: PresentationRequest.PresentationDefinition(
-          id: "business-card-request",
-          inputDescriptors: []
-        )
+        state: state,
+        nonce: nonce,
+        clientId: descriptor.did,
+        redirectUri: redirectUri,
+        responseType: "vp_token",
+        presentationDefinition: presentationDefinition
       )
 
       return .success(
@@ -179,8 +207,46 @@ final class OIDCService: ObservableObject {
     let nonce = queryItems.first(where: { $0.name == "nonce" })?.value ?? ""
     let state = queryItems.first(where: { $0.name == "state" })?.value ?? ""
     let redirectUri = queryItems.first(where: { $0.name == "redirect_uri" })?.value ?? ""
+    let responseType = queryItems.first(where: { $0.name == "response_type" })?.value ?? "vp_token"
 
-    // Simplified parsing for compatibility
+    // Parse presentation_definition from query if present
+    let presentationDefinition: PresentationRequest.PresentationDefinition
+    if let pdString = queryItems.first(where: { $0.name == "presentation_definition" })?.value,
+       let pdData = pdString.data(using: .utf8),
+       let pdJson = try? JSONSerialization.jsonObject(with: pdData) as? [String: Any]
+    {
+      let pdId = pdJson["id"] as? String ?? "parsed-request"
+      var descriptors: [PresentationRequest.PresentationDefinition.InputDescriptor] = []
+      if let inputDescs = pdJson["input_descriptors"] as? [[String: Any]] {
+        descriptors = inputDescs.map { desc in
+          PresentationRequest.PresentationDefinition.InputDescriptor(
+            id: desc["id"] as? String ?? UUID().uuidString,
+            name: desc["name"] as? String,
+            purpose: desc["purpose"] as? String,
+            format: desc["format"] as? [String: Any],
+            constraints: desc["constraints"] as? [String: Any]
+          )
+        }
+      }
+      presentationDefinition = PresentationRequest.PresentationDefinition(
+        id: pdId, inputDescriptors: descriptors
+      )
+    } else {
+      // Fallback: no presentation_definition in URL — assume business card exchange
+      presentationDefinition = PresentationRequest.PresentationDefinition(
+        id: "default-request",
+        inputDescriptors: [
+          PresentationRequest.PresentationDefinition.InputDescriptor(
+            id: "business-card",
+            name: "Business Card",
+            purpose: "Exchange contact info",
+            format: nil,
+            constraints: nil
+          )
+        ]
+      )
+    }
+
     return .success(
       PresentationRequest(
         id: UUID().uuidString,
@@ -188,24 +254,20 @@ final class OIDCService: ObservableObject {
         nonce: nonce,
         clientId: clientId,
         redirectUri: redirectUri,
-        presentationDefinition: PresentationRequest.PresentationDefinition(
-          id: "business-card-request",
-          inputDescriptors: [
-            PresentationRequest.PresentationDefinition.InputDescriptor(
-              id: "business-card",
-              name: "Business Card",
-              purpose: "Exchange contact info"
-            )
-          ]
-        )
+        responseType: responseType,
+        presentationDefinition: presentationDefinition
       )
     )
   }
 
   func handleResponse(url: URL, vcService: VCService) -> CardResult<VCService.ImportedCredential> {
-    // Mock implementation for handling OIDC response
-    // In a real scenario, this would exchange the code for tokens or parse the id_token/vp_token directly
-    return .failure(.configurationError("OIDC response handling not fully implemented"))
+    // Extract vp_token from response URL and import the credential
+    guard let components = URLComponents(url: url, resolvingAgainstBaseURL: false),
+          let vpToken = components.queryItems?.first(where: { $0.name == "vp_token" })?.value
+    else {
+      return .failure(.invalidData("No vp_token found in response URL"))
+    }
+    return vcService.importPresentedCredential(jwt: vpToken)
   }
 
   func buildResponseURL(for request: PresentationRequest, vpToken: String) -> CardResult<URL> {
@@ -213,13 +275,9 @@ final class OIDCService: ObservableObject {
       return .failure(.invalidData("Invalid redirect URI"))
     }
 
-    // Construct the response parameters (id_token or vp_token)
-    // For SIOPv2, we typically return an id_token. For OIDC4VP, a vp_token.
-    // Simplified implementation:
-
     var queryItems = components.queryItems ?? []
     queryItems.append(URLQueryItem(name: "state", value: request.state))
-    queryItems.append(URLQueryItem(name: "id_token", value: vpToken))  // Using id_token for compatibility
+    queryItems.append(URLQueryItem(name: "vp_token", value: vpToken))
 
     components.queryItems = queryItems
 

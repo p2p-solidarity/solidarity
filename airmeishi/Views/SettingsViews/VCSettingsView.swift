@@ -111,9 +111,15 @@ class VCSettingsViewModel: ObservableObject {
     Self.logger.info("Creating VC with DID method: \(method.rawValue)")
     vcService.setDIDMethod(method)
 
-    // Use a sample card for demonstration. In a real app, this would be the user's profile.
-    let card = BusinessCard.sample
-    Self.logger.info("Using sample business card: \(card.id.uuidString)")
+    guard let card = CardManager.shared.businessCards.first else {
+      Self.logger.error("No business card found – cannot create VC")
+      DispatchQueue.main.async {
+        self.errorMessage = String(localized: "Please create a business card first before issuing a VC.")
+        self.showError = true
+      }
+      return
+    }
+    Self.logger.info("Using business card: \(card.id.uuidString)")
 
     switch vcService.issueAndStoreBusinessCardCredential(for: card) {
     case .success(let stored):
