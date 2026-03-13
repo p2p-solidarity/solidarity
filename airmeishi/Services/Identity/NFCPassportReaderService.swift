@@ -51,23 +51,9 @@ final class NFCPassportReaderService: NSObject {
   }
 
   /// ICAO 9303 check digit (mod 10 weighted sum).
+  /// Delegates to the shared implementation in MRZScannerService.
   static func checkDigit(_ input: String) -> Int {
-    let weights = [7, 3, 1]
-    var sum = 0
-    for (i, char) in input.uppercased().enumerated() {
-      let value: Int
-      if let digit = char.wholeNumberValue {
-        value = digit
-      } else if char == "<" || char == " " {
-        value = 0
-      } else if let ascii = char.asciiValue, let baseA = Character("A").asciiValue, ascii >= baseA {
-        value = Int(ascii - baseA) + 10
-      } else {
-        value = 0
-      }
-      sum += value * weights[i % 3]
-    }
-    return sum % 10
+    MRZScannerService.computeCheckDigit(input)
   }
 
   private static func pad(_ value: String, fieldLength: Int) -> String {
@@ -111,12 +97,20 @@ final class NFCPassportReaderService: NSObject {
           }
         }
       )
+    } catch let nfcError as NFCPassportReaderError {
+      switch nfcError {
+      case .UserCanceled, .TagNotValid, .ConnectionError:
+        throw NFCError.cancelled
+      default:
+        throw NFCError.readFailed(nfcError.localizedDescription)
+      }
     } catch {
-      let desc = error.localizedDescription
-      if desc.contains("cancel") || desc.contains("Cancel") || desc.contains("invalidat") {
+      let nsError = error as NSError
+      // CoreNFC user cancellation: domain=NFCError code=200 or code=6
+      if nsError.domain == "NFCError" && (nsError.code == 200 || nsError.code == 6) {
         throw NFCError.cancelled
       }
-      throw NFCError.readFailed(desc)
+      throw NFCError.readFailed(error.localizedDescription)
     }
 
     // Extract MRZ from DG1
@@ -130,9 +124,14 @@ final class NFCPassportReaderService: NSObject {
     let passiveOK = passport.passportCorrectlySigned && passport.passportDataNotTampered
 
     // Build chip UID from document number (no direct UID exposed by library)
-    let chipUID = passport.documentNumber.isEmpty
-      ? "NFC-\(UUID().uuidString.prefix(8))"
-      : "NFC-\(passport.documentNumber)"
+    // Use deterministic fallback based on MRZ data to ensure stable de-duplication
+    let chipUID: String
+    if !passport.documentNumber.isEmpty {
+      chipUID = "NFC-\(passport.documentNumber)"
+    } else {
+      let fallbackHash = SHA256.hash(data: Data(mrzData.utf8))
+      chipUID = "NFC-\(fallbackHash.prefix(4).map { String(format: "%02x", $0) }.joined())"
+    }
 
     // Hash all DG1 raw data for integrity
     let dg1Raw = passport.getDataGroup(.DG1)

@@ -404,21 +404,14 @@ extension BusinessCard {
   /// Sample business card for previews
   static var sample: BusinessCard {
     return BusinessCard(
-      name: "John Doe",
-      title: "Senior iOS Developer",
-      company: "Tech Corp",
-      email: "john.doe@techcorp.com",
-      phone: "+1 (555) 123-4567",
-      socialNetworks: [
-        SocialNetwork(platform: .linkedin, username: "johndoe", url: "https://linkedin.com/in/johndoe"),
-        SocialNetwork(platform: .github, username: "johndoe", url: "https://github.com/johndoe"),
-      ],
-      skills: [
-        Skill(name: "Swift", category: "Programming", proficiencyLevel: .expert),
-        Skill(name: "SwiftUI", category: "UI Framework", proficiencyLevel: .advanced),
-        Skill(name: "Core Data", category: "Database", proficiencyLevel: .intermediate),
-      ],
-      categories: ["Technology", "Mobile Development"]
+      name: "Solidarity User",
+      title: "Builder",
+      company: "Solidarity",
+      email: "hello@solidarity.id",
+      phone: "",
+      socialNetworks: [],
+      skills: [],
+      categories: []
     )
   }
 }

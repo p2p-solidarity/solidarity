@@ -340,18 +340,17 @@ private final class PassportPipelineViewModel: ObservableObject {
 
   func readNFC() {
     isLoading = true
-    nfcProgressMessage = "Connecting to chip..."
+    nfcProgressMessage = "Hold passport near device..."
     Task {
-      // Show progress steps for simulated mode
-      nfcProgressMessage = "Verifying BAC..."
       let result = await pipeline.readNFCChip(from: draft)
-      nfcProgressMessage = "Reading DG1 data..."
       isLoading = false
       switch result {
       case .success(let snapshot):
+        nfcProgressMessage = "Read complete."
         chipSnapshot = snapshot
         step = .proof
       case .failure(let error):
+        nfcProgressMessage = ""
         show(error.localizedDescription)
       }
     }

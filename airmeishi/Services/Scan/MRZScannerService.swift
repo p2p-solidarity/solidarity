@@ -1,5 +1,6 @@
 @preconcurrency import AVFoundation
 import Combine
+import os
 import UIKit
 import Vision
 
@@ -13,7 +14,7 @@ final class MRZScannerService: NSObject, ObservableObject {
   private let captureSession = AVCaptureSession()
   private let videoOutput = AVCaptureVideoDataOutput()
   private let processingQueue = DispatchQueue(label: "com.airmeishi.mrz-scanner", qos: .userInitiated)
-  private nonisolated(unsafe) var _isProcessingFrame = false
+  private let _isProcessingFrame = OSAllocatedUnfairLock(initialState: false)
 
   // MARK: - Session Setup
 
@@ -152,16 +153,24 @@ extension MRZScannerService: AVCaptureVideoDataOutputSampleBufferDelegate {
     didOutput sampleBuffer: CMSampleBuffer,
     from connection: AVCaptureConnection
   ) {
-    guard !_isProcessingFrame else { return }
-    _isProcessingFrame = true
+    let alreadyProcessing = _isProcessingFrame.withLock { value -> Bool in
+      if value { return true }
+      value = true
+      return false
+    }
+    guard !alreadyProcessing else { return }
 
     guard let pixelBuffer = CMSampleBufferGetImageBuffer(sampleBuffer) else {
-      _isProcessingFrame = false
+      _isProcessingFrame.withLock { $0 = false }
       return
     }
 
-    let request = VNRecognizeTextRequest { [weak self] request, _ in
-      defer { self?._isProcessingFrame = false }
+    let request = VNRecognizeTextRequest { [weak self] request, error in
+      defer { self?._isProcessingFrame.withLock { $0 = false } }
+
+      if let error {
+        os_log(.error, "Vision OCR error: %{public}@", error.localizedDescription)
+      }
 
       guard let results = request.results as? [VNRecognizedTextObservation] else { return }
 
@@ -190,6 +199,11 @@ extension MRZScannerService: AVCaptureVideoDataOutputSampleBufferDelegate {
     request.recognitionLanguages = ["en-US"]
 
     let handler = VNImageRequestHandler(cvPixelBuffer: pixelBuffer, options: [:])
-    try? handler.perform([request])
+    do {
+      try handler.perform([request])
+    } catch {
+      os_log(.error, "Vision perform error: %{public}@", error.localizedDescription)
+      _isProcessingFrame.withLock { $0 = false }
+    }
   }
 }

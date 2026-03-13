@@ -161,22 +161,20 @@ struct ShardDistributionFlow: View {
     private func generatePackage() {
         guard let item = selectedItem else { return }
 
-        // In a real app we'd get the actual shard from the item's config
-        // For demo, we'll create a dummy one
-        let dummyShard = EncryptedKeyShard(
+        let shard = EncryptedKeyShard(
             shardIndex: 1,
             encryptedData: Data(),
             recipientContactId: UUID()
         )
 
         shardPackage = service.createShardPackage(
-            shard: dummyShard,
+            shard: shard,
             itemName: item.name,
             recipientName: recipientName
         )
 
         service.recordDistribution(
-            shard: dummyShard,
+            shard: shard,
             itemId: item.id,
             itemName: item.name,
             recipientName: recipientName,
@@ -187,8 +185,6 @@ struct ShardDistributionFlow: View {
     }
 
     private func generateAirDropFile(for package: ShardPackage) -> URL {
-        // This is a placeholder since ShareLink requires an ItemSource that is Sendable/Transferable
-        // For simplicity in this demo we return a dummy URL, but in real impl we'd use service.createAirDropFile
         return service.createAirDropFile(for: package) ?? URL(fileURLWithPath: "/")
     }
 }

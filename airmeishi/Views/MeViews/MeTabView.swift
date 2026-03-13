@@ -6,12 +6,16 @@ struct MeTabView: View {
   @EnvironmentObject private var identityDataStore: IdentityDataStore
 
   @State private var showingSettings = false
-  @State private var showingCreateCard = false
+  @State private var showingEditProfile = false
   @State private var showingVCSettings = false
   @State private var showingProofSheet = false
   @State private var showingPassportFlow = false
   @State private var selectedClaim: ProvableClaimEntity?
   @State private var revealDid = false
+
+  private var verifiedCards: [IdentityCardEntity] {
+    identityDataStore.identityCards.filter { $0.type != "business_card" }
+  }
 
   var body: some View {
     NavigationStack {
@@ -54,9 +58,15 @@ struct MeTabView: View {
           SettingsView()
         }
       }
-      .sheet(isPresented: $showingCreateCard) {
-        BusinessCardFormView(forceCreate: true) { _ in
-          showingCreateCard = false
+      .sheet(isPresented: $showingEditProfile) {
+        if let card = cardManager.businessCards.first {
+          BusinessCardFormView(businessCard: card) { _ in
+            showingEditProfile = false
+          }
+        } else {
+          BusinessCardFormView(forceCreate: true) { _ in
+            showingEditProfile = false
+          }
         }
       }
       .sheet(isPresented: $showingVCSettings) {
@@ -103,56 +113,75 @@ struct MeTabView: View {
   // MARK: - Subcomponents
 
   private var identityHeader: some View {
-    HStack(alignment: .top, spacing: 16) {
-      ZStack {
-        Rectangle()
-          .fill(Color.Theme.searchBg)
-          .frame(width: 80, height: 80)
-          .overlay(Rectangle().stroke(Color.Theme.divider, lineWidth: 1))
+    VStack(spacing: 16) {
+      HStack(alignment: .top, spacing: 16) {
+        ZStack {
+          Rectangle()
+            .fill(Color.Theme.searchBg)
+            .frame(width: 80, height: 80)
+            .overlay(Rectangle().stroke(Color.Theme.divider, lineWidth: 1))
 
-        Text(String(displayName.prefix(1)).uppercased())
-          .font(.system(size: 32, weight: .bold, design: .monospaced))
-          .foregroundColor(.white)
-      }
-
-      VStack(alignment: .leading, spacing: 8) {
-        Text(displayName)
-          .font(.system(size: 24, weight: .bold))
-          .foregroundColor(Color.Theme.textPrimary)
-
-        Button {
-          revealDid.toggle()
-        } label: {
-          HStack(spacing: 4) {
-            Image(systemName: "key.viewfinder")
-              .font(.system(size: 10))
-            Text(revealDid ? displayDid : shortDid(displayDid))
-              .font(.system(size: 10, weight: .bold, design: .monospaced))
-          }
-          .foregroundColor(Color.Theme.textTertiary)
-          .padding(.horizontal, 8)
-          .padding(.vertical, 4)
-          .background(Color.Theme.searchBg)
-          .overlay(Rectangle().stroke(Color.Theme.divider, lineWidth: 1))
+          Text(String(displayName.prefix(1)).uppercased())
+            .font(.system(size: 32, weight: .bold, design: .monospaced))
+            .foregroundColor(.white)
         }
-        .buttonStyle(.plain)
+
+        VStack(alignment: .leading, spacing: 8) {
+          Text(displayName)
+            .font(.system(size: 24, weight: .bold))
+            .foregroundColor(Color.Theme.textPrimary)
+
+          Button {
+            revealDid.toggle()
+          } label: {
+            HStack(spacing: 4) {
+              Image(systemName: "key.viewfinder")
+                .font(.system(size: 10))
+              Text(revealDid ? displayDid : shortDid(displayDid))
+                .font(.system(size: 10, weight: .bold, design: .monospaced))
+            }
+            .foregroundColor(Color.Theme.textTertiary)
+            .padding(.horizontal, 8)
+            .padding(.vertical, 4)
+            .background(Color.Theme.searchBg)
+            .overlay(Rectangle().stroke(Color.Theme.divider, lineWidth: 1))
+          }
+          .buttonStyle(.plain)
+        }
+        Spacer()
       }
-      Spacer()
+
+      Button {
+        showingEditProfile = true
+      } label: {
+        HStack(spacing: 6) {
+          Image(systemName: "pencil")
+            .font(.system(size: 12, weight: .bold))
+          Text("Edit Profile")
+            .font(.system(size: 12, weight: .bold, design: .monospaced))
+        }
+        .foregroundColor(Color.Theme.textPrimary)
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, 10)
+        .background(Color.Theme.searchBg)
+        .overlay(Rectangle().stroke(Color.Theme.divider, lineWidth: 1))
+      }
+      .buttonStyle(.plain)
     }
     .padding(.horizontal, 24)
   }
 
   private var identityCardSection: some View {
     VStack(alignment: .leading, spacing: 16) {
-      Text("[ SECURE CREDENTIALS ]")
+      Text("[ VERIFIED CREDENTIALS ]")
         .font(.system(size: 12, weight: .bold, design: .monospaced))
         .foregroundColor(Color.Theme.textSecondary)
         .padding(.horizontal, 24)
 
-      if identityDataStore.identityCards.isEmpty {
+      if verifiedCards.isEmpty {
         EmptyMeStateCard(
-          title: "Vault Empty",
-          subtitle: "No cryptographic proofs stored.",
+          title: "No Verified Credentials",
+          subtitle: "Scan a government-issued ID to generate cryptographic proofs.",
           primaryTitle: "Scan Identity",
           secondaryTitle: "Import JSON",
           onPrimaryTap: { showingPassportFlow = true },
@@ -161,21 +190,32 @@ struct MeTabView: View {
         .padding(.horizontal, 16)
       } else {
         VStack(spacing: 12) {
-          ForEach(identityDataStore.identityCards) { card in
-            IdentityStatusCard(
-              emoji: card.type == "passport" ? "🛂" : "🪪",
-              title: card.title,
-              trustText: card.trustLevel == "green" ? "🟢 LEVEL 3 TRUST" : "⚪️ LEVEL 1",
-              subtitle: card.issuerType,
-              ctaTitle: "Regenerate",
-              onCTA: card.type == "passport" ? {
-                identityDataStore.removePassportCredentials()
-                showingPassportFlow = true
-              } : nil
-            )
+          ForEach(verifiedCards) { card in
+            NavigationLink {
+              CredentialDetailView(card: card)
+                .environmentObject(identityDataStore)
+            } label: {
+              IdentityStatusCard(
+                emoji: "🛂",
+                title: card.title,
+                trustText: trustText(for: card),
+                subtitle: card.issuerType,
+                ctaTitle: "Details",
+                onCTA: nil
+              )
+            }
+            .buttonStyle(.plain)
           }
         }
       }
+    }
+  }
+
+  private func trustText(for card: IdentityCardEntity) -> String {
+    switch card.trustLevel {
+    case "green": return "🟢 LEVEL 3 — ZK VERIFIED"
+    case "blue": return "🔵 LEVEL 2 — FALLBACK"
+    default: return "⚪️ LEVEL 1 — SELF-ATTESTED"
     }
   }
 
@@ -321,6 +361,10 @@ private struct IdentityStatusCard: View {
               .background(Color.Theme.terminalGreen)
           }
           .buttonStyle(.plain)
+        } else {
+          Image(systemName: "chevron.right")
+            .font(.system(size: 10, weight: .bold))
+            .foregroundColor(Color.Theme.textTertiary)
         }
       }
 

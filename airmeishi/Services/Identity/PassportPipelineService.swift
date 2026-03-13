@@ -26,12 +26,11 @@ struct PassportProofResult: Equatable {
   let generationFailed: Bool
 }
 
-@MainActor
 final class PassportPipelineService {
   static let shared = PassportPipelineService()
   private init() {}
 
-  func validateMRZ(_ draft: PassportMRZDraft) -> CardResult<Void> {
+  @MainActor func validateMRZ(_ draft: PassportMRZDraft) -> CardResult<Void> {
     let passport = draft.passportNumber.trimmingCharacters(in: .whitespacesAndNewlines)
     let nationality = draft.nationalityCode.trimmingCharacters(in: .whitespacesAndNewlines)
 
@@ -47,7 +46,7 @@ final class PassportPipelineService {
     return .success(())
   }
 
-  func readNFCChip(from draft: PassportMRZDraft) async -> CardResult<PassportChipSnapshot> {
+  @MainActor func readNFCChip(from draft: PassportMRZDraft) async -> CardResult<PassportChipSnapshot> {
     switch validateMRZ(draft) {
     case .failure(let error):
       return .failure(error)
@@ -66,7 +65,7 @@ final class PassportPipelineService {
     #endif
   }
 
-  func generateProof(chip: PassportChipSnapshot, draft: PassportMRZDraft) async -> CardResult<PassportProofResult> {
+  @MainActor func generateProof(chip: PassportChipSnapshot, draft: PassportMRZDraft) async -> CardResult<PassportProofResult> {
     do {
       let identity = try SemaphoreIdentityManager.shared.loadOrCreateIdentity()
       let proofJSON = try SemaphoreIdentityManager.shared.generateProof(
@@ -119,7 +118,7 @@ final class PassportPipelineService {
     }
   }
 
-  func persistPassportCredential(
+  @MainActor func persistPassportCredential(
     draft: PassportMRZDraft,
     proof: PassportProofResult
   ) -> CardResult<IdentityCardEntity> {
@@ -180,7 +179,7 @@ final class PassportPipelineService {
 
   // MARK: - Private
 
-  private var shouldSimulateNFC: Bool {
+  @MainActor private var shouldSimulateNFC: Bool {
     #if targetEnvironment(simulator)
     return true
     #else
@@ -214,9 +213,10 @@ final class PassportPipelineService {
   }
 
   #if !targetEnvironment(simulator)
-  private func realNFCRead(draft: PassportMRZDraft) async -> CardResult<PassportChipSnapshot> {
+  private nonisolated func realNFCRead(draft: PassportMRZDraft) async -> CardResult<PassportChipSnapshot> {
     let dateFormatter = DateFormatter()
     dateFormatter.dateFormat = "yyMMdd"
+    dateFormatter.locale = Locale(identifier: "en_US_POSIX")
 
     let reader = NFCPassportReaderService()
     do {
@@ -226,16 +226,20 @@ final class PassportPipelineService {
         expiryDate: dateFormatter.string(from: draft.expiryDate)
       )
 
-      let draftMRZSource = "\(draft.passportNumber)|\(draft.nationalityCode)|\(draft.dateOfBirth.timeIntervalSince1970)|\(draft.expiryDate.timeIntervalSince1970)"
-      let mrzDigest = SHA256.hash(data: Data(draftMRZSource.utf8))
+      // Use chip-signed MRZ data for digest, falling back to draft only if chip MRZ is empty
+      let mrzSource: String
+      if !result.dg1MRZData.isEmpty {
+        mrzSource = result.dg1MRZData
+      } else {
+        mrzSource = "\(draft.passportNumber)|\(draft.nationalityCode)|\(draft.dateOfBirth.timeIntervalSince1970)|\(draft.expiryDate.timeIntervalSince1970)"
+      }
+      let mrzDigest = SHA256.hash(data: Data(mrzSource.utf8))
       let mrzDigestHex = mrzDigest.map { String(format: "%02x", $0) }.joined()
 
       return .success(
         PassportChipSnapshot(
-          documentHash: result.rawDataHash.count >= 32
-            ? String(result.rawDataHash.prefix(32))
-            : result.rawDataHash,
-          mrzDigest: String(mrzDigestHex.suffix(32)),
+          documentHash: result.rawDataHash,
+          mrzDigest: mrzDigestHex,
           chipUID: result.chipUID,
           bacVerified: result.bacSucceeded,
           paceVerified: result.paceSucceeded,
@@ -248,7 +252,7 @@ final class PassportPipelineService {
       if case .cancelled = error {
         return .failure(.configurationError("NFC read cancelled"))
       }
-      return .failure(.configurationError(error.localizedDescription ?? "NFC read failed"))
+      return .failure(.configurationError(error.errorDescription ?? "NFC read failed"))
     } catch {
       return .failure(.configurationError("NFC read failed: \(error.localizedDescription)"))
     }

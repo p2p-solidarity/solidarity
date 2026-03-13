@@ -12,7 +12,7 @@ final class DeveloperModeManager: ObservableObject {
   static let shared = DeveloperModeManager()
 
   @AppStorage("developerModeEnabled") var isDeveloperMode: Bool = false
-  @AppStorage("dev.simulateNFC") var simulateNFC: Bool = true
+  @AppStorage("dev.simulateNFC") var simulateNFC: Bool = false
 
   @Published var tapCount: Int = 0
 

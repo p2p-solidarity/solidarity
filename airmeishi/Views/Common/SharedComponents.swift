@@ -134,7 +134,7 @@ private struct KeyboardAccessoryHider: UIViewRepresentable {
     ContactInfoRow(
       icon: "envelope.fill",
       label: "Email",
-      value: "test@example.com"
+      value: "hello@solidarity.id"
     )
 
     MetadataRow(

@@ -512,13 +512,7 @@ struct AddPassesControllerView: UIViewControllerRepresentable {
 
 #Preview {
   WalletPassGenerationView(
-    businessCard: BusinessCard(
-      name: "John Doe",
-      title: "Software Engineer",
-      company: "Tech Corp",
-      email: "john@techcorp.com",
-      phone: "+1 (555) 123-4567"
-    ),
+    businessCard: .sample,
     sharingLevel: .professional
   )
 }

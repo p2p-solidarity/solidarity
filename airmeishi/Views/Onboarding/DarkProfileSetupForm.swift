@@ -28,19 +28,18 @@ struct DarkProfileSetupForm: View {
       // Username field
       DarkInputField(
         title: "Choose your username",
-        placeholder: "Enter you username",
+        placeholder: "Enter your username",
         text: $username,
         isRequired: true,
-        errorMessage: (hasAttemptedNext && username.isEmpty) ? "Dude, you need the name" : nil
+        errorMessage: (hasAttemptedNext && username.isEmpty) ? "Username is required" : nil
       )
 
       // Link field
       DarkInputField(
         title: "Link",
-        placeholder: "Enter you username", // keeping typo from reference or leave as is
+        placeholder: "https://yoursite.com",
         text: $link,
-        isRequired: false,
-        errorMessage: (hasAttemptedNext && link.count == 1) ? "Error" : nil // Fake logic just for demo error state
+        isRequired: false
       )
 
       // X field
