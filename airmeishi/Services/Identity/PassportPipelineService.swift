@@ -17,6 +17,11 @@ struct PassportChipSnapshot: Equatable {
   let passiveAuthPassed: Bool
   let isSimulated: Bool
   let readAt: Date
+
+  // Displayable fields parsed from chip MRZ (DG1)
+  let nationalityCode: String
+  let maskedDocNumber: String
+  let dataGroupsRead: [String]
 }
 
 struct PassportProofResult: Equatable {
@@ -65,57 +70,30 @@ final class PassportPipelineService {
     #endif
   }
 
-  @MainActor func generateProof(chip: PassportChipSnapshot, draft: PassportMRZDraft) async -> CardResult<PassportProofResult> {
-    do {
-      let identity = try SemaphoreIdentityManager.shared.loadOrCreateIdentity()
-      let proofJSON = try SemaphoreIdentityManager.shared.generateProof(
-        groupCommitments: [identity.commitment],
-        message: chip.documentHash,
-        scope: "passport:\(draft.nationalityCode)"
-      )
+  /// Generate proof using Mopro (OpenPassport Noir) → Semaphore → SD-JWT fallback chain.
+  func generateProof(
+    chip: PassportChipSnapshot,
+    draft: PassportMRZDraft,
+    onProgress: @escaping @Sendable (String) -> Void
+  ) async -> CardResult<PassportProofResult> {
+    let output = await MoproProofService.shared.generatePassportProof(
+      documentHash: chip.documentHash,
+      mrzDigest: chip.mrzDigest,
+      nationalityCode: draft.nationalityCode,
+      dateOfBirth: draft.dateOfBirth,
+      expiryDate: draft.expiryDate,
+      passiveAuthPassed: chip.passiveAuthPassed,
+      onProgress: onProgress
+    )
 
-      // Build payload with proper JSON serialization
-      var payloadDict: [String: Any] = [
-        "passport_hash": chip.documentHash,
-        "mrz": chip.mrzDigest,
-      ]
-      // proofJSON is a JSON string from Semaphore — parse it to embed as object, not string
-      if let proofData = proofJSON.data(using: .utf8),
-        let proofObj = try? JSONSerialization.jsonObject(with: proofData)
-      {
-        payloadDict["semaphore_proof"] = proofObj
-      } else {
-        payloadDict["semaphore_proof"] = proofJSON
-      }
-      let payloadData = try JSONSerialization.data(withJSONObject: payloadDict)
-      let payloadString = String(data: payloadData, encoding: .utf8) ?? "{}"
-
-      return .success(
-        PassportProofResult(
-          proofType: "semaphore-zk",
-          proofPayload: payloadString,
-          trustLevel: "green",
-          generationFailed: false
-        )
+    return .success(
+      PassportProofResult(
+        proofType: output.proofType,
+        proofPayload: output.proofJSON,
+        trustLevel: output.trustLevel,
+        generationFailed: output.proofType == "sd-jwt-fallback"
       )
-    } catch {
-      // Fallback to sd-jwt when Semaphore is unsupported (e.g. simulator) or fails
-      let fallbackDict: [String: String] = [
-        "passport_hash": chip.documentHash,
-        "mrz": chip.mrzDigest,
-      ]
-      let fallbackData = (try? JSONSerialization.data(withJSONObject: fallbackDict)) ?? Data()
-      let fallbackString = String(data: fallbackData, encoding: .utf8) ?? "{}"
-
-      return .success(
-        PassportProofResult(
-          proofType: "sd-jwt-fallback",
-          proofPayload: fallbackString,
-          trustLevel: "blue",
-          generationFailed: true
-        )
-      )
-    }
+    )
   }
 
   @MainActor func persistPassportCredential(
@@ -198,6 +176,9 @@ final class PassportPipelineService {
     let digest = SHA256.hash(data: Data(source.utf8))
     let digestHex = digest.map { String(format: "%02x", $0) }.joined()
 
+    let raw = draft.passportNumber
+    let masked = raw.count > 3 ? String(raw.prefix(2)) + String(repeating: "*", count: raw.count - 3) + String(raw.suffix(1)) : raw
+
     return .success(
       PassportChipSnapshot(
         documentHash: String(digestHex.prefix(32)),
@@ -207,7 +188,10 @@ final class PassportPipelineService {
         paceVerified: false,
         passiveAuthPassed: false,
         isSimulated: true,
-        readAt: Date()
+        readAt: Date(),
+        nationalityCode: draft.nationalityCode,
+        maskedDocNumber: masked,
+        dataGroupsRead: ["DG1 (sim)"]
       )
     )
   }
@@ -236,6 +220,25 @@ final class PassportPipelineService {
       let mrzDigest = SHA256.hash(data: Data(mrzSource.utf8))
       let mrzDigestHex = mrzDigest.map { String(format: "%02x", $0) }.joined()
 
+      // Parse nationality and document number from chip MRZ for display
+      let parsedNationality: String
+      let parsedDocNumber: String
+      let chipMRZ = result.dg1MRZData
+      if chipMRZ.count >= 44 {
+        // TD3 line 2: positions 10-12 = nationality, positions 0-8 = document number
+        let line2Start = chipMRZ.count > 88 ? chipMRZ.index(chipMRZ.startIndex, offsetBy: 44) : chipMRZ.startIndex
+        let natStart = chipMRZ.index(line2Start, offsetBy: 10, limitedBy: chipMRZ.endIndex) ?? chipMRZ.endIndex
+        let natEnd = chipMRZ.index(line2Start, offsetBy: 13, limitedBy: chipMRZ.endIndex) ?? chipMRZ.endIndex
+        parsedNationality = natStart < natEnd ? String(chipMRZ[natStart..<natEnd]).replacingOccurrences(of: "<", with: "") : draft.nationalityCode
+        let docEnd = chipMRZ.index(line2Start, offsetBy: 9, limitedBy: chipMRZ.endIndex) ?? chipMRZ.endIndex
+        let rawDoc = String(chipMRZ[line2Start..<docEnd]).replacingOccurrences(of: "<", with: "")
+        parsedDocNumber = rawDoc.count > 3 ? String(rawDoc.prefix(2)) + String(repeating: "*", count: rawDoc.count - 3) + String(rawDoc.suffix(1)) : rawDoc
+      } else {
+        parsedNationality = draft.nationalityCode
+        let raw = draft.passportNumber
+        parsedDocNumber = raw.count > 3 ? String(raw.prefix(2)) + String(repeating: "*", count: raw.count - 3) + String(raw.suffix(1)) : raw
+      }
+
       return .success(
         PassportChipSnapshot(
           documentHash: result.rawDataHash,
@@ -245,7 +248,10 @@ final class PassportPipelineService {
           paceVerified: result.paceSucceeded,
           passiveAuthPassed: result.passiveAuthPassed,
           isSimulated: false,
-          readAt: result.readAt
+          readAt: result.readAt,
+          nationalityCode: parsedNationality,
+          maskedDocNumber: parsedDocNumber,
+          dataGroupsRead: ["COM", "SOD", "DG1", "DG2", "DG14", "DG15"]
         )
       )
     } catch let error as NFCPassportReaderService.NFCError {
