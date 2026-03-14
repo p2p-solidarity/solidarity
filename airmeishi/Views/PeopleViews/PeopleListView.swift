@@ -66,7 +66,7 @@ struct PeopleListView: View {
             Button {
               importPhoneContacts()
             } label: {
-              Label("Import from Phone", systemImage: "person.crop.circle.badge.down")
+              Label("Import from Phone", systemImage: "person.crop.circle.badge.plus")
             }
 
             Button {

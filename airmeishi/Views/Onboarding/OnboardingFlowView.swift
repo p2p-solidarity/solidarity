@@ -14,8 +14,17 @@ struct OnboardingFlowView: View {
   @AppStorage("solidarity.onboarding.completed") private var onboardingCompleted = false
   @AppStorage("theme_selected_animal") private var savedAvatar: String?
   @AppStorage("user_profile_name") private var profileName = ""
+  @AppStorage("solidarity.onboarding.step") private var persistedStep: Int = 0
 
-  @State private var step: Step = .welcome
+  private var step: Step {
+    get { Step(rawValue: persistedStep) ?? .welcome }
+  }
+
+  private func goTo(_ newStep: Step) {
+    withAnimation(.easeInOut) {
+      persistedStep = newStep.rawValue
+    }
+  }
 
   // Profile Form Data
   @State private var username = ""
@@ -47,13 +56,13 @@ struct OnboardingFlowView: View {
       switch step {
       case .welcome:
         TerminalWelcomeScreen {
-          withAnimation(.easeInOut) { step = .profileSetup }
+          goTo(.profileSetup)
         }
       case .profileSetup:
         DarkProfileSetupForm(
           onNext: {
-            profileName = username // Save name
-            withAnimation(.easeInOut) { step = .avatarSetup }
+            profileName = username
+            goTo(.avatarSetup)
           },
           username: $username,
           link: $linkText,
@@ -68,10 +77,10 @@ struct OnboardingFlowView: View {
             if let avatar = selectedAvatar {
               savedAvatar = avatar.rawValue
             }
-            withAnimation(.easeInOut) { step = .secureKeys }
+            goTo(.secureKeys)
           },
           onBack: {
-            withAnimation(.easeInOut) { step = .profileSetup }
+            goTo(.profileSetup)
           }
         )
       case .secureKeys:
@@ -98,7 +107,7 @@ struct OnboardingFlowView: View {
       PassportOnboardingFlowView { _ in
         passportScanned = true
         showingPassportFlow = false
-        withAnimation(.easeInOut) { step = .complete }
+        goTo(.complete)
       }
     }
   }
@@ -108,7 +117,7 @@ struct OnboardingFlowView: View {
   private var finalizeKeysStep: some View {
     VStack(alignment: .leading, spacing: 24) {
       HStack {
-        Button(action: { withAnimation { step = .avatarSetup } }) {
+        Button(action: { goTo(.avatarSetup) }) {
           Image(systemName: "chevron.left")
             .foregroundColor(.white)
             .padding(12)
@@ -151,7 +160,7 @@ struct OnboardingFlowView: View {
   private var importContactsStep: some View {
     VStack(alignment: .leading, spacing: 24) {
       HStack {
-        Button(action: { withAnimation { step = .secureKeys } }) {
+        Button(action: { goTo(.secureKeys) }) {
           Image(systemName: "chevron.left")
             .foregroundColor(.white)
             .padding(12)
@@ -195,7 +204,7 @@ struct OnboardingFlowView: View {
             .padding(.vertical, 8)
         } else {
           Button(action: importFromPhone) {
-            Label("Import from Phone", systemImage: "person.crop.circle.badge.down")
+            Label("Import from Phone", systemImage: "person.crop.circle.badge.plus")
           }
           .buttonStyle(ThemedPrimaryButtonStyle())
 
@@ -208,7 +217,7 @@ struct OnboardingFlowView: View {
 
       Spacer()
 
-      Button(action: { withAnimation(.easeInOut) { step = .scanPassport } }) {
+      Button(action: { goTo(.scanPassport) }) {
         Text(importedCount != nil ? "Continue" : "Skip")
       }
       .buttonStyle(ThemedInvertedButtonStyle())
@@ -221,7 +230,7 @@ struct OnboardingFlowView: View {
   private var scanPassportStep: some View {
     VStack(alignment: .leading, spacing: 24) {
       HStack {
-        Button(action: { withAnimation { step = .importContacts } }) {
+        Button(action: { goTo(.importContacts) }) {
           Image(systemName: "chevron.left")
             .foregroundColor(.white)
             .padding(12)
@@ -267,7 +276,7 @@ struct OnboardingFlowView: View {
 
       Spacer()
 
-      Button(action: { withAnimation(.easeInOut) { step = .complete } }) {
+      Button(action: { goTo(.complete) }) {
         Text(passportScanned ? "Continue" : "Skip")
       }
       .buttonStyle(ThemedInvertedButtonStyle())
@@ -316,6 +325,7 @@ struct OnboardingFlowView: View {
 
       Button(action: {
         HapticFeedbackManager.shared.successNotification()
+        persistedStep = 0
         onboardingCompleted = true
       }) {
         Text("Start Using Solidarity")
@@ -364,7 +374,7 @@ struct OnboardingFlowView: View {
           case .success:
             keysGenerated = true
             createInitialBusinessCard()
-            withAnimation { step = .importContacts }
+            goTo(.importContacts)
           case .failure(let error):
             show(error.localizedDescription)
           }

@@ -141,58 +141,105 @@ struct SharingTabView: View {
   // MARK: - QR Section
 
   private var qrSection: some View {
-    VStack(spacing: 12) {
-      HStack {
-        Text("MY QR")
-          .font(.system(size: 12, weight: .bold, design: .monospaced))
-          .foregroundColor(Color.Theme.textTertiary)
+    let card = cardManager.businessCards.first
 
-        Spacer()
-
-        NavigationLink {
-          ShareSettingsView()
-        } label: {
-          HStack(spacing: 4) {
-            Image(systemName: "gearshape")
-              .font(.system(size: 12))
-            Text("Settings")
-              .font(.system(size: 12, weight: .medium))
-          }
-          .foregroundColor(Color.Theme.primaryBlue)
-        }
-      }
-
-      Group {
+    return VStack(spacing: 0) {
+      // QR code with white background
+      ZStack {
         if let generatedQRImage {
           Image(uiImage: generatedQRImage)
             .resizable()
             .interpolation(.none)
             .scaledToFit()
+            .padding(24)
         } else {
-          VStack(spacing: 8) {
+          VStack(spacing: 10) {
             Image(systemName: "qrcode")
-              .font(.system(size: 36))
-              .foregroundColor(Color.Theme.textTertiary)
+              .font(.system(size: 44))
+              .foregroundColor(Color(white: 0.78))
             Text("Create a card to generate QR")
-              .font(.system(size: 12))
-              .foregroundColor(Color.Theme.textTertiary)
+              .font(.system(size: 12, design: .monospaced))
+              .foregroundColor(Color(white: 0.6))
           }
           .frame(maxWidth: .infinity)
-          .frame(height: 180)
+          .frame(height: 200)
         }
       }
       .frame(maxWidth: .infinity)
       .aspectRatio(1, contentMode: .fit)
-      .padding(10)
       .background(Color.white)
-      .cornerRadius(8)
 
-      // Active proof badges
-      proofBadges
+      // Card info footer
+      VStack(spacing: 10) {
+        // Name + avatar row
+        HStack(spacing: 10) {
+          if let animal = card?.animal,
+             let img = UIImage(named: animal.imageBasename) {
+            Image(uiImage: img)
+              .resizable()
+              .scaledToFill()
+              .frame(width: 32, height: 32)
+              .clipShape(Circle())
+              .overlay(Circle().stroke(Color.Theme.divider, lineWidth: 1))
+          }
+
+          VStack(alignment: .leading, spacing: 2) {
+            Text(card?.name ?? "No Card")
+              .font(.system(size: 15, weight: .semibold))
+              .foregroundColor(Color.Theme.textPrimary)
+              .lineLimit(1)
+
+            Text(sharedFieldsSummary)
+              .font(.system(size: 11, design: .monospaced))
+              .foregroundColor(Color.Theme.textTertiary)
+              .lineLimit(1)
+          }
+
+          Spacer()
+
+          NavigationLink {
+            ShareSettingsView()
+          } label: {
+            Image(systemName: "slider.horizontal.3")
+              .font(.system(size: 14))
+              .foregroundColor(Color.Theme.textSecondary)
+              .padding(8)
+              .background(Color.Theme.searchBg)
+              .overlay(Rectangle().stroke(Color.Theme.divider, lineWidth: 1))
+          }
+        }
+
+        // Proof badges
+        proofBadges
+      }
+      .padding(.horizontal, 16)
+      .padding(.vertical, 12)
+      .background(Color.Theme.cardSurface(for: colorScheme))
     }
-    .padding(16)
-    .background(Color.Theme.cardSurface(for: colorScheme))
-    .overlay(Rectangle().stroke(Color.Theme.cardBorder(for: colorScheme), lineWidth: 1))
+    .clipShape(RoundedRectangle(cornerRadius: 12))
+    .overlay(
+      RoundedRectangle(cornerRadius: 12)
+        .stroke(Color.Theme.cardBorder(for: colorScheme), lineWidth: 1)
+    )
+    .shadow(color: .black.opacity(0.08), radius: 12, x: 0, y: 4)
+  }
+
+  private var sharedFieldsSummary: String {
+    let fields = ShareSettingsReader.enabledFields
+    let labels = fields.sorted(by: { $0.rawValue < $1.rawValue }).compactMap { field -> String? in
+      switch field {
+      case .name: return nil // always on, skip
+      case .title: return "title"
+      case .company: return "company"
+      case .email: return "email"
+      case .phone: return "phone"
+      case .profileImage: return "photo"
+      case .socialNetworks: return "socials"
+      case .skills: return "skills"
+      }
+    }
+    if labels.isEmpty { return "name only" }
+    return "name + " + labels.joined(separator: ", ")
   }
 
   private var proofBadges: some View {

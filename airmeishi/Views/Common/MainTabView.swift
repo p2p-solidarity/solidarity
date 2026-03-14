@@ -114,6 +114,9 @@ struct MainTabView: View {
     } else {
       GeometryReader { geometry in
         ZStack(alignment: .bottom) {
+          Color.Theme.pageBg
+            .ignoresSafeArea()
+
           TabView(selection: $selectedTab) {
             PeopleListView()
               .tag(MainAppTab.people.rawValue)
@@ -132,7 +135,6 @@ struct MainTabView: View {
           CustomFloatingTabBar(selectedTab: $selectedTab)
             .padding(.bottom, max(geometry.safeAreaInsets.bottom, 16))
         }
-        .background(Color.Theme.pageBg)
         .ignoresSafeArea(edges: .bottom)
       }
     }

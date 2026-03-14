@@ -6,6 +6,7 @@ struct TerminalWelcomeScreen: View {
   private let fullText = "Welcome to\nyour new social\nexperiment"
   @State private var showSubtitle = false
   @State private var showNext = false
+  @State private var typingTimer: Timer?
 
   var body: some View {
     VStack {
@@ -50,20 +51,38 @@ struct TerminalWelcomeScreen: View {
     }
     .frame(maxWidth: .infinity, maxHeight: .infinity)
     .background(Color.Theme.pageBg.ignoresSafeArea())
+    .contentShape(Rectangle())
+    .onTapGesture {
+      skipAnimation()
+    }
     .onAppear(perform: startTyping)
+  }
+
+  private func skipAnimation() {
+    guard !showNext else { return }
+    typingTimer?.invalidate()
+    typingTimer = nil
+    displayedText = fullText
+    withAnimation(.easeIn(duration: 0.3)) {
+      showSubtitle = true
+    }
+    withAnimation(.spring()) {
+      showNext = true
+    }
   }
 
   private func startTyping() {
     let characters = Array(fullText)
     var index = 0
 
-    Timer.scheduledTimer(withTimeInterval: 0.05, repeats: true) { timer in
+    typingTimer = Timer.scheduledTimer(withTimeInterval: 0.05, repeats: true) { timer in
       if index < characters.count {
         displayedText.append(characters[index])
         index += 1
         HapticFeedbackManager.shared.softImpact()
       } else {
         timer.invalidate()
+        typingTimer = nil
         withAnimation(.easeIn(duration: 0.8)) {
           showSubtitle = true
         }
