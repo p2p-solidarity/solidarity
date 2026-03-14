@@ -71,6 +71,9 @@ final class NFCPassportReaderService: NSObject {
     )
 
     let reader = PassportReader()
+    if let masterListURL = Bundle.main.url(forResource: "masterList", withExtension: "pem") {
+      reader.setMasterListURL(masterListURL)
+    }
 
     let passport: NFCPassportModel
     do {
