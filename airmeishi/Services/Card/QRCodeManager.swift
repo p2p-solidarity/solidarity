@@ -36,6 +36,21 @@ final class QRCodeManager: ObservableObject {
 
   func generateQRCode(
     for businessCard: BusinessCard,
+    fields: Set<BusinessCardField>,
+    expirationDate: Date? = nil
+  ) -> CardResult<UIImage> {
+    isGenerating = true
+    let result = generationService.generateImage(
+      for: businessCard,
+      fields: fields,
+      expirationDate: expirationDate
+    )
+    isGenerating = false
+    return result
+  }
+
+  func generateQRCode(
+    for businessCard: BusinessCard,
     sharingLevel: SharingLevel,
     expirationDate: Date? = nil
   ) -> CardResult<UIImage> {

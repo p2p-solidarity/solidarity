@@ -102,8 +102,8 @@ struct MainTabView: View {
         Tab(MainAppTab.people.title, systemImage: MainAppTab.people.systemImage, value: MainAppTab.people.rawValue) {
           PeopleListView()
         }
-        Tab(MainAppTab.scan.title, systemImage: MainAppTab.scan.systemImage, value: MainAppTab.scan.rawValue) {
-          ScanTabView()
+        Tab(MainAppTab.share.title, systemImage: MainAppTab.share.systemImage, value: MainAppTab.share.rawValue) {
+          SharingTabView()
         }
         Tab(MainAppTab.me.title, systemImage: MainAppTab.me.systemImage, value: MainAppTab.me.rawValue) {
           MeTabView()
@@ -112,30 +112,31 @@ struct MainTabView: View {
       .tint(Color.Theme.primaryBlue)
       .toolbarColorScheme(.dark, for: .tabBar)
     } else {
-      ZStack(alignment: .bottom) {
-        TabView(selection: $selectedTab) {
-          PeopleListView()
-            .tag(MainAppTab.people.rawValue)
+      GeometryReader { geometry in
+        ZStack(alignment: .bottom) {
+          Color.Theme.pageBg
+            .ignoresSafeArea()
 
-          ScanTabView()
-            .tag(MainAppTab.scan.rawValue)
+          TabView(selection: $selectedTab) {
+            PeopleListView()
+              .tag(MainAppTab.people.rawValue)
 
-          MeTabView()
-            .tag(MainAppTab.me.rawValue)
-        }
-        .tabViewStyle(DefaultTabViewStyle())
-        .toolbarBackground(.hidden, for: .tabBar)
-        .toolbar(.hidden, for: .tabBar)
-        .padding(.bottom, 80)
+            SharingTabView()
+              .tag(MainAppTab.share.rawValue)
 
-        VStack(spacing: 0) {
-          Spacer()
+            MeTabView()
+              .tag(MainAppTab.me.rawValue)
+          }
+          .tabViewStyle(DefaultTabViewStyle())
+          .toolbarBackground(.hidden, for: .tabBar)
+          .toolbar(.hidden, for: .tabBar)
+          .padding(.bottom, 80)
 
           CustomFloatingTabBar(selectedTab: $selectedTab)
-            .padding(.bottom, 24)
+            .padding(.bottom, max(geometry.safeAreaInsets.bottom, 16))
         }
+        .ignoresSafeArea(edges: .bottom)
       }
-      .ignoresSafeArea(edges: .bottom)
     }
   }
 
@@ -160,7 +161,7 @@ struct MainTabView: View {
       )
 
     case .navigateToSharing:
-      selectedTab = MainAppTab.scan.rawValue
+      selectedTab = MainAppTab.share.rawValue
 
     case .navigateToContacts:
       selectedTab = MainAppTab.people.rawValue

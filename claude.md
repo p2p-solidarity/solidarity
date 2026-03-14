@@ -220,7 +220,7 @@ airmeishi/
 | SecureKeyManager volatile | Curve25519 keys in-memory only, regenerated each launch | HIGH |
 | Semaphore sync stubbed | `syncRootFromNetwork()` / `pushUpdatesToNetwork()` return false | HIGH |
 | Contact merge silent | Auto-deduplicates by businessCard.id, no UI merge prompt | LOW |
-| Tab structure mismatch | 5 tabs currently vs spec 3-tab (People/Scan/Me) | INFO |
+| SharingLevel still in services | `SharingLevel` enum kept for backward compat; services/tests still reference it | LOW |
 | Legacy Contact struct | `Contact.swift` (Codable) lacks spec fields; only `ContactEntity` has them | LOW |
 
 ### Known TODOs in Code
@@ -260,11 +260,51 @@ airmeishi/
 
 **Present Proof**: Scan QR / Self-initiated → Review Request → Biometric + Sign → Submit VP Token → Success
 
-### Spec Tab Structure
+### Spec Tab Structure (v1.2)
 
 ```
-People (person.2.fill) | Scan (qrcode.viewfinder) | Me (person.text.rectangle)
+People (person.2.fill) | Share (dot.radiowaves.up.forward) | Me (person.text.rectangle)
 ```
+
+- **Share tab** = `SharingTabView`（radar/orbit peer discovery + QR）
+- QR scanner 從 sheet 開啟（Share tab 內的 "Scan QR" 按鈕），不是獨立 tab
+- `ScanTabView` 仍存在，但作為 `.sheet` 使用
+
+### Share Tab Layout
+
+```
+┌────────────────────────────────┐
+│       [Radar / Orbit view]     │  ← hero, MPC peer discovery
+│       [Start / Stop Matching]  │
+│                                │
+│          ┌──────────┐          │
+│          │  QR Code  │          │  ← VP format, reflects share settings
+│          └──────────┘          │
+│       ⚙️ Share Settings →      │  ← NavigationLink → ShareSettingsView
+│                                │
+│   [Scan QR]      [My QR]      │  ← quick actions
+└────────────────────────────────┘
+```
+
+### Share Settings（獨立頁面，從 Share tab 跳轉）
+
+```
+── Share Fields ──
+✅ Name         (locked, always on)
+⬜ Title
+⬜ Company
+⬜ Email
+⬜ Phone
+
+── Proofs ──
+✅ Real Human    (default on, if passport claim exists)
+⬜ Age 18+       (if passport claim exists)
+```
+
+- 以 `@AppStorage` 持久化用戶的欄位選擇
+- QR payload = VP（Verifiable Presentation），包含選取的 card fields + proof badges
+- **取消 `SharingLevel`**（public/professional/personal）— 改為逐欄位 toggle，預設最少資訊（僅 name）
+- `ShareCardPickerSheet` 由 `ShareSettingsView` 取代
 
 ### Spec Data Models
 
@@ -314,7 +354,7 @@ People (person.2.fill) | Scan (qrcode.viewfinder) | Me (person.text.rectangle)
 | 6 | Ichigo-ichie (bidirectional 140 chars) | P0 |
 | 7 | Proof presentation (OID4VP) | P0 |
 | 8 | Proof verification (QR scan) | P0 |
-| 9 | 3-Tab navigation | P0 |
+| 9 | 3-Tab navigation (People/Share/Me) | P0 |
 | 10 | iCloud backup | P1 |
 | 11 | Full onboarding flow | P1 |
 

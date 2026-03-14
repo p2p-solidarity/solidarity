@@ -5,15 +5,8 @@ struct SettingsView: View {
   @ObservedObject private var devMode = DeveloperModeManager.shared
   @State private var showingSolidarityQR = false
   @State private var showingDIDList = false
-  @AppStorage("defaultSharingLevel") private var defaultSharingLevel: String = SharingLevel.professional.rawValue
+  @State private var showingOnboarding = false
   @AppStorage("iCloudBackupEnabled") private var iCloudBackupEnabled: Bool = true
-
-  private var sharingLevelBinding: Binding<SharingLevel> {
-    Binding(
-      get: { SharingLevel(rawValue: defaultSharingLevel) ?? .professional },
-      set: { defaultSharingLevel = $0.rawValue }
-    )
-  }
 
   var body: some View {
     NavigationStack {
@@ -39,13 +32,13 @@ struct SettingsView: View {
         }
 
         Section(
-          header: Text("QR Privacy Level"),
-          footer: Text("Controls which fields are included when generating or sharing your QR code.")
+          header: Text("QR Sharing"),
+          footer: Text("Controls which fields and proofs are included when generating your QR code.")
         ) {
-          Picker("Default Level", selection: sharingLevelBinding) {
-            ForEach(SharingLevel.allCases) { level in
-              Label(level.displayName, systemImage: level.icon).tag(level)
-            }
+          NavigationLink {
+            ShareSettingsView()
+          } label: {
+            Label("Share Settings", systemImage: "checklist")
           }
         }
 
@@ -75,6 +68,14 @@ struct SettingsView: View {
           }
         }
 
+        Section("Guide") {
+          Button {
+            showingOnboarding = true
+          } label: {
+            Label("Replay Onboarding", systemImage: "arrow.counterclockwise")
+          }
+        }
+
         Section("About") {
           HStack {
             Text("Version")
@@ -98,6 +99,11 @@ struct SettingsView: View {
       }
       .sheet(isPresented: $showingDIDList) {
         DIDListSheet()
+      }
+      .fullScreenCover(isPresented: $showingOnboarding) {
+        OnboardingReplayView {
+          showingOnboarding = false
+        }
       }
     }
   }
@@ -156,6 +162,29 @@ private struct DIDListSheet: View {
         .textSelection(.enabled)
     }
     .padding(.vertical, 4)
+  }
+}
+
+// MARK: - Onboarding Replay Wrapper
+
+private struct OnboardingReplayView: View {
+  var onDismiss: () -> Void
+
+  var body: some View {
+    ZStack(alignment: .topTrailing) {
+      OnboardingFlowView()
+
+      Button(action: onDismiss) {
+        Image(systemName: "xmark")
+          .font(.system(size: 14, weight: .bold))
+          .foregroundColor(Color.Theme.textSecondary)
+          .padding(10)
+          .background(Color.Theme.searchBg)
+          .overlay(Rectangle().stroke(Color.Theme.divider, lineWidth: 1))
+      }
+      .padding(.top, 54)
+      .padding(.trailing, 20)
+    }
   }
 }
 

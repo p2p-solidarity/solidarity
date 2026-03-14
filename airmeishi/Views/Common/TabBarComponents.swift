@@ -4,13 +4,13 @@ import SwiftUI
 
 enum MainAppTab: Int, CaseIterable {
   case people = 0
-  case scan = 1
+  case share = 1
   case me = 2
 
   var title: String {
     switch self {
     case .people: "People"
-    case .scan: "Scan"
+    case .share: "Share"
     case .me: "Me"
     }
   }
@@ -18,7 +18,7 @@ enum MainAppTab: Int, CaseIterable {
   var systemImage: String {
     switch self {
     case .people: "person.2.fill"
-    case .scan: "qrcode.viewfinder"
+    case .share: "dot.radiowaves.up.forward"
     case .me: "person.text.rectangle"
     }
   }
