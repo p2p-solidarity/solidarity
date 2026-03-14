@@ -269,7 +269,7 @@ private struct PresentationSheet: View {
           }
 
           // Claim pills
-          FlowLayout(spacing: 8) {
+          LazyVGrid(columns: [GridItem(.adaptive(minimum: 100), spacing: 8)], spacing: 8) {
             ForEach(selectedClaims) { claim in
               Text(claim.claimType)
                 .font(.system(size: 10, weight: .bold, design: .monospaced))

@@ -105,7 +105,7 @@ struct ProximitySharingView: View {
   private var headerCard: some View {
     VStack(alignment: .leading, spacing: 12) {
       HStack {
-        Text(currentScreenID.rawValue.uppercased())
+        Text(currentStepTitle.uppercased())
           .font(.system(size: 10, weight: .bold, design: .monospaced))
           .foregroundColor(Color.Theme.terminalGreen)
         Spacer()
@@ -457,13 +457,13 @@ struct ProximitySharingView: View {
     .overlay(Rectangle().stroke(Color.Theme.divider, lineWidth: 1))
   }
 
-  private var currentScreenID: SolidarityScreenID {
+  private var currentStepTitle: String {
     switch step {
-    case .discovery: return .exchangeDiscovery
-    case .scope: return .exchangeScope
-    case .awaiting: return .exchangeAwaiting
-    case .incoming: return .exchangeIncoming
-    case .saved: return .exchangeSaved
+    case .discovery: return "Discovery"
+    case .scope: return "Sharing Scope"
+    case .awaiting: return "Awaiting Response"
+    case .incoming: return "Incoming Request"
+    case .saved: return "Exchange Complete"
     }
   }
 

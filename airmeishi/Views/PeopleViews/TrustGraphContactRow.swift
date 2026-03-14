@@ -118,10 +118,14 @@ struct TrustGraphContactRow: View {
     .padding(.vertical, 8)
   }
 
+  private static let dateFormatter: DateFormatter = {
+    let f = DateFormatter()
+    f.dateFormat = "yy.MM.dd HH:mm"
+    return f
+  }()
+
   private func formatDate(_ date: Date) -> String {
-    let formatter = DateFormatter()
-    formatter.dateFormat = "yy.MM.dd HH:mm"
-    return formatter.string(from: date)
+    Self.dateFormatter.string(from: date)
   }
 }
 

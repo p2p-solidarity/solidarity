@@ -418,7 +418,9 @@ extension ProximityManager {
         entity.exchangeTimestamp = payload.timestamp
         entity.myEphemeralMessage = payload.myMessage?.prefix(140).description
         entity.theirEphemeralMessage = payload.theirMessage?.prefix(140).description
-        entity.didPublicKey = payload.signPubKey
+        if case .success(let descriptor) = DIDService().currentDescriptor() {
+          entity.didPublicKey = descriptor.did
+        }
         entity.graphExportEdgeId = entity.graphExportEdgeId ?? UUID().uuidString
         entity.commonFriendsHandshakeToken = entity.commonFriendsHandshakeToken ?? UUID().uuidString
         IdentityDataStore.shared.upsertContact(entity)
@@ -430,14 +432,13 @@ extension ProximityManager {
   }
 
   private func signExchangeString(_ value: String) -> String? {
-    switch KeyManager.shared.getSigningKeyPair() {
+    guard let messageData = value.data(using: .utf8) else { return nil }
+    switch KeychainService.shared.signingKey() {
     case .failure:
       return nil
-    case .success(let pair):
-      guard let messageData = value.data(using: .utf8),
-        let signature = try? pair.privateKey.signature(for: messageData)
-      else { return nil }
-      return signature.derRepresentation.base64EncodedString()
+    case .success(let signingKey):
+      guard let signature = try? signingKey.sign(payload: messageData) else { return nil }
+      return signature.base64EncodedString()
     }
   }
 

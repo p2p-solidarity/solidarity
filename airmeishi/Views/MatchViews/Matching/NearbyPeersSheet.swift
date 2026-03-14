@@ -36,7 +36,7 @@ struct NearbyPeersSheet: View {
   }
 
   var body: some View {
-    NavigationView {
+    NavigationStack {
       ZStack {
         Color.Theme.pageBg.ignoresSafeArea()
 

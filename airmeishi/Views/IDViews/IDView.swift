@@ -40,7 +40,7 @@ struct IDView: View {
     NavigationStack {
       ZStack {
         // Background
-        Color(.systemGroupedBackground)
+        Color.Theme.pageBg
           .ignoresSafeArea()
 
         ScrollView {
@@ -74,7 +74,7 @@ struct IDView: View {
               },
               label: {
                 Image(systemName: "qrcode")
-                  .foregroundColor(.primary)
+                  .foregroundColor(Color.Theme.textPrimary)
               }
             )
 
@@ -84,7 +84,7 @@ struct IDView: View {
               },
               label: {
                 Image(systemName: "arrow.clockwise")
-                  .foregroundColor(.primary)
+                  .foregroundColor(Color.Theme.textPrimary)
               }
             )
           }
@@ -97,7 +97,7 @@ struct IDView: View {
             },
             label: {
               Image(systemName: "gearshape")
-                .foregroundColor(.primary)
+                .foregroundColor(Color.Theme.textPrimary)
             }
           )
         }

@@ -4,22 +4,22 @@ import SwiftUI
 
 enum MainAppTab: Int, CaseIterable {
   case people = 0
-  case sharing = 1
+  case scan = 1
   case me = 2
 
   var title: String {
     switch self {
     case .people: "People"
-    case .sharing: "Sharing"
+    case .scan: "Scan"
     case .me: "Me"
     }
   }
 
   var systemImage: String {
     switch self {
-    case .people: "hexagon"
-    case .sharing: "dot.radiowaves.up.forward"
-    case .me: "diamond"
+    case .people: "person.2.fill"
+    case .scan: "qrcode.viewfinder"
+    case .me: "person.text.rectangle"
     }
   }
 }
@@ -90,26 +90,3 @@ struct PeacefulTabButton: View {
   }
 }
 
-// MARK: - Tab Bar Button (Legacy)
-
-struct TabBarButton: View {
-  let systemName: String
-  let title: String
-  let isSelected: Bool
-  let action: () -> Void
-
-  var body: some View {
-    Button(action: action) {
-      VStack(spacing: 4) {
-        Image(systemName: systemName)
-          .font(.system(size: 18, weight: .medium))
-          .foregroundColor(Color.Theme.textPrimary.opacity(isSelected ? 1.0 : 0.5))
-
-        Text(title)
-          .font(.system(size: 11, weight: .medium))
-          .foregroundColor(Color.Theme.textPrimary.opacity(isSelected ? 1.0 : 0.5))
-      }
-    }
-    .buttonStyle(.plain)
-  }
-}

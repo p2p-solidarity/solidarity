@@ -23,7 +23,7 @@ struct ScanTabView: View {
   var body: some View {
     NavigationStack {
       ZStack {
-        Color.Theme.cardBg.ignoresSafeArea()
+        Color.Theme.pageBg.ignoresSafeArea()
         CameraPreviewView(previewLayer: $cameraPreviewLayer).ignoresSafeArea()
 
         VStack {
@@ -398,7 +398,8 @@ private struct ProofPresentationFlowSheet: View {
           let vpToken = Self.wrapInVPEnvelope(
             vcJwt: credential.jwt,
             holderDid: credential.holderDid,
-            nonce: parsedRequest?.nonce
+            nonce: parsedRequest?.nonce,
+            audience: parsedRequest?.clientId
           )
           submitToVerifier(jwt: vpToken)
         }
@@ -406,25 +407,54 @@ private struct ProofPresentationFlowSheet: View {
     }
   }
 
-  /// Wraps a VC JWT inside a Verifiable Presentation JSON envelope, then base64url-encodes it
-  /// so it can be sent as a single `vp_token` string.
-  private static func wrapInVPEnvelope(vcJwt: String, holderDid: String, nonce: String?) -> String {
-    var vp: [String: Any] = [
-      "@context": ["https://www.w3.org/2018/credentials/v1"],
-      "type": ["VerifiablePresentation"],
-      "holder": holderDid,
-      "verifiableCredential": [vcJwt],
+  /// Wraps a VC JWT inside a signed Verifiable Presentation JWT (ES256).
+  private static func wrapInVPEnvelope(vcJwt: String, holderDid: String, nonce: String?, audience: String? = nil) -> String {
+    // Build JWT header
+    var header: [String: Any] = [
+      "alg": "ES256",
+      "typ": "JWT",
+      "kid": "\(holderDid)#0",
     ]
-    if let nonce { vp["nonce"] = nonce }
 
-    // Encode as compact JSON — verifiers can base64url-decode or treat as opaque JWT-like token
-    guard let data = try? JSONSerialization.data(withJSONObject: vp, options: [.sortedKeys]),
-          let json = String(data: data, encoding: .utf8)
-    else {
-      // Fallback: return the bare VC JWT if envelope creation fails
-      return vcJwt
-    }
-    return json
+    // Build JWT payload
+    let now = Date()
+    var payload: [String: Any] = [
+      "iss": holderDid,
+      "iat": Int(now.timeIntervalSince1970),
+      "exp": Int(now.timeIntervalSince1970) + 300,
+      "vp": [
+        "@context": ["https://www.w3.org/2018/credentials/v1"],
+        "type": ["VerifiablePresentation"],
+        "verifiableCredential": [vcJwt],
+      ] as [String: Any],
+    ]
+    if let nonce { payload["nonce"] = nonce }
+    if let audience { payload["aud"] = audience }
+
+    // Encode header and payload
+    guard let headerData = try? JSONSerialization.data(withJSONObject: header, options: [.sortedKeys]),
+          let payloadData = try? JSONSerialization.data(withJSONObject: payload, options: [.sortedKeys])
+    else { return vcJwt }
+
+    let headerB64 = base64url(headerData)
+    let payloadB64 = base64url(payloadData)
+    let signingInput = "\(headerB64).\(payloadB64)"
+
+    // Sign with DID key (P-256 ECDSA)
+    guard let inputData = signingInput.data(using: .utf8),
+          case .success(let signingKey) = KeychainService.shared.signingKey(),
+          let signature = try? signingKey.sign(payload: inputData)
+    else { return vcJwt }
+
+    let signatureB64 = base64url(signature)
+    return "\(headerB64).\(payloadB64).\(signatureB64)"
+  }
+
+  private static func base64url(_ data: Data) -> String {
+    data.base64EncodedString()
+      .replacingOccurrences(of: "+", with: "-")
+      .replacingOccurrences(of: "/", with: "_")
+      .replacingOccurrences(of: "=", with: "")
   }
 
   private func submitToVerifier(jwt: String) {

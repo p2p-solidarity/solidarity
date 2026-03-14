@@ -20,7 +20,7 @@ struct AddIssuerView: View {
   }
 
   var body: some View {
-    NavigationView {
+    NavigationStack {
       List(availableMembers) { member in
         Button(action: {
           Task {

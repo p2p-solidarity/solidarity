@@ -3,6 +3,8 @@ import SwiftUI
 struct AdvancedSettingsView: View {
   @ObservedObject private var devMode = DeveloperModeManager.shared
   @State private var showingPassportPipeline = false
+  @State private var showingZKSettings = false
+  @State private var showingOIDCRequest = false
   @State private var showingAlert = false
   @State private var alertMessage = ""
   @State private var showingResetConfirm = false
@@ -35,8 +37,26 @@ struct AdvancedSettingsView: View {
             Label("Simulate NFC", systemImage: "wave.3.forward")
           }
 
+          Button {
+            showingZKSettings = true
+          } label: {
+            Label("ZK Identity Settings", systemImage: "shield.checkered")
+          }
+
+          Button {
+            showingOIDCRequest = true
+          } label: {
+            Label("OIDC Request Scanner", systemImage: "qrcode")
+          }
+
           Button("Reset Passport Credential", role: .destructive) {
             resetPassportCredential()
+          }
+
+          Button(role: .destructive) {
+            devMode.disableDeveloperMode()
+          } label: {
+            Label("Disable Developer Mode", systemImage: "xmark.circle")
           }
         } else {
           Text("Tap the version number in the main settings screen several times to enable developer mode.")
@@ -57,6 +77,12 @@ struct AdvancedSettingsView: View {
       PassportOnboardingFlowView { _ in
         showingPassportPipeline = false
       }
+    }
+    .sheet(isPresented: $showingZKSettings) {
+      ZKSettingsView()
+    }
+    .sheet(isPresented: $showingOIDCRequest) {
+      OIDCRequestView()
     }
     .alert("Settings", isPresented: $showingAlert) {
       Button("OK", role: .cancel) {}

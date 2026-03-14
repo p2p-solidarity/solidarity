@@ -13,7 +13,7 @@ final class QRCodeManagerTests: XCTestCase {
     var qrManager: QRCodeManager!
     var testBusinessCard: BusinessCard!
     
-    override func setUpWithResult() throws {
+    override func setUpWithError() throws {
         qrManager = QRCodeManager.shared
         
         testBusinessCard = BusinessCard(
@@ -29,7 +29,7 @@ final class QRCodeManagerTests: XCTestCase {
         )
     }
     
-    override func tearDownWithResult() throws {
+    override func tearDownWithError() throws {
         qrManager = nil
         testBusinessCard = nil
     }
@@ -203,7 +203,7 @@ final class PassKitManagerTests: XCTestCase {
     var passKitManager: PassKitManager!
     var testBusinessCard: BusinessCard!
     
-    override func setUpWithResult() throws {
+    override func setUpWithError() throws {
         passKitManager = PassKitManager.shared
         
         testBusinessCard = BusinessCard(
@@ -215,7 +215,7 @@ final class PassKitManagerTests: XCTestCase {
         )
     }
     
-    override func tearDownWithResult() throws {
+    override func tearDownWithError() throws {
         passKitManager = nil
         testBusinessCard = nil
     }
@@ -267,7 +267,7 @@ final class ShareLinkManagerTests: XCTestCase {
     var shareLinkManager: ShareLinkManager!
     var testBusinessCard: BusinessCard!
     
-    override func setUpWithResult() throws {
+    override func setUpWithError() throws {
         shareLinkManager = ShareLinkManager.shared
         
         testBusinessCard = BusinessCard(
@@ -279,7 +279,7 @@ final class ShareLinkManagerTests: XCTestCase {
         )
     }
     
-    override func tearDownWithResult() throws {
+    override func tearDownWithError() throws {
         // Clean up any test links
         _ = shareLinkManager.deactivateAllLinks(for: testBusinessCard.id)
         shareLinkManager = nil

@@ -7,6 +7,7 @@ struct OnboardingFlowView: View {
     case avatarSetup
     case secureKeys
     case importContacts
+    case scanPassport
     case complete
   }
 
@@ -31,6 +32,10 @@ struct OnboardingFlowView: View {
   // Import Contacts
   @State private var importedCount: Int?
   @State private var showingVCFPicker = false
+
+  // Passport Scan
+  @State private var showingPassportFlow = false
+  @State private var passportScanned = false
 
   // Completion tracking
   @State private var keysGenerated = false
@@ -73,6 +78,8 @@ struct OnboardingFlowView: View {
         finalizeKeysStep
       case .importContacts:
         importContactsStep
+      case .scanPassport:
+        scanPassportStep
       case .complete:
         finalCompletionStep
       }
@@ -85,6 +92,13 @@ struct OnboardingFlowView: View {
     .sheet(isPresented: $showingVCFPicker) {
       VCFDocumentPicker { url in
         handleVCFImport(url: url)
+      }
+    }
+    .fullScreenCover(isPresented: $showingPassportFlow) {
+      PassportOnboardingFlowView { _ in
+        passportScanned = true
+        showingPassportFlow = false
+        withAnimation(.easeInOut) { step = .complete }
       }
     }
   }
@@ -194,8 +208,67 @@ struct OnboardingFlowView: View {
 
       Spacer()
 
-      Button(action: { withAnimation(.easeInOut) { step = .complete } }) {
+      Button(action: { withAnimation(.easeInOut) { step = .scanPassport } }) {
         Text(importedCount != nil ? "Continue" : "Skip")
+      }
+      .buttonStyle(ThemedInvertedButtonStyle())
+    }
+    .padding(.horizontal, 24)
+  }
+
+  // MARK: - Scan Passport Step [O-4]
+
+  private var scanPassportStep: some View {
+    VStack(alignment: .leading, spacing: 24) {
+      HStack {
+        Button(action: { withAnimation { step = .importContacts } }) {
+          Image(systemName: "chevron.left")
+            .foregroundColor(.white)
+            .padding(12)
+            .overlay(Rectangle().stroke(Color.Theme.divider, lineWidth: 1))
+        }
+        Spacer()
+      }
+      .padding(.top, 40)
+
+      VStack(alignment: .leading, spacing: 8) {
+        Text("Scan Passport")
+          .font(.system(size: 28, weight: .bold))
+          .foregroundColor(.white)
+        Text("Scan your passport to unlock provable claims.\nYou can prove your age or personhood without revealing personal info.")
+          .font(.system(size: 14))
+          .foregroundColor(Color.Theme.textSecondary)
+      }
+
+      Spacer()
+
+      VStack(spacing: 16) {
+        if passportScanned {
+          HStack(spacing: 8) {
+            Image(systemName: "checkmark.circle.fill")
+              .foregroundColor(Color.Theme.terminalGreen)
+            Text("Passport credential created")
+              .font(.system(size: 16, weight: .semibold, design: .monospaced))
+              .foregroundColor(Color.Theme.terminalGreen)
+          }
+          .padding(.vertical, 10)
+          .frame(maxWidth: .infinity)
+          .background(Color.Theme.terminalGreen.opacity(0.08))
+          .overlay(Rectangle().stroke(Color.Theme.terminalGreen.opacity(0.3), lineWidth: 1))
+        }
+
+        if !passportScanned {
+          Button(action: { showingPassportFlow = true }) {
+            Label("Scan Passport", systemImage: "doc.viewfinder")
+          }
+          .buttonStyle(ThemedPrimaryButtonStyle())
+        }
+      }
+
+      Spacer()
+
+      Button(action: { withAnimation(.easeInOut) { step = .complete } }) {
+        Text(passportScanned ? "Continue" : "Skip")
       }
       .buttonStyle(ThemedInvertedButtonStyle())
     }
@@ -228,6 +301,11 @@ struct OnboardingFlowView: View {
           title: "Contacts",
           done: (importedCount ?? 0) > 0,
           detail: importedCount.map { "\($0) imported" } ?? "Skipped"
+        )
+        completionRow(
+          title: "Passport",
+          done: passportScanned,
+          detail: passportScanned ? "Credential created" : "Skipped"
         )
       }
       .padding(16)

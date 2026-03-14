@@ -24,7 +24,7 @@ struct PeerDetailSheet: View {
   @State private var isLighteningAnimating = false
 
   var body: some View {
-    NavigationView {
+    NavigationStack {
       ZStack {
         Color.Theme.pageBg.ignoresSafeArea()
 

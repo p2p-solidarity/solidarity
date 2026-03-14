@@ -13,7 +13,7 @@ struct TerminalWelcomeScreen: View {
 
       VStack(alignment: .leading, spacing: 16) {
         Text(displayedText)
-          .font(.system(size: 32, weight: .bold, design: .default))
+          .font(.system(size: 32, weight: .bold, design: .monospaced))
           .foregroundColor(.white)
           .multilineTextAlignment(.leading)
           .frame(maxWidth: .infinity, alignment: .leading)

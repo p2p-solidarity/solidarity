@@ -1,210 +1,15 @@
 //
-//  QRScannerView.swift
+//  ScanComponents.swift
 //  airmeishi
 //
-//  QR code scanner interface with camera preview and scan results
+//  Shared camera/scan UI components used by ScanTabView and MRZCameraView
 //
 
 import AVFoundation
 import SwiftUI
 import UIKit
 
-/// QR code scanner view with camera preview and scan handling
-struct QRScannerView: View {
-  @StateObject private var qrManager = QRCodeManager.shared
-  @StateObject private var contactRepository = ContactRepository.shared
-
-  @State private var showingScannedCard = false
-  @State private var showingError = false
-  @State private var lastVerification: VerificationStatus = .unverified
-  @State private var cameraPreviewLayer: AVCaptureVideoPreviewLayer?
-  @State private var showingPermissionAlert = false
-  @State private var permissionAlertMessage = ""
-
-  @Environment(\.dismiss) private var dismiss
-
-  var body: some View {
-    NavigationView {
-      ZStack {
-        // Camera preview
-        CameraPreviewView(previewLayer: $cameraPreviewLayer)
-          .ignoresSafeArea()
-
-        // Overlay UI
-        VStack {
-          // Top bar
-          HStack {
-            Button("Cancel") {
-              qrManager.stopScanning()
-              dismiss()
-            }
-            .foregroundColor(.white)
-            .padding()
-
-            Spacer()
-
-            Text("Scan QR Code")
-              .font(.headline)
-              .foregroundColor(.white)
-
-            Spacer()
-
-            // Placeholder to balance layout
-            Color.clear.frame(width: 44, height: 44)
-              .padding()
-          }
-          .background(Color.black.opacity(0.7))
-
-          Spacer()
-
-          // Scanning frame
-          ScanningFrameView()
-
-          Spacer()
-
-          // Instructions
-          VStack(spacing: 8) {
-            Text("Position QR code within the frame")
-              .font(.subheadline)
-              .foregroundColor(.white)
-
-            if qrManager.isScanning {
-              HStack {
-                ProgressView()
-                  .progressViewStyle(CircularProgressViewStyle(tint: .white))
-                  .scaleEffect(0.8)
-
-                Text("Scanning...")
-                  .font(.caption)
-                  .foregroundColor(.white)
-              }
-            }
-          }
-          .padding()
-          .background(Color.black.opacity(0.7))
-          .cornerRadius(10)
-          .padding(.horizontal)
-          .padding(.bottom, 50)
-        }
-        .transaction { transaction in
-          transaction.animation = nil  // Prevent animation propagation from scanning line
-        }
-      }
-    }
-    .navigationBarHidden(true)
-    .onAppear {
-      ensureCameraPermissionAndStart()
-    }
-    .onDisappear {
-      qrManager.stopScanning()
-      cameraPreviewLayer = nil
-    }
-    .onChange(of: qrManager.lastScannedCard) { _, scannedCard in
-      if scannedCard != nil {
-        lastVerification = qrManager.lastVerificationStatus ?? .unverified
-        showingScannedCard = true
-      }
-    }
-    .onChange(of: qrManager.scanError) { _, error in
-      if error != nil {
-        showingError = true
-      }
-    }
-    .sheet(isPresented: $showingScannedCard) {
-      if let scannedCard = qrManager.lastScannedCard {
-        ScannedCardView(businessCard: scannedCard, verification: lastVerification) {
-          // Save to contacts
-          saveScannedCard(scannedCard)
-        }
-      }
-    }
-    .alert("Scan Error", isPresented: $showingError) {
-      Button("Try Again") {
-        qrManager.scanError = nil
-        ensureCameraPermissionAndStart()
-      }
-      Button("Cancel") {
-        dismiss()
-      }
-    } message: {
-      Text(qrManager.scanError?.localizedDescription ?? String(localized: "Unknown error occurred"))
-    }
-    .alert("Camera Permission", isPresented: $showingPermissionAlert) {
-      Button("Open Settings") {
-        if let url = URL(string: UIApplication.openSettingsURLString) {
-          UIApplication.shared.open(url)
-        }
-      }
-      Button("Cancel", role: .cancel) {}
-    } message: {
-      Text(permissionAlertMessage)
-    }
-  }
-
-  // MARK: - Private Methods
-
-  private func startScanning() {
-    let result = qrManager.startScanning()
-
-    switch result {
-    case .success(let previewLayer):
-      self.cameraPreviewLayer = previewLayer
-    case .failure(let error):
-      qrManager.scanError = error
-      showingError = true
-    }
-  }
-
-  private func ensureCameraPermissionAndStart() {
-    switch AVCaptureDevice.authorizationStatus(for: .video) {
-    case .authorized:
-      startScanning()
-    case .notDetermined:
-      AVCaptureDevice.requestAccess(for: .video) { granted in
-        DispatchQueue.main.async {
-          if granted {
-            startScanning()
-          } else {
-            permissionAlertMessage = String(localized: "Camera access is required to scan QR codes. Please enable it in Settings.")
-            showingPermissionAlert = true
-          }
-        }
-      }
-    case .denied, .restricted:
-      permissionAlertMessage = String(localized: "Camera access is required to scan QR codes. Please enable it in Settings.")
-      showingPermissionAlert = true
-    @unknown default:
-      permissionAlertMessage = String(localized: "Camera access is required to scan QR codes.")
-      showingPermissionAlert = true
-    }
-  }
-
-  private func saveScannedCard(_ businessCard: BusinessCard) {
-    let contact = Contact(
-      id: UUID(),
-      businessCard: businessCard,
-      receivedAt: Date(),
-      source: .qrCode,
-      tags: [],
-      notes: nil,
-      verificationStatus: lastVerification,
-      sealedRoute: qrManager.lastSealedRoute
-    )
-
-    let result = contactRepository.addContact(contact)
-
-    switch result {
-    case .success:
-      showingScannedCard = false
-      dismiss()
-    case .failure(let error):
-      qrManager.scanError = error
-      showingError = true
-    }
-  }
-}
-
-// MARK: - Camera Preview View
+// MARK: - Camera Preview
 
 struct CameraPreviewView: UIViewRepresentable {
   @Binding var previewLayer: AVCaptureVideoPreviewLayer?
@@ -221,42 +26,33 @@ struct CameraPreviewView: UIViewRepresentable {
     }
   }
 
-  // Internal UIView subclass to handle layout updates
   class PreviewContainerView: UIView {
     var previewLayer: AVCaptureVideoPreviewLayer?
 
     func setPreviewLayer(_ layer: AVCaptureVideoPreviewLayer) {
-      // Remove old layer if exists
       self.previewLayer?.removeFromSuperlayer()
-
-      // Set new layer
       self.previewLayer = layer
       layer.videoGravity = .resizeAspectFill
       self.layer.addSublayer(layer)
-
-      // Initial layout
       layer.frame = bounds
     }
 
     override func layoutSubviews() {
       super.layoutSubviews()
-      // Ensure preview layer matches view bounds on layout changes
       previewLayer?.frame = bounds
     }
   }
 }
 
-// MARK: - Scanning Frame View
+// MARK: - Scanning Frame
 
 struct ScanningFrameView: View {
   var body: some View {
     ZStack {
-      // Scanning frame
       RoundedRectangle(cornerRadius: 20)
         .stroke(Color.white, lineWidth: 3)
         .frame(width: 250, height: 250)
 
-      // Corner indicators
       VStack {
         HStack {
           CornerIndicator(corners: [.topLeft])
@@ -272,17 +68,16 @@ struct ScanningFrameView: View {
       }
       .frame(width: 250, height: 250)
 
-      // Scanning line animation - isolated to prevent affecting parent views
       ScanningLineView()
     }
     .frame(width: 250, height: 250)
     .transaction { transaction in
-      transaction.animation = nil  // Prevent animation propagation to parent
+      transaction.animation = nil
     }
   }
 }
 
-// MARK: - Scanning Line View
+// MARK: - Scanning Line
 
 struct ScanningLineView: View {
   @State private var animationOffset: CGFloat = -125
@@ -345,12 +140,10 @@ struct ScannedCardView: View {
   @Environment(\.dismiss) private var dismiss
 
   var body: some View {
-    NavigationView {
+    NavigationStack {
       ScrollView {
         VStack(alignment: .leading, spacing: 20) {
-          // Header
           VStack(alignment: .center, spacing: 12) {
-            // Profile image placeholder
             if let imageData = businessCard.profileImage,
               let uiImage = UIImage(data: imageData)
             {
@@ -400,7 +193,6 @@ struct ScannedCardView: View {
           .background(Color.Theme.cardBg)
           .cornerRadius(12)
 
-          // Contact information
           VStack(alignment: .leading, spacing: 16) {
             Text("Contact Information")
               .font(.headline)
@@ -425,7 +217,6 @@ struct ScannedCardView: View {
           .background(Color.Theme.cardBg)
           .cornerRadius(12)
 
-          // Skills
           if !businessCard.skills.isEmpty {
             VStack(alignment: .leading, spacing: 16) {
               Text("Skills")
@@ -470,11 +261,4 @@ struct ScannedCardView: View {
       }
     }
   }
-}
-
-// MARK: - Supporting Views
-// Shared components are now in SharedComponents.swift
-
-#Preview {
-  QRScannerView()
 }
