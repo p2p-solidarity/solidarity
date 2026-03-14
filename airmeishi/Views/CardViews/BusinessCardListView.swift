@@ -29,9 +29,9 @@ struct BusinessCardListView: View {
   @State private var activeOIDCEvent: IdentityState.OIDCEvent?
 
   var body: some View {
-    NavigationView {
+    NavigationStack {
       ZStack {
-        Color.black.ignoresSafeArea()
+        Color.Theme.pageBg.ignoresSafeArea()
         if cardManager.isLoading {
           ProgressView("Loading cards...")
             .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -49,11 +49,11 @@ struct BusinessCardListView: View {
         }
       }
       .sheet(isPresented: $showingAppearanceSettings) {
-        NavigationView { AppearanceSettingsView() }
+        NavigationStack { AppearanceSettingsView() }
           .environmentObject(theme)
       }
       .sheet(isPresented: $showingBackupSettings) {
-        NavigationView { BackupSettingsView() }
+        NavigationStack { BackupSettingsView() }
       }
       .sheet(isPresented: $showingGroupManagement) {
         GroupManagementView()
@@ -86,7 +86,7 @@ struct BusinessCardListView: View {
       }
       .sheet(isPresented: $showingAddPass) {
         ZStack {
-          Color.black.ignoresSafeArea()
+          Color.Theme.pageBg.ignoresSafeArea()
 
           if let pass = pendingPass {
             AddPassesControllerView(pass: pass)

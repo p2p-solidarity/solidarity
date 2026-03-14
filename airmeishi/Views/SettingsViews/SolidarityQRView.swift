@@ -6,9 +6,14 @@ struct SolidarityQRView: View {
 
   @Environment(\.dismiss) private var dismiss
   @StateObject private var qrCodeManager = QRCodeManager.shared
+  @AppStorage("defaultSharingLevel") private var defaultSharingLevel: String = SharingLevel.professional.rawValue
   @State private var generatedQRImage: UIImage?
   @State private var showingAlert = false
   @State private var alertMessage = ""
+
+  private var sharingLevel: SharingLevel {
+    SharingLevel(rawValue: defaultSharingLevel) ?? .professional
+  }
 
   var body: some View {
     NavigationStack {
@@ -76,7 +81,7 @@ struct SolidarityQRView: View {
   }
 
   private func refreshQRCode() {
-    let result = qrCodeManager.generateQRCode(for: businessCard, sharingLevel: .professional)
+    let result = qrCodeManager.generateQRCode(for: businessCard, sharingLevel: sharingLevel)
     switch result {
     case .success(let image):
       generatedQRImage = image

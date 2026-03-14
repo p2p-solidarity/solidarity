@@ -23,8 +23,16 @@ struct PeopleListView: View {
     filteredContacts.filter { $0.verificationStatus == VerificationStatus.verified.rawValue }
   }
 
+  private var importedContacts: [ContactEntity] {
+    filteredContacts.filter {
+      $0.verificationStatus != VerificationStatus.verified.rawValue && $0.source == "imported"
+    }
+  }
+
   private var others: [ContactEntity] {
-    filteredContacts.filter { $0.verificationStatus != VerificationStatus.verified.rawValue }
+    filteredContacts.filter {
+      $0.verificationStatus != VerificationStatus.verified.rawValue && $0.source != "imported"
+    }
   }
 
   var body: some View {
@@ -32,7 +40,14 @@ struct PeopleListView: View {
       ZStack {
         Color.Theme.pageBg.ignoresSafeArea()
         if filteredContacts.isEmpty {
-          emptyState
+          if identityDataStore.contacts.isEmpty {
+            emptyState
+          } else {
+            emptySearchState
+          }
+        } else if verifiedContacts.isEmpty && !importedContacts.isEmpty {
+          // [PL-1v] Has imported contacts but no verified
+          listContent
         } else {
           listContent
         }
@@ -152,6 +167,13 @@ struct PeopleListView: View {
           }
         }
 
+        if !importedContacts.isEmpty {
+          sectionTitle(String(localized: "Contacts"))
+          ForEach(importedContacts, id: \.id) { contact in
+            contactRow(contact)
+          }
+        }
+
         if !others.isEmpty {
           sectionTitle(String(localized: "Pending / Unverified"))
           ForEach(others, id: \.id) { contact in
@@ -173,21 +195,34 @@ struct PeopleListView: View {
   }
 
   private func contactRow(_ contact: ContactEntity) -> some View {
-    TrustGraphContactRow(contact: contact)
-      .contextMenu {
-        Button(role: .destructive) {
-          contactToDelete = contact
-          showingDeleteConfirm = true
-        } label: {
-          Label("Delete", systemImage: "trash")
-        }
+    NavigationLink {
+      PersonDetailView(contact: contact)
+        .environmentObject(identityDataStore)
+    } label: {
+      TrustGraphContactRow(contact: contact)
+    }
+    .buttonStyle(.plain)
+    .contextMenu {
+      Button(role: .destructive) {
+        contactToDelete = contact
+        showingDeleteConfirm = true
+      } label: {
+        Label("Delete", systemImage: "trash")
       }
+    }
   }
 
-  private func formatDate(_ date: Date) -> String {
-    let formatter = DateFormatter()
-    formatter.dateFormat = "yyyy-MM-dd"
-    return formatter.string(from: date)
+  private var emptySearchState: some View {
+    VStack(spacing: 12) {
+      Spacer()
+      Image(systemName: "magnifyingglass")
+        .font(.system(size: 36))
+        .foregroundColor(Color.Theme.textTertiary)
+      Text("No results for \"\(searchQuery)\"")
+        .font(.system(size: 14))
+        .foregroundColor(Color.Theme.textSecondary)
+      Spacer()
+    }
   }
 
   // MARK: - Actions

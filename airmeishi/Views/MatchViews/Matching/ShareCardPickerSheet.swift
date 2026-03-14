@@ -13,14 +13,16 @@ struct ShareCardPickerSheet: View {
   let onStop: () -> Void
   let isAdvertising: Bool
   @Environment(\.dismiss) private var dismiss
+  @AppStorage("defaultSharingLevel") private var defaultSharingLevel: String = SharingLevel.professional.rawValue
   @State private var level: SharingLevel = .professional
+  @State private var didInitLevel = false
 
   private var firstCard: BusinessCard? {
     cards.first
   }
 
   var body: some View {
-    NavigationView {
+    NavigationStack {
       Form {
         Section("Privacy Level") {
           Picker("Level", selection: $level) {
@@ -45,6 +47,12 @@ struct ShareCardPickerSheet: View {
         }
       }
       .navigationTitle("Privacy Level")
+      .onAppear {
+        if !didInitLevel {
+          level = SharingLevel(rawValue: defaultSharingLevel) ?? .professional
+          didInitLevel = true
+        }
+      }
       .toolbar {
         ToolbarItem(placement: .navigationBarLeading) { Button("Cancel") { dismiss() } }
         ToolbarItem(placement: .navigationBarTrailing) {

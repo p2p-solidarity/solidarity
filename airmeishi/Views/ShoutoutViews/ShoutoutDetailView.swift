@@ -30,7 +30,7 @@ struct ShoutoutDetailView: View {
   }
 
   private var bodyContent: some View {
-    NavigationView {
+    NavigationStack {
       ZStack {
         Color.Theme.pageBg.ignoresSafeArea()
 

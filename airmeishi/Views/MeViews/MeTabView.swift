@@ -5,11 +5,18 @@ struct MeTabView: View {
   @StateObject private var cardManager = CardManager.shared
   @EnvironmentObject private var identityDataStore: IdentityDataStore
 
+  @ObservedObject private var devMode = DeveloperModeManager.shared
+  @StateObject private var groupManager = CloudKitGroupSyncManager.shared
+  @StateObject private var idm = SemaphoreIdentityManager.shared
+
   @State private var showingSettings = false
   @State private var showingEditProfile = false
   @State private var showingVCSettings = false
   @State private var showingProofSheet = false
   @State private var showingPassportFlow = false
+  @State private var showingGroupManager = false
+  @State private var showingOIDCRequest = false
+  @State private var showingZKSettings = false
   @State private var selectedClaim: ProvableClaimEntity?
   @State private var revealDid = false
 
@@ -32,12 +39,16 @@ struct MeTabView: View {
           provableClaimsSection
 
           addMoreSection
+
+          if devMode.isDeveloperMode {
+            devModeSection
+          }
         }
         .padding(.vertical, 24)
         .padding(.bottom, 90)
       }
       .background(Color.Theme.pageBg.ignoresSafeArea())
-      .navigationTitle("Vault")
+      .navigationTitle("Me")
       .navigationBarTitleDisplayMode(.inline)
       .toolbar {
         ToolbarItem(placement: .navigationBarTrailing) {
@@ -83,6 +94,17 @@ struct MeTabView: View {
         if let selectedClaim {
           SelfInitiatedProofSheet(claim: selectedClaim)
         }
+      }
+      .sheet(isPresented: $showingGroupManager) {
+        NavigationStack {
+          GroupManagementView()
+        }
+      }
+      .sheet(isPresented: $showingOIDCRequest) {
+        OIDCRequestView()
+      }
+      .sheet(isPresented: $showingZKSettings) {
+        ZKSettingsView()
       }
       .onAppear {
         if identityCoordinator.state.currentProfile.activeDID == nil,
@@ -294,6 +316,90 @@ struct MeTabView: View {
     .padding(16)
     .background(Color.Theme.searchBg)
     .overlay(Rectangle().stroke(Color.Theme.divider, lineWidth: 1))
+  }
+
+  // MARK: - Developer Mode Section
+
+  private var devModeSection: some View {
+    VStack(alignment: .leading, spacing: 16) {
+      Text("[ DEVELOPER ]")
+        .font(.system(size: 12, weight: .bold, design: .monospaced))
+        .foregroundColor(Color.Theme.textSecondary)
+        .padding(.horizontal, 24)
+
+      VStack(spacing: 8) {
+        // ZK Identity Status
+        Button {
+          showingZKSettings = true
+        } label: {
+          HStack {
+            Image(systemName: "shield.checkered")
+              .font(.system(size: 16, weight: .bold))
+              .foregroundColor(Color.Theme.terminalGreen)
+              .frame(width: 24)
+
+            VStack(alignment: .leading, spacing: 2) {
+              Text("ZK Identity")
+                .font(.system(size: 14, weight: .bold))
+                .foregroundColor(Color.Theme.textPrimary)
+              Text(idm.getIdentity() != nil ? "Commitment active" : "Not initialized")
+                .font(.system(size: 10, weight: .bold, design: .monospaced))
+                .foregroundColor(Color.Theme.textTertiary)
+            }
+
+            Spacer()
+
+            Image(systemName: "chevron.right")
+              .font(.system(size: 10, weight: .bold))
+              .foregroundColor(Color.Theme.textPlaceholder)
+          }
+          .padding(16)
+          .background(Color.Theme.searchBg)
+          .overlay(Rectangle().stroke(Color.Theme.divider, lineWidth: 1))
+        }
+        .buttonStyle(.plain)
+
+        // OIDC / OpenID Connect
+        Button {
+          showingOIDCRequest = true
+        } label: {
+          sectionActionLabel(icon: "qrcode", title: "OIDC Request Scanner")
+        }
+        .buttonStyle(.plain)
+
+        // Group Management
+        Button {
+          showingGroupManager = true
+        } label: {
+          HStack {
+            Image(systemName: "person.3")
+              .font(.system(size: 16, weight: .bold))
+              .foregroundColor(Color.Theme.terminalGreen)
+              .frame(width: 24)
+
+            VStack(alignment: .leading, spacing: 2) {
+              Text("Group Management")
+                .font(.system(size: 14, weight: .bold))
+                .foregroundColor(Color.Theme.textPrimary)
+              Text("\(groupManager.groups.count) groups")
+                .font(.system(size: 10, weight: .bold, design: .monospaced))
+                .foregroundColor(Color.Theme.textTertiary)
+            }
+
+            Spacer()
+
+            Image(systemName: "chevron.right")
+              .font(.system(size: 10, weight: .bold))
+              .foregroundColor(Color.Theme.textPlaceholder)
+          }
+          .padding(16)
+          .background(Color.Theme.searchBg)
+          .overlay(Rectangle().stroke(Color.Theme.divider, lineWidth: 1))
+        }
+        .buttonStyle(.plain)
+      }
+      .padding(.horizontal, 16)
+    }
   }
 
   private func shortDid(_ did: String) -> String {

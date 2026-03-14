@@ -25,7 +25,7 @@ struct ShoutoutView: View {
   @Environment(\.colorScheme) private var colorScheme
 
   var body: some View {
-    NavigationView {
+    NavigationStack {
       ZStack {
         Color.Theme.pageBg.ignoresSafeArea()
 

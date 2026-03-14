@@ -9,18 +9,19 @@ final class IdentityCoordinatorTests: XCTestCase {
             vcService: VCService(),
             oidcService: OIDCService.shared,
             semaphoreManager: SemaphoreIdentityManager.shared,
+            groupManager: SemaphoreGroupManager.shared,
             cacheStore: IdentityCacheStore(),
             autoRefresh: false
         )
 
+        let stateId = UUID().uuidString
         let request = OIDCService.PresentationRequest(
-            clientId: "airmeishi://oidc/callback",
-            redirectURI: "airmeishi://oidc/callback",
-            responseType: "vp_token",
-            responseMode: "direct_post",
-            scope: "openid",
-            state: UUID().uuidString,
+            id: UUID().uuidString,
+            state: stateId,
             nonce: UUID().uuidString,
+            clientId: "airmeishi://oidc/callback",
+            redirectUri: "airmeishi://oidc/callback",
+            responseType: "vp_token",
             presentationDefinition: .init(
                 id: "test",
                 inputDescriptors: []

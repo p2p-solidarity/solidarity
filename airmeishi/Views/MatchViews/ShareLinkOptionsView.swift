@@ -27,7 +27,7 @@ struct ShareLinkOptionsView: View {
   private let expirationOptions = [1, 6, 12, 24, 48, 72, 168]  // hours
 
   var body: some View {
-    NavigationView {
+    NavigationStack {
       ScrollView {
         VStack(spacing: 24) {
           // Header
@@ -376,7 +376,7 @@ struct CreatedLinkView: View {
   }
 
   var body: some View {
-    NavigationView {
+    NavigationStack {
       ScrollView {
         VStack(spacing: 24) {
           // Success header

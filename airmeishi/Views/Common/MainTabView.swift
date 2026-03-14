@@ -102,8 +102,8 @@ struct MainTabView: View {
         Tab(MainAppTab.people.title, systemImage: MainAppTab.people.systemImage, value: MainAppTab.people.rawValue) {
           PeopleListView()
         }
-        Tab(MainAppTab.sharing.title, systemImage: MainAppTab.sharing.systemImage, value: MainAppTab.sharing.rawValue) {
-          SharingTabView()
+        Tab(MainAppTab.scan.title, systemImage: MainAppTab.scan.systemImage, value: MainAppTab.scan.rawValue) {
+          ScanTabView()
         }
         Tab(MainAppTab.me.title, systemImage: MainAppTab.me.systemImage, value: MainAppTab.me.rawValue) {
           MeTabView()
@@ -117,8 +117,8 @@ struct MainTabView: View {
           PeopleListView()
             .tag(MainAppTab.people.rawValue)
 
-          SharingTabView()
-            .tag(MainAppTab.sharing.rawValue)
+          ScanTabView()
+            .tag(MainAppTab.scan.rawValue)
 
           MeTabView()
             .tag(MainAppTab.me.rawValue)
@@ -160,7 +160,7 @@ struct MainTabView: View {
       )
 
     case .navigateToSharing:
-      selectedTab = MainAppTab.sharing.rawValue
+      selectedTab = MainAppTab.scan.rawValue
 
     case .navigateToContacts:
       selectedTab = MainAppTab.people.rawValue

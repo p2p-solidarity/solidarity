@@ -330,7 +330,7 @@ struct GroupManagementView: View {
   }
 
   private var privacySheet: some View {
-    NavigationView {
+    NavigationStack {
       ScrollView {
         Text("Privacy Policy Content...")
           .padding()
@@ -345,7 +345,7 @@ struct GroupManagementView: View {
   }
 
   private var termsSheet: some View {
-    NavigationView {
+    NavigationStack {
       ScrollView {
         Text("Terms of Service Content...")
           .padding()

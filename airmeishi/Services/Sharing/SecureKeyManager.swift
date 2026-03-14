@@ -19,12 +19,59 @@ class SecureKeyManager {
     loadOrGenerateKeys()
   }
 
+  private static let signingService = "solidarity.messaging.signing"
+  private static let encryptionService = "solidarity.messaging.encryption"
+  private static let account = "default"
+
   private func loadOrGenerateKeys() {
-    // Keychain read/write details omitted here, assuming it exists or is regenerated on each launch
-    // Please ensure Keys are stored in Keychain during implementation
-    // TODO: Implement proper Keychain storage
-    self.signingKey = Curve25519.Signing.PrivateKey()
-    self.encryptionKey = Curve25519.KeyAgreement.PrivateKey()
+    if let sigData = Self.loadFromKeychain(service: Self.signingService),
+       let encData = Self.loadFromKeychain(service: Self.encryptionService),
+       let sig = try? Curve25519.Signing.PrivateKey(rawRepresentation: sigData),
+       let enc = try? Curve25519.KeyAgreement.PrivateKey(rawRepresentation: encData) {
+      self.signingKey = sig
+      self.encryptionKey = enc
+      return
+    }
+    // Generate and persist new keys
+    let newSigning = Curve25519.Signing.PrivateKey()
+    let newEncryption = Curve25519.KeyAgreement.PrivateKey()
+    Self.saveToKeychain(data: newSigning.rawRepresentation, service: Self.signingService)
+    Self.saveToKeychain(data: newEncryption.rawRepresentation, service: Self.encryptionService)
+    self.signingKey = newSigning
+    self.encryptionKey = newEncryption
+  }
+
+  private static func loadFromKeychain(service: String) -> Data? {
+    let query: [String: Any] = [
+      kSecClass as String: kSecClassGenericPassword,
+      kSecAttrService as String: service,
+      kSecAttrAccount as String: account,
+      kSecReturnData as String: true,
+      kSecMatchLimit as String: kSecMatchLimitOne,
+    ]
+    var result: AnyObject?
+    let status = SecItemCopyMatching(query as CFDictionary, &result)
+    guard status == errSecSuccess else { return nil }
+    return result as? Data
+  }
+
+  private static func saveToKeychain(data: Data, service: String) {
+    // Delete any existing item first
+    let deleteQuery: [String: Any] = [
+      kSecClass as String: kSecClassGenericPassword,
+      kSecAttrService as String: service,
+      kSecAttrAccount as String: account,
+    ]
+    SecItemDelete(deleteQuery as CFDictionary)
+
+    let addQuery: [String: Any] = [
+      kSecClass as String: kSecClassGenericPassword,
+      kSecAttrService as String: service,
+      kSecAttrAccount as String: account,
+      kSecValueData as String: data,
+      kSecAttrAccessible as String: kSecAttrAccessibleWhenUnlocked,
+    ]
+    SecItemAdd(addQuery as CFDictionary, nil)
   }
 
   // Get my public key (Base64 String)

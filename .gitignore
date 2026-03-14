@@ -104,3 +104,6 @@ Packages
 *.certSigningRequest
 # Spec documents
 spec.md
+
+.context
+.claude

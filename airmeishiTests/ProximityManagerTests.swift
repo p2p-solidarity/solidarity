@@ -188,23 +188,37 @@ class ProximityManagerTests: XCTestCase {
             card: testCard,
             sharingLevel: .professional,
             timestamp: timestamp,
-            senderID: senderID
+            senderID: senderID,
+            shareId: UUID(),
+            issuerCommitment: nil,
+            issuerProof: nil,
+            sdProof: nil,
+            sealedRoute: nil,
+            pubKey: nil,
+            signPubKey: nil
         )
-        
+
         // Then
         XCTAssertEqual(payload.card.name, testCard.name)
-        XCTAssertEqual(payload.sharingLevel, .professional)
+        XCTAssertEqual(payload.sharingLevel, SharingLevel.professional)
         XCTAssertEqual(payload.timestamp, timestamp)
         XCTAssertEqual(payload.senderID, senderID)
     }
-    
+
     func testPayloadSerialization() throws {
         // Given
         let payload = ProximitySharingPayload(
             card: testCard,
             sharingLevel: .professional,
             timestamp: Date(),
-            senderID: "Test Sender"
+            senderID: "Test Sender",
+            shareId: UUID(),
+            issuerCommitment: nil,
+            issuerProof: nil,
+            sdProof: nil,
+            sealedRoute: nil,
+            pubKey: nil,
+            signPubKey: nil
         )
         
         // When
@@ -213,7 +227,7 @@ class ProximityManagerTests: XCTestCase {
         
         // Then
         XCTAssertEqual(decodedPayload.card.name, payload.card.name)
-        XCTAssertEqual(decodedPayload.sharingLevel, payload.sharingLevel)
+        XCTAssertEqual(decodedPayload.sharingLevel.rawValue, payload.sharingLevel.rawValue)
         XCTAssertEqual(decodedPayload.senderID, payload.senderID)
     }
     
@@ -290,19 +304,6 @@ class AirDropManagerTests: XCTestCase {
         }
     }
     
-    func testAirDropSharingOptions() throws {
-        // Given
-        let options = AirDropSharingOptions(
-            includeVCard: true,
-            includeWalletPass: false,
-            includeQRCode: true,
-            sharingLevel: .professional
-        )
-        
-        // Then
-        XCTAssertTrue(options.includeVCard)
-        XCTAssertFalse(options.includeWalletPass)
-        XCTAssertTrue(options.includeQRCode)
-        XCTAssertEqual(options.sharingLevel, .professional)
-    }
+    // AirDropSharingOptions was removed from the codebase — test disabled
+    // func testAirDropSharingOptions() throws { ... }
 }
