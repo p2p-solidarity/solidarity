@@ -83,6 +83,20 @@ struct BusinessCard: Codable, Identifiable, Equatable, Hashable {
 
     return filtered
   }
+
+  /// Get filtered business card based on explicit field set
+  func filteredCard(for fields: Set<BusinessCardField>) -> BusinessCard {
+    var filtered = self
+    if !fields.contains(.name) { filtered.name = "" }
+    if !fields.contains(.title) { filtered.title = nil }
+    if !fields.contains(.company) { filtered.company = nil }
+    if !fields.contains(.email) { filtered.email = nil }
+    if !fields.contains(.phone) { filtered.phone = nil }
+    if !fields.contains(.profileImage) { filtered.profileImage = nil }
+    if !fields.contains(.socialNetworks) { filtered.socialNetworks = [] }
+    if !fields.contains(.skills) { filtered.skills = [] }
+    return filtered
+  }
 }
 
 /// Social network information

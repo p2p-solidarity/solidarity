@@ -2,8 +2,8 @@
 //  SharingTabView.swift
 //  airmeishi
 //
-//  Main sharing hub: radar matching view with UWB spatial sensing,
-//  QR scanner access via toolbar, and peer discovery.
+//  Main sharing hub: radar matching view with peer discovery,
+//  inline QR code, and Share Settings navigation.
 //
 
 import SwiftUI
@@ -12,120 +12,91 @@ struct SharingTabView: View {
   @StateObject private var proximityManager = ProximityManager.shared
   @StateObject private var cardManager = CardManager.shared
   @StateObject private var niManager = NearbyInteractionManager.shared
+  @StateObject private var qrCodeManager = QRCodeManager.shared
   @Environment(\.colorScheme) private var colorScheme
+
   @State private var showingScanSheet = false
-  @State private var showingShareSheet = false
   @State private var showingNearbySheet = false
   @State private var showingReceivedCard = false
   @State private var isMatching = false
+  @State private var showingShareActivity = false
+  @State private var generatedQRImage: UIImage?
 
   var body: some View {
     NavigationStack {
-      ZStack {
-        // Background gradient
-        LinearGradient(
-          colors: Color.Theme.pageGradient(for: colorScheme),
-          startPoint: .top,
-          endPoint: .bottom
-        )
-        .ignoresSafeArea()
-
+      ScrollView {
         VStack(spacing: 0) {
-          Spacer()
-
-          // Radar view
+          // Radar hero
           RadarMatchingView(
             peers: proximityManager.nearbyPeers,
             isMatching: isMatching,
             niManager: niManager
           )
-          .frame(height: 300)
+          .frame(height: 260)
           .onTapGesture {
             if !proximityManager.nearbyPeers.isEmpty {
               showingNearbySheet = true
             }
           }
 
-          Spacer().frame(height: 24)
+          Spacer().frame(height: 16)
 
-          // Status text
+          // Status + matching button
           VStack(spacing: 8) {
             Text(isMatching ? "Scanning Nearby" : "Ready To Match")
-              .font(.system(size: 22, weight: .bold))
+              .font(.system(size: 20, weight: .bold))
               .foregroundColor(Color.Theme.textPrimary)
 
             Text(statusSubtitle)
-              .font(.system(size: 14))
+              .font(.system(size: 13))
               .foregroundColor(Color.Theme.textSecondary)
               .multilineTextAlignment(.center)
               .padding(.horizontal, 40)
           }
 
-          Spacer().frame(height: 28)
+          Spacer().frame(height: 16)
 
-          // Main action button
           Button(action: toggleMatching) {
             HStack(spacing: 10) {
               Image(systemName: isMatching ? "stop.fill" : "dot.radiowaves.left.and.right")
-                .font(.system(size: 16, weight: .semibold))
+                .font(.system(size: 15, weight: .semibold))
               Text(isMatching ? "Stop Matching" : "Start Matching")
-                .font(.system(size: 16, weight: .semibold))
+                .font(.system(size: 15, weight: .semibold))
             }
           }
           .buttonStyle(ThemedPrimaryButtonStyle())
           .padding(.horizontal, 48)
 
-          Spacer().frame(height: 16)
-
-          // QR code quick actions
-          HStack(spacing: 12) {
-            Button {
-              showingScanSheet = true
-            } label: {
-              HStack(spacing: 8) {
-                Image(systemName: "qrcode.viewfinder")
-                  .font(.system(size: 16, weight: .semibold))
-                Text("Scan QR")
-                  .font(.system(size: 14, weight: .semibold))
-              }
-              .frame(maxWidth: .infinity)
-              .padding(.vertical, 12)
-              .foregroundColor(Color.Theme.textPrimary)
-              .background(Color.Theme.searchBg)
-              .overlay(Rectangle().stroke(Color.Theme.divider, lineWidth: 1))
-            }
-            .buttonStyle(.plain)
-
-            Button {
-              showingShareSheet = true
-            } label: {
-              HStack(spacing: 8) {
-                Image(systemName: "qrcode")
-                  .font(.system(size: 16, weight: .semibold))
-                Text("My QR")
-                  .font(.system(size: 14, weight: .semibold))
-              }
-              .frame(maxWidth: .infinity)
-              .padding(.vertical, 12)
-              .foregroundColor(Color.Theme.textPrimary)
-              .background(Color.Theme.searchBg)
-              .overlay(Rectangle().stroke(Color.Theme.divider, lineWidth: 1))
-            }
-            .buttonStyle(.plain)
-          }
-          .padding(.horizontal, 48)
-
-          // UWB status pill
+          // UWB status
           if niManager.isSupported, niManager.spatialState.isActive {
             uwbStatusPill
-              .padding(.top, 12)
+              .padding(.top, 10)
           }
 
-          Spacer()
+          Spacer().frame(height: 24)
+
+          // QR code section
+          qrSection
+            .padding(.horizontal, 16)
+
+          Spacer().frame(height: 16)
+
+          // Quick actions
+          quickActions
+            .padding(.horizontal, 16)
+
+          Spacer().frame(height: 100)
         }
-        .padding(.bottom, 80)
       }
-      .navigationTitle("Sharing")
+      .background(
+        LinearGradient(
+          colors: Color.Theme.pageGradient(for: colorScheme),
+          startPoint: .top,
+          endPoint: .bottom
+        )
+        .ignoresSafeArea()
+      )
+      .navigationTitle("Share")
       .navigationBarTitleDisplayMode(.inline)
       .toolbar {
         ToolbarItem(placement: .navigationBarLeading) {
@@ -136,29 +107,14 @@ struct SharingTabView: View {
               .foregroundColor(Color.Theme.toolbarTint(for: colorScheme))
           }
         }
-        ToolbarItem(placement: .navigationBarTrailing) {
-          Button {
-            showingShareSheet = true
-          } label: {
-            Image(systemName: "square.and.arrow.up")
-              .foregroundColor(Color.Theme.toolbarTint(for: colorScheme))
-          }
-        }
       }
     }
     .onAppear {
       setupSpatialTrigger()
+      refreshQR()
     }
     .sheet(isPresented: $showingScanSheet) {
       ScanTabView()
-    }
-    .sheet(isPresented: $showingShareSheet) {
-      ShareCardPickerSheet(
-        cards: cardManager.businessCards,
-        onStart: { card, level in proximityManager.startAdvertising(with: card, sharingLevel: level) },
-        onStop: { proximityManager.stopAdvertising() },
-        isAdvertising: proximityManager.getSharingStatus().isAdvertising
-      )
     }
     .sheet(isPresented: $showingNearbySheet) {
       NearbyPeersSheet(
@@ -174,6 +130,151 @@ struct SharingTabView: View {
         ReceivedCardView(card: card)
       }
     }
+    .sheet(isPresented: $showingShareActivity) {
+      let text = shareText
+      if !text.isEmpty {
+        ShareSheet(activityItems: [text])
+      }
+    }
+  }
+
+  // MARK: - QR Section
+
+  private var qrSection: some View {
+    VStack(spacing: 12) {
+      HStack {
+        Text("MY QR")
+          .font(.system(size: 12, weight: .bold, design: .monospaced))
+          .foregroundColor(Color.Theme.textTertiary)
+
+        Spacer()
+
+        NavigationLink {
+          ShareSettingsView()
+        } label: {
+          HStack(spacing: 4) {
+            Image(systemName: "gearshape")
+              .font(.system(size: 12))
+            Text("Settings")
+              .font(.system(size: 12, weight: .medium))
+          }
+          .foregroundColor(Color.Theme.primaryBlue)
+        }
+      }
+
+      Group {
+        if let generatedQRImage {
+          Image(uiImage: generatedQRImage)
+            .resizable()
+            .interpolation(.none)
+            .scaledToFit()
+        } else {
+          VStack(spacing: 8) {
+            Image(systemName: "qrcode")
+              .font(.system(size: 36))
+              .foregroundColor(Color.Theme.textTertiary)
+            Text("Create a card to generate QR")
+              .font(.system(size: 12))
+              .foregroundColor(Color.Theme.textTertiary)
+          }
+          .frame(maxWidth: .infinity)
+          .frame(height: 180)
+        }
+      }
+      .frame(maxWidth: .infinity)
+      .aspectRatio(1, contentMode: .fit)
+      .padding(10)
+      .background(Color.white)
+      .cornerRadius(8)
+
+      // Active proof badges
+      proofBadges
+    }
+    .padding(16)
+    .background(Color.Theme.cardSurface(for: colorScheme))
+    .overlay(Rectangle().stroke(Color.Theme.cardBorder(for: colorScheme), lineWidth: 1))
+  }
+
+  private var proofBadges: some View {
+    let claims = IdentityDataStore.shared.provableClaims.filter { $0.issuerType == "government" }
+    return Group {
+      if !claims.isEmpty {
+        HStack(spacing: 8) {
+          if ShareSettingsReader.shareIsHuman,
+             claims.contains(where: { $0.claimType == "is_human" }) {
+            proofPill(label: "Real Human", color: Color.Theme.terminalGreen)
+          }
+          if ShareSettingsReader.shareAgeOver18,
+             claims.contains(where: { $0.claimType == "age_over_18" }) {
+            proofPill(label: "Age 18+", color: Color.Theme.terminalGreen)
+          }
+          Spacer()
+        }
+      }
+    }
+  }
+
+  private func proofPill(label: String, color: Color) -> some View {
+    HStack(spacing: 4) {
+      Circle()
+        .fill(color)
+        .frame(width: 6, height: 6)
+      Text(label)
+        .font(.system(size: 11, weight: .semibold, design: .monospaced))
+        .foregroundColor(color)
+    }
+    .padding(.horizontal, 8)
+    .padding(.vertical, 4)
+    .background(
+      Capsule()
+        .fill(color.opacity(0.12))
+    )
+  }
+
+  // MARK: - Quick Actions
+
+  private var quickActions: some View {
+    HStack(spacing: 12) {
+      Button {
+        showingScanSheet = true
+      } label: {
+        HStack(spacing: 8) {
+          Image(systemName: "qrcode.viewfinder")
+            .font(.system(size: 16, weight: .semibold))
+          Text("Scan QR")
+            .font(.system(size: 14, weight: .semibold))
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, 12)
+        .foregroundColor(Color.Theme.textPrimary)
+        .background(Color.Theme.searchBg)
+        .overlay(Rectangle().stroke(Color.Theme.divider, lineWidth: 1))
+      }
+      .buttonStyle(.plain)
+
+      Button {
+        showingShareActivity = true
+      } label: {
+        HStack(spacing: 8) {
+          Image(systemName: "square.and.arrow.up")
+            .font(.system(size: 16, weight: .semibold))
+          Text("Share")
+            .font(.system(size: 14, weight: .semibold))
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, 12)
+        .foregroundColor(Color.Theme.textPrimary)
+        .background(Color.Theme.searchBg)
+        .overlay(Rectangle().stroke(Color.Theme.divider, lineWidth: 1))
+      }
+      .buttonStyle(.plain)
+    }
+  }
+
+  private var shareText: String {
+    guard let card = cardManager.businessCards.first else { return "" }
+    let filtered = card.filteredCard(for: ShareSettingsReader.enabledFields)
+    return filtered.vCardData
   }
 
   // MARK: - Actions
@@ -196,9 +297,21 @@ struct SharingTabView: View {
       if count > 0 {
         return "Found \(count) nearby \(count == 1 ? "peer" : "peers"). Tap the radar to connect."
       }
-      return "Searching for nearby peers... Keep the app open."
+      return "Searching for nearby peers..."
     }
-    return "Start matching to discover nearby people and exchange cards."
+    return "Start matching to discover nearby people."
+  }
+
+  private func refreshQR() {
+    guard let card = cardManager.businessCards.first else {
+      generatedQRImage = nil
+      return
+    }
+    let fields = ShareSettingsReader.enabledFields
+    let result = qrCodeManager.generateQRCode(for: card, fields: fields)
+    if case .success(let image) = result {
+      generatedQRImage = image
+    }
   }
 
   // MARK: - UWB
@@ -262,7 +375,7 @@ struct SharingTabView: View {
   }
 }
 
-// MARK: - Radar Matching View
+// MARK: - Radar Matching View (kept from original)
 
 struct RadarMatchingView: View {
   let peers: [ProximityPeer]
@@ -280,7 +393,6 @@ struct RadarMatchingView: View {
   var body: some View {
     GeometryReader { geo in
       let size = min(geo.size.width, geo.size.height)
-      let center = CGPoint(x: geo.size.width / 2, y: geo.size.height / 2)
 
       ZStack {
         // Expanding pulse rings
@@ -336,7 +448,7 @@ struct RadarMatchingView: View {
 
         // Peer avatars
         ForEach(Array(peers.prefix(8).enumerated()), id: \.element.id) { index, peer in
-          peerDot(peer: peer, index: index, total: min(peers.count, 8), center: center, radius: size * 0.35)
+          peerDot(peer: peer, index: index, total: min(peers.count, 8), radius: size * 0.35)
         }
       }
       .frame(width: geo.size.width, height: geo.size.height)
@@ -358,7 +470,6 @@ struct RadarMatchingView: View {
   }
 
   private func startPulse() {
-    // Staggered expanding pulse animation
     withAnimation(.easeOut(duration: 3.0).repeatForever(autoreverses: false)) {
       pulseScale1 = 1.0
       pulseOpacity1 = 0.0
@@ -377,7 +488,7 @@ struct RadarMatchingView: View {
     }
   }
 
-  private func peerDot(peer: ProximityPeer, index: Int, total: Int, center: CGPoint, radius: CGFloat) -> some View {
+  private func peerDot(peer: ProximityPeer, index: Int, total: Int, radius: CGFloat) -> some View {
     let angle = (2 * .pi / Double(total)) * Double(index) - .pi / 2
     let x = cos(angle) * Double(radius)
     let y = sin(angle) * Double(radius)

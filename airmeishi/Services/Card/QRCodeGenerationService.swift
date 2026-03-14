@@ -14,6 +14,33 @@ final class QRCodeGenerationService {
 
   func generateImage(
     for card: BusinessCard,
+    fields: Set<BusinessCardField>,
+    expirationDate: Date? = nil
+  ) -> CardResult<UIImage> {
+    let filteredCard = card.filteredCard(for: fields)
+    let mySealedRoute = SecureKeyManager.shared.mySealedRoute
+    let snapshot = BusinessCardSnapshot(card: filteredCard, sealedRoute: mySealedRoute)
+    let shareId = UUID()
+    let payload = QRPlaintextPayload(snapshot: snapshot, shareId: shareId, expirationDate: expirationDate)
+    let envelope = QRCodeEnvelope(
+      format: .plaintext,
+      sharingLevel: .public,
+      shareId: shareId,
+      plaintext: payload
+    )
+    do {
+      let data = try JSONEncoder.qrEncoder.encode(envelope)
+      guard let json = String(data: data, encoding: .utf8) else {
+        return .failure(.sharingError("Failed to encode QR envelope"))
+      }
+      return generateImage(from: json)
+    } catch {
+      return .failure(.sharingError("Failed to encode QR envelope: \(error.localizedDescription)"))
+    }
+  }
+
+  func generateImage(
+    for card: BusinessCard,
     sharingLevel: SharingLevel,
     expirationDate: Date? = nil
   ) -> CardResult<UIImage> {
