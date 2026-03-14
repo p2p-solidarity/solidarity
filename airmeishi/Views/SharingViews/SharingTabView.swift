@@ -21,6 +21,7 @@ struct SharingTabView: View {
   @State private var isMatching = false
   @State private var showingShareActivity = false
   @State private var generatedQRImage: UIImage?
+  @AppStorage("sharing_qr_expanded") private var isQRExpanded: Bool = true
 
   var body: some View {
     NavigationStack {
@@ -144,32 +145,35 @@ struct SharingTabView: View {
     let card = cardManager.businessCards.first
 
     return VStack(spacing: 0) {
-      // QR code with white background
-      ZStack {
-        if let generatedQRImage {
-          Image(uiImage: generatedQRImage)
-            .resizable()
-            .interpolation(.none)
-            .scaledToFit()
-            .padding(24)
-        } else {
-          VStack(spacing: 10) {
-            Image(systemName: "qrcode")
-              .font(.system(size: 44))
-              .foregroundColor(Color(white: 0.78))
-            Text("Create a card to generate QR")
-              .font(.system(size: 12, design: .monospaced))
-              .foregroundColor(Color(white: 0.6))
+      // Collapsible QR code with white background
+      if isQRExpanded {
+        ZStack {
+          if let generatedQRImage {
+            Image(uiImage: generatedQRImage)
+              .resizable()
+              .interpolation(.none)
+              .scaledToFit()
+              .padding(24)
+          } else {
+            VStack(spacing: 10) {
+              Image(systemName: "qrcode")
+                .font(.system(size: 44))
+                .foregroundColor(Color(white: 0.78))
+              Text("Create a card to generate QR")
+                .font(.system(size: 12, design: .monospaced))
+                .foregroundColor(Color(white: 0.6))
+            }
+            .frame(maxWidth: .infinity)
+            .frame(height: 200)
           }
-          .frame(maxWidth: .infinity)
-          .frame(height: 200)
         }
+        .frame(maxWidth: .infinity)
+        .aspectRatio(1, contentMode: .fit)
+        .background(Color.white)
+        .transition(.opacity.combined(with: .move(edge: .top)))
       }
-      .frame(maxWidth: .infinity)
-      .aspectRatio(1, contentMode: .fit)
-      .background(Color.white)
 
-      // Card info footer
+      // Card info footer (always visible, tappable to toggle QR)
       VStack(spacing: 10) {
         // Name + avatar row
         HStack(spacing: 10) {
@@ -196,6 +200,21 @@ struct SharingTabView: View {
           }
 
           Spacer()
+
+          // Collapse/expand chevron
+          Button {
+            withAnimation(.easeInOut(duration: 0.25)) {
+              isQRExpanded.toggle()
+            }
+          } label: {
+            Image(systemName: "chevron.up")
+              .font(.system(size: 12, weight: .semibold))
+              .foregroundColor(Color.Theme.textTertiary)
+              .rotationEffect(.degrees(isQRExpanded ? 0 : 180))
+              .padding(8)
+              .background(Color.Theme.searchBg)
+              .overlay(Rectangle().stroke(Color.Theme.divider, lineWidth: 1))
+          }
 
           NavigationLink {
             ShareSettingsView()
