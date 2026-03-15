@@ -14,17 +14,20 @@ struct QRPlaintextPayload: Codable {
   let shareId: UUID
   let createdAt: Date
   let expirationDate: Date?
+  let proofClaims: [String]?
 
   init(
     snapshot: BusinessCardSnapshot,
     shareId: UUID,
     createdAt: Date = Date(),
-    expirationDate: Date?
+    expirationDate: Date?,
+    proofClaims: [String]? = nil
   ) {
     self.snapshot = snapshot
     self.shareId = shareId
     self.createdAt = createdAt
     self.expirationDate = expirationDate
+    self.proofClaims = proofClaims
   }
 }
 
@@ -96,6 +99,7 @@ struct QRSharingPayload: Codable {
   let sdProof: SelectiveDisclosureProof?
   let format: SharingFormat?
   let sealedRoute: String?
+  let proofClaims: [String]?
 
   init(
     businessCard: BusinessCard,
@@ -109,7 +113,8 @@ struct QRSharingPayload: Codable {
     issuerProof: String? = nil,
     sdProof: SelectiveDisclosureProof? = nil,
     format: SharingFormat? = nil,
-    sealedRoute: String? = nil
+    sealedRoute: String? = nil,
+    proofClaims: [String]? = nil
   ) {
     self.businessCard = businessCard
     self.sharingLevel = sharingLevel
@@ -123,5 +128,6 @@ struct QRSharingPayload: Codable {
     self.sdProof = sdProof
     self.format = format
     self.sealedRoute = sealedRoute
+    self.proofClaims = proofClaims
   }
 }

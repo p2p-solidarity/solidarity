@@ -35,6 +35,24 @@ final class SemaphoreIdentityManager: ObservableObject {
     let commitment: String  // public commitment hex/string
   }
 
+  struct ProofEnvelope: Codable, Equatable {
+    let version: Int
+    let semaphoreProof: String
+    let groupRoot: String
+    let signal: String
+    let scope: String
+    let memberCount: Int
+
+    enum CodingKeys: String, CodingKey {
+      case version
+      case semaphoreProof = "semaphore_proof"
+      case groupRoot = "group_root"
+      case signal
+      case scope
+      case memberCount = "member_count"
+    }
+  }
+
   enum Error: Swift.Error {
     case notInitialized
     case storageFailed(String)
@@ -106,6 +124,8 @@ final class SemaphoreIdentityManager: ObservableObject {
   {
     #if canImport(Semaphore) && !(targetEnvironment(simulator) && arch(x86_64))
       guard let bundle = try? keychain.loadIdentity() else { throw Error.notInitialized }
+      let canonicalMembers = Self.canonicalCommitments(groupCommitments + [bundle.commitment])
+      let groupRoot = Self.deterministicGroupRoot(for: canonicalMembers)
       let identity = Identity(privateKey: bundle.privateKey)
       // Build a minimal group that at least contains our own identity element.
       // TODO: When available, convert external commitment strings to elements and include them.
@@ -114,25 +134,56 @@ final class SemaphoreIdentityManager: ObservableObject {
       // Avoid passing 64-char hex (which exceeds 32 bytes) — clamp to 32 UTF-8 bytes if needed.
       let normalizedMessage = Self.clampToMax32Bytes(message)
       let normalizedScope = Self.clampToMax32Bytes(scope)
-      return try generateSemaphoreProof(
+      let rawProof = try generateSemaphoreProof(
         identity: identity,
         group: group,
         message: normalizedMessage,
         scope: normalizedScope,
         merkleTreeDepth: UInt16(merkleDepth)
       )
+      let envelope = ProofEnvelope(
+        version: 1,
+        semaphoreProof: rawProof,
+        groupRoot: groupRoot,
+        signal: normalizedMessage,
+        scope: normalizedScope,
+        memberCount: canonicalMembers.count
+      )
+      let data = try JSONEncoder().encode(envelope)
+      return String(decoding: data, as: UTF8.self)
     #else
       throw Error.unsupported
     #endif
   }
 
   /// Verify a Semaphore proof JSON string.
-  func verifyProof(_ proof: String) throws -> Bool {
+  func verifyProof(
+    _ proof: String,
+    expectedRoot: String? = nil,
+    expectedSignal: String? = nil,
+    expectedScope: String? = nil
+  ) throws -> Bool {
+    let envelope = decodeEnvelope(from: proof)
+    if expectedRoot != nil || expectedSignal != nil || expectedScope != nil {
+      guard let envelope else { return false }
+      if let expectedRoot, envelope.groupRoot != expectedRoot { return false }
+      if let expectedSignal, envelope.signal != Self.clampToMax32Bytes(expectedSignal) { return false }
+      if let expectedScope, envelope.scope != Self.clampToMax32Bytes(expectedScope) { return false }
+    }
+
+    let rawProof = envelope?.semaphoreProof ?? proof
     #if canImport(Semaphore) && !(targetEnvironment(simulator) && arch(x86_64))
-      return try verifySemaphoreProof(proof: proof)
+      return try verifySemaphoreProof(proof: rawProof)
     #else
       return false
     #endif
+  }
+
+  static func deterministicGroupRoot(for commitments: [String]) -> String {
+    let canonical = canonicalCommitments(commitments)
+    let payload = canonical.joined(separator: "|")
+    let digest = SHA256.hash(data: Data(payload.utf8))
+    return digest.map { String(format: "%02x", $0) }.joined()
   }
 
   // MARK: - Utilities
@@ -153,6 +204,18 @@ final class SemaphoreIdentityManager: ObservableObject {
     let bytes = Array(input.utf8)
     if bytes.count <= 32 { return input }
     return String(data: Data(bytes.prefix(32)), encoding: .utf8) ?? ""
+  }
+
+  private static func canonicalCommitments(_ commitments: [String]) -> [String] {
+    let normalized = commitments
+      .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+      .filter { !$0.isEmpty }
+    return Array(Set(normalized)).sorted()
+  }
+
+  private func decodeEnvelope(from proof: String) -> ProofEnvelope? {
+    guard let data = proof.data(using: .utf8) else { return nil }
+    return try? JSONDecoder().decode(ProofEnvelope.self, from: data)
   }
 
   private func ensureCommitment(bundle: IdentityBundle) -> IdentityBundle {

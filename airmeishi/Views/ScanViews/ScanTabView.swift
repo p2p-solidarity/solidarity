@@ -395,66 +395,27 @@ private struct ProofPresentationFlowSheet: View {
           showingAlert = true
           step = .review
         case .success(let credential):
-          let vpToken = Self.wrapInVPEnvelope(
+          let wrapResult = OID4VPPresentationService.shared.wrapCredentialAsVP(
             vcJwt: credential.jwt,
-            holderDid: credential.holderDid,
-            nonce: parsedRequest?.nonce,
-            audience: parsedRequest?.clientId
+            options: .init(
+              relyingPartyDomain: rpDomain,
+              nonce: parsedRequest?.nonce,
+              audience: parsedRequest?.clientId
+            )
           )
-          submitToVerifier(jwt: vpToken)
+
+          switch wrapResult {
+          case .failure(let error):
+            isWorking = false
+            alertMessage = error.localizedDescription
+            showingAlert = true
+            step = .review
+          case .success(let vpToken):
+            submitToVerifier(jwt: vpToken)
+          }
         }
       }
     }
-  }
-
-  /// Wraps a VC JWT inside a signed Verifiable Presentation JWT (ES256).
-  private static func wrapInVPEnvelope(vcJwt: String, holderDid: String, nonce: String?, audience: String? = nil) -> String {
-    // Build JWT header
-    var header: [String: Any] = [
-      "alg": "ES256",
-      "typ": "JWT",
-      "kid": "\(holderDid)#0",
-    ]
-
-    // Build JWT payload
-    let now = Date()
-    var payload: [String: Any] = [
-      "iss": holderDid,
-      "iat": Int(now.timeIntervalSince1970),
-      "exp": Int(now.timeIntervalSince1970) + 300,
-      "vp": [
-        "@context": ["https://www.w3.org/2018/credentials/v1"],
-        "type": ["VerifiablePresentation"],
-        "verifiableCredential": [vcJwt],
-      ] as [String: Any],
-    ]
-    if let nonce { payload["nonce"] = nonce }
-    if let audience { payload["aud"] = audience }
-
-    // Encode header and payload
-    guard let headerData = try? JSONSerialization.data(withJSONObject: header, options: [.sortedKeys]),
-          let payloadData = try? JSONSerialization.data(withJSONObject: payload, options: [.sortedKeys])
-    else { return vcJwt }
-
-    let headerB64 = base64url(headerData)
-    let payloadB64 = base64url(payloadData)
-    let signingInput = "\(headerB64).\(payloadB64)"
-
-    // Sign with DID key (P-256 ECDSA)
-    guard let inputData = signingInput.data(using: .utf8),
-          case .success(let signingKey) = KeychainService.shared.signingKey(),
-          let signature = try? signingKey.sign(payload: inputData)
-    else { return vcJwt }
-
-    let signatureB64 = base64url(signature)
-    return "\(headerB64).\(payloadB64).\(signatureB64)"
-  }
-
-  private static func base64url(_ data: Data) -> String {
-    data.base64EncodedString()
-      .replacingOccurrences(of: "+", with: "-")
-      .replacingOccurrences(of: "/", with: "_")
-      .replacingOccurrences(of: "=", with: "")
   }
 
   private func submitToVerifier(jwt: String) {

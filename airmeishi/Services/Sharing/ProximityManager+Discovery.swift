@@ -19,7 +19,8 @@ extension ProximityManager {
     autoSendCardOnConnect = false
 
     if let card = card {
-      startAdvertising(with: card, sharingLevel: sharingLevel)
+      let configuredCard = ShareSettingsStore.applyFields(to: card, level: sharingLevel)
+      startAdvertising(with: configuredCard, sharingLevel: sharingLevel)
     } else {
       startAdvertisingIdentity()
     }
@@ -50,7 +51,7 @@ extension ProximityManager {
     advertiser?.startAdvertisingPeer()
 
     isAdvertising = true
-    connectionStatus = .advertising
+    updateConnectionStatus()
 
     print("Started advertising business card: \(card.name)")
   }
@@ -107,7 +108,7 @@ extension ProximityManager {
     browser?.startBrowsingForPeers()
 
     isBrowsing = true
-    connectionStatus = .browsing
+    updateConnectionStatus()
 
     print("Started browsing for nearby peers")
 

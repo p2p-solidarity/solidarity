@@ -18,7 +18,13 @@ enum ProximityVerificationHelper {
       return .failed
     }
     if let proof = proof, SemaphoreIdentityManager.proofsSupported {
-      let ok = (try? SemaphoreIdentityManager.shared.verifyProof(proof)) ?? false
+      let expectedRoot = SemaphoreIdentityManager.deterministicGroupRoot(for: [commitment])
+      let ok = (try? SemaphoreIdentityManager.shared.verifyProof(
+        proof,
+        expectedRoot: expectedRoot,
+        expectedSignal: message,
+        expectedScope: scope
+      )) ?? false
       return ok ? .verified : .failed
     }
     return .pending

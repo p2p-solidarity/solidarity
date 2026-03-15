@@ -12,6 +12,9 @@ import MultipeerConnectivity
 class ProximityManagerTests: XCTestCase {
     var proximityManager: ProximityManager!
     var testCard: BusinessCard!
+    private let shareTitleKey = "share_field_title"
+    private let shareCompanyKey = "share_field_company"
+    private let shareEmailKey = "share_field_email"
     
     override func setUpWithError() throws {
         proximityManager = ProximityManager.shared
@@ -33,6 +36,9 @@ class ProximityManagerTests: XCTestCase {
     
     override func tearDownWithError() throws {
         proximityManager.disconnect()
+        UserDefaults.standard.removeObject(forKey: shareTitleKey)
+        UserDefaults.standard.removeObject(forKey: shareCompanyKey)
+        UserDefaults.standard.removeObject(forKey: shareEmailKey)
         proximityManager = nil
         testCard = nil
     }
@@ -115,6 +121,26 @@ class ProximityManagerTests: XCTestCase {
         XCTAssertTrue(proximityManager.isAdvertising)
         XCTAssertTrue(proximityManager.isBrowsing)
         XCTAssertEqual(proximityManager.connectionStatus, .advertisingAndBrowsing)
+    }
+
+    func testStartBrowsingThenAdvertisingKeepsCombinedConnectionStatus() throws {
+        proximityManager.startBrowsing()
+        proximityManager.startAdvertising(with: testCard, sharingLevel: .professional)
+
+        XCTAssertTrue(proximityManager.isBrowsing)
+        XCTAssertTrue(proximityManager.isAdvertising)
+        XCTAssertEqual(proximityManager.connectionStatus, .advertisingAndBrowsing)
+    }
+
+    func testStartMatchingAppliesShareSettingsFieldsToProfessionalLevel() throws {
+        UserDefaults.standard.set(true, forKey: shareTitleKey)
+        UserDefaults.standard.set(false, forKey: shareCompanyKey)
+        UserDefaults.standard.set(true, forKey: shareEmailKey)
+
+        proximityManager.startMatching(with: testCard, sharingLevel: .professional)
+
+        let expected = ShareSettingsStore.enabledFields
+        XCTAssertEqual(proximityManager.currentCard?.sharingPreferences.professionalFields, expected)
     }
     
     // MARK: - Sharing Status Tests

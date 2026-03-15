@@ -319,26 +319,17 @@ final class QRCodeScanService: NSObject {
     switch oidcService.parseRequest(from: data) {
     case .failure(let error):
       onScanOutcome?(.failure(error))
-    case .success(let request):
-      guard let businessCard = CardManager.shared.businessCards.first else {
-        onScanOutcome?(.failure(.notFound("No business card available to present.")))
-        return
-      }
-
-      switch vcService.issueBusinessCardCredential(for: businessCard) {
-      case .failure(let error):
-        onScanOutcome?(.failure(error))
-      case .success(let credential):
-        switch oidcService.buildResponseURL(for: request, vpToken: credential.jwt) {
-        case .failure(let error):
-          onScanOutcome?(.failure(error))
-        case .success(let url):
-          DispatchQueue.main.async {
-            UIApplication.shared.open(url, options: [:], completionHandler: nil)
-          }
-          onScanOutcome?(.success(ScanOutcome(card: businessCard, verificationStatus: .pending, sealedRoute: nil, route: route)))
-        }
-      }
+    case .success:
+      onScanOutcome?(
+        .success(
+          ScanOutcome(
+            card: nil,
+            verificationStatus: .pending,
+            sealedRoute: nil,
+            route: route
+          )
+        )
+      )
     }
   }
 
@@ -430,7 +421,13 @@ final class QRCodeScanService: NSObject {
     }
 
     if let proof = proof, SemaphoreIdentityManager.proofsSupported {
-      let ok = (try? SemaphoreIdentityManager.shared.verifyProof(proof)) ?? false
+      let expectedRoot = SemaphoreIdentityManager.deterministicGroupRoot(for: [commitment])
+      let ok = (try? SemaphoreIdentityManager.shared.verifyProof(
+        proof,
+        expectedRoot: expectedRoot,
+        expectedSignal: message,
+        expectedScope: scope
+      )) ?? false
       return ok ? .verified : .failed
     }
 

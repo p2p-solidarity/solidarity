@@ -97,6 +97,23 @@ struct ExchangeRequestPayloadTests {
     let decoded = try JSONDecoder().decode(ExchangeRequestPayload.self, from: data)
     #expect(decoded.myEphemeralMessage == nil)
   }
+
+  @Test func requestPayloadCarriesSigningPublicKey() async throws {
+    let payload = ExchangeRequestPayload(
+      requestId: UUID(),
+      senderID: "alice-device",
+      timestamp: Date(),
+      selectedFields: [.name],
+      cardPreview: BusinessCard(name: "Alice"),
+      myEphemeralMessage: "hello",
+      myExchangeSignature: "sig",
+      signPubKey: "ed25519-public"
+    )
+
+    let data = try JSONEncoder().encode(payload)
+    let decoded = try JSONDecoder().decode(ExchangeRequestPayload.self, from: data)
+    #expect(decoded.signPubKey == "ed25519-public")
+  }
 }
 
 // MARK: - ExchangeAcceptPayload Tests
@@ -435,5 +452,34 @@ struct PendingExchangeRequestTests {
 
     #expect(pending.id == requestId)
     #expect(pending.requestId == requestId)
+  }
+}
+
+// MARK: - Exchange Signature Verification Tests
+
+struct ExchangeSignatureVerificationTests {
+  @Test func verifyValidExchangeSignature() async throws {
+    let canonical = "request-id|peer|name|name,email|1234567890"
+    let pubKey = SecureKeyManager.shared.mySignPubKey
+    let signature = SecureKeyManager.shared.sign(content: canonical)
+
+    let isValid = ProximityManager.verifyExchangeSignature(
+      signature: signature,
+      canonicalString: canonical,
+      signPubKey: pubKey
+    )
+    #expect(isValid == true)
+  }
+
+  @Test func rejectMissingExchangeSignPubKey() async throws {
+    let canonical = "request-id|peer|name|name,email|1234567890"
+    let signature = SecureKeyManager.shared.sign(content: canonical)
+
+    let isValid = ProximityManager.verifyExchangeSignature(
+      signature: signature,
+      canonicalString: canonical,
+      signPubKey: nil
+    )
+    #expect(isValid == false)
   }
 }

@@ -152,11 +152,24 @@ extension ProximityManager: MCSessionDelegate {
       guard let self = self else { return }
       let mySignature = self.sentExchangeSignatures.removeValue(forKey: exchangeAccept.requestId) ?? ""
       let myMessage = self.sentExchangeMessages.removeValue(forKey: exchangeAccept.requestId)
+      let canonical = self.canonicalExchangeString(
+        requestId: exchangeAccept.requestId,
+        peerName: self.localPeerID.displayName,
+        card: exchangeAccept.cardPreview,
+        fields: exchangeAccept.selectedFields,
+        timestamp: exchangeAccept.timestamp
+      )
+      let isValidSignature = Self.verifyExchangeSignature(
+        signature: exchangeAccept.exchangeSignature,
+        canonicalString: canonical,
+        signPubKey: exchangeAccept.signPubKey
+      )
+      let verificationStatus: VerificationStatus = isValidSignature ? .verified : .pending
 
       let persistence = ExchangeEdgePersistencePayload(
         card: exchangeAccept.cardPreview,
         sourcePeerName: exchangeAccept.senderID,
-        verificationStatus: .verified,
+        verificationStatus: verificationStatus,
         sealedRoute: exchangeAccept.sealedRoute,
         pubKey: exchangeAccept.pubKey,
         signPubKey: exchangeAccept.signPubKey,

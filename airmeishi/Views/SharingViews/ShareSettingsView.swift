@@ -260,26 +260,14 @@ struct ShareSettingsView: View {
 
 enum ShareSettingsReader {
   static var enabledFields: Set<BusinessCardField> {
-    var fields: Set<BusinessCardField> = [.name]
-    if UserDefaults.standard.bool(forKey: "share_field_title") { fields.insert(.title) }
-    if UserDefaults.standard.bool(forKey: "share_field_company") { fields.insert(.company) }
-    if UserDefaults.standard.bool(forKey: "share_field_email") { fields.insert(.email) }
-    if UserDefaults.standard.bool(forKey: "share_field_phone") { fields.insert(.phone) }
-    if UserDefaults.standard.bool(forKey: "share_field_profileImage") { fields.insert(.profileImage) }
-    if UserDefaults.standard.bool(forKey: "share_field_socialNetworks") { fields.insert(.socialNetworks) }
-    if UserDefaults.standard.bool(forKey: "share_field_skills") { fields.insert(.skills) }
-    return fields
+    ShareSettingsStore.enabledFields
   }
 
   static var shareIsHuman: Bool {
-    // Default true — UserDefaults returns false for unset keys, so check registration
-    if UserDefaults.standard.object(forKey: "share_proof_is_human") == nil {
-      return true
-    }
-    return UserDefaults.standard.bool(forKey: "share_proof_is_human")
+    ShareSettingsStore.shareIsHuman
   }
 
   static var shareAgeOver18: Bool {
-    UserDefaults.standard.bool(forKey: "share_proof_age_over_18")
+    ShareSettingsStore.shareAgeOver18
   }
 }

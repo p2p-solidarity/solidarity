@@ -384,13 +384,17 @@ struct SharingTabView: View {
 
   private func setupSpatialTrigger() {
     niManager.onSpatialTrigger = { peerID in
-      guard let card = CardManager.shared.businessCards.first else {
+      let baseCard = ProximityManager.shared.currentCard ?? CardManager.shared.businessCards.first
+      guard let card = baseCard else {
         NearbyInteractionManager.shared.exchangeDidFail()
         return
       }
+      let sharingLevel = ProximityManager.shared.currentSharingLevel
+      let prepared = ShareSettingsStore.applyFields(to: card, level: sharingLevel)
       ProximityManager.shared.sendCard(
-        card, to: peerID,
-        sharingLevel: ProximityManager.shared.currentSharingLevel
+        prepared,
+        to: peerID,
+        sharingLevel: sharingLevel
       )
       NearbyInteractionManager.shared.exchangeDidComplete()
     }

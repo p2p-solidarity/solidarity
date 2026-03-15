@@ -1,3 +1,4 @@
+import CryptoKit
 import Foundation
 
 struct VpTokenVerificationResult: Equatable {
@@ -69,12 +70,25 @@ final class ProofVerifierService {
       details.append("exp: missing")
     }
 
+    switch verifyJWTSignature(jwt: token, payload: payload) {
+    case .failure(let reason):
+      return VpTokenVerificationResult(
+        isValid: false,
+        status: .failed,
+        title: "Signature invalid",
+        reason: reason,
+        details: details
+      )
+    case .success(let signatureDetail):
+      details.append(signatureDetail)
+    }
+
     if payload["vp"] != nil || payload["vc"] != nil {
       return VpTokenVerificationResult(
         isValid: true,
         status: .verified,
         title: "Proof verified",
-        reason: "Token structure and expiry checks passed.",
+        reason: "Token signature, structure, and expiry checks passed.",
         details: details
       )
     }
@@ -175,15 +189,125 @@ final class ProofVerifierService {
       }
     }
 
+    switch verifyJWTSignature(jwt: jwt, payload: payload) {
+    case .failure(let reason):
+      return VpTokenVerificationResult(
+        isValid: false, status: .failed,
+        title: "Invalid signature", reason: reason,
+        details: details
+      )
+    case .success(let signatureDetail):
+      details.append(signatureDetail)
+    }
+
     if payload["vc"] != nil {
       details.append("type: VerifiableCredential")
     }
 
     return VpTokenVerificationResult(
       isValid: true, status: .verified,
-      title: "JWT valid", reason: "Structure and expiry OK.",
+      title: "JWT valid", reason: "Signature, structure, and expiry checks passed.",
       details: details
     )
+  }
+
+  private enum SignatureVerificationOutcome {
+    case success(String)
+    case failure(String)
+  }
+
+  private func verifyJWTSignature(jwt: String, payload: [String: Any]) -> SignatureVerificationOutcome {
+    guard let publicJWK = extractPublicKeyJWK(from: payload) else {
+      return .failure("Missing publicKeyJwk for JWT signature verification.")
+    }
+
+    let segments = jwt.split(separator: ".")
+    guard segments.count == 3 else {
+      return .failure("Malformed JWT signature structure.")
+    }
+
+    guard let signatureData = Data(base64URLEncoded: String(segments[2])) else {
+      return .failure("Invalid JWT signature encoding.")
+    }
+
+    guard let signingInputData = "\(segments[0]).\(segments[1])".data(using: .utf8) else {
+      return .failure("Unable to reconstruct signing input.")
+    }
+
+    do {
+      let publicKey = try publicJWK.toP256PublicKey()
+      let signature =
+        (try? P256.Signing.ECDSASignature(rawRepresentation: signatureData))
+        ?? (try? P256.Signing.ECDSASignature(derRepresentation: signatureData))
+
+      guard let signature else {
+        return .failure("Unsupported JWT signature format.")
+      }
+
+      guard publicKey.isValidSignature(signature, for: signingInputData) else {
+        return .failure("JWT signature verification failed.")
+      }
+
+      return .success("sig: valid")
+    } catch {
+      return .failure("Failed to verify JWT signature: \(error.localizedDescription)")
+    }
+  }
+
+  private func extractPublicKeyJWK(from payload: [String: Any]) -> PublicKeyJWK? {
+    if let credentialSubject = payload["credentialSubject"] as? [String: Any],
+      let key = parsePublicKeyJWK(from: credentialSubject["publicKeyJwk"])
+    {
+      return key
+    }
+
+    if let vc = payload["vc"] as? [String: Any],
+      let credentialSubject = vc["credentialSubject"] as? [String: Any],
+      let key = parsePublicKeyJWK(from: credentialSubject["publicKeyJwk"])
+    {
+      return key
+    }
+
+    if let vp = payload["vp"] as? [String: Any],
+      let embeddedCredentials = vp["verifiableCredential"] as? [Any]
+    {
+      for embedded in embeddedCredentials {
+        guard let jwt = embedded as? String,
+          let embeddedPayload = payloadFromCompactJWT(jwt)
+        else { continue }
+
+        if let key = extractPublicKeyJWK(from: embeddedPayload) {
+          return key
+        }
+      }
+    }
+
+    return nil
+  }
+
+  private func parsePublicKeyJWK(from value: Any?) -> PublicKeyJWK? {
+    guard let dict = value as? [String: Any],
+      let kty = dict["kty"] as? String,
+      let crv = dict["crv"] as? String,
+      let alg = dict["alg"] as? String,
+      let x = dict["x"] as? String,
+      let y = dict["y"] as? String
+    else {
+      return nil
+    }
+
+    return PublicKeyJWK(kty: kty, crv: crv, alg: alg, x: x, y: y)
+  }
+
+  private func payloadFromCompactJWT(_ jwt: String) -> [String: Any]? {
+    let segments = jwt.split(separator: ".")
+    guard segments.count == 3,
+      let payloadData = Data(base64URLEncoded: String(segments[1])),
+      let payload = try? JSONSerialization.jsonObject(with: payloadData) as? [String: Any]
+    else {
+      return nil
+    }
+    return payload
   }
 
   // MARK: - Semaphore Proof Verification

@@ -109,7 +109,8 @@ extension ProximityManager {
       selectedFields: selectedFields,
       cardPreview: preview,
       myEphemeralMessage: myEphemeralMessage?.prefix(140).description,
-      myExchangeSignature: signature
+      myExchangeSignature: signature,
+      signPubKey: SecureKeyManager.shared.mySignPubKey
     )
 
     do {
@@ -163,13 +164,26 @@ extension ProximityManager {
       let data = try JSONEncoder().encode(payload)
       try session.send(data, toPeers: [request.fromPeer], with: .reliable)
 
+      let requestCanonical = canonicalExchangeString(
+        requestId: request.payload.requestId,
+        peerName: localPeerID.displayName,
+        card: request.payload.cardPreview,
+        fields: request.payload.selectedFields,
+        timestamp: request.payload.timestamp
+      )
+      let isRequestSignatureValid = Self.verifyExchangeSignature(
+        signature: request.payload.myExchangeSignature,
+        canonicalString: requestCanonical,
+        signPubKey: request.payload.signPubKey
+      )
+
       let persistence = ExchangeEdgePersistencePayload(
         card: request.payload.cardPreview,
         sourcePeerName: request.payload.senderID,
-        verificationStatus: .verified,
+        verificationStatus: isRequestSignatureValid ? .verified : .pending,
         sealedRoute: nil,
         pubKey: nil,
-        signPubKey: nil,
+        signPubKey: request.payload.signPubKey,
         mySignature: signature,
         theirSignature: request.payload.myExchangeSignature,
         myMessage: myEphemeralMessage?.prefix(140).description,
@@ -431,18 +445,28 @@ extension ProximityManager {
     }
   }
 
-  private func signExchangeString(_ value: String) -> String? {
-    guard let messageData = value.data(using: .utf8) else { return nil }
-    switch KeychainService.shared.signingKey() {
-    case .failure:
-      return nil
-    case .success(let signingKey):
-      guard let signature = try? signingKey.sign(payload: messageData) else { return nil }
-      return signature.base64EncodedString()
+  static func verifyExchangeSignature(signature: String, canonicalString: String, signPubKey: String?) -> Bool {
+    guard !signature.isEmpty,
+      !canonicalString.isEmpty,
+      let signPubKey,
+      !signPubKey.isEmpty
+    else {
+      return false
     }
+    return SecureKeyManager.shared.verify(
+      signatureBase64: signature,
+      content: canonicalString,
+      pubKeyBase64: signPubKey
+    )
   }
 
-  private func canonicalExchangeString(
+  private func signExchangeString(_ value: String) -> String? {
+    guard !value.isEmpty else { return nil }
+    let signature = SecureKeyManager.shared.sign(content: value)
+    return signature.isEmpty ? nil : signature
+  }
+
+  func canonicalExchangeString(
     requestId: UUID,
     peerName: String,
     card: BusinessCard,
@@ -450,7 +474,8 @@ extension ProximityManager {
     timestamp: Date
   ) -> String {
     let orderedFields = fields.map(\.rawValue).sorted().joined(separator: ",")
-    return "\(requestId.uuidString)|\(peerName)|\(card.name)|\(orderedFields)|\(timestamp.timeIntervalSince1970)"
+    let unixSeconds = Int(timestamp.timeIntervalSince1970)
+    return "\(requestId.uuidString)|\(peerName)|\(card.name)|\(orderedFields)|\(unixSeconds)"
   }
 
   private func filteredCard(_ card: BusinessCard, using selectedFields: [BusinessCardField]) -> BusinessCard {

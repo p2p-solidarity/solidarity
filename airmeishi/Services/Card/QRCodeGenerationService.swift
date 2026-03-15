@@ -21,7 +21,13 @@ final class QRCodeGenerationService {
     let mySealedRoute = SecureKeyManager.shared.mySealedRoute
     let snapshot = BusinessCardSnapshot(card: filteredCard, sealedRoute: mySealedRoute)
     let shareId = UUID()
-    let payload = QRPlaintextPayload(snapshot: snapshot, shareId: shareId, expirationDate: expirationDate)
+    let claims = ShareSettingsStore.selectedProofClaims
+    let payload = QRPlaintextPayload(
+      snapshot: snapshot,
+      shareId: shareId,
+      expirationDate: expirationDate,
+      proofClaims: claims.isEmpty ? nil : claims
+    )
     let envelope = QRCodeEnvelope(
       format: .plaintext,
       sharingLevel: .public,
@@ -115,10 +121,12 @@ final class QRCodeGenerationService {
     let mySealedRoute = SecureKeyManager.shared.mySealedRoute
     let snapshot = BusinessCardSnapshot(card: filteredCard, sealedRoute: mySealedRoute)
     let shareId = UUID()
+    let claims = ShareSettingsStore.selectedProofClaims
     let payload = QRPlaintextPayload(
       snapshot: snapshot,
       shareId: shareId,
-      expirationDate: expirationDate
+      expirationDate: expirationDate,
+      proofClaims: claims.isEmpty ? nil : claims
     )
     return QRCodeEnvelope(
       format: .plaintext,
@@ -172,7 +180,8 @@ final class QRCodeGenerationService {
       issuerProof: issuerProof,
       sdProof: sdProof,
       format: .zkProof,
-      sealedRoute: SecureKeyManager.shared.mySealedRoute
+      sealedRoute: SecureKeyManager.shared.mySealedRoute,
+      proofClaims: ShareSettingsStore.selectedProofClaims
     )
 
     switch encryptionManager.encrypt(payload) {

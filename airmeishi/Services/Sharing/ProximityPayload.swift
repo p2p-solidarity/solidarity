@@ -31,6 +31,27 @@ struct ExchangeRequestPayload: Codable {
   let cardPreview: BusinessCard
   let myEphemeralMessage: String?
   let myExchangeSignature: String
+  let signPubKey: String?
+
+  init(
+    requestId: UUID,
+    senderID: String,
+    timestamp: Date,
+    selectedFields: [BusinessCardField],
+    cardPreview: BusinessCard,
+    myEphemeralMessage: String?,
+    myExchangeSignature: String,
+    signPubKey: String? = nil
+  ) {
+    self.requestId = requestId
+    self.senderID = senderID
+    self.timestamp = timestamp
+    self.selectedFields = selectedFields
+    self.cardPreview = cardPreview
+    self.myEphemeralMessage = myEphemeralMessage
+    self.myExchangeSignature = myExchangeSignature
+    self.signPubKey = signPubKey
+  }
 }
 
 struct ExchangeAcceptPayload: Codable {
