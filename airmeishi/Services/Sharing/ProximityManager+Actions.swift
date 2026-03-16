@@ -12,6 +12,11 @@ import MultipeerConnectivity
 extension ProximityManager {
 
   /// Send business card to a specific peer
+  func sendCard(_ card: BusinessCard, to peer: MCPeerID) {
+    sendCard(card, to: peer, sharingLevel: .public)
+  }
+
+  /// Legacy level-based entrypoint kept for backward compatibility.
   func sendCard(_ card: BusinessCard, to peer: MCPeerID, sharingLevel: SharingLevel) {
     guard session.connectedPeers.contains(peer) else {
       lastError = .sharingError("Peer is not connected")
@@ -22,7 +27,7 @@ extension ProximityManager {
       let configuredCard = ShareSettingsStore.applyFields(to: card, level: sharingLevel)
       let selectedFields = ShareSettingsStore.enabledFields.sorted { $0.rawValue < $1.rawValue }
       let filteredCard = configuredCard.filteredCard(for: Set(selectedFields))
-      let scope = ShareScopeResolver.scope(selectedFields: selectedFields, legacyLevel: nil)
+      let scope = ShareScopeResolver.scope(selectedFields: selectedFields)
 
       // Create sharing payload with ZK issuer info
       let shareUUID = UUID()
@@ -30,10 +35,13 @@ extension ProximityManager {
         SemaphoreIdentityManager.shared.getIdentity() ?? (try? SemaphoreIdentityManager.shared.loadOrCreateIdentity())
       let issuerCommitment = identityBundle?.commitment ?? ""
       var issuerProof: String?
-      if !issuerCommitment.isEmpty && SemaphoreIdentityManager.proofsSupported {
+      if !issuerCommitment.isEmpty,
+        SemaphoreIdentityManager.proofsSupported,
+        let groupCommitments = SemaphoreGroupManager.shared.proofCommitments(containing: issuerCommitment)
+      {
         issuerProof =
           (try? SemaphoreIdentityManager.shared.generateProof(
-            groupCommitments: [issuerCommitment],
+            groupCommitments: groupCommitments,
             message: shareUUID.uuidString,
             scope: scope
           ))
@@ -52,6 +60,7 @@ extension ProximityManager {
         card: filteredCard,
         sharingLevel: sharingLevel,
         selectedFields: selectedFields,
+        scope: scope,
         timestamp: Date(),
         senderID: localPeerID.displayName,
         shareId: shareUUID,
@@ -380,13 +389,14 @@ extension ProximityManager {
 
     // Save to contact repository on main actor
     Task { @MainActor in
+      let peerSignPubKey = (signPubKey == SecureKeyManager.shared.mySignPubKey) ? nil : signPubKey
       let contact = Contact(
         businessCard: card,
         source: .proximity,
         verificationStatus: status,
         sealedRoute: sealedRoute,
         pubKey: pubKey,
-        signPubKey: signPubKey
+        signPubKey: peerSignPubKey
       )
 
       let result = contactRepository.addContact(contact)
@@ -420,19 +430,21 @@ extension ProximityManager {
 
   internal func persistExchangeEdge(_ payload: ExchangeEdgePersistencePayload) {
     Task { @MainActor in
+      let peerSignPubKey = (payload.signPubKey == SecureKeyManager.shared.mySignPubKey) ? nil : payload.signPubKey
       let contact = Contact(
         businessCard: payload.card,
         source: .proximity,
         verificationStatus: payload.verificationStatus,
         sealedRoute: payload.sealedRoute,
         pubKey: payload.pubKey,
-        signPubKey: payload.signPubKey
+        signPubKey: peerSignPubKey
       )
 
       let result = contactRepository.addContact(contact)
       switch result {
       case .success(let saved):
         var entity = ContactEntity.fromLegacy(saved)
+        entity.didPublicKey = peerSignPubKey
         entity.myExchangeSignature = Data(base64Encoded: payload.mySignature)
         entity.exchangeSignature = Data(base64Encoded: payload.theirSignature)
         entity.exchangeTimestamp = payload.timestamp

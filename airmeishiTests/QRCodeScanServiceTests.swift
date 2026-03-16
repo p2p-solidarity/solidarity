@@ -35,7 +35,7 @@ final class QRCodeScanServiceTests: XCTestCase {
     XCTAssertNil(outcome.card, "siopRequest should go through consent/review flow before issuance")
   }
 
-  func testPlaintextProofClaimsRequireCryptographicVerification() throws {
+  func testPlaintextEnvelopeStripsProofClaimsAndRemainsUnverified() throws {
     UserDefaults.standard.set(true, forKey: "share_proof_is_human")
     UserDefaults.standard.set(false, forKey: "share_proof_age_over_18")
     defer {
@@ -50,6 +50,7 @@ final class QRCodeScanServiceTests: XCTestCase {
       XCTFail("Failed to build test QR envelope")
       return
     }
+    XCTAssertNil(envelope.plaintext?.proofClaims, "Plaintext format must not advertise unverifiable claims")
     let encoded = try JSONEncoder.qrEncoder.encode(envelope)
     let payload = String(decoding: encoded, as: UTF8.self)
 
@@ -69,6 +70,6 @@ final class QRCodeScanServiceTests: XCTestCase {
       XCTFail("Expected successful scan outcome")
       return
     }
-    XCTAssertEqual(outcome.verificationStatus, .failed)
+    XCTAssertEqual(outcome.verificationStatus, .unverified)
   }
 }

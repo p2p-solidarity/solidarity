@@ -20,8 +20,14 @@ struct PersonDetailView: View {
     var level = 0
     if contact.exchangeSignature != nil { level += 1 }
     if contact.myExchangeSignature != nil { level += 1 }
-    if contact.didPublicKey != nil { level += 1 }
+    if displayDidPublicKey != nil { level += 1 }
     return level
+  }
+
+  private var displayDidPublicKey: String? {
+    guard let did = contact.didPublicKey, !did.isEmpty else { return nil }
+    if did == SecureKeyManager.shared.mySignPubKey { return nil }
+    return did
   }
 
   private var isVerified: Bool {
@@ -252,14 +258,14 @@ struct PersonDetailView: View {
 
   @ViewBuilder
   private var exchangeMetadataSection: some View {
-    if contact.didPublicKey != nil || contact.exchangeSignature != nil {
+    if displayDidPublicKey != nil || contact.exchangeSignature != nil {
       VStack(alignment: .leading, spacing: 12) {
         Text("— EXCHANGE DATA")
           .font(.system(size: 12, weight: .bold, design: .monospaced))
           .foregroundColor(Color.Theme.textSecondary)
 
         VStack(spacing: 8) {
-          if let did = contact.didPublicKey, !did.isEmpty {
+          if let did = displayDidPublicKey {
             metadataRow(label: "PEER PUB KEY", value: shortKey(did))
           }
 

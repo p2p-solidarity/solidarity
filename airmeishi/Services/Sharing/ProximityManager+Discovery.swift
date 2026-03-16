@@ -20,7 +20,7 @@ extension ProximityManager {
 
     if let card = card {
       let configuredCard = ShareSettingsStore.applyFields(to: card, level: sharingLevel)
-      startAdvertising(with: configuredCard, sharingLevel: sharingLevel)
+      startAdvertising(with: configuredCard)
     } else {
       startAdvertisingIdentity()
     }
@@ -32,6 +32,11 @@ extension ProximityManager {
   }
 
   /// Start advertising the current business card for proximity sharing
+  func startAdvertising(with card: BusinessCard) {
+    startAdvertising(with: card, sharingLevel: .public)
+  }
+
+  /// Legacy level-based entrypoint kept for backward compatibility.
   func startAdvertising(with card: BusinessCard, sharingLevel: SharingLevel) {
     guard !isAdvertising else { return }
 
@@ -39,7 +44,7 @@ extension ProximityManager {
     currentSharingLevel = sharingLevel
 
     // Create discovery info with card preview
-    let discoveryInfo = createDiscoveryInfo(for: card, level: sharingLevel)
+    let discoveryInfo = createDiscoveryInfo(for: card)
 
     advertiser = MCNearbyServiceAdvertiser(
       peer: localPeerID,
@@ -175,7 +180,7 @@ extension ProximityManager {
     return hasService
   }
 
-  internal func createDiscoveryInfo(for card: BusinessCard, level: SharingLevel) -> [String: String] {
+  internal func createDiscoveryInfo(for card: BusinessCard) -> [String: String] {
     let selectedFields = ShareSettingsStore.enabledFields.sorted { $0.rawValue < $1.rawValue }
     let filteredCard = card.filteredCard(for: Set(selectedFields))
 
@@ -190,8 +195,8 @@ extension ProximityManager {
       info["company"] = company
     }
 
-    // Legacy key retained for backward compatibility.
-    info["level"] = level.rawValue
+    // Legacy key retained for backward compatibility. Discovery semantics are field-based.
+    info["level"] = SharingLevel.public.rawValue
     info["timestamp"] = String(Int(Date().timeIntervalSince1970))
     // Announce ZK capability so browsers can show a badge before proof arrives
     info["zk"] = card.sharingPreferences.useZK ? "1" : "0"

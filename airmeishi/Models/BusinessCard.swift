@@ -320,7 +320,8 @@ enum BusinessCardField: String, Codable, CaseIterable {
   }
 }
 
-/// Sharing levels for privacy control
+/// Legacy sharing-level marker kept for backward compatibility.
+/// Field toggles (`BusinessCardField`) are the canonical sharing controls.
 enum SharingLevel: String, Codable, CaseIterable {
   case `public` = "public"
   case professional = "professional"

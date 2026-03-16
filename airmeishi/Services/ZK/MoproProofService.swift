@@ -176,8 +176,12 @@ final class MoproProofService {
 
     do {
       let identity = try SemaphoreIdentityManager.shared.loadOrCreateIdentity()
+      guard let groupCommitments = SemaphoreGroupManager.shared.proofCommitments(containing: identity.commitment) else {
+        ZKLog.info("Semaphore fallback skipped: no multi-member group context available.")
+        return nil
+      }
       let proofJSON = try SemaphoreIdentityManager.shared.generateProof(
-        groupCommitments: [identity.commitment],
+        groupCommitments: groupCommitments,
         message: documentHash,
         scope: "passport:\(nationalityCode)"
       )

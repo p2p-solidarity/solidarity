@@ -155,7 +155,12 @@ final class QRCodeScanService: NSObject {
       let card = rebuildCard(from: payload)
       // Extract sealed route from snapshot if available
       let sealedRoute = payload.snapshot.sealedRoute
-      let status = verifyProofClaims(payload.proofClaims, issuerStatus: .unverified)
+      let status = verifyProofClaims(
+        payload.proofClaims,
+        issuerStatus: .unverified,
+        issuerProofPresent: false,
+        ageOver18ProofValid: false
+      )
 
       identityCoordinator.updateVerificationStatus(for: card.id, status: status)
       onScanOutcome?(
@@ -222,18 +227,32 @@ final class QRCodeScanService: NSObject {
       commitment: payload.issuerCommitment,
       proof: payload.issuerProof,
       message: payload.shareId.uuidString,
-      scope: ShareScopeResolver.scope(
+      scope: payload.scope ?? ShareScopeResolver.scope(
         selectedFields: payload.selectedFields,
         legacyLevel: payload.sharingLevel
       )
     )
 
+    var ageOver18ProofValid = false
     if let proof = payload.sdProof {
       let verification = proofManager.verifySelectiveDisclosureProof(
         proof,
         expectedBusinessCardId: payload.businessCard.id.uuidString
       )
-      if case .success(let outcome) = verification, outcome.isValid == false {
+      switch verification {
+      case .success(let outcome):
+        ageOver18ProofValid = outcome.isValid
+        if outcome.isValid == false {
+          return .success(
+            ScanOutcome(
+              card: payload.businessCard,
+              verificationStatus: .failed,
+              sealedRoute: payload.sealedRoute,
+              route: .businessCard
+            )
+          )
+        }
+      case .failure:
         return .success(
           ScanOutcome(
             card: payload.businessCard,
@@ -245,7 +264,12 @@ final class QRCodeScanService: NSObject {
       }
     }
 
-    let finalStatus = verifyProofClaims(payload.proofClaims, issuerStatus: status)
+    let finalStatus = verifyProofClaims(
+      payload.proofClaims,
+      issuerStatus: status,
+      issuerProofPresent: payload.issuerProof != nil,
+      ageOver18ProofValid: ageOver18ProofValid
+    )
     identityCoordinator.updateVerificationStatus(for: payload.businessCard.id, status: finalStatus)
     return .success(
       ScanOutcome(
@@ -453,7 +477,9 @@ final class QRCodeScanService: NSObject {
 
   private func verifyProofClaims(
     _ claims: [String]?,
-    issuerStatus: VerificationStatus
+    issuerStatus: VerificationStatus,
+    issuerProofPresent: Bool,
+    ageOver18ProofValid: Bool
   ) -> VerificationStatus {
     guard let claims, !claims.isEmpty else {
       return issuerStatus
@@ -468,8 +494,11 @@ final class QRCodeScanService: NSObject {
       return .failed
     }
 
-    // `age_over_18` currently lacks a portable, cryptographically verifiable proof artifact in the payload.
-    if claims.contains("age_over_18") {
+    if claims.contains("is_human"), !issuerProofPresent {
+      return .failed
+    }
+
+    if claims.contains("age_over_18"), !ageOver18ProofValid {
       return .failed
     }
 

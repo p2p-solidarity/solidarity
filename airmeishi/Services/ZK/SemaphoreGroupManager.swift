@@ -82,6 +82,42 @@ final class SemaphoreGroupManager: ObservableObject {
 
   func indexOf(_ commitment: String) -> Int? { members.firstIndex(of: commitment) }
 
+  /// Returns a canonical member set for proof generation.
+  /// Requires a real group context (at least 2 distinct commitments including local).
+  func proofCommitments(containing localCommitment: String?) -> [String]? {
+    guard let localCommitment = localCommitment?.trimmingCharacters(in: .whitespacesAndNewlines),
+      !localCommitment.isEmpty
+    else {
+      return nil
+    }
+
+    func canonicalMembers(from group: ManagedGroup) -> [String] {
+      Array(
+        Set(
+          group.members
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+        )
+      ).sorted()
+    }
+
+    if let gid = selectedGroupId, let selected = allGroups.first(where: { $0.id == gid }) {
+      let members = canonicalMembers(from: selected)
+      if members.contains(localCommitment), members.count > 1 {
+        return members
+      }
+    }
+
+    for group in allGroups {
+      let members = canonicalMembers(from: group)
+      if members.contains(localCommitment), members.count > 1 {
+        return members
+      }
+    }
+
+    return nil
+  }
+
   // MARK: - Root
 
   func recomputeRoot() {

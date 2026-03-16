@@ -9,8 +9,11 @@ import Foundation
 
 struct ProximitySharingPayload: Codable {
   let card: BusinessCard
+  /// Legacy field retained for backward compatibility. Do not use for proof scope binding.
   let sharingLevel: SharingLevel
   let selectedFields: [BusinessCardField]?
+  /// Canonical proof scope bound to selected fields.
+  let scope: String?
   let timestamp: Date
   let senderID: String
   let shareId: UUID
@@ -27,6 +30,7 @@ struct ProximitySharingPayload: Codable {
     card: BusinessCard,
     sharingLevel: SharingLevel,
     selectedFields: [BusinessCardField]? = nil,
+    scope: String? = nil,
     timestamp: Date,
     senderID: String,
     shareId: UUID,
@@ -40,6 +44,7 @@ struct ProximitySharingPayload: Codable {
     self.card = card
     self.sharingLevel = sharingLevel
     self.selectedFields = selectedFields
+    self.scope = scope
     self.timestamp = timestamp
     self.senderID = senderID
     self.shareId = shareId

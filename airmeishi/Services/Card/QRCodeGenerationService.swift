@@ -5,6 +5,7 @@ import UIKit
 final class QRCodeGenerationService {
   private let encryptionManager = EncryptionManager.shared
   private let semaphoreManager = SemaphoreIdentityManager.shared
+  private let semaphoreGroupManager = SemaphoreGroupManager.shared
   private let proofManager = ProofGenerationManager.shared
   private let vcService: VCService
 
@@ -22,12 +23,12 @@ final class QRCodeGenerationService {
     let mySealedRoute = SecureKeyManager.shared.mySealedRoute
     let snapshot = BusinessCardSnapshot(card: filteredCard, sealedRoute: mySealedRoute)
     let shareId = UUID()
-    let claims = ShareSettingsStore.selectedProofClaims
     let payload = QRPlaintextPayload(
       snapshot: snapshot,
       shareId: shareId,
       expirationDate: expirationDate,
-      proofClaims: claims.isEmpty ? nil : claims,
+      // Plaintext payload cannot carry a cryptographic claim artifact.
+      proofClaims: nil,
       selectedFields: selectedFields
     )
     let envelope = QRCodeEnvelope(
@@ -119,18 +120,18 @@ final class QRCodeGenerationService {
     level: SharingLevel,
     expirationDate: Date?
   ) -> QRCodeEnvelope {
-    let selectedFields = card.sharingPreferences.fieldsForLevel(level).sorted { $0.rawValue < $1.rawValue }
+    let selectedFields = resolvedSelectedFields(for: card, legacyLevel: level)
     let filteredCard = card.filteredCard(for: Set(selectedFields))
     // Ensure we include our sealedRoute so the scanner can reply via Sakura
     let mySealedRoute = SecureKeyManager.shared.mySealedRoute
     let snapshot = BusinessCardSnapshot(card: filteredCard, sealedRoute: mySealedRoute)
     let shareId = UUID()
-    let claims = ShareSettingsStore.selectedProofClaims
     let payload = QRPlaintextPayload(
       snapshot: snapshot,
       shareId: shareId,
       expirationDate: expirationDate,
-      proofClaims: claims.isEmpty ? nil : claims,
+      // Plaintext payload cannot carry a cryptographic claim artifact.
+      proofClaims: nil,
       selectedFields: selectedFields
     )
     return QRCodeEnvelope(
@@ -147,11 +148,11 @@ final class QRCodeGenerationService {
     level: SharingLevel,
     expirationDate: Date?
   ) -> CardResult<QRCodeEnvelope> {
-    let selectedFields = card.sharingPreferences.fieldsForLevel(level).sorted { $0.rawValue < $1.rawValue }
+    let selectedFields = resolvedSelectedFields(for: card, legacyLevel: level)
     let filteredCard = card.filteredCard(for: Set(selectedFields))
     let shareUUID = UUID()
     let expires = expirationDate ?? Date().addingTimeInterval(24 * 60 * 60)
-    let scope = ShareScopeResolver.scope(selectedFields: selectedFields, legacyLevel: nil)
+    let scope = ShareScopeResolver.scope(selectedFields: selectedFields)
 
     var sdProof: SelectiveDisclosureProof?
     if card.sharingPreferences.useZK || card.sharingPreferences.sharingFormat == .zkProof {
@@ -169,18 +170,25 @@ final class QRCodeGenerationService {
     let issuerCommitment = identityBundle?.commitment
     var issuerProof: String?
 
-    if let commitment = issuerCommitment, !commitment.isEmpty, SemaphoreIdentityManager.proofsSupported {
+    if let commitment = issuerCommitment,
+      !commitment.isEmpty,
+      SemaphoreIdentityManager.proofsSupported,
+      let groupCommitments = semaphoreGroupManager.proofCommitments(containing: commitment)
+    {
       issuerProof = try? semaphoreManager.generateProof(
-        groupCommitments: [commitment],
+        groupCommitments: groupCommitments,
         message: shareUUID.uuidString,
         scope: scope
       )
     }
 
+    let proofClaims = filteredProofClaims(issuerProof: issuerProof, sdProof: sdProof)
+
     let payload = QRSharingPayload(
       businessCard: filteredCard,
       sharingLevel: level,
       selectedFields: selectedFields,
+      scope: scope,
       expirationDate: expires,
       shareId: shareUUID,
       createdAt: Date(),
@@ -189,7 +197,7 @@ final class QRCodeGenerationService {
       sdProof: sdProof,
       format: .zkProof,
       sealedRoute: SecureKeyManager.shared.mySealedRoute,
-      proofClaims: ShareSettingsStore.selectedProofClaims
+      proofClaims: proofClaims
     )
 
     switch encryptionManager.encrypt(payload) {
@@ -208,12 +216,29 @@ final class QRCodeGenerationService {
     }
   }
 
+  private func filteredProofClaims(
+    issuerProof: String?,
+    sdProof: SelectiveDisclosureProof?
+  ) -> [String]? {
+    let claims = ShareSettingsStore.selectedProofClaims.filter { claim in
+      switch claim {
+      case "is_human":
+        return issuerProof != nil
+      case "age_over_18":
+        return sdProof != nil
+      default:
+        return false
+      }
+    }
+    return claims.isEmpty ? nil : claims
+  }
+
   private func buildDidSignedEnvelope(
     for card: BusinessCard,
     level: SharingLevel,
     expirationDate: Date?
   ) -> CardResult<QRCodeEnvelope> {
-    let selectedFields = card.sharingPreferences.fieldsForLevel(level).sorted { $0.rawValue < $1.rawValue }
+    let selectedFields = resolvedSelectedFields(for: card, legacyLevel: level)
     let filteredCard = card.filteredCard(for: Set(selectedFields))
     let options = VCService.IssueOptions(expiration: expirationDate)
     let issueResult = vcService.issueBusinessCardCredential(for: filteredCard, options: options)
@@ -239,5 +264,16 @@ final class QRCodeGenerationService {
       )
       return .success(envelope)
     }
+  }
+
+  private func resolvedSelectedFields(
+    for card: BusinessCard,
+    legacyLevel: SharingLevel
+  ) -> [BusinessCardField] {
+    let fieldsFromToggles = ShareSettingsStore.enabledFields
+    if !fieldsFromToggles.isEmpty {
+      return fieldsFromToggles.sorted { $0.rawValue < $1.rawValue }
+    }
+    return card.sharingPreferences.effectiveFields(preferredLevel: legacyLevel).sorted { $0.rawValue < $1.rawValue }
   }
 }

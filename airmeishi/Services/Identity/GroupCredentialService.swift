@@ -170,9 +170,15 @@ final class GroupCredentialService: ObservableObject {
     guard let members = semaphoreGroup?.members, !members.isEmpty else {
       throw GroupCredentialError.groupIntegrityError("No local semaphore members found for group")
     }
+    let canonicalMembers = Array(Set(members)).sorted()
+    guard canonicalMembers.count > 1 else {
+      throw GroupCredentialError.groupIntegrityError(
+        "Semaphore group requires at least 2 distinct members for proof generation"
+      )
+    }
 
     return try SemaphoreIdentityManager.shared.generateProof(
-      groupCommitments: members,
+      groupCommitments: canonicalMembers,
       message: group.id,
       scope: group.id
     )

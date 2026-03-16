@@ -17,6 +17,7 @@ enum ProximityVerificationHelper {
       let context = SemaphoreIdentityManager.shared.bindingContext(from: proof)
       guard let context else { return .failed }
       guard context.commitments.contains(commitment) else { return .failed }
+      guard context.commitments.count > 1 else { return .failed }
 
       let expectedRoot = SemaphoreIdentityManager.bindingRoot(for: context.commitments)
       guard context.groupRoot == expectedRoot else { return .failed }

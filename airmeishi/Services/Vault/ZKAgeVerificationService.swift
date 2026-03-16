@@ -184,9 +184,12 @@ final class ZKAgeVerificationService: ObservableObject {
         // Generate Semaphore proof
         // Group commitments would include trusted age verifiers in production
         let identity = try semaphoreManager.loadOrCreateIdentity()
+        guard let groupCommitments = SemaphoreGroupManager.shared.proofCommitments(containing: identity.commitment) else {
+            throw AgeVerificationError.proofGenerationFailed
+        }
 
         return try semaphoreManager.generateProof(
-            groupCommitments: [identity.commitment],
+            groupCommitments: groupCommitments,
             message: message,
             scope: scope
         )

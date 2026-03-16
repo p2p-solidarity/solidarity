@@ -40,7 +40,7 @@ extension ProximityManager: MCSessionDelegate {
 
       // Optional legacy behavior: auto-send current card when a connection is established
       if state == .connected, self.autoSendCardOnConnect, let card = self.currentCard {
-        self.sendCard(card, to: peerID, sharingLevel: self.currentSharingLevel)
+        self.sendCard(card, to: peerID)
       }
 
       // If we have a pending join response for this peer, send it now
@@ -201,7 +201,7 @@ extension ProximityManager: MCSessionDelegate {
   private func handleProximityCardPayload(_ data: Data, from peerID: MCPeerID) {
     do {
       let payload = try JSONDecoder().decode(ProximitySharingPayload.self, from: data)
-      let scope = ShareScopeResolver.scope(
+      let scope = payload.scope ?? ShareScopeResolver.scope(
         selectedFields: payload.selectedFields,
         legacyLevel: payload.sharingLevel
       )

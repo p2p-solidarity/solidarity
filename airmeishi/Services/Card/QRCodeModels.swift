@@ -94,8 +94,11 @@ struct QRCodeEnvelope: Codable {
 
 struct QRSharingPayload: Codable {
   let businessCard: BusinessCard
+  /// Legacy field retained for backward compatibility. Do not use for proof scope binding.
   let sharingLevel: SharingLevel
   let selectedFields: [BusinessCardField]?
+  /// Canonical proof scope bound to selected fields.
+  let scope: String?
   let expirationDate: Date
   let shareId: UUID
   let createdAt: Date
@@ -112,6 +115,7 @@ struct QRSharingPayload: Codable {
     businessCard: BusinessCard,
     sharingLevel: SharingLevel,
     selectedFields: [BusinessCardField]? = nil,
+    scope: String? = nil,
     expirationDate: Date,
     shareId: UUID,
     createdAt: Date,
@@ -127,6 +131,7 @@ struct QRSharingPayload: Codable {
     self.businessCard = businessCard
     self.sharingLevel = sharingLevel
     self.selectedFields = selectedFields
+    self.scope = scope
     self.expirationDate = expirationDate
     self.shareId = shareId
     self.createdAt = createdAt

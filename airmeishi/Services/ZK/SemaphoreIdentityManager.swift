@@ -61,6 +61,7 @@ final class SemaphoreIdentityManager: ObservableObject {
     case unsupported
     case invalidCommitment(String)
     case groupConstructionFailed(String)
+    case insufficientGroupContext(String)
   }
 
   // MARK: - Identity
@@ -129,6 +130,11 @@ final class SemaphoreIdentityManager: ObservableObject {
     #if canImport(Semaphore) && !(targetEnvironment(simulator) && arch(x86_64))
       guard let bundle = try? keychain.loadIdentity() else { throw Error.notInitialized }
       let canonicalMembers = Self.canonicalCommitments(groupCommitments + [bundle.commitment])
+      guard canonicalMembers.count > 1 else {
+        throw Error.insufficientGroupContext(
+          "Semaphore proof generation requires at least 2 distinct group commitments."
+        )
+      }
       let identity = Identity(privateKey: bundle.privateKey)
       let memberElements = try canonicalMembers.map { try Self.commitmentElement(from: $0) }
       let group = Group(members: memberElements)
@@ -173,12 +179,18 @@ final class SemaphoreIdentityManager: ObservableObject {
     let envelope = decodeEnvelope(from: proof)
     guard let envelope else { return false }
 
-    if envelope.memberCount != Self.canonicalCommitments(envelope.commitments).count {
+    let canonicalCommitments = Self.canonicalCommitments(envelope.commitments)
+
+    if envelope.memberCount != canonicalCommitments.count {
+      return false
+    }
+
+    if canonicalCommitments.count <= 1 {
       return false
     }
 
     #if canImport(Semaphore) && !(targetEnvironment(simulator) && arch(x86_64))
-      let expectedEnvelopeRoot = try Self.circuitGroupRoot(for: envelope.commitments)
+      let expectedEnvelopeRoot = try Self.circuitGroupRoot(for: canonicalCommitments)
       if envelope.groupRoot != expectedEnvelopeRoot { return false }
     #endif
 
@@ -208,6 +220,10 @@ final class SemaphoreIdentityManager: ObservableObject {
       }
     #endif
     return deterministicGroupRoot(for: commitments)
+  }
+
+  static func clampForBinding(_ input: String) -> String {
+    clampToMax32Bytes(input)
   }
 
   struct ProofBindingContext: Equatable {

@@ -387,21 +387,42 @@ final class ProofVerifierService {
     }
 
     let parsedContext = SemaphoreIdentityManager.shared.bindingContext(from: semaphoreProofString)
-    let expectedRoot = (json["group_root"] as? String) ?? parsedContext?.groupRoot
-    let expectedSignal = (json["signal"] as? String) ?? parsedContext?.signal
-    let expectedScope = (json["scope"] as? String) ?? parsedContext?.scope
+    let expectedRoot = json["group_root"] as? String
+    let expectedSignal = json["signal"] as? String
+    let expectedScope = json["scope"] as? String
 
     guard let expectedRoot, let expectedSignal, let expectedScope else {
       return VpTokenVerificationResult(
         isValid: false,
         status: .failed,
         title: "Missing Semaphore binding context",
-        reason: "Semaphore proof must include root/signal/scope for replay-safe verification.",
+        reason: "Semaphore proof payload must explicitly include root/signal/scope.",
         details: details
       )
     }
 
     if let parsedContext {
+      if parsedContext.groupRoot != expectedRoot
+        || parsedContext.signal != SemaphoreIdentityManager.clampForBinding(expectedSignal)
+        || parsedContext.scope != SemaphoreIdentityManager.clampForBinding(expectedScope)
+      {
+        return VpTokenVerificationResult(
+          isValid: false,
+          status: .failed,
+          title: "Invalid binding context",
+          reason: "Provided root/signal/scope does not match proof envelope context.",
+          details: details
+        )
+      }
+      if parsedContext.commitments.count <= 1 {
+        return VpTokenVerificationResult(
+          isValid: false,
+          status: .failed,
+          title: "Insufficient group context",
+          reason: "Semaphore verification requires at least 2 group commitments.",
+          details: details
+        )
+      }
       let calculatedRoot = SemaphoreIdentityManager.bindingRoot(for: parsedContext.commitments)
       if parsedContext.groupRoot != calculatedRoot {
         return VpTokenVerificationResult(
