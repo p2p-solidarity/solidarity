@@ -10,6 +10,8 @@
 		F12208B32F541E0C00875220 /* NFCPassportReader in Frameworks */ = {isa = PBXBuildFile; productRef = F12208B22F541E0C00875220 /* NFCPassportReader */; };
 		F140CFAC2EDB561E009A2F45 /* WebRTC in Frameworks */ = {isa = PBXBuildFile; productRef = F140CFAB2EDB561E009A2F45 /* WebRTC */; };
 		F18CDB3C2EC2248C005E94B4 /* SpruceIDMobileSdkRs in Frameworks */ = {isa = PBXBuildFile; productRef = F18CDB3B2EC2248C005E94B4 /* SpruceIDMobileSdkRs */; };
+		F1C10A032F60A00300AA0003 /* Semaphore in Frameworks */ = {isa = PBXBuildFile; productRef = F1C10A022F60A00200AA0002 /* Semaphore */; };
+		F1C10B032F60B00300BB0003 /* OpenPassportSwift in Frameworks */ = {isa = PBXBuildFile; productRef = F1C10B022F60B00200BB0002 /* OpenPassportSwift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -74,6 +76,8 @@
 				F140CFAC2EDB561E009A2F45 /* WebRTC in Frameworks */,
 				F12208B32F541E0C00875220 /* NFCPassportReader in Frameworks */,
 				F18CDB3C2EC2248C005E94B4 /* SpruceIDMobileSdkRs in Frameworks */,
+				F1C10A032F60A00300AA0003 /* Semaphore in Frameworks */,
+				F1C10B032F60B00300BB0003 /* OpenPassportSwift in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -147,6 +151,8 @@
 				F18CDB3B2EC2248C005E94B4 /* SpruceIDMobileSdkRs */,
 				F140CFAB2EDB561E009A2F45 /* WebRTC */,
 				F12208B22F541E0C00875220 /* NFCPassportReader */,
+				F1C10A022F60A00200AA0002 /* Semaphore */,
+				F1C10B022F60B00200BB0002 /* OpenPassportSwift */,
 			);
 			productName = airmeishi;
 			productReference = F1133D7E2E70600A0097A2A4 /* airmeishi.app */;
@@ -235,6 +241,8 @@
 				F140CFAA2EDB5612009A2F45 /* XCRemoteSwiftPackageReference "WebRTC" */,
 				F1286C052EEB58030001BBFD /* XCRemoteSwiftPackageReference "SwiftLintPlugins" */,
 				F12208B12F541DFF00875220 /* XCRemoteSwiftPackageReference "NFCPassportReader" */,
+				F1C10A012F60A00100AA0001 /* XCRemoteSwiftPackageReference "SemaphoreSwift" */,
+				F1C10B012F60B00100BB0001 /* XCRemoteSwiftPackageReference "passport-noir" */,
 			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = F1133D7F2E70600A0097A2A4 /* Products */;
@@ -723,6 +731,22 @@
 				minimumVersion = 0.12.11;
 			};
 		};
+		F1C10A012F60A00100AA0001 /* XCRemoteSwiftPackageReference "SemaphoreSwift" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/zkmopro/SemaphoreSwift";
+			requirement = {
+				branch = main;
+				kind = branch;
+			};
+		};
+		F1C10B012F60B00100BB0001 /* XCRemoteSwiftPackageReference "passport-noir" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/p2p-solidarity/passport-noir.git";
+			requirement = {
+				branch = main;
+				kind = branch;
+			};
+		};
 /* End XCRemoteSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
@@ -745,6 +769,16 @@
 			isa = XCSwiftPackageProductDependency;
 			package = F18CDB272EC1F68E005E94B4 /* XCRemoteSwiftPackageReference "sprucekit-mobile" */;
 			productName = SpruceIDMobileSdkRs;
+		};
+		F1C10A022F60A00200AA0002 /* Semaphore */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = F1C10A012F60A00100AA0001 /* XCRemoteSwiftPackageReference "SemaphoreSwift" */;
+			productName = Semaphore;
+		};
+		F1C10B022F60B00200BB0002 /* OpenPassportSwift */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = F1C10B012F60B00100BB0001 /* XCRemoteSwiftPackageReference "passport-noir" */;
+			productName = OpenPassportSwift;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};
