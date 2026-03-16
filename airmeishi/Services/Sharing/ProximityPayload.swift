@@ -20,6 +20,7 @@ struct ProximitySharingPayload: Codable {
   let issuerCommitment: String?
   let issuerProof: String?
   let sdProof: SelectiveDisclosureProof?
+  let payloadSignature: String?
 
   // Secure Messaging Fields (Optional for backward compatibility)
   let sealedRoute: String?
@@ -37,6 +38,7 @@ struct ProximitySharingPayload: Codable {
     issuerCommitment: String?,
     issuerProof: String?,
     sdProof: SelectiveDisclosureProof?,
+    payloadSignature: String? = nil,
     sealedRoute: String?,
     pubKey: String?,
     signPubKey: String?
@@ -51,6 +53,7 @@ struct ProximitySharingPayload: Codable {
     self.issuerCommitment = issuerCommitment
     self.issuerProof = issuerProof
     self.sdProof = sdProof
+    self.payloadSignature = payloadSignature
     self.sealedRoute = sealedRoute
     self.pubKey = pubKey
     self.signPubKey = signPubKey

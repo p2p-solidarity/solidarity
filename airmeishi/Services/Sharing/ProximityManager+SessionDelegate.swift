@@ -211,6 +211,12 @@ extension ProximityManager: MCSessionDelegate {
         message: payload.shareId.uuidString,
         scope: scope
       )
+      let payloadSignatureValid = Self.verifyExchangeSignature(
+        signature: payload.payloadSignature ?? "",
+        canonicalString: canonicalCardPayloadString(for: payload),
+        signPubKey: payload.signPubKey
+      )
+      let finalStatus: VerificationStatus = (status == .pending && payloadSignatureValid) ? .verified : status
 
       print("[ProximityManager] Received payload from \(payload.senderID)")
       print("[ProximityManager] Sealed Route: \(String(describing: payload.sealedRoute))")
@@ -218,14 +224,14 @@ extension ProximityManager: MCSessionDelegate {
 
       DispatchQueue.main.async { [weak self] in
         guard let self = self else { return }
-        self.lastReceivedVerification = status
+        self.lastReceivedVerification = finalStatus
         if let index = self.nearbyPeers.firstIndex(where: { $0.peerID == peerID }) {
-          self.nearbyPeers[index].verification = status
+          self.nearbyPeers[index].verification = finalStatus
         }
         self.handleReceivedCard(
           payload.card,
           from: payload.senderID,
-          status: status,
+          status: finalStatus,
           sealedRoute: payload.sealedRoute,
           pubKey: payload.pubKey,
           signPubKey: payload.signPubKey

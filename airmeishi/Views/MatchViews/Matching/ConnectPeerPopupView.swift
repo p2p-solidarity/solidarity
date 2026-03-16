@@ -124,7 +124,7 @@ struct ConnectPeerPopupView: View {
       case .success:
         HStack(spacing: 8) {
           Image(systemName: "checkmark.seal.fill").foregroundColor(.green)
-          Text("Connected! Sending card...")
+          Text("Connected!")
             .font(.subheadline)
             .foregroundColor(Color.Theme.textSecondary)
         }

@@ -21,6 +21,7 @@ struct SharingTabView: View {
   @State private var isMatching = false
   @State private var showingShareActivity = false
   @State private var generatedQRImage: UIImage?
+  @State private var lastReceivedCardCount = 0
   @AppStorage("sharing_qr_expanded") private var isQRExpanded: Bool = true
 
   var body: some View {
@@ -113,6 +114,28 @@ struct SharingTabView: View {
     .onAppear {
       setupSpatialTrigger()
       refreshQR()
+      lastReceivedCardCount = proximityManager.receivedCards.count
+    }
+    .onReceive(proximityManager.$receivedCards) { cards in
+      guard cards.count > lastReceivedCardCount, let latest = cards.last else {
+        lastReceivedCardCount = cards.count
+        return
+      }
+      lastReceivedCardCount = cards.count
+      ToastManager.shared.show(
+        title: String(localized: "Card Received"),
+        message: String(localized: "Received from \(latest.name)."),
+        type: .success
+      )
+      showingReceivedCard = true
+    }
+    .onReceive(proximityManager.$lastError) { error in
+      guard let error else { return }
+      ToastManager.shared.show(
+        title: String(localized: "Sharing Failed"),
+        message: error.localizedDescription,
+        type: .error
+      )
     }
     .sheet(isPresented: $showingScanSheet) {
       ScanTabView()
@@ -352,7 +375,7 @@ struct SharingTabView: View {
       isMatching = false
     } else {
       let card = cardManager.businessCards.first
-      proximityManager.startMatching(with: card)
+      proximityManager.startMatching(with: card, autoSendCardOnConnect: true)
       isMatching = true
     }
   }
@@ -384,6 +407,12 @@ struct SharingTabView: View {
 
   private func setupSpatialTrigger() {
     niManager.onSpatialTrigger = { peerID in
+      // If connection-based auto-send is enabled, avoid sending duplicate payloads on UWB trigger.
+      if ProximityManager.shared.autoSendCardOnConnect {
+        NearbyInteractionManager.shared.exchangeDidComplete()
+        return
+      }
+
       let baseCard = ProximityManager.shared.currentCard ?? CardManager.shared.businessCards.first
       guard let card = baseCard else {
         NearbyInteractionManager.shared.exchangeDidFail()

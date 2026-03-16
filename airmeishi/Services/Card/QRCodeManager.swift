@@ -88,6 +88,9 @@ final class QRCodeManager: ObservableObject {
   // MARK: - Scanning
 
   func startScanning() -> CardResult<AVCaptureVideoPreviewLayer> {
+    // Reset route so scanning the same payload again still emits a route change.
+    lastScanRoute = nil
+    scanError = nil
     let result = scanService.startScanning()
     if case .success = result {
       isScanning = true
@@ -114,6 +117,7 @@ final class QRCodeManager: ObservableObject {
         self.lastScannedCard = outcome.card
         self.lastVerificationStatus = outcome.verificationStatus
         self.lastSealedRoute = outcome.sealedRoute
+        self.lastScanRoute = nil
         self.lastScanRoute = outcome.route
         self.scanError = nil
       case .failure(let error):

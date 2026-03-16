@@ -56,7 +56,7 @@ extension ProximityManager {
         )
         if case .success(let proof) = sdResult { sdProof = proof }
       }
-      let payload = ProximitySharingPayload(
+      let unsignedPayload = ProximitySharingPayload(
         card: filteredCard,
         sharingLevel: sharingLevel,
         selectedFields: selectedFields,
@@ -67,9 +67,28 @@ extension ProximityManager {
         issuerCommitment: issuerCommitment.isEmpty ? nil : issuerCommitment,
         issuerProof: issuerProof,
         sdProof: sdProof,
+        payloadSignature: nil,
         sealedRoute: SecureKeyManager.shared.mySealedRoute,
         pubKey: SecureKeyManager.shared.myEncPubKey,
         signPubKey: SecureKeyManager.shared.mySignPubKey
+      )
+
+      let payloadSignature = signExchangeString(canonicalCardPayloadString(for: unsignedPayload))
+      let payload = ProximitySharingPayload(
+        card: unsignedPayload.card,
+        sharingLevel: unsignedPayload.sharingLevel,
+        selectedFields: unsignedPayload.selectedFields,
+        scope: unsignedPayload.scope,
+        timestamp: unsignedPayload.timestamp,
+        senderID: unsignedPayload.senderID,
+        shareId: unsignedPayload.shareId,
+        issuerCommitment: unsignedPayload.issuerCommitment,
+        issuerProof: unsignedPayload.issuerProof,
+        sdProof: unsignedPayload.sdProof,
+        payloadSignature: payloadSignature,
+        sealedRoute: unsignedPayload.sealedRoute,
+        pubKey: unsignedPayload.pubKey,
+        signPubKey: unsignedPayload.signPubKey
       )
 
       print("[ProximityManager] Sending card to \(peer.displayName)")
@@ -495,6 +514,12 @@ extension ProximityManager {
     let orderedFields = fields.map(\.rawValue).sorted().joined(separator: ",")
     let unixSeconds = Int(timestamp.timeIntervalSince1970)
     return "\(requestId.uuidString)|\(peerName)|\(card.name)|\(orderedFields)|\(unixSeconds)"
+  }
+
+  internal func canonicalCardPayloadString(for payload: ProximitySharingPayload) -> String {
+    let orderedFields = (payload.selectedFields ?? []).map(\.rawValue).sorted().joined(separator: ",")
+    let unixSeconds = Int(payload.timestamp.timeIntervalSince1970)
+    return "\(payload.shareId.uuidString)|\(payload.senderID)|\(payload.card.id.uuidString)|\(orderedFields)|\(unixSeconds)"
   }
 
   private func filteredCard(_ card: BusinessCard, using selectedFields: [BusinessCardField]) -> BusinessCard {

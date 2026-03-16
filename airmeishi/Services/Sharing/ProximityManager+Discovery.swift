@@ -14,9 +14,13 @@ extension ProximityManager {
   // MARK: - Public Methods
 
   /// Start auto-pilot matching (Advertising + Browsing) with automatic connection and retries
-  func startMatching(with card: BusinessCard?, sharingLevel: SharingLevel = .professional) {
+  func startMatching(
+    with card: BusinessCard?,
+    sharingLevel: SharingLevel = .professional,
+    autoSendCardOnConnect: Bool = false
+  ) {
     autoConnectEnabled = true
-    autoSendCardOnConnect = false
+    self.autoSendCardOnConnect = autoSendCardOnConnect
 
     if let card = card {
       let configuredCard = ShareSettingsStore.applyFields(to: card, level: sharingLevel)

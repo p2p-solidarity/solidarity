@@ -56,25 +56,30 @@ struct ScanTabView: View {
     .onChange(of: qrManager.lastScanRoute) { _, route in
       handleRoute(route)
     }
+    .onReceive(qrManager.$scanError) { error in
+      guard let error else { return }
+      routeAlertMessage = error.localizedDescription
+      showingRouteAlert = true
+    }
     .onReceive(contactRepository.$pendingMergeProposal) { proposal in
       showingMergeConfirmation = proposal != nil
     }
-    .sheet(isPresented: $showingScannedCard) {
+    .sheet(isPresented: $showingScannedCard, onDismiss: restartScanningIfPossible) {
       if let scannedCard = qrManager.lastScannedCard {
         ScannedCardView(businessCard: scannedCard, verification: lastVerification) {
           saveScannedCard(scannedCard)
         }
       }
     }
-    .sheet(isPresented: $showingPresentationFlow) {
+    .sheet(isPresented: $showingPresentationFlow, onDismiss: restartScanningIfPossible) {
       ProofPresentationFlowSheet(requestPayload: pendingRoutePayload)
     }
-    .sheet(isPresented: $showingVerifierResult) {
+    .sheet(isPresented: $showingVerifierResult, onDismiss: restartScanningIfPossible) {
       if let verificationResult {
         VerifierResultSheet(result: verificationResult)
       }
     }
-    .sheet(isPresented: $showingCredentialImport) {
+    .sheet(isPresented: $showingCredentialImport, onDismiss: restartScanningIfPossible) {
       CredentialImportFlowSheet(offerURL: pendingCredentialOffer)
     }
     .sheet(isPresented: $showingSelfQr) {
@@ -118,6 +123,11 @@ struct ScanTabView: View {
         case .success(let merged):
           if let merged {
             IdentityDataStore.shared.upsertContact(ContactEntity.fromLegacy(merged))
+            ToastManager.shared.show(
+              title: String(localized: "Contact Updated"),
+              message: String(localized: "Merged and saved to People."),
+              type: .success
+            )
           }
         case .failure(let error):
           routeAlertMessage = error.localizedDescription
@@ -201,6 +211,14 @@ struct ScanTabView: View {
     case .businessCard:
       if qrManager.lastScannedCard != nil {
         lastVerification = qrManager.lastVerificationStatus ?? .unverified
+        if lastVerification == .verified {
+          ToastManager.shared.show(
+            title: String(localized: "Verification Success"),
+            message: String(localized: "Credential verified. Save to add to People."),
+            type: .success,
+            duration: 2.2
+          )
+        }
         showingScannedCard = true
       }
 
@@ -243,6 +261,11 @@ struct ScanTabView: View {
     case .success(let saved):
       IdentityDataStore.shared.upsertContact(ContactEntity.fromLegacy(saved))
       showingScannedCard = false
+      ToastManager.shared.show(
+        title: String(localized: "Saved to People"),
+        message: String(localized: "Contact saved successfully."),
+        type: .success
+      )
     case .failure(let error):
       if isMergeConfirmationRequired(error) {
         showingMergeConfirmation = true
@@ -258,6 +281,12 @@ struct ScanTabView: View {
       return message.contains("Merge confirmation required")
     }
     return false
+  }
+
+  private func restartScanningIfPossible() {
+    guard !qrManager.isScanning else { return }
+    guard AVCaptureDevice.authorizationStatus(for: .video) == .authorized else { return }
+    startScanning()
   }
 }
 

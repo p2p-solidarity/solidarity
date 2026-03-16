@@ -72,4 +72,37 @@ final class QRCodeScanServiceTests: XCTestCase {
     }
     XCTAssertEqual(outcome.verificationStatus, .unverified)
   }
+
+  func testCompactCredentialJWTImportsAsBusinessCardRoute() throws {
+    let card = BusinessCard(
+      name: "JWT Route Test",
+      title: "Engineer",
+      company: "Solidarity"
+    )
+    let issueResult = VCService().issueBusinessCardCredential(for: card)
+    guard case .success(let credential) = issueResult else {
+      XCTFail("Expected JWT credential issuance")
+      return
+    }
+
+    let service = QRCodeScanService()
+    let expectation = expectation(description: "scan outcome")
+    var outcomeResult: Result<QRCodeScanService.ScanOutcome, CardError>?
+
+    service.onScanOutcome = { result in
+      outcomeResult = result
+      expectation.fulfill()
+    }
+
+    service.process(scannedString: credential.jwt)
+    waitForExpectations(timeout: 2.0)
+
+    guard case .success(let outcome) = outcomeResult else {
+      XCTFail("Expected successful scan outcome")
+      return
+    }
+
+    XCTAssertEqual(outcome.route, .businessCard)
+    XCTAssertEqual(outcome.card?.name, card.name)
+  }
 }
