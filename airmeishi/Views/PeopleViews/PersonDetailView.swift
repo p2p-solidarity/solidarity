@@ -82,7 +82,7 @@ struct PersonDetailView: View {
 
         Text(String(contact.name.prefix(1)).uppercased())
           .font(.system(size: 36, weight: .bold, design: .monospaced))
-          .foregroundColor(.white)
+          .foregroundColor(Color.Theme.textPrimary)
       }
 
       VStack(spacing: 6) {
@@ -169,7 +169,7 @@ struct PersonDetailView: View {
 
         Text(message)
           .font(.system(size: 14, weight: .medium))
-          .foregroundColor(.black)
+          .foregroundColor(Color.Theme.textPrimary)
           .italic()
           .frame(maxWidth: .infinity, alignment: .leading)
       }

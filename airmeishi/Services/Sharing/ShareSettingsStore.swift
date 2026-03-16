@@ -24,10 +24,12 @@ enum ShareSettingsStore {
   }
 
   static var shareIsHuman: Bool {
-    if UserDefaults.standard.object(forKey: proofHumanKey) == nil {
-      return true
+    // Spec: "Real Human" is mandatory when claim exists.
+    // Keep persisted state normalized to true for compatibility with older installs.
+    if (UserDefaults.standard.object(forKey: proofHumanKey) as? Bool) != true {
+      UserDefaults.standard.set(true, forKey: proofHumanKey)
     }
-    return UserDefaults.standard.bool(forKey: proofHumanKey)
+    return true
   }
 
   static var shareAgeOver18: Bool {
@@ -35,8 +37,7 @@ enum ShareSettingsStore {
   }
 
   static var selectedProofClaims: [String] {
-    var claims: [String] = []
-    if shareIsHuman { claims.append("is_human") }
+    var claims: [String] = ["is_human"]
     if shareAgeOver18 { claims.append("age_over_18") }
     return claims
   }

@@ -22,7 +22,7 @@ struct DarkProfileSetupForm: View {
         VStack(alignment: .center, spacing: 8) {
           Text("Hi,")
             .font(.system(size: 28, weight: .bold))
-            .foregroundColor(.white)
+            .foregroundColor(Color.Theme.textPrimary)
           Text("It's good to have you here <3\nLet's set up your profile")
             .font(.system(size: 14))
             .foregroundColor(Color.Theme.textSecondary)
@@ -83,7 +83,7 @@ struct DarkProfileSetupForm: View {
         VStack(alignment: .leading, spacing: 4) {
           Text("Export")
             .font(.system(size: 14, weight: .bold))
-            .foregroundColor(.white)
+            .foregroundColor(Color.Theme.textPrimary)
           Text("You can do this later or whenever you're ready to export your data.")
             .font(.system(size: 12))
             .foregroundColor(Color.Theme.textTertiary)
@@ -149,7 +149,7 @@ struct DarkInputField: View {
       HStack(spacing: 4) {
         Text(title)
           .font(.system(size: 14, weight: .bold))
-          .foregroundColor(.white)
+          .foregroundColor(Color.Theme.textPrimary)
         if isRequired {
           Text("*")
             .font(.system(size: 14, weight: .bold))
@@ -162,8 +162,8 @@ struct DarkInputField: View {
           Text(placeholder).foregroundColor(Color.Theme.textPlaceholder)
         }
         .padding(14)
-        .foregroundColor(.white)
-        .background(Color.clear)
+        .foregroundColor(Color.Theme.textPrimary)
+        .background(Color.Theme.searchBg)
         .overlay(
           Rectangle()
             .stroke(errorMessage != nil ? Color.Theme.destructive : Color.Theme.divider, lineWidth: 1)

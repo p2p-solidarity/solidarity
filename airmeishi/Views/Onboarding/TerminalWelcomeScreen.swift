@@ -15,7 +15,7 @@ struct TerminalWelcomeScreen: View {
       VStack(alignment: .leading, spacing: 16) {
         Text(displayedText)
           .font(.system(size: 32, weight: .bold, design: .monospaced))
-          .foregroundColor(.white)
+          .foregroundColor(Color.Theme.textPrimary)
           .multilineTextAlignment(.leading)
           .frame(maxWidth: .infinity, alignment: .leading)
 
@@ -39,11 +39,8 @@ struct TerminalWelcomeScreen: View {
           Text("Begin")
             .font(.system(size: 18, weight: .bold, design: .monospaced))
             .frame(maxWidth: .infinity)
-            .padding()
-            .background(Color.white)
-            .foregroundColor(.black)
-            .clipShape(Rectangle())
         }
+        .buttonStyle(ThemedInvertedButtonStyle())
         .padding(.horizontal, 32)
         .padding(.bottom, 48)
         .transition(.move(edge: .bottom).combined(with: .opacity))

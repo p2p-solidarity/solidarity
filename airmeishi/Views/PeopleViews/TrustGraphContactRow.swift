@@ -36,14 +36,14 @@ struct TrustGraphContactRow: View {
 
           Text(String(contact.name.prefix(1)).uppercased())
             .font(.system(size: 20, weight: .bold, design: .monospaced))
-            .foregroundColor(.white)
+            .foregroundColor(Color.Theme.textPrimary)
         }
 
         // Name & Title
         VStack(alignment: .leading, spacing: 4) {
           Text(contact.name)
             .font(.system(size: 18, weight: .bold))
-            .foregroundColor(.white)
+            .foregroundColor(Color.Theme.textPrimary)
             .lineLimit(1)
 
           if let title = contact.title, !title.isEmpty {
@@ -75,7 +75,7 @@ struct TrustGraphContactRow: View {
 
           Text(message)
             .font(.system(size: 14, weight: .medium, design: .default))
-            .foregroundColor(.black)
+            .foregroundColor(Color.Theme.textPrimary)
             .lineSpacing(4)
             .italic()
             .frame(maxWidth: .infinity, alignment: .leading)

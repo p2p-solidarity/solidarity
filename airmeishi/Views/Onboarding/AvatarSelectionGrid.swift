@@ -11,7 +11,7 @@ struct AvatarSelectionGrid: View {
       HStack {
         Button(action: onBack) {
           Image(systemName: "chevron.left")
-            .foregroundColor(.white)
+            .foregroundColor(Color.Theme.textPrimary)
             .padding(12)
             .background(Color.clear)
             .overlay(Rectangle().stroke(Color.Theme.divider, lineWidth: 1))
@@ -23,7 +23,7 @@ struct AvatarSelectionGrid: View {
       VStack(spacing: 8) {
         Text("Avatar")
           .font(.system(size: 28, weight: .bold))
-          .foregroundColor(.white)
+          .foregroundColor(Color.Theme.textPrimary)
         Text("Choose your beloved creature.")
           .font(.system(size: 14))
           .foregroundColor(Color.Theme.textSecondary)
@@ -34,7 +34,7 @@ struct AvatarSelectionGrid: View {
         // Subtle background pattern or silhouette could go here logically
 
         if let sel = selectedAvatar {
-          Image(sel.imageBasename)
+          ImageProvider.animalImage(for: sel)
             .resizable()
             .scaledToFit()
             .frame(width: 150, height: 150)
@@ -60,13 +60,13 @@ struct AvatarSelectionGrid: View {
         HStack(spacing: 24) {
           ForEach(AnimalCharacter.allCases, id: \.self) { animal in
             VStack(spacing: 8) {
-              Image(animal.imageBasename)
+              ImageProvider.animalImage(for: animal)
                 .resizable()
                 .scaledToFit()
                 .frame(width: 60, height: 60)
                 .clipShape(Circle())
                 .overlay(
-                  Circle().stroke(selectedAvatar == animal ? Color.white : Color.clear, lineWidth: 2)
+                  Circle().stroke(selectedAvatar == animal ? Color.Theme.primaryBlue : Color.clear, lineWidth: 2)
                 )
                 .onTapGesture {
                   HapticFeedbackManager.shared.rigidImpact()
@@ -77,7 +77,7 @@ struct AvatarSelectionGrid: View {
 
               Text(animal.rawValue.capitalized)
                 .font(.system(size: 12, weight: .medium))
-                .foregroundColor(selectedAvatar == animal ? .white : Color.Theme.textSecondary)
+                .foregroundColor(selectedAvatar == animal ? Color.Theme.textPrimary : Color.Theme.textSecondary)
             }
           }
         }
@@ -87,7 +87,7 @@ struct AvatarSelectionGrid: View {
       VStack(alignment: .leading, spacing: 8) {
         Text("About avatar")
           .font(.system(size: 14, weight: .bold))
-          .foregroundColor(.white)
+          .foregroundColor(Color.Theme.textPrimary)
 
         Text("This avatar will develop alongside your journey, based on the activity level you accumulate. " +
              "As you progress, your avatar will evolve!\n\n" +

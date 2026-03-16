@@ -23,6 +23,7 @@ struct SharingTabView: View {
   @State private var generatedQRImage: UIImage?
   @State private var lastReceivedCardCount = 0
   @AppStorage("sharing_qr_expanded") private var isQRExpanded: Bool = true
+  @AppStorage("theme_selected_animal") private var savedAvatar: String?
 
   var body: some View {
     NavigationStack {
@@ -200,15 +201,7 @@ struct SharingTabView: View {
       VStack(spacing: 10) {
         // Name + avatar row
         HStack(spacing: 10) {
-          if let animal = card?.animal,
-             let img = UIImage(named: animal.imageBasename) {
-            Image(uiImage: img)
-              .resizable()
-              .scaledToFill()
-              .frame(width: 32, height: 32)
-              .clipShape(Circle())
-              .overlay(Circle().stroke(Color.Theme.divider, lineWidth: 1))
-          }
+          profileAvatar(for: card)
 
           VStack(alignment: .leading, spacing: 2) {
             Text(card?.name ?? "No Card")
@@ -364,6 +357,48 @@ struct SharingTabView: View {
     guard let card = cardManager.businessCards.first else { return "" }
     let filtered = card.filteredCard(for: ShareSettingsReader.enabledFields)
     return filtered.vCardData
+  }
+
+  @ViewBuilder
+  private func profileAvatar(for card: BusinessCard?) -> some View {
+    let frame: CGFloat = 32
+
+    if let imageData = card?.profileImage,
+      let uiImage = UIImage(data: imageData)
+    {
+      Image(uiImage: uiImage)
+        .resizable()
+        .scaledToFill()
+        .frame(width: frame, height: frame)
+        .clipShape(Circle())
+        .overlay(Circle().stroke(Color.Theme.divider, lineWidth: 1))
+    } else if let animal = card?.animal ?? savedAvatar.flatMap(AnimalCharacter.init(rawValue:)) {
+      ImageProvider.animalImage(for: animal)
+        .resizable()
+        .scaledToFill()
+        .frame(width: frame, height: frame)
+        .clipShape(Circle())
+        .overlay(Circle().stroke(Color.Theme.divider, lineWidth: 1))
+    } else {
+      ZStack {
+        Circle()
+          .fill(Color.Theme.searchBg)
+          .frame(width: frame, height: frame)
+        Text(initials(for: card?.name))
+          .font(.system(size: 12, weight: .bold, design: .monospaced))
+          .foregroundColor(Color.Theme.textPrimary)
+      }
+      .overlay(Circle().stroke(Color.Theme.divider, lineWidth: 1))
+    }
+  }
+
+  private func initials(for name: String?) -> String {
+    guard let name, !name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+      return "?"
+    }
+    let parts = name.components(separatedBy: .whitespacesAndNewlines).filter { !$0.isEmpty }
+    let letters = parts.compactMap(\.first).map(String.init)
+    return letters.prefix(2).joined().uppercased()
   }
 
   // MARK: - Actions

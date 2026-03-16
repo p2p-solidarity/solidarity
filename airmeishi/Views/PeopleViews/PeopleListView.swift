@@ -2,6 +2,7 @@ import SwiftUI
 
 struct PeopleListView: View {
   @EnvironmentObject private var identityDataStore: IdentityDataStore
+  @ObservedObject private var devMode = DeveloperModeManager.shared
   @StateObject private var contactRepository = ContactRepository.shared
   @State private var searchQuery = ""
   @State private var showingExchangeFlow = false
@@ -27,13 +28,15 @@ struct PeopleListView: View {
 
   private var importedContacts: [ContactEntity] {
     filteredContacts.filter {
-      $0.verificationStatus != VerificationStatus.verified.rawValue && $0.source == "imported"
+      $0.verificationStatus != VerificationStatus.verified.rawValue
+        && isImportedSource($0.source)
     }
   }
 
   private var others: [ContactEntity] {
     filteredContacts.filter {
-      $0.verificationStatus != VerificationStatus.verified.rawValue && $0.source != "imported"
+      $0.verificationStatus != VerificationStatus.verified.rawValue
+        && !isImportedSource($0.source)
     }
   }
 
@@ -59,10 +62,12 @@ struct PeopleListView: View {
       .toolbar {
         ToolbarItem(placement: .navigationBarTrailing) {
           Menu {
-            Button {
-              showingExchangeFlow = true
-            } label: {
-              Label("Radar Exchange", systemImage: "antenna.radiowaves.left.and.right")
+            if devMode.isDeveloperMode {
+              Button {
+                showingExchangeFlow = true
+              } label: {
+                Label("Radar Exchange", systemImage: "antenna.radiowaves.left.and.right")
+              }
             }
 
             Button {
@@ -332,5 +337,10 @@ struct PeopleListView: View {
         }
       }
     }
+  }
+
+  private func isImportedSource(_ source: String) -> Bool {
+    let normalized = source.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+    return normalized == "imported" || normalized == ContactSource.manual.rawValue.lowercased()
   }
 }

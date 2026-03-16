@@ -119,7 +119,7 @@ struct OnboardingFlowView: View {
       HStack {
         Button(action: { goTo(.avatarSetup) }) {
           Image(systemName: "chevron.left")
-            .foregroundColor(.white)
+            .foregroundColor(Color.Theme.textPrimary)
             .padding(12)
             .overlay(Rectangle().stroke(Color.Theme.divider, lineWidth: 1))
         }
@@ -130,7 +130,7 @@ struct OnboardingFlowView: View {
       VStack(alignment: .leading, spacing: 8) {
         Text("Secure Keys")
           .font(.system(size: 28, weight: .bold))
-          .foregroundColor(.white)
+          .foregroundColor(Color.Theme.textPrimary)
         Text("You're about to begin your journey.\nPlease confirm to generate your DID keys.")
           .font(.system(size: 14))
           .foregroundColor(Color.Theme.textSecondary)
@@ -140,7 +140,7 @@ struct OnboardingFlowView: View {
 
       if isWorking {
         ProgressView()
-          .progressViewStyle(CircularProgressViewStyle(tint: .white))
+          .progressViewStyle(CircularProgressViewStyle(tint: Color.Theme.terminalGreen))
           .scaleEffect(1.5)
           .frame(maxWidth: .infinity)
       } else {
@@ -162,7 +162,7 @@ struct OnboardingFlowView: View {
       HStack {
         Button(action: { goTo(.secureKeys) }) {
           Image(systemName: "chevron.left")
-            .foregroundColor(.white)
+            .foregroundColor(Color.Theme.textPrimary)
             .padding(12)
             .overlay(Rectangle().stroke(Color.Theme.divider, lineWidth: 1))
         }
@@ -173,7 +173,7 @@ struct OnboardingFlowView: View {
       VStack(alignment: .leading, spacing: 8) {
         Text("Import Contacts")
           .font(.system(size: 28, weight: .bold))
-          .foregroundColor(.white)
+          .foregroundColor(Color.Theme.textPrimary)
         Text("Bring your existing contacts into Solidarity.\nYou can always import more later.")
           .font(.system(size: 14))
           .foregroundColor(Color.Theme.textSecondary)
@@ -198,7 +198,7 @@ struct OnboardingFlowView: View {
 
         if isWorking {
           ProgressView()
-            .progressViewStyle(CircularProgressViewStyle(tint: .white))
+            .progressViewStyle(CircularProgressViewStyle(tint: Color.Theme.terminalGreen))
             .scaleEffect(1.2)
             .frame(maxWidth: .infinity)
             .padding(.vertical, 8)
@@ -232,7 +232,7 @@ struct OnboardingFlowView: View {
       HStack {
         Button(action: { goTo(.importContacts) }) {
           Image(systemName: "chevron.left")
-            .foregroundColor(.white)
+            .foregroundColor(Color.Theme.textPrimary)
             .padding(12)
             .overlay(Rectangle().stroke(Color.Theme.divider, lineWidth: 1))
         }
@@ -243,7 +243,7 @@ struct OnboardingFlowView: View {
       VStack(alignment: .leading, spacing: 8) {
         Text("Scan Passport")
           .font(.system(size: 28, weight: .bold))
-          .foregroundColor(.white)
+          .foregroundColor(Color.Theme.textPrimary)
         Text("Scan your passport to unlock provable claims.\nYou can prove your age or personhood without revealing personal info.")
           .font(.system(size: 14))
           .foregroundColor(Color.Theme.textSecondary)

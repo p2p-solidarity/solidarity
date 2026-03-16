@@ -54,7 +54,13 @@ struct ShareSettingsView: View {
     .background(Color.Theme.pageBg.ignoresSafeArea())
     .navigationTitle("Share Settings")
     .navigationBarTitleDisplayMode(.inline)
-    .onAppear { refreshQR() }
+    .onAppear {
+      enforceMandatoryProofs()
+      refreshQR()
+    }
+    .onChange(of: hasHumanClaim) { _, _ in
+      enforceMandatoryProofs()
+    }
     .onChange(of: shareTitle) { _, _ in refreshQR() }
     .onChange(of: shareCompany) { _, _ in refreshQR() }
     .onChange(of: shareEmail) { _, _ in refreshQR() }
@@ -62,7 +68,12 @@ struct ShareSettingsView: View {
     .onChange(of: shareProfileImage) { _, _ in refreshQR() }
     .onChange(of: shareSocialNetworks) { _, _ in refreshQR() }
     .onChange(of: shareSkills) { _, _ in refreshQR() }
-    .onChange(of: shareIsHuman) { _, _ in refreshQR() }
+    .onChange(of: shareIsHuman) { _, newValue in
+      if hasHumanClaim, !newValue {
+        shareIsHuman = true
+      }
+      refreshQR()
+    }
     .onChange(of: shareAgeOver18) { _, _ in refreshQR() }
   }
 
@@ -143,7 +154,8 @@ struct ShareSettingsView: View {
             label: "Real Human",
             badge: "Government",
             badgeColor: Color.Theme.terminalGreen,
-            isOn: $shareIsHuman
+            isOn: $shareIsHuman,
+            locked: true
           )
         }
         if hasAgeClaim {
@@ -197,7 +209,14 @@ struct ShareSettingsView: View {
     }
   }
 
-  private func proofRow(icon: String, label: String, badge: String, badgeColor: Color, isOn: Binding<Bool>) -> some View {
+  private func proofRow(
+    icon: String,
+    label: String,
+    badge: String,
+    badgeColor: Color,
+    isOn: Binding<Bool>,
+    locked: Bool = false
+  ) -> some View {
     HStack(spacing: 12) {
       Image(systemName: icon)
         .font(.system(size: 14))
@@ -215,15 +234,22 @@ struct ShareSettingsView: View {
 
       Spacer()
 
-      Image(systemName: isOn.wrappedValue ? "checkmark.square.fill" : "square")
-        .font(.system(size: 18))
-        .foregroundColor(isOn.wrappedValue ? badgeColor : Color.Theme.textTertiary)
+      if locked {
+        Image(systemName: "lock.fill")
+          .font(.system(size: 12))
+          .foregroundColor(Color.Theme.textTertiary)
+      } else {
+        Image(systemName: isOn.wrappedValue ? "checkmark.square.fill" : "square")
+          .font(.system(size: 18))
+          .foregroundColor(isOn.wrappedValue ? badgeColor : Color.Theme.textTertiary)
+      }
     }
     .padding(.horizontal, 16)
     .padding(.vertical, 12)
     .background(Color.Theme.searchBg)
     .contentShape(Rectangle())
     .onTapGesture {
+      guard !locked else { return }
       HapticFeedbackManager.shared.rigidImpact()
       isOn.wrappedValue.toggle()
     }
@@ -253,6 +279,13 @@ struct ShareSettingsView: View {
     if shareSocialNetworks { fields.insert(.socialNetworks) }
     if shareSkills { fields.insert(.skills) }
     return fields
+  }
+
+  private func enforceMandatoryProofs() {
+    guard hasHumanClaim else { return }
+    if !shareIsHuman {
+      shareIsHuman = true
+    }
   }
 }
 
