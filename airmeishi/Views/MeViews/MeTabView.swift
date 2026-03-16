@@ -1,4 +1,5 @@
 import SwiftUI
+// swiftlint:disable file_length
 
 struct MeTabView: View {
   @EnvironmentObject private var identityCoordinator: IdentityCoordinator
@@ -420,7 +421,6 @@ struct MeTabView: View {
   }
 
 }
-
 private struct ClaimRowView: View {
   let title: String
   let source: String
@@ -616,7 +616,7 @@ private struct SelfInitiatedProofSheet: View {
     let nonce = UUID().uuidString.replacingOccurrences(of: "-", with: "")
 
     // Build a VP envelope so verifiers can validate directly via standard VP token parsing
-    var vp: [String: Any] = [
+    let vp: [String: Any] = [
       "@context": ["https://www.w3.org/2018/credentials/v1"],
       "type": ["VerifiablePresentation"],
       "verifiableCredential": [claim.payload],

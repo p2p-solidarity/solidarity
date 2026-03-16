@@ -8,6 +8,7 @@ import Foundation
 import LocalAuthentication
 import SpruceIDMobileSdkRs
 import os
+// swiftlint:disable file_length
 
 /// High level service for issuing and parsing Verifiable Credentials.
 final class VCService {
@@ -402,7 +403,6 @@ final class VCService {
     }
   }
 }
-
 // MARK: - JWT decoding helpers
 
 extension VCService {

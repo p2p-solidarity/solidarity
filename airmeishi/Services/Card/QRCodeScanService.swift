@@ -1,6 +1,7 @@
 import AVFoundation
 import Foundation
 import UIKit
+// swiftlint:disable file_length
 
 final class QRCodeScanService: NSObject {
   struct ScanOutcome {

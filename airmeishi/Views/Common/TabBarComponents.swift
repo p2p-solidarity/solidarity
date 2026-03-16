@@ -23,7 +23,6 @@ enum MainAppTab: Int, CaseIterable {
     }
   }
 }
-
 // MARK: - Peaceful Floating Tab Bar (1.1.1 Era)
 
 struct CustomFloatingTabBar: View {
@@ -89,4 +88,3 @@ struct PeacefulTabButton: View {
     .buttonStyle(.plain)
   }
 }
-

@@ -6,6 +6,7 @@
 //
 
 import Foundation
+import AppIntents
 import PassKit
 import SwiftUI
 

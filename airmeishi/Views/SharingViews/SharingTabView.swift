@@ -7,6 +7,7 @@
 //
 
 import SwiftUI
+// swiftlint:disable file_length
 
 struct SharingTabView: View {
   @StateObject private var proximityManager = ProximityManager.shared
@@ -508,7 +509,6 @@ struct SharingTabView: View {
     }
   }
 }
-
 // MARK: - Radar Matching View (kept from original)
 
 struct RadarMatchingView: View {

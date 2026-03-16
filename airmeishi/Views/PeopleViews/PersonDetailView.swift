@@ -132,8 +132,8 @@ struct PersonDetailView: View {
 
   @ViewBuilder
   private var ephemeralMessageSection: some View {
-    let hasMyMsg = contact.myEphemeralMessage != nil && !contact.myEphemeralMessage!.isEmpty
-    let hasTheirMsg = contact.theirEphemeralMessage != nil && !contact.theirEphemeralMessage!.isEmpty
+    let hasMyMsg = !(contact.myEphemeralMessage?.isEmpty ?? true)
+    let hasTheirMsg = !(contact.theirEphemeralMessage?.isEmpty ?? true)
 
     if hasMyMsg || hasTheirMsg {
       VStack(alignment: .leading, spacing: 12) {

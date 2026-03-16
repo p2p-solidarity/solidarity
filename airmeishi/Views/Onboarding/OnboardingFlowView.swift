@@ -17,7 +17,7 @@ struct OnboardingFlowView: View {
   @AppStorage("solidarity.onboarding.step") private var persistedStep: Int = 0
 
   private var step: Step {
-    get { Step(rawValue: persistedStep) ?? .welcome }
+    Step(rawValue: persistedStep) ?? .welcome
   }
 
   private func goTo(_ newStep: Step) {

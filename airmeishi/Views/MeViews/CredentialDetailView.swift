@@ -243,7 +243,6 @@ struct CredentialDetailView: View {
     return formatter.string(from: date)
   }
 }
-
 // MARK: - Presentation Sheet
 
 private struct PresentationSheet: View {
@@ -364,4 +363,3 @@ private struct PresentationSheet: View {
     }
   }
 }
-

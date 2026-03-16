@@ -41,6 +41,7 @@ final class MoproProofService {
 
   // MARK: - Passport Proof Generation
 
+  // swiftlint:disable function_parameter_count
   /// Generate a ZK proof from passport chip data using Mopro (OpenPassport Noir circuit).
   /// Falls back to Semaphore → SD-JWT if Mopro is unavailable.
   func generatePassportProof(
@@ -90,10 +91,12 @@ final class MoproProofService {
       startTime: start
     )
   }
+  // swiftlint:enable function_parameter_count
 
   // MARK: - Mopro Native Proof
 
   #if canImport(moproFFI)
+  // swiftlint:disable:next function_parameter_count
   private func generateWithMopro(
     documentHash: String,
     mrzDigest: String,
@@ -217,6 +220,7 @@ final class MoproProofService {
 
   // MARK: - SD-JWT Fallback
 
+  // swiftlint:disable:next function_parameter_count
   private func generateSDJWTFallback(
     documentHash: String,
     mrzDigest: String,

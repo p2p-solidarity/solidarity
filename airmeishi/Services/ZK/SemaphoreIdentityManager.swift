@@ -163,7 +163,10 @@ final class SemaphoreIdentityManager: ObservableObject {
         commitments: canonicalMembers
       )
       let data = try JSONEncoder().encode(envelope)
-      return String(decoding: data, as: UTF8.self)
+      guard let encoded = String(bytes: data, encoding: .utf8) else {
+        throw Error.groupConstructionFailed("Failed to encode semaphore proof envelope.")
+      }
+      return encoded
     #else
       throw Error.unsupported
     #endif

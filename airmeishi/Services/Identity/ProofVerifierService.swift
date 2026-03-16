@@ -245,9 +245,7 @@ final class ProofVerifierService {
       return .failure("Invalid JWT signature encoding.")
     }
 
-    guard let signingInputData = "\(segments[0]).\(segments[1])".data(using: .utf8) else {
-      return .failure("Unable to reconstruct signing input.")
-    }
+    let signingInputData = Data("\(segments[0]).\(segments[1])".utf8)
 
     do {
       let publicKey = try trustedJWK.toP256PublicKey()
@@ -340,9 +338,10 @@ final class ProofVerifierService {
 
   // MARK: - Semaphore Proof Verification
 
+  // swiftlint:disable:next function_body_length
   func verifySemaphoreProof(_ proofPayload: String) -> VpTokenVerificationResult {
-    guard let data = proofPayload.data(using: .utf8),
-      let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
+    let data = Data(proofPayload.utf8)
+    guard let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
     else {
       return VpTokenVerificationResult(
         isValid: false,
