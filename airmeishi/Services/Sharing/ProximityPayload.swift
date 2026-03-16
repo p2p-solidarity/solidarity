@@ -10,6 +10,7 @@ import Foundation
 struct ProximitySharingPayload: Codable {
   let card: BusinessCard
   let sharingLevel: SharingLevel
+  let selectedFields: [BusinessCardField]?
   let timestamp: Date
   let senderID: String
   let shareId: UUID
@@ -21,6 +22,34 @@ struct ProximitySharingPayload: Codable {
   let sealedRoute: String?
   let pubKey: String?  // Encryption Key (X25519)
   let signPubKey: String?  // Identity Key (Ed25519)
+
+  init(
+    card: BusinessCard,
+    sharingLevel: SharingLevel,
+    selectedFields: [BusinessCardField]? = nil,
+    timestamp: Date,
+    senderID: String,
+    shareId: UUID,
+    issuerCommitment: String?,
+    issuerProof: String?,
+    sdProof: SelectiveDisclosureProof?,
+    sealedRoute: String?,
+    pubKey: String?,
+    signPubKey: String?
+  ) {
+    self.card = card
+    self.sharingLevel = sharingLevel
+    self.selectedFields = selectedFields
+    self.timestamp = timestamp
+    self.senderID = senderID
+    self.shareId = shareId
+    self.issuerCommitment = issuerCommitment
+    self.issuerProof = issuerProof
+    self.sdProof = sdProof
+    self.sealedRoute = sealedRoute
+    self.pubKey = pubKey
+    self.signPubKey = signPubKey
+  }
 }
 
 struct ExchangeRequestPayload: Codable {

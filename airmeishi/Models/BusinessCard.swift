@@ -67,7 +67,7 @@ struct BusinessCard: Codable, Identifiable, Equatable, Hashable {
   /// Get filtered business card based on sharing preferences for a specific sharing level
   func filteredCard(for sharingLevel: SharingLevel) -> BusinessCard {
     var filtered = self
-    let allowedFields = sharingPreferences.fieldsForLevel(sharingLevel)
+    let allowedFields = sharingPreferences.effectiveFields(preferredLevel: sharingLevel)
 
     if !allowedFields.contains(.name) { filtered.name = "" }
     if !allowedFields.contains(.title) { filtered.title = nil }
@@ -227,6 +227,14 @@ struct SharingPreferences: Codable, Equatable, Hashable {
     case .personal:
       return personalFields
     }
+  }
+
+  /// Field toggles are the canonical source when all legacy levels carry the same set.
+  func effectiveFields(preferredLevel: SharingLevel) -> Set<BusinessCardField> {
+    if publicFields == professionalFields && professionalFields == personalFields {
+      return publicFields
+    }
+    return fieldsForLevel(preferredLevel)
   }
 }
 

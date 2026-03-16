@@ -155,13 +155,14 @@ final class QRCodeScanService: NSObject {
       let card = rebuildCard(from: payload)
       // Extract sealed route from snapshot if available
       let sealedRoute = payload.snapshot.sealedRoute
+      let status = verifyProofClaims(payload.proofClaims, issuerStatus: .unverified)
 
-      identityCoordinator.updateVerificationStatus(for: card.id, status: .unverified)
+      identityCoordinator.updateVerificationStatus(for: card.id, status: status)
       onScanOutcome?(
         .success(
           ScanOutcome(
             card: card,
-            verificationStatus: .unverified,
+            verificationStatus: status,
             sealedRoute: sealedRoute,
             route: .businessCard
           )
@@ -221,7 +222,10 @@ final class QRCodeScanService: NSObject {
       commitment: payload.issuerCommitment,
       proof: payload.issuerProof,
       message: payload.shareId.uuidString,
-      scope: payload.sharingLevel.rawValue
+      scope: ShareScopeResolver.scope(
+        selectedFields: payload.selectedFields,
+        legacyLevel: payload.sharingLevel
+      )
     )
 
     if let proof = payload.sdProof {
@@ -241,11 +245,12 @@ final class QRCodeScanService: NSObject {
       }
     }
 
-    identityCoordinator.updateVerificationStatus(for: payload.businessCard.id, status: status)
+    let finalStatus = verifyProofClaims(payload.proofClaims, issuerStatus: status)
+    identityCoordinator.updateVerificationStatus(for: payload.businessCard.id, status: finalStatus)
     return .success(
       ScanOutcome(
         card: payload.businessCard,
-        verificationStatus: status,
+        verificationStatus: finalStatus,
         sealedRoute: payload.sealedRoute,
         route: .businessCard
       )
@@ -410,28 +415,12 @@ final class QRCodeScanService: NSObject {
     message: String,
     scope: String
   ) -> VerificationStatus {
-    guard let commitment = commitment, !commitment.isEmpty else {
-      return .failed
-    }
-
-    let hexSet = CharacterSet(charactersIn: "0123456789abcdefABCDEF")
-    let isHex = commitment.unicodeScalars.allSatisfy { hexSet.contains($0) }
-    if !isHex || commitment.count < 32 {
-      return .failed
-    }
-
-    if let proof = proof, SemaphoreIdentityManager.proofsSupported {
-      let expectedRoot = SemaphoreIdentityManager.deterministicGroupRoot(for: [commitment])
-      let ok = (try? SemaphoreIdentityManager.shared.verifyProof(
-        proof,
-        expectedRoot: expectedRoot,
-        expectedSignal: message,
-        expectedScope: scope
-      )) ?? false
-      return ok ? .verified : .failed
-    }
-
-    return .pending
+    ProximityVerificationHelper.verify(
+      commitment: commitment,
+      proof: proof,
+      message: message,
+      scope: scope
+    )
   }
 
   private func statusFromStoredCredential(_ status: VCLibrary.StoredCredential.Status) -> VerificationStatus {
@@ -446,20 +435,45 @@ final class QRCodeScanService: NSObject {
   }
 
   private func verifyVpToken(_ token: String) -> VerificationStatus {
-    let parts = token.split(separator: ".")
-    guard parts.count == 3 else { return .failed }
-    guard let payloadData = Data(base64URLEncoded: String(parts[1])),
-      let payloadJSON = try? JSONSerialization.jsonObject(with: payloadData) as? [String: Any]
-    else { return .failed }
+    let result = ProofVerifierService.shared.verifyVpToken(token)
+    if result.isValid {
+      return .verified
+    }
+    switch result.status {
+    case .verified:
+      return .verified
+    case .failed:
+      return .failed
+    case .pending:
+      return .pending
+    case .unverified:
+      return .unverified
+    }
+  }
 
-    if let exp = payloadJSON["exp"] as? TimeInterval, Date() > Date(timeIntervalSince1970: exp) {
+  private func verifyProofClaims(
+    _ claims: [String]?,
+    issuerStatus: VerificationStatus
+  ) -> VerificationStatus {
+    guard let claims, !claims.isEmpty else {
+      return issuerStatus
+    }
+
+    let supportedClaims: Set<String> = ["is_human", "age_over_18"]
+    if claims.contains(where: { !supportedClaims.contains($0) }) {
       return .failed
     }
 
-    if payloadJSON["vp"] != nil || payloadJSON["vc"] != nil {
-      return .verified
+    guard issuerStatus == .verified else {
+      return .failed
     }
-    return .pending
+
+    // `age_over_18` currently lacks a portable, cryptographically verifiable proof artifact in the payload.
+    if claims.contains("age_over_18") {
+      return .failed
+    }
+
+    return .verified
   }
 }
 

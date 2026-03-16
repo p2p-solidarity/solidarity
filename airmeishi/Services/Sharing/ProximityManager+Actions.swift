@@ -19,8 +19,10 @@ extension ProximityManager {
     }
 
     do {
-      // Filter card based on sharing level
-      let filteredCard = card.filteredCard(for: sharingLevel)
+      let configuredCard = ShareSettingsStore.applyFields(to: card, level: sharingLevel)
+      let selectedFields = ShareSettingsStore.enabledFields.sorted { $0.rawValue < $1.rawValue }
+      let filteredCard = configuredCard.filteredCard(for: Set(selectedFields))
+      let scope = ShareScopeResolver.scope(selectedFields: selectedFields, legacyLevel: nil)
 
       // Create sharing payload with ZK issuer info
       let shareUUID = UUID()
@@ -33,16 +35,15 @@ extension ProximityManager {
           (try? SemaphoreIdentityManager.shared.generateProof(
             groupCommitments: [issuerCommitment],
             message: shareUUID.uuidString,
-            scope: sharingLevel.rawValue
+            scope: scope
           ))
       }
       // Optional SD proof if enabled by sender's prefs
       var sdProof: SelectiveDisclosureProof?
-      if card.sharingPreferences.useZK {
-        let allowed = card.sharingPreferences.fieldsForLevel(sharingLevel)
+      if configuredCard.sharingPreferences.useZK {
         let sdResult = ProofGenerationManager.shared.generateSelectiveDisclosureProof(
-          businessCard: card,
-          selectedFields: allowed,
+          businessCard: configuredCard,
+          selectedFields: Set(selectedFields),
           recipientId: peer.displayName
         )
         if case .success(let proof) = sdResult { sdProof = proof }
@@ -50,6 +51,7 @@ extension ProximityManager {
       let payload = ProximitySharingPayload(
         card: filteredCard,
         sharingLevel: sharingLevel,
+        selectedFields: selectedFields,
         timestamp: Date(),
         senderID: localPeerID.displayName,
         shareId: shareUUID,
@@ -406,8 +408,12 @@ extension ProximityManager {
         }
 
       case .failure(let error):
-        print("Failed to save received card: \(error)")
-        self.lastError = error
+        if isMergeConfirmationRequired(error) {
+          print("Pending merge confirmation required for received card from \(senderName)")
+        } else {
+          print("Failed to save received card: \(error)")
+          self.lastError = error
+        }
       }
     }
   }
@@ -432,15 +438,16 @@ extension ProximityManager {
         entity.exchangeTimestamp = payload.timestamp
         entity.myEphemeralMessage = payload.myMessage?.prefix(140).description
         entity.theirEphemeralMessage = payload.theirMessage?.prefix(140).description
-        if case .success(let descriptor) = DIDService().currentDescriptor() {
-          entity.didPublicKey = descriptor.did
-        }
         entity.graphExportEdgeId = entity.graphExportEdgeId ?? UUID().uuidString
         entity.commonFriendsHandshakeToken = entity.commonFriendsHandshakeToken ?? UUID().uuidString
         IdentityDataStore.shared.upsertContact(entity)
         print("Persisted exchange edge for \(payload.sourcePeerName)")
       case .failure(let error):
-        self.lastError = error
+        if isMergeConfirmationRequired(error) {
+          print("Pending merge confirmation required for exchange edge from \(payload.sourcePeerName)")
+        } else {
+          self.lastError = error
+        }
       }
     }
   }
@@ -490,5 +497,12 @@ extension ProximityManager {
     if !allowed.contains(.socialNetworks) { filtered.socialNetworks = [] }
     if !allowed.contains(.skills) { filtered.skills = [] }
     return filtered
+  }
+
+  private func isMergeConfirmationRequired(_ error: CardError) -> Bool {
+    if case .validationError(let message) = error {
+      return message.contains("Merge confirmation required")
+    }
+    return false
   }
 }

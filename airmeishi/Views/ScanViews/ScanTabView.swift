@@ -19,6 +19,7 @@ struct ScanTabView: View {
   @State private var pendingRoutePayload = ""
   @State private var verificationResult: VpTokenVerificationResult?
   @State private var lastVerification: VerificationStatus = .unverified
+  @State private var showingMergeConfirmation = false
 
   var body: some View {
     NavigationStack {
@@ -54,6 +55,9 @@ struct ScanTabView: View {
     }
     .onChange(of: qrManager.lastScanRoute) { _, route in
       handleRoute(route)
+    }
+    .onReceive(contactRepository.$pendingMergeProposal) { proposal in
+      showingMergeConfirmation = proposal != nil
     }
     .sheet(isPresented: $showingScannedCard) {
       if let scannedCard = qrManager.lastScannedCard {
@@ -103,6 +107,32 @@ struct ScanTabView: View {
       Button("OK", role: .cancel) {}
     } message: {
       Text(routeAlertMessage)
+    }
+    .confirmationDialog(
+      "Merge Contact",
+      isPresented: $showingMergeConfirmation,
+      titleVisibility: .visible
+    ) {
+      Button("Merge", role: .none) {
+        switch contactRepository.resolvePendingMerge(accept: true) {
+        case .success(let merged):
+          if let merged {
+            IdentityDataStore.shared.upsertContact(ContactEntity.fromLegacy(merged))
+          }
+        case .failure(let error):
+          routeAlertMessage = error.localizedDescription
+          showingRouteAlert = true
+        }
+      }
+      Button("Keep Existing", role: .cancel) {
+        _ = contactRepository.resolvePendingMerge(accept: false)
+      }
+    } message: {
+      if let proposal = contactRepository.pendingMergeProposal {
+        Text("A contact for \(proposal.existing.businessCard.name) already exists. Merge with the newly scanned card?")
+      } else {
+        Text("A duplicate contact was detected. Merge confirmation is required.")
+      }
     }
   }
 
@@ -214,9 +244,20 @@ struct ScanTabView: View {
       IdentityDataStore.shared.upsertContact(ContactEntity.fromLegacy(saved))
       showingScannedCard = false
     case .failure(let error):
-      routeAlertMessage = error.localizedDescription
-      showingRouteAlert = true
+      if isMergeConfirmationRequired(error) {
+        showingMergeConfirmation = true
+      } else {
+        routeAlertMessage = error.localizedDescription
+        showingRouteAlert = true
+      }
     }
+  }
+
+  private func isMergeConfirmationRequired(_ error: CardError) -> Bool {
+    if case .validationError(let message) = error {
+      return message.contains("Merge confirmation required")
+    }
+    return false
   }
 }
 

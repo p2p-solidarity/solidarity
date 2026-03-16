@@ -2,11 +2,13 @@ import SwiftUI
 
 struct PeopleListView: View {
   @EnvironmentObject private var identityDataStore: IdentityDataStore
+  @StateObject private var contactRepository = ContactRepository.shared
   @State private var searchQuery = ""
   @State private var showingExchangeFlow = false
   @State private var showingVCFPicker = false
   @State private var contactToDelete: ContactEntity?
   @State private var showingDeleteConfirm = false
+  @State private var showingMergeConfirm = false
 
   private var filteredContacts: [ContactEntity] {
     let all = identityDataStore.contacts.sorted { $0.receivedAt > $1.receivedAt }
@@ -86,6 +88,9 @@ struct PeopleListView: View {
     .onAppear {
       identityDataStore.refreshAll()
     }
+    .onReceive(contactRepository.$pendingMergeProposal) { proposal in
+      showingMergeConfirm = proposal != nil
+    }
     .sheet(isPresented: $showingVCFPicker) {
       VCFDocumentPicker { url in
         importVCFFile(url: url)
@@ -112,6 +117,32 @@ struct PeopleListView: View {
       }
     } message: {
       Text("This contact will be permanently removed.")
+    }
+    .confirmationDialog(
+      "Merge Contact",
+      isPresented: $showingMergeConfirm,
+      titleVisibility: .visible
+    ) {
+      Button("Merge") {
+        switch contactRepository.resolvePendingMerge(accept: true) {
+        case .success(let merged):
+          if let merged {
+            identityDataStore.upsertContact(ContactEntity.fromLegacy(merged))
+          }
+          identityDataStore.refreshAll()
+        case .failure:
+          break
+        }
+      }
+      Button("Keep Existing", role: .cancel) {
+        _ = contactRepository.resolvePendingMerge(accept: false)
+      }
+    } message: {
+      if let proposal = contactRepository.pendingMergeProposal {
+        Text("Duplicate detected for \(proposal.existing.businessCard.name). Merge new contact data?")
+      } else {
+        Text("Duplicate contact detected.")
+      }
     }
   }
 

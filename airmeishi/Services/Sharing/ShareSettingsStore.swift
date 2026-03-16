@@ -41,17 +41,13 @@ enum ShareSettingsStore {
     return claims
   }
 
-  static func applyFields(to card: BusinessCard, level: SharingLevel) -> BusinessCard {
+  static func applyFields(to card: BusinessCard, level _: SharingLevel) -> BusinessCard {
     var configured = card
     let fields = enabledFields
-    switch level {
-    case .public:
-      configured.sharingPreferences.publicFields = fields
-    case .professional:
-      configured.sharingPreferences.professionalFields = fields
-    case .personal:
-      configured.sharingPreferences.personalFields = fields
-    }
+    // Keep all legacy levels synchronized so field toggles remain the source of truth.
+    configured.sharingPreferences.publicFields = fields
+    configured.sharingPreferences.professionalFields = fields
+    configured.sharingPreferences.personalFields = fields
     return configured
   }
 }

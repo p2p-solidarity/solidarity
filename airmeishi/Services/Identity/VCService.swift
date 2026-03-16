@@ -321,15 +321,34 @@ final class VCService {
         let envelope = try JSONDecoder().decode(BusinessCardCredentialEnvelope.self, from: decoded.payloadData)
 
         let credentialSubject = (envelope.vc ?? envelope.payload?.vc)?.credentialSubject
+        let issuerDid = envelope.iss ?? envelope.payload?.iss
+        let keyId = decoded.header["kid"] as? String
 
-        guard let publicKeyJwk = credentialSubject?.publicKeyJwk else {
-          Self.logger.error("Credential missing public key information")
-          return .failure(.invalidData("Credential missing public key information"))
+        guard let issuerDid, !issuerDid.isEmpty else {
+          Self.logger.error("Credential is missing issuer DID")
+          return storeVerificationResult(credential, status: .failed)
         }
 
-        Self.logger.info("Verifying signature")
-        let publicKey = try publicKeyJwk.toP256PublicKey()
-        let signature = try P256.Signing.ECDSASignature(rawRepresentation: signatureData)
+        guard let trustedKey = IssuerTrustAnchorStore.shared.trustedJWK(for: issuerDid, keyId: keyId) else {
+          Self.logger.error("Issuer DID is not trusted: \(issuerDid)")
+          return storeVerificationResult(credential, status: .failed)
+        }
+
+        if let embeddedKey = credentialSubject?.publicKeyJwk, embeddedKey != trustedKey {
+          Self.logger.error("Embedded publicKeyJwk does not match trusted issuer key")
+          return storeVerificationResult(credential, status: .failed)
+        }
+
+        Self.logger.info("Verifying signature with trusted issuer key")
+        let publicKey = try trustedKey.toP256PublicKey()
+        let signature =
+          (try? P256.Signing.ECDSASignature(rawRepresentation: signatureData))
+          ?? (try? P256.Signing.ECDSASignature(derRepresentation: signatureData))
+
+        guard let signature else {
+          Self.logger.error("Unsupported JWT signature encoding")
+          return storeVerificationResult(credential, status: .failed)
+        }
 
         guard publicKey.isValidSignature(signature, for: signingData) else {
           Self.logger.error("Signature verification failed")

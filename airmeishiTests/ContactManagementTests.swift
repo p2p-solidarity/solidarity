@@ -75,6 +75,50 @@ final class ContactManagementTests: XCTestCase {
             XCTFail("Failed to add contact: \(error)")
         }
     }
+
+    func testDuplicateContactRequiresMergeConfirmation() throws {
+        let sharedCardId = UUID()
+        let existing = Contact(
+            businessCard: BusinessCard(id: sharedCardId, name: "Alice Existing"),
+            source: .qrCode,
+            tags: ["existing"]
+        )
+        let incoming = Contact(
+            businessCard: BusinessCard(id: sharedCardId, name: "Alice Updated"),
+            source: .proximity,
+            tags: ["incoming"]
+        )
+
+        _ = contactRepository.addContact(existing)
+        let duplicateResult = contactRepository.addContact(incoming)
+
+        switch duplicateResult {
+        case .success:
+            XCTFail("Expected duplicate contact to require merge confirmation")
+        case .failure(let error):
+            if case .validationError(let message) = error {
+                XCTAssertTrue(message.contains("Merge confirmation required"))
+            } else {
+                XCTFail("Expected validationError for duplicate merge confirmation")
+            }
+        }
+
+        XCTAssertNotNil(contactRepository.pendingMergeProposal)
+
+        let mergeResult = contactRepository.resolvePendingMerge(accept: true)
+        switch mergeResult {
+        case .success(let merged):
+            guard let merged else {
+                XCTFail("Expected merged contact after accepting merge")
+                return
+            }
+            XCTAssertEqual(merged.businessCard.name, "Alice Updated")
+            XCTAssertTrue(merged.tags.contains("existing"))
+            XCTAssertTrue(merged.tags.contains("incoming"))
+        case .failure(let error):
+            XCTFail("Merge confirmation failed: \(error)")
+        }
+    }
     
     func testUpdateContact() throws {
         // Given

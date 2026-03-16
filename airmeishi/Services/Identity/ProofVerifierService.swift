@@ -40,8 +40,7 @@ final class ProofVerifierService {
       )
     }
 
-    guard let payloadData = Data(base64URLEncoded: String(segments[1])),
-      let payload = try? JSONSerialization.jsonObject(with: payloadData) as? [String: Any]
+    guard let decoded = decodeCompactJWT(token)
     else {
       return VpTokenVerificationResult(
         isValid: false,
@@ -52,6 +51,8 @@ final class ProofVerifierService {
       )
     }
 
+    let payload = decoded.payload
+    let header = decoded.header
     var details: [String] = []
 
     if let exp = payload["exp"] as? TimeInterval {
@@ -70,7 +71,7 @@ final class ProofVerifierService {
       details.append("exp: missing")
     }
 
-    switch verifyJWTSignature(jwt: token, payload: payload) {
+    switch verifyJWTSignature(jwt: token, header: header, payload: payload) {
     case .failure(let reason):
       return VpTokenVerificationResult(
         isValid: false,
@@ -166,8 +167,7 @@ final class ProofVerifierService {
       )
     }
 
-    guard let payloadData = Data(base64URLEncoded: String(segments[1])),
-          let payload = try? JSONSerialization.jsonObject(with: payloadData) as? [String: Any]
+    guard let decoded = decodeCompactJWT(jwt)
     else {
       return VpTokenVerificationResult(
         isValid: false, status: .failed,
@@ -176,6 +176,8 @@ final class ProofVerifierService {
       )
     }
 
+    let payload = decoded.payload
+    let header = decoded.header
     var details: [String] = []
     if let exp = payload["exp"] as? TimeInterval {
       let expiry = Date(timeIntervalSince1970: exp)
@@ -189,7 +191,7 @@ final class ProofVerifierService {
       }
     }
 
-    switch verifyJWTSignature(jwt: jwt, payload: payload) {
+    switch verifyJWTSignature(jwt: jwt, header: header, payload: payload) {
     case .failure(let reason):
       return VpTokenVerificationResult(
         isValid: false, status: .failed,
@@ -216,9 +218,22 @@ final class ProofVerifierService {
     case failure(String)
   }
 
-  private func verifyJWTSignature(jwt: String, payload: [String: Any]) -> SignatureVerificationOutcome {
-    guard let publicJWK = extractPublicKeyJWK(from: payload) else {
-      return .failure("Missing publicKeyJwk for JWT signature verification.")
+  private func verifyJWTSignature(
+    jwt: String,
+    header: [String: Any],
+    payload: [String: Any]
+  ) -> SignatureVerificationOutcome {
+    guard let issuerDid = extractIssuerDid(from: payload) else {
+      return .failure("Missing issuer DID for JWT signature verification.")
+    }
+    let keyId = header["kid"] as? String
+
+    guard let trustedJWK = IssuerTrustAnchorStore.shared.trustedJWK(for: issuerDid, keyId: keyId) else {
+      return .failure("Untrusted issuer DID: \(issuerDid)")
+    }
+
+    if let embeddedJWK = extractPublicKeyJWK(from: payload), embeddedJWK != trustedJWK {
+      return .failure("JWT embedded key does not match trusted issuer anchor.")
     }
 
     let segments = jwt.split(separator: ".")
@@ -235,7 +250,7 @@ final class ProofVerifierService {
     }
 
     do {
-      let publicKey = try publicJWK.toP256PublicKey()
+      let publicKey = try trustedJWK.toP256PublicKey()
       let signature =
         (try? P256.Signing.ECDSASignature(rawRepresentation: signatureData))
         ?? (try? P256.Signing.ECDSASignature(derRepresentation: signatureData))
@@ -248,7 +263,7 @@ final class ProofVerifierService {
         return .failure("JWT signature verification failed.")
       }
 
-      return .success("sig: valid")
+      return .success("sig: valid (\(issuerDid))")
     } catch {
       return .failure("Failed to verify JWT signature: \(error.localizedDescription)")
     }
@@ -268,17 +283,23 @@ final class ProofVerifierService {
       return key
     }
 
-    if let vp = payload["vp"] as? [String: Any],
-      let embeddedCredentials = vp["verifiableCredential"] as? [Any]
-    {
-      for embedded in embeddedCredentials {
-        guard let jwt = embedded as? String,
-          let embeddedPayload = payloadFromCompactJWT(jwt)
-        else { continue }
+    return nil
+  }
 
-        if let key = extractPublicKeyJWK(from: embeddedPayload) {
-          return key
-        }
+  private func extractIssuerDid(from payload: [String: Any]) -> String? {
+    if let iss = payload["iss"] as? String, !iss.isEmpty {
+      return iss
+    }
+
+    if let vc = payload["vc"] as? [String: Any] {
+      if let issuer = vc["issuer"] as? String, !issuer.isEmpty {
+        return issuer
+      }
+      if let issuer = vc["issuer"] as? [String: Any],
+         let id = issuer["id"] as? String,
+         !id.isEmpty
+      {
+        return id
       }
     }
 
@@ -299,15 +320,22 @@ final class ProofVerifierService {
     return PublicKeyJWK(kty: kty, crv: crv, alg: alg, x: x, y: y)
   }
 
-  private func payloadFromCompactJWT(_ jwt: String) -> [String: Any]? {
+  private struct DecodedCompactJWT {
+    let header: [String: Any]
+    let payload: [String: Any]
+  }
+
+  private func decodeCompactJWT(_ jwt: String) -> DecodedCompactJWT? {
     let segments = jwt.split(separator: ".")
     guard segments.count == 3,
+      let headerData = Data(base64URLEncoded: String(segments[0])),
       let payloadData = Data(base64URLEncoded: String(segments[1])),
+      let header = try? JSONSerialization.jsonObject(with: headerData) as? [String: Any],
       let payload = try? JSONSerialization.jsonObject(with: payloadData) as? [String: Any]
     else {
       return nil
     }
-    return payload
+    return DecodedCompactJWT(header: header, payload: payload)
   }
 
   // MARK: - Semaphore Proof Verification
@@ -358,8 +386,44 @@ final class ProofVerifierService {
       details.append("passport_hash: \(hash.prefix(16))...")
     }
 
+    let parsedContext = SemaphoreIdentityManager.shared.bindingContext(from: semaphoreProofString)
+    let expectedRoot = (json["group_root"] as? String) ?? parsedContext?.groupRoot
+    let expectedSignal = (json["signal"] as? String) ?? parsedContext?.signal
+    let expectedScope = (json["scope"] as? String) ?? parsedContext?.scope
+
+    guard let expectedRoot, let expectedSignal, let expectedScope else {
+      return VpTokenVerificationResult(
+        isValid: false,
+        status: .failed,
+        title: "Missing Semaphore binding context",
+        reason: "Semaphore proof must include root/signal/scope for replay-safe verification.",
+        details: details
+      )
+    }
+
+    if let parsedContext {
+      let calculatedRoot = SemaphoreIdentityManager.bindingRoot(for: parsedContext.commitments)
+      if parsedContext.groupRoot != calculatedRoot {
+        return VpTokenVerificationResult(
+          isValid: false,
+          status: .failed,
+          title: "Invalid group root binding",
+          reason: "group_root does not match commitments encoded in proof context.",
+          details: details
+        )
+      }
+      if !parsedContext.commitments.isEmpty {
+        details.append("members: \(parsedContext.commitments.count)")
+      }
+    }
+
     do {
-      let isValid = try SemaphoreIdentityManager.shared.verifyProof(semaphoreProofString)
+      let isValid = try SemaphoreIdentityManager.shared.verifyProof(
+        semaphoreProofString,
+        expectedRoot: expectedRoot,
+        expectedSignal: expectedSignal,
+        expectedScope: expectedScope
+      )
       if isValid {
         details.append("Semaphore ZKP: verified")
         return VpTokenVerificationResult(

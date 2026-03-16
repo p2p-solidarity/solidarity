@@ -34,4 +34,41 @@ final class QRCodeScanServiceTests: XCTestCase {
     }
     XCTAssertNil(outcome.card, "siopRequest should go through consent/review flow before issuance")
   }
+
+  func testPlaintextProofClaimsRequireCryptographicVerification() throws {
+    UserDefaults.standard.set(true, forKey: "share_proof_is_human")
+    UserDefaults.standard.set(false, forKey: "share_proof_age_over_18")
+    defer {
+      UserDefaults.standard.removeObject(forKey: "share_proof_is_human")
+      UserDefaults.standard.removeObject(forKey: "share_proof_age_over_18")
+    }
+
+    var card = BusinessCard(name: "Claim Test")
+    card.sharingPreferences.sharingFormat = .plaintext
+    let envelopeResult = QRCodeGenerationService().buildEnvelope(for: card, sharingLevel: .professional)
+    guard case .success(let envelope) = envelopeResult else {
+      XCTFail("Failed to build test QR envelope")
+      return
+    }
+    let encoded = try JSONEncoder.qrEncoder.encode(envelope)
+    let payload = String(decoding: encoded, as: UTF8.self)
+
+    let service = QRCodeScanService()
+    let expectation = expectation(description: "scan outcome")
+    var outcomeResult: Result<QRCodeScanService.ScanOutcome, CardError>?
+
+    service.onScanOutcome = { result in
+      outcomeResult = result
+      expectation.fulfill()
+    }
+
+    service.process(scannedString: payload)
+    waitForExpectations(timeout: 2.0)
+
+    guard case .success(let outcome) = outcomeResult else {
+      XCTFail("Expected successful scan outcome")
+      return
+    }
+    XCTAssertEqual(outcome.verificationStatus, .failed)
+  }
 }

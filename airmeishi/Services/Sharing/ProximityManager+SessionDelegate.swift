@@ -201,11 +201,15 @@ extension ProximityManager: MCSessionDelegate {
   private func handleProximityCardPayload(_ data: Data, from peerID: MCPeerID) {
     do {
       let payload = try JSONDecoder().decode(ProximitySharingPayload.self, from: data)
+      let scope = ShareScopeResolver.scope(
+        selectedFields: payload.selectedFields,
+        legacyLevel: payload.sharingLevel
+      )
       let status = ProximityVerificationHelper.verify(
         commitment: payload.issuerCommitment,
         proof: payload.issuerProof,
         message: payload.shareId.uuidString,
-        scope: payload.sharingLevel.rawValue
+        scope: scope
       )
 
       print("[ProximityManager] Received payload from \(payload.senderID)")

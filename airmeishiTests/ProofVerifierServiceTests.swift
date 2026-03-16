@@ -40,14 +40,49 @@ final class ProofVerifierServiceTests: XCTestCase {
     XCTAssertEqual(result.status, .failed)
   }
 
-  private func issuedCredentialJWT() throws -> String {
+  func testVerifyVpTokenRejectsUntrustedIssuerEvenIfSignatureIsValid() throws {
+    let credentialJWT = try issuedCredentialJWT(issuerDid: "did:example:attacker")
+    let result = ProofVerifierService.shared.verifyVpToken(credentialJWT)
+
+    XCTAssertFalse(result.isValid)
+    XCTAssertEqual(result.status, .failed)
+  }
+
+  func testVCServiceStoredCredentialVerificationRejectsUntrustedIssuer() throws {
+    let card = BusinessCard(name: "Untrusted Issuer")
+    let options = VCService.IssueOptions(issuerDid: "did:example:attacker")
+    let storeResult = vcService.issueAndStoreBusinessCardCredential(
+      for: card,
+      options: options,
+      status: .unverified
+    )
+
+    guard case .success(let stored) = storeResult else {
+      XCTFail("Failed to create stored credential for test")
+      return
+    }
+    defer {
+      _ = VCLibrary.shared.remove(id: stored.id)
+    }
+
+    let verifyResult = vcService.verifyStoredCredential(stored)
+    guard case .success(let updated) = verifyResult else {
+      XCTFail("Expected verification result with updated status")
+      return
+    }
+
+    XCTAssertEqual(updated.status, .failed)
+  }
+
+  private func issuedCredentialJWT(issuerDid: String? = nil) throws -> String {
     let card = BusinessCard(
       name: "Verifier Test",
       title: "Engineer",
       company: "Solidarity",
       email: "verifier@example.com"
     )
-    switch vcService.issueBusinessCardCredential(for: card) {
+    let options = VCService.IssueOptions(issuerDid: issuerDid)
+    switch vcService.issueBusinessCardCredential(for: card, options: options) {
     case .failure(let error):
       throw error
     case .success(let issued):

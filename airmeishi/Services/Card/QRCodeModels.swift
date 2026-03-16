@@ -15,19 +15,22 @@ struct QRPlaintextPayload: Codable {
   let createdAt: Date
   let expirationDate: Date?
   let proofClaims: [String]?
+  let selectedFields: [BusinessCardField]?
 
   init(
     snapshot: BusinessCardSnapshot,
     shareId: UUID,
     createdAt: Date = Date(),
     expirationDate: Date?,
-    proofClaims: [String]? = nil
+    proofClaims: [String]? = nil,
+    selectedFields: [BusinessCardField]? = nil
   ) {
     self.snapshot = snapshot
     self.shareId = shareId
     self.createdAt = createdAt
     self.expirationDate = expirationDate
     self.proofClaims = proofClaims
+    self.selectedFields = selectedFields
   }
 }
 
@@ -62,6 +65,7 @@ struct QRCodeEnvelope: Codable {
   let version: Int
   let format: SharingFormat
   let sharingLevel: SharingLevel
+  let selectedFields: [BusinessCardField]?
   let shareId: UUID
   let plaintext: QRPlaintextPayload?
   let encryptedPayload: String?
@@ -70,6 +74,7 @@ struct QRCodeEnvelope: Codable {
   init(
     format: SharingFormat,
     sharingLevel: SharingLevel,
+    selectedFields: [BusinessCardField]? = nil,
     shareId: UUID,
     plaintext: QRPlaintextPayload? = nil,
     encryptedPayload: String? = nil,
@@ -79,6 +84,7 @@ struct QRCodeEnvelope: Codable {
     self.version = version
     self.format = format
     self.sharingLevel = sharingLevel
+    self.selectedFields = selectedFields
     self.shareId = shareId
     self.plaintext = plaintext
     self.encryptedPayload = encryptedPayload
@@ -89,6 +95,7 @@ struct QRCodeEnvelope: Codable {
 struct QRSharingPayload: Codable {
   let businessCard: BusinessCard
   let sharingLevel: SharingLevel
+  let selectedFields: [BusinessCardField]?
   let expirationDate: Date
   let shareId: UUID
   let createdAt: Date
@@ -104,6 +111,7 @@ struct QRSharingPayload: Codable {
   init(
     businessCard: BusinessCard,
     sharingLevel: SharingLevel,
+    selectedFields: [BusinessCardField]? = nil,
     expirationDate: Date,
     shareId: UUID,
     createdAt: Date,
@@ -118,6 +126,7 @@ struct QRSharingPayload: Codable {
   ) {
     self.businessCard = businessCard
     self.sharingLevel = sharingLevel
+    self.selectedFields = selectedFields
     self.expirationDate = expirationDate
     self.shareId = shareId
     self.createdAt = createdAt

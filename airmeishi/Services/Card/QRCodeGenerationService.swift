@@ -18,6 +18,7 @@ final class QRCodeGenerationService {
     expirationDate: Date? = nil
   ) -> CardResult<UIImage> {
     let filteredCard = card.filteredCard(for: fields)
+    let selectedFields = fields.sorted { $0.rawValue < $1.rawValue }
     let mySealedRoute = SecureKeyManager.shared.mySealedRoute
     let snapshot = BusinessCardSnapshot(card: filteredCard, sealedRoute: mySealedRoute)
     let shareId = UUID()
@@ -26,11 +27,13 @@ final class QRCodeGenerationService {
       snapshot: snapshot,
       shareId: shareId,
       expirationDate: expirationDate,
-      proofClaims: claims.isEmpty ? nil : claims
+      proofClaims: claims.isEmpty ? nil : claims,
+      selectedFields: selectedFields
     )
     let envelope = QRCodeEnvelope(
       format: .plaintext,
       sharingLevel: .public,
+      selectedFields: selectedFields,
       shareId: shareId,
       plaintext: payload
     )
@@ -116,7 +119,8 @@ final class QRCodeGenerationService {
     level: SharingLevel,
     expirationDate: Date?
   ) -> QRCodeEnvelope {
-    let filteredCard = card.filteredCard(for: level)
+    let selectedFields = card.sharingPreferences.fieldsForLevel(level).sorted { $0.rawValue < $1.rawValue }
+    let filteredCard = card.filteredCard(for: Set(selectedFields))
     // Ensure we include our sealedRoute so the scanner can reply via Sakura
     let mySealedRoute = SecureKeyManager.shared.mySealedRoute
     let snapshot = BusinessCardSnapshot(card: filteredCard, sealedRoute: mySealedRoute)
@@ -126,11 +130,13 @@ final class QRCodeGenerationService {
       snapshot: snapshot,
       shareId: shareId,
       expirationDate: expirationDate,
-      proofClaims: claims.isEmpty ? nil : claims
+      proofClaims: claims.isEmpty ? nil : claims,
+      selectedFields: selectedFields
     )
     return QRCodeEnvelope(
       format: .plaintext,
       sharingLevel: level,
+      selectedFields: selectedFields,
       shareId: shareId,
       plaintext: payload
     )
@@ -141,16 +147,17 @@ final class QRCodeGenerationService {
     level: SharingLevel,
     expirationDate: Date?
   ) -> CardResult<QRCodeEnvelope> {
-    let filteredCard = card.filteredCard(for: level)
+    let selectedFields = card.sharingPreferences.fieldsForLevel(level).sorted { $0.rawValue < $1.rawValue }
+    let filteredCard = card.filteredCard(for: Set(selectedFields))
     let shareUUID = UUID()
     let expires = expirationDate ?? Date().addingTimeInterval(24 * 60 * 60)
+    let scope = ShareScopeResolver.scope(selectedFields: selectedFields, legacyLevel: nil)
 
     var sdProof: SelectiveDisclosureProof?
     if card.sharingPreferences.useZK || card.sharingPreferences.sharingFormat == .zkProof {
-      let allowed = card.sharingPreferences.fieldsForLevel(level)
       let proofResult = proofManager.generateSelectiveDisclosureProof(
         businessCard: card,
-        selectedFields: allowed,
+        selectedFields: Set(selectedFields),
         recipientId: nil
       )
       if case .success(let proof) = proofResult {
@@ -166,13 +173,14 @@ final class QRCodeGenerationService {
       issuerProof = try? semaphoreManager.generateProof(
         groupCommitments: [commitment],
         message: shareUUID.uuidString,
-        scope: level.rawValue
+        scope: scope
       )
     }
 
     let payload = QRSharingPayload(
       businessCard: filteredCard,
       sharingLevel: level,
+      selectedFields: selectedFields,
       expirationDate: expires,
       shareId: shareUUID,
       createdAt: Date(),
@@ -192,6 +200,7 @@ final class QRCodeGenerationService {
       let envelope = QRCodeEnvelope(
         format: .zkProof,
         sharingLevel: level,
+        selectedFields: selectedFields,
         shareId: shareUUID,
         encryptedPayload: base64
       )
@@ -204,7 +213,8 @@ final class QRCodeGenerationService {
     level: SharingLevel,
     expirationDate: Date?
   ) -> CardResult<QRCodeEnvelope> {
-    let filteredCard = card.filteredCard(for: level)
+    let selectedFields = card.sharingPreferences.fieldsForLevel(level).sorted { $0.rawValue < $1.rawValue }
+    let filteredCard = card.filteredCard(for: Set(selectedFields))
     let options = VCService.IssueOptions(expiration: expirationDate)
     let issueResult = vcService.issueBusinessCardCredential(for: filteredCard, options: options)
 
@@ -223,6 +233,7 @@ final class QRCodeGenerationService {
       let envelope = QRCodeEnvelope(
         format: .didSigned,
         sharingLevel: level,
+        selectedFields: selectedFields,
         shareId: shareId,
         didSigned: payload
       )

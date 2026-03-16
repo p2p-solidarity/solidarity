@@ -260,7 +260,7 @@ struct PersonDetailView: View {
 
         VStack(spacing: 8) {
           if let did = contact.didPublicKey, !did.isEmpty {
-            metadataRow(label: "DID PUB KEY", value: shortKey(did))
+            metadataRow(label: "PEER PUB KEY", value: shortKey(did))
           }
 
           if contact.exchangeSignature != nil {

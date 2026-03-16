@@ -176,7 +176,8 @@ extension ProximityManager {
   }
 
   internal func createDiscoveryInfo(for card: BusinessCard, level: SharingLevel) -> [String: String] {
-    let filteredCard = card.filteredCard(for: level)
+    let selectedFields = ShareSettingsStore.enabledFields.sorted { $0.rawValue < $1.rawValue }
+    let filteredCard = card.filteredCard(for: Set(selectedFields))
 
     var info: [String: String] = [:]
     info["name"] = filteredCard.name
@@ -189,11 +190,14 @@ extension ProximityManager {
       info["company"] = company
     }
 
+    // Legacy key retained for backward compatibility.
     info["level"] = level.rawValue
     info["timestamp"] = String(Int(Date().timeIntervalSince1970))
     // Announce ZK capability so browsers can show a badge before proof arrives
     info["zk"] = card.sharingPreferences.useZK ? "1" : "0"
-    let allowedCount = card.sharingPreferences.fieldsForLevel(level).count
+    info["selectedFields"] = selectedFields.map(\.rawValue).joined(separator: ",")
+    info["scope"] = ShareScopeResolver.scope(selectedFields: selectedFields, legacyLevel: nil)
+    let allowedCount = selectedFields.count
     info["zkf"] = String(allowedCount)
 
     return info
