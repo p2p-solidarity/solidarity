@@ -38,13 +38,18 @@ final class ContactImportService {
         let phone = contact.phoneNumbers.first?.value.stringValue.nilIfBlank()
         let title = contact.jobTitle.nilIfBlank()
         let company = contact.organizationName.nilIfBlank()
-        let existing = findExistingImportedContact(
+        let existing = findExistingContact(
           name: fullName,
           title: title,
           company: company,
           email: email,
           phone: phone
         )
+        if let existing, !isImportedLikeSource(existing.source) {
+          // Existing contact came from a stronger source (QR/proximity/etc.),
+          // so skip imported overwrite and avoid duplicate insertion.
+          continue
+        }
         let idSeed = importedIdentityKey(
           for: ImportedIdentityInput(
             name: fullName,
@@ -66,7 +71,7 @@ final class ContactImportService {
           company: company ?? existing?.company,
           email: email ?? existing?.email,
           phone: phone ?? existing?.phone,
-          source: importedSource,
+          source: existing?.source ?? importedSource,
           verificationStatus: existing?.verificationStatus ?? VerificationStatus.unverified.rawValue,
           receivedAt: existing?.receivedAt ?? Date(),
           lastInteraction: existing?.lastInteraction,
@@ -129,13 +134,18 @@ final class ContactImportService {
         let phone = contact.phoneNumbers.first?.value.stringValue.nilIfBlank()
         let title = contact.jobTitle.nilIfBlank()
         let company = contact.organizationName.nilIfBlank()
-        let existing = findExistingImportedContact(
+        let existing = findExistingContact(
           name: fullName,
           title: title,
           company: company,
           email: email,
           phone: phone
         )
+        if let existing, !isImportedLikeSource(existing.source) {
+          // Existing contact came from a stronger source (QR/proximity/etc.),
+          // so skip imported overwrite and avoid duplicate insertion.
+          return
+        }
         let idSeed = importedIdentityKey(
           for: ImportedIdentityInput(
             name: fullName,
@@ -157,7 +167,7 @@ final class ContactImportService {
           company: company ?? existing?.company,
           email: email ?? existing?.email,
           phone: phone ?? existing?.phone,
-          source: importedSource,
+          source: existing?.source ?? importedSource,
           verificationStatus: existing?.verificationStatus ?? VerificationStatus.unverified.rawValue,
           receivedAt: existing?.receivedAt ?? Date(),
           lastInteraction: existing?.lastInteraction,
@@ -207,7 +217,7 @@ private extension ContactImportService {
     let externalIdentifier: String?
   }
 
-  func findExistingImportedContact(
+  func findExistingContact(
     name: String,
     title: String?,
     company: String?,
@@ -221,8 +231,6 @@ private extension ContactImportService {
     let normalizedTitle = normalizeText(title)
 
     return IdentityDataStore.shared.contacts.first { contact in
-      guard isImportedLikeSource(contact.source) else { return false }
-
       if let normalizedEmail,
         normalizeEmail(contact.email) == normalizedEmail
       {

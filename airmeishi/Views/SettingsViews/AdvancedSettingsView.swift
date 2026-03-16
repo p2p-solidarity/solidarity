@@ -30,7 +30,7 @@ struct AdvancedSettingsView: View {
           Button {
             showingPassportPipeline = true
           } label: {
-            Label("Passport Pipeline", systemImage: "passport")
+            Label("Passport Pipeline", systemImage: "doc.viewfinder")
           }
 
           Toggle(isOn: $devMode.simulateNFC) {

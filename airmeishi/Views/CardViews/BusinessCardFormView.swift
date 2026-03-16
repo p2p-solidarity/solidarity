@@ -109,7 +109,7 @@ struct BusinessCardFormView: View {
           Text(format.displayName).tag(format)
         }
       }
-      .pickerStyle(.menu)
+      .pickerStyle(.navigationLink)
 
       Text(selectedFormat.detail)
         .font(.caption)

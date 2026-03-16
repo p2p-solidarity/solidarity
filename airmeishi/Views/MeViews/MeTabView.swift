@@ -24,6 +24,17 @@ struct MeTabView: View {
     identityDataStore.identityCards.filter { $0.type != "business_card" }
   }
 
+  private var displayClaims: [ProvableClaimEntity] {
+    var hasIncludedProfileCard = false
+    return identityDataStore.provableClaims.filter { claim in
+      guard claim.isPresentable else { return false }
+      guard claim.claimType == "profile_card" else { return true }
+      guard !hasIncludedProfileCard else { return false }
+      hasIncludedProfileCard = true
+      return true
+    }
+  }
+
   var body: some View {
     NavigationStack {
       ScrollView {
@@ -248,17 +259,18 @@ struct MeTabView: View {
         .foregroundColor(Color.Theme.textSecondary)
         .padding(.horizontal, 24)
 
-      if identityDataStore.provableClaims.isEmpty {
+      if displayClaims.isEmpty {
         Text("No derivations available.")
           .font(.system(size: 12, design: .monospaced))
           .foregroundColor(Color.Theme.textTertiary)
           .padding(.horizontal, 24)
       } else {
         VStack(spacing: 12) {
-          ForEach(identityDataStore.provableClaims) { claim in
+          ForEach(displayClaims) { claim in
             ClaimRowView(
               title: claim.title,
               source: "SRC: \(claim.source)",
+              actionTitle: claim.lastPresentedAt == nil ? "Generate" : "Show",
               onPresent: {
                 selectedClaim = claim
                 showingProofSheet = true
@@ -412,6 +424,7 @@ struct MeTabView: View {
 private struct ClaimRowView: View {
   let title: String
   let source: String
+  let actionTitle: String
   let onPresent: () -> Void
 
   var body: some View {
@@ -426,7 +439,7 @@ private struct ClaimRowView: View {
       }
       Spacer()
       Button(action: onPresent) {
-        Text("Generate")
+        Text(actionTitle)
           .font(.system(size: 12, weight: .bold, design: .monospaced))
           .foregroundColor(.black)
           .padding(.horizontal, 12)

@@ -37,7 +37,7 @@ struct AppearanceSettingsView: View {
             Text(animal.displayName).tag(Optional(animal))
           }
         }
-        .pickerStyle(.menu)
+        .pickerStyle(.navigationLink)
 
         if let animal = theme.selectedAnimal {
           Text(animal.personality)
