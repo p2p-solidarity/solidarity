@@ -10,7 +10,9 @@ import Foundation
 @MainActor
 final class BackupManager: ObservableObject {
   static let shared = BackupManager()
-  private init() {}
+  private init() {
+    loadSettings()
+  }
 
   struct Settings: Codable {
     var enabled: Bool

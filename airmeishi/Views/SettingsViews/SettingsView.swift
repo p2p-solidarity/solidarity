@@ -6,7 +6,6 @@ struct SettingsView: View {
   @State private var showingSolidarityQR = false
   @State private var showingDIDList = false
   @State private var showingOnboarding = false
-  @AppStorage("iCloudBackupEnabled") private var iCloudBackupEnabled: Bool = true
 
   var body: some View {
     NavigationStack {
@@ -39,12 +38,6 @@ struct SettingsView: View {
             ShareSettingsView()
           } label: {
             Label("Share Settings", systemImage: "checklist")
-          }
-        }
-
-        Section("Backup") {
-          Toggle(isOn: $iCloudBackupEnabled) {
-            Label("iCloud Backup", systemImage: "icloud")
           }
         }
 
@@ -124,19 +117,19 @@ private struct DIDListSheet: View {
           }
         }
 
-        Section(footer: Text("DID keys are stored in Secure Enclave and synced via iCloud Keychain.")) {
+        Section(footer: Text("DID keys are stored in iCloud Keychain and shared across your signed-in devices.")) {
           HStack {
             Text("Key Storage")
             Spacer()
-            Text("Secure Enclave")
-              .foregroundColor(.secondary)
+            Text("iCloud Keychain")
+              .foregroundColor(Color.Theme.textSecondary)
           }
 
           HStack {
             Text("Sync")
             Spacer()
-            Text("iCloud Keychain")
-              .foregroundColor(.secondary)
+            Text("Same Apple ID devices")
+              .foregroundColor(Color.Theme.textSecondary)
           }
         }
       }
@@ -155,10 +148,10 @@ private struct DIDListSheet: View {
     return VStack(alignment: .leading, spacing: 4) {
       Text(method.uppercased())
         .font(.caption.weight(.bold))
-        .foregroundColor(.secondary)
+        .foregroundColor(Color.Theme.textSecondary)
       Text(did)
         .font(.system(size: 12, design: .monospaced))
-        .foregroundColor(.primary)
+        .foregroundColor(Color.Theme.textPrimary)
         .textSelection(.enabled)
     }
     .padding(.vertical, 4)

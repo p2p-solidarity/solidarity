@@ -15,6 +15,10 @@ extension KeychainService {
 
   /// Ensures the signing key exists, generating it if needed.
   func ensureSigningKey() -> CardResult<Void> {
+    if alias == Self.masterAlias {
+      return ensureCloudSyncedMasterSigningKey()
+    }
+
     if keyExists() {
       print("[KeychainService] Signing key already exists")
       return .success(())
@@ -52,6 +56,34 @@ extension KeychainService {
         }
       }
     #endif
+  }
+
+  private func ensureCloudSyncedMasterSigningKey() -> CardResult<Void> {
+    if keyExists() {
+      if isMasterKeyCloudSyncCompatible() {
+        print("[KeychainService] Cloud-synced master signing key already exists")
+        return .success(())
+      }
+
+      print("[KeychainService] Existing master key is not cloud-sync compatible. Rotating to shared iCloud key.")
+      clearInMemoryKey()
+      switch deleteSigningKey() {
+      case .success:
+        break
+      case .failure(let error):
+        return .failure(error)
+      }
+    }
+
+    print("[KeychainService] Generating cloud-synced master signing key")
+    switch generateSigningKey(useSecureEnclave: false) {
+    case .success:
+      print("[KeychainService] Successfully prepared cloud-synced master signing key")
+      return .success(())
+    case .failure(let error):
+      print("[KeychainService] Failed to prepare cloud-synced master signing key: \(error)")
+      return .failure(error)
+    }
   }
 
   func cleanupAllOldKeys() {
@@ -98,10 +130,10 @@ extension KeychainService {
           cachePublicJWK(from: key)
           return .success(())
         } else if status == errSecDuplicateItem {
-          // If duplicate, that means it's already there somehow, so success
-          print("[KeychainService] Key already exists (duplicate), considering success")
-          cachePublicJWK(from: key)
-          return .success(())
+          print("[KeychainService] Key already exists (duplicate), reusing existing key")
+          return cacheExistingPublicJWKIfPossible()
+            ? .success(())
+            : .failure(.keyManagementError("Duplicate simulator key exists but could not load it"))
         } else {
           print("[KeychainService] Failed to store key: \(statusDescription(status)), using in-memory key")
           // Store the key in a static variable as fallback
@@ -182,8 +214,10 @@ extension KeychainService {
         || message.contains("duplicate") || message.contains("errSecDuplicateItem")
 
       if isDuplicateError {
-        print("[KeychainService] Duplicate error detected (code: \(errorCode)), switching to software fallback key...")
-        return generateSessionBasedDeviceKey()
+        print("[KeychainService] Duplicate key detected (code: \(errorCode)), reusing existing key")
+        return cacheExistingPublicJWKIfPossible()
+          ? .success(())
+          : .failure(.keyManagementError("Duplicate key exists but could not load it"))
       }
 
       return .failure(.keyManagementError("Failed to generate device key: \(message)"))
@@ -219,9 +253,10 @@ extension KeychainService {
           cachePublicJWK(from: sessionKey)
           return .success(())
         } else if addStatus == errSecDuplicateItem {
-          print("[KeychainService] Session key already exists (duplicate), considering success")
-          cachePublicJWK(from: sessionKey)
-          return .success(())
+          print("[KeychainService] Session key already exists (duplicate), reusing existing key")
+          return cacheExistingPublicJWKIfPossible()
+            ? .success(())
+            : .failure(.keyManagementError("Duplicate session key exists but could not load it"))
         } else {
           print("[KeychainService] Failed to store session key: \(statusDescription(addStatus)), using in-memory key")
           // Store the key in a static variable as fallback
@@ -248,6 +283,72 @@ extension KeychainService {
       )
     }
   #endif
+
+  private func cacheExistingPublicJWKIfPossible() -> Bool {
+    guard let existingKey = existingPrivateKeyReference() else {
+      print("[KeychainService] Unable to find existing key for tag \(alias)")
+      return false
+    }
+    cachePublicJWK(from: existingKey)
+    return true
+  }
+
+  private func existingPrivateKeyReference() -> SecKey? {
+    let query: [String: Any] = [
+      kSecClass as String: kSecClassKey,
+      kSecAttrApplicationTag as String: keyTag,
+      kSecAttrKeyType as String: kSecAttrKeyTypeECSECPrimeRandom,
+      kSecAttrSynchronizable as String: kSecAttrSynchronizableAny,
+      kSecMatchLimit as String: kSecMatchLimitOne,
+      kSecReturnRef as String: true,
+    ]
+
+    var item: CFTypeRef?
+    let status = SecItemCopyMatching(query as CFDictionary, &item)
+    guard status == errSecSuccess, let candidate = item else {
+      return nil
+    }
+    guard CFGetTypeID(candidate) == SecKeyGetTypeID() else {
+      return nil
+    }
+    // swiftlint:disable:next force_cast
+    return candidate as! SecKey
+  }
+
+  private func existingKeyAttributes() -> [String: Any]? {
+    let query: [String: Any] = [
+      kSecClass as String: kSecClassKey,
+      kSecAttrApplicationTag as String: keyTag,
+      kSecAttrKeyType as String: kSecAttrKeyTypeECSECPrimeRandom,
+      kSecAttrSynchronizable as String: kSecAttrSynchronizableAny,
+      kSecMatchLimit as String: kSecMatchLimitOne,
+      kSecReturnAttributes as String: true,
+    ]
+
+    var item: CFTypeRef?
+    let status = SecItemCopyMatching(query as CFDictionary, &item)
+    guard status == errSecSuccess else {
+      return nil
+    }
+    return item as? [String: Any]
+  }
+
+  private func isMasterKeyCloudSyncCompatible() -> Bool {
+    guard let attributes = existingKeyAttributes() else {
+      return false
+    }
+    let synchronizable = (attributes[kSecAttrSynchronizable as String] as? NSNumber)?.boolValue ?? false
+    let tokenId = attributes[kSecAttrTokenID as String] as? String
+    return synchronizable && tokenId != (kSecAttrTokenIDSecureEnclave as String)
+  }
+
+  private func clearInMemoryKey() {
+    #if targetEnvironment(simulator)
+      Self.simulatorInMemoryKey = nil
+    #else
+      Self.deviceInMemoryKey = nil
+    #endif
+  }
 
   /// Immediately cache the public JWK from a freshly generated key reference.
   /// This avoids needing biometric auth later just to display the DID.

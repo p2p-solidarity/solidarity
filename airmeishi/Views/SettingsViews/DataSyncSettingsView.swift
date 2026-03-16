@@ -2,6 +2,7 @@ import SwiftUI
 
 struct DataSyncSettingsView: View {
   @StateObject private var identityStore = IdentityDataStore.shared
+  @StateObject private var backupManager = BackupManager.shared
   @State private var showingAlert = false
   @State private var alertMessage = ""
   @State private var showingShareSheet = false
@@ -13,14 +14,19 @@ struct DataSyncSettingsView: View {
         NavigationLink {
           BackupSettingsView()
         } label: {
-          Label("iCloud Backup & Restore", systemImage: "icloud")
+          HStack {
+            Label("iCloud Backup & Restore", systemImage: "icloud")
+            Spacer()
+            Text(backupManager.settings.enabled ? "On" : "Off")
+              .foregroundColor(Color.Theme.textSecondary)
+          }
         }
 
         HStack {
           Text("Identity records in Vault")
           Spacer()
           Text("\(identityStore.identityCards.count) cards")
-            .foregroundColor(.secondary)
+            .foregroundColor(Color.Theme.textSecondary)
         }
       }
 
@@ -41,6 +47,9 @@ struct DataSyncSettingsView: View {
     .navigationBarTitleDisplayMode(.inline)
     .sheet(isPresented: $showingShareSheet) {
       ShareSheet(activityItems: shareItems)
+    }
+    .onAppear {
+      backupManager.loadSettings()
     }
     .alert("Export Error", isPresented: $showingAlert) {
       Button("OK", role: .cancel) {}
