@@ -46,12 +46,19 @@ class NearbyInteractionManager: NSObject, ObservableObject {
 
     // Tag prefix for NI token messages sent over MC
     static let tokenPrefix = Data("NI_TOKEN:".utf8)
+    private static var supportsNearbyInteraction: Bool {
+        if #available(iOS 16.0, *) {
+            return NISession.deviceCapabilities.supportsPreciseDistanceMeasurement
+        } else {
+            return NISession.isSupported
+        }
+    }
 
     // MARK: - Init
 
     override init() {
         super.init()
-        self.isSupported = NISession.isSupported
+        self.isSupported = Self.supportsNearbyInteraction
     }
 
     // MARK: - Session Lifecycle
@@ -59,7 +66,7 @@ class NearbyInteractionManager: NSObject, ObservableObject {
     /// Call this when MC session connects to a peer.
     /// Initializes NISession, grabs local token, and sends it via MC.
     func startSession(with peerID: MCPeerID, via proximityManager: ProximityManager) {
-        guard NISession.isSupported else {
+        guard Self.supportsNearbyInteraction else {
             DispatchQueue.main.async {
                 self.spatialState = .unavailable(reason: "UWB not supported on this device")
             }

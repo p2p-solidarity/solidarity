@@ -311,8 +311,7 @@ extension KeychainService {
     guard CFGetTypeID(candidate) == SecKeyGetTypeID() else {
       return nil
     }
-    // swiftlint:disable:next force_cast
-    return candidate as! SecKey
+    return unsafeBitCast(candidate, to: SecKey.self)
   }
 
   private func existingKeyAttributes() -> [String: Any]? {

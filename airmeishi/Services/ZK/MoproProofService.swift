@@ -222,8 +222,8 @@ final class MoproProofService {
       let revealOlderThan = true
       let revealName = false
 
-      let outName = revealName ? Array(mrzData[5...43]) : Array(repeating: UInt8(0), count: 39)
-      let outNationality = revealNationality ? nationalityBytes : Array(repeating: UInt8(0), count: 3)
+      let outName = Array(repeating: UInt8(0), count: 39)
+      let outNationality = nationalityBytes
 
       let inputs: [String: [String]] = [
         "mrz_data": toFieldValues(mrzData),
@@ -253,6 +253,7 @@ final class MoproProofService {
       )
     }
 
+    // swiftlint:disable:next function_parameter_count
     private func buildOpenPassportPayload(
       proof: NoirProofResult,
       documentHash: String,

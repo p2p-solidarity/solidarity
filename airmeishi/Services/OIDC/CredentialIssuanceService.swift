@@ -380,7 +380,7 @@ final class CredentialIssuanceService {
 
     // Build JWT header + payload
     let now = Int(Date().timeIntervalSince1970)
-    var header: [String: Any] = [
+    let header: [String: Any] = [
       "alg": "ES256",
       "typ": "openid4vci-proof+jwt",
       "kid": descriptor.verificationMethodId,

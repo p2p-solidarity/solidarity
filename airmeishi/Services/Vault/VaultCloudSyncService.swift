@@ -156,9 +156,7 @@ final class VaultCloudSyncService: ObservableObject {
 
         // Load and register item if metadata exists
         if fileManager.fileExists(atPath: metadataURL.path) {
-            let metadataData = try Data(contentsOf: metadataURL)
-            let decoder = JSONDecoder()
-            decoder.dateDecodingStrategy = .iso8601
+            _ = try Data(contentsOf: metadataURL)
             // Item will be loaded from vault metadata on next load
         }
     }

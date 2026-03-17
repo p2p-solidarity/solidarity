@@ -462,7 +462,7 @@ extension ProximityManager {
       let result = contactRepository.addContact(contact)
       switch result {
       case .success(let saved):
-        var entity = ContactEntity.fromLegacy(saved)
+        let entity = ContactEntity.fromLegacy(saved)
         entity.didPublicKey = peerSignPubKey
         entity.myExchangeSignature = Data(base64Encoded: payload.mySignature)
         entity.exchangeSignature = Data(base64Encoded: payload.theirSignature)

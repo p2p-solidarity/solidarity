@@ -103,11 +103,11 @@ final class BackupManager: ObservableObject {
       }
 
       // Collect identity cards and provable claims
-      let identityCards: [IdentityCardEntity] = await MainActor.run {
-        IdentityDataStore.shared.identityCards
+      let identityCards: [BackupIdentityCard] = await MainActor.run {
+        IdentityDataStore.shared.identityCards.map(BackupIdentityCard.init(from:))
       }
-      let provableClaims: [ProvableClaimEntity] = await MainActor.run {
-        IdentityDataStore.shared.provableClaims
+      let provableClaims: [BackupProvableClaim] = await MainActor.run {
+        IdentityDataStore.shared.provableClaims.map(BackupProvableClaim.init(from:))
       }
 
       let backupData = BackupData(
@@ -115,8 +115,8 @@ final class BackupManager: ObservableObject {
         timestamp: Date(),
         businessCards: cards,
         contacts: contacts,
-        identityCards: identityCards.map { BackupIdentityCard(from: $0) },
-        provableClaims: provableClaims.map { BackupProvableClaim(from: $0) }
+        identityCards: identityCards,
+        provableClaims: provableClaims
       )
 
       // Save to iCloud
@@ -219,7 +219,7 @@ final class BackupManager: ObservableObject {
 
   // MARK: - Backup Data Types
 
-  private struct BackupData: Codable {
+  private struct BackupData: Codable, Sendable {
     let version: Int
     let timestamp: Date
     let businessCards: [BusinessCard]
@@ -228,7 +228,7 @@ final class BackupManager: ObservableObject {
     var provableClaims: [BackupProvableClaim]?
   }
 
-  struct BackupIdentityCard: Codable {
+  struct BackupIdentityCard: Codable, Sendable {
     let id: String
     let type: String
     let issuerType: String
@@ -278,7 +278,7 @@ final class BackupManager: ObservableObject {
     }
   }
 
-  struct BackupProvableClaim: Codable {
+  struct BackupProvableClaim: Codable, Sendable {
     let id: String
     let identityCardId: String
     let claimType: String

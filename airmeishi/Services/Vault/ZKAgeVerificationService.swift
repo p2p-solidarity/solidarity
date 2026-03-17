@@ -58,7 +58,7 @@ final class ZKAgeVerificationService: ObservableObject {
         requesterId: String,
         scope: String
     ) async throws -> AgeProof {
-        guard let birthdate = birthdate else {
+        guard birthdate != nil else {
             throw AgeVerificationError.birthdateNotSet
         }
 

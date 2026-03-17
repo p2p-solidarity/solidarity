@@ -55,7 +55,6 @@ final class SovereignVaultService: ObservableObject {
         let contentType = VaultItemType.from(mimeType: mimeTypeForFile(at: sourceURL))
 
         let data = try Data(contentsOf: sourceURL)
-        let checksum = encryption.computeChecksum(data)
 
         let metadata = VaultMetadata(
             sourceApp: nil,
@@ -300,8 +299,7 @@ final class SovereignVaultService: ObservableObject {
     }
 
     private func mimeTypeForFile(at url: URL) -> String {
-        let path = url.path
-        let ext = (url.pathExtension as NSString).pathExtension.lowercased()
+        let ext = url.pathExtension.lowercased()
 
         switch ext {
         case "png", "jpg", "jpeg", "gif", "heic": return "image/\(ext)"

@@ -501,6 +501,8 @@
 				"LD_RUNPATH_SEARCH_PATHS[sdk=macosx*]" = "@executable_path/../Frameworks";
 				MACOSX_DEPLOYMENT_TARGET = 15.5;
 				MARKETING_VERSION = 1.1.2;
+				"OTHER_LDFLAGS[sdk=iphoneos*]" = "$(inherited) -Wl,-deployment_target_mismatches,suppress";
+				"OTHER_LDFLAGS[sdk=iphonesimulator*]" = "$(inherited) -Wl,-deployment_target_mismatches,suppress";
 				PRODUCT_BUNDLE_IDENTIFIER = kidneyweakx.airmeishi;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				REGISTER_APP_GROUPS = YES;
@@ -551,6 +553,8 @@
 				"LD_RUNPATH_SEARCH_PATHS[sdk=macosx*]" = "@executable_path/../Frameworks";
 				MACOSX_DEPLOYMENT_TARGET = 15.5;
 				MARKETING_VERSION = 1.1.2;
+				"OTHER_LDFLAGS[sdk=iphoneos*]" = "$(inherited) -Wl,-deployment_target_mismatches,suppress";
+				"OTHER_LDFLAGS[sdk=iphonesimulator*]" = "$(inherited) -Wl,-deployment_target_mismatches,suppress";
 				PRODUCT_BUNDLE_IDENTIFIER = kidneyweakx.airmeishi;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				REGISTER_APP_GROUPS = YES;
