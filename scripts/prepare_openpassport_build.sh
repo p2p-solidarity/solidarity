@@ -20,24 +20,8 @@ xcodebuild -resolvePackageDependencies \
   -derivedDataPath "${DERIVED_DATA_PATH}" \
   -skipPackagePluginValidation
 
-SEMAPHORE_CHECKOUT="${DERIVED_DATA_PATH}/SourcePackages/checkouts/SemaphoreSwift"
-SEMAPHORE_MANIFEST="${SEMAPHORE_CHECKOUT}/Package.swift"
-SEMAPHORE_BINDINGS_DIR="${SEMAPHORE_CHECKOUT}/Sources/MoproiOSBindings"
-SEMAPHORE_ORIG_XCFRAMEWORK="${SEMAPHORE_BINDINGS_DIR}/MoproBindings.xcframework"
-SEMAPHORE_PATCHED_XCFRAMEWORK="${SEMAPHORE_BINDINGS_DIR}/SemaphoreMoproBindings.xcframework"
-
-if [[ ! -f "${SEMAPHORE_MANIFEST}" ]]; then
-  echo "SemaphoreSwift checkout not found under ${SEMAPHORE_CHECKOUT}" >&2
-  exit 1
-fi
-
-if [[ -d "${SEMAPHORE_ORIG_XCFRAMEWORK}" && ! -d "${SEMAPHORE_PATCHED_XCFRAMEWORK}" ]]; then
-  echo "Patching SemaphoreSwift xcframework name to avoid duplicate SignatureCollection tasks..."
-  mv "${SEMAPHORE_ORIG_XCFRAMEWORK}" "${SEMAPHORE_PATCHED_XCFRAMEWORK}"
-fi
-
-perl -0pi -e 's#SemaphoreSemaphoreMoproBindings\.xcframework#SemaphoreMoproBindings.xcframework#g' "${SEMAPHORE_MANIFEST}"
-perl -0pi -e 's#Sources/MoproiOSBindings/MoproBindings\.xcframework#Sources/MoproiOSBindings/SemaphoreMoproBindings.xcframework#g' "${SEMAPHORE_MANIFEST}"
+# Patch duplicate MoproBindings.xcframework names
+"${ROOT_DIR}/scripts/patch_mopro_xcframeworks.sh" "${DERIVED_DATA_PATH}"
 
 PASSPORT_CIRCUIT_SOURCE="${DERIVED_DATA_PATH}/SourcePackages/checkouts/passport-noir/circuits/target/disclosure.json"
 PASSPORT_CIRCUIT_TARGET="${ROOT_DIR}/airmeishi/Resources/openpassport_disclosure.json"
