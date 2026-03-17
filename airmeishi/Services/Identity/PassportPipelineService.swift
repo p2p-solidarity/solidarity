@@ -246,7 +246,7 @@ final class PassportPipelineService {
         PassportChipSnapshot(
           documentHash: result.rawDataHash,
           mrzDigest: mrzDigestHex,
-          dg1MRZData: chipMRZ.isEmpty ? syntheticMRZ(from: draft) : chipMRZ,
+          dg1MRZData: chipMRZ,
           chipUID: result.chipUID,
           bacVerified: result.bacSucceeded,
           paceVerified: result.paceSucceeded,

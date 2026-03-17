@@ -285,25 +285,16 @@ final class MoproProofService {
           character.isASCII && (character.isLetter || character.isNumber || character == "<")
         }
 
-      if sanitized.count >= 88 {
-        return Array(sanitized.prefix(88).utf8)
+      // OpenPassport disclosure proof must be based on real DG1 MRZ bytes.
+      // If DG1 data is incomplete, we skip OpenPassport and fall back to the next proof engine.
+      guard sanitized.count >= 88 else {
+        ZKLog.info(
+          "OpenPassport skipped: DG1 MRZ incomplete (\(sanitized.count) chars, expected >= 88). " +
+            "fallback_nationality=\(fallbackNationalityCode), fallback_dob=\(yyMMdd(from: fallbackDateOfBirth))"
+        )
+        return nil
       }
-
-      let nationality = String((fallbackNationalityCode.uppercased() + "<<<").prefix(3))
-      let dob = yyMMdd(from: fallbackDateOfBirth)
-
-      let line1Prefix = "P<\(nationality)"
-      let line1 = String((line1Prefix + String(repeating: "<", count: 44)).prefix(44))
-      var line2 = Array(repeating: Character("<"), count: 44)
-      for (index, character) in nationality.enumerated() {
-        line2[10 + index] = character
-      }
-      for (index, character) in dob.enumerated() {
-        line2[13 + index] = character
-      }
-      let synthetic = line1 + String(line2)
-      guard synthetic.count == 88 else { return nil }
-      return Array(synthetic.utf8)
+      return Array(sanitized.prefix(88).utf8)
     }
 
     private func boolField(_ value: Bool) -> String {
