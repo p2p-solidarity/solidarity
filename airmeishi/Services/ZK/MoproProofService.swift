@@ -125,6 +125,13 @@ final class MoproProofService {
         return nil
       }
 
+      // SRS file is required for Barretenberg proving backend.
+      // Without it, the C++ prover throws a foreign exception that Rust cannot catch, causing a crash.
+      guard let srsPath = Bundle.main.path(forResource: "openpassport_srs", ofType: "bin") else {
+        ZKLog.info("OpenPassport SRS file not found in bundle, skipping Noir proving")
+        return nil
+      }
+
       onProgress("Preparing OpenPassport disclosure witness...")
       guard let witness = buildDisclosureWitness(
         rawMRZ: dg1MRZData,
@@ -138,8 +145,6 @@ final class MoproProofService {
       if !mrzDigest.isEmpty && witness.mrzHashHex != mrzDigest.lowercased() {
         onProgress("MRZ digest mismatch detected; using DG1-derived digest.")
       }
-
-      let srsPath = Bundle.main.path(forResource: "openpassport_srs", ofType: "bin")
 
       do {
         onProgress("Generating OpenPassport proof on device...")
@@ -366,10 +371,17 @@ final class MoproProofService {
 
     do {
       let identity = try SemaphoreIdentityManager.shared.loadOrCreateIdentity()
-      guard let groupCommitments = SemaphoreGroupManager.shared.proofCommitments(containing: identity.commitment) else {
-        ZKLog.info("Semaphore fallback skipped: no multi-member group context available.")
-        return nil
+
+      // Use existing multi-member group, or bootstrap a minimal 2-member group
+      // for passport self-attestation (anchor + user = anonymity set of 2).
+      let groupCommitments: [String]
+      if let existingGroup = SemaphoreGroupManager.shared.proofCommitments(containing: identity.commitment) {
+        groupCommitments = existingGroup
+      } else {
+        groupCommitments = [identity.commitment, SemaphoreIdentityManager.passportAnchorCommitment]
+        ZKLog.info("Using bootstrap passport anchor for Semaphore proof (no existing group).")
       }
+
       let proofJSON = try SemaphoreIdentityManager.shared.generateProof(
         groupCommitments: groupCommitments,
         message: documentHash,

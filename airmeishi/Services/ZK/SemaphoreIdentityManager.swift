@@ -21,6 +21,11 @@ final class SemaphoreIdentityManager: ObservableObject {
 
   private let keychain = IdentityKeychain()
 
+  /// Bootstrap anchor commitment for passport self-attestation proofs.
+  /// A fixed decimal field element used as the second member in a minimal 2-member group,
+  /// enabling passport ZK proofs before the user joins any peer group.
+  static let passportAnchorCommitment = "7891011121314151617181920212223242526272829303132"
+
   // Whether the SemaphoreSwift library is available for proof ops
   static var proofsSupported: Bool {
     #if canImport(Semaphore) && !(targetEnvironment(simulator) && arch(x86_64))
