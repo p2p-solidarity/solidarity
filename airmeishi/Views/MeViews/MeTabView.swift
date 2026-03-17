@@ -4,6 +4,7 @@ import SwiftUI
 struct MeTabView: View {
   @EnvironmentObject private var identityCoordinator: IdentityCoordinator
   @StateObject private var cardManager = CardManager.shared
+  @StateObject private var qrCodeManager = QRCodeManager.shared
   @EnvironmentObject private var identityDataStore: IdentityDataStore
 
   @ObservedObject private var devMode = DeveloperModeManager.shared
@@ -13,13 +14,14 @@ struct MeTabView: View {
   @State private var showingSettings = false
   @State private var showingEditProfile = false
   @State private var showingVCSettings = false
-  @State private var showingProofSheet = false
   @State private var showingPassportFlow = false
   @State private var showingGroupManager = false
   @State private var showingOIDCRequest = false
   @State private var showingZKSettings = false
-  @State private var selectedClaim: ProvableClaimEntity?
   @State private var revealDid = false
+  @State private var preparingClaimID: String?
+  @State private var preparedProof: PreparedSelfInitiatedProof?
+  @State private var proofPreparationError: String?
 
   private var verifiedCards: [IdentityCardEntity] {
     identityDataStore.identityCards.filter { $0.type != "business_card" }
@@ -102,10 +104,8 @@ struct MeTabView: View {
           showingPassportFlow = false
         }
       }
-      .sheet(isPresented: $showingProofSheet) {
-        if let selectedClaim {
-          SelfInitiatedProofSheet(claim: selectedClaim)
-        }
+      .sheet(item: $preparedProof) { preparedProof in
+        SelfInitiatedProofSheet(preparedProof: preparedProof)
       }
       .sheet(isPresented: $showingGroupManager) {
         NavigationStack {
@@ -117,6 +117,11 @@ struct MeTabView: View {
       }
       .sheet(isPresented: $showingZKSettings) {
         ZKSettingsView()
+      }
+      .alert("Unable to Generate Proof", isPresented: proofErrorAlertPresented) {
+        Button("OK", role: .cancel) {}
+      } message: {
+        Text(proofPreparationError ?? "Unknown error")
       }
       .onAppear {
         if identityCoordinator.state.currentProfile.activeDID == nil,
@@ -266,15 +271,28 @@ struct MeTabView: View {
           .foregroundColor(Color.Theme.textTertiary)
           .padding(.horizontal, 24)
       } else {
+        if preparingClaimID != nil {
+          HStack(spacing: 8) {
+            ProgressView()
+              .progressViewStyle(CircularProgressViewStyle(tint: Color.Theme.terminalGreen))
+              .scaleEffect(0.8)
+            Text("Generating proof...")
+              .font(.system(size: 10, weight: .bold, design: .monospaced))
+              .foregroundColor(Color.Theme.textSecondary)
+          }
+          .padding(.horizontal, 24)
+        }
+
         VStack(spacing: 12) {
           ForEach(displayClaims) { claim in
             ClaimRowView(
               title: claim.title,
               source: "SRC: \(claim.source)",
               actionTitle: claim.lastPresentedAt == nil ? "Generate" : "Show",
+              isLoading: preparingClaimID == claim.id,
+              isDisabled: preparingClaimID != nil,
               onPresent: {
-                selectedClaim = claim
-                showingProofSheet = true
+                prepareProofPresentation(for: claim)
               }
             )
           }
@@ -420,11 +438,75 @@ struct MeTabView: View {
     return "\(did.prefix(12))...\(did.suffix(8))"
   }
 
+  private var proofErrorAlertPresented: Binding<Bool> {
+    Binding(
+      get: { proofPreparationError != nil },
+      set: { shouldShow in
+        if !shouldShow {
+          proofPreparationError = nil
+        }
+      }
+    )
+  }
+
+  private func prepareProofPresentation(for claim: ProvableClaimEntity) {
+    guard preparingClaimID == nil else { return }
+    preparingClaimID = claim.id
+
+    Task { @MainActor in
+      defer { preparingClaimID = nil }
+      await Task.yield()
+
+      switch buildPreparedProof(for: claim) {
+      case .success(let proof):
+        preparedProof = proof
+        identityDataStore.markClaimPresented(claim.id)
+      case .failure(let error):
+        proofPreparationError = error.localizedDescription
+      }
+    }
+  }
+
+  private func buildPreparedProof(for claim: ProvableClaimEntity) -> CardResult<PreparedSelfInitiatedProof> {
+    let nonce = UUID().uuidString.replacingOccurrences(of: "-", with: "")
+
+    let vp: [String: Any] = [
+      "@context": ["https://www.w3.org/2018/credentials/v1"],
+      "type": ["VerifiablePresentation"],
+      "verifiableCredential": [claim.payload],
+      "nonce": nonce,
+      "claim_type": claim.claimType,
+    ]
+
+    let qrString: String
+    if let data = try? JSONSerialization.data(withJSONObject: vp, options: [.sortedKeys]),
+       let json = String(data: data, encoding: .utf8) {
+      qrString = json
+    } else {
+      qrString = claim.payload
+    }
+
+    switch qrCodeManager.generateQRCode(from: qrString) {
+    case .success(let image):
+      return .success(PreparedSelfInitiatedProof(claim: claim, qrImage: image))
+    case .failure(let error):
+      return .failure(error)
+    }
+  }
+
 }
+private struct PreparedSelfInitiatedProof: Identifiable {
+  let id = UUID().uuidString
+  let claim: ProvableClaimEntity
+  let qrImage: UIImage
+}
+
 private struct ClaimRowView: View {
   let title: String
   let source: String
   let actionTitle: String
+  let isLoading: Bool
+  let isDisabled: Bool
   let onPresent: () -> Void
 
   var body: some View {
@@ -439,14 +521,25 @@ private struct ClaimRowView: View {
       }
       Spacer()
       Button(action: onPresent) {
-        Text(actionTitle)
-          .font(.system(size: 12, weight: .bold, design: .monospaced))
-          .foregroundColor(.black)
-          .padding(.horizontal, 12)
-          .padding(.vertical, 8)
-          .background(Color.white)
-          .overlay(Rectangle().stroke(Color.white, lineWidth: 1))
+        Group {
+          if isLoading {
+            ProgressView()
+              .progressViewStyle(CircularProgressViewStyle(tint: Color.Theme.textPrimary))
+              .scaleEffect(0.8)
+          } else {
+            Text(actionTitle)
+              .font(.system(size: 12, weight: .bold, design: .monospaced))
+          }
+        }
+        .foregroundColor(Color.Theme.textPrimary)
+        .frame(minWidth: 72)
+        .padding(.horizontal, 12)
+        .padding(.vertical, 8)
+        .background(Color.Theme.pageBg)
+        .overlay(Rectangle().stroke(Color.Theme.divider, lineWidth: 1))
       }
+      .disabled(isDisabled)
+      .opacity(isDisabled && !isLoading ? 0.5 : 1)
     }
     .padding(16)
     .background(Color.Theme.cardBg)
@@ -552,39 +645,25 @@ private struct EmptyMeStateCard: View {
 }
 
 private struct SelfInitiatedProofSheet: View {
-  let claim: ProvableClaimEntity
+  let preparedProof: PreparedSelfInitiatedProof
   @Environment(\.dismiss) private var dismiss
-  @StateObject private var qrCodeManager = QRCodeManager.shared
-  @State private var qrImage: UIImage?
-  @State private var errorMessage: String?
 
   var body: some View {
     NavigationStack {
       ScrollView {
         VStack(spacing: 24) {
-          Text("Claim: [\(claim.claimType)]")
+          Text("Claim: [\(preparedProof.claim.claimType)]")
             .font(.system(size: 14, weight: .bold, design: .monospaced))
             .foregroundColor(Color.Theme.terminalGreen)
 
-          if let qrImage {
-            Image(uiImage: qrImage)
-              .resizable()
-              .interpolation(.none)
-              .scaledToFit()
-              .frame(maxWidth: 260)
-              .padding(16)
-              .background(Color.white)
-              .cornerRadius(12)
-          } else if let errorMessage {
-            Text(errorMessage)
-              .font(.system(size: 14))
-              .foregroundColor(.red)
-              .multilineTextAlignment(.center)
-              .padding(.horizontal, 32)
-          } else {
-            ProgressView()
-              .frame(height: 260)
-          }
+          Image(uiImage: preparedProof.qrImage)
+            .resizable()
+            .interpolation(.none)
+            .scaledToFit()
+            .frame(maxWidth: 260)
+            .padding(16)
+            .background(Color.white)
+            .cornerRadius(12)
 
           Text("Present this QR to a verifier for proof disclosure.")
             .font(.system(size: 14))
@@ -608,37 +687,6 @@ private struct SelfInitiatedProofSheet: View {
           }
         }
       }
-      .onAppear { generateQR() }
-    }
-  }
-
-  private func generateQR() {
-    let nonce = UUID().uuidString.replacingOccurrences(of: "-", with: "")
-
-    // Build a VP envelope so verifiers can validate directly via standard VP token parsing
-    let vp: [String: Any] = [
-      "@context": ["https://www.w3.org/2018/credentials/v1"],
-      "type": ["VerifiablePresentation"],
-      "verifiableCredential": [claim.payload],
-      "nonce": nonce,
-      "claim_type": claim.claimType,
-    ]
-
-    let qrString: String
-    if let data = try? JSONSerialization.data(withJSONObject: vp, options: [.sortedKeys]),
-       let json = String(data: data, encoding: .utf8) {
-      qrString = json
-    } else {
-      qrString = claim.payload
-    }
-
-    let result = qrCodeManager.generateQRCode(from: qrString)
-    switch result {
-    case .success(let image):
-      qrImage = image
-      IdentityDataStore.shared.markClaimPresented(claim.id)
-    case .failure(let error):
-      errorMessage = error.localizedDescription
     }
   }
 }
