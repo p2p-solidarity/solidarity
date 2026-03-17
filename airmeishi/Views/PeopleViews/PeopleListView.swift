@@ -1,3 +1,4 @@
+import Contacts
 import SwiftUI
 
 struct PeopleListView: View {
@@ -10,6 +11,7 @@ struct PeopleListView: View {
   @State private var contactToDelete: ContactEntity?
   @State private var showingDeleteConfirm = false
   @State private var showingMergeConfirm = false
+  @State private var showingContactPicker = false
 
   private var filteredContacts: [ContactEntity] {
     let all = identityDataStore.contacts.sorted { $0.receivedAt > $1.receivedAt }
@@ -71,7 +73,7 @@ struct PeopleListView: View {
             }
 
             Button {
-              importPhoneContacts()
+              showingContactPicker = true
             } label: {
               Label("Import from Phone", systemImage: "person.crop.circle.badge.plus")
             }
@@ -95,6 +97,11 @@ struct PeopleListView: View {
     }
     .onReceive(contactRepository.$pendingMergeProposal) { proposal in
       showingMergeConfirm = proposal != nil
+    }
+    .sheet(isPresented: $showingContactPicker) {
+      ContactPickerView { contacts in
+        handlePickedContacts(contacts)
+      }
     }
     .sheet(isPresented: $showingVCFPicker) {
       VCFDocumentPicker { url in
@@ -180,7 +187,7 @@ struct PeopleListView: View {
         .buttonStyle(ThemedPrimaryButtonStyle())
 
         Button("Import Phone Contacts") {
-          importPhoneContacts()
+          showingContactPicker = true
         }
         .buttonStyle(ThemedSecondaryButtonStyle())
       }
@@ -284,58 +291,24 @@ struct PeopleListView: View {
     }
   }
 
-  private func importPhoneContacts() {
-    Task {
-      // 1. Request permission
-      let permissionResult = await ContactImportService.shared.requestPermission()
-
-      switch permissionResult {
-      case .success(let granted):
-        guard granted else {
-          await MainActor.run {
-            ToastManager.shared.show(
-              title: String(localized: "Access Denied"),
-              message: String(localized: "Please enable Contacts permission in iOS Settings."),
-              type: .error,
-              duration: 3.0
-            )
-          }
-          return
-        }
-
-        // 2. Perform import
-        let importResult = ContactImportService.shared.importContacts()
-
-        await MainActor.run {
-          switch importResult {
-          case .success(let count):
-            identityDataStore.refreshAll()
-            ToastManager.shared.show(
-              title: String(localized: "Import Complete"),
-              message: String(localized: "Successfully imported \(count) local contacts."),
-              type: .success,
-              duration: 3.0
-            )
-          case .failure(let error):
-            ToastManager.shared.show(
-              title: String(localized: "Import Failed"),
-              message: error.localizedDescription,
-              type: .error,
-              duration: 4.0
-            )
-          }
-        }
-
-      case .failure(let error):
-        await MainActor.run {
-          ToastManager.shared.show(
-            title: String(localized: "Error"),
-            message: error.localizedDescription,
-            type: .error,
-            duration: 4.0
-          )
-        }
-      }
+  private func handlePickedContacts(_ contacts: [CNContact]) {
+    let result = ContactImportService.shared.importPickedContacts(contacts)
+    switch result {
+    case .success(let count):
+      identityDataStore.refreshAll()
+      ToastManager.shared.show(
+        title: String(localized: "Import Complete"),
+        message: String(localized: "Successfully imported \(count) contacts."),
+        type: .success,
+        duration: 3.0
+      )
+    case .failure(let error):
+      ToastManager.shared.show(
+        title: String(localized: "Import Failed"),
+        message: error.localizedDescription,
+        type: .error,
+        duration: 4.0
+      )
     }
   }
 

@@ -103,100 +103,75 @@ final class ContactImportService {
     }
   }
 
-  // MARK: - Phone Contacts Import
+  // MARK: - Phone Contacts Import (User-Picked)
 
-  func importContacts(limit: Int = 50) -> CardResult<Int> {
-    let keys: [CNKeyDescriptor] = [
-      CNContactGivenNameKey as CNKeyDescriptor,
-      CNContactFamilyNameKey as CNKeyDescriptor,
-      CNContactOrganizationNameKey as CNKeyDescriptor,
-      CNContactJobTitleKey as CNKeyDescriptor,
-      CNContactEmailAddressesKey as CNKeyDescriptor,
-      CNContactPhoneNumbersKey as CNKeyDescriptor,
-    ]
-
-    let request = CNContactFetchRequest(keysToFetch: keys)
+  func importPickedContacts(_ cnContacts: [CNContact]) -> CardResult<Int> {
     var imported = 0
-    var scanned = 0
 
-    do {
-      try store.enumerateContacts(with: request) { contact, stop in
-        if scanned >= limit {
-          stop.pointee = true
-          return
-        }
+    for contact in cnContacts {
+      let fullName = "\(contact.givenName) \(contact.familyName)".trimmingCharacters(in: .whitespacesAndNewlines)
+      guard !fullName.isEmpty else { continue }
 
-        let fullName = "\(contact.givenName) \(contact.familyName)".trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !fullName.isEmpty else { return }
-        scanned += 1
-
-        let email = (contact.emailAddresses.first?.value as String?)?.nilIfBlank()
-        let phone = contact.phoneNumbers.first?.value.stringValue.nilIfBlank()
-        let title = contact.jobTitle.nilIfBlank()
-        let company = contact.organizationName.nilIfBlank()
-        let existing = findExistingContact(
+      let email = (contact.emailAddresses.first?.value as String?)?.nilIfBlank()
+      let phone = contact.phoneNumbers.first?.value.stringValue.nilIfBlank()
+      let title = contact.jobTitle.nilIfBlank()
+      let company = contact.organizationName.nilIfBlank()
+      let existing = findExistingContact(
+        name: fullName,
+        title: title,
+        company: company,
+        email: email,
+        phone: phone
+      )
+      if let existing, !isImportedLikeSource(existing.source) {
+        continue
+      }
+      let idSeed = importedIdentityKey(
+        for: ImportedIdentityInput(
           name: fullName,
           title: title,
           company: company,
           email: email,
-          phone: phone
+          phone: phone,
+          externalIdentifier: contact.identifier.nilIfBlank()
         )
-        if let existing, !isImportedLikeSource(existing.source) {
-          // Existing contact came from a stronger source (QR/proximity/etc.),
-          // so skip imported overwrite and avoid duplicate insertion.
-          return
-        }
-        let idSeed = importedIdentityKey(
-          for: ImportedIdentityInput(
-            name: fullName,
-            title: title,
-            company: company,
-            email: email,
-            phone: phone,
-            externalIdentifier: contact.identifier.nilIfBlank()
-          )
-        )
-        let stableID = existing?.id ?? deterministicUUIDString(from: "imported|\(idSeed)")
-        let cardID = existing?.cardId ?? deterministicUUIDString(from: "card|\(stableID)")
+      )
+      let stableID = existing?.id ?? deterministicUUIDString(from: "imported|\(idSeed)")
+      let cardID = existing?.cardId ?? deterministicUUIDString(from: "card|\(stableID)")
 
-        let entity = ContactEntity(
-          id: stableID,
-          cardId: cardID,
-          name: fullName,
-          title: title ?? existing?.title,
-          company: company ?? existing?.company,
-          email: email ?? existing?.email,
-          phone: phone ?? existing?.phone,
-          source: existing?.source ?? importedSource,
-          verificationStatus: existing?.verificationStatus ?? VerificationStatus.unverified.rawValue,
-          receivedAt: existing?.receivedAt ?? Date(),
-          lastInteraction: existing?.lastInteraction,
-          tags: existing?.tags ?? [],
-          notes: existing?.notes,
-          sealedRoute: existing?.sealedRoute,
-          pubKey: existing?.pubKey,
-          signPubKey: existing?.signPubKey,
-          didPublicKey: existing?.didPublicKey,
-          exchangeSignature: existing?.exchangeSignature,
-          myExchangeSignature: existing?.myExchangeSignature,
-          exchangeTimestamp: existing?.exchangeTimestamp,
-          myEphemeralMessage: existing?.myEphemeralMessage,
-          theirEphemeralMessage: existing?.theirEphemeralMessage,
-          graphExportEdgeId: existing?.graphExportEdgeId,
-          graphCredentialRef: existing?.graphCredentialRef,
-          commonFriendsHandshakeToken: existing?.commonFriendsHandshakeToken
-        )
+      let entity = ContactEntity(
+        id: stableID,
+        cardId: cardID,
+        name: fullName,
+        title: title ?? existing?.title,
+        company: company ?? existing?.company,
+        email: email ?? existing?.email,
+        phone: phone ?? existing?.phone,
+        source: existing?.source ?? importedSource,
+        verificationStatus: existing?.verificationStatus ?? VerificationStatus.unverified.rawValue,
+        receivedAt: existing?.receivedAt ?? Date(),
+        lastInteraction: existing?.lastInteraction,
+        tags: existing?.tags ?? [],
+        notes: existing?.notes,
+        sealedRoute: existing?.sealedRoute,
+        pubKey: existing?.pubKey,
+        signPubKey: existing?.signPubKey,
+        didPublicKey: existing?.didPublicKey,
+        exchangeSignature: existing?.exchangeSignature,
+        myExchangeSignature: existing?.myExchangeSignature,
+        exchangeTimestamp: existing?.exchangeTimestamp,
+        myEphemeralMessage: existing?.myEphemeralMessage,
+        theirEphemeralMessage: existing?.theirEphemeralMessage,
+        graphExportEdgeId: existing?.graphExportEdgeId,
+        graphCredentialRef: existing?.graphCredentialRef,
+        commonFriendsHandshakeToken: existing?.commonFriendsHandshakeToken
+      )
 
-        IdentityDataStore.shared.upsertContact(entity)
-        if existing == nil {
-          imported += 1
-        }
-      }
-
-      return .success(imported)
-    } catch {
-      return .failure(.storageError("Failed to import contacts: \(error.localizedDescription)"))
+      IdentityDataStore.shared.upsertContact(entity)
+      imported += 1
     }
+
+    return .success(imported)
   }
 }
 

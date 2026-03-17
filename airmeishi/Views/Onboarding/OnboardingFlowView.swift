@@ -1,3 +1,4 @@
+import Contacts
 import SwiftUI
 
 struct OnboardingFlowView: View {
@@ -41,6 +42,7 @@ struct OnboardingFlowView: View {
   // Import Contacts
   @State private var importedCount: Int?
   @State private var showingVCFPicker = false
+  @State private var showingContactPicker = false
 
   // Passport Scan
   @State private var showingPassportFlow = false
@@ -97,6 +99,11 @@ struct OnboardingFlowView: View {
       Button("OK", role: .cancel) {}
     } message: {
       Text(alertMessage)
+    }
+    .sheet(isPresented: $showingContactPicker) {
+      ContactPickerView { contacts in
+        handlePickedContacts(contacts)
+      }
     }
     .sheet(isPresented: $showingVCFPicker) {
       VCFDocumentPicker { url in
@@ -203,7 +210,7 @@ struct OnboardingFlowView: View {
             .frame(maxWidth: .infinity)
             .padding(.vertical, 8)
         } else {
-          Button(action: importFromPhone) {
+          Button(action: { showingContactPicker = true }) {
             Label("Import from Phone", systemImage: "person.crop.circle.badge.plus")
           }
           .buttonStyle(ThemedPrimaryButtonStyle())
@@ -402,35 +409,13 @@ struct OnboardingFlowView: View {
     _ = CardManager.shared.createCard(card)
   }
 
-  private func importFromPhone() {
-    isWorking = true
-    Task {
-      let permResult = await ContactImportService.shared.requestPermission()
-      switch permResult {
-      case .success(let granted):
-        guard granted else {
-          await MainActor.run {
-            isWorking = false
-            show("Please enable Contacts permission in iOS Settings.")
-          }
-          return
-        }
-        let importResult = ContactImportService.shared.importContacts()
-        await MainActor.run {
-          isWorking = false
-          switch importResult {
-          case .success(let count):
-            importedCount = (importedCount ?? 0) + count
-          case .failure(let error):
-            show(error.localizedDescription)
-          }
-        }
-      case .failure(let error):
-        await MainActor.run {
-          isWorking = false
-          show(error.localizedDescription)
-        }
-      }
+  private func handlePickedContacts(_ contacts: [CNContact]) {
+    let result = ContactImportService.shared.importPickedContacts(contacts)
+    switch result {
+    case .success(let count):
+      importedCount = (importedCount ?? 0) + count
+    case .failure(let error):
+      show(error.localizedDescription)
     }
   }
 
