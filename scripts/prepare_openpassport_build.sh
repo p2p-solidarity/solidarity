@@ -20,9 +20,6 @@ xcodebuild -resolvePackageDependencies \
   -derivedDataPath "${DERIVED_DATA_PATH}" \
   -skipPackagePluginValidation
 
-# Patch duplicate MoproBindings.xcframework names
-"${ROOT_DIR}/scripts/patch_mopro_xcframeworks.sh" "${DERIVED_DATA_PATH}"
-
 PASSPORT_CIRCUIT_SOURCE="${DERIVED_DATA_PATH}/SourcePackages/checkouts/passport-noir/circuits/target/disclosure.json"
 PASSPORT_CIRCUIT_TARGET="${ROOT_DIR}/airmeishi/Resources/openpassport_disclosure.json"
 
