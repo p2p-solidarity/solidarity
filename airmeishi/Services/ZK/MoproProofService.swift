@@ -2,16 +2,15 @@
 //  MoproProofService.swift
 //  airmeishi
 //
-//  Wraps Mopro (zkmopro) for on-device ZK proof generation using
-//  OpenPassport Noir circuits. Falls back to Semaphore or SD-JWT
-//  when the Mopro FFI bindings are not available.
+//  Wraps OpenPassport mopro proving for on-device ZK proof generation.
+//  Falls back to Semaphore or SD-JWT when native proving is unavailable.
 //
 
 import CryptoKit
 import Foundation
 
-#if canImport(moproFFI)
-  import moproFFI
+#if canImport(OpenPassportSwift)
+  import OpenPassportSwift
 #endif
 
 // MARK: - Proof Output
@@ -30,9 +29,9 @@ final class MoproProofService {
   static let shared = MoproProofService()
   private init() {}
 
-  /// Whether Mopro native proving is available in this build.
+  /// Whether OpenPassport native proving is available in this build.
   static var isAvailable: Bool {
-    #if canImport(moproFFI)
+    #if canImport(OpenPassportSwift)
       return true
     #else
       return false
@@ -42,11 +41,12 @@ final class MoproProofService {
   // MARK: - Passport Proof Generation
 
   // swiftlint:disable function_parameter_count
-  /// Generate a ZK proof from passport chip data using Mopro (OpenPassport Noir circuit).
-  /// Falls back to Semaphore → SD-JWT if Mopro is unavailable.
+  /// Generate a ZK proof from passport chip data using OpenPassport disclosure circuit.
+  /// Falls back to Semaphore → SD-JWT if OpenPassport proving is unavailable.
   func generatePassportProof(
     documentHash: String,
     mrzDigest: String,
+    dg1MRZData: String,
     nationalityCode: String,
     dateOfBirth: Date,
     expiryDate: Date,
@@ -55,13 +55,14 @@ final class MoproProofService {
   ) async -> MoproProofOutput {
     let start = DispatchTime.now()
 
-    // Try Mopro first
-    #if canImport(moproFFI)
-    if let result = await generateWithMopro(
+    // Try OpenPassport proving first.
+    #if canImport(OpenPassportSwift)
+    if let result = await generateWithOpenPassport(
       documentHash: documentHash,
       mrzDigest: mrzDigest,
-      nationalityCode: nationalityCode,
-      dateOfBirth: dateOfBirth,
+      dg1MRZData: dg1MRZData,
+      fallbackNationalityCode: nationalityCode,
+      fallbackDateOfBirth: dateOfBirth,
       expiryDate: expiryDate,
       onProgress: onProgress
     ) {
@@ -69,7 +70,7 @@ final class MoproProofService {
     }
     #endif
 
-    // Fallback: Semaphore ZK
+    // Fallback: Semaphore ZK.
     onProgress("Trying Semaphore ZK...")
     if let result = await generateWithSemaphore(
       documentHash: documentHash,
@@ -80,7 +81,7 @@ final class MoproProofService {
       return result
     }
 
-    // Final fallback: SD-JWT
+    // Final fallback: SD-JWT.
     onProgress("Using SD-JWT fallback...")
     return generateSDJWTFallback(
       documentHash: documentHash,
@@ -93,78 +94,273 @@ final class MoproProofService {
   }
   // swiftlint:enable function_parameter_count
 
-  // MARK: - Mopro Native Proof
+  // MARK: - OpenPassport Native Proof
 
-  #if canImport(moproFFI)
-  // swiftlint:disable:next function_parameter_count
-  private func generateWithMopro(
-    documentHash: String,
-    mrzDigest: String,
-    nationalityCode: String,
-    dateOfBirth: Date,
-    expiryDate: Date,
-    onProgress: @escaping @Sendable (String) -> Void
-  ) async -> MoproProofOutput? {
-    let start = DispatchTime.now()
-
-    guard let circuitPath = Bundle.main.path(forResource: "openpassport_circuit", ofType: "json"),
-          let srsPath = Bundle.main.path(forResource: "openpassport_srs", ofType: "bin")
-    else {
-      ZKLog.warn("Mopro circuit or SRS not found in bundle")
-      return nil
+  #if canImport(OpenPassportSwift)
+    private struct DisclosureWitness {
+      let inputs: [String: [String]]
+      let mrzHashHex: String
+      let disclosedNationality: String
+      let isOlderThan18: Bool
+      let publicSignals: [String]
     }
 
-    onProgress("Loading OpenPassport circuit...")
+    // swiftlint:disable:next function_parameter_count
+    private func generateWithOpenPassport(
+      documentHash: String,
+      mrzDigest: String,
+      dg1MRZData: String,
+      fallbackNationalityCode: String,
+      fallbackDateOfBirth: Date,
+      expiryDate: Date,
+      onProgress: @escaping @Sendable (String) -> Void
+    ) async -> MoproProofOutput? {
+      let start = DispatchTime.now()
 
-    // Build circuit inputs
-    let ageThreshold = 18
-    let inputs: [String] = [
-      documentHash,
-      mrzDigest,
-      nationalityCode,
-      "\(ageThreshold)",
-    ]
+      guard
+        let circuitPath = Bundle.main.path(forResource: "openpassport_disclosure", ofType: "json")
+          ?? Bundle.main.path(forResource: "disclosure", ofType: "json")
+      else {
+        ZKLog.info("OpenPassport disclosure circuit not found in bundle")
+        return nil
+      }
 
-    do {
-      onProgress("Generating ZK proof (this may take 5-15s)...")
+      onProgress("Preparing OpenPassport disclosure witness...")
+      guard let witness = buildDisclosureWitness(
+        rawMRZ: dg1MRZData,
+        fallbackNationalityCode: fallbackNationalityCode,
+        fallbackDateOfBirth: fallbackDateOfBirth
+      ) else {
+        ZKLog.info("Failed to build disclosure witness from MRZ data")
+        return nil
+      }
 
-      let proofData = try generateNoirProof(
-        circuitPath: circuitPath,
-        srsPath: srsPath,
-        inputs: inputs
-      )
+      if !mrzDigest.isEmpty && witness.mrzHashHex != mrzDigest.lowercased() {
+        onProgress("MRZ digest mismatch detected; using DG1-derived digest.")
+      }
 
-      let elapsed = elapsedMs(from: start)
-      onProgress("Proof generated in \(elapsed)ms")
+      let srsPath = Bundle.main.path(forResource: "openpassport_srs", ofType: "bin")
 
-      // Extract public signals from proof
-      let publicSignals = derivePublicSignals(
-        nationalityCode: nationalityCode,
-        dateOfBirth: dateOfBirth,
-        expiryDate: expiryDate
-      )
+      do {
+        onProgress("Generating OpenPassport proof on device...")
 
-      let payload = buildProofPayload(
-        proofType: "mopro-noir",
-        proofData: proofData,
-        documentHash: documentHash,
-        mrzDigest: mrzDigest,
+        let proof = try generateNoirProof(
+          circuitPath: circuitPath,
+          srsPath: srsPath,
+          inputs: witness.inputs
+        )
+
+        let verified = try verifyNoirProof(proof: proof.proof, vk: proof.vk)
+        guard verified else {
+          ZKLog.info("OpenPassport proof verification failed immediately after generation")
+          return nil
+        }
+
+        let elapsed = elapsedMs(from: start)
+        onProgress("OpenPassport proof generated in \(elapsed)ms")
+
+        var publicSignals = witness.publicSignals
+        if expiryDate > Date() {
+          publicSignals.append("document_valid")
+        }
+
+        let payload = buildOpenPassportPayload(
+          proof: proof,
+          documentHash: documentHash,
+          mrzDigest: mrzDigest,
+          witness: witness,
+          publicSignals: publicSignals,
+          generationTimeMs: elapsed
+        )
+
+        return MoproProofOutput(
+          proofType: "mopro-noir",
+          proofJSON: payload,
+          publicSignals: publicSignals,
+          generationTimeMs: elapsed,
+          trustLevel: "green"
+        )
+      } catch {
+        ZKLog.error("OpenPassport proof generation failed: \(error)")
+        onProgress("OpenPassport failed, trying fallback...")
+        return nil
+      }
+    }
+
+    private func buildDisclosureWitness(
+      rawMRZ: String,
+      fallbackNationalityCode: String,
+      fallbackDateOfBirth: Date
+    ) -> DisclosureWitness? {
+      guard
+        let mrzData = normalizedMRZ(
+          from: rawMRZ,
+          fallbackNationalityCode: fallbackNationalityCode,
+          fallbackDateOfBirth: fallbackDateOfBirth
+        )
+      else {
+        return nil
+      }
+
+      let mrzHashBytes = Array(SHA256.hash(data: Data(mrzData)))
+      let mrzHashHex = mrzHashBytes.map { String(format: "%02x", $0) }.joined()
+
+      let nationalityBytes = Array(mrzData[54...56])
+      let nationalityCode = String(bytes: nationalityBytes, encoding: .ascii)?
+        .replacingOccurrences(of: "<", with: "") ?? "UNK"
+
+      let currentDateBytes = asciiBytes(from: yyMMdd(from: Date()))
+      let dobBytes = Array(mrzData[57...62])
+      let isOlderThan18 = isAgeAtLeastThreshold(dobYYMMDD: dobBytes, currentYYMMDD: currentDateBytes, threshold: 18)
+
+      let revealNationality = true
+      let revealOlderThan = true
+      let revealName = false
+
+      let outName = revealName ? Array(mrzData[5...43]) : Array(repeating: UInt8(0), count: 39)
+      let outNationality = revealNationality ? nationalityBytes : Array(repeating: UInt8(0), count: 3)
+
+      let inputs: [String: [String]] = [
+        "mrz_data": toFieldValues(mrzData),
+        "mrz_hash": toFieldValues(mrzHashBytes),
+        "disclose_nationality": [boolField(revealNationality)],
+        "disclose_older_than": [boolField(revealOlderThan)],
+        "disclose_name": [boolField(revealName)],
+        "age_threshold": ["18"],
+        "current_date": toFieldValues(currentDateBytes),
+        "out_nationality": toFieldValues(outNationality),
+        "out_name": toFieldValues(outName),
+        "out_is_older": [boolField(isOlderThan18)],
+      ]
+
+      var publicSignals = ["is_human"]
+      if isOlderThan18 {
+        publicSignals.append("age_over_18")
+      }
+      publicSignals.append("nationality:\(nationalityCode)")
+
+      return DisclosureWitness(
+        inputs: inputs,
+        mrzHashHex: mrzHashHex,
+        disclosedNationality: nationalityCode,
+        isOlderThan18: isOlderThan18,
         publicSignals: publicSignals
       )
-
-      return MoproProofOutput(
-        proofType: "mopro-noir",
-        proofJSON: payload,
-        publicSignals: publicSignals,
-        generationTimeMs: elapsed,
-        trustLevel: "green"
-      )
-    } catch {
-      ZKLog.error("Mopro proof generation failed: \(error)")
-      onProgress("Mopro failed, trying fallback...")
-      return nil
     }
-  }
+
+    private func buildOpenPassportPayload(
+      proof: NoirProofResult,
+      documentHash: String,
+      mrzDigest: String,
+      witness: DisclosureWitness,
+      publicSignals: [String],
+      generationTimeMs: UInt64
+    ) -> String {
+      let payload: [String: Any] = [
+        "proof_type": "mopro-noir",
+        "engine": "openpassport-disclosure",
+        "passport_hash": documentHash,
+        "mrz": mrzDigest,
+        "mrz_hash": witness.mrzHashHex,
+        "disclosed_nationality": witness.disclosedNationality,
+        "is_over_18": witness.isOlderThan18,
+        "public_signals": publicSignals,
+        "proof_b64": proof.proof.base64EncodedString(),
+        "vk_b64": proof.vk.base64EncodedString(),
+        "generated_at": ISO8601DateFormatter().string(from: Date()),
+        "generation_time_ms": Int64(generationTimeMs),
+      ]
+      let data = (try? JSONSerialization.data(withJSONObject: payload)) ?? Data()
+      return String(data: data, encoding: .utf8) ?? "{}"
+    }
+
+    private func normalizedMRZ(
+      from rawMRZ: String,
+      fallbackNationalityCode: String,
+      fallbackDateOfBirth: Date
+    ) -> [UInt8]? {
+      let sanitized = rawMRZ
+        .uppercased()
+        .filter { character in
+          character.isASCII && (character.isLetter || character.isNumber || character == "<")
+        }
+
+      if sanitized.count >= 88 {
+        return Array(sanitized.prefix(88).utf8)
+      }
+
+      let nationality = String((fallbackNationalityCode.uppercased() + "<<<").prefix(3))
+      let dob = yyMMdd(from: fallbackDateOfBirth)
+
+      let line1Prefix = "P<\(nationality)"
+      let line1 = String((line1Prefix + String(repeating: "<", count: 44)).prefix(44))
+      var line2 = Array(repeating: Character("<"), count: 44)
+      for (index, character) in nationality.enumerated() {
+        line2[10 + index] = character
+      }
+      for (index, character) in dob.enumerated() {
+        line2[13 + index] = character
+      }
+      let synthetic = line1 + String(line2)
+      guard synthetic.count == 88 else { return nil }
+      return Array(synthetic.utf8)
+    }
+
+    private func boolField(_ value: Bool) -> String {
+      value ? "1" : "0"
+    }
+
+    private func toFieldValues(_ bytes: [UInt8]) -> [String] {
+      bytes.map { String($0) }
+    }
+
+    private func asciiBytes(from value: String) -> [UInt8] {
+      Array(value.utf8)
+    }
+
+    private func yyMMdd(from date: Date) -> String {
+      let formatter = DateFormatter()
+      formatter.dateFormat = "yyMMdd"
+      formatter.locale = Locale(identifier: "en_US_POSIX")
+      formatter.timeZone = TimeZone(secondsFromGMT: 0)
+      return formatter.string(from: date)
+    }
+
+    private func isAgeAtLeastThreshold(
+      dobYYMMDD: [UInt8],
+      currentYYMMDD: [UInt8],
+      threshold: UInt16
+    ) -> Bool {
+      guard dobYYMMDD.count == 6, currentYYMMDD.count == 6 else { return false }
+
+      let birthYear = decimalPair(dobYYMMDD[0], dobYYMMDD[1])
+      let birthMonth = decimalPair(dobYYMMDD[2], dobYYMMDD[3])
+      let birthDay = decimalPair(dobYYMMDD[4], dobYYMMDD[5])
+
+      let currentYear = decimalPair(currentYYMMDD[0], currentYYMMDD[1])
+      let currentMonth = decimalPair(currentYYMMDD[2], currentYYMMDD[3])
+      let currentDay = decimalPair(currentYYMMDD[4], currentYYMMDD[5])
+
+      var age: UInt16
+      if currentYear >= birthYear {
+        age = currentYear - birthYear
+      } else {
+        age = 100 + currentYear - birthYear
+      }
+
+      let birthdayPassed = currentMonth > birthMonth || (currentMonth == birthMonth && currentDay >= birthDay)
+      if !birthdayPassed && age > 0 {
+        age -= 1
+      }
+
+      return age >= threshold
+    }
+
+    private func decimalPair(_ first: UInt8, _ second: UInt8) -> UInt16 {
+      let firstDigit = first >= 48 && first <= 57 ? first - 48 : 0
+      let secondDigit = second >= 48 && second <= 57 ? second - 48 : 0
+      return UInt16(firstDigit) * 10 + UInt16(secondDigit)
+    }
   #endif
 
   // MARK: - Semaphore Fallback
@@ -195,8 +391,8 @@ final class MoproProofService {
         "proof_type": "semaphore-zk",
       ]
       if let proofData = proofJSON.data(using: .utf8),
-         let proofObj = try? JSONSerialization.jsonObject(with: proofData) {
-        payloadDict["semaphore_proof"] = proofObj
+         let proofObject = try? JSONSerialization.jsonObject(with: proofData) {
+        payloadDict["semaphore_proof"] = proofObject
       } else {
         payloadDict["semaphore_proof"] = proofJSON
       }
@@ -247,50 +443,6 @@ final class MoproProofService {
       generationTimeMs: elapsed,
       trustLevel: "blue"
     )
-  }
-
-  // MARK: - Helpers
-
-  private func derivePublicSignals(
-    nationalityCode: String,
-    dateOfBirth: Date,
-    expiryDate: Date
-  ) -> [String] {
-    var signals: [String] = []
-
-    // Age over 18 check
-    let age = Calendar.current.dateComponents([.year], from: dateOfBirth, to: Date()).year ?? 0
-    if age >= 18 {
-      signals.append("age_over_18")
-    }
-    signals.append("is_human")
-    signals.append("nationality:\(nationalityCode)")
-
-    // Passport validity
-    if expiryDate > Date() {
-      signals.append("document_valid")
-    }
-
-    return signals
-  }
-
-  private func buildProofPayload(
-    proofType: String,
-    proofData: Any,
-    documentHash: String,
-    mrzDigest: String,
-    publicSignals: [String]
-  ) -> String {
-    let payload: [String: Any] = [
-      "proof_type": proofType,
-      "passport_hash": documentHash,
-      "mrz": mrzDigest,
-      "public_signals": publicSignals,
-      "proof": "\(proofData)",
-      "generated_at": ISO8601DateFormatter().string(from: Date()),
-    ]
-    let data = (try? JSONSerialization.data(withJSONObject: payload)) ?? Data()
-    return String(data: data, encoding: .utf8) ?? "{}"
   }
 
   private func elapsedMs(from start: DispatchTime) -> UInt64 {

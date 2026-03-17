@@ -11,6 +11,7 @@ struct PassportMRZDraft: Equatable {
 struct PassportChipSnapshot: Equatable {
   let documentHash: String
   let mrzDigest: String
+  let dg1MRZData: String
   let chipUID: String
   let bacVerified: Bool
   let paceVerified: Bool
@@ -79,6 +80,7 @@ final class PassportPipelineService {
     let output = await MoproProofService.shared.generatePassportProof(
       documentHash: chip.documentHash,
       mrzDigest: chip.mrzDigest,
+      dg1MRZData: chip.dg1MRZData,
       nationalityCode: draft.nationalityCode,
       dateOfBirth: draft.dateOfBirth,
       expiryDate: draft.expiryDate,
@@ -172,8 +174,8 @@ final class PassportPipelineService {
       return .failure(.configurationError("NFC read cancelled"))
     }
 
-    let source = "\(draft.passportNumber)|\(draft.nationalityCode)|\(draft.dateOfBirth.timeIntervalSince1970)|\(draft.expiryDate.timeIntervalSince1970)"
-    let digest = SHA256.hash(data: Data(source.utf8))
+    let syntheticMRZ = syntheticMRZ(from: draft)
+    let digest = SHA256.hash(data: Data(syntheticMRZ.utf8))
     let digestHex = digest.map { String(format: "%02x", $0) }.joined()
 
     let raw = draft.passportNumber
@@ -181,8 +183,9 @@ final class PassportPipelineService {
 
     return .success(
       PassportChipSnapshot(
-        documentHash: String(digestHex.prefix(32)),
-        mrzDigest: String(digestHex.suffix(32)),
+        documentHash: digestHex,
+        mrzDigest: digestHex,
+        dg1MRZData: syntheticMRZ,
         chipUID: "SIM-\(String(digestHex.prefix(8)).uppercased())",
         bacVerified: true,
         paceVerified: false,
@@ -243,6 +246,7 @@ final class PassportPipelineService {
         PassportChipSnapshot(
           documentHash: result.rawDataHash,
           mrzDigest: mrzDigestHex,
+          dg1MRZData: chipMRZ.isEmpty ? syntheticMRZ(from: draft) : chipMRZ,
           chipUID: result.chipUID,
           bacVerified: result.bacSucceeded,
           paceVerified: result.paceSucceeded,
@@ -264,4 +268,41 @@ final class PassportPipelineService {
     }
   }
   #endif
+
+  private func syntheticMRZ(from draft: PassportMRZDraft) -> String {
+    let nationality = sanitizeICAOCode(draft.nationalityCode)
+    let dob = yyMMdd(from: draft.dateOfBirth)
+    let expiry = yyMMdd(from: draft.expiryDate)
+
+    let line1Prefix = "P<\(nationality)"
+    let line1 = String((line1Prefix + String(repeating: "<", count: 44)).prefix(44))
+
+    var line2 = Array(repeating: Character("<"), count: 44)
+    for (index, character) in nationality.enumerated() {
+      line2[10 + index] = character
+    }
+    for (index, character) in dob.enumerated() {
+      line2[13 + index] = character
+    }
+    for (index, character) in expiry.enumerated() {
+      line2[21 + index] = character
+    }
+
+    return line1 + String(line2)
+  }
+
+  private func sanitizeICAOCode(_ value: String) -> String {
+    let cleaned = value
+      .uppercased()
+      .filter { $0.isLetter || $0 == "<" }
+    return String((cleaned + "<<<").prefix(3))
+  }
+
+  private func yyMMdd(from date: Date) -> String {
+    let formatter = DateFormatter()
+    formatter.dateFormat = "yyMMdd"
+    formatter.locale = Locale(identifier: "en_US_POSIX")
+    formatter.timeZone = TimeZone(secondsFromGMT: 0)
+    return formatter.string(from: date)
+  }
 }
