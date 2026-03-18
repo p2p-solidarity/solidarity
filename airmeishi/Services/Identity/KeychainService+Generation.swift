@@ -165,33 +165,33 @@ extension KeychainService {
 
   #if !targetEnvironment(simulator)
     private func generateDeviceSigningKey(useSecureEnclave: Bool) -> CardResult<Void> {
-      let flags = accessControlFlags
-
-      guard
-        let accessControl = SecAccessControlCreateWithFlags(
-          nil,
-          kSecAttrAccessibleWhenUnlocked,
-          flags,
-          nil
-        )
-      else {
-        return .failure(.keyManagementError("Failed to configure key access control"))
-      }
-
-      // First attempt: try persistent key with Secure Enclave (if requested) or software
       var attributes: [String: Any] = [
         kSecAttrKeyType as String: kSecAttrKeyTypeECSECPrimeRandom,
         kSecAttrKeyClass as String: kSecAttrKeyClassPrivate,
         kSecAttrKeySizeInBits as String: 256,
         kSecAttrIsPermanent as String: true,
-        kSecAttrAccessControl as String: accessControl,
         kSecAttrApplicationTag as String: keyTag,
         kSecAttrLabel as String: "Solidarity DID Key",
       ]
 
       if useSecureEnclave {
+        // Secure Enclave requires kSecAttrAccessControl with .privateKeyUsage
+        guard
+          let accessControl = SecAccessControlCreateWithFlags(
+            nil,
+            kSecAttrAccessibleWhenUnlocked,
+            accessControlFlags,
+            nil
+          )
+        else {
+          return .failure(.keyManagementError("Failed to configure key access control"))
+        }
+        attributes[kSecAttrAccessControl as String] = accessControl
         attributes[kSecAttrTokenID as String] = kSecAttrTokenIDSecureEnclave
       } else {
+        // Software keys with iCloud sync: .privateKeyUsage is incompatible with
+        // kSecAttrSynchronizable — use kSecAttrAccessible instead of kSecAttrAccessControl
+        attributes[kSecAttrAccessible as String] = kSecAttrAccessibleWhenUnlocked
         attributes[kSecAttrSynchronizable as String] = kCFBooleanTrue as Any
       }
 
@@ -209,15 +209,40 @@ extension KeychainService {
         ?? "Unknown error (\(statusDescription(errSecParam)))"
 
       let errorCode = (cfError as? NSError)?.code ?? 0
-      let isDuplicateError =
-        errorCode == -25293 || errorCode == -25299 || message.contains("-25293") || message.contains("-25299")
+      let isDuplicateOrConflict =
+        errorCode == -25293 || errorCode == -25299 || errorCode == -50
+        || message.contains("-25293") || message.contains("-25299")
         || message.contains("duplicate") || message.contains("errSecDuplicateItem")
+        || message.contains("-50")
 
-      if isDuplicateError {
-        print("[KeychainService] Duplicate key detected (code: \(errorCode)), reusing existing key")
-        return cacheExistingPublicJWKIfPossible()
-          ? .success(())
-          : .failure(.keyManagementError("Duplicate key exists but could not load it"))
+      if isDuplicateOrConflict {
+        print("[KeychainService] Duplicate/conflict key detected (code: \(errorCode)), trying to reuse existing key")
+        if cacheExistingPublicJWKIfPossible() {
+          return .success(())
+        }
+
+        // Existing key can't be loaded — delete the stale key and retry once
+        print("[KeychainService] Stale key detected, deleting and retrying...")
+        _ = deleteSigningKey()
+        clearInMemoryKey()
+
+        var retryError: Unmanaged<CFError>?
+        var retryAttributes = attributes
+        // Rebuild without SE since we're in a recovery path — use kSecAttrAccessible for sync keys
+        retryAttributes.removeValue(forKey: kSecAttrTokenID as String)
+        retryAttributes.removeValue(forKey: kSecAttrAccessControl as String)
+        retryAttributes[kSecAttrAccessible as String] = kSecAttrAccessibleWhenUnlocked
+        retryAttributes[kSecAttrSynchronizable as String] = kCFBooleanTrue as Any
+
+        if let retryKey = SecKeyCreateRandomKey(retryAttributes as CFDictionary, &retryError) {
+          print("[KeychainService] Successfully regenerated key after stale key cleanup")
+          cachePublicJWK(from: retryKey)
+          return .success(())
+        }
+
+        let retryMessage = (retryError?.takeRetainedValue() as Error?)?.localizedDescription ?? "Unknown error"
+        print("[KeychainService] Retry after cleanup also failed: \(retryMessage)")
+        return .failure(.keyManagementError("Failed to generate device key after cleanup: \(retryMessage)"))
       }
 
       return .failure(.keyManagementError("Failed to generate device key: \(message)"))
