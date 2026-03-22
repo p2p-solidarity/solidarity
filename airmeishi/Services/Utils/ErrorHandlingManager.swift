@@ -12,7 +12,7 @@ import os.log
 class ErrorHandlingManager {
   static let shared = ErrorHandlingManager()
 
-  private let logger = Logger(subsystem: "com.kidneyweakx.airmeishi", category: "ErrorHandling")
+  private let logger = Logger(subsystem: AppBranding.currentLoggerSubsystem, category: "ErrorHandling")
   private let storageManager = StorageManager.shared
   private let maxLogEntries = 1000
 

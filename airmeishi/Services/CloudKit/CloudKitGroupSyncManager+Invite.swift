@@ -51,7 +51,7 @@ extension CloudKitGroupSyncManager {
 
     if let firstMatch = sortedResults.first, let token = firstMatch.0["token"] as? String {
       print("[CloudKitManager] Found existing active invite token")
-      return "airmeishi://group/join?token=\(token)"
+      return AppBranding.inviteURL(token: token)
     }
 
     // 2. Create new token if none exists
@@ -65,7 +65,7 @@ extension CloudKitGroupSyncManager {
 
     try await publicDB.save(inviteRecord)
     print("[CloudKitManager] Created new invite token")
-    return "airmeishi://group/join?token=\(token)"
+    return AppBranding.inviteURL(token: token)
   }
 
   func revokeInviteToken(_ token: String) async throws {

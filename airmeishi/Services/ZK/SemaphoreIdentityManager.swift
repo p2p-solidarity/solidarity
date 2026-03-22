@@ -17,9 +17,11 @@ import Foundation
 final class SemaphoreIdentityManager: ObservableObject {
   static let shared = SemaphoreIdentityManager()
 
-  private init() {}
+  private let keychain: IdentityBundleStore
 
-  private let keychain = IdentityKeychain()
+  init(keychain: IdentityBundleStore = KeychainIdentityStore()) {
+    self.keychain = keychain
+  }
 
   /// Bootstrap anchor commitment for passport self-attestation proofs.
   /// A fixed decimal field element used as the second member in a minimal 2-member group,
@@ -107,6 +109,10 @@ final class SemaphoreIdentityManager: ObservableObject {
     let fixed = ensureCommitment(bundle: loaded)
     if fixed.commitment != loaded.commitment { try? keychain.storeIdentity(fixed) }
     return fixed
+  }
+
+  func migrateLegacyIdentityIfNeeded() {
+    _ = try? keychain.loadIdentity()
   }
 
   /// Replaces identity with provided secret bytes.
@@ -341,8 +347,22 @@ final class SemaphoreIdentityManager: ObservableObject {
 
 // MARK: - Keychain storage for identity
 
-private final class IdentityKeychain {
-  private let tag = "com.kidneyweakx.airmeishi.semaphore.identity"
+protocol IdentityBundleStore {
+  func storeIdentity(_ bundle: SemaphoreIdentityManager.IdentityBundle) throws
+  func loadIdentity() throws -> SemaphoreIdentityManager.IdentityBundle?
+}
+
+final class KeychainIdentityStore: IdentityBundleStore {
+  private let tag: String
+  private let legacyTag: String
+
+  init(
+    tag: String = AppBranding.currentSemaphoreIdentityTag,
+    legacyTag: String = AppBranding.legacySemaphoreIdentityTag
+  ) {
+    self.tag = tag
+    self.legacyTag = legacyTag
+  }
 
   func storeIdentity(_ bundle: SemaphoreIdentityManager.IdentityBundle) throws {
     let data = try JSONEncoder().encode(bundle)
@@ -358,6 +378,19 @@ private final class IdentityKeychain {
   }
 
   func loadIdentity() throws -> SemaphoreIdentityManager.IdentityBundle? {
+    if let current = try loadIdentity(for: tag) {
+      return current
+    }
+
+    guard let legacy = try loadIdentity(for: legacyTag) else {
+      return nil
+    }
+
+    try storeIdentity(legacy)
+    return legacy
+  }
+
+  private func loadIdentity(for tag: String) throws -> SemaphoreIdentityManager.IdentityBundle? {
     let query: [String: Any] = [
       kSecClass as String: kSecClassGenericPassword,
       kSecAttrAccount as String: tag,

@@ -62,7 +62,7 @@ final class OIDCService: ObservableObject {
   ///   - claims: Dictionary specifying the requested claims (e.g. for VCs).
   /// - Returns: A `CardResult` containing the generated URL.
   func generateRequest(
-    redirectUri: String = "airmeishi://oidc-callback",
+    redirectUri: String = "\(AppBranding.currentScheme)://oidc-callback",
     claims: [String: Any]? = nil,
     relyingPartyDomain: String? = nil
   ) -> CardResult<URL> {
@@ -142,7 +142,7 @@ final class OIDCService: ObservableObject {
 
     let nonce = UUID().uuidString
     let state = UUID().uuidString
-    let redirectUri = "airmeishi://oidc-callback"
+    let redirectUri = "\(AppBranding.currentScheme)://oidc-callback"
 
     let presentationDefinition = PresentationRequest.PresentationDefinition(
       id: "business-card-request",

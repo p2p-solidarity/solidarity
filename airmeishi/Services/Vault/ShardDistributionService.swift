@@ -66,7 +66,7 @@ final class ShardDistributionService: ObservableObject {
         }
 
         let base64 = compressed.base64EncodedString()
-        let urlString = "airmeishi://shard?data=\(base64)"
+        let urlString = AppBranding.shardURL(data: base64)
 
         let filter = CIFilter.qrCodeGenerator()
         filter.message = Data(urlString.utf8)

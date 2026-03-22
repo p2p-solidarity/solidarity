@@ -3,11 +3,11 @@ import Security
 
 /// Lightweight cache backed by Keychain for DID documents and JWK material.
 final class IdentityCacheStore {
-  private let service = "com.kidneyweakx.airmeishi.identity-cache"
+  private let service = AppBranding.currentIdentityCacheService
   private let documentsAccount = "did-documents"
   private let jwkAccount = "public-jwks"
   private let descriptorAccount = "active-did-descriptor"
-  private let queue = DispatchQueue(label: "com.kidneyweakx.airmeishi.identity-cache", qos: .utility)
+  private let queue = DispatchQueue(label: AppBranding.currentIdentityCacheService, qos: .utility)
 
   func loadDocuments() -> [String: DIDDocument] {
     queue.sync {

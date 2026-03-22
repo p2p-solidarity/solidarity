@@ -132,6 +132,10 @@ class ProximityManagerTests: XCTestCase {
         XCTAssertEqual(proximityManager.connectionStatus, .advertisingAndBrowsing)
     }
 
+    func testServiceTypeUsesSolidarityBranding() {
+        XCTAssertEqual(proximityManager.serviceType, "solidarity-share")
+    }
+
     func testStartMatchingAppliesShareSettingsFieldsToProfessionalLevel() throws {
         UserDefaults.standard.set(true, forKey: shareTitleKey)
         UserDefaults.standard.set(false, forKey: shareCompanyKey)

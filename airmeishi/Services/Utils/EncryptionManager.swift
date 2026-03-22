@@ -13,10 +13,25 @@ import Security
 class EncryptionManager {
   static let shared = EncryptionManager()
 
-  private let keyTag = "com.kidneyweakx.airmeishi.encryption.key"
-  private let service = "airmeishi"
+  private let keyTag: String
+  private let legacyKeyTag: String
+  private let service: String
+  private let legacyService: String
+  private let defaults: UserDefaults
 
-  private init() {}
+  init(
+    keyTag: String = AppBranding.currentEncryptionKeyTag,
+    legacyKeyTag: String = AppBranding.legacyEncryptionKeyTag,
+    service: String = AppBranding.currentEncryptionService,
+    legacyService: String = AppBranding.legacyEncryptionService,
+    defaults: UserDefaults = .standard
+  ) {
+    self.keyTag = keyTag
+    self.legacyKeyTag = legacyKeyTag
+    self.service = service
+    self.legacyService = legacyService
+    self.defaults = defaults
+  }
 
   // MARK: - Public Methods
 
@@ -73,28 +88,37 @@ class EncryptionManager {
 
   /// Securely delete encryption key from keychain
   func deleteEncryptionKey() -> CardResult<Void> {
-    let query: [String: Any] = [
-      kSecClass as String: kSecClassGenericPassword,
-      kSecAttrService as String: service,
-      kSecAttrAccount as String: keyTag,
-    ]
+    let currentStatus = deleteKey(service: service, account: keyTag)
+    let legacyStatus = deleteKey(service: legacyService, account: legacyKeyTag)
 
-    let status = SecItemDelete(query as CFDictionary)
-
-    if status == errSecSuccess || status == errSecItemNotFound {
+    if [currentStatus, legacyStatus].allSatisfy({ $0 == errSecSuccess || $0 == errSecItemNotFound }) {
       return .success(())
     } else {
-      return .failure(.encryptionError("Failed to delete encryption key: \(status)"))
+      return .failure(.encryptionError("Failed to delete encryption key: \(currentStatus) / \(legacyStatus)"))
     }
+  }
+
+  func migrateLegacyKeyIfNeeded() {
+    guard (try? retrieveKeyFromKeychain(service: service, account: keyTag)) == nil,
+          let legacyKey = try? retrieveKeyFromKeychain(service: legacyService, account: legacyKeyTag)
+    else { return }
+
+    try? storeKeyInKeychain(legacyKey)
+    defaults.set(true, forKey: "solidarity.migration.encryption.v1")
   }
 
   // MARK: - Private Methods
 
   /// Get existing encryption key from keychain or create a new one
   private func getOrCreateEncryptionKey() throws -> SymmetricKey {
-    // Try to retrieve existing key
-    if let existingKey = try? retrieveKeyFromKeychain() {
+    if let existingKey = try? retrieveKeyFromKeychain(service: service, account: keyTag) {
       return existingKey
+    }
+
+    if let legacyKey = try? retrieveKeyFromKeychain(service: legacyService, account: legacyKeyTag) {
+      try storeKeyInKeychain(legacyKey)
+      defaults.set(true, forKey: "solidarity.migration.encryption.v1")
+      return legacyKey
     }
 
     // Create new key if none exists
@@ -104,11 +128,11 @@ class EncryptionManager {
   }
 
   /// Retrieve encryption key from keychain
-  private func retrieveKeyFromKeychain() throws -> SymmetricKey {
+  private func retrieveKeyFromKeychain(service: String, account: String) throws -> SymmetricKey {
     let query: [String: Any] = [
       kSecClass as String: kSecClassGenericPassword,
       kSecAttrService as String: service,
-      kSecAttrAccount as String: keyTag,
+      kSecAttrAccount as String: account,
       kSecReturnData as String: true,
       kSecMatchLimit as String: kSecMatchLimitOne,
     ]
@@ -129,12 +153,16 @@ class EncryptionManager {
 
   /// Store encryption key in keychain, updating existing value when duplicate item exists.
   func storeKeyInKeychain(_ key: SymmetricKey) throws {
+    try storeKeyInKeychain(key, service: service, account: keyTag)
+  }
+
+  private func storeKeyInKeychain(_ key: SymmetricKey, service: String, account: String) throws {
     let keyData = key.withUnsafeBytes { Data($0) }
 
     let addQuery: [String: Any] = [
       kSecClass as String: kSecClassGenericPassword,
       kSecAttrService as String: service,
-      kSecAttrAccount as String: keyTag,
+      kSecAttrAccount as String: account,
       kSecValueData as String: keyData,
       kSecAttrAccessible as String: kSecAttrAccessibleWhenUnlockedThisDeviceOnly,
     ]
@@ -144,7 +172,7 @@ class EncryptionManager {
       let matchQuery: [String: Any] = [
         kSecClass as String: kSecClassGenericPassword,
         kSecAttrService as String: service,
-        kSecAttrAccount as String: keyTag,
+        kSecAttrAccount as String: account,
       ]
       let attributesToUpdate: [String: Any] = [
         kSecValueData as String: keyData,
@@ -160,5 +188,15 @@ class EncryptionManager {
     guard status == errSecSuccess else {
       throw CardError.encryptionError("Failed to store key in keychain: \(status)")
     }
+  }
+
+  private func deleteKey(service: String, account: String) -> OSStatus {
+    let query: [String: Any] = [
+      kSecClass as String: kSecClassGenericPassword,
+      kSecAttrService as String: service,
+      kSecAttrAccount as String: account,
+    ]
+
+    return SecItemDelete(query as CFDictionary)
   }
 }

@@ -197,7 +197,7 @@ struct OIDCServiceResponseTests {
     let vcService = VCService()
     // Use a fake JWT — importPresentedCredential will fail but we test that
     // the vp_token is correctly extracted from the URL
-    let url = URL(string: "airmeishi://oidc-callback?vp_token=fake.jwt.token&state=abc")!
+    let url = URL(string: "solidarity://oidc-callback?vp_token=fake.jwt.token&state=abc")!
     let result = service.handleResponse(url: url, vcService: vcService)
     // The import will fail because "fake.jwt.token" is not a valid JWT,
     // but it should NOT fail with "No vp_token found"
@@ -213,7 +213,7 @@ struct OIDCServiceResponseTests {
   @Test func handleResponseNoVPTokenFails() async throws {
     let service = OIDCService()
     let vcService = VCService()
-    let url = URL(string: "airmeishi://oidc-callback?state=abc")!
+    let url = URL(string: "solidarity://oidc-callback?state=abc")!
     let result = service.handleResponse(url: url, vcService: vcService)
     switch result {
     case .success: Issue.record("Expected failure when no vp_token")

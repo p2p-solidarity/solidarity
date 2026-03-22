@@ -78,6 +78,10 @@ struct airmeishiApp: App {
     // Request necessary permissions
     requestPermissions()
 
+    EncryptionManager.shared.migrateLegacyKeyIfNeeded()
+    SemaphoreIdentityManager.shared.migrateLegacyIdentityIfNeeded()
+    _ = IssuerTrustAnchorStore.shared
+
     identityDataStore.runInitialMigrationIfNeeded()
 
     // Note: Data is automatically loaded in the managers' init methods
@@ -101,7 +105,7 @@ struct airmeishiApp: App {
         do {
           // Use a consistent dummy token for this install
           let defaults = UserDefaults.standard
-          let tokenKey = "airmeishi.simulator.deviceToken"
+          let tokenKey = AppBranding.currentSimulatorDeviceTokenKey
           var dummyToken = defaults.string(forKey: tokenKey)
 
           if dummyToken == nil {
@@ -131,7 +135,8 @@ struct airmeishiApp: App {
       SecureKeyManager.shared.mySealedRoute = nil
 
       // Also clear any stored simulator token from UserDefaults to be safe
-      UserDefaults.standard.removeObject(forKey: "airmeishi.simulator.deviceToken")
+      UserDefaults.standard.removeObject(forKey: AppBranding.currentSimulatorDeviceTokenKey)
+      UserDefaults.standard.removeObject(forKey: AppBranding.legacySimulatorDeviceTokenKey)
     #endif
   }
 

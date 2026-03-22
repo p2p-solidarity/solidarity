@@ -12,7 +12,7 @@ import os
 
 /// High level service for issuing and parsing Verifiable Credentials.
 final class VCService {
-  private static let logger = Logger(subsystem: "com.kidneyweakx.airmeishi", category: "VCService")
+  private static let logger = Logger(subsystem: AppBranding.currentLoggerSubsystem, category: "VCService")
   struct IssueOptions {
     var holderDid: String?
     var issuerDid: String?

@@ -175,7 +175,7 @@ class ShareLinkManager: ObservableObject {
 
   /// Generate shareable URL for a link
   func generateShareURL(for shareLink: ShareLink) -> String {
-    let baseURL = "https://airmeishi.app/share"  // Your actual domain
+    let baseURL = AppBranding.currentShareBaseURL
     return "\(baseURL)/\(shareLink.id.uuidString)"
   }
 

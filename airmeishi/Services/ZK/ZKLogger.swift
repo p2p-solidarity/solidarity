@@ -9,7 +9,7 @@ import Foundation
 import os
 
 enum ZKLog {
-  private static let logger = Logger(subsystem: "com.kidneyweakx.airmeishi", category: "Semaphore")
+  private static let logger = Logger(subsystem: AppBranding.currentLoggerSubsystem, category: "Semaphore")
 
   static func info(_ message: String) {
     logger.info("\(message, privacy: .public)")

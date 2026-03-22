@@ -16,7 +16,7 @@ class WebhookManager: ObservableObject {
   @Published private(set) var registeredPasses: [String: PassRegistration] = [:]
   @Published private(set) var lastError: CardError?
 
-  private let baseURL = "https://airmeishi.app/api/v1"  // Your actual server URL
+  private let baseURL = AppBranding.currentAPIBaseURL
   private var cancellables = Set<AnyCancellable>()
 
   private init() {

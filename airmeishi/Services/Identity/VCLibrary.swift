@@ -42,7 +42,7 @@ final class VCLibrary {
 
   static let shared = VCLibrary()
 
-  private let queue = DispatchQueue(label: "com.kidneyweakx.airmeishi.vclibrary", qos: .userInitiated)
+  private let queue = DispatchQueue(label: "com.kidneyweakx.solidarity.vclibrary", qos: .userInitiated)
   private let fileManager: FileManager
   private let encryptionManager: EncryptionManager
   private let storageDirectoryName = "AirmeishiStorage"

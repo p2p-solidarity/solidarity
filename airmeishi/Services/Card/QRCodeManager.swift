@@ -77,7 +77,7 @@ final class QRCodeManager: ObservableObject {
         let data = try JSONEncoder.qrEncoder.encode(envelope)
         let key = "sharing_\(envelope.shareId.uuidString)"
         UserDefaults.standard.set(data, forKey: key)
-        let baseURL = "https://airmeishi.app/share"
+        let baseURL = AppBranding.currentShareBaseURL
         return .success("\(baseURL)/\(envelope.shareId.uuidString)")
       } catch {
         return .failure(.sharingError("Failed to persist share payload"))

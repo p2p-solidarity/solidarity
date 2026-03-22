@@ -92,7 +92,7 @@ final class QRCodeManagerTests: XCTestCase {
         switch result {
         case .success(let shareURL):
             XCTAssertFalse(shareURL.isEmpty, "Share URL should not be empty")
-            XCTAssertTrue(shareURL.contains("airmeishi.app"), "Share URL should contain domain")
+            XCTAssertTrue(shareURL.contains("solidarity.gg"), "Share URL should contain domain")
             
         case .failure(let error):
             XCTFail("Share link generation failed: \(error.localizedDescription)")

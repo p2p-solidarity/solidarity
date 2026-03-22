@@ -115,6 +115,11 @@ extension ProximityManager {
     browser = MCNearbyServiceBrowser(peer: localPeerID, serviceType: serviceType)
     browser?.delegate = self
     browser?.startBrowsingForPeers()
+    if AppBranding.legacyProximityServiceType != serviceType {
+      legacyBrowser = MCNearbyServiceBrowser(peer: localPeerID, serviceType: AppBranding.legacyProximityServiceType)
+      legacyBrowser?.delegate = self
+      legacyBrowser?.startBrowsingForPeers()
+    }
 
     isBrowsing = true
     updateConnectionStatus()
@@ -131,6 +136,8 @@ extension ProximityManager {
 
     browser?.stopBrowsingForPeers()
     browser = nil
+    legacyBrowser?.stopBrowsingForPeers()
+    legacyBrowser = nil
 
     isBrowsing = false
     nearbyPeers.removeAll()
@@ -173,12 +180,10 @@ extension ProximityManager {
       return false
     }
 
-    // Check if our service type is declared
-    let expectedService = "_airmeishi-share._tcp."
-    let hasService = services.contains(expectedService)
+    let hasService = services.contains { AppBranding.supportedBonjourServices.contains($0) }
 
     if !hasService {
-      print("Expected service \(expectedService) not found in NSBonjourServices: \(services)")
+      print("Expected service \(AppBranding.supportedBonjourServices) not found in NSBonjourServices: \(services)")
     }
 
     return hasService

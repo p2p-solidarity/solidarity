@@ -1,7 +1,7 @@
 import CryptoKit
 import Foundation
 
-#if canImport(NFCPassportReader)
+#if ENABLE_NFC_PASSPORT_READER
 import NFCPassportReader
 #endif
 
@@ -62,7 +62,7 @@ final class NFCPassportReaderService: NSObject {
 
   // MARK: - Read passport
 
-  #if canImport(NFCPassportReader) && !targetEnvironment(simulator)
+  #if ENABLE_NFC_PASSPORT_READER && !targetEnvironment(simulator)
   func read(passportNumber: String, dateOfBirth: String, expiryDate: String) async throws -> NFCReadResult {
     let mrzKey = NFCPassportReaderService.buildMRZKey(
       passportNumber: passportNumber,
@@ -156,6 +156,10 @@ final class NFCPassportReaderService: NSObject {
       rawDataHash: rawHash,
       readAt: Date()
     )
+  }
+  #else
+  func read(passportNumber _: String, dateOfBirth _: String, expiryDate _: String) async throws -> NFCReadResult {
+    throw NFCError.notAvailable
   }
   #endif
 }

@@ -25,10 +25,18 @@
 		<dict>
 			<key>CFBundleURLSchemes</key>
 			<array>
+				<string>solidarity</string>
+			</array>
+			<key>CFBundleURLName</key>
+			<string>solidarity.auth</string>
+		</dict>
+		<dict>
+			<key>CFBundleURLSchemes</key>
+			<array>
 				<string>airmeishi</string>
 			</array>
 			<key>CFBundleURLName</key>
-			<string>airmeishi.auth</string>
+			<string>airmeishi.auth.legacy</string>
 		</dict>
 		<dict>
 			<key>CFBundleURLSchemes</key>
@@ -36,7 +44,7 @@
 				<string>openid-credential-offer</string>
 			</array>
 			<key>CFBundleURLName</key>
-			<string>airmeishi.oid4vci</string>
+			<string>solidarity.oid4vci</string>
 		</dict>
 	</array>
 	<key>ITSAppUsesNonExemptEncryption</key>
@@ -45,6 +53,8 @@
 	<true/>
 	<key>NSBonjourServices</key>
 	<array>
+		<string>_solidarity-share._tcp.</string>
+		<string>_solidarity-share._tcp</string>
 		<string>_airmeishi-share._tcp.</string>
 		<string>_airmeishi-share._tcp</string>
 	</array>

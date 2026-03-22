@@ -57,6 +57,7 @@
 	<string>This app needs camera access to scan QR codes and business cards.</string>
 	<key>NSBonjourServices</key>
 	<array>
+		<string>_solidarity-share._tcp.</string>
 		<string>_airmeishi-share._tcp.</string>
 	</array>
 	<key>ITSAppUsesNonExemptEncryption</key>

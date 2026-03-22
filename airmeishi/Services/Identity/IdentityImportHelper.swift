@@ -52,7 +52,10 @@ class IdentityImportHelper {
       return .failure(.invalidData("Import payload is empty"))
     }
 
-    if let url = URL(string: trimmed), trimmed.hasPrefix("airmeishi://oidc") {
+    if let url = URL(string: trimmed),
+      trimmed.hasPrefix("\(AppBranding.currentScheme)://oidc")
+        || trimmed.hasPrefix("\(AppBranding.legacyScheme)://oidc")
+    {
       return resolvePayload(from: .oidcResponse(url), context: nil)
     }
 

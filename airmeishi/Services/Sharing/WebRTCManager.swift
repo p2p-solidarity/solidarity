@@ -109,9 +109,9 @@ class WebRTCManager: NSObject, ObservableObject {
     // Create Data Channel
     let config = RTCDataChannelConfiguration()
     config.isOrdered = true
-    self.dataChannel = pc.dataChannel(forLabel: "airmeishi-data", configuration: config)
+    self.dataChannel = pc.dataChannel(forLabel: AppBranding.currentWebRTCDataChannelLabel, configuration: config)
     self.dataChannel?.delegate = self
-    print("[WebRTC] Data channel created with label: airmeishi-data")
+    print("[WebRTC] Data channel created with label: \(AppBranding.currentWebRTCDataChannelLabel)")
     // Note: delegate method dataChannelDidChangeState will update isChannelOpen
 
     pc.offer(for: mediaConstraints) { [weak self] sdp, error in

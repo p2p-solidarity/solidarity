@@ -26,7 +26,7 @@ final class OIDCRequestHandler {
         }
 
         let clientId = queryItems.first { $0.name == "client_id" }?.value ?? "unknown"
-        let redirectUri = queryItems.first { $0.name == "redirect_uri" }?.value ?? "airmeishi://oidc-callback"
+        let redirectUri = queryItems.first { $0.name == "redirect_uri" }?.value ?? "\(AppBranding.currentScheme)://oidc-callback"
         let state = queryItems.first { $0.name == "state" }?.value ?? UUID().uuidString
         let nonce = queryItems.first { $0.name == "nonce" }?.value ?? UUID().uuidString
 

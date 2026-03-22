@@ -11,7 +11,8 @@ struct TrustedIssuerAnchor: Codable, Equatable {
 final class IssuerTrustAnchorStore {
   static let shared = IssuerTrustAnchorStore()
 
-  private let storageKey = "airmeishi.trusted_issuer_anchors.v1"
+  private let storageKey = AppBranding.currentTrustedIssuerAnchorsKey
+  private let legacyStorageKey = AppBranding.legacyTrustedIssuerAnchorsKey
   private let defaults: UserDefaults
   private let didService: DIDService
   private var anchors: [TrustedIssuerAnchor]
@@ -22,6 +23,7 @@ final class IssuerTrustAnchorStore {
   ) {
     self.defaults = defaults
     self.didService = didService
+    Self.migrateLegacyAnchorsIfNeeded(in: defaults, storageKey: storageKey, legacyStorageKey: legacyStorageKey)
     self.anchors = Self.loadAnchors(from: defaults, storageKey: storageKey)
   }
 
@@ -101,6 +103,19 @@ final class IssuerTrustAnchorStore {
   private func persistAnchors() {
     guard let data = try? JSONEncoder().encode(anchors) else { return }
     defaults.set(data, forKey: storageKey)
+  }
+
+  private static func migrateLegacyAnchorsIfNeeded(
+    in defaults: UserDefaults,
+    storageKey: String,
+    legacyStorageKey: String
+  ) {
+    guard defaults.object(forKey: storageKey) == nil,
+      let legacyData = defaults.data(forKey: legacyStorageKey)
+    else { return }
+
+    defaults.set(legacyData, forKey: storageKey)
+    defaults.removeObject(forKey: legacyStorageKey)
   }
 
   private static func loadAnchors(from defaults: UserDefaults, storageKey: String) -> [TrustedIssuerAnchor] {

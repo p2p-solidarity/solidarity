@@ -40,7 +40,7 @@ struct VCExportWrapper: Codable {
 }
 
 class VCSettingsViewModel: ObservableObject {
-  private static let logger = Logger(subsystem: "com.kidneyweakx.airmeishi", category: "VCSettingsViewModel")
+  private static let logger = Logger(subsystem: AppBranding.currentLoggerSubsystem, category: "VCSettingsViewModel")
 
   @Published var importedCount: Int = 0
   @Published var errorMessage: String?

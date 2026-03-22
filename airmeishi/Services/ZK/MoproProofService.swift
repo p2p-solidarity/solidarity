@@ -9,7 +9,7 @@
 import CryptoKit
 import Foundation
 
-#if canImport(OpenPassportSwift)
+#if ENABLE_OPEN_PASSPORT
   import OpenPassportSwift
 #endif
 
@@ -31,7 +31,7 @@ final class MoproProofService {
 
   /// Whether OpenPassport native proving is available in this build.
   static var isAvailable: Bool {
-    #if canImport(OpenPassportSwift)
+    #if ENABLE_OPEN_PASSPORT
       return true
     #else
       return false
@@ -56,7 +56,7 @@ final class MoproProofService {
     let start = DispatchTime.now()
 
     // Try OpenPassport proving first.
-    #if canImport(OpenPassportSwift)
+    #if ENABLE_OPEN_PASSPORT
     if let result = await generateWithOpenPassport(
       documentHash: documentHash,
       mrzDigest: mrzDigest,
@@ -96,7 +96,7 @@ final class MoproProofService {
 
   // MARK: - OpenPassport Native Proof
 
-  #if canImport(OpenPassportSwift)
+  #if ENABLE_OPEN_PASSPORT
     private struct DisclosureWitness {
       let inputs: [String: [String]]
       let mrzHashHex: String

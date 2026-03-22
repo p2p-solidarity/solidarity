@@ -13,7 +13,7 @@ final class MRZScannerService: NSObject, ObservableObject {
 
   private let captureSession = AVCaptureSession()
   private let videoOutput = AVCaptureVideoDataOutput()
-  private let processingQueue = DispatchQueue(label: "com.airmeishi.mrz-scanner", qos: .userInitiated)
+  private let processingQueue = DispatchQueue(label: "com.solidarity.mrz-scanner", qos: .userInitiated)
   private let _isProcessingFrame = OSAllocatedUnfairLock(initialState: false)
 
   // MARK: - Session Setup

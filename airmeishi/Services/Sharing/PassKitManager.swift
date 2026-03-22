@@ -486,11 +486,11 @@ struct PassRevocation: Codable {
 
 extension PassKitManager {
   /// Generate a simple import URL string that contains the name and job title.
-  /// Example: airmeishi://contact?name=John%20Doe&job=Engineer
+  /// Example: solidarity://contact?name=John%20Doe&job=Engineer
   func generateImportString(for businessCard: BusinessCard, sharingLevel: SharingLevel) -> String {
     let filtered = businessCard.filteredCard(for: sharingLevel)
     var components = URLComponents()
-    components.scheme = "airmeishi"
+    components.scheme = AppBranding.currentScheme
     components.host = "contact"
 
     var queryItems: [URLQueryItem] = [
@@ -508,7 +508,10 @@ extension PassKitManager {
     components.queryItems = queryItems
 
     return components.url?.absoluteString
-      ?? "airmeishi://contact?name=\(urlEncode(filtered.name))&job=\(urlEncode(filtered.title ?? ""))"
+      ?? AppBranding.contactURL(
+        name: urlEncode(filtered.name),
+        job: urlEncode(filtered.title ?? "")
+      )
   }
 
   private func urlEncode(_ value: String) -> String {

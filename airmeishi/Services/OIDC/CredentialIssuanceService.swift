@@ -75,7 +75,7 @@ struct IssuanceResult {
 /// OID4VCI client implementing the pre-authorized code flow.
 final class CredentialIssuanceService {
   static let shared = CredentialIssuanceService()
-  private static let logger = Logger(subsystem: "com.kidneyweakx.airmeishi", category: "OID4VCI")
+  private static let logger = Logger(subsystem: AppBranding.currentLoggerSubsystem, category: "OID4VCI")
 
   private let keychain = KeychainService.shared
   private let didService = DIDService()

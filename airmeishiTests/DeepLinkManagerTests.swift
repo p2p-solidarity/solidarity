@@ -41,7 +41,7 @@ class DeepLinkManagerTests: XCTestCase {
         
         // Then
         XCTAssertNotNil(shareURL)
-        XCTAssertTrue(shareURL?.absoluteString.contains("airmeishi.app") == true)
+        XCTAssertTrue(shareURL?.absoluteString.contains("solidarity.gg") == true)
         XCTAssertTrue(shareURL?.absoluteString.contains("/share") == true)
         XCTAssertTrue(shareURL?.absoluteString.contains("card=") == true)
         XCTAssertTrue(shareURL?.absoluteString.contains("level=professional") == true)
@@ -53,7 +53,7 @@ class DeepLinkManagerTests: XCTestCase {
         
         // Then
         XCTAssertNotNil(appClipURL)
-        XCTAssertTrue(appClipURL?.absoluteString.contains("airmeishi.app/clip") == true)
+        XCTAssertTrue(appClipURL?.absoluteString.contains("solidarity.gg/clip") == true)
         XCTAssertTrue(appClipURL?.absoluteString.contains("card=") == true)
         XCTAssertTrue(appClipURL?.absoluteString.contains("level=professional") == true)
         XCTAssertTrue(appClipURL?.absoluteString.contains("source=qr") == true)
@@ -65,9 +65,17 @@ class DeepLinkManagerTests: XCTestCase {
         
         // Then
         XCTAssertNotNil(tempURL)
-        XCTAssertTrue(tempURL?.absoluteString.contains("airmeishi.app") == true)
+        XCTAssertTrue(tempURL?.absoluteString.contains("solidarity.gg") == true)
         XCTAssertTrue(tempURL?.absoluteString.contains("/temp") == true)
         XCTAssertTrue(tempURL?.absoluteString.contains("expires=") == true)
+    }
+
+    func testHandleSolidarityContactURL() throws {
+        let url = URL(string: "solidarity://contact?name=Solid%20Tester&job=Builder")!
+
+        let handled = deepLinkManager.handleIncomingURL(url)
+
+        XCTAssertTrue(handled)
     }
     
     func testCreateShareURLWithDifferentSharingLevels() throws {

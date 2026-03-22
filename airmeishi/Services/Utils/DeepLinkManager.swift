@@ -22,8 +22,8 @@ class DeepLinkManager: DeepLinkManagerProtocol, ObservableObject {
   @Published var lastReceivedCard: BusinessCard?
   @Published var pendingAction: DeepLinkAction?
 
-  private let baseURL = "https://solidarity.gg"
-  private let appClipURL = "https://solidarity.gg/clip"
+  private let baseURL = AppBranding.currentBaseURL
+  private let appClipURL = AppBranding.currentAppClipURL
 
   private let cardManager = CardManager.shared
   private let oidcService = OIDCService.shared
@@ -47,8 +47,7 @@ class DeepLinkManager: DeepLinkManagerProtocol, ObservableObject {
       return false
     }
 
-    // Check for airmeishi:// custom URL scheme
-    if components.scheme == "airmeishi" {
+    if AppBranding.isSupportedAppScheme(components.scheme) {
       return handleCustomSchemeURL(components)
     }
 
@@ -182,7 +181,6 @@ class DeepLinkManager: DeepLinkManagerProtocol, ObservableObject {
   private func handleCustomSchemeURL(_ components: URLComponents) -> Bool {
     print("Handling custom scheme URL: \(components)")
 
-    // Handle airmeishi://contact?name=...&job=...
     if components.host == "contact" {
       return handleContactSchemeURL(components)
     } else if components.host == "oidc", let url = components.url {
@@ -259,7 +257,7 @@ class DeepLinkManager: DeepLinkManagerProtocol, ObservableObject {
       case .success:
         lastReceivedCard = businessCard
         pendingAction = .showReceivedCard(businessCard)
-        print("Successfully received card from airmeishi:// URL: \(contactName)")
+        print("Successfully received card from app URL: \(contactName)")
 
       case .failure(let error):
         pendingAction = .showError("Failed to save card: \(error.localizedDescription)")

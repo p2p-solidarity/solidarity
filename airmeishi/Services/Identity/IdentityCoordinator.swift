@@ -34,7 +34,7 @@ final class IdentityCoordinator: ObservableObject {
   private let semaphoreManager: SemaphoreIdentityManager
   private let groupManager: SemaphoreGroupManager
   private let cacheStore: IdentityCacheStore
-  private let queue = DispatchQueue(label: "com.kidneyweakx.airmeishi.identity-coordinator", qos: .userInitiated)
+  private let queue = DispatchQueue(label: "com.kidneyweakx.solidarity.identity-coordinator", qos: .userInitiated)
   private let importHelper: IdentityImportHelper
   private let verificationSubject: CurrentValueSubject<[UUID: VerificationStatus], Never>
   private let verificationUpdateSubject = PassthroughSubject<IdentityState.VerificationEvent, Never>()

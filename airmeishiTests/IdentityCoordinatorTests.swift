@@ -19,8 +19,8 @@ final class IdentityCoordinatorTests: XCTestCase {
             id: UUID().uuidString,
             state: stateId,
             nonce: UUID().uuidString,
-            clientId: "airmeishi://oidc/callback",
-            redirectUri: "airmeishi://oidc/callback",
+            clientId: "solidarity://oidc/callback",
+            redirectUri: "solidarity://oidc/callback",
             responseType: "vp_token",
             presentationDefinition: .init(
                 id: "test",

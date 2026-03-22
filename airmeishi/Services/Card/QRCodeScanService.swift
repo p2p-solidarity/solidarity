@@ -25,7 +25,7 @@ final class QRCodeScanService: NSObject {
   private let scanStateLock = NSLock()
   private var isProcessingScan = false
 
-  private let sessionQueue = DispatchQueue(label: "app.airmeishi.camera.session.queue")
+  private let sessionQueue = DispatchQueue(label: "app.solidarity.camera.session.queue")
 
   // MARK: - Scanning Lifecycle
 
@@ -115,7 +115,7 @@ final class QRCodeScanService: NSObject {
       break
     }
 
-    if let url = URL(string: data), url.scheme == "airmeishi", url.host == "oidc" {
+    if let url = URL(string: data), AppBranding.isSupportedAppScheme(url.scheme), url.host == "oidc" {
       handleOIDCResponse(url: url)
       return
     }
@@ -125,7 +125,7 @@ final class QRCodeScanService: NSObject {
       return
     }
 
-    if data.hasPrefix("airmeishi://") {
+    if AppBranding.isSupportedDeepLink(data) {
       handleDeepLink(data)
       return
     }
@@ -426,7 +426,7 @@ final class QRCodeScanService: NSObject {
         }
       }
     } else {
-      emitOutcome(.failure(.sharingError("Invalid airmeishi:// URL format")))
+      emitOutcome(.failure(.sharingError("Invalid app deep link URL format")))
     }
   }
 

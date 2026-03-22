@@ -65,12 +65,13 @@ class ProximityManager: NSObject, ProximityManagerProtocol, ObservableObject {
   internal var retryWorkItems: [MCPeerID: DispatchWorkItem] = [:]
 
   // MARK: - Internal Properties
-  internal let serviceType = "airmeishi-share"
+  internal let serviceType = AppBranding.currentProximityServiceType
   internal let maxPeers = 8
 
   internal var session: MCSession
   internal var advertiser: MCNearbyServiceAdvertiser?
   internal var browser: MCNearbyServiceBrowser?
+  internal var legacyBrowser: MCNearbyServiceBrowser?
   internal var localPeerID: MCPeerID
 
   internal var currentCard: BusinessCard?

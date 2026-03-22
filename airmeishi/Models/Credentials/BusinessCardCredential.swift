@@ -93,7 +93,7 @@ struct BusinessCardSnapshot: Codable, Equatable {
 
 /// Builds JWT header and payload claims for a self-issued Business Card credential.
 struct BusinessCardCredentialClaims {
-  static let logger = Logger(subsystem: "com.kidneyweakx.airmeishi", category: "BusinessCardCredentialClaims")
+  static let logger = Logger(subsystem: AppBranding.currentLoggerSubsystem, category: "BusinessCardCredentialClaims")
   static let contexts = [
     "https://www.w3.org/2018/credentials/v1",
     "https://schema.org",
