@@ -22,22 +22,16 @@ struct ShoutoutView: View {
   @State private var selectedContact: Contact?
   @State private var isSakuraAnimating = false
   @State private var displayMode: DisplayMode = .grid
+  @Environment(\.colorScheme) private var colorScheme
 
   var body: some View {
-    NavigationView {
+    NavigationStack {
       ZStack {
-        // Dark gradient background with lightning effect
-        LinearGradient(
-          colors: [
-            Color.black,
-            Color.purple.opacity(0.15),
-            Color.blue.opacity(0.1),
-            Color.black,
-          ],
-          startPoint: .topLeading,
-          endPoint: .bottomTrailing
-        )
-        .ignoresSafeArea()
+        Color.Theme.pageBg.ignoresSafeArea()
+
+        // Decorative background
+        DecorativeBlobs()
+          .offset(x: -80, y: -120)
 
         VStack(spacing: 0) {
           // Header
@@ -64,7 +58,6 @@ struct ShoutoutView: View {
       }
 
     }
-    .preferredColorScheme(.dark)
     .onAppear {
       startSakuraAnimation()
     }
@@ -79,12 +72,12 @@ struct ShoutoutView: View {
     VStack(spacing: 16) {
       // Animated sakura title with grid/list toggle
       HStack {
-        SakuraIconView(size: 28, color: .pink, isAnimating: isSakuraAnimating)
+        SakuraIconView(size: 28, color: Color.Theme.accentRose, isAnimating: isSakuraAnimating)
 
         Text("Sakura Ichigoichie")
           .font(.title2)
           .fontWeight(.bold)
-          .foregroundColor(.white)
+          .foregroundColor(Color.Theme.textPrimary)
 
         Spacer()
 
@@ -93,19 +86,19 @@ struct ShoutoutView: View {
           Button(action: { displayMode = .grid }) {
             Image(systemName: "square.grid.2x2")
               .padding(8)
-              .background(displayMode == .grid ? Color.pink.opacity(0.2) : Color.clear)
+              .background(displayMode == .grid ? Color.Theme.accentRose.opacity(0.2) : Color.clear)
               .cornerRadius(8)
           }
 
           Button(action: { displayMode = .list }) {
             Image(systemName: "list.bullet")
               .padding(8)
-              .background(displayMode == .list ? Color.pink.opacity(0.2) : Color.clear)
+              .background(displayMode == .list ? Color.Theme.accentRose.opacity(0.2) : Color.clear)
               .cornerRadius(8)
           }
         }
-        .foregroundColor(.white)
-        .background(Color.white.opacity(0.1))
+        .foregroundColor(Color.Theme.textPrimary)
+        .background(Color.Theme.searchBg)
         .cornerRadius(8)
 
         Button(action: {
@@ -115,7 +108,7 @@ struct ShoutoutView: View {
         }) {
           Image(systemName: "arrow.triangle.2.circlepath")
             .font(.title2)
-            .foregroundColor(.white)
+            .foregroundColor(Color.Theme.textPrimary)
         }
 
         // Live count with pulsing effect
@@ -131,7 +124,7 @@ struct ShoutoutView: View {
 
           Text("\(chartService.filteredData.count) cards")
             .font(.caption)
-            .foregroundColor(.gray)
+            .foregroundColor(Color.Theme.textSecondary)
         }
       }
       .padding(.horizontal)
@@ -139,18 +132,18 @@ struct ShoutoutView: View {
       // Search bar with sakura accent
       HStack {
         Image(systemName: "magnifyingglass")
-          .foregroundColor(.pink)
+          .foregroundColor(Color.Theme.accentRose)
 
         TextField("Search contacts, companies...", text: $chartService.searchQuery)
           .textFieldStyle(PlainTextFieldStyle())
-          .foregroundColor(.white)
+          .foregroundColor(Color.Theme.textPrimary)
 
         if !chartService.searchQuery.isEmpty {
           Button(action: {
             chartService.searchQuery = ""
           }) {
             Image(systemName: "xmark.circle.fill")
-              .foregroundColor(.gray)
+              .foregroundColor(Color.Theme.textSecondary)
           }
         }
 
@@ -173,7 +166,7 @@ struct ShoutoutView: View {
               Text(chartService.filterOption.rawValue)
             }
             .font(.caption)
-            .foregroundColor(.gray)
+            .foregroundColor(Color.Theme.textSecondary)
           }
         )
       }
@@ -181,12 +174,12 @@ struct ShoutoutView: View {
       .padding(.vertical, 12)
       .background(
         RoundedRectangle(cornerRadius: 12)
-          .fill(Color.white.opacity(0.08))
+          .fill(Color.Theme.searchBg)
           .overlay(
             RoundedRectangle(cornerRadius: 12)
               .stroke(
                 LinearGradient(
-                  colors: [.pink.opacity(0.5), .purple.opacity(0.5)],
+                  colors: [Color.Theme.accentRose.opacity(0.5), Color.Theme.dustyMauve.opacity(0.5)],
                   startPoint: .leading,
                   endPoint: .trailing
                 ),
@@ -207,13 +200,13 @@ struct ShoutoutView: View {
         Circle()
           .fill(
             LinearGradient(
-              colors: [.pink, .purple],
+              colors: [Color.Theme.accentRose, Color.Theme.dustyMauve],
               startPoint: .topLeading,
               endPoint: .bottomTrailing
             )
           )
           .frame(width: 50, height: 50)
-          .shadow(color: .pink.opacity(0.5), radius: 6, x: 0, y: 0)
+          .shadow(color: Color.Theme.accentRose.opacity(0.4), radius: 6, x: 0, y: 0)
 
         SakuraIconView(size: 20, color: .white, isAnimating: isSakuraAnimating)
       }
@@ -226,16 +219,16 @@ struct ShoutoutView: View {
     ScrollView {
       if chartService.filteredData.isEmpty {
         VStack(spacing: 16) {
-          SakuraIconView(size: 60, color: .gray, isAnimating: false)
+          SakuraIconView(size: 60, color: Color.Theme.textSecondary, isAnimating: false)
             .padding(.top, 60)
 
           Text("No cards found")
             .font(.title3)
-            .foregroundColor(.gray)
+            .foregroundColor(Color.Theme.textSecondary)
 
           Text("Try adjusting your search or filters")
             .font(.caption)
-            .foregroundColor(.gray.opacity(0.6))
+            .foregroundColor(Color.Theme.textTertiary)
         }
       } else {
         switch displayMode {

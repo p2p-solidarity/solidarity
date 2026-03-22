@@ -18,11 +18,11 @@ enum ScanLanguage: String, CaseIterable, Identifiable {
   var displayName: String {
     switch self {
     case .traditionalChinese:
-      return "繁體中文"
+      return String(localized: "Traditional Chinese")
     case .japanese:
-      return "日本語"
+      return String(localized: "Japanese")
     case .english:
-      return "English"
+      return String(localized: "English")
     }
   }
 

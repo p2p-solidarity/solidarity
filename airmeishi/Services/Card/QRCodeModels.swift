@@ -14,17 +14,23 @@ struct QRPlaintextPayload: Codable {
   let shareId: UUID
   let createdAt: Date
   let expirationDate: Date?
+  let proofClaims: [String]?
+  let selectedFields: [BusinessCardField]?
 
   init(
     snapshot: BusinessCardSnapshot,
     shareId: UUID,
     createdAt: Date = Date(),
-    expirationDate: Date?
+    expirationDate: Date?,
+    proofClaims: [String]? = nil,
+    selectedFields: [BusinessCardField]? = nil
   ) {
     self.snapshot = snapshot
     self.shareId = shareId
     self.createdAt = createdAt
     self.expirationDate = expirationDate
+    self.proofClaims = proofClaims
+    self.selectedFields = selectedFields
   }
 }
 
@@ -59,6 +65,7 @@ struct QRCodeEnvelope: Codable {
   let version: Int
   let format: SharingFormat
   let sharingLevel: SharingLevel
+  let selectedFields: [BusinessCardField]?
   let shareId: UUID
   let plaintext: QRPlaintextPayload?
   let encryptedPayload: String?
@@ -67,6 +74,7 @@ struct QRCodeEnvelope: Codable {
   init(
     format: SharingFormat,
     sharingLevel: SharingLevel,
+    selectedFields: [BusinessCardField]? = nil,
     shareId: UUID,
     plaintext: QRPlaintextPayload? = nil,
     encryptedPayload: String? = nil,
@@ -76,6 +84,7 @@ struct QRCodeEnvelope: Codable {
     self.version = version
     self.format = format
     self.sharingLevel = sharingLevel
+    self.selectedFields = selectedFields
     self.shareId = shareId
     self.plaintext = plaintext
     self.encryptedPayload = encryptedPayload
@@ -85,7 +94,11 @@ struct QRCodeEnvelope: Codable {
 
 struct QRSharingPayload: Codable {
   let businessCard: BusinessCard
+  /// Legacy field retained for backward compatibility. Do not use for proof scope binding.
   let sharingLevel: SharingLevel
+  let selectedFields: [BusinessCardField]?
+  /// Canonical proof scope bound to selected fields.
+  let scope: String?
   let expirationDate: Date
   let shareId: UUID
   let createdAt: Date
@@ -96,10 +109,13 @@ struct QRSharingPayload: Codable {
   let sdProof: SelectiveDisclosureProof?
   let format: SharingFormat?
   let sealedRoute: String?
+  let proofClaims: [String]?
 
   init(
     businessCard: BusinessCard,
     sharingLevel: SharingLevel,
+    selectedFields: [BusinessCardField]? = nil,
+    scope: String? = nil,
     expirationDate: Date,
     shareId: UUID,
     createdAt: Date,
@@ -109,10 +125,13 @@ struct QRSharingPayload: Codable {
     issuerProof: String? = nil,
     sdProof: SelectiveDisclosureProof? = nil,
     format: SharingFormat? = nil,
-    sealedRoute: String? = nil
+    sealedRoute: String? = nil,
+    proofClaims: [String]? = nil
   ) {
     self.businessCard = businessCard
     self.sharingLevel = sharingLevel
+    self.selectedFields = selectedFields
+    self.scope = scope
     self.expirationDate = expirationDate
     self.shareId = shareId
     self.createdAt = createdAt
@@ -123,5 +142,6 @@ struct QRSharingPayload: Codable {
     self.sdProof = sdProof
     self.format = format
     self.sealedRoute = sealedRoute
+    self.proofClaims = proofClaims
   }
 }

@@ -12,6 +12,7 @@ import Foundation
 @MainActor
 protocol ContactRepositoryProtocol {
   func addContact(_ contact: Contact) -> CardResult<Contact>
+  func resolvePendingMerge(accept: Bool) -> CardResult<Contact?>
   func updateContact(_ contact: Contact) -> CardResult<Contact>
   func deleteContact(id: UUID) -> CardResult<Void>
   func getContact(id: UUID) -> CardResult<Contact>
@@ -25,11 +26,17 @@ protocol ContactRepositoryProtocol {
 /// Repository for managing received business cards with encrypted storage
 @MainActor
 class ContactRepository: ContactRepositoryProtocol, ObservableObject {
+  struct MergeProposal: Equatable {
+    let existing: Contact
+    let incoming: Contact
+  }
+
   static let shared = ContactRepository()
 
   @Published private(set) var contacts: [Contact] = []
   @Published private(set) var isLoading = false
   @Published private(set) var lastError: CardError?
+  @Published private(set) var pendingMergeProposal: MergeProposal?
 
   private let storageManager = StorageManager.shared
   private var cancellables = Set<AnyCancellable>()
@@ -50,41 +57,9 @@ class ContactRepository: ContactRepositoryProtocol, ObservableObject {
   func addContact(_ contact: Contact) -> CardResult<Contact> {
     // Check for duplicate business card IDs
     if let existingIndex = contacts.firstIndex(where: { $0.businessCard.id == contact.businessCard.id }) {
-      // Update existing contact instead of returning error
       let existingContact = contacts[existingIndex]
-
-      // Create updated contact with merged data
-      let updatedContact = Contact(
-        id: existingContact.id,  // Preserve existing Contact ID
-        businessCard: contact.businessCard,  // Update business card info
-        receivedAt: existingContact.receivedAt,  // Keep original received date
-        source: existingContact.source,  // Keep original source
-        tags: mergeTags(existingContact.tags, newTags: contact.tags),  // Merge tags
-        notes: contact.notes ?? existingContact.notes,  // Prefer new notes, fallback to existing
-        verificationStatus: contact.verificationStatus,  // Update verification status
-        lastInteraction: Date(),  // Update last interaction time
-        sealedRoute: contact.sealedRoute ?? existingContact.sealedRoute,
-        pubKey: contact.pubKey ?? existingContact.pubKey,
-        signPubKey: contact.signPubKey ?? existingContact.signPubKey
-      )
-
-      // Store original for rollback
-      let originalContact = contacts[existingIndex]
-
-      // Update in local array
-      contacts[existingIndex] = updatedContact
-
-      // Save to storage
-      let saveResult = saveContactsToStorage()
-
-      switch saveResult {
-      case .success:
-        return .success(updatedContact)
-      case .failure(let error):
-        // Rollback on failure
-        contacts[existingIndex] = originalContact
-        return .failure(error)
-      }
+      pendingMergeProposal = MergeProposal(existing: existingContact, incoming: contact)
+      return .failure(.validationError("Duplicate contact found. Merge confirmation required."))
     }
 
     // Add new contact to local array
@@ -99,6 +74,36 @@ class ContactRepository: ContactRepositoryProtocol, ObservableObject {
     case .failure(let error):
       // Rollback on failure
       contacts.removeAll { $0.id == contact.id }
+      return .failure(error)
+    }
+  }
+
+  func resolvePendingMerge(accept: Bool) -> CardResult<Contact?> {
+    guard let proposal = pendingMergeProposal else {
+      return .success(nil)
+    }
+
+    defer {
+      pendingMergeProposal = nil
+    }
+
+    guard accept else {
+      return .success(nil)
+    }
+
+    guard let existingIndex = contacts.firstIndex(where: { $0.id == proposal.existing.id }) else {
+      return .failure(.notFound("Existing contact not found for merge"))
+    }
+
+    let updatedContact = mergedContact(existing: proposal.existing, incoming: proposal.incoming)
+    let originalContact = contacts[existingIndex]
+    contacts[existingIndex] = updatedContact
+
+    switch saveContactsToStorage() {
+    case .success:
+      return .success(updatedContact)
+    case .failure(let error):
+      contacts[existingIndex] = originalContact
       return .failure(error)
     }
   }
@@ -253,6 +258,22 @@ class ContactRepository: ContactRepositoryProtocol, ObservableObject {
     var merged = Set(existingTags)
     merged.formUnion(newTags)
     return Array(merged).sorted()
+  }
+
+  private func mergedContact(existing: Contact, incoming: Contact) -> Contact {
+    Contact(
+      id: existing.id,
+      businessCard: incoming.businessCard,
+      receivedAt: existing.receivedAt,
+      source: existing.source,
+      tags: mergeTags(existing.tags, newTags: incoming.tags),
+      notes: incoming.notes ?? existing.notes,
+      verificationStatus: incoming.verificationStatus,
+      lastInteraction: Date(),
+      sealedRoute: incoming.sealedRoute ?? existing.sealedRoute,
+      pubKey: incoming.pubKey ?? existing.pubKey,
+      signPubKey: incoming.signPubKey ?? existing.signPubKey
+    )
   }
 
   /// Load contacts from encrypted storage

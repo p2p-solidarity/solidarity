@@ -127,3 +127,36 @@ struct PendingInvitation {
   let peerID: MCPeerID
   let receivedAt: Date
 }
+
+struct PendingExchangeRequest: Identifiable {
+  let requestId: UUID
+  let fromPeer: MCPeerID
+  let payload: ExchangeRequestPayload
+
+  var id: UUID { requestId }
+}
+
+struct ExchangeCompletionEvent: Identifiable {
+  let id = UUID()
+  let peerName: String
+  let card: BusinessCard
+  let requestId: UUID
+  let mySignature: String
+  let theirSignature: String
+  let myMessage: String?
+  let theirMessage: String?
+}
+
+struct ExchangeEdgePersistencePayload {
+  let card: BusinessCard
+  let sourcePeerName: String
+  let verificationStatus: VerificationStatus
+  let sealedRoute: String?
+  let pubKey: String?
+  let signPubKey: String?
+  let mySignature: String
+  let theirSignature: String
+  let myMessage: String?
+  let theirMessage: String?
+  let timestamp: Date
+}

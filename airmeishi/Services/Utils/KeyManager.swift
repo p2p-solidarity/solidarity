@@ -15,7 +15,6 @@ class KeyManager {
   static let shared = KeyManager()
 
   private let keychain = KeychainManager()
-  private let keyTag = "com.kidneyweakx.airmeishi.keys"
 
   // Key identifiers
   private enum KeyIdentifier: String, CaseIterable {
@@ -27,6 +26,32 @@ class KeyManager {
 
     var keychainTag: String {
       return "com.kidneyweakx.airmeishi.keys.\(self.rawValue)"
+    }
+
+    var modernTag: String {
+      switch self {
+      case .masterKey:
+        return "solidarity.master"
+      case .signingKey:
+        return "solidarity.master.signing"
+      case .domainKey:
+        return "solidarity.rp.default"
+      case .verificationKey:
+        return "solidarity.master.verification"
+      case .proofKey:
+        return "solidarity.master.proof"
+      }
+    }
+
+    var readTags: [String] {
+      if keychainTag == modernTag {
+        return [keychainTag]
+      }
+      return [keychainTag, modernTag]
+    }
+
+    var allTags: [String] {
+      Array(Set(readTags))
     }
   }
 
@@ -94,7 +119,9 @@ class KeyManager {
   func rotateKeys() -> CardResult<Void> {
     // Delete existing keys
     for keyId in KeyIdentifier.allCases {
-      _ = keychain.deleteKey(tag: keyId.keychainTag)
+      for tag in keyId.allTags {
+        _ = keychain.deleteKey(tag: tag)
+      }
     }
 
     // Reinitialize with new keys
@@ -144,9 +171,11 @@ class KeyManager {
     var hasError = false
 
     for keyId in KeyIdentifier.allCases {
-      let result = keychain.deleteKey(tag: keyId.keychainTag)
-      if case .failure = result {
-        hasError = true
+      for tag in keyId.allTags {
+        let result = keychain.deleteKey(tag: tag)
+        if case .failure = result {
+          hasError = true
+        }
       }
     }
 
@@ -156,10 +185,8 @@ class KeyManager {
   // MARK: - Private Methods
 
   private func getOrCreateMasterKey() -> CardResult<SymmetricKey> {
-    let tag = KeyIdentifier.masterKey.keychainTag
-
-    // Try to retrieve existing key
-    let retrieveResult = keychain.retrieveSymmetricKey(tag: tag)
+    let identifier = KeyIdentifier.masterKey
+    let retrieveResult = retrieveSymmetricKey(identifier)
 
     switch retrieveResult {
     case .success(let key):
@@ -168,7 +195,7 @@ class KeyManager {
     case .failure:
       // Generate new key
       let newKey = SymmetricKey(size: .bits256)
-      let storeResult = keychain.storeSymmetricKey(newKey, tag: tag)
+      let storeResult = storeSymmetricKey(newKey, identifier: identifier)
 
       switch storeResult {
       case .success:
@@ -182,10 +209,8 @@ class KeyManager {
   private func getOrCreateSigningKeyPair() -> CardResult<
     (privateKey: P256.Signing.PrivateKey, publicKey: P256.Signing.PublicKey)
   > {
-    let tag = KeyIdentifier.signingKey.keychainTag
-
-    // Try to retrieve existing key
-    let retrieveResult = keychain.retrievePrivateKey(tag: tag)
+    let identifier = KeyIdentifier.signingKey
+    let retrieveResult = retrievePrivateKey(identifier)
 
     switch retrieveResult {
     case .success(let privateKey):
@@ -194,7 +219,7 @@ class KeyManager {
     case .failure:
       // Generate new key pair
       let newPrivateKey = P256.Signing.PrivateKey()
-      let storeResult = keychain.storePrivateKey(newPrivateKey, tag: tag)
+      let storeResult = storePrivateKey(newPrivateKey, identifier: identifier)
 
       switch storeResult {
       case .success:
@@ -206,10 +231,8 @@ class KeyManager {
   }
 
   private func getOrCreateDomainKey() -> CardResult<SymmetricKey> {
-    let tag = KeyIdentifier.domainKey.keychainTag
-
-    // Try to retrieve existing key
-    let retrieveResult = keychain.retrieveSymmetricKey(tag: tag)
+    let identifier = KeyIdentifier.domainKey
+    let retrieveResult = retrieveSymmetricKey(identifier)
 
     switch retrieveResult {
     case .success(let key):
@@ -218,7 +241,7 @@ class KeyManager {
     case .failure:
       // Generate new key
       let newKey = SymmetricKey(size: .bits256)
-      let storeResult = keychain.storeSymmetricKey(newKey, tag: tag)
+      let storeResult = storeSymmetricKey(newKey, identifier: identifier)
 
       switch storeResult {
       case .success:
@@ -227,6 +250,50 @@ class KeyManager {
         return .failure(error)
       }
     }
+  }
+
+  private func retrieveSymmetricKey(_ identifier: KeyIdentifier) -> CardResult<SymmetricKey> {
+    for tag in identifier.readTags {
+      let retrieve = keychain.retrieveSymmetricKey(tag: tag)
+      if case .success(let key) = retrieve {
+        if tag != identifier.keychainTag {
+          _ = keychain.storeSymmetricKey(key, tag: identifier.keychainTag)
+        }
+        return .success(key)
+      }
+    }
+    return .failure(.encryptionError("Failed to retrieve symmetric key from compatible tags"))
+  }
+
+  private func retrievePrivateKey(_ identifier: KeyIdentifier) -> CardResult<P256.Signing.PrivateKey> {
+    for tag in identifier.readTags {
+      let retrieve = keychain.retrievePrivateKey(tag: tag)
+      if case .success(let key) = retrieve {
+        if tag != identifier.keychainTag {
+          _ = keychain.storePrivateKey(key, tag: identifier.keychainTag)
+        }
+        return .success(key)
+      }
+    }
+    return .failure(.encryptionError("Failed to retrieve private key from compatible tags"))
+  }
+
+  private func storeSymmetricKey(_ key: SymmetricKey, identifier: KeyIdentifier) -> CardResult<Void> {
+    let primary = keychain.storeSymmetricKey(key, tag: identifier.keychainTag)
+    guard case .success = primary else { return primary }
+    if identifier.modernTag != identifier.keychainTag {
+      _ = keychain.storeSymmetricKey(key, tag: identifier.modernTag)
+    }
+    return .success(())
+  }
+
+  private func storePrivateKey(_ key: P256.Signing.PrivateKey, identifier: KeyIdentifier) -> CardResult<Void> {
+    let primary = keychain.storePrivateKey(key, tag: identifier.keychainTag)
+    guard case .success = primary else { return primary }
+    if identifier.modernTag != identifier.keychainTag {
+      _ = keychain.storePrivateKey(key, tag: identifier.modernTag)
+    }
+    return .success(())
   }
 }
 
@@ -258,7 +325,8 @@ private class KeychainManager {
       kSecClass as String: kSecClassGenericPassword,
       kSecAttrAccount as String: tag,
       kSecValueData as String: keyData,
-      kSecAttrAccessible as String: kSecAttrAccessibleWhenUnlockedThisDeviceOnly,
+      kSecAttrAccessible as String: kSecAttrAccessibleWhenUnlocked,
+      kSecAttrSynchronizable as String: kCFBooleanTrue as Any,
     ]
 
     // Delete existing key first
@@ -299,7 +367,8 @@ private class KeychainManager {
       kSecClass as String: kSecClassGenericPassword,
       kSecAttrAccount as String: tag,
       kSecValueData as String: keyData,
-      kSecAttrAccessible as String: kSecAttrAccessibleWhenUnlockedThisDeviceOnly,
+      kSecAttrAccessible as String: kSecAttrAccessibleWhenUnlocked,
+      kSecAttrSynchronizable as String: kCFBooleanTrue as Any,
     ]
 
     // Delete existing key first

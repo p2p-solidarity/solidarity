@@ -67,7 +67,7 @@ struct BusinessCard: Codable, Identifiable, Equatable, Hashable {
   /// Get filtered business card based on sharing preferences for a specific sharing level
   func filteredCard(for sharingLevel: SharingLevel) -> BusinessCard {
     var filtered = self
-    let allowedFields = sharingPreferences.fieldsForLevel(sharingLevel)
+    let allowedFields = sharingPreferences.effectiveFields(preferredLevel: sharingLevel)
 
     if !allowedFields.contains(.name) { filtered.name = "" }
     if !allowedFields.contains(.title) { filtered.title = nil }
@@ -81,6 +81,20 @@ struct BusinessCard: Codable, Identifiable, Equatable, Hashable {
     // If sharing level is personal/professional, we might want to strip group context
     // unless explicitly handled. For now, we keep it as it's part of the credential.
 
+    return filtered
+  }
+
+  /// Get filtered business card based on explicit field set
+  func filteredCard(for fields: Set<BusinessCardField>) -> BusinessCard {
+    var filtered = self
+    if !fields.contains(.name) { filtered.name = "" }
+    if !fields.contains(.title) { filtered.title = nil }
+    if !fields.contains(.company) { filtered.company = nil }
+    if !fields.contains(.email) { filtered.email = nil }
+    if !fields.contains(.phone) { filtered.phone = nil }
+    if !fields.contains(.profileImage) { filtered.profileImage = nil }
+    if !fields.contains(.socialNetworks) { filtered.socialNetworks = [] }
+    if !fields.contains(.skills) { filtered.skills = [] }
     return filtered
   }
 }
@@ -214,6 +228,14 @@ struct SharingPreferences: Codable, Equatable, Hashable {
       return personalFields
     }
   }
+
+  /// Field toggles are the canonical source when all legacy levels carry the same set.
+  func effectiveFields(preferredLevel: SharingLevel) -> Set<BusinessCardField> {
+    if publicFields == professionalFields && professionalFields == personalFields {
+      return publicFields
+    }
+    return fieldsForLevel(preferredLevel)
+  }
 }
 
 // MARK: - Codable compatibility for SharingPreferences (handle missing keys)
@@ -298,7 +320,8 @@ enum BusinessCardField: String, Codable, CaseIterable {
   }
 }
 
-/// Sharing levels for privacy control
+/// Legacy sharing-level marker kept for backward compatibility.
+/// Field toggles (`BusinessCardField`) are the canonical sharing controls.
 enum SharingLevel: String, Codable, CaseIterable {
   case `public` = "public"
   case professional = "professional"
@@ -404,21 +427,14 @@ extension BusinessCard {
   /// Sample business card for previews
   static var sample: BusinessCard {
     return BusinessCard(
-      name: "John Doe",
-      title: "Senior iOS Developer",
-      company: "Tech Corp",
-      email: "john.doe@techcorp.com",
-      phone: "+1 (555) 123-4567",
-      socialNetworks: [
-        SocialNetwork(platform: .linkedin, username: "johndoe", url: "https://linkedin.com/in/johndoe"),
-        SocialNetwork(platform: .github, username: "johndoe", url: "https://github.com/johndoe"),
-      ],
-      skills: [
-        Skill(name: "Swift", category: "Programming", proficiencyLevel: .expert),
-        Skill(name: "SwiftUI", category: "UI Framework", proficiencyLevel: .advanced),
-        Skill(name: "Core Data", category: "Database", proficiencyLevel: .intermediate),
-      ],
-      categories: ["Technology", "Mobile Development"]
+      name: "Solidarity User",
+      title: "Builder",
+      company: "Solidarity",
+      email: "hello@solidarity.id",
+      phone: "",
+      socialNetworks: [],
+      skills: [],
+      categories: []
     )
   }
 }

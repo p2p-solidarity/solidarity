@@ -13,6 +13,15 @@ struct AppearanceSettingsView: View {
 
   var body: some View {
     Form {
+      Section("Color Mode") {
+        Picker("Appearance", selection: $theme.appColorScheme) {
+          ForEach(AppColorScheme.allCases, id: \.self) { scheme in
+            Text(scheme.displayName).tag(scheme)
+          }
+        }
+        .pickerStyle(.segmented)
+      }
+
       Section("Card Accent Color") {
         colorGrid()
       }
@@ -28,7 +37,7 @@ struct AppearanceSettingsView: View {
             Text(animal.displayName).tag(Optional(animal))
           }
         }
-        .pickerStyle(.menu)
+        .pickerStyle(.navigationLink)
 
         if let animal = theme.selectedAnimal {
           Text(animal.personality)

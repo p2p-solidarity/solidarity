@@ -14,11 +14,17 @@ extension ProximityManager {
   // MARK: - Public Methods
 
   /// Start auto-pilot matching (Advertising + Browsing) with automatic connection and retries
-  func startMatching(with card: BusinessCard?, sharingLevel: SharingLevel = .professional) {
+  func startMatching(
+    with card: BusinessCard?,
+    sharingLevel: SharingLevel = .professional,
+    autoSendCardOnConnect: Bool = false
+  ) {
     autoConnectEnabled = true
+    self.autoSendCardOnConnect = autoSendCardOnConnect
 
     if let card = card {
-      startAdvertising(with: card, sharingLevel: sharingLevel)
+      let configuredCard = ShareSettingsStore.applyFields(to: card, level: sharingLevel)
+      startAdvertising(with: configuredCard)
     } else {
       startAdvertisingIdentity()
     }
@@ -30,6 +36,11 @@ extension ProximityManager {
   }
 
   /// Start advertising the current business card for proximity sharing
+  func startAdvertising(with card: BusinessCard) {
+    startAdvertising(with: card, sharingLevel: .public)
+  }
+
+  /// Legacy level-based entrypoint kept for backward compatibility.
   func startAdvertising(with card: BusinessCard, sharingLevel: SharingLevel) {
     guard !isAdvertising else { return }
 
@@ -37,7 +48,7 @@ extension ProximityManager {
     currentSharingLevel = sharingLevel
 
     // Create discovery info with card preview
-    let discoveryInfo = createDiscoveryInfo(for: card, level: sharingLevel)
+    let discoveryInfo = createDiscoveryInfo(for: card)
 
     advertiser = MCNearbyServiceAdvertiser(
       peer: localPeerID,
@@ -49,7 +60,7 @@ extension ProximityManager {
     advertiser?.startAdvertisingPeer()
 
     isAdvertising = true
-    connectionStatus = .advertising
+    updateConnectionStatus()
 
     print("Started advertising business card: \(card.name)")
   }
@@ -106,7 +117,7 @@ extension ProximityManager {
     browser?.startBrowsingForPeers()
 
     isBrowsing = true
-    connectionStatus = .browsing
+    updateConnectionStatus()
 
     print("Started browsing for nearby peers")
 
@@ -173,8 +184,9 @@ extension ProximityManager {
     return hasService
   }
 
-  internal func createDiscoveryInfo(for card: BusinessCard, level: SharingLevel) -> [String: String] {
-    let filteredCard = card.filteredCard(for: level)
+  internal func createDiscoveryInfo(for card: BusinessCard) -> [String: String] {
+    let selectedFields = ShareSettingsStore.enabledFields.sorted { $0.rawValue < $1.rawValue }
+    let filteredCard = card.filteredCard(for: Set(selectedFields))
 
     var info: [String: String] = [:]
     info["name"] = filteredCard.name
@@ -187,11 +199,14 @@ extension ProximityManager {
       info["company"] = company
     }
 
-    info["level"] = level.rawValue
+    // Legacy key retained for backward compatibility. Discovery semantics are field-based.
+    info["level"] = SharingLevel.public.rawValue
     info["timestamp"] = String(Int(Date().timeIntervalSince1970))
     // Announce ZK capability so browsers can show a badge before proof arrives
     info["zk"] = card.sharingPreferences.useZK ? "1" : "0"
-    let allowedCount = card.sharingPreferences.fieldsForLevel(level).count
+    info["selectedFields"] = selectedFields.map(\.rawValue).joined(separator: ",")
+    info["scope"] = ShareScopeResolver.scope(selectedFields: selectedFields, legacyLevel: nil)
+    let allowedCount = selectedFields.count
     info["zkf"] = String(allowedCount)
 
     return info

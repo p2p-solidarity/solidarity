@@ -33,129 +33,129 @@ enum CardError: Error, LocalizedError, Equatable, Codable {
   var errorDescription: String? {
     switch self {
     case .invalidData(let message):
-      return "Invalid data: \(message)"
+      return String(localized: "Invalid data: \(message)")
     case .storageError(let message):
-      return "Storage error: \(message)"
+      return String(localized: "Storage error: \(message)")
     case .encryptionError(let message):
-      return "Encryption error: \(message)"
+      return String(localized: "Encryption error: \(message)")
     case .networkError(let message):
-      return "Network error: \(message)"
+      return String(localized: "Network error: \(message)")
     case .passGenerationError(let message):
-      return "Pass generation error: \(message)"
+      return String(localized: "Pass generation error: \(message)")
     case .ocrError(let message):
-      return "OCR error: \(message)"
+      return String(localized: "OCR error: \(message)")
     case .sharingError(let message):
-      return "Sharing error: \(message)"
+      return String(localized: "Sharing error: \(message)")
     case .validationError(let message):
-      return "Validation error: \(message)"
+      return String(localized: "Validation error: \(message)")
     case .notFound(let message):
-      return "Not found: \(message)"
+      return String(localized: "Not found: \(message)")
     case .unauthorized(let message):
-      return "Unauthorized: \(message)"
+      return String(localized: "Unauthorized: \(message)")
     case .rateLimited(let message):
-      return "Rate limited: \(message)"
+      return String(localized: "Rate limited: \(message)")
     case .cryptographicError(let message):
-      return "Cryptographic error: \(message)"
+      return String(localized: "Cryptographic error: \(message)")
     case .domainVerificationError(let message):
-      return "Domain verification error: \(message)"
+      return String(localized: "Domain verification error: \(message)")
     case .proofGenerationError(let message):
-      return "Proof generation error: \(message)"
+      return String(localized: "Proof generation error: \(message)")
     case .proofVerificationError(let message):
-      return "Proof verification error: \(message)"
+      return String(localized: "Proof verification error: \(message)")
     case .keyManagementError(let message):
-      return "Key management error: \(message)"
+      return String(localized: "Key management error: \(message)")
     case .offlineError(let message):
-      return "Offline error: \(message)"
+      return String(localized: "Offline error: \(message)")
     case .syncError(let message):
-      return "Sync error: \(message)"
+      return String(localized: "Sync error: \(message)")
     case .configurationError(let message):
-      return "Configuration error: \(message)"
+      return String(localized: "Configuration error: \(message)")
     }
   }
 
   var recoverySuggestion: String? {
     switch self {
     case .invalidData:
-      return "Please check the data format and try again."
+      return String(localized: "Please check the data format and try again.")
     case .storageError:
-      return "Please check available storage space and try again."
+      return String(localized: "Please check available storage space and try again.")
     case .encryptionError:
-      return "Please restart the app and try again."
+      return String(localized: "Please restart the app and try again.")
     case .networkError:
-      return "Please check your internet connection and try again."
+      return String(localized: "Please check your internet connection and try again.")
     case .passGenerationError:
-      return "Please check your Apple Wallet settings and try again."
+      return String(localized: "Please check your Apple Wallet settings and try again.")
     case .ocrError:
-      return "Please ensure the image is clear and try again."
+      return String(localized: "Please ensure the image is clear and try again.")
     case .sharingError:
-      return "Please check sharing permissions and try again."
+      return String(localized: "Please check sharing permissions and try again.")
     case .validationError:
-      return "Please correct the highlighted fields and try again."
+      return String(localized: "Please correct the highlighted fields and try again.")
     case .notFound:
-      return "The requested item could not be found."
+      return String(localized: "The requested item could not be found.")
     case .unauthorized:
-      return "Please check your permissions and try again."
+      return String(localized: "Please check your permissions and try again.")
     case .rateLimited:
-      return "Please wait a moment before trying again."
+      return String(localized: "Please wait a moment before trying again.")
     case .cryptographicError:
-      return "Please restart the app to reinitialize cryptographic components."
+      return String(localized: "Please restart the app to reinitialize cryptographic components.")
     case .domainVerificationError:
-      return "Please check the email domain and try again later."
+      return String(localized: "Please check the email domain and try again later.")
     case .proofGenerationError:
-      return "Please ensure all required fields are present and try again."
+      return String(localized: "Please ensure all required fields are present and try again.")
     case .proofVerificationError:
-      return "The proof may be expired or invalid. Please request a new one."
+      return String(localized: "The proof may be expired or invalid. Please request a new one.")
     case .keyManagementError:
-      return "Please restart the app to reinitialize security keys."
+      return String(localized: "Please restart the app to reinitialize security keys.")
     case .offlineError:
-      return "This feature requires an internet connection. Please try again when online."
+      return String(localized: "This feature requires an internet connection. Please try again when online.")
     case .syncError:
-      return "Please check your connection and try syncing again."
+      return String(localized: "Please check your connection and try syncing again.")
     case .configurationError:
-      return "Please check app settings and configuration."
+      return String(localized: "Please check app settings and configuration.")
     }
   }
 
   var failureReason: String? {
     switch self {
     case .invalidData:
-      return "The provided data is not in the expected format."
+      return String(localized: "The provided data is not in the expected format.")
     case .storageError:
-      return "Unable to read from or write to local storage."
+      return String(localized: "Unable to read from or write to local storage.")
     case .encryptionError:
-      return "Failed to encrypt or decrypt data."
+      return String(localized: "Failed to encrypt or decrypt data.")
     case .networkError:
-      return "Network request failed or timed out."
+      return String(localized: "Network request failed or timed out.")
     case .passGenerationError:
-      return "Unable to generate Apple Wallet pass."
+      return String(localized: "Unable to generate Apple Wallet pass.")
     case .ocrError:
-      return "Text recognition failed or returned low confidence results."
+      return String(localized: "Text recognition failed or returned low confidence results.")
     case .sharingError:
-      return "Unable to share business card data."
+      return String(localized: "Unable to share business card data.")
     case .validationError:
-      return "Required fields are missing or invalid."
+      return String(localized: "Required fields are missing or invalid.")
     case .notFound:
-      return "The requested resource does not exist."
+      return String(localized: "The requested resource does not exist.")
     case .unauthorized:
-      return "Access denied or insufficient permissions."
+      return String(localized: "Access denied or insufficient permissions.")
     case .rateLimited:
-      return "Too many requests in a short time period."
+      return String(localized: "Too many requests in a short time period.")
     case .cryptographicError:
-      return "Cryptographic operation failed or keys are corrupted."
+      return String(localized: "Cryptographic operation failed or keys are corrupted.")
     case .domainVerificationError:
-      return "Unable to verify email domain ownership."
+      return String(localized: "Unable to verify email domain ownership.")
     case .proofGenerationError:
-      return "Failed to generate cryptographic proof."
+      return String(localized: "Failed to generate cryptographic proof.")
     case .proofVerificationError:
-      return "Cryptographic proof verification failed."
+      return String(localized: "Cryptographic proof verification failed.")
     case .keyManagementError:
-      return "Unable to manage cryptographic keys."
+      return String(localized: "Unable to manage cryptographic keys.")
     case .offlineError:
-      return "Operation requires network connectivity."
+      return String(localized: "Operation requires network connectivity.")
     case .syncError:
-      return "Failed to synchronize data."
+      return String(localized: "Failed to synchronize data.")
     case .configurationError:
-      return "App configuration is invalid or missing."
+      return String(localized: "App configuration is invalid or missing.")
     }
   }
 
@@ -210,10 +210,10 @@ enum ErrorSeverity: Int, Codable, CaseIterable {
 
   var displayName: String {
     switch self {
-    case .low: return "Low"
-    case .medium: return "Medium"
-    case .high: return "High"
-    case .critical: return "Critical"
+    case .low: return String(localized: "Low")
+    case .medium: return String(localized: "Medium")
+    case .high: return String(localized: "High")
+    case .critical: return String(localized: "Critical")
     }
   }
 
@@ -296,13 +296,13 @@ extension CardError {
   var userFriendlyMessage: String {
     switch self.severity {
     case .low:
-      return self.errorDescription ?? "An error occurred"
+      return self.errorDescription ?? String(localized: "An error occurred")
     case .medium:
-      return "Something went wrong. \(self.recoverySuggestion ?? "")"
+      return String(localized: "Something went wrong. \(self.recoverySuggestion ?? "")")
     case .high:
-      return "We encountered a problem. \(self.recoverySuggestion ?? "")"
+      return String(localized: "We encountered a problem. \(self.recoverySuggestion ?? "")")
     case .critical:
-      return "A critical error occurred. Please restart the app and contact support if the problem persists."
+      return String(localized: "A critical error occurred. Please restart the app and contact support if the problem persists.")
     }
   }
 }

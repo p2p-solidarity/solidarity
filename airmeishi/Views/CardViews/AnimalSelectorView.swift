@@ -37,7 +37,7 @@ private struct AnimalChip: View {
         .cornerRadius(12)
         .overlay(
           RoundedRectangle(cornerRadius: 12, style: .continuous)
-            .stroke(Color.white.opacity(isSelected ? 0.6 : 0.25), lineWidth: 1)
+            .stroke(Color.Theme.divider.opacity(isSelected ? 1 : 0.6), lineWidth: 1)
         )
       Text(animal.displayName)
         .font(.caption.weight(.semibold))
@@ -46,11 +46,11 @@ private struct AnimalChip: View {
     .padding(.vertical, 8)
     .background(
       RoundedRectangle(cornerRadius: 10, style: .continuous)
-        .fill(Color.white.opacity(isSelected ? 0.16 : 0.08))
+        .fill(Color.Theme.searchBg.opacity(isSelected ? 2 : 1))
     )
     .overlay(
       RoundedRectangle(cornerRadius: 10, style: .continuous)
-        .stroke(Color.white.opacity(isSelected ? 0.6 : 0.25), lineWidth: 1)
+        .stroke(Color.Theme.divider.opacity(isSelected ? 1 : 0.6), lineWidth: 1)
     )
   }
 }
@@ -59,8 +59,7 @@ private struct AnimalChip: View {
   StatefulPreviewWrapper(AnimalCharacter.dog) { sel in
     AnimalSelectorView(selection: sel)
       .padding()
-      .background(Color.black)
-      .preferredColorScheme(.dark)
+      .background(Color.Theme.pageBg)
   }
 }
 

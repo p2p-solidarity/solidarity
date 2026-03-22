@@ -175,9 +175,17 @@ struct GroupManagementView: View {
                 .padding(.top, 8)
 
               VStack(spacing: 1) {
-                SimpleNodeRow(icon: "plus.circle.fill", title: "Create Group", subtitle: "Create a new CloudKit group")
+                SimpleNodeRow(
+                  icon: "plus.circle.fill",
+                  title: String(localized: "Create Group"),
+                  subtitle: String(localized: "Create a new CloudKit group")
+                )
                 { activeSheet = .create }
-                SimpleNodeRow(icon: "link", title: "Invite via Link", subtitle: "Generate invite link for members") {
+                SimpleNodeRow(
+                  icon: "link",
+                  title: String(localized: "Invite via Link"),
+                  subtitle: String(localized: "Generate invite link for members")
+                ) {
                   activeSheet = .invite
                 }
               }
@@ -210,10 +218,18 @@ struct GroupManagementView: View {
                 .padding(.top, 8)
 
               VStack(spacing: 1) {
-                SimpleNodeRow(icon: "hand.raised", title: "Privacy Policy", subtitle: "View our privacy policy") {
+                SimpleNodeRow(
+                  icon: "hand.raised",
+                  title: String(localized: "Privacy Policy"),
+                  subtitle: String(localized: "View our privacy policy")
+                ) {
                   activeSheet = .privacy
                 }
-                SimpleNodeRow(icon: "doc.text", title: "Terms of Service", subtitle: "View terms of service") {
+                SimpleNodeRow(
+                  icon: "doc.text",
+                  title: String(localized: "Terms of Service"),
+                  subtitle: String(localized: "View terms of service")
+                ) {
                   activeSheet = .terms
                 }
               }
@@ -314,7 +330,7 @@ struct GroupManagementView: View {
   }
 
   private var privacySheet: some View {
-    NavigationView {
+    NavigationStack {
       ScrollView {
         Text("Privacy Policy Content...")
           .padding()
@@ -329,7 +345,7 @@ struct GroupManagementView: View {
   }
 
   private var termsSheet: some View {
-    NavigationView {
+    NavigationStack {
       ScrollView {
         Text("Terms of Service Content...")
           .padding()

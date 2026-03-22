@@ -1,12 +1,14 @@
 import AVFoundation
 import Foundation
 import UIKit
+// swiftlint:disable file_length
 
 final class QRCodeScanService: NSObject {
   struct ScanOutcome {
     let card: BusinessCard?
     let verificationStatus: VerificationStatus?
     let sealedRoute: String?
+    let route: ScanRoute
   }
 
   var onScanOutcome: ((Result<ScanOutcome, CardError>) -> Void)?
@@ -16,15 +18,19 @@ final class QRCodeScanService: NSObject {
   private let vcService = VCService()
   private let proofManager = ProofGenerationManager.shared
   private let identityCoordinator = IdentityCoordinator.shared
+  private let scanRouter = ScanRouterService.shared
 
   private var captureSession: AVCaptureSession?
   private var previewLayer: AVCaptureVideoPreviewLayer?
+  private let scanStateLock = NSLock()
+  private var isProcessingScan = false
 
   private let sessionQueue = DispatchQueue(label: "app.airmeishi.camera.session.queue")
 
   // MARK: - Scanning Lifecycle
 
   func startScanning() -> CardResult<AVCaptureVideoPreviewLayer> {
+    resetProcessingState()
     let session = AVCaptureSession()
 
     guard let videoCaptureDevice = AVCaptureDevice.default(for: .video) else {
@@ -91,13 +97,31 @@ final class QRCodeScanService: NSObject {
   // MARK: - Processing
 
   func process(scannedString data: String) {
+    let route = scanRouter.route(for: data)
+    switch route {
+    case .oid4vpRequest(let request):
+      handleOID4VPRequest(request)
+      return
+    case .vpToken(let token):
+      handleVPToken(token)
+      return
+    case .credentialOffer(let offer):
+      emitOutcome(.success(ScanOutcome(card: nil, verificationStatus: .pending, sealedRoute: nil, route: .credentialOffer(offer))))
+      return
+    case .siopRequest(let request):
+      handleOIDCRequest(request, route: .siopRequest(request))
+      return
+    case .businessCard, .unknown:
+      break
+    }
+
     if let url = URL(string: data), url.scheme == "airmeishi", url.host == "oidc" {
       handleOIDCResponse(url: url)
       return
     }
 
     if data.hasPrefix("openid-vc://") || data.hasPrefix("openid://") {
-      handleOIDCRequest(data)
+      handleOIDCRequest(data, route: .siopRequest(data))
       return
     }
 
@@ -125,47 +149,54 @@ final class QRCodeScanService: NSObject {
     switch envelope.format {
     case .plaintext:
       guard let payload = envelope.plaintext else {
-        onScanOutcome?(.failure(.sharingError("Missing plaintext payload")))
+        emitOutcome(.failure(.sharingError("Missing plaintext payload")))
         return
       }
       if let expiration = payload.expirationDate, expiration < Date() {
-        onScanOutcome?(.failure(.sharingError("Shared card has expired")))
+        emitOutcome(.failure(.sharingError("Shared card has expired")))
         return
       }
       let card = rebuildCard(from: payload)
       // Extract sealed route from snapshot if available
       let sealedRoute = payload.snapshot.sealedRoute
+      let status = verifyProofClaims(
+        payload.proofClaims,
+        issuerStatus: .unverified,
+        issuerProofPresent: false,
+        ageOver18ProofValid: false
+      )
 
-      identityCoordinator.updateVerificationStatus(for: card.id, status: .unverified)
-      onScanOutcome?(
+      identityCoordinator.updateVerificationStatus(for: card.id, status: status)
+      emitOutcome(
         .success(
           ScanOutcome(
             card: card,
-            verificationStatus: .unverified,
-            sealedRoute: sealedRoute
+            verificationStatus: status,
+            sealedRoute: sealedRoute,
+            route: .businessCard
           )
         )
       )
 
     case .zkProof:
       guard let base64 = envelope.encryptedPayload else {
-        onScanOutcome?(.failure(.sharingError("Missing encrypted payload")))
+        emitOutcome(.failure(.sharingError("Missing encrypted payload")))
         return
       }
       let result = handleEncryptedPayload(base64)
-      onScanOutcome?(result)
+      emitOutcome(result)
 
     case .didSigned:
       guard let payload = envelope.didSigned else {
-        onScanOutcome?(.failure(.sharingError("Missing DID payload")))
+        emitOutcome(.failure(.sharingError("Missing DID payload")))
         return
       }
       if let expiration = payload.expirationDate, expiration < Date() {
-        onScanOutcome?(.failure(.sharingError("Shared card has expired")))
+        emitOutcome(.failure(.sharingError("Shared card has expired")))
         return
       }
       let result = handleDidSignedPayload(payload)
-      onScanOutcome?(result)
+      emitOutcome(result)
     }
   }
 
@@ -200,31 +231,56 @@ final class QRCodeScanService: NSObject {
       commitment: payload.issuerCommitment,
       proof: payload.issuerProof,
       message: payload.shareId.uuidString,
-      scope: payload.sharingLevel.rawValue
+      scope: payload.scope ?? ShareScopeResolver.scope(
+        selectedFields: payload.selectedFields,
+        legacyLevel: payload.sharingLevel
+      )
     )
 
+    var ageOver18ProofValid = false
     if let proof = payload.sdProof {
       let verification = proofManager.verifySelectiveDisclosureProof(
         proof,
         expectedBusinessCardId: payload.businessCard.id.uuidString
       )
-      if case .success(let outcome) = verification, outcome.isValid == false {
+      switch verification {
+      case .success(let outcome):
+        ageOver18ProofValid = outcome.isValid
+        if outcome.isValid == false {
+          return .success(
+            ScanOutcome(
+              card: payload.businessCard,
+              verificationStatus: .failed,
+              sealedRoute: payload.sealedRoute,
+              route: .businessCard
+            )
+          )
+        }
+      case .failure:
         return .success(
           ScanOutcome(
             card: payload.businessCard,
             verificationStatus: .failed,
-            sealedRoute: payload.sealedRoute
+            sealedRoute: payload.sealedRoute,
+            route: .businessCard
           )
         )
       }
     }
 
-    identityCoordinator.updateVerificationStatus(for: payload.businessCard.id, status: status)
+    let finalStatus = verifyProofClaims(
+      payload.proofClaims,
+      issuerStatus: status,
+      issuerProofPresent: payload.issuerProof != nil,
+      ageOver18ProofValid: ageOver18ProofValid
+    )
+    identityCoordinator.updateVerificationStatus(for: payload.businessCard.id, status: finalStatus)
     return .success(
       ScanOutcome(
         card: payload.businessCard,
-        verificationStatus: status,
-        sealedRoute: payload.sealedRoute
+        verificationStatus: finalStatus,
+        sealedRoute: payload.sealedRoute,
+        route: .businessCard
       )
     )
   }
@@ -243,59 +299,108 @@ final class QRCodeScanService: NSObject {
         status = .unverified
       }
       identityCoordinator.updateVerificationStatus(for: imported.businessCard.id, status: status)
-      return .success(ScanOutcome(card: imported.businessCard, verificationStatus: status, sealedRoute: nil))
+      return .success(ScanOutcome(card: imported.businessCard, verificationStatus: status, sealedRoute: nil, route: .businessCard))
     }
   }
 
   private func handleLegacyPayload(_ data: String) {
     guard let encryptedData = Data(base64Encoded: data) else {
-      onScanOutcome?(.failure(.sharingError("Invalid QR code format")))
+      emitOutcome(.failure(.sharingError("Invalid QR code format")))
       return
     }
 
     let decryptionResult = encryptionManager.decrypt(encryptedData, as: QRSharingPayload.self)
     switch decryptionResult {
     case .failure(let error):
-      onScanOutcome?(.failure(error))
+      emitOutcome(.failure(error))
     case .success(let payload):
       identityCoordinator.updateVerificationStatus(for: payload.businessCard.id, status: .unverified)
-      onScanOutcome?(evaluateSharingPayload(payload))
+      emitOutcome(evaluateSharingPayload(payload))
     }
   }
 
   // MARK: - OIDC Handlers
 
-  private func handleOIDCRequest(_ data: String) {
-    switch oidcService.parseRequest(from: data) {
-    case .failure(let error):
-      onScanOutcome?(.failure(error))
-    case .success(let request):
-      guard let businessCard = CardManager.shared.businessCards.first else {
-        onScanOutcome?(.failure(.notFound("No business card available to present.")))
+  private func handleOID4VPRequest(_ requestString: String) {
+    emitOutcome(
+      .success(
+        ScanOutcome(
+          card: nil,
+          verificationStatus: .pending,
+          sealedRoute: nil,
+          route: .oid4vpRequest(requestString)
+        )
+      )
+    )
+  }
+
+  private func handleVPToken(_ token: String) {
+    let verification = ProofVerifierService.shared.verifyVpToken(token)
+    let status = verificationStatus(from: verification)
+
+    if shouldImportAsCredential(token) {
+      switch vcService.importPresentedCredential(jwt: token) {
+      case .failure:
+        break
+      case .success(let imported):
+        let verifyResult = vcService.verifyStoredCredential(imported.storedCredential)
+        let finalStatus: VerificationStatus
+        switch verifyResult {
+        case .success(let updated):
+          finalStatus = statusFromStoredCredential(updated.status)
+        case .failure:
+          finalStatus = status
+        }
+
+        identityCoordinator.updateVerificationStatus(for: imported.businessCard.id, status: finalStatus)
+        emitOutcome(
+          .success(
+            ScanOutcome(
+              card: imported.businessCard,
+              verificationStatus: finalStatus,
+              sealedRoute: nil,
+              route: .businessCard
+            )
+          )
+        )
         return
       }
+    }
 
-      switch vcService.issueBusinessCardCredential(for: businessCard) {
-      case .failure(let error):
-        onScanOutcome?(.failure(error))
-      case .success(let credential):
-        switch oidcService.buildResponseURL(for: request, vpToken: credential.jwt) {
-        case .failure(let error):
-          onScanOutcome?(.failure(error))
-        case .success(let url):
-          DispatchQueue.main.async {
-            UIApplication.shared.open(url, options: [:], completionHandler: nil)
-          }
-          onScanOutcome?(.success(ScanOutcome(card: businessCard, verificationStatus: .pending, sealedRoute: nil)))
-        }
-      }
+    emitOutcome(
+      .success(
+        ScanOutcome(
+          card: nil,
+          verificationStatus: status,
+          sealedRoute: nil,
+          route: .vpToken(token)
+        )
+      )
+    )
+  }
+
+  private func handleOIDCRequest(_ data: String, route: ScanRoute) {
+    switch oidcService.parseRequest(from: data) {
+    case .failure(let error):
+      emitOutcome(.failure(error))
+    case .success:
+      emitOutcome(
+        .success(
+          ScanOutcome(
+            card: nil,
+            verificationStatus: .pending,
+            sealedRoute: nil,
+            route: route
+          )
+        )
+      )
     }
   }
 
   private func handleOIDCResponse(url: URL) {
     switch oidcService.handleResponse(url: url, vcService: vcService) {
     case .failure(let error):
-      onScanOutcome?(.failure(error))
+      emitOutcome(.failure(error))
     case .success(let imported):
       let verificationOutcome = vcService.verifyStoredCredential(imported.storedCredential)
       let status: VerificationStatus
@@ -306,7 +411,7 @@ final class QRCodeScanService: NSObject {
         status = .unverified
       }
       identityCoordinator.updateVerificationStatus(for: imported.businessCard.id, status: status)
-      onScanOutcome?(.success(ScanOutcome(card: imported.businessCard, verificationStatus: status, sealedRoute: nil)))
+      emitOutcome(.success(ScanOutcome(card: imported.businessCard, verificationStatus: status, sealedRoute: nil, route: .siopRequest(url.absoluteString))))
     }
   }
 
@@ -315,13 +420,13 @@ final class QRCodeScanService: NSObject {
     if handled {
       DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
         if let card = DeepLinkManager.shared.lastReceivedCard {
-          self.onScanOutcome?(.success(ScanOutcome(card: card, verificationStatus: .unverified, sealedRoute: nil)))
+          self.emitOutcome(.success(ScanOutcome(card: card, verificationStatus: .unverified, sealedRoute: nil, route: .businessCard)))
         } else {
-          self.onScanOutcome?(.failure(.sharingError("No card received from deep link")))
+          self.emitOutcome(.failure(.sharingError("No card received from deep link")))
         }
       }
     } else {
-      onScanOutcome?(.failure(.sharingError("Invalid airmeishi:// URL format")))
+      emitOutcome(.failure(.sharingError("Invalid airmeishi:// URL format")))
     }
   }
 
@@ -369,22 +474,12 @@ final class QRCodeScanService: NSObject {
     message: String,
     scope: String
   ) -> VerificationStatus {
-    guard let commitment = commitment, !commitment.isEmpty else {
-      return .failed
-    }
-
-    let hexSet = CharacterSet(charactersIn: "0123456789abcdefABCDEF")
-    let isHex = commitment.unicodeScalars.allSatisfy { hexSet.contains($0) }
-    if !isHex || commitment.count < 32 {
-      return .failed
-    }
-
-    if let proof = proof, SemaphoreIdentityManager.proofsSupported {
-      let ok = (try? SemaphoreIdentityManager.shared.verifyProof(proof)) ?? false
-      return ok ? .verified : .failed
-    }
-
-    return .pending
+    ProximityVerificationHelper.verify(
+      commitment: commitment,
+      proof: proof,
+      message: message,
+      scope: scope
+    )
   }
 
   private func statusFromStoredCredential(_ status: VCLibrary.StoredCredential.Status) -> VerificationStatus {
@@ -397,6 +492,90 @@ final class QRCodeScanService: NSObject {
       return .failed
     }
   }
+
+  private func verificationStatus(from verification: VpTokenVerificationResult) -> VerificationStatus {
+    if verification.isValid {
+      return .verified
+    }
+    switch verification.status {
+    case .verified:
+      return .verified
+    case .failed:
+      return .failed
+    case .pending:
+      return .pending
+    case .unverified:
+      return .unverified
+    }
+  }
+
+  private func shouldImportAsCredential(_ token: String) -> Bool {
+    guard let payload = decodeCompactJWTPayload(token) else { return false }
+    if payload["vp"] != nil {
+      return false
+    }
+    return payload["vc"] != nil
+  }
+
+  private func decodeCompactJWTPayload(_ token: String) -> [String: Any]? {
+    let segments = token.split(separator: ".")
+    guard segments.count == 3,
+      let payloadData = Data(base64URLEncoded: String(segments[1])),
+      let payload = try? JSONSerialization.jsonObject(with: payloadData) as? [String: Any]
+    else {
+      return nil
+    }
+    return payload
+  }
+
+  private func beginProcessingScanIfNeeded() -> Bool {
+    scanStateLock.lock()
+    defer { scanStateLock.unlock() }
+    guard !isProcessingScan else { return false }
+    isProcessingScan = true
+    return true
+  }
+
+  private func resetProcessingState() {
+    scanStateLock.lock()
+    isProcessingScan = false
+    scanStateLock.unlock()
+  }
+
+  private func emitOutcome(_ result: Result<ScanOutcome, CardError>) {
+    resetProcessingState()
+    onScanOutcome?(result)
+  }
+
+  private func verifyProofClaims(
+    _ claims: [String]?,
+    issuerStatus: VerificationStatus,
+    issuerProofPresent: Bool,
+    ageOver18ProofValid: Bool
+  ) -> VerificationStatus {
+    guard let claims, !claims.isEmpty else {
+      return issuerStatus
+    }
+
+    let supportedClaims: Set<String> = ["is_human", "age_over_18"]
+    if claims.contains(where: { !supportedClaims.contains($0) }) {
+      return .failed
+    }
+
+    guard issuerStatus == .verified else {
+      return .failed
+    }
+
+    if claims.contains("is_human"), !issuerProofPresent {
+      return .failed
+    }
+
+    if claims.contains("age_over_18"), !ageOver18ProofValid {
+      return .failed
+    }
+
+    return .verified
+  }
 }
 
 // MARK: - AVCaptureMetadataOutputObjectsDelegate
@@ -407,10 +586,14 @@ extension QRCodeScanService: AVCaptureMetadataOutputObjectsDelegate {
     didOutput metadataObjects: [AVMetadataObject],
     from connection: AVCaptureConnection
   ) {
+    guard beginProcessingScanIfNeeded() else { return }
     guard
       let metadataObject = metadataObjects.first as? AVMetadataMachineReadableCodeObject,
       let value = metadataObject.stringValue
-    else { return }
+    else {
+      resetProcessingState()
+      return
+    }
 
     stopScanning()
     process(scannedString: value)

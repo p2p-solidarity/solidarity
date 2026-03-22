@@ -1,109 +1,182 @@
-//
-//  SettingsView.swift
-//  airmeishi
-//
-//  Main settings view that consolidates all app settings
-//
-
 import SwiftUI
 
 struct SettingsView: View {
   @EnvironmentObject private var theme: ThemeManager
-  @StateObject private var cardManager = CardManager.shared
-  @State private var showingAppearanceSettings = false
-  @State private var showingBackupSettings = false
-  @State private var showingPrivacySettings = false
-  @State private var showingGroupManagement = false
-  @State private var showingZKSettings = false
+  @ObservedObject private var devMode = DeveloperModeManager.shared
+  @State private var showingSolidarityQR = false
+  @State private var showingDIDList = false
+  @State private var showingOnboarding = false
 
   var body: some View {
     NavigationStack {
       Form {
-        Section("Notifications") {
-          NavigationLink(
-            destination: {
-              NotificationSettingsView()
-            },
-            label: {
-              Label("Notification Settings", systemImage: "bell.fill")
-            }
-          )
-        }
+        Section("Account & Identity") {
+          NavigationLink {
+            VCSettingsView()
+          } label: {
+            Label("Identity Profile", systemImage: "person.text.rectangle")
+          }
 
-        Section("Appearance") {
-          NavigationLink(
-            destination: {
-              AppearanceSettingsView()
-            },
-            label: {
-              Label("Card Appearance", systemImage: "paintbrush.fill")
-            }
-          )
-        }
+          Button {
+            showingSolidarityQR = true
+          } label: {
+            Label("Solidarity QR", systemImage: "qrcode")
+          }
 
-        Section("Privacy & Security") {
-          if let card = cardManager.businessCards.first {
-            let cardId = card.id
-            let sharingBinding = Binding(
-              get: {
-                if let currentCard = cardManager.businessCards.first(where: { $0.id == cardId }) {
-                  return currentCard.sharingPreferences
-                }
-                return card.sharingPreferences
-              },
-              set: { newPreferences in
-                if var updatedCard = cardManager.businessCards.first(where: { $0.id == cardId }) {
-                  updatedCard.sharingPreferences = newPreferences
-                  _ = cardManager.updateCard(updatedCard)
-                }
-              }
-            )
-
-            NavigationLink(
-              destination: {
-                PrivacySettingsView(sharingPreferences: sharingBinding)
-              },
-              label: {
-                Label("Privacy Settings", systemImage: "lock.shield.fill")
-              }
-            )
-          } else {
-            Text("Please create a card to configure privacy settings")
-              .foregroundColor(.secondary)
+          Button {
+            showingDIDList = true
+          } label: {
+            Label("View DIDs", systemImage: "key.viewfinder")
           }
         }
 
-        Section("Data") {
-          NavigationLink(
-            destination: {
-              BackupSettingsView()
-            },
-            label: {
-              Label("Backup & Restore", systemImage: "icloud.fill")
-            }
-          )
+        Section(
+          header: Text("QR Sharing"),
+          footer: Text("Controls which fields and proofs are included when generating your QR code.")
+        ) {
+          NavigationLink {
+            ShareSettingsView()
+          } label: {
+            Label("Share Settings", systemImage: "checklist")
+          }
+        }
 
-          NavigationLink(
-            destination: {
-              VCSettingsView()
-            },
-            label: {
-              Label("VC Management", systemImage: "doc.text.fill")
-            }
-          )
+        Section("Preferences") {
+          NavigationLink {
+            SecuritySettingsView()
+          } label: {
+            Label("Security & Keys", systemImage: "lock.shield")
+          }
+
+          NavigationLink {
+            DataSyncSettingsView()
+          } label: {
+            Label("Data & Sync", systemImage: "server.rack")
+          }
+
+          NavigationLink {
+            AdvancedSettingsView()
+          } label: {
+            Label("Advanced", systemImage: "gearshape.2")
+          }
+        }
+
+        Section("Guide") {
+          Button {
+            showingOnboarding = true
+          } label: {
+            Label("Replay Onboarding", systemImage: "arrow.counterclockwise")
+          }
         }
 
         Section("About") {
           HStack {
             Text("Version")
             Spacer()
-            Text(Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "Unknown")
+            Text(Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? String(localized: "Unknown"))
               .foregroundColor(.secondary)
+          }
+          .contentShape(Rectangle())
+          .onTapGesture {
+            devMode.registerVersionTap()
           }
         }
       }
-      .adaptiveMaxWidth(700)
       .navigationTitle("Settings")
+      .scrollContentBackground(.hidden)
+      .background(Color.Theme.pageBg.ignoresSafeArea())
+      .sheet(isPresented: $showingSolidarityQR) {
+        if let card = CardManager.shared.businessCards.first {
+          SolidarityQRView(businessCard: card)
+        }
+      }
+      .sheet(isPresented: $showingDIDList) {
+        DIDListSheet()
+      }
+      .fullScreenCover(isPresented: $showingOnboarding) {
+        OnboardingReplayView {
+          showingOnboarding = false
+        }
+      }
+    }
+  }
+}
+
+// MARK: - DID List Sheet
+
+private struct DIDListSheet: View {
+  @ObservedObject private var coordinator = IdentityCoordinator.shared
+  @Environment(\.dismiss) private var dismiss
+
+  var body: some View {
+    NavigationStack {
+      List {
+        if let activeDID = coordinator.state.currentProfile.activeDID {
+          Section("Active DID") {
+            didRow(did: activeDID.did)
+          }
+        }
+
+        Section(footer: Text("DID keys are stored in iCloud Keychain and shared across your signed-in devices.")) {
+          HStack {
+            Text("Key Storage")
+            Spacer()
+            Text("iCloud Keychain")
+              .foregroundColor(Color.Theme.textSecondary)
+          }
+
+          HStack {
+            Text("Sync")
+            Spacer()
+            Text("Same Apple ID devices")
+              .foregroundColor(Color.Theme.textSecondary)
+          }
+        }
+      }
+      .navigationTitle("Your DIDs")
+      .navigationBarTitleDisplayMode(.inline)
+      .toolbar {
+        ToolbarItem(placement: .navigationBarTrailing) {
+          Button("Done") { dismiss() }
+        }
+      }
+    }
+  }
+
+  private func didRow(did: String) -> some View {
+    let method = did.hasPrefix("did:key") ? "did:key" : did.hasPrefix("did:ethr") ? "did:ethr" : "did:web"
+    return VStack(alignment: .leading, spacing: 4) {
+      Text(method.uppercased())
+        .font(.caption.weight(.bold))
+        .foregroundColor(Color.Theme.textSecondary)
+      Text(did)
+        .font(.system(size: 12, design: .monospaced))
+        .foregroundColor(Color.Theme.textPrimary)
+        .textSelection(.enabled)
+    }
+    .padding(.vertical, 4)
+  }
+}
+
+// MARK: - Onboarding Replay Wrapper
+
+private struct OnboardingReplayView: View {
+  var onDismiss: () -> Void
+
+  var body: some View {
+    ZStack(alignment: .topTrailing) {
+      OnboardingFlowView()
+
+      Button(action: onDismiss) {
+        Image(systemName: "xmark")
+          .font(.system(size: 14, weight: .bold))
+          .foregroundColor(Color.Theme.textSecondary)
+          .padding(10)
+          .background(Color.Theme.searchBg)
+          .overlay(Rectangle().stroke(Color.Theme.divider, lineWidth: 1))
+      }
+      .padding(.top, 54)
+      .padding(.trailing, 20)
     }
   }
 }

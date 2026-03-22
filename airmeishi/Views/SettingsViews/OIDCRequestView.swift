@@ -109,7 +109,7 @@ struct OIDCRequestView: View {
         self.qrCode = image
         self.errorMessage = nil
       } else {
-        self.errorMessage = "Failed to generate QR code image."
+        self.errorMessage = String(localized: "Failed to generate QR code image.")
       }
     case .failure(let error):
       self.errorMessage = error.localizedDescription

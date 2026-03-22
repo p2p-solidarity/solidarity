@@ -14,143 +14,90 @@ struct LighteningCardView: View {
   let isLighteningAnimating: Bool
   let onTap: () -> Void
 
-  @State private var cardOffset: CGFloat = 0
   @State private var isHovering = false
 
   var body: some View {
     Button(action: onTap) {
-      VStack(spacing: 12) {
-        // Card header with lightning effect
+      VStack(spacing: 8) {
+        // Card header
         HStack {
-          // Profile image with lightning border
+          // Profile image
           AsyncImage(url: dataPoint.user.profileImageURL) { image in
             image
               .resizable()
               .aspectRatio(contentMode: .fill)
           } placeholder: {
             Circle()
-              .fill(
-                LinearGradient(
-                  colors: [dataPoint.color, dataPoint.color.opacity(0.6)],
-                  startPoint: .topLeading,
-                  endPoint: .bottomTrailing
-                )
-              )
+              .fill(Color.Theme.darkUI)
               .overlay {
                 Text(dataPoint.user.initials)
-                  .font(.headline)
-                  .fontWeight(.bold)
+                  .font(.system(size: 12, weight: .bold))
                   .foregroundColor(.white)
               }
           }
-          .frame(width: 50, height: 50)
+          .frame(width: 32, height: 32)
           .clipShape(Circle())
           .overlay(
             Circle()
-              .stroke(
-                isLighteningAnimating ? Color.pink : dataPoint.color,
-                lineWidth: isLighteningAnimating ? 3 : 2
-              )
-              .scaleEffect(isLighteningAnimating ? 1.1 : 1.0)
-              .animation(
-                .easeInOut(duration: 0.5).repeatForever(autoreverses: true),
-                value: isLighteningAnimating
-              )
-          )
-          .shadow(
-            color: isLighteningAnimating ? .pink.opacity(0.6) : dataPoint.color.opacity(0.5),
-            radius: isLighteningAnimating ? 8 : 4,
-            x: 0,
-            y: 2
+              .stroke(Color.Theme.darkUI, lineWidth: 0.5)
           )
 
           Spacer()
 
-          // Sakura indicator
-          SakuraIconView(size: 16, color: isLighteningAnimating ? .pink : .gray, isAnimating: isLighteningAnimating)
+          // Date
+          Text(DateFormatter.relativeDate.string(from: dataPoint.user.lastInteraction))
+            .font(.system(size: 10))
+            .foregroundColor(Color.Theme.textTertiary)
         }
 
-        // User info with fixed spacing
+        // User info
         VStack(alignment: .leading, spacing: 4) {
           Text(dataPoint.user.name)
-            .font(.headline)
-            .fontWeight(.semibold)
-            .foregroundColor(.white)
+            .font(.system(size: 16, weight: .medium))
+            .foregroundColor(Color.Theme.textPrimary)
             .lineLimit(1)
 
-          // Always reserve space for company, even if empty
-          Text(dataPoint.user.company.isEmpty ? " " : dataPoint.user.company)
-            .font(.caption)
-            .foregroundColor(dataPoint.user.company.isEmpty ? .clear : .gray)
-            .lineLimit(1)
-            .frame(height: 14)
-
-          // Always reserve space for title, even if empty
-          Text(dataPoint.user.title.isEmpty ? " " : dataPoint.user.title)
-            .font(.caption2)
-            .foregroundColor(dataPoint.user.title.isEmpty ? .clear : .gray.opacity(0.8))
-            .lineLimit(1)
-            .frame(height: 12)
+          if !dataPoint.user.company.isEmpty || !dataPoint.user.title.isEmpty {
+            Text([dataPoint.user.title, dataPoint.user.company].filter { !$0.isEmpty }.joined(separator: " · "))
+              .font(.system(size: 14))
+              .foregroundColor(Color.Theme.textSecondary)
+              .lineLimit(1)
+          }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
 
         Spacer(minLength: 0)
 
-        // Verification status with lightning effect
+        // Verification status
         HStack {
           Image(systemName: dataPoint.user.verificationStatus.systemImageName)
             .foregroundColor(verificationColor)
             .font(.caption)
 
           Text(dataPoint.user.verificationStatus.displayName)
-            .font(.caption2)
-            .foregroundColor(.gray)
+            .font(.system(size: 10))
+            .foregroundColor(Color.Theme.textTertiary)
 
           Spacer()
-
-          // Score indicator
-          HStack(spacing: 2) {
-            ForEach(0..<3) { index in
-              Circle()
-                .fill(index < Int(dataPoint.user.eventScore * 3) ? Color.pink : Color.gray.opacity(0.3))
-                .frame(width: 4, height: 4)
-            }
-          }
         }
       }
-      .padding(16)
+      .padding(12)
       .frame(height: 180)
       .frame(maxWidth: .infinity)
       .background(
-        RoundedRectangle(cornerRadius: 16)
-          .fill(Color.white.opacity(0.05))
+        RoundedRectangle(cornerRadius: 8)
+          .fill(Color.Theme.cardBg)
           .overlay(
-            RoundedRectangle(cornerRadius: 16)
-              .stroke(
-                isLighteningAnimating ? Color.yellow.opacity(0.3) : Color.white.opacity(0.1),
-                lineWidth: 1
-              )
+            RoundedRectangle(cornerRadius: 8)
+              .stroke(Color.Theme.divider, lineWidth: 0.5)
           )
       )
-      .scaleEffect(isHovering ? 1.05 : 1.0)
-      .offset(y: cardOffset)
+      .scaleEffect(isHovering ? 1.02 : 1.0)
       .animation(.spring(response: 0.3, dampingFraction: 0.7), value: isHovering)
-      .animation(.spring(response: 0.3, dampingFraction: 0.7), value: cardOffset)
     }
     .buttonStyle(PlainButtonStyle())
     .onHover { hovering in
       isHovering = hovering
-    }
-    .onTapGesture {
-      withAnimation(.spring(response: 0.2, dampingFraction: 0.6)) {
-        cardOffset = -5
-      }
-      DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
-        withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
-          cardOffset = 0
-        }
-      }
-      onTap()
     }
   }
 
@@ -175,117 +122,92 @@ struct ContactRowView: View {
 
   var body: some View {
     Button(action: onTap) {
-      HStack(spacing: 16) {
-        // Profile image with lightning border
-        AsyncImage(url: dataPoint.user.profileImageURL) { image in
-          image
-            .resizable()
-            .aspectRatio(contentMode: .fill)
-        } placeholder: {
-          Circle()
-            .fill(
-              LinearGradient(
-                colors: [dataPoint.color, dataPoint.color.opacity(0.6)],
-                startPoint: .topLeading,
-                endPoint: .bottomTrailing
-              )
-            )
-            .overlay {
-              Text(dataPoint.user.initials)
-                .font(.headline)
-                .fontWeight(.bold)
-                .foregroundColor(.white)
-            }
-        }
-        .frame(width: 60, height: 60)
-        .clipShape(Circle())
-        .overlay(
-          Circle()
-            .stroke(
-              isLighteningAnimating ? Color.pink : dataPoint.color,
-              lineWidth: isLighteningAnimating ? 3 : 2
-            )
-            .scaleEffect(isLighteningAnimating ? 1.1 : 1.0)
-            .animation(
-              .easeInOut(duration: 0.5).repeatForever(autoreverses: true),
-              value: isLighteningAnimating
-            )
-        )
-        .shadow(
-          color: isLighteningAnimating ? .pink.opacity(0.6) : dataPoint.color.opacity(0.5),
-          radius: isLighteningAnimating ? 8 : 4,
-          x: 0,
-          y: 2
-        )
-
-        // User info
-        VStack(alignment: .leading, spacing: 4) {
-          Text(dataPoint.user.name)
-            .font(.headline)
-            .fontWeight(.semibold)
-            .foregroundColor(.white)
-            .lineLimit(1)
-
-          HStack(spacing: 8) {
-            if !dataPoint.user.company.isEmpty {
-              Text(dataPoint.user.company)
-                .font(.subheadline)
-                .foregroundColor(.gray)
-                .lineLimit(1)
-            }
-
-            if !dataPoint.user.title.isEmpty {
-              Text("•")
-                .font(.subheadline)
-                .foregroundColor(.gray.opacity(0.5))
-
-              Text(dataPoint.user.title)
-                .font(.subheadline)
-                .foregroundColor(.gray)
-                .lineLimit(1)
-            }
+      VStack(spacing: 0) {
+        HStack(alignment: .top, spacing: 8) {
+          // Avatar container (38w)
+          AsyncImage(url: dataPoint.user.profileImageURL) { image in
+            image
+              .resizable()
+              .aspectRatio(contentMode: .fill)
+          } placeholder: {
+            Circle()
+              .fill(Color.Theme.darkUI)
+              .overlay {
+                Text(dataPoint.user.initials)
+                  .font(.system(size: 12, weight: .bold))
+                  .foregroundColor(.white)
+              }
           }
+          .frame(width: 32, height: 32)
+          .clipShape(Circle())
+          .overlay(
+            Circle()
+              .stroke(Color.Theme.darkUI, lineWidth: 0.5)
+          )
+          .frame(width: 38)
 
-          // Verification status and score
-          HStack(spacing: 8) {
-            Image(systemName: dataPoint.user.verificationStatus.systemImageName)
-              .foregroundColor(verificationColor)
-              .font(.caption)
+          // Info box
+          VStack(spacing: 0) {
+            // Row 1: info main
+            HStack(alignment: .top) {
+              VStack(alignment: .leading, spacing: 2) {
+                Text(dataPoint.user.name)
+                  .font(.system(size: 16, weight: .medium))
+                  .foregroundColor(Color.Theme.textPrimary)
+                  .lineLimit(1)
 
-            Text(dataPoint.user.verificationStatus.displayName)
-              .font(.caption2)
-              .foregroundColor(.gray)
+                if !dataPoint.user.company.isEmpty || !dataPoint.user.title.isEmpty {
+                  Text([dataPoint.user.title, dataPoint.user.company].filter { !$0.isEmpty }.joined(separator: " · "))
+                    .font(.system(size: 14))
+                    .foregroundColor(Color.Theme.textSecondary)
+                    .lineLimit(1)
+                }
+              }
 
-            // Score indicator
-            HStack(spacing: 2) {
-              ForEach(0..<3) { index in
-                Circle()
-                  .fill(index < Int(dataPoint.user.eventScore * 3) ? Color.pink : Color.gray.opacity(0.3))
-                  .frame(width: 4, height: 4)
+              Spacer()
+
+              VStack(alignment: .trailing, spacing: 2) {
+                Text(DateFormatter.relativeDate.string(from: dataPoint.user.lastInteraction))
+                  .font(.system(size: 10))
+                  .foregroundColor(Color.Theme.textTertiary)
+
+                Image(systemName: dataPoint.user.verificationStatus.systemImageName)
+                  .foregroundColor(verificationColor)
+                  .font(.system(size: 10))
               }
             }
+
+            // Divider
+            Rectangle()
+              .fill(Color.Theme.divider)
+              .frame(height: 0.5)
+              .padding(.vertical, 8)
+
+            // Row 2: marks / notes
+            HStack {
+              if !dataPoint.user.company.isEmpty {
+                Text(dataPoint.user.company)
+                  .font(.system(size: 11))
+                  .foregroundColor(Color.Theme.textTertiary)
+                  .lineLimit(1)
+              } else {
+                Text(dataPoint.user.verificationStatus.displayName)
+                  .font(.system(size: 11))
+                  .foregroundColor(Color.Theme.textTertiary)
+                  .lineLimit(1)
+              }
+              Spacer()
+            }
           }
         }
-
-        Spacer()
-
-        // Sakura indicator
-        SakuraIconView(size: 24, color: isLighteningAnimating ? .pink : .gray, isAnimating: isLighteningAnimating)
+        .padding(.vertical, 12)
       }
-      .padding(.horizontal, 16)
-      .padding(.vertical, 12)
-      .background(
-        RoundedRectangle(cornerRadius: 12)
-          .fill(Color.white.opacity(0.05))
-          .overlay(
-            RoundedRectangle(cornerRadius: 12)
-              .stroke(
-                isLighteningAnimating ? Color.yellow.opacity(0.3) : Color.white.opacity(0.1),
-                lineWidth: 1
-              )
-          )
-      )
-      .scaleEffect(isHovering ? 1.02 : 1.0)
+      .overlay(alignment: .top) {
+        Rectangle()
+          .fill(Color.Theme.divider)
+          .frame(height: 0.5)
+      }
+      .scaleEffect(isHovering ? 1.01 : 1.0)
       .animation(.spring(response: 0.3, dampingFraction: 0.7), value: isHovering)
     }
     .buttonStyle(PlainButtonStyle())
@@ -314,17 +236,17 @@ struct ShoutoutInfoRow: View {
   var body: some View {
     HStack {
       Image(systemName: icon)
-        .foregroundColor(.white)
+        .foregroundColor(Color.Theme.textPrimary)
         .frame(width: 20)
 
       VStack(alignment: .leading, spacing: 2) {
         Text(title)
           .font(.subheadline)
-          .foregroundColor(.white)
+          .foregroundColor(Color.Theme.textPrimary)
 
         Text(value)
           .font(.caption)
-          .foregroundColor(.gray)
+          .foregroundColor(Color.Theme.textSecondary)
       }
 
       Spacer()

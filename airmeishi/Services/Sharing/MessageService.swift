@@ -154,6 +154,7 @@ class MessageService: ObservableObject {
   // MARK: - Message Processing & Polling
 
   private var pollingTimer: AnyCancellable?
+  private var autoSyncObserver: NSObjectProtocol?
 
   /// Process incoming messages (Sync -> Decrypt -> Notify -> Ack)
   /// Returns true if new data was processed
@@ -229,15 +230,15 @@ class MessageService: ObservableObject {
         }
       }
 
-    // Listen for auto-sync setting changes
-    NotificationCenter.default.addObserver(
+    // Listen for auto-sync setting changes (store observer for cleanup)
+    autoSyncObserver = NotificationCenter.default.addObserver(
       forName: .autoSyncSettingChanged,
       object: nil,
       queue: .main
     ) { [weak self] notification in
       if let enabled = notification.userInfo?["enabled"] as? Bool {
         if enabled {
-          self?.startPolling()  // Restart with new interval
+          self?.startPolling()
         } else {
           self?.stopPolling()
         }
@@ -249,6 +250,10 @@ class MessageService: ObservableObject {
   func stopPolling() {
     pollingTimer?.cancel()
     pollingTimer = nil
+    if let observer = autoSyncObserver {
+      NotificationCenter.default.removeObserver(observer)
+      autoSyncObserver = nil
+    }
   }
 
   // Helper: Show Local Notification

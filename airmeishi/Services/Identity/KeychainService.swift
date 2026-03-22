@@ -14,17 +14,11 @@ import SpruceIDMobileSdkRs
 /// Manages the DID signing key material using the system Keychain.
 final class KeychainService {
   static let shared = KeychainService()
-
-  // Use a single session ID that persists for the app instance
-  private static let sessionId: String = {
-    let defaults = UserDefaults.standard
-    if let existingId = defaults.string(forKey: "airmeishi.keychain.session.id") {
-      return existingId
-    }
-    let newId = UUID().uuidString
-    defaults.set(newId, forKey: "airmeishi.keychain.session.id")
-    return newId
-  }()
+  static let legacyMasterAlias: KeyAlias = "airmeishi.did.signing"
+  static let modernMasterAlias: KeyAlias = "solidarity.master"
+  static let masterAlias: KeyAlias = modernMasterAlias
+  static let rpAliasPrefix = "airmeishi.did.rp."
+  static let modernRpAliasPrefix = "solidarity.rp."
 
   #if targetEnvironment(simulator)
     static var simulatorInMemoryKey: SecKey?
@@ -40,25 +34,18 @@ final class KeychainService {
   private let authenticationPolicy: LAPolicy
 
   init(
-    alias: KeyAlias = "airmeishi.did.signing",
+    alias: KeyAlias = KeychainService.masterAlias,
     accessControlFlags: SecAccessControlCreateFlags = [.privateKeyUsage],
-    accessPrompt: String = "Authenticate to access your AirMeishi identity key",
+    accessPrompt: String = "Authenticate to access your identity key",
     authenticationPolicy: LAPolicy = .deviceOwnerAuthentication
   ) {
     self.alias = alias
-    // Use a unique tag per app session to avoid keychain conflicts
-    // This works for both simulator and device
-    let uniqueAlias = "airmeishi.did.signing.\(Self.sessionId)"
-    print("[KeychainService] Using session tag: \(uniqueAlias)")
-    self.keyTag = Data(uniqueAlias.utf8)
+    self.keyTag = Data(alias.utf8)
     self.accessControlFlags = accessControlFlags
     self.accessPrompt = accessPrompt
     self.authenticationPolicy = authenticationPolicy
 
-    // For device, clean up old keys. For simulator, skip cleanup since we use unique tags
-    #if !targetEnvironment(simulator)
-      cleanupAllOldKeys()
-    #endif
+    migrateLegacyKeysIfNeeded()
   }
 
   // MARK: - Public API
@@ -143,6 +130,7 @@ final class KeychainService {
     let query: [String: Any] = [
       kSecClass as String: kSecClassKey,
       kSecAttrApplicationTag as String: keyTag,
+      kSecAttrSynchronizable as String: kSecAttrSynchronizableAny,
     ]
 
     // First attempt to delete without specifying key type (broader match)
@@ -186,7 +174,7 @@ final class KeychainService {
 
   // MARK: - Private helpers
 
-  /// Checks if a key logic with our tag exists in the keychain.
+  /// Checks if a key with our tag exists in the keychain.
   func keyExists() -> Bool {
     // Check if we have an in-memory key first
     #if targetEnvironment(simulator)
@@ -195,11 +183,12 @@ final class KeychainService {
       if Self.deviceInMemoryKey != nil { return true }
     #endif
 
-    // Otherwise check keychain
+    // Otherwise check keychain (include synchronizable to find all keys)
     let query: [String: Any] = [
       kSecClass as String: kSecClassKey,
       kSecAttrApplicationTag as String: keyTag,
       kSecAttrKeyType as String: kSecAttrKeyTypeECSECPrimeRandom,
+      kSecAttrSynchronizable as String: kSecAttrSynchronizableAny,
       kSecMatchLimit as String: kSecMatchLimitOne,
     ]
 
@@ -216,10 +205,11 @@ final class KeychainService {
         return .success(inMemoryKey)
       }
 
-      // Try to get from keychain
+      // Try to get from keychain (include synchronizable to find all keys)
       let query: [String: Any] = [
         kSecClass as String: kSecClassKey,
         kSecAttrApplicationTag as String: keyTag,
+        kSecAttrSynchronizable as String: kSecAttrSynchronizableAny,
         kSecReturnRef as String: true,
       ]
 
@@ -232,7 +222,25 @@ final class KeychainService {
         return .success(key)
       }
 
-      return .failure(.keyManagementError("Key not found in simulator keychain and no in-memory key available"))
+      // Key not found — attempt to generate on the fly
+      print("[KeychainService] Simulator key not found (status: \(statusDescription(status))), generating...")
+      switch ensureSigningKey() {
+      case .failure(let error):
+        return .failure(error)
+      case .success:
+        // Check in-memory key first (ensureSigningKey may have set it)
+        if let inMemoryKey = Self.simulatorInMemoryKey {
+          return .success(inMemoryKey)
+        }
+        // Retry keychain
+        var retryItem: CFTypeRef?
+        let retryStatus = SecItemCopyMatching(query as CFDictionary, &retryItem)
+        if retryStatus == errSecSuccess {
+          // swiftlint:disable:next force_cast
+          return .success(retryItem as! SecKey)
+        }
+        return .failure(.keyManagementError("Key not found after generation (status: \(statusDescription(retryStatus)))"))
+      }
 
     #else
       // Device code with authentication handling
@@ -240,6 +248,7 @@ final class KeychainService {
         kSecClass as String: kSecClassKey,
         kSecAttrApplicationTag as String: keyTag,
         kSecAttrKeyType as String: kSecAttrKeyTypeECSECPrimeRandom,
+        kSecAttrSynchronizable as String: kSecAttrSynchronizableAny,
         kSecReturnRef as String: true,
       ]
 

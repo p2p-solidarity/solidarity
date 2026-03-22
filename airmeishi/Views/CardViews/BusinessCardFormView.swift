@@ -1,558 +1,272 @@
-//
-//  BusinessCardFormView.swift
-//  airmeishi
-//
-//  Complete business card creation and editing form with skills categorization
-//
-
-import PhotosUI
 import SwiftUI
 
 struct BusinessCardFormView: View {
+  let businessCard: BusinessCard?
+  let forceCreate: Bool
+  let onSave: (BusinessCard) -> Void
+
   @Environment(\.dismiss) private var dismiss
   @StateObject private var cardManager = CardManager.shared
 
-  @State private var businessCard: BusinessCard
-  @State private var isEditing: Bool
-  @State private var showingImagePicker = false
-  @State private var showingCamera = false
-  @State private var showingOCRScanner = false
-  @State private var selectedPhotoItem: PhotosPickerItem?
-  @State private var showingAlert = false
-  @State private var alertMessage = ""
-  @State private var isLoading = false
-  @State private var showingWalletPassSheet = false
-  @State private var createdCardForWallet: BusinessCard?
-  @State private var isInitializing = true
+  @State private var name = ""
+  @State private var title = ""
+  @State private var company = ""
+  @State private var email = ""
+  @State private var phone = ""
+  @State private var skillsText = ""
+  @State private var categoriesText = ""
+  @State private var linkedInHandle = ""
+  @State private var githubHandle = ""
+  @State private var useZK = true
+  @State private var allowForwarding = false
+  @State private var selectedFormat: SharingFormat = .plaintext
 
-  // Validation states
-  @State private var nameError: String?
-  @State private var emailError: String?
-  @State private var phoneError: String?
+  @State private var showingDeleteConfirm = false
+  @State private var showingErrorAlert = false
+  @State private var errorMessage = ""
 
-  // Group Selection
-  @State private var selectedGroupId: String?
-  @State private var availableGroups: [GroupModel] = []
-
-  let onSave: (BusinessCard) -> Void
-
-  init(businessCard: BusinessCard? = nil, forceCreate: Bool = false, onSave: @escaping (BusinessCard) -> Void) {
-
-    let initialCard = businessCard ?? BusinessCard(name: "")
-    self._businessCard = State(initialValue: initialCard)
-    if forceCreate {
-      self._isEditing = State(initialValue: false)
-    } else if let bc = businessCard {
-      // Only treat as editing if the card already exists in storage
-      let exists: Bool
-      switch CardManager.shared.getCard(id: bc.id) {
-      case .success:
-        exists = true
-      case .failure:
-        exists = false
-      }
-      self._isEditing = State(initialValue: exists)
-    } else {
-      self._isEditing = State(initialValue: false)
-    }
-
-    // Initialize selectedGroupId from card categories
-    if let tag = initialCard.categories.first(where: { $0.hasPrefix("group:") }) {
-      let uuidString = String(tag.dropFirst("group:".count))
-      self._selectedGroupId = State(initialValue: uuidString)
-    } else if forceCreate, let currentGroupId = SemaphoreGroupManager.shared.selectedGroupId?.uuidString {
-      // Pre-select group if creating from a group context
-      self._selectedGroupId = State(initialValue: currentGroupId)
-    } else {
-      self._selectedGroupId = State(initialValue: nil)
-    }
-
+  init(
+    businessCard: BusinessCard? = nil,
+    forceCreate: Bool = false,
+    onSave: @escaping (BusinessCard) -> Void = { _ in }
+  ) {
+    self.businessCard = businessCard
+    self.forceCreate = forceCreate
     self.onSave = onSave
   }
 
+  private var isEditing: Bool { businessCard != nil && !forceCreate }
+
   var body: some View {
-    // Removed debug print to reduce body re-evaluation overhead
-    bodyContent
-  }
-
-  private var bodyContent: some View {
-    NavigationView {
-      ZStack {
-        // Base layer - always visible to prevent gray screen
-        Color(.systemGroupedBackground)
-          .ignoresSafeArea()
-
-        Form {
-          groupSection
-          basicInfoSection
-          contactInfoSection
-          animalSection
-          // socialNetworksSection - Removed due to crashes
-          simplePrivacySection
-          if businessCard.sharingPreferences.useZK {
-            Section {
-              ZKVerifyButton(businessCard: businessCard, sharingLevel: .professional)
-            } header: {
-              Text("ZK Tools")
-            }
-          }
-        }
-        .adaptiveMaxWidth(700)
-        .opacity(isInitializing ? 0 : 1)
-
-        if isInitializing {
-          VStack(spacing: 20) {
-            ProgressView()
-              .progressViewStyle(CircularProgressViewStyle())
-              .scaleEffect(1.5)
-
-            Text("Loading card...")
-              .font(.subheadline)
-              .foregroundColor(.secondary)
-          }
-          .frame(maxWidth: .infinity, maxHeight: .infinity)
-          .background(Color(.systemGroupedBackground))
+    NavigationStack {
+      Form {
+        basicSection
+        profileSection
+        privacySection
+        saveSection
+        if isEditing {
+          dangerSection
         }
       }
-      .navigationTitle(isEditing ? "Edit Card" : "New Card")
+      .navigationTitle(isEditing ? "Edit Identity Card" : "Create Identity Card")
       .navigationBarTitleDisplayMode(.inline)
       .toolbar {
         ToolbarItem(placement: .navigationBarLeading) {
-          Button("Cancel") {
-            dismiss()
-          }
-        }
-
-        ToolbarItem(placement: .navigationBarTrailing) {
-          Button(action: {
-            saveBusinessCard()
-          }) {
-            HStack(spacing: 4) {
-              Image(systemName: "checkmark")
-                .font(.system(size: 14, weight: .bold))
-              Text("Add")
-                .font(.system(size: 16, weight: .semibold))
-            }
-            .foregroundColor((isLoading || !isFormValid) ? .gray : .white)
-            .padding(.horizontal, 16)
-            .padding(.vertical, 8)
-            .background(
-              RoundedRectangle(cornerRadius: 20, style: .continuous)
-                .fill((isLoading || !isFormValid) ? Color.gray.opacity(0.2) : Color.black)
-                .shadow(
-                  color: (isLoading || !isFormValid) ? .clear : Color.black.opacity(0.3),
-                  radius: 8,
-                  x: 0,
-                  y: 4
-                )
-            )
-          }
-          .disabled(isLoading || !isFormValid)
+          Button("Cancel") { dismiss() }
         }
       }
-      .alert("Error", isPresented: $showingAlert) {
-        Button("OK") {}
+      .onAppear(perform: hydrate)
+      .alert("Error", isPresented: $showingErrorAlert) {
+        Button("OK", role: .cancel) {}
       } message: {
-        Text(alertMessage)
+        Text(errorMessage)
       }
-      // OCR scanner removed per new flow
-      .photosPicker(isPresented: $showingImagePicker, selection: $selectedPhotoItem, matching: .images)
-      .onChange(of: selectedPhotoItem) { _, newItem in
-        loadSelectedImage(newItem)
-      }
-      .sheet(isPresented: $showingWalletPassSheet, onDismiss: { dismiss() }) {
-        if let card = createdCardForWallet {
-          WalletPassGenerationView(
-            businessCard: card,
-            sharingLevel: .professional
-          )
+      .confirmationDialog(
+        "Delete this card?",
+        isPresented: $showingDeleteConfirm,
+        titleVisibility: .visible
+      ) {
+        Button("Delete", role: .destructive) {
+          deleteCard()
         }
-      }
-      .onAppear {
-        // Load available groups
-        availableGroups = CloudKitGroupSyncManager.shared.getAllGroups()
-
-        // Set loading state to false immediately to prevent gray screen
-        DispatchQueue.main.async {
-          isInitializing = false
-        }
+        Button("Cancel", role: .cancel) {}
+      } message: {
+        Text("This action cannot be undone.")
       }
     }
-    .hideKeyboardAccessory()
   }
 
-  // MARK: - Form Sections
+  private var basicSection: some View {
+    Section("Basic Info") {
+      TextField("Name *", text: $name)
+      TextField("Title", text: $title)
+      TextField("Company", text: $company)
+    }
+  }
 
-  // socialNetworksSection removed - feature disabled due to crashes
+  private var profileSection: some View {
+    Section("Contact and Skills") {
+      TextField("Email", text: $email)
+        .textInputAutocapitalization(.never)
+        .keyboardType(.emailAddress)
+      TextField("Phone", text: $phone)
+        .keyboardType(.phonePad)
+      TextField("Skills (comma separated)", text: $skillsText)
+      TextField("Categories (comma separated)", text: $categoriesText)
+      TextField("LinkedIn username", text: $linkedInHandle)
+      TextField("GitHub username", text: $githubHandle)
+        .textInputAutocapitalization(.never)
+    }
+  }
 
-  private var simplePrivacySection: some View {
-    Section {
-      Toggle(
-        isOn: Binding(
-          get: { businessCard.sharingPreferences.useZK },
-          set: { businessCard.sharingPreferences.useZK = $0 }
-        )
-      ) {
-        VStack(alignment: .leading) {
-          Text("Zero-Knowledge Privacy")
-            .font(.headline)
-          Text("Selective Disclosure Enabled")
-            .font(.caption)
-            .foregroundColor(.secondary)
+  private var privacySection: some View {
+    Section("Sharing Preferences") {
+      Toggle("Use ZK proof by default", isOn: $useZK)
+      Toggle("Allow forwarding", isOn: $allowForwarding)
+
+      Picker("Sharing format", selection: $selectedFormat) {
+        ForEach(SharingFormat.allCases) { format in
+          Text(format.displayName).tag(format)
         }
       }
-      .tint(.purple)  // Make it look premium
+      .pickerStyle(.navigationLink)
 
-      if businessCard.sharingPreferences.useZK {
-        Text(
-          """
-          Your data is cryptographically protected. When you share via QR,
-          only the fields you explicitly allow are revealed.
-          The receiver verifies your identity without seeing hidden data.
-          """
-        )
+      Text(selectedFormat.detail)
         .font(.caption)
         .foregroundColor(.secondary)
-      }
-    } header: {
-      Label("Privacy & Security", systemImage: "lock.shield")
     }
   }
 
-  private var basicInfoSection: some View {
+  private var saveSection: some View {
     Section {
-      VStack(alignment: .leading, spacing: 4) {
-        TextField("Full Name", text: $businessCard.name)
-          .textContentType(.name)
-          .onChange(of: businessCard.name) { _, _ in
-            validateName()
-          }
-        if let error = nameError {
-          Text(error)
-            .font(.caption)
-            .foregroundColor(.red)
-        }
+      Button {
+        persistCard()
+      } label: {
+        Text(isEditing ? "Save Changes" : "Create Card")
+          .frame(maxWidth: .infinity)
       }
-
-      // Re-enable Job Title input (even with group), but keep company hidden
-      TextField(
-        "Job Title",
-        text: Binding(
-          get: { businessCard.title ?? "" },
-          set: { businessCard.title = $0.isEmpty ? nil : $0 }
-        )
-      )
-      .textContentType(.jobTitle)
-    } header: {
-      Text("Basic Information")
+      .disabled(name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
     }
   }
 
-  private var contactInfoSection: some View {
-    Section {
-      VStack(alignment: .leading, spacing: 4) {
-        TextField(
-          "Email",
-          text: Binding(
-            get: { businessCard.email ?? "" },
-            set: { businessCard.email = $0.isEmpty ? nil : $0 }
-          )
-        )
-        .textContentType(.emailAddress)
-        .keyboardType(.emailAddress)
-        .autocapitalization(.none)
-        .onChange(of: businessCard.email) { _, _ in
-          validateEmail()
-        }
-
-        if let error = emailError {
-          Text(error)
-            .font(.caption)
-            .foregroundColor(.red)
-        }
-      }
-
-      VStack(alignment: .leading, spacing: 4) {
-        TextField(
-          "Phone",
-          text: Binding(
-            get: { businessCard.phone ?? "" },
-            set: { businessCard.phone = $0.isEmpty ? nil : $0 }
-          )
-        )
-        .textContentType(.telephoneNumber)
-        .keyboardType(.phonePad)
-        .onChange(of: businessCard.phone) { _, _ in
-          validatePhone()
-        }
-
-        if let error = phoneError {
-          Text(error)
-            .font(.caption)
-            .foregroundColor(.red)
-        }
-      }
-
-      // Scan business card removed per new flow
-    } header: {
-      Text("Contact Information (Sensitive Information)")
-    }
-  }
-
-  private var animalSection: some View {
-    Section {
-      AnimalSelectorView(
-        selection: Binding(
-          get: { businessCard.animal ?? .dog },
-          set: { businessCard.animal = $0 }
-        )
-      )
-    } header: {
-      Text("Card Character")
-    } footer: {
-      if let animal = businessCard.animal {
-        Text(animal.personality).font(.caption).foregroundColor(.secondary)
-      } else {
-        EmptyView()
+  private var dangerSection: some View {
+    Section("Danger Zone") {
+      Button(role: .destructive) {
+        showingDeleteConfirm = true
+      } label: {
+        Text("Delete Card")
+          .frame(maxWidth: .infinity, alignment: .leading)
       }
     }
   }
 
-  // MARK: - Computed Properties
-
-  private var isFormValid: Bool {
-    !businessCard.name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && nameError == nil && emailError == nil
-      && phoneError == nil
+  private func hydrate() {
+    guard let businessCard else { return }
+    name = businessCard.name
+    title = businessCard.title ?? ""
+    company = businessCard.company ?? ""
+    email = businessCard.email ?? ""
+    phone = businessCard.phone ?? ""
+    skillsText = businessCard.skills.map(\.name).joined(separator: ", ")
+    categoriesText = businessCard.categories.joined(separator: ", ")
+    linkedInHandle =
+      businessCard.socialNetworks.first(where: { $0.platform == .linkedin })?.username ?? ""
+    githubHandle =
+      businessCard.socialNetworks.first(where: { $0.platform == .github })?.username ?? ""
+    useZK = businessCard.sharingPreferences.useZK
+    allowForwarding = businessCard.sharingPreferences.allowForwarding
+    selectedFormat = businessCard.sharingPreferences.sharingFormat
   }
 
-  // MARK: - Methods
-
-  private func saveBusinessCard() {
-    isLoading = true
-
-    // Update group tag based on selection
-    businessCard.categories.removeAll { $0.hasPrefix("group:") }
-    if let gid = selectedGroupId {
-      businessCard.categories.append("group:\(gid)")
+  private func persistCard() {
+    let trimmedName = name.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard !trimmedName.isEmpty else {
+      showError("Name is required.")
+      return
     }
 
-    let result = isEditing ? cardManager.updateCard(businessCard) : cardManager.createCard(businessCard)
+    let skills = parseSkills(from: skillsText)
+    let categories = parseCSV(categoriesText)
+    let socials = parseSocialNetworks()
+    let existingCard = businessCard
+
+    let preferences = SharingPreferences(
+      allowForwarding: allowForwarding,
+      useZK: useZK,
+      sharingFormat: selectedFormat
+    )
+
+    let updatedCard = BusinessCard(
+      id: existingCard?.id ?? UUID(),
+      name: trimmedName,
+      title: nilIfEmpty(title),
+      company: nilIfEmpty(company),
+      email: nilIfEmpty(email),
+      phone: nilIfEmpty(phone),
+      profileImage: existingCard?.profileImage,
+      animal: existingCard?.animal,
+      socialNetworks: socials,
+      skills: skills,
+      categories: categories,
+      sharingPreferences: preferences,
+      groupContext: existingCard?.groupContext,
+      createdAt: existingCard?.createdAt ?? Date(),
+      updatedAt: Date()
+    )
+
+    let result: CardResult<BusinessCard> =
+      isEditing
+      ? cardManager.updateCard(updatedCard)
+      : cardManager.createCard(updatedCard)
 
     switch result {
     case .success(let savedCard):
       onSave(savedCard)
-      if isEditing {
-        dismiss()
-      } else {
-        createdCardForWallet = savedCard
-        showingWalletPassSheet = true
-      }
+      dismiss()
     case .failure(let error):
-      alertMessage = error.localizedDescription
-      showingAlert = true
-    }
-
-    isLoading = false
-  }
-
-  private func validateName() {
-    let trimmedName = businessCard.name.trimmingCharacters(in: .whitespacesAndNewlines)
-    if trimmedName.isEmpty {
-      nameError = "Name is required"
-    } else {
-      nameError = nil
+      showError(error.localizedDescription)
     }
   }
 
-  private func validateEmail() {
-    guard let email = businessCard.email, !email.isEmpty else {
-      emailError = nil
-      return
-    }
-
-    let emailRegex = "^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\\.[A-Za-z]{2,}$"
-    let emailPredicate = NSPredicate(format: "SELF MATCHES %@", emailRegex)
-
-    if !emailPredicate.evaluate(with: email) {
-      emailError = "Invalid email format"
-    } else {
-      emailError = nil
+  private func deleteCard() {
+    guard let id = businessCard?.id else { return }
+    let result = cardManager.deleteCard(id: id)
+    switch result {
+    case .success:
+      dismiss()
+    case .failure(let error):
+      showError(error.localizedDescription)
     }
   }
 
-  private func validatePhone() {
-    guard let phone = businessCard.phone, !phone.isEmpty else {
-      phoneError = nil
-      return
-    }
-
-    let phoneRegex = "^[+]?[0-9\\s\\-\\(\\)]{10,}$"
-    let phonePredicate = NSPredicate(format: "SELF MATCHES %@", phoneRegex)
-
-    if !phonePredicate.evaluate(with: phone) {
-      phoneError = "Invalid phone format"
-    } else {
-      phoneError = nil
+  private func parseSkills(from value: String) -> [Skill] {
+    parseCSV(value).map {
+      Skill(name: $0, category: String(localized: "General"), proficiencyLevel: .intermediate)
     }
   }
 
-  // Social network functions removed - feature disabled
+  private func parseSocialNetworks() -> [SocialNetwork] {
+    var socials: [SocialNetwork] = []
 
-  private func loadSelectedImage(_ item: PhotosPickerItem?) {
-    guard let item = item else { return }
-
-    item.loadTransferable(type: Data.self) { result in
-      DispatchQueue.main.async {
-        switch result {
-        case .success(let data):
-          if let data = data {
-            businessCard.profileImage = data
-          }
-        case .failure(let error):
-          alertMessage = "Failed to load image: \(error.localizedDescription)"
-          showingAlert = true
-        }
-      }
+    let linkedIn = linkedInHandle.trimmingCharacters(in: .whitespacesAndNewlines)
+    if !linkedIn.isEmpty {
+      socials.append(
+        SocialNetwork(
+          platform: .linkedin,
+          username: linkedIn,
+          url: "https://linkedin.com/in/\(linkedIn)"
+        )
+      )
     }
+
+    let github = githubHandle.trimmingCharacters(in: .whitespacesAndNewlines)
+    if !github.isEmpty {
+      socials.append(
+        SocialNetwork(
+          platform: .github,
+          username: github,
+          url: "https://github.com/\(github)"
+        )
+      )
+    }
+
+    return socials
   }
 
-  private func applyExtractedData(_ extractedCard: BusinessCard) {
-    // Apply OCR extracted data to current card
-    if !extractedCard.name.isEmpty {
-      businessCard.name = extractedCard.name
-    }
-    if let title = extractedCard.title, !title.isEmpty {
-      businessCard.title = title
-    }
-    if let company = extractedCard.company, !company.isEmpty {
-      businessCard.company = company
-    }
-    if let email = extractedCard.email, !email.isEmpty {
-      businessCard.email = email
-    }
-    if let phone = extractedCard.phone, !phone.isEmpty {
-      businessCard.phone = phone
-    }
-
-    // Validate after applying extracted data
-    validateName()
-    validateEmail()
-    validatePhone()
+  private func parseCSV(_ rawValue: String) -> [String] {
+    rawValue
+      .split(separator: ",")
+      .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+      .filter { !$0.isEmpty }
   }
 
-  // MARK: - Helpers
-  private func groupForCurrentCard() -> SemaphoreGroupManager.ManagedGroup? {
-    if let tag = businessCard.categories.first(where: { $0.hasPrefix("group:") }) {
-      let uuidString = String(tag.dropFirst("group:".count))
-      if let id = UUID(uuidString: uuidString) {
-        return SemaphoreGroupManager.shared.allGroups.first(where: { $0.id == id })
-      }
-    }
-    return nil
+  private func nilIfEmpty(_ value: String) -> String? {
+    let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+    return trimmed.isEmpty ? nil : trimmed
   }
 
-  // Group Selection Section
-  private var groupSection: some View {
-    Section {
-      if let selectedId = selectedGroupId, let group = availableGroups.first(where: { $0.id == selectedId }) {
-        HStack(spacing: 12) {
-          ZStack {
-            Circle()
-              .fill(LinearGradient(colors: [.purple, .blue], startPoint: .topLeading, endPoint: .bottomTrailing))
-              .frame(width: 32, height: 32)
-            Image(systemName: "person.3.fill")
-              .font(.system(size: 14, weight: .semibold))
-              .foregroundColor(.white)
-          }
-
-          VStack(alignment: .leading, spacing: 2) {
-            Text(group.name)
-              .font(.headline)
-              .foregroundColor(.primary)
-            Text("Issuing Group")
-              .font(.caption)
-              .foregroundColor(.secondary)
-          }
-
-          Spacer()
-
-          Button(action: {
-            selectedGroupId = nil
-          }) {
-            Image(systemName: "xmark.circle.fill")
-              .foregroundColor(.gray)
-              .font(.system(size: 22))
-          }
-          .buttonStyle(PlainButtonStyle())
-        }
-        .padding(.vertical, 4)
-
-        NavigationLink("Change Group") {
-          GroupSelectionView(groups: availableGroups, selectedGroupId: $selectedGroupId)
-        }
-      } else {
-        HStack {
-          Text("Not linked to any group")
-            .foregroundColor(.secondary)
-          Spacer()
-          NavigationLink("Link to Group") {
-            GroupSelectionView(groups: availableGroups, selectedGroupId: $selectedGroupId)
-          }
-        }
-      }
-    } header: {
-      Text("Group Affiliation")
-    }
+  private func showError(_ message: String) {
+    errorMessage = message
+    showingErrorAlert = true
   }
-}
-
-struct GroupSelectionView: View {
-  let groups: [GroupModel]
-  @Binding var selectedGroupId: String?
-  @Environment(\.dismiss) private var dismiss
-
-  var body: some View {
-    List {
-      Section {
-        Button(action: {
-          selectedGroupId = nil
-          dismiss()
-        }) {
-          HStack {
-            Text("None")
-              .foregroundColor(.primary)
-            Spacer()
-            if selectedGroupId == nil {
-              Image(systemName: "checkmark")
-                .foregroundColor(.blue)
-            }
-          }
-        }
-      }
-
-      Section("Available Groups") {
-        ForEach(groups) { group in
-          Button(action: {
-            selectedGroupId = group.id
-            dismiss()
-          }) {
-            HStack {
-              Text(group.name)
-                .foregroundColor(.primary)
-              Spacer()
-              if selectedGroupId == group.id {
-                Image(systemName: "checkmark")
-                  .foregroundColor(.blue)
-              }
-            }
-          }
-        }
-      }
-    }
-    .navigationTitle("Select Group")
-  }
-}
-
-#Preview {
-  BusinessCardFormView { _ in }
 }

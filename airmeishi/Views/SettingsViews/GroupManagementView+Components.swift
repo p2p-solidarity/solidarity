@@ -19,7 +19,7 @@ struct InviteLinkView: View {
   var onShare: ((CKShare, CKContainer) -> Void)?
 
   var body: some View {
-    NavigationView {
+    NavigationStack {
       Form {
         Section(header: Text("Select Group")) {
           Picker("Group", selection: $selectedGroup) {

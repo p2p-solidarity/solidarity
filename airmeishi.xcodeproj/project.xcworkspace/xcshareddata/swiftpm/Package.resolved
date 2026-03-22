@@ -1,6 +1,33 @@
 {
-  "originHash" : "179bd30fbd6d31f0266783d0e1853d7e8cdb11d43fca074ce27704a3fc92563b",
+  "originHash" : "2a29e879d092f39402c140053d8241c416134833c94034dca1c22dc94c6ee9c6",
   "pins" : [
+    {
+      "identity" : "nfcpassportreader",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/AndyQ/NFCPassportReader",
+      "state" : {
+        "revision" : "deec44982fa9bf2704a5f2138eb01dab7dcf9299",
+        "version" : "2.3.0"
+      }
+    },
+    {
+      "identity" : "openssl-package",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/krzyzanowskim/OpenSSL-Package.git",
+      "state" : {
+        "revision" : "71dbe0b4514cdaad95961470db72e8231f5943a6",
+        "version" : "3.3.3001"
+      }
+    },
+    {
+      "identity" : "passport-noir",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/p2p-solidarity/passport-noir.git",
+      "state" : {
+        "branch" : "main",
+        "revision" : "705748e50fc959a1915f042ee89952ae986a8ecf"
+      }
+    },
     {
       "identity" : "semaphoreswift",
       "kind" : "remoteSourceControl",
@@ -15,8 +42,8 @@
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/spruceid/sprucekit-mobile",
       "state" : {
-        "revision" : "d5c765b7096e0c03229a13829800841811a9da8c",
-        "version" : "0.12.11"
+        "revision" : "0e595013523eeb855bc64951a6634898eab5c19d",
+        "version" : "0.14.10"
       }
     },
     {
@@ -42,8 +69,8 @@
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/SimplyDanny/SwiftLintPlugins",
       "state" : {
-        "revision" : "ecafb5b056cb7995324f0d310a61f30661d00cad",
-        "version" : "0.62.2"
+        "revision" : "8a4640d14777685ba8f14e832373160498fbab92",
+        "version" : "0.63.2"
       }
     },
     {

@@ -8,8 +8,16 @@
 import SwiftUI
 
 struct ContentView: View {
+  @AppStorage("solidarity.onboarding.completed") private var onboardingCompleted = false
+
   var body: some View {
-    MainTabView()
+    Group {
+      if onboardingCompleted {
+        MainTabView()
+      } else {
+        OnboardingFlowView()
+      }
+    }
   }
 }
 

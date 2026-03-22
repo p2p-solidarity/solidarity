@@ -10,6 +10,7 @@ final class QRCodeManager: ObservableObject {
   @Published var lastScannedCard: BusinessCard?
   @Published var lastVerificationStatus: VerificationStatus?
   @Published var lastSealedRoute: String?
+  @Published var lastScanRoute: ScanRoute?
   @Published var scanError: CardError?
 
   private let generationService: QRCodeGenerationService
@@ -31,6 +32,21 @@ final class QRCodeManager: ObservableObject {
 
   func generateQRCode(from string: String) -> CardResult<UIImage> {
     generationService.generateImage(from: string)
+  }
+
+  func generateQRCode(
+    for businessCard: BusinessCard,
+    fields: Set<BusinessCardField>,
+    expirationDate: Date? = nil
+  ) -> CardResult<UIImage> {
+    isGenerating = true
+    let result = generationService.generateImage(
+      for: businessCard,
+      fields: fields,
+      expirationDate: expirationDate
+    )
+    isGenerating = false
+    return result
   }
 
   func generateQRCode(
@@ -72,6 +88,9 @@ final class QRCodeManager: ObservableObject {
   // MARK: - Scanning
 
   func startScanning() -> CardResult<AVCaptureVideoPreviewLayer> {
+    // Reset route so scanning the same payload again still emits a route change.
+    lastScanRoute = nil
+    scanError = nil
     let result = scanService.startScanning()
     if case .success = result {
       isScanning = true
@@ -98,8 +117,11 @@ final class QRCodeManager: ObservableObject {
         self.lastScannedCard = outcome.card
         self.lastVerificationStatus = outcome.verificationStatus
         self.lastSealedRoute = outcome.sealedRoute
+        self.lastScanRoute = nil
+        self.lastScanRoute = outcome.route
         self.scanError = nil
       case .failure(let error):
+        self.lastScanRoute = nil
         self.scanError = error
       }
     }

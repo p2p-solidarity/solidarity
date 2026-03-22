@@ -30,6 +30,14 @@
 			<key>CFBundleURLName</key>
 			<string>airmeishi.auth</string>
 		</dict>
+		<dict>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>openid-credential-offer</string>
+			</array>
+			<key>CFBundleURLName</key>
+			<string>airmeishi.oid4vci</string>
+		</dict>
 	</array>
 	<key>ITSAppUsesNonExemptEncryption</key>
 	<false/>
@@ -46,6 +54,14 @@
 	<string>This app needs access to contacts to save business card information.</string>
 	<key>NSLocalNetworkUsageDescription</key>
 	<string>This app needs access to the local network to discover and connect with nearby devices for business card sharing.</string>
+	<key>NSNearbyInteractionUsageDescription</key>
+	<string>This app uses Nearby Interaction to detect the distance and direction of nearby devices for business card sharing.</string>
+	<key>com.apple.developer.nfc.readersession.iso7816.select-identifiers</key>
+	<array>
+		<string>A0000002471001</string>
+	</array>
+	<key>NFCReaderUsageDescription</key>
+	<string>Read your passport's NFC chip to create a verified identity credential.</string>
 	<key>NSPhotoLibraryUsageDescription</key>
 	<string>This app needs access to photo library to save QR codes and business card images.</string>
 	<key>UIApplicationSceneManifest</key>

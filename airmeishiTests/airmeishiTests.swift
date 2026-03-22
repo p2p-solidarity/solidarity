@@ -56,7 +56,7 @@ struct airmeishiTests {
         }
     }
     
-    @Test func testContactRepository() async throws {
+    @Test @MainActor func testContactRepository() async throws {
         // Clear any existing data
         _ = StorageManager.shared.clearAllData()
         

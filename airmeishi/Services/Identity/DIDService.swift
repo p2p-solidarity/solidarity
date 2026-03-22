@@ -39,11 +39,15 @@ final class DIDService {
   }
 
   func currentDescriptor(context: LAContext? = nil) -> CardResult<DIDDescriptor> {
+    currentDescriptor(for: nil, context: context)
+  }
+
+  func currentDescriptor(for relyingPartyDomain: String?, context: LAContext? = nil) -> CardResult<DIDDescriptor> {
     switch currentMethod {
     case .key:
-      return currentDidKey(context: context)
+      return currentDidKey(context: context, relyingPartyDomain: relyingPartyDomain)
     case .ethr:
-      return currentDidEthr(context: context)
+      return currentDidEthr(context: context, relyingPartyDomain: relyingPartyDomain)
     }
   }
 
@@ -61,9 +65,15 @@ final class DIDService {
   // MARK: - DID:key
 
   /// Returns the descriptor (DID, verification method ID, JWK) for the current did:key identity.
-  func currentDidKey(context: LAContext? = nil) -> CardResult<DIDDescriptor> {
-    // First ensure the signing key exists
-    switch keychain.ensureSigningKey() {
+  func currentDidKey(context: LAContext? = nil, relyingPartyDomain: String? = nil) -> CardResult<DIDDescriptor> {
+    let ensureResult: CardResult<Void>
+    if let relyingPartyDomain {
+      ensureResult = keychain.ensurePairwiseKey(for: relyingPartyDomain)
+    } else {
+      ensureResult = keychain.ensureSigningKey()
+    }
+
+    switch ensureResult {
     case .failure(let error):
       print("[DIDService] Failed to ensure signing key: \(error)")
       return .failure(error)
@@ -71,7 +81,14 @@ final class DIDService {
       break
     }
 
-    switch keychain.publicJwk(context: context) {
+    let publicJwkResult: CardResult<PublicKeyJWK>
+    if let relyingPartyDomain {
+      publicJwkResult = keychain.pairwisePublicJwk(for: relyingPartyDomain, context: context)
+    } else {
+      publicJwkResult = keychain.publicJwk(context: context)
+    }
+
+    switch publicJwkResult {
     case .failure(let error):
       print("[DIDService] Failed to get public JWK: \(error)")
       return .failure(error)
@@ -105,8 +122,15 @@ final class DIDService {
   /// Returns the descriptor for did:ethr derived from the same key.
   /// Note: This assumes the key is secp256k1 (ES256K). If it's P-256 (ES256), did:ethr is not standardly supported this way,
   /// but for this implementation we will derive an Ethereum address from the public key bytes if possible.
-  func currentDidEthr(context: LAContext? = nil) -> CardResult<DIDDescriptor> {
-    switch keychain.publicJwk(context: context) {
+  func currentDidEthr(context: LAContext? = nil, relyingPartyDomain: String? = nil) -> CardResult<DIDDescriptor> {
+    let publicJwkResult: CardResult<PublicKeyJWK>
+    if let relyingPartyDomain {
+      publicJwkResult = keychain.pairwisePublicJwk(for: relyingPartyDomain, context: context)
+    } else {
+      publicJwkResult = keychain.publicJwk(context: context)
+    }
+
+    switch publicJwkResult {
     case .failure(let error):
       return .failure(error)
     case .success(let jwk):
@@ -152,7 +176,7 @@ final class DIDService {
     services: [DIDServiceEndpoint] = [],
     context: LAContext? = nil
   ) -> CardResult<DIDDocument> {
-    switch keychain.publicJwk(context: context) {
+    switch keychain.pairwisePublicJwk(for: domain, context: context) {
     case .failure(let error):
       return .failure(error)
     case .success(let jwk):

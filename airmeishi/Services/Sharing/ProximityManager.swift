@@ -12,12 +12,24 @@ import UIKit
 
 /// Protocol for proximity sharing operations
 protocol ProximityManagerProtocol {
-  func startAdvertising(with card: BusinessCard, sharingLevel: SharingLevel)
+  func startAdvertising(with card: BusinessCard)
   func stopAdvertising()
   func startBrowsing()
   func stopBrowsing()
-  func sendCard(_ card: BusinessCard, to peer: MCPeerID, sharingLevel: SharingLevel)
+  func sendCard(_ card: BusinessCard, to peer: MCPeerID)
   func disconnect()
+}
+
+extension ProximityManagerProtocol {
+  /// Legacy wrapper. Sharing scope is field-based; level is ignored by core protocol semantics.
+  func startAdvertising(with card: BusinessCard, sharingLevel _: SharingLevel) {
+    startAdvertising(with: card)
+  }
+
+  /// Legacy wrapper. Sharing scope is field-based; level is ignored by core protocol semantics.
+  func sendCard(_ card: BusinessCard, to peer: MCPeerID, sharingLevel _: SharingLevel) {
+    sendCard(card, to: peer)
+  }
 }
 
 /// Manages proximity-based sharing using Multipeer Connectivity
@@ -37,6 +49,8 @@ class ProximityManager: NSObject, ProximityManagerProtocol, ObservableObject {
   @Published var pendingInvitations: [PendingInvitation] = []
   @Published var isPresentingInvitation = false
   @Published var pendingGroupInvite: (payload: GroupInvitePayload, from: MCPeerID)?
+  @Published var pendingExchangeRequest: PendingExchangeRequest?
+  @Published var latestExchangeCompletion: ExchangeCompletionEvent?
   @Published var matchingInfoMessage: String?  // User-friendly status message for UI
   @Published var discoveryState: DiscoveryState = .idle
   @Published var currentSession: MCSession?  // Corrected type for MCSession?
@@ -61,6 +75,9 @@ class ProximityManager: NSObject, ProximityManagerProtocol, ObservableObject {
 
   internal var currentCard: BusinessCard?
   internal var currentSharingLevel: SharingLevel = .professional
+  internal var autoSendCardOnConnect = false
+  internal var sentExchangeSignatures: [UUID: String] = [:]
+  internal var sentExchangeMessages: [UUID: String] = [:]
 
   @MainActor internal let contactRepository = ContactRepository.shared
   internal var cancellables = Set<AnyCancellable>()

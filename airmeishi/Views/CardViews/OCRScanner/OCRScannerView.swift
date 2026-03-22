@@ -36,7 +36,7 @@ struct OCRScannerView: View {
   }
 
   var body: some View {
-    NavigationView {
+    NavigationStack {
       ScrollView {
         VStack(spacing: 20) {
           if showingLanguageSelection {
@@ -270,23 +270,23 @@ struct OCRScannerView: View {
 
       VStack(alignment: .leading, spacing: 8) {
         if !card.name.isEmpty {
-          ExtractedFieldView(label: "Name", value: card.name, confidence: ocrManager.lastConfidenceScores["name"])
+          ExtractedFieldView(label: String(localized: "Name"), value: card.name, confidence: ocrManager.lastConfidenceScores["name"])
         }
 
         if let title = card.title, !title.isEmpty {
-          ExtractedFieldView(label: "Title", value: title, confidence: ocrManager.lastConfidenceScores["title"])
+          ExtractedFieldView(label: String(localized: "Title"), value: title, confidence: ocrManager.lastConfidenceScores["title"])
         }
 
         if let company = card.company, !company.isEmpty {
-          ExtractedFieldView(label: "Company", value: company, confidence: ocrManager.lastConfidenceScores["company"])
+          ExtractedFieldView(label: String(localized: "Company"), value: company, confidence: ocrManager.lastConfidenceScores["company"])
         }
 
         if let email = card.email, !email.isEmpty {
-          ExtractedFieldView(label: "Email", value: email, confidence: ocrManager.lastConfidenceScores["email"])
+          ExtractedFieldView(label: String(localized: "Email"), value: email, confidence: ocrManager.lastConfidenceScores["email"])
         }
 
         if let phone = card.phone, !phone.isEmpty {
-          ExtractedFieldView(label: "Phone", value: phone, confidence: ocrManager.lastConfidenceScores["phone"])
+          ExtractedFieldView(label: String(localized: "Phone"), value: phone, confidence: ocrManager.lastConfidenceScores["phone"])
         }
       }
 
@@ -312,18 +312,18 @@ struct OCRScannerView: View {
           if granted {
             showingCamera = true
           } else {
-            alertMessage = "Camera access is required to scan business cards. Please enable it in Settings."
+            alertMessage = String(localized: "Camera access is required to scan business cards. Please enable it in Settings.")
             showSettingsButton = true
             showingAlert = true
           }
         }
       }
     case .denied, .restricted:
-      alertMessage = "Camera access is required. Please enable it in Settings."
+      alertMessage = String(localized: "Camera access is required. Please enable it in Settings.")
       showSettingsButton = true
       showingAlert = true
     @unknown default:
-      alertMessage = "Camera access is required to scan business cards"
+      alertMessage = String(localized: "Camera access is required to scan business cards")
       showingAlert = true
     }
   }
@@ -340,7 +340,8 @@ struct OCRScannerView: View {
             processImage(image)
           }
         case .failure(let error):
-          alertMessage = "Failed to load image: \(error.localizedDescription)"
+          let format = String(localized: "Failed to load image: %@")
+          alertMessage = String(format: format, error.localizedDescription)
           showingAlert = true
         }
       }
@@ -359,7 +360,8 @@ struct OCRScannerView: View {
         case .success(let card):
           extractedCard = card
         case .failure(let error):
-          alertMessage = "Failed to extract information: \(error.localizedDescription)"
+          let format = String(localized: "Failed to extract information: %@")
+          alertMessage = String(format: format, error.localizedDescription)
           showingAlert = true
         }
       }

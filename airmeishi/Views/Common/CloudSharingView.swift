@@ -38,7 +38,7 @@ struct CloudSharingView: UIViewControllerRepresentable {
     }
 
     func itemTitle(for csc: UICloudSharingController) -> String? {
-      return parent.share[CKShare.SystemFieldKey.title] as? String ?? "Group"
+      return parent.share[CKShare.SystemFieldKey.title] as? String ?? String(localized: "Group")
     }
 
     // Optional: Handle other delegate methods if needed

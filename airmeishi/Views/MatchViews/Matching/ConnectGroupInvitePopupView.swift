@@ -23,11 +23,12 @@ struct ConnectGroupInvitePopupView: View {
   var onDismiss: (() -> Void)?
 
   @ObservedObject private var proximityManager = ProximityManager.shared
+  @Environment(\.colorScheme) private var colorScheme
   @State private var phase: GroupInvitePhase = .idle
 
   var body: some View {
     ZStack {
-      Color.black.opacity(0.5)
+      Color.Theme.overlayBg
         .ignoresSafeArea()
         .onTapGesture { if canTapOutsideToDismiss { dismiss() } }
 
@@ -35,13 +36,12 @@ struct ConnectGroupInvitePopupView: View {
         .padding(20)
         .background(
           RoundedRectangle(cornerRadius: 20)
-            .fill(Color(.secondarySystemBackground).opacity(0.95))
-            .overlay(RoundedRectangle(cornerRadius: 20).stroke(Color.white.opacity(0.1), lineWidth: 1))
+            .fill(Color.Theme.popupSurface.opacity(0.95))
+            .overlay(RoundedRectangle(cornerRadius: 20).stroke(Color.Theme.cardBorder(for: colorScheme), lineWidth: 1))
         )
         .padding(.horizontal, 24)
-        .shadow(color: Color.black.opacity(0.3), radius: 20, x: 0, y: 10)
+        .shadow(color: Color.black.opacity(0.2), radius: 20, x: 0, y: 10)
     }
-    .preferredColorScheme(.dark)
   }
 
   private var content: some View {
@@ -56,7 +56,13 @@ struct ConnectGroupInvitePopupView: View {
     HStack(spacing: 12) {
       ZStack {
         Circle()
-          .fill(LinearGradient(colors: [.purple, .blue], startPoint: .topLeading, endPoint: .bottomTrailing))
+          .fill(
+            LinearGradient(
+              colors: [Color.Theme.dustyMauve, Color.Theme.primaryBlue],
+              startPoint: .topLeading,
+              endPoint: .bottomTrailing
+            )
+          )
           .frame(width: 54, height: 54)
         Image(systemName: "person.3.fill")
           .foregroundColor(.white)
@@ -64,22 +70,22 @@ struct ConnectGroupInvitePopupView: View {
       VStack(alignment: .leading, spacing: 6) {
         Text(invite.groupName)
           .font(.headline)
-          .foregroundColor(.white)
+          .foregroundColor(Color.Theme.textPrimary)
           .lineLimit(1)
         Text("Invite from \(fromPeer.displayName)")
           .font(.caption)
-          .foregroundColor(.yellow)
+          .foregroundColor(Color.Theme.featureAccent)
           .lineLimit(1)
         if let root = invite.groupRoot, !root.isEmpty {
           Text("Root: \(root)")
             .font(.caption2)
-            .foregroundColor(.gray)
+            .foregroundColor(Color.Theme.textSecondary)
             .lineLimit(1)
         }
       }
       Spacer(minLength: 8)
       Image(systemName: "link.badge.plus")
-        .foregroundColor(.yellow)
+        .foregroundColor(Color.Theme.featureAccent)
     }
   }
 
@@ -89,21 +95,21 @@ struct ConnectGroupInvitePopupView: View {
       case .idle:
         Text("Accept to join this group. Your identity commitment will be sent to the inviter.")
           .font(.subheadline)
-          .foregroundColor(.gray)
+          .foregroundColor(Color.Theme.textSecondary)
           .multilineTextAlignment(.center)
       case .accepting:
         HStack(spacing: 12) {
-          ProgressView().progressViewStyle(CircularProgressViewStyle(tint: .yellow))
+          ProgressView().progressViewStyle(CircularProgressViewStyle(tint: Color.Theme.featureAccent))
           Text("Sending join response...")
             .font(.subheadline)
-            .foregroundColor(.gray)
+            .foregroundColor(Color.Theme.textSecondary)
         }
       case .success:
         HStack(spacing: 8) {
           Image(systemName: "checkmark.seal.fill").foregroundColor(.green)
           Text("Joined. Your card was created.")
             .font(.subheadline)
-            .foregroundColor(.gray)
+            .foregroundColor(Color.Theme.textSecondary)
         }
       case .error(let message):
         VStack(spacing: 8) {
@@ -111,11 +117,11 @@ struct ConnectGroupInvitePopupView: View {
             Image(systemName: "exclamationmark.triangle.fill").foregroundColor(.orange)
             Text("Invite failed")
               .font(.subheadline)
-              .foregroundColor(.white)
+              .foregroundColor(Color.Theme.textPrimary)
           }
           Text(message)
             .font(.caption)
-            .foregroundColor(.gray)
+            .foregroundColor(Color.Theme.textSecondary)
             .multilineTextAlignment(.center)
         }
       }
@@ -129,7 +135,7 @@ struct ConnectGroupInvitePopupView: View {
         Button(action: { dismiss() }) {
           Text("Decline").frame(maxWidth: .infinity)
         }
-        .buttonStyle(SecondaryButtonStyle())
+        .buttonStyle(ThemedSecondaryButtonStyle())
         Button(action: accept) {
           HStack(spacing: 6) {
             Image(systemName: "hand.thumbsup.fill")
@@ -137,22 +143,22 @@ struct ConnectGroupInvitePopupView: View {
           }
           .frame(maxWidth: .infinity)
         }
-        .buttonStyle(PrimaryGradientButtonStyle())
+        .buttonStyle(ThemedPrimaryButtonStyle())
       case .accepting:
         Button(action: { dismiss() }) {
           Text("Hide").frame(maxWidth: .infinity)
         }
-        .buttonStyle(SecondaryButtonStyle())
+        .buttonStyle(ThemedSecondaryButtonStyle())
       case .success:
         Button(action: { dismiss() }) {
           Text("Done").frame(maxWidth: .infinity)
         }
-        .buttonStyle(PrimaryGradientButtonStyle())
+        .buttonStyle(ThemedPrimaryButtonStyle())
       case .error:
         Button(action: { dismiss() }) {
           Text("Close").frame(maxWidth: .infinity)
         }
-        .buttonStyle(SecondaryButtonStyle())
+        .buttonStyle(ThemedSecondaryButtonStyle())
       }
     }
   }
@@ -174,7 +180,7 @@ struct ConnectGroupInvitePopupView: View {
       return UIDevice.current.name
     }()
     if commitment.isEmpty {
-      withAnimation { phase = .error("Missing identity commitment") }
+      withAnimation { phase = .error(String(localized: "Missing identity commitment")) }
       return
     }
     // Defer actual send until connected by accepting the MP invite now
@@ -188,41 +194,5 @@ struct ConnectGroupInvitePopupView: View {
   private func dismiss() {
     withAnimation { isPresented = false }
     onDismiss?()
-  }
-}
-
-// MARK: - Local Button Styles
-
-private struct PrimaryGradientButtonStyle: ButtonStyle {
-  func makeBody(configuration: Configuration) -> some View {
-    configuration.label
-      .padding(.vertical, 12)
-      .foregroundColor(.white)
-      .background(
-        RoundedRectangle(cornerRadius: 12)
-          .fill(
-            LinearGradient(
-              colors: [Color.blue.opacity(0.9), Color.purple.opacity(0.9)],
-              startPoint: .topLeading,
-              endPoint: .bottomTrailing
-            )
-          )
-      )
-      .overlay(RoundedRectangle(cornerRadius: 12).stroke(Color.white.opacity(0.2), lineWidth: 1))
-      .scaleEffect(configuration.isPressed ? 0.98 : 1.0)
-  }
-}
-
-private struct SecondaryButtonStyle: ButtonStyle {
-  func makeBody(configuration: Configuration) -> some View {
-    configuration.label
-      .padding(.vertical, 12)
-      .foregroundColor(.white)
-      .background(
-        RoundedRectangle(cornerRadius: 12)
-          .fill(Color.white.opacity(0.08))
-      )
-      .overlay(RoundedRectangle(cornerRadius: 12).stroke(Color.white.opacity(0.15), lineWidth: 1))
-      .scaleEffect(configuration.isPressed ? 0.98 : 1.0)
   }
 }

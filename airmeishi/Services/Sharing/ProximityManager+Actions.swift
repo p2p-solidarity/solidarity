@@ -5,12 +5,18 @@
 //  Created by AirMeishi Team.
 //
 
+import CryptoKit
 import Foundation
 import MultipeerConnectivity
 
 extension ProximityManager {
 
   /// Send business card to a specific peer
+  func sendCard(_ card: BusinessCard, to peer: MCPeerID) {
+    sendCard(card, to: peer, sharingLevel: .public)
+  }
+
+  /// Legacy level-based entrypoint kept for backward compatibility.
   func sendCard(_ card: BusinessCard, to peer: MCPeerID, sharingLevel: SharingLevel) {
     guard session.connectedPeers.contains(peer) else {
       lastError = .sharingError("Peer is not connected")
@@ -18,8 +24,10 @@ extension ProximityManager {
     }
 
     do {
-      // Filter card based on sharing level
-      let filteredCard = card.filteredCard(for: sharingLevel)
+      let configuredCard = ShareSettingsStore.applyFields(to: card, level: sharingLevel)
+      let selectedFields = ShareSettingsStore.enabledFields.sorted { $0.rawValue < $1.rawValue }
+      let filteredCard = configuredCard.filteredCard(for: Set(selectedFields))
+      let scope = ShareScopeResolver.scope(selectedFields: selectedFields)
 
       // Create sharing payload with ZK issuer info
       let shareUUID = UUID()
@@ -27,37 +35,60 @@ extension ProximityManager {
         SemaphoreIdentityManager.shared.getIdentity() ?? (try? SemaphoreIdentityManager.shared.loadOrCreateIdentity())
       let issuerCommitment = identityBundle?.commitment ?? ""
       var issuerProof: String?
-      if !issuerCommitment.isEmpty && SemaphoreIdentityManager.proofsSupported {
+      if !issuerCommitment.isEmpty,
+        SemaphoreIdentityManager.proofsSupported,
+        let groupCommitments = SemaphoreGroupManager.shared.proofCommitments(containing: issuerCommitment)
+      {
         issuerProof =
           (try? SemaphoreIdentityManager.shared.generateProof(
-            groupCommitments: [issuerCommitment],
+            groupCommitments: groupCommitments,
             message: shareUUID.uuidString,
-            scope: sharingLevel.rawValue
+            scope: scope
           ))
       }
       // Optional SD proof if enabled by sender's prefs
       var sdProof: SelectiveDisclosureProof?
-      if card.sharingPreferences.useZK {
-        let allowed = card.sharingPreferences.fieldsForLevel(sharingLevel)
+      if configuredCard.sharingPreferences.useZK {
         let sdResult = ProofGenerationManager.shared.generateSelectiveDisclosureProof(
-          businessCard: card,
-          selectedFields: allowed,
+          businessCard: configuredCard,
+          selectedFields: Set(selectedFields),
           recipientId: peer.displayName
         )
         if case .success(let proof) = sdResult { sdProof = proof }
       }
-      let payload = ProximitySharingPayload(
+      let unsignedPayload = ProximitySharingPayload(
         card: filteredCard,
         sharingLevel: sharingLevel,
+        selectedFields: selectedFields,
+        scope: scope,
         timestamp: Date(),
         senderID: localPeerID.displayName,
         shareId: shareUUID,
         issuerCommitment: issuerCommitment.isEmpty ? nil : issuerCommitment,
         issuerProof: issuerProof,
         sdProof: sdProof,
+        payloadSignature: nil,
         sealedRoute: SecureKeyManager.shared.mySealedRoute,
         pubKey: SecureKeyManager.shared.myEncPubKey,
         signPubKey: SecureKeyManager.shared.mySignPubKey
+      )
+
+      let payloadSignature = signExchangeString(canonicalCardPayloadString(for: unsignedPayload))
+      let payload = ProximitySharingPayload(
+        card: unsignedPayload.card,
+        sharingLevel: unsignedPayload.sharingLevel,
+        selectedFields: unsignedPayload.selectedFields,
+        scope: unsignedPayload.scope,
+        timestamp: unsignedPayload.timestamp,
+        senderID: unsignedPayload.senderID,
+        shareId: unsignedPayload.shareId,
+        issuerCommitment: unsignedPayload.issuerCommitment,
+        issuerProof: unsignedPayload.issuerProof,
+        sdProof: unsignedPayload.sdProof,
+        payloadSignature: payloadSignature,
+        sealedRoute: unsignedPayload.sealedRoute,
+        pubKey: unsignedPayload.pubKey,
+        signPubKey: unsignedPayload.signPubKey
       )
 
       print("[ProximityManager] Sending card to \(peer.displayName)")
@@ -74,6 +105,131 @@ extension ProximityManager {
       lastError = .sharingError("Failed to send card: \(error.localizedDescription)")
       print("Failed to send card: \(error)")
     }
+  }
+
+  func sendExchangeRequest(
+    card: BusinessCard,
+    to peer: MCPeerID,
+    selectedFields: [BusinessCardField],
+    myEphemeralMessage: String?
+  ) -> CardResult<UUID> {
+    guard session.connectedPeers.contains(peer) else {
+      return .failure(.sharingError("Peer is not connected"))
+    }
+
+    let requestId = UUID()
+    let timestamp = Date()
+    let preview = filteredCard(card, using: selectedFields)
+    let signatureInput = canonicalExchangeString(
+      requestId: requestId,
+      peerName: peer.displayName,
+      card: preview,
+      fields: selectedFields,
+      timestamp: timestamp
+    )
+
+    guard let signature = signExchangeString(signatureInput) else {
+      return .failure(.cryptographicError("Failed to sign exchange request"))
+    }
+
+    let payload = ExchangeRequestPayload(
+      requestId: requestId,
+      senderID: localPeerID.displayName,
+      timestamp: timestamp,
+      selectedFields: selectedFields,
+      cardPreview: preview,
+      myEphemeralMessage: myEphemeralMessage?.prefix(140).description,
+      myExchangeSignature: signature,
+      signPubKey: SecureKeyManager.shared.mySignPubKey
+    )
+
+    do {
+      let data = try JSONEncoder().encode(payload)
+      try session.send(data, toPeers: [peer], with: .reliable)
+      sentExchangeSignatures[requestId] = signature
+      sentExchangeMessages[requestId] = myEphemeralMessage?.prefix(140).description ?? ""
+      return .success(requestId)
+    } catch {
+      return .failure(.sharingError("Failed to send exchange request: \(error.localizedDescription)"))
+    }
+  }
+
+  func respondToExchangeRequest(
+    _ request: PendingExchangeRequest,
+    with card: BusinessCard,
+    selectedFields: [BusinessCardField],
+    myEphemeralMessage: String?
+  ) -> CardResult<Void> {
+    guard session.connectedPeers.contains(request.fromPeer) else {
+      return .failure(.sharingError("Peer is not connected"))
+    }
+
+    let timestamp = Date()
+    let preview = filteredCard(card, using: selectedFields)
+    let signatureInput = canonicalExchangeString(
+      requestId: request.requestId,
+      peerName: request.fromPeer.displayName,
+      card: preview,
+      fields: selectedFields,
+      timestamp: timestamp
+    )
+    guard let signature = signExchangeString(signatureInput) else {
+      return .failure(.cryptographicError("Failed to sign exchange response"))
+    }
+
+    let payload = ExchangeAcceptPayload(
+      requestId: request.requestId,
+      senderID: localPeerID.displayName,
+      timestamp: timestamp,
+      selectedFields: selectedFields,
+      cardPreview: preview,
+      theirEphemeralMessage: myEphemeralMessage?.prefix(140).description,
+      exchangeSignature: signature,
+      sealedRoute: SecureKeyManager.shared.mySealedRoute,
+      pubKey: SecureKeyManager.shared.myEncPubKey,
+      signPubKey: SecureKeyManager.shared.mySignPubKey
+    )
+
+    do {
+      let data = try JSONEncoder().encode(payload)
+      try session.send(data, toPeers: [request.fromPeer], with: .reliable)
+
+      let requestCanonical = canonicalExchangeString(
+        requestId: request.payload.requestId,
+        peerName: localPeerID.displayName,
+        card: request.payload.cardPreview,
+        fields: request.payload.selectedFields,
+        timestamp: request.payload.timestamp
+      )
+      let isRequestSignatureValid = Self.verifyExchangeSignature(
+        signature: request.payload.myExchangeSignature,
+        canonicalString: requestCanonical,
+        signPubKey: request.payload.signPubKey
+      )
+
+      let persistence = ExchangeEdgePersistencePayload(
+        card: request.payload.cardPreview,
+        sourcePeerName: request.payload.senderID,
+        verificationStatus: isRequestSignatureValid ? .verified : .pending,
+        sealedRoute: nil,
+        pubKey: nil,
+        signPubKey: request.payload.signPubKey,
+        mySignature: signature,
+        theirSignature: request.payload.myExchangeSignature,
+        myMessage: myEphemeralMessage?.prefix(140).description,
+        theirMessage: request.payload.myEphemeralMessage,
+        timestamp: timestamp
+      )
+      persistExchangeEdge(persistence)
+      pendingExchangeRequest = nil
+      return .success(())
+    } catch {
+      return .failure(.sharingError("Failed to send exchange response: \(error.localizedDescription)"))
+    }
+  }
+
+  func declinePendingExchangeRequest() {
+    pendingExchangeRequest = nil
   }
 
   /// Send a group invite to a specific peer
@@ -125,6 +281,9 @@ extension ProximityManager {
     stopBrowsing()
     stopHeartbeat()
     cancelAllRetries()
+
+    // Tear down UWB session
+    NearbyInteractionManager.shared.invalidateSession()
 
     session.disconnect()
     nearbyPeers.removeAll()
@@ -249,13 +408,14 @@ extension ProximityManager {
 
     // Save to contact repository on main actor
     Task { @MainActor in
+      let peerSignPubKey = (signPubKey == SecureKeyManager.shared.mySignPubKey) ? nil : signPubKey
       let contact = Contact(
         businessCard: card,
         source: .proximity,
         verificationStatus: status,
         sealedRoute: sealedRoute,
         pubKey: pubKey,
-        signPubKey: signPubKey
+        signPubKey: peerSignPubKey
       )
 
       let result = contactRepository.addContact(contact)
@@ -277,9 +437,109 @@ extension ProximityManager {
         }
 
       case .failure(let error):
-        print("Failed to save received card: \(error)")
-        self.lastError = error
+        if isMergeConfirmationRequired(error) {
+          print("Pending merge confirmation required for received card from \(senderName)")
+        } else {
+          print("Failed to save received card: \(error)")
+          self.lastError = error
+        }
       }
     }
+  }
+
+  internal func persistExchangeEdge(_ payload: ExchangeEdgePersistencePayload) {
+    Task { @MainActor in
+      let peerSignPubKey = (payload.signPubKey == SecureKeyManager.shared.mySignPubKey) ? nil : payload.signPubKey
+      let contact = Contact(
+        businessCard: payload.card,
+        source: .proximity,
+        verificationStatus: payload.verificationStatus,
+        sealedRoute: payload.sealedRoute,
+        pubKey: payload.pubKey,
+        signPubKey: peerSignPubKey
+      )
+
+      let result = contactRepository.addContact(contact)
+      switch result {
+      case .success(let saved):
+        let entity = ContactEntity.fromLegacy(saved)
+        entity.didPublicKey = peerSignPubKey
+        entity.myExchangeSignature = Data(base64Encoded: payload.mySignature)
+        entity.exchangeSignature = Data(base64Encoded: payload.theirSignature)
+        entity.exchangeTimestamp = payload.timestamp
+        entity.myEphemeralMessage = payload.myMessage?.prefix(140).description
+        entity.theirEphemeralMessage = payload.theirMessage?.prefix(140).description
+        entity.graphExportEdgeId = entity.graphExportEdgeId ?? UUID().uuidString
+        entity.commonFriendsHandshakeToken = entity.commonFriendsHandshakeToken ?? UUID().uuidString
+        IdentityDataStore.shared.upsertContact(entity)
+        print("Persisted exchange edge for \(payload.sourcePeerName)")
+      case .failure(let error):
+        if isMergeConfirmationRequired(error) {
+          print("Pending merge confirmation required for exchange edge from \(payload.sourcePeerName)")
+        } else {
+          self.lastError = error
+        }
+      }
+    }
+  }
+
+  static func verifyExchangeSignature(signature: String, canonicalString: String, signPubKey: String?) -> Bool {
+    guard !signature.isEmpty,
+      !canonicalString.isEmpty,
+      let signPubKey,
+      !signPubKey.isEmpty
+    else {
+      return false
+    }
+    return SecureKeyManager.shared.verify(
+      signatureBase64: signature,
+      content: canonicalString,
+      pubKeyBase64: signPubKey
+    )
+  }
+
+  private func signExchangeString(_ value: String) -> String? {
+    guard !value.isEmpty else { return nil }
+    let signature = SecureKeyManager.shared.sign(content: value)
+    return signature.isEmpty ? nil : signature
+  }
+
+  func canonicalExchangeString(
+    requestId: UUID,
+    peerName: String,
+    card: BusinessCard,
+    fields: [BusinessCardField],
+    timestamp: Date
+  ) -> String {
+    let orderedFields = fields.map(\.rawValue).sorted().joined(separator: ",")
+    let unixSeconds = Int(timestamp.timeIntervalSince1970)
+    return "\(requestId.uuidString)|\(peerName)|\(card.name)|\(orderedFields)|\(unixSeconds)"
+  }
+
+  internal func canonicalCardPayloadString(for payload: ProximitySharingPayload) -> String {
+    let orderedFields = (payload.selectedFields ?? []).map(\.rawValue).sorted().joined(separator: ",")
+    let unixSeconds = Int(payload.timestamp.timeIntervalSince1970)
+    return "\(payload.shareId.uuidString)|\(payload.senderID)|\(payload.card.id.uuidString)|\(orderedFields)|\(unixSeconds)"
+  }
+
+  private func filteredCard(_ card: BusinessCard, using selectedFields: [BusinessCardField]) -> BusinessCard {
+    let allowed = Set(selectedFields)
+    var filtered = card
+    if !allowed.contains(.name) { filtered.name = "" }
+    if !allowed.contains(.title) { filtered.title = nil }
+    if !allowed.contains(.company) { filtered.company = nil }
+    if !allowed.contains(.email) { filtered.email = nil }
+    if !allowed.contains(.phone) { filtered.phone = nil }
+    if !allowed.contains(.profileImage) { filtered.profileImage = nil }
+    if !allowed.contains(.socialNetworks) { filtered.socialNetworks = [] }
+    if !allowed.contains(.skills) { filtered.skills = [] }
+    return filtered
+  }
+
+  private func isMergeConfirmationRequired(_ error: CardError) -> Bool {
+    if case .validationError(let message) = error {
+      return message.contains("Merge confirmation required")
+    }
+    return false
   }
 }

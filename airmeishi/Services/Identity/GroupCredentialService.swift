@@ -126,22 +126,17 @@ final class GroupCredentialService: ObservableObject {
         }
 
         // Verify proof format and validity
-        // Note: SemaphoreIdentityManager.verifyProof verifies the ZK proof itself.
-        // It does not check if the proof corresponds to a specific root or signal in this call
-        // unless the library supports it. The user feedback indicates verifyProof takes only 'proof'.
-        // We should ideally verify the root against the group's root separately if possible,
-        // or assume the proof contains the public inputs (root, nullifier, signal) and we verify them.
-
         do {
-          let isValidProof = try semaphoreManager.verifyProof(proof)
+          let isValidProof = try semaphoreManager.verifyProof(
+            proof,
+            expectedRoot: info.merkleRoot,
+            expectedSignal: info.groupId,
+            expectedScope: info.groupId
+          )
 
           if !isValidProof {
             return .invalidProof
           }
-
-          // TODO: Verify that the proof's public signals match the expected group root and signal (groupId)
-          // This requires parsing the proof or using a more specific verification method if available.
-          // For now, we rely on the basic proof verification.
 
         } catch {
           return .invalidProof
@@ -175,9 +170,15 @@ final class GroupCredentialService: ObservableObject {
     guard let members = semaphoreGroup?.members, !members.isEmpty else {
       throw GroupCredentialError.groupIntegrityError("No local semaphore members found for group")
     }
+    let canonicalMembers = Array(Set(members)).sorted()
+    guard canonicalMembers.count > 1 else {
+      throw GroupCredentialError.groupIntegrityError(
+        "Semaphore group requires at least 2 distinct members for proof generation"
+      )
+    }
 
     return try SemaphoreIdentityManager.shared.generateProof(
-      groupCommitments: members,
+      groupCommitments: canonicalMembers,
       message: group.id,
       scope: group.id
     )

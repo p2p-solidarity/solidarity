@@ -127,11 +127,11 @@ class EncryptionManager {
     return SymmetricKey(data: keyData)
   }
 
-  /// Store encryption key in keychain
-  private func storeKeyInKeychain(_ key: SymmetricKey) throws {
+  /// Store encryption key in keychain, updating existing value when duplicate item exists.
+  func storeKeyInKeychain(_ key: SymmetricKey) throws {
     let keyData = key.withUnsafeBytes { Data($0) }
 
-    let query: [String: Any] = [
+    let addQuery: [String: Any] = [
       kSecClass as String: kSecClassGenericPassword,
       kSecAttrService as String: service,
       kSecAttrAccount as String: keyTag,
@@ -139,7 +139,23 @@ class EncryptionManager {
       kSecAttrAccessible as String: kSecAttrAccessibleWhenUnlockedThisDeviceOnly,
     ]
 
-    let status = SecItemAdd(query as CFDictionary, nil)
+    let status = SecItemAdd(addQuery as CFDictionary, nil)
+    if status == errSecDuplicateItem {
+      let matchQuery: [String: Any] = [
+        kSecClass as String: kSecClassGenericPassword,
+        kSecAttrService as String: service,
+        kSecAttrAccount as String: keyTag,
+      ]
+      let attributesToUpdate: [String: Any] = [
+        kSecValueData as String: keyData,
+        kSecAttrAccessible as String: kSecAttrAccessibleWhenUnlockedThisDeviceOnly,
+      ]
+      let updateStatus = SecItemUpdate(matchQuery as CFDictionary, attributesToUpdate as CFDictionary)
+      guard updateStatus == errSecSuccess else {
+        throw CardError.encryptionError("Failed to update key in keychain: \(updateStatus)")
+      }
+      return
+    }
 
     guard status == errSecSuccess else {
       throw CardError.encryptionError("Failed to store key in keychain: \(status)")

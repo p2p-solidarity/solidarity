@@ -15,25 +15,25 @@ struct IncomingInvitationPopupView: View {
   let onDismiss: () -> Void
 
   @ObservedObject private var proximityManager = ProximityManager.shared
+  @Environment(\.colorScheme) private var colorScheme
   @State private var isAnimating = false
   @State private var didRespond = false
 
   var body: some View {
     ZStack {
-      Color.black.opacity(0.5).ignoresSafeArea()
+      Color.Theme.overlayBg.ignoresSafeArea()
       content
         .padding(20)
         .background(
           RoundedRectangle(cornerRadius: 20)
-            .fill(Color(.secondarySystemBackground).opacity(0.95))
-            .overlay(RoundedRectangle(cornerRadius: 20).stroke(Color.white.opacity(0.1), lineWidth: 1))
+            .fill(Color.Theme.popupSurface.opacity(0.95))
+            .overlay(RoundedRectangle(cornerRadius: 20).stroke(Color.Theme.cardBorder(for: colorScheme), lineWidth: 1))
         )
         .padding(.horizontal, 24)
-        .shadow(color: Color.black.opacity(0.3), radius: 20, x: 0, y: 10)
+        .shadow(color: Color.black.opacity(0.2), radius: 20, x: 0, y: 10)
     }
     .onAppear { isAnimating = true }
     .onDisappear { onDismiss() }
-    .preferredColorScheme(.dark)
   }
 
   private var content: some View {
@@ -41,7 +41,7 @@ struct IncomingInvitationPopupView: View {
       header
       Text("wants to connect with you")
         .font(.subheadline)
-        .foregroundColor(.gray)
+        .foregroundColor(Color.Theme.textSecondary)
       actionButtons
     }
   }
@@ -76,7 +76,7 @@ struct IncomingInvitationPopupView: View {
           .fontWeight(.bold)
           .foregroundColor(.white)
         Circle()
-          .stroke(Color.yellow, lineWidth: 2)
+          .stroke(Color.Theme.featureAccent, lineWidth: 2)
           .frame(width: 60, height: 60)
           .scaleEffect(isAnimating ? 1.1 : 1.0)
           .animation(
@@ -85,9 +85,9 @@ struct IncomingInvitationPopupView: View {
           )
       }
       VStack(alignment: .leading, spacing: 6) {
-        Text(name).font(.headline).foregroundColor(.white).lineLimit(1)
-        if let title = title { Text(title).font(.caption).foregroundColor(.yellow).lineLimit(1) }
-        if let company = company { Text(company).font(.caption2).foregroundColor(.gray).lineLimit(1) }
+        Text(name).font(.headline).foregroundColor(Color.Theme.textPrimary).lineLimit(1)
+        if let title = title { Text(title).font(.caption).foregroundColor(Color.Theme.featureAccent).lineLimit(1) }
+        if let company = company { Text(company).font(.caption2).foregroundColor(Color.Theme.textSecondary).lineLimit(1) }
       }
       Spacer(minLength: 8)
       Image(systemName: status.systemImageName).foregroundColor(statusColor)
@@ -103,7 +103,7 @@ struct IncomingInvitationPopupView: View {
       }) {
         Text("Decline").frame(maxWidth: .infinity)
       }
-      .buttonStyle(SecondaryButtonStyle())
+      .buttonStyle(ThemedSecondaryButtonStyle())
       Button(action: {
         guard !didRespond else { return }
         didRespond = true
@@ -115,43 +115,7 @@ struct IncomingInvitationPopupView: View {
         }
         .frame(maxWidth: .infinity)
       }
-      .buttonStyle(PrimaryGradientButtonStyle())
+      .buttonStyle(ThemedPrimaryButtonStyle())
     }
-  }
-}
-
-// MARK: - Button Styles (local to this view)
-
-private struct PrimaryGradientButtonStyle: ButtonStyle {
-  func makeBody(configuration: Configuration) -> some View {
-    configuration.label
-      .padding(.vertical, 12)
-      .foregroundColor(.white)
-      .background(
-        RoundedRectangle(cornerRadius: 12)
-          .fill(
-            LinearGradient(
-              colors: [Color.blue.opacity(0.9), Color.purple.opacity(0.9)],
-              startPoint: .topLeading,
-              endPoint: .bottomTrailing
-            )
-          )
-      )
-      .overlay(RoundedRectangle(cornerRadius: 12).stroke(Color.white.opacity(0.2), lineWidth: 1))
-      .scaleEffect(configuration.isPressed ? 0.98 : 1.0)
-  }
-}
-
-private struct SecondaryButtonStyle: ButtonStyle {
-  func makeBody(configuration: Configuration) -> some View {
-    configuration.label
-      .padding(.vertical, 12)
-      .foregroundColor(.white)
-      .background(
-        RoundedRectangle(cornerRadius: 12)
-          .fill(Color.white.opacity(0.08))
-      )
-      .overlay(RoundedRectangle(cornerRadius: 12).stroke(Color.white.opacity(0.15), lineWidth: 1))
-      .scaleEffect(configuration.isPressed ? 0.98 : 1.0)
   }
 }

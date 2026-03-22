@@ -6,6 +6,7 @@
 //
 
 import Foundation
+import AppIntents
 import PassKit
 import SwiftUI
 
@@ -19,6 +20,8 @@ struct airmeishiApp: App {
   @StateObject private var proximityManager = ProximityManager.shared
   @StateObject private var deepLinkManager = DeepLinkManager.shared
   @StateObject private var themeManager = ThemeManager.shared
+  @StateObject private var identityDataStore = IdentityDataStore.shared
+  @StateObject private var identityCoordinator = IdentityCoordinator.shared
 
   var body: some Scene {
     WindowGroup {
@@ -28,8 +31,9 @@ struct airmeishiApp: App {
         .environmentObject(proximityManager)
         .environmentObject(deepLinkManager)
         .environmentObject(themeManager)
-        .tint(.black)
-        .preferredColorScheme(.dark)
+        .environmentObject(identityDataStore)
+        .environmentObject(identityCoordinator)
+        .preferredColorScheme(themeManager.appColorScheme.colorScheme)
         .onAppear {
           setupApp()
         }
@@ -46,6 +50,19 @@ struct airmeishiApp: App {
 
   /// Initialize app components and check permissions
   private func setupApp() {
+    // MARK: - UIAppearance (Adaptive)
+
+    let tabBarAppearance = UITabBarAppearance()
+    tabBarAppearance.configureWithDefaultBackground()
+    UITabBar.appearance().standardAppearance = tabBarAppearance
+    UITabBar.appearance().scrollEdgeAppearance = tabBarAppearance
+
+    let navBarAppearance = UINavigationBarAppearance()
+    navBarAppearance.configureWithDefaultBackground()
+    UINavigationBar.appearance().standardAppearance = navBarAppearance
+    UINavigationBar.appearance().scrollEdgeAppearance = navBarAppearance
+    UINavigationBar.appearance().compactAppearance = navBarAppearance
+
     // Check if PassKit is available
     if PKPassLibrary.isPassLibraryAvailable() {
       print("PassKit is available")
@@ -60,6 +77,8 @@ struct airmeishiApp: App {
 
     // Request necessary permissions
     requestPermissions()
+
+    identityDataStore.runInitialMigrationIfNeeded()
 
     // Note: Data is automatically loaded in the managers' init methods
     print("App setup completed")

@@ -146,19 +146,8 @@ class DeepLinkManagerTests: XCTestCase {
     
     // MARK: - URL Scheme Tests
     
-    func testURLSchemeConfig() throws {
-        // When
-        let schemeURL = URLSchemeConfig.createSchemeURL(
-            path: "/share",
-            parameters: ["id": "test123"]
-        )
-        
-        // Then
-        XCTAssertNotNil(schemeURL)
-        XCTAssertEqual(schemeURL?.scheme, "airmeishi")
-        XCTAssertEqual(schemeURL?.host, "share")
-        XCTAssertTrue(schemeURL?.absoluteString.contains("id=test123") == true)
-    }
+    // URLSchemeConfig was removed from the codebase — test disabled
+    // func testURLSchemeConfig() throws { ... }
     
     // MARK: - Deep Link Action Tests
     

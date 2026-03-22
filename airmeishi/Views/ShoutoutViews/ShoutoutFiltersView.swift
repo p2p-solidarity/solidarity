@@ -12,7 +12,7 @@ struct ShoutoutFiltersView: View {
   @Environment(\.dismiss) private var dismiss
 
   var body: some View {
-    NavigationView {
+    NavigationStack {
       Form {
         // Search Section
         Section("Search") {
@@ -30,7 +30,7 @@ struct ShoutoutFiltersView: View {
         // Event Type Filter
         Section("Event Activity Level") {
           HStack {
-            Image(systemName: "clear")
+            Image(systemName: "xmark.circle")
               .foregroundColor(.secondary)
               .frame(width: 20)
 
@@ -72,7 +72,7 @@ struct ShoutoutFiltersView: View {
         // Character Type Filter
         Section("Character Type") {
           HStack {
-            Image(systemName: "clear")
+            Image(systemName: "xmark.circle")
               .foregroundColor(.secondary)
               .frame(width: 20)
 

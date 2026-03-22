@@ -203,14 +203,14 @@ struct RippleButton: View {
             .foregroundColor(.secondary)
         } else {
           Text("Identity Active")
-            .foregroundColor(.green)
+            .foregroundColor(Color.Theme.accentRose)
         }
       case .processing:
         Text("Processing...")
           .foregroundColor(.primary)
       case .success:
         Text("Success!")
-          .foregroundColor(.green)
+          .foregroundColor(Color.Theme.accentRose)
       case .syncNeeded:
         Text("Sync Needed")
           .foregroundColor(.orange)
@@ -231,14 +231,14 @@ struct RippleButton: View {
       return commitment == nil
         ? LinearGradient(colors: [.gray, .gray.opacity(0.8)], startPoint: .topLeading, endPoint: .bottomTrailing)
         : LinearGradient(
-          colors: [.green.opacity(0.9), .blue.opacity(0.8)],
+          colors: [Color.Theme.accentRose, Color(hex: 0xA6678D)],
           startPoint: .topLeading,
           endPoint: .bottomTrailing
         )
     case .processing:
       return LinearGradient(colors: [.blue, .purple], startPoint: .topLeading, endPoint: .bottomTrailing)
     case .success:
-      return LinearGradient(colors: [.green, .mint], startPoint: .topLeading, endPoint: .bottomTrailing)
+      return LinearGradient(colors: [Color.Theme.accentRose, Color(hex: 0xD4BDE7)], startPoint: .topLeading, endPoint: .bottomTrailing)
     case .syncNeeded:
       return LinearGradient(colors: [.orange, .red], startPoint: .topLeading, endPoint: .bottomTrailing)
     }

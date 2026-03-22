@@ -32,7 +32,7 @@ struct WalletPassGenerationView: View {
   }
 
   var body: some View {
-    NavigationView {
+    NavigationStack {
       ScrollView {
         VStack(spacing: 24) {
           // Header
@@ -233,12 +233,12 @@ struct WalletPassGenerationView: View {
       // Parse error for better UX
       let errorDesc = error.localizedDescription
       if errorDesc.contains("certificate") || errorDesc.contains("trust chain") {
-        errorMessage = "Certificate verification failed"
+        errorMessage = String(localized: "Certificate verification failed")
         errorDetail =
-          "The pass signature could not be verified. Please check the server-side certificate configuration."
+          String(localized: "The pass signature could not be verified. Please check the server-side certificate configuration.")
       } else if errorDesc.contains("Server") || errorDesc.contains("network") {
-        errorMessage = "Network error"
-        errorDetail = "Unable to connect to signing service. Please check your internet connection."
+        errorMessage = String(localized: "Network error")
+        errorDetail = String(localized: "Unable to connect to signing service. Please check your internet connection.")
       } else {
         errorMessage = errorDesc
         errorDetail = ""
@@ -262,12 +262,12 @@ struct WalletPassGenerationView: View {
       if errorDesc.contains("certificate") || errorDesc.contains("trust chain")
         || errorDesc.contains("passTypeIdentifier") || errorDesc.contains("teamIdentifier")
       {
-        errorMessage = "Pass verification failed"
+        errorMessage = String(localized: "Pass verification failed")
         errorDetail =
-          "Apple Wallet could not verify this pass. The certificate may not match the Pass Type ID or Team ID in the pass data."
+          String(localized: "Apple Wallet could not verify this pass. The certificate may not match the Pass Type ID or Team ID in the pass data.")
       } else if errorDesc.contains("already exists") {
-        errorMessage = "Pass already in Wallet"
-        errorDetail = "This business card pass has already been added to your Apple Wallet."
+        errorMessage = String(localized: "Pass already in Wallet")
+        errorDetail = String(localized: "This business card pass has already been added to your Apple Wallet.")
       } else {
         errorMessage = errorDesc
         errorDetail = ""
@@ -512,13 +512,7 @@ struct AddPassesControllerView: UIViewControllerRepresentable {
 
 #Preview {
   WalletPassGenerationView(
-    businessCard: BusinessCard(
-      name: "John Doe",
-      title: "Software Engineer",
-      company: "Tech Corp",
-      email: "john@techcorp.com",
-      phone: "+1 (555) 123-4567"
-    ),
+    businessCard: .sample,
     sharingLevel: .professional
   )
 }

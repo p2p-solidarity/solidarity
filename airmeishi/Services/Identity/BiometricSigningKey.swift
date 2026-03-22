@@ -61,6 +61,8 @@ final class BiometricSigningKey: SpruceIDMobileSdkRs.SigningKey, @unchecked Send
   private let jwkRepresentation: PublicKeyJWK
   private let alias: KeyAlias
 
+  var keyAlias: KeyAlias { alias }
+
   init(privateKey: SecKey, jwk: PublicKeyJWK, alias: KeyAlias) {
     self.privateKey = privateKey
     self.jwkRepresentation = jwk

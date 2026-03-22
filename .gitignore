@@ -102,3 +102,8 @@ Packages
 *.p12
 *.cer
 *.certSigningRequest
+# Spec documents
+spec.md
+
+.context
+.claude

@@ -3,13 +3,12 @@
 //  airmeishi
 //
 //  Handles issuance and parsing of Verifiable Credentials using SpruceKit.
-//
-
 import CryptoKit
 import Foundation
 import LocalAuthentication
 import SpruceIDMobileSdkRs
 import os
+// swiftlint:disable file_length
 
 /// High level service for issuing and parsing Verifiable Credentials.
 final class VCService {
@@ -19,6 +18,7 @@ final class VCService {
     var issuerDid: String?
     var expiration: Date?
     var authenticationContext: LAContext?
+    var relyingPartyDomain: String?
   }
 
   struct IssuedCredential {
@@ -70,7 +70,10 @@ final class VCService {
     }
 
     Self.logger.info("Retrieving current DID descriptor")
-    let descriptorResult = didService.currentDescriptor(context: context)
+    let descriptorResult = didService.currentDescriptor(
+      for: options.relyingPartyDomain,
+      context: context
+    )
     guard case .success(let descriptor) = descriptorResult else {
       if case .failure(let error) = descriptorResult {
         Self.logger.error("Failed to get DID descriptor: \(error.localizedDescription)")
@@ -94,7 +97,12 @@ final class VCService {
     )
 
     Self.logger.info("Retrieving signing key")
-    let signerResult = keychain.signingKey(context: context)
+    let signerResult: CardResult<BiometricSigningKey>
+    if let relyingPartyDomain = options.relyingPartyDomain {
+      signerResult = keychain.pairwiseSigningKey(for: relyingPartyDomain, context: context)
+    } else {
+      signerResult = keychain.signingKey(context: context)
+    }
     guard case .success(let signingKey) = signerResult else {
       if case .failure(let error) = signerResult {
         Self.logger.error("Failed to get signing key: \(error.localizedDescription)")
@@ -106,7 +114,8 @@ final class VCService {
     return signAndIssueCredential(
       claims: claims,
       signingKey: signingKey,
-      verificationMethodId: descriptor.verificationMethodId
+      verificationMethodId: descriptor.verificationMethodId,
+      keyAlias: signingKey.keyAlias
     )
   }
 
@@ -122,7 +131,8 @@ final class VCService {
   private func signAndIssueCredential(
     claims: BusinessCardCredentialClaims,
     signingKey: BiometricSigningKey,
-    verificationMethodId: String
+    verificationMethodId: String,
+    keyAlias: KeyAlias
   ) -> CardResult<IssuedCredential> {
     do {
       Self.logger.info("Generating JWT header and payload - kid: \(verificationMethodId)")
@@ -141,7 +151,7 @@ final class VCService {
       let signature = try signingKey.sign(payload: signingInputData).base64URLEncodedString()
       let jwt = "\(signingInput).\(signature)"
 
-      validateJwtWithSpruce(jwt: jwt, payloadData: payloadData)
+      validateJwtWithSpruce(jwt: jwt, payloadData: payloadData, keyAlias: keyAlias)
 
       let headerJSONObject = try JSONSerialization.jsonObject(with: headerData)
       guard let headerDict = headerJSONObject as? [String: Any] else {
@@ -170,10 +180,10 @@ final class VCService {
     }
   }
 
-  private func validateJwtWithSpruce(jwt: String, payloadData: Data) {
-    Self.logger.info("Validating JWT with SpruceKit - keyAlias: \(self.keychain.alias)")
+  private func validateJwtWithSpruce(jwt: String, payloadData: Data, keyAlias: KeyAlias) {
+    Self.logger.info("Validating JWT with SpruceKit - keyAlias: \(keyAlias)")
     do {
-      _ = try JwtVc.newFromCompactJwsWithKey(jws: jwt, keyAlias: self.keychain.alias)
+      _ = try JwtVc.newFromCompactJwsWithKey(jws: jwt, keyAlias: keyAlias)
       Self.logger.info("JWT validation with SpruceKit successful")
     } catch let spruceError {
       let errorString = String(describing: spruceError)
@@ -312,15 +322,34 @@ final class VCService {
         let envelope = try JSONDecoder().decode(BusinessCardCredentialEnvelope.self, from: decoded.payloadData)
 
         let credentialSubject = (envelope.vc ?? envelope.payload?.vc)?.credentialSubject
+        let issuerDid = envelope.iss ?? envelope.payload?.iss
+        let keyId = decoded.header["kid"] as? String
 
-        guard let publicKeyJwk = credentialSubject?.publicKeyJwk else {
-          Self.logger.error("Credential missing public key information")
-          return .failure(.invalidData("Credential missing public key information"))
+        guard let issuerDid, !issuerDid.isEmpty else {
+          Self.logger.error("Credential is missing issuer DID")
+          return storeVerificationResult(credential, status: .failed)
         }
 
-        Self.logger.info("Verifying signature")
-        let publicKey = try publicKeyJwk.toP256PublicKey()
-        let signature = try P256.Signing.ECDSASignature(rawRepresentation: signatureData)
+        guard let trustedKey = IssuerTrustAnchorStore.shared.trustedJWK(for: issuerDid, keyId: keyId) else {
+          Self.logger.error("Issuer DID is not trusted: \(issuerDid)")
+          return storeVerificationResult(credential, status: .failed)
+        }
+
+        if let embeddedKey = credentialSubject?.publicKeyJwk, embeddedKey != trustedKey {
+          Self.logger.error("Embedded publicKeyJwk does not match trusted issuer key")
+          return storeVerificationResult(credential, status: .failed)
+        }
+
+        Self.logger.info("Verifying signature with trusted issuer key")
+        let publicKey = try trustedKey.toP256PublicKey()
+        let signature =
+          (try? P256.Signing.ECDSASignature(rawRepresentation: signatureData))
+          ?? (try? P256.Signing.ECDSASignature(derRepresentation: signatureData))
+
+        guard let signature else {
+          Self.logger.error("Unsupported JWT signature encoding")
+          return storeVerificationResult(credential, status: .failed)
+        }
 
         guard publicKey.isValidSignature(signature, for: signingData) else {
           Self.logger.error("Signature verification failed")
@@ -374,7 +403,6 @@ final class VCService {
     }
   }
 }
-
 // MARK: - JWT decoding helpers
 
 extension VCService {

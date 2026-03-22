@@ -110,7 +110,7 @@ struct GroupJoinSheet: View {
       // Auto-join? Or just fill? Let's fill for safety.
       // joinGroup()
     } else {
-      errorMessage = "Invalid QR Code format"
+      errorMessage = String(localized: "Invalid QR Code format")
     }
   }
 
@@ -126,7 +126,8 @@ struct GroupJoinSheet: View {
         let group = try await groupManager.joinGroup(withInviteToken: inviteToken)
         await MainActor.run {
           isJoining = false
-          successMessage = "Successfully joined \(group.name)!"
+          let successFormat = String(localized: "Successfully joined %@!")
+          successMessage = String(format: successFormat, locale: Locale.current, group.name)
           // Delay dismissal to show success message
           DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
             dismiss()
@@ -135,7 +136,8 @@ struct GroupJoinSheet: View {
       } catch {
         await MainActor.run {
           isJoining = false
-          errorMessage = "Failed to join: \(error.localizedDescription)"
+          let errorFormat = String(localized: "Failed to join: %@")
+          errorMessage = String(format: errorFormat, locale: Locale.current, error.localizedDescription)
         }
       }
     }

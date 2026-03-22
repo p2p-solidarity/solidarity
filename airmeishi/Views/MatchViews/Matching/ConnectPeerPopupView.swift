@@ -21,13 +21,14 @@ struct ConnectPeerPopupView: View {
   var onDismiss: (() -> Void)?
 
   @ObservedObject private var proximityManager = ProximityManager.shared
+  @Environment(\.colorScheme) private var colorScheme
   @State private var phase: ConnectPeerPhase = .idle
   @State private var displayedPeer: ProximityPeerStatus = .disconnected
   @State private var isAnimating = false
 
   var body: some View {
     ZStack {
-      Color.black.opacity(0.5)
+      Color.Theme.overlayBg
         .ignoresSafeArea()
         .onTapGesture { if canTapOutsideToDismiss { dismiss() } }
 
@@ -35,11 +36,11 @@ struct ConnectPeerPopupView: View {
         .padding(20)
         .background(
           RoundedRectangle(cornerRadius: 20)
-            .fill(Color(.secondarySystemBackground).opacity(0.95))
-            .overlay(RoundedRectangle(cornerRadius: 20).stroke(Color.white.opacity(0.1), lineWidth: 1))
+            .fill(Color.Theme.popupSurface.opacity(0.95))
+            .overlay(RoundedRectangle(cornerRadius: 20).stroke(Color.Theme.cardBorder(for: colorScheme), lineWidth: 1))
         )
         .padding(.horizontal, 24)
-        .shadow(color: Color.black.opacity(0.3), radius: 20, x: 0, y: 10)
+        .shadow(color: Color.black.opacity(0.2), radius: 20, x: 0, y: 10)
     }
     .onAppear {
       isAnimating = true
@@ -64,7 +65,6 @@ struct ConnectPeerPopupView: View {
       statusSection
       actionButtons
     }
-    .preferredColorScheme(.dark)
   }
 
   private var header: some View {
@@ -85,7 +85,7 @@ struct ConnectPeerPopupView: View {
           .foregroundColor(.white)
         if displayedPeer == .connected {
           Circle()
-            .stroke(Color.yellow, lineWidth: 2)
+            .stroke(Color.Theme.featureAccent, lineWidth: 2)
             .frame(width: 60, height: 60)
             .scaleEffect(isAnimating ? 1.1 : 1.0)
             .animation(.easeInOut(duration: 0.6).repeatForever(autoreverses: true), value: isAnimating)
@@ -94,10 +94,10 @@ struct ConnectPeerPopupView: View {
       VStack(alignment: .leading, spacing: 6) {
         Text(peer.cardName ?? peer.name)
           .font(.headline)
-          .foregroundColor(.white)
+          .foregroundColor(Color.Theme.textPrimary)
           .lineLimit(1)
-        if let title = peer.cardTitle { Text(title).font(.caption).foregroundColor(.yellow).lineLimit(1) }
-        if let company = peer.cardCompany { Text(company).font(.caption2).foregroundColor(.gray).lineLimit(1) }
+        if let title = peer.cardTitle { Text(title).font(.caption).foregroundColor(Color.Theme.featureAccent).lineLimit(1) }
+        if let company = peer.cardCompany { Text(company).font(.caption2).foregroundColor(Color.Theme.textSecondary).lineLimit(1) }
       }
       Spacer(minLength: 8)
       Image(systemName: displayedPeer.systemImageName)
@@ -111,22 +111,22 @@ struct ConnectPeerPopupView: View {
       case .idle:
         Text("Connect to this peer to exchange cards fast.")
           .font(.subheadline)
-          .foregroundColor(.gray)
+          .foregroundColor(Color.Theme.textSecondary)
           .multilineTextAlignment(.center)
       case .connecting:
         HStack(spacing: 12) {
           ProgressView()
-            .progressViewStyle(CircularProgressViewStyle(tint: .yellow))
+            .progressViewStyle(CircularProgressViewStyle(tint: Color.Theme.featureAccent))
           Text("Connecting...")
             .font(.subheadline)
-            .foregroundColor(.gray)
+            .foregroundColor(Color.Theme.textSecondary)
         }
       case .success:
         HStack(spacing: 8) {
           Image(systemName: "checkmark.seal.fill").foregroundColor(.green)
-          Text("Connected! Sending card...")
+          Text("Connected!")
             .font(.subheadline)
-            .foregroundColor(.gray)
+            .foregroundColor(Color.Theme.textSecondary)
         }
       case .error(let message):
         VStack(spacing: 8) {
@@ -134,11 +134,11 @@ struct ConnectPeerPopupView: View {
             Image(systemName: "exclamationmark.triangle.fill").foregroundColor(.orange)
             Text("Connection failed")
               .font(.subheadline)
-              .foregroundColor(.white)
+              .foregroundColor(Color.Theme.textPrimary)
           }
           Text(message)
             .font(.caption)
-            .foregroundColor(.gray)
+            .foregroundColor(Color.Theme.textSecondary)
             .multilineTextAlignment(.center)
         }
       }
@@ -152,7 +152,7 @@ struct ConnectPeerPopupView: View {
         Button(action: { dismiss() }) {
           Text("Cancel").frame(maxWidth: .infinity)
         }
-        .buttonStyle(SecondaryButtonStyle())
+        .buttonStyle(ThemedSecondaryButtonStyle())
         Button(action: startConnect) {
           HStack(spacing: 6) {
             Image(systemName: "link.badge.plus")
@@ -160,26 +160,26 @@ struct ConnectPeerPopupView: View {
           }
           .frame(maxWidth: .infinity)
         }
-        .buttonStyle(PrimaryGradientButtonStyle())
+        .buttonStyle(ThemedPrimaryButtonStyle())
       case .connecting:
         Button(action: { dismiss() }) {
           Text("Hide").frame(maxWidth: .infinity)
         }
-        .buttonStyle(SecondaryButtonStyle())
+        .buttonStyle(ThemedSecondaryButtonStyle())
       case .success:
         Button(action: { dismiss() }) {
           Text("Done").frame(maxWidth: .infinity)
         }
-        .buttonStyle(PrimaryGradientButtonStyle())
+        .buttonStyle(ThemedPrimaryButtonStyle())
       case .error:
         Button(action: { dismiss() }) {
           Text("Close").frame(maxWidth: .infinity)
         }
-        .buttonStyle(SecondaryButtonStyle())
+        .buttonStyle(ThemedSecondaryButtonStyle())
         Button(action: startConnect) {
           Text("Try Again").frame(maxWidth: .infinity)
         }
-        .buttonStyle(PrimaryGradientButtonStyle())
+        .buttonStyle(ThemedPrimaryButtonStyle())
       }
     }
   }
@@ -244,41 +244,5 @@ struct ConnectPeerPopupView: View {
   private func dismiss() {
     withAnimation { isPresented = false }
     onDismiss?()
-  }
-}
-
-// MARK: - Button Styles
-
-private struct PrimaryGradientButtonStyle: ButtonStyle {
-  func makeBody(configuration: Configuration) -> some View {
-    configuration.label
-      .padding(.vertical, 12)
-      .foregroundColor(.white)
-      .background(
-        RoundedRectangle(cornerRadius: 12)
-          .fill(
-            LinearGradient(
-              colors: [Color.blue.opacity(0.9), Color.purple.opacity(0.9)],
-              startPoint: .topLeading,
-              endPoint: .bottomTrailing
-            )
-          )
-      )
-      .overlay(RoundedRectangle(cornerRadius: 12).stroke(Color.white.opacity(0.2), lineWidth: 1))
-      .scaleEffect(configuration.isPressed ? 0.98 : 1.0)
-  }
-}
-
-private struct SecondaryButtonStyle: ButtonStyle {
-  func makeBody(configuration: Configuration) -> some View {
-    configuration.label
-      .padding(.vertical, 12)
-      .foregroundColor(.white)
-      .background(
-        RoundedRectangle(cornerRadius: 12)
-          .fill(Color.white.opacity(0.08))
-      )
-      .overlay(RoundedRectangle(cornerRadius: 12).stroke(Color.white.opacity(0.15), lineWidth: 1))
-      .scaleEffect(configuration.isPressed ? 0.98 : 1.0)
   }
 }

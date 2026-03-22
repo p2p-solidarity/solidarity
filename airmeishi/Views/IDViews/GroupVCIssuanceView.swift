@@ -35,7 +35,7 @@ struct GroupVCIssuanceView: View {
   }
 
   var body: some View {
-    NavigationView {
+    NavigationStack {
       Form {
         // Card Selection
         Section("Select Business Card") {
@@ -230,8 +230,14 @@ struct GroupVCIssuanceView: View {
 
           // Notify listeners
           let successCount = results.filter { if case .success = $0 { return true } else { return false } }.count
-          let summary =
-            "Last issuance: \(successCount) successful, \(results.count - successCount) failed at \(Date().formatted(date: .abbreviated, time: .shortened))"
+          let summaryFormat = String(localized: "Last issuance: %lld successful, %lld failed at %@")
+          let summary = String(
+            format: summaryFormat,
+            locale: Locale.current,
+            successCount,
+            results.count - successCount,
+            Date().formatted(date: .abbreviated, time: .shortened)
+          )
           NotificationCenter.default.post(
             name: .groupVCIssuanceDidComplete,
             object: nil,

@@ -410,10 +410,31 @@ final class IdentityCoordinator: ObservableObject {
   private func loadIdentity(context: LAContext?) async {
     await setLoading(true)
 
+    print("[IdentityCoordinator] loadIdentity started")
+
+    // Try cached descriptor first (avoids biometric auth for display)
+    let cachedDescriptor = cacheStore.loadDescriptor()
+    if let cached = cachedDescriptor {
+      print("[IdentityCoordinator] Using cached DID descriptor: \(cached.did)")
+    }
+
+    // Try live derivation from keychain
     let descriptorResult = didService.currentDescriptor(context: context)
     let cachedDocs = cacheStore.loadDocuments()
     let cachedJwks = cacheStore.loadJwks()
     let identity = semaphoreManager.getIdentity() ?? (try? semaphoreManager.loadOrCreateIdentity())
+
+    switch descriptorResult {
+    case .success(let descriptor):
+      print("[IdentityCoordinator] DID loaded successfully: \(descriptor.did)")
+      // Cache for future loads (avoids biometric prompt)
+      cacheStore.saveDescriptor(descriptor)
+    case .failure(let error):
+      print("[IdentityCoordinator] DID live derivation failed: \(error)")
+      if cachedDescriptor != nil {
+        print("[IdentityCoordinator] Falling back to cached descriptor")
+      }
+    }
 
     await MainActor.run {
       var next = state
@@ -430,7 +451,17 @@ final class IdentityCoordinator: ObservableObject {
           next.didDocument = doc
         }
       case .failure(let error):
-        next.lastError = error
+        // Fall back to cached descriptor if live derivation failed
+        // (e.g., biometric auth was cancelled)
+        if let cached = cachedDescriptor {
+          next.currentProfile.activeDID = cached
+          next.lastError = nil
+          if let doc = cachedDocs[cached.did] {
+            next.didDocument = doc
+          }
+        } else {
+          next.lastError = error
+        }
       }
 
       state = next
