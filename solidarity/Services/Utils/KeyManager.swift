@@ -1,7 +1,7 @@
 //
 //
 //  KeyManager.swift
-//  airmeishi
+//  solidarity
 //
 //  Cryptographic key management for ZK-ready architecture
 //
@@ -24,11 +24,12 @@ class KeyManager {
     case domainKey = "domain_key"
     case proofKey = "proof_key"
 
-    var keychainTag: String {
+    // Keep the old namespace readable for migration and downgrade safety.
+    var legacyKeychainTag: String {
       return "com.kidneyweakx.airmeishi.keys.\(self.rawValue)"
     }
 
-    var modernTag: String {
+    var primaryTag: String {
       switch self {
       case .masterKey:
         return "solidarity.master"
@@ -44,14 +45,12 @@ class KeyManager {
     }
 
     var readTags: [String] {
-      if keychainTag == modernTag {
-        return [keychainTag]
-      }
-      return [keychainTag, modernTag]
+      let tags = [primaryTag, legacyKeychainTag]
+      return Array(NSOrderedSet(array: tags)) as? [String] ?? tags
     }
 
     var allTags: [String] {
-      Array(Set(readTags))
+      readTags
     }
   }
 
@@ -256,8 +255,11 @@ class KeyManager {
     for tag in identifier.readTags {
       let retrieve = keychain.retrieveSymmetricKey(tag: tag)
       if case .success(let key) = retrieve {
-        if tag != identifier.keychainTag {
-          _ = keychain.storeSymmetricKey(key, tag: identifier.keychainTag)
+        if tag != identifier.primaryTag {
+          _ = keychain.storeSymmetricKey(key, tag: identifier.primaryTag)
+        }
+        if tag != identifier.legacyKeychainTag {
+          _ = keychain.storeSymmetricKey(key, tag: identifier.legacyKeychainTag)
         }
         return .success(key)
       }
@@ -269,8 +271,11 @@ class KeyManager {
     for tag in identifier.readTags {
       let retrieve = keychain.retrievePrivateKey(tag: tag)
       if case .success(let key) = retrieve {
-        if tag != identifier.keychainTag {
-          _ = keychain.storePrivateKey(key, tag: identifier.keychainTag)
+        if tag != identifier.primaryTag {
+          _ = keychain.storePrivateKey(key, tag: identifier.primaryTag)
+        }
+        if tag != identifier.legacyKeychainTag {
+          _ = keychain.storePrivateKey(key, tag: identifier.legacyKeychainTag)
         }
         return .success(key)
       }
@@ -279,20 +284,16 @@ class KeyManager {
   }
 
   private func storeSymmetricKey(_ key: SymmetricKey, identifier: KeyIdentifier) -> CardResult<Void> {
-    let primary = keychain.storeSymmetricKey(key, tag: identifier.keychainTag)
+    let primary = keychain.storeSymmetricKey(key, tag: identifier.primaryTag)
     guard case .success = primary else { return primary }
-    if identifier.modernTag != identifier.keychainTag {
-      _ = keychain.storeSymmetricKey(key, tag: identifier.modernTag)
-    }
+    _ = keychain.storeSymmetricKey(key, tag: identifier.legacyKeychainTag)
     return .success(())
   }
 
   private func storePrivateKey(_ key: P256.Signing.PrivateKey, identifier: KeyIdentifier) -> CardResult<Void> {
-    let primary = keychain.storePrivateKey(key, tag: identifier.keychainTag)
+    let primary = keychain.storePrivateKey(key, tag: identifier.primaryTag)
     guard case .success = primary else { return primary }
-    if identifier.modernTag != identifier.keychainTag {
-      _ = keychain.storePrivateKey(key, tag: identifier.modernTag)
-    }
+    _ = keychain.storePrivateKey(key, tag: identifier.legacyKeychainTag)
     return .success(())
   }
 }

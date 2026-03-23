@@ -1,12 +1,12 @@
 //
 //  DeepLinkManagerTests.swift
-//  airmeishiTests
+//  solidarityTests
 //
 //  Unit tests for deep linking functionality
 //
 
 import XCTest
-@testable import airmeishi
+@testable import solidarity
 
 class DeepLinkManagerTests: XCTestCase {
     var deepLinkManager: DeepLinkManager!

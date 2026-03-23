@@ -17,15 +17,15 @@ opt_in_rules:
   - redundant_string_enum_value
 
 included:
-  - airmeishi
+  - solidarity
 
 excluded:
   - Pods
   - DerivedData
   - Carthage
-  - airmeishiClip
-  - airmeishiTests
-  - airmeishiUITests
+  - solidarityClip
+  - solidarityTests
+  - solidarityUITests
   - "**/Generated"
   - "**/*generated.swift"
   - "**/*.generated.swift"

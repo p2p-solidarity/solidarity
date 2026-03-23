@@ -1,6 +1,6 @@
 //
 //  WebRTCManager.swift
-//  airmeishi
+//  solidarity
 //
 //  Manages WebRTC connections and data channels for peer-to-peer messaging.
 //

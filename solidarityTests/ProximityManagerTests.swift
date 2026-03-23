@@ -1,13 +1,13 @@
 //
 //  ProximityManagerTests.swift
-//  airmeishiTests
+//  solidarityTests
 //
 //  Unit tests for proximity sharing functionality
 //
 
 import XCTest
 import MultipeerConnectivity
-@testable import airmeishi
+@testable import solidarity
 
 class ProximityManagerTests: XCTestCase {
     var proximityManager: ProximityManager!

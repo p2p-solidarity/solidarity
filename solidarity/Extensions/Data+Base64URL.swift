@@ -1,6 +1,6 @@
 //
 //  Data+Base64URL.swift
-//  airmeishi
+//  solidarity
 //
 //  Lightweight helper for RFC 7515 URL-safe base64 encoding.
 //

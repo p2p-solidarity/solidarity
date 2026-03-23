@@ -1,6 +1,6 @@
 //
 //  ProximityEvents.swift
-//  airmeishi
+//  solidarity
 //
 //  Global notification names for proximity matching so multiple views can react.
 //

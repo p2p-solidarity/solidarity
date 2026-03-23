@@ -1,7 +1,7 @@
 import Foundation
 import MultipeerConnectivity
 import Testing
-@testable import airmeishi
+@testable import solidarity
 
 // MARK: - ContactEntity Spec Fields Tests
 

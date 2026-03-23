@@ -1,6 +1,6 @@
 //
 //  OCRManager.swift
-//  airmeishi
+//  solidarity
 //
 //  Apple Vision OCR manager for extracting business card information with confidence scoring
 //

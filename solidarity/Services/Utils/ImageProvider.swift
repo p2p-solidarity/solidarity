@@ -1,6 +1,6 @@
 //
 //  ImageProvider.swift
-//  airmeishi
+//  solidarity
 //
 //  Lightweight loader for animal images from app bundle Resources.
 //

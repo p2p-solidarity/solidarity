@@ -1,6 +1,6 @@
 //
 //  BackupSettingsView.swift
-//  airmeishi
+//  solidarity
 //
 //  Settings UI for iCloud backup
 //

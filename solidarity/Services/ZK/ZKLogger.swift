@@ -1,6 +1,6 @@
 //
 //  ZKLogger.swift
-//  airmeishi
+//  solidarity
 //
 //  Lightweight unified logging for Semaphore-related flows.
 //

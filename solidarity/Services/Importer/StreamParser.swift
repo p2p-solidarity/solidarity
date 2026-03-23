@@ -1,6 +1,6 @@
 //
 //  StreamParser.swift
-//  airmeishi
+//  solidarity
 //
 //  Stream-based JSON parser for large files (Google Takeout, Twitter Archive)
 //

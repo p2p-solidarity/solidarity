@@ -1,6 +1,6 @@
 import Foundation
 import XCTest
-@testable import airmeishi
+@testable import solidarity
 
 final class ProofVerifierServiceTests: XCTestCase {
   private let vcService = VCService()

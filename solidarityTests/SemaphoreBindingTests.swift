@@ -1,5 +1,5 @@
 import XCTest
-@testable import airmeishi
+@testable import solidarity
 
 @MainActor
 final class SemaphoreBindingTests: XCTestCase {

@@ -1,6 +1,6 @@
 //
 //  GroupManagementView.swift
-//  airmeishi
+//  solidarity
 //
 //  Manage group membership: view root, add/remove members, join via code/url.
 //

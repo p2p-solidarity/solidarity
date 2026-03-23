@@ -1,14 +1,14 @@
 //
-//  airmeishiTests.swift
-//  airmeishiTests
+//  SolidarityTests.swift
+//  solidarityTests
 //
 //  Created by kidneyweak on 2025/09/09.
 //
 
 import Testing
-@testable import airmeishi
+@testable import solidarity
 
-struct airmeishiTests {
+struct SolidarityTests {
     
     @Test func testBusinessCardCreation() async throws {
         // Clear any existing data

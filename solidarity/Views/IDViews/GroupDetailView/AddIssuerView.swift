@@ -1,6 +1,6 @@
 //
 //  AddIssuerView.swift
-//  airmeishi
+//  solidarity
 //
 //  View for adding new credential issuers to a group
 //

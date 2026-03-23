@@ -1,6 +1,6 @@
 //
 //  ContactRepository.swift
-//  airmeishi
+//  solidarity
 //
 //  Repository for managing received business cards (contacts) with CRUD operations
 //

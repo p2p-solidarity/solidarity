@@ -1,6 +1,6 @@
 //
 //  ProximityVerificationHelper.swift
-//  airmeishi
+//  solidarity
 //
 //  Helper to verify issuer commitment and optional Semaphore proof for proximity.
 //

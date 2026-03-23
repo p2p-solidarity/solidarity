@@ -1,6 +1,6 @@
 //
 //  ThemeManager.swift
-//  airmeishi
+//  solidarity
 //
 //  Centralized app theming: card accent color + optional glow
 //

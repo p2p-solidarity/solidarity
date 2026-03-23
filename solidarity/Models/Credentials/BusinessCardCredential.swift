@@ -1,6 +1,6 @@
 //
 //  BusinessCardCredential.swift
-//  airmeishi
+//  solidarity
 //
 //  Schema helpers for issuing Verifiable Credentials derived from BusinessCard data.
 //

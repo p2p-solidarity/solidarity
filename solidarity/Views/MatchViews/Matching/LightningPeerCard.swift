@@ -1,6 +1,6 @@
 //
 //  LighteningPeerCard.swift
-//  airmeishi
+//  solidarity
 //
 //  Card cell showing a peer with a styled Connect button.
 //

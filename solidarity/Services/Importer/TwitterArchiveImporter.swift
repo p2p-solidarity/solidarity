@@ -1,6 +1,6 @@
 //
 //  TwitterArchiveImporter.swift
-//  airmeishi
+//  solidarity
 //
 //  Imports Twitter/X archive data using stream parsing
 //  Handles the actual Twitter takeout format

@@ -1,13 +1,13 @@
 //
-//  airmeishiUITests.swift
-//  airmeishiUITests
+//  SolidarityUITests.swift
+//  solidarityUITests
 //
 //  Created by kidneyweak on 2025/09/09.
 //
 
 import XCTest
 
-final class airmeishiUITests: XCTestCase {
+final class SolidarityUITests: XCTestCase {
 
     override func setUpWithError() throws {
         // Put setup code here. This method is called before the invocation of each test method in the class.

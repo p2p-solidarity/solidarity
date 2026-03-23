@@ -1,6 +1,6 @@
 //
 //  EventParticipation.swift
-//  airmeishi
+//  solidarity
 //
 //  Represents a verified participation in an event (e.g., Luma) stored locally
 //

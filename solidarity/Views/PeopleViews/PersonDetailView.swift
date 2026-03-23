@@ -1,6 +1,6 @@
 //
 //  PersonDetailView.swift
-//  airmeishi
+//  solidarity
 //
 //  Contact detail view — spec [PL-2] using ContactEntity
 //

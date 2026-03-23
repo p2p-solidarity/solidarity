@@ -1,6 +1,6 @@
 //
 //  LanguageSelectionView.swift
-//  airmeishi
+//  solidarity
 //
 //  Language selection interface for OCR scanning
 //

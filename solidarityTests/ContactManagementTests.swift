@@ -1,12 +1,12 @@
 //
 //  ContactManagementTests.swift
-//  airmeishiTests
+//  solidarityTests
 //
 //  Tests for contact management and cryptographic core functionality
 //
 
 import XCTest
-@testable import airmeishi
+@testable import solidarity
 
 @MainActor
 final class ContactManagementTests: XCTestCase {

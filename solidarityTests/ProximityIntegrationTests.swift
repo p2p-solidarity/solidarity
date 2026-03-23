@@ -1,12 +1,12 @@
 //
 //  ProximityIntegrationTests.swift
-//  airmeishiTests
+//  solidarityTests
 //
 //  Integration tests for proximity sharing functionality
 //
 
 import XCTest
-@testable import airmeishi
+@testable import solidarity
 
 class ProximityIntegrationTests: XCTestCase {
     var proximityManager: ProximityManager!

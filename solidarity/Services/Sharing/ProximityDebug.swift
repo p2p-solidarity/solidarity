@@ -1,6 +1,6 @@
 //
 //  ProximityDebug.swift
-//  airmeishi
+//  solidarity
 //
 //  Debug helpers for proximity sharing configuration
 //

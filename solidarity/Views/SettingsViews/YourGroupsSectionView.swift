@@ -1,6 +1,6 @@
 //
 //  YourGroupsSectionView.swift
-//  airmeishi
+//  solidarity
 //
 //  Created by Antigravity on 2025-12-03.
 //

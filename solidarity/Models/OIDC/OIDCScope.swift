@@ -1,6 +1,6 @@
 //
 //  OIDCScope.swift
-//  airmeishi
+//  solidarity
 //
 //  OIDC scope definitions for The Sovereign Vault
 //

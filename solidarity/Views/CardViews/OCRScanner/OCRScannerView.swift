@@ -1,6 +1,6 @@
 //
 //  OCRScannerView.swift
-//  airmeishi
+//  solidarity
 //
 //  Apple Vision OCR scanner for extracting business card information from camera and images
 //

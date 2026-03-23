@@ -1,6 +1,6 @@
 //
 //  ScanLanguage.swift
-//  airmeishi
+//  solidarity
 //
 //  Language selection for OCR scanning
 //

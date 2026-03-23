@@ -1,6 +1,6 @@
 //
 //  FocusedCardView.swift
-//  airmeishi
+//  solidarity
 //
 //  Centered single-card focus overlay with edit and swipe-to-delete
 //

@@ -1,6 +1,6 @@
 //
 //  VaultModels.swift
-//  airmeishi
+//  solidarity
 //
 //  All vault data models for The Sovereign Vault
 //

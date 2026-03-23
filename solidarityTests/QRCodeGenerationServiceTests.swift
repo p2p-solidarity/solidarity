@@ -1,5 +1,5 @@
 import XCTest
-@testable import airmeishi
+@testable import solidarity
 
 final class QRCodeGenerationServiceTests: XCTestCase {
   private let humanKey = "share_proof_is_human"

@@ -1,6 +1,6 @@
 //
 //  ShoutoutDetailView.swift
-//  airmeishi
+//  solidarity
 //
 //  Lightening-themed detailed view for a specific user in the shoutout system
 //

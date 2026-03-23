@@ -1,4 +1,4 @@
-# AirMeishi (Solidarity) - Claude Code Instructions
+# Solidarity - Claude Code Instructions
 
 ## Rules
 
@@ -9,7 +9,7 @@
 ## Build
 
 ```bash
-xcodebuild -project airmeishi.xcodeproj -scheme airmeishi \
+xcodebuild -project solidarity.xcodeproj -scheme solidarity \
   -destination 'platform=iOS Simulator,name=iPhone 17 Pro' \
   build -skipPackagePluginValidation
 ```
@@ -21,9 +21,9 @@ xcodebuild -project airmeishi.xcodeproj -scheme airmeishi \
 ## Project Structure
 
 ```
-airmeishi/
-├── airmeishi/                   # Main app target
-│   ├── airmeishiApp.swift       # App entry, deep linking, CloudKit setup
+solidarity/
+├── solidarity/                  # Main app target
+│   ├── SolidarityApp.swift      # App entry, deep linking, CloudKit setup
 │   ├── AppDelegate.swift        # CloudKit notification handling
 │   ├── Models/                  # Data models
 │   │   ├── BusinessCard.swift   # Core card model with privacy controls
@@ -102,9 +102,9 @@ airmeishi/
 │       ├── IDViews/             # Identity/group management
 │       ├── ShoutoutViews/       # Social messaging (Sakura)
 │       └── SettingsViews/
-├── airmeishiClip/               # App Clip target
-├── airmeishiTests/              # Unit tests
-└── airmeishiUITests/
+├── solidarityClip/              # App Clip target
+├── solidarityTests/             # Unit tests
+└── solidarityUITests/
 ```
 
 ## Dependencies (Swift Package Manager)

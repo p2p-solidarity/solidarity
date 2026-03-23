@@ -1,8 +1,8 @@
 //
 //  GroupJoinSheet.swift
-//  airmeishi
+//  solidarity
 //
-//  Created by AirMeishi Team.
+//  Created by Solidarity Team.
 //
 
 import SwiftUI
@@ -99,7 +99,7 @@ struct GroupJoinSheet: View {
   @State private var showingScanner = false
 
   private func handleScannedCode(_ code: String) {
-    // Expected format: airmeishi://group/join?token=XYZ
+    // Expected format: solidarity://group/join?token=XYZ (legacy airmeishi:// links also work)
     if let url = URL(string: code),
       let components = URLComponents(url: url, resolvingAgainstBaseURL: false),
       let queryItems = components.queryItems,

@@ -1,6 +1,6 @@
 //
 //  AdaptiveLayout.swift
-//  airmeishi
+//  solidarity
 //
 //  Provides adaptive layout modifiers for iPad/landscape support.
 //  iPhone layout remains unchanged. iPad gets full-screen native experience.

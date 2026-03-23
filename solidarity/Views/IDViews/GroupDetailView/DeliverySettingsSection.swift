@@ -1,6 +1,6 @@
 //
 //  DeliverySettingsSection.swift
-//  airmeishi
+//  solidarity
 //
 //  Section for configuring Group VC delivery settings
 //

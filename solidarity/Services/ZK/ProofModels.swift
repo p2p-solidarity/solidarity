@@ -1,6 +1,6 @@
 //
 //  ProofModels.swift
-//  airmeishi
+//  solidarity
 //
 //  Shared ZK proof model types to keep files small and readable
 //

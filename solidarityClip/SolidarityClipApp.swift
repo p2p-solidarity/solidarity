@@ -1,6 +1,6 @@
 //
-//  airmeishiClipApp.swift
-//  airmeishiClip
+//  SolidarityClipApp.swift
+//  solidarityClip
 //
 //  App Clip entry point for viewing shared business cards
 //
@@ -8,7 +8,7 @@
 import SwiftUI
 
 @main
-struct airmeishiClipApp: App {
+struct SolidarityClipApp: App {
     var body: some Scene {
         WindowGroup {
             ContentView()

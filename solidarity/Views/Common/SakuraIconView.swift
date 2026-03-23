@@ -1,6 +1,6 @@
 //
 //  SakuraIconView.swift
-//  airmeishi
+//  solidarity
 //
 //  Sakura (cherry blossom) icon view for Ichigoichie feature
 //

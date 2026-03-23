@@ -1,6 +1,6 @@
 //
 //  ProofGenerationManager.swift
-//  airmeishi
+//  solidarity
 //
 //  ZK-ready proof generation system for selective disclosure and privacy protection
 //

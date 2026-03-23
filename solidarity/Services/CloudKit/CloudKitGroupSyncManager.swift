@@ -1,8 +1,8 @@
 //
 //  CloudKitGroupSyncManager.swift
-//  airmeishi
+//  solidarity
 //
-//  Created by AirMeishi Team.
+//  Created by Solidarity Team.
 //
 
 import CloudKit

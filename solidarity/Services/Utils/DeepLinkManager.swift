@@ -1,6 +1,6 @@
 //
 //  DeepLinkManager.swift
-//  airmeishi
+//  solidarity
 //
 //  Manages deep linking and URL handling for business card sharing
 //

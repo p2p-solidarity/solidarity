@@ -1,6 +1,6 @@
 //
 //  ConnectPeerPopupView.swift
-//  airmeishi
+//  solidarity
 //
 //  Reusable popup to confirm and track connecting to a nearby peer.
 //

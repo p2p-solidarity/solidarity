@@ -1,6 +1,6 @@
 //
 //  SemaphoreGroupManager.swift
-//  airmeishi
+//  solidarity
 //
 //  Manages local view of Semaphore group membership and Merkle root.
 //  NOTE: Root syncing with chain/API is stubbed with TODOs.
@@ -312,7 +312,7 @@ private final class GroupStorage {
     guard let dir = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first else {
       fatalError("Could not access application support directory")
     }
-    let appDir = dir.appendingPathComponent("airmeishi", isDirectory: true)
+    let appDir = dir.appendingPathComponent("solidarity", isDirectory: true)
     try? FileManager.default.createDirectory(at: appDir, withIntermediateDirectories: true)
     url = appDir.appendingPathComponent("semaphore_group.json")
   }

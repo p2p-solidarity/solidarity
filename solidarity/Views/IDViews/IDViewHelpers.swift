@@ -1,6 +1,6 @@
 //
 //  IDViewHelpers.swift
-//  airmeishi
+//  solidarity
 //
 //  Helper methods and computed properties for IDView
 //

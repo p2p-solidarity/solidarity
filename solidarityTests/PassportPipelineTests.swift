@@ -1,6 +1,6 @@
 import Foundation
 import Testing
-@testable import airmeishi
+@testable import solidarity
 
 // MARK: - MRZ Parsing Tests
 
@@ -88,6 +88,7 @@ struct MoproProofServiceTests {
     let output = await MoproProofService.shared.generatePassportProof(
       documentHash: "abc123def456",
       mrzDigest: "feedbeef01020304",
+      dg1MRZData: "\(MRZParsingTests.sampleLine1)\(MRZParsingTests.sampleLine2)",
       nationalityCode: "JPN",
       dateOfBirth: Date(timeIntervalSince1970: 0),
       expiryDate: Date(timeIntervalSinceNow: 86400 * 365),
@@ -214,6 +215,7 @@ struct PassportPipelineServiceTests {
   @Test func passportChipSnapshotFields() async throws {
     let snapshot = PassportChipSnapshot(
       documentHash: "aabbccdd", mrzDigest: "11223344",
+      dg1MRZData: "\(MRZParsingTests.sampleLine1)\(MRZParsingTests.sampleLine2)",
       chipUID: "SIM-ABCDEF01", bacVerified: true, paceVerified: false,
       passiveAuthPassed: true, isSimulated: true, readAt: Date(),
       nationalityCode: "JPN", maskedDocNumber: "AB***67",

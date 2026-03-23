@@ -1,6 +1,6 @@
 //
 //  InactivityMonitorService.swift
-//  airmeishi
+//  solidarity
 //
 //  Monitors user activity for time-locked vault items
 //  Core component of the "Digital Will" / inheritance feature

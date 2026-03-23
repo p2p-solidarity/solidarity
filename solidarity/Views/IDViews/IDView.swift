@@ -1,6 +1,6 @@
 //
 //  IDView.swift
-//  airmeishi
+//  solidarity
 //
 //  Unified identity and group management with ripple animation, OpenID, and ZK settings
 //

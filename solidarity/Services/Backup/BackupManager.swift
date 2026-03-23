@@ -1,6 +1,6 @@
 //
 //  BackupManager.swift
-//  airmeishi
+//  solidarity
 //
 //  Handles iCloud backup for business cards and contacts
 //

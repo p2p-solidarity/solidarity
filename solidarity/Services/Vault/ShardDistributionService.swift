@@ -1,6 +1,6 @@
 //
 //  ShardDistributionService.swift
-//  airmeishi
+//  solidarity
 //
 //  AirDrop and QR-based key shard distribution for digital inheritance
 //

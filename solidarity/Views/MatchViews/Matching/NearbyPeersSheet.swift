@@ -1,6 +1,6 @@
 //
 //  NearbyPeersSheet.swift
-//  airmeishi
+//  solidarity
 //
 //  Sheet listing nearby peers with search and a CTA to view latest card.
 //

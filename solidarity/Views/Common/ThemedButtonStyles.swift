@@ -1,6 +1,6 @@
 //
 //  ThemedButtonStyles.swift
-//  airmeishi
+//  solidarity
 //
 
 import SwiftUI

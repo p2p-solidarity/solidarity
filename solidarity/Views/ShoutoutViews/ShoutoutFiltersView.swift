@@ -1,6 +1,6 @@
 //
 //  ShoutoutFiltersView.swift
-//  airmeishi
+//  solidarity
 //
 //  Filter and search options for 3D shoutout chart
 //

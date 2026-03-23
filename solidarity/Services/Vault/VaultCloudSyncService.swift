@@ -1,6 +1,6 @@
 //
 //  VaultCloudSyncService.swift
-//  airmeishi
+//  solidarity
 //
 //  iCloud Drive sync for The Sovereign Vault
 //  Ensures encrypted vault items are backed up to user's iCloud

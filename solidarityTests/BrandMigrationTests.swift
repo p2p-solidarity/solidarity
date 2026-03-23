@@ -2,7 +2,7 @@ import CryptoKit
 import Foundation
 import Security
 import XCTest
-@testable import airmeishi
+@testable import solidarity
 
 final class BrandMigrationTests: XCTestCase {
   private struct SecretPayload: Codable, Equatable {

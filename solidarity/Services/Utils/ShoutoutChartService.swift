@@ -1,6 +1,6 @@
 //
 //  ShoutoutChartService.swift
-//  airmeishi
+//  solidarity
 //
 //  3D chart visualization service for shoutout discovery and user search
 //

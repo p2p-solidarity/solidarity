@@ -1,6 +1,6 @@
 //
 //  IncomingInvitationPopupView.swift
-//  airmeishi
+//  solidarity
 //
 //  Popup to request consent for incoming proximity connection.
 //

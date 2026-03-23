@@ -1,6 +1,6 @@
 //
 //  DeveloperModeManager.swift
-//  airmeishi
+//  solidarity
 //
 //  Manages developer mode activation via version-tap easter egg
 //

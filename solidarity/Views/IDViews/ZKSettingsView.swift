@@ -1,6 +1,6 @@
 //
 //  ZKSettingsView.swift
-//  airmeishi
+//  solidarity
 //
 //  Zero-Knowledge settings view for managing identity
 //

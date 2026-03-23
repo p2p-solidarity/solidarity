@@ -1,6 +1,6 @@
 //
 //  AppearanceSettingsView.swift
-//  airmeishi
+//  solidarity
 //
 //  Lets users choose card accent color and glow
 //

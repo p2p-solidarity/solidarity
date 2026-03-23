@@ -1,6 +1,6 @@
 //
 //  VCService.swift
-//  airmeishi
+//  solidarity
 //
 //  Handles issuance and parsing of Verifiable Credentials using SpruceKit.
 import CryptoKit

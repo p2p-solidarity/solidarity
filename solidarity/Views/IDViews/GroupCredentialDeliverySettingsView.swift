@@ -1,6 +1,6 @@
 //
 //  GroupCredentialDeliverySettingsView.swift
-//  airmeishi
+//  solidarity
 //
 //  View for configuring Group VC delivery settings
 //

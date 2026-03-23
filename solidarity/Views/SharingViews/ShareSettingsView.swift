@@ -1,6 +1,6 @@
 //
 //  ShareSettingsView.swift
-//  airmeishi
+//  solidarity
 //
 //  Per-field sharing toggles + proof badge selection.
 //  Replaces SharingLevel (public/professional/personal).

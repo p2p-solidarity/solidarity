@@ -1,6 +1,6 @@
 //
 //  PassKitManager.swift
-//  airmeishi
+//  solidarity
 //
 //  Apple Wallet pass generation and management service with PassKit integration
 //

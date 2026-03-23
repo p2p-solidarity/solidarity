@@ -1,6 +1,6 @@
 //
 //  ShareCardPickerSheet.swift
-//  airmeishi
+//  solidarity
 //
 //  Sheet to start/stop advertising the first business card at a chosen privacy level.
 //

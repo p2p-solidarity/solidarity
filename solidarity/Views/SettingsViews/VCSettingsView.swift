@@ -1,6 +1,6 @@
 //
 //  VCSettingsView.swift
-//  airmeishi
+//  solidarity
 //
 //  Settings view for importing and exporting Verifiable Credentials
 //
@@ -223,7 +223,7 @@ struct VCSettingsView: View {
       isPresented: $showingExporter,
       document: exportDocument,
       contentType: .json,
-      defaultFilename: "airmeishi_vcs.json"
+      defaultFilename: "solidarity_vcs.json"
     ) { result in
       switch result {
       case .success(let url):

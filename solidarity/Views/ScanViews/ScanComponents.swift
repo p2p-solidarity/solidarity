@@ -1,6 +1,6 @@
 //
 //  ScanComponents.swift
-//  airmeishi
+//  solidarity
 //
 //  Shared camera/scan UI components used by ScanTabView and MRZCameraView
 //

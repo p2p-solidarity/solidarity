@@ -1,6 +1,6 @@
 //
 //  SemaphoreIdentityManager.swift
-//  airmeishi
+//  solidarity
 //
 //  Manages Semaphore identity lifecycle, commitments, and proof helpers.
 //  Uses Keychain to store the private identity secret locally.

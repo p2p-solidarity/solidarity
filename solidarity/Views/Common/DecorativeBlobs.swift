@@ -1,6 +1,6 @@
 //
 //  DecorativeBlobs.swift
-//  airmeishi
+//  solidarity
 //
 //  Decorative nested ellipses (Ellipse 283/284/285 from design spec)
 //  and radial gradient background.

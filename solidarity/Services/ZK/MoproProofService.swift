@@ -1,6 +1,6 @@
 //
 //  MoproProofService.swift
-//  airmeishi
+//  solidarity
 //
 //  Wraps OpenPassport mopro proving for on-device ZK proof generation.
 //  Falls back to Semaphore or SD-JWT when native proving is unavailable.

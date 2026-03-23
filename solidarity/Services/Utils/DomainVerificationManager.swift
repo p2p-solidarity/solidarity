@@ -1,6 +1,6 @@
 //
 //  DomainVerificationManager.swift
-//  airmeishi
+//  solidarity
 //
 //  Domain verification system for ZK-ready architecture
 //

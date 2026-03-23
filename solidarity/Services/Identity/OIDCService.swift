@@ -1,6 +1,6 @@
 //
 //  OIDCService.swift
-//  airmeishi
+//  solidarity
 //
 //  Service for generating and parsing OIDC Authentication Requests (SIOPv2 / OIDC4VP).
 //

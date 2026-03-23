@@ -1,6 +1,6 @@
 //
 //  CardError.swift
-//  airmeishi
+//  solidarity
 //
 //  Comprehensive error handling for business card operations with offline-first support
 //

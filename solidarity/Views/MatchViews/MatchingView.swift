@@ -1,6 +1,6 @@
 //
 //  MatchingView.swift
-//  airmeishi
+//  solidarity
 //
 //  Matching interface with orbit animation and peer management
 //

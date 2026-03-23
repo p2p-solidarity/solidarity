@@ -1,6 +1,6 @@
 //
 //  AppClipViewModel.swift
-//  airmeishiClip
+//  solidarityClip
 //
 //  View model for App Clip handling URL parsing and business card loading
 //

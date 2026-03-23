@@ -1,6 +1,6 @@
 import CryptoKit
 import XCTest
-@testable import airmeishi
+@testable import solidarity
 
 final class EncryptionManagerTests: XCTestCase {
   private struct SecretPayload: Codable, Equatable {

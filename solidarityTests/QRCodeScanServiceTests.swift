@@ -1,5 +1,5 @@
 import XCTest
-@testable import airmeishi
+@testable import solidarity
 
 final class QRCodeScanServiceTests: XCTestCase {
   func testSiopRequestRoutesToReviewWithoutImmediateCredentialDispatch() {

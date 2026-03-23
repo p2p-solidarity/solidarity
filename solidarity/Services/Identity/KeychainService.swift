@@ -1,6 +1,6 @@
 //
 //  KeychainService.swift
-//  airmeishi
+//  solidarity
 //
 //  Secure storage and retrieval of DID signing keys backed by iOS Keychain with biometric access control.
 //

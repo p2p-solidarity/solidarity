@@ -1,6 +1,6 @@
 //
 //  ShareLinkManager.swift
-//  airmeishi
+//  solidarity
 //
 //  Share link management with rate limiting and expiration controls
 //

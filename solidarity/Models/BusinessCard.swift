@@ -1,6 +1,6 @@
 //
 //  BusinessCard.swift
-//  airmeishi
+//  solidarity
 //
 //  Core data model for business cards with privacy controls and skills management
 //

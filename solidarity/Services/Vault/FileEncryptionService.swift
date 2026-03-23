@@ -1,6 +1,6 @@
 //
 //  FileEncryptionService.swift
-//  airmeishi
+//  solidarity
 //
 //  AES-256-GCM encryption with streaming support for large files
 //

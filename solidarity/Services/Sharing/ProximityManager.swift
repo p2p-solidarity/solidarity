@@ -1,6 +1,6 @@
 //
 //  ProximityManager.swift
-//  airmeishi
+//  solidarity
 //
 //  Manages proximity-based sharing using Multipeer Connectivity for device discovery and sharing
 //

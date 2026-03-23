@@ -1,6 +1,6 @@
 //
 //  BusinessCardListView.swift
-//  airmeishi
+//  solidarity
 //
 //  Main view for displaying and managing business cards
 //

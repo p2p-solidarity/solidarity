@@ -1,6 +1,6 @@
 //
 //  Contact.swift
-//  airmeishi
+//  solidarity
 //
 //  Data model for received business cards with metadata and verification status
 //

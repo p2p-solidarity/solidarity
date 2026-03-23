@@ -1,6 +1,6 @@
 //
 //  NearbyInteractionManager+Types.swift
-//  airmeishi
+//  solidarity
 //
 //  State machine types and configuration for UWB spatial triggering.
 //

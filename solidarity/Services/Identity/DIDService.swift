@@ -1,6 +1,6 @@
 //
 //  DIDService.swift
-//  airmeishi
+//  solidarity
 //
 //  DID derivation utilities backed by SpruceKit.
 //

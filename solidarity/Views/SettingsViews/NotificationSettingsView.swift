@@ -1,6 +1,6 @@
 //
 //  NotificationSettingsView.swift
-//  airmeishi
+//  solidarity
 //
 //  Notification settings UI for managing Sakura message notifications
 //

@@ -1,6 +1,6 @@
 //
 //  AnimalSelectorView.swift
-//  airmeishi
+//  solidarity
 //
 //  Horizontal picker of animal characters with image previews.
 //

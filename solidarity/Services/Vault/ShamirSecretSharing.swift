@@ -1,6 +1,6 @@
 //
 //  ShamirSecretSharing.swift
-//  airmeishi
+//  solidarity
 //
 //  Shamir Secret Sharing implementation for The Sovereign Vault
 //  Used for digital inheritance and emergency key recovery

@@ -1,6 +1,6 @@
 //
 //  ContentKeyExchangeService.swift
-//  airmeishi
+//  solidarity
 //
 //  Manages content key exchange for decrypt_content scope
 //  Enables paid content / authorization-gated decryption

@@ -1,6 +1,6 @@
 //
 //  CardManager.swift
-//  airmeishi
+//  solidarity
 //
 //  Core manager for business card CRUD operations with encrypted storage
 //

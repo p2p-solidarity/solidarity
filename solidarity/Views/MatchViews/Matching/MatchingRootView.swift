@@ -1,6 +1,6 @@
 //
 //  MatchingRootView.swift
-//  airmeishi
+//  solidarity
 //
 //  Root view hosting orbit UI and sheets; small and reusable.
 //

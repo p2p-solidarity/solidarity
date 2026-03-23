@@ -1,6 +1,6 @@
 //
 //  ContentView.swift
-//  airmeishi
+//  solidarity
 //
 //  Main app content view with business card management
 //

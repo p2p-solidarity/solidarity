@@ -1,6 +1,6 @@
 //
 //  DIDDocumentExporter.swift
-//  airmeishi
+//  solidarity
 //
 //  Utilities for exporting DID documents for peer-to-peer distribution.
 //
@@ -11,7 +11,7 @@ import Foundation
 final class DIDDocumentExporter {
   private let fileManager: FileManager
   private let encoder: JSONEncoder
-  private let directoryName = "airmeishi-did-docs"
+  private let directoryName = "solidarity-did-docs"
 
   init(fileManager: FileManager = .default, encoder: JSONEncoder? = nil) {
     self.fileManager = fileManager

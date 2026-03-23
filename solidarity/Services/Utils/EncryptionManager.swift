@@ -1,6 +1,6 @@
 //
 //  EncryptionManager.swift
-//  airmeishi
+//  solidarity
 //
 //  AES-256 encryption service with keychain integration for secure local storage
 //

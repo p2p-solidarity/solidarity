@@ -1,6 +1,6 @@
 //
 //  SovereignVaultService.swift
-//  airmeishi
+//  solidarity
 //
 //  Main service for The Sovereign Vault - manages encrypted local storage
 //

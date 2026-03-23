@@ -1,6 +1,6 @@
 //
 //  SharingTabView.swift
-//  airmeishi
+//  solidarity
 //
 //  Main sharing hub: radar matching view with peer discovery,
 //  inline QR code, and Share Settings navigation.

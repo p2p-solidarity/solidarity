@@ -1,6 +1,6 @@
 //
 //  ProximityPayload.swift
-//  airmeishi
+//  solidarity
 //
 //  Defines the payload used for proximity-based sharing, including ZK info.
 //

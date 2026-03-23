@@ -1,13 +1,13 @@
 //
-//  airmeishiUITestsLaunchTests.swift
-//  airmeishiUITests
+//  SolidarityUITestsLaunchTests.swift
+//  solidarityUITests
 //
 //  Created by kidneyweak on 2025/09/09.
 //
 
 import XCTest
 
-final class airmeishiUITestsLaunchTests: XCTestCase {
+final class SolidarityUITestsLaunchTests: XCTestCase {
 
     override class var runsForEachTargetApplicationUIConfiguration: Bool {
         true

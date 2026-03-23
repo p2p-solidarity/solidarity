@@ -1,6 +1,6 @@
 //
 //  NearbyInteractionManager.swift
-//  airmeishi
+//  solidarity
 //
 //  Manages UWB Nearby Interaction sessions as a spatial trigger layer
 //  on top of the existing MultipeerConnectivity data channel.

@@ -1,7 +1,7 @@
 import Foundation
 import LocalAuthentication
 import XCTest
-@testable import airmeishi
+@testable import solidarity
 
 final class OID4VPPresentationServiceTests: XCTestCase {
   func testWrapCredentialUsesPairwiseDescriptorForRP() throws {

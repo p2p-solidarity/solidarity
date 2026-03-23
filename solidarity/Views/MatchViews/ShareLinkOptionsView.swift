@@ -1,6 +1,6 @@
 //
 //  ShareLinkOptionsView.swift
-//  airmeishi
+//  solidarity
 //
 //  Share link creation interface with usage limits and expiration controls
 //

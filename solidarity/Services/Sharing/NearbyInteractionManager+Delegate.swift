@@ -1,6 +1,6 @@
 //
 //  NearbyInteractionManager+Delegate.swift
-//  airmeishi
+//  solidarity
 //
 //  NISessionDelegate implementation: handles ranging updates, suspension, and errors.
 //

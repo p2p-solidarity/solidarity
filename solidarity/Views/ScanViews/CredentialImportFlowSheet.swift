@@ -1,6 +1,6 @@
 //
 //  CredentialImportFlowSheet.swift
-//  airmeishi
+//  solidarity
 //
 //  UI flow for OID4VCI credential import: review offer → authenticate → fetch → done.
 //

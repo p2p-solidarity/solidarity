@@ -1,6 +1,6 @@
 //
 //  ErrorHandlingManager.swift
-//  airmeishi
+//  solidarity
 //
 //  Comprehensive error handling and logging system for offline-first functionality
 //

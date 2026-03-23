@@ -1,6 +1,6 @@
 //
 //  CredentialIssuersSection.swift
-//  airmeishi
+//  solidarity
 //
 //  Section for managing credential issuers in GroupDetailView
 //

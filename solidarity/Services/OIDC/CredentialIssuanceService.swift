@@ -1,6 +1,6 @@
 //
 //  CredentialIssuanceService.swift
-//  airmeishi
+//  solidarity
 //
 //  OID4VCI (OpenID for Verifiable Credential Issuance) client.
 //  Handles pre-authorized code flow: credential offer → token → credential.

@@ -1,6 +1,6 @@
 //
 //  ConnectGroupInvitePopupView.swift
-//  airmeishi
+//  solidarity
 //
 //  Popup to accept a nearby group invite without manual matching.
 //

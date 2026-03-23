@@ -1,6 +1,6 @@
 //
 //  MatchingOrbitView.swift
-//  airmeishi
+//  solidarity
 //
 //  Lightweight orbit animation used on the simplified Match screen
 //

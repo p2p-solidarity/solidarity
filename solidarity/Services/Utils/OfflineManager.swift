@@ -1,6 +1,6 @@
 //
 //  OfflineManager.swift
-//  airmeishi
+//  solidarity
 //
 //  Offline-first functionality manager for business card operations
 //

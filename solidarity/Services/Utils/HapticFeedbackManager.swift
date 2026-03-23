@@ -1,6 +1,6 @@
 //
 //  HapticFeedbackManager.swift
-//  airmeishi
+//  solidarity
 //
 
 import UIKit

@@ -1,6 +1,6 @@
 //
 //  TimeLockConfig.swift
-//  airmeishi
+//  solidarity
 //
 //  Time-based access control for vault items - implements "digital inheritance"
 //

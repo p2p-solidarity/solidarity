@@ -1,6 +1,6 @@
 //
 //  ShoutoutView.swift
-//  airmeishi
+//  solidarity
 //
 //  Ichigoichie (Sakura) gallery view for business card discovery and management
 //

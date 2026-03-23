@@ -1,6 +1,6 @@
 //
 //  SharedComponents.swift
-//  airmeishi
+//  solidarity
 //
 //  Shared UI components used across multiple views
 //

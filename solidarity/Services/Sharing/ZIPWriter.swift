@@ -1,6 +1,6 @@
 //
 //  ZIPWriter.swift
-//  airmeishi
+//  solidarity
 //
 //  Simple ZIP file creator for .pkpass generation
 //

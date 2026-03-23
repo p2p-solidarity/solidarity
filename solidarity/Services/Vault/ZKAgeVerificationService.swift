@@ -1,6 +1,6 @@
 //
 //  ZKAgeVerificationService.swift
-//  airmeishi
+//  solidarity
 //
 //  Zero-Knowledge age verification using Semaphore
 //  Proves age threshold without revealing birthdate

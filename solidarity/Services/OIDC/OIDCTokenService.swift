@@ -1,6 +1,6 @@
 //
 //  OIDCTokenService.swift
-//  airmeishi
+//  solidarity
 //
 //  JWT token generation and validation for OIDC flows
 //  Uses DID private key for signing

@@ -3,8 +3,8 @@ set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 DERIVED_DATA_PATH="${1:-${ROOT_DIR}/build/DerivedData}"
-PROJECT_PATH="${ROOT_DIR}/airmeishi.xcodeproj"
-SCHEME="${SCHEME:-airmeishi}"
+PROJECT_PATH="${ROOT_DIR}/solidarity.xcodeproj"
+SCHEME="${SCHEME:-solidarity}"
 EXPECTED_NOIR_VERSION_PREFIX="${EXPECTED_NOIR_VERSION_PREFIX:-1.0.0-beta.8}"
 PASSPORT_NOIR_ROOT="${OPENPASSPORT_REPO_PATH:-${ROOT_DIR}/../passport-noir}"
 
@@ -22,9 +22,9 @@ xcodebuild -resolvePackageDependencies \
   -derivedDataPath "${DERIVED_DATA_PATH}" \
   -skipPackagePluginValidation
 
-PASSPORT_CIRCUIT_TARGET="${ROOT_DIR}/airmeishi/Resources/openpassport_disclosure.json"
+PASSPORT_CIRCUIT_TARGET="${ROOT_DIR}/solidarity/Resources/openpassport_disclosure.json"
 PASSPORT_SRS_SOURCE="${OPENPASSPORT_SRS_SOURCE:-}"
-PASSPORT_SRS_TARGET="${ROOT_DIR}/airmeishi/Resources/openpassport_srs.bin"
+PASSPORT_SRS_TARGET="${ROOT_DIR}/solidarity/Resources/openpassport_srs.bin"
 
 read_noir_version() {
   local circuit_file="$1"

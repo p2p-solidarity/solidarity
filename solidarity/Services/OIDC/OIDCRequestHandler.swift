@@ -1,6 +1,6 @@
 //
 //  OIDCRequestHandler.swift
-//  airmeishi
+//  solidarity
 //
 //  Handles incoming OIDC authorization requests for vault access
 //

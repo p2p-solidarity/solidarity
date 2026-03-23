@@ -1,6 +1,6 @@
 //
 //  WalletPassGenerationView.swift
-//  airmeishi
+//  solidarity
 //
 //  Apple Wallet pass generation interface with PassKit integration
 //

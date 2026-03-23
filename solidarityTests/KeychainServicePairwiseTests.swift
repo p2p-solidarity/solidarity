@@ -1,5 +1,5 @@
 import Testing
-@testable import airmeishi
+@testable import solidarity
 
 struct KeychainServicePairwiseTests {
   @Test func testMasterAliasKeepsLegacyTag() async throws {

@@ -1,6 +1,6 @@
 //
 //  AirDropManager.swift
-//  airmeishi
+//  solidarity
 //
 //  Manages AirDrop integration for sharing business cards and Apple Wallet passes
 //

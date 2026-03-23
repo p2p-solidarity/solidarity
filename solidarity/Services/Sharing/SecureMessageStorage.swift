@@ -1,6 +1,6 @@
 //
 //  SecureMessageStorage.swift
-//  airmeishi
+//  solidarity
 //
 //  Manages local storage for secure messages, ensuring they are excluded from iCloud backups.
 //

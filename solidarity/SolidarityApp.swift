@@ -1,6 +1,6 @@
 //
-//  airmeishiApp.swift
-//  airmeishi
+//  SolidarityApp.swift
+//  solidarity
 //
 //  Created by kidneyweak on 2025/09/09.
 //
@@ -11,7 +11,7 @@ import PassKit
 import SwiftUI
 
 @main
-struct airmeishiApp: App {
+struct SolidarityApp: App {
   @UIApplicationDelegateAdaptor(AppDelegate.self) var appDelegate
 
   // Initialize core managers

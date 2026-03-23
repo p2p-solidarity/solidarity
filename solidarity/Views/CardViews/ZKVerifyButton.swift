@@ -1,6 +1,6 @@
 //
 //  ZKVerifyButton.swift
-//  airmeishi
+//  solidarity
 //
 //  A small reusable button to generate and verify a local SD proof
 //

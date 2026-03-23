@@ -1,6 +1,6 @@
 import Foundation
 import Testing
-@testable import airmeishi
+@testable import solidarity
 
 // MARK: - ScanRouterService Tests
 

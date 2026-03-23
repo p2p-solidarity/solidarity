@@ -1,6 +1,6 @@
 //
 //  OIDCRequestView.swift
-//  airmeishi
+//  solidarity
 //
 //  View for generating and displaying OIDC Authentication Requests via QR Code.
 //

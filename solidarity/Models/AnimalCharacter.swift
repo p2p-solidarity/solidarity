@@ -1,6 +1,6 @@
 //
 //  AnimalCharacter.swift
-//  airmeishi
+//  solidarity
 //
 //  Defines selectable animal characters for card styling and UX.
 //

@@ -1,6 +1,6 @@
 //
 //  WebhookManager.swift
-//  airmeishi
+//  solidarity
 //
 //  Minimal server webhook simulation for Apple Wallet pass updates and revocation
 //

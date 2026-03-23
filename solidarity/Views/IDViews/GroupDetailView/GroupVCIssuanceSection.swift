@@ -1,6 +1,6 @@
 //
 //  GroupVCIssuanceSection.swift
-//  airmeishi
+//  solidarity
 //
 //  Section for issuing Group VCs in GroupDetailView
 //
