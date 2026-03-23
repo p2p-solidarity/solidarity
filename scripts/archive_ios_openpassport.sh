@@ -3,10 +3,10 @@ set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 DERIVED_DATA_PATH="${DERIVED_DATA_PATH:-${ROOT_DIR}/build/DerivedData}"
-ARCHIVE_PATH="${ARCHIVE_PATH:-${ROOT_DIR}/build/airmeishi.xcarchive}"
+ARCHIVE_PATH="${ARCHIVE_PATH:-${ROOT_DIR}/build/solidarity.xcarchive}"
 RESULT_BUNDLE_PATH="${RESULT_BUNDLE_PATH:-${ROOT_DIR}/build/resultbundle.xcresult}"
-PROJECT_PATH="${ROOT_DIR}/airmeishi.xcodeproj"
-SCHEME="${SCHEME:-airmeishi}"
+PROJECT_PATH="${ROOT_DIR}/solidarity.xcodeproj"
+SCHEME="${SCHEME:-solidarity}"
 DESTINATION="${DESTINATION:-generic/platform=iOS}"
 DEVELOPMENT_TEAM="${DEVELOPMENT_TEAM:-538MCM44UX}"
 UNSIGNED_ARCHIVE="${UNSIGNED_ARCHIVE:-1}"

@@ -1,0 +1,47 @@
+name: ✨ Feature request
+description: Suggest an improvement, workflow upgrade, or new capability.
+title: "[Feature] "
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Keep this focused and concrete.
+
+        If you already have a discussion, mock, or spec link, include it here.
+
+  - type: dropdown
+    id: areas
+    attributes:
+      label: 🎯 Primary area
+      description: Pick the closest match.
+      multiple: false
+      options:
+        - Not sure
+        - Business card / contacts
+        - Share / proximity
+        - Scan / QR / OIDC flows
+        - Identity / credentials / ZK
+        - Passport / NFC
+        - Groups / CloudKit
+        - Onboarding / UX
+        - App Clip
+        - Messaging
+        - Developer / tooling
+    validations:
+      required: true
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: 🧠 Problem or goal
+      description: What user or developer problem does this solve?
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposal
+    attributes:
+      label: 🛠️ Proposed direction (optional)
+      description: Rough idea, mock, scope, or acceptance criteria.
+    validations:
+      required: false

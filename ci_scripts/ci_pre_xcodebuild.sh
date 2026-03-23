@@ -6,7 +6,7 @@ set -eu
 
 DERIVED_DATA="${CI_DERIVED_DATA_PATH:-/Volumes/workspace/DerivedData}"
 PASSPORT_CIRCUIT_SOURCE="${DERIVED_DATA}/SourcePackages/checkouts/passport-noir/circuits/target/disclosure.json"
-PASSPORT_CIRCUIT_TARGET="./airmeishi/Resources/openpassport_disclosure.json"
+PASSPORT_CIRCUIT_TARGET="./solidarity/Resources/openpassport_disclosure.json"
 
 if [ -f "${PASSPORT_CIRCUIT_SOURCE}" ]; then
   mkdir -p "$(dirname "${PASSPORT_CIRCUIT_TARGET}")"

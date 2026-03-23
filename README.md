@@ -2,7 +2,7 @@
 <h1>Solid(ar)ity</h1>
 <p>A privacy-preserving, proximity-based business card sharing app built with zero-knowledge proofs, CloudKit-backed group sync, and P2P networking.</p>
 
-<img src="./airmeishi/Assets.xcassets/AppIcon.appiconset/1024.png" width="50%" height="50%"></img>
+<img src="./solidarity/Assets.xcassets/AppIcon.appiconset/1024.png" width="50%" height="50%"></img>
 
 ![License: Apache 2.0](https://img.shields.io/github/license/kidneyweakx/solidarity)
 </div>
@@ -51,14 +51,14 @@ Your data lives on your device. You decide what to share, when, and with whom.
 
 ## Project Structure
 
-- `airmeishi/AppDelegate.swift`: bootstrap, CloudKit notification handling
-- `airmeishi/Models`: cards, groups, credentials, CloudKit models
-- `airmeishi/Services/CloudKit`: CloudKitGroupSyncManager + models
-- `airmeishi/Services/Sharing`: P2P managers, QR, ShareLink flows
-- `airmeishi/Services/Identity`: Semaphore group management and credential issuance
-- `airmeishi/Services/Cache`: SwiftData-backed local cache
-- `airmeishi/Views`: SwiftUI screens for cards, IDs, groups, settings
-- `airmeishi/Assets.xcassets`: app icon and UI assets
+- `solidarity/AppDelegate.swift`: bootstrap, CloudKit notification handling
+- `solidarity/Models`: cards, groups, credentials, CloudKit models
+- `solidarity/Services/CloudKit`: CloudKitGroupSyncManager + models
+- `solidarity/Services/Sharing`: P2P managers, QR, ShareLink flows
+- `solidarity/Services/Identity`: Semaphore group management and credential issuance
+- `solidarity/Services/Cache`: SwiftData-backed local cache
+- `solidarity/Views`: SwiftUI screens for cards, IDs, groups, settings
+- `solidarity/Assets.xcassets`: app icon and UI assets
 
 ## Built With
 
@@ -75,8 +75,8 @@ Your data lives on your device. You decide what to share, when, and with whom.
 
 ```bash
 git clone https://github.com/kidneyweakx/solidarity.git
-cd airmeishi
-open airmeishi.xcodeproj
+cd solidarity
+open solidarity.xcodeproj
 ```
 
 Dependencies auto-resolve via Swift Package Manager. Press Cmd+R to run.
@@ -85,7 +85,7 @@ Dependencies auto-resolve via Swift Package Manager. Press Cmd+R to run.
 
 ```bash
 # Run all tests
-xcodebuild test -project airmeishi.xcodeproj -scheme airmeishi \
+xcodebuild test -project solidarity.xcodeproj -scheme solidarity \
   -destination 'platform=iOS Simulator,name=iPhone 16'
 
 # Test proximity features (requires 2 simulators or devices)

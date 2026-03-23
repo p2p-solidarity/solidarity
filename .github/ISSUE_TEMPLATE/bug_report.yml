@@ -1,0 +1,69 @@
+name: 🐞 Bug report
+description: Unexpected behavior, crashes, regressions, or incorrect results.
+title: "[Bug] "
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Use this form for **bugs and regressions**.
+
+        If you are not sure whether this is a bug, please use [Discussions](https://github.com/p2p-solidarity/solidarity/discussions) first.
+
+  - type: dropdown
+    id: areas
+    attributes:
+      label: 🔎 Affected area(s)
+      description: Select all that apply.
+      multiple: true
+      options:
+        - Not sure
+        - Business card / contacts
+        - Share / proximity / WebRTC
+        - Scan / QR / OID4VP / OID4VCI
+        - Identity / DID / VC / Keychain
+        - Passport / NFC / MRZ / ZK
+        - Groups / CloudKit
+        - Onboarding / settings / UI
+        - App Clip
+        - Messaging (Sakura)
+        - Build / CI / Xcode / tooling
+        - Unit tests / UITests
+    validations:
+      required: true
+
+  - type: textarea
+    id: what
+    attributes:
+      label: 🧩 What happened?
+      description: Describe the observed behavior. Include the expected behavior if it is not obvious.
+    validations:
+      required: true
+
+  - type: textarea
+    id: repro
+    attributes:
+      label: 🔁 Steps to reproduce
+      description: Add numbered steps, or say "not reproducible" if the issue is intermittent.
+      placeholder: |
+        1.
+        2.
+        3.
+    validations:
+      required: false
+
+  - type: input
+    id: version
+    attributes:
+      label: 🏷️ App / build (if known)
+      description: For example: TestFlight build, commit SHA, or local debug build.
+      placeholder: e.g. 1.2.0 (123)
+    validations:
+      required: false
+
+  - type: input
+    id: device
+    attributes:
+      label: 📱 Device and OS (if relevant)
+      placeholder: e.g. iPhone 15 Pro, iOS 18.6
+    validations:
+      required: false

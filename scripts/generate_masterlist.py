@@ -4,7 +4,7 @@ Fetches CSCA certificates from Self (OpenPassport) skiPem.ts
 and converts them to a concatenated PEM file for NFCPassportReader.
 
 Source: https://github.com/selfxyz/self (MIT license)
-Output: airmeishi/Resources/masterList.pem
+Output: solidarity/Resources/masterList.pem
 
 Usage:
     python3 scripts/generate_masterlist.py
@@ -21,7 +21,7 @@ SKI_PEM_URL = (
     "common/src/constants/skiPem.ts"
 )
 
-OUTPUT_PATH = Path(__file__).parent.parent / "airmeishi" / "Resources" / "masterList.pem"
+OUTPUT_PATH = Path(__file__).parent.parent / "solidarity" / "Resources" / "masterList.pem"
 
 
 def fetch_ski_pem_ts() -> str:
