@@ -1,6 +1,6 @@
 //
 //  EventRepository.swift
-//  airmeishi
+//  solidarity
 //
 //  Encrypted local persistence for event participations
 //
@@ -114,7 +114,7 @@ final class EventRepository: ObservableObject {
     guard let documentsURL = fm.urls(for: .documentDirectory, in: .userDomainMask).first else {
       fatalError("Unable to access document directory")
     }
-    return documentsURL.appendingPathComponent("AirmeishiStorage")
+    return documentsURL.appendingPathComponent(AppBranding.currentStorageDirectoryName)
   }
 }
 

@@ -1,6 +1,6 @@
 //
 //  ContentView.swift
-//  airmeishiClip
+//  solidarityClip
 //
 //  Main view for App Clip showing shared business card with verification
 //
@@ -289,7 +289,7 @@ struct ContentView: View {
                 .foregroundColor(.secondary)
                 .multilineTextAlignment(.center)
             
-            Button("Download Airmeishi") {
+            Button("Download Solid(ar)ity") {
                 showingFullApp = true
             }
             .buttonStyle(.borderedProminent)
@@ -388,7 +388,7 @@ struct ContentView: View {
                     .font(.system(size: 60))
                     .foregroundColor(.blue)
                 
-                Text("Get Airmeishi")
+                Text("Get Solid(ar)ity")
                     .font(.title)
                     .fontWeight(.bold)
                 
@@ -537,7 +537,7 @@ struct ContentView: View {
     
     private func openAppStore() {
         // In a real app, this would open the App Store page
-        if let url = URL(string: "https://apps.apple.com/app/airmeishi") {
+        if let url = URL(string: "https://apps.apple.com/app/id6752410250") {
             UIApplication.shared.open(url)
         }
     }

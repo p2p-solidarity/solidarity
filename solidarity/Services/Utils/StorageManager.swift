@@ -1,6 +1,6 @@
 //
 //  StorageManager.swift
-//  airmeishi
+//  solidarity
 //
 //  Local storage manager with encryption for business cards and contacts
 //
@@ -20,6 +20,7 @@ class StorageManager {
   private let userPreferencesFileName = "user_preferences.encrypted"
 
   private init() {
+    migrateLegacyStorageDirectoryIfNeeded()
     createStorageDirectoryIfNeeded()
   }
 
@@ -161,10 +162,29 @@ class StorageManager {
 
   /// Get the storage directory URL
   private func getStorageURL() -> URL {
+    return documentsDirectoryURL().appendingPathComponent(AppBranding.currentStorageDirectoryName)
+  }
+
+  private func documentsDirectoryURL() -> URL {
     guard let documentsURL = fileManager.urls(for: .documentDirectory, in: .userDomainMask).first else {
       fatalError("Unable to access document directory")
     }
-    return documentsURL.appendingPathComponent("AirmeishiStorage")
+    return documentsURL
+  }
+
+  private func migrateLegacyStorageDirectoryIfNeeded() {
+    let currentURL = getStorageURL()
+    let legacyURL = documentsDirectoryURL().appendingPathComponent(AppBranding.legacyStorageDirectoryName)
+
+    guard !fileManager.fileExists(atPath: currentURL.path),
+          fileManager.fileExists(atPath: legacyURL.path)
+    else { return }
+
+    do {
+      try fileManager.moveItem(at: legacyURL, to: currentURL)
+    } catch {
+      print("Failed to migrate legacy storage directory: \(error.localizedDescription)")
+    }
   }
 
   /// Create storage directory if it doesn't exist

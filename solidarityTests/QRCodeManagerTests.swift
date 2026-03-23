@@ -1,12 +1,12 @@
 //
 //  QRCodeManagerTests.swift
-//  airmeishiTests
+//  solidarityTests
 //
 //  Unit tests for QR code generation and sharing functionality
 //
 
 import XCTest
-@testable import airmeishi
+@testable import solidarity
 
 final class QRCodeManagerTests: XCTestCase {
     
@@ -247,12 +247,12 @@ final class PassKitManagerTests: XCTestCase {
             "passTypeIdentifier": "pass.kidneyweakx.airmeishi.businesscard",
             "serialNumber": UUID().uuidString,
             "teamIdentifier": "5N42RJ485D",
-            "organizationName": "Airmeishi",
+            "organizationName": "Solid(ar)ity",
             "description": "Business Card - \(testBusinessCard.name)"
         ] as [String : Any]
         
         XCTAssertEqual(passData["formatVersion"] as? Int, 1, "Format version should be 1")
-        XCTAssertEqual(passData["organizationName"] as? String, "Airmeishi", "Organization name should be set")
+        XCTAssertEqual(passData["organizationName"] as? String, "Solid(ar)ity", "Organization name should be set")
         XCTAssertTrue(
             (passData["description"] as? String)?.contains(testBusinessCard.name) == true,
             "Description should contain business card name"

@@ -1,6 +1,6 @@
 //
 //  VCLibrary.swift
-//  airmeishi
+//  solidarity
 //
 //  Encrypted local persistence for Verifiable Credentials.
 //
@@ -45,7 +45,7 @@ final class VCLibrary {
   private let queue = DispatchQueue(label: "com.kidneyweakx.solidarity.vclibrary", qos: .userInitiated)
   private let fileManager: FileManager
   private let encryptionManager: EncryptionManager
-  private let storageDirectoryName = "AirmeishiStorage"
+  private let storageDirectoryName = AppBranding.currentStorageDirectoryName
   private let storageFileName = "vc_library.encrypted"
 
   private var cache: [StoredCredential] = []
@@ -202,6 +202,7 @@ final class VCLibrary {
   }
 
   private func ensureStorageDirectory() -> CardResult<Void> {
+    migrateLegacyStorageDirectoryIfNeeded()
     let directoryURL = storageURL().deletingLastPathComponent()
     if fileManager.fileExists(atPath: directoryURL.path) {
       return .success(())
@@ -213,5 +214,20 @@ final class VCLibrary {
     } catch {
       return .failure(.storageError("Failed to create credential storage directory: \(error.localizedDescription)"))
     }
+  }
+
+  private func migrateLegacyStorageDirectoryIfNeeded() {
+    guard let documents = fileManager.urls(for: .documentDirectory, in: .userDomainMask).first else {
+      return
+    }
+
+    let currentURL = documents.appendingPathComponent(storageDirectoryName, isDirectory: true)
+    let legacyURL = documents.appendingPathComponent(AppBranding.legacyStorageDirectoryName, isDirectory: true)
+
+    guard !fileManager.fileExists(atPath: currentURL.path),
+          fileManager.fileExists(atPath: legacyURL.path)
+    else { return }
+
+    try? fileManager.moveItem(at: legacyURL, to: currentURL)
   }
 }

@@ -1,6 +1,6 @@
 //
 //  GroupCredentialDeliveryService.swift
-//  airmeishi
+//  solidarity
 //
 //  Handles the delivery of Group Verifiable Credentials via various methods (Sakura, Proximity, etc.)
 //
@@ -90,7 +90,7 @@ final class GroupCredentialDeliveryService: ObservableObject {
     // The recipient needs to detect this is a VC.
     // Ideally, we should wrap this in a structured message, but for MVP we send raw JSON or a specific prefix.
     // Let's use a prefix to help the recipient identify it.
-    let messageText = "AIRMEISHI_VC::\(cardJSON)"
+    let messageText = "\(AppBranding.currentCredentialMessagePrefix)\(cardJSON)"
 
     try await messageService.sendMessage(to: contact, text: messageText)
   }

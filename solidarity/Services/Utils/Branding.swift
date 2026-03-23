@@ -31,6 +31,10 @@ enum AppBranding {
   static let currentIdentityCacheService = "com.kidneyweakx.solidarity.identity-cache"
 
   static let currentLoggerSubsystem = "com.kidneyweakx.solidarity"
+  static let currentStorageDirectoryName = "SolidarityStorage"
+  static let legacyStorageDirectoryName = "AirmeishiStorage"
+  static let currentCredentialMessagePrefix = "SOLIDARITY_VC::"
+  static let legacyCredentialMessagePrefix = "AIRMEISHI_VC::"
 
   static let supportedBonjourServices = [
     "_\(currentProximityServiceType)._tcp.",
