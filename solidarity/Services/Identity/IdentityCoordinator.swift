@@ -9,7 +9,7 @@ import Security
 final class IdentityCoordinator: ObservableObject {
   static let shared = IdentityCoordinator()
 
-  @Published private(set) var state: IdentityState
+  @Published internal(set) var state: IdentityState
 
   var statePublisher: AnyPublisher<IdentityState, Never> {
     $state.eraseToAnyPublisher()
@@ -28,17 +28,17 @@ final class IdentityCoordinator: ObservableObject {
   }
 
   private let keychain: KeychainService
-  private let didService: DIDService
-  private let vcService: VCService
-  private let oidcService: OIDCService
-  private let semaphoreManager: SemaphoreIdentityManager
+  let didService: DIDService
+  let vcService: VCService
+  let oidcService: OIDCService
+  let semaphoreManager: SemaphoreIdentityManager
   private let groupManager: SemaphoreGroupManager
-  private let cacheStore: IdentityCacheStore
-  private let queue = DispatchQueue(label: "com.kidneyweakx.solidarity.identity-coordinator", qos: .userInitiated)
-  private let importHelper: IdentityImportHelper
-  private let verificationSubject: CurrentValueSubject<[UUID: VerificationStatus], Never>
-  private let verificationUpdateSubject = PassthroughSubject<IdentityState.VerificationEvent, Never>()
-  private let oidcEventSubject = PassthroughSubject<IdentityState.OIDCEvent, Never>()
+  let cacheStore: IdentityCacheStore
+  let queue = DispatchQueue(label: "com.kidneyweakx.solidarity.identity-coordinator", qos: .userInitiated)
+  let importHelper: IdentityImportHelper
+  let verificationSubject: CurrentValueSubject<[UUID: VerificationStatus], Never>
+  let verificationUpdateSubject = PassthroughSubject<IdentityState.VerificationEvent, Never>()
+  let oidcEventSubject = PassthroughSubject<IdentityState.OIDCEvent, Never>()
   private var cancellables = Set<AnyCancellable>()
 
   init(
@@ -217,197 +217,17 @@ final class IdentityCoordinator: ObservableObject {
     state.verificationCache[cardId]
   }
 
-  // MARK: - Issuance
-
-  func issueBusinessCardVC(
-    for card: BusinessCard,
-    context: LAContext? = nil,
-    completion: ((CardResult<VCLibrary.StoredCredential>) -> Void)? = nil
-  ) {
-    queue.async {
-      // 1. Ensure we have an active DID
-      let didResult = self.didService.currentDescriptor(context: context)
-
-      switch didResult {
-      case .failure(let error):
-        DispatchQueue.main.async { completion?(.failure(error)) }
-        return
-
-      case .success(let descriptor):
-        // 2. Issue the credential using the DID
-        let options = VCService.IssueOptions(
-          holderDid: descriptor.did,
-          issuerDid: descriptor.did,
-          expiration: card.sharingPreferences.expirationDate,
-          authenticationContext: context
-        )
-
-        let result = self.vcService.issueAndStoreBusinessCardCredential(
-          for: card,
-          options: options
-        )
-
-        DispatchQueue.main.async {
-          if case .success = result {
-            // Update verification status immediately since we just issued it
-            self.updateVerificationStatus(for: card.id, status: .verified)
-          }
-          completion?(result)
-        }
-      }
-    }
-  }
-
-  func issueGroupCredential(
-    for card: BusinessCard,
-    group: GroupModel,
-    targetMembers: [GroupMemberModel]? = nil,
-    expiration: Date? = nil,
-    completion: (([GroupCredentialResult]) -> Void)? = nil
-  ) {
-    Task {
-      do {
-        let results = try await GroupCredentialService.shared.issueGroupCredential(
-          for: card,
-          group: group,
-          targetMembers: targetMembers,
-          expiration: expiration
-        )
-
-        DispatchQueue.main.async {
-          completion?(results)
-        }
-      } catch {
-        // Handle error (maybe log it or callback with empty/failure)
-        print("Failed to issue group credential: \(error)")
-        DispatchQueue.main.async {
-          completion?([])  // Or change signature to return Result
-        }
-      }
-    }
-  }
-
-  // MARK: - Import pipeline
-
-  func importIdentity(
-    from source: IdentityImportSource,
-    context: LAContext? = nil,
-    completion: ((CardResult<IdentityImportResult>) -> Void)? = nil
-  ) {
-    queue.async {
-      let payloadResult = self.importHelper.resolvePayload(from: source, context: context)
-      let result = payloadResult.map { self.makeResult(from: $0, source: source) }
-
-      DispatchQueue.main.async {
-        self.applyImportResult(result, from: source)
-        completion?(result)
-      }
-    }
-  }
-
-  // MARK: - Verification cache
-
-  func updateVerificationStatus(for cardId: UUID, status: VerificationStatus) {
-    queue.async {
-      var snapshot = self.verificationSubject.value
-      snapshot[cardId] = status
-      self.verificationSubject.send(snapshot)
-
-      let event = IdentityState.VerificationEvent(cardId: cardId, status: status, timestamp: Date())
-
-      DispatchQueue.main.async {
-        var next = self.state
-        next.verificationCache = snapshot
-        next.lastVerificationUpdate = event
-        next.lastError = nil
-        self.state = next
-        self.verificationUpdateSubject.send(event)
-      }
-    }
-  }
-
-  func mergeVerificationStatuses(_ statuses: [UUID: VerificationStatus]) {
-    queue.async {
-      var snapshot = self.verificationSubject.value
-      for (key, value) in statuses { snapshot[key] = value }
-      self.verificationSubject.send(snapshot)
-
-      DispatchQueue.main.async {
-        var next = self.state
-        next.verificationCache = snapshot
-        next.lastError = nil
-        self.state = next
-      }
-    }
-  }
-
-  func resetVerificationCache() {
-    queue.async {
-      self.verificationSubject.send([:])
-      DispatchQueue.main.async {
-        var next = self.state
-        next.verificationCache = [:]
-        next.lastVerificationUpdate = nil
-        self.state = next
-      }
-    }
-  }
-
-  // MARK: - OIDC tracking
-
-  func registerOIDCRequest(_ request: OIDCService.PresentationRequest) {
-    queue.async {
-      DispatchQueue.main.async {
-        var next = self.state
-        next.activeOIDCRequests[request.state] = request
-        self.state = next
-        self.recordOIDCEvent(
-          IdentityState.OIDCEvent(
-            kind: .requestCreated,
-            state: request.state,
-            message: "Created presentation request",
-            timestamp: Date()
-          )
-        )
-      }
-    }
-  }
-
-  func resolveOIDCRequest(state: String) {
-    queue.async {
-      DispatchQueue.main.async {
-        var next = self.state
-        next.activeOIDCRequests.removeValue(forKey: state)
-        self.state = next
-      }
-    }
-  }
-
-  func recordOIDCEvent(kind: IdentityState.OIDCEvent.Kind, state: String, message: String) {
-    let event = IdentityState.OIDCEvent(kind: kind, state: state, message: message, timestamp: Date())
-    recordOIDCEvent(event)
-  }
-
-  private func recordOIDCEvent(_ event: IdentityState.OIDCEvent) {
-    DispatchQueue.main.async {
-      var next = self.state
-      next.lastOIDCEvent = event
-      self.state = next
-      self.oidcEventSubject.send(event)
-    }
-  }
-
   // MARK: - Internal helpers
 
   @MainActor
-  private func setLoading(_ loading: Bool) {
+  func setLoading(_ loading: Bool) {
     if state.isLoading == loading { return }
     var next = state
     next.isLoading = loading
     state = next
   }
 
-  private func loadIdentity(context: LAContext?) async {
+  func loadIdentity(context: LAContext?) async {
     await setLoading(true)
 
     print("[IdentityCoordinator] loadIdentity started")
@@ -464,83 +284,6 @@ final class IdentityCoordinator: ObservableObject {
         }
       }
 
-      state = next
-    }
-  }
-
-  // Payload resolution logic moved to IdentityImportHelper
-
-  private func makeResult(
-    from payload: IdentityImportResult.Payload,
-    source: IdentityImportSource
-  ) -> IdentityImportResult {
-    let message: String
-
-    switch payload {
-    case .didDocument(let document):
-      message = "Cached DID document for \(document.id)"
-
-    case .publicJwk(_, let did):
-      let target = did ?? state.currentProfile.activeDID?.did ?? "local identity"
-      message = "Cached public JWK for \(target)"
-
-    case .zkIdentity(let bundle):
-      let prefix = String(bundle.commitment.prefix(8))
-      message = "Updated Semaphore identity (commitment \(prefix))"
-
-    case .credential(let credential):
-      message = "Imported credential from \(credential.issuerDid)"
-
-    case .presentationRequest(let request):
-      message = "Loaded OIDC request \(request.presentationDefinition.id)"
-    }
-
-    return IdentityImportResult(payload: payload, message: message)
-  }
-
-  private func applyImportResult(_ result: CardResult<IdentityImportResult>, from source: IdentityImportSource) {
-    switch result {
-    case .success(let success):
-      var next = state
-      next.lastError = nil
-      next.lastImportEvent = IdentityState.ImportEvent(
-        kind: source.kind,
-        summary: success.message,
-        timestamp: Date()
-      )
-
-      switch success.payload {
-      case .didDocument(let document):
-        next.cachedDocuments[document.id] = document
-        if next.currentProfile.activeDID?.did == document.id {
-          next.didDocument = document
-        }
-        cacheStore.saveDocuments(next.cachedDocuments)
-        state = next
-        refreshIdentity()
-
-      case .publicJwk(let jwk, let did):
-        let key = did ?? next.currentProfile.activeDID?.did ?? "local"
-        next.cachedJwks[key] = jwk
-        cacheStore.saveJwks(next.cachedJwks)
-        state = next
-        refreshIdentity()
-
-      case .zkIdentity(let bundle):
-        next.currentProfile.zkIdentity = bundle
-        state = next
-        refreshIdentity()
-
-      case .credential:
-        state = next
-
-      case .presentationRequest:
-        state = next
-      }
-
-    case .failure(let error):
-      var next = state
-      next.lastError = error
       state = next
     }
   }

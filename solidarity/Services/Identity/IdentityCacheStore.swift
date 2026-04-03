@@ -74,6 +74,16 @@ final class IdentityCacheStore {
     }
   }
 
+  /// Clears all cached identity data: DID documents, JWKs, and active descriptor.
+  func clearAll() {
+    queue.async {
+      self.delete(for: self.documentsAccount)
+      self.delete(for: self.jwkAccount)
+      self.delete(for: self.descriptorAccount)
+      print("[IdentityCacheStore] Cleared all cached identity data")
+    }
+  }
+
   private func data(for account: String) -> Data? {
     let query: [String: Any] = [
       kSecClass as String: kSecClassGenericPassword,

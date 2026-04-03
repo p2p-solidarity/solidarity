@@ -1,22 +1,13 @@
-//
-//  ProximityManager+Actions.swift
-//  solidarity
-//
-//  Created by Solidarity Team.
-//
-
 import CryptoKit
 import Foundation
 import MultipeerConnectivity
 
 extension ProximityManager {
 
-  /// Send business card to a specific peer
   func sendCard(_ card: BusinessCard, to peer: MCPeerID) {
     sendCard(card, to: peer, sharingLevel: .public)
   }
 
-  /// Legacy level-based entrypoint kept for backward compatibility.
   func sendCard(_ card: BusinessCard, to peer: MCPeerID, sharingLevel: SharingLevel) {
     guard session.connectedPeers.contains(peer) else {
       lastError = .sharingError("Peer is not connected")
@@ -29,7 +20,6 @@ extension ProximityManager {
       let filteredCard = configuredCard.filteredCard(for: Set(selectedFields))
       let scope = ShareScopeResolver.scope(selectedFields: selectedFields)
 
-      // Create sharing payload with ZK issuer info
       let shareUUID = UUID()
       let identityBundle =
         SemaphoreIdentityManager.shared.getIdentity() ?? (try? SemaphoreIdentityManager.shared.loadOrCreateIdentity())
@@ -46,7 +36,6 @@ extension ProximityManager {
             scope: scope
           ))
       }
-      // Optional SD proof if enabled by sender's prefs
       var sdProof: SelectiveDisclosureProof?
       if configuredCard.sharingPreferences.useZK {
         let sdResult = ProofGenerationManager.shared.generateSelectiveDisclosureProof(
@@ -232,273 +221,9 @@ extension ProximityManager {
     pendingExchangeRequest = nil
   }
 
-  /// Send a group invite to a specific peer
-  func sendGroupInvite(to peer: MCPeerID, group: SemaphoreGroupManager.ManagedGroup, inviterName: String) {
-    guard session.connectedPeers.contains(peer) else {
-      lastError = .sharingError("Peer is not connected")
-      return
-    }
-    let payload = GroupInvitePayload(
-      groupId: group.id,
-      groupName: group.name,
-      groupRoot: group.root,
-      inviterName: inviterName,
-      timestamp: Date()
-    )
-    do {
-      let data = try JSONEncoder().encode(payload)
-      try session.send(data, toPeers: [peer], with: .reliable)
-      print("Sent group invite to \(peer.displayName) for group: \(group.name)")
-    } catch {
-      lastError = .sharingError("Failed to send group invite: \(error.localizedDescription)")
-      print("Failed to send group invite: \(error)")
-    }
-  }
+  // MARK: - Signing & Canonical Helpers
 
-  /// Accept a pending group invite and send back join response with user's commitment
-  func acceptGroupInvite(_ invite: GroupInvitePayload, to peer: MCPeerID, memberName: String, memberCommitment: String)
-  {
-    let response = GroupJoinResponsePayload(
-      groupId: invite.groupId,
-      memberCommitment: memberCommitment,
-      memberName: memberName,
-      timestamp: Date()
-    )
-    do {
-      let data = try JSONEncoder().encode(response)
-      try session.send(data, toPeers: [peer], with: .reliable)
-      print("Sent group join response to \(peer.displayName) for group: \(invite.groupName)")
-    } catch {
-      lastError = .sharingError("Failed to send join response: \(error.localizedDescription)")
-      print("Failed to send join response: \(error)")
-    }
-  }
-
-  /// Disconnect from all peers and stop all services
-  func disconnect() {
-    autoConnectEnabled = false
-    stopAdvertising()
-    stopBrowsing()
-    stopHeartbeat()
-    cancelAllRetries()
-
-    // Tear down UWB session
-    NearbyInteractionManager.shared.invalidateSession()
-
-    session.disconnect()
-    nearbyPeers.removeAll()
-    connectionStatus = .disconnected
-
-    print("Disconnected from all peers")
-  }
-
-  /// Respond to the most recent pending invitation
-  func respondToPendingInvitation(accept: Bool) {
-    guard let handler = pendingInvitationHandler else { return }
-    handler(accept, session)
-    pendingInvitation = nil
-    pendingInvitationHandler = nil
-    isPresentingInvitation = false
-  }
-
-  /// Accept the most recent pending group invite and defer sending the join response until connected
-  func acceptPendingGroupInvite(memberName: String, memberCommitment: String) {
-    guard let tuple = pendingGroupInvite else { return }
-    pendingGroupJoinResponse = PendingGroupJoinResponse(
-      invite: tuple.payload,
-      memberName: memberName,
-      memberCommitment: memberCommitment,
-      peerID: tuple.from
-    )
-    // Accept the Multipeer invitation to establish the session
-    respondToPendingInvitation(accept: true)
-  }
-
-  /// Decline the most recent pending group invite
-  func declinePendingGroupInvite() {
-    respondToPendingInvitation(accept: false)
-    pendingGroupInvite = nil
-    pendingGroupJoinResponse = nil
-  }
-
-  /// Attempt to exclusively present the invitation popup. Returns true if acquired.
-  func tryAcquireInvitationPresentation() -> Bool {
-    if isPresentingInvitation { return false }
-    isPresentingInvitation = true
-    return true
-  }
-
-  /// Release the presentation lock for invitation popup.
-  func releaseInvitationPresentation() {
-    isPresentingInvitation = false
-  }
-
-  /// Get current sharing status
-  func getSharingStatus() -> ProximitySharingStatus {
-    return ProximitySharingStatus(
-      isAdvertising: isAdvertising,
-      isBrowsing: isBrowsing,
-      connectedPeersCount: session.connectedPeers.count,
-      nearbyPeersCount: nearbyPeers.count,
-      currentCard: currentCard,
-      sharingLevel: currentSharingLevel
-    )
-  }
-
-  /// Connect to a specific peer
-  func connectToPeer(_ peer: ProximityPeer) {
-    guard let browser = browser else {
-      // Strategy B: Auto-restart browsing + Soft UI hint
-      print("Browser was nil in connectToPeer. Restarting browsing...")
-      startBrowsing()
-      matchingInfoMessage = "Reconnecting... Please wait a moment, then try connecting again."
-      return
-    }
-
-    browser.invitePeer(peer.peerID, to: session, withContext: nil, timeout: 30)
-
-    // Update peer status
-    if let index = nearbyPeers.firstIndex(where: { $0.id == peer.id }) {
-      nearbyPeers[index].status = .connecting
-    }
-
-    print("Connecting to peer: \(peer.name)")
-  }
-
-  /// Invite a peer to join a group using the Multipeer invitation context (no manual connect first)
-  func invitePeerToGroup(_ peer: ProximityPeer, group: SemaphoreGroupManager.ManagedGroup, inviterName: String) {
-    guard let browser = browser else {
-      // Strategy B: Auto-restart browsing + Soft UI hint
-      print("Browser was nil in invitePeerToGroup. Restarting browsing...")
-      startBrowsing()
-      matchingInfoMessage = "Reconnecting... Please wait a moment, then try connecting again."
-      return
-    }
-    let payload = GroupInvitePayload(
-      groupId: group.id,
-      groupName: group.name,
-      groupRoot: group.root,
-      inviterName: inviterName,
-      timestamp: Date()
-    )
-    do {
-      let context = try JSONEncoder().encode(payload)
-      browser.invitePeer(peer.peerID, to: session, withContext: context, timeout: 30)
-      print("Invited \(peer.name) to group via context: \(group.name)")
-    } catch {
-      lastError = .sharingError("Failed to encode invite: \(error.localizedDescription)")
-    }
-  }
-
-  /// Clear received cards
-  func clearReceivedCards() {
-    receivedCards.removeAll()
-  }
-
-  func handleReceivedCard(
-    _ card: BusinessCard,
-    from senderName: String,
-    status: VerificationStatus,
-    sealedRoute: String? = nil,
-    pubKey: String? = nil,
-    signPubKey: String? = nil
-  ) {
-    // Add to received cards
-    receivedCards.append(card)
-
-    // Save to contact repository on main actor
-    Task { @MainActor in
-      let peerSignPubKey = (signPubKey == SecureKeyManager.shared.mySignPubKey) ? nil : signPubKey
-      let contact = Contact(
-        businessCard: card,
-        source: .proximity,
-        verificationStatus: status,
-        sealedRoute: sealedRoute,
-        pubKey: pubKey,
-        signPubKey: peerSignPubKey
-      )
-
-      let result = contactRepository.addContact(contact)
-
-      switch result {
-      case .success:
-        print("Received and saved business card from \(senderName)")
-
-        // If this is a Group VC, update messaging data for the member
-        if let groupContext = card.groupContext,
-          case .group(let info) = groupContext,
-          let _ = sealedRoute,
-          let _ = pubKey,
-          let _ = signPubKey
-        {
-
-          print("Detected Group VC for group \(info.groupId). Updating member messaging data.")
-          // Note: Logic for updating CloudKit for group members is delegated to owner
-        }
-
-      case .failure(let error):
-        if isMergeConfirmationRequired(error) {
-          print("Pending merge confirmation required for received card from \(senderName)")
-        } else {
-          print("Failed to save received card: \(error)")
-          self.lastError = error
-        }
-      }
-    }
-  }
-
-  internal func persistExchangeEdge(_ payload: ExchangeEdgePersistencePayload) {
-    Task { @MainActor in
-      let peerSignPubKey = (payload.signPubKey == SecureKeyManager.shared.mySignPubKey) ? nil : payload.signPubKey
-      let contact = Contact(
-        businessCard: payload.card,
-        source: .proximity,
-        verificationStatus: payload.verificationStatus,
-        sealedRoute: payload.sealedRoute,
-        pubKey: payload.pubKey,
-        signPubKey: peerSignPubKey
-      )
-
-      let result = contactRepository.addContact(contact)
-      switch result {
-      case .success(let saved):
-        let entity = ContactEntity.fromLegacy(saved)
-        entity.didPublicKey = peerSignPubKey
-        entity.myExchangeSignature = Data(base64Encoded: payload.mySignature)
-        entity.exchangeSignature = Data(base64Encoded: payload.theirSignature)
-        entity.exchangeTimestamp = payload.timestamp
-        entity.myEphemeralMessage = payload.myMessage?.prefix(140).description
-        entity.theirEphemeralMessage = payload.theirMessage?.prefix(140).description
-        entity.graphExportEdgeId = entity.graphExportEdgeId ?? UUID().uuidString
-        entity.commonFriendsHandshakeToken = entity.commonFriendsHandshakeToken ?? UUID().uuidString
-        IdentityDataStore.shared.upsertContact(entity)
-        print("Persisted exchange edge for \(payload.sourcePeerName)")
-      case .failure(let error):
-        if isMergeConfirmationRequired(error) {
-          print("Pending merge confirmation required for exchange edge from \(payload.sourcePeerName)")
-        } else {
-          self.lastError = error
-        }
-      }
-    }
-  }
-
-  static func verifyExchangeSignature(signature: String, canonicalString: String, signPubKey: String?) -> Bool {
-    guard !signature.isEmpty,
-      !canonicalString.isEmpty,
-      let signPubKey,
-      !signPubKey.isEmpty
-    else {
-      return false
-    }
-    return SecureKeyManager.shared.verify(
-      signatureBase64: signature,
-      content: canonicalString,
-      pubKeyBase64: signPubKey
-    )
-  }
-
-  private func signExchangeString(_ value: String) -> String? {
+  func signExchangeString(_ value: String) -> String? {
     guard !value.isEmpty else { return nil }
     let signature = SecureKeyManager.shared.sign(content: value)
     return signature.isEmpty ? nil : signature
@@ -522,7 +247,7 @@ extension ProximityManager {
     return "\(payload.shareId.uuidString)|\(payload.senderID)|\(payload.card.id.uuidString)|\(orderedFields)|\(unixSeconds)"
   }
 
-  private func filteredCard(_ card: BusinessCard, using selectedFields: [BusinessCardField]) -> BusinessCard {
+  func filteredCard(_ card: BusinessCard, using selectedFields: [BusinessCardField]) -> BusinessCard {
     let allowed = Set(selectedFields)
     var filtered = card
     if !allowed.contains(.name) { filtered.name = "" }
@@ -534,12 +259,5 @@ extension ProximityManager {
     if !allowed.contains(.socialNetworks) { filtered.socialNetworks = [] }
     if !allowed.contains(.skills) { filtered.skills = [] }
     return filtered
-  }
-
-  private func isMergeConfirmationRequired(_ error: CardError) -> Bool {
-    if case .validationError(let message) = error {
-      return message.contains("Merge confirmation required")
-    }
-    return false
   }
 }
