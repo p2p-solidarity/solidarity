@@ -110,13 +110,22 @@ final class BackupManager: ObservableObject {
         IdentityDataStore.shared.provableClaims.map(BackupProvableClaim.init(from:))
       }
 
+      // Collect stored credentials from VCLibrary
+      let storedCredentials: [BackupStoredCredential] = {
+        switch VCLibrary.shared.list() {
+        case .success(let creds): return creds.map(BackupStoredCredential.init(from:))
+        case .failure: return []
+        }
+      }()
+
       let backupData = BackupData(
-        version: 2,
+        version: 3,
         timestamp: Date(),
         businessCards: cards,
         contacts: contacts,
         identityCards: identityCards,
-        provableClaims: provableClaims
+        provableClaims: provableClaims,
+        storedCredentials: storedCredentials
       )
 
       // Save to iCloud
@@ -140,7 +149,7 @@ final class BackupManager: ObservableObject {
 
   // MARK: - Restore
 
-  func restoreFromBackup() async -> CardResult<[BusinessCard]> {
+  func restoreFromBackup() async -> CardResult<RestoreResult> {
     guard let containerURL = iCloudContainerURL else {
       return .failure(.configurationError("iCloud not available"))
     }
@@ -165,15 +174,23 @@ final class BackupManager: ObservableObject {
       let data = try Data(contentsOf: latestBackup)
       let backupData = try JSONDecoder().decode(BackupData.self, from: data)
 
+      var result = RestoreResult()
+
       // Restore business cards
       for card in backupData.businessCards {
-        _ = cardManager.createCard(card)
+        switch cardManager.createCard(card) {
+        case .success: result.restoredCards += 1
+        case .failure: result.skippedDuplicates += 1
+        }
       }
 
       // Restore contacts
       await MainActor.run {
         for contact in backupData.contacts {
-          _ = contactRepo.addContact(contact)
+          switch contactRepo.addContact(contact) {
+          case .success: result.restoredContacts += 1
+          case .failure: result.skippedDuplicates += 1
+          }
         }
       }
 
@@ -181,13 +198,46 @@ final class BackupManager: ObservableObject {
       await MainActor.run {
         for ic in backupData.identityCards ?? [] {
           IdentityDataStore.shared.addIdentityCard(ic.toEntity())
+          result.restoredIdentityCards += 1
         }
         for pc in backupData.provableClaims ?? [] {
           IdentityDataStore.shared.addProvableClaim(pc.toEntity())
+          result.restoredClaims += 1
         }
       }
 
-      return .success(backupData.businessCards)
+      // Restore stored credentials from VCLibrary
+      if let creds = backupData.storedCredentials {
+        let existingIds: Set<UUID> = {
+          switch VCLibrary.shared.list() {
+          case .success(let existing): return Set(existing.map(\.id))
+          case .failure: return []
+          }
+        }()
+
+        for cred in creds {
+          if existingIds.contains(cred.id) {
+            result.skippedDuplicates += 1
+          } else {
+            let issued = VCService.IssuedCredential(
+              jwt: cred.jwt,
+              header: [:],
+              payload: [:],
+              snapshot: cred.snapshot,
+              issuedAt: cred.issuedAt,
+              expiresAt: cred.expiresAt,
+              holderDid: cred.holderDid,
+              issuerDid: cred.issuerDid
+            )
+            switch VCLibrary.shared.add(issued, status: cred.status) {
+            case .success: result.restoredCredentials += 1
+            case .failure: result.skippedDuplicates += 1
+            }
+          }
+        }
+      }
+
+      return .success(result)
     } catch {
       return .failure(.storageError("Restore failed: \(error.localizedDescription)"))
     }
@@ -219,6 +269,19 @@ final class BackupManager: ObservableObject {
 
   // MARK: - Backup Data Types
 
+  struct RestoreResult {
+    var restoredCards: Int = 0
+    var restoredContacts: Int = 0
+    var restoredIdentityCards: Int = 0
+    var restoredClaims: Int = 0
+    var restoredCredentials: Int = 0
+    var skippedDuplicates: Int = 0
+
+    var totalRestored: Int {
+      restoredCards + restoredContacts + restoredIdentityCards + restoredClaims + restoredCredentials
+    }
+  }
+
   private struct BackupData: Codable, Sendable {
     let version: Int
     let timestamp: Date
@@ -226,6 +289,7 @@ final class BackupManager: ObservableObject {
     let contacts: [Contact]
     var identityCards: [BackupIdentityCard]?
     var provableClaims: [BackupProvableClaim]?
+    var storedCredentials: [BackupStoredCredential]?
   }
 
   struct BackupIdentityCard: Codable, Sendable {
@@ -316,6 +380,36 @@ final class BackupManager: ObservableObject {
         isPresentable: isPresentable,
         lastPresentedAt: lastPresentedAt
       )
+    }
+  }
+
+  struct BackupStoredCredential: Codable, Sendable {
+    let id: UUID
+    let jwt: String
+    let issuerDid: String
+    let holderDid: String
+    let issuedAt: Date
+    let expiresAt: Date?
+    let addedAt: Date
+    let lastVerifiedAt: Date?
+    let status: VCLibrary.StoredCredential.Status
+    let snapshot: BusinessCardSnapshot
+    let tags: [String]
+    let notes: String?
+
+    init(from credential: VCLibrary.StoredCredential) {
+      self.id = credential.id
+      self.jwt = credential.jwt
+      self.issuerDid = credential.issuerDid
+      self.holderDid = credential.holderDid
+      self.issuedAt = credential.issuedAt
+      self.expiresAt = credential.expiresAt
+      self.addedAt = credential.addedAt
+      self.lastVerifiedAt = credential.lastVerifiedAt
+      self.status = credential.status
+      self.snapshot = credential.snapshot
+      self.tags = credential.metadata.tags
+      self.notes = credential.metadata.notes
     }
   }
 }
