@@ -112,12 +112,34 @@ struct AdvancedSettingsView: View {
         alertMessage = error.localizedDescription
         showingAlert = true
       case .success:
+        // Encrypted files (business cards, contacts, preferences)
         _ = StorageManager.shared.clearAllData()
+
+        // SwiftData stores
         IdentityDataStore.shared.clearAllContacts()
         IdentityDataStore.shared.clearAllIdentityData()
-        IdentityCacheStore().clearDescriptor()
-        UserDefaults.standard.removeObject(forKey: "solidarity.onboarding.completed")
-        UserDefaults.standard.removeObject(forKey: "solidarity.identity.swiftdata.migrated.v1")
+
+        // Identity caches (DID documents, JWKs, descriptor)
+        IdentityCacheStore().clearAll()
+
+        // Verifiable Credential library
+        VCLibrary.shared.clearAll()
+
+        // Cryptographic keys (KeyManager symmetric + KeychainService signing)
+        _ = KeyManager.shared.clearAllKeys()
+        KeychainService.shared.resetSigningKey()
+
+        // Secure message history
+        SecureMessageStorage.shared.clearAllHistory()
+
+        // Offline operation queue
+        _ = OfflineManager.shared.clearPendingOperations()
+
+        // All UserDefaults (sharing prefs, profile, dev mode, etc.)
+        if let bundleId = Bundle.main.bundleIdentifier {
+          UserDefaults.standard.removePersistentDomain(forName: bundleId)
+        }
+
         alertMessage = String(localized: "Local data reset completed.")
         showingAlert = true
       }

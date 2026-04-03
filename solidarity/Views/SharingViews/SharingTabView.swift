@@ -7,23 +7,22 @@
 //
 
 import SwiftUI
-// swiftlint:disable file_length
 
 struct SharingTabView: View {
   @StateObject private var proximityManager = ProximityManager.shared
-  @StateObject private var cardManager = CardManager.shared
+  @StateObject var cardManager = CardManager.shared
   @StateObject private var niManager = NearbyInteractionManager.shared
   @StateObject private var qrCodeManager = QRCodeManager.shared
-  @Environment(\.colorScheme) private var colorScheme
+  @Environment(\.colorScheme) var colorScheme
 
-  @State private var showingScanSheet = false
+  @State var showingScanSheet = false
   @State private var showingNearbySheet = false
   @State private var showingReceivedCard = false
   @State private var isMatching = false
-  @State private var showingShareActivity = false
-  @State private var generatedQRImage: UIImage?
+  @State var showingShareActivity = false
+  @State var generatedQRImage: UIImage?
   @State private var lastReceivedCardCount = 0
-  @AppStorage("sharing_qr_expanded") private var isQRExpanded: Bool = true
+  @AppStorage("sharing_qr_expanded") var isQRExpanded: Bool = true
   @AppStorage("theme_selected_animal") private var savedAvatar: String?
 
   var body: some View {
@@ -164,196 +163,6 @@ struct SharingTabView: View {
     }
   }
 
-  // MARK: - QR Section
-
-  private var qrSection: some View {
-    let card = cardManager.businessCards.first
-
-    return VStack(spacing: 0) {
-      // Collapsible QR code with white background
-      if isQRExpanded {
-        ZStack {
-          if let generatedQRImage {
-            Image(uiImage: generatedQRImage)
-              .resizable()
-              .interpolation(.none)
-              .scaledToFit()
-              .padding(24)
-          } else {
-            VStack(spacing: 10) {
-              Image(systemName: "qrcode")
-                .font(.system(size: 44))
-                .foregroundColor(Color(white: 0.78))
-              Text("Create a card to generate QR")
-                .font(.system(size: 12, design: .monospaced))
-                .foregroundColor(Color(white: 0.6))
-            }
-            .frame(maxWidth: .infinity)
-            .frame(height: 200)
-          }
-        }
-        .frame(maxWidth: .infinity)
-        .aspectRatio(1, contentMode: .fit)
-        .background(Color.white)
-        .transition(.opacity.combined(with: .move(edge: .top)))
-      }
-
-      // Card info footer (always visible, tappable to toggle QR)
-      VStack(spacing: 10) {
-        // Name + avatar row
-        HStack(spacing: 10) {
-          profileAvatar(for: card)
-
-          VStack(alignment: .leading, spacing: 2) {
-            Text(card?.name ?? "No Card")
-              .font(.system(size: 15, weight: .semibold))
-              .foregroundColor(Color.Theme.textPrimary)
-              .lineLimit(1)
-
-            Text(sharedFieldsSummary)
-              .font(.system(size: 11, design: .monospaced))
-              .foregroundColor(Color.Theme.textTertiary)
-              .lineLimit(1)
-          }
-
-          Spacer()
-
-          // Collapse/expand chevron
-          Button {
-            withAnimation(.easeInOut(duration: 0.25)) {
-              isQRExpanded.toggle()
-            }
-          } label: {
-            Image(systemName: "chevron.up")
-              .font(.system(size: 12, weight: .semibold))
-              .foregroundColor(Color.Theme.textTertiary)
-              .rotationEffect(.degrees(isQRExpanded ? 0 : 180))
-              .padding(8)
-              .background(Color.Theme.searchBg)
-              .overlay(Rectangle().stroke(Color.Theme.divider, lineWidth: 1))
-          }
-
-          NavigationLink {
-            ShareSettingsView()
-          } label: {
-            Image(systemName: "slider.horizontal.3")
-              .font(.system(size: 14))
-              .foregroundColor(Color.Theme.textSecondary)
-              .padding(8)
-              .background(Color.Theme.searchBg)
-              .overlay(Rectangle().stroke(Color.Theme.divider, lineWidth: 1))
-          }
-        }
-
-        // Proof badges
-        proofBadges
-      }
-      .padding(.horizontal, 16)
-      .padding(.vertical, 12)
-      .background(Color.Theme.cardSurface(for: colorScheme))
-    }
-    .clipShape(RoundedRectangle(cornerRadius: 12))
-    .overlay(
-      RoundedRectangle(cornerRadius: 12)
-        .stroke(Color.Theme.cardBorder(for: colorScheme), lineWidth: 1)
-    )
-    .shadow(color: .black.opacity(0.08), radius: 12, x: 0, y: 4)
-  }
-
-  private var sharedFieldsSummary: String {
-    let fields = ShareSettingsReader.enabledFields
-    let labels = fields.sorted(by: { $0.rawValue < $1.rawValue }).compactMap { field -> String? in
-      switch field {
-      case .name: return nil // always on, skip
-      case .title: return "title"
-      case .company: return "company"
-      case .email: return "email"
-      case .phone: return "phone"
-      case .profileImage: return "photo"
-      case .socialNetworks: return "socials"
-      case .skills: return "skills"
-      }
-    }
-    if labels.isEmpty { return "name only" }
-    return "name + " + labels.joined(separator: ", ")
-  }
-
-  private var proofBadges: some View {
-    let claims = IdentityDataStore.shared.provableClaims.filter { $0.issuerType == "government" }
-    return Group {
-      if !claims.isEmpty {
-        HStack(spacing: 8) {
-          if ShareSettingsReader.shareIsHuman,
-             claims.contains(where: { $0.claimType == "is_human" }) {
-            proofPill(label: "Real Human", color: Color.Theme.terminalGreen)
-          }
-          if ShareSettingsReader.shareAgeOver18,
-             claims.contains(where: { $0.claimType == "age_over_18" }) {
-            proofPill(label: "Age 18+", color: Color.Theme.terminalGreen)
-          }
-          Spacer()
-        }
-      }
-    }
-  }
-
-  private func proofPill(label: String, color: Color) -> some View {
-    HStack(spacing: 4) {
-      Circle()
-        .fill(color)
-        .frame(width: 6, height: 6)
-      Text(label)
-        .font(.system(size: 11, weight: .semibold, design: .monospaced))
-        .foregroundColor(color)
-    }
-    .padding(.horizontal, 8)
-    .padding(.vertical, 4)
-    .background(
-      Capsule()
-        .fill(color.opacity(0.12))
-    )
-  }
-
-  // MARK: - Quick Actions
-
-  private var quickActions: some View {
-    HStack(spacing: 12) {
-      Button {
-        showingScanSheet = true
-      } label: {
-        HStack(spacing: 8) {
-          Image(systemName: "qrcode.viewfinder")
-            .font(.system(size: 16, weight: .semibold))
-          Text("Scan QR")
-            .font(.system(size: 14, weight: .semibold))
-        }
-        .frame(maxWidth: .infinity)
-        .padding(.vertical, 12)
-        .foregroundColor(Color.Theme.textPrimary)
-        .background(Color.Theme.searchBg)
-        .overlay(Rectangle().stroke(Color.Theme.divider, lineWidth: 1))
-      }
-      .buttonStyle(.plain)
-
-      Button {
-        showingShareActivity = true
-      } label: {
-        HStack(spacing: 8) {
-          Image(systemName: "square.and.arrow.up")
-            .font(.system(size: 16, weight: .semibold))
-          Text("Share")
-            .font(.system(size: 14, weight: .semibold))
-        }
-        .frame(maxWidth: .infinity)
-        .padding(.vertical, 12)
-        .foregroundColor(Color.Theme.textPrimary)
-        .background(Color.Theme.searchBg)
-        .overlay(Rectangle().stroke(Color.Theme.divider, lineWidth: 1))
-      }
-      .buttonStyle(.plain)
-    }
-  }
-
   private var shareText: String {
     guard let card = cardManager.businessCards.first else { return "" }
     let filtered = card.filteredCard(for: ShareSettingsReader.enabledFields)
@@ -361,7 +170,7 @@ struct SharingTabView: View {
   }
 
   @ViewBuilder
-  private func profileAvatar(for card: BusinessCard?) -> some View {
+  func profileAvatar(for card: BusinessCard?) -> some View {
     let frame: CGFloat = 32
 
     if let imageData = card?.profileImage,
@@ -507,150 +316,5 @@ struct SharingTabView: View {
     case .cooldown: return "Done"
     default: return "UWB"
     }
-  }
-}
-// MARK: - Radar Matching View (kept from original)
-
-struct RadarMatchingView: View {
-  let peers: [ProximityPeer]
-  let isMatching: Bool
-  @ObservedObject var niManager: NearbyInteractionManager
-  @Environment(\.colorScheme) private var colorScheme
-
-  @State private var pulseScale1: CGFloat = 0.3
-  @State private var pulseScale2: CGFloat = 0.3
-  @State private var pulseScale3: CGFloat = 0.3
-  @State private var pulseOpacity1: Double = 0.6
-  @State private var pulseOpacity2: Double = 0.6
-  @State private var pulseOpacity3: Double = 0.6
-
-  var body: some View {
-    GeometryReader { geo in
-      let size = min(geo.size.width, geo.size.height)
-
-      ZStack {
-        // Expanding pulse rings
-        if isMatching {
-          pulseRing(scale: pulseScale1, opacity: pulseOpacity1, size: size)
-          pulseRing(scale: pulseScale2, opacity: pulseOpacity2, size: size)
-          pulseRing(scale: pulseScale3, opacity: pulseOpacity3, size: size)
-        }
-
-        // Static concentric rings
-        Circle()
-          .stroke(Color.Theme.radarRing, lineWidth: 1)
-          .frame(width: size * 0.85, height: size * 0.85)
-        Circle()
-          .stroke(Color.Theme.radarRing, lineWidth: 1)
-          .frame(width: size * 0.6, height: size * 0.6)
-        Circle()
-          .stroke(Color.Theme.radarRing, lineWidth: 1)
-          .frame(width: size * 0.35, height: size * 0.35)
-
-        // Center glow sphere
-        RadialGradient(
-          colors: [
-            Color.Theme.radarGlow,
-            Color.Theme.radarGlow.opacity(0.3),
-            Color.clear,
-          ],
-          center: .center,
-          startRadius: 5,
-          endRadius: size * 0.18
-        )
-        .frame(width: size * 0.36, height: size * 0.36)
-
-        // Center orb
-        Circle()
-          .fill(
-            RadialGradient(
-              colors: [
-                Color.white.opacity(colorScheme == .dark ? 0.2 : 0.8),
-                Color.Theme.featureAccent.opacity(0.3),
-                Color.Theme.featureAccent.opacity(0.1),
-              ],
-              center: .center,
-              startRadius: 2,
-              endRadius: size * 0.08
-            )
-          )
-          .frame(width: size * 0.16, height: size * 0.16)
-          .overlay(
-            Circle()
-              .stroke(Color.Theme.featureAccent.opacity(0.4), lineWidth: 1)
-          )
-
-        // Peer avatars
-        ForEach(Array(peers.prefix(8).enumerated()), id: \.element.id) { index, peer in
-          peerDot(peer: peer, index: index, total: min(peers.count, 8), radius: size * 0.35)
-        }
-      }
-      .frame(width: geo.size.width, height: geo.size.height)
-    }
-    .onAppear {
-      if isMatching { startPulse() }
-    }
-    .onChange(of: isMatching) { _, matching in
-      if matching { startPulse() }
-    }
-  }
-
-  private func pulseRing(scale: CGFloat, opacity: Double, size: CGFloat) -> some View {
-    Circle()
-      .stroke(Color.Theme.featureAccent.opacity(0.5), lineWidth: 1.5)
-      .frame(width: size, height: size)
-      .scaleEffect(scale)
-      .opacity(opacity)
-  }
-
-  private func startPulse() {
-    withAnimation(.easeOut(duration: 3.0).repeatForever(autoreverses: false)) {
-      pulseScale1 = 1.0
-      pulseOpacity1 = 0.0
-    }
-    DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
-      withAnimation(.easeOut(duration: 3.0).repeatForever(autoreverses: false)) {
-        pulseScale2 = 1.0
-        pulseOpacity2 = 0.0
-      }
-    }
-    DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) {
-      withAnimation(.easeOut(duration: 3.0).repeatForever(autoreverses: false)) {
-        pulseScale3 = 1.0
-        pulseOpacity3 = 0.0
-      }
-    }
-  }
-
-  private func peerDot(peer: ProximityPeer, index: Int, total: Int, radius: CGFloat) -> some View {
-    let angle = (2 * .pi / Double(total)) * Double(index) - .pi / 2
-    let x = cos(angle) * Double(radius)
-    let y = sin(angle) * Double(radius)
-
-    return VStack(spacing: 2) {
-      ZStack {
-        Circle()
-          .fill(peerColor(peer))
-          .frame(width: 32, height: 32)
-        Text(peerInitials(peer))
-          .font(.system(size: 11, weight: .bold))
-          .foregroundColor(.white)
-      }
-    }
-    .offset(x: CGFloat(x), y: CGFloat(y))
-  }
-
-  private func peerColor(_ peer: ProximityPeer) -> Color {
-    switch peer.status {
-    case .connected: return Color.Theme.featureAccent
-    case .connecting: return .orange
-    case .disconnected: return Color.Theme.textTertiary
-    }
-  }
-
-  private func peerInitials(_ peer: ProximityPeer) -> String {
-    let name = peer.cardName ?? peer.name
-    let parts = name.components(separatedBy: " ")
-    return parts.compactMap { $0.first }.map { String($0) }.prefix(2).joined().uppercased()
   }
 }
