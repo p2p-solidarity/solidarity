@@ -86,10 +86,30 @@ Dependencies auto-resolve via Swift Package Manager. Press Cmd+R to run.
 ```bash
 # Run all tests
 xcodebuild test -project solidarity.xcodeproj -scheme solidarity \
-  -destination 'platform=iOS Simulator,name=iPhone 16'
+  -destination 'platform=iOS Simulator,name=iPhone 17'
 
 # Test proximity features (requires 2 simulators or devices)
 ```
+
+### Mutation Testing (Muter)
+
+```bash
+# Install muter (one-time)
+brew install muter-mutation-testing/formulae/muter
+
+# Optional: if Homebrew build crashes, install latest from source
+# git clone https://github.com/muter-mutation-testing/muter.git && cd muter && make install prefix=$(brew --prefix)
+
+# Run mutation testing with project defaults
+./scripts/run_muter.sh
+
+# Run mutation testing only for one file (faster feedback)
+./scripts/run_muter.sh --files-to-mutate solidarity/Services/Utils/KeyManager.swift
+```
+
+Muter config is versioned in `muter.conf.yml`.
+By default it runs `solidarityTests` (unit tests only) to keep mutation runs deterministic.
+If mutation testing stops at baseline, run `xcodebuild test -project solidarity.xcodeproj -scheme solidarity -destination 'platform=iOS Simulator,name=iPhone 17' -only-testing:solidarityTests` first and fix any failing tests.
 
 ### Dependencies
 

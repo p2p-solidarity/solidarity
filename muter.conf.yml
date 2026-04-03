@@ -1,0 +1,24 @@
+arguments:
+- -project
+- solidarity.xcodeproj
+- -scheme
+- solidarity
+- -configuration
+- Debug
+- -sdk
+- iphonesimulator
+- -destination
+- platform=iOS Simulator,name=iPhone 17
+- -only-testing:solidarityTests
+- -enableCodeCoverage
+- "YES"
+- test
+executable: /usr/bin/xcodebuild
+exclude:
+- build/
+- SourcePackages/
+- solidarityTests/
+- solidarityUITests
+- solidarityClip/
+excludeCalls: []
+testSuiteTimeout: 600
