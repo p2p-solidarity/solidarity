@@ -108,9 +108,16 @@ struct BackupSettingsView: View {
   private func performRestore() {
     Task {
       switch await backup.restoreFromBackup() {
-      case .success:
+      case .success(let result):
         await MainActor.run {
-          dismiss()
+          if result.skippedDuplicates > 0 {
+            errorMessage = String(
+              localized: "Restored \(result.totalRestored) items. Skipped \(result.skippedDuplicates) duplicates."
+            )
+            showError = true
+          } else {
+            dismiss()
+          }
         }
       case .failure(let error):
         await MainActor.run {
