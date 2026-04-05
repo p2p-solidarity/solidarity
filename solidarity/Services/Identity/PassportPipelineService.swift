@@ -154,6 +154,22 @@ final class PassportPipelineService {
     )
     IdentityDataStore.shared.addProvableClaim(humanClaim)
 
+    // Field-level claim — passport DG1 binds a name to this holder.
+    // sourceField lets VerifiedClaimIndex answer "is name verified?" so
+    // when the user issues a self-card VC the name is index-verified
+    // (L3 government) instead of L1 self-attested.
+    let nameClaim = ProvableClaimEntity(
+      identityCardId: passportCard.id,
+      claimType: "field_name",
+      title: "Name verified by passport",
+      issuerType: "government",
+      trustLevel: proof.trustLevel,
+      source: "Passport",
+      payload: "{\"claim\":\"field_name\",\"proof\":\"\(proof.proofType)\"\(cardRef)}",
+      sourceField: BusinessCardField.name.rawValue
+    )
+    IdentityDataStore.shared.addProvableClaim(nameClaim)
+
     return .success(passportCard)
   }
 

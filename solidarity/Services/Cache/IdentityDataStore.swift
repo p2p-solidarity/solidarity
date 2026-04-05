@@ -22,36 +22,21 @@ final class IdentityDataStore: ObservableObject {
   let modelContainer: ModelContainer
   let modelContext: ModelContext
 
-  private let migrationMarker = "solidarity.identity.swiftdata.migrated.v1"
+  private let migrationMarker = "solidarity.identity.swiftdata.migrated.v2"
   private let refreshSubject = PassthroughSubject<Void, Never>()
   private var refreshCancellable: AnyCancellable?
 
   private init() {
-    let url = URL.documentsDirectory.appending(path: "SolidarityIdentity_v1.store")
+    // v2 store — adds ContactEntity.credentialIds and
+    // ProvableClaimEntity.sourceField. SwiftData cannot always auto-migrate
+    // from v1, so we use a new store path. The v1 file is left on disk
+    // untouched; migration from legacy sources (StorageManager, VCLibrary)
+    // reruns automatically via runInitialMigrationIfNeeded.
+    let url = URL.documentsDirectory.appending(path: "SolidarityIdentity_v2.store")
     let configuration = ModelConfiguration(url: url, cloudKitDatabase: .none)
 
-    do {
-      modelContainer = try ModelContainer(
-        for: ContactEntity.self,
-        IdentityCardEntity.self,
-        ProvableClaimEntity.self,
-        configurations: configuration
-      )
-      modelContext = modelContainer.mainContext
-    } catch {
-      let memoryConfiguration = ModelConfiguration(isStoredInMemoryOnly: true, cloudKitDatabase: .none)
-      do {
-        modelContainer = try ModelContainer(
-          for: ContactEntity.self,
-          IdentityCardEntity.self,
-          ProvableClaimEntity.self,
-          configurations: memoryConfiguration
-        )
-        modelContext = modelContainer.mainContext
-      } catch {
-        fatalError("Failed to initialize IdentityDataStore: \(error)")
-      }
-    }
+    modelContainer = Self.makeContainer(configuration: configuration, fallbackStoreURL: url)
+    modelContext = modelContainer.mainContext
 
     // Debounce rapid writes — coalesce refreshes within 100ms
     refreshCancellable = refreshSubject
@@ -61,6 +46,62 @@ final class IdentityDataStore: ObservableObject {
       }
 
     performRefresh()
+  }
+
+  /// Attempts to open the persistent store. On failure (schema mismatch,
+  /// corrupt file) the v2 file is moved to a quarantine path and a fresh
+  /// store is opened. The final fallback is in-memory to keep the app
+  /// running even if disk I/O is broken. Rebuilding from quarantine is
+  /// manual and only relevant for debugging.
+  private static func makeContainer(
+    configuration: ModelConfiguration,
+    fallbackStoreURL: URL
+  ) -> ModelContainer {
+    if let container = try? ModelContainer(
+      for: ContactEntity.self,
+      IdentityCardEntity.self,
+      ProvableClaimEntity.self,
+      configurations: configuration
+    ) {
+      return container
+    }
+
+    // Quarantine the broken store and try one fresh on-disk open.
+    let fm = FileManager.default
+    if fm.fileExists(atPath: fallbackStoreURL.path) {
+      let quarantine = fallbackStoreURL.deletingLastPathComponent()
+        .appending(path: "SolidarityIdentity_v2.broken-\(Int(Date().timeIntervalSince1970)).store")
+      try? fm.moveItem(at: fallbackStoreURL, to: quarantine)
+      // Also move sidecar files SwiftData writes alongside the store.
+      for suffix in ["-wal", "-shm"] {
+        let sidecar = URL(fileURLWithPath: fallbackStoreURL.path + suffix)
+        if fm.fileExists(atPath: sidecar.path) {
+          try? fm.removeItem(at: sidecar)
+        }
+      }
+    }
+
+    if let container = try? ModelContainer(
+      for: ContactEntity.self,
+      IdentityCardEntity.self,
+      ProvableClaimEntity.self,
+      configurations: configuration
+    ) {
+      return container
+    }
+
+    // Last resort — in-memory. App stays usable; data is ephemeral.
+    let memory = ModelConfiguration(isStoredInMemoryOnly: true, cloudKitDatabase: .none)
+    do {
+      return try ModelContainer(
+        for: ContactEntity.self,
+        IdentityCardEntity.self,
+        ProvableClaimEntity.self,
+        configurations: memory
+      )
+    } catch {
+      fatalError("Failed to initialize IdentityDataStore: \(error)")
+    }
   }
 
   func refreshAll() {
