@@ -121,7 +121,20 @@ class VCSettingsViewModel: ObservableObject {
     }
     Self.logger.info("Using business card: \(card.id.uuidString)")
 
-    switch vcService.issueAndStoreBusinessCardCredential(for: card) {
+    // Self-attest to all populated fields for this L1 self-issued VC.
+    // verifiedOnly is enforced by VCService; we must mark verifiedFields
+    // explicitly so the VC payload is bounded, not derived from raw card.
+    var populatedFields: Set<BusinessCardField> = [.name]
+    if card.title?.isEmpty == false { populatedFields.insert(.title) }
+    if card.company?.isEmpty == false { populatedFields.insert(.company) }
+    if card.email?.isEmpty == false { populatedFields.insert(.email) }
+    if card.phone?.isEmpty == false { populatedFields.insert(.phone) }
+    if card.profileImage != nil { populatedFields.insert(.profileImage) }
+    if !card.socialNetworks.isEmpty { populatedFields.insert(.socialNetworks) }
+    if !card.skills.isEmpty { populatedFields.insert(.skills) }
+    let attestedCard = card.withAttestedFields(populatedFields)
+
+    switch vcService.issueAndStoreBusinessCardCredential(for: attestedCard) {
     case .success(let stored):
       Self.logger.info("VC created successfully, verifying...")
       // Verify immediately to ensure it can be parsed

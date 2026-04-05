@@ -351,6 +351,7 @@ final class BackupManager: ObservableObject {
     let trustLevel: String
     let source: String
     let payload: String
+    let sourceField: String?
     let isPresentable: Bool
     let lastPresentedAt: Date?
 
@@ -363,6 +364,7 @@ final class BackupManager: ObservableObject {
       self.trustLevel = entity.trustLevel
       self.source = entity.source
       self.payload = entity.payload
+      self.sourceField = entity.sourceField
       self.isPresentable = entity.isPresentable
       self.lastPresentedAt = entity.lastPresentedAt
     }
@@ -377,6 +379,7 @@ final class BackupManager: ObservableObject {
         trustLevel: trustLevel,
         source: source,
         payload: payload,
+        sourceField: sourceField,
         isPresentable: isPresentable,
         lastPresentedAt: lastPresentedAt
       )

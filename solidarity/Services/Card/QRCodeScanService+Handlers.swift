@@ -159,7 +159,15 @@ extension QRCodeScanService {
         status = .unverified
       }
       identityCoordinator.updateVerificationStatus(for: imported.businessCard.id, status: status)
-      return .success(ScanOutcome(card: imported.businessCard, verificationStatus: status, sealedRoute: nil, route: .businessCard))
+      return .success(
+        ScanOutcome(
+          card: imported.businessCard,
+          verificationStatus: status,
+          sealedRoute: nil,
+          route: .businessCard,
+          credentialId: imported.storedCredential.id
+        )
+      )
     }
   }
 
@@ -219,7 +227,8 @@ extension QRCodeScanService {
               card: imported.businessCard,
               verificationStatus: finalStatus,
               sealedRoute: nil,
-              route: .businessCard
+              route: .businessCard,
+              credentialId: imported.storedCredential.id
             )
           )
         )
@@ -271,7 +280,17 @@ extension QRCodeScanService {
         status = .unverified
       }
       identityCoordinator.updateVerificationStatus(for: imported.businessCard.id, status: status)
-      emitOutcome(.success(ScanOutcome(card: imported.businessCard, verificationStatus: status, sealedRoute: nil, route: .siopRequest(url.absoluteString))))
+      emitOutcome(
+        .success(
+          ScanOutcome(
+            card: imported.businessCard,
+            verificationStatus: status,
+            sealedRoute: nil,
+            route: .siopRequest(url.absoluteString),
+            credentialId: imported.storedCredential.id
+          )
+        )
+      )
     }
   }
 

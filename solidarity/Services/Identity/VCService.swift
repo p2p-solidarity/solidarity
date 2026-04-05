@@ -18,8 +18,13 @@ final class VCService {
     var expiration: Date?
     var authenticationContext: LAContext?
     var relyingPartyDomain: String?
-    /// When true, only fields marked in `BusinessCard.verifiedFields` are included in the VC.
-    var verifiedOnly: Bool = false
+    /// When true (default), only fields marked in `BusinessCard.verifiedFields`
+    /// are included in the VC. Unverified data MUST stay in ContactProfile and
+    /// MUST NOT enter a signed credential. Callers pre-filter the card to the
+    /// fields they want to assert (via `filteredCard(for:)`) and set
+    /// `verifiedFields` to indicate which of those fields are backed by a
+    /// source credential.
+    var verifiedOnly: Bool = true
   }
 
   struct IssuedCredential {
@@ -87,7 +92,26 @@ final class VCService {
     let issuerDid = options.issuerDid ?? descriptor.did
     let issuedAt = Date()
 
-    let cardForCredential = options.verifiedOnly ? card.filteredCardForVerifiedOnly() : card
+    // Merge VerifiedClaimIndex entries into card.verifiedFields BEFORE
+    // filtering. The VC payload is the union of:
+    //   - self-attested fields (caller-set via withAttestedFields)
+    //   - index-verified fields (backed by a source VC for this holder)
+    // Intersected with the card's populated fields. This enforces the rule:
+    // "VC payload must come from VerifiedClaimIndex or verifiedFields union,
+    // never from raw ContactProfile data."
+    let cardWithIndexMerged: BusinessCard = {
+      guard options.verifiedOnly else { return card }
+      var working = card
+      var merged = card.verifiedFields ?? []
+      merged.formUnion(VerifiedClaimIndex.verifiedFieldsSync(forHolder: holderDid))
+      merged.insert(.name)
+      working.verifiedFields = merged
+      return working
+    }()
+
+    let cardForCredential = options.verifiedOnly
+      ? cardWithIndexMerged.filteredCardForVerifiedOnly()
+      : card
 
     let claims = BusinessCardCredentialClaims(
       card: cardForCredential,

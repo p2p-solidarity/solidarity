@@ -167,8 +167,15 @@ struct ProofPresentationFlowSheet: View {
           if let uri = parsedRequest?.redirectUri { return URL(string: uri)?.host }
           return OIDCService.verifierDomain(from: requestPayload)
         }()
+        // VC payload must be bounded by what the holder has attested to.
+        // We scope to ShareSettingsStore.enabledFields — the user's opt-in
+        // share set — so unverified data never enters the signed VP.
+        let attestedFields = ShareSettingsStore.enabledFields
+        let cardToPresent = card
+          .filteredCard(for: attestedFields)
+          .withAttestedFields(attestedFields)
         let options = VCService.IssueOptions(relyingPartyDomain: rpDomain)
-        switch VCService().issueBusinessCardCredential(for: card, options: options) {
+        switch VCService().issueBusinessCardCredential(for: cardToPresent, options: options) {
         case .failure(let error):
           isWorking = false
           alertMessage = error.localizedDescription

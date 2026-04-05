@@ -34,6 +34,13 @@ final class ContactEntity {
   var graphCredentialRef: String?
   var commonFriendsHandshakeToken: String?
 
+  // ContactProfile → CredentialVault references.
+  // ContactProfile does NOT own VC contents. It only stores credential IDs
+  // (VCLibrary.StoredCredential.id or IdentityCardEntity.id) that back
+  // any verified claim about this contact. Read verified fields via
+  // VerifiedClaimIndex, not the raw name/email/phone columns.
+  var credentialIds: [String] = []
+
   init(
     id: String = UUID().uuidString,
     cardId: String = UUID().uuidString,
@@ -59,7 +66,8 @@ final class ContactEntity {
     theirEphemeralMessage: String? = nil,
     graphExportEdgeId: String? = nil,
     graphCredentialRef: String? = nil,
-    commonFriendsHandshakeToken: String? = nil
+    commonFriendsHandshakeToken: String? = nil,
+    credentialIds: [String] = []
   ) {
     self.id = id
     self.cardId = cardId
@@ -86,6 +94,7 @@ final class ContactEntity {
     self.graphExportEdgeId = graphExportEdgeId
     self.graphCredentialRef = graphCredentialRef
     self.commonFriendsHandshakeToken = commonFriendsHandshakeToken
+    self.credentialIds = credentialIds
   }
 }
 
@@ -145,6 +154,9 @@ final class IdentityCardEntity {
 @Model
 final class ProvableClaimEntity {
   @Attribute(.unique) var id: String
+  /// ID of the credential (IdentityCardEntity / VCLibrary.StoredCredential)
+  /// that backs this claim. Every VerifiedClaimIndex entry MUST have one —
+  /// claims without a source credential are not presentable.
   var identityCardId: String
   var claimType: String
   var title: String
@@ -152,10 +164,23 @@ final class ProvableClaimEntity {
   var trustLevel: String
   var source: String
   var payload: String
+  /// Optional BusinessCardField.rawValue this claim verifies
+  /// (e.g. "email", "name"). Used by VerifiedClaimIndex to answer
+  /// "is field X verified for this holder?". nil for non-field claims
+  /// like "age_over_18" or "is_human".
+  var sourceField: String?
   var isPresentable: Bool
   var lastPresentedAt: Date?
   var createdAt: Date
   var updatedAt: Date
+
+  /// Semantic alias for `identityCardId`. ProvableClaim is indexed by the
+  /// source credential ID — never modify the claim independently of its
+  /// source VC.
+  var sourceCredentialId: String {
+    get { identityCardId }
+    set { identityCardId = newValue }
+  }
 
   init(
     id: String = UUID().uuidString,
@@ -166,6 +191,7 @@ final class ProvableClaimEntity {
     trustLevel: String,
     source: String,
     payload: String,
+    sourceField: String? = nil,
     isPresentable: Bool = true,
     lastPresentedAt: Date? = nil,
     createdAt: Date = Date(),
@@ -179,6 +205,7 @@ final class ProvableClaimEntity {
     self.trustLevel = trustLevel
     self.source = source
     self.payload = payload
+    self.sourceField = sourceField
     self.isPresentable = isPresentable
     self.lastPresentedAt = lastPresentedAt
     self.createdAt = createdAt

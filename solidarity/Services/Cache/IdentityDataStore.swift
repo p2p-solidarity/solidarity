@@ -113,12 +113,24 @@ final class IdentityDataStore: ObservableObject {
       existing.graphExportEdgeId = contact.graphExportEdgeId
       existing.graphCredentialRef = contact.graphCredentialRef
       existing.commonFriendsHandshakeToken = contact.commonFriendsHandshakeToken
+      existing.credentialIds = contact.credentialIds
     } else {
       modelContext.insert(contact)
     }
 
     try? modelContext.save()
     refreshAll()
+  }
+
+  /// Attaches a credential ID reference to a contact. ContactProfile only
+  /// stores references to the credential vault, never the VC contents.
+  func attachCredential(contactID: String, credentialID: String) {
+    guard let contact = findContact(by: contactID) else { return }
+    if !contact.credentialIds.contains(credentialID) {
+      contact.credentialIds.append(credentialID)
+      try? modelContext.save()
+      refreshAll()
+    }
   }
 
   func updateExchangeMetadata(_ patch: ExchangeMetadataPatch) {
@@ -162,6 +174,7 @@ final class IdentityDataStore: ObservableObject {
       existing.trustLevel = claim.trustLevel
       existing.source = claim.source
       existing.payload = claim.payload
+      existing.sourceField = claim.sourceField
       existing.isPresentable = claim.isPresentable
       existing.updatedAt = Date()
     } else {

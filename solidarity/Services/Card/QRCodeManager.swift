@@ -12,6 +12,9 @@ final class QRCodeManager: ObservableObject {
   @Published var lastSealedRoute: String?
   @Published var lastScanRoute: ScanRoute?
   @Published var scanError: CardError?
+  /// StoredCredential.id for the VC imported during the last scan, if any.
+  /// Used by contact-save flows to attach the credential reference.
+  @Published var lastCredentialId: UUID?
 
   private let generationService: QRCodeGenerationService
   private let scanService: QRCodeScanService
@@ -117,6 +120,7 @@ final class QRCodeManager: ObservableObject {
         self.lastScannedCard = outcome.card
         self.lastVerificationStatus = outcome.verificationStatus
         self.lastSealedRoute = outcome.sealedRoute
+        self.lastCredentialId = outcome.credentialId
         self.lastScanRoute = nil
         self.lastScanRoute = outcome.route
         self.scanError = nil

@@ -239,7 +239,12 @@ final class QRCodeGenerationService {
     expirationDate: Date?
   ) -> CardResult<QRCodeEnvelope> {
     let selectedFields = resolvedSelectedFields(for: card, legacyLevel: level)
-    let filteredCard = card.filteredCard(for: Set(selectedFields))
+    // Self-issued VC: the user attests to the selected fields about themselves.
+    // verifiedFields is populated explicitly so VCService.verifiedOnly enforces
+    // that only these attested fields enter the signed VC payload.
+    let filteredCard = card
+      .filteredCard(for: Set(selectedFields))
+      .withAttestedFields(Set(selectedFields))
     let options = VCService.IssueOptions(expiration: expirationDate)
     let issueResult = vcService.issueBusinessCardCredential(for: filteredCard, options: options)
 
