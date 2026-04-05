@@ -1,3 +1,4 @@
+import Security
 import SwiftUI
 
 struct AdvancedSettingsView: View {
@@ -8,6 +9,7 @@ struct AdvancedSettingsView: View {
   @State private var showingAlert = false
   @State private var alertMessage = ""
   @State private var showingResetConfirm = false
+  @State private var showingWipeConfirm = false
 
   var body: some View {
     Form {
@@ -54,6 +56,12 @@ struct AdvancedSettingsView: View {
           }
 
           Button(role: .destructive) {
+            showingWipeConfirm = true
+          } label: {
+            Label("Wipe Everything (Factory Reset)", systemImage: "trash.slash")
+          }
+
+          Button(role: .destructive) {
             devMode.disableDeveloperMode()
           } label: {
             Label("Disable Developer Mode", systemImage: "xmark.circle")
@@ -96,6 +104,18 @@ struct AdvancedSettingsView: View {
       Button("Cancel", role: .cancel) {}
     } message: {
       Text("This clears local encrypted files and onboarding status.")
+    }
+    .confirmationDialog(
+      "Wipe everything?",
+      isPresented: $showingWipeConfirm,
+      titleVisibility: .visible
+    ) {
+      Button("Wipe", role: .destructive) {
+        wipeEverything()
+      }
+      Button("Cancel", role: .cancel) {}
+    } message: {
+      Text("This deletes ALL data including private keys, DIDs, credentials, and keychain items. Relaunch the app after wipe.")
     }
   }
 
@@ -142,6 +162,129 @@ struct AdvancedSettingsView: View {
 
         alertMessage = String(localized: "Local data reset completed.")
         showingAlert = true
+      }
+    }
+  }
+
+  private func wipeEverything() {
+    BiometricGatekeeper.shared.authorizeIfRequired(.rotateMasterKey) { result in
+      switch result {
+      case .failure(let error):
+        alertMessage = error.localizedDescription
+        showingAlert = true
+      case .success:
+        performFullWipe()
+        alertMessage = String(localized: "All data wiped. Please relaunch the app.")
+        showingAlert = true
+      }
+    }
+  }
+
+  private func performFullWipe() {
+    // Encrypted files (business cards, contacts, preferences)
+    _ = StorageManager.shared.clearAllData()
+
+    // SwiftData stores
+    IdentityDataStore.shared.clearAllContacts()
+    IdentityDataStore.shared.clearAllIdentityData()
+
+    // Identity caches (DID documents, JWKs, descriptor)
+    IdentityCacheStore().clearAll()
+
+    // Verifiable Credential library
+    VCLibrary.shared.clearAll()
+
+    // Cryptographic keys (KeyManager symmetric)
+    _ = KeyManager.shared.clearAllKeys()
+
+    // Master DID signing key — delete, do NOT regenerate
+    _ = KeychainService.shared.deleteSigningKey()
+    KeychainService.shared.clearInMemoryKey()
+
+    // File encryption key (AES-256)
+    _ = EncryptionManager.shared.deleteEncryptionKey()
+
+    // Secure message history
+    SecureMessageStorage.shared.clearAllHistory()
+
+    // Offline operation queue
+    _ = OfflineManager.shared.clearPendingOperations()
+
+    // Broad keychain sweep: pairwise RP keys, Semaphore identity,
+    // messaging keys, identity cache, and any legacy airmeishi items
+    sweepAppKeychainItems()
+
+    // All UserDefaults (sharing prefs, profile, dev mode, etc.)
+    if let bundleId = Bundle.main.bundleIdentifier {
+      UserDefaults.standard.removePersistentDomain(forName: bundleId)
+    }
+  }
+
+  /// Enumerates keychain items and deletes every entry whose tag/service/account
+  /// begins with one of the app-owned prefixes. Covers pairwise DID keys,
+  /// Semaphore identity material, messaging keys, DID cache, and legacy entries.
+  private func sweepAppKeychainItems() {
+    let appPrefixes = [
+      "solidarity.",
+      "airmeishi.",
+      "com.kidneyweakx.solidarity",
+      "com.kidneyweakx.airmeishi",
+    ]
+
+    func matchesAppPrefix(_ value: String) -> Bool {
+      appPrefixes.contains { value.hasPrefix($0) }
+    }
+
+    // Sweep SecKey entries (signing keys: master, pairwise RP, legacy)
+    let keyQuery: [String: Any] = [
+      kSecClass as String: kSecClassKey,
+      kSecAttrSynchronizable as String: kSecAttrSynchronizableAny,
+      kSecReturnAttributes as String: true,
+      kSecMatchLimit as String: kSecMatchLimitAll,
+    ]
+    var keyResult: CFTypeRef?
+    if SecItemCopyMatching(keyQuery as CFDictionary, &keyResult) == errSecSuccess,
+      let items = keyResult as? [[String: Any]]
+    {
+      for item in items {
+        guard let tagData = item[kSecAttrApplicationTag as String] as? Data,
+          let tag = String(data: tagData, encoding: .utf8),
+          matchesAppPrefix(tag)
+        else { continue }
+        let deleteQuery: [String: Any] = [
+          kSecClass as String: kSecClassKey,
+          kSecAttrApplicationTag as String: tagData,
+          kSecAttrSynchronizable as String: kSecAttrSynchronizableAny,
+        ]
+        SecItemDelete(deleteQuery as CFDictionary)
+      }
+    }
+
+    // Sweep generic password entries (messaging keys, identity cache,
+    // Semaphore identity, encryption keys, any legacy items)
+    let passwordQuery: [String: Any] = [
+      kSecClass as String: kSecClassGenericPassword,
+      kSecAttrSynchronizable as String: kSecAttrSynchronizableAny,
+      kSecReturnAttributes as String: true,
+      kSecMatchLimit as String: kSecMatchLimitAll,
+    ]
+    var passwordResult: CFTypeRef?
+    if SecItemCopyMatching(passwordQuery as CFDictionary, &passwordResult) == errSecSuccess,
+      let items = passwordResult as? [[String: Any]]
+    {
+      for item in items {
+        let service = item[kSecAttrService as String] as? String ?? ""
+        let account = item[kSecAttrAccount as String] as? String ?? ""
+        guard matchesAppPrefix(service) || matchesAppPrefix(account) else { continue }
+        var deleteQuery: [String: Any] = [
+          kSecClass as String: kSecClassGenericPassword,
+          kSecAttrSynchronizable as String: kSecAttrSynchronizableAny,
+          kSecAttrAccount as String: account,
+        ]
+        if !service.isEmpty {
+          deleteQuery[kSecAttrService as String] = service
+        }
+        SecItemDelete(deleteQuery as CFDictionary)
       }
     }
   }
