@@ -123,6 +123,12 @@ struct ScanTabView: View {
         case .success(let merged):
           if let merged {
             IdentityDataStore.shared.upsertContact(ContactEntity.fromLegacy(merged))
+            if let credentialId = qrManager.lastCredentialId {
+              IdentityDataStore.shared.attachCredential(
+                contactID: merged.id.uuidString,
+                credentialID: credentialId.uuidString
+              )
+            }
             ToastManager.shared.show(
               title: String(localized: "Contact Updated"),
               message: String(localized: "Merged and saved to People."),
@@ -260,6 +266,12 @@ struct ScanTabView: View {
     switch contactRepository.addContact(contact) {
     case .success(let saved):
       IdentityDataStore.shared.upsertContact(ContactEntity.fromLegacy(saved))
+      if let credentialId = qrManager.lastCredentialId {
+        IdentityDataStore.shared.attachCredential(
+          contactID: saved.id.uuidString,
+          credentialID: credentialId.uuidString
+        )
+      }
       showingScannedCard = false
       ToastManager.shared.show(
         title: String(localized: "Saved to People"),

@@ -105,6 +105,19 @@ struct BusinessCard: Codable, Identifiable, Equatable, Hashable {
     fields.insert(.name)
     return filteredCard(for: fields)
   }
+
+  /// Marks the provided fields as verified/attested on this card. Used by
+  /// callers that issue self-signed (L1) credentials — the holder explicitly
+  /// attests to their own values so those fields may enter the signed VC.
+  /// For L2/L3 credentials, `verifiedFields` should instead be derived from
+  /// VerifiedClaimIndex against a source VC.
+  func withAttestedFields(_ fields: Set<BusinessCardField>) -> BusinessCard {
+    var copy = self
+    var attested = fields
+    attested.insert(.name)
+    copy.verifiedFields = attested
+    return copy
+  }
 }
 
 struct SocialNetwork: Codable, Identifiable, Equatable, Hashable {

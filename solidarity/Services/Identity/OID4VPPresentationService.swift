@@ -40,8 +40,21 @@ final class OID4VPPresentationService {
   }
 
   func wrapCredentialAsVP(vcJwt: String, options: WrapOptions = WrapOptions()) -> CardResult<String> {
-    let normalizedCredential = vcJwt.trimmingCharacters(in: .whitespacesAndNewlines)
-    guard !normalizedCredential.isEmpty else {
+    wrapCredentialsAsVP(vcJwts: [vcJwt], options: options)
+  }
+
+  /// Wraps one or more VC JWTs into a single signed VerifiablePresentation.
+  /// Callers resolve the set of credentials to present (e.g. by walking
+  /// VerifiedClaimIndex and collecting distinct sourceCredentialIds) and
+  /// this method produces the batched VP — one signature, many VCs.
+  func wrapCredentialsAsVP(
+    vcJwts: [String],
+    options: WrapOptions = WrapOptions()
+  ) -> CardResult<String> {
+    let normalized = vcJwts
+      .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+      .filter { !$0.isEmpty }
+    guard !normalized.isEmpty else {
       return .failure(.invalidData("Cannot wrap empty VC JWT"))
     }
 
@@ -72,7 +85,7 @@ final class OID4VPPresentationService {
         "@context": ["https://www.w3.org/2018/credentials/v1"],
         "type": ["VerifiablePresentation"],
         "holder": descriptor.did,
-        "verifiableCredential": [normalizedCredential],
+        "verifiableCredential": normalized,
       ] as [String: Any],
     ]
     if let nonce = options.nonce, !nonce.isEmpty { payload["nonce"] = nonce }

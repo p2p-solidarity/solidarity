@@ -8,6 +8,25 @@ final class QRCodeScanService: NSObject {
     let verificationStatus: VerificationStatus?
     let sealedRoute: String?
     let route: ScanRoute
+    /// The StoredCredential.id created when a signed VC/VP was imported
+    /// during this scan. Callers persisting a contact should attach this
+    /// reference to ContactEntity.credentialIds via
+    /// IdentityDataStore.attachCredential.
+    let credentialId: UUID?
+
+    init(
+      card: BusinessCard?,
+      verificationStatus: VerificationStatus?,
+      sealedRoute: String?,
+      route: ScanRoute,
+      credentialId: UUID? = nil
+    ) {
+      self.card = card
+      self.verificationStatus = verificationStatus
+      self.sealedRoute = sealedRoute
+      self.route = route
+      self.credentialId = credentialId
+    }
   }
 
   var onScanOutcome: ((Result<ScanOutcome, CardError>) -> Void)?

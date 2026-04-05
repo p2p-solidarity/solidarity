@@ -28,6 +28,10 @@ extension IdentityCoordinator {
           authenticationContext: context
         )
 
+        // verifiedOnly is enforced by VCService. If the caller hasn't
+        // populated `card.verifiedFields` already, the VC payload will be
+        // restricted to `{name}`. Callers needing to self-attest should
+        // call `card.withAttestedFields(...)` before passing the card in.
         let result = self.vcService.issueAndStoreBusinessCardCredential(
           for: card,
           options: options
