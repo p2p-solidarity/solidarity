@@ -34,6 +34,20 @@ struct PersonDetailView: View {
     contact.verificationStatus == VerificationStatus.verified.rawValue
   }
 
+  /// Fields verified through this contact's linked credentials (via the
+  /// VerifiedClaimIndex). UI reads this to show per-field verified badges
+  /// — not the raw ContactEntity columns.
+  private var verifiedFieldsFromIndex: Set<BusinessCardField> {
+    guard !contact.credentialIds.isEmpty else { return [] }
+    return VerifiedClaimIndex.verifiedFields(fromCredentials: contact.credentialIds)
+  }
+
+  private var linkedCredentials: [IdentityCardEntity] {
+    guard !contact.credentialIds.isEmpty else { return [] }
+    let idSet = Set(contact.credentialIds)
+    return identityDataStore.identityCards.filter { idSet.contains($0.id) }
+  }
+
   var body: some View {
     ScrollView {
       VStack(spacing: 20) {
@@ -41,6 +55,7 @@ struct PersonDetailView: View {
         verificationBadge
         ephemeralMessageSection
         contactInfoSection
+        linkedCredentialsSection
         exchangeMetadataSection
         actionButtons
       }
@@ -187,8 +202,22 @@ struct PersonDetailView: View {
         .foregroundColor(Color.Theme.textSecondary)
 
       VStack(spacing: 8) {
+        if contact.name.isEmpty == false {
+          HStack(spacing: 4) {
+            Spacer(minLength: 0)
+            if verifiedFieldsFromIndex.contains(.name) {
+              fieldVerifiedBadge(field: .name)
+            }
+          }
+        }
+
         if let email = contact.email, !email.isEmpty {
-          contactInfoRow(icon: "envelope", label: "EMAIL", value: email) {
+          contactInfoRow(
+            icon: "envelope",
+            label: "EMAIL",
+            value: email,
+            verified: verifiedFieldsFromIndex.contains(.email)
+          ) {
             if let url = URL(string: "mailto:\(email)") {
               UIApplication.shared.open(url)
             }
@@ -196,7 +225,12 @@ struct PersonDetailView: View {
         }
 
         if let phone = contact.phone, !phone.isEmpty {
-          contactInfoRow(icon: "phone", label: "PHONE", value: phone) {
+          contactInfoRow(
+            icon: "phone",
+            label: "PHONE",
+            value: phone,
+            verified: verifiedFieldsFromIndex.contains(.phone)
+          ) {
             if let url = URL(string: "tel:\(phone)") {
               UIApplication.shared.open(url)
             }
@@ -227,7 +261,13 @@ struct PersonDetailView: View {
     .overlay(Rectangle().stroke(Color.Theme.divider, lineWidth: 1))
   }
 
-  private func contactInfoRow(icon: String, label: String, value: String, action: @escaping () -> Void) -> some View {
+  private func contactInfoRow(
+    icon: String,
+    label: String,
+    value: String,
+    verified: Bool = false,
+    action: @escaping () -> Void
+  ) -> some View {
     Button(action: action) {
       HStack(spacing: 12) {
         Image(systemName: icon)
@@ -236,9 +276,16 @@ struct PersonDetailView: View {
           .frame(width: 20)
 
         VStack(alignment: .leading, spacing: 2) {
-          Text(label)
-            .font(.system(size: 10, weight: .bold, design: .monospaced))
-            .foregroundColor(Color.Theme.textTertiary)
+          HStack(spacing: 6) {
+            Text(label)
+              .font(.system(size: 10, weight: .bold, design: .monospaced))
+              .foregroundColor(Color.Theme.textTertiary)
+            if verified {
+              Image(systemName: "checkmark.seal.fill")
+                .font(.system(size: 10, weight: .bold))
+                .foregroundColor(Color.Theme.terminalGreen)
+            }
+          }
           Text(value)
             .font(.system(size: 14))
             .foregroundColor(Color.Theme.textPrimary)
@@ -252,6 +299,87 @@ struct PersonDetailView: View {
       }
     }
     .buttonStyle(.plain)
+  }
+
+  private func fieldVerifiedBadge(field: BusinessCardField) -> some View {
+    HStack(spacing: 4) {
+      Image(systemName: "checkmark.seal.fill")
+        .font(.system(size: 9, weight: .bold))
+      Text("\(field.displayName.uppercased()) VERIFIED")
+        .font(.system(size: 9, weight: .bold, design: .monospaced))
+    }
+    .foregroundColor(Color.Theme.terminalGreen)
+    .padding(.horizontal, 6)
+    .padding(.vertical, 3)
+    .background(Color.Theme.terminalGreen.opacity(0.08))
+  }
+
+  // MARK: - Linked Credentials
+
+  @ViewBuilder
+  private var linkedCredentialsSection: some View {
+    if linkedCredentials.isEmpty == false {
+      VStack(alignment: .leading, spacing: 12) {
+        HStack {
+          Text("— LINKED CREDENTIALS")
+            .font(.system(size: 12, weight: .bold, design: .monospaced))
+            .foregroundColor(Color.Theme.textSecondary)
+          Spacer()
+          Text("\(linkedCredentials.count)")
+            .font(.system(size: 12, weight: .bold, design: .monospaced))
+            .foregroundColor(Color.Theme.textTertiary)
+        }
+
+        VStack(spacing: 8) {
+          ForEach(linkedCredentials, id: \.id) { card in
+            linkedCredentialRow(card)
+          }
+        }
+      }
+      .padding(16)
+      .background(Color.Theme.cardBg)
+      .overlay(Rectangle().stroke(Color.Theme.divider, lineWidth: 1))
+    }
+  }
+
+  private func linkedCredentialRow(_ card: IdentityCardEntity) -> some View {
+    HStack(alignment: .top, spacing: 12) {
+      Image(systemName: trustIcon(for: card.trustLevel))
+        .font(.system(size: 12, weight: .bold))
+        .foregroundColor(trustColor(for: card.trustLevel))
+        .frame(width: 20, alignment: .top)
+        .padding(.top, 2)
+
+      VStack(alignment: .leading, spacing: 2) {
+        Text(card.title)
+          .font(.system(size: 13, weight: .semibold))
+          .foregroundColor(Color.Theme.textPrimary)
+        Text("\(card.issuerType.uppercased()) · \(card.status.uppercased())")
+          .font(.system(size: 10, weight: .bold, design: .monospaced))
+          .foregroundColor(Color.Theme.textTertiary)
+      }
+
+      Spacer()
+    }
+    .padding(10)
+    .background(Color.Theme.searchBg)
+    .overlay(Rectangle().stroke(Color.Theme.divider, lineWidth: 1))
+  }
+
+  private func trustIcon(for level: String) -> String {
+    switch level {
+    case "green": return "seal.fill"
+    case "blue": return "seal"
+    default: return "doc.text"
+    }
+  }
+
+  private func trustColor(for level: String) -> Color {
+    switch level {
+    case "green": return Color.Theme.terminalGreen
+    case "blue": return Color.Theme.primaryBlue
+    default: return Color.Theme.textTertiary
+    }
   }
 
   // MARK: - Exchange Metadata

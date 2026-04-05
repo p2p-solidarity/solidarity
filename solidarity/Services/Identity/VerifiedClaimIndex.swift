@@ -80,6 +80,23 @@ enum VerifiedClaimIndex {
     }
   }
 
+  /// Set of fields verified across the given credential IDs. Used by the
+  /// contact detail view to answer "does this contact have a VC that
+  /// verifies their email?" via ContactEntity.credentialIds — without
+  /// touching the raw ContactProfile columns.
+  @MainActor
+  static func verifiedFields(fromCredentials credentialIds: [String]) -> Set<BusinessCardField> {
+    let idSet = Set(credentialIds)
+    var fields: Set<BusinessCardField> = []
+    for claim in allClaims where idSet.contains(claim.sourceCredentialId) {
+      guard let raw = claim.sourceField, let field = BusinessCardField(rawValue: raw) else {
+        continue
+      }
+      fields.insert(field)
+    }
+    return fields
+  }
+
   /// Distinct credential IDs backing verified claims for this holder.
   /// Used when building multi-VC VPs — resolve sourceCredentialIds, then
   /// fetch each VC's JWT from VCLibrary and batch via

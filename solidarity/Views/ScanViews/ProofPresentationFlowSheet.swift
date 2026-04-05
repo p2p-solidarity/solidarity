@@ -28,6 +28,22 @@ struct ProofPresentationFlowSheet: View {
     parsedRequest?.presentationDefinition.inputDescriptors.compactMap { $0.name ?? $0.purpose } ?? []
   }
 
+  /// Holder DID for the current session, used to collect backing VCs
+  /// from the credential vault and resolve verified claims.
+  private var currentHolderDid: String? {
+    guard case .success(let descriptor) = DIDService().currentDescriptor() else { return nil }
+    return descriptor.did
+  }
+
+  /// Credentials from VCLibrary owned by this holder that will be batched
+  /// into the VP alongside the freshly-issued self-card VC.
+  private var backingCredentials: [VCLibrary.StoredCredential] {
+    guard let holder = currentHolderDid,
+      case .success(let stored) = VCLibrary.shared.list()
+    else { return [] }
+    return stored.filter { $0.holderDid == holder && $0.status != .revoked }
+  }
+
   var body: some View {
     NavigationStack {
       VStack(spacing: 16) {
@@ -81,6 +97,27 @@ struct ProofPresentationFlowSheet: View {
             Label(claim, systemImage: "checkmark.shield")
               .font(.system(size: 14))
               .foregroundColor(Color.Theme.textPrimary)
+          }
+        }
+
+        if !backingCredentials.isEmpty {
+          Divider().overlay(Color.Theme.divider)
+
+          Text("— CREDENTIALS TO PRESENT")
+            .font(.system(size: 11, weight: .bold, design: .monospaced))
+            .foregroundColor(Color.Theme.textSecondary)
+
+          Label(
+            "Self card (fresh) + \(backingCredentials.count) backing VC\(backingCredentials.count == 1 ? "" : "s")",
+            systemImage: "doc.on.doc"
+          )
+          .font(.system(size: 13, design: .monospaced))
+          .foregroundColor(Color.Theme.textPrimary)
+
+          ForEach(backingCredentials, id: \.id) { cred in
+            Text("• \(shortIssuer(cred.issuerDid))")
+              .font(.system(size: 11, design: .monospaced))
+              .foregroundColor(Color.Theme.textTertiary)
           }
         }
       }
@@ -144,6 +181,11 @@ struct ProofPresentationFlowSheet: View {
     }
   }
 
+  private func shortIssuer(_ did: String) -> String {
+    guard did.count > 32 else { return did }
+    return "\(did.prefix(16))…\(did.suffix(12))"
+  }
+
   private func parseRequest() {
     if case .success(let request) = OIDCService.shared.parseRequest(from: requestPayload) {
       parsedRequest = request
@@ -182,8 +224,14 @@ struct ProofPresentationFlowSheet: View {
           showingAlert = true
           step = .review
         case .success(let credential):
-          let wrapResult = OID4VPPresentationService.shared.wrapCredentialAsVP(
-            vcJwt: credential.jwt,
+          // Batch VP: fresh self-card VC + all holder-owned backing VCs
+          // from the credential vault (passport L3, institution L2, etc.).
+          // One VP signature, many VCs — verifier sees full trust chain.
+          var jwts: [String] = [credential.jwt]
+          jwts.append(contentsOf: self.backingCredentials.map { $0.jwt })
+
+          let wrapResult = OID4VPPresentationService.shared.wrapCredentialsAsVP(
+            vcJwts: jwts,
             options: .init(
               relyingPartyDomain: rpDomain,
               nonce: parsedRequest?.nonce,
