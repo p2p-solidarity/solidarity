@@ -12,112 +12,237 @@ struct AdvancedSettingsView: View {
   @State private var showingWipeConfirm = false
 
   var body: some View {
-    Form {
-      Section("Interface & Display") {
-        NavigationLink {
-          AppearanceSettingsView()
-        } label: {
-          Label("Appearance", systemImage: "paintbrush")
-        }
+    ScrollView {
+      VStack(spacing: 24) {
+        interfaceSection
+        if devMode.isDeveloperMode { devToolsSection }
+        dangerZoneSection
       }
-
-      Section("Developer Tools") {
-        if devMode.isDeveloperMode {
-          NavigationLink {
-            GroupManagementView()
-          } label: {
-            Label("Developer Group Management", systemImage: "person.3")
-          }
-
-          Button {
-            showingPassportPipeline = true
-          } label: {
-            Label("Passport Pipeline", systemImage: "doc.viewfinder")
-          }
-
-          Toggle(isOn: $devMode.simulateNFC) {
-            Label("Simulate NFC", systemImage: "wave.3.forward")
-          }
-
-          Button {
-            showingZKSettings = true
-          } label: {
-            Label("ZK Identity Settings", systemImage: "shield.checkered")
-          }
-
-          Button {
-            showingOIDCRequest = true
-          } label: {
-            Label("OIDC Request Scanner", systemImage: "qrcode")
-          }
-
-          Button("Reset Passport Credential", role: .destructive) {
-            resetPassportCredential()
-          }
-
-          Button(role: .destructive) {
-            showingWipeConfirm = true
-          } label: {
-            Label("Wipe Everything (Factory Reset)", systemImage: "trash.slash")
-          }
-
-          Button(role: .destructive) {
-            devMode.disableDeveloperMode()
-          } label: {
-            Label("Disable Developer Mode", systemImage: "xmark.circle")
-          }
-        } else {
-          Text("Tap the version number in the main settings screen several times to enable developer mode.")
-            .font(.caption)
-            .foregroundColor(.secondary)
-        }
-      }
-
-      Section("Danger Zone") {
-        Button("Reset Local App Data", role: .destructive) {
-          showingResetConfirm = true
-        }
-      }
+      .padding(.vertical, 24)
     }
-    .navigationTitle("Advanced Settings")
+    .background(Color.Theme.pageBg.ignoresSafeArea())
+    .navigationTitle("Advanced")
     .navigationBarTitleDisplayMode(.inline)
     .sheet(isPresented: $showingPassportPipeline) {
-      PassportOnboardingFlowView { _ in
-        showingPassportPipeline = false
-      }
+      PassportOnboardingFlowView { _ in showingPassportPipeline = false }
     }
-    .sheet(isPresented: $showingZKSettings) {
-      ZKSettingsView()
-    }
-    .sheet(isPresented: $showingOIDCRequest) {
-      OIDCRequestView()
-    }
+    .sheet(isPresented: $showingZKSettings) { ZKSettingsView() }
+    .sheet(isPresented: $showingOIDCRequest) { OIDCRequestView() }
     .alert("Settings", isPresented: $showingAlert) {
       Button("OK", role: .cancel) {}
     } message: {
       Text(alertMessage)
     }
-    .confirmationDialog("Reset local app data?", isPresented: $showingResetConfirm, titleVisibility: .visible) {
-      Button("Reset", role: .destructive) {
-        resetLocalData()
-      }
+    .confirmationDialog(
+      "Reset local app data?",
+      isPresented: $showingResetConfirm,
+      titleVisibility: .visible
+    ) {
+      Button("Reset", role: .destructive) { resetLocalData() }
       Button("Cancel", role: .cancel) {}
     } message: {
-      Text("This clears local encrypted files and onboarding status.")
+      Text("This clears local encrypted files, contacts, credentials, and onboarding status. Keys are preserved.")
     }
     .confirmationDialog(
       "Wipe everything?",
       isPresented: $showingWipeConfirm,
       titleVisibility: .visible
     ) {
-      Button("Wipe", role: .destructive) {
-        wipeEverything()
-      }
+      Button("Wipe", role: .destructive) { wipeEverything() }
       Button("Cancel", role: .cancel) {}
     } message: {
       Text("This deletes ALL data including private keys, DIDs, credentials, and keychain items. Relaunch the app after wipe.")
     }
   }
+
+  // MARK: - Interface
+
+  private var interfaceSection: some View {
+    VStack(alignment: .leading, spacing: 12) {
+      sectionHeader("INTERFACE")
+
+      NavigationLink {
+        AppearanceSettingsView()
+      } label: {
+        rowLabel(icon: "paintbrush", title: "Appearance")
+      }
+      .buttonStyle(.plain)
+      .padding(.horizontal, 16)
+    }
+  }
+
+  // MARK: - Developer Tools
+
+  private var devToolsSection: some View {
+    VStack(alignment: .leading, spacing: 12) {
+      sectionHeader("DEVELOPER TOOLS")
+
+      VStack(spacing: 8) {
+        NavigationLink {
+          GroupManagementView()
+        } label: {
+          rowLabel(icon: "person.3", title: "Group Management")
+        }
+        .buttonStyle(.plain)
+
+        Button { showingPassportPipeline = true } label: {
+          rowLabel(icon: "doc.viewfinder", title: "Passport Pipeline")
+        }
+        .buttonStyle(.plain)
+
+        nfcToggleRow
+
+        Button { showingZKSettings = true } label: {
+          rowLabel(icon: "shield.checkered", title: "ZK Identity Settings")
+        }
+        .buttonStyle(.plain)
+
+        Button { showingOIDCRequest = true } label: {
+          rowLabel(icon: "qrcode", title: "OIDC Request Scanner")
+        }
+        .buttonStyle(.plain)
+      }
+      .padding(.horizontal, 16)
+    }
+  }
+
+  private var nfcToggleRow: some View {
+    HStack {
+      Image(systemName: "wave.3.forward")
+        .font(.system(size: 16, weight: .bold))
+        .foregroundColor(Color.Theme.terminalGreen)
+        .frame(width: 24)
+
+      Text("Simulate NFC")
+        .font(.system(size: 14, weight: .bold))
+        .foregroundColor(Color.Theme.textPrimary)
+
+      Spacer()
+
+      Toggle("", isOn: $devMode.simulateNFC)
+        .labelsHidden()
+        .tint(Color.Theme.terminalGreen)
+    }
+    .padding(16)
+    .background(Color.Theme.searchBg)
+    .overlay(Rectangle().stroke(Color.Theme.divider, lineWidth: 1))
+  }
+
+  // MARK: - Danger Zone
+
+  private var dangerZoneSection: some View {
+    VStack(alignment: .leading, spacing: 12) {
+      sectionHeader("DANGER ZONE")
+
+      VStack(spacing: 8) {
+        Button { showingResetConfirm = true } label: {
+          dangerRowLabel(icon: "arrow.counterclockwise", title: "Reset App Data", subtitle: "Clears data, preserves keys")
+        }
+        .buttonStyle(.plain)
+
+        if devMode.isDeveloperMode {
+          Button { resetPassportCredential() } label: {
+            dangerRowLabel(icon: "doc.badge.xmark", title: "Reset Passport Credential")
+          }
+          .buttonStyle(.plain)
+
+          Button { showingWipeConfirm = true } label: {
+            dangerRowLabel(icon: "trash.slash", title: "Wipe Everything", subtitle: "Deletes all data + keys")
+          }
+          .buttonStyle(.plain)
+
+          Rectangle()
+            .fill(Color.Theme.divider)
+            .frame(height: 1)
+
+          Button { devMode.disableDeveloperMode() } label: {
+            HStack {
+              Image(systemName: "xmark.circle")
+                .font(.system(size: 16, weight: .bold))
+                .foregroundColor(Color.Theme.textSecondary)
+                .frame(width: 24)
+
+              Text("Disable Developer Mode")
+                .font(.system(size: 14, weight: .bold))
+                .foregroundColor(Color.Theme.textSecondary)
+
+              Spacer()
+            }
+            .padding(16)
+            .background(Color.Theme.searchBg)
+            .overlay(Rectangle().stroke(Color.Theme.divider, lineWidth: 1))
+          }
+          .buttonStyle(.plain)
+        }
+      }
+      .padding(.horizontal, 16)
+
+      if !devMode.isDeveloperMode {
+        Text("Tap the version number in Settings to enable developer mode.")
+          .font(.system(size: 10, design: .monospaced))
+          .foregroundColor(Color.Theme.textTertiary)
+          .padding(.horizontal, 24)
+      }
+    }
+  }
+
+  // MARK: - Shared Components
+
+  private func sectionHeader(_ title: String) -> some View {
+    Text("[ \(title) ]")
+      .font(.system(size: 12, weight: .bold, design: .monospaced))
+      .foregroundColor(Color.Theme.textSecondary)
+      .padding(.horizontal, 24)
+  }
+
+  private func rowLabel(icon: String, title: String) -> some View {
+    HStack {
+      Image(systemName: icon)
+        .font(.system(size: 16, weight: .bold))
+        .foregroundColor(Color.Theme.terminalGreen)
+        .frame(width: 24)
+
+      Text(title)
+        .font(.system(size: 14, weight: .bold))
+        .foregroundColor(Color.Theme.textPrimary)
+
+      Spacer()
+
+      Image(systemName: "chevron.right")
+        .font(.system(size: 10, weight: .bold))
+        .foregroundColor(Color.Theme.textPlaceholder)
+    }
+    .padding(16)
+    .background(Color.Theme.searchBg)
+    .overlay(Rectangle().stroke(Color.Theme.divider, lineWidth: 1))
+  }
+
+  private func dangerRowLabel(icon: String, title: String, subtitle: String? = nil) -> some View {
+    HStack {
+      Image(systemName: icon)
+        .font(.system(size: 16, weight: .bold))
+        .foregroundColor(Color.Theme.destructive)
+        .frame(width: 24)
+
+      VStack(alignment: .leading, spacing: 2) {
+        Text(title)
+          .font(.system(size: 14, weight: .bold))
+          .foregroundColor(Color.Theme.destructive)
+        if let subtitle {
+          Text(subtitle)
+            .font(.system(size: 10, weight: .bold, design: .monospaced))
+            .foregroundColor(Color.Theme.textTertiary)
+        }
+      }
+
+      Spacer()
+    }
+    .padding(16)
+    .background(Color.Theme.searchBg)
+    .overlay(Rectangle().stroke(Color.Theme.destructive.opacity(0.3), lineWidth: 1))
+  }
+
+  // MARK: - Actions
 
   private func resetPassportCredential() {
     IdentityDataStore.shared.removePassportCredentials()
@@ -132,34 +257,18 @@ struct AdvancedSettingsView: View {
         alertMessage = error.localizedDescription
         showingAlert = true
       case .success:
-        // Encrypted files (business cards, contacts, preferences)
         _ = StorageManager.shared.clearAllData()
-
-        // SwiftData stores
         IdentityDataStore.shared.clearAllContacts()
         IdentityDataStore.shared.clearAllIdentityData()
-
-        // Identity caches (DID documents, JWKs, descriptor)
         IdentityCacheStore().clearAll()
-
-        // Verifiable Credential library
         VCLibrary.shared.clearAll()
-
-        // Cryptographic keys (KeyManager symmetric + KeychainService signing)
         _ = KeyManager.shared.clearAllKeys()
         KeychainService.shared.resetSigningKey()
-
-        // Secure message history
         SecureMessageStorage.shared.clearAllHistory()
-
-        // Offline operation queue
         _ = OfflineManager.shared.clearPendingOperations()
-
-        // All UserDefaults (sharing prefs, profile, dev mode, etc.)
         if let bundleId = Bundle.main.bundleIdentifier {
           UserDefaults.standard.removePersistentDomain(forName: bundleId)
         }
-
         alertMessage = String(localized: "Local data reset completed.")
         showingAlert = true
       }
@@ -181,61 +290,33 @@ struct AdvancedSettingsView: View {
   }
 
   private func performFullWipe() {
-    // Encrypted files (business cards, contacts, preferences)
     _ = StorageManager.shared.clearAllData()
-
-    // SwiftData stores
     IdentityDataStore.shared.clearAllContacts()
     IdentityDataStore.shared.clearAllIdentityData()
-
-    // Identity caches (DID documents, JWKs, descriptor)
     IdentityCacheStore().clearAll()
-
-    // Verifiable Credential library
     VCLibrary.shared.clearAll()
-
-    // Cryptographic keys (KeyManager symmetric)
     _ = KeyManager.shared.clearAllKeys()
-
-    // Master DID signing key — delete, do NOT regenerate
     _ = KeychainService.shared.deleteSigningKey()
     KeychainService.shared.clearInMemoryKey()
-
-    // File encryption key (AES-256)
     _ = EncryptionManager.shared.deleteEncryptionKey()
-
-    // Secure message history
     SecureMessageStorage.shared.clearAllHistory()
-
-    // Offline operation queue
     _ = OfflineManager.shared.clearPendingOperations()
-
-    // Broad keychain sweep: pairwise RP keys, Semaphore identity,
-    // messaging keys, identity cache, and any legacy airmeishi items
     sweepAppKeychainItems()
-
-    // All UserDefaults (sharing prefs, profile, dev mode, etc.)
     if let bundleId = Bundle.main.bundleIdentifier {
       UserDefaults.standard.removePersistentDomain(forName: bundleId)
     }
   }
 
-  /// Enumerates keychain items and deletes every entry whose tag/service/account
-  /// begins with one of the app-owned prefixes. Covers pairwise DID keys,
-  /// Semaphore identity material, messaging keys, DID cache, and legacy entries.
   private func sweepAppKeychainItems() {
     let appPrefixes = [
-      "solidarity.",
-      "airmeishi.",
-      "com.kidneyweakx.solidarity",
-      "com.kidneyweakx.airmeishi",
+      "solidarity.", "airmeishi.",
+      "com.kidneyweakx.solidarity", "com.kidneyweakx.airmeishi",
     ]
 
-    func matchesAppPrefix(_ value: String) -> Bool {
+    func matchesApp(_ value: String) -> Bool {
       appPrefixes.contains { value.hasPrefix($0) }
     }
 
-    // Sweep SecKey entries (signing keys: master, pairwise RP, legacy)
     let keyQuery: [String: Any] = [
       kSecClass as String: kSecClassKey,
       kSecAttrSynchronizable as String: kSecAttrSynchronizableAny,
@@ -249,7 +330,7 @@ struct AdvancedSettingsView: View {
       for item in items {
         guard let tagData = item[kSecAttrApplicationTag as String] as? Data,
           let tag = String(data: tagData, encoding: .utf8),
-          matchesAppPrefix(tag)
+          matchesApp(tag)
         else { continue }
         let deleteQuery: [String: Any] = [
           kSecClass as String: kSecClassKey,
@@ -260,8 +341,6 @@ struct AdvancedSettingsView: View {
       }
     }
 
-    // Sweep generic password entries (messaging keys, identity cache,
-    // Semaphore identity, encryption keys, any legacy items)
     let passwordQuery: [String: Any] = [
       kSecClass as String: kSecClassGenericPassword,
       kSecAttrSynchronizable as String: kSecAttrSynchronizableAny,
@@ -275,7 +354,7 @@ struct AdvancedSettingsView: View {
       for item in items {
         let service = item[kSecAttrService as String] as? String ?? ""
         let account = item[kSecAttrAccount as String] as? String ?? ""
-        guard matchesAppPrefix(service) || matchesAppPrefix(account) else { continue }
+        guard matchesApp(service) || matchesApp(account) else { continue }
         var deleteQuery: [String: Any] = [
           kSecClass as String: kSecClassGenericPassword,
           kSecAttrSynchronizable as String: kSecAttrSynchronizableAny,
