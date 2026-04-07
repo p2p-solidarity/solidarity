@@ -19,7 +19,7 @@ struct BusinessCardFormView: View {
   @State private var githubHandle = ""
   @State private var useZK = true
   @State private var allowForwarding = false
-  @State private var selectedFormat: SharingFormat = .plaintext
+  @State private var selectedFormat: SharingFormat = .didSigned
 
   @State private var showingDeleteConfirm = false
   @State private var showingErrorAlert = false

@@ -39,10 +39,17 @@ struct ShareSettingsView: View {
   }
 
   /// Fields that are externally verified (backed by source credentials).
+  /// Resolves the actual holder DID from existing identity cards rather than
+  /// using card.id (which is a UUID, not a DID).
   private var externallyVerifiedFields: Set<BusinessCardField> {
-    guard let card = cardManager.businessCards.first else { return [] }
-    let holderDid = card.id.uuidString
-    return VerifiedClaimIndex.verifiedFieldsSync(forHolder: holderDid)
+    // Find holderDid from any existing identity card issued to the local user.
+    // IdentityCardEntity.holderDid stores the real DID (did:key:...).
+    let holderDids = Set(identityStore.identityCards.map { $0.holderDid })
+    var fields: Set<BusinessCardField> = []
+    for did in holderDids {
+      fields.formUnion(VerifiedClaimIndex.verifiedFieldsSync(forHolder: did))
+    }
+    return fields
   }
 
   var body: some View {

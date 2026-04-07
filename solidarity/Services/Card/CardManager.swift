@@ -29,8 +29,26 @@ class CardManager: BusinessCardManagerProtocol, ObservableObject {
   private let storageManager = StorageManager.shared
   private var cancellables = Set<AnyCancellable>()
 
+  private static let didMigrateSharingFormatKey = "migration_sharing_format_to_didSigned_v1"
+
   private init() {
     loadCardsFromStorage()
+    migrateSharingFormatIfNeeded()
+  }
+
+  /// One-shot migration: upgrade any existing cards with .plaintext format
+  /// to .didSigned so all users get VC-based sharing by default.
+  private func migrateSharingFormatIfNeeded() {
+    guard !UserDefaults.standard.bool(forKey: Self.didMigrateSharingFormatKey) else { return }
+    var didMigrate = false
+    for i in businessCards.indices where businessCards[i].sharingPreferences.sharingFormat == .plaintext {
+      businessCards[i].sharingPreferences.sharingFormat = .didSigned
+      didMigrate = true
+    }
+    if didMigrate {
+      _ = storageManager.saveBusinessCards(businessCards)
+    }
+    UserDefaults.standard.set(true, forKey: Self.didMigrateSharingFormatKey)
   }
 
   // MARK: - Public Methods

@@ -25,13 +25,14 @@ final class QRCodeGenerationService {
     case .plaintext:
       return generatePlaintextImage(for: card, fields: fields, expirationDate: expirationDate)
     case .zkProof, .didSigned:
-      // Use the envelope builder which dispatches by format.
-      switch buildEnvelope(for: card, sharingLevel: .public, expirationDate: expirationDate) {
-      case .failure(let error):
-        return .failure(error)
-      case .success(let envelope):
-        return encodeEnvelopeToImage(envelope)
+      // Try format-aware envelope. If it fails at any stage (biometric auth,
+      // QR too large, encoding error), fall back to plaintext so the QR is
+      // never empty.
+      if case .success(let envelope) = buildEnvelope(for: card, sharingLevel: .public, expirationDate: expirationDate),
+         case .success(let image) = encodeEnvelopeToImage(envelope) {
+        return .success(image)
       }
+      return generatePlaintextImage(for: card, fields: fields, expirationDate: expirationDate)
     }
   }
 
@@ -63,18 +64,27 @@ final class QRCodeGenerationService {
   }
 
   private func encodeEnvelopeToImage(_ envelope: QRCodeEnvelope) -> CardResult<UIImage> {
+    // For didSigned: encode just the JWT string directly into the QR.
+    // JWTs are self-describing (start with "eyJ") and the scanner detects them.
+    // This avoids the envelope JSON wrapper overhead that pushes past QR limits.
+    if envelope.format == .didSigned, let jwt = envelope.didSigned?.jwt {
+      return generateImage(from: jwt, correctionLevel: "L")
+    }
+
     do {
       let data = try JSONEncoder.qrEncoder.encode(envelope)
-      // For VC-based formats, compress the payload to keep QR scannable.
-      if envelope.format == .didSigned || envelope.format == .zkProof {
+      // For ZK formats, try compression and use lower correction level.
+      if envelope.format == .zkProof {
         if let compressed = Self.compressForQR(data) {
-          return generateImage(from: compressed)
+          return generateImage(from: compressed, correctionLevel: "M")
         }
       }
       guard let json = String(data: data, encoding: .utf8) else {
         return .failure(.sharingError("Failed to encode QR envelope"))
       }
-      return generateImage(from: json)
+      // Plaintext uses high correction; signed formats use medium.
+      let level = envelope.format == .plaintext ? "H" : "M"
+      return generateImage(from: json, correctionLevel: level)
     } catch {
       return .failure(.sharingError("Failed to encode QR envelope: \(error.localizedDescription)"))
     }
@@ -144,7 +154,7 @@ final class QRCodeGenerationService {
     }
   }
 
-  func generateImage(from string: String) -> CardResult<UIImage> {
+  func generateImage(from string: String, correctionLevel: String = "H") -> CardResult<UIImage> {
     guard let data = string.data(using: .utf8) else {
       return .failure(.sharingError("Failed to convert string to data"))
     }
@@ -154,7 +164,7 @@ final class QRCodeGenerationService {
     }
 
     filter.setValue(data, forKey: "inputMessage")
-    filter.setValue("H", forKey: "inputCorrectionLevel")
+    filter.setValue(correctionLevel, forKey: "inputCorrectionLevel")
 
     guard let ciImage = filter.outputImage else {
       return .failure(.sharingError("Failed to generate QR code image"))

@@ -34,7 +34,14 @@ final class QRCodeManager: ObservableObject {
   // MARK: - Generation
 
   func generateQRCode(from string: String) -> CardResult<UIImage> {
-    generationService.generateImage(from: string)
+    // Try descending correction levels: H → M → L.
+    // VP / VC payloads often exceed "H" capacity (~1273 bytes).
+    for level in ["H", "M", "L"] {
+      if case .success(let image) = generationService.generateImage(from: string, correctionLevel: level) {
+        return .success(image)
+      }
+    }
+    return generationService.generateImage(from: string, correctionLevel: "L")
   }
 
   func generateQRCode(

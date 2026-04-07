@@ -148,6 +148,20 @@ final class QRCodeScanService: NSObject {
       return
     }
 
+    // Bare JWT from didSigned QR (encoded directly without envelope wrapper).
+    // JWTs have 3 base64url segments separated by dots, starting with "eyJ".
+    if data.hasPrefix("eyJ"), data.split(separator: ".").count == 3 {
+      let payload = QRDidSignedPayload(
+        jwt: data,
+        shareId: UUID(),
+        expirationDate: nil,
+        issuerDid: "",
+        holderDid: ""
+      )
+      emitOutcome(handleDidSignedPayload(payload))
+      return
+    }
+
     if let envelope = decodeEnvelope(from: data) {
       handleEnvelope(envelope)
       return
