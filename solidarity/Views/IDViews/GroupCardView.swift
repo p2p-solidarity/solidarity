@@ -20,7 +20,7 @@ struct GroupCardView: View {
           Image(systemName: "person.3.fill")
             .font(.caption)
             .padding(6)
-            .background(Color.white.opacity(0.2))
+            .background(Color.Theme.textPrimary.opacity(0.2))
             .clipShape(Circle())
 
           Spacer()
@@ -33,19 +33,19 @@ struct GroupCardView: View {
         // Content
         VStack(alignment: .leading, spacing: 4) {
           Text(membership.name)
-            .font(.headline)
-            .foregroundColor(.white)
+            .font(.system(size: 12, weight: .bold, design: .monospaced))
+            .foregroundColor(Color.Theme.textPrimary)
             .lineLimit(2)
             .multilineTextAlignment(.leading)
 
           if let index = membership.memberIndex {
             Text("Member #\(index + 1)")
               .font(.caption2)
-              .foregroundColor(.white.opacity(0.8))
+              .foregroundColor(Color.Theme.textPrimary.opacity(0.8))
           } else {
             Text("Not a member")
               .font(.caption2)
-              .foregroundColor(.white.opacity(0.6))
+              .foregroundColor(Color.Theme.textPrimary.opacity(0.6))
           }
         }
       }
@@ -55,9 +55,9 @@ struct GroupCardView: View {
       .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
       .overlay(
         RoundedRectangle(cornerRadius: 20, style: .continuous)
-          .stroke(isSelected ? Color.white : Color.clear, lineWidth: 3)
+          .stroke(isSelected ? Color.Theme.textPrimary : Color.clear, lineWidth: 3)
       )
-      .shadow(color: Color.black.opacity(0.15), radius: 8, x: 0, y: 4)
+      .shadow(color: Color.Theme.pageBg.opacity(0.15), radius: 8, x: 0, y: 4)
       .scaleEffect(isSelected ? 1.05 : 1.0)
       .animation(.spring(response: 0.3, dampingFraction: 0.7), value: isSelected)
     }
@@ -69,20 +69,20 @@ struct GroupCardView: View {
       switch membership.status {
       case .active:
         Image(systemName: "checkmark.circle.fill")
-          .foregroundColor(.green)
+          .foregroundColor(Color.Theme.terminalGreen)
       case .outdated:
         Image(systemName: "exclamationmark.triangle.fill")
-          .foregroundColor(.yellow)
+          .foregroundColor(Color.Theme.dustyMauve)
       case .pending:
         ProgressView()
           .scaleEffect(0.5)
       case .notMember:
         Image(systemName: "circle")
-          .foregroundColor(.white.opacity(0.5))
+          .foregroundColor(Color.Theme.textPrimary.opacity(0.5))
       }
     }
     .padding(4)
-    .background(Color.black.opacity(0.2))
+    .background(Color.Theme.pageBg.opacity(0.2))
     .clipShape(Circle())
   }
 
@@ -98,12 +98,12 @@ struct GroupCardView: View {
       // Abstract Pattern (Circles)
       GeometryReader { geo in
         Circle()
-          .fill(Color.white.opacity(0.1))
+          .fill(Color.Theme.textPrimary.opacity(0.1))
           .frame(width: geo.size.width * 0.8)
           .offset(x: -geo.size.width * 0.2, y: -geo.size.height * 0.2)
 
         Circle()
-          .fill(Color.white.opacity(0.05))
+          .fill(Color.Theme.textPrimary.opacity(0.05))
           .frame(width: geo.size.width * 0.6)
           .offset(x: geo.size.width * 0.5, y: geo.size.height * 0.6)
       }
@@ -113,13 +113,13 @@ struct GroupCardView: View {
   private var gradientColors: [Color] {
     switch membership.status {
     case .active:
-      return [Color.blue, Color.purple]
+      return [Color.Theme.primaryBlue, Color.Theme.dustyMauve]
     case .outdated:
-      return [Color.orange, Color.red]
+      return [Color.Theme.accentRose, Color.Theme.destructive]
     case .pending:
-      return [Color.gray, Color.gray.opacity(0.7)]
+      return [Color.Theme.textTertiary, Color.Theme.textTertiary.opacity(0.7)]
     case .notMember:
-      return [Color.gray.opacity(0.8), Color.gray.opacity(0.6)]
+      return [Color.Theme.textTertiary.opacity(0.8), Color.Theme.textTertiary.opacity(0.6)]
     }
   }
 }

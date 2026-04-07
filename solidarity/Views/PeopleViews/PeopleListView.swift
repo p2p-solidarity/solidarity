@@ -181,10 +181,12 @@ struct PeopleListView: View {
       .padding(.top, 20)
 
       VStack(spacing: 10) {
-        Button("Radar Exchange") {
-          showingExchangeFlow = true
+        if devMode.isDeveloperMode {
+          Button("Radar Exchange") {
+            showingExchangeFlow = true
+          }
+          .buttonStyle(ThemedPrimaryButtonStyle())
         }
-        .buttonStyle(ThemedPrimaryButtonStyle())
 
         Button("Import Phone Contacts") {
           showingContactPicker = true

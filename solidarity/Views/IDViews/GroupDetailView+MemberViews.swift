@@ -22,8 +22,8 @@ struct InviteSection: View {
     VStack(alignment: .leading, spacing: 16) {
       HStack {
         Text("Invite Members")
-          .font(.headline)
-          .foregroundColor(.secondary)
+          .font(.system(size: 12, weight: .bold, design: .monospaced))
+          .foregroundColor(Color.Theme.textSecondary)
         Spacer()
       }
 
@@ -42,19 +42,19 @@ struct InviteSection: View {
               .font(.system(.subheadline, design: .monospaced))
               .lineLimit(1)
               .truncationMode(.middle)
-              .foregroundColor(.primary)
+              .foregroundColor(Color.Theme.textPrimary)
               .padding(8)
-              .background(Color(.systemGray6))
+              .background(Color.Theme.searchBg)
               .cornerRadius(8)
 
             Button(action: {
               UIPasteboard.general.string = link
             }) {
               Image(systemName: "doc.on.doc")
-                .font(.headline)
-                .foregroundColor(.blue)
+                .font(.system(size: 12, weight: .bold, design: .monospaced))
+                .foregroundColor(Color.Theme.primaryBlue)
                 .padding(8)
-                .background(Color(.systemBlue).opacity(0.1))
+                .background(Color.Theme.primaryBlue.opacity(0.1))
                 .clipShape(Circle())
             }
           }
@@ -72,7 +72,7 @@ struct InviteSection: View {
             .frame(maxWidth: .infinity)
             .padding(.vertical, 8)
           }
-          .buttonStyle(.bordered)
+          .buttonStyle(ThemedSecondaryButtonStyle())
 
           if showQRCode, let image = qrImage {
             Image(uiImage: image)
@@ -81,7 +81,7 @@ struct InviteSection: View {
               .scaledToFit()
               .frame(width: 180, height: 180)
               .padding()
-              .background(Color.white)
+              .background(Color.Theme.cardBg)
               .cornerRadius(12)
               .shadow(radius: 4)
               .transition(.scale.combined(with: .opacity))
@@ -94,17 +94,18 @@ struct InviteSection: View {
           Text("Generate Invite Link")
             .frame(maxWidth: .infinity)
         }
-        .buttonStyle(.borderedProminent)
+        .buttonStyle(ThemedPrimaryButtonStyle())
       }
 
       if let error = errorMessage {
         Text(error)
           .font(.caption)
-          .foregroundColor(.red)
+          .foregroundColor(Color.Theme.destructive)
       }
     }
-    .padding()
-    .background(Color(.secondarySystemGroupedBackground))
+    .padding(16)
+    .background(Color.Theme.searchBg)
+    .overlay(Rectangle().stroke(Color.Theme.divider, lineWidth: 1))
     .cornerRadius(12)
     .onAppear {
       if inviteLink == nil {
@@ -174,8 +175,8 @@ struct MembersSection: View {
     VStack(alignment: .leading, spacing: 12) {
       HStack {
         Text("Members")
-          .font(.headline)
-          .foregroundColor(.secondary)
+          .font(.system(size: 12, weight: .bold, design: .monospaced))
+          .foregroundColor(Color.Theme.textSecondary)
         Spacer()
 
         // Syncing indicator removed as it was based on stale data
@@ -187,18 +188,18 @@ struct MembersSection: View {
 
       if members.isEmpty && !isLoading {
         Text("No members found.")
-          .foregroundColor(.secondary)
-          .padding()
+          .foregroundColor(Color.Theme.textSecondary)
+          .padding(16)
           .frame(maxWidth: .infinity, alignment: .center)
-          .background(Color(.secondarySystemGroupedBackground))
-          .cornerRadius(12)
+          .background(Color.Theme.searchBg)
+          .overlay(Rectangle().stroke(Color.Theme.divider, lineWidth: 1))
       } else {
         LazyVStack(spacing: 16) {
           if !pendingMembers.isEmpty {
             VStack(alignment: .leading, spacing: 8) {
               Text("Pending Requests")
-                .font(.subheadline)
-                .foregroundColor(.orange)
+                .font(.system(size: 12, weight: .bold, design: .monospaced))
+                .foregroundColor(Color.Theme.accentRose)
                 .padding(.leading, 4)
 
               VStack(spacing: 1) {
@@ -214,8 +215,8 @@ struct MembersSection: View {
                   }
                 }
               }
-              .background(Color(.secondarySystemGroupedBackground))
-              .cornerRadius(12)
+              .background(Color.Theme.searchBg)
+              .overlay(Rectangle().stroke(Color.Theme.divider, lineWidth: 1))
             }
           }
 
@@ -223,8 +224,8 @@ struct MembersSection: View {
             VStack(alignment: .leading, spacing: 8) {
               if !pendingMembers.isEmpty {
                 Text("Active Members")
-                  .font(.subheadline)
-                  .foregroundColor(.secondary)
+                  .font(.system(size: 12, weight: .bold, design: .monospaced))
+                  .foregroundColor(Color.Theme.textSecondary)
                   .padding(.leading, 4)
               }
 
@@ -236,8 +237,8 @@ struct MembersSection: View {
                   }
                 }
               }
-              .background(Color(.secondarySystemGroupedBackground))
-              .cornerRadius(12)
+              .background(Color.Theme.searchBg)
+              .overlay(Rectangle().stroke(Color.Theme.divider, lineWidth: 1))
             }
           }
         }
@@ -264,7 +265,7 @@ struct PendingMemberRow: View {
 
         Text("Requesting to join")
           .font(.caption)
-          .foregroundColor(.orange)
+          .foregroundColor(Color.Theme.accentRose)
       }
 
       Spacer()
@@ -273,20 +274,20 @@ struct PendingMemberRow: View {
         HStack(spacing: 12) {
           Button(action: onReject) {
             Image(systemName: "xmark.circle.fill")
-            .foregroundColor(.red)
+            .foregroundColor(Color.Theme.destructive)
             .font(.title2)
           }
 
           Button(action: onApprove) {
             Image(systemName: "checkmark.circle.fill")
-            .foregroundColor(.green)
+            .foregroundColor(Color.Theme.terminalGreen)
             .font(.title2)
           }
         }
       }
     }
-    .padding()
-    .background(Color(.secondarySystemGroupedBackground))
+    .padding(16)
+    .background(Color.Theme.searchBg)
   }
 }
 
@@ -308,14 +309,14 @@ struct MemberRow: View {
             .font(.caption)
             .padding(.horizontal, 6)
             .padding(.vertical, 2)
-            .background(member.role == .owner ? Color.blue.opacity(0.1) : Color.gray.opacity(0.1))
-            .foregroundColor(member.role == .owner ? .blue : .secondary)
+            .background(member.role == .owner ? Color.Theme.primaryBlue.opacity(0.1) : Color.Theme.textTertiary.opacity(0.1))
+            .foregroundColor(member.role == .owner ? Color.Theme.primaryBlue : Color.Theme.textSecondary)
             .cornerRadius(4)
 
           if member.status == .kicked {
             Text("Kicked")
               .font(.caption)
-              .foregroundColor(.red)
+              .foregroundColor(Color.Theme.destructive)
           }
         }
       }
@@ -324,20 +325,20 @@ struct MemberRow: View {
 
       if member.hasMessagingData {
         Image(systemName: "bubble.left.and.bubble.right.fill")
-          .foregroundColor(.pink)
+          .foregroundColor(Color.Theme.accentRose)
           .help("Can receive Sakura / Group VC")
       }
 
       if isOwner && member.role != .owner && member.status != .kicked {
         Button(role: .destructive, action: onKick) {
           Text("Kick")
-            .foregroundColor(.red)
+            .foregroundColor(Color.Theme.destructive)
         }
-        .buttonStyle(.bordered)
+        .buttonStyle(ThemedSecondaryButtonStyle())
         .controlSize(.small)
       }
     }
-    .padding()
-    .background(Color(.secondarySystemGroupedBackground))  // Ensure background for tap
+    .padding(16)
+    .background(Color.Theme.searchBg)  // Ensure background for tap
   }
 }

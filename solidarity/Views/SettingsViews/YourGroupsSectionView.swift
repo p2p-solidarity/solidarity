@@ -32,23 +32,23 @@ struct YourGroupsSectionView: View {
   var body: some View {
     VStack(alignment: .leading, spacing: 16) {
       Text("Your Groups")
-        .font(.title3)
-        .fontWeight(.bold)
-        .foregroundColor(.white)
+        .font(.system(size: 12, weight: .bold, design: .monospaced))
+        .foregroundColor(Color.Theme.textPrimary)
         .padding(.horizontal, 20)
         .padding(.top, 8)
 
       if groupManager.groups.isEmpty {
         Text("No groups found. Create one to get started.")
-          .foregroundColor(.white.opacity(0.6))
+          .font(.system(size: 14))
+          .foregroundColor(Color.Theme.textSecondary)
           .padding(.horizontal, 20)
       } else {
         VStack(alignment: .leading, spacing: 12) {
           // Public Groups
           if !publicGroups.isEmpty {
             Text("Public Groups")
-              .font(.subheadline)
-              .foregroundColor(.white.opacity(0.7))
+              .font(.system(size: 12, weight: .bold, design: .monospaced))
+              .foregroundColor(Color.Theme.textSecondary)
               .padding(.horizontal, 20)
 
             LazyVStack(spacing: 16) {
@@ -68,8 +68,8 @@ struct YourGroupsSectionView: View {
           // Private (Owned)
           if !privateOwnedGroups.isEmpty {
             Text("Your Private Groups")
-              .font(.subheadline)
-              .foregroundColor(.white.opacity(0.7))
+              .font(.system(size: 12, weight: .bold, design: .monospaced))
+              .foregroundColor(Color.Theme.textSecondary)
               .padding(.horizontal, 20)
               .padding(.top, 4)
 
@@ -90,8 +90,8 @@ struct YourGroupsSectionView: View {
           // Private (Shared with you)
           if !privateSharedGroups.isEmpty {
             Text("Shared With You")
-              .font(.subheadline)
-              .foregroundColor(.white.opacity(0.7))
+              .font(.system(size: 12, weight: .bold, design: .monospaced))
+              .foregroundColor(Color.Theme.textSecondary)
               .padding(.horizontal, 20)
               .padding(.top, 4)
 

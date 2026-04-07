@@ -14,8 +14,8 @@ struct DeliverySettingsSection: View {
     NavigationLink(destination: GroupCredentialDeliverySettingsView(group: group)) {
       Label("Delivery Settings", systemImage: "envelope.badge.gearshape")
     }
-    .padding()
-    .background(Color(.secondarySystemGroupedBackground))
-    .cornerRadius(12)
+    .padding(16)
+    .background(Color.Theme.searchBg)
+    .overlay(Rectangle().stroke(Color.Theme.divider, lineWidth: 1))
   }
 }

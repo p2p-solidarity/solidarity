@@ -31,16 +31,16 @@ struct AddIssuerView: View {
           HStack {
             VStack(alignment: .leading) {
               Text(member.userRecordID)
-                .font(.body)
+                .font(.system(size: 14))
                 .lineLimit(1)
                 .truncationMode(.middle)
               Text(member.role.rawValue.capitalized)
-                .font(.caption)
-                .foregroundColor(.secondary)
+                .font(.system(size: 10, design: .monospaced))
+                .foregroundColor(Color.Theme.textSecondary)
             }
             Spacer()
             Image(systemName: "plus.circle")
-              .foregroundColor(.blue)
+              .foregroundColor(Color.Theme.primaryBlue)
           }
         }
       }
@@ -55,12 +55,12 @@ struct AddIssuerView: View {
           VStack(spacing: 12) {
             Image(systemName: "person.2.slash")
               .font(.largeTitle)
-              .foregroundColor(.secondary)
+              .foregroundColor(Color.Theme.textSecondary)
             Text("No eligible members found")
-              .font(.headline)
+              .font(.system(size: 12, weight: .bold, design: .monospaced))
             Text("All members are already issuers or the owner.")
-              .font(.caption)
-              .foregroundColor(.secondary)
+              .font(.system(size: 10, design: .monospaced))
+              .foregroundColor(Color.Theme.textSecondary)
           }
         }
       }

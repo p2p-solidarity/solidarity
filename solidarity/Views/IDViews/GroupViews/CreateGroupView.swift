@@ -19,32 +19,62 @@ struct CreateGroupView: View {
 
   var body: some View {
     NavigationStack {
-      Form {
-        Section {
-          TextField("Group Name", text: $groupName)
-            .textInputAutocapitalization(.words)
+      ScrollView {
+        VStack(spacing: 16) {
+          // Group Info Section
+          VStack(alignment: .leading, spacing: 0) {
+            VStack(spacing: 1) {
+              TextField("Group Name", text: $groupName)
+                .textInputAutocapitalization(.words)
+                .font(.system(size: 14))
+                .foregroundColor(Color.Theme.textPrimary)
+                .padding(16)
+                .background(Color.Theme.searchBg)
 
-          TextField("Description (Optional)", text: $groupDescription)
-            .textInputAutocapitalization(.sentences)
-        } footer: {
-          Text("Give your group a recognizable name and description.")
-        }
+              TextField("Description (Optional)", text: $groupDescription)
+                .textInputAutocapitalization(.sentences)
+                .font(.system(size: 14))
+                .foregroundColor(Color.Theme.textPrimary)
+                .padding(16)
+                .background(Color.Theme.searchBg)
+            }
+            .overlay(Rectangle().stroke(Color.Theme.divider, lineWidth: 1))
 
-        Section {
-          Picker("Group Type", selection: $isPrivate) {
-            Text("Public Group").tag(false)
-            Text("Private Group").tag(true)
+            Text("Give your group a recognizable name and description.")
+              .font(.system(size: 12, design: .monospaced))
+              .foregroundColor(Color.Theme.textTertiary)
+              .padding(.top, 6)
           }
-          .pickerStyle(.segmented)
-        } footer: {
-          if isPrivate {
-            Text("Private groups use native iCloud Sharing. Only invited people can join.")
-          } else {
-            Text("Public groups use simple link sharing. Anyone with the link can join.")
-          }
-        }
 
-        Section {
+          // Group Type Section
+          VStack(alignment: .leading, spacing: 0) {
+            Text("GROUP TYPE")
+              .font(.system(size: 12, weight: .bold, design: .monospaced))
+              .foregroundColor(Color.Theme.textTertiary)
+              .padding(.bottom, 8)
+
+            Picker("Group Type", selection: $isPrivate) {
+              Text("Public Group").tag(false)
+              Text("Private Group").tag(true)
+            }
+            .pickerStyle(.segmented)
+            .padding(16)
+            .background(Color.Theme.searchBg)
+            .overlay(Rectangle().stroke(Color.Theme.divider, lineWidth: 1))
+
+            Group {
+              if isPrivate {
+                Text("Private groups use native iCloud Sharing. Only invited people can join.")
+              } else {
+                Text("Public groups use simple link sharing. Anyone with the link can join.")
+              }
+            }
+            .font(.system(size: 12, design: .monospaced))
+            .foregroundColor(Color.Theme.textTertiary)
+            .padding(.top, 6)
+          }
+
+          // Create Button
           Button(action: createGroup) {
             if isCreating {
               HStack {
@@ -52,13 +82,18 @@ struct CreateGroupView: View {
                 Spacer()
                 ProgressView()
               }
+              .frame(maxWidth: .infinity)
             } else {
               Text("Create Group")
+                .frame(maxWidth: .infinity)
             }
           }
+          .buttonStyle(ThemedPrimaryButtonStyle())
           .disabled(groupName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || isCreating)
         }
+        .padding(16)
       }
+      .background(Color.Theme.pageBg.ignoresSafeArea())
       .navigationTitle("New Group")
       .navigationBarTitleDisplayMode(.inline)
       .toolbar {
@@ -66,6 +101,7 @@ struct CreateGroupView: View {
           Button("Cancel") {
             dismiss()
           }
+          .foregroundColor(Color.Theme.textPrimary)
         }
       }
       .alert("Error", isPresented: $showingError) {

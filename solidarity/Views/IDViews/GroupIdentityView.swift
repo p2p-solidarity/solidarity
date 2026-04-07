@@ -5,74 +5,105 @@ struct GroupIdentityView: View {
   @ObservedObject private var groupManager = CloudKitGroupSyncManager.shared
 
   var body: some View {
-    List {
-      headerSection
-      membersSection
-      actionsSection
+    ScrollView {
+      VStack(spacing: 16) {
+        headerSection
+        membersSection
+        actionsSection
+      }
+      .padding(16)
     }
-    .listStyle(.insetGrouped)
+    .background(Color.Theme.pageBg.ignoresSafeArea())
   }
 
   private var headerSection: some View {
-    Section("Selected Group") {
-      // For now, we don't have a "selected group" concept in the manager globally,
-      // but we can list all groups or just show a placeholder.
-      // Or we can iterate over groups.
-      // Given the original view was for a SINGLE selected group, this view might need a redesign.
-      // For MVP, I'll just list the groups.
+    VStack(alignment: .leading, spacing: 0) {
+      Text("SELECTED GROUP")
+        .font(.system(size: 12, weight: .bold, design: .monospaced))
+        .foregroundColor(Color.Theme.textTertiary)
+        .padding(.bottom, 8)
 
-      if groupManager.groups.isEmpty {
-        Text("No groups found. Create or join a group.")
-          .foregroundColor(.secondary)
-      } else {
-        ForEach(groupManager.groups) { group in
-          NavigationLink(destination: GroupDetailView(group: group)) {
-            VStack(alignment: .leading) {
-              Text(group.name)
-                .font(.headline)
-              Text("Members: \(group.memberCount)")
-                .font(.caption)
-                .foregroundColor(.secondary)
+      VStack(spacing: 1) {
+        if groupManager.groups.isEmpty {
+          Text("No groups found. Create or join a group.")
+            .font(.system(size: 14))
+            .foregroundColor(Color.Theme.textSecondary)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(16)
+            .background(Color.Theme.searchBg)
+        } else {
+          ForEach(groupManager.groups) { group in
+            NavigationLink(destination: GroupDetailView(group: group)) {
+              VStack(alignment: .leading, spacing: 4) {
+                Text(group.name)
+                  .font(.system(size: 14, weight: .semibold))
+                  .foregroundColor(Color.Theme.textPrimary)
+                Text("Members: \(group.memberCount)")
+                  .font(.system(size: 12, design: .monospaced))
+                  .foregroundColor(Color.Theme.textSecondary)
+              }
+              .frame(maxWidth: .infinity, alignment: .leading)
+              .padding(16)
+              .background(Color.Theme.searchBg)
             }
           }
         }
       }
+      .overlay(Rectangle().stroke(Color.Theme.divider, lineWidth: 1))
     }
   }
 
   private var membersSection: some View {
-    Section("Members Details") {
-      // CloudKit groups don't expose full member list locally unless fetched.
-      // We only have memberCount in GroupModel.
-      // So we can't list members easily here without fetching.
+    VStack(alignment: .leading, spacing: 0) {
+      Text("MEMBERS DETAILS")
+        .font(.system(size: 12, weight: .bold, design: .monospaced))
+        .foregroundColor(Color.Theme.textTertiary)
+        .padding(.bottom, 8)
+
       Text("Member details are managed via CloudKit.")
-        .foregroundColor(.secondary)
+        .font(.system(size: 14))
+        .foregroundColor(Color.Theme.textSecondary)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(16)
+        .background(Color.Theme.searchBg)
+        .overlay(Rectangle().stroke(Color.Theme.divider, lineWidth: 1))
     }
   }
 
   @State private var showJoinSheet = false
 
   private var actionsSection: some View {
-    Section("Actions") {
-      Button(
-        action: {
-          showJoinSheet = true
-        },
-        label: {
-          Label("Join Group", systemImage: "person.badge.plus")
-        }
-      )
+    VStack(alignment: .leading, spacing: 0) {
+      Text("ACTIONS")
+        .font(.system(size: 12, weight: .bold, design: .monospaced))
+        .foregroundColor(Color.Theme.textTertiary)
+        .padding(.bottom, 8)
 
-      Button(
-        action: {
-          Task {
-            try? await groupManager.fetchLatestChanges()
+      VStack(spacing: 12) {
+        Button(
+          action: {
+            showJoinSheet = true
+          },
+          label: {
+            Label("Join Group", systemImage: "person.badge.plus")
+              .frame(maxWidth: .infinity)
           }
-        },
-        label: {
-          Label("Refresh Groups", systemImage: "arrow.clockwise")
-        }
-      )
+        )
+        .buttonStyle(ThemedSecondaryButtonStyle())
+
+        Button(
+          action: {
+            Task {
+              try? await groupManager.fetchLatestChanges()
+            }
+          },
+          label: {
+            Label("Refresh Groups", systemImage: "arrow.clockwise")
+              .frame(maxWidth: .infinity)
+          }
+        )
+        .buttonStyle(ThemedSecondaryButtonStyle())
+      }
     }
     .sheet(isPresented: $showJoinSheet) {
       GroupJoinSheet()
