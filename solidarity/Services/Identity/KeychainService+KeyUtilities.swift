@@ -26,6 +26,7 @@ extension KeychainService {
       kSecClass as String: kSecClassKey,
       kSecAttrApplicationTag as String: keyTag,
       kSecAttrKeyType as String: kSecAttrKeyTypeECSECPrimeRandom,
+      kSecAttrKeyClass as String: kSecAttrKeyClassPrivate,
       kSecAttrSynchronizable as String: kSecAttrSynchronizableAny,
       kSecMatchLimit as String: kSecMatchLimitOne,
       kSecReturnRef as String: true,
@@ -47,6 +48,7 @@ extension KeychainService {
       kSecClass as String: kSecClassKey,
       kSecAttrApplicationTag as String: keyTag,
       kSecAttrKeyType as String: kSecAttrKeyTypeECSECPrimeRandom,
+      kSecAttrKeyClass as String: kSecAttrKeyClassPrivate,
       kSecAttrSynchronizable as String: kSecAttrSynchronizableAny,
       kSecMatchLimit as String: kSecMatchLimitOne,
       kSecReturnAttributes as String: true,
@@ -66,7 +68,11 @@ extension KeychainService {
     }
     let synchronizable = (attributes[kSecAttrSynchronizable as String] as? NSNumber)?.boolValue ?? false
     let tokenId = attributes[kSecAttrTokenID as String] as? String
-    return synchronizable && tokenId != (kSecAttrTokenIDSecureEnclave as String)
+    guard synchronizable && tokenId != (kSecAttrTokenIDSecureEnclave as String) else {
+      return false
+    }
+    // Verify the private key is actually readable — attributes alone don't guarantee usability
+    return existingPrivateKeyReference() != nil
   }
 
   func clearInMemoryKey() {
@@ -113,31 +119,56 @@ extension KeychainService {
 
   func deleteAllKeysWithTag() {
     // Try multiple deletion strategies to ensure complete cleanup
+    // Covers: private/public, synchronizable true/false/any, SE/non-SE
     let queries: [[String: Any]] = [
+      // Broadest: any key with this tag
       [
         kSecClass as String: kSecClassKey,
         kSecAttrApplicationTag as String: keyTag,
       ],
+      // By key type
       [
         kSecClass as String: kSecClassKey,
         kSecAttrApplicationTag as String: keyTag,
         kSecAttrKeyType as String: kSecAttrKeyTypeECSECPrimeRandom,
       ],
+      // Private keys only
       [
         kSecClass as String: kSecClassKey,
         kSecAttrApplicationTag as String: keyTag,
         kSecAttrKeyClass as String: kSecAttrKeyClassPrivate,
       ],
+      // Public keys only (orphan cleanup)
+      [
+        kSecClass as String: kSecClassKey,
+        kSecAttrApplicationTag as String: keyTag,
+        kSecAttrKeyClass as String: kSecAttrKeyClassPublic,
+      ],
+      // Secure Enclave keys
       [
         kSecClass as String: kSecClassKey,
         kSecAttrApplicationTag as String: keyTag,
         kSecAttrTokenID as String: kSecAttrTokenIDSecureEnclave,
       ],
+      // Synchronizable true
+      [
+        kSecClass as String: kSecClassKey,
+        kSecAttrApplicationTag as String: keyTag,
+        kSecAttrSynchronizable as String: kCFBooleanTrue as Any,
+      ],
+      // Synchronizable false (local-only)
+      [
+        kSecClass as String: kSecClassKey,
+        kSecAttrApplicationTag as String: keyTag,
+        kSecAttrSynchronizable as String: kCFBooleanFalse as Any,
+      ],
+      // Synchronizable any + specific type + size
       [
         kSecClass as String: kSecClassKey,
         kSecAttrApplicationTag as String: keyTag,
         kSecAttrKeyType as String: kSecAttrKeyTypeECSECPrimeRandom,
         kSecAttrKeySizeInBits as String: 256,
+        kSecAttrSynchronizable as String: kSecAttrSynchronizableAny,
       ],
     ]
 

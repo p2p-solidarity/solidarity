@@ -15,6 +15,9 @@ extension KeychainService {
 
   /// Ensures the signing key exists, generating it if needed.
   func ensureSigningKey() -> CardResult<Void> {
+    Self.keyLock.lock()
+    defer { Self.keyLock.unlock() }
+
     if alias == Self.masterAlias {
       return ensureCloudSyncedMasterSigningKey()
     }
@@ -60,12 +63,18 @@ extension KeychainService {
 
   private func ensureCloudSyncedMasterSigningKey() -> CardResult<Void> {
     if keyExists() {
-      if isMasterKeyCloudSyncCompatible() {
-        print("[KeychainService] Cloud-synced master signing key already exists")
+      // keyExists() confirmed a private key is present — now verify it's cloud-sync compatible
+      // AND the private key is actually retrievable (not just metadata)
+      if isMasterKeyCloudSyncCompatible(), existingPrivateKeyReference() != nil {
+        print("[KeychainService] Cloud-synced master signing key already exists and is usable")
         return .success(())
       }
 
-      print("[KeychainService] Existing master key is not cloud-sync compatible. Rotating to shared iCloud key.")
+      // Key exists but is either not cloud-sync compatible or private key is not retrievable
+      print(
+        "[KeychainService] Existing master key is not usable (incompatible or private key not retrievable). "
+        + "Rotating to shared iCloud key."
+      )
       clearInMemoryKey()
       switch deleteSigningKey() {
       case .success:

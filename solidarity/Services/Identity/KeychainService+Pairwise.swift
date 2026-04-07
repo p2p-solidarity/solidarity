@@ -83,7 +83,11 @@ extension KeychainService {
       print("[KeychainService] Migrated legacy signing key to \(alias)")
     }
 
-    UserDefaults.standard.set(true, forKey: marker)
+    // Only mark migration complete if we have a usable key (migrated or pre-existing)
+    // Otherwise, a future launch should retry migration
+    if migrated || keyExists() {
+      UserDefaults.standard.set(true, forKey: marker)
+    }
   }
 
   fileprivate func migrateLegacySecKey(tag: String) -> Bool {
@@ -91,13 +95,16 @@ extension KeychainService {
     let query: [String: Any] = [
       kSecClass as String: kSecClassKey,
       kSecAttrApplicationTag as String: oldTag,
+      kSecAttrKeyClass as String: kSecAttrKeyClassPrivate,
       kSecReturnRef as String: true,
       kSecMatchLimit as String: kSecMatchLimitOne,
     ]
 
     var item: CFTypeRef?
     let status = SecItemCopyMatching(query as CFDictionary, &item)
-    guard status == errSecSuccess, let secKey = item else {
+    guard status == errSecSuccess, let secKey = item,
+      CFGetTypeID(secKey) == SecKeyGetTypeID()
+    else {
       return false
     }
 
