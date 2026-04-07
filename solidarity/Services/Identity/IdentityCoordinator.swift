@@ -9,7 +9,7 @@ import Security
 final class IdentityCoordinator: ObservableObject {
   static let shared = IdentityCoordinator()
 
-  @Published internal(set) var state: IdentityState
+  @Published var state: IdentityState
 
   var statePublisher: AnyPublisher<IdentityState, Never> {
     $state.eraseToAnyPublisher()

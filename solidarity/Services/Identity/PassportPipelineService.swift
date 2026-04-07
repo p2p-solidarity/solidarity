@@ -179,13 +179,6 @@ final class PassportPipelineService {
   // MARK: - Private
 
   private func logPipelineConfiguration() {
-    let isSimulator: Bool
-    #if targetEnvironment(simulator)
-    isSimulator = true
-    #else
-    isSimulator = false
-    #endif
-
     let openPassportEnabled = MoproProofService.isAvailable
 
     let hasMasterList = Bundle.main.url(forResource: "masterList", withExtension: "pem") != nil
@@ -193,24 +186,32 @@ final class PassportPipelineService {
       || Bundle.main.path(forResource: "disclosure", ofType: "json") != nil
     let hasSRS = Bundle.main.path(forResource: "openpassport_srs", ofType: "bin") != nil
 
+    #if targetEnvironment(simulator)
+    let environmentName = "simulator"
+    #else
+    let environmentName = "device"
+    #endif
+
     print("""
     [PassportPipeline] ── configuration ──
-      environment:              \(isSimulator ? "simulator" : "device")
+      environment:              \(environmentName)
       ENABLE_OPEN_PASSPORT:     \(openPassportEnabled)
       masterList.pem in bundle: \(hasMasterList)
       disclosure circuit:       \(hasCircuit)
       SRS file:                 \(hasSRS)
     """)
 
-    if isSimulator {
-      print("[PassportPipeline] running on simulator — NFC will use simulated read")
-    }
+    #if targetEnvironment(simulator)
+    print("[PassportPipeline] running on simulator — NFC will use simulated read")
+    #endif
     if !openPassportEnabled {
       print("[PassportPipeline] ⚠ OpenPassport ZK disabled — proof will fall back to Semaphore → SD-JWT")
     }
-    if !isSimulator && !hasMasterList {
+    #if !targetEnvironment(simulator)
+    if !hasMasterList {
       print("[PassportPipeline] ⚠ masterList.pem missing — passiveAuthPassed will always be false (cannot verify passport authenticity)")
     }
+    #endif
   }
 
   @MainActor private var shouldSimulateNFC: Bool {
