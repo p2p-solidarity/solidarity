@@ -11,7 +11,7 @@ enum AppBranding {
   static let currentShareBaseURL = "\(currentBaseURL)/share"
   static let currentAPIBaseURL = "\(currentBaseURL)/api/v1"
 
-  static let currentProximityServiceType = "solidarity-share"
+  static let currentProximityServiceType = "say-share"
   static let legacyProximityServiceType = "airmeishi-share"
   static let currentWebRTCDataChannelLabel = "solidarity-data"
   static let legacyWebRTCDataChannelLabel = "airmeishi-data"
