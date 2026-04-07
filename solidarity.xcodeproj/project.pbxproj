@@ -235,6 +235,8 @@
 				F18CDB272EC1F68E005E94B4 /* XCRemoteSwiftPackageReference "sprucekit-mobile" */,
 				F140CFAA2EDB5612009A2F45 /* XCRemoteSwiftPackageReference "WebRTC" */,
 				F1286C052EEB58030001BBFD /* XCRemoteSwiftPackageReference "SwiftLintPlugins" */,
+				F18E8CAB2F84EB11008EA7EC /* XCRemoteSwiftPackageReference "NFCPassportReader" */,
+				F18E8CAC2F84EB63008EA7EC /* XCRemoteSwiftPackageReference "passport-noir" */,
 			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = F1133D7F2E70600A0097A2A4 /* Products */;
@@ -727,6 +729,22 @@
 			requirement = {
 				kind = upToNextMajorVersion;
 				minimumVersion = 0.12.11;
+			};
+		};
+		F18E8CAB2F84EB11008EA7EC /* XCRemoteSwiftPackageReference "NFCPassportReader" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/AndyQ/NFCPassportReader";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 2.3.0;
+			};
+		};
+		F18E8CAC2F84EB63008EA7EC /* XCRemoteSwiftPackageReference "passport-noir" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/p2p-solidarity/passport-noir";
+			requirement = {
+				branch = main;
+				kind = branch;
 			};
 		};
 /* End XCRemoteSwiftPackageReference section */

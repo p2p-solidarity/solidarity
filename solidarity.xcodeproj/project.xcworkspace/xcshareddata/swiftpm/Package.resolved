@@ -1,6 +1,33 @@
 {
-  "originHash" : "7a835d92ed8961030378f9765313a23b32d7dc5e6a64d4d9d246390d38494996",
+  "originHash" : "47075584088e53fee774a1e451a969e0e53fd45b3b83378385276df7aab672aa",
   "pins" : [
+    {
+      "identity" : "nfcpassportreader",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/AndyQ/NFCPassportReader",
+      "state" : {
+        "revision" : "deec44982fa9bf2704a5f2138eb01dab7dcf9299",
+        "version" : "2.3.0"
+      }
+    },
+    {
+      "identity" : "openssl-package",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/krzyzanowskim/OpenSSL-Package.git",
+      "state" : {
+        "revision" : "71dbe0b4514cdaad95961470db72e8231f5943a6",
+        "version" : "3.3.3001"
+      }
+    },
+    {
+      "identity" : "passport-noir",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/p2p-solidarity/passport-noir",
+      "state" : {
+        "branch" : "main",
+        "revision" : "705748e50fc959a1915f042ee89952ae986a8ecf"
+      }
+    },
     {
       "identity" : "semaphoreswift",
       "kind" : "remoteSourceControl",
