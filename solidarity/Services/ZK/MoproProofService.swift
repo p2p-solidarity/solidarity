@@ -57,6 +57,7 @@ final class MoproProofService {
 
     // Try OpenPassport proving first.
     #if ENABLE_OPEN_PASSPORT
+    print("[PassportPipeline] OpenPassport ZK is enabled — attempting Noir proof generation")
     if let result = await generateWithOpenPassport(
       documentHash: documentHash,
       mrzDigest: mrzDigest,
@@ -68,21 +69,28 @@ final class MoproProofService {
     ) {
       return result
     }
+    print("[PassportPipeline] OpenPassport proof failed — falling back")
+    #else
+    print("[PassportPipeline] configuration: ENABLE_OPEN_PASSPORT flag is not set — skipping Noir proof, using fallback chain (Semaphore → SD-JWT)")
     #endif
 
     // Fallback: Semaphore ZK.
     onProgress("Trying Semaphore ZK...")
+    print("[PassportPipeline] attempting Semaphore ZK proof")
     if let result = await generateWithSemaphore(
       documentHash: documentHash,
       mrzDigest: mrzDigest,
       nationalityCode: nationalityCode,
       startTime: start
     ) {
+      print("[PassportPipeline] Semaphore ZK proof succeeded (trustLevel: green)")
       return result
     }
+    print("[PassportPipeline] Semaphore ZK proof failed — falling back to SD-JWT")
 
     // Final fallback: SD-JWT.
     onProgress("Using SD-JWT fallback...")
+    print("[PassportPipeline] using SD-JWT fallback (trustLevel: blue, not true ZK)")
     return generateSDJWTFallback(
       documentHash: documentHash,
       mrzDigest: mrzDigest,

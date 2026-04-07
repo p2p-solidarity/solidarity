@@ -22,17 +22,15 @@ final class IdentityDataStore: ObservableObject {
   let modelContainer: ModelContainer
   let modelContext: ModelContext
 
-  private let migrationMarker = "solidarity.identity.swiftdata.migrated.v2"
+  private let migrationMarker = "solidarity.identity.swiftdata.migrated.v3"
   private let refreshSubject = PassthroughSubject<Void, Never>()
   private var refreshCancellable: AnyCancellable?
 
   private init() {
-    // v2 store — adds ContactEntity.credentialIds and
-    // ProvableClaimEntity.sourceField. SwiftData cannot always auto-migrate
-    // from v1, so we use a new store path. The v1 file is left on disk
-    // untouched; migration from legacy sources (StorageManager, VCLibrary)
-    // reruns automatically via runInitialMigrationIfNeeded.
-    let url = URL.documentsDirectory.appending(path: "SolidarityIdentity_v2.store")
+    // v3 store — isolates from v2 Array<String> materialization bug
+    // (CoreData could not materialize tags/credentialIds). v1 & v2 files
+    // are left on disk; migration from legacy sources reruns via marker.
+    let url = URL.documentsDirectory.appending(path: "SolidarityIdentity_v3.store")
     let configuration = ModelConfiguration(url: url, cloudKitDatabase: .none)
 
     modelContainer = Self.makeContainer(configuration: configuration, fallbackStoreURL: url)
@@ -67,10 +65,11 @@ final class IdentityDataStore: ObservableObject {
     }
 
     // Quarantine the broken store and try one fresh on-disk open.
+    print("[IdentityDataStore] v3 store failed to open — quarantining \(fallbackStoreURL.lastPathComponent)")
     let fm = FileManager.default
     if fm.fileExists(atPath: fallbackStoreURL.path) {
       let quarantine = fallbackStoreURL.deletingLastPathComponent()
-        .appending(path: "SolidarityIdentity_v2.broken-\(Int(Date().timeIntervalSince1970)).store")
+        .appending(path: "SolidarityIdentity_v3.broken-\(Int(Date().timeIntervalSince1970)).store")
       try? fm.moveItem(at: fallbackStoreURL, to: quarantine)
       // Also move sidecar files SwiftData writes alongside the store.
       for suffix in ["-wal", "-shm"] {
@@ -91,6 +90,7 @@ final class IdentityDataStore: ObservableObject {
     }
 
     // Last resort — in-memory. App stays usable; data is ephemeral.
+    print("[IdentityDataStore] fresh on-disk also failed — falling back to in-memory store")
     let memory = ModelConfiguration(isStoredInMemoryOnly: true, cloudKitDatabase: .none)
     do {
       return try ModelContainer(
@@ -124,7 +124,7 @@ final class IdentityDataStore: ObservableObject {
     migrateContactsFromEncryptedStore()
     migrateCredentialsFromLibrary()
 
-    try? modelContext.save()
+    persistSave("initialMigration")
     UserDefaults.standard.set(true, forKey: migrationMarker)
     performRefresh()
   }
@@ -159,7 +159,7 @@ final class IdentityDataStore: ObservableObject {
       modelContext.insert(contact)
     }
 
-    try? modelContext.save()
+    persistSave("upsertContact(\(contact.id))")
     refreshAll()
   }
 
@@ -169,7 +169,7 @@ final class IdentityDataStore: ObservableObject {
     guard let contact = findContact(by: contactID) else { return }
     if !contact.credentialIds.contains(credentialID) {
       contact.credentialIds.append(credentialID)
-      try? modelContext.save()
+      persistSave("attachCredential(\(contactID))")
       refreshAll()
     }
   }
@@ -181,7 +181,7 @@ final class IdentityDataStore: ObservableObject {
     contact.exchangeTimestamp = patch.timestamp
     contact.myEphemeralMessage = patch.myMessage
     contact.theirEphemeralMessage = patch.theirMessage
-    try? modelContext.save()
+    persistSave("updateExchangeMetadata(\(patch.contactID))")
     refreshAll()
   }
 
@@ -203,7 +203,7 @@ final class IdentityDataStore: ObservableObject {
     } else {
       modelContext.insert(card)
     }
-    try? modelContext.save()
+    persistSave("addIdentityCard(\(card.id))")
     refreshAll()
   }
 
@@ -221,14 +221,14 @@ final class IdentityDataStore: ObservableObject {
     } else {
       modelContext.insert(claim)
     }
-    try? modelContext.save()
+    persistSave("addProvableClaim(\(claim.id))")
     refreshAll()
   }
 
   func deleteContact(by id: String) {
     guard let contact = findContact(by: id) else { return }
     modelContext.delete(contact)
-    try? modelContext.save()
+    persistSave("deleteContact(\(id))")
     refreshAll()
   }
 
@@ -236,7 +236,7 @@ final class IdentityDataStore: ObservableObject {
     for contact in contacts {
       modelContext.delete(contact)
     }
-    try? modelContext.save()
+    persistSave("clearAllContacts")
     refreshAll()
   }
 
@@ -247,7 +247,7 @@ final class IdentityDataStore: ObservableObject {
     for claim in provableClaims {
       modelContext.delete(claim)
     }
-    try? modelContext.save()
+    persistSave("clearAllIdentityData")
     refreshAll()
   }
 
@@ -260,7 +260,7 @@ final class IdentityDataStore: ObservableObject {
       }
       modelContext.delete(card)
     }
-    try? modelContext.save()
+    persistSave("removePassportCredentials")
     refreshAll()
   }
 
@@ -268,8 +268,21 @@ final class IdentityDataStore: ObservableObject {
     guard let claim = findClaim(by: claimID) else { return }
     claim.lastPresentedAt = Date()
     claim.updatedAt = Date()
-    try? modelContext.save()
+    persistSave("markClaimPresented(\(claimID))")
     refreshAll()
+  }
+
+  // MARK: - Persistence
+
+  @discardableResult
+  private func persistSave(_ label: String) -> Bool {
+    do {
+      try modelContext.save()
+      return true
+    } catch {
+      print("[IdentityDataStore] \(label): save failed — \(error)")
+      return false
+    }
   }
 
   // MARK: - Migration

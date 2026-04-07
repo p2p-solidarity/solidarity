@@ -10,6 +10,8 @@
 		F1134EA62E757F230097A2A4 /* Semaphore in Frameworks */ = {isa = PBXBuildFile; productRef = F1134EA52E757F230097A2A4 /* Semaphore */; };
 		F140CFAC2EDB561E009A2F45 /* WebRTC in Frameworks */ = {isa = PBXBuildFile; productRef = F140CFAB2EDB561E009A2F45 /* WebRTC */; };
 		F18CDB3C2EC2248C005E94B4 /* SpruceIDMobileSdkRs in Frameworks */ = {isa = PBXBuildFile; productRef = F18CDB3B2EC2248C005E94B4 /* SpruceIDMobileSdkRs */; };
+		F18E96FC2F850966008EA7EC /* OpenPassportSwift in Frameworks */ = {isa = PBXBuildFile; productRef = F18E96FB2F850966008EA7EC /* OpenPassportSwift */; };
+		F18E96FE2F85096E008EA7EC /* NFCPassportReader in Frameworks */ = {isa = PBXBuildFile; productRef = F18E96FD2F85096E008EA7EC /* NFCPassportReader */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -71,8 +73,10 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				F18E96FC2F850966008EA7EC /* OpenPassportSwift in Frameworks */,
 				F1134EA62E757F230097A2A4 /* Semaphore in Frameworks */,
 				F140CFAC2EDB561E009A2F45 /* WebRTC in Frameworks */,
+				F18E96FE2F85096E008EA7EC /* NFCPassportReader in Frameworks */,
 				F18CDB3C2EC2248C005E94B4 /* SpruceIDMobileSdkRs in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -147,6 +151,8 @@
 				F1134EA52E757F230097A2A4 /* Semaphore */,
 				F18CDB3B2EC2248C005E94B4 /* SpruceIDMobileSdkRs */,
 				F140CFAB2EDB561E009A2F45 /* WebRTC */,
+				F18E96FB2F850966008EA7EC /* OpenPassportSwift */,
+				F18E96FD2F85096E008EA7EC /* NFCPassportReader */,
 			);
 			productName = solidarity;
 			productReference = F1133D7E2E70600A0097A2A4 /* solidarity.app */;
@@ -769,6 +775,16 @@
 			isa = XCSwiftPackageProductDependency;
 			package = F18CDB272EC1F68E005E94B4 /* XCRemoteSwiftPackageReference "sprucekit-mobile" */;
 			productName = SpruceIDMobileSdkRs;
+		};
+		F18E96FB2F850966008EA7EC /* OpenPassportSwift */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = F18E8CAC2F84EB63008EA7EC /* XCRemoteSwiftPackageReference "passport-noir" */;
+			productName = OpenPassportSwift;
+		};
+		F18E96FD2F85096E008EA7EC /* NFCPassportReader */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = F18E8CAB2F84EB11008EA7EC /* XCRemoteSwiftPackageReference "NFCPassportReader" */;
+			productName = NFCPassportReader;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};
