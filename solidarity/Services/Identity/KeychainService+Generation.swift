@@ -230,28 +230,34 @@ extension KeychainService {
           return .success(())
         }
 
-        // Existing key can't be loaded — delete the stale key and retry once
-        print("[KeychainService] Stale key detected, deleting and retrying...")
-        _ = deleteSigningKey()
+        // Existing key can't be loaded — aggressive cleanup of ALL key variants before retry
+        print("[KeychainService] Stale key detected, running aggressive cleanup before retry...")
+        cleanupAllOldKeys()
         clearInMemoryKey()
 
-        var retryError: Unmanaged<CFError>?
-        var retryAttributes = attributes
-        // Rebuild without SE since we're in a recovery path — use kSecAttrAccessible for sync keys
-        retryAttributes.removeValue(forKey: kSecAttrTokenID as String)
-        retryAttributes.removeValue(forKey: kSecAttrAccessControl as String)
-        retryAttributes[kSecAttrAccessible as String] = kSecAttrAccessibleWhenUnlocked
-        retryAttributes[kSecAttrSynchronizable as String] = kCFBooleanTrue as Any
+        // Build clean attributes from scratch (no SE tokens carried over from original)
+        let retryAttributes: [String: Any] = [
+          kSecAttrKeyType as String: kSecAttrKeyTypeECSECPrimeRandom,
+          kSecAttrKeyClass as String: kSecAttrKeyClassPrivate,
+          kSecAttrKeySizeInBits as String: 256,
+          kSecAttrIsPermanent as String: true,
+          kSecAttrApplicationTag as String: keyTag,
+          kSecAttrLabel as String: "Solidarity DID Key",
+          kSecAttrAccessible as String: kSecAttrAccessibleWhenUnlocked,
+          kSecAttrSynchronizable as String: kCFBooleanTrue as Any,
+        ]
 
+        var retryError: Unmanaged<CFError>?
         if let retryKey = SecKeyCreateRandomKey(retryAttributes as CFDictionary, &retryError) {
-          print("[KeychainService] Successfully regenerated key after stale key cleanup")
+          print("[KeychainService] Successfully regenerated key after aggressive cleanup")
           cachePublicJWK(from: retryKey)
           return .success(())
         }
 
+        // Persistent retry also failed — fall back to session-based (in-memory) key
         let retryMessage = (retryError?.takeRetainedValue() as Error?)?.localizedDescription ?? "Unknown error"
-        print("[KeychainService] Retry after cleanup also failed: \(retryMessage)")
-        return .failure(.keyManagementError("Failed to generate device key after cleanup: \(retryMessage)"))
+        print("[KeychainService] Persistent retry failed (\(retryMessage)), falling back to session-based key...")
+        return generateSessionBasedDeviceKey()
       }
 
       return .failure(.keyManagementError("Failed to generate device key: \(message)"))
