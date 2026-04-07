@@ -1,3 +1,4 @@
+import Compression
 import CoreImage
 import Foundation
 import UIKit
@@ -18,6 +19,27 @@ final class QRCodeGenerationService {
     fields: Set<BusinessCardField>,
     expirationDate: Date? = nil
   ) -> CardResult<UIImage> {
+    // Respect the card's sharingFormat instead of always generating plaintext.
+    let format = card.sharingPreferences.sharingFormat
+    switch format {
+    case .plaintext:
+      return generatePlaintextImage(for: card, fields: fields, expirationDate: expirationDate)
+    case .zkProof, .didSigned:
+      // Use the envelope builder which dispatches by format.
+      switch buildEnvelope(for: card, sharingLevel: .public, expirationDate: expirationDate) {
+      case .failure(let error):
+        return .failure(error)
+      case .success(let envelope):
+        return encodeEnvelopeToImage(envelope)
+      }
+    }
+  }
+
+  private func generatePlaintextImage(
+    for card: BusinessCard,
+    fields: Set<BusinessCardField>,
+    expirationDate: Date? = nil
+  ) -> CardResult<UIImage> {
     let filteredCard = card.filteredCard(for: fields)
     let selectedFields = fields.sorted { $0.rawValue < $1.rawValue }
     let mySealedRoute = SecureKeyManager.shared.mySealedRoute
@@ -27,7 +49,6 @@ final class QRCodeGenerationService {
       snapshot: snapshot,
       shareId: shareId,
       expirationDate: expirationDate,
-      // Plaintext payload cannot carry a cryptographic claim artifact.
       proofClaims: nil,
       selectedFields: selectedFields
     )
@@ -38,8 +59,18 @@ final class QRCodeGenerationService {
       shareId: shareId,
       plaintext: payload
     )
+    return encodeEnvelopeToImage(envelope)
+  }
+
+  private func encodeEnvelopeToImage(_ envelope: QRCodeEnvelope) -> CardResult<UIImage> {
     do {
       let data = try JSONEncoder.qrEncoder.encode(envelope)
+      // For VC-based formats, compress the payload to keep QR scannable.
+      if envelope.format == .didSigned || envelope.format == .zkProof {
+        if let compressed = Self.compressForQR(data) {
+          return generateImage(from: compressed)
+        }
+      }
       guard let json = String(data: data, encoding: .utf8) else {
         return .failure(.sharingError("Failed to encode QR envelope"))
       }
@@ -47,6 +78,57 @@ final class QRCodeGenerationService {
     } catch {
       return .failure(.sharingError("Failed to encode QR envelope: \(error.localizedDescription)"))
     }
+  }
+
+  /// Compresses JSON data using zlib and encodes as a URI-safe string.
+  /// Format: "sce1:" prefix + base64url(zlib(data)).
+  /// Returns nil if compression doesn't reduce size or fails.
+  static func compressForQR(_ data: Data) -> String? {
+    let sourceSize = data.count
+    let destinationBuffer = UnsafeMutablePointer<UInt8>.allocate(capacity: sourceSize)
+    defer { destinationBuffer.deallocate() }
+
+    let compressedSize = data.withUnsafeBytes { sourceBuffer -> Int in
+      guard let baseAddress = sourceBuffer.baseAddress else { return 0 }
+      return compression_encode_buffer(
+        destinationBuffer, sourceSize,
+        baseAddress.assumingMemoryBound(to: UInt8.self), sourceSize,
+        nil,
+        COMPRESSION_ZLIB
+      )
+    }
+
+    guard compressedSize > 0 else { return nil }
+    let compressedData = Data(bytes: destinationBuffer, count: compressedSize)
+    let encoded = compressedData.base64URLEncodedString()
+    let result = "sce1:\(encoded)"
+    // Only use compression if it actually reduces size
+    guard result.count < sourceSize else { return nil }
+    return result
+  }
+
+  /// Decompresses a "sce1:" prefixed QR string back to JSON.
+  static func decompressQR(_ string: String) -> Data? {
+    guard string.hasPrefix("sce1:") else { return nil }
+    let encoded = String(string.dropFirst(5))
+    guard let compressedData = Data(base64URLEncoded: encoded) else { return nil }
+
+    let destinationSize = compressedData.count * 10  // generous buffer
+    let destinationBuffer = UnsafeMutablePointer<UInt8>.allocate(capacity: destinationSize)
+    defer { destinationBuffer.deallocate() }
+
+    let decompressedSize = compressedData.withUnsafeBytes { sourceBuffer -> Int in
+      guard let baseAddress = sourceBuffer.baseAddress else { return 0 }
+      return compression_decode_buffer(
+        destinationBuffer, destinationSize,
+        baseAddress.assumingMemoryBound(to: UInt8.self), compressedData.count,
+        nil,
+        COMPRESSION_ZLIB
+      )
+    }
+
+    guard decompressedSize > 0 else { return nil }
+    return Data(bytes: destinationBuffer, count: decompressedSize)
   }
 
   func generateImage(
@@ -58,15 +140,7 @@ final class QRCodeGenerationService {
     case .failure(let error):
       return .failure(error)
     case .success(let envelope):
-      do {
-        let data = try JSONEncoder.qrEncoder.encode(envelope)
-        guard let json = String(data: data, encoding: .utf8) else {
-          return .failure(.sharingError("Failed to encode QR envelope"))
-        }
-        return generateImage(from: json)
-      } catch {
-        return .failure(.sharingError("Failed to encode QR envelope: \(error.localizedDescription)"))
-      }
+      return encodeEnvelopeToImage(envelope)
     }
   }
 
@@ -239,12 +313,16 @@ final class QRCodeGenerationService {
     expirationDate: Date?
   ) -> CardResult<QRCodeEnvelope> {
     let selectedFields = resolvedSelectedFields(for: card, legacyLevel: level)
+    // Strip profileImage (too large for QR) and skills (unverifiable, not VC-eligible).
+    var vcEligibleFields = Set(selectedFields)
+    vcEligibleFields.remove(.profileImage)
+    vcEligibleFields.remove(.skills)
     // Self-issued VC: the user attests to the selected fields about themselves.
     // verifiedFields is populated explicitly so VCService.verifiedOnly enforces
     // that only these attested fields enter the signed VC payload.
     let filteredCard = card
-      .filteredCard(for: Set(selectedFields))
-      .withAttestedFields(Set(selectedFields))
+      .filteredCard(for: vcEligibleFields)
+      .withAttestedFields(vcEligibleFields)
     let options = VCService.IssueOptions(expiration: expirationDate)
     let issueResult = vcService.issueBusinessCardCredential(for: filteredCard, options: options)
 

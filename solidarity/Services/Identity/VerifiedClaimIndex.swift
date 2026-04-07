@@ -29,10 +29,23 @@ import Foundation
 /// for whom, and by which source credential?". Write access is through
 /// `IdentityDataStore.addProvableClaim`.
 enum VerifiedClaimIndex {
-  /// All presentable claims in the index.
+  /// All presentable claims in the index, excluding claims whose source
+  /// credential has expired. When a source VC expires, its derived claims
+  /// are automatically considered invalid and not presentable.
   @MainActor
   static var allClaims: [ProvableClaimEntity] {
-    IdentityDataStore.shared.provableClaims.filter { $0.isPresentable }
+    let now = Date()
+    let expiredCredentialIds = Set(
+      IdentityDataStore.shared.identityCards
+        .filter { card in
+          guard let expiresAt = card.expiresAt else { return false }
+          return expiresAt < now
+        }
+        .map { $0.id }
+    )
+    return IdentityDataStore.shared.provableClaims.filter { claim in
+      claim.isPresentable && !expiredCredentialIds.contains(claim.sourceCredentialId)
+    }
   }
 
   /// Claims backed by a specific source credential (VC).
@@ -105,6 +118,17 @@ enum VerifiedClaimIndex {
   static func credentialIds(forHolder holderDid: String) -> [String] {
     let seen = claims(forHolder: holderDid).map { $0.sourceCredentialId }
     return Array(Set(seen))
+  }
+
+  /// Thread-safe variant of `credentialIds(forHolder:)`.
+  /// Used by VCService to embed sourceCredentialIds in the VC payload.
+  static func credentialIdsSync(forHolder holderDid: String) -> [String] {
+    if Thread.isMainThread {
+      return MainActor.assumeIsolated { credentialIds(forHolder: holderDid) }
+    }
+    return DispatchQueue.main.sync {
+      MainActor.assumeIsolated { credentialIds(forHolder: holderDid) }
+    }
   }
 
   /// Answers: does the holder have a verified claim for this field?

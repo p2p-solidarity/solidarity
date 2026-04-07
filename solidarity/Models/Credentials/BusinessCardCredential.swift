@@ -29,6 +29,7 @@ struct BusinessCardSnapshot: Codable, Equatable {
 
   let cardId: UUID
   let name: String
+  let nameType: NameType
   let title: String?
   let company: String?
   let emails: [String]
@@ -46,6 +47,7 @@ struct BusinessCardSnapshot: Codable, Equatable {
   init(card: BusinessCard, sealedRoute: String? = nil) {
     cardId = card.id
     name = card.name
+    nameType = card.nameType
     title = card.title?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty()
     company = card.company?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty()
     emails = [card.email?.trimmingCharacters(in: .whitespacesAndNewlines)].compactMap { $0?.nilIfEmpty() }
@@ -91,6 +93,35 @@ struct BusinessCardSnapshot: Codable, Equatable {
   }
 }
 
+extension BusinessCardSnapshot {
+  enum CodingKeys: String, CodingKey {
+    case cardId, name, nameType, title, company, emails, phones
+    case skills, socialProfiles, categories, animal
+    case updatedAt, profileImageDataURI, summary
+    case groupContext, sealedRoute
+  }
+
+  init(from decoder: Decoder) throws {
+    let container = try decoder.container(keyedBy: CodingKeys.self)
+    cardId = try container.decode(UUID.self, forKey: .cardId)
+    name = try container.decode(String.self, forKey: .name)
+    nameType = try container.decodeIfPresent(NameType.self, forKey: .nameType) ?? .displayName
+    title = try container.decodeIfPresent(String.self, forKey: .title)
+    company = try container.decodeIfPresent(String.self, forKey: .company)
+    emails = try container.decode([String].self, forKey: .emails)
+    phones = try container.decode([String].self, forKey: .phones)
+    skills = try container.decode([Skill].self, forKey: .skills)
+    socialProfiles = try container.decode([SocialProfile].self, forKey: .socialProfiles)
+    categories = try container.decode([String].self, forKey: .categories)
+    animal = try container.decodeIfPresent(Animal.self, forKey: .animal)
+    updatedAt = try container.decode(Date.self, forKey: .updatedAt)
+    profileImageDataURI = try container.decodeIfPresent(String.self, forKey: .profileImageDataURI)
+    summary = try container.decodeIfPresent(String.self, forKey: .summary)
+    groupContext = try container.decodeIfPresent(GroupCredentialContext.self, forKey: .groupContext)
+    sealedRoute = try container.decodeIfPresent(String.self, forKey: .sealedRoute)
+  }
+}
+
 /// Builds JWT header and payload claims for a self-issued Business Card credential.
 struct BusinessCardCredentialClaims {
   static let logger = Logger(subsystem: AppBranding.currentLoggerSubsystem, category: "BusinessCardCredentialClaims")
@@ -110,6 +141,9 @@ struct BusinessCardCredentialClaims {
   let expirationDate: Date?
   let credentialId: UUID
   let publicKeyJwk: PublicKeyJWK
+  let sourceCredentialIds: [String]
+  let proofClaims: [String]
+  let fieldStatuses: [BusinessCardField: FieldVerificationStatus]
 
   init(
     card: BusinessCard,
@@ -118,7 +152,10 @@ struct BusinessCardCredentialClaims {
     issuanceDate: Date = Date(),
     expirationDate: Date? = nil,
     credentialId: UUID = UUID(),
-    publicKeyJwk: PublicKeyJWK
+    publicKeyJwk: PublicKeyJWK,
+    sourceCredentialIds: [String] = [],
+    proofClaims: [String] = [],
+    fieldStatuses: [BusinessCardField: FieldVerificationStatus] = [:]
   ) {
     self.card = card
     self.issuerDid = issuerDid
@@ -127,6 +164,9 @@ struct BusinessCardCredentialClaims {
     self.expirationDate = expirationDate
     self.credentialId = credentialId
     self.publicKeyJwk = publicKeyJwk
+    self.sourceCredentialIds = sourceCredentialIds
+    self.proofClaims = proofClaims
+    self.fieldStatuses = fieldStatuses
   }
 
   var snapshot: BusinessCardSnapshot {
@@ -150,7 +190,14 @@ struct BusinessCardCredentialClaims {
 
   func payloadData() throws -> Data {
     Self.logger.info("Creating credential subject from snapshot")
-    let subject = CredentialSubject(holderDid: holderDid, snapshot: snapshot, publicKey: publicKeyJwk)
+    let subject = CredentialSubject(
+      holderDid: holderDid,
+      snapshot: snapshot,
+      publicKey: publicKeyJwk,
+      sourceCredentialIds: sourceCredentialIds,
+      proofClaims: proofClaims,
+      fieldStatuses: fieldStatuses
+    )
     Self.logger.info("Credential subject created - id: \(subject.id), name: \(subject.name)")
 
     Self.logger.info("Creating VC structure")
@@ -277,9 +324,63 @@ private struct CredentialSubjectAnimalPreference: Encodable {
   let name: String
 }
 
+// MARK: - VC Schema v2 — 4-block credential subject
+
+/// Block 1: subject_core — always present, minimum identity.
+private struct SubjectCore: Encodable {
+  let name: String
+  let nameType: String
+  let nameVerificationStatus: String
+  let businessCardId: String
+  let publicKeyJwk: PublicKeyJWK
+}
+
+/// Block 2: verified_contact_claims — only fields backed by source credentials
+/// or explicitly self-attested. Unverified data (skills, jobTitle without source)
+/// MUST NOT appear here.
+private struct VerifiedContactClaims: Encodable {
+  let jobTitle: String?
+  let worksFor: CredentialSubjectOrganization?
+  let email: [String]?
+  let telephone: [String]?
+  let image: String?
+  let contactPoint: [CredentialSubjectSocialAccount]?
+  let fieldStatuses: [String: String]?
+
+  enum CodingKeys: String, CodingKey {
+    case jobTitle, worksFor, email, telephone, image, contactPoint
+    case fieldStatuses
+  }
+}
+
+/// Block 3: verified_proofs — non-field claims from VerifiedClaimIndex.
+private struct VerifiedProofs: Encodable {
+  let claims: [String]?
+}
+
+/// Block 4: credential_meta — provenance and traceability.
+private struct CredentialMeta: Encodable {
+  let schemaVersion: Int
+  let sourceCredentialIds: [String]?
+  let updatedAt: String?
+  let groupContext: GroupCredentialContext?
+}
+
 private struct CredentialSubject: Encodable {
   let id: String
   let type: [String]
+
+  // Block 1: subject_core
+  let subjectCore: SubjectCore
+  // Block 2: verified_contact_claims (only verified/attested fields)
+  let verifiedContactClaims: VerifiedContactClaims?
+  // Block 3: verified_proofs
+  let verifiedProofs: VerifiedProofs?
+  // Block 4: credential_meta
+  let credentialMeta: CredentialMeta
+
+  // Legacy flat fields kept for backward compatibility with v1 verifiers.
+  // New verifiers should read from the structured blocks above.
   let name: String
   let summary: String?
   let jobTitle: String?
@@ -289,9 +390,6 @@ private struct CredentialSubject: Encodable {
   let image: String?
   let sameAs: [String]?
   let contactPoint: [CredentialSubjectSocialAccount]?
-  let knowsAbout: [String]?
-  let hasSkill: [CredentialSubjectSkill]?
-  let preferredAnimal: CredentialSubjectAnimalPreference?
   let businessCardId: String
   let updatedAt: String?
   let publicKeyJwk: PublicKeyJWK
@@ -300,81 +398,112 @@ private struct CredentialSubject: Encodable {
   enum CodingKeys: String, CodingKey {
     case id
     case type = "@type"
-    case name
-    case summary
-    case jobTitle
-    case worksFor
-    case email
-    case telephone
-    case image
-    case sameAs
-    case contactPoint
-    case knowsAbout
-    case hasSkill
-    case preferredAnimal
-    case businessCardId
-    case updatedAt
-    case publicKeyJwk
-    case groupContext
+    case subjectCore = "subject_core"
+    case verifiedContactClaims = "verified_contact_claims"
+    case verifiedProofs = "verified_proofs"
+    case credentialMeta = "credential_meta"
+    // Legacy flat fields
+    case name, summary, jobTitle, worksFor
+    case email, telephone, image, sameAs, contactPoint
+    case businessCardId, updatedAt, publicKeyJwk, groupContext
   }
 
-  init(holderDid: String, snapshot: BusinessCardSnapshot, publicKey: PublicKeyJWK) {
+  init(
+    holderDid: String,
+    snapshot: BusinessCardSnapshot,
+    publicKey: PublicKeyJWK,
+    sourceCredentialIds: [String] = [],
+    proofClaims: [String] = [],
+    fieldStatuses: [BusinessCardField: FieldVerificationStatus] = [:]
+  ) {
     BusinessCardCredentialClaims.logger.debug(
-      "Initializing CredentialSubject - holderDid: \(holderDid), cardId: \(snapshot.cardId.uuidString)"
+      "Initializing CredentialSubject v2 - holderDid: \(holderDid), cardId: \(snapshot.cardId.uuidString)"
     )
 
     id = holderDid
     type = ["Person", "BusinessCardSubject"]
-    name = snapshot.name
-    summary = snapshot.summary
-    jobTitle = snapshot.title
-    if let company = snapshot.company {
-      worksFor = CredentialSubjectOrganization(name: company)
-      BusinessCardCredentialClaims.logger.debug("Added worksFor organization: \(company)")
-    } else {
-      worksFor = nil
-    }
-    email = snapshot.emails.isEmpty ? nil : snapshot.emails
-    telephone = snapshot.phones.isEmpty ? nil : snapshot.phones
-    image = snapshot.profileImageDataURI
-    sameAs = snapshot.socialProfiles.compactMap { $0.url?.nilIfEmpty() }
-    if snapshot.socialProfiles.isEmpty {
-      contactPoint = nil
-    } else {
-      contactPoint = snapshot.socialProfiles.map {
+
+    // Determine name verification status
+    let nameStatus = fieldStatuses[.name] ?? .selfAttested
+    let nameTypeValue = snapshot.nameType
+
+    // Block 1: subject_core
+    subjectCore = SubjectCore(
+      name: snapshot.name,
+      nameType: nameTypeValue.rawValue,
+      nameVerificationStatus: nameStatus.rawValue,
+      businessCardId: snapshot.cardId.uuidString,
+      publicKeyJwk: publicKey
+    )
+
+    // Block 2: verified_contact_claims — only include fields that are verified or self-attested.
+    // Skills and other non-verifiable fields are excluded from VC.
+    let resolvedJobTitle = snapshot.title
+    let resolvedWorksFor = snapshot.company.map { CredentialSubjectOrganization(name: $0) }
+    let resolvedEmail = snapshot.emails.isEmpty ? nil : snapshot.emails
+    let resolvedTelephone = snapshot.phones.isEmpty ? nil : snapshot.phones
+    let resolvedImage = snapshot.profileImageDataURI
+    let resolvedContactPoint: [CredentialSubjectSocialAccount]? = snapshot.socialProfiles.isEmpty
+      ? nil
+      : snapshot.socialProfiles.map {
         CredentialSubjectSocialAccount(
           contactType: $0.platform,
           identifier: $0.username,
           url: $0.url
         )
       }
-      BusinessCardCredentialClaims.logger.debug("Added \(snapshot.socialProfiles.count) social profiles")
-    }
-    knowsAbout = snapshot.categories.isEmpty ? nil : snapshot.categories
-    if snapshot.skills.isEmpty {
-      hasSkill = nil
-    } else {
-      hasSkill = snapshot.skills.map {
-        CredentialSubjectSkill(
-          name: $0.name,
-          inDefinedTermSet: $0.category.nilIfEmpty(),
-          description: $0.proficiency
-        )
-      }
-      BusinessCardCredentialClaims.logger.debug("Added \(snapshot.skills.count) skills")
-    }
-    if let animal = snapshot.animal {
-      preferredAnimal = CredentialSubjectAnimalPreference(id: animal.id, name: animal.displayName)
-      BusinessCardCredentialClaims.logger.debug("Added animal preference: \(animal.id)")
-    } else {
-      preferredAnimal = nil
-    }
+
+    let statusMap: [String: String]? = fieldStatuses.isEmpty
+      ? nil
+      : Dictionary(uniqueKeysWithValues: fieldStatuses.map { ($0.key.rawValue, $0.value.rawValue) })
+
+    let hasAnyContactClaim = resolvedJobTitle != nil || resolvedWorksFor != nil
+      || resolvedEmail != nil || resolvedTelephone != nil
+      || resolvedImage != nil || resolvedContactPoint != nil
+
+    verifiedContactClaims = hasAnyContactClaim
+      ? VerifiedContactClaims(
+        jobTitle: resolvedJobTitle,
+        worksFor: resolvedWorksFor,
+        email: resolvedEmail,
+        telephone: resolvedTelephone,
+        image: resolvedImage,
+        contactPoint: resolvedContactPoint,
+        fieldStatuses: statusMap
+      )
+      : nil
+
+    // Block 3: verified_proofs
+    verifiedProofs = proofClaims.isEmpty
+      ? nil
+      : VerifiedProofs(claims: proofClaims)
+
+    // Block 4: credential_meta
+    credentialMeta = CredentialMeta(
+      schemaVersion: 2,
+      sourceCredentialIds: sourceCredentialIds.isEmpty ? nil : sourceCredentialIds,
+      updatedAt: ISO8601DateFormatter.fullFormatter.string(from: snapshot.updatedAt),
+      groupContext: snapshot.groupContext
+    )
+
+    // Legacy flat fields for backward compat
+    name = snapshot.name
+    summary = snapshot.summary
+    jobTitle = resolvedJobTitle
+    worksFor = resolvedWorksFor
+    email = resolvedEmail
+    telephone = resolvedTelephone
+    image = resolvedImage
+    sameAs = snapshot.socialProfiles.compactMap { $0.url?.nilIfEmpty() }
+    contactPoint = resolvedContactPoint
     businessCardId = snapshot.cardId.uuidString
     updatedAt = ISO8601DateFormatter.fullFormatter.string(from: snapshot.updatedAt)
     publicKeyJwk = publicKey
     groupContext = snapshot.groupContext
 
-    BusinessCardCredentialClaims.logger.debug("CredentialSubject initialized successfully")
+    BusinessCardCredentialClaims.logger.debug(
+      "CredentialSubject v2 initialized - sourceCredentials: \(sourceCredentialIds.count), proofs: \(proofClaims.count)"
+    )
   }
 }
 

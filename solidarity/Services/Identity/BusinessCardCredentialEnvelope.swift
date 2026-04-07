@@ -50,8 +50,47 @@ struct BusinessCardCredentialEnvelope: Decodable {
       let name: String?
     }
 
+    // MARK: - v2 structured blocks (optional, nil for v1 VCs)
+
+    struct SubjectCoreBlock: Decodable {
+      let name: String?
+      let nameType: String?
+      let nameVerificationStatus: String?
+      let businessCardId: String?
+      let publicKeyJwk: PublicKeyJWK?
+    }
+
+    struct VerifiedContactClaimsBlock: Decodable {
+      let jobTitle: String?
+      let worksFor: Organization?
+      let email: [String]?
+      let telephone: [String]?
+      let image: String?
+      let contactPoint: [SocialAccount]?
+      let fieldStatuses: [String: String]?
+    }
+
+    struct VerifiedProofsBlock: Decodable {
+      let claims: [String]?
+    }
+
+    struct CredentialMetaBlock: Decodable {
+      let schemaVersion: Int?
+      let sourceCredentialIds: [String]?
+      let updatedAt: String?
+      let groupContext: GroupCredentialContext?
+    }
+
     let id: String?
     let type: [String]?
+
+    // v2 structured blocks
+    let subjectCore: SubjectCoreBlock?
+    let verifiedContactClaims: VerifiedContactClaimsBlock?
+    let verifiedProofs: VerifiedProofsBlock?
+    let credentialMeta: CredentialMetaBlock?
+
+    // Legacy flat fields (v1 compat)
     let name: String
     let summary: String?
     let jobTitle: String?
@@ -68,6 +107,34 @@ struct BusinessCardCredentialEnvelope: Decodable {
     let updatedAt: String?
     let publicKeyJwk: PublicKeyJWK?
     let groupContext: GroupCredentialContext?
+
+    enum CodingKeys: String, CodingKey {
+      case id, type
+      case subjectCore = "subject_core"
+      case verifiedContactClaims = "verified_contact_claims"
+      case verifiedProofs = "verified_proofs"
+      case credentialMeta = "credential_meta"
+      case name, summary, jobTitle, worksFor
+      case email, telephone, image, sameAs, contactPoint
+      case knowsAbout, hasSkill, preferredAnimal
+      case businessCardId, updatedAt, publicKeyJwk, groupContext
+    }
+
+    /// Schema version: 2 if v2 blocks present, 1 otherwise.
+    var schemaVersion: Int {
+      credentialMeta?.schemaVersion ?? (subjectCore != nil ? 2 : 1)
+    }
+
+    /// Source credential IDs for traceability (v2 only).
+    var sourceCredentialIds: [String] {
+      credentialMeta?.sourceCredentialIds ?? []
+    }
+
+    /// Resolved name type from v2 block or default.
+    var resolvedNameType: NameType {
+      guard let raw = subjectCore?.nameType else { return .displayName }
+      return NameType(rawValue: raw) ?? .displayName
+    }
   }
 
   let payload: Payload?
@@ -109,19 +176,27 @@ struct BusinessCardCredentialEnvelope: Decodable {
     }
 
     let subject = envelopeVC.credentialSubject
-    let cardId = UUID(uuidString: subject.businessCardId ?? "") ?? UUID()
-    let title = subject.jobTitle?.nilIfEmpty()
-    let company = subject.worksFor?.name?.nilIfEmpty()
-    let email = subject.email?.first?.nilIfEmpty()
-    let phone = subject.telephone?.first?.nilIfEmpty()
 
+    // v2: prefer structured blocks, fall back to legacy flat fields.
+    let resolvedBusinessCardId = subject.subjectCore?.businessCardId ?? subject.businessCardId
+    let cardId = UUID(uuidString: resolvedBusinessCardId ?? "") ?? UUID()
+
+    // For v2, contact claims come from verified_contact_claims block.
+    let vcClaims = subject.verifiedContactClaims
+    let title = (vcClaims?.jobTitle ?? subject.jobTitle)?.nilIfEmpty()
+    let company = (vcClaims?.worksFor?.name ?? subject.worksFor?.name)?.nilIfEmpty()
+    let email = (vcClaims?.email ?? subject.email)?.first?.nilIfEmpty()
+    let phone = (vcClaims?.telephone ?? subject.telephone)?.first?.nilIfEmpty()
+
+    let resolvedImage = vcClaims?.image ?? subject.image
     var profileImageData: Data?
-    if let image = subject.image, let data = Data(dataURI: image) {
+    if let image = resolvedImage, let data = Data(dataURI: image) {
       profileImageData = data
     }
 
+    let resolvedContactPoints = vcClaims?.contactPoint ?? subject.contactPoint
     let socialNetworks: [SocialNetwork] =
-      subject.contactPoint?
+      resolvedContactPoints?
       .compactMap { account in
         guard let platformName = account.contactType?.nilIfEmpty(),
           let username = account.identifier?.nilIfEmpty()
@@ -134,6 +209,7 @@ struct BusinessCardCredentialEnvelope: Decodable {
         )
       } ?? []
 
+    // v2 VCs exclude skills from the credential. Only v1 legacy VCs carry them.
     let skills: [Skill] =
       subject.hasSkill?
       .compactMap { skill in
@@ -150,6 +226,9 @@ struct BusinessCardCredentialEnvelope: Decodable {
       animal = value
     }
 
+    let resolvedGroupContext = subject.credentialMeta?.groupContext ?? subject.groupContext
+    let resolvedNameType = subject.resolvedNameType
+
     var card = BusinessCard(
       id: cardId,
       name: subject.name,
@@ -163,7 +242,8 @@ struct BusinessCardCredentialEnvelope: Decodable {
       skills: skills,
       categories: subject.knowsAbout ?? [],
       sharingPreferences: SharingPreferences(),
-      groupContext: subject.groupContext,
+      groupContext: resolvedGroupContext,
+      nameType: resolvedNameType,
       createdAt: issuedAtDate ?? Date(),
       updatedAt: Date()
     )

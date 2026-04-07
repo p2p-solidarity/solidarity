@@ -24,6 +24,8 @@ struct BusinessCard: Codable, Identifiable, Equatable, Hashable {
   /// Fields that have been cryptographically verified (e.g., from passport, signed exchange).
   /// nil means no verification tracking (legacy cards); empty set means nothing verified.
   var verifiedFields: Set<BusinessCardField>?
+  /// Whether the name is a display name or a verified legal name from a source credential.
+  var nameType: NameType
   var createdAt: Date
   var updatedAt: Date
 
@@ -42,6 +44,7 @@ struct BusinessCard: Codable, Identifiable, Equatable, Hashable {
     sharingPreferences: SharingPreferences = SharingPreferences(),
     groupContext: GroupCredentialContext? = nil,
     verifiedFields: Set<BusinessCardField>? = nil,
+    nameType: NameType = .displayName,
     createdAt: Date = Date(),
     updatedAt: Date = Date()
   ) {
@@ -59,8 +62,37 @@ struct BusinessCard: Codable, Identifiable, Equatable, Hashable {
     self.sharingPreferences = sharingPreferences
     self.groupContext = groupContext
     self.verifiedFields = verifiedFields
+    self.nameType = nameType
     self.createdAt = createdAt
     self.updatedAt = updatedAt
+  }
+
+  enum CodingKeys: String, CodingKey {
+    case id, name, title, company, email, phone, profileImage
+    case animal, socialNetworks, skills, categories
+    case sharingPreferences, groupContext, verifiedFields
+    case nameType, createdAt, updatedAt
+  }
+
+  init(from decoder: Decoder) throws {
+    let container = try decoder.container(keyedBy: CodingKeys.self)
+    id = try container.decode(UUID.self, forKey: .id)
+    name = try container.decode(String.self, forKey: .name)
+    title = try container.decodeIfPresent(String.self, forKey: .title)
+    company = try container.decodeIfPresent(String.self, forKey: .company)
+    email = try container.decodeIfPresent(String.self, forKey: .email)
+    phone = try container.decodeIfPresent(String.self, forKey: .phone)
+    profileImage = try container.decodeIfPresent(Data.self, forKey: .profileImage)
+    animal = try container.decodeIfPresent(AnimalCharacter.self, forKey: .animal)
+    socialNetworks = try container.decodeIfPresent([SocialNetwork].self, forKey: .socialNetworks) ?? []
+    skills = try container.decodeIfPresent([Skill].self, forKey: .skills) ?? []
+    categories = try container.decodeIfPresent([String].self, forKey: .categories) ?? []
+    sharingPreferences = try container.decodeIfPresent(SharingPreferences.self, forKey: .sharingPreferences) ?? SharingPreferences()
+    groupContext = try container.decodeIfPresent(GroupCredentialContext.self, forKey: .groupContext)
+    verifiedFields = try container.decodeIfPresent(Set<BusinessCardField>.self, forKey: .verifiedFields)
+    nameType = try container.decodeIfPresent(NameType.self, forKey: .nameType) ?? .displayName
+    createdAt = try container.decodeIfPresent(Date.self, forKey: .createdAt) ?? Date()
+    updatedAt = try container.decodeIfPresent(Date.self, forKey: .updatedAt) ?? Date()
   }
 
   mutating func update() {
@@ -117,6 +149,33 @@ struct BusinessCard: Codable, Identifiable, Equatable, Hashable {
     attested.insert(.name)
     copy.verifiedFields = attested
     return copy
+  }
+
+  /// Returns the verification status for a given field.
+  /// - `verifiedBySource`: field is in `verifiedFields` AND backed by a source VC
+  ///   (caller must confirm via VerifiedClaimIndex).
+  /// - `selfAttested`: field is in `verifiedFields` but not externally backed.
+  /// - `unverified`: field is NOT in `verifiedFields` — not eligible for VC.
+  func verificationStatus(for field: BusinessCardField, externallyVerified: Set<BusinessCardField>) -> FieldVerificationStatus {
+    let verified = verifiedFields ?? []
+    guard verified.contains(field) else { return .unverified }
+    return externallyVerified.contains(field) ? .verifiedBySource : .selfAttested
+  }
+
+  /// Fields that are VC-eligible: intersection of selectedFields and
+  /// (verifiedFields from source + name). Unverified fields are excluded.
+  /// For L1 self-issued: all selected fields are self-attested.
+  func vcEligibleFields(
+    selectedFields: Set<BusinessCardField>,
+    externallyVerifiedFields: Set<BusinessCardField>
+  ) -> Set<BusinessCardField> {
+    var eligible: Set<BusinessCardField> = [.name]
+    for field in selectedFields {
+      if externallyVerifiedFields.contains(field) {
+        eligible.insert(field)
+      }
+    }
+    return eligible
   }
 }
 
@@ -212,7 +271,7 @@ struct SharingPreferences: Codable, Equatable, Hashable {
     allowForwarding: Bool = false,
     expirationDate: Date? = nil,
     useZK: Bool = true,
-    sharingFormat: SharingFormat = .plaintext
+    sharingFormat: SharingFormat = .didSigned
   ) {
     var publicSet = publicFields
     publicSet.insert(.name)
@@ -249,6 +308,27 @@ struct SharingPreferences: Codable, Equatable, Hashable {
     }
     return fieldsForLevel(preferredLevel)
   }
+}
+
+/// Verification status for individual fields in a VC.
+/// Distinguishes self-attested (L1) from source-verified (L2/L3) data.
+enum FieldVerificationStatus: String, Codable, CaseIterable {
+  /// No verification — user-provided data, NOT included in signed VC.
+  case unverified
+  /// Self-attested (L1) — holder explicitly attests to this value. Included in
+  /// VC but marked as self-issued with no external backing.
+  case selfAttested = "self_attested"
+  /// Verified by an external source credential (L2 institution / L3 government).
+  /// The backing sourceCredentialId is tracked in VerifiedClaimIndex.
+  case verifiedBySource = "verified_by_source"
+}
+
+/// Whether the `name` field represents a display name or a verified legal name.
+enum NameType: String, Codable {
+  /// User-chosen display name (default). Always shareable but only self-attested in VC.
+  case displayName = "display_name"
+  /// Legal name verified from passport or institutional credential.
+  case verifiedLegalName = "verified_legal_name"
 }
 
 enum BusinessCardField: String, Codable, CaseIterable {

@@ -92,18 +92,18 @@ final class VCService {
     let issuerDid = options.issuerDid ?? descriptor.did
     let issuedAt = Date()
 
-    // Merge VerifiedClaimIndex entries into card.verifiedFields BEFORE
-    // filtering. The VC payload is the union of:
-    //   - self-attested fields (caller-set via withAttestedFields)
-    //   - index-verified fields (backed by a source VC for this holder)
-    // Intersected with the card's populated fields. This enforces the rule:
-    // "VC payload must come from VerifiedClaimIndex or verifiedFields union,
-    // never from raw ContactProfile data."
+    // --- Field verification enforcement ---
+    // Determine which fields are externally verified (L2/L3) from VerifiedClaimIndex.
+    let externallyVerified = VerifiedClaimIndex.verifiedFieldsSync(forHolder: holderDid)
+
+    // Merge: VC payload = (self-attested fields from card.verifiedFields) ∪ (index-verified fields) + name.
+    // For L2/L3 external credentials: only intersection of selected and externally verified enters VC.
+    // For L1 self-issued: self-attested fields are allowed but marked as such.
     let cardWithIndexMerged: BusinessCard = {
       guard options.verifiedOnly else { return card }
       var working = card
       var merged = card.verifiedFields ?? []
-      merged.formUnion(VerifiedClaimIndex.verifiedFieldsSync(forHolder: holderDid))
+      merged.formUnion(externallyVerified)
       merged.insert(.name)
       working.verifiedFields = merged
       return working
@@ -113,6 +113,27 @@ final class VCService {
       ? cardWithIndexMerged.filteredCardForVerifiedOnly()
       : card
 
+    // Compute per-field verification status for VC metadata.
+    let activeFields = cardForCredential.verifiedFields ?? [.name]
+    var fieldStatuses: [BusinessCardField: FieldVerificationStatus] = [:]
+    for field in activeFields {
+      if externallyVerified.contains(field) {
+        fieldStatuses[field] = .verifiedBySource
+      } else {
+        fieldStatuses[field] = .selfAttested
+      }
+    }
+    // Name is always at least self-attested.
+    if fieldStatuses[.name] == nil {
+      fieldStatuses[.name] = .selfAttested
+    }
+
+    // Collect sourceCredentialIds for traceability.
+    let sourceCredentialIds = VerifiedClaimIndex.credentialIdsSync(forHolder: holderDid)
+
+    // Collect active proof claims.
+    let proofClaims = ShareSettingsStore.selectedProofClaims
+
     let claims = BusinessCardCredentialClaims(
       card: cardForCredential,
       issuerDid: issuerDid,
@@ -120,7 +141,10 @@ final class VCService {
       issuanceDate: issuedAt,
       expirationDate: options.expiration,
       credentialId: UUID(),
-      publicKeyJwk: descriptor.jwk
+      publicKeyJwk: descriptor.jwk,
+      sourceCredentialIds: sourceCredentialIds,
+      proofClaims: proofClaims,
+      fieldStatuses: fieldStatuses
     )
 
     Self.logger.info("Retrieving signing key")

@@ -2,6 +2,11 @@ import Foundation
 
 extension QRCodeScanService {
   func decodeEnvelope(from string: String) -> QRCodeEnvelope? {
+    // Try compressed format first (sce1: prefix = zlib compressed envelope).
+    if let decompressed = QRCodeGenerationService.decompressQR(string) {
+      return try? JSONDecoder.qrDecoder.decode(QRCodeEnvelope.self, from: decompressed)
+    }
+    // Fall back to uncompressed JSON.
     guard let data = string.data(using: .utf8) else { return nil }
     return try? JSONDecoder.qrDecoder.decode(QRCodeEnvelope.self, from: data)
   }
