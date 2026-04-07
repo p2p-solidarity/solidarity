@@ -74,6 +74,14 @@ final class IdentityCacheStore {
     }
   }
 
+  /// Synchronous variant that does NOT dispatch through the internal queue.
+  /// Safe to call from any thread (SecItemDelete is OS-level thread-safe).
+  /// Use when subsequent operations depend on the cache being empty.
+  func clearDescriptorSync() {
+    delete(for: descriptorAccount)
+    print("[IdentityCacheStore] Cleared cached DID descriptor (sync)")
+  }
+
   /// Clears all cached identity data: DID documents, JWKs, and active descriptor.
   func clearAll() {
     queue.async {

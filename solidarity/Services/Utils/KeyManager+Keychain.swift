@@ -105,6 +105,7 @@ class KeychainManager {
     let query: [String: Any] = [
       kSecClass as String: kSecClassGenericPassword,
       kSecAttrAccount as String: tag,
+      kSecAttrSynchronizable as String: kSecAttrSynchronizableAny,
       kSecReturnData as String: true,
       kSecMatchLimit as String: kSecMatchLimitOne,
     ]
@@ -146,6 +147,7 @@ class KeychainManager {
     let query: [String: Any] = [
       kSecClass as String: kSecClassGenericPassword,
       kSecAttrAccount as String: tag,
+      kSecAttrSynchronizable as String: kSecAttrSynchronizableAny,
       kSecReturnData as String: true,
       kSecMatchLimit as String: kSecMatchLimitOne,
     ]
@@ -169,6 +171,7 @@ class KeychainManager {
     let query: [String: Any] = [
       kSecClass as String: kSecClassGenericPassword,
       kSecAttrAccount as String: tag,
+      kSecAttrSynchronizable as String: kSecAttrSynchronizableAny,
     ]
 
     let status = SecItemDelete(query as CFDictionary)

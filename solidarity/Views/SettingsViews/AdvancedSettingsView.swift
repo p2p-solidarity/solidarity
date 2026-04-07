@@ -271,7 +271,8 @@ struct AdvancedSettingsView: View {
 
         switch KeychainService.shared.resetSigningKey() {
         case .failure(let error):
-          alertMessage = String(localized: "Data cleared but key reset failed: \(error.localizedDescription)")
+          let detail = error.localizedDescription
+          alertMessage = String(localized: "Data cleared but key reset failed.") + "\n" + detail
         case .success:
           alertMessage = String(localized: "Local data reset completed.")
         }

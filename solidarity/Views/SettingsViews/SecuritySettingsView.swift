@@ -67,8 +67,8 @@ struct SecuritySettingsView: View {
           alertMessage = error.localizedDescription
           showingAlert = true
         case .success:
-          // Now safe to clear stale cache and rebuild
-          IdentityCacheStore().clearDescriptor()
+          // Synchronously clear stale cache before refresh to avoid race
+          IdentityCacheStore().clearDescriptorSync()
           _ = KeychainService.shared.ensurePairwiseKey(for: "solidarity.gg")
           IdentityCoordinator.shared.refreshIdentity()
           alertMessage = String(localized: "Master key rotated successfully.")
