@@ -195,7 +195,7 @@ final class PassportPipelineService {
     print("""
     [PassportPipeline] ── configuration ──
       environment:              \(environmentName)
-      ENABLE_OPEN_PASSPORT:     \(openPassportEnabled)
+      OpenPassport available:    \(openPassportEnabled)
       masterList.pem in bundle: \(hasMasterList)
       disclosure circuit:       \(hasCircuit)
       SRS file:                 \(hasSRS)
@@ -205,7 +205,7 @@ final class PassportPipelineService {
     print("[PassportPipeline] running on simulator — NFC will use simulated read")
     #endif
     if !openPassportEnabled {
-      print("[PassportPipeline] ⚠ OpenPassport ZK disabled — proof will fall back to Semaphore → SD-JWT")
+      print("[PassportPipeline] ⚠ OpenPassport ZK unavailable (missing circuit/SRS files) — proof will fall back to Semaphore → SD-JWT")
     }
     #if !targetEnvironment(simulator)
     if !hasMasterList {

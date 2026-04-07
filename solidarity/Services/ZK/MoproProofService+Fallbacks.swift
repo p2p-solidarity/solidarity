@@ -6,6 +6,9 @@
 //
 
 import Foundation
+import os
+
+private let logger = Logger(subsystem: "solidarity.zk", category: "MoproProofFallbacks")
 
 extension MoproProofService {
 
@@ -17,26 +20,34 @@ extension MoproProofService {
     nationalityCode: String,
     startTime: DispatchTime
   ) async -> MoproProofOutput? {
-    guard SemaphoreIdentityManager.proofsSupported else { return nil }
+    guard SemaphoreIdentityManager.proofsSupported else {
+      logger.warning("[Semaphore] proofsSupported=false, skipping")
+      return nil
+    }
 
     do {
+      logger.info("[Semaphore] Loading or creating identity...")
       let identity = try SemaphoreIdentityManager.shared.loadOrCreateIdentity()
+      logger.info("[Semaphore] Identity loaded — commitment=\(identity.commitment.prefix(16))...")
 
       // Use existing multi-member group, or bootstrap a minimal 2-member group
       // for passport self-attestation (anchor + user = anonymity set of 2).
       let groupCommitments: [String]
       if let existingGroup = SemaphoreGroupManager.shared.proofCommitments(containing: identity.commitment) {
         groupCommitments = existingGroup
+        logger.info("[Semaphore] Found existing group with \(existingGroup.count) members")
       } else {
         groupCommitments = [identity.commitment, SemaphoreIdentityManager.passportAnchorCommitment]
-        ZKLog.info("Using bootstrap passport anchor for Semaphore proof (no existing group).")
+        logger.info("[Semaphore] No existing group — using bootstrap anchor (anonymity set=2)")
       }
 
+      logger.info("[Semaphore] Generating proof — scope=passport:\(nationalityCode), groupSize=\(groupCommitments.count)")
       let proofJSON = try SemaphoreIdentityManager.shared.generateProof(
         groupCommitments: groupCommitments,
         message: documentHash,
         scope: "passport:\(nationalityCode)"
       )
+      logger.info("[Semaphore] Proof generated — payload length=\(proofJSON.count)")
 
       var payloadDict: [String: Any] = [
         "passport_hash": documentHash,
@@ -62,6 +73,7 @@ extension MoproProofService {
         trustLevel: "green"
       )
     } catch {
+      logger.error("[Semaphore] Proof generation FAILED: \(error.localizedDescription)")
       ZKLog.error("Semaphore proof generation failed: \(error)")
       return nil
     }
@@ -78,6 +90,8 @@ extension MoproProofService {
     passiveAuthPassed: Bool,
     startTime: DispatchTime
   ) -> MoproProofOutput {
+    logger.warning("[SD-JWT] Generating fallback proof — NOT true ZK, no anonymity guarantee")
+    logger.info("[SD-JWT] passiveAuth=\(passiveAuthPassed), nationality=\(nationalityCode)")
     let fallbackDict: [String: Any] = [
       "passport_hash": documentHash,
       "mrz": mrzDigest,
