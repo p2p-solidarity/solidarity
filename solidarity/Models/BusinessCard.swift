@@ -277,7 +277,7 @@ enum BusinessCardField: String, Codable, CaseIterable {
   var icon: String {
     switch self {
     case .name: return "person.text.rectangle"
-    case .title: return "id.card"
+    case .title: return "briefcase"
     case .company: return "building.2"
     case .email: return "envelope"
     case .phone: return "phone"

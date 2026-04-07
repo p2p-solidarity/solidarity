@@ -125,7 +125,7 @@ struct ShareSettingsView: View {
 
       VStack(spacing: 1) {
         fieldRow(icon: "person.text.rectangle", label: "Name", isOn: .constant(true), locked: true)
-        fieldRow(icon: "id.card", label: "Title", isOn: $shareTitle)
+        fieldRow(icon: "briefcase", label: "Title", isOn: $shareTitle)
         fieldRow(icon: "building.2", label: "Company", isOn: $shareCompany)
         fieldRow(icon: "envelope", label: "Email", isOn: $shareEmail)
         fieldRow(icon: "phone", label: "Phone", isOn: $sharePhone)

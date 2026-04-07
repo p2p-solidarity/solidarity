@@ -263,13 +263,18 @@ struct AdvancedSettingsView: View {
         IdentityCacheStore().clearAll()
         VCLibrary.shared.clearAll()
         _ = KeyManager.shared.clearAllKeys()
-        KeychainService.shared.resetSigningKey()
         SecureMessageStorage.shared.clearAllHistory()
         _ = OfflineManager.shared.clearPendingOperations()
         if let bundleId = Bundle.main.bundleIdentifier {
           UserDefaults.standard.removePersistentDomain(forName: bundleId)
         }
-        alertMessage = String(localized: "Local data reset completed.")
+
+        switch KeychainService.shared.resetSigningKey() {
+        case .failure(let error):
+          alertMessage = String(localized: "Data cleared but key reset failed: \(error.localizedDescription)")
+        case .success:
+          alertMessage = String(localized: "Local data reset completed.")
+        }
         showingAlert = true
       }
     }

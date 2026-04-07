@@ -29,25 +29,42 @@ class KeyManager {
     var primaryTag: String {
       switch self {
       case .masterKey:
-        return "solidarity.master"
+        return "solidarity.symm.master"
       case .signingKey:
-        return "solidarity.master.signing"
+        return "solidarity.symm.signing"
       case .domainKey:
-        return "solidarity.rp.default"
+        return "solidarity.symm.domain"
       case .verificationKey:
-        return "solidarity.master.verification"
+        return "solidarity.symm.verification"
       case .proofKey:
-        return "solidarity.master.proof"
+        return "solidarity.symm.proof"
+      }
+    }
+
+    /// Previous primaryTag values before the rename to solidarity.symm.* namespace.
+    /// Used as migration fallbacks in readTags.
+    var legacyPrimaryTags: [String] {
+      switch self {
+      case .masterKey:
+        return ["solidarity.master"]
+      case .signingKey:
+        return ["solidarity.master.signing"]
+      case .domainKey:
+        return ["solidarity.rp.default"]
+      case .verificationKey:
+        return ["solidarity.master.verification"]
+      case .proofKey:
+        return ["solidarity.master.proof"]
       }
     }
 
     var readTags: [String] {
-      let tags = [primaryTag, legacyKeychainTag]
+      let tags = [primaryTag] + legacyPrimaryTags + [legacyKeychainTag]
       return Array(NSOrderedSet(array: tags)) as? [String] ?? tags
     }
 
     var allTags: [String] {
-      readTags
+      readTags  // includes primaryTag + legacyPrimaryTags + legacyKeychainTag
     }
   }
 
