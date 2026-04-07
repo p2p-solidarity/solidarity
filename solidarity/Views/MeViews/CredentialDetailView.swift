@@ -13,10 +13,30 @@ struct CredentialDetailView: View {
   }
 
   private var proofType: String {
+    if card.metadataTags.contains("mopro-noir") {
+      return "OpenPassport (Noir/Mopro)"
+    }
     if card.metadataTags.contains("semaphore-zk") {
       return "Semaphore ZK"
     }
     return "SD-JWT Fallback"
+  }
+
+  private var proofSystemIcon: String {
+    if card.metadataTags.contains("mopro-noir") {
+      return "bolt.shield.fill"
+    }
+    if card.metadataTags.contains("semaphore-zk") {
+      return "shield.checkered"
+    }
+    return "exclamationmark.triangle"
+  }
+
+  private var proofSystemColor: Color {
+    if card.metadataTags.contains("mopro-noir") || card.metadataTags.contains("semaphore-zk") {
+      return Color.Theme.terminalGreen
+    }
+    return .orange
   }
 
   var body: some View {
@@ -68,7 +88,7 @@ struct CredentialDetailView: View {
 
       HStack(spacing: 8) {
         statusPill(card.status)
-        statusPill(proofType)
+        proofSystemPill
       }
     }
     .frame(maxWidth: .infinity)
@@ -83,6 +103,21 @@ struct CredentialDetailView: View {
       .padding(.vertical, 5)
       .background(Color.Theme.searchBg)
       .overlay(Rectangle().stroke(Color.Theme.divider, lineWidth: 1))
+  }
+
+  private var proofSystemPill: some View {
+    HStack(spacing: 4) {
+      Image(systemName: proofSystemIcon)
+        .font(.system(size: 9))
+        .foregroundColor(proofSystemColor)
+      Text(proofType.uppercased())
+        .font(.system(size: 10, weight: .bold, design: .monospaced))
+        .foregroundColor(proofSystemColor)
+    }
+    .padding(.horizontal, 10)
+    .padding(.vertical, 5)
+    .background(proofSystemColor.opacity(0.1))
+    .overlay(Rectangle().stroke(proofSystemColor.opacity(0.4), lineWidth: 1))
   }
 
   // MARK: - Metadata
@@ -253,6 +288,12 @@ private struct PresentationSheet: View {
   @State private var qrImage: UIImage?
   @State private var errorMessage: String?
 
+  var resolvedProofTypeTag: String {
+    if card.metadataTags.contains("mopro-noir") { return "mopro-noir" }
+    if card.metadataTags.contains("semaphore-zk") { return "semaphore-zk" }
+    return "sd-jwt-fallback"
+  }
+
   var body: some View {
     NavigationStack {
       ScrollView {
@@ -343,7 +384,7 @@ private struct PresentationSheet: View {
       "holder": card.holderDid,
       "verifiableCredential": credentials,
       "nonce": nonce,
-      "proof_type": card.metadataTags.contains("semaphore-zk") ? "semaphore-zk" : "sd-jwt-fallback",
+      "proof_type": resolvedProofTypeTag,
       "selected_claims": selectedClaims.map { $0.claimType },
     ]
 

@@ -61,7 +61,9 @@ extension PassportOnboardingFlowView {
     }
 
     func proofResultCard(_ proof: PassportProofResult) -> some View {
-        VStack(alignment: .leading, spacing: 4) {
+        let systemLabel = proofSystemLabel(proof.proofType)
+
+        return VStack(alignment: .leading, spacing: 4) {
             HStack {
                 Image(systemName: proof.generationFailed ? "exclamationmark.triangle" : "checkmark.seal.fill")
                     .foregroundColor(proof.generationFailed ? .orange : .green)
@@ -76,6 +78,14 @@ extension PassportOnboardingFlowView {
                     .background(proof.generationFailed ? Color.orange.opacity(0.15) : Color.green.opacity(0.15))
                     .cornerRadius(4)
             }
+            HStack(spacing: 4) {
+                Image(systemName: systemLabel.icon)
+                    .font(.caption2)
+                    .foregroundColor(systemLabel.color)
+                Text(systemLabel.label)
+                    .font(.caption2.monospaced().weight(.semibold))
+                    .foregroundColor(systemLabel.color)
+            }
             Text("Type: \(proof.proofType)")
                 .font(.caption2.monospaced())
                 .foregroundColor(Color.Theme.textTertiary)
@@ -83,6 +93,17 @@ extension PassportOnboardingFlowView {
         .padding(8)
         .background(Color.Theme.searchBg)
         .cornerRadius(6)
+    }
+
+    private func proofSystemLabel(_ proofType: String) -> (label: String, icon: String, color: Color) {
+        switch proofType {
+        case "mopro-noir":
+            return ("OpenPassport (Noir/Mopro)", "bolt.shield.fill", .green)
+        case "semaphore-zk":
+            return ("Semaphore ZK", "shield.checkered", .green)
+        default:
+            return ("SD-JWT Fallback", "exclamationmark.triangle", .orange)
+        }
     }
 
     var persistStepSection: some View {

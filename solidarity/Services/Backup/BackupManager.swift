@@ -33,6 +33,22 @@ final class BackupManager: ObservableObject {
     FileManager.default.url(forUbiquityContainerIdentifier: nil)?.appendingPathComponent("Documents/AirMeishiBackup")
   }
 
+  /// Local backup directory as fallback when iCloud is unavailable.
+  private var localBackupURL: URL {
+    let docs = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first!
+    return docs.appendingPathComponent("AirMeishiBackup")
+  }
+
+  /// Resolved backup directory: iCloud if available, local fallback otherwise.
+  private var resolvedBackupURL: URL {
+    iCloudContainerURL ?? localBackupURL
+  }
+
+  /// Whether iCloud is available for backup.
+  var isICloudAvailable: Bool {
+    iCloudContainerURL != nil
+  }
+
   func loadSettings() {
     switch storage.loadUserPreferences(Settings.self) {
     case .success(let s): settings = s
@@ -77,9 +93,7 @@ final class BackupManager: ObservableObject {
       return .failure(.configurationError("Backup is disabled"))
     }
 
-    guard let containerURL = iCloudContainerURL else {
-      return .failure(.configurationError("iCloud not available. Sign in to iCloud in Settings."))
-    }
+    let containerURL = resolvedBackupURL
 
     await MainActor.run { isBackingUp = true }
     defer { Task { @MainActor in isBackingUp = false } }
@@ -150,9 +164,7 @@ final class BackupManager: ObservableObject {
   // MARK: - Restore
 
   func restoreFromBackup() async -> CardResult<RestoreResult> {
-    guard let containerURL = iCloudContainerURL else {
-      return .failure(.configurationError("iCloud not available"))
-    }
+    let containerURL = resolvedBackupURL
 
     do {
       let files = try FileManager.default.contentsOfDirectory(
