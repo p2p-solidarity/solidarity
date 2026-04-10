@@ -5,16 +5,9 @@ extension MeTabView {
   var identityHeader: some View {
     VStack(spacing: 16) {
       HStack(alignment: .top, spacing: 16) {
-        ZStack {
-          Rectangle()
-            .fill(Color.Theme.searchBg)
-            .frame(width: 80, height: 80)
-            .overlay(Rectangle().stroke(Color.Theme.divider, lineWidth: 1))
-
-          Text(String(displayName.prefix(1)).uppercased())
-            .font(.system(size: 32, weight: .bold, design: .monospaced))
-            .foregroundColor(.white)
-        }
+        identityAvatar
+          .frame(width: 80, height: 80)
+          .overlay(Rectangle().stroke(Color.Theme.divider, lineWidth: 1))
 
         VStack(alignment: .leading, spacing: 8) {
           Text(displayName)
@@ -59,6 +52,34 @@ extension MeTabView {
       .buttonStyle(.plain)
     }
     .padding(.horizontal, 24)
+  }
+
+  @ViewBuilder
+  var identityAvatar: some View {
+    let card = CardManager.shared.businessCards.first
+    let savedAnimalRaw = UserDefaults.standard.string(forKey: "theme_selected_animal")
+    let animal = card?.animal ?? savedAnimalRaw.flatMap(AnimalCharacter.init(rawValue:))
+
+    if let imageData = card?.profileImage, let uiImage = UIImage(data: imageData) {
+      Image(uiImage: uiImage)
+        .resizable()
+        .scaledToFill()
+    } else if let animal {
+      ZStack {
+        Rectangle().fill(Color.Theme.searchBg)
+        ImageProvider.animalImage(for: animal)
+          .resizable()
+          .scaledToFit()
+          .padding(6)
+      }
+    } else {
+      ZStack {
+        Rectangle().fill(Color.Theme.searchBg)
+        Text(String(displayName.prefix(1)).uppercased())
+          .font(.system(size: 32, weight: .bold, design: .monospaced))
+          .foregroundColor(.white)
+      }
+    }
   }
 
   var identityCardSection: some View {

@@ -79,10 +79,17 @@ struct ReceivedCardView: View {
               }
 
               VStack(alignment: .leading, spacing: 12) {
-                Text(card.name)
-                  .font(.title2)
-                  .fontWeight(.bold)
-                  .foregroundColor(Color.Theme.textPrimary)
+                HStack(spacing: 12) {
+                  receivedAvatar
+                    .frame(width: 56, height: 56)
+                    .clipShape(Circle())
+                    .overlay(Circle().stroke(Color.Theme.accentRose.opacity(0.4), lineWidth: 1))
+
+                  Text(card.name)
+                    .font(.title2)
+                    .fontWeight(.bold)
+                    .foregroundColor(Color.Theme.textPrimary)
+                }
 
                 if let title = card.title {
                   Text(title)
@@ -203,6 +210,28 @@ struct ReceivedCardView: View {
         Button("OK") {}
       } message: {
         Text("The business card has been successfully saved to your contacts.")
+      }
+    }
+  }
+
+  @ViewBuilder
+  private var receivedAvatar: some View {
+    if let imageData = card.profileImage, let uiImage = UIImage(data: imageData) {
+      Image(uiImage: uiImage)
+        .resizable()
+        .scaledToFill()
+    } else if let animal = card.animal {
+      ImageProvider.animalImage(for: animal)
+        .resizable()
+        .scaledToFit()
+        .padding(4)
+        .background(Color.Theme.searchBg)
+    } else {
+      ZStack {
+        Rectangle().fill(Color.Theme.searchBg)
+        Text(String(card.name.prefix(1)).uppercased())
+          .font(.system(size: 22, weight: .bold, design: .monospaced))
+          .foregroundColor(Color.Theme.textPrimary)
       }
     }
   }
