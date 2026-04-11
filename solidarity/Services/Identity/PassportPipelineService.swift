@@ -60,7 +60,10 @@ final class PassportPipelineService {
       break
     }
 
+    logPipelineConfiguration()
+
     if shouldSimulateNFC {
+      print("[PassportPipeline] NFC read: using simulator/dev-mode simulated read")
       return await simulatedNFCRead(draft: draft)
     }
 
@@ -154,10 +157,62 @@ final class PassportPipelineService {
     )
     IdentityDataStore.shared.addProvableClaim(humanClaim)
 
+    // Field-level claim — passport DG1 binds a name to this holder.
+    // sourceField lets VerifiedClaimIndex answer "is name verified?" so
+    // when the user issues a self-card VC the name is index-verified
+    // (L3 government) instead of L1 self-attested.
+    let nameClaim = ProvableClaimEntity(
+      identityCardId: passportCard.id,
+      claimType: "field_name",
+      title: "Name verified by passport",
+      issuerType: "government",
+      trustLevel: proof.trustLevel,
+      source: "Passport",
+      payload: "{\"claim\":\"field_name\",\"proof\":\"\(proof.proofType)\"\(cardRef)}",
+      sourceField: BusinessCardField.name.rawValue
+    )
+    IdentityDataStore.shared.addProvableClaim(nameClaim)
+
     return .success(passportCard)
   }
 
   // MARK: - Private
+
+  private func logPipelineConfiguration() {
+    let openPassportEnabled = MoproProofService.isAvailable
+
+    let hasMasterList = Bundle.main.url(forResource: "masterList", withExtension: "pem") != nil
+    let hasCircuit = Bundle.main.path(forResource: "openpassport_disclosure", ofType: "json") != nil
+      || Bundle.main.path(forResource: "disclosure", ofType: "json") != nil
+    let hasSRS = Bundle.main.path(forResource: "openpassport_srs", ofType: "bin") != nil
+
+    #if targetEnvironment(simulator)
+    let environmentName = "simulator"
+    #else
+    let environmentName = "device"
+    #endif
+
+    print("""
+    [PassportPipeline] ── configuration ──
+      environment:              \(environmentName)
+      OpenPassport available:    \(openPassportEnabled)
+      masterList.pem in bundle: \(hasMasterList)
+      disclosure circuit:       \(hasCircuit)
+      SRS file:                 \(hasSRS)
+    """)
+
+    #if targetEnvironment(simulator)
+    print("[PassportPipeline] running on simulator — NFC will use simulated read")
+    #endif
+    if !openPassportEnabled {
+      print("[PassportPipeline] ⚠ OpenPassport ZK unavailable (missing circuit/SRS files) — proof will fall back to Semaphore → SD-JWT")
+    }
+    #if !targetEnvironment(simulator)
+    if !hasMasterList {
+      print("[PassportPipeline] ⚠ masterList.pem missing — passiveAuthPassed will always be false (cannot verify passport authenticity)")
+    }
+    #endif
+  }
 
   @MainActor private var shouldSimulateNFC: Bool {
     #if targetEnvironment(simulator)

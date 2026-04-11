@@ -20,6 +20,9 @@ final class KeychainService {
   static let rpAliasPrefix = "airmeishi.did.rp."
   static let modernRpAliasPrefix = "solidarity.rp."
 
+  /// Serializes key mutation operations to prevent concurrent duplicate generation.
+  static let keyLock = NSRecursiveLock()
+
   #if targetEnvironment(simulator)
     static var simulatorInMemoryKey: SecKey?
   #else
@@ -125,6 +128,9 @@ final class KeychainService {
 
   /// Deletes the signing key from the Keychain.
   func deleteSigningKey() -> CardResult<Void> {
+    Self.keyLock.lock()
+    defer { Self.keyLock.unlock() }
+
     // Create a broad query that will match any key with our tag
     // This ensures we clean up keys regardless of their access control settings
     let query: [String: Any] = [
@@ -156,10 +162,21 @@ final class KeychainService {
 
   /// Resets the signing key by deleting and regenerating it
   func resetSigningKey() -> CardResult<Void> {
+    Self.keyLock.lock()
+    defer { Self.keyLock.unlock() }
+
     print("[KeychainService] Resetting signing key...")
 
-    // First delete any existing key
-    _ = deleteSigningKey()
+    // Delete must succeed before regenerating — fail fast to avoid duplicate keys
+    switch deleteSigningKey() {
+    case .failure(let error):
+      print("[KeychainService] Reset aborted: failed to delete existing key: \(error)")
+      return .failure(error)
+    case .success:
+      break
+    }
+
+    clearInMemoryKey()
 
     // Then create a new one
     switch ensureSigningKey() {
@@ -183,154 +200,138 @@ final class KeychainService {
       if Self.deviceInMemoryKey != nil { return true }
     #endif
 
-    // Otherwise check keychain (include synchronizable to find all keys)
+    // Only match private keys — avoids false positives from orphan public keys
     let query: [String: Any] = [
       kSecClass as String: kSecClassKey,
       kSecAttrApplicationTag as String: keyTag,
       kSecAttrKeyType as String: kSecAttrKeyTypeECSECPrimeRandom,
+      kSecAttrKeyClass as String: kSecAttrKeyClassPrivate,
       kSecAttrSynchronizable as String: kSecAttrSynchronizableAny,
       kSecMatchLimit as String: kSecMatchLimitOne,
+      kSecReturnRef as String: true,
     ]
 
     var item: CFTypeRef?
     let status = SecItemCopyMatching(query as CFDictionary, &item)
-    return status == errSecSuccess
+    guard status == errSecSuccess, let candidate = item else {
+      return false
+    }
+    return CFGetTypeID(candidate) == SecKeyGetTypeID()
   }
 
   private func privateKey(context: LAContext?) -> CardResult<SecKey> {
-    // Check for in-memory key first (works for both simulator and device)
     #if targetEnvironment(simulator)
-      if let inMemoryKey = Self.simulatorInMemoryKey {
-        print("[KeychainService] Using in-memory simulator key")
-        return .success(inMemoryKey)
-      }
-
-      // Try to get from keychain (include synchronizable to find all keys)
-      let query: [String: Any] = [
-        kSecClass as String: kSecClassKey,
-        kSecAttrApplicationTag as String: keyTag,
-        kSecAttrSynchronizable as String: kSecAttrSynchronizableAny,
-        kSecReturnRef as String: true,
-      ]
-
-      var item: CFTypeRef?
-      let status = SecItemCopyMatching(query as CFDictionary, &item)
-
-      if status == errSecSuccess {
-        // swiftlint:disable:next force_cast
-        let key = item as! SecKey
-        return .success(key)
-      }
-
-      // Key not found — attempt to generate on the fly
-      print("[KeychainService] Simulator key not found (status: \(statusDescription(status))), generating...")
-      switch ensureSigningKey() {
-      case .failure(let error):
-        return .failure(error)
-      case .success:
-        // Check in-memory key first (ensureSigningKey may have set it)
-        if let inMemoryKey = Self.simulatorInMemoryKey {
-          return .success(inMemoryKey)
-        }
-        // Retry keychain
-        var retryItem: CFTypeRef?
-        let retryStatus = SecItemCopyMatching(query as CFDictionary, &retryItem)
-        if retryStatus == errSecSuccess {
-          // swiftlint:disable:next force_cast
-          return .success(retryItem as! SecKey)
-        }
-        return .failure(.keyManagementError("Key not found after generation (status: \(statusDescription(retryStatus)))"))
-      }
-
+      return privateKeyForSimulator()
     #else
-      // Device code with authentication handling
-      let basicQuery: [String: Any] = [
-        kSecClass as String: kSecClassKey,
-        kSecAttrApplicationTag as String: keyTag,
-        kSecAttrKeyType as String: kSecAttrKeyTypeECSECPrimeRandom,
-        kSecAttrSynchronizable as String: kSecAttrSynchronizableAny,
-        kSecReturnRef as String: true,
-      ]
-
-      var item: CFTypeRef?
-      // Try to copy matching item *without* auth context first.
-      // If it requires auth, this might fail with errSecAuthFailed or errSecInteractionNotAllowed.
-      var status = SecItemCopyMatching(basicQuery as CFDictionary, &item)
-
-      if status == errSecSuccess {
-        guard let candidate = item else {
-          return .failure(.keyManagementError("Keychain returned empty result for signing key"))
-        }
-        guard CFGetTypeID(candidate) == SecKeyGetTypeID() else {
-          return .failure(.keyManagementError("Keychain returned unexpected item type for signing key"))
-        }
-        print("[KeychainService] Successfully retrieved key without authentication context")
-        // Since we verified the type ID above, this cast is safe and redundant for CFTypeRef -> SecKey
-        // swiftlint:disable:next force_cast
-        let key = candidate as! SecKey
-        return .success(key)
-      }
-
-      // If key requires authentication, try with context
-      if status == errSecInteractionNotAllowed || status == errSecAuthFailed {
-        var authQuery = basicQuery
-        let authContext: LAContext
-        if let context = context {
-          authContext = context
-        } else {
-          let newContext = LAContext()
-          newContext.touchIDAuthenticationAllowableReuseDuration = 5
-          newContext.localizedFallbackTitle = "Use Passcode"
-          authContext = newContext
-        }
-        authQuery[kSecUseAuthenticationContext as String] = authContext
-
-        status = SecItemCopyMatching(authQuery as CFDictionary, &item)
-        if status == errSecSuccess {
-          guard let candidate = item else {
-            return .failure(.keyManagementError("Keychain returned empty result for signing key"))
-          }
-          guard CFGetTypeID(candidate) == SecKeyGetTypeID() else {
-            return .failure(.keyManagementError("Keychain returned unexpected item type for signing key"))
-          }
-          print("[KeychainService] Successfully retrieved key with authentication context")
-          // swiftlint:disable:next force_cast
-          let key = candidate as! SecKey
-          return .success(key)
-        }
-      }
-
-      // If key not found, try to create it first
-      if status == errSecItemNotFound {
-        print("[KeychainService] Key not found, attempting to create...")
-        // Try to ensure the key exists
-        switch ensureSigningKey() {
-        case .failure(let error):
-          return .failure(error)
-        case .success:
-          // Retry fetching the key
-          let retryStatus = SecItemCopyMatching(basicQuery as CFDictionary, &item)
-          guard retryStatus == errSecSuccess else {
-            return .failure(
-              .keyManagementError("Failed to retrieve signing key after creation: \(statusDescription(retryStatus))")
-            )
-          }
-          guard let candidate = item else {
-            return .failure(.keyManagementError("Keychain returned empty result for signing key after creation"))
-          }
-          guard CFGetTypeID(candidate) == SecKeyGetTypeID() else {
-            return .failure(.keyManagementError("Keychain returned unexpected item type for signing key"))
-          }
-          print("[KeychainService] Successfully retrieved key after creation")
-          // swiftlint:disable:next force_cast
-          let key = candidate as! SecKey
-          return .success(key)
-        }
-      }
-
-      print("[KeychainService] Failed to retrieve key with status: \(statusDescription(status))")
-      return .failure(.keyManagementError("Failed to retrieve signing key: \(statusDescription(status))"))
+      return privateKeyForDevice(context: context)
     #endif
+  }
+
+  // MARK: - Private Key Retrieval Helpers
+
+  #if targetEnvironment(simulator)
+  private func privateKeyForSimulator() -> CardResult<SecKey> {
+    if let inMemoryKey = Self.simulatorInMemoryKey {
+      print("[KeychainService] Using in-memory simulator key")
+      return .success(inMemoryKey)
+    }
+
+    let query = basePrivateKeyQuery()
+    if let key = fetchSecKey(query: query) { return .success(key) }
+
+    print("[KeychainService] Simulator key not found, generating...")
+    switch ensureSigningKey() {
+    case .failure(let error):
+      return .failure(error)
+    case .success:
+      if let inMemoryKey = Self.simulatorInMemoryKey { return .success(inMemoryKey) }
+      if let key = fetchSecKey(query: query) { return .success(key) }
+      return .failure(.keyManagementError("Key not found after generation"))
+    }
+  }
+  #else
+  private func privateKeyForDevice(context: LAContext?) -> CardResult<SecKey> {
+    var basicQuery = basePrivateKeyQuery()
+    basicQuery[kSecAttrKeyType as String] = kSecAttrKeyTypeECSECPrimeRandom
+
+    // Try without auth context first
+    if let result = fetchOrRecoverKey(query: basicQuery, label: "without authentication context") {
+      return result
+    }
+
+    // Try with auth context if required
+    var item: CFTypeRef?
+    let status = SecItemCopyMatching(basicQuery as CFDictionary, &item)
+    if status == errSecInteractionNotAllowed || status == errSecAuthFailed {
+      var authQuery = basicQuery
+      let authContext = context ?? {
+        let ctx = LAContext()
+        ctx.touchIDAuthenticationAllowableReuseDuration = 5
+        ctx.localizedFallbackTitle = "Use Passcode"
+        return ctx
+      }()
+      authQuery[kSecUseAuthenticationContext as String] = authContext
+      if let result = fetchOrRecoverKey(query: authQuery, label: "with authentication context") {
+        return result
+      }
+    }
+
+    // Key not found — create it
+    if status == errSecItemNotFound {
+      print("[KeychainService] Key not found, attempting to create...")
+      return generateAndFetchKey(query: basicQuery)
+    }
+
+    print("[KeychainService] Failed to retrieve key with status: \(statusDescription(status))")
+    return .failure(.keyManagementError("Failed to retrieve signing key: \(statusDescription(status))"))
+  }
+  #endif
+
+  private func basePrivateKeyQuery() -> [String: Any] {
+    [
+      kSecClass as String: kSecClassKey,
+      kSecAttrApplicationTag as String: keyTag,
+      kSecAttrKeyClass as String: kSecAttrKeyClassPrivate,
+      kSecAttrSynchronizable as String: kSecAttrSynchronizableAny,
+      kSecReturnRef as String: true,
+    ]
+  }
+
+  private func fetchSecKey(query: [String: Any]) -> SecKey? {
+    var item: CFTypeRef?
+    let status = SecItemCopyMatching(query as CFDictionary, &item)
+    guard status == errSecSuccess, let candidate = item,
+      CFGetTypeID(candidate) == SecKeyGetTypeID()
+    else { return nil }
+    return (candidate as! SecKey) // swiftlint:disable:this force_cast
+  }
+
+  private func fetchOrRecoverKey(query: [String: Any], label: String) -> CardResult<SecKey>? {
+    var item: CFTypeRef?
+    let status = SecItemCopyMatching(query as CFDictionary, &item)
+    guard status == errSecSuccess else { return nil }
+
+    if let candidate = item, CFGetTypeID(candidate) == SecKeyGetTypeID() {
+      print("[KeychainService] Successfully retrieved key \(label)")
+      // swiftlint:disable:next force_cast
+      return .success(candidate as! SecKey)
+    }
+
+    // Stale entry — cleanup and regenerate
+    print("[KeychainService] Stale key detected (\(label)), cleaning up and regenerating...")
+    cleanupAllOldKeys()
+    clearInMemoryKey()
+    return generateAndFetchKey(query: query)
+  }
+
+  private func generateAndFetchKey(query: [String: Any]) -> CardResult<SecKey> {
+    switch ensureSigningKey() {
+    case .failure(let error):
+      return .failure(error)
+    case .success:
+      if let key = fetchSecKey(query: query) { return .success(key) }
+      return .failure(.keyManagementError("Key not usable after generation"))
+    }
   }
 
   private func jwk(for privateKey: SecKey) -> CardResult<PublicKeyJWK> {

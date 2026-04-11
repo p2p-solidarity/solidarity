@@ -30,8 +30,8 @@ struct GroupManagementView: View {
       // Simple gradient background
       LinearGradient(
         colors: [
-          Color(red: 0.05, green: 0.05, blue: 0.08),
-          Color(red: 0.08, green: 0.08, blue: 0.12),
+          Color.Theme.pageBg,
+          Color.Theme.pageBg,
         ],
         startPoint: .topLeading,
         endPoint: .bottomTrailing
@@ -45,23 +45,23 @@ struct GroupManagementView: View {
             // Simple icon
             ZStack {
               RoundedRectangle(cornerRadius: 16)
-                .fill(Color.white.opacity(0.1))
+                .fill(Color.Theme.divider)
                 .frame(width: 50, height: 50)
 
               Image(systemName: "person.3.sequence.fill")
                 .font(.system(size: 24))
-                .foregroundColor(.white)
+                .foregroundColor(Color.Theme.textPrimary)
             }
 
             VStack(alignment: .leading, spacing: 6) {
               Text("Group Management")
-                .font(.system(size: 28, weight: .bold))
-                .foregroundColor(.white)
+                .font(.system(size: 28, weight: .bold, design: .monospaced))
+                .foregroundColor(Color.Theme.textPrimary)
 
               HStack {
                 Text("Manage your groups and members")
-                  .font(.subheadline)
-                  .foregroundColor(.white.opacity(0.6))
+                  .font(.system(size: 14))
+                  .foregroundColor(Color.Theme.textSecondary)
 
                 Spacer()
 
@@ -74,18 +74,18 @@ struct GroupManagementView: View {
                     ProgressView()
                       .scaleEffect(0.6)
                     Text("Syncing...")
-                      .font(.caption)
-                      .foregroundColor(.white.opacity(0.6))
+                      .font(.system(size: 12, design: .monospaced))
+                      .foregroundColor(Color.Theme.textSecondary)
                   }
                 case .error(let error):
                   Image(systemName: "exclamationmark.triangle.fill")
-                    .foregroundColor(.red)
+                    .foregroundColor(Color.Theme.destructive)
                     .onTapGesture {
                       print("Sync Error: \(error)")
                     }
                 case .offline:
                   Image(systemName: "wifi.slash")
-                    .foregroundColor(.white.opacity(0.4))
+                    .foregroundColor(Color.Theme.textTertiary)
                 }
               }
             }
@@ -96,10 +96,10 @@ struct GroupManagementView: View {
         }
         .background(
           RoundedRectangle(cornerRadius: 20)
-            .fill(Color.white.opacity(0.08))
+            .fill(Color.Theme.searchBg)
             .overlay(
               RoundedRectangle(cornerRadius: 20)
-                .stroke(Color.white.opacity(0.15), lineWidth: 1)
+                .stroke(Color.Theme.divider, lineWidth: 1)
             )
         )
         .adaptivePadding(horizontal: 20, vertical: 0)
@@ -110,30 +110,30 @@ struct GroupManagementView: View {
         if !groupManager.isAuthenticated {
           HStack(spacing: 12) {
             Image(systemName: "exclamationmark.triangle.fill")
-              .foregroundColor(.yellow)
+              .foregroundColor(Color.Theme.dustyMauve)
 
             VStack(alignment: .leading, spacing: 2) {
               Text("iCloud Sign-In Required")
-                .font(.subheadline)
+                .font(.system(size: 14))
                 .fontWeight(.semibold)
-                .foregroundColor(.white)
+                .foregroundColor(Color.Theme.textPrimary)
 
               if case .couldNotDetermine = groupManager.accountStatus {
                 Text("Could not determine iCloud status. Please check Settings.")
-                  .font(.caption)
-                  .foregroundColor(.white.opacity(0.8))
+                  .font(.system(size: 12, design: .monospaced))
+                  .foregroundColor(Color.Theme.textSecondary)
               } else if case .restricted = groupManager.accountStatus {
                 Text("iCloud access is restricted.")
-                  .font(.caption)
-                  .foregroundColor(.white.opacity(0.8))
+                  .font(.system(size: 12, design: .monospaced))
+                  .foregroundColor(Color.Theme.textSecondary)
               } else if case .noAccount = groupManager.accountStatus {
                 Text("Please sign in to iCloud in Settings.")
-                  .font(.caption)
-                  .foregroundColor(.white.opacity(0.8))
+                  .font(.system(size: 12, design: .monospaced))
+                  .foregroundColor(Color.Theme.textSecondary)
               } else {
                 Text("Please sign in to iCloud in Settings to use group features.")
-                  .font(.caption)
-                  .foregroundColor(.white.opacity(0.8))
+                  .font(.system(size: 12, design: .monospaced))
+                  .foregroundColor(Color.Theme.textSecondary)
               }
 
               Button(action: {
@@ -142,9 +142,9 @@ struct GroupManagementView: View {
                 }
               }) {
                 Text("Retry")
-                  .font(.caption)
+                  .font(.system(size: 12, design: .monospaced))
                   .fontWeight(.bold)
-                  .foregroundColor(.yellow)
+                  .foregroundColor(Color.Theme.dustyMauve)
                   .padding(.top, 2)
               }
             }
@@ -152,11 +152,11 @@ struct GroupManagementView: View {
             Spacer()
           }
           .padding(16)
-          .background(Color.yellow.opacity(0.15))
+          .background(Color.Theme.dustyMauve.opacity(0.15))
           .cornerRadius(12)
           .overlay(
             RoundedRectangle(cornerRadius: 12)
-              .stroke(Color.yellow.opacity(0.3), lineWidth: 1)
+              .stroke(Color.Theme.dustyMauve.opacity(0.3), lineWidth: 1)
           )
           .adaptivePadding(horizontal: 20, vertical: 0)
           .padding(.bottom, 16)
@@ -168,9 +168,8 @@ struct GroupManagementView: View {
             // Group Actions
             VStack(alignment: .leading, spacing: 16) {
               Text("Actions")
-                .font(.title3)
-                .fontWeight(.bold)
-                .foregroundColor(.white)
+                .font(.system(size: 12, weight: .bold, design: .monospaced))
+                .foregroundColor(Color.Theme.textPrimary)
                 .padding(.horizontal, 20)
                 .padding(.top, 8)
 
@@ -193,10 +192,10 @@ struct GroupManagementView: View {
             .padding(4)
             .background(
               RoundedRectangle(cornerRadius: 16)
-                .fill(Color.white.opacity(0.06))
+                .fill(Color.Theme.searchBg)
                 .overlay(
                   RoundedRectangle(cornerRadius: 16)
-                    .stroke(Color.white.opacity(0.12), lineWidth: 1)
+                    .stroke(Color.Theme.divider, lineWidth: 1)
                 )
             )
             .adaptivePadding(horizontal: 20, vertical: 0)
@@ -211,9 +210,8 @@ struct GroupManagementView: View {
             // Legal & Privacy
             VStack(alignment: .leading, spacing: 16) {
               Text("Legal & Privacy")
-                .font(.title3)
-                .fontWeight(.bold)
-                .foregroundColor(.white)
+                .font(.system(size: 12, weight: .bold, design: .monospaced))
+                .foregroundColor(Color.Theme.textPrimary)
                 .padding(.horizontal, 20)
                 .padding(.top, 8)
 
@@ -237,10 +235,10 @@ struct GroupManagementView: View {
             .padding(4)
             .background(
               RoundedRectangle(cornerRadius: 16)
-                .fill(Color.white.opacity(0.06))
+                .fill(Color.Theme.searchBg)
                 .overlay(
                   RoundedRectangle(cornerRadius: 16)
-                    .stroke(Color.white.opacity(0.12), lineWidth: 1)
+                    .stroke(Color.Theme.divider, lineWidth: 1)
                 )
             )
             .adaptivePadding(horizontal: 20, vertical: 0)
@@ -260,15 +258,15 @@ struct GroupManagementView: View {
               Text("Done")
                 .fontWeight(.semibold)
             }
-            .foregroundColor(.white)
+            .foregroundColor(Color.Theme.textPrimary)
             .padding(.horizontal, 20)
             .padding(.vertical, 12)
             .background(
               Capsule()
-                .fill(Color.white.opacity(0.15))
+                .fill(Color.Theme.searchBg)
                 .background(
                   Capsule()
-                    .stroke(Color.white.opacity(0.3), lineWidth: 1)
+                    .stroke(Color.Theme.divider, lineWidth: 1)
                 )
             )
           }

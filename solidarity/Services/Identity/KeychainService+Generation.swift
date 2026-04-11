@@ -15,6 +15,9 @@ extension KeychainService {
 
   /// Ensures the signing key exists, generating it if needed.
   func ensureSigningKey() -> CardResult<Void> {
+    Self.keyLock.lock()
+    defer { Self.keyLock.unlock() }
+
     if alias == Self.masterAlias {
       return ensureCloudSyncedMasterSigningKey()
     }
@@ -60,12 +63,18 @@ extension KeychainService {
 
   private func ensureCloudSyncedMasterSigningKey() -> CardResult<Void> {
     if keyExists() {
-      if isMasterKeyCloudSyncCompatible() {
-        print("[KeychainService] Cloud-synced master signing key already exists")
+      // keyExists() confirmed a private key is present — now verify it's cloud-sync compatible
+      // AND the private key is actually retrievable (not just metadata)
+      if isMasterKeyCloudSyncCompatible(), existingPrivateKeyReference() != nil {
+        print("[KeychainService] Cloud-synced master signing key already exists and is usable")
         return .success(())
       }
 
-      print("[KeychainService] Existing master key is not cloud-sync compatible. Rotating to shared iCloud key.")
+      // Key exists but is either not cloud-sync compatible or private key is not retrievable
+      print(
+        "[KeychainService] Existing master key is not usable (incompatible or private key not retrievable). "
+        + "Rotating to shared iCloud key."
+      )
       clearInMemoryKey()
       switch deleteSigningKey() {
       case .success:
@@ -221,28 +230,34 @@ extension KeychainService {
           return .success(())
         }
 
-        // Existing key can't be loaded — delete the stale key and retry once
-        print("[KeychainService] Stale key detected, deleting and retrying...")
-        _ = deleteSigningKey()
+        // Existing key can't be loaded — aggressive cleanup of ALL key variants before retry
+        print("[KeychainService] Stale key detected, running aggressive cleanup before retry...")
+        cleanupAllOldKeys()
         clearInMemoryKey()
 
-        var retryError: Unmanaged<CFError>?
-        var retryAttributes = attributes
-        // Rebuild without SE since we're in a recovery path — use kSecAttrAccessible for sync keys
-        retryAttributes.removeValue(forKey: kSecAttrTokenID as String)
-        retryAttributes.removeValue(forKey: kSecAttrAccessControl as String)
-        retryAttributes[kSecAttrAccessible as String] = kSecAttrAccessibleWhenUnlocked
-        retryAttributes[kSecAttrSynchronizable as String] = kCFBooleanTrue as Any
+        // Build clean attributes from scratch (no SE tokens carried over from original)
+        let retryAttributes: [String: Any] = [
+          kSecAttrKeyType as String: kSecAttrKeyTypeECSECPrimeRandom,
+          kSecAttrKeyClass as String: kSecAttrKeyClassPrivate,
+          kSecAttrKeySizeInBits as String: 256,
+          kSecAttrIsPermanent as String: true,
+          kSecAttrApplicationTag as String: keyTag,
+          kSecAttrLabel as String: "Solidarity DID Key",
+          kSecAttrAccessible as String: kSecAttrAccessibleWhenUnlocked,
+          kSecAttrSynchronizable as String: kCFBooleanTrue as Any,
+        ]
 
+        var retryError: Unmanaged<CFError>?
         if let retryKey = SecKeyCreateRandomKey(retryAttributes as CFDictionary, &retryError) {
-          print("[KeychainService] Successfully regenerated key after stale key cleanup")
+          print("[KeychainService] Successfully regenerated key after aggressive cleanup")
           cachePublicJWK(from: retryKey)
           return .success(())
         }
 
+        // Persistent retry also failed — fall back to session-based (in-memory) key
         let retryMessage = (retryError?.takeRetainedValue() as Error?)?.localizedDescription ?? "Unknown error"
-        print("[KeychainService] Retry after cleanup also failed: \(retryMessage)")
-        return .failure(.keyManagementError("Failed to generate device key after cleanup: \(retryMessage)"))
+        print("[KeychainService] Persistent retry failed (\(retryMessage)), falling back to session-based key...")
+        return generateSessionBasedDeviceKey()
       }
 
       return .failure(.keyManagementError("Failed to generate device key: \(message)"))
@@ -308,157 +323,4 @@ extension KeychainService {
       )
     }
   #endif
-
-  private func cacheExistingPublicJWKIfPossible() -> Bool {
-    guard let existingKey = existingPrivateKeyReference() else {
-      print("[KeychainService] Unable to find existing key for tag \(alias)")
-      return false
-    }
-    cachePublicJWK(from: existingKey)
-    return true
-  }
-
-  private func existingPrivateKeyReference() -> SecKey? {
-    let query: [String: Any] = [
-      kSecClass as String: kSecClassKey,
-      kSecAttrApplicationTag as String: keyTag,
-      kSecAttrKeyType as String: kSecAttrKeyTypeECSECPrimeRandom,
-      kSecAttrSynchronizable as String: kSecAttrSynchronizableAny,
-      kSecMatchLimit as String: kSecMatchLimitOne,
-      kSecReturnRef as String: true,
-    ]
-
-    var item: CFTypeRef?
-    let status = SecItemCopyMatching(query as CFDictionary, &item)
-    guard status == errSecSuccess, let candidate = item else {
-      return nil
-    }
-    guard CFGetTypeID(candidate) == SecKeyGetTypeID() else {
-      return nil
-    }
-    return unsafeBitCast(candidate, to: SecKey.self)
-  }
-
-  private func existingKeyAttributes() -> [String: Any]? {
-    let query: [String: Any] = [
-      kSecClass as String: kSecClassKey,
-      kSecAttrApplicationTag as String: keyTag,
-      kSecAttrKeyType as String: kSecAttrKeyTypeECSECPrimeRandom,
-      kSecAttrSynchronizable as String: kSecAttrSynchronizableAny,
-      kSecMatchLimit as String: kSecMatchLimitOne,
-      kSecReturnAttributes as String: true,
-    ]
-
-    var item: CFTypeRef?
-    let status = SecItemCopyMatching(query as CFDictionary, &item)
-    guard status == errSecSuccess else {
-      return nil
-    }
-    return item as? [String: Any]
-  }
-
-  private func isMasterKeyCloudSyncCompatible() -> Bool {
-    guard let attributes = existingKeyAttributes() else {
-      return false
-    }
-    let synchronizable = (attributes[kSecAttrSynchronizable as String] as? NSNumber)?.boolValue ?? false
-    let tokenId = attributes[kSecAttrTokenID as String] as? String
-    return synchronizable && tokenId != (kSecAttrTokenIDSecureEnclave as String)
-  }
-
-  private func clearInMemoryKey() {
-    #if targetEnvironment(simulator)
-      Self.simulatorInMemoryKey = nil
-    #else
-      Self.deviceInMemoryKey = nil
-    #endif
-  }
-
-  /// Immediately cache the public JWK from a freshly generated key reference.
-  /// This avoids needing biometric auth later just to display the DID.
-  private func cachePublicJWK(from privateKey: SecKey) {
-    guard let publicKey = SecKeyCopyPublicKey(privateKey) else {
-      print("[KeychainService] cachePublicJWK: failed to derive public key")
-      return
-    }
-    var error: Unmanaged<CFError>?
-    guard let data = SecKeyCopyExternalRepresentation(publicKey, &error) as Data?,
-          data.count == 65
-    else {
-      print("[KeychainService] cachePublicJWK: failed to export public key")
-      return
-    }
-    let x = data.subdata(in: 1..<33)
-    let y = data.subdata(in: 33..<65)
-    let jwk = PublicKeyJWK(
-      kty: "EC", crv: "P-256", alg: "ES256",
-      x: x.base64URLEncodedString(),
-      y: y.base64URLEncodedString()
-    )
-    do {
-      let didUtils = DidMethodUtils(method: .key)
-      let did = try didUtils.didFromJwk(jwk: try jwk.jsonString())
-      let descriptor = DIDDescriptor(
-        did: did,
-        verificationMethodId: "\(did)#keys-1",
-        jwk: jwk
-      )
-      IdentityCacheStore().saveDescriptor(descriptor)
-      print("[KeychainService] cachePublicJWK: cached DID \(did)")
-    } catch {
-      print("[KeychainService] cachePublicJWK: DID derivation failed: \(error)")
-      // Still useful to cache even without DID for future use
-    }
-  }
-
-  private func deleteAllKeysWithTag() {
-    // Try multiple deletion strategies to ensure complete cleanup
-    let queries: [[String: Any]] = [
-      // Delete by tag only (broadest match)
-      [
-        kSecClass as String: kSecClassKey,
-        kSecAttrApplicationTag as String: keyTag,
-      ],
-      // Delete EC keys with tag
-      [
-        kSecClass as String: kSecClassKey,
-        kSecAttrApplicationTag as String: keyTag,
-        kSecAttrKeyType as String: kSecAttrKeyTypeECSECPrimeRandom,
-      ],
-      // Delete all private EC keys with our tag
-      [
-        kSecClass as String: kSecClassKey,
-        kSecAttrApplicationTag as String: keyTag,
-        kSecAttrKeyClass as String: kSecAttrKeyClassPrivate,
-      ],
-      // Delete Secure Enclave keys with tag
-      [
-        kSecClass as String: kSecClassKey,
-        kSecAttrApplicationTag as String: keyTag,
-        kSecAttrTokenID as String: kSecAttrTokenIDSecureEnclave,
-      ],
-      // Delete software keys with tag
-      [
-        kSecClass as String: kSecClassKey,
-        kSecAttrApplicationTag as String: keyTag,
-        kSecAttrKeyType as String: kSecAttrKeyTypeECSECPrimeRandom,
-        kSecAttrKeySizeInBits as String: 256,
-      ],
-    ]
-
-    var deletedCount = 0
-    for query in queries {
-      let status = SecItemDelete(query as CFDictionary)
-      if status == errSecSuccess {
-        deletedCount += 1
-        print("[KeychainService] Aggressive cleanup: deleted keys matching query")
-      } else if status != errSecItemNotFound {
-        print("[KeychainService] Cleanup query returned status: \(statusDescription(status))")
-      }
-    }
-
-    if deletedCount > 0 {
-      print("[KeychainService] Cleaned up \(deletedCount) key(s) with tag")
-    }
-  }
 }

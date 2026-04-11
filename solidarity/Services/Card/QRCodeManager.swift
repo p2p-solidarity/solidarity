@@ -12,6 +12,9 @@ final class QRCodeManager: ObservableObject {
   @Published var lastSealedRoute: String?
   @Published var lastScanRoute: ScanRoute?
   @Published var scanError: CardError?
+  /// StoredCredential.id for the VC imported during the last scan, if any.
+  /// Used by contact-save flows to attach the credential reference.
+  @Published var lastCredentialId: UUID?
 
   private let generationService: QRCodeGenerationService
   private let scanService: QRCodeScanService
@@ -31,7 +34,14 @@ final class QRCodeManager: ObservableObject {
   // MARK: - Generation
 
   func generateQRCode(from string: String) -> CardResult<UIImage> {
-    generationService.generateImage(from: string)
+    // Try descending correction levels: H → M → L.
+    // VP / VC payloads often exceed "H" capacity (~1273 bytes).
+    for level in ["H", "M", "L"] {
+      if case .success(let image) = generationService.generateImage(from: string, correctionLevel: level) {
+        return .success(image)
+      }
+    }
+    return generationService.generateImage(from: string, correctionLevel: "L")
   }
 
   func generateQRCode(
@@ -117,6 +127,7 @@ final class QRCodeManager: ObservableObject {
         self.lastScannedCard = outcome.card
         self.lastVerificationStatus = outcome.verificationStatus
         self.lastSealedRoute = outcome.sealedRoute
+        self.lastCredentialId = outcome.credentialId
         self.lastScanRoute = nil
         self.lastScanRoute = outcome.route
         self.scanError = nil

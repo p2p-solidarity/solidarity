@@ -53,8 +53,8 @@
 	<true/>
 	<key>NSBonjourServices</key>
 	<array>
-		<string>_solidarity-share._tcp.</string>
-		<string>_solidarity-share._tcp</string>
+		<string>_say-share._tcp.</string>
+		<string>_say-share._tcp</string>
 		<string>_airmeishi-share._tcp.</string>
 		<string>_airmeishi-share._tcp</string>
 	</array>

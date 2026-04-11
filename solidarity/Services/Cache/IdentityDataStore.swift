@@ -22,36 +22,19 @@ final class IdentityDataStore: ObservableObject {
   let modelContainer: ModelContainer
   let modelContext: ModelContext
 
-  private let migrationMarker = "solidarity.identity.swiftdata.migrated.v1"
+  private let migrationMarker = "solidarity.identity.swiftdata.migrated.v3"
   private let refreshSubject = PassthroughSubject<Void, Never>()
   private var refreshCancellable: AnyCancellable?
 
   private init() {
-    let url = URL.documentsDirectory.appending(path: "SolidarityIdentity_v1.store")
+    // v3 store — isolates from v2 Array<String> materialization bug
+    // (CoreData could not materialize tags/credentialIds). v1 & v2 files
+    // are left on disk; migration from legacy sources reruns via marker.
+    let url = URL.documentsDirectory.appending(path: "SolidarityIdentity_v3.store")
     let configuration = ModelConfiguration(url: url, cloudKitDatabase: .none)
 
-    do {
-      modelContainer = try ModelContainer(
-        for: ContactEntity.self,
-        IdentityCardEntity.self,
-        ProvableClaimEntity.self,
-        configurations: configuration
-      )
-      modelContext = modelContainer.mainContext
-    } catch {
-      let memoryConfiguration = ModelConfiguration(isStoredInMemoryOnly: true, cloudKitDatabase: .none)
-      do {
-        modelContainer = try ModelContainer(
-          for: ContactEntity.self,
-          IdentityCardEntity.self,
-          ProvableClaimEntity.self,
-          configurations: memoryConfiguration
-        )
-        modelContext = modelContainer.mainContext
-      } catch {
-        fatalError("Failed to initialize IdentityDataStore: \(error)")
-      }
-    }
+    modelContainer = Self.makeContainer(configuration: configuration, fallbackStoreURL: url)
+    modelContext = modelContainer.mainContext
 
     // Debounce rapid writes — coalesce refreshes within 100ms
     refreshCancellable = refreshSubject
@@ -61,6 +44,64 @@ final class IdentityDataStore: ObservableObject {
       }
 
     performRefresh()
+  }
+
+  /// Attempts to open the persistent store. On failure (schema mismatch,
+  /// corrupt file) the v2 file is moved to a quarantine path and a fresh
+  /// store is opened. The final fallback is in-memory to keep the app
+  /// running even if disk I/O is broken. Rebuilding from quarantine is
+  /// manual and only relevant for debugging.
+  private static func makeContainer(
+    configuration: ModelConfiguration,
+    fallbackStoreURL: URL
+  ) -> ModelContainer {
+    if let container = try? ModelContainer(
+      for: ContactEntity.self,
+      IdentityCardEntity.self,
+      ProvableClaimEntity.self,
+      configurations: configuration
+    ) {
+      return container
+    }
+
+    // Quarantine the broken store and try one fresh on-disk open.
+    print("[IdentityDataStore] v3 store failed to open — quarantining \(fallbackStoreURL.lastPathComponent)")
+    let fm = FileManager.default
+    if fm.fileExists(atPath: fallbackStoreURL.path) {
+      let quarantine = fallbackStoreURL.deletingLastPathComponent()
+        .appending(path: "SolidarityIdentity_v3.broken-\(Int(Date().timeIntervalSince1970)).store")
+      try? fm.moveItem(at: fallbackStoreURL, to: quarantine)
+      // Also move sidecar files SwiftData writes alongside the store.
+      for suffix in ["-wal", "-shm"] {
+        let sidecar = URL(fileURLWithPath: fallbackStoreURL.path + suffix)
+        if fm.fileExists(atPath: sidecar.path) {
+          try? fm.removeItem(at: sidecar)
+        }
+      }
+    }
+
+    if let container = try? ModelContainer(
+      for: ContactEntity.self,
+      IdentityCardEntity.self,
+      ProvableClaimEntity.self,
+      configurations: configuration
+    ) {
+      return container
+    }
+
+    // Last resort — in-memory. App stays usable; data is ephemeral.
+    print("[IdentityDataStore] fresh on-disk also failed — falling back to in-memory store")
+    let memory = ModelConfiguration(isStoredInMemoryOnly: true, cloudKitDatabase: .none)
+    do {
+      return try ModelContainer(
+        for: ContactEntity.self,
+        IdentityCardEntity.self,
+        ProvableClaimEntity.self,
+        configurations: memory
+      )
+    } catch {
+      fatalError("Failed to initialize IdentityDataStore: \(error)")
+    }
   }
 
   func refreshAll() {
@@ -83,7 +124,7 @@ final class IdentityDataStore: ObservableObject {
     migrateContactsFromEncryptedStore()
     migrateCredentialsFromLibrary()
 
-    try? modelContext.save()
+    persistSave("initialMigration")
     UserDefaults.standard.set(true, forKey: migrationMarker)
     performRefresh()
   }
@@ -113,12 +154,24 @@ final class IdentityDataStore: ObservableObject {
       existing.graphExportEdgeId = contact.graphExportEdgeId
       existing.graphCredentialRef = contact.graphCredentialRef
       existing.commonFriendsHandshakeToken = contact.commonFriendsHandshakeToken
+      existing.credentialIds = contact.credentialIds
     } else {
       modelContext.insert(contact)
     }
 
-    try? modelContext.save()
+    persistSave("upsertContact(\(contact.id))")
     refreshAll()
+  }
+
+  /// Attaches a credential ID reference to a contact. ContactProfile only
+  /// stores references to the credential vault, never the VC contents.
+  func attachCredential(contactID: String, credentialID: String) {
+    guard let contact = findContact(by: contactID) else { return }
+    if !contact.credentialIds.contains(credentialID) {
+      contact.credentialIds.append(credentialID)
+      persistSave("attachCredential(\(contactID))")
+      refreshAll()
+    }
   }
 
   func updateExchangeMetadata(_ patch: ExchangeMetadataPatch) {
@@ -128,7 +181,7 @@ final class IdentityDataStore: ObservableObject {
     contact.exchangeTimestamp = patch.timestamp
     contact.myEphemeralMessage = patch.myMessage
     contact.theirEphemeralMessage = patch.theirMessage
-    try? modelContext.save()
+    persistSave("updateExchangeMetadata(\(patch.contactID))")
     refreshAll()
   }
 
@@ -150,7 +203,7 @@ final class IdentityDataStore: ObservableObject {
     } else {
       modelContext.insert(card)
     }
-    try? modelContext.save()
+    persistSave("addIdentityCard(\(card.id))")
     refreshAll()
   }
 
@@ -162,19 +215,20 @@ final class IdentityDataStore: ObservableObject {
       existing.trustLevel = claim.trustLevel
       existing.source = claim.source
       existing.payload = claim.payload
+      existing.sourceField = claim.sourceField
       existing.isPresentable = claim.isPresentable
       existing.updatedAt = Date()
     } else {
       modelContext.insert(claim)
     }
-    try? modelContext.save()
+    persistSave("addProvableClaim(\(claim.id))")
     refreshAll()
   }
 
   func deleteContact(by id: String) {
     guard let contact = findContact(by: id) else { return }
     modelContext.delete(contact)
-    try? modelContext.save()
+    persistSave("deleteContact(\(id))")
     refreshAll()
   }
 
@@ -182,7 +236,7 @@ final class IdentityDataStore: ObservableObject {
     for contact in contacts {
       modelContext.delete(contact)
     }
-    try? modelContext.save()
+    persistSave("clearAllContacts")
     refreshAll()
   }
 
@@ -193,7 +247,7 @@ final class IdentityDataStore: ObservableObject {
     for claim in provableClaims {
       modelContext.delete(claim)
     }
-    try? modelContext.save()
+    persistSave("clearAllIdentityData")
     refreshAll()
   }
 
@@ -206,7 +260,7 @@ final class IdentityDataStore: ObservableObject {
       }
       modelContext.delete(card)
     }
-    try? modelContext.save()
+    persistSave("removePassportCredentials")
     refreshAll()
   }
 
@@ -214,8 +268,21 @@ final class IdentityDataStore: ObservableObject {
     guard let claim = findClaim(by: claimID) else { return }
     claim.lastPresentedAt = Date()
     claim.updatedAt = Date()
-    try? modelContext.save()
+    persistSave("markClaimPresented(\(claimID))")
     refreshAll()
+  }
+
+  // MARK: - Persistence
+
+  @discardableResult
+  private func persistSave(_ label: String) -> Bool {
+    do {
+      try modelContext.save()
+      return true
+    } catch {
+      print("[IdentityDataStore] \(label): save failed — \(error)")
+      return false
+    }
   }
 
   // MARK: - Migration

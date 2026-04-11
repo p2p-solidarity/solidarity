@@ -138,6 +138,25 @@ final class VCLibrary {
     }
   }
 
+  /// Removes all stored credentials and deletes the encrypted file.
+  @discardableResult
+  func clearAll() -> CardResult<Void> {
+    return queue.sync {
+      cache = []
+      loaded = false
+
+      let url = storageURL()
+      if fileManager.fileExists(atPath: url.path) {
+        do {
+          try fileManager.removeItem(at: url)
+        } catch {
+          return .failure(.storageError("Failed to delete credential library: \(error.localizedDescription)"))
+        }
+      }
+      return .success(())
+    }
+  }
+
   // MARK: - Internal helpers
 
   private func ensureLoaded() -> CardResult<Void> {

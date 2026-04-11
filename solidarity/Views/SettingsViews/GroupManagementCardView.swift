@@ -22,7 +22,7 @@ struct GroupManagementCardView: View {
           .clipped()
           .overlay(
             LinearGradient(
-              colors: [.clear, .black.opacity(0.8)],
+              colors: [.clear, Color.Theme.pageBg.opacity(0.8)],
               startPoint: .top,
               endPoint: .bottom
             )
@@ -30,14 +30,14 @@ struct GroupManagementCardView: View {
       } else {
         // Fallback Gradient
         LinearGradient(
-          colors: [Color.blue.opacity(0.3), Color.purple.opacity(0.3)],
+          colors: [Color.Theme.primaryBlue.opacity(0.3), Color.Theme.dustyMauve.opacity(0.3)],
           startPoint: .topLeading,
           endPoint: .bottomTrailing
         )
         .frame(height: 200)
         .overlay(
           LinearGradient(
-            colors: [.clear, .black.opacity(0.6)],
+            colors: [.clear, Color.Theme.pageBg.opacity(0.6)],
             startPoint: .top,
             endPoint: .bottom
           )
@@ -49,10 +49,10 @@ struct GroupManagementCardView: View {
         HStack {
           if group.isPrivate {
             Image(systemName: "lock.fill")
-              .font(.caption)
-              .foregroundColor(.yellow)
+              .font(.system(size: 12, design: .monospaced))
+              .foregroundColor(Color.Theme.dustyMauve)
               .padding(6)
-              .background(Color.black.opacity(0.5))
+              .background(Color.Theme.pageBg.opacity(0.5))
               .clipShape(Circle())
           }
 
@@ -61,9 +61,9 @@ struct GroupManagementCardView: View {
           // Delete Button (Top Right)
           Button(action: onDelete) {
             Image(systemName: "trash")
-              .foregroundColor(.white)
+              .foregroundColor(Color.Theme.textPrimary)
               .padding(8)
-              .background(Color.red.opacity(0.7))
+              .background(Color.Theme.destructive.opacity(0.7))
               .clipShape(Circle())
           }
         }
@@ -71,15 +71,14 @@ struct GroupManagementCardView: View {
         Spacer()
 
         Text(group.name)
-          .font(.title2)
-          .fontWeight(.bold)
-          .foregroundColor(.white)
+          .font(.system(size: 28, weight: .bold, design: .monospaced))
+          .foregroundColor(Color.Theme.textPrimary)
           .lineLimit(1)
 
         if !group.description.isEmpty {
           Text(group.description)
-            .font(.subheadline)
-            .foregroundColor(.white.opacity(0.8))
+            .font(.system(size: 14))
+            .foregroundColor(Color.Theme.textSecondary)
             .lineLimit(2)
         }
 
@@ -88,28 +87,28 @@ struct GroupManagementCardView: View {
             Image(systemName: "person.2.fill")
             Text("\(group.memberCount)")
           }
-          .font(.caption)
-          .foregroundColor(.white.opacity(0.7))
+          .font(.system(size: 12, design: .monospaced))
+          .foregroundColor(Color.Theme.textSecondary)
 
           if !group.isSynced {
             HStack(spacing: 4) {
               Image(systemName: "arrow.triangle.2.circlepath")
               Text("Unsynced")
             }
-            .font(.caption)
-            .foregroundColor(.orange)
+            .font(.system(size: 12, design: .monospaced))
+            .foregroundColor(Color.Theme.accentRose)
           }
         }
       }
       .padding(16)
     }
     .frame(height: 200)
-    .background(Color(red: 0.1, green: 0.1, blue: 0.15))
+    .background(Color.Theme.cardBg)
     .cornerRadius(20)
-    .shadow(color: Color.black.opacity(0.3), radius: 10, x: 0, y: 5)
+    .shadow(color: Color.Theme.pageBg.opacity(0.3), radius: 10, x: 0, y: 5)
     .overlay(
       RoundedRectangle(cornerRadius: 20)
-        .stroke(Color.white.opacity(0.1), lineWidth: 1)
+        .stroke(Color.Theme.divider, lineWidth: 1)
     )
   }
 }

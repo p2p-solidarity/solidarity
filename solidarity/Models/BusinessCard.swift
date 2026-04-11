@@ -7,7 +7,6 @@
 
 import Foundation
 
-/// Main business card data model with comprehensive contact information and privacy controls
 struct BusinessCard: Codable, Identifiable, Equatable, Hashable {
   let id: UUID
   var name: String
@@ -21,7 +20,12 @@ struct BusinessCard: Codable, Identifiable, Equatable, Hashable {
   var skills: [Skill]
   var categories: [String]
   var sharingPreferences: SharingPreferences
-  var groupContext: GroupCredentialContext?  // Group VC Context
+  var groupContext: GroupCredentialContext?
+  /// Fields that have been cryptographically verified (e.g., from passport, signed exchange).
+  /// nil means no verification tracking (legacy cards); empty set means nothing verified.
+  var verifiedFields: Set<BusinessCardField>?
+  /// Whether the name is a display name or a verified legal name from a source credential.
+  var nameType: NameType
   var createdAt: Date
   var updatedAt: Date
 
@@ -39,6 +43,8 @@ struct BusinessCard: Codable, Identifiable, Equatable, Hashable {
     categories: [String] = [],
     sharingPreferences: SharingPreferences = SharingPreferences(),
     groupContext: GroupCredentialContext? = nil,
+    verifiedFields: Set<BusinessCardField>? = nil,
+    nameType: NameType = .displayName,
     createdAt: Date = Date(),
     updatedAt: Date = Date()
   ) {
@@ -55,16 +61,44 @@ struct BusinessCard: Codable, Identifiable, Equatable, Hashable {
     self.categories = categories
     self.sharingPreferences = sharingPreferences
     self.groupContext = groupContext
+    self.verifiedFields = verifiedFields
+    self.nameType = nameType
     self.createdAt = createdAt
     self.updatedAt = updatedAt
   }
 
-  /// Update the business card and refresh the updatedAt timestamp
+  enum CodingKeys: String, CodingKey {
+    case id, name, title, company, email, phone, profileImage
+    case animal, socialNetworks, skills, categories
+    case sharingPreferences, groupContext, verifiedFields
+    case nameType, createdAt, updatedAt
+  }
+
+  init(from decoder: Decoder) throws {
+    let container = try decoder.container(keyedBy: CodingKeys.self)
+    id = try container.decode(UUID.self, forKey: .id)
+    name = try container.decode(String.self, forKey: .name)
+    title = try container.decodeIfPresent(String.self, forKey: .title)
+    company = try container.decodeIfPresent(String.self, forKey: .company)
+    email = try container.decodeIfPresent(String.self, forKey: .email)
+    phone = try container.decodeIfPresent(String.self, forKey: .phone)
+    profileImage = try container.decodeIfPresent(Data.self, forKey: .profileImage)
+    animal = try container.decodeIfPresent(AnimalCharacter.self, forKey: .animal)
+    socialNetworks = try container.decodeIfPresent([SocialNetwork].self, forKey: .socialNetworks) ?? []
+    skills = try container.decodeIfPresent([Skill].self, forKey: .skills) ?? []
+    categories = try container.decodeIfPresent([String].self, forKey: .categories) ?? []
+    sharingPreferences = try container.decodeIfPresent(SharingPreferences.self, forKey: .sharingPreferences) ?? SharingPreferences()
+    groupContext = try container.decodeIfPresent(GroupCredentialContext.self, forKey: .groupContext)
+    verifiedFields = try container.decodeIfPresent(Set<BusinessCardField>.self, forKey: .verifiedFields)
+    nameType = try container.decodeIfPresent(NameType.self, forKey: .nameType) ?? .displayName
+    createdAt = try container.decodeIfPresent(Date.self, forKey: .createdAt) ?? Date()
+    updatedAt = try container.decodeIfPresent(Date.self, forKey: .updatedAt) ?? Date()
+  }
+
   mutating func update() {
     self.updatedAt = Date()
   }
 
-  /// Get filtered business card based on sharing preferences for a specific sharing level
   func filteredCard(for sharingLevel: SharingLevel) -> BusinessCard {
     var filtered = self
     let allowedFields = sharingPreferences.effectiveFields(preferredLevel: sharingLevel)
@@ -78,13 +112,9 @@ struct BusinessCard: Codable, Identifiable, Equatable, Hashable {
     if !allowedFields.contains(.socialNetworks) { filtered.socialNetworks = [] }
     if !allowedFields.contains(.skills) { filtered.skills = [] }
 
-    // If sharing level is personal/professional, we might want to strip group context
-    // unless explicitly handled. For now, we keep it as it's part of the credential.
-
     return filtered
   }
 
-  /// Get filtered business card based on explicit field set
   func filteredCard(for fields: Set<BusinessCardField>) -> BusinessCard {
     var filtered = self
     if !fields.contains(.name) { filtered.name = "" }
@@ -97,9 +127,58 @@ struct BusinessCard: Codable, Identifiable, Equatable, Hashable {
     if !fields.contains(.skills) { filtered.skills = [] }
     return filtered
   }
+
+  /// Returns a copy containing only fields that have been cryptographically verified.
+  /// Name is always included as the minimum identity field.
+  func filteredCardForVerifiedOnly() -> BusinessCard {
+    let verified = verifiedFields ?? []
+    // Name is always included as minimum identity
+    var fields = verified
+    fields.insert(.name)
+    return filteredCard(for: fields)
+  }
+
+  /// Marks the provided fields as verified/attested on this card. Used by
+  /// callers that issue self-signed (L1) credentials — the holder explicitly
+  /// attests to their own values so those fields may enter the signed VC.
+  /// For L2/L3 credentials, `verifiedFields` should instead be derived from
+  /// VerifiedClaimIndex against a source VC.
+  func withAttestedFields(_ fields: Set<BusinessCardField>) -> BusinessCard {
+    var copy = self
+    var attested = fields
+    attested.insert(.name)
+    copy.verifiedFields = attested
+    return copy
+  }
+
+  /// Returns the verification status for a given field.
+  /// - `verifiedBySource`: field is in `verifiedFields` AND backed by a source VC
+  ///   (caller must confirm via VerifiedClaimIndex).
+  /// - `selfAttested`: field is in `verifiedFields` but not externally backed.
+  /// - `unverified`: field is NOT in `verifiedFields` — not eligible for VC.
+  func verificationStatus(for field: BusinessCardField, externallyVerified: Set<BusinessCardField>) -> FieldVerificationStatus {
+    let verified = verifiedFields ?? []
+    guard verified.contains(field) else { return .unverified }
+    return externallyVerified.contains(field) ? .verifiedBySource : .selfAttested
+  }
+
+  /// Fields that are VC-eligible: intersection of selectedFields and
+  /// (verifiedFields from source + name). Unverified fields are excluded.
+  /// For L1 self-issued: all selected fields are self-attested.
+  func vcEligibleFields(
+    selectedFields: Set<BusinessCardField>,
+    externallyVerifiedFields: Set<BusinessCardField>
+  ) -> Set<BusinessCardField> {
+    var eligible: Set<BusinessCardField> = [.name]
+    for field in selectedFields {
+      if externallyVerifiedFields.contains(field) {
+        eligible.insert(field)
+      }
+    }
+    return eligible
+  }
 }
 
-/// Social network information
 struct SocialNetwork: Codable, Identifiable, Equatable, Hashable {
   let id: UUID
   var platform: SocialPlatform
@@ -119,7 +198,6 @@ struct SocialNetwork: Codable, Identifiable, Equatable, Hashable {
   }
 }
 
-/// Supported social media platforms
 enum SocialPlatform: String, Codable, CaseIterable {
   case linkedin = "LinkedIn"
   case twitter = "Twitter"
@@ -142,7 +220,6 @@ enum SocialPlatform: String, Codable, CaseIterable {
   }
 }
 
-/// Individual skill with categorization and proficiency levels
 struct Skill: Codable, Identifiable, Equatable, Hashable {
   let id: UUID
   var name: String
@@ -162,7 +239,6 @@ struct Skill: Codable, Identifiable, Equatable, Hashable {
   }
 }
 
-/// Proficiency levels for skills
 enum ProficiencyLevel: String, Codable, CaseIterable {
   case beginner = "Beginner"
   case intermediate = "Intermediate"
@@ -179,7 +255,6 @@ enum ProficiencyLevel: String, Codable, CaseIterable {
   }
 }
 
-/// Privacy controls for selective information sharing
 struct SharingPreferences: Codable, Equatable, Hashable {
   var publicFields: Set<BusinessCardField>
   var professionalFields: Set<BusinessCardField>
@@ -196,9 +271,8 @@ struct SharingPreferences: Codable, Equatable, Hashable {
     allowForwarding: Bool = false,
     expirationDate: Date? = nil,
     useZK: Bool = true,
-    sharingFormat: SharingFormat = .plaintext
+    sharingFormat: SharingFormat = .didSigned
   ) {
-    // Ensure name is always included in all levels
     var publicSet = publicFields
     publicSet.insert(.name)
     self.publicFields = publicSet
@@ -217,7 +291,6 @@ struct SharingPreferences: Codable, Equatable, Hashable {
     self.sharingFormat = sharingFormat
   }
 
-  /// Get allowed fields for a specific sharing level
   func fieldsForLevel(_ level: SharingLevel) -> Set<BusinessCardField> {
     switch level {
     case .`public`:
@@ -229,7 +302,6 @@ struct SharingPreferences: Codable, Equatable, Hashable {
     }
   }
 
-  /// Field toggles are the canonical source when all legacy levels carry the same set.
   func effectiveFields(preferredLevel: SharingLevel) -> Set<BusinessCardField> {
     if publicFields == professionalFields && professionalFields == personalFields {
       return publicFields
@@ -238,51 +310,27 @@ struct SharingPreferences: Codable, Equatable, Hashable {
   }
 }
 
-// MARK: - Codable compatibility for SharingPreferences (handle missing keys)
-
-extension SharingPreferences {
-  private enum CodingKeys: String, CodingKey {
-    case publicFields, professionalFields, personalFields, allowForwarding, expirationDate, useZK, sharingFormat
-  }
-
-  init(from decoder: Decoder) throws {
-    let container = try decoder.container(keyedBy: CodingKeys.self)
-    var publicSet =
-      try container.decodeIfPresent(Set<BusinessCardField>.self, forKey: .publicFields) ?? [.name, .title, .company]
-    publicSet.insert(.name)  // Ensure name is always included
-    self.publicFields = publicSet
-
-    var professionalSet =
-      try container.decodeIfPresent(Set<BusinessCardField>.self, forKey: .professionalFields)
-      ?? [.name, .title, .company, .email, .skills]
-    professionalSet.insert(.name)  // Ensure name is always included
-    self.professionalFields = professionalSet
-
-    var personalSet =
-      try container.decodeIfPresent(Set<BusinessCardField>.self, forKey: .personalFields)
-      ?? BusinessCardField.allCases.asSet()
-    personalSet.insert(.name)  // Ensure name is always included
-    self.personalFields = personalSet
-
-    self.allowForwarding = try container.decodeIfPresent(Bool.self, forKey: .allowForwarding) ?? false
-    self.expirationDate = try container.decodeIfPresent(Date.self, forKey: .expirationDate)
-    self.useZK = try container.decodeIfPresent(Bool.self, forKey: .useZK) ?? true
-    self.sharingFormat = try container.decodeIfPresent(SharingFormat.self, forKey: .sharingFormat) ?? .plaintext
-  }
-
-  func encode(to encoder: Encoder) throws {
-    var container = encoder.container(keyedBy: CodingKeys.self)
-    try container.encode(publicFields, forKey: .publicFields)
-    try container.encode(professionalFields, forKey: .professionalFields)
-    try container.encode(personalFields, forKey: .personalFields)
-    try container.encode(allowForwarding, forKey: .allowForwarding)
-    try container.encodeIfPresent(expirationDate, forKey: .expirationDate)
-    try container.encode(useZK, forKey: .useZK)
-    try container.encode(sharingFormat, forKey: .sharingFormat)
-  }
+/// Verification status for individual fields in a VC.
+/// Distinguishes self-attested (L1) from source-verified (L2/L3) data.
+enum FieldVerificationStatus: String, Codable, CaseIterable {
+  /// No verification — user-provided data, NOT included in signed VC.
+  case unverified
+  /// Self-attested (L1) — holder explicitly attests to this value. Included in
+  /// VC but marked as self-issued with no external backing.
+  case selfAttested = "self_attested"
+  /// Verified by an external source credential (L2 institution / L3 government).
+  /// The backing sourceCredentialId is tracked in VerifiedClaimIndex.
+  case verifiedBySource = "verified_by_source"
 }
 
-/// Available business card fields for privacy control
+/// Whether the `name` field represents a display name or a verified legal name.
+enum NameType: String, Codable {
+  /// User-chosen display name (default). Always shareable but only self-attested in VC.
+  case displayName = "display_name"
+  /// Legal name verified from passport or institutional credential.
+  case verifiedLegalName = "verified_legal_name"
+}
+
 enum BusinessCardField: String, Codable, CaseIterable {
   case name
   case title
@@ -309,7 +357,7 @@ enum BusinessCardField: String, Codable, CaseIterable {
   var icon: String {
     switch self {
     case .name: return "person.text.rectangle"
-    case .title: return "id.card"
+    case .title: return "briefcase"
     case .company: return "building.2"
     case .email: return "envelope"
     case .phone: return "phone"
@@ -320,8 +368,6 @@ enum BusinessCardField: String, Codable, CaseIterable {
   }
 }
 
-/// Legacy sharing-level marker kept for backward compatibility.
-/// Field toggles (`BusinessCardField`) are the canonical sharing controls.
 enum SharingLevel: String, Codable, CaseIterable {
   case `public` = "public"
   case professional = "professional"
@@ -349,92 +395,5 @@ enum SharingLevel: String, Codable, CaseIterable {
     case .professional: return "For work contacts and events. Usually includes email and skills."
     case .personal: return "For close contacts. Typically includes all fields."
     }
-  }
-}
-
-// MARK: - Extensions
-
-extension Array where Element == BusinessCardField {
-  func asSet() -> Set<BusinessCardField> {
-    return Set(self)
-  }
-}
-
-extension BusinessCardField: Identifiable {
-  var id: String { self.rawValue }
-}
-
-extension SharingLevel: Identifiable {
-  var id: String { self.rawValue }
-}
-
-// MARK: - Additional Extensions for Contact Management
-
-extension BusinessCard {
-  /// Get initials for profile display
-  var initials: String {
-    let components = name.components(separatedBy: " ")
-    let initials = components.compactMap { $0.first }.map { String($0) }
-    return initials.prefix(2).joined().uppercased()
-  }
-
-  /// Get profile image URL if stored as URL string
-  var profileImageURL: URL? {
-    // In a real implementation, this might return a URL to a stored image
-    // For now, return nil as we're storing image data directly
-    return nil
-  }
-
-  /// Generate vCard data for sharing
-  var vCardData: String {
-    var vCard = "BEGIN:VCARD\n"
-    vCard += "VERSION:3.0\n"
-    vCard += "FN:\(name)\n"
-
-    if let title = title, !title.isEmpty {
-      vCard += "TITLE:\(title)\n"
-    }
-
-    if let company = company, !company.isEmpty {
-      vCard += "ORG:\(company)\n"
-    }
-
-    if let email = email, !email.isEmpty {
-      vCard += "EMAIL:\(email)\n"
-    }
-
-    if let phone = phone, !phone.isEmpty {
-      vCard += "TEL:\(phone)\n"
-    }
-
-    // Add social networks
-    for social in socialNetworks {
-      if let url = social.url, !url.isEmpty {
-        vCard += "URL:\(url)\n"
-      }
-    }
-
-    // Add skills as notes
-    if !skills.isEmpty {
-      let skillsText = skills.map { "\($0.name) (\($0.proficiencyLevel.rawValue))" }.joined(separator: ", ")
-      vCard += "NOTE:Skills: \(skillsText)\n"
-    }
-
-    vCard += "END:VCARD\n"
-    return vCard
-  }
-
-  /// Sample business card for previews
-  static var sample: BusinessCard {
-    return BusinessCard(
-      name: "Solidarity User",
-      title: "Builder",
-      company: "Solidarity",
-      email: "hello@solidarity.id",
-      phone: "",
-      socialNetworks: [],
-      skills: [],
-      categories: []
-    )
   }
 }

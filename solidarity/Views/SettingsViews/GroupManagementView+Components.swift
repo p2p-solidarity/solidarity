@@ -43,8 +43,8 @@ struct InviteLinkView: View {
               .disabled(isGenerating)
 
               Text("This is a private group. Use iCloud sharing to add or remove people.")
-                .font(.caption)
-                .foregroundColor(.secondary)
+                .font(.system(size: 12, design: .monospaced))
+                .foregroundColor(Color.Theme.textSecondary)
             } else {
               Button(action: { generateLink(for: group) }) {
                 if isGenerating {
@@ -58,8 +58,8 @@ struct InviteLinkView: View {
               if let link = inviteLink {
                 VStack(alignment: .leading) {
                   Text("Invite Link")
-                    .font(.caption)
-                    .foregroundColor(.black)
+                    .font(.system(size: 12, weight: .bold, design: .monospaced))
+                    .foregroundColor(Color.Theme.textPrimary)
                   Text(link)
                     .font(.monospaced(.body)())
                     .textSelection(.enabled)
@@ -80,7 +80,7 @@ struct InviteLinkView: View {
         if let error = errorMessage {
           Section {
             Text(error)
-              .foregroundColor(.red)
+              .foregroundColor(Color.Theme.destructive)
           }
         }
       }
@@ -147,38 +147,38 @@ struct SimpleNodeRow: View {
       HStack(alignment: .center, spacing: 16) {
         ZStack {
           RoundedRectangle(cornerRadius: 12)
-            .fill(Color.white.opacity(0.1))
+            .fill(Color.Theme.divider)
             .frame(width: 44, height: 44)
 
           Image(systemName: icon)
             .font(.system(size: 20, weight: .medium))
-            .foregroundColor(.white)
+            .foregroundColor(Color.Theme.textPrimary)
             .frame(width: 44, height: 44)
             .contentShape(Rectangle())
         }
 
         VStack(alignment: .leading, spacing: 4) {
           Text(title)
-            .font(.subheadline)
+            .font(.system(size: 14))
             .fontWeight(.medium)
-            .foregroundColor(.white)
+            .foregroundColor(Color.Theme.textPrimary)
 
           Text(subtitle)
-            .font(.caption)
-            .foregroundColor(.white.opacity(0.5))
+            .font(.system(size: 12, design: .monospaced))
+            .foregroundColor(Color.Theme.textTertiary)
         }
 
         Spacer()
 
         Image(systemName: "chevron.right")
           .font(.system(size: 14))
-          .foregroundColor(.white.opacity(0.4))
+          .foregroundColor(Color.Theme.textTertiary)
       }
       .padding(.horizontal, 16)
       .padding(.vertical, 12)
       .background(
         RoundedRectangle(cornerRadius: 12)
-          .fill(Color.white.opacity(0.05))
+          .fill(Color.Theme.searchBg)
       )
       .padding(.horizontal, 12)
       .padding(.vertical, 2)
@@ -198,25 +198,25 @@ struct SimplePremiumFeatureRow: View {
     HStack(alignment: .center, spacing: 16) {
       ZStack {
         RoundedRectangle(cornerRadius: 14)
-          .fill(Color.white.opacity(0.12))
+          .fill(Color.Theme.divider)
           .frame(width: 50, height: 50)
 
         Image(systemName: icon)
           .font(.system(size: 22, weight: .medium))
-          .foregroundColor(.white)
+          .foregroundColor(Color.Theme.textPrimary)
           .frame(width: 50, height: 50)
           .contentShape(Rectangle())
       }
 
       VStack(alignment: .leading, spacing: 4) {
         Text(title)
-          .font(.subheadline)
+          .font(.system(size: 14))
           .fontWeight(.medium)
-          .foregroundColor(.white)
+          .foregroundColor(Color.Theme.textPrimary)
 
         Text(subtitle)
-          .font(.caption)
-          .foregroundColor(.white.opacity(0.5))
+          .font(.system(size: 12, design: .monospaced))
+          .foregroundColor(Color.Theme.textTertiary)
           .lineLimit(2)
       }
 
@@ -224,22 +224,21 @@ struct SimplePremiumFeatureRow: View {
 
       VStack(alignment: .trailing, spacing: 2) {
         Text(price)
-          .font(.headline)
-          .fontWeight(.semibold)
-          .foregroundColor(.white)
+          .font(.system(size: 12, weight: .bold, design: .monospaced))
+          .foregroundColor(Color.Theme.textPrimary)
 
         Text("Premium")
-          .font(.caption2)
-          .foregroundColor(.white.opacity(0.5))
+          .font(.system(size: 10, design: .monospaced))
+          .foregroundColor(Color.Theme.textTertiary)
       }
     }
     .padding(16)
     .background(
       RoundedRectangle(cornerRadius: 14)
-        .fill(Color.white.opacity(0.08))
+        .fill(Color.Theme.searchBg)
         .overlay(
           RoundedRectangle(cornerRadius: 14)
-            .stroke(Color.white.opacity(0.15), lineWidth: 1)
+            .stroke(Color.Theme.divider, lineWidth: 1)
         )
     )
     .padding(.horizontal, 12)
@@ -258,41 +257,41 @@ struct SimpleDangerNodeRow: View {
       HStack(alignment: .center, spacing: 16) {
         ZStack {
           RoundedRectangle(cornerRadius: 12)
-            .fill(Color.red.opacity(0.15))
+            .fill(Color.Theme.destructive.opacity(0.15))
             .frame(width: 44, height: 44)
 
           Image(systemName: icon)
             .font(.system(size: 20, weight: .medium))
-            .foregroundColor(.red)
+            .foregroundColor(Color.Theme.destructive)
             .frame(width: 44, height: 44)
             .contentShape(Rectangle())
         }
 
         VStack(alignment: .leading, spacing: 4) {
           Text(title)
-            .font(.subheadline)
+            .font(.system(size: 14))
             .fontWeight(.medium)
-            .foregroundColor(.red)
+            .foregroundColor(Color.Theme.destructive)
 
           Text(subtitle)
-            .font(.caption)
-            .foregroundColor(.white.opacity(0.5))
+            .font(.system(size: 12, design: .monospaced))
+            .foregroundColor(Color.Theme.textTertiary)
         }
 
         Spacer()
 
         Image(systemName: "chevron.right")
           .font(.system(size: 14))
-          .foregroundColor(.red.opacity(0.6))
+          .foregroundColor(Color.Theme.destructive.opacity(0.6))
       }
       .padding(.horizontal, 16)
       .padding(.vertical, 12)
       .background(
         RoundedRectangle(cornerRadius: 12)
-          .fill(Color.red.opacity(0.08))
+          .fill(Color.Theme.destructive.opacity(0.08))
           .overlay(
             RoundedRectangle(cornerRadius: 12)
-              .stroke(Color.red.opacity(0.15), lineWidth: 1)
+              .stroke(Color.Theme.destructive.opacity(0.15), lineWidth: 1)
           )
       )
       .padding(.horizontal, 12)

@@ -1,33 +1,32 @@
 import SwiftUI
-// swiftlint:disable file_length
 
 struct MeTabView: View {
   @EnvironmentObject private var identityCoordinator: IdentityCoordinator
   @StateObject private var cardManager = CardManager.shared
   @StateObject private var qrCodeManager = QRCodeManager.shared
-  @EnvironmentObject private var identityDataStore: IdentityDataStore
+  @EnvironmentObject var identityDataStore: IdentityDataStore
 
-  @ObservedObject private var devMode = DeveloperModeManager.shared
-  @StateObject private var groupManager = CloudKitGroupSyncManager.shared
-  @StateObject private var idm = SemaphoreIdentityManager.shared
+  @ObservedObject var devMode = DeveloperModeManager.shared
+  @StateObject var groupManager = CloudKitGroupSyncManager.shared
+  @StateObject var idm = SemaphoreIdentityManager.shared
 
   @State private var showingSettings = false
-  @State private var showingEditProfile = false
-  @State private var showingVCSettings = false
-  @State private var showingPassportFlow = false
-  @State private var showingGroupManager = false
-  @State private var showingOIDCRequest = false
-  @State private var showingZKSettings = false
-  @State private var revealDid = false
-  @State private var preparingClaimID: String?
+  @State var showingEditProfile = false
+  @State var showingVCSettings = false
+  @State var showingPassportFlow = false
+  @State var showingGroupManager = false
+  @State var showingOIDCRequest = false
+  @State var showingZKSettings = false
+  @State var revealDid = false
+  @State var preparingClaimID: String?
   @State private var preparedProof: PreparedSelfInitiatedProof?
   @State private var proofPreparationError: String?
 
-  private var verifiedCards: [IdentityCardEntity] {
+  var verifiedCards: [IdentityCardEntity] {
     identityDataStore.identityCards.filter { $0.type != "business_card" }
   }
 
-  private var displayClaims: [ProvableClaimEntity] {
+  var displayClaims: [ProvableClaimEntity] {
     var hasIncludedProfileCard = false
     return identityDataStore.provableClaims.filter { claim in
       guard claim.isPresentable else { return false }
@@ -132,11 +131,11 @@ struct MeTabView: View {
     }
   }
 
-  private var displayName: String {
+  var displayName: String {
     cardManager.businessCards.first?.name ?? String(localized: "User Node")
   }
 
-  private var displayDid: String {
+  var displayDid: String {
     if let did = identityCoordinator.state.currentProfile.activeDID?.did {
       return did
     }
@@ -149,291 +148,7 @@ struct MeTabView: View {
     return "Initializing..."
   }
 
-  // MARK: - Subcomponents
-
-  private var identityHeader: some View {
-    VStack(spacing: 16) {
-      HStack(alignment: .top, spacing: 16) {
-        ZStack {
-          Rectangle()
-            .fill(Color.Theme.searchBg)
-            .frame(width: 80, height: 80)
-            .overlay(Rectangle().stroke(Color.Theme.divider, lineWidth: 1))
-
-          Text(String(displayName.prefix(1)).uppercased())
-            .font(.system(size: 32, weight: .bold, design: .monospaced))
-            .foregroundColor(.white)
-        }
-
-        VStack(alignment: .leading, spacing: 8) {
-          Text(displayName)
-            .font(.system(size: 24, weight: .bold))
-            .foregroundColor(Color.Theme.textPrimary)
-
-          Button {
-            revealDid.toggle()
-          } label: {
-            HStack(spacing: 4) {
-              Image(systemName: "key.viewfinder")
-                .font(.system(size: 10))
-              Text(revealDid ? displayDid : shortDid(displayDid))
-                .font(.system(size: 10, weight: .bold, design: .monospaced))
-            }
-            .foregroundColor(Color.Theme.textTertiary)
-            .padding(.horizontal, 8)
-            .padding(.vertical, 4)
-            .background(Color.Theme.searchBg)
-            .overlay(Rectangle().stroke(Color.Theme.divider, lineWidth: 1))
-          }
-          .buttonStyle(.plain)
-        }
-        Spacer()
-      }
-
-      Button {
-        showingEditProfile = true
-      } label: {
-        HStack(spacing: 6) {
-          Image(systemName: "pencil")
-            .font(.system(size: 12, weight: .bold))
-          Text("Edit Profile")
-            .font(.system(size: 12, weight: .bold, design: .monospaced))
-        }
-        .foregroundColor(Color.Theme.textPrimary)
-        .frame(maxWidth: .infinity)
-        .padding(.vertical, 10)
-        .background(Color.Theme.searchBg)
-        .overlay(Rectangle().stroke(Color.Theme.divider, lineWidth: 1))
-      }
-      .buttonStyle(.plain)
-    }
-    .padding(.horizontal, 24)
-  }
-
-  private var identityCardSection: some View {
-    VStack(alignment: .leading, spacing: 16) {
-      Text("[ VERIFIED CREDENTIALS ]")
-        .font(.system(size: 12, weight: .bold, design: .monospaced))
-        .foregroundColor(Color.Theme.textSecondary)
-        .padding(.horizontal, 24)
-
-      if verifiedCards.isEmpty {
-        EmptyMeStateCard(
-          title: "No Verified Credentials",
-          subtitle: "Scan a government-issued ID to generate cryptographic proofs.",
-          primaryTitle: "Scan Identity",
-          secondaryTitle: "Import JSON",
-          onPrimaryTap: { showingPassportFlow = true },
-          onSecondaryTap: { showingVCSettings = true }
-        )
-        .padding(.horizontal, 16)
-      } else {
-        VStack(spacing: 12) {
-          ForEach(verifiedCards) { card in
-            NavigationLink {
-              CredentialDetailView(card: card)
-                .environmentObject(identityDataStore)
-            } label: {
-              IdentityStatusCard(
-                emoji: "🛂",
-                title: card.title,
-                trustText: trustText(for: card),
-                subtitle: card.issuerType,
-                ctaTitle: "Details",
-                onCTA: nil
-              )
-            }
-            .buttonStyle(.plain)
-          }
-        }
-      }
-    }
-  }
-
-  private func trustText(for card: IdentityCardEntity) -> String {
-    switch card.trustLevel {
-    case "green": return "🟢 LEVEL 3 — ZK VERIFIED"
-    case "blue": return "🔵 LEVEL 2 — FALLBACK"
-    default: return "⚪️ LEVEL 1 — SELF-ATTESTED"
-    }
-  }
-
-  private var provableClaimsSection: some View {
-    VStack(alignment: .leading, spacing: 16) {
-      Text("[ SELECTIVE DISCLOSURES ]")
-        .font(.system(size: 12, weight: .bold, design: .monospaced))
-        .foregroundColor(Color.Theme.textSecondary)
-        .padding(.horizontal, 24)
-
-      if displayClaims.isEmpty {
-        Text("No derivations available.")
-          .font(.system(size: 12, design: .monospaced))
-          .foregroundColor(Color.Theme.textTertiary)
-          .padding(.horizontal, 24)
-      } else {
-        if preparingClaimID != nil {
-          HStack(spacing: 8) {
-            ProgressView()
-              .progressViewStyle(CircularProgressViewStyle(tint: Color.Theme.terminalGreen))
-              .scaleEffect(0.8)
-            Text("Generating proof...")
-              .font(.system(size: 10, weight: .bold, design: .monospaced))
-              .foregroundColor(Color.Theme.textSecondary)
-          }
-          .padding(.horizontal, 24)
-        }
-
-        VStack(spacing: 12) {
-          ForEach(displayClaims) { claim in
-            ClaimRowView(
-              title: claim.title,
-              source: "SRC: \(claim.source)",
-              actionTitle: claim.lastPresentedAt == nil ? "Generate" : "Show",
-              isLoading: preparingClaimID == claim.id,
-              isDisabled: preparingClaimID != nil,
-              onPresent: {
-                prepareProofPresentation(for: claim)
-              }
-            )
-          }
-        }
-      }
-    }
-  }
-
-  private var addMoreSection: some View {
-    VStack(alignment: .leading, spacing: 16) {
-      Text("[ ACTIONS ]")
-        .font(.system(size: 12, weight: .bold, design: .monospaced))
-        .foregroundColor(Color.Theme.textSecondary)
-        .padding(.horizontal, 24)
-
-      VStack(spacing: 8) {
-        Button {
-          showingPassportFlow = true
-        } label: {
-          sectionActionLabel(icon: "plus.viewfinder", title: "Acquire New Proof")
-        }
-        .buttonStyle(.plain)
-
-        Button {
-          showingVCSettings = true
-        } label: {
-          sectionActionLabel(icon: "arrow.down.doc.fill", title: "Import Raw Credential")
-        }
-        .buttonStyle(.plain)
-      }
-      .padding(.horizontal, 16)
-    }
-  }
-
-  private func sectionActionLabel(icon: String, title: String) -> some View {
-    HStack {
-      Image(systemName: icon)
-        .font(.system(size: 16, weight: .bold))
-        .foregroundColor(Color.Theme.terminalGreen)
-        .frame(width: 24)
-
-      Text(title)
-        .font(.system(size: 14, weight: .bold))
-        .foregroundColor(Color.Theme.textPrimary)
-
-      Spacer()
-
-      Image(systemName: "chevron.right")
-        .font(.system(size: 10, weight: .bold))
-        .foregroundColor(Color.Theme.textPlaceholder)
-    }
-    .padding(16)
-    .background(Color.Theme.searchBg)
-    .overlay(Rectangle().stroke(Color.Theme.divider, lineWidth: 1))
-  }
-
-  // MARK: - Developer Mode Section
-
-  private var devModeSection: some View {
-    VStack(alignment: .leading, spacing: 16) {
-      Text("[ DEVELOPER ]")
-        .font(.system(size: 12, weight: .bold, design: .monospaced))
-        .foregroundColor(Color.Theme.textSecondary)
-        .padding(.horizontal, 24)
-
-      VStack(spacing: 8) {
-        // ZK Identity Status
-        Button {
-          showingZKSettings = true
-        } label: {
-          HStack {
-            Image(systemName: "shield.checkered")
-              .font(.system(size: 16, weight: .bold))
-              .foregroundColor(Color.Theme.terminalGreen)
-              .frame(width: 24)
-
-            VStack(alignment: .leading, spacing: 2) {
-              Text("ZK Identity")
-                .font(.system(size: 14, weight: .bold))
-                .foregroundColor(Color.Theme.textPrimary)
-              Text(idm.getIdentity() != nil ? "Commitment active" : "Not initialized")
-                .font(.system(size: 10, weight: .bold, design: .monospaced))
-                .foregroundColor(Color.Theme.textTertiary)
-            }
-
-            Spacer()
-
-            Image(systemName: "chevron.right")
-              .font(.system(size: 10, weight: .bold))
-              .foregroundColor(Color.Theme.textPlaceholder)
-          }
-          .padding(16)
-          .background(Color.Theme.searchBg)
-          .overlay(Rectangle().stroke(Color.Theme.divider, lineWidth: 1))
-        }
-        .buttonStyle(.plain)
-
-        // OIDC / OpenID Connect
-        Button {
-          showingOIDCRequest = true
-        } label: {
-          sectionActionLabel(icon: "qrcode", title: "OIDC Request Scanner")
-        }
-        .buttonStyle(.plain)
-
-        // Group Management
-        Button {
-          showingGroupManager = true
-        } label: {
-          HStack {
-            Image(systemName: "person.3")
-              .font(.system(size: 16, weight: .bold))
-              .foregroundColor(Color.Theme.terminalGreen)
-              .frame(width: 24)
-
-            VStack(alignment: .leading, spacing: 2) {
-              Text("Group Management")
-                .font(.system(size: 14, weight: .bold))
-                .foregroundColor(Color.Theme.textPrimary)
-              Text("\(groupManager.groups.count) groups")
-                .font(.system(size: 10, weight: .bold, design: .monospaced))
-                .foregroundColor(Color.Theme.textTertiary)
-            }
-
-            Spacer()
-
-            Image(systemName: "chevron.right")
-              .font(.system(size: 10, weight: .bold))
-              .foregroundColor(Color.Theme.textPlaceholder)
-          }
-          .padding(16)
-          .background(Color.Theme.searchBg)
-          .overlay(Rectangle().stroke(Color.Theme.divider, lineWidth: 1))
-        }
-        .buttonStyle(.plain)
-      }
-      .padding(.horizontal, 16)
-    }
-  }
-
-  private func shortDid(_ did: String) -> String {
+  func shortDid(_ did: String) -> String {
     guard did.count > 22 else { return did }
     return "\(did.prefix(12))...\(did.suffix(8))"
   }
@@ -449,7 +164,7 @@ struct MeTabView: View {
     )
   }
 
-  private func prepareProofPresentation(for claim: ProvableClaimEntity) {
+  func prepareProofPresentation(for claim: ProvableClaimEntity) {
     guard preparingClaimID == nil else { return }
     preparingClaimID = claim.id
 
@@ -494,199 +209,4 @@ struct MeTabView: View {
     }
   }
 
-}
-private struct PreparedSelfInitiatedProof: Identifiable {
-  let id = UUID().uuidString
-  let claim: ProvableClaimEntity
-  let qrImage: UIImage
-}
-
-private struct ClaimRowView: View {
-  let title: String
-  let source: String
-  let actionTitle: String
-  let isLoading: Bool
-  let isDisabled: Bool
-  let onPresent: () -> Void
-
-  var body: some View {
-    HStack(spacing: 12) {
-      VStack(alignment: .leading, spacing: 6) {
-        Text(title)
-          .font(.system(size: 16, weight: .bold))
-          .foregroundColor(Color.Theme.textPrimary)
-        Text(source)
-          .font(.system(size: 10, weight: .bold, design: .monospaced))
-          .foregroundColor(Color.Theme.textSecondary)
-      }
-      Spacer()
-      Button(action: onPresent) {
-        Group {
-          if isLoading {
-            ProgressView()
-              .progressViewStyle(CircularProgressViewStyle(tint: Color.Theme.textPrimary))
-              .scaleEffect(0.8)
-          } else {
-            Text(actionTitle)
-              .font(.system(size: 12, weight: .bold, design: .monospaced))
-          }
-        }
-        .foregroundColor(Color.Theme.textPrimary)
-        .frame(minWidth: 72)
-        .padding(.horizontal, 12)
-        .padding(.vertical, 8)
-        .background(Color.Theme.pageBg)
-        .overlay(Rectangle().stroke(Color.Theme.divider, lineWidth: 1))
-      }
-      .disabled(isDisabled)
-      .opacity(isDisabled && !isLoading ? 0.5 : 1)
-    }
-    .padding(16)
-    .background(Color.Theme.cardBg)
-    .overlay(Rectangle().stroke(Color.Theme.divider, lineWidth: 1))
-    .padding(.horizontal, 16)
-  }
-}
-
-private struct IdentityStatusCard: View {
-  let emoji: String
-  let title: String
-  let trustText: String
-  let subtitle: String
-  let ctaTitle: String
-  var onCTA: (() -> Void)?
-
-  var body: some View {
-    VStack(alignment: .leading, spacing: 12) {
-      HStack {
-        Text("\(emoji) \(title)")
-          .font(.system(size: 16, weight: .bold))
-          .foregroundColor(Color.Theme.textPrimary)
-        Spacer()
-        if let onCTA {
-          Button(action: onCTA) {
-            Text(ctaTitle)
-              .font(.system(size: 10, weight: .bold, design: .monospaced))
-              .foregroundColor(.black)
-              .padding(.horizontal, 10)
-              .padding(.vertical, 6)
-              .background(Color.Theme.terminalGreen)
-          }
-          .buttonStyle(.plain)
-        } else {
-          Image(systemName: "chevron.right")
-            .font(.system(size: 10, weight: .bold))
-            .foregroundColor(Color.Theme.textTertiary)
-        }
-      }
-
-      Rectangle()
-        .fill(Color.Theme.divider)
-        .frame(height: 1)
-
-      HStack {
-        Text(trustText)
-          .font(.system(size: 10, weight: .bold, design: .monospaced))
-          .foregroundColor(Color.Theme.terminalGreen)
-        Spacer()
-        Text(subtitle.uppercased())
-          .font(.system(size: 10, weight: .bold, design: .monospaced))
-          .foregroundColor(Color.Theme.textTertiary)
-      }
-    }
-    .padding(16)
-    .background(Color.Theme.cardBg)
-    .overlay(Rectangle().stroke(Color.Theme.divider, lineWidth: 1))
-    .padding(.horizontal, 16)
-  }
-}
-
-private struct EmptyMeStateCard: View {
-  let title: String
-  let subtitle: String
-  let primaryTitle: String
-  let secondaryTitle: String
-  let onPrimaryTap: () -> Void
-  let onSecondaryTap: () -> Void
-
-  var body: some View {
-    VStack(spacing: 24) {
-      Image(systemName: "lock.shield")
-        .font(.system(size: 48))
-        .foregroundColor(Color.Theme.textTertiary)
-
-      VStack(spacing: 8) {
-        Text(title.uppercased())
-          .font(.system(size: 16, weight: .bold, design: .monospaced))
-          .foregroundColor(Color.Theme.textPrimary)
-        Text(subtitle)
-          .font(.system(size: 14))
-          .foregroundColor(Color.Theme.textSecondary)
-          .multilineTextAlignment(.center)
-      }
-
-      VStack(spacing: 12) {
-        Button(action: onPrimaryTap) {
-          Text(primaryTitle)
-        }
-        .buttonStyle(ThemedPrimaryButtonStyle())
-
-        Button(action: onSecondaryTap) {
-          Text(secondaryTitle)
-        }
-        .buttonStyle(ThemedSecondaryButtonStyle())
-      }
-    }
-    .padding(24)
-    .frame(maxWidth: .infinity)
-    .background(Color.Theme.searchBg)
-    .overlay(Rectangle().stroke(Color.Theme.textTertiary, style: StrokeStyle(lineWidth: 1, dash: [4, 4])))
-  }
-}
-
-private struct SelfInitiatedProofSheet: View {
-  let preparedProof: PreparedSelfInitiatedProof
-  @Environment(\.dismiss) private var dismiss
-
-  var body: some View {
-    NavigationStack {
-      ScrollView {
-        VStack(spacing: 24) {
-          Text("Claim: [\(preparedProof.claim.claimType)]")
-            .font(.system(size: 14, weight: .bold, design: .monospaced))
-            .foregroundColor(Color.Theme.terminalGreen)
-
-          Image(uiImage: preparedProof.qrImage)
-            .resizable()
-            .interpolation(.none)
-            .scaledToFit()
-            .frame(maxWidth: 260)
-            .padding(16)
-            .background(Color.white)
-            .cornerRadius(12)
-
-          Text("Present this QR to a verifier for proof disclosure.")
-            .font(.system(size: 14))
-            .foregroundColor(Color.Theme.textSecondary)
-            .multilineTextAlignment(.center)
-            .padding(.horizontal, 32)
-        }
-        .padding(.top, 24)
-        .padding(.horizontal, 16)
-      }
-      .background(Color.Theme.pageBg.ignoresSafeArea())
-      .navigationTitle("Present Proof")
-      .navigationBarTitleDisplayMode(.inline)
-      .toolbar {
-        ToolbarItem(placement: .navigationBarTrailing) {
-          Button {
-            dismiss()
-          } label: {
-            Image(systemName: "xmark")
-              .foregroundColor(.white)
-          }
-        }
-      }
-    }
-  }
 }

@@ -21,13 +21,13 @@ struct CredentialIssuersSection: View {
     VStack(alignment: .leading, spacing: 12) {
       HStack {
         Text("Credential Issuers")
-          .font(.headline)
-          .foregroundColor(.secondary)
+          .font(.system(size: 12, weight: .bold, design: .monospaced))
+          .foregroundColor(Color.Theme.textSecondary)
         Spacer()
         if isOwner {
           Button(action: { showAddIssuer = true }) {
             Image(systemName: "plus.circle.fill")
-              .foregroundColor(.blue)
+              .foregroundColor(Color.Theme.primaryBlue)
           }
         }
       }
@@ -62,13 +62,13 @@ struct CredentialIssuersSection: View {
             ? String(localized: "No additional issuers configured yet.")
             : String(localized: "Only the group owner can assign additional credential issuers.")
         )
-        .font(.caption)
-        .foregroundColor(.secondary)
+        .font(.system(size: 10, design: .monospaced))
+        .foregroundColor(Color.Theme.textSecondary)
       }
     }
-    .padding()
-    .background(Color(.secondarySystemGroupedBackground))
-    .cornerRadius(12)
+    .padding(16)
+    .background(Color.Theme.searchBg)
+    .overlay(Rectangle().stroke(Color.Theme.divider, lineWidth: 1))
     .sheet(isPresented: $showAddIssuer) {
       AddIssuerView(group: group, members: members)
     }
@@ -89,15 +89,15 @@ struct IssuerRow: View {
   var body: some View {
     HStack {
       Image(systemName: isOwner ? "crown.fill" : "person.badge.key.fill")
-        .foregroundColor(isOwner ? .yellow : .blue)
+        .foregroundColor(isOwner ? Color.Theme.dustyMauve : Color.Theme.primaryBlue)
       Text(userRecordID)
-        .font(.subheadline)
+        .font(.system(size: 14))
         .lineLimit(1)
         .truncationMode(.middle)
       if isOwner {
         Text("(Owner)")
-          .font(.caption)
-          .foregroundColor(.secondary)
+          .font(.system(size: 10, design: .monospaced))
+          .foregroundColor(Color.Theme.textSecondary)
       }
       Spacer()
       if canRemove, let onRemove = onRemove {

@@ -65,8 +65,22 @@ struct BackupSettingsView: View {
         }
       }
 
-      Section(footer: Text("Backups are stored in your iCloud Drive and synced across all your devices.")) {
-        EmptyView()
+      Section {
+        if backup.isICloudAvailable {
+          Label("iCloud connected", systemImage: "checkmark.icloud.fill")
+            .font(.footnote)
+            .foregroundColor(.green)
+        } else {
+          Label("iCloud unavailable — backup saved locally", systemImage: "externaldrive.fill")
+            .font(.footnote)
+            .foregroundColor(.orange)
+        }
+      } footer: {
+        if backup.isICloudAvailable {
+          Text("Backups are stored in your iCloud Drive and synced across all your devices.")
+        } else {
+          Text("Sign in to iCloud in Settings to sync backups across devices. Local backups are still available.")
+        }
       }
     }
     .navigationTitle("Backup")
@@ -108,9 +122,16 @@ struct BackupSettingsView: View {
   private func performRestore() {
     Task {
       switch await backup.restoreFromBackup() {
-      case .success:
+      case .success(let result):
         await MainActor.run {
-          dismiss()
+          if result.skippedDuplicates > 0 {
+            errorMessage = String(
+              localized: "Restored \(result.totalRestored) items. Skipped \(result.skippedDuplicates) duplicates."
+            )
+            showError = true
+          } else {
+            dismiss()
+          }
         }
       case .failure(let error):
         await MainActor.run {

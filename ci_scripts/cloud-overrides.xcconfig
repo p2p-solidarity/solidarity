@@ -1,0 +1,3 @@
+// Xcode Cloud-only overrides for UniFFI module visibility.
+OTHER_SWIFT_FLAGS = $(inherited) -Xcc -I/Volumes/workspace/repository/ci_scripts/semaphore_ffi_shim -Xcc -fmodule-map-file=/Volumes/workspace/repository/ci_scripts/semaphore_ffi_shim/module.modulemap
+OTHER_CFLAGS = $(inherited) -I/Volumes/workspace/repository/ci_scripts/semaphore_ffi_shim -fmodule-map-file=/Volumes/workspace/repository/ci_scripts/semaphore_ffi_shim/module.modulemap

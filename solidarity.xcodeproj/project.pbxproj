@@ -10,6 +10,8 @@
 		F1134EA62E757F230097A2A4 /* Semaphore in Frameworks */ = {isa = PBXBuildFile; productRef = F1134EA52E757F230097A2A4 /* Semaphore */; };
 		F140CFAC2EDB561E009A2F45 /* WebRTC in Frameworks */ = {isa = PBXBuildFile; productRef = F140CFAB2EDB561E009A2F45 /* WebRTC */; };
 		F18CDB3C2EC2248C005E94B4 /* SpruceIDMobileSdkRs in Frameworks */ = {isa = PBXBuildFile; productRef = F18CDB3B2EC2248C005E94B4 /* SpruceIDMobileSdkRs */; };
+		F18E96FC2F850966008EA7EC /* OpenPassportSwift in Frameworks */ = {isa = PBXBuildFile; productRef = F18E96FB2F850966008EA7EC /* OpenPassportSwift */; };
+		F18E96FE2F85096E008EA7EC /* NFCPassportReader in Frameworks */ = {isa = PBXBuildFile; productRef = F18E96FD2F85096E008EA7EC /* NFCPassportReader */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -71,8 +73,10 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				F18E96FC2F850966008EA7EC /* OpenPassportSwift in Frameworks */,
 				F1134EA62E757F230097A2A4 /* Semaphore in Frameworks */,
 				F140CFAC2EDB561E009A2F45 /* WebRTC in Frameworks */,
+				F18E96FE2F85096E008EA7EC /* NFCPassportReader in Frameworks */,
 				F18CDB3C2EC2248C005E94B4 /* SpruceIDMobileSdkRs in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -147,6 +151,8 @@
 				F1134EA52E757F230097A2A4 /* Semaphore */,
 				F18CDB3B2EC2248C005E94B4 /* SpruceIDMobileSdkRs */,
 				F140CFAB2EDB561E009A2F45 /* WebRTC */,
+				F18E96FB2F850966008EA7EC /* OpenPassportSwift */,
+				F18E96FD2F85096E008EA7EC /* NFCPassportReader */,
 			);
 			productName = solidarity;
 			productReference = F1133D7E2E70600A0097A2A4 /* solidarity.app */;
@@ -235,6 +241,8 @@
 				F18CDB272EC1F68E005E94B4 /* XCRemoteSwiftPackageReference "sprucekit-mobile" */,
 				F140CFAA2EDB5612009A2F45 /* XCRemoteSwiftPackageReference "WebRTC" */,
 				F1286C052EEB58030001BBFD /* XCRemoteSwiftPackageReference "SwiftLintPlugins" */,
+				F18E8CAB2F84EB11008EA7EC /* XCRemoteSwiftPackageReference "NFCPassportReader" */,
+				F18E8CAC2F84EB63008EA7EC /* XCRemoteSwiftPackageReference "passport-noir" */,
 			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = F1133D7F2E70600A0097A2A4 /* Products */;
@@ -468,9 +476,9 @@
 				DEVELOPMENT_TEAM = 538MCM44UX;
 				ENABLE_APP_SANDBOX = YES;
 				ENABLE_HARDENED_RUNTIME = YES;
-				"EXCLUDED_ARCHS[sdk=iphonesimulator*]" = x86_64;
 				ENABLE_PREVIEWS = YES;
 				ENABLE_USER_SELECTED_FILES = readonly;
+				"EXCLUDED_ARCHS[sdk=iphonesimulator*]" = x86_64;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = solidarity/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = "Solid(ar)ity";
@@ -493,7 +501,7 @@
 				LD_RUNPATH_SEARCH_PATHS = "@executable_path/Frameworks";
 				"LD_RUNPATH_SEARCH_PATHS[sdk=macosx*]" = "@executable_path/../Frameworks";
 				MACOSX_DEPLOYMENT_TARGET = 15.5;
-				MARKETING_VERSION = 1.2.0;
+				MARKETING_VERSION = 1.2.1;
 				PRODUCT_BUNDLE_IDENTIFIER = kidneyweakx.airmeishi;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				REGISTER_APP_GROUPS = YES;
@@ -519,9 +527,9 @@
 				DEVELOPMENT_TEAM = 538MCM44UX;
 				ENABLE_APP_SANDBOX = YES;
 				ENABLE_HARDENED_RUNTIME = YES;
-				"EXCLUDED_ARCHS[sdk=iphonesimulator*]" = x86_64;
 				ENABLE_PREVIEWS = YES;
 				ENABLE_USER_SELECTED_FILES = readonly;
+				"EXCLUDED_ARCHS[sdk=iphonesimulator*]" = x86_64;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = solidarity/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = "Solid(ar)ity";
@@ -544,7 +552,7 @@
 				LD_RUNPATH_SEARCH_PATHS = "@executable_path/Frameworks";
 				"LD_RUNPATH_SEARCH_PATHS[sdk=macosx*]" = "@executable_path/../Frameworks";
 				MACOSX_DEPLOYMENT_TARGET = 15.5;
-				MARKETING_VERSION = 1.2.0;
+				MARKETING_VERSION = 1.2.1;
 				PRODUCT_BUNDLE_IDENTIFIER = kidneyweakx.airmeishi;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				REGISTER_APP_GROUPS = YES;
@@ -729,6 +737,22 @@
 				minimumVersion = 0.12.11;
 			};
 		};
+		F18E8CAB2F84EB11008EA7EC /* XCRemoteSwiftPackageReference "NFCPassportReader" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/AndyQ/NFCPassportReader";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 2.3.0;
+			};
+		};
+		F18E8CAC2F84EB63008EA7EC /* XCRemoteSwiftPackageReference "passport-noir" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/p2p-solidarity/passport-noir";
+			requirement = {
+				branch = main;
+				kind = branch;
+			};
+		};
 /* End XCRemoteSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
@@ -751,6 +775,16 @@
 			isa = XCSwiftPackageProductDependency;
 			package = F18CDB272EC1F68E005E94B4 /* XCRemoteSwiftPackageReference "sprucekit-mobile" */;
 			productName = SpruceIDMobileSdkRs;
+		};
+		F18E96FB2F850966008EA7EC /* OpenPassportSwift */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = F18E8CAC2F84EB63008EA7EC /* XCRemoteSwiftPackageReference "passport-noir" */;
+			productName = OpenPassportSwift;
+		};
+		F18E96FD2F85096E008EA7EC /* NFCPassportReader */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = F18E8CAB2F84EB11008EA7EC /* XCRemoteSwiftPackageReference "NFCPassportReader" */;
+			productName = NFCPassportReader;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};

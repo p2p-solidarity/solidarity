@@ -27,10 +27,10 @@ struct GroupDetailView: View {
         if let error = errorMessage {
           Text(error)
             .font(.caption)
-            .foregroundColor(.red)
+            .foregroundColor(Color.Theme.destructive)
             .padding(8)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .background(Color.red.opacity(0.1))
+            .background(Color.Theme.destructive.opacity(0.1))
             .cornerRadius(8)
         }
 
@@ -57,8 +57,8 @@ struct GroupDetailView: View {
         if isOwner || cloudKitManager.canIssueCredentials(for: group) {
           VStack(alignment: .leading, spacing: 16) {
             Text("Admin Tools")
-              .font(.headline)
-              .foregroundColor(.secondary)
+              .font(.system(size: 12, weight: .bold, design: .monospaced))
+              .foregroundColor(Color.Theme.textSecondary)
               .padding(.leading, 4)
 
             CredentialIssuersSection(group: group)
@@ -72,7 +72,7 @@ struct GroupDetailView: View {
       }
       .padding()
     }
-    .background(Color(.systemGroupedBackground))
+    .background(Color.Theme.pageBg)
     .navigationTitle(group.name)
     .navigationBarTitleDisplayMode(.inline)
     .task {

@@ -38,6 +38,20 @@ struct ShareSettingsView: View {
     identityStore.provableClaims.contains { $0.claimType == "age_over_18" }
   }
 
+  /// Fields that are externally verified (backed by source credentials).
+  /// Resolves the actual holder DID from existing identity cards rather than
+  /// using card.id (which is a UUID, not a DID).
+  private var externallyVerifiedFields: Set<BusinessCardField> {
+    // Find holderDid from any existing identity card issued to the local user.
+    // IdentityCardEntity.holderDid stores the real DID (did:key:...).
+    let holderDids = Set(identityStore.identityCards.map { $0.holderDid })
+    var fields: Set<BusinessCardField> = []
+    for did in holderDids {
+      fields.formUnion(VerifiedClaimIndex.verifiedFieldsSync(forHolder: did))
+    }
+    return fields
+  }
+
   var body: some View {
     ScrollView {
       VStack(spacing: 20) {
@@ -117,24 +131,49 @@ struct ShareSettingsView: View {
   // MARK: - Field Toggles
 
   private var fieldToggles: some View {
-    VStack(alignment: .leading, spacing: 0) {
-      Text("SHARE FIELDS")
-        .font(.system(size: 12, weight: .bold, design: .monospaced))
-        .foregroundColor(Color.Theme.textTertiary)
-        .padding(.bottom, 8)
+    let verified = externallyVerifiedFields
+
+    return VStack(alignment: .leading, spacing: 0) {
+      HStack {
+        Text("SHARE FIELDS")
+          .font(.system(size: 12, weight: .bold, design: .monospaced))
+          .foregroundColor(Color.Theme.textTertiary)
+        Spacer()
+        Text("VC = enters signed credential")
+          .font(.system(size: 10, design: .monospaced))
+          .foregroundColor(Color.Theme.textTertiary)
+      }
+      .padding(.bottom, 8)
 
       VStack(spacing: 1) {
-        fieldRow(icon: "person.text.rectangle", label: "Name", isOn: .constant(true), locked: true)
-        fieldRow(icon: "id.card", label: "Title", isOn: $shareTitle)
-        fieldRow(icon: "building.2", label: "Company", isOn: $shareCompany)
-        fieldRow(icon: "envelope", label: "Email", isOn: $shareEmail)
-        fieldRow(icon: "phone", label: "Phone", isOn: $sharePhone)
-        fieldRow(icon: "person.crop.circle", label: "Profile Image", isOn: $shareProfileImage)
-        fieldRow(icon: "link", label: "Social Networks", isOn: $shareSocialNetworks)
-        fieldRow(icon: "star", label: "Skills", isOn: $shareSkills)
+        fieldRow(icon: "person.text.rectangle", label: "Name", field: .name, isOn: .constant(true), locked: true, verified: verified)
+        fieldRow(icon: "briefcase", label: "Title", field: .title, isOn: $shareTitle, verified: verified)
+        fieldRow(icon: "building.2", label: "Company", field: .company, isOn: $shareCompany, verified: verified)
+        fieldRow(icon: "envelope", label: "Email", field: .email, isOn: $shareEmail, verified: verified)
+        fieldRow(icon: "phone", label: "Phone", field: .phone, isOn: $sharePhone, verified: verified)
+        fieldRow(icon: "person.crop.circle", label: "Profile Image", field: .profileImage, isOn: $shareProfileImage, verified: verified)
+        fieldRow(icon: "link", label: "Social Networks", field: .socialNetworks, isOn: $shareSocialNetworks, verified: verified)
+        fieldRow(icon: "star", label: "Skills", field: .skills, isOn: $shareSkills, verified: verified)
       }
       .clipShape(Rectangle())
       .overlay(Rectangle().stroke(Color.Theme.divider, lineWidth: 1))
+
+      // Legend
+      HStack(spacing: 16) {
+        legendItem(color: Color.Theme.terminalGreen, label: "Verified")
+        legendItem(color: .orange, label: "Self-attested")
+        legendItem(color: Color.Theme.textTertiary, label: "Not in VC")
+      }
+      .padding(.top, 8)
+    }
+  }
+
+  private func legendItem(color: Color, label: String) -> some View {
+    HStack(spacing: 4) {
+      Circle().fill(color).frame(width: 6, height: 6)
+      Text(label)
+        .font(.system(size: 10, design: .monospaced))
+        .foregroundColor(Color.Theme.textTertiary)
     }
   }
 
@@ -175,16 +214,47 @@ struct ShareSettingsView: View {
 
   // MARK: - Row Components
 
-  private func fieldRow(icon: String, label: String, isOn: Binding<Bool>, locked: Bool = false) -> some View {
-    HStack(spacing: 12) {
+  private func fieldRow(
+    icon: String,
+    label: String,
+    field: BusinessCardField,
+    isOn: Binding<Bool>,
+    locked: Bool = false,
+    verified: Set<BusinessCardField> = []
+  ) -> some View {
+    let isVerified = verified.contains(field)
+    // Skills and profileImage never enter VC (unverifiable / too large).
+    let excludedFromVC = field == .skills || field == .profileImage
+    let vcStatus: FieldVerificationStatus = {
+      if excludedFromVC { return .unverified }
+      if isVerified { return .verifiedBySource }
+      return .selfAttested
+    }()
+    let statusColor: Color = {
+      switch vcStatus {
+      case .verifiedBySource: return Color.Theme.terminalGreen
+      case .selfAttested: return .orange
+      case .unverified: return Color.Theme.textTertiary
+      }
+    }()
+
+    return HStack(spacing: 12) {
       Image(systemName: icon)
         .font(.system(size: 14))
-        .foregroundColor(isOn.wrappedValue ? Color.Theme.terminalGreen : Color.Theme.textTertiary)
+        .foregroundColor(isOn.wrappedValue ? statusColor : Color.Theme.textTertiary)
         .frame(width: 20)
 
-      Text(label)
-        .font(.system(size: 14, weight: .medium))
-        .foregroundColor(isOn.wrappedValue ? Color.Theme.textPrimary : Color.Theme.textSecondary)
+      VStack(alignment: .leading, spacing: 2) {
+        Text(label)
+          .font(.system(size: 14, weight: .medium))
+          .foregroundColor(isOn.wrappedValue ? Color.Theme.textPrimary : Color.Theme.textSecondary)
+
+        if isOn.wrappedValue {
+          Text(vcStatusLabel(vcStatus, excludedFromVC: excludedFromVC))
+            .font(.system(size: 10, weight: .medium, design: .monospaced))
+            .foregroundColor(statusColor)
+        }
+      }
 
       Spacer()
 
@@ -195,7 +265,7 @@ struct ShareSettingsView: View {
       } else {
         Image(systemName: isOn.wrappedValue ? "checkmark.square.fill" : "square")
           .font(.system(size: 18))
-          .foregroundColor(isOn.wrappedValue ? Color.Theme.terminalGreen : Color.Theme.textTertiary)
+          .foregroundColor(isOn.wrappedValue ? statusColor : Color.Theme.textTertiary)
       }
     }
     .padding(.horizontal, 16)
@@ -206,6 +276,15 @@ struct ShareSettingsView: View {
       guard !locked else { return }
       HapticFeedbackManager.shared.rigidImpact()
       isOn.wrappedValue.toggle()
+    }
+  }
+
+  private func vcStatusLabel(_ status: FieldVerificationStatus, excludedFromVC: Bool) -> String {
+    if excludedFromVC { return "Shared but not in VC" }
+    switch status {
+    case .verifiedBySource: return "VC: verified"
+    case .selfAttested: return "VC: self-attested"
+    case .unverified: return "Not in VC"
     }
   }
 

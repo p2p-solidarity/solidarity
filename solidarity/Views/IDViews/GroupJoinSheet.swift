@@ -18,32 +18,53 @@ struct GroupJoinSheet: View {
 
   var body: some View {
     NavigationStack {
-      Form {
-        Section {
-          TextField("Enter Invite Token", text: $inviteToken)
-            .autocorrectionDisabled()
-            .textInputAutocapitalization(.never)
-        } header: {
-          Text("Invite Token")
-        } footer: {
-          Text("Enter the token shared with you to join a private or public group.")
-        }
+      ScrollView {
+        VStack(spacing: 16) {
+          // Invite Token Section
+          VStack(alignment: .leading, spacing: 0) {
+            Text("INVITE TOKEN")
+              .font(.system(size: 12, weight: .bold, design: .monospaced))
+              .foregroundColor(Color.Theme.textTertiary)
+              .padding(.bottom, 8)
 
-        if let error = errorMessage {
-          Section {
+            TextField("Enter Invite Token", text: $inviteToken)
+              .autocorrectionDisabled()
+              .textInputAutocapitalization(.never)
+              .font(.system(size: 14))
+              .foregroundColor(Color.Theme.textPrimary)
+              .padding(16)
+              .background(Color.Theme.searchBg)
+              .overlay(Rectangle().stroke(Color.Theme.divider, lineWidth: 1))
+
+            Text("Enter the token shared with you to join a private or public group.")
+              .font(.system(size: 12, design: .monospaced))
+              .foregroundColor(Color.Theme.textTertiary)
+              .padding(.top, 6)
+          }
+
+          // Error Message
+          if let error = errorMessage {
             Text(error)
-              .foregroundColor(.red)
+              .font(.system(size: 14))
+              .foregroundColor(Color.Theme.destructive)
+              .frame(maxWidth: .infinity, alignment: .leading)
+              .padding(16)
+              .background(Color.Theme.searchBg)
+              .overlay(Rectangle().stroke(Color.Theme.destructive.opacity(0.3), lineWidth: 1))
           }
-        }
 
-        if let success = successMessage {
-          Section {
+          // Success Message
+          if let success = successMessage {
             Text(success)
-              .foregroundColor(.green)
+              .font(.system(size: 14))
+              .foregroundColor(Color.Theme.terminalGreen)
+              .frame(maxWidth: .infinity, alignment: .leading)
+              .padding(16)
+              .background(Color.Theme.searchBg)
+              .overlay(Rectangle().stroke(Color.Theme.terminalGreen.opacity(0.3), lineWidth: 1))
           }
-        }
 
-        Section {
+          // Join Button
           Button(
             action: {
               joinGroup()
@@ -55,24 +76,31 @@ struct GroupJoinSheet: View {
                   Spacer()
                   ProgressView()
                 }
+                .frame(maxWidth: .infinity)
               } else {
                 Text("Join Group")
+                  .frame(maxWidth: .infinity)
               }
             }
           )
+          .buttonStyle(ThemedPrimaryButtonStyle())
           .disabled(inviteToken.isEmpty || isJoining)
-        }
-        Section {
+
+          // Scan QR Code Button
           Button(
             action: {
               showingScanner = true
             },
             label: {
               Label("Scan QR Code", systemImage: "qrcode.viewfinder")
+                .frame(maxWidth: .infinity)
             }
           )
+          .buttonStyle(ThemedSecondaryButtonStyle())
         }
+        .padding(16)
       }
+      .background(Color.Theme.pageBg.ignoresSafeArea())
       .navigationTitle("Join Group")
       .navigationBarTitleDisplayMode(.inline)
       .toolbar {
@@ -80,6 +108,7 @@ struct GroupJoinSheet: View {
           Button("Cancel") {
             dismiss()
           }
+          .foregroundColor(Color.Theme.textPrimary)
         }
       }
       .sheet(isPresented: $showingScanner) {

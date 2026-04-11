@@ -8,17 +8,23 @@ import Foundation
 import LocalAuthentication
 import SpruceIDMobileSdkRs
 import os
-// swiftlint:disable file_length
 
 /// High level service for issuing and parsing Verifiable Credentials.
 final class VCService {
-  private static let logger = Logger(subsystem: AppBranding.currentLoggerSubsystem, category: "VCService")
+  static let logger = Logger(subsystem: AppBranding.currentLoggerSubsystem, category: "VCService")
   struct IssueOptions {
     var holderDid: String?
     var issuerDid: String?
     var expiration: Date?
     var authenticationContext: LAContext?
     var relyingPartyDomain: String?
+    /// When true (default), only fields marked in `BusinessCard.verifiedFields`
+    /// are included in the VC. Unverified data MUST stay in ContactProfile and
+    /// MUST NOT enter a signed credential. Callers pre-filter the card to the
+    /// fields they want to assert (via `filteredCard(for:)`) and set
+    /// `verifiedFields` to indicate which of those fields are backed by a
+    /// source credential.
+    var verifiedOnly: Bool = true
   }
 
   struct IssuedCredential {
@@ -86,14 +92,59 @@ final class VCService {
     let issuerDid = options.issuerDid ?? descriptor.did
     let issuedAt = Date()
 
+    // --- Field verification enforcement ---
+    // Determine which fields are externally verified (L2/L3) from VerifiedClaimIndex.
+    let externallyVerified = VerifiedClaimIndex.verifiedFieldsSync(forHolder: holderDid)
+
+    // Merge: VC payload = (self-attested fields from card.verifiedFields) ∪ (index-verified fields) + name.
+    // For L2/L3 external credentials: only intersection of selected and externally verified enters VC.
+    // For L1 self-issued: self-attested fields are allowed but marked as such.
+    let cardWithIndexMerged: BusinessCard = {
+      guard options.verifiedOnly else { return card }
+      var working = card
+      var merged = card.verifiedFields ?? []
+      merged.formUnion(externallyVerified)
+      merged.insert(.name)
+      working.verifiedFields = merged
+      return working
+    }()
+
+    let cardForCredential = options.verifiedOnly
+      ? cardWithIndexMerged.filteredCardForVerifiedOnly()
+      : card
+
+    // Compute per-field verification status for VC metadata.
+    let activeFields = cardForCredential.verifiedFields ?? [.name]
+    var fieldStatuses: [BusinessCardField: FieldVerificationStatus] = [:]
+    for field in activeFields {
+      if externallyVerified.contains(field) {
+        fieldStatuses[field] = .verifiedBySource
+      } else {
+        fieldStatuses[field] = .selfAttested
+      }
+    }
+    // Name is always at least self-attested.
+    if fieldStatuses[.name] == nil {
+      fieldStatuses[.name] = .selfAttested
+    }
+
+    // Collect sourceCredentialIds for traceability.
+    let sourceCredentialIds = VerifiedClaimIndex.credentialIdsSync(forHolder: holderDid)
+
+    // Collect active proof claims.
+    let proofClaims = ShareSettingsStore.selectedProofClaims
+
     let claims = BusinessCardCredentialClaims(
-      card: card,
+      card: cardForCredential,
       issuerDid: issuerDid,
       holderDid: holderDid,
       issuanceDate: issuedAt,
       expirationDate: options.expiration,
       credentialId: UUID(),
-      publicKeyJwk: descriptor.jwk
+      publicKeyJwk: descriptor.jwk,
+      sourceCredentialIds: sourceCredentialIds,
+      proofClaims: proofClaims,
+      fieldStatuses: fieldStatuses
     )
 
     Self.logger.info("Retrieving signing key")
@@ -401,218 +452,5 @@ final class VCService {
     case .failure(let error):
       return .failure(error)
     }
-  }
-}
-// MARK: - JWT decoding helpers
-
-extension VCService {
-  fileprivate struct DecodedJWT {
-    let header: [String: Any]
-    let payload: [String: Any]
-    let payloadData: Data
-  }
-
-  fileprivate func decodeJWT(_ jwt: String) -> CardResult<DecodedJWT> {
-    let components = jwt.split(separator: ".")
-    guard components.count >= 2 else {
-      Self.logger.error("Malformed JWT - component count: \(components.count), expected at least 2")
-      return .failure(.invalidData("Malformed JWT"))
-    }
-
-    guard let headerData = Data(base64URLEncoded: String(components[0])),
-      let payloadData = Data(base64URLEncoded: String(components[1]))
-    else {
-      Self.logger.error("Failed to decode JWT segments from base64URL")
-      return .failure(.invalidData("Failed to decode JWT segments"))
-    }
-
-    do {
-      let headerJSON = try JSONSerialization.jsonObject(with: headerData, options: [])
-      let payloadJSON = try JSONSerialization.jsonObject(with: payloadData, options: [])
-
-      guard let headerDict = headerJSON as? [String: Any],
-        let payloadDict = payloadJSON as? [String: Any]
-      else {
-        Self.logger.error("JWT segments are not valid JSON objects")
-        return .failure(.invalidData("JWT segments are not valid JSON objects"))
-      }
-
-      Self.logger.debug("JWT decoded successfully - header keys: \(headerDict.keys.joined(separator: ", "))")
-      return .success(DecodedJWT(header: headerDict, payload: payloadDict, payloadData: payloadData))
-    } catch {
-      Self.logger.error("Failed to parse JWT JSON: \(error.localizedDescription)")
-      return .failure(.invalidData("Failed to parse JWT JSON: \(error.localizedDescription)"))
-    }
-  }
-}
-
-// MARK: - Credential envelope parsing
-
-private struct BusinessCardCredentialEnvelope: Decodable {
-  struct Payload: Decodable {
-    let iss: String?
-    let sub: String?
-    let iat: Int?
-    let nbf: Int?
-    let exp: Int?
-    let vc: VerifiableCredential
-  }
-
-  struct VerifiableCredential: Decodable {
-    let type: [String]
-    let credentialSubject: CredentialSubject
-  }
-
-  struct CredentialSubject: Decodable {
-    struct Organization: Decodable {
-      let name: String?
-    }
-
-    struct Skill: Decodable {
-      let name: String
-      let inDefinedTermSet: String?
-      let description: String?
-
-      enum CodingKeys: String, CodingKey {
-        case name
-        case inDefinedTermSet
-        case description
-      }
-    }
-
-    struct SocialAccount: Decodable {
-      let contactType: String?
-      let identifier: String?
-      let url: String?
-    }
-
-    struct AnimalPreference: Decodable {
-      let id: String?
-      let name: String?
-    }
-
-    let id: String?
-    let type: [String]?
-    let name: String
-    let summary: String?
-    let jobTitle: String?
-    let worksFor: Organization?
-    let email: [String]?
-    let telephone: [String]?
-    let image: String?
-    let sameAs: [String]?
-    let contactPoint: [SocialAccount]?
-    let knowsAbout: [String]?
-    let hasSkill: [Skill]?
-    let preferredAnimal: AnimalPreference?
-    let businessCardId: String?
-    let updatedAt: String?
-    let publicKeyJwk: PublicKeyJWK?
-    let groupContext: GroupCredentialContext?
-  }
-
-  let payload: Payload?
-  let iss: String?
-  let sub: String?
-  let iat: Int?
-  let nbf: Int?
-  let exp: Int?
-  let vc: VerifiableCredential?
-
-  var issuedAtDate: Date? {
-    if let iat = iat {
-      return Date(timeIntervalSince1970: TimeInterval(iat))
-    }
-    if let payloadIat = payload?.iat {
-      return Date(timeIntervalSince1970: TimeInterval(payloadIat))
-    }
-    return nil
-  }
-
-  var expirationDate: Date? {
-    if let exp = exp {
-      return Date(timeIntervalSince1970: TimeInterval(exp))
-    }
-    if let payloadExp = payload?.exp {
-      return Date(timeIntervalSince1970: TimeInterval(payloadExp))
-    }
-    return nil
-  }
-
-  func toBusinessCard() throws -> BusinessCard {
-    let envelopeVC: VerifiableCredential
-    if let directVc = vc {
-      envelopeVC = directVc
-    } else if let nestedVc = payload?.vc {
-      envelopeVC = nestedVc
-    } else {
-      throw CardError.invalidData("Credential missing VC payload")
-    }
-
-    let subject = envelopeVC.credentialSubject
-    let cardId = UUID(uuidString: subject.businessCardId ?? "") ?? UUID()
-    let title = subject.jobTitle?.nilIfEmpty()
-    let company = subject.worksFor?.name?.nilIfEmpty()
-    let email = subject.email?.first?.nilIfEmpty()
-    let phone = subject.telephone?.first?.nilIfEmpty()
-
-    var profileImageData: Data?
-    if let image = subject.image, let data = Data(dataURI: image) {
-      profileImageData = data
-    }
-
-    let socialNetworks: [SocialNetwork] =
-      subject.contactPoint?
-      .compactMap { account in
-        guard let platformName = account.contactType?.nilIfEmpty(),
-          let username = account.identifier?.nilIfEmpty()
-        else { return nil }
-        let platform = SocialPlatform(rawValue: platformName) ?? .other
-        return SocialNetwork(
-          platform: platform,
-          username: username,
-          url: account.url?.nilIfEmpty()
-        )
-      } ?? []
-
-    let skills: [Skill] =
-      subject.hasSkill?
-      .compactMap { skill in
-        let proficiency = ProficiencyLevel(rawValue: skill.description ?? "") ?? .intermediate
-        return Skill(
-          name: skill.name,
-          category: skill.inDefinedTermSet ?? "General",
-          proficiencyLevel: proficiency
-        )
-      } ?? []
-
-    var animal: AnimalCharacter?
-    if let animalId = subject.preferredAnimal?.id, let value = AnimalCharacter(rawValue: animalId) {
-      animal = value
-    }
-
-    var card = BusinessCard(
-      id: cardId,
-      name: subject.name,
-      title: title,
-      company: company,
-      email: email,
-      phone: phone,
-      profileImage: profileImageData,
-      animal: animal,
-      socialNetworks: socialNetworks,
-      skills: skills,
-      categories: subject.knowsAbout ?? [],
-      sharingPreferences: SharingPreferences(),
-      groupContext: subject.groupContext,
-      createdAt: issuedAtDate ?? Date(),
-      updatedAt: Date()
-    )
-
-    if let summary = subject.summary, !summary.isEmpty {
-      card.categories.append(summary)
-    }
-
-    return card
   }
 }

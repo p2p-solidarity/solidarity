@@ -8,10 +8,10 @@
 
 import CryptoKit
 import Foundation
+import OpenPassportSwift
+import os
 
-#if ENABLE_OPEN_PASSPORT
-  import OpenPassportSwift
-#endif
+private let logger = Logger(subsystem: "solidarity.zk", category: "MoproProofService")
 
 // MARK: - Proof Output
 
@@ -30,19 +30,27 @@ final class MoproProofService {
   private init() {}
 
   /// Whether OpenPassport native proving is available in this build.
+  /// Now always true since OpenPassportSwift is linked unconditionally.
+  /// Actual availability depends on circuit files being in the bundle.
   static var isAvailable: Bool {
-    #if ENABLE_OPEN_PASSPORT
-      return true
-    #else
-      return false
-    #endif
+    let hasCircuit = Bundle.main.path(forResource: "openpassport_disclosure", ofType: "json") != nil
+      || Bundle.main.path(forResource: "disclosure", ofType: "json") != nil
+    let hasSRS = Bundle.main.path(forResource: "openpassport_srs", ofType: "bin") != nil
+    logger.info("OpenPassport availability: circuit=\(hasCircuit), srs=\(hasSRS)")
+    if !hasCircuit {
+      logger.warning("Missing circuit file (openpassport_disclosure.json) — OpenPassport will fall back")
+    }
+    if !hasSRS {
+      logger.warning("Missing SRS file (openpassport_srs.bin) — OpenPassport will fall back")
+    }
+    return hasCircuit && hasSRS
   }
 
   // MARK: - Passport Proof Generation
 
   // swiftlint:disable function_parameter_count
   /// Generate a ZK proof from passport chip data using OpenPassport disclosure circuit.
-  /// Falls back to Semaphore → SD-JWT if OpenPassport proving is unavailable.
+  /// Falls back to Semaphore -> SD-JWT if OpenPassport proving is unavailable.
   func generatePassportProof(
     documentHash: String,
     mrzDigest: String,
@@ -55,35 +63,57 @@ final class MoproProofService {
   ) async -> MoproProofOutput {
     let start = DispatchTime.now()
 
-    // Try OpenPassport proving first.
-    #if ENABLE_OPEN_PASSPORT
-    if let result = await generateWithOpenPassport(
-      documentHash: documentHash,
-      mrzDigest: mrzDigest,
-      dg1MRZData: dg1MRZData,
-      fallbackNationalityCode: nationalityCode,
-      fallbackDateOfBirth: dateOfBirth,
-      expiryDate: expiryDate,
-      onProgress: onProgress
-    ) {
-      return result
-    }
-    #endif
+    logger.info("========== PASSPORT PROOF GENERATION START ==========")
+    logger.info("nationality=\(nationalityCode), passiveAuth=\(passiveAuthPassed)")
+    logger.info("dg1MRZData length=\(dg1MRZData.count), documentHash=\(documentHash.prefix(16))...")
+    logger.info("mrzDigest=\(mrzDigest.prefix(16))..., expiryDate=\(expiryDate)")
 
-    // Fallback: Semaphore ZK.
-    onProgress("Trying Semaphore ZK...")
-    if let result = await generateWithSemaphore(
-      documentHash: documentHash,
-      mrzDigest: mrzDigest,
-      nationalityCode: nationalityCode,
-      startTime: start
-    ) {
-      return result
+    // ── Step 1: OpenPassport (Mopro/Noir) ──
+    logger.info("── Step 1/3: OpenPassport (Noir/Mopro) ──")
+    if Self.isAvailable {
+      logger.info("Attempting Noir proof generation via OpenPassport circuit...")
+      if let result = await generateWithOpenPassport(
+        documentHash: documentHash,
+        mrzDigest: mrzDigest,
+        dg1MRZData: dg1MRZData,
+        fallbackNationalityCode: nationalityCode,
+        fallbackDateOfBirth: dateOfBirth,
+        expiryDate: expiryDate,
+        onProgress: onProgress
+      ) {
+        logger.info("✅ OpenPassport proof SUCCEEDED in \(result.generationTimeMs)ms — proofType=mopro-noir, trustLevel=green")
+        return result
+      }
+      logger.warning("❌ OpenPassport proof FAILED — falling back to Semaphore")
+    } else {
+      logger.warning("OpenPassport SKIPPED — circuit files not found in bundle")
+      logger.warning("Required: openpassport_disclosure.json + openpassport_srs.bin")
     }
 
-    // Final fallback: SD-JWT.
+    // ── Step 2: Semaphore ZK ──
+    let semaphoreSupported = SemaphoreIdentityManager.proofsSupported
+    logger.info("── Step 2/3: Semaphore ZK ── supported=\(semaphoreSupported)")
+    if semaphoreSupported {
+      onProgress("Trying Semaphore ZK...")
+      logger.info("Attempting Semaphore proof generation...")
+      if let result = await generateWithSemaphore(
+        documentHash: documentHash,
+        mrzDigest: mrzDigest,
+        nationalityCode: nationalityCode,
+        startTime: start
+      ) {
+        logger.info("✅ Semaphore ZK proof SUCCEEDED in \(result.generationTimeMs)ms — proofType=semaphore-zk, trustLevel=green")
+        return result
+      }
+      logger.warning("❌ Semaphore ZK proof FAILED — falling back to SD-JWT")
+    } else {
+      logger.warning("Semaphore ZK SKIPPED — proofsSupported=false (check: canImport(Semaphore), not x86_64 simulator)")
+    }
+
+    // ── Step 3: SD-JWT Fallback ──
+    logger.warning("── Step 3/3: SD-JWT Fallback ── (not true ZK, trustLevel=blue)")
     onProgress("Using SD-JWT fallback...")
-    return generateSDJWTFallback(
+    let result = generateSDJWTFallback(
       documentHash: documentHash,
       mrzDigest: mrzDigest,
       nationalityCode: nationalityCode,
@@ -91,19 +121,21 @@ final class MoproProofService {
       passiveAuthPassed: passiveAuthPassed,
       startTime: start
     )
+    logger.info("SD-JWT fallback completed in \(result.generationTimeMs)ms — proofType=sd-jwt-fallback")
+    logger.info("========== PASSPORT PROOF GENERATION END (used: \(result.proofType)) ==========")
+    return result
   }
   // swiftlint:enable function_parameter_count
 
   // MARK: - OpenPassport Native Proof
 
-  #if ENABLE_OPEN_PASSPORT
-    private struct DisclosureWitness {
-      let inputs: [String: [String]]
-      let mrzHashHex: String
-      let disclosedNationality: String
-      let isOlderThan18: Bool
-      let publicSignals: [String]
-    }
+  private struct DisclosureWitness {
+    let inputs: [String: [String]]
+    let mrzHashHex: String
+    let disclosedNationality: String
+    let isOlderThan18: Bool
+    let publicSignals: [String]
+  }
 
     // swiftlint:disable:next function_parameter_count
     private func generateWithOpenPassport(
@@ -353,104 +385,9 @@ final class MoproProofService {
       return age >= threshold
     }
 
-    private func decimalPair(_ first: UInt8, _ second: UInt8) -> UInt16 {
-      let firstDigit = first >= 48 && first <= 57 ? first - 48 : 0
-      let secondDigit = second >= 48 && second <= 57 ? second - 48 : 0
-      return UInt16(firstDigit) * 10 + UInt16(secondDigit)
-    }
-  #endif
-
-  // MARK: - Semaphore Fallback
-
-  private func generateWithSemaphore(
-    documentHash: String,
-    mrzDigest: String,
-    nationalityCode: String,
-    startTime: DispatchTime
-  ) async -> MoproProofOutput? {
-    guard SemaphoreIdentityManager.proofsSupported else { return nil }
-
-    do {
-      let identity = try SemaphoreIdentityManager.shared.loadOrCreateIdentity()
-
-      // Use existing multi-member group, or bootstrap a minimal 2-member group
-      // for passport self-attestation (anchor + user = anonymity set of 2).
-      let groupCommitments: [String]
-      if let existingGroup = SemaphoreGroupManager.shared.proofCommitments(containing: identity.commitment) {
-        groupCommitments = existingGroup
-      } else {
-        groupCommitments = [identity.commitment, SemaphoreIdentityManager.passportAnchorCommitment]
-        ZKLog.info("Using bootstrap passport anchor for Semaphore proof (no existing group).")
-      }
-
-      let proofJSON = try SemaphoreIdentityManager.shared.generateProof(
-        groupCommitments: groupCommitments,
-        message: documentHash,
-        scope: "passport:\(nationalityCode)"
-      )
-
-      var payloadDict: [String: Any] = [
-        "passport_hash": documentHash,
-        "mrz": mrzDigest,
-        "proof_type": "semaphore-zk",
-      ]
-      if let proofData = proofJSON.data(using: .utf8),
-         let proofObject = try? JSONSerialization.jsonObject(with: proofData) {
-        payloadDict["semaphore_proof"] = proofObject
-      } else {
-        payloadDict["semaphore_proof"] = proofJSON
-      }
-
-      let payloadData = try JSONSerialization.data(withJSONObject: payloadDict)
-      let payloadString = String(data: payloadData, encoding: .utf8) ?? "{}"
-      let elapsed = elapsedMs(from: startTime)
-
-      return MoproProofOutput(
-        proofType: "semaphore-zk",
-        proofJSON: payloadString,
-        publicSignals: ["age_over_18", "is_human"],
-        generationTimeMs: elapsed,
-        trustLevel: "green"
-      )
-    } catch {
-      ZKLog.error("Semaphore proof generation failed: \(error)")
-      return nil
-    }
-  }
-
-  // MARK: - SD-JWT Fallback
-
-  // swiftlint:disable:next function_parameter_count
-  private func generateSDJWTFallback(
-    documentHash: String,
-    mrzDigest: String,
-    nationalityCode: String,
-    dateOfBirth: Date,
-    passiveAuthPassed: Bool,
-    startTime: DispatchTime
-  ) -> MoproProofOutput {
-    let fallbackDict: [String: Any] = [
-      "passport_hash": documentHash,
-      "mrz": mrzDigest,
-      "proof_type": "sd-jwt-fallback",
-      "nationality": nationalityCode,
-      "passive_auth": passiveAuthPassed,
-    ]
-    let fallbackData = (try? JSONSerialization.data(withJSONObject: fallbackDict)) ?? Data()
-    let fallbackString = String(data: fallbackData, encoding: .utf8) ?? "{}"
-    let elapsed = elapsedMs(from: startTime)
-
-    return MoproProofOutput(
-      proofType: "sd-jwt-fallback",
-      proofJSON: fallbackString,
-      publicSignals: [],
-      generationTimeMs: elapsed,
-      trustLevel: "blue"
-    )
-  }
-
-  private func elapsedMs(from start: DispatchTime) -> UInt64 {
-    let end = DispatchTime.now()
-    return (end.uptimeNanoseconds - start.uptimeNanoseconds) / 1_000_000
+  private func decimalPair(_ first: UInt8, _ second: UInt8) -> UInt16 {
+    let firstDigit = first >= 48 && first <= 57 ? first - 48 : 0
+    let secondDigit = second >= 48 && second <= 57 ? second - 48 : 0
+    return UInt16(firstDigit) * 10 + UInt16(secondDigit)
   }
 }
