@@ -229,7 +229,8 @@ final class MoproProofService {
       logger.info("[Noir] generateWithOpenPassport ENTRY — dg1MRZData.count=\(dg1MRZData.count), fallbackNationality=\(fallbackNationalityCode)")
 
       guard
-        let circuitPath = Bundle.main.path(forResource: "openpassport_disclosure", ofType: "json")
+        let circuitPath = Bundle.main.path(forResource: "openpassport_disclosure", ofType: "acir")
+          ?? Bundle.main.path(forResource: "openpassport_disclosure", ofType: "json")
           ?? Bundle.main.path(forResource: "disclosure", ofType: "json")
       else {
         logger.warning("[Noir] EXIT reason=circuit-missing — OpenPassport disclosure circuit not found in bundle")
