@@ -14,16 +14,34 @@ extension MoproProofService {
 
   // MARK: - Semaphore crash sentinel
 
-  private static let semaphoreSentinelKey = "solidarity.semaphore.proving_in_progress"
-  private static let semaphoreCrashCountKey = "solidarity.semaphore.crash_count"
+  static let semaphoreSentinelKey = "solidarity.semaphore.proving_in_progress"
+  static let semaphoreCrashCountKey = "solidarity.semaphore.crash_count"
 
-  static var semaphoreCrashedPreviously: Bool {
+  /// Snapshot-at-launch equivalent of OpenPassport's sentinel. Read once per
+  /// process so consuming code can check freely without clobbering the armed
+  /// flag mid-proof.
+  static let semaphoreCrashSnapshotAtLaunch: Bool = {
     guard UserDefaults.standard.bool(forKey: semaphoreSentinelKey) else { return false }
     let count = UserDefaults.standard.integer(forKey: semaphoreCrashCountKey) + 1
     UserDefaults.standard.set(count, forKey: semaphoreCrashCountKey)
     UserDefaults.standard.set(false, forKey: semaphoreSentinelKey)
-    logger.warning("Semaphore prover crash detected (count=\(count)/\(maxCrashRetries))")
+    logger.warning("Semaphore prover crash detected at launch (count=\(count)/\(maxCrashRetries))")
     return count >= maxCrashRetries
+  }()
+
+  static func armSemaphoreSentinel() {
+    UserDefaults.standard.set(true, forKey: semaphoreSentinelKey)
+    UserDefaults.standard.synchronize()
+  }
+
+  static func disarmSemaphoreSentinel() {
+    UserDefaults.standard.set(false, forKey: semaphoreSentinelKey)
+    UserDefaults.standard.set(0, forKey: semaphoreCrashCountKey)
+  }
+
+  static func resetSemaphoreCrashSentinel() {
+    UserDefaults.standard.removeObject(forKey: semaphoreSentinelKey)
+    UserDefaults.standard.removeObject(forKey: semaphoreCrashCountKey)
   }
 
   // MARK: - Semaphore Fallback
@@ -39,7 +57,7 @@ extension MoproProofService {
       return nil
     }
 
-    if Self.semaphoreCrashedPreviously {
+    if Self.semaphoreCrashSnapshotAtLaunch {
       logger.warning("[Semaphore] DISABLED — native prover crashed in a previous session")
       return nil
     }
@@ -61,15 +79,18 @@ extension MoproProofService {
       }
 
       logger.info("[Semaphore] Generating proof — scope=passport:\(nationalityCode), groupSize=\(groupCommitments.count)")
-      UserDefaults.standard.set(true, forKey: Self.semaphoreSentinelKey)
-      UserDefaults.standard.synchronize()
+
+      // `defer` clears the armed flag on every non-crash exit — required to
+      // stop catchable Swift throws from accumulating toward the retry cap
+      // and permanently disabling Semaphore.
+      Self.armSemaphoreSentinel()
+      defer { Self.disarmSemaphoreSentinel() }
+
       let proofJSON = try SemaphoreIdentityManager.shared.generateProof(
         groupCommitments: groupCommitments,
         message: documentHash,
         scope: "passport:\(nationalityCode)"
       )
-      UserDefaults.standard.set(false, forKey: Self.semaphoreSentinelKey)
-      UserDefaults.standard.set(0, forKey: Self.semaphoreCrashCountKey)
       logger.info("[Semaphore] Proof generated — payload length=\(proofJSON.count)")
 
       var payloadDict: [String: Any] = [

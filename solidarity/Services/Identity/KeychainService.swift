@@ -23,10 +23,15 @@ final class KeychainService {
   /// Serializes key mutation operations to prevent concurrent duplicate generation.
   static let keyLock = NSRecursiveLock()
 
+  // In-memory key fallback keyed by alias. A single shared slot collapses
+  // every `KeychainService` instance — including per-RP pairwise instances —
+  // onto one key, which silently defeats pairwise isolation when the master
+  // key generation path writes into the slot. Keep one entry per alias so
+  // each RP's fallback key is scoped to its own `KeychainService`.
   #if targetEnvironment(simulator)
-    static var simulatorInMemoryKey: SecKey?
+    static var simulatorInMemoryKeys: [KeyAlias: SecKey] = [:]
   #else
-    static var deviceInMemoryKey: SecKey?
+    static var deviceInMemoryKeys: [KeyAlias: SecKey] = [:]
   #endif
 
   let alias: KeyAlias
@@ -193,11 +198,11 @@ final class KeychainService {
 
   /// Checks if a key with our tag exists in the keychain.
   func keyExists() -> Bool {
-    // Check if we have an in-memory key first
+    // Check if we have an in-memory key for *this* alias first
     #if targetEnvironment(simulator)
-      if Self.simulatorInMemoryKey != nil { return true }
+      if Self.simulatorInMemoryKeys[alias] != nil { return true }
     #else
-      if Self.deviceInMemoryKey != nil { return true }
+      if Self.deviceInMemoryKeys[alias] != nil { return true }
     #endif
 
     // Only match private keys — avoids false positives from orphan public keys
@@ -231,8 +236,8 @@ final class KeychainService {
 
   #if targetEnvironment(simulator)
   private func privateKeyForSimulator() -> CardResult<SecKey> {
-    if let inMemoryKey = Self.simulatorInMemoryKey {
-      print("[KeychainService] Using in-memory simulator key")
+    if let inMemoryKey = Self.simulatorInMemoryKeys[alias] {
+      print("[KeychainService] Using in-memory simulator key for alias=\(alias)")
       return .success(inMemoryKey)
     }
 
@@ -244,16 +249,18 @@ final class KeychainService {
     case .failure(let error):
       return .failure(error)
     case .success:
-      if let inMemoryKey = Self.simulatorInMemoryKey { return .success(inMemoryKey) }
+      if let inMemoryKey = Self.simulatorInMemoryKeys[alias] { return .success(inMemoryKey) }
       if let key = fetchSecKey(query: query) { return .success(key) }
       return .failure(.keyManagementError("Key not found after generation"))
     }
   }
   #else
   private func privateKeyForDevice(context: LAContext?) -> CardResult<SecKey> {
-    // Check in-memory key first (matches simulator path behaviour)
-    if let inMemoryKey = Self.deviceInMemoryKey {
-      print("[KeychainService] Using in-memory device key")
+    // Check in-memory key for *this* alias first (matches simulator path).
+    // NEVER return the bare static slot: doing so collapses every per-RP
+    // `KeychainService` onto the first alias that populated the fallback.
+    if let inMemoryKey = Self.deviceInMemoryKeys[alias] {
+      print("[KeychainService] Using in-memory device key for alias=\(alias)")
       return .success(inMemoryKey)
     }
 
