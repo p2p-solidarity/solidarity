@@ -112,13 +112,23 @@ final class KeychainService {
   }
 
   /// Creates an authentication context ready for Keychain access.
+  ///
+  /// Prefers biometrics-only auth (Face ID / Touch ID). If no biometric is
+  /// enrolled we fall back to the full `authenticationPolicy` so the user
+  /// isn't locked out on iPads / post-lockout / unenrolled devices.
   func authenticationContext(reason: String? = nil) -> CardResult<LAContext> {
     let context = LAContext()
     context.localizedCancelTitle = "Cancel"
-    context.localizedFallbackTitle = "Use Passcode"
+
+    let effectivePolicy = Self.preferredBiometricPolicy(on: context, fallbackTo: authenticationPolicy)
+    if effectivePolicy == .deviceOwnerAuthentication {
+      // Only surface the "Use Passcode" button when passcode is the actual
+      // fallback path — in biometrics-only mode there is no such button.
+      context.localizedFallbackTitle = "Use Passcode"
+    }
 
     var evaluationError: NSError?
-    guard context.canEvaluatePolicy(authenticationPolicy, error: &evaluationError) else {
+    guard context.canEvaluatePolicy(effectivePolicy, error: &evaluationError) else {
       let message = evaluationError?.localizedDescription ?? "Biometric authentication unavailable"
       return .failure(.keyManagementError(message))
     }
@@ -129,6 +139,13 @@ final class KeychainService {
     }
 
     return .success(context)
+  }
+
+  static func preferredBiometricPolicy(on context: LAContext, fallbackTo policy: LAPolicy) -> LAPolicy {
+    if context.canEvaluatePolicy(.deviceOwnerAuthenticationWithBiometrics, error: nil) {
+      return .deviceOwnerAuthenticationWithBiometrics
+    }
+    return policy
   }
 
   /// Deletes the signing key from the Keychain.
@@ -280,7 +297,11 @@ final class KeychainService {
       let authContext = context ?? {
         let ctx = LAContext()
         ctx.touchIDAuthenticationAllowableReuseDuration = 5
-        ctx.localizedFallbackTitle = "Use Passcode"
+        // Biometric-first: omit the "Use Passcode" fallback label unless we
+        // can't enroll biometrics on this device.
+        if !ctx.canEvaluatePolicy(.deviceOwnerAuthenticationWithBiometrics, error: nil) {
+          ctx.localizedFallbackTitle = "Use Passcode"
+        }
         return ctx
       }()
       authQuery[kSecUseAuthenticationContext as String] = authContext
