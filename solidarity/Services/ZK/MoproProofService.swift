@@ -37,7 +37,18 @@ final class MoproProofService {
   /// crash and fall back to Semaphore/SD-JWT.
   static let crashSentinelKey = "solidarity.mopro.noir.proving_in_progress"
   static let crashCountKey = "solidarity.mopro.noir.crash_count"
+  static let crashSentinelBuildKey = "solidarity.mopro.noir.crash_build"
   static let maxCrashRetries = 2
+
+  /// Current build identifier used to auto-reset the crash sentinel whenever
+  /// the app is upgraded. A prior crash on an older build shouldn't keep
+  /// OpenPassport disabled after the user installs a new version that may
+  /// have fixed the crashing path.
+  static let currentBuildIdentifier: String = {
+    let short = (Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String) ?? "?"
+    let build = (Bundle.main.infoDictionary?["CFBundleVersion"] as? String) ?? "?"
+    return "\(short)(\(build))"
+  }()
 
   /// Sentinel evaluated **once per process** at first access. Reading the
   /// persisted flag is destructive (it increments the crash count and clears
@@ -47,12 +58,23 @@ final class MoproProofService {
   /// eventually trip the retry cap without any real crash. Capturing the
   /// state once preserves the "was armed by a previous, crashed process"
   /// semantics across all subsequent reads.
+  ///
+  /// Auto-resets when the build identifier changes so a new TestFlight build
+  /// gets a clean sentinel slate without needing a manual reset.
   static let crashSnapshotAtLaunch: Bool = {
+    let storedBuild = UserDefaults.standard.string(forKey: crashSentinelBuildKey)
+    if storedBuild != currentBuildIdentifier {
+      logger.info("Native prover sentinel auto-reset — build changed from \(storedBuild ?? "nil") to \(currentBuildIdentifier)")
+      UserDefaults.standard.removeObject(forKey: crashSentinelKey)
+      UserDefaults.standard.removeObject(forKey: crashCountKey)
+      UserDefaults.standard.set(currentBuildIdentifier, forKey: crashSentinelBuildKey)
+      return false
+    }
     guard UserDefaults.standard.bool(forKey: crashSentinelKey) else { return false }
     let count = UserDefaults.standard.integer(forKey: crashCountKey) + 1
     UserDefaults.standard.set(count, forKey: crashCountKey)
     UserDefaults.standard.set(false, forKey: crashSentinelKey)
-    logger.warning("Native prover crash detected at launch (count=\(count)/\(maxCrashRetries))")
+    logger.warning("Native prover crash detected at launch (count=\(count)/\(maxCrashRetries)) on build \(currentBuildIdentifier)")
     return count >= maxCrashRetries
   }()
 
@@ -77,19 +99,21 @@ final class MoproProofService {
   }
 
   /// Whether OpenPassport native proving is available in this build.
-  /// Checks circuit/SRS presence and whether the native prover crashed in a
-  /// previous session (sentinel-gated to avoid repeated crash loops).
+  /// Always logs both the crash-sentinel state **and** the file-bundle state so
+  /// a disabled build can be diagnosed (sentinel trip vs. missing resource) in
+  /// one pass without guessing.
   static var isAvailable: Bool {
-    if crashSnapshotAtLaunch {
-      logger.warning("OpenPassport DISABLED — native prover crashed in a previous session")
-      return false
-    }
+    let sentinelTripped = crashSnapshotAtLaunch
     let circuitPath = Bundle.main.path(forResource: "openpassport_disclosure", ofType: "json")
       ?? Bundle.main.path(forResource: "disclosure", ofType: "json")
     let srsPath = Bundle.main.path(forResource: "openpassport_srs", ofType: "bin")
     let hasCircuit = circuitPath != nil
     let hasSRS = srsPath != nil
-    logger.info("OpenPassport availability: circuit=\(hasCircuit) path=\(circuitPath ?? "nil"), srs=\(hasSRS) path=\(srsPath ?? "nil")")
+    logger.info("OpenPassport availability: sentinelTripped=\(sentinelTripped), circuit=\(hasCircuit) path=\(circuitPath ?? "nil"), srs=\(hasSRS) path=\(srsPath ?? "nil")")
+    if sentinelTripped {
+      logger.warning("OpenPassport DISABLED — native prover crashed in a previous session (files present: circuit=\(hasCircuit), srs=\(hasSRS))")
+      return false
+    }
     if !hasCircuit {
       logger.warning("Missing circuit file (openpassport_disclosure.json) — OpenPassport will fall back")
     }
