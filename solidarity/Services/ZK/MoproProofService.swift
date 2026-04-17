@@ -77,18 +77,19 @@ final class MoproProofService {
   }
 
   /// Whether OpenPassport native proving is available in this build.
-  /// Now always true since OpenPassportSwift is linked unconditionally.
-  /// Actual availability depends on circuit files being in the bundle
-  /// and the native prover not having crashed previously.
+  /// Checks circuit/SRS presence and whether the native prover crashed in a
+  /// previous session (sentinel-gated to avoid repeated crash loops).
   static var isAvailable: Bool {
     if crashSnapshotAtLaunch {
       logger.warning("OpenPassport DISABLED — native prover crashed in a previous session")
       return false
     }
-    let hasCircuit = Bundle.main.path(forResource: "openpassport_disclosure", ofType: "json") != nil
-      || Bundle.main.path(forResource: "disclosure", ofType: "json") != nil
-    let hasSRS = Bundle.main.path(forResource: "openpassport_srs", ofType: "bin") != nil
-    logger.info("OpenPassport availability: circuit=\(hasCircuit), srs=\(hasSRS)")
+    let circuitPath = Bundle.main.path(forResource: "openpassport_disclosure", ofType: "json")
+      ?? Bundle.main.path(forResource: "disclosure", ofType: "json")
+    let srsPath = Bundle.main.path(forResource: "openpassport_srs", ofType: "bin")
+    let hasCircuit = circuitPath != nil
+    let hasSRS = srsPath != nil
+    logger.info("OpenPassport availability: circuit=\(hasCircuit) path=\(circuitPath ?? "nil"), srs=\(hasSRS) path=\(srsPath ?? "nil")")
     if !hasCircuit {
       logger.warning("Missing circuit file (openpassport_disclosure.json) — OpenPassport will fall back")
     }
@@ -201,37 +202,48 @@ final class MoproProofService {
     ) async -> MoproProofOutput? {
       let start = DispatchTime.now()
 
+      logger.info("[Noir] generateWithOpenPassport ENTRY — dg1MRZData.count=\(dg1MRZData.count), fallbackNationality=\(fallbackNationalityCode)")
+
       guard
         let circuitPath = Bundle.main.path(forResource: "openpassport_disclosure", ofType: "json")
           ?? Bundle.main.path(forResource: "disclosure", ofType: "json")
       else {
+        logger.warning("[Noir] EXIT reason=circuit-missing — OpenPassport disclosure circuit not found in bundle")
         ZKLog.info("OpenPassport disclosure circuit not found in bundle")
         return nil
       }
+      logger.info("[Noir] circuitPath=\(circuitPath)")
 
       // SRS file is required for Barretenberg proving backend.
       // Without it, the C++ prover throws a foreign exception that Rust cannot catch, causing a crash.
       guard let srsPath = Bundle.main.path(forResource: "openpassport_srs", ofType: "bin") else {
+        logger.warning("[Noir] EXIT reason=srs-missing — OpenPassport SRS file not found in bundle")
         ZKLog.info("OpenPassport SRS file not found in bundle, skipping Noir proving")
         return nil
       }
+      logger.info("[Noir] srsPath=\(srsPath)")
 
       onProgress("Preparing OpenPassport disclosure witness...")
+      logger.info("[Noir] Building disclosure witness...")
       guard let witness = buildDisclosureWitness(
         rawMRZ: dg1MRZData,
         fallbackNationalityCode: fallbackNationalityCode,
         fallbackDateOfBirth: fallbackDateOfBirth
       ) else {
+        logger.warning("[Noir] EXIT reason=witness-build-failed — could not build witness from MRZ data (length=\(dg1MRZData.count))")
         ZKLog.info("Failed to build disclosure witness from MRZ data")
         return nil
       }
+      logger.info("[Noir] Witness built — mrzHash=\(witness.mrzHashHex.prefix(16))..., nationality=\(witness.disclosedNationality), over18=\(witness.isOlderThan18), inputs.keys=\(Array(witness.inputs.keys).sorted().joined(separator: ","))")
 
       if !mrzDigest.isEmpty && witness.mrzHashHex != mrzDigest.lowercased() {
+        logger.warning("[Noir] MRZ digest mismatch — caller=\(mrzDigest.prefix(16))..., dg1=\(witness.mrzHashHex.prefix(16))...")
         onProgress("MRZ digest mismatch detected; using DG1-derived digest.")
       }
 
       do {
         onProgress("Generating OpenPassport proof on device...")
+        logger.info("[Noir] Calling generateNoirProof — arming crash sentinel...")
 
         // `defer` fires on every non-crash exit (success or catchable throw) so
         // recoverable Swift errors don't leave the sentinel armed and push the
@@ -241,20 +253,28 @@ final class MoproProofService {
         Self.armCrashSentinel()
         defer { Self.disarmCrashSentinel() }
 
+        let proveStart = DispatchTime.now()
         let proof = try generateNoirProof(
           circuitPath: circuitPath,
           srsPath: srsPath,
           inputs: witness.inputs
         )
+        let proveMs = elapsedMs(from: proveStart)
+        logger.info("[Noir] generateNoirProof RETURNED in \(proveMs)ms — proof.count=\(proof.proof.count), vk.count=\(proof.vk.count)")
 
+        let verifyStart = DispatchTime.now()
         let verified = try verifyNoirProof(proof: proof.proof, vk: proof.vk)
+        let verifyMs = elapsedMs(from: verifyStart)
+        logger.info("[Noir] verifyNoirProof RETURNED verified=\(verified) in \(verifyMs)ms")
         guard verified else {
+          logger.warning("[Noir] EXIT reason=verify-false — proof generated but verification returned false")
           ZKLog.info("OpenPassport proof verification failed immediately after generation")
           return nil
         }
 
         let elapsed = elapsedMs(from: start)
         onProgress("OpenPassport proof generated in \(elapsed)ms")
+        logger.info("[Noir] SUCCESS — total=\(elapsed)ms (prove=\(proveMs)ms, verify=\(verifyMs)ms)")
 
         var publicSignals = witness.publicSignals
         if expiryDate > Date() {
@@ -278,6 +298,7 @@ final class MoproProofService {
           trustLevel: "green"
         )
       } catch {
+        logger.error("[Noir] EXIT reason=threw — \(String(describing: error))")
         ZKLog.error("OpenPassport proof generation failed: \(error)")
         onProgress("OpenPassport failed, trying fallback...")
         return nil
@@ -386,12 +407,14 @@ final class MoproProofService {
       // OpenPassport disclosure proof must be based on real DG1 MRZ bytes.
       // If DG1 data is incomplete, we skip OpenPassport and fall back to the next proof engine.
       guard sanitized.count >= 88 else {
+        logger.warning("[Noir] normalizedMRZ: sanitized=\(sanitized.count) chars (need >=88) — raw=\(rawMRZ.count) chars, fallback nationality=\(fallbackNationalityCode)")
         ZKLog.info(
           "OpenPassport skipped: DG1 MRZ incomplete (\(sanitized.count) chars, expected >= 88). " +
             "fallback_nationality=\(fallbackNationalityCode), fallback_dob=\(yyMMdd(from: fallbackDateOfBirth))"
         )
         return nil
       }
+      logger.info("[Noir] normalizedMRZ: raw=\(rawMRZ.count) → sanitized=\(sanitized.count) → prefix88")
       return Array(sanitized.prefix(88).utf8)
     }
 
