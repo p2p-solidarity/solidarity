@@ -64,7 +64,7 @@ final class MoproProofService {
   static let crashSnapshotAtLaunch: Bool = {
     let storedBuild = UserDefaults.standard.string(forKey: crashSentinelBuildKey)
     if storedBuild != currentBuildIdentifier {
-      logger.info("Native prover sentinel auto-reset — build changed from \(storedBuild ?? "nil") to \(currentBuildIdentifier)")
+      logger.warning("Native prover sentinel auto-reset — build changed from \(storedBuild ?? "nil", privacy: .public) to \(currentBuildIdentifier, privacy: .public)")
       UserDefaults.standard.removeObject(forKey: crashSentinelKey)
       UserDefaults.standard.removeObject(forKey: crashCountKey)
       UserDefaults.standard.set(currentBuildIdentifier, forKey: crashSentinelBuildKey)
@@ -74,7 +74,7 @@ final class MoproProofService {
     let count = UserDefaults.standard.integer(forKey: crashCountKey) + 1
     UserDefaults.standard.set(count, forKey: crashCountKey)
     UserDefaults.standard.set(false, forKey: crashSentinelKey)
-    logger.warning("Native prover crash detected at launch (count=\(count)/\(maxCrashRetries)) on build \(currentBuildIdentifier)")
+    logger.warning("Native prover crash detected at launch (count=\(count)/\(maxCrashRetries)) on build \(currentBuildIdentifier, privacy: .public)")
     return count >= maxCrashRetries
   }()
 
@@ -104,7 +104,8 @@ final class MoproProofService {
   /// one pass without guessing.
   static var isAvailable: Bool {
     let sentinelTripped = crashSnapshotAtLaunch
-    let circuitPath = Bundle.main.path(forResource: "openpassport_disclosure", ofType: "json")
+    let circuitPath = Bundle.main.path(forResource: "openpassport_disclosure", ofType: "acir")
+      ?? Bundle.main.path(forResource: "openpassport_disclosure", ofType: "json")
       ?? Bundle.main.path(forResource: "disclosure", ofType: "json")
     let srsPath = Bundle.main.path(forResource: "openpassport_srs", ofType: "bin")
     let hasCircuit = circuitPath != nil
@@ -115,7 +116,7 @@ final class MoproProofService {
       return false
     }
     if !hasCircuit {
-      logger.warning("Missing circuit file (openpassport_disclosure.json) — OpenPassport will fall back")
+      logger.warning("Missing circuit file (openpassport_disclosure.acir) — OpenPassport will fall back")
     }
     if !hasSRS {
       logger.warning("Missing SRS file (openpassport_srs.bin) — OpenPassport will fall back")
@@ -163,8 +164,7 @@ final class MoproProofService {
       }
       logger.warning("❌ OpenPassport proof FAILED — falling back to Semaphore")
     } else {
-      logger.warning("OpenPassport SKIPPED — circuit files not found in bundle")
-      logger.warning("Required: openpassport_disclosure.json + openpassport_srs.bin")
+      logger.warning("OpenPassport SKIPPED — isAvailable=false (see prior log for sentinelTripped / file status)")
     }
 
     // ── Step 2: Semaphore ZK ──
