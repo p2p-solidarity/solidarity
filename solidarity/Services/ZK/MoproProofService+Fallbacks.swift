@@ -12,6 +12,20 @@ private let logger = Logger(subsystem: "solidarity.zk", category: "MoproProofFal
 
 extension MoproProofService {
 
+  // MARK: - Semaphore crash sentinel
+
+  private static let semaphoreSentinelKey = "solidarity.semaphore.proving_in_progress"
+  private static let semaphoreCrashCountKey = "solidarity.semaphore.crash_count"
+
+  static var semaphoreCrashedPreviously: Bool {
+    guard UserDefaults.standard.bool(forKey: semaphoreSentinelKey) else { return false }
+    let count = UserDefaults.standard.integer(forKey: semaphoreCrashCountKey) + 1
+    UserDefaults.standard.set(count, forKey: semaphoreCrashCountKey)
+    UserDefaults.standard.set(false, forKey: semaphoreSentinelKey)
+    logger.warning("Semaphore prover crash detected (count=\(count)/\(maxCrashRetries))")
+    return count >= maxCrashRetries
+  }
+
   // MARK: - Semaphore Fallback
 
   func generateWithSemaphore(
@@ -22,6 +36,11 @@ extension MoproProofService {
   ) async -> MoproProofOutput? {
     guard SemaphoreIdentityManager.proofsSupported else {
       logger.warning("[Semaphore] proofsSupported=false, skipping")
+      return nil
+    }
+
+    if Self.semaphoreCrashedPreviously {
+      logger.warning("[Semaphore] DISABLED — native prover crashed in a previous session")
       return nil
     }
 
@@ -42,11 +61,15 @@ extension MoproProofService {
       }
 
       logger.info("[Semaphore] Generating proof — scope=passport:\(nationalityCode), groupSize=\(groupCommitments.count)")
+      UserDefaults.standard.set(true, forKey: Self.semaphoreSentinelKey)
+      UserDefaults.standard.synchronize()
       let proofJSON = try SemaphoreIdentityManager.shared.generateProof(
         groupCommitments: groupCommitments,
         message: documentHash,
         scope: "passport:\(nationalityCode)"
       )
+      UserDefaults.standard.set(false, forKey: Self.semaphoreSentinelKey)
+      UserDefaults.standard.set(0, forKey: Self.semaphoreCrashCountKey)
       logger.info("[Semaphore] Proof generated — payload length=\(proofJSON.count)")
 
       var payloadDict: [String: Any] = [

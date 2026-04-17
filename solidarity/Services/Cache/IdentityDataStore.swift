@@ -22,15 +22,15 @@ final class IdentityDataStore: ObservableObject {
   let modelContainer: ModelContainer
   let modelContext: ModelContext
 
-  private let migrationMarker = "solidarity.identity.swiftdata.migrated.v3"
+  private let migrationMarker = "solidarity.identity.swiftdata.migrated.v4"
   private let refreshSubject = PassthroughSubject<Void, Never>()
   private var refreshCancellable: AnyCancellable?
 
   private init() {
-    // v3 store — isolates from v2 Array<String> materialization bug
-    // (CoreData could not materialize tags/credentialIds). v1 & v2 files
-    // are left on disk; migration from legacy sources reruns via marker.
-    let url = URL.documentsDirectory.appending(path: "SolidarityIdentity_v3.store")
+    // v4 store — Array<String> stored properties replaced with Data?
+    // backing + computed accessors to eliminate CoreData materialization
+    // bug. v1–v3 files are left on disk; migration reruns via marker.
+    let url = URL.documentsDirectory.appending(path: "SolidarityIdentity_v4.store")
     let configuration = ModelConfiguration(url: url, cloudKitDatabase: .none)
 
     modelContainer = Self.makeContainer(configuration: configuration, fallbackStoreURL: url)
@@ -65,11 +65,11 @@ final class IdentityDataStore: ObservableObject {
     }
 
     // Quarantine the broken store and try one fresh on-disk open.
-    print("[IdentityDataStore] v3 store failed to open — quarantining \(fallbackStoreURL.lastPathComponent)")
+    print("[IdentityDataStore] v4 store failed to open — quarantining \(fallbackStoreURL.lastPathComponent)")
     let fm = FileManager.default
     if fm.fileExists(atPath: fallbackStoreURL.path) {
       let quarantine = fallbackStoreURL.deletingLastPathComponent()
-        .appending(path: "SolidarityIdentity_v3.broken-\(Int(Date().timeIntervalSince1970)).store")
+        .appending(path: "SolidarityIdentity_v4.broken-\(Int(Date().timeIntervalSince1970)).store")
       try? fm.moveItem(at: fallbackStoreURL, to: quarantine)
       // Also move sidecar files SwiftData writes alongside the store.
       for suffix in ["-wal", "-shm"] {

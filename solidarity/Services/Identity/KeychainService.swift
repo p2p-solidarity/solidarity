@@ -251,6 +251,12 @@ final class KeychainService {
   }
   #else
   private func privateKeyForDevice(context: LAContext?) -> CardResult<SecKey> {
+    // Check in-memory key first (matches simulator path behaviour)
+    if let inMemoryKey = Self.deviceInMemoryKey {
+      print("[KeychainService] Using in-memory device key")
+      return .success(inMemoryKey)
+    }
+
     var basicQuery = basePrivateKeyQuery()
     basicQuery[kSecAttrKeyType as String] = kSecAttrKeyTypeECSECPrimeRandom
 

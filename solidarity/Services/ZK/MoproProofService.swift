@@ -29,10 +29,54 @@ final class MoproProofService {
   static let shared = MoproProofService()
   private init() {}
 
+  // MARK: - Crash sentinel
+
+  /// Tracks whether the native prover previously crashed the process.
+  /// The Barretenberg C++ backend throws foreign exceptions that Rust/Swift
+  /// cannot catch — the only safe approach is to skip OpenPassport after a
+  /// crash and fall back to Semaphore/SD-JWT.
+  private static let crashSentinelKey = "solidarity.mopro.noir.proving_in_progress"
+  private static let crashCountKey = "solidarity.mopro.noir.crash_count"
+  static let maxCrashRetries = 2
+
+  /// Call before entering native prover code.
+  private static func armCrashSentinel() {
+    UserDefaults.standard.set(true, forKey: crashSentinelKey)
+    UserDefaults.standard.synchronize()
+  }
+
+  /// Call after native prover returns normally.
+  private static func disarmCrashSentinel() {
+    UserDefaults.standard.set(false, forKey: crashSentinelKey)
+    UserDefaults.standard.set(0, forKey: crashCountKey)
+  }
+
+  /// Returns true if the previous native prover call crashed the process.
+  private static var proverCrashedPreviously: Bool {
+    guard UserDefaults.standard.bool(forKey: crashSentinelKey) else { return false }
+    // Sentinel was armed but never disarmed → app crashed during proof generation.
+    let count = UserDefaults.standard.integer(forKey: crashCountKey) + 1
+    UserDefaults.standard.set(count, forKey: crashCountKey)
+    UserDefaults.standard.set(false, forKey: crashSentinelKey)
+    logger.warning("Native prover crash detected (count=\(count)/\(maxCrashRetries))")
+    return count >= maxCrashRetries
+  }
+
+  /// Reset crash history (e.g. after app update or circuit file change).
+  static func resetCrashSentinel() {
+    UserDefaults.standard.removeObject(forKey: crashSentinelKey)
+    UserDefaults.standard.removeObject(forKey: crashCountKey)
+  }
+
   /// Whether OpenPassport native proving is available in this build.
   /// Now always true since OpenPassportSwift is linked unconditionally.
-  /// Actual availability depends on circuit files being in the bundle.
+  /// Actual availability depends on circuit files being in the bundle
+  /// and the native prover not having crashed previously.
   static var isAvailable: Bool {
+    if proverCrashedPreviously {
+      logger.warning("OpenPassport DISABLED — native prover crashed in a previous session")
+      return false
+    }
     let hasCircuit = Bundle.main.path(forResource: "openpassport_disclosure", ofType: "json") != nil
       || Bundle.main.path(forResource: "disclosure", ofType: "json") != nil
     let hasSRS = Bundle.main.path(forResource: "openpassport_srs", ofType: "bin") != nil
@@ -181,11 +225,13 @@ final class MoproProofService {
       do {
         onProgress("Generating OpenPassport proof on device...")
 
+        Self.armCrashSentinel()
         let proof = try generateNoirProof(
           circuitPath: circuitPath,
           srsPath: srsPath,
           inputs: witness.inputs
         )
+        Self.disarmCrashSentinel()
 
         let verified = try verifyNoirProof(proof: proof.proof, vk: proof.vk)
         guard verified else {
