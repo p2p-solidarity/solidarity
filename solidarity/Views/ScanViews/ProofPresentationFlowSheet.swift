@@ -17,7 +17,8 @@ struct ProofPresentationFlowSheet: View {
   @State private var parsedRequest: OIDCService.PresentationRequest?
 
   private var verifierDomain: String {
-    if let uri = parsedRequest?.redirectUri, let host = URL(string: uri)?.host {
+    if let request = parsedRequest,
+       let host = URL(string: request.effectiveResponseTarget)?.host {
       return host
     }
     return OIDCService.verifierDomain(from: requestPayload)
@@ -187,8 +188,14 @@ struct ProofPresentationFlowSheet: View {
   }
 
   private func parseRequest() {
-    if case .success(let request) = OIDCService.shared.parseRequest(from: requestPayload) {
-      parsedRequest = request
+    // Use the async parser so request_uri / signed request Request Objects
+    // are resolved before the review screen renders. Sync parseRequest is
+    // kept as a fallback when resolution fails (offline / unreachable).
+    Task {
+      let result = await OIDCService.shared.parseRequestAsync(from: requestPayload)
+      if case .success(let request) = result {
+        await MainActor.run { parsedRequest = request }
+      }
     }
   }
 
@@ -206,7 +213,10 @@ struct ProofPresentationFlowSheet: View {
       case .success:
         let card = CardManager.shared.businessCards.first ?? BusinessCard(name: String(localized: "Solidarity User"))
         let rpDomain: String? = {
-          if let uri = parsedRequest?.redirectUri { return URL(string: uri)?.host }
+          if let request = parsedRequest,
+             let host = URL(string: request.effectiveResponseTarget)?.host {
+            return host
+          }
           return OIDCService.verifierDomain(from: requestPayload)
         }()
         // VC payload must be bounded by what the holder has attested to.
@@ -264,8 +274,9 @@ struct ProofPresentationFlowSheet: View {
     Task {
       let result = await OIDCService.shared.submitVpToken(
         token: jwt,
-        redirectURI: request.redirectUri,
-        state: request.state.isEmpty ? nil : request.state
+        target: request.effectiveResponseTarget,
+        state: request.state.isEmpty ? nil : request.state,
+        responseMode: request.responseMode
       )
       await MainActor.run {
         isWorking = false

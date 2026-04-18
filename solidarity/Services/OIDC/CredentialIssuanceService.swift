@@ -170,7 +170,12 @@ final class CredentialIssuanceService {
       bodyItems.append(URLQueryItem(name: "pre-authorized_code", value: code))
     }
 
-    if let pin = userPin, offer.userPinRequired {
+    // OID4VCI final §6.1 renamed `user_pin` to `tx_code`. We send both
+    // during the transition — older draft-13 issuers still look for
+    // user_pin, final issuers look for tx_code. Requesting with both is
+    // harmless because issuers ignore unknown form parameters.
+    if let pin = userPin, offer.txCode != nil {
+      bodyItems.append(URLQueryItem(name: "tx_code", value: pin))
       bodyItems.append(URLQueryItem(name: "user_pin", value: pin))
     }
 
@@ -228,8 +233,25 @@ final class CredentialIssuanceService {
 
     let credentialType = offer.credentialConfigurationIds.first ?? "VerifiableCredential"
 
+    // OID4VCI final §6.4: when the token response carries
+    // `authorization_details` with `credential_identifiers`, the
+    // Credential Request MUST use `credential_identifier` instead of
+    // `credential_configuration_id`. The issuer has bound the
+    // authorization to a specific issuer-picked identifier — sending the
+    // configuration id back would be a spec violation.
+    let credentialIdentifiers: [String] = (tokenResponse.authorizationDetails ?? [])
+      .flatMap { ($0["credential_identifiers"] as? [String]) ?? [] }
+
+    // OID4VCI final §7.2 replaces the draft-13 request shape:
+    //   - `credential_definition` + `format` → `credential_configuration_id`
+    //   - `proof` (single) → `proofs` (object keyed by proof_type, array of proofs)
+    // We keep `format` + `credential_definition` alongside for issuers that
+    // still speak draft-13, so the same request succeeds on both stacks.
     func makeRequestBody(proofJWT: String) -> [String: Any] {
-      return [
+      var body: [String: Any] = [
+        "proofs": [
+          "jwt": [proofJWT],
+        ],
         "format": "jwt_vc_json",
         "credential_definition": [
           "type": ["VerifiableCredential", credentialType]
@@ -239,6 +261,12 @@ final class CredentialIssuanceService {
           "jwt": proofJWT,
         ],
       ]
+      if let identifier = credentialIdentifiers.first {
+        body["credential_identifier"] = identifier
+      } else {
+        body["credential_configuration_id"] = credentialType
+      }
+      return body
     }
 
     guard let bodyData = try? JSONSerialization.data(withJSONObject: makeRequestBody(proofJWT: proofJWT)) else {
@@ -291,16 +319,18 @@ final class CredentialIssuanceService {
 
       let credResponse = try JSONDecoder().decode(CredentialResponse.self, from: data)
 
-      guard let jwt = credResponse.credential else {
+      guard let jwt = credResponse.primaryCredentialJWT else {
         return .failure(.invalidData("Credential endpoint returned no credential"))
       }
 
-      Self.logger.info("Credential received, format: \(credResponse.format ?? "jwt_vc_json")")
+      let format = credResponse.primaryFormat ?? "jwt_vc_json"
+      Self.logger.info("Credential received, format: \(format), batch=\(credResponse.credentials?.count ?? 0)")
       return .success(IssuanceResult(
         credentialJWT: jwt,
-        format: credResponse.format ?? "jwt_vc_json",
+        format: format,
         issuer: offer.credentialIssuer,
-        credentialType: credentialType
+        credentialType: credentialType,
+        cNonce: credResponse.cNonce
       ))
     } catch let cardError as CardError {
       return .failure(cardError)

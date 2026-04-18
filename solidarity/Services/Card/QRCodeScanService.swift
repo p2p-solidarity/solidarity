@@ -133,7 +133,9 @@ final class QRCodeScanService: NSObject {
       break
     }
 
-    if let url = URL(string: data), AppBranding.isSupportedAppScheme(url.scheme), url.host == "oidc" {
+    if let url = URL(string: data),
+       AppBranding.isSupportedAppScheme(url.scheme),
+       OIDCService.isCallbackHost(url.host) {
       handleOIDCResponse(url: url)
       return
     }

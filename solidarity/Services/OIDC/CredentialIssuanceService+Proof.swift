@@ -23,12 +23,18 @@ extension CredentialIssuanceService {
         ?? []
 
       var preAuthCode: String?
-      var pinRequired = false
+      var txCode: TxCodeSpec?
 
       if let grants = json["grants"] as? [String: Any] {
         let preAuthGrant = grants["urn:ietf:params:oauth:grant-type:pre-authorized_code"] as? [String: Any]
         preAuthCode = preAuthGrant?["pre-authorized_code"] as? String
-        pinRequired = preAuthGrant?["user_pin_required"] as? Bool ?? false
+        // OID4VCI final §4.1.1 introduces `tx_code` (object). Older drafts
+        // sent `user_pin_required: true`; promote that to a default spec.
+        if let txCodeValue = preAuthGrant?["tx_code"] {
+          txCode = TxCodeSpec.parse(txCodeValue)
+        } else if let legacy = preAuthGrant?["user_pin_required"] as? Bool, legacy {
+          txCode = .default
+        }
       }
 
       Self.logger.info("Parsed offer from \(issuer), \(configIds.count) credential(s)")
@@ -36,7 +42,7 @@ extension CredentialIssuanceService {
         credentialIssuer: issuer,
         credentialConfigurationIds: configIds,
         preAuthorizedCode: preAuthCode,
-        userPinRequired: pinRequired
+        txCode: txCode
       ))
     } catch {
       return .failure(.invalidData("Failed to decode credential offer JSON: \(error.localizedDescription)"))
