@@ -1,5 +1,7 @@
 import CryptoKit
 import Foundation
+import SpruceIDMobileSdkRs
+import os
 
 struct VpTokenVerificationResult: Equatable {
   let isValid: Bool
@@ -11,6 +13,8 @@ struct VpTokenVerificationResult: Equatable {
 
 final class ProofVerifierService {
   static let shared = ProofVerifierService()
+  static let logger = Logger(subsystem: AppBranding.currentLoggerSubsystem, category: "ProofVerifier")
+
   private init() {}
 
   func verifyVpToken(_ token: String) -> VpTokenVerificationResult {
@@ -71,6 +75,22 @@ final class ProofVerifierService {
       details.append("exp: missing")
     }
 
+    // Nonce replay check: a verifier that receives the same nonce twice
+    // is being replayed. Register the nonce before signature verification
+    // so even a valid signature cannot be reused.
+    if let nonce = payload["nonce"] as? String, !nonce.isEmpty {
+      if !OIDCService.shared.registerNonce(nonce) {
+        return VpTokenVerificationResult(
+          isValid: false,
+          status: .failed,
+          title: "Replay detected",
+          reason: "vp_token nonce has already been used.",
+          details: details + ["nonce: \(nonce.prefix(16))..."]
+        )
+      }
+      details.append("nonce: \(nonce.prefix(16))...")
+    }
+
     switch verifyJWTSignature(jwt: token, header: header, payload: payload) {
     case .failure(let reason):
       return VpTokenVerificationResult(
@@ -120,12 +140,34 @@ final class ProofVerifierService {
     }
     let keyId = header["kid"] as? String
 
-    guard let trustedJWK = IssuerTrustAnchorStore.shared.trustedJWK(for: issuerDid, keyId: keyId) else {
+    // Resolution strategy, in order of preference:
+    //  1. IssuerTrustAnchorStore — for issuers registered via TLSNotary /
+    //     institution proof pipelines.
+    //  2. did:key self-resolution — the public key is encoded in the DID
+    //     itself; no external trust required for the SIGNATURE part.
+    //     (The caller still decides whether to trust this issuer.)
+    //  3. Embedded publicKeyJwk in the VC credentialSubject — sanity-checked
+    //     against the resolved DID.
+    let resolvedKey: PublicKeyJWK
+    let source: String
+
+    if let anchor = IssuerTrustAnchorStore.shared.trustedJWK(for: issuerDid, keyId: keyId) {
+      resolvedKey = anchor
+      source = "anchor"
+    } else if let didKeyJWK = DIDKeyResolver.resolveP256JWK(from: issuerDid) {
+      resolvedKey = didKeyJWK
+      source = "did:key"
+    } else if let embedded = extractPublicKeyJWK(from: payload),
+              let derivedDid = selfDerivedDid(from: embedded),
+              Self.normalizeDid(derivedDid) == Self.normalizeDid(issuerDid) {
+      resolvedKey = embedded
+      source = "embedded-jwk (self-consistent)"
+    } else {
       return .failure("Untrusted issuer DID: \(issuerDid)")
     }
 
-    if let embeddedJWK = extractPublicKeyJWK(from: payload), embeddedJWK != trustedJWK {
-      return .failure("JWT embedded key does not match trusted issuer anchor.")
+    if let embedded = extractPublicKeyJWK(from: payload), embedded != resolvedKey {
+      return .failure("JWT embedded key does not match resolved issuer key.")
     }
 
     let segments = jwt.split(separator: ".")
@@ -140,7 +182,7 @@ final class ProofVerifierService {
     let signingInputData = Data("\(segments[0]).\(segments[1])".utf8)
 
     do {
-      let publicKey = try trustedJWK.toP256PublicKey()
+      let publicKey = try resolvedKey.toP256PublicKey()
       let signature =
         (try? P256.Signing.ECDSASignature(rawRepresentation: signatureData))
         ?? (try? P256.Signing.ECDSASignature(derRepresentation: signatureData))
@@ -153,7 +195,7 @@ final class ProofVerifierService {
         return .failure("JWT signature verification failed.")
       }
 
-      return .success("sig: valid (\(issuerDid))")
+      return .success("sig: valid (\(issuerDid), via \(source))")
     } catch {
       return .failure("Failed to verify JWT signature: \(error.localizedDescription)")
     }
@@ -228,5 +270,16 @@ final class ProofVerifierService {
     }
 
     return PublicKeyJWK(kty: kty, crv: crv, alg: alg, x: x, y: y)
+  }
+
+  /// Derive a did:key from a JWK via SpruceKit. Used for embedded-key
+  /// self-consistency checks when no anchor is registered.
+  private func selfDerivedDid(from jwk: PublicKeyJWK) -> String? {
+    guard let jwkString = try? jwk.jsonString() else { return nil }
+    return try? DidMethodUtils(method: .key).didFromJwk(jwk: jwkString)
+  }
+
+  static func normalizeDid(_ did: String) -> String {
+    did.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
   }
 }

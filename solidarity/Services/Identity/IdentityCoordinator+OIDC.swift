@@ -5,30 +5,26 @@ extension IdentityCoordinator {
   // MARK: - OIDC tracking
 
   func registerOIDCRequest(_ request: OIDCService.PresentationRequest) {
-    queue.async {
-      DispatchQueue.main.async {
-        var next = self.state
-        next.activeOIDCRequests[request.state] = request
-        self.state = next
-        self.recordOIDCEvent(
-          IdentityState.OIDCEvent(
-            kind: .requestCreated,
-            state: request.state,
-            message: "Created presentation request",
-            timestamp: Date()
-          )
+    DispatchQueue.main.async {
+      var next = self.state
+      next.activeOIDCRequests[request.state] = request
+      self.state = next
+      self.recordOIDCEvent(
+        IdentityState.OIDCEvent(
+          kind: .requestCreated,
+          state: request.state,
+          message: "Created presentation request",
+          timestamp: Date()
         )
-      }
+      )
     }
   }
 
   func resolveOIDCRequest(state: String) {
-    queue.async {
-      DispatchQueue.main.async {
-        var next = self.state
-        next.activeOIDCRequests.removeValue(forKey: state)
-        self.state = next
-      }
+    DispatchQueue.main.async {
+      var next = self.state
+      next.activeOIDCRequests.removeValue(forKey: state)
+      self.state = next
     }
   }
 

@@ -2,7 +2,10 @@
 //  OIDCRequestHandler.swift
 //  solidarity
 //
-//  Handles incoming OIDC authorization requests for vault access
+//  Handles incoming OIDC authorization requests for vault access.
+//  Parses inbound requests, generates permission-prompt data for the UI,
+//  and delegates authorization-code/token minting to OIDCTokenService so
+//  there is a single source of truth for code lifecycle.
 //
 
 import Foundation
@@ -12,7 +15,30 @@ final class OIDCRequestHandler {
     static let shared = OIDCRequestHandler()
 
     private let vault = SovereignVaultService.shared
+    private let tokenService = OIDCTokenService.shared
     private var pendingRequests: [String: OIDCAuthorizationRequest] = [:]
+
+    // Registry of trusted client identifiers. Matched exactly against either
+    // the full clientId or its reversed-DNS prefix (e.g. "gg.solidarity" or
+    // "com.example.app"). Substring contains-matching is unsafe because an
+    // attacker can register e.g. "evil-solidarity.com" and impersonate us.
+    private static let trustedClientIds: Set<String> = [
+        "solidarity",
+        "gg.solidarity",
+        "kidneyweakx.solidarity",
+        "kidneyweakx.airmeishi",
+        "aniseekr",
+        "com.aniseekr.app",
+    ]
+
+    private static let clientDisplayNames: [String: String] = [
+        "solidarity": "Solidarity",
+        "gg.solidarity": "Solidarity",
+        "kidneyweakx.solidarity": "Solidarity",
+        "kidneyweakx.airmeishi": "AirMeishi",
+        "aniseekr": "AniSeekr",
+        "com.aniseekr.app": "AniSeekr",
+    ]
 
     private init() {}
 
@@ -25,12 +51,18 @@ final class OIDCRequestHandler {
             return nil
         }
 
-        let clientId = queryItems.first { $0.name == "client_id" }?.value ?? "unknown"
-        let redirectUri = queryItems.first { $0.name == "redirect_uri" }?.value ?? "\(AppBranding.currentScheme)://oidc-callback"
+        guard let clientId = queryItems.first(where: { $0.name == "client_id" })?.value,
+              !clientId.isEmpty else {
+            return nil
+        }
+
+        let redirectUri = queryItems.first { $0.name == "redirect_uri" }?.value
+            ?? "\(AppBranding.currentScheme)://oidc-callback"
         let state = queryItems.first { $0.name == "state" }?.value ?? UUID().uuidString
         let nonce = queryItems.first { $0.name == "nonce" }?.value ?? UUID().uuidString
 
-        let scopeStrings = queryItems.first { $0.name == "scope" }?.value?.components(separatedBy: " ") ?? []
+        let scopeStrings = queryItems.first { $0.name == "scope" }?.value?
+            .components(separatedBy: " ") ?? []
         let scopes = scopeStrings.compactMap { OIDCScope(rawValue: $0) }
 
         let request = OIDCAuthorizationRequest(
@@ -50,9 +82,7 @@ final class OIDCRequestHandler {
 
     /// Validate the requesting client
     func validateClient(_ clientId: String) async throws -> OIDCClientInfo {
-        // For now, create a basic client info
-        // In production, this would check against a registry
-        return OIDCClientInfo(
+        OIDCClientInfo(
             clientId: clientId,
             displayName: displayNameForClient(clientId),
             iconURL: nil,
@@ -85,7 +115,9 @@ final class OIDCRequestHandler {
     func handlePermissionDecision(
         request: OIDCAuthorizationRequest,
         decision: PermissionDecision,
-        grantedScopes: [OIDCScope] = []
+        grantedScopes: [OIDCScope] = [],
+        codeChallenge: String? = nil,
+        codeChallengeMethod: String? = nil
     ) async throws -> OIDCAuthorizationResponse {
         pendingRequests.removeValue(forKey: request.state)
 
@@ -97,7 +129,12 @@ final class OIDCRequestHandler {
             )
         }
 
-        let code = generateAuthorizationCode(for: request, scopes: grantedScopes)
+        let code = tokenService.generateAuthorizationCode(
+            for: request,
+            grantedScopes: grantedScopes,
+            codeChallenge: codeChallenge,
+            codeChallengeMethod: codeChallengeMethod
+        )
 
         return OIDCAuthorizationResponse(
             state: request.state,
@@ -107,7 +144,10 @@ final class OIDCRequestHandler {
     }
 
     /// Build the response URL
-    func buildResponseURL(for response: OIDCAuthorizationResponse, originalRedirectUri: String) -> URL? {
+    func buildResponseURL(
+        for response: OIDCAuthorizationResponse,
+        originalRedirectUri: String
+    ) -> URL? {
         guard var components = URLComponents(string: originalRedirectUri) else {
             return nil
         }
@@ -144,22 +184,36 @@ final class OIDCRequestHandler {
     // MARK: - Private Methods
 
     private func displayNameForClient(_ clientId: String) -> String {
-        let knownClients: [String: String] = [
-            "aniseekr": "AniSeekr",
-            "solidarity": "Solidarity",
-            "mygame": "My Game"
-        ]
-
-        for (key, name) in knownClients where clientId.lowercased().contains(key.lowercased()) {
-            return name
+        let normalized = normalizeClientId(clientId)
+        if let known = Self.clientDisplayNames[normalized] {
+            return known
         }
-
-        return clientId.components(separatedBy: ".").first?.capitalized ?? clientId
+        if let lastPath = clientId.components(separatedBy: CharacterSet(charactersIn: ".:/")).last,
+           !lastPath.isEmpty {
+            return lastPath.capitalized
+        }
+        return clientId
     }
 
     private func isTrustedClient(_ clientId: String) -> Bool {
-        let trustedClients = ["solidarity", "aniseekr"]
-        return trustedClients.contains { clientId.lowercased().contains($0) }
+        Self.trustedClientIds.contains(normalizeClientId(clientId))
+    }
+
+    private func normalizeClientId(_ clientId: String) -> String {
+        // Strip scheme for DID/URL-style ids, lowercase, and trim.
+        var value = clientId.lowercased().trimmingCharacters(in: .whitespacesAndNewlines)
+        if let schemeEnd = value.range(of: "://") {
+            value = String(value[schemeEnd.upperBound...])
+        }
+        if value.hasPrefix("did:") {
+            // Keep DIDs as-is so they match registered DID clients.
+            return value
+        }
+        // Drop any trailing path so "gg.solidarity/callback" == "gg.solidarity".
+        if let slashIdx = value.firstIndex(of: "/") {
+            value = String(value[..<slashIdx])
+        }
+        return value
     }
 
     private func resourceHint(for scopes: [OIDCScope]) -> String? {
@@ -176,11 +230,6 @@ final class OIDCRequestHandler {
             return "Shared content"
         }
         return nil
-    }
-
-    private func generateAuthorizationCode(for request: OIDCAuthorizationRequest, scopes: [OIDCScope]) -> String {
-        let codeData = Data("\(request.clientId)|\(request.nonce)|\(Date().timeIntervalSince1970)".utf8)
-        return codeData.base64EncodedString()
     }
 }
 

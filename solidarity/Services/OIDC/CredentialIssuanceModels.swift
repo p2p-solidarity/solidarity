@@ -11,18 +11,32 @@ struct CredentialOffer: Equatable {
   let credentialConfigurationIds: [String]
   let preAuthorizedCode: String?
   let userPinRequired: Bool
+  /// Endpoints discovered from `/.well-known/openid-credential-issuer` (and
+  /// its authorization server metadata, if advertised). Nil until metadata
+  /// has been resolved; callers fall back to the legacy guessed paths only
+  /// when discovery fails.
+  var resolvedMetadata: IssuerMetadata?
 
   var metadataURL: URL? {
     URL(string: "\(credentialIssuer)/.well-known/openid-credential-issuer")
   }
 
   var tokenEndpoint: URL? {
-    URL(string: "\(credentialIssuer)/token")
+    if let endpoint = resolvedMetadata?.tokenEndpoint { return endpoint }
+    return URL(string: "\(credentialIssuer)/token")
   }
 
   var credentialEndpoint: URL? {
-    URL(string: "\(credentialIssuer)/credential")
+    if let endpoint = resolvedMetadata?.credentialEndpoint { return endpoint }
+    return URL(string: "\(credentialIssuer)/credential")
   }
+}
+
+/// Endpoints and capabilities advertised by an OID4VCI issuer.
+struct IssuerMetadata: Equatable {
+  let credentialEndpoint: URL
+  let tokenEndpoint: URL
+  let authorizationServer: URL?
 }
 
 /// Response from the issuer's token endpoint.

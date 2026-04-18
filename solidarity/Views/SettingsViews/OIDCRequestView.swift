@@ -12,13 +12,13 @@ struct OIDCRequestView: View {
   @State private var requestURL: URL?
   @State private var errorMessage: String?
 
-  private let oidcService = OIDCService()
+  private let oidcService = OIDCService.shared
 
   var body: some View {
     VStack(spacing: 20) {
       Text("OpenID Request")
-        .font(.title2)
-        .fontWeight(.bold)
+        .font(.system(size: 28, weight: .bold, design: .monospaced))
+        .foregroundColor(Color.Theme.textPrimary)
 
       if let qrCode = qrCode {
         Image(uiImage: qrCode)
@@ -28,13 +28,12 @@ struct OIDCRequestView: View {
           .frame(width: 250, height: 250)
           .padding()
           .background(Color.white)
-          .cornerRadius(12)
-          .shadow(radius: 5)
+          .overlay(Rectangle().stroke(Color.Theme.divider, lineWidth: 1))
 
         if let url = requestURL {
           Text(url.absoluteString)
-            .font(.caption)
-            .foregroundColor(.secondary)
+            .font(.system(size: 10, design: .monospaced))
+            .foregroundColor(Color.Theme.textSecondary)
             .multilineTextAlignment(.center)
             .padding(.horizontal)
             .contextMenu {
@@ -49,60 +48,49 @@ struct OIDCRequestView: View {
             }
         }
 
-        Text("Scan this QR code with another AirMeishi app to present your credential.")
-          .font(.footnote)
-          .foregroundColor(.secondary)
+        Text("Scan this QR code to present a credential to Solidarity.")
+          .font(.system(size: 12))
+          .foregroundColor(Color.Theme.textSecondary)
           .multilineTextAlignment(.center)
           .padding(.horizontal)
       } else {
         VStack {
           Image(systemName: "qrcode")
             .font(.system(size: 60))
-            .foregroundColor(.secondary)
+            .foregroundColor(Color.Theme.textSecondary)
           Text("Generate a request to receive a credential")
-            .font(.subheadline)
-            .foregroundColor(.secondary)
+            .font(.system(size: 12))
+            .foregroundColor(Color.Theme.textSecondary)
             .padding(.top, 8)
         }
         .frame(width: 250, height: 250)
-        .background(Color(.systemGray6))
-        .cornerRadius(12)
+        .background(Color.Theme.searchBg)
+        .overlay(Rectangle().stroke(Color.Theme.divider, lineWidth: 1))
       }
 
       if let errorMessage = errorMessage {
         Text(errorMessage)
-          .foregroundColor(.red)
-          .font(.caption)
+          .foregroundColor(Color.Theme.destructive)
+          .font(.system(size: 12, design: .monospaced))
       }
 
       Button(action: generateRequest) {
         Label("Generate OIDC Request", systemImage: "qrcode")
           .frame(maxWidth: .infinity)
       }
-      .buttonStyle(.borderedProminent)
+      .buttonStyle(ThemedPrimaryButtonStyle())
       .padding(.horizontal)
-      .foregroundColor(.black)
 
       Spacer()
     }
     .padding()
+    .background(Color.Theme.pageBg)
     .navigationTitle("Receive Card")
     .navigationBarTitleDisplayMode(.inline)
   }
 
   private func generateRequest() {
-    // Request a BusinessCardCredential
-    let claims: [String: Any] = [
-      "id_token": [
-        "verifiable_credentials": [
-          "essential": true,
-          "purpose": "To exchange business cards",
-          "credential_type": "BusinessCardCredential",
-        ]
-      ]
-    ]
-
-    switch oidcService.generateRequest(claims: claims) {
+    switch oidcService.generateRequest() {
     case .success(let url):
       self.requestURL = url
       if let image = oidcService.generateQRCode(from: url) {

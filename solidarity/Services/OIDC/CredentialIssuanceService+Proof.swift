@@ -112,11 +112,31 @@ extension CredentialIssuanceService {
     switch vcService.importPresentedCredential(jwt: result.credentialJWT) {
     case .success(let imported):
       var stored = imported.storedCredential
-      stored.status = .verified
-      stored.lastVerifiedAt = Date()
-      if case .success = VCLibrary.shared.update(stored) {
-        Self.logger.info("Issued credential stored and verified")
+
+      // Real signature verification — previously this method blindly marked
+      // every imported credential as `.verified`. Now we only upgrade the
+      // status if ProofVerifierService can prove the issuer signature.
+      let verifier = ProofVerifierService.shared
+      if let decoded = verifier.decodeCompactJWT(result.credentialJWT) {
+        switch verifier.verifyJWTSignature(
+          jwt: result.credentialJWT,
+          header: decoded.header,
+          payload: decoded.payload
+        ) {
+        case .success(let detail):
+          stored.status = .verified
+          stored.lastVerifiedAt = Date()
+          Self.logger.info("Issued credential verified (\(detail))")
+        case .failure(let reason):
+          stored.status = .unverified
+          Self.logger.error("Issued credential signature unverified: \(reason)")
+        }
+      } else {
+        stored.status = .unverified
+        Self.logger.error("Issued credential JWT could not be decoded for verification")
       }
+
+      _ = VCLibrary.shared.update(stored)
       return .success(stored)
     case .failure(let error):
       Self.logger.error("Failed to import issued credential: \(error.localizedDescription)")

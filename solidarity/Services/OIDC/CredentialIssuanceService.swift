@@ -82,6 +82,77 @@ final class CredentialIssuanceService {
     return .failure(.invalidData("No credential_offer or credential_offer_uri found in URL"))
   }
 
+  // MARK: - Issuer Metadata
+
+  /// Fetch `/.well-known/openid-credential-issuer` and optionally chain into
+  /// the authorization server metadata (for the real token endpoint).
+  /// Returns nil on failure so callers fall back to guessed endpoints.
+  func fetchIssuerMetadata(for offer: CredentialOffer) async -> IssuerMetadata? {
+    guard let metadataURL = offer.metadataURL else { return nil }
+
+    do {
+      let (data, response) = try await session.data(from: metadataURL)
+      guard let http = response as? HTTPURLResponse, (200...299).contains(http.statusCode),
+            let json = try JSONSerialization.jsonObject(with: data) as? [String: Any]
+      else {
+        Self.logger.info("Issuer metadata not available at \(metadataURL.absoluteString)")
+        return nil
+      }
+
+      guard let credentialEndpointString = json["credential_endpoint"] as? String,
+            let credentialEndpoint = URL(string: credentialEndpointString)
+      else {
+        return nil
+      }
+
+      // Token endpoint may be advertised directly on the issuer metadata or
+      // delegated to an authorization server.
+      if let tokenString = json["token_endpoint"] as? String,
+         let tokenEndpoint = URL(string: tokenString) {
+        return IssuerMetadata(
+          credentialEndpoint: credentialEndpoint,
+          tokenEndpoint: tokenEndpoint,
+          authorizationServer: nil
+        )
+      }
+
+      if let asString = (json["authorization_servers"] as? [String])?.first
+          ?? json["authorization_server"] as? String,
+         let asURL = URL(string: asString),
+         let tokenEndpoint = await resolveTokenEndpoint(authorizationServer: asURL) {
+        return IssuerMetadata(
+          credentialEndpoint: credentialEndpoint,
+          tokenEndpoint: tokenEndpoint,
+          authorizationServer: asURL
+        )
+      }
+
+      return IssuerMetadata(
+        credentialEndpoint: credentialEndpoint,
+        tokenEndpoint: URL(string: "\(offer.credentialIssuer)/token") ?? credentialEndpoint,
+        authorizationServer: nil
+      )
+    } catch {
+      Self.logger.info("Issuer metadata fetch failed: \(error.localizedDescription)")
+      return nil
+    }
+  }
+
+  private func resolveTokenEndpoint(authorizationServer: URL) async -> URL? {
+    let discoveryURL = authorizationServer
+      .appendingPathComponent(".well-known")
+      .appendingPathComponent("openid-configuration")
+    do {
+      let (data, _) = try await session.data(from: discoveryURL)
+      guard let json = try JSONSerialization.jsonObject(with: data) as? [String: Any],
+            let tokenEndpoint = json["token_endpoint"] as? String
+      else { return nil }
+      return URL(string: tokenEndpoint)
+    } catch {
+      return nil
+    }
+  }
+
   // MARK: - Token Request
 
   func requestToken(offer: CredentialOffer, userPin: String? = nil) async -> CardResult<VCITokenResponse> {
@@ -215,10 +286,13 @@ final class CredentialIssuanceService {
     userPin: String? = nil
   ) async -> CardResult<VCLibrary.StoredCredential> {
     let offerResult = await parseOfferAsync(from: offerURL)
-    guard case .success(let offer) = offerResult else {
+    guard case .success(var offer) = offerResult else {
       if case .failure(let error) = offerResult { return .failure(error) }
       return .failure(.invalidData("Failed to parse credential offer"))
     }
+
+    // Discover real endpoints from issuer metadata when available.
+    offer.resolvedMetadata = await fetchIssuerMetadata(for: offer)
 
     let tokenResult = await requestToken(offer: offer, userPin: userPin)
     guard case .success(let tokenResponse) = tokenResult else {
