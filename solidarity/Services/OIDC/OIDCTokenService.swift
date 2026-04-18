@@ -372,8 +372,6 @@ final class OIDCTokenService {
             let digest = SHA256.hash(data: Data(verifier.utf8))
             let encoded = Data(digest).base64URLEncodedString()
             return encoded == challenge
-        case "plain":
-            return verifier == challenge
         default:
             return false
         }
@@ -392,7 +390,7 @@ final class OIDCTokenService {
               let scheme = comps.scheme?.lowercased() else {
             return nil
         }
-        if scheme == "https" || scheme == "http" {
+        if scheme == "https" {
             return comps.host
         }
         return nil

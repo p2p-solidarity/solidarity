@@ -17,6 +17,7 @@ final class OIDCRequestHandler {
     private let vault = SovereignVaultService.shared
     private let tokenService = OIDCTokenService.shared
     private var pendingRequests: [String: OIDCAuthorizationRequest] = [:]
+    private let pendingRequestsLock = NSLock()
 
     // Registry of trusted client identifiers. Matched exactly against either
     // the full clientId or its reversed-DNS prefix (e.g. "gg.solidarity" or
@@ -56,10 +57,18 @@ final class OIDCRequestHandler {
             return nil
         }
 
-        let redirectUri = queryItems.first { $0.name == "redirect_uri" }?.value
-            ?? "\(AppBranding.currentScheme)://oidc-callback"
-        let state = queryItems.first { $0.name == "state" }?.value ?? UUID().uuidString
-        let nonce = queryItems.first { $0.name == "nonce" }?.value ?? UUID().uuidString
+        guard let redirectUri = queryItems.first(where: { $0.name == "redirect_uri" })?.value,
+              !redirectUri.isEmpty else {
+            return nil
+        }
+        guard let state = queryItems.first(where: { $0.name == "state" })?.value,
+              !state.isEmpty else {
+            return nil
+        }
+        guard let nonce = queryItems.first(where: { $0.name == "nonce" })?.value,
+              !nonce.isEmpty else {
+            return nil
+        }
 
         let scopeStrings = queryItems.first { $0.name == "scope" }?.value?
             .components(separatedBy: " ") ?? []
@@ -76,7 +85,9 @@ final class OIDCRequestHandler {
             requestedAt: Date()
         )
 
+        pendingRequestsLock.lock()
         pendingRequests[state] = request
+        pendingRequestsLock.unlock()
         return request
     }
 
@@ -119,6 +130,10 @@ final class OIDCRequestHandler {
         codeChallenge: String? = nil,
         codeChallengeMethod: String? = nil
     ) async throws -> OIDCAuthorizationResponse {
+        // This method is @MainActor + async — reads/writes to pendingRequests
+        // are already serialized by the main actor, so no lock is needed here.
+        // The lock in parseAuthorizationRequest(_:) guards against legacy
+        // non-strict-concurrency callers that bypass actor isolation.
         pendingRequests.removeValue(forKey: request.state)
 
         guard decision == .approved else {

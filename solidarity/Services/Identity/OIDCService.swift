@@ -206,10 +206,22 @@ final class OIDCService: ObservableObject {
       return .failure(.invalidData("Invalid OIDC request URL"))
     }
 
-    let clientId = queryItems.first(where: { $0.name == "client_id" })?.value ?? ""
-    let nonce = queryItems.first(where: { $0.name == "nonce" })?.value ?? ""
-    let state = queryItems.first(where: { $0.name == "state" })?.value ?? ""
-    let redirectUri = queryItems.first(where: { $0.name == "redirect_uri" })?.value ?? ""
+    guard let clientId = queryItems.first(where: { $0.name == "client_id" })?.value,
+      !clientId.isEmpty
+    else {
+      return .failure(.invalidData("Missing or empty client_id in authorization request"))
+    }
+    guard let nonce = queryItems.first(where: { $0.name == "nonce" })?.value, !nonce.isEmpty else {
+      return .failure(.invalidData("Missing or empty nonce in authorization request"))
+    }
+    guard let state = queryItems.first(where: { $0.name == "state" })?.value, !state.isEmpty else {
+      return .failure(.invalidData("Missing or empty state in authorization request"))
+    }
+    guard let redirectUri = queryItems.first(where: { $0.name == "redirect_uri" })?.value,
+      !redirectUri.isEmpty
+    else {
+      return .failure(.invalidData("Missing or empty redirect_uri in authorization request"))
+    }
     let responseType = queryItems.first(where: { $0.name == "response_type" })?.value ?? "vp_token"
     let responseMode = queryItems.first(where: { $0.name == "response_mode" })?.value ?? "direct_post"
 
@@ -221,8 +233,7 @@ final class OIDCService: ObservableObject {
     } else if let parsed = Self.parsePresentationDefinition(fromClaims: queryItems) {
       presentationDefinition = parsed
     } else {
-      // No embedded definition — assume default business-card exchange.
-      presentationDefinition = Self.defaultBusinessCardDefinition()
+      return .failure(.invalidData("Missing presentation_definition in authorization request"))
     }
 
     return .success(

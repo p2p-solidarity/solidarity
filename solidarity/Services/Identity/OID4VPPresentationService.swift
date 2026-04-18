@@ -79,6 +79,7 @@ final class OID4VPPresentationService {
     let now = Date()
     var payload: [String: Any] = [
       "iss": descriptor.did,
+      "sub": descriptor.did,
       "iat": Int(now.timeIntervalSince1970),
       "exp": Int(now.addingTimeInterval(options.validitySeconds).timeIntervalSince1970),
       "vp": [
@@ -93,7 +94,7 @@ final class OID4VPPresentationService {
 
     let header: [String: Any] = [
       "alg": "ES256",
-      "typ": "JWT",
+      "typ": "vp+jwt",
       "kid": descriptor.verificationMethodId,
     ]
 

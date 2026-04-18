@@ -228,18 +228,20 @@ final class CredentialIssuanceService {
 
     let credentialType = offer.credentialConfigurationIds.first ?? "VerifiableCredential"
 
-    let requestBody: [String: Any] = [
-      "format": "jwt_vc_json",
-      "credential_definition": [
-        "type": ["VerifiableCredential", credentialType]
-      ],
-      "proof": [
-        "proof_type": "jwt",
-        "jwt": proofJWT,
-      ],
-    ]
+    func makeRequestBody(proofJWT: String) -> [String: Any] {
+      return [
+        "format": "jwt_vc_json",
+        "credential_definition": [
+          "type": ["VerifiableCredential", credentialType]
+        ],
+        "proof": [
+          "proof_type": "jwt",
+          "jwt": proofJWT,
+        ],
+      ]
+    }
 
-    guard let bodyData = try? JSONSerialization.data(withJSONObject: requestBody) else {
+    guard let bodyData = try? JSONSerialization.data(withJSONObject: makeRequestBody(proofJWT: proofJWT)) else {
       return .failure(.invalidData("Failed to serialize credential request body"))
     }
 
@@ -250,12 +252,40 @@ final class CredentialIssuanceService {
       request.setValue("Bearer \(tokenResponse.accessToken)", forHTTPHeaderField: "Authorization")
       request.httpBody = bodyData
 
-      let (data, response) = try await session.data(for: request)
-      guard let httpResponse = response as? HTTPURLResponse,
-            (200...299).contains(httpResponse.statusCode) else {
-        let code = (response as? HTTPURLResponse)?.statusCode ?? -1
+      var (data, response) = try await session.data(for: request)
+      var httpResponse = response as? HTTPURLResponse
+      var didRetryOnInvalidNonce = false
+
+      if let http = httpResponse, !(200...299).contains(http.statusCode) {
+        // OID4VCI draft 13 §7.3.2: on `invalid_nonce`, retry ONCE with the fresh c_nonce.
+        if let errorJson = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+           let errorCode = errorJson["error"] as? String,
+           errorCode == "invalid_nonce",
+           let freshNonce = errorJson["c_nonce"] as? String {
+          Self.logger.info("Credential endpoint returned invalid_nonce; retrying once with fresh c_nonce")
+          let retryProofResult = buildProofJWT(
+            issuerURL: offer.credentialIssuer,
+            cNonce: freshNonce
+          )
+          guard case .success(let retryProofJWT) = retryProofResult else {
+            if case .failure(let error) = retryProofResult { return .failure(error) }
+            return .failure(.cryptographicError("Failed to build proof of possession"))
+          }
+          guard let retryBodyData = try? JSONSerialization.data(withJSONObject: makeRequestBody(proofJWT: retryProofJWT)) else {
+            return .failure(.invalidData("Failed to serialize credential request body"))
+          }
+          request.httpBody = retryBodyData
+          didRetryOnInvalidNonce = true
+          (data, response) = try await session.data(for: request)
+          httpResponse = response as? HTTPURLResponse
+        }
+      }
+
+      guard let finalResponse = httpResponse,
+            (200...299).contains(finalResponse.statusCode) else {
+        let code = httpResponse?.statusCode ?? -1
         let body = String(data: data, encoding: .utf8) ?? ""
-        Self.logger.error("Credential endpoint returned HTTP \(code): \(body)")
+        Self.logger.error("Credential endpoint returned HTTP \(code)\(didRetryOnInvalidNonce ? " (after invalid_nonce retry)" : ""): \(body)")
         return .failure(.networkError("Credential endpoint returned HTTP \(code)"))
       }
 
