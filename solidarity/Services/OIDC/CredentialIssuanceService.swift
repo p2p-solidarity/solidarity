@@ -105,6 +105,13 @@ final class CredentialIssuanceService {
         return nil
       }
 
+      // OID4VCI final §7.2: `nonce_endpoint` is advertised alongside
+      // `credential_endpoint` on issuer metadata. When present, callers
+      // SHOULD fetch a fresh c_nonce from it before building the proof of
+      // possession — the token-response c_nonce is optional and may be
+      // absent for issuers that defer nonce issuance to this endpoint.
+      let nonceEndpoint = (json["nonce_endpoint"] as? String).flatMap(URL.init(string:))
+
       // Token endpoint may be advertised directly on the issuer metadata or
       // delegated to an authorization server.
       if let tokenString = json["token_endpoint"] as? String,
@@ -112,7 +119,8 @@ final class CredentialIssuanceService {
         return IssuerMetadata(
           credentialEndpoint: credentialEndpoint,
           tokenEndpoint: tokenEndpoint,
-          authorizationServer: nil
+          authorizationServer: nil,
+          nonceEndpoint: nonceEndpoint
         )
       }
 
@@ -123,17 +131,49 @@ final class CredentialIssuanceService {
         return IssuerMetadata(
           credentialEndpoint: credentialEndpoint,
           tokenEndpoint: tokenEndpoint,
-          authorizationServer: asURL
+          authorizationServer: asURL,
+          nonceEndpoint: nonceEndpoint
         )
       }
 
       return IssuerMetadata(
         credentialEndpoint: credentialEndpoint,
         tokenEndpoint: URL(string: "\(offer.credentialIssuer)/token") ?? credentialEndpoint,
-        authorizationServer: nil
+        authorizationServer: nil,
+        nonceEndpoint: nonceEndpoint
       )
     } catch {
       Self.logger.info("Issuer metadata fetch failed: \(error.localizedDescription)")
+      return nil
+    }
+  }
+
+  // MARK: - Nonce Endpoint (OID4VCI final §7.2)
+
+  /// Fetches a fresh c_nonce from the issuer's `nonce_endpoint` when
+  /// advertised. The endpoint responds with `{c_nonce, c_nonce_expires_in}`
+  /// and is called without authorization — it binds nothing until the
+  /// nonce is echoed inside a signed proof. Returns nil on any failure so
+  /// callers can fall back to the token-response c_nonce.
+  func fetchFreshCNonce(from endpoint: URL) async -> String? {
+    var request = URLRequest(url: endpoint)
+    request.httpMethod = "POST"
+    request.setValue("application/x-www-form-urlencoded", forHTTPHeaderField: "Content-Type")
+    request.httpBody = Data()
+
+    do {
+      let (data, response) = try await session.data(for: request)
+      guard let http = response as? HTTPURLResponse, (200...299).contains(http.statusCode) else {
+        Self.logger.info("nonce_endpoint returned HTTP \((response as? HTTPURLResponse)?.statusCode ?? -1)")
+        return nil
+      }
+      guard let json = try JSONSerialization.jsonObject(with: data) as? [String: Any],
+            let nonce = json["c_nonce"] as? String, !nonce.isEmpty else {
+        return nil
+      }
+      return nonce
+    } catch {
+      Self.logger.info("nonce_endpoint fetch failed: \(error.localizedDescription)")
       return nil
     }
   }
@@ -222,9 +262,20 @@ final class CredentialIssuanceService {
 
     Self.logger.info("Requesting credential from \(credentialURL.absoluteString)")
 
+    // OID4VCI final §7.2: when the issuer advertises a nonce_endpoint, a
+    // freshly fetched c_nonce takes precedence over the one returned from
+    // the token endpoint. Reason: issuers that advertise the endpoint
+    // treat the token-response nonce as optional and may omit it.
+    var effectiveCNonce = tokenResponse.cNonce
+    if let nonceEndpoint = offer.resolvedMetadata?.nonceEndpoint {
+      if let fresh = await fetchFreshCNonce(from: nonceEndpoint) {
+        effectiveCNonce = fresh
+      }
+    }
+
     let proofResult = buildProofJWT(
       issuerURL: offer.credentialIssuer,
-      cNonce: tokenResponse.cNonce
+      cNonce: effectiveCNonce
     )
     guard case .success(let proofJWT) = proofResult else {
       if case .failure(let error) = proofResult { return .failure(error) }

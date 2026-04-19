@@ -119,7 +119,9 @@ final class OIDCService: ObservableObject {
   private weak var coordinator: IdentityCoordinator?
   private let nonceLock = NSLock()
   private var seenNonces: [String: Date] = [:]
-  private let session: URLSession
+  // Internal so response-signing helpers in OIDCService+Response.swift
+  // can reuse the same ephemeral session (matching TLS + timeout config).
+  let session: URLSession
 
   init(didService: DIDService = DIDService()) {
     self.didService = didService
@@ -402,8 +404,22 @@ final class OIDCService: ObservableObject {
   }
 
   private func resolveRequestUri(_ remote: URL, fallbackComponents: URLComponents) async -> CardResult<PresentationRequest> {
+    // OID4VP 1.0 §5.10 — the verifier may advertise `request_uri_method=post`
+    // to signal they expect a POST fetch (optionally with wallet_metadata
+    // in the body). Default is GET. We currently don't send wallet_metadata
+    // so the POST body is empty, which matches the spec's minimum contract.
+    let method = fallbackComponents.queryItems?
+      .first(where: { $0.name == "request_uri_method" })?.value?.lowercased() ?? "get"
+
+    var urlRequest = URLRequest(url: remote)
+    if method == "post" {
+      urlRequest.httpMethod = "POST"
+      urlRequest.setValue("application/x-www-form-urlencoded", forHTTPHeaderField: "Content-Type")
+      urlRequest.httpBody = Data()
+    }
+
     do {
-      let (data, response) = try await session.data(from: remote)
+      let (data, response) = try await session.data(for: urlRequest)
       guard let http = response as? HTTPURLResponse, (200...299).contains(http.statusCode) else {
         let code = (response as? HTTPURLResponse)?.statusCode ?? -1
         return .failure(.networkError("request_uri fetch returned HTTP \(code)"))
