@@ -9,17 +9,17 @@ enum MainAppTab: Int, CaseIterable {
 
   var title: String {
     switch self {
-    case .people: "people"
+    case .people: "People"
     case .share: "Share"
-    case .me: "me"
+    case .me: "Me"
     }
   }
 
   var systemImage: String {
     switch self {
-    case .people: "person"
-    case .share: "capsule"
-    case .me: "record.circle"
+    case .people: "person.2"
+    case .share: "dot.radiowaves.left.and.right"
+    case .me: "person.crop.circle"
     }
   }
 }

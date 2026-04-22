@@ -141,6 +141,39 @@ extension Color {
   }
 }
 
+// MARK: - Figma Palette
+
+extension Color {
+  /// Raw palette mirroring the Figma design-system variables
+  /// (file: Solid(ar)ity, node 621-2155).
+  ///
+  /// Prefer semantic `Color.Theme.*` tokens in view code. Reach for
+  /// `Color.Palette.*` when you genuinely need a specific brand swatch
+  /// (e.g. illustrations, charts, print assets) independent of theme.
+  struct Palette {
+    // Neutrals — darkest (#1) to lightest (#7)
+    static let ink = Color(hex: 0x2F2F30)  // #1 — primary text on light
+    static let slate = Color(hex: 0x5F5E67)  // #2 — secondary text
+    static let stone = Color(hex: 0x9C9AA6)  // #3 — tertiary text / placeholder
+    static let fog = Color(hex: 0xD1D1D1)  // #4 — divider / border
+    static let mist = Color(hex: 0xEEEEEE)  // #5 — search / input surface
+    static let cream = Color(hex: 0xFBF9F2)  // #6 — page background
+    static let paper = Color(hex: 0xFFFFFF)  // #7 — card surface
+
+    // Accents
+    static let purple = Color(hex: 0x83537D)  // brand mauve
+    static let green = Color(hex: 0x4CAF51)  // success
+    static let red = Color(hex: 0xCD556A)  // destructive
+
+    /// All palette colors in display order (for swatch previews / pickers).
+    static let all: [(name: String, color: Color)] = [
+      ("ink", ink), ("slate", slate), ("stone", stone), ("fog", fog),
+      ("mist", mist), ("cream", cream), ("paper", paper),
+      ("purple", purple), ("green", green), ("red", red),
+    ]
+  }
+}
+
 // MARK: - Semantic Colors Extension
 
 extension Color {
@@ -166,6 +199,7 @@ extension Color {
     // MARK: - Swiss Sunrise Palette (Light) + Deep Alpine Night (Dark)
 
     /// Page background: warm cream (light) / deep brown-purple (dark)
+    /// Light: `Palette.cream` (#fbf9f2)
     static let pageBg = Color(.init(dynamicProvider: { traits in
       traits.userInterfaceStyle == .dark
         ? UIColor(red: 0.10, green: 0.07, blue: 0.09, alpha: 1)  // #1A1218

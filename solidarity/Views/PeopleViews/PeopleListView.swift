@@ -119,8 +119,8 @@ struct PeopleListView: View {
 
   private var header: some View {
     HStack {
-      Text("people list")
-        .font(.system(size: 18))
+      Text("People List")
+        .font(.system(size: 18, weight: .semibold))
         .foregroundColor(Color.Theme.textPrimary)
 
       Spacer()
@@ -189,16 +189,14 @@ struct PeopleListView: View {
 
   private var emptyState: some View {
     VStack(spacing: 0) {
-      Spacer()
-
       PaperStackIllustration()
         .frame(width: 214, height: 214)
-        .padding(.bottom, 32)
 
       Text("你的聯絡人通訊錄是空的")
         .font(.system(size: 14))
         .foregroundColor(Color.Theme.textSecondary)
         .multilineTextAlignment(.center)
+        .padding(.bottom, 32)
 
       VStack(spacing: 8) {
         Button {
@@ -207,9 +205,7 @@ struct PeopleListView: View {
           Text("匯入手機通訊錄")
             .font(.system(size: 15))
             .foregroundColor(.white)
-            .padding(.horizontal, 20)
-            .padding(.vertical, 12)
-            .frame(minWidth: 200)
+            .frame(width: 200, height: 44)
             .background(Color.Theme.textPrimary)
             .clipShape(RoundedRectangle(cornerRadius: 2, style: .continuous))
         }
@@ -221,15 +217,14 @@ struct PeopleListView: View {
           Text("手動新增")
             .font(.system(size: 15))
             .foregroundColor(Color.Theme.textPrimary)
-            .padding(.horizontal, 20)
-            .padding(.vertical, 12)
+            .frame(width: 200, height: 44)
         }
       }
-      .padding(.top, 16)
+      .padding(.vertical, 16)
 
       Spacer()
-      Spacer()
     }
+    .padding(.top, 12)
     .frame(maxWidth: .infinity)
   }
 

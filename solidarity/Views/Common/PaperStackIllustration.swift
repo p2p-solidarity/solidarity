@@ -2,17 +2,16 @@
 //  PaperStackIllustration.swift
 //  solidarity
 //
-//  Empty-state artwork reproducing Pencil node `TruU1` in solidarity.pen.
-//  Two cream papers with a cast parallelogram shadow and a folded corner.
-//
-//  Paper fill: #fbf9f2, ink/shadow: #2f2f30. Canvas is 214×214.
+//  Empty-state artwork — Figma `document` (node 723:2292). Two leaning
+//  papers (cream fill, black outline) with a cast shadow wedge and
+//  five horizontal text lines on the front sheet. Canvas 214×214.
 //
 
 import SwiftUI
 
 struct PaperStackIllustration: View {
-  private let paperFill = Color(red: 0.984, green: 0.976, blue: 0.949)
-  private let ink = Color(red: 0.184, green: 0.184, blue: 0.188)
+  private let paperFill = Color(red: 0.984, green: 0.976, blue: 0.949)  // #FBF9F2
+  private let ink = Color(red: 0.184, green: 0.184, blue: 0.188)         // #2F2F30
 
   private let base: CGFloat = 214
 
@@ -20,37 +19,19 @@ struct PaperStackIllustration: View {
     GeometryReader { geo in
       let s = min(geo.size.width, geo.size.height) / base
       ZStack(alignment: .topLeading) {
-        Vector14Shape()
-          .fill(ink)
-          .frame(width: 86.34 * s, height: 41.47 * s)
-          .offset(x: 83.10 * s, y: 130.71 * s)
+        Vector14Shape(s: s).fill(ink)
+        Shadow1Shape(s: s).fill(ink)
 
-        Shadow1Shape()
-          .fill(ink)
-          .frame(width: 120 * s, height: 39.60 * s)
-          .offset(x: 28.70 * s, y: 114.80 * s)
+        Paper2Shape(s: s).fill(paperFill)
+        Paper2Shape(s: s).stroke(ink, lineWidth: 1)
 
-        Paper2Shape()
-          .fill(paperFill)
-          .overlay(Paper2Shape().stroke(ink, lineWidth: 1))
-          .frame(width: 89.95 * s, height: 120.99 * s)
-          .offset(x: 58.05 * s, y: 32.44 * s)
+        Shadow2Shape(s: s).fill(ink)
 
-        Paper1Shape()
-          .fill(paperFill)
-          .overlay(Paper1Shape().stroke(ink, lineWidth: 1))
-          .frame(width: 92.05 * s, height: 120.96 * s)
-          .offset(x: 89.17 * s, y: 49.79 * s)
+        Paper1FillShape(s: s).fill(paperFill)
+        Paper1StrokeShape(s: s).stroke(ink, lineWidth: 1)
 
-        Shadow2Shape()
-          .fill(ink)
-          .frame(width: 28.31 * s, height: 94.21 * s)
-          .offset(x: 72.79 * s, y: 57.39 * s)
-
-        CornerShape()
-          .fill(ink)
-          .frame(width: 12.53 * s, height: 12.49 * s)
-          .offset(x: 152.30 * s, y: 56.40 * s)
+        TextShape(s: s).fill(ink)
+        CornerShape(s: s).fill(ink)
       }
       .frame(width: geo.size.width, height: geo.size.height, alignment: .topLeading)
     }
@@ -58,93 +39,122 @@ struct PaperStackIllustration: View {
   }
 }
 
-// MARK: - Path shapes (native coords from solidarity.pen / TruU1)
+// MARK: - Shapes (coords in native 214×214 space; scaled by `s`)
 
 private struct Vector14Shape: Shape {
-  func path(in rect: CGRect) -> Path {
-    let sx = rect.width / 107.925
-    let sy = rect.height / 51.838
+  let s: CGFloat
+  func path(in _: CGRect) -> Path {
     var p = Path()
-    p.move(to: CGPoint(x: 107.925 * sx, y: 19.203 * sy))
-    p.addLine(to: CGPoint(x: 24.170 * sx, y: 51.838 * sy))
-    p.addLine(to: CGPoint(x: 0, y: 26.609 * sy))
-    p.addLine(to: CGPoint(x: 97.327 * sx, y: 0))
-    p.addLine(to: CGPoint(x: 107.925 * sx, y: 0))
+    p.move(to: CGPoint(x: 102.436 * s, y: 172.183 * s))
+    p.addLine(to: CGPoint(x: 169.44 * s, y: 146.075 * s))
+    p.addLine(to: CGPoint(x: 169.44 * s, y: 130.712 * s))
+    p.addLine(to: CGPoint(x: 160.961 * s, y: 130.712 * s))
+    p.addLine(to: CGPoint(x: 83.1 * s, y: 152 * s))
     p.closeSubpath()
     return p
   }
 }
 
 private struct Shadow1Shape: Shape {
-  func path(in rect: CGRect) -> Path {
-    let sx = rect.width / 150
-    let sy = rect.height / 49.5
+  let s: CGFloat
+  func path(in _: CGRect) -> Path {
     var p = Path()
-    p.move(to: CGPoint(x: 146.543 * sx, y: 3.958 * sy))
-    p.addLine(to: CGPoint(x: 54 * sx, y: 49.5 * sy))
-    p.addLine(to: CGPoint(x: 0, y: 0))
-    p.addLine(to: CGPoint(x: 150 * sx, y: 0))
+    p.move(to: CGPoint(x: 71.9 * s, y: 154.4 * s))
+    p.addLine(to: CGPoint(x: 145.934 * s, y: 117.966 * s))
+    p.addLine(to: CGPoint(x: 148.7 * s, y: 114.8 * s))
+    p.addLine(to: CGPoint(x: 121.152 * s, y: 114.8 * s))
+    p.addLine(to: CGPoint(x: 28.7 * s, y: 114.8 * s))
     p.closeSubpath()
     return p
   }
 }
 
 private struct Paper2Shape: Shape {
-  func path(in rect: CGRect) -> Path {
-    let sx = rect.width / 74.959
-    let sy = rect.height / 100.832
+  let s: CGFloat
+  func path(in _: CGRect) -> Path {
     var p = Path()
-    p.move(to: CGPoint(x: 0, y: 0))
-    p.addLine(to: CGPoint(x: 12.194 * sx, y: 100.832 * sy))
-    p.addLine(to: CGPoint(x: 74.959 * sx, y: 92.104 * sy))
-    p.addLine(to: CGPoint(x: 62.637 * sx, y: 5.850 * sy))
+    p.move(to: CGPoint(x: 72.6785 * s, y: 153.442 * s))
+    p.addLine(to: CGPoint(x: 58.0461 * s, y: 32.4434 * s))
+    p.addLine(to: CGPoint(x: 133.21 * s, y: 39.4632 * s))
+    p.addLine(to: CGPoint(x: 147.997 * s, y: 142.968 * s))
     p.closeSubpath()
     return p
   }
 }
 
-private struct Paper1Shape: Shape {
-  func path(in rect: CGRect) -> Path {
-    let sx = rect.width / 115.056
-    let sy = rect.height / 151.202
+private struct Paper1FillShape: Shape {
+  let s: CGFloat
+  func path(in _: CGRect) -> Path {
     var p = Path()
-    p.move(to: CGPoint(x: 17.943 * sx, y: 151.202 * sy))
-    p.addLine(to: CGPoint(x: 0, y: 0))
-    p.addLine(to: CGPoint(x: 78.568 * sx, y: 7.297 * sy))
-    p.addLine(to: CGPoint(x: 94.945 * sx, y: 23.674 * sy))
-    p.addLine(to: CGPoint(x: 115.056 * sx, y: 135.300 * sy))
+    p.move(to: CGPoint(x: 103.524 * s, y: 170.754 * s))
+    p.addLine(to: CGPoint(x: 89.1694 * s, y: 49.7925 * s))
+    p.addLine(to: CGPoint(x: 152.024 * s, y: 55.6301 * s))
+    p.addLine(to: CGPoint(x: 165.126 * s, y: 68.7317 * s))
+    p.addLine(to: CGPoint(x: 181.214 * s, y: 158.032 * s))
     p.closeSubpath()
-    // Folded-corner detail strokes (no enclosed area — stroke only)
-    p.move(to: CGPoint(x: 82.435 * sx, y: 22.510 * sy))
-    p.addLine(to: CGPoint(x: 94.944 * sx, y: 23.674 * sy))
-    p.move(to: CGPoint(x: 78.567 * sx, y: 7.297 * sy))
-    p.addLine(to: CGPoint(x: 82.435 * sx, y: 22.510 * sy))
+    return p
+  }
+}
+
+private struct Paper1StrokeShape: Shape {
+  let s: CGFloat
+  func path(in _: CGRect) -> Path {
+    var p = Path()
+    p.move(to: CGPoint(x: 152.024 * s, y: 55.6301 * s))
+    p.addLine(to: CGPoint(x: 89.1694 * s, y: 49.7925 * s))
+    p.addLine(to: CGPoint(x: 103.524 * s, y: 170.754 * s))
+    p.addLine(to: CGPoint(x: 181.214 * s, y: 158.032 * s))
+    p.addLine(to: CGPoint(x: 165.126 * s, y: 68.7317 * s))
+    // Folded-corner triangle
+    p.move(to: CGPoint(x: 152.024 * s, y: 55.6301 * s))
+    p.addLine(to: CGPoint(x: 155.118 * s, y: 67.8007 * s))
+    p.addLine(to: CGPoint(x: 165.126 * s, y: 68.7317 * s))
     return p
   }
 }
 
 private struct Shadow2Shape: Shape {
-  func path(in rect: CGRect) -> Path {
-    let sx = rect.width / 35.383
-    let sy = rect.height / 117.766
+  let s: CGFloat
+  func path(in _: CGRect) -> Path {
     var p = Path()
-    p.move(to: CGPoint(x: 0, y: 0))
-    p.addLine(to: CGPoint(x: 22.372 * sx, y: 1.580 * sy))
-    p.addLine(to: CGPoint(x: 35.383 * sx, y: 116.266 * sy))
-    p.addLine(to: CGPoint(x: 12.883 * sx, y: 117.766 * sy))
+    p.move(to: CGPoint(x: 72.7937 * s, y: 57.3872 * s))
+    p.addLine(to: CGPoint(x: 83.1 * s, y: 151.6 * s))
+    p.addLine(to: CGPoint(x: 101.1 * s, y: 150.4 * s))
+    p.addLine(to: CGPoint(x: 90.6914 * s, y: 58.6508 * s))
     p.closeSubpath()
     return p
   }
 }
 
-private struct CornerShape: Shape {
-  func path(in rect: CGRect) -> Path {
-    let sx = rect.width / 10.444
-    let sy = rect.height / 10.410
+private struct TextShape: Shape {
+  let s: CGFloat
+  func path(in _: CGRect) -> Path {
     var p = Path()
-    p.move(to: CGPoint(x: 0, y: 0))
-    p.addLine(to: CGPoint(x: 2.240 * sx, y: 9.479 * sy))
-    p.addLine(to: CGPoint(x: 10.444 * sx, y: 10.410 * sy))
+    let lines: [[(CGFloat, CGFloat)]] = [
+      [(143.348, 77.5303), (104.467, 76.1001), (105.099, 81.1025), (143.947, 81.945)],
+      [(106.854, 94.9918), (107.288, 98.4327), (157.263, 97.6252), (156.778, 94.6089)],
+      [(158.497, 105.293), (157.966, 101.994), (107.901, 103.279), (108.346, 106.805)],
+      [(108.751, 110.011), (109.205, 113.604), (159.442, 111.168), (158.922, 107.938)],
+      [(139.366, 118.474), (138.895, 115.088), (109.616, 116.861), (110.079, 120.521)],
+    ]
+    for quad in lines {
+      p.move(to: CGPoint(x: quad[0].0 * s, y: quad[0].1 * s))
+      for pt in quad.dropFirst() {
+        p.addLine(to: CGPoint(x: pt.0 * s, y: pt.1 * s))
+      }
+      p.closeSubpath()
+    }
+    return p
+  }
+}
+
+private struct CornerShape: Shape {
+  let s: CGFloat
+  func path(in _: CGRect) -> Path {
+    var p = Path()
+    p.move(to: CGPoint(x: 154.989 * s, y: 67.7745 * s))
+    p.addLine(to: CGPoint(x: 152.3 * s, y: 56.3999 * s))
+    p.addLine(to: CGPoint(x: 164.833 * s, y: 68.8913 * s))
     p.closeSubpath()
     return p
   }

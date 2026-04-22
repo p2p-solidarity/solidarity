@@ -223,12 +223,13 @@ struct PersonDetailView: View {
 
   private var verifiedTag: some View {
     HStack(spacing: 4) {
-      Circle()
-        .fill(Color.Theme.terminalGreen)
-        .frame(width: 6, height: 6)
+      Image(systemName: "checkmark.seal.fill")
+        .font(.system(size: 10))
+        .foregroundStyle(Color.Theme.terminalGreen)
+        .frame(width: 12, height: 12)
       Text(verifiedLabel)
         .font(.system(size: 10))
-        .foregroundStyle(Color.Theme.textPrimary)
+        .foregroundStyle(Color.Theme.textSecondary)
     }
     .padding(.horizontal, 4)
     .padding(.vertical, 2)
@@ -247,12 +248,13 @@ struct PersonDetailView: View {
 
   private func contextTag(_ label: String) -> some View {
     HStack(spacing: 4) {
-      Image(systemName: "mappin")
-        .font(.system(size: 8))
-        .foregroundStyle(Color.Theme.primaryBlue)
+      Image(systemName: "mappin.and.ellipse")
+        .font(.system(size: 9))
+        .foregroundStyle(Color.Theme.textSecondary)
+        .frame(width: 12, height: 12)
       Text(label)
         .font(.system(size: 10))
-        .foregroundStyle(Color.Theme.textPrimary)
+        .foregroundStyle(Color.Theme.textSecondary)
     }
     .padding(.horizontal, 4)
     .padding(.vertical, 2)
@@ -296,9 +298,10 @@ struct PersonDetailView: View {
   private func outgoingBubble(text: String) -> some View {
     VStack(alignment: .trailing, spacing: 2) {
       Text(text)
-        .font(.system(size: 13))
+        .font(.system(size: 14))
         .foregroundStyle(Color.white)
         .multilineTextAlignment(.leading)
+        .lineSpacing(4)
         .padding(12)
         .background(
           BubbleShape(corners: .outgoing)
@@ -317,9 +320,10 @@ struct PersonDetailView: View {
   private func incomingBubble(text: String) -> some View {
     VStack(alignment: .leading, spacing: 2) {
       Text(text)
-        .font(.system(size: 13))
+        .font(.system(size: 14))
         .foregroundStyle(Color.Theme.textPrimary)
         .multilineTextAlignment(.leading)
+        .lineSpacing(4)
         .padding(12)
         .background(
           BubbleShape(corners: .incoming)
