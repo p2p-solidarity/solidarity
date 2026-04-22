@@ -97,47 +97,27 @@ struct MainTabView: View {
 
   @ViewBuilder
   private var tabContent: some View {
-    if #available(iOS 26, *) {
+    ZStack(alignment: .bottom) {
+      Color.Theme.pageBg.ignoresSafeArea()
+
       TabView(selection: $selectedTab) {
-        Tab(MainAppTab.people.title, systemImage: MainAppTab.people.systemImage, value: MainAppTab.people.rawValue) {
-          PeopleListView()
-        }
-        Tab(MainAppTab.share.title, systemImage: MainAppTab.share.systemImage, value: MainAppTab.share.rawValue) {
-          SharingTabView()
-        }
-        Tab(MainAppTab.me.title, systemImage: MainAppTab.me.systemImage, value: MainAppTab.me.rawValue) {
-          MeTabView()
-        }
+        PeopleListView()
+          .tag(MainAppTab.people.rawValue)
+
+        SharingTabView()
+          .tag(MainAppTab.share.rawValue)
+
+        MeTabView()
+          .tag(MainAppTab.me.rawValue)
       }
-      .tint(Color.Theme.primaryBlue)
-      .toolbarColorScheme(.dark, for: .tabBar)
-    } else {
-      GeometryReader { geometry in
-        ZStack(alignment: .bottom) {
-          Color.Theme.pageBg
-            .ignoresSafeArea()
+      .tabViewStyle(DefaultTabViewStyle())
+      .toolbarBackground(.hidden, for: .tabBar)
+      .toolbar(.hidden, for: .tabBar)
+      .ignoresSafeArea(.keyboard)
 
-          TabView(selection: $selectedTab) {
-            PeopleListView()
-              .tag(MainAppTab.people.rawValue)
-
-            SharingTabView()
-              .tag(MainAppTab.share.rawValue)
-
-            MeTabView()
-              .tag(MainAppTab.me.rawValue)
-          }
-          .tabViewStyle(DefaultTabViewStyle())
-          .toolbarBackground(.hidden, for: .tabBar)
-          .toolbar(.hidden, for: .tabBar)
-          .padding(.bottom, 80)
-
-          CustomFloatingTabBar(selectedTab: $selectedTab)
-            .padding(.bottom, max(geometry.safeAreaInsets.bottom, 16))
-        }
-        .ignoresSafeArea(edges: .bottom)
-      }
+      CustomFloatingTabBar(selectedTab: $selectedTab)
     }
+    .ignoresSafeArea(edges: .bottom)
   }
 
   // MARK: - Handlers

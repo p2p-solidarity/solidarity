@@ -2,7 +2,10 @@
 //  PersonDetailView.swift
 //  solidarity
 //
-//  Contact detail view — spec [PL-2] using ContactEntity
+//  Contact detail view — Pencil design 0YvBA. Hero gradient card
+//  with mauve petal watermark + "一期一會" messages + contact info
+//  rows. Share action via ActivityViewController; ellipsis opens
+//  PersonDetailMoreSheet (Note editor + Delete Contact).
 //
 
 import SwiftUI
@@ -11,473 +14,520 @@ struct PersonDetailView: View {
   let contact: ContactEntity
   @EnvironmentObject private var identityDataStore: IdentityDataStore
   @Environment(\.dismiss) private var dismiss
-  @Environment(\.colorScheme) private var colorScheme
-  @State private var showingDeleteConfirm = false
+
   @State private var showingShareSheet = false
+  @State private var showingMoreSheet = false
 
-  /// Verification level derived from real exchange data.
-  private var verificationLevel: Int {
-    var level = 0
-    if contact.exchangeSignature != nil { level += 1 }
-    if contact.myExchangeSignature != nil { level += 1 }
-    if displayDidPublicKey != nil { level += 1 }
-    return level
-  }
-
-  private var displayDidPublicKey: String? {
-    guard let did = contact.didPublicKey, !did.isEmpty else { return nil }
-    if did == SecureKeyManager.shared.mySignPubKey { return nil }
-    return did
-  }
+  // MARK: - Derived data
 
   private var isVerified: Bool {
     contact.verificationStatus == VerificationStatus.verified.rawValue
   }
 
-  /// Fields verified through this contact's linked credentials (via the
-  /// VerifiedClaimIndex). UI reads this to show per-field verified badges
-  /// — not the raw ContactEntity columns.
-  private var verifiedFieldsFromIndex: Set<BusinessCardField> {
-    guard !contact.credentialIds.isEmpty else { return [] }
-    return VerifiedClaimIndex.verifiedFields(fromCredentials: contact.credentialIds)
+  private var subtitle: String? {
+    let parts = [contact.company, contact.title]
+      .compactMap { $0?.trimmingCharacters(in: .whitespaces) }
+      .filter { !$0.isEmpty }
+    guard !parts.isEmpty else { return nil }
+    return parts.joined(separator: " • ")
   }
 
-  private var linkedCredentials: [IdentityCardEntity] {
-    guard !contact.credentialIds.isEmpty else { return [] }
-    let idSet = Set(contact.credentialIds)
-    return identityDataStore.identityCards.filter { idSet.contains($0.id) }
+  private var firstTag: String? {
+    contact.tags.first(where: { !$0.isEmpty })
   }
+
+  private var hasMyMessage: Bool {
+    !(contact.myEphemeralMessage?.isEmpty ?? true)
+  }
+
+  private var hasTheirMessage: Bool {
+    !(contact.theirEphemeralMessage?.isEmpty ?? true)
+  }
+
+  private var hasEphemeralMessages: Bool {
+    hasMyMessage || hasTheirMessage
+  }
+
+  private var messageCount: Int {
+    (hasMyMessage ? 1 : 0) + (hasTheirMessage ? 1 : 0)
+  }
+
+  private var webURLFromGraphRef: URL? {
+    guard let ref = contact.graphCredentialRef,
+      let url = URL(string: ref),
+      url.scheme == "http" || url.scheme == "https"
+    else { return nil }
+    return url
+  }
+
+  // MARK: - Body
 
   var body: some View {
-    ScrollView {
-      VStack(spacing: 20) {
-        profileHeader
-        verificationBadge
-        ephemeralMessageSection
-        contactInfoSection
-        linkedCredentialsSection
-        exchangeMetadataSection
-        actionButtons
+    VStack(spacing: 0) {
+      topBar
+
+      ScrollView {
+        VStack(spacing: 24) {
+          heroCard
+          ephemeralSection
+          contactInfoSection
+        }
+        .padding(.top, 12)
+        .padding(.bottom, 32)
       }
-      .padding(.horizontal, 20)
-      .padding(.vertical, 16)
     }
     .background(Color.Theme.pageBg.ignoresSafeArea())
-    .navigationTitle("Profile")
-    .navigationBarTitleDisplayMode(.inline)
+    .navigationBarHidden(true)
+    .toolbar(.hidden, for: .navigationBar)
     .sheet(isPresented: $showingShareSheet) {
       ActivityViewController(activityItems: [
         String(format: String(localized: "Check out %@ on AirMeishi!"), contact.name)
       ])
     }
-    .confirmationDialog(
-      "Delete \(contact.name)?",
-      isPresented: $showingDeleteConfirm,
-      titleVisibility: .visible
-    ) {
-      Button("Delete", role: .destructive) {
-        identityDataStore.deleteContact(by: contact.id)
+    .sheet(isPresented: $showingMoreSheet) {
+      PersonDetailMoreSheet(
+        contact: contact,
+        onSave: { updated in
+          contact.notes = updated
+          identityDataStore.refreshAll()
+        },
+        onDelete: {
+          identityDataStore.deleteContact(by: contact.id)
+          dismiss()
+        }
+      )
+    }
+  }
+
+  // MARK: - Top bar
+
+  private var topBar: some View {
+    HStack {
+      Button {
         dismiss()
+      } label: {
+        Image(systemName: "chevron.left")
+          .font(.system(size: 24, weight: .regular))
+          .foregroundStyle(Color.Theme.textPrimary)
       }
-      Button("Cancel", role: .cancel) {}
-    } message: {
-      Text("This contact will be permanently removed.")
+      .buttonStyle(.plain)
+
+      Spacer()
+
+      HStack(spacing: 16) {
+        Button {
+          showingShareSheet = true
+        } label: {
+          Image(systemName: "square.and.arrow.up")
+            .font(.system(size: 22, weight: .regular))
+            .foregroundStyle(Color.Theme.textPrimary)
+            .frame(width: 22, height: 22)
+        }
+        .buttonStyle(.plain)
+
+        Button {
+          showingMoreSheet = true
+        } label: {
+          Image(systemName: "ellipsis")
+            .font(.system(size: 22, weight: .regular))
+            .foregroundStyle(Color.Theme.textPrimary)
+            .frame(width: 22, height: 22)
+        }
+        .buttonStyle(.plain)
+      }
     }
+    .padding(.horizontal, 16)
+    .frame(height: 56)
   }
 
-  // MARK: - Profile Header
+  // MARK: - Hero card
 
-  private var profileHeader: some View {
-    VStack(spacing: 16) {
-      ZStack {
-        Rectangle()
-          .fill(Color.Theme.searchBg)
-          .frame(width: 96, height: 96)
-          .overlay(Rectangle().stroke(Color.Theme.divider, lineWidth: 1))
+  private var heroCard: some View {
+    VStack(spacing: 8) {
+      avatarCircle
 
-        Text(String(contact.name.prefix(1)).uppercased())
-          .font(.system(size: 36, weight: .bold, design: .monospaced))
-          .foregroundColor(Color.Theme.textPrimary)
+      Text(contact.name)
+        .font(.system(size: 24, weight: .medium))
+        .foregroundStyle(Color.Theme.textPrimary)
+        .multilineTextAlignment(.center)
+
+      if let subtitle {
+        Text(subtitle)
+          .font(.system(size: 14))
+          .foregroundStyle(Color.Theme.textSecondary)
+          .multilineTextAlignment(.center)
       }
 
-      VStack(spacing: 6) {
-        Text(contact.name)
-          .font(.system(size: 24, weight: .bold))
-          .foregroundColor(Color.Theme.textPrimary)
-
-        if let title = contact.title, !title.isEmpty {
-          Text(title)
-            .font(.system(size: 14, weight: .medium, design: .monospaced))
-            .foregroundColor(Color.Theme.textSecondary)
-        }
-
-        if let company = contact.company, !company.isEmpty {
-          Text(company)
-            .font(.system(size: 12, design: .monospaced))
-            .foregroundColor(Color.Theme.textTertiary)
-        }
+      if isVerified || firstTag != nil {
+        tagRow
+          .padding(.top, 4)
       }
     }
-    .padding(.vertical, 8)
-  }
-
-  // MARK: - Verification Badge
-
-  private var verificationBadge: some View {
-    HStack(spacing: 8) {
-      EvolvingTrustBadge(verificationLevel: verificationLevel)
-
-      if isVerified, let date = contact.exchangeTimestamp {
-        Text("[\(formatDate(date))]")
-          .font(.system(size: 10, weight: .bold, design: .monospaced))
-          .foregroundColor(Color.Theme.textTertiary)
-      }
-
-      Text("[ \(contact.source.uppercased()) ]")
-        .font(.system(size: 10, weight: .bold, design: .monospaced))
-        .foregroundColor(isVerified ? Color.Theme.terminalGreen : Color.Theme.textTertiary)
-    }
-    .padding(12)
     .frame(maxWidth: .infinity)
-    .background(Color.Theme.searchBg)
-    .overlay(Rectangle().stroke(Color.Theme.divider, lineWidth: 1))
+    .padding(.leading, 12)
+    .padding(.trailing, 12)
+    .padding(.top, 16)
+    .padding(.bottom, 24)
+    .background(
+      ZStack {
+        LinearGradient(
+          colors: [
+            Color.Theme.gradientLavender,
+            Color.Theme.gradientPeach,
+          ],
+          startPoint: .top,
+          endPoint: .bottom
+        )
+
+        MauvePetalMotif()
+          .allowsHitTesting(false)
+      }
+    )
+    .clipShape(RoundedRectangle(cornerRadius: 4))
+    .padding(.horizontal, 16)
   }
 
-  // MARK: - Ephemeral Messages (一期一會)
+  private var avatarCircle: some View {
+    ZStack {
+      Circle()
+        .fill(Color.Theme.gradientCream)
+
+      Text(initials)
+        .font(.system(size: 32, weight: .medium))
+        .foregroundStyle(Color.Theme.textSecondary)
+    }
+    .frame(width: 88, height: 88)
+    .overlay(
+      Circle().stroke(Color.Theme.gradientCream, lineWidth: 1)
+    )
+  }
+
+  private var initials: String {
+    let trimmed = contact.name.trimmingCharacters(in: .whitespaces)
+    guard !trimmed.isEmpty else { return "?" }
+    let parts = trimmed.split(separator: " ").prefix(2)
+    let letters = parts.compactMap { $0.first }.map { String($0) }
+    return letters.joined().uppercased()
+  }
+
+  private var tagRow: some View {
+    HStack(spacing: 16) {
+      if isVerified {
+        verifiedTag
+      }
+      if let firstTag {
+        contextTag(firstTag)
+      }
+    }
+  }
+
+  private var verifiedTag: some View {
+    HStack(spacing: 4) {
+      Circle()
+        .fill(Color.Theme.terminalGreen)
+        .frame(width: 6, height: 6)
+      Text(verifiedLabel)
+        .font(.system(size: 10))
+        .foregroundStyle(Color.Theme.textPrimary)
+    }
+    .padding(.horizontal, 4)
+    .padding(.vertical, 2)
+    .background(
+      RoundedRectangle(cornerRadius: 2)
+        .fill(Color(hex: 0xF7F2FA))
+    )
+  }
+
+  private var verifiedLabel: String {
+    if let date = contact.exchangeTimestamp {
+      return "Verified · \(Self.tagDateFormatter.string(from: date))"
+    }
+    return "Verified"
+  }
+
+  private func contextTag(_ label: String) -> some View {
+    HStack(spacing: 4) {
+      Image(systemName: "mappin")
+        .font(.system(size: 8))
+        .foregroundStyle(Color.Theme.primaryBlue)
+      Text(label)
+        .font(.system(size: 10))
+        .foregroundStyle(Color.Theme.textPrimary)
+    }
+    .padding(.horizontal, 4)
+    .padding(.vertical, 2)
+    .background(
+      RoundedRectangle(cornerRadius: 2)
+        .fill(Color(hex: 0xF7F2FA))
+    )
+  }
+
+  // MARK: - Ephemeral messages (一期一會)
 
   @ViewBuilder
-  private var ephemeralMessageSection: some View {
-    let hasMyMsg = !(contact.myEphemeralMessage?.isEmpty ?? true)
-    let hasTheirMsg = !(contact.theirEphemeralMessage?.isEmpty ?? true)
+  private var ephemeralSection: some View {
+    if hasEphemeralMessages {
+      VStack(alignment: .leading, spacing: 8) {
+        Text("一期一會")
+          .font(.system(size: 14))
+          .foregroundStyle(Color.Theme.textPrimary)
 
-    if hasMyMsg || hasTheirMsg {
-      VStack(alignment: .leading, spacing: 12) {
-        Text("— 一期一會")
-          .font(.system(size: 12, weight: .bold, design: .monospaced))
-          .foregroundColor(Color.Theme.textSecondary)
-
-        if let msg = contact.theirEphemeralMessage, !msg.isEmpty {
-          ephemeralBubble(label: "RX (FROM THEM)", message: msg, isIncoming: true)
+        VStack(alignment: .trailing, spacing: 12) {
+          if let mine = contact.myEphemeralMessage, !mine.isEmpty {
+            outgoingBubble(text: mine)
+          }
+          if let theirs = contact.theirEphemeralMessage, !theirs.isEmpty {
+            incomingBubble(text: theirs)
+          }
+          if messageCount > 0 {
+            seeMorePill
+              .frame(maxWidth: .infinity, alignment: .center)
+          }
         }
-
-        if let msg = contact.myEphemeralMessage, !msg.isEmpty {
-          ephemeralBubble(label: "TX (FROM ME)", message: msg, isIncoming: false)
-        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 16)
+        .frame(maxWidth: .infinity, alignment: .trailing)
+        .background(Color(hex: 0xEEEEEE).opacity(0.8))
       }
-      .padding(16)
-      .background(Color.Theme.cardBg)
-      .overlay(Rectangle().stroke(Color.Theme.divider, lineWidth: 1))
+      .padding(.horizontal, 16)
     }
   }
 
-  private func ephemeralBubble(label: String, message: String, isIncoming: Bool) -> some View {
-    VStack(alignment: .leading, spacing: 6) {
-      Text(label)
-        .font(.system(size: 10, weight: .bold, design: .monospaced))
-        .foregroundColor(isIncoming ? Color.Theme.primaryBlue : Color.Theme.terminalGreen)
+  private func outgoingBubble(text: String) -> some View {
+    VStack(alignment: .trailing, spacing: 2) {
+      Text(text)
+        .font(.system(size: 13))
+        .foregroundStyle(Color.white)
+        .multilineTextAlignment(.leading)
+        .padding(12)
+        .background(
+          BubbleShape(corners: .outgoing)
+            .fill(Color.Theme.accentRose)
+        )
 
-      HStack(alignment: .top, spacing: 8) {
-        Image(systemName: "quote.opening")
-          .font(.system(size: 10, weight: .bold))
-          .foregroundColor(isIncoming ? Color.Theme.primaryBlue : Color.Theme.terminalGreen)
-          .padding(.top, 2)
-
-        Text(message)
-          .font(.system(size: 14, weight: .medium))
-          .foregroundColor(Color.Theme.textPrimary)
-          .italic()
-          .frame(maxWidth: .infinity, alignment: .leading)
+      if let date = contact.exchangeTimestamp {
+        Text(Self.bubbleDateFormatter.string(from: date))
+          .font(.system(size: 10))
+          .foregroundStyle(Color.Theme.textSecondary)
       }
-      .padding(10)
-      .background(Color.Theme.warmCream)
     }
+    .frame(maxWidth: .infinity, alignment: .trailing)
   }
 
-  // MARK: - Contact Info
+  private func incomingBubble(text: String) -> some View {
+    VStack(alignment: .leading, spacing: 2) {
+      Text(text)
+        .font(.system(size: 13))
+        .foregroundStyle(Color.Theme.textPrimary)
+        .multilineTextAlignment(.leading)
+        .padding(12)
+        .background(
+          BubbleShape(corners: .incoming)
+            .fill(Color.Theme.warmCream)
+        )
 
+      if let date = contact.exchangeTimestamp {
+        Text(Self.bubbleDateFormatter.string(from: date))
+          .font(.system(size: 10))
+          .foregroundStyle(Color.Theme.textSecondary)
+      }
+    }
+    .frame(maxWidth: .infinity, alignment: .leading)
+  }
+
+  private var seeMorePill: some View {
+    HStack(spacing: 2) {
+      Text(seeMoreLabel)
+        .font(.system(size: 10))
+        .foregroundStyle(Color.Theme.textSecondary)
+      Image(systemName: "chevron.right")
+        .font(.system(size: 12))
+        .foregroundStyle(Color.Theme.textSecondary)
+    }
+    .padding(.leading, 8)
+    .padding(.trailing, 4)
+    .padding(.vertical, 4)
+    .background(
+      Capsule().fill(Color(hex: 0xEEEEEE))
+    )
+  }
+
+  private var seeMoreLabel: String {
+    let count = messageCount
+    if count <= 1 {
+      return "see more"
+    }
+    return "see \(count) messages"
+  }
+
+  // MARK: - Contact info
+
+  @ViewBuilder
   private var contactInfoSection: some View {
-    VStack(alignment: .leading, spacing: 12) {
-      Text("— CONTACT INFO")
-        .font(.system(size: 12, weight: .bold, design: .monospaced))
-        .foregroundColor(Color.Theme.textSecondary)
+    let rows = contactRows
+    if !rows.isEmpty {
+      VStack(alignment: .leading, spacing: 10) {
+        Text("contact info")
+          .font(.system(size: 14))
+          .foregroundStyle(Color.Theme.textPrimary)
 
-      VStack(spacing: 8) {
-        if contact.name.isEmpty == false {
-          HStack(spacing: 4) {
-            Spacer(minLength: 0)
-            if verifiedFieldsFromIndex.contains(.name) {
-              fieldVerifiedBadge(field: .name)
-            }
-          }
-        }
-
-        if let email = contact.email, !email.isEmpty {
-          contactInfoRow(
-            icon: "envelope",
-            label: "EMAIL",
-            value: email,
-            verified: verifiedFieldsFromIndex.contains(.email)
-          ) {
-            if let url = URL(string: "mailto:\(email)") {
-              UIApplication.shared.open(url)
-            }
-          }
-        }
-
-        if let phone = contact.phone, !phone.isEmpty {
-          contactInfoRow(
-            icon: "phone",
-            label: "PHONE",
-            value: phone,
-            verified: verifiedFieldsFromIndex.contains(.phone)
-          ) {
-            if let url = URL(string: "tel:\(phone)") {
-              UIApplication.shared.open(url)
-            }
-          }
-        }
-
-        if let notes = contact.notes, !notes.isEmpty {
-          HStack(alignment: .top, spacing: 12) {
-            Image(systemName: "note.text")
-              .font(.system(size: 12, weight: .bold))
-              .foregroundColor(Color.Theme.textTertiary)
-              .frame(width: 20)
-
-            VStack(alignment: .leading, spacing: 2) {
-              Text("NOTES")
-                .font(.system(size: 10, weight: .bold, design: .monospaced))
-                .foregroundColor(Color.Theme.textTertiary)
-              Text(notes)
-                .font(.system(size: 14))
-                .foregroundColor(Color.Theme.textPrimary)
-            }
+        VStack(spacing: 8) {
+          ForEach(rows) { row in
+            contactRowView(row)
           }
         }
       }
+      .padding(.horizontal, 16)
     }
-    .padding(16)
-    .background(Color.Theme.cardBg)
-    .overlay(Rectangle().stroke(Color.Theme.divider, lineWidth: 1))
   }
 
-  private func contactInfoRow(
-    icon: String,
-    label: String,
-    value: String,
-    verified: Bool = false,
-    action: @escaping () -> Void
-  ) -> some View {
-    Button(action: action) {
-      HStack(spacing: 12) {
-        Image(systemName: icon)
-          .font(.system(size: 12, weight: .bold))
-          .foregroundColor(Color.Theme.primaryBlue)
-          .frame(width: 20)
+  private var contactRows: [PersonDetailContactRow] {
+    var out: [PersonDetailContactRow] = []
+    if let phone = contact.phone, !phone.isEmpty {
+      out.append(
+        PersonDetailContactRow(
+          id: "phone",
+          icon: "phone",
+          value: phone,
+          url: URL(string: "tel:\(phone)")
+        )
+      )
+    }
+    if let email = contact.email, !email.isEmpty {
+      out.append(
+        PersonDetailContactRow(
+          id: "email",
+          icon: "envelope",
+          value: email,
+          url: URL(string: "mailto:\(email)")
+        )
+      )
+    }
+    if let url = webURLFromGraphRef {
+      out.append(
+        PersonDetailContactRow(
+          id: "link",
+          icon: "link",
+          value: url.absoluteString,
+          url: url
+        )
+      )
+    }
+    return out
+  }
 
-        VStack(alignment: .leading, spacing: 2) {
-          HStack(spacing: 6) {
-            Text(label)
-              .font(.system(size: 10, weight: .bold, design: .monospaced))
-              .foregroundColor(Color.Theme.textTertiary)
-            if verified {
-              Image(systemName: "checkmark.seal.fill")
-                .font(.system(size: 10, weight: .bold))
-                .foregroundColor(Color.Theme.terminalGreen)
-            }
-          }
-          Text(value)
-            .font(.system(size: 14))
-            .foregroundColor(Color.Theme.textPrimary)
-        }
-
-        Spacer()
-
-        Image(systemName: "arrow.up.right")
-          .font(.system(size: 10, weight: .bold))
-          .foregroundColor(Color.Theme.textTertiary)
+  private func contactRowView(_ row: PersonDetailContactRow) -> some View {
+    Button {
+      if let url = row.url {
+        UIApplication.shared.open(url)
       }
+    } label: {
+      HStack(spacing: 8) {
+        Image(systemName: row.icon)
+          .font(.system(size: 15, weight: .regular))
+          .foregroundStyle(Color.Theme.textPrimary)
+          .frame(width: 18, height: 18)
+        Text(row.value)
+          .font(.system(size: 15))
+          .foregroundStyle(Color.Theme.textPrimary)
+          .lineLimit(1)
+        Spacer(minLength: 0)
+      }
+      .padding(.horizontal, 12)
+      .frame(height: 48)
+      .background(
+        RoundedRectangle(cornerRadius: 2)
+          .fill(Color(hex: 0xEEEEEE).opacity(0.8))
+      )
     }
     .buttonStyle(.plain)
   }
 
-  private func fieldVerifiedBadge(field: BusinessCardField) -> some View {
-    HStack(spacing: 4) {
-      Image(systemName: "checkmark.seal.fill")
-        .font(.system(size: 9, weight: .bold))
-      Text("\(field.displayName.uppercased()) VERIFIED")
-        .font(.system(size: 9, weight: .bold, design: .monospaced))
-    }
-    .foregroundColor(Color.Theme.terminalGreen)
-    .padding(.horizontal, 6)
-    .padding(.vertical, 3)
-    .background(Color.Theme.terminalGreen.opacity(0.08))
-  }
+  // MARK: - Formatters
 
-  // MARK: - Linked Credentials
-
-  @ViewBuilder
-  private var linkedCredentialsSection: some View {
-    if linkedCredentials.isEmpty == false {
-      VStack(alignment: .leading, spacing: 12) {
-        HStack {
-          Text("— LINKED CREDENTIALS")
-            .font(.system(size: 12, weight: .bold, design: .monospaced))
-            .foregroundColor(Color.Theme.textSecondary)
-          Spacer()
-          Text("\(linkedCredentials.count)")
-            .font(.system(size: 12, weight: .bold, design: .monospaced))
-            .foregroundColor(Color.Theme.textTertiary)
-        }
-
-        VStack(spacing: 8) {
-          ForEach(linkedCredentials, id: \.id) { card in
-            linkedCredentialRow(card)
-          }
-        }
-      }
-      .padding(16)
-      .background(Color.Theme.cardBg)
-      .overlay(Rectangle().stroke(Color.Theme.divider, lineWidth: 1))
-    }
-  }
-
-  private func linkedCredentialRow(_ card: IdentityCardEntity) -> some View {
-    HStack(alignment: .top, spacing: 12) {
-      Image(systemName: trustIcon(for: card.trustLevel))
-        .font(.system(size: 12, weight: .bold))
-        .foregroundColor(trustColor(for: card.trustLevel))
-        .frame(width: 20, alignment: .top)
-        .padding(.top, 2)
-
-      VStack(alignment: .leading, spacing: 2) {
-        Text(card.title)
-          .font(.system(size: 13, weight: .semibold))
-          .foregroundColor(Color.Theme.textPrimary)
-        Text("\(card.issuerType.uppercased()) · \(card.status.uppercased())")
-          .font(.system(size: 10, weight: .bold, design: .monospaced))
-          .foregroundColor(Color.Theme.textTertiary)
-      }
-
-      Spacer()
-    }
-    .padding(10)
-    .background(Color.Theme.searchBg)
-    .overlay(Rectangle().stroke(Color.Theme.divider, lineWidth: 1))
-  }
-
-  private func trustIcon(for level: String) -> String {
-    switch level {
-    case "green": return "seal.fill"
-    case "blue": return "seal"
-    default: return "doc.text"
-    }
-  }
-
-  private func trustColor(for level: String) -> Color {
-    switch level {
-    case "green": return Color.Theme.terminalGreen
-    case "blue": return Color.Theme.primaryBlue
-    default: return Color.Theme.textTertiary
-    }
-  }
-
-  // MARK: - Exchange Metadata
-
-  @ViewBuilder
-  private var exchangeMetadataSection: some View {
-    if displayDidPublicKey != nil || contact.exchangeSignature != nil {
-      VStack(alignment: .leading, spacing: 12) {
-        Text("— EXCHANGE DATA")
-          .font(.system(size: 12, weight: .bold, design: .monospaced))
-          .foregroundColor(Color.Theme.textSecondary)
-
-        VStack(spacing: 8) {
-          if let did = displayDidPublicKey {
-            metadataRow(label: "PEER PUB KEY", value: shortKey(did))
-          }
-
-          if contact.exchangeSignature != nil {
-            metadataRow(label: "THEIR SIG", value: "✓ Present")
-          }
-
-          if contact.myExchangeSignature != nil {
-            metadataRow(label: "MY SIG", value: "✓ Present")
-          }
-
-          if let ts = contact.exchangeTimestamp {
-            metadataRow(label: "TIMESTAMP", value: formatDate(ts))
-          }
-        }
-      }
-      .padding(16)
-      .background(Color.Theme.cardBg)
-      .overlay(Rectangle().stroke(Color.Theme.divider, lineWidth: 1))
-    }
-  }
-
-  private func metadataRow(label: String, value: String) -> some View {
-    HStack(alignment: .top, spacing: 16) {
-      Text(label)
-        .font(.system(size: 10, weight: .bold, design: .monospaced))
-        .foregroundColor(Color.Theme.textTertiary)
-        .frame(width: 80, alignment: .leading)
-      Text(value)
-        .font(.system(size: 12, weight: .regular, design: .monospaced))
-        .foregroundColor(Color.Theme.textPrimary)
-    }
-  }
-
-  // MARK: - Actions
-
-  private var actionButtons: some View {
-    VStack(spacing: 12) {
-      Button {
-        showingShareSheet = true
-      } label: {
-        HStack(spacing: 6) {
-          Image(systemName: "square.and.arrow.up")
-            .font(.system(size: 12, weight: .bold))
-          Text("Share Contact")
-            .font(.system(size: 14, weight: .bold, design: .monospaced))
-        }
-        .foregroundColor(Color.Theme.textPrimary)
-        .frame(maxWidth: .infinity)
-        .padding(.vertical, 12)
-        .background(Color.Theme.searchBg)
-        .overlay(Rectangle().stroke(Color.Theme.divider, lineWidth: 1))
-      }
-      .buttonStyle(.plain)
-
-      Button {
-        showingDeleteConfirm = true
-      } label: {
-        Text("Delete Contact")
-          .font(.system(size: 14, weight: .bold, design: .monospaced))
-          .foregroundColor(.red.opacity(0.8))
-          .frame(maxWidth: .infinity)
-          .padding(.vertical, 12)
-          .background(Color.red.opacity(0.04))
-          .overlay(Rectangle().stroke(Color.red.opacity(0.12), lineWidth: 1))
-      }
-      .buttonStyle(.plain)
-    }
-  }
-
-  // MARK: - Helpers
-
-  private static let dateFormatter: DateFormatter = {
+  private static let tagDateFormatter: DateFormatter = {
     let f = DateFormatter()
-    f.dateFormat = "yy.MM.dd HH:mm"
+    f.dateFormat = "yyyy-MM-dd"
     return f
   }()
 
-  private func formatDate(_ date: Date) -> String {
-    Self.dateFormatter.string(from: date)
+  private static let bubbleDateFormatter: DateFormatter = {
+    let f = DateFormatter()
+    f.dateFormat = "yyyy-MM-dd"
+    return f
+  }()
+}
+
+// MARK: - Supporting types
+
+private struct PersonDetailContactRow: Identifiable {
+  let id: String
+  let icon: String
+  let value: String
+  let url: URL?
+}
+
+/// Chat-bubble shape where one corner (pointing at the owner side) is
+/// squared off. Outgoing bubbles square the bottom-right corner;
+/// incoming bubbles square the bottom-left corner.
+private struct BubbleShape: Shape {
+  enum Corners {
+    case outgoing, incoming
   }
 
-  private func shortKey(_ key: String) -> String {
-    guard key.count > 20 else { return key }
-    return "\(key.prefix(10))...\(key.suffix(8))"
+  let corners: Corners
+  let radius: CGFloat = 4
+  let squaredRadius: CGFloat = 0
+
+  func path(in rect: CGRect) -> Path {
+    let topLeft = radius
+    let topRight = radius
+    let bottomRight: CGFloat
+    let bottomLeft: CGFloat
+    switch corners {
+    case .outgoing:
+      bottomRight = squaredRadius
+      bottomLeft = radius
+    case .incoming:
+      bottomRight = radius
+      bottomLeft = squaredRadius
+    }
+
+    var path = Path()
+    path.move(to: CGPoint(x: rect.minX + topLeft, y: rect.minY))
+    path.addLine(to: CGPoint(x: rect.maxX - topRight, y: rect.minY))
+    path.addArc(
+      center: CGPoint(x: rect.maxX - topRight, y: rect.minY + topRight),
+      radius: topRight,
+      startAngle: .degrees(-90),
+      endAngle: .degrees(0),
+      clockwise: false
+    )
+    path.addLine(to: CGPoint(x: rect.maxX, y: rect.maxY - bottomRight))
+    path.addArc(
+      center: CGPoint(x: rect.maxX - bottomRight, y: rect.maxY - bottomRight),
+      radius: bottomRight,
+      startAngle: .degrees(0),
+      endAngle: .degrees(90),
+      clockwise: false
+    )
+    path.addLine(to: CGPoint(x: rect.minX + bottomLeft, y: rect.maxY))
+    path.addArc(
+      center: CGPoint(x: rect.minX + bottomLeft, y: rect.maxY - bottomLeft),
+      radius: bottomLeft,
+      startAngle: .degrees(90),
+      endAngle: .degrees(180),
+      clockwise: false
+    )
+    path.addLine(to: CGPoint(x: rect.minX, y: rect.minY + topLeft))
+    path.addArc(
+      center: CGPoint(x: rect.minX + topLeft, y: rect.minY + topLeft),
+      radius: topLeft,
+      startAngle: .degrees(180),
+      endAngle: .degrees(270),
+      clockwise: false
+    )
+    path.closeSubpath()
+    return path
   }
 }

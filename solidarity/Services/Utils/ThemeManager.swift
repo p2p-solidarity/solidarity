@@ -161,15 +161,15 @@ extension Color {
     static var groupedBackground: Color { Color(.systemGroupedBackground) }
 
     // Soft rose accent used for primary CTA buttons
-    static var accentRose: Color { Color(hex: 0xC088A0) }
+    static var accentRose: Color { Color(hex: 0xBF80A7) }
 
     // MARK: - Swiss Sunrise Palette (Light) + Deep Alpine Night (Dark)
 
-    /// Page background: soft lavender (light) / deep brown-purple (dark)
+    /// Page background: warm cream (light) / deep brown-purple (dark)
     static let pageBg = Color(.init(dynamicProvider: { traits in
       traits.userInterfaceStyle == .dark
         ? UIColor(red: 0.10, green: 0.07, blue: 0.09, alpha: 1)  // #1A1218
-        : UIColor(red: 0.90, green: 0.86, blue: 0.90, alpha: 1)  // #E6DBE6
+        : UIColor(red: 0.984, green: 0.976, blue: 0.949, alpha: 1)  // #fbf9f2
     }))
 
     /// Dark UI elements
@@ -179,53 +179,53 @@ extension Color {
         : UIColor(red: 0.82, green: 0.78, blue: 0.82, alpha: 1)  // #D1C7D1
     }))
 
-    /// Primary text: dark charcoal-purple (light) / off-white lavender (dark)
+    /// Primary text: dark charcoal (light) / off-white lavender (dark)
     static let textPrimary = Color(.init(dynamicProvider: { traits in
       traits.userInterfaceStyle == .dark
         ? UIColor(red: 0.94, green: 0.91, blue: 0.94, alpha: 1)  // #F0E8F0
-        : UIColor(red: 0.16, green: 0.10, blue: 0.18, alpha: 1)  // #2A1A2E
+        : UIColor(red: 0.184, green: 0.184, blue: 0.188, alpha: 1)  // #2f2f30
     }))
 
     /// Secondary text
     static let textSecondary = Color(.init(dynamicProvider: { traits in
       traits.userInterfaceStyle == .dark
         ? UIColor(red: 0.66, green: 0.60, blue: 0.66, alpha: 1)  // #A898A8
-        : UIColor(red: 0.42, green: 0.31, blue: 0.44, alpha: 1)  // #6A5070
+        : UIColor(red: 0.373, green: 0.369, blue: 0.404, alpha: 1)  // #5f5e67
     }))
 
     /// Tertiary text
     static let textTertiary = Color(.init(dynamicProvider: { traits in
       traits.userInterfaceStyle == .dark
         ? UIColor(white: 0.50, alpha: 1)
-        : UIColor(red: 0.60, green: 0.53, blue: 0.60, alpha: 1)  // #998898
+        : UIColor(red: 0.612, green: 0.604, blue: 0.651, alpha: 1)  // #9c9aa6
     }))
 
     /// Placeholder text
     static let textPlaceholder = Color(.init(dynamicProvider: { traits in
       traits.userInterfaceStyle == .dark
         ? UIColor(white: 0.30, alpha: 1)
-        : UIColor(red: 0.72, green: 0.66, blue: 0.72, alpha: 1)  // #B8A8B8
+        : UIColor(red: 0.612, green: 0.604, blue: 0.651, alpha: 1)  // #9c9aa6
     }))
 
     /// Search/input background
     static let searchBg = Color(.init(dynamicProvider: { traits in
       traits.userInterfaceStyle == .dark
         ? UIColor(white: 1.0, alpha: 0.08)
-        : UIColor(red: 0.94, green: 0.91, blue: 0.94, alpha: 1)  // #F0E8F0
+        : UIColor(red: 0.933, green: 0.933, blue: 0.933, alpha: 1)  // #eeeeee
     }))
 
     /// Divider / border
     static let divider = Color(.init(dynamicProvider: { traits in
       traits.userInterfaceStyle == .dark
         ? UIColor(white: 1.0, alpha: 0.15)
-        : UIColor(red: 0.80, green: 0.74, blue: 0.80, alpha: 1)  // #CCBDCC
+        : UIColor(red: 0.820, green: 0.820, blue: 0.820, alpha: 1)  // #d1d1d1
     }))
 
     /// Card background
     static let cardBg = Color(.init(dynamicProvider: { traits in
       traits.userInterfaceStyle == .dark
         ? UIColor(red: 0.07, green: 0.04, blue: 0.07, alpha: 1)  // #111111
-        : UIColor(white: 1.0, alpha: 1)
+        : UIColor(white: 1.0, alpha: 1)  // #ffffff
     }))
 
     // MARK: - Primary / accent colors
@@ -234,34 +234,34 @@ extension Color {
     static let primaryBlue = Color(.init(dynamicProvider: { traits in
       traits.userInterfaceStyle == .dark
         ? UIColor(red: 0.75, green: 0.53, blue: 0.63, alpha: 1)  // #C088A0
-        : UIColor(red: 0.54, green: 0.31, blue: 0.53, alpha: 1)  // #8A5088
+        : UIColor(red: 0.514, green: 0.325, blue: 0.490, alpha: 1)  // #83537d
     }))
 
     /// Success green
     static let terminalGreen = Color(.init(dynamicProvider: { traits in
       traits.userInterfaceStyle == .dark
         ? UIColor(red: 0.0, green: 1.0, blue: 0.25, alpha: 1)
-        : UIColor(red: 0.20, green: 0.70, blue: 0.30, alpha: 1)  // #34B34D
+        : UIColor(red: 0.298, green: 0.686, blue: 0.318, alpha: 1)  // #4caf51
     }))
 
     /// Dusty mauve decorative
-    static let dustyMauve = Color(hex: 0x7A5070)
+    static let dustyMauve = Color(hex: 0xA6678D)
 
     /// Danger red
-    static let destructive = Color(hex: 0xFF3333)
+    static let destructive = Color(hex: 0xCD556A)
 
     /// Warm cream for inverted cards
     static let warmCream = Color(.init(dynamicProvider: { traits in
       traits.userInterfaceStyle == .dark
         ? UIColor(red: 0.97, green: 0.97, blue: 0.96, alpha: 1)
-        : UIColor(red: 0.16, green: 0.10, blue: 0.18, alpha: 1)  // inverted for light
+        : UIColor(red: 0.953, green: 0.922, blue: 0.867, alpha: 1)  // #f3ebdd
     }))
 
     /// Feature accent (brand mauve)
     static let featureAccent = Color(.init(dynamicProvider: { traits in
       traits.userInterfaceStyle == .dark
         ? UIColor(red: 0.75, green: 0.53, blue: 0.63, alpha: 1)  // #C088A0
-        : UIColor(red: 0.54, green: 0.31, blue: 0.53, alpha: 1)  // #8A5088
+        : UIColor(red: 0.514, green: 0.325, blue: 0.490, alpha: 1)  // #83537d
     }))
 
     // MARK: - Radar / sharing specific
@@ -297,7 +297,7 @@ extension Color {
     static let tabAccentMe = Color(.init(dynamicProvider: { traits in
       traits.userInterfaceStyle == .dark
         ? UIColor(white: 0.15, alpha: 1)
-        : UIColor(red: 0.94, green: 0.91, blue: 0.94, alpha: 1)
+        : UIColor(red: 0.984, green: 0.976, blue: 0.949, alpha: 1)  // #fbf9f2
     }))
     static let tabAccentSakura = Color(hex: 0x222233)
     static let tabAccentGroups = Color(hex: 0x1A2228)
@@ -307,22 +307,22 @@ extension Color {
     static let blobCenter = Color(.init(dynamicProvider: { traits in
       traits.userInterfaceStyle == .dark
         ? UIColor(red: 0.08, green: 0.06, blue: 0.08, alpha: 1)
-        : UIColor(red: 0.88, green: 0.82, blue: 0.88, alpha: 1)
+        : UIColor(red: 0.941, green: 0.929, blue: 0.957, alpha: 1)  // #f0edf4
     }))
     static let gradientPeach = Color(.init(dynamicProvider: { traits in
       traits.userInterfaceStyle == .dark
         ? UIColor(red: 0.10, green: 0.08, blue: 0.07, alpha: 1)
-        : UIColor(red: 0.92, green: 0.85, blue: 0.88, alpha: 1)  // #EBD9E0
+        : UIColor(red: 0.953, green: 0.875, blue: 0.867, alpha: 1)  // #f3dfdd
     }))
     static let gradientLavender = Color(.init(dynamicProvider: { traits in
       traits.userInterfaceStyle == .dark
         ? UIColor(red: 0.09, green: 0.07, blue: 0.10, alpha: 1)
-        : UIColor(red: 0.86, green: 0.80, blue: 0.90, alpha: 1)  // #DBCCE6
+        : UIColor(red: 0.914, green: 0.890, blue: 0.929, alpha: 1)  // #e9e3ed
     }))
     static let gradientCream = Color(.init(dynamicProvider: { traits in
       traits.userInterfaceStyle == .dark
         ? UIColor(red: 0.08, green: 0.07, blue: 0.06, alpha: 1)
-        : UIColor(red: 0.93, green: 0.90, blue: 0.92, alpha: 1)  // #EDE5EB
+        : UIColor(red: 0.941, green: 0.929, blue: 0.957, alpha: 1)  // #f0edf4
     }))
 
     // MARK: - Adaptive functions

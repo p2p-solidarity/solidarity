@@ -1,133 +1,117 @@
 import SwiftUI
 
-/// A component representing a single connection in the People Tab's Trust Graph.
-/// Features a WinCard (Neo-Brutalist) layout, evolving badges, and a notepad snippet for ephemeral messages.
+/// A single contact row in the People list. Matches the Pencil design:
+/// round avatar | name + subtitle + tag bubble | date column with status dot.
 struct TrustGraphContactRow: View {
   let contact: ContactEntity
 
-  /// Whether both sides have exchange signatures (real cryptographic proof).
+  private static let dateFormatter: DateFormatter = {
+    let f = DateFormatter()
+    f.dateFormat = "yyyy-MM-dd"
+    return f
+  }()
+
   private var hasVerifiedExchange: Bool {
     contact.exchangeSignature != nil && contact.myExchangeSignature != nil
   }
 
-  /// Verification level derived from real contact data.
-  private var verificationLevel: Int {
-    var level = 0
-    if contact.exchangeSignature != nil { level += 1 }
-    if contact.myExchangeSignature != nil { level += 1 }
-    if contact.didPublicKey != nil { level += 1 }
-    return level
+  private var subtitle: String? {
+    let parts = [contact.company, contact.title]
+      .compactMap { $0?.trimmingCharacters(in: .whitespacesAndNewlines) }
+      .filter { !$0.isEmpty }
+    guard !parts.isEmpty else { return nil }
+    return parts.joined(separator: " • ")
+  }
+
+  private var tagText: String? {
+    if let first = contact.tags.first(where: { !$0.trimmingCharacters(in: .whitespaces).isEmpty }) {
+      return first
+    }
+    let normalized = contact.source.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+    if normalized == "imported" || normalized == "manual" {
+      return "#手機通訊錄"
+    }
+    return nil
   }
 
   var body: some View {
     VStack(alignment: .leading, spacing: 0) {
+      HStack(alignment: .top, spacing: 16) {
+        avatar
 
-      // Top Area: Identity & Badge
-      HStack(alignment: .top, spacing: 12) {
+        VStack(alignment: .leading, spacing: 8) {
+          HStack(alignment: .top, spacing: 12) {
+            VStack(alignment: .leading, spacing: 2) {
+              Text(contact.name)
+                .font(.system(size: 16, weight: .medium))
+                .foregroundColor(Color.Theme.textPrimary)
+                .lineLimit(1)
 
-        // Avatar Block
-        ZStack {
-          Rectangle()
-            .fill(Color.Theme.searchBg)
-            .frame(width: 48, height: 48)
-            .overlay(
-              Rectangle().stroke(Color.Theme.divider, lineWidth: 1)
-            )
+              if let subtitle {
+                Text(subtitle)
+                  .font(.system(size: 14))
+                  .foregroundColor(Color.Theme.textSecondary)
+                  .lineLimit(1)
+              }
+            }
 
-          Text(String(contact.name.prefix(1)).uppercased())
-            .font(.system(size: 20, weight: .bold, design: .monospaced))
-            .foregroundColor(Color.Theme.textPrimary)
-        }
+            Spacer(minLength: 8)
 
-        // Name & Title
-        VStack(alignment: .leading, spacing: 4) {
-          Text(contact.name)
-            .font(.system(size: 18, weight: .bold))
-            .foregroundColor(Color.Theme.textPrimary)
-            .lineLimit(1)
+            dateColumn
+          }
 
-          if let title = contact.title, !title.isEmpty {
-            Text(title)
-              .font(.system(size: 14, weight: .regular, design: .monospaced))
+          if let tag = tagText {
+            Text(tag)
+              .font(.system(size: 10))
               .foregroundColor(Color.Theme.textSecondary)
-              .lineLimit(1)
+              .padding(.horizontal, 4)
+              .padding(.vertical, 2)
+              .background(Color.Theme.searchBg)
+              .clipShape(RoundedRectangle(cornerRadius: 2, style: .continuous))
           }
         }
-
-        Spacer()
-
-        // Trust Badge based on real verification data
-        EvolvingTrustBadge(verificationLevel: verificationLevel)
       }
-      .padding(16)
+      .padding(12)
 
       Rectangle()
-        .fill(Color.Theme.divider)
+        .fill(Color.Theme.searchBg)
         .frame(height: 1)
-
-      // Middle Area: Ephemeral Message (Notepad Snippet)
-      if let message = contact.theirEphemeralMessage, !message.isEmpty {
-        HStack(alignment: .top, spacing: 8) {
-          Image(systemName: "quote.opening")
-            .font(.system(size: 12, weight: .bold))
-            .foregroundColor(Color.Theme.primaryBlue)
-            .padding(.top, 2)
-
-          Text(message)
-            .font(.system(size: 14, weight: .medium, design: .default))
-            .foregroundColor(Color.Theme.textPrimary)
-            .lineSpacing(4)
-            .italic()
-            .frame(maxWidth: .infinity, alignment: .leading)
-        }
-        .padding(12)
-        // High contrast yellow/white notepad paper look
-        .background(Color.Theme.warmCream)
-      } else if let notes = contact.notes, !notes.isEmpty {
-        Text(notes)
-          .font(.system(size: 14, design: .monospaced))
-          .foregroundColor(Color.Theme.textSecondary)
-          .padding(16)
-      }
-
-      Rectangle()
-        .fill(Color.Theme.divider)
-        .frame(height: 1)
-
-      // Bottom Area: Terminal Metadata
-      HStack {
-        Text("[\(formatDate(contact.receivedAt))]")
-          .font(.system(size: 10, weight: .bold, design: .monospaced))
-          .foregroundColor(Color.Theme.textTertiary)
-
-        Spacer()
-
-        Text("[ \(contact.source.uppercased()) ]")
-          .font(.system(size: 10, weight: .bold, design: .monospaced))
-          .foregroundColor(hasVerifiedExchange ? Color.Theme.terminalGreen : Color.Theme.textTertiary)
-      }
-      .padding(.horizontal, 16)
-      .padding(.vertical, 12)
-      .background(Color.Theme.searchBg)
     }
-    .background(Color.Theme.cardBg)
-    .overlay(
-      Rectangle().stroke(Color.Theme.divider, lineWidth: 1)
-    )
-    .padding(.horizontal, 16)
-    .padding(.vertical, 8)
+    .contentShape(Rectangle())
   }
 
-  private static let dateFormatter: DateFormatter = {
-    let f = DateFormatter()
-    f.dateFormat = "yy.MM.dd HH:mm"
-    return f
-  }()
+  // MARK: - Subviews
 
-  private func formatDate(_ date: Date) -> String {
-    Self.dateFormatter.string(from: date)
+  private var avatar: some View {
+    ZStack {
+      Circle()
+        .fill(Color.Theme.searchBg)
+      Image(systemName: "person.crop.circle.fill")
+        .font(.system(size: 38))
+        .foregroundColor(Color.Theme.textTertiary)
+    }
+    .frame(width: 38, height: 38)
+    .overlay(
+      Circle()
+        .stroke(Color.Theme.searchBg, lineWidth: 0.5)
+    )
+  }
+
+  private var dateColumn: some View {
+    VStack(alignment: .trailing, spacing: 4) {
+      HStack(spacing: 4) {
+        Circle()
+          .fill(Color.Theme.divider)
+          .frame(width: 10, height: 10)
+        Text(Self.dateFormatter.string(from: contact.receivedAt))
+          .font(.system(size: 10))
+          .foregroundColor(Color.Theme.textSecondary)
+      }
+    }
   }
 }
+
+// MARK: - Legacy badge (still referenced by PersonDetailView)
 
 /// A badge that reflects the real verification level based on cryptographic proof data.
 /// Level 0: No proof — no badge shown.

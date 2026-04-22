@@ -9,79 +9,72 @@ enum MainAppTab: Int, CaseIterable {
 
   var title: String {
     switch self {
-    case .people: "People"
+    case .people: "people"
     case .share: "Share"
-    case .me: "Me"
+    case .me: "me"
     }
   }
 
   var systemImage: String {
     switch self {
-    case .people: "person.2.fill"
-    case .share: "dot.radiowaves.up.forward"
-    case .me: "person.text.rectangle"
+    case .people: "person"
+    case .share: "capsule"
+    case .me: "record.circle"
     }
   }
 }
-// MARK: - Peaceful Floating Tab Bar (1.1.1 Era)
+
+// MARK: - Flat bottom tab bar (matches Pencil design nh8OZ)
 
 struct CustomFloatingTabBar: View {
   @Binding var selectedTab: Int
-  @Environment(\.colorScheme) private var colorScheme
 
   var body: some View {
-    HStack(spacing: 0) {
-      ForEach(MainAppTab.allCases, id: \.rawValue) { tab in
-        PeacefulTabButton(
-          systemName: tab.systemImage,
-          title: tab.title,
-          isSelected: selectedTab == tab.rawValue,
-          action: { selectedTab = tab.rawValue }
-        )
+    VStack(spacing: 0) {
+      Rectangle()
+        .fill(Color.Theme.divider)
+        .frame(height: 0.5)
+
+      HStack(alignment: .center, spacing: 0) {
+        ForEach(MainAppTab.allCases, id: \.rawValue) { tab in
+          FlatTabButton(
+            tab: tab,
+            isSelected: selectedTab == tab.rawValue,
+            action: { selectedTab = tab.rawValue }
+          )
+        }
       }
+      .padding(.horizontal, 16)
+      .padding(.top, 16)
+      .padding(.bottom, 50)
+      .background(Color.Theme.pageBg)
     }
-    .padding(.horizontal, 24)
-    .padding(.vertical, 12)
-    .background(
-      Capsule()
-        .fill(Color.Theme.cardSurface(for: colorScheme))
-        .overlay(
-          Capsule()
-            .stroke(Color.Theme.cardBorder(for: colorScheme), lineWidth: 1)
-        )
-        .shadow(color: Color.Theme.dustyMauve.opacity(0.12), radius: 16, x: 0, y: 6)
-    )
-    .padding(.horizontal, 32)
   }
 }
 
-// MARK: - Peaceful Tab Button
+// MARK: - Flat Tab Button
 
-struct PeacefulTabButton: View {
-  let systemName: String
-  let title: String
+private struct FlatTabButton: View {
+  let tab: MainAppTab
   let isSelected: Bool
   let action: () -> Void
 
   var body: some View {
-    Button(action: {
+    Button {
       if !isSelected {
         HapticFeedbackManager.shared.softImpact()
-        withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
-          action()
-        }
+        action()
       }
-    }) {
-      VStack(spacing: 4) {
-        Image(systemName: isSelected ? systemName : systemName.replacingOccurrences(of: ".fill", with: ""))
-          .font(.system(size: 22, weight: .medium))
-          .foregroundColor(isSelected ? Color.Theme.primaryBlue : Color.Theme.textTertiary)
+    } label: {
+      VStack(spacing: 3) {
+        Image(systemName: tab.systemImage)
+          .font(.system(size: 20, weight: .regular))
           .frame(height: 24)
 
-        Text(title)
-          .font(.system(size: 11, weight: isSelected ? .semibold : .medium))
-          .foregroundColor(isSelected ? Color.Theme.textPrimary : Color.Theme.textTertiary)
+        Text(tab.title)
+          .font(.system(size: 11, weight: .medium))
       }
+      .foregroundColor(isSelected ? Color.Theme.textPrimary : Color.Theme.textTertiary)
       .frame(maxWidth: .infinity)
       .contentShape(Rectangle())
     }

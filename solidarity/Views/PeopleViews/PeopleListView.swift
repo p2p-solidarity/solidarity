@@ -5,6 +5,7 @@ struct PeopleListView: View {
   @EnvironmentObject private var identityDataStore: IdentityDataStore
   @ObservedObject private var devMode = DeveloperModeManager.shared
   @StateObject private var contactRepository = ContactRepository.shared
+
   @State private var searchQuery = ""
   @State private var showingExchangeFlow = false
   @State private var showingVCFPicker = false
@@ -15,8 +16,9 @@ struct PeopleListView: View {
 
   private var filteredContacts: [ContactEntity] {
     let all = identityDataStore.contacts.sorted { $0.receivedAt > $1.receivedAt }
-    guard !searchQuery.isEmpty else { return all }
-    let q = searchQuery.lowercased()
+    let trimmed = searchQuery.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard !trimmed.isEmpty else { return all }
+    let q = trimmed.lowercased()
     return all.filter {
       $0.name.lowercased().contains(q)
         || ($0.company?.lowercased().contains(q) ?? false)
@@ -24,77 +26,32 @@ struct PeopleListView: View {
     }
   }
 
-  private var verifiedContacts: [ContactEntity] {
-    filteredContacts.filter { $0.verificationStatus == VerificationStatus.verified.rawValue }
-  }
-
-  private var importedContacts: [ContactEntity] {
-    filteredContacts.filter {
-      $0.verificationStatus != VerificationStatus.verified.rawValue
-        && isImportedSource($0.source)
-    }
-  }
-
-  private var others: [ContactEntity] {
-    filteredContacts.filter {
-      $0.verificationStatus != VerificationStatus.verified.rawValue
-        && !isImportedSource($0.source)
-    }
-  }
-
   var body: some View {
     NavigationStack {
       ZStack {
         Color.Theme.pageBg.ignoresSafeArea()
-        if filteredContacts.isEmpty {
+
+        VStack(spacing: 0) {
+          header
+
           if identityDataStore.contacts.isEmpty {
             emptyState
-          } else {
+          } else if filteredContacts.isEmpty {
+            searchField
+              .padding(.horizontal, 16)
+              .padding(.bottom, 12)
             emptySearchState
-          }
-        } else if verifiedContacts.isEmpty && !importedContacts.isEmpty {
-          // [PL-1v] Has imported contacts but no verified
-          listContent
-        } else {
-          listContent
-        }
-      }
-      .navigationTitle("People")
-      .navigationBarTitleDisplayMode(.inline)
-      .toolbar {
-        ToolbarItem(placement: .navigationBarTrailing) {
-          Menu {
-            if devMode.isDeveloperMode {
-              Button {
-                showingExchangeFlow = true
-              } label: {
-                Label("Radar Exchange", systemImage: "antenna.radiowaves.left.and.right")
-              }
-            }
-
-            Button {
-              showingContactPicker = true
-            } label: {
-              Label("Import from Phone", systemImage: "person.crop.circle.badge.plus")
-            }
-
-            Button {
-              showingVCFPicker = true
-            } label: {
-              Label("Import VCF File", systemImage: "doc.badge.plus")
-            }
-          } label: {
-            Image(systemName: "plus.circle")
-              .font(.system(size: 20))
-              .foregroundColor(Color.Theme.textPrimary)
+          } else {
+            searchField
+              .padding(.horizontal, 16)
+              .padding(.bottom, 12)
+            listContent
           }
         }
       }
-      .searchable(text: $searchQuery, prompt: "Search")
+      .navigationBarHidden(true)
     }
-    .onAppear {
-      identityDataStore.refreshAll()
-    }
+    .onAppear { identityDataStore.refreshAll() }
     .onReceive(contactRepository.$pendingMergeProposal) { proposal in
       showingMergeConfirm = proposal != nil
     }
@@ -158,85 +115,149 @@ struct PeopleListView: View {
     }
   }
 
-  // MARK: - Empty State
+  // MARK: - Header
 
-  private var emptyState: some View {
-    VStack(spacing: 16) {
+  private var header: some View {
+    HStack {
+      Text("people list")
+        .font(.system(size: 18))
+        .foregroundColor(Color.Theme.textPrimary)
+
       Spacer()
 
-      VStack(spacing: 12) {
-        Image(systemName: "person.2")
-          .font(.system(size: 48))
-          .foregroundColor(Color.Theme.textTertiary)
-
-        Text("No contacts yet")
-          .font(.system(size: 16, weight: .semibold))
-          .foregroundColor(Color.Theme.textPrimary)
-
-        Text("Add via proximity exchange or contact import")
-          .font(.system(size: 14))
-          .foregroundColor(Color.Theme.textSecondary)
-          .multilineTextAlignment(.center)
-      }
-      .padding(.top, 20)
-
-      VStack(spacing: 10) {
+      Menu {
         if devMode.isDeveloperMode {
-          Button("Radar Exchange") {
+          Button {
             showingExchangeFlow = true
+          } label: {
+            Label("Radar Exchange", systemImage: "antenna.radiowaves.left.and.right")
           }
-          .buttonStyle(ThemedPrimaryButtonStyle())
         }
 
-        Button("Import Phone Contacts") {
+        Button {
           showingContactPicker = true
+        } label: {
+          Label("Import from Phone", systemImage: "person.crop.circle.badge.plus")
         }
-        .buttonStyle(ThemedSecondaryButtonStyle())
-      }
-      .padding(.horizontal, 40)
 
-      Spacer()
+        Button {
+          showingVCFPicker = true
+        } label: {
+          Label("Import VCF File", systemImage: "doc.badge.plus")
+        }
+      } label: {
+        Image(systemName: "plus")
+          .font(.system(size: 18))
+          .foregroundColor(Color.Theme.textPrimary)
+          .frame(width: 24, height: 24)
+      }
     }
-    .padding(16)
+    .padding(.horizontal, 16)
+    .frame(height: 56)
   }
 
-  // MARK: - List Content
+  // MARK: - Search field
+
+  private var searchField: some View {
+    HStack(spacing: 8) {
+      Image(systemName: "magnifyingglass")
+        .font(.system(size: 14))
+        .foregroundColor(Color.Theme.textSecondary)
+
+      ZStack(alignment: .leading) {
+        if searchQuery.isEmpty {
+          Text("搜索")
+            .font(.system(size: 14))
+            .foregroundColor(Color.Theme.textSecondary)
+        }
+        TextField("", text: $searchQuery)
+          .font(.system(size: 14))
+          .foregroundColor(Color.Theme.textPrimary)
+          .textInputAutocapitalization(.never)
+          .autocorrectionDisabled()
+      }
+    }
+    .padding(.horizontal, 12)
+    .padding(.vertical, 10)
+    .overlay(
+      RoundedRectangle(cornerRadius: 2, style: .continuous)
+        .stroke(Color.Theme.textPrimary, lineWidth: 0.5)
+    )
+  }
+
+  // MARK: - Empty states
+
+  private var emptyState: some View {
+    VStack(spacing: 0) {
+      Spacer()
+
+      PaperStackIllustration()
+        .frame(width: 214, height: 214)
+        .padding(.bottom, 32)
+
+      Text("你的聯絡人通訊錄是空的")
+        .font(.system(size: 14))
+        .foregroundColor(Color.Theme.textSecondary)
+        .multilineTextAlignment(.center)
+
+      VStack(spacing: 8) {
+        Button {
+          showingContactPicker = true
+        } label: {
+          Text("匯入手機通訊錄")
+            .font(.system(size: 15))
+            .foregroundColor(.white)
+            .padding(.horizontal, 20)
+            .padding(.vertical, 12)
+            .frame(minWidth: 200)
+            .background(Color.Theme.textPrimary)
+            .clipShape(RoundedRectangle(cornerRadius: 2, style: .continuous))
+        }
+
+        // TODO: wire up a dedicated manual-add flow when available.
+        Button {
+          showingContactPicker = true
+        } label: {
+          Text("手動新增")
+            .font(.system(size: 15))
+            .foregroundColor(Color.Theme.textPrimary)
+            .padding(.horizontal, 20)
+            .padding(.vertical, 12)
+        }
+      }
+      .padding(.top, 16)
+
+      Spacer()
+      Spacer()
+    }
+    .frame(maxWidth: .infinity)
+  }
+
+  private var emptySearchState: some View {
+    VStack(spacing: 12) {
+      Spacer()
+      Image(systemName: "magnifyingglass")
+        .font(.system(size: 36))
+        .foregroundColor(Color.Theme.textTertiary)
+      Text("No results for \"\(searchQuery)\"")
+        .font(.system(size: 14))
+        .foregroundColor(Color.Theme.textSecondary)
+      Spacer()
+    }
+    .frame(maxWidth: .infinity)
+  }
+
+  // MARK: - List
 
   private var listContent: some View {
     ScrollView {
-      VStack(alignment: .leading, spacing: 12) {
-        if !verifiedContacts.isEmpty {
-          sectionTitle(String(localized: "Verified"))
-          ForEach(verifiedContacts, id: \.id) { contact in
-            contactRow(contact)
-          }
-        }
-
-        if !importedContacts.isEmpty {
-          sectionTitle(String(localized: "Contacts"))
-          ForEach(importedContacts, id: \.id) { contact in
-            contactRow(contact)
-          }
-        }
-
-        if !others.isEmpty {
-          sectionTitle(String(localized: "Pending / Unverified"))
-          ForEach(others, id: \.id) { contact in
-            contactRow(contact)
-          }
+      LazyVStack(spacing: 0) {
+        ForEach(filteredContacts, id: \.id) { contact in
+          contactRow(contact)
         }
       }
-      .padding(16)
       .padding(.bottom, 90)
     }
-  }
-
-  private func sectionTitle(_ value: String) -> some View {
-    Text("— " + value.uppercased())
-      .font(.system(size: 12, weight: .bold, design: .monospaced))
-      .foregroundColor(Color.Theme.textSecondary)
-      .padding(.horizontal, 16)
-      .padding(.top, 8)
   }
 
   private func contactRow(_ contact: ContactEntity) -> some View {
@@ -254,19 +275,6 @@ struct PeopleListView: View {
       } label: {
         Label("Delete", systemImage: "trash")
       }
-    }
-  }
-
-  private var emptySearchState: some View {
-    VStack(spacing: 12) {
-      Spacer()
-      Image(systemName: "magnifyingglass")
-        .font(.system(size: 36))
-        .foregroundColor(Color.Theme.textTertiary)
-      Text("No results for \"\(searchQuery)\"")
-        .font(.system(size: 14))
-        .foregroundColor(Color.Theme.textSecondary)
-      Spacer()
     }
   }
 
@@ -312,10 +320,5 @@ struct PeopleListView: View {
         duration: 4.0
       )
     }
-  }
-
-  private func isImportedSource(_ source: String) -> Bool {
-    let normalized = source.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-    return normalized == "imported" || normalized == ContactSource.manual.rawValue.lowercased()
   }
 }
