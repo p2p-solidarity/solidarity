@@ -144,10 +144,13 @@ struct OIDCServiceParsingTests {
 struct OIDCServiceResponseTests {
   @Test func buildResponseURLContainsVPToken() async throws {
     let service = OIDCService()
+    // direct_post (default) carries response_uri; redirect_uri is for the
+    // fragment / query modes. Matching the spec's exclusivity rule.
     let request = OIDCService.PresentationRequest(
       id: "req-1", state: "state-abc", nonce: "nonce-xyz",
       clientId: "did:key:z6MkTest",
-      redirectUri: "https://verifier.example.com/callback",
+      redirectUri: "",
+      responseUri: "https://verifier.example.com/callback",
       responseType: "vp_token",
       presentationDefinition: OIDCService.PresentationRequest.PresentationDefinition(
         id: "default", inputDescriptors: []

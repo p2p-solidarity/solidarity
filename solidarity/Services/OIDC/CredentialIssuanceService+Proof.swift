@@ -23,12 +23,18 @@ extension CredentialIssuanceService {
         ?? []
 
       var preAuthCode: String?
-      var pinRequired = false
+      var txCode: TxCodeSpec?
 
       if let grants = json["grants"] as? [String: Any] {
         let preAuthGrant = grants["urn:ietf:params:oauth:grant-type:pre-authorized_code"] as? [String: Any]
         preAuthCode = preAuthGrant?["pre-authorized_code"] as? String
-        pinRequired = preAuthGrant?["user_pin_required"] as? Bool ?? false
+        // OID4VCI final §4.1.1 introduces `tx_code` (object). Older drafts
+        // sent `user_pin_required: true`; promote that to a default spec.
+        if let txCodeValue = preAuthGrant?["tx_code"] {
+          txCode = TxCodeSpec.parse(txCodeValue)
+        } else if let legacy = preAuthGrant?["user_pin_required"] as? Bool, legacy {
+          txCode = .default
+        }
       }
 
       Self.logger.info("Parsed offer from \(issuer), \(configIds.count) credential(s)")
@@ -36,7 +42,7 @@ extension CredentialIssuanceService {
         credentialIssuer: issuer,
         credentialConfigurationIds: configIds,
         preAuthorizedCode: preAuthCode,
-        userPinRequired: pinRequired
+        txCode: txCode
       ))
     } catch {
       return .failure(.invalidData("Failed to decode credential offer JSON: \(error.localizedDescription)"))
@@ -112,11 +118,31 @@ extension CredentialIssuanceService {
     switch vcService.importPresentedCredential(jwt: result.credentialJWT) {
     case .success(let imported):
       var stored = imported.storedCredential
-      stored.status = .verified
-      stored.lastVerifiedAt = Date()
-      if case .success = VCLibrary.shared.update(stored) {
-        Self.logger.info("Issued credential stored and verified")
+
+      // Real signature verification — previously this method blindly marked
+      // every imported credential as `.verified`. Now we only upgrade the
+      // status if ProofVerifierService can prove the issuer signature.
+      let verifier = ProofVerifierService.shared
+      if let decoded = verifier.decodeCompactJWT(result.credentialJWT) {
+        switch verifier.verifyJWTSignature(
+          jwt: result.credentialJWT,
+          header: decoded.header,
+          payload: decoded.payload
+        ) {
+        case .success(let detail):
+          stored.status = .verified
+          stored.lastVerifiedAt = Date()
+          Self.logger.info("Issued credential verified (\(detail))")
+        case .failure(let reason):
+          stored.status = .unverified
+          Self.logger.error("Issued credential signature unverified: \(reason)")
+        }
+      } else {
+        stored.status = .unverified
+        Self.logger.error("Issued credential JWT could not be decoded for verification")
       }
+
+      _ = VCLibrary.shared.update(stored)
       return .success(stored)
     case .failure(let error):
       Self.logger.error("Failed to import issued credential: \(error.localizedDescription)")

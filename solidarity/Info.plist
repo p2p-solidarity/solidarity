@@ -72,6 +72,8 @@
 	</array>
 	<key>NFCReaderUsageDescription</key>
 	<string>Read your passport's NFC chip to create a verified identity credential.</string>
+	<key>NSFaceIDUsageDescription</key>
+	<string>Solid(ar)ity uses Face ID to protect your identity keys and authorize sensitive actions like issuing credentials, presenting proofs, and exchanging contacts.</string>
 	<key>NSPhotoLibraryUsageDescription</key>
 	<string>This app needs access to photo library to save QR codes and business card images.</string>
 	<key>UIApplicationSceneManifest</key>

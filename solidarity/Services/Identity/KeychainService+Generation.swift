@@ -145,8 +145,8 @@ extension KeychainService {
             : .failure(.keyManagementError("Duplicate simulator key exists but could not load it"))
         } else {
           print("[KeychainService] Failed to store key: \(statusDescription(status)), using in-memory key")
-          // Store the key in a static variable as fallback
-          Self.simulatorInMemoryKey = key
+          // Store per-alias as fallback so pairwise RP instances don't collide.
+          Self.simulatorInMemoryKeys[alias] = key
           cachePublicJWK(from: key)
           return .success(())
         }
@@ -163,7 +163,7 @@ extension KeychainService {
 
       if let key = SecKeyCreateRandomKey(attributes as CFDictionary, nil) {
         print("[KeychainService] Successfully created in-memory key")
-        Self.simulatorInMemoryKey = key
+        Self.simulatorInMemoryKeys[alias] = key
         cachePublicJWK(from: key)
         return .success(())
       }
@@ -299,8 +299,9 @@ extension KeychainService {
             : .failure(.keyManagementError("Duplicate session key exists but could not load it"))
         } else {
           print("[KeychainService] Failed to store session key: \(statusDescription(addStatus)), using in-memory key")
-          // Store the key in a static variable as fallback
-          Self.deviceInMemoryKey = sessionKey
+          // Scope the fallback by alias so pairwise RP keys never collapse
+          // onto the master key or each other.
+          Self.deviceInMemoryKeys[alias] = sessionKey
           cachePublicJWK(from: sessionKey)
           return .success(())
         }
@@ -310,7 +311,7 @@ extension KeychainService {
       sessionAttributes.removeValue(forKey: kSecAttrApplicationTag as String)
       if let inMemoryKey = SecKeyCreateRandomKey(sessionAttributes as CFDictionary, nil) {
         print("[KeychainService] Successfully created in-memory key as fallback")
-        Self.deviceInMemoryKey = inMemoryKey
+        Self.deviceInMemoryKeys[alias] = inMemoryKey
         cachePublicJWK(from: inMemoryKey)
         return .success(())
       }

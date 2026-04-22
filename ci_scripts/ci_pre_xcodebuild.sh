@@ -5,15 +5,17 @@ set -eu
 # 1) Inject cloud xcconfig
 # 2) Build a generic UniFFI shim modulemap from all *FFI.h headers
 # 3) Verify Semaphore binary baseline
-# 4) Sync OpenPassport circuit when available
+#
+# OpenPassport circuit is committed in-repo as openpassport_disclosure.acir —
+# do NOT resync from the passport-noir package checkout; its disclosure.json
+# is incompatible with the linked Barretenberg version and caused Cloud-build
+# native prover crashes (local Release build with repo file runs fine).
 
 DERIVED_DATA="${CI_DERIVED_DATA_PATH:-/Volumes/workspace/DerivedData}"
 WORKSPACE_ROOT="${CI_WORKSPACE:-/Volumes/workspace}"
 REPO_ROOT="${WORKSPACE_ROOT}/repository"
 XCLOUD_XCCONFIG_PATH="${REPO_ROOT}/ci_scripts/cloud-overrides.xcconfig"
 FFI_SHIM_DIR="${REPO_ROOT}/ci_scripts/semaphore_ffi_shim"
-PASSPORT_CIRCUIT_SOURCE="${DERIVED_DATA}/SourcePackages/checkouts/passport-noir/circuits/target/disclosure.json"
-PASSPORT_CIRCUIT_TARGET="${REPO_ROOT}/solidarity/Resources/openpassport_disclosure.json"
 MIN_SEMAPHORE_LIB_SIZE_BYTES="${MIN_SEMAPHORE_LIB_SIZE_BYTES:-1000000}"
 
 log() {
@@ -108,17 +110,6 @@ EOF
   log "Prepared UniFFI shim with ${header_count} module(s)."
 }
 
-sync_openpassport_circuit() {
-  if [ -f "${PASSPORT_CIRCUIT_SOURCE}" ]; then
-    mkdir -p "$(dirname "${PASSPORT_CIRCUIT_TARGET}")"
-    cp -f "${PASSPORT_CIRCUIT_SOURCE}" "${PASSPORT_CIRCUIT_TARGET}"
-    log "Synced OpenPassport disclosure circuit."
-  else
-    log "OpenPassport disclosure circuit not found; using repo version."
-  fi
-}
-
 setup_cloud_xcconfig
 validate_semaphore_binary
 prepare_ffi_shim
-sync_openpassport_circuit

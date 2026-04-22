@@ -23,10 +23,15 @@ final class KeychainService {
   /// Serializes key mutation operations to prevent concurrent duplicate generation.
   static let keyLock = NSRecursiveLock()
 
+  // In-memory key fallback keyed by alias. A single shared slot collapses
+  // every `KeychainService` instance — including per-RP pairwise instances —
+  // onto one key, which silently defeats pairwise isolation when the master
+  // key generation path writes into the slot. Keep one entry per alias so
+  // each RP's fallback key is scoped to its own `KeychainService`.
   #if targetEnvironment(simulator)
-    static var simulatorInMemoryKey: SecKey?
+    static var simulatorInMemoryKeys: [KeyAlias: SecKey] = [:]
   #else
-    static var deviceInMemoryKey: SecKey?
+    static var deviceInMemoryKeys: [KeyAlias: SecKey] = [:]
   #endif
 
   let alias: KeyAlias
@@ -107,13 +112,23 @@ final class KeychainService {
   }
 
   /// Creates an authentication context ready for Keychain access.
+  ///
+  /// Prefers biometrics-only auth (Face ID / Touch ID). If no biometric is
+  /// enrolled we fall back to the full `authenticationPolicy` so the user
+  /// isn't locked out on iPads / post-lockout / unenrolled devices.
   func authenticationContext(reason: String? = nil) -> CardResult<LAContext> {
     let context = LAContext()
     context.localizedCancelTitle = "Cancel"
-    context.localizedFallbackTitle = "Use Passcode"
+
+    let effectivePolicy = Self.preferredBiometricPolicy(on: context, fallbackTo: authenticationPolicy)
+    if effectivePolicy == .deviceOwnerAuthentication {
+      // Only surface the "Use Passcode" button when passcode is the actual
+      // fallback path — in biometrics-only mode there is no such button.
+      context.localizedFallbackTitle = "Use Passcode"
+    }
 
     var evaluationError: NSError?
-    guard context.canEvaluatePolicy(authenticationPolicy, error: &evaluationError) else {
+    guard context.canEvaluatePolicy(effectivePolicy, error: &evaluationError) else {
       let message = evaluationError?.localizedDescription ?? "Biometric authentication unavailable"
       return .failure(.keyManagementError(message))
     }
@@ -124,6 +139,13 @@ final class KeychainService {
     }
 
     return .success(context)
+  }
+
+  static func preferredBiometricPolicy(on context: LAContext, fallbackTo policy: LAPolicy) -> LAPolicy {
+    if context.canEvaluatePolicy(.deviceOwnerAuthenticationWithBiometrics, error: nil) {
+      return .deviceOwnerAuthenticationWithBiometrics
+    }
+    return policy
   }
 
   /// Deletes the signing key from the Keychain.
@@ -193,11 +215,11 @@ final class KeychainService {
 
   /// Checks if a key with our tag exists in the keychain.
   func keyExists() -> Bool {
-    // Check if we have an in-memory key first
+    // Check if we have an in-memory key for *this* alias first
     #if targetEnvironment(simulator)
-      if Self.simulatorInMemoryKey != nil { return true }
+      if Self.simulatorInMemoryKeys[alias] != nil { return true }
     #else
-      if Self.deviceInMemoryKey != nil { return true }
+      if Self.deviceInMemoryKeys[alias] != nil { return true }
     #endif
 
     // Only match private keys — avoids false positives from orphan public keys
@@ -231,8 +253,8 @@ final class KeychainService {
 
   #if targetEnvironment(simulator)
   private func privateKeyForSimulator() -> CardResult<SecKey> {
-    if let inMemoryKey = Self.simulatorInMemoryKey {
-      print("[KeychainService] Using in-memory simulator key")
+    if let inMemoryKey = Self.simulatorInMemoryKeys[alias] {
+      print("[KeychainService] Using in-memory simulator key for alias=\(alias)")
       return .success(inMemoryKey)
     }
 
@@ -244,13 +266,21 @@ final class KeychainService {
     case .failure(let error):
       return .failure(error)
     case .success:
-      if let inMemoryKey = Self.simulatorInMemoryKey { return .success(inMemoryKey) }
+      if let inMemoryKey = Self.simulatorInMemoryKeys[alias] { return .success(inMemoryKey) }
       if let key = fetchSecKey(query: query) { return .success(key) }
       return .failure(.keyManagementError("Key not found after generation"))
     }
   }
   #else
   private func privateKeyForDevice(context: LAContext?) -> CardResult<SecKey> {
+    // Check in-memory key for *this* alias first (matches simulator path).
+    // NEVER return the bare static slot: doing so collapses every per-RP
+    // `KeychainService` onto the first alias that populated the fallback.
+    if let inMemoryKey = Self.deviceInMemoryKeys[alias] {
+      print("[KeychainService] Using in-memory device key for alias=\(alias)")
+      return .success(inMemoryKey)
+    }
+
     var basicQuery = basePrivateKeyQuery()
     basicQuery[kSecAttrKeyType as String] = kSecAttrKeyTypeECSECPrimeRandom
 
@@ -267,7 +297,11 @@ final class KeychainService {
       let authContext = context ?? {
         let ctx = LAContext()
         ctx.touchIDAuthenticationAllowableReuseDuration = 5
-        ctx.localizedFallbackTitle = "Use Passcode"
+        // Biometric-first: omit the "Use Passcode" fallback label unless we
+        // can't enroll biometrics on this device.
+        if !ctx.canEvaluatePolicy(.deviceOwnerAuthenticationWithBiometrics, error: nil) {
+          ctx.localizedFallbackTitle = "Use Passcode"
+        }
         return ctx
       }()
       authQuery[kSecUseAuthenticationContext as String] = authContext

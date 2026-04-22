@@ -22,14 +22,19 @@ final class IdentityDataStore: ObservableObject {
   let modelContainer: ModelContainer
   let modelContext: ModelContext
 
-  private let migrationMarker = "solidarity.identity.swiftdata.migrated.v3"
+  private let migrationMarker = "solidarity.identity.swiftdata.migrated.v4"
   private let refreshSubject = PassthroughSubject<Void, Never>()
   private var refreshCancellable: AnyCancellable?
 
   private init() {
-    // v3 store — isolates from v2 Array<String> materialization bug
-    // (CoreData could not materialize tags/credentialIds). v1 & v2 files
-    // are left on disk; migration from legacy sources reruns via marker.
+    // Keep the v3 store file path so existing passport IdentityCardEntity /
+    // ProvableClaimEntity rows from v1.2.1 survive the upgrade. The schema
+    // change (Array<String> stored columns → Data? + computed accessors) is
+    // additive from SwiftData's perspective: the old `tags` / `metadataTags` /
+    // `credentialIds` columns are simply no longer in the model (lightweight
+    // migration drops them), and the new `*Data` columns are added as nil.
+    // Only the auxiliary tag arrays are lost — all other fields persist.
+    // Marker bumped to v4 so `migrateCredentialsFromLibrary` reruns on upgrade.
     let url = URL.documentsDirectory.appending(path: "SolidarityIdentity_v3.store")
     let configuration = ModelConfiguration(url: url, cloudKitDatabase: .none)
 
@@ -65,7 +70,7 @@ final class IdentityDataStore: ObservableObject {
     }
 
     // Quarantine the broken store and try one fresh on-disk open.
-    print("[IdentityDataStore] v3 store failed to open — quarantining \(fallbackStoreURL.lastPathComponent)")
+    print("[IdentityDataStore] store failed to open — quarantining \(fallbackStoreURL.lastPathComponent)")
     let fm = FileManager.default
     if fm.fileExists(atPath: fallbackStoreURL.path) {
       let quarantine = fallbackStoreURL.deletingLastPathComponent()

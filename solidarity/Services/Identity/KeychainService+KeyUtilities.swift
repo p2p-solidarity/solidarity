@@ -77,9 +77,9 @@ extension KeychainService {
 
   func clearInMemoryKey() {
     #if targetEnvironment(simulator)
-      Self.simulatorInMemoryKey = nil
+      Self.simulatorInMemoryKeys.removeValue(forKey: alias)
     #else
-      Self.deviceInMemoryKey = nil
+      Self.deviceInMemoryKeys.removeValue(forKey: alias)
     #endif
   }
 

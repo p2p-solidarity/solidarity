@@ -60,6 +60,11 @@ class IdentityImportHelper {
     }
 
     if trimmed.hasPrefix("openid-vc://") || trimmed.hasPrefix("openid://") {
+      // Import-time parsing intentionally uses the sync surface: this path
+      // is for pasted/imported payloads that are expected to carry the
+      // request inline. Requests delivered via `request_uri` need a network
+      // fetch and go through QRCodeScanService / ProofPresentationFlowSheet,
+      // which call parseRequestAsync on the live scan path.
       return oidcService.parseRequest(from: trimmed)
         .map { .presentationRequest($0) }
     }

@@ -182,7 +182,8 @@ final class PassportPipelineService {
     let openPassportEnabled = MoproProofService.isAvailable
 
     let hasMasterList = Bundle.main.url(forResource: "masterList", withExtension: "pem") != nil
-    let hasCircuit = Bundle.main.path(forResource: "openpassport_disclosure", ofType: "json") != nil
+    let hasCircuit = Bundle.main.path(forResource: "openpassport_disclosure", ofType: "acir") != nil
+      || Bundle.main.path(forResource: "openpassport_disclosure", ofType: "json") != nil
       || Bundle.main.path(forResource: "disclosure", ofType: "json") != nil
     let hasSRS = Bundle.main.path(forResource: "openpassport_srs", ofType: "bin") != nil
 

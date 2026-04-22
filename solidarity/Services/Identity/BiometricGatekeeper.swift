@@ -33,14 +33,23 @@ final class BiometricGatekeeper {
 
   func authorize(_ action: SensitiveAction, completion: @escaping (CardResult<Void>) -> Void) {
     let context = LAContext()
+
+    // Prefer biometrics-only (Face ID / Touch ID) — no "Use Passcode" button.
+    // If the device has no enrolled biometric, falls back to passcode auth so
+    // the user isn't locked out of sensitive flows.
+    let policy: LAPolicy =
+      context.canEvaluatePolicy(.deviceOwnerAuthenticationWithBiometrics, error: nil)
+        ? .deviceOwnerAuthenticationWithBiometrics
+        : .deviceOwnerAuthentication
+
     var evaluationError: NSError?
-    guard context.canEvaluatePolicy(.deviceOwnerAuthentication, error: &evaluationError) else {
+    guard context.canEvaluatePolicy(policy, error: &evaluationError) else {
       let message = evaluationError?.localizedDescription ?? "Biometric authentication is unavailable."
       completion(.failure(.keyManagementError(message)))
       return
     }
 
-    context.evaluatePolicy(.deviceOwnerAuthentication, localizedReason: action.prompt) { success, error in
+    context.evaluatePolicy(policy, localizedReason: action.prompt) { success, error in
       DispatchQueue.main.async {
         if success {
           completion(.success(()))

@@ -254,20 +254,30 @@ extension QRCodeScanService {
   }
 
   func handleOIDCRequest(_ data: String, route: ScanRoute) {
-    switch oidcService.parseRequest(from: data) {
-    case .failure(let error):
-      emitOutcome(.failure(error))
-    case .success:
-      emitOutcome(
-        .success(
-          ScanOutcome(
-            card: nil,
-            verificationStatus: .pending,
-            sealedRoute: nil,
-            route: route
+    // OID4VP 1.0 lets the verifier replace query-string parameters with a
+    // remote Request Object (`request_uri`) or an inline signed JWT
+    // (`request`). parseRequestAsync resolves both before falling back to
+    // local query parsing, so we need the async entry point here.
+    Task { [weak self] in
+      guard let self else { return }
+      let parseResult = await self.oidcService.parseRequestAsync(from: data)
+      await MainActor.run {
+        switch parseResult {
+        case .failure(let error):
+          self.emitOutcome(.failure(error))
+        case .success:
+          self.emitOutcome(
+            .success(
+              ScanOutcome(
+                card: nil,
+                verificationStatus: .pending,
+                sealedRoute: nil,
+                route: route
+              )
+            )
           )
-        )
-      )
+        }
+      }
     }
   }
 

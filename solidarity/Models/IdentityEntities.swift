@@ -14,7 +14,7 @@ final class ContactEntity {
   var verificationStatus: String
   var receivedAt: Date
   var lastInteraction: Date?
-  var tags: [String]
+  var tagsData: Data?
   var notes: String?
 
   var sealedRoute: String?
@@ -39,7 +39,28 @@ final class ContactEntity {
   // (VCLibrary.StoredCredential.id or IdentityCardEntity.id) that back
   // any verified claim about this contact. Read verified fields via
   // VerifiedClaimIndex, not the raw name/email/phone columns.
-  var credentialIds: [String] = []
+  var credentialIdsData: Data?
+
+  // MARK: - Computed array accessors (avoids CoreData Array<String> materialization bug)
+
+  var tags: [String] {
+    get { Self.decodeStringArray(tagsData) }
+    set { tagsData = Self.encodeStringArray(newValue) }
+  }
+
+  var credentialIds: [String] {
+    get { Self.decodeStringArray(credentialIdsData) }
+    set { credentialIdsData = Self.encodeStringArray(newValue) }
+  }
+
+  private static func decodeStringArray(_ data: Data?) -> [String] {
+    guard let data else { return [] }
+    return (try? JSONDecoder().decode([String].self, from: data)) ?? []
+  }
+
+  private static func encodeStringArray(_ array: [String]) -> Data? {
+    try? JSONEncoder().encode(array)
+  }
 
   init(
     id: String = UUID().uuidString,
@@ -80,7 +101,7 @@ final class ContactEntity {
     self.verificationStatus = verificationStatus
     self.receivedAt = receivedAt
     self.lastInteraction = lastInteraction
-    self.tags = tags
+    self.tagsData = Self.encodeStringArray(tags)
     self.notes = notes
     self.sealedRoute = sealedRoute
     self.pubKey = pubKey
@@ -94,7 +115,7 @@ final class ContactEntity {
     self.graphExportEdgeId = graphExportEdgeId
     self.graphCredentialRef = graphCredentialRef
     self.commonFriendsHandshakeToken = commonFriendsHandshakeToken
-    self.credentialIds = credentialIds
+    self.credentialIdsData = Self.encodeStringArray(credentialIds)
   }
 }
 
@@ -112,9 +133,25 @@ final class IdentityCardEntity {
   var status: String
   var sourceReference: String?
   var rawCredentialJWT: String?
-  var metadataTags: [String]
+  var metadataTagsData: Data?
   var createdAt: Date
   var updatedAt: Date
+
+  // MARK: - Computed array accessor (avoids CoreData Array<String> materialization bug)
+
+  var metadataTags: [String] {
+    get { Self.decodeStringArray(metadataTagsData) }
+    set { metadataTagsData = Self.encodeStringArray(newValue) }
+  }
+
+  private static func decodeStringArray(_ data: Data?) -> [String] {
+    guard let data else { return [] }
+    return (try? JSONDecoder().decode([String].self, from: data)) ?? []
+  }
+
+  private static func encodeStringArray(_ array: [String]) -> Data? {
+    try? JSONEncoder().encode(array)
+  }
 
   init(
     id: String = UUID().uuidString,
@@ -145,7 +182,7 @@ final class IdentityCardEntity {
     self.status = status
     self.sourceReference = sourceReference
     self.rawCredentialJWT = rawCredentialJWT
-    self.metadataTags = metadataTags
+    self.metadataTagsData = Self.encodeStringArray(metadataTags)
     self.createdAt = createdAt
     self.updatedAt = updatedAt
   }

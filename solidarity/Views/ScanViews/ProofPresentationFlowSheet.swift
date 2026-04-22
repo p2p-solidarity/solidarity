@@ -7,6 +7,16 @@ struct ProofPresentationFlowSheet: View {
     case submitted
   }
 
+  /// Explicit lifecycle for request parsing. Without this, a failed async
+  /// parse left `parsedRequest == nil` and the submit path silently
+  /// short-circuited into a fake "submitted" state. Surfacing `.failed`
+  /// forces the UI to show the real parse error instead.
+  enum ParseState: Equatable {
+    case loading
+    case ready
+    case failed(String)
+  }
+
   let requestPayload: String
   @Environment(\.dismiss) private var dismiss
   @State private var step: Step = .review
@@ -15,9 +25,11 @@ struct ProofPresentationFlowSheet: View {
   @State private var showingAlert = false
   @State private var alertMessage = ""
   @State private var parsedRequest: OIDCService.PresentationRequest?
+  @State private var parseState: ParseState = .loading
 
   private var verifierDomain: String {
-    if let uri = parsedRequest?.redirectUri, let host = URL(string: uri)?.host {
+    if let request = parsedRequest,
+       let host = URL(string: request.effectiveResponseTarget)?.host {
       return host
     }
     return OIDCService.verifierDomain(from: requestPayload)
@@ -126,9 +138,21 @@ struct ProofPresentationFlowSheet: View {
       .background(Color.Theme.searchBg)
       .overlay(Rectangle().stroke(Color.Theme.divider, lineWidth: 1))
 
-      Button("Sign & Submit") { submit() }
+      Button(submitButtonTitle) { submit() }
         .buttonStyle(ThemedPrimaryButtonStyle())
-        .disabled(isWorking)
+        .disabled(isWorking || parseState != .ready)
+    }
+  }
+
+  private var submitButtonTitle: String {
+    switch parseState {
+    case .loading: return String(localized: "Loading request…")
+    case .failed: return String(localized: "Request invalid")
+    case .ready:
+      if parsedRequest?.isSIOPIdTokenOnly == true {
+        return String(localized: "Sign & Submit ID Token")
+      }
+      return String(localized: "Sign & Submit")
     }
   }
 
@@ -187,12 +211,43 @@ struct ProofPresentationFlowSheet: View {
   }
 
   private func parseRequest() {
-    if case .success(let request) = OIDCService.shared.parseRequest(from: requestPayload) {
-      parsedRequest = request
+    parseState = .loading
+    // Use the async parser so request_uri / signed request Request Objects
+    // are resolved before the review screen renders. Sync parseRequest is
+    // kept as a fallback when resolution fails (offline / unreachable).
+    Task {
+      let result = await OIDCService.shared.parseRequestAsync(from: requestPayload)
+      await MainActor.run {
+        switch result {
+        case .success(let request):
+          parsedRequest = request
+          parseState = .ready
+        case .failure(let error):
+          parsedRequest = nil
+          parseState = .failed(error.localizedDescription)
+          alertMessage = error.localizedDescription
+          showingAlert = true
+        }
+      }
     }
   }
 
   private func submit() {
+    // Parse must have succeeded — without the resolved request we have no
+    // nonce / audience / response target. Refuse to fake a "submitted"
+    // state in that case (Codex finding: "解析失敗卻顯示已提交").
+    guard parseState == .ready, let request = parsedRequest else {
+      let reason: String
+      if case .failed(let message) = parseState {
+        reason = message
+      } else {
+        reason = String(localized: "Authorization request is still loading.")
+      }
+      alertMessage = reason
+      showingAlert = true
+      return
+    }
+
     step = .signing
     isWorking = true
 
@@ -204,9 +259,16 @@ struct ProofPresentationFlowSheet: View {
         showingAlert = true
         step = .review
       case .success:
+        if request.isSIOPIdTokenOnly {
+          signAndSubmitIdToken(for: request)
+          return
+        }
+
         let card = CardManager.shared.businessCards.first ?? BusinessCard(name: String(localized: "Solidarity User"))
         let rpDomain: String? = {
-          if let uri = parsedRequest?.redirectUri { return URL(string: uri)?.host }
+          if let host = URL(string: request.effectiveResponseTarget)?.host {
+            return host
+          }
           return OIDCService.verifierDomain(from: requestPayload)
         }()
         // VC payload must be bounded by what the holder has attested to.
@@ -234,8 +296,8 @@ struct ProofPresentationFlowSheet: View {
             vcJwts: jwts,
             options: .init(
               relyingPartyDomain: rpDomain,
-              nonce: parsedRequest?.nonce,
-              audience: parsedRequest?.clientId
+              nonce: request.nonce,
+              audience: request.clientId
             )
           )
 
@@ -246,26 +308,41 @@ struct ProofPresentationFlowSheet: View {
             showingAlert = true
             step = .review
           case .success(let vpToken):
-            submitToVerifier(jwt: vpToken)
+            submitToVerifier(jwt: vpToken, request: request)
           }
         }
       }
     }
   }
 
-  private func submitToVerifier(jwt: String) {
-    guard let request = parsedRequest else {
-      isWorking = false
-      submittedToken = jwt
-      step = .submitted
-      return
+  private func signAndSubmitIdToken(for request: OIDCService.PresentationRequest) {
+    Task {
+      let result = await OIDCService.shared.submitIdToken(request: request)
+      await MainActor.run {
+        isWorking = false
+        switch result {
+        case .success(let idToken):
+          submittedToken = idToken
+          step = .submitted
+        case .failure(let error):
+          alertMessage = error.localizedDescription
+          showingAlert = true
+          step = .review
+        }
+      }
     }
+  }
 
+  private func submitToVerifier(jwt: String, request: OIDCService.PresentationRequest) {
     Task {
       let result = await OIDCService.shared.submitVpToken(
         token: jwt,
-        redirectURI: request.redirectUri,
-        state: request.state.isEmpty ? nil : request.state
+        target: request.effectiveResponseTarget,
+        state: request.state.isEmpty ? nil : request.state,
+        responseMode: request.responseMode,
+        nonce: request.nonce,
+        audience: request.clientId,
+        relyingPartyDomain: URL(string: request.effectiveResponseTarget)?.host
       )
       await MainActor.run {
         isWorking = false

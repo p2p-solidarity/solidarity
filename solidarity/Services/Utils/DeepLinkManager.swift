@@ -183,7 +183,7 @@ class DeepLinkManager: DeepLinkManagerProtocol, ObservableObject {
 
     if components.host == "contact" {
       return handleContactSchemeURL(components)
-    } else if components.host == "oidc", let url = components.url {
+    } else if OIDCService.isCallbackHost(components.host), let url = components.url {
       return handleOIDCCallback(url)
     } else if components.host == "group" && components.path == "/join" {
       return handleGroupJoinURL(components)
