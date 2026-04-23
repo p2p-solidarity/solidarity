@@ -23,15 +23,33 @@ struct TrustGraphContactRow: View {
     return parts.joined(separator: " • ")
   }
 
+  /// Combines the first non-empty tag with the contact's note so a single
+  /// inline chip summarises both context ("在 DID Workshop 認識的") and the
+  /// user's written memo ("聊了 zk 的事"). Falls back to source-based default
+  /// for imported/manual contacts when neither exists.
   private var tagText: String? {
-    if let first = contact.tags.first(where: { !$0.trimmingCharacters(in: .whitespaces).isEmpty }) {
-      return first
+    let tag = contact.tags
+      .first(where: { !$0.trimmingCharacters(in: .whitespaces).isEmpty })?
+      .trimmingCharacters(in: .whitespaces)
+    let note = contact.notes?
+      .trimmingCharacters(in: .whitespacesAndNewlines)
+      .replacingOccurrences(of: "\n", with: " ")
+    let noteValue = (note?.isEmpty == false) ? note : nil
+
+    switch (tag, noteValue) {
+    case let (tag?, note?):
+      return "\(tag) · \(note)"
+    case let (tag?, nil):
+      return tag
+    case let (nil, note?):
+      return note
+    case (nil, nil):
+      let normalized = contact.source.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+      if normalized == "imported" || normalized == "manual" {
+        return "#手機通訊錄"
+      }
+      return nil
     }
-    let normalized = contact.source.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-    if normalized == "imported" || normalized == "manual" {
-      return "#手機通訊錄"
-    }
-    return nil
   }
 
   var body: some View {
@@ -64,6 +82,8 @@ struct TrustGraphContactRow: View {
             Text(tag)
               .font(.system(size: 10))
               .foregroundColor(Color.Theme.textSecondary)
+              .lineLimit(1)
+              .truncationMode(.tail)
               .padding(.horizontal, 4)
               .padding(.vertical, 2)
               .background(Color.Theme.searchBg)
@@ -82,13 +102,19 @@ struct TrustGraphContactRow: View {
 
   // MARK: - Subviews
 
+  /// Each contact gets a stable solidarity-animal avatar derived from its id.
+  /// We never mutate `ContactEntity` for this — it's purely a display fallback
+  /// until real avatar support lands.
   private var avatar: some View {
-    ZStack {
+    let animal = AnimalCharacter.default(forId: contact.id)
+    return ZStack {
       Circle()
         .fill(Color.Theme.searchBg)
-      Image(systemName: "person.crop.circle.fill")
-        .font(.system(size: 38))
-        .foregroundColor(Color.Theme.textTertiary)
+      ImageProvider.animalImage(for: animal)
+        .resizable()
+        .scaledToFit()
+        .frame(width: 38, height: 38)
+        .clipShape(Circle())
     }
     .frame(width: 38, height: 38)
     .overlay(

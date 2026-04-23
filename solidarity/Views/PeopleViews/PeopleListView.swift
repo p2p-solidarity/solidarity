@@ -13,6 +13,7 @@ struct PeopleListView: View {
   @State private var showingDeleteConfirm = false
   @State private var showingMergeConfirm = false
   @State private var showingContactPicker = false
+  @State private var contactToEditNote: ContactEntity?
 
   private var filteredContacts: [ContactEntity] {
     let all = identityDataStore.contacts.sorted { $0.receivedAt > $1.receivedAt }
@@ -63,6 +64,25 @@ struct PeopleListView: View {
     .sheet(isPresented: $showingVCFPicker) {
       VCFDocumentPicker { url in
         importVCFFile(url: url)
+      }
+    }
+    .sheet(
+      isPresented: Binding(
+        get: { contactToEditNote != nil },
+        set: { if !$0 { contactToEditNote = nil } }
+      )
+    ) {
+      if let contact = contactToEditNote {
+        PersonDetailMoreSheet(
+          contact: contact,
+          onSave: { updated in
+            contact.notes = updated
+            identityDataStore.refreshAll()
+          },
+          onDelete: {
+            identityDataStore.deleteContact(by: contact.id)
+          }
+        )
       }
     }
     .fullScreenCover(isPresented: $showingExchangeFlow, onDismiss: {
@@ -264,6 +284,12 @@ struct PeopleListView: View {
     }
     .buttonStyle(.plain)
     .contextMenu {
+      Button {
+        contactToEditNote = contact
+      } label: {
+        Label("Note", systemImage: "square.and.pencil")
+      }
+
       Button(role: .destructive) {
         contactToDelete = contact
         showingDeleteConfirm = true
