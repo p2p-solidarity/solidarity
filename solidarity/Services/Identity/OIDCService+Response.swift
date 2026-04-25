@@ -23,6 +23,15 @@ import UIKit
 
 extension OIDCService {
 
+  /// Bundles the signer identity and target audience that JARM-style and
+  /// SIOPv2 responses need to embed into the issued JWT. Reduces the
+  /// parameter footprint of `submitFormResponse` / JARM helpers.
+  struct ResponseSignerContext {
+    let descriptor: DIDDescriptor
+    let signingKey: BiometricSigningKey
+    let audience: String
+  }
+
   // MARK: - SIOPv2 id_token submission
 
   /// Signs and submits a SIOPv2 self-issued id_token. The caller must have
@@ -70,14 +79,17 @@ extension OIDCService {
 
     if responseMode.hasPrefix("direct_post") {
       let jarmMode = responseMode == "direct_post.jwt"
+      let signer = ResponseSignerContext(
+        descriptor: descriptor,
+        signingKey: signingKey,
+        audience: request.clientId
+      )
       let submitResult = await submitFormResponse(
         target: target,
         fields: ["id_token": idToken],
         state: state,
         jarm: jarmMode,
-        descriptor: descriptor,
-        signingKey: signingKey,
-        audience: request.clientId
+        signer: signer
       )
       if case .failure(let error) = submitResult { return .failure(error) }
       return .success(idToken)
@@ -155,9 +167,7 @@ extension OIDCService {
     fields: [String: String],
     state: String?,
     jarm: Bool,
-    descriptor: DIDDescriptor,
-    signingKey: BiometricSigningKey,
-    audience: String
+    signer: ResponseSignerContext
   ) async -> CardResult<Void> {
     guard let url = URL(string: target) else {
       return .failure(.invalidData("Invalid response_uri"))
@@ -170,9 +180,7 @@ extension OIDCService {
       if let state { inner["state"] = state }
       let jwtResult = buildJARMResponseJWT(
         fields: inner,
-        descriptor: descriptor,
-        signingKey: signingKey,
-        audience: audience
+        signer: signer
       )
       guard case .success(let jwt) = jwtResult else {
         if case .failure(let error) = jwtResult { return .failure(error) }
@@ -213,9 +221,7 @@ extension OIDCService {
   /// typ is `oauth-authz-resp+jwt` per JARM (RFC-in-draft).
   private func buildJARMResponseJWT(
     fields: [String: String],
-    descriptor: DIDDescriptor,
-    signingKey: BiometricSigningKey,
-    audience: String
+    signer: ResponseSignerContext
   ) -> CardResult<String> {
     let now = Int(Date().timeIntervalSince1970)
     let exp = now + 300
@@ -223,12 +229,12 @@ extension OIDCService {
     let header: [String: Any] = [
       "alg": "ES256",
       "typ": "oauth-authz-resp+jwt",
-      "kid": descriptor.verificationMethodId,
+      "kid": signer.descriptor.verificationMethodId,
     ]
 
     var payload: [String: Any] = [
-      "iss": descriptor.did,
-      "aud": audience,
+      "iss": signer.descriptor.did,
+      "aud": signer.audience,
       "iat": now,
       "exp": exp,
     ]
@@ -236,7 +242,7 @@ extension OIDCService {
       payload[key] = value
     }
 
-    return signCompactJWT(header: header, payload: payload, signingKey: signingKey)
+    return signCompactJWT(header: header, payload: payload, signingKey: signer.signingKey)
   }
 
   // MARK: - Shared signer
@@ -269,6 +275,28 @@ extension OIDCService {
 
   // MARK: - Enhanced vp_token submission (direct_post.jwt aware)
 
+  /// Bundles verifier identification used when wrapping a vp_token as a
+  /// JARM-style signed response. Lets the public submit API stay under the
+  /// SwiftLint parameter cap without losing call-site context.
+  struct VPSubmissionVerifier {
+    let nonce: String?
+    let audience: String
+    let relyingPartyDomain: String?
+    let context: LAContext?
+
+    init(
+      nonce: String?,
+      audience: String,
+      relyingPartyDomain: String?,
+      context: LAContext? = nil
+    ) {
+      self.nonce = nonce
+      self.audience = audience
+      self.relyingPartyDomain = relyingPartyDomain
+      self.context = context
+    }
+  }
+
   /// Overload of submitVpToken that knows how to wrap the token as JARM
   /// when the verifier requested `direct_post.jwt`. Falls through to the
   /// legacy direct_post form when a plain direct_post was requested.
@@ -277,10 +305,7 @@ extension OIDCService {
     target: String,
     state: String?,
     responseMode: String,
-    nonce: String?,
-    audience: String,
-    relyingPartyDomain: String?,
-    context: LAContext? = nil
+    verifier: VPSubmissionVerifier
   ) async -> CardResult<Void> {
     let lowered = responseMode.lowercased()
 
@@ -294,31 +319,37 @@ extension OIDCService {
     }
 
     let keychain = KeychainService.shared
-    let descriptorResult = DIDService().currentDescriptor(for: relyingPartyDomain, context: context)
+    let descriptorResult = DIDService().currentDescriptor(
+      for: verifier.relyingPartyDomain,
+      context: verifier.context
+    )
     guard case .success(let descriptor) = descriptorResult else {
       if case .failure(let error) = descriptorResult { return .failure(error) }
       return .failure(.keyManagementError("Failed to resolve DID for JARM response"))
     }
 
     let signerResult: CardResult<BiometricSigningKey>
-    if let rp = relyingPartyDomain {
-      signerResult = keychain.pairwiseSigningKey(for: rp, context: context)
+    if let rp = verifier.relyingPartyDomain {
+      signerResult = keychain.pairwiseSigningKey(for: rp, context: verifier.context)
     } else {
-      signerResult = keychain.signingKey(context: context)
+      signerResult = keychain.signingKey(context: verifier.context)
     }
     guard case .success(let signingKey) = signerResult else {
       if case .failure(let error) = signerResult { return .failure(error) }
       return .failure(.keyManagementError("Failed to resolve signing key for JARM response"))
     }
 
+    let signer = ResponseSignerContext(
+      descriptor: descriptor,
+      signingKey: signingKey,
+      audience: verifier.audience
+    )
     return await submitFormResponse(
       target: target,
       fields: ["vp_token": token],
       state: state,
       jarm: true,
-      descriptor: descriptor,
-      signingKey: signingKey,
-      audience: audience
+      signer: signer
     )
   }
 }

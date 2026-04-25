@@ -35,7 +35,8 @@ final class BackupManager: ObservableObject {
 
   /// Local backup directory as fallback when iCloud is unavailable.
   private var localBackupURL: URL {
-    let docs = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first!
+    let docs = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first
+      ?? URL(fileURLWithPath: NSHomeDirectory()).appendingPathComponent("Documents")
     return docs.appendingPathComponent("AirMeishiBackup")
   }
 

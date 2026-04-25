@@ -95,14 +95,20 @@ extension PassportOnboardingFlowView {
         .cornerRadius(6)
     }
 
-    private func proofSystemLabel(_ proofType: String) -> (label: String, icon: String, color: Color) {
+    struct ProofSystemLabel {
+        let label: String
+        let icon: String
+        let color: Color
+    }
+
+    private func proofSystemLabel(_ proofType: String) -> ProofSystemLabel {
         switch proofType {
         case "mopro-noir":
-            return ("OpenPassport (Noir/Mopro)", "bolt.shield.fill", .green)
+            return ProofSystemLabel(label: "OpenPassport (Noir/Mopro)", icon: "bolt.shield.fill", color: .green)
         case "semaphore-zk":
-            return ("Semaphore ZK", "shield.checkered", .green)
+            return ProofSystemLabel(label: "Semaphore ZK", icon: "shield.checkered", color: .green)
         default:
-            return ("SD-JWT Fallback", "exclamationmark.triangle", .orange)
+            return ProofSystemLabel(label: "SD-JWT Fallback", icon: "exclamationmark.triangle", color: .orange)
         }
     }
 

@@ -402,7 +402,7 @@ struct PersonDetailView: View {
         .lineSpacing(4)
         .padding(12)
         .background(
-          BubbleShape(corners: .outgoing)
+          PersonDetailBubbleShape(corners: .outgoing)
             .fill(Color.Theme.accentRose)
         )
 
@@ -424,7 +424,7 @@ struct PersonDetailView: View {
         .lineSpacing(4)
         .padding(12)
         .background(
-          BubbleShape(corners: .incoming)
+          PersonDetailBubbleShape(corners: .incoming)
             .fill(Color.Theme.warmCream)
         )
 
@@ -556,78 +556,4 @@ struct PersonDetailView: View {
     f.dateFormat = "yyyy-MM-dd"
     return f
   }()
-}
-
-// MARK: - Supporting types
-
-private struct PersonDetailContactRow: Identifiable {
-  let id: String
-  let icon: String
-  let value: String
-  let url: URL?
-}
-
-/// Chat-bubble shape where one corner (pointing at the owner side) is
-/// squared off. Outgoing bubbles square the bottom-right corner;
-/// incoming bubbles square the bottom-left corner.
-private struct BubbleShape: Shape {
-  enum Corners {
-    case outgoing, incoming
-  }
-
-  let corners: Corners
-  let radius: CGFloat = 4
-  let squaredRadius: CGFloat = 0
-
-  func path(in rect: CGRect) -> Path {
-    let topLeft = radius
-    let topRight = radius
-    let bottomRight: CGFloat
-    let bottomLeft: CGFloat
-    switch corners {
-    case .outgoing:
-      bottomRight = squaredRadius
-      bottomLeft = radius
-    case .incoming:
-      bottomRight = radius
-      bottomLeft = squaredRadius
-    }
-
-    var path = Path()
-    path.move(to: CGPoint(x: rect.minX + topLeft, y: rect.minY))
-    path.addLine(to: CGPoint(x: rect.maxX - topRight, y: rect.minY))
-    path.addArc(
-      center: CGPoint(x: rect.maxX - topRight, y: rect.minY + topRight),
-      radius: topRight,
-      startAngle: .degrees(-90),
-      endAngle: .degrees(0),
-      clockwise: false
-    )
-    path.addLine(to: CGPoint(x: rect.maxX, y: rect.maxY - bottomRight))
-    path.addArc(
-      center: CGPoint(x: rect.maxX - bottomRight, y: rect.maxY - bottomRight),
-      radius: bottomRight,
-      startAngle: .degrees(0),
-      endAngle: .degrees(90),
-      clockwise: false
-    )
-    path.addLine(to: CGPoint(x: rect.minX + bottomLeft, y: rect.maxY))
-    path.addArc(
-      center: CGPoint(x: rect.minX + bottomLeft, y: rect.maxY - bottomLeft),
-      radius: bottomLeft,
-      startAngle: .degrees(90),
-      endAngle: .degrees(180),
-      clockwise: false
-    )
-    path.addLine(to: CGPoint(x: rect.minX, y: rect.minY + topLeft))
-    path.addArc(
-      center: CGPoint(x: rect.minX + topLeft, y: rect.minY + topLeft),
-      radius: topLeft,
-      startAngle: .degrees(180),
-      endAngle: .degrees(270),
-      clockwise: false
-    )
-    path.closeSubpath()
-    return path
-  }
 }

@@ -64,11 +64,11 @@ private struct MauvePetalFlower: Shape {
 
     // Each horseshoe's baseline midpoint in SVG space.
     // `peakUp = true` → arch curves upward (toward y = 0).
-    let arches: [(cx: CGFloat, cy: CGFloat, peakUp: Bool)] = [
-      (37.36, 38.11, true),  // Ellipse 291 — top, peak up
-      (91.21, 97.24, true),  // Ellipse 292 — middle-right, peak up
-      (36.35, 96.63, false),  // Ellipse 293 — bottom-left, peak down
-      (56.58, 42.93, false),  // Ellipse 294 — center, peak down
+    let arches: [Arch] = [
+      Arch(cx: 37.36, cy: 38.11, peakUp: true),  // Ellipse 291 — top, peak up
+      Arch(cx: 91.21, cy: 97.24, peakUp: true),  // Ellipse 292 — middle-right, peak up
+      Arch(cx: 36.35, cy: 96.63, peakUp: false),  // Ellipse 293 — bottom-left, peak down
+      Arch(cx: 56.58, cy: 42.93, peakUp: false),  // Ellipse 294 — center, peak down
     ]
 
     var path = Path()
@@ -83,6 +83,12 @@ private struct MauvePetalFlower: Shape {
         ))
     }
     return path
+  }
+
+  private struct Arch {
+    let cx: CGFloat
+    let cy: CGFloat
+    let peakUp: Bool
   }
 
   /// A single horseshoe: outer semicircle + inner semicircle sharing

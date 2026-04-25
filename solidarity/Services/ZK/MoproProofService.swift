@@ -64,7 +64,9 @@ final class MoproProofService {
   static let crashSnapshotAtLaunch: Bool = {
     let storedBuild = UserDefaults.standard.string(forKey: crashSentinelBuildKey)
     if storedBuild != currentBuildIdentifier {
-      logger.warning("Native prover sentinel auto-reset — build changed from \(storedBuild ?? "nil", privacy: .public) to \(currentBuildIdentifier, privacy: .public)")
+      logger.warning(
+        "Native prover sentinel auto-reset — build changed from \(storedBuild ?? "nil", privacy: .public) to \(currentBuildIdentifier, privacy: .public)"
+      )
       UserDefaults.standard.removeObject(forKey: crashSentinelKey)
       UserDefaults.standard.removeObject(forKey: crashCountKey)
       UserDefaults.standard.set(currentBuildIdentifier, forKey: crashSentinelBuildKey)
@@ -110,7 +112,11 @@ final class MoproProofService {
     let srsPath = Bundle.main.path(forResource: "openpassport_srs", ofType: "bin")
     let hasCircuit = circuitPath != nil
     let hasSRS = srsPath != nil
-    logger.info("OpenPassport availability: sentinelTripped=\(sentinelTripped), circuit=\(hasCircuit) path=\(circuitPath ?? "nil"), srs=\(hasSRS) path=\(srsPath ?? "nil")")
+    let circuitDesc = circuitPath ?? "nil"
+    let srsDesc = srsPath ?? "nil"
+    logger.info(
+      "OpenPassport availability: sentinelTripped=\(sentinelTripped), circuit=\(hasCircuit) path=\(circuitDesc), srs=\(hasSRS) path=\(srsDesc)"
+    )
     if sentinelTripped {
       logger.warning("OpenPassport DISABLED — native prover crashed in a previous session (files present: circuit=\(hasCircuit), srs=\(hasSRS))")
       return false
@@ -259,7 +265,13 @@ final class MoproProofService {
         ZKLog.info("Failed to build disclosure witness from MRZ data")
         return nil
       }
-      logger.info("[Noir] Witness built — mrzHash=\(witness.mrzHashHex.prefix(16))..., nationality=\(witness.disclosedNationality), over18=\(witness.isOlderThan18), inputs.keys=\(Array(witness.inputs.keys).sorted().joined(separator: ","))")
+      let inputKeys = Array(witness.inputs.keys).sorted().joined(separator: ",")
+      let mrzPrefix = witness.mrzHashHex.prefix(16)
+      let nationality = witness.disclosedNationality
+      let over18 = witness.isOlderThan18
+      logger.info(
+        "[Noir] Witness built — mrzHash=\(mrzPrefix)..., nationality=\(nationality), over18=\(over18), inputs.keys=\(inputKeys)"
+      )
 
       if !mrzDigest.isEmpty && witness.mrzHashHex != mrzDigest.lowercased() {
         logger.warning("[Noir] MRZ digest mismatch — caller=\(mrzDigest.prefix(16))..., dg1=\(witness.mrzHashHex.prefix(16))...")
@@ -432,7 +444,9 @@ final class MoproProofService {
       // OpenPassport disclosure proof must be based on real DG1 MRZ bytes.
       // If DG1 data is incomplete, we skip OpenPassport and fall back to the next proof engine.
       guard sanitized.count >= 88 else {
-        logger.warning("[Noir] normalizedMRZ: sanitized=\(sanitized.count) chars (need >=88) — raw=\(rawMRZ.count) chars, fallback nationality=\(fallbackNationalityCode)")
+        logger.warning(
+          "[Noir] normalizedMRZ: sanitized=\(sanitized.count) chars (need >=88) — raw=\(rawMRZ.count) chars, fallback nationality=\(fallbackNationalityCode)"
+        )
         ZKLog.info(
           "OpenPassport skipped: DG1 MRZ incomplete (\(sanitized.count) chars, expected >= 88). " +
             "fallback_nationality=\(fallbackNationalityCode), fallback_dob=\(yyMMdd(from: fallbackDateOfBirth))"
