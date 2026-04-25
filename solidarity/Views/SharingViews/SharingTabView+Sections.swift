@@ -41,119 +41,131 @@ extension SharingTabView {
         .transition(.opacity.combined(with: .move(edge: .top)))
       }
 
-      // Card info footer (always visible, tappable to toggle QR)
-      VStack(spacing: 10) {
-        // Name + avatar row
+      // Card info footer
+      VStack(alignment: .leading, spacing: 12) {
+        // Name + Real Human badge + chevron to share settings
         HStack(spacing: 10) {
           profileAvatar(for: card)
 
-          VStack(alignment: .leading, spacing: 2) {
-            Text(card?.name ?? "No Card")
-              .font(.system(size: 15, weight: .semibold))
-              .foregroundColor(Color.Theme.textPrimary)
-              .lineLimit(1)
+          Text(card?.name ?? "No Card")
+            .font(.system(size: 17, weight: .semibold))
+            .foregroundColor(Color.Theme.textPrimary)
+            .lineLimit(1)
 
-            Text(sharedFieldsSummary)
-              .font(.system(size: 11, design: .monospaced))
-              .foregroundColor(Color.Theme.textTertiary)
-              .lineLimit(1)
+          if hasRealHumanProof {
+            realHumanBadge
           }
 
-          Spacer()
+          Spacer(minLength: 4)
 
-          // Collapse/expand chevron
+          NavigationLink {
+            ShareSettingsView()
+          } label: {
+            Image(systemName: "chevron.right")
+              .font(.system(size: 14, weight: .semibold))
+              .foregroundColor(Color.Theme.textTertiary)
+          }
+          .buttonStyle(.plain)
+        }
+
+        // Field tag pills
+        fieldPills
+
+        // Show code + share row
+        HStack(spacing: 10) {
           Button {
             withAnimation(.easeInOut(duration: 0.25)) {
               isQRExpanded.toggle()
             }
           } label: {
-            Image(systemName: "chevron.up")
-              .font(.system(size: 12, weight: .semibold))
-              .foregroundColor(Color.Theme.textTertiary)
-              .rotationEffect(.degrees(isQRExpanded ? 0 : 180))
-              .padding(8)
-              .background(Color.Theme.searchBg)
-              .overlay(Rectangle().stroke(Color.Theme.divider, lineWidth: 1))
+            Text(isQRExpanded ? "Hide code" : "Show code")
+              .font(.system(size: 15, weight: .semibold))
+              .foregroundColor(.white)
+              .frame(maxWidth: .infinity)
+              .padding(.vertical, 14)
+              .background(Color.Theme.textPrimary)
+              .clipShape(RoundedRectangle(cornerRadius: 8))
           }
+          .buttonStyle(.plain)
 
-          NavigationLink {
-            ShareSettingsView()
+          Button {
+            showingShareActivity = true
           } label: {
-            Image(systemName: "slider.horizontal.3")
-              .font(.system(size: 14))
-              .foregroundColor(Color.Theme.textSecondary)
-              .padding(8)
-              .background(Color.Theme.searchBg)
-              .overlay(Rectangle().stroke(Color.Theme.divider, lineWidth: 1))
+            Image(systemName: "arrow.up.forward.app")
+              .font(.system(size: 18, weight: .regular))
+              .foregroundColor(Color.Theme.textPrimary)
+              .frame(width: 50, height: 46)
+              .background(
+                RoundedRectangle(cornerRadius: 8)
+                  .fill(Color.Theme.warmCream)
+              )
+              .overlay(
+                RoundedRectangle(cornerRadius: 8)
+                  .stroke(Color.Theme.divider, lineWidth: 1)
+              )
           }
+          .buttonStyle(.plain)
         }
-
-        // Proof badges
-        proofBadges
       }
-      .padding(.horizontal, 16)
-      .padding(.vertical, 12)
-      .background(Color.Theme.cardSurface(for: colorScheme))
+      .padding(16)
+      .background(Color.Theme.warmCream)
     }
     .clipShape(RoundedRectangle(cornerRadius: 12))
     .overlay(
       RoundedRectangle(cornerRadius: 12)
-        .stroke(Color.Theme.cardBorder(for: colorScheme), lineWidth: 1)
+        .stroke(Color.Theme.divider.opacity(0.5), lineWidth: 1)
     )
-    .shadow(color: .black.opacity(0.08), radius: 12, x: 0, y: 4)
+    .shadow(color: .black.opacity(0.06), radius: 10, x: 0, y: 3)
   }
 
-  var sharedFieldsSummary: String {
-    let fields = ShareSettingsReader.enabledFields
-    let labels = fields.sorted(by: { $0.rawValue < $1.rawValue }).compactMap { field -> String? in
-      switch field {
-      case .name: return nil // always on, skip
-      case .title: return "title"
-      case .company: return "company"
-      case .email: return "email"
-      case .phone: return "phone"
-      case .profileImage: return "photo"
-      case .socialNetworks: return "socials"
-      case .skills: return "skills"
-      }
-    }
-    if labels.isEmpty { return "name only" }
-    return "name + " + labels.joined(separator: ", ")
+  // Sorted field pill labels for the enabled-fields row.
+  private var fieldPillLabels: [String] {
+    ShareSettingsReader.enabledFields
+      .sorted(by: { $0.sortOrder < $1.sortOrder })
+      .map(\.shortLabel)
   }
 
-  var proofBadges: some View {
-    let claims = IdentityDataStore.shared.provableClaims.filter { $0.issuerType == "government" }
-    return Group {
-      if !claims.isEmpty {
-        HStack(spacing: 8) {
-          if ShareSettingsReader.shareIsHuman,
-             claims.contains(where: { $0.claimType == "is_human" }) {
-            proofPill(label: "Real Human", color: Color.Theme.terminalGreen)
-          }
-          if ShareSettingsReader.shareAgeOver18,
-             claims.contains(where: { $0.claimType == "age_over_18" }) {
-            proofPill(label: "Age 18+", color: Color.Theme.terminalGreen)
-          }
-          Spacer()
-        }
+  var fieldPills: some View {
+    FlowLayout(spacing: 6, lineSpacing: 6) {
+      ForEach(fieldPillLabels, id: \.self) { label in
+        Text(label)
+          .font(.system(size: 12, weight: .medium))
+          .foregroundColor(Color.Theme.textSecondary)
+          .padding(.horizontal, 10)
+          .padding(.vertical, 4)
+          .background(
+            RoundedRectangle(cornerRadius: 4)
+              .fill(Color.Theme.searchBg)
+          )
+          .overlay(
+            RoundedRectangle(cornerRadius: 4)
+              .stroke(Color.Theme.divider, lineWidth: 1)
+          )
       }
     }
   }
 
-  func proofPill(label: String, color: Color) -> some View {
+  var hasRealHumanProof: Bool {
+    guard ShareSettingsReader.shareIsHuman else { return false }
+    return IdentityDataStore.shared.provableClaims.contains {
+      $0.issuerType == "government" && $0.claimType == "is_human"
+    }
+  }
+
+  var realHumanBadge: some View {
     HStack(spacing: 4) {
-      Circle()
-        .fill(color)
-        .frame(width: 6, height: 6)
-      Text(label)
-        .font(.system(size: 11, weight: .semibold, design: .monospaced))
-        .foregroundColor(color)
+      Image(systemName: "checkmark.seal.fill")
+        .font(.system(size: 12))
+        .foregroundColor(Color.Theme.terminalGreen)
+      Text("Real human")
+        .font(.system(size: 12, weight: .medium))
+        .foregroundColor(Color.Theme.textSecondary)
     }
     .padding(.horizontal, 8)
-    .padding(.vertical, 4)
-    .background(
-      Capsule()
-        .fill(color.opacity(0.12))
+    .padding(.vertical, 3)
+    .overlay(
+      RoundedRectangle(cornerRadius: 4)
+        .stroke(Color.Theme.divider, lineWidth: 1)
     )
   }
 
@@ -194,6 +206,85 @@ extension SharingTabView {
         .overlay(Rectangle().stroke(Color.Theme.divider, lineWidth: 1))
       }
       .buttonStyle(.plain)
+    }
+  }
+}
+
+// MARK: - Field pill helpers
+
+extension BusinessCardField {
+  fileprivate var sortOrder: Int {
+    switch self {
+    case .name: return 0
+    case .title: return 1
+    case .company: return 2
+    case .email: return 3
+    case .phone: return 4
+    case .profileImage: return 5
+    case .socialNetworks: return 6
+    case .skills: return 7
+    }
+  }
+
+  fileprivate var shortLabel: String {
+    switch self {
+    case .name: return "Name"
+    case .title: return "Title"
+    case .company: return "Company"
+    case .email: return "Email"
+    case .phone: return "Phone"
+    case .profileImage: return "Profile"
+    case .socialNetworks: return "Social"
+    case .skills: return "Skills"
+    }
+  }
+}
+
+// MARK: - Simple flow layout
+
+struct FlowLayout: Layout {
+  var spacing: CGFloat = 8
+  var lineSpacing: CGFloat = 8
+
+  func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache _: inout ()) -> CGSize {
+    let maxWidth = proposal.width ?? .infinity
+    var rowWidth: CGFloat = 0
+    var totalHeight: CGFloat = 0
+    var rowHeight: CGFloat = 0
+    var maxRowWidth: CGFloat = 0
+
+    for subview in subviews {
+      let size = subview.sizeThatFits(.unspecified)
+      if rowWidth + size.width > maxWidth, rowWidth > 0 {
+        totalHeight += rowHeight + lineSpacing
+        maxRowWidth = max(maxRowWidth, rowWidth - spacing)
+        rowWidth = 0
+        rowHeight = 0
+      }
+      rowWidth += size.width + spacing
+      rowHeight = max(rowHeight, size.height)
+    }
+    totalHeight += rowHeight
+    maxRowWidth = max(maxRowWidth, rowWidth - spacing)
+    return CGSize(width: maxRowWidth, height: totalHeight)
+  }
+
+  func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache _: inout ()) {
+    let maxWidth = proposal.width ?? bounds.width
+    var x = bounds.minX
+    var y = bounds.minY
+    var rowHeight: CGFloat = 0
+
+    for subview in subviews {
+      let size = subview.sizeThatFits(.unspecified)
+      if x + size.width > bounds.minX + maxWidth, x > bounds.minX {
+        x = bounds.minX
+        y += rowHeight + lineSpacing
+        rowHeight = 0
+      }
+      subview.place(at: CGPoint(x: x, y: y), proposal: ProposedViewSize(size))
+      x += size.width + spacing
+      rowHeight = max(rowHeight, size.height)
     }
   }
 }

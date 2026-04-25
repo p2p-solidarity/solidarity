@@ -91,14 +91,7 @@ struct SharingTabView: View {
           Spacer().frame(height: 100)
         }
       }
-      .background(
-        LinearGradient(
-          colors: Color.Theme.pageGradient(for: colorScheme),
-          startPoint: .top,
-          endPoint: .bottom
-        )
-        .ignoresSafeArea()
-      )
+      .background(Color.Theme.pageBg.ignoresSafeArea())
       .navigationTitle("Share")
       .navigationBarTitleDisplayMode(.inline)
       .toolbar {
