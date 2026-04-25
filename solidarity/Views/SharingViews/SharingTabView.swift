@@ -82,12 +82,6 @@ struct SharingTabView: View {
           qrSection
             .padding(.horizontal, 16)
 
-          Spacer().frame(height: 16)
-
-          // Quick actions
-          quickActions
-            .padding(.horizontal, 16)
-
           Spacer().frame(height: 100)
         }
       }

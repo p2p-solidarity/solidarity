@@ -169,45 +169,6 @@ extension SharingTabView {
     )
   }
 
-  // MARK: - Quick Actions
-
-  var quickActions: some View {
-    HStack(spacing: 12) {
-      Button {
-        showingScanSheet = true
-      } label: {
-        HStack(spacing: 8) {
-          Image(systemName: "qrcode.viewfinder")
-            .font(.system(size: 16, weight: .semibold))
-          Text("Scan QR")
-            .font(.system(size: 14, weight: .semibold))
-        }
-        .frame(maxWidth: .infinity)
-        .padding(.vertical, 12)
-        .foregroundColor(Color.Theme.textPrimary)
-        .background(Color.Theme.searchBg)
-        .overlay(Rectangle().stroke(Color.Theme.divider, lineWidth: 1))
-      }
-      .buttonStyle(.plain)
-
-      Button {
-        showingShareActivity = true
-      } label: {
-        HStack(spacing: 8) {
-          Image(systemName: "square.and.arrow.up")
-            .font(.system(size: 16, weight: .semibold))
-          Text("Share")
-            .font(.system(size: 14, weight: .semibold))
-        }
-        .frame(maxWidth: .infinity)
-        .padding(.vertical, 12)
-        .foregroundColor(Color.Theme.textPrimary)
-        .background(Color.Theme.searchBg)
-        .overlay(Rectangle().stroke(Color.Theme.divider, lineWidth: 1))
-      }
-      .buttonStyle(.plain)
-    }
-  }
 }
 
 // MARK: - Field pill helpers
