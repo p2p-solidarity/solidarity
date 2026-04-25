@@ -3,102 +3,195 @@ import SwiftUI
 struct SettingsView: View {
   @EnvironmentObject private var theme: ThemeManager
   @ObservedObject private var devMode = DeveloperModeManager.shared
+  @Environment(\.dismiss) private var dismiss
   @State private var showingSolidarityQR = false
   @State private var showingDIDList = false
   @State private var showingOnboarding = false
 
+  private var versionString: String {
+    Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String
+      ?? String(localized: "Unknown")
+  }
+
   var body: some View {
-    NavigationStack {
-      Form {
-        Section("Account & Identity") {
+    ScrollView {
+      VStack(alignment: .leading, spacing: 24) {
+        SettingsSection(title: "Account & Identity") {
           NavigationLink {
             VCSettingsView()
           } label: {
-            Label("Identity Profile", systemImage: "person.text.rectangle")
+            SettingsRowLabel(title: "Identity Profile")
           }
+          .buttonStyle(.plain)
 
           Button {
             showingSolidarityQR = true
           } label: {
-            Label("Solidarity QR", systemImage: "qrcode")
+            SettingsRowLabel(title: "Solidarity QR")
           }
+          .buttonStyle(.plain)
 
           Button {
             showingDIDList = true
           } label: {
-            Label("View DIDs", systemImage: "key.viewfinder")
+            SettingsRowLabel(title: "View DIDs")
           }
+          .buttonStyle(.plain)
         }
 
-        Section(
-          header: Text("QR Sharing"),
-          footer: Text("Controls which fields and proofs are included when generating your QR code.")
-        ) {
+        SettingsSection(title: "QR Sharing") {
           NavigationLink {
             ShareSettingsView()
           } label: {
-            Label("Share Settings", systemImage: "checklist")
+            SettingsRowLabel(title: "Share Settings")
           }
+          .buttonStyle(.plain)
         }
 
-        Section("Preferences") {
+        SettingsSection(title: "Preferences") {
           NavigationLink {
             SecuritySettingsView()
           } label: {
-            Label("Security & Keys", systemImage: "lock.shield")
+            SettingsRowLabel(title: "Security & Keys")
           }
+          .buttonStyle(.plain)
 
           NavigationLink {
             DataSyncSettingsView()
           } label: {
-            Label("Data & Sync", systemImage: "server.rack")
+            SettingsRowLabel(title: "Data & Sync")
           }
+          .buttonStyle(.plain)
 
           NavigationLink {
             AdvancedSettingsView()
           } label: {
-            Label("Advanced", systemImage: "gearshape.2")
+            SettingsRowLabel(title: "Advanced")
           }
+          .buttonStyle(.plain)
         }
 
-        Section("Guide") {
+        SettingsSection(title: "Guide") {
           Button {
             showingOnboarding = true
           } label: {
-            Label("Replay Onboarding", systemImage: "arrow.counterclockwise")
+            HStack(spacing: 8) {
+              Image(systemName: "arrow.counterclockwise")
+                .font(.system(size: 14, weight: .regular))
+              Text("Replay Onboarding")
+                .font(.system(size: 16, weight: .regular))
+              Spacer()
+            }
+            .foregroundColor(Color.Theme.primaryBlue)
+            .padding(.horizontal, 16)
+            .padding(.vertical, 14)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(
+              RoundedRectangle(cornerRadius: 12)
+                .fill(Color.Theme.searchBg)
+            )
           }
+          .buttonStyle(.plain)
         }
 
-        Section("About") {
+        SettingsSection(title: "About") {
           HStack {
             Text("Version")
+              .font(.system(size: 16))
+              .foregroundColor(Color.Theme.textPrimary)
             Spacer()
-            Text(Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? String(localized: "Unknown"))
-              .foregroundColor(.secondary)
+            Text(versionString)
+              .font(.system(size: 16))
+              .foregroundColor(Color.Theme.textTertiary)
           }
+          .padding(.horizontal, 16)
+          .padding(.vertical, 14)
+          .frame(maxWidth: .infinity)
+          .background(
+            RoundedRectangle(cornerRadius: 12)
+              .fill(Color.Theme.searchBg)
+          )
           .contentShape(Rectangle())
           .onTapGesture {
             devMode.registerVersionTap()
           }
         }
       }
-      .navigationTitle("Settings")
-      .scrollContentBackground(.hidden)
-      .background(Color.Theme.pageBg.ignoresSafeArea())
-      .sheet(isPresented: $showingSolidarityQR) {
-        if let card = CardManager.shared.businessCards.first {
-          SolidarityQRView(businessCard: card)
-        }
-      }
-      .sheet(isPresented: $showingDIDList) {
-        DIDListSheet()
-      }
-      .fullScreenCover(isPresented: $showingOnboarding) {
-        OnboardingReplayView {
-          showingOnboarding = false
+      .padding(.horizontal, 16)
+      .padding(.top, 8)
+      .padding(.bottom, 60)
+    }
+    .background(Color.Theme.pageBg.ignoresSafeArea())
+    .navigationTitle("Settings")
+    .navigationBarTitleDisplayMode(.inline)
+    .toolbarBackground(Color.Theme.pageBg, for: .navigationBar)
+    .toolbarBackground(.visible, for: .navigationBar)
+    .toolbar {
+      ToolbarItem(placement: .navigationBarLeading) {
+        Button {
+          dismiss()
+        } label: {
+          Image(systemName: "chevron.left")
+            .font(.system(size: 17, weight: .semibold))
+            .foregroundColor(Color.Theme.textPrimary)
         }
       }
     }
+    .sheet(isPresented: $showingSolidarityQR) {
+      if let card = CardManager.shared.businessCards.first {
+        SolidarityQRView(businessCard: card)
+      }
+    }
+    .sheet(isPresented: $showingDIDList) {
+      DIDListSheet()
+    }
+    .fullScreenCover(isPresented: $showingOnboarding) {
+      OnboardingReplayView {
+        showingOnboarding = false
+      }
+    }
+  }
+}
+
+// MARK: - Section + row components
+
+private struct SettingsSection<Content: View>: View {
+  let title: String
+  @ViewBuilder let content: Content
+
+  var body: some View {
+    VStack(alignment: .leading, spacing: 10) {
+      Text(title)
+        .font(.system(size: 14, weight: .regular))
+        .foregroundColor(Color.Theme.textPrimary)
+      VStack(spacing: 8) {
+        content
+      }
+    }
+  }
+}
+
+private struct SettingsRowLabel: View {
+  let title: String
+
+  var body: some View {
+    HStack {
+      Text(title)
+        .font(.system(size: 16, weight: .regular))
+        .foregroundColor(Color.Theme.textPrimary)
+      Spacer()
+      Image(systemName: "chevron.right")
+        .font(.system(size: 13, weight: .semibold))
+        .foregroundColor(Color.Theme.textTertiary)
+    }
+    .padding(.horizontal, 16)
+    .padding(.vertical, 14)
+    .frame(maxWidth: .infinity)
+    .background(
+      RoundedRectangle(cornerRadius: 12)
+        .fill(Color.Theme.searchBg)
+    )
+    .contentShape(RoundedRectangle(cornerRadius: 12))
   }
 }
 
@@ -182,6 +275,8 @@ private struct OnboardingReplayView: View {
 }
 
 #Preview {
-  SettingsView()
-    .environmentObject(ThemeManager.shared)
+  NavigationStack {
+    SettingsView()
+      .environmentObject(ThemeManager.shared)
+  }
 }
