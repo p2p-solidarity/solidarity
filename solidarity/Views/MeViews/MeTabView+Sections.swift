@@ -47,17 +47,12 @@ extension MeTabView {
     VStack(alignment: .leading, spacing: 12) {
       MeSectionHeader(title: "Verified Credentials")
 
-      // Entry-action tiles: 2-column grid (Scan Identity, Manual Input, Import JSON)
+      // Entry-action tiles: 2-column grid (Scan Identity, Import JSON)
       let columns = [GridItem(.flexible(), spacing: 12), GridItem(.flexible(), spacing: 12)]
       LazyVGrid(columns: columns, spacing: 12) {
         ActionTile(
           icon: "viewfinder",
           title: "Scan Identity",
-          action: { showingPassportFlow = true }
-        )
-        ActionTile(
-          icon: "rectangle.and.pencil.and.ellipsis",
-          title: "Manual Input",
           action: { showingPassportFlow = true }
         )
         ActionTile(
