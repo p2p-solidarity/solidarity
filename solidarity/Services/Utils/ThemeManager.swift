@@ -198,11 +198,11 @@ extension Color {
 
     // MARK: - Swiss Sunrise Palette (Light) + Deep Alpine Night (Dark)
 
-    /// Page background: warm cream (light) / deep brown-purple (dark)
+    /// Page background: warm cream (light) / deep navy-mauve (dark)
     /// Light: `Palette.cream` (#fbf9f2)
     static let pageBg = Color(.init(dynamicProvider: { traits in
       traits.userInterfaceStyle == .dark
-        ? UIColor(red: 0.10, green: 0.07, blue: 0.09, alpha: 1)  // #1A1218
+        ? UIColor(red: 0.055, green: 0.035, blue: 0.078, alpha: 1)  // #0E0914
         : UIColor(red: 0.984, green: 0.976, blue: 0.949, alpha: 1)  // #fbf9f2
     }))
 
@@ -241,25 +241,47 @@ extension Color {
         : UIColor(red: 0.612, green: 0.604, blue: 0.651, alpha: 1)  // #9c9aa6
     }))
 
-    /// Search/input background
+    /// Search/input background — also used as elevated card surface
     static let searchBg = Color(.init(dynamicProvider: { traits in
       traits.userInterfaceStyle == .dark
-        ? UIColor(white: 1.0, alpha: 0.08)
+        ? UIColor(red: 0.110, green: 0.078, blue: 0.141, alpha: 1)  // #1C1424
         : UIColor(red: 0.933, green: 0.933, blue: 0.933, alpha: 1)  // #eeeeee
     }))
 
     /// Divider / border
     static let divider = Color(.init(dynamicProvider: { traits in
       traits.userInterfaceStyle == .dark
-        ? UIColor(white: 1.0, alpha: 0.15)
+        ? UIColor(red: 0.176, green: 0.141, blue: 0.220, alpha: 1)  // #2D2438
         : UIColor(red: 0.820, green: 0.820, blue: 0.820, alpha: 1)  // #d1d1d1
     }))
 
     /// Card background
     static let cardBg = Color(.init(dynamicProvider: { traits in
       traits.userInterfaceStyle == .dark
-        ? UIColor(red: 0.07, green: 0.04, blue: 0.07, alpha: 1)  // #111111
+        ? UIColor(red: 0.078, green: 0.055, blue: 0.110, alpha: 1)  // #14101C
         : UIColor(white: 1.0, alpha: 1)  // #ffffff
+    }))
+
+    /// Pill / chip background — light grey on cream (light), translucent white on mauve/dark (dark)
+    static let pillBg = Color(.init(dynamicProvider: { traits in
+      traits.userInterfaceStyle == .dark
+        ? UIColor.white.withAlphaComponent(0.18)
+        : UIColor(red: 0.933, green: 0.933, blue: 0.933, alpha: 1)  // #eeeeee
+    }))
+
+    /// Pill / chip border
+    static let pillBorder = Color(.init(dynamicProvider: { traits in
+      traits.userInterfaceStyle == .dark
+        ? UIColor.white.withAlphaComponent(0.30)
+        : UIColor(red: 0.820, green: 0.820, blue: 0.820, alpha: 1)  // #d1d1d1
+    }))
+
+    /// Featured / hero card surface — cream (light) / saturated brand mauve (dark).
+    /// Used for the Share QR hero card.
+    static let featuredCardBg = Color(.init(dynamicProvider: { traits in
+      traits.userInterfaceStyle == .dark
+        ? UIColor(red: 0.514, green: 0.325, blue: 0.490, alpha: 1)  // #83537d
+        : UIColor(red: 0.953, green: 0.922, blue: 0.867, alpha: 1)  // #f3ebdd
     }))
 
     // MARK: - Primary / accent colors
@@ -284,12 +306,9 @@ extension Color {
     /// Danger red
     static let destructive = Color(hex: 0xCD556A)
 
-    /// Warm cream for inverted cards
-    static let warmCream = Color(.init(dynamicProvider: { traits in
-      traits.userInterfaceStyle == .dark
-        ? UIColor(red: 0.97, green: 0.97, blue: 0.96, alpha: 1)
-        : UIColor(red: 0.953, green: 0.922, blue: 0.867, alpha: 1)  // #f3ebdd
-    }))
+    /// Warm cream — used for chat bubble (incoming), avatar fallback, inverted on-dark surfaces.
+    /// Stays light cream in both modes so it reads as a bright surface against the dark page bg.
+    static let warmCream = Color(red: 0.953, green: 0.922, blue: 0.867)  // #f3ebdd
 
     /// Feature accent (brand mauve)
     static let featureAccent = Color(.init(dynamicProvider: { traits in

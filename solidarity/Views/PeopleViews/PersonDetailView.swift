@@ -419,7 +419,7 @@ struct PersonDetailView: View {
     VStack(alignment: .leading, spacing: 2) {
       Text(text)
         .font(.system(size: 14))
-        .foregroundStyle(Color.Theme.textPrimary)
+        .foregroundStyle(Color(hex: 0x2F2F30))
         .multilineTextAlignment(.leading)
         .lineSpacing(4)
         .padding(12)

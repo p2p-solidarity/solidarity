@@ -8,24 +8,17 @@ import SwiftUI
 // MARK: - Primary (Adaptive Square Button)
 
 struct ThemedPrimaryButtonStyle: ButtonStyle {
-  @Environment(\.colorScheme) private var colorScheme
-
   func makeBody(configuration: Configuration) -> some View {
     configuration.label
       .font(.system(size: 16, weight: .medium, design: .default))
-      .foregroundColor(colorScheme == .dark ? .white : .white)
+      .foregroundColor(Color.Theme.pageBg)
       .padding(.horizontal, 24)
       .padding(.vertical, 14)
       .frame(maxWidth: .infinity)
-      .background(colorScheme == .dark ? Color(white: 0.15) : Color(hex: 0x2A1A2E))
+      .background(Color.Theme.textPrimary)
       .overlay(
         Rectangle()
-          .stroke(
-            colorScheme == .dark
-              ? Color.white.opacity(0.2)
-              : Color(hex: 0x2A1A2E).opacity(0.3),
-            lineWidth: 1
-          )
+          .stroke(Color.Theme.textPrimary.opacity(0.3), lineWidth: 1)
       )
       .clipShape(Rectangle())
       .scaleEffect(configuration.isPressed ? 0.98 : 1)

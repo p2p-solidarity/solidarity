@@ -70,7 +70,7 @@ struct ProfileHeaderCard: View {
       Button(action: onEdit) {
         Text("Edit")
           .font(.system(size: 14, weight: .semibold))
-          .foregroundColor(.white)
+          .foregroundColor(Color.Theme.pageBg)
           .padding(.horizontal, 16)
           .padding(.vertical, 8)
           .background(
@@ -153,14 +153,14 @@ struct DisclosureRowView: View {
         Group {
           if isLoading {
             ProgressView()
-              .progressViewStyle(CircularProgressViewStyle(tint: .white))
+              .progressViewStyle(CircularProgressViewStyle(tint: Color.Theme.pageBg))
               .scaleEffect(0.8)
           } else {
             Text(actionTitle)
               .font(.system(size: 14, weight: .semibold))
           }
         }
-        .foregroundColor(.white)
+        .foregroundColor(Color.Theme.pageBg)
         .frame(minWidth: 56)
         .padding(.horizontal, 14)
         .padding(.vertical, 8)
@@ -245,7 +245,7 @@ struct IdentityStatusCard: View {
           Button(action: onCTA) {
             Text(ctaTitle)
               .font(.system(size: 13, weight: .semibold))
-              .foregroundColor(.white)
+              .foregroundColor(Color.Theme.pageBg)
               .padding(.horizontal, 12)
               .padding(.vertical, 6)
               .background(

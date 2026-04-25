@@ -80,7 +80,7 @@ extension SharingTabView {
           } label: {
             Text(isQRExpanded ? "Hide code" : "Show code")
               .font(.system(size: 15, weight: .semibold))
-              .foregroundColor(.white)
+              .foregroundColor(Color.Theme.pageBg)
               .frame(maxWidth: .infinity)
               .padding(.vertical, 14)
               .background(Color.Theme.textPrimary)
@@ -93,7 +93,7 @@ extension SharingTabView {
           } label: {
             Image(systemName: "arrow.up.forward.app")
               .font(.system(size: 18, weight: .regular))
-              .foregroundColor(Color.Theme.textPrimary)
+              .foregroundColor(Color(hex: 0x2F2F30))
               .frame(width: 50, height: 46)
               .background(
                 RoundedRectangle(cornerRadius: 8)
@@ -101,14 +101,14 @@ extension SharingTabView {
               )
               .overlay(
                 RoundedRectangle(cornerRadius: 8)
-                  .stroke(Color.Theme.divider, lineWidth: 1)
+                  .stroke(Color.Theme.pillBorder, lineWidth: 1)
               )
           }
           .buttonStyle(.plain)
         }
       }
       .padding(16)
-      .background(Color.Theme.warmCream)
+      .background(Color.Theme.featuredCardBg)
     }
     .clipShape(RoundedRectangle(cornerRadius: 12))
     .overlay(
@@ -135,11 +135,11 @@ extension SharingTabView {
           .padding(.vertical, 4)
           .background(
             RoundedRectangle(cornerRadius: 4)
-              .fill(Color.Theme.searchBg)
+              .fill(Color.Theme.pillBg)
           )
           .overlay(
             RoundedRectangle(cornerRadius: 4)
-              .stroke(Color.Theme.divider, lineWidth: 1)
+              .stroke(Color.Theme.pillBorder, lineWidth: 1)
           )
       }
     }
@@ -163,9 +163,13 @@ extension SharingTabView {
     }
     .padding(.horizontal, 8)
     .padding(.vertical, 3)
+    .background(
+      RoundedRectangle(cornerRadius: 4)
+        .fill(Color.Theme.pillBg)
+    )
     .overlay(
       RoundedRectangle(cornerRadius: 4)
-        .stroke(Color.Theme.divider, lineWidth: 1)
+        .stroke(Color.Theme.pillBorder, lineWidth: 1)
     )
   }
 
