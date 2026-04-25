@@ -2,10 +2,12 @@
 //  PersonDetailView.swift
 //  solidarity
 //
-//  Contact detail view — Pencil design 0YvBA. Hero gradient card
-//  with mauve petal watermark + "一期一會" messages + contact info
-//  rows. Share action via ActivityViewController; ellipsis opens
-//  PersonDetailMoreSheet (Note editor + Delete Contact).
+//  Contact detail view — Figma node 723:2337 / 723:2340. Centered hero
+//  (avatar + name + note line + verified/unverified pill + optional
+//  context tag) with an edit pencil at the top-right. Below the hero
+//  sit the "sakura" exchange messages (when present) and the contact
+//  info rows. Tap the pencil — or long-press the hero — to surface
+//  the Note / Share / Delete sheet.
 //
 
 import SwiftUI
@@ -24,16 +26,36 @@ struct PersonDetailView: View {
     contact.verificationStatus == VerificationStatus.verified.rawValue
   }
 
-  private var subtitle: String? {
-    let parts = [contact.company, contact.title]
-      .compactMap { $0?.trimmingCharacters(in: .whitespaces) }
-      .filter { !$0.isEmpty }
-    guard !parts.isEmpty else { return nil }
-    return parts.joined(separator: " • ")
+  private var trimmedNote: String? {
+    let raw = contact.notes?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+    return raw.isEmpty ? nil : raw
+  }
+
+  private var unverifiedLabel: String {
+    switch contact.source {
+    case "imported":
+      return "unverified (import)"
+    case ContactSource.manual.rawValue:
+      return "unverified (manual)"
+    case ContactSource.qrCode.rawValue:
+      return "unverified (qr)"
+    case ContactSource.airdrop.rawValue:
+      return "unverified (airdrop)"
+    case ContactSource.appClip.rawValue:
+      return "unverified (clip)"
+    case ContactSource.proximity.rawValue:
+      return "unverified (proximity)"
+    default:
+      return "unverified"
+    }
   }
 
   private var firstTag: String? {
     contact.tags.first(where: { !$0.isEmpty })
+  }
+
+  private var hasNote: Bool {
+    !(contact.notes?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ?? true)
   }
 
   private var hasMyMessage: Bool {
@@ -114,27 +136,15 @@ struct PersonDetailView: View {
 
       Spacer()
 
-      HStack(spacing: 16) {
-        Button {
-          showingShareSheet = true
-        } label: {
-          Image(systemName: "square.and.arrow.up")
-            .font(.system(size: 22, weight: .regular))
-            .foregroundStyle(Color.Theme.textPrimary)
-            .frame(width: 22, height: 22)
-        }
-        .buttonStyle(.plain)
-
-        Button {
-          showingMoreSheet = true
-        } label: {
-          Image(systemName: "ellipsis")
-            .font(.system(size: 22, weight: .regular))
-            .foregroundStyle(Color.Theme.textPrimary)
-            .frame(width: 22, height: 22)
-        }
-        .buttonStyle(.plain)
+      Button {
+        showingShareSheet = true
+      } label: {
+        Image(systemName: "square.and.arrow.up")
+          .font(.system(size: 22, weight: .regular))
+          .foregroundStyle(Color.Theme.textPrimary)
+          .frame(width: 22, height: 22)
       }
+      .buttonStyle(.plain)
     }
     .padding(.horizontal, 16)
     .frame(height: 56)
@@ -143,40 +153,38 @@ struct PersonDetailView: View {
   // MARK: - Hero card
 
   private var heroCard: some View {
-    VStack(spacing: 8) {
-      avatarCircle
+    ZStack(alignment: .topTrailing) {
+      VStack(spacing: 16) {
+        avatarCircle
 
-      Text(contact.name)
-        .font(.system(size: 24, weight: .medium))
-        .foregroundStyle(Color.Theme.textPrimary)
-        .multilineTextAlignment(.center)
+        VStack(spacing: 8) {
+          Text(contact.name)
+            .font(.system(size: 24, weight: .medium))
+            .foregroundStyle(Color.Theme.textPrimary)
+            .multilineTextAlignment(.center)
 
-      if let subtitle {
-        Text(subtitle)
-          .font(.system(size: 14))
-          .foregroundStyle(Color.Theme.textSecondary)
-          .multilineTextAlignment(.center)
+          heroNoteLine
+
+          tagRow
+        }
       }
+      .frame(maxWidth: .infinity)
+      .padding(.horizontal, 12)
+      .padding(.top, 16)
+      .padding(.bottom, 24)
 
-      if isVerified || firstTag != nil {
-        tagRow
-          .padding(.top, 4)
-      }
+      heroEditButton
     }
-    .frame(maxWidth: .infinity)
-    .padding(.leading, 12)
-    .padding(.trailing, 12)
-    .padding(.top, 16)
-    .padding(.bottom, 24)
     .background(
       ZStack {
+        // Figma 723:2336 — linear-gradient(17.3°, #E9E3ED 36.4%, #F3DFDD 68.4%)
         LinearGradient(
-          colors: [
-            Color.Theme.gradientLavender,
-            Color.Theme.gradientPeach,
+          stops: [
+            .init(color: Color.Theme.gradientLavender, location: 0.36),
+            .init(color: Color.Theme.gradientPeach, location: 0.68),
           ],
-          startPoint: .top,
-          endPoint: .bottom
+          startPoint: UnitPoint(x: 0.35, y: 0.98),
+          endPoint: UnitPoint(x: 0.65, y: 0.02)
         )
 
         MauvePetalMotif()
@@ -185,16 +193,86 @@ struct PersonDetailView: View {
     )
     .clipShape(RoundedRectangle(cornerRadius: 4))
     .padding(.horizontal, 16)
+    .contextMenu {
+      Button {
+        showingMoreSheet = true
+      } label: {
+        Label(hasNote ? "Edit Note" : "Add Note", systemImage: "note.text")
+      }
+      Button {
+        showingShareSheet = true
+      } label: {
+        Label("Share", systemImage: "square.and.arrow.up")
+      }
+      Button(role: .destructive) {
+        showingMoreSheet = true
+      } label: {
+        Label("Delete Contact", systemImage: "trash")
+      }
+    }
+  }
+
+  private var heroEditButton: some View {
+    Button {
+      showingMoreSheet = true
+    } label: {
+      Image(systemName: "square.and.pencil")
+        .font(.system(size: 14, weight: .regular))
+        .foregroundStyle(Color.Theme.textPrimary.opacity(0.75))
+        .frame(width: 32, height: 32)
+        .background(
+          Circle()
+            .fill(Color.white.opacity(0.45))
+        )
+        .overlay(
+          Circle()
+            .stroke(Color.white.opacity(0.6), lineWidth: 0.5)
+        )
+    }
+    .buttonStyle(.plain)
+    .padding(10)
+    .accessibilityLabel(hasNote ? "Edit note" : "Add note")
+  }
+
+  @ViewBuilder
+  private var heroNoteLine: some View {
+    Button {
+      showingMoreSheet = true
+    } label: {
+      Group {
+        if let note = trimmedNote {
+          Text(note)
+            .font(.system(size: 14))
+            .foregroundStyle(Color.Theme.textSecondary)
+        } else {
+          HStack(spacing: 4) {
+            Text("//")
+              .font(.system(size: 12, weight: .medium, design: .monospaced))
+              .foregroundStyle(Color.Theme.primaryBlue)
+            Text("tap to add note")
+              .font(.system(size: 12, design: .monospaced))
+              .foregroundStyle(Color.Theme.textTertiary)
+          }
+        }
+      }
+      .lineLimit(1)
+      .multilineTextAlignment(.center)
+      .frame(maxWidth: .infinity)
+    }
+    .buttonStyle(.plain)
   }
 
   private var avatarCircle: some View {
-    ZStack {
+    let animal = AnimalCharacter.default(forId: contact.id)
+    return ZStack {
       Circle()
         .fill(Color.Theme.gradientCream)
 
-      Text(initials)
-        .font(.system(size: 32, weight: .medium))
-        .foregroundStyle(Color.Theme.textSecondary)
+      ImageProvider.animalImage(for: animal)
+        .resizable()
+        .scaledToFit()
+        .frame(width: 88, height: 88)
+        .clipShape(Circle())
     }
     .frame(width: 88, height: 88)
     .overlay(
@@ -202,22 +280,21 @@ struct PersonDetailView: View {
     )
   }
 
-  private var initials: String {
-    let trimmed = contact.name.trimmingCharacters(in: .whitespaces)
-    guard !trimmed.isEmpty else { return "?" }
-    let parts = trimmed.split(separator: " ").prefix(2)
-    let letters = parts.compactMap { $0.first }.map { String($0) }
-    return letters.joined().uppercased()
-  }
-
   private var tagRow: some View {
     HStack(spacing: 16) {
-      if isVerified {
-        verifiedTag
-      }
+      statusTag
       if let firstTag {
         contextTag(firstTag)
       }
+    }
+  }
+
+  @ViewBuilder
+  private var statusTag: some View {
+    if isVerified {
+      verifiedTag
+    } else {
+      unverifiedTag
     }
   }
 
@@ -228,6 +305,24 @@ struct PersonDetailView: View {
         .foregroundStyle(Color.Theme.terminalGreen)
         .frame(width: 12, height: 12)
       Text(verifiedLabel)
+        .font(.system(size: 10))
+        .foregroundStyle(Color.Theme.textSecondary)
+    }
+    .padding(.horizontal, 4)
+    .padding(.vertical, 2)
+    .background(
+      RoundedRectangle(cornerRadius: 2)
+        .fill(Color(hex: 0xF7F2FA))
+    )
+  }
+
+  private var unverifiedTag: some View {
+    HStack(spacing: 4) {
+      Image(systemName: "circle.dashed")
+        .font(.system(size: 10))
+        .foregroundStyle(Color.Theme.textTertiary)
+        .frame(width: 12, height: 12)
+      Text(unverifiedLabel)
         .font(.system(size: 10))
         .foregroundStyle(Color.Theme.textSecondary)
     }
@@ -264,13 +359,13 @@ struct PersonDetailView: View {
     )
   }
 
-  // MARK: - Ephemeral messages (一期一會)
+  // MARK: - Sakura messages (exchange ephemerals)
 
   @ViewBuilder
   private var ephemeralSection: some View {
     if hasEphemeralMessages {
       VStack(alignment: .leading, spacing: 8) {
-        Text("一期一會")
+        Text("sakura")
           .font(.system(size: 14))
           .foregroundStyle(Color.Theme.textPrimary)
 
@@ -289,7 +384,10 @@ struct PersonDetailView: View {
         .padding(.horizontal, 12)
         .padding(.vertical, 16)
         .frame(maxWidth: .infinity, alignment: .trailing)
-        .background(Color(hex: 0xEEEEEE).opacity(0.8))
+        .background(
+          RoundedRectangle(cornerRadius: 12)
+            .fill(Color(hex: 0xEEEEEE).opacity(0.8))
+        )
       }
       .padding(.horizontal, 16)
     }
@@ -358,10 +456,8 @@ struct PersonDetailView: View {
 
   private var seeMoreLabel: String {
     let count = messageCount
-    if count <= 1 {
-      return "see more"
-    }
-    return "see \(count) messages"
+    let noun = count == 1 ? "message" : "messages"
+    return "see more \(count) \(noun)"
   }
 
   // MARK: - Contact info
