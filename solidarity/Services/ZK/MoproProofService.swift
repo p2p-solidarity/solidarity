@@ -183,6 +183,7 @@ final class MoproProofService {
         documentHash: documentHash,
         mrzDigest: mrzDigest,
         nationalityCode: nationalityCode,
+        passiveAuthPassed: passiveAuthPassed,
         startTime: start
       ) {
         logger.info("✅ Semaphore ZK proof SUCCEEDED in \(result.generationTimeMs)ms — proofType=semaphore-zk, trustLevel=green")

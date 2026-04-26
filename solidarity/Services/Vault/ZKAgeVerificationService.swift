@@ -215,18 +215,26 @@ final class ZKAgeVerificationService: ObservableObject {
             throw AgeVerificationError.encodingFailed
         }
 
-        // Sign with identity key
-        let identity = try semaphoreManager.loadOrCreateIdentity()
-        let key = SymmetricKey(data: identity.privateKey)
+        // Sign with the master DID P-256 signing key, NOT the Semaphore trapdoor.
+        // The trapdoor is used inside ZK proofs; exposing an HMAC tag derived from
+        // it would leak the secret. ECDSA over P-256 keeps the trapdoor isolated
+        // and lets the public key act as the verification authority.
+        let signingKeyResult = KeyManager.shared.getSigningKeyPair()
+        guard case .success(let keyPair) = signingKeyResult else {
+            throw AgeVerificationError.proofGenerationFailed
+        }
 
-        let signature = HMAC<SHA256>.authenticationCode(
-            for: payloadData,
-            using: key
-        )
+        let signature: P256.Signing.ECDSASignature
+        do {
+            signature = try keyPair.privateKey.signature(for: payloadData)
+        } catch {
+            throw AgeVerificationError.proofGenerationFailed
+        }
 
         let signedAttestation = SignedAttestation(
             payload: payloadData.base64EncodedString(),
-            signature: Data(signature).base64EncodedString()
+            signature: signature.derRepresentation.base64EncodedString(),
+            publicKey: keyPair.publicKey.rawRepresentation.base64EncodedString()
         )
 
         return try JSONEncoder().encode(signedAttestation).base64EncodedString()
@@ -236,17 +244,27 @@ final class ZKAgeVerificationService: ObservableObject {
         guard let data = Data(base64Encoded: proofData),
               let attestation = try? JSONDecoder().decode(SignedAttestation.self, from: data),
               let payloadData = Data(base64Encoded: attestation.payload),
-              let signatureData = Data(base64Encoded: attestation.signature),
-              let identity = semaphoreManager.getIdentity() else {
+              let signatureData = Data(base64Encoded: attestation.signature) else {
             return false
         }
 
-        let key = SymmetricKey(data: identity.privateKey)
-        return HMAC<SHA256>.isValidAuthenticationCode(
-            signatureData,
-            authenticating: payloadData,
-            using: key
-        )
+        // Resolve the public key: prefer the embedded one (binds verification to
+        // the issuer's claimed key), fall back to the local KeyManager pair.
+        let publicKey: P256.Signing.PublicKey
+        if let pubKeyB64 = attestation.publicKey,
+           let pubKeyData = Data(base64Encoded: pubKeyB64),
+           let parsed = try? P256.Signing.PublicKey(rawRepresentation: pubKeyData) {
+            publicKey = parsed
+        } else if case .success(let keyPair) = KeyManager.shared.getSigningKeyPair() {
+            publicKey = keyPair.publicKey
+        } else {
+            return false
+        }
+
+        guard let signature = try? P256.Signing.ECDSASignature(derRepresentation: signatureData) else {
+            return false
+        }
+        return publicKey.isValidSignature(signature, for: payloadData)
     }
 
     private func loadBirthdate() {
@@ -341,6 +359,9 @@ private struct AttestationPayload: Codable {
 private struct SignedAttestation: Codable {
     let payload: String
     let signature: String
+    /// Optional so legacy attestations (pre-key-decoupling) still decode; new
+    /// attestations always emit it.
+    let publicKey: String?
 }
 
 // MARK: - Errors

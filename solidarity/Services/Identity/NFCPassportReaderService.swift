@@ -127,13 +127,15 @@ final class NFCPassportReaderService: NSObject {
     let passiveOK = passport.passportCorrectlySigned && passport.passportDataNotTampered
 
     // Build chip UID from document number (no direct UID exposed by library)
-    // Use deterministic fallback based on MRZ data to ensure stable de-duplication
+    // Use deterministic fallback based on MRZ data to ensure stable de-duplication.
+    // Full SHA-256 hex prevents 32-bit collisions while staying deterministic per passport.
     let chipUID: String
     if !passport.documentNumber.isEmpty {
       chipUID = "NFC-\(passport.documentNumber)"
     } else {
       let fallbackHash = SHA256.hash(data: Data(mrzData.utf8))
-      chipUID = "NFC-\(fallbackHash.prefix(4).map { String(format: "%02x", $0) }.joined())"
+      let fullHashHex = fallbackHash.map { String(format: "%02x", $0) }.joined()
+      chipUID = "NFC-\(fullHashHex)"
     }
 
     // Hash all DG1 raw data for integrity

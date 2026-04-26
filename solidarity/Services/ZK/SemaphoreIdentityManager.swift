@@ -69,6 +69,7 @@ final class SemaphoreIdentityManager: ObservableObject {
     case invalidCommitment(String)
     case groupConstructionFailed(String)
     case insufficientGroupContext(String)
+    case replayDetected(scope: String, nullifier: String)
   }
 
   // MARK: - Identity
@@ -214,10 +215,44 @@ final class SemaphoreIdentityManager: ObservableObject {
 
     let rawProof = envelope.semaphoreProof
     #if canImport(Semaphore) && !(targetEnvironment(simulator) && arch(x86_64))
-      return try verifySemaphoreProof(proof: rawProof)
+      let cryptoValid = try verifySemaphoreProof(proof: rawProof)
+      guard cryptoValid else { return false }
+
+      // Replay protection: every (scope, nullifier) pair must be unique.
+      // Skip enforcement only when the proof JSON does not expose a nullifier
+      // (older binding versions); we never silently accept a duplicate.
+      if let nullifier = Self.extractNullifier(fromSemaphoreProof: rawProof) {
+        if NullifierStore.shared.hasSeen(scope: envelope.scope, nullifier: nullifier) {
+          throw Error.replayDetected(scope: envelope.scope, nullifier: nullifier)
+        }
+        NullifierStore.shared.record(scope: envelope.scope, nullifier: nullifier)
+      }
+      return true
     #else
       return false
     #endif
+  }
+
+  /// Extract the `nullifier` field from a Semaphore proof JSON string.
+  /// The Rust binding (semaphore_bindings) serializes proofs with the keys
+  /// `merkle_tree_depth`, `merkle_tree_root`, `nullifier`, `message`, `scope`,
+  /// `points` — see SemaphoreSwift sources. We tolerate either snake_case or
+  /// camelCase keys so a binding upgrade doesn't break replay protection.
+  static func extractNullifier(fromSemaphoreProof proofJSON: String) -> String? {
+    guard let data = proofJSON.data(using: .utf8) else { return nil }
+    guard let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+      return nil
+    }
+    if let nullifier = object["nullifier"] as? String, !nullifier.isEmpty {
+      return nullifier
+    }
+    if let nullifier = object["nullifierHash"] as? String, !nullifier.isEmpty {
+      return nullifier
+    }
+    if let number = object["nullifier"] as? NSNumber {
+      return number.stringValue
+    }
+    return nil
   }
 
   static func deterministicGroupRoot(for commitments: [String]) -> String {
