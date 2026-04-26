@@ -106,19 +106,87 @@ struct ExchangeAcceptPayload: Codable {
   let signPubKey: String?
 }
 
-/// Payload for inviting a nearby peer to join a Semaphore group
+/// Payload for inviting a nearby peer to join a Semaphore group.
+/// `inviterPublicKey` is the Ed25519 raw public key bytes (base64 in transit when needed).
+/// `inviterSignature` covers the canonical bytes returned by `canonicalBytes()`.
+/// Receivers MUST verify both the signature and that `timestamp` is within ``Self.maxAge``.
 struct GroupInvitePayload: Codable {
+  static let maxAge: TimeInterval = 5 * 60
+
   let groupId: UUID
   let groupName: String
   let groupRoot: String?
   let inviterName: String
   let timestamp: Date
+  let inviterPublicKey: Data
+  let inviterSignature: Data
+
+  /// Deterministic byte representation used to sign / verify the invite.
+  /// Format: `groupId|groupName|groupRoot|ISO8601(timestamp)`. Empty `groupRoot`
+  /// is encoded as the empty string.
+  static func canonicalBytes(
+    groupId: UUID,
+    groupName: String,
+    groupRoot: String?,
+    timestamp: Date
+  ) -> Data {
+    let formatter = ISO8601DateFormatter()
+    formatter.timeZone = TimeZone(identifier: "UTC")
+    formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+    let stamp = formatter.string(from: timestamp)
+    let canonical = [
+      groupId.uuidString,
+      groupName,
+      groupRoot ?? "",
+      stamp
+    ].joined(separator: "|")
+    return Data(canonical.utf8)
+  }
+
+  func canonicalBytes() -> Data {
+    Self.canonicalBytes(groupId: groupId, groupName: groupName, groupRoot: groupRoot, timestamp: timestamp)
+  }
 }
 
-/// Payload for responding to a group invite with the recipient's commitment
+/// Payload for responding to a group invite with the recipient's commitment.
+/// Signed with the joiner's Ed25519 identity key over the canonical join bytes
+/// to bind the commitment to a specific identity. Unsigned join payloads are
+/// rejected by ``ProximityManager+SessionDelegate``.
 struct GroupJoinResponsePayload: Codable {
+  static let maxAge: TimeInterval = 5 * 60
+
   let groupId: UUID
   let memberCommitment: String
   let memberName: String
   let timestamp: Date
+  let memberPublicKey: Data?
+  let memberSignature: Data?
+
+  static func canonicalBytes(
+    groupId: UUID,
+    memberCommitment: String,
+    memberName: String,
+    timestamp: Date
+  ) -> Data {
+    let formatter = ISO8601DateFormatter()
+    formatter.timeZone = TimeZone(identifier: "UTC")
+    formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+    let stamp = formatter.string(from: timestamp)
+    let canonical = [
+      groupId.uuidString,
+      memberCommitment,
+      memberName,
+      stamp
+    ].joined(separator: "|")
+    return Data(canonical.utf8)
+  }
+
+  func canonicalBytes() -> Data {
+    Self.canonicalBytes(
+      groupId: groupId,
+      memberCommitment: memberCommitment,
+      memberName: memberName,
+      timestamp: timestamp
+    )
+  }
 }

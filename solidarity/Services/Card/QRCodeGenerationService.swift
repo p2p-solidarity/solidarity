@@ -4,6 +4,9 @@ import Foundation
 import UIKit
 
 final class QRCodeGenerationService {
+  private static let maxDecompressedQRSize = 256 * 1024
+  private static let maxCompressedQRSize = 32 * 1024
+
   private let encryptionManager = EncryptionManager.shared
   private let semaphoreManager = SemaphoreIdentityManager.shared
   private let semaphoreGroupManager = SemaphoreGroupManager.shared
@@ -118,12 +121,20 @@ final class QRCodeGenerationService {
   }
 
   /// Decompresses a "sce1:" prefixed QR string back to JSON.
+  /// Bounds the output buffer to ``maxDecompressedQRSize`` and short-circuits
+  /// inputs larger than ``maxCompressedQRSize`` so that a malicious QR cannot
+  /// cause a multi-megabyte allocation (zip-bomb style).
   static func decompressQR(_ string: String) -> Data? {
     guard string.hasPrefix("sce1:") else { return nil }
     let encoded = String(string.dropFirst(5))
     guard let compressedData = Data(base64URLEncoded: encoded) else { return nil }
 
-    let destinationSize = compressedData.count * 10  // generous buffer
+    guard compressedData.count <= maxCompressedQRSize else {
+      print("[QRCodeGenerationService] Rejecting QR payload too large: \(compressedData.count) bytes")
+      return nil
+    }
+
+    let destinationSize = min(compressedData.count * 10, maxDecompressedQRSize)
     let destinationBuffer = UnsafeMutablePointer<UInt8>.allocate(capacity: destinationSize)
     defer { destinationBuffer.deallocate() }
 
@@ -138,6 +149,12 @@ final class QRCodeGenerationService {
     }
 
     guard decompressedSize > 0 else { return nil }
+    // If decode filled the buffer to the cap, the payload was either oversized or truncated;
+    // either way we cannot trust the result.
+    guard decompressedSize < maxDecompressedQRSize else {
+      print("[QRCodeGenerationService] Rejecting QR payload that hit decompression cap")
+      return nil
+    }
     return Data(bytes: destinationBuffer, count: decompressedSize)
   }
 

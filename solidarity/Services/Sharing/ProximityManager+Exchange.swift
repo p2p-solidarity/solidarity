@@ -9,13 +9,15 @@ extension ProximityManager {
       lastError = .sharingError("Peer is not connected")
       return
     }
-    let payload = GroupInvitePayload(
+    guard let payload = Self.buildSignedGroupInvite(
       groupId: group.id,
       groupName: group.name,
       groupRoot: group.root,
-      inviterName: inviterName,
-      timestamp: Date()
-    )
+      inviterName: inviterName
+    ) else {
+      lastError = .sharingError("Failed to sign group invite")
+      return
+    }
     do {
       let data = try JSONEncoder().encode(payload)
       try session.send(data, toPeers: [peer], with: .reliable)
@@ -28,12 +30,14 @@ extension ProximityManager {
 
   func acceptGroupInvite(_ invite: GroupInvitePayload, to peer: MCPeerID, memberName: String, memberCommitment: String)
   {
-    let response = GroupJoinResponsePayload(
+    guard let response = Self.buildSignedGroupJoinResponse(
       groupId: invite.groupId,
       memberCommitment: memberCommitment,
-      memberName: memberName,
-      timestamp: Date()
-    )
+      memberName: memberName
+    ) else {
+      lastError = .sharingError("Failed to sign group join response")
+      return
+    }
     do {
       let data = try JSONEncoder().encode(response)
       try session.send(data, toPeers: [peer], with: .reliable)
@@ -42,6 +46,66 @@ extension ProximityManager {
       lastError = .sharingError("Failed to send join response: \(error.localizedDescription)")
       print("Failed to send join response: \(error)")
     }
+  }
+
+  /// Builds a `GroupInvitePayload` with an Ed25519 signature over the canonical bytes.
+  /// Returns nil if signing fails (CryptoKit error or empty key).
+  static func buildSignedGroupInvite(
+    groupId: UUID,
+    groupName: String,
+    groupRoot: String?,
+    inviterName: String,
+    timestamp: Date = Date()
+  ) -> GroupInvitePayload? {
+    let canonical = GroupInvitePayload.canonicalBytes(
+      groupId: groupId,
+      groupName: groupName,
+      groupRoot: groupRoot,
+      timestamp: timestamp
+    )
+    guard let signature = GroupInviteSigner.sign(canonicalBytes: canonical) else {
+      return nil
+    }
+    let publicKey = GroupInviteSigner.localPublicKey
+    guard !publicKey.isEmpty else { return nil }
+    return GroupInvitePayload(
+      groupId: groupId,
+      groupName: groupName,
+      groupRoot: groupRoot,
+      inviterName: inviterName,
+      timestamp: timestamp,
+      inviterPublicKey: publicKey,
+      inviterSignature: signature
+    )
+  }
+
+  /// Builds a `GroupJoinResponsePayload` with an Ed25519 signature over the
+  /// canonical join bytes, binding the commitment to the local identity key.
+  static func buildSignedGroupJoinResponse(
+    groupId: UUID,
+    memberCommitment: String,
+    memberName: String,
+    timestamp: Date = Date()
+  ) -> GroupJoinResponsePayload? {
+    let canonical = GroupJoinResponsePayload.canonicalBytes(
+      groupId: groupId,
+      memberCommitment: memberCommitment,
+      memberName: memberName,
+      timestamp: timestamp
+    )
+    guard let signature = GroupInviteSigner.sign(canonicalBytes: canonical) else {
+      return nil
+    }
+    let publicKey = GroupInviteSigner.localPublicKey
+    guard !publicKey.isEmpty else { return nil }
+    return GroupJoinResponsePayload(
+      groupId: groupId,
+      memberCommitment: memberCommitment,
+      memberName: memberName,
+      timestamp: timestamp,
+      memberPublicKey: publicKey,
+      memberSignature: signature
+    )
   }
 
   func disconnect() {
@@ -130,13 +194,15 @@ extension ProximityManager {
       matchingInfoMessage = "Reconnecting... Please wait a moment, then try connecting again."
       return
     }
-    let payload = GroupInvitePayload(
+    guard let payload = Self.buildSignedGroupInvite(
       groupId: group.id,
       groupName: group.name,
       groupRoot: group.root,
-      inviterName: inviterName,
-      timestamp: Date()
-    )
+      inviterName: inviterName
+    ) else {
+      lastError = .sharingError("Failed to sign group invite")
+      return
+    }
     do {
       let context = try JSONEncoder().encode(payload)
       browser.invitePeer(peer.peerID, to: session, withContext: context, timeout: 30)

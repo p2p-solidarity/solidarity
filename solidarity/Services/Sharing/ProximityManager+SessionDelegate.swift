@@ -88,6 +88,19 @@ extension ProximityManager: MCSessionDelegate {
     guard let invite = try? JSONDecoder().decode(GroupInvitePayload.self, from: data) else {
       return false
     }
+    guard GroupInviteSigner.isFresh(invite.timestamp, maxAge: GroupInvitePayload.maxAge) else {
+      print("[ProximityManager] Rejecting stale group invite from \(peerID.displayName)")
+      return true
+    }
+    let signatureValid = GroupInviteSigner.verify(
+      signature: invite.inviterSignature,
+      canonicalBytes: invite.canonicalBytes(),
+      publicKey: invite.inviterPublicKey
+    )
+    guard signatureValid else {
+      print("[ProximityManager] Rejecting group invite with invalid signature from \(peerID.displayName)")
+      return true
+    }
     DispatchQueue.main.async { [weak self] in
       guard let self = self else { return }
       let gm = SemaphoreGroupManager.shared
@@ -105,6 +118,24 @@ extension ProximityManager: MCSessionDelegate {
   private func handleGroupJoinPayload(_ data: Data) -> Bool {
     guard let join = try? JSONDecoder().decode(GroupJoinResponsePayload.self, from: data) else {
       return false
+    }
+    guard GroupInviteSigner.isFresh(join.timestamp, maxAge: GroupJoinResponsePayload.maxAge) else {
+      print("[ProximityManager] Rejecting stale group join response")
+      return true
+    }
+    // Reject unsigned join payloads — safer default while older clients are still in the field.
+    guard let signature = join.memberSignature, let publicKey = join.memberPublicKey else {
+      print("[ProximityManager] Rejecting unsigned group join response")
+      return true
+    }
+    let signatureValid = GroupInviteSigner.verify(
+      signature: signature,
+      canonicalBytes: join.canonicalBytes(),
+      publicKey: publicKey
+    )
+    guard signatureValid else {
+      print("[ProximityManager] Rejecting group join response with invalid signature")
+      return true
     }
     DispatchQueue.main.async { [weak self] in
       guard let self = self else { return }
@@ -211,12 +242,15 @@ extension ProximityManager: MCSessionDelegate {
         message: payload.shareId.uuidString,
         scope: scope
       )
-      let payloadSignatureValid = Self.verifyExchangeSignature(
+      // The payload's ECDSA signature only proves the sender holds their own key —
+      // it is NOT a credential. Surfacing `.verified` based on it alone would be a
+      // false trust signal. Keep `.pending` so the UI badge requires a real proof.
+      _ = Self.verifyExchangeSignature(
         signature: payload.payloadSignature ?? "",
         canonicalString: canonicalCardPayloadString(for: payload),
         signPubKey: payload.signPubKey
       )
-      let finalStatus: VerificationStatus = (status == .pending && payloadSignatureValid) ? .verified : status
+      let finalStatus: VerificationStatus = status
 
       print("[ProximityManager] Received payload from \(payload.senderID)")
       print("[ProximityManager] Sealed Route: \(String(describing: payload.sealedRoute))")
