@@ -205,15 +205,21 @@ extension ProofVerifierService {
           details: details
         )
       }
-      let calculatedRoot = SemaphoreIdentityManager.bindingRoot(for: parsedContext.commitments)
-      if parsedContext.groupRoot != calculatedRoot {
-        return VpTokenVerificationResult(
-          isValid: false,
-          status: .failed,
-          title: "Invalid group root binding",
-          reason: "group_root does not match commitments encoded in proof context.",
-          details: details
-        )
+      // Use the circuit-only variant: if Semaphore is unavailable in this
+      // build we skip this binding check rather than substituting a
+      // non-circuit deterministic fingerprint that the proof envelope's
+      // `groupRoot` will never equal. The internal verifyProof call below
+      // also performs the circuit-root match, so skipping here is safe.
+      if let calculatedRoot = SemaphoreIdentityManager.bindingRootIfCircuitAvailable(for: parsedContext.commitments) {
+        if parsedContext.groupRoot != calculatedRoot {
+          return VpTokenVerificationResult(
+            isValid: false,
+            status: .failed,
+            title: "Invalid group root binding",
+            reason: "group_root does not match commitments encoded in proof context.",
+            details: details
+          )
+        }
       }
       if !parsedContext.commitments.isEmpty {
         details.append("members: \(parsedContext.commitments.count)")

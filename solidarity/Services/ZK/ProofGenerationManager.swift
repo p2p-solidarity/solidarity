@@ -161,23 +161,67 @@ class ProofGenerationManager {
 
   // MARK: - Private Methods
 
+  // MARK: - Commitment versioning
+  //
+  // v1 (legacy): SHA256("<field>:<prefix3>" || recipient || masterKey).
+  //   Prefix-3 over a small alphabet (~17k inputs) provides effectively no
+  //   hiding — an attacker can brute-force the value from the commitment.
+  // v2 (current): version-byte (0x02) || SHA256(domainSeparator || "<field>:<full>" || recipient || masterKey)
+  //   Uses the full field value and a domain separator so commitments are
+  //   not interchangeable with v1 / other contexts.
+  //
+  // Storage: legacy on-disk commitments are exactly 32 bytes (the SHA256
+  // digest). v2 commitments are 33 bytes — first byte is the version tag.
+  // Verification accepts both during transition; new commitments are v2 only.
+
+  static let commitmentVersionV1: UInt8 = 0x01
+  static let commitmentVersionV2: UInt8 = 0x02
+  static let commitmentDomainSeparator = "solidarity.fieldCommit.v2"
+
   private func generateFieldCommitment(
     field: BusinessCardField,
     value: String,
     masterKey: SymmetricKey,
     recipientId: String?
   ) -> Data {
-    // Use only first 3 characters for non-name fields to limit commitment size and support lightweight verification
-    let committedValue: String
-    if field == .name {
-      committedValue = value
-    } else {
-      committedValue = String(value.prefix(3))
-    }
+    let digest = Self.computeV2Digest(
+      field: field,
+      value: value,
+      masterKey: masterKey,
+      recipientId: recipientId
+    )
+    var out = Data([Self.commitmentVersionV2])
+    out.append(digest)
+    return out
+  }
+
+  /// Compute the SHA256 digest portion of a v2 commitment (no version byte).
+  /// Exposed at type level so verification helpers can recompute deterministically.
+  static func computeV2Digest(
+    field: BusinessCardField,
+    value: String,
+    masterKey: SymmetricKey,
+    recipientId: String?
+  ) -> Data {
+    let domain = Data(commitmentDomainSeparator.utf8)
+    let fieldData = Data("\(field.rawValue):\(value)".utf8)
+    let recipientData = Data((recipientId ?? "").utf8)
+    let digest = SHA256.hash(data: domain + fieldData + recipientData + masterKey.withUnsafeBytes { Data($0) })
+    return Data(digest)
+  }
+
+  /// Legacy v1 digest using the 3-char prefix scheme. Retained ONLY for
+  /// backward-compatible verification of pre-v2 commitments still on disk.
+  static func computeV1Digest(
+    field: BusinessCardField,
+    value: String,
+    masterKey: SymmetricKey,
+    recipientId: String?
+  ) -> Data {
+    let committedValue = (field == .name) ? value : String(value.prefix(3))
     let fieldData = Data("\(field.rawValue):\(committedValue)".utf8)
     let recipientData = Data((recipientId ?? "").utf8)
-
-    let commitment = SHA256.hash(data: fieldData + recipientData + masterKey.withUnsafeBytes { Data($0) })
-    return Data(commitment)
+    let digest = SHA256.hash(data: fieldData + recipientData + masterKey.withUnsafeBytes { Data($0) })
+    return Data(digest)
   }
 }

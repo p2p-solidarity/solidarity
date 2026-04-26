@@ -255,6 +255,10 @@ final class SemaphoreIdentityManager: ObservableObject {
     return nil
   }
 
+  /// Non-cryptographic deterministic group identifier used only as a UI
+  /// fingerprint ("did the local view of members change?"). NOT a
+  /// Semaphore Merkle root — never compare against a proof envelope's
+  /// `groupRoot` because the circuit will never produce this value.
   static func deterministicGroupRoot(for commitments: [String]) -> String {
     let canonical = canonicalCommitments(commitments)
     let payload = canonical.joined(separator: "|")
@@ -262,13 +266,34 @@ final class SemaphoreIdentityManager: ObservableObject {
     return digest.map { String(format: "%02x", $0) }.joined()
   }
 
-  static func bindingRoot(for commitments: [String]) -> String {
+  /// Returns the Semaphore circuit-derived Merkle root for the given
+  /// commitments. When the Semaphore library is unavailable in this
+  /// build (x86_64 simulator, missing import), returns nil. Callers
+  /// must handle nil rather than substituting a non-circuit fallback —
+  /// a deterministic SHA256 group fingerprint will never match the
+  /// proof envelope's `groupRoot` and silently passing it through
+  /// produces verification failures that look like "wrong root" when
+  /// they're actually "wrong root algorithm".
+  static func bindingRootIfCircuitAvailable(for commitments: [String]) -> String? {
     #if canImport(Semaphore) && !(targetEnvironment(simulator) && arch(x86_64))
-      if let root = try? circuitGroupRoot(for: commitments) {
-        return root
-      }
+      return try? circuitGroupRoot(for: commitments)
+    #else
+      return nil
     #endif
-    return deterministicGroupRoot(for: commitments)
+  }
+
+  /// Backward-compatible accessor. Falls back to the deterministic
+  /// non-circuit fingerprint only when the Semaphore library is missing,
+  /// and logs the substitution so verification failures don't look like
+  /// data tampering. New verification code paths should prefer
+  /// `bindingRootIfCircuitAvailable` and explicitly handle nil.
+  static func bindingRoot(for commitments: [String]) -> String {
+    if let root = bindingRootIfCircuitAvailable(for: commitments) {
+      return root
+    }
+    let fallback = deterministicGroupRoot(for: commitments)
+    ZKLog.info("bindingRoot: Semaphore unavailable; returning deterministic fingerprint (NOT a circuit root). callers comparing to proof envelopes will see a mismatch.")
+    return fallback
   }
 
   static func clampForBinding(_ input: String) -> String {

@@ -184,8 +184,18 @@ final class ZKAgeVerificationService: ObservableObject {
         // Generate Semaphore proof
         // Group commitments would include trusted age verifiers in production
         let identity = try semaphoreManager.loadOrCreateIdentity()
-        guard let groupCommitments = SemaphoreGroupManager.shared.proofCommitments(containing: identity.commitment) else {
-            throw AgeVerificationError.proofGenerationFailed
+
+        // Bootstrap fallback (mirrors MoproProofService.generateWithSemaphore):
+        // If the user has not joined any peer group locally, fall back to a
+        // 2-member anchor group ([identity, passportAnchorCommitment]). The
+        // proof is still cryptographically sound — only the anonymity set
+        // is smaller (set of 2). Without this, a user with a valid
+        // birthdate but no joined group is blocked entirely.
+        let groupCommitments: [String]
+        if let existingGroup = SemaphoreGroupManager.shared.proofCommitments(containing: identity.commitment) {
+            groupCommitments = existingGroup
+        } else {
+            groupCommitments = [identity.commitment, SemaphoreIdentityManager.passportAnchorCommitment]
         }
 
         return try semaphoreManager.generateProof(

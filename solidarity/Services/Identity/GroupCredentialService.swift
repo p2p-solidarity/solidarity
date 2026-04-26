@@ -125,13 +125,25 @@ final class GroupCredentialService: ObservableObject {
           return .missingProof
         }
 
-        // Verify proof format and validity
+        // Verify proof format and validity.
+        //
+        // Scope MUST differ from signal — Semaphore derives the
+        // anonymity-collapsing nullifier from `(identitySecret, scope)`.
+        // If scope == groupId == signal, every proof from a given member
+        // in this group produces the same nullifier and the verifier can
+        // link presentations across sessions. We use a versioned context
+        // string for scope and the groupId for signal (the message being
+        // attested). The prover side mirrors this in
+        // `generateVerificationProof(for:)`.
+        let expectedSignal = Self.groupCredentialSignal(groupId: info.groupId)
+        let expectedScope = Self.groupCredentialScope(groupId: info.groupId)
+
         do {
           let isValidProof = try semaphoreManager.verifyProof(
             proof,
             expectedRoot: info.merkleRoot,
-            expectedSignal: info.groupId,
-            expectedScope: info.groupId
+            expectedSignal: expectedSignal,
+            expectedScope: expectedScope
           )
 
           if !isValidProof {
@@ -145,6 +157,26 @@ final class GroupCredentialService: ObservableObject {
 
       return .valid(context: context)
     }
+  }
+
+  // MARK: - Scope / signal derivation
+  //
+  // Domain-separated. Different from each other so the per-(secret, scope)
+  // nullifier is stable per group context but distinct from the signal
+  // payload. If we ever issue group credentials in a new context (e.g.
+  // group voting) the scope domain string changes and replays from the
+  // credential context don't carry over.
+
+  // Pure derivations — `nonisolated` so callers (and tests) can use them
+  // without hopping to the main actor.
+  nonisolated static let groupCredentialScopeDomain = "groupCredential.v1"
+
+  nonisolated static func groupCredentialScope(groupId: String) -> String {
+    "\(groupCredentialScopeDomain).\(groupId)"
+  }
+
+  nonisolated static func groupCredentialSignal(groupId: String) -> String {
+    groupId
   }
 
   // MARK: - Proof Generation
@@ -179,8 +211,8 @@ final class GroupCredentialService: ObservableObject {
 
     return try SemaphoreIdentityManager.shared.generateProof(
       groupCommitments: canonicalMembers,
-      message: group.id,
-      scope: group.id
+      message: Self.groupCredentialSignal(groupId: group.id),
+      scope: Self.groupCredentialScope(groupId: group.id)
     )
   }
 }

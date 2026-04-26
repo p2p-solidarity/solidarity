@@ -23,6 +23,24 @@ struct MoproProofOutput: Equatable {
   let trustLevel: String         // "green" = ZKP, "blue" = fallback
 }
 
+// MARK: - Errors
+
+enum MoproProofError: LocalizedError, Equatable {
+  /// OCR-supplied MRZ digest does not match the chip-derived DG1 digest.
+  /// The user is asked to re-scan the MRZ and try again. We refuse to
+  /// silently embed the OCR digest in a proof while the witness uses the
+  /// chip digest — that produces a credential whose self-attested digest
+  /// disagrees with the data the proof actually attested to.
+  case mrzDigestMismatch(ocr: String, chip: String)
+
+  var errorDescription: String? {
+    switch self {
+    case .mrzDigestMismatch(let ocr, let chip):
+      return "Passport MRZ digest does not match chip data (OCR=\(ocr.prefix(12))..., chip=\(chip.prefix(12))...). Re-scan the MRZ and try again."
+    }
+  }
+}
+
 // MARK: - Service
 
 final class MoproProofService {
@@ -135,6 +153,12 @@ final class MoproProofService {
   // swiftlint:disable function_parameter_count
   /// Generate a ZK proof from passport chip data using OpenPassport disclosure circuit.
   /// Falls back to Semaphore -> SD-JWT if OpenPassport proving is unavailable.
+  ///
+  /// Throws `MoproProofError.mrzDigestMismatch` when the OCR-supplied
+  /// `mrzDigest` and the chip-derived DG1 digest disagree. Previously the
+  /// service logged a warning and proceeded with inconsistent inputs
+  /// (chip digest as witness, OCR digest in payload) — now the caller is
+  /// asked to re-scan instead.
   func generatePassportProof(
     documentHash: String,
     mrzDigest: String,
@@ -144,13 +168,25 @@ final class MoproProofService {
     expiryDate: Date,
     passiveAuthPassed: Bool,
     onProgress: @escaping @Sendable (String) -> Void
-  ) async -> MoproProofOutput {
+  ) async throws -> MoproProofOutput {
     let start = DispatchTime.now()
 
     logger.info("========== PASSPORT PROOF GENERATION START ==========")
     logger.info("nationality=\(nationalityCode), passiveAuth=\(passiveAuthPassed)")
     logger.info("dg1MRZData length=\(dg1MRZData.count), documentHash=\(documentHash.prefix(16))...")
     logger.info("mrzDigest=\(mrzDigest.prefix(16))..., expiryDate=\(expiryDate)")
+
+    // ── Step 0: Hard-fail on MRZ digest mismatch ──
+    // Done outside generateWithOpenPassport so the Noir witness path stays
+    // untouched. We compute a normalized chip digest the same way the Noir
+    // builder does — sanitized DG1 prefix-88 SHA256 — and reject early when
+    // it disagrees with the caller-supplied OCR digest.
+    if !mrzDigest.isEmpty, let chipDigest = chipDerivedMRZDigest(from: dg1MRZData) {
+      if chipDigest.lowercased() != mrzDigest.lowercased() {
+        logger.error("[MRZ] DIGEST MISMATCH — ocr=\(mrzDigest.prefix(16))..., chip=\(chipDigest.prefix(16))...")
+        throw MoproProofError.mrzDigestMismatch(ocr: mrzDigest, chip: chipDigest)
+      }
+    }
 
     // ── Step 1: OpenPassport (Mopro/Noir) ──
     logger.info("── Step 1/3: OpenPassport (Noir/Mopro) ──")
@@ -210,6 +246,25 @@ final class MoproProofService {
     return result
   }
   // swiftlint:enable function_parameter_count
+
+  // MARK: - MRZ digest helper (mismatch detection)
+
+  /// Compute the chip-derived MRZ digest the same way `buildDisclosureWitness`
+  /// does — sanitize DG1 to ASCII letters/digits/`<`, take the first 88
+  /// characters (TD3 line1+line2), SHA256 the bytes. Returns nil when the
+  /// raw DG1 MRZ is too short to derive a digest from (in which case we
+  /// can't compare and won't raise a mismatch).
+  private func chipDerivedMRZDigest(from rawMRZ: String) -> String? {
+    let sanitized = rawMRZ
+      .uppercased()
+      .filter { character in
+        character.isASCII && (character.isLetter || character.isNumber || character == "<")
+      }
+    guard sanitized.count >= 88 else { return nil }
+    let bytes = Array(sanitized.prefix(88).utf8)
+    let digest = SHA256.hash(data: Data(bytes))
+    return digest.map { String(format: "%02x", $0) }.joined()
+  }
 
   // MARK: - OpenPassport Native Proof
 

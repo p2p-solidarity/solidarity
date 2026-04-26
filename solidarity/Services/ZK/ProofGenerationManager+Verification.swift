@@ -294,19 +294,25 @@ extension ProofGenerationManager {
     attribute: AttributeType,
     value: String
   ) -> Bool {
-    // Compare by first 3 characters to avoid leaking full data and to simplify checks
-    let target = String(value.prefix(3)).lowercased()
+    // v2: compare the full normalized value (not a 3-char prefix). Prefix
+    // matching gave attackers a tiny search space and made commitments
+    // brute-forceable. We now case-fold and trim, but otherwise match the
+    // entire field.
+    let target = value.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+    func norm(_ str: String?) -> String {
+      (str ?? "").trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+    }
     switch attribute {
     case .skill:
-      return businessCard.skills.contains { String($0.name.prefix(3)).lowercased() == target }
+      return businessCard.skills.contains { norm($0.name) == target }
     case .company:
-      return String((businessCard.company ?? "").prefix(3)).lowercased() == target
+      return norm(businessCard.company) == target
     case .title:
-      return String((businessCard.title ?? "").prefix(3)).lowercased() == target
+      return norm(businessCard.title) == target
     case .domain:
       if let email = businessCard.email {
         let domain = email.components(separatedBy: "@").last?.lowercased()
-        return String((domain ?? "").prefix(3)).lowercased() == target
+        return norm(domain) == target
       }
       return false
     }
