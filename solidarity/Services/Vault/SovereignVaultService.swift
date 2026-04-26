@@ -68,7 +68,7 @@ final class SovereignVaultService: ObservableObject {
         let encryptedURL = vaultDirectoryURL.appendingPathComponent(encryptedFileName)
 
         let result = try await encryption.encryptData(data)
-        try result.encryptedData.write(to: encryptedURL)
+        try result.encryptedData.write(to: encryptedURL, options: [.atomic, .completeFileProtection])
 
         let item = VaultItem(
             id: itemId,
@@ -105,7 +105,7 @@ final class SovereignVaultService: ObservableObject {
         let encryptedURL = vaultDirectoryURL.appendingPathComponent(encryptedFileName)
 
         let result = try await encryption.encryptData(data)
-        try result.encryptedData.write(to: encryptedURL)
+        try result.encryptedData.write(to: encryptedURL, options: [.atomic, .completeFileProtection])
 
         let metadata = VaultMetadata(
             sourceApp: sourceApp,
@@ -141,7 +141,7 @@ final class SovereignVaultService: ObservableObject {
         }
 
         let decryptedData = try await encryption.decryptData(Data(contentsOf: item.encryptedPath))
-        try decryptedData.write(to: destinationURL)
+        try decryptedData.write(to: destinationURL, options: [.atomic, .completeFileProtection])
     }
 
     /// Get decrypted data for an item
@@ -269,8 +269,16 @@ final class SovereignVaultService: ObservableObject {
 
     private func setupVaultDirectory() {
         if !fileManager.fileExists(atPath: vaultDirectoryURL.path) {
-            try? fileManager.createDirectory(at: vaultDirectoryURL, withIntermediateDirectories: true)
+            try? fileManager.createDirectory(
+                at: vaultDirectoryURL,
+                withIntermediateDirectories: true,
+                attributes: [.protectionKey: FileProtectionType.complete]
+            )
         }
+        try? fileManager.setAttributes(
+            [.protectionKey: FileProtectionType.complete],
+            ofItemAtPath: vaultDirectoryURL.path
+        )
     }
 
     private func loadMetadata() {
@@ -288,7 +296,7 @@ final class SovereignVaultService: ObservableObject {
     private func saveMetadata() {
         do {
             let data = try JSONEncoder().encode(items)
-            try data.write(to: metadataURL)
+            try data.write(to: metadataURL, options: [.atomic, .completeFileProtection])
         } catch {
             print("Failed to save vault metadata: \(error)")
         }

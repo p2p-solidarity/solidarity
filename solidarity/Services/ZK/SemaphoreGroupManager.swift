@@ -322,7 +322,15 @@ private final class GroupStorage {
       fatalError("Could not access application support directory")
     }
     let appDir = dir.appendingPathComponent("solidarity", isDirectory: true)
-    try? FileManager.default.createDirectory(at: appDir, withIntermediateDirectories: true)
+    try? FileManager.default.createDirectory(
+      at: appDir,
+      withIntermediateDirectories: true,
+      attributes: [.protectionKey: FileProtectionType.complete]
+    )
+    try? FileManager.default.setAttributes(
+      [.protectionKey: FileProtectionType.complete],
+      ofItemAtPath: appDir.path
+    )
     url = appDir.appendingPathComponent("semaphore_group.json")
   }
 
@@ -356,6 +364,8 @@ private final class GroupStorage {
 
   func save(groups: [SemaphoreGroupManager.ManagedGroup], selectedGroupId: UUID?) {
     let state = State(groups: groups, selectedGroupId: selectedGroupId)
-    if let data = try? JSONEncoder().encode(state) { try? data.write(to: url) }
+    if let data = try? JSONEncoder().encode(state) {
+      try? data.write(to: url, options: [.atomic, .completeFileProtection])
+    }
   }
 }

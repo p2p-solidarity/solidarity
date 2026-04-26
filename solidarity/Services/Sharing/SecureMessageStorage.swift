@@ -37,8 +37,10 @@ class SecureMessageStorage: ObservableObject {
     let fileURL = directoryURL.appendingPathComponent(filename(for: sender))
 
     do {
-      try text.write(to: fileURL, atomically: true, encoding: .utf8)
-      print("[SecureMessageStorage] Saved message from \(sender)")
+      if let data = text.data(using: .utf8) {
+        try data.write(to: fileURL, options: [.atomic, .completeFileProtection])
+        print("[SecureMessageStorage] Saved message from \(sender)")
+      }
     } catch {
       print("[SecureMessageStorage] Failed to save message: \(error)")
     }
@@ -127,7 +129,7 @@ class SecureMessageStorage: ObservableObject {
 
     do {
       let data = try JSONEncoder().encode(messageHistory)
-      try data.write(to: historyURL, options: .atomic)
+      try data.write(to: historyURL, options: [.atomic, .completeFileProtection])
     } catch {
       print("[SecureMessageStorage] Failed to save history: \(error)")
     }
@@ -144,7 +146,11 @@ class SecureMessageStorage: ObservableObject {
 
     if !fileManager.fileExists(atPath: storageURL.path) {
       do {
-        try fileManager.createDirectory(at: storageURL, withIntermediateDirectories: true)
+        try fileManager.createDirectory(
+          at: storageURL,
+          withIntermediateDirectories: true,
+          attributes: [.protectionKey: FileProtectionType.complete]
+        )
 
         // CRITICAL: Exclude from iCloud backup
         var url = storageURL
@@ -158,6 +164,12 @@ class SecureMessageStorage: ObservableObject {
         return nil
       }
     }
+
+    // Re-apply complete protection in case directory predates this hardening.
+    try? fileManager.setAttributes(
+      [.protectionKey: FileProtectionType.complete],
+      ofItemAtPath: storageURL.path
+    )
 
     return storageURL
   }

@@ -26,10 +26,10 @@ extension TwitterArchiveImporter {
         }
 
         var account = TwitterAccount(
-            id: accountObj["accountId"] as? String ?? "",
-            username: accountObj["username"] as? String ?? "",
-            displayName: accountObj["accountDisplayName"] as? String ?? "",
-            email: accountObj["email"] as? String ?? "",
+            id: cappedField(accountObj["accountId"] as? String, maxBytes: TwitterImportLimits.maxShortFieldBytes),
+            username: cappedField(accountObj["username"] as? String, maxBytes: TwitterImportLimits.maxShortFieldBytes),
+            displayName: cappedField(accountObj["accountDisplayName"] as? String, maxBytes: TwitterImportLimits.maxShortFieldBytes),
+            email: cappedField(accountObj["email"] as? String, maxBytes: TwitterImportLimits.maxShortFieldBytes),
             createdAt: parseTwitterDate(accountObj["createdAt"] as? String) ?? Date()
         )
 
@@ -40,10 +40,11 @@ extension TwitterArchiveImporter {
            let profileObj = profileArray.first?["profile"] as? [String: Any] {
 
             if let description = profileObj["description"] as? [String: Any] {
-                account.bio = description["bio"] as? String
+                account.bio = cappedField(description["bio"] as? String, maxBytes: TwitterImportLimits.maxLongFieldBytes)
             }
             if let avatar = profileObj["avatarMediaUrl"] as? String {
-                account.avatarURL = URL(string: avatar)
+                let cappedAvatar = cappedField(avatar, maxBytes: TwitterImportLimits.maxShortFieldBytes)
+                account.avatarURL = URL(string: cappedAvatar)
             }
         }
 
@@ -60,10 +61,12 @@ extension TwitterArchiveImporter {
             throw TwitterImportError.invalidDataFormat
         }
 
+        let bounded = tweetsArray.prefix(TwitterImportLimits.maxRecordsPerArray)
         var tweets: [Tweet] = []
-        let total = tweetsArray.count
+        tweets.reserveCapacity(bounded.count)
+        let total = bounded.count
 
-        for (index, wrapper) in tweetsArray.enumerated() {
+        for (index, wrapper) in bounded.enumerated() {
             if let tweetData = wrapper["tweet"] as? [String: Any] {
                 if let tweet = parseTweet(from: tweetData) {
                     tweets.append(tweet)
@@ -71,7 +74,7 @@ extension TwitterArchiveImporter {
             }
 
             if index % 100 == 0 {
-                progress?(Double(index) / Double(total))
+                progress?(Double(index) / Double(max(total, 1)))
             }
         }
 
@@ -85,12 +88,12 @@ extension TwitterArchiveImporter {
             throw TwitterImportError.invalidDataFormat
         }
 
-        return likesArray.compactMap { wrapper -> Like? in
+        return likesArray.prefix(TwitterImportLimits.maxRecordsPerArray).compactMap { wrapper -> Like? in
             guard let likeData = wrapper["like"] as? [String: Any] else { return nil }
             return Like(
-                tweetId: likeData["tweetId"] as? String ?? "",
-                fullText: likeData["fullText"] as? String,
-                expandedUrl: likeData["expandedUrl"] as? String
+                tweetId: cappedField(likeData["tweetId"] as? String, maxBytes: TwitterImportLimits.maxShortFieldBytes),
+                fullText: cappedField(likeData["fullText"] as? String, maxBytes: TwitterImportLimits.maxLongFieldBytes),
+                expandedUrl: cappedField(likeData["expandedUrl"] as? String, maxBytes: TwitterImportLimits.maxShortFieldBytes)
             )
         }
     }
@@ -102,15 +105,15 @@ extension TwitterArchiveImporter {
             throw TwitterImportError.invalidDataFormat
         }
 
-        return connectionsArray.compactMap { wrapper -> Connection? in
+        return connectionsArray.prefix(TwitterImportLimits.maxRecordsPerArray).compactMap { wrapper -> Connection? in
             // Handle both "follower" and "following" formats
             let connectionData = wrapper["follower"] as? [String: Any] ??
                                  wrapper["following"] as? [String: Any]
             guard let data = connectionData else { return nil }
 
             return Connection(
-                accountId: data["accountId"] as? String ?? "",
-                userLink: data["userLink"] as? String
+                accountId: cappedField(data["accountId"] as? String, maxBytes: TwitterImportLimits.maxShortFieldBytes),
+                userLink: cappedField(data["userLink"] as? String, maxBytes: TwitterImportLimits.maxShortFieldBytes)
             )
         }
     }
@@ -122,30 +125,43 @@ extension TwitterArchiveImporter {
             throw TwitterImportError.invalidDataFormat
         }
 
-        return dmArray.compactMap { wrapper -> DirectMessageConversation? in
+        return dmArray.prefix(TwitterImportLimits.maxRecordsPerArray).compactMap { wrapper -> DirectMessageConversation? in
             guard let convData = wrapper["dmConversation"] as? [String: Any],
                   let messagesData = convData["messages"] as? [[String: Any]] else {
                 return nil
             }
 
-            let messages = messagesData.compactMap { parseDirectMessage(from: $0) }
+            let messages = messagesData
+                .prefix(TwitterImportLimits.maxRecordsPerArray)
+                .compactMap { parseDirectMessage(from: $0) }
 
             return DirectMessageConversation(
-                conversationId: convData["conversationId"] as? String ?? UUID().uuidString,
+                conversationId: cappedField(
+                    convData["conversationId"] as? String,
+                    maxBytes: TwitterImportLimits.maxShortFieldBytes
+                ).isEmpty ? UUID().uuidString : cappedField(
+                    convData["conversationId"] as? String,
+                    maxBytes: TwitterImportLimits.maxShortFieldBytes
+                ),
                 messages: messages
             )
         }
     }
 
     func parseTweet(from data: [String: Any]) -> Tweet? {
-        guard let id = data["id"] as? String ?? data["id_str"] as? String else {
+        guard let rawId = data["id"] as? String ?? data["id_str"] as? String else {
             return nil
         }
+        let id = cappedField(rawId, maxBytes: TwitterImportLimits.maxShortFieldBytes)
 
-        let fullText = data["full_text"] as? String ?? data["text"] as? String ?? ""
+        let fullText = cappedField(
+            data["full_text"] as? String ?? data["text"] as? String,
+            maxBytes: TwitterImportLimits.maxLongFieldBytes
+        )
         let createdAt = parseTwitterDate(data["created_at"] as? String) ?? Date()
 
-        // Parse entities
+        // Parse entities (each entity array bounded to keep one tampered tweet
+        // from blowing memory).
         var hashtags: [String] = []
         var mentions: [String] = []
         var urls: [String] = []
@@ -153,18 +169,27 @@ extension TwitterArchiveImporter {
 
         if let entities = data["entities"] as? [String: Any] {
             if let hashtagsData = entities["hashtags"] as? [[String: Any]] {
-                hashtags = hashtagsData.compactMap { $0["text"] as? String }
+                hashtags = hashtagsData.prefix(TwitterImportLimits.maxRecordsPerArray).compactMap {
+                    let raw = $0["text"] as? String
+                    return raw.map { cappedField($0, maxBytes: TwitterImportLimits.maxShortFieldBytes) }
+                }
             }
             if let mentionsData = entities["user_mentions"] as? [[String: Any]] {
-                mentions = mentionsData.compactMap { $0["screen_name"] as? String }
+                mentions = mentionsData.prefix(TwitterImportLimits.maxRecordsPerArray).compactMap {
+                    let raw = $0["screen_name"] as? String
+                    return raw.map { cappedField($0, maxBytes: TwitterImportLimits.maxShortFieldBytes) }
+                }
             }
             if let urlsData = entities["urls"] as? [[String: Any]] {
-                urls = urlsData.compactMap { $0["expanded_url"] as? String }
+                urls = urlsData.prefix(TwitterImportLimits.maxRecordsPerArray).compactMap {
+                    let raw = $0["expanded_url"] as? String
+                    return raw.map { cappedField($0, maxBytes: TwitterImportLimits.maxShortFieldBytes) }
+                }
             }
             if let mediaData = entities["media"] as? [[String: Any]] {
-                mediaURLs = mediaData.compactMap {
+                mediaURLs = mediaData.prefix(TwitterImportLimits.maxRecordsPerArray).compactMap {
                     guard let urlString = $0["media_url_https"] as? String else { return nil }
-                    return URL(string: urlString)
+                    return URL(string: cappedField(urlString, maxBytes: TwitterImportLimits.maxShortFieldBytes))
                 }
             }
         }
@@ -172,9 +197,9 @@ extension TwitterArchiveImporter {
         // Extended entities for media
         if let extendedEntities = data["extended_entities"] as? [String: Any],
            let mediaData = extendedEntities["media"] as? [[String: Any]] {
-            let extendedMedia = mediaData.compactMap { entry -> URL? in
+            let extendedMedia = mediaData.prefix(TwitterImportLimits.maxRecordsPerArray).compactMap { entry -> URL? in
                 guard let urlString = entry["media_url_https"] as? String else { return nil }
-                return URL(string: urlString)
+                return URL(string: cappedField(urlString, maxBytes: TwitterImportLimits.maxShortFieldBytes))
             }
             mediaURLs.append(contentsOf: extendedMedia)
         }
@@ -185,34 +210,57 @@ extension TwitterArchiveImporter {
             createdAt: createdAt,
             favoriteCount: data["favorite_count"] as? Int ?? 0,
             retweetCount: data["retweet_count"] as? Int ?? 0,
-            inReplyToStatusId: data["in_reply_to_status_id_str"] as? String,
-            inReplyToUserId: data["in_reply_to_user_id_str"] as? String,
+            inReplyToStatusId: (data["in_reply_to_status_id_str"] as? String).map {
+                cappedField($0, maxBytes: TwitterImportLimits.maxShortFieldBytes)
+            },
+            inReplyToUserId: (data["in_reply_to_user_id_str"] as? String).map {
+                cappedField($0, maxBytes: TwitterImportLimits.maxShortFieldBytes)
+            },
             hashtags: hashtags,
             mentions: mentions,
             urls: urls,
             mediaURLs: mediaURLs,
-            retweetedStatusId: (data["retweeted_status"] as? [String: Any])?["id_str"] as? String,
+            retweetedStatusId: ((data["retweeted_status"] as? [String: Any])?["id_str"] as? String).map {
+                cappedField($0, maxBytes: TwitterImportLimits.maxShortFieldBytes)
+            },
             source: extractSource(from: data["source"] as? String)
         )
     }
 
     func parseDirectMessage(from data: [String: Any]) -> DirectMessage? {
         guard let messageData = data["messageCreate"] as? [String: Any],
-              let id = messageData["id"] as? String else {
+              let rawId = messageData["id"] as? String else {
             return nil
         }
 
         return DirectMessage(
-            id: id,
-            senderId: messageData["senderId"] as? String ?? "",
-            recipientId: (messageData["recipient"] as? [String: Any])?["recipientId"] as? String ?? "",
-            text: messageData["text"] as? String ?? "",
+            id: cappedField(rawId, maxBytes: TwitterImportLimits.maxShortFieldBytes),
+            senderId: cappedField(messageData["senderId"] as? String, maxBytes: TwitterImportLimits.maxShortFieldBytes),
+            recipientId: cappedField(
+                (messageData["recipient"] as? [String: Any])?["recipientId"] as? String,
+                maxBytes: TwitterImportLimits.maxShortFieldBytes
+            ),
+            text: cappedField(messageData["text"] as? String, maxBytes: TwitterImportLimits.maxLongFieldBytes),
             createdAt: parseTwitterDate(messageData["createdAt"] as? String) ?? Date()
         )
     }
 
     /// Read Twitter JS file format (window.YTD.xxx.part0 = [...])
+    /// Rejects the file if its on-disk size exceeds `TwitterImportLimits.maxFileSizeBytes`
+    /// before reading anything into memory, and bumps a per-importer running total
+    /// that is also capped by `TwitterImportLimits.maxTotalSizeBytes`.
     func readTwitterJS(from url: URL) async throws -> Data {
+        let attrs = try FileManager.default.attributesOfItem(atPath: url.path)
+        let fileSize = (attrs[.size] as? NSNumber)?.int64Value ?? 0
+        if fileSize > TwitterImportLimits.maxFileSizeBytes {
+            throw TwitterImportError.fileTooLarge(
+                name: url.lastPathComponent,
+                sizeBytes: fileSize,
+                limitBytes: TwitterImportLimits.maxFileSizeBytes
+            )
+        }
+        try noteBytesAccepted(fileSize)
+
         var content = try String(contentsOf: url, encoding: .utf8)
 
         // Remove the JavaScript variable assignment prefix
@@ -227,6 +275,19 @@ extension TwitterArchiveImporter {
         }
 
         return data
+    }
+
+    /// Truncates a string to the configured field byte budget. Twitter's takeout
+    /// usually fits well below these limits; this guards against tampered files.
+    func cappedField(_ raw: String?, maxBytes: Int) -> String {
+        guard let raw, !raw.isEmpty else { return "" }
+        let utf8 = Array(raw.utf8)
+        if utf8.count <= maxBytes { return raw }
+        // Drop any partial UTF-8 sequence at the boundary so we don't produce
+        // invalid Strings.
+        var cutoff = maxBytes
+        while cutoff > 0, (utf8[cutoff] & 0xC0) == 0x80 { cutoff -= 1 }
+        return String(decoding: utf8.prefix(cutoff), as: UTF8.self)
     }
 
     func parseTwitterDate(_ dateString: String?) -> Date? {

@@ -161,7 +161,13 @@ final class BackupManager: ObservableObject {
       payload.append(ciphertext)
 
       let backupURL = containerURL.appendingPathComponent("backup_\(Date().timeIntervalSince1970).solbk")
-      try payload.write(to: backupURL, options: [.atomic, .completeFileProtection])
+      // Local-only files can lock down with completeFileProtection. iCloud-resident
+      // backups must remain readable while locked so CloudKit can sync them; the
+      // ciphertext is already encrypted at rest, so .atomic alone is sufficient.
+      let writeOptions: Data.WritingOptions = isICloudAvailable
+        ? [.atomic]
+        : [.atomic, .completeFileProtection]
+      try payload.write(to: backupURL, options: writeOptions)
 
       // Rotate old backups
       rotateBackups(in: containerURL)
