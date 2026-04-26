@@ -5,6 +5,12 @@ extension ProofVerifierService {
 
   // MARK: - VP Envelope Verification
 
+  /// Verifies a Verifiable Presentation envelope. A plain JSON VP without a
+  /// holder JWT signature cannot be considered valid even when its embedded
+  /// VCs verify — without a holder proof of possession we have no way to
+  /// bind the presentation to the alleged holder. Callers wanting holder
+  /// binding must pass a signed VP JWT (handled in `verifyVpToken` via
+  /// `verifyJWTSignature`).
   func verifyVPEnvelope(_ vp: [String: Any]) -> VpTokenVerificationResult {
     var details: [String] = []
 
@@ -49,11 +55,11 @@ extension ProofVerifierService {
     }
 
     return VpTokenVerificationResult(
-      isValid: true,
-      status: .verified,
-      title: "VP verified",
-      reason: "Verifiable Presentation structure and embedded credentials are valid.",
-      details: details
+      isValid: false,
+      status: .failed,
+      title: "VP envelope unsigned",
+      reason: "VP envelope is unsigned (no holder proof of possession).",
+      details: details + ["Embedded credentials verify, but the JSON VP itself carries no holder JWT signature. Re-issue as a signed VP JWT (typ: vp+jwt)."]
     )
   }
 

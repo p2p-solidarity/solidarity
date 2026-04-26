@@ -75,7 +75,11 @@ extension OIDCService {
     let scheme = components.scheme?.lowercased() ?? ""
     let isDirectPost = responseMode.lowercased().hasPrefix("direct_post")
 
-    if scheme == "https" || scheme == "http" {
+    if scheme == "http" {
+      return .failure(.invalidData("vp_token submission requires https"))
+    }
+
+    if scheme == "https" {
       guard let postURL = components.url else {
         return .failure(.invalidData("Failed to build POST URL"))
       }

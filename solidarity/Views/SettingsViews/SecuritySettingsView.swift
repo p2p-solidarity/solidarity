@@ -51,6 +51,8 @@ struct SecuritySettingsView: View {
       return String(localized: "Require Face ID for key rotation")
     case .revealRecoveryBundle:
       return String(localized: "Require Face ID for recovery")
+    case .registerTrustAnchor:
+      return String(localized: "Require Face ID for trusted issuers")
     }
   }
 

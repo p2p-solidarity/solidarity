@@ -287,8 +287,11 @@ final class OIDCService: ObservableObject {
   }
 
   /// Async parse that honours OID4VP 1.0 `request_uri`: fetches the signed
-  /// (or plain JSON) Request Object and parses its body. Falls back to
-  /// normal query-param parsing when request_uri is absent.
+  /// (or plain JSON) Request Object and parses its body. When a JWT-wrapped
+  /// Request Object is present (either via `request` query param or fetched
+  /// from `request_uri`), the JWT signature MUST verify against the issuer's
+  /// public key — otherwise the request is rejected. We never silently fall
+  /// back to plain query-param parsing on JWT failure.
   func parseRequestAsync(from string: String) async -> CardResult<PresentationRequest> {
     guard let url = URL(string: string),
           let components = URLComponents(url: url, resolvingAgainstBaseURL: false)
@@ -302,9 +305,7 @@ final class OIDCService: ObservableObject {
     }
 
     if let requestJWT = components.queryItems?.first(where: { $0.name == "request" })?.value {
-      if let resolved = resolveRequestJWT(requestJWT, fallbackComponents: components) {
-        return resolved
-      }
+      return resolveRequestJWT(requestJWT, fallbackComponents: components)
     }
 
     return parseRequest(components: components)
@@ -425,8 +426,12 @@ final class OIDCService: ObservableObject {
         return .failure(.networkError("request_uri fetch returned HTTP \(code)"))
       }
       let body = String(data: data, encoding: .utf8) ?? ""
-      if let resolved = resolveRequestJWT(body, fallbackComponents: fallbackComponents) {
-        return resolved
+      let trimmedBody = body.trimmingCharacters(in: .whitespacesAndNewlines)
+      // A JWT-shaped body MUST verify; we do not fall back to JSON parsing
+      // when the response looks like a JWT, because that would let an
+      // attacker who controls a JWT-shaped string bypass signature checks.
+      if trimmedBody.split(separator: ".").count == 3 {
+        return resolveRequestJWT(trimmedBody, fallbackComponents: fallbackComponents)
       }
       if let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
         return parseRequest(components: componentsFromRequestObject(json, fallback: fallbackComponents))
@@ -437,20 +442,49 @@ final class OIDCService: ObservableObject {
     }
   }
 
-  private func resolveRequestJWT(_ token: String, fallbackComponents: URLComponents) -> CardResult<PresentationRequest>? {
+  private func resolveRequestJWT(_ token: String, fallbackComponents: URLComponents) -> CardResult<PresentationRequest> {
     let trimmed = token.trimmingCharacters(in: .whitespacesAndNewlines)
     let segments = trimmed.split(separator: ".")
     guard segments.count == 3,
+          let headerData = Data(base64URLEncoded: String(segments[0])),
           let payloadData = Data(base64URLEncoded: String(segments[1])),
+          let header = try? JSONSerialization.jsonObject(with: headerData) as? [String: Any],
           let json = try? JSONSerialization.jsonObject(with: payloadData) as? [String: Any]
     else {
-      return nil
+      return .failure(.invalidData("Request Object JWT is malformed"))
     }
-    // NOTE: we intentionally do NOT verify the Request Object signature
-    // here. Verification requires the verifier's public key (via client
-    // metadata or DID resolution) which is not in scope for this patch.
-    // The caller should treat values from a JWT-wrapped request as
-    // unauthenticated until a follow-up pass adds signature verification.
+    // OID4VP 1.0 §5.10 — the Request Object is signed by the verifier
+    // (`iss`/`client_id` claim). Resolve to a public key via did:key when
+    // possible, else via the locally-trusted issuer anchor store, and
+    // verify ES256 before treating any of the embedded values as trusted.
+    let issuer = (json["iss"] as? String) ?? (json["client_id"] as? String) ?? ""
+    let keyId = header["kid"] as? String
+    guard !issuer.isEmpty else {
+      return .failure(.invalidData("Request Object JWT missing iss/client_id"))
+    }
+    let resolvedKey: PublicKeyJWK
+    if let didKey = DIDKeyResolver.resolveP256JWK(from: issuer) {
+      resolvedKey = didKey
+    } else if let anchor = IssuerTrustAnchorStore.shared.trustedJWK(for: issuer, keyId: keyId) {
+      resolvedKey = anchor
+    } else {
+      return .failure(.invalidData("Request Object issuer is untrusted: \(issuer)"))
+    }
+    do {
+      let publicKey = try resolvedKey.toP256PublicKey()
+      let signingInput = Data("\(segments[0]).\(segments[1])".utf8)
+      guard let signatureData = Data(base64URLEncoded: String(segments[2])) else {
+        return .failure(.invalidData("Request Object JWT has invalid signature encoding"))
+      }
+      let signature =
+        (try? P256.Signing.ECDSASignature(rawRepresentation: signatureData))
+        ?? (try? P256.Signing.ECDSASignature(derRepresentation: signatureData))
+      guard let signature, publicKey.isValidSignature(signature, for: signingInput) else {
+        return .failure(.invalidData("Request Object JWT signature verification failed"))
+      }
+    } catch {
+      return .failure(.cryptographicError("Request Object verification error: \(error.localizedDescription)"))
+    }
     return parseRequest(components: componentsFromRequestObject(json, fallback: fallbackComponents))
   }
 
