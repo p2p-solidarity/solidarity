@@ -251,6 +251,11 @@ final class ProvableClaimEntity {
 }
 
 extension ContactEntity {
+  /// Persists a legacy `Contact` snapshot into SwiftData. SECURITY: callers
+  /// must populate `legacy.verificationStatus` from local crypto evidence
+  /// (signature/JWT/ZKP verified on this device) — never copy a status
+  /// field straight off a remote payload. ContactRepository.mergedContact
+  /// enforces this on duplicate-merge.
   static func fromLegacy(_ legacy: Contact) -> ContactEntity {
     ContactEntity(
       id: legacy.id.uuidString,

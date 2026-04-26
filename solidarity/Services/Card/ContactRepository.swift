@@ -261,19 +261,52 @@ class ContactRepository: ContactRepositoryProtocol, ObservableObject {
   }
 
   private func mergedContact(existing: Contact, incoming: Contact) -> Contact {
-    Contact(
+    // SECURITY: Trust status must NOT be copied wholesale from the incoming
+    // record on merge. Re-derive from the locally-observed cryptographic
+    // state held by `IdentityCoordinator.verificationSubject`, which only
+    // gets `.verified` after a real signature/proof check on this device.
+    // Falling back to `existing` (never `incoming`) avoids letting a
+    // forged payload upgrade an existing badge.
+    let crypto = IdentityCoordinator.shared.verificationStatus(for: incoming.businessCard.id)
+    let mergedStatus = Self.recomputedVerificationStatus(
+      existing: existing.verificationStatus,
+      incoming: incoming.verificationStatus,
+      crypto: crypto
+    )
+    return Contact(
       id: existing.id,
       businessCard: incoming.businessCard,
       receivedAt: existing.receivedAt,
       source: existing.source,
       tags: mergeTags(existing.tags, newTags: incoming.tags),
       notes: incoming.notes ?? existing.notes,
-      verificationStatus: incoming.verificationStatus,
+      verificationStatus: mergedStatus,
       lastInteraction: Date(),
       sealedRoute: incoming.sealedRoute ?? existing.sealedRoute,
       pubKey: incoming.pubKey ?? existing.pubKey,
       signPubKey: incoming.signPubKey ?? existing.signPubKey
     )
+  }
+
+  /// Resolves the merged contact's verification status from the locally
+  /// observed crypto state. The wire-supplied `incoming` value is treated
+  /// as advisory only: we never promote to `.verified` without a matching
+  /// entry in the verification cache, which is populated exclusively by
+  /// code paths that just verified a signature/ZKP/JWT locally on this
+  /// device for this scan.
+  static func recomputedVerificationStatus(
+    existing: VerificationStatus,
+    incoming: VerificationStatus,
+    crypto: VerificationStatus?
+  ) -> VerificationStatus {
+    // Fresh local crypto evidence (this run) is the strongest signal.
+    if let crypto {
+      return crypto
+    }
+    // No fresh evidence — keep the previously stored status. We refuse to
+    // upgrade based on `incoming` because that field is attacker-controlled
+    // when the merge originates from a remote payload.
+    return existing
   }
 
   /// Load contacts from encrypted storage

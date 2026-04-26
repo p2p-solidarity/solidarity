@@ -119,7 +119,57 @@ final class ContactManagementTests: XCTestCase {
             XCTFail("Merge confirmation failed: \(error)")
         }
     }
-    
+
+    // MARK: - Trust-status forgery (TASK 27)
+
+    /// A malicious peer cannot promote a previously-unverified contact to
+    /// `.verified` just by stamping `verificationStatus = .verified` on the
+    /// payload it sends. The merge step must recompute trust from local
+    /// crypto state, not copy it off the wire.
+    func testForgedVerifiedStatusFromIncomingPayloadIsRejectedOnMerge() {
+        let merged = ContactRepository.recomputedVerificationStatus(
+            existing: .unverified,
+            incoming: .verified, // attacker-controlled
+            crypto: nil           // no local evidence for this card
+        )
+        XCTAssertEqual(merged, .unverified, "Forged .verified must not promote without local crypto evidence")
+    }
+
+    /// When local crypto evidence DOES exist (we just verified a JWT/ZKP/
+    /// signature on this device), that result wins.
+    func testLocalCryptoEvidenceOverridesAnyIncomingClaim() {
+        XCTAssertEqual(
+            ContactRepository.recomputedVerificationStatus(
+                existing: .unverified,
+                incoming: .verified,
+                crypto: .failed
+            ),
+            .failed,
+            "Local crypto wins over incoming claim"
+        )
+        XCTAssertEqual(
+            ContactRepository.recomputedVerificationStatus(
+                existing: .verified,
+                incoming: .unverified,
+                crypto: .verified
+            ),
+            .verified,
+            "Local crypto wins over incoming claim (positive case)"
+        )
+    }
+
+    /// A previously-verified contact stays verified across merges that come
+    /// without fresh local evidence — we trust the historical local result,
+    /// never the wire-supplied status.
+    func testExistingVerifiedSurvivesMergeWithoutFreshEvidence() {
+        let merged = ContactRepository.recomputedVerificationStatus(
+            existing: .verified,
+            incoming: .failed, // attacker tries to clobber the badge
+            crypto: nil
+        )
+        XCTAssertEqual(merged, .verified, "Existing verified status must not be overwritten by wire data")
+    }
+
     func testUpdateContact() throws {
         // Given
         let businessCard = BusinessCard.sample
