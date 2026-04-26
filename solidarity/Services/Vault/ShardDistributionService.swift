@@ -28,6 +28,10 @@ final class ShardDistributionService: ObservableObject {
     let distributedKey = "com.solidarity.vault.distributedShards"
     let receivedKey = "com.solidarity.vault.receivedShards"
 
+    // Tracks which shard ids have been migrated out of plaintext storage so we
+    // only log the migration once per id.
+    var migratedShardIds: Set<UUID> = []
+
     // MARK: - Private Properties
 
     private let context = CIContext()

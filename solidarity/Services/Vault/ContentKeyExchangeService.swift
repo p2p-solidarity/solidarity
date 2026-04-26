@@ -28,6 +28,7 @@ final class ContentKeyExchangeService: ObservableObject {
     private let encryption = FileEncryptionService.shared
     private let userDefaults = UserDefaults.standard
     private let keysStorageKey = "com.solidarity.vault.contentKeys"
+    private var migratedFromUserDefaults: Set<UUID> = []
 
     // MARK: - Initialization
 
@@ -200,18 +201,84 @@ final class ContentKeyExchangeService: ObservableObject {
         contentKeys
     }
 
+    /// Returns the per-vault wrap key used to authenticate recovery shard
+    /// envelopes. The key is generated lazily and persisted in the same
+    /// Keychain partition as content keys.
+    func vaultWrapKey(vaultId: UUID, createIfMissing: Bool = true) throws -> SymmetricKey {
+        let account = "wrap.\(vaultId.uuidString)"
+        if let existing = try VaultSecretsKeychain.loadData(
+            service: VaultSecretsKeychain.contentKeyService,
+            account: account
+        ) {
+            return SymmetricKey(data: existing)
+        }
+        guard createIfMissing else {
+            throw WrappedShardEnvelope.WrapError.missingWrapKey
+        }
+        let newKey = SymmetricKey(size: .bits256)
+        let bytes = newKey.withUnsafeBytes { Data($0) }
+        try VaultSecretsKeychain.storeData(
+            bytes,
+            service: VaultSecretsKeychain.contentKeyService,
+            account: account
+        )
+        return newKey
+    }
+
     // MARK: - Private Methods
 
     private func loadStoredKeys() {
         guard let data = userDefaults.data(forKey: keysStorageKey),
-              let keys = try? JSONDecoder().decode([ContentKeyEntry].self, from: data) else {
+              let stored = try? JSONDecoder().decode([ContentKeyEntry].self, from: data) else {
             return
         }
-        contentKeys = keys
+
+        var hydrated: [ContentKeyEntry] = []
+        for var entry in stored {
+            do {
+                if let keyBytes = try VaultSecretsKeychain.loadData(
+                    service: VaultSecretsKeychain.contentKeyService,
+                    account: entry.contentId.uuidString
+                ) {
+                    entry.contentKey = keyBytes
+                } else if !entry.contentKey.isEmpty {
+                    // Migrate plaintext UserDefaults bytes into the Keychain.
+                    try VaultSecretsKeychain.storeData(
+                        entry.contentKey,
+                        service: VaultSecretsKeychain.contentKeyService,
+                        account: entry.contentId.uuidString
+                    )
+                    if !migratedFromUserDefaults.contains(entry.contentId) {
+                        migratedFromUserDefaults.insert(entry.contentId)
+                        print("[ContentKeyExchange] Migrated content key \(entry.contentId) from UserDefaults to Keychain")
+                    }
+                }
+            } catch {
+                print("[ContentKeyExchange] Failed to hydrate content key \(entry.contentId): \(error)")
+            }
+            hydrated.append(entry)
+        }
+        contentKeys = hydrated
+
+        // Strip plaintext keys from UserDefaults after migration.
+        saveStoredKeys()
     }
 
     private func saveStoredKeys() {
-        if let data = try? JSONEncoder().encode(contentKeys) {
+        for entry in contentKeys {
+            do {
+                try VaultSecretsKeychain.storeData(
+                    entry.contentKey,
+                    service: VaultSecretsKeychain.contentKeyService,
+                    account: entry.contentId.uuidString
+                )
+            } catch {
+                print("[ContentKeyExchange] Failed to persist content key \(entry.contentId): \(error)")
+            }
+        }
+
+        let sanitized = contentKeys.map { $0.withoutSecret() }
+        if let data = try? JSONEncoder().encode(sanitized) {
             userDefaults.set(data, forKey: keysStorageKey)
         }
     }
@@ -236,7 +303,7 @@ struct ContentKeyEntry: Codable, Identifiable {
     var id: UUID { contentId }
     let contentId: UUID
     let contentName: String
-    let contentKey: Data
+    var contentKey: Data
     let price: Decimal?
     let expiresAt: Date?
     let maxAccessCount: Int?
@@ -256,6 +323,14 @@ struct ContentKeyEntry: Codable, Identifiable {
             return "\(currentAccessCount)/\(max)"
         }
         return "\(currentAccessCount)"
+    }
+
+    /// Returns a copy of this entry with the secret key bytes stripped — used
+    /// when persisting non-secret metadata to UserDefaults.
+    func withoutSecret() -> ContentKeyEntry {
+        var copy = self
+        copy.contentKey = Data()
+        return copy
     }
 }
 

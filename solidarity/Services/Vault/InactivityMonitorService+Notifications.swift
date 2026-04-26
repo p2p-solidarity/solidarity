@@ -39,28 +39,37 @@ extension InactivityMonitorService {
             totalShares: totalParties
         )
 
+        let wrapKey = try ContentKeyExchangeService.shared.vaultWrapKey(vaultId: itemId)
+
+        let recipients: [UUID] = [beneficiary] + witnesses
         var shards: [EncryptedKeyShard] = []
-
-        shards.append(EncryptedKeyShard(
-            shardIndex: 0,
-            encryptedData: shares[0].value,
-            recipientContactId: beneficiary
-        ))
-
-        for (index, witnessId) in witnesses.enumerated() {
+        for (offset, recipient) in recipients.enumerated() {
+            let envelope = try WrappedShardEnvelope.seal(
+                share: shares[offset].value,
+                vaultId: itemId,
+                guardianContactId: recipient,
+                shardIndex: shares[offset].index,
+                threshold: threshold,
+                wrapKey: wrapKey
+            )
             shards.append(EncryptedKeyShard(
-                shardIndex: index + 1,
-                encryptedData: shares[index + 1].value,
-                recipientContactId: witnessId
+                shardIndex: shares[offset].index,
+                encryptedData: try envelope.encode(),
+                recipientContactId: recipient
             ))
         }
 
         return shards
     }
 
+    /// Returns the symmetric encryption key used to seal a vault item, as raw
+    /// bytes suitable for Shamir splitting. Vault items currently share a
+    /// single per-device vault key (managed by FileEncryptionService); per-item
+    /// keys are not yet implemented. Fails closed if the key cannot be loaded
+    /// — callers must NOT receive random bytes.
     func getItemEncryptionKey(_ itemId: UUID) async throws -> Data {
-        let randomBytes = (0..<32).map { _ in UInt8.random(in: 0...255) }
-        return Data(randomBytes)
+        let key = try VaultSecretsKeychain.loadVaultKey()
+        return key.withUnsafeBytes { Data($0) }
     }
 
     func notifyBeneficiary(_ beneficiaryId: UUID, about item: VaultItem) async {
