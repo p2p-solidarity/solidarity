@@ -14,6 +14,7 @@ struct MeTabView: View {
   @State var showingEditProfile = false
   @State var showingVCSettings = false
   @State var showingPassportFlow = false
+  @State var passportFlowStartManual = false
   @State var showingGroupManager = false
   @State var showingOIDCRequest = false
   @State var showingZKSettings = false
@@ -40,7 +41,7 @@ struct MeTabView: View {
   var body: some View {
     NavigationStack {
       ScrollView {
-        VStack(spacing: 28) {
+        VStack(spacing: 32) {
           identityHeader
 
           identityCardSection
@@ -53,7 +54,7 @@ struct MeTabView: View {
             devModeSection
           }
         }
-        .padding(.top, 8)
+        .padding(.top, 12)
         .padding(.bottom, 100)
       }
       .background(Color.Theme.pageBg.ignoresSafeArea())
@@ -93,8 +94,8 @@ struct MeTabView: View {
           VCSettingsView()
         }
       }
-      .sheet(isPresented: $showingPassportFlow) {
-        PassportOnboardingFlowView { _ in
+      .sheet(isPresented: $showingPassportFlow, onDismiss: { passportFlowStartManual = false }) {
+        PassportOnboardingFlowView(startInManualInput: passportFlowStartManual) { _ in
           showingPassportFlow = false
         }
       }

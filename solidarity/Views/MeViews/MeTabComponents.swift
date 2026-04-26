@@ -6,35 +6,21 @@ struct PreparedSelfInitiatedProof: Identifiable {
   let qrImage: UIImage
 }
 
-// MARK: - Section header
+// MARK: - Section header (Figma 737:2560: 14pt regular)
 
 struct MeSectionHeader: View {
   let title: String
 
   var body: some View {
     Text(title)
-      .font(.system(size: 15, weight: .semibold))
+      .font(.system(size: 14))
       .foregroundColor(Color.Theme.textPrimary)
       .frame(maxWidth: .infinity, alignment: .leading)
       .padding(.horizontal, 16)
   }
 }
 
-// MARK: - Card surface
-
-struct MeCardSurface<Content: View>: View {
-  let content: Content
-  init(@ViewBuilder content: () -> Content) { self.content = content() }
-  var body: some View {
-    content
-      .background(
-        RoundedRectangle(cornerRadius: 12)
-          .fill(Color.Theme.searchBg)
-      )
-  }
-}
-
-// MARK: - Profile header card
+// MARK: - Profile header card (Figma 737:2545)
 
 struct ProfileHeaderCard: View {
   let name: String
@@ -43,94 +29,237 @@ struct ProfileHeaderCard: View {
   let onEdit: () -> Void
 
   var body: some View {
-    HStack(alignment: .center, spacing: 14) {
-      avatar
-        .frame(width: 56, height: 56)
-        .clipShape(Circle())
+    HStack(alignment: .top, spacing: 24) {
+      HStack(alignment: .top, spacing: 16) {
+        avatarCircle
 
-      VStack(alignment: .leading, spacing: 6) {
-        Text(name)
-          .font(.system(size: 22, weight: .bold))
-          .foregroundColor(Color.Theme.textPrimary)
-          .lineLimit(1)
-
-        HStack(spacing: 4) {
-          Image(systemName: "key.fill")
-            .font(.system(size: 9))
-          Text(did)
-            .font(.system(size: 11, weight: .medium, design: .monospaced))
+        VStack(alignment: .leading, spacing: 8) {
+          Text(name)
+            .font(.system(size: 24, weight: .medium))
+            .foregroundColor(Color.Theme.textPrimary)
             .lineLimit(1)
-            .truncationMode(.middle)
-        }
-        .foregroundColor(Color.Theme.textTertiary)
-      }
 
-      Spacer(minLength: 4)
+          didPill
+        }
+      }
+      .frame(maxWidth: .infinity, alignment: .leading)
 
       Button(action: onEdit) {
         Text("Edit")
-          .font(.system(size: 14, weight: .semibold))
-          .foregroundColor(Color.Theme.pageBg)
+          .font(.system(size: 13, weight: .medium))
+          .foregroundColor(Color.Theme.invertedButtonText)
           .padding(.horizontal, 16)
-          .padding(.vertical, 8)
+          .frame(height: 28)
           .background(
-            RoundedRectangle(cornerRadius: 8)
-              .fill(Color.Theme.textPrimary)
+            RoundedRectangle(cornerRadius: 2)
+              .fill(Color.Theme.invertedButtonBg)
           )
       }
       .buttonStyle(.plain)
     }
-    .padding(14)
+    .padding(.horizontal, 12)
+    .padding(.top, 16)
+    .padding(.bottom, 24)
     .background(
-      RoundedRectangle(cornerRadius: 14)
-        .fill(Color.Theme.searchBg)
+      RoundedRectangle(cornerRadius: 3)
+        .fill(Color.Theme.mutedSurface)
+    )
+    .padding(.horizontal, 16)
+  }
+
+  private var avatarCircle: some View {
+    ZStack {
+      Circle()
+        .fill(Color.Theme.warmCream)
+      avatar
+    }
+    .frame(width: 56, height: 56)
+    .clipShape(Circle())
+  }
+
+  private var didPill: some View {
+    HStack(spacing: 4) {
+      Image(systemName: "key")
+        .font(.system(size: 9, weight: .regular))
+        .frame(width: 12, height: 12)
+      Text(did)
+        .font(.system(size: 10))
+        .lineLimit(1)
+        .truncationMode(.middle)
+    }
+    .foregroundColor(Color.Theme.textSecondary)
+    .padding(.horizontal, 4)
+    .padding(.vertical, 2)
+    .overlay(
+      RoundedRectangle(cornerRadius: 2)
+        .stroke(Color.Theme.pillBorder, lineWidth: 0.5)
+    )
+  }
+}
+
+// MARK: - Verified credential card (Figma 743:2981)
+
+struct VerifiedCredentialRow: View {
+  let icon: String
+  let title: String
+  let trustLevel: String
+  let issuerType: String
+
+  private var levelText: String {
+    switch trustLevel {
+    case "green": return "Level 3 - ZK Verified"
+    case "blue": return "Level 2 - Fallback"
+    default: return "Level 1 - Self-attested"
+    }
+  }
+
+  private var levelColor: Color {
+    switch trustLevel {
+    case "green": return Color.Theme.terminalGreen
+    case "blue": return Color.Theme.primaryBlue
+    default: return Color.Theme.textTertiary
+    }
+  }
+
+  var body: some View {
+    VStack(alignment: .leading, spacing: 8) {
+      HStack(spacing: 8) {
+        Image(systemName: icon)
+          .font(.system(size: 14, weight: .regular))
+          .foregroundColor(Color.Theme.textPrimary)
+          .frame(width: 18, height: 18)
+
+        Text(title)
+          .font(.system(size: 15))
+          .foregroundColor(Color.Theme.textPrimary)
+          .lineLimit(1)
+
+        Spacer(minLength: 0)
+
+        Image(systemName: "chevron.right")
+          .font(.system(size: 12, weight: .semibold))
+          .foregroundColor(Color.Theme.textTertiary)
+          .frame(width: 18, height: 18)
+      }
+      .padding(.bottom, 12)
+      .overlay(alignment: .bottom) {
+        Rectangle()
+          .fill(Color.Theme.divider)
+          .frame(height: 0.5)
+      }
+
+      HStack(spacing: 4) {
+        Image(systemName: "checkmark.seal.fill")
+          .font(.system(size: 11))
+          .foregroundColor(levelColor)
+          .frame(width: 12, height: 12)
+        Text(levelText)
+          .font(.system(size: 11))
+          .foregroundColor(levelColor)
+
+        Spacer(minLength: 0)
+
+        Text(issuerType.capitalized)
+          .font(.system(size: 11))
+          .foregroundColor(Color.Theme.textTertiary)
+      }
+      .padding(.vertical, 4)
+    }
+    .padding(12)
+    .background(
+      RoundedRectangle(cornerRadius: 8)
+        .fill(Color.Theme.mutedSurface)
     )
     .padding(.horizontal, 16)
   }
 }
 
-// MARK: - Action tile (icon circle + label)
+// MARK: - Action tile (Figma 737:2565: 40pt mauve bubble + label)
 
-struct ActionTile: View {
+struct MeActionTile: View {
   let icon: String
   let title: String
   let action: () -> Void
 
   var body: some View {
     Button(action: action) {
-      HStack(spacing: 12) {
+      HStack(spacing: 8) {
         ZStack {
           Circle()
             .fill(Color.Theme.primaryBlue.opacity(0.15))
-            .frame(width: 36, height: 36)
+            .frame(width: 40, height: 40)
           Image(systemName: icon)
-            .font(.system(size: 16, weight: .regular))
+            .font(.system(size: 18, weight: .regular))
             .foregroundColor(Color.Theme.primaryBlue)
         }
 
         Text(title)
-          .font(.system(size: 14, weight: .medium))
+          .font(.system(size: 15))
           .foregroundColor(Color.Theme.textPrimary)
           .multilineTextAlignment(.leading)
           .lineLimit(2)
-          .minimumScaleFactor(0.9)
-
-        Spacer(minLength: 0)
+          .frame(maxWidth: .infinity, alignment: .leading)
       }
-      .padding(14)
-      .frame(maxWidth: .infinity, minHeight: 76, alignment: .leading)
+      .padding(.horizontal, 12)
+      .padding(.vertical, 16)
+      .frame(maxWidth: .infinity, minHeight: 72, alignment: .leading)
       .background(
-        RoundedRectangle(cornerRadius: 12)
-          .fill(Color.Theme.searchBg)
+        RoundedRectangle(cornerRadius: 2)
+          .fill(Color.Theme.mutedSurface)
       )
     }
     .buttonStyle(.plain)
   }
 }
 
-// MARK: - Disclosure row (title + source + Show button)
+// MARK: - Developer row (Figma 737:2755: icon + title + trailing + chevron)
+
+struct MeDeveloperRow: View {
+  let icon: String
+  let title: String
+  let trailingText: String?
+  let action: () -> Void
+
+  var body: some View {
+    Button(action: action) {
+      HStack(spacing: 8) {
+        Image(systemName: icon)
+          .font(.system(size: 14, weight: .regular))
+          .foregroundColor(Color.Theme.textPrimary)
+          .frame(width: 18, height: 18)
+
+        Text(title)
+          .font(.system(size: 15))
+          .foregroundColor(Color.Theme.textPrimary)
+
+        Spacer(minLength: 4)
+
+        if let trailingText {
+          Text(trailingText)
+            .font(.system(size: 15))
+            .foregroundColor(Color.Theme.textSecondary)
+        }
+
+        Image(systemName: "chevron.right")
+          .font(.system(size: 12, weight: .semibold))
+          .foregroundColor(Color.Theme.textTertiary)
+          .frame(width: 18, height: 18)
+      }
+      .padding(.horizontal, 12)
+      .padding(.vertical, 16)
+      .background(
+        RoundedRectangle(cornerRadius: 2)
+          .fill(Color.Theme.mutedSurface)
+      )
+    }
+    .buttonStyle(.plain)
+  }
+}
+
+// MARK: - Disclosure row (Figma 724:22770: icon + title + src + Show)
 
 struct DisclosureRowView: View {
+  let icon: String
   let title: String
   let source: String
   let actionTitle: String
@@ -139,33 +268,39 @@ struct DisclosureRowView: View {
   let onPresent: () -> Void
 
   var body: some View {
-    HStack(alignment: .center, spacing: 12) {
+    HStack(spacing: 8) {
+      Image(systemName: icon)
+        .font(.system(size: 14, weight: .regular))
+        .foregroundColor(Color.Theme.terminalGreen)
+        .frame(width: 18, height: 18)
+
       VStack(alignment: .leading, spacing: 4) {
         Text(title)
-          .font(.system(size: 15, weight: .semibold))
+          .font(.system(size: 15))
           .foregroundColor(Color.Theme.textPrimary)
         Text(source)
-          .font(.system(size: 11, weight: .regular, design: .monospaced))
+          .font(.system(size: 11))
           .foregroundColor(Color.Theme.textTertiary)
       }
-      Spacer()
+
+      Spacer(minLength: 4)
+
       Button(action: onPresent) {
         Group {
           if isLoading {
             ProgressView()
               .progressViewStyle(CircularProgressViewStyle(tint: Color.Theme.pageBg))
-              .scaleEffect(0.8)
+              .scaleEffect(0.7)
           } else {
             Text(actionTitle)
-              .font(.system(size: 14, weight: .semibold))
+              .font(.system(size: 13, weight: .medium))
           }
         }
         .foregroundColor(Color.Theme.pageBg)
-        .frame(minWidth: 56)
-        .padding(.horizontal, 14)
-        .padding(.vertical, 8)
+        .padding(.horizontal, 8)
+        .frame(minWidth: 56, minHeight: 28)
         .background(
-          RoundedRectangle(cornerRadius: 8)
+          RoundedRectangle(cornerRadius: 2)
             .fill(Color.Theme.textPrimary)
         )
       }
@@ -173,159 +308,17 @@ struct DisclosureRowView: View {
       .disabled(isDisabled)
       .opacity(isDisabled && !isLoading ? 0.5 : 1)
     }
-    .padding(14)
+    .padding(.horizontal, 12)
+    .padding(.vertical, 16)
     .background(
-      RoundedRectangle(cornerRadius: 12)
-        .fill(Color.Theme.searchBg)
+      RoundedRectangle(cornerRadius: 8)
+        .fill(Color.Theme.mutedSurface)
     )
     .padding(.horizontal, 16)
   }
 }
 
-// MARK: - Developer row (icon + title + trailing detail + chevron)
-
-struct DeveloperRowView: View {
-  let icon: String
-  let title: String
-  let trailingText: String?
-  let action: () -> Void
-
-  var body: some View {
-    Button(action: action) {
-      HStack(spacing: 12) {
-        Image(systemName: icon)
-          .font(.system(size: 16, weight: .regular))
-          .foregroundColor(Color.Theme.textPrimary)
-          .frame(width: 24)
-
-        Text(title)
-          .font(.system(size: 14, weight: .medium))
-          .foregroundColor(Color.Theme.textPrimary)
-
-        Spacer()
-
-        if let trailingText {
-          Text(trailingText)
-            .font(.system(size: 13, weight: .regular))
-            .foregroundColor(Color.Theme.textTertiary)
-        }
-
-        Image(systemName: "chevron.right")
-          .font(.system(size: 12, weight: .semibold))
-          .foregroundColor(Color.Theme.textTertiary)
-      }
-      .padding(14)
-      .background(
-        RoundedRectangle(cornerRadius: 12)
-          .fill(Color.Theme.searchBg)
-      )
-    }
-    .buttonStyle(.plain)
-  }
-}
-
-// MARK: - Identity status card (legacy verified credential row)
-
-struct IdentityStatusCard: View {
-  let emoji: String
-  let title: String
-  let trustText: String
-  let subtitle: String
-  let ctaTitle: String
-  var onCTA: (() -> Void)?
-
-  var body: some View {
-    VStack(alignment: .leading, spacing: 10) {
-      HStack {
-        Text("\(emoji) \(title)")
-          .font(.system(size: 15, weight: .semibold))
-          .foregroundColor(Color.Theme.textPrimary)
-        Spacer()
-        if let onCTA {
-          Button(action: onCTA) {
-            Text(ctaTitle)
-              .font(.system(size: 13, weight: .semibold))
-              .foregroundColor(Color.Theme.pageBg)
-              .padding(.horizontal, 12)
-              .padding(.vertical, 6)
-              .background(
-                RoundedRectangle(cornerRadius: 8)
-                  .fill(Color.Theme.textPrimary)
-              )
-          }
-          .buttonStyle(.plain)
-        } else {
-          Image(systemName: "chevron.right")
-            .font(.system(size: 12, weight: .semibold))
-            .foregroundColor(Color.Theme.textTertiary)
-        }
-      }
-
-      HStack {
-        Text(trustText)
-          .font(.system(size: 11, weight: .medium, design: .monospaced))
-          .foregroundColor(Color.Theme.terminalGreen)
-        Spacer()
-        Text(subtitle.uppercased())
-          .font(.system(size: 11, weight: .medium, design: .monospaced))
-          .foregroundColor(Color.Theme.textTertiary)
-      }
-    }
-    .padding(14)
-    .background(
-      RoundedRectangle(cornerRadius: 12)
-        .fill(Color.Theme.searchBg)
-    )
-    .padding(.horizontal, 16)
-  }
-}
-
-// MARK: - Empty state
-
-struct EmptyMeStateCard: View {
-  let title: String
-  let subtitle: String
-  let primaryTitle: String
-  let secondaryTitle: String
-  let onPrimaryTap: () -> Void
-  let onSecondaryTap: () -> Void
-
-  var body: some View {
-    VStack(spacing: 20) {
-      Image(systemName: "lock.shield")
-        .font(.system(size: 40))
-        .foregroundColor(Color.Theme.textTertiary)
-
-      VStack(spacing: 6) {
-        Text(title)
-          .font(.system(size: 16, weight: .semibold))
-          .foregroundColor(Color.Theme.textPrimary)
-        Text(subtitle)
-          .font(.system(size: 13))
-          .foregroundColor(Color.Theme.textSecondary)
-          .multilineTextAlignment(.center)
-      }
-
-      VStack(spacing: 10) {
-        Button(action: onPrimaryTap) {
-          Text(primaryTitle)
-        }
-        .buttonStyle(ThemedPrimaryButtonStyle())
-
-        Button(action: onSecondaryTap) {
-          Text(secondaryTitle)
-        }
-        .buttonStyle(ThemedSecondaryButtonStyle())
-      }
-    }
-    .padding(20)
-    .frame(maxWidth: .infinity)
-    .background(
-      RoundedRectangle(cornerRadius: 12)
-        .fill(Color.Theme.searchBg)
-    )
-  }
-}
+// MARK: - Self-initiated proof sheet
 
 struct SelfInitiatedProofSheet: View {
   let preparedProof: PreparedSelfInitiatedProof

@@ -2,11 +2,18 @@ import SwiftUI
 
 struct PassportOnboardingFlowView: View {
     let onCompleted: (PassportProofResult) -> Void
+    let startInManualInput: Bool
 
     @Environment(\.dismiss) var dismiss
     @StateObject var pipeline = PassportPipelineViewModel()
     @State private var showingMRZCamera = false
-    @State private var showManualInput = false
+    @State private var showManualInput: Bool
+
+    init(startInManualInput: Bool = false, onCompleted: @escaping (PassportProofResult) -> Void) {
+        self.onCompleted = onCompleted
+        self.startInManualInput = startInManualInput
+        self._showManualInput = State(initialValue: startInManualInput)
+    }
 
     var body: some View {
         NavigationStack {

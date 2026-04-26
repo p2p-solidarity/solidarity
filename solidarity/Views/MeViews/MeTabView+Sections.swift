@@ -24,60 +24,53 @@ extension MeTabView {
         .resizable()
         .scaledToFill()
     } else if let animal {
-      ZStack {
-        Circle().fill(Color.Theme.warmCream)
-        ImageProvider.animalImage(for: animal)
-          .resizable()
-          .scaledToFit()
-          .padding(6)
-      }
+      ImageProvider.animalImage(for: animal)
+        .resizable()
+        .scaledToFill()
     } else {
-      ZStack {
-        Circle().fill(Color.Theme.primaryBlue.opacity(0.18))
-        Text(String(displayName.prefix(1)).uppercased())
-          .font(.system(size: 22, weight: .bold))
-          .foregroundColor(Color.Theme.primaryBlue)
-      }
+      Text(String(displayName.prefix(1)).uppercased())
+        .font(.system(size: 22, weight: .bold))
+        .foregroundColor(Color.Theme.primaryBlue)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(Color.Theme.primaryBlue.opacity(0.18))
     }
   }
 
-  // MARK: - Verified Credentials (entry tiles + existing list)
+  // MARK: - Verified Credentials (Figma 737:2558 empty / 743:2981 filled)
 
   var identityCardSection: some View {
-    VStack(alignment: .leading, spacing: 12) {
+    VStack(alignment: .leading, spacing: 8) {
       MeSectionHeader(title: "Verified Credentials")
 
-      // Entry-action tiles: 2-column grid (Scan Identity, Import JSON)
-      let columns = [GridItem(.flexible(), spacing: 12), GridItem(.flexible(), spacing: 12)]
-      LazyVGrid(columns: columns, spacing: 12) {
-        ActionTile(
-          icon: "viewfinder",
-          title: "Scan Identity",
-          action: { showingPassportFlow = true }
-        )
-        ActionTile(
-          icon: "square.and.arrow.up",
-          title: "Import JSON",
-          action: { showingVCSettings = true }
-        )
-      }
-      .padding(.horizontal, 16)
-
-      // Existing verified credentials list (rendered below tiles when present)
-      if !verifiedCards.isEmpty {
-        VStack(spacing: 10) {
+      if verifiedCards.isEmpty {
+        VStack(spacing: 8) {
+          HStack(spacing: 8) {
+            MeActionTile(icon: "viewfinder", title: "Scan Identity") {
+              passportFlowStartManual = false
+              showingPassportFlow = true
+            }
+            MeActionTile(icon: "keyboard", title: "Manual Input") {
+              passportFlowStartManual = true
+              showingPassportFlow = true
+            }
+          }
+          MeActionTile(icon: "square.and.arrow.up", title: "Import JSON") {
+            showingVCSettings = true
+          }
+        }
+        .padding(.horizontal, 16)
+      } else {
+        VStack(spacing: 8) {
           ForEach(verifiedCards) { card in
             NavigationLink {
               CredentialDetailView(card: card)
                 .environmentObject(identityDataStore)
             } label: {
-              IdentityStatusCard(
-                emoji: "🛂",
+              VerifiedCredentialRow(
+                icon: credentialIcon(for: card),
                 title: card.title,
-                trustText: trustText(for: card),
-                subtitle: card.issuerType,
-                ctaTitle: "Details",
-                onCTA: nil
+                trustLevel: card.trustLevel,
+                issuerType: card.issuerType
               )
             }
             .buttonStyle(.plain)
@@ -87,18 +80,38 @@ extension MeTabView {
     }
   }
 
-  func trustText(for card: IdentityCardEntity) -> String {
-    switch card.trustLevel {
-    case "green": return "🟢 LEVEL 3 — ZK VERIFIED"
-    case "blue": return "🔵 LEVEL 2 — FALLBACK"
-    default: return "⚪️ LEVEL 1 — SELF-ATTESTED"
+  func credentialIcon(for card: IdentityCardEntity) -> String {
+    switch card.type {
+    case "passport": return "doc.text.fill"
+    case "student": return "graduationcap.fill"
+    case "social_graph", "socialGraph": return "person.2.fill"
+    default: return "checkmark.shield.fill"
+    }
+  }
+
+  // MARK: - Action (Figma 737:2703)
+
+  var addMoreSection: some View {
+    VStack(alignment: .leading, spacing: 8) {
+      MeSectionHeader(title: "Action")
+
+      HStack(spacing: 8) {
+        MeActionTile(icon: "plus", title: "Acquire New Proof") {
+          passportFlowStartManual = false
+          showingPassportFlow = true
+        }
+        MeActionTile(icon: "square.and.arrow.up", title: "Import Raw Credential") {
+          showingVCSettings = true
+        }
+      }
+      .padding(.horizontal, 16)
     }
   }
 
   // MARK: - Selective Disclosures
 
   var provableClaimsSection: some View {
-    VStack(alignment: .leading, spacing: 12) {
+    VStack(alignment: .leading, spacing: 8) {
       MeSectionHeader(title: "Selective Disclosures")
 
       if displayClaims.isEmpty {
@@ -107,12 +120,13 @@ extension MeTabView {
           .foregroundColor(Color.Theme.textTertiary)
           .padding(.horizontal, 16)
       } else {
-        VStack(spacing: 10) {
+        VStack(spacing: 8) {
           ForEach(displayClaims) { claim in
             DisclosureRowView(
+              icon: claimIcon(for: claim),
               title: claim.title,
-              source: "SRC: \(claim.source)",
-              actionTitle: claim.lastPresentedAt == nil ? "Generate" : "Show",
+              source: "Src:\(claim.source.capitalized)",
+              actionTitle: "Show",
               isLoading: preparingClaimID == claim.id,
               isDisabled: preparingClaimID != nil,
               onPresent: {
@@ -125,51 +139,38 @@ extension MeTabView {
     }
   }
 
-  // MARK: - Action tiles
-
-  var addMoreSection: some View {
-    VStack(alignment: .leading, spacing: 12) {
-      MeSectionHeader(title: "Action")
-
-      let columns = [GridItem(.flexible(), spacing: 12), GridItem(.flexible(), spacing: 12)]
-      LazyVGrid(columns: columns, spacing: 12) {
-        ActionTile(
-          icon: "plus",
-          title: "Acquire New Proof",
-          action: { showingPassportFlow = true }
-        )
-        ActionTile(
-          icon: "square.and.arrow.up",
-          title: "Import Raw Credential",
-          action: { showingVCSettings = true }
-        )
-      }
-      .padding(.horizontal, 16)
+  func claimIcon(for claim: ProvableClaimEntity) -> String {
+    switch claim.claimType {
+    case "is_human": return "faceid"
+    case "age_over_18": return "face.smiling"
+    case "profile_card": return "person.crop.rectangle.fill"
+    case "field_name": return "person.fill"
+    default: return "checkmark.shield.fill"
     }
   }
 
-  // MARK: - Developer Mode Section
+  // MARK: - Developer Mode Section (Figma 737:2748)
 
   var devModeSection: some View {
-    VStack(alignment: .leading, spacing: 12) {
+    VStack(alignment: .leading, spacing: 8) {
       MeSectionHeader(title: "Developer")
 
-      VStack(spacing: 10) {
-        DeveloperRowView(
+      VStack(spacing: 8) {
+        MeDeveloperRow(
           icon: "shield",
           title: "ZK Identity",
           trailingText: idm.getIdentity() != nil ? "Commitment Active" : "Not initialized",
           action: { showingZKSettings = true }
         )
 
-        DeveloperRowView(
+        MeDeveloperRow(
           icon: "qrcode",
           title: "OIDC Request Scanner",
           trailingText: nil,
           action: { showingOIDCRequest = true }
         )
 
-        DeveloperRowView(
+        MeDeveloperRow(
           icon: "person.2",
           title: "Group Management",
           trailingText: "\(groupManager.groups.count) Groups",

@@ -199,10 +199,10 @@ extension Color {
     // MARK: - Swiss Sunrise Palette (Light) + Deep Alpine Night (Dark)
 
     /// Page background: warm cream (light) / deep navy-mauve (dark)
-    /// Light: `Palette.cream` (#fbf9f2)
+    /// Light: `Palette.cream` (#fbf9f2). Dark: Figma `#060417`.
     static let pageBg = Color(.init(dynamicProvider: { traits in
       traits.userInterfaceStyle == .dark
-        ? UIColor(red: 0.055, green: 0.035, blue: 0.078, alpha: 1)  // #0E0914
+        ? UIColor(red: 0.024, green: 0.016, blue: 0.090, alpha: 1)  // #060417
         : UIColor(red: 0.984, green: 0.976, blue: 0.949, alpha: 1)  // #fbf9f2
     }))
 
@@ -282,6 +282,110 @@ extension Color {
       traits.userInterfaceStyle == .dark
         ? UIColor(red: 0.514, green: 0.325, blue: 0.490, alpha: 1)  // #83537d
         : UIColor(red: 0.953, green: 0.922, blue: 0.867, alpha: 1)  // #f3ebdd
+    }))
+
+    /// Chip / verified-tag surface inside hero cards.
+    /// Light: `#F7F2FA`. Dark: Figma `rgba(47,47,48,0.5)`.
+    static let chipSurface = Color(.init(dynamicProvider: { traits in
+      traits.userInterfaceStyle == .dark
+        ? UIColor(red: 0.184, green: 0.184, blue: 0.188, alpha: 0.5)
+        : UIColor(red: 0.969, green: 0.949, blue: 0.980, alpha: 1.0)  // #F7F2FA
+    }))
+
+    /// Muted card / row container (sakura container, contact info rows).
+    /// Light: `#EEEEEE` @ 80%. Dark: Figma `rgba(47,47,48,0.6)`.
+    static let mutedSurface = Color(.init(dynamicProvider: { traits in
+      traits.userInterfaceStyle == .dark
+        ? UIColor(red: 0.184, green: 0.184, blue: 0.188, alpha: 0.6)
+        : UIColor(red: 0.933, green: 0.933, blue: 0.933, alpha: 0.8)
+    }))
+
+    /// "see more" pill / capsule background.
+    /// Light: `#EEEEEE`. Dark: Figma `rgba(47,47,48,0.5)`.
+    static let pillSurface = Color(.init(dynamicProvider: { traits in
+      traits.userInterfaceStyle == .dark
+        ? UIColor(red: 0.184, green: 0.184, blue: 0.188, alpha: 0.5)
+        : UIColor(red: 0.933, green: 0.933, blue: 0.933, alpha: 1.0)
+    }))
+
+    /// Outgoing chat bubble fill.
+    /// Light: rose `#BF80A7`. Dark: brand mauve `#83537D` per Figma.
+    static let bubbleOutgoing = Color(.init(dynamicProvider: { traits in
+      traits.userInterfaceStyle == .dark
+        ? UIColor(red: 0.514, green: 0.325, blue: 0.490, alpha: 1)  // #83537D
+        : UIColor(red: 0.749, green: 0.502, blue: 0.655, alpha: 1)  // #BF80A7
+    }))
+
+    /// Incoming chat bubble fill.
+    /// Light: warm cream `#F3EBDD`. Dark: dusty olive `#7A6F5C` per Figma.
+    static let bubbleIncoming = Color(.init(dynamicProvider: { traits in
+      traits.userInterfaceStyle == .dark
+        ? UIColor(red: 0.478, green: 0.435, blue: 0.361, alpha: 1)  // #7A6F5C
+        : UIColor(red: 0.953, green: 0.922, blue: 0.867, alpha: 1)  // #F3EBDD
+    }))
+
+    /// Text on the incoming bubble.
+    /// Light: ink `#2F2F30`. Dark: white per Figma.
+    static let bubbleIncomingText = Color(.init(dynamicProvider: { traits in
+      traits.userInterfaceStyle == .dark
+        ? UIColor.white
+        : UIColor(red: 0.184, green: 0.184, blue: 0.188, alpha: 1)
+    }))
+
+    /// Hero card gradient — lavender stop.
+    /// Light: opaque `#E9E3ED`. Dark: `rgba(233,227,237,0.3)` over page bg per Figma.
+    static let heroGradientStart = Color(.init(dynamicProvider: { traits in
+      traits.userInterfaceStyle == .dark
+        ? UIColor(red: 0.914, green: 0.890, blue: 0.929, alpha: 0.30)
+        : UIColor(red: 0.914, green: 0.890, blue: 0.929, alpha: 1.00)
+    }))
+
+    /// Hero card gradient — peach stop.
+    /// Light: opaque `#F3DFDD`. Dark: `rgba(243,223,221,0.3)` over page bg per Figma.
+    static let heroGradientEnd = Color(.init(dynamicProvider: { traits in
+      traits.userInterfaceStyle == .dark
+        ? UIColor(red: 0.953, green: 0.875, blue: 0.867, alpha: 0.30)
+        : UIColor(red: 0.953, green: 0.875, blue: 0.867, alpha: 1.00)
+    }))
+
+    /// Credential hero — top stop (sky blue) per Figma 724:22805.
+    /// Light: `#C1E3EC`. Dark: same hue at 30% over page bg.
+    static let heroSkyTop = Color(.init(dynamicProvider: { traits in
+      traits.userInterfaceStyle == .dark
+        ? UIColor(red: 0.757, green: 0.890, blue: 0.925, alpha: 0.30)
+        : UIColor(red: 0.757, green: 0.890, blue: 0.925, alpha: 1.00)
+    }))
+
+    /// Credential hero — bottom stop (cream) per Figma 724:22805.
+    /// Light: `#FEF7EB`. Dark: same hue at 30% over page bg.
+    static let heroSkyBottom = Color(.init(dynamicProvider: { traits in
+      traits.userInterfaceStyle == .dark
+        ? UIColor(red: 0.996, green: 0.969, blue: 0.922, alpha: 0.30)
+        : UIColor(red: 0.996, green: 0.969, blue: 0.922, alpha: 1.00)
+    }))
+
+    /// Translucent disc behind the credential icon in the hero.
+    /// Light: white frosted; dark: white at 12% so the icon stays readable.
+    static let heroSkyDisc = Color(.init(dynamicProvider: { traits in
+      traits.userInterfaceStyle == .dark
+        ? UIColor.white.withAlphaComponent(0.12)
+        : UIColor.white.withAlphaComponent(0.55)
+    }))
+
+    /// Inverted action surface (Edit / small CTA pills inside cards).
+    /// Light: ink `#2F2F30` (Figma 737:2545). Dark: cream `#FBF9F2` (Figma 768:5673).
+    static let invertedButtonBg = Color(.init(dynamicProvider: { traits in
+      traits.userInterfaceStyle == .dark
+        ? UIColor(red: 0.984, green: 0.976, blue: 0.949, alpha: 1)
+        : UIColor(red: 0.184, green: 0.184, blue: 0.188, alpha: 1)
+    }))
+
+    /// Text on an `invertedButtonBg` surface.
+    /// Light: white (Figma 743:2992). Dark: ink `#2F2F30` (Figma 768:5674).
+    static let invertedButtonText = Color(.init(dynamicProvider: { traits in
+      traits.userInterfaceStyle == .dark
+        ? UIColor(red: 0.184, green: 0.184, blue: 0.188, alpha: 1)
+        : UIColor.white
     }))
 
     // MARK: - Primary / accent colors

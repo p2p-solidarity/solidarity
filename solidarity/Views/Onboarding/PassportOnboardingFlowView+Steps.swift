@@ -3,61 +3,68 @@ import SwiftUI
 extension PassportOnboardingFlowView {
 
     var proofStepSection: some View {
-        VStack(spacing: 12) {
-            Text("Generate a zero-knowledge proof from your passport data.")
-                .font(.subheadline)
-                .foregroundColor(Color.Theme.textSecondary)
+        VStack(spacing: 48) {
+            // Hero: shield icon + title + description (Figma 756:3317)
+            VStack(spacing: 16) {
+                Image(systemName: "checkmark.shield")
+                    .font(.system(size: 48, weight: .regular))
+                    .foregroundColor(Color.Theme.terminalGreen)
+                    .frame(width: 64, height: 64)
 
-            if MoproProofService.isAvailable {
-                HStack(spacing: 6) {
-                    Image(systemName: "bolt.shield.fill")
-                        .foregroundColor(.green)
-                        .font(.caption)
-                    Text("Mopro (OpenPassport Noir) available")
-                        .font(.caption)
-                        .foregroundColor(.green)
-                }
-            } else if SemaphoreIdentityManager.proofsSupported {
-                HStack(spacing: 6) {
-                    Image(systemName: "shield.checkered")
-                        .foregroundColor(Color.Theme.darkUI)
-                        .font(.caption)
-                    Text("Semaphore ZK available")
-                        .font(.caption)
-                        .foregroundColor(Color.Theme.textSecondary)
-                }
-            }
-
-            Text("This runs entirely on your device — no data leaves your phone.")
-                .font(.caption)
-                .foregroundColor(Color.Theme.textTertiary)
-
-            if pipeline.isLoading {
                 VStack(spacing: 8) {
-                    ProgressView()
-                    Text(pipeline.proofProgressMessage)
-                        .font(.caption)
-                        .foregroundColor(Color.Theme.textTertiary)
-                        .animation(.easeInOut, value: pipeline.proofProgressMessage)
+                    Text("Create Privacy Proof")
+                        .font(.system(size: 16, weight: .medium))
+                        .foregroundColor(Color.Theme.textPrimary)
+                        .multilineTextAlignment(.center)
+
+                    Text("Securely generate a proof from your passport to verify your identity — without sharing raw data.")
+                        .font(.system(size: 14))
+                        .foregroundColor(Color.Theme.textSecondary)
+                        .multilineTextAlignment(.center)
+                        .lineSpacing(4)
+                        .padding(.horizontal, 32)
                 }
             }
 
-            if let proof = pipeline.proofResult {
-                proofResultCard(proof)
-            }
+            VStack(spacing: 32) {
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("Selective Disclosures")
+                        .font(.system(size: 14))
+                        .foregroundColor(Color.Theme.textPrimary)
 
-            Button {
-                pipeline.generateProof()
-            } label: {
-                Text("Generate Proof")
-                    .frame(maxWidth: .infinity)
+                    VStack(spacing: 8) {
+                        BulletGuaranteeRow(text: "Runs entirely on your device")
+                        BulletGuaranteeRow(text: "No personal data is uploaded")
+                    }
+                }
+                .padding(.horizontal, 16)
+
+                if pipeline.isLoading {
+                    VStack(spacing: 8) {
+                        ProgressView()
+                        Text(pipeline.proofProgressMessage)
+                            .font(.system(size: 12))
+                            .foregroundColor(Color.Theme.textTertiary)
+                            .animation(.easeInOut, value: pipeline.proofProgressMessage)
+                    }
+                }
+
+                if let proof = pipeline.proofResult {
+                    proofResultCard(proof)
+                        .padding(.horizontal, 16)
+                }
+
+                Button {
+                    pipeline.generateProof()
+                } label: {
+                    Text("Generate Proof")
+                }
+                .buttonStyle(ThemedPrimaryButtonStyle())
+                .disabled(pipeline.isLoading || pipeline.chipSnapshot == nil)
+                .padding(.horizontal, 16)
             }
-            .buttonStyle(ThemedPrimaryButtonStyle())
-            .disabled(pipeline.isLoading || pipeline.chipSnapshot == nil)
         }
-        .padding(14)
-        .background(Color.Theme.cardBg)
-        .cornerRadius(10)
+        .padding(.top, 32)
     }
 
     func proofResultCard(_ proof: PassportProofResult) -> some View {
@@ -204,5 +211,36 @@ extension PassportOnboardingFlowView {
                 .font(.caption2.weight(.semibold))
                 .foregroundColor(passed ? .green : Color.Theme.textTertiary)
         }
+    }
+}
+
+// MARK: - Bullet guarantee row (Figma 756:3327)
+
+struct BulletGuaranteeRow: View {
+    let text: String
+
+    var body: some View {
+        HStack(spacing: 8) {
+            Text(text)
+                .font(.system(size: 15))
+                .foregroundColor(Color.Theme.textPrimary)
+
+            Spacer(minLength: 0)
+
+            ZStack {
+                Circle()
+                    .fill(Color.Theme.terminalGreen)
+                    .frame(width: 18, height: 18)
+                Image(systemName: "checkmark")
+                    .font(.system(size: 10, weight: .bold))
+                    .foregroundColor(.white)
+            }
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 16)
+        .background(
+            RoundedRectangle(cornerRadius: 8)
+                .fill(Color.Theme.mutedSurface)
+        )
     }
 }

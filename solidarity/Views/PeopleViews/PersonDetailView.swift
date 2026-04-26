@@ -177,11 +177,13 @@ struct PersonDetailView: View {
     }
     .background(
       ZStack {
-        // Figma 723:2336 — linear-gradient(17.3°, #E9E3ED 36.4%, #F3DFDD 68.4%)
+        // Figma 766:5241 — linear-gradient(17.3°, #E9E3ED/30 36.4%, #F3DFDD/30 68.4%)
+        // The gradient stops are translucent in dark mode so the page bg
+        // tints through into the Figma's mauve→peach feel.
         LinearGradient(
           stops: [
-            .init(color: Color.Theme.gradientLavender, location: 0.36),
-            .init(color: Color.Theme.gradientPeach, location: 0.68),
+            .init(color: Color.Theme.heroGradientStart, location: 0.36),
+            .init(color: Color.Theme.heroGradientEnd, location: 0.68),
           ],
           startPoint: UnitPoint(x: 0.35, y: 0.98),
           endPoint: UnitPoint(x: 0.65, y: 0.02)
@@ -312,7 +314,7 @@ struct PersonDetailView: View {
     .padding(.vertical, 2)
     .background(
       RoundedRectangle(cornerRadius: 2)
-        .fill(Color(hex: 0xF7F2FA))
+        .fill(Color.Theme.chipSurface)
     )
   }
 
@@ -330,7 +332,7 @@ struct PersonDetailView: View {
     .padding(.vertical, 2)
     .background(
       RoundedRectangle(cornerRadius: 2)
-        .fill(Color(hex: 0xF7F2FA))
+        .fill(Color.Theme.chipSurface)
     )
   }
 
@@ -355,7 +357,7 @@ struct PersonDetailView: View {
     .padding(.vertical, 2)
     .background(
       RoundedRectangle(cornerRadius: 2)
-        .fill(Color(hex: 0xF7F2FA))
+        .fill(Color.Theme.chipSurface)
     )
   }
 
@@ -386,7 +388,7 @@ struct PersonDetailView: View {
         .frame(maxWidth: .infinity, alignment: .trailing)
         .background(
           RoundedRectangle(cornerRadius: 12)
-            .fill(Color(hex: 0xEEEEEE).opacity(0.8))
+            .fill(Color.Theme.mutedSurface)
         )
       }
       .padding(.horizontal, 16)
@@ -403,7 +405,7 @@ struct PersonDetailView: View {
         .padding(12)
         .background(
           PersonDetailBubbleShape(corners: .outgoing)
-            .fill(Color.Theme.accentRose)
+            .fill(Color.Theme.bubbleOutgoing)
         )
 
       if let date = contact.exchangeTimestamp {
@@ -419,13 +421,13 @@ struct PersonDetailView: View {
     VStack(alignment: .leading, spacing: 2) {
       Text(text)
         .font(.system(size: 14))
-        .foregroundStyle(Color(hex: 0x2F2F30))
+        .foregroundStyle(Color.Theme.bubbleIncomingText)
         .multilineTextAlignment(.leading)
         .lineSpacing(4)
         .padding(12)
         .background(
           PersonDetailBubbleShape(corners: .incoming)
-            .fill(Color.Theme.warmCream)
+            .fill(Color.Theme.bubbleIncoming)
         )
 
       if let date = contact.exchangeTimestamp {
@@ -450,7 +452,7 @@ struct PersonDetailView: View {
     .padding(.trailing, 4)
     .padding(.vertical, 4)
     .background(
-      Capsule().fill(Color(hex: 0xEEEEEE))
+      Capsule().fill(Color.Theme.pillSurface)
     )
   }
 
@@ -537,7 +539,7 @@ struct PersonDetailView: View {
       .frame(height: 48)
       .background(
         RoundedRectangle(cornerRadius: 2)
-          .fill(Color(hex: 0xEEEEEE).opacity(0.8))
+          .fill(Color.Theme.mutedSurface)
       )
     }
     .buttonStyle(.plain)
