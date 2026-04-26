@@ -110,9 +110,17 @@ class KeyManager {
   func deriveKey(from masterKey: SymmetricKey, purpose: String, context: String) -> CardResult<SymmetricKey> {
     let info = Data("\(purpose):\(context)".utf8)
 
+    // Derivation must stay deterministic — callers do not roundtrip the salt
+    // through storage, so a per-call random salt would silently invalidate any
+    // data previously encrypted with the same (purpose, context) pair. Use a
+    // fixed project-scoped salt for domain separation; rotate only via
+    // explicit key migration.
+    let salt = Data("solidarity.kdf.v1".utf8)
+
     let derivedKey = HKDF<SHA256>
       .deriveKey(
         inputKeyMaterial: masterKey,
+        salt: salt,
         info: info,
         outputByteCount: 32
       )

@@ -297,29 +297,48 @@ extension KeychainService {
           return cacheExistingPublicJWKIfPossible()
             ? .success(())
             : .failure(.keyManagementError("Duplicate session key exists but could not load it"))
-        } else {
-          print("[KeychainService] Failed to store session key: \(statusDescription(addStatus)), using in-memory key")
-          // Scope the fallback by alias so pairwise RP keys never collapse
-          // onto the master key or each other.
+        } else if Self.allowEphemeralInMemoryFallback {
+          // Opt-in path for tests/simulator only. Production must NEVER hit
+          // this branch — process-lifetime keys silently rotate the DID on
+          // every relaunch, breaking long-lived contact signatures.
+          print(
+            "[KeychainService] Failed to store session key: \(statusDescription(addStatus)). "
+              + "Ephemeral in-memory fallback enabled — using process-lifetime key."
+          )
           Self.deviceInMemoryKeys[alias] = sessionKey
           cachePublicJWK(from: sessionKey)
           return .success(())
+        } else {
+          print("[KeychainService] Failed to store session key: \(statusDescription(addStatus))")
+          return .failure(
+            .keyManagementError(
+              "DID key cannot be stored — refusing to generate ephemeral key "
+                + "(SecItemAdd failed: \(statusDescription(addStatus)))"
+            )
+          )
         }
       }
 
-      // Last resort: create completely in-memory key
-      sessionAttributes.removeValue(forKey: kSecAttrApplicationTag as String)
-      if let inMemoryKey = SecKeyCreateRandomKey(sessionAttributes as CFDictionary, nil) {
-        print("[KeychainService] Successfully created in-memory key as fallback")
-        Self.deviceInMemoryKeys[alias] = inMemoryKey
-        cachePublicJWK(from: inMemoryKey)
-        return .success(())
+      // Last resort: create completely in-memory key — also gated. Without
+      // persistent storage, every launch yields a new identity which silently
+      // rotates the DID, so we surface the failure instead of hiding it.
+      if Self.allowEphemeralInMemoryFallback {
+        sessionAttributes.removeValue(forKey: kSecAttrApplicationTag as String)
+        if let inMemoryKey = SecKeyCreateRandomKey(sessionAttributes as CFDictionary, nil) {
+          print(
+            "[KeychainService] Created in-memory-only key under explicit ephemeral fallback flag"
+          )
+          Self.deviceInMemoryKeys[alias] = inMemoryKey
+          cachePublicJWK(from: inMemoryKey)
+          return .success(())
+        }
       }
 
       let sessionMessage = (sessionError?.takeRetainedValue() as Error?)?.localizedDescription ?? "Unknown error"
       return .failure(
         .keyManagementError(
-          "Failed to generate device key (persistent and session methods failed); session error: \(sessionMessage)"
+          "DID key cannot be stored — refusing to generate ephemeral key "
+            + "(persistent and session methods failed); session error: \(sessionMessage)"
         )
       )
     }
