@@ -71,14 +71,15 @@ extension CloudKitGroupSyncManager {
   }
 
   private func findGroupID(from token: String) async throws -> CKRecord.ID {
-    let predicate = NSPredicate(format: "token == %@", token)
+    // Refuse revoked tokens at the predicate layer so the query never returns them.
+    let predicate = NSPredicate(format: "token == %@ AND isActive == 1", token)
     let query = CKQuery(recordType: CloudKitRecordType.groupInvite, predicate: predicate)
     let (results, _) = try await publicDB.records(matching: query)
 
     guard let firstMatch = results.first, case .success(let inviteRecord) = firstMatch.1,
       let groupRef = inviteRecord["targetGroup"] as? CKRecord.Reference
     else {
-      print("[CloudKitManager] Invalid or expired invite token")
+      print("[CloudKitManager] Invalid, revoked, or expired invite token")
       throw NSError(domain: "GroupError", code: 404, userInfo: [NSLocalizedDescriptionKey: "Invalid or expired invite token"])
     }
     return groupRef.recordID
@@ -198,6 +199,15 @@ extension CloudKitGroupSyncManager {
   func kickMember(userId: String, from group: GroupModel) async throws {
     print("[CloudKitManager] Kicking member \(userId) from group \(group.name)")
 
+    // Only the group owner may mutate other members' status. CloudKit publicDB
+    // record-level write ACL also enforces this server-side, but we gate locally to
+    // surface a clear error and avoid noisy CK failures.
+    guard let currentUser = currentUserRecordID,
+      group.ownerRecordID == currentUser.recordName
+    else {
+      throw CKError(.permissionFailure)
+    }
+
     let predicate = NSPredicate(
       format: "group == %@ AND userRecordID == %@",
       CKRecord.Reference(recordID: CKRecord.ID(recordName: group.id), action: .none),
@@ -226,6 +236,13 @@ extension CloudKitGroupSyncManager {
   }
 
   internal func updateMemberStatus(userId: String, group: GroupModel, status: String) async throws {
+    // Owner-gated. Same rationale as `kickMember`.
+    guard let currentUser = currentUserRecordID,
+      group.ownerRecordID == currentUser.recordName
+    else {
+      throw CKError(.permissionFailure)
+    }
+
     let predicate = NSPredicate(
       format: "group == %@ AND userRecordID == %@",
       CKRecord.Reference(recordID: CKRecord.ID(recordName: group.id), action: .none),
