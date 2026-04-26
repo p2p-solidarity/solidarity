@@ -109,17 +109,24 @@ final class OIDCTokenService {
             throw OIDCTokenError.redirectMismatch
         }
 
-        if let challenge = entry.codeChallenge {
-            guard let verifier = codeVerifier, !verifier.isEmpty else {
-                throw OIDCTokenError.pkceRequired
-            }
-            guard Self.verifyPKCE(
-                verifier: verifier,
-                challenge: challenge,
-                method: entry.codeChallengeMethod ?? "s256"
-            ) else {
-                throw OIDCTokenError.pkceFailed
-            }
+        // PKCE is enforced unconditionally. The authorization endpoint
+        // (OIDCRequestHandler.parseAuthorizationRequest) refuses to mint a
+        // code without a registered challenge; if we still got here with
+        // `codeChallenge == nil` it is a programming error in the caller,
+        // so we fail closed via `pkceFailed` rather than silently accept.
+        guard let challenge = entry.codeChallenge else {
+            Self.logger.error("PKCE challenge missing on authorization code — refusing exchange")
+            throw OIDCTokenError.pkceFailed
+        }
+        guard let verifier = codeVerifier, !verifier.isEmpty else {
+            throw OIDCTokenError.pkceRequired
+        }
+        guard Self.verifyPKCE(
+            verifier: verifier,
+            challenge: challenge,
+            method: entry.codeChallengeMethod ?? "s256"
+        ) else {
+            throw OIDCTokenError.pkceFailed
         }
 
         let accessToken = try generateAccessToken(

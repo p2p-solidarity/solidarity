@@ -480,6 +480,17 @@ final class VCService {
         }
 
         Self.logger.info("Verifying signature with trusted issuer key")
+        // Cross-check the JWT alg header against the resolved key. The
+        // trustedJWK we retrieved is P-256 (ES256); accepting `none`,
+        // `HS256`, `ES384`, etc. would let an attacker bypass the
+        // signature step entirely. RFC 8725 §3.1 requires the verifier
+        // to pin alg to the key's known curve before signature decode.
+        let alg = (decoded.header["alg"] as? String)?.uppercased() ?? ""
+        guard alg == "ES256" else {
+          Self.logger.error("Rejecting credential with non-ES256 alg: \(alg.isEmpty ? "(missing)" : alg)")
+          return storeVerificationResult(credential, status: .failed)
+        }
+
         let publicKey = try trustedKey.toP256PublicKey()
         let signature =
           (try? P256.Signing.ECDSASignature(rawRepresentation: signatureData))

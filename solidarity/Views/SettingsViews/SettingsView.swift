@@ -237,7 +237,7 @@ private struct DIDListSheet: View {
   }
 
   private func didRow(did: String) -> some View {
-    let method = did.hasPrefix("did:key") ? "did:key" : did.hasPrefix("did:ethr") ? "did:ethr" : "did:web"
+    let method = did.hasPrefix("did:key") ? "did:key" : "did:web"
     return VStack(alignment: .leading, spacing: 4) {
       Text(method.uppercased())
         .font(.caption.weight(.bold))

@@ -172,7 +172,7 @@ struct VCSettingsView: View {
   var body: some View {
     Form {
       Section {
-        Text("Manage your Verifiable Credentials (VCs) for did:key and did:ethr.")
+        Text("Manage your Verifiable Credentials (VCs) for did:key.")
           .font(.footnote)
           .foregroundColor(.secondary)
       }
@@ -184,15 +184,6 @@ struct VCSettingsView: View {
           },
           label: {
             Label("Create did:key VC", systemImage: "key.fill")
-          }
-        )
-
-        Button(
-          action: {
-            viewModel.createVC(method: .ethr)
-          },
-          label: {
-            Label("Create did:ethr VC", systemImage: "link.circle.fill")
           }
         )
 

@@ -5,16 +5,23 @@
 //  DID derivation utilities backed by SpruceKit.
 //
 
-import CryptoKit
 import Foundation
 import LocalAuthentication
 import SpruceIDMobileSdkRs
 
 /// Provides helper functions to derive DID identifiers and documents from the local key material.
 final class DIDService {
+  /// Supported DID methods.
+  ///
+  /// did:ethr was previously listed but its derivation was algorithmically
+  /// broken (SHA-256 of the JWK JSON instead of keccak256 of an
+  /// uncompressed secp256k1 public key), and the underlying signing keys
+  /// here are P-256, not secp256k1. Rather than ship a cryptographically
+  /// invalid identifier, the method has been removed.
+  /// TODO: re-introduce did:ethr only after secp256k1 keys + keccak256 are
+  /// available in the project (e.g. via a vetted FFI module).
   enum DIDMethod: String, CaseIterable {
     case key = "did:key"
-    case ethr = "did:ethr"
   }
 
   private let keychain: KeychainService
@@ -46,20 +53,14 @@ final class DIDService {
     switch currentMethod {
     case .key:
       return currentDidKey(context: context, relyingPartyDomain: relyingPartyDomain)
-    case .ethr:
-      return currentDidEthr(context: context, relyingPartyDomain: relyingPartyDomain)
     }
   }
 
   func document(for descriptor: DIDDescriptor, services: [DIDServiceEndpoint]) throws -> DIDDocument {
-    if descriptor.did.hasPrefix("did:key") {
-      return documentForKey(descriptor, services: services)
-    } else if descriptor.did.hasPrefix("did:ethr") {
-      return documentForEthr(descriptor, services: services)
-    } else {
-      // Default fallback
-      return documentForKey(descriptor, services: services)
-    }
+    // Only did:key and did:web are produced by this service; both share the
+    // same JsonWebKey2020 verification method shape, so route everything
+    // through documentForKey.
+    return documentForKey(descriptor, services: services)
   }
 
   // MARK: - DID:key
@@ -114,56 +115,6 @@ final class DIDService {
       return .failure(error)
     case .success(let descriptor):
       return .success(documentForKey(descriptor, services: services))
-    }
-  }
-
-  // MARK: - DID:ethr
-
-  /// Returns the descriptor for did:ethr derived from the same key.
-  /// Note: This assumes the key is secp256k1 (ES256K). If it's P-256 (ES256), did:ethr is not standardly supported this way,
-  /// but for this implementation we will derive an Ethereum address from the public key bytes if possible.
-  func currentDidEthr(context: LAContext? = nil, relyingPartyDomain: String? = nil) -> CardResult<DIDDescriptor> {
-    let publicJwkResult: CardResult<PublicKeyJWK>
-    if let relyingPartyDomain {
-      publicJwkResult = keychain.pairwisePublicJwk(for: relyingPartyDomain, context: context)
-    } else {
-      publicJwkResult = keychain.publicJwk(context: context)
-    }
-
-    switch publicJwkResult {
-    case .failure(let error):
-      return .failure(error)
-    case .success(let jwk):
-      // 1. Get raw public key bytes
-      // This is a simplified derivation. In production, we should strictly check curve type.
-      // Assuming P-256 or secp256k1.
-      // For now, we will use a hash of the JWK as a deterministic proxy for an address if we can't do full eth derivation
-      // OR better: use the SpruceID library if it supports it.
-      // Since SpruceIDMobileSdkRs doesn't expose eth address derivation directly from this interface easily,
-      // we will simulate it by hashing the public key to a 20-byte address.
-
-      do {
-        let jwkString = try jwk.jsonString()
-        guard let data = jwkString.data(using: .utf8) else {
-          return .failure(.keyManagementError("Invalid JWK data"))
-        }
-
-        // Hash the JWK to get a stable identifier (Simulated Ethereum Address)
-        let hash = SHA256.hash(data: data)
-        let addressBytes = hash.prefix(20)
-        let addressHex = addressBytes.map { String(format: "%02x", $0) }.joined()
-        let did = "did:ethr:0x\(addressHex)"
-
-        return .success(
-          DIDDescriptor(
-            did: did,
-            verificationMethodId: "\(did)#controller",
-            jwk: jwk
-          )
-        )
-      } catch {
-        return .failure(.keyManagementError("Failed to derive did:ethr: \(error.localizedDescription)"))
-      }
     }
   }
 
@@ -223,25 +174,6 @@ final class DIDService {
         DIDDocument.VerificationMethod(
           id: descriptor.verificationMethodId,
           type: "JsonWebKey2020",
-          controller: descriptor.did,
-          publicKeyJwk: descriptor.jwk
-        )
-      ],
-      authentication: [descriptor.verificationMethodId],
-      assertionMethod: [descriptor.verificationMethodId],
-      service: services.isEmpty ? nil : services
-    )
-  }
-
-  private func documentForEthr(_ descriptor: DIDDescriptor, services: [DIDServiceEndpoint]) -> DIDDocument {
-    // did:ethr documents are usually resolved from the chain, but for local representation:
-    DIDDocument(
-      context: ["https://www.w3.org/ns/did/v1", "https://w3id.org/security/suites/secp256k1recovery-2020/v2"],
-      id: descriptor.did,
-      verificationMethod: [
-        DIDDocument.VerificationMethod(
-          id: descriptor.verificationMethodId,
-          type: "EcdsaSecp256k1RecoveryMethod2020",
           controller: descriptor.did,
           publicKeyJwk: descriptor.jwk
         )
