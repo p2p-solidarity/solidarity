@@ -14,9 +14,6 @@ class MessageService: ObservableObject {
 
   // MARK: - TLS Pinning
 
-  // TODO(security): set pin to base64 of sha256(SubjectPublicKeyInfo) of bussiness-card.kidneyweakx.com cert before ship
-  static let pinnedSPKIHash: String = "REPLACE_WITH_PIN"
-
   static let pinnedHost = "bussiness-card.kidneyweakx.com"
 
   private let pinnedDelegate = PinnedSessionDelegate()
@@ -309,10 +306,17 @@ class MessageService: ObservableObject {
 
 // MARK: - URLSession Delegate (TLS Pinning)
 
-/// Pins the SPKI hash of the server certificate for the messaging backend host. The pin is shipped
-/// as a placeholder so dev builds stay functional; production must replace `pinnedSPKIHash` with the
-/// real value before shipping. While the placeholder is present, validation falls back to the
-/// system trust evaluation but emits a loud log warning each time the backend is contacted.
+/// Pins the SPKI hash of the server certificate for the messaging backend host.
+///
+/// Trust policy:
+///  - Pin set non-empty + leaf SPKI matches → accept.
+///  - Pin set non-empty + no match           → REJECT (fail closed).
+///  - Pin set empty in release builds         → REJECT (fail closed).
+///  - Pin set empty in DEBUG builds           → accept after system trust eval
+///    (development convenience; surfaced loudly in the log).
+///
+/// Pin values are sourced from `MessageServerPinning.pinnedSPKIHashes(for:)`
+/// so future commits can drop in the real values without changing this file.
 final class PinnedSessionDelegate: NSObject, URLSessionDelegate {
   func urlSession(
     _ session: URLSession,
@@ -340,12 +344,25 @@ final class PinnedSessionDelegate: NSObject, URLSessionDelegate {
       return
     }
 
-    if MessageService.pinnedSPKIHash == "REPLACE_WITH_PIN" {
+    let pins = MessageServerPinning.pinnedSPKIHashes(for: MessageService.pinnedHost)
+
+    // Empty pin set: fail closed in production, allow only in DEBUG with a warning.
+    if pins.isEmpty {
+      if MessageServerPinning.allowsUnpinnedFallback {
+        #if DEBUG
+        print(
+          "[MessageService][TLS][WARNING] No SPKI pins configured for \(MessageService.pinnedHost). " +
+          "Falling back to system trust (DEBUG only). Configure pins in MessageServerPinning before shipping."
+        )
+        completionHandler(.useCredential, URLCredential(trust: serverTrust))
+        return
+        #endif
+      }
       print(
-        "[MessageService][TLS][WARNING] SPKI pin placeholder is set; falling back to default trust evaluation. " +
-        "Set MessageService.pinnedSPKIHash before shipping."
+        "[MessageService][TLS] No SPKI pins configured for \(MessageService.pinnedHost); " +
+        "rejecting connection (release builds require explicit pinning)."
       )
-      completionHandler(.useCredential, URLCredential(trust: serverTrust))
+      completionHandler(.cancelAuthenticationChallenge, nil)
       return
     }
 
@@ -357,10 +374,10 @@ final class PinnedSessionDelegate: NSObject, URLSessionDelegate {
     }
 
     let leafHash = MessageService.sha256Base64(spki)
-    if leafHash == MessageService.pinnedSPKIHash {
+    if pins.contains(leafHash) {
       completionHandler(.useCredential, URLCredential(trust: serverTrust))
     } else {
-      print("[MessageService][TLS] SPKI pin mismatch. Expected \(MessageService.pinnedSPKIHash), got \(leafHash)")
+      print("[MessageService][TLS] SPKI pin mismatch for \(MessageService.pinnedHost). Got \(leafHash); expected one of \(pins).")
       completionHandler(.cancelAuthenticationChallenge, nil)
     }
   }

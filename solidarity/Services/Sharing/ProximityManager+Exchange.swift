@@ -315,6 +315,115 @@ extension ProximityManager {
     )
   }
 
+  /// Verifies a v2 DID-bound exchange signature. Returns false on any of:
+  ///  - missing protocolVersion (legacy v1)
+  ///  - missing senderDID / senderJWK / signature / nonce
+  ///  - JWK does not match the JWK encoded in the sender's did:key identifier
+  ///  - signature does not verify against the recomputed canonical bytes
+  /// The receiverPeerName must be the local peer name from the receiver's
+  /// perspective so a captured payload cannot be replayed against a different
+  /// peer.
+  // swiftlint:disable function_parameter_count
+  static func verifyDIDExchangeSignature(
+    protocolVersion: Int?,
+    direction: ProximityExchangeBinding.Direction,
+    requestId: UUID,
+    senderDID: String?,
+    receiverPeerName: String,
+    senderID: String,
+    cardPreview: BusinessCard,
+    selectedFields: [BusinessCardField],
+    ephemeralMessage: String?,
+    nonce: String?,
+    timestamp: Date,
+    signatureBase64: String?,
+    senderJWK: PublicKeyJWK?
+  ) -> Bool {
+    guard let protocolVersion,
+      protocolVersion >= ProximityIdentitySigner.currentProtocolVersion,
+      let senderDID, !senderDID.isEmpty,
+      let senderJWK,
+      let signatureBase64, !signatureBase64.isEmpty,
+      let nonce, !nonce.isEmpty
+    else {
+      return false
+    }
+    guard ProximityIdentitySigner.jwk(senderJWK, matchesDID: senderDID) else {
+      print("[ProximityManager] DID/JWK mismatch from \(senderID); rejecting signature")
+      return false
+    }
+    let canonical = ProximityExchangeBinding.exchangeCanonicalBytes(
+      protocolVersion: protocolVersion,
+      direction: direction,
+      requestId: requestId,
+      senderDID: senderDID,
+      receiverPeerName: receiverPeerName,
+      senderID: senderID,
+      cardPreview: cardPreview,
+      selectedFields: selectedFields,
+      ephemeralMessage: ephemeralMessage,
+      nonce: nonce,
+      timestamp: timestamp
+    )
+    return ProximityIdentitySigner.verify(
+      signatureBase64: signatureBase64,
+      canonicalBytes: canonical,
+      jwk: senderJWK
+    )
+  }
+  // swiftlint:enable function_parameter_count
+
+  /// Verifies a v2 DID-bound card sharing signature. Same fail-closed rules as
+  /// `verifyDIDExchangeSignature` above; the only differences are the binding
+  /// fields (shareId + scope replace requestId + ephemeralMessage).
+  // swiftlint:disable function_parameter_count
+  static func verifyDIDCardSignature(
+    protocolVersion: Int?,
+    shareId: UUID,
+    senderDID: String?,
+    receiverPeerName: String,
+    senderID: String,
+    card: BusinessCard,
+    selectedFields: [BusinessCardField],
+    scope: String,
+    nonce: String?,
+    timestamp: Date,
+    signatureBase64: String?,
+    senderJWK: PublicKeyJWK?
+  ) -> Bool {
+    guard let protocolVersion,
+      protocolVersion >= ProximityIdentitySigner.currentProtocolVersion,
+      let senderDID, !senderDID.isEmpty,
+      let senderJWK,
+      let signatureBase64, !signatureBase64.isEmpty,
+      let nonce, !nonce.isEmpty
+    else {
+      return false
+    }
+    guard ProximityIdentitySigner.jwk(senderJWK, matchesDID: senderDID) else {
+      print("[ProximityManager] DID/JWK mismatch from \(senderID); rejecting card signature")
+      return false
+    }
+    let canonical = ProximityExchangeBinding.cardCanonicalBytes(
+      protocolVersion: protocolVersion,
+      shareId: shareId,
+      senderDID: senderDID,
+      receiverPeerName: receiverPeerName,
+      senderID: senderID,
+      card: card,
+      selectedFields: selectedFields,
+      scope: scope,
+      nonce: nonce,
+      timestamp: timestamp
+    )
+    return ProximityIdentitySigner.verify(
+      signatureBase64: signatureBase64,
+      canonicalBytes: canonical,
+      jwk: senderJWK
+    )
+  }
+  // swiftlint:enable function_parameter_count
+
   func isMergeConfirmationRequired(_ error: CardError) -> Bool {
     if case .validationError(let message) = error {
       return message.contains("Merge confirmation required")

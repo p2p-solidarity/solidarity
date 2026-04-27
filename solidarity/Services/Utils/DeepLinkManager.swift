@@ -237,35 +237,45 @@ class DeepLinkManager: DeepLinkManagerProtocol, ObservableObject {
       return false
     }
 
-    // Create a minimal business card from the URL parameters
+    // Create a minimal business card from the URL parameters.
+    // We do NOT persist it here — a deep link cannot be trusted to add contacts
+    // without explicit user confirmation. The caller surfaces a sheet via
+    // `MainTabView.handleDeepLinkAction` and only on user confirmation does
+    // `confirmPendingContactImport(_:)` write to the repository.
     let businessCard = BusinessCard(
       name: contactName,
       title: job?.isEmpty == false ? job : nil
     )
 
-    // Save to contacts on main thread
     Task { @MainActor in
-      let contact = Contact(
-        businessCard: businessCard,
-        source: .qrCode,
-        verificationStatus: .unverified
-      )
-
-      let result = contactRepository.addContact(contact)
-
-      switch result {
-      case .success:
-        lastReceivedCard = businessCard
-        pendingAction = .showReceivedCard(businessCard)
-        print("Successfully received card from app URL: \(contactName)")
-
-      case .failure(let error):
-        pendingAction = .showError("Failed to save card: \(error.localizedDescription)")
-        print("Failed to save card: \(error)")
-      }
+      lastReceivedCard = businessCard
+      pendingAction = .confirmContactImport(businessCard)
+      print("[DeepLinkManager] Awaiting user confirmation for contact import: \(contactName)")
     }
 
     return true
+  }
+
+  /// Persist a contact that the user explicitly confirmed via the import sheet.
+  /// Called by the UI layer after the user reviews the deep-linked contact.
+  @MainActor
+  func confirmPendingContactImport(_ card: BusinessCard) {
+    let contact = Contact(
+      businessCard: card,
+      source: .qrCode,
+      verificationStatus: .unverified
+    )
+
+    let result = contactRepository.addContact(contact)
+    switch result {
+    case .success:
+      lastReceivedCard = card
+      pendingAction = .showReceivedCard(card)
+      print("[DeepLinkManager] User confirmed contact import: \(card.name)")
+    case .failure(let error):
+      pendingAction = .showError("Failed to save card: \(error.localizedDescription)")
+      print("[DeepLinkManager] Failed to persist confirmed contact: \(error)")
+    }
   }
 
   private func isBusinessCardURL(_ components: URLComponents) -> Bool {
@@ -408,4 +418,8 @@ enum DeepLinkAction {
   case navigateToSharing
   case navigateToContacts
   case credentialOffer(String)
+  /// A contact deep link arrived but is awaiting explicit user confirmation
+  /// before being persisted. The view layer presents a confirmation sheet and
+  /// then calls `DeepLinkManager.confirmPendingContactImport(_:)` on accept.
+  case confirmContactImport(BusinessCard)
 }

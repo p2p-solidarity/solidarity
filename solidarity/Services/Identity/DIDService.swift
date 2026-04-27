@@ -121,6 +121,14 @@ final class DIDService {
   // MARK: - DID:web
 
   /// Produces a DID Document for did:web by combining the local key with the supplied domain/path.
+  ///
+  /// TODO(security): when did:web *resolution* is implemented (fetching the
+  /// remote `.well-known/did.json` for verification), the resolver MUST verify
+  /// that the resolved document's `id` exactly matches the DID being resolved.
+  /// Otherwise an attacker who can serve a JSON document over HTTPS at any
+  /// domain could substitute their key under a different DID's identity. The
+  /// check belongs in the resolver, not in this construction helper, but this
+  /// note is kept here so future work doesn't lose track.
   func didWebDocument(
     domain: String,
     pathComponents: [String],

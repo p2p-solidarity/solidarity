@@ -9,6 +9,7 @@ struct MainTabView: View {
   @State private var selectedTab = MainAppTab.people.rawValue
   @State private var showingCredentialImport = false
   @State private var pendingCredentialOfferURL = ""
+  @State private var pendingContactImport: BusinessCard?
 
   var body: some View {
     tabContent
@@ -19,6 +20,25 @@ struct MainTabView: View {
       }
       .sheet(isPresented: $showingCredentialImport) {
         CredentialImportFlowSheet(offerURL: pendingCredentialOfferURL)
+      }
+      .alert(
+        String(localized: "Add this contact?"),
+        isPresented: Binding(
+          get: { pendingContactImport != nil },
+          set: { newValue in if !newValue { pendingContactImport = nil } }
+        ),
+        presenting: pendingContactImport
+      ) { card in
+        Button(String(localized: "Add")) {
+          deepLinkManager.confirmPendingContactImport(card)
+          pendingContactImport = nil
+        }
+        Button(String(localized: "Cancel"), role: .cancel) {
+          pendingContactImport = nil
+        }
+      } message: { card in
+        let detail = card.title.flatMap { $0.isEmpty ? nil : $0 }.map { " (\($0))" } ?? ""
+        Text(String(localized: "A link is requesting to save \(card.name)\(detail) to your contacts."))
       }
       .alert("Error", isPresented: $showingErrorAlert) {
         Button("OK") {}
@@ -149,6 +169,9 @@ struct MainTabView: View {
     case .credentialOffer(let offerURL):
       pendingCredentialOfferURL = offerURL
       showingCredentialImport = true
+
+    case .confirmContactImport(let card):
+      pendingContactImport = card
     }
 
     deepLinkManager.clearPendingAction()

@@ -164,6 +164,24 @@ extension ProximityManager: MCSessionDelegate {
     guard let exchangeRequest = try? JSONDecoder().decode(ExchangeRequestPayload.self, from: data) else {
       return false
     }
+    // Reject pre-v2 exchange requests at the boundary so the user is never asked to
+    // accept an unauthenticated card that we cannot verify against a DID.
+    guard let version = exchangeRequest.protocolVersion,
+      version >= ProximityIdentitySigner.currentProtocolVersion else {
+      print("[ProximityManager] Rejecting legacy exchange request from \(peerID.displayName); needs DID-bound v2")
+      DispatchQueue.main.async { [weak self] in
+        let err: CardError = .sharingError(
+          "Peer is using an outdated exchange protocol; please ask them to update."
+        )
+        self?.lastError = err
+        NotificationCenter.default.post(
+          name: .matchingError,
+          object: nil,
+          userInfo: [ProximityEventKey.error: err]
+        )
+      }
+      return true
+    }
     DispatchQueue.main.async { [weak self] in
       guard let self = self else { return }
       self.pendingExchangeRequest = PendingExchangeRequest(
@@ -179,24 +197,46 @@ extension ProximityManager: MCSessionDelegate {
     guard let exchangeAccept = try? JSONDecoder().decode(ExchangeAcceptPayload.self, from: data) else {
       return false
     }
+    // Reject pre-v2 accepts: the legacy Curve25519 signature does not chain to the
+    // sender's DID and is therefore not safe to mark `.verified` from.
+    guard let version = exchangeAccept.protocolVersion,
+      version >= ProximityIdentitySigner.currentProtocolVersion else {
+      print("[ProximityManager] Rejecting legacy exchange accept; needs DID-bound v2")
+      DispatchQueue.main.async { [weak self] in
+        let err: CardError = .sharingError(
+          "Peer is using an outdated exchange protocol; please ask them to update."
+        )
+        self?.lastError = err
+        NotificationCenter.default.post(
+          name: .matchingError,
+          object: nil,
+          userInfo: [ProximityEventKey.error: err]
+        )
+      }
+      return true
+    }
     DispatchQueue.main.async { [weak self] in
       guard let self = self else { return }
       let mySignature = self.sentExchangeSignatures.removeValue(forKey: exchangeAccept.requestId) ?? ""
       let myMessage = self.sentExchangeMessages.removeValue(forKey: exchangeAccept.requestId)
-      let canonical = self.canonicalExchangeString(
+      let isValidSignature = ProximityManager.verifyDIDExchangeSignature(
+        protocolVersion: exchangeAccept.protocolVersion,
+        direction: .accept,
         requestId: exchangeAccept.requestId,
-        peerName: self.localPeerID.displayName,
-        card: exchangeAccept.cardPreview,
-        fields: exchangeAccept.selectedFields,
-        timestamp: exchangeAccept.timestamp
-      )
-      let isValidSignature = Self.verifyExchangeSignature(
-        signature: exchangeAccept.exchangeSignature,
-        canonicalString: canonical,
-        signPubKey: exchangeAccept.signPubKey
+        senderDID: exchangeAccept.senderDID,
+        receiverPeerName: self.localPeerID.displayName,
+        senderID: exchangeAccept.senderID,
+        cardPreview: exchangeAccept.cardPreview,
+        selectedFields: exchangeAccept.selectedFields,
+        ephemeralMessage: exchangeAccept.theirEphemeralMessage,
+        nonce: exchangeAccept.nonce,
+        timestamp: exchangeAccept.timestamp,
+        signatureBase64: exchangeAccept.didSignature,
+        senderJWK: exchangeAccept.senderJWK
       )
       let verificationStatus: VerificationStatus = isValidSignature ? .verified : .pending
 
+      let theirSignature = exchangeAccept.didSignature ?? exchangeAccept.exchangeSignature
       let persistence = ExchangeEdgePersistencePayload(
         card: exchangeAccept.cardPreview,
         sourcePeerName: exchangeAccept.senderID,
@@ -205,7 +245,7 @@ extension ProximityManager: MCSessionDelegate {
         pubKey: exchangeAccept.pubKey,
         signPubKey: exchangeAccept.signPubKey,
         mySignature: mySignature,
-        theirSignature: exchangeAccept.exchangeSignature,
+        theirSignature: theirSignature,
         myMessage: myMessage,
         theirMessage: exchangeAccept.theirEphemeralMessage,
         timestamp: exchangeAccept.timestamp
@@ -217,7 +257,7 @@ extension ProximityManager: MCSessionDelegate {
         card: exchangeAccept.cardPreview,
         requestId: exchangeAccept.requestId,
         mySignature: mySignature,
-        theirSignature: exchangeAccept.exchangeSignature,
+        theirSignature: theirSignature,
         myMessage: myMessage,
         theirMessage: exchangeAccept.theirEphemeralMessage
       )
@@ -232,25 +272,70 @@ extension ProximityManager: MCSessionDelegate {
   private func handleProximityCardPayload(_ data: Data, from peerID: MCPeerID) {
     do {
       let payload = try JSONDecoder().decode(ProximitySharingPayload.self, from: data)
+      // Reject pre-v2 card payloads: their signature does not chain to a DID, so we cannot
+      // tell whether the bytes match what the sender's DID controller actually issued.
+      guard let version = payload.protocolVersion,
+        version >= ProximityIdentitySigner.currentProtocolVersion else {
+        print("[ProximityManager] Rejecting legacy card payload from \(peerID.displayName); needs v2")
+        DispatchQueue.main.async { [weak self] in
+          let err: CardError = .sharingError(
+            "Peer is using an outdated exchange protocol; please ask them to update."
+          )
+          self?.lastError = err
+          NotificationCenter.default.post(
+            name: .matchingError,
+            object: nil,
+            userInfo: [ProximityEventKey.error: err]
+          )
+        }
+        return
+      }
       let scope = payload.scope ?? ShareScopeResolver.scope(
         selectedFields: payload.selectedFields,
         legacyLevel: payload.sharingLevel
       )
-      let status = ProximityVerificationHelper.verify(
+      let issuerStatus = ProximityVerificationHelper.verify(
         commitment: payload.issuerCommitment,
         proof: payload.issuerProof,
         message: payload.shareId.uuidString,
         scope: scope
       )
-      // The payload's ECDSA signature only proves the sender holds their own key —
-      // it is NOT a credential. Surfacing `.verified` based on it alone would be a
-      // false trust signal. Keep `.pending` so the UI badge requires a real proof.
-      _ = Self.verifyExchangeSignature(
-        signature: payload.payloadSignature ?? "",
-        canonicalString: canonicalCardPayloadString(for: payload),
-        signPubKey: payload.signPubKey
+      // Independently verify the DID-bound payload signature. We do NOT promote
+      // `.pending` to `.verified` based on this alone (the signature only proves
+      // the sender holds their own key — issuer trust still comes from `issuerStatus`).
+      // But we DO downgrade `.verified` back to `.pending` if the DID signature
+      // fails, because that means the bytes we just decoded may not be what the
+      // sender's DID controller actually signed.
+      let didSignatureValid = Self.verifyDIDCardSignature(
+        protocolVersion: payload.protocolVersion,
+        shareId: payload.shareId,
+        senderDID: payload.senderDID,
+        receiverPeerName: localPeerID.displayName,
+        senderID: payload.senderID,
+        card: payload.card,
+        selectedFields: payload.selectedFields ?? [],
+        scope: scope,
+        nonce: payload.nonce,
+        timestamp: payload.timestamp,
+        signatureBase64: payload.didSignature,
+        senderJWK: payload.senderJWK
       )
-      let finalStatus: VerificationStatus = status
+      guard didSignatureValid else {
+        print("[ProximityManager] DID signature invalid for card from \(payload.senderID); rejecting")
+        DispatchQueue.main.async { [weak self] in
+          let err: CardError = .sharingError(
+            "Received card has an invalid identity signature; rejecting."
+          )
+          self?.lastError = err
+          NotificationCenter.default.post(
+            name: .matchingError,
+            object: nil,
+            userInfo: [ProximityEventKey.error: err]
+          )
+        }
+        return
+      }
+      let finalStatus: VerificationStatus = issuerStatus
 
       print("[ProximityManager] Received payload from \(payload.senderID)")
       print("[ProximityManager] Sealed Route: \(String(describing: payload.sealedRoute))")

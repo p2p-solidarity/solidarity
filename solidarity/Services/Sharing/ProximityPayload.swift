@@ -25,7 +25,16 @@ struct ProximitySharingPayload: Codable {
   // Secure Messaging Fields (Optional for backward compatibility)
   let sealedRoute: String?
   let pubKey: String?  // Encryption Key (X25519)
-  let signPubKey: String?  // Identity Key (Ed25519)
+  let signPubKey: String?  // Identity Key (Ed25519, messaging-only)
+
+  // v2 DID-bound exchange signing fields. v1 (nil protocolVersion / nil senderDID) is
+  // rejected by the receiver because it lacks DID-anchored authenticity.
+  let protocolVersion: Int?
+  let senderDID: String?
+  let senderJWK: PublicKeyJWK?
+  let receiverPeerName: String?
+  let nonce: String?
+  let didSignature: String?
 
   init(
     card: BusinessCard,
@@ -41,7 +50,13 @@ struct ProximitySharingPayload: Codable {
     payloadSignature: String? = nil,
     sealedRoute: String?,
     pubKey: String?,
-    signPubKey: String?
+    signPubKey: String?,
+    protocolVersion: Int? = nil,
+    senderDID: String? = nil,
+    senderJWK: PublicKeyJWK? = nil,
+    receiverPeerName: String? = nil,
+    nonce: String? = nil,
+    didSignature: String? = nil
   ) {
     self.card = card
     self.sharingLevel = sharingLevel
@@ -57,6 +72,12 @@ struct ProximitySharingPayload: Codable {
     self.sealedRoute = sealedRoute
     self.pubKey = pubKey
     self.signPubKey = signPubKey
+    self.protocolVersion = protocolVersion
+    self.senderDID = senderDID
+    self.senderJWK = senderJWK
+    self.receiverPeerName = receiverPeerName
+    self.nonce = nonce
+    self.didSignature = didSignature
   }
 }
 
@@ -70,6 +91,14 @@ struct ExchangeRequestPayload: Codable {
   let myExchangeSignature: String
   let signPubKey: String?
 
+  // v2 DID-bound exchange signing fields. v1 payloads (nil protocolVersion) are rejected.
+  let protocolVersion: Int?
+  let senderDID: String?
+  let senderJWK: PublicKeyJWK?
+  let receiverPeerName: String?
+  let nonce: String?
+  let didSignature: String?
+
   init(
     requestId: UUID,
     senderID: String,
@@ -78,7 +107,13 @@ struct ExchangeRequestPayload: Codable {
     cardPreview: BusinessCard,
     myEphemeralMessage: String?,
     myExchangeSignature: String,
-    signPubKey: String? = nil
+    signPubKey: String? = nil,
+    protocolVersion: Int? = nil,
+    senderDID: String? = nil,
+    senderJWK: PublicKeyJWK? = nil,
+    receiverPeerName: String? = nil,
+    nonce: String? = nil,
+    didSignature: String? = nil
   ) {
     self.requestId = requestId
     self.senderID = senderID
@@ -88,6 +123,12 @@ struct ExchangeRequestPayload: Codable {
     self.myEphemeralMessage = myEphemeralMessage
     self.myExchangeSignature = myExchangeSignature
     self.signPubKey = signPubKey
+    self.protocolVersion = protocolVersion
+    self.senderDID = senderDID
+    self.senderJWK = senderJWK
+    self.receiverPeerName = receiverPeerName
+    self.nonce = nonce
+    self.didSignature = didSignature
   }
 }
 
@@ -104,6 +145,50 @@ struct ExchangeAcceptPayload: Codable {
   let sealedRoute: String?
   let pubKey: String?
   let signPubKey: String?
+
+  // v2 DID-bound exchange signing fields. v1 payloads (nil protocolVersion) are rejected.
+  let protocolVersion: Int?
+  let senderDID: String?
+  let senderJWK: PublicKeyJWK?
+  let receiverPeerName: String?
+  let nonce: String?
+  let didSignature: String?
+
+  init(
+    requestId: UUID,
+    senderID: String,
+    timestamp: Date,
+    selectedFields: [BusinessCardField],
+    cardPreview: BusinessCard,
+    theirEphemeralMessage: String?,
+    exchangeSignature: String,
+    sealedRoute: String?,
+    pubKey: String?,
+    signPubKey: String?,
+    protocolVersion: Int? = nil,
+    senderDID: String? = nil,
+    senderJWK: PublicKeyJWK? = nil,
+    receiverPeerName: String? = nil,
+    nonce: String? = nil,
+    didSignature: String? = nil
+  ) {
+    self.requestId = requestId
+    self.senderID = senderID
+    self.timestamp = timestamp
+    self.selectedFields = selectedFields
+    self.cardPreview = cardPreview
+    self.theirEphemeralMessage = theirEphemeralMessage
+    self.exchangeSignature = exchangeSignature
+    self.sealedRoute = sealedRoute
+    self.pubKey = pubKey
+    self.signPubKey = signPubKey
+    self.protocolVersion = protocolVersion
+    self.senderDID = senderDID
+    self.senderJWK = senderJWK
+    self.receiverPeerName = receiverPeerName
+    self.nonce = nonce
+    self.didSignature = didSignature
+  }
 }
 
 /// Payload for inviting a nearby peer to join a Semaphore group.
