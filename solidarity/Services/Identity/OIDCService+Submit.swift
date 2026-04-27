@@ -117,11 +117,16 @@ extension OIDCService {
         request.setValue("application/x-www-form-urlencoded", forHTTPHeaderField: "Content-Type")
         request.httpBody = bodyString.data(using: .utf8)
 
-        let (_, response) = try await session.data(for: request)
+        let (data, response) = try await session.data(for: request)
         guard let httpResponse = response as? HTTPURLResponse,
               (200...299).contains(httpResponse.statusCode) else {
           let code = (response as? HTTPURLResponse)?.statusCode ?? -1
           return .failure(.networkError("Verifier returned HTTP \(code)"))
+        }
+        // direct_post responses are tiny ack bodies; refuse oversized
+        // payloads so a hostile verifier cannot stream garbage back.
+        guard data.count <= OIDCService.maxOIDCResponseBytes else {
+          return .failure(.networkError("Verifier response exceeds size limit"))
         }
         return .success(())
       } catch {

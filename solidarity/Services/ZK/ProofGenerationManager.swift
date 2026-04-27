@@ -66,6 +66,7 @@ class ProofGenerationManager {
       }
 
       let signatureResult = signProofData(proofDataToSign)
+      let signerKey = signerPublicKeyData()
 
       switch signatureResult {
       case .success(let signature):
@@ -77,6 +78,7 @@ class ProofGenerationManager {
             fieldCommitments: fieldCommitments,
             recipientId: recipientId,
             signature: signature,
+            signerPublicKey: signerKey,
             createdAt: now,
             expiresAt: Calendar.current.date(byAdding: .hour, value: 24, to: Date()) ?? Date()
           )
@@ -141,9 +143,41 @@ class ProofGenerationManager {
     }
   }
 
-  func verifyProofSignature(_ data: Data, signature: Data) -> CardResult<Bool> {
-    let keyResult = keyManager.getSigningKeyPair()
+  /// Verify a proof signature.
+  ///
+  /// `signerPublicKey` is the verification key claimed by the proof envelope.
+  /// When supplied, verification binds to that key — NOT to a local key
+  /// derived from the verifier's own master material — so a peer-issued proof
+  /// can be checked without first impersonating the peer.
+  ///
+  /// TODO(security): the embedded key is currently trusted on-the-fly. For a
+  /// non-tautological attestation, the peer's pubkey must be cross-checked
+  /// against an independent trust anchor (e.g. the contact's stored
+  /// `didPublicKey` from the exchange handshake, or `IssuerTrustAnchorStore`).
+  /// Without that binding, an attacker who controls the proof can simply
+  /// embed their own valid signature/key pair and pass verification.
+  ///
+  /// `signerPublicKey == nil` is the legacy code path: we fall back to the
+  /// verifier's local KeyManager pair, which is meaningful only for
+  /// self-signed local QR rotations (the current `.zkProof` QR flow encrypts
+  /// with a per-install key, so the issuer and verifier are the same user).
+  func verifyProofSignature(
+    _ data: Data,
+    signature: Data,
+    signerPublicKey: Data? = nil
+  ) -> CardResult<Bool> {
+    if let signerPublicKey {
+      do {
+        let publicKey = try P256.Signing.PublicKey(rawRepresentation: signerPublicKey)
+        let ecdsaSignature = try P256.Signing.ECDSASignature(rawRepresentation: signature)
+        let isValid = publicKey.isValidSignature(ecdsaSignature, for: data)
+        return .success(isValid)
+      } catch {
+        return .success(false)
+      }
+    }
 
+    let keyResult = keyManager.getSigningKeyPair()
     switch keyResult {
     case .success(let keyPair):
       do {
@@ -157,6 +191,16 @@ class ProofGenerationManager {
     case .failure:
       return .success(false)
     }
+  }
+
+  /// Raw representation of the local signer's P-256 public key, used to
+  /// stamp newly generated proofs so verifiers can rebuild trust without
+  /// guessing the key from the verifier's own state.
+  func signerPublicKeyData() -> Data? {
+    guard case .success(let pair) = keyManager.getSigningKeyPair() else {
+      return nil
+    }
+    return pair.publicKey.rawRepresentation
   }
 
   // MARK: - Private Methods

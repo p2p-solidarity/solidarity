@@ -52,7 +52,9 @@ class MessageService: ObservableObject {
 
   // 2. Send Message (Send)
   func sendMessage(to contact: SecureContact, text: String) async throws {
+    #if DEBUG
     print("[MessageService] Sending message to \(contact.name), pubKey: \(contact.pubKey)")
+    #endif
     // Encrypt Content
     let blob = try SecureKeyManager.shared.encrypt(message: text, for: contact.pubKey)
 
@@ -203,7 +205,11 @@ class MessageService: ObservableObject {
           print("[MessageService] Failed to decrypt message from \(senderContact.name): \(error)")
         }
       } else {
+        #if DEBUG
         print("[MessageService] Received message from unknown sender (PubKey: \(msg.owner_pubkey))")
+        #else
+        print("[MessageService] Received message from unknown sender")
+        #endif
       }
     }
 

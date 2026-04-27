@@ -116,15 +116,21 @@ class SecureKeyManager {
   // --- Feature B: Encrypt Message (Send Mail) ---
   // Uses NaCl Box concept (ECDH + ChaCha20Poly1305)
   func encrypt(message: String, for recipientPubKeyBase64: String) throws -> String {
+    #if DEBUG
     print("[SecureKeyManager] Encrypting for recipient: \(recipientPubKeyBase64)")
+    #endif
 
     guard let recipientData = Data(base64Encoded: recipientPubKeyBase64) else {
+      #if DEBUG
       print("[SecureKeyManager] Failed to decode base64 key")
+      #endif
       throw NSError(domain: "Crypto", code: -1, userInfo: [NSLocalizedDescriptionKey: "Invalid Base64 Key"])
     }
 
     guard let recipientKey = try? Curve25519.KeyAgreement.PublicKey(rawRepresentation: recipientData) else {
+      #if DEBUG
       print("[SecureKeyManager] Failed to create PublicKey from data (count: \(recipientData.count))")
+      #endif
       throw NSError(domain: "Crypto", code: -1, userInfo: [NSLocalizedDescriptionKey: "Invalid Curve25519 Key"])
     }
 

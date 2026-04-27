@@ -4,6 +4,12 @@
 //
 //  Manages local storage for secure messages, ensuring they are excluded from iCloud backups.
 //
+//  Messages are persisted as AES-GCM ciphertext (key sourced from
+//  `EncryptionManager`) so that a device-level file compromise — backup
+//  extraction, jailbreak filesystem access, etc. — cannot recover plaintext
+//  Sakura messages from the on-disk JSON / per-sender files. The complete
+//  file protection class still applies on top of the encryption envelope.
+//
 
 import Foundation
 
@@ -21,6 +27,7 @@ class SecureMessageStorage: ObservableObject {
   private let directoryName = "SecureMessages"
   private let historyFileName = "message_history.json"
   private let maxHistoryPerUser = 50  // Keep last 50 messages per user
+  private let encryption = EncryptionManager.shared
 
   @Published var messageHistory: [String: [StoredMessage]] = [:]
 
@@ -33,16 +40,22 @@ class SecureMessageStorage: ObservableObject {
   func saveLastMessage(_ text: String, from sender: String) {
     guard let directoryURL = getStorageDirectory() else { return }
 
-    // Save to legacy last message file (for backward compatibility)
     let fileURL = directoryURL.appendingPathComponent(filename(for: sender))
 
-    do {
-      if let data = text.data(using: .utf8) {
-        try data.write(to: fileURL, options: [.atomic, .completeFileProtection])
-        print("[SecureMessageStorage] Saved message from \(sender)")
+    let envelope = LastMessageEnvelope(text: text)
+    switch encryption.encrypt(envelope) {
+    case .success(let cipher):
+      do {
+        try cipher.write(to: fileURL, options: [.atomic, .completeFileProtection])
+      } catch {
+        #if DEBUG
+        print("[SecureMessageStorage] Failed to save message: \(error)")
+        #endif
       }
-    } catch {
-      print("[SecureMessageStorage] Failed to save message: \(error)")
+    case .failure(let error):
+      #if DEBUG
+      print("[SecureMessageStorage] Encryption failed: \(error.localizedDescription)")
+      #endif
     }
 
     // Also save to history
@@ -54,14 +67,18 @@ class SecureMessageStorage: ObservableObject {
     guard let directoryURL = getStorageDirectory() else { return nil }
 
     let fileURL = directoryURL.appendingPathComponent(filename(for: sender))
-
-    do {
-      let text = try String(contentsOf: fileURL, encoding: .utf8)
-      return text
-    } catch {
-      // File might not exist yet, which is fine
+    guard let data = try? Data(contentsOf: fileURL) else {
       return nil
     }
+
+    // New format: AES-GCM-wrapped envelope produced by `saveLastMessage`.
+    if case .success(let envelope) = encryption.decrypt(data, as: LastMessageEnvelope.self) {
+      return envelope.text
+    }
+
+    // Legacy plaintext-on-disk fallback. Keep it readable so users with
+    // existing installs don't lose their last-message context.
+    return String(data: data, encoding: .utf8)
   }
 
   // MARK: - Message History API
@@ -113,13 +130,20 @@ class SecureMessageStorage: ObservableObject {
     let historyURL = directoryURL.appendingPathComponent(historyFileName)
 
     guard fileManager.fileExists(atPath: historyURL.path) else { return }
+    guard let data = try? Data(contentsOf: historyURL) else { return }
 
-    do {
-      let data = try Data(contentsOf: historyURL)
-      messageHistory = try JSONDecoder().decode([String: [StoredMessage]].self, from: data)
-      print("[SecureMessageStorage] Loaded message history")
-    } catch {
-      print("[SecureMessageStorage] Failed to load history: \(error)")
+    // New format: AES-GCM-wrapped JSON. Decrypt and decode in one step.
+    if case .success(let history) = encryption.decrypt(data, as: [String: [StoredMessage]].self) {
+      messageHistory = history
+      return
+    }
+
+    // Legacy plaintext JSON written before the encryption upgrade. Read,
+    // adopt into memory, then re-persist as ciphertext on the next save so
+    // the on-disk copy is upgraded transparently.
+    if let history = try? JSONDecoder().decode([String: [StoredMessage]].self, from: data) {
+      messageHistory = history
+      saveHistoryToDisk()
     }
   }
 
@@ -127,11 +151,19 @@ class SecureMessageStorage: ObservableObject {
     guard let directoryURL = getStorageDirectory() else { return }
     let historyURL = directoryURL.appendingPathComponent(historyFileName)
 
-    do {
-      let data = try JSONEncoder().encode(messageHistory)
-      try data.write(to: historyURL, options: [.atomic, .completeFileProtection])
-    } catch {
-      print("[SecureMessageStorage] Failed to save history: \(error)")
+    switch encryption.encrypt(messageHistory) {
+    case .success(let cipher):
+      do {
+        try cipher.write(to: historyURL, options: [.atomic, .completeFileProtection])
+      } catch {
+        #if DEBUG
+        print("[SecureMessageStorage] Failed to save history: \(error)")
+        #endif
+      }
+    case .failure(let error):
+      #if DEBUG
+      print("[SecureMessageStorage] History encryption failed: \(error.localizedDescription)")
+      #endif
     }
   }
 
@@ -179,4 +211,12 @@ class SecureMessageStorage: ObservableObject {
     let safeName = sender.components(separatedBy: .init(charactersIn: "/\\?%*|\"<>:")).joined()
     return "\(safeName)_lastmessage.txt"
   }
+}
+
+// MARK: - On-disk envelope
+
+/// Codable wrapper used so the per-sender "last message" file can flow
+/// through `EncryptionManager` (which is generic over `Codable`).
+private struct LastMessageEnvelope: Codable {
+  let text: String
 }

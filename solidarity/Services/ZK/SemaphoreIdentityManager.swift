@@ -24,9 +24,22 @@ final class SemaphoreIdentityManager: ObservableObject {
   }
 
   /// Bootstrap anchor commitment for passport self-attestation proofs.
-  /// A fixed decimal field element used as the second member in a minimal 2-member group,
-  /// enabling passport ZK proofs before the user joins any peer group.
-  static let passportAnchorCommitment = "7891011121314151617181920212223242526272829303132"
+  ///
+  /// Used as the second member in a minimal 2-member group when the user
+  /// has not yet joined any peer group, so passport ZK proofs can still be
+  /// generated. Each install derives a unique random commitment via
+  /// `SecRandomCopyBytes` and persists it in the Keychain — sharing a
+  /// single hard-coded literal across installs would let a passive
+  /// observer recognise the bootstrap fallback in any group's public
+  /// commitment list.
+  ///
+  /// Production proofs that target a real CSCA-anchored circuit must
+  /// continue to derive the anchor from the chip transcript — this value
+  /// is only consulted by the dev / fallback `Array(.., passportAnchor)`
+  /// pairs on the Semaphore-fallback path.
+  static var passportAnchorCommitment: String {
+    PassportAnchorCommitmentStore.shared.value
+  }
 
   // Whether the SemaphoreSwift library is available for proof ops
   static var proofsSupported: Bool {

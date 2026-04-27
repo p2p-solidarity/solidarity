@@ -17,7 +17,9 @@ extension CloudKitGroupSyncManager {
   }
 
   internal func joinPublicGroup(withInviteToken token: String) async throws -> GroupModel {
+    #if DEBUG
     print("[CloudKitManager] Attempting to join public group with token: \(token)")
+    #endif
 
     let userID = try await ensureAuthenticated()
     let groupRecordID = try await findGroupID(from: token)

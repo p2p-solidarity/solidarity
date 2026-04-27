@@ -76,7 +76,9 @@ final class DIDService {
 
     switch ensureResult {
     case .failure(let error):
+      #if DEBUG
       print("[DIDService] Failed to ensure signing key: \(error)")
+      #endif
       return .failure(error)
     case .success:
       break
@@ -91,15 +93,21 @@ final class DIDService {
 
     switch publicJwkResult {
     case .failure(let error):
+      #if DEBUG
       print("[DIDService] Failed to get public JWK: \(error)")
+      #endif
       return .failure(error)
     case .success(let jwk):
       do {
         let did = try didKeyUtils.didFromJwk(jwk: try jwk.jsonString())
+        #if DEBUG
         print("[DIDService] Successfully derived DID: \(did)")
+        #endif
         return .success(descriptor(for: did, jwk: jwk))
       } catch {
+        #if DEBUG
         print("[DIDService] Failed to derive did:key: \(error)")
+        #endif
         return .failure(.keyManagementError("Failed to derive did:key: \(error.localizedDescription)"))
       }
     }

@@ -55,7 +55,11 @@ extension ProofGenerationManager {
       )
     }
 
-    let signatureResult = verifyProofSignature(proofDataToVerify, signature: proof.signature)
+    let signatureResult = verifyProofSignature(
+      proofDataToVerify,
+      signature: proof.signature,
+      signerPublicKey: proof.signerPublicKey
+    )
 
     switch signatureResult {
     case .success(let isValidSignature):
@@ -127,6 +131,7 @@ extension ProofGenerationManager {
       }
 
       let signatureResult = signProofData(proofDataToSign)
+      let signerKey = signerPublicKeyData()
 
       switch signatureResult {
       case .success(let signature):
@@ -137,6 +142,7 @@ extension ProofGenerationManager {
             attributeType: attribute,
             commitment: Data(commitment),
             signature: signature,
+            signerPublicKey: signerKey,
             createdAt: Date(),
             expiresAt: Calendar.current.date(byAdding: .hour, value: 12, to: Date()) ?? Date()
           )
@@ -200,7 +206,11 @@ extension ProofGenerationManager {
       )
     }
 
-    let signatureResult = verifyProofSignature(proofDataToVerify, signature: proof.signature)
+    let signatureResult = verifyProofSignature(
+      proofDataToVerify,
+      signature: proof.signature,
+      signerPublicKey: proof.signerPublicKey
+    )
 
     switch signatureResult {
     case .success(let isValidSignature):
@@ -261,6 +271,7 @@ extension ProofGenerationManager {
       }
 
       let signatureResult = signProofData(proofDataToSign)
+      let signerKey = signerPublicKeyData()
 
       switch signatureResult {
       case .success(let signature):
@@ -273,6 +284,7 @@ extension ProofGenerationManager {
             isInRange: isInRange,
             commitment: Data(commitment),
             signature: signature,
+            signerPublicKey: signerKey,
             createdAt: Date(),
             expiresAt: Calendar.current.date(byAdding: .hour, value: 6, to: Date()) ?? Date()
           )

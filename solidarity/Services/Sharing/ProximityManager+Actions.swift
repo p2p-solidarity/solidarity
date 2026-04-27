@@ -121,8 +121,10 @@ extension ProximityManager {
       )
 
       print("[ProximityManager] Sending card to \(peer.displayName)")
+      #if DEBUG
       print("[ProximityManager] Sealed Route: \(String(describing: SecureKeyManager.shared.mySealedRoute))")
       print("[ProximityManager] Pub Key: \(String(describing: SecureKeyManager.shared.myEncPubKey))")
+      #endif
 
       let data = try JSONEncoder().encode(payload)
 

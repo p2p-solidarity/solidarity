@@ -63,14 +63,18 @@ final class IdentityCacheStore {
       )
       guard let data = try? JSONEncoder().encode(container) else { return }
       self.store(data, for: self.descriptorAccount)
+      #if DEBUG
       print("[IdentityCacheStore] Cached DID descriptor: \(descriptor.did)")
+      #endif
     }
   }
 
   func clearDescriptor() {
     queue.async {
       self.delete(for: self.descriptorAccount)
+      #if DEBUG
       print("[IdentityCacheStore] Cleared cached DID descriptor")
+      #endif
     }
   }
 
@@ -79,7 +83,9 @@ final class IdentityCacheStore {
   /// Use when subsequent operations depend on the cache being empty.
   func clearDescriptorSync() {
     delete(for: descriptorAccount)
+    #if DEBUG
     print("[IdentityCacheStore] Cleared cached DID descriptor (sync)")
+    #endif
   }
 
   /// Clears all cached identity data: DID documents, JWKs, and active descriptor.

@@ -23,6 +23,12 @@ final class OIDCService: ObservableObject {
   static let shared = OIDCService()
   static let logger = Logger(subsystem: AppBranding.currentLoggerSubsystem, category: "OIDCService")
 
+  /// Hard byte cap for any OID4VP request/response we accept from the
+  /// network (request_uri payloads, JARM responses, etc.). Real flows are
+  /// in the low-KB range; 256 KB lets us refuse adversarial blobs early
+  /// without breaking realistic verifiers.
+  static let maxOIDCResponseBytes = 256 * 1024
+
   struct PresentationRequest: Equatable {
     let id: String
     let state: String
@@ -118,7 +124,11 @@ final class OIDCService: ObservableObject {
   private let didService: DIDService
   private weak var coordinator: IdentityCoordinator?
   private let nonceLock = NSLock()
-  private var seenNonces: [String: Date] = [:]
+  /// Replay-protection nonce set. Persisted via `OIDCNonceStore` so a
+  /// kill/restart cannot reset the in-memory cache and let an attacker
+  /// replay a vp_token under a previously-seen nonce.
+  private let nonceStore = OIDCNonceStore.shared
+  private var seenNonces: [String: Date]
   // Internal so response-signing helpers in OIDCService+Response.swift
   // can reuse the same ephemeral session (matching TLS + timeout config).
   let session: URLSession
@@ -128,6 +138,7 @@ final class OIDCService: ObservableObject {
     let config = URLSessionConfiguration.ephemeral
     config.timeoutIntervalForRequest = 20
     self.session = URLSession(configuration: config)
+    self.seenNonces = OIDCNonceStore.shared.load()
   }
 
   func attachIdentityCoordinator(_ coordinator: IdentityCoordinator) {
@@ -425,6 +436,13 @@ final class OIDCService: ObservableObject {
         let code = (response as? HTTPURLResponse)?.statusCode ?? -1
         return .failure(.networkError("request_uri fetch returned HTTP \(code)"))
       }
+      // Cap inbound Request Object size — even a JWT-shaped Request Object
+      // is small (low KB). 256 KB is generous enough for legitimate verifiers
+      // while preventing memory-pressure attacks from a hostile request_uri
+      // host that streams garbage.
+      guard data.count <= Self.maxOIDCResponseBytes else {
+        return .failure(.networkError("request_uri payload exceeds size limit"))
+      }
       let body = String(data: data, encoding: .utf8) ?? ""
       let trimmedBody = body.trimmingCharacters(in: .whitespacesAndNewlines)
       // A JWT-shaped body MUST verify; we do not fall back to JSON parsing
@@ -522,6 +540,9 @@ final class OIDCService: ObservableObject {
 
   /// Records a nonce (from a received vp_token) and returns true if it is
   /// fresh, false if it has been seen within the replay window.
+  ///
+  /// Both the in-memory cache and the Keychain-backed `OIDCNonceStore` are
+  /// updated so a process restart cannot replay a previously-seen nonce.
   @discardableResult
   func registerNonce(_ nonce: String, ttl: TimeInterval = 3600) -> Bool {
     guard !nonce.isEmpty else { return true }
@@ -530,14 +551,15 @@ final class OIDCService: ObservableObject {
     defer { nonceLock.unlock() }
 
     let now = Date()
-    // Opportunistic cleanup
+    // Opportunistic cleanup of expired entries.
     seenNonces = seenNonces.filter { now.timeIntervalSince($0.value) < ttl }
 
     if seenNonces[nonce] != nil {
-      Self.logger.warning("Replay detected: nonce=\(nonce, privacy: .public) already used")
+      Self.logger.warning("Replay detected: nonce already used")
       return false
     }
     seenNonces[nonce] = now
+    nonceStore.save(seenNonces, ttl: ttl, now: now)
     return true
   }
 

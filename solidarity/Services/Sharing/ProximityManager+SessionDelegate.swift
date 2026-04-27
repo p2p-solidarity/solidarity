@@ -338,8 +338,10 @@ extension ProximityManager: MCSessionDelegate {
       let finalStatus: VerificationStatus = issuerStatus
 
       print("[ProximityManager] Received payload from \(payload.senderID)")
+      #if DEBUG
       print("[ProximityManager] Sealed Route: \(String(describing: payload.sealedRoute))")
       print("[ProximityManager] Pub Key: \(String(describing: payload.pubKey))")
+      #endif
 
       DispatchQueue.main.async { [weak self] in
         guard let self = self else { return }
