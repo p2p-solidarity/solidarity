@@ -248,6 +248,22 @@ final class SemaphoreIdentityManager: ObservableObject {
 
     let rawProof = envelope.semaphoreProof
     #if canImport(Semaphore) && !(targetEnvironment(simulator) && arch(x86_64))
+      // Cross-check envelope vs proof internals BEFORE crypto verify.
+      // The Rust binding's verify treats the proof JSON as the source of
+      // truth for public inputs — if envelope.signal/scope disagree with
+      // what's actually inside the proof, the envelope is lying about
+      // what was attested. The crypto check would still pass for the
+      // proof's real values, so we'd grant a verdict against the wrong
+      // signal/scope. Reject early when they disagree.
+      if let internalSignal = Self.extractStringField(fromSemaphoreProof: rawProof, keys: ["message", "signal"]),
+         envelope.signal != internalSignal {
+        return false
+      }
+      if let internalScope = Self.extractStringField(fromSemaphoreProof: rawProof, keys: ["scope"]),
+         envelope.scope != internalScope {
+        return false
+      }
+
       let cryptoValid = try verifySemaphoreProof(proof: rawProof)
       guard cryptoValid else { return false }
 
@@ -264,6 +280,25 @@ final class SemaphoreIdentityManager: ObservableObject {
     #else
       return false
     #endif
+  }
+
+  /// Read a string-valued field from a Semaphore-binding proof JSON. Tolerates
+  /// snake_case / camelCase variants and numeric values that decode to strings,
+  /// mirroring `extractNullifier`.
+  static func extractStringField(fromSemaphoreProof proofJSON: String, keys: [String]) -> String? {
+    guard let data = proofJSON.data(using: .utf8) else { return nil }
+    guard let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+      return nil
+    }
+    for key in keys {
+      if let str = object[key] as? String, !str.isEmpty {
+        return str
+      }
+      if let number = object[key] as? NSNumber {
+        return number.stringValue
+      }
+    }
+    return nil
   }
 
   /// Extract the `nullifier` field from a Semaphore proof JSON string.
