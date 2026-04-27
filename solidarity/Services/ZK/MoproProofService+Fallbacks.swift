@@ -142,7 +142,13 @@ extension MoproProofService {
     startTime: DispatchTime
   ) -> MoproProofOutput {
     logger.warning("[SD-JWT] Generating fallback proof — NOT true ZK, no anonymity guarantee")
+    // nationality is PII; only log it in DEBUG. Production logs keep the
+    // boolean signal without leaking which country issued the passport.
+    #if DEBUG
     logger.info("[SD-JWT] passiveAuth=\(passiveAuthPassed), nationality=\(nationalityCode)")
+    #else
+    logger.info("[SD-JWT] passiveAuth=\(passiveAuthPassed)")
+    #endif
     let fallbackDict: [String: Any] = [
       "passport_hash": documentHash,
       "mrz": mrzDigest,
