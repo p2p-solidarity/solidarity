@@ -209,6 +209,13 @@ final class KeychainService {
 
     clearInMemoryKey()
 
+    // Cached DID descriptor / JWK becomes invalid the moment the underlying
+    // key rotates. Clear it here so any caller of `resetSigningKey()` —
+    // present or future — can't accidentally leave stale cache entries that
+    // verify against the *old* key. Done before regeneration so a partial
+    // failure path can't leave cache pointing at a now-deleted key.
+    IdentityCacheStore().clearDescriptorSync()
+
     // Then create a new one
     switch ensureSigningKey() {
     case .failure(let error):
