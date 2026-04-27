@@ -26,13 +26,15 @@ solidarity/
 │   ├── SolidarityApp.swift      # App entry, deep linking, CloudKit setup
 │   ├── AppDelegate.swift        # CloudKit notification handling
 │   ├── Models/                  # Data models
-│   │   ├── BusinessCard.swift   # Core card model with privacy controls
+│   │   ├── BusinessCard.swift / BusinessCard+Extensions.swift # Core card + sharing prefs
 │   │   ├── Contact.swift        # Received card wrapper (legacy Codable)
 │   │   ├── IdentityEntities.swift # SwiftData: ContactEntity, IdentityCardEntity, ProvableClaimEntity
-│   │   ├── Credentials/         # VC-related models
-│   │   ├── GroupEntities.swift
-│   │   ├── SecureMessagingModels.swift
-│   │   └── ScanLanguage.swift
+│   │   ├── AnimalCharacter.swift / CardError.swift / SharingFormat.swift / ScanLanguage.swift
+│   │   ├── EventParticipation.swift / GroupCredentialContext.swift / GroupCredentialDeliverySettings.swift
+│   │   ├── CloudKitGroupModels.swift / GroupEntities.swift / SecureMessagingModels.swift
+│   │   ├── Credentials/         # BusinessCardCredential.swift
+│   │   ├── OIDC/                # OIDCScope.swift
+│   │   └── Vault/               # VaultModels.swift, TimeLockConfig.swift
 │   ├── Services/
 │   │   ├── ZK/                  # Zero-Knowledge Proof layer
 │   │   │   ├── SemaphoreIdentityManager.swift  # ZK identity (mopro)
@@ -42,64 +44,82 @@ solidarity/
 │   │   │   ├── ProofModels.swift
 │   │   │   └── ZKLogger.swift
 │   │   ├── Identity/            # DID & credential layer
-│   │   │   ├── DIDService.swift               # did:key, did:ethr, did:web
-│   │   │   ├── KeychainService.swift          # Secure Enclave + fallback
-│   │   │   ├── KeychainService+Generation.swift # Key generation (SE + software)
-│   │   │   ├── KeychainService+Pairwise.swift # Per-RP pairwise key management
-│   │   │   ├── VCService.swift                # JWT VC issuance & verification
+│   │   │   ├── DIDService.swift / DIDKeyResolver.swift / DIDDocumentExporter.swift
+│   │   │   ├── KeychainService.swift (+Generation/+Pairwise/+KeyUtilities)
+│   │   │   ├── VCService.swift (+JWT)         # JWT VC issuance & verification
 │   │   │   ├── VCLibrary.swift                # Encrypted VC storage
-│   │   │   ├── OIDCService.swift              # OID4VP request/response
-│   │   │   ├── CredentialIssuanceService.swift # OID4VCI pre-authorized flow
-│   │   │   ├── ProofVerifierService.swift     # VP/ZKP local verification
-│   │   │   ├── PassportPipelineService.swift   # Passport: MRZ→NFC→ZKP→VC orchestration
-│   │   │   ├── NFCPassportReaderService.swift  # NFC chip read (BAC/PACE/DG1/DG2/SOD)
-│   │   │   ├── IdentityCoordinator.swift      # State orchestration
-│   │   │   ├── BiometricSigningKey.swift       # P-256 ECDSA for VCs
-│   │   │   ├── BiometricGatekeeper.swift       # Face ID / passcode auth gate
-│   │   │   ├── GroupCredentialService.swift    # Group VC issuance
-│   │   │   └── IdentityImportHelper.swift     # Multi-format import
+│   │   │   ├── OIDCService.swift (+Helpers/+Response/+Submit) # OID4VP req/resp + JARM
+│   │   │   ├── OID4VPPresentationService.swift
+│   │   │   ├── ProofVerifierService.swift (+VPToken) # VP/ZKP local verification
+│   │   │   ├── PassportPipelineService.swift  # Passport: MRZ→NFC→ZKP→VC orchestration
+│   │   │   ├── NFCPassportReaderService.swift # NFC chip read (BAC/PACE/DG1/DG2/SOD) + masterListURL
+│   │   │   ├── IdentityCoordinator.swift (+Import/+Issuance/+OIDC/+Verification)
+│   │   │   ├── IdentityCacheStore.swift / IdentityState.swift
+│   │   │   ├── BiometricSigningKey.swift / BiometricGatekeeper.swift
+│   │   │   ├── BusinessCardCredentialEnvelope.swift
+│   │   │   ├── GroupCredentialService.swift / GroupCredentialDeliveryService.swift
+│   │   │   ├── IdentityImportHelper.swift
+│   │   │   ├── SensitiveActionPolicyStore.swift / IssuerTrustAnchorStore.swift
+│   │   │   └── VerifiedClaimIndex.swift
+│   │   ├── OIDC/                # OID4VCI issuance flow
+│   │   │   ├── CredentialIssuanceService.swift (+Proof)
+│   │   │   ├── CredentialIssuanceModels.swift
+│   │   │   ├── OIDCRequestHandler.swift
+│   │   │   └── OIDCTokenService.swift
 │   │   ├── Sharing/             # P2P exchange layer
-│   │   │   ├── ProximityManager.swift         # MPC discovery/session
-│   │   │   ├── ProximityManager+Actions.swift # Card send with ZK proof
-│   │   │   ├── ProximityManager+SessionDelegate.swift  # Receive & verify
-│   │   │   ├── ProximityPayload.swift         # Exchange data structure
+│   │   │   ├── ProximityManager.swift (+Actions/+Discovery/+Exchange/+SessionDelegate/+Types)
+│   │   │   ├── ProximityPayload.swift / ProximityEvents.swift / ProximityDebug.swift / ProximityVerificationHelper.swift
+│   │   │   ├── GroupProximityManager.swift
+│   │   │   ├── NearbyInteractionManager.swift (+Delegate/+Types)
+│   │   │   ├── AirDropManager.swift / PassKitManager.swift (+Generation)
 │   │   │   ├── WebRTCManager.swift            # WebRTC data channel
 │   │   │   ├── MessageService.swift           # Server-based messaging
-│   │   │   ├── SecureKeyManager.swift         # X25519/Ed25519 keys
-│   │   │   └── SecureMessageStorage.swift
+│   │   │   ├── SecureKeyManager.swift         # X25519/Ed25519, persisted in Keychain
+│   │   │   ├── SecureMessageStorage.swift
+│   │   │   ├── ShareLinkManager.swift / ShareScopeResolver.swift / ShareSettingsStore.swift
+│   │   │   └── ZIPWriter.swift
 │   │   ├── CloudKit/            # Cloud sync (groups, invites)
-│   │   ├── Scan/                # Passport MRZ scanning
-│   │   │   └── MRZScannerService.swift        # Vision OCR + TD3 ICAO 9303 parsing
+│   │   ├── Scan/                # Passport MRZ scanning + QR routing
+│   │   │   ├── MRZScannerService.swift        # Vision OCR + TD3 ICAO 9303 parsing
+│   │   │   └── ScanRouterService.swift        # QR payload routing (OID4VP/VCI/SIOP/JWT)
 │   │   ├── Card/                # Card CRUD, QR, OCR
-│   │   │   ├── CardManager.swift
-│   │   │   ├── ContactRepository.swift
-│   │   │   ├── QRCodeScanService.swift        # QR decode + envelope handlers
-│   │   │   ├── QRCodeGenerationService.swift  # 3 format generators
-│   │   │   ├── ScanRouterService.swift        # QR payload routing (OID4VP/VCI/SIOP/JWT)
+│   │   │   ├── CardManager.swift / ContactRepository.swift
+│   │   │   ├── QRCodeScanService.swift (+Handlers/+Verification)
+│   │   │   ├── QRCodeGenerationService.swift / QRCodeManager.swift / QRCodeModels.swift
 │   │   │   └── OCRManager.swift               # Vision framework (business card)
+│   │   ├── Backup/              # BackupManager.swift
+│   │   ├── Contacts/            # ContactImportService.swift (VCF/system contacts)
+│   │   ├── Importer/            # TwitterArchiveImporter (+Models/+Parsing) + StreamParser
+│   │   ├── Recovery/            # IdentityRecoveryService.swift
+│   │   ├── SocialGraph/         # SocialGraphPrepServices + ProximityManager+GraphPrep
+│   │   ├── Vault/               # SovereignVault, Shamir, file encryption, ZK age verification
 │   │   ├── Cache/
-│   │   └── Utils/
-│   │       ├── KeyManager.swift               # Master key + HKDF (isolated)
-│   │       ├── EncryptionManager.swift
-│   │       └── DeveloperModeManager.swift
+│   │   └── Utils/               # KeyManager (+Keychain), EncryptionManager, DeveloperModeManager,
+│   │                            # ThemeManager, DeepLinkManager, NotificationSettingsManager, etc.
 │   └── Views/
 │       ├── Common/              # Shared components
-│       │   ├── MainTabView.swift              # Root tab view
-│       │   ├── TabBarComponents.swift         # Tab enum
-│       │   ├── IDView.swift                   # Identity view (3-layer)
-│       │   └── ProximitySharingView.swift
-│       ├── CardViews/           # Card creation, editing
-│       ├── MatchViews/          # P2P proximity matching UI
-│       ├── PeopleViews/         # Contact list & detail
-│       ├── MeViews/             # Own card + identity
+│       │   ├── MainTabView.swift              # Root tab view (People / Share / Me)
+│       │   ├── TabBarComponents.swift         # MainAppTab enum + CustomFloatingTabBar
+│       │   ├── ReceivedCardView.swift / ContactPickerView.swift / VCFDocumentPicker.swift
+│       │   ├── ThemedButtonStyles.swift / SakuraIconView.swift / DecorativeBlobs.swift
+│       │   ├── AdaptiveLayout.swift / RippleButton.swift / CryptoCompilingOverlay.swift
+│       │   └── Toast/ (toast overlay)
+│       ├── CardViews/           # Card creation, editing, wallet pass generation
+│       ├── MatchViews/          # P2P proximity matching UI (radar/orbit, share-link, QR)
+│       │   └── Matching/        # MatchingRootView, ShareCardPickerSheet, peer popups, etc.
+│       ├── PeopleViews/         # Contact list & detail (PeopleListView, PersonDetailView, TrustGraphContactRow)
+│       ├── MeViews/             # MeTabView (+Sections) + MeTabComponents + CredentialDetailView
 │       ├── ScanViews/           # QR scanner + OID4VP/VCI flows
-│       │   ├── ScanTabView.swift              # Camera + ProofPresentationFlowSheet
+│       │   ├── ScanTabView.swift              # Camera scan entry (presented as sheet)
+│       │   ├── ProofPresentationFlowSheet.swift / VerifierResultSheet.swift
 │       │   └── CredentialImportFlowSheet.swift # OID4VCI import UI
-│       ├── Onboarding/          # Onboarding flow
-│       │   ├── OnboardingFlowView.swift       # 6-step onboarding (welcome→profile→avatar→keys→contacts→complete)
-│       │   ├── PassportOnboardingFlowView.swift # Passport scan sub-flow (dev mode only)
+│       ├── SharingViews/        # Share tab (SharingTabView, RadarMatchingView, ShareSettingsView, ProximitySharingView)
+│       ├── Onboarding/          # 7-step onboarding: welcome → profile → avatar → keys → contacts → scanPassport → complete
+│       │   ├── OnboardingFlowView.swift (+Steps)
+│       │   ├── TerminalWelcomeScreen.swift / DarkProfileSetupForm.swift / AvatarSelectionGrid.swift
+│       │   ├── PassportOnboardingFlowView.swift (+Steps) + PassportPipelineViewModel.swift
 │       │   └── MRZCameraView.swift            # Passport MRZ camera UI
-│       ├── IDViews/             # Identity/group management
+│       ├── IDViews/             # Identity/group management (GroupDetailView, ZKSettingsView, etc.)
 │       ├── ShoutoutViews/       # Social messaging (Sakura)
 │       └── SettingsViews/
 ├── solidarityClip/              # App Clip target
@@ -168,12 +188,12 @@ solidarity/
 ### Key Management — Three Systems
 
 1. **`KeychainService`** (Primary) — Secure Enclave P-256 keys for DID/VC signing, per-RP pairwise keys, iCloud sync. Tags: `solidarity.master`, `solidarity.rp.{domain}`
-2. **`KeyManager`** (Secondary) — Symmetric master key + HKDF + P-256 signing pair. Used by `ProofGenerationManager`, exchange signing
-3. **`SecureKeyManager`** (Messaging) — Curve25519 Ed25519/X25519. **In-memory only** (TODO: persist)
+2. **`KeyManager`** (Secondary) — Symmetric master key + HKDF + P-256 signing pair. Used by `ProofGenerationManager` for selective-disclosure signing
+3. **`SecureKeyManager`** (Messaging + proximity exchange signing) — Curve25519 Ed25519/X25519. Persisted in Keychain (`solidarity.messaging.signing` / `solidarity.messaging.encryption`). `mySealedRoute` lives in `UserDefaults`.
 
 ### Proof Systems (Three Independent)
 
-1. **`MoproProofService`** — Passport ZK proofs. Fallback chain: Mopro(deferred) → Semaphore → SD-JWT
+1. **`MoproProofService`** — Passport ZK proofs. Fallback chain: OpenPassport (Mopro/Noir) → Semaphore → SD-JWT, gated at runtime by a crash sentinel and bundle-resource check (`openpassport_disclosure.acir` + `openpassport_srs.bin`)
 2. **`SemaphoreIdentityManager`** — Real Semaphore ZK proofs (group membership, mopro-based)
 3. **`ProofGenerationManager`** — Custom selective disclosure (SHA256 + ECDSA, NOT true ZK). Used by QR generation
 
@@ -201,42 +221,45 @@ solidarity/
 3. **Proximity exchange** — MPC discovery → per-field scope → request/accept → ephemeral messages (140 char) → exchange signatures stored
 4. **Semaphore ZK** — identity create → group membership proof → verify
 5. **JWT VC** — biometric auth → ECDSA-P256 sign → encrypted storage → verification
-6. **OID4VP** — scan `openid4vp://` → parse → biometric gate → VC with per-RP pairwise DID → VP envelope → submit
+6. **OID4VP** — scan `openid4vp://` → parse → biometric gate → VC with per-RP pairwise DID → VP envelope → submit (`direct_post` and `direct_post.jwt`/JARM-signed responses)
 7. **OID4VCI** — scan `openid-credential-offer://` → parse → biometric gate → token exchange → credential with proof of possession → store
-8. **Passport pipeline** — MRZ OCR → NFC chip read → Semaphore proof (v1) → VC persist (dev mode only)
-9. **Secure messaging** (Sakura) — E2E ChaCha20-Poly1305 via server relay
-10. **Onboarding** — Welcome → Profile → Avatar → Keys (Face ID) → Import Contacts → Complete
+8. **Passport pipeline** — MRZ OCR → NFC chip read (with CSCA Master List) → OpenPassport (Mopro) → Semaphore → SD-JWT fallback chain → VC persist; integrated into onboarding
+9. **Secure messaging** (Sakura) — E2E ChaCha20-Poly1305 via server relay; Curve25519 keys persisted in Keychain
+10. **Onboarding** — Welcome → Profile → Avatar → Keys (Face ID) → Import Contacts → Scan Passport → Complete (7 steps)
 11. **DID** — did:key from P-256 + per-RP pairwise key generation + DID routing
 
 ### Known Gaps
 
 | Gap | Detail | Priority |
 |-----|--------|----------|
-| Passport not in main onboarding | `PassportOnboardingFlowView` only accessible via Developer Mode | MEDIUM |
-| CSCA Master List missing | `NFCPassportReaderService` 未設定 `masterListURL` → `passiveAuthPassed` 永遠 false → 無法驗證護照真偽 | HIGH |
-| OpenPassport deferred | v1 uses Semaphore proof; Mopro FFI not linked, circuit files missing | HIGH |
-| VP envelope not signed | JSON VP object, not signed JWT per OID4VP spec | MEDIUM |
-| Exchange uses wrong key | `KeyManager` master key instead of DID pairwise key | MEDIUM |
-| SecureKeyManager volatile | Curve25519 keys in-memory only, regenerated each launch | HIGH |
-| Semaphore sync stubbed | `syncRootFromNetwork()` / `pushUpdatesToNetwork()` return false | HIGH |
+| OpenPassport native prover stability | Circuit (`openpassport_disclosure.acir`) and SRS (`openpassport_srs.bin`) ship in bundle; runtime gated by crash sentinel + Semaphore/SD-JWT fallback | MEDIUM |
+| Exchange signing key hierarchy | `ProximityManager` signs with `SecureKeyManager` (Curve25519 Ed25519), not the per-RP pairwise DID key | MEDIUM |
+| Semaphore sync stubbed | `SemaphoreGroupManager.syncRootFromNetwork()` / `pushUpdatesToNetwork()` return false (needs CloudKit/CKShare or chain hookup) | HIGH |
+| Issuer signature verification | `ProofVerifierService` does not yet verify the issuer's signature on presented VCs | MEDIUM |
 | Contact merge silent | Auto-deduplicates by businessCard.id, no UI merge prompt | LOW |
-| SharingLevel still in services | `SharingLevel` enum kept for backward compat; services/tests still reference it | LOW |
+| SharingLevel still in services | `SharingLevel` enum kept for backward compat; ~30 files still reference it (and `ShareCardPickerSheet` is wired up alongside `ShareSettingsView`) | LOW |
 | Legacy Contact struct | `Contact.swift` (Codable) lacks spec fields; only `ContactEntity` has them | LOW |
+
+### Recently Resolved (was in earlier gap list)
+
+- **CSCA Master List** — `solidarity/Resources/masterList.pem` ships in bundle and is wired via `reader.setMasterListURL(...)` in `NFCPassportReaderService`.
+- **OpenPassport circuits present** — `openpassport_disclosure.acir` and `openpassport_srs.bin` ship in bundle; `MoproProofService.isAvailable` checks both files plus a crash sentinel.
+- **VP envelope signing** — `OIDCService+Response.swift` now supports `direct_post.jwt` (JARM) responses signed with the per-RP pairwise key.
+- **SecureKeyManager persisted** — `SecureKeyManager` now reads/writes Curve25519 signing & encryption keys to Keychain via `kSecClassGenericPassword` queries.
+- **Passport in main onboarding** — `OnboardingFlowView` adds a `.scanPassport` step between contacts import and the completion screen; no longer dev-mode-only.
 
 ### Known TODOs in Code
 
+> Verified against the source tree on 2026-04-26. Line numbers checked against current files.
+
 | File | Issue | Priority |
 |------|-------|----------|
-| `SemaphoreGroupManager.swift` | Network sync stubbed (needs CloudKit CKShare) | HIGH |
-| `SemaphoreIdentityManager.swift:111` | External commitment conversion incomplete | HIGH |
-| `GroupCredentialService.swift:142` | Proof signal verification not implemented | HIGH |
-| `SecureKeyManager.swift:25` | Keychain storage not implemented | HIGH |
-| `NFCPassportReaderService.swift` | 未設定 `masterListURL`，需載入 CSCA Master List | HIGH |
-| `MoproProofService.swift:107` | Circuit files missing, always falls back to SD-JWT | HIGH |
-| `ProximityManager+Actions.swift` | Exchange signing uses wrong key hierarchy | MEDIUM |
-| `ScanTabView.swift:398` | VP envelope is JSON, not signed JWT | MEDIUM |
-| `ProofVerifierService.swift` | No issuer signature verification | MEDIUM |
-| `PassportOnboardingFlowView` | Not integrated in main onboarding flow | MEDIUM |
+| `Services/ZK/SemaphoreGroupManager.swift:285,295` | `syncRootFromNetwork()` / `pushUpdatesToNetwork()` are stubs ("Replace with real on-chain or API fetch/push") | HIGH |
+| `Views/IDViews/ZKSettingsView.swift:55` | `// TODO: Implement identity deletion` | MEDIUM |
+| `Views/IDViews/GroupDetailView+Subviews.swift:162` | `// TODO: Generate Proof` (group proof from detail screen) | MEDIUM |
+| `Views/CardViews/WalletPassGeneration/WalletPassGenerationComponents.swift:225` | Implement signed `.pkpass` bundle (manifest + signature + images) | MEDIUM |
+| `Views/MatchViews/Matching/MatchingRootView.swift:124` | Add local visual effect on connect | LOW |
+| `Views/PeopleViews/PeopleListView.swift:233` | Wire up dedicated manual-add contact flow | LOW |
 
 ---
 
@@ -252,7 +275,7 @@ solidarity/
 
 ### User Journeys
 
-**Onboarding**: Welcome → Keychain Setup (required) → Import Contacts (skip) → Scan Passport (skip) → Complete
+**Onboarding** (current code, 7 steps): Welcome → Profile Setup → Avatar Setup → Secure Keys (Face ID) → Import Contacts (skip) → Scan Passport (skip) → Complete
 
 **Passport Scan**: MRZ Camera → NFC Chip Read → ZK Proof Generation → Credential Created
 
@@ -303,8 +326,8 @@ People (person.2.fill) | Share (dot.radiowaves.up.forward) | Me (person.text.rec
 
 - 以 `@AppStorage` 持久化用戶的欄位選擇
 - QR payload = VP（Verifiable Presentation），包含選取的 card fields + proof badges
-- **取消 `SharingLevel`**（public/professional/personal）— 改為逐欄位 toggle，預設最少資訊（僅 name）
-- `ShareCardPickerSheet` 由 `ShareSettingsView` 取代
+- 規劃方向：取消 `SharingLevel`（public/professional/personal），改為逐欄位 toggle，預設最少資訊（僅 name）
+- 現況：`SharingLevel` enum 仍保留並被 ~30 個檔案引用（向下相容）；`ShareCardPickerSheet` 與新的 `ShareSettingsView` 並存（前者由 `MatchingRootView` 使用，後者由 `SharingTabView` / `SettingsView` 使用）
 
 ### Spec Data Models
 
@@ -369,9 +392,12 @@ People (person.2.fill) | Share (dot.radiowaves.up.forward) | Me (person.text.rec
 
 ## CSCA Master List — Passport 驗證
 
-### 問題
+### 現況（已實作）
 
-`NFCPassportReaderService` 呼叫 `PassportReader()` 時未設定 `masterListURL`。沒有 CSCA Master List，NFC 能讀資料但**無法驗證護照真偽**（`passiveAuthPassed` 永遠 `false`）。
+`NFCPassportReaderService.read(...)` 會在建立 `PassportReader` 後呼叫
+`reader.setMasterListURL(Bundle.main.url(forResource: "masterList", withExtension: "pem")!)`，
+bundle 內的 `solidarity/Resources/masterList.pem` 即是聚合後的 CSCA 憑證集。
+若日後要更新涵蓋國家或更新到期憑證，只需替換這份 `masterList.pem` 即可。
 
 ### 驗證鏈
 
