@@ -129,6 +129,26 @@ final class SemaphoreIdentityManager: ObservableObject {
     _ = try? keychain.loadIdentity()
   }
 
+  /// Permanently delete the local ZK identity. Biometric-gated because the
+  /// commitment is the user's pseudonymous handle in every group they joined —
+  /// after deletion all on-device proofs they could regenerate locally are lost.
+  func deleteIdentity() async -> CardResult<Void> {
+    let gate: CardResult<Void> = await withCheckedContinuation { continuation in
+      BiometricGatekeeper.shared.authorizeIfRequired(.deleteZKIdentity) { outcome in
+        continuation.resume(returning: outcome)
+      }
+    }
+    if case .failure(let error) = gate {
+      return .failure(error)
+    }
+    do {
+      try keychain.deleteIdentity()
+    } catch {
+      return .failure(.keyManagementError(error.localizedDescription))
+    }
+    return .success(())
+  }
+
   /// Replaces identity with provided secret bytes.
   func importIdentity(privateKey: Data) throws -> IdentityBundle {
     #if canImport(Semaphore) && !(targetEnvironment(simulator) && arch(x86_64))
@@ -423,6 +443,7 @@ final class SemaphoreIdentityManager: ObservableObject {
 protocol IdentityBundleStore {
   func storeIdentity(_ bundle: SemaphoreIdentityManager.IdentityBundle) throws
   func loadIdentity() throws -> SemaphoreIdentityManager.IdentityBundle?
+  func deleteIdentity() throws
 }
 
 final class KeychainIdentityStore: IdentityBundleStore {
@@ -461,6 +482,19 @@ final class KeychainIdentityStore: IdentityBundleStore {
 
     try storeIdentity(legacy)
     return legacy
+  }
+
+  func deleteIdentity() throws {
+    for account in [tag, legacyTag] {
+      let query: [String: Any] = [
+        kSecClass as String: kSecClassGenericPassword,
+        kSecAttrAccount as String: account,
+      ]
+      let status = SecItemDelete(query as CFDictionary)
+      guard status == errSecSuccess || status == errSecItemNotFound else {
+        throw SemaphoreIdentityManager.Error.storageFailed("SecItemDelete: \(status)")
+      }
+    }
   }
 
   private func loadIdentity(for tag: String) throws -> SemaphoreIdentityManager.IdentityBundle? {

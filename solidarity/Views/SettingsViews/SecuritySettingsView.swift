@@ -53,6 +53,8 @@ struct SecuritySettingsView: View {
       return String(localized: "Require Face ID for recovery")
     case .registerTrustAnchor:
       return String(localized: "Require Face ID for trusted issuers")
+    case .deleteZKIdentity:
+      return String(localized: "Require Face ID to delete ZK identity")
     }
   }
 

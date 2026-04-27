@@ -12,6 +12,9 @@ struct ZKSettingsView: View {
   @StateObject private var idm = SemaphoreIdentityManager.shared
   @State private var identityCommitment: String?
   @State private var showingDeleteConfirm = false
+  @State private var deleteErrorMessage: String?
+  @State private var showingDeleteError = false
+  @State private var isDeleting = false
 
   var body: some View {
     NavigationStack {
@@ -32,7 +35,7 @@ struct ZKSettingsView: View {
           Button(role: .destructive, action: { showingDeleteConfirm = true }) {
             Label("Delete Identity", systemImage: "trash")
           }
-          .disabled(identityCommitment == nil)
+          .disabled(identityCommitment == nil || isDeleting)
         }
       }
       .navigationTitle("ZK Settings")
@@ -52,7 +55,7 @@ struct ZKSettingsView: View {
         isPresented: $showingDeleteConfirm,
         actions: {
           Button("Delete", role: .destructive) {
-            // TODO: Implement identity deletion
+            performDelete()
           }
           Button("Cancel", role: .cancel) {}
         },
@@ -60,6 +63,33 @@ struct ZKSettingsView: View {
           Text("This will permanently delete your ZK identity. This action cannot be undone.")
         }
       )
+      .alert(
+        "Delete Failed",
+        isPresented: $showingDeleteError,
+        actions: {
+          Button("OK", role: .cancel) {}
+        },
+        message: {
+          Text(deleteErrorMessage ?? "Unknown error.")
+        }
+      )
+    }
+  }
+
+  private func performDelete() {
+    isDeleting = true
+    Task {
+      let result = await idm.deleteIdentity()
+      await MainActor.run {
+        isDeleting = false
+        switch result {
+        case .success:
+          identityCommitment = nil
+        case .failure(let error):
+          deleteErrorMessage = error.localizedDescription
+          showingDeleteError = true
+        }
+      }
     }
   }
 }
