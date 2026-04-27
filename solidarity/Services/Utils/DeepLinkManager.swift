@@ -271,7 +271,11 @@ class DeepLinkManager: DeepLinkManagerProtocol, ObservableObject {
     case .success:
       lastReceivedCard = card
       pendingAction = .showReceivedCard(card)
+      #if DEBUG
       print("[DeepLinkManager] User confirmed contact import: \(card.name)")
+      #else
+      print("[DeepLinkManager] User confirmed contact import")
+      #endif
     case .failure(let error):
       pendingAction = .showError("Failed to save card: \(error.localizedDescription)")
       print("[DeepLinkManager] Failed to persist confirmed contact: \(error)")
