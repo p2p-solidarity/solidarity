@@ -274,7 +274,12 @@ extension ContactEntity {
       sealedRoute: legacy.sealedRoute,
       pubKey: legacy.pubKey,
       signPubKey: legacy.signPubKey,
-      didPublicKey: legacy.signPubKey
+      didPublicKey: legacy.didPublicKey ?? legacy.signPubKey,
+      exchangeSignature: legacy.exchangeSignature,
+      myExchangeSignature: legacy.myExchangeSignature,
+      exchangeTimestamp: legacy.exchangeTimestamp,
+      myEphemeralMessage: legacy.myEphemeralMessage,
+      theirEphemeralMessage: legacy.theirEphemeralMessage
     )
   }
 
@@ -298,7 +303,13 @@ extension ContactEntity {
       lastInteraction: lastInteraction,
       sealedRoute: sealedRoute,
       pubKey: pubKey,
-      signPubKey: signPubKey
+      signPubKey: signPubKey,
+      didPublicKey: didPublicKey,
+      exchangeSignature: exchangeSignature,
+      myExchangeSignature: myExchangeSignature,
+      exchangeTimestamp: exchangeTimestamp,
+      myEphemeralMessage: myEphemeralMessage,
+      theirEphemeralMessage: theirEphemeralMessage
     )
   }
 }
