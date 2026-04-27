@@ -44,4 +44,21 @@ enum GroupInviteSigner {
     let age = abs(Date().timeIntervalSince(timestamp))
     return age <= maxAge
   }
+
+  /// Returns the locally-stored contact whose `signPubKey` matches `publicKey`.
+  /// The caller is responsible for treating a `nil` result as "no prior trust"
+  /// — the embedded public key in an invite/join payload is presenter-supplied
+  /// and means nothing on its own. Only keys that survived a real proximity
+  /// card exchange are stored here, so a hit here is the trust anchor.
+  ///
+  /// Comparison is on base64-encoded raw bytes to match how
+  /// `ContactRepository.signPubKey` is persisted.
+  @MainActor
+  static func knownContact(matchingPublicKey publicKey: Data) -> Contact? {
+    let pubKeyB64 = publicKey.base64EncodedString()
+    if case .success(let contact) = ContactRepository.shared.getContact(pubKey: pubKeyB64) {
+      return contact
+    }
+    return nil
+  }
 }
