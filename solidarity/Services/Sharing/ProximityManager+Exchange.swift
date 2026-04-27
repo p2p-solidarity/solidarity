@@ -315,6 +315,7 @@ extension ProximityManager {
     )
   }
 
+  // swiftlint:disable function_parameter_count
   /// Verifies a v2 DID-bound exchange signature. Returns false on any of:
   ///  - missing protocolVersion (legacy v1)
   ///  - missing senderDID / senderJWK / signature / nonce
@@ -323,7 +324,6 @@ extension ProximityManager {
   /// The receiverPeerName must be the local peer name from the receiver's
   /// perspective so a captured payload cannot be replayed against a different
   /// peer.
-  // swiftlint:disable function_parameter_count
   static func verifyDIDExchangeSignature(
     protocolVersion: Int?,
     direction: ProximityExchangeBinding.Direction,
@@ -373,10 +373,10 @@ extension ProximityManager {
   }
   // swiftlint:enable function_parameter_count
 
+  // swiftlint:disable function_parameter_count
   /// Verifies a v2 DID-bound card sharing signature. Same fail-closed rules as
   /// `verifyDIDExchangeSignature` above; the only differences are the binding
   /// fields (shareId + scope replace requestId + ephemeralMessage).
-  // swiftlint:disable function_parameter_count
   static func verifyDIDCardSignature(
     protocolVersion: Int?,
     shareId: UUID,

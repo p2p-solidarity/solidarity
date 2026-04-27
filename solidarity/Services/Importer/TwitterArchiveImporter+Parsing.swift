@@ -287,7 +287,7 @@ extension TwitterArchiveImporter {
         // invalid Strings.
         var cutoff = maxBytes
         while cutoff > 0, (utf8[cutoff] & 0xC0) == 0x80 { cutoff -= 1 }
-        return String(decoding: utf8.prefix(cutoff), as: UTF8.self)
+        return String(bytes: utf8.prefix(cutoff), encoding: .utf8) ?? raw
     }
 
     func parseTwitterDate(_ dateString: String?) -> Date? {

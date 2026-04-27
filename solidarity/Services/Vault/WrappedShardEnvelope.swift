@@ -43,6 +43,7 @@ struct WrappedShardEnvelope: Codable {
         }
     }
 
+    // swiftlint:disable:next function_parameter_count
     static func seal(
         share: Data,
         vaultId: UUID,

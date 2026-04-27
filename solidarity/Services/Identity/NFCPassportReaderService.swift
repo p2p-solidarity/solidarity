@@ -96,7 +96,11 @@ final class NFCPassportReaderService: NSObject {
       isMasterListLoaded = false
       // TODO: load CSCA Master List from OpenPassport (selfxyz/self) PEM
       // (see CLAUDE.md → "CSCA Master List — Passport 驗證").
-      print("[NFCPassportReader][WARNING] masterList.pem missing — passive authentication disabled (passiveAuthPassed will always be false). Add a CSCA Master List PEM to the bundle to enable passport authenticity checks.")
+      print(
+        "[NFCPassportReader][WARNING] masterList.pem missing — passive authentication "
+        + "disabled (passiveAuthPassed will always be false). Add a CSCA Master List "
+        + "PEM to the bundle to enable passport authenticity checks."
+      )
     }
 
     let passport: NFCPassportModel

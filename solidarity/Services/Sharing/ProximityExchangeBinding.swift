@@ -15,6 +15,7 @@ import Foundation
 enum ProximityExchangeBinding {
   // MARK: - Card sharing payload
 
+  // swiftlint:disable function_parameter_count
   /// Canonical bytes for `ProximitySharingPayload` (one-way card send).
   /// Format (newline-separated, deterministic):
   ///   v=<protocolVersion>
@@ -29,7 +30,6 @@ enum ProximityExchangeBinding {
   ///   scope=<scope>
   ///   nonce=<uuid>
   ///   ts=<unix-seconds>
-  // swiftlint:disable function_parameter_count
   static func cardCanonicalBytes(
     protocolVersion: Int,
     shareId: UUID,
@@ -62,9 +62,9 @@ enum ProximityExchangeBinding {
 
   // MARK: - Exchange request / accept
 
+  // swiftlint:disable function_parameter_count
   /// Canonical bytes for an exchange request or accept payload. The two
   /// directions share the format so verification logic is symmetric.
-  // swiftlint:disable function_parameter_count
   static func exchangeCanonicalBytes(
     protocolVersion: Int,
     direction: Direction,

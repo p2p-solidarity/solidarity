@@ -366,7 +366,6 @@ final class VCService {
     case rejected(String)
   }
 
-  // swiftlint:disable:next function_body_length cyclomatic_complexity
   private func verifyImportedJWTSignature(
     jwt: String,
     issuerDid: String,
