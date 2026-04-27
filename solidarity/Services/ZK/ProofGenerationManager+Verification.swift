@@ -10,9 +10,19 @@ extension ProofGenerationManager {
 
   // MARK: - Selective Disclosure Verification
 
+  /// Verify a selective-disclosure proof.
+  ///
+  /// `trustedSignerPublicKey` is the caller's independently-known public key
+  /// for the expected signer (e.g. cached from a prior contact handshake).
+  /// When non-nil, it MUST match the embedded `proof.signerPublicKey` —
+  /// otherwise the proof is rejected as not coming from the trusted party.
+  /// When nil, the call provides only structural integrity (signature is
+  /// internally consistent) and not authenticity — the caller is responsible
+  /// for any out-of-band trust check (e.g. issuer commitment).
   func verifySelectiveDisclosureProof(
     _ proof: SelectiveDisclosureProof,
-    expectedBusinessCardId: String?
+    expectedBusinessCardId: String?,
+    trustedSignerPublicKey: Data? = nil
   ) -> CardResult<ProofVerificationResult> {
 
     // Check expiration
@@ -35,6 +45,22 @@ extension ProofGenerationManager {
           verifiedAt: Date()
         )
       )
+    }
+
+    // Cross-anchor check: when an external trust anchor was supplied, the
+    // embedded key must match it. Without this guard, an attacker could
+    // simply embed their own valid keypair and pass verification (the TODO
+    // that this fix closes).
+    if let trustedKey = trustedSignerPublicKey {
+      guard let embedded = proof.signerPublicKey, embedded == trustedKey else {
+        return .success(
+          ProofVerificationResult(
+            isValid: false,
+            reason: "Proof signer key does not match trusted anchor",
+            verifiedAt: Date()
+          )
+        )
+      }
     }
 
     // Verify signature using the same deterministic payload as signing
@@ -157,10 +183,13 @@ extension ProofGenerationManager {
     }
   }
 
+  /// Verify an attribute proof. See `verifySelectiveDisclosureProof` for the
+  /// trust-anchor semantics of `trustedSignerPublicKey`.
   func verifyAttributeProof(
     _ proof: AttributeProof,
     expectedAttribute: AttributeType,
-    expectedValue: String
+    expectedValue: String,
+    trustedSignerPublicKey: Data? = nil
   ) -> CardResult<ProofVerificationResult> {
 
     // Check expiration
@@ -183,6 +212,18 @@ extension ProofGenerationManager {
           verifiedAt: Date()
         )
       )
+    }
+
+    if let trustedKey = trustedSignerPublicKey {
+      guard let embedded = proof.signerPublicKey, embedded == trustedKey else {
+        return .success(
+          ProofVerificationResult(
+            isValid: false,
+            reason: "Proof signer key does not match trusted anchor",
+            verifiedAt: Date()
+          )
+        )
+      }
     }
 
     // Verify signature

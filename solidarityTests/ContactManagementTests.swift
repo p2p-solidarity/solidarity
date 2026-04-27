@@ -404,14 +404,14 @@ final class ContactManagementTests: XCTestCase {
     func testAttributeProof() throws {
         // Given
         let businessCard = BusinessCard.sample
-        
+
         // When
         let result = proofGenerationManager.generateAttributeProof(
             businessCard: businessCard,
             attribute: .skill,
             value: "Swift"
         )
-        
+
         // Then
         switch result {
         case .success(let proof):
@@ -422,6 +422,61 @@ final class ContactManagementTests: XCTestCase {
         case .failure(let error):
             XCTFail("Failed to generate attribute proof: \(error)")
         }
+    }
+
+    // Cross-anchor: when a verifier supplies a trusted public key, the proof's
+    // embedded `signerPublicKey` MUST match. An attacker who substitutes their
+    // own valid keypair would otherwise pass verification tautologically.
+    func testSelectiveDisclosureProofRejectsForgedSignerWhenAnchored() throws {
+        let businessCard = BusinessCard.sample
+        let proofResult = proofGenerationManager.generateSelectiveDisclosureProof(
+            businessCard: businessCard,
+            selectedFields: [.name],
+            recipientId: "test-recipient"
+        )
+        guard case .success(let proof) = proofResult else {
+            XCTFail("Failed to generate proof")
+            return
+        }
+        let forgedAnchor = Data(repeating: 0xAB, count: 65)
+        let result = proofGenerationManager.verifySelectiveDisclosureProof(
+            proof,
+            expectedBusinessCardId: businessCard.id.uuidString,
+            trustedSignerPublicKey: forgedAnchor
+        )
+        guard case .success(let outcome) = result else {
+            XCTFail("Verification call failed")
+            return
+        }
+        XCTAssertFalse(outcome.isValid)
+        XCTAssertEqual(outcome.reason, "Proof signer key does not match trusted anchor")
+    }
+
+    func testSelectiveDisclosureProofAcceptsMatchingAnchor() throws {
+        let businessCard = BusinessCard.sample
+        let proofResult = proofGenerationManager.generateSelectiveDisclosureProof(
+            businessCard: businessCard,
+            selectedFields: [.name],
+            recipientId: "test-recipient"
+        )
+        guard case .success(let proof) = proofResult else {
+            XCTFail("Failed to generate proof")
+            return
+        }
+        guard let embedded = proof.signerPublicKey else {
+            XCTFail("Generated proof should embed the signer public key")
+            return
+        }
+        let result = proofGenerationManager.verifySelectiveDisclosureProof(
+            proof,
+            expectedBusinessCardId: businessCard.id.uuidString,
+            trustedSignerPublicKey: embedded
+        )
+        guard case .success(let outcome) = result else {
+            XCTFail("Verification call failed")
+            return
+        }
+        XCTAssertTrue(outcome.isValid)
     }
     
     func testRangeProof() throws {

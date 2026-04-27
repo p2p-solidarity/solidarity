@@ -143,19 +143,21 @@ class ProofGenerationManager {
     }
   }
 
-  /// Verify a proof signature.
+  /// Verify a proof signature against a public key.
   ///
   /// `signerPublicKey` is the verification key claimed by the proof envelope.
   /// When supplied, verification binds to that key — NOT to a local key
   /// derived from the verifier's own master material — so a peer-issued proof
   /// can be checked without first impersonating the peer.
   ///
-  /// TODO(security): the embedded key is currently trusted on-the-fly. For a
-  /// non-tautological attestation, the peer's pubkey must be cross-checked
-  /// against an independent trust anchor (e.g. the contact's stored
-  /// `didPublicKey` from the exchange handshake, or `IssuerTrustAnchorStore`).
-  /// Without that binding, an attacker who controls the proof can simply
-  /// embed their own valid signature/key pair and pass verification.
+  /// IMPORTANT: this function only checks the signature is internally
+  /// consistent with the supplied key. The cross-anchor check (i.e. the
+  /// embedded key matches an independently-trusted public key for the
+  /// expected signer) lives at the higher-level `verifySelectiveDisclosureProof`
+  /// / `verifyAttributeProof` entry points via the `trustedSignerPublicKey`
+  /// parameter. Callers that bypass those entry points and call this
+  /// function directly with `proof.signerPublicKey` get only structural
+  /// integrity, not authenticity.
   ///
   /// `signerPublicKey == nil` is the legacy code path: we fall back to the
   /// verifier's local KeyManager pair, which is meaningful only for
