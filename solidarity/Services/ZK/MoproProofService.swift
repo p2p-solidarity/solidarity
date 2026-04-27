@@ -222,7 +222,7 @@ final class MoproProofService {
         passiveAuthPassed: passiveAuthPassed,
         startTime: start
       ) {
-        logger.info("✅ Semaphore ZK proof SUCCEEDED in \(result.generationTimeMs)ms — proofType=semaphore-zk, trustLevel=green")
+        logger.info("✅ Semaphore ZK proof SUCCEEDED in \(result.generationTimeMs)ms — proofType=semaphore-zk, trustLevel=\(result.trustLevel)")
         return result
       }
       logger.warning("❌ Semaphore ZK proof FAILED — falling back to SD-JWT")
