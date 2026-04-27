@@ -540,11 +540,16 @@ struct DIDExchangeSignatureTests {
   /// Round-trip: signing with the local DID key and verifying against the
   /// matching public JWK over the same canonical bytes must succeed; verifying
   /// over different canonical bytes must fail.
+  ///
+  /// Bypass `IdentityCacheStore` so a stale cached descriptor (left behind
+  /// by tests that rotate keychain entries) can't desynchronise the JWK
+  /// from the actual signing key.
   @Test func didSignatureRoundTrips() async throws {
-    guard let did = ProximityIdentitySigner.localDID(),
-      let jwk = ProximityIdentitySigner.localPublicJWK() else {
+    guard case .success(let descriptor) = DIDService().currentDidKey() else {
       return
     }
+    let did = descriptor.did
+    let jwk = descriptor.jwk
     let card = BusinessCard(name: "Alice", title: "Engineer")
     let nonce = UUID().uuidString
     let timestamp = Date()
