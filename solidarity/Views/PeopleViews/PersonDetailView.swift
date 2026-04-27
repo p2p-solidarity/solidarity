@@ -2,7 +2,12 @@
 //  PersonDetailView.swift
 //  solidarity
 //
-//  Contact detail view — spec [PL-2] using ContactEntity
+//  Contact detail view — Figma node 723:2337 / 723:2340. Centered hero
+//  (avatar + name + note line + verified/unverified pill + optional
+//  context tag) with an edit pencil at the top-right. Below the hero
+//  sit the "sakura" exchange messages (when present) and the contact
+//  info rows. Tap the pencil — or long-press the hero — to surface
+//  the Note / Share / Delete sheet.
 //
 
 import SwiftUI
@@ -11,473 +16,546 @@ struct PersonDetailView: View {
   let contact: ContactEntity
   @EnvironmentObject private var identityDataStore: IdentityDataStore
   @Environment(\.dismiss) private var dismiss
-  @Environment(\.colorScheme) private var colorScheme
-  @State private var showingDeleteConfirm = false
+
   @State private var showingShareSheet = false
+  @State private var showingMoreSheet = false
 
-  /// Verification level derived from real exchange data.
-  private var verificationLevel: Int {
-    var level = 0
-    if contact.exchangeSignature != nil { level += 1 }
-    if contact.myExchangeSignature != nil { level += 1 }
-    if displayDidPublicKey != nil { level += 1 }
-    return level
-  }
-
-  private var displayDidPublicKey: String? {
-    guard let did = contact.didPublicKey, !did.isEmpty else { return nil }
-    if did == SecureKeyManager.shared.mySignPubKey { return nil }
-    return did
-  }
+  // MARK: - Derived data
 
   private var isVerified: Bool {
     contact.verificationStatus == VerificationStatus.verified.rawValue
   }
 
-  /// Fields verified through this contact's linked credentials (via the
-  /// VerifiedClaimIndex). UI reads this to show per-field verified badges
-  /// — not the raw ContactEntity columns.
-  private var verifiedFieldsFromIndex: Set<BusinessCardField> {
-    guard !contact.credentialIds.isEmpty else { return [] }
-    return VerifiedClaimIndex.verifiedFields(fromCredentials: contact.credentialIds)
+  private var trimmedNote: String? {
+    let raw = contact.notes?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+    return raw.isEmpty ? nil : raw
   }
 
-  private var linkedCredentials: [IdentityCardEntity] {
-    guard !contact.credentialIds.isEmpty else { return [] }
-    let idSet = Set(contact.credentialIds)
-    return identityDataStore.identityCards.filter { idSet.contains($0.id) }
+  private var unverifiedLabel: String {
+    switch contact.source {
+    case "imported":
+      return "unverified (import)"
+    case ContactSource.manual.rawValue:
+      return "unverified (manual)"
+    case ContactSource.qrCode.rawValue:
+      return "unverified (qr)"
+    case ContactSource.airdrop.rawValue:
+      return "unverified (airdrop)"
+    case ContactSource.appClip.rawValue:
+      return "unverified (clip)"
+    case ContactSource.proximity.rawValue:
+      return "unverified (proximity)"
+    default:
+      return "unverified"
+    }
   }
+
+  private var firstTag: String? {
+    contact.tags.first(where: { !$0.isEmpty })
+  }
+
+  private var hasNote: Bool {
+    !(contact.notes?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ?? true)
+  }
+
+  private var hasMyMessage: Bool {
+    !(contact.myEphemeralMessage?.isEmpty ?? true)
+  }
+
+  private var hasTheirMessage: Bool {
+    !(contact.theirEphemeralMessage?.isEmpty ?? true)
+  }
+
+  private var hasEphemeralMessages: Bool {
+    hasMyMessage || hasTheirMessage
+  }
+
+  private var messageCount: Int {
+    (hasMyMessage ? 1 : 0) + (hasTheirMessage ? 1 : 0)
+  }
+
+  private var webURLFromGraphRef: URL? {
+    guard let ref = contact.graphCredentialRef,
+      let url = URL(string: ref),
+      url.scheme == "http" || url.scheme == "https"
+    else { return nil }
+    return url
+  }
+
+  // MARK: - Body
 
   var body: some View {
-    ScrollView {
-      VStack(spacing: 20) {
-        profileHeader
-        verificationBadge
-        ephemeralMessageSection
-        contactInfoSection
-        linkedCredentialsSection
-        exchangeMetadataSection
-        actionButtons
+    VStack(spacing: 0) {
+      topBar
+
+      ScrollView {
+        VStack(spacing: 24) {
+          heroCard
+          ephemeralSection
+          contactInfoSection
+        }
+        .padding(.top, 12)
+        .padding(.bottom, 32)
       }
-      .padding(.horizontal, 20)
-      .padding(.vertical, 16)
     }
     .background(Color.Theme.pageBg.ignoresSafeArea())
-    .navigationTitle("Profile")
-    .navigationBarTitleDisplayMode(.inline)
+    .navigationBarHidden(true)
+    .toolbar(.hidden, for: .navigationBar)
     .sheet(isPresented: $showingShareSheet) {
       ActivityViewController(activityItems: [
         String(format: String(localized: "Check out %@ on AirMeishi!"), contact.name)
       ])
     }
-    .confirmationDialog(
-      "Delete \(contact.name)?",
-      isPresented: $showingDeleteConfirm,
-      titleVisibility: .visible
-    ) {
-      Button("Delete", role: .destructive) {
-        identityDataStore.deleteContact(by: contact.id)
+    .sheet(isPresented: $showingMoreSheet) {
+      PersonDetailMoreSheet(
+        contact: contact,
+        onSave: { updated in
+          contact.notes = updated
+          identityDataStore.refreshAll()
+        },
+        onDelete: {
+          identityDataStore.deleteContact(by: contact.id)
+          dismiss()
+        }
+      )
+    }
+  }
+
+  // MARK: - Top bar
+
+  private var topBar: some View {
+    HStack {
+      Button {
         dismiss()
+      } label: {
+        Image(systemName: "chevron.left")
+          .font(.system(size: 24, weight: .regular))
+          .foregroundStyle(Color.Theme.textPrimary)
       }
-      Button("Cancel", role: .cancel) {}
-    } message: {
-      Text("This contact will be permanently removed.")
+      .buttonStyle(.plain)
+
+      Spacer()
+
+      Button {
+        showingShareSheet = true
+      } label: {
+        Image(systemName: "square.and.arrow.up")
+          .font(.system(size: 22, weight: .regular))
+          .foregroundStyle(Color.Theme.textPrimary)
+          .frame(width: 22, height: 22)
+      }
+      .buttonStyle(.plain)
     }
+    .padding(.horizontal, 16)
+    .frame(height: 56)
   }
 
-  // MARK: - Profile Header
+  // MARK: - Hero card
 
-  private var profileHeader: some View {
-    VStack(spacing: 16) {
+  private var heroCard: some View {
+    ZStack(alignment: .topTrailing) {
+      VStack(spacing: 16) {
+        avatarCircle
+
+        VStack(spacing: 8) {
+          Text(contact.name)
+            .font(.system(size: 24, weight: .medium))
+            .foregroundStyle(Color.Theme.textPrimary)
+            .multilineTextAlignment(.center)
+
+          heroNoteLine
+
+          tagRow
+        }
+      }
+      .frame(maxWidth: .infinity)
+      .padding(.horizontal, 12)
+      .padding(.top, 16)
+      .padding(.bottom, 24)
+
+      heroEditButton
+    }
+    .background(
       ZStack {
-        Rectangle()
-          .fill(Color.Theme.searchBg)
-          .frame(width: 96, height: 96)
-          .overlay(Rectangle().stroke(Color.Theme.divider, lineWidth: 1))
+        // Figma 766:5241 — linear-gradient(17.3°, #E9E3ED/30 36.4%, #F3DFDD/30 68.4%)
+        // The gradient stops are translucent in dark mode so the page bg
+        // tints through into the Figma's mauve→peach feel.
+        LinearGradient(
+          stops: [
+            .init(color: Color.Theme.heroGradientStart, location: 0.36),
+            .init(color: Color.Theme.heroGradientEnd, location: 0.68),
+          ],
+          startPoint: UnitPoint(x: 0.35, y: 0.98),
+          endPoint: UnitPoint(x: 0.65, y: 0.02)
+        )
 
-        Text(String(contact.name.prefix(1)).uppercased())
-          .font(.system(size: 36, weight: .bold, design: .monospaced))
-          .foregroundColor(Color.Theme.textPrimary)
+        MauvePetalMotif()
+          .allowsHitTesting(false)
       }
-
-      VStack(spacing: 6) {
-        Text(contact.name)
-          .font(.system(size: 24, weight: .bold))
-          .foregroundColor(Color.Theme.textPrimary)
-
-        if let title = contact.title, !title.isEmpty {
-          Text(title)
-            .font(.system(size: 14, weight: .medium, design: .monospaced))
-            .foregroundColor(Color.Theme.textSecondary)
-        }
-
-        if let company = contact.company, !company.isEmpty {
-          Text(company)
-            .font(.system(size: 12, design: .monospaced))
-            .foregroundColor(Color.Theme.textTertiary)
-        }
+    )
+    .clipShape(RoundedRectangle(cornerRadius: 4))
+    .padding(.horizontal, 16)
+    .contextMenu {
+      Button {
+        showingMoreSheet = true
+      } label: {
+        Label(hasNote ? "Edit Note" : "Add Note", systemImage: "note.text")
+      }
+      Button {
+        showingShareSheet = true
+      } label: {
+        Label("Share", systemImage: "square.and.arrow.up")
+      }
+      Button(role: .destructive) {
+        showingMoreSheet = true
+      } label: {
+        Label("Delete Contact", systemImage: "trash")
       }
     }
-    .padding(.vertical, 8)
   }
 
-  // MARK: - Verification Badge
-
-  private var verificationBadge: some View {
-    HStack(spacing: 8) {
-      EvolvingTrustBadge(verificationLevel: verificationLevel)
-
-      if isVerified, let date = contact.exchangeTimestamp {
-        Text("[\(formatDate(date))]")
-          .font(.system(size: 10, weight: .bold, design: .monospaced))
-          .foregroundColor(Color.Theme.textTertiary)
-      }
-
-      Text("[ \(contact.source.uppercased()) ]")
-        .font(.system(size: 10, weight: .bold, design: .monospaced))
-        .foregroundColor(isVerified ? Color.Theme.terminalGreen : Color.Theme.textTertiary)
+  private var heroEditButton: some View {
+    Button {
+      showingMoreSheet = true
+    } label: {
+      Image(systemName: "square.and.pencil")
+        .font(.system(size: 14, weight: .regular))
+        .foregroundStyle(Color.Theme.textPrimary.opacity(0.75))
+        .frame(width: 32, height: 32)
+        .background(
+          Circle()
+            .fill(Color.white.opacity(0.45))
+        )
+        .overlay(
+          Circle()
+            .stroke(Color.white.opacity(0.6), lineWidth: 0.5)
+        )
     }
-    .padding(12)
-    .frame(maxWidth: .infinity)
-    .background(Color.Theme.searchBg)
-    .overlay(Rectangle().stroke(Color.Theme.divider, lineWidth: 1))
+    .buttonStyle(.plain)
+    .padding(10)
+    .accessibilityLabel(hasNote ? "Edit note" : "Add note")
   }
-
-  // MARK: - Ephemeral Messages (一期一會)
 
   @ViewBuilder
-  private var ephemeralMessageSection: some View {
-    let hasMyMsg = !(contact.myEphemeralMessage?.isEmpty ?? true)
-    let hasTheirMsg = !(contact.theirEphemeralMessage?.isEmpty ?? true)
-
-    if hasMyMsg || hasTheirMsg {
-      VStack(alignment: .leading, spacing: 12) {
-        Text("— 一期一會")
-          .font(.system(size: 12, weight: .bold, design: .monospaced))
-          .foregroundColor(Color.Theme.textSecondary)
-
-        if let msg = contact.theirEphemeralMessage, !msg.isEmpty {
-          ephemeralBubble(label: "RX (FROM THEM)", message: msg, isIncoming: true)
-        }
-
-        if let msg = contact.myEphemeralMessage, !msg.isEmpty {
-          ephemeralBubble(label: "TX (FROM ME)", message: msg, isIncoming: false)
-        }
-      }
-      .padding(16)
-      .background(Color.Theme.cardBg)
-      .overlay(Rectangle().stroke(Color.Theme.divider, lineWidth: 1))
-    }
-  }
-
-  private func ephemeralBubble(label: String, message: String, isIncoming: Bool) -> some View {
-    VStack(alignment: .leading, spacing: 6) {
-      Text(label)
-        .font(.system(size: 10, weight: .bold, design: .monospaced))
-        .foregroundColor(isIncoming ? Color.Theme.primaryBlue : Color.Theme.terminalGreen)
-
-      HStack(alignment: .top, spacing: 8) {
-        Image(systemName: "quote.opening")
-          .font(.system(size: 10, weight: .bold))
-          .foregroundColor(isIncoming ? Color.Theme.primaryBlue : Color.Theme.terminalGreen)
-          .padding(.top, 2)
-
-        Text(message)
-          .font(.system(size: 14, weight: .medium))
-          .foregroundColor(Color.Theme.textPrimary)
-          .italic()
-          .frame(maxWidth: .infinity, alignment: .leading)
-      }
-      .padding(10)
-      .background(Color.Theme.warmCream)
-    }
-  }
-
-  // MARK: - Contact Info
-
-  private var contactInfoSection: some View {
-    VStack(alignment: .leading, spacing: 12) {
-      Text("— CONTACT INFO")
-        .font(.system(size: 12, weight: .bold, design: .monospaced))
-        .foregroundColor(Color.Theme.textSecondary)
-
-      VStack(spacing: 8) {
-        if contact.name.isEmpty == false {
-          HStack(spacing: 4) {
-            Spacer(minLength: 0)
-            if verifiedFieldsFromIndex.contains(.name) {
-              fieldVerifiedBadge(field: .name)
-            }
-          }
-        }
-
-        if let email = contact.email, !email.isEmpty {
-          contactInfoRow(
-            icon: "envelope",
-            label: "EMAIL",
-            value: email,
-            verified: verifiedFieldsFromIndex.contains(.email)
-          ) {
-            if let url = URL(string: "mailto:\(email)") {
-              UIApplication.shared.open(url)
-            }
-          }
-        }
-
-        if let phone = contact.phone, !phone.isEmpty {
-          contactInfoRow(
-            icon: "phone",
-            label: "PHONE",
-            value: phone,
-            verified: verifiedFieldsFromIndex.contains(.phone)
-          ) {
-            if let url = URL(string: "tel:\(phone)") {
-              UIApplication.shared.open(url)
-            }
-          }
-        }
-
-        if let notes = contact.notes, !notes.isEmpty {
-          HStack(alignment: .top, spacing: 12) {
-            Image(systemName: "note.text")
-              .font(.system(size: 12, weight: .bold))
-              .foregroundColor(Color.Theme.textTertiary)
-              .frame(width: 20)
-
-            VStack(alignment: .leading, spacing: 2) {
-              Text("NOTES")
-                .font(.system(size: 10, weight: .bold, design: .monospaced))
-                .foregroundColor(Color.Theme.textTertiary)
-              Text(notes)
-                .font(.system(size: 14))
-                .foregroundColor(Color.Theme.textPrimary)
-            }
-          }
-        }
-      }
-    }
-    .padding(16)
-    .background(Color.Theme.cardBg)
-    .overlay(Rectangle().stroke(Color.Theme.divider, lineWidth: 1))
-  }
-
-  private func contactInfoRow(
-    icon: String,
-    label: String,
-    value: String,
-    verified: Bool = false,
-    action: @escaping () -> Void
-  ) -> some View {
-    Button(action: action) {
-      HStack(spacing: 12) {
-        Image(systemName: icon)
-          .font(.system(size: 12, weight: .bold))
-          .foregroundColor(Color.Theme.primaryBlue)
-          .frame(width: 20)
-
-        VStack(alignment: .leading, spacing: 2) {
-          HStack(spacing: 6) {
-            Text(label)
-              .font(.system(size: 10, weight: .bold, design: .monospaced))
-              .foregroundColor(Color.Theme.textTertiary)
-            if verified {
-              Image(systemName: "checkmark.seal.fill")
-                .font(.system(size: 10, weight: .bold))
-                .foregroundColor(Color.Theme.terminalGreen)
-            }
-          }
-          Text(value)
+  private var heroNoteLine: some View {
+    Button {
+      showingMoreSheet = true
+    } label: {
+      Group {
+        if let note = trimmedNote {
+          Text(note)
             .font(.system(size: 14))
-            .foregroundColor(Color.Theme.textPrimary)
+            .foregroundStyle(Color.Theme.textSecondary)
+        } else {
+          HStack(spacing: 4) {
+            Text("//")
+              .font(.system(size: 12, weight: .medium, design: .monospaced))
+              .foregroundStyle(Color.Theme.primaryBlue)
+            Text("tap to add note")
+              .font(.system(size: 12, design: .monospaced))
+              .foregroundStyle(Color.Theme.textTertiary)
+          }
         }
-
-        Spacer()
-
-        Image(systemName: "arrow.up.right")
-          .font(.system(size: 10, weight: .bold))
-          .foregroundColor(Color.Theme.textTertiary)
       }
+      .lineLimit(1)
+      .multilineTextAlignment(.center)
+      .frame(maxWidth: .infinity)
     }
     .buttonStyle(.plain)
   }
 
-  private func fieldVerifiedBadge(field: BusinessCardField) -> some View {
+  private var avatarCircle: some View {
+    let animal = AnimalCharacter.default(forId: contact.id)
+    return ZStack {
+      Circle()
+        .fill(Color.Theme.gradientCream)
+
+      ImageProvider.animalImage(for: animal)
+        .resizable()
+        .scaledToFit()
+        .frame(width: 88, height: 88)
+        .clipShape(Circle())
+    }
+    .frame(width: 88, height: 88)
+    .overlay(
+      Circle().stroke(Color.Theme.gradientCream, lineWidth: 1)
+    )
+  }
+
+  private var tagRow: some View {
+    HStack(spacing: 16) {
+      statusTag
+      if let firstTag {
+        contextTag(firstTag)
+      }
+    }
+  }
+
+  @ViewBuilder
+  private var statusTag: some View {
+    if isVerified {
+      verifiedTag
+    } else {
+      unverifiedTag
+    }
+  }
+
+  private var verifiedTag: some View {
     HStack(spacing: 4) {
       Image(systemName: "checkmark.seal.fill")
-        .font(.system(size: 9, weight: .bold))
-      Text("\(field.displayName.uppercased()) VERIFIED")
-        .font(.system(size: 9, weight: .bold, design: .monospaced))
+        .font(.system(size: 10))
+        .foregroundStyle(Color.Theme.terminalGreen)
+        .frame(width: 12, height: 12)
+      Text(verifiedLabel)
+        .font(.system(size: 10))
+        .foregroundStyle(Color.Theme.textSecondary)
     }
-    .foregroundColor(Color.Theme.terminalGreen)
-    .padding(.horizontal, 6)
-    .padding(.vertical, 3)
-    .background(Color.Theme.terminalGreen.opacity(0.08))
+    .padding(.horizontal, 4)
+    .padding(.vertical, 2)
+    .background(
+      RoundedRectangle(cornerRadius: 2)
+        .fill(Color.Theme.chipSurface)
+    )
   }
 
-  // MARK: - Linked Credentials
-
-  @ViewBuilder
-  private var linkedCredentialsSection: some View {
-    if linkedCredentials.isEmpty == false {
-      VStack(alignment: .leading, spacing: 12) {
-        HStack {
-          Text("— LINKED CREDENTIALS")
-            .font(.system(size: 12, weight: .bold, design: .monospaced))
-            .foregroundColor(Color.Theme.textSecondary)
-          Spacer()
-          Text("\(linkedCredentials.count)")
-            .font(.system(size: 12, weight: .bold, design: .monospaced))
-            .foregroundColor(Color.Theme.textTertiary)
-        }
-
-        VStack(spacing: 8) {
-          ForEach(linkedCredentials, id: \.id) { card in
-            linkedCredentialRow(card)
-          }
-        }
-      }
-      .padding(16)
-      .background(Color.Theme.cardBg)
-      .overlay(Rectangle().stroke(Color.Theme.divider, lineWidth: 1))
+  private var unverifiedTag: some View {
+    HStack(spacing: 4) {
+      Image(systemName: "circle.dashed")
+        .font(.system(size: 10))
+        .foregroundStyle(Color.Theme.textTertiary)
+        .frame(width: 12, height: 12)
+      Text(unverifiedLabel)
+        .font(.system(size: 10))
+        .foregroundStyle(Color.Theme.textSecondary)
     }
+    .padding(.horizontal, 4)
+    .padding(.vertical, 2)
+    .background(
+      RoundedRectangle(cornerRadius: 2)
+        .fill(Color.Theme.chipSurface)
+    )
   }
 
-  private func linkedCredentialRow(_ card: IdentityCardEntity) -> some View {
-    HStack(alignment: .top, spacing: 12) {
-      Image(systemName: trustIcon(for: card.trustLevel))
-        .font(.system(size: 12, weight: .bold))
-        .foregroundColor(trustColor(for: card.trustLevel))
-        .frame(width: 20, alignment: .top)
-        .padding(.top, 2)
-
-      VStack(alignment: .leading, spacing: 2) {
-        Text(card.title)
-          .font(.system(size: 13, weight: .semibold))
-          .foregroundColor(Color.Theme.textPrimary)
-        Text("\(card.issuerType.uppercased()) · \(card.status.uppercased())")
-          .font(.system(size: 10, weight: .bold, design: .monospaced))
-          .foregroundColor(Color.Theme.textTertiary)
-      }
-
-      Spacer()
+  private var verifiedLabel: String {
+    if let date = contact.exchangeTimestamp {
+      return "Verified · \(Self.tagDateFormatter.string(from: date))"
     }
-    .padding(10)
-    .background(Color.Theme.searchBg)
-    .overlay(Rectangle().stroke(Color.Theme.divider, lineWidth: 1))
+    return "Verified"
   }
 
-  private func trustIcon(for level: String) -> String {
-    switch level {
-    case "green": return "seal.fill"
-    case "blue": return "seal"
-    default: return "doc.text"
-    }
-  }
-
-  private func trustColor(for level: String) -> Color {
-    switch level {
-    case "green": return Color.Theme.terminalGreen
-    case "blue": return Color.Theme.primaryBlue
-    default: return Color.Theme.textTertiary
-    }
-  }
-
-  // MARK: - Exchange Metadata
-
-  @ViewBuilder
-  private var exchangeMetadataSection: some View {
-    if displayDidPublicKey != nil || contact.exchangeSignature != nil {
-      VStack(alignment: .leading, spacing: 12) {
-        Text("— EXCHANGE DATA")
-          .font(.system(size: 12, weight: .bold, design: .monospaced))
-          .foregroundColor(Color.Theme.textSecondary)
-
-        VStack(spacing: 8) {
-          if let did = displayDidPublicKey {
-            metadataRow(label: "PEER PUB KEY", value: shortKey(did))
-          }
-
-          if contact.exchangeSignature != nil {
-            metadataRow(label: "THEIR SIG", value: "✓ Present")
-          }
-
-          if contact.myExchangeSignature != nil {
-            metadataRow(label: "MY SIG", value: "✓ Present")
-          }
-
-          if let ts = contact.exchangeTimestamp {
-            metadataRow(label: "TIMESTAMP", value: formatDate(ts))
-          }
-        }
-      }
-      .padding(16)
-      .background(Color.Theme.cardBg)
-      .overlay(Rectangle().stroke(Color.Theme.divider, lineWidth: 1))
-    }
-  }
-
-  private func metadataRow(label: String, value: String) -> some View {
-    HStack(alignment: .top, spacing: 16) {
+  private func contextTag(_ label: String) -> some View {
+    HStack(spacing: 4) {
+      Image(systemName: "mappin.and.ellipse")
+        .font(.system(size: 9))
+        .foregroundStyle(Color.Theme.textSecondary)
+        .frame(width: 12, height: 12)
       Text(label)
-        .font(.system(size: 10, weight: .bold, design: .monospaced))
-        .foregroundColor(Color.Theme.textTertiary)
-        .frame(width: 80, alignment: .leading)
-      Text(value)
-        .font(.system(size: 12, weight: .regular, design: .monospaced))
-        .foregroundColor(Color.Theme.textPrimary)
+        .font(.system(size: 10))
+        .foregroundStyle(Color.Theme.textSecondary)
     }
+    .padding(.horizontal, 4)
+    .padding(.vertical, 2)
+    .background(
+      RoundedRectangle(cornerRadius: 2)
+        .fill(Color.Theme.chipSurface)
+    )
   }
 
-  // MARK: - Actions
+  // MARK: - Sakura messages (exchange ephemerals)
 
-  private var actionButtons: some View {
-    VStack(spacing: 12) {
-      Button {
-        showingShareSheet = true
-      } label: {
-        HStack(spacing: 6) {
-          Image(systemName: "square.and.arrow.up")
-            .font(.system(size: 12, weight: .bold))
-          Text("Share Contact")
-            .font(.system(size: 14, weight: .bold, design: .monospaced))
+  @ViewBuilder
+  private var ephemeralSection: some View {
+    if hasEphemeralMessages {
+      VStack(alignment: .leading, spacing: 8) {
+        Text("sakura")
+          .font(.system(size: 14))
+          .foregroundStyle(Color.Theme.textPrimary)
+
+        VStack(alignment: .trailing, spacing: 12) {
+          if let mine = contact.myEphemeralMessage, !mine.isEmpty {
+            outgoingBubble(text: mine)
+          }
+          if let theirs = contact.theirEphemeralMessage, !theirs.isEmpty {
+            incomingBubble(text: theirs)
+          }
+          if messageCount > 0 {
+            seeMorePill
+              .frame(maxWidth: .infinity, alignment: .center)
+          }
         }
-        .foregroundColor(Color.Theme.textPrimary)
-        .frame(maxWidth: .infinity)
-        .padding(.vertical, 12)
-        .background(Color.Theme.searchBg)
-        .overlay(Rectangle().stroke(Color.Theme.divider, lineWidth: 1))
+        .padding(.horizontal, 12)
+        .padding(.vertical, 16)
+        .frame(maxWidth: .infinity, alignment: .trailing)
+        .background(
+          RoundedRectangle(cornerRadius: 12)
+            .fill(Color.Theme.mutedSurface)
+        )
       }
-      .buttonStyle(.plain)
-
-      Button {
-        showingDeleteConfirm = true
-      } label: {
-        Text("Delete Contact")
-          .font(.system(size: 14, weight: .bold, design: .monospaced))
-          .foregroundColor(.red.opacity(0.8))
-          .frame(maxWidth: .infinity)
-          .padding(.vertical, 12)
-          .background(Color.red.opacity(0.04))
-          .overlay(Rectangle().stroke(Color.red.opacity(0.12), lineWidth: 1))
-      }
-      .buttonStyle(.plain)
+      .padding(.horizontal, 16)
     }
   }
 
-  // MARK: - Helpers
+  private func outgoingBubble(text: String) -> some View {
+    VStack(alignment: .trailing, spacing: 2) {
+      Text(text)
+        .font(.system(size: 14))
+        .foregroundStyle(Color.white)
+        .multilineTextAlignment(.leading)
+        .lineSpacing(4)
+        .padding(12)
+        .background(
+          PersonDetailBubbleShape(corners: .outgoing)
+            .fill(Color.Theme.bubbleOutgoing)
+        )
 
-  private static let dateFormatter: DateFormatter = {
+      if let date = contact.exchangeTimestamp {
+        Text(Self.bubbleDateFormatter.string(from: date))
+          .font(.system(size: 10))
+          .foregroundStyle(Color.Theme.textSecondary)
+      }
+    }
+    .frame(maxWidth: .infinity, alignment: .trailing)
+  }
+
+  private func incomingBubble(text: String) -> some View {
+    VStack(alignment: .leading, spacing: 2) {
+      Text(text)
+        .font(.system(size: 14))
+        .foregroundStyle(Color.Theme.bubbleIncomingText)
+        .multilineTextAlignment(.leading)
+        .lineSpacing(4)
+        .padding(12)
+        .background(
+          PersonDetailBubbleShape(corners: .incoming)
+            .fill(Color.Theme.bubbleIncoming)
+        )
+
+      if let date = contact.exchangeTimestamp {
+        Text(Self.bubbleDateFormatter.string(from: date))
+          .font(.system(size: 10))
+          .foregroundStyle(Color.Theme.textSecondary)
+      }
+    }
+    .frame(maxWidth: .infinity, alignment: .leading)
+  }
+
+  private var seeMorePill: some View {
+    HStack(spacing: 2) {
+      Text(seeMoreLabel)
+        .font(.system(size: 10))
+        .foregroundStyle(Color.Theme.textSecondary)
+      Image(systemName: "chevron.right")
+        .font(.system(size: 12))
+        .foregroundStyle(Color.Theme.textSecondary)
+    }
+    .padding(.leading, 8)
+    .padding(.trailing, 4)
+    .padding(.vertical, 4)
+    .background(
+      Capsule().fill(Color.Theme.pillSurface)
+    )
+  }
+
+  private var seeMoreLabel: String {
+    let count = messageCount
+    let noun = count == 1 ? "message" : "messages"
+    return "see more \(count) \(noun)"
+  }
+
+  // MARK: - Contact info
+
+  @ViewBuilder
+  private var contactInfoSection: some View {
+    let rows = contactRows
+    if !rows.isEmpty {
+      VStack(alignment: .leading, spacing: 10) {
+        Text("contact info")
+          .font(.system(size: 14))
+          .foregroundStyle(Color.Theme.textPrimary)
+
+        VStack(spacing: 8) {
+          ForEach(rows) { row in
+            contactRowView(row)
+          }
+        }
+      }
+      .padding(.horizontal, 16)
+    }
+  }
+
+  private var contactRows: [PersonDetailContactRow] {
+    var out: [PersonDetailContactRow] = []
+    if let phone = contact.phone, !phone.isEmpty {
+      out.append(
+        PersonDetailContactRow(
+          id: "phone",
+          icon: "phone",
+          value: phone,
+          url: URL(string: "tel:\(phone)")
+        )
+      )
+    }
+    if let email = contact.email, !email.isEmpty {
+      out.append(
+        PersonDetailContactRow(
+          id: "email",
+          icon: "envelope",
+          value: email,
+          url: URL(string: "mailto:\(email)")
+        )
+      )
+    }
+    if let url = webURLFromGraphRef {
+      out.append(
+        PersonDetailContactRow(
+          id: "link",
+          icon: "link",
+          value: url.absoluteString,
+          url: url
+        )
+      )
+    }
+    return out
+  }
+
+  private func contactRowView(_ row: PersonDetailContactRow) -> some View {
+    Button {
+      if let url = row.url {
+        UIApplication.shared.open(url)
+      }
+    } label: {
+      HStack(spacing: 8) {
+        Image(systemName: row.icon)
+          .font(.system(size: 15, weight: .regular))
+          .foregroundStyle(Color.Theme.textPrimary)
+          .frame(width: 18, height: 18)
+        Text(row.value)
+          .font(.system(size: 15))
+          .foregroundStyle(Color.Theme.textPrimary)
+          .lineLimit(1)
+        Spacer(minLength: 0)
+      }
+      .padding(.horizontal, 12)
+      .frame(height: 48)
+      .background(
+        RoundedRectangle(cornerRadius: 2)
+          .fill(Color.Theme.mutedSurface)
+      )
+    }
+    .buttonStyle(.plain)
+  }
+
+  // MARK: - Formatters
+
+  private static let tagDateFormatter: DateFormatter = {
     let f = DateFormatter()
-    f.dateFormat = "yy.MM.dd HH:mm"
+    f.dateFormat = "yyyy-MM-dd"
     return f
   }()
 
-  private func formatDate(_ date: Date) -> String {
-    Self.dateFormatter.string(from: date)
-  }
-
-  private func shortKey(_ key: String) -> String {
-    guard key.count > 20 else { return key }
-    return "\(key.prefix(10))...\(key.suffix(8))"
-  }
+  private static let bubbleDateFormatter: DateFormatter = {
+    let f = DateFormatter()
+    f.dateFormat = "yyyy-MM-dd"
+    return f
+  }()
 }

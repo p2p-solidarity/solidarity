@@ -14,6 +14,7 @@ struct MeTabView: View {
   @State var showingEditProfile = false
   @State var showingVCSettings = false
   @State var showingPassportFlow = false
+  @State var passportFlowStartManual = false
   @State var showingGroupManager = false
   @State var showingOIDCRequest = false
   @State var showingZKSettings = false
@@ -40,12 +41,8 @@ struct MeTabView: View {
   var body: some View {
     NavigationStack {
       ScrollView {
-        VStack(spacing: 24) {
+        VStack(spacing: 32) {
           identityHeader
-
-          Rectangle()
-            .fill(Color.Theme.divider)
-            .frame(height: 1)
 
           identityCardSection
 
@@ -57,23 +54,22 @@ struct MeTabView: View {
             devModeSection
           }
         }
-        .padding(.vertical, 24)
-        .padding(.bottom, 90)
+        .padding(.top, 12)
+        .padding(.bottom, 100)
       }
       .background(Color.Theme.pageBg.ignoresSafeArea())
       .navigationTitle("Me")
       .navigationBarTitleDisplayMode(.inline)
+      .toolbarBackground(Color.Theme.pageBg, for: .navigationBar)
+      .toolbarBackground(.visible, for: .navigationBar)
       .toolbar {
         ToolbarItem(placement: .navigationBarTrailing) {
           Button {
             showingSettings = true
           } label: {
-            Image(systemName: "gearshape.fill")
-              .font(.system(size: 14))
+            Image(systemName: "gearshape")
+              .font(.system(size: 18, weight: .regular))
               .foregroundColor(Color.Theme.textPrimary)
-              .padding(8)
-              .background(Color.Theme.searchBg)
-              .overlay(Rectangle().stroke(Color.Theme.divider, lineWidth: 1))
           }
         }
       }
@@ -98,8 +94,8 @@ struct MeTabView: View {
           VCSettingsView()
         }
       }
-      .sheet(isPresented: $showingPassportFlow) {
-        PassportOnboardingFlowView { _ in
+      .sheet(isPresented: $showingPassportFlow, onDismiss: { passportFlowStartManual = false }) {
+        PassportOnboardingFlowView(startInManualInput: passportFlowStartManual) { _ in
           showingPassportFlow = false
         }
       }

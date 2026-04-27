@@ -111,9 +111,13 @@ extension KeychainService {
         jwk: jwk
       )
       IdentityCacheStore().saveDescriptor(descriptor)
+      #if DEBUG
       print("[KeychainService] cachePublicJWK: cached DID \(did)")
+      #endif
     } catch {
+      #if DEBUG
       print("[KeychainService] cachePublicJWK: DID derivation failed: \(error)")
+      #endif
     }
   }
 

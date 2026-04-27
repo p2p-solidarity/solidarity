@@ -15,6 +15,10 @@ final class FileEncryptionService {
     private let bufferSize = 1024 * 1024  // 1MB buffer
     private let vaultKeyTag = "com.solidarity.vault.encryption.key"
 
+    // v2: per-chunk fresh nonce; framed as [u32 BE chunk-len][12B nonce + ct + 16B tag].
+    // v1 (legacy, broken): single nonce reused across all chunks. Refuse to decrypt.
+    private static let streamMagicV2: [UInt8] = [0x00, 0x00, 0x00, 0x02]
+
     private init() {}
 
     // MARK: - Public API
@@ -32,7 +36,6 @@ final class FileEncryptionService {
         }
 
         let vaultKey = try getOrCreateVaultKey()
-        let nonce = AES.GCM.Nonce()
 
         let inputStream = InputStream(url: sourceURL)
         guard let stream = inputStream else {
@@ -43,8 +46,9 @@ final class FileEncryptionService {
         defer { stream.close() }
 
         var encryptedData = Data()
-        var processedBytes: Int64 = 0
+        encryptedData.append(contentsOf: Self.streamMagicV2)
 
+        var processedBytes: Int64 = 0
         var buffer = [UInt8](repeating: 0, count: bufferSize)
 
         while stream.hasBytesAvailable {
@@ -53,11 +57,16 @@ final class FileEncryptionService {
             guard bytesRead > 0 else { break }
 
             let chunk = Data(buffer.prefix(bytesRead))
+            let nonce = AES.GCM.Nonce()
             let sealedChunk = try AES.GCM.seal(chunk, using: vaultKey, nonce: nonce)
 
-            if let combined = sealedChunk.combined {
-                encryptedData.append(combined)
+            guard let combined = sealedChunk.combined else {
+                throw VaultError.encryptionFailed
             }
+
+            var lengthBE = UInt32(combined.count).bigEndian
+            withUnsafeBytes(of: &lengthBE) { encryptedData.append(contentsOf: $0) }
+            encryptedData.append(combined)
 
             processedBytes += Int64(bytesRead)
             progress?(Double(processedBytes) / Double(fileSize))
@@ -65,12 +74,12 @@ final class FileEncryptionService {
             if Task.isCancelled { throw VaultError.cancelled }
         }
 
-        try encryptedData.write(to: destinationURL)
+        try encryptedData.write(to: destinationURL, options: [.atomic, .completeFileProtection])
 
         return EncryptedFileResult(
             encryptedURL: destinationURL,
             size: Int64(encryptedData.count),
-            nonce: Data(nonce),
+            nonce: Data(),
             checksum: computeChecksum(encryptedData)
         )
     }
@@ -84,10 +93,41 @@ final class FileEncryptionService {
         let encryptedData = try Data(contentsOf: encryptedURL)
         let vaultKey = try getOrCreateVaultKey()
 
-        let sealedBox = try AES.GCM.SealedBox(combined: encryptedData)
-        let decryptedData = try AES.GCM.open(sealedBox, using: vaultKey)
+        guard encryptedData.count >= 4,
+              Array(encryptedData.prefix(4)) == Self.streamMagicV2 else {
+            throw VaultError.unsupportedFileVersion
+        }
 
-        try decryptedData.write(to: destinationURL)
+        var output = Data()
+        var offset = 4
+        let total = encryptedData.count
+
+        while offset < total {
+            guard offset + 4 <= total else {
+                throw VaultError.decryptionFailed
+            }
+            let lenBytes = encryptedData[offset..<(offset + 4)]
+            let length = lenBytes.withUnsafeBytes { ptr -> UInt32 in
+                let raw = ptr.load(as: UInt32.self)
+                return UInt32(bigEndian: raw)
+            }
+            offset += 4
+
+            guard length > 0, offset + Int(length) <= total else {
+                throw VaultError.decryptionFailed
+            }
+            let chunk = encryptedData[offset..<(offset + Int(length))]
+            offset += Int(length)
+
+            let sealedBox = try AES.GCM.SealedBox(combined: chunk)
+            let plain = try AES.GCM.open(sealedBox, using: vaultKey)
+            output.append(plain)
+
+            progress?(Double(offset) / Double(total))
+            if Task.isCancelled { throw VaultError.cancelled }
+        }
+
+        try output.write(to: destinationURL, options: [.atomic, .completeFileProtection])
     }
 
     /// Decrypt and return data directly
@@ -246,6 +286,7 @@ enum VaultError: LocalizedError {
     case keyCreationFailed(String)
     case keyDeletionFailed(String)
     case checksumMismatch
+    case unsupportedFileVersion
 
     var errorDescription: String? {
         switch self {
@@ -257,6 +298,7 @@ enum VaultError: LocalizedError {
         case .keyCreationFailed(let reason): return "Failed to create encryption key: \(reason)"
         case .keyDeletionFailed(let reason): return "Failed to delete encryption key: \(reason)"
         case .checksumMismatch: return "File integrity check failed"
+        case .unsupportedFileVersion: return "Encrypted file uses an unsupported or legacy format"
         }
     }
 }

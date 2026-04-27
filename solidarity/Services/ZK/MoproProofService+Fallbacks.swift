@@ -50,6 +50,7 @@ extension MoproProofService {
     documentHash: String,
     mrzDigest: String,
     nationalityCode: String,
+    passiveAuthPassed: Bool,
     startTime: DispatchTime
   ) async -> MoproProofOutput? {
     guard SemaphoreIdentityManager.proofsSupported else {
@@ -97,6 +98,7 @@ extension MoproProofService {
         "passport_hash": documentHash,
         "mrz": mrzDigest,
         "proof_type": "semaphore-zk",
+        "passive_auth": passiveAuthPassed,
       ]
       if let proofData = proofJSON.data(using: .utf8),
          let proofObject = try? JSONSerialization.jsonObject(with: proofData) {
@@ -109,12 +111,17 @@ extension MoproProofService {
       let payloadString = String(data: payloadData, encoding: .utf8) ?? "{}"
       let elapsed = elapsedMs(from: startTime)
 
+      // Trust level is gated on CSCA passive authentication. Without a verified
+      // CSCA chain the chip data is unauthenticated — treat as self-issued.
+      let trustLevel = passiveAuthPassed ? "green" : "white"
+      let publicSignals: [String] = passiveAuthPassed ? ["age_over_18", "is_human"] : []
+
       return MoproProofOutput(
         proofType: "semaphore-zk",
         proofJSON: payloadString,
-        publicSignals: ["age_over_18", "is_human"],
+        publicSignals: publicSignals,
         generationTimeMs: elapsed,
-        trustLevel: "green"
+        trustLevel: trustLevel
       )
     } catch {
       logger.error("[Semaphore] Proof generation FAILED: \(error.localizedDescription)")
@@ -135,7 +142,13 @@ extension MoproProofService {
     startTime: DispatchTime
   ) -> MoproProofOutput {
     logger.warning("[SD-JWT] Generating fallback proof — NOT true ZK, no anonymity guarantee")
+    // nationality is PII; only log it in DEBUG. Production logs keep the
+    // boolean signal without leaking which country issued the passport.
+    #if DEBUG
     logger.info("[SD-JWT] passiveAuth=\(passiveAuthPassed), nationality=\(nationalityCode)")
+    #else
+    logger.info("[SD-JWT] passiveAuth=\(passiveAuthPassed)")
+    #endif
     let fallbackDict: [String: Any] = [
       "passport_hash": documentHash,
       "mrz": mrzDigest,
@@ -147,12 +160,16 @@ extension MoproProofService {
     let fallbackString = String(data: fallbackData, encoding: .utf8) ?? "{}"
     let elapsed = elapsedMs(from: startTime)
 
+    // SD-JWT fallback is not true ZK; trust level mirrors CSCA passive auth result.
+    // green = government-verified passport, white = unauthenticated self-issued.
+    let trustLevel = passiveAuthPassed ? "green" : "white"
+
     return MoproProofOutput(
       proofType: "sd-jwt-fallback",
       proofJSON: fallbackString,
       publicSignals: [],
       generationTimeMs: elapsed,
-      trustLevel: "blue"
+      trustLevel: trustLevel
     )
   }
 

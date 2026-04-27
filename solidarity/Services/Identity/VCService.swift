@@ -279,6 +279,9 @@ final class VCService {
   }
 
   /// Imports a presented credential (vp_token) and stores it locally.
+  /// Rejects unsigned / tampered JWTs before persistence — historically
+  /// this method blindly stored anything decodable, which let a hostile
+  /// verifier seed our library with arbitrary "credentials".
   func importPresentedCredential(jwt: String) -> CardResult<ImportedCredential> {
     Self.logger.info("Importing presented credential, JWT length: \(jwt.count)")
     let decodeResult = decodeJWT(jwt)
@@ -293,25 +296,34 @@ final class VCService {
         Self.logger.info("Credential envelope decoded, converting to business card")
         let businessCard = try envelope.toBusinessCard()
 
-        // Group VC Verification
-        if let _ = businessCard.groupContext {
-          Self.logger.info("Detected Group Credential, performing additional verification")
-          // Note: We need to verify the Semaphore proof here or in a separate step.
-          // For now, we import it, but mark it as requiring verification if proof is missing/invalid.
-          // The actual proof verification usually happens during presentation (VP), not just import.
-          // But if we are importing a *presented* credential, we should check the proof.
-          // However, the proof is likely in the VP, not the VC itself, or in the VC if it's a specific claim.
-          // Our design puts the proof in the presentation exchange, but here we are just parsing the VC JWT.
-          // We'll let the coordinator handle the proof verification using GroupCredentialService.
-        }
-
-        let snapshot = BusinessCardSnapshot(card: businessCard)
-
         let issuedAt = envelope.issuedAtDate ?? Date()
         let expiresAt = envelope.expirationDate
         let holderDid = envelope.sub ?? businessCard.id.uuidString
         let issuerDid = envelope.iss ?? "did:unknown"
+        let keyId = decoded.header["kid"] as? String
 
+        // Resolution chain mirrors ProofVerifierService:
+        //  1. anchor (user-trusted) → status .verified
+        //  2. did:key self-resolution → status .unverified (signature is
+        //     cryptographically sound but the issuer isn't anchored yet)
+        //  3. embedded JWK that matches the iss did:key → status .unverified
+        let verification = verifyImportedJWTSignature(
+          jwt: jwt,
+          issuerDid: issuerDid,
+          keyId: keyId,
+          decoded: decoded,
+          envelope: envelope
+        )
+        let importStatus: VCLibrary.StoredCredential.Status
+        switch verification {
+        case .rejected(let reason):
+          Self.logger.error("Imported credential signature rejected: \(reason)")
+          return .failure(.cryptographicError("Imported credential signature invalid: \(reason)"))
+        case .ok(let trust):
+          importStatus = trust == .anchor ? .verified : .unverified
+        }
+
+        let snapshot = BusinessCardSnapshot(card: businessCard)
         Self.logger.info("Creating issued credential - holderDid: \(holderDid), issuerDid: \(issuerDid)")
         let issued = IssuedCredential(
           jwt: jwt,
@@ -324,8 +336,8 @@ final class VCService {
           issuerDid: issuerDid
         )
 
-        Self.logger.info("Storing imported credential with unverified status")
-        switch library.add(issued, status: .unverified) {
+        Self.logger.info("Storing imported credential with status: \(String(describing: importStatus))")
+        switch library.add(issued, status: importStatus) {
         case .success(let stored):
           Self.logger.info("Credential imported and stored successfully")
           return .success(ImportedCredential(storedCredential: stored, businessCard: businessCard))
@@ -341,6 +353,81 @@ final class VCService {
         return .failure(.invalidData("Failed to parse credential subject: \(error.localizedDescription)"))
       }
     }
+  }
+
+  private enum ImportTrustSource {
+    case anchor
+    case didKey
+    case embeddedJWK
+  }
+
+  private enum ImportSignatureOutcome {
+    case ok(ImportTrustSource)
+    case rejected(String)
+  }
+
+  private func verifyImportedJWTSignature(
+    jwt: String,
+    issuerDid: String,
+    keyId: String?,
+    decoded: DecodedJWT,
+    envelope: BusinessCardCredentialEnvelope
+  ) -> ImportSignatureOutcome {
+    guard !issuerDid.isEmpty, issuerDid != "did:unknown" else {
+      return .rejected("Missing issuer DID")
+    }
+    let segments = jwt.split(separator: ".")
+    guard segments.count == 3,
+          let signatureData = Data(base64URLEncoded: String(segments[2]))
+    else {
+      return .rejected("Malformed JWT signature")
+    }
+    let signingInput = Data("\(segments[0]).\(segments[1])".utf8)
+
+    let credentialSubject = (envelope.vc ?? envelope.payload?.vc)?.credentialSubject
+    let embeddedJwk = credentialSubject?.publicKeyJwk
+
+    let resolved: (PublicKeyJWK, ImportTrustSource)
+    if let anchor = IssuerTrustAnchorStore.shared.trustedJWK(for: issuerDid, keyId: keyId) {
+      if let embedded = embeddedJwk, embedded != anchor {
+        return .rejected("Embedded publicKeyJwk does not match trusted issuer key")
+      }
+      resolved = (anchor, .anchor)
+    } else if let didKey = DIDKeyResolver.resolveP256JWK(from: issuerDid) {
+      if let embedded = embeddedJwk, embedded != didKey {
+        return .rejected("Embedded publicKeyJwk does not match did:key resolution")
+      }
+      resolved = (didKey, .didKey)
+    } else if let embedded = embeddedJwk,
+              let derived = embeddedJwkSelfDerivedDid(embedded),
+              normalizedDid(derived) == normalizedDid(issuerDid) {
+      resolved = (embedded, .embeddedJWK)
+    } else {
+      return .rejected("No trusted public key found for issuer \(issuerDid)")
+    }
+
+    do {
+      let publicKey = try resolved.0.toP256PublicKey()
+      let signature =
+        (try? P256.Signing.ECDSASignature(rawRepresentation: signatureData))
+        ?? (try? P256.Signing.ECDSASignature(derRepresentation: signatureData))
+      guard let signature, publicKey.isValidSignature(signature, for: signingInput) else {
+        return .rejected("Signature does not verify")
+      }
+    } catch {
+      return .rejected("Verification error: \(error.localizedDescription)")
+    }
+    _ = decoded
+    return .ok(resolved.1)
+  }
+
+  private func embeddedJwkSelfDerivedDid(_ jwk: PublicKeyJWK) -> String? {
+    guard let jwkString = try? jwk.jsonString() else { return nil }
+    return try? DidMethodUtils(method: .key).didFromJwk(jwk: jwkString)
+  }
+
+  private func normalizedDid(_ did: String) -> String {
+    did.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
   }
 
   func verifyStoredCredential(_ credential: VCLibrary.StoredCredential) -> CardResult<VCLibrary.StoredCredential> {
@@ -392,6 +479,17 @@ final class VCService {
         }
 
         Self.logger.info("Verifying signature with trusted issuer key")
+        // Cross-check the JWT alg header against the resolved key. The
+        // trustedJWK we retrieved is P-256 (ES256); accepting `none`,
+        // `HS256`, `ES384`, etc. would let an attacker bypass the
+        // signature step entirely. RFC 8725 §3.1 requires the verifier
+        // to pin alg to the key's known curve before signature decode.
+        let alg = (decoded.header["alg"] as? String)?.uppercased() ?? ""
+        guard alg == "ES256" else {
+          Self.logger.error("Rejecting credential with non-ES256 alg: \(alg.isEmpty ? "(missing)" : alg)")
+          return storeVerificationResult(credential, status: .failed)
+        }
+
         let publicKey = try trustedKey.toP256PublicKey()
         let signature =
           (try? P256.Signing.ECDSASignature(rawRepresentation: signatureData))

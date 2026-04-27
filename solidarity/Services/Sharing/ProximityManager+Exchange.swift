@@ -9,13 +9,15 @@ extension ProximityManager {
       lastError = .sharingError("Peer is not connected")
       return
     }
-    let payload = GroupInvitePayload(
+    guard let payload = Self.buildSignedGroupInvite(
       groupId: group.id,
       groupName: group.name,
       groupRoot: group.root,
-      inviterName: inviterName,
-      timestamp: Date()
-    )
+      inviterName: inviterName
+    ) else {
+      lastError = .sharingError("Failed to sign group invite")
+      return
+    }
     do {
       let data = try JSONEncoder().encode(payload)
       try session.send(data, toPeers: [peer], with: .reliable)
@@ -28,12 +30,14 @@ extension ProximityManager {
 
   func acceptGroupInvite(_ invite: GroupInvitePayload, to peer: MCPeerID, memberName: String, memberCommitment: String)
   {
-    let response = GroupJoinResponsePayload(
+    guard let response = Self.buildSignedGroupJoinResponse(
       groupId: invite.groupId,
       memberCommitment: memberCommitment,
-      memberName: memberName,
-      timestamp: Date()
-    )
+      memberName: memberName
+    ) else {
+      lastError = .sharingError("Failed to sign group join response")
+      return
+    }
     do {
       let data = try JSONEncoder().encode(response)
       try session.send(data, toPeers: [peer], with: .reliable)
@@ -42,6 +46,66 @@ extension ProximityManager {
       lastError = .sharingError("Failed to send join response: \(error.localizedDescription)")
       print("Failed to send join response: \(error)")
     }
+  }
+
+  /// Builds a `GroupInvitePayload` with an Ed25519 signature over the canonical bytes.
+  /// Returns nil if signing fails (CryptoKit error or empty key).
+  static func buildSignedGroupInvite(
+    groupId: UUID,
+    groupName: String,
+    groupRoot: String?,
+    inviterName: String,
+    timestamp: Date = Date()
+  ) -> GroupInvitePayload? {
+    let canonical = GroupInvitePayload.canonicalBytes(
+      groupId: groupId,
+      groupName: groupName,
+      groupRoot: groupRoot,
+      timestamp: timestamp
+    )
+    guard let signature = GroupInviteSigner.sign(canonicalBytes: canonical) else {
+      return nil
+    }
+    let publicKey = GroupInviteSigner.localPublicKey
+    guard !publicKey.isEmpty else { return nil }
+    return GroupInvitePayload(
+      groupId: groupId,
+      groupName: groupName,
+      groupRoot: groupRoot,
+      inviterName: inviterName,
+      timestamp: timestamp,
+      inviterPublicKey: publicKey,
+      inviterSignature: signature
+    )
+  }
+
+  /// Builds a `GroupJoinResponsePayload` with an Ed25519 signature over the
+  /// canonical join bytes, binding the commitment to the local identity key.
+  static func buildSignedGroupJoinResponse(
+    groupId: UUID,
+    memberCommitment: String,
+    memberName: String,
+    timestamp: Date = Date()
+  ) -> GroupJoinResponsePayload? {
+    let canonical = GroupJoinResponsePayload.canonicalBytes(
+      groupId: groupId,
+      memberCommitment: memberCommitment,
+      memberName: memberName,
+      timestamp: timestamp
+    )
+    guard let signature = GroupInviteSigner.sign(canonicalBytes: canonical) else {
+      return nil
+    }
+    let publicKey = GroupInviteSigner.localPublicKey
+    guard !publicKey.isEmpty else { return nil }
+    return GroupJoinResponsePayload(
+      groupId: groupId,
+      memberCommitment: memberCommitment,
+      memberName: memberName,
+      timestamp: timestamp,
+      memberPublicKey: publicKey,
+      memberSignature: signature
+    )
   }
 
   func disconnect() {
@@ -130,13 +194,15 @@ extension ProximityManager {
       matchingInfoMessage = "Reconnecting... Please wait a moment, then try connecting again."
       return
     }
-    let payload = GroupInvitePayload(
+    guard let payload = Self.buildSignedGroupInvite(
       groupId: group.id,
       groupName: group.name,
       groupRoot: group.root,
-      inviterName: inviterName,
-      timestamp: Date()
-    )
+      inviterName: inviterName
+    ) else {
+      lastError = .sharingError("Failed to sign group invite")
+      return
+    }
     do {
       let context = try JSONEncoder().encode(payload)
       browser.invitePeer(peer.peerID, to: session, withContext: context, timeout: 30)
@@ -248,6 +314,115 @@ extension ProximityManager {
       pubKeyBase64: signPubKey
     )
   }
+
+  // swiftlint:disable function_parameter_count
+  /// Verifies a v2 DID-bound exchange signature. Returns false on any of:
+  ///  - missing protocolVersion (legacy v1)
+  ///  - missing senderDID / senderJWK / signature / nonce
+  ///  - JWK does not match the JWK encoded in the sender's did:key identifier
+  ///  - signature does not verify against the recomputed canonical bytes
+  /// The receiverPeerName must be the local peer name from the receiver's
+  /// perspective so a captured payload cannot be replayed against a different
+  /// peer.
+  static func verifyDIDExchangeSignature(
+    protocolVersion: Int?,
+    direction: ProximityExchangeBinding.Direction,
+    requestId: UUID,
+    senderDID: String?,
+    receiverPeerName: String,
+    senderID: String,
+    cardPreview: BusinessCard,
+    selectedFields: [BusinessCardField],
+    ephemeralMessage: String?,
+    nonce: String?,
+    timestamp: Date,
+    signatureBase64: String?,
+    senderJWK: PublicKeyJWK?
+  ) -> Bool {
+    guard let protocolVersion,
+      protocolVersion >= ProximityIdentitySigner.currentProtocolVersion,
+      let senderDID, !senderDID.isEmpty,
+      let senderJWK,
+      let signatureBase64, !signatureBase64.isEmpty,
+      let nonce, !nonce.isEmpty
+    else {
+      return false
+    }
+    guard ProximityIdentitySigner.jwk(senderJWK, matchesDID: senderDID) else {
+      print("[ProximityManager] DID/JWK mismatch from \(senderID); rejecting signature")
+      return false
+    }
+    let canonical = ProximityExchangeBinding.exchangeCanonicalBytes(
+      protocolVersion: protocolVersion,
+      direction: direction,
+      requestId: requestId,
+      senderDID: senderDID,
+      receiverPeerName: receiverPeerName,
+      senderID: senderID,
+      cardPreview: cardPreview,
+      selectedFields: selectedFields,
+      ephemeralMessage: ephemeralMessage,
+      nonce: nonce,
+      timestamp: timestamp
+    )
+    return ProximityIdentitySigner.verify(
+      signatureBase64: signatureBase64,
+      canonicalBytes: canonical,
+      jwk: senderJWK
+    )
+  }
+  // swiftlint:enable function_parameter_count
+
+  // swiftlint:disable function_parameter_count
+  /// Verifies a v2 DID-bound card sharing signature. Same fail-closed rules as
+  /// `verifyDIDExchangeSignature` above; the only differences are the binding
+  /// fields (shareId + scope replace requestId + ephemeralMessage).
+  static func verifyDIDCardSignature(
+    protocolVersion: Int?,
+    shareId: UUID,
+    senderDID: String?,
+    receiverPeerName: String,
+    senderID: String,
+    card: BusinessCard,
+    selectedFields: [BusinessCardField],
+    scope: String,
+    nonce: String?,
+    timestamp: Date,
+    signatureBase64: String?,
+    senderJWK: PublicKeyJWK?
+  ) -> Bool {
+    guard let protocolVersion,
+      protocolVersion >= ProximityIdentitySigner.currentProtocolVersion,
+      let senderDID, !senderDID.isEmpty,
+      let senderJWK,
+      let signatureBase64, !signatureBase64.isEmpty,
+      let nonce, !nonce.isEmpty
+    else {
+      return false
+    }
+    guard ProximityIdentitySigner.jwk(senderJWK, matchesDID: senderDID) else {
+      print("[ProximityManager] DID/JWK mismatch from \(senderID); rejecting card signature")
+      return false
+    }
+    let canonical = ProximityExchangeBinding.cardCanonicalBytes(
+      protocolVersion: protocolVersion,
+      shareId: shareId,
+      senderDID: senderDID,
+      receiverPeerName: receiverPeerName,
+      senderID: senderID,
+      card: card,
+      selectedFields: selectedFields,
+      scope: scope,
+      nonce: nonce,
+      timestamp: timestamp
+    )
+    return ProximityIdentitySigner.verify(
+      signatureBase64: signatureBase64,
+      canonicalBytes: canonical,
+      jwk: senderJWK
+    )
+  }
+  // swiftlint:enable function_parameter_count
 
   func isMergeConfirmationRequired(_ error: CardError) -> Bool {
     if case .validationError(let message) = error {

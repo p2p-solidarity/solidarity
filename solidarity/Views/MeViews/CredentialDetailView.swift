@@ -22,32 +22,55 @@ struct CredentialDetailView: View {
     return "SD-JWT Fallback"
   }
 
-  private var proofSystemIcon: String {
+  private var proofTagText: String {
+    if card.metadataTags.contains("mopro-noir") {
+      return "OpenPassport"
+    }
+    if card.metadataTags.contains("semaphore-zk") {
+      return "Semaphore ZK"
+    }
+    return "SD-JWT Fallback"
+  }
+
+  private var proofIcon: String {
     if card.metadataTags.contains("mopro-noir") {
       return "bolt.shield.fill"
     }
     if card.metadataTags.contains("semaphore-zk") {
       return "shield.checkered"
     }
-    return "exclamationmark.triangle"
+    return "doc.text.fill"
   }
 
-  private var proofSystemColor: Color {
-    if card.metadataTags.contains("mopro-noir") || card.metadataTags.contains("semaphore-zk") {
-      return Color.Theme.terminalGreen
+  private var levelText: String {
+    switch card.trustLevel {
+    case "green": return "Level 3 - ZK Verified"
+    case "blue": return "Level 2 - Fallback"
+    default: return "Level 1 - Self-attested"
     }
-    return .orange
+  }
+
+  private var levelAccent: Color {
+    switch card.trustLevel {
+    case "green": return Color.Theme.terminalGreen
+    case "blue": return Color.Theme.primaryBlue
+    default: return Color.Theme.textTertiary
+    }
   }
 
   var body: some View {
-    ScrollView {
-      VStack(spacing: 20) {
-        credentialHeader
-        metadataSection
-        claimsSection
-        presentButton
+    VStack(spacing: 0) {
+      ScrollView {
+        VStack(spacing: 32) {
+          credentialHero
+          metadataSection
+          claimsSection
+        }
+        .padding(.top, 12)
+        .padding(.bottom, 24)
       }
-      .padding(.vertical, 24)
+
+      presentBar
     }
     .background(Color.Theme.pageBg.ignoresSafeArea())
     .navigationTitle("Credential")
@@ -61,7 +84,11 @@ struct CredentialDetailView: View {
         selectedClaims: associatedClaims.filter { selectedClaimIDs.contains($0.id) }
       )
     }
-    .confirmationDialog("Regenerate this credential?", isPresented: $showingRegenConfirm, titleVisibility: .visible) {
+    .confirmationDialog(
+      "Regenerate this credential?",
+      isPresented: $showingRegenConfirm,
+      titleVisibility: .visible
+    ) {
       Button("Regenerate", role: .destructive) {
         identityDataStore.removePassportCredentials()
       }
@@ -71,170 +98,249 @@ struct CredentialDetailView: View {
     }
   }
 
-  // MARK: - Header
+  // MARK: - Hero (Figma 724:22805)
 
-  private var credentialHeader: some View {
-    VStack(spacing: 12) {
-      Text("🛂")
-        .font(.system(size: 48))
+  private var credentialHero: some View {
+    VStack(spacing: 8) {
+      ZStack {
+        Circle()
+          .fill(Color.Theme.heroSkyDisc)
+          .frame(width: 56, height: 56)
+        Image(systemName: credentialIcon)
+          .font(.system(size: 22, weight: .regular))
+          .foregroundColor(Color.Theme.textPrimary)
+      }
 
-      Text(card.title)
-        .font(.system(size: 20, weight: .bold))
-        .foregroundColor(Color.Theme.textPrimary)
+      VStack(spacing: 16) {
+        Text(card.title)
+          .font(.system(size: 24, weight: .medium))
+          .foregroundColor(Color.Theme.textPrimary)
 
-      Text(trustText)
-        .font(.system(size: 12, weight: .bold, design: .monospaced))
-        .foregroundColor(Color.Theme.terminalGreen)
-
-      HStack(spacing: 8) {
-        statusPill(card.status)
-        proofSystemPill
+        VStack(spacing: 8) {
+          levelTag
+          HStack(spacing: 16) {
+            verifiedTag
+            proofSystemTag
+          }
+        }
       }
     }
     .frame(maxWidth: .infinity)
-    .padding(.horizontal, 24)
+    .padding(.horizontal, 12)
+    .padding(.top, 16)
+    .padding(.bottom, 24)
+    .background(
+      LinearGradient(
+        colors: [Color.Theme.heroSkyTop, Color.Theme.heroSkyBottom],
+        startPoint: .top,
+        endPoint: .bottom
+      )
+    )
+    .clipShape(RoundedRectangle(cornerRadius: 4))
+    .padding(.horizontal, 16)
   }
 
-  private func statusPill(_ text: String) -> some View {
-    Text(text.uppercased())
-      .font(.system(size: 10, weight: .bold, design: .monospaced))
-      .foregroundColor(Color.Theme.textPrimary)
-      .padding(.horizontal, 10)
-      .padding(.vertical, 5)
-      .background(Color.Theme.searchBg)
-      .overlay(Rectangle().stroke(Color.Theme.divider, lineWidth: 1))
-  }
-
-  private var proofSystemPill: some View {
-    HStack(spacing: 4) {
-      Image(systemName: proofSystemIcon)
-        .font(.system(size: 9))
-        .foregroundColor(proofSystemColor)
-      Text(proofType.uppercased())
-        .font(.system(size: 10, weight: .bold, design: .monospaced))
-        .foregroundColor(proofSystemColor)
+  private var credentialIcon: String {
+    switch card.type {
+    case "passport": return "doc.text.fill"
+    case "student": return "graduationcap.fill"
+    case "social_graph", "socialGraph": return "person.2.fill"
+    default: return "checkmark.shield.fill"
     }
-    .padding(.horizontal, 10)
-    .padding(.vertical, 5)
-    .background(proofSystemColor.opacity(0.1))
-    .overlay(Rectangle().stroke(proofSystemColor.opacity(0.4), lineWidth: 1))
   }
 
-  // MARK: - Metadata
+  private var levelTag: some View {
+    Text(levelText.uppercased())
+      .font(.system(size: 10, weight: .medium))
+      .foregroundColor(levelAccent)
+      .padding(.horizontal, 4)
+      .padding(.vertical, 2)
+      .frame(maxWidth: .infinity)
+      .overlay(
+        RoundedRectangle(cornerRadius: 2)
+          .stroke(levelAccent, lineWidth: 0.5)
+      )
+  }
+
+  private var verifiedTag: some View {
+    HStack(spacing: 4) {
+      Image(systemName: "checkmark.seal")
+        .font(.system(size: 9))
+        .foregroundColor(Color.Theme.textSecondary)
+        .frame(width: 12, height: 12)
+      Text(card.status.capitalized)
+        .font(.system(size: 10))
+        .foregroundColor(Color.Theme.textSecondary)
+    }
+    .padding(.horizontal, 4)
+    .padding(.vertical, 2)
+    .background(
+      RoundedRectangle(cornerRadius: 2)
+        .fill(Color.Theme.chipSurface)
+    )
+  }
+
+  private var proofSystemTag: some View {
+    HStack(spacing: 4) {
+      Image(systemName: proofIcon)
+        .font(.system(size: 9))
+        .foregroundColor(Color.Theme.textSecondary)
+        .frame(width: 12, height: 12)
+      Text(proofTagText)
+        .font(.system(size: 10))
+        .foregroundColor(Color.Theme.textSecondary)
+    }
+    .padding(.horizontal, 4)
+    .padding(.vertical, 2)
+    .background(
+      RoundedRectangle(cornerRadius: 2)
+        .fill(Color.Theme.chipSurface)
+    )
+  }
+
+  // MARK: - Metadata (Figma 724:22828)
 
   private var metadataSection: some View {
-    VStack(alignment: .leading, spacing: 12) {
-      sectionHeader("CREDENTIAL METADATA")
+    VStack(alignment: .leading, spacing: 8) {
+      sectionHeader("Credential metadata")
 
       VStack(spacing: 0) {
-        metadataRow(label: "ISSUER", value: card.issuerDid)
-        metadataRow(label: "HOLDER", value: shortDid(card.holderDid))
-        metadataRow(label: "ISSUED", value: formatDate(card.issuedAt))
-        metadataRow(label: "EXPIRES", value: card.expiresAt.map(formatDate) ?? "NONE")
-        metadataRow(label: "PROOF", value: proofType)
+        metadataRow(label: "Issuer", value: card.issuerDid, position: .first)
+        metadataRow(label: "Holder", value: shortDid(card.holderDid), position: .middle)
+        metadataRow(label: "Issued", value: formatDate(card.issuedAt), position: .middle)
+        metadataRow(label: "Expires", value: card.expiresAt.map(formatDate) ?? "None", position: .middle)
+        metadataRow(label: "Proof", value: proofType, position: .last)
       }
-      .overlay(Rectangle().stroke(Color.Theme.divider, lineWidth: 1))
+      .padding(.horizontal, 16)
     }
   }
 
-  private func metadataRow(label: String, value: String) -> some View {
+  private enum RowPosition { case first, middle, last }
+
+  private func metadataRow(label: String, value: String, position: RowPosition) -> some View {
     HStack {
       Text(label)
-        .font(.system(size: 10, weight: .bold, design: .monospaced))
-        .foregroundColor(Color.Theme.textTertiary)
-        .frame(width: 70, alignment: .leading)
+        .font(.system(size: 15))
+        .foregroundColor(Color.Theme.textSecondary)
+      Spacer()
       Text(value)
-        .font(.system(size: 12, weight: .medium, design: .monospaced))
+        .font(.system(size: 15))
         .foregroundColor(Color.Theme.textPrimary)
         .lineLimit(1)
-      Spacer()
+        .truncationMode(.middle)
     }
     .padding(.horizontal, 12)
-    .padding(.vertical, 8)
-    .background(Color.Theme.cardBg)
+    .frame(height: 48)
+    .background(
+      UnevenRoundedRectangle(cornerRadii: cornerRadii(position))
+        .fill(Color.Theme.mutedSurface)
+    )
   }
 
-  // MARK: - Claims
+  private func cornerRadii(_ position: RowPosition) -> RectangleCornerRadii {
+    switch position {
+    case .first:
+      return RectangleCornerRadii(topLeading: 8, bottomLeading: 0, bottomTrailing: 0, topTrailing: 8)
+    case .middle:
+      return RectangleCornerRadii()
+    case .last:
+      return RectangleCornerRadii(topLeading: 0, bottomLeading: 8, bottomTrailing: 8, topTrailing: 0)
+    }
+  }
+
+  // MARK: - Claims (Figma 724:22844)
 
   private var claimsSection: some View {
-    VStack(alignment: .leading, spacing: 12) {
-      sectionHeader("SELECTIVE DISCLOSURES")
+    VStack(alignment: .leading, spacing: 8) {
+      sectionHeader("Selective Disclosures")
 
       if associatedClaims.isEmpty {
         Text("No claims associated with this credential.")
-          .font(.system(size: 12, design: .monospaced))
+          .font(.system(size: 13))
           .foregroundColor(Color.Theme.textTertiary)
-          .padding(.horizontal, 24)
+          .padding(.horizontal, 16)
       } else {
-        VStack(spacing: 0) {
+        VStack(spacing: 8) {
           ForEach(associatedClaims) { claim in
-            claimToggleRow(claim)
+            claimRow(claim)
           }
         }
-        .overlay(Rectangle().stroke(Color.Theme.divider, lineWidth: 1))
         .padding(.horizontal, 16)
       }
     }
   }
 
-  private func claimToggleRow(_ claim: ProvableClaimEntity) -> some View {
+  private func claimRow(_ claim: ProvableClaimEntity) -> some View {
     let isSelected = selectedClaimIDs.contains(claim.id)
-    return HStack(spacing: 12) {
-      VStack(alignment: .leading, spacing: 4) {
+    return Button {
+      if isSelected {
+        selectedClaimIDs.remove(claim.id)
+      } else {
+        selectedClaimIDs.insert(claim.id)
+      }
+    } label: {
+      HStack(spacing: 8) {
+        Image(systemName: claimIcon(claim.claimType))
+          .font(.system(size: 14, weight: .regular))
+          .foregroundColor(Color.Theme.terminalGreen)
+          .frame(width: 18, height: 18)
+
         Text(claim.title)
-          .font(.system(size: 14, weight: .bold))
+          .font(.system(size: 15))
           .foregroundColor(Color.Theme.textPrimary)
-        Text(claim.claimType)
-          .font(.system(size: 10, weight: .bold, design: .monospaced))
-          .foregroundColor(Color.Theme.textTertiary)
+          .lineLimit(1)
+
+        Spacer(minLength: 0)
+
+        claimCheckbox(isSelected: isSelected)
       }
-      Spacer()
-      Button {
-        if isSelected {
-          selectedClaimIDs.remove(claim.id)
-        } else {
-          selectedClaimIDs.insert(claim.id)
-        }
-      } label: {
-        Rectangle()
-          .fill(isSelected ? Color.Theme.terminalGreen : Color.clear)
-          .frame(width: 22, height: 22)
-          .overlay(Rectangle().stroke(isSelected ? Color.Theme.terminalGreen : Color.Theme.divider, lineWidth: 1.5))
-          .overlay {
-            if isSelected {
-              Image(systemName: "checkmark")
-                .font(.system(size: 12, weight: .bold))
-                .foregroundColor(.black)
-            }
-          }
-      }
-      .buttonStyle(.plain)
+      .padding(.horizontal, 12)
+      .padding(.vertical, 16)
+      .background(
+        RoundedRectangle(cornerRadius: 12)
+          .fill(Color.Theme.mutedSurface)
+      )
     }
-    .padding(.horizontal, 12)
-    .padding(.vertical, 10)
-    .background(Color.Theme.cardBg)
+    .buttonStyle(.plain)
   }
 
-  // MARK: - Present
+  private func claimCheckbox(isSelected: Bool) -> some View {
+    ZStack {
+      RoundedRectangle(cornerRadius: 2)
+        .fill(isSelected ? Color.Theme.terminalGreen : Color.clear)
+        .frame(width: 18, height: 18)
+        .overlay(
+          RoundedRectangle(cornerRadius: 2)
+            .stroke(isSelected ? Color.Theme.terminalGreen : Color.Theme.textTertiary, lineWidth: 1)
+        )
+      if isSelected {
+        Image(systemName: "checkmark")
+          .font(.system(size: 10, weight: .bold))
+          .foregroundColor(.white)
+      }
+    }
+  }
 
-  private var presentButton: some View {
-    VStack(spacing: 10) {
+  private func claimIcon(_ claimType: String) -> String {
+    switch claimType {
+    case "is_human": return "faceid"
+    case "age_over_18": return "face.smiling"
+    case "profile_card": return "person.crop.rectangle.fill"
+    case "field_name": return "person.fill"
+    default: return "checkmark.shield.fill"
+    }
+  }
+
+  // MARK: - Present bar
+
+  private var presentBar: some View {
+    VStack(spacing: 8) {
       Button {
         showingPresentation = true
       } label: {
-        HStack(spacing: 8) {
-          Image(systemName: "qrcode")
-            .font(.system(size: 14, weight: .bold))
-          Text("Present Proof")
-            .font(.system(size: 14, weight: .bold, design: .monospaced))
-        }
-        .foregroundColor(.black)
-        .frame(maxWidth: .infinity)
-        .padding(.vertical, 14)
-        .background(Color.white)
-        .overlay(Rectangle().stroke(Color.white, lineWidth: 1))
+        Text("Present proof")
       }
-      .buttonStyle(.plain)
+      .buttonStyle(ThemedPrimaryButtonStyle())
       .disabled(selectedClaimIDs.isEmpty)
       .opacity(selectedClaimIDs.isEmpty ? 0.4 : 1)
 
@@ -242,29 +348,25 @@ struct CredentialDetailView: View {
         showingRegenConfirm = true
       } label: {
         Text("Regenerate Credential")
-          .font(.system(size: 12, weight: .bold, design: .monospaced))
+          .font(.system(size: 12, weight: .medium))
           .foregroundColor(Color.Theme.textSecondary)
       }
       .buttonStyle(.plain)
     }
     .padding(.horizontal, 16)
+    .padding(.top, 12)
+    .padding(.bottom, 12)
+    .background(Color.Theme.pageBg)
   }
 
   // MARK: - Helpers
 
-  private var trustText: String {
-    switch card.trustLevel {
-    case "green": return "🟢 LEVEL 3 — ZK VERIFIED"
-    case "blue": return "🔵 LEVEL 2 — FALLBACK"
-    default: return "⚪️ LEVEL 1 — SELF-ATTESTED"
-    }
-  }
-
   private func sectionHeader(_ title: String) -> some View {
-    Text("[ \(title) ]")
-      .font(.system(size: 12, weight: .bold, design: .monospaced))
-      .foregroundColor(Color.Theme.textSecondary)
-      .padding(.horizontal, 24)
+    Text(title)
+      .font(.system(size: 14))
+      .foregroundColor(Color.Theme.textPrimary)
+      .frame(maxWidth: .infinity, alignment: .leading)
+      .padding(.horizontal, 16)
   }
 
   private func shortDid(_ did: String) -> String {
@@ -278,6 +380,7 @@ struct CredentialDetailView: View {
     return formatter.string(from: date)
   }
 }
+
 // MARK: - Presentation Sheet
 
 private struct PresentationSheet: View {
@@ -298,31 +401,34 @@ private struct PresentationSheet: View {
     NavigationStack {
       ScrollView {
         VStack(spacing: 24) {
-          // Selected claims summary
           VStack(spacing: 6) {
             Text(card.title)
               .font(.system(size: 16, weight: .bold))
               .foregroundColor(Color.Theme.textPrimary)
             Text("\(selectedClaims.count) claim(s) selected")
-              .font(.system(size: 12, weight: .bold, design: .monospaced))
+              .font(.system(size: 12, weight: .medium))
               .foregroundColor(Color.Theme.terminalGreen)
           }
 
-          // Claim pills
           LazyVGrid(columns: [GridItem(.adaptive(minimum: 100), spacing: 8)], spacing: 8) {
             ForEach(selectedClaims) { claim in
               Text(claim.claimType)
-                .font(.system(size: 10, weight: .bold, design: .monospaced))
+                .font(.system(size: 10, weight: .medium))
                 .foregroundColor(Color.Theme.textPrimary)
                 .padding(.horizontal, 10)
                 .padding(.vertical, 5)
-                .background(Color.Theme.searchBg)
-                .overlay(Rectangle().stroke(Color.Theme.terminalGreen, lineWidth: 1))
+                .background(
+                  RoundedRectangle(cornerRadius: 4)
+                    .fill(Color.Theme.chipSurface)
+                )
+                .overlay(
+                  RoundedRectangle(cornerRadius: 4)
+                    .stroke(Color.Theme.terminalGreen, lineWidth: 1)
+                )
             }
           }
           .padding(.horizontal, 16)
 
-          // QR Code
           if let qrImage {
             Image(uiImage: qrImage)
               .resizable()
@@ -335,7 +441,7 @@ private struct PresentationSheet: View {
           } else if let errorMessage {
             Text(errorMessage)
               .font(.system(size: 14))
-              .foregroundColor(.red)
+              .foregroundColor(Color.Theme.destructive)
               .multilineTextAlignment(.center)
               .padding(.horizontal, 32)
           } else {
@@ -359,7 +465,7 @@ private struct PresentationSheet: View {
         ToolbarItem(placement: .navigationBarTrailing) {
           Button { dismiss() } label: {
             Image(systemName: "xmark")
-              .foregroundColor(.white)
+              .foregroundColor(Color.Theme.textPrimary)
           }
         }
       }
@@ -370,7 +476,6 @@ private struct PresentationSheet: View {
   private func generateVP() {
     let nonce = UUID().uuidString.replacingOccurrences(of: "-", with: "")
 
-    // Build credential array: raw proof + selected claim payloads
     var credentials: [Any] = []
     if let rawJWT = card.rawCredentialJWT,
        let rawData = rawJWT.data(using: .utf8),

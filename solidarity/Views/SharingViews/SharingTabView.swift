@@ -82,23 +82,10 @@ struct SharingTabView: View {
           qrSection
             .padding(.horizontal, 16)
 
-          Spacer().frame(height: 16)
-
-          // Quick actions
-          quickActions
-            .padding(.horizontal, 16)
-
           Spacer().frame(height: 100)
         }
       }
-      .background(
-        LinearGradient(
-          colors: Color.Theme.pageGradient(for: colorScheme),
-          startPoint: .top,
-          endPoint: .bottom
-        )
-        .ignoresSafeArea()
-      )
+      .background(Color.Theme.pageBg.ignoresSafeArea())
       .navigationTitle("Share")
       .navigationBarTitleDisplayMode(.inline)
       .toolbar {

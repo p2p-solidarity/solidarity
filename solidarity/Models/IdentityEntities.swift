@@ -251,6 +251,11 @@ final class ProvableClaimEntity {
 }
 
 extension ContactEntity {
+  /// Persists a legacy `Contact` snapshot into SwiftData. SECURITY: callers
+  /// must populate `legacy.verificationStatus` from local crypto evidence
+  /// (signature/JWT/ZKP verified on this device) — never copy a status
+  /// field straight off a remote payload. ContactRepository.mergedContact
+  /// enforces this on duplicate-merge.
   static func fromLegacy(_ legacy: Contact) -> ContactEntity {
     ContactEntity(
       id: legacy.id.uuidString,
@@ -269,7 +274,12 @@ extension ContactEntity {
       sealedRoute: legacy.sealedRoute,
       pubKey: legacy.pubKey,
       signPubKey: legacy.signPubKey,
-      didPublicKey: legacy.signPubKey
+      didPublicKey: legacy.didPublicKey ?? legacy.signPubKey,
+      exchangeSignature: legacy.exchangeSignature,
+      myExchangeSignature: legacy.myExchangeSignature,
+      exchangeTimestamp: legacy.exchangeTimestamp,
+      myEphemeralMessage: legacy.myEphemeralMessage,
+      theirEphemeralMessage: legacy.theirEphemeralMessage
     )
   }
 
@@ -293,7 +303,13 @@ extension ContactEntity {
       lastInteraction: lastInteraction,
       sealedRoute: sealedRoute,
       pubKey: pubKey,
-      signPubKey: signPubKey
+      signPubKey: signPubKey,
+      didPublicKey: didPublicKey,
+      exchangeSignature: exchangeSignature,
+      myExchangeSignature: myExchangeSignature,
+      exchangeTimestamp: exchangeTimestamp,
+      myEphemeralMessage: myEphemeralMessage,
+      theirEphemeralMessage: theirEphemeralMessage
     )
   }
 }

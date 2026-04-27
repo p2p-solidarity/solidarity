@@ -1,4 +1,5 @@
 import Combine
+import CommonCrypto
 import Foundation
 import UserNotifications
 
@@ -10,6 +11,17 @@ class MessageService: ObservableObject {
     return url
   }()
   static let shared = MessageService()
+
+  // MARK: - TLS Pinning
+
+  static let pinnedHost = "bussiness-card.kidneyweakx.com"
+
+  private let pinnedDelegate = PinnedSessionDelegate()
+  private lazy var pinnedSession: URLSession = {
+    URLSession(configuration: .default, delegate: pinnedDelegate, delegateQueue: nil)
+  }()
+
+  // MARK: - Endpoints
 
   // 1. Exchange for Envelope (Seal)
   func sealToken(deviceToken: String) async throws -> String {
@@ -33,14 +45,16 @@ class MessageService: ObservableObject {
 
     request.httpBody = try JSONSerialization.data(withJSONObject: body)
 
-    let (data, _) = try await URLSession.shared.data(for: request)
+    let (data, _) = try await pinnedSession.data(for: request)
     let response = try JSONDecoder().decode(SealResponse.self, from: data)
     return response.sealed_route
   }
 
   // 2. Send Message (Send)
   func sendMessage(to contact: SecureContact, text: String) async throws {
+    #if DEBUG
     print("[MessageService] Sending message to \(contact.name), pubKey: \(contact.pubKey)")
+    #endif
     // Encrypt Content
     let blob = try SecureKeyManager.shared.encrypt(message: text, for: contact.pubKey)
 
@@ -78,7 +92,7 @@ class MessageService: ObservableObject {
     request.addValue("application/json", forHTTPHeaderField: "Content-Type")
     request.httpBody = try JSONEncoder().encode(payload)
 
-    let (data, response) = try await URLSession.shared.data(for: request)
+    let (data, response) = try await pinnedSession.data(for: request)
 
     if let httpResponse = response as? HTTPURLResponse, httpResponse.statusCode != 202 {
       let responseBody = String(data: data, encoding: .utf8) ?? "Unable to decode response body"
@@ -90,36 +104,21 @@ class MessageService: ObservableObject {
   // 3. Receive Mail (Sync)
   func syncMessages() async throws -> [InboxMessage] {
     let myPub = SecureKeyManager.shared.mySignPubKey
-    // Signed content can be timestamp, simplified here to signing PubKey to prove identity
-    let sig = SecureKeyManager.shared.sign(content: myPub)
+    // Sign `pubkey || ":" || ISO8601_minute_timestamp` so the signature rotates per minute and can no
+    // longer be replayed forever. The server is expected to accept signatures whose minute timestamp
+    // is within +/- 1 minute of its own clock; clients within this window will validate.
+    let minuteStamp = Self.iso8601MinuteTimestamp(for: Date())
+    let signedContent = "\(myPub):\(minuteStamp)"
+    let sig = SecureKeyManager.shared.sign(content: signedContent)
 
-    // Assemble Query Params: ?pubkey=...&sig=...
-    guard
-      var components = URLComponents(
-        url: MessageService.baseURL.appendingPathComponent("sync"),
-        resolvingAgainstBaseURL: true
-      )
-    else {
-      throw NSError(
-        domain: "MessageService",
-        code: -1,
-        userInfo: [NSLocalizedDescriptionKey: "Failed to create URLComponents"]
-      )
-    }
-    components.queryItems = [
-      URLQueryItem(name: "pubkey", value: myPub),
-      URLQueryItem(name: "sig", value: sig),
-    ]
+    let url = MessageService.baseURL.appendingPathComponent("sync")
+    var request = URLRequest(url: url)
+    request.httpMethod = "GET"
+    request.addValue(myPub, forHTTPHeaderField: "X-Identity-PubKey")
+    request.addValue(sig, forHTTPHeaderField: "X-Identity-Sig")
+    request.addValue(minuteStamp, forHTTPHeaderField: "X-Identity-Timestamp")
 
-    guard let url = components.url else {
-      throw NSError(
-        domain: "MessageService",
-        code: -1,
-        userInfo: [NSLocalizedDescriptionKey: "Failed to construct URL from components"]
-      )
-    }
-
-    let (data, _) = try await URLSession.shared.data(from: url)
+    let (data, _) = try await pinnedSession.data(for: request)
     let response = try JSONDecoder().decode(SyncResponse.self, from: data)
     return response.messages
   }
@@ -141,7 +140,7 @@ class MessageService: ObservableObject {
     request.addValue("application/json", forHTTPHeaderField: "Content-Type")
     request.httpBody = try? JSONEncoder().encode(payload)
 
-    _ = try? await URLSession.shared.data(for: request)
+    _ = try? await pinnedSession.data(for: request)
   }
 
   // Helper to get recipient ID (for compatibility or if needed)
@@ -149,6 +148,16 @@ class MessageService: ObservableObject {
     // This is a placeholder for backward compatibility or if we need to look up contacts
     // In the new model, we pass SecureContact directly
     return nil
+  }
+
+  /// Produces an ISO-8601 timestamp truncated to the minute (UTC). Used as the rotating component
+  /// of the /sync request signature so that captured headers cease to be valid after one minute.
+  private static func iso8601MinuteTimestamp(for date: Date) -> String {
+    let formatter = ISO8601DateFormatter()
+    formatter.timeZone = TimeZone(identifier: "UTC")
+    formatter.formatOptions = [.withInternetDateTime]
+    let truncated = Date(timeIntervalSince1970: floor(date.timeIntervalSince1970 / 60.0) * 60.0)
+    return formatter.string(from: truncated)
   }
 
   // MARK: - Message Processing & Polling
@@ -196,7 +205,11 @@ class MessageService: ObservableObject {
           print("[MessageService] Failed to decrypt message from \(senderContact.name): \(error)")
         }
       } else {
+        #if DEBUG
         print("[MessageService] Received message from unknown sender (PubKey: \(msg.owner_pubkey))")
+        #else
+        print("[MessageService] Received message from unknown sender")
+        #endif
       }
     }
 
@@ -294,5 +307,111 @@ class MessageService: ObservableObject {
     case .failure:
       return nil
     }
+  }
+}
+
+// MARK: - URLSession Delegate (TLS Pinning)
+
+/// Pins the SPKI hash of the server certificate for the messaging backend host.
+///
+/// Trust policy:
+///  - Pin set non-empty + leaf SPKI matches → accept.
+///  - Pin set non-empty + no match           → REJECT (fail closed).
+///  - Pin set empty in release builds         → REJECT (fail closed).
+///  - Pin set empty in DEBUG builds           → accept after system trust eval
+///    (development convenience; surfaced loudly in the log).
+///
+/// Pin values are sourced from `MessageServerPinning.pinnedSPKIHashes(for:)`
+/// so future commits can drop in the real values without changing this file.
+final class PinnedSessionDelegate: NSObject, URLSessionDelegate {
+  func urlSession(
+    _ session: URLSession,
+    didReceive challenge: URLAuthenticationChallenge,
+    completionHandler: @escaping (URLSession.AuthChallengeDisposition, URLCredential?) -> Void
+  ) {
+    guard challenge.protectionSpace.authenticationMethod == NSURLAuthenticationMethodServerTrust,
+          let serverTrust = challenge.protectionSpace.serverTrust else {
+      completionHandler(.performDefaultHandling, nil)
+      return
+    }
+
+    // Only enforce pinning for our backend host; everything else uses default trust evaluation.
+    guard challenge.protectionSpace.host == MessageService.pinnedHost else {
+      completionHandler(.performDefaultHandling, nil)
+      return
+    }
+
+    // Validate the chain via the system first so we still get hostname / expiry checks.
+    var trustError: CFError?
+    let trusted = SecTrustEvaluateWithError(serverTrust, &trustError)
+    guard trusted else {
+      print("[MessageService][TLS] System trust evaluation failed for \(MessageService.pinnedHost): \(String(describing: trustError))")
+      completionHandler(.cancelAuthenticationChallenge, nil)
+      return
+    }
+
+    let pins = MessageServerPinning.pinnedSPKIHashes(for: MessageService.pinnedHost)
+
+    // Empty pin set: fail closed in production, allow only in DEBUG with a warning.
+    if pins.isEmpty {
+      if MessageServerPinning.allowsUnpinnedFallback {
+        #if DEBUG
+        print(
+          "[MessageService][TLS][WARNING] No SPKI pins configured for \(MessageService.pinnedHost). " +
+          "Falling back to system trust (DEBUG only). Configure pins in MessageServerPinning before shipping."
+        )
+        completionHandler(.useCredential, URLCredential(trust: serverTrust))
+        return
+        #endif
+      }
+      print(
+        "[MessageService][TLS] No SPKI pins configured for \(MessageService.pinnedHost); " +
+        "rejecting connection (release builds require explicit pinning)."
+      )
+      completionHandler(.cancelAuthenticationChallenge, nil)
+      return
+    }
+
+    guard let leaf = MessageService.leafCertificate(from: serverTrust),
+          let spki = MessageService.subjectPublicKeyInfoData(from: leaf) else {
+      print("[MessageService][TLS] Could not extract leaf SPKI for pin verification")
+      completionHandler(.cancelAuthenticationChallenge, nil)
+      return
+    }
+
+    let leafHash = MessageService.sha256Base64(spki)
+    if pins.contains(leafHash) {
+      completionHandler(.useCredential, URLCredential(trust: serverTrust))
+    } else {
+      print("[MessageService][TLS] SPKI pin mismatch for \(MessageService.pinnedHost). Got \(leafHash); expected one of \(pins).")
+      completionHandler(.cancelAuthenticationChallenge, nil)
+    }
+  }
+}
+
+// MARK: - SPKI helpers
+
+extension MessageService {
+  fileprivate static func leafCertificate(from trust: SecTrust) -> SecCertificate? {
+    if let chain = SecTrustCopyCertificateChain(trust) as? [SecCertificate], let leaf = chain.first {
+      return leaf
+    }
+    return nil
+  }
+
+  fileprivate static func subjectPublicKeyInfoData(from certificate: SecCertificate) -> Data? {
+    guard let publicKey = SecCertificateCopyKey(certificate),
+          let data = SecKeyCopyExternalRepresentation(publicKey, nil) as Data? else {
+      return nil
+    }
+    return data
+  }
+
+  fileprivate static func sha256Base64(_ data: Data) -> String {
+    var hash = [UInt8](repeating: 0, count: Int(CC_SHA256_DIGEST_LENGTH))
+    data.withUnsafeBytes {
+      _ = CC_SHA256($0.baseAddress, CC_LONG(data.count), &hash)
+    }
+    return Data(hash).base64EncodedString()
   }
 }

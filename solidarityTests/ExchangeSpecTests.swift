@@ -483,3 +483,118 @@ struct ExchangeSignatureVerificationTests {
     #expect(isValid == false)
   }
 }
+
+// MARK: - DID-bound (v2) exchange signature tests
+
+struct DIDExchangeSignatureTests {
+  /// v1 (nil protocolVersion) MUST be rejected. Otherwise a downgrade attack
+  /// would let captured pre-v2 payloads slip past the new check.
+  @Test func rejectsLegacyV1Payload() async throws {
+    let valid = ProximityManager.verifyDIDExchangeSignature(
+      protocolVersion: nil,
+      direction: .request,
+      requestId: UUID(),
+      senderDID: "did:key:z6Mk",
+      receiverPeerName: "receiver",
+      senderID: "sender",
+      cardPreview: BusinessCard(name: "Alice"),
+      selectedFields: [.name],
+      ephemeralMessage: nil,
+      nonce: "n",
+      timestamp: Date(),
+      signatureBase64: "AAAA",
+      senderJWK: PublicKeyJWK(kty: "EC", crv: "P-256", alg: "ES256", x: "x", y: "y")
+    )
+    #expect(valid == false)
+  }
+
+  /// A JWK that does not match the bytes encoded in the sender's did:key MUST
+  /// be rejected, even if the signature itself happens to verify against the
+  /// JWK.
+  @Test func rejectsJWKThatDoesNotMatchDID() async throws {
+    let bogusDID = "did:key:z6MkpTHR8VNsBxYAAWHut2Geadd9jSwuBV8xRoAnwWsdvktH"
+    let unrelatedJWK = PublicKeyJWK(
+      kty: "EC", crv: "P-256", alg: "ES256",
+      x: "AAAA", y: "BBBB"
+    )
+    let mismatch = ProximityIdentitySigner.jwk(unrelatedJWK, matchesDID: bogusDID)
+    #expect(mismatch == false)
+  }
+
+  /// The local DID returned by `ProximityIdentitySigner.localDID()` must
+  /// produce a JWK that round-trips through `DIDKeyResolver.resolveP256JWK`,
+  /// because that's the same check the receiver performs before trusting any
+  /// signature.
+  @Test func localDIDMatchesResolverEncoding() async throws {
+    guard let did = ProximityIdentitySigner.localDID(),
+      let jwk = ProximityIdentitySigner.localPublicJWK() else {
+      // Tests run in an environment where DID generation can fail (sim quirks);
+      // skip rather than fail in that case so this test stays focused on the
+      // assertion above.
+      return
+    }
+    let matches = ProximityIdentitySigner.jwk(jwk, matchesDID: did)
+    #expect(matches == true)
+  }
+
+  /// Round-trip: signing with the local DID key and verifying against the
+  /// matching public JWK over the same canonical bytes must succeed; verifying
+  /// over different canonical bytes must fail.
+  ///
+  /// Bypass `IdentityCacheStore` so a stale cached descriptor (left behind
+  /// by tests that rotate keychain entries) can't desynchronise the JWK
+  /// from the actual signing key.
+  @Test func didSignatureRoundTrips() async throws {
+    guard case .success(let descriptor) = DIDService().currentDidKey() else {
+      return
+    }
+    let did = descriptor.did
+    let jwk = descriptor.jwk
+    let card = BusinessCard(name: "Alice", title: "Engineer")
+    let nonce = UUID().uuidString
+    let timestamp = Date()
+    let canonical = ProximityExchangeBinding.exchangeCanonicalBytes(
+      protocolVersion: ProximityIdentitySigner.currentProtocolVersion,
+      direction: .request,
+      requestId: UUID(),
+      senderDID: did,
+      receiverPeerName: "receiver",
+      senderID: "sender",
+      cardPreview: card,
+      selectedFields: [.name, .title],
+      ephemeralMessage: "hello",
+      nonce: nonce,
+      timestamp: timestamp
+    )
+    guard let signature = ProximityIdentitySigner.signBase64(canonicalBytes: canonical) else {
+      return
+    }
+    let valid = ProximityIdentitySigner.verify(
+      signatureBase64: signature,
+      canonicalBytes: canonical,
+      jwk: jwk
+    )
+    #expect(valid == true)
+
+    // Tampered canonical bytes (different nonce) must NOT verify.
+    let tampered = ProximityExchangeBinding.exchangeCanonicalBytes(
+      protocolVersion: ProximityIdentitySigner.currentProtocolVersion,
+      direction: .request,
+      requestId: UUID(),
+      senderDID: did,
+      receiverPeerName: "receiver",
+      senderID: "sender",
+      cardPreview: card,
+      selectedFields: [.name, .title],
+      ephemeralMessage: "hello",
+      nonce: UUID().uuidString,
+      timestamp: timestamp
+    )
+    let invalid = ProximityIdentitySigner.verify(
+      signatureBase64: signature,
+      canonicalBytes: tampered,
+      jwk: jwk
+    )
+    #expect(invalid == false)
+  }
+}

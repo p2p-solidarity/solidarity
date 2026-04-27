@@ -32,7 +32,10 @@ final class CloudKitGroupSyncManager: ObservableObject, GroupSyncManagerProtocol
   internal let container = CKContainer.default()
   internal var privateDB: CKDatabase { container.privateCloudDatabase }
   internal var sharedDB: CKDatabase { container.sharedCloudDatabase }
-  // Using Public DB for Invites to make them accessible by token query without prior sharing setup
+  // public: Group invites and discoverable group metadata (name, memberCount, merkleRoot)
+  // live here so a token-only invite link can resolve without prior sharing setup. Messaging
+  // routing fields (sealedRoute/pubKey/signPubKey) ride on membership records here as well —
+  // they are intentionally readable by any active group member to enable Sakura delivery.
   internal var publicDB: CKDatabase { container.publicCloudDatabase }
 
   @Published var groups: [GroupModel] = []
@@ -116,7 +119,14 @@ final class CloudKitGroupSyncManager: ObservableObject, GroupSyncManagerProtocol
 
   private func fetchPublicGroups(userID: CKRecord.ID) async -> [GroupModel] {
     var fetchedGroups: [GroupModel] = []
-    let publicPredicate = NSPredicate(format: "userRecordID == %@", userID)
+    // Restrict to the caller's own active memberships so kicked / left rows do not pull in
+    // stale group records. CloudKit publicDB has no row-level ACL, so the predicate is the
+    // only filter we control on the client.
+    let publicPredicate = NSPredicate(
+      format: "userRecordID == %@ AND status == %@",
+      userID,
+      "active"
+    )
     let publicQuery = CKQuery(recordType: CloudKitRecordType.groupMembership, predicate: publicPredicate)
     do {
       let (matchResults, _) = try await publicDB.records(matching: publicQuery)
@@ -143,8 +153,13 @@ final class CloudKitGroupSyncManager: ObservableObject, GroupSyncManagerProtocol
   private func fetchPrivateAndSharedGroups() async -> [GroupModel] {
     var fetchedGroups: [GroupModel] = []
 
-    // Fetch Owned Private Groups
-    let privateQuery = CKQuery(recordType: CloudKitRecordType.group, predicate: NSPredicate(value: true))
+    // Fetch Owned Private Groups — TRUEPREDICATE is bounded to the caller's own private
+    // zone, so it cannot leak other users' data. Apple recommends an explicit predicate
+    // shape over `NSPredicate(value: true)` for query parser compatibility.
+    let privateQuery = CKQuery(
+      recordType: CloudKitRecordType.group,
+      predicate: NSPredicate(format: "TRUEPREDICATE")
+    )
     do {
       let (matchResults, _) = try await privateDB.records(matching: privateQuery, inZoneWith: customZoneID)
       for result in matchResults {
@@ -159,8 +174,12 @@ final class CloudKitGroupSyncManager: ObservableObject, GroupSyncManagerProtocol
       print("[CloudKitManager] Private fetch failed: \(error)")
     }
 
-    // Fetch Shared Groups (Joined)
-    let sharedQuery = CKQuery(recordType: CloudKitRecordType.group, predicate: NSPredicate(value: true))
+    // Fetch Shared Groups (Joined) — sharedDB is per-share scoped by CloudKit; only
+    // CKShare-accepted records will be returned regardless of predicate.
+    let sharedQuery = CKQuery(
+      recordType: CloudKitRecordType.group,
+      predicate: NSPredicate(format: "TRUEPREDICATE")
+    )
     do {
       let (matchResults, _) = try await sharedDB.records(matching: sharedQuery)
       for result in matchResults {

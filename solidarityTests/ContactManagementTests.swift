@@ -119,7 +119,57 @@ final class ContactManagementTests: XCTestCase {
             XCTFail("Merge confirmation failed: \(error)")
         }
     }
-    
+
+    // MARK: - Trust-status forgery (TASK 27)
+
+    /// A malicious peer cannot promote a previously-unverified contact to
+    /// `.verified` just by stamping `verificationStatus = .verified` on the
+    /// payload it sends. The merge step must recompute trust from local
+    /// crypto state, not copy it off the wire.
+    func testForgedVerifiedStatusFromIncomingPayloadIsRejectedOnMerge() {
+        let merged = ContactRepository.recomputedVerificationStatus(
+            existing: .unverified,
+            incoming: .verified, // attacker-controlled
+            crypto: nil           // no local evidence for this card
+        )
+        XCTAssertEqual(merged, .unverified, "Forged .verified must not promote without local crypto evidence")
+    }
+
+    /// When local crypto evidence DOES exist (we just verified a JWT/ZKP/
+    /// signature on this device), that result wins.
+    func testLocalCryptoEvidenceOverridesAnyIncomingClaim() {
+        XCTAssertEqual(
+            ContactRepository.recomputedVerificationStatus(
+                existing: .unverified,
+                incoming: .verified,
+                crypto: .failed
+            ),
+            .failed,
+            "Local crypto wins over incoming claim"
+        )
+        XCTAssertEqual(
+            ContactRepository.recomputedVerificationStatus(
+                existing: .verified,
+                incoming: .unverified,
+                crypto: .verified
+            ),
+            .verified,
+            "Local crypto wins over incoming claim (positive case)"
+        )
+    }
+
+    /// A previously-verified contact stays verified across merges that come
+    /// without fresh local evidence — we trust the historical local result,
+    /// never the wire-supplied status.
+    func testExistingVerifiedSurvivesMergeWithoutFreshEvidence() {
+        let merged = ContactRepository.recomputedVerificationStatus(
+            existing: .verified,
+            incoming: .failed, // attacker tries to clobber the badge
+            crypto: nil
+        )
+        XCTAssertEqual(merged, .verified, "Existing verified status must not be overwritten by wire data")
+    }
+
     func testUpdateContact() throws {
         // Given
         let businessCard = BusinessCard.sample
@@ -352,16 +402,27 @@ final class ContactManagementTests: XCTestCase {
     }
     
     func testAttributeProof() throws {
-        // Given
-        let businessCard = BusinessCard.sample
-        
+        // Given. Construct fixture data here rather than relying on the
+        // `BusinessCard.sample` Preview-only convenience, which is now empty
+        // by design and no longer supplies attributes that this test asserts on.
+        let businessCard = BusinessCard(
+            name: "Tester",
+            title: "iOS Engineer",
+            company: "Solidarity",
+            email: "tester@example.com",
+            phone: "",
+            socialNetworks: [],
+            skills: [Skill(name: "Swift", category: "Language")],
+            categories: []
+        )
+
         // When
         let result = proofGenerationManager.generateAttributeProof(
             businessCard: businessCard,
             attribute: .skill,
             value: "Swift"
         )
-        
+
         // Then
         switch result {
         case .success(let proof):
@@ -373,24 +434,92 @@ final class ContactManagementTests: XCTestCase {
             XCTFail("Failed to generate attribute proof: \(error)")
         }
     }
+
+    // Cross-anchor: when a verifier supplies a trusted public key, the proof's
+    // embedded `signerPublicKey` MUST match. An attacker who substitutes their
+    // own valid keypair would otherwise pass verification tautologically.
+    func testSelectiveDisclosureProofRejectsForgedSignerWhenAnchored() throws {
+        let businessCard = BusinessCard.sample
+        let proofResult = proofGenerationManager.generateSelectiveDisclosureProof(
+            businessCard: businessCard,
+            selectedFields: [.name],
+            recipientId: "test-recipient"
+        )
+        guard case .success(let proof) = proofResult else {
+            XCTFail("Failed to generate proof")
+            return
+        }
+        let forgedAnchor = Data(repeating: 0xAB, count: 65)
+        let result = proofGenerationManager.verifySelectiveDisclosureProof(
+            proof,
+            expectedBusinessCardId: businessCard.id.uuidString,
+            trustedSignerPublicKey: forgedAnchor
+        )
+        guard case .success(let outcome) = result else {
+            XCTFail("Verification call failed")
+            return
+        }
+        XCTAssertFalse(outcome.isValid)
+        XCTAssertEqual(outcome.reason, "Proof signer key does not match trusted anchor")
+    }
+
+    func testSelectiveDisclosureProofAcceptsMatchingAnchor() throws {
+        let businessCard = BusinessCard.sample
+        let proofResult = proofGenerationManager.generateSelectiveDisclosureProof(
+            businessCard: businessCard,
+            selectedFields: [.name],
+            recipientId: "test-recipient"
+        )
+        guard case .success(let proof) = proofResult else {
+            XCTFail("Failed to generate proof")
+            return
+        }
+        guard let embedded = proof.signerPublicKey else {
+            XCTFail("Generated proof should embed the signer public key")
+            return
+        }
+        let result = proofGenerationManager.verifySelectiveDisclosureProof(
+            proof,
+            expectedBusinessCardId: businessCard.id.uuidString,
+            trustedSignerPublicKey: embedded
+        )
+        guard case .success(let outcome) = result else {
+            XCTFail("Verification call failed")
+            return
+        }
+        XCTAssertTrue(outcome.isValid)
+    }
     
     func testRangeProof() throws {
-        // Given
-        let businessCard = BusinessCard.sample
-        
+        // Given a card with 3 skills (count is what the range proof asserts on).
+        let businessCard = BusinessCard(
+            name: "Tester",
+            title: "iOS Engineer",
+            company: "Solidarity",
+            email: "tester@example.com",
+            phone: "",
+            socialNetworks: [],
+            skills: [
+                Skill(name: "Swift", category: "Language"),
+                Skill(name: "Rust", category: "Language"),
+                Skill(name: "Cryptography", category: "Domain")
+            ],
+            categories: []
+        )
+
         // When
         let result = proofGenerationManager.generateRangeProof(
             businessCard: businessCard,
             attribute: .skill,
             range: 1...5
         )
-        
+
         // Then
         switch result {
         case .success(let proof):
             XCTAssertEqual(proof.businessCardId, businessCard.id.uuidString)
             XCTAssertEqual(proof.attributeType, .skill)
-            XCTAssertTrue(proof.isInRange) // Sample has 3 skills, which is in range 1...5
+            XCTAssertTrue(proof.isInRange) // Card has 3 skills, which is in range 1...5
             XCTAssertFalse(proof.isExpired)
         case .failure(let error):
             XCTFail("Failed to generate range proof: \(error)")

@@ -114,6 +114,11 @@ struct OIDCSection: View {
   @ObservedObject private var semaphoreManager = SemaphoreIdentityManager.shared
   @ObservedObject private var semaphoreGroupManager = SemaphoreGroupManager.shared
 
+  @State private var generatedProof: String?
+  @State private var generationError: String?
+  @State private var isGenerating = false
+  @State private var showingProofSheet = false
+
   var body: some View {
     VStack(alignment: .leading, spacing: 12) {
       Text("Identity Info")
@@ -158,19 +163,112 @@ struct OIDCSection: View {
         if let identity = semaphoreManager.getIdentity(),
           semaphoreGroupManager.indexOf(identity.commitment) != nil
         {
-          Button(action: {
-            // TODO: Generate Proof
-          }) {
-            Label("Generate Group Proof", systemImage: "lock.doc.fill")
-              .frame(maxWidth: .infinity)
+          Button(action: { generateProof() }) {
+            HStack {
+              if isGenerating {
+                ProgressView()
+              }
+              Label("Generate Group Proof", systemImage: "lock.doc.fill")
+            }
+            .frame(maxWidth: .infinity)
           }
           .buttonStyle(ThemedSecondaryButtonStyle())
+          .disabled(isGenerating)
+
+          if let error = generationError {
+            Text(error)
+              .font(.caption)
+              .foregroundColor(Color.Theme.accentRose)
+          }
         }
       }
       .padding(16)
       .frame(maxWidth: .infinity, alignment: .leading)
       .background(Color.Theme.searchBg)
       .overlay(Rectangle().stroke(Color.Theme.divider, lineWidth: 1))
+    }
+    .sheet(isPresented: $showingProofSheet) {
+      if let proof = generatedProof {
+        GroupProofSheet(proofJSON: proof, groupName: group.name)
+      }
+    }
+  }
+
+  private func generateProof() {
+    guard let identity = semaphoreManager.getIdentity() else { return }
+    isGenerating = true
+    generationError = nil
+    Task.detached(priority: .userInitiated) {
+      do {
+        let members = await MainActor.run { semaphoreGroupManager.members }
+        let canonical = Array(Set(members + [identity.commitment])).sorted()
+        guard canonical.count > 1 else {
+          throw SemaphoreIdentityManager.Error.invalidCommitment(
+            "Group needs at least 2 distinct members for a proof"
+          )
+        }
+        let proofJSON = try SemaphoreIdentityManager.shared.generateProof(
+          groupCommitments: canonical,
+          message: GroupCredentialService.groupCredentialSignal(groupId: group.id),
+          scope: GroupCredentialService.groupCredentialScope(groupId: group.id)
+        )
+        await MainActor.run {
+          generatedProof = proofJSON
+          isGenerating = false
+          showingProofSheet = true
+        }
+      } catch {
+        await MainActor.run {
+          generationError = error.localizedDescription
+          isGenerating = false
+        }
+      }
+    }
+  }
+}
+
+// MARK: - Group Proof Sheet
+
+struct GroupProofSheet: View {
+  let proofJSON: String
+  let groupName: String
+  @Environment(\.dismiss) private var dismiss
+
+  var body: some View {
+    NavigationStack {
+      ScrollView {
+        VStack(alignment: .leading, spacing: 12) {
+          Text("Group Membership Proof")
+            .font(.system(size: 12, weight: .bold, design: .monospaced))
+            .foregroundColor(Color.Theme.textSecondary)
+          Text(groupName)
+            .font(.headline)
+
+          Text(proofJSON)
+            .font(.system(.caption, design: .monospaced))
+            .textSelection(.enabled)
+            .padding(12)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(Color.Theme.searchBg)
+            .overlay(Rectangle().stroke(Color.Theme.divider, lineWidth: 1))
+
+          Button {
+            UIPasteboard.general.string = proofJSON
+          } label: {
+            Label("Copy Proof", systemImage: "doc.on.doc")
+              .frame(maxWidth: .infinity)
+          }
+          .buttonStyle(ThemedSecondaryButtonStyle())
+        }
+        .padding(16)
+      }
+      .navigationTitle("Proof")
+      .navigationBarTitleDisplayMode(.inline)
+      .toolbar {
+        ToolbarItem(placement: .navigationBarTrailing) {
+          Button("Done") { dismiss() }
+        }
+      }
     }
   }
 }

@@ -34,6 +34,12 @@ final class KeychainService {
     static var deviceInMemoryKeys: [KeyAlias: SecKey] = [:]
   #endif
 
+  /// Opt-in switch for ephemeral (process-lifetime) key fallback when all
+  /// Keychain writes fail on a real device. Default is `false` — production
+  /// must surface a real error rather than silently rotate the user's DID on
+  /// the next launch. Tests or diagnostic tools may flip this temporarily.
+  static var allowEphemeralInMemoryFallback: Bool = false
+
   let alias: KeyAlias
 
   var keyTag: Data
@@ -134,7 +140,10 @@ final class KeychainService {
     }
 
     if let reason = reason {
-      context.touchIDAuthenticationAllowableReuseDuration = 5
+      // No reuse window: every key access re-prompts. Closes the 5-second
+      // TOCTOU gap where a previously authorized session could be reused for
+      // an unrelated signing operation.
+      context.touchIDAuthenticationAllowableReuseDuration = 0
       context.setLocalizedReason(reason)
     }
 
@@ -199,6 +208,13 @@ final class KeychainService {
     }
 
     clearInMemoryKey()
+
+    // Cached DID descriptor / JWK becomes invalid the moment the underlying
+    // key rotates. Clear it here so any caller of `resetSigningKey()` —
+    // present or future — can't accidentally leave stale cache entries that
+    // verify against the *old* key. Done before regeneration so a partial
+    // failure path can't leave cache pointing at a now-deleted key.
+    IdentityCacheStore().clearDescriptorSync()
 
     // Then create a new one
     switch ensureSigningKey() {
@@ -296,7 +312,8 @@ final class KeychainService {
       var authQuery = basicQuery
       let authContext = context ?? {
         let ctx = LAContext()
-        ctx.touchIDAuthenticationAllowableReuseDuration = 5
+        // No reuse window — every signing operation re-prompts.
+        ctx.touchIDAuthenticationAllowableReuseDuration = 0
         // Biometric-first: omit the "Use Passcode" fallback label unless we
         // can't enroll biometrics on this device.
         if !ctx.canEvaluatePolicy(.deviceOwnerAuthenticationWithBiometrics, error: nil) {

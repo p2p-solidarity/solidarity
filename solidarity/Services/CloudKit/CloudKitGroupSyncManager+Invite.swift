@@ -55,6 +55,9 @@ extension CloudKitGroupSyncManager {
     }
 
     // 2. Create new token if none exists
+    // public: invite tokens are stored in the public DB so any user with the token
+    // string can join the public group. Tokens are gated by the `isActive == 1`
+    // predicate at lookup, and `revokeInviteToken` flips this flag to disable.
     let token = UUID().uuidString
     let inviteRecord = CKRecord(recordType: CloudKitRecordType.groupInvite)
     inviteRecord["token"] = token

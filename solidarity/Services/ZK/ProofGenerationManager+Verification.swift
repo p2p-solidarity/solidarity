@@ -10,9 +10,19 @@ extension ProofGenerationManager {
 
   // MARK: - Selective Disclosure Verification
 
+  /// Verify a selective-disclosure proof.
+  ///
+  /// `trustedSignerPublicKey` is the caller's independently-known public key
+  /// for the expected signer (e.g. cached from a prior contact handshake).
+  /// When non-nil, it MUST match the embedded `proof.signerPublicKey` —
+  /// otherwise the proof is rejected as not coming from the trusted party.
+  /// When nil, the call provides only structural integrity (signature is
+  /// internally consistent) and not authenticity — the caller is responsible
+  /// for any out-of-band trust check (e.g. issuer commitment).
   func verifySelectiveDisclosureProof(
     _ proof: SelectiveDisclosureProof,
-    expectedBusinessCardId: String?
+    expectedBusinessCardId: String?,
+    trustedSignerPublicKey: Data? = nil
   ) -> CardResult<ProofVerificationResult> {
 
     // Check expiration
@@ -37,6 +47,22 @@ extension ProofGenerationManager {
       )
     }
 
+    // Cross-anchor check: when an external trust anchor was supplied, the
+    // embedded key must match it. Without this guard, an attacker could
+    // simply embed their own valid keypair and pass verification (the TODO
+    // that this fix closes).
+    if let trustedKey = trustedSignerPublicKey {
+      guard let embedded = proof.signerPublicKey, embedded == trustedKey else {
+        return .success(
+          ProofVerificationResult(
+            isValid: false,
+            reason: "Proof signer key does not match trusted anchor",
+            verifiedAt: Date()
+          )
+        )
+      }
+    }
+
     // Verify signature using the same deterministic payload as signing
     let proofData = canonicalProofSigningData(
       businessCardId: proof.businessCardId,
@@ -55,7 +81,11 @@ extension ProofGenerationManager {
       )
     }
 
-    let signatureResult = verifyProofSignature(proofDataToVerify, signature: proof.signature)
+    let signatureResult = verifyProofSignature(
+      proofDataToVerify,
+      signature: proof.signature,
+      signerPublicKey: proof.signerPublicKey
+    )
 
     switch signatureResult {
     case .success(let isValidSignature):
@@ -127,6 +157,7 @@ extension ProofGenerationManager {
       }
 
       let signatureResult = signProofData(proofDataToSign)
+      let signerKey = signerPublicKeyData()
 
       switch signatureResult {
       case .success(let signature):
@@ -137,6 +168,7 @@ extension ProofGenerationManager {
             attributeType: attribute,
             commitment: Data(commitment),
             signature: signature,
+            signerPublicKey: signerKey,
             createdAt: Date(),
             expiresAt: Calendar.current.date(byAdding: .hour, value: 12, to: Date()) ?? Date()
           )
@@ -151,10 +183,13 @@ extension ProofGenerationManager {
     }
   }
 
+  /// Verify an attribute proof. See `verifySelectiveDisclosureProof` for the
+  /// trust-anchor semantics of `trustedSignerPublicKey`.
   func verifyAttributeProof(
     _ proof: AttributeProof,
     expectedAttribute: AttributeType,
-    expectedValue: String
+    expectedValue: String,
+    trustedSignerPublicKey: Data? = nil
   ) -> CardResult<ProofVerificationResult> {
 
     // Check expiration
@@ -179,6 +214,18 @@ extension ProofGenerationManager {
       )
     }
 
+    if let trustedKey = trustedSignerPublicKey {
+      guard let embedded = proof.signerPublicKey, embedded == trustedKey else {
+        return .success(
+          ProofVerificationResult(
+            isValid: false,
+            reason: "Proof signer key does not match trusted anchor",
+            verifiedAt: Date()
+          )
+        )
+      }
+    }
+
     // Verify signature
     let proofData = try? JSONEncoder()
       .encode(
@@ -200,7 +247,11 @@ extension ProofGenerationManager {
       )
     }
 
-    let signatureResult = verifyProofSignature(proofDataToVerify, signature: proof.signature)
+    let signatureResult = verifyProofSignature(
+      proofDataToVerify,
+      signature: proof.signature,
+      signerPublicKey: proof.signerPublicKey
+    )
 
     switch signatureResult {
     case .success(let isValidSignature):
@@ -261,6 +312,7 @@ extension ProofGenerationManager {
       }
 
       let signatureResult = signProofData(proofDataToSign)
+      let signerKey = signerPublicKeyData()
 
       switch signatureResult {
       case .success(let signature):
@@ -273,6 +325,7 @@ extension ProofGenerationManager {
             isInRange: isInRange,
             commitment: Data(commitment),
             signature: signature,
+            signerPublicKey: signerKey,
             createdAt: Date(),
             expiresAt: Calendar.current.date(byAdding: .hour, value: 6, to: Date()) ?? Date()
           )
@@ -294,19 +347,25 @@ extension ProofGenerationManager {
     attribute: AttributeType,
     value: String
   ) -> Bool {
-    // Compare by first 3 characters to avoid leaking full data and to simplify checks
-    let target = String(value.prefix(3)).lowercased()
+    // v2: compare the full normalized value (not a 3-char prefix). Prefix
+    // matching gave attackers a tiny search space and made commitments
+    // brute-forceable. We now case-fold and trim, but otherwise match the
+    // entire field.
+    let target = value.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+    func norm(_ str: String?) -> String {
+      (str ?? "").trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+    }
     switch attribute {
     case .skill:
-      return businessCard.skills.contains { String($0.name.prefix(3)).lowercased() == target }
+      return businessCard.skills.contains { norm($0.name) == target }
     case .company:
-      return String((businessCard.company ?? "").prefix(3)).lowercased() == target
+      return norm(businessCard.company) == target
     case .title:
-      return String((businessCard.title ?? "").prefix(3)).lowercased() == target
+      return norm(businessCard.title) == target
     case .domain:
       if let email = businessCard.email {
         let domain = email.components(separatedBy: "@").last?.lowercased()
-        return String((domain ?? "").prefix(3)).lowercased() == target
+        return norm(domain) == target
       }
       return false
     }

@@ -25,7 +25,16 @@ struct ProximitySharingPayload: Codable {
   // Secure Messaging Fields (Optional for backward compatibility)
   let sealedRoute: String?
   let pubKey: String?  // Encryption Key (X25519)
-  let signPubKey: String?  // Identity Key (Ed25519)
+  let signPubKey: String?  // Identity Key (Ed25519, messaging-only)
+
+  // v2 DID-bound exchange signing fields. v1 (nil protocolVersion / nil senderDID) is
+  // rejected by the receiver because it lacks DID-anchored authenticity.
+  let protocolVersion: Int?
+  let senderDID: String?
+  let senderJWK: PublicKeyJWK?
+  let receiverPeerName: String?
+  let nonce: String?
+  let didSignature: String?
 
   init(
     card: BusinessCard,
@@ -41,7 +50,13 @@ struct ProximitySharingPayload: Codable {
     payloadSignature: String? = nil,
     sealedRoute: String?,
     pubKey: String?,
-    signPubKey: String?
+    signPubKey: String?,
+    protocolVersion: Int? = nil,
+    senderDID: String? = nil,
+    senderJWK: PublicKeyJWK? = nil,
+    receiverPeerName: String? = nil,
+    nonce: String? = nil,
+    didSignature: String? = nil
   ) {
     self.card = card
     self.sharingLevel = sharingLevel
@@ -57,6 +72,12 @@ struct ProximitySharingPayload: Codable {
     self.sealedRoute = sealedRoute
     self.pubKey = pubKey
     self.signPubKey = signPubKey
+    self.protocolVersion = protocolVersion
+    self.senderDID = senderDID
+    self.senderJWK = senderJWK
+    self.receiverPeerName = receiverPeerName
+    self.nonce = nonce
+    self.didSignature = didSignature
   }
 }
 
@@ -70,6 +91,14 @@ struct ExchangeRequestPayload: Codable {
   let myExchangeSignature: String
   let signPubKey: String?
 
+  // v2 DID-bound exchange signing fields. v1 payloads (nil protocolVersion) are rejected.
+  let protocolVersion: Int?
+  let senderDID: String?
+  let senderJWK: PublicKeyJWK?
+  let receiverPeerName: String?
+  let nonce: String?
+  let didSignature: String?
+
   init(
     requestId: UUID,
     senderID: String,
@@ -78,7 +107,13 @@ struct ExchangeRequestPayload: Codable {
     cardPreview: BusinessCard,
     myEphemeralMessage: String?,
     myExchangeSignature: String,
-    signPubKey: String? = nil
+    signPubKey: String? = nil,
+    protocolVersion: Int? = nil,
+    senderDID: String? = nil,
+    senderJWK: PublicKeyJWK? = nil,
+    receiverPeerName: String? = nil,
+    nonce: String? = nil,
+    didSignature: String? = nil
   ) {
     self.requestId = requestId
     self.senderID = senderID
@@ -88,6 +123,12 @@ struct ExchangeRequestPayload: Codable {
     self.myEphemeralMessage = myEphemeralMessage
     self.myExchangeSignature = myExchangeSignature
     self.signPubKey = signPubKey
+    self.protocolVersion = protocolVersion
+    self.senderDID = senderDID
+    self.senderJWK = senderJWK
+    self.receiverPeerName = receiverPeerName
+    self.nonce = nonce
+    self.didSignature = didSignature
   }
 }
 
@@ -104,21 +145,133 @@ struct ExchangeAcceptPayload: Codable {
   let sealedRoute: String?
   let pubKey: String?
   let signPubKey: String?
+
+  // v2 DID-bound exchange signing fields. v1 payloads (nil protocolVersion) are rejected.
+  let protocolVersion: Int?
+  let senderDID: String?
+  let senderJWK: PublicKeyJWK?
+  let receiverPeerName: String?
+  let nonce: String?
+  let didSignature: String?
+
+  init(
+    requestId: UUID,
+    senderID: String,
+    timestamp: Date,
+    selectedFields: [BusinessCardField],
+    cardPreview: BusinessCard,
+    theirEphemeralMessage: String?,
+    exchangeSignature: String,
+    sealedRoute: String?,
+    pubKey: String?,
+    signPubKey: String?,
+    protocolVersion: Int? = nil,
+    senderDID: String? = nil,
+    senderJWK: PublicKeyJWK? = nil,
+    receiverPeerName: String? = nil,
+    nonce: String? = nil,
+    didSignature: String? = nil
+  ) {
+    self.requestId = requestId
+    self.senderID = senderID
+    self.timestamp = timestamp
+    self.selectedFields = selectedFields
+    self.cardPreview = cardPreview
+    self.theirEphemeralMessage = theirEphemeralMessage
+    self.exchangeSignature = exchangeSignature
+    self.sealedRoute = sealedRoute
+    self.pubKey = pubKey
+    self.signPubKey = signPubKey
+    self.protocolVersion = protocolVersion
+    self.senderDID = senderDID
+    self.senderJWK = senderJWK
+    self.receiverPeerName = receiverPeerName
+    self.nonce = nonce
+    self.didSignature = didSignature
+  }
 }
 
-/// Payload for inviting a nearby peer to join a Semaphore group
+/// Payload for inviting a nearby peer to join a Semaphore group.
+/// `inviterPublicKey` is the Ed25519 raw public key bytes (base64 in transit when needed).
+/// `inviterSignature` covers the canonical bytes returned by `canonicalBytes()`.
+/// Receivers MUST verify both the signature and that `timestamp` is within ``Self.maxAge``.
 struct GroupInvitePayload: Codable {
+  static let maxAge: TimeInterval = 5 * 60
+
   let groupId: UUID
   let groupName: String
   let groupRoot: String?
   let inviterName: String
   let timestamp: Date
+  let inviterPublicKey: Data
+  let inviterSignature: Data
+
+  /// Deterministic byte representation used to sign / verify the invite.
+  /// Format: `groupId|groupName|groupRoot|ISO8601(timestamp)`. Empty `groupRoot`
+  /// is encoded as the empty string.
+  static func canonicalBytes(
+    groupId: UUID,
+    groupName: String,
+    groupRoot: String?,
+    timestamp: Date
+  ) -> Data {
+    let formatter = ISO8601DateFormatter()
+    formatter.timeZone = TimeZone(identifier: "UTC")
+    formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+    let stamp = formatter.string(from: timestamp)
+    let canonical = [
+      groupId.uuidString,
+      groupName,
+      groupRoot ?? "",
+      stamp
+    ].joined(separator: "|")
+    return Data(canonical.utf8)
+  }
+
+  func canonicalBytes() -> Data {
+    Self.canonicalBytes(groupId: groupId, groupName: groupName, groupRoot: groupRoot, timestamp: timestamp)
+  }
 }
 
-/// Payload for responding to a group invite with the recipient's commitment
+/// Payload for responding to a group invite with the recipient's commitment.
+/// Signed with the joiner's Ed25519 identity key over the canonical join bytes
+/// to bind the commitment to a specific identity. Unsigned join payloads are
+/// rejected by ``ProximityManager+SessionDelegate``.
 struct GroupJoinResponsePayload: Codable {
+  static let maxAge: TimeInterval = 5 * 60
+
   let groupId: UUID
   let memberCommitment: String
   let memberName: String
   let timestamp: Date
+  let memberPublicKey: Data?
+  let memberSignature: Data?
+
+  static func canonicalBytes(
+    groupId: UUID,
+    memberCommitment: String,
+    memberName: String,
+    timestamp: Date
+  ) -> Data {
+    let formatter = ISO8601DateFormatter()
+    formatter.timeZone = TimeZone(identifier: "UTC")
+    formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+    let stamp = formatter.string(from: timestamp)
+    let canonical = [
+      groupId.uuidString,
+      memberCommitment,
+      memberName,
+      stamp
+    ].joined(separator: "|")
+    return Data(canonical.utf8)
+  }
+
+  func canonicalBytes() -> Data {
+    Self.canonicalBytes(
+      groupId: groupId,
+      memberCommitment: memberCommitment,
+      memberName: memberName,
+      timestamp: timestamp
+    )
+  }
 }

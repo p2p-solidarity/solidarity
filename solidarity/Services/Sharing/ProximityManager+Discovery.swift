@@ -62,7 +62,11 @@ extension ProximityManager {
     isAdvertising = true
     updateConnectionStatus()
 
+    #if DEBUG
     print("Started advertising business card: \(card.name)")
+    #else
+    print("Started advertising business card")
+    #endif
   }
 
   /// Start advertising identity-only (no business card), so peers can still find and invite

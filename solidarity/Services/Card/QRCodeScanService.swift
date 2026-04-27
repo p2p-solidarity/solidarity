@@ -114,7 +114,20 @@ final class QRCodeScanService: NSObject {
 
   // MARK: - Processing
 
+  /// Upper bound on a scanned QR payload. The QR Code spec maxes out around
+  /// 4 KB for alphanumeric content, so 64 KB leaves ample headroom while
+  /// preventing pathological JSON blobs (zip-bombed compressed envelopes,
+  /// adversarial input from `request_uri` injection, etc.) from being
+  /// decoded inline. Matches the ScanRouter cap so both code paths reject
+  /// the same shape.
+  static let maxQRPayloadBytes = 64 * 1024
+
   func process(scannedString data: String) {
+    guard data.utf8.count <= Self.maxQRPayloadBytes else {
+      emitOutcome(.failure(.sharingError("QR payload exceeds size limit")))
+      return
+    }
+
     let route = scanRouter.route(for: data)
     switch route {
     case .oid4vpRequest(let request):
