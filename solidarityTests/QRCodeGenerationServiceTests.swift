@@ -10,7 +10,11 @@ final class QRCodeGenerationServiceTests: XCTestCase {
     UserDefaults.standard.removeObject(forKey: ageKey)
   }
 
-  func testPlaintextEnvelopeIncludesEnabledProofClaims() {
+  /// Plaintext envelopes intentionally drop proof claims even when the user
+  /// has them toggled on, because the plaintext payload has no
+  /// cryptographic artifact to back the claim. Only signed/zk envelopes
+  /// can advertise verified claims.
+  func testPlaintextEnvelopeNeverIncludesProofClaims() {
     UserDefaults.standard.set(true, forKey: humanKey)
     UserDefaults.standard.set(true, forKey: ageKey)
 
@@ -23,8 +27,10 @@ final class QRCodeGenerationServiceTests: XCTestCase {
       return
     }
 
-    let claims = Set(envelope.plaintext?.proofClaims ?? [])
-    XCTAssertEqual(claims, Set(["is_human", "age_over_18"]))
+    XCTAssertTrue(
+      (envelope.plaintext?.proofClaims ?? []).isEmpty,
+      "Plaintext envelope must not advertise proof claims; only signed/zk paths may."
+    )
   }
 
   func testPlaintextEnvelopeOmitsProofClaimsWhenDisabled() {
