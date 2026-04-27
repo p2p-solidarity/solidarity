@@ -62,9 +62,10 @@ final class GroupInviteSignerTests: XCTestCase {
   }
 
   func testKnownContactDoesNotMatchOnEncryptionKey() {
-    // Defensive: signPubKey (Ed25519 identity) is the trust anchor, NOT pubKey
-    // (X25519 encryption). A contact whose pubKey accidentally collides with
-    // an attacker's signature key must not be treated as "known".
+    // Trust anchor is signPubKey (Ed25519 identity) ONLY. A contact whose
+    // pubKey (X25519 encryption) collides with the queried bytes must NOT
+    // resolve, otherwise an attacker who learns a contact's encryption key
+    // could impersonate them on group invites.
     let attacker = Curve25519.Signing.PrivateKey()
     let attackerPubKey = attacker.publicKey.rawRepresentation
 
@@ -78,13 +79,11 @@ final class GroupInviteSignerTests: XCTestCase {
     )
     XCTAssertNoThrow(try storeContact(contact))
 
-    // ContactRepository.getContact(pubKey:) accepts either key for lookup, so
-    // the result here SHOULD still be a hit — knownContact only filters on
-    // identity, but the repository treats either key as a query handle. The
-    // current trust contract is "any persisted contact key" — encode that
-    // expectation explicitly so any tightening shows up as a test diff.
     let resolved = GroupInviteSigner.knownContact(matchingPublicKey: attackerPubKey)
-    XCTAssertNotNil(resolved, "Repository lookup uses either pubKey or signPubKey today; tighten the helper if this is undesirable.")
+    XCTAssertNil(
+      resolved,
+      "Encryption key collision must not satisfy the identity-key trust anchor."
+    )
   }
 
   // MARK: - Helpers
