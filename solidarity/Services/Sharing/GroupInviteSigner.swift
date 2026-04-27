@@ -51,14 +51,20 @@ enum GroupInviteSigner {
   /// and means nothing on its own. Only keys that survived a real proximity
   /// card exchange are stored here, so a hit here is the trust anchor.
   ///
+  /// Strict identity match: only `signPubKey` (Curve25519 Ed25519 identity)
+  /// counts. The encryption key (`pubKey`, X25519) is intentionally excluded —
+  /// it has different cryptographic semantics and leaks no signing authority,
+  /// so accepting it here would let an attacker who knows a contact's
+  /// encryption key impersonate them on group invites.
+  ///
   /// Comparison is on base64-encoded raw bytes to match how
   /// `ContactRepository.signPubKey` is persisted.
   @MainActor
   static func knownContact(matchingPublicKey publicKey: Data) -> Contact? {
     let pubKeyB64 = publicKey.base64EncodedString()
-    if case .success(let contact) = ContactRepository.shared.getContact(pubKey: pubKeyB64) {
-      return contact
+    guard case .success(let contacts) = ContactRepository.shared.getAllContacts() else {
+      return nil
     }
-    return nil
+    return contacts.first { $0.signPubKey == pubKeyB64 }
   }
 }
