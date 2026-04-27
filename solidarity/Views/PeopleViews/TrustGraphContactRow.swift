@@ -27,6 +27,18 @@ struct TrustGraphContactRow: View {
     return raw.isEmpty ? nil : raw
   }
 
+  /// Secondary line: "Company • Title" (Figma 723:2202) with note fallback
+  /// for imported contacts that lack business-card metadata.
+  private var subtitleText: String? {
+    let parts = [contact.company, contact.title]
+      .compactMap { $0?.trimmingCharacters(in: .whitespacesAndNewlines) }
+      .filter { !$0.isEmpty }
+    if !parts.isEmpty {
+      return parts.joined(separator: " • ")
+    }
+    return noteText
+  }
+
   /// Origin pill shown at the bottom of the row.
   private var sourceLabel: String {
     let normalized = contact.source
@@ -52,7 +64,7 @@ struct TrustGraphContactRow: View {
       HStack(alignment: .top, spacing: 16) {
         avatar
 
-        VStack(alignment: .leading, spacing: 6) {
+        VStack(alignment: .leading, spacing: 8) {
           HStack(alignment: .top, spacing: 12) {
             VStack(alignment: .leading, spacing: 2) {
               Text(contact.name)
@@ -60,8 +72,8 @@ struct TrustGraphContactRow: View {
                 .foregroundColor(Color.Theme.textPrimary)
                 .lineLimit(1)
 
-              if let note = noteText {
-                Text(note)
+              if let subtitle = subtitleText {
+                Text(subtitle)
                   .font(.system(size: 14))
                   .foregroundColor(Color.Theme.textSecondary)
                   .lineLimit(1)
@@ -154,15 +166,14 @@ struct TrustGraphContactRow: View {
   }
 
   private var dateColumn: some View {
-    VStack(alignment: .trailing, spacing: 4) {
-      HStack(spacing: 4) {
-        Circle()
-          .fill(isVerified ? Color.Theme.terminalGreen : Color.Theme.divider)
-          .frame(width: 10, height: 10)
-        Text(Self.dateFormatter.string(from: contact.receivedAt))
-          .font(.system(size: 10))
-          .foregroundColor(Color.Theme.textSecondary)
-      }
+    HStack(spacing: 4) {
+      Circle()
+        .fill(isVerified ? Color.Theme.terminalGreen : Color.Theme.divider)
+        .frame(width: 8, height: 8)
+        .frame(width: 16, height: 16)
+      Text(Self.dateFormatter.string(from: contact.receivedAt))
+        .font(.system(size: 10))
+        .foregroundColor(Color.Theme.textSecondary)
     }
   }
 }
