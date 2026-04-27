@@ -101,8 +101,18 @@ extension ProximityManager: MCSessionDelegate {
       print("[ProximityManager] Rejecting group invite with invalid signature from \(peerID.displayName)")
       return true
     }
+    // Bind the embedded `inviterPublicKey` to a previously-trusted contact.
+    // The crypto check above only proves "whoever holds this key signed it"
+    // — it tells us nothing about identity unless the key was already
+    // stored from a prior proximity card exchange. Without this lookup
+    // any peer could generate a fresh keypair, embed it, sign with it,
+    // and pass verification. We require an out-of-band trust anchor.
     DispatchQueue.main.async { [weak self] in
       guard let self = self else { return }
+      guard GroupInviteSigner.knownContact(matchingPublicKey: invite.inviterPublicKey) != nil else {
+        print("[ProximityManager] Rejecting group invite from \(peerID.displayName) — inviter key not bound to any known contact (exchange cards first)")
+        return
+      }
       let gm = SemaphoreGroupManager.shared
       gm.ensureGroupFromInvite(id: invite.groupId, name: invite.groupName, root: invite.groupRoot)
       self.pendingGroupInvite = (invite, peerID)
@@ -137,8 +147,14 @@ extension ProximityManager: MCSessionDelegate {
       print("[ProximityManager] Rejecting group join response with invalid signature")
       return true
     }
+    // Same trust binding as `handleGroupInvitePayload`: the signature must
+    // be from a key that previously survived a proximity card exchange.
     DispatchQueue.main.async { [weak self] in
       guard let self = self else { return }
+      guard GroupInviteSigner.knownContact(matchingPublicKey: publicKey) != nil else {
+        print("[ProximityManager] Rejecting group join response — member key not bound to any known contact")
+        return
+      }
       let gm = SemaphoreGroupManager.shared
       if let idx = gm.allGroups.firstIndex(where: { $0.id == join.groupId }) {
         gm.selectGroup(gm.allGroups[idx].id)
