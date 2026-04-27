@@ -402,8 +402,19 @@ final class ContactManagementTests: XCTestCase {
     }
     
     func testAttributeProof() throws {
-        // Given
-        let businessCard = BusinessCard.sample
+        // Given. Construct fixture data here rather than relying on the
+        // `BusinessCard.sample` Preview-only convenience, which is now empty
+        // by design and no longer supplies attributes that this test asserts on.
+        let businessCard = BusinessCard(
+            name: "Tester",
+            title: "iOS Engineer",
+            company: "Solidarity",
+            email: "tester@example.com",
+            phone: "",
+            socialNetworks: [],
+            skills: [Skill(name: "Swift", category: "Language")],
+            categories: []
+        )
 
         // When
         let result = proofGenerationManager.generateAttributeProof(
@@ -480,22 +491,35 @@ final class ContactManagementTests: XCTestCase {
     }
     
     func testRangeProof() throws {
-        // Given
-        let businessCard = BusinessCard.sample
-        
+        // Given a card with 3 skills (count is what the range proof asserts on).
+        let businessCard = BusinessCard(
+            name: "Tester",
+            title: "iOS Engineer",
+            company: "Solidarity",
+            email: "tester@example.com",
+            phone: "",
+            socialNetworks: [],
+            skills: [
+                Skill(name: "Swift", category: "Language"),
+                Skill(name: "Rust", category: "Language"),
+                Skill(name: "Cryptography", category: "Domain")
+            ],
+            categories: []
+        )
+
         // When
         let result = proofGenerationManager.generateRangeProof(
             businessCard: businessCard,
             attribute: .skill,
             range: 1...5
         )
-        
+
         // Then
         switch result {
         case .success(let proof):
             XCTAssertEqual(proof.businessCardId, businessCard.id.uuidString)
             XCTAssertEqual(proof.attributeType, .skill)
-            XCTAssertTrue(proof.isInRange) // Sample has 3 skills, which is in range 1...5
+            XCTAssertTrue(proof.isInRange) // Card has 3 skills, which is in range 1...5
             XCTAssertFalse(proof.isExpired)
         case .failure(let error):
             XCTFail("Failed to generate range proof: \(error)")
