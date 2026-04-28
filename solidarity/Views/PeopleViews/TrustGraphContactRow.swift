@@ -1,7 +1,8 @@
 import SwiftUI
 
-/// A single contact row in the People list. Matches the Pencil design:
-/// round avatar | name + subtitle + tag bubble | date column with status dot.
+/// A single contact row in the People list. Mirrors Figma `Frame 1597880336`
+/// (723:2195): round avatar | name + subtitle + meeting-context tag | radar
+/// icon + ISO date column.
 struct TrustGraphContactRow: View {
   let contact: ContactEntity
 
@@ -11,15 +12,12 @@ struct TrustGraphContactRow: View {
     return f
   }()
 
-  private var hasVerifiedExchange: Bool {
-    contact.exchangeSignature != nil && contact.myExchangeSignature != nil
-  }
-
   private var isVerified: Bool {
     contact.verificationStatus == VerificationStatus.verified.rawValue
   }
 
-  /// One-line note used as the row's secondary line.
+  /// One-line note used as the row's secondary line when no business-card
+  /// metadata is present (typical for VCF/phone-imported contacts).
   private var noteText: String? {
     let raw = contact.notes?
       .trimmingCharacters(in: .whitespacesAndNewlines)
@@ -39,28 +37,36 @@ struct TrustGraphContactRow: View {
     return noteText
   }
 
-  /// Origin pill shown at the bottom of the row.
-  private var sourceLabel: String {
+  /// Single meeting-context tag (Figma 723:2211). Prefers a user-applied
+  /// tag (e.g. "在 DID Workshop 認識的") and falls back to a source-derived
+  /// default so every row has consistent bottom-line context.
+  private var contextTag: String? {
+    if let custom = contact.tags
+      .compactMap({ $0.trimmingCharacters(in: .whitespacesAndNewlines) })
+      .first(where: { !$0.isEmpty })
+    {
+      return custom
+    }
     let normalized = contact.source
       .trimmingCharacters(in: .whitespacesAndNewlines)
       .lowercased()
-    if normalized == "imported" { return "import" }
-    if normalized == ContactSource.manual.rawValue.lowercased() { return "manual" }
-    // qrCode / proximity / appClip / airdrop — all face-to-face style swaps.
-    return "exchanged"
-  }
-
-  /// True when either party left an ichigo-ichie message during the swap.
-  private var hasSakura: Bool {
-    let mine = contact.myEphemeralMessage?
-      .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-    let theirs = contact.theirEphemeralMessage?
-      .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-    return !mine.isEmpty || !theirs.isEmpty
+    switch normalized {
+    case "imported":
+      return "#手機通訊錄"
+    case ContactSource.manual.rawValue.lowercased():
+      return "手動新增"
+    case ContactSource.qrCode.rawValue.lowercased(),
+      ContactSource.proximity.rawValue.lowercased(),
+      ContactSource.appClip.rawValue.lowercased(),
+      ContactSource.airdrop.rawValue.lowercased():
+      return "面對面交換"
+    default:
+      return nil
+    }
   }
 
   var body: some View {
-    VStack(alignment: .leading, spacing: 0) {
+    VStack(spacing: 0) {
       HStack(alignment: .top, spacing: 16) {
         avatar
 
@@ -86,11 +92,14 @@ struct TrustGraphContactRow: View {
             dateColumn
           }
 
-          HStack(spacing: 6) {
-            sourcePill
-            if hasSakura {
-              sakuraPill
-            }
+          if let contextTag {
+            Text(contextTag)
+              .font(.system(size: 10))
+              .foregroundColor(Color.Theme.textSecondary)
+              .padding(.horizontal, 4)
+              .padding(.vertical, 2)
+              .background(Color.Theme.searchBg)
+              .clipShape(RoundedRectangle(cornerRadius: 2, style: .continuous))
           }
         }
       }
@@ -103,34 +112,10 @@ struct TrustGraphContactRow: View {
     .contentShape(Rectangle())
   }
 
-  // MARK: - Pills
-
-  private var sourcePill: some View {
-    Text(sourceLabel)
-      .font(.system(size: 10))
-      .foregroundColor(Color.Theme.textSecondary)
-      .padding(.horizontal, 4)
-      .padding(.vertical, 2)
-      .background(Color.Theme.searchBg)
-      .clipShape(RoundedRectangle(cornerRadius: 2, style: .continuous))
-  }
-
-  private var sakuraPill: some View {
-    Text("sakura")
-      .font(.system(size: 10))
-      .foregroundColor(Color.Theme.accentRose)
-      .padding(.horizontal, 4)
-      .padding(.vertical, 2)
-      .background(Color.Theme.accentRose.opacity(0.12))
-      .clipShape(RoundedRectangle(cornerRadius: 2, style: .continuous))
-  }
-
   // MARK: - Subviews
 
   /// Each contact gets a stable solidarity-animal avatar derived from its id.
-  /// We never mutate `ContactEntity` for this — it's purely a display fallback
-  /// until real avatar support lands. Verified contacts get a small green
-  /// `checkmark.seal.fill` badge in the bottom-right corner.
+  /// Verified contacts get a small green `checkmark.seal.fill` badge.
   private var avatar: some View {
     let animal = AnimalCharacter.default(forId: contact.id)
     return ZStack {
@@ -167,14 +152,40 @@ struct TrustGraphContactRow: View {
 
   private var dateColumn: some View {
     HStack(spacing: 4) {
-      Circle()
-        .fill(isVerified ? Color.Theme.terminalGreen : Color.Theme.divider)
-        .frame(width: 8, height: 8)
+      RadarTickIcon()
         .frame(width: 16, height: 16)
       Text(Self.dateFormatter.string(from: contact.receivedAt))
         .font(.system(size: 10))
         .foregroundColor(Color.Theme.textSecondary)
     }
+  }
+}
+
+/// Radar fade-out marker (Figma 723:2204). Five concentric strokes whose
+/// opacity drops as they spread outward, evoking the proximity-exchange
+/// radar without pulling in an SVG asset.
+private struct RadarTickIcon: View {
+  var body: some View {
+    GeometryReader { geo in
+      let size = min(geo.size.width, geo.size.height)
+      let stroke: CGFloat = max(0.5, size * 0.0208)
+      let stops: [(diameter: CGFloat, opacity: Double)] = [
+        (size * 0.131, 1.0),
+        (size * 0.313, 1.0),
+        (size * 0.524, 0.5),
+        (size * 0.767, 0.2),
+        (size * 0.979, 0.05),
+      ]
+      ZStack {
+        ForEach(stops.indices, id: \.self) { i in
+          Circle()
+            .stroke(Color.Theme.textSecondary.opacity(stops[i].opacity), lineWidth: stroke)
+            .frame(width: stops[i].diameter, height: stops[i].diameter)
+        }
+      }
+      .frame(width: size, height: size)
+    }
+    .aspectRatio(1, contentMode: .fit)
   }
 }
 

@@ -266,7 +266,7 @@ struct PeopleListView: View {
 
   private var listContent: some View {
     ScrollView {
-      LazyVStack(spacing: 8) {
+      LazyVStack(spacing: 0) {
         ForEach(filteredContacts, id: \.id) { contact in
           contactRow(contact)
         }
