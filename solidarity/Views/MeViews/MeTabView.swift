@@ -116,7 +116,7 @@ struct MeTabView: View {
       .alert("Unable to Generate Proof", isPresented: proofErrorAlertPresented) {
         Button("OK", role: .cancel) {}
       } message: {
-        Text(proofPreparationError ?? "Unknown error")
+        Text(proofPreparationError ?? String(localized: "Unknown error"))
       }
       .onAppear {
         if identityCoordinator.state.currentProfile.activeDID == nil,
@@ -136,12 +136,12 @@ struct MeTabView: View {
       return did
     }
     if identityCoordinator.state.isLoading {
-      return "Loading..."
+      return String(localized: "Loading...")
     }
     if let error = identityCoordinator.state.lastError {
-      return "Error: \(error.localizedDescription)"
+      return String(localized: "Error: \(error.localizedDescription)")
     }
-    return "Initializing..."
+    return String(localized: "Initializing...")
   }
 
   func shortDid(_ did: String) -> String {

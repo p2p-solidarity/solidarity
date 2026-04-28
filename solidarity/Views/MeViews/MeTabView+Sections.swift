@@ -125,7 +125,7 @@ extension MeTabView {
             DisclosureRowView(
               icon: claimIcon(for: claim),
               title: claim.title,
-              source: "Src:\(claim.source.capitalized)",
+              source: String(localized: "Src:\(claim.source.capitalized)"),
               actionTitle: "Show",
               isLoading: preparingClaimID == claim.id,
               isDisabled: preparingClaimID != nil,
@@ -159,7 +159,7 @@ extension MeTabView {
         MeDeveloperRow(
           icon: "shield",
           title: "ZK Identity",
-          trailingText: idm.getIdentity() != nil ? "Commitment Active" : "Not initialized",
+          trailingText: idm.getIdentity() != nil ? String(localized: "Commitment Active") : String(localized: "Not initialized"),
           action: { showingZKSettings = true }
         )
 
@@ -173,7 +173,7 @@ extension MeTabView {
         MeDeveloperRow(
           icon: "person.2",
           title: "Group Management",
-          trailingText: "\(groupManager.groups.count) Groups",
+          trailingText: String(localized: "\(groupManager.groups.count) Groups"),
           action: { showingGroupManager = true }
         )
       }

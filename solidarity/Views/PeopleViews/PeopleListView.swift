@@ -186,7 +186,7 @@ struct PeopleListView: View {
 
       ZStack(alignment: .leading) {
         if searchQuery.isEmpty {
-          Text("搜索")
+          Text("Search")
             .font(.system(size: 14))
             .foregroundColor(Color.Theme.textSecondary)
         }
@@ -212,7 +212,7 @@ struct PeopleListView: View {
       PaperStackIllustration()
         .frame(width: 214, height: 214)
 
-      Text("你的聯絡人通訊錄是空的")
+      Text("Your contact list is empty")
         .font(.system(size: 14))
         .foregroundColor(Color.Theme.textSecondary)
         .multilineTextAlignment(.center)
@@ -222,7 +222,7 @@ struct PeopleListView: View {
         Button {
           showingContactPicker = true
         } label: {
-          Text("匯入手機通訊錄")
+          Text("Import from Phone")
             .font(.system(size: 15))
             .foregroundColor(.white)
             .frame(width: 200, height: 44)
@@ -234,7 +234,7 @@ struct PeopleListView: View {
         Button {
           showingContactPicker = true
         } label: {
-          Text("手動新增")
+          Text("Add Manually")
             .font(.system(size: 15))
             .foregroundColor(Color.Theme.textPrimary)
             .frame(width: 200, height: 44)

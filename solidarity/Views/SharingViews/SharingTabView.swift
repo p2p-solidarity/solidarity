@@ -216,11 +216,14 @@ struct SharingTabView: View {
     if isMatching {
       let count = proximityManager.nearbyPeers.count
       if count > 0 {
-        return "Found \(count) nearby \(count == 1 ? "peer" : "peers"). Tap the radar to connect."
+        if count == 1 {
+          return String(localized: "Found 1 nearby peer. Tap the radar to connect.")
+        }
+        return String(localized: "Found \(count) nearby peers. Tap the radar to connect.")
       }
-      return "Searching for nearby peers..."
+      return String(localized: "Searching for nearby peers...")
     }
-    return "Start matching to discover nearby people."
+    return String(localized: "Start matching to discover nearby people.")
   }
 
   private func refreshQR() {

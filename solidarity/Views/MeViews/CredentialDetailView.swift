@@ -208,7 +208,7 @@ struct CredentialDetailView: View {
         metadataRow(label: "Issuer", value: card.issuerDid, position: .first)
         metadataRow(label: "Holder", value: shortDid(card.holderDid), position: .middle)
         metadataRow(label: "Issued", value: formatDate(card.issuedAt), position: .middle)
-        metadataRow(label: "Expires", value: card.expiresAt.map(formatDate) ?? "None", position: .middle)
+        metadataRow(label: "Expires", value: card.expiresAt.map(formatDate) ?? String(localized: "None"), position: .middle)
         metadataRow(label: "Proof", value: proofType, position: .last)
       }
       .padding(.horizontal, 16)
@@ -217,7 +217,7 @@ struct CredentialDetailView: View {
 
   private enum RowPosition { case first, middle, last }
 
-  private func metadataRow(label: String, value: String, position: RowPosition) -> some View {
+  private func metadataRow(label: LocalizedStringKey, value: String, position: RowPosition) -> some View {
     HStack {
       Text(label)
         .font(.system(size: 15))
@@ -361,7 +361,7 @@ struct CredentialDetailView: View {
 
   // MARK: - Helpers
 
-  private func sectionHeader(_ title: String) -> some View {
+  private func sectionHeader(_ title: LocalizedStringKey) -> some View {
     Text(title)
       .font(.system(size: 14))
       .foregroundColor(Color.Theme.textPrimary)

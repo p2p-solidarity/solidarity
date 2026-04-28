@@ -34,19 +34,19 @@ struct PersonDetailView: View {
   private var unverifiedLabel: String {
     switch contact.source {
     case "imported":
-      return "unverified (import)"
+      return String(localized: "unverified (import)")
     case ContactSource.manual.rawValue:
-      return "unverified (manual)"
+      return String(localized: "unverified (manual)")
     case ContactSource.qrCode.rawValue:
-      return "unverified (qr)"
+      return String(localized: "unverified (qr)")
     case ContactSource.airdrop.rawValue:
-      return "unverified (airdrop)"
+      return String(localized: "unverified (airdrop)")
     case ContactSource.appClip.rawValue:
-      return "unverified (clip)"
+      return String(localized: "unverified (clip)")
     case ContactSource.proximity.rawValue:
-      return "unverified (proximity)"
+      return String(localized: "unverified (proximity)")
     default:
-      return "unverified"
+      return String(localized: "unverified")
     }
   }
 
@@ -458,8 +458,10 @@ struct PersonDetailView: View {
 
   private var seeMoreLabel: String {
     let count = messageCount
-    let noun = count == 1 ? "message" : "messages"
-    return "see more \(count) \(noun)"
+    if count == 1 {
+      return String(localized: "see more 1 message")
+    }
+    return String(localized: "see more \(count) messages")
   }
 
   // MARK: - Contact info

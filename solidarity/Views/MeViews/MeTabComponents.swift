@@ -9,7 +9,7 @@ struct PreparedSelfInitiatedProof: Identifiable {
 // MARK: - Section header (Figma 737:2560: 14pt regular)
 
 struct MeSectionHeader: View {
-  let title: String
+  let title: LocalizedStringKey
 
   var body: some View {
     Text(title)
@@ -178,7 +178,7 @@ struct VerifiedCredentialRow: View {
 
 struct MeActionTile: View {
   let icon: String
-  let title: String
+  let title: LocalizedStringKey
   let action: () -> Void
 
   var body: some View {
@@ -216,7 +216,7 @@ struct MeActionTile: View {
 
 struct MeDeveloperRow: View {
   let icon: String
-  let title: String
+  let title: LocalizedStringKey
   let trailingText: String?
   let action: () -> Void
 
@@ -262,7 +262,7 @@ struct DisclosureRowView: View {
   let icon: String
   let title: String
   let source: String
-  let actionTitle: String
+  let actionTitle: LocalizedStringKey
   let isLoading: Bool
   let isDisabled: Bool
   let onPresent: () -> Void

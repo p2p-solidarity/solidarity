@@ -52,14 +52,14 @@ struct TrustGraphContactRow: View {
       .lowercased()
     switch normalized {
     case "imported":
-      return "#手機通訊錄"
+      return String(localized: "#Phone Contacts")
     case ContactSource.manual.rawValue.lowercased():
-      return "手動新增"
+      return String(localized: "Added manually")
     case ContactSource.qrCode.rawValue.lowercased(),
       ContactSource.proximity.rawValue.lowercased(),
       ContactSource.appClip.rawValue.lowercased(),
       ContactSource.airdrop.rawValue.lowercased():
-      return "面對面交換"
+      return String(localized: "Met in person")
     default:
       return nil
     }

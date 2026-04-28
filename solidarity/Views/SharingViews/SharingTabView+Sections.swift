@@ -193,14 +193,14 @@ extension BusinessCardField {
 
   fileprivate var shortLabel: String {
     switch self {
-    case .name: return "Name"
-    case .title: return "Title"
-    case .company: return "Company"
-    case .email: return "Email"
-    case .phone: return "Phone"
-    case .profileImage: return "Profile"
-    case .socialNetworks: return "Social"
-    case .skills: return "Skills"
+    case .name: return String(localized: "Name")
+    case .title: return String(localized: "Title")
+    case .company: return String(localized: "Company")
+    case .email: return String(localized: "Email")
+    case .phone: return String(localized: "Phone")
+    case .profileImage: return String(localized: "Profile")
+    case .socialNetworks: return String(localized: "Social")
+    case .skills: return String(localized: "Skills")
     }
   }
 }
