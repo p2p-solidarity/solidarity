@@ -362,4 +362,42 @@ extension ProximityManager {
     if !allowed.contains(.skills) { filtered.skills = [] }
     return filtered
   }
+
+  // MARK: - UWB Spatial Trigger
+
+  /// Single entry point for `NearbyInteractionManager.onSpatialTrigger`. Replaces
+  /// the per-view `sendCard` calls that used to race against MC connection state
+  /// and produce "Peer is not connected" toasts. Routing rules:
+  ///  - Peer must still be in `session.connectedPeers` (matched by displayName so
+  ///    a re-instantiated MCPeerID does not falsely fail the contains check).
+  ///  - If `autoSendCardOnConnect` is on, MC `.connected` already sent the card;
+  ///    just close the UWB cooldown.
+  ///  - Otherwise resolve a card from `currentCard` with a `CardManager` fallback,
+  ///    then send through the existing `sendCard(_:to:sharingLevel:)` path.
+  /// Failures here log + reset NI to idle; they never set `lastError`, so a UWB
+  /// race after disconnect no longer surfaces as a user-visible error toast.
+  func handleSpatialTrigger(peerID: MCPeerID) {
+    let isConnected = session.connectedPeers.contains { $0.displayName == peerID.displayName }
+    guard isConnected else {
+      print("[ProximityManager] UWB trigger ignored — peer \(peerID.displayName) not in connectedPeers")
+      NearbyInteractionManager.shared.exchangeDidFail()
+      return
+    }
+
+    if autoSendCardOnConnect {
+      NearbyInteractionManager.shared.exchangeDidComplete()
+      return
+    }
+
+    let baseCard = currentCard ?? CardManager.shared.businessCards.first
+    guard let card = baseCard else {
+      print("[ProximityManager] UWB trigger ignored — no card available to send")
+      NearbyInteractionManager.shared.exchangeDidFail()
+      return
+    }
+
+    let prepared = ShareSettingsStore.applyFields(to: card, level: currentSharingLevel)
+    sendCard(prepared, to: peerID, sharingLevel: currentSharingLevel)
+    NearbyInteractionManager.shared.exchangeDidComplete()
+  }
 }

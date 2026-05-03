@@ -280,25 +280,7 @@ struct SharingTabView: View {
 
   private func setupSpatialTrigger() {
     niManager.onSpatialTrigger = { peerID in
-      // If connection-based auto-send is enabled, avoid sending duplicate payloads on UWB trigger.
-      if ProximityManager.shared.autoSendCardOnConnect {
-        NearbyInteractionManager.shared.exchangeDidComplete()
-        return
-      }
-
-      let baseCard = ProximityManager.shared.currentCard ?? CardManager.shared.businessCards.first
-      guard let card = baseCard else {
-        NearbyInteractionManager.shared.exchangeDidFail()
-        return
-      }
-      let sharingLevel = ProximityManager.shared.currentSharingLevel
-      let prepared = ShareSettingsStore.applyFields(to: card, level: sharingLevel)
-      ProximityManager.shared.sendCard(
-        prepared,
-        to: peerID,
-        sharingLevel: sharingLevel
-      )
-      NearbyInteractionManager.shared.exchangeDidComplete()
+      ProximityManager.shared.handleSpatialTrigger(peerID: peerID)
     }
   }
 

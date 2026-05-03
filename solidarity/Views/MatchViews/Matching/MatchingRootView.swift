@@ -204,14 +204,8 @@ struct MatchingRootView: View {
   // MARK: - UWB Spatial Trigger
 
   private func setupSpatialTrigger() {
-    niManager.onSpatialTrigger = { [weak proximityManager] peerID in
-      guard let pm = proximityManager,
-            let card = pm.currentCard else {
-        NearbyInteractionManager.shared.exchangeDidFail()
-        return
-      }
-      pm.sendCard(card, to: peerID, sharingLevel: pm.currentSharingLevel)
-      NearbyInteractionManager.shared.exchangeDidComplete()
+    niManager.onSpatialTrigger = { peerID in
+      ProximityManager.shared.handleSpatialTrigger(peerID: peerID)
     }
   }
 

@@ -38,6 +38,16 @@ extension ProximityManager: MCSessionDelegate {
 
       print("Peer \(peerID.displayName) changed state to: \(state)")
 
+      // Kill any UWB session bound to this peer the moment MC drops it. Otherwise
+      // ranging frames can keep arriving after `.notConnected` and push the state
+      // machine to `.confirmed`, firing `onSpatialTrigger` for a peer that is no
+      // longer in `session.connectedPeers` — the original source of the stale
+      // "Peer is not connected" error toast.
+      if state == .notConnected,
+        NearbyInteractionManager.shared.connectedPeerID?.displayName == peerID.displayName {
+        NearbyInteractionManager.shared.invalidateSession()
+      }
+
       // Optional legacy behavior: auto-send current card when a connection is established
       if state == .connected, self.autoSendCardOnConnect, let card = self.currentCard {
         self.sendCard(card, to: peerID)
