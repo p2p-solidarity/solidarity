@@ -77,6 +77,7 @@ struct MeTabView: View {
         NavigationStack {
           SettingsView()
         }
+        .toastOverlay()
       }
       .sheet(isPresented: $showingEditProfile) {
         if let card = cardManager.businessCards.first {
