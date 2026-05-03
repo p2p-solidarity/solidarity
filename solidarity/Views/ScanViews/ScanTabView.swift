@@ -129,6 +129,12 @@ struct ScanTabView: View {
                 credentialID: credentialId.uuidString
               )
             }
+            if let declared = qrManager.lastDeclaredProofClaims {
+              IdentityDataStore.shared.setDeclaredProofClaims(
+                contactID: merged.id.uuidString,
+                claims: declared
+              )
+            }
             ToastManager.shared.show(
               title: String(localized: "Contact Updated"),
               message: String(localized: "Merged and saved to People."),
@@ -270,6 +276,16 @@ struct ScanTabView: View {
         IdentityDataStore.shared.attachCredential(
           contactID: saved.id.uuidString,
           credentialID: credentialId.uuidString
+        )
+      }
+      // Persist declared proof claims separately from the legacy Contact
+      // round-trip — `Contact` (Codable) doesn't carry them. Skip on nil
+      // (scan path didn't parse a claims field, e.g. plaintext) so we
+      // don't wipe an earlier scan's declarations.
+      if let declared = qrManager.lastDeclaredProofClaims {
+        IdentityDataStore.shared.setDeclaredProofClaims(
+          contactID: saved.id.uuidString,
+          claims: declared
         )
       }
       showingScannedCard = false

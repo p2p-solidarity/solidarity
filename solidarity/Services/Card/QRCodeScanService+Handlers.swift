@@ -145,7 +145,8 @@ extension QRCodeScanService {
         card: payload.businessCard,
         verificationStatus: finalStatus,
         sealedRoute: payload.sealedRoute,
-        route: .businessCard
+        route: .businessCard,
+        declaredProofClaims: payload.proofClaims
       )
     )
   }
@@ -164,13 +165,19 @@ extension QRCodeScanService {
         status = .unverified
       }
       identityCoordinator.updateVerificationStatus(for: imported.businessCard.id, status: status)
+      // The peer's VC may declare proof claims (e.g. "is_human", "age_over_18")
+      // in its verified_proofs block. We surface this so the People view can
+      // display a "declared" sub-badge — it's the peer's own self-attestation
+      // signed by their DID, NOT a claim we re-verified locally.
+      let declaredClaims = extractDeclaredProofClaims(fromJWT: payload.jwt)
       return .success(
         ScanOutcome(
           card: imported.businessCard,
           verificationStatus: status,
           sealedRoute: nil,
           route: .businessCard,
-          credentialId: imported.storedCredential.id
+          credentialId: imported.storedCredential.id,
+          declaredProofClaims: declaredClaims
         )
       )
     }

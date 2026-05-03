@@ -79,3 +79,57 @@ struct PersonDetailBubbleShape: Shape {
     return path
   }
 }
+
+// MARK: - Declared proof claims
+
+extension PersonDetailView {
+  /// Proof claims declared in the peer's VC `verified_proofs` block. We
+  /// did NOT re-verify the underlying passport ZK / SD-JWT — show as
+  /// "claims: …" to keep that distinction explicit. Intentionally placed
+  /// in its own row, separate from `verifiedTag`, so users don't read the
+  /// declaration as a verification by us.
+  @ViewBuilder
+  var declaredClaimsRow: some View {
+    if !contact.declaredProofClaims.isEmpty {
+      HStack(spacing: 8) {
+        ForEach(contact.declaredProofClaims, id: \.self) { claim in
+          declaredClaimChip(claim)
+        }
+      }
+    }
+  }
+
+  fileprivate func declaredClaimChip(_ claimType: String) -> some View {
+    HStack(spacing: 4) {
+      Image(systemName: Self.claimIcon(claimType))
+        .font(.system(size: 10))
+        .foregroundStyle(Color.Theme.textSecondary)
+        .frame(width: 12, height: 12)
+      Text(Self.claimDisplayName(claimType))
+        .font(.system(size: 10, design: .monospaced))
+        .foregroundStyle(Color.Theme.textSecondary)
+    }
+    .padding(.horizontal, 4)
+    .padding(.vertical, 2)
+    .overlay(
+      RoundedRectangle(cornerRadius: 2)
+        .stroke(Color.Theme.divider, lineWidth: 1)
+    )
+  }
+
+  fileprivate static func claimIcon(_ claimType: String) -> String {
+    switch claimType {
+    case "is_human": return "person.fill.checkmark"
+    case "age_over_18": return "calendar.badge.checkmark"
+    default: return "sparkles"
+    }
+  }
+
+  fileprivate static func claimDisplayName(_ claimType: String) -> String {
+    switch claimType {
+    case "is_human": return String(localized: "claims: real human")
+    case "age_over_18": return String(localized: "claims: 18+")
+    default: return String(localized: "claims: \(claimType)")
+    }
+  }
+}

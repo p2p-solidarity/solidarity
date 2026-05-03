@@ -13,19 +13,28 @@ final class QRCodeScanService: NSObject {
     /// reference to ContactEntity.credentialIds via
     /// IdentityDataStore.attachCredential.
     let credentialId: UUID?
+    /// Proof-claim labels (e.g. "is_human", "age_over_18") declared in the
+    /// peer's VC `verified_proofs.claims` block. nil means this scan path
+    /// did not parse a claims field at all (plaintext / non-VC route);
+    /// empty array means the peer's VC explicitly declared zero proofs.
+    /// REPLACE-when-non-nil semantics — callers should leave existing
+    /// ContactEntity.declaredProofClaims untouched when this is nil.
+    let declaredProofClaims: [String]?
 
     init(
       card: BusinessCard?,
       verificationStatus: VerificationStatus?,
       sealedRoute: String?,
       route: ScanRoute,
-      credentialId: UUID? = nil
+      credentialId: UUID? = nil,
+      declaredProofClaims: [String]? = nil
     ) {
       self.card = card
       self.verificationStatus = verificationStatus
       self.sealedRoute = sealedRoute
       self.route = route
       self.credentialId = credentialId
+      self.declaredProofClaims = declaredProofClaims
     }
   }
 

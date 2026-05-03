@@ -177,6 +177,8 @@ struct PersonDetailView: View {
           heroNoteLine
 
           tagRow
+
+          declaredClaimsRow
         }
       }
       .frame(maxWidth: .infinity)
@@ -301,6 +303,9 @@ struct PersonDetailView: View {
       }
     }
   }
+
+  // declaredClaimsRow + chip helpers live in PersonDetailViewSupport.swift
+  // so this file stays under the 600-line lint cap.
 
   @ViewBuilder
   private var statusTag: some View {

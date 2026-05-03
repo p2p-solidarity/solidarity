@@ -16,6 +16,15 @@ struct TrustGraphContactRow: View {
     contact.verificationStatus == VerificationStatus.verified.rawValue
   }
 
+  /// Non-empty when the peer's VC declared proof claims (e.g. "is_human")
+  /// in its `verified_proofs` block. The badge shown for these is visually
+  /// distinct from `isVerified` because we did NOT re-verify the underlying
+  /// passport ZK / SD-JWT — it's the peer's own self-attestation, signed
+  /// by their DID. PersonDetailView shows the full breakdown.
+  private var declaredClaims: [String] {
+    contact.declaredProofClaims
+  }
+
   /// One-line note used as the row's secondary line when no business-card
   /// metadata is present (typical for VCF/phone-imported contacts).
   private var noteText: String? {
@@ -92,14 +101,19 @@ struct TrustGraphContactRow: View {
             dateColumn
           }
 
-          if let contextTag {
-            Text(contextTag)
-              .font(.system(size: 10))
-              .foregroundColor(Color.Theme.textSecondary)
-              .padding(.horizontal, 4)
-              .padding(.vertical, 2)
-              .background(Color.Theme.searchBg)
-              .clipShape(RoundedRectangle(cornerRadius: 2, style: .continuous))
+          HStack(spacing: 6) {
+            if let contextTag {
+              Text(contextTag)
+                .font(.system(size: 10))
+                .foregroundColor(Color.Theme.textSecondary)
+                .padding(.horizontal, 4)
+                .padding(.vertical, 2)
+                .background(Color.Theme.searchBg)
+                .clipShape(RoundedRectangle(cornerRadius: 2, style: .continuous))
+            }
+            if !declaredClaims.isEmpty {
+              declaredClaimsChip
+            }
           }
         }
       }
@@ -148,6 +162,37 @@ struct TrustGraphContactRow: View {
         Circle().fill(Color.Theme.pageBg)
       )
       .offset(x: 2, y: 2)
+  }
+
+  /// Compact "claims: …" pill. Hollow outline (not filled) deliberately
+  /// signals "asserted but not locally verified" — distinct from the
+  /// filled green seal which means "we checked the signature".
+  private var declaredClaimsChip: some View {
+    HStack(spacing: 3) {
+      Image(systemName: "sparkles")
+        .font(.system(size: 8))
+      Text(verbatim: "claims: \(declaredClaimsLabel)")
+        .font(.system(size: 10, design: .monospaced))
+    }
+    .foregroundColor(Color.Theme.textSecondary)
+    .padding(.horizontal, 4)
+    .padding(.vertical, 2)
+    .overlay(
+      RoundedRectangle(cornerRadius: 2, style: .continuous)
+        .stroke(Color.Theme.divider, lineWidth: 1)
+    )
+  }
+
+  private var declaredClaimsLabel: String {
+    declaredClaims.map(Self.proofClaimDisplayLabel).joined(separator: ", ")
+  }
+
+  static func proofClaimDisplayLabel(_ claimType: String) -> String {
+    switch claimType {
+    case "is_human": return String(localized: "real human")
+    case "age_over_18": return String(localized: "18+")
+    default: return claimType
+    }
   }
 
   private var dateColumn: some View {
