@@ -430,6 +430,42 @@ final class VCService {
     did.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
   }
 
+  private enum StoredVerificationKeySource { case anchor, didKey, embeddedJwk }
+
+  private enum StoredVerificationKeyOutcome {
+    case ok(key: PublicKeyJWK, source: StoredVerificationKeySource)
+    case rejected(reason: String)
+  }
+
+  /// Resolves the public key the JWT signature should be verified against.
+  /// Mirrors `verifyImportedJWTSignature`'s chain so a cryptographically
+  /// valid did:key signature is honoured even when the issuer isn't in
+  /// `IssuerTrustAnchorStore`.
+  private func resolveStoredVerificationKey(
+    issuerDid: String,
+    keyId: String?,
+    embeddedJwk: PublicKeyJWK?
+  ) -> StoredVerificationKeyOutcome {
+    if let anchor = IssuerTrustAnchorStore.shared.trustedJWK(for: issuerDid, keyId: keyId) {
+      if let embedded = embeddedJwk, embedded != anchor {
+        return .rejected(reason: "Embedded publicKeyJwk does not match trusted issuer key")
+      }
+      return .ok(key: anchor, source: .anchor)
+    }
+    if let didKeyJWK = DIDKeyResolver.resolveP256JWK(from: issuerDid) {
+      if let embedded = embeddedJwk, embedded != didKeyJWK {
+        return .rejected(reason: "Embedded publicKeyJwk does not match did:key resolution")
+      }
+      return .ok(key: didKeyJWK, source: .didKey)
+    }
+    if let embedded = embeddedJwk,
+       let derived = embeddedJwkSelfDerivedDid(embedded),
+       normalizedDid(derived) == normalizedDid(issuerDid) {
+      return .ok(key: embedded, source: .embeddedJwk)
+    }
+    return .rejected(reason: "No trusted public key found for issuer \(issuerDid)")
+  }
+
   func verifyStoredCredential(_ credential: VCLibrary.StoredCredential) -> CardResult<VCLibrary.StoredCredential> {
     Self.logger.info("Verifying stored credential")
     let components = credential.jwt.split(separator: ".")
@@ -468,29 +504,35 @@ final class VCService {
           return storeVerificationResult(credential, status: .failed)
         }
 
-        guard let trustedKey = IssuerTrustAnchorStore.shared.trustedJWK(for: issuerDid, keyId: keyId) else {
-          Self.logger.error("Issuer DID is not trusted: \(issuerDid)")
+        let resolution = resolveStoredVerificationKey(
+          issuerDid: issuerDid,
+          keyId: keyId,
+          embeddedJwk: credentialSubject?.publicKeyJwk
+        )
+        let resolvedKey: PublicKeyJWK
+        let resolvedSource: StoredVerificationKeySource
+        switch resolution {
+        case .rejected(let reason):
+          Self.logger.error("Key resolution failed: \(reason)")
           return storeVerificationResult(credential, status: .failed)
+        case .ok(let key, let source):
+          resolvedKey = key
+          resolvedSource = source
         }
 
-        if let embeddedKey = credentialSubject?.publicKeyJwk, embeddedKey != trustedKey {
-          Self.logger.error("Embedded publicKeyJwk does not match trusted issuer key")
-          return storeVerificationResult(credential, status: .failed)
-        }
-
-        Self.logger.info("Verifying signature with trusted issuer key")
+        Self.logger.info("Verifying signature with resolved issuer key")
         // Cross-check the JWT alg header against the resolved key. The
-        // trustedJWK we retrieved is P-256 (ES256); accepting `none`,
-        // `HS256`, `ES384`, etc. would let an attacker bypass the
-        // signature step entirely. RFC 8725 §3.1 requires the verifier
-        // to pin alg to the key's known curve before signature decode.
+        // resolved JWK is P-256 (ES256); accepting `none`, `HS256`, `ES384`,
+        // etc. would let an attacker bypass the signature step entirely.
+        // RFC 8725 §3.1 requires the verifier to pin alg to the key's known
+        // curve before signature decode.
         let alg = (decoded.header["alg"] as? String)?.uppercased() ?? ""
         guard alg == "ES256" else {
           Self.logger.error("Rejecting credential with non-ES256 alg: \(alg.isEmpty ? "(missing)" : alg)")
           return storeVerificationResult(credential, status: .failed)
         }
 
-        let publicKey = try trustedKey.toP256PublicKey()
+        let publicKey = try resolvedKey.toP256PublicKey()
         let signature =
           (try? P256.Signing.ECDSASignature(rawRepresentation: signatureData))
           ?? (try? P256.Signing.ECDSASignature(derRepresentation: signatureData))
@@ -524,7 +566,10 @@ final class VCService {
           }
         }
 
-        Self.logger.info("Credential verification successful")
+        // Trust gradient: anchored issuers earn `.verified`. did:key /
+        // embedded-JWK issuers earn `.verified` too — the signature binds
+        // to the issuer DID, which is what L1 self-issued credentials assert.
+        Self.logger.info("Credential verification successful (\(String(describing: resolvedSource)))")
         return storeVerificationResult(credential, status: .verified)
       } catch let cardError as CardError {
         Self.logger.error("CardError during verification: \(cardError.localizedDescription)")

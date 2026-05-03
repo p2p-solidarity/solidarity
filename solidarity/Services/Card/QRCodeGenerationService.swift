@@ -44,8 +44,13 @@ final class QRCodeGenerationService {
     fields: Set<BusinessCardField>,
     expirationDate: Date? = nil
   ) -> CardResult<UIImage> {
-    let filteredCard = card.filteredCard(for: fields)
-    let selectedFields = fields.sorted { $0.rawValue < $1.rawValue }
+    // Profile images are tens of KB once base64-encoded as a data URI, which
+    // blows past every QR capacity tier. Strip them from QR payloads even
+    // when the user toggled "share profile image" — the receiver can fetch
+    // the image via a follow-up channel (Sakura, OID4VP, etc.).
+    let qrFields = fields.subtracting([.profileImage])
+    let filteredCard = card.filteredCard(for: qrFields)
+    let selectedFields = qrFields.sorted { $0.rawValue < $1.rawValue }
     let mySealedRoute = SecureKeyManager.shared.mySealedRoute
     let snapshot = BusinessCardSnapshot(card: filteredCard, sealedRoute: mySealedRoute)
     let shareId = UUID()
@@ -71,7 +76,7 @@ final class QRCodeGenerationService {
     // JWTs are self-describing (start with "eyJ") and the scanner detects them.
     // This avoids the envelope JSON wrapper overhead that pushes past QR limits.
     if envelope.format == .didSigned, let jwt = envelope.didSigned?.jwt {
-      return generateImage(from: jwt, correctionLevel: "L")
+      return generateImageCascading(from: jwt, startingLevel: "L")
     }
 
     do {
@@ -79,18 +84,37 @@ final class QRCodeGenerationService {
       // For ZK formats, try compression and use lower correction level.
       if envelope.format == .zkProof {
         if let compressed = Self.compressForQR(data) {
-          return generateImage(from: compressed, correctionLevel: "M")
+          return generateImageCascading(from: compressed, startingLevel: "M")
         }
       }
       guard let json = String(data: data, encoding: .utf8) else {
         return .failure(.sharingError("Failed to encode QR envelope"))
       }
-      // Plaintext uses high correction; signed formats use medium.
-      let level = envelope.format == .plaintext ? "H" : "M"
-      return generateImage(from: json, correctionLevel: level)
+      // Plaintext prefers high correction but cascades to lower levels if the
+      // payload exceeds the per-level capacity. Signed formats start at M.
+      let startingLevel = envelope.format == .plaintext ? "H" : "M"
+      return generateImageCascading(from: json, startingLevel: startingLevel)
     } catch {
       return .failure(.sharingError("Failed to encode QR envelope: \(error.localizedDescription)"))
     }
+  }
+
+  /// Tries the requested QR error-correction level first and falls back to
+  /// progressively lower levels if the payload won't fit. CIQRCodeGenerator
+  /// returns a nil outputImage when the message exceeds the chosen level's
+  /// capacity, so a single hardcoded level silently breaks generation for
+  /// realistic payloads (e.g. a plaintext envelope with 5+ fields).
+  private func generateImageCascading(from string: String, startingLevel: String) -> CardResult<UIImage> {
+    let levels = ["H", "Q", "M", "L"]
+    let startIndex = levels.firstIndex(of: startingLevel) ?? 0
+    let candidates = Array(levels[startIndex...])
+    var lastFailure: CardResult<UIImage> = .failure(.sharingError("QR generation failed"))
+    for level in candidates {
+      let result = generateImage(from: string, correctionLevel: level)
+      if case .success = result { return result }
+      lastFailure = result
+    }
+    return lastFailure
   }
 
   /// Compresses JSON data using zlib and encodes as a URI-safe string.
@@ -163,12 +187,17 @@ final class QRCodeGenerationService {
     sharingLevel: SharingLevel,
     expirationDate: Date? = nil
   ) -> CardResult<UIImage> {
-    switch buildEnvelope(for: card, sharingLevel: sharingLevel, expirationDate: expirationDate) {
-    case .failure(let error):
-      return .failure(error)
-    case .success(let envelope):
-      return encodeEnvelopeToImage(envelope)
+    // Try the user-preferred format first. If the envelope can't be built
+    // (biometric declined, ZK identity unavailable, signing failure) or the
+    // resulting payload doesn't fit a QR, fall back to plaintext so the QR
+    // surface always shows something the recipient can scan. Mirrors the
+    // fields-based generateImage path.
+    if case .success(let envelope) = buildEnvelope(for: card, sharingLevel: sharingLevel, expirationDate: expirationDate),
+       case .success(let image) = encodeEnvelopeToImage(envelope) {
+      return .success(image)
     }
+    let fallbackFields = Set(resolvedSelectedFields(for: card, legacyLevel: sharingLevel))
+    return generatePlaintextImage(for: card, fields: fallbackFields, expirationDate: expirationDate)
   }
 
   func generateImage(from string: String, correctionLevel: String = "H") -> CardResult<UIImage> {
@@ -221,7 +250,9 @@ final class QRCodeGenerationService {
     level: SharingLevel,
     expirationDate: Date?
   ) -> QRCodeEnvelope {
+    // Strip profileImage — see generatePlaintextImage for rationale.
     let selectedFields = resolvedSelectedFields(for: card, legacyLevel: level)
+      .filter { $0 != .profileImage }
     let filteredCard = card.filteredCard(for: Set(selectedFields))
     // Ensure we include our sealedRoute so the scanner can reply via Sakura
     let mySealedRoute = SecureKeyManager.shared.mySealedRoute

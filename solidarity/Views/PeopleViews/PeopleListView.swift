@@ -13,6 +13,7 @@ struct PeopleListView: View {
   @State private var showingDeleteConfirm = false
   @State private var showingMergeConfirm = false
   @State private var showingContactPicker = false
+  @State private var showingManualEntry = false
   @State private var contactToEditNote: ContactEntity?
 
   private var filteredContacts: [ContactEntity] {
@@ -64,6 +65,16 @@ struct PeopleListView: View {
     .sheet(isPresented: $showingVCFPicker) {
       VCFDocumentPicker { url in
         importVCFFile(url: url)
+      }
+    }
+    .sheet(isPresented: $showingManualEntry) {
+      ManualContactEntrySheet { _ in
+        identityDataStore.refreshAll()
+        ToastManager.shared.show(
+          title: String(localized: "Contact Added"),
+          message: String(localized: "Saved to People."),
+          type: .success
+        )
       }
     }
     .sheet(
@@ -155,6 +166,12 @@ struct PeopleListView: View {
         }
 
         Button {
+          showingManualEntry = true
+        } label: {
+          Label("Add Manually", systemImage: "square.and.pencil")
+        }
+
+        Button {
           showingContactPicker = true
         } label: {
           Label("Import from Phone", systemImage: "person.crop.circle.badge.plus")
@@ -230,9 +247,8 @@ struct PeopleListView: View {
             .clipShape(RoundedRectangle(cornerRadius: 2, style: .continuous))
         }
 
-        // TODO: wire up a dedicated manual-add flow when available.
         Button {
-          showingContactPicker = true
+          showingManualEntry = true
         } label: {
           Text("Add Manually")
             .font(.system(size: 15))
