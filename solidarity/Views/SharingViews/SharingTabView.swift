@@ -22,6 +22,10 @@ struct SharingTabView: View {
   @State var showingShareActivity = false
   @State var generatedQRImage: UIImage?
   @State private var lastReceivedCardCount = 0
+  /// Tracks the field set last used to render the QR. Lets the
+  /// UserDefaults observer skip refreshes that don't actually change the
+  /// visible payload (e.g. unrelated AppStorage writes).
+  @State private var lastRenderedFields: Set<BusinessCardField> = []
   @AppStorage("sharing_qr_expanded") var isQRExpanded: Bool = true
   @AppStorage("theme_selected_animal") private var savedAvatar: String?
 
@@ -82,23 +86,10 @@ struct SharingTabView: View {
           qrSection
             .padding(.horizontal, 16)
 
-          Spacer().frame(height: 16)
-
-          // Quick actions
-          quickActions
-            .padding(.horizontal, 16)
-
           Spacer().frame(height: 100)
         }
       }
-      .background(
-        LinearGradient(
-          colors: Color.Theme.pageGradient(for: colorScheme),
-          startPoint: .top,
-          endPoint: .bottom
-        )
-        .ignoresSafeArea()
-      )
+      .background(Color.Theme.pageBg.ignoresSafeArea())
       .navigationTitle("Share")
       .navigationBarTitleDisplayMode(.inline)
       .toolbar {
@@ -137,6 +128,27 @@ struct SharingTabView: View {
         message: error.localizedDescription,
         type: .error
       )
+    }
+    // Re-render the QR when the underlying card mutates (edits in Me tab,
+    // sharingPreferences format change, etc.). `.onAppear` only catches
+    // re-entry from navigation, not in-place updates.
+    .onReceive(cardManager.$businessCards) { _ in
+      refreshQR()
+    }
+    // ShareSettings writes through @AppStorage → UserDefaults. Without
+    // this observer the QR stays stale after the user toggles a field
+    // and pops back, because @AppStorage writes don't republish through
+    // any object SharingTabView observes. We dedupe against the last
+    // rendered field set so unrelated UserDefaults writes (theme,
+    // notification prefs, etc.) don't trigger needless QR regeneration.
+    .onReceive(
+      NotificationCenter.default
+        .publisher(for: UserDefaults.didChangeNotification)
+        .receive(on: DispatchQueue.main)
+    ) { _ in
+      let current = ShareSettingsReader.enabledFields
+      guard current != lastRenderedFields else { return }
+      refreshQR()
     }
     .sheet(isPresented: $showingScanSheet) {
       ScanTabView()
@@ -182,7 +194,13 @@ struct SharingTabView: View {
         .frame(width: frame, height: frame)
         .clipShape(Circle())
         .overlay(Circle().stroke(Color.Theme.divider, lineWidth: 1))
-    } else if let animal = card?.animal ?? savedAvatar.flatMap(AnimalCharacter.init(rawValue:)) {
+    } else if let card {
+      // Always render an animal: chosen → saved → stable default from card.id.
+      // Letter initials would surface here when the user resumed onboarding
+      // mid-flow (selectedAvatar lost) or restored a legacy backup.
+      let animal = card.animal
+        ?? savedAvatar.flatMap(AnimalCharacter.init(rawValue:))
+        ?? AnimalCharacter.default(forId: card.id.uuidString)
       ImageProvider.animalImage(for: animal)
         .resizable()
         .scaledToFill()
@@ -194,21 +212,12 @@ struct SharingTabView: View {
         Circle()
           .fill(Color.Theme.searchBg)
           .frame(width: frame, height: frame)
-        Text(initials(for: card?.name))
-          .font(.system(size: 12, weight: .bold, design: .monospaced))
-          .foregroundColor(Color.Theme.textPrimary)
+        Image(systemName: "person")
+          .font(.system(size: 14, weight: .semibold))
+          .foregroundColor(Color.Theme.textTertiary)
       }
       .overlay(Circle().stroke(Color.Theme.divider, lineWidth: 1))
     }
-  }
-
-  private func initials(for name: String?) -> String {
-    guard let name, !name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
-      return "?"
-    }
-    let parts = name.components(separatedBy: .whitespacesAndNewlines).filter { !$0.isEmpty }
-    let letters = parts.compactMap(\.first).map(String.init)
-    return letters.prefix(2).joined().uppercased()
   }
 
   // MARK: - Actions
@@ -229,22 +238,38 @@ struct SharingTabView: View {
     if isMatching {
       let count = proximityManager.nearbyPeers.count
       if count > 0 {
-        return "Found \(count) nearby \(count == 1 ? "peer" : "peers"). Tap the radar to connect."
+        if count == 1 {
+          return String(localized: "Found 1 nearby peer. Tap the radar to connect.")
+        }
+        return String(localized: "Found \(count) nearby peers. Tap the radar to connect.")
       }
-      return "Searching for nearby peers..."
+      return String(localized: "Searching for nearby peers...")
     }
-    return "Start matching to discover nearby people."
+    return String(localized: "Start matching to discover nearby people.")
   }
 
   private func refreshQR() {
     guard let card = cardManager.businessCards.first else {
       generatedQRImage = nil
+      lastRenderedFields = []
       return
     }
     let fields = ShareSettingsReader.enabledFields
-    let result = qrCodeManager.generateQRCode(for: card, fields: fields)
-    if case .success(let image) = result {
+    lastRenderedFields = fields
+    switch qrCodeManager.generateQRCode(for: card, fields: fields) {
+    case .success(let image):
       generatedQRImage = image
+    case .failure(let error):
+      // Old behaviour was `if case .success` only — failures left a stale
+      // image with no signal to the user. Clear the image so the QR card
+      // reverts to the placeholder, and surface the message via Toast
+      // (same channel used for the other QR / sharing errors above).
+      generatedQRImage = nil
+      ToastManager.shared.show(
+        title: String(localized: "QR Generation Failed"),
+        message: error.localizedDescription,
+        type: .error
+      )
     }
   }
 
@@ -252,25 +277,7 @@ struct SharingTabView: View {
 
   private func setupSpatialTrigger() {
     niManager.onSpatialTrigger = { peerID in
-      // If connection-based auto-send is enabled, avoid sending duplicate payloads on UWB trigger.
-      if ProximityManager.shared.autoSendCardOnConnect {
-        NearbyInteractionManager.shared.exchangeDidComplete()
-        return
-      }
-
-      let baseCard = ProximityManager.shared.currentCard ?? CardManager.shared.businessCards.first
-      guard let card = baseCard else {
-        NearbyInteractionManager.shared.exchangeDidFail()
-        return
-      }
-      let sharingLevel = ProximityManager.shared.currentSharingLevel
-      let prepared = ShareSettingsStore.applyFields(to: card, level: sharingLevel)
-      ProximityManager.shared.sendCard(
-        prepared,
-        to: peerID,
-        sharingLevel: sharingLevel
-      )
-      NearbyInteractionManager.shared.exchangeDidComplete()
+      ProximityManager.shared.handleSpatialTrigger(peerID: peerID)
     }
   }
 

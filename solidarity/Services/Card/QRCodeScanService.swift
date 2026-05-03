@@ -13,19 +13,28 @@ final class QRCodeScanService: NSObject {
     /// reference to ContactEntity.credentialIds via
     /// IdentityDataStore.attachCredential.
     let credentialId: UUID?
+    /// Proof-claim labels (e.g. "is_human", "age_over_18") declared in the
+    /// peer's VC `verified_proofs.claims` block. nil means this scan path
+    /// did not parse a claims field at all (plaintext / non-VC route);
+    /// empty array means the peer's VC explicitly declared zero proofs.
+    /// REPLACE-when-non-nil semantics — callers should leave existing
+    /// ContactEntity.declaredProofClaims untouched when this is nil.
+    let declaredProofClaims: [String]?
 
     init(
       card: BusinessCard?,
       verificationStatus: VerificationStatus?,
       sealedRoute: String?,
       route: ScanRoute,
-      credentialId: UUID? = nil
+      credentialId: UUID? = nil,
+      declaredProofClaims: [String]? = nil
     ) {
       self.card = card
       self.verificationStatus = verificationStatus
       self.sealedRoute = sealedRoute
       self.route = route
       self.credentialId = credentialId
+      self.declaredProofClaims = declaredProofClaims
     }
   }
 
@@ -114,7 +123,20 @@ final class QRCodeScanService: NSObject {
 
   // MARK: - Processing
 
+  /// Upper bound on a scanned QR payload. The QR Code spec maxes out around
+  /// 4 KB for alphanumeric content, so 64 KB leaves ample headroom while
+  /// preventing pathological JSON blobs (zip-bombed compressed envelopes,
+  /// adversarial input from `request_uri` injection, etc.) from being
+  /// decoded inline. Matches the ScanRouter cap so both code paths reject
+  /// the same shape.
+  static let maxQRPayloadBytes = 64 * 1024
+
   func process(scannedString data: String) {
+    guard data.utf8.count <= Self.maxQRPayloadBytes else {
+      emitOutcome(.failure(.sharingError("QR payload exceeds size limit")))
+      return
+    }
+
     let route = scanRouter.route(for: data)
     switch route {
     case .oid4vpRequest(let request):

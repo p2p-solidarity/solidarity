@@ -60,7 +60,36 @@ final class IssuerTrustAnchorStore {
     trustedJWK(for: issuerDid, keyId: keyId) != nil
   }
 
-  func registerAnchor(
+  /// Promotes an issuer to a locally-trusted anchor only after the user
+  /// explicitly approves via biometric. Trust anchors are the root of the
+  /// VC verification chain — adding one without consent would let a
+  /// remote/automatic flow silently mint a "trusted" issuer.
+  func registerAnchorWithConsent(
+    issuerDid: String,
+    publicKeyJwk: PublicKeyJWK,
+    keyId: String?,
+    source: String = "manual",
+    reason: String? = nil
+  ) async -> CardResult<Void> {
+    let result: CardResult<Void> = await withCheckedContinuation { continuation in
+      BiometricGatekeeper.shared.authorizeIfRequired(.registerTrustAnchor) { outcome in
+        continuation.resume(returning: outcome)
+      }
+    }
+    if case .failure(let error) = result {
+      return .failure(error)
+    }
+    _ = reason
+    _registerAnchorInternal(
+      issuerDid: issuerDid,
+      publicKeyJwk: publicKeyJwk,
+      keyId: keyId,
+      source: source
+    )
+    return .success(())
+  }
+
+  internal func _registerAnchorInternal(
     issuerDid: String,
     publicKeyJwk: PublicKeyJWK,
     keyId: String?,

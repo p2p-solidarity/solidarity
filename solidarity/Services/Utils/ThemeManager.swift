@@ -141,6 +141,39 @@ extension Color {
   }
 }
 
+// MARK: - Figma Palette
+
+extension Color {
+  /// Raw palette mirroring the Figma design-system variables
+  /// (file: Solid(ar)ity, node 621-2155).
+  ///
+  /// Prefer semantic `Color.Theme.*` tokens in view code. Reach for
+  /// `Color.Palette.*` when you genuinely need a specific brand swatch
+  /// (e.g. illustrations, charts, print assets) independent of theme.
+  struct Palette {
+    // Neutrals — darkest (#1) to lightest (#7)
+    static let ink = Color(hex: 0x2F2F30)  // #1 — primary text on light
+    static let slate = Color(hex: 0x5F5E67)  // #2 — secondary text
+    static let stone = Color(hex: 0x9C9AA6)  // #3 — tertiary text / placeholder
+    static let fog = Color(hex: 0xD1D1D1)  // #4 — divider / border
+    static let mist = Color(hex: 0xEEEEEE)  // #5 — search / input surface
+    static let cream = Color(hex: 0xFBF9F2)  // #6 — page background
+    static let paper = Color(hex: 0xFFFFFF)  // #7 — card surface
+
+    // Accents
+    static let purple = Color(hex: 0x83537D)  // brand mauve
+    static let green = Color(hex: 0x4CAF51)  // success
+    static let red = Color(hex: 0xCD556A)  // destructive
+
+    /// All palette colors in display order (for swatch previews / pickers).
+    static let all: [(name: String, color: Color)] = [
+      ("ink", ink), ("slate", slate), ("stone", stone), ("fog", fog),
+      ("mist", mist), ("cream", cream), ("paper", paper),
+      ("purple", purple), ("green", green), ("red", red),
+    ]
+  }
+}
+
 // MARK: - Semantic Colors Extension
 
 extension Color {
@@ -161,15 +194,16 @@ extension Color {
     static var groupedBackground: Color { Color(.systemGroupedBackground) }
 
     // Soft rose accent used for primary CTA buttons
-    static var accentRose: Color { Color(hex: 0xC088A0) }
+    static var accentRose: Color { Color(hex: 0xBF80A7) }
 
     // MARK: - Swiss Sunrise Palette (Light) + Deep Alpine Night (Dark)
 
-    /// Page background: soft lavender (light) / deep brown-purple (dark)
+    /// Page background: warm cream (light) / deep navy-mauve (dark)
+    /// Light: `Palette.cream` (#fbf9f2). Dark: Figma `#060417`.
     static let pageBg = Color(.init(dynamicProvider: { traits in
       traits.userInterfaceStyle == .dark
-        ? UIColor(red: 0.10, green: 0.07, blue: 0.09, alpha: 1)  // #1A1218
-        : UIColor(red: 0.90, green: 0.86, blue: 0.90, alpha: 1)  // #E6DBE6
+        ? UIColor(red: 0.024, green: 0.016, blue: 0.090, alpha: 1)  // #060417
+        : UIColor(red: 0.984, green: 0.976, blue: 0.949, alpha: 1)  // #fbf9f2
     }))
 
     /// Dark UI elements
@@ -179,53 +213,179 @@ extension Color {
         : UIColor(red: 0.82, green: 0.78, blue: 0.82, alpha: 1)  // #D1C7D1
     }))
 
-    /// Primary text: dark charcoal-purple (light) / off-white lavender (dark)
+    /// Primary text: dark charcoal (light) / off-white lavender (dark)
     static let textPrimary = Color(.init(dynamicProvider: { traits in
       traits.userInterfaceStyle == .dark
         ? UIColor(red: 0.94, green: 0.91, blue: 0.94, alpha: 1)  // #F0E8F0
-        : UIColor(red: 0.16, green: 0.10, blue: 0.18, alpha: 1)  // #2A1A2E
+        : UIColor(red: 0.184, green: 0.184, blue: 0.188, alpha: 1)  // #2f2f30
     }))
 
     /// Secondary text
     static let textSecondary = Color(.init(dynamicProvider: { traits in
       traits.userInterfaceStyle == .dark
         ? UIColor(red: 0.66, green: 0.60, blue: 0.66, alpha: 1)  // #A898A8
-        : UIColor(red: 0.42, green: 0.31, blue: 0.44, alpha: 1)  // #6A5070
+        : UIColor(red: 0.373, green: 0.369, blue: 0.404, alpha: 1)  // #5f5e67
     }))
 
     /// Tertiary text
     static let textTertiary = Color(.init(dynamicProvider: { traits in
       traits.userInterfaceStyle == .dark
         ? UIColor(white: 0.50, alpha: 1)
-        : UIColor(red: 0.60, green: 0.53, blue: 0.60, alpha: 1)  // #998898
+        : UIColor(red: 0.612, green: 0.604, blue: 0.651, alpha: 1)  // #9c9aa6
     }))
 
     /// Placeholder text
     static let textPlaceholder = Color(.init(dynamicProvider: { traits in
       traits.userInterfaceStyle == .dark
         ? UIColor(white: 0.30, alpha: 1)
-        : UIColor(red: 0.72, green: 0.66, blue: 0.72, alpha: 1)  // #B8A8B8
+        : UIColor(red: 0.612, green: 0.604, blue: 0.651, alpha: 1)  // #9c9aa6
     }))
 
-    /// Search/input background
+    /// Search/input background — also used as elevated card surface
     static let searchBg = Color(.init(dynamicProvider: { traits in
       traits.userInterfaceStyle == .dark
-        ? UIColor(white: 1.0, alpha: 0.08)
-        : UIColor(red: 0.94, green: 0.91, blue: 0.94, alpha: 1)  // #F0E8F0
+        ? UIColor(red: 0.110, green: 0.078, blue: 0.141, alpha: 1)  // #1C1424
+        : UIColor(red: 0.933, green: 0.933, blue: 0.933, alpha: 1)  // #eeeeee
     }))
 
     /// Divider / border
     static let divider = Color(.init(dynamicProvider: { traits in
       traits.userInterfaceStyle == .dark
-        ? UIColor(white: 1.0, alpha: 0.15)
-        : UIColor(red: 0.80, green: 0.74, blue: 0.80, alpha: 1)  // #CCBDCC
+        ? UIColor(red: 0.176, green: 0.141, blue: 0.220, alpha: 1)  // #2D2438
+        : UIColor(red: 0.820, green: 0.820, blue: 0.820, alpha: 1)  // #d1d1d1
     }))
 
     /// Card background
     static let cardBg = Color(.init(dynamicProvider: { traits in
       traits.userInterfaceStyle == .dark
-        ? UIColor(red: 0.07, green: 0.04, blue: 0.07, alpha: 1)  // #111111
-        : UIColor(white: 1.0, alpha: 1)
+        ? UIColor(red: 0.078, green: 0.055, blue: 0.110, alpha: 1)  // #14101C
+        : UIColor(white: 1.0, alpha: 1)  // #ffffff
+    }))
+
+    /// Pill / chip background — light grey on cream (light), translucent white on mauve/dark (dark)
+    static let pillBg = Color(.init(dynamicProvider: { traits in
+      traits.userInterfaceStyle == .dark
+        ? UIColor.white.withAlphaComponent(0.18)
+        : UIColor(red: 0.933, green: 0.933, blue: 0.933, alpha: 1)  // #eeeeee
+    }))
+
+    /// Pill / chip border
+    static let pillBorder = Color(.init(dynamicProvider: { traits in
+      traits.userInterfaceStyle == .dark
+        ? UIColor.white.withAlphaComponent(0.30)
+        : UIColor(red: 0.820, green: 0.820, blue: 0.820, alpha: 1)  // #d1d1d1
+    }))
+
+    /// Featured / hero card surface — cream (light) / saturated brand mauve (dark).
+    /// Used for the Share QR hero card.
+    static let featuredCardBg = Color(.init(dynamicProvider: { traits in
+      traits.userInterfaceStyle == .dark
+        ? UIColor(red: 0.514, green: 0.325, blue: 0.490, alpha: 1)  // #83537d
+        : UIColor(red: 0.953, green: 0.922, blue: 0.867, alpha: 1)  // #f3ebdd
+    }))
+
+    /// Chip / verified-tag surface inside hero cards.
+    /// Light: `#F7F2FA`. Dark: Figma `rgba(47,47,48,0.5)`.
+    static let chipSurface = Color(.init(dynamicProvider: { traits in
+      traits.userInterfaceStyle == .dark
+        ? UIColor(red: 0.184, green: 0.184, blue: 0.188, alpha: 0.5)
+        : UIColor(red: 0.969, green: 0.949, blue: 0.980, alpha: 1.0)  // #F7F2FA
+    }))
+
+    /// Muted card / row container (sakura container, contact info rows).
+    /// Light: `#EEEEEE` @ 80%. Dark: Figma `rgba(47,47,48,0.6)`.
+    static let mutedSurface = Color(.init(dynamicProvider: { traits in
+      traits.userInterfaceStyle == .dark
+        ? UIColor(red: 0.184, green: 0.184, blue: 0.188, alpha: 0.6)
+        : UIColor(red: 0.933, green: 0.933, blue: 0.933, alpha: 0.8)
+    }))
+
+    /// "see more" pill / capsule background.
+    /// Light: `#EEEEEE`. Dark: Figma `rgba(47,47,48,0.5)`.
+    static let pillSurface = Color(.init(dynamicProvider: { traits in
+      traits.userInterfaceStyle == .dark
+        ? UIColor(red: 0.184, green: 0.184, blue: 0.188, alpha: 0.5)
+        : UIColor(red: 0.933, green: 0.933, blue: 0.933, alpha: 1.0)
+    }))
+
+    /// Outgoing chat bubble fill.
+    /// Light: rose `#BF80A7`. Dark: brand mauve `#83537D` per Figma.
+    static let bubbleOutgoing = Color(.init(dynamicProvider: { traits in
+      traits.userInterfaceStyle == .dark
+        ? UIColor(red: 0.514, green: 0.325, blue: 0.490, alpha: 1)  // #83537D
+        : UIColor(red: 0.749, green: 0.502, blue: 0.655, alpha: 1)  // #BF80A7
+    }))
+
+    /// Incoming chat bubble fill.
+    /// Light: warm cream `#F3EBDD`. Dark: dusty olive `#7A6F5C` per Figma.
+    static let bubbleIncoming = Color(.init(dynamicProvider: { traits in
+      traits.userInterfaceStyle == .dark
+        ? UIColor(red: 0.478, green: 0.435, blue: 0.361, alpha: 1)  // #7A6F5C
+        : UIColor(red: 0.953, green: 0.922, blue: 0.867, alpha: 1)  // #F3EBDD
+    }))
+
+    /// Text on the incoming bubble.
+    /// Light: ink `#2F2F30`. Dark: white per Figma.
+    static let bubbleIncomingText = Color(.init(dynamicProvider: { traits in
+      traits.userInterfaceStyle == .dark
+        ? UIColor.white
+        : UIColor(red: 0.184, green: 0.184, blue: 0.188, alpha: 1)
+    }))
+
+    /// Hero card gradient — lavender stop.
+    /// Light: opaque `#E9E3ED`. Dark: `rgba(233,227,237,0.3)` over page bg per Figma.
+    static let heroGradientStart = Color(.init(dynamicProvider: { traits in
+      traits.userInterfaceStyle == .dark
+        ? UIColor(red: 0.914, green: 0.890, blue: 0.929, alpha: 0.30)
+        : UIColor(red: 0.914, green: 0.890, blue: 0.929, alpha: 1.00)
+    }))
+
+    /// Hero card gradient — peach stop.
+    /// Light: opaque `#F3DFDD`. Dark: `rgba(243,223,221,0.3)` over page bg per Figma.
+    static let heroGradientEnd = Color(.init(dynamicProvider: { traits in
+      traits.userInterfaceStyle == .dark
+        ? UIColor(red: 0.953, green: 0.875, blue: 0.867, alpha: 0.30)
+        : UIColor(red: 0.953, green: 0.875, blue: 0.867, alpha: 1.00)
+    }))
+
+    /// Credential hero — top stop (sky blue) per Figma 724:22805.
+    /// Light: `#C1E3EC`. Dark: same hue at 30% over page bg.
+    static let heroSkyTop = Color(.init(dynamicProvider: { traits in
+      traits.userInterfaceStyle == .dark
+        ? UIColor(red: 0.757, green: 0.890, blue: 0.925, alpha: 0.30)
+        : UIColor(red: 0.757, green: 0.890, blue: 0.925, alpha: 1.00)
+    }))
+
+    /// Credential hero — bottom stop (cream) per Figma 724:22805.
+    /// Light: `#FEF7EB`. Dark: same hue at 30% over page bg.
+    static let heroSkyBottom = Color(.init(dynamicProvider: { traits in
+      traits.userInterfaceStyle == .dark
+        ? UIColor(red: 0.996, green: 0.969, blue: 0.922, alpha: 0.30)
+        : UIColor(red: 0.996, green: 0.969, blue: 0.922, alpha: 1.00)
+    }))
+
+    /// Translucent disc behind the credential icon in the hero.
+    /// Light: white frosted; dark: white at 12% so the icon stays readable.
+    static let heroSkyDisc = Color(.init(dynamicProvider: { traits in
+      traits.userInterfaceStyle == .dark
+        ? UIColor.white.withAlphaComponent(0.12)
+        : UIColor.white.withAlphaComponent(0.55)
+    }))
+
+    /// Inverted action surface (Edit / small CTA pills inside cards).
+    /// Light: ink `#2F2F30` (Figma 737:2545). Dark: cream `#FBF9F2` (Figma 768:5673).
+    static let invertedButtonBg = Color(.init(dynamicProvider: { traits in
+      traits.userInterfaceStyle == .dark
+        ? UIColor(red: 0.984, green: 0.976, blue: 0.949, alpha: 1)
+        : UIColor(red: 0.184, green: 0.184, blue: 0.188, alpha: 1)
+    }))
+
+    /// Text on an `invertedButtonBg` surface.
+    /// Light: white (Figma 743:2992). Dark: ink `#2F2F30` (Figma 768:5674).
+    static let invertedButtonText = Color(.init(dynamicProvider: { traits in
+      traits.userInterfaceStyle == .dark
+        ? UIColor(red: 0.184, green: 0.184, blue: 0.188, alpha: 1)
+        : UIColor.white
     }))
 
     // MARK: - Primary / accent colors
@@ -234,34 +394,31 @@ extension Color {
     static let primaryBlue = Color(.init(dynamicProvider: { traits in
       traits.userInterfaceStyle == .dark
         ? UIColor(red: 0.75, green: 0.53, blue: 0.63, alpha: 1)  // #C088A0
-        : UIColor(red: 0.54, green: 0.31, blue: 0.53, alpha: 1)  // #8A5088
+        : UIColor(red: 0.514, green: 0.325, blue: 0.490, alpha: 1)  // #83537d
     }))
 
     /// Success green
     static let terminalGreen = Color(.init(dynamicProvider: { traits in
       traits.userInterfaceStyle == .dark
         ? UIColor(red: 0.0, green: 1.0, blue: 0.25, alpha: 1)
-        : UIColor(red: 0.20, green: 0.70, blue: 0.30, alpha: 1)  // #34B34D
+        : UIColor(red: 0.298, green: 0.686, blue: 0.318, alpha: 1)  // #4caf51
     }))
 
     /// Dusty mauve decorative
-    static let dustyMauve = Color(hex: 0x7A5070)
+    static let dustyMauve = Color(hex: 0xA6678D)
 
     /// Danger red
-    static let destructive = Color(hex: 0xFF3333)
+    static let destructive = Color(hex: 0xCD556A)
 
-    /// Warm cream for inverted cards
-    static let warmCream = Color(.init(dynamicProvider: { traits in
-      traits.userInterfaceStyle == .dark
-        ? UIColor(red: 0.97, green: 0.97, blue: 0.96, alpha: 1)
-        : UIColor(red: 0.16, green: 0.10, blue: 0.18, alpha: 1)  // inverted for light
-    }))
+    /// Warm cream — used for chat bubble (incoming), avatar fallback, inverted on-dark surfaces.
+    /// Stays light cream in both modes so it reads as a bright surface against the dark page bg.
+    static let warmCream = Color(red: 0.953, green: 0.922, blue: 0.867)  // #f3ebdd
 
     /// Feature accent (brand mauve)
     static let featureAccent = Color(.init(dynamicProvider: { traits in
       traits.userInterfaceStyle == .dark
         ? UIColor(red: 0.75, green: 0.53, blue: 0.63, alpha: 1)  // #C088A0
-        : UIColor(red: 0.54, green: 0.31, blue: 0.53, alpha: 1)  // #8A5088
+        : UIColor(red: 0.514, green: 0.325, blue: 0.490, alpha: 1)  // #83537d
     }))
 
     // MARK: - Radar / sharing specific
@@ -297,7 +454,7 @@ extension Color {
     static let tabAccentMe = Color(.init(dynamicProvider: { traits in
       traits.userInterfaceStyle == .dark
         ? UIColor(white: 0.15, alpha: 1)
-        : UIColor(red: 0.94, green: 0.91, blue: 0.94, alpha: 1)
+        : UIColor(red: 0.984, green: 0.976, blue: 0.949, alpha: 1)  // #fbf9f2
     }))
     static let tabAccentSakura = Color(hex: 0x222233)
     static let tabAccentGroups = Color(hex: 0x1A2228)
@@ -307,22 +464,22 @@ extension Color {
     static let blobCenter = Color(.init(dynamicProvider: { traits in
       traits.userInterfaceStyle == .dark
         ? UIColor(red: 0.08, green: 0.06, blue: 0.08, alpha: 1)
-        : UIColor(red: 0.88, green: 0.82, blue: 0.88, alpha: 1)
+        : UIColor(red: 0.941, green: 0.929, blue: 0.957, alpha: 1)  // #f0edf4
     }))
     static let gradientPeach = Color(.init(dynamicProvider: { traits in
       traits.userInterfaceStyle == .dark
         ? UIColor(red: 0.10, green: 0.08, blue: 0.07, alpha: 1)
-        : UIColor(red: 0.92, green: 0.85, blue: 0.88, alpha: 1)  // #EBD9E0
+        : UIColor(red: 0.953, green: 0.875, blue: 0.867, alpha: 1)  // #f3dfdd
     }))
     static let gradientLavender = Color(.init(dynamicProvider: { traits in
       traits.userInterfaceStyle == .dark
         ? UIColor(red: 0.09, green: 0.07, blue: 0.10, alpha: 1)
-        : UIColor(red: 0.86, green: 0.80, blue: 0.90, alpha: 1)  // #DBCCE6
+        : UIColor(red: 0.914, green: 0.890, blue: 0.929, alpha: 1)  // #e9e3ed
     }))
     static let gradientCream = Color(.init(dynamicProvider: { traits in
       traits.userInterfaceStyle == .dark
         ? UIColor(red: 0.08, green: 0.07, blue: 0.06, alpha: 1)
-        : UIColor(red: 0.93, green: 0.90, blue: 0.92, alpha: 1)  // #EDE5EB
+        : UIColor(red: 0.941, green: 0.929, blue: 0.957, alpha: 1)  // #f0edf4
     }))
 
     // MARK: - Adaptive functions

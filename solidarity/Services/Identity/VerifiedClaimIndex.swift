@@ -144,4 +144,25 @@ enum VerifiedClaimIndex {
   static func nonFieldClaims(forHolder holderDid: String) -> [ProvableClaimEntity] {
     claims(forHolder: holderDid).filter { $0.sourceField == nil }
   }
+
+  /// Set of non-field claim types (e.g. "is_human", "age_over_18") that the
+  /// holder actually possesses, derived from ProvableClaimEntity. Used by
+  /// VC issuance to constrain `verified_proofs.claims` to claims the holder
+  /// can back — without this, a card could declare proofs the holder never
+  /// earned (ghost claims).
+  @MainActor
+  static func proofClaimTypes(forHolder holderDid: String) -> Set<String> {
+    Set(nonFieldClaims(forHolder: holderDid).map { $0.claimType })
+  }
+
+  /// Thread-safe variant of `proofClaimTypes(forHolder:)`. VCService runs
+  /// off-main during issuance and needs sync access to gate proofClaims.
+  static func proofClaimTypesSync(forHolder holderDid: String) -> Set<String> {
+    if Thread.isMainThread {
+      return MainActor.assumeIsolated { proofClaimTypes(forHolder: holderDid) }
+    }
+    return DispatchQueue.main.sync {
+      MainActor.assumeIsolated { proofClaimTypes(forHolder: holderDid) }
+    }
+  }
 }

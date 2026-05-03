@@ -15,7 +15,21 @@ final class TwitterArchiveImporter {
 
     private let streamParser = StreamParser.shared
 
+    /// Running total of bytes accepted from `*.js` files for the current
+    /// import. Reset at the start of each `importArchive` call.
+    private var bytesAcceptedThisImport: Int64 = 0
+
     private init() {}
+
+    func noteBytesAccepted(_ bytes: Int64) throws {
+        bytesAcceptedThisImport &+= max(0, bytes)
+        if bytesAcceptedThisImport > TwitterImportLimits.maxTotalSizeBytes {
+            throw TwitterImportError.archiveTooLarge(
+                totalBytes: bytesAcceptedThisImport,
+                limitBytes: TwitterImportLimits.maxTotalSizeBytes
+            )
+        }
+    }
 
     // MARK: - Public API
 
@@ -24,6 +38,7 @@ final class TwitterArchiveImporter {
         from archiveURL: URL,
         progress: ((ImportProgress) -> Void)? = nil
     ) async throws -> TwitterArchiveResult {
+        bytesAcceptedThisImport = 0
         var result = TwitterArchiveResult()
 
         // Twitter archive structure:

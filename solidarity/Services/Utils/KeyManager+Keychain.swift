@@ -82,12 +82,14 @@ class KeychainManager {
   func storeSymmetricKey(_ key: SymmetricKey, tag: String) -> CardResult<Void> {
     let keyData = key.withUnsafeBytes { Data($0) }
 
+    // Local-only storage. Raw key bytes must never leave the device via iCloud
+    // Keychain — `WhenUnlockedThisDeviceOnly` prevents both backup and sync.
     let query: [String: Any] = [
       kSecClass as String: kSecClassGenericPassword,
       kSecAttrAccount as String: tag,
       kSecValueData as String: keyData,
-      kSecAttrAccessible as String: kSecAttrAccessibleWhenUnlocked,
-      kSecAttrSynchronizable as String: kCFBooleanTrue as Any,
+      kSecAttrAccessible as String: kSecAttrAccessibleWhenUnlockedThisDeviceOnly,
+      kSecAttrSynchronizable as String: kCFBooleanFalse as Any,
     ]
 
     _ = deleteKey(tag: tag)
@@ -107,14 +109,28 @@ class KeychainManager {
       kSecAttrAccount as String: tag,
       kSecAttrSynchronizable as String: kSecAttrSynchronizableAny,
       kSecReturnData as String: true,
+      kSecReturnAttributes as String: true,
       kSecMatchLimit as String: kSecMatchLimitOne,
     ]
 
     var result: AnyObject?
     let status = SecItemCopyMatching(query as CFDictionary, &result)
 
-    if status == errSecSuccess, let keyData = result as? Data {
+    if status == errSecSuccess,
+       let dict = result as? [String: Any],
+       let keyData = dict[kSecValueData as String] as? Data {
       let key = SymmetricKey(data: keyData)
+
+      // One-time migration: if the stored item was synchronizable (iCloud
+      // Keychain), copy it to a local-only entry and delete the synced one so
+      // future reads use the safe variant.
+      if let isSynchronizable = (dict[kSecAttrSynchronizable as String] as? NSNumber)?.boolValue,
+         isSynchronizable {
+        print("[KeychainManager] Migrating synchronizable symmetric key to local-only: \(tag)")
+        _ = deleteKey(tag: tag)
+        _ = storeSymmetricKey(key, tag: tag)
+      }
+
       return .success(key)
     } else {
       return .failure(.encryptionError("Failed to retrieve symmetric key: \(status)"))
@@ -124,12 +140,14 @@ class KeychainManager {
   func storePrivateKey(_ key: P256.Signing.PrivateKey, tag: String) -> CardResult<Void> {
     let keyData = key.rawRepresentation
 
+    // Local-only storage. Private key bytes must never leave the device via
+    // iCloud Keychain.
     let query: [String: Any] = [
       kSecClass as String: kSecClassGenericPassword,
       kSecAttrAccount as String: tag,
       kSecValueData as String: keyData,
-      kSecAttrAccessible as String: kSecAttrAccessibleWhenUnlocked,
-      kSecAttrSynchronizable as String: kCFBooleanTrue as Any,
+      kSecAttrAccessible as String: kSecAttrAccessibleWhenUnlockedThisDeviceOnly,
+      kSecAttrSynchronizable as String: kCFBooleanFalse as Any,
     ]
 
     _ = deleteKey(tag: tag)
@@ -149,15 +167,29 @@ class KeychainManager {
       kSecAttrAccount as String: tag,
       kSecAttrSynchronizable as String: kSecAttrSynchronizableAny,
       kSecReturnData as String: true,
+      kSecReturnAttributes as String: true,
       kSecMatchLimit as String: kSecMatchLimitOne,
     ]
 
     var result: AnyObject?
     let status = SecItemCopyMatching(query as CFDictionary, &result)
 
-    if status == errSecSuccess, let keyData = result as? Data {
+    if status == errSecSuccess,
+       let dict = result as? [String: Any],
+       let keyData = dict[kSecValueData as String] as? Data {
       do {
         let key = try P256.Signing.PrivateKey(rawRepresentation: keyData)
+
+        // One-time migration: pull legacy iCloud-synced entries down to a
+        // local-only entry on first read so private key bytes stop leaving
+        // the device.
+        if let isSynchronizable = (dict[kSecAttrSynchronizable as String] as? NSNumber)?.boolValue,
+           isSynchronizable {
+          print("[KeychainManager] Migrating synchronizable private key to local-only: \(tag)")
+          _ = deleteKey(tag: tag)
+          _ = storePrivateKey(key, tag: tag)
+        }
+
         return .success(key)
       } catch {
         return .failure(.encryptionError("Failed to reconstruct private key: \(error.localizedDescription)"))

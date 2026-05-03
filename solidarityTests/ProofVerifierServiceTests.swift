@@ -90,6 +90,47 @@ final class ProofVerifierServiceTests: XCTestCase {
     }
   }
 
+  func testVerifyJWTRejectsAlgNone() throws {
+    let credentialJWT = try issuedCredentialJWT()
+    let mutated = swapHeaderAlg(of: credentialJWT, to: "none")
+    let result = ProofVerifierService.shared.verifyVpToken(mutated)
+    XCTAssertFalse(result.isValid)
+    XCTAssertEqual(result.status, .failed)
+    XCTAssertTrue(result.reason.lowercased().contains("alg") || result.reason.lowercased().contains("es256"),
+                  "Expected reason to mention alg, got: \(result.reason)")
+  }
+
+  func testVerifyJWTRejectsAlgES384() throws {
+    let credentialJWT = try issuedCredentialJWT()
+    let mutated = swapHeaderAlg(of: credentialJWT, to: "ES384")
+    let result = ProofVerifierService.shared.verifyVpToken(mutated)
+    XCTAssertFalse(result.isValid)
+    XCTAssertEqual(result.status, .failed)
+  }
+
+  func testVerifyJWTRejectsAlgHS256() throws {
+    let credentialJWT = try issuedCredentialJWT()
+    let mutated = swapHeaderAlg(of: credentialJWT, to: "HS256")
+    let result = ProofVerifierService.shared.verifyVpToken(mutated)
+    XCTAssertFalse(result.isValid)
+    XCTAssertEqual(result.status, .failed)
+  }
+
+  func testEmbeddedJWKFallbackRejectsNonDIDKeyIssuer() throws {
+    // FIX 1: even though `did:web:...` may collide with a JWK-derived
+    // `did:key:...` and trip the equality check, the fallback path must
+    // be blocked at the method check itself — only `iss` values starting
+    // with `did:key:` may use the embedded-JWK self-consistency fallback.
+    let credentialJWT = try issuedCredentialJWT(issuerDid: "did:web:attacker.example")
+    let result = ProofVerifierService.shared.verifyVpToken(credentialJWT)
+    XCTAssertFalse(result.isValid)
+    XCTAssertEqual(result.status, .failed)
+    XCTAssertTrue(result.reason.lowercased().contains("untrusted")
+                  || result.reason.lowercased().contains("issuer")
+                  || result.reason.lowercased().contains("alg"),
+                  "Unexpected reason: \(result.reason)")
+  }
+
   private func tamperPayload(of jwt: String) -> String {
     let parts = jwt.split(separator: ".")
     guard parts.count == 3 else { return jwt }
@@ -97,5 +138,19 @@ final class ProofVerifierServiceTests: XCTestCase {
     payloadData[payloadData.startIndex] ^= 0x01
     let payload = payloadData.base64URLEncodedString()
     return "\(parts[0]).\(payload).\(parts[2])"
+  }
+
+  /// Swap the JWT header `alg` and re-pack. Signature is left as-is — for
+  /// these tests we only care that the alg-pin trips before the crypto.
+  private func swapHeaderAlg(of jwt: String, to newAlg: String) -> String {
+    let parts = jwt.split(separator: ".")
+    guard parts.count == 3,
+          let headerData = Data(base64URLEncoded: String(parts[0])),
+          var headerJson = try? JSONSerialization.jsonObject(with: headerData) as? [String: Any]
+    else { return jwt }
+    headerJson["alg"] = newAlg
+    guard let mutatedHeader = try? JSONSerialization.data(withJSONObject: headerJson, options: [.sortedKeys])
+    else { return jwt }
+    return "\(mutatedHeader.base64URLEncodedString()).\(parts[1]).\(parts[2])"
   }
 }

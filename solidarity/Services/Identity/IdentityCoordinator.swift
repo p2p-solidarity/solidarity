@@ -230,13 +230,17 @@ final class IdentityCoordinator: ObservableObject {
   func loadIdentity(context: LAContext?) async {
     await setLoading(true)
 
+    #if DEBUG
     print("[IdentityCoordinator] loadIdentity started")
+    #endif
 
     // Try cached descriptor first (avoids biometric auth for display)
     let cachedDescriptor = cacheStore.loadDescriptor()
+    #if DEBUG
     if let cached = cachedDescriptor {
       print("[IdentityCoordinator] Using cached DID descriptor: \(cached.did)")
     }
+    #endif
 
     // Try live derivation from keychain
     let descriptorResult = didService.currentDescriptor(context: context)
@@ -246,14 +250,18 @@ final class IdentityCoordinator: ObservableObject {
 
     switch descriptorResult {
     case .success(let descriptor):
+      #if DEBUG
       print("[IdentityCoordinator] DID loaded successfully: \(descriptor.did)")
+      #endif
       // Cache for future loads (avoids biometric prompt)
       cacheStore.saveDescriptor(descriptor)
     case .failure(let error):
+      #if DEBUG
       print("[IdentityCoordinator] DID live derivation failed: \(error)")
       if cachedDescriptor != nil {
         print("[IdentityCoordinator] Falling back to cached descriptor")
       }
+      #endif
     }
 
     await MainActor.run {

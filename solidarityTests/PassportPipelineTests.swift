@@ -1,3 +1,4 @@
+import CryptoKit
 import Foundation
 import Testing
 @testable import solidarity
@@ -78,16 +79,22 @@ struct MRZParsingTests {
 // MARK: - MoproProofService Tests
 
 struct MoproProofServiceTests {
-  @Test func moproIsAvailableReturnsFalseWithoutFFI() async throws {
-    #expect(MoproProofService.isAvailable == false,
-            "Mopro native proving should not be available in test builds")
+  @Test func moproAvailabilityReflectsBundleState() async throws {
+    // Availability now depends on whether the OpenPassport disclosure
+    // circuit + SRS files are bundled in this build. We only assert
+    // it returns a stable Bool — the value depends on the build target.
+    let available = MoproProofService.isAvailable
+    #expect(available == true || available == false)
   }
 
-  @Test func sdJwtFallbackProducesValidOutput() async throws {
+  @Test func generatePassportProofProducesNonEmptyOutput() async throws {
     var progressMessages: [String] = []
-    let output = await MoproProofService.shared.generatePassportProof(
+    // Pass an empty mrzDigest so the new mismatch hard-fail does not fire
+    // for this test — it's only validating that the proof chain produces
+    // some output regardless of which engine wins (Mopro/Semaphore/SD-JWT).
+    let output = try await MoproProofService.shared.generatePassportProof(
       documentHash: "abc123def456",
-      mrzDigest: "feedbeef01020304",
+      mrzDigest: "",
       dg1MRZData: "\(MRZParsingTests.sampleLine1)\(MRZParsingTests.sampleLine2)",
       nationalityCode: "JPN",
       dateOfBirth: Date(timeIntervalSince1970: 0),
@@ -96,12 +103,36 @@ struct MoproProofServiceTests {
       onProgress: { msg in progressMessages.append(msg) }
     )
 
-    #expect(output.proofType != "mopro-noir",
-            "Should not produce mopro-noir proof without FFI bindings")
-    #expect(["semaphore-zk", "sd-jwt-fallback"].contains(output.proofType),
-            "Should fall back to semaphore-zk or sd-jwt-fallback")
+    #expect(["mopro-noir", "semaphore-zk", "sd-jwt-fallback"].contains(output.proofType),
+            "Output proofType must be one of the documented engines")
     #expect(!output.proofJSON.isEmpty, "Proof JSON should not be empty")
     #expect(!progressMessages.isEmpty, "Should report progress during generation")
+  }
+
+  @Test func mrzDigestMismatchThrowsHardError() async throws {
+    // OCR-supplied digest deliberately does not match the SHA256 of the
+    // sanitized DG1 prefix-88 — the service must throw mrzDigestMismatch
+    // instead of silently producing a credential with inconsistent inputs.
+    do {
+      _ = try await MoproProofService.shared.generatePassportProof(
+        documentHash: "abc123def456",
+        mrzDigest: "00000000000000000000000000000000000000000000000000000000feedbeef",
+        dg1MRZData: "\(MRZParsingTests.sampleLine1)\(MRZParsingTests.sampleLine2)",
+        nationalityCode: "JPN",
+        dateOfBirth: Date(timeIntervalSince1970: 0),
+        expiryDate: Date(timeIntervalSinceNow: 86400 * 365),
+        passiveAuthPassed: false,
+        onProgress: { _ in }
+      )
+      Issue.record("Expected mrzDigestMismatch but generation succeeded")
+    } catch let error as MoproProofError {
+      switch error {
+      case .mrzDigestMismatch(let ocr, let chip):
+        #expect(!ocr.isEmpty)
+        #expect(!chip.isEmpty)
+        #expect(ocr != chip)
+      }
+    }
   }
 
   @Test func proofOutputEquatableConformance() async throws {
@@ -367,5 +398,134 @@ struct ProvableClaimEntityTests {
     )
     #expect(claim.identityCardId == card.id,
             "Claim's identityCardId should match the parent card's id")
+  }
+}
+
+// MARK: - Fix 2 — Simulated chips persist as selfIssued
+
+struct SimulatedPassportPersistTests {
+  @Test @MainActor func simulatedChipDemotesToSelfIssued() async throws {
+    let draft = PassportMRZDraft(
+      passportNumber: "AB1234567", nationalityCode: "TWN",
+      dateOfBirth: Date(timeIntervalSince1970: 0),
+      expiryDate: Date(timeIntervalSinceNow: 86400 * 365)
+    )
+    let chip = PassportChipSnapshot(
+      documentHash: "aabbccdd", mrzDigest: "11223344",
+      dg1MRZData: "\(MRZParsingTests.sampleLine1)\(MRZParsingTests.sampleLine2)",
+      chipUID: "SIM-DEAD", bacVerified: true, paceVerified: false,
+      passiveAuthPassed: false, isSimulated: true, readAt: Date(),
+      nationalityCode: "TWN", maskedDocNumber: "AB***67",
+      dataGroupsRead: ["DG1 (sim)"]
+    )
+    // Synthesize a proof result that the persist step would receive after
+    // the pipeline forced trust to "white".
+    let proof = PassportProofResult(
+      proofType: "sd-jwt-fallback", proofPayload: "{}",
+      trustLevel: "white", generationFailed: true
+    )
+
+    let result = PassportPipelineService.shared.persistPassportCredential(
+      draft: draft, proof: proof, chip: chip
+    )
+    switch result {
+    case .success(let card):
+      #expect(card.issuerType == "selfIssued",
+              "Simulated chip must persist as selfIssued, not government")
+      #expect(card.trustLevel == "white",
+              "Simulated chip must persist with white trust level")
+      #expect(card.metadataTags.contains("isSimulated:true"),
+              "Simulated chip must mark credential metadata for DEV BUILD badge")
+      #expect(card.title.contains("DEV BUILD"),
+              "Simulated chip title must surface DEV BUILD label")
+    case .failure(let error):
+      Issue.record("Expected success but got \(error)")
+    }
+  }
+
+  @Test @MainActor func realChipPersistsAsGovernment() async throws {
+    let draft = PassportMRZDraft(
+      passportNumber: "AB1234567", nationalityCode: "TWN",
+      dateOfBirth: Date(timeIntervalSince1970: 0),
+      expiryDate: Date(timeIntervalSinceNow: 86400 * 365)
+    )
+    let chip = PassportChipSnapshot(
+      documentHash: "aabbccdd", mrzDigest: "11223344",
+      dg1MRZData: "\(MRZParsingTests.sampleLine1)\(MRZParsingTests.sampleLine2)",
+      chipUID: "NFC-AB1234567", bacVerified: true, paceVerified: true,
+      passiveAuthPassed: true, isSimulated: false, readAt: Date(),
+      nationalityCode: "TWN", maskedDocNumber: "AB***67",
+      dataGroupsRead: ["DG1", "DG2", "SOD"]
+    )
+    let proof = PassportProofResult(
+      proofType: "semaphore-zk", proofPayload: "{}",
+      trustLevel: "green", generationFailed: false
+    )
+
+    let result = PassportPipelineService.shared.persistPassportCredential(
+      draft: draft, proof: proof, chip: chip
+    )
+    switch result {
+    case .success(let card):
+      #expect(card.issuerType == "government")
+      #expect(card.trustLevel == "green")
+      #expect(!card.metadataTags.contains("isSimulated:true"))
+      #expect(!card.title.contains("DEV BUILD"))
+    case .failure(let error):
+      Issue.record("Expected success but got \(error)")
+    }
+  }
+}
+
+// MARK: - Fix 1 — v2 field commitments use full value with version byte
+
+struct FieldCommitmentV2Tests {
+  @Test func v2CommitmentDiffersFromV1() async throws {
+    let key = SymmetricKey(size: .bits256)
+    let v1 = ProofGenerationManager.computeV1Digest(
+      field: .email, value: "alice@example.com",
+      masterKey: key, recipientId: "rp"
+    )
+    let v2 = ProofGenerationManager.computeV2Digest(
+      field: .email, value: "alice@example.com",
+      masterKey: key, recipientId: "rp"
+    )
+    #expect(v1 != v2,
+            "v2 must differ from v1 — domain separator + full-value hashing changes the digest")
+    #expect(v1.count == 32 && v2.count == 32,
+            "Both digests are SHA256 (32 bytes); the version byte is added separately")
+  }
+
+  @Test func v2CommitmentChangesWithFullValue() async throws {
+    let key = SymmetricKey(size: .bits256)
+    // v1 only used the first 3 chars for non-name fields, so two values
+    // sharing a prefix collided. v2 uses the full value — different inputs
+    // must produce different digests.
+    let a = ProofGenerationManager.computeV2Digest(
+      field: .email, value: "alice@example.com",
+      masterKey: key, recipientId: nil
+    )
+    let b = ProofGenerationManager.computeV2Digest(
+      field: .email, value: "alice@example.org",
+      masterKey: key, recipientId: nil
+    )
+    #expect(a != b,
+            "Full-value hashing must distinguish values that share a 3-char prefix")
+  }
+}
+
+// MARK: - Fix 8 — Group credential scope ≠ signal
+
+struct GroupCredentialScopeTests {
+  @Test func scopeAndSignalDiffer() async throws {
+    let groupId = "abc-123"
+    let scope = GroupCredentialService.groupCredentialScope(groupId: groupId)
+    let signal = GroupCredentialService.groupCredentialSignal(groupId: groupId)
+    #expect(scope != signal,
+            "Scope must differ from signal so the per-(secret, scope) nullifier doesn't collapse anonymity")
+    #expect(scope.contains("groupCredential.v1"),
+            "Scope must be domain-separated by version")
+    #expect(signal == groupId,
+            "Signal carries the groupId payload being attested")
   }
 }

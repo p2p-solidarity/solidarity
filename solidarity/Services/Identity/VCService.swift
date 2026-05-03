@@ -45,7 +45,10 @@ final class VCService {
 
   private let keychain: KeychainService
   private let didService: DIDService
-  private let library: VCLibrary
+  /// Internal so the verify-side extension in `VCService+Verify.swift`
+  /// can persist import / verification results without rerouting through
+  /// a forwarding accessor. Still scoped to the module.
+  let library: VCLibrary
 
   init(
     keychain: KeychainService = .shared,
@@ -131,8 +134,27 @@ final class VCService {
     // Collect sourceCredentialIds for traceability.
     let sourceCredentialIds = VerifiedClaimIndex.credentialIdsSync(forHolder: holderDid)
 
-    // Collect active proof claims.
-    let proofClaims = ShareSettingsStore.selectedProofClaims
+    // Collect active proof claims, intersected with what the holder actually
+    // owns. Without this, the VC could declare proofs the holder never
+    // earned (ghost claims) — e.g. ShareSettingsStore returns "is_human"
+    // by default but the holder might have no passport credential. The
+    // recipient cannot independently verify those declarations, so the
+    // issuer must self-police.
+    let requestedProofClaims = ShareSettingsStore.selectedProofClaims
+    let availableProofs = VerifiedClaimIndex.proofClaimTypesSync(forHolder: holderDid)
+    let proofClaims = requestedProofClaims.filter { availableProofs.contains($0) }
+    let droppedProofs = Set(requestedProofClaims).subtracting(availableProofs)
+    if !droppedProofs.isEmpty {
+      // Common cause: ShareSettings toggle says "share is_human" but no
+      // passport claim exists for this holderDid — either the user never
+      // scanned a passport, or PassportPipeline wrote claims under a
+      // different holderDid (DID descriptor drift). Surface so onboarding
+      // bugs don't silently produce "verified" cards with no proofs.
+      let dropped = droppedProofs.sorted().joined(separator: ", ")
+      Self.logger.warning(
+        "Dropping requested proof claims not available for holder \(holderDid, privacy: .private): \(dropped)"
+      )
+    }
 
     let claims = BusinessCardCredentialClaims(
       card: cardForCredential,
@@ -278,179 +300,6 @@ final class VCService {
     }
   }
 
-  /// Imports a presented credential (vp_token) and stores it locally.
-  func importPresentedCredential(jwt: String) -> CardResult<ImportedCredential> {
-    Self.logger.info("Importing presented credential, JWT length: \(jwt.count)")
-    let decodeResult = decodeJWT(jwt)
-    switch decodeResult {
-    case .failure(let error):
-      Self.logger.error("Failed to decode JWT: \(error.localizedDescription)")
-      return .failure(error)
-    case .success(let decoded):
-      Self.logger.info("JWT decoded successfully, parsing credential envelope")
-      do {
-        let envelope = try JSONDecoder().decode(BusinessCardCredentialEnvelope.self, from: decoded.payloadData)
-        Self.logger.info("Credential envelope decoded, converting to business card")
-        let businessCard = try envelope.toBusinessCard()
-
-        // Group VC Verification
-        if let _ = businessCard.groupContext {
-          Self.logger.info("Detected Group Credential, performing additional verification")
-          // Note: We need to verify the Semaphore proof here or in a separate step.
-          // For now, we import it, but mark it as requiring verification if proof is missing/invalid.
-          // The actual proof verification usually happens during presentation (VP), not just import.
-          // But if we are importing a *presented* credential, we should check the proof.
-          // However, the proof is likely in the VP, not the VC itself, or in the VC if it's a specific claim.
-          // Our design puts the proof in the presentation exchange, but here we are just parsing the VC JWT.
-          // We'll let the coordinator handle the proof verification using GroupCredentialService.
-        }
-
-        let snapshot = BusinessCardSnapshot(card: businessCard)
-
-        let issuedAt = envelope.issuedAtDate ?? Date()
-        let expiresAt = envelope.expirationDate
-        let holderDid = envelope.sub ?? businessCard.id.uuidString
-        let issuerDid = envelope.iss ?? "did:unknown"
-
-        Self.logger.info("Creating issued credential - holderDid: \(holderDid), issuerDid: \(issuerDid)")
-        let issued = IssuedCredential(
-          jwt: jwt,
-          header: decoded.header,
-          payload: decoded.payload,
-          snapshot: snapshot,
-          issuedAt: issuedAt,
-          expiresAt: expiresAt,
-          holderDid: holderDid,
-          issuerDid: issuerDid
-        )
-
-        Self.logger.info("Storing imported credential with unverified status")
-        switch library.add(issued, status: .unverified) {
-        case .success(let stored):
-          Self.logger.info("Credential imported and stored successfully")
-          return .success(ImportedCredential(storedCredential: stored, businessCard: businessCard))
-        case .failure(let error):
-          Self.logger.error("Failed to store imported credential: \(error.localizedDescription)")
-          return .failure(error)
-        }
-      } catch let cardError as CardError {
-        Self.logger.error("CardError during credential import: \(cardError.localizedDescription)")
-        return .failure(cardError)
-      } catch {
-        Self.logger.error("Failed to parse credential subject: \(error.localizedDescription)")
-        return .failure(.invalidData("Failed to parse credential subject: \(error.localizedDescription)"))
-      }
-    }
-  }
-
-  func verifyStoredCredential(_ credential: VCLibrary.StoredCredential) -> CardResult<VCLibrary.StoredCredential> {
-    Self.logger.info("Verifying stored credential")
-    let components = credential.jwt.split(separator: ".")
-    guard components.count == 3 else {
-      Self.logger.error("Malformed JWT - component count: \(components.count), expected 3")
-      return .failure(.invalidData("Malformed JWT"))
-    }
-
-    let signingInput = "\(components[0]).\(components[1])"
-    guard
-      let signatureData = Data(base64URLEncoded: String(components[2])),
-      let signingData = signingInput.data(using: .utf8)
-    else {
-      Self.logger.error("Invalid JWT signature encoding")
-      return .failure(.invalidData("Invalid JWT signature encoding"))
-    }
-
-    Self.logger.info("Decoding JWT for verification")
-    let decodedResult = decodeJWT(credential.jwt)
-
-    switch decodedResult {
-    case .failure(let error):
-      Self.logger.error("Failed to decode JWT during verification: \(error.localizedDescription)")
-      return .failure(error)
-    case .success(let decoded):
-      Self.logger.info("JWT decoded, parsing credential envelope")
-      do {
-        let envelope = try JSONDecoder().decode(BusinessCardCredentialEnvelope.self, from: decoded.payloadData)
-
-        let credentialSubject = (envelope.vc ?? envelope.payload?.vc)?.credentialSubject
-        let issuerDid = envelope.iss ?? envelope.payload?.iss
-        let keyId = decoded.header["kid"] as? String
-
-        guard let issuerDid, !issuerDid.isEmpty else {
-          Self.logger.error("Credential is missing issuer DID")
-          return storeVerificationResult(credential, status: .failed)
-        }
-
-        guard let trustedKey = IssuerTrustAnchorStore.shared.trustedJWK(for: issuerDid, keyId: keyId) else {
-          Self.logger.error("Issuer DID is not trusted: \(issuerDid)")
-          return storeVerificationResult(credential, status: .failed)
-        }
-
-        if let embeddedKey = credentialSubject?.publicKeyJwk, embeddedKey != trustedKey {
-          Self.logger.error("Embedded publicKeyJwk does not match trusted issuer key")
-          return storeVerificationResult(credential, status: .failed)
-        }
-
-        Self.logger.info("Verifying signature with trusted issuer key")
-        let publicKey = try trustedKey.toP256PublicKey()
-        let signature =
-          (try? P256.Signing.ECDSASignature(rawRepresentation: signatureData))
-          ?? (try? P256.Signing.ECDSASignature(derRepresentation: signatureData))
-
-        guard let signature else {
-          Self.logger.error("Unsupported JWT signature encoding")
-          return storeVerificationResult(credential, status: .failed)
-        }
-
-        guard publicKey.isValidSignature(signature, for: signingData) else {
-          Self.logger.error("Signature verification failed")
-          return storeVerificationResult(credential, status: .failed)
-        }
-
-        Self.logger.info("Signature verified, checking expiration")
-
-        let now = Date()
-        if let notBefore = envelope.nbf {
-          let nbfDate = Date(timeIntervalSince1970: TimeInterval(notBefore))
-          if now < nbfDate {
-            Self.logger.warning("Credential not yet valid - nbf: \(nbfDate), now: \(now)")
-            return storeVerificationResult(credential, status: .failed)
-          }
-        }
-
-        if let expiration = envelope.exp {
-          let expDate = Date(timeIntervalSince1970: TimeInterval(expiration))
-          if now > expDate {
-            Self.logger.warning("Credential expired - exp: \(expDate), now: \(now)")
-            return storeVerificationResult(credential, status: .failed)
-          }
-        }
-
-        Self.logger.info("Credential verification successful")
-        return storeVerificationResult(credential, status: .verified)
-      } catch let cardError as CardError {
-        Self.logger.error("CardError during verification: \(cardError.localizedDescription)")
-        return .failure(cardError)
-      } catch {
-        Self.logger.error("Verification failed: \(error.localizedDescription)")
-        return .failure(.invalidData("Verification failed: \(error.localizedDescription)"))
-      }
-    }
-  }
-
-  private func storeVerificationResult(
-    _ credential: VCLibrary.StoredCredential,
-    status: VCLibrary.StoredCredential.Status
-  ) -> CardResult<VCLibrary.StoredCredential> {
-    var updated = credential
-    updated.status = status
-    updated.lastVerifiedAt = Date()
-
-    switch library.update(updated) {
-    case .success:
-      return .success(updated)
-    case .failure(let error):
-      return .failure(error)
-    }
-  }
+  // Import + verification chain lives in VCService+Verify.swift to keep
+  // this file under the 600-line lint cap.
 }

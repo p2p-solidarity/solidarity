@@ -202,7 +202,7 @@ final class VCLibrary {
         return .failure(error)
       case .success(let encryptedData):
         let url = storageURL()
-        try encryptedData.write(to: url, options: [.atomic])
+        try encryptedData.write(to: url, options: [.atomic, .completeFileProtection])
         return .success(())
       }
     } catch {
@@ -228,7 +228,11 @@ final class VCLibrary {
     }
 
     do {
-      try fileManager.createDirectory(at: directoryURL, withIntermediateDirectories: true)
+      try fileManager.createDirectory(
+        at: directoryURL,
+        withIntermediateDirectories: true,
+        attributes: [.protectionKey: FileProtectionType.complete]
+      )
       return .success(())
     } catch {
       return .failure(.storageError("Failed to create credential storage directory: \(error.localizedDescription)"))

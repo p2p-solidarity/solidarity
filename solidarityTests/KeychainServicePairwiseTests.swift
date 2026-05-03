@@ -2,8 +2,13 @@ import Testing
 @testable import solidarity
 
 struct KeychainServicePairwiseTests {
-  @Test func testMasterAliasKeepsLegacyTag() async throws {
-    #expect(KeychainService.masterAlias == "airmeishi.did.signing")
+  /// Master alias migrated from "airmeishi.did.signing" → "solidarity.master"
+  /// during the project rename. The legacy constant is retained on
+  /// `KeychainService.legacyMasterAlias` so first-run migration can find
+  /// keys that pre-date the rename.
+  @Test func testMasterAliasMigratedToSolidarityPrefix() async throws {
+    #expect(KeychainService.masterAlias == "solidarity.master")
+    #expect(KeychainService.legacyMasterAlias == "airmeishi.did.signing")
   }
 
   @Test func testPairwiseAliasSanitizesDomain() async throws {

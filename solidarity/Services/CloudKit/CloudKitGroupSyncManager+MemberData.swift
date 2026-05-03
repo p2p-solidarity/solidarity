@@ -57,6 +57,15 @@ extension CloudKitGroupSyncManager {
     pubKey: String,
     signPubKey: String
   ) async throws {
+    // A user may only publish messaging data for their own membership row. This blocks
+    // a malicious caller from rewriting another member's sealedRoute/pubKey to redirect
+    // group messages to themselves.
+    guard let currentUser = currentUserRecordID,
+      currentUser.recordName == userId
+    else {
+      throw CKError(.permissionFailure)
+    }
+
     let predicate = NSPredicate(
       format: "group == %@ AND userRecordID == %@",
       CKRecord.Reference(recordID: CKRecord.ID(recordName: group.id), action: .none),
@@ -69,6 +78,10 @@ extension CloudKitGroupSyncManager {
       throw NSError(domain: "GroupError", code: 404, userInfo: [NSLocalizedDescriptionKey: "Member not found"])
     }
 
+    // public: sealedRoute / pubKey / signPubKey are intentionally readable by any
+    // active group member so they can deliver Sakura messages to this user. They are
+    // not raw secrets — sealedRoute is a server-blinded reference and pubKey/signPubKey
+    // are the user's published Curve25519 public keys.
     record["sealedRoute"] = sealedRoute
     record["pubKey"] = pubKey
     record["signPubKey"] = signPubKey

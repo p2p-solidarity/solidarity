@@ -108,9 +108,9 @@ extension ProximitySharingView {
       VStack(alignment: .leading, spacing: 8) {
         Text("SELECTIVE DISCLOSURE")
           .font(.system(size: 12, weight: .bold, design: .monospaced))
-          .foregroundColor(.white)
+          .foregroundColor(Color.Theme.textPrimary)
 
-        Text("Select the claims you wish to reveal to \(selectedPeer?.name ?? "peer").")
+        Text("Select the claims you wish to reveal to \(selectedPeer?.name ?? String(localized: "peer")).")
           .font(.system(size: 14))
           .foregroundColor(Color.Theme.textSecondary)
       }
@@ -119,7 +119,7 @@ extension ProximitySharingView {
         VStack(spacing: 8) {
           ForEach(BusinessCardField.allCases) { field in
             RedactionSwitcherView(
-              label: field.displayName,
+              label: String(localized: String.LocalizationValue(field.displayName)),
               value: extractValue(from: selectedCard, field: field),
               isDisclosed: Binding(
                 get: { selectedFields.contains(field) },
@@ -185,8 +185,8 @@ extension ProximitySharingView {
       VStack(spacing: 8) {
         Text("AWAITING PEER")
           .font(.system(size: 16, weight: .bold, design: .monospaced))
-          .foregroundColor(.white)
-        Text("Handshake initiated with \(selectedPeer?.name ?? "peer").")
+          .foregroundColor(Color.Theme.textPrimary)
+        Text("Handshake initiated with \(selectedPeer?.name ?? String(localized: "peer")).")
           .font(.system(size: 14))
           .foregroundColor(Color.Theme.textSecondary)
       }
@@ -215,7 +215,7 @@ extension ProximitySharingView {
 
             Text("Connection request from \(request.payload.senderID)")
               .font(.system(size: 16, weight: .bold))
-              .foregroundColor(.white)
+              .foregroundColor(Color.Theme.textPrimary)
           }
 
           fieldPicker(selection: $incomingFields)

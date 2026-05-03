@@ -8,12 +8,14 @@ final class EncryptionManagerTests: XCTestCase {
   }
 
   override func setUpWithError() throws {
+    // Reset the keychain entry before this test runs.
     _ = EncryptionManager.shared.deleteEncryptionKey()
   }
 
-  override func tearDownWithError() throws {
-    _ = EncryptionManager.shared.deleteEncryptionKey()
-  }
+  // Intentionally NOT tearing down: Swift Testing runs other test cases
+  // (e.g. SolidarityTests.testEncryption) in parallel with XCTest, and
+  // deleting the shared encryption key here yanks it out from under them.
+  // The next setUpWithError() will reset state before the next run.
 
   func testStoreKeyInKeychainHandlesDuplicateByUpdatingItem() throws {
     let key1 = SymmetricKey(size: .bits256)

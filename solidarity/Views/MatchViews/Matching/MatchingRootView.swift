@@ -19,6 +19,8 @@ struct MatchingRootView: View {
   @State private var showNearbySheet = false
   @State private var showPeerCardSheet = false
   @State private var showShareSheet = false
+  @State private var localSakuraPulseId = UUID()
+  @State private var showLocalSakuraPulse = false
 
   var body: some View {
     ZStack {
@@ -52,7 +54,7 @@ struct MatchingRootView: View {
     .overlay(spatialStatusOverlay)
     .overlay(sakuraOverlay)
     .overlay(latestMessageOverlay)
-    .overlay(incomingInvitationOverlay)
+    .incomingInvitationOverlay()
     .sheet(isPresented: $showNearbySheet) {
       NearbyPeersSheet(
         peers: proximityManager.nearbyPeers,
@@ -117,21 +119,28 @@ struct MatchingRootView: View {
       Spacer()
       // Only show if WebRTC data channel is actually open
       if webRTCManager.isChannelOpen {
-        Button(action: {
-          webRTCManager.sendSakura()
-          // Also trigger local effect
-          withAnimation {
-            // TODO: Add local visual effect
-          }
-        }) {
+        Button(action: { triggerSakura() }) {
           Text("🌸")
             .font(.system(size: 40))
             .padding()
             .background(Color.Theme.cardSurface(for: colorScheme))
             .clipShape(Circle())
+            .scaleEffect(showLocalSakuraPulse ? 1.25 : 1.0)
+            .opacity(showLocalSakuraPulse ? 0.6 : 1.0)
+            .animation(.spring(response: 0.35, dampingFraction: 0.5), value: showLocalSakuraPulse)
         }
         .padding(.bottom, 100)
       }
+    }
+  }
+
+  private func triggerSakura() {
+    webRTCManager.sendSakura()
+    localSakuraPulseId = UUID()
+    showLocalSakuraPulse = true
+    Task {
+      try? await Task.sleep(nanoseconds: 250_000_000)
+      await MainActor.run { showLocalSakuraPulse = false }
     }
   }
 
@@ -172,37 +181,11 @@ struct MatchingRootView: View {
     Circle().fill(Color.Theme.featureAccent.opacity(0.6)).frame(width: size, height: size)
   }
 
-  private var incomingInvitationOverlay: some View {
-    Group {
-      if let invitation = proximityManager.pendingInvitation {
-        IncomingInvitationPopupView(
-          invitation: invitation,
-          onAccept: {
-            proximityManager.respondToPendingInvitation(accept: true)
-          },
-          onDecline: {
-            proximityManager.respondToPendingInvitation(accept: false)
-          },
-          onDismiss: {
-            proximityManager.releaseInvitationPresentation()
-          }
-        )
-        .transition(.opacity)
-      }
-    }
-  }
-
   // MARK: - UWB Spatial Trigger
 
   private func setupSpatialTrigger() {
-    niManager.onSpatialTrigger = { [weak proximityManager] peerID in
-      guard let pm = proximityManager,
-            let card = pm.currentCard else {
-        NearbyInteractionManager.shared.exchangeDidFail()
-        return
-      }
-      pm.sendCard(card, to: peerID, sharingLevel: pm.currentSharingLevel)
-      NearbyInteractionManager.shared.exchangeDidComplete()
+    niManager.onSpatialTrigger = { peerID in
+      ProximityManager.shared.handleSpatialTrigger(peerID: peerID)
     }
   }
 

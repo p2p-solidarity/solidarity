@@ -14,6 +14,12 @@ extension ProximityManager {
       return
     }
 
+    guard let senderDID = ProximityIdentitySigner.localDID(),
+      let senderJWK = ProximityIdentitySigner.localPublicJWK() else {
+      lastError = .sharingError("Local DID key is not available; cannot sign exchange")
+      return
+    }
+
     do {
       let configuredCard = ShareSettingsStore.applyFields(to: card, level: sharingLevel)
       let selectedFields = ShareSettingsStore.enabledFields.sorted { $0.rawValue < $1.rawValue }
@@ -45,12 +51,38 @@ extension ProximityManager {
         )
         if case .success(let proof) = sdResult { sdProof = proof }
       }
+
+      let nonce = UUID().uuidString
+      let timestamp = Date()
+      let canonical = ProximityExchangeBinding.cardCanonicalBytes(
+        protocolVersion: ProximityIdentitySigner.currentProtocolVersion,
+        shareId: shareUUID,
+        senderDID: senderDID,
+        receiverPeerName: peer.displayName,
+        senderID: localPeerID.displayName,
+        card: filteredCard,
+        selectedFields: selectedFields,
+        scope: scope,
+        nonce: nonce,
+        timestamp: timestamp
+      )
+      let didSignature: String
+      switch ProximityIdentitySigner.signBase64(canonicalBytes: canonical) {
+      case .failure(let error):
+        lastError = error
+        return
+      case .success(let value):
+        didSignature = value
+      }
+
+      // Legacy Curve25519 envelope signature retained for backward compatibility with older
+      // clients that read `payloadSignature`. The trust gate is `didSignature` above.
       let unsignedPayload = ProximitySharingPayload(
         card: filteredCard,
         sharingLevel: sharingLevel,
         selectedFields: selectedFields,
         scope: scope,
-        timestamp: Date(),
+        timestamp: timestamp,
         senderID: localPeerID.displayName,
         shareId: shareUUID,
         issuerCommitment: issuerCommitment.isEmpty ? nil : issuerCommitment,
@@ -59,7 +91,13 @@ extension ProximityManager {
         payloadSignature: nil,
         sealedRoute: SecureKeyManager.shared.mySealedRoute,
         pubKey: SecureKeyManager.shared.myEncPubKey,
-        signPubKey: SecureKeyManager.shared.mySignPubKey
+        signPubKey: SecureKeyManager.shared.mySignPubKey,
+        protocolVersion: ProximityIdentitySigner.currentProtocolVersion,
+        senderDID: senderDID,
+        senderJWK: senderJWK,
+        receiverPeerName: peer.displayName,
+        nonce: nonce,
+        didSignature: didSignature
       )
 
       let payloadSignature = signExchangeString(canonicalCardPayloadString(for: unsignedPayload))
@@ -77,12 +115,20 @@ extension ProximityManager {
         payloadSignature: payloadSignature,
         sealedRoute: unsignedPayload.sealedRoute,
         pubKey: unsignedPayload.pubKey,
-        signPubKey: unsignedPayload.signPubKey
+        signPubKey: unsignedPayload.signPubKey,
+        protocolVersion: unsignedPayload.protocolVersion,
+        senderDID: unsignedPayload.senderDID,
+        senderJWK: unsignedPayload.senderJWK,
+        receiverPeerName: unsignedPayload.receiverPeerName,
+        nonce: unsignedPayload.nonce,
+        didSignature: unsignedPayload.didSignature
       )
 
       print("[ProximityManager] Sending card to \(peer.displayName)")
+      #if DEBUG
       print("[ProximityManager] Sealed Route: \(String(describing: SecureKeyManager.shared.mySealedRoute))")
       print("[ProximityManager] Pub Key: \(String(describing: SecureKeyManager.shared.myEncPubKey))")
+      #endif
 
       let data = try JSONEncoder().encode(payload)
 
@@ -106,9 +152,38 @@ extension ProximityManager {
       return .failure(.sharingError("Peer is not connected"))
     }
 
+    guard let senderDID = ProximityIdentitySigner.localDID(),
+      let senderJWK = ProximityIdentitySigner.localPublicJWK() else {
+      return .failure(.cryptographicError("Local DID key is not available; cannot sign exchange"))
+    }
+
     let requestId = UUID()
     let timestamp = Date()
     let preview = filteredCard(card, using: selectedFields)
+    let truncatedMessage = myEphemeralMessage?.prefix(140).description
+
+    let nonce = UUID().uuidString
+    let canonical = ProximityExchangeBinding.exchangeCanonicalBytes(
+      protocolVersion: ProximityIdentitySigner.currentProtocolVersion,
+      direction: .request,
+      requestId: requestId,
+      senderDID: senderDID,
+      receiverPeerName: peer.displayName,
+      senderID: localPeerID.displayName,
+      cardPreview: preview,
+      selectedFields: selectedFields,
+      ephemeralMessage: truncatedMessage,
+      nonce: nonce,
+      timestamp: timestamp
+    )
+    let didSignature: String
+    switch ProximityIdentitySigner.signBase64(canonicalBytes: canonical) {
+    case .failure(let error):
+      return .failure(error)
+    case .success(let value):
+      didSignature = value
+    }
+
     let signatureInput = canonicalExchangeString(
       requestId: requestId,
       peerName: peer.displayName,
@@ -116,10 +191,7 @@ extension ProximityManager {
       fields: selectedFields,
       timestamp: timestamp
     )
-
-    guard let signature = signExchangeString(signatureInput) else {
-      return .failure(.cryptographicError("Failed to sign exchange request"))
-    }
+    let legacySignature = signExchangeString(signatureInput) ?? ""
 
     let payload = ExchangeRequestPayload(
       requestId: requestId,
@@ -127,16 +199,22 @@ extension ProximityManager {
       timestamp: timestamp,
       selectedFields: selectedFields,
       cardPreview: preview,
-      myEphemeralMessage: myEphemeralMessage?.prefix(140).description,
-      myExchangeSignature: signature,
-      signPubKey: SecureKeyManager.shared.mySignPubKey
+      myEphemeralMessage: truncatedMessage,
+      myExchangeSignature: legacySignature,
+      signPubKey: SecureKeyManager.shared.mySignPubKey,
+      protocolVersion: ProximityIdentitySigner.currentProtocolVersion,
+      senderDID: senderDID,
+      senderJWK: senderJWK,
+      receiverPeerName: peer.displayName,
+      nonce: nonce,
+      didSignature: didSignature
     )
 
     do {
       let data = try JSONEncoder().encode(payload)
       try session.send(data, toPeers: [peer], with: .reliable)
-      sentExchangeSignatures[requestId] = signature
-      sentExchangeMessages[requestId] = myEphemeralMessage?.prefix(140).description ?? ""
+      sentExchangeSignatures[requestId] = didSignature
+      sentExchangeMessages[requestId] = truncatedMessage ?? ""
       return .success(requestId)
     } catch {
       return .failure(.sharingError("Failed to send exchange request: \(error.localizedDescription)"))
@@ -153,8 +231,37 @@ extension ProximityManager {
       return .failure(.sharingError("Peer is not connected"))
     }
 
+    guard let senderDID = ProximityIdentitySigner.localDID(),
+      let senderJWK = ProximityIdentitySigner.localPublicJWK() else {
+      return .failure(.cryptographicError("Local DID key is not available; cannot sign exchange"))
+    }
+
     let timestamp = Date()
     let preview = filteredCard(card, using: selectedFields)
+    let truncatedMessage = myEphemeralMessage?.prefix(140).description
+
+    let nonce = UUID().uuidString
+    let canonical = ProximityExchangeBinding.exchangeCanonicalBytes(
+      protocolVersion: ProximityIdentitySigner.currentProtocolVersion,
+      direction: .accept,
+      requestId: request.requestId,
+      senderDID: senderDID,
+      receiverPeerName: request.fromPeer.displayName,
+      senderID: localPeerID.displayName,
+      cardPreview: preview,
+      selectedFields: selectedFields,
+      ephemeralMessage: truncatedMessage,
+      nonce: nonce,
+      timestamp: timestamp
+    )
+    let didSignature: String
+    switch ProximityIdentitySigner.signBase64(canonicalBytes: canonical) {
+    case .failure(let error):
+      return .failure(error)
+    case .success(let value):
+      didSignature = value
+    }
+
     let signatureInput = canonicalExchangeString(
       requestId: request.requestId,
       peerName: request.fromPeer.displayName,
@@ -162,9 +269,7 @@ extension ProximityManager {
       fields: selectedFields,
       timestamp: timestamp
     )
-    guard let signature = signExchangeString(signatureInput) else {
-      return .failure(.cryptographicError("Failed to sign exchange response"))
-    }
+    let legacySignature = signExchangeString(signatureInput) ?? ""
 
     let payload = ExchangeAcceptPayload(
       requestId: request.requestId,
@@ -172,28 +277,37 @@ extension ProximityManager {
       timestamp: timestamp,
       selectedFields: selectedFields,
       cardPreview: preview,
-      theirEphemeralMessage: myEphemeralMessage?.prefix(140).description,
-      exchangeSignature: signature,
+      theirEphemeralMessage: truncatedMessage,
+      exchangeSignature: legacySignature,
       sealedRoute: SecureKeyManager.shared.mySealedRoute,
       pubKey: SecureKeyManager.shared.myEncPubKey,
-      signPubKey: SecureKeyManager.shared.mySignPubKey
+      signPubKey: SecureKeyManager.shared.mySignPubKey,
+      protocolVersion: ProximityIdentitySigner.currentProtocolVersion,
+      senderDID: senderDID,
+      senderJWK: senderJWK,
+      receiverPeerName: request.fromPeer.displayName,
+      nonce: nonce,
+      didSignature: didSignature
     )
 
     do {
       let data = try JSONEncoder().encode(payload)
       try session.send(data, toPeers: [request.fromPeer], with: .reliable)
 
-      let requestCanonical = canonicalExchangeString(
+      let isRequestSignatureValid = ProximityManager.verifyDIDExchangeSignature(
+        protocolVersion: request.payload.protocolVersion,
+        direction: .request,
         requestId: request.payload.requestId,
-        peerName: localPeerID.displayName,
-        card: request.payload.cardPreview,
-        fields: request.payload.selectedFields,
-        timestamp: request.payload.timestamp
-      )
-      let isRequestSignatureValid = Self.verifyExchangeSignature(
-        signature: request.payload.myExchangeSignature,
-        canonicalString: requestCanonical,
-        signPubKey: request.payload.signPubKey
+        senderDID: request.payload.senderDID,
+        receiverPeerName: localPeerID.displayName,
+        senderID: request.payload.senderID,
+        cardPreview: request.payload.cardPreview,
+        selectedFields: request.payload.selectedFields,
+        ephemeralMessage: request.payload.myEphemeralMessage,
+        nonce: request.payload.nonce,
+        timestamp: request.payload.timestamp,
+        signatureBase64: request.payload.didSignature,
+        senderJWK: request.payload.senderJWK
       )
 
       let persistence = ExchangeEdgePersistencePayload(
@@ -203,9 +317,9 @@ extension ProximityManager {
         sealedRoute: nil,
         pubKey: nil,
         signPubKey: request.payload.signPubKey,
-        mySignature: signature,
-        theirSignature: request.payload.myExchangeSignature,
-        myMessage: myEphemeralMessage?.prefix(140).description,
+        mySignature: didSignature,
+        theirSignature: request.payload.didSignature ?? request.payload.myExchangeSignature,
+        myMessage: truncatedMessage,
         theirMessage: request.payload.myEphemeralMessage,
         timestamp: timestamp
       )
@@ -259,5 +373,43 @@ extension ProximityManager {
     if !allowed.contains(.socialNetworks) { filtered.socialNetworks = [] }
     if !allowed.contains(.skills) { filtered.skills = [] }
     return filtered
+  }
+
+  // MARK: - UWB Spatial Trigger
+
+  /// Single entry point for `NearbyInteractionManager.onSpatialTrigger`. Replaces
+  /// the per-view `sendCard` calls that used to race against MC connection state
+  /// and produce "Peer is not connected" toasts. Routing rules:
+  ///  - Peer must still be in `session.connectedPeers` (matched by displayName so
+  ///    a re-instantiated MCPeerID does not falsely fail the contains check).
+  ///  - If `autoSendCardOnConnect` is on, MC `.connected` already sent the card;
+  ///    just close the UWB cooldown.
+  ///  - Otherwise resolve a card from `currentCard` with a `CardManager` fallback,
+  ///    then send through the existing `sendCard(_:to:sharingLevel:)` path.
+  /// Failures here log + reset NI to idle; they never set `lastError`, so a UWB
+  /// race after disconnect no longer surfaces as a user-visible error toast.
+  func handleSpatialTrigger(peerID: MCPeerID) {
+    let isConnected = session.connectedPeers.contains { $0.displayName == peerID.displayName }
+    guard isConnected else {
+      print("[ProximityManager] UWB trigger ignored — peer \(peerID.displayName) not in connectedPeers")
+      NearbyInteractionManager.shared.exchangeDidFail()
+      return
+    }
+
+    if autoSendCardOnConnect {
+      NearbyInteractionManager.shared.exchangeDidComplete()
+      return
+    }
+
+    let baseCard = currentCard ?? CardManager.shared.businessCards.first
+    guard let card = baseCard else {
+      print("[ProximityManager] UWB trigger ignored — no card available to send")
+      NearbyInteractionManager.shared.exchangeDidFail()
+      return
+    }
+
+    let prepared = ShareSettingsStore.applyFields(to: card, level: currentSharingLevel)
+    sendCard(prepared, to: peerID, sharingLevel: currentSharingLevel)
+    NearbyInteractionManager.shared.exchangeDidComplete()
   }
 }

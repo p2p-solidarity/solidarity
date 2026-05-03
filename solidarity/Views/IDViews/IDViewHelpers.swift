@@ -13,21 +13,15 @@ extension IDView {
   internal var maskSection: some View {
     VStack(spacing: 12) {
       HStack(spacing: 0) {
+        // did:key is currently the only supported DID method (did:ethr was
+        // removed because the previous derivation was cryptographically
+        // broken). The capsule is kept so the UI continues to communicate
+        // the active identity, but no method switch is offered.
         didCapsule(
           title: "Anonymous",
           subtitle: "did:key",
           isActive: isDidKeyActive,
           action: { switchDID(.key) }
-        )
-
-        Divider()
-          .frame(height: 24)
-
-        didCapsule(
-          title: "Public",
-          subtitle: "did:ethr",
-          isActive: !isDidKeyActive,
-          action: { switchDID(.ethr) }
         )
       }
       .background(Color(.secondarySystemBackground))

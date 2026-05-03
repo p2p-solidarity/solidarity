@@ -41,6 +41,14 @@ final class ContactEntity {
   // VerifiedClaimIndex, not the raw name/email/phone columns.
   var credentialIdsData: Data?
 
+  /// Proof-claim labels (e.g. "is_human", "age_over_18") that the peer's
+  /// presented VC declares in its `verified_proofs.claims` block. This is
+  /// the peer's own self-attestation, signed by their DID — NOT a locally
+  /// re-verified ZK / SD-JWT artifact. UI must label it as "declared",
+  /// never "verified". Stored as JSON-encoded [String] to dodge the
+  /// SwiftData [String] materialization bug we hit on credentialIds.
+  var declaredProofClaimsRaw: Data?
+
   // MARK: - Computed array accessors (avoids CoreData Array<String> materialization bug)
 
   var tags: [String] {
@@ -51,6 +59,11 @@ final class ContactEntity {
   var credentialIds: [String] {
     get { Self.decodeStringArray(credentialIdsData) }
     set { credentialIdsData = Self.encodeStringArray(newValue) }
+  }
+
+  var declaredProofClaims: [String] {
+    get { Self.decodeStringArray(declaredProofClaimsRaw) }
+    set { declaredProofClaimsRaw = Self.encodeStringArray(newValue) }
   }
 
   private static func decodeStringArray(_ data: Data?) -> [String] {
@@ -88,7 +101,8 @@ final class ContactEntity {
     graphExportEdgeId: String? = nil,
     graphCredentialRef: String? = nil,
     commonFriendsHandshakeToken: String? = nil,
-    credentialIds: [String] = []
+    credentialIds: [String] = [],
+    declaredProofClaims: [String] = []
   ) {
     self.id = id
     self.cardId = cardId
@@ -116,6 +130,7 @@ final class ContactEntity {
     self.graphCredentialRef = graphCredentialRef
     self.commonFriendsHandshakeToken = commonFriendsHandshakeToken
     self.credentialIdsData = Self.encodeStringArray(credentialIds)
+    self.declaredProofClaimsRaw = Self.encodeStringArray(declaredProofClaims)
   }
 }
 
@@ -251,6 +266,11 @@ final class ProvableClaimEntity {
 }
 
 extension ContactEntity {
+  /// Persists a legacy `Contact` snapshot into SwiftData. SECURITY: callers
+  /// must populate `legacy.verificationStatus` from local crypto evidence
+  /// (signature/JWT/ZKP verified on this device) — never copy a status
+  /// field straight off a remote payload. ContactRepository.mergedContact
+  /// enforces this on duplicate-merge.
   static func fromLegacy(_ legacy: Contact) -> ContactEntity {
     ContactEntity(
       id: legacy.id.uuidString,
@@ -269,7 +289,12 @@ extension ContactEntity {
       sealedRoute: legacy.sealedRoute,
       pubKey: legacy.pubKey,
       signPubKey: legacy.signPubKey,
-      didPublicKey: legacy.signPubKey
+      didPublicKey: legacy.didPublicKey ?? legacy.signPubKey,
+      exchangeSignature: legacy.exchangeSignature,
+      myExchangeSignature: legacy.myExchangeSignature,
+      exchangeTimestamp: legacy.exchangeTimestamp,
+      myEphemeralMessage: legacy.myEphemeralMessage,
+      theirEphemeralMessage: legacy.theirEphemeralMessage
     )
   }
 
@@ -293,7 +318,13 @@ extension ContactEntity {
       lastInteraction: lastInteraction,
       sealedRoute: sealedRoute,
       pubKey: pubKey,
-      signPubKey: signPubKey
+      signPubKey: signPubKey,
+      didPublicKey: didPublicKey,
+      exchangeSignature: exchangeSignature,
+      myExchangeSignature: myExchangeSignature,
+      exchangeTimestamp: exchangeTimestamp,
+      myEphemeralMessage: myEphemeralMessage,
+      theirEphemeralMessage: theirEphemeralMessage
     )
   }
 }

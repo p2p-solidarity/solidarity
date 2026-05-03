@@ -23,6 +23,16 @@ struct Contact: Codable, Identifiable, Equatable {
   var pubKey: String?
   var signPubKey: String?
 
+  // Spec-aligned exchange metadata. Optional + nil-defaulting so older
+  // serialized JSON (backups, exports) decodes unchanged. These survive
+  // ContactEntity ↔ Contact round-trips, which previously dropped them.
+  var didPublicKey: String?
+  var exchangeSignature: Data?
+  var myExchangeSignature: Data?
+  var exchangeTimestamp: Date?
+  var myEphemeralMessage: String?
+  var theirEphemeralMessage: String?
+
   /// Check if this contact supports Sakura (Secure Messaging)
   var canReceiveSakura: Bool {
     return sealedRoute != nil && pubKey != nil && signPubKey != nil
@@ -39,7 +49,13 @@ struct Contact: Codable, Identifiable, Equatable {
     lastInteraction: Date? = nil,
     sealedRoute: String? = nil,
     pubKey: String? = nil,
-    signPubKey: String? = nil
+    signPubKey: String? = nil,
+    didPublicKey: String? = nil,
+    exchangeSignature: Data? = nil,
+    myExchangeSignature: Data? = nil,
+    exchangeTimestamp: Date? = nil,
+    myEphemeralMessage: String? = nil,
+    theirEphemeralMessage: String? = nil
   ) {
     self.id = id
     self.businessCard = businessCard
@@ -52,6 +68,12 @@ struct Contact: Codable, Identifiable, Equatable {
     self.sealedRoute = sealedRoute
     self.pubKey = pubKey
     self.signPubKey = signPubKey
+    self.didPublicKey = didPublicKey
+    self.exchangeSignature = exchangeSignature
+    self.myExchangeSignature = myExchangeSignature
+    self.exchangeTimestamp = exchangeTimestamp
+    self.myEphemeralMessage = myEphemeralMessage
+    self.theirEphemeralMessage = theirEphemeralMessage
   }
 
   /// Update last interaction timestamp

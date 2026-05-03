@@ -15,6 +15,11 @@ final class QRCodeManager: ObservableObject {
   /// StoredCredential.id for the VC imported during the last scan, if any.
   /// Used by contact-save flows to attach the credential reference.
   @Published var lastCredentialId: UUID?
+  /// Proof-claim labels declared in the peer's VC `verified_proofs.claims`.
+  /// nil for scan paths that don't parse a claims field (plaintext, OIDC
+  /// requests). See ScanOutcome.declaredProofClaims for replace-vs-merge
+  /// semantics.
+  @Published var lastDeclaredProofClaims: [String]?
 
   private let generationService: QRCodeGenerationService
   private let scanService: QRCodeScanService
@@ -128,6 +133,7 @@ final class QRCodeManager: ObservableObject {
         self.lastVerificationStatus = outcome.verificationStatus
         self.lastSealedRoute = outcome.sealedRoute
         self.lastCredentialId = outcome.credentialId
+        self.lastDeclaredProofClaims = outcome.declaredProofClaims
         self.lastScanRoute = nil
         self.lastScanRoute = outcome.route
         self.scanError = nil

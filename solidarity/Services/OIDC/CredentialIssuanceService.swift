@@ -336,11 +336,30 @@ final class CredentialIssuanceService {
       var didRetryOnInvalidNonce = false
 
       if let http = httpResponse, !(200...299).contains(http.statusCode) {
-        // OID4VCI draft 13 §7.3.2: on `invalid_nonce`, retry ONCE with the fresh c_nonce.
+        // OID4VCI draft 13 §7.3.2: on `invalid_nonce`, retry AT MOST ONCE
+        // with the fresh c_nonce. The retry is gated by:
+        //   1. The original credential URL must be HTTPS — a MITM on
+        //      cleartext could otherwise force the wallet to sign any
+        //      attacker-supplied c_nonce.
+        //   2. The fresh nonce must look like a plausible random token
+        //      (>= 16 base64url chars). This is heuristic, not a defence
+        //      on its own; it's a tripwire against grossly malformed
+        //      nonces injected by a degraded transport.
+        //   3. We never retry more than once per credential request — if
+        //      the issuer keeps replying invalid_nonce, fail outright
+        //      rather than enter a sign loop.
         if let errorJson = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
            let errorCode = errorJson["error"] as? String,
            errorCode == "invalid_nonce",
            let freshNonce = errorJson["c_nonce"] as? String {
+          guard credentialURL.scheme?.lowercased() == "https" else {
+            Self.logger.error("Refusing invalid_nonce retry over non-TLS transport: \(credentialURL.absoluteString)")
+            return .failure(.networkError("invalid_nonce retry requires TLS transport"))
+          }
+          guard Self.looksLikeRandomToken(freshNonce) else {
+            Self.logger.error("Refusing invalid_nonce retry: c_nonce fails random-token heuristic")
+            return .failure(.networkError("invalid_nonce retry rejected: malformed c_nonce"))
+          }
           Self.logger.info("Credential endpoint returned invalid_nonce; retrying once with fresh c_nonce")
           let retryProofResult = buildProofJWT(
             issuerURL: offer.credentialIssuer,
@@ -357,6 +376,14 @@ final class CredentialIssuanceService {
           didRetryOnInvalidNonce = true
           (data, response) = try await session.data(for: request)
           httpResponse = response as? HTTPURLResponse
+
+          // Second invalid_nonce → fail outright. Do NOT loop.
+          if let retryHttp = httpResponse, !(200...299).contains(retryHttp.statusCode),
+             let retryJson = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+             (retryJson["error"] as? String) == "invalid_nonce" {
+            Self.logger.error("Credential endpoint returned invalid_nonce on retry; aborting")
+            return .failure(.networkError("Credential endpoint returned invalid_nonce on retry"))
+          }
         }
       }
 
@@ -418,5 +445,19 @@ final class CredentialIssuanceService {
     }
 
     return storeCredential(issuanceResult)
+  }
+
+  // MARK: - c_nonce sanity heuristic
+
+  /// Returns true if `value` plausibly looks like a server-issued random
+  /// nonce: at least 16 characters, each from the unreserved base64url
+  /// alphabet (RFC 4648 §5). This is a tripwire — a real defence against
+  /// an injected c_nonce relies on TLS authentication of the issuer, not
+  /// on the shape of the token.
+  static func looksLikeRandomToken(_ value: String) -> Bool {
+    guard value.count >= 16 else { return false }
+    let allowed = CharacterSet(charactersIn:
+      "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_")
+    return value.unicodeScalars.allSatisfy { allowed.contains($0) }
   }
 }
