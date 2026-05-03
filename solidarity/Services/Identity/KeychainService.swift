@@ -40,6 +40,17 @@ final class KeychainService {
   /// the next launch. Tests or diagnostic tools may flip this temporarily.
   static var allowEphemeralInMemoryFallback: Bool = false
 
+  /// `UserDefaults` flag tracking whether we've ever blocked waiting for iCloud
+  /// Keychain to deliver the master DID key. The wait happens once per install
+  /// (cleared by deleting/reinstalling the app); subsequent launches skip it so
+  /// we don't add seconds to cold start.
+  static let iCloudKeychainSyncWaitMarker = "solidarity.master.icloudkeychain.first_attempt_done"
+
+  /// Maximum time we'll block on a fresh launch waiting for iCloud Keychain to
+  /// hand us the master DID key from another device on the same Apple ID. Tuned
+  /// to balance a cross-device pickup rate against user-visible cold-start lag.
+  static let iCloudKeychainSyncWaitSeconds: TimeInterval = 5.0
+
   let alias: KeyAlias
 
   var keyTag: Data

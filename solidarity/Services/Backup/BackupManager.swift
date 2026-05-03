@@ -55,6 +55,48 @@ final class BackupManager: ObservableObject {
     iCloudContainerURL != nil
   }
 
+  // MARK: - Probe (pre-onboarding)
+
+  /// Lightweight metadata about the latest backup found on disk.
+  struct BackupProbe: Sendable {
+    let timestamp: Date
+    let isICloud: Bool
+  }
+
+  /// Looks for an existing backup file in iCloud Drive (or local fallback) without
+  /// requiring the user's backup setting to be enabled. Used during onboarding to
+  /// detect prior data on a fresh device. File enumeration runs off the main thread
+  /// because querying `forUbiquityContainerIdentifier:` may block.
+  nonisolated static func probeLatestBackup() async -> BackupProbe? {
+    await Task.detached(priority: .userInitiated) {
+      let iCloudURL = FileManager.default.url(forUbiquityContainerIdentifier: nil)?
+        .appendingPathComponent("Documents/AirMeishiBackup")
+      let docs = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first
+        ?? URL(fileURLWithPath: NSHomeDirectory()).appendingPathComponent("Documents")
+      let localURL = docs.appendingPathComponent("AirMeishiBackup")
+      let url = iCloudURL ?? localURL
+      let isICloud = iCloudURL != nil
+
+      guard FileManager.default.fileExists(atPath: url.path) else { return nil }
+      guard let files = try? FileManager.default.contentsOfDirectory(
+        at: url,
+        includingPropertiesForKeys: [.creationDateKey]
+      ) else { return nil }
+
+      let candidates: [(URL, Date)] = files.compactMap { file in
+        let ext = file.pathExtension.lowercased()
+        guard file.lastPathComponent.hasPrefix("backup_"), ext == "solbk" || ext == "json" else {
+          return nil
+        }
+        let date = (try? file.resourceValues(forKeys: [.creationDateKey]).creationDate) ?? .distantPast
+        return (file, date)
+      }
+
+      guard let latest = candidates.max(by: { $0.1 < $1.1 }) else { return nil }
+      return BackupProbe(timestamp: latest.1, isICloud: isICloud)
+    }.value
+  }
+
   func loadSettings() {
     switch storage.loadUserPreferences(Settings.self) {
     case .success(let s): settings = s
