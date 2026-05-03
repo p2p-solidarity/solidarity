@@ -22,6 +22,10 @@ struct SharingTabView: View {
   @State var showingShareActivity = false
   @State var generatedQRImage: UIImage?
   @State private var lastReceivedCardCount = 0
+  /// Tracks the field set last used to render the QR. Lets the
+  /// UserDefaults observer skip refreshes that don't actually change the
+  /// visible payload (e.g. unrelated AppStorage writes).
+  @State private var lastRenderedFields: Set<BusinessCardField> = []
   @AppStorage("sharing_qr_expanded") var isQRExpanded: Bool = true
   @AppStorage("theme_selected_animal") private var savedAvatar: String?
 
@@ -124,6 +128,27 @@ struct SharingTabView: View {
         message: error.localizedDescription,
         type: .error
       )
+    }
+    // Re-render the QR when the underlying card mutates (edits in Me tab,
+    // sharingPreferences format change, etc.). `.onAppear` only catches
+    // re-entry from navigation, not in-place updates.
+    .onReceive(cardManager.$businessCards) { _ in
+      refreshQR()
+    }
+    // ShareSettings writes through @AppStorage → UserDefaults. Without
+    // this observer the QR stays stale after the user toggles a field
+    // and pops back, because @AppStorage writes don't republish through
+    // any object SharingTabView observes. We dedupe against the last
+    // rendered field set so unrelated UserDefaults writes (theme,
+    // notification prefs, etc.) don't trigger needless QR regeneration.
+    .onReceive(
+      NotificationCenter.default
+        .publisher(for: UserDefaults.didChangeNotification)
+        .receive(on: DispatchQueue.main)
+    ) { _ in
+      let current = ShareSettingsReader.enabledFields
+      guard current != lastRenderedFields else { return }
+      refreshQR()
     }
     .sheet(isPresented: $showingScanSheet) {
       ScanTabView()
@@ -229,12 +254,25 @@ struct SharingTabView: View {
   private func refreshQR() {
     guard let card = cardManager.businessCards.first else {
       generatedQRImage = nil
+      lastRenderedFields = []
       return
     }
     let fields = ShareSettingsReader.enabledFields
-    let result = qrCodeManager.generateQRCode(for: card, fields: fields)
-    if case .success(let image) = result {
+    lastRenderedFields = fields
+    switch qrCodeManager.generateQRCode(for: card, fields: fields) {
+    case .success(let image):
       generatedQRImage = image
+    case .failure(let error):
+      // Old behaviour was `if case .success` only — failures left a stale
+      // image with no signal to the user. Clear the image so the QR card
+      // reverts to the placeholder, and surface the message via Toast
+      // (same channel used for the other QR / sharing errors above).
+      generatedQRImage = nil
+      ToastManager.shared.show(
+        title: String(localized: "QR Generation Failed"),
+        message: error.localizedDescription,
+        type: .error
+      )
     }
   }
 
