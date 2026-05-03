@@ -54,7 +54,7 @@ struct MatchingRootView: View {
     .overlay(spatialStatusOverlay)
     .overlay(sakuraOverlay)
     .overlay(latestMessageOverlay)
-    .overlay(incomingInvitationOverlay)
+    .incomingInvitationOverlay()
     .sheet(isPresented: $showNearbySheet) {
       NearbyPeersSheet(
         peers: proximityManager.nearbyPeers,
@@ -179,26 +179,6 @@ struct MatchingRootView: View {
 
   private func satellite(size: CGFloat) -> some View {
     Circle().fill(Color.Theme.featureAccent.opacity(0.6)).frame(width: size, height: size)
-  }
-
-  private var incomingInvitationOverlay: some View {
-    Group {
-      if let invitation = proximityManager.pendingInvitation {
-        IncomingInvitationPopupView(
-          invitation: invitation,
-          onAccept: {
-            proximityManager.respondToPendingInvitation(accept: true)
-          },
-          onDecline: {
-            proximityManager.respondToPendingInvitation(accept: false)
-          },
-          onDismiss: {
-            proximityManager.releaseInvitationPresentation()
-          }
-        )
-        .transition(.opacity)
-      }
-    }
   }
 
   // MARK: - UWB Spatial Trigger

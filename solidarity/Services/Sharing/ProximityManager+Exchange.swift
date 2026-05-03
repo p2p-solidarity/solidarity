@@ -199,6 +199,21 @@ extension ProximityManager {
     }
   }
 
+  /// Tear down the visual representation of a peer regardless of state.
+  /// MultipeerConnectivity has no per-peer disconnect API — `MCSession` only
+  /// supports `disconnect()` (all peers). For `.connected` peers we therefore
+  /// just flip the status back to `.disconnected` so the lightning card
+  /// reflects the user's intent; the underlying session keeps the peer until
+  /// it's torn down via `disconnect()` or a network event. Keeping the entry
+  /// (rather than removing it) prevents the browser from immediately re-
+  /// discovering and re-appending the peer in `.disconnected` form.
+  func disconnectFromPeer(_ peer: ProximityPeer) {
+    cancelRetry(for: peer.peerID)
+    if let index = nearbyPeers.firstIndex(where: { $0.id == peer.id }) {
+      nearbyPeers[index].status = .disconnected
+    }
+  }
+
   func invitePeerToGroup(_ peer: ProximityPeer, group: SemaphoreGroupManager.ManagedGroup, inviterName: String) {
     guard let browser = browser else {
       print("Browser was nil in invitePeerToGroup. Restarting browsing...")

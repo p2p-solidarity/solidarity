@@ -222,7 +222,7 @@ struct PeerDetailSheet: View {
           .frame(maxWidth: .infinity)
         }
         .buttonStyle(ThemedPrimaryButtonStyle())
-        Button(action: { proximityManager.cancelConnectionAttempt(for: livePeer) }) {
+        Button(action: { proximityManager.disconnectFromPeer(livePeer) }) {
           HStack(spacing: 8) {
             Image(systemName: "xmark.circle")
             Text("Disconnect")

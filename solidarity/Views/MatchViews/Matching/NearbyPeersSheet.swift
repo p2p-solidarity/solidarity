@@ -87,6 +87,7 @@ struct NearbyPeersSheet: View {
         if let peer = selectedPeer { PeerDetailSheet(peer: peer) }
       }
     }
+    .incomingInvitationOverlay()
   }
 
   private var lightningHeader: some View {
@@ -149,7 +150,7 @@ struct NearbyPeersSheet: View {
               sendCard(to: peer)
             },
             onDisconnect: {
-              proximityManager.cancelConnectionAttempt(for: peer)
+              proximityManager.disconnectFromPeer(peer)
             }
           )
         }

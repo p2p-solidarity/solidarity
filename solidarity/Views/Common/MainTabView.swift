@@ -49,6 +49,7 @@ struct MainTabView: View {
         handleDeepLinkAction(action)
       }
       .toastOverlay()
+      .incomingInvitationOverlay()
       .onChange(of: scenePhase) { _, newPhase in
         if newPhase == .background {
           BackupManager.shared.triggerAutoBackupIfNeeded()
