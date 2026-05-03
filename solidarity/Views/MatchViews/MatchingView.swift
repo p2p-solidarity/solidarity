@@ -22,6 +22,16 @@ struct PeerDetailSheet: View {
   @Environment(\.dismiss) private var dismiss
   @Environment(\.colorScheme) private var colorScheme
   @State private var isLighteningAnimating = false
+  @State private var showingConnectPopup = false
+  @StateObject private var proximityManager = ProximityManager.shared
+  @StateObject private var cardManager = CardManager.shared
+
+  /// Resolves the live peer record so this sheet reflects status changes that
+  /// happened after it was opened (e.g. the connect popup completed). Falls
+  /// back to the captured `peer` if MultipeerConnectivity has dropped it.
+  private var livePeer: ProximityPeer {
+    proximityManager.nearbyPeers.first(where: { $0.peerID == peer.peerID }) ?? peer
+  }
 
   var body: some View {
     NavigationStack {
@@ -102,13 +112,13 @@ struct PeerDetailSheet: View {
                     Circle()
                       .fill(statusColor)
                       .frame(width: 8, height: 8)
-                    Text(peer.status.rawValue)
+                    Text(livePeer.status.rawValue)
                       .font(.subheadline)
                       .foregroundColor(Color.Theme.textPrimary)
                   }
                 }
 
-                if let verification = peer.verification {
+                if let verification = livePeer.verification {
                   HStack {
                     Text("Verification")
                       .font(.headline)
@@ -151,9 +161,17 @@ struct PeerDetailSheet: View {
                 )
             )
 
+            actionButtons
+              .padding(.top, 4)
+
             Spacer()
           }
           .padding()
+        }
+
+        if showingConnectPopup {
+          ConnectPeerPopupView(peer: livePeer, isPresented: $showingConnectPopup, autoDismissOnSuccess: true)
+            .transition(.opacity)
         }
       }
       .navigationTitle("Peer Details")
@@ -169,6 +187,70 @@ struct PeerDetailSheet: View {
     }
   }
 
+  @ViewBuilder
+  private var actionButtons: some View {
+    switch livePeer.status {
+    case .disconnected:
+      Button {
+        showingConnectPopup = true
+      } label: {
+        HStack(spacing: 8) {
+          Image(systemName: "link.badge.plus")
+          Text("Connect & Send Card")
+        }
+        .frame(maxWidth: .infinity)
+      }
+      .buttonStyle(ThemedPrimaryButtonStyle())
+    case .connecting:
+      Button(action: { proximityManager.cancelConnectionAttempt(for: livePeer) }) {
+        HStack(spacing: 8) {
+          ProgressView()
+            .progressViewStyle(CircularProgressViewStyle(tint: .white))
+            .scaleEffect(0.7)
+          Text("Cancel Connecting")
+        }
+        .frame(maxWidth: .infinity)
+      }
+      .buttonStyle(ThemedSecondaryButtonStyle())
+    case .connected:
+      VStack(spacing: 10) {
+        Button(action: sendCardNow) {
+          HStack(spacing: 8) {
+            Image(systemName: "paperplane.fill")
+            Text("Send My Card")
+          }
+          .frame(maxWidth: .infinity)
+        }
+        .buttonStyle(ThemedPrimaryButtonStyle())
+        Button(action: { proximityManager.cancelConnectionAttempt(for: livePeer) }) {
+          HStack(spacing: 8) {
+            Image(systemName: "xmark.circle")
+            Text("Disconnect")
+          }
+          .frame(maxWidth: .infinity)
+        }
+        .buttonStyle(ThemedSecondaryButtonStyle())
+      }
+    }
+  }
+
+  private func sendCardNow() {
+    guard let card = cardManager.businessCards.first else {
+      ToastManager.shared.show(
+        title: String(localized: "No Card"),
+        message: String(localized: "Create an identity card in the Me tab first."),
+        type: .error
+      )
+      return
+    }
+    proximityManager.sendCard(card, to: livePeer.peerID, sharingLevel: proximityManager.currentSharingLevel)
+    ToastManager.shared.show(
+      title: String(localized: "Card Sent"),
+      message: String(format: String(localized: "Sent your card to %@."), livePeer.cardName ?? livePeer.name),
+      type: .success
+    )
+  }
+
   private var peerAvatarInitials: String {
     let name = peer.cardName ?? peer.name
     let components = name.components(separatedBy: " ")
@@ -177,7 +259,7 @@ struct PeerDetailSheet: View {
   }
 
   private var statusColor: Color {
-    switch peer.status {
+    switch livePeer.status {
     case .connected: return .green
     case .connecting: return .orange
     case .disconnected: return .gray
@@ -185,7 +267,7 @@ struct PeerDetailSheet: View {
   }
 
   private var verificationColor: Color {
-    if let verification = peer.verification {
+    if let verification = livePeer.verification {
       switch verification {
       case .verified: return .green
       case .pending: return .orange

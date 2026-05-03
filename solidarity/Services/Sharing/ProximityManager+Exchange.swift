@@ -187,6 +187,18 @@ extension ProximityManager {
     print("Connecting to peer: \(peer.name)")
   }
 
+  /// User-initiated cancel of an in-flight connection attempt. Stops any retry
+  /// scheduled by the auto-pilot loop so the popup's Cancel button doesn't get
+  /// fought by a silent re-invite, and resets the peer status so the lightning
+  /// card returns to its disconnected state immediately.
+  func cancelConnectionAttempt(for peer: ProximityPeer) {
+    cancelRetry(for: peer.peerID)
+    if let index = nearbyPeers.firstIndex(where: { $0.id == peer.id }),
+       nearbyPeers[index].status == .connecting {
+      nearbyPeers[index].status = .disconnected
+    }
+  }
+
   func invitePeerToGroup(_ peer: ProximityPeer, group: SemaphoreGroupManager.ManagedGroup, inviterName: String) {
     guard let browser = browser else {
       print("Browser was nil in invitePeerToGroup. Restarting browsing...")

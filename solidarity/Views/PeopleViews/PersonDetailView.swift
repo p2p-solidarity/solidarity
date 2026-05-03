@@ -31,20 +31,31 @@ struct PersonDetailView: View {
     return raw.isEmpty ? nil : raw
   }
 
+  /// Builds the chip text shown when a contact's `verificationStatus` isn't
+  /// `.verified`. The previous version baked the source into the label
+  /// ("unverified (qr)") which read as a bug rather than a state — the user
+  /// has no way to tell whether the QR was plaintext (no signature, can never
+  /// verify) vs. didSigned-but-failed (signature didn't validate). For QR
+  /// and proximity sources we fold a more actionable hint into the label
+  /// instead of just leaking the source enum.
   private var unverifiedLabel: String {
-    switch contact.source {
-    case "imported":
-      return String(localized: "unverified (import)")
-    case ContactSource.manual.rawValue:
-      return String(localized: "unverified (manual)")
-    case ContactSource.qrCode.rawValue:
-      return String(localized: "unverified (qr)")
-    case ContactSource.airdrop.rawValue:
-      return String(localized: "unverified (airdrop)")
-    case ContactSource.appClip.rawValue:
-      return String(localized: "unverified (clip)")
-    case ContactSource.proximity.rawValue:
-      return String(localized: "unverified (proximity)")
+    switch (contact.source, contact.verificationStatus) {
+    case (_, VerificationStatus.failed.rawValue):
+      return String(localized: "verification failed")
+    case (_, VerificationStatus.pending.rawValue):
+      return String(localized: "pending verification")
+    case (ContactSource.qrCode.rawValue, _):
+      return String(localized: "scanned · not exchanged")
+    case ("imported", _):
+      return String(localized: "imported · self-attested")
+    case (ContactSource.manual.rawValue, _):
+      return String(localized: "added manually")
+    case (ContactSource.airdrop.rawValue, _):
+      return String(localized: "via AirDrop · not exchanged")
+    case (ContactSource.appClip.rawValue, _):
+      return String(localized: "via App Clip · not exchanged")
+    case (ContactSource.proximity.rawValue, _):
+      return String(localized: "proximity · awaiting signature")
     default:
       return String(localized: "unverified")
     }

@@ -22,6 +22,7 @@ struct NearbyPeersSheet: View {
   @State private var showingPeerDetail = false
   @State private var showingConnectPopup = false
   @State private var connectTarget: ProximityPeer?
+  @State private var sendingInProgress: UUID?
   @StateObject private var proximityManager = ProximityManager.shared
   @StateObject private var cardManager = CardManager.shared
 
@@ -33,6 +34,13 @@ struct NearbyPeersSheet: View {
         || peer.cardCompany?.localizedCaseInsensitiveContains(searchText) == true
         || peer.name.localizedCaseInsensitiveContains(searchText) == true
     }
+  }
+
+  /// Only worth surfacing the "View Latest Card" CTA once we've actually
+  /// received a card. The original sheet showed the button whenever any peer
+  /// was connected, which led to a confusing waiting-state sheet on tap.
+  private var hasReceivedCard: Bool {
+    proximityManager.receivedCards.last != nil
   }
 
   var body: some View {
@@ -50,7 +58,7 @@ struct NearbyPeersSheet: View {
           } else {
             peersGrid
           }
-          if connectedCount > 0 { lightningActionButton }
+          if hasReceivedCard { lightningActionButton }
 
           // Soft status message
           if let message = proximityManager.matchingInfoMessage {
@@ -136,12 +144,18 @@ struct NearbyPeersSheet: View {
             onConnect: {
               connectTarget = peer
               showingConnectPopup = true
+            },
+            onSendCard: {
+              sendCard(to: peer)
+            },
+            onDisconnect: {
+              proximityManager.cancelConnectionAttempt(for: peer)
             }
           )
         }
       }
       .padding()
-      .padding(.bottom, connectedCount > 0 ? 100 : 20)
+      .padding(.bottom, hasReceivedCard ? 100 : 20)
     }
   }
 
@@ -194,6 +208,27 @@ struct NearbyPeersSheet: View {
       }
       .padding(.horizontal)
       .padding(.bottom, 20)
+    }
+  }
+
+  private func sendCard(to peer: ProximityPeer) {
+    guard let card = cardManager.businessCards.first else {
+      ToastManager.shared.show(
+        title: String(localized: "No Card"),
+        message: String(localized: "Create an identity card in the Me tab first."),
+        type: .error
+      )
+      return
+    }
+    sendingInProgress = peer.id
+    proximityManager.sendCard(card, to: peer.peerID, sharingLevel: proximityManager.currentSharingLevel)
+    ToastManager.shared.show(
+      title: String(localized: "Card Sent"),
+      message: String(format: String(localized: "Sent your card to %@."), peer.cardName ?? peer.name),
+      type: .success
+    )
+    DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+      sendingInProgress = nil
     }
   }
 }

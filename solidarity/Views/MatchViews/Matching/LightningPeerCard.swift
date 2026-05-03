@@ -2,7 +2,9 @@
 //  LighteningPeerCard.swift
 //  solidarity
 //
-//  Card cell showing a peer with a styled Connect button.
+//  Card cell showing a peer with status-aware actions (Connect / Connecting /
+//  Send Card · Disconnect). Drives the lightning-card flow inside
+//  `NearbyPeersSheet`.
 //
 
 import SwiftUI
@@ -12,6 +14,12 @@ struct LighteningPeerCard: View {
   let isLighteningAnimating: Bool
   let onTap: () -> Void
   let onConnect: (() -> Void)?
+  /// Invoked when the user taps "Send Card" on a connected peer. Optional —
+  /// callers that don't want to expose a manual send (e.g. screens that
+  /// auto-exchange) can leave it nil.
+  var onSendCard: (() -> Void)?
+  /// Invoked when the user taps "Disconnect" on a connected peer.
+  var onDisconnect: (() -> Void)?
 
   @Environment(\.colorScheme) private var colorScheme
   @State private var isHovering = false
@@ -29,11 +37,12 @@ struct LighteningPeerCard: View {
           .fill(Color.Theme.cardSurface(for: colorScheme))
           .overlay(
             RoundedRectangle(cornerRadius: 16)
-              .stroke(isLighteningAnimating ? Color.Theme.featureAccent.opacity(0.3) : Color.Theme.cardBorder(for: colorScheme), lineWidth: 1)
+              .stroke(borderColor, lineWidth: peer.status == .connected ? 1.5 : 1)
           )
       )
       .scaleEffect(isHovering ? 1.05 : 1.0)
       .animation(.spring(response: 0.3, dampingFraction: 0.7), value: isHovering)
+      .animation(.easeInOut(duration: 0.25), value: peer.status)
     }
     .buttonStyle(PlainButtonStyle())
     .onHover { hovering in isHovering = hovering }
@@ -63,9 +72,16 @@ struct LighteningPeerCard: View {
       Spacer()
       VStack(alignment: .trailing, spacing: 4) {
         HStack(spacing: 4) {
-          Circle().fill(statusColor).frame(width: 8, height: 8)
-            .scaleEffect(isLighteningAnimating ? 1.2 : 1.0)
-            .animation(.easeInOut(duration: 0.5).repeatForever(autoreverses: true), value: isLighteningAnimating)
+          if peer.status == .connecting {
+            ProgressView()
+              .progressViewStyle(CircularProgressViewStyle(tint: statusColor))
+              .scaleEffect(0.6)
+              .frame(width: 8, height: 8)
+          } else {
+            Circle().fill(statusColor).frame(width: 8, height: 8)
+              .scaleEffect(isLighteningAnimating ? 1.2 : 1.0)
+              .animation(.easeInOut(duration: 0.5).repeatForever(autoreverses: true), value: isLighteningAnimating)
+          }
           Text(peer.status.rawValue).font(.caption2).foregroundColor(Color.Theme.textPrimary)
         }
         if let verification = peer.verification {
@@ -92,34 +108,96 @@ struct LighteningPeerCard: View {
     .frame(maxWidth: .infinity, alignment: .leading)
   }
 
+  @ViewBuilder
   private var footer: some View {
-    HStack {
-      if peer.status == .disconnected {
-        Button(action: { onConnect?() }) {
-          HStack(spacing: 6) {
-            Image(systemName: "link.badge.plus")
-            Text("Connect")
-              .fontWeight(.semibold)
-          }
-          .font(.caption)
-          .foregroundColor(.white)
-          .padding(.horizontal, 12)
-          .padding(.vertical, 8)
-          .background(Color.Theme.primaryBlue)
-          .clipShape(Capsule())
-          .overlay(
-            Capsule().stroke(Color.Theme.cardBorder(for: colorScheme), lineWidth: 1)
-          )
-          .shadow(color: Color.Theme.primaryBlue.opacity(0.3), radius: 6, x: 0, y: 2)
-        }
-        .buttonStyle(PlainButtonStyle())
+    HStack(spacing: 8) {
+      switch peer.status {
+      case .disconnected:
+        connectButton
+        Spacer()
+      case .connecting:
+        connectingPill
+        Spacer()
+      case .connected:
+        sendCardButton
+        disconnectButton
       }
-      Spacer()
       Image(systemName: "bolt.fill")
         .foregroundColor(isLighteningAnimating ? Color.Theme.featureAccent : Color.Theme.textSecondary)
         .font(.caption)
         .scaleEffect(isLighteningAnimating ? 1.2 : 1.0)
         .animation(.easeInOut(duration: 0.3).repeatForever(autoreverses: true), value: isLighteningAnimating)
+    }
+  }
+
+  private var connectButton: some View {
+    Button(action: { onConnect?() }) {
+      HStack(spacing: 6) {
+        Image(systemName: "link.badge.plus")
+        Text("Connect").fontWeight(.semibold)
+      }
+      .font(.caption)
+      .foregroundColor(.white)
+      .padding(.horizontal, 12)
+      .padding(.vertical, 8)
+      .background(Color.Theme.primaryBlue)
+      .clipShape(Capsule())
+      .overlay(
+        Capsule().stroke(Color.Theme.cardBorder(for: colorScheme), lineWidth: 1)
+      )
+      .shadow(color: Color.Theme.primaryBlue.opacity(0.3), radius: 6, x: 0, y: 2)
+    }
+    .buttonStyle(PlainButtonStyle())
+  }
+
+  private var connectingPill: some View {
+    HStack(spacing: 6) {
+      ProgressView()
+        .progressViewStyle(CircularProgressViewStyle(tint: .white))
+        .scaleEffect(0.65)
+      Text("Connecting…").fontWeight(.semibold)
+    }
+    .font(.caption)
+    .foregroundColor(.white)
+    .padding(.horizontal, 12)
+    .padding(.vertical, 8)
+    .background(Color.orange)
+    .clipShape(Capsule())
+    .overlay(Capsule().stroke(Color.orange.opacity(0.6), lineWidth: 1))
+  }
+
+  @ViewBuilder
+  private var sendCardButton: some View {
+    if let onSendCard {
+      Button(action: { onSendCard() }) {
+        HStack(spacing: 6) {
+          Image(systemName: "paperplane.fill")
+          Text("Send").fontWeight(.semibold)
+        }
+        .font(.caption)
+        .foregroundColor(.white)
+        .padding(.horizontal, 12)
+        .padding(.vertical, 8)
+        .background(Color.green)
+        .clipShape(Capsule())
+        .shadow(color: Color.green.opacity(0.3), radius: 6, x: 0, y: 2)
+      }
+      .buttonStyle(PlainButtonStyle())
+    }
+  }
+
+  @ViewBuilder
+  private var disconnectButton: some View {
+    if let onDisconnect {
+      Button(action: { onDisconnect() }) {
+        Image(systemName: "xmark.circle.fill")
+          .font(.caption)
+          .foregroundColor(Color.Theme.textSecondary)
+          .padding(8)
+          .background(Color.Theme.searchBg)
+          .clipShape(Circle())
+      }
+      .buttonStyle(PlainButtonStyle())
     }
   }
 
@@ -135,6 +213,17 @@ struct LighteningPeerCard: View {
     case .connected: return .green
     case .connecting: return .orange
     case .disconnected: return .gray
+    }
+  }
+
+  private var borderColor: Color {
+    switch peer.status {
+    case .connected: return Color.Theme.featureAccent.opacity(0.5)
+    case .connecting: return Color.orange.opacity(0.5)
+    case .disconnected:
+      return isLighteningAnimating
+        ? Color.Theme.featureAccent.opacity(0.3)
+        : Color.Theme.cardBorder(for: colorScheme)
     }
   }
 
