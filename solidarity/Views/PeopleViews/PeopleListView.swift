@@ -243,9 +243,9 @@ struct PeopleListView: View {
         } label: {
           Text("Import from Phone")
             .font(.system(size: 15))
-            .foregroundColor(.white)
+            .foregroundColor(Color.Theme.invertedButtonText)
             .frame(width: 200, height: 44)
-            .background(Color.Theme.textPrimary)
+            .background(Color.Theme.invertedButtonBg)
             .clipShape(RoundedRectangle(cornerRadius: 2, style: .continuous))
         }
 

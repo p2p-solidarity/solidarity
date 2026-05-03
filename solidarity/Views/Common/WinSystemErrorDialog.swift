@@ -18,7 +18,7 @@ struct WinSystemErrorDialog: View {
         HStack(alignment: .top) {
           Text(title)
             .font(.system(size: 18, weight: .bold, design: .default))
-            .foregroundColor(.white)
+            .foregroundColor(Color.Theme.textPrimary)
 
           Spacer()
 
@@ -28,7 +28,7 @@ struct WinSystemErrorDialog: View {
           }) {
             Image(systemName: "xmark")
               .font(.system(size: 14, weight: .semibold))
-              .foregroundColor(.white)
+              .foregroundColor(Color.Theme.textPrimary)
               .padding(4)
               // Dotted outline for the close button
               .overlay(

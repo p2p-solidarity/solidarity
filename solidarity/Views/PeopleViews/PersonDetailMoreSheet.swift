@@ -80,12 +80,12 @@ struct PersonDetailMoreSheet: View {
       } label: {
         Text("Done")
           .font(.system(size: 13, weight: .medium))
-          .foregroundStyle(Color.white)
+          .foregroundStyle(Color.Theme.invertedButtonText)
           .padding(.horizontal, 16)
           .padding(.vertical, 4)
           .background(
             RoundedRectangle(cornerRadius: 2)
-              .fill(Color.Theme.textPrimary)
+              .fill(Color.Theme.invertedButtonBg)
           )
       }
       .buttonStyle(.plain)
