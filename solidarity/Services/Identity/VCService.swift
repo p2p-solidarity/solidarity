@@ -131,8 +131,27 @@ final class VCService {
     // Collect sourceCredentialIds for traceability.
     let sourceCredentialIds = VerifiedClaimIndex.credentialIdsSync(forHolder: holderDid)
 
-    // Collect active proof claims.
-    let proofClaims = ShareSettingsStore.selectedProofClaims
+    // Collect active proof claims, intersected with what the holder actually
+    // owns. Without this, the VC could declare proofs the holder never
+    // earned (ghost claims) — e.g. ShareSettingsStore returns "is_human"
+    // by default but the holder might have no passport credential. The
+    // recipient cannot independently verify those declarations, so the
+    // issuer must self-police.
+    let requestedProofClaims = ShareSettingsStore.selectedProofClaims
+    let availableProofs = VerifiedClaimIndex.proofClaimTypesSync(forHolder: holderDid)
+    let proofClaims = requestedProofClaims.filter { availableProofs.contains($0) }
+    let droppedProofs = Set(requestedProofClaims).subtracting(availableProofs)
+    if !droppedProofs.isEmpty {
+      // Common cause: ShareSettings toggle says "share is_human" but no
+      // passport claim exists for this holderDid — either the user never
+      // scanned a passport, or PassportPipeline wrote claims under a
+      // different holderDid (DID descriptor drift). Surface so onboarding
+      // bugs don't silently produce "verified" cards with no proofs.
+      let dropped = droppedProofs.sorted().joined(separator: ", ")
+      Self.logger.warning(
+        "Dropping requested proof claims not available for holder \(holderDid, privacy: .private): \(dropped)"
+      )
+    }
 
     let claims = BusinessCardCredentialClaims(
       card: cardForCredential,
