@@ -226,6 +226,8 @@ struct PeopleListView: View {
 
   private var emptyState: some View {
     VStack(spacing: 0) {
+      Spacer()
+
       PaperStackIllustration()
         .frame(width: 214, height: 214)
 
@@ -260,8 +262,7 @@ struct PeopleListView: View {
 
       Spacer()
     }
-    .padding(.top, 12)
-    .frame(maxWidth: .infinity)
+    .frame(maxWidth: .infinity, maxHeight: .infinity)
   }
 
   private var emptySearchState: some View {
