@@ -66,9 +66,13 @@ extension ProximityManager {
         nonce: nonce,
         timestamp: timestamp
       )
-      guard let didSignature = ProximityIdentitySigner.signBase64(canonicalBytes: canonical) else {
-        lastError = .cryptographicError("Failed to sign card exchange with DID key")
+      let didSignature: String
+      switch ProximityIdentitySigner.signBase64(canonicalBytes: canonical) {
+      case .failure(let error):
+        lastError = error
         return
+      case .success(let value):
+        didSignature = value
       }
 
       // Legacy Curve25519 envelope signature retained for backward compatibility with older
@@ -172,8 +176,12 @@ extension ProximityManager {
       nonce: nonce,
       timestamp: timestamp
     )
-    guard let didSignature = ProximityIdentitySigner.signBase64(canonicalBytes: canonical) else {
-      return .failure(.cryptographicError("Failed to sign exchange request with DID key"))
+    let didSignature: String
+    switch ProximityIdentitySigner.signBase64(canonicalBytes: canonical) {
+    case .failure(let error):
+      return .failure(error)
+    case .success(let value):
+      didSignature = value
     }
 
     let signatureInput = canonicalExchangeString(
@@ -246,8 +254,12 @@ extension ProximityManager {
       nonce: nonce,
       timestamp: timestamp
     )
-    guard let didSignature = ProximityIdentitySigner.signBase64(canonicalBytes: canonical) else {
-      return .failure(.cryptographicError("Failed to sign exchange response with DID key"))
+    let didSignature: String
+    switch ProximityIdentitySigner.signBase64(canonicalBytes: canonical) {
+    case .failure(let error):
+      return .failure(error)
+    case .success(let value):
+      didSignature = value
     }
 
     let signatureInput = canonicalExchangeString(

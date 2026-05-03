@@ -194,7 +194,13 @@ struct SharingTabView: View {
         .frame(width: frame, height: frame)
         .clipShape(Circle())
         .overlay(Circle().stroke(Color.Theme.divider, lineWidth: 1))
-    } else if let animal = card?.animal ?? savedAvatar.flatMap(AnimalCharacter.init(rawValue:)) {
+    } else if let card {
+      // Always render an animal: chosen → saved → stable default from card.id.
+      // Letter initials would surface here when the user resumed onboarding
+      // mid-flow (selectedAvatar lost) or restored a legacy backup.
+      let animal = card.animal
+        ?? savedAvatar.flatMap(AnimalCharacter.init(rawValue:))
+        ?? AnimalCharacter.default(forId: card.id.uuidString)
       ImageProvider.animalImage(for: animal)
         .resizable()
         .scaledToFill()
@@ -206,21 +212,12 @@ struct SharingTabView: View {
         Circle()
           .fill(Color.Theme.searchBg)
           .frame(width: frame, height: frame)
-        Text(initials(for: card?.name))
-          .font(.system(size: 12, weight: .bold, design: .monospaced))
-          .foregroundColor(Color.Theme.textPrimary)
+        Image(systemName: "person")
+          .font(.system(size: 14, weight: .semibold))
+          .foregroundColor(Color.Theme.textTertiary)
       }
       .overlay(Circle().stroke(Color.Theme.divider, lineWidth: 1))
     }
-  }
-
-  private func initials(for name: String?) -> String {
-    guard let name, !name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
-      return "?"
-    }
-    let parts = name.components(separatedBy: .whitespacesAndNewlines).filter { !$0.isEmpty }
-    let letters = parts.compactMap(\.first).map(String.init)
-    return letters.prefix(2).joined().uppercased()
   }
 
   // MARK: - Actions

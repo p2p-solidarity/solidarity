@@ -17,13 +17,19 @@ extension MeTabView {
   var identityAvatar: some View {
     let card = CardManager.shared.businessCards.first
     let savedAnimalRaw = UserDefaults.standard.string(forKey: "theme_selected_animal")
-    let animal = card?.animal ?? savedAnimalRaw.flatMap(AnimalCharacter.init(rawValue:))
 
     if let imageData = card?.profileImage, let uiImage = UIImage(data: imageData) {
       Image(uiImage: uiImage)
         .resizable()
         .scaledToFill()
-    } else if let animal {
+    } else if let card {
+      let animal = card.animal
+        ?? savedAnimalRaw.flatMap(AnimalCharacter.init(rawValue:))
+        ?? AnimalCharacter.default(forId: card.id.uuidString)
+      ImageProvider.animalImage(for: animal)
+        .resizable()
+        .scaledToFill()
+    } else if let animal = savedAnimalRaw.flatMap(AnimalCharacter.init(rawValue:)) {
       ImageProvider.animalImage(for: animal)
         .resizable()
         .scaledToFill()

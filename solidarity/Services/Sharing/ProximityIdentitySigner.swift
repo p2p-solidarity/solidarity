@@ -54,17 +54,25 @@ enum ProximityIdentitySigner {
 
   /// Signs canonical bytes with the local DID signing key (P-256 ECDSA, SHA-256).
   /// Returns the raw fixed-width r||s signature (64 bytes), base64-encoded for
-  /// JSON transport. Returns nil if the signing key is unavailable.
-  static func signBase64(canonicalBytes: Data) -> String? {
-    let signingKeyResult = KeychainService.shared.signingKey()
-    guard case .success(let key) = signingKeyResult else {
-      return nil
-    }
-    do {
-      let signature = try key.sign(payload: canonicalBytes)
-      return signature.base64EncodedString()
-    } catch {
-      return nil
+  /// JSON transport. Failures propagate the underlying `CardError` so callers
+  /// can surface a meaningful toast (key unavailable vs signing rejected vs
+  /// keychain retrieval failure) instead of a single opaque string.
+  static func signBase64(canonicalBytes: Data) -> Result<String, CardError> {
+    switch KeychainService.shared.signingKey() {
+    case .failure(let error):
+      print("[ProximityIdentitySigner] signing key unavailable: \(error)")
+      return .failure(error)
+    case .success(let key):
+      do {
+        let signature = try key.sign(payload: canonicalBytes)
+        return .success(signature.base64EncodedString())
+      } catch let error as CardError {
+        print("[ProximityIdentitySigner] sign() failed: \(error)")
+        return .failure(error)
+      } catch {
+        print("[ProximityIdentitySigner] sign() failed: \(error.localizedDescription)")
+        return .failure(.cryptographicError("Signing failed: \(error.localizedDescription)"))
+      }
     }
   }
 

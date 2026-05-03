@@ -292,7 +292,9 @@ struct OnboardingFlowView: View {
 
     var card = BusinessCard(name: trimmedName)
     card.socialNetworks = socials
-    card.animal = selectedAvatar
+    // Fall back to the persisted UserDefaults choice when the in-memory
+    // selection was lost (e.g. app killed between avatarSetup and secureKeys).
+    card.animal = selectedAvatar ?? savedAvatar.flatMap(AnimalCharacter.init(rawValue:))
 
     _ = CardManager.shared.createCard(card)
   }
