@@ -98,10 +98,13 @@ extension QRCodeScanService {
   }
 
   /// Pulls `verified_proofs.claims` out of a JWT VC payload without
-  /// re-running signature verification. Returns `nil` when the JWT is not
-  /// a BusinessCardCredentialEnvelope (e.g. unrelated VC, malformed) so
-  /// the caller can leave existing declared claims untouched. An empty
-  /// array means the envelope explicitly declared zero proofs.
+  /// re-running signature verification. Returns `nil` only when the JWT
+  /// is not a BusinessCardCredentialEnvelope at all (malformed JWT,
+  /// decode failure, or envelope decoded but carries no VC body) so the
+  /// caller can leave existing declared claims untouched. Once we have a
+  /// real VC body, an absent or empty `verified_proofs.claims` block
+  /// means the peer explicitly declared zero proofs — return `[]` so
+  /// callers overwrite stale ghost claims from a prior VC.
   func extractDeclaredProofClaims(fromJWT jwt: String) -> [String]? {
     let segments = jwt.split(separator: ".")
     guard segments.count == 3,
@@ -117,8 +120,10 @@ extension QRCodeScanService {
     else {
       return nil
     }
-    let credentialSubject = (envelope.vc ?? envelope.payload?.vc)?.credentialSubject
-    return credentialSubject?.verifiedProofs?.claims
+    guard let credentialSubject = (envelope.vc ?? envelope.payload?.vc)?.credentialSubject else {
+      return nil
+    }
+    return credentialSubject.verifiedProofs?.claims ?? []
   }
 
   func verifyProofClaims(

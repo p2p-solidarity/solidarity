@@ -140,13 +140,20 @@ extension QRCodeScanService {
       ageOver18ProofValid: ageOver18ProofValid
     )
     identityCoordinator.updateVerificationStatus(for: payload.businessCard.id, status: finalStatus)
+    // Only propagate the peer's declared claims when the issuer
+    // signature checked out. A forged QR could include
+    // `proofClaims: ["is_human", "age_over_18"]` while failing issuer
+    // verification — emit nil in that case so the consumer leaves
+    // earlier-verified declarations untouched and never stores the
+    // untrusted set.
+    let trustedClaims: [String]? = finalStatus == .verified ? payload.proofClaims : nil
     return .success(
       ScanOutcome(
         card: payload.businessCard,
         verificationStatus: finalStatus,
         sealedRoute: payload.sealedRoute,
         route: .businessCard,
-        declaredProofClaims: payload.proofClaims
+        declaredProofClaims: trustedClaims
       )
     )
   }
@@ -166,10 +173,15 @@ extension QRCodeScanService {
       }
       identityCoordinator.updateVerificationStatus(for: imported.businessCard.id, status: status)
       // The peer's VC may declare proof claims (e.g. "is_human", "age_over_18")
-      // in its verified_proofs block. We surface this so the People view can
-      // display a "declared" sub-badge — it's the peer's own self-attestation
-      // signed by their DID, NOT a claim we re-verified locally.
-      let declaredClaims = extractDeclaredProofClaims(fromJWT: payload.jwt)
+      // in its verified_proofs block. The "declared" sub-badge is the peer's
+      // own self-attestation signed by their DID, NOT a claim we re-verified
+      // locally — but it MUST still rest on a valid issuer signature.
+      // Skip extraction unless verification succeeded so a forged JWT can't
+      // smuggle in is_human / age_over_18 chips with only a hollow outline
+      // to distinguish them.
+      let declaredClaims: [String]? = status == .verified
+        ? extractDeclaredProofClaims(fromJWT: payload.jwt)
+        : nil
       return .success(
         ScanOutcome(
           card: imported.businessCard,
