@@ -43,30 +43,33 @@ extension SharingTabView {
 
       // Card info footer
       VStack(alignment: .leading, spacing: 12) {
-        // Name + Real Human badge + chevron to share settings
-        HStack(spacing: 10) {
-          profileAvatar(for: card)
+        // Whole row taps through to ShareSettings — the lone chevron was a
+        // tiny tap target. `.contentShape(Rectangle())` keeps the Spacer gap
+        // hit-testable so the avatar, name, and trailing whitespace all work.
+        NavigationLink {
+          ShareSettingsView()
+        } label: {
+          HStack(spacing: 10) {
+            profileAvatar(for: card)
 
-          Text(card?.name ?? "No Card")
-            .font(.system(size: 17, weight: .semibold))
-            .foregroundColor(Color.Theme.textPrimary)
-            .lineLimit(1)
+            Text(card?.name ?? "No Card")
+              .font(.system(size: 17, weight: .semibold))
+              .foregroundColor(Color.Theme.textPrimary)
+              .lineLimit(1)
 
-          if hasRealHumanProof {
-            realHumanBadge
-          }
+            if hasRealHumanProof {
+              realHumanBadge
+            }
 
-          Spacer(minLength: 4)
+            Spacer(minLength: 4)
 
-          NavigationLink {
-            ShareSettingsView()
-          } label: {
             Image(systemName: "chevron.right")
               .font(.system(size: 14, weight: .semibold))
               .foregroundColor(Color.Theme.textTertiary)
           }
-          .buttonStyle(.plain)
+          .contentShape(Rectangle())
         }
+        .buttonStyle(.plain)
 
         // Field tag pills
         fieldPills
