@@ -253,6 +253,11 @@ extension ProximityManager: MCNearbyServiceAdvertiserDelegate {
       self.pendingInvitationHandler = invitationHandler
       self.pendingInvitation = PendingInvitation(peerID: peerID, receivedAt: Date())
       self.isPresentingInvitation = false
+      // Fire haptic exactly once per state transition. The overlay is
+      // mounted at multiple points (root tab, NearbyPeersSheet) so any
+      // .onAppear-based haptic would double-fire when a sheet is open
+      // — emit it from the single publish site instead.
+      HapticFeedbackManager.shared.heavyImpact()
       print("Received invitation from \(peerID.displayName)")
     }
   }

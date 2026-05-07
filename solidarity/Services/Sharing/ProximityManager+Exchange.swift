@@ -199,18 +199,36 @@ extension ProximityManager {
     }
   }
 
-  /// Tear down the visual representation of a peer regardless of state.
-  /// MultipeerConnectivity has no per-peer disconnect API — `MCSession` only
-  /// supports `disconnect()` (all peers). For `.connected` peers we therefore
-  /// just flip the status back to `.disconnected` so the lightning card
-  /// reflects the user's intent; the underlying session keeps the peer until
-  /// it's torn down via `disconnect()` or a network event. Keeping the entry
-  /// (rather than removing it) prevents the browser from immediately re-
-  /// discovering and re-appending the peer in `.disconnected` form.
+  /// Locally tombstones a peer regardless of state. MultipeerConnectivity
+  /// has no per-peer disconnect API — `MCSession` only supports
+  /// `disconnect()` (all peers). For `.connected` peers we therefore flip
+  /// the status back to `.disconnected`; the underlying MC session keeps
+  /// the peer until it's torn down via `disconnect()` or a network event.
+  /// Keeping the entry (rather than removing it) prevents the browser
+  /// from immediately re-discovering and re-appending the peer in
+  /// `.disconnected` form.
+  ///
+  /// Outbound send paths (`sendCard`, `sendExchangeRequest`,
+  /// `respondToExchangeRequest`, `handleSpatialTrigger`) consult
+  /// `isPeerLocallyDisconnected(_:)` so a UWB spatial trigger or a
+  /// retry-loop card send doesn't slip past the tombstone via the still-
+  /// alive `session.connectedPeers` membership.
   func disconnectFromPeer(_ peer: ProximityPeer) {
     cancelRetry(for: peer.peerID)
     if let index = nearbyPeers.firstIndex(where: { $0.id == peer.id }) {
       nearbyPeers[index].status = .disconnected
+    }
+  }
+
+  /// True when the local user has tombstoned this peer via
+  /// `disconnectFromPeer(_:)`. Outbound send paths must check this even
+  /// when `session.connectedPeers.contains(peer)` returns true, because
+  /// MultipeerConnectivity cannot evict a single peer from the session.
+  /// Returns false for peers we've never tracked in `nearbyPeers`, so a
+  /// session-only peer (no discovery entry) still proceeds normally.
+  internal func isPeerLocallyDisconnected(_ peerID: MCPeerID) -> Bool {
+    return nearbyPeers.contains {
+      $0.peerID.displayName == peerID.displayName && $0.status == .disconnected
     }
   }
 

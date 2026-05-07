@@ -13,6 +13,10 @@ extension ProximityManager {
       lastError = .sharingError("Peer is not connected")
       return
     }
+    guard !isPeerLocallyDisconnected(peer) else {
+      print("[ProximityManager] sendCard skipped — peer \(peer.displayName) was locally disconnected")
+      return
+    }
 
     guard let senderDID = ProximityIdentitySigner.localDID(),
       let senderJWK = ProximityIdentitySigner.localPublicJWK() else {
@@ -151,6 +155,9 @@ extension ProximityManager {
     guard session.connectedPeers.contains(peer) else {
       return .failure(.sharingError("Peer is not connected"))
     }
+    guard !isPeerLocallyDisconnected(peer) else {
+      return .failure(.sharingError("Peer was locally disconnected"))
+    }
 
     guard let senderDID = ProximityIdentitySigner.localDID(),
       let senderJWK = ProximityIdentitySigner.localPublicJWK() else {
@@ -229,6 +236,9 @@ extension ProximityManager {
   ) -> CardResult<Void> {
     guard session.connectedPeers.contains(request.fromPeer) else {
       return .failure(.sharingError("Peer is not connected"))
+    }
+    guard !isPeerLocallyDisconnected(request.fromPeer) else {
+      return .failure(.sharingError("Peer was locally disconnected"))
     }
 
     guard let senderDID = ProximityIdentitySigner.localDID(),
@@ -392,6 +402,11 @@ extension ProximityManager {
     let isConnected = session.connectedPeers.contains { $0.displayName == peerID.displayName }
     guard isConnected else {
       print("[ProximityManager] UWB trigger ignored — peer \(peerID.displayName) not in connectedPeers")
+      NearbyInteractionManager.shared.exchangeDidFail()
+      return
+    }
+    guard !isPeerLocallyDisconnected(peerID) else {
+      print("[ProximityManager] UWB trigger ignored — peer \(peerID.displayName) was locally disconnected")
       NearbyInteractionManager.shared.exchangeDidFail()
       return
     }

@@ -25,7 +25,10 @@ struct IncomingInvitationOverlay: ViewModifier {
         )
         .transition(.opacity)
         .zIndex(200)
-        .onAppear { HapticFeedbackManager.shared.heavyImpact() }
+        // Haptic is fired by ProximityManager when pendingInvitation is
+        // set — the overlay can mount in multiple containers (root tab
+        // + any sheet that re-applies the modifier), so .onAppear here
+        // would double-fire the impact.
       }
     }
   }
