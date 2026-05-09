@@ -31,17 +31,19 @@ struct LighteningPeerCard: View {
         info
         footer
       }
-      .padding(16)
+      .padding(14)
       .background(
-        RoundedRectangle(cornerRadius: 16)
-          .fill(Color.Theme.cardSurface(for: colorScheme))
+        RoundedRectangle(cornerRadius: 12)
+          .fill(Color.Theme.mutedSurface)
           .overlay(
-            RoundedRectangle(cornerRadius: 16)
-              .stroke(borderColor, lineWidth: peer.status == .connected ? 1.5 : 1)
+            Group {
+              if peer.status == .connected {
+                RoundedRectangle(cornerRadius: 12)
+                  .stroke(Color.Theme.featureAccent.opacity(0.4), lineWidth: 1)
+              }
+            }
           )
       )
-      .scaleEffect(isHovering ? 1.05 : 1.0)
-      .animation(.spring(response: 0.3, dampingFraction: 0.7), value: isHovering)
       .animation(.easeInOut(duration: 0.25), value: peer.status)
     }
     .buttonStyle(PlainButtonStyle())
@@ -60,15 +62,8 @@ struct LighteningPeerCard: View {
           .frame(width: 50, height: 50)
           .clipShape(Circle())
         Circle()
-          .stroke(statusColor, lineWidth: peer.status == .connected ? 2 : 1)
+          .stroke(statusColor, lineWidth: 1)
           .frame(width: 50, height: 50)
-        if peer.status == .connected {
-          Circle()
-            .stroke(Color.Theme.featureAccent.opacity(0.5), lineWidth: 1.5)
-            .frame(width: 56, height: 56)
-            .scaleEffect(isLighteningAnimating ? 1.1 : 1.0)
-            .animation(.easeInOut(duration: 0.5).repeatForever(autoreverses: true), value: isLighteningAnimating)
-        }
       }
       Spacer()
       VStack(alignment: .trailing, spacing: 4) {
@@ -80,20 +75,28 @@ struct LighteningPeerCard: View {
               .frame(width: 8, height: 8)
           } else {
             Circle().fill(statusColor).frame(width: 8, height: 8)
-              .scaleEffect(isLighteningAnimating ? 1.2 : 1.0)
-              .animation(.easeInOut(duration: 0.5).repeatForever(autoreverses: true), value: isLighteningAnimating)
           }
-          Text(peer.status.rawValue).font(.caption2).foregroundColor(Color.Theme.textPrimary)
+          Text(peer.status.rawValue)
+            .font(.system(size: 12))
+            .foregroundColor(Color.Theme.textPrimary)
         }
         if let verification = peer.verification {
           HStack(spacing: 2) {
-            Image(systemName: verification.systemImageName).font(.caption2).foregroundColor(verificationColor)
-            Text(verification.displayName).font(.caption2).foregroundColor(Color.Theme.textSecondary)
+            Image(systemName: verification.systemImageName)
+              .font(.system(size: 12))
+              .foregroundColor(verificationColor)
+            Text(verification.displayName)
+              .font(.system(size: 12))
+              .foregroundColor(Color.Theme.textSecondary)
           }
         } else if peer.discoveryInfo["zk"] == "1" {
           HStack(spacing: 2) {
-            Image(systemName: "shield.checkerboard").font(.caption2).foregroundColor(Color.Theme.primaryBlue)
-            Text("ZK Ready").font(.caption2).foregroundColor(Color.Theme.textSecondary)
+            Image(systemName: "shield.checkerboard")
+              .font(.system(size: 12))
+              .foregroundColor(Color.Theme.primaryBlue)
+            Text("ZK Ready")
+              .font(.system(size: 12))
+              .foregroundColor(Color.Theme.textSecondary)
           }
         }
       }
@@ -102,9 +105,22 @@ struct LighteningPeerCard: View {
 
   private var info: some View {
     VStack(alignment: .leading, spacing: 4) {
-      Text(peer.cardName ?? peer.name).font(.headline).fontWeight(.semibold).foregroundColor(Color.Theme.textPrimary).lineLimit(1)
-      if let title = peer.cardTitle { Text(title).font(.caption).foregroundColor(Color.Theme.featureAccent).lineLimit(1) }
-      if let company = peer.cardCompany { Text(company).font(.caption2).foregroundColor(Color.Theme.textSecondary).lineLimit(1) }
+      Text(peer.cardName ?? peer.name)
+        .font(.system(size: 16, weight: .semibold))
+        .foregroundColor(Color.Theme.textPrimary)
+        .lineLimit(1)
+      if let title = peer.cardTitle {
+        Text(title)
+          .font(.system(size: 12))
+          .foregroundColor(Color.Theme.featureAccent)
+          .lineLimit(1)
+      }
+      if let company = peer.cardCompany {
+        Text(company)
+          .font(.system(size: 12))
+          .foregroundColor(Color.Theme.textSecondary)
+          .lineLimit(1)
+      }
     }
     .frame(maxWidth: .infinity, alignment: .leading)
   }
@@ -124,10 +140,8 @@ struct LighteningPeerCard: View {
         disconnectButton
       }
       Image(systemName: "bolt.fill")
-        .foregroundColor(isLighteningAnimating ? Color.Theme.featureAccent : Color.Theme.textSecondary)
-        .font(.caption)
-        .scaleEffect(isLighteningAnimating ? 1.2 : 1.0)
-        .animation(.easeInOut(duration: 0.3).repeatForever(autoreverses: true), value: isLighteningAnimating)
+        .foregroundColor(peer.status == .connected ? Color.Theme.terminalGreen : Color.Theme.textTertiary)
+        .font(.system(size: 12))
     }
   }
 
@@ -137,16 +151,13 @@ struct LighteningPeerCard: View {
         Image(systemName: "link.badge.plus")
         Text("Connect").fontWeight(.semibold)
       }
-      .font(.caption)
+      .font(.system(size: 12, weight: .semibold))
       .foregroundColor(.white)
       .padding(.horizontal, 12)
       .padding(.vertical, 8)
       .background(Color.Theme.primaryBlue)
       .clipShape(Capsule())
-      .overlay(
-        Capsule().stroke(Color.Theme.cardBorder(for: colorScheme), lineWidth: 1)
-      )
-      .shadow(color: Color.Theme.primaryBlue.opacity(0.3), radius: 6, x: 0, y: 2)
+      .shadow(color: Color.Theme.primaryBlue.opacity(0.2), radius: 4, x: 0, y: 2)
     }
     .buttonStyle(PlainButtonStyle())
   }
@@ -158,13 +169,12 @@ struct LighteningPeerCard: View {
         .scaleEffect(0.65)
       Text("Connecting…").fontWeight(.semibold)
     }
-    .font(.caption)
+    .font(.system(size: 12, weight: .semibold))
     .foregroundColor(.white)
     .padding(.horizontal, 12)
     .padding(.vertical, 8)
     .background(Color.Theme.warning)
     .clipShape(Capsule())
-    .overlay(Capsule().stroke(Color.Theme.warning.opacity(0.6), lineWidth: 1))
   }
 
   @ViewBuilder
@@ -175,13 +185,13 @@ struct LighteningPeerCard: View {
           Image(systemName: "paperplane.fill")
           Text("Send").fontWeight(.semibold)
         }
-        .font(.caption)
+        .font(.system(size: 12, weight: .semibold))
         .foregroundColor(.white)
         .padding(.horizontal, 12)
         .padding(.vertical, 8)
         .background(Color.Theme.terminalGreen)
         .clipShape(Capsule())
-        .shadow(color: Color.Theme.terminalGreen.opacity(0.3), radius: 6, x: 0, y: 2)
+        .shadow(color: Color.Theme.terminalGreen.opacity(0.2), radius: 4, x: 0, y: 2)
       }
       .buttonStyle(PlainButtonStyle())
     }
@@ -192,7 +202,7 @@ struct LighteningPeerCard: View {
     if let onDisconnect {
       Button(action: { onDisconnect() }) {
         Image(systemName: "xmark.circle.fill")
-          .font(.caption)
+          .font(.system(size: 14))
           .foregroundColor(Color.Theme.textSecondary)
           .padding(8)
           .background(Color.Theme.searchBg)
@@ -207,17 +217,6 @@ struct LighteningPeerCard: View {
     case .connected: return Color.Theme.terminalGreen
     case .connecting: return Color.Theme.warning
     case .disconnected: return Color.Theme.textTertiary
-    }
-  }
-
-  private var borderColor: Color {
-    switch peer.status {
-    case .connected: return Color.Theme.featureAccent.opacity(0.5)
-    case .connecting: return Color.Theme.warning.opacity(0.5)
-    case .disconnected:
-      return isLighteningAnimating
-        ? Color.Theme.featureAccent.opacity(0.3)
-        : Color.Theme.cardBorder(for: colorScheme)
     }
   }
 
