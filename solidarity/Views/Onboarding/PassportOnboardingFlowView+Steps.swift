@@ -97,9 +97,11 @@ extension PassportOnboardingFlowView {
                 .font(.caption2.monospaced())
                 .foregroundColor(Color.Theme.textTertiary)
         }
-        .padding(8)
-        .background(Color.Theme.searchBg)
-        .cornerRadius(6)
+        .padding(10)
+        .background(
+            RoundedRectangle(cornerRadius: 10)
+                .fill(Color.Theme.mutedSurface)
+        )
     }
 
     struct ProofSystemLabel {
@@ -139,8 +141,10 @@ extension PassportOnboardingFlowView {
             .disabled(pipeline.proofResult == nil || pipeline.isLoading)
         }
         .padding(14)
-        .background(Color.Theme.cardBg)
-        .cornerRadius(10)
+        .background(
+            RoundedRectangle(cornerRadius: 12)
+                .fill(Color.Theme.mutedSurface)
+        )
     }
 
     func chipSnapshotCard(_ chip: PassportChipSnapshot) -> some View {
@@ -197,9 +201,11 @@ extension PassportOnboardingFlowView {
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(10)
-        .background(Color.Theme.searchBg)
-        .cornerRadius(8)
+        .padding(12)
+        .background(
+            RoundedRectangle(cornerRadius: 12)
+                .fill(Color.Theme.mutedSurface)
+        )
     }
 
     func authBadge(_ label: String, passed: Bool) -> some View {
