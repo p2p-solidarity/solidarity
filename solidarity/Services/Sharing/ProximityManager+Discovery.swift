@@ -208,6 +208,12 @@ extension ProximityManager {
       info["company"] = company
     }
 
+    // Broadcast the avatar so peers can render the same animal everywhere
+    // (radar, lightning peer card, invite popups). Falls back to a stable
+    // default seeded on the card id for cards that haven't picked one yet.
+    let animal = card.animal ?? AnimalCharacter.default(forId: card.id.uuidString)
+    info["animal"] = animal.rawValue
+
     // Legacy key retained for backward compatibility. Discovery semantics are field-based.
     info["level"] = SharingLevel.public.rawValue
     info["timestamp"] = String(Int(Date().timeIntervalSince1970))

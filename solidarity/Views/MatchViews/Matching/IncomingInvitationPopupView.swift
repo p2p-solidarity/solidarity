@@ -52,29 +52,27 @@ struct IncomingInvitationPopupView: View {
     let title = peer?.cardTitle
     let company = peer?.cardCompany
     let status = peer?.status ?? .disconnected
-    let initials = name.split(separator: " ").compactMap { $0.first }.map(String.init).prefix(2).joined().uppercased()
+    let animal = peer?.cardAnimal ?? AnimalCharacter.default(forId: invitation.peerID.displayName)
     let statusColor: Color = {
       switch status {
-      case .connected: return .green
-      case .connecting: return .orange
-      case .disconnected: return .gray
+      case .connected: return Color.Theme.terminalGreen
+      case .connecting: return Color.Theme.warning
+      case .disconnected: return Color.Theme.textTertiary
       }
     }()
     return HStack(spacing: 12) {
       ZStack {
         Circle()
-          .fill(
-            LinearGradient(
-              colors: [statusColor, statusColor.opacity(0.6)],
-              startPoint: .topLeading,
-              endPoint: .bottomTrailing
-            )
-          )
+          .fill(Color.Theme.searchBg)
           .frame(width: 54, height: 54)
-        Text(initials)
-          .font(.headline)
-          .fontWeight(.bold)
-          .foregroundColor(.white)
+        ImageProvider.animalImage(for: animal)
+          .resizable()
+          .scaledToFill()
+          .frame(width: 54, height: 54)
+          .clipShape(Circle())
+        Circle()
+          .stroke(statusColor, lineWidth: 1)
+          .frame(width: 54, height: 54)
         Circle()
           .stroke(Color.Theme.featureAccent, lineWidth: 2)
           .frame(width: 60, height: 60)

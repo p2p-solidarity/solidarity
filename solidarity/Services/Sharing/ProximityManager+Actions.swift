@@ -8,7 +8,10 @@ extension ProximityManager {
     sendCard(card, to: peer, sharingLevel: .public)
   }
 
-  func sendCard(_ card: BusinessCard, to peer: MCPeerID, sharingLevel: SharingLevel) {
+  func sendCard(_ card: BusinessCard,
+                to peer: MCPeerID,
+                sharingLevel: SharingLevel)
+    {
     guard session.connectedPeers.contains(peer) else {
       lastError = .sharingError("Peer is not connected")
       return

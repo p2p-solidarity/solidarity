@@ -102,7 +102,9 @@ struct NearbyPeersSheet: View {
         }
         Spacer()
         HStack(spacing: 8) {
-          Circle().fill(connectedCount > 0 ? .green : .orange).frame(width: 8, height: 8)
+          Circle()
+            .fill(connectedCount > 0 ? Color.Theme.terminalGreen : Color.Theme.warning)
+            .frame(width: 8, height: 8)
             .scaleEffect(isLighteningAnimating ? 1.3 : 1.0)
             .animation(.easeInOut(duration: 1.0).repeatForever(autoreverses: true), value: isLighteningAnimating)
           Text("\(connectedCount) connected").font(.caption).foregroundColor(Color.Theme.textSecondary)
@@ -193,20 +195,16 @@ struct NearbyPeersSheet: View {
       Spacer()
       Button(action: onViewLatestCard) {
         HStack(spacing: 12) {
-          Image(systemName: "bolt.fill").font(.title2)
-            .scaleEffect(isLighteningAnimating ? 1.3 : 1.0)
+          Image(systemName: "bolt.fill")
+            .font(.system(size: 15, weight: .semibold))
+            .scaleEffect(isLighteningAnimating ? 1.15 : 1.0)
             .animation(.easeInOut(duration: 0.3).repeatForever(autoreverses: true), value: isLighteningAnimating)
-          Text("View Latest Lightening Card").font(.headline).fontWeight(.bold)
+          Text("View Latest Lightening Card")
+            .font(.system(size: 15, weight: .semibold))
         }
-        .foregroundColor(.white)
         .frame(maxWidth: .infinity)
-        .padding(.vertical, 16)
-        .background(
-          RoundedRectangle(cornerRadius: 16)
-            .fill(LinearGradient(colors: [Color.Theme.featureAccent, .orange, Color.Theme.accentRose], startPoint: .leading, endPoint: .trailing))
-            .shadow(color: Color.Theme.featureAccent.opacity(0.4), radius: 10, x: 0, y: 0)
-        )
       }
+      .buttonStyle(ThemedPrimaryButtonStyle())
       .padding(.horizontal)
       .padding(.bottom, 20)
     }

@@ -109,18 +109,16 @@ struct ConnectPeerPopupView: View {
     HStack(spacing: 12) {
       ZStack {
         Circle()
-          .fill(
-            LinearGradient(
-              colors: [statusColor, statusColor.opacity(0.6)],
-              startPoint: .topLeading,
-              endPoint: .bottomTrailing
-            )
-          )
+          .fill(Color.Theme.searchBg)
           .frame(width: 54, height: 54)
-        Text(peerInitials)
-          .font(.headline)
-          .fontWeight(.bold)
-          .foregroundColor(.white)
+        ImageProvider.animalImage(for: peer.cardAnimal)
+          .resizable()
+          .scaledToFill()
+          .frame(width: 54, height: 54)
+          .clipShape(Circle())
+        Circle()
+          .stroke(statusColor, lineWidth: 1)
+          .frame(width: 54, height: 54)
         if displayedPeer == .connected {
           Circle()
             .stroke(Color.Theme.featureAccent, lineWidth: 2)
@@ -166,7 +164,7 @@ struct ConnectPeerPopupView: View {
         }
       case .connected:
         HStack(spacing: 8) {
-          Image(systemName: "link.circle.fill").foregroundColor(.green)
+          Image(systemName: "link.circle.fill").foregroundColor(Color.Theme.terminalGreen)
           Text("Connected")
             .font(.subheadline)
             .foregroundColor(Color.Theme.textSecondary)
@@ -181,7 +179,7 @@ struct ConnectPeerPopupView: View {
         }
       case .success:
         HStack(spacing: 8) {
-          Image(systemName: "checkmark.seal.fill").foregroundColor(.green)
+          Image(systemName: "checkmark.seal.fill").foregroundColor(Color.Theme.terminalGreen)
           Text(autoExchangeOnConnect ? "Card sent!" : "Connected!")
             .font(.subheadline)
             .foregroundColor(Color.Theme.textSecondary)
@@ -189,7 +187,7 @@ struct ConnectPeerPopupView: View {
       case .error(let message):
         VStack(spacing: 8) {
           HStack(spacing: 8) {
-            Image(systemName: "exclamationmark.triangle.fill").foregroundColor(.orange)
+            Image(systemName: "exclamationmark.triangle.fill").foregroundColor(Color.Theme.warning)
             Text("Connection failed")
               .font(.subheadline)
               .foregroundColor(Color.Theme.textPrimary)
@@ -262,18 +260,11 @@ struct ConnectPeerPopupView: View {
     }
   }
 
-  private var peerInitials: String {
-    let name = peer.cardName ?? peer.name
-    let components = name.components(separatedBy: " ")
-    let initials = components.compactMap { $0.first }.map { String($0) }
-    return initials.prefix(2).joined().uppercased()
-  }
-
   private var statusColor: Color {
     switch displayedPeer {
-    case .connected: return .green
-    case .connecting: return .orange
-    case .disconnected: return .gray
+    case .connected: return Color.Theme.terminalGreen
+    case .connecting: return Color.Theme.warning
+    case .disconnected: return Color.Theme.textTertiary
     }
   }
 

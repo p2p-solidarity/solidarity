@@ -52,18 +52,19 @@ struct LighteningPeerCard: View {
     HStack {
       ZStack {
         Circle()
-          .fill(
-            LinearGradient(
-              colors: [statusColor, statusColor.opacity(0.6)],
-              startPoint: .topLeading,
-              endPoint: .bottomTrailing
-            )
-          )
+          .fill(Color.Theme.searchBg)
           .frame(width: 50, height: 50)
-        Text(peerAvatarInitials).font(.headline).fontWeight(.bold).foregroundColor(.white)
+        ImageProvider.animalImage(for: peer.cardAnimal)
+          .resizable()
+          .scaledToFill()
+          .frame(width: 50, height: 50)
+          .clipShape(Circle())
+        Circle()
+          .stroke(statusColor, lineWidth: peer.status == .connected ? 2 : 1)
+          .frame(width: 50, height: 50)
         if peer.status == .connected {
           Circle()
-            .stroke(Color.Theme.featureAccent, lineWidth: 2)
+            .stroke(Color.Theme.featureAccent.opacity(0.5), lineWidth: 1.5)
             .frame(width: 56, height: 56)
             .scaleEffect(isLighteningAnimating ? 1.1 : 1.0)
             .animation(.easeInOut(duration: 0.5).repeatForever(autoreverses: true), value: isLighteningAnimating)
@@ -161,9 +162,9 @@ struct LighteningPeerCard: View {
     .foregroundColor(.white)
     .padding(.horizontal, 12)
     .padding(.vertical, 8)
-    .background(Color.orange)
+    .background(Color.Theme.warning)
     .clipShape(Capsule())
-    .overlay(Capsule().stroke(Color.orange.opacity(0.6), lineWidth: 1))
+    .overlay(Capsule().stroke(Color.Theme.warning.opacity(0.6), lineWidth: 1))
   }
 
   @ViewBuilder
@@ -178,9 +179,9 @@ struct LighteningPeerCard: View {
         .foregroundColor(.white)
         .padding(.horizontal, 12)
         .padding(.vertical, 8)
-        .background(Color.green)
+        .background(Color.Theme.terminalGreen)
         .clipShape(Capsule())
-        .shadow(color: Color.green.opacity(0.3), radius: 6, x: 0, y: 2)
+        .shadow(color: Color.Theme.terminalGreen.opacity(0.3), radius: 6, x: 0, y: 2)
       }
       .buttonStyle(PlainButtonStyle())
     }
@@ -201,25 +202,18 @@ struct LighteningPeerCard: View {
     }
   }
 
-  private var peerAvatarInitials: String {
-    let name = peer.cardName ?? peer.name
-    let components = name.components(separatedBy: " ")
-    let initials = components.compactMap { $0.first }.map { String($0) }
-    return initials.prefix(2).joined().uppercased()
-  }
-
   private var statusColor: Color {
     switch peer.status {
-    case .connected: return .green
-    case .connecting: return .orange
-    case .disconnected: return .gray
+    case .connected: return Color.Theme.terminalGreen
+    case .connecting: return Color.Theme.warning
+    case .disconnected: return Color.Theme.textTertiary
     }
   }
 
   private var borderColor: Color {
     switch peer.status {
     case .connected: return Color.Theme.featureAccent.opacity(0.5)
-    case .connecting: return Color.orange.opacity(0.5)
+    case .connecting: return Color.Theme.warning.opacity(0.5)
     case .disconnected:
       return isLighteningAnimating
         ? Color.Theme.featureAccent.opacity(0.3)
@@ -230,10 +224,10 @@ struct LighteningPeerCard: View {
   private var verificationColor: Color {
     if let verification = peer.verification {
       switch verification {
-      case .verified: return .green
-      case .pending: return .orange
+      case .verified: return Color.Theme.terminalGreen
+      case .pending: return Color.Theme.warning
       case .unverified: return Color.Theme.primaryBlue
-      case .failed: return .red
+      case .failed: return Color.Theme.destructive
       }
     }
     return Color.Theme.primaryBlue

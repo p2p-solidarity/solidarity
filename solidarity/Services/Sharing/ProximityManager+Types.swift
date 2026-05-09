@@ -52,6 +52,16 @@ struct ProximityPeer: Identifiable, Equatable {
     return discoveryInfo["company"]
   }
 
+  /// Animal avatar advertised by the peer, falling back to a stable default
+  /// seeded on `peerID.displayName` when the peer hasn't broadcast one (older
+  /// app versions, or pre-card identity-only advertising).
+  var cardAnimal: AnimalCharacter {
+    if let raw = discoveryInfo["animal"], let a = AnimalCharacter(rawValue: raw) {
+      return a
+    }
+    return AnimalCharacter.default(forId: peerID.displayName)
+  }
+
   var sharingLevel: SharingLevel {
     if let levelString = discoveryInfo["level"],
       let level = SharingLevel(rawValue: levelString)
