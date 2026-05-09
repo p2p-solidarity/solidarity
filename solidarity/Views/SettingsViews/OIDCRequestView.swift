@@ -15,77 +15,79 @@ struct OIDCRequestView: View {
   private let oidcService = OIDCService.shared
 
   var body: some View {
-    VStack(spacing: 20) {
-      Text("OpenID Request")
-        .font(.system(size: 28, weight: .bold, design: .monospaced))
-        .foregroundColor(Color.Theme.textPrimary)
+    ScrollView {
+      VStack(spacing: 20) {
+        if let qrCode = qrCode {
+          Image(uiImage: qrCode)
+            .resizable()
+            .interpolation(.none)
+            .scaledToFit()
+            .frame(width: 250, height: 250)
+            .padding(14)
+            .background(
+              RoundedRectangle(cornerRadius: 12)
+                .fill(Color.white)
+            )
 
-      if let qrCode = qrCode {
-        Image(uiImage: qrCode)
-          .resizable()
-          .interpolation(.none)
-          .scaledToFit()
-          .frame(width: 250, height: 250)
-          .padding()
-          .background(Color.white)
-          .overlay(Rectangle().stroke(Color.Theme.divider, lineWidth: 1))
+          if let url = requestURL {
+            Text(url.absoluteString)
+              .font(.system(size: 11, design: .monospaced))
+              .foregroundColor(Color.Theme.textSecondary)
+              .multilineTextAlignment(.center)
+              .padding(.horizontal)
+              .contextMenu {
+                Button(
+                  action: {
+                    UIPasteboard.general.string = url.absoluteString
+                  },
+                  label: {
+                    Label("Copy URL", systemImage: "doc.on.doc")
+                  }
+                )
+              }
+          }
 
-        if let url = requestURL {
-          Text(url.absoluteString)
-            .font(.system(size: 10, design: .monospaced))
+          Text("Scan this QR code to present a credential to Solidarity.")
+            .font(.system(size: 13))
             .foregroundColor(Color.Theme.textSecondary)
             .multilineTextAlignment(.center)
             .padding(.horizontal)
-            .contextMenu {
-              Button(
-                action: {
-                  UIPasteboard.general.string = url.absoluteString
-                },
-                label: {
-                  Label("Copy URL", systemImage: "doc.on.doc")
-                }
-              )
-            }
+        } else {
+          VStack(spacing: 8) {
+            Image(systemName: "qrcode")
+              .font(.system(size: 60, weight: .light))
+              .foregroundColor(Color.Theme.textTertiary)
+            Text("Generate a request to receive a credential")
+              .font(.system(size: 13))
+              .foregroundColor(Color.Theme.textSecondary)
+              .multilineTextAlignment(.center)
+          }
+          .frame(width: 250, height: 250)
+          .background(
+            RoundedRectangle(cornerRadius: 12)
+              .fill(Color.Theme.mutedSurface)
+          )
         }
 
-        Text("Scan this QR code to present a credential to Solidarity.")
-          .font(.system(size: 12))
-          .foregroundColor(Color.Theme.textSecondary)
-          .multilineTextAlignment(.center)
-          .padding(.horizontal)
-      } else {
-        VStack {
-          Image(systemName: "qrcode")
-            .font(.system(size: 60))
-            .foregroundColor(Color.Theme.textSecondary)
-          Text("Generate a request to receive a credential")
-            .font(.system(size: 12))
-            .foregroundColor(Color.Theme.textSecondary)
-            .padding(.top, 8)
+        if let errorMessage = errorMessage {
+          Text(errorMessage)
+            .foregroundColor(Color.Theme.destructive)
+            .font(.system(size: 13))
+            .multilineTextAlignment(.center)
+            .padding(.horizontal)
         }
-        .frame(width: 250, height: 250)
-        .background(Color.Theme.searchBg)
-        .overlay(Rectangle().stroke(Color.Theme.divider, lineWidth: 1))
-      }
 
-      if let errorMessage = errorMessage {
-        Text(errorMessage)
-          .foregroundColor(Color.Theme.destructive)
-          .font(.system(size: 12, design: .monospaced))
+        Button(action: generateRequest) {
+          Label("Generate OIDC Request", systemImage: "qrcode")
+            .frame(maxWidth: .infinity)
+        }
+        .buttonStyle(ThemedPrimaryButtonStyle())
+        .padding(.horizontal, 16)
       }
-
-      Button(action: generateRequest) {
-        Label("Generate OIDC Request", systemImage: "qrcode")
-          .frame(maxWidth: .infinity)
-      }
-      .buttonStyle(ThemedPrimaryButtonStyle())
-      .padding(.horizontal)
-
-      Spacer()
+      .padding(.vertical, 24)
     }
-    .padding()
-    .background(Color.Theme.pageBg)
-    .navigationTitle("Receive Card")
+    .background(Color.Theme.pageBg.ignoresSafeArea())
+    .navigationTitle("OIDC Request")
     .navigationBarTitleDisplayMode(.inline)
   }
 
