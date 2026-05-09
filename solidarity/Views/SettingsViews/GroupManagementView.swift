@@ -274,32 +274,18 @@ struct GroupManagementView: View {
   }
 
   private var privacySheet: some View {
-    NavigationStack {
-      ScrollView {
-        Text("Privacy Policy Content...")
-          .padding()
-      }
-      .background(Color.Theme.pageBg.ignoresSafeArea())
-      .navigationTitle("Privacy Policy")
-      .navigationBarTitleDisplayMode(.inline)
-      .toolbar {
-        SettingsBackToolbar { activeSheet = nil }
-      }
-    }
+    MarkdownDocumentView(
+      title: String(localized: "Privacy Policy"),
+      resourceName: "PRIVACY_POLICY",
+      onDismiss: { activeSheet = nil }
+    )
   }
 
   private var termsSheet: some View {
-    NavigationStack {
-      ScrollView {
-        Text("Terms of Service Content...")
-          .padding()
-      }
-      .background(Color.Theme.pageBg.ignoresSafeArea())
-      .navigationTitle("Terms of Service")
-      .navigationBarTitleDisplayMode(.inline)
-      .toolbar {
-        SettingsBackToolbar { activeSheet = nil }
-      }
-    }
+    MarkdownDocumentView(
+      title: String(localized: "Terms of Service"),
+      resourceName: "TERMS_OF_SERVICE",
+      onDismiss: { activeSheet = nil }
+    )
   }
 }
