@@ -37,23 +37,29 @@ struct BusinessCardFormView: View {
 
   private var isEditing: Bool { businessCard != nil && !forceCreate }
 
+  private var trimmedName: String {
+    name.trimmingCharacters(in: .whitespacesAndNewlines)
+  }
+
   var body: some View {
     NavigationStack {
-      Form {
-        basicSection
-        profileSection
-        privacySection
-        saveSection
-        if isEditing {
-          dangerSection
+      ScrollView {
+        VStack(spacing: 24) {
+          basicSection
+          profileSection
+          privacySection
+          saveSection
+          if isEditing {
+            dangerSection
+          }
         }
+        .padding(.vertical, 24)
       }
+      .background(Color.Theme.pageBg.ignoresSafeArea())
       .navigationTitle(isEditing ? "Edit Identity Card" : "Create Identity Card")
       .navigationBarTitleDisplayMode(.inline)
       .toolbar {
-        ToolbarItem(placement: .navigationBarLeading) {
-          Button("Cancel") { dismiss() }
-        }
+        SettingsBackToolbar("Cancel") { dismiss() }
       }
       .onAppear(perform: hydrate)
       .alert("Error", isPresented: $showingErrorAlert) {
@@ -76,69 +82,176 @@ struct BusinessCardFormView: View {
     }
   }
 
+  // MARK: - Sections
+
   private var basicSection: some View {
-    Section("Basic Info") {
-      TextField("Name *", text: $name)
-      TextField("Title", text: $title)
-      TextField("Company", text: $company)
+    SettingsBlockSection("Basic Info") {
+      nameField
+      formField(icon: "briefcase", placeholder: "Title", text: $title)
+      formField(icon: "building.2", placeholder: "Company", text: $company)
     }
   }
 
+  private var nameField: some View {
+    HStack(spacing: 12) {
+      Image(systemName: "person")
+        .font(.system(size: 14, weight: .regular))
+        .foregroundColor(Color.Theme.textPrimary)
+        .frame(width: 20, height: 20)
+
+      TextField("Name", text: $name)
+        .font(.system(size: 15))
+        .foregroundColor(Color.Theme.textPrimary)
+
+      if trimmedName.isEmpty {
+        Text("*")
+          .font(.system(size: 15, weight: .semibold))
+          .foregroundColor(Color.Theme.destructive)
+      }
+    }
+    .padding(.horizontal, 14)
+    .padding(.vertical, 12)
+    .background(
+      RoundedRectangle(cornerRadius: 12)
+        .fill(Color.Theme.mutedSurface)
+    )
+  }
+
   private var profileSection: some View {
-    Section("Contact and Skills") {
-      TextField("Email", text: $email)
-        .textInputAutocapitalization(.never)
-        .keyboardType(.emailAddress)
-      TextField("Phone", text: $phone)
-        .keyboardType(.phonePad)
-      TextField("Skills (comma separated)", text: $skillsText)
-      TextField("Categories (comma separated)", text: $categoriesText)
-      TextField("LinkedIn username", text: $linkedInHandle)
-      TextField("GitHub username", text: $githubHandle)
-        .textInputAutocapitalization(.never)
+    SettingsBlockSection("Contact and Skills") {
+      formField(
+        icon: "envelope",
+        placeholder: "Email",
+        text: $email,
+        keyboardType: .emailAddress,
+        autocapitalization: .never
+      )
+      formField(
+        icon: "phone",
+        placeholder: "Phone",
+        text: $phone,
+        keyboardType: .phonePad
+      )
+      formField(
+        icon: "sparkles",
+        placeholder: "Skills (comma separated)",
+        text: $skillsText
+      )
+      formField(
+        icon: "tag",
+        placeholder: "Categories (comma separated)",
+        text: $categoriesText
+      )
+      formField(
+        icon: "link",
+        placeholder: "LinkedIn username",
+        text: $linkedInHandle
+      )
+      formField(
+        icon: "chevron.left.forwardslash.chevron.right",
+        placeholder: "GitHub username",
+        text: $githubHandle,
+        autocapitalization: .never
+      )
     }
   }
 
   private var privacySection: some View {
-    Section("Sharing Preferences") {
-      Toggle("Use ZK proof by default", isOn: $useZK)
-      Toggle("Allow forwarding", isOn: $allowForwarding)
+    VStack(alignment: .leading, spacing: 8) {
+      SettingsBlockSectionHeader(title: "Sharing Preferences")
 
-      Picker("Sharing format", selection: $selectedFormat) {
-        ForEach(SharingFormat.allCases) { format in
-          Text(format.displayName).tag(format)
+      VStack(spacing: 8) {
+        SettingsBlockToggleRow(
+          icon: "shield",
+          title: "Use ZK proof by default",
+          isOn: $useZK
+        )
+        SettingsBlockToggleRow(
+          icon: "arrowshape.turn.up.right",
+          title: "Allow forwarding",
+          isOn: $allowForwarding
+        )
+
+        Menu {
+          Picker("Sharing format", selection: $selectedFormat) {
+            ForEach(SharingFormat.allCases) { format in
+              Text(format.displayName).tag(format)
+            }
+          }
+        } label: {
+          SettingsBlockRow(
+            icon: "square.and.arrow.up.on.square",
+            title: "Sharing format",
+            trailingText: selectedFormat.displayName,
+            showsChevron: false
+          )
         }
       }
-      .pickerStyle(.navigationLink)
+      .padding(.horizontal, 16)
 
       Text(selectedFormat.detail)
-        .font(.caption)
-        .foregroundColor(.secondary)
+        .font(.system(size: 12))
+        .foregroundColor(Color.Theme.textTertiary)
+        .padding(.horizontal, 16)
     }
   }
 
   private var saveSection: some View {
-    Section {
-      Button {
-        persistCard()
-      } label: {
-        Text(isEditing ? "Save Changes" : "Create Card")
-          .frame(maxWidth: .infinity)
-      }
-      .disabled(name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+    Button {
+      persistCard()
+    } label: {
+      Text(isEditing ? "Save Changes" : "Create Card")
     }
+    .buttonStyle(ThemedPrimaryButtonStyle())
+    .disabled(trimmedName.isEmpty)
+    .opacity(trimmedName.isEmpty ? 0.5 : 1)
+    .padding(.horizontal, 16)
   }
 
   private var dangerSection: some View {
-    Section("Danger Zone") {
-      Button(role: .destructive) {
+    VStack(alignment: .leading, spacing: 8) {
+      SettingsBlockSectionHeader(title: "Danger Zone")
+
+      Button {
         showingDeleteConfirm = true
       } label: {
-        Text("Delete Card")
-          .frame(maxWidth: .infinity, alignment: .leading)
+        SettingsBlockDangerRow(icon: "trash", title: "Delete Card")
       }
+      .buttonStyle(.plain)
+      .padding(.horizontal, 16)
     }
   }
+
+  // MARK: - Field Helpers
+
+  private func formField(
+    icon: String,
+    placeholder: String,
+    text: Binding<String>,
+    keyboardType: UIKeyboardType = .default,
+    autocapitalization: TextInputAutocapitalization = .sentences
+  ) -> some View {
+    HStack(spacing: 12) {
+      Image(systemName: icon)
+        .font(.system(size: 14, weight: .regular))
+        .foregroundColor(Color.Theme.textPrimary)
+        .frame(width: 20, height: 20)
+
+      TextField(placeholder, text: text)
+        .font(.system(size: 15))
+        .foregroundColor(Color.Theme.textPrimary)
+        .keyboardType(keyboardType)
+        .textInputAutocapitalization(autocapitalization)
+    }
+    .padding(.horizontal, 14)
+    .padding(.vertical, 12)
+    .background(
+      RoundedRectangle(cornerRadius: 12)
+        .fill(Color.Theme.mutedSurface)
+    )
+  }
+
+  // MARK: - Lifecycle / Persistence
 
   private func hydrate() {
     guard let businessCard else { return }
@@ -159,8 +272,8 @@ struct BusinessCardFormView: View {
   }
 
   private func persistCard() {
-    let trimmedName = name.trimmingCharacters(in: .whitespacesAndNewlines)
-    guard !trimmedName.isEmpty else {
+    let trimmed = trimmedName
+    guard !trimmed.isEmpty else {
       showError("Name is required.")
       return
     }
@@ -178,7 +291,7 @@ struct BusinessCardFormView: View {
 
     let updatedCard = BusinessCard(
       id: existingCard?.id ?? UUID(),
-      name: trimmedName,
+      name: trimmed,
       title: nilIfEmpty(title),
       company: nilIfEmpty(company),
       email: nilIfEmpty(email),
