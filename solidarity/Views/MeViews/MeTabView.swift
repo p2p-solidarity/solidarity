@@ -109,7 +109,12 @@ struct MeTabView: View {
         }
       }
       .sheet(isPresented: $showingOIDCRequest) {
-        OIDCRequestView()
+        NavigationStack {
+          OIDCRequestView()
+            .toolbar {
+              SettingsBackToolbar { showingOIDCRequest = false }
+            }
+        }
       }
       .sheet(isPresented: $showingZKSettings) {
         ZKSettingsView()
