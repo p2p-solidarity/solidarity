@@ -121,7 +121,7 @@ struct AdvancedSettingsView: View {
         if devMode.isDeveloperMode {
           Button { resetPassportCredential() } label: {
             SettingsBlockDangerRow(
-              icon: "doc.badge.minus",
+              icon: "xmark.bin",
               title: "Reset Passport Credential"
             )
           }
