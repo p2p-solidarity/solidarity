@@ -86,9 +86,7 @@ struct InviteLinkView: View {
       }
       .navigationTitle("Invite Members")
       .toolbar {
-        ToolbarItem(placement: .navigationBarTrailing) {
-          Button("Done") { dismiss() }
-        }
+        SettingsBackToolbar { dismiss() }
       }
     }
   }

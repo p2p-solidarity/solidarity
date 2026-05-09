@@ -167,9 +167,7 @@ private struct DIDListSheet: View {
       .navigationTitle("Your DIDs")
       .navigationBarTitleDisplayMode(.inline)
       .toolbar {
-        ToolbarItem(placement: .navigationBarTrailing) {
-          Button("Done") { dismiss() }
-        }
+        SettingsBackToolbar { dismiss() }
       }
     }
   }

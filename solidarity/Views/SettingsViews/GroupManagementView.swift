@@ -206,27 +206,20 @@ struct GroupManagementView: View {
       .safeAreaInset(edge: .top) {
         HStack {
           Button(action: { dismiss() }) {
-            HStack(spacing: 8) {
-              Image(systemName: "xmark.circle.fill")
+            HStack(spacing: 4) {
+              Image(systemName: "chevron.left")
+                .font(.system(size: 16, weight: .semibold))
               Text("Done")
-                .fontWeight(.semibold)
+                .font(.system(size: 16))
             }
             .foregroundColor(Color.Theme.textPrimary)
-            .padding(.horizontal, 20)
-            .padding(.vertical, 12)
-            .background(
-              Capsule()
-                .fill(Color.Theme.searchBg)
-                .background(
-                  Capsule()
-                    .stroke(Color.Theme.divider, lineWidth: 1)
-                )
-            )
+            .padding(.horizontal, 4)
+            .padding(.vertical, 8)
           }
           Spacer()
         }
-        .padding(.horizontal, 20)
-        .padding(.vertical, 8)
+        .padding(.horizontal, 16)
+        .padding(.vertical, 4)
       }
     }
     .navigationBarHidden(true)
@@ -286,11 +279,11 @@ struct GroupManagementView: View {
         Text("Privacy Policy Content...")
           .padding()
       }
+      .background(Color.Theme.pageBg.ignoresSafeArea())
       .navigationTitle("Privacy Policy")
+      .navigationBarTitleDisplayMode(.inline)
       .toolbar {
-        ToolbarItem(placement: .navigationBarTrailing) {
-          Button("Done") { activeSheet = nil }
-        }
+        SettingsBackToolbar { activeSheet = nil }
       }
     }
   }
@@ -301,11 +294,11 @@ struct GroupManagementView: View {
         Text("Terms of Service Content...")
           .padding()
       }
+      .background(Color.Theme.pageBg.ignoresSafeArea())
       .navigationTitle("Terms of Service")
+      .navigationBarTitleDisplayMode(.inline)
       .toolbar {
-        ToolbarItem(placement: .navigationBarTrailing) {
-          Button("Done") { activeSheet = nil }
-        }
+        SettingsBackToolbar { activeSheet = nil }
       }
     }
   }

@@ -28,9 +28,7 @@ struct BackupSettingsView: View {
     .navigationBarTitleDisplayMode(.inline)
     .onAppear { backup.loadSettings() }
     .toolbar {
-      ToolbarItem(placement: .navigationBarTrailing) {
-        Button("Done") { dismiss() }
-      }
+      SettingsBackToolbar { dismiss() }
     }
     .alert("Restore from Backup?", isPresented: $showRestoreAlert) {
       Button("Cancel", role: .cancel) {}

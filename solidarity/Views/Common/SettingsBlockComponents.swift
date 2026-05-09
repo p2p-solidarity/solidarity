@@ -1,5 +1,31 @@
 import SwiftUI
 
+// MARK: - Back Toolbar (chevron.left + title at navigationBarLeading)
+
+struct SettingsBackToolbar: ToolbarContent {
+  let title: String
+  let action: () -> Void
+
+  init(_ title: String = "Done", action: @escaping () -> Void) {
+    self.title = title
+    self.action = action
+  }
+
+  var body: some ToolbarContent {
+    ToolbarItem(placement: .navigationBarLeading) {
+      Button(action: action) {
+        HStack(spacing: 4) {
+          Image(systemName: "chevron.left")
+            .font(.system(size: 16, weight: .semibold))
+          Text(title)
+            .font(.system(size: 16))
+        }
+        .foregroundColor(Color.Theme.textPrimary)
+      }
+    }
+  }
+}
+
 // MARK: - Section Header (Me-tab style: 14pt regular, no brackets)
 
 struct SettingsBlockSectionHeader: View {

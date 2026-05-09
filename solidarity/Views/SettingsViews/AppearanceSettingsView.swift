@@ -25,9 +25,7 @@ struct AppearanceSettingsView: View {
     .navigationTitle("Appearance")
     .navigationBarTitleDisplayMode(.inline)
     .toolbar {
-      ToolbarItem(placement: .navigationBarTrailing) {
-        Button("Done") { dismiss() }
-      }
+      SettingsBackToolbar { dismiss() }
     }
   }
 
