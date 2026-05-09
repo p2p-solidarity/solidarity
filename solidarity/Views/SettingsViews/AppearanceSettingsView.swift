@@ -24,9 +24,6 @@ struct AppearanceSettingsView: View {
     .background(Color.Theme.pageBg.ignoresSafeArea())
     .navigationTitle("Appearance")
     .navigationBarTitleDisplayMode(.inline)
-    .toolbar {
-      SettingsBackToolbar { dismiss() }
-    }
   }
 
   // MARK: - Color Mode

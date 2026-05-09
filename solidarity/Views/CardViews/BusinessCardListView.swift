@@ -49,11 +49,21 @@ struct BusinessCardListView: View {
         }
       }
       .sheet(isPresented: $showingAppearanceSettings) {
-        NavigationStack { AppearanceSettingsView() }
-          .environmentObject(theme)
+        NavigationStack {
+          AppearanceSettingsView()
+            .toolbar {
+              SettingsBackToolbar { showingAppearanceSettings = false }
+            }
+        }
+        .environmentObject(theme)
       }
       .sheet(isPresented: $showingBackupSettings) {
-        NavigationStack { BackupSettingsView() }
+        NavigationStack {
+          BackupSettingsView()
+            .toolbar {
+              SettingsBackToolbar { showingBackupSettings = false }
+            }
+        }
       }
       .sheet(isPresented: $showingGroupManagement) {
         GroupManagementView()
