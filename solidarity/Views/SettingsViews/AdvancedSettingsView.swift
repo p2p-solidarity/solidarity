@@ -58,96 +58,81 @@ struct AdvancedSettingsView: View {
   // MARK: - Interface
 
   private var interfaceSection: some View {
-    VStack(alignment: .leading, spacing: 12) {
-      sectionHeader("INTERFACE")
-
+    SettingsBlockSection("INTERFACE") {
       NavigationLink {
         AppearanceSettingsView()
       } label: {
-        rowLabel(icon: "paintbrush", title: "Appearance")
+        SettingsBlockRow(icon: "paintbrush", title: "Appearance")
       }
       .buttonStyle(.plain)
-      .padding(.horizontal, 16)
     }
   }
 
   // MARK: - Developer Tools
 
   private var devToolsSection: some View {
-    VStack(alignment: .leading, spacing: 12) {
-      sectionHeader("DEVELOPER TOOLS")
-
-      VStack(spacing: 8) {
-        NavigationLink {
-          GroupManagementView()
-        } label: {
-          rowLabel(icon: "person.3", title: "Group Management")
-        }
-        .buttonStyle(.plain)
-
-        Button { showingPassportPipeline = true } label: {
-          rowLabel(icon: "doc.viewfinder", title: "Passport Pipeline")
-        }
-        .buttonStyle(.plain)
-
-        nfcToggleRow
-
-        Button { showingZKSettings = true } label: {
-          rowLabel(icon: "shield.checkered", title: "ZK Identity Settings")
-        }
-        .buttonStyle(.plain)
-
-        Button { showingOIDCRequest = true } label: {
-          rowLabel(icon: "qrcode", title: "OIDC Request Scanner")
-        }
-        .buttonStyle(.plain)
+    SettingsBlockSection("DEVELOPER TOOLS") {
+      NavigationLink {
+        GroupManagementView()
+      } label: {
+        SettingsBlockRow(icon: "person.3", title: "Group Management")
       }
-      .padding(.horizontal, 16)
+      .buttonStyle(.plain)
+
+      Button { showingPassportPipeline = true } label: {
+        SettingsBlockRow(icon: "doc.viewfinder", title: "Passport Pipeline")
+      }
+      .buttonStyle(.plain)
+
+      SettingsBlockToggleRow(
+        icon: "wave.3.forward",
+        title: "Simulate NFC",
+        isOn: $devMode.simulateNFC
+      )
+
+      Button { showingZKSettings = true } label: {
+        SettingsBlockRow(icon: "shield.checkered", title: "ZK Identity Settings")
+      }
+      .buttonStyle(.plain)
+
+      Button { showingOIDCRequest = true } label: {
+        SettingsBlockRow(icon: "qrcode", title: "OIDC Request Scanner")
+      }
+      .buttonStyle(.plain)
     }
-  }
-
-  private var nfcToggleRow: some View {
-    HStack {
-      Image(systemName: "wave.3.forward")
-        .font(.system(size: 16, weight: .bold))
-        .foregroundColor(Color.Theme.terminalGreen)
-        .frame(width: 24)
-
-      Text("Simulate NFC")
-        .font(.system(size: 14, weight: .bold))
-        .foregroundColor(Color.Theme.textPrimary)
-
-      Spacer()
-
-      Toggle("", isOn: $devMode.simulateNFC)
-        .labelsHidden()
-        .tint(Color.Theme.terminalGreen)
-    }
-    .padding(16)
-    .background(Color.Theme.searchBg)
-    .overlay(Rectangle().stroke(Color.Theme.divider, lineWidth: 1))
   }
 
   // MARK: - Danger Zone
 
   private var dangerZoneSection: some View {
     VStack(alignment: .leading, spacing: 12) {
-      sectionHeader("DANGER ZONE")
+      SettingsBlockSectionHeader(title: "DANGER ZONE")
 
       VStack(spacing: 8) {
         Button { showingResetConfirm = true } label: {
-          dangerRowLabel(icon: "arrow.counterclockwise", title: "Reset App Data", subtitle: "Clears data, preserves keys")
+          SettingsBlockDangerRow(
+            icon: "arrow.counterclockwise",
+            title: "Reset App Data",
+            subtitle: "Clears data, preserves keys"
+          )
         }
         .buttonStyle(.plain)
 
         if devMode.isDeveloperMode {
           Button { resetPassportCredential() } label: {
-            dangerRowLabel(icon: "doc.badge.xmark", title: "Reset Passport Credential")
+            SettingsBlockDangerRow(
+              icon: "doc.badge.xmark",
+              title: "Reset Passport Credential"
+            )
           }
           .buttonStyle(.plain)
 
           Button { showingWipeConfirm = true } label: {
-            dangerRowLabel(icon: "trash.slash", title: "Wipe Everything", subtitle: "Deletes all data + keys")
+            SettingsBlockDangerRow(
+              icon: "trash.slash",
+              title: "Wipe Everything",
+              subtitle: "Deletes all data + keys"
+            )
           }
           .buttonStyle(.plain)
 
@@ -156,21 +141,12 @@ struct AdvancedSettingsView: View {
             .frame(height: 1)
 
           Button { devMode.disableDeveloperMode() } label: {
-            HStack {
-              Image(systemName: "xmark.circle")
-                .font(.system(size: 16, weight: .bold))
-                .foregroundColor(Color.Theme.textSecondary)
-                .frame(width: 24)
-
-              Text("Disable Developer Mode")
-                .font(.system(size: 14, weight: .bold))
-                .foregroundColor(Color.Theme.textSecondary)
-
-              Spacer()
-            }
-            .padding(16)
-            .background(Color.Theme.searchBg)
-            .overlay(Rectangle().stroke(Color.Theme.divider, lineWidth: 1))
+            SettingsBlockRow(
+              icon: "xmark.circle",
+              title: "Disable Developer Mode",
+              showsChevron: false,
+              iconColor: Color.Theme.textSecondary
+            )
           }
           .buttonStyle(.plain)
         }
@@ -184,62 +160,6 @@ struct AdvancedSettingsView: View {
           .padding(.horizontal, 24)
       }
     }
-  }
-
-  // MARK: - Shared Components
-
-  private func sectionHeader(_ title: String) -> some View {
-    Text("[ \(title) ]")
-      .font(.system(size: 12, weight: .bold, design: .monospaced))
-      .foregroundColor(Color.Theme.textSecondary)
-      .padding(.horizontal, 24)
-  }
-
-  private func rowLabel(icon: String, title: String) -> some View {
-    HStack {
-      Image(systemName: icon)
-        .font(.system(size: 16, weight: .bold))
-        .foregroundColor(Color.Theme.terminalGreen)
-        .frame(width: 24)
-
-      Text(title)
-        .font(.system(size: 14, weight: .bold))
-        .foregroundColor(Color.Theme.textPrimary)
-
-      Spacer()
-
-      Image(systemName: "chevron.right")
-        .font(.system(size: 10, weight: .bold))
-        .foregroundColor(Color.Theme.textPlaceholder)
-    }
-    .padding(16)
-    .background(Color.Theme.searchBg)
-    .overlay(Rectangle().stroke(Color.Theme.divider, lineWidth: 1))
-  }
-
-  private func dangerRowLabel(icon: String, title: String, subtitle: String? = nil) -> some View {
-    HStack {
-      Image(systemName: icon)
-        .font(.system(size: 16, weight: .bold))
-        .foregroundColor(Color.Theme.destructive)
-        .frame(width: 24)
-
-      VStack(alignment: .leading, spacing: 2) {
-        Text(title)
-          .font(.system(size: 14, weight: .bold))
-          .foregroundColor(Color.Theme.destructive)
-        if let subtitle {
-          Text(subtitle)
-            .font(.system(size: 10, weight: .bold, design: .monospaced))
-            .foregroundColor(Color.Theme.textTertiary)
-        }
-      }
-
-      Spacer()
-    }
-    .padding(16)
-    .background(Color.Theme.searchBg)
-    .overlay(Rectangle().stroke(Color.Theme.destructive.opacity(0.3), lineWidth: 1))
   }
 
   // MARK: - Actions
