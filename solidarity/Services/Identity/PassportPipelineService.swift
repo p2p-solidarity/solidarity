@@ -124,13 +124,20 @@ final class PassportPipelineService {
     proof: PassportProofResult,
     chip: PassportChipSnapshot? = nil
   ) -> CardResult<IdentityCardEntity> {
-    let holderDid = DIDService().currentDescriptor()
+    // Refuse to persist with a placeholder holder DID. A literal
+    // "did:key:pending" string poisons the vault — the credential later looks
+    // valid in lists and presentation flows but cannot be cryptographically
+    // bound to the user. Surface the error so the UI can prompt a retry once
+    // iCloud Keychain delivers the master signing key.
     let didValue: String
-    switch holderDid {
+    switch DIDService().currentDescriptor() {
     case .success(let descriptor):
       didValue = descriptor.did
-    case .failure:
-      didValue = "did:key:pending"
+    case .failure(let error):
+      return .failure(.keyManagementError(
+        "DID key is not ready yet (\(error.localizedDescription)). "
+          + "Wait a few seconds for iCloud Keychain to sync, then retry."
+      ))
     }
 
     // Simulated chip data must NOT be persisted as a government-tier

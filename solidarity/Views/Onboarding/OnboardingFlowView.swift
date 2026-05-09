@@ -105,7 +105,7 @@ struct OnboardingFlowView: View {
       String(localized: "Restore from iCloud?"),
       isPresented: $showingICloudRestorePrompt,
       presenting: detectedICloudBackup
-    ) { probe in
+    ) { _ in
       Button(String(localized: "Restore")) {
         performICloudRestore()
       }
@@ -234,10 +234,18 @@ struct OnboardingFlowView: View {
     }
   }
 
-  /// Bootstraps keys (waiting briefly for iCloud Keychain to deliver an
-  /// existing master key from another device) and then decrypts the iCloud
-  /// backup blob. The encryption key now syncs via iCloud Keychain, so the
-  /// blob's `EncryptionManager` decryption succeeds on a fresh device.
+  /// Maximum time the restore flow blocks waiting for iCloud Keychain to
+  /// deliver the original Device A keys. Aggressive (relative to the 5s used
+  /// during normal cold-start) because the alternative — minting fresh keys
+  /// on Device B — silently corrupts cross-device sync: the new key both
+  /// fails to decrypt the existing backup (CryptoKit error 3) and overwrites
+  /// Device A's keychain entry once iCloud sync catches up.
+  static let iCloudRestoreSyncWaitSeconds: TimeInterval = 30.0
+
+  /// Bootstraps keys (waiting up to 30s for iCloud Keychain to deliver the
+  /// existing master DID + backup-encryption keys from another device) and
+  /// then decrypts the iCloud backup blob. Aborts loudly if either key fails
+  /// to arrive — minting fresh keys here would split the user's two devices.
   func performICloudRestore() {
     isRestoringFromICloud = true
     BiometricGatekeeper.shared.authorize(.rotateMasterKey) { result in
@@ -247,6 +255,35 @@ struct OnboardingFlowView: View {
         restoreErrorMessage = error.localizedDescription
       case .success:
         Task { @MainActor in
+          let waitDeadline = Self.iCloudRestoreSyncWaitSeconds
+          let didKeyArrived = await Task.detached(priority: .userInitiated) {
+            KeychainService.shared.waitForCloudSyncedMasterKey(maxWait: waitDeadline)
+          }.value
+          guard didKeyArrived else {
+            isRestoringFromICloud = false
+            restoreErrorMessage = String(
+              localized: """
+              iCloud Keychain hasn't delivered your DID key yet. \
+              Confirm iCloud Keychain is enabled on this device, then try again.
+              """
+            )
+            return
+          }
+
+          let encryptionKeyArrived = await Task.detached(priority: .userInitiated) {
+            EncryptionManager.shared.waitForCloudSyncedKey(maxWait: waitDeadline)
+          }.value
+          guard encryptionKeyArrived else {
+            isRestoringFromICloud = false
+            restoreErrorMessage = String(
+              localized: """
+              iCloud Keychain hasn't delivered your backup encryption key yet. \
+              Confirm iCloud Keychain is enabled on this device, then try again.
+              """
+            )
+            return
+          }
+
           let keyResult = await Task.detached(priority: .userInitiated) {
             KeychainService.shared.ensureSigningKey()
           }.value

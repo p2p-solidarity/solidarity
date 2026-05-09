@@ -499,7 +499,15 @@ private struct PresentationSheet: View {
       return
     }
 
-    let result = qrCodeManager.generateQRCode(from: vpString)
+    // Passport ZK proofs (mopro-noir / semaphore) routinely run several KB —
+    // well past the ~2.9 KB upper bound a QR can carry at the lowest error-
+    // correction level. Compress to the `sce1:` envelope (zlib + base64url)
+    // that the in-app scanner already understands via
+    // `QRCodeGenerationService.decompressQR`. Falls back to raw JSON if
+    // compression doesn't help (small payloads).
+    let payload = QRCodeGenerationService.compressForQR(vpData) ?? vpString
+
+    let result = qrCodeManager.generateQRCode(from: payload)
     switch result {
     case .success(let image):
       qrImage = image

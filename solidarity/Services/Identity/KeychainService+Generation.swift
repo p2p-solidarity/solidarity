@@ -118,7 +118,7 @@ extension KeychainService {
   /// Polls `keyExists()` until iCloud Keychain delivers a synced master key or
   /// `maxWait` elapses. Synchronous because the keychain APIs are sync — call
   /// this from a detached task so it doesn't block the main thread.
-  private func waitForCloudKeychainDelivery(maxWait: TimeInterval) {
+  func waitForCloudKeychainDelivery(maxWait: TimeInterval) {
     let pollInterval: useconds_t = 250_000  // 250ms
     let deadline = Date().addingTimeInterval(maxWait)
     while Date() < deadline {
@@ -127,6 +127,23 @@ extension KeychainService {
       }
       usleep(pollInterval)
     }
+  }
+
+  /// Restore-flow guard: blocks up to `maxWait` for iCloud Keychain to deliver
+  /// the master signing key from another device, returning whether it arrived.
+  /// Unlike `ensureCloudSyncedMasterSigningKey`, this **never** mints a new
+  /// key — restoring a backup with a freshly-minted key would AES-GCM auth-tag
+  /// fail (CryptoKit error 3) and silently overwrite the original key on
+  /// iCloud, permanently splitting the user's two devices.
+  func waitForCloudSyncedMasterKey(maxWait: TimeInterval) -> Bool {
+    Self.keyLock.lock()
+    defer { Self.keyLock.unlock() }
+
+    if keyExists(), isMasterKeyCloudSyncCompatible(), existingPrivateKeyReference() != nil {
+      return true
+    }
+    waitForCloudKeychainDelivery(maxWait: maxWait)
+    return keyExists() && isMasterKeyCloudSyncCompatible() && existingPrivateKeyReference() != nil
   }
 
   func cleanupAllOldKeys() {

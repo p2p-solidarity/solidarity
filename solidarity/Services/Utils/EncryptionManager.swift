@@ -98,6 +98,40 @@ class EncryptionManager {
     }
   }
 
+  /// Cheap probe for an iCloud-synced encryption key without minting one or
+  /// loading the bytes. Used by the restore flow to decide whether decryption
+  /// can proceed.
+  func hasCloudSyncedKey() -> Bool {
+    let query: [String: Any] = [
+      kSecClass as String: kSecClassGenericPassword,
+      kSecAttrService as String: service,
+      kSecAttrAccount as String: keyTag,
+      kSecAttrSynchronizable as String: kCFBooleanTrue as Any,
+      kSecMatchLimit as String: kSecMatchLimitOne,
+    ]
+    let status = SecItemCopyMatching(query as CFDictionary, nil)
+    return status == errSecSuccess
+  }
+
+  /// Polls for an iCloud-synced encryption key until `maxWait` elapses,
+  /// returning true once the key is present locally. **Never** mints a new
+  /// key — the restore flow must wait for the original Device A key to land
+  /// or fail loudly. Minting on Device B before iCloud delivers would (a)
+  /// fail to decrypt the existing backup with CryptoKit error 3 and (b) push
+  /// the wrong key to iCloud, clobbering Device A.
+  ///
+  /// Synchronous; call from a detached task.
+  func waitForCloudSyncedKey(maxWait: TimeInterval) -> Bool {
+    if hasCloudSyncedKey() { return true }
+    let pollInterval: useconds_t = 250_000  // 250ms
+    let deadline = Date().addingTimeInterval(maxWait)
+    while Date() < deadline {
+      if hasCloudSyncedKey() { return true }
+      usleep(pollInterval)
+    }
+    return hasCloudSyncedKey()
+  }
+
   func migrateLegacyKeyIfNeeded() {
     guard (try? retrieveKeyFromKeychain(service: service, account: keyTag, synchronizable: .any)) == nil,
           let legacyKey = try? retrieveKeyFromKeychain(
