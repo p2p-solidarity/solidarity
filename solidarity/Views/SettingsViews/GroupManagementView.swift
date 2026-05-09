@@ -43,13 +43,13 @@ struct GroupManagementView: View {
           VStack(alignment: .leading, spacing: 24) {
             HStack(spacing: 12) {
               Image(systemName: "person.3.sequence.fill")
-                .font(.system(size: 18, weight: .bold))
-                .foregroundColor(Color.Theme.terminalGreen)
+                .font(.system(size: 18, weight: .regular))
+                .foregroundColor(Color.Theme.textPrimary)
                 .frame(width: 32)
 
               VStack(alignment: .leading, spacing: 4) {
                 Text("Group Management")
-                  .font(.system(size: 18, weight: .bold, design: .monospaced))
+                  .font(.system(size: 18, weight: .semibold))
                   .foregroundColor(Color.Theme.textPrimary)
 
                 switch groupManager.syncStatus {
@@ -60,16 +60,16 @@ struct GroupManagementView: View {
                     ProgressView()
                       .scaleEffect(0.5)
                     Text("Syncing...")
-                      .font(.system(size: 11, weight: .bold, design: .monospaced))
+                      .font(.system(size: 12))
                       .foregroundColor(Color.Theme.textSecondary)
                   }
                 case .error(let error):
                   HStack(spacing: 4) {
                     Image(systemName: "exclamationmark.triangle.fill")
-                      .font(.system(size: 11, weight: .bold))
+                      .font(.system(size: 11))
                       .foregroundColor(Color.Theme.destructive)
                     Text("Sync error")
-                      .font(.system(size: 11, weight: .bold, design: .monospaced))
+                      .font(.system(size: 12))
                       .foregroundColor(Color.Theme.destructive)
                   }
                   .onTapGesture {
@@ -78,10 +78,10 @@ struct GroupManagementView: View {
                 case .offline:
                   HStack(spacing: 4) {
                     Image(systemName: "wifi.slash")
-                      .font(.system(size: 11, weight: .bold))
+                      .font(.system(size: 11))
                       .foregroundColor(Color.Theme.textTertiary)
                     Text("Offline")
-                      .font(.system(size: 11, weight: .bold, design: .monospaced))
+                      .font(.system(size: 12))
                       .foregroundColor(Color.Theme.textTertiary)
                   }
                 }
@@ -89,9 +89,12 @@ struct GroupManagementView: View {
 
               Spacer()
             }
-            .padding(16)
-            .background(Color.Theme.searchBg)
-            .overlay(Rectangle().stroke(Color.Theme.divider, lineWidth: 1))
+            .padding(.horizontal, 14)
+            .padding(.vertical, 14)
+            .background(
+              RoundedRectangle(cornerRadius: 12)
+                .fill(Color.Theme.mutedSurface)
+            )
             .padding(.horizontal, 16)
             .padding(.top, 8)
 
@@ -108,19 +111,19 @@ struct GroupManagementView: View {
 
                   if case .couldNotDetermine = groupManager.accountStatus {
                     Text("Could not determine iCloud status. Please check Settings.")
-                      .font(.system(size: 12, design: .monospaced))
+                      .font(.system(size: 12))
                       .foregroundColor(Color.Theme.textSecondary)
                   } else if case .restricted = groupManager.accountStatus {
                     Text("iCloud access is restricted.")
-                      .font(.system(size: 12, design: .monospaced))
+                      .font(.system(size: 12))
                       .foregroundColor(Color.Theme.textSecondary)
                   } else if case .noAccount = groupManager.accountStatus {
                     Text("Please sign in to iCloud in Settings.")
-                      .font(.system(size: 12, design: .monospaced))
+                      .font(.system(size: 12))
                       .foregroundColor(Color.Theme.textSecondary)
                   } else {
                     Text("Please sign in to iCloud in Settings to use group features.")
-                      .font(.system(size: 12, design: .monospaced))
+                      .font(.system(size: 12))
                       .foregroundColor(Color.Theme.textSecondary)
                   }
 
@@ -130,8 +133,8 @@ struct GroupManagementView: View {
                     }
                   }) {
                     Text("Retry")
-                      .font(.system(size: 12, design: .monospaced))
-                      .fontWeight(.bold)
+                      .font(.system(size: 12))
+                      .fontWeight(.semibold)
                       .foregroundColor(Color.Theme.dustyMauve)
                       .padding(.top, 2)
                   }
@@ -139,13 +142,15 @@ struct GroupManagementView: View {
 
                 Spacer()
               }
-              .padding(16)
-              .background(Color.Theme.dustyMauve.opacity(0.15))
-              .overlay(Rectangle().stroke(Color.Theme.dustyMauve.opacity(0.3), lineWidth: 1))
+              .padding(14)
+              .background(
+                RoundedRectangle(cornerRadius: 12)
+                  .fill(Color.Theme.dustyMauve.opacity(0.12))
+              )
               .padding(.horizontal, 16)
             }
 
-            SettingsBlockSection("ACTIONS") {
+            SettingsBlockSection("Actions") {
               Button { activeSheet = .create } label: {
                 SettingsBlockRow(
                   icon: "plus.circle.fill",
@@ -171,7 +176,7 @@ struct GroupManagementView: View {
               showDeleteConfirm: $showDeleteConfirm
             )
 
-            SettingsBlockSection("LEGAL & PRIVACY") {
+            SettingsBlockSection("Legal & Privacy") {
               Button { activeSheet = .privacy } label: {
                 SettingsBlockRow(
                   icon: "hand.raised",

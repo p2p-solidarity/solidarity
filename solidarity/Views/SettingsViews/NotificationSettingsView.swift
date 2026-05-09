@@ -29,7 +29,7 @@ struct NotificationSettingsView: View {
 
   private var inAppSection: some View {
     SettingsBlockSection(
-      "IN-APP NOTIFICATIONS",
+      "In-App Notifications",
       footer: "Toast notifications appear at the top of the screen when the app is in foreground."
     ) {
       SettingsBlockToggleRow(
@@ -43,7 +43,7 @@ struct NotificationSettingsView: View {
 
   private var remoteSection: some View {
     SettingsBlockSection(
-      "REMOTE NOTIFICATIONS",
+      "Remote Notifications",
       footer: "When disabled, you won't receive push notifications from other users sending Sakura messages."
     ) {
       SettingsBlockToggleRow(
@@ -66,7 +66,7 @@ struct NotificationSettingsView: View {
 
   private var syncSection: some View {
     SettingsBlockSection(
-      "SYNC SETTINGS",
+      "Sync Settings",
       footer: "Auto-sync periodically checks for new messages. Higher intervals reduce battery and network usage."
     ) {
       SettingsBlockToggleRow(
@@ -85,12 +85,12 @@ struct NotificationSettingsView: View {
   private var syncIntervalRow: some View {
     HStack(spacing: 12) {
       Image(systemName: "timer")
-        .font(.system(size: 16, weight: .bold))
-        .foregroundColor(Color.Theme.terminalGreen)
-        .frame(width: 24)
+        .font(.system(size: 14, weight: .regular))
+        .foregroundColor(Color.Theme.textPrimary)
+        .frame(width: 20, height: 20)
 
       Text("Sync Interval")
-        .font(.system(size: 14, weight: .bold))
+        .font(.system(size: 15))
         .foregroundColor(Color.Theme.textPrimary)
 
       Spacer()
@@ -104,18 +104,21 @@ struct NotificationSettingsView: View {
       } label: {
         HStack(spacing: 6) {
           Text(currentSyncIntervalLabel)
-            .font(.system(size: 12, weight: .bold, design: .monospaced))
+            .font(.system(size: 13))
             .foregroundColor(Color.Theme.textSecondary)
           Image(systemName: "chevron.up.chevron.down")
-            .font(.system(size: 10, weight: .bold))
-            .foregroundColor(Color.Theme.textPlaceholder)
+            .font(.system(size: 11))
+            .foregroundColor(Color.Theme.textTertiary)
         }
       }
     }
-    .padding(16)
+    .padding(.horizontal, 14)
+    .padding(.vertical, 14)
     .frame(maxWidth: .infinity, alignment: .leading)
-    .background(Color.Theme.searchBg)
-    .overlay(Rectangle().stroke(Color.Theme.divider, lineWidth: 1))
+    .background(
+      RoundedRectangle(cornerRadius: 12)
+        .fill(Color.Theme.mutedSurface)
+    )
   }
 
   private var currentSyncIntervalLabel: String {
@@ -126,7 +129,7 @@ struct NotificationSettingsView: View {
   }
 
   private var resetSection: some View {
-    SettingsBlockSection("RESET") {
+    SettingsBlockSection("Reset") {
       Button { settings.resetToDefaults() } label: {
         SettingsBlockDangerRow(
           icon: "arrow.counterclockwise",

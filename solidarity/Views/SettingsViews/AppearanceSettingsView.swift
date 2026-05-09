@@ -34,21 +34,22 @@ struct AppearanceSettingsView: View {
   // MARK: - Color Mode
 
   private var colorModeSection: some View {
-    VStack(alignment: .leading, spacing: 12) {
-      SettingsBlockSectionHeader(title: "COLOR MODE")
+    VStack(alignment: .leading, spacing: 8) {
+      SettingsBlockSectionHeader(title: "Color Mode")
 
-      HStack {
-        Picker("Appearance", selection: $theme.appColorScheme) {
-          ForEach(AppColorScheme.allCases, id: \.self) { scheme in
-            Text(scheme.displayName).tag(scheme)
-          }
+      Picker("Appearance", selection: $theme.appColorScheme) {
+        ForEach(AppColorScheme.allCases, id: \.self) { scheme in
+          Text(scheme.displayName).tag(scheme)
         }
-        .pickerStyle(.segmented)
       }
-      .padding(16)
+      .pickerStyle(.segmented)
+      .padding(.horizontal, 14)
+      .padding(.vertical, 12)
       .frame(maxWidth: .infinity, alignment: .leading)
-      .background(Color.Theme.searchBg)
-      .overlay(Rectangle().stroke(Color.Theme.divider, lineWidth: 1))
+      .background(
+        RoundedRectangle(cornerRadius: 12)
+          .fill(Color.Theme.mutedSurface)
+      )
       .padding(.horizontal, 16)
     }
   }
@@ -56,14 +57,16 @@ struct AppearanceSettingsView: View {
   // MARK: - Card Accent
 
   private var cardAccentSection: some View {
-    VStack(alignment: .leading, spacing: 12) {
-      SettingsBlockSectionHeader(title: "CARD ACCENT")
+    VStack(alignment: .leading, spacing: 8) {
+      SettingsBlockSectionHeader(title: "Card Accent")
 
       colorGrid()
-        .padding(16)
+        .padding(14)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(Color.Theme.searchBg)
-        .overlay(Rectangle().stroke(Color.Theme.divider, lineWidth: 1))
+        .background(
+          RoundedRectangle(cornerRadius: 12)
+            .fill(Color.Theme.mutedSurface)
+        )
         .padding(.horizontal, 16)
     }
   }
@@ -71,7 +74,7 @@ struct AppearanceSettingsView: View {
   // MARK: - Effects
 
   private var effectsSection: some View {
-    SettingsBlockSection("EFFECTS") {
+    SettingsBlockSection("Effects") {
       SettingsBlockToggleRow(
         icon: "sparkles",
         title: "Enable Glow",
@@ -83,7 +86,7 @@ struct AppearanceSettingsView: View {
   // MARK: - Animal Theme
 
   private var animalThemeSection: some View {
-    SettingsBlockSection("ANIMAL THEME", footer: theme.selectedAnimal?.personality) {
+    SettingsBlockSection("Animal Theme", footer: theme.selectedAnimal?.personality) {
       NavigationLink {
         AnimalPickerView()
           .environmentObject(theme)
@@ -129,7 +132,7 @@ private struct AnimalPickerView: View {
   var body: some View {
     ScrollView {
       VStack(spacing: 24) {
-        SettingsBlockSection("ANIMAL") {
+        SettingsBlockSection("Animal") {
           Button {
             theme.selectedAnimal = nil
             dismiss()
