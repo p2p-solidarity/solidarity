@@ -170,34 +170,31 @@ struct VCSettingsView: View {
   @State private var exportDocument: VCExportDocument?
 
   var body: some View {
-    Form {
-      Section {
-        Text("Manage your Verifiable Credentials (VCs) for did:key.")
-          .font(.footnote)
-          .foregroundColor(.secondary)
-      }
+    ScrollView {
+      VStack(spacing: 24) {
+        SettingsBlockSection(
+          "ABOUT",
+          footer: "Manage your Verifiable Credentials (VCs) for did:key."
+        ) {
+          EmptyView()
+        }
 
-      Section("Actions") {
-        Button(
-          action: {
+        SettingsBlockSection("ACTIONS") {
+          Button {
             viewModel.createVC(method: .key)
-          },
-          label: {
-            Label("Create did:key VC", systemImage: "key.fill")
+          } label: {
+            SettingsBlockRow(icon: "key.fill", title: "Create did:key VC")
           }
-        )
+          .buttonStyle(.plain)
 
-        NavigationLink(
-          destination: {
+          NavigationLink {
             OIDCRequestView()
-          },
-          label: {
-            Label("Receive Card (OIDC)", systemImage: "qrcode")
+          } label: {
+            SettingsBlockRow(icon: "qrcode", title: "Receive Card (OIDC)")
           }
-        )
+          .buttonStyle(.plain)
 
-        Button(
-          action: {
+          Button {
             let vcs = viewModel.getAllVCs()
             if !vcs.isEmpty {
               exportDocument = VCExportDocument(vcs: vcs)
@@ -206,23 +203,24 @@ struct VCSettingsView: View {
               viewModel.errorMessage = String(localized: "No VCs found to export.")
               viewModel.showError = true
             }
-          },
-          label: {
-            Label("Export VCs", systemImage: "square.and.arrow.up")
+          } label: {
+            SettingsBlockRow(icon: "square.and.arrow.up", title: "Export VCs")
           }
-        )
+          .buttonStyle(.plain)
 
-        Button(
-          action: {
+          Button {
             showingImporter = true
-          },
-          label: {
-            Label("Import VCs", systemImage: "square.and.arrow.down")
+          } label: {
+            SettingsBlockRow(icon: "square.and.arrow.down", title: "Import VCs")
           }
-        )
+          .buttonStyle(.plain)
+        }
       }
+      .padding(.vertical, 24)
     }
+    .background(Color.Theme.pageBg.ignoresSafeArea())
     .navigationTitle("VC Management")
+    .navigationBarTitleDisplayMode(.inline)
     .fileExporter(
       isPresented: $showingExporter,
       document: exportDocument,

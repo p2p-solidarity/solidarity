@@ -9,40 +9,14 @@ struct DataSyncSettingsView: View {
   @State private var shareItems: [Any] = []
 
   var body: some View {
-    Form {
-      Section("Sync & Backup") {
-        NavigationLink {
-          BackupSettingsView()
-        } label: {
-          HStack {
-            Label("iCloud Backup & Restore", systemImage: "icloud")
-            Spacer()
-            Text(backupManager.settings.enabled ? "On" : "Off")
-              .foregroundColor(Color.Theme.textSecondary)
-          }
-        }
-
-        HStack {
-          Text("Identity records in Vault")
-          Spacer()
-          Text("\(identityStore.identityCards.count) cards")
-            .foregroundColor(Color.Theme.textSecondary)
-        }
+    ScrollView {
+      VStack(spacing: 24) {
+        syncBackupSection
+        importExportSection
       }
-
-      Section("Import / Export") {
-        NavigationLink {
-          VCSettingsView()
-        } label: {
-          Label("Import W3C Credentials", systemImage: "square.and.arrow.down")
-        }
-
-        Button(action: exportGraph) {
-          Label("Export Verified Graph Data", systemImage: "square.and.arrow.up")
-        }
-        .foregroundColor(Color.Theme.textPrimary)
-      }
+      .padding(.vertical, 24)
     }
+    .background(Color.Theme.pageBg.ignoresSafeArea())
     .navigationTitle("Data & Sync")
     .navigationBarTitleDisplayMode(.inline)
     .sheet(isPresented: $showingShareSheet) {
@@ -55,6 +29,53 @@ struct DataSyncSettingsView: View {
       Button("OK", role: .cancel) {}
     } message: {
       Text(alertMessage)
+    }
+  }
+
+  // MARK: - Sync & Backup
+
+  private var syncBackupSection: some View {
+    SettingsBlockSection("SYNC & BACKUP") {
+      NavigationLink {
+        BackupSettingsView()
+      } label: {
+        SettingsBlockRow(
+          icon: "icloud",
+          title: "iCloud Backup & Restore",
+          trailingText: backupManager.settings.enabled ? "On" : "Off"
+        )
+      }
+      .buttonStyle(.plain)
+
+      SettingsBlockInfoRow(
+        icon: "list.bullet.rectangle",
+        title: "Identity records in Vault",
+        value: "\(identityStore.identityCards.count) cards"
+      )
+    }
+  }
+
+  // MARK: - Import / Export
+
+  private var importExportSection: some View {
+    SettingsBlockSection("IMPORT / EXPORT") {
+      NavigationLink {
+        VCSettingsView()
+      } label: {
+        SettingsBlockRow(
+          icon: "square.and.arrow.down",
+          title: "Import W3C Credentials"
+        )
+      }
+      .buttonStyle(.plain)
+
+      Button(action: exportGraph) {
+        SettingsBlockRow(
+          icon: "square.and.arrow.up",
+          title: "Export Verified Graph Data"
+        )
+      }
+      .buttonStyle(.plain)
     }
   }
 

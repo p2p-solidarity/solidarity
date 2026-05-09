@@ -6,36 +6,54 @@ struct SecuritySettingsView: View {
   @State private var alertMessage = ""
 
   var body: some View {
-    Form {
-      Section(
-        header: Text("Key Rotation"),
-        footer: Text("Rotating the master key will invalidate active verifiable credentials across your network until re-issued.")
-      ) {
-        Button(role: .destructive) {
-          rotateMasterKey()
-        } label: {
-          Label("Rotate DID Master Key", systemImage: "key.fill")
-        }
+    ScrollView {
+      VStack(spacing: 24) {
+        keyRotationSection
+        biometricSection
       }
-
-      Section("Biometric Requirements") {
-        ForEach(SensitiveAction.allCases) { action in
-          Toggle(isOn: Binding(
-            get: { policyStore.requiresBiometric(action) },
-            set: { policyStore.setRequirement($0, for: action) }
-          )) {
-            Text(faceIdLabel(for: action))
-              .font(.subheadline)
-          }
-        }
-      }
+      .padding(.vertical, 24)
     }
+    .background(Color.Theme.pageBg.ignoresSafeArea())
     .navigationTitle("Security & Keys")
     .navigationBarTitleDisplayMode(.inline)
     .alert("Security", isPresented: $showingAlert) {
       Button("OK", role: .cancel) {}
     } message: {
       Text(alertMessage)
+    }
+  }
+
+  // MARK: - Key Rotation
+
+  private var keyRotationSection: some View {
+    SettingsBlockSection(
+      "KEY ROTATION",
+      footer: "Rotating the master key will invalidate active verifiable credentials across your network until re-issued."
+    ) {
+      Button { rotateMasterKey() } label: {
+        SettingsBlockDangerRow(
+          icon: "key.fill",
+          title: "Rotate DID Master Key"
+        )
+      }
+      .buttonStyle(.plain)
+    }
+  }
+
+  // MARK: - Biometric Requirements
+
+  private var biometricSection: some View {
+    SettingsBlockSection("BIOMETRIC REQUIREMENTS") {
+      ForEach(SensitiveAction.allCases) { action in
+        SettingsBlockToggleRow(
+          icon: "faceid",
+          title: faceIdLabel(for: action),
+          isOn: Binding(
+            get: { policyStore.requiresBiometric(action) },
+            set: { policyStore.setRequirement($0, for: action) }
+          )
+        )
+      }
     }
   }
 
