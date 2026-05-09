@@ -212,50 +212,6 @@ struct MeActionTile: View {
   }
 }
 
-// MARK: - Developer row (Figma 737:2755: icon + title + trailing + chevron)
-
-struct MeDeveloperRow: View {
-  let icon: String
-  let title: LocalizedStringKey
-  let trailingText: String?
-  let action: () -> Void
-
-  var body: some View {
-    Button(action: action) {
-      HStack(spacing: 8) {
-        Image(systemName: icon)
-          .font(.system(size: 14, weight: .regular))
-          .foregroundColor(Color.Theme.textPrimary)
-          .frame(width: 18, height: 18)
-
-        Text(title)
-          .font(.system(size: 15))
-          .foregroundColor(Color.Theme.textPrimary)
-
-        Spacer(minLength: 4)
-
-        if let trailingText {
-          Text(trailingText)
-            .font(.system(size: 15))
-            .foregroundColor(Color.Theme.textSecondary)
-        }
-
-        Image(systemName: "chevron.right")
-          .font(.system(size: 12, weight: .semibold))
-          .foregroundColor(Color.Theme.textTertiary)
-          .frame(width: 18, height: 18)
-      }
-      .padding(.horizontal, 12)
-      .padding(.vertical, 16)
-      .background(
-        RoundedRectangle(cornerRadius: 2)
-          .fill(Color.Theme.mutedSurface)
-      )
-    }
-    .buttonStyle(.plain)
-  }
-}
-
 // MARK: - Disclosure row (Figma 724:22770: icon + title + src + Show)
 
 struct DisclosureRowView: View {

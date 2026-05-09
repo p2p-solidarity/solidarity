@@ -16,109 +16,89 @@ struct SettingsView: View {
   var body: some View {
     ScrollView {
       VStack(alignment: .leading, spacing: 24) {
-        SettingsSection(title: "Account & Identity") {
+        SettingsBlockSection("ACCOUNT & IDENTITY") {
           NavigationLink {
             VCSettingsView()
           } label: {
-            SettingsRowLabel(title: "Identity Profile")
+            SettingsBlockRow(icon: "person.text.rectangle", title: "Identity Profile")
           }
           .buttonStyle(.plain)
 
           Button {
             showingSolidarityQR = true
           } label: {
-            SettingsRowLabel(title: "Solidarity QR")
+            SettingsBlockRow(icon: "qrcode", title: "Solidarity QR")
           }
           .buttonStyle(.plain)
 
           Button {
             showingDIDList = true
           } label: {
-            SettingsRowLabel(title: "View DIDs")
+            SettingsBlockRow(icon: "key.horizontal", title: "View DIDs")
           }
           .buttonStyle(.plain)
         }
 
-        SettingsSection(title: "QR Sharing") {
+        SettingsBlockSection("QR SHARING") {
           NavigationLink {
             ShareSettingsView()
           } label: {
-            SettingsRowLabel(title: "Share Settings")
+            SettingsBlockRow(icon: "square.and.arrow.up", title: "Share Settings")
           }
           .buttonStyle(.plain)
         }
 
-        SettingsSection(title: "Preferences") {
+        SettingsBlockSection("PREFERENCES") {
           NavigationLink {
             SecuritySettingsView()
           } label: {
-            SettingsRowLabel(title: "Security & Keys")
+            SettingsBlockRow(icon: "lock.shield", title: "Security & Keys")
           }
           .buttonStyle(.plain)
 
           NavigationLink {
             DataSyncSettingsView()
           } label: {
-            SettingsRowLabel(title: "Data & Sync")
+            SettingsBlockRow(icon: "icloud", title: "Data & Sync")
           }
           .buttonStyle(.plain)
 
           NavigationLink {
             AdvancedSettingsView()
           } label: {
-            SettingsRowLabel(title: "Advanced")
+            SettingsBlockRow(icon: "slider.horizontal.3", title: "Advanced")
           }
           .buttonStyle(.plain)
         }
 
-        SettingsSection(title: "Guide") {
+        SettingsBlockSection("GUIDE") {
           Button {
             showingOnboarding = true
           } label: {
-            HStack(spacing: 8) {
-              Image(systemName: "arrow.counterclockwise")
-                .font(.system(size: 14, weight: .regular))
-              Text("Replay Onboarding")
-                .font(.system(size: 16, weight: .regular))
-              Spacer()
-            }
-            .foregroundColor(Color.Theme.primaryBlue)
-            .padding(.horizontal, 16)
-            .padding(.vertical, 14)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .background(
-              RoundedRectangle(cornerRadius: 12)
-                .fill(Color.Theme.searchBg)
+            SettingsBlockRow(
+              icon: "arrow.counterclockwise",
+              title: "Replay Onboarding"
             )
           }
           .buttonStyle(.plain)
         }
 
-        SettingsSection(title: "About") {
-          HStack {
-            Text("Version")
-              .font(.system(size: 16))
-              .foregroundColor(Color.Theme.textPrimary)
-            Spacer()
-            Text(versionString)
-              .font(.system(size: 16))
-              .foregroundColor(Color.Theme.textTertiary)
-          }
-          .padding(.horizontal, 16)
-          .padding(.vertical, 14)
-          .frame(maxWidth: .infinity)
-          .background(
-            RoundedRectangle(cornerRadius: 12)
-              .fill(Color.Theme.searchBg)
+        VStack(alignment: .leading, spacing: 12) {
+          SettingsBlockSectionHeader(title: "ABOUT")
+
+          SettingsBlockInfoRow(
+            icon: "info.circle",
+            title: "Version",
+            value: versionString
           )
           .contentShape(Rectangle())
           .onTapGesture {
             devMode.registerVersionTap()
           }
+          .padding(.horizontal, 16)
         }
       }
-      .padding(.horizontal, 16)
-      .padding(.top, 8)
+      .padding(.vertical, 24)
       .padding(.bottom, 60)
     }
     .background(Color.Theme.pageBg.ignoresSafeArea())
@@ -150,48 +130,6 @@ struct SettingsView: View {
         showingOnboarding = false
       }
     }
-  }
-}
-
-// MARK: - Section + row components
-
-private struct SettingsSection<Content: View>: View {
-  let title: String
-  @ViewBuilder let content: Content
-
-  var body: some View {
-    VStack(alignment: .leading, spacing: 10) {
-      Text(title)
-        .font(.system(size: 14, weight: .regular))
-        .foregroundColor(Color.Theme.textPrimary)
-      VStack(spacing: 8) {
-        content
-      }
-    }
-  }
-}
-
-private struct SettingsRowLabel: View {
-  let title: String
-
-  var body: some View {
-    HStack {
-      Text(title)
-        .font(.system(size: 16, weight: .regular))
-        .foregroundColor(Color.Theme.textPrimary)
-      Spacer()
-      Image(systemName: "chevron.right")
-        .font(.system(size: 13, weight: .semibold))
-        .foregroundColor(Color.Theme.textTertiary)
-    }
-    .padding(.horizontal, 16)
-    .padding(.vertical, 14)
-    .frame(maxWidth: .infinity)
-    .background(
-      RoundedRectangle(cornerRadius: 12)
-        .fill(Color.Theme.searchBg)
-    )
-    .contentShape(RoundedRectangle(cornerRadius: 12))
   }
 }
 

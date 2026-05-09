@@ -158,32 +158,40 @@ extension MeTabView {
   // MARK: - Developer Mode Section (Figma 737:2748)
 
   var devModeSection: some View {
-    VStack(alignment: .leading, spacing: 8) {
-      MeSectionHeader(title: "Developer")
-
-      VStack(spacing: 8) {
-        MeDeveloperRow(
+    SettingsBlockSection("DEVELOPER") {
+      Button {
+        showingZKSettings = true
+      } label: {
+        SettingsBlockRow(
           icon: "shield",
-          title: "ZK Identity",
-          trailingText: idm.getIdentity() != nil ? String(localized: "Commitment Active") : String(localized: "Not initialized"),
-          action: { showingZKSettings = true }
-        )
-
-        MeDeveloperRow(
-          icon: "qrcode",
-          title: "OIDC Request Scanner",
-          trailingText: nil,
-          action: { showingOIDCRequest = true }
-        )
-
-        MeDeveloperRow(
-          icon: "person.2",
-          title: "Group Management",
-          trailingText: String(localized: "\(groupManager.groups.count) Groups"),
-          action: { showingGroupManager = true }
+          title: String(localized: "ZK Identity"),
+          trailingText: idm.getIdentity() != nil
+            ? String(localized: "Commitment Active")
+            : String(localized: "Not initialized")
         )
       }
-      .padding(.horizontal, 16)
+      .buttonStyle(.plain)
+
+      Button {
+        showingOIDCRequest = true
+      } label: {
+        SettingsBlockRow(
+          icon: "qrcode",
+          title: String(localized: "OIDC Request Scanner")
+        )
+      }
+      .buttonStyle(.plain)
+
+      Button {
+        showingGroupManager = true
+      } label: {
+        SettingsBlockRow(
+          icon: "person.2",
+          title: String(localized: "Group Management"),
+          trailingText: String(localized: "\(groupManager.groups.count) Groups")
+        )
+      }
+      .buttonStyle(.plain)
     }
   }
 
