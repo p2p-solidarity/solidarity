@@ -141,29 +141,35 @@ private struct DIDListSheet: View {
 
   var body: some View {
     NavigationStack {
-      List {
-        if let activeDID = coordinator.state.currentProfile.activeDID {
-          Section("Active DID") {
-            didRow(did: activeDID.did)
-          }
-        }
-
-        Section(footer: Text("DID keys are stored in iCloud Keychain and shared across your signed-in devices.")) {
-          HStack {
-            Text("Key Storage")
-            Spacer()
-            Text("iCloud Keychain")
-              .foregroundColor(Color.Theme.textSecondary)
+      ScrollView {
+        VStack(spacing: 24) {
+          if let activeDID = coordinator.state.currentProfile.activeDID {
+            VStack(alignment: .leading, spacing: 8) {
+              SettingsBlockSectionHeader(title: "Active DID")
+              didCard(did: activeDID.did)
+                .padding(.horizontal, 16)
+            }
           }
 
-          HStack {
-            Text("Sync")
-            Spacer()
-            Text("Same Apple ID devices")
-              .foregroundColor(Color.Theme.textSecondary)
+          SettingsBlockSection(
+            "Key Storage",
+            footer: "DID keys are stored in iCloud Keychain and shared across your signed-in devices."
+          ) {
+            SettingsBlockInfoRow(
+              icon: "key.icloud",
+              title: "Storage",
+              value: "iCloud Keychain"
+            )
+            SettingsBlockInfoRow(
+              icon: "arrow.triangle.2.circlepath",
+              title: "Sync",
+              value: "Same Apple ID devices"
+            )
           }
         }
+        .padding(.vertical, 24)
       }
+      .background(Color.Theme.pageBg.ignoresSafeArea())
       .navigationTitle("Your DIDs")
       .navigationBarTitleDisplayMode(.inline)
       .toolbar {
@@ -172,18 +178,36 @@ private struct DIDListSheet: View {
     }
   }
 
-  private func didRow(did: String) -> some View {
+  private func didCard(did: String) -> some View {
     let method = did.hasPrefix("did:key") ? "did:key" : "did:web"
-    return VStack(alignment: .leading, spacing: 4) {
-      Text(method.uppercased())
-        .font(.caption.weight(.bold))
-        .foregroundColor(Color.Theme.textSecondary)
+    return VStack(alignment: .leading, spacing: 8) {
+      HStack(spacing: 12) {
+        Image(systemName: "key.horizontal")
+          .font(.system(size: 14, weight: .regular))
+          .foregroundColor(Color.Theme.textPrimary)
+          .frame(width: 20, height: 20)
+
+        Text(method.uppercased())
+          .font(.system(size: 13, weight: .semibold, design: .monospaced))
+          .foregroundColor(Color.Theme.textSecondary)
+
+        Spacer()
+      }
+
       Text(did)
         .font(.system(size: 12, design: .monospaced))
         .foregroundColor(Color.Theme.textPrimary)
         .textSelection(.enabled)
+        .lineLimit(3)
+        .truncationMode(.middle)
     }
-    .padding(.vertical, 4)
+    .padding(.horizontal, 14)
+    .padding(.vertical, 12)
+    .frame(maxWidth: .infinity, alignment: .leading)
+    .background(
+      RoundedRectangle(cornerRadius: 12)
+        .fill(Color.Theme.mutedSurface)
+    )
   }
 }
 
