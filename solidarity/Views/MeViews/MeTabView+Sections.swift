@@ -158,7 +158,7 @@ extension MeTabView {
   // MARK: - Developer Mode Section (Figma 737:2748)
 
   var devModeSection: some View {
-    SettingsBlockSection("DEVELOPER") {
+    SettingsBlockSection("Developer") {
       Button {
         showingZKSettings = true
       } label: {

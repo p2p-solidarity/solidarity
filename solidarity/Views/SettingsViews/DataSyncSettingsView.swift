@@ -35,7 +35,7 @@ struct DataSyncSettingsView: View {
   // MARK: - Sync & Backup
 
   private var syncBackupSection: some View {
-    SettingsBlockSection("SYNC & BACKUP") {
+    SettingsBlockSection("Sync & Backup") {
       NavigationLink {
         BackupSettingsView()
       } label: {
@@ -58,7 +58,7 @@ struct DataSyncSettingsView: View {
   // MARK: - Import / Export
 
   private var importExportSection: some View {
-    SettingsBlockSection("IMPORT / EXPORT") {
+    SettingsBlockSection("Import / Export") {
       NavigationLink {
         VCSettingsView()
       } label: {

@@ -173,13 +173,13 @@ struct VCSettingsView: View {
     ScrollView {
       VStack(spacing: 24) {
         SettingsBlockSection(
-          "ABOUT",
+          "About",
           footer: "Manage your Verifiable Credentials (VCs) for did:key."
         ) {
           EmptyView()
         }
 
-        SettingsBlockSection("ACTIONS") {
+        SettingsBlockSection("Actions") {
           Button {
             viewModel.createVC(method: .key)
           } label: {

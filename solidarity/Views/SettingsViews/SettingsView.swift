@@ -16,7 +16,7 @@ struct SettingsView: View {
   var body: some View {
     ScrollView {
       VStack(alignment: .leading, spacing: 24) {
-        SettingsBlockSection("ACCOUNT & IDENTITY") {
+        SettingsBlockSection("Account & Identity") {
           NavigationLink {
             VCSettingsView()
           } label: {
@@ -39,7 +39,7 @@ struct SettingsView: View {
           .buttonStyle(.plain)
         }
 
-        SettingsBlockSection("QR SHARING") {
+        SettingsBlockSection("QR Sharing") {
           NavigationLink {
             ShareSettingsView()
           } label: {
@@ -48,7 +48,7 @@ struct SettingsView: View {
           .buttonStyle(.plain)
         }
 
-        SettingsBlockSection("PREFERENCES") {
+        SettingsBlockSection("Preferences") {
           NavigationLink {
             SecuritySettingsView()
           } label: {
@@ -71,7 +71,7 @@ struct SettingsView: View {
           .buttonStyle(.plain)
         }
 
-        SettingsBlockSection("GUIDE") {
+        SettingsBlockSection("Guide") {
           Button {
             showingOnboarding = true
           } label: {
@@ -84,7 +84,7 @@ struct SettingsView: View {
         }
 
         VStack(alignment: .leading, spacing: 12) {
-          SettingsBlockSectionHeader(title: "ABOUT")
+          SettingsBlockSectionHeader(title: "About")
 
           SettingsBlockInfoRow(
             icon: "info.circle",

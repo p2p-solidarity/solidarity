@@ -58,7 +58,7 @@ struct AdvancedSettingsView: View {
   // MARK: - Interface
 
   private var interfaceSection: some View {
-    SettingsBlockSection("INTERFACE") {
+    SettingsBlockSection("Interface") {
       NavigationLink {
         AppearanceSettingsView()
       } label: {
@@ -71,7 +71,7 @@ struct AdvancedSettingsView: View {
   // MARK: - Developer Tools
 
   private var devToolsSection: some View {
-    SettingsBlockSection("DEVELOPER TOOLS") {
+    SettingsBlockSection("Developer Tools") {
       NavigationLink {
         GroupManagementView()
       } label: {
@@ -106,7 +106,7 @@ struct AdvancedSettingsView: View {
 
   private var dangerZoneSection: some View {
     VStack(alignment: .leading, spacing: 12) {
-      SettingsBlockSectionHeader(title: "DANGER ZONE")
+      SettingsBlockSectionHeader(title: "Danger Zone")
 
       VStack(spacing: 8) {
         Button { showingResetConfirm = true } label: {

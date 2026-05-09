@@ -50,7 +50,7 @@ struct BackupSettingsView: View {
   // MARK: - Sections
 
   private var iCloudBackupSection: some View {
-    SettingsBlockSection("ICLOUD BACKUP") {
+    SettingsBlockSection("iCloud Backup") {
       SettingsBlockToggleRow(
         icon: "icloud",
         title: "Enable iCloud Backup",
@@ -75,7 +75,7 @@ struct BackupSettingsView: View {
   }
 
   private var actionsSection: some View {
-    SettingsBlockSection("ACTIONS", footer: actionsFooter) {
+    SettingsBlockSection("Actions", footer: actionsFooter) {
       let backupDisabled = !backup.settings.enabled || backup.isBackingUp
 
       Button(action: performBackup) {
@@ -100,7 +100,7 @@ struct BackupSettingsView: View {
   }
 
   private var statusSection: some View {
-    SettingsBlockSection("STATUS", footer: statusFooter) {
+    SettingsBlockSection("Status", footer: statusFooter) {
       SettingsBlockInfoRow(
         icon: backup.isICloudAvailable ? "checkmark.icloud.fill" : "externaldrive.fill",
         title: backup.isICloudAvailable ? "iCloud connected" : "iCloud unavailable",

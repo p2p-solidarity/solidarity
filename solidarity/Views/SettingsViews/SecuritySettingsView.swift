@@ -27,7 +27,7 @@ struct SecuritySettingsView: View {
 
   private var keyRotationSection: some View {
     SettingsBlockSection(
-      "KEY ROTATION",
+      "Key Rotation",
       footer: "Rotating the master key will invalidate active verifiable credentials across your network until re-issued."
     ) {
       Button { rotateMasterKey() } label: {
@@ -43,7 +43,7 @@ struct SecuritySettingsView: View {
   // MARK: - Biometric Requirements
 
   private var biometricSection: some View {
-    SettingsBlockSection("BIOMETRIC REQUIREMENTS") {
+    SettingsBlockSection("Biometric Requirements") {
       ForEach(SensitiveAction.allCases) { action in
         SettingsBlockToggleRow(
           icon: "faceid",
