@@ -120,12 +120,29 @@ struct BackupSettingsView: View {
   }
 
   private func performBackup() {
+    ToastManager.shared.show(
+      title: String(localized: "Backing up…"),
+      message: String(localized: "Encrypting and uploading to iCloud"),
+      type: .info,
+      duration: 2.0
+    )
     Task {
       switch await backup.performBackupNow() {
       case .success:
-        break
+        await MainActor.run {
+          ToastManager.shared.show(
+            title: String(localized: "Backup complete"),
+            message: String(localized: "Your data is safely backed up"),
+            type: .success
+          )
+        }
       case .failure(let error):
         await MainActor.run {
+          ToastManager.shared.show(
+            title: String(localized: "Backup failed"),
+            message: error.localizedDescription,
+            type: .error
+          )
           errorMessage = error.localizedDescription
           showError = true
         }
