@@ -566,7 +566,11 @@ struct DIDExchangeSignatureTests {
       nonce: nonce,
       timestamp: timestamp
     )
-    guard let signature = ProximityIdentitySigner.signBase64(canonicalBytes: canonical) else {
+    let signature: String
+    switch ProximityIdentitySigner.signBase64(canonicalBytes: canonical) {
+    case .success(let value):
+      signature = value
+    case .failure:
       return
     }
     let valid = ProximityIdentitySigner.verify(

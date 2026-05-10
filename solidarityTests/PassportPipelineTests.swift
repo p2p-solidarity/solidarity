@@ -430,6 +430,10 @@ struct SimulatedPassportPersistTests {
     )
     switch result {
     case .success(let card):
+      #expect(card.holderDid.hasPrefix("did:key:"),
+              "Passport credential must bind to the user's actual did:key holder")
+      #expect(card.holderDid != "did:key:pending",
+              "Passport credential must not persist the placeholder pending DID")
       #expect(card.issuerType == "selfIssued",
               "Simulated chip must persist as selfIssued, not government")
       #expect(card.trustLevel == "white",

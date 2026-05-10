@@ -48,4 +48,32 @@ final class QRCodeGenerationServiceTests: XCTestCase {
 
     XCTAssertTrue((envelope.plaintext?.proofClaims ?? []).isEmpty)
   }
+
+  func testCompressedProofPayloadRoundTripsAndGeneratesQRCode() throws {
+    let proofChunks = Array(repeating: "0123456789abcdef", count: 500)
+    let vp: [String: Any] = [
+      "@context": ["https://www.w3.org/2018/credentials/v1"],
+      "type": ["VerifiablePresentation"],
+      "holder": "did:key:z6MkHolder",
+      "nonce": UUID().uuidString,
+      "proof_type": "mopro-noir",
+      "selected_claims": ["field_name", "is_human", "age_over_18"],
+      "verifiableCredential": [
+        [
+          "proof": proofChunks,
+          "publicSignals": proofChunks,
+        ]
+      ],
+    ]
+    let data = try JSONSerialization.data(withJSONObject: vp, options: [.sortedKeys])
+
+    let compressed = try XCTUnwrap(QRCodeGenerationService.compressForQR(data))
+    let decompressed = try XCTUnwrap(QRCodeGenerationService.decompressQR(compressed))
+    XCTAssertEqual(decompressed, data)
+
+    guard case .success = QRCodeManager.shared.generateQRCode(from: compressed) else {
+      XCTFail("Compressed proof payload should fit in a QR code")
+      return
+    }
+  }
 }

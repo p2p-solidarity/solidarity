@@ -62,8 +62,54 @@ extension KeychainService {
   }
 
   private func ensureCloudSyncedMasterSigningKey() -> CardResult<Void> {
+    dumpMasterKeyState(label: "ensure-entry")
+
+    // Local-only escape hatch: skip iCloud-specific behaviors. The local
+    // alias lives outside the iCloud bag, so there's nothing to wait for from
+    // sync, and `isMasterKeyCloudSyncCompatible` would always be false here.
+    if isLocalMaster {
+      let fpKeyExists = keyExists()
+      let fpRef = fpKeyExists && existingPrivateKeyReference() != nil
+      print("[KeychainService] ensure (local) fast-path keyExists=\(fpKeyExists) privateRef=\(fpRef)")
+      if fpKeyExists, fpRef {
+        print("[KeychainService] Local master signing key already exists and is usable")
+        return .success(())
+      }
+
+      if fpKeyExists {
+        print("[KeychainService] Existing local master key is not usable — rotating.")
+        dumpMasterKeyState(label: "ensure-pre-rotate-local")
+        clearInMemoryKey()
+        switch deleteSigningKey() {
+        case .success:
+          break
+        case .failure(let error):
+          return .failure(error)
+        }
+      }
+
+      print("[KeychainService] Generating local-only master signing key")
+      switch generateSigningKey(useSecureEnclave: false) {
+      case .success:
+        print("[KeychainService] Successfully prepared local-only master signing key")
+        dumpMasterKeyState(label: "ensure-post-generate-local")
+        return .success(())
+      case .failure(let error):
+        print("[KeychainService] Failed to prepare local-only master signing key: \(error)")
+        dumpMasterKeyState(label: "ensure-generate-failed-local")
+        return .failure(error)
+      }
+    }
+
     // Fast path: a usable, iCloud-synced master key is already on this device.
-    if keyExists(), isMasterKeyCloudSyncCompatible(), existingPrivateKeyReference() != nil {
+    let fpKeyExists = keyExists()
+    let fpCompat = fpKeyExists && isMasterKeyCloudSyncCompatible()
+    let fpRef = fpCompat && existingPrivateKeyReference() != nil
+    print(
+      "[KeychainService] ensure fast-path keyExists=\(fpKeyExists) "
+        + "syncCompat=\(fpCompat) privateRef=\(fpRef)"
+    )
+    if fpKeyExists, fpCompat, fpRef {
       print("[KeychainService] Cloud-synced master signing key already exists and is usable")
       return .success(())
     }
@@ -81,6 +127,7 @@ extension KeychainService {
       print("[KeychainService] Waiting up to \(Self.iCloudKeychainSyncWaitSeconds)s for iCloud Keychain delivery…")
       waitForCloudKeychainDelivery(maxWait: Self.iCloudKeychainSyncWaitSeconds)
       defaults.set(true, forKey: Self.iCloudKeychainSyncWaitMarker)
+      dumpMasterKeyState(label: "ensure-post-wait")
 
       if keyExists(), isMasterKeyCloudSyncCompatible(), existingPrivateKeyReference() != nil {
         print("[KeychainService] iCloud-synced master key arrived during wait — adopted")
@@ -95,6 +142,7 @@ extension KeychainService {
         "[KeychainService] Existing master key is not usable (incompatible or private key not retrievable). "
         + "Rotating to shared iCloud key."
       )
+      dumpMasterKeyState(label: "ensure-pre-rotate")
       clearInMemoryKey()
       switch deleteSigningKey() {
       case .success:
@@ -108,9 +156,11 @@ extension KeychainService {
     switch generateSigningKey(useSecureEnclave: false) {
     case .success:
       print("[KeychainService] Successfully prepared cloud-synced master signing key")
+      dumpMasterKeyState(label: "ensure-post-generate")
       return .success(())
     case .failure(let error):
       print("[KeychainService] Failed to prepare cloud-synced master signing key: \(error)")
+      dumpMasterKeyState(label: "ensure-generate-failed")
       return .failure(error)
     }
   }
@@ -225,14 +275,7 @@ extension KeychainService {
 
   #if !targetEnvironment(simulator)
     private func generateDeviceSigningKey(useSecureEnclave: Bool) -> CardResult<Void> {
-      var attributes: [String: Any] = [
-        kSecAttrKeyType as String: kSecAttrKeyTypeECSECPrimeRandom,
-        kSecAttrKeyClass as String: kSecAttrKeyClassPrivate,
-        kSecAttrKeySizeInBits as String: 256,
-        kSecAttrIsPermanent as String: true,
-        kSecAttrApplicationTag as String: keyTag,
-        kSecAttrLabel as String: "Solidarity DID Key",
-      ]
+      let attributes: [String: Any]
 
       if useSecureEnclave {
         // Secure Enclave requires kSecAttrAccessControl with .privateKeyUsage
@@ -246,13 +289,12 @@ extension KeychainService {
         else {
           return .failure(.keyManagementError("Failed to configure key access control"))
         }
-        attributes[kSecAttrAccessControl as String] = accessControl
-        attributes[kSecAttrTokenID as String] = kSecAttrTokenIDSecureEnclave
+        attributes = persistentDeviceKeyAttributes(
+          useSecureEnclave: true,
+          accessControl: accessControl
+        )
       } else {
-        // Software keys with iCloud sync: .privateKeyUsage is incompatible with
-        // kSecAttrSynchronizable — use kSecAttrAccessible instead of kSecAttrAccessControl
-        attributes[kSecAttrAccessible as String] = kSecAttrAccessibleWhenUnlocked
-        attributes[kSecAttrSynchronizable as String] = kCFBooleanTrue as Any
+        attributes = persistentDeviceKeyAttributes(useSecureEnclave: false)
       }
 
       var error: Unmanaged<CFError>?
@@ -286,17 +328,9 @@ extension KeychainService {
         cleanupAllOldKeys()
         clearInMemoryKey()
 
-        // Build clean attributes from scratch (no SE tokens carried over from original)
-        let retryAttributes: [String: Any] = [
-          kSecAttrKeyType as String: kSecAttrKeyTypeECSECPrimeRandom,
-          kSecAttrKeyClass as String: kSecAttrKeyClassPrivate,
-          kSecAttrKeySizeInBits as String: 256,
-          kSecAttrIsPermanent as String: true,
-          kSecAttrApplicationTag as String: keyTag,
-          kSecAttrLabel as String: "Solidarity DID Key",
-          kSecAttrAccessible as String: kSecAttrAccessibleWhenUnlocked,
-          kSecAttrSynchronizable as String: kCFBooleanTrue as Any,
-        ]
+        // Build clean software attributes from scratch; retry must not carry
+        // Secure Enclave token/access-control settings from the original path.
+        let retryAttributes = persistentDeviceKeyAttributes(useSecureEnclave: false)
 
         var retryError: Unmanaged<CFError>?
         if let retryKey = SecKeyCreateRandomKey(retryAttributes as CFDictionary, &retryError) {
@@ -305,7 +339,8 @@ extension KeychainService {
           return .success(())
         }
 
-        // Persistent retry also failed — fall back to session-based (in-memory) key
+        // Persistent retry also failed — create an exportable software key and
+        // import it with explicit keychain metadata.
         let retryMessage = (retryError?.takeRetainedValue() as Error?)?.localizedDescription ?? "Unknown error"
         print("[KeychainService] Persistent retry failed (\(retryMessage)), falling back to session-based key...")
         return generateSessionBasedDeviceKey()
@@ -315,33 +350,38 @@ extension KeychainService {
     }
 
     private func generateSessionBasedDeviceKey() -> CardResult<Void> {
-      // Fall back to non-persistent key approach (similar to simulator)
-      var sessionAttributes: [String: Any] = [
+      // Fall back to a non-persistent key, then import the raw private key data
+      // into Keychain with explicit key type/class metadata. Adding the SecKey
+      // reference directly can create tag-matching entries that cannot later be
+      // materialized as ECPrivateKey on device.
+      let sessionAttributes: [String: Any] = [
         kSecAttrKeyType as String: kSecAttrKeyTypeECSECPrimeRandom,
-        kSecAttrKeyClass as String: kSecAttrKeyClassPrivate,
         kSecAttrKeySizeInBits as String: 256,
-        kSecAttrIsPermanent as String: false,  // Non-persistent to avoid keychain conflicts
-        kSecAttrApplicationTag as String: keyTag,
-        kSecAttrLabel as String: "AirMeishi Session Key",
+        kSecPrivateKeyAttrs as String: [
+          kSecAttrIsPermanent as String: false,
+        ],
       ]
 
       var sessionError: Unmanaged<CFError>?
       if let sessionKey = SecKeyCreateRandomKey(sessionAttributes as CFDictionary, &sessionError) {
         print("[KeychainService] Generated non-persistent session key, attempting to store...")
 
-        // Try to add it to keychain manually
-        let addQuery: [String: Any] = [
-          kSecClass as String: kSecClassKey,
-          kSecValueRef as String: sessionKey,
-          kSecAttrApplicationTag as String: keyTag,
-          kSecAttrAccessible as String: kSecAttrAccessibleWhenUnlocked,
-          kSecAttrSynchronizable as String: kCFBooleanTrue as Any,
-        ]
+        var exportError: Unmanaged<CFError>?
+        guard let privateData = SecKeyCopyExternalRepresentation(sessionKey, &exportError) as Data? else {
+          let message = (exportError?.takeRetainedValue() as Error?)?.localizedDescription ?? "Unknown error"
+          return .failure(
+            .keyManagementError("Failed to export generated DID key for keychain import: \(message)")
+          )
+        }
+
+        let addQuery = privateKeyImportQuery(privateData: privateData)
 
         let addStatus = SecItemAdd(addQuery as CFDictionary, nil)
         if addStatus == errSecSuccess {
-          print("[KeychainService] Successfully stored session key in keychain")
-          cachePublicJWK(from: sessionKey)
+          guard cacheExistingPublicJWKIfPossible() else {
+            return .failure(.keyManagementError("DID key stored but could not be reloaded"))
+          }
+          print("[KeychainService] Successfully imported session key into keychain")
           return .success(())
         } else if addStatus == errSecDuplicateItem {
           print("[KeychainService] Session key already exists (duplicate), reusing existing key")
@@ -374,7 +414,6 @@ extension KeychainService {
       // persistent storage, every launch yields a new identity which silently
       // rotates the DID, so we surface the failure instead of hiding it.
       if Self.allowEphemeralInMemoryFallback {
-        sessionAttributes.removeValue(forKey: kSecAttrApplicationTag as String)
         if let inMemoryKey = SecKeyCreateRandomKey(sessionAttributes as CFDictionary, nil) {
           print(
             "[KeychainService] Created in-memory-only key under explicit ephemeral fallback flag"

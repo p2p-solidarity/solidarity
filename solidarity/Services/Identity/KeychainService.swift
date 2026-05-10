@@ -15,8 +15,38 @@ import SpruceIDMobileSdkRs
 final class KeychainService {
   static let shared = KeychainService()
   static let legacyMasterAlias: KeyAlias = "airmeishi.did.signing"
-  static let modernMasterAlias: KeyAlias = "solidarity.master"
-  static let masterAlias: KeyAlias = modernMasterAlias
+  /// Pre-v2 master alias. Retained as a migration source: installs that have a
+  /// usable key here are forwarded to the v2 alias on first launch. Installs
+  /// where this tag is occupied by an iCloud Keychain phantom (synced bytes
+  /// that fail `SecKeyCreate init(ECPrivateKey)` with `errSecParam` and
+  /// permanently block writes with `errSecDuplicateItem`) silently fall
+  /// through — `migrateLegacySecKey` filters by `kSecAttrKeyClassPrivate`,
+  /// which the phantom doesn't satisfy, so the migration is a no-op and
+  /// generation proceeds under the fresh v2 tag.
+  static let v1MasterAlias: KeyAlias = "solidarity.master"
+  static let modernMasterAlias: KeyAlias = "solidarity.master.v2"
+  /// Local-only escape hatch for users whose iCloud Keychain bag is poisoned
+  /// by phantom entries that block synced writes (-25299) and can't be cleared
+  /// by attribute-based delete (the iCloud server pushes them back). Triggered
+  /// from "Reset Identity Keys" in Data & Sync settings: cleans every master
+  /// tag, sets `useLocalAliasMarker`, and asks the user to relaunch. New keys
+  /// generated under this alias are written with
+  /// `kSecAttrSynchronizable: false` so they live in the local-only keychain
+  /// scope, which is isolated from the iCloud bag's phantoms.
+  static let localMasterAlias: KeyAlias = "solidarity.master.local"
+  /// `UserDefaults` flag toggled by "Reset Identity Keys". When `true`, the
+  /// computed `masterAlias` resolves to `localMasterAlias` and the master key
+  /// path skips iCloud-specific behaviors (5 s sync wait, sync-compat check).
+  static let useLocalAliasMarker = "solidarity.master.use_local_alias"
+  /// Computed at instance-init time. Once `KeychainService.shared` captures a
+  /// value here, the singleton sticks with it until the next app launch — the
+  /// "Reset Identity Keys" flow therefore prompts the user to relaunch so the
+  /// new alias takes effect across every cached service.
+  static var masterAlias: KeyAlias {
+    UserDefaults.standard.bool(forKey: useLocalAliasMarker)
+      ? localMasterAlias
+      : modernMasterAlias
+  }
   static let rpAliasPrefix = "airmeishi.did.rp."
   static let modernRpAliasPrefix = "solidarity.rp."
 
@@ -43,8 +73,10 @@ final class KeychainService {
   /// `UserDefaults` flag tracking whether we've ever blocked waiting for iCloud
   /// Keychain to deliver the master DID key. The wait happens once per install
   /// (cleared by deleting/reinstalling the app); subsequent launches skip it so
-  /// we don't add seconds to cold start.
-  static let iCloudKeychainSyncWaitMarker = "solidarity.master.icloudkeychain.first_attempt_done"
+  /// we don't add seconds to cold start. Namespaced under the v2 alias so that
+  /// installs upgrading from a phantom-stuck v1 master get a fresh wait window
+  /// the first time v2 runs.
+  static let iCloudKeychainSyncWaitMarker = "solidarity.master.v2.icloudkeychain.first_attempt_done"
 
   /// Maximum time we'll block on a fresh launch waiting for iCloud Keychain to
   /// hand us the master DID key from another device on the same Apple ID. Tuned
@@ -71,6 +103,32 @@ final class KeychainService {
     self.authenticationPolicy = authenticationPolicy
 
     migrateLegacyKeysIfNeeded()
+  }
+
+  // MARK: - Sync scope
+
+  /// `true` when this instance writes to and reads from the local-only
+  /// keychain scope (`solidarity.master.local`). Local-mode reads use
+  /// `kSecAttrSynchronizable: false` to filter out iCloud bag phantoms; writes
+  /// land outside the sync scope so `errSecDuplicateItem` from the iCloud bag
+  /// can't block them.
+  var isLocalMaster: Bool {
+    alias == Self.localMasterAlias
+  }
+
+  /// `kSecAttrSynchronizable` to use when **writing** keys under this alias.
+  /// `false` for the local-only escape hatch, `true` for every other alias
+  /// (master v2 + per-RP pairwise — both retain iCloud sync as before).
+  var preferredSyncWriteValue: Any {
+    isLocalMaster ? (kCFBooleanFalse as Any) : (kCFBooleanTrue as Any)
+  }
+
+  /// `kSecAttrSynchronizable` to use when **querying** keys under this alias.
+  /// In local-only mode we strictly filter by `false` so the query does not
+  /// return iCloud-synced phantoms; otherwise we use `Any` to remain
+  /// compatible with both local and synced entries.
+  var preferredSyncQueryValue: Any {
+    isLocalMaster ? (kCFBooleanFalse as Any) : kSecAttrSynchronizableAny
   }
 
   // MARK: - Public API
@@ -255,7 +313,7 @@ final class KeychainService {
       kSecAttrApplicationTag as String: keyTag,
       kSecAttrKeyType as String: kSecAttrKeyTypeECSECPrimeRandom,
       kSecAttrKeyClass as String: kSecAttrKeyClassPrivate,
-      kSecAttrSynchronizable as String: kSecAttrSynchronizableAny,
+      kSecAttrSynchronizable as String: preferredSyncQueryValue,
       kSecMatchLimit as String: kSecMatchLimitOne,
       kSecReturnRef as String: true,
     ]
@@ -319,6 +377,7 @@ final class KeychainService {
     // Try with auth context if required
     var item: CFTypeRef?
     let status = SecItemCopyMatching(basicQuery as CFDictionary, &item)
+    print("[KeychainService] privateKeyForDevice basicQuery status=\(statusDescription(status))")
     if status == errSecInteractionNotAllowed || status == errSecAuthFailed {
       var authQuery = basicQuery
       let authContext = context ?? {
@@ -341,6 +400,7 @@ final class KeychainService {
     // Key not found — create it
     if status == errSecItemNotFound {
       print("[KeychainService] Key not found, attempting to create...")
+      dumpMasterKeyState(label: "device-pre-generate-fetch")
       return generateAndFetchKey(query: basicQuery)
     }
 
@@ -354,7 +414,7 @@ final class KeychainService {
       kSecClass as String: kSecClassKey,
       kSecAttrApplicationTag as String: keyTag,
       kSecAttrKeyClass as String: kSecAttrKeyClassPrivate,
-      kSecAttrSynchronizable as String: kSecAttrSynchronizableAny,
+      kSecAttrSynchronizable as String: preferredSyncQueryValue,
       kSecReturnRef as String: true,
     ]
   }
@@ -381,6 +441,7 @@ final class KeychainService {
 
     // Stale entry — cleanup and regenerate
     print("[KeychainService] Stale key detected (\(label)), cleaning up and regenerating...")
+    dumpMasterKeyState(label: "stale-pre-cleanup-\(label)")
     cleanupAllOldKeys()
     clearInMemoryKey()
     return generateAndFetchKey(query: query)
@@ -392,6 +453,16 @@ final class KeychainService {
       return .failure(error)
     case .success:
       if let key = fetchSecKey(query: query) { return .success(key) }
+      // Diagnostic dump: ensureSigningKey reported success but the same query
+      // still returns nothing. Surfaces duplicate entries, SE-bound stragglers,
+      // and iCloud Keychain race aftermath before we surrender to the caller.
+      var probe: CFTypeRef?
+      let probeStatus = SecItemCopyMatching(query as CFDictionary, &probe)
+      print(
+        "[KeychainService] generateAndFetchKey post-ensure fetch failed: "
+          + "status=\(statusDescription(probeStatus))"
+      )
+      dumpMasterKeyState(label: "generate-fetch-failed")
       return .failure(.keyManagementError("Key not usable after generation"))
     }
   }

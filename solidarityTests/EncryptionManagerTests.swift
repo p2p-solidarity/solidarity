@@ -35,4 +35,15 @@ final class EncryptionManagerTests: XCTestCase {
     }
     XCTAssertEqual(decrypted, payload)
   }
+
+  func testWaitForCloudSyncedKeyDoesNotCreateMissingKey() throws {
+    _ = EncryptionManager.shared.deleteEncryptionKey()
+
+    XCTAssertFalse(EncryptionManager.shared.hasCloudSyncedKey())
+    XCTAssertFalse(EncryptionManager.shared.waitForCloudSyncedKey(maxWait: 0))
+    XCTAssertFalse(
+      EncryptionManager.shared.hasCloudSyncedKey(),
+      "Restore guard must not mint a replacement key before decrypting an iCloud backup"
+    )
+  }
 }

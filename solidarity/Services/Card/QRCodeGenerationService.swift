@@ -158,7 +158,10 @@ final class QRCodeGenerationService {
       return nil
     }
 
-    let destinationSize = min(compressedData.count * 10, maxDecompressedQRSize)
+    // Compression ratio can be far higher than 10x for structured proof JSON.
+    // Allocate up to the existing hard cap so valid compact payloads decode,
+    // while still bounding memory use for malicious inputs.
+    let destinationSize = maxDecompressedQRSize
     let destinationBuffer = UnsafeMutablePointer<UInt8>.allocate(capacity: destinationSize)
     defer { destinationBuffer.deallocate() }
 
