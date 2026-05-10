@@ -2,6 +2,11 @@ import AVFoundation
 import Foundation
 import UIKit
 
+enum QRCodeScanDisposition: Equatable {
+  case handled
+  case awaitingMoreChunks
+}
+
 final class QRCodeScanService: NSObject {
   struct ScanOutcome {
     let card: BusinessCard?
@@ -42,6 +47,7 @@ final class QRCodeScanService: NSObject {
   }
 
   var onScanOutcome: ((Result<ScanOutcome, CardError>) -> Void)?
+  var onChunkProgress: ((QRCodeChunkProgress) -> Void)?
 
   let encryptionManager = EncryptionManager.shared
   let oidcService = OIDCService.shared
@@ -54,6 +60,7 @@ final class QRCodeScanService: NSObject {
   private var previewLayer: AVCaptureVideoPreviewLayer?
   private let scanStateLock = NSLock()
   private var isProcessingScan = false
+  private let chunkReassembler = QRCodeChunkReassembler()
 
   private let sessionQueue = DispatchQueue(label: "app.solidarity.camera.session.queue")
 
@@ -61,6 +68,7 @@ final class QRCodeScanService: NSObject {
 
   func startScanning() -> CardResult<AVCaptureVideoPreviewLayer> {
     resetProcessingState()
+    chunkReassembler.reset()
     let session = AVCaptureSession()
 
     guard let videoCaptureDevice = AVCaptureDevice.default(for: .video) else {
@@ -126,53 +134,81 @@ final class QRCodeScanService: NSObject {
 
   // MARK: - Processing
 
-  /// Upper bound on a scanned QR payload. The QR Code spec maxes out around
-  /// 4 KB for alphanumeric content, so 64 KB leaves ample headroom while
-  /// preventing pathological JSON blobs (zip-bombed compressed envelopes,
-  /// adversarial input from `request_uri` injection, etc.) from being
-  /// decoded inline. Matches the ScanRouter cap so both code paths reject
-  /// the same shape.
-  static let maxQRPayloadBytes = 64 * 1024
+  /// Upper bound on a decoded payload after optional chunk reassembly.
+  /// Single physical QR symbols remain far smaller, but chunked proof
+  /// transfer needs enough room for offline VP payloads while still bounding
+  /// memory for adversarial input.
+  static let maxQRPayloadBytes = QRCodeChunkingService.maxReassembledPayloadBytes
 
-  func process(scannedString data: String) {
+  @discardableResult
+  func process(scannedString data: String) -> QRCodeScanDisposition {
+    if QRCodeChunkingService.isChunkFrame(data) {
+      return processChunkFrame(data)
+    }
+    return processResolvedPayload(data)
+  }
+
+  private func processChunkFrame(_ data: String) -> QRCodeScanDisposition {
+    do {
+      switch try chunkReassembler.ingest(data) {
+      case .progress(let progress):
+        onChunkProgress?(progress)
+        return .awaitingMoreChunks
+      case .complete(let payload, let progress):
+        onChunkProgress?(progress)
+        return processResolvedPayload(payload)
+      }
+    } catch {
+      chunkReassembler.reset()
+      emitOutcome(.failure(.sharingError("Invalid chunked QR payload")))
+      return .handled
+    }
+  }
+
+  private func processResolvedPayload(_ data: String) -> QRCodeScanDisposition {
     guard data.utf8.count <= Self.maxQRPayloadBytes else {
       emitOutcome(.failure(.sharingError("QR payload exceeds size limit")))
-      return
+      return .handled
     }
 
     let route = scanRouter.route(for: data)
     switch route {
     case .oid4vpRequest(let request):
       handleOID4VPRequest(request)
-      return
+      return .handled
     case .vpToken(let token):
       handleVPToken(token)
-      return
+      return .handled
     case .credentialOffer(let offer):
       emitOutcome(.success(ScanOutcome(card: nil, verificationStatus: .pending, sealedRoute: nil, route: .credentialOffer(offer))))
-      return
+      return .handled
     case .siopRequest(let request):
       handleOIDCRequest(request, route: .siopRequest(request))
-      return
+      return .handled
     case .businessCard, .unknown:
       break
+    }
+
+    if let token = decodePresentationToken(from: data) {
+      handleVPToken(token)
+      return .handled
     }
 
     if let url = URL(string: data),
        AppBranding.isSupportedAppScheme(url.scheme),
        OIDCService.isCallbackHost(url.host) {
       handleOIDCResponse(url: url)
-      return
+      return .handled
     }
 
     if data.hasPrefix("openid-vc://") || data.hasPrefix("openid://") {
       handleOIDCRequest(data, route: .siopRequest(data))
-      return
+      return .handled
     }
 
     if AppBranding.isSupportedDeepLink(data) {
       handleDeepLink(data)
-      return
+      return .handled
     }
 
     // Bare JWT from didSigned QR (encoded directly without envelope wrapper).
@@ -186,15 +222,41 @@ final class QRCodeScanService: NSObject {
         holderDid: ""
       )
       emitOutcome(handleDidSignedPayload(payload))
-      return
+      return .handled
     }
 
     if let envelope = decodeEnvelope(from: data) {
       handleEnvelope(envelope)
-      return
+      return .handled
     }
 
     handleLegacyPayload(data)
+    return .handled
+  }
+
+  private func decodePresentationToken(from data: String) -> String? {
+    let token: String
+    if let decompressed = QRCodeGenerationService.decompressQR(data),
+       let decompressedString = String(data: decompressed, encoding: .utf8) {
+      token = decompressedString
+    } else {
+      token = data
+    }
+
+    guard
+      let jsonData = token.data(using: .utf8),
+      let json = try? JSONSerialization.jsonObject(with: jsonData) as? [String: Any]
+    else {
+      return nil
+    }
+
+    if let types = json["type"] as? [String], types.contains("VerifiablePresentation") {
+      return token
+    }
+    if json["semaphore_proof"] != nil || json["proof_type"] != nil {
+      return token
+    }
+    return nil
   }
 
   // MARK: - State Management
@@ -214,6 +276,7 @@ final class QRCodeScanService: NSObject {
   }
 
   func emitOutcome(_ result: Result<ScanOutcome, CardError>) {
+    chunkReassembler.reset()
     resetProcessingState()
     onScanOutcome?(result)
   }
@@ -236,8 +299,12 @@ extension QRCodeScanService: AVCaptureMetadataOutputObjectsDelegate {
       return
     }
 
-    stopScanning()
-    process(scannedString: value)
+    switch process(scannedString: value) {
+    case .handled:
+      stopScanning()
+    case .awaitingMoreChunks:
+      resetProcessingState()
+    }
   }
 }
 

@@ -388,8 +388,17 @@ private struct PresentationSheet: View {
   let selectedClaims: [ProvableClaimEntity]
   @Environment(\.dismiss) private var dismiss
   @StateObject private var qrCodeManager = QRCodeManager.shared
-  @State private var qrImage: UIImage?
+  @State private var qrPages: [ProofQRPage] = []
+  @State private var currentQRPageIndex = 0
+  @State private var isChunkPlaybackPaused = false
   @State private var errorMessage: String?
+
+  private let chunkPlaybackTimer = Timer.publish(every: 0.75, on: .main, in: .common).autoconnect()
+
+  private var currentQRPage: ProofQRPage? {
+    guard qrPages.indices.contains(currentQRPageIndex) else { return nil }
+    return qrPages[currentQRPageIndex]
+  }
 
   var resolvedProofTypeTag: String {
     if card.metadataTags.contains("mopro-noir") { return "mopro-noir" }
@@ -429,15 +438,28 @@ private struct PresentationSheet: View {
           }
           .padding(.horizontal, 16)
 
-          if let qrImage {
-            Image(uiImage: qrImage)
-              .resizable()
-              .interpolation(.none)
-              .scaledToFit()
-              .frame(maxWidth: 260)
-              .padding(16)
-              .background(Color.white)
-              .cornerRadius(12)
+          if let currentPage = currentQRPage {
+            VStack(spacing: 14) {
+              Image(uiImage: currentPage.image)
+                .resizable()
+                .interpolation(.none)
+                .scaledToFit()
+                .frame(maxWidth: 260)
+                .padding(16)
+                .background(Color.white)
+                .clipShape(.rect(cornerRadius: 12))
+
+              if qrPages.count > 1 {
+                PresentationChunkPlaybackControls(
+                  currentIndex: currentQRPageIndex,
+                  totalCount: qrPages.count,
+                  isPaused: isChunkPlaybackPaused,
+                  onPrevious: { moveChunk(by: -1) },
+                  onTogglePlayback: { isChunkPlaybackPaused.toggle() },
+                  onNext: { moveChunk(by: 1) }
+                )
+              }
+            }
           } else if let errorMessage {
             Text(errorMessage)
               .font(.system(size: 14))
@@ -470,6 +492,9 @@ private struct PresentationSheet: View {
         }
       }
       .onAppear { generateVP() }
+      .onReceive(chunkPlaybackTimer) { _ in
+        advanceChunkPlaybackIfNeeded()
+      }
     }
   }
 
@@ -510,10 +535,36 @@ private struct PresentationSheet: View {
     let result = qrCodeManager.generateQRCode(from: payload)
     switch result {
     case .success(let image):
-      qrImage = image
+      qrPages = [ProofQRPage(image: image)]
+      currentQRPageIndex = 0
       selectedClaims.forEach { IdentityDataStore.shared.markClaimPresented($0.id) }
     case .failure(let error):
-      errorMessage = error.localizedDescription
+      generateChunkedVP(from: payload, fallbackError: error)
     }
+  }
+
+  private func generateChunkedVP(from payload: String, fallbackError: CardError) {
+    do {
+      qrPages = try PresentationQRPageBuilder.buildChunkedPages(for: payload, using: qrCodeManager)
+      currentQRPageIndex = 0
+      isChunkPlaybackPaused = false
+      selectedClaims.forEach { IdentityDataStore.shared.markClaimPresented($0.id) }
+    } catch let error as CardError {
+      errorMessage = error.localizedDescription
+    } catch QRCodeChunkingError.payloadTooLarge {
+      errorMessage = "Proof payload is too large for offline QR transfer."
+    } catch {
+      errorMessage = fallbackError.localizedDescription
+    }
+  }
+
+  private func advanceChunkPlaybackIfNeeded() {
+    guard qrPages.count > 1, !isChunkPlaybackPaused else { return }
+    moveChunk(by: 1)
+  }
+
+  private func moveChunk(by delta: Int) {
+    guard qrPages.isEmpty == false else { return }
+    currentQRPageIndex = (currentQRPageIndex + delta + qrPages.count) % qrPages.count
   }
 }

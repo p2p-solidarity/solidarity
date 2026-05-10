@@ -12,6 +12,7 @@ final class QRCodeManager: ObservableObject {
   @Published var lastSealedRoute: String?
   @Published var lastScanRoute: ScanRoute?
   @Published var scanError: CardError?
+  @Published var chunkScanProgress: QRCodeChunkProgress?
   /// StoredCredential.id for the VC imported during the last scan, if any.
   /// Used by contact-save flows to attach the credential reference.
   @Published var lastCredentialId: UUID?
@@ -33,6 +34,9 @@ final class QRCodeManager: ObservableObject {
 
     self.scanService.onScanOutcome = { [weak self] result in
       self?.handleScanResult(result)
+    }
+    self.scanService.onChunkProgress = { [weak self] progress in
+      self?.handleChunkProgress(progress)
     }
   }
 
@@ -106,6 +110,7 @@ final class QRCodeManager: ObservableObject {
     // Reset route so scanning the same payload again still emits a route change.
     lastScanRoute = nil
     scanError = nil
+    chunkScanProgress = nil
     let result = scanService.startScanning()
     if case .success = result {
       isScanning = true
@@ -127,6 +132,7 @@ final class QRCodeManager: ObservableObject {
   private func handleScanResult(_ result: Result<QRCodeScanService.ScanOutcome, CardError>) {
     DispatchQueue.main.async {
       self.isScanning = false
+      self.chunkScanProgress = nil
       switch result {
       case .success(let outcome):
         self.lastScannedCard = outcome.card
@@ -141,6 +147,14 @@ final class QRCodeManager: ObservableObject {
         self.lastScanRoute = nil
         self.scanError = error
       }
+    }
+  }
+
+  private func handleChunkProgress(_ progress: QRCodeChunkProgress) {
+    DispatchQueue.main.async {
+      self.isScanning = true
+      self.scanError = nil
+      self.chunkScanProgress = progress
     }
   }
 }

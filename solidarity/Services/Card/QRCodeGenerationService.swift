@@ -4,8 +4,8 @@ import Foundation
 import UIKit
 
 final class QRCodeGenerationService {
-  private static let maxDecompressedQRSize = 256 * 1024
-  private static let maxCompressedQRSize = 32 * 1024
+  private static let maxDecompressedQRSize = QRCodeChunkingService.maxReassembledPayloadBytes
+  private static let maxCompressedQRSize = QRCodeChunkingService.maxReassembledPayloadBytes
 
   private let encryptionManager = EncryptionManager.shared
   private let semaphoreManager = SemaphoreIdentityManager.shared
