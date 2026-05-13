@@ -128,7 +128,7 @@ struct PersonDetailMoreSheet: View {
       .frame(height: 48)
       .background(
         RoundedRectangle(cornerRadius: 2)
-          .fill(Color(hex: 0xEEEEEE).opacity(0.8))
+          .fill(Color.Theme.searchBg)
       )
       .overlay(
         RoundedRectangle(cornerRadius: 2)
