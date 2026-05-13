@@ -2,16 +2,23 @@ import SwiftUI
 
 struct PassportOnboardingFlowView: View {
     let onCompleted: (PassportProofResult) -> Void
+    let startInManualInput: Bool
 
     @Environment(\.dismiss) var dismiss
     @StateObject var pipeline = PassportPipelineViewModel()
     @State private var showingMRZCamera = false
-    @State private var showManualInput = false
+    @State private var showManualInput: Bool
+
+    init(startInManualInput: Bool = false, onCompleted: @escaping (PassportProofResult) -> Void) {
+        self.onCompleted = onCompleted
+        self.startInManualInput = startInManualInput
+        self._showManualInput = State(initialValue: startInManualInput)
+    }
 
     var body: some View {
         NavigationStack {
             ScrollView {
-                VStack(spacing: 14) {
+                VStack(spacing: 16) {
                     SolidarityPlaceholderCard(
                         screenID: pipeline.currentScreenID,
                         title: pipeline.currentTitle,
@@ -31,12 +38,11 @@ struct PassportOnboardingFlowView: View {
                 }
                 .padding(16)
             }
+            .background(Color.Theme.pageBg.ignoresSafeArea())
             .navigationTitle("Passport Setup")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
-                ToolbarItem(placement: .navigationBarLeading) {
-                    Button("Close") { dismiss() }
-                }
+                SettingsBackToolbar("Close") { dismiss() }
             }
             .alert("Passport Pipeline", isPresented: $pipeline.showingAlert) {
                 Button("OK", role: .cancel) {}
@@ -73,8 +79,10 @@ struct PassportOnboardingFlowView: View {
                     .buttonStyle(.bordered)
                 }
                 .padding(14)
-                .background(Color.Theme.cardBg)
-                .cornerRadius(10)
+                .background(
+                    RoundedRectangle(cornerRadius: 12)
+                        .fill(Color.Theme.mutedSurface)
+                )
             } else {
                 VStack(spacing: 10) {
                     TextField("Passport Number", text: $pipeline.passportNumber)
@@ -104,8 +112,10 @@ struct PassportOnboardingFlowView: View {
                     }
                 }
                 .padding(14)
-                .background(Color.Theme.cardBg)
-                .cornerRadius(10)
+                .background(
+                    RoundedRectangle(cornerRadius: 12)
+                        .fill(Color.Theme.mutedSurface)
+                )
             }
         }
     }
@@ -152,7 +162,9 @@ struct PassportOnboardingFlowView: View {
             .disabled(pipeline.isLoading)
         }
         .padding(14)
-        .background(Color.Theme.cardBg)
-        .cornerRadius(10)
+        .background(
+            RoundedRectangle(cornerRadius: 12)
+                .fill(Color.Theme.mutedSurface)
+        )
     }
 }

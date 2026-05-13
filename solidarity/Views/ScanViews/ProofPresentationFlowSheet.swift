@@ -340,9 +340,11 @@ struct ProofPresentationFlowSheet: View {
         target: request.effectiveResponseTarget,
         state: request.state.isEmpty ? nil : request.state,
         responseMode: request.responseMode,
-        nonce: request.nonce,
-        audience: request.clientId,
-        relyingPartyDomain: URL(string: request.effectiveResponseTarget)?.host
+        verifier: OIDCService.VPSubmissionVerifier(
+          nonce: request.nonce,
+          audience: request.clientId,
+          relyingPartyDomain: URL(string: request.effectiveResponseTarget)?.host
+        )
       )
       await MainActor.run {
         isWorking = false

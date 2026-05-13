@@ -13,6 +13,12 @@ struct NFCReadResult {
   let bacSucceeded: Bool
   let paceSucceeded: Bool
   let passiveAuthPassed: Bool
+  /// True when the chip advertised PACE capability but the session ended
+  /// using BAC only. This is treated as a downgrade and forces
+  /// `passiveAuthPassed` to false even if the SOD chain otherwise checks
+  /// out, because BAC-only sessions on PACE-capable chips are vulnerable
+  /// to active downgrade attacks.
+  let paceDowngraded: Bool
   let rawDataHash: String
   let readAt: Date
 }
@@ -20,6 +26,17 @@ struct NFCReadResult {
 // MARK: - Service
 
 final class NFCPassportReaderService: NSObject {
+
+  /// True when a CSCA Master List PEM was found in the bundle and loaded
+  /// into the reader. When false, passive authentication will always
+  /// return false because the document signing chain has no trust roots.
+  /// Callers should not block reads on this flag, but they should refuse
+  /// to mark a credential as "government" trust without it.
+  ///
+  /// TODO: bundle a CSCA Master List from OpenPassport (`selfxyz/self`)
+  /// in PEM form (see CLAUDE.md → "CSCA Master List — Passport 驗證" for
+  /// the recommended pipeline).
+  private(set) var isMasterListLoaded: Bool = false
 
   enum NFCError: LocalizedError {
     case notAvailable
@@ -73,6 +90,17 @@ final class NFCPassportReaderService: NSObject {
     let reader = PassportReader()
     if let masterListURL = Bundle.main.url(forResource: "masterList", withExtension: "pem") {
       reader.setMasterListURL(masterListURL)
+      isMasterListLoaded = true
+      print("[NFCPassportReader] masterList.pem loaded — passive authentication enabled")
+    } else {
+      isMasterListLoaded = false
+      // TODO: load CSCA Master List from OpenPassport (selfxyz/self) PEM
+      // (see CLAUDE.md → "CSCA Master List — Passport 驗證").
+      print(
+        "[NFCPassportReader][WARNING] masterList.pem missing — passive authentication "
+        + "disabled (passiveAuthPassed will always be false). Add a CSCA Master List "
+        + "PEM to the bundle to enable passport authenticity checks."
+      )
     }
 
     let passport: NFCPassportModel
@@ -123,17 +151,36 @@ final class NFCPassportReaderService: NSObject {
     let bacOK = passport.BACStatus == .success
     let paceOK = passport.PACEStatus == .success
 
-    // Passive authentication
-    let passiveOK = passport.passportCorrectlySigned && passport.passportDataNotTampered
+    // PACE downgrade detection: chip advertised PACE capability (via
+    // CardAccess or DG14 PACEInfo) but the session ended with BAC only.
+    // BAC-only sessions on PACE-capable chips are considered downgraded
+    // because an attacker between the chip and the reader can force BAC
+    // selection — passive auth must be rejected in that case even if
+    // the SOD chain itself verifies.
+    let chipSupportsPACE = passport.isPACESupported
+    let paceDowngraded = chipSupportsPACE && bacOK && !paceOK
+    if !paceOK {
+      print("[NFCPassportReader] PACE not completed — bacOK=\(bacOK), chipSupportsPACE=\(chipSupportsPACE), downgraded=\(paceDowngraded)")
+    }
+
+    // Passive authentication. We additionally gate on PACE downgrade —
+    // a downgraded session is rejected even if SOD/DSC checks pass.
+    let signedAndUntampered = passport.passportCorrectlySigned && passport.passportDataNotTampered
+    let passiveOK = signedAndUntampered && !paceDowngraded
+    if signedAndUntampered && paceDowngraded {
+      print("[NFCPassportReader][WARNING] Passive auth FORCED to false because PACE was downgraded to BAC")
+    }
 
     // Build chip UID from document number (no direct UID exposed by library)
-    // Use deterministic fallback based on MRZ data to ensure stable de-duplication
+    // Use deterministic fallback based on MRZ data to ensure stable de-duplication.
+    // Full SHA-256 hex prevents 32-bit collisions while staying deterministic per passport.
     let chipUID: String
     if !passport.documentNumber.isEmpty {
       chipUID = "NFC-\(passport.documentNumber)"
     } else {
       let fallbackHash = SHA256.hash(data: Data(mrzData.utf8))
-      chipUID = "NFC-\(fallbackHash.prefix(4).map { String(format: "%02x", $0) }.joined())"
+      let fullHashHex = fallbackHash.map { String(format: "%02x", $0) }.joined()
+      chipUID = "NFC-\(fullHashHex)"
     }
 
     // Hash all DG1 raw data for integrity
@@ -153,6 +200,7 @@ final class NFCPassportReaderService: NSObject {
       bacSucceeded: bacOK,
       paceSucceeded: paceOK,
       passiveAuthPassed: passiveOK,
+      paceDowngraded: paceDowngraded,
       rawDataHash: rawHash,
       readAt: Date()
     )

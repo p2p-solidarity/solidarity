@@ -43,7 +43,10 @@ extension CloudKitGroupSyncManager {
 
   internal func subscribeToChanges() async throws {
     // 1. Subscribe to Public Group Changes (Database Subscription not available for Public DB, use Query)
-    // Subscribe to all group memberships for this user
+    // Subscribe to membership changes that pertain to the current user. We constrain
+    // the predicate to the caller's own record so the silent push does not wake the
+    // app on unrelated groups, and we accept any status so a "kicked" status flip
+    // still notifies the user.
     if let userID = currentUserRecordID {
       let predicate = NSPredicate(format: "userRecordID == %@", userID)
       let subscriptionID = "group-membership-changes"

@@ -23,21 +23,27 @@ enum ShareSettingsStore {
     return fields
   }
 
+  /// User's intent to declare "is_human" in their shared card. Honest read
+  /// of the toggle — does NOT imply the holder actually has the claim.
+  /// Issuer (VCService.issueBusinessCardCredential) intersects this with
+  /// VerifiedClaimIndex.proofClaimTypesSync(forHolder:) so a toggle without
+  /// a backing ProvableClaim never enters a signed VC. ShareSettingsView
+  /// enforces "on when hasHumanClaim" via enforceMandatoryProofs().
   static var shareIsHuman: Bool {
-    // Spec: "Real Human" is mandatory when claim exists.
-    // Keep persisted state normalized to true for compatibility with older installs.
-    if (UserDefaults.standard.object(forKey: proofHumanKey) as? Bool) != true {
-      UserDefaults.standard.set(true, forKey: proofHumanKey)
-    }
-    return true
+    UserDefaults.standard.bool(forKey: proofHumanKey)
   }
 
   static var shareAgeOver18: Bool {
     UserDefaults.standard.bool(forKey: proofAgeOver18Key)
   }
 
+  /// User-selected proof claims. May include claims the holder does not
+  /// actually own — VCService filters against VerifiedClaimIndex before
+  /// signing. Callers that need the *effective* declared claims should ask
+  /// VCService, not this store.
   static var selectedProofClaims: [String] {
-    var claims: [String] = ["is_human"]
+    var claims: [String] = []
+    if shareIsHuman { claims.append("is_human") }
     if shareAgeOver18 { claims.append("age_over_18") }
     return claims
   }

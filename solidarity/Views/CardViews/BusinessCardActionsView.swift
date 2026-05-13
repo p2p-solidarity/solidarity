@@ -247,19 +247,19 @@ struct BusinessCardEmptyStateView: View {
 
           Image(systemName: "person.crop.rectangle.stack")
             .font(.system(size: 64, weight: .light))
-            .foregroundColor(.white.opacity(0.9))
+            .foregroundColor(Color.Theme.textSecondary)
         }
 
         VStack(spacing: 20) {
           VStack(spacing: 12) {
             Text("No Business Card")
               .font(.title.bold())
-              .foregroundColor(.white)
+              .foregroundColor(Color.Theme.textPrimary)
               .multilineTextAlignment(.center)
 
             Text("Create your first business card to start sharing")
               .font(.body)
-              .foregroundColor(.white.opacity(0.7))
+              .foregroundColor(Color.Theme.textSecondary)
               .multilineTextAlignment(.center)
               .padding(.horizontal, 40)
           }

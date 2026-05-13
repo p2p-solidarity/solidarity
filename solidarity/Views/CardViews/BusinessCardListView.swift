@@ -49,11 +49,21 @@ struct BusinessCardListView: View {
         }
       }
       .sheet(isPresented: $showingAppearanceSettings) {
-        NavigationStack { AppearanceSettingsView() }
-          .environmentObject(theme)
+        NavigationStack {
+          AppearanceSettingsView()
+            .toolbar {
+              SettingsBackToolbar { showingAppearanceSettings = false }
+            }
+        }
+        .environmentObject(theme)
       }
       .sheet(isPresented: $showingBackupSettings) {
-        NavigationStack { BackupSettingsView() }
+        NavigationStack {
+          BackupSettingsView()
+            .toolbar {
+              SettingsBackToolbar { showingBackupSettings = false }
+            }
+        }
       }
       .sheet(isPresented: $showingGroupManagement) {
         GroupManagementView()
@@ -93,12 +103,12 @@ struct BusinessCardListView: View {
           } else {
             VStack(spacing: 20) {
               ProgressView()
-                .progressViewStyle(CircularProgressViewStyle(tint: .white))
+                .progressViewStyle(CircularProgressViewStyle(tint: Color.Theme.textPrimary))
                 .scaleEffect(1.5)
 
               Text("Preparing Wallet Pass...")
                 .font(.subheadline)
-                .foregroundColor(.white.opacity(0.8))
+                .foregroundColor(Color.Theme.textSecondary)
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
           }
@@ -244,7 +254,7 @@ extension BusinessCardListView {
           .foregroundColor(theme.cardAccent)
         Text("Sharing Nearby")
           .font(.footnote.weight(.semibold))
-          .foregroundColor(.white)
+          .foregroundColor(Color.Theme.textPrimary)
         Spacer()
         Button("Stop") { proximityManager.stopAdvertising() }
           .font(.footnote.weight(.semibold))
@@ -252,7 +262,7 @@ extension BusinessCardListView {
       .padding(10)
       .background(
         RoundedRectangle(cornerRadius: 12, style: .continuous)
-          .fill(Color.white.opacity(0.08))
+          .fill(Color.Theme.searchBg)
           .overlay(
             RoundedRectangle(cornerRadius: 12, style: .continuous)
               .stroke(theme.cardAccent.opacity(0.25), lineWidth: 1)

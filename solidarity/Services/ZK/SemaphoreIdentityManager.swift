@@ -24,9 +24,22 @@ final class SemaphoreIdentityManager: ObservableObject {
   }
 
   /// Bootstrap anchor commitment for passport self-attestation proofs.
-  /// A fixed decimal field element used as the second member in a minimal 2-member group,
-  /// enabling passport ZK proofs before the user joins any peer group.
-  static let passportAnchorCommitment = "7891011121314151617181920212223242526272829303132"
+  ///
+  /// Used as the second member in a minimal 2-member group when the user
+  /// has not yet joined any peer group, so passport ZK proofs can still be
+  /// generated. Each install derives a unique random commitment via
+  /// `SecRandomCopyBytes` and persists it in the Keychain — sharing a
+  /// single hard-coded literal across installs would let a passive
+  /// observer recognise the bootstrap fallback in any group's public
+  /// commitment list.
+  ///
+  /// Production proofs that target a real CSCA-anchored circuit must
+  /// continue to derive the anchor from the chip transcript — this value
+  /// is only consulted by the dev / fallback `Array(.., passportAnchor)`
+  /// pairs on the Semaphore-fallback path.
+  static var passportAnchorCommitment: String {
+    PassportAnchorCommitmentStore.shared.value
+  }
 
   // Whether the SemaphoreSwift library is available for proof ops
   static var proofsSupported: Bool {
@@ -69,6 +82,7 @@ final class SemaphoreIdentityManager: ObservableObject {
     case invalidCommitment(String)
     case groupConstructionFailed(String)
     case insufficientGroupContext(String)
+    case replayDetected(scope: String, nullifier: String)
   }
 
   // MARK: - Identity
@@ -113,6 +127,26 @@ final class SemaphoreIdentityManager: ObservableObject {
 
   func migrateLegacyIdentityIfNeeded() {
     _ = try? keychain.loadIdentity()
+  }
+
+  /// Permanently delete the local ZK identity. Biometric-gated because the
+  /// commitment is the user's pseudonymous handle in every group they joined —
+  /// after deletion all on-device proofs they could regenerate locally are lost.
+  func deleteIdentity() async -> CardResult<Void> {
+    let gate: CardResult<Void> = await withCheckedContinuation { continuation in
+      BiometricGatekeeper.shared.authorizeIfRequired(.deleteZKIdentity) { outcome in
+        continuation.resume(returning: outcome)
+      }
+    }
+    if case .failure(let error) = gate {
+      return .failure(error)
+    }
+    do {
+      try keychain.deleteIdentity()
+    } catch {
+      return .failure(.keyManagementError(error.localizedDescription))
+    }
+    return .success(())
   }
 
   /// Replaces identity with provided secret bytes.
@@ -214,12 +248,85 @@ final class SemaphoreIdentityManager: ObservableObject {
 
     let rawProof = envelope.semaphoreProof
     #if canImport(Semaphore) && !(targetEnvironment(simulator) && arch(x86_64))
-      return try verifySemaphoreProof(proof: rawProof)
+      // Cross-check envelope vs proof internals BEFORE crypto verify.
+      // The Rust binding's verify treats the proof JSON as the source of
+      // truth for public inputs — if envelope.signal/scope disagree with
+      // what's actually inside the proof, the envelope is lying about
+      // what was attested. The crypto check would still pass for the
+      // proof's real values, so we'd grant a verdict against the wrong
+      // signal/scope. Reject early when they disagree.
+      if let internalSignal = Self.extractStringField(fromSemaphoreProof: rawProof, keys: ["message", "signal"]),
+         envelope.signal != internalSignal {
+        return false
+      }
+      if let internalScope = Self.extractStringField(fromSemaphoreProof: rawProof, keys: ["scope"]),
+         envelope.scope != internalScope {
+        return false
+      }
+
+      let cryptoValid = try verifySemaphoreProof(proof: rawProof)
+      guard cryptoValid else { return false }
+
+      // Replay protection: every (scope, nullifier) pair must be unique.
+      // Skip enforcement only when the proof JSON does not expose a nullifier
+      // (older binding versions); we never silently accept a duplicate.
+      if let nullifier = Self.extractNullifier(fromSemaphoreProof: rawProof) {
+        if NullifierStore.shared.hasSeen(scope: envelope.scope, nullifier: nullifier) {
+          throw Error.replayDetected(scope: envelope.scope, nullifier: nullifier)
+        }
+        NullifierStore.shared.record(scope: envelope.scope, nullifier: nullifier)
+      }
+      return true
     #else
       return false
     #endif
   }
 
+  /// Read a string-valued field from a Semaphore-binding proof JSON. Tolerates
+  /// snake_case / camelCase variants and numeric values that decode to strings,
+  /// mirroring `extractNullifier`.
+  static func extractStringField(fromSemaphoreProof proofJSON: String, keys: [String]) -> String? {
+    guard let data = proofJSON.data(using: .utf8) else { return nil }
+    guard let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+      return nil
+    }
+    for key in keys {
+      if let str = object[key] as? String, !str.isEmpty {
+        return str
+      }
+      if let number = object[key] as? NSNumber {
+        return number.stringValue
+      }
+    }
+    return nil
+  }
+
+  /// Extract the `nullifier` field from a Semaphore proof JSON string.
+  /// The Rust binding (semaphore_bindings) serializes proofs with the keys
+  /// `merkle_tree_depth`, `merkle_tree_root`, `nullifier`, `message`, `scope`,
+  /// `points` — see SemaphoreSwift sources. We tolerate either snake_case or
+  /// camelCase keys so a binding upgrade doesn't break replay protection.
+  static func extractNullifier(fromSemaphoreProof proofJSON: String) -> String? {
+    guard let data = proofJSON.data(using: .utf8) else { return nil }
+    guard let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+      return nil
+    }
+    if let nullifier = object["nullifier"] as? String, !nullifier.isEmpty {
+      return nullifier
+    }
+    if let nullifier = object["nullifierHash"] as? String, !nullifier.isEmpty {
+      return nullifier
+    }
+    if let number = object["nullifier"] as? NSNumber {
+      return number.stringValue
+    }
+    return nil
+  }
+
+  /// Non-cryptographic deterministic group identifier used only as a UI
+  /// fingerprint ("did the local view of members change?"). NOT a
+  /// Semaphore Merkle root — never compare against a proof envelope's
+  /// `groupRoot` because the circuit will never produce this value.
   static func deterministicGroupRoot(for commitments: [String]) -> String {
     let canonical = canonicalCommitments(commitments)
     let payload = canonical.joined(separator: "|")
@@ -227,13 +334,34 @@ final class SemaphoreIdentityManager: ObservableObject {
     return digest.map { String(format: "%02x", $0) }.joined()
   }
 
-  static func bindingRoot(for commitments: [String]) -> String {
+  /// Returns the Semaphore circuit-derived Merkle root for the given
+  /// commitments. When the Semaphore library is unavailable in this
+  /// build (x86_64 simulator, missing import), returns nil. Callers
+  /// must handle nil rather than substituting a non-circuit fallback —
+  /// a deterministic SHA256 group fingerprint will never match the
+  /// proof envelope's `groupRoot` and silently passing it through
+  /// produces verification failures that look like "wrong root" when
+  /// they're actually "wrong root algorithm".
+  static func bindingRootIfCircuitAvailable(for commitments: [String]) -> String? {
     #if canImport(Semaphore) && !(targetEnvironment(simulator) && arch(x86_64))
-      if let root = try? circuitGroupRoot(for: commitments) {
-        return root
-      }
+      return try? circuitGroupRoot(for: commitments)
+    #else
+      return nil
     #endif
-    return deterministicGroupRoot(for: commitments)
+  }
+
+  /// Backward-compatible accessor. Falls back to the deterministic
+  /// non-circuit fingerprint only when the Semaphore library is missing,
+  /// and logs the substitution so verification failures don't look like
+  /// data tampering. New verification code paths should prefer
+  /// `bindingRootIfCircuitAvailable` and explicitly handle nil.
+  static func bindingRoot(for commitments: [String]) -> String {
+    if let root = bindingRootIfCircuitAvailable(for: commitments) {
+      return root
+    }
+    let fallback = deterministicGroupRoot(for: commitments)
+    ZKLog.info("bindingRoot: Semaphore unavailable; returning deterministic fingerprint (NOT a circuit root). callers comparing to proof envelopes will see a mismatch.")
+    return fallback
   }
 
   static func clampForBinding(_ input: String) -> String {
@@ -350,6 +478,7 @@ final class SemaphoreIdentityManager: ObservableObject {
 protocol IdentityBundleStore {
   func storeIdentity(_ bundle: SemaphoreIdentityManager.IdentityBundle) throws
   func loadIdentity() throws -> SemaphoreIdentityManager.IdentityBundle?
+  func deleteIdentity() throws
 }
 
 final class KeychainIdentityStore: IdentityBundleStore {
@@ -388,6 +517,19 @@ final class KeychainIdentityStore: IdentityBundleStore {
 
     try storeIdentity(legacy)
     return legacy
+  }
+
+  func deleteIdentity() throws {
+    for account in [tag, legacyTag] {
+      let query: [String: Any] = [
+        kSecClass as String: kSecClassGenericPassword,
+        kSecAttrAccount as String: account,
+      ]
+      let status = SecItemDelete(query as CFDictionary)
+      guard status == errSecSuccess || status == errSecItemNotFound else {
+        throw SemaphoreIdentityManager.Error.storageFailed("SecItemDelete: \(status)")
+      }
+    }
   }
 
   private func loadIdentity(for tag: String) throws -> SemaphoreIdentityManager.IdentityBundle? {

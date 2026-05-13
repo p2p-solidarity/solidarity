@@ -114,10 +114,14 @@ struct SolidarityApp: App {
           }
 
           if let token = dummyToken {
+            #if DEBUG
             print("[App] Simulator detected. Sealing fallback token: \(token)")
+            #endif
             let route = try await MessageService.shared.sealToken(deviceToken: token)
             SecureKeyManager.shared.mySealedRoute = route
+            #if DEBUG
             print("[App] Fallback sealing successful. Route: \(route)")
+            #endif
           }
         } catch {
           print("[App] Fallback sealing failed: \(error)")

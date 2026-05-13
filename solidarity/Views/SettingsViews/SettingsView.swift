@@ -3,100 +3,131 @@ import SwiftUI
 struct SettingsView: View {
   @EnvironmentObject private var theme: ThemeManager
   @ObservedObject private var devMode = DeveloperModeManager.shared
+  @Environment(\.dismiss) private var dismiss
   @State private var showingSolidarityQR = false
   @State private var showingDIDList = false
   @State private var showingOnboarding = false
 
+  private var versionString: String {
+    Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String
+      ?? String(localized: "Unknown")
+  }
+
   var body: some View {
-    NavigationStack {
-      Form {
-        Section("Account & Identity") {
+    ScrollView {
+      VStack(alignment: .leading, spacing: 24) {
+        SettingsBlockSection("Account & Identity") {
           NavigationLink {
             VCSettingsView()
           } label: {
-            Label("Identity Profile", systemImage: "person.text.rectangle")
+            SettingsBlockRow(icon: "person.text.rectangle", title: "Identity Profile")
           }
+          .buttonStyle(.plain)
 
           Button {
             showingSolidarityQR = true
           } label: {
-            Label("Solidarity QR", systemImage: "qrcode")
+            SettingsBlockRow(icon: "qrcode", title: "Solidarity QR")
           }
+          .buttonStyle(.plain)
 
           Button {
             showingDIDList = true
           } label: {
-            Label("View DIDs", systemImage: "key.viewfinder")
+            SettingsBlockRow(icon: "key.horizontal", title: "View DIDs")
           }
+          .buttonStyle(.plain)
         }
 
-        Section(
-          header: Text("QR Sharing"),
-          footer: Text("Controls which fields and proofs are included when generating your QR code.")
-        ) {
+        SettingsBlockSection("QR Sharing") {
           NavigationLink {
             ShareSettingsView()
           } label: {
-            Label("Share Settings", systemImage: "checklist")
+            SettingsBlockRow(icon: "square.and.arrow.up", title: "Share Settings")
           }
+          .buttonStyle(.plain)
         }
 
-        Section("Preferences") {
+        SettingsBlockSection("Preferences") {
           NavigationLink {
             SecuritySettingsView()
           } label: {
-            Label("Security & Keys", systemImage: "lock.shield")
+            SettingsBlockRow(icon: "lock.shield", title: "Security & Keys")
           }
+          .buttonStyle(.plain)
 
           NavigationLink {
             DataSyncSettingsView()
           } label: {
-            Label("Data & Sync", systemImage: "server.rack")
+            SettingsBlockRow(icon: "icloud", title: "Data & Sync")
           }
+          .buttonStyle(.plain)
 
           NavigationLink {
             AdvancedSettingsView()
           } label: {
-            Label("Advanced", systemImage: "gearshape.2")
+            SettingsBlockRow(icon: "slider.horizontal.3", title: "Advanced")
           }
+          .buttonStyle(.plain)
         }
 
-        Section("Guide") {
+        SettingsBlockSection("Guide") {
           Button {
             showingOnboarding = true
           } label: {
-            Label("Replay Onboarding", systemImage: "arrow.counterclockwise")
+            SettingsBlockRow(
+              icon: "arrow.counterclockwise",
+              title: "Replay Onboarding"
+            )
           }
+          .buttonStyle(.plain)
         }
 
-        Section("About") {
-          HStack {
-            Text("Version")
-            Spacer()
-            Text(Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? String(localized: "Unknown"))
-              .foregroundColor(.secondary)
-          }
+        VStack(alignment: .leading, spacing: 12) {
+          SettingsBlockSectionHeader(title: "About")
+
+          SettingsBlockInfoRow(
+            icon: "info.circle",
+            title: "Version",
+            value: versionString
+          )
           .contentShape(Rectangle())
           .onTapGesture {
             devMode.registerVersionTap()
           }
+          .padding(.horizontal, 16)
         }
       }
-      .navigationTitle("Settings")
-      .scrollContentBackground(.hidden)
-      .background(Color.Theme.pageBg.ignoresSafeArea())
-      .sheet(isPresented: $showingSolidarityQR) {
-        if let card = CardManager.shared.businessCards.first {
-          SolidarityQRView(businessCard: card)
+      .padding(.vertical, 24)
+      .padding(.bottom, 60)
+    }
+    .background(Color.Theme.pageBg.ignoresSafeArea())
+    .navigationTitle("Settings")
+    .navigationBarTitleDisplayMode(.inline)
+    .toolbarBackground(Color.Theme.pageBg, for: .navigationBar)
+    .toolbarBackground(.visible, for: .navigationBar)
+    .toolbar {
+      ToolbarItem(placement: .navigationBarLeading) {
+        Button {
+          dismiss()
+        } label: {
+          Image(systemName: "chevron.left")
+            .font(.system(size: 17, weight: .semibold))
+            .foregroundColor(Color.Theme.textPrimary)
         }
       }
-      .sheet(isPresented: $showingDIDList) {
-        DIDListSheet()
+    }
+    .sheet(isPresented: $showingSolidarityQR) {
+      if let card = CardManager.shared.businessCards.first {
+        SolidarityQRView(businessCard: card)
       }
-      .fullScreenCover(isPresented: $showingOnboarding) {
-        OnboardingReplayView {
-          showingOnboarding = false
-        }
+    }
+    .sheet(isPresented: $showingDIDList) {
+      DIDListSheet()
+    }
+    .fullScreenCover(isPresented: $showingOnboarding) {
+      OnboardingReplayView {
+        showingOnboarding = false
       }
     }
   }
@@ -110,51 +141,73 @@ private struct DIDListSheet: View {
 
   var body: some View {
     NavigationStack {
-      List {
-        if let activeDID = coordinator.state.currentProfile.activeDID {
-          Section("Active DID") {
-            didRow(did: activeDID.did)
-          }
-        }
-
-        Section(footer: Text("DID keys are stored in iCloud Keychain and shared across your signed-in devices.")) {
-          HStack {
-            Text("Key Storage")
-            Spacer()
-            Text("iCloud Keychain")
-              .foregroundColor(Color.Theme.textSecondary)
+      ScrollView {
+        VStack(spacing: 24) {
+          if let activeDID = coordinator.state.currentProfile.activeDID {
+            VStack(alignment: .leading, spacing: 8) {
+              SettingsBlockSectionHeader(title: "Active DID")
+              didCard(did: activeDID.did)
+                .padding(.horizontal, 16)
+            }
           }
 
-          HStack {
-            Text("Sync")
-            Spacer()
-            Text("Same Apple ID devices")
-              .foregroundColor(Color.Theme.textSecondary)
+          SettingsBlockSection(
+            "Key Storage",
+            footer: "DID keys are stored in iCloud Keychain and shared across your signed-in devices."
+          ) {
+            SettingsBlockInfoRow(
+              icon: "key.icloud",
+              title: "Storage",
+              value: "iCloud Keychain"
+            )
+            SettingsBlockInfoRow(
+              icon: "arrow.triangle.2.circlepath",
+              title: "Sync",
+              value: "Same Apple ID devices"
+            )
           }
         }
+        .padding(.vertical, 24)
       }
+      .background(Color.Theme.pageBg.ignoresSafeArea())
       .navigationTitle("Your DIDs")
       .navigationBarTitleDisplayMode(.inline)
       .toolbar {
-        ToolbarItem(placement: .navigationBarTrailing) {
-          Button("Done") { dismiss() }
-        }
+        SettingsBackToolbar { dismiss() }
       }
     }
   }
 
-  private func didRow(did: String) -> some View {
-    let method = did.hasPrefix("did:key") ? "did:key" : did.hasPrefix("did:ethr") ? "did:ethr" : "did:web"
-    return VStack(alignment: .leading, spacing: 4) {
-      Text(method.uppercased())
-        .font(.caption.weight(.bold))
-        .foregroundColor(Color.Theme.textSecondary)
+  private func didCard(did: String) -> some View {
+    let method = did.hasPrefix("did:key") ? "did:key" : "did:web"
+    return VStack(alignment: .leading, spacing: 8) {
+      HStack(spacing: 12) {
+        Image(systemName: "key.horizontal")
+          .font(.system(size: 14, weight: .regular))
+          .foregroundColor(Color.Theme.textPrimary)
+          .frame(width: 20, height: 20)
+
+        Text(method.uppercased())
+          .font(.system(size: 13, weight: .semibold, design: .monospaced))
+          .foregroundColor(Color.Theme.textSecondary)
+
+        Spacer()
+      }
+
       Text(did)
         .font(.system(size: 12, design: .monospaced))
         .foregroundColor(Color.Theme.textPrimary)
         .textSelection(.enabled)
+        .lineLimit(3)
+        .truncationMode(.middle)
     }
-    .padding(.vertical, 4)
+    .padding(.horizontal, 14)
+    .padding(.vertical, 12)
+    .frame(maxWidth: .infinity, alignment: .leading)
+    .background(
+      RoundedRectangle(cornerRadius: 12)
+        .fill(Color.Theme.mutedSurface)
+    )
   }
 }
 
@@ -182,6 +235,8 @@ private struct OnboardingReplayView: View {
 }
 
 #Preview {
-  SettingsView()
-    .environmentObject(ThemeManager.shared)
+  NavigationStack {
+    SettingsView()
+      .environmentObject(ThemeManager.shared)
+  }
 }

@@ -10,9 +10,7 @@ struct PrivacySettingsView: View {
         .navigationTitle("Privacy Settings")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
-          ToolbarItem(placement: .navigationBarTrailing) {
-            Button("Done") { dismiss() }
-          }
+          SettingsBackToolbar { dismiss() }
         }
     }
   }

@@ -76,7 +76,7 @@ final class EventRepository: ObservableObject {
     case .success(let encryptedData):
       let fileURL = getStorageURL().appendingPathComponent(fileName)
       do {
-        try encryptedData.write(to: fileURL)
+        try encryptedData.write(to: fileURL, options: [.atomic, .completeFileProtection])
         return .success(())
       } catch {
         return .failure(.storageError("Failed to write file: \(error.localizedDescription)"))

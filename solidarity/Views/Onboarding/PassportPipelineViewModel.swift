@@ -121,7 +121,11 @@ final class PassportPipelineViewModel: ObservableObject {
 
     func persist() {
         guard let proofResult else { return }
-        switch pipeline.persistPassportCredential(draft: draft, proof: proofResult) {
+        switch pipeline.persistPassportCredential(
+            draft: draft,
+            proof: proofResult,
+            chip: chipSnapshot
+        ) {
         case .success:
             break
         case .failure(let error):

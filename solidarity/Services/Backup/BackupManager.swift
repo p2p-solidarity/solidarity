@@ -29,13 +29,19 @@ final class BackupManager: ObservableObject {
   private let maxBackupCount = 5
   private let autoBackupInterval: TimeInterval = 24 * 60 * 60 // 24 hours
 
+  // 4-byte magic + 1-byte version. v1 = AES-GCM payload via EncryptionManager (master key).
+  private static let backupMagic: [UInt8] = [0x53, 0x4F, 0x4C, 0x42] // "SOLB"
+  private static let backupVersion: UInt8 = 0x01
+  private static let backupHeaderLength = 5
+
   private var iCloudContainerURL: URL? {
     FileManager.default.url(forUbiquityContainerIdentifier: nil)?.appendingPathComponent("Documents/AirMeishiBackup")
   }
 
   /// Local backup directory as fallback when iCloud is unavailable.
   private var localBackupURL: URL {
-    let docs = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first!
+    let docs = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first
+      ?? URL(fileURLWithPath: NSHomeDirectory()).appendingPathComponent("Documents")
     return docs.appendingPathComponent("AirMeishiBackup")
   }
 
@@ -47,6 +53,48 @@ final class BackupManager: ObservableObject {
   /// Whether iCloud is available for backup.
   var isICloudAvailable: Bool {
     iCloudContainerURL != nil
+  }
+
+  // MARK: - Probe (pre-onboarding)
+
+  /// Lightweight metadata about the latest backup found on disk.
+  struct BackupProbe: Sendable {
+    let timestamp: Date
+    let isICloud: Bool
+  }
+
+  /// Looks for an existing backup file in iCloud Drive (or local fallback) without
+  /// requiring the user's backup setting to be enabled. Used during onboarding to
+  /// detect prior data on a fresh device. File enumeration runs off the main thread
+  /// because querying `forUbiquityContainerIdentifier:` may block.
+  nonisolated static func probeLatestBackup() async -> BackupProbe? {
+    await Task.detached(priority: .userInitiated) {
+      let iCloudURL = FileManager.default.url(forUbiquityContainerIdentifier: nil)?
+        .appendingPathComponent("Documents/AirMeishiBackup")
+      let docs = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first
+        ?? URL(fileURLWithPath: NSHomeDirectory()).appendingPathComponent("Documents")
+      let localURL = docs.appendingPathComponent("AirMeishiBackup")
+      let url = iCloudURL ?? localURL
+      let isICloud = iCloudURL != nil
+
+      guard FileManager.default.fileExists(atPath: url.path) else { return nil }
+      guard let files = try? FileManager.default.contentsOfDirectory(
+        at: url,
+        includingPropertiesForKeys: [.creationDateKey]
+      ) else { return nil }
+
+      let candidates: [(URL, Date)] = files.compactMap { file in
+        let ext = file.pathExtension.lowercased()
+        guard file.lastPathComponent.hasPrefix("backup_"), ext == "solbk" || ext == "json" else {
+          return nil
+        }
+        let date = (try? file.resourceValues(forKeys: [.creationDateKey]).creationDate) ?? .distantPast
+        return (file, date)
+      }
+
+      guard let latest = candidates.max(by: { $0.1 < $1.1 }) else { return nil }
+      return BackupProbe(timestamp: latest.1, isICloud: isICloud)
+    }.value
   }
 
   func loadSettings() {
@@ -142,12 +190,26 @@ final class BackupManager: ObservableObject {
         storedCredentials: storedCredentials
       )
 
-      // Save to iCloud
-      let encoder = JSONEncoder()
-      encoder.outputFormatting = .prettyPrinted
-      let data = try encoder.encode(backupData)
-      let backupURL = containerURL.appendingPathComponent("backup_\(Date().timeIntervalSince1970).json")
-      try data.write(to: backupURL)
+      let encryptResult = EncryptionManager.shared.encrypt(backupData)
+      let ciphertext: Data
+      switch encryptResult {
+      case .success(let data): ciphertext = data
+      case .failure(let error): return .failure(error)
+      }
+
+      var payload = Data()
+      payload.append(contentsOf: Self.backupMagic)
+      payload.append(Self.backupVersion)
+      payload.append(ciphertext)
+
+      let backupURL = containerURL.appendingPathComponent("backup_\(Date().timeIntervalSince1970).solbk")
+      // Local-only files can lock down with completeFileProtection. iCloud-resident
+      // backups must remain readable while locked so CloudKit can sync them; the
+      // ciphertext is already encrypted at rest, so .atomic alone is sufficient.
+      let writeOptions: Data.WritingOptions = isICloudAvailable
+        ? [.atomic]
+        : [.atomic, .completeFileProtection]
+      try payload.write(to: backupURL, options: writeOptions)
 
       // Rotate old backups
       rotateBackups(in: containerURL)
@@ -172,19 +234,22 @@ final class BackupManager: ObservableObject {
         includingPropertiesForKeys: [.creationDateKey]
       )
 
-      // Find latest backup
-      guard
-        let latestBackup =
-          files
-          .filter({ $0.lastPathComponent.hasPrefix("backup_") && $0.pathExtension == "json" })
-          .sorted(by: { $0.lastPathComponent > $1.lastPathComponent })
-          .first
-      else {
+      // Find latest backup (encrypted .solbk preferred; .json indicates legacy plaintext)
+      let candidates = files
+        .filter { $0.lastPathComponent.hasPrefix("backup_") && (Self.isBackupFile($0)) }
+        .sorted { $0.lastPathComponent > $1.lastPathComponent }
+
+      guard let latestBackup = candidates.first else {
         return .failure(.notFound("No backup found"))
       }
 
-      let data = try Data(contentsOf: latestBackup)
-      let backupData = try JSONDecoder().decode(BackupData.self, from: data)
+      let raw = try Data(contentsOf: latestBackup)
+      let backupData: BackupData
+      do {
+        backupData = try Self.decodeBackup(raw)
+      } catch let error as CardError {
+        return .failure(error)
+      }
 
       var result = RestoreResult()
 
@@ -265,7 +330,7 @@ final class BackupManager: ObservableObject {
       )
 
       let backups = files
-        .filter { $0.lastPathComponent.hasPrefix("backup_") && $0.pathExtension == "json" }
+        .filter { $0.lastPathComponent.hasPrefix("backup_") && Self.isBackupFile($0) }
         .sorted { $0.lastPathComponent > $1.lastPathComponent } // newest first
 
       // Remove oldest backups beyond the limit
@@ -277,6 +342,38 @@ final class BackupManager: ObservableObject {
     } catch {
       print("[BackupManager] Rotation failed: \(error.localizedDescription)")
     }
+  }
+
+  // MARK: - Backup Encoding
+
+  private static func isBackupFile(_ url: URL) -> Bool {
+    let ext = url.pathExtension.lowercased()
+    return ext == "solbk" || ext == "json"
+  }
+
+  private static func decodeBackup(_ raw: Data) throws -> BackupData {
+    if raw.count >= backupHeaderLength,
+       Array(raw.prefix(backupMagic.count)) == backupMagic {
+      let version = raw[backupMagic.count]
+      guard version == backupVersion else {
+        throw CardError.storageError("Unsupported backup version: \(version)")
+      }
+      let ciphertext = raw.subdata(in: backupHeaderLength..<raw.count)
+      let result: CardResult<BackupData> = EncryptionManager.shared.decrypt(ciphertext, as: BackupData.self)
+      switch result {
+      case .success(let data): return data
+      case .failure(let error): throw error
+      }
+    }
+
+    // Legacy plaintext backup: refuse to silently load PII.
+    if raw.first == UInt8(ascii: "{") {
+      throw CardError.storageError(
+        "Legacy plaintext backup detected and refused. Re-create the backup to upgrade to the encrypted format."
+      )
+    }
+
+    throw CardError.storageError("Unrecognized backup format")
   }
 
   // MARK: - Backup Data Types

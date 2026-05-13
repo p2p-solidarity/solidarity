@@ -120,31 +120,29 @@ struct RadarMatchingView: View {
     let angle = (2 * .pi / Double(total)) * Double(index) - .pi / 2
     let x = cos(angle) * Double(radius)
     let y = sin(angle) * Double(radius)
+    let size: CGFloat = 36
 
-    return VStack(spacing: 2) {
-      ZStack {
-        Circle()
-          .fill(peerColor(peer))
-          .frame(width: 32, height: 32)
-        Text(peerInitials(peer))
-          .font(.system(size: 11, weight: .bold))
-          .foregroundColor(.white)
-      }
+    return ZStack {
+      Circle()
+        .fill(Color.Theme.searchBg)
+        .frame(width: size, height: size)
+      ImageProvider.animalImage(for: peer.cardAnimal)
+        .resizable()
+        .scaledToFill()
+        .frame(width: size, height: size)
+        .clipShape(Circle())
+      Circle()
+        .stroke(peerRingColor(peer), lineWidth: peer.status == .connected ? 2 : 1)
+        .frame(width: size, height: size)
     }
     .offset(x: CGFloat(x), y: CGFloat(y))
   }
 
-  private func peerColor(_ peer: ProximityPeer) -> Color {
+  private func peerRingColor(_ peer: ProximityPeer) -> Color {
     switch peer.status {
     case .connected: return Color.Theme.featureAccent
-    case .connecting: return .orange
-    case .disconnected: return Color.Theme.textTertiary
+    case .connecting: return Color.Theme.warning
+    case .disconnected: return Color.Theme.divider
     }
-  }
-
-  private func peerInitials(_ peer: ProximityPeer) -> String {
-    let name = peer.cardName ?? peer.name
-    let parts = name.components(separatedBy: " ")
-    return parts.compactMap { $0.first }.map { String($0) }.prefix(2).joined().uppercased()
   }
 }

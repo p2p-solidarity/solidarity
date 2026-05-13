@@ -22,6 +22,7 @@ struct NearbyPeersSheet: View {
   @State private var showingPeerDetail = false
   @State private var showingConnectPopup = false
   @State private var connectTarget: ProximityPeer?
+  @State private var sendingInProgress: UUID?
   @StateObject private var proximityManager = ProximityManager.shared
   @StateObject private var cardManager = CardManager.shared
 
@@ -33,6 +34,13 @@ struct NearbyPeersSheet: View {
         || peer.cardCompany?.localizedCaseInsensitiveContains(searchText) == true
         || peer.name.localizedCaseInsensitiveContains(searchText) == true
     }
+  }
+
+  /// Only worth surfacing the "View Latest Card" CTA once we've actually
+  /// received a card. The original sheet showed the button whenever any peer
+  /// was connected, which led to a confusing waiting-state sheet on tap.
+  private var hasReceivedCard: Bool {
+    proximityManager.receivedCards.last != nil
   }
 
   var body: some View {
@@ -50,13 +58,12 @@ struct NearbyPeersSheet: View {
           } else {
             peersGrid
           }
-          if connectedCount > 0 { lightningActionButton }
+          if hasReceivedCard { lightningActionButton }
 
-          // Soft status message
           if let message = proximityManager.matchingInfoMessage {
             Text(message)
-              .font(.footnote)
-              .foregroundColor(.secondary)
+              .font(.system(size: 12))
+              .foregroundColor(Color.Theme.textSecondary)
               .multilineTextAlignment(.center)
               .padding(.horizontal)
               .padding(.bottom, 8)
@@ -73,58 +80,74 @@ struct NearbyPeersSheet: View {
       }
       .navigationTitle("Lightening Peers")
       .navigationBarTitleDisplayMode(.inline)
-      .toolbar { ToolbarItem(placement: .navigationBarTrailing) { Button("Done") { dismiss() } } }
+      .toolbar { SettingsBackToolbar { dismiss() } }
       .onAppear { isLighteningAnimating = true }
       .sheet(isPresented: $showingPeerDetail) {
         if let peer = selectedPeer { PeerDetailSheet(peer: peer) }
       }
     }
+    .incomingInvitationOverlay()
   }
 
   private var lightningHeader: some View {
-    VStack(spacing: 16) {
-      HStack {
-        Image(systemName: "bolt.fill").foregroundColor(Color.Theme.featureAccent).font(.title)
-          .scaleEffect(isLighteningAnimating ? 1.3 : 1.0)
-          .animation(.easeInOut(duration: 0.5).repeatForever(autoreverses: true), value: isLighteningAnimating)
-        VStack(alignment: .leading, spacing: 2) {
-          Text("Lightening Peers").font(.title2).fontWeight(.bold).foregroundColor(Color.Theme.textPrimary)
-          Text("\(peers.count) nearby connections").font(.caption).foregroundColor(Color.Theme.textSecondary)
-        }
-        Spacer()
-        HStack(spacing: 8) {
-          Circle().fill(connectedCount > 0 ? .green : .orange).frame(width: 8, height: 8)
-            .scaleEffect(isLighteningAnimating ? 1.3 : 1.0)
-            .animation(.easeInOut(duration: 1.0).repeatForever(autoreverses: true), value: isLighteningAnimating)
-          Text("\(connectedCount) connected").font(.caption).foregroundColor(Color.Theme.textSecondary)
-        }
+    HStack(spacing: 10) {
+      Image(systemName: "bolt.fill")
+        .font(.system(size: 16, weight: .regular))
+        .foregroundColor(Color.Theme.terminalGreen)
+
+      Text("Nearby")
+        .font(.system(size: 14))
+        .foregroundColor(Color.Theme.textPrimary)
+
+      Spacer()
+
+      HStack(spacing: 6) {
+        Circle()
+          .fill(connectedCount > 0 ? Color.Theme.terminalGreen : Color.Theme.textTertiary)
+          .frame(width: 6, height: 6)
+        Text("\(connectedCount)/\(peers.count)")
+          .font(.system(size: 12))
+          .foregroundColor(Color.Theme.textSecondary)
       }
-      .padding(.horizontal)
+      .padding(.horizontal, 10)
+      .padding(.vertical, 4)
+      .background(
+        Capsule().fill(Color.Theme.mutedSurface)
+      )
     }
-    .padding(.vertical)
+    .padding(.horizontal, 16)
+    .padding(.top, 8)
+    .padding(.bottom, 12)
   }
 
   private var searchBar: some View {
     HStack {
-      Image(systemName: "magnifyingglass").foregroundColor(Color.Theme.featureAccent)
+      Image(systemName: "magnifyingglass")
+        .font(.system(size: 14))
+        .foregroundColor(Color.Theme.textSecondary)
       TextField("Search peers...", text: $searchText)
-        .textFieldStyle(PlainTextFieldStyle()).foregroundColor(Color.Theme.textPrimary)
+        .textFieldStyle(PlainTextFieldStyle())
+        .font(.system(size: 14))
+        .foregroundColor(Color.Theme.textPrimary)
       if !searchText.isEmpty {
-        Button("Clear") { searchText = "" }.font(.caption).foregroundColor(Color.Theme.textSecondary)
+        Button("Clear") { searchText = "" }
+          .font(.system(size: 12))
+          .foregroundColor(Color.Theme.textSecondary)
       }
     }
-    .padding(.horizontal, 16).padding(.vertical, 12)
+    .padding(.horizontal, 14)
+    .padding(.vertical, 12)
     .background(
       RoundedRectangle(cornerRadius: 12)
-        .fill(Color.Theme.searchBg)
-        .overlay(RoundedRectangle(cornerRadius: 12).stroke(Color.Theme.featureAccent.opacity(0.3), lineWidth: 1))
+        .fill(Color.Theme.mutedSurface)
     )
-    .padding(.horizontal)
+    .padding(.horizontal, 16)
+    .padding(.bottom, 12)
   }
 
   private var peersGrid: some View {
     ScrollView {
-      LazyVGrid(columns: [GridItem(.flexible(), spacing: 16), GridItem(.flexible(), spacing: 16)], spacing: 16) {
+      LazyVGrid(columns: [GridItem(.flexible(), spacing: 12), GridItem(.flexible(), spacing: 12)], spacing: 12) {
         ForEach(filteredPeers) { peer in
           LighteningPeerCard(
             peer: peer,
@@ -136,41 +159,85 @@ struct NearbyPeersSheet: View {
             onConnect: {
               connectTarget = peer
               showingConnectPopup = true
+            },
+            onSendCard: {
+              sendCard(to: peer)
+            },
+            onDisconnect: {
+              proximityManager.disconnectFromPeer(peer)
             }
           )
         }
       }
-      .padding()
-      .padding(.bottom, connectedCount > 0 ? 100 : 20)
+      .padding(.horizontal, 16)
+      .padding(.bottom, hasReceivedCard ? 100 : 20)
     }
   }
 
   private var emptyState: some View {
-    VStack(spacing: 20) {
-      ZStack {
-        Circle().stroke(Color.Theme.divider, lineWidth: 2).frame(width: 120, height: 120)
-          .scaleEffect(isLighteningAnimating ? 1.1 : 1.0)
-          .animation(.easeInOut(duration: 2.0).repeatForever(autoreverses: true), value: isLighteningAnimating)
-        Image(systemName: "person.2.fill").font(.system(size: 40)).foregroundColor(Color.Theme.textSecondary)
+    VStack {
+      Spacer(minLength: 12)
+      VStack(spacing: 12) {
+        Image(systemName: "person.2.fill")
+          .font(.system(size: 28, weight: .regular))
+          .foregroundColor(Color.Theme.textSecondary)
+          .frame(width: 56, height: 56)
+          .background(
+            Circle().fill(Color.Theme.pageBg)
+          )
+
+        VStack(spacing: 6) {
+          Text("No Lightening Peers Yet")
+            .font(.system(size: 16, weight: .semibold))
+            .foregroundColor(Color.Theme.textPrimary)
+          Text("Start matching to discover nearby professionals with lightning-fast connections")
+            .font(.system(size: 13))
+            .foregroundColor(Color.Theme.textSecondary)
+            .multilineTextAlignment(.center)
+            .padding(.horizontal, 16)
+        }
       }
-      VStack(spacing: 8) {
-        Text("No Lightening Peers Yet").font(.title2).fontWeight(.bold).foregroundColor(Color.Theme.textPrimary)
-        Text("Start matching to discover nearby professionals with lightning-fast connections")
-          .font(.body).foregroundColor(Color.Theme.textSecondary).multilineTextAlignment(.center).padding(.horizontal, 32)
-      }
+      .padding(.vertical, 28)
+      .frame(maxWidth: .infinity)
+      .background(
+        RoundedRectangle(cornerRadius: 12)
+          .fill(Color.Theme.mutedSurface)
+      )
+      .padding(.horizontal, 16)
+      Spacer()
     }
-    .frame(maxWidth: .infinity, maxHeight: .infinity)
   }
 
   private var emptySearchState: some View {
-    VStack(spacing: 20) {
-      Image(systemName: "magnifyingglass").font(.system(size: 40)).foregroundColor(Color.Theme.textSecondary)
-      VStack(spacing: 8) {
-        Text("No Results").font(.title2).fontWeight(.bold).foregroundColor(Color.Theme.textPrimary)
-        Text("No peers match your search").font(.body).foregroundColor(Color.Theme.textSecondary)
+    VStack {
+      Spacer(minLength: 12)
+      VStack(spacing: 12) {
+        Image(systemName: "magnifyingglass")
+          .font(.system(size: 28, weight: .regular))
+          .foregroundColor(Color.Theme.textSecondary)
+          .frame(width: 56, height: 56)
+          .background(
+            Circle().fill(Color.Theme.pageBg)
+          )
+
+        VStack(spacing: 6) {
+          Text("No Results")
+            .font(.system(size: 16, weight: .semibold))
+            .foregroundColor(Color.Theme.textPrimary)
+          Text("No peers match your search")
+            .font(.system(size: 13))
+            .foregroundColor(Color.Theme.textSecondary)
+        }
       }
+      .padding(.vertical, 28)
+      .frame(maxWidth: .infinity)
+      .background(
+        RoundedRectangle(cornerRadius: 12)
+          .fill(Color.Theme.mutedSurface)
+      )
+      .padding(.horizontal, 16)
+      Spacer()
     }
-    .frame(maxWidth: .infinity, maxHeight: .infinity)
   }
 
   private var lightningActionButton: some View {
@@ -178,22 +245,37 @@ struct NearbyPeersSheet: View {
       Spacer()
       Button(action: onViewLatestCard) {
         HStack(spacing: 12) {
-          Image(systemName: "bolt.fill").font(.title2)
-            .scaleEffect(isLighteningAnimating ? 1.3 : 1.0)
-            .animation(.easeInOut(duration: 0.3).repeatForever(autoreverses: true), value: isLighteningAnimating)
-          Text("View Latest Lightening Card").font(.headline).fontWeight(.bold)
+          Image(systemName: "bolt.fill")
+            .font(.system(size: 15, weight: .semibold))
+          Text("View Latest Lightening Card")
+            .font(.system(size: 15, weight: .semibold))
         }
-        .foregroundColor(.white)
         .frame(maxWidth: .infinity)
-        .padding(.vertical, 16)
-        .background(
-          RoundedRectangle(cornerRadius: 16)
-            .fill(LinearGradient(colors: [Color.Theme.featureAccent, .orange, Color.Theme.accentRose], startPoint: .leading, endPoint: .trailing))
-            .shadow(color: Color.Theme.featureAccent.opacity(0.4), radius: 10, x: 0, y: 0)
-        )
       }
-      .padding(.horizontal)
+      .buttonStyle(ThemedPrimaryButtonStyle())
+      .padding(.horizontal, 16)
       .padding(.bottom, 20)
+    }
+  }
+
+  private func sendCard(to peer: ProximityPeer) {
+    guard let card = cardManager.businessCards.first else {
+      ToastManager.shared.show(
+        title: String(localized: "No Card"),
+        message: String(localized: "Create an identity card in the Me tab first."),
+        type: .error
+      )
+      return
+    }
+    sendingInProgress = peer.id
+    proximityManager.sendCard(card, to: peer.peerID, sharingLevel: proximityManager.currentSharingLevel)
+    ToastManager.shared.show(
+      title: String(localized: "Card Sent"),
+      message: String(format: String(localized: "Sent your card to %@."), peer.cardName ?? peer.name),
+      type: .success
+    )
+    DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+      sendingInProgress = nil
     }
   }
 }

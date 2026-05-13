@@ -39,6 +39,9 @@ extension CloudKitGroupSyncManager {
     coverImage: Data?,
     userID: CKRecord.ID
   ) async throws -> GroupModel {
+    // public: the group record itself (name, description, coverImage, memberCount,
+    // merkleRoot) is intentionally discoverable so an invite token resolves without
+    // prior CKShare setup.
     let groupRecord = CKRecord(recordType: CloudKitRecordType.group)
     groupRecord["name"] = name
     groupRecord["description"] = description
@@ -103,6 +106,13 @@ extension CloudKitGroupSyncManager {
   }
 
   func updateGroup(_ group: GroupModel, name: String?, description: String?) async throws {
+    // Only the group owner may rewrite group display metadata.
+    guard let currentUser = currentUserRecordID,
+      group.ownerRecordID == currentUser.recordName
+    else {
+      throw CKError(.permissionFailure)
+    }
+
     let db = group.isPrivate ? privateDB : publicDB
     let recordID = CKRecord.ID(
       recordName: group.id,
@@ -128,6 +138,15 @@ extension CloudKitGroupSyncManager {
   }
 
   func deleteGroup(_ group: GroupModel) async throws {
+    // Only the group owner may delete the group record. CloudKit publicDB also
+    // enforces this at the record-write ACL layer, but we guard locally to avoid
+    // misleading "success" UI for non-owners.
+    guard let currentUser = currentUserRecordID,
+      group.ownerRecordID == currentUser.recordName
+    else {
+      throw CKError(.permissionFailure)
+    }
+
     let db = group.isPrivate ? privateDB : publicDB
     let recordID = CKRecord.ID(
       recordName: group.id,

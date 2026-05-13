@@ -7,6 +7,8 @@ enum SensitiveAction: String, CaseIterable, Identifiable {
   case exportGraph
   case rotateMasterKey
   case revealRecoveryBundle
+  case registerTrustAnchor
+  case deleteZKIdentity
 
   var id: String { rawValue }
 
@@ -22,6 +24,10 @@ enum SensitiveAction: String, CaseIterable, Identifiable {
       return "Authenticate to rotate your DID master key."
     case .revealRecoveryBundle:
       return "Authenticate to access social recovery data."
+    case .registerTrustAnchor:
+      return "Authenticate to add a trusted issuer."
+    case .deleteZKIdentity:
+      return "Authenticate to delete your zero-knowledge identity."
     }
   }
 }

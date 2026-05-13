@@ -48,7 +48,9 @@ class AppDelegate: UIResponder, UIApplicationDelegate, UNUserNotificationCenterD
   func application(_ application: UIApplication, didRegisterForRemoteNotificationsWithDeviceToken deviceToken: Data) {
     #if !targetEnvironment(simulator)
       let tokenString = deviceToken.map { String(format: "%02.2hhx", $0) }.joined()
+      #if DEBUG
       print("[AppDelegate] Device token: \(tokenString)")
+      #endif
       // Validate token format to ensure it's not a fallback or malformed
       guard !tokenString.isEmpty,
         !tokenString.contains("simulator_dummy_token"),
@@ -65,7 +67,9 @@ class AppDelegate: UIResponder, UIApplicationDelegate, UNUserNotificationCenterD
 
           // 3. Save Business Card (Update Local Storage)
           SecureKeyManager.shared.mySealedRoute = sealedRoute
+          #if DEBUG
           print("My Route Sealed: \(sealedRoute)")
+          #endif
 
           // UI can now display QR Code containing: Name + PubKey + SealedRoute
         } catch {

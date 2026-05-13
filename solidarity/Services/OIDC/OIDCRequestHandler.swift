@@ -45,29 +45,45 @@ final class OIDCRequestHandler {
 
     // MARK: - Public API
 
-    /// Parse incoming OIDC authorization request from URL
-    func parseAuthorizationRequest(from url: URL) -> OIDCAuthorizationRequest? {
+    /// Parse incoming OIDC authorization request from URL.
+    ///
+    /// PKCE is mandatory: every request MUST carry `code_challenge` plus
+    /// `code_challenge_method=S256`. Requests without PKCE are rejected
+    /// with `OIDCError.invalidRequest` so a client cannot opt out of
+    /// proof-of-possession at the token endpoint.
+    func parseAuthorizationRequest(from url: URL) throws -> OIDCAuthorizationRequest {
         guard let components = URLComponents(url: url, resolvingAgainstBaseURL: false),
               let queryItems = components.queryItems else {
-            return nil
+            throw OIDCError.invalidRequest("Malformed authorization URL")
         }
 
         guard let clientId = queryItems.first(where: { $0.name == "client_id" })?.value,
               !clientId.isEmpty else {
-            return nil
+            throw OIDCError.invalidRequest("Missing or empty client_id")
         }
 
         guard let redirectUri = queryItems.first(where: { $0.name == "redirect_uri" })?.value,
               !redirectUri.isEmpty else {
-            return nil
+            throw OIDCError.invalidRequest("Missing or empty redirect_uri")
         }
         guard let state = queryItems.first(where: { $0.name == "state" })?.value,
               !state.isEmpty else {
-            return nil
+            throw OIDCError.invalidRequest("Missing or empty state")
         }
         guard let nonce = queryItems.first(where: { $0.name == "nonce" })?.value,
               !nonce.isEmpty else {
-            return nil
+            throw OIDCError.invalidRequest("Missing or empty nonce")
+        }
+
+        // RFC 7636 + OAuth 2.1: require PKCE on every authorization request.
+        // We only honour S256 — `plain` is forbidden by OAuth 2.1 §4.1.1.
+        guard let codeChallenge = queryItems.first(where: { $0.name == "code_challenge" })?.value,
+              !codeChallenge.isEmpty else {
+            throw OIDCError.invalidRequest("PKCE required: code_challenge with S256 method")
+        }
+        let codeChallengeMethod = queryItems.first(where: { $0.name == "code_challenge_method" })?.value ?? ""
+        guard codeChallengeMethod.uppercased() == "S256" else {
+            throw OIDCError.invalidRequest("PKCE required: code_challenge with S256 method")
         }
 
         let scopeStrings = queryItems.first { $0.name == "scope" }?.value?
@@ -82,7 +98,9 @@ final class OIDCRequestHandler {
             nonce: nonce,
             scopes: scopes,
             presentationDefinition: nil,
-            requestedAt: Date()
+            requestedAt: Date(),
+            codeChallenge: codeChallenge,
+            codeChallengeMethod: "S256"
         )
 
         pendingRequestsLock.lock()
@@ -122,13 +140,14 @@ final class OIDCRequestHandler {
         )
     }
 
-    /// Handle user approval/denial
+    /// Handle user approval/denial.
+    ///
+    /// PKCE is captured on the request itself by `parseAuthorizationRequest`,
+    /// so the challenge cannot be supplied (or omitted) by the caller here.
     func handlePermissionDecision(
         request: OIDCAuthorizationRequest,
         decision: PermissionDecision,
-        grantedScopes: [OIDCScope] = [],
-        codeChallenge: String? = nil,
-        codeChallengeMethod: String? = nil
+        grantedScopes: [OIDCScope] = []
     ) async throws -> OIDCAuthorizationResponse {
         // This method is @MainActor + async — reads/writes to pendingRequests
         // are already serialized by the main actor, so no lock is needed here.
@@ -147,8 +166,8 @@ final class OIDCRequestHandler {
         let code = tokenService.generateAuthorizationCode(
             for: request,
             grantedScopes: grantedScopes,
-            codeChallenge: codeChallenge,
-            codeChallengeMethod: codeChallengeMethod
+            codeChallenge: request.codeChallenge,
+            codeChallengeMethod: request.codeChallengeMethod
         )
 
         return OIDCAuthorizationResponse(
@@ -158,13 +177,24 @@ final class OIDCRequestHandler {
         )
     }
 
-    /// Build the response URL
+    /// Build the response URL.
+    ///
+    /// `originalRedirectUri` MUST equal (under normalisation) the
+    /// `redirect_uri` on the parsed request. Honouring an arbitrary
+    /// caller-supplied URI here is an open-redirect vulnerability — an
+    /// attacker who can call this method could exfiltrate the
+    /// authorization code to a hostile origin even if they could not
+    /// influence the original request. The check is intentionally strict.
     func buildResponseURL(
         for response: OIDCAuthorizationResponse,
+        request: OIDCAuthorizationRequest,
         originalRedirectUri: String
-    ) -> URL? {
+    ) throws -> URL {
+        guard OIDCTokenService.redirectURIsMatch(originalRedirectUri, request.redirectUri) else {
+            throw OIDCError.invalidRequest("redirect_uri mismatch")
+        }
         guard var components = URLComponents(string: originalRedirectUri) else {
-            return nil
+            throw OIDCError.invalidRequest("Malformed redirect_uri")
         }
 
         var queryItems: [URLQueryItem] = [
@@ -176,7 +206,10 @@ final class OIDCRequestHandler {
         }
 
         components.queryItems = queryItems
-        return components.url
+        guard let url = components.url else {
+            throw OIDCError.invalidRequest("Failed to build redirect URL")
+        }
+        return url
     }
 
     /// Handle incoming data from external app (after authorization)
@@ -262,6 +295,19 @@ enum OIDCHandlerError: LocalizedError {
         case .clientNotFound: return "Client not found"
         case .importFailed: return "Failed to import data"
         case .unauthorized: return "Unauthorized"
+        }
+    }
+}
+
+/// Spec-aligned OIDC errors raised by `OIDCRequestHandler`. The associated
+/// message mirrors the `error_description` value the caller would surface
+/// to the relying party.
+enum OIDCError: LocalizedError, Equatable {
+    case invalidRequest(String)
+
+    var errorDescription: String? {
+        switch self {
+        case .invalidRequest(let message): return "invalid_request: \(message)"
         }
     }
 }

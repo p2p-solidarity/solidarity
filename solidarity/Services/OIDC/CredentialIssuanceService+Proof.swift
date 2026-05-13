@@ -78,6 +78,11 @@ extension CredentialIssuanceService {
     }
 
     let now = Int(Date().timeIntervalSince1970)
+    // OID4VCI §7.2.1 strongly recommends `exp` on proof JWTs so a leaked
+    // signed proof has a bounded reuse window. Five minutes covers
+    // realistic clock skew + retry latency without giving an attacker
+    // meaningful replay reach.
+    let proofLifetime = 300 // 5 minutes
     let header: [String: Any] = [
       "alg": "ES256",
       "typ": "openid4vci-proof+jwt",
@@ -88,6 +93,7 @@ extension CredentialIssuanceService {
       "iss": descriptor.did,
       "aud": issuerURL,
       "iat": now,
+      "exp": now + proofLifetime,
     ]
     if let nonce = cNonce {
       payload["nonce"] = nonce

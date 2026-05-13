@@ -39,209 +39,162 @@ struct GroupManagementView: View {
       .ignoresSafeArea()
 
       VStack(spacing: 0) {
-        // Header Section
-        VStack(alignment: .leading, spacing: 16) {
-          HStack(spacing: 16) {
-            // Simple icon
-            ZStack {
-              RoundedRectangle(cornerRadius: 16)
-                .fill(Color.Theme.divider)
-                .frame(width: 50, height: 50)
-
+        ScrollView {
+          VStack(alignment: .leading, spacing: 24) {
+            HStack(spacing: 12) {
               Image(systemName: "person.3.sequence.fill")
-                .font(.system(size: 24))
+                .font(.system(size: 18, weight: .regular))
                 .foregroundColor(Color.Theme.textPrimary)
-            }
+                .frame(width: 32)
 
-            VStack(alignment: .leading, spacing: 6) {
-              Text("Group Management")
-                .font(.system(size: 28, weight: .bold, design: .monospaced))
-                .foregroundColor(Color.Theme.textPrimary)
+              VStack(alignment: .leading, spacing: 4) {
+                Text("Group Management")
+                  .font(.system(size: 18, weight: .semibold))
+                  .foregroundColor(Color.Theme.textPrimary)
 
-              HStack {
-                Text("Manage your groups and members")
-                  .font(.system(size: 14))
-                  .foregroundColor(Color.Theme.textSecondary)
-
-                Spacer()
-
-                // Sync Status Indicator
                 switch groupManager.syncStatus {
                 case .idle:
                   EmptyView()
                 case .syncing:
                   HStack(spacing: 4) {
                     ProgressView()
-                      .scaleEffect(0.6)
+                      .scaleEffect(0.5)
                     Text("Syncing...")
-                      .font(.system(size: 12, design: .monospaced))
+                      .font(.system(size: 12))
                       .foregroundColor(Color.Theme.textSecondary)
                   }
                 case .error(let error):
-                  Image(systemName: "exclamationmark.triangle.fill")
-                    .foregroundColor(Color.Theme.destructive)
-                    .onTapGesture {
-                      print("Sync Error: \(error)")
-                    }
+                  HStack(spacing: 4) {
+                    Image(systemName: "exclamationmark.triangle.fill")
+                      .font(.system(size: 11))
+                      .foregroundColor(Color.Theme.destructive)
+                    Text("Sync error")
+                      .font(.system(size: 12))
+                      .foregroundColor(Color.Theme.destructive)
+                  }
+                  .onTapGesture {
+                    print("Sync Error: \(error)")
+                  }
                 case .offline:
-                  Image(systemName: "wifi.slash")
-                    .foregroundColor(Color.Theme.textTertiary)
+                  HStack(spacing: 4) {
+                    Image(systemName: "wifi.slash")
+                      .font(.system(size: 11))
+                      .foregroundColor(Color.Theme.textTertiary)
+                    Text("Offline")
+                      .font(.system(size: 12))
+                      .foregroundColor(Color.Theme.textTertiary)
+                  }
                 }
               }
-            }
 
-            Spacer()
-          }
-          .padding(20)
-        }
-        .background(
-          RoundedRectangle(cornerRadius: 20)
-            .fill(Color.Theme.searchBg)
-            .overlay(
-              RoundedRectangle(cornerRadius: 20)
-                .stroke(Color.Theme.divider, lineWidth: 1)
+              Spacer()
+            }
+            .padding(.horizontal, 14)
+            .padding(.vertical, 14)
+            .background(
+              RoundedRectangle(cornerRadius: 12)
+                .fill(Color.Theme.mutedSurface)
             )
-        )
-        .adaptivePadding(horizontal: 20, vertical: 0)
-        .padding(.top, 20)
-        .padding(.bottom, 24)
+            .padding(.horizontal, 16)
+            .padding(.top, 8)
 
-        // Authentication Warning
-        if !groupManager.isAuthenticated {
-          HStack(spacing: 12) {
-            Image(systemName: "exclamationmark.triangle.fill")
-              .foregroundColor(Color.Theme.dustyMauve)
-
-            VStack(alignment: .leading, spacing: 2) {
-              Text("iCloud Sign-In Required")
-                .font(.system(size: 14))
-                .fontWeight(.semibold)
-                .foregroundColor(Color.Theme.textPrimary)
-
-              if case .couldNotDetermine = groupManager.accountStatus {
-                Text("Could not determine iCloud status. Please check Settings.")
-                  .font(.system(size: 12, design: .monospaced))
-                  .foregroundColor(Color.Theme.textSecondary)
-              } else if case .restricted = groupManager.accountStatus {
-                Text("iCloud access is restricted.")
-                  .font(.system(size: 12, design: .monospaced))
-                  .foregroundColor(Color.Theme.textSecondary)
-              } else if case .noAccount = groupManager.accountStatus {
-                Text("Please sign in to iCloud in Settings.")
-                  .font(.system(size: 12, design: .monospaced))
-                  .foregroundColor(Color.Theme.textSecondary)
-              } else {
-                Text("Please sign in to iCloud in Settings to use group features.")
-                  .font(.system(size: 12, design: .monospaced))
-                  .foregroundColor(Color.Theme.textSecondary)
-              }
-
-              Button(action: {
-                Task {
-                  await groupManager.checkAccountStatus()
-                }
-              }) {
-                Text("Retry")
-                  .font(.system(size: 12, design: .monospaced))
-                  .fontWeight(.bold)
+            if !groupManager.isAuthenticated {
+              HStack(spacing: 12) {
+                Image(systemName: "exclamationmark.triangle.fill")
                   .foregroundColor(Color.Theme.dustyMauve)
-                  .padding(.top, 2)
+
+                VStack(alignment: .leading, spacing: 2) {
+                  Text("iCloud Sign-In Required")
+                    .font(.system(size: 14))
+                    .fontWeight(.semibold)
+                    .foregroundColor(Color.Theme.textPrimary)
+
+                  if case .couldNotDetermine = groupManager.accountStatus {
+                    Text("Could not determine iCloud status. Please check Settings.")
+                      .font(.system(size: 12))
+                      .foregroundColor(Color.Theme.textSecondary)
+                  } else if case .restricted = groupManager.accountStatus {
+                    Text("iCloud access is restricted.")
+                      .font(.system(size: 12))
+                      .foregroundColor(Color.Theme.textSecondary)
+                  } else if case .noAccount = groupManager.accountStatus {
+                    Text("Please sign in to iCloud in Settings.")
+                      .font(.system(size: 12))
+                      .foregroundColor(Color.Theme.textSecondary)
+                  } else {
+                    Text("Please sign in to iCloud in Settings to use group features.")
+                      .font(.system(size: 12))
+                      .foregroundColor(Color.Theme.textSecondary)
+                  }
+
+                  Button(action: {
+                    Task {
+                      await groupManager.checkAccountStatus()
+                    }
+                  }) {
+                    Text("Retry")
+                      .font(.system(size: 12))
+                      .fontWeight(.semibold)
+                      .foregroundColor(Color.Theme.dustyMauve)
+                      .padding(.top, 2)
+                  }
+                }
+
+                Spacer()
               }
+              .padding(14)
+              .background(
+                RoundedRectangle(cornerRadius: 12)
+                  .fill(Color.Theme.dustyMauve.opacity(0.12))
+              )
+              .padding(.horizontal, 16)
             }
 
-            Spacer()
-          }
-          .padding(16)
-          .background(Color.Theme.dustyMauve.opacity(0.15))
-          .cornerRadius(12)
-          .overlay(
-            RoundedRectangle(cornerRadius: 12)
-              .stroke(Color.Theme.dustyMauve.opacity(0.3), lineWidth: 1)
-          )
-          .adaptivePadding(horizontal: 20, vertical: 0)
-          .padding(.bottom, 16)
-        }
-
-        // Main Actions Section with enhanced cards
-        ScrollView {
-          VStack(alignment: .leading, spacing: 24) {
-            // Group Actions
-            VStack(alignment: .leading, spacing: 16) {
-              Text("Actions")
-                .font(.system(size: 12, weight: .bold, design: .monospaced))
-                .foregroundColor(Color.Theme.textPrimary)
-                .padding(.horizontal, 20)
-                .padding(.top, 8)
-
-              VStack(spacing: 1) {
-                SimpleNodeRow(
+            SettingsBlockSection("Actions") {
+              Button { activeSheet = .create } label: {
+                SettingsBlockRow(
                   icon: "plus.circle.fill",
                   title: String(localized: "Create Group"),
                   subtitle: String(localized: "Create a new CloudKit group")
                 )
-                { activeSheet = .create }
-                SimpleNodeRow(
+              }
+              .buttonStyle(.plain)
+
+              Button { activeSheet = .invite } label: {
+                SettingsBlockRow(
                   icon: "link",
                   title: String(localized: "Invite via Link"),
                   subtitle: String(localized: "Generate invite link for members")
-                ) {
-                  activeSheet = .invite
-                }
-              }
-            }
-            .padding(4)
-            .background(
-              RoundedRectangle(cornerRadius: 16)
-                .fill(Color.Theme.searchBg)
-                .overlay(
-                  RoundedRectangle(cornerRadius: 16)
-                    .stroke(Color.Theme.divider, lineWidth: 1)
                 )
-            )
-            .adaptivePadding(horizontal: 20, vertical: 0)
+              }
+              .buttonStyle(.plain)
+            }
 
-            // Your Groups List (Categorized)
             YourGroupsSectionView(
               groupManager: groupManager,
               selectedGroupToDelete: $selectedGroupToDelete,
               showDeleteConfirm: $showDeleteConfirm
             )
 
-            // Legal & Privacy
-            VStack(alignment: .leading, spacing: 16) {
-              Text("Legal & Privacy")
-                .font(.system(size: 12, weight: .bold, design: .monospaced))
-                .foregroundColor(Color.Theme.textPrimary)
-                .padding(.horizontal, 20)
-                .padding(.top, 8)
-
-              VStack(spacing: 1) {
-                SimpleNodeRow(
+            SettingsBlockSection("Legal & Privacy") {
+              Button { activeSheet = .privacy } label: {
+                SettingsBlockRow(
                   icon: "hand.raised",
                   title: String(localized: "Privacy Policy"),
                   subtitle: String(localized: "View our privacy policy")
-                ) {
-                  activeSheet = .privacy
-                }
-                SimpleNodeRow(
+                )
+              }
+              .buttonStyle(.plain)
+
+              Button { activeSheet = .terms } label: {
+                SettingsBlockRow(
                   icon: "doc.text",
                   title: String(localized: "Terms of Service"),
                   subtitle: String(localized: "View terms of service")
-                ) {
-                  activeSheet = .terms
-                }
-              }
-            }
-            .padding(4)
-            .background(
-              RoundedRectangle(cornerRadius: 16)
-                .fill(Color.Theme.searchBg)
-                .overlay(
-                  RoundedRectangle(cornerRadius: 16)
-                    .stroke(Color.Theme.divider, lineWidth: 1)
                 )
-            )
-            .adaptivePadding(horizontal: 20, vertical: 0)
+              }
+              .buttonStyle(.plain)
+            }
             .padding(.bottom, 40)
           }
         }
@@ -253,27 +206,20 @@ struct GroupManagementView: View {
       .safeAreaInset(edge: .top) {
         HStack {
           Button(action: { dismiss() }) {
-            HStack(spacing: 8) {
-              Image(systemName: "xmark.circle.fill")
+            HStack(spacing: 4) {
+              Image(systemName: "chevron.left")
+                .font(.system(size: 16, weight: .semibold))
               Text("Done")
-                .fontWeight(.semibold)
+                .font(.system(size: 16))
             }
             .foregroundColor(Color.Theme.textPrimary)
-            .padding(.horizontal, 20)
-            .padding(.vertical, 12)
-            .background(
-              Capsule()
-                .fill(Color.Theme.searchBg)
-                .background(
-                  Capsule()
-                    .stroke(Color.Theme.divider, lineWidth: 1)
-                )
-            )
+            .padding(.horizontal, 4)
+            .padding(.vertical, 8)
           }
           Spacer()
         }
-        .padding(.horizontal, 20)
-        .padding(.vertical, 8)
+        .padding(.horizontal, 16)
+        .padding(.vertical, 4)
       }
     }
     .navigationBarHidden(true)
@@ -328,32 +274,18 @@ struct GroupManagementView: View {
   }
 
   private var privacySheet: some View {
-    NavigationStack {
-      ScrollView {
-        Text("Privacy Policy Content...")
-          .padding()
-      }
-      .navigationTitle("Privacy Policy")
-      .toolbar {
-        ToolbarItem(placement: .navigationBarTrailing) {
-          Button("Done") { activeSheet = nil }
-        }
-      }
-    }
+    MarkdownDocumentView(
+      title: String(localized: "Privacy Policy"),
+      resourceName: "PRIVACY_POLICY",
+      onDismiss: { activeSheet = nil }
+    )
   }
 
   private var termsSheet: some View {
-    NavigationStack {
-      ScrollView {
-        Text("Terms of Service Content...")
-          .padding()
-      }
-      .navigationTitle("Terms of Service")
-      .toolbar {
-        ToolbarItem(placement: .navigationBarTrailing) {
-          Button("Done") { activeSheet = nil }
-        }
-      }
-    }
+    MarkdownDocumentView(
+      title: String(localized: "Terms of Service"),
+      resourceName: "TERMS_OF_SERVICE",
+      onDismiss: { activeSheet = nil }
+    )
   }
 }

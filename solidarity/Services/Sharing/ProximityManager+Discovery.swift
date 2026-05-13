@@ -62,7 +62,11 @@ extension ProximityManager {
     isAdvertising = true
     updateConnectionStatus()
 
+    #if DEBUG
     print("Started advertising business card: \(card.name)")
+    #else
+    print("Started advertising business card")
+    #endif
   }
 
   /// Start advertising identity-only (no business card), so peers can still find and invite
@@ -204,6 +208,12 @@ extension ProximityManager {
       info["company"] = company
     }
 
+    // Broadcast the avatar so peers can render the same animal everywhere
+    // (radar, lightning peer card, invite popups). Falls back to a stable
+    // default seeded on the card id for cards that haven't picked one yet.
+    let animal = card.animal ?? AnimalCharacter.default(forId: card.id.uuidString)
+    info["animal"] = animal.rawValue
+
     // Legacy key retained for backward compatibility. Discovery semantics are field-based.
     info["level"] = SharingLevel.public.rawValue
     info["timestamp"] = String(Int(Date().timeIntervalSince1970))
@@ -249,6 +259,11 @@ extension ProximityManager: MCNearbyServiceAdvertiserDelegate {
       self.pendingInvitationHandler = invitationHandler
       self.pendingInvitation = PendingInvitation(peerID: peerID, receivedAt: Date())
       self.isPresentingInvitation = false
+      // Fire haptic exactly once per state transition. The overlay is
+      // mounted at multiple points (root tab, NearbyPeersSheet) so any
+      // .onAppear-based haptic would double-fire when a sheet is open
+      // — emit it from the single publish site instead.
+      HapticFeedbackManager.shared.heavyImpact()
       print("Received invitation from \(peerID.displayName)")
     }
   }

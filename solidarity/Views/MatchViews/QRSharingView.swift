@@ -133,21 +133,29 @@ struct QRSharingView: View {
   }
 
   private func refreshQRCode() {
-    let payload = universalPayload()
-    let result = qrCodeManager.generateQRCode(from: payload)
-
-    switch result {
-    case .success(let image):
-      generatedQRImage = image
+    // Build a spec-compliant OID4VP authorization request via OIDCService.
+    // Earlier versions hand-rolled `openid4vp://present?claim=…&nonce=…`,
+    // which omitted `client_id` / `state` / `response_uri` — the holder's
+    // parser (OIDCService.parseRequest) rejected it as
+    // "Missing or empty client_id" and the present-proof button locked into
+    // "Request invalid". The shared generator emits all required params
+    // (client_id = our DID, response_type=vp_token, response_mode,
+    // response_uri, nonce, state, presentation_definition).
+    switch OIDCService.shared.generateRequest() {
     case .failure(let error):
+      generatedQRImage = nil
       alertMessage = error.localizedDescription
       showingAlert = true
+      return
+    case .success(let url):
+      switch qrCodeManager.generateQRCode(from: url.absoluteString) {
+      case .success(let image):
+        generatedQRImage = image
+      case .failure(let error):
+        alertMessage = error.localizedDescription
+        showingAlert = true
+      }
     }
-  }
-
-  private func universalPayload() -> String {
-    let nonce = UUID().uuidString.replacingOccurrences(of: "-", with: "")
-    return "openid4vp://present?claim=profile_card&nonce=\(nonce)"
   }
 }
 

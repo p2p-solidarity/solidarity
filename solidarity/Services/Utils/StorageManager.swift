@@ -128,7 +128,7 @@ class StorageManager {
       let fileURL = getStorageURL().appendingPathComponent(fileName)
 
       do {
-        try encryptedData.write(to: fileURL)
+        try encryptedData.write(to: fileURL, options: [.atomic, .completeFileProtection])
         return .success(())
       } catch {
         return .failure(.storageError("Failed to write file: \(error.localizedDescription)"))
@@ -193,10 +193,21 @@ class StorageManager {
 
     if !fileManager.fileExists(atPath: storageURL.path) {
       do {
-        try fileManager.createDirectory(at: storageURL, withIntermediateDirectories: true)
+        try fileManager.createDirectory(
+          at: storageURL,
+          withIntermediateDirectories: true,
+          attributes: [.protectionKey: FileProtectionType.complete]
+        )
       } catch {
         print("Failed to create storage directory: \(error.localizedDescription)")
       }
     }
+
+    // Re-apply protection on every launch in case the attribute was lost
+    // (e.g. on directories created by older builds before this hardening).
+    try? fileManager.setAttributes(
+      [.protectionKey: FileProtectionType.complete],
+      ofItemAtPath: storageURL.path
+    )
   }
 }

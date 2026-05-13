@@ -2,6 +2,46 @@ import XCTest
 @testable import solidarity
 
 final class QRCodeScanServiceTests: XCTestCase {
+  func testChunkedVPTokenAcceptsChunksStartingFromThirdFrame() throws {
+    let vpPayload = """
+    {"@context":["https://www.w3.org/2018/credentials/v1"],"holder":"did:key:z6MkTest","nonce":"n-123","type":["VerifiablePresentation"],"verifiableCredential":[{"proof":"test"}]}
+    """
+    let frames = try QRCodeChunkingService.makeFrames(for: vpPayload, chunkDataBytes: 80)
+    XCTAssertGreaterThanOrEqual(frames.count, 3)
+
+    let service = QRCodeScanService()
+    var progressEvents: [QRCodeChunkProgress] = []
+    var outcomeResult: Result<QRCodeScanService.ScanOutcome, CardError>?
+
+    service.onChunkProgress = { progressEvents.append($0) }
+    service.onScanOutcome = { result in outcomeResult = result }
+
+    let delayedIndex = 1
+    let firstScannedIndex = 2
+    let interimOrder = [firstScannedIndex] + frames.indices.filter {
+      $0 != firstScannedIndex && $0 != delayedIndex
+    }
+
+    for index in interimOrder {
+      let disposition = service.process(scannedString: frames[index])
+      XCTAssertEqual(disposition, .awaitingMoreChunks)
+    }
+
+    XCTAssertNil(outcomeResult)
+    XCTAssertEqual(progressEvents.last?.receivedCount, frames.count - 1)
+    XCTAssertEqual(progressEvents.last?.totalCount, frames.count)
+
+    let finalDisposition = service.process(scannedString: frames[delayedIndex])
+    XCTAssertEqual(finalDisposition, .handled)
+
+    guard case .success(let outcome) = outcomeResult else {
+      XCTFail("Expected successful scan outcome")
+      return
+    }
+    XCTAssertEqual(outcome.route, .vpToken(vpPayload))
+    XCTAssertEqual(progressEvents.last?.receivedCount, frames.count)
+  }
+
   func testSiopRequestRoutesToReviewWithoutImmediateCredentialDispatch() {
     let card = BusinessCard(name: "SIOP Test \(UUID().uuidString)")
     _ = CardManager.shared.createCard(card)

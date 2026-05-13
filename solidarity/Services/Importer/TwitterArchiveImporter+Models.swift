@@ -107,6 +107,24 @@ struct TweetStatistics {
     var tweetsByMonth: [(String, Int)] = []
 }
 
+// MARK: - Import Limits
+
+/// Hard caps applied during Twitter archive import to prevent OOM / memory bombs.
+/// Values picked for an iPhone with 4–6 GB RAM where we keep the entire decoded
+/// archive in memory; if a future redesign streams to disk these can be raised.
+enum TwitterImportLimits {
+    /// Max accepted size for any single `*.js` file in the archive.
+    static let maxFileSizeBytes: Int64 = 8 * 1024 * 1024
+    /// Max accepted total bytes summed across all files we read.
+    static let maxTotalSizeBytes: Int64 = 64 * 1024 * 1024
+    /// Max accepted record count per array (tweets, likes, followers, …).
+    static let maxRecordsPerArray = 100_000
+    /// Max bytes kept for short string fields (username, display name, urls, …).
+    static let maxShortFieldBytes = 4 * 1024
+    /// Max bytes kept for long-form text (tweet/DM body).
+    static let maxLongFieldBytes = 16 * 1024
+}
+
 // MARK: - Errors
 
 enum TwitterImportError: LocalizedError {
@@ -114,6 +132,8 @@ enum TwitterImportError: LocalizedError {
     case missingFile(String)
     case invalidDataFormat
     case parsingFailed(String)
+    case fileTooLarge(name: String, sizeBytes: Int64, limitBytes: Int64)
+    case archiveTooLarge(totalBytes: Int64, limitBytes: Int64)
 
     var errorDescription: String? {
         switch self {
@@ -125,6 +145,10 @@ enum TwitterImportError: LocalizedError {
             return "Could not parse Twitter data format"
         case .parsingFailed(let reason):
             return "Parsing failed: \(reason)"
+        case .fileTooLarge(let name, let sizeBytes, let limitBytes):
+            return "Archive file '\(name)' is \(sizeBytes) bytes, exceeds limit \(limitBytes)"
+        case .archiveTooLarge(let totalBytes, let limitBytes):
+            return "Archive total size \(totalBytes) bytes exceeds limit \(limitBytes)"
         }
     }
 }

@@ -49,4 +49,14 @@ enum AnimalCharacter: String, Codable, CaseIterable, Identifiable, Equatable {
     case .dove: return "dove"
     }
   }
+
+  /// Stable, content-based default animal derived from a seed (e.g. contact id).
+  /// Uses UTF-8 byte sum so the mapping survives process restarts, unlike
+  /// `String.hashValue` which is randomised per run.
+  static func `default`(forId seed: String) -> AnimalCharacter {
+    let all = AnimalCharacter.allCases
+    guard !all.isEmpty else { return .dog }
+    let sum = seed.utf8.reduce(0) { $0 &+ Int($1) }
+    return all[abs(sum) % all.count]
+  }
 }

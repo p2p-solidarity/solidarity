@@ -76,7 +76,9 @@ final class ContactVCVerifiedDataTests: XCTestCase {
     XCTAssertEqual(reconstructed.name, "Frank")
     XCTAssertEqual(reconstructed.title, "Designer")
     XCTAssertEqual(reconstructed.email, "frank@designco.com")
-    XCTAssertEqual(reconstructed.skills.first?.name, "Figma")
+    // v2 VCs intentionally strip skills (unverifiable, not VC-eligible).
+    // The encoding side documents this in BusinessCardCredentialEnvelope.
+    XCTAssertTrue(reconstructed.skills.isEmpty)
   }
 
   // MARK: - NEW: verifiedFields support on BusinessCard
@@ -127,13 +129,15 @@ final class ContactVCVerifiedDataTests: XCTestCase {
     XCTAssertNil(filtered.email)
   }
 
-  /// VCService.IssueOptions now has verifiedOnly flag
+  /// VCService.IssueOptions now has verifiedOnly flag. The default flipped
+  /// to `true` so newly-issued VCs only carry attested fields by default
+  /// — callers must opt out explicitly to include unverified data.
   func testIssueOptionsHasVerifiedOnlyFlag() throws {
     var options = VCService.IssueOptions()
-    XCTAssertFalse(options.verifiedOnly, "Default should be false for backward compat")
+    XCTAssertTrue(options.verifiedOnly, "Default flipped to true for safer issuance")
 
-    options.verifiedOnly = true
-    XCTAssertTrue(options.verifiedOnly)
+    options.verifiedOnly = false
+    XCTAssertFalse(options.verifiedOnly)
   }
 
   /// VC payload with verifiedOnly=true should exclude unverified fields

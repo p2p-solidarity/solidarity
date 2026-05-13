@@ -129,6 +129,12 @@ struct ScanTabView: View {
                 credentialID: credentialId.uuidString
               )
             }
+            if let declared = qrManager.lastDeclaredProofClaims {
+              IdentityDataStore.shared.setDeclaredProofClaims(
+                contactID: merged.id.uuidString,
+                claims: declared
+              )
+            }
             ToastManager.shared.show(
               title: String(localized: "Contact Updated"),
               message: String(localized: "Merged and saved to People."),
@@ -154,11 +160,15 @@ struct ScanTabView: View {
 
   private var footer: some View {
     VStack(spacing: 8) {
-      SolidarityPlaceholderCard(
-        screenID: .scanRouter,
-        title: String(localized: "Protocol Router"),
-        subtitle: String(localized: "Supports OID4VP request, vp_token verify, credential offers, and SIOPv2.")
-      )
+      if let progress = qrManager.chunkScanProgress {
+        ChunkScanProgressView(progress: progress)
+      } else {
+        SolidarityPlaceholderCard(
+          screenID: .scanRouter,
+          title: String(localized: "Protocol Router"),
+          subtitle: String(localized: "Supports OID4VP request, vp_token verify, credential offers, and SIOPv2.")
+        )
+      }
 
       if qrManager.isScanning {
         HStack(spacing: 6) {
@@ -272,6 +282,16 @@ struct ScanTabView: View {
           credentialID: credentialId.uuidString
         )
       }
+      // Persist declared proof claims separately from the legacy Contact
+      // round-trip — `Contact` (Codable) doesn't carry them. Skip on nil
+      // (scan path didn't parse a claims field, e.g. plaintext) so we
+      // don't wipe an earlier scan's declarations.
+      if let declared = qrManager.lastDeclaredProofClaims {
+        IdentityDataStore.shared.setDeclaredProofClaims(
+          contactID: saved.id.uuidString,
+          claims: declared
+        )
+      }
       showingScannedCard = false
       ToastManager.shared.show(
         title: String(localized: "Saved to People"),
@@ -299,5 +319,44 @@ struct ScanTabView: View {
     guard !qrManager.isScanning else { return }
     guard AVCaptureDevice.authorizationStatus(for: .video) == .authorized else { return }
     startScanning()
+  }
+}
+
+private struct ChunkScanProgressView: View {
+  let progress: QRCodeChunkProgress
+
+  var body: some View {
+    VStack(spacing: 10) {
+      HStack {
+        Image(systemName: "qrcode.viewfinder")
+          .foregroundStyle(Color.Theme.terminalGreen)
+        Text("Receiving proof")
+          .font(.system(size: 14, weight: .semibold))
+          .foregroundStyle(Color.Theme.textPrimary)
+        Spacer()
+        Text("\(progress.receivedCount)/\(progress.totalCount)")
+          .font(.system(size: 12, weight: .medium))
+          .foregroundStyle(Color.Theme.textSecondary)
+      }
+
+      ProgressView(value: progress.fractionCompleted)
+        .tint(Color.Theme.terminalGreen)
+
+      Text("Keep scanning the changing QR until all chunks are collected.")
+        .font(.system(size: 12))
+        .foregroundStyle(Color.Theme.textSecondary)
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+    .padding(14)
+    .background(
+      RoundedRectangle(cornerRadius: 8)
+        .fill(Color.Theme.cardBg.opacity(0.92))
+    )
+    .overlay(
+      RoundedRectangle(cornerRadius: 8)
+        .stroke(Color.Theme.terminalGreen.opacity(0.45), lineWidth: 1)
+    )
+    .accessibilityElement(children: .combine)
+    .accessibilityLabel("Receiving proof \(progress.receivedCount) of \(progress.totalCount)")
   }
 }

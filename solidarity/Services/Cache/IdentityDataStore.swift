@@ -179,6 +179,23 @@ final class IdentityDataStore: ObservableObject {
     }
   }
 
+  /// Replaces the contact's declared proof claims with the value pulled
+  /// from the most recent VC presentation (peer's `verified_proofs.claims`
+  /// block). REPLACE semantics: the latest VC is authoritative for what
+  /// the peer is currently declaring — older claims that the peer has
+  /// dropped should not linger. Callers should only invoke this when the
+  /// scan path actually parsed a claims field; pass an empty array for
+  /// "explicitly declared zero proofs", and skip the call entirely for
+  /// scan paths that don't parse claims (plaintext, OIDC).
+  func setDeclaredProofClaims(contactID: String, claims: [String]) {
+    guard let contact = findContact(by: contactID) else { return }
+    let normalized = claims.sorted()
+    guard contact.declaredProofClaims != normalized else { return }
+    contact.declaredProofClaims = normalized
+    persistSave("setDeclaredProofClaims(\(contactID))")
+    refreshAll()
+  }
+
   func updateExchangeMetadata(_ patch: ExchangeMetadataPatch) {
     guard let contact = findContact(by: patch.contactID) else { return }
     contact.myExchangeSignature = patch.mySignature

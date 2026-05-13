@@ -151,6 +151,11 @@ struct OIDCAuthorizationRequest: Codable, Identifiable {
     let scopes: [OIDCScope]
     let presentationDefinition: PresentationDefinition?
     let requestedAt: Date
+    /// PKCE: required by RFC 7636 + OAuth 2.1. Captured at parse time so
+    /// the token endpoint can verify the code_verifier later. Always non-nil
+    /// for parsed requests; the parser rejects requests without S256 PKCE.
+    let codeChallenge: String
+    let codeChallengeMethod: String
 
     struct PresentationDefinition: Codable {
         let id: String

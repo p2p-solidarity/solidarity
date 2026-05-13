@@ -12,6 +12,13 @@ final class StreamParser {
 
     private let bufferSize = 1024 * 1024  // 1MB buffer
 
+    /// Hard cap on a single accumulated element while scanning a JSON array.
+    /// Anything larger is treated as a malformed/abusive input so we can never
+    /// allocate an unbounded String when, e.g., a closing brace is missing.
+    private let maxElementBytes = 1 * 1024 * 1024 // 1 MiB
+    /// Hard cap on the total size of any input file the parser will read.
+    private let maxInputBytes: Int64 = 64 * 1024 * 1024 // 64 MiB
+
     private init() {}
 
     // MARK: - Public API
@@ -26,6 +33,10 @@ final class StreamParser {
             Task {
                 do {
                     let fileSize = try fileSize(of: url)
+                    if fileSize > maxInputBytes {
+                        continuation.finish(throwing: StreamParserError.invalidFormat)
+                        return
+                    }
                     var processedBytes: Int64 = 0
 
                     guard let inputStream = InputStream(url: url) else {
@@ -49,6 +60,12 @@ final class StreamParser {
                         let chunk = Data(buffer.prefix(bytesRead))
                         if let chunkString = String(data: chunk, encoding: .utf8) {
                             lineBuffer += chunkString
+
+                            // Reject pathological inputs (no newlines, infinite buffer growth).
+                            if lineBuffer.utf8.count > self.maxElementBytes {
+                                continuation.finish(throwing: StreamParserError.invalidFormat)
+                                return
+                            }
 
                             while let newlineIndex = lineBuffer.firstIndex(of: "\n") {
                                 let line = String(lineBuffer[..<newlineIndex])
@@ -100,6 +117,9 @@ final class StreamParser {
         progress: ((Double) -> Void)? = nil
     ) async throws -> [T] {
         let fileSize = try fileSize(of: url)
+        if fileSize > maxInputBytes {
+            throw StreamParserError.invalidFormat
+        }
         var processedBytes: Int64 = 0
 
         guard let inputStream = InputStream(url: url) else {
@@ -126,6 +146,9 @@ final class StreamParser {
             processedBytes += Int64(bytesRead)
 
             for i in 0..<bytesRead {
+                if currentElement.utf8.count > maxElementBytes {
+                    throw StreamParserError.invalidFormat
+                }
                 let char = UnicodeScalar(buffer[i])
 
                 if escapeNext {
@@ -194,8 +217,14 @@ final class StreamParser {
         return result
     }
 
-    /// Estimate number of items in a file (for progress)
+    /// Estimate number of items in a file (for progress).
+    /// Bounded by `maxInputBytes` to avoid loading a multi-GB file just to
+    /// count newlines.
     func estimateItemCount(in url: URL) async throws -> Int {
+        let size = try fileSize(of: url)
+        if size > maxInputBytes {
+            throw StreamParserError.invalidFormat
+        }
         let data = try Data(contentsOf: url)
         guard let content = String(data: data, encoding: .utf8) else {
             throw StreamParserError.cannotParse

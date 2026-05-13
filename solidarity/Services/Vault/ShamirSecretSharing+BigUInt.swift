@@ -68,6 +68,17 @@ struct BigUInt: Equatable, Comparable {
         return data.isEmpty ? Data([0]) : data
     }
 
+    var bitWidth: Int {
+        guard let top = limbs.last else { return 0 }
+        return (limbs.count - 1) * 64 + (64 - top.leadingZeroBitCount)
+    }
+
+    func bit(at index: Int) -> UInt8 {
+        let limbIndex = index / 64
+        guard limbIndex < limbs.count else { return 0 }
+        return UInt8((limbs[limbIndex] >> (index % 64)) & 1)
+    }
+
     static func < (lhs: BigUInt, rhs: BigUInt) -> Bool {
         if lhs.limbs.count != rhs.limbs.count {
             return lhs.limbs.count < rhs.limbs.count
@@ -147,31 +158,70 @@ struct BigUInt: Equatable, Comparable {
         return bigResult
     }
 
-    static func / (lhs: BigUInt, rhs: BigUInt) -> BigUInt {
-        guard !rhs.limbs.isEmpty else { return BigUInt(0) }
-        guard lhs >= rhs else { return BigUInt(0) }
+    static func << (lhs: BigUInt, rhs: Int) -> BigUInt {
+        guard rhs > 0, !lhs.limbs.isEmpty else { return lhs }
+        let limbShift = rhs / 64
+        let bitShift = rhs % 64
 
-        var quotient = BigUInt(0)
-        var remainder = lhs
-
-        while remainder >= rhs {
-            remainder -= rhs
-            quotient += BigUInt(1)
+        var newLimbs = [UInt64](repeating: 0, count: limbShift)
+        if bitShift == 0 {
+            newLimbs.append(contentsOf: lhs.limbs)
+        } else {
+            var carry: UInt64 = 0
+            for limb in lhs.limbs {
+                newLimbs.append((limb << bitShift) | carry)
+                carry = limb >> (64 - bitShift)
+            }
+            if carry > 0 {
+                newLimbs.append(carry)
+            }
         }
 
-        return quotient
+        var result = BigUInt()
+        result.limbs = newLimbs
+        while result.limbs.last == 0 {
+            result.limbs.removeLast()
+        }
+        return result
+    }
+
+    private func divModBinary(_ divisor: BigUInt) -> (BigUInt, BigUInt) {
+        precondition(!divisor.isZero, "Division by zero")
+        if self < divisor { return (BigUInt(0), self) }
+        if divisor == BigUInt(UInt64(1)) { return (self, BigUInt(0)) }
+
+        var quotientLimbs = [UInt64](repeating: 0, count: limbs.count)
+        var remainder = BigUInt(0)
+        let totalBits = bitWidth
+
+        for i in (0..<totalBits).reversed() {
+            remainder = remainder << 1
+            if remainder.limbs.isEmpty { remainder.limbs = [0] }
+            remainder.limbs[0] |= UInt64(bit(at: i))
+            while remainder.limbs.last == 0 { remainder.limbs.removeLast() }
+
+            if remainder >= divisor {
+                remainder -= divisor
+                let limbIdx = i / 64
+                let bitIdx = i % 64
+                quotientLimbs[limbIdx] |= (UInt64(1) << bitIdx)
+            }
+        }
+
+        var quotient = BigUInt()
+        quotient.limbs = quotientLimbs
+        while quotient.limbs.last == 0 { quotient.limbs.removeLast() }
+        return (quotient, remainder)
+    }
+
+    static func / (lhs: BigUInt, rhs: BigUInt) -> BigUInt {
+        guard !rhs.limbs.isEmpty else { return BigUInt(0) }
+        return lhs.divModBinary(rhs).0
     }
 
     static func % (lhs: BigUInt, rhs: BigUInt) -> BigUInt {
         guard !rhs.limbs.isEmpty else { return BigUInt(0) }
-        guard lhs >= rhs else { return lhs }
-
-        var remainder = lhs
-        while remainder >= rhs {
-            remainder -= rhs
-        }
-
-        return remainder
+        return lhs.divModBinary(rhs).1
     }
 
     static func -= (lhs: inout BigUInt, rhs: BigUInt) {

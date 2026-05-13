@@ -19,7 +19,14 @@ enum ProximityVerificationHelper {
       guard context.commitments.contains(commitment) else { return .failed }
       guard context.commitments.count > 1 else { return .failed }
 
-      let expectedRoot = SemaphoreIdentityManager.bindingRoot(for: context.commitments)
+      // Circuit-only root check. If the build has no Semaphore library
+      // we cannot derive a circuit root — defer to verifyProof which is
+      // the canonical check anyway. We never substitute the deterministic
+      // SHA256 fingerprint here because it will never equal the envelope's
+      // circuit root.
+      guard let expectedRoot = SemaphoreIdentityManager.bindingRootIfCircuitAvailable(for: context.commitments) else {
+        return .pending
+      }
       guard context.groupRoot == expectedRoot else { return .failed }
 
       let ok = (try? SemaphoreIdentityManager.shared.verifyProof(

@@ -11,20 +11,24 @@ enum ExchangeStep {
 extension ProximitySharingView {
 
   func extractValue(from card: BusinessCard?, field: BusinessCardField) -> String {
-    guard let card = card else { return "UNKNOWN" }
+    guard let card = card else { return String(localized: "UNKNOWN") }
     switch field {
     case .name: return card.name
-    case .title: return card.title ?? "N/A"
-    case .company: return card.company ?? "N/A"
-    case .email: return card.email ?? "N/A"
-    case .phone: return card.phone ?? "N/A"
-    case .profileImage: return "Binary Data"
-    case .socialNetworks: return "\(card.socialNetworks.count) Links"
-    case .skills: return "\(card.skills.count) Verified"
+    case .title: return card.title ?? String(localized: "N/A")
+    case .company: return card.company ?? String(localized: "N/A")
+    case .email: return card.email ?? String(localized: "N/A")
+    case .phone: return card.phone ?? String(localized: "N/A")
+    case .profileImage: return String(localized: "Binary Data")
+    case .socialNetworks:
+      let count = card.socialNetworks.count
+      return String(localized: "\(count) Links")
+    case .skills:
+      let count = card.skills.count
+      return String(localized: "\(count) Verified")
     }
   }
 
-  func infoRow(label: String, value: String) -> some View {
+  func infoRow(label: LocalizedStringKey, value: String) -> some View {
     HStack(alignment: .top, spacing: 16) {
       Text(label)
         .font(.system(size: 10, weight: .bold, design: .monospaced))
@@ -40,7 +44,8 @@ extension ProximitySharingView {
     VStack(spacing: 1) {
       ForEach(BusinessCardField.allCases) { field in
         HStack {
-          Text(field.displayName.uppercased())
+          Text(LocalizedStringKey(field.displayName))
+            .textCase(.uppercase)
             .font(.system(size: 12, weight: .bold, design: .monospaced))
             .foregroundColor(selection.wrappedValue.contains(field) ? Color.Theme.terminalGreen : Color.Theme.textSecondary)
           Spacer()
@@ -66,21 +71,21 @@ extension ProximitySharingView {
 
   var currentStepTitle: String {
     switch step {
-    case .discovery: return "Discovery"
-    case .scope: return "Sharing Scope"
-    case .awaiting: return "Awaiting Response"
-    case .incoming: return "Incoming Request"
-    case .saved: return "Exchange Complete"
+    case .discovery: return String(localized: "Discovery")
+    case .scope: return String(localized: "Sharing Scope")
+    case .awaiting: return String(localized: "Awaiting Response")
+    case .incoming: return String(localized: "Incoming Request")
+    case .saved: return String(localized: "Exchange Complete")
     }
   }
 
   var currentSubtitle: String {
     switch step {
-    case .discovery: return "Keep this terminal open for physical pairing."
-    case .scope: return "Select payload fields to cryptographically share."
-    case .awaiting: return "Awaiting peer node to accept handshake."
-    case .incoming: return "Review and accept inbound transmission."
-    case .saved: return "Keys generated. Signatures exchanged."
+    case .discovery: return String(localized: "Keep this terminal open for physical pairing.")
+    case .scope: return String(localized: "Select payload fields to cryptographically share.")
+    case .awaiting: return String(localized: "Awaiting peer node to accept handshake.")
+    case .incoming: return String(localized: "Review and accept inbound transmission.")
+    case .saved: return String(localized: "Keys generated. Signatures exchanged.")
     }
   }
 

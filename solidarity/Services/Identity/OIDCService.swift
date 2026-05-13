@@ -23,6 +23,12 @@ final class OIDCService: ObservableObject {
   static let shared = OIDCService()
   static let logger = Logger(subsystem: AppBranding.currentLoggerSubsystem, category: "OIDCService")
 
+  /// Hard byte cap for any OID4VP request/response we accept from the
+  /// network (request_uri payloads, JARM responses, etc.). Real flows are
+  /// in the low-KB range; 256 KB lets us refuse adversarial blobs early
+  /// without breaking realistic verifiers.
+  static let maxOIDCResponseBytes = 256 * 1024
+
   struct PresentationRequest: Equatable {
     let id: String
     let state: String
@@ -118,7 +124,11 @@ final class OIDCService: ObservableObject {
   private let didService: DIDService
   private weak var coordinator: IdentityCoordinator?
   private let nonceLock = NSLock()
-  private var seenNonces: [String: Date] = [:]
+  /// Replay-protection nonce set. Persisted via `OIDCNonceStore` so a
+  /// kill/restart cannot reset the in-memory cache and let an attacker
+  /// replay a vp_token under a previously-seen nonce.
+  private let nonceStore = OIDCNonceStore.shared
+  private var seenNonces: [String: Date]
   // Internal so response-signing helpers in OIDCService+Response.swift
   // can reuse the same ephemeral session (matching TLS + timeout config).
   let session: URLSession
@@ -128,6 +138,7 @@ final class OIDCService: ObservableObject {
     let config = URLSessionConfiguration.ephemeral
     config.timeoutIntervalForRequest = 20
     self.session = URLSession(configuration: config)
+    self.seenNonces = OIDCNonceStore.shared.load()
   }
 
   func attachIdentityCoordinator(_ coordinator: IdentityCoordinator) {
@@ -287,8 +298,11 @@ final class OIDCService: ObservableObject {
   }
 
   /// Async parse that honours OID4VP 1.0 `request_uri`: fetches the signed
-  /// (or plain JSON) Request Object and parses its body. Falls back to
-  /// normal query-param parsing when request_uri is absent.
+  /// (or plain JSON) Request Object and parses its body. When a JWT-wrapped
+  /// Request Object is present (either via `request` query param or fetched
+  /// from `request_uri`), the JWT signature MUST verify against the issuer's
+  /// public key — otherwise the request is rejected. We never silently fall
+  /// back to plain query-param parsing on JWT failure.
   func parseRequestAsync(from string: String) async -> CardResult<PresentationRequest> {
     guard let url = URL(string: string),
           let components = URLComponents(url: url, resolvingAgainstBaseURL: false)
@@ -302,9 +316,7 @@ final class OIDCService: ObservableObject {
     }
 
     if let requestJWT = components.queryItems?.first(where: { $0.name == "request" })?.value {
-      if let resolved = resolveRequestJWT(requestJWT, fallbackComponents: components) {
-        return resolved
-      }
+      return resolveRequestJWT(requestJWT, fallbackComponents: components)
     }
 
     return parseRequest(components: components)
@@ -424,9 +436,20 @@ final class OIDCService: ObservableObject {
         let code = (response as? HTTPURLResponse)?.statusCode ?? -1
         return .failure(.networkError("request_uri fetch returned HTTP \(code)"))
       }
+      // Cap inbound Request Object size — even a JWT-shaped Request Object
+      // is small (low KB). 256 KB is generous enough for legitimate verifiers
+      // while preventing memory-pressure attacks from a hostile request_uri
+      // host that streams garbage.
+      guard data.count <= Self.maxOIDCResponseBytes else {
+        return .failure(.networkError("request_uri payload exceeds size limit"))
+      }
       let body = String(data: data, encoding: .utf8) ?? ""
-      if let resolved = resolveRequestJWT(body, fallbackComponents: fallbackComponents) {
-        return resolved
+      let trimmedBody = body.trimmingCharacters(in: .whitespacesAndNewlines)
+      // A JWT-shaped body MUST verify; we do not fall back to JSON parsing
+      // when the response looks like a JWT, because that would let an
+      // attacker who controls a JWT-shaped string bypass signature checks.
+      if trimmedBody.split(separator: ".").count == 3 {
+        return resolveRequestJWT(trimmedBody, fallbackComponents: fallbackComponents)
       }
       if let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
         return parseRequest(components: componentsFromRequestObject(json, fallback: fallbackComponents))
@@ -437,20 +460,49 @@ final class OIDCService: ObservableObject {
     }
   }
 
-  private func resolveRequestJWT(_ token: String, fallbackComponents: URLComponents) -> CardResult<PresentationRequest>? {
+  private func resolveRequestJWT(_ token: String, fallbackComponents: URLComponents) -> CardResult<PresentationRequest> {
     let trimmed = token.trimmingCharacters(in: .whitespacesAndNewlines)
     let segments = trimmed.split(separator: ".")
     guard segments.count == 3,
+          let headerData = Data(base64URLEncoded: String(segments[0])),
           let payloadData = Data(base64URLEncoded: String(segments[1])),
+          let header = try? JSONSerialization.jsonObject(with: headerData) as? [String: Any],
           let json = try? JSONSerialization.jsonObject(with: payloadData) as? [String: Any]
     else {
-      return nil
+      return .failure(.invalidData("Request Object JWT is malformed"))
     }
-    // NOTE: we intentionally do NOT verify the Request Object signature
-    // here. Verification requires the verifier's public key (via client
-    // metadata or DID resolution) which is not in scope for this patch.
-    // The caller should treat values from a JWT-wrapped request as
-    // unauthenticated until a follow-up pass adds signature verification.
+    // OID4VP 1.0 §5.10 — the Request Object is signed by the verifier
+    // (`iss`/`client_id` claim). Resolve to a public key via did:key when
+    // possible, else via the locally-trusted issuer anchor store, and
+    // verify ES256 before treating any of the embedded values as trusted.
+    let issuer = (json["iss"] as? String) ?? (json["client_id"] as? String) ?? ""
+    let keyId = header["kid"] as? String
+    guard !issuer.isEmpty else {
+      return .failure(.invalidData("Request Object JWT missing iss/client_id"))
+    }
+    let resolvedKey: PublicKeyJWK
+    if let didKey = DIDKeyResolver.resolveP256JWK(from: issuer) {
+      resolvedKey = didKey
+    } else if let anchor = IssuerTrustAnchorStore.shared.trustedJWK(for: issuer, keyId: keyId) {
+      resolvedKey = anchor
+    } else {
+      return .failure(.invalidData("Request Object issuer is untrusted: \(issuer)"))
+    }
+    do {
+      let publicKey = try resolvedKey.toP256PublicKey()
+      let signingInput = Data("\(segments[0]).\(segments[1])".utf8)
+      guard let signatureData = Data(base64URLEncoded: String(segments[2])) else {
+        return .failure(.invalidData("Request Object JWT has invalid signature encoding"))
+      }
+      let signature =
+        (try? P256.Signing.ECDSASignature(rawRepresentation: signatureData))
+        ?? (try? P256.Signing.ECDSASignature(derRepresentation: signatureData))
+      guard let signature, publicKey.isValidSignature(signature, for: signingInput) else {
+        return .failure(.invalidData("Request Object JWT signature verification failed"))
+      }
+    } catch {
+      return .failure(.cryptographicError("Request Object verification error: \(error.localizedDescription)"))
+    }
     return parseRequest(components: componentsFromRequestObject(json, fallback: fallbackComponents))
   }
 
@@ -484,168 +536,13 @@ final class OIDCService: ObservableObject {
     return components
   }
 
-  func handleResponse(url: URL, vcService: VCService) -> CardResult<VCService.ImportedCredential> {
-    guard let components = URLComponents(url: url, resolvingAgainstBaseURL: false) else {
-      return .failure(.invalidData("No query items in response URL"))
-    }
-
-    // vp_token can appear in the query string (fragment mode) or be
-    // URL-encoded as a top-level param. We accept both.
-    let queryItems = components.queryItems ?? []
-    guard let vpToken = queryItems.first(where: { $0.name == "vp_token" })?.value else {
-      return .failure(.invalidData("No vp_token found in response URL"))
-    }
-
-    // A VP may wrap one or many VCs. Unwrap to individual VC JWTs before
-    // importing; importing the raw VP as a credential loses the signer's
-    // holder/issuer binding.
-    if let jwt = Self.extractFirstCredentialJWT(fromVPToken: vpToken) {
-      return vcService.importPresentedCredential(jwt: jwt)
-    }
-
-    // Fallback: treat the token itself as a VC JWT (legacy flows).
-    return vcService.importPresentedCredential(jwt: vpToken)
-  }
-
-  func buildResponseURL(for request: PresentationRequest, vpToken: String) -> CardResult<URL> {
-    let target = request.effectiveResponseTarget
-    guard var components = URLComponents(string: target) else {
-      return .failure(.invalidData("Invalid response target URI"))
-    }
-
-    var queryItems = components.queryItems ?? []
-    queryItems.append(URLQueryItem(name: "state", value: request.state))
-    queryItems.append(URLQueryItem(name: "vp_token", value: vpToken))
-
-    components.queryItems = queryItems
-
-    guard let url = components.url else {
-      return .failure(.invalidData("Failed to build response URL"))
-    }
-
-    return .success(url)
-  }
-
-  // MARK: - VP Token Submission
-
-  /// Submits a vp_token to the verifier's response target.
-  /// - `direct_post*` modes: HTTP POST form-encoded to response_uri.
-  /// - Fragment / query modes: open the redirect URL via UIApplication.
-  func submitVpToken(
-    token: String,
-    target: String,
-    state: String?,
-    responseMode: String = "direct_post"
-  ) async -> CardResult<Void> {
-    guard let components = URLComponents(string: target) else {
-      return .failure(.invalidData("Invalid response target URI"))
-    }
-
-    let scheme = components.scheme?.lowercased() ?? ""
-    let isDirectPost = responseMode.lowercased().hasPrefix("direct_post")
-
-    if scheme == "https" || scheme == "http" {
-      guard let postURL = components.url else {
-        return .failure(.invalidData("Failed to build POST URL"))
-      }
-
-      if !isDirectPost {
-        // Non-direct_post HTTPS redirect: append params & open externally.
-        var redirectComponents = components
-        var queryItems = redirectComponents.queryItems ?? []
-        queryItems.append(URLQueryItem(name: "vp_token", value: token))
-        if let state { queryItems.append(URLQueryItem(name: "state", value: state)) }
-        redirectComponents.queryItems = queryItems
-        guard let redirectURL = redirectComponents.url else {
-          return .failure(.invalidData("Failed to build redirect URL"))
-        }
-        let canOpen = await MainActor.run { UIApplication.shared.canOpenURL(redirectURL) }
-        guard canOpen else {
-          return .failure(.networkError("Unable to open redirect URI: \(target)"))
-        }
-        await MainActor.run { UIApplication.shared.open(redirectURL) }
-        return .success(())
-      }
-
-      var bodyComponents = URLComponents()
-      var bodyItems = [URLQueryItem(name: "vp_token", value: token)]
-      if let state { bodyItems.append(URLQueryItem(name: "state", value: state)) }
-      bodyComponents.queryItems = bodyItems
-
-      guard let bodyString = bodyComponents.percentEncodedQuery else {
-        return .failure(.invalidData("Failed to encode POST body"))
-      }
-
-      do {
-        var request = URLRequest(url: postURL)
-        request.httpMethod = "POST"
-        request.setValue("application/x-www-form-urlencoded", forHTTPHeaderField: "Content-Type")
-        request.httpBody = bodyString.data(using: .utf8)
-
-        let (_, response) = try await session.data(for: request)
-        guard let httpResponse = response as? HTTPURLResponse,
-              (200...299).contains(httpResponse.statusCode) else {
-          let code = (response as? HTTPURLResponse)?.statusCode ?? -1
-          return .failure(.networkError("Verifier returned HTTP \(code)"))
-        }
-        return .success(())
-      } catch {
-        return .failure(.networkError("Failed to submit vp_token: \(error.localizedDescription)"))
-      }
-    }
-
-    // Custom scheme → append params to URL and open via UIApplication
-    var redirectComponents = components
-    var queryItems = redirectComponents.queryItems ?? []
-    queryItems.append(URLQueryItem(name: "vp_token", value: token))
-    if let state { queryItems.append(URLQueryItem(name: "state", value: state)) }
-    redirectComponents.queryItems = queryItems
-
-    guard let redirectURL = redirectComponents.url else {
-      return .failure(.invalidData("Failed to build redirect URL"))
-    }
-
-    let canOpen = await MainActor.run {
-      UIApplication.shared.canOpenURL(redirectURL)
-    }
-    guard canOpen else {
-      return .failure(.networkError("Unable to open redirect URI: \(target)"))
-    }
-    await MainActor.run {
-      UIApplication.shared.open(redirectURL)
-    }
-    return .success(())
-  }
-
-  /// Back-compat wrapper for callers that only know the legacy redirect_uri
-  /// field name. Routes to the response_uri-aware `submitVpToken`.
-  func submitVpToken(token: String, redirectURI: String, state: String?) async -> CardResult<Void> {
-    await submitVpToken(token: token, target: redirectURI, state: state, responseMode: "direct_post")
-  }
-
-  /// Extracts the verifier domain from a request payload string.
-  static func verifierDomain(from payload: String) -> String? {
-    guard let url = URL(string: payload),
-          let components = URLComponents(url: url, resolvingAgainstBaseURL: false)
-    else {
-      return URL(string: payload)?.host
-    }
-    let items = components.queryItems ?? []
-    if let responseUri = items.first(where: { $0.name == "response_uri" })?.value,
-       let host = URL(string: responseUri)?.host {
-      return host
-    }
-    if let redirectUri = items.first(where: { $0.name == "redirect_uri" })?.value,
-       let host = URL(string: redirectUri)?.host {
-      return host
-    }
-    return URL(string: payload)?.host
-  }
-
   // MARK: - Nonce replay suppression
 
   /// Records a nonce (from a received vp_token) and returns true if it is
   /// fresh, false if it has been seen within the replay window.
+  ///
+  /// Both the in-memory cache and the Keychain-backed `OIDCNonceStore` are
+  /// updated so a process restart cannot replay a previously-seen nonce.
   @discardableResult
   func registerNonce(_ nonce: String, ttl: TimeInterval = 3600) -> Bool {
     guard !nonce.isEmpty else { return true }
@@ -654,144 +551,16 @@ final class OIDCService: ObservableObject {
     defer { nonceLock.unlock() }
 
     let now = Date()
-    // Opportunistic cleanup
+    // Opportunistic cleanup of expired entries.
     seenNonces = seenNonces.filter { now.timeIntervalSince($0.value) < ttl }
 
     if seenNonces[nonce] != nil {
-      Self.logger.warning("Replay detected: nonce=\(nonce, privacy: .public) already used")
+      Self.logger.warning("Replay detected: nonce already used")
       return false
     }
     seenNonces[nonce] = now
+    nonceStore.save(seenNonces, ttl: ttl, now: now)
     return true
   }
 
-  // MARK: - Private helpers
-
-  /// Canonical callback URI used by the app when acting as a holder.
-  /// Host is `oidc-callback` so URL handlers can match with a simple
-  /// `host == "oidc-callback"` check.
-  static func defaultCallbackURI() -> String {
-    "\(AppBranding.currentScheme)://oidc-callback"
-  }
-
-  static func isCallbackHost(_ host: String?) -> Bool {
-    switch host?.lowercased() {
-    case "oidc-callback", "oidc":
-      return true
-    default:
-      return false
-    }
-  }
-
-  private static func defaultBusinessCardDefinition() -> PresentationRequest.PresentationDefinition {
-    PresentationRequest.PresentationDefinition(
-      id: "default-request",
-      inputDescriptors: [
-        PresentationRequest.PresentationDefinition.InputDescriptor(
-          id: "business-card",
-          name: "Business Card",
-          purpose: "Exchange contact info",
-          format: nil,
-          constraints: nil
-        )
-      ]
-    )
-  }
-
-  private static func presentationDefinitionJSON(
-    _ definition: PresentationRequest.PresentationDefinition
-  ) throws -> Data {
-    var descriptors: [[String: Any]] = []
-    for d in definition.inputDescriptors {
-      var descriptor: [String: Any] = ["id": d.id]
-      if let name = d.name { descriptor["name"] = name }
-      if let purpose = d.purpose { descriptor["purpose"] = purpose }
-      if let format = d.format { descriptor["format"] = format }
-      if let constraints = d.constraints { descriptor["constraints"] = constraints }
-      descriptors.append(descriptor)
-    }
-    let object: [String: Any] = [
-      "id": definition.id,
-      "input_descriptors": descriptors,
-    ]
-    return try JSONSerialization.data(withJSONObject: object, options: [.sortedKeys])
-  }
-
-  private static func parsePresentationDefinition(
-    fromTopLevel items: [URLQueryItem]
-  ) -> PresentationRequest.PresentationDefinition? {
-    guard let pdString = items.first(where: { $0.name == "presentation_definition" })?.value,
-          let pdData = pdString.data(using: .utf8),
-          let json = try? JSONSerialization.jsonObject(with: pdData) as? [String: Any]
-    else { return nil }
-    return Self.decodePresentationDefinition(from: json)
-  }
-
-  private static func parsePresentationDefinition(
-    fromClaims items: [URLQueryItem]
-  ) -> PresentationRequest.PresentationDefinition? {
-    guard let claimsString = items.first(where: { $0.name == "claims" })?.value,
-          let claimsData = claimsString.data(using: .utf8),
-          let claims = try? JSONSerialization.jsonObject(with: claimsData) as? [String: Any],
-          let vpToken = claims["vp_token"] as? [String: Any],
-          let pd = vpToken["presentation_definition"] as? [String: Any]
-    else { return nil }
-    return Self.decodePresentationDefinition(from: pd)
-  }
-
-  private static func decodePresentationDefinition(
-    from json: [String: Any]
-  ) -> PresentationRequest.PresentationDefinition {
-    let pdId = json["id"] as? String ?? "parsed-request"
-    var descriptors: [PresentationRequest.PresentationDefinition.InputDescriptor] = []
-    if let inputDescs = json["input_descriptors"] as? [[String: Any]] {
-      descriptors = inputDescs.map { desc in
-        PresentationRequest.PresentationDefinition.InputDescriptor(
-          id: desc["id"] as? String ?? UUID().uuidString,
-          name: desc["name"] as? String,
-          purpose: desc["purpose"] as? String,
-          format: desc["format"] as? [String: Any],
-          constraints: desc["constraints"] as? [String: Any]
-        )
-      }
-    }
-    return PresentationRequest.PresentationDefinition(id: pdId, inputDescriptors: descriptors)
-  }
-
-  /// Attempts to extract the first embedded VC JWT from a vp_token.
-  /// Supports:
-  ///   - Signed VP JWT (payload.vp.verifiableCredential[0] is a VC JWT)
-  ///   - Raw JSON VP envelope ({type: [VerifiablePresentation], verifiableCredential: [...]})
-  ///   - Array of strings
-  /// Returns nil when the token itself is already a compact JWT VC.
-  private static func extractFirstCredentialJWT(fromVPToken token: String) -> String? {
-    // Signed VP (JWT) case — inspect payload.vp.verifiableCredential[0]
-    let segments = token.split(separator: ".")
-    if segments.count == 3,
-       let payloadData = Data(base64URLEncoded: String(segments[1])),
-       let payload = try? JSONSerialization.jsonObject(with: payloadData) as? [String: Any] {
-      if let vp = payload["vp"] as? [String: Any],
-         let creds = vp["verifiableCredential"] as? [Any],
-         let first = creds.first {
-        if let s = first as? String { return s }
-        if let obj = first as? [String: Any],
-           let s = try? String(data: JSONSerialization.data(withJSONObject: obj), encoding: .utf8) {
-          return s
-        }
-      }
-      // A plain VC JWT (no vp wrapper) — return the token as-is.
-      if payload["vc"] != nil { return token }
-    }
-
-    // Raw JSON VP envelope (unsigned / legacy)
-    if let data = token.data(using: .utf8),
-       let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-       let types = json["type"] as? [String], types.contains("VerifiablePresentation"),
-       let creds = json["verifiableCredential"] as? [Any],
-       let first = creds.first as? String {
-      return first
-    }
-
-    return nil
-  }
 }

@@ -19,6 +19,19 @@ struct MatchingRootView: View {
   @State private var showNearbySheet = false
   @State private var showPeerCardSheet = false
   @State private var showShareSheet = false
+  @State private var localSakuraPulseId = UUID()
+  @State private var showLocalSakuraPulse = false
+  @State private var draft = ""
+  @State private var sendPulse = false
+  @FocusState private var isInputFocused: Bool
+
+  private let presetMessages: [String] = [
+    "Hi 👋",
+    "Nice to meet you!",
+    "Let's stay in touch 🤝",
+    "Coffee? ☕",
+    "Thanks! 🙏",
+  ]
 
   var body: some View {
     ZStack {
@@ -50,9 +63,9 @@ struct MatchingRootView: View {
       setupSpatialTrigger()
     }
     .overlay(spatialStatusOverlay)
-    .overlay(sakuraOverlay)
+    .overlay(alignment: .bottom) { composerOverlay }
     .overlay(latestMessageOverlay)
-    .overlay(incomingInvitationOverlay)
+    .incomingInvitationOverlay()
     .sheet(isPresented: $showNearbySheet) {
       NearbyPeersSheet(
         peers: proximityManager.nearbyPeers,
@@ -112,27 +125,109 @@ struct MatchingRootView: View {
   }
   */
 
-  private var sakuraOverlay: some View {
-    VStack {
-      Spacer()
-      // Only show if WebRTC data channel is actually open
+  private var composerOverlay: some View {
+    VStack(spacing: 10) {
       if webRTCManager.isChannelOpen {
-        Button(action: {
-          webRTCManager.sendSakura()
-          // Also trigger local effect
-          withAnimation {
-            // TODO: Add local visual effect
-          }
-        }) {
-          Text("🌸")
-            .font(.system(size: 40))
-            .padding()
-            .background(Color.Theme.cardSurface(for: colorScheme))
-            .clipShape(Circle())
-        }
-        .padding(.bottom, 100)
+        presetChipsRow
+        inputRow
       }
     }
+    .padding(.horizontal, 12)
+    .padding(.bottom, isInputFocused ? 12 : 24)
+    .animation(.spring(response: 0.35, dampingFraction: 0.85), value: webRTCManager.isChannelOpen)
+    .animation(.spring(response: 0.3, dampingFraction: 0.9), value: isInputFocused)
+  }
+
+  private var presetChipsRow: some View {
+    ScrollView(.horizontal, showsIndicators: false) {
+      HStack(spacing: 8) {
+        ForEach(presetMessages, id: \.self) { msg in
+          Button(action: { sendPreset(msg) }) {
+            Text(msg)
+              .font(.system(size: 14, weight: .medium))
+              .foregroundColor(Color.Theme.textPrimary)
+              .padding(.horizontal, 14)
+              .padding(.vertical, 8)
+              .background(Capsule().fill(Color.Theme.pillBg))
+              .overlay(Capsule().stroke(Color.Theme.pillBorder, lineWidth: 1))
+          }
+          .buttonStyle(PlainButtonStyle())
+        }
+      }
+      .padding(.horizontal, 4)
+    }
+    .frame(height: 40)
+  }
+
+  private var inputRow: some View {
+    HStack(spacing: 10) {
+      Button(action: { triggerSakura() }) {
+        Text("🌸")
+          .font(.system(size: 22))
+          .frame(width: 44, height: 44)
+          .background(Circle().fill(Color.Theme.cardSurface(for: colorScheme)))
+          .overlay(Circle().stroke(Color.Theme.cardBorder(for: colorScheme), lineWidth: 1))
+          .scaleEffect(showLocalSakuraPulse ? 1.25 : 1.0)
+          .opacity(showLocalSakuraPulse ? 0.6 : 1.0)
+          .animation(.spring(response: 0.35, dampingFraction: 0.5), value: showLocalSakuraPulse)
+      }
+      .buttonStyle(PlainButtonStyle())
+
+      HStack(spacing: 8) {
+        TextField("Send a message…", text: $draft)
+          .textFieldStyle(PlainTextFieldStyle())
+          .font(.system(size: 15))
+          .foregroundColor(Color.Theme.textPrimary)
+          .focused($isInputFocused)
+          .submitLabel(.send)
+          .onSubmit { sendDraft() }
+        Button(action: { sendDraft() }) {
+          Image(systemName: "arrow.up.circle.fill")
+            .font(.system(size: 28))
+            .foregroundColor(canSend ? Color.Theme.accentRose : Color.Theme.textTertiary)
+        }
+        .buttonStyle(PlainButtonStyle())
+        .disabled(!canSend)
+        .scaleEffect(sendPulse ? 0.82 : 1.0)
+        .animation(.spring(response: 0.25, dampingFraction: 0.5), value: sendPulse)
+      }
+      .padding(.horizontal, 14)
+      .padding(.vertical, 8)
+      .background(Capsule().fill(Color.Theme.mutedSurface))
+    }
+  }
+
+  private var canSend: Bool {
+    !draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+  }
+
+  private func triggerSakura() {
+    webRTCManager.sendSakura()
+    localSakuraPulseId = UUID()
+    showLocalSakuraPulse = true
+    UIImpactFeedbackGenerator(style: .light).impactOccurred()
+    Task {
+      try? await Task.sleep(nanoseconds: 250_000_000)
+      await MainActor.run { showLocalSakuraPulse = false }
+    }
+  }
+
+  private func sendDraft() {
+    let text = draft.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard !text.isEmpty else { return }
+    webRTCManager.sendText(text)
+    draft = ""
+    UIImpactFeedbackGenerator(style: .light).impactOccurred()
+    sendPulse = true
+    Task {
+      try? await Task.sleep(nanoseconds: 220_000_000)
+      await MainActor.run { sendPulse = false }
+    }
+  }
+
+  private func sendPreset(_ text: String) {
+    webRTCManager.sendText(text)
+    UIImpactFeedbackGenerator(style: .light).impactOccurred()
   }
 
   private var latestMessageOverlay: some View {
@@ -172,37 +267,11 @@ struct MatchingRootView: View {
     Circle().fill(Color.Theme.featureAccent.opacity(0.6)).frame(width: size, height: size)
   }
 
-  private var incomingInvitationOverlay: some View {
-    Group {
-      if let invitation = proximityManager.pendingInvitation {
-        IncomingInvitationPopupView(
-          invitation: invitation,
-          onAccept: {
-            proximityManager.respondToPendingInvitation(accept: true)
-          },
-          onDecline: {
-            proximityManager.respondToPendingInvitation(accept: false)
-          },
-          onDismiss: {
-            proximityManager.releaseInvitationPresentation()
-          }
-        )
-        .transition(.opacity)
-      }
-    }
-  }
-
   // MARK: - UWB Spatial Trigger
 
   private func setupSpatialTrigger() {
-    niManager.onSpatialTrigger = { [weak proximityManager] peerID in
-      guard let pm = proximityManager,
-            let card = pm.currentCard else {
-        NearbyInteractionManager.shared.exchangeDidFail()
-        return
-      }
-      pm.sendCard(card, to: peerID, sharingLevel: pm.currentSharingLevel)
-      NearbyInteractionManager.shared.exchangeDidComplete()
+    niManager.onSpatialTrigger = { peerID in
+      ProximityManager.shared.handleSpatialTrigger(peerID: peerID)
     }
   }
 

@@ -12,46 +12,87 @@ struct AppearanceSettingsView: View {
   @Environment(\.dismiss) private var dismiss
 
   var body: some View {
-    Form {
-      Section("Color Mode") {
-        Picker("Appearance", selection: $theme.appColorScheme) {
-          ForEach(AppColorScheme.allCases, id: \.self) { scheme in
-            Text(scheme.displayName).tag(scheme)
-          }
-        }
-        .pickerStyle(.segmented)
+    ScrollView {
+      VStack(spacing: 24) {
+        colorModeSection
+        cardAccentSection
+        effectsSection
+        animalThemeSection
       }
-
-      Section("Card Accent Color") {
-        colorGrid()
-      }
-
-      Section("Effects") {
-        Toggle("Enable Glow", isOn: $theme.enableGlow)
-      }
-
-      Section("Global Animal Theme") {
-        Picker("Select Animal", selection: $theme.selectedAnimal) {
-          Text("None").tag(Optional<AnimalCharacter>.none)
-          ForEach(AnimalCharacter.allCases) { animal in
-            Text(animal.displayName).tag(Optional(animal))
-          }
-        }
-        .pickerStyle(.navigationLink)
-
-        if let animal = theme.selectedAnimal {
-          Text(animal.personality)
-            .font(.caption)
-            .foregroundColor(.secondary)
-        }
-      }
+      .padding(.vertical, 24)
     }
+    .background(Color.Theme.pageBg.ignoresSafeArea())
     .navigationTitle("Appearance")
     .navigationBarTitleDisplayMode(.inline)
-    .toolbar {
-      ToolbarItem(placement: .navigationBarTrailing) {
-        Button("Done") { dismiss() }
+  }
+
+  // MARK: - Color Mode
+
+  private var colorModeSection: some View {
+    VStack(alignment: .leading, spacing: 8) {
+      SettingsBlockSectionHeader(title: "Color Mode")
+
+      Picker("Appearance", selection: $theme.appColorScheme) {
+        ForEach(AppColorScheme.allCases, id: \.self) { scheme in
+          Text(scheme.displayName).tag(scheme)
+        }
       }
+      .pickerStyle(.segmented)
+      .padding(.horizontal, 14)
+      .padding(.vertical, 12)
+      .frame(maxWidth: .infinity, alignment: .leading)
+      .background(
+        RoundedRectangle(cornerRadius: 12)
+          .fill(Color.Theme.mutedSurface)
+      )
+      .padding(.horizontal, 16)
+    }
+  }
+
+  // MARK: - Card Accent
+
+  private var cardAccentSection: some View {
+    VStack(alignment: .leading, spacing: 8) {
+      SettingsBlockSectionHeader(title: "Card Accent")
+
+      colorGrid()
+        .padding(14)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(
+          RoundedRectangle(cornerRadius: 12)
+            .fill(Color.Theme.mutedSurface)
+        )
+        .padding(.horizontal, 16)
+    }
+  }
+
+  // MARK: - Effects
+
+  private var effectsSection: some View {
+    SettingsBlockSection("Effects") {
+      SettingsBlockToggleRow(
+        icon: "sparkles",
+        title: "Enable Glow",
+        isOn: $theme.enableGlow
+      )
+    }
+  }
+
+  // MARK: - Animal Theme
+
+  private var animalThemeSection: some View {
+    SettingsBlockSection("Animal Theme", footer: theme.selectedAnimal?.personality) {
+      NavigationLink {
+        AnimalPickerView()
+          .environmentObject(theme)
+      } label: {
+        SettingsBlockRow(
+          icon: "pawprint",
+          title: "Animal",
+          trailingText: theme.selectedAnimal?.displayName ?? "None"
+        )
+      }
+      .buttonStyle(.plain)
     }
   }
 
@@ -74,7 +115,54 @@ struct AppearanceSettingsView: View {
         .padding(4)
       }
     }
-    .padding(.vertical, 4)
+  }
+}
+
+// MARK: - Animal Picker
+
+private struct AnimalPickerView: View {
+  @EnvironmentObject private var theme: ThemeManager
+  @Environment(\.dismiss) private var dismiss
+
+  var body: some View {
+    ScrollView {
+      VStack(spacing: 24) {
+        SettingsBlockSection("Animal") {
+          Button {
+            theme.selectedAnimal = nil
+            dismiss()
+          } label: {
+            SettingsBlockRow(
+              icon: "circle.slash",
+              title: "None",
+              trailingText: theme.selectedAnimal == nil ? "✓" : nil,
+              showsChevron: false
+            )
+          }
+          .buttonStyle(.plain)
+
+          ForEach(AnimalCharacter.allCases) { animal in
+            Button {
+              theme.selectedAnimal = animal
+              dismiss()
+            } label: {
+              SettingsBlockRow(
+                icon: "pawprint",
+                title: animal.displayName,
+                subtitle: animal.personality,
+                trailingText: theme.selectedAnimal == animal ? "✓" : nil,
+                showsChevron: false
+              )
+            }
+            .buttonStyle(.plain)
+          }
+        }
+      }
+      .padding(.vertical, 24)
+    }
+    .background(Color.Theme.pageBg.ignoresSafeArea())
+    .navigationTitle("Animal")
+    .navigationBarTitleDisplayMode(.inline)
   }
 }
 

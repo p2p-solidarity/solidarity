@@ -80,53 +80,100 @@ final class PassportPipelineService {
     draft: PassportMRZDraft,
     onProgress: @escaping @Sendable (String) -> Void
   ) async -> CardResult<PassportProofResult> {
-    let output = await MoproProofService.shared.generatePassportProof(
-      documentHash: chip.documentHash,
-      mrzDigest: chip.mrzDigest,
-      dg1MRZData: chip.dg1MRZData,
-      nationalityCode: draft.nationalityCode,
-      dateOfBirth: draft.dateOfBirth,
-      expiryDate: draft.expiryDate,
-      passiveAuthPassed: chip.passiveAuthPassed,
-      onProgress: onProgress
-    )
+    // Force passive-auth=false for simulated chips. Synthetic chip data
+    // cannot satisfy CSCA → DSC → SOD validation; surface this in the
+    // proof inputs so downstream trust decisions don't see a green badge
+    // backed by dev-mode data.
+    let effectivePassiveAuth = chip.isSimulated ? false : chip.passiveAuthPassed
 
-    return .success(
-      PassportProofResult(
-        proofType: output.proofType,
-        proofPayload: output.proofJSON,
-        trustLevel: output.trustLevel,
-        generationFailed: output.proofType == "sd-jwt-fallback"
+    do {
+      let output = try await MoproProofService.shared.generatePassportProof(
+        documentHash: chip.documentHash,
+        mrzDigest: chip.mrzDigest,
+        dg1MRZData: chip.dg1MRZData,
+        nationalityCode: draft.nationalityCode,
+        dateOfBirth: draft.dateOfBirth,
+        expiryDate: draft.expiryDate,
+        passiveAuthPassed: effectivePassiveAuth,
+        onProgress: onProgress
       )
-    )
+
+      // For simulated chips, override trustLevel to "white" (selfIssued tier).
+      // Trust level lives on the credential too; we lock both ends here.
+      let effectiveTrustLevel = chip.isSimulated ? "white" : output.trustLevel
+
+      return .success(
+        PassportProofResult(
+          proofType: output.proofType,
+          proofPayload: output.proofJSON,
+          trustLevel: effectiveTrustLevel,
+          generationFailed: output.proofType == "sd-jwt-fallback"
+        )
+      )
+    } catch let error as MoproProofError {
+      // Surface MRZ mismatch (and any future structured proof errors) to the
+      // user via the standard alert path so they re-scan the MRZ.
+      return .failure(.validationError(error.errorDescription ?? "Passport proof generation failed."))
+    } catch {
+      return .failure(.configurationError("Passport proof generation failed: \(error.localizedDescription)"))
+    }
   }
 
   @MainActor func persistPassportCredential(
     draft: PassportMRZDraft,
-    proof: PassportProofResult
+    proof: PassportProofResult,
+    chip: PassportChipSnapshot? = nil
   ) -> CardResult<IdentityCardEntity> {
-    let holderDid = DIDService().currentDescriptor()
+    // Refuse to persist with a placeholder holder DID. A literal
+    // "did:key:pending" string poisons the vault — the credential later looks
+    // valid in lists and presentation flows but cannot be cryptographically
+    // bound to the user. Surface the error so the UI can prompt a retry once
+    // iCloud Keychain delivers the master signing key.
     let didValue: String
-    switch holderDid {
+    switch DIDService().currentDescriptor() {
     case .success(let descriptor):
       didValue = descriptor.did
-    case .failure:
-      didValue = "did:key:pending"
+    case .failure(let error):
+      return .failure(.keyManagementError(
+        "DID key is not ready yet (\(error.localizedDescription)). "
+          + "Wait a few seconds for iCloud Keychain to sync, then retry."
+      ))
+    }
+
+    // Simulated chip data must NOT be persisted as a government-tier
+    // credential — it would be indistinguishable from a real passport
+    // VC at presentation time. Demote to selfIssued / white tier.
+    let isSimulated = chip?.isSimulated ?? false
+    let issuerType = isSimulated ? "selfIssued" : "government"
+    let trustLevel = isSimulated ? "white" : proof.trustLevel
+    var metadataTags: [String] = ["passport", proof.proofType]
+    if isSimulated {
+      metadataTags.append("isSimulated:true")
+      metadataTags.append("dev-build")
+    }
+
+    let issuerDid: String
+    if isSimulated {
+      issuerDid = "did:dev:simulated-passport"
+    } else {
+      issuerDid = "did:gov:\(draft.nationalityCode.lowercased())"
     }
 
     let passportCard = IdentityCardEntity(
       type: "passport",
-      issuerType: "government",
-      trustLevel: proof.trustLevel,
-      title: "Passport \(draft.nationalityCode.uppercased())",
-      issuerDid: "did:gov:\(draft.nationalityCode.lowercased())",
+      issuerType: issuerType,
+      trustLevel: trustLevel,
+      title: isSimulated
+        ? "Passport \(draft.nationalityCode.uppercased()) (DEV BUILD)"
+        : "Passport \(draft.nationalityCode.uppercased())",
+      issuerDid: issuerDid,
       holderDid: didValue,
       issuedAt: Date(),
       expiresAt: draft.expiryDate,
-      status: proof.generationFailed ? "fallback" : "verified",
-      sourceReference: "MRZ+NFC",
+      status: proof.generationFailed ? "fallback" : (isSimulated ? "simulated" : "verified"),
+      sourceReference: isSimulated ? "MRZ+NFC(simulated)" : "MRZ+NFC",
       rawCredentialJWT: proof.proofPayload,
-      metadataTags: ["passport", proof.proofType]
+      metadataTags: metadataTags
     )
 
     IdentityDataStore.shared.addIdentityCard(passportCard)
@@ -134,15 +181,16 @@ final class PassportPipelineService {
     // Claims reference the card ID for proof lookup — the full proof data
     // lives in passportCard.rawCredentialJWT, not duplicated here.
     let cardRef = ",\"identity_card_id\":\"\(passportCard.id)\""
+    let simRef = isSimulated ? ",\"is_simulated\":true" : ""
 
     let ageClaim = ProvableClaimEntity(
       identityCardId: passportCard.id,
       claimType: "age_over_18",
       title: "I am over 18",
-      issuerType: "government",
-      trustLevel: proof.trustLevel,
+      issuerType: issuerType,
+      trustLevel: trustLevel,
       source: "Passport",
-      payload: "{\"claim\":\"age_over_18\",\"proof\":\"\(proof.proofType)\"\(cardRef)}"
+      payload: "{\"claim\":\"age_over_18\",\"proof\":\"\(proof.proofType)\"\(cardRef)\(simRef)}"
     )
     IdentityDataStore.shared.addProvableClaim(ageClaim)
 
@@ -150,10 +198,10 @@ final class PassportPipelineService {
       identityCardId: passportCard.id,
       claimType: "is_human",
       title: "I am a real person",
-      issuerType: "government",
-      trustLevel: proof.trustLevel,
+      issuerType: issuerType,
+      trustLevel: trustLevel,
       source: "Passport",
-      payload: "{\"claim\":\"is_human\",\"proof\":\"\(proof.proofType)\"\(cardRef)}"
+      payload: "{\"claim\":\"is_human\",\"proof\":\"\(proof.proofType)\"\(cardRef)\(simRef)}"
     )
     IdentityDataStore.shared.addProvableClaim(humanClaim)
 
@@ -164,11 +212,11 @@ final class PassportPipelineService {
     let nameClaim = ProvableClaimEntity(
       identityCardId: passportCard.id,
       claimType: "field_name",
-      title: "Name verified by passport",
-      issuerType: "government",
-      trustLevel: proof.trustLevel,
+      title: isSimulated ? "Name (dev-mode passport)" : "Name verified by passport",
+      issuerType: issuerType,
+      trustLevel: trustLevel,
       source: "Passport",
-      payload: "{\"claim\":\"field_name\",\"proof\":\"\(proof.proofType)\"\(cardRef)}",
+      payload: "{\"claim\":\"field_name\",\"proof\":\"\(proof.proofType)\"\(cardRef)\(simRef)}",
       sourceField: BusinessCardField.name.rawValue
     )
     IdentityDataStore.shared.addProvableClaim(nameClaim)

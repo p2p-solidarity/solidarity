@@ -216,7 +216,7 @@ struct ShareSettingsView: View {
 
   private func fieldRow(
     icon: String,
-    label: String,
+    label: LocalizedStringKey,
     field: BusinessCardField,
     isOn: Binding<Bool>,
     locked: Bool = false,
@@ -280,11 +280,11 @@ struct ShareSettingsView: View {
   }
 
   private func vcStatusLabel(_ status: FieldVerificationStatus, excludedFromVC: Bool) -> String {
-    if excludedFromVC { return "Shared but not in VC" }
+    if excludedFromVC { return String(localized: "Shared but not in VC") }
     switch status {
-    case .verifiedBySource: return "VC: verified"
-    case .selfAttested: return "VC: self-attested"
-    case .unverified: return "Not in VC"
+    case .verifiedBySource: return String(localized: "VC: verified")
+    case .selfAttested: return String(localized: "VC: self-attested")
+    case .unverified: return String(localized: "Not in VC")
     }
   }
 

@@ -13,7 +13,7 @@ import CryptoKit
 
 final class ShamirSecretSharing {
 
-    static let prime: BigUInt = BigUInt(hexString: "FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF") ?? BigUInt(0)
+    static let prime: BigUInt = BigUInt(hexString: "FFFFFFFF00000001000000000000000000000000FFFFFFFFFFFFFFFFFFFFFFFF") ?? BigUInt(0)
 
     // MARK: - Public API
 
@@ -121,15 +121,49 @@ final class ShamirSecretSharing {
     }
 
     static func modInverse(_ a: BigUInt, _ m: BigUInt) -> BigUInt {
-        extendedGCD(a, m).1
+        // Iterative extended Euclidean over signed pairs, mapped onto BigUInt by
+        // tracking the sign as a parallel boolean. Returns a^-1 mod m for gcd(a, m) = 1.
+        var oldR = a % m
+        var r = m
+        var oldS = BigUInt(UInt64(1))
+        var oldSNeg = false
+        var s = BigUInt(0)
+        var sNeg = false
+
+        while !r.isZero {
+            let q = oldR / r
+            let newR = oldR - q * r
+            oldR = r
+            r = newR
+
+            // newS = oldS - q*s, computed as signed difference.
+            let qs = q * s
+            let (newS, newSNeg) = signedSub(oldS, oldSNeg, qs, sNeg)
+            oldS = s
+            oldSNeg = sNeg
+            s = newS
+            sNeg = newSNeg
+        }
+
+        // oldR is gcd; oldS is the Bezout coefficient for a (mod m).
+        if oldSNeg {
+            return m - (oldS % m)
+        }
+        return oldS % m
     }
 
-    static func extendedGCD(_ a: BigUInt, _ b: BigUInt) -> (BigUInt, BigUInt) {
-        if a.isZero {
-            return (b, BigUInt(0))
+    private static func signedSub(
+        _ a: BigUInt, _ aNeg: Bool, _ b: BigUInt, _ bNeg: Bool
+    ) -> (BigUInt, Bool) {
+        if aNeg == bNeg {
+            // (+a) - (+b) or (-a) - (-b) reduces to a - b with sign aNeg.
+            if a >= b {
+                return (a - b, aNeg && !(a == b))
+            }
+            return (b - a, !aNeg)
         }
-        let (g, x) = extendedGCD(b % a, a)
-        return (g, (b / a * x + prime - x) % prime)
+        // Different signs: a - (-b) = a + b (sign aNeg), or (-a) - b = -(a+b).
+        return (a + b, aNeg)
     }
 
     static func computeShareChecksum(index: Int, value: Data) -> String {

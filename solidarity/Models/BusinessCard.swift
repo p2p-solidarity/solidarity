@@ -170,10 +170,8 @@ struct BusinessCard: Codable, Identifiable, Equatable, Hashable {
     externallyVerifiedFields: Set<BusinessCardField>
   ) -> Set<BusinessCardField> {
     var eligible: Set<BusinessCardField> = [.name]
-    for field in selectedFields {
-      if externallyVerifiedFields.contains(field) {
-        eligible.insert(field)
-      }
+    for field in selectedFields where externallyVerifiedFields.contains(field) {
+      eligible.insert(field)
     }
     return eligible
   }

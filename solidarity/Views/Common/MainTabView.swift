@@ -9,6 +9,7 @@ struct MainTabView: View {
   @State private var selectedTab = MainAppTab.people.rawValue
   @State private var showingCredentialImport = false
   @State private var pendingCredentialOfferURL = ""
+  @State private var pendingContactImport: BusinessCard?
 
   var body: some View {
     tabContent
@@ -20,6 +21,25 @@ struct MainTabView: View {
       .sheet(isPresented: $showingCredentialImport) {
         CredentialImportFlowSheet(offerURL: pendingCredentialOfferURL)
       }
+      .alert(
+        String(localized: "Add this contact?"),
+        isPresented: Binding(
+          get: { pendingContactImport != nil },
+          set: { newValue in if !newValue { pendingContactImport = nil } }
+        ),
+        presenting: pendingContactImport
+      ) { card in
+        Button(String(localized: "Add")) {
+          deepLinkManager.confirmPendingContactImport(card)
+          pendingContactImport = nil
+        }
+        Button(String(localized: "Cancel"), role: .cancel) {
+          pendingContactImport = nil
+        }
+      } message: { card in
+        let detail = card.title.flatMap { $0.isEmpty ? nil : $0 }.map { " (\($0))" } ?? ""
+        Text(String(localized: "A link is requesting to save \(card.name)\(detail) to your contacts."))
+      }
       .alert("Error", isPresented: $showingErrorAlert) {
         Button("OK") {}
       } message: {
@@ -29,6 +49,7 @@ struct MainTabView: View {
         handleDeepLinkAction(action)
       }
       .toastOverlay()
+      .incomingInvitationOverlay()
       .onChange(of: scenePhase) { _, newPhase in
         if newPhase == .background {
           BackupManager.shared.triggerAutoBackupIfNeeded()
@@ -97,47 +118,27 @@ struct MainTabView: View {
 
   @ViewBuilder
   private var tabContent: some View {
-    if #available(iOS 26, *) {
+    ZStack(alignment: .bottom) {
+      Color.Theme.pageBg.ignoresSafeArea()
+
       TabView(selection: $selectedTab) {
-        Tab(MainAppTab.people.title, systemImage: MainAppTab.people.systemImage, value: MainAppTab.people.rawValue) {
-          PeopleListView()
-        }
-        Tab(MainAppTab.share.title, systemImage: MainAppTab.share.systemImage, value: MainAppTab.share.rawValue) {
-          SharingTabView()
-        }
-        Tab(MainAppTab.me.title, systemImage: MainAppTab.me.systemImage, value: MainAppTab.me.rawValue) {
-          MeTabView()
-        }
+        PeopleListView()
+          .tag(MainAppTab.people.rawValue)
+
+        SharingTabView()
+          .tag(MainAppTab.share.rawValue)
+
+        MeTabView()
+          .tag(MainAppTab.me.rawValue)
       }
-      .tint(Color.Theme.primaryBlue)
-      .toolbarColorScheme(.dark, for: .tabBar)
-    } else {
-      GeometryReader { geometry in
-        ZStack(alignment: .bottom) {
-          Color.Theme.pageBg
-            .ignoresSafeArea()
+      .tabViewStyle(DefaultTabViewStyle())
+      .toolbarBackground(.hidden, for: .tabBar)
+      .toolbar(.hidden, for: .tabBar)
+      .ignoresSafeArea(.keyboard)
 
-          TabView(selection: $selectedTab) {
-            PeopleListView()
-              .tag(MainAppTab.people.rawValue)
-
-            SharingTabView()
-              .tag(MainAppTab.share.rawValue)
-
-            MeTabView()
-              .tag(MainAppTab.me.rawValue)
-          }
-          .tabViewStyle(DefaultTabViewStyle())
-          .toolbarBackground(.hidden, for: .tabBar)
-          .toolbar(.hidden, for: .tabBar)
-          .padding(.bottom, 80)
-
-          CustomFloatingTabBar(selectedTab: $selectedTab)
-            .padding(.bottom, max(geometry.safeAreaInsets.bottom, 16))
-        }
-        .ignoresSafeArea(edges: .bottom)
-      }
+      CustomFloatingTabBar(selectedTab: $selectedTab)
     }
+    .ignoresSafeArea(edges: .bottom)
   }
 
   // MARK: - Handlers
@@ -169,6 +170,9 @@ struct MainTabView: View {
     case .credentialOffer(let offerURL):
       pendingCredentialOfferURL = offerURL
       showingCredentialImport = true
+
+    case .confirmContactImport(let card):
+      pendingContactImport = card
     }
 
     deepLinkManager.clearPendingAction()

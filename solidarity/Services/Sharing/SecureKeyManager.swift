@@ -106,31 +106,49 @@ class SecureKeyManager {
     return pubKey.isValidSignature(sigData, for: contentData)
   }
 
+  // Envelope versioning for backward-compatible decrypt.
+  // v1 = legacy ChaChaPoly.combined (no salt prepended, HKDF salt = Data()).
+  // v2 = [0x02 | 32-byte salt | ChaChaPoly.combined], HKDF salt = random per message.
+  private static let envelopeVersionV2: UInt8 = 0x02
+  private static let v2SaltByteCount = 32
+  private static let messageSharedInfo: Data = Data("solidarity.secureMessage.v2".utf8)
+
   // --- Feature B: Encrypt Message (Send Mail) ---
   // Uses NaCl Box concept (ECDH + ChaCha20Poly1305)
   func encrypt(message: String, for recipientPubKeyBase64: String) throws -> String {
+    #if DEBUG
     print("[SecureKeyManager] Encrypting for recipient: \(recipientPubKeyBase64)")
+    #endif
 
     guard let recipientData = Data(base64Encoded: recipientPubKeyBase64) else {
+      #if DEBUG
       print("[SecureKeyManager] Failed to decode base64 key")
+      #endif
       throw NSError(domain: "Crypto", code: -1, userInfo: [NSLocalizedDescriptionKey: "Invalid Base64 Key"])
     }
 
     guard let recipientKey = try? Curve25519.KeyAgreement.PublicKey(rawRepresentation: recipientData) else {
+      #if DEBUG
       print("[SecureKeyManager] Failed to create PublicKey from data (count: \(recipientData.count))")
+      #endif
       throw NSError(domain: "Crypto", code: -1, userInfo: [NSLocalizedDescriptionKey: "Invalid Curve25519 Key"])
     }
 
     // 1. Establish Shared Secret
     let sharedSecret = try encryptionKey.sharedSecretFromKeyAgreement(with: recipientKey)
+
+    // 2. Generate fresh per-message salt and derive a unique key.
+    //    Domain-separate via sharedInfo so any future protocol that reuses the
+    //    same shared secret cannot collide with secure messages.
+    let salt = Self.randomBytes(count: Self.v2SaltByteCount)
     let symmetricKey = sharedSecret.hkdfDerivedSymmetricKey(
       using: SHA256.self,
-      salt: Data(),  // Salt can be empty if not defined by protocol
-      sharedInfo: Data(),
+      salt: salt,
+      sharedInfo: Self.messageSharedInfo,
       outputByteCount: 32
     )
 
-    // 2. Encrypt
+    // 3. Encrypt
     guard let data = message.data(using: .utf8) else {
       throw NSError(
         domain: "Crypto",
@@ -140,14 +158,18 @@ class SecureKeyManager {
     }
     let sealedBox = try ChaChaPoly.seal(data, using: symmetricKey)
 
-    // Returns Base64 of Combined Data (Nonce + Ciphertext + Tag)
-    return sealedBox.combined.base64EncodedString()
+    // 4. Wrap in versioned envelope: [0x02][32-byte salt][nonce + ciphertext + tag]
+    var envelope = Data()
+    envelope.append(Self.envelopeVersionV2)
+    envelope.append(salt)
+    envelope.append(sealedBox.combined)
+
+    return envelope.base64EncodedString()
   }
 
   // --- Feature C: Decrypt Message (Receive Mail) ---
   func decrypt(blobBase64: String, from senderPubKeyBase64: String) throws -> String {
     guard let combinedData = Data(base64Encoded: blobBase64),
-      let sealedBox = try? ChaChaPoly.SealedBox(combined: combinedData),
       let senderData = Data(base64Encoded: senderPubKeyBase64),
       let senderKey = try? Curve25519.KeyAgreement.PublicKey(rawRepresentation: senderData)
     else {
@@ -155,14 +177,57 @@ class SecureKeyManager {
     }
 
     let sharedSecret = try encryptionKey.sharedSecretFromKeyAgreement(with: senderKey)
-    let symmetricKey = sharedSecret.hkdfDerivedSymmetricKey(
+
+    // Try v2 envelope first (fresh per-message salt + domain-separated sharedInfo).
+    if combinedData.count > 1 + Self.v2SaltByteCount,
+       combinedData[combinedData.startIndex] == Self.envelopeVersionV2 {
+      let saltStart = combinedData.startIndex + 1
+      let saltEnd = saltStart + Self.v2SaltByteCount
+      let salt = combinedData.subdata(in: saltStart..<saltEnd)
+      let payload = combinedData.subdata(in: saltEnd..<combinedData.endIndex)
+
+      guard let sealedBox = try? ChaChaPoly.SealedBox(combined: payload) else {
+        throw NSError(domain: "Crypto", code: -2, userInfo: [NSLocalizedDescriptionKey: "Decrypt Failed"])
+      }
+
+      let symmetricKey = sharedSecret.hkdfDerivedSymmetricKey(
+        using: SHA256.self,
+        salt: salt,
+        sharedInfo: Self.messageSharedInfo,
+        outputByteCount: 32
+      )
+      let decryptedData = try ChaChaPoly.open(sealedBox, using: symmetricKey)
+      return String(data: decryptedData, encoding: .utf8) ?? ""
+    }
+
+    // Legacy v1 path: empty salt + empty sharedInfo. Kept for messages that were
+    // already encrypted before the v2 envelope existed. Encryption is rejected
+    // for v1 — only decrypt remains.
+    guard let sealedBox = try? ChaChaPoly.SealedBox(combined: combinedData) else {
+      throw NSError(domain: "Crypto", code: -2, userInfo: [NSLocalizedDescriptionKey: "Decrypt Failed"])
+    }
+    let legacyKey = sharedSecret.hkdfDerivedSymmetricKey(
       using: SHA256.self,
       salt: Data(),
       sharedInfo: Data(),
       outputByteCount: 32
     )
 
-    let decryptedData = try ChaChaPoly.open(sealedBox, using: symmetricKey)
+    let decryptedData = try ChaChaPoly.open(sealedBox, using: legacyKey)
     return String(data: decryptedData, encoding: .utf8) ?? ""
+  }
+
+  private static func randomBytes(count: Int) -> Data {
+    var bytes = Data(count: count)
+    let status = bytes.withUnsafeMutableBytes { buffer -> Int32 in
+      guard let baseAddress = buffer.baseAddress else { return errSecParam }
+      return SecRandomCopyBytes(kSecRandomDefault, count, baseAddress)
+    }
+    if status != errSecSuccess {
+      // SecRandomCopyBytes failure is exceptional — fall back to CryptoKit's
+      // CSPRNG so we never return predictable bytes.
+      return SymmetricKey(size: .bits256).withUnsafeBytes { Data($0) }
+    }
+    return bytes
   }
 }

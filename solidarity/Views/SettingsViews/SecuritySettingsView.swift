@@ -6,36 +6,54 @@ struct SecuritySettingsView: View {
   @State private var alertMessage = ""
 
   var body: some View {
-    Form {
-      Section(
-        header: Text("Key Rotation"),
-        footer: Text("Rotating the master key will invalidate active verifiable credentials across your network until re-issued.")
-      ) {
-        Button(role: .destructive) {
-          rotateMasterKey()
-        } label: {
-          Label("Rotate DID Master Key", systemImage: "key.fill")
-        }
+    ScrollView {
+      VStack(spacing: 24) {
+        keyRotationSection
+        biometricSection
       }
-
-      Section("Biometric Requirements") {
-        ForEach(SensitiveAction.allCases) { action in
-          Toggle(isOn: Binding(
-            get: { policyStore.requiresBiometric(action) },
-            set: { policyStore.setRequirement($0, for: action) }
-          )) {
-            Text(faceIdLabel(for: action))
-              .font(.subheadline)
-          }
-        }
-      }
+      .padding(.vertical, 24)
     }
+    .background(Color.Theme.pageBg.ignoresSafeArea())
     .navigationTitle("Security & Keys")
     .navigationBarTitleDisplayMode(.inline)
     .alert("Security", isPresented: $showingAlert) {
       Button("OK", role: .cancel) {}
     } message: {
       Text(alertMessage)
+    }
+  }
+
+  // MARK: - Key Rotation
+
+  private var keyRotationSection: some View {
+    SettingsBlockSection(
+      "Key Rotation",
+      footer: "Rotating the master key will invalidate active verifiable credentials across your network until re-issued."
+    ) {
+      Button { rotateMasterKey() } label: {
+        SettingsBlockDangerRow(
+          icon: "key.fill",
+          title: "Rotate DID Master Key"
+        )
+      }
+      .buttonStyle(.plain)
+    }
+  }
+
+  // MARK: - Biometric Requirements
+
+  private var biometricSection: some View {
+    SettingsBlockSection("Biometric Requirements") {
+      ForEach(SensitiveAction.allCases) { action in
+        SettingsBlockToggleRow(
+          icon: "faceid",
+          title: faceIdLabel(for: action),
+          isOn: Binding(
+            get: { policyStore.requiresBiometric(action) },
+            set: { policyStore.setRequirement($0, for: action) }
+          )
+        )
+      }
     }
   }
 
@@ -51,6 +69,10 @@ struct SecuritySettingsView: View {
       return String(localized: "Require Face ID for key rotation")
     case .revealRecoveryBundle:
       return String(localized: "Require Face ID for recovery")
+    case .registerTrustAnchor:
+      return String(localized: "Require Face ID for trusted issuers")
+    case .deleteZKIdentity:
+      return String(localized: "Require Face ID to delete ZK identity")
     }
   }
 

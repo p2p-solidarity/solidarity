@@ -66,7 +66,13 @@ extension KeychainService {
     }
 
     var migrated = false
-    migrated = migrated || migrateLegacySecKey(tag: Self.modernMasterAlias)
+    // v1 master alias → v2. `migrateLegacySecKey` filters by
+    // `kSecAttrKeyClassPrivate`, so phantom v1 entries (whose key class can't
+    // be materialized by iOS) silently fail this query and we fall through to
+    // a fresh generation under v2. A previous self-to-self migration of
+    // `Self.modernMasterAlias → Self.modernMasterAlias` lived here and is
+    // suspected of contributing to the v1 phantom state — it's been removed.
+    migrated = migrated || migrateLegacySecKey(tag: Self.v1MasterAlias)
     migrated = migrated || migrateLegacySecKey(tag: "airmeishi.did.signing")
 
     if !migrated,
@@ -113,7 +119,7 @@ extension KeychainService {
       kSecValueRef as String: secKey,
       kSecAttrApplicationTag as String: keyTag,
       kSecAttrAccessible as String: kSecAttrAccessibleWhenUnlocked,
-      kSecAttrSynchronizable as String: kCFBooleanTrue as Any,
+      kSecAttrSynchronizable as String: preferredSyncWriteValue,
     ]
     let addStatus = SecItemAdd(addQuery as CFDictionary, nil)
     return addStatus == errSecSuccess || addStatus == errSecDuplicateItem
@@ -148,7 +154,7 @@ extension KeychainService {
       kSecValueRef as String: secKey,
       kSecAttrApplicationTag as String: keyTag,
       kSecAttrAccessible as String: kSecAttrAccessibleWhenUnlocked,
-      kSecAttrSynchronizable as String: kCFBooleanTrue as Any,
+      kSecAttrSynchronizable as String: preferredSyncWriteValue,
     ]
     let addStatus = SecItemAdd(addQuery as CFDictionary, nil)
     return addStatus == errSecSuccess || addStatus == errSecDuplicateItem

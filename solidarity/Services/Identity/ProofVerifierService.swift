@@ -140,6 +140,19 @@ final class ProofVerifierService {
     }
     let keyId = header["kid"] as? String
 
+    // RFC 8725 §3.1: pin alg before signature decode. The resolved
+    // issuer key is always P-256 here (did:key + IssuerTrustAnchorStore
+    // produce P-256 JWKs and PublicKeyJWK.toP256PublicKey() enforces it),
+    // so anything other than ES256 — including `none`, HMAC, RSA or
+    // ES384 — must be rejected. Decoding the signature first and then
+    // running through ECDSA would otherwise let `alg: none` slip past
+    // because the empty signature would just fail crypto and we would
+    // log a confusing error instead of a precise one.
+    let alg = (header["alg"] as? String)?.uppercased() ?? ""
+    guard alg == "ES256" else {
+      return .failure("Unsupported JWT alg: \(alg.isEmpty ? "(missing)" : alg). Expected ES256.")
+    }
+
     // Resolution strategy, in order of preference:
     //  1. IssuerTrustAnchorStore — for issuers registered via TLSNotary /
     //     institution proof pipelines.
@@ -157,11 +170,16 @@ final class ProofVerifierService {
     } else if let didKeyJWK = DIDKeyResolver.resolveP256JWK(from: issuerDid) {
       resolvedKey = didKeyJWK
       source = "did:key"
-    } else if let embedded = extractPublicKeyJWK(from: payload),
+    } else if Self.normalizeDid(issuerDid).hasPrefix("did:key:"),
+              let embedded = extractPublicKeyJWK(from: payload),
               let derivedDid = selfDerivedDid(from: embedded),
-              Self.normalizeDid(derivedDid) == Self.normalizeDid(issuerDid) {
+              Self.didSuffixesMatch(derivedDid, issuerDid) {
+      // Embedded-JWK fallback: only honoured for did:key issuers, where the
+      // DID itself is a deterministic function of the public key. For any
+      // other DID method (did:web, did:ethr, …) the JWK could be supplied
+      // by the presenter, making this a circular trust path. Reject those.
       resolvedKey = embedded
-      source = "embedded-jwk (self-consistent)"
+      source = "embedded-jwk (did:key self-consistent)"
     } else {
       return .failure("Untrusted issuer DID: \(issuerDid)")
     }
@@ -281,5 +299,21 @@ final class ProofVerifierService {
 
   static func normalizeDid(_ did: String) -> String {
     did.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+  }
+
+  /// Strict suffix equality for did:key identifiers. The multibase suffix
+  /// after `did:key:` is case-sensitive (base58btc), so we deliberately do
+  /// NOT lowercase before comparing — only whitespace is trimmed. Both
+  /// inputs MUST be did:key.
+  static func didSuffixesMatch(_ lhs: String, _ rhs: String) -> Bool {
+    let prefix = "did:key:"
+    let l = lhs.trimmingCharacters(in: .whitespacesAndNewlines)
+    let r = rhs.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard l.lowercased().hasPrefix(prefix), r.lowercased().hasPrefix(prefix) else {
+      return false
+    }
+    let lSuffix = l.dropFirst(prefix.count)
+    let rSuffix = r.dropFirst(prefix.count)
+    return lSuffix == rSuffix
   }
 }

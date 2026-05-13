@@ -145,14 +145,15 @@ extension VaultCloudSyncService {
             )
         }
 
-        // Save local manifest
+        // Save local manifest with full protection — only consumed on-device.
         let localManifestURL = localVaultURL.appendingPathComponent(".sync_manifest.json")
         let data = try JSONEncoder().encode(updatedManifest)
-        try data.write(to: localManifestURL)
+        try data.write(to: localManifestURL, options: [.atomic, .completeFileProtection])
 
-        // Save cloud manifest
+        // Cloud manifest cannot use .completeFileProtection because CloudKit
+        // needs to upload it while the device may be locked.
         if let cloudManifestURL = syncManifestURL {
-            try data.write(to: cloudManifestURL)
+            try data.write(to: cloudManifestURL, options: [.atomic])
         }
     }
 

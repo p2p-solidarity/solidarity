@@ -86,9 +86,7 @@ struct InviteLinkView: View {
       }
       .navigationTitle("Invite Members")
       .toolbar {
-        ToolbarItem(placement: .navigationBarTrailing) {
-          Button("Done") { dismiss() }
-        }
+        SettingsBackToolbar { dismiss() }
       }
     }
   }
@@ -135,57 +133,6 @@ struct InviteLinkView: View {
 }
 
 // MARK: - Simple UI Components
-
-struct SimpleNodeRow: View {
-  let icon: String
-  let title: String
-  let subtitle: String
-  let action: () -> Void
-
-  var body: some View {
-    Button(action: action) {
-      HStack(alignment: .center, spacing: 16) {
-        ZStack {
-          RoundedRectangle(cornerRadius: 12)
-            .fill(Color.Theme.divider)
-            .frame(width: 44, height: 44)
-
-          Image(systemName: icon)
-            .font(.system(size: 20, weight: .medium))
-            .foregroundColor(Color.Theme.textPrimary)
-            .frame(width: 44, height: 44)
-            .contentShape(Rectangle())
-        }
-
-        VStack(alignment: .leading, spacing: 4) {
-          Text(title)
-            .font(.system(size: 14))
-            .fontWeight(.medium)
-            .foregroundColor(Color.Theme.textPrimary)
-
-          Text(subtitle)
-            .font(.system(size: 12, design: .monospaced))
-            .foregroundColor(Color.Theme.textTertiary)
-        }
-
-        Spacer()
-
-        Image(systemName: "chevron.right")
-          .font(.system(size: 14))
-          .foregroundColor(Color.Theme.textTertiary)
-      }
-      .padding(.horizontal, 16)
-      .padding(.vertical, 12)
-      .background(
-        RoundedRectangle(cornerRadius: 12)
-          .fill(Color.Theme.searchBg)
-      )
-      .padding(.horizontal, 12)
-      .padding(.vertical, 2)
-    }
-    .buttonStyle(.plain)
-  }
-}
 
 struct SimplePremiumFeatureRow: View {
   let icon: String

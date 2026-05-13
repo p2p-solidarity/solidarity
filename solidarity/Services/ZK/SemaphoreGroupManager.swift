@@ -125,7 +125,7 @@ final class SemaphoreGroupManager: ObservableObject {
       onMain { [weak self] in self?.merkleRoot = nil }
       return
     }
-    let newRoot = computePseudoRoot(for: allGroups[idx])
+    let newRoot = groupFingerprint(for: allGroups[idx])
     onMain { [weak self] in
       self?.allGroups[idx].root = newRoot
       self?.merkleRoot = newRoot
@@ -258,7 +258,7 @@ final class SemaphoreGroupManager: ObservableObject {
   }
 
   private func updateRootForGroup(at index: Int) {
-    self.allGroups[index].root = computePseudoRoot(for: self.allGroups[index])
+    self.allGroups[index].root = groupFingerprint(for: self.allGroups[index])
   }
 
   private func applySelectedToPublished() {
@@ -272,8 +272,17 @@ final class SemaphoreGroupManager: ObservableObject {
   }
 
   // MARK: - Root helper
-  private func computePseudoRoot(for group: ManagedGroup) -> String {
-    // Deterministic, stable root based on group id and sorted members
+  //
+  // NOTE: this is a non-cryptographic GROUP FINGERPRINT, NOT a Semaphore
+  // Merkle root. The Semaphore circuit derives its own root from the
+  // member commitments at proof time (see
+  // `SemaphoreIdentityManager.circuitGroupRoot`). A pseudo-root computed
+  // here as `SHA256(groupId|sortedMembers...)` will never match the
+  // circuit root, so `verifyProof` must NOT use this value as the
+  // expected `groupRoot`. It's safe to use as a UI/diff identifier
+  // ("did the local view of group state change?") but never for proof
+  // verification.
+  private func groupFingerprint(for group: ManagedGroup) -> String {
     let sorted = group.members.sorted()
     let payload = group.id.uuidString + "|" + sorted.joined(separator: "|")
     let digest = SHA256.hash(data: Data(payload.utf8))
@@ -313,7 +322,15 @@ private final class GroupStorage {
       fatalError("Could not access application support directory")
     }
     let appDir = dir.appendingPathComponent("solidarity", isDirectory: true)
-    try? FileManager.default.createDirectory(at: appDir, withIntermediateDirectories: true)
+    try? FileManager.default.createDirectory(
+      at: appDir,
+      withIntermediateDirectories: true,
+      attributes: [.protectionKey: FileProtectionType.complete]
+    )
+    try? FileManager.default.setAttributes(
+      [.protectionKey: FileProtectionType.complete],
+      ofItemAtPath: appDir.path
+    )
     url = appDir.appendingPathComponent("semaphore_group.json")
   }
 
@@ -347,6 +364,8 @@ private final class GroupStorage {
 
   func save(groups: [SemaphoreGroupManager.ManagedGroup], selectedGroupId: UUID?) {
     let state = State(groups: groups, selectedGroupId: selectedGroupId)
-    if let data = try? JSONEncoder().encode(state) { try? data.write(to: url) }
+    if let data = try? JSONEncoder().encode(state) {
+      try? data.write(to: url, options: [.atomic, .completeFileProtection])
+    }
   }
 }
