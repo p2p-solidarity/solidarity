@@ -125,3 +125,55 @@ export const useGroup = (id: string | undefined): GroupModel | undefined =>
 
 export const useGroupMembers = (id: string | undefined): readonly GroupMember[] =>
   useGroupStore((s) => (id ? (s.members.get(id) ?? []) : []));
+
+/**
+ * Local-only "current user" record id. The Swift app reads
+ * `CKContainer.default().userRecordID`; on the Expo port we don't have
+ * CloudKit, so the owner of any locally-created group is the literal
+ * string `"me"` (see `apps/expo/app/groups/new.tsx`). Keeping the
+ * constant here means screens compare against one place and the
+ * future CloudKit / Drive sync layer can swap the implementation.
+ *
+ * TODO(android): wire to backup-provider identity when CloudKitGroupSync
+ * Manager / Drive equivalent lands.
+ */
+export const CURRENT_USER_RECORD_ID = 'me';
+
+/** All groups (insertion order). */
+export const useAllGroups = (): readonly GroupModel[] =>
+  useGroupStore((s) => Array.from(s.groups.values()));
+
+/** Public (non-private) groups. Mirrors Swift YourGroupsSectionView.publicGroups. */
+export const usePublicGroups = (): readonly GroupModel[] =>
+  useGroupStore((s) =>
+    Array.from(s.groups.values()).filter((g) => !g.isPrivate)
+  );
+
+/** Private groups owned by the current user. */
+export const usePrivateOwnedGroups = (): readonly GroupModel[] =>
+  useGroupStore((s) =>
+    Array.from(s.groups.values()).filter(
+      (g) => g.isPrivate && g.ownerRecordID === CURRENT_USER_RECORD_ID
+    )
+  );
+
+/** Private groups shared with the current user. */
+export const usePrivateSharedGroups = (): readonly GroupModel[] =>
+  useGroupStore((s) =>
+    Array.from(s.groups.values()).filter(
+      (g) => g.isPrivate && g.ownerRecordID !== CURRENT_USER_RECORD_ID
+    )
+  );
+
+/** True if the current user owns the given group. */
+export function isOwner(group: GroupModel): boolean {
+  return group.ownerRecordID === CURRENT_USER_RECORD_ID;
+}
+
+/** True if the current user is allowed to issue group VCs. */
+export function canIssueCredentials(group: GroupModel): boolean {
+  return (
+    isOwner(group) ||
+    group.credentialIssuers.includes(CURRENT_USER_RECORD_ID)
+  );
+}

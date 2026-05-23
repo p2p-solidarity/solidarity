@@ -1,96 +1,240 @@
 /**
- * Create group — mirrors Swift CreateGroupView. Persists a new GroupModel
- * to the zustand store; CloudKit/Drive sync happens out of band.
+ * Create Group — 1:1 port of Swift CreateGroupView
+ *   (solidarity/Views/IDViews/GroupViews/CreateGroupView.swift).
+ *
+ * Layout matches the Swift screen exactly:
+ *   • Nav title "New Group" + leading "Cancel" button
+ *   • Stacked text fields: Group Name + Description (Optional)
+ *     inside searchBg cards with divider stroke
+ *   • Helper text: "Give your group a recognizable name and description."
+ *   • "GROUP TYPE" mono caption header
+ *   • Segmented control: Public Group / Private Group
+ *   • Helper text per selection (public vs private)
+ *   • Primary "Create Group" button — disabled until name is non-empty
+ *
+ * TODO(android): persists straight into the local zustand store. The
+ * Swift original calls CloudKitGroupSyncManager.createGroup which performs
+ * the CKShare dance. That sync layer is not ported yet.
  */
+import { randomUUID } from 'expo-crypto';
 import { router } from 'expo-router';
 import { useState } from 'react';
-import { ScrollView, Switch, TextInput, View } from 'react-native';
+import {
+  ActivityIndicator,
+  Alert,
+  Pressable,
+  ScrollView,
+  Text,
+  TextInput,
+  View,
+} from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { ThemedButton, ThemedSurface, ThemedText } from '@/components/themed';
-import { useGroupStore } from '@/groups/store';
+import { ThemedButton } from '@/components/themed';
+import { Colors } from '@/constants/Colors';
 import { pushToast } from '@/feedback/toast';
+import {
+  CURRENT_USER_RECORD_ID,
+  useGroupStore,
+} from '@/groups/store';
 
-export default function CreateGroup() {
+const MONO_FONT = 'Menlo';
+
+function NavBar({
+  title,
+  onCancel,
+}: {
+  readonly title: string;
+  readonly onCancel: () => void;
+}): React.JSX.Element {
+  const insets = useSafeAreaInsets();
+  return (
+    <View style={{ paddingTop: insets.top }} className="bg-pageBg">
+      <View className="h-11 flex-row items-center px-4">
+        <Pressable
+          onPress={onCancel}
+          accessibilityRole="button"
+          accessibilityLabel="Cancel"
+          hitSlop={8}
+          className="px-1 py-1 active:opacity-60"
+        >
+          <Text className="text-text1 text-[16px]">Cancel</Text>
+        </Pressable>
+        <View className="flex-1 items-center">
+          <Text className="text-text1 text-[17px] font-semibold">{title}</Text>
+        </View>
+        <View style={{ width: 60 }} />
+      </View>
+    </View>
+  );
+}
+
+interface GroupTypeSegmentProps {
+  readonly value: boolean;
+  readonly onChange: (next: boolean) => void;
+}
+
+function GroupTypeSegment({
+  value,
+  onChange,
+}: GroupTypeSegmentProps): React.JSX.Element {
+  return (
+    <View
+      className="flex-row p-1 rounded-lg bg-searchBg"
+      style={{ borderWidth: 1, borderColor: Colors.divider }}
+    >
+      <Pressable
+        accessibilityRole="button"
+        onPress={() => { onChange(false); }}
+        className="flex-1 items-center justify-center rounded-md py-2"
+        style={{
+          backgroundColor: !value ? Colors.cardBg : 'transparent',
+          shadowColor: !value ? '#000' : 'transparent',
+          shadowOpacity: !value ? 0.08 : 0,
+          shadowRadius: 2,
+          shadowOffset: { width: 0, height: 1 },
+        }}
+      >
+        <Text
+          className={`text-[14px] ${!value ? 'text-text1 font-semibold' : 'text-text2'}`}
+        >
+          Public Group
+        </Text>
+      </Pressable>
+      <Pressable
+        accessibilityRole="button"
+        onPress={() => { onChange(true); }}
+        className="flex-1 items-center justify-center rounded-md py-2"
+        style={{
+          backgroundColor: value ? Colors.cardBg : 'transparent',
+          shadowColor: value ? '#000' : 'transparent',
+          shadowOpacity: value ? 0.08 : 0,
+          shadowRadius: 2,
+          shadowOffset: { width: 0, height: 1 },
+        }}
+      >
+        <Text
+          className={`text-[14px] ${value ? 'text-text1 font-semibold' : 'text-text2'}`}
+        >
+          Private Group
+        </Text>
+      </Pressable>
+    </View>
+  );
+}
+
+export default function CreateGroup(): React.JSX.Element {
   const upsertGroup = useGroupStore((s) => s.upsertGroup);
-  const [name, setName] = useState('');
-  const [description, setDescription] = useState('');
+  const [groupName, setGroupName] = useState('');
+  const [groupDescription, setGroupDescription] = useState('');
   const [isPrivate, setIsPrivate] = useState(false);
+  const [isCreating, setIsCreating] = useState(false);
+
+  const trimmed = groupName.trim();
+  const disabled = trimmed.length === 0 || isCreating;
 
   const onCreate = async () => {
-    if (name.trim().length === 0) {
-      pushToast('Name is required', 'warning');
-      return;
+    if (trimmed.length === 0) return;
+    setIsCreating(true);
+    try {
+      const id = randomUUID();
+      await upsertGroup({
+        id,
+        name: trimmed,
+        description: groupDescription.trim(),
+        ownerRecordID: CURRENT_USER_RECORD_ID,
+        merkleRoot: undefined,
+        merkleTreeDepth: 0,
+        memberCount: 1,
+        isPrivate,
+        isSynced: false,
+        credentialIssuers: [],
+      });
+      pushToast(`Created "${trimmed}"`, 'success');
+      router.replace({ pathname: '/groups/[id]', params: { id } });
+    } catch (e) {
+      Alert.alert('Error', e instanceof Error ? e.message : 'Unknown error');
+    } finally {
+      setIsCreating(false);
     }
-    const id = crypto.randomUUID();
-    await upsertGroup({
-      id,
-      name: name.trim(),
-      description: description.trim(),
-      ownerRecordID: 'me',
-      merkleRoot: undefined,
-      merkleTreeDepth: 0,
-      memberCount: 1,
-      isPrivate,
-      isSynced: false,
-      credentialIssuers: [],
-    });
-    pushToast(`Created "${name}"`, 'success');
-    router.replace({ pathname: '/groups/[id]', params: { id } });
   };
 
   return (
-    <ScrollView className="flex-1 bg-pageBg">
-      <View className="px-4 pt-6">
-        <ThemedButton variant="secondary" size="sm" label="‹ Back" onPress={() => { router.back(); }} />
-      </View>
-      <View className="px-4 py-4">
-        <ThemedText variant="headlineLarge">New group</ThemedText>
-      </View>
+    <View className="flex-1 bg-pageBg">
+      <NavBar title="New Group" onCancel={() => { router.back(); }} />
 
-      <ThemedSurface variant="card" padded className="mx-4">
-        <ThemedText variant="caption" tone="tertiary">NAME</ThemedText>
-        <TextInput
-          value={name}
-          onChangeText={setName}
-          placeholder="Solidarity Founders"
-          placeholderTextColor="#9C9C9C"
-          autoCapitalize="words"
-          className="text-text1 mt-1 py-1"
-        />
-      </ThemedSurface>
+      <ScrollView
+        className="flex-1"
+        contentContainerStyle={{ padding: 16 }}
+        keyboardShouldPersistTaps="handled"
+      >
+        <View className="gap-4">
+          {/* Group Info Section */}
+          <View>
+            <View
+              style={{ borderWidth: 1, borderColor: Colors.divider }}
+              className="overflow-hidden"
+            >
+              <TextInput
+                value={groupName}
+                onChangeText={setGroupName}
+                placeholder="Group Name"
+                placeholderTextColor={Colors.text3}
+                autoCapitalize="words"
+                className="text-text1 text-[14px] bg-searchBg px-4 py-4"
+              />
+              <View style={{ height: 1, backgroundColor: Colors.divider }} />
+              <TextInput
+                value={groupDescription}
+                onChangeText={setGroupDescription}
+                placeholder="Description (Optional)"
+                placeholderTextColor={Colors.text3}
+                autoCapitalize="sentences"
+                className="text-text1 text-[14px] bg-searchBg px-4 py-4"
+              />
+            </View>
+            <Text
+              className="text-text3 text-[12px] pt-2"
+              style={{ fontFamily: MONO_FONT }}
+            >
+              Give your group a recognizable name and description.
+            </Text>
+          </View>
 
-      <ThemedSurface variant="card" padded className="mx-4 mt-3">
-        <ThemedText variant="caption" tone="tertiary">DESCRIPTION (OPTIONAL)</ThemedText>
-        <TextInput
-          value={description}
-          onChangeText={setDescription}
-          placeholder="What's this group for?"
-          placeholderTextColor="#9C9C9C"
-          multiline
-          numberOfLines={4}
-          className="text-text1 mt-1"
-          style={{ minHeight: 80, textAlignVertical: 'top' }}
-        />
-      </ThemedSurface>
+          {/* Group Type Section */}
+          <View>
+            <Text
+              className="text-text3 text-[12px] font-bold pb-2"
+              style={{ fontFamily: MONO_FONT }}
+            >
+              GROUP TYPE
+            </Text>
+            <GroupTypeSegment value={isPrivate} onChange={setIsPrivate} />
+            <Text
+              className="text-text3 text-[12px] pt-2"
+              style={{ fontFamily: MONO_FONT }}
+            >
+              {isPrivate
+                ? 'Private groups use native iCloud Sharing. Only invited people can join.'
+                : 'Public groups use simple link sharing. Anyone with the link can join.'}
+            </Text>
+          </View>
 
-      <ThemedSurface variant="card" padded className="mx-4 mt-3 flex-row items-center justify-between">
-        <View className="flex-1 mr-3">
-          <ThemedText variant="bodyLarge">Private group</ThemedText>
-          <ThemedText variant="caption" tone="tertiary" className="mt-0.5">
-            Only invited members can see this group.
-          </ThemedText>
+          {/* Create button */}
+          <ThemedButton
+            variant="primary"
+            fullWidth
+            disabled={disabled}
+            label={isCreating ? 'Creating...' : 'Create Group'}
+            onPress={() => { void onCreate(); }}
+          />
+          {isCreating ? (
+            <View className="items-center -mt-2">
+              <ActivityIndicator size="small" color={Colors.accentRose} />
+            </View>
+          ) : null}
         </View>
-        <Switch value={isPrivate} onValueChange={setIsPrivate} />
-      </ThemedSurface>
-
-      <View className="px-4 mt-6 mb-10">
-        <ThemedButton
-          label="Create group"
-          fullWidth
-          disabled={name.trim().length === 0}
-          onPress={() => { void onCreate(); }}
-        />
-      </View>
-    </ScrollView>
+      </ScrollView>
+    </View>
   );
 }
