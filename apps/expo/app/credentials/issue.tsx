@@ -1,110 +1,439 @@
 /**
- * Group VC issuance — mirrors Swift GroupVCIssuanceView.
- * Lets a group owner mint a verifiable credential and dispatch it via
- * one of the delivery methods (Sakura / Proximity / QR Code / AirDrop).
+ * Issue Group VC — port of solidarity/Views/IDViews/GroupVCIssuanceView.swift.
  *
- * Today: builds the VC payload in-memory and persists it locally. Real
- * issuance (sign with group key + push via delivery method) wires when
- * Phase 8.3 lands.
+ * Sections (Swift parity): SELECT BUSINESS CARD, GROUP DISPLAY, RECIPIENTS,
+ * DELIVERY METHOD, EXPIRATION (OPTIONAL), Issue button, RESULTS. Section
+ * headers are 12pt monospaced bold uppercase text3; field cards are
+ * searchBg with 1pt divider overlay.
+ *
+ * Real issuance lives in GroupCredentialService — not ported yet. The
+ * Issue button currently writes a placeholder StoredCredential locally so
+ * the full flow is exercisable. Swap the body of `runIssuance` when
+ * `src/credentials/groupIssuance.ts` lands.
  */
 import { router, useLocalSearchParams } from 'expo-router';
-import { useState } from 'react';
-import { ScrollView, TextInput, View } from 'react-native';
+import type { SFSymbol } from 'expo-symbols';
+import type { ReactNode } from 'react';
+import { useEffect, useMemo, useState } from 'react';
+import {
+  Platform,
+  Pressable,
+  ScrollView,
+  Text,
+  TextInput,
+  View,
+} from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { SfIcon } from '@/components/icons/SfIcon';
+import { useCardStore } from '@/cards/cardManager';
+import { ThemedButton } from '@/components/themed';
+import { Colors } from '@/constants/Colors';
 import { useCredentialStore } from '@/credentials/store';
-import { useGroup } from '@/groups/store';
-import { ThemedButton, ThemedSurface, ThemedText } from '@/components/themed';
 import { pushToast } from '@/feedback/toast';
+import { useGroup, useGroupMembers } from '@/groups/store';
+import { getMmkv } from '@/storage/mmkv';
+import type { BusinessCard } from '@solidarity/shared';
 
-type Delivery = 'Sakura' | 'Proximity' | 'QR Code' | 'AirDrop';
+const MONO = Platform.OS === 'ios' ? 'Menlo' : 'monospace';
 
-const DELIVERY_OPTIONS: readonly Delivery[] = ['Sakura', 'Proximity', 'QR Code', 'AirDrop'];
+type DeliveryMethod = 'Sakura' | 'Proximity' | 'QR Code' | 'AirDrop';
+const DELIVERY_METHODS: readonly DeliveryMethod[] = ['Sakura', 'Proximity', 'QR Code', 'AirDrop'];
 
-export default function IssueCredential() {
+interface GroupCardBindingSettings {
+  readonly cardId: string;
+  readonly customName?: string;
+}
+
+function bindingKey(groupId: string): string {
+  return `group_issuance_binding_${groupId}`;
+}
+function loadBinding(groupId: string): GroupCardBindingSettings | null {
+  const raw = getMmkv().getString(bindingKey(groupId));
+  if (!raw) return null;
+  try { return JSON.parse(raw) as GroupCardBindingSettings; } catch { return null; }
+}
+function saveBinding(groupId: string, settings: GroupCardBindingSettings): void {
+  getMmkv().set(bindingKey(groupId), JSON.stringify(settings));
+}
+
+type IssuanceResult =
+  | { readonly ok: true; readonly memberId: string }
+  | { readonly ok: false; readonly memberId: string; readonly error: string };
+
+function thirtyDaysFromNow(): Date {
+  const d = new Date();
+  d.setDate(d.getDate() + 30);
+  return d;
+}
+
+// MARK: - Atoms
+
+function Section({ title, children }: { readonly title: string; readonly children: ReactNode }) {
+  return (
+    <View>
+      <Text
+        style={{
+          fontFamily: MONO,
+          fontSize: 12,
+          fontWeight: '700',
+          color: Colors.text3,
+          marginBottom: 8,
+        }}
+      >
+        {title}
+      </Text>
+      <View style={{ borderWidth: 1, borderColor: Colors.divider, overflow: 'hidden' }}>
+        {children}
+      </View>
+    </View>
+  );
+}
+
+function SegmentedOption({
+  label, isSelected, onPress,
+}: { readonly label: string; readonly isSelected: boolean; readonly onPress: () => void }) {
+  return (
+    <Pressable
+      onPress={onPress}
+      accessibilityRole="button"
+      accessibilityLabel={label}
+      accessibilityState={{ selected: isSelected }}
+      style={{
+        paddingHorizontal: 12,
+        paddingVertical: 8,
+        borderRadius: 6,
+        backgroundColor: isSelected ? Colors.text1 : 'transparent',
+      }}
+    >
+      <Text
+        style={{
+          color: isSelected ? Colors.pageBg : Colors.text1,
+          fontSize: 14,
+          fontWeight: isSelected ? '600' : '400',
+        }}
+      >
+        {label}
+      </Text>
+    </Pressable>
+  );
+}
+
+function SegmentedRow({ children }: { readonly children: ReactNode }) {
+  return (
+    <ScrollView
+      horizontal
+      showsHorizontalScrollIndicator={false}
+      style={{ backgroundColor: Colors.searchBg }}
+      contentContainerStyle={{ padding: 8, gap: 6 }}
+    >
+      {children}
+    </ScrollView>
+  );
+}
+
+function ToggleRow({
+  label, isOn, onChange,
+}: { readonly label: string; readonly isOn: boolean; readonly onChange: (on: boolean) => void }) {
+  return (
+    <Pressable
+      onPress={() => { onChange(!isOn); }}
+      accessibilityRole="switch"
+      accessibilityLabel={label}
+      accessibilityState={{ checked: isOn }}
+      style={{
+        backgroundColor: Colors.searchBg,
+        padding: 16,
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 12,
+      }}
+    >
+      <Text className="text-text1 text-[14px] flex-1">{label}</Text>
+      <View
+        style={{
+          width: 36, height: 22, borderRadius: 11,
+          backgroundColor: isOn ? Colors.primaryBlue : Colors.divider,
+          padding: 2, justifyContent: 'center',
+        }}
+      >
+        <View
+          style={{
+            width: 18, height: 18, borderRadius: 9,
+            backgroundColor: '#FFFFFF',
+            alignSelf: isOn ? 'flex-end' : 'flex-start',
+          }}
+        />
+      </View>
+    </Pressable>
+  );
+}
+
+function ResultRow({ result }: { readonly result: IssuanceResult }) {
+  const icon: SFSymbol = result.ok ? 'checkmark.circle.fill' : 'xmark.circle.fill';
+  const color = result.ok ? Colors.terminalGreen : Colors.destructive;
+  const label = result.ok
+    ? `Sent to ${result.memberId}`
+    : `Failed: ${result.memberId} - ${result.error}`;
+  return (
+    <View
+      style={{
+        backgroundColor: Colors.searchBg, padding: 16,
+        flexDirection: 'row', alignItems: 'center', gap: 8,
+      }}
+    >
+      <SfIcon name={icon} size={14} color={color} />
+      <Text style={{ color, fontSize: 14, flex: 1 }}>{label}</Text>
+    </View>
+  );
+}
+
+// MARK: - Screen
+
+export default function GroupVCIssuanceScreen() {
+  const insets = useSafeAreaInsets();
   const { groupId } = useLocalSearchParams<{ groupId?: string }>();
   const group = useGroup(groupId);
+  const members = useGroupMembers(groupId);
+  const cards = useCardStore((s) => s.cards);
+  const hydrateCards = useCardStore((s) => s.hydrate);
   const addCredential = useCredentialStore((s) => s.add);
-  const [claimType, setClaimType] = useState('member');
-  const [title, setTitle] = useState(group ? `${group.name} member` : '');
-  const [delivery, setDelivery] = useState<Delivery>('Sakura');
 
-  const onIssue = async () => {
-    const id = crypto.randomUUID();
+  const [selectedCardId, setSelectedCardId] = useState<string | undefined>(undefined);
+  const [customName, setCustomName] = useState('');
+  const [rememberSelection, setRememberSelection] = useState(true);
+  const [selectedMemberIds, setSelectedMemberIds] = useState<readonly string[]>([]);
+  const [deliveryMethod, setDeliveryMethod] = useState<DeliveryMethod>('Sakura');
+  const [expirationDate, setExpirationDate] = useState<Date | undefined>(undefined);
+  const [isIssuing, setIsIssuing] = useState(false);
+  const [results, setResults] = useState<readonly IssuanceResult[]>([]);
+
+  useEffect(() => { void hydrateCards(); }, [hydrateCards]);
+
+  useEffect(() => {
+    if (!groupId) return;
+    const saved = loadBinding(groupId);
+    if (!saved) return;
+    const card = cards.find((c) => c.id === saved.cardId);
+    if (card) {
+      setSelectedCardId(card.id);
+      setCustomName(saved.customName ?? card.name);
+    }
+  }, [groupId, cards]);
+
+  const selectedCard = useMemo<BusinessCard | undefined>(
+    () => cards.find((c) => c.id === selectedCardId),
+    [cards, selectedCardId]
+  );
+
+  const sendToAllMembers = selectedMemberIds.length === 0;
+
+  const toggleMember = (memberId: string, on: boolean) => {
+    setSelectedMemberIds((prev) => {
+      const next = prev.filter((id) => id !== memberId);
+      return on ? [...next, memberId] : next;
+    });
+  };
+
+  const runIssuance = async () => {
+    if (!selectedCard || !group) return;
+    setIsIssuing(true);
+
+    const targetMembers =
+      selectedMemberIds.length === 0
+        ? members
+        : members.filter((m) => selectedMemberIds.includes(m.userRecordID));
+
+    const trimmed = customName.trim();
+    const nameOverride: string | undefined = trimmed.length === 0 ? undefined : trimmed;
+
+    const placeholderId = `${group.id}-${selectedCard.id}-${Date.now()}`;
     await addCredential({
-      id,
-      type: claimType,
-      title,
-      issuerDid: group ? `did:web:solidarity.gg/group/${group.id}` : 'did:key:local',
+      id: placeholderId,
+      type: 'group_membership',
+      title: nameOverride ?? `${group.name} member`,
+      issuerDid: `did:web:solidarity.gg/group/${group.id}`,
       holderDid: 'did:key:me',
       trustLevel: 'L2',
       rawJwt: 'unsigned.placeholder.jwt',
       issuedAt: new Date(),
-      metadataTags: [delivery.toLowerCase()],
+      expiresAt: expirationDate,
+      metadataTags: [deliveryMethod.toLowerCase()],
     });
-    pushToast(`Issued "${title}" via ${delivery}`, 'success');
-    router.back();
+
+    const issuanceResults: IssuanceResult[] =
+      targetMembers.length === 0
+        ? [{ ok: true, memberId: 'self' }]
+        : targetMembers.map((m) => ({ ok: true, memberId: m.userRecordID }));
+
+    if (rememberSelection) {
+      saveBinding(group.id, { cardId: selectedCard.id, customName: nameOverride });
+    }
+
+    setResults(issuanceResults);
+    setIsIssuing(false);
+    pushToast('Group credential issued', 'success');
   };
 
+  if (!group || !groupId) {
+    return (
+      <View className="flex-1 bg-pageBg items-center justify-center">
+        <Text className="text-text2 text-[15px]">Group not found.</Text>
+      </View>
+    );
+  }
+
+  const issueDisabled = selectedCard === undefined || isIssuing;
+
   return (
-    <ScrollView className="flex-1 bg-pageBg">
-      <View className="px-4 pt-6">
-        <ThemedButton variant="secondary" size="sm" label="‹ Back" onPress={() => { router.back(); }} />
-      </View>
-      <View className="px-4 py-4">
-        <ThemedText variant="headlineLarge">Issue credential</ThemedText>
-        {group ? (
-          <ThemedText variant="bodySmall" tone="tertiary" className="mt-1">
-            for {group.name}
-          </ThemedText>
-        ) : null}
-      </View>
-
-      <ThemedSurface variant="card" padded className="mx-4">
-        <ThemedText variant="caption" tone="tertiary">TITLE</ThemedText>
-        <TextInput
-          value={title}
-          onChangeText={setTitle}
-          placeholder="Founders Member"
-          placeholderTextColor="#9C9C9C"
-          className="text-text1 mt-1 py-1"
-        />
-      </ThemedSurface>
-
-      <ThemedSurface variant="card" padded className="mx-4 mt-3">
-        <ThemedText variant="caption" tone="tertiary">CLAIM TYPE</ThemedText>
-        <TextInput
-          value={claimType}
-          onChangeText={setClaimType}
-          placeholder="member"
-          placeholderTextColor="#9C9C9C"
-          autoCapitalize="none"
-          className="text-text1 mt-1 py-1"
-        />
-      </ThemedSurface>
-
-      <View className="px-4 mt-6">
-        <ThemedText variant="caption" tone="tertiary">DELIVERY METHOD</ThemedText>
-        <View className="flex-row flex-wrap mt-2" style={{ gap: 8 }}>
-          {DELIVERY_OPTIONS.map((opt) => (
-            <ThemedButton
-              key={opt}
-              label={opt}
-              size="sm"
-              variant={opt === delivery ? 'primary' : 'secondary'}
-              onPress={() => { setDelivery(opt); }}
-            />
-          ))}
+    <View className="flex-1 bg-pageBg">
+      <View style={{ paddingTop: insets.top }} className="bg-pageBg">
+        <View className="h-11 flex-row items-center px-4">
+          <View style={{ width: 50 }} />
+          <View className="flex-1 items-center">
+            <Text className="text-text1 text-[17px] font-semibold">Issue Group VC</Text>
+          </View>
+          <Pressable
+            onPress={() => { router.back(); }}
+            accessibilityRole="button"
+            accessibilityLabel="Done"
+            className="px-1 py-1 active:opacity-60"
+          >
+            <Text className="text-text1 text-[17px]">Done</Text>
+          </Pressable>
         </View>
       </View>
 
-      <View className="px-4 mt-6 mb-10">
+      <ScrollView className="flex-1" contentContainerStyle={{ padding: 16, gap: 16 }}>
+        <Section title="SELECT BUSINESS CARD">
+          <SegmentedRow>
+            <SegmentedOption
+              label="None"
+              isSelected={selectedCardId === undefined}
+              onPress={() => { setSelectedCardId(undefined); }}
+            />
+            {cards.map((card) => (
+              <SegmentedOption
+                key={card.id}
+                label={card.name}
+                isSelected={selectedCardId === card.id}
+                onPress={() => {
+                  setSelectedCardId(card.id);
+                  if (customName.length === 0) setCustomName(card.name);
+                }}
+              />
+            ))}
+          </SegmentedRow>
+        </Section>
+
+        <Section title="GROUP DISPLAY">
+          <View style={{ gap: 1 }}>
+            {selectedCard ? (
+              <>
+                <View style={{ backgroundColor: Colors.searchBg, padding: 16 }}>
+                  <TextInput
+                    value={customName}
+                    onChangeText={setCustomName}
+                    placeholder="Name shown in this group"
+                    placeholderTextColor={Colors.text3}
+                    autoCapitalize="words"
+                    autoCorrect={false}
+                    style={{ color: Colors.text1, fontSize: 14, paddingVertical: 0 }}
+                  />
+                </View>
+                <ToggleRow
+                  label="Remember this card for this group"
+                  isOn={rememberSelection}
+                  onChange={setRememberSelection}
+                />
+              </>
+            ) : (
+              <View style={{ backgroundColor: Colors.searchBg, padding: 16 }}>
+                <Text className="text-text2 text-[14px]">Select a card first</Text>
+              </View>
+            )}
+          </View>
+        </Section>
+
+        <Section title="RECIPIENTS">
+          <View style={{ gap: 1 }}>
+            <ToggleRow
+              label="Send to All Active Members"
+              isOn={sendToAllMembers}
+              onChange={(on) => { if (on) setSelectedMemberIds([]); }}
+            />
+            {!sendToAllMembers
+              ? members.map((member) => (
+                  <ToggleRow
+                    key={member.userRecordID}
+                    label={member.userRecordID}
+                    isOn={selectedMemberIds.includes(member.userRecordID)}
+                    onChange={(on) => { toggleMember(member.userRecordID, on); }}
+                  />
+                ))
+              : null}
+          </View>
+        </Section>
+
+        <Section title="DELIVERY METHOD">
+          <SegmentedRow>
+            {DELIVERY_METHODS.map((method) => (
+              <SegmentedOption
+                key={method}
+                label={method}
+                isSelected={deliveryMethod === method}
+                onPress={() => { setDeliveryMethod(method); }}
+              />
+            ))}
+          </SegmentedRow>
+        </Section>
+
+        <Section title="EXPIRATION (OPTIONAL)">
+          <View style={{ gap: 1 }}>
+            <ToggleRow
+              label="Set Expiration"
+              isOn={expirationDate !== undefined}
+              onChange={(on) => { setExpirationDate(on ? thirtyDaysFromNow() : undefined); }}
+            />
+            {expirationDate ? (
+              <View
+                style={{
+                  backgroundColor: Colors.searchBg,
+                  paddingHorizontal: 16,
+                  paddingVertical: 16,
+                  flexDirection: 'row',
+                  alignItems: 'center',
+                }}
+              >
+                <Text className="text-text1 text-[14px] flex-1">Expires</Text>
+                <Text className="text-text1 text-[14px]">
+                  {expirationDate.toLocaleDateString()}
+                </Text>
+              </View>
+            ) : null}
+          </View>
+        </Section>
+
         <ThemedButton
-          label="Issue credential"
+          label={isIssuing ? 'Issuing…' : 'Issue Group Credential'}
           fullWidth
-          disabled={title.trim().length === 0}
-          onPress={() => { void onIssue(); }}
+          loading={isIssuing}
+          disabled={issueDisabled}
+          onPress={() => { void runIssuance(); }}
         />
-      </View>
-    </ScrollView>
+
+        {results.length > 0 ? (
+          <Section title="RESULTS">
+            <View style={{ gap: 1 }}>
+              {results.map((r, idx) => (
+                <ResultRow key={`${r.memberId}-${idx}`} result={r} />
+              ))}
+            </View>
+          </Section>
+        ) : null}
+
+        <View style={{ height: 8 + insets.bottom }} />
+      </ScrollView>
+    </View>
   );
 }

@@ -70,3 +70,9 @@ export const useCredentialStore = create<CredentialStoreState>((set, get) => ({
     set((s) => ({ items: s.items.filter((i) => i.id !== id) }));
   },
 }));
+
+/** Selector: look up a single credential by id (memo-safe, no per-render filter). */
+export const useCredentialById = (
+  id: string | undefined
+): StoredCredential | undefined =>
+  useCredentialStore((s) => (id ? s.items.find((i) => i.id === id) : undefined));
