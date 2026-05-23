@@ -91,6 +91,34 @@ final class FixtureExporter: XCTestCase {
     ])
   }
 
+  /// QR chunking — exports a payload + Swift-produced frame list so the TS
+  /// reassembler asserts byte-equal payload reconstruction.
+  func test_exportQrChunkFrames() throws {
+    let payloads: [(String, String, Int)] = [
+      ("short_string", "Hello, Solidarity!", QRCodeChunkingService.defaultChunkDataBytes),
+      ("multiline_vc", String(repeating: "abcdef0123456789\n", count: 200),
+       QRCodeChunkingService.defaultChunkDataBytes),
+      ("tiny_chunks", String(repeating: "a", count: 4096), QRCodeChunkingService.minChunkDataBytes),
+    ]
+
+    var cases: [[String: Any]] = []
+    for (name, payload, chunkBytes) in payloads {
+      let frames = try QRCodeChunkingService.makeFrames(for: payload, chunkDataBytes: chunkBytes)
+      cases.append([
+        "name": name,
+        "payload": payload,
+        "chunkBytes": chunkBytes,
+        "frames": frames,
+      ])
+    }
+
+    try writeFixture(domain: "qr", file: "chunking_round_trip.json", payload: [
+      "schema": "1",
+      "source": "solidarityTests/FixtureExporter.test_exportQrChunkFrames",
+      "cases": cases,
+    ])
+  }
+
   /// ES256 JWT sign — proves Swift CryptoKit signatures verify under the TS
   /// `@noble/curves` implementation. Signatures are randomised (CryptoKit
   /// uses a fresh `k` per call), so byte-equal is NOT asserted; the TS side

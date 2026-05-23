@@ -13,4 +13,5 @@
  */
 export * from './crypto';
 export * from './identity';
+export * from './qr';
 export * from './types';
