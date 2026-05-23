@@ -1,0 +1,13 @@
+{
+  "name": "@solidarity/parity-fixtures",
+  "version": "1.3.1",
+  "private": true,
+  "description": "Golden JSON fixtures exported by Swift FixtureExporter; consumed by bun test parity suites to verify TS↔Swift behavioral equivalence.",
+  "main": "./src/index.ts",
+  "exports": {
+    ".": "./src/index.ts",
+    "./encryption": "./fixtures/encryption/index.json",
+    "./identity": "./fixtures/identity/index.json",
+    "./qr": "./fixtures/qr/index.json"
+  }
+}

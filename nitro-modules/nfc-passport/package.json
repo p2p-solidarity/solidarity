@@ -1,0 +1,16 @@
+{
+  "name": "@solidarity/nitro-nfc-passport",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Nitro module for ICAO 9303 passport NFC reading (BAC + PACE + passive auth + DG1/DG2/DG14/DG15/SOD parsing). iOS: CoreNFC + NFCPassportReader. Android: jmrtd JNI bridge.",
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "scripts": {
+    "nitrogen": "nitrogen",
+    "lint": "eslint .",
+    "typecheck": "tsc --noEmit"
+  },
+  "react-native": {
+    "supportedPlatforms": ["ios", "android"]
+  }
+}
