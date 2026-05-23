@@ -61,7 +61,14 @@ export const useVaultStore = create<VaultStoreState>((set, get) => ({
     const out: VaultItem[] = [];
     for (const k of listKeys()) {
       const v = await getEncrypted<VaultItem>(k);
-      if (v) out.push(v);
+      if (!v) continue;
+      // Same JSON-round-trip Date fix as shoutoutStore — `.getTime()`
+      // after decryptJson would throw otherwise.
+      out.push({
+        ...v,
+        createdAt: new Date(v.createdAt),
+        updatedAt: new Date(v.updatedAt),
+      });
     }
     out.sort((a, b) => b.updatedAt.getTime() - a.updatedAt.getTime());
     set({ items: out, hydrated: true });
