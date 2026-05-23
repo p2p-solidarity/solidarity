@@ -69,6 +69,19 @@ export const Colors = {
   /** Incoming chat bubble — #F3EBDD / #7A6F5C. */
   bubbleIncoming: '#F3EBDD',
   bubbleIncomingDark: '#7A6F5C',
+  /** Text on the incoming chat bubble — ink in light, white in dark. */
+  bubbleIncomingText: '#2F2F30',
+  bubbleIncomingTextDark: '#FFFFFF',
+
+  /** Hero card gradient stops (Figma 766:5241 — 17.3°, mauve→peach). */
+  heroGradientStart: '#E9E3ED',
+  heroGradientStartDark: 'rgba(233,227,237,0.30)',
+  heroGradientEnd: '#F3DFDD',
+  heroGradientEndDark: 'rgba(243,223,221,0.30)',
+
+  /** Avatar circle background (lavender cream in both modes). */
+  gradientCream: '#F0EDF4',
+  gradientCreamDark: '#141112',
 
   /** Inverted button background — text1 (used by Edit / Show buttons). */
   invertedButtonBg: '#2F2F30',
@@ -87,8 +100,8 @@ export const Colors = {
   /** Feature accent purple. */
   featureAccent: '#5856D6',
 
-  /** Decorative — dusty mauve overlay. */
-  dustyMauve: '#B89BB1',
+  /** Decorative — dusty mauve overlay. Mirrors Swift Color.Theme.dustyMauve #A6678D. */
+  dustyMauve: '#A6678D',
   /** Decorative — peach centre for blobs / radial gradients. */
   blobCenter: '#FFE4D6',
   blobCenterDark: '#2A1F26',
@@ -96,6 +109,25 @@ export const Colors = {
   /** Radar pulse rings. */
   radarRing: 'rgba(191,128,167,0.3)',
   radarGlow: 'rgba(191,128,167,0.15)',
+
+  /** Warning amber — `Color.Theme.warning` (orange in Swift). */
+  warning: '#FF9500',
+
+  /** Overlay backdrop for popups — `Color.Theme.overlayBg`. */
+  overlayBg: 'rgba(41,26,46,0.45)',
+  overlayBgDark: 'rgba(0,0,0,0.65)',
+
+  /** Popup surface — `Color.Theme.popupSurface`. */
+  popupSurface: '#FFFFFF',
+  popupSurfaceDark: '#120712',
+
+  /** Adaptive card surface — `Color.Theme.cardSurface(for:)`. */
+  cardSurface: 'rgba(255,255,255,0.85)',
+  cardSurfaceDark: 'rgba(255,255,255,0.05)',
+
+  /** Adaptive card border — `Color.Theme.cardBorder(for:)`. */
+  cardBorder: 'rgba(200,184,200,0.6)',
+  cardBorderDark: 'rgba(255,255,255,0.10)',
 } as const;
 
 export type ColorToken = keyof typeof Colors;
