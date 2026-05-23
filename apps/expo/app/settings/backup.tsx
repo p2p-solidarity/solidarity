@@ -1,106 +1,168 @@
 /**
- * Backup settings — choose between iCloud (iOS only) and Google Drive,
- * trigger a manual backup, view last-backed-up timestamp.
- * Mirrors Swift BackupSettingsView + DataSyncSettingsView.
+ * Backup — 1:1 port of solidarity/Views/SettingsViews/BackupSettingsView.swift.
+ *
+ * Three sections:
+ *   1. iCloud Backup — Enable toggle. When ON, also shows Auto-backup toggle
+ *      with subtitle "Automatically backup when cards change".
+ *   2. Actions — "Back Up Now" (shows "Working…" while running) and
+ *      "Restore from Backup". Footer = "Last: …" timestamp if available.
+ *   3. Status — iCloud connectivity row + footer explaining sync behaviour.
  */
+import { router } from 'expo-router';
 import { useEffect, useState } from 'react';
-import { Alert, Platform, ScrollView, View } from 'react-native';
+import { Alert, ScrollView, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { SettingRow, ToggleRow } from '@/components/settings/SettingRow';
-import { ThemedButton, ThemedSurface, ThemedText } from '@/components/themed';
+import {
+  SettingsBackToolbar,
+  SettingsBlockInfoRow,
+  SettingsBlockRow,
+  SettingsBlockSection,
+  SettingsBlockToggleRow,
+  SettingsScreenTitle,
+} from '@/components/settings/SettingsBlocks';
 import {
   backupMtime,
   performBackupNow,
-  setGoogleAccessToken,
-  setProvider,
-  signInForDrive,
+  restoreFromBackup,
 } from '@/backup';
+import { pushToast } from '@/feedback/toast';
 import { usePreferences } from '@/settings/preferences';
 
 export default function BackupSettings() {
+  const insets = useSafeAreaInsets();
   const provider = usePreferences((s) => s.backupProvider);
+  const backupEnabled = usePreferences((s) => s.backupEnabled);
   const autoBackup = usePreferences((s) => s.autoBackupOnPull);
   const setPref = usePreferences((s) => s.set);
 
   const [lastBackup, setLastBackup] = useState<Date | null>(null);
-  const [busy, setBusy] = useState(false);
+  const [isBackingUp, setIsBackingUp] = useState(false);
+  const [iCloudAvailable, setICloudAvailable] = useState(true);
 
   useEffect(() => {
-    void backupMtime().then(setLastBackup).catch(() => null);
+    void backupMtime()
+      .then((d) => {
+        setLastBackup(d);
+        setICloudAvailable(true);
+      })
+      .catch(() => {
+        setLastBackup(null);
+        setICloudAvailable(false);
+      });
   }, [provider]);
 
-  const switchToDrive = async () => {
-    try {
-      const session = await signInForDrive();
-      setGoogleAccessToken(session.accessToken);
-      setProvider('googleDrive');
-      setPref('backupProvider', 'googleDrive');
-    } catch (err) {
-      Alert.alert('Sign-in failed', String((err as Error).message ?? err));
-    }
-  };
-
-  const switchToICloud = () => {
-    setProvider('iCloud');
-    setPref('backupProvider', 'iCloud');
-  };
-
   const onBackupNow = async () => {
-    setBusy(true);
+    setIsBackingUp(true);
+    pushToast('Encrypting and uploading to iCloud', 'info', 2000);
     try {
       const result = await performBackupNow(provider);
       setLastBackup(new Date(result.exportedAt));
-      Alert.alert('Backup complete', `${String(result.cards.length)} cards · ${String(result.contacts.length)} contacts`);
+      pushToast('Your data is safely backed up', 'success');
     } catch (err) {
-      Alert.alert('Backup failed', String((err as Error).message ?? err));
+      const msg = (err as Error).message;
+      pushToast(msg, 'error');
+      Alert.alert('Error', msg);
     } finally {
-      setBusy(false);
+      setIsBackingUp(false);
     }
   };
 
+  const onRestore = () => {
+    Alert.alert(
+      'Restore from Backup?',
+      'This will replace your current cards and contacts with the backed up data.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Restore',
+          style: 'destructive',
+          onPress: () => { void performRestoreNow(); },
+        },
+      ]
+    );
+  };
+
+  const performRestoreNow = async () => {
+    try {
+      const r = await restoreFromBackup();
+      if (!r) {
+        Alert.alert('Error', 'No backup found.');
+        return;
+      }
+      router.back();
+    } catch (err) {
+      Alert.alert('Error', (err as Error).message);
+    }
+  };
+
+  const actionsFooter = lastBackup
+    ? `Last: ${lastBackup.toLocaleString()}`
+    : undefined;
+
+  const statusFooter = iCloudAvailable
+    ? 'Backups are stored in your iCloud Drive and synced across all your devices.'
+    : 'Sign in to iCloud in Settings to sync backups across devices. Local backups are still available.';
+
+  const backupDisabled = !backupEnabled || isBackingUp;
+
   return (
-    <ScrollView className="flex-1 bg-pageBg">
-      <View className="px-4 py-6">
-        <ThemedText variant="headlineLarge">Backup</ThemedText>
-        <ThemedText variant="bodySmall" tone="tertiary" className="mt-1">
-          End-to-end encrypted. Your provider only sees ciphertext.
-        </ThemedText>
-      </View>
+    <View className="flex-1 bg-pageBg" style={{ paddingTop: insets.top }}>
+      <SettingsBackToolbar onPress={() => { router.back(); }} />
+      <SettingsScreenTitle title="Backup" />
 
-      <SettingRow
-        label="iCloud"
-        value={provider === 'iCloud' ? 'Selected' : Platform.OS === 'ios' ? '' : 'iOS only'}
-        onPress={Platform.OS === 'ios' ? switchToICloud : undefined}
-      />
-      <SettingRow
-        label="Google Drive"
-        value={provider === 'googleDrive' ? 'Selected' : ''}
-        onPress={() => void switchToDrive()}
-      />
+      <ScrollView
+        className="flex-1"
+        contentContainerStyle={{ paddingTop: 24, paddingBottom: 24 + insets.bottom }}
+      >
+        <View className="gap-6">
+          {/* iCloud Backup */}
+          <SettingsBlockSection title="iCloud Backup">
+            <SettingsBlockToggleRow
+              icon="icloud"
+              title="Enable iCloud Backup"
+              value={backupEnabled}
+              onValueChange={(v) => { setPref('backupEnabled', v); }}
+            />
+            {backupEnabled ? (
+              <SettingsBlockToggleRow
+                icon="arrow.triangle.2.circlepath"
+                title="Auto-backup"
+                subtitle="Automatically backup when cards change"
+                value={autoBackup}
+                onValueChange={(v) => { setPref('autoBackupOnPull', v); }}
+              />
+            ) : null}
+          </SettingsBlockSection>
 
-      <View className="px-4 pt-6">
-        <ToggleRow
-          label="Auto-backup on pull-down"
-          value={autoBackup}
-          onChange={(v) => { setPref('autoBackupOnPull', v); }}
-        />
-      </View>
+          {/* Actions */}
+          <SettingsBlockSection title="Actions" footer={actionsFooter}>
+            <SettingsBlockRow
+              icon="icloud.and.arrow.up"
+              title="Back Up Now"
+              trailingText={isBackingUp ? 'Working…' : undefined}
+              showsChevron={false}
+              disabled={backupDisabled}
+              onPress={() => { void onBackupNow(); }}
+            />
+            <SettingsBlockRow
+              icon="arrow.counterclockwise.icloud"
+              title="Restore from Backup"
+              showsChevron={false}
+              onPress={onRestore}
+            />
+          </SettingsBlockSection>
 
-      <ThemedSurface variant="card" padded className="mx-4 mt-6">
-        <ThemedText variant="caption" tone="tertiary">LAST BACKUP</ThemedText>
-        <ThemedText variant="bodyLarge">
-          {lastBackup ? lastBackup.toLocaleString() : 'Never'}
-        </ThemedText>
-      </ThemedSurface>
-
-      <View className="px-4 mt-6 mb-10">
-        <ThemedButton
-          label={busy ? 'Backing up…' : 'Back up now'}
-          fullWidth
-          loading={busy}
-          onPress={() => void onBackupNow()}
-        />
-      </View>
-    </ScrollView>
+          {/* Status */}
+          <SettingsBlockSection title="Status" footer={statusFooter}>
+            <SettingsBlockInfoRow
+              icon={iCloudAvailable ? 'checkmark.icloud.fill' : 'externaldrive.fill'}
+              title={iCloudAvailable ? 'iCloud connected' : 'iCloud unavailable'}
+              value=""
+            />
+          </SettingsBlockSection>
+        </View>
+      </ScrollView>
+    </View>
   );
 }

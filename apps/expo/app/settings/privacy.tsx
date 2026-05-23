@@ -1,24 +1,31 @@
 /**
- * Privacy settings — entry into sharing defaults + selective disclosure.
- * Mirrors Swift PrivacySettingsView.
+ * Privacy Settings — 1:1 port of
+ * solidarity/Views/SettingsViews/PrivacySettingsView.swift.
+ *
+ * The Swift version is a NavigationStack wrapping SelectiveDisclosureSettingsView
+ * with title "Privacy Settings" and a SettingsBackToolbar. Since the Expo
+ * settings stack already shows a back button via SettingsBackToolbar, this
+ * file simply renders the same content as `disclosure.tsx` but with the
+ * "Privacy Settings" title — matching Swift behaviour exactly.
  */
-import { ScrollView, View } from 'react-native';
+import { router } from 'expo-router';
+import { View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { SettingRow } from '@/components/settings/SettingRow';
-import { ThemedText } from '@/components/themed';
+import {
+  SettingsBackToolbar,
+  SettingsScreenTitle,
+} from '@/components/settings/SettingsBlocks';
+
+import SelectiveDisclosureBody from './disclosure';
 
 export default function PrivacySettings() {
+  const insets = useSafeAreaInsets();
   return (
-    <ScrollView className="flex-1 bg-pageBg">
-      <View className="px-4 py-6">
-        <ThemedText variant="headlineLarge">Privacy</ThemedText>
-        <ThemedText variant="bodySmall" tone="tertiary" className="mt-1">
-          Control what you reveal at each sharing level.
-        </ThemedText>
-      </View>
-      <SettingRow label="Default sharing level" value="Professional" />
-      <SettingRow label="Selective disclosure" value="3 fields hidden" />
-      <SettingRow label="Allow forwarding" value="On" />
-    </ScrollView>
+    <View className="flex-1 bg-pageBg" style={{ paddingTop: insets.top }}>
+      <SettingsBackToolbar onPress={() => { router.back(); }} />
+      <SettingsScreenTitle title="Privacy Settings" />
+      <SelectiveDisclosureBody headerless />
+    </View>
   );
 }

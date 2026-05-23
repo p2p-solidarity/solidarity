@@ -12,20 +12,31 @@ module.exports = {
     extend: {
       colors: {
         // Surfaces — map to Color.Theme.cardSurface()/pageBg/searchBg/etc.
-        pageBg: 'var(--color-pageBg, #FFFBF7)',
+        pageBg: 'var(--color-pageBg, #FBF9F2)',
         cardBg: 'var(--color-cardBg, #FFFFFF)',
-        searchBg: 'var(--color-searchBg, #F4F0EA)',
-        divider: 'var(--color-divider, #E8E1D8)',
+        searchBg: 'var(--color-searchBg, #EEEEEE)',
+        divider: 'var(--color-divider, #D1D1D1)',
+        mutedSurface: 'var(--color-mutedSurface, rgba(238,238,238,0.8))',
+        pillSurface: 'var(--color-pillSurface, #EEEEEE)',
+        pillBg: 'var(--color-pillBg, #EEEEEE)',
+        pillBorder: 'var(--color-pillBorder, #D1D1D1)',
+        featuredCardBg: 'var(--color-featuredCardBg, #F3EBDD)',
+        chipSurface: 'var(--color-chipSurface, #F7F2FA)',
+        warmCream: 'var(--color-warmCream, #F3EBDD)',
+        invertedButtonBg: 'var(--color-invertedButtonBg, #2F2F30)',
+        invertedButtonText: 'var(--color-invertedButtonText, #FBF9F2)',
 
         // Text — map to Color.Theme.textPrimary/Secondary/Tertiary
-        text1: 'var(--color-text1, #1A1A1A)',
-        text2: 'var(--color-text2, #6B6B6B)',
-        text3: 'var(--color-text3, #9C9C9C)',
+        text1: 'var(--color-text1, #2F2F30)',
+        text2: 'var(--color-text2, #5F5E67)',
+        text3: 'var(--color-text3, #9C9AA6)',
 
         // Accents — map to Color.Theme.accentRose/primaryBlue/destructive
-        accentRose: 'var(--color-accentRose, #D8466B)',
+        accentRose: 'var(--color-accentRose, #BF80A7)',
         primaryBlue: 'var(--color-primaryBlue, #007AFF)',
-        destructive: 'var(--color-destructive, #FF3B30)',
+        primaryMauve: 'var(--color-primaryMauve, #83537D)',
+        destructive: 'var(--color-destructive, #CD556A)',
+        terminalGreen: 'var(--color-terminalGreen, #4CAF51)',
         featureAccent: 'var(--color-featureAccent, #5856D6)',
 
         // Decorative — map to Color.Theme.dustyMauve/blobCenter
@@ -33,8 +44,12 @@ module.exports = {
         blobCenter: 'var(--color-blobCenter, #FFE4D6)',
 
         // Radar
-        radarRing: 'var(--color-radarRing, rgba(216, 70, 107, 0.3))',
-        radarGlow: 'var(--color-radarGlow, rgba(216, 70, 107, 0.15))',
+        radarRing: 'var(--color-radarRing, rgba(191,128,167,0.3))',
+        radarGlow: 'var(--color-radarGlow, rgba(191,128,167,0.15))',
+      },
+      borderRadius: {
+        sm2: '2px',
+        sm3: '3px',
       },
       fontFamily: {
         sans: ['System'],

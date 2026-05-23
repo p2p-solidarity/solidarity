@@ -16,6 +16,22 @@ import type { ProviderKind } from '@/backup';
 
 const KEY = 'prefs:v1';
 
+/** Per-action biometric requirement flags (mirrors Swift SensitiveAction). */
+export type SensitiveActionKey =
+  | 'issueCredential'
+  | 'presentProof'
+  | 'exportGraph'
+  | 'rotateMasterKey'
+  | 'revealRecoveryBundle'
+  | 'registerTrustAnchor'
+  | 'deleteZKIdentity';
+
+/** Mirrors Swift AppColorScheme (system / light / dark). */
+export type AppColorScheme = 'system' | 'light' | 'dark';
+
+/** Mirrors Swift AnimalCharacter. */
+export type AnimalCharacter = 'dog' | 'horse' | 'pig' | 'sheep' | 'dove';
+
 export interface Preferences {
   readonly hasCompletedOnboarding: boolean;
   readonly biometricSensitiveOps: boolean;
@@ -24,7 +40,37 @@ export interface Preferences {
   readonly notificationsEnabled: boolean;
   readonly developerMode: boolean;
   readonly themeMode: 'auto' | 'light' | 'dark';
+  /** Mirrors Swift ThemeManager.appColorScheme. */
+  readonly appColorScheme: AppColorScheme;
+  /** Mirrors Swift ThemeManager.cardAccent (hex). */
+  readonly cardAccentHex: string;
+  /** Mirrors Swift ThemeManager.enableGlow. */
+  readonly enableGlow: boolean;
+  /** Mirrors Swift ThemeManager.selectedAnimal (null = none). */
+  readonly selectedAnimal: AnimalCharacter | null;
+  /** Per-action Face ID requirement flags (Swift SensitiveActionPolicyStore). */
+  readonly biometricPolicy: Readonly<Record<SensitiveActionKey, boolean>>;
+  /** Mirrors Swift BackupSettings.enabled. */
+  readonly backupEnabled: boolean;
+  /** Mirrors Swift NotificationSettingsManager.enableInAppToast. */
+  readonly notificationsInAppToast: boolean;
+  /** Mirrors Swift NotificationSettingsManager.enableRemoteNotification. */
+  readonly notificationsRemote: boolean;
+  /** Mirrors Swift NotificationSettingsManager.enableAutoSync. */
+  readonly notificationsAutoSync: boolean;
+  /** Mirrors Swift NotificationSettingsManager.syncIntervalSeconds. */
+  readonly notificationsSyncIntervalSeconds: number;
 }
+
+const DEFAULT_BIOMETRIC_POLICY: Readonly<Record<SensitiveActionKey, boolean>> = {
+  issueCredential: true,
+  presentProof: true,
+  exportGraph: true,
+  rotateMasterKey: true,
+  revealRecoveryBundle: true,
+  registerTrustAnchor: true,
+  deleteZKIdentity: true,
+};
 
 const DEFAULTS: Preferences = {
   hasCompletedOnboarding: false,
@@ -34,6 +80,16 @@ const DEFAULTS: Preferences = {
   notificationsEnabled: true,
   developerMode: false,
   themeMode: 'auto',
+  appColorScheme: 'system',
+  cardAccentHex: '#E091B3',
+  enableGlow: true,
+  selectedAnimal: null,
+  biometricPolicy: DEFAULT_BIOMETRIC_POLICY,
+  backupEnabled: false,
+  notificationsInAppToast: true,
+  notificationsRemote: true,
+  notificationsAutoSync: true,
+  notificationsSyncIntervalSeconds: 30,
 };
 
 function readSafe(): Preferences {
