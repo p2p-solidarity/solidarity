@@ -1,1 +1,28 @@
-{"schema":"1","cases":[],"json":"{}"}
+{
+  "schema": "1",
+  "source": "NIST CAVP gcmEncryptExtIV256.rsp (record 0) + Solidarity self-vectors",
+  "note": "These pin AES-256-GCM output to NIST-standard byte layouts. Swift CryptoKit + @noble/ciphers MUST both produce these bytes given the same (key, nonce, plaintext). Layout: nonce(12) || ciphertext || tag(16) — matches Swift AES.GCM.SealedBox.combined.",
+  "cases": [
+    {
+      "name": "nist_zero_pt",
+      "key": "b52c505a37d78eda5dd34f20c22540ea1b58963cf8e5bf8ffa85f9f2492505b4",
+      "nonce": "516c33929df5a3284ff463d7",
+      "plaintext": "",
+      "ciphertext": "516c33929df5a3284ff463d7bdc1ac884d332457a1d2664f168c76f0"
+    },
+    {
+      "name": "hello_solidarity",
+      "key": "0102030405060708010203040506070801020304050607080102030405060708",
+      "nonce": "0a0a0a0a0a0a0a0a0a0a0a0a",
+      "plaintext": "Hello, Solidarity!",
+      "ciphertext": "0a0a0a0a0a0a0a0a0a0a0a0abfa1ba380fde2fca454160c72096409559379fb18f508139ea042e04b3d92a79b160"
+    },
+    {
+      "name": "business_card_json",
+      "key": "aabbccddeeff00112233445566778899aabbccddeeff00112233445566778899",
+      "nonce": "112233445566778899aabbcc",
+      "plaintext": "{\"id\":\"00000000-0000-0000-0000-000000000001\",\"name\":\"Alice\"}",
+      "ciphertext": "112233445566778899aabbcc19aa6bc4a7ce7c77bcf00f0fcadc0058124d6d50c7071e9fe9d614ab365de6a326659b6d401355b1f7e6b6a730055c71ae302fac9e587ca1bfd7c08d3cd895db6c37deeb9cad059efa3a4762"
+    }
+  ]
+}

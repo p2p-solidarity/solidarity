@@ -1,1 +1,5 @@
-{"schema":"1","cases":[],"json":"{}"}
+{
+  "schema": "1",
+  "source": "Hand-crafted to match Swift JSONEncoder(sortedKeys + iso8601) shape — switch the Swift exporter to .iso8601 to match.",
+  "json": "{\"animal\":\"sheep\",\"categories\":[\"engineering\"],\"company\":\"Solidarity\",\"createdAt\":\"2023-11-14T22:13:20Z\",\"email\":\"ada@solidarity.gg\",\"id\":\"f47ac10b-58cc-4372-a567-0e02b2c3d479\",\"name\":\"Ada Lovelace\",\"nameType\":\"display_name\",\"sharingPreferences\":{\"allowForwarding\":true,\"personalFields\":[\"name\",\"email\",\"phone\"],\"professionalFields\":[\"company\",\"email\",\"name\",\"title\"],\"publicFields\":[\"name\",\"title\"],\"sharingFormat\":\"didSigned\",\"useZK\":false},\"skills\":[],\"socialNetworks\":[],\"title\":\"Founder\",\"updatedAt\":\"2023-11-14T22:13:20Z\"}"
+}

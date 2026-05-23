@@ -1,1 +1,14 @@
-{"schema":"1","cases":[],"json":"{}"}
+{
+  "schema": "1",
+  "source": "TS-side makeFrames seed. Swift FixtureExporter overwrites with byte-equal frames (sessionId differs per generation; reassembler is sessionId-agnostic so cross-impl parity holds).",
+  "cases": [
+    {
+      "name": "short_string",
+      "payload": "Hello, Solidarity!",
+      "chunkBytes": 2100,
+      "frames": [
+        "sqc1.12ce9cb7c8df48aea2bc1febb626d139.0.1.d3eeca10fe1b4011b57e641fbbf2605bd0f6ae09d9b20a8e4e08c0e4682241dd.SGVsbG8sIFNvbGlkYXJpdHkh"
+      ]
+    }
+  ]
+}

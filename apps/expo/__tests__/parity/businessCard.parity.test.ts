@@ -23,7 +23,7 @@ describe('BusinessCard parity: Swift Codable ↔ Zod 4', () => {
   it('parses Swift-encoded JSON without loss', () => {
     const decoded = JSON.parse(json) as unknown;
     const parsed = businessCardSchema.parse(decoded);
-    expect(parsed.id).toBe('11111111-1111-1111-1111-111111111111');
+    expect(parsed.id).toBe('f47ac10b-58cc-4372-a567-0e02b2c3d479');
     expect(parsed.name).toBe('Ada Lovelace');
     expect(parsed.animal).toBe('sheep');
     expect(parsed.nameType).toBe('display_name');
