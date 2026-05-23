@@ -73,10 +73,11 @@ export default function VaultNew() {
       const id = crypto.randomUUID();
       const written = await writeVaultBlob(id, base64);
       const now = new Date();
+      const name = asset.name || 'file';
       await upsert({
         id,
-        name: asset.name ?? 'file',
-        kind: inferKind(asset.mimeType, asset.name ?? ''),
+        name,
+        kind: inferKind(asset.mimeType, name),
         mimeType: asset.mimeType,
         size: written.size,
         checksumSha256: written.checksumSha256,
@@ -85,10 +86,10 @@ export default function VaultNew() {
         updatedAt: now,
         tags: [],
       });
-      pushToast(`Encrypted ${asset.name ?? 'file'} (${String(written.size)} B)`, 'success');
+      pushToast(`Encrypted ${name} (${written.size.toFixed(0)} B)`, 'success');
       router.back();
     } catch (err) {
-      pushToast(`Upload failed: ${String((err as Error).message)}`, 'error');
+      pushToast(`Upload failed: ${(err as Error).message}`, 'error');
     } finally {
       setBusy(false);
     }

@@ -243,7 +243,7 @@ export default function ShoutoutCompose(): ReactNode {
       router.back();
     } catch (err) {
       haptic('error');
-      pushToast(`Protocol failure: ${String((err as Error).message)}`, 'error');
+      pushToast(`Protocol failure: ${(err as Error).message}`, 'error');
     } finally {
       setIsTransmitting(false);
     }

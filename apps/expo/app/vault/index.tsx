@@ -41,7 +41,9 @@ function VaultRow({ item }: { readonly item: VaultItem }): ReactNode {
   return (
     <Pressable
       onPress={() => {
-        router.push({ pathname: '/vault/[id]' as never, params: { id: item.id } });
+        // Vault detail screen is not yet implemented; tap is a no-op
+        // and keeps the row visible with chevron parity. Wires when
+        // /vault/[id] lands.
       }}
       accessibilityRole="button"
       accessibilityLabel={`Open ${item.name}`}

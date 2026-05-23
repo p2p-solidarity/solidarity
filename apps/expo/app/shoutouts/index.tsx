@@ -27,7 +27,13 @@ import { SfIcon } from '@/components/icons/SfIcon';
 import { Colors } from '@/constants/Colors';
 import { useContactList } from '@/contacts/repository';
 import { haptic } from '@/feedback/haptics';
-import type { Contact, VerificationStatus } from '@solidarity/shared';
+import {
+  initials,
+  relativeDate,
+  verificationColor,
+  verificationIcon,
+} from '@/shoutouts/ui';
+import type { Contact } from '@solidarity/shared';
 
 type DisplayMode = 'grid' | 'list';
 type FilterOption = 'All Cards' | 'Verified Only' | 'Recently Added';
@@ -37,51 +43,6 @@ const FILTER_OPTIONS: readonly FilterOption[] = [
   'Verified Only',
   'Recently Added',
 ];
-
-function verificationColor(status: VerificationStatus): string {
-  switch (status) {
-    case 'Verified':
-      return Colors.terminalGreen;
-    case 'Pending':
-      return '#FF9500';
-    case 'Failed':
-      return Colors.destructive;
-    default:
-      return Colors.primaryBlue;
-  }
-}
-
-function verificationIcon(status: VerificationStatus): import('expo-symbols').SFSymbol {
-  switch (status) {
-    case 'Verified':
-      return 'checkmark.seal.fill';
-    case 'Pending':
-      return 'clock';
-    case 'Failed':
-      return 'xmark.circle.fill';
-    default:
-      return 'questionmark.circle';
-  }
-}
-
-function initials(name: string): string {
-  return name
-    .split(/\s+/u)
-    .filter(Boolean)
-    .slice(0, 2)
-    .map((p) => p[0]?.toUpperCase() ?? '')
-    .join('');
-}
-
-function relativeDate(d: Date | undefined): string {
-  if (!d) return '';
-  const deltaSec = (Date.now() - d.getTime()) / 1000;
-  if (deltaSec < 60) return 'just now';
-  if (deltaSec < 3600) return `${Math.floor(deltaSec / 60).toFixed(0)}m ago`;
-  if (deltaSec < 86400) return `${Math.floor(deltaSec / 3600).toFixed(0)}h ago`;
-  if (deltaSec < 86400 * 7) return `${Math.floor(deltaSec / 86400).toFixed(0)}d ago`;
-  return d.toLocaleDateString();
-}
 
 function GridCard({
   contact,
@@ -210,7 +171,7 @@ function ListRow({
             }}
           />
           <Text className="text-text3" numberOfLines={1} style={{ fontSize: 11 }}>
-            {card.company ? card.company : contact.verificationStatus}
+            {(card.company?.length ?? 0) > 0 ? card.company : contact.verificationStatus}
           </Text>
         </View>
       </View>
