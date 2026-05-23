@@ -43,12 +43,12 @@ export default function SettingsHub() {
             <SettingsBlockRow
               icon="person.text.rectangle"
               title="Identity Profile"
-              onPress={() => { router.push('/settings/disclosure'); }}
+              onPress={() => { router.push('/settings/vc'); }}
             />
             <SettingsBlockRow
               icon="qrcode"
               title="Solidarity QR"
-              onPress={() => { router.push('/qr-share'); }}
+              onPress={() => { router.push('/settings/solidarity-qr'); }}
             />
             <SettingsBlockRow
               icon="key.horizontal"
@@ -76,12 +76,12 @@ export default function SettingsHub() {
             <SettingsBlockRow
               icon="icloud"
               title="Data & Sync"
-              onPress={() => { router.push('/settings/backup'); }}
+              onPress={() => { router.push('/settings/data-sync'); }}
             />
             <SettingsBlockRow
               icon="slider.horizontal.3"
               title="Advanced"
-              onPress={() => { router.push('/settings/appearance'); }}
+              onPress={() => { router.push('/settings/advanced'); }}
             />
             <SettingsBlockRow
               icon="bell"

@@ -60,6 +60,8 @@ export interface Preferences {
   readonly notificationsAutoSync: boolean;
   /** Mirrors Swift NotificationSettingsManager.syncIntervalSeconds. */
   readonly notificationsSyncIntervalSeconds: number;
+  /** Mirrors Swift DeveloperModeManager.simulateNFC. */
+  readonly simulateNfc: boolean;
 }
 
 const DEFAULT_BIOMETRIC_POLICY: Readonly<Record<SensitiveActionKey, boolean>> = {
@@ -90,6 +92,7 @@ const DEFAULTS: Preferences = {
   notificationsRemote: true,
   notificationsAutoSync: true,
   notificationsSyncIntervalSeconds: 30,
+  simulateNfc: false,
 };
 
 function readSafe(): Preferences {
