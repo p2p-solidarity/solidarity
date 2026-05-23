@@ -1,17 +1,29 @@
 /**
  * Avatar grid — pick AnimalCharacter. Mirrors Swift AvatarSelectionGrid.
+ * Uses the real PNG glyphs from solidarity/Assets.xcassets/.
  */
-import { Pressable, View } from 'react-native';
+import { Image, Pressable, View } from 'react-native';
 
 import { ThemedSurface, ThemedText } from '@/components/themed';
 import type { Animal } from '@solidarity/shared';
 
-const OPTIONS: readonly { animal: Animal; emoji: string; label: string }[] = [
-  { animal: 'dog', emoji: '🐕', label: 'Dog' },
-  { animal: 'horse', emoji: '🐎', label: 'Horse' },
-  { animal: 'pig', emoji: '🐖', label: 'Pig' },
-  { animal: 'sheep', emoji: '🐑', label: 'Sheep' },
-  { animal: 'dove', emoji: '🕊️', label: 'Dove' },
+interface Option {
+  readonly animal: Animal;
+  readonly label: string;
+  readonly source: number | null;
+  readonly emojiFallback: string;
+}
+
+const HORSE = require('../../../assets/animals/horse-white.png') as number;
+const PIG = require('../../../assets/animals/pig-white.png') as number;
+const SHEEP = require('../../../assets/animals/sheep-white.png') as number;
+
+const OPTIONS: readonly Option[] = [
+  { animal: 'dog', label: 'Dog', source: null, emojiFallback: '🐕' },
+  { animal: 'horse', label: 'Horse', source: HORSE, emojiFallback: '🐎' },
+  { animal: 'pig', label: 'Pig', source: PIG, emojiFallback: '🐖' },
+  { animal: 'sheep', label: 'Sheep', source: SHEEP, emojiFallback: '🐑' },
+  { animal: 'dove', label: 'Dove', source: null, emojiFallback: '🕊️' },
 ];
 
 export interface AvatarStepProps {
@@ -38,7 +50,11 @@ export function AvatarStep({ value, onSelect }: AvatarStepProps) {
               className={selected ? 'border-accentRose border-2' : ''}
             >
               <View className="items-center">
-                <ThemedText variant="headlineLarge">{opt.emoji}</ThemedText>
+                {opt.source ? (
+                  <Image source={opt.source} style={{ width: 56, height: 56 }} resizeMode="contain" />
+                ) : (
+                  <ThemedText variant="headlineLarge">{opt.emojiFallback}</ThemedText>
+                )}
                 <ThemedText variant="caption" tone="secondary" className="mt-1">
                   {opt.label}
                 </ThemedText>

@@ -1,5 +1,6 @@
 /**
- * Terminal welcome — typewriter intro mirroring Swift TerminalWelcomeScreen.
+ * Terminal welcome — typewriter intro + Solidarity wordmark. Mirrors
+ * Swift TerminalWelcomeScreen.
  *
  * Animations:
  *   - Char reveal: pure JS setInterval (low frequency, no need for worklet)
@@ -16,6 +17,7 @@ import Animated, {
   withTiming,
 } from 'react-native-reanimated';
 
+import { Wordmark } from '@/components/brand/Wordmark';
 import { ThemedText } from '@/components/themed';
 
 const LINES = [
@@ -49,11 +51,16 @@ export function TerminalWelcomeStep() {
   const cursorStyle = useAnimatedStyle(() => ({ opacity: cursorOpacity.value }));
 
   return (
-    <View style={styles.wrap}>
-      <ThemedText variant="bodyMedium" tone="accent" style={styles.mono}>
-        {revealed}
-      </ThemedText>
-      <Animated.View style={[styles.cursor, cursorStyle]} />
+    <View>
+      <View className="mb-6">
+        <Wordmark />
+      </View>
+      <View style={styles.wrap}>
+        <ThemedText variant="bodyMedium" tone="accent" style={styles.mono}>
+          {revealed}
+        </ThemedText>
+        <Animated.View style={[styles.cursor, cursorStyle]} />
+      </View>
     </View>
   );
 }
