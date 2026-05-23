@@ -1,0 +1,17 @@
+{
+  "$schema": "https://nitro.margelo.com/schemas/nitro.schema.json",
+  "cxxNamespace": ["margelo", "nitro", "nfcpassport"],
+  "ios": {
+    "iosModuleName": "NfcPassport"
+  },
+  "android": {
+    "androidNamespace": ["gg", "solidarity", "nitro", "nfcpassport"],
+    "androidCxxLibName": "NfcPassport"
+  },
+  "autolinking": {
+    "NfcPassport": {
+      "swift": "HybridNfcPassport",
+      "kotlin": "HybridNfcPassport"
+    }
+  }
+}
