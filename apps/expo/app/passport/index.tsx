@@ -22,6 +22,7 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { CryptoCompilingOverlay } from '@/components/common/CryptoCompilingOverlay';
 import { BulletGuaranteeRow } from '@/components/passport/BulletGuaranteeRow';
 import { SolidarityPlaceholderCard } from '@/components/passport/SolidarityPlaceholderCard';
 import { SfIcon } from '@/components/icons/SfIcon';
@@ -169,6 +170,7 @@ export default function PassportSetup() {
   return (
     <View className="flex-1 bg-pageBg" style={{ paddingTop: insets.top }}>
       <NavBar onClose={() => router.back()} />
+      <CryptoCompilingOverlay visible={busy && step === 'proof'} />
       <ScrollView contentContainerStyle={{ padding: 16, paddingBottom: 80 }}>
         <SolidarityPlaceholderCard
           screenID={meta.id}
