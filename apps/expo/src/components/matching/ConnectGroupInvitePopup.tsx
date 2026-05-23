@@ -19,7 +19,7 @@ import {
 import { LinearGradient } from 'expo-linear-gradient';
 
 import { SfIcon } from '@/components/icons/SfIcon';
-import { ThemedButton } from '@/components/themed';
+import { ON_DARK, ThemedButton } from '@/components/themed';
 import { Colors } from '@/constants/Colors';
 
 export interface GroupInvitePayload {
@@ -107,7 +107,7 @@ function Header({
         end={{ x: 1, y: 1 }}
         style={styles.iconCircle}
       >
-        <SfIcon name="person.3.fill" size={22} color="#FFFFFF" />
+        <SfIcon name="person.3.fill" size={22} color={ON_DARK} />
       </LinearGradient>
       <View style={styles.headerText}>
         <Text style={styles.headerName} numberOfLines={1}>{invite.groupName}</Text>
@@ -175,7 +175,7 @@ function Actions({
           <ThemedButton
             fullWidth
             label="Accept"
-            leadingIcon={<SfIcon name="hand.thumbsup.fill" size={14} color="#FFFFFF" />}
+            leadingIcon={<SfIcon name="hand.thumbsup.fill" size={14} color={ON_DARK} />}
             onPress={onAccept}
           />
         </View>

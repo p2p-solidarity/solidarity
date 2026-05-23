@@ -36,11 +36,11 @@ import { Colors } from '@/constants/Colors';
 import { useContact, useContactList } from '@/contacts/repository';
 import { haptic } from '@/feedback/haptics';
 import { pushToast } from '@/feedback/toast';
-import { useShoutoutStore } from '@/shoutouts/store';
+import { SHOUTOUT_MAX_PAYLOAD_BYTES, useShoutoutStore } from '@/shoutouts/store';
 import type { Contact } from '@solidarity/shared';
 
 const MONO_FONT = 'Menlo';
-const MAX_BYTES = 200;
+const MAX_BYTES = SHOUTOUT_MAX_PAYLOAD_BYTES;
 
 function initials(name: string): string {
   return name

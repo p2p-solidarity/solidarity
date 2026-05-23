@@ -18,6 +18,7 @@
  * Selective tab follows Swift's `supportsSelective == false` branch (hidden).
  * TODO(android): wire IdentityCoordinator.refreshIdentity() once ported.
  */
+import type { SFSymbol } from 'expo-symbols';
 import { useState } from 'react';
 import { Pressable, ScrollView, Text, View } from 'react-native';
 
@@ -37,7 +38,7 @@ type DashboardSection = 'personal' | 'group';
 interface SectionDef {
   readonly id: DashboardSection;
   readonly title: string;
-  readonly icon: import('expo-symbols').SFSymbol;
+  readonly icon: SFSymbol;
 }
 
 const SECTIONS: readonly SectionDef[] = [

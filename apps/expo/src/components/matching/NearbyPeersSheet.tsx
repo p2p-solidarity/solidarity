@@ -24,7 +24,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import type { SFSymbol } from 'expo-symbols';
 
 import { SfIcon } from '@/components/icons/SfIcon';
-import { ThemedButton } from '@/components/themed';
+import { ON_DARK, ThemedButton } from '@/components/themed';
 import { Colors } from '@/constants/Colors';
 import { useCardStore } from '@/cards/cardManager';
 import { useMatchingSession } from '@/matching/session';
@@ -135,7 +135,7 @@ export function NearbyPeersSheet({
             <ThemedButton
               fullWidth
               label="View Latest Lightening Card"
-              leadingIcon={<SfIcon name="bolt.fill" size={15} color="#FFFFFF" />}
+              leadingIcon={<SfIcon name="bolt.fill" size={15} color={ON_DARK} />}
               onPress={onViewLatestCard}
             />
           </View>

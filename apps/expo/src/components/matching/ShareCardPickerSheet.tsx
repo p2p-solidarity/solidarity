@@ -12,7 +12,7 @@ import { Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-nati
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { SfIcon } from '@/components/icons/SfIcon';
-import { ThemedButton, ThemedSurface } from '@/components/themed';
+import { ON_DARK, ThemedButton, ThemedSurface } from '@/components/themed';
 import { Colors } from '@/constants/Colors';
 import type { BusinessCard, SharingLevel } from '@solidarity/shared';
 
@@ -130,7 +130,7 @@ export function ShareCardPickerSheet({
                 <SfIcon
                   name={isAdvertising ? 'stop.fill' : 'antenna.radiowaves.left.and.right'}
                   size={14}
-                  color={isAdvertising ? Colors.destructive : '#FFFFFF'}
+                  color={isAdvertising ? Colors.destructive : ON_DARK}
                 />
               }
               label={isAdvertising ? 'Stop Advertising' : 'Start Advertising'}

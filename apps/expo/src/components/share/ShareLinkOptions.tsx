@@ -26,7 +26,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import type { SFSymbol } from 'expo-symbols';
 
 import { SfIcon } from '@/components/icons/SfIcon';
-import { ThemedButton, ThemedSurface } from '@/components/themed';
+import { ON_DARK, ThemedButton, ThemedSurface } from '@/components/themed';
 import { Colors } from '@/constants/Colors';
 import { pushToast } from '@/feedback/toast';
 import type { BusinessCard, SharingLevel } from '@solidarity/shared';
@@ -140,7 +140,7 @@ export function ShareLinkOptions({
             <ThemedButton
               fullWidth
               label="Create Share Link"
-              leadingIcon={<SfIcon name="plus.circle.fill" size={14} color="#FFFFFF" />}
+              leadingIcon={<SfIcon name="plus.circle.fill" size={14} color={ON_DARK} />}
               onPress={() => { void create(); }}
             />
             <Pressable accessibilityRole="button" onPress={onClose}>
@@ -321,7 +321,7 @@ function CreatedLinkView({
             <ThemedButton
               fullWidth
               label="Share Link"
-              leadingIcon={<SfIcon name="square.and.arrow.up" size={14} color="#FFFFFF" />}
+              leadingIcon={<SfIcon name="square.and.arrow.up" size={14} color={ON_DARK} />}
               onPress={() => { void shareLink(); }}
             />
             <ThemedButton
@@ -426,7 +426,7 @@ const styles = StyleSheet.create({
   },
   optionBoxActive: { backgroundColor: Colors.primaryBlue },
   optionValue: { color: Colors.text1, fontSize: 17, fontWeight: '700' },
-  optionValueActive: { color: '#FFFFFF' },
+  optionValueActive: { color: ON_DARK },
   optionCaption: { color: Colors.text2, fontSize: 11 },
 
   notice: { gap: 8 },

@@ -92,7 +92,7 @@ function NavBar({
 function AdminTools({
   group,
 }: {
-  readonly group: import('@/groups/store').GroupModel;
+  readonly group: GroupModel;
 }): React.JSX.Element {
   // 1:1 port of Swift IDView "Admin Tools" stack
   // (GroupDetailView.swift: `if isOwner || canIssueCredentials { ... }`).

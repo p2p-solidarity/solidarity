@@ -13,6 +13,7 @@ import type { ReactNode } from 'react';
 import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { SfIcon } from '@/components/icons/SfIcon';
+import { ON_DARK } from '@/components/themed';
 import { Colors } from '@/constants/Colors';
 import { haptic } from '@/feedback/haptics';
 
@@ -156,7 +157,7 @@ function ConnectPill({ onPress }: { readonly onPress?: () => void }): ReactNode 
       accessibilityLabel="Connect"
       style={[styles.pill, { backgroundColor: Colors.primaryBlue }]}
     >
-      <SfIcon name="link.badge.plus" size={12} color="#FFFFFF" />
+      <SfIcon name="link.badge.plus" size={12} color={ON_DARK} />
       <Text style={styles.pillText}>Connect</Text>
     </Pressable>
   );
@@ -165,7 +166,7 @@ function ConnectPill({ onPress }: { readonly onPress?: () => void }): ReactNode 
 function ConnectingPill(): ReactNode {
   return (
     <View style={[styles.pill, { backgroundColor: Colors.warning }]}>
-      <ActivityIndicator color="#FFFFFF" size="small" />
+      <ActivityIndicator color={ON_DARK} size="small" />
       <Text style={styles.pillText}>Connecting…</Text>
     </View>
   );
@@ -182,7 +183,7 @@ function SendCardPill({ onPress }: { readonly onPress: () => void }): ReactNode 
       accessibilityLabel="Send card"
       style={[styles.pill, { backgroundColor: Colors.terminalGreen }]}
     >
-      <SfIcon name="paperplane.fill" size={12} color="#FFFFFF" />
+      <SfIcon name="paperplane.fill" size={12} color={ON_DARK} />
       <Text style={styles.pillText}>Send</Text>
     </Pressable>
   );
@@ -235,7 +236,7 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
     borderRadius: 999,
   },
-  pillText: { color: '#FFFFFF', fontSize: 12, fontWeight: '600' },
+  pillText: { color: ON_DARK, fontSize: 12, fontWeight: '600' },
   disconnect: {
     padding: 8,
     borderRadius: 999,

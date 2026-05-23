@@ -24,7 +24,7 @@ import {
 import type { SFSymbol } from 'expo-symbols';
 
 import { SfIcon } from '@/components/icons/SfIcon';
-import { ThemedButton } from '@/components/themed';
+import { ON_DARK, ThemedButton } from '@/components/themed';
 import { Colors } from '@/constants/Colors';
 import { useMatchingSession } from '@/matching/session';
 import type { MatchingPeer, PeerStatus } from '@/matching/types';
@@ -203,7 +203,7 @@ export function ConnectPeerPopup({
               dismiss();
             }}
             onConnect={startConnect}
-            onSendCard={() => triggerExchange(true)}
+            onSendCard={() => { triggerExchange(true); }}
             onDismiss={dismiss}
             onRetry={startConnect}
           />
@@ -348,7 +348,7 @@ function PhaseActions({
           <ThemedButton
             fullWidth
             label="Connect"
-            leadingIcon={<SfIcon name="link.badge.plus" size={14} color="#FFFFFF" />}
+            leadingIcon={<SfIcon name="link.badge.plus" size={14} color={ON_DARK} />}
             onPress={onConnect}
           />
         </View>
@@ -376,7 +376,7 @@ function PhaseActions({
             <ThemedButton
               fullWidth
               label="Send Card"
-              leadingIcon={<SfIcon name="paperplane.fill" size={14} color="#FFFFFF" />}
+              leadingIcon={<SfIcon name="paperplane.fill" size={14} color={ON_DARK} />}
               onPress={onSendCard}
             />
           </View>

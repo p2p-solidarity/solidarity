@@ -83,7 +83,7 @@ export default function ShareTab() {
 
   return (
     <View className="flex-1 bg-pageBg" style={{ paddingTop: insets.top }}>
-      <NavBar onScan={() => router.push('/scan')} />
+      <NavBar onScan={() => { router.push('/scan'); }} />
 
       <ScrollView contentContainerStyle={{ paddingBottom: 100 }}>
         <View className="items-center" style={{ height: 260 }}>
@@ -157,8 +157,8 @@ export default function ShareTab() {
             cardName={myCard?.name}
             enabledFields={DEFAULT_FIELDS}
             hasRealHuman={false}
-            onOpenSettings={() => router.push('/settings')}
-            onShare={() => router.push('/share/qr')}
+            onOpenSettings={() => { router.push('/settings'); }}
+            onShare={() => { router.push('/share/qr'); }}
           />
         </View>
       </ScrollView>

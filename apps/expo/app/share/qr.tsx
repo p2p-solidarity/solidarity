@@ -19,7 +19,7 @@ import * as FileSystem from 'expo-file-system/legacy';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { SfIcon } from '@/components/icons/SfIcon';
-import { ThemedButton } from '@/components/themed';
+import { ON_DARK, ThemedButton } from '@/components/themed';
 import { Colors } from '@/constants/Colors';
 import { useMyCard } from '@/cards/cardManager';
 import { toVCard } from '@/cards/vCard';
@@ -32,7 +32,10 @@ export default function QrSharingScreen() {
   const myCard = useMyCard();
   const [generation, setGeneration] = useState(0);
   const [secondsLeft, setSecondsLeft] = useState(COUNTDOWN_SECONDS);
-  const qrRef = useRef<{ toDataURL?: (cb: (data: string) => void) => void } | null>(null);
+  interface QrRefShape {
+    readonly toDataURL?: (cb: (data: string) => void) => void;
+  }
+  const qrRef = useRef<QrRefShape | null>(null);
 
   const payload = useMemo(() => {
     if (!myCard) return null;
@@ -62,12 +65,14 @@ export default function QrSharingScreen() {
   }, [refresh, secondsLeft]);
 
   const shareQr = useCallback(async () => {
-    if (!qrRef.current?.toDataURL) {
+    const ref = qrRef.current;
+    const toDataURL = ref?.toDataURL;
+    if (!toDataURL) {
       pushToast('Share unavailable on this device.', 'warning');
       return;
     }
     const dataUrl = await new Promise<string>((resolve) => {
-      qrRef.current!.toDataURL!((data) => { resolve(data); });
+      toDataURL((data) => { resolve(data); });
     });
     const path = `${FileSystem.cacheDirectory ?? ''}solidarity-qr.png`;
     await FileSystem.writeAsStringAsync(path, dataUrl, {
@@ -103,10 +108,8 @@ export default function QrSharingScreen() {
                 size={260}
                 backgroundColor="#FFFFFF"
                 color={Colors.text1}
-                getRef={(c) => {
-                  qrRef.current = c as unknown as {
-                    toDataURL?: (cb: (data: string) => void) => void;
-                  };
+                getRef={(c: QrRefShape | null) => {
+                  qrRef.current = c;
                 }}
               />
             ) : (
@@ -139,7 +142,7 @@ export default function QrSharingScreen() {
           <ThemedButton
             fullWidth
             label="Share QR"
-            leadingIcon={<SfIcon name="square.and.arrow.up" size={14} color="#FFFFFF" />}
+            leadingIcon={<SfIcon name="square.and.arrow.up" size={14} color={ON_DARK} />}
             disabled={!payload}
             onPress={() => { void shareQr(); }}
           />

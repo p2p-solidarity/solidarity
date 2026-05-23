@@ -19,7 +19,7 @@ import Animated, {
 } from 'react-native-reanimated';
 
 import { SfIcon } from '@/components/icons/SfIcon';
-import { ThemedButton } from '@/components/themed';
+import { ON_DARK, ThemedButton } from '@/components/themed';
 import { Colors } from '@/constants/Colors';
 import { useMatchingSession } from '@/matching/session';
 import { defaultAnimalForId } from '@solidarity/shared';
@@ -112,7 +112,7 @@ export function IncomingInvitationPopup({
               <ThemedButton
                 fullWidth
                 label="Accept"
-                leadingIcon={<SfIcon name="hand.thumbsup.fill" size={14} color="#FFFFFF" />}
+                leadingIcon={<SfIcon name="hand.thumbsup.fill" size={14} color={ON_DARK} />}
                 onPress={() => {
                   if (didRespond) return;
                   setDidRespond(true);

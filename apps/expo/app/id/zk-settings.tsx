@@ -39,10 +39,15 @@ function useZkIdentityCommitment(): string | null {
   return null;
 }
 
-const PROOFS_SUPPORTED = true;
+// TODO(android): wire SemaphoreIdentityManager.proofsSupported. The Swift
+// version reads a static boolean off the manager class.
+function useProofsSupported(): boolean {
+  return true;
+}
 
 export default function ZkSettings(): React.JSX.Element {
   const initialCommitment = useZkIdentityCommitment();
+  const proofsSupported = useProofsSupported();
   const [commitment, setCommitment] = useState<string | null>(initialCommitment);
   const [isDeleting, setIsDeleting] = useState(false);
 
@@ -107,7 +112,7 @@ export default function ZkSettings(): React.JSX.Element {
             <SettingsBlockInfoRow
               icon="checkmark.seal"
               title="Proofs Supported"
-              value={PROOFS_SUPPORTED ? 'Yes' : 'No'}
+              value={proofsSupported ? 'Yes' : 'No'}
             />
           </SettingsBlockSection>
 

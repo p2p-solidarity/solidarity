@@ -231,3 +231,54 @@ export async function runPassportPipeline(
   onStep({ type: 'vcIssued', jwt: vcJwt });
   return vcJwt;
 }
+
+/** Translate a Nitro PassportReadResult into the UI snapshot model. */
+export function chipFromNitro(
+  result: PassportReadResult,
+  fallbackNationality: string,
+  fallbackDocNumber: string
+): PassportChipSnapshot {
+  return {
+    documentHash: '',
+    mrzDigest: '',
+    dg1MRZData: '',
+    chipUid: result.chipUid ?? '',
+    bacVerified: true,
+    paceVerified: true,
+    passiveAuthPassed: result.passiveAuthValid,
+    isSimulated: false,
+    readAt: new Date(),
+    nationalityCode: result.mrz.nationality || fallbackNationality,
+    maskedDocNumber: maskDocumentNumber(result.mrz.documentNumber || fallbackDocNumber),
+    dataGroupsRead: ['COM', 'SOD', 'DG1', 'DG2', 'DG14', 'DG15'],
+  };
+}
+
+/** Stand-in chip snapshot when the Nitro NFC module isn't linked (Sim/Android). */
+export function simulatedChipSnapshot(draft: PassportMRZDraft): PassportChipSnapshot {
+  const fakeDigest = '0123456789abcdef0123456789abcdef';
+  return {
+    documentHash: fakeDigest,
+    mrzDigest: fakeDigest,
+    dg1MRZData: `P<${draft.nationalityCode}<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<`,
+    chipUid: `SIM-${fakeDigest.slice(0, 8).toUpperCase()}`,
+    bacVerified: true,
+    paceVerified: false,
+    passiveAuthPassed: false,
+    isSimulated: true,
+    readAt: new Date(),
+    nationalityCode: draft.nationalityCode,
+    maskedDocNumber: maskDocumentNumber(draft.passportNumber),
+    dataGroupsRead: ['DG1 (sim)'],
+  };
+}
+
+/** Convert raw proof bytes to a base64-encoded payload. */
+export function arrayBufferToBase64(buffer: ArrayBuffer): string {
+  const bytes = new Uint8Array(buffer);
+  let binary = '';
+  for (const b of bytes) binary += String.fromCharCode(b);
+  if (typeof btoa !== 'undefined') return btoa(binary);
+  // RN fallback: leave as binary string (rare path; mock proof only).
+  return binary;
+}
