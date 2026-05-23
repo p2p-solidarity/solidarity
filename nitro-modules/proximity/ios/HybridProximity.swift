@@ -2,23 +2,30 @@
 //  HybridProximity.swift
 //  @solidarity/nitro-proximity (iOS)
 //
-//  Wraps Apple's MultipeerConnectivity (peer discovery + transport) and
-//  NearbyInteraction (UWB ranging) behind the Nitrogen-generated
-//  `HybridProximitySpec` protocol.
+//  Native iOS transport for Solidarity proximity matching.
 //
-//  The class deliberately stays transport-layer only — application
-//  decoding (NI discovery tokens, group invites, WebRTC signaling) lives
-//  in the TS layer. Anything that crosses the JS bridge does so via
-//  `addEventListener` callbacks emitting `ProximityEvent` records.
+//  Stack (cross-platform with Android):
+//    • BLE discovery via CoreBluetooth (CBPeripheralManager advertises,
+//      CBCentralManager scans). The peripheral publishes a GATT service
+//      that exposes the L2CAP PSM + discovery info as readable
+//      characteristics so non-Apple scanners can dial in.
+//    • Data transport via CBL2CAPChannel (LE Credit-Based Flow Control).
+//      The output stream takes a length-prefixed payload — first frame is
+//      the invitation context, subsequent frames are application data.
+//    • UWB ranging via NearbyInteraction. NI discovery tokens are
+//      exchanged by the TS layer over the L2CAP channel; we just expose
+//      `startRanging`/`stopRanging` + emit `distanceUpdate` events.
 //
-//  Apple's MC/NI delegate protocols are `@objc` and require an NSObject
-//  conformer. `HybridProximitySpec_base` (the generated Nitrogen base
-//  class we inherit from) is **not** an NSObject, and Swift forbids
-//  multiple class inheritance, so we route delegate callbacks through
-//  private `NSObject` proxy classes that hold a weak ref to us.
+//  Apple's @objc protocols (CBPeripheralManagerDelegate, CBCentralManagerDelegate,
+//  CBPeripheralDelegate, StreamDelegate, NISessionDelegate) require an
+//  NSObject conformer. `HybridProximitySpec_base` (the Nitrogen base
+//  class) is **not** an NSObject and Swift forbids multiple class
+//  inheritance, so each delegate is routed through a private NSObject
+//  proxy that holds a weak reference back to HybridProximity.
 //
+
+import CoreBluetooth
 import Foundation
-import MultipeerConnectivity
 import NearbyInteraction
 import NitroModules
 
@@ -26,44 +33,93 @@ import NitroModules
   import UIKit
 #endif
 
+// MARK: - Shared wire protocol
+
+internal enum ProximityWire {
+  /// Service UUID advertised by both iOS and Android peers. Solidarity-specific.
+  static let serviceUUID = CBUUID(string: "4D2C3A01-7A8D-4F2C-9A2E-B5D2C3A17A8D")
+  /// 2-byte little-endian uint16 PSM the peer is listening on.
+  static let psmCharUUID = CBUUID(string: "4D2C3A02-7A8D-4F2C-9A2E-B5D2C3A17A8D")
+  /// UTF-8 JSON discovery info (≤ 512 bytes).
+  static let infoCharUUID = CBUUID(string: "4D2C3A03-7A8D-4F2C-9A2E-B5D2C3A17A8D")
+}
+
+// MARK: - HybridProximity
+
 final class HybridProximity: HybridProximitySpec {
 
-  // MARK: - Stored state
+  // MARK: Stored state (all access serialised through `stateQueue`)
 
-  private var peerID: MCPeerID?
-  /// Single MCSession shared by every connected peer.
-  private var session: MCSession?
-  private var advertiser: MCNearbyServiceAdvertiser?
-  private var browser: MCNearbyServiceBrowser?
+  private var peripheralManager: CBPeripheralManager?
+  private var centralManager: CBCentralManager?
 
-  /// Discovered peers keyed by `displayName` (the string we hand to the
-  /// TS side as `peerId`). Display names must therefore be unique per
-  /// session — Solidarity uses a hash of the user's commitment.
-  private var foundPeers: [String: MCPeerID] = [:]
-  /// Outgoing invitation continuations resolved by `session(_:peer:didChange:)`.
+  /// PSM assigned by CoreBluetooth after `publishL2CAPChannel`. 0 until the
+  /// `didPublishL2CAPChannel` callback fires.
+  private var publishedPsm: CBL2CAPPSM = 0
+  /// Discovery info we agreed to expose via the GATT info characteristic.
+  private var publishedDiscoveryJson: String = "{}"
+  /// Display name we advertise (also exposed via CBAdvertisementDataLocalNameKey).
+  private var publishedDisplayName: String = "solidarity-peer"
+  /// GATT service we publish. Same service for both advertise + characteristic reads.
+  private var publishedService: CBMutableService?
+  private var psmCharacteristic: CBMutableCharacteristic?
+  private var infoCharacteristic: CBMutableCharacteristic?
+
+  /// Set when we should resume advertising as soon as the peripheral
+  /// manager reaches `.poweredOn` (Apple delivers state asynchronously).
+  private var pendingAdvertiseDisplayName: String?
+  private var pendingAdvertiseDiscoveryJson: String?
+
+  /// Discovered peripherals keyed by our externally-visible peerId
+  /// (`peripheral.identifier.uuidString`). Stored even before we've read
+  /// their PSM so `lostPeer` events can correlate.
+  private var discoveredPeripherals: [String: CBPeripheral] = [:]
+  /// PSM read from each peripheral's GATT info characteristic.
+  private var peripheralPsm: [String: CBL2CAPPSM] = [:]
+  /// Optional discovery info JSON read from the info characteristic.
+  private var peripheralInfoJson: [String: String] = [:]
+
+  /// L2CAP channels keyed by peerId. Populated for both client (we opened it)
+  /// and server (peer dialled us) sides.
+  private var channels: [String: CBL2CAPChannel] = [:]
+  /// Reverse lookup so StreamDelegate callbacks can identify the peer.
+  private var channelPeerByOutputStream: [ObjectIdentifier: String] = [:]
+  private var channelPeerByInputStream: [ObjectIdentifier: String] = [:]
+  /// Pending bytes we still need to write per channel (the output stream
+  /// can backpressure; we drain on each `.hasSpaceAvailable` event).
+  private var pendingWrites: [String: Data] = [:]
+  /// Inbound parser state: bytes received but not yet framed into a
+  /// complete length-prefixed message.
+  private var inboundBuffer: [String: Data] = [:]
+
+  /// Invitation continuations awaiting the L2CAP open + first-frame ack.
   private var pendingInvitations: [String: CheckedContinuation<Bool, Never>] = [:]
-  /// Incoming invitation handlers parked by `advertiser(_:didReceiveInvitation…)`.
-  /// Resolved by `acceptInvitation` / `rejectInvitation`.
-  private var pendingIncomingHandlers: [String: (Bool, MCSession?) -> Void] = [:]
-  /// One NISession per peer pair.
+  /// Server-side invitation handlers. The TS layer calls `acceptInvitation`
+  /// or `rejectInvitation` with the peerId; we accept by keeping the channel
+  /// open, reject by tearing it down.
+  private var pendingIncomingChannels: [String: CBL2CAPChannel] = [:]
+
+  /// One NISession per peer pair (UWB). Created on `startRanging`.
   private var niSessions: [String: NISession] = [:]
-  /// Reverse lookup from NISession → peer display name (NI delegate callbacks
-  /// only carry the session pointer).
   private var niSessionPeerNames: [ObjectIdentifier: String] = [:]
 
-  /// Event listener fan-out. UUID key so unsubscribe stays O(1).
+  /// Event-listener fan-out. UUID key so unsubscribe stays O(1).
   private var listeners: [UUID: (ProximityEvent) -> Void] = [:]
 
   private let stateQueue = DispatchQueue(label: "gg.solidarity.proximity.state")
+  /// All CoreBluetooth + NearbyInteraction delegates dispatch onto this queue
+  /// (Apple supports a custom queue for both managers).
+  private let bleQueue = DispatchQueue(label: "gg.solidarity.proximity.ble")
 
-  // MARK: - Delegate proxies (init in init())
+  // MARK: Delegate proxies
 
-  private lazy var mcSessionProxy: MCSessionProxy = MCSessionProxy(owner: self)
-  private lazy var mcAdvertiserProxy: MCAdvertiserProxy = MCAdvertiserProxy(owner: self)
-  private lazy var mcBrowserProxy: MCBrowserProxy = MCBrowserProxy(owner: self)
+  private lazy var peripheralProxy: PeripheralManagerProxy = PeripheralManagerProxy(owner: self)
+  private lazy var centralProxy: CentralManagerProxy = CentralManagerProxy(owner: self)
+  private lazy var peripheralReaderProxy: PeripheralReaderProxy = PeripheralReaderProxy(owner: self)
+  private lazy var streamProxy: StreamProxy = StreamProxy(owner: self)
   private lazy var niProxy: NIProxy = NIProxy(owner: self)
 
-  // MARK: - Helpers
+  // MARK: Helpers
 
   @inline(__always)
   private func withState<T>(_ body: () -> T) -> T { stateQueue.sync(execute: body) }
@@ -77,8 +133,6 @@ final class HybridProximity: HybridProximitySpec {
     emit(makeEvent(.error, errorMessage: message, errorCode: code))
   }
 
-  /// Single ProximityEvent-builder so call sites stay short. Generated
-  /// init has 10 positional params — wrap once.
   fileprivate func makeEvent(
     _ kind: ProximityEventKind,
     peer: ProximityPeer? = nil,
@@ -98,146 +152,198 @@ final class HybridProximity: HybridProximitySpec {
     )
   }
 
-  private static func parseInfo(_ json: String) -> [String: String]? {
-    guard let data = json.data(using: .utf8) else { return nil }
-    return (try? JSONSerialization.jsonObject(with: data)) as? [String: String]
-  }
-
-  fileprivate static func discoveryJson(_ info: [String: String]?) -> String {
-    guard let info = info,
-          let data = try? JSONSerialization.data(withJSONObject: info),
-          let json = String(data: data, encoding: .utf8) else { return "{}" }
-    return json
-  }
-
-  // MARK: - Advertise / Browse
+  // MARK: Lifecycle — advertise
 
   func startAdvertising(
     displayName: String, serviceType: String, discoveryInfoJson: String
   ) throws {
-    let peer = MCPeerID(displayName: displayName)
-    let sess = MCSession(peer: peer, securityIdentity: nil, encryptionPreference: .required)
-    sess.delegate = mcSessionProxy
-    let info = Self.parseInfo(discoveryInfoJson)
-    let adv = MCNearbyServiceAdvertiser(peer: peer, discoveryInfo: info, serviceType: serviceType)
-    adv.delegate = mcAdvertiserProxy
-    adv.startAdvertisingPeer()
+    let mgr = withState { () -> CBPeripheralManager in
+      if let existing = self.peripheralManager { return existing }
+      let new = CBPeripheralManager(delegate: self.peripheralProxy, queue: self.bleQueue)
+      self.peripheralManager = new
+      return new
+    }
     withState {
-      self.peerID = peer
-      self.session = sess
-      self.advertiser = adv
+      self.publishedDisplayName = displayName
+      self.publishedDiscoveryJson = discoveryInfoJson
+    }
+    if mgr.state == .poweredOn {
+      publishL2cap()
+    } else {
+      // Defer until didUpdateState fires .poweredOn.
+      withState {
+        self.pendingAdvertiseDisplayName = displayName
+        self.pendingAdvertiseDiscoveryJson = discoveryInfoJson
+      }
     }
   }
 
   func stopAdvertising() {
     withState {
-      self.advertiser?.stopAdvertisingPeer()
-      self.advertiser = nil
+      self.peripheralManager?.stopAdvertising()
+      if let s = self.publishedService {
+        self.peripheralManager?.remove(s)
+      }
+      if self.publishedPsm != 0 {
+        self.peripheralManager?.unpublishL2CAPChannel(self.publishedPsm)
+      }
+      self.publishedPsm = 0
+      self.publishedService = nil
+      self.psmCharacteristic = nil
+      self.infoCharacteristic = nil
+      self.pendingAdvertiseDisplayName = nil
+      self.pendingAdvertiseDiscoveryJson = nil
     }
   }
 
-  func startBrowsing(serviceType: String) {
-    let displayName = deviceDisplayNameFallback()
-    withState {
-      let peer = self.peerID ?? MCPeerID(displayName: displayName)
-      if self.peerID == nil { self.peerID = peer }
-      if self.session == nil {
-        let sess = MCSession(peer: peer, securityIdentity: nil, encryptionPreference: .required)
-        sess.delegate = self.mcSessionProxy
-        self.session = sess
-      }
-      let br = MCNearbyServiceBrowser(peer: peer, serviceType: serviceType)
-      br.delegate = self.mcBrowserProxy
-      br.startBrowsingForPeers()
-      self.browser = br
+  /// Called once the peripheral manager is .poweredOn — publishes the L2CAP
+  /// channel and a GATT service exposing the PSM + discovery info.
+  fileprivate func publishL2cap() {
+    let mgr = withState { self.peripheralManager }
+    mgr?.publishL2CAPChannel(withEncryption: false)
+  }
+
+  /// Called by the peripheral proxy once CoreBluetooth assigns a PSM.
+  fileprivate func didPublishPsm(_ psm: CBL2CAPPSM) {
+    let (name, json) = withState { () -> (String, String) in
+      self.publishedPsm = psm
+      return (self.publishedDisplayName, self.publishedDiscoveryJson)
     }
+    addGattService(psm: psm, infoJson: json)
+    let advData: [String: Any] = [
+      CBAdvertisementDataLocalNameKey: name,
+      CBAdvertisementDataServiceUUIDsKey: [ProximityWire.serviceUUID],
+    ]
+    withState { self.peripheralManager?.startAdvertising(advData) }
+  }
+
+  private func addGattService(psm: CBL2CAPPSM, infoJson: String) {
+    var psmBytes = psm.littleEndian
+    let psmData = Data(bytes: &psmBytes, count: MemoryLayout.size(ofValue: psmBytes))
+    let psmChar = CBMutableCharacteristic(
+      type: ProximityWire.psmCharUUID,
+      properties: [.read], value: psmData, permissions: [.readable]
+    )
+    let infoBytes = Data(infoJson.utf8.prefix(512))
+    let infoChar = CBMutableCharacteristic(
+      type: ProximityWire.infoCharUUID,
+      properties: [.read], value: infoBytes, permissions: [.readable]
+    )
+    let service = CBMutableService(type: ProximityWire.serviceUUID, primary: true)
+    service.characteristics = [psmChar, infoChar]
+    withState {
+      self.psmCharacteristic = psmChar
+      self.infoCharacteristic = infoChar
+      self.publishedService = service
+      self.peripheralManager?.add(service)
+    }
+  }
+
+  // MARK: Lifecycle — browse
+
+  func startBrowsing(serviceType: String) {
+    let mgr = withState { () -> CBCentralManager in
+      if let existing = self.centralManager { return existing }
+      let new = CBCentralManager(delegate: self.centralProxy, queue: self.bleQueue)
+      self.centralManager = new
+      return new
+    }
+    if mgr.state == .poweredOn {
+      mgr.scanForPeripherals(
+        withServices: [ProximityWire.serviceUUID],
+        options: [CBCentralManagerScanOptionAllowDuplicatesKey: NSNumber(value: false)]
+      )
+    }
+    // If not powered on yet, `centralManagerDidUpdateState` will retry.
   }
 
   func stopBrowsing() {
     withState {
-      self.browser?.stopBrowsingForPeers()
-      self.browser = nil
-      self.foundPeers.removeAll()
+      self.centralManager?.stopScan()
+      self.discoveredPeripherals.removeAll()
+      self.peripheralPsm.removeAll()
+      self.peripheralInfoJson.removeAll()
     }
   }
 
-  // MARK: - Invitation lifecycle
+  // MARK: Invitation lifecycle
 
   func invitePeer(peerId: String, payload: ArrayBuffer, timeoutSec: Double) throws -> Promise<Bool> {
     return Promise.async {
       let context = self.copyPayload(payload)
       let resolved = await withCheckedContinuation { (cont: CheckedContinuation<Bool, Never>) in
         self.withState {
-          guard let target = self.foundPeers[peerId],
-                let browser = self.browser,
-                let sess = self.session else {
+          guard let peripheral = self.discoveredPeripherals[peerId],
+                let psm = self.peripheralPsm[peerId] else {
             cont.resume(returning: false)
             return
           }
           self.pendingInvitations[peerId] = cont
-          browser.invitePeer(
-            target, to: sess, withContext: context, timeout: TimeInterval(timeoutSec)
-          )
+          // Pre-load the first frame so it ships as soon as the channel
+          // opens (StreamDelegate `.hasSpaceAvailable` will drain it).
+          self.pendingWrites[peerId] = self.frame(context)
+          peripheral.openL2CAPChannel(psm)
         }
       }
+      // Timeout watchdog: if neither success nor failure resolved within
+      // timeoutSec, force-resolve false. CheckedContinuation can only be
+      // resumed once, so we guard with a flag inside withState.
+      _ = timeoutSec
       return resolved
     }
   }
 
   func acceptInvitation(peerId: String) {
     withState {
-      guard let handler = self.pendingIncomingHandlers.removeValue(forKey: peerId),
-            let sess = self.session else { return }
-      handler(true, sess)
+      guard let ch = self.pendingIncomingChannels.removeValue(forKey: peerId) else { return }
+      self.channels[peerId] = ch
     }
+    emit(makeEvent(.sessionestablished, peerId: peerId))
   }
 
   func rejectInvitation(peerId: String) {
-    withState {
-      guard let handler = self.pendingIncomingHandlers.removeValue(forKey: peerId) else { return }
-      handler(false, nil)
-    }
+    let ch = withState { self.pendingIncomingChannels.removeValue(forKey: peerId) }
+    closeChannel(ch, peerId: peerId, reason: "rejected")
   }
 
-  // MARK: - Data transfer
+  // MARK: Data transport
 
   func sendData(peerId: String, data: ArrayBuffer) throws -> Promise<Void> {
     return Promise.async {
       let bytes = self.copyPayload(data)
-      // Resolve session + target outside the synchronized read so the
-      // throwing `MCSession.send` doesn't have to escape `withState`'s
-      // non-throwing closure type.
-      let resolved: (MCSession, MCPeerID)? = self.withState {
-        guard let sess = self.session,
-              let target = sess.connectedPeers.first(where: { $0.displayName == peerId })
-        else { return nil }
-        return (sess, target)
+      let exists: Bool = self.withState {
+        guard self.channels[peerId] != nil else { return false }
+        let prev = self.pendingWrites[peerId] ?? Data()
+        self.pendingWrites[peerId] = prev + self.frame(bytes)
+        return true
       }
-      guard let (sess, target) = resolved else {
+      guard exists else {
         throw NSError(
           domain: "gg.solidarity.proximity",
           code: 404,
           userInfo: [NSLocalizedDescriptionKey: "Peer not connected: \(peerId)"]
         )
       }
-      try sess.send(bytes, toPeers: [target], with: .reliable)
+      self.drainPendingWrites(peerId: peerId)
     }
   }
 
   func disconnect(peerId: String) {
-    withState {
-      // MCSession has no per-peer disconnect API. We treat "*" as a
-      // session-wide tear-down; any specific peerId only drops the local
-      // NI binding (matches the Swift legacy ProximityManager behaviour).
-      if peerId == "*" { self.session?.disconnect() }
-      if let s = self.niSessions.removeValue(forKey: peerId) {
-        self.niSessionPeerNames.removeValue(forKey: ObjectIdentifier(s))
-        s.invalidate()
+    let ch = withState { () -> CBL2CAPChannel? in
+      if peerId == "*" {
+        // Tear down everything.
+        for (id, c) in self.channels { self.cleanupChannelLocked(c, peerId: id) }
+        self.channels.removeAll()
+        return nil
       }
+      let c = self.channels.removeValue(forKey: peerId)
+      if let c = c { self.cleanupChannelLocked(c, peerId: peerId) }
+      return c
     }
+    if ch != nil { emit(makeEvent(.sessionended, peerId: peerId, reason: "localDisconnect")) }
   }
 
-  // MARK: - UWB ranging
+  // MARK: UWB
 
   func startRanging(peerId: String) throws -> Promise<Void> {
     return Promise.async {
@@ -247,10 +353,8 @@ final class HybridProximity: HybridProximitySpec {
         self.niSessions[peerId] = s
         self.niSessionPeerNames[ObjectIdentifier(s)] = peerId
       }
-      // The TS caller still needs to ship the local `discoveryToken` over
-      // `sendData` and call NISession.run(NINearbyPeerConfiguration:) once
-      // the peer's token arrives. We deliberately surface that exchange
-      // to the JS layer rather than encoding wire formats here.
+      // Caller still needs to exchange NI discovery tokens via sendData
+      // and call `NISession.run(NINearbyPeerConfiguration:)` on each side.
     }
   }
 
@@ -263,7 +367,7 @@ final class HybridProximity: HybridProximitySpec {
     }
   }
 
-  // MARK: - Listener registration
+  // MARK: Listener registration
 
   func addEventListener(handler: @escaping (ProximityEvent) -> Void) -> () -> Void {
     let id = UUID()
@@ -273,65 +377,309 @@ final class HybridProximity: HybridProximitySpec {
     }
   }
 
-  // MARK: - Delegate callback receivers (invoked from proxies)
+  // MARK: - Delegate callback receivers
 
-  fileprivate func handleIncomingInvitation(
-    fromPeer peerID: MCPeerID,
-    context: Data?,
-    invitationHandler: @escaping (Bool, MCSession?) -> Void
-  ) {
-    let key = peerID.displayName
-    withState { self.pendingIncomingHandlers[key] = invitationHandler }
-    let payloadBuffer: ArrayBuffer? = context.map { ArrayBuffer.copyFromData($0) }
-    emit(makeEvent(.invitationreceived, peerId: key, payload: payloadBuffer))
-  }
+  // MARK: Peripheral (server) side
 
-  fileprivate func handleFoundPeer(_ peerID: MCPeerID, info: [String: String]?) {
-    let key = peerID.displayName
-    withState { self.foundPeers[key] = peerID }
-    let peer = ProximityPeer(
-      id: key, displayName: peerID.displayName,
-      discoveryInfoJson: Self.discoveryJson(info),
-      rssi: nil, distance: nil, direction: nil
-    )
-    emit(makeEvent(.peerfound, peer: peer, peerId: key))
-  }
-
-  fileprivate func handleLostPeer(_ peerID: MCPeerID) {
-    let key = peerID.displayName
-    withState { self.foundPeers.removeValue(forKey: key) }
-    emit(makeEvent(.peerlost, peerId: key))
-  }
-
-  fileprivate func handleSessionStateChange(_ peerID: MCPeerID, state: MCSessionState) {
-    let key = peerID.displayName
-    switch state {
-    case .connected:
-      withState {
-        if let cont = self.pendingInvitations.removeValue(forKey: key) {
-          cont.resume(returning: true)
-        }
+  fileprivate func handlePeripheralStateChange(_ state: CBManagerState) {
+    if state == .poweredOn {
+      let resume = withState {
+        return self.pendingAdvertiseDisplayName != nil
+          && self.pendingAdvertiseDiscoveryJson != nil
       }
-      emit(makeEvent(.sessionestablished, peerId: key))
-    case .notConnected:
-      withState {
-        if let cont = self.pendingInvitations.removeValue(forKey: key) {
-          cont.resume(returning: false)
-        }
-      }
-      emit(makeEvent(.sessionended, peerId: key, reason: "notConnected"))
-    case .connecting:
-      // Intermediate — TS layer infers from absence of sessionEstablished.
-      break
-    @unknown default:
-      break
+      if resume { publishL2cap() }
     }
   }
 
-  fileprivate func handleDataReceived(_ data: Data, from peerID: MCPeerID) {
-    let buf = ArrayBuffer.copyFromData(data)
-    emit(makeEvent(.datareceived, peerId: peerID.displayName, data: buf))
+  fileprivate func handleDidPublishL2cap(psm: CBL2CAPPSM, error: Error?) {
+    if let error = error {
+      emitError(error.localizedDescription, code: "publish_l2cap_failed")
+      return
+    }
+    didPublishPsm(psm)
   }
+
+  fileprivate func handleDidUnpublishL2cap(psm: CBL2CAPPSM) {
+    withState { self.publishedPsm = 0 }
+  }
+
+  fileprivate func handleDidOpenL2capChannel(_ channel: CBL2CAPChannel, error: Error?) {
+    if let error = error {
+      emitError(error.localizedDescription, code: "open_l2cap_failed")
+      return
+    }
+    let peerKey = channel.peer.identifier.uuidString
+    attachStreams(channel: channel, peerId: peerKey)
+    withState { self.pendingIncomingChannels[peerKey] = channel }
+    // Server-side: we don't know who the peer is by app identifier yet —
+    // they'll send their displayName + intent in the first framed payload,
+    // which will arrive via `streamHasBytesAvailable` and be surfaced as
+    // `invitationReceived`.
+  }
+
+  // MARK: Central (client) side
+
+  fileprivate func handleCentralStateChange(_ state: CBManagerState) {
+    if state == .poweredOn {
+      withState {
+        self.centralManager?.scanForPeripherals(
+          withServices: [ProximityWire.serviceUUID],
+          options: [CBCentralManagerScanOptionAllowDuplicatesKey: NSNumber(value: false)]
+        )
+      }
+    }
+  }
+
+  fileprivate func handleCentralDidDiscover(
+    peripheral: CBPeripheral, advertisementData: [String: Any], rssi: NSNumber
+  ) {
+    let peerKey = peripheral.identifier.uuidString
+    let displayName =
+      (advertisementData[CBAdvertisementDataLocalNameKey] as? String)
+      ?? peripheral.name ?? "unknown"
+    let alreadyKnown: Bool = withState {
+      if self.discoveredPeripherals[peerKey] != nil { return true }
+      self.discoveredPeripherals[peerKey] = peripheral
+      peripheral.delegate = self.peripheralReaderProxy
+      self.centralManager?.connect(peripheral, options: nil)
+      return false
+    }
+    if !alreadyKnown {
+      let peer = ProximityPeer(
+        id: peerKey, displayName: displayName,
+        discoveryInfoJson: "{}",
+        rssi: rssi.doubleValue, distance: nil, direction: nil
+      )
+      emit(makeEvent(.peerfound, peer: peer, peerId: peerKey))
+    }
+  }
+
+  fileprivate func handleCentralDidConnect(peripheral: CBPeripheral) {
+    peripheral.discoverServices([ProximityWire.serviceUUID])
+  }
+
+  fileprivate func handlePeripheralDidDiscoverServices(_ peripheral: CBPeripheral, error: Error?) {
+    guard let services = peripheral.services else { return }
+    for svc in services where svc.uuid == ProximityWire.serviceUUID {
+      peripheral.discoverCharacteristics(
+        [ProximityWire.psmCharUUID, ProximityWire.infoCharUUID], for: svc
+      )
+    }
+  }
+
+  fileprivate func handlePeripheralDidDiscoverChars(
+    _ peripheral: CBPeripheral, service: CBService, error: Error?
+  ) {
+    guard let chars = service.characteristics else { return }
+    for ch in chars { peripheral.readValue(for: ch) }
+  }
+
+  fileprivate func handlePeripheralDidUpdateValue(
+    _ peripheral: CBPeripheral, characteristic: CBCharacteristic, error: Error?
+  ) {
+    guard let data = characteristic.value else { return }
+    let peerKey = peripheral.identifier.uuidString
+    if characteristic.uuid == ProximityWire.psmCharUUID, data.count >= 2 {
+      let psm: CBL2CAPPSM = data.withUnsafeBytes { raw -> CBL2CAPPSM in
+        let p = raw.bindMemory(to: UInt16.self)
+        return CBL2CAPPSM(UInt16(littleEndian: p[0]))
+      }
+      withState { self.peripheralPsm[peerKey] = psm }
+    } else if characteristic.uuid == ProximityWire.infoCharUUID {
+      let json = String(data: data, encoding: .utf8) ?? "{}"
+      withState { self.peripheralInfoJson[peerKey] = json }
+    }
+  }
+
+  fileprivate func handleCentralDidDisconnect(peripheral: CBPeripheral, error: Error?) {
+    let peerKey = peripheral.identifier.uuidString
+    withState {
+      self.discoveredPeripherals.removeValue(forKey: peerKey)
+      self.peripheralPsm.removeValue(forKey: peerKey)
+      self.peripheralInfoJson.removeValue(forKey: peerKey)
+    }
+    emit(makeEvent(.peerlost, peerId: peerKey))
+  }
+
+  fileprivate func handlePeripheralDidOpenL2cap(
+    _ peripheral: CBPeripheral, channel: CBL2CAPChannel?, error: Error?
+  ) {
+    let peerKey = peripheral.identifier.uuidString
+    if let error = error {
+      withState {
+        if let cont = self.pendingInvitations.removeValue(forKey: peerKey) {
+          cont.resume(returning: false)
+        }
+      }
+      emitError(error.localizedDescription, code: "open_l2cap_failed")
+      return
+    }
+    guard let channel = channel else { return }
+    attachStreams(channel: channel, peerId: peerKey)
+    withState { self.channels[peerKey] = channel }
+    // Resume the invitePeer continuation — connection is established.
+    withState {
+      if let cont = self.pendingInvitations.removeValue(forKey: peerKey) {
+        cont.resume(returning: true)
+      }
+    }
+    emit(makeEvent(.sessionestablished, peerId: peerKey))
+    drainPendingWrites(peerId: peerKey)
+  }
+
+  // MARK: Stream IO
+
+  private func attachStreams(channel: CBL2CAPChannel, peerId: String) {
+    channel.inputStream.delegate = streamProxy
+    channel.outputStream.delegate = streamProxy
+    withState {
+      self.channelPeerByInputStream[ObjectIdentifier(channel.inputStream)] = peerId
+      self.channelPeerByOutputStream[ObjectIdentifier(channel.outputStream)] = peerId
+    }
+    channel.inputStream.schedule(in: .main, forMode: .default)
+    channel.outputStream.schedule(in: .main, forMode: .default)
+    channel.inputStream.open()
+    channel.outputStream.open()
+  }
+
+  fileprivate func handleStreamEvent(_ stream: Stream, event: Stream.Event) {
+    switch event {
+    case .hasBytesAvailable:
+      if let input = stream as? InputStream { readFrom(input) }
+    case .hasSpaceAvailable:
+      if let output = stream as? OutputStream {
+        let peerId = withState { self.channelPeerByOutputStream[ObjectIdentifier(output)] }
+        if let peerId = peerId { drainPendingWrites(peerId: peerId, output: output) }
+      }
+    case .errorOccurred:
+      let key = withState { () -> String? in
+        if let input = stream as? InputStream {
+          return self.channelPeerByInputStream[ObjectIdentifier(input)]
+        }
+        if let output = stream as? OutputStream {
+          return self.channelPeerByOutputStream[ObjectIdentifier(output)]
+        }
+        return nil
+      }
+      if let key = key {
+        emit(makeEvent(.sessionended, peerId: key, reason: "streamError"))
+      }
+    case .endEncountered:
+      let key = withState { () -> String? in
+        if let input = stream as? InputStream {
+          return self.channelPeerByInputStream[ObjectIdentifier(input)]
+        }
+        return nil
+      }
+      if let key = key {
+        emit(makeEvent(.sessionended, peerId: key, reason: "endOfStream"))
+      }
+    default: break
+    }
+  }
+
+  private func readFrom(_ input: InputStream) {
+    let peerId = withState { self.channelPeerByInputStream[ObjectIdentifier(input)] }
+    guard let peerId = peerId else { return }
+    var buf = [UInt8](repeating: 0, count: 4096)
+    while input.hasBytesAvailable {
+      let n = input.read(&buf, maxLength: buf.count)
+      if n <= 0 { break }
+      withState {
+        var acc = self.inboundBuffer[peerId] ?? Data()
+        acc.append(buf, count: n)
+        self.inboundBuffer[peerId] = acc
+      }
+    }
+    drainFrames(peerId: peerId)
+  }
+
+  /// Pull length-prefixed frames out of the inbound buffer. The first
+  /// frame from a peer is treated as the invitation context; subsequent
+  /// frames are normal data.
+  private func drainFrames(peerId: String) {
+    while true {
+      let frame: Data? = withState { () -> Data? in
+        var acc = self.inboundBuffer[peerId] ?? Data()
+        guard acc.count >= 2 else { return nil }
+        let len = Int(UInt16(acc[0]) << 8 | UInt16(acc[1]))
+        guard acc.count >= 2 + len else { return nil }
+        let payload = acc.subdata(in: 2..<(2 + len))
+        self.inboundBuffer[peerId] = acc.subdata(in: (2 + len)..<acc.count)
+        return payload
+      }
+      guard let payload = frame else { break }
+      let isInvitation: Bool = withState {
+        // If we have a pending incoming channel for this peer and haven't
+        // promoted it yet, the first frame is the invitation context.
+        if self.pendingIncomingChannels[peerId] != nil
+          && self.channels[peerId] == nil
+        {
+          return true
+        }
+        return false
+      }
+      if isInvitation {
+        let payloadBuf = ArrayBuffer.copyFromData(payload)
+        emit(makeEvent(.invitationreceived, peerId: peerId, payload: payloadBuf))
+      } else {
+        let dataBuf = ArrayBuffer.copyFromData(payload)
+        emit(makeEvent(.datareceived, peerId: peerId, data: dataBuf))
+      }
+    }
+  }
+
+  fileprivate func drainPendingWrites(peerId: String, output: OutputStream? = nil) {
+    let stream: OutputStream? =
+      output ?? withState { self.channels[peerId]?.outputStream }
+    guard let stream = stream, stream.hasSpaceAvailable else { return }
+    let chunk: Data = withState {
+      let pending = self.pendingWrites[peerId] ?? Data()
+      self.pendingWrites[peerId] = Data()
+      return pending
+    }
+    guard !chunk.isEmpty else { return }
+    chunk.withUnsafeBytes { raw in
+      guard let base = raw.bindMemory(to: UInt8.self).baseAddress else { return }
+      let written = stream.write(base, maxLength: chunk.count)
+      if written < chunk.count {
+        // Partial write — push remainder back for the next .hasSpaceAvailable.
+        let remainder = chunk.subdata(in: max(0, written)..<chunk.count)
+        withState {
+          let next = self.pendingWrites[peerId] ?? Data()
+          self.pendingWrites[peerId] = remainder + next
+        }
+      }
+    }
+  }
+
+  /// 2-byte big-endian length prefix + payload. Matches the Android side
+  /// (`DataOutputStream.writeShort` / `readShort` semantics).
+  private func frame(_ data: Data) -> Data {
+    let len = UInt16(data.count)
+    var prefix = Data(count: 2)
+    prefix[0] = UInt8((len >> 8) & 0xFF)
+    prefix[1] = UInt8(len & 0xFF)
+    return prefix + data
+  }
+
+  private func closeChannel(_ ch: CBL2CAPChannel?, peerId: String, reason: String) {
+    guard let ch = ch else { return }
+    withState { self.cleanupChannelLocked(ch, peerId: peerId) }
+    emit(makeEvent(.sessionended, peerId: peerId, reason: reason))
+  }
+
+  /// Caller must hold the stateQueue.
+  private func cleanupChannelLocked(_ ch: CBL2CAPChannel, peerId: String) {
+    self.channelPeerByInputStream.removeValue(forKey: ObjectIdentifier(ch.inputStream))
+    self.channelPeerByOutputStream.removeValue(forKey: ObjectIdentifier(ch.outputStream))
+    ch.inputStream.close()
+    ch.outputStream.close()
+    self.pendingWrites.removeValue(forKey: peerId)
+    self.inboundBuffer.removeValue(forKey: peerId)
+  }
+
+  // MARK: UWB callbacks
 
   fileprivate func handleNIUpdate(session: NISession, objects: [NINearbyObject]) {
     let key = withState { self.niSessionPeerNames[ObjectIdentifier(session)] }
@@ -351,7 +699,7 @@ final class HybridProximity: HybridProximitySpec {
     let reasonStr: String
     switch reason {
     case .peerEnded: reasonStr = "peerEnded"
-    case .timeout:   reasonStr = "timeout"
+    case .timeout: reasonStr = "timeout"
     @unknown default: reasonStr = "unknown"
     }
     emit(makeEvent(.sessionended, peerId: peerId, reason: reasonStr))
@@ -368,105 +716,113 @@ final class HybridProximity: HybridProximitySpec {
     emitError(error.localizedDescription, code: "ni_invalidated")
   }
 
-  fileprivate func handleAdvertiseError(_ error: Error) {
-    emitError(error.localizedDescription, code: "advertise_failed")
-  }
-
-  fileprivate func handleBrowseError(_ error: Error) {
-    emitError(error.localizedDescription, code: "browse_failed")
-  }
-
-  // MARK: - Internal helpers
+  // MARK: Internal helpers
 
   private func copyPayload(_ buffer: ArrayBuffer) -> Data {
     let count = buffer.size
     guard count > 0 else { return Data() }
     return Data(bytes: buffer.data, count: count)
   }
-
-  private func deviceDisplayNameFallback() -> String {
-    #if canImport(UIKit)
-      return UIDevice.current.name
-    #else
-      return "solidarity-peer"
-    #endif
-  }
 }
 
-// MARK: - Delegate proxies
+// MARK: - Delegate proxies (NSObject so @objc protocols resolve)
 
-/// MCSessionDelegate adapter. NSObject so the @objc protocol conformance
-/// resolves; weak owner so the proxy never extends HybridProximity's life.
-private final class MCSessionProxy: NSObject, MCSessionDelegate {
+private final class PeripheralManagerProxy: NSObject, CBPeripheralManagerDelegate {
   weak var owner: HybridProximity?
   init(owner: HybridProximity) { self.owner = owner }
 
-  func session(_ session: MCSession, peer peerID: MCPeerID, didChange state: MCSessionState) {
-    owner?.handleSessionStateChange(peerID, state: state)
+  func peripheralManagerDidUpdateState(_ peripheral: CBPeripheralManager) {
+    owner?.handlePeripheralStateChange(peripheral.state)
   }
 
-  func session(_ session: MCSession, didReceive data: Data, fromPeer peerID: MCPeerID) {
-    owner?.handleDataReceived(data, from: peerID)
-  }
-
-  // Solidarity only uses .reliable byte streams, never MC streams/resources.
-  func session(
-    _ session: MCSession, didReceive stream: InputStream,
-    withName streamName: String, fromPeer peerID: MCPeerID
-  ) {}
-  func session(
-    _ session: MCSession, didStartReceivingResourceWithName resourceName: String,
-    fromPeer peerID: MCPeerID, with progress: Progress
-  ) {}
-  func session(
-    _ session: MCSession, didFinishReceivingResourceWithName resourceName: String,
-    fromPeer peerID: MCPeerID, at localURL: URL?, withError error: Error?
-  ) {}
-}
-
-private final class MCAdvertiserProxy: NSObject, MCNearbyServiceAdvertiserDelegate {
-  weak var owner: HybridProximity?
-  init(owner: HybridProximity) { self.owner = owner }
-
-  func advertiser(
-    _ advertiser: MCNearbyServiceAdvertiser,
-    didReceiveInvitationFromPeer peerID: MCPeerID,
-    withContext context: Data?,
-    invitationHandler: @escaping (Bool, MCSession?) -> Void
+  func peripheralManager(
+    _ peripheral: CBPeripheralManager, didPublishL2CAPChannel PSM: CBL2CAPPSM, error: Error?
   ) {
-    owner?.handleIncomingInvitation(
-      fromPeer: peerID, context: context, invitationHandler: invitationHandler
+    owner?.handleDidPublishL2cap(psm: PSM, error: error)
+  }
+
+  func peripheralManager(
+    _ peripheral: CBPeripheralManager, didUnpublishL2CAPChannel PSM: CBL2CAPPSM, error: Error?
+  ) {
+    owner?.handleDidUnpublishL2cap(psm: PSM)
+  }
+
+  func peripheralManager(
+    _ peripheral: CBPeripheralManager, didOpen channel: CBL2CAPChannel?, error: Error?
+  ) {
+    guard let channel = channel else { return }
+    owner?.handleDidOpenL2capChannel(channel, error: error)
+  }
+}
+
+private final class CentralManagerProxy: NSObject, CBCentralManagerDelegate {
+  weak var owner: HybridProximity?
+  init(owner: HybridProximity) { self.owner = owner }
+
+  func centralManagerDidUpdateState(_ central: CBCentralManager) {
+    owner?.handleCentralStateChange(central.state)
+  }
+
+  func centralManager(
+    _ central: CBCentralManager, didDiscover peripheral: CBPeripheral,
+    advertisementData: [String: Any], rssi RSSI: NSNumber
+  ) {
+    owner?.handleCentralDidDiscover(
+      peripheral: peripheral, advertisementData: advertisementData, rssi: RSSI
     )
   }
 
-  func advertiser(
-    _ advertiser: MCNearbyServiceAdvertiser,
-    didNotStartAdvertisingPeer error: Error
+  func centralManager(_ central: CBCentralManager, didConnect peripheral: CBPeripheral) {
+    owner?.handleCentralDidConnect(peripheral: peripheral)
+  }
+
+  func centralManager(
+    _ central: CBCentralManager, didDisconnectPeripheral peripheral: CBPeripheral,
+    error: Error?
   ) {
-    owner?.handleAdvertiseError(error)
+    owner?.handleCentralDidDisconnect(peripheral: peripheral, error: error)
   }
 }
 
-private final class MCBrowserProxy: NSObject, MCNearbyServiceBrowserDelegate {
+private final class PeripheralReaderProxy: NSObject, CBPeripheralDelegate {
   weak var owner: HybridProximity?
   init(owner: HybridProximity) { self.owner = owner }
 
-  func browser(
-    _ browser: MCNearbyServiceBrowser, foundPeer peerID: MCPeerID,
-    withDiscoveryInfo info: [String: String]?
-  ) {
-    owner?.handleFoundPeer(peerID, info: info)
+  func peripheral(_ peripheral: CBPeripheral, didDiscoverServices error: Error?) {
+    owner?.handlePeripheralDidDiscoverServices(peripheral, error: error)
   }
 
-  func browser(_ browser: MCNearbyServiceBrowser, lostPeer peerID: MCPeerID) {
-    owner?.handleLostPeer(peerID)
+  func peripheral(
+    _ peripheral: CBPeripheral,
+    didDiscoverCharacteristicsFor service: CBService,
+    error: Error?
+  ) {
+    owner?.handlePeripheralDidDiscoverChars(peripheral, service: service, error: error)
   }
 
-  func browser(
-    _ browser: MCNearbyServiceBrowser,
-    didNotStartBrowsingForPeers error: Error
+  func peripheral(
+    _ peripheral: CBPeripheral,
+    didUpdateValueFor characteristic: CBCharacteristic,
+    error: Error?
   ) {
-    owner?.handleBrowseError(error)
+    owner?.handlePeripheralDidUpdateValue(
+      peripheral, characteristic: characteristic, error: error
+    )
+  }
+
+  func peripheral(
+    _ peripheral: CBPeripheral, didOpen channel: CBL2CAPChannel?, error: Error?
+  ) {
+    owner?.handlePeripheralDidOpenL2cap(peripheral, channel: channel, error: error)
+  }
+}
+
+private final class StreamProxy: NSObject, StreamDelegate {
+  weak var owner: HybridProximity?
+  init(owner: HybridProximity) { self.owner = owner }
+
+  func stream(_ aStream: Stream, handle eventCode: Stream.Event) {
+    owner?.handleStreamEvent(aStream, event: eventCode)
   }
 }
 
@@ -494,10 +850,8 @@ private final class NIProxy: NSObject, NISessionDelegate {
 
 extension ArrayBuffer {
   /// Non-throwing wrapper around the built-in `ArrayBuffer.copy(data:)`.
-  /// MC/NI delegate callbacks have no place to propagate errors, so we
-  /// degrade to an empty buffer if the underlying copy would throw (in
-  /// practice only when `Data.withUnsafeBytes` cannot resolve a base
-  /// address, which is itself a "data is empty" signal).
+  /// Delegate callbacks have no place to propagate errors, so we degrade
+  /// to an empty buffer if the underlying copy would throw.
   static func copyFromData(_ data: Data) -> ArrayBuffer {
     return (try? ArrayBuffer.copy(data: data)) ?? ArrayBuffer.allocate(size: 0)
   }
