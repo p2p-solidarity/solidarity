@@ -159,3 +159,8 @@ __snapshots__/
 packages/*/node_modules/
 apps/*/node_modules/
 nitro-modules/*/node_modules/
+
+# Android C++ build artifacts (.cxx is regenerated on every assemble*).
+nitro-modules/*/android/.cxx/
+nitro-modules/*/android/build/
+nitro-modules/*/android/.gradle/
