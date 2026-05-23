@@ -5,7 +5,43 @@
  */
 import { describe, expect, it } from 'bun:test';
 
-import { runPassportPipeline, type PassportStep } from '../../src/passport/pipeline';
+import type { PassportMRZ } from '@solidarity/nitro-nfc-passport';
+
+import {
+  mrzCheckDigit,
+  runPassportPipeline,
+  runPassportPipelineSafe,
+  validateMrzChecksum,
+  type PassportPipelineDeps,
+  type PassportStep,
+} from '../../src/passport/pipeline';
+
+// Validated ICAO 9303 specimen passport number + embedded check digit.
+// `L898902C3` + `6` matches mrzCheckDigit("L898902C3") = 6.
+const VALID_MRZ: PassportMRZ = {
+  documentNumber: 'L898902C36',
+  dateOfBirth: '740812',
+  dateOfExpiry: '300101',
+};
+
+function makeNoopDeps(): PassportPipelineDeps {
+  return {
+    readChip: () => Promise.resolve({
+      mrz: {
+        nationality: 'TWN',
+        documentNumber: VALID_MRZ.documentNumber,
+        name: 'ADA LOVELACE',
+        dateOfBirth: VALID_MRZ.dateOfBirth,
+        dateOfExpiry: VALID_MRZ.dateOfExpiry,
+        gender: 'F',
+      },
+      dataGroups: {},
+      passiveAuthValid: true,
+    }),
+    generateProof: () => Promise.resolve(new ArrayBuffer(32)),
+    issueVc: () => Promise.resolve('header.payload.sig'),
+  };
+}
 
 describe('runPassportPipeline', () => {
   it('emits steps in order and resolves with VC JWT', async () => {
@@ -63,5 +99,127 @@ describe('runPassportPipeline', () => {
       captured = err as Error;
     }
     expect(captured?.message).toBe('NFC: tag lost');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// MRZ check-digit validation (mirrors Swift MRZScannerService.computeCheckDigit).
+// ---------------------------------------------------------------------------
+
+describe('mrzCheckDigit', () => {
+  it('matches the ICAO 9303 specimen check digit for L898902C3', () => {
+    // Specimen MRZ from ICAO 9303 Part 4 — published reference value.
+    expect(mrzCheckDigit('L898902C3')).toBe(6);
+  });
+
+  it('treats `<` filler as zero and digit chars at face value', () => {
+    expect(mrzCheckDigit('<<<<<<<<<')).toBe(0);
+    expect(mrzCheckDigit('123456789')).toBe(((1*7 + 2*3 + 3*1) + (4*7 + 5*3 + 6*1) + (7*7 + 8*3 + 9*1)) % 10);
+  });
+
+  it('maps letters to (ascii - A) + 10', () => {
+    // 'A' contributes 10 * 7 = 70 → 0 mod 10
+    expect(mrzCheckDigit('A')).toBe(0);
+    // 'B' contributes 11 * 7 = 77 → 7 mod 10
+    expect(mrzCheckDigit('B')).toBe(7);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// validateMrzChecksum (Result-returning, typed CardError on failure).
+// ---------------------------------------------------------------------------
+
+describe('validateMrzChecksum', () => {
+  it('accepts a passport number whose embedded check digit is correct', () => {
+    const r = validateMrzChecksum(VALID_MRZ);
+    expect(r.ok).toBe(true);
+  });
+
+  it('returns a typed validationError when the check digit is wrong', () => {
+    const bad: PassportMRZ = { ...VALID_MRZ, documentNumber: 'L898902C30' };
+    const r = validateMrzChecksum(bad);
+    expect(r.ok).toBe(false);
+    if (!r.ok) {
+      // Mirrors Swift CardError.validationError(message:) — the type discriminator
+      // is the wire-equivalent of Swift's enum case name.
+      expect(r.error.type).toBe('validationError');
+      expect(r.error.message).toMatch(/check digit/i);
+    }
+  });
+
+  it('rejects an MRZ whose last char is non-numeric (missing check digit)', () => {
+    const noChecksum: PassportMRZ = { ...VALID_MRZ, documentNumber: 'L898902C3' };
+    const r = validateMrzChecksum(noChecksum);
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.error.type).toBe('validationError');
+  });
+
+  it('rejects malformed YYMMDD dates', () => {
+    const r = validateMrzChecksum({ ...VALID_MRZ, dateOfBirth: '74' });
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.error.type).toBe('validationError');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// runPassportPipelineSafe — Result<jwt, CardError>. Mirrors Swift
+// PassportPipelineService.{validateMRZ → readNFCChip → generateProof}.
+// Each step returns a typed `CardError` variant (validationError /
+// configurationError / proofGenerationError) instead of throwing.
+// ---------------------------------------------------------------------------
+
+describe('runPassportPipelineSafe — typed error reporting', () => {
+  it('returns Err(validationError) when the MRZ check digit is wrong', async () => {
+    const steps: PassportStep[] = [];
+    const r = await runPassportPipelineSafe(
+      { ...VALID_MRZ, documentNumber: 'L898902C30' }, // last digit flipped
+      makeNoopDeps(),
+      (s) => { steps.push(s); }
+    );
+    expect(r.ok).toBe(false);
+    if (!r.ok) {
+      // Matches Swift PassportPipelineService.validateMRZ →
+      // .failure(.validationError("…check digit…")). The typed code is the
+      // wire-equivalent of Swift CardError.validationError.
+      expect(r.error.type).toBe('validationError');
+      expect(r.error.message).toMatch(/check digit/i);
+    }
+    // No NFC / proof events should have fired — checksum gates the pipeline.
+    expect(steps.map((s) => s.type)).toEqual(['error']);
+  });
+
+  it('returns Err(configurationError) when chip authentication fails', async () => {
+    const steps: PassportStep[] = [];
+    const r = await runPassportPipelineSafe(
+      VALID_MRZ,
+      {
+        readChip: () => {
+          // Mirrors Swift NFCPassportReaderService throwing NFCError.readFailed,
+          // which PassportPipelineService maps to CardError.configurationError.
+          throw new Error('NFC chip authentication failed: BAC mutual-auth rejected');
+        },
+        generateProof: () => Promise.resolve(new ArrayBuffer(0)),
+        issueVc: () => Promise.resolve(''),
+      },
+      (s) => { steps.push(s); }
+    );
+    expect(r.ok).toBe(false);
+    if (!r.ok) {
+      // Swift CardResult side: .failure(.configurationError("NFC read failed: …")).
+      expect(r.error.type).toBe('configurationError');
+      expect(r.error.message).toMatch(/nfc|chip|bac/i);
+    }
+    // mrzScanned + nfcReading fire, then error.
+    expect(steps.map((s) => s.type)).toEqual(['mrzScanned', 'nfcReading', 'error']);
+  });
+
+  it('returns Ok(jwt) on the happy path with a valid MRZ + chip + proof', async () => {
+    const r = await runPassportPipelineSafe(
+      VALID_MRZ,
+      makeNoopDeps(),
+      () => undefined
+    );
+    expect(r.ok).toBe(true);
+    if (r.ok) expect(r.value).toBe('header.payload.sig');
   });
 });

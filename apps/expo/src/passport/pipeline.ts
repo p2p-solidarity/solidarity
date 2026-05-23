@@ -16,6 +16,8 @@
  * for tests/scripts. Callers that need step-level UI control use the
  * `createPassportPipeline()` factory which returns a reducer + helpers.
  */
+import type { CardError, Result } from '@solidarity/shared';
+import { err, ok } from '@solidarity/shared';
 import type {
   PassportMRZ,
   PassportReadResult,
