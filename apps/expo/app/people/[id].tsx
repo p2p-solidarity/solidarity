@@ -1,74 +1,377 @@
 /**
- * Person detail — mirrors Swift PersonDetailView. Renders the full
- * business-card + signed exchange metadata + verification badge.
+ * PersonDetailView — 1:1 port of
+ * solidarity/Views/PeopleViews/PersonDetailView.swift.
  *
- * Per aniseekr-expo rule 10: list passes `name` via route params so frame 1
- * paints the hero before MMKV fetch resolves. The rest fills in once the
- * store hydrates (cache hit = instant).
+ * Centred hero (avatar + name + note line + verified/unverified chip +
+ * optional context tag + optional declared-claims row) with an edit pencil
+ * at the top-right of the hero card. Below the hero sit the "sakura"
+ * exchange messages (when present) and the contact-info rows. Tap the
+ * pencil or top-bar share icon to surface the More / Share sheets.
+ *
+ * Per aniseekr-expo rule 10: the list route passes `name` via route params
+ * so the hero paints on frame 1 even before the MMKV-backed contact store
+ * resolves. The rest of the card fills in once `useContact(id)` returns.
  */
 import { router, useLocalSearchParams } from 'expo-router';
-import { ScrollView, View } from 'react-native';
+import { LinearGradient } from 'expo-linear-gradient';
+import { useMemo, useState, type ReactNode } from 'react';
+import {
+  Pressable,
+  ScrollView,
+  Share,
+  Text,
+  View,
+  type LayoutChangeEvent,
+} from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { MauvePetalMotif } from '@/components/decor/MauvePetalMotif';
-import { ThemedButton, ThemedSurface, ThemedText } from '@/components/themed';
-import { useContact } from '@/contacts/repository';
+import { SfIcon } from '@/components/icons/SfIcon';
+import { PersonDetailEphemeralSection } from '@/components/people/PersonDetailEphemeralSection';
+import { PersonDetailMoreSheet } from '@/components/people/PersonDetailMoreSheet';
+import {
+  ContextTag,
+  DeclaredClaimChip,
+  PersonDetailContactRowView,
+  StatusTag,
+  buildContactRows,
+} from '@/components/people/personDetailSupport';
+import { Colors } from '@/constants/Colors';
+import { useContact, useContactStore } from '@/contacts/repository';
+import type { Contact } from '@solidarity/shared';
 
-export default function PersonDetail() {
+const HERO_HORIZONTAL_PADDING = 16;
+
+export default function PersonDetailScreen(): ReactNode {
   const { id, name } = useLocalSearchParams<{ id: string; name?: string }>();
   const contact = useContact(id);
+  const upsert = useContactStore((s) => s.upsert);
+  const remove = useContactStore((s) => s.remove);
+  const insets = useSafeAreaInsets();
+
+  const [showingMoreSheet, setShowingMoreSheet] = useState(false);
   const displayName = contact?.businessCard.name ?? name ?? 'Contact';
 
+  const onShare = (): void => {
+    void Share.share({ message: `Check out ${displayName} on AirMeishi!` }).catch(
+      () => {
+        // Swallow — share sheet cancellation isn't an error worth surfacing.
+      },
+    );
+  };
+
+  const onSaveNote = (note: string): void => {
+    if (!contact) return;
+    const trimmed = note.trim();
+    void upsert({
+      ...contact,
+      notes: trimmed.length > 0 ? trimmed : undefined,
+    });
+  };
+
+  const onDelete = (): void => {
+    if (!contact) return;
+    void remove(contact.id);
+    router.back();
+  };
+
   return (
-    <ScrollView className="flex-1 bg-pageBg">
-      <View className="px-4 pt-6 pb-3">
-        <ThemedButton
-          variant="secondary"
-          label="‹ Back"
-          size="sm"
-          onPress={() => { router.back(); }}
+    <View className="flex-1 bg-pageBg" style={{ paddingTop: insets.top }}>
+      <TopBar onBack={() => { router.back(); }} onShare={onShare} />
+
+      <ScrollView contentContainerStyle={{ paddingTop: 12, paddingBottom: 32, rowGap: 24 }}>
+        <HeroCard
+          contact={contact}
+          displayName={displayName}
+          onEditNote={() => { setShowingMoreSheet(true); }}
         />
-      </View>
-      <View className="px-4 pb-2" style={{ position: 'relative' }}>
-        <View
-          pointerEvents="none"
-          style={{ position: 'absolute', top: -16, left: -16, right: -16, bottom: 0 }}
-        >
-          <MauvePetalMotif cardWidth={361} cardHeight={120} />
-        </View>
-        <ThemedText variant="headlineLarge">{displayName}</ThemedText>
-        {contact?.businessCard.title ? (
-          <ThemedText variant="bodyMedium" tone="secondary">
-            {contact.businessCard.title}
-            {contact.businessCard.company ? ` · ${contact.businessCard.company}` : ''}
-          </ThemedText>
-        ) : null}
-      </View>
+        {contact ? <PersonDetailEphemeralSection contact={contact} /> : null}
+        {contact ? <ContactInfoSection contact={contact} /> : null}
+      </ScrollView>
 
-      {contact?.businessCard.email ? (
-        <ThemedSurface variant="card" padded className="mx-4 mt-3">
-          <ThemedText variant="caption" tone="tertiary">EMAIL</ThemedText>
-          <ThemedText variant="bodyLarge">{contact.businessCard.email}</ThemedText>
-        </ThemedSurface>
+      {contact ? (
+        <PersonDetailMoreSheet
+          visible={showingMoreSheet}
+          contact={contact}
+          onSave={onSaveNote}
+          onDelete={onDelete}
+          onClose={() => { setShowingMoreSheet(false); }}
+        />
       ) : null}
-
-      {contact?.businessCard.phone ? (
-        <ThemedSurface variant="card" padded className="mx-4 mt-3">
-          <ThemedText variant="caption" tone="tertiary">PHONE</ThemedText>
-          <ThemedText variant="bodyLarge">{contact.businessCard.phone}</ThemedText>
-        </ThemedSurface>
-      ) : null}
-
-      <ThemedSurface variant="card" padded className="mx-4 mt-3 mb-6">
-        <ThemedText variant="caption" tone="tertiary">VERIFICATION</ThemedText>
-        <ThemedText variant="bodyLarge">
-          {contact?.verificationStatus ?? 'Pending'}
-        </ThemedText>
-        {contact?.exchangeTimestamp ? (
-          <ThemedText variant="caption" tone="tertiary" className="mt-1">
-            Exchanged on {contact.exchangeTimestamp.toLocaleString()}
-          </ThemedText>
-        ) : null}
-      </ThemedSurface>
-    </ScrollView>
+    </View>
   );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Top bar — chevron.left back + share icon. 56pt tall, 16pt horiz pad.
+// ─────────────────────────────────────────────────────────────────────────────
+
+function TopBar({
+  onBack,
+  onShare,
+}: {
+  readonly onBack: () => void;
+  readonly onShare: () => void;
+}): ReactNode {
+  return (
+    <View
+      className="flex-row items-center justify-between"
+      style={{ height: 56, paddingHorizontal: 16 }}
+    >
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel="Back"
+        onPress={onBack}
+        hitSlop={8}
+      >
+        <SfIcon name="chevron.left" size={24} color={Colors.text1} />
+      </Pressable>
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel="Share"
+        onPress={onShare}
+        hitSlop={8}
+        style={{ width: 22, height: 22, alignItems: 'center', justifyContent: 'center' }}
+      >
+        <SfIcon name="square.and.arrow.up" size={22} color={Colors.text1} />
+      </Pressable>
+    </View>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Hero card — gradient + MauvePetalMotif watermark + avatar + name + chips.
+// 4pt corner radius (matches Swift PersonDetailView heroCard).
+// ─────────────────────────────────────────────────────────────────────────────
+
+function HeroCard({
+  contact,
+  displayName,
+  onEditNote,
+}: {
+  readonly contact: Contact | undefined;
+  readonly displayName: string;
+  readonly onEditNote: () => void;
+}): ReactNode {
+  const [cardWidth, setCardWidth] = useState<number>(0);
+  const onLayout = (e: LayoutChangeEvent): void => {
+    const w = e.nativeEvent.layout.width;
+    if (Math.abs(w - cardWidth) > 0.5) setCardWidth(w);
+  };
+
+  const trimmedNote = contact?.notes?.trim();
+  const note = trimmedNote && trimmedNote.length > 0 ? trimmedNote : undefined;
+  const firstTag = contact?.tags.find((t) => t.trim().length > 0);
+  const hasNote = note !== undefined;
+  const declaredClaims = readDeclaredProofClaims(contact);
+
+  return (
+    <View
+      onLayout={onLayout}
+      style={{ marginHorizontal: HERO_HORIZONTAL_PADDING, borderRadius: 4, overflow: 'hidden' }}
+    >
+      {/* Background gradient (Figma 766:5241 — 17.3°, mauve @ 0.36 → peach @ 0.68). */}
+      <LinearGradient
+        colors={[Colors.heroGradientStart, Colors.heroGradientEnd]}
+        locations={[0.36, 0.68]}
+        start={{ x: 0.35, y: 0.98 }}
+        end={{ x: 0.65, y: 0.02 }}
+        style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }}
+      />
+
+      {/* Mauve horseshoe watermark — only renders once cardWidth is known. */}
+      {cardWidth > 0 ? (
+        <View pointerEvents="none" style={{ position: 'absolute', top: 0, left: 0 }}>
+          <MauvePetalMotif cardWidth={cardWidth} cardHeight={260} />
+        </View>
+      ) : null}
+
+      <View style={{ paddingHorizontal: 12, paddingTop: 16, paddingBottom: 24, rowGap: 16 }}>
+        <View style={{ alignItems: 'center', rowGap: 16 }}>
+          <AvatarCircle name={displayName} />
+          <View style={{ alignItems: 'center', rowGap: 8, alignSelf: 'stretch' }}>
+            <Text
+              numberOfLines={2}
+              className="text-text1"
+              style={{ fontSize: 24, fontWeight: '500', textAlign: 'center' }}
+            >
+              {displayName}
+            </Text>
+
+            <HeroNoteLine note={note} onEditNote={onEditNote} />
+
+            {contact ? (
+              <View className="flex-row items-center" style={{ columnGap: 16 }}>
+                <StatusTag contact={contact} />
+                {firstTag ? <ContextTag label={firstTag} /> : null}
+              </View>
+            ) : null}
+
+            {declaredClaims.length > 0 ? (
+              <View className="flex-row" style={{ columnGap: 8 }}>
+                {declaredClaims.map((claim) => (
+                  <DeclaredClaimChip key={claim} claimType={claim} />
+                ))}
+              </View>
+            ) : null}
+          </View>
+        </View>
+      </View>
+
+      <HeroEditButton hasNote={hasNote} onPress={onEditNote} />
+    </View>
+  );
+}
+
+function HeroEditButton({
+  hasNote,
+  onPress,
+}: {
+  readonly hasNote: boolean;
+  readonly onPress: () => void;
+}): ReactNode {
+  return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={hasNote ? 'Edit note' : 'Add note'}
+      onPress={onPress}
+      hitSlop={8}
+      style={{
+        position: 'absolute',
+        top: 10,
+        right: 10,
+        width: 32,
+        height: 32,
+        borderRadius: 16,
+        backgroundColor: 'rgba(255,255,255,0.45)',
+        borderWidth: 0.5,
+        borderColor: 'rgba(255,255,255,0.6)',
+        alignItems: 'center',
+        justifyContent: 'center',
+      }}
+    >
+      <SfIcon name="square.and.pencil" size={14} color={Colors.text1} />
+    </Pressable>
+  );
+}
+
+function HeroNoteLine({
+  note,
+  onEditNote,
+}: {
+  readonly note: string | undefined;
+  readonly onEditNote: () => void;
+}): ReactNode {
+  return (
+    <Pressable
+      onPress={onEditNote}
+      accessibilityRole="button"
+      accessibilityLabel={note ? 'Edit note' : 'Add note'}
+      style={{ alignSelf: 'stretch' }}
+    >
+      {note ? (
+        <Text
+          numberOfLines={1}
+          className="text-text2"
+          style={{ fontSize: 14, textAlign: 'center' }}
+        >
+          {note}
+        </Text>
+      ) : (
+        <View
+          className="flex-row items-center justify-center"
+          style={{ columnGap: 4 }}
+        >
+          <Text
+            style={{
+              fontSize: 12,
+              fontFamily: 'Menlo',
+              fontWeight: '500',
+              color: Colors.primaryBlue,
+            }}
+          >
+            {'//'}
+          </Text>
+          <Text
+            style={{
+              fontSize: 12,
+              fontFamily: 'Menlo',
+              color: Colors.text3,
+            }}
+          >
+            tap to add note
+          </Text>
+        </View>
+      )}
+    </Pressable>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Avatar circle — 88pt warm cream disc with an initial glyph. Once the
+// asset pipeline lands, swap the initial for ImageProvider.animalImage(for:).
+// ─────────────────────────────────────────────────────────────────────────────
+
+function AvatarCircle({ name }: { readonly name: string }): ReactNode {
+  return (
+    <View
+      style={{
+        width: 88,
+        height: 88,
+        borderRadius: 44,
+        backgroundColor: Colors.gradientCream,
+        borderWidth: 1,
+        borderColor: Colors.gradientCream,
+        alignItems: 'center',
+        justifyContent: 'center',
+        overflow: 'hidden',
+      }}
+    >
+      <Text className="text-text2" style={{ fontSize: 32, fontWeight: '500' }}>
+        {initialOf(name)}
+      </Text>
+    </View>
+  );
+}
+
+function initialOf(name: string): string {
+  const trimmed = name.trim();
+  if (trimmed.length === 0) return '?';
+  return trimmed.charAt(0).toUpperCase();
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Contact info — phone / email rows (Swift: phone, email, web link). The
+// web-link row depends on `graphCredentialRef` which the TS schema doesn't
+// surface yet, so it's omitted until the field lands cross-platform.
+// ─────────────────────────────────────────────────────────────────────────────
+
+function ContactInfoSection({ contact }: { readonly contact: Contact }): ReactNode {
+  const rows = useMemo(() => buildContactRows(contact), [contact]);
+  if (rows.length === 0) return null;
+  return (
+    <View style={{ paddingHorizontal: 16, rowGap: 10 }}>
+      <Text className="text-text1" style={{ fontSize: 14 }}>
+        contact info
+      </Text>
+      <View style={{ rowGap: 8 }}>
+        {rows.map((row) => (
+          <PersonDetailContactRowView key={row.id} row={row} />
+        ))}
+      </View>
+    </View>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Declared-proof claims accessor — TS Contact doesn't carry `declaredProofClaims`
+// directly today, so read defensively (forwards-compatible if a future
+// schema add lands without breaking the existing wire format).
+// ─────────────────────────────────────────────────────────────────────────────
+
+function readDeclaredProofClaims(contact: Contact | undefined): readonly string[] {
+  if (!contact) return [];
+  const raw = (contact as unknown as { declaredProofClaims?: unknown }).declaredProofClaims;
+  if (!Array.isArray(raw)) return [];
+  return raw.filter((v): v is string => typeof v === 'string');
 }

@@ -23,9 +23,11 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { makeGestureAutoBackup } from '@/backup';
 import { SfIcon } from '@/components/icons/SfIcon';
 import { PaperStackIllustration } from '@/components/decor/PaperStackIllustration';
+import { ManualContactEntrySheet } from '@/components/people/ManualContactEntrySheet';
 import { PeopleSearchField } from '@/components/people/PeopleSearchField';
 import { TrustGraphContactRow } from '@/components/people/TrustGraphContactRow';
 import { Colors } from '@/constants/Colors';
+import { useContactStore } from '@/contacts/repository';
 import { pushToast } from '@/feedback/toast';
 import { usePeopleScreen } from '@/people/usePeopleScreen';
 import { usePreferences } from '@/settings/preferences';
@@ -33,6 +35,7 @@ import type { Contact } from '@solidarity/shared';
 
 export default function PeopleTab() {
   const { contacts, refresh } = usePeopleScreen();
+  const removeContact = useContactStore((s) => s.remove);
   const provider = usePreferences((s) => s.backupProvider);
   const autoEnabled = usePreferences((s) => s.autoBackupOnPull);
   const developerMode = usePreferences((s) => s.developerMode);
@@ -40,6 +43,7 @@ export default function PeopleTab() {
 
   const [searchQuery, setSearchQuery] = useState('');
   const [menuOpen, setMenuOpen] = useState(false);
+  const [manualSheetOpen, setManualSheetOpen] = useState(false);
 
   const filtered = useMemo(
     () => filterContacts(contacts, searchQuery),
@@ -63,7 +67,10 @@ export default function PeopleTab() {
           text: 'Delete',
           style: 'destructive',
           onPress: () => {
-            refresh();
+            void (async () => {
+              await removeContact(c.id);
+              refresh();
+            })();
           },
         },
       ],
@@ -82,7 +89,7 @@ export default function PeopleTab() {
   const body = (
     <View className="flex-1">
       <Header
-        onAddManually={() => router.push('/contacts/manual')}
+        onAddManually={() => { setManualSheetOpen(true); }}
         onImportPhone={() => router.push('/contacts/picker')}
         onImportVcf={() => router.push('/contacts/import-vcf')}
         onRadarExchange={() => router.push('/(tabs)/share')}
@@ -91,10 +98,16 @@ export default function PeopleTab() {
         setMenuOpen={setMenuOpen}
       />
 
+      <ManualContactEntrySheet
+        visible={manualSheetOpen}
+        onClose={() => { setManualSheetOpen(false); }}
+        onSaved={() => { refresh(); }}
+      />
+
       {contacts.length === 0 ? (
         <EmptyState
           onImportPhone={() => router.push('/contacts/picker')}
-          onAddManually={() => router.push('/contacts/manual')}
+          onAddManually={() => { setManualSheetOpen(true); }}
         />
       ) : filtered.length === 0 ? (
         <>
