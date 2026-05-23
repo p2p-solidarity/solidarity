@@ -7,32 +7,34 @@
  * same UI also powers the dashboard's "Personal" tab.
  */
 import { router } from 'expo-router';
+import { useEffect } from 'react';
 import { Pressable, ScrollView, View } from 'react-native';
 
 import { IDNavBar } from '@/components/id';
-import {
-  EMPTY_PERSONAL_STATE,
-  PersonalPanel,
-  type PersonalIdentityState,
-} from '@/components/id/panels/PersonalPanel';
+import { PersonalPanel } from '@/components/id/panels/PersonalPanel';
 import { SfIcon } from '@/components/icons/SfIcon';
 import { Colors } from '@/constants/Colors';
 import { pushToast } from '@/feedback/toast';
-
-// TODO(android): swap for IdentityCoordinator.shared selectors once the
-// coordinator port lands.
-function useIdentityState(): PersonalIdentityState {
-  return EMPTY_PERSONAL_STATE;
-}
+import { useIdentityState, useZkIdentity } from '@/zk';
 
 export default function PersonalIdentity(): React.JSX.Element {
   const state = useIdentityState();
+  const seedFromNative = useZkIdentity((s) => s.seedFromNative);
+  const createIdentity = useZkIdentity((s) => s.createIdentity);
+  const clearError = useZkIdentity((s) => s.clearError);
+
+  useEffect(() => {
+    void seedFromNative();
+  }, [seedFromNative]);
 
   const onRefresh = (): void => {
-    pushToast('Identity refresh lands next iteration', 'info');
+    void createIdentity().then(() => {
+      pushToast('Identity refreshed', 'success');
+    });
   };
 
   const onClearError = (): void => {
+    clearError();
     pushToast('Error cleared', 'success');
   };
 

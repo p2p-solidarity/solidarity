@@ -27,6 +27,10 @@ import XCTest
 
 @testable import solidarity
 
+#if canImport(Semaphore) && !(targetEnvironment(simulator) && arch(x86_64))
+  import Semaphore
+#endif
+
 final class FixtureExporter: XCTestCase {
 
   // MARK: - Public exports
@@ -153,6 +157,96 @@ final class FixtureExporter: XCTestCase {
         "jwt": jwt,
       ]],
     ])
+  }
+
+  /// Semaphore identity commitments — pins the Pedersen-hash output the
+  /// Rust `semaphore_bindings` crate produces for fixed seeds. The
+  /// Expo Nitro module MUST produce the same commitments otherwise
+  /// every group's local merkle root drifts away from the legacy
+  /// SwiftUI app's view. Runs only on arm64 simulators / devices where
+  /// the Semaphore SPM package is linkable.
+  func test_exportSemaphoreIdentityCommitments() throws {
+    #if canImport(Semaphore) && !(targetEnvironment(simulator) && arch(x86_64))
+      struct Seed { let name: String; let hex: String }
+      let seeds: [Seed] = [
+        .init(name: "all_zeros",       hex: String(repeating: "00", count: 32)),
+        .init(name: "all_ones",        hex: String(repeating: "01", count: 32)),
+        .init(name: "ascending",       hex: (0..<32).map { String(format: "%02x", $0) }.joined()),
+        .init(name: "kidneyweakx_fixture",
+              hex: "11111111222222223333333344444444" +
+                   "55555555666666667777777788888888"),
+      ]
+
+      var commitmentCases: [[String: Any]] = []
+      var allCommitments: [String] = []
+      for seed in seeds {
+        let bytes = Data(hexString: seed.hex)
+        let identity = Identity(privateKey: bytes)
+        let commitment = identity.commitment()
+        commitmentCases.append([
+          "name": seed.name,
+          "privateKeyHex": seed.hex,
+          "commitment": commitment,
+        ])
+        allCommitments.append(commitment)
+      }
+      try writeFixture(domain: "semaphore", file: "identity_commitments.json", payload: [
+        "schema": "1",
+        "source": "solidarityTests/FixtureExporter.test_exportSemaphoreIdentityCommitments",
+        "cases": commitmentCases,
+      ])
+
+      // Cross-fixture: group root over the four seed identities (canonical
+      // sorted dedupe) so the TS port can verify it computes the same root.
+      let trimmed = allCommitments
+        .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+        .filter { !$0.isEmpty }
+      let canonical = Array(Set(trimmed)).sorted()
+      let elements: [Data] = try canonical.map { commitment in
+        var bytes = [UInt8](repeating: 0, count: 32)
+        for scalar in commitment.unicodeScalars {
+          guard let digit = Int(String(scalar)) else { throw NSError(domain: "fx", code: 1) }
+          var carry = digit
+          for i in 0..<bytes.count {
+            let total = Int(bytes[i]) * 10 + carry
+            bytes[i] = UInt8(total & 0xff)
+            carry = total >> 8
+          }
+        }
+        return Data(bytes)
+      }
+      let group = Group(members: elements)
+      guard let rootData = group.root() else {
+        XCTFail("group root missing")
+        return
+      }
+      // Decode 32-byte LE root → decimal string (same as the Nitro module).
+      var digits: [UInt8] = [0]
+      for byte in rootData.reversed() {
+        var carry = UInt32(byte)
+        for i in 0..<digits.count {
+          let total = UInt32(digits[i]) * 256 + carry
+          digits[i] = UInt8(total % 10)
+          carry = total / 10
+        }
+        while carry > 0 {
+          digits.append(UInt8(carry % 10))
+          carry /= 10
+        }
+      }
+      let trimmedDigits = digits.reversed().drop(while: { $0 == 0 })
+      let rootDecimal = trimmedDigits.isEmpty ? "0" :
+        String(trimmedDigits.map { Character("\($0)") })
+
+      try writeFixture(domain: "semaphore", file: "group_root.json", payload: [
+        "schema": "1",
+        "source": "solidarityTests/FixtureExporter.test_exportSemaphoreIdentityCommitments",
+        "canonicalCommitments": canonical,
+        "rootDecimal": rootDecimal,
+      ])
+    #else
+      throw XCTSkip("Semaphore not linkable in this build (x86_64 simulator)")
+    #endif
   }
 
   /// JSON-encoded `BusinessCard` round trip — pins the Codable byte layout

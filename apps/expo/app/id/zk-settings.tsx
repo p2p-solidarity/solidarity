@@ -29,40 +29,33 @@ import {
 } from '@/components/settings/SettingsBlocks';
 import { Colors } from '@/constants/Colors';
 import { pushToast } from '@/feedback/toast';
-
-// TODO(android): swap for real `SemaphoreIdentityManager.getIdentity()`
-// once the Nitro module lands. The Swift version reads
-// `idm.getIdentity()?.commitment` on appear.
-function useZkIdentityCommitment(): string | null {
-  // Until the Nitro module is wired, mirror Swift's "Not initialized"
-  // empty state so the UI still renders correctly.
-  return null;
-}
-
-// TODO(android): wire SemaphoreIdentityManager.proofsSupported. The Swift
-// version reads a static boolean off the manager class.
-function useProofsSupported(): boolean {
-  return true;
-}
+import { requireBiometric } from '@/keychain/biometric';
+import {
+  useProofsSupported,
+  useZkIdentity,
+  useZkIdentityCommitment,
+} from '@/zk';
 
 export default function ZkSettings(): React.JSX.Element {
-  const initialCommitment = useZkIdentityCommitment();
+  const commitment = useZkIdentityCommitment();
   const proofsSupported = useProofsSupported();
-  const [commitment, setCommitment] = useState<string | null>(initialCommitment);
+  const seedFromNative = useZkIdentity((s) => s.seedFromNative);
+  const deleteIdentity = useZkIdentity((s) => s.deleteIdentity);
   const [isDeleting, setIsDeleting] = useState(false);
 
   useEffect(() => {
-    setCommitment(initialCommitment);
-  }, [initialCommitment]);
+    void seedFromNative();
+  }, [seedFromNative]);
 
   const performDelete = async (): Promise<void> => {
     setIsDeleting(true);
     try {
-      // TODO(android): call SemaphoreIdentityManager.deleteIdentity().
-      // For parity with Swift, simulate the same Result.success path: clear
-      // the local commitment and let the parent show a toast.
-      await new Promise((resolve) => setTimeout(resolve, 250));
-      setCommitment(null);
+      const ok = await requireBiometric('delete');
+      if (!ok) {
+        pushToast('Biometric authentication required', 'warning');
+        return;
+      }
+      await deleteIdentity();
       pushToast('Identity deleted', 'success');
     } catch (e) {
       const message = e instanceof Error ? e.message : 'Unknown error.';

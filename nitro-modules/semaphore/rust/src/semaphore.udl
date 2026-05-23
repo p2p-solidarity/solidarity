@@ -1,0 +1,62 @@
+// uniffi UDL — semaphore_bindings
+//
+// Mirrors the existing surface of the legacy `libsemaphore_bindings.a`
+// (as decoded by `SemaphoreSwift/Sources/MoproiOSBindings/mopro.swift`).
+// Changing names here without regenerating the iOS xcframework will break
+// parity with the SwiftUI legacy app.
+
+namespace semaphore_bindings {
+  string mopro_uniffi_hello_world();
+  [Throws=ProofError]
+  string generate_semaphore_proof(
+    Identity identity,
+    Group group,
+    string message,
+    string scope,
+    u16 merkle_tree_depth
+  );
+  [Throws=ProofError]
+  boolean verify_semaphore_proof(string proof);
+};
+
+[Error]
+enum GroupError {
+  "EmptyLeaf",
+  "InvalidMemberLength",
+  "RemovedMember",
+  "AlreadyRemovedMember",
+};
+
+[Error]
+enum ProofError {
+  "MerkleProofGeneration",
+  "WitnessGeneration",
+  "ProofGeneration",
+  "ProofVerification",
+  "InvalidScope",
+  "InvalidMessage",
+};
+
+interface Identity {
+  constructor(bytes private_key);
+  string commitment();
+  bytes private_key();
+  string secret_scalar();
+  bytes to_element();
+};
+
+interface Group {
+  constructor(sequence<bytes> members);
+  [Throws=GroupError]
+  void add_member(bytes member);
+  [Throws=GroupError]
+  void add_members(sequence<bytes> members);
+  u32 depth();
+  u32? index_of(bytes member);
+  sequence<bytes> members();
+  [Throws=GroupError]
+  void remove_member(u32 index);
+  bytes? root();
+  [Throws=GroupError]
+  void update_member(u32 index, bytes member);
+};

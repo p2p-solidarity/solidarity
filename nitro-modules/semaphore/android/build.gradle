@@ -1,0 +1,162 @@
+/*
+ * build.gradle
+ * @solidarity/nitro-semaphore (Android)
+ *
+ * Modeled after react-native-mmkv's Nitro module gradle setup + the
+ * sibling nitro-modules/proximity/android/build.gradle. Pulls in the
+ * nitrogen autolinking gradle, defines the Kotlin/C++ build, and declares
+ * the runtime deps we need (kotlinx coroutines for Promise.async,
+ * androidx.security for EncryptedSharedPreferences).
+ *
+ * The Rust `libsemaphore_bindings.so` is consumed via the `jniLibs/` dir;
+ * `rust/build-android.sh` populates `android/src/main/jniLibs/<abi>/`
+ * before gradle is invoked.
+ */
+buildscript {
+  repositories {
+    google()
+    mavenCentral()
+  }
+  dependencies {
+    classpath "com.android.tools.build:gradle:9.1.0"
+  }
+}
+
+def reactNativeArchitectures() {
+  def value = rootProject.getProperties().get("reactNativeArchitectures")
+  return value ? value.split(",") : ["x86", "x86_64", "armeabi-v7a", "arm64-v8a"]
+}
+
+def isNewArchitectureEnabled() {
+  return rootProject.hasProperty("newArchEnabled") && rootProject.getProperty("newArchEnabled") == "true"
+}
+
+apply plugin: "com.android.library"
+apply plugin: "org.jetbrains.kotlin.android"
+apply from: "../nitrogen/generated/android/Semaphore+autolinking.gradle"
+
+if (isNewArchitectureEnabled()) {
+  apply plugin: "com.facebook.react"
+}
+
+def getExtOrDefault(name) {
+  return rootProject.ext.has(name) ? rootProject.ext.get(name) : project.properties["Semaphore_" + name]
+}
+
+def getExtOrIntegerDefault(name) {
+  return rootProject.ext.has(name) ? rootProject.ext.get(name) : (project.properties["Semaphore_" + name]).toInteger()
+}
+
+android {
+  namespace "com.margelo.nitro.gg.solidarity.semaphore"
+
+  ndkVersion getExtOrDefault("ndkVersion")
+  compileSdkVersion getExtOrIntegerDefault("compileSdkVersion")
+
+  defaultConfig {
+    minSdkVersion getExtOrIntegerDefault("minSdkVersion")
+    targetSdkVersion getExtOrIntegerDefault("targetSdkVersion")
+    buildConfigField "boolean", "IS_NEW_ARCHITECTURE_ENABLED", isNewArchitectureEnabled().toString()
+
+    externalNativeBuild {
+      cmake {
+        cppFlags "-frtti -fexceptions -Wall -Wextra -fstack-protector-all"
+        arguments "-DANDROID_STL=c++_shared", "-DANDROID_SUPPORT_FLEXIBLE_PAGE_SIZES=ON"
+        abiFilters (*reactNativeArchitectures())
+
+        buildTypes {
+          debug {
+            cppFlags "-O1 -g"
+          }
+          release {
+            cppFlags "-O2"
+          }
+        }
+      }
+    }
+  }
+
+  externalNativeBuild {
+    cmake {
+      path "CMakeLists.txt"
+    }
+  }
+
+  packagingOptions {
+    excludes = [
+      "META-INF",
+      "META-INF/**",
+      "**/libNitroModules.so",
+      "**/libc++_shared.so",
+      "**/libfbjni.so",
+      "**/libjsi.so",
+      "**/libfolly_json.so",
+      "**/libfolly_runtime.so",
+      "**/libglog.so",
+      "**/libhermes.so",
+      "**/libhermes-executor-debug.so",
+      "**/libhermes_executor.so",
+      "**/libreactnative.so",
+      "**/libreactnativejni.so",
+      "**/libturbomodulejsijni.so",
+      "**/libreact_nativemodule_core.so",
+      "**/libjscexecutor.so"
+    ]
+  }
+
+  buildFeatures {
+    buildConfig true
+    prefab true
+  }
+
+  buildTypes {
+    release {
+      minifyEnabled false
+    }
+  }
+
+  lintOptions {
+    disable "GradleCompatible"
+  }
+
+  compileOptions {
+    sourceCompatibility JavaVersion.VERSION_1_8
+    targetCompatibility JavaVersion.VERSION_1_8
+  }
+
+  sourceSets {
+    main {
+      java.srcDirs += [
+        "${project.projectDir}/../nitrogen/generated/android/kotlin",
+      ]
+      // Rust-produced .so files land here after `rust/build-android.sh`.
+      jniLibs.srcDirs = ["${project.projectDir}/src/main/jniLibs"]
+
+      if (isNewArchitectureEnabled()) {
+        java.srcDirs += [
+          "${project.buildDir}/generated/source/codegen/java"
+        ]
+      }
+    }
+  }
+}
+
+repositories {
+  mavenCentral()
+  google()
+}
+
+dependencies {
+  //noinspection GradleDynamicVersion
+  implementation "com.facebook.react:react-native:+"
+  implementation project(":react-native-nitro-modules")
+
+  // Coroutines for Promise.async.
+  implementation "org.jetbrains.kotlinx:kotlinx-coroutines-android:1.8.1"
+
+  // EncryptedSharedPreferences for identity + nullifier persistence
+  // (the Android equivalent of the iOS Keychain we use in HybridSemaphore.swift).
+  // 1.1.0-alpha06 is the last release that includes `MasterKeys.getOrCreate`;
+  // the 1.0.0 stable also has it but exposes a slightly different builder API.
+  implementation "androidx.security:security-crypto:1.0.0"
+}

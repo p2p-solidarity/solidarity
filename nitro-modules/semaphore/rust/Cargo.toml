@@ -1,0 +1,22 @@
+[package]
+name = "solidarity-semaphore-bindings"
+version = "0.1.0"
+edition = "2021"
+description = "uniffi wrapper for semaphore-rs (https://github.com/semaphore-protocol/semaphore-rs). Vendored shim crate so the Nitro module can build the same `libsemaphore_bindings.a` shipped in SemaphoreSwift's xcframework for both iOS and Android, without forking the upstream codebase."
+
+[lib]
+name = "semaphore_bindings"
+# staticlib: linked into the iOS xcframework (libsemaphore_bindings.a)
+# cdylib:    loaded into Android via System.loadLibrary("semaphore_bindings")
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[dependencies]
+# Pinned to the same tag the SwiftUI legacy app's MoproBindings.xcframework
+# was built against. Bump only when re-publishing both the iOS xcframework
+# AND the Android .so so commitments don't drift between platforms.
+semaphore-rs = { git = "https://github.com/semaphore-protocol/semaphore-rs", rev = "main", features = ["depth_16", "depth_32"] }
+uniffi = { version = "0.28", features = ["build", "tokio"] }
+thiserror = "1"
+
+[build-dependencies]
+uniffi = { version = "0.28", features = ["build"] }

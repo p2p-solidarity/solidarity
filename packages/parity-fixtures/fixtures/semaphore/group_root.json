@@ -1,0 +1,6 @@
+{
+  "schema": "1",
+  "source": "PENDING — run solidarityTests/FixtureExporter.test_exportSemaphoreIdentityCommitments on a real device/simulator (arm64) to populate `canonicalCommitments` + `rootDecimal`.",
+  "canonicalCommitments": [],
+  "rootDecimal": null
+}

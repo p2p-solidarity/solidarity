@@ -8,7 +8,7 @@
  */
 import * as Clipboard from 'expo-clipboard';
 import type { ReactNode } from 'react';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Pressable, Text, View } from 'react-native';
 import QRCode from 'react-native-qrcode-svg';
 
@@ -19,8 +19,18 @@ import { pushToast } from '@/feedback/toast';
 import {
   CURRENT_USER_RECORD_ID,
   isOwner as isOwnerOf,
+  useGroupMembers,
+  useGroupStore,
+  type GroupMember,
   type GroupModel,
 } from '@/groups/store';
+import {
+  generateGroupProof,
+  leafIndex,
+  recomputeRoot,
+  useIdentitySnapshot,
+  useZkIdentity,
+} from '@/zk';
 
 const MONO_FONT = 'Menlo';
 
@@ -142,9 +152,36 @@ export function MerkleTreeSection({
 }: {
   readonly group: GroupModel;
 }): ReactNode {
-  // TODO(android): wire to SemaphoreGroupManager port. The Swift screen
-  // pulls semaphoreManager.merkleRoot + recomputeRoot + index lookup.
-  const root = group.merkleRoot;
+  const members = useGroupMembers(group.id);
+  const upsertGroup = useGroupStore((s) => s.upsertGroup);
+  const { commitment } = useIdentitySnapshot();
+  const [root, setRoot] = useState<string | undefined>(group.merkleRoot);
+  const [isRecomputing, setIsRecomputing] = useState(false);
+
+  // Sync the local cache when the group store hydrates an updated root.
+  useEffect(() => { setRoot(group.merkleRoot); }, [group.merkleRoot]);
+
+  const commitments = collectMemberCommitments(members);
+  const myIndex = leafIndex(commitment, commitments);
+
+  const onRecompute = async (): Promise<void> => {
+    setIsRecomputing(true);
+    try {
+      const next = await recomputeRoot(commitments);
+      if (next == null) {
+        pushToast('Native module unavailable in this build', 'warning');
+        return;
+      }
+      setRoot(next);
+      await upsertGroup({ ...group, merkleRoot: next });
+      pushToast('Merkle root recomputed', 'success');
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      pushToast(`Recompute failed: ${message}`, 'warning');
+    } finally {
+      setIsRecomputing(false);
+    }
+  };
 
   return (
     <View className="gap-3">
@@ -169,8 +206,9 @@ export function MerkleTreeSection({
         <View className="mt-3">
           <ThemedButton
             variant="secondary"
-            label="Recompute Root"
+            label={isRecomputing ? 'Recomputing…' : 'Recompute Root'}
             fullWidth
+            disabled={isRecomputing || commitments.length === 0}
             leadingIcon={
               <SfIcon
                 name="arrow.triangle.2.circlepath"
@@ -178,16 +216,35 @@ export function MerkleTreeSection({
                 color={Colors.accentRose}
               />
             }
-            onPress={() => {
-              pushToast('Merkle recompute lands next iteration', 'info');
-            }}
+            onPress={() => { void onRecompute(); }}
           />
         </View>
 
-        {/* TODO(android): show leaf-index membership line once Semaphore is ported. */}
+        {myIndex !== null ? (
+          <Text className="text-text2 text-[12px] mt-2">
+            Your leaf index: {myIndex}
+          </Text>
+        ) : commitment !== null && commitments.length > 0 ? (
+          <Text className="text-text2 text-[12px] mt-2">
+            Your commitment is not yet in this group's member set.
+          </Text>
+        ) : null}
       </SectionCard>
     </View>
   );
+}
+
+/** Extract non-empty commitments from the group's member list. */
+function collectMemberCommitments(
+  members: readonly GroupMember[]
+): readonly string[] {
+  const out: string[] = [];
+  for (const m of members) {
+    if (m.commitment && m.commitment.trim().length > 0) {
+      out.push(m.commitment);
+    }
+  }
+  return out;
 }
 
 /* ------------------------------------------------------------------ */
@@ -264,8 +321,41 @@ export function IdentityInfoSection({
 }: {
   readonly group: GroupModel;
 }): ReactNode {
-  // TODO(android): pull real values from a ported SemaphoreIdentityManager.
   const userId = CURRENT_USER_RECORD_ID;
+  const members = useGroupMembers(group.id);
+  const { commitment } = useIdentitySnapshot();
+  const seedFromNative = useZkIdentity((s) => s.seedFromNative);
+  const [isGenerating, setIsGenerating] = useState(false);
+
+  useEffect(() => { void seedFromNative(); }, [seedFromNative]);
+
+  const commitments = collectMemberCommitments(members);
+
+  const onGenerate = async (): Promise<void> => {
+    if (!commitment) {
+      pushToast('Initialize your identity first (tap the Core).', 'warning');
+      return;
+    }
+    if (commitments.length < 1 || !commitments.includes(commitment)) {
+      pushToast('Your commitment is not in this group yet.', 'warning');
+      return;
+    }
+    setIsGenerating(true);
+    try {
+      const proof = await generateGroupProof({
+        commitments,
+        scope: `group:${group.id}`,
+        signal: group.id,
+      });
+      await Clipboard.setStringAsync(proof.proofJson);
+      pushToast(`Group proof copied to clipboard (${proof.nullifier.slice(0, 8)}…)`, 'success');
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      pushToast(`Proof generation failed: ${message}`, 'warning');
+    } finally {
+      setIsGenerating(false);
+    }
+  };
 
   return (
     <View className="gap-3">
@@ -295,25 +385,33 @@ export function IdentityInfoSection({
           <Text className="text-text2 text-[12px]">
             Leaf Hash (Commitment)
           </Text>
-          <Text className="text-accentRose text-[12px]">
-            Identity not initialized
-          </Text>
+          {commitment ? (
+            <Text
+              selectable
+              numberOfLines={2}
+              ellipsizeMode="middle"
+              className="text-text1 text-[12px]"
+              style={{ fontFamily: MONO_FONT }}
+            >
+              {commitment}
+            </Text>
+          ) : (
+            <Text className="text-accentRose text-[12px]">
+              Identity not initialized
+            </Text>
+          )}
         </View>
 
         <View className="mt-3">
           <ThemedButton
             variant="secondary"
-            label="Generate Group Proof"
+            label={isGenerating ? 'Generating…' : 'Generate Group Proof'}
             fullWidth
+            disabled={isGenerating || !commitment}
             leadingIcon={
               <SfIcon name="lock.doc.fill" size={14} color={Colors.accentRose} />
             }
-            onPress={() => {
-              pushToast(
-                `Group proof for "${group.name}" lands next iteration`,
-                'info'
-              );
-            }}
+            onPress={() => { void onGenerate(); }}
           />
         </View>
       </SectionCard>

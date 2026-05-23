@@ -39,44 +39,45 @@ import { haptic } from '@/feedback/haptics';
 import { pushToast } from '@/feedback/toast';
 import { useGroupStore, type GroupModel } from '@/groups/store';
 import { usePreferences } from '@/settings/preferences';
-
-// TODO(android): wire IdentityCoordinator + SemaphoreIdentityManager so the
-// did/commitment values reflect the real identity. For now we mirror the
-// "no identity yet" empty state from Swift.
-function useIdentitySnapshot(): {
-  readonly did: string | null;
-  readonly commitment: string | null;
-} {
-  return { did: null, commitment: null };
-}
+import { useIdentitySnapshot, useZkIdentity } from '@/zk';
 
 export default function IDViewScreen(): React.JSX.Element {
   const insets = useSafeAreaInsets();
   const { did, commitment } = useIdentitySnapshot();
-  const [isWorking, setIsWorking] = useState(false);
+  const isWorkingFromStore = useZkIdentity((s) => s.isWorking);
+  const seedFromNative = useZkIdentity((s) => s.seedFromNative);
+  const createIdentity = useZkIdentity((s) => s.createIdentity);
+  const [isWorkingLocal, setIsWorkingLocal] = useState(false);
+  const isWorking = isWorkingFromStore || isWorkingLocal;
   const developerMode = usePreferences((s) => s.developerMode);
 
   const hydrate = useGroupStore((s) => s.hydrate);
   const groups = useGroupStore((s) => Array.from(s.groups.values()));
 
-  useEffect(() => { void hydrate(); }, [hydrate]);
+  useEffect(() => {
+    void hydrate();
+    void seedFromNative();
+  }, [hydrate, seedFromNative]);
 
   const rippleState: RippleButtonState = isWorking ? 'processing' : 'idle';
   const isDidKeyActive = did === null || did.startsWith('did:key');
 
   const onCoreTap = (): void => {
     if (commitment === null) {
-      // Mirror Swift createIdentity()
-      setIsWorking(true);
-      // TODO(android): SemaphoreIdentityManager.loadOrCreateIdentity()
-      setTimeout(() => {
-        setIsWorking(false);
-        haptic('success');
-        pushToast('ZK identity creation lands next iteration', 'info');
-      }, 600);
+      // Mirror Swift createIdentity() — real call into the Nitro module.
+      setIsWorkingLocal(true);
+      void createIdentity()
+        .then(() => { haptic('success'); })
+        .catch((error: unknown) => {
+          const message = error instanceof Error ? error.message : String(error);
+          pushToast(`Identity creation failed: ${message}`, 'warning');
+        })
+        .finally(() => { setIsWorkingLocal(false); });
     } else {
-      // TODO(android): IdentityCoordinator.refreshIdentity()
-      pushToast('Sync lands next iteration', 'info');
+      // TODO(android): IdentityCoordinator.refreshIdentity() — full refresh
+      // sweep (DID metadata, group root pulls) lands in a follow-up iteration;
+      // for now the ZK identity itself is already authoritative.
+      pushToast('Identity is up to date', 'info');
     }
   };
 
