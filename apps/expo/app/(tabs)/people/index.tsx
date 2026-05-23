@@ -1,29 +1,50 @@
 /**
- * People tab — mirrors Swift PeopleListView. 1:1 strings + actions:
- *   navigation title: "People"
- *   empty state:      "Your contact list is empty"
- *   add menu:         Radar Exchange / Add Manually / Import from Phone / Import VCF File
+ * People tab — 1:1 port of solidarity/Views/PeopleViews/PeopleListView.swift.
  *
- * Pan gesture wraps the scroll view so a downward pull triggers
- * `performBackupNow` (per user direction 2026-05-24).
+ *   • Title "People List" (semibold 18pt, left-aligned) + trailing "+" menu
+ *     (Radar Exchange [dev-mode] / Add Manually / Import from Phone /
+ *     Import VCF File)
+ *   • Search field (magnifyingglass + "Search" placeholder, 0.5pt
+ *     textPrimary border) once contact list is non-empty
+ *   • Empty state: PaperStackIllustration 214×214 +
+ *     "Your contact list is empty" + 2 buttons (Import from Phone / Add
+ *     Manually), no card border
+ *   • Empty-search state: magnifyingglass + "No results for \"<query>\""
+ *   • TrustGraphContactRow per contact, tap → /people/[id], long-press →
+ *     Delete dialog: "Delete <name>?" / "This contact will be permanently
+ *     removed."
  */
 import { router } from 'expo-router';
-import { useMemo } from 'react';
-import { View } from 'react-native';
+import { useMemo, useState } from 'react';
+import { Alert, FlatList, Pressable, ScrollView, Text, View } from 'react-native';
 import { GestureDetector } from 'react-native-gesture-handler';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { makeGestureAutoBackup } from '@/backup';
-import { ContactsList } from '@/components/people/ContactsList';
-import { ThemedButton, ThemedText } from '@/components/themed';
+import { SfIcon } from '@/components/icons/SfIcon';
+import { PaperStackIllustration } from '@/components/decor/PaperStackIllustration';
+import { PeopleSearchField } from '@/components/people/PeopleSearchField';
+import { TrustGraphContactRow } from '@/components/people/TrustGraphContactRow';
+import { Colors } from '@/constants/Colors';
 import { pushToast } from '@/feedback/toast';
 import { usePeopleScreen } from '@/people/usePeopleScreen';
 import { usePreferences } from '@/settings/preferences';
 import type { Contact } from '@solidarity/shared';
 
 export default function PeopleTab() {
-  const { contacts, loading, refreshing, refresh } = usePeopleScreen();
+  const { contacts, refresh } = usePeopleScreen();
   const provider = usePreferences((s) => s.backupProvider);
   const autoEnabled = usePreferences((s) => s.autoBackupOnPull);
+  const developerMode = usePreferences((s) => s.developerMode);
+  const insets = useSafeAreaInsets();
+
+  const [searchQuery, setSearchQuery] = useState('');
+  const [menuOpen, setMenuOpen] = useState(false);
+
+  const filtered = useMemo(
+    () => filterContacts(contacts, searchQuery),
+    [contacts, searchQuery],
+  );
 
   const onSelectContact = (c: Contact) => {
     router.push({
@@ -32,40 +53,267 @@ export default function PeopleTab() {
     });
   };
 
+  const onLongPressContact = (c: Contact) => {
+    Alert.alert(
+      `Delete ${c.businessCard.name}?`,
+      'This contact will be permanently removed.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: () => {
+            refresh();
+          },
+        },
+      ],
+    );
+  };
+
   const backupGesture = useMemo(
     () =>
       makeGestureAutoBackup(provider, {
         onComplete: () => { pushToast('Backed up to cloud', 'success', 2000); },
         onError: () => { pushToast('Backup failed', 'error'); },
       }),
-    [provider]
+    [provider],
   );
 
-  const list = (
+  const body = (
     <View className="flex-1">
-      <View className="flex-row items-center justify-between px-4 pt-4 pb-2">
-        <ThemedText variant="headlineLarge">People</ThemedText>
-        <ThemedButton
-          label="+"
-          size="sm"
-          onPress={() => {
-            pushToast('Add menu (radar / manual / phone / VCF) lands next pass', 'info');
-          }}
-        />
-      </View>
-      <ContactsList
-        contacts={contacts}
-        loading={loading}
-        refreshing={refreshing}
-        onRefresh={refresh}
-        onSelectContact={onSelectContact}
+      <Header
+        onAddManually={() => router.push('/contacts/manual')}
+        onImportPhone={() => router.push('/contacts/picker')}
+        onImportVcf={() => router.push('/contacts/import-vcf')}
+        onRadarExchange={() => router.push('/(tabs)/share')}
+        developerMode={developerMode}
+        menuOpen={menuOpen}
+        setMenuOpen={setMenuOpen}
       />
+
+      {contacts.length === 0 ? (
+        <EmptyState
+          onImportPhone={() => router.push('/contacts/picker')}
+          onAddManually={() => router.push('/contacts/manual')}
+        />
+      ) : filtered.length === 0 ? (
+        <>
+          <View className="px-4 pb-3">
+            <PeopleSearchField value={searchQuery} onChangeText={setSearchQuery} />
+          </View>
+          <EmptySearchState query={searchQuery} />
+        </>
+      ) : (
+        <>
+          <View className="px-4 pb-3">
+            <PeopleSearchField value={searchQuery} onChangeText={setSearchQuery} />
+          </View>
+          <FlatList
+            data={filtered}
+            keyExtractor={(c) => c.id}
+            contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: 90 }}
+            renderItem={({ item }) => (
+              <TrustGraphContactRow
+                contact={item}
+                onPress={() => onSelectContact(item)}
+                onLongPress={() => onLongPressContact(item)}
+              />
+            )}
+          />
+        </>
+      )}
     </View>
   );
 
   return (
-    <View className="flex-1 bg-pageBg">
-      {autoEnabled ? <GestureDetector gesture={backupGesture}>{list}</GestureDetector> : list}
+    <View className="flex-1 bg-pageBg" style={{ paddingTop: insets.top }}>
+      {autoEnabled ? (
+        <GestureDetector gesture={backupGesture}>{body}</GestureDetector>
+      ) : (
+        body
+      )}
     </View>
   );
+}
+
+function Header({
+  onAddManually,
+  onImportPhone,
+  onImportVcf,
+  onRadarExchange,
+  developerMode,
+  menuOpen,
+  setMenuOpen,
+}: {
+  onAddManually: () => void;
+  onImportPhone: () => void;
+  onImportVcf: () => void;
+  onRadarExchange: () => void;
+  developerMode: boolean;
+  menuOpen: boolean;
+  setMenuOpen: (v: boolean) => void;
+}) {
+  return (
+    <View className="px-4" style={{ height: 56 }}>
+      <View className="flex-1 flex-row items-center justify-between">
+        <Text className="text-text1 text-[18px] font-semibold">People List</Text>
+        <Pressable
+          accessibilityRole="button"
+          onPress={() => setMenuOpen(!menuOpen)}
+          style={{ width: 24, height: 24, alignItems: 'center', justifyContent: 'center' }}
+          className="active:opacity-60"
+        >
+          <SfIcon name="plus" size={18} color={Colors.text1} />
+        </Pressable>
+      </View>
+      {menuOpen ? (
+        <View
+          className="absolute right-4 top-12 rounded-lg bg-cardBg"
+          style={{
+            shadowColor: '#000',
+            shadowOffset: { width: 0, height: 4 },
+            shadowOpacity: 0.12,
+            shadowRadius: 12,
+            elevation: 6,
+            zIndex: 10,
+          }}
+        >
+          {developerMode ? (
+            <MenuItem
+              icon="antenna.radiowaves.left.and.right"
+              label="Radar Exchange"
+              onPress={() => { setMenuOpen(false); onRadarExchange(); }}
+            />
+          ) : null}
+          <MenuItem
+            icon="square.and.pencil"
+            label="Add Manually"
+            onPress={() => { setMenuOpen(false); onAddManually(); }}
+          />
+          <MenuItem
+            icon="person.crop.circle.badge.plus"
+            label="Import from Phone"
+            onPress={() => { setMenuOpen(false); onImportPhone(); }}
+          />
+          <MenuItem
+            icon="doc.badge.plus"
+            label="Import VCF File"
+            onPress={() => { setMenuOpen(false); onImportVcf(); }}
+            isLast
+          />
+        </View>
+      ) : null}
+    </View>
+  );
+}
+
+function MenuItem({
+  icon,
+  label,
+  onPress,
+  isLast = false,
+}: {
+  icon: import('expo-symbols').SFSymbol;
+  label: string;
+  onPress: () => void;
+  isLast?: boolean;
+}) {
+  return (
+    <Pressable
+      onPress={onPress}
+      className="flex-row items-center gap-3 px-4 py-3 active:opacity-70"
+      style={{
+        borderBottomWidth: isLast ? 0 : 0.5,
+        borderBottomColor: Colors.divider,
+        minWidth: 200,
+      }}
+    >
+      <SfIcon name={icon} size={16} color={Colors.text1} />
+      <Text className="text-text1 text-[15px]">{label}</Text>
+    </Pressable>
+  );
+}
+
+function EmptyState({
+  onImportPhone,
+  onAddManually,
+}: {
+  onImportPhone: () => void;
+  onAddManually: () => void;
+}) {
+  return (
+    <ScrollView
+      contentContainerStyle={{ flexGrow: 1, alignItems: 'center', justifyContent: 'center' }}
+    >
+      <View
+        style={{ width: 214, height: 214, alignItems: 'center', justifyContent: 'center' }}
+      >
+        <PaperStackIllustration size={214} />
+      </View>
+      <Text className="text-text2 text-[14px] text-center pb-8">
+        Your contact list is empty
+      </Text>
+      <View className="gap-2 py-4 items-center">
+        <Pressable
+          onPress={onImportPhone}
+          accessibilityRole="button"
+          className="rounded-sm2 active:opacity-80"
+          style={{
+            width: 200,
+            height: 44,
+            backgroundColor: Colors.invertedButtonBg,
+            alignItems: 'center',
+            justifyContent: 'center',
+          }}
+        >
+          <Text
+            style={{ color: Colors.invertedButtonText }}
+            className="text-[15px]"
+          >
+            Import from Phone
+          </Text>
+        </Pressable>
+        <Pressable
+          onPress={onAddManually}
+          accessibilityRole="button"
+          style={{
+            width: 200,
+            height: 44,
+            alignItems: 'center',
+            justifyContent: 'center',
+          }}
+          className="active:opacity-60"
+        >
+          <Text className="text-text1 text-[15px]">Add Manually</Text>
+        </Pressable>
+      </View>
+    </ScrollView>
+  );
+}
+
+function EmptySearchState({ query }: { query: string }) {
+  return (
+    <View className="flex-1 items-center justify-center gap-3">
+      <SfIcon name="magnifyingglass" size={36} color={Colors.text3} />
+      <Text className="text-text2 text-[14px]">{`No results for "${query}"`}</Text>
+    </View>
+  );
+}
+
+function filterContacts(
+  contacts: readonly Contact[],
+  query: string,
+): readonly Contact[] {
+  const trimmed = query.trim();
+  const sorted = [...contacts].sort(
+    (a, b) => b.receivedAt.getTime() - a.receivedAt.getTime(),
+  );
+  if (trimmed.length === 0) return sorted;
+  const q = trimmed.toLowerCase();
+  return sorted.filter((c) => {
+    const name = c.businessCard.name.toLowerCase();
+    const company = (c.businessCard.company ?? '').toLowerCase();
+    const title = (c.businessCard.title ?? '').toLowerCase();
+    return name.includes(q) || company.includes(q) || title.includes(q);
+  });
 }
