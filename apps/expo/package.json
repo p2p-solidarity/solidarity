@@ -35,6 +35,7 @@
     "expo-clipboard": "~56.0.3",
     "expo-contacts": "~56.0.7",
     "expo-crypto": "~56.0.3",
+    "expo-document-picker": "~14.0.0",
     "expo-file-system": "~56.0.7",
     "expo-haptics": "~56.0.3",
     "expo-image": "~56.0.9",
