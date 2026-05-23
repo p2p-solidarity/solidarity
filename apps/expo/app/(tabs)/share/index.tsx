@@ -25,10 +25,13 @@ import {
   type EnabledField,
   FieldPillRow as _FieldPillRow,
 } from '@/components/share/FieldPillRow';
+import { UwbStatusPill } from '@/components/share/UwbStatusPill';
 import {
-  UwbStatusPill,
-  type UwbSpatialState,
-} from '@/components/share/UwbStatusPill';
+  NearbyPeersSheet,
+  ShareCardPickerSheet,
+  IncomingInvitationPopup,
+} from '@/components/matching';
+import { useMatchingSession } from '@/matching/session';
 import { ThemedButton } from '@/components/themed';
 import { Colors } from '@/constants/Colors';
 
@@ -47,9 +50,19 @@ export default function ShareTab() {
   const myCard = useMyCard();
   const hydrate = useCardStore((s) => s.hydrate);
   const insets = useSafeAreaInsets();
-  const [isMatching, setIsMatching] = useState(false);
-  const [peerCount] = useState(0);
-  const [uwb] = useState<UwbSpatialState>({ kind: 'idle' });
+  const peerCount = useMatchingSession((s) => s.peers.length);
+  const isAdvertising = useMatchingSession((s) => s.isAdvertising);
+  const isBrowsing = useMatchingSession((s) => s.isBrowsing);
+  const isMatching = isAdvertising || isBrowsing;
+  const pendingInvitations = useMatchingSession((s) => s.pendingInvitations);
+  const acceptInvitation = useMatchingSession((s) => s.acceptInvitation);
+  const declineInvitation = useMatchingSession((s) => s.declineInvitation);
+  const startBrowsing = useMatchingSession((s) => s.startBrowsing);
+  const startAdvertising = useMatchingSession((s) => s.startAdvertising);
+  const stopAll = useMatchingSession((s) => s.stopAll);
+  const uwb = useMatchingSession((s) => s.uwbSpatial);
+  const [nearbyVisible, setNearbyVisible] = useState(false);
+  const [pickerVisible, setPickerVisible] = useState(false);
 
   useEffect(() => { void hydrate(); }, [hydrate]);
 
@@ -57,6 +70,16 @@ export default function ShareTab() {
   const statusTitle = isMatching ? 'Scanning Nearby' : 'Ready To Match';
   const subtitle = statusSubtitle(isMatching, peerCount);
   const uwbVisible = uwb.kind !== 'idle';
+  const currentInvitation = pendingInvitations[0];
+
+  const toggleMatching = (): void => {
+    if (isMatching) {
+      void stopAll();
+      return;
+    }
+    // Browsing only by default — Start Advertising goes via the picker.
+    void startBrowsing();
+  };
 
   return (
     <View className="flex-1 bg-pageBg" style={{ paddingTop: insets.top }}>
@@ -66,9 +89,7 @@ export default function ShareTab() {
         <View className="items-center" style={{ height: 260 }}>
           <Pressable
             onPress={() => {
-              if (peerCount > 0) {
-                // TODO: open NearbyPeersSheet once ported
-              }
+              if (peerCount > 0) setNearbyVisible(true);
             }}
             style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}
           >
@@ -100,7 +121,25 @@ export default function ShareTab() {
                 color={Colors.invertedButtonText}
               />
             }
-            onPress={() => setIsMatching((b) => !b)}
+            onPress={toggleMatching}
+          />
+        </View>
+
+        <View style={{ height: 12 }} />
+        <View className="px-12">
+          <ThemedButton
+            label={isAdvertising ? 'Stop Advertising' : 'Share My Card'}
+            fullWidth
+            variant="secondary"
+            leadingIcon={
+              <SfIcon
+                name={isAdvertising ? 'stop.circle' : 'antenna.radiowaves.left.and.right'}
+                size={15}
+                weight="semibold"
+                color={Colors.accentRose}
+              />
+            }
+            onPress={() => { setPickerVisible(true); }}
           />
         </View>
 
@@ -119,12 +158,43 @@ export default function ShareTab() {
             enabledFields={DEFAULT_FIELDS}
             hasRealHuman={false}
             onOpenSettings={() => router.push('/settings')}
-            onShare={() => {
-              // TODO: wire native ShareSheet via expo-sharing
-            }}
+            onShare={() => router.push('/share/qr')}
           />
         </View>
       </ScrollView>
+
+      <NearbyPeersSheet
+        visible={nearbyVisible}
+        onClose={() => { setNearbyVisible(false); }}
+        onViewLatestCard={() => { setNearbyVisible(false); }}
+        onSelectPeer={() => { /* future: open peer detail */ }}
+      />
+
+      <ShareCardPickerSheet
+        visible={pickerVisible}
+        card={myCard}
+        initialLevel="professional"
+        isAdvertising={isAdvertising}
+        onStart={(card, level) => {
+          void startAdvertising(card.name, level, {
+            name: card.name,
+            ...(card.title ? { title: card.title } : {}),
+            ...(card.company ? { company: card.company } : {}),
+            ...(card.animal ? { animal: card.animal } : {}),
+          });
+        }}
+        onStop={() => { void stopAll(); }}
+        onClose={() => { setPickerVisible(false); }}
+      />
+
+      {currentInvitation ? (
+        <IncomingInvitationPopup
+          peerId={currentInvitation.peerId}
+          onAccept={() => { void acceptInvitation(currentInvitation.peerId); }}
+          onDecline={() => { void declineInvitation(currentInvitation.peerId); }}
+          onDismiss={() => { void declineInvitation(currentInvitation.peerId); }}
+        />
+      ) : null}
     </View>
   );
 }
