@@ -33,7 +33,7 @@
 #include <NitroModules/ArrayBuffer.hpp>
 #include <string>
 
-namespace margelo::nitro::margelo::solidarity::passportzk {
+namespace margelo::nitro::solidarity::passportzk {
 
   /**
    * A struct which can be represented as a JavaScript object (NoirProofResult).
@@ -51,21 +51,21 @@ namespace margelo::nitro::margelo::solidarity::passportzk {
     friend bool operator==(const NoirProofResult& lhs, const NoirProofResult& rhs) = default;
   };
 
-} // namespace margelo::nitro::margelo::solidarity::passportzk
+} // namespace margelo::nitro::solidarity::passportzk
 
 namespace margelo::nitro {
 
   // C++ NoirProofResult <> JS NoirProofResult (object)
   template <>
-  struct JSIConverter<margelo::nitro::margelo::solidarity::passportzk::NoirProofResult> final {
-    static inline margelo::nitro::margelo::solidarity::passportzk::NoirProofResult fromJSI(jsi::Runtime& runtime, const jsi::Value& arg) {
+  struct JSIConverter<margelo::nitro::solidarity::passportzk::NoirProofResult> final {
+    static inline margelo::nitro::solidarity::passportzk::NoirProofResult fromJSI(jsi::Runtime& runtime, const jsi::Value& arg) {
       jsi::Object obj = arg.asObject(runtime);
-      return margelo::nitro::margelo::solidarity::passportzk::NoirProofResult(
+      return margelo::nitro::solidarity::passportzk::NoirProofResult(
         JSIConverter<std::shared_ptr<ArrayBuffer>>::fromJSI(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "proof"))),
         JSIConverter<std::string>::fromJSI(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "publicInputsJson")))
       );
     }
-    static inline jsi::Value toJSI(jsi::Runtime& runtime, const margelo::nitro::margelo::solidarity::passportzk::NoirProofResult& arg) {
+    static inline jsi::Value toJSI(jsi::Runtime& runtime, const margelo::nitro::solidarity::passportzk::NoirProofResult& arg) {
       jsi::Object obj(runtime);
       obj.setProperty(runtime, PropNameIDCache::get(runtime, "proof"), JSIConverter<std::shared_ptr<ArrayBuffer>>::toJSI(runtime, arg.proof));
       obj.setProperty(runtime, PropNameIDCache::get(runtime, "publicInputsJson"), JSIConverter<std::string>::toJSI(runtime, arg.publicInputsJson));

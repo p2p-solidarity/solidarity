@@ -8,13 +8,13 @@
 #include "JHybridNfcPassportSpec.hpp"
 
 // Forward declaration of `PassportReadResult` to properly resolve imports.
-namespace margelo::nitro::margelo::solidarity::nfcpassport { struct PassportReadResult; }
+namespace margelo::nitro::solidarity::nfcpassport { struct PassportReadResult; }
 // Forward declaration of `ParsedMrz` to properly resolve imports.
-namespace margelo::nitro::margelo::solidarity::nfcpassport { struct ParsedMrz; }
+namespace margelo::nitro::solidarity::nfcpassport { struct ParsedMrz; }
 // Forward declaration of `DataGroupsBundle` to properly resolve imports.
-namespace margelo::nitro::margelo::solidarity::nfcpassport { struct DataGroupsBundle; }
+namespace margelo::nitro::solidarity::nfcpassport { struct DataGroupsBundle; }
 // Forward declaration of `PassportMRZ` to properly resolve imports.
-namespace margelo::nitro::margelo::solidarity::nfcpassport { struct PassportMRZ; }
+namespace margelo::nitro::solidarity::nfcpassport { struct PassportMRZ; }
 
 #include "PassportReadResult.hpp"
 #include <NitroModules/Promise.hpp>
@@ -31,7 +31,7 @@ namespace margelo::nitro::margelo::solidarity::nfcpassport { struct PassportMRZ;
 #include "PassportMRZ.hpp"
 #include "JPassportMRZ.hpp"
 
-namespace margelo::nitro::margelo::solidarity::nfcpassport {
+namespace margelo::nitro::solidarity::nfcpassport {
 
   std::shared_ptr<JHybridNfcPassportSpec> JHybridNfcPassportSpec::JavaPart::getJHybridNfcPassportSpec() {
     auto hybridObject = JHybridObject::JavaPart::getJHybridObject();
@@ -90,4 +90,4 @@ namespace margelo::nitro::margelo::solidarity::nfcpassport {
     method(_javaPart);
   }
 
-} // namespace margelo::nitro::margelo::solidarity::nfcpassport
+} // namespace margelo::nitro::solidarity::nfcpassport

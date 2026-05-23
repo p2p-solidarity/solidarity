@@ -12,7 +12,7 @@
 #include "NfcPassport-Swift-Cxx-Umbrella.hpp"
 #include <NitroModules/NitroDefines.hpp>
 
-namespace margelo::nitro::margelo::solidarity::nfcpassport::bridge::swift {
+namespace margelo::nitro::solidarity::nfcpassport::bridge::swift {
 
   // pragma MARK: std::function<void(const PassportReadResult& /* result */)>
   Func_void_PassportReadResult create_Func_void_PassportReadResult(void* NON_NULL swiftClosureWrapper) noexcept {
@@ -33,10 +33,10 @@ namespace margelo::nitro::margelo::solidarity::nfcpassport::bridge::swift {
   // pragma MARK: std::shared_ptr<HybridNfcPassportSpec>
   std::shared_ptr<HybridNfcPassportSpec> create_std__shared_ptr_HybridNfcPassportSpec_(void* NON_NULL swiftUnsafePointer) noexcept {
     NfcPassport::HybridNfcPassportSpec_cxx swiftPart = NfcPassport::HybridNfcPassportSpec_cxx::fromUnsafe(swiftUnsafePointer);
-    return std::make_shared<margelo::nitro::margelo::solidarity::nfcpassport::HybridNfcPassportSpecSwift>(swiftPart);
+    return std::make_shared<margelo::nitro::solidarity::nfcpassport::HybridNfcPassportSpecSwift>(swiftPart);
   }
   void* NON_NULL get_std__shared_ptr_HybridNfcPassportSpec_(std__shared_ptr_HybridNfcPassportSpec_ cppType) {
-    std::shared_ptr<margelo::nitro::margelo::solidarity::nfcpassport::HybridNfcPassportSpecSwift> swiftWrapper = std::dynamic_pointer_cast<margelo::nitro::margelo::solidarity::nfcpassport::HybridNfcPassportSpecSwift>(cppType);
+    std::shared_ptr<margelo::nitro::solidarity::nfcpassport::HybridNfcPassportSpecSwift> swiftWrapper = std::dynamic_pointer_cast<margelo::nitro::solidarity::nfcpassport::HybridNfcPassportSpecSwift>(cppType);
     #ifdef NITRO_DEBUG
     if (swiftWrapper == nullptr) [[unlikely]] {
       throw std::runtime_error("Class \"HybridNfcPassportSpec\" is not implemented in Swift!");
@@ -46,4 +46,4 @@ namespace margelo::nitro::margelo::solidarity::nfcpassport::bridge::swift {
     return swiftPart.toUnsafe();
   }
 
-} // namespace margelo::nitro::margelo::solidarity::nfcpassport::bridge::swift
+} // namespace margelo::nitro::solidarity::nfcpassport::bridge::swift

@@ -10,10 +10,10 @@ import NitroModules
 /**
  * Represents an instance of `PassportMRZ`, backed by a C++ struct.
  */
-public typealias PassportMRZ = margelo.nitro.margelo.solidarity.nfcpassport.PassportMRZ
+public typealias PassportMRZ = margelo.nitro.solidarity.nfcpassport.PassportMRZ
 
 public extension PassportMRZ {
-  private typealias bridge = margelo.nitro.margelo.solidarity.nfcpassport.bridge.swift
+  private typealias bridge = margelo.nitro.solidarity.nfcpassport.bridge.swift
 
   /**
    * Create a new instance of `PassportMRZ`.

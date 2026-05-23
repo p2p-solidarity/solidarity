@@ -10,10 +10,10 @@ import NitroModules
 /**
  * Represents an instance of `ProximityPeer`, backed by a C++ struct.
  */
-public typealias ProximityPeer = margelo.nitro.margelo.solidarity.proximity.ProximityPeer
+public typealias ProximityPeer = margelo.nitro.solidarity.proximity.ProximityPeer
 
 public extension ProximityPeer {
-  private typealias bridge = margelo.nitro.margelo.solidarity.proximity.bridge.swift
+  private typealias bridge = margelo.nitro.solidarity.proximity.bridge.swift
 
   /**
    * Create a new instance of `ProximityPeer`.

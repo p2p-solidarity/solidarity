@@ -9,15 +9,15 @@
 
 // Forward declarations of C++ defined types
 // Forward declaration of `DataGroupsBundle` to properly resolve imports.
-namespace margelo::nitro::margelo::solidarity::nfcpassport { struct DataGroupsBundle; }
+namespace margelo::nitro::solidarity::nfcpassport { struct DataGroupsBundle; }
 // Forward declaration of `HybridNfcPassportSpec` to properly resolve imports.
-namespace margelo::nitro::margelo::solidarity::nfcpassport { class HybridNfcPassportSpec; }
+namespace margelo::nitro::solidarity::nfcpassport { class HybridNfcPassportSpec; }
 // Forward declaration of `ParsedMrz` to properly resolve imports.
-namespace margelo::nitro::margelo::solidarity::nfcpassport { struct ParsedMrz; }
+namespace margelo::nitro::solidarity::nfcpassport { struct ParsedMrz; }
 // Forward declaration of `PassportMRZ` to properly resolve imports.
-namespace margelo::nitro::margelo::solidarity::nfcpassport { struct PassportMRZ; }
+namespace margelo::nitro::solidarity::nfcpassport { struct PassportMRZ; }
 // Forward declaration of `PassportReadResult` to properly resolve imports.
-namespace margelo::nitro::margelo::solidarity::nfcpassport { struct PassportReadResult; }
+namespace margelo::nitro::solidarity::nfcpassport { struct PassportReadResult; }
 
 // Include C++ defined types
 #include "DataGroupsBundle.hpp"

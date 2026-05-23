@@ -14,7 +14,7 @@
 
 
 
-namespace margelo::nitro::margelo::solidarity::proximity {
+namespace margelo::nitro::solidarity::proximity {
 
   using namespace facebook;
 
@@ -71,4 +71,4 @@ namespace margelo::nitro::margelo::solidarity::proximity {
     jni::global_ref<JHybridProximitySpec::JavaPart> _javaPart;
   };
 
-} // namespace margelo::nitro::margelo::solidarity::proximity
+} // namespace margelo::nitro::solidarity::proximity

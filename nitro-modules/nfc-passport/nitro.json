@@ -1,6 +1,6 @@
 {
   "$schema": "https://nitro.margelo.com/schemas/nitro.schema.json",
-  "cxxNamespace": ["margelo", "solidarity", "nfcpassport"],
+  "cxxNamespace": ["solidarity", "nfcpassport"],
   "ios": {
     "iosModuleName": "NfcPassport"
   },

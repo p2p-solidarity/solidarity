@@ -25,7 +25,7 @@
 #include <NitroModules/ArrayBuffer.hpp>
 #include <NitroModules/JArrayBuffer.hpp>
 
-namespace margelo::nitro::margelo::solidarity::proximity {
+namespace margelo::nitro::solidarity::proximity {
 
   using namespace facebook;
 
@@ -84,4 +84,4 @@ namespace margelo::nitro::margelo::solidarity::proximity {
     std::function<void(const ProximityEvent& /* event */)> _func;
   };
 
-} // namespace margelo::nitro::margelo::solidarity::proximity
+} // namespace margelo::nitro::solidarity::proximity

@@ -10,10 +10,10 @@ import NitroModules
 /**
  * Represents an instance of `DataGroupsBundle`, backed by a C++ struct.
  */
-public typealias DataGroupsBundle = margelo.nitro.margelo.solidarity.nfcpassport.DataGroupsBundle
+public typealias DataGroupsBundle = margelo.nitro.solidarity.nfcpassport.DataGroupsBundle
 
 public extension DataGroupsBundle {
-  private typealias bridge = margelo.nitro.margelo.solidarity.nfcpassport.bridge.swift
+  private typealias bridge = margelo.nitro.solidarity.nfcpassport.bridge.swift
 
   /**
    * Create a new instance of `DataGroupsBundle`.

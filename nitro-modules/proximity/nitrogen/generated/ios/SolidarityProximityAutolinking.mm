@@ -19,7 +19,7 @@
 
 + (void) load {
   using namespace margelo::nitro;
-  using namespace margelo::nitro::margelo::solidarity::proximity;
+  using namespace margelo::nitro::solidarity::proximity;
 
   HybridObjectRegistry::registerHybridObjectConstructor(
     "Proximity",

@@ -7,5 +7,5 @@
 
 #include "HybridProximitySpecSwift.hpp"
 
-namespace margelo::nitro::margelo::solidarity::proximity {
-} // namespace margelo::nitro::margelo::solidarity::proximity
+namespace margelo::nitro::solidarity::proximity {
+} // namespace margelo::nitro::solidarity::proximity

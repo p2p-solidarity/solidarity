@@ -18,11 +18,11 @@ import NitroModules
  */
 open class HybridNfcPassportSpec_cxx {
   /**
-   * The Swift <> C++ bridge's namespace (`margelo::nitro::margelo::solidarity::nfcpassport::bridge::swift`)
+   * The Swift <> C++ bridge's namespace (`margelo::nitro::solidarity::nfcpassport::bridge::swift`)
    * from `NfcPassport-Swift-Cxx-Bridge.hpp`.
    * This contains specialized C++ templates, and C++ helper functions that can be accessed from Swift.
    */
-  public typealias bridge = margelo.nitro.margelo.solidarity.nfcpassport.bridge.swift
+  public typealias bridge = margelo.nitro.solidarity.nfcpassport.bridge.swift
 
   /**
    * Holds an instance of the `HybridNfcPassportSpec` Swift protocol.

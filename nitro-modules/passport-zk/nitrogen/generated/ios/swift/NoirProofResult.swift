@@ -10,10 +10,10 @@ import NitroModules
 /**
  * Represents an instance of `NoirProofResult`, backed by a C++ struct.
  */
-public typealias NoirProofResult = margelo.nitro.margelo.solidarity.passportzk.NoirProofResult
+public typealias NoirProofResult = margelo.nitro.solidarity.passportzk.NoirProofResult
 
 public extension NoirProofResult {
-  private typealias bridge = margelo.nitro.margelo.solidarity.passportzk.bridge.swift
+  private typealias bridge = margelo.nitro.solidarity.passportzk.bridge.swift
 
   /**
    * Create a new instance of `NoirProofResult`.

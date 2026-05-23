@@ -14,7 +14,7 @@
 
 
 
-namespace margelo::nitro::margelo::solidarity::passportzk {
+namespace margelo::nitro::solidarity::passportzk {
 
   using namespace facebook;
 
@@ -62,4 +62,4 @@ namespace margelo::nitro::margelo::solidarity::passportzk {
     jni::global_ref<JHybridPassportZkSpec::JavaPart> _javaPart;
   };
 
-} // namespace margelo::nitro::margelo::solidarity::passportzk
+} // namespace margelo::nitro::solidarity::passportzk

@@ -19,7 +19,7 @@
 
 + (void) load {
   using namespace margelo::nitro;
-  using namespace margelo::nitro::margelo::solidarity::passportzk;
+  using namespace margelo::nitro::solidarity::passportzk;
 
   HybridObjectRegistry::registerHybridObjectConstructor(
     "PassportZk",

@@ -7,5 +7,5 @@
 
 #include "HybridPassportZkSpecSwift.hpp"
 
-namespace margelo::nitro::margelo::solidarity::passportzk {
-} // namespace margelo::nitro::margelo::solidarity::passportzk
+namespace margelo::nitro::solidarity::passportzk {
+} // namespace margelo::nitro::solidarity::passportzk

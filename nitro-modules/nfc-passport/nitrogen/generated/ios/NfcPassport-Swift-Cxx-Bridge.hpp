@@ -11,13 +11,13 @@
 // Forward declaration of `ArrayBufferHolder` to properly resolve imports.
 namespace NitroModules { class ArrayBufferHolder; }
 // Forward declaration of `DataGroupsBundle` to properly resolve imports.
-namespace margelo::nitro::margelo::solidarity::nfcpassport { struct DataGroupsBundle; }
+namespace margelo::nitro::solidarity::nfcpassport { struct DataGroupsBundle; }
 // Forward declaration of `HybridNfcPassportSpec` to properly resolve imports.
-namespace margelo::nitro::margelo::solidarity::nfcpassport { class HybridNfcPassportSpec; }
+namespace margelo::nitro::solidarity::nfcpassport { class HybridNfcPassportSpec; }
 // Forward declaration of `ParsedMrz` to properly resolve imports.
-namespace margelo::nitro::margelo::solidarity::nfcpassport { struct ParsedMrz; }
+namespace margelo::nitro::solidarity::nfcpassport { struct ParsedMrz; }
 // Forward declaration of `PassportReadResult` to properly resolve imports.
-namespace margelo::nitro::margelo::solidarity::nfcpassport { struct PassportReadResult; }
+namespace margelo::nitro::solidarity::nfcpassport { struct PassportReadResult; }
 
 // Forward declarations of Swift defined types
 // Forward declaration of `HybridNfcPassportSpec_cxx` to properly resolve imports.
@@ -43,7 +43,7 @@ namespace NfcPassport { class HybridNfcPassportSpec_cxx; }
  * Contains specialized versions of C++ templated types so they can be accessed from Swift,
  * as well as helper functions to interact with those C++ types from Swift.
  */
-namespace margelo::nitro::margelo::solidarity::nfcpassport::bridge::swift {
+namespace margelo::nitro::solidarity::nfcpassport::bridge::swift {
 
   // pragma MARK: std::optional<std::shared_ptr<ArrayBuffer>>
   /**
@@ -170,4 +170,4 @@ namespace margelo::nitro::margelo::solidarity::nfcpassport::bridge::swift {
     return Result<void>::withError(error);
   }
 
-} // namespace margelo::nitro::margelo::solidarity::nfcpassport::bridge::swift
+} // namespace margelo::nitro::solidarity::nfcpassport::bridge::swift

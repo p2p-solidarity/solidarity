@@ -7,7 +7,7 @@
 
 #include "HybridProximitySpec.hpp"
 
-namespace margelo::nitro::margelo::solidarity::proximity {
+namespace margelo::nitro::solidarity::proximity {
 
   void HybridProximitySpec::loadHybridMethods() {
     // load base methods/properties
@@ -29,4 +29,4 @@ namespace margelo::nitro::margelo::solidarity::proximity {
     });
   }
 
-} // namespace margelo::nitro::margelo::solidarity::proximity
+} // namespace margelo::nitro::solidarity::proximity

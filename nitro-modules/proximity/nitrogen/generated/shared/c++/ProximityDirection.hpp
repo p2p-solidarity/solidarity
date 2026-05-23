@@ -32,7 +32,7 @@
 
 
 
-namespace margelo::nitro::margelo::solidarity::proximity {
+namespace margelo::nitro::solidarity::proximity {
 
   /**
    * A struct which can be represented as a JavaScript object (ProximityDirection).
@@ -51,22 +51,22 @@ namespace margelo::nitro::margelo::solidarity::proximity {
     friend bool operator==(const ProximityDirection& lhs, const ProximityDirection& rhs) = default;
   };
 
-} // namespace margelo::nitro::margelo::solidarity::proximity
+} // namespace margelo::nitro::solidarity::proximity
 
 namespace margelo::nitro {
 
   // C++ ProximityDirection <> JS ProximityDirection (object)
   template <>
-  struct JSIConverter<margelo::nitro::margelo::solidarity::proximity::ProximityDirection> final {
-    static inline margelo::nitro::margelo::solidarity::proximity::ProximityDirection fromJSI(jsi::Runtime& runtime, const jsi::Value& arg) {
+  struct JSIConverter<margelo::nitro::solidarity::proximity::ProximityDirection> final {
+    static inline margelo::nitro::solidarity::proximity::ProximityDirection fromJSI(jsi::Runtime& runtime, const jsi::Value& arg) {
       jsi::Object obj = arg.asObject(runtime);
-      return margelo::nitro::margelo::solidarity::proximity::ProximityDirection(
+      return margelo::nitro::solidarity::proximity::ProximityDirection(
         JSIConverter<double>::fromJSI(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "x"))),
         JSIConverter<double>::fromJSI(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "y"))),
         JSIConverter<double>::fromJSI(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "z")))
       );
     }
-    static inline jsi::Value toJSI(jsi::Runtime& runtime, const margelo::nitro::margelo::solidarity::proximity::ProximityDirection& arg) {
+    static inline jsi::Value toJSI(jsi::Runtime& runtime, const margelo::nitro::solidarity::proximity::ProximityDirection& arg) {
       jsi::Object obj(runtime);
       obj.setProperty(runtime, PropNameIDCache::get(runtime, "x"), JSIConverter<double>::toJSI(runtime, arg.x));
       obj.setProperty(runtime, PropNameIDCache::get(runtime, "y"), JSIConverter<double>::toJSI(runtime, arg.y));

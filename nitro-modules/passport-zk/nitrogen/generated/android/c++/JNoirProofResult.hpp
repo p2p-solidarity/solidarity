@@ -14,7 +14,7 @@
 #include <NitroModules/JArrayBuffer.hpp>
 #include <string>
 
-namespace margelo::nitro::margelo::solidarity::passportzk {
+namespace margelo::nitro::solidarity::passportzk {
 
   using namespace facebook;
 
@@ -60,4 +60,4 @@ namespace margelo::nitro::margelo::solidarity::passportzk {
     }
   };
 
-} // namespace margelo::nitro::margelo::solidarity::passportzk
+} // namespace margelo::nitro::solidarity::passportzk

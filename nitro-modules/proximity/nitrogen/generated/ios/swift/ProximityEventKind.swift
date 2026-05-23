@@ -8,7 +8,7 @@
 /**
  * Represents the JS union `ProximityEventKind`, backed by a C++ enum.
  */
-public typealias ProximityEventKind = margelo.nitro.margelo.solidarity.proximity.ProximityEventKind
+public typealias ProximityEventKind = margelo.nitro.solidarity.proximity.ProximityEventKind
 
 public extension ProximityEventKind {
   /**

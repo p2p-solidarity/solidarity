@@ -7,7 +7,7 @@
 
 #include "HybridPassportZkSpec.hpp"
 
-namespace margelo::nitro::margelo::solidarity::passportzk {
+namespace margelo::nitro::solidarity::passportzk {
 
   void HybridPassportZkSpec::loadHybridMethods() {
     // load base methods/properties
@@ -20,4 +20,4 @@ namespace margelo::nitro::margelo::solidarity::passportzk {
     });
   }
 
-} // namespace margelo::nitro::margelo::solidarity::passportzk
+} // namespace margelo::nitro::solidarity::passportzk

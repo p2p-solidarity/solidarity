@@ -19,7 +19,7 @@
 
 + (void) load {
   using namespace margelo::nitro;
-  using namespace margelo::nitro::margelo::solidarity::nfcpassport;
+  using namespace margelo::nitro::solidarity::nfcpassport;
 
   HybridObjectRegistry::registerHybridObjectConstructor(
     "NfcPassport",

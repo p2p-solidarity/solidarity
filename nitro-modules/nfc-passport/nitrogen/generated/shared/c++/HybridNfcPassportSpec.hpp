@@ -14,15 +14,15 @@
 #endif
 
 // Forward declaration of `PassportReadResult` to properly resolve imports.
-namespace margelo::nitro::margelo::solidarity::nfcpassport { struct PassportReadResult; }
+namespace margelo::nitro::solidarity::nfcpassport { struct PassportReadResult; }
 // Forward declaration of `PassportMRZ` to properly resolve imports.
-namespace margelo::nitro::margelo::solidarity::nfcpassport { struct PassportMRZ; }
+namespace margelo::nitro::solidarity::nfcpassport { struct PassportMRZ; }
 
 #include "PassportReadResult.hpp"
 #include <NitroModules/Promise.hpp>
 #include "PassportMRZ.hpp"
 
-namespace margelo::nitro::margelo::solidarity::nfcpassport {
+namespace margelo::nitro::solidarity::nfcpassport {
 
   using namespace margelo::nitro;
 
@@ -66,4 +66,4 @@ namespace margelo::nitro::margelo::solidarity::nfcpassport {
       static constexpr auto TAG = "NfcPassport";
   };
 
-} // namespace margelo::nitro::margelo::solidarity::nfcpassport
+} // namespace margelo::nitro::solidarity::nfcpassport

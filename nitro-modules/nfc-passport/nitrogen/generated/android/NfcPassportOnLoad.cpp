@@ -18,11 +18,11 @@
 #include "JHybridNfcPassportSpec.hpp"
 #include <NitroModules/DefaultConstructableObject.hpp>
 
-namespace margelo::nitro::margelo::solidarity::nfcpassport {
+namespace margelo::nitro::solidarity::nfcpassport {
 
 int initialize(JavaVM* vm) {
   return facebook::jni::initialize(vm, []() {
-    ::margelo::nitro::margelo::solidarity::nfcpassport::registerAllNatives();
+    ::margelo::nitro::solidarity::nfcpassport::registerAllNatives();
   });
 }
 
@@ -37,10 +37,10 @@ struct JHybridNfcPassportSpecImpl: public jni::JavaClass<JHybridNfcPassportSpecI
 
 void registerAllNatives() {
   using namespace margelo::nitro;
-  using namespace margelo::nitro::margelo::solidarity::nfcpassport;
+  using namespace margelo::nitro::solidarity::nfcpassport;
 
   // Register native JNI methods
-  margelo::nitro::margelo::solidarity::nfcpassport::JHybridNfcPassportSpec::CxxPart::registerNatives();
+  margelo::nitro::solidarity::nfcpassport::JHybridNfcPassportSpec::CxxPart::registerNatives();
 
   // Register Nitro Hybrid Objects
   HybridObjectRegistry::registerHybridObjectConstructor(
@@ -51,4 +51,4 @@ void registerAllNatives() {
   );
 }
 
-} // namespace margelo::nitro::margelo::solidarity::nfcpassport
+} // namespace margelo::nitro::solidarity::nfcpassport

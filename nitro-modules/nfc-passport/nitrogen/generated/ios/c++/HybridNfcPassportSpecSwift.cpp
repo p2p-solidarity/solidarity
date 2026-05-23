@@ -7,5 +7,5 @@
 
 #include "HybridNfcPassportSpecSwift.hpp"
 
-namespace margelo::nitro::margelo::solidarity::nfcpassport {
-} // namespace margelo::nitro::margelo::solidarity::nfcpassport
+namespace margelo::nitro::solidarity::nfcpassport {
+} // namespace margelo::nitro::solidarity::nfcpassport

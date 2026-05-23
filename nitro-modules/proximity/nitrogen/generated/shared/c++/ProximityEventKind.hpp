@@ -23,7 +23,7 @@
 #error NitroModules cannot be found! Are you sure you installed NitroModules properly?
 #endif
 
-namespace margelo::nitro::margelo::solidarity::proximity {
+namespace margelo::nitro::solidarity::proximity {
 
   /**
    * An enum which can be represented as a JavaScript union (ProximityEventKind).
@@ -39,38 +39,38 @@ namespace margelo::nitro::margelo::solidarity::proximity {
     ERROR      SWIFT_NAME(error) = 7,
   } CLOSED_ENUM;
 
-} // namespace margelo::nitro::margelo::solidarity::proximity
+} // namespace margelo::nitro::solidarity::proximity
 
 namespace margelo::nitro {
 
   // C++ ProximityEventKind <> JS ProximityEventKind (union)
   template <>
-  struct JSIConverter<margelo::nitro::margelo::solidarity::proximity::ProximityEventKind> final {
-    static inline margelo::nitro::margelo::solidarity::proximity::ProximityEventKind fromJSI(jsi::Runtime& runtime, const jsi::Value& arg) {
+  struct JSIConverter<margelo::nitro::solidarity::proximity::ProximityEventKind> final {
+    static inline margelo::nitro::solidarity::proximity::ProximityEventKind fromJSI(jsi::Runtime& runtime, const jsi::Value& arg) {
       std::string unionValue = JSIConverter<std::string>::fromJSI(runtime, arg);
       switch (hashString(unionValue.c_str(), unionValue.size())) {
-        case hashString("peerFound"): return margelo::nitro::margelo::solidarity::proximity::ProximityEventKind::PEERFOUND;
-        case hashString("peerLost"): return margelo::nitro::margelo::solidarity::proximity::ProximityEventKind::PEERLOST;
-        case hashString("invitationReceived"): return margelo::nitro::margelo::solidarity::proximity::ProximityEventKind::INVITATIONRECEIVED;
-        case hashString("sessionEstablished"): return margelo::nitro::margelo::solidarity::proximity::ProximityEventKind::SESSIONESTABLISHED;
-        case hashString("sessionEnded"): return margelo::nitro::margelo::solidarity::proximity::ProximityEventKind::SESSIONENDED;
-        case hashString("dataReceived"): return margelo::nitro::margelo::solidarity::proximity::ProximityEventKind::DATARECEIVED;
-        case hashString("distanceUpdate"): return margelo::nitro::margelo::solidarity::proximity::ProximityEventKind::DISTANCEUPDATE;
-        case hashString("error"): return margelo::nitro::margelo::solidarity::proximity::ProximityEventKind::ERROR;
+        case hashString("peerFound"): return margelo::nitro::solidarity::proximity::ProximityEventKind::PEERFOUND;
+        case hashString("peerLost"): return margelo::nitro::solidarity::proximity::ProximityEventKind::PEERLOST;
+        case hashString("invitationReceived"): return margelo::nitro::solidarity::proximity::ProximityEventKind::INVITATIONRECEIVED;
+        case hashString("sessionEstablished"): return margelo::nitro::solidarity::proximity::ProximityEventKind::SESSIONESTABLISHED;
+        case hashString("sessionEnded"): return margelo::nitro::solidarity::proximity::ProximityEventKind::SESSIONENDED;
+        case hashString("dataReceived"): return margelo::nitro::solidarity::proximity::ProximityEventKind::DATARECEIVED;
+        case hashString("distanceUpdate"): return margelo::nitro::solidarity::proximity::ProximityEventKind::DISTANCEUPDATE;
+        case hashString("error"): return margelo::nitro::solidarity::proximity::ProximityEventKind::ERROR;
         default: [[unlikely]]
           throw std::invalid_argument("Cannot convert \"" + unionValue + "\" to enum ProximityEventKind - invalid value!");
       }
     }
-    static inline jsi::Value toJSI(jsi::Runtime& runtime, margelo::nitro::margelo::solidarity::proximity::ProximityEventKind arg) {
+    static inline jsi::Value toJSI(jsi::Runtime& runtime, margelo::nitro::solidarity::proximity::ProximityEventKind arg) {
       switch (arg) {
-        case margelo::nitro::margelo::solidarity::proximity::ProximityEventKind::PEERFOUND: return JSIConverter<std::string>::toJSI(runtime, "peerFound");
-        case margelo::nitro::margelo::solidarity::proximity::ProximityEventKind::PEERLOST: return JSIConverter<std::string>::toJSI(runtime, "peerLost");
-        case margelo::nitro::margelo::solidarity::proximity::ProximityEventKind::INVITATIONRECEIVED: return JSIConverter<std::string>::toJSI(runtime, "invitationReceived");
-        case margelo::nitro::margelo::solidarity::proximity::ProximityEventKind::SESSIONESTABLISHED: return JSIConverter<std::string>::toJSI(runtime, "sessionEstablished");
-        case margelo::nitro::margelo::solidarity::proximity::ProximityEventKind::SESSIONENDED: return JSIConverter<std::string>::toJSI(runtime, "sessionEnded");
-        case margelo::nitro::margelo::solidarity::proximity::ProximityEventKind::DATARECEIVED: return JSIConverter<std::string>::toJSI(runtime, "dataReceived");
-        case margelo::nitro::margelo::solidarity::proximity::ProximityEventKind::DISTANCEUPDATE: return JSIConverter<std::string>::toJSI(runtime, "distanceUpdate");
-        case margelo::nitro::margelo::solidarity::proximity::ProximityEventKind::ERROR: return JSIConverter<std::string>::toJSI(runtime, "error");
+        case margelo::nitro::solidarity::proximity::ProximityEventKind::PEERFOUND: return JSIConverter<std::string>::toJSI(runtime, "peerFound");
+        case margelo::nitro::solidarity::proximity::ProximityEventKind::PEERLOST: return JSIConverter<std::string>::toJSI(runtime, "peerLost");
+        case margelo::nitro::solidarity::proximity::ProximityEventKind::INVITATIONRECEIVED: return JSIConverter<std::string>::toJSI(runtime, "invitationReceived");
+        case margelo::nitro::solidarity::proximity::ProximityEventKind::SESSIONESTABLISHED: return JSIConverter<std::string>::toJSI(runtime, "sessionEstablished");
+        case margelo::nitro::solidarity::proximity::ProximityEventKind::SESSIONENDED: return JSIConverter<std::string>::toJSI(runtime, "sessionEnded");
+        case margelo::nitro::solidarity::proximity::ProximityEventKind::DATARECEIVED: return JSIConverter<std::string>::toJSI(runtime, "dataReceived");
+        case margelo::nitro::solidarity::proximity::ProximityEventKind::DISTANCEUPDATE: return JSIConverter<std::string>::toJSI(runtime, "distanceUpdate");
+        case margelo::nitro::solidarity::proximity::ProximityEventKind::ERROR: return JSIConverter<std::string>::toJSI(runtime, "error");
         default: [[unlikely]]
           throw std::invalid_argument("Cannot convert ProximityEventKind to JS - invalid value: "
                                     + std::to_string(static_cast<int>(arg)) + "!");

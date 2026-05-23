@@ -29,16 +29,16 @@
 #endif
 
 // Forward declaration of `ParsedMrz` to properly resolve imports.
-namespace margelo::nitro::margelo::solidarity::nfcpassport { struct ParsedMrz; }
+namespace margelo::nitro::solidarity::nfcpassport { struct ParsedMrz; }
 // Forward declaration of `DataGroupsBundle` to properly resolve imports.
-namespace margelo::nitro::margelo::solidarity::nfcpassport { struct DataGroupsBundle; }
+namespace margelo::nitro::solidarity::nfcpassport { struct DataGroupsBundle; }
 
 #include "ParsedMrz.hpp"
 #include "DataGroupsBundle.hpp"
 #include <string>
 #include <optional>
 
-namespace margelo::nitro::margelo::solidarity::nfcpassport {
+namespace margelo::nitro::solidarity::nfcpassport {
 
   /**
    * A struct which can be represented as a JavaScript object (PassportReadResult).
@@ -58,26 +58,26 @@ namespace margelo::nitro::margelo::solidarity::nfcpassport {
     friend bool operator==(const PassportReadResult& lhs, const PassportReadResult& rhs) = default;
   };
 
-} // namespace margelo::nitro::margelo::solidarity::nfcpassport
+} // namespace margelo::nitro::solidarity::nfcpassport
 
 namespace margelo::nitro {
 
   // C++ PassportReadResult <> JS PassportReadResult (object)
   template <>
-  struct JSIConverter<margelo::nitro::margelo::solidarity::nfcpassport::PassportReadResult> final {
-    static inline margelo::nitro::margelo::solidarity::nfcpassport::PassportReadResult fromJSI(jsi::Runtime& runtime, const jsi::Value& arg) {
+  struct JSIConverter<margelo::nitro::solidarity::nfcpassport::PassportReadResult> final {
+    static inline margelo::nitro::solidarity::nfcpassport::PassportReadResult fromJSI(jsi::Runtime& runtime, const jsi::Value& arg) {
       jsi::Object obj = arg.asObject(runtime);
-      return margelo::nitro::margelo::solidarity::nfcpassport::PassportReadResult(
-        JSIConverter<margelo::nitro::margelo::solidarity::nfcpassport::ParsedMrz>::fromJSI(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "mrz"))),
-        JSIConverter<margelo::nitro::margelo::solidarity::nfcpassport::DataGroupsBundle>::fromJSI(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "dataGroups"))),
+      return margelo::nitro::solidarity::nfcpassport::PassportReadResult(
+        JSIConverter<margelo::nitro::solidarity::nfcpassport::ParsedMrz>::fromJSI(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "mrz"))),
+        JSIConverter<margelo::nitro::solidarity::nfcpassport::DataGroupsBundle>::fromJSI(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "dataGroups"))),
         JSIConverter<std::optional<std::string>>::fromJSI(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "chipUid"))),
         JSIConverter<bool>::fromJSI(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "passiveAuthValid")))
       );
     }
-    static inline jsi::Value toJSI(jsi::Runtime& runtime, const margelo::nitro::margelo::solidarity::nfcpassport::PassportReadResult& arg) {
+    static inline jsi::Value toJSI(jsi::Runtime& runtime, const margelo::nitro::solidarity::nfcpassport::PassportReadResult& arg) {
       jsi::Object obj(runtime);
-      obj.setProperty(runtime, PropNameIDCache::get(runtime, "mrz"), JSIConverter<margelo::nitro::margelo::solidarity::nfcpassport::ParsedMrz>::toJSI(runtime, arg.mrz));
-      obj.setProperty(runtime, PropNameIDCache::get(runtime, "dataGroups"), JSIConverter<margelo::nitro::margelo::solidarity::nfcpassport::DataGroupsBundle>::toJSI(runtime, arg.dataGroups));
+      obj.setProperty(runtime, PropNameIDCache::get(runtime, "mrz"), JSIConverter<margelo::nitro::solidarity::nfcpassport::ParsedMrz>::toJSI(runtime, arg.mrz));
+      obj.setProperty(runtime, PropNameIDCache::get(runtime, "dataGroups"), JSIConverter<margelo::nitro::solidarity::nfcpassport::DataGroupsBundle>::toJSI(runtime, arg.dataGroups));
       obj.setProperty(runtime, PropNameIDCache::get(runtime, "chipUid"), JSIConverter<std::optional<std::string>>::toJSI(runtime, arg.chipUid));
       obj.setProperty(runtime, PropNameIDCache::get(runtime, "passiveAuthValid"), JSIConverter<bool>::toJSI(runtime, arg.passiveAuthValid));
       return obj;
@@ -90,8 +90,8 @@ namespace margelo::nitro {
       if (!nitro::isPlainObject(runtime, obj)) {
         return false;
       }
-      if (!JSIConverter<margelo::nitro::margelo::solidarity::nfcpassport::ParsedMrz>::canConvert(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "mrz")))) return false;
-      if (!JSIConverter<margelo::nitro::margelo::solidarity::nfcpassport::DataGroupsBundle>::canConvert(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "dataGroups")))) return false;
+      if (!JSIConverter<margelo::nitro::solidarity::nfcpassport::ParsedMrz>::canConvert(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "mrz")))) return false;
+      if (!JSIConverter<margelo::nitro::solidarity::nfcpassport::DataGroupsBundle>::canConvert(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "dataGroups")))) return false;
       if (!JSIConverter<std::optional<std::string>>::canConvert(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "chipUid")))) return false;
       if (!JSIConverter<bool>::canConvert(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "passiveAuthValid")))) return false;
       return true;

@@ -12,7 +12,7 @@ import NitroModules
  * This class can be used from C++, e.g. to wrap the Swift closure as a `std::function`.
  */
 public final class Func_void_PassportReadResult {
-  public typealias bridge = margelo.nitro.margelo.solidarity.nfcpassport.bridge.swift
+  public typealias bridge = margelo.nitro.solidarity.nfcpassport.bridge.swift
 
   private let closure: (_ value: PassportReadResult) -> Void
 

@@ -14,7 +14,7 @@
 #endif
 
 // Forward declaration of `NoirProofResult` to properly resolve imports.
-namespace margelo::nitro::margelo::solidarity::passportzk { struct NoirProofResult; }
+namespace margelo::nitro::solidarity::passportzk { struct NoirProofResult; }
 
 #include "NoirProofResult.hpp"
 #include <NitroModules/Promise.hpp>
@@ -22,7 +22,7 @@ namespace margelo::nitro::margelo::solidarity::passportzk { struct NoirProofResu
 #include <optional>
 #include <NitroModules/ArrayBuffer.hpp>
 
-namespace margelo::nitro::margelo::solidarity::passportzk {
+namespace margelo::nitro::solidarity::passportzk {
 
   using namespace margelo::nitro;
 
@@ -66,4 +66,4 @@ namespace margelo::nitro::margelo::solidarity::passportzk {
       static constexpr auto TAG = "PassportZk";
   };
 
-} // namespace margelo::nitro::margelo::solidarity::passportzk
+} // namespace margelo::nitro::solidarity::passportzk

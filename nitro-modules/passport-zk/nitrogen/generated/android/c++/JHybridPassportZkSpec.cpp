@@ -8,7 +8,7 @@
 #include "JHybridPassportZkSpec.hpp"
 
 // Forward declaration of `NoirProofResult` to properly resolve imports.
-namespace margelo::nitro::margelo::solidarity::passportzk { struct NoirProofResult; }
+namespace margelo::nitro::solidarity::passportzk { struct NoirProofResult; }
 
 #include "NoirProofResult.hpp"
 #include <NitroModules/Promise.hpp>
@@ -19,7 +19,7 @@ namespace margelo::nitro::margelo::solidarity::passportzk { struct NoirProofResu
 #include <string>
 #include <optional>
 
-namespace margelo::nitro::margelo::solidarity::passportzk {
+namespace margelo::nitro::solidarity::passportzk {
 
   std::shared_ptr<JHybridPassportZkSpec> JHybridPassportZkSpec::JavaPart::getJHybridPassportZkSpec() {
     auto hybridObject = JHybridObject::JavaPart::getJHybridObject();
@@ -101,4 +101,4 @@ namespace margelo::nitro::margelo::solidarity::passportzk {
     }();
   }
 
-} // namespace margelo::nitro::margelo::solidarity::passportzk
+} // namespace margelo::nitro::solidarity::passportzk

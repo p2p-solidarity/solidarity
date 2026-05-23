@@ -11,9 +11,9 @@
 // Forward declaration of `ArrayBufferHolder` to properly resolve imports.
 namespace NitroModules { class ArrayBufferHolder; }
 // Forward declaration of `HybridPassportZkSpec` to properly resolve imports.
-namespace margelo::nitro::margelo::solidarity::passportzk { class HybridPassportZkSpec; }
+namespace margelo::nitro::solidarity::passportzk { class HybridPassportZkSpec; }
 // Forward declaration of `NoirProofResult` to properly resolve imports.
-namespace margelo::nitro::margelo::solidarity::passportzk { struct NoirProofResult; }
+namespace margelo::nitro::solidarity::passportzk { struct NoirProofResult; }
 
 // Forward declarations of Swift defined types
 // Forward declaration of `HybridPassportZkSpec_cxx` to properly resolve imports.
@@ -37,7 +37,7 @@ namespace PassportZK { class HybridPassportZkSpec_cxx; }
  * Contains specialized versions of C++ templated types so they can be accessed from Swift,
  * as well as helper functions to interact with those C++ types from Swift.
  */
-namespace margelo::nitro::margelo::solidarity::passportzk::bridge::swift {
+namespace margelo::nitro::solidarity::passportzk::bridge::swift {
 
   // pragma MARK: std::shared_ptr<Promise<NoirProofResult>>
   /**
@@ -217,4 +217,4 @@ namespace margelo::nitro::margelo::solidarity::passportzk::bridge::swift {
     return Result<std::shared_ptr<Promise<bool>>>::withError(error);
   }
 
-} // namespace margelo::nitro::margelo::solidarity::passportzk::bridge::swift
+} // namespace margelo::nitro::solidarity::passportzk::bridge::swift

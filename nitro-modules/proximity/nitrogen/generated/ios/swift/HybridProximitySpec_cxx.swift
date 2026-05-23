@@ -18,11 +18,11 @@ import NitroModules
  */
 open class HybridProximitySpec_cxx {
   /**
-   * The Swift <> C++ bridge's namespace (`margelo::nitro::margelo::solidarity::proximity::bridge::swift`)
+   * The Swift <> C++ bridge's namespace (`margelo::nitro::solidarity::proximity::bridge::swift`)
    * from `SolidarityProximity-Swift-Cxx-Bridge.hpp`.
    * This contains specialized C++ templates, and C++ helper functions that can be accessed from Swift.
    */
-  public typealias bridge = margelo.nitro.margelo.solidarity.proximity.bridge.swift
+  public typealias bridge = margelo.nitro.solidarity.proximity.bridge.swift
 
   /**
    * Holds an instance of the `HybridProximitySpec` Swift protocol.

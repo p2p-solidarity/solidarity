@@ -11,15 +11,15 @@
 // Forward declaration of `ArrayBufferHolder` to properly resolve imports.
 namespace NitroModules { class ArrayBufferHolder; }
 // Forward declaration of `HybridProximitySpec` to properly resolve imports.
-namespace margelo::nitro::margelo::solidarity::proximity { class HybridProximitySpec; }
+namespace margelo::nitro::solidarity::proximity { class HybridProximitySpec; }
 // Forward declaration of `ProximityDirection` to properly resolve imports.
-namespace margelo::nitro::margelo::solidarity::proximity { struct ProximityDirection; }
+namespace margelo::nitro::solidarity::proximity { struct ProximityDirection; }
 // Forward declaration of `ProximityEventKind` to properly resolve imports.
-namespace margelo::nitro::margelo::solidarity::proximity { enum class ProximityEventKind; }
+namespace margelo::nitro::solidarity::proximity { enum class ProximityEventKind; }
 // Forward declaration of `ProximityEvent` to properly resolve imports.
-namespace margelo::nitro::margelo::solidarity::proximity { struct ProximityEvent; }
+namespace margelo::nitro::solidarity::proximity { struct ProximityEvent; }
 // Forward declaration of `ProximityPeer` to properly resolve imports.
-namespace margelo::nitro::margelo::solidarity::proximity { struct ProximityPeer; }
+namespace margelo::nitro::solidarity::proximity { struct ProximityPeer; }
 
 // Forward declarations of Swift defined types
 // Forward declaration of `HybridProximitySpec_cxx` to properly resolve imports.
@@ -46,7 +46,7 @@ namespace SolidarityProximity { class HybridProximitySpec_cxx; }
  * Contains specialized versions of C++ templated types so they can be accessed from Swift,
  * as well as helper functions to interact with those C++ types from Swift.
  */
-namespace margelo::nitro::margelo::solidarity::proximity::bridge::swift {
+namespace margelo::nitro::solidarity::proximity::bridge::swift {
 
   // pragma MARK: std::shared_ptr<Promise<bool>>
   /**
@@ -283,4 +283,4 @@ namespace margelo::nitro::margelo::solidarity::proximity::bridge::swift {
     return Result<std::function<void()>>::withError(error);
   }
 
-} // namespace margelo::nitro::margelo::solidarity::proximity::bridge::swift
+} // namespace margelo::nitro::solidarity::proximity::bridge::swift

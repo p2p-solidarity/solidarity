@@ -15,13 +15,13 @@ namespace SolidarityProximity { class HybridProximitySpec_cxx; }
 // Forward declaration of `ArrayBufferHolder` to properly resolve imports.
 namespace NitroModules { class ArrayBufferHolder; }
 // Forward declaration of `ProximityEvent` to properly resolve imports.
-namespace margelo::nitro::margelo::solidarity::proximity { struct ProximityEvent; }
+namespace margelo::nitro::solidarity::proximity { struct ProximityEvent; }
 // Forward declaration of `ProximityEventKind` to properly resolve imports.
-namespace margelo::nitro::margelo::solidarity::proximity { enum class ProximityEventKind; }
+namespace margelo::nitro::solidarity::proximity { enum class ProximityEventKind; }
 // Forward declaration of `ProximityPeer` to properly resolve imports.
-namespace margelo::nitro::margelo::solidarity::proximity { struct ProximityPeer; }
+namespace margelo::nitro::solidarity::proximity { struct ProximityPeer; }
 // Forward declaration of `ProximityDirection` to properly resolve imports.
-namespace margelo::nitro::margelo::solidarity::proximity { struct ProximityDirection; }
+namespace margelo::nitro::solidarity::proximity { struct ProximityDirection; }
 
 #include <string>
 #include <NitroModules/Promise.hpp>
@@ -36,7 +36,7 @@ namespace margelo::nitro::margelo::solidarity::proximity { struct ProximityDirec
 
 #include "SolidarityProximity-Swift-Cxx-Umbrella.hpp"
 
-namespace margelo::nitro::margelo::solidarity::proximity {
+namespace margelo::nitro::solidarity::proximity {
 
   /**
    * The C++ part of HybridProximitySpec_cxx.swift.
@@ -169,4 +169,4 @@ namespace margelo::nitro::margelo::solidarity::proximity {
     SolidarityProximity::HybridProximitySpec_cxx _swiftPart;
   };
 
-} // namespace margelo::nitro::margelo::solidarity::proximity
+} // namespace margelo::nitro::solidarity::proximity

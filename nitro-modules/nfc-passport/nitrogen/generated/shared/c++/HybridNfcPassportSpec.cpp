@@ -7,7 +7,7 @@
 
 #include "HybridNfcPassportSpec.hpp"
 
-namespace margelo::nitro::margelo::solidarity::nfcpassport {
+namespace margelo::nitro::solidarity::nfcpassport {
 
   void HybridNfcPassportSpec::loadHybridMethods() {
     // load base methods/properties
@@ -20,4 +20,4 @@ namespace margelo::nitro::margelo::solidarity::nfcpassport {
     });
   }
 
-} // namespace margelo::nitro::margelo::solidarity::nfcpassport
+} // namespace margelo::nitro::solidarity::nfcpassport

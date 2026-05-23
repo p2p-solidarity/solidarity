@@ -10,10 +10,10 @@ import NitroModules
 /**
  * Represents an instance of `ProximityDirection`, backed by a C++ struct.
  */
-public typealias ProximityDirection = margelo.nitro.margelo.solidarity.proximity.ProximityDirection
+public typealias ProximityDirection = margelo.nitro.solidarity.proximity.ProximityDirection
 
 public extension ProximityDirection {
-  private typealias bridge = margelo.nitro.margelo.solidarity.proximity.bridge.swift
+  private typealias bridge = margelo.nitro.solidarity.proximity.bridge.swift
 
   /**
    * Create a new instance of `ProximityDirection`.

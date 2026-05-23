@@ -13,7 +13,7 @@
 namespace PassportZK { class HybridPassportZkSpec_cxx; }
 
 // Forward declaration of `NoirProofResult` to properly resolve imports.
-namespace margelo::nitro::margelo::solidarity::passportzk { struct NoirProofResult; }
+namespace margelo::nitro::solidarity::passportzk { struct NoirProofResult; }
 // Forward declaration of `ArrayBufferHolder` to properly resolve imports.
 namespace NitroModules { class ArrayBufferHolder; }
 
@@ -26,7 +26,7 @@ namespace NitroModules { class ArrayBufferHolder; }
 
 #include "PassportZK-Swift-Cxx-Umbrella.hpp"
 
-namespace margelo::nitro::margelo::solidarity::passportzk {
+namespace margelo::nitro::solidarity::passportzk {
 
   /**
    * The C++ part of HybridPassportZkSpec_cxx.swift.
@@ -103,4 +103,4 @@ namespace margelo::nitro::margelo::solidarity::passportzk {
     PassportZK::HybridPassportZkSpec_cxx _swiftPart;
   };
 
-} // namespace margelo::nitro::margelo::solidarity::passportzk
+} // namespace margelo::nitro::solidarity::passportzk

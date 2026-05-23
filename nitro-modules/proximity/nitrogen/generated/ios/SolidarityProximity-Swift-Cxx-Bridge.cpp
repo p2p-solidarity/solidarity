@@ -12,7 +12,7 @@
 #include "SolidarityProximity-Swift-Cxx-Umbrella.hpp"
 #include <NitroModules/NitroDefines.hpp>
 
-namespace margelo::nitro::margelo::solidarity::proximity::bridge::swift {
+namespace margelo::nitro::solidarity::proximity::bridge::swift {
 
   // pragma MARK: std::function<void(bool /* result */)>
   Func_void_bool create_Func_void_bool(void* NON_NULL swiftClosureWrapper) noexcept {
@@ -49,10 +49,10 @@ namespace margelo::nitro::margelo::solidarity::proximity::bridge::swift {
   // pragma MARK: std::shared_ptr<HybridProximitySpec>
   std::shared_ptr<HybridProximitySpec> create_std__shared_ptr_HybridProximitySpec_(void* NON_NULL swiftUnsafePointer) noexcept {
     SolidarityProximity::HybridProximitySpec_cxx swiftPart = SolidarityProximity::HybridProximitySpec_cxx::fromUnsafe(swiftUnsafePointer);
-    return std::make_shared<margelo::nitro::margelo::solidarity::proximity::HybridProximitySpecSwift>(swiftPart);
+    return std::make_shared<margelo::nitro::solidarity::proximity::HybridProximitySpecSwift>(swiftPart);
   }
   void* NON_NULL get_std__shared_ptr_HybridProximitySpec_(std__shared_ptr_HybridProximitySpec_ cppType) {
-    std::shared_ptr<margelo::nitro::margelo::solidarity::proximity::HybridProximitySpecSwift> swiftWrapper = std::dynamic_pointer_cast<margelo::nitro::margelo::solidarity::proximity::HybridProximitySpecSwift>(cppType);
+    std::shared_ptr<margelo::nitro::solidarity::proximity::HybridProximitySpecSwift> swiftWrapper = std::dynamic_pointer_cast<margelo::nitro::solidarity::proximity::HybridProximitySpecSwift>(cppType);
     #ifdef NITRO_DEBUG
     if (swiftWrapper == nullptr) [[unlikely]] {
       throw std::runtime_error("Class \"HybridProximitySpec\" is not implemented in Swift!");
@@ -62,4 +62,4 @@ namespace margelo::nitro::margelo::solidarity::proximity::bridge::swift {
     return swiftPart.toUnsafe();
   }
 
-} // namespace margelo::nitro::margelo::solidarity::proximity::bridge::swift
+} // namespace margelo::nitro::solidarity::proximity::bridge::swift

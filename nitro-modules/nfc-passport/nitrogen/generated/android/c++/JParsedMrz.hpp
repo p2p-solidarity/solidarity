@@ -12,7 +12,7 @@
 
 #include <string>
 
-namespace margelo::nitro::margelo::solidarity::nfcpassport {
+namespace margelo::nitro::solidarity::nfcpassport {
 
   using namespace facebook;
 
@@ -74,4 +74,4 @@ namespace margelo::nitro::margelo::solidarity::nfcpassport {
     }
   };
 
-} // namespace margelo::nitro::margelo::solidarity::nfcpassport
+} // namespace margelo::nitro::solidarity::nfcpassport

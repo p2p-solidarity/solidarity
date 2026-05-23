@@ -9,7 +9,7 @@
 #include <functional>
 #include <NitroModules/NitroDefines.hpp>
 
-namespace margelo::nitro::margelo::solidarity::proximity {
+namespace margelo::nitro::solidarity::proximity {
 
   [[deprecated("Use registerNatives() instead.")]]
   int initialize(JavaVM* vm);
@@ -23,7 +23,7 @@ namespace margelo::nitro::margelo::solidarity::proximity {
    * JNIEXPORT jint JNICALL JNI_OnLoad(JavaVM* vm, void*) {
    *   return facebook::jni::initialize(vm, []() {
    *     // register all SolidarityProximity HybridObjects
-   *     margelo::nitro::margelo::solidarity::proximity::registerNatives();
+   *     margelo::nitro::solidarity::proximity::registerNatives();
    *     // any other custom registrations go here.
    *   });
    * }
@@ -31,4 +31,4 @@ namespace margelo::nitro::margelo::solidarity::proximity {
    */
   void registerAllNatives();
 
-} // namespace margelo::nitro::margelo::solidarity::proximity
+} // namespace margelo::nitro::solidarity::proximity

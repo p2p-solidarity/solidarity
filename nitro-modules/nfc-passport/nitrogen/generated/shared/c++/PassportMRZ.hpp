@@ -32,7 +32,7 @@
 
 #include <string>
 
-namespace margelo::nitro::margelo::solidarity::nfcpassport {
+namespace margelo::nitro::solidarity::nfcpassport {
 
   /**
    * A struct which can be represented as a JavaScript object (PassportMRZ).
@@ -51,22 +51,22 @@ namespace margelo::nitro::margelo::solidarity::nfcpassport {
     friend bool operator==(const PassportMRZ& lhs, const PassportMRZ& rhs) = default;
   };
 
-} // namespace margelo::nitro::margelo::solidarity::nfcpassport
+} // namespace margelo::nitro::solidarity::nfcpassport
 
 namespace margelo::nitro {
 
   // C++ PassportMRZ <> JS PassportMRZ (object)
   template <>
-  struct JSIConverter<margelo::nitro::margelo::solidarity::nfcpassport::PassportMRZ> final {
-    static inline margelo::nitro::margelo::solidarity::nfcpassport::PassportMRZ fromJSI(jsi::Runtime& runtime, const jsi::Value& arg) {
+  struct JSIConverter<margelo::nitro::solidarity::nfcpassport::PassportMRZ> final {
+    static inline margelo::nitro::solidarity::nfcpassport::PassportMRZ fromJSI(jsi::Runtime& runtime, const jsi::Value& arg) {
       jsi::Object obj = arg.asObject(runtime);
-      return margelo::nitro::margelo::solidarity::nfcpassport::PassportMRZ(
+      return margelo::nitro::solidarity::nfcpassport::PassportMRZ(
         JSIConverter<std::string>::fromJSI(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "documentNumber"))),
         JSIConverter<std::string>::fromJSI(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "dateOfBirth"))),
         JSIConverter<std::string>::fromJSI(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "dateOfExpiry")))
       );
     }
-    static inline jsi::Value toJSI(jsi::Runtime& runtime, const margelo::nitro::margelo::solidarity::nfcpassport::PassportMRZ& arg) {
+    static inline jsi::Value toJSI(jsi::Runtime& runtime, const margelo::nitro::solidarity::nfcpassport::PassportMRZ& arg) {
       jsi::Object obj(runtime);
       obj.setProperty(runtime, PropNameIDCache::get(runtime, "documentNumber"), JSIConverter<std::string>::toJSI(runtime, arg.documentNumber));
       obj.setProperty(runtime, PropNameIDCache::get(runtime, "dateOfBirth"), JSIConverter<std::string>::toJSI(runtime, arg.dateOfBirth));

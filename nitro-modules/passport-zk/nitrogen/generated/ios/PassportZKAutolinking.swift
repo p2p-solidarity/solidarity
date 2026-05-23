@@ -10,7 +10,7 @@ import NitroModules
 // TODO: Use empty enums once Swift supports exporting them as namespaces
 //       See: https://github.com/swiftlang/swift/pull/83616
 public final class PassportZKAutolinking {
-  public typealias bridge = margelo.nitro.margelo.solidarity.passportzk.bridge.swift
+  public typealias bridge = margelo.nitro.solidarity.passportzk.bridge.swift
 
   public static func createPassportZk() -> bridge.std__shared_ptr_HybridPassportZkSpec_ {
     let hybridObject = HybridPassportZk()

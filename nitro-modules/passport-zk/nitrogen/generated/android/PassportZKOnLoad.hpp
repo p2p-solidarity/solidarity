@@ -9,7 +9,7 @@
 #include <functional>
 #include <NitroModules/NitroDefines.hpp>
 
-namespace margelo::nitro::margelo::solidarity::passportzk {
+namespace margelo::nitro::solidarity::passportzk {
 
   [[deprecated("Use registerNatives() instead.")]]
   int initialize(JavaVM* vm);
@@ -23,7 +23,7 @@ namespace margelo::nitro::margelo::solidarity::passportzk {
    * JNIEXPORT jint JNICALL JNI_OnLoad(JavaVM* vm, void*) {
    *   return facebook::jni::initialize(vm, []() {
    *     // register all PassportZK HybridObjects
-   *     margelo::nitro::margelo::solidarity::passportzk::registerNatives();
+   *     margelo::nitro::solidarity::passportzk::registerNatives();
    *     // any other custom registrations go here.
    *   });
    * }
@@ -31,4 +31,4 @@ namespace margelo::nitro::margelo::solidarity::passportzk {
    */
   void registerAllNatives();
 
-} // namespace margelo::nitro::margelo::solidarity::passportzk
+} // namespace margelo::nitro::solidarity::passportzk

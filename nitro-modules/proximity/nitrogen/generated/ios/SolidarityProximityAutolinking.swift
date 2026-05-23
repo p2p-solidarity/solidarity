@@ -10,7 +10,7 @@ import NitroModules
 // TODO: Use empty enums once Swift supports exporting them as namespaces
 //       See: https://github.com/swiftlang/swift/pull/83616
 public final class SolidarityProximityAutolinking {
-  public typealias bridge = margelo.nitro.margelo.solidarity.proximity.bridge.swift
+  public typealias bridge = margelo.nitro.solidarity.proximity.bridge.swift
 
   public static func createProximity() -> bridge.std__shared_ptr_HybridProximitySpec_ {
     let hybridObject = HybridProximity()

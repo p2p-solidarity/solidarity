@@ -20,11 +20,11 @@
 #include "JFunc_void_ProximityEvent.hpp"
 #include <NitroModules/DefaultConstructableObject.hpp>
 
-namespace margelo::nitro::margelo::solidarity::proximity {
+namespace margelo::nitro::solidarity::proximity {
 
 int initialize(JavaVM* vm) {
   return facebook::jni::initialize(vm, []() {
-    ::margelo::nitro::margelo::solidarity::proximity::registerAllNatives();
+    ::margelo::nitro::solidarity::proximity::registerAllNatives();
   });
 }
 
@@ -39,12 +39,12 @@ struct JHybridProximitySpecImpl: public jni::JavaClass<JHybridProximitySpecImpl,
 
 void registerAllNatives() {
   using namespace margelo::nitro;
-  using namespace margelo::nitro::margelo::solidarity::proximity;
+  using namespace margelo::nitro::solidarity::proximity;
 
   // Register native JNI methods
-  margelo::nitro::margelo::solidarity::proximity::JHybridProximitySpec::CxxPart::registerNatives();
-  margelo::nitro::margelo::solidarity::proximity::JFunc_void_cxx::registerNatives();
-  margelo::nitro::margelo::solidarity::proximity::JFunc_void_ProximityEvent_cxx::registerNatives();
+  margelo::nitro::solidarity::proximity::JHybridProximitySpec::CxxPart::registerNatives();
+  margelo::nitro::solidarity::proximity::JFunc_void_cxx::registerNatives();
+  margelo::nitro::solidarity::proximity::JFunc_void_ProximityEvent_cxx::registerNatives();
 
   // Register Nitro Hybrid Objects
   HybridObjectRegistry::registerHybridObjectConstructor(
@@ -55,4 +55,4 @@ void registerAllNatives() {
   );
 }
 
-} // namespace margelo::nitro::margelo::solidarity::proximity
+} // namespace margelo::nitro::solidarity::proximity

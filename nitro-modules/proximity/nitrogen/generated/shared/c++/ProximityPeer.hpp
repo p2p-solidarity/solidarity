@@ -29,13 +29,13 @@
 #endif
 
 // Forward declaration of `ProximityDirection` to properly resolve imports.
-namespace margelo::nitro::margelo::solidarity::proximity { struct ProximityDirection; }
+namespace margelo::nitro::solidarity::proximity { struct ProximityDirection; }
 
 #include <string>
 #include <optional>
 #include "ProximityDirection.hpp"
 
-namespace margelo::nitro::margelo::solidarity::proximity {
+namespace margelo::nitro::solidarity::proximity {
 
   /**
    * A struct which can be represented as a JavaScript object (ProximityPeer).
@@ -57,32 +57,32 @@ namespace margelo::nitro::margelo::solidarity::proximity {
     friend bool operator==(const ProximityPeer& lhs, const ProximityPeer& rhs) = default;
   };
 
-} // namespace margelo::nitro::margelo::solidarity::proximity
+} // namespace margelo::nitro::solidarity::proximity
 
 namespace margelo::nitro {
 
   // C++ ProximityPeer <> JS ProximityPeer (object)
   template <>
-  struct JSIConverter<margelo::nitro::margelo::solidarity::proximity::ProximityPeer> final {
-    static inline margelo::nitro::margelo::solidarity::proximity::ProximityPeer fromJSI(jsi::Runtime& runtime, const jsi::Value& arg) {
+  struct JSIConverter<margelo::nitro::solidarity::proximity::ProximityPeer> final {
+    static inline margelo::nitro::solidarity::proximity::ProximityPeer fromJSI(jsi::Runtime& runtime, const jsi::Value& arg) {
       jsi::Object obj = arg.asObject(runtime);
-      return margelo::nitro::margelo::solidarity::proximity::ProximityPeer(
+      return margelo::nitro::solidarity::proximity::ProximityPeer(
         JSIConverter<std::string>::fromJSI(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "id"))),
         JSIConverter<std::string>::fromJSI(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "displayName"))),
         JSIConverter<std::string>::fromJSI(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "discoveryInfoJson"))),
         JSIConverter<std::optional<double>>::fromJSI(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "rssi"))),
         JSIConverter<std::optional<double>>::fromJSI(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "distance"))),
-        JSIConverter<std::optional<margelo::nitro::margelo::solidarity::proximity::ProximityDirection>>::fromJSI(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "direction")))
+        JSIConverter<std::optional<margelo::nitro::solidarity::proximity::ProximityDirection>>::fromJSI(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "direction")))
       );
     }
-    static inline jsi::Value toJSI(jsi::Runtime& runtime, const margelo::nitro::margelo::solidarity::proximity::ProximityPeer& arg) {
+    static inline jsi::Value toJSI(jsi::Runtime& runtime, const margelo::nitro::solidarity::proximity::ProximityPeer& arg) {
       jsi::Object obj(runtime);
       obj.setProperty(runtime, PropNameIDCache::get(runtime, "id"), JSIConverter<std::string>::toJSI(runtime, arg.id));
       obj.setProperty(runtime, PropNameIDCache::get(runtime, "displayName"), JSIConverter<std::string>::toJSI(runtime, arg.displayName));
       obj.setProperty(runtime, PropNameIDCache::get(runtime, "discoveryInfoJson"), JSIConverter<std::string>::toJSI(runtime, arg.discoveryInfoJson));
       obj.setProperty(runtime, PropNameIDCache::get(runtime, "rssi"), JSIConverter<std::optional<double>>::toJSI(runtime, arg.rssi));
       obj.setProperty(runtime, PropNameIDCache::get(runtime, "distance"), JSIConverter<std::optional<double>>::toJSI(runtime, arg.distance));
-      obj.setProperty(runtime, PropNameIDCache::get(runtime, "direction"), JSIConverter<std::optional<margelo::nitro::margelo::solidarity::proximity::ProximityDirection>>::toJSI(runtime, arg.direction));
+      obj.setProperty(runtime, PropNameIDCache::get(runtime, "direction"), JSIConverter<std::optional<margelo::nitro::solidarity::proximity::ProximityDirection>>::toJSI(runtime, arg.direction));
       return obj;
     }
     static inline bool canConvert(jsi::Runtime& runtime, const jsi::Value& value) {
@@ -98,7 +98,7 @@ namespace margelo::nitro {
       if (!JSIConverter<std::string>::canConvert(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "discoveryInfoJson")))) return false;
       if (!JSIConverter<std::optional<double>>::canConvert(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "rssi")))) return false;
       if (!JSIConverter<std::optional<double>>::canConvert(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "distance")))) return false;
-      if (!JSIConverter<std::optional<margelo::nitro::margelo::solidarity::proximity::ProximityDirection>>::canConvert(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "direction")))) return false;
+      if (!JSIConverter<std::optional<margelo::nitro::solidarity::proximity::ProximityDirection>>::canConvert(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "direction")))) return false;
       return true;
     }
   };

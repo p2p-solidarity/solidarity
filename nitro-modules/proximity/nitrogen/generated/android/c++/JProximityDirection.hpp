@@ -12,7 +12,7 @@
 
 
 
-namespace margelo::nitro::margelo::solidarity::proximity {
+namespace margelo::nitro::solidarity::proximity {
 
   using namespace facebook;
 
@@ -62,4 +62,4 @@ namespace margelo::nitro::margelo::solidarity::proximity {
     }
   };
 
-} // namespace margelo::nitro::margelo::solidarity::proximity
+} // namespace margelo::nitro::solidarity::proximity

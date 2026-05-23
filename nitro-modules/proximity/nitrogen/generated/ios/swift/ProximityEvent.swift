@@ -10,10 +10,10 @@ import NitroModules
 /**
  * Represents an instance of `ProximityEvent`, backed by a C++ struct.
  */
-public typealias ProximityEvent = margelo.nitro.margelo.solidarity.proximity.ProximityEvent
+public typealias ProximityEvent = margelo.nitro.solidarity.proximity.ProximityEvent
 
 public extension ProximityEvent {
-  private typealias bridge = margelo.nitro.margelo.solidarity.proximity.bridge.swift
+  private typealias bridge = margelo.nitro.solidarity.proximity.bridge.swift
 
   /**
    * Create a new instance of `ProximityEvent`.

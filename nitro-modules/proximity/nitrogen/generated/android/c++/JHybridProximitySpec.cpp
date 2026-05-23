@@ -8,13 +8,13 @@
 #include "JHybridProximitySpec.hpp"
 
 // Forward declaration of `ProximityEvent` to properly resolve imports.
-namespace margelo::nitro::margelo::solidarity::proximity { struct ProximityEvent; }
+namespace margelo::nitro::solidarity::proximity { struct ProximityEvent; }
 // Forward declaration of `ProximityEventKind` to properly resolve imports.
-namespace margelo::nitro::margelo::solidarity::proximity { enum class ProximityEventKind; }
+namespace margelo::nitro::solidarity::proximity { enum class ProximityEventKind; }
 // Forward declaration of `ProximityPeer` to properly resolve imports.
-namespace margelo::nitro::margelo::solidarity::proximity { struct ProximityPeer; }
+namespace margelo::nitro::solidarity::proximity { struct ProximityPeer; }
 // Forward declaration of `ProximityDirection` to properly resolve imports.
-namespace margelo::nitro::margelo::solidarity::proximity { struct ProximityDirection; }
+namespace margelo::nitro::solidarity::proximity { struct ProximityDirection; }
 
 #include <NitroModules/Promise.hpp>
 #include <NitroModules/JPromise.hpp>
@@ -36,7 +36,7 @@ namespace margelo::nitro::margelo::solidarity::proximity { struct ProximityDirec
 #include "ProximityDirection.hpp"
 #include "JProximityDirection.hpp"
 
-namespace margelo::nitro::margelo::solidarity::proximity {
+namespace margelo::nitro::solidarity::proximity {
 
   std::shared_ptr<JHybridProximitySpec> JHybridProximitySpec::JavaPart::getJHybridProximitySpec() {
     auto hybridObject = JHybridObject::JavaPart::getJHybridObject();
@@ -161,4 +161,4 @@ namespace margelo::nitro::margelo::solidarity::proximity {
     }();
   }
 
-} // namespace margelo::nitro::margelo::solidarity::proximity
+} // namespace margelo::nitro::solidarity::proximity

@@ -14,7 +14,7 @@
 #endif
 
 // Forward declaration of `ProximityEvent` to properly resolve imports.
-namespace margelo::nitro::margelo::solidarity::proximity { struct ProximityEvent; }
+namespace margelo::nitro::solidarity::proximity { struct ProximityEvent; }
 
 #include <string>
 #include <NitroModules/Promise.hpp>
@@ -22,7 +22,7 @@ namespace margelo::nitro::margelo::solidarity::proximity { struct ProximityEvent
 #include <functional>
 #include "ProximityEvent.hpp"
 
-namespace margelo::nitro::margelo::solidarity::proximity {
+namespace margelo::nitro::solidarity::proximity {
 
   using namespace margelo::nitro;
 
@@ -75,4 +75,4 @@ namespace margelo::nitro::margelo::solidarity::proximity {
       static constexpr auto TAG = "Proximity";
   };
 
-} // namespace margelo::nitro::margelo::solidarity::proximity
+} // namespace margelo::nitro::solidarity::proximity

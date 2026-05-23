@@ -33,7 +33,7 @@
 #include <NitroModules/ArrayBuffer.hpp>
 #include <optional>
 
-namespace margelo::nitro::margelo::solidarity::nfcpassport {
+namespace margelo::nitro::solidarity::nfcpassport {
 
   /**
    * A struct which can be represented as a JavaScript object (DataGroupsBundle).
@@ -54,16 +54,16 @@ namespace margelo::nitro::margelo::solidarity::nfcpassport {
     friend bool operator==(const DataGroupsBundle& lhs, const DataGroupsBundle& rhs) = default;
   };
 
-} // namespace margelo::nitro::margelo::solidarity::nfcpassport
+} // namespace margelo::nitro::solidarity::nfcpassport
 
 namespace margelo::nitro {
 
   // C++ DataGroupsBundle <> JS DataGroupsBundle (object)
   template <>
-  struct JSIConverter<margelo::nitro::margelo::solidarity::nfcpassport::DataGroupsBundle> final {
-    static inline margelo::nitro::margelo::solidarity::nfcpassport::DataGroupsBundle fromJSI(jsi::Runtime& runtime, const jsi::Value& arg) {
+  struct JSIConverter<margelo::nitro::solidarity::nfcpassport::DataGroupsBundle> final {
+    static inline margelo::nitro::solidarity::nfcpassport::DataGroupsBundle fromJSI(jsi::Runtime& runtime, const jsi::Value& arg) {
       jsi::Object obj = arg.asObject(runtime);
-      return margelo::nitro::margelo::solidarity::nfcpassport::DataGroupsBundle(
+      return margelo::nitro::solidarity::nfcpassport::DataGroupsBundle(
         JSIConverter<std::optional<std::shared_ptr<ArrayBuffer>>>::fromJSI(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "dg1"))),
         JSIConverter<std::optional<std::shared_ptr<ArrayBuffer>>>::fromJSI(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "dg2"))),
         JSIConverter<std::optional<std::shared_ptr<ArrayBuffer>>>::fromJSI(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "dg14"))),
@@ -71,7 +71,7 @@ namespace margelo::nitro {
         JSIConverter<std::optional<std::shared_ptr<ArrayBuffer>>>::fromJSI(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "sod")))
       );
     }
-    static inline jsi::Value toJSI(jsi::Runtime& runtime, const margelo::nitro::margelo::solidarity::nfcpassport::DataGroupsBundle& arg) {
+    static inline jsi::Value toJSI(jsi::Runtime& runtime, const margelo::nitro::solidarity::nfcpassport::DataGroupsBundle& arg) {
       jsi::Object obj(runtime);
       obj.setProperty(runtime, PropNameIDCache::get(runtime, "dg1"), JSIConverter<std::optional<std::shared_ptr<ArrayBuffer>>>::toJSI(runtime, arg.dg1));
       obj.setProperty(runtime, PropNameIDCache::get(runtime, "dg2"), JSIConverter<std::optional<std::shared_ptr<ArrayBuffer>>>::toJSI(runtime, arg.dg2));

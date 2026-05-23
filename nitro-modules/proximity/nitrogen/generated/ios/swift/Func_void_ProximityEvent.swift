@@ -12,7 +12,7 @@ import NitroModules
  * This class can be used from C++, e.g. to wrap the Swift closure as a `std::function`.
  */
 public final class Func_void_ProximityEvent {
-  public typealias bridge = margelo.nitro.margelo.solidarity.proximity.bridge.swift
+  public typealias bridge = margelo.nitro.solidarity.proximity.bridge.swift
 
   private let closure: (_ event: ProximityEvent) -> Void
 

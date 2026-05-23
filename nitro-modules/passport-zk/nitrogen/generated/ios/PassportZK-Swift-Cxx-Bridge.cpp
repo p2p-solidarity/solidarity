@@ -12,7 +12,7 @@
 #include "PassportZK-Swift-Cxx-Umbrella.hpp"
 #include <NitroModules/NitroDefines.hpp>
 
-namespace margelo::nitro::margelo::solidarity::passportzk::bridge::swift {
+namespace margelo::nitro::solidarity::passportzk::bridge::swift {
 
   // pragma MARK: std::function<void(const NoirProofResult& /* result */)>
   Func_void_NoirProofResult create_Func_void_NoirProofResult(void* NON_NULL swiftClosureWrapper) noexcept {
@@ -49,10 +49,10 @@ namespace margelo::nitro::margelo::solidarity::passportzk::bridge::swift {
   // pragma MARK: std::shared_ptr<HybridPassportZkSpec>
   std::shared_ptr<HybridPassportZkSpec> create_std__shared_ptr_HybridPassportZkSpec_(void* NON_NULL swiftUnsafePointer) noexcept {
     PassportZK::HybridPassportZkSpec_cxx swiftPart = PassportZK::HybridPassportZkSpec_cxx::fromUnsafe(swiftUnsafePointer);
-    return std::make_shared<margelo::nitro::margelo::solidarity::passportzk::HybridPassportZkSpecSwift>(swiftPart);
+    return std::make_shared<margelo::nitro::solidarity::passportzk::HybridPassportZkSpecSwift>(swiftPart);
   }
   void* NON_NULL get_std__shared_ptr_HybridPassportZkSpec_(std__shared_ptr_HybridPassportZkSpec_ cppType) {
-    std::shared_ptr<margelo::nitro::margelo::solidarity::passportzk::HybridPassportZkSpecSwift> swiftWrapper = std::dynamic_pointer_cast<margelo::nitro::margelo::solidarity::passportzk::HybridPassportZkSpecSwift>(cppType);
+    std::shared_ptr<margelo::nitro::solidarity::passportzk::HybridPassportZkSpecSwift> swiftWrapper = std::dynamic_pointer_cast<margelo::nitro::solidarity::passportzk::HybridPassportZkSpecSwift>(cppType);
     #ifdef NITRO_DEBUG
     if (swiftWrapper == nullptr) [[unlikely]] {
       throw std::runtime_error("Class \"HybridPassportZkSpec\" is not implemented in Swift!");
@@ -62,4 +62,4 @@ namespace margelo::nitro::margelo::solidarity::passportzk::bridge::swift {
     return swiftPart.toUnsafe();
   }
 
-} // namespace margelo::nitro::margelo::solidarity::passportzk::bridge::swift
+} // namespace margelo::nitro::solidarity::passportzk::bridge::swift

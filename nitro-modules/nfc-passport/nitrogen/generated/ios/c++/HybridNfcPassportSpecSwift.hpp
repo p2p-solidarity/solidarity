@@ -13,15 +13,15 @@
 namespace NfcPassport { class HybridNfcPassportSpec_cxx; }
 
 // Forward declaration of `PassportReadResult` to properly resolve imports.
-namespace margelo::nitro::margelo::solidarity::nfcpassport { struct PassportReadResult; }
+namespace margelo::nitro::solidarity::nfcpassport { struct PassportReadResult; }
 // Forward declaration of `ParsedMrz` to properly resolve imports.
-namespace margelo::nitro::margelo::solidarity::nfcpassport { struct ParsedMrz; }
+namespace margelo::nitro::solidarity::nfcpassport { struct ParsedMrz; }
 // Forward declaration of `DataGroupsBundle` to properly resolve imports.
-namespace margelo::nitro::margelo::solidarity::nfcpassport { struct DataGroupsBundle; }
+namespace margelo::nitro::solidarity::nfcpassport { struct DataGroupsBundle; }
 // Forward declaration of `ArrayBufferHolder` to properly resolve imports.
 namespace NitroModules { class ArrayBufferHolder; }
 // Forward declaration of `PassportMRZ` to properly resolve imports.
-namespace margelo::nitro::margelo::solidarity::nfcpassport { struct PassportMRZ; }
+namespace margelo::nitro::solidarity::nfcpassport { struct PassportMRZ; }
 
 #include "PassportReadResult.hpp"
 #include <NitroModules/Promise.hpp>
@@ -35,7 +35,7 @@ namespace margelo::nitro::margelo::solidarity::nfcpassport { struct PassportMRZ;
 
 #include "NfcPassport-Swift-Cxx-Umbrella.hpp"
 
-namespace margelo::nitro::margelo::solidarity::nfcpassport {
+namespace margelo::nitro::solidarity::nfcpassport {
 
   /**
    * The C++ part of HybridNfcPassportSpec_cxx.swift.
@@ -110,4 +110,4 @@ namespace margelo::nitro::margelo::solidarity::nfcpassport {
     NfcPassport::HybridNfcPassportSpec_cxx _swiftPart;
   };
 
-} // namespace margelo::nitro::margelo::solidarity::nfcpassport
+} // namespace margelo::nitro::solidarity::nfcpassport
