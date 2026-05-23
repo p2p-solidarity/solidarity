@@ -1,0 +1,21 @@
+{
+  "app.name": "Solidarity",
+  "tab.people": "People",
+  "tab.share": "Share",
+  "tab.me": "Me",
+  "onboarding.continue": "Continue",
+  "onboarding.back": "Back",
+  "onboarding.enter": "Enter Solidarity",
+  "people.empty.title": "No contacts yet",
+  "people.empty.subtitle": "Scan a QR or accept a proximity invite to add your first one.",
+  "settings.title": "Settings",
+  "settings.backup": "Backup",
+  "settings.security": "Security",
+  "settings.privacy": "Privacy",
+  "settings.appearance": "Appearance",
+  "settings.notifications": "Notifications",
+  "settings.developer": "Developer mode",
+  "backup.now": "Back up now",
+  "backup.complete": "Backup complete",
+  "backup.failed": "Backup failed"
+}

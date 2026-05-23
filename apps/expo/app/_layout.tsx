@@ -1,13 +1,14 @@
 /**
- * Root layout — Expo Router stack + global providers + MMKV bootstrap.
+ * Root layout — Expo Router stack + global providers + MMKV bootstrap +
+ * global ToastOverlay.
  *
- * Boot order (matters; mirrors Swift SolidarityApp.setupApp()):
- *   1. initMmkv()         — derives master key, hydrates the encrypted KV store
- *   2. hydrate contact store
- *   3. render the router stack
+ * Boot order (mirrors Swift SolidarityApp.setupApp()):
+ *   1. initMmkv()         — derives master key, opens encrypted KV store
+ *   2. hydrate contact store from MMKV
+ *   3. install i18n catalog
+ *   4. render the router stack
  *
- * Splash screen stays up until step 2 resolves to avoid flashing an empty
- * People tab on warm starts (aniseekr-expo rule 10).
+ * Splash stays up through step 2 so warm-start render isn't empty.
  */
 import 'react-native-gesture-handler';
 import '../global.css';
@@ -21,6 +22,8 @@ import { KeyboardProvider } from 'react-native-keyboard-controller';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 
 import { useContactStore } from '@/contacts/repository';
+import { ToastOverlay } from '@/feedback/toast';
+import { installI18n } from '@/i18n';
 import { initMmkv } from '@/storage';
 
 void SplashScreen.preventAutoHideAsync();
@@ -34,6 +37,7 @@ export default function RootLayout() {
       try {
         await initMmkv();
         await hydrateContacts();
+        await installI18n();
       } finally {
         setReady(true);
         await SplashScreen.hideAsync();
@@ -49,6 +53,7 @@ export default function RootLayout() {
         <SafeAreaProvider>
           <StatusBar style="auto" />
           <Stack screenOptions={{ headerShown: false }} />
+          <ToastOverlay />
         </SafeAreaProvider>
       </KeyboardProvider>
     </GestureHandlerRootView>

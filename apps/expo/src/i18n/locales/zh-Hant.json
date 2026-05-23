@@ -1,0 +1,21 @@
+{
+  "app.name": "Solidarity",
+  "tab.people": "聯絡人",
+  "tab.share": "分享",
+  "tab.me": "我",
+  "onboarding.continue": "繼續",
+  "onboarding.back": "上一步",
+  "onboarding.enter": "進入 Solidarity",
+  "people.empty.title": "尚無聯絡人",
+  "people.empty.subtitle": "掃描 QR 或接受附近的邀請來新增第一位聯絡人。",
+  "settings.title": "設定",
+  "settings.backup": "備份",
+  "settings.security": "安全",
+  "settings.privacy": "隱私",
+  "settings.appearance": "外觀",
+  "settings.notifications": "通知",
+  "settings.developer": "開發者模式",
+  "backup.now": "立即備份",
+  "backup.complete": "備份完成",
+  "backup.failed": "備份失敗"
+}
