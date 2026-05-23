@@ -1,24 +1,45 @@
 /**
- * People tab — mirrors Swift PeopleListView.
- * Placeholder; full FlashList + contact-row port lands in Phase 5c.
+ * People tab — mirrors Swift PeopleListView. Renders ContactsList (FlashList)
+ * and routes taps into the detail sheet.
+ *
+ * Render path keeps `useState` count low; all the hard work is inside the
+ * `usePeopleScreen()` hook. Per aniseekr-expo rule 10, the cache hit (MMKV
+ * is sync) means we never flash a skeleton on warm starts once `useEffect`
+ * resolves.
  */
+import { router } from 'expo-router';
 import { View } from 'react-native';
 
-import { ThemedSurface, ThemedText } from '@/components/themed';
+import { ContactsList } from '@/components/people/ContactsList';
+import { ThemedText } from '@/components/themed';
+import { usePeopleScreen } from '@/people/usePeopleScreen';
+import type { Contact } from '@solidarity/shared';
 
 export default function PeopleTab() {
+  const { contacts, loading, refreshing, refresh } = usePeopleScreen();
+
+  const onSelectContact = (c: Contact) => {
+    router.push({
+      pathname: '/people/[id]',
+      params: { id: c.id, name: c.businessCard.name },
+    });
+  };
+
   return (
-    <View className="flex-1 bg-pageBg p-4">
-      <ThemedText variant="headlineLarge">People</ThemedText>
-      <ThemedText variant="bodyMedium" tone="secondary" className="mt-2">
-        Contacts ported from Swift PeopleListView land here.
-      </ThemedText>
-      <ThemedSurface variant="card" padded className="mt-6">
-        <ThemedText variant="titleMedium">No contacts yet</ThemedText>
-        <ThemedText variant="bodySmall" tone="tertiary" className="mt-1">
-          Scan a QR or accept a proximity invite to add one.
+    <View className="flex-1 bg-pageBg">
+      <View className="px-4 pt-4 pb-2">
+        <ThemedText variant="headlineLarge">People</ThemedText>
+        <ThemedText variant="bodySmall" tone="tertiary">
+          {String(contacts.length)} contacts
         </ThemedText>
-      </ThemedSurface>
+      </View>
+      <ContactsList
+        contacts={contacts}
+        loading={loading}
+        refreshing={refreshing}
+        onRefresh={refresh}
+        onSelectContact={onSelectContact}
+      />
     </View>
   );
 }
