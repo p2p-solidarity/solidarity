@@ -1,7 +1,7 @@
 # Solidarity Migration Plan — Swift / SwiftUI → Expo / React Native + Nitro
 
 **Source**: `solidarity/` (iOS 26 / 17, 320 Swift files, ~67k LOC)
-**Target**: `apps/expo/` (Expo 54 + RN 0.81 + NativeWind + Reanimated 4 + FlashList 2 + MMKV 4 + VisionCamera v5 + Nitro Modules)
+**Target**: `apps/expo/` (Expo 56 + RN 0.85 + React 19.2 + TS 6.0 + NativeWind 4.2 + Reanimated 4.3 + FlashList 2.3 + MMKV 4.3 + VisionCamera v5 + Nitro Modules 0.35 + Zod 4 + Zustand 5)
 **Goal**: 1:1 functional parity of v1.3.1 + Android support + same Bundle ID (`kidneyweakx.airmeishi`) → in-place upgrade for existing iOS users.
 
 ---
