@@ -2,34 +2,53 @@
 @tailwind components;
 @tailwind utilities;
 
-/* Light (default) — mirrors Swift Color.Theme defaults */
+/* Light (default) — mirrors Swift Color.Theme (ThemeManager.swift L200-330) */
 :root {
-  --color-pageBg: #FFFBF7;
+  --color-pageBg: #FBF9F2;
   --color-cardBg: #FFFFFF;
-  --color-searchBg: #F4F0EA;
-  --color-divider: #E8E1D8;
-  --color-text1: #1A1A1A;
-  --color-text2: #6B6B6B;
-  --color-text3: #9C9C9C;
-  --color-accentRose: #D8466B;
+  --color-searchBg: #EEEEEE;
+  --color-divider: #D1D1D1;
+  --color-mutedSurface: rgba(238,238,238,0.8);
+  --color-pillSurface: #EEEEEE;
+  --color-pillBg: #EEEEEE;
+  --color-pillBorder: #D1D1D1;
+  --color-featuredCardBg: #F3EBDD;
+  --color-chipSurface: #F7F2FA;
+  --color-warmCream: #F3EBDD;
+  --color-invertedButtonBg: #2F2F30;
+  --color-invertedButtonText: #FBF9F2;
+  --color-text1: #2F2F30;
+  --color-text2: #5F5E67;
+  --color-text3: #9C9AA6;
+  --color-accentRose: #BF80A7;
   --color-primaryBlue: #007AFF;
-  --color-destructive: #FF3B30;
+  --color-primaryMauve: #83537D;
+  --color-destructive: #CD556A;
+  --color-terminalGreen: #4CAF51;
   --color-featureAccent: #5856D6;
   --color-dustyMauve: #B89BB1;
   --color-blobCenter: #FFE4D6;
-  --color-radarRing: rgba(216, 70, 107, 0.3);
-  --color-radarGlow: rgba(216, 70, 107, 0.15);
+  --color-radarRing: rgba(191,128,167,0.3);
+  --color-radarGlow: rgba(191,128,167,0.15);
 }
 
 @media (prefers-color-scheme: dark) {
   :root {
-    --color-pageBg: #0F0F12;
-    --color-cardBg: #1A1A1F;
-    --color-searchBg: #22222A;
-    --color-divider: #2A2A33;
-    --color-text1: #F5F5F7;
-    --color-text2: #A8A8B0;
-    --color-text3: #6E6E78;
+    --color-pageBg: #060417;
+    --color-cardBg: #14101C;
+    --color-searchBg: #1C1424;
+    --color-divider: #2D2438;
+    --color-mutedSurface: rgba(47,47,48,0.6);
+    --color-pillSurface: rgba(47,47,48,0.5);
+    --color-pillBg: rgba(255,255,255,0.18);
+    --color-pillBorder: rgba(255,255,255,0.30);
+    --color-featuredCardBg: #83537D;
+    --color-chipSurface: rgba(47,47,48,0.5);
+    --color-invertedButtonBg: #F0E8F0;
+    --color-invertedButtonText: #060417;
+    --color-text1: #F0E8F0;
+    --color-text2: #A898A8;
+    --color-text3: #808080;
     --color-blobCenter: #2A1F26;
   }
 }
