@@ -13,6 +13,15 @@ import { getMmkv } from '@/storage/mmkv';
 
 export type ShoutoutDirection = 'incoming' | 'outgoing';
 
+/**
+ * Max payload size for a shoutout body. Mirrors Swift CreateShoutoutView.swift
+ * (`message.count > 200` + the .prefix(200) truncation on input). Swift
+ * `String.count` is grapheme-cluster count; the TS form treats it as JS
+ * string length (UTF-16 code units), which differs only on emoji. For ASCII
+ * text both compute the same value.
+ */
+export const SHOUTOUT_MAX_PAYLOAD_BYTES = 200;
+
 export interface Shoutout {
   readonly id: string;
   readonly direction: ShoutoutDirection;
@@ -43,7 +52,11 @@ export const useShoutoutStore = create<ShoutoutStoreState>((set, get) => ({
       if (!k.startsWith(KEY_PREFIX)) continue;
       const raw = getMmkv().getString(k);
       if (!raw) continue;
-      out.push(await decryptJson<Shoutout>(raw));
+      const item = await decryptJson<Shoutout>(raw);
+      // JSON round-trip strips the Date prototype; rebuild it so sort
+      // + downstream `.getTime()` keep working. Same pattern as Swift
+      // ShoutoutStore which keeps Date objects through Codable.
+      out.push({ ...item, createdAt: new Date(item.createdAt) });
     }
     out.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
     set({ items: out, hydrated: true });
