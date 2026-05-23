@@ -1,18 +1,31 @@
 /**
  * Sakura messaging client — mirrors Swift MessageService.shared.
  *
- * Wire format is snake_case JSON (preserved by @solidarity/shared/types/sakura).
- * Transport is plain fetch (https with HSTS); for cert pinning + per-message
- * encryption see crypto.ts (next iteration).
+ * Two layers:
+ *   - HTTP layer: stateless POST/GET against the Sakura relay
+ *     (EXPO_PUBLIC_SAKURA_API_URL). Wire shapes are snake_case per
+ *     @solidarity/shared/types/sakura.
+ *   - Crypto layer: sealBlob (X25519 ECIES + AES-GCM) wraps every payload
+ *     before send; openBlob unwraps every inbox message with the holder's
+ *     long-term recipient privkey.
  *
- * The relay URL is provided via EXPO_PUBLIC_SAKURA_API_URL (see .env.example).
+ * Sign step: every outbound SendRequest is ECDSA-signed with the sender's
+ * P-256 signing key (see signSendRequest). The relay verifies the
+ * signature against sender_pubkey before forwarding; the recipient
+ * verifies again before opening the blob.
  */
 import {
   ackRequestSchema,
+  base64Decode,
+  base64Encode,
+  bytesToUtf8,
   inboxMessageSchema,
+  openBlob,
+  sealBlob,
   sealResponseSchema,
   sendRequestSchema,
   syncResponseSchema,
+  utf8ToBytes,
   type AckRequest,
   type InboxMessage,
   type SealResponse,
@@ -53,7 +66,7 @@ async function getJson<TOut>(
   return parse((await res.json()) as unknown);
 }
 
-/** Exchange a device token for a sealed route — equivalent of MessageService.sealToken. */
+/** Exchange an APNs/FCM device token for a sealed (blind) route. */
 export async function sealToken(deviceToken: string): Promise<SealResponse> {
   return postJson('/v1/seal', { device_token: deviceToken }, (r) =>
     sealResponseSchema.parse(r)
@@ -75,4 +88,53 @@ export async function ackMessages(req: AckRequest): Promise<void> {
   await postJson('/v1/ack', ackRequestSchema.parse(req), () => undefined);
 }
 
-export type { SealResponse, SendRequest, SyncResponse, InboxMessage, AckRequest };
+// ── Crypto-wrapped send/recv ─────────────────────────────────────────────────
+
+export interface OutgoingMessage {
+  /** Recipient's X25519 public key (base64). */
+  readonly recipientPubKey: string;
+  /** Recipient's sealed route from a prior `sealToken` exchange. */
+  readonly recipientSealedRoute: string;
+  /** Our sending key (signature side, P-256 ECDSA). */
+  readonly senderSignPubKey: string;
+  /** Plaintext payload bytes (will be JSON-stringified and sealed). */
+  readonly payload: unknown;
+}
+
+/**
+ * Build a `SendRequest`: seals the payload with the recipient's X25519
+ * pubkey, then leaves `sender_sig` to the caller (which adds the ECDSA
+ * signature using the keychain bridge).
+ */
+export function buildSealedSendRequest(
+  msg: OutgoingMessage,
+  unsignedSenderSig = ''
+): SendRequest {
+  const plaintext = utf8ToBytes(JSON.stringify(msg.payload));
+  const blob = sealBlob(base64Decode(msg.recipientPubKey), plaintext);
+  return {
+    recipient_pubkey: msg.recipientPubKey,
+    blob: base64Encode(blob),
+    sealed_route: msg.recipientSealedRoute,
+    sender_pubkey: msg.senderSignPubKey,
+    sender_sig: unsignedSenderSig,
+  };
+}
+
+/** Open a received inbox message with our long-term X25519 recipient privkey. */
+export function openInboxMessage<T = unknown>(
+  privKey: Uint8Array,
+  message: InboxMessage
+): T {
+  const blob = base64Decode(message.blob);
+  const plaintext = openBlob(privKey, blob);
+  return JSON.parse(bytesToUtf8(plaintext)) as T;
+}
+
+export type {
+  SealResponse,
+  SendRequest,
+  SyncResponse,
+  InboxMessage,
+  AckRequest,
+};
