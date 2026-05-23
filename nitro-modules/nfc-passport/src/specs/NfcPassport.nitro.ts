@@ -7,9 +7,8 @@
  *   iOS    : HybridNfcPassport.swift wraps NFCPassportReader (AndyQ).
  *   Android: HybridNfcPassport.kt wraps jmrtd via JNI.
  *
- * The MRZ used to derive BAC/PACE keys is composed externally (the
- * caller already has it from MRZScanner). DG content stays as ArrayBuffer
- * so callers can route the raw bytes into the ZK pipeline without copy.
+ * Nested object types are extracted to top-level interfaces because
+ * Nitrogen rejects anonymous inline structs (it can't codegen the C++).
  */
 import type { HybridObject } from 'react-native-nitro-modules';
 
@@ -22,26 +21,30 @@ export interface PassportMRZ {
   readonly dateOfExpiry: string;
 }
 
+export interface ParsedMrz {
+  readonly nationality: string;
+  readonly documentNumber: string;
+  readonly name: string;
+  readonly dateOfBirth: string;
+  readonly dateOfExpiry: string;
+  readonly gender: string;
+}
+
+export interface DataGroupsBundle {
+  readonly dg1?: ArrayBuffer;
+  /** Face image (JPEG2000 / JPEG). */
+  readonly dg2?: ArrayBuffer;
+  /** Chip Authentication (CA) public key. */
+  readonly dg14?: ArrayBuffer;
+  /** Active Authentication (AA) public key. */
+  readonly dg15?: ArrayBuffer;
+  /** Security Object document (SHA-256-signed DG hashes). */
+  readonly sod?: ArrayBuffer;
+}
+
 export interface PassportReadResult {
-  readonly mrz: {
-    readonly nationality: string;
-    readonly documentNumber: string;
-    readonly name: string;
-    readonly dateOfBirth: string;
-    readonly dateOfExpiry: string;
-    readonly gender: string;
-  };
-  readonly dataGroups: {
-    readonly dg1?: ArrayBuffer;
-    /** Face image (JPEG2000 / JPEG). */
-    readonly dg2?: ArrayBuffer;
-    /** Chip Authentication (CA) public key. */
-    readonly dg14?: ArrayBuffer;
-    /** Active Authentication (AA) public key. */
-    readonly dg15?: ArrayBuffer;
-    /** Security Object document (SHA-256-signed DG hashes). */
-    readonly sod?: ArrayBuffer;
-  };
+  readonly mrz: ParsedMrz;
+  readonly dataGroups: DataGroupsBundle;
   readonly chipUid?: string;
   readonly passiveAuthValid: boolean;
 }

@@ -1,17 +1,23 @@
 {
   "$schema": "https://nitro.margelo.com/schemas/nitro.schema.json",
-  "cxxNamespace": ["margelo", "nitro", "passportzk"],
+  "cxxNamespace": ["margelo", "solidarity", "passportzk"],
   "ios": {
     "iosModuleName": "PassportZK"
   },
   "android": {
-    "androidNamespace": ["gg", "solidarity", "nitro", "passportzk"],
+    "androidNamespace": ["gg", "solidarity", "passportzk"],
     "androidCxxLibName": "PassportZK"
   },
   "autolinking": {
     "PassportZk": {
-      "swift": "HybridPassportZk",
-      "kotlin": "HybridPassportZk"
+      "ios": {
+        "language": "swift",
+        "implementationClassName": "HybridPassportZk"
+      },
+      "android": {
+        "language": "kotlin",
+        "implementationClassName": "HybridPassportZk"
+      }
     }
   }
 }

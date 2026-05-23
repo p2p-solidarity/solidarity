@@ -1,17 +1,23 @@
 {
   "$schema": "https://nitro.margelo.com/schemas/nitro.schema.json",
-  "cxxNamespace": ["margelo", "nitro", "proximity"],
+  "cxxNamespace": ["margelo", "solidarity", "proximity"],
   "ios": {
     "iosModuleName": "SolidarityProximity"
   },
   "android": {
-    "androidNamespace": ["gg", "solidarity", "nitro", "proximity"],
+    "androidNamespace": ["gg", "solidarity", "proximity"],
     "androidCxxLibName": "SolidarityProximity"
   },
   "autolinking": {
     "Proximity": {
-      "swift": "HybridProximity",
-      "kotlin": "HybridProximity"
+      "ios": {
+        "language": "swift",
+        "implementationClassName": "HybridProximity"
+      },
+      "android": {
+        "language": "kotlin",
+        "implementationClassName": "HybridProximity"
+      }
     }
   }
 }

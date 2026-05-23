@@ -3,68 +3,72 @@
  *
  * Unified abstraction over:
  *   iOS    : MultipeerConnectivity (peers) + NearbyInteraction (UWB ranging)
- *   Android: Nearby Connections API (peers) + UWB API 31+ (ranging),
+ *   Android: Google Nearby Connections API (peers) + UWB API 31+ (ranging),
  *            BLE RSSI fallback for older devices
  *
- * Mirrors the Swift ProximityManager + NearbyInteractionManager surface;
- * see docs/migration/02-services-inventory.md for the full method map.
- *
- * Event-stream pattern: addEventListener returns an unsubscribe callback.
- * Heavy state transitions emit a single event payload so the JS layer can
- * keep a Zustand store in sync without polling.
- *
- * NOTE: this file is on the JS↔Native boundary, so `any`-style payloads
- * are allowed by the eslint override on nitro-modules/**/specs.
+ * Event shape: a single `ProximityEvent` struct with all optional fields
+ * + a `kind` enum string. Nitrogen rejects discriminated unions with
+ * string literal discriminators, so we use this flattened shape and let
+ * the consumer narrow with the runtime `kind` check.
  */
 import type { HybridObject } from 'react-native-nitro-modules';
+
+export interface ProximityDirection {
+  readonly x: number;
+  readonly y: number;
+  readonly z: number;
+}
 
 export interface ProximityPeer {
   /** Session-stable identifier (MCPeerID / EndpointId / UWB token). */
   readonly id: string;
   readonly displayName: string;
-  /** Discovery-time metadata (e.g. did, animal, app version). */
-  readonly discoveryInfo: Readonly<Record<string, string>>;
+  /** JSON-stringified discovery metadata (did, animal, app version). */
+  readonly discoveryInfoJson: string;
   /** BLE RSSI in dBm (Android fallback only). */
   readonly rssi?: number;
   /** Last measured distance in metres (UWB). */
   readonly distance?: number;
   /** Direction unit vector (UWB; iOS only on most devices). */
-  readonly direction?: Readonly<{ x: number; y: number; z: number }>;
+  readonly direction?: ProximityDirection;
 }
 
-export type ProximityEvent =
-  | { readonly type: 'peerFound'; readonly peer: ProximityPeer }
-  | { readonly type: 'peerLost'; readonly peerId: string }
-  | {
-      readonly type: 'invitationReceived';
-      readonly peerId: string;
-      readonly payload: ArrayBuffer;
-    }
-  | { readonly type: 'sessionEstablished'; readonly peerId: string }
-  | {
-      readonly type: 'sessionEnded';
-      readonly peerId: string;
-      readonly reason: string;
-    }
-  | {
-      readonly type: 'dataReceived';
-      readonly peerId: string;
-      readonly data: ArrayBuffer;
-    }
-  | {
-      readonly type: 'distanceUpdate';
-      readonly peerId: string;
-      readonly distance: number;
-      readonly direction?: Readonly<{ x: number; y: number; z: number }>;
-    }
-  | { readonly type: 'error'; readonly message: string; readonly code: string };
+export type ProximityEventKind =
+  | 'peerFound'
+  | 'peerLost'
+  | 'invitationReceived'
+  | 'sessionEstablished'
+  | 'sessionEnded'
+  | 'dataReceived'
+  | 'distanceUpdate'
+  | 'error';
+
+export interface ProximityEvent {
+  readonly kind: ProximityEventKind;
+  /** Populated for peerFound. */
+  readonly peer?: ProximityPeer;
+  /** Populated for peerLost / invitationReceived / session* / dataReceived / distanceUpdate. */
+  readonly peerId?: string;
+  /** Populated for invitationReceived. */
+  readonly payload?: ArrayBuffer;
+  /** Populated for sessionEnded. */
+  readonly reason?: string;
+  /** Populated for dataReceived. */
+  readonly data?: ArrayBuffer;
+  /** Populated for distanceUpdate. */
+  readonly distance?: number;
+  readonly direction?: ProximityDirection;
+  /** Populated for error. */
+  readonly errorMessage?: string;
+  readonly errorCode?: string;
+}
 
 export interface Proximity
   extends HybridObject<{ ios: 'swift'; android: 'kotlin' }> {
   startAdvertising(
     displayName: string,
     serviceType: string,
-    info: Readonly<Record<string, string>>
+    discoveryInfoJson: string
   ): void;
   stopAdvertising(): void;
 

@@ -137,8 +137,10 @@ apps/expo/ios/*
 !apps/expo/ios/ci_scripts/
 apps/expo/android/
 
-# Nitro generated boilerplate (committed where needed; ignored when codegen-only)
-nitro-modules/**/nitrogen/generated/
+# Nitro nitrogen-generated boilerplate — these are real build artifacts
+# used by CocoaPods + Gradle, so they must be committed. Only ignore
+# the cache dir if nitrogen ever creates one.
+# nitro-modules/**/nitrogen/generated/  (committed)
 
 # Tests / coverage
 coverage/

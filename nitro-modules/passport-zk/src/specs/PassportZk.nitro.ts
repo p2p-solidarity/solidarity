@@ -11,9 +11,12 @@
  *   public func verifyNoirProof(proof, vk) → Bool
  *
  * iOS: HybridPassportZk.swift reuses MoproBindings.xcframework directly.
- * Android: HybridPassportZk.kt calls into a Rust cdylib
- *   (passport_zk_mopro for aarch64-linux-android + x86_64-linux-android)
- *   via JNI. The Rust source is in passport-noir/mopro-binding/src/.
+ * Android: HybridPassportZk.kt calls into a Rust cdylib via JNI.
+ *
+ * The `inputs` map (witness name → array of decimal-string field elements
+ * in BN254) is passed as a JSON-stringified payload across the bridge —
+ * Nitrogen doesn't support generic Record types, and the JSON form
+ * matches the way the underlying mopro FFI already expects inputs.
  *
  * NOTE: this file is on the JS↔Native boundary, so `any` is allowed by
  * eslint config (see eslint.config.mjs override on nitro-modules/**/specs).
@@ -23,25 +26,26 @@ import type { HybridObject } from 'react-native-nitro-modules';
 export interface NoirProofResult {
   /** Raw proof bytes (Barretenberg-encoded). */
   readonly proof: ArrayBuffer;
-  /** Public inputs as decimal-string field elements (BN254). */
-  readonly publicInputs: readonly string[];
+  /** Public inputs as a JSON-stringified array of decimal-string field elements. */
+  readonly publicInputsJson: string;
 }
 
 export interface PassportZk
   extends HybridObject<{ ios: 'swift'; android: 'kotlin' }> {
   /**
    * Generate a Noir ZK proof.
-   * @param circuitPath  Absolute path to the compiled circuit JSON (Noir 1.0.0-beta.19).
-   * @param srsPath      Optional path to a precomputed SRS bin; if omitted, derived from circuit.
-   * @param inputs       Map of witness name → array of decimal-string field elements.
+   * @param circuitPath    Absolute path to the compiled circuit JSON.
+   * @param srsPath        Optional path to a precomputed SRS bin.
+   * @param inputsJson     JSON-stringified `{ [witness: string]: string[] }`
+   *                       where values are decimal field elements (BN254).
    */
   generateNoirProof(
     circuitPath: string,
     srsPath: string | undefined,
-    inputs: Readonly<Record<string, readonly string[]>>
+    inputsJson: string
   ): Promise<NoirProofResult>;
 
-  /** Extract verifying key bytes for a circuit. */
+  /** Extract verifying-key bytes for a circuit. */
   getNoirVerificationKey(
     circuitPath: string,
     srsPath: string | undefined

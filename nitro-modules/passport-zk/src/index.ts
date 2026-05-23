@@ -1,17 +1,28 @@
 /**
  * @solidarity/nitro-passport-zk — public entrypoint.
  *
- * Until `bunx nitrogen generate` runs and produces
- * `nitrogen/generated/<HybridPassportZk>` bindings, this barrel only
- * re-exports the spec type so app code can `import type` without
- * pulling native bridges into Metro's resolver.
+ * After `bunx nitrogen` + `pod install`, the generated HybridObject
+ * adapter is auto-registered. `passportZk` returns the iOS Swift impl
+ * (HybridPassportZk.swift) or the Android Kotlin impl when on-device.
+ *
+ * In tests or web bundles `NitroModules.createHybridObject` returns
+ * `null`; consumers should fall back to the Semaphore / SD-JWT path
+ * the Swift app already uses (MoproProofService+Fallbacks).
  */
+import { NitroModules } from 'react-native-nitro-modules';
+
+import type { PassportZk } from './specs/PassportZk.nitro';
+
 export type {
   PassportZk,
   NoirProofResult,
 } from './specs/PassportZk.nitro';
 
-// After codegen + native impl ship:
-//   import { NitroModules } from 'react-native-nitro-modules';
-//   import type { PassportZk } from './specs/PassportZk.nitro';
-//   export const passportZk = NitroModules.createHybridObject<PassportZk>('PassportZk');
+let cached: PassportZk | null = null;
+
+/** Returns the singleton HybridObject (lazy + cached). */
+export function getPassportZk(): PassportZk {
+  if (cached) return cached;
+  cached = NitroModules.createHybridObject<PassportZk>('PassportZk');
+  return cached;
+}
