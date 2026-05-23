@@ -1,20 +1,20 @@
 /**
- * People tab — mirrors Swift PeopleListView.
+ * People tab — mirrors Swift PeopleListView. 1:1 strings + actions:
+ *   navigation title: "People"
+ *   empty state:      "Your contact list is empty"
+ *   add menu:         Radar Exchange / Add Manually / Import from Phone / Import VCF File
  *
- * Hosts the FlashList + a Pan gesture wrapping the whole scroll view so a
- * downward pull triggers `performBackupNow` (per user direction
- * 2026-05-24: "資料雲端自動儲存 react-native-gesture-handler"). The
- * gesture composes with the FlashList's native scroll via
- * `Gesture.Simultaneous` so we don't fight the JS-thread scroll.
+ * Pan gesture wraps the scroll view so a downward pull triggers
+ * `performBackupNow` (per user direction 2026-05-24).
  */
 import { router } from 'expo-router';
+import { useMemo } from 'react';
 import { View } from 'react-native';
 import { GestureDetector } from 'react-native-gesture-handler';
-import { useMemo } from 'react';
 
 import { makeGestureAutoBackup } from '@/backup';
 import { ContactsList } from '@/components/people/ContactsList';
-import { ThemedText } from '@/components/themed';
+import { ThemedButton, ThemedText } from '@/components/themed';
 import { pushToast } from '@/feedback/toast';
 import { usePeopleScreen } from '@/people/usePeopleScreen';
 import { usePreferences } from '@/settings/preferences';
@@ -43,11 +43,15 @@ export default function PeopleTab() {
 
   const list = (
     <View className="flex-1">
-      <View className="px-4 pt-4 pb-2">
+      <View className="flex-row items-center justify-between px-4 pt-4 pb-2">
         <ThemedText variant="headlineLarge">People</ThemedText>
-        <ThemedText variant="bodySmall" tone="tertiary">
-          {String(contacts.length)} contacts
-        </ThemedText>
+        <ThemedButton
+          label="+"
+          size="sm"
+          onPress={() => {
+            pushToast('Add menu (radar / manual / phone / VCF) lands next pass', 'info');
+          }}
+        />
       </View>
       <ContactsList
         contacts={contacts}

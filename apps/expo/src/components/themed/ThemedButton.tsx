@@ -1,29 +1,30 @@
 /**
  * ThemedButton — single CTA primitive, 5 variants matching the Swift
- * Themed*ButtonStyle family:
+ * Themed*ButtonStyle family + auto-haptic per aniseekr-expo CLAUDE rule 7:
  *   primary           → solid accentRose, contrast-safe foreground
  *   inverted          → white background, dark text (Swift ThemedInverted)
  *   secondary         → translucent border, accent text
  *   dottedOutline     → dashed border, accent text
  *   destructive       → red outline + red text
  *
- * Per aniseekr-expo CLAUDE.md rule 1: do NOT re-roll a per-screen
- * PrimaryButton. Extend variants here. The foreground colour for the
- * `primary` variant is computed via `readableTextOn` so a light accent
- * (gold, pale cyan) gets dark text instead of invisible white.
- *
- * Why no haptic wired here: `expo-haptics` import would force every
- * test to mock it. Callers pass `onPress` that does any haptic side
- * effect themselves; this matches aniseekr's later refactor.
+ * Haptic policy (rule 7):
+ *   primary           → success
+ *   destructive       → warning
+ *   * (default)       → tap
+ * Override with `haptic="…"` or `haptic={false}` to disable.
  */
 import type { ReactNode } from 'react';
 import {
   ActivityIndicator,
   Pressable,
+  type GestureResponderEvent,
   type PressableProps,
   StyleSheet,
   View,
 } from 'react-native';
+
+import { Colors } from '@/constants/Colors';
+import { haptic as fireHaptic, type HapticKind } from '@/feedback/haptics';
 
 import { ON_DARK, ON_LIGHT, readableTextOn } from './contrast';
 import { ThemedText, type TextVariant } from './ThemedText';
@@ -58,15 +59,10 @@ interface VariantStyle {
   readonly textColor: string;
 }
 
-// Swift accent is `accentRose` (#D8466B). The light/dark mode CSS vars in
-// global.css don't redefine accentRose, so it's stable across modes; we
-// can pin its hex here for the contrast calc.
-const ACCENT_ROSE_HEX = '#D8466B';
-
 const VARIANT_CONFIG: Readonly<Record<ButtonVariant, VariantStyle>> = {
   primary: {
     container: 'bg-accentRose',
-    textColor: readableTextOn(ACCENT_ROSE_HEX),
+    textColor: readableTextOn(Colors.accentRose),
   },
   inverted: {
     container: 'bg-cardBg border border-divider',
@@ -74,16 +70,24 @@ const VARIANT_CONFIG: Readonly<Record<ButtonVariant, VariantStyle>> = {
   },
   secondary: {
     container: 'bg-transparent border border-divider',
-    textColor: '', // resolved via tone="accent"
+    textColor: '',
   },
   dottedOutline: {
-    container: 'bg-transparent', // dashed border applied inline
+    container: 'bg-transparent',
     textColor: '',
   },
   destructive: {
     container: 'bg-transparent border border-destructive',
-    textColor: '', // resolved via tone="error"
+    textColor: '',
   },
+};
+
+const DEFAULT_HAPTIC: Readonly<Record<ButtonVariant, HapticKind>> = {
+  primary: 'success',
+  inverted: 'tap',
+  secondary: 'tap',
+  dottedOutline: 'tap',
+  destructive: 'warning',
 };
 
 export interface ThemedButtonProps extends Omit<PressableProps, 'children' | 'style'> {
@@ -93,6 +97,8 @@ export interface ThemedButtonProps extends Omit<PressableProps, 'children' | 'st
   readonly fullWidth?: boolean;
   readonly loading?: boolean;
   readonly leadingIcon?: ReactNode;
+  /** Override the default haptic, or pass `false` to disable. */
+  readonly haptic?: HapticKind | false;
 }
 
 export function ThemedButton({
@@ -102,8 +108,10 @@ export function ThemedButton({
   fullWidth = false,
   loading = false,
   leadingIcon,
+  haptic,
   disabled,
   className,
+  onPress,
   ...rest
 }: ThemedButtonProps): ReactNode {
   const cfg = VARIANT_CONFIG[variant];
@@ -125,7 +133,7 @@ export function ThemedButton({
     minHeight,
     paddingHorizontal: SIZE_PADDING_X[size],
     ...(isDashed
-      ? { borderStyle: 'dashed' as const, borderWidth: 1, borderColor: ACCENT_ROSE_HEX }
+      ? { borderStyle: 'dashed' as const, borderWidth: 1, borderColor: Colors.accentRose }
       : {}),
   };
 
@@ -136,6 +144,11 @@ export function ThemedButton({
         ? { color: ON_LIGHT }
         : undefined;
 
+  const handlePress = (e: GestureResponderEvent) => {
+    if (haptic !== false) fireHaptic(haptic ?? DEFAULT_HAPTIC[variant]);
+    onPress?.(e);
+  };
+
   return (
     <Pressable
       className={baseClass}
@@ -143,10 +156,11 @@ export function ThemedButton({
       disabled={disabled || loading}
       accessibilityRole="button"
       accessibilityLabel={label}
+      onPress={handlePress}
       {...rest}
     >
       {loading ? (
-        <ActivityIndicator color={variant === 'primary' ? ON_DARK : ACCENT_ROSE_HEX} />
+        <ActivityIndicator color={variant === 'primary' ? ON_DARK : Colors.accentRose} />
       ) : (
         <View style={styles.row}>
           {leadingIcon ? <View style={styles.icon}>{leadingIcon}</View> : null}

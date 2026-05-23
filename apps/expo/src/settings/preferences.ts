@@ -3,8 +3,11 @@
  * UserDefaults-derived stores (NotificationSettingsManager, ShareSettingsStore,
  * BackupSettings, etc.) collapsed into one TS surface.
  *
- * Reads sync from MMKV on first access; writes write-through. UI components
- * use `usePreferences()` with selector for granular re-render.
+ * Reads start with DEFAULTS so the store is safe to subscribe to BEFORE
+ * `initMmkv()` finishes. Call `hydratePreferences()` from the root layout
+ * after MMKV is ready to swap in the persisted values. Writes are best-
+ * effort — they swallow MMKV errors so a not-yet-initialised store doesn't
+ * crash the render.
  */
 import { create } from 'zustand';
 
@@ -33,7 +36,7 @@ const DEFAULTS: Preferences = {
   themeMode: 'auto',
 };
 
-function read(): Preferences {
+function readSafe(): Preferences {
   try {
     const raw = getMmkv().getString(KEY);
     if (!raw) return DEFAULTS;
@@ -43,8 +46,12 @@ function read(): Preferences {
   }
 }
 
-function write(p: Preferences): void {
-  getMmkv().set(KEY, JSON.stringify(p));
+function writeSafe(p: Preferences): void {
+  try {
+    getMmkv().set(KEY, JSON.stringify(p));
+  } catch {
+    // MMKV not ready / disk full — fail closed; UI state is the truth.
+  }
 }
 
 interface PrefsState extends Preferences {
@@ -52,19 +59,25 @@ interface PrefsState extends Preferences {
   readonly reset: () => void;
 }
 
-export const usePreferences = create<PrefsState>((set) => {
-  const initial = read();
-  return {
-    ...initial,
-    set: (key, value) =>
-      { set((s) => {
-        const next = { ...s, [key]: value } as Preferences;
-        write(next);
-        return { [key]: value };
-      }); },
-    reset: () => {
-      write(DEFAULTS);
-      set(DEFAULTS);
-    },
-  };
-});
+export const usePreferences = create<PrefsState>((set) => ({
+  ...DEFAULTS,
+  set: (key, value) => {
+    set((s) => {
+      const next = { ...s, [key]: value } as Preferences;
+      writeSafe(next);
+      return { [key]: value } as Partial<PrefsState>;
+    });
+  },
+  reset: () => {
+    writeSafe(DEFAULTS);
+    set(DEFAULTS);
+  },
+}));
+
+/**
+ * Swap the in-memory defaults for the persisted ones. Call once from the
+ * root layout, after `initMmkv()` resolves.
+ */
+export function hydratePreferences(): void {
+  usePreferences.setState(readSafe());
+}

@@ -18,6 +18,7 @@ import Animated, {
 } from 'react-native-reanimated';
 
 import { Wordmark } from '@/components/brand/Wordmark';
+import { Colors } from '@/constants/Colors';
 import { ThemedText } from '@/components/themed';
 
 const LINES = [
@@ -71,7 +72,7 @@ const styles = StyleSheet.create({
   cursor: {
     width: 8,
     height: 18,
-    backgroundColor: '#D8466B',
+    backgroundColor: Colors.accentRose,
     marginLeft: 2,
     marginBottom: 2,
   },

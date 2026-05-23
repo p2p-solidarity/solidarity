@@ -1,10 +1,10 @@
 /**
- * Share tab — mirrors Swift SharingTabView. Shows the user's QR (top half)
- * + a radar visualisation while browsing for nearby peers (bottom half).
- *
- * QR rendering: react-native-qrcode-svg. The encoded payload is a
- * sharing URL containing a base64url of the user's signed card snapshot
- * (the actual encoding lands when Phase 4.1's share-link service does).
+ * Share tab — mirrors Swift SharingTabView. 1:1 strings:
+ *   navigation title: "Share"
+ *   matching toggle:  "Ready To Match" / "Scanning Nearby"
+ *   action button:    "Start Matching" / "Stop Matching"
+ *   browsing copy:    "Searching for nearby peers…"
+ *   idle copy:        "Start matching to discover nearby people."
  */
 import { useState } from 'react';
 import { ScrollView, View } from 'react-native';
@@ -17,7 +17,7 @@ import { ThemedButton, ThemedSurface, ThemedText } from '@/components/themed';
 
 export default function ShareTab() {
   const myCard = useMyCard();
-  const [browsing, setBrowsing] = useState(false);
+  const [isMatching, setIsMatching] = useState(false);
 
   const shareUrl = myCard
     ? `https://solidarity.gg/c/${myCard.id}`
@@ -48,23 +48,35 @@ export default function ShareTab() {
       </ThemedSurface>
 
       <ThemedSurface variant="card" padded className="mx-4 mt-4">
-        {browsing ? (
-          <View className="items-center">
-            <ThemedText variant="caption" tone="tertiary">SEARCHING…</ThemedText>
-            <View className="my-4">
+        <ThemedText variant="titleMedium" className="text-center">
+          {isMatching ? 'Scanning Nearby' : 'Ready To Match'}
+        </ThemedText>
+        {isMatching ? (
+          <View className="items-center mt-3">
+            <View className="my-2">
               <RadarMatching avatar="📡" />
             </View>
+            <ThemedText variant="bodySmall" tone="tertiary" className="text-center">
+              Searching for nearby peers…
+            </ThemedText>
           </View>
-        ) : null}
-        <ThemedButton
-          label={browsing ? 'Stop searching' : 'Find nearby'}
-          fullWidth
-          onPress={() => { setBrowsing((b) => !b); }}
-        />
+        ) : (
+          <ThemedText variant="bodySmall" tone="tertiary" className="text-center mt-2">
+            Start matching to discover nearby people.
+          </ThemedText>
+        )}
+        <View className="mt-4">
+          <ThemedButton
+            label={isMatching ? 'Stop Matching' : 'Start Matching'}
+            variant={isMatching ? 'destructive' : 'primary'}
+            fullWidth
+            onPress={() => { setIsMatching((b) => !b); }}
+          />
+        </View>
         <View className="mt-3">
           <ThemedButton
             variant="secondary"
-            label="Scan a QR instead"
+            label="Scan QR"
             fullWidth
             onPress={() => { router.push('/scan'); }}
           />

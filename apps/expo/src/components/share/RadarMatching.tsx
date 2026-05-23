@@ -16,6 +16,7 @@ import Animated, {
   withTiming,
 } from 'react-native-reanimated';
 
+import { Colors } from '@/constants/Colors';
 import { ThemedText } from '@/components/themed';
 
 const RING_DURATION_MS = 2400;
@@ -88,7 +89,7 @@ const styles = StyleSheet.create({
   },
   ring: {
     borderWidth: 1.5,
-    borderColor: '#D8466B',
+    borderColor: Colors.accentRose,
   },
   center: {
     position: 'absolute',

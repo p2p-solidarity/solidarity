@@ -37,9 +37,9 @@ function EmptyState(): ReactNode {
         <PaperStackIllustration size={120} />
       </View>
       <ThemedSurface variant="outlined" padded className="w-full items-center">
-        <ThemedText variant="titleMedium">No contacts yet</ThemedText>
+        <ThemedText variant="titleMedium">Your contact list is empty</ThemedText>
         <ThemedText variant="bodySmall" tone="tertiary" className="mt-2 text-center">
-          Scan a QR or accept a proximity invite to add your first one.
+          Scan a QR or run a Radar Exchange to add your first contact.
         </ThemedText>
       </ThemedSurface>
     </View>

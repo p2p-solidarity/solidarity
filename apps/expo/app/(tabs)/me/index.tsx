@@ -1,6 +1,9 @@
 /**
- * Me tab — mirrors Swift MeTabView. Shows the user's own card or a CTA
- * to create one, plus quick-access to settings + the passport flow.
+ * Me tab — mirrors Swift MeTabView. 1:1 strings:
+ *   navigation title:    "Me"
+ *   fallback display:    "User Node"
+ *   trailing toolbar:    Settings (gearshape)
+ *   sections:            personal card · group membership · passport credential
  */
 import { router } from 'expo-router';
 import { useEffect } from 'react';
@@ -13,9 +16,9 @@ export default function MeTab() {
   const card = useMyCard();
   const hydrate = useCardStore((s) => s.hydrate);
 
-  useEffect(() => {
-    void hydrate();
-  }, [hydrate]);
+  useEffect(() => { void hydrate(); }, [hydrate]);
+
+  const displayName = card?.name ?? 'User Node';
 
   return (
     <ScrollView className="flex-1 bg-pageBg">
@@ -24,10 +27,14 @@ export default function MeTab() {
         <ThemedButton
           variant="secondary"
           size="sm"
-          label="Settings"
+          label="⚙︎ Settings"
           onPress={() => { router.push('/settings'); }}
         />
       </View>
+
+      <ThemedText variant="bodyMedium" tone="secondary" className="px-4 mt-1">
+        {displayName}
+      </ThemedText>
 
       <ThemedSurface variant="card" padded className="mx-4 mt-6">
         {card ? (
@@ -49,7 +56,9 @@ export default function MeTab() {
               <ThemedButton
                 label="Edit"
                 size="sm"
-                onPress={() => { router.push({ pathname: '/cards/edit', params: { id: card.id } }); }}
+                onPress={() => {
+                  router.push({ pathname: '/cards/edit', params: { id: card.id } });
+                }}
               />
             </View>
           </View>
@@ -60,13 +69,24 @@ export default function MeTab() {
               Add one so others can save your contact info from a QR.
             </ThemedText>
             <View className="mt-3">
-              <ThemedButton
-                label="Create card"
-                onPress={() => { router.push('/cards/edit'); }}
-              />
+              <ThemedButton label="Create Card" onPress={() => { router.push('/cards/edit'); }} />
             </View>
           </View>
         )}
+      </ThemedSurface>
+
+      <ThemedSurface variant="card" padded className="mx-4 mt-4">
+        <ThemedText variant="titleMedium">Credentials</ThemedText>
+        <ThemedText variant="bodySmall" tone="tertiary" className="mt-1">
+          Manage every verifiable credential issued to you.
+        </ThemedText>
+        <View className="mt-3">
+          <ThemedButton
+            variant="secondary"
+            label="Open credentials"
+            onPress={() => { router.push('/credentials'); }}
+          />
+        </View>
       </ThemedSurface>
 
       <ThemedSurface variant="card" padded className="mx-4 mt-4 mb-10">
