@@ -10,12 +10,12 @@
 // Forward declarations of C++ defined types
 // Forward declaration of `HybridPassportZkSpec` to properly resolve imports.
 namespace margelo::nitro::solidarity::passportzk { class HybridPassportZkSpec; }
-// Forward declaration of `NoirProofResult` to properly resolve imports.
-namespace margelo::nitro::solidarity::passportzk { struct NoirProofResult; }
+// Forward declaration of `NitroNoirProof` to properly resolve imports.
+namespace margelo::nitro::solidarity::passportzk { struct NitroNoirProof; }
 
 // Include C++ defined types
 #include "HybridPassportZkSpec.hpp"
-#include "NoirProofResult.hpp"
+#include "NitroNoirProof.hpp"
 #include <NitroModules/ArrayBuffer.hpp>
 #include <NitroModules/Promise.hpp>
 #include <NitroModules/Result.hpp>

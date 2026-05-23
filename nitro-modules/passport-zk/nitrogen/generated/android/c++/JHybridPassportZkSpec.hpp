@@ -54,7 +54,7 @@ namespace margelo::nitro::solidarity::passportzk {
 
   public:
     // Methods
-    std::shared_ptr<Promise<NoirProofResult>> generateNoirProof(const std::string& circuitPath, const std::optional<std::string>& srsPath, const std::string& inputsJson) override;
+    std::shared_ptr<Promise<NitroNoirProof>> generateNoirProof(const std::string& circuitPath, const std::optional<std::string>& srsPath, const std::string& inputsJson) override;
     std::shared_ptr<Promise<std::shared_ptr<ArrayBuffer>>> getNoirVerificationKey(const std::string& circuitPath, const std::optional<std::string>& srsPath) override;
     std::shared_ptr<Promise<bool>> verifyNoirProof(const std::shared_ptr<ArrayBuffer>& proof, const std::shared_ptr<ArrayBuffer>& vk) override;
 

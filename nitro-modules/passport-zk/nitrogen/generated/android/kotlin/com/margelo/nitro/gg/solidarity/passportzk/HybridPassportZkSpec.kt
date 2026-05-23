@@ -32,7 +32,7 @@ abstract class HybridPassportZkSpec: HybridObject() {
   // Methods
   @DoNotStrip
   @Keep
-  abstract fun generateNoirProof(circuitPath: String, srsPath: String?, inputsJson: String): Promise<NoirProofResult>
+  abstract fun generateNoirProof(circuitPath: String, srsPath: String?, inputsJson: String): Promise<NitroNoirProof>
   
   @DoNotStrip
   @Keep

@@ -12,8 +12,8 @@
 namespace NitroModules { class ArrayBufferHolder; }
 // Forward declaration of `HybridPassportZkSpec` to properly resolve imports.
 namespace margelo::nitro::solidarity::passportzk { class HybridPassportZkSpec; }
-// Forward declaration of `NoirProofResult` to properly resolve imports.
-namespace margelo::nitro::solidarity::passportzk { struct NoirProofResult; }
+// Forward declaration of `NitroNoirProof` to properly resolve imports.
+namespace margelo::nitro::solidarity::passportzk { struct NitroNoirProof; }
 
 // Forward declarations of Swift defined types
 // Forward declaration of `HybridPassportZkSpec_cxx` to properly resolve imports.
@@ -21,7 +21,7 @@ namespace PassportZK { class HybridPassportZkSpec_cxx; }
 
 // Include C++ defined types
 #include "HybridPassportZkSpec.hpp"
-#include "NoirProofResult.hpp"
+#include "NitroNoirProof.hpp"
 #include <NitroModules/ArrayBuffer.hpp>
 #include <NitroModules/ArrayBufferHolder.hpp>
 #include <NitroModules/Promise.hpp>
@@ -39,38 +39,38 @@ namespace PassportZK { class HybridPassportZkSpec_cxx; }
  */
 namespace margelo::nitro::solidarity::passportzk::bridge::swift {
 
-  // pragma MARK: std::shared_ptr<Promise<NoirProofResult>>
+  // pragma MARK: std::shared_ptr<Promise<NitroNoirProof>>
   /**
-   * Specialized version of `std::shared_ptr<Promise<NoirProofResult>>`.
+   * Specialized version of `std::shared_ptr<Promise<NitroNoirProof>>`.
    */
-  using std__shared_ptr_Promise_NoirProofResult__ = std::shared_ptr<Promise<NoirProofResult>>;
-  inline std::shared_ptr<Promise<NoirProofResult>> create_std__shared_ptr_Promise_NoirProofResult__() noexcept {
-    return Promise<NoirProofResult>::create();
+  using std__shared_ptr_Promise_NitroNoirProof__ = std::shared_ptr<Promise<NitroNoirProof>>;
+  inline std::shared_ptr<Promise<NitroNoirProof>> create_std__shared_ptr_Promise_NitroNoirProof__() noexcept {
+    return Promise<NitroNoirProof>::create();
   }
-  inline PromiseHolder<NoirProofResult> wrap_std__shared_ptr_Promise_NoirProofResult__(std::shared_ptr<Promise<NoirProofResult>> promise) noexcept {
-    return PromiseHolder<NoirProofResult>(std::move(promise));
+  inline PromiseHolder<NitroNoirProof> wrap_std__shared_ptr_Promise_NitroNoirProof__(std::shared_ptr<Promise<NitroNoirProof>> promise) noexcept {
+    return PromiseHolder<NitroNoirProof>(std::move(promise));
   }
   
-  // pragma MARK: std::function<void(const NoirProofResult& /* result */)>
+  // pragma MARK: std::function<void(const NitroNoirProof& /* result */)>
   /**
-   * Specialized version of `std::function<void(const NoirProofResult&)>`.
+   * Specialized version of `std::function<void(const NitroNoirProof&)>`.
    */
-  using Func_void_NoirProofResult = std::function<void(const NoirProofResult& /* result */)>;
+  using Func_void_NitroNoirProof = std::function<void(const NitroNoirProof& /* result */)>;
   /**
-   * Wrapper class for a `std::function<void(const NoirProofResult& / * result * /)>`, this can be used from Swift.
+   * Wrapper class for a `std::function<void(const NitroNoirProof& / * result * /)>`, this can be used from Swift.
    */
-  class Func_void_NoirProofResult_Wrapper final {
+  class Func_void_NitroNoirProof_Wrapper final {
   public:
-    explicit Func_void_NoirProofResult_Wrapper(std::function<void(const NoirProofResult& /* result */)>&& func): _function(std::make_unique<std::function<void(const NoirProofResult& /* result */)>>(std::move(func))) {}
-    inline void call(NoirProofResult result) const noexcept {
+    explicit Func_void_NitroNoirProof_Wrapper(std::function<void(const NitroNoirProof& /* result */)>&& func): _function(std::make_unique<std::function<void(const NitroNoirProof& /* result */)>>(std::move(func))) {}
+    inline void call(NitroNoirProof result) const noexcept {
       _function->operator()(result);
     }
   private:
-    std::unique_ptr<std::function<void(const NoirProofResult& /* result */)>> _function;
+    std::unique_ptr<std::function<void(const NitroNoirProof& /* result */)>> _function;
   } SWIFT_NONCOPYABLE;
-  Func_void_NoirProofResult create_Func_void_NoirProofResult(void* NON_NULL swiftClosureWrapper) noexcept;
-  inline Func_void_NoirProofResult_Wrapper wrap_Func_void_NoirProofResult(Func_void_NoirProofResult value) noexcept {
-    return Func_void_NoirProofResult_Wrapper(std::move(value));
+  Func_void_NitroNoirProof create_Func_void_NitroNoirProof(void* NON_NULL swiftClosureWrapper) noexcept;
+  inline Func_void_NitroNoirProof_Wrapper wrap_Func_void_NitroNoirProof(Func_void_NitroNoirProof value) noexcept {
+    return Func_void_NitroNoirProof_Wrapper(std::move(value));
   }
   
   // pragma MARK: std::function<void(const std::exception_ptr& /* error */)>
@@ -190,13 +190,13 @@ namespace margelo::nitro::solidarity::passportzk::bridge::swift {
   using std__weak_ptr_HybridPassportZkSpec_ = std::weak_ptr<HybridPassportZkSpec>;
   inline std__weak_ptr_HybridPassportZkSpec_ weakify_std__shared_ptr_HybridPassportZkSpec_(const std::shared_ptr<HybridPassportZkSpec>& strong) noexcept { return strong; }
   
-  // pragma MARK: Result<std::shared_ptr<Promise<NoirProofResult>>>
-  using Result_std__shared_ptr_Promise_NoirProofResult___ = Result<std::shared_ptr<Promise<NoirProofResult>>>;
-  inline Result_std__shared_ptr_Promise_NoirProofResult___ create_Result_std__shared_ptr_Promise_NoirProofResult___(const std::shared_ptr<Promise<NoirProofResult>>& value) noexcept {
-    return Result<std::shared_ptr<Promise<NoirProofResult>>>::withValue(value);
+  // pragma MARK: Result<std::shared_ptr<Promise<NitroNoirProof>>>
+  using Result_std__shared_ptr_Promise_NitroNoirProof___ = Result<std::shared_ptr<Promise<NitroNoirProof>>>;
+  inline Result_std__shared_ptr_Promise_NitroNoirProof___ create_Result_std__shared_ptr_Promise_NitroNoirProof___(const std::shared_ptr<Promise<NitroNoirProof>>& value) noexcept {
+    return Result<std::shared_ptr<Promise<NitroNoirProof>>>::withValue(value);
   }
-  inline Result_std__shared_ptr_Promise_NoirProofResult___ create_Result_std__shared_ptr_Promise_NoirProofResult___(const std::exception_ptr& error) noexcept {
-    return Result<std::shared_ptr<Promise<NoirProofResult>>>::withError(error);
+  inline Result_std__shared_ptr_Promise_NitroNoirProof___ create_Result_std__shared_ptr_Promise_NitroNoirProof___(const std::exception_ptr& error) noexcept {
+    return Result<std::shared_ptr<Promise<NitroNoirProof>>>::withError(error);
   }
   
   // pragma MARK: Result<std::shared_ptr<Promise<std::shared_ptr<ArrayBuffer>>>>

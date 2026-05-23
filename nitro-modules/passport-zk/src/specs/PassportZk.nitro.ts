@@ -24,27 +24,26 @@
  */
 import type { HybridObject } from 'react-native-nitro-modules';
 
-export interface NoirProofResult {
+export interface NitroNoirProof {
   /** Raw proof bytes (Barretenberg-encoded). */
   readonly proof: ArrayBuffer;
-  /** Public inputs as a JSON-stringified array of decimal-string field elements. */
-  readonly publicInputsJson: string;
+  /** Verification key bytes (returned by mopro alongside the proof). */
+  readonly vk: ArrayBuffer;
 }
 
 export interface PassportZk
   extends HybridObject<{ ios: 'swift'; android: 'kotlin' }> {
   /**
-   * Generate a Noir ZK proof.
-   * @param circuitPath    Absolute path to the compiled circuit JSON.
-   * @param srsPath        Optional path to a precomputed SRS bin.
-   * @param inputsJson     JSON-stringified `{ [witness: string]: string[] }`
-   *                       where values are decimal field elements (BN254).
+   * Generate a Noir ZK proof. Returns proof + vk to mirror mopro's
+   * `NoirProofResult { proof: Data, vk: Data }`. Renamed to
+   * `NitroNoirProof` to avoid collision with mopro.swift's struct
+   * of the same name in the same Swift module.
    */
   generateNoirProof(
     circuitPath: string,
     srsPath: string | undefined,
     inputsJson: string
-  ): Promise<NoirProofResult>;
+  ): Promise<NitroNoirProof>;
 
   /** Extract verifying-key bytes for a circuit. */
   getNoirVerificationKey(

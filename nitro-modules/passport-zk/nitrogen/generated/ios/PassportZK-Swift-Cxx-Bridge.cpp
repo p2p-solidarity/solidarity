@@ -14,10 +14,10 @@
 
 namespace margelo::nitro::solidarity::passportzk::bridge::swift {
 
-  // pragma MARK: std::function<void(const NoirProofResult& /* result */)>
-  Func_void_NoirProofResult create_Func_void_NoirProofResult(void* NON_NULL swiftClosureWrapper) noexcept {
-    auto swiftClosure = PassportZK::Func_void_NoirProofResult::fromUnsafe(swiftClosureWrapper);
-    return [swiftClosure = std::move(swiftClosure)](const NoirProofResult& result) mutable -> void {
+  // pragma MARK: std::function<void(const NitroNoirProof& /* result */)>
+  Func_void_NitroNoirProof create_Func_void_NitroNoirProof(void* NON_NULL swiftClosureWrapper) noexcept {
+    auto swiftClosure = PassportZK::Func_void_NitroNoirProof::fromUnsafe(swiftClosureWrapper);
+    return [swiftClosure = std::move(swiftClosure)](const NitroNoirProof& result) mutable -> void {
       swiftClosure.call(result);
     };
   }

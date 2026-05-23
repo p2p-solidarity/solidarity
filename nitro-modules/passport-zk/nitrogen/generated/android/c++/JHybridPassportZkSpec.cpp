@@ -7,13 +7,13 @@
 
 #include "JHybridPassportZkSpec.hpp"
 
-// Forward declaration of `NoirProofResult` to properly resolve imports.
-namespace margelo::nitro::solidarity::passportzk { struct NoirProofResult; }
+// Forward declaration of `NitroNoirProof` to properly resolve imports.
+namespace margelo::nitro::solidarity::passportzk { struct NitroNoirProof; }
 
-#include "NoirProofResult.hpp"
+#include "NitroNoirProof.hpp"
 #include <NitroModules/Promise.hpp>
 #include <NitroModules/JPromise.hpp>
-#include "JNoirProofResult.hpp"
+#include "JNitroNoirProof.hpp"
 #include <NitroModules/ArrayBuffer.hpp>
 #include <NitroModules/JArrayBuffer.hpp>
 #include <string>
@@ -52,13 +52,13 @@ namespace margelo::nitro::solidarity::passportzk {
   
 
   // Methods
-  std::shared_ptr<Promise<NoirProofResult>> JHybridPassportZkSpec::generateNoirProof(const std::string& circuitPath, const std::optional<std::string>& srsPath, const std::string& inputsJson) {
+  std::shared_ptr<Promise<NitroNoirProof>> JHybridPassportZkSpec::generateNoirProof(const std::string& circuitPath, const std::optional<std::string>& srsPath, const std::string& inputsJson) {
     static const auto method = _javaPart->javaClassStatic()->getMethod<jni::local_ref<JPromise::javaobject>(jni::alias_ref<jni::JString> /* circuitPath */, jni::alias_ref<jni::JString> /* srsPath */, jni::alias_ref<jni::JString> /* inputsJson */)>("generateNoirProof");
     auto __result = method(_javaPart, jni::make_jstring(circuitPath), srsPath.has_value() ? jni::make_jstring(srsPath.value()) : nullptr, jni::make_jstring(inputsJson));
     return [&]() {
-      auto __promise = Promise<NoirProofResult>::create();
+      auto __promise = Promise<NitroNoirProof>::create();
       __result->cthis()->addOnResolvedListener([=](const jni::alias_ref<jni::JObject>& __boxedResult) {
-        auto __result = jni::static_ref_cast<JNoirProofResult>(__boxedResult);
+        auto __result = jni::static_ref_cast<JNitroNoirProof>(__boxedResult);
         __promise->resolve(__result->toCpp());
       });
       __result->cthis()->addOnRejectedListener([=](const jni::alias_ref<jni::JThrowable>& __throwable) {

@@ -13,10 +13,10 @@
 #error NitroModules cannot be found! Are you sure you installed NitroModules properly?
 #endif
 
-// Forward declaration of `NoirProofResult` to properly resolve imports.
-namespace margelo::nitro::solidarity::passportzk { struct NoirProofResult; }
+// Forward declaration of `NitroNoirProof` to properly resolve imports.
+namespace margelo::nitro::solidarity::passportzk { struct NitroNoirProof; }
 
-#include "NoirProofResult.hpp"
+#include "NitroNoirProof.hpp"
 #include <NitroModules/Promise.hpp>
 #include <string>
 #include <optional>
@@ -53,7 +53,7 @@ namespace margelo::nitro::solidarity::passportzk {
 
     public:
       // Methods
-      virtual std::shared_ptr<Promise<NoirProofResult>> generateNoirProof(const std::string& circuitPath, const std::optional<std::string>& srsPath, const std::string& inputsJson) = 0;
+      virtual std::shared_ptr<Promise<NitroNoirProof>> generateNoirProof(const std::string& circuitPath, const std::optional<std::string>& srsPath, const std::string& inputsJson) = 0;
       virtual std::shared_ptr<Promise<std::shared_ptr<ArrayBuffer>>> getNoirVerificationKey(const std::string& circuitPath, const std::optional<std::string>& srsPath) = 0;
       virtual std::shared_ptr<Promise<bool>> verifyNoirProof(const std::shared_ptr<ArrayBuffer>& proof, const std::shared_ptr<ArrayBuffer>& vk) = 0;
 

@@ -12,12 +12,12 @@
 // Forward declaration of `HybridPassportZkSpec_cxx` to properly resolve imports.
 namespace PassportZK { class HybridPassportZkSpec_cxx; }
 
-// Forward declaration of `NoirProofResult` to properly resolve imports.
-namespace margelo::nitro::solidarity::passportzk { struct NoirProofResult; }
+// Forward declaration of `NitroNoirProof` to properly resolve imports.
+namespace margelo::nitro::solidarity::passportzk { struct NitroNoirProof; }
 // Forward declaration of `ArrayBufferHolder` to properly resolve imports.
 namespace NitroModules { class ArrayBufferHolder; }
 
-#include "NoirProofResult.hpp"
+#include "NitroNoirProof.hpp"
 #include <NitroModules/Promise.hpp>
 #include <NitroModules/ArrayBuffer.hpp>
 #include <NitroModules/ArrayBufferHolder.hpp>
@@ -74,7 +74,7 @@ namespace margelo::nitro::solidarity::passportzk {
 
   public:
     // Methods
-    inline std::shared_ptr<Promise<NoirProofResult>> generateNoirProof(const std::string& circuitPath, const std::optional<std::string>& srsPath, const std::string& inputsJson) override {
+    inline std::shared_ptr<Promise<NitroNoirProof>> generateNoirProof(const std::string& circuitPath, const std::optional<std::string>& srsPath, const std::string& inputsJson) override {
       auto __result = _swiftPart.generateNoirProof(circuitPath, srsPath, inputsJson);
       if (__result.hasError()) [[unlikely]] {
         std::rethrow_exception(__result.error());
