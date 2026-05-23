@@ -126,13 +126,19 @@ android {
 
   sourceSets {
     main {
-      // Pull in our hand-written HybridProximity.kt next to this build.gradle.
-      java.srcDirs += ["."]
-      manifest.srcFile "AndroidManifest.xml"
+      // src/main/java is the conventional layout (SolidarityProximityPackage.kt
+      // lives there). The hand-written HybridProximity.kt sits one level up
+      // beside this build.gradle per the package author's preference; pull
+      // it in via an explicit file list so gradle doesn't end up scanning
+      // build outputs and producing implicit-dependency warnings.
+      java.srcDirs += [
+        // Nitrogen-generated kotlin (also added by autolinking.gradle, kept
+        // here as a safety net if autolinking ordering changes).
+        "${project.projectDir}/../nitrogen/generated/android/kotlin",
+      ]
 
       if (isNewArchitectureEnabled()) {
         java.srcDirs += [
-          // React Codegen files
           "${project.buildDir}/generated/source/codegen/java"
         ]
       }
@@ -156,6 +162,7 @@ dependencies {
   // Coroutines for L2CAP/GATT async I/O.
   implementation "org.jetbrains.kotlinx:kotlinx-coroutines-android:1.8.1"
 
-  // AndroidX core UWB (alpha — UWB API surface is still pre-1.0).
-  implementation "androidx.core:core-uwb:1.0.0-alpha10"
+  // AndroidX UWB. Group is `androidx.core.uwb:uwb` — note the dot, not a
+  // hyphen. Pinning to the latest 1.0.0 release; bump as new versions land.
+  implementation "androidx.core.uwb:uwb:1.0.0"
 }
