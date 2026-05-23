@@ -4,6 +4,7 @@ export * from './cardError';
 export * from './contact';
 export * from './groupContext';
 export * from './jwk';
+export * from './oidc';
 export * from './result';
 export * from './sakura';
 export * from './sharingFormat';
