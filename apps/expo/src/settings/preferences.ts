@@ -57,11 +57,11 @@ export const usePreferences = create<PrefsState>((set) => {
   return {
     ...initial,
     set: (key, value) =>
-      set((s) => {
+      { set((s) => {
         const next = { ...s, [key]: value } as Preferences;
         write(next);
-        return { [key]: value } as Partial<PrefsState>;
-      }),
+        return { [key]: value };
+      }); },
     reset: () => {
       write(DEFAULTS);
       set(DEFAULTS);

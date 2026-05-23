@@ -24,7 +24,7 @@ export default function GroupDetail() {
   return (
     <ScrollView className="flex-1 bg-pageBg">
       <View className="px-4 pt-6 pb-2">
-        <ThemedButton variant="secondary" size="sm" label="‹ Back" onPress={() => router.back()} />
+        <ThemedButton variant="secondary" size="sm" label="‹ Back" onPress={() => { router.back(); }} />
       </View>
       <View className="px-4">
         <ThemedText variant="headlineLarge">{group.name}</ThemedText>

@@ -38,13 +38,13 @@ export default function ScanScreen() {
           </ThemedSurface>
         </View>
         <View>
-          <ThemedButton label="Scan another" fullWidth onPress={() => setResult(null)} />
+          <ThemedButton label="Scan another" fullWidth onPress={() => { setResult(null); }} />
           <View className="mt-2">
             <ThemedButton
               variant="secondary"
               label="Close"
               fullWidth
-              onPress={() => router.back()}
+              onPress={() => { router.back(); }}
             />
           </View>
         </View>

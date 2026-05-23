@@ -36,7 +36,7 @@ export default function VaultHub() {
     <ScrollView className="flex-1 bg-pageBg">
       <View className="flex-row items-center justify-between px-4 pt-6">
         <ThemedText variant="headlineLarge">Vault</ThemedText>
-        <ThemedButton label="Add" size="sm" onPress={() => router.push('/vault/new')} />
+        <ThemedButton label="Add" size="sm" onPress={() => { router.push('/vault/new'); }} />
       </View>
       <ThemedText variant="bodySmall" tone="tertiary" className="mx-4 mt-1">
         End-to-end encrypted private storage.
@@ -53,7 +53,7 @@ export default function VaultHub() {
         items.map((it) => (
           <Pressable
             key={it.id}
-            onPress={() => router.push({ pathname: '/vault/[id]', params: { id: it.id } })}
+            onPress={() => { router.push({ pathname: '/vault/[id]', params: { id: it.id } }); }}
             accessibilityRole="button"
             accessibilityLabel={`Open vault item ${it.name}`}
           >

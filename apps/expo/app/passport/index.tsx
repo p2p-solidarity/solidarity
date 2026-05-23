@@ -42,7 +42,7 @@ export default function PassportEntry() {
           generateProof: async () => new ArrayBuffer(32),
           issueVc: async () => 'demo.vc.jwt',
         },
-        (s) => setSteps((cur) => [...cur, s])
+        (s) => { setSteps((cur) => [...cur, s]); }
       );
       pushToast('Passport credential issued', 'success');
       router.back();

@@ -59,14 +59,14 @@ export default function ShareTab() {
         <ThemedButton
           label={browsing ? 'Stop searching' : 'Find nearby'}
           fullWidth
-          onPress={() => setBrowsing((b) => !b)}
+          onPress={() => { setBrowsing((b) => !b); }}
         />
         <View className="mt-3">
           <ThemedButton
             variant="secondary"
             label="Scan a QR instead"
             fullWidth
-            onPress={() => router.push('/scan')}
+            onPress={() => { router.push('/scan'); }}
           />
         </View>
       </ThemedSurface>

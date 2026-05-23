@@ -24,5 +24,5 @@ export function defaultAnimalForId(id: string): Animal {
   const bytes = new TextEncoder().encode(id);
   let sum = 0;
   for (const b of bytes) sum = (sum + b) % 5;
-  return BY_INDEX[sum as 0 | 1 | 2 | 3 | 4] ?? 'dog';
+  return BY_INDEX[sum as 0 | 1 | 2 | 3 | 4];
 }

@@ -20,7 +20,7 @@ export default function NotificationSettings() {
       <ToggleRow
         label="Enable push notifications"
         value={enabled}
-        onChange={(v) => setPref('notificationsEnabled', v)}
+        onChange={(v) => { setPref('notificationsEnabled', v); }}
       />
     </ScrollView>
   );

@@ -24,7 +24,7 @@ export default function PersonDetail() {
           variant="secondary"
           label="‹ Back"
           size="sm"
-          onPress={() => router.back()}
+          onPress={() => { router.back(); }}
         />
       </View>
       <View className="px-4 pb-2">

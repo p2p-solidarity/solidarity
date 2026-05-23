@@ -20,7 +20,7 @@ export default function GroupsHub() {
     <ScrollView className="flex-1 bg-pageBg">
       <View className="flex-row items-center justify-between px-4 pt-6">
         <ThemedText variant="headlineLarge">Groups</ThemedText>
-        <ThemedButton label="New" size="sm" onPress={() => router.push('/groups/new')} />
+        <ThemedButton label="New" size="sm" onPress={() => { router.push('/groups/new'); }} />
       </View>
 
       {groups.length === 0 ? (
@@ -47,7 +47,7 @@ export default function GroupsHub() {
                 variant="secondary"
                 size="sm"
                 label="Manage"
-                onPress={() => router.push({ pathname: '/groups/[id]', params: { id: g.id } })}
+                onPress={() => { router.push({ pathname: '/groups/[id]', params: { id: g.id } }); }}
               />
             </View>
           </ThemedSurface>

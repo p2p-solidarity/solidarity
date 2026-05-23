@@ -20,14 +20,18 @@ import {
 import { getMasterKey } from './secureMasterKey';
 
 /** Serialise + encrypt; returns base64 of the Swift-compatible combined blob. */
-export async function encryptJson<T>(value: T): Promise<string> {
+export async function encryptJson(value: unknown): Promise<string> {
   const key = await getMasterKey();
   const plaintext = utf8ToBytes(JSON.stringify(value));
   return base64Encode(aesGcmSeal(key, plaintext));
 }
 
-/** Decrypt + parse JSON. Throws on tampering or bad JSON. */
-export async function decryptJson<T>(blob: string): Promise<T> {
+/**
+ * Decrypt + parse JSON. Throws on tampering or bad JSON.
+ * Returns `unknown` — callers must cast to their domain type (or pipe
+ * through a Zod schema for runtime validation).
+ */
+export async function decryptJson<T = unknown>(blob: string): Promise<T> {
   const key = await getMasterKey();
   const combined = base64Decode(blob);
   const plaintext = aesGcmOpen(key, combined);

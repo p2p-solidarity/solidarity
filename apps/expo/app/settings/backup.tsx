@@ -82,7 +82,7 @@ export default function BackupSettings() {
         <ToggleRow
           label="Auto-backup on pull-down"
           value={autoBackup}
-          onChange={(v) => setPref('autoBackupOnPull', v)}
+          onChange={(v) => { setPref('autoBackupOnPull', v); }}
         />
       </View>
 

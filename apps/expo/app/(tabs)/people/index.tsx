@@ -35,8 +35,8 @@ export default function PeopleTab() {
   const backupGesture = useMemo(
     () =>
       makeGestureAutoBackup(provider, {
-        onComplete: () => pushToast('Backed up to cloud', 'success', 2000),
-        onError: () => pushToast('Backup failed', 'error'),
+        onComplete: () => { pushToast('Backed up to cloud', 'success', 2000); },
+        onError: () => { pushToast('Backup failed', 'error'); },
       }),
     [provider]
   );

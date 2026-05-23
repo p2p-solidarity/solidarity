@@ -44,7 +44,7 @@ export default function CredentialsHub() {
           <Pressable
             key={c.id}
             onPress={() =>
-              router.push({ pathname: '/credentials/[id]', params: { id: c.id } })
+              { router.push({ pathname: '/credentials/[id]', params: { id: c.id } }); }
             }
             accessibilityRole="button"
             accessibilityLabel={`View credential ${c.title}`}

@@ -1,0 +1,9 @@
+# Bun config — hoisted linker mode so Metro + Expo CLI can find their
+# peer deps. The default `isolated` (symlink) linker creates
+# .bun/<pkg>@<hash>/node_modules/<pkg>/, which Metro's transformer
+# loader can't traverse: it fails with
+#   "Cannot read properties of undefined (reading 'transformFile')"
+# Hoisted mode creates a flat node_modules/ at the workspace root,
+# matching what npm/yarn produce — Metro + expo-doctor both work.
+[install]
+linker = "hoisted"

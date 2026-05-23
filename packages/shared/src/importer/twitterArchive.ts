@@ -34,7 +34,7 @@ export interface TwitterArchive {
 
 function stripJsPrefix(input: string): string {
   // `window.YTD.<kind>.partN = ` (kind: tweets, account, follower, …)
-  const match = input.match(/window\.YTD\.[^=]+= /u);
+  const match = /window\.YTD\.[^=]+= /u.exec(input);
   return match ? input.slice(match[0].length) : input;
 }
 

@@ -28,7 +28,7 @@ export default function SecuritySettings() {
       <ToggleRow
         label="Require Face ID for sensitive ops"
         value={biometric}
-        onChange={(v) => setPref('biometricSensitiveOps', v)}
+        onChange={(v) => { setPref('biometricSensitiveOps', v); }}
       />
 
       <ThemedSurface variant="card" padded className="mx-4 mt-4">

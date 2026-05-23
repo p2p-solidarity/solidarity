@@ -43,7 +43,7 @@ export function TerminalWelcomeStep() {
       setRevealed(fullText.slice(0, i));
       if (i >= fullText.length) clearInterval(timer);
     }, intervalMs);
-    return () => clearInterval(timer);
+    return () => { clearInterval(timer); };
   }, [fullText]);
 
   const cursorStyle = useAnimatedStyle(() => ({ opacity: cursorOpacity.value }));

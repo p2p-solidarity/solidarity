@@ -38,8 +38,8 @@ let nextId = 1;
 const useToastStore = create<ToastStore>((set) => ({
   toasts: [],
   push: (message, tone = 'info', ms = 3000) =>
-    set((s) => ({ toasts: [...s.toasts, { id: nextId++, message, tone, ms }] })),
-  pop: (id) => set((s) => ({ toasts: s.toasts.filter((t) => t.id !== id) })),
+    { set((s) => ({ toasts: [...s.toasts, { id: nextId++, message, tone, ms }] })); },
+  pop: (id) => { set((s) => ({ toasts: s.toasts.filter((t) => t.id !== id) })); },
 }));
 
 export function pushToast(
@@ -68,9 +68,9 @@ function ToastItem({ toast }: { readonly toast: Toast }): ReactNode {
     const timer = setTimeout(() => {
       opacity.value = withTiming(0, { duration: 200 });
       translateY.value = withTiming(20, { duration: 250 });
-      setTimeout(() => pop(toast.id), 250);
+      setTimeout(() => { pop(toast.id); }, 250);
     }, toast.ms);
-    return () => clearTimeout(timer);
+    return () => { clearTimeout(timer); };
   }, [opacity, pop, toast.id, toast.ms, translateY]);
 
   const animStyle = useAnimatedStyle(() => ({

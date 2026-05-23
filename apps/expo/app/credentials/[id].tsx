@@ -40,7 +40,7 @@ export default function CredentialDetail() {
   return (
     <ScrollView className="flex-1 bg-pageBg">
       <View className="px-4 pt-6">
-        <ThemedButton variant="secondary" size="sm" label="‹ Back" onPress={() => router.back()} />
+        <ThemedButton variant="secondary" size="sm" label="‹ Back" onPress={() => { router.back(); }} />
       </View>
       <View className="px-4 mt-4">
         <ThemedText variant="headlineLarge">{credential.title}</ThemedText>

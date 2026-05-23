@@ -23,11 +23,11 @@ export default function DeveloperSettings() {
       <ToggleRow
         label="Developer mode"
         value={enabled}
-        onChange={(v) => setPref('developerMode', v)}
+        onChange={(v) => { setPref('developerMode', v); }}
       />
       {enabled ? (
         <>
-          <SettingRow label="Reset all preferences" destructive onPress={() => reset()} />
+          <SettingRow label="Reset all preferences" destructive onPress={() => { reset(); }} />
         </>
       ) : null}
     </ScrollView>

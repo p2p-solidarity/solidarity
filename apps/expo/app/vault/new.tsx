@@ -95,7 +95,7 @@ export default function VaultNew() {
             variant="secondary"
             label="Cancel"
             fullWidth
-            onPress={() => router.back()}
+            onPress={() => { router.back(); }}
           />
         </View>
       </View>

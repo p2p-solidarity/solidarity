@@ -14,11 +14,11 @@ export interface ProfileStepProps {
 
 export function ProfileStep({ name, handle, onChange }: ProfileStepProps) {
   const setName = useCallback(
-    (v: string) => onChange({ name: v, handle }),
+    (v: string) => { onChange({ name: v, handle }); },
     [handle, onChange]
   );
   const setHandle = useCallback(
-    (v: string) => onChange({ name, handle: v.replace(/[^A-Za-z0-9_]/gu, '') }),
+    (v: string) => { onChange({ name, handle: v.replace(/[^A-Za-z0-9_]/gu, '') }); },
     [name, onChange]
   );
 

@@ -38,7 +38,7 @@ export default function OidcConsent() {
       <View className="flex-1 bg-pageBg items-center justify-center p-6">
         <ThemedText tone="secondary">Invalid OIDC request.</ThemedText>
         <View className="mt-3">
-          <ThemedButton variant="secondary" label="Back" onPress={() => router.back()} />
+          <ThemedButton variant="secondary" label="Back" onPress={() => { router.back(); }} />
         </View>
       </View>
     );

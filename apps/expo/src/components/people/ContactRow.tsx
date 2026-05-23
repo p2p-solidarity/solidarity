@@ -57,8 +57,8 @@ export function ContactRow({
   return (
     <Pressable
       className="bg-cardBg flex-row items-center rounded-2xl border border-divider p-4 mx-4 my-1"
-      onPress={() => onPress(contact)}
-      onLongPress={onLongPress ? () => onLongPress(contact) : undefined}
+      onPress={() => { onPress(contact); }}
+      onLongPress={onLongPress ? () => { onLongPress(contact); } : undefined}
       accessibilityRole="button"
       accessibilityLabel={`Contact ${card.name}`}
     >

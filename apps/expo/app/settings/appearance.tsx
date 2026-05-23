@@ -24,7 +24,7 @@ export default function AppearanceSettings() {
           key={opt}
           label={opt.charAt(0).toUpperCase() + opt.slice(1)}
           value={mode === opt ? '✓' : ''}
-          onPress={() => setPref('themeMode', opt)}
+          onPress={() => { setPref('themeMode', opt); }}
         />
       ))}
     </ScrollView>

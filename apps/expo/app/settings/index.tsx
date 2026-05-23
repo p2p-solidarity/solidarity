@@ -22,29 +22,29 @@ export default function SettingsHub() {
       <SettingRow
         label="Backup"
         value={provider === 'iCloud' ? 'iCloud' : 'Google Drive'}
-        onPress={() => router.push('/settings/backup')}
+        onPress={() => { router.push('/settings/backup'); }}
       />
       <SettingRow
         label="Security"
         value="Face ID + Keychain"
-        onPress={() => router.push('/settings/security')}
+        onPress={() => { router.push('/settings/security'); }}
       />
       <SettingRow
         label="Privacy"
-        onPress={() => router.push('/settings/privacy')}
+        onPress={() => { router.push('/settings/privacy'); }}
       />
       <SettingRow
         label="Appearance"
         value={themeMode === 'auto' ? 'Auto' : themeMode === 'dark' ? 'Dark' : 'Light'}
-        onPress={() => router.push('/settings/appearance')}
+        onPress={() => { router.push('/settings/appearance'); }}
       />
       <SettingRow
         label="Notifications"
-        onPress={() => router.push('/settings/notifications')}
+        onPress={() => { router.push('/settings/notifications'); }}
       />
       <SettingRow
         label="Developer mode"
-        onPress={() => router.push('/settings/developer')}
+        onPress={() => { router.push('/settings/developer'); }}
       />
     </ScrollView>
   );

@@ -54,7 +54,7 @@ export default function RootLayout() {
     const sub = Linking.addEventListener('url', ({ url }) => {
       handleDeepLink(url);
     });
-    return () => sub.remove();
+    return () => { sub.remove(); };
   }, []);
 
   if (!ready) return null;

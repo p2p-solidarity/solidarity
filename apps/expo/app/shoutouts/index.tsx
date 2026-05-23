@@ -24,7 +24,7 @@ export default function ShoutoutsHub() {
         <ThemedButton
           label="Compose"
           size="sm"
-          onPress={() => router.push('/shoutouts/new')}
+          onPress={() => { router.push('/shoutouts/new'); }}
         />
       </View>
 
@@ -39,7 +39,7 @@ export default function ShoutoutsHub() {
         items.map((s) => (
           <Pressable
             key={s.id}
-            onPress={() => router.push({ pathname: '/shoutouts/[id]', params: { id: s.id } })}
+            onPress={() => { router.push({ pathname: '/shoutouts/[id]', params: { id: s.id } }); }}
             accessibilityRole="button"
             accessibilityLabel={`Open shoutout ${s.subject}`}
           >

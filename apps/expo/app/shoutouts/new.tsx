@@ -58,7 +58,7 @@ export default function ShoutoutCompose() {
                 size="sm"
                 variant={recipient?.id === c.id ? 'primary' : 'secondary'}
                 label={c.businessCard.name}
-                onPress={() => setRecipient(c)}
+                onPress={() => { setRecipient(c); }}
               />
             ))}
           </View>

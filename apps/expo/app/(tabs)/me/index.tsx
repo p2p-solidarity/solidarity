@@ -25,7 +25,7 @@ export default function MeTab() {
           variant="secondary"
           size="sm"
           label="Settings"
-          onPress={() => router.push('/settings')}
+          onPress={() => { router.push('/settings'); }}
         />
       </View>
 
@@ -49,7 +49,7 @@ export default function MeTab() {
               <ThemedButton
                 label="Edit"
                 size="sm"
-                onPress={() => router.push({ pathname: '/cards/edit', params: { id: card.id } })}
+                onPress={() => { router.push({ pathname: '/cards/edit', params: { id: card.id } }); }}
               />
             </View>
           </View>
@@ -62,7 +62,7 @@ export default function MeTab() {
             <View className="mt-3">
               <ThemedButton
                 label="Create card"
-                onPress={() => router.push('/cards/edit')}
+                onPress={() => { router.push('/cards/edit'); }}
               />
             </View>
           </View>
@@ -78,7 +78,7 @@ export default function MeTab() {
           <ThemedButton
             variant="secondary"
             label="Start passport flow"
-            onPress={() => router.push('/passport')}
+            onPress={() => { router.push('/passport'); }}
           />
         </View>
       </ThemedSurface>

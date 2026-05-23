@@ -27,7 +27,7 @@ export function AvatarStep({ value, onSelect }: AvatarStepProps) {
         return (
           <Pressable
             key={opt.animal}
-            onPress={() => onSelect(opt.animal)}
+            onPress={() => { onSelect(opt.animal); }}
             accessibilityRole="button"
             accessibilityLabel={`Pick ${opt.label}`}
             className="basis-[30%]"

@@ -60,14 +60,14 @@ export default function OnboardingFlow() {
               name={state.profile.name}
               handle={state.profile.handle}
               onChange={(p) =>
-                dispatch({ type: 'setProfile', name: p.name, handle: p.handle })
+                { dispatch({ type: 'setProfile', name: p.name, handle: p.handle }); }
               }
             />
           ) : null}
           {state.step === 'avatarSelection' ? (
             <AvatarStep
               value={state.animal}
-              onSelect={(a) => dispatch({ type: 'setAnimal', animal: a })}
+              onSelect={(a) => { dispatch({ type: 'setAnimal', animal: a }); }}
             />
           ) : null}
         </View>
@@ -86,7 +86,7 @@ export default function OnboardingFlow() {
               variant="secondary"
               label="Back"
               fullWidth
-              onPress={() => dispatch({ type: 'back' })}
+              onPress={() => { dispatch({ type: 'back' }); }}
             />
           </View>
         ) : null}

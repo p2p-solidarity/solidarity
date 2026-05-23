@@ -20,10 +20,13 @@ function encode(bytes: Uint8Array, alphabet: string, pad: boolean): string {
     const b1 = bytes[i + 1] ?? 0;
     const b2 = bytes[i + 2] ?? 0;
     const triple = (b0 << 16) | (b1 << 8) | b2;
-    out += alphabet[(triple >> 18) & 0x3f];
-    out += alphabet[(triple >> 12) & 0x3f];
-    out += i + 1 < bytes.length ? alphabet[(triple >> 6) & 0x3f] : '=';
-    out += i + 2 < bytes.length ? alphabet[triple & 0x3f] : '=';
+    // Alphabet indices come from 6-bit masks of a 24-bit value, so they're
+    // guaranteed to be in [0, 63] — the `?? ''` keeps strict TS happy
+    // (alphabet[number] is `string | undefined` under noUncheckedIndexedAccess).
+    out += alphabet[(triple >> 18) & 0x3f] ?? '';
+    out += alphabet[(triple >> 12) & 0x3f] ?? '';
+    out += i + 1 < bytes.length ? (alphabet[(triple >> 6) & 0x3f] ?? '') : '=';
+    out += i + 2 < bytes.length ? (alphabet[triple & 0x3f] ?? '') : '=';
   }
   return pad ? out : out.replace(/=+$/u, '');
 }

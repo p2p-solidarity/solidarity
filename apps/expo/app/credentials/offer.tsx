@@ -47,7 +47,7 @@ export default function CredentialOffer() {
       <View className="flex-1 bg-pageBg items-center justify-center p-6">
         <ThemedText tone="secondary">Invalid credential offer.</ThemedText>
         <View className="mt-3">
-          <ThemedButton variant="secondary" label="Back" onPress={() => router.back()} />
+          <ThemedButton variant="secondary" label="Back" onPress={() => { router.back(); }} />
         </View>
       </View>
     );
@@ -86,7 +86,7 @@ export default function CredentialOffer() {
       <View className="px-4 mt-6 mb-10">
         <ThemedButton label="Accept credential" fullWidth onPress={onAccept} />
         <View className="mt-2">
-          <ThemedButton variant="secondary" label="Cancel" fullWidth onPress={() => router.back()} />
+          <ThemedButton variant="secondary" label="Cancel" fullWidth onPress={() => { router.back(); }} />
         </View>
       </View>
     </ScrollView>
