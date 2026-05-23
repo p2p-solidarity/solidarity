@@ -1,7 +1,9 @@
 /**
  * bun test preload — runs once before any test file.
- * Mirrors aniseekr-expo/test-setup.ts; stub native modules here as the
- * port progresses (mmkv, secure-store, vision-camera, nitro modules).
+ *
+ * Globals like `expect.each` / `it.each` are bun built-ins (since bun 1.2).
+ * Native modules that touch JSI (mmkv, secure-store, vision-camera, nitro)
+ * are stubbed lazily — only the suites that import them install a mock,
+ * which keeps the parity tests (pure TS over fixtures) fast + isolated.
  */
-// Intentionally minimal until Phase 1 lands; tests added per-feature.
 export {};
