@@ -1,0 +1,22 @@
+{
+  "name": "@solidarity/nitro-spruce-did",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Nitro module wrapping SpruceID's mobile SDKs for DID key generation + DID document management. iOS: Secure Enclave (P-256) + SpruceIDMobileSdkRs. Android: AndroidKeyStore (StrongBox where available) + com.spruceid.mobile.sdk:mobilesdk.",
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "scripts": {
+    "nitrogen": "nitrogen",
+    "lint": "eslint .",
+    "typecheck": "tsc --noEmit"
+  },
+  "react-native": {
+    "supportedPlatforms": ["ios", "android"]
+  },
+  "peerDependencies": {
+    "react-native-nitro-modules": "*"
+  },
+  "devDependencies": {
+    "react-native-nitro-modules": "^0.35.7"
+  }
+}

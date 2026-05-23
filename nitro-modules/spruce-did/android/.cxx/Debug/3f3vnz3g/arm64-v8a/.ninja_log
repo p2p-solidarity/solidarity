@@ -1,0 +1,6 @@
+# ninja log v5
+0	33	1779572861868744323	CMakeFiles/SolidaritySpruceDid.dir/dummy.cpp.o	a7906071f0741f57
+0	1787	1779572863609756237	CMakeFiles/SolidaritySpruceDid.dir/Users/kidney/Workspace/Work/solidarity/airmeishi/nitro-modules/spruce-did/nitrogen/generated/android/SolidaritySpruceDidOnLoad.cpp.o	9ffc852efdf8fdc4
+0	3215	1779572865025794470	CMakeFiles/SolidaritySpruceDid.dir/Users/kidney/Workspace/Work/solidarity/airmeishi/nitro-modules/spruce-did/nitrogen/generated/android/c++/JHybridSpruceDidSpec.cpp.o	2d338d68dac83c0
+0	3281	1779572865091276175	CMakeFiles/SolidaritySpruceDid.dir/Users/kidney/Workspace/Work/solidarity/airmeishi/nitro-modules/spruce-did/nitrogen/generated/shared/c++/HybridSpruceDidSpec.cpp.o	28be4aeb9f0188f0
+3281	3353	1779572865172080072	../../../../build/intermediates/cxx/Debug/3f3vnz3g/obj/arm64-v8a/libSolidaritySpruceDid.so	7bbb6a590fade787

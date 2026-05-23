@@ -1,0 +1,22 @@
+                        -H/Users/kidney/Workspace/Work/solidarity/airmeishi/nitro-modules/spruce-did/android
+-DCMAKE_SYSTEM_NAME=Android
+-DCMAKE_EXPORT_COMPILE_COMMANDS=ON
+-DCMAKE_SYSTEM_VERSION=26
+-DANDROID_PLATFORM=android-26
+-DANDROID_ABI=x86_64
+-DCMAKE_ANDROID_ARCH_ABI=x86_64
+-DANDROID_NDK=/Users/kidney/Library/Android/sdk/ndk/27.1.12297006
+-DCMAKE_ANDROID_NDK=/Users/kidney/Library/Android/sdk/ndk/27.1.12297006
+-DCMAKE_TOOLCHAIN_FILE=/Users/kidney/Library/Android/sdk/ndk/27.1.12297006/build/cmake/android.toolchain.cmake
+-DCMAKE_MAKE_PROGRAM=/Users/kidney/Library/Android/sdk/cmake/3.22.1/bin/ninja
+-DCMAKE_CXX_FLAGS=-frtti -fexceptions -Wall -Wextra -fstack-protector-all -O1 -g -O2
+-DCMAKE_LIBRARY_OUTPUT_DIRECTORY=/Users/kidney/Workspace/Work/solidarity/airmeishi/nitro-modules/spruce-did/android/build/intermediates/cxx/Debug/3f3vnz3g/obj/x86_64
+-DCMAKE_RUNTIME_OUTPUT_DIRECTORY=/Users/kidney/Workspace/Work/solidarity/airmeishi/nitro-modules/spruce-did/android/build/intermediates/cxx/Debug/3f3vnz3g/obj/x86_64
+-DCMAKE_BUILD_TYPE=Debug
+-DCMAKE_FIND_ROOT_PATH=/Users/kidney/Workspace/Work/solidarity/airmeishi/nitro-modules/spruce-did/android/.cxx/Debug/3f3vnz3g/prefab/x86_64/prefab
+-B/Users/kidney/Workspace/Work/solidarity/airmeishi/nitro-modules/spruce-did/android/.cxx/Debug/3f3vnz3g/x86_64
+-GNinja
+-DANDROID_STL=c++_shared
+-DANDROID_SUPPORT_FLEXIBLE_PAGE_SIZES=ON
+                        Build command args: []
+                        Version: 2

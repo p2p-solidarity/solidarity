@@ -1,0 +1,165 @@
+/*
+ * build.gradle
+ * @solidarity/nitro-spruce-did (Android)
+ *
+ * Modeled after react-native-mmkv's Nitro module gradle setup. Pulls in
+ * the nitrogen autolinking gradle, defines the Kotlin/C++ build, and
+ * declares the runtime deps we need (kotlinx coroutines, androidx biometric,
+ * SpruceID Android SDK).
+ */
+buildscript {
+  repositories {
+    google()
+    mavenCentral()
+  }
+  dependencies {
+    // Match the rest of the Nitro ecosystem to avoid drift.
+    classpath "com.android.tools.build:gradle:9.1.0"
+  }
+}
+
+def reactNativeArchitectures() {
+  def value = rootProject.getProperties().get("reactNativeArchitectures")
+  return value ? value.split(",") : ["x86", "x86_64", "armeabi-v7a", "arm64-v8a"]
+}
+
+def isNewArchitectureEnabled() {
+  return rootProject.hasProperty("newArchEnabled") && rootProject.getProperty("newArchEnabled") == "true"
+}
+
+apply plugin: "com.android.library"
+apply plugin: "org.jetbrains.kotlin.android"
+apply from: "../nitrogen/generated/android/SolidaritySpruceDid+autolinking.gradle"
+
+if (isNewArchitectureEnabled()) {
+  apply plugin: "com.facebook.react"
+}
+
+def getExtOrDefault(name) {
+  return rootProject.ext.has(name) ? rootProject.ext.get(name) : project.properties["SolidaritySpruceDid_" + name]
+}
+
+def getExtOrIntegerDefault(name) {
+  return rootProject.ext.has(name) ? rootProject.ext.get(name) : (project.properties["SolidaritySpruceDid_" + name]).toInteger()
+}
+
+android {
+  namespace "com.margelo.nitro.gg.solidarity.sprucedid"
+
+  ndkVersion getExtOrDefault("ndkVersion")
+  compileSdkVersion getExtOrIntegerDefault("compileSdkVersion")
+
+  defaultConfig {
+    // AndroidKeyStore EC keys ship in API 23; StrongBox in API 28;
+    // BiometricPrompt + BiometricManager in API 28 (androidx covers older).
+    // We set minSdk=24 to match the rest of the Solidarity Android build.
+    minSdkVersion getExtOrIntegerDefault("minSdkVersion")
+    targetSdkVersion getExtOrIntegerDefault("targetSdkVersion")
+    buildConfigField "boolean", "IS_NEW_ARCHITECTURE_ENABLED", isNewArchitectureEnabled().toString()
+
+    externalNativeBuild {
+      cmake {
+        cppFlags "-frtti -fexceptions -Wall -Wextra -fstack-protector-all"
+        arguments "-DANDROID_STL=c++_shared", "-DANDROID_SUPPORT_FLEXIBLE_PAGE_SIZES=ON"
+        abiFilters (*reactNativeArchitectures())
+
+        buildTypes {
+          debug {
+            cppFlags "-O1 -g"
+          }
+          release {
+            cppFlags "-O2"
+          }
+        }
+      }
+    }
+  }
+
+  externalNativeBuild {
+    cmake {
+      path "CMakeLists.txt"
+    }
+  }
+
+  packagingOptions {
+    excludes = [
+      "META-INF",
+      "META-INF/**",
+      "**/libNitroModules.so",
+      "**/libc++_shared.so",
+      "**/libfbjni.so",
+      "**/libjsi.so",
+      "**/libfolly_json.so",
+      "**/libfolly_runtime.so",
+      "**/libglog.so",
+      "**/libhermes.so",
+      "**/libhermes-executor-debug.so",
+      "**/libhermes_executor.so",
+      "**/libreactnative.so",
+      "**/libreactnativejni.so",
+      "**/libturbomodulejsijni.so",
+      "**/libreact_nativemodule_core.so",
+      "**/libjscexecutor.so"
+    ]
+  }
+
+  buildFeatures {
+    buildConfig true
+    prefab true
+  }
+
+  buildTypes {
+    release {
+      minifyEnabled false
+    }
+  }
+
+  lintOptions {
+    disable "GradleCompatible"
+  }
+
+  compileOptions {
+    sourceCompatibility JavaVersion.VERSION_1_8
+    targetCompatibility JavaVersion.VERSION_1_8
+  }
+
+  sourceSets {
+    main {
+      java.srcDirs += [
+        "${project.projectDir}/../nitrogen/generated/android/kotlin",
+      ]
+
+      if (isNewArchitectureEnabled()) {
+        java.srcDirs += [
+          "${project.buildDir}/generated/source/codegen/java"
+        ]
+      }
+    }
+  }
+}
+
+repositories {
+  mavenCentral()
+  google()
+}
+
+dependencies {
+  // RN: provided by the app's react-native gradle plugin.
+  //noinspection GradleDynamicVersion
+  implementation "com.facebook.react:react-native:+"
+
+  // NitroModules core — provides HybridObject base, ArrayBuffer, Promise.
+  implementation project(":react-native-nitro-modules")
+
+  // Coroutines for async key generation / sign / verify.
+  implementation "org.jetbrains.kotlinx:kotlinx-coroutines-android:1.8.1"
+
+  // BiometricPrompt — androidx wrapper that covers API 23+ uniformly.
+  implementation "androidx.biometric:biometric:1.2.0-alpha05"
+
+  // SpruceID Android SDK. Same major.minor as the iOS SPM pin (0.14.x) so
+  // the wire format (did:key, JWK encoding, VC-JWT claim shape) is
+  // byte-identical across platforms.
+  // Source: https://central.sonatype.com/artifact/com.spruceid.mobile.sdk/mobilesdk
+  implementation "com.spruceid.mobile.sdk:mobilesdk:0.14.10"
+}

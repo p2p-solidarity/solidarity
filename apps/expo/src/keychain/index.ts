@@ -7,9 +7,12 @@ export {
   ensureSigningKey,
   publicJwk,
   signJwt,
+  didKeyForCurrentIdentity,
   resetSigningKeyForTesting,
+  type SigningIdentity,
 } from './signingKey';
 export {
   pairwisePrivateKey,
   pairwisePublicJwk,
+  resetPairwiseSeedForTesting,
 } from './pairwiseKey';

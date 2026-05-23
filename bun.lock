@@ -31,6 +31,7 @@
         "@solidarity/nitro-nfc-passport": "workspace:*",
         "@solidarity/nitro-passport-zk": "workspace:*",
         "@solidarity/nitro-proximity": "workspace:*",
+        "@solidarity/nitro-semaphore": "workspace:*",
         "@solidarity/nitro-spruce-did": "workspace:*",
         "@solidarity/shared": "workspace:*",
         "expo": "~56.0.4",

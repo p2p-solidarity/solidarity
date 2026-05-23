@@ -1,0 +1,6 @@
+/Users/kidney/Workspace/Work/solidarity/airmeishi/nitro-modules/spruce-did/android/.cxx/Debug/3f3vnz3g/prefab/x86/prefab/lib/i686-linux-android/cmake/ReactAndroid/ReactAndroidConfig.cmake
+/Users/kidney/Workspace/Work/solidarity/airmeishi/nitro-modules/spruce-did/android/.cxx/Debug/3f3vnz3g/prefab/x86/prefab/lib/i686-linux-android/cmake/ReactAndroid/ReactAndroidConfigVersion.cmake
+/Users/kidney/Workspace/Work/solidarity/airmeishi/nitro-modules/spruce-did/android/.cxx/Debug/3f3vnz3g/prefab/x86/prefab/lib/i686-linux-android/cmake/fbjni/fbjniConfig.cmake
+/Users/kidney/Workspace/Work/solidarity/airmeishi/nitro-modules/spruce-did/android/.cxx/Debug/3f3vnz3g/prefab/x86/prefab/lib/i686-linux-android/cmake/fbjni/fbjniConfigVersion.cmake
+/Users/kidney/Workspace/Work/solidarity/airmeishi/nitro-modules/spruce-did/android/.cxx/Debug/3f3vnz3g/prefab/x86/prefab/lib/i686-linux-android/cmake/react-native-nitro-modules/react-native-nitro-modulesConfig.cmake
+/Users/kidney/Workspace/Work/solidarity/airmeishi/nitro-modules/spruce-did/android/CMakeLists.txt

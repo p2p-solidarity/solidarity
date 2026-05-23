@@ -1,0 +1,48 @@
+{
+  "buildFiles": [
+    "/Users/kidney/Workspace/Work/solidarity/airmeishi/nitro-modules/spruce-did/android/.cxx/Debug/3f3vnz3g/prefab/x86/prefab/lib/i686-linux-android/cmake/ReactAndroid/ReactAndroidConfig.cmake",
+    "/Users/kidney/Workspace/Work/solidarity/airmeishi/nitro-modules/spruce-did/android/.cxx/Debug/3f3vnz3g/prefab/x86/prefab/lib/i686-linux-android/cmake/ReactAndroid/ReactAndroidConfigVersion.cmake",
+    "/Users/kidney/Workspace/Work/solidarity/airmeishi/nitro-modules/spruce-did/android/.cxx/Debug/3f3vnz3g/prefab/x86/prefab/lib/i686-linux-android/cmake/fbjni/fbjniConfig.cmake",
+    "/Users/kidney/Workspace/Work/solidarity/airmeishi/nitro-modules/spruce-did/android/.cxx/Debug/3f3vnz3g/prefab/x86/prefab/lib/i686-linux-android/cmake/fbjni/fbjniConfigVersion.cmake",
+    "/Users/kidney/Workspace/Work/solidarity/airmeishi/nitro-modules/spruce-did/android/.cxx/Debug/3f3vnz3g/prefab/x86/prefab/lib/i686-linux-android/cmake/react-native-nitro-modules/react-native-nitro-modulesConfig.cmake",
+    "/Users/kidney/Workspace/Work/solidarity/airmeishi/nitro-modules/spruce-did/android/CMakeLists.txt"
+  ],
+  "cleanCommandsComponents": [
+    [
+      "/Users/kidney/Library/Android/sdk/cmake/3.22.1/bin/ninja",
+      "-C",
+      "/Users/kidney/Workspace/Work/solidarity/airmeishi/nitro-modules/spruce-did/android/.cxx/Debug/3f3vnz3g/x86",
+      "clean"
+    ]
+  ],
+  "buildTargetsCommandComponents": [
+    "/Users/kidney/Library/Android/sdk/cmake/3.22.1/bin/ninja",
+    "-C",
+    "/Users/kidney/Workspace/Work/solidarity/airmeishi/nitro-modules/spruce-did/android/.cxx/Debug/3f3vnz3g/x86",
+    "{LIST_OF_TARGETS_TO_BUILD}"
+  ],
+  "libraries": {
+    "SolidaritySpruceDid::@6890427a1f51a3e7e1df": {
+      "toolchain": "toolchain",
+      "abi": "x86",
+      "artifactName": "SolidaritySpruceDid",
+      "output": "/Users/kidney/Workspace/Work/solidarity/airmeishi/nitro-modules/spruce-did/android/build/intermediates/cxx/Debug/3f3vnz3g/obj/x86/libSolidaritySpruceDid.so",
+      "runtimeFiles": [
+        "/Users/kidney/.gradle/caches/9.3.1/transforms/6f1f7af63467440b9fe6f23d6ac7fd9b/transformed/fbjni-0.7.0/prefab/modules/fbjni/libs/android.x86/libfbjni.so",
+        "/Users/kidney/.gradle/caches/9.3.1/transforms/6f9e22f0c697aaa3166c5b27816d5e7c/transformed/react-android-0.85.3-debug/prefab/modules/jsi/libs/android.x86/libjsi.so",
+        "/Users/kidney/Workspace/Work/solidarity/airmeishi/node_modules/react-native-nitro-modules/android/build/intermediates/cxx/Debug/4h6l6x1u/obj/x86/libNitroModules.so",
+        "/Users/kidney/.gradle/caches/9.3.1/transforms/6f9e22f0c697aaa3166c5b27816d5e7c/transformed/react-android-0.85.3-debug/prefab/modules/reactnative/libs/android.x86/libreactnative.so"
+      ]
+    }
+  },
+  "toolchains": {
+    "toolchain": {
+      "cCompilerExecutable": "/Users/kidney/Library/Android/sdk/ndk/27.1.12297006/toolchains/llvm/prebuilt/darwin-x86_64/bin/clang.lld",
+      "cppCompilerExecutable": "/Users/kidney/Library/Android/sdk/ndk/27.1.12297006/toolchains/llvm/prebuilt/darwin-x86_64/bin/clang++.lld"
+    }
+  },
+  "cFileExtensions": [],
+  "cppFileExtensions": [
+    "cpp"
+  ]
+}

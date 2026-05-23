@@ -1,0 +1,9 @@
+{
+  "enabled": true,
+  "prefabPath": "/Users/kidney/.gradle/caches/modules-2/files-2.1/com.google.prefab/cli/2.1.0/aa32fec809c44fa531f01dcfb739b5b3304d3050/cli-2.1.0-all.jar",
+  "packages": [
+    "/Users/kidney/.gradle/caches/9.3.1/transforms/6f9e22f0c697aaa3166c5b27816d5e7c/transformed/react-android-0.85.3-debug/prefab",
+    "/Users/kidney/Workspace/Work/solidarity/airmeishi/node_modules/react-native-nitro-modules/android/build/intermediates/prefab_package/debug/prefab",
+    "/Users/kidney/.gradle/caches/9.3.1/transforms/6f1f7af63467440b9fe6f23d6ac7fd9b/transformed/fbjni-0.7.0/prefab"
+  ]
+}
