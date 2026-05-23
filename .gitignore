@@ -136,6 +136,11 @@ web-build/
 apps/expo/ios/*
 !apps/expo/ios/ci_scripts/
 apps/expo/android/
+# Root-level ios/ + app.json — only ever happen if someone runs
+# `expo prebuild` from the workspace root by mistake; the legitimate
+# native dir lives under apps/expo/ios/.
+/ios/
+/app.json
 
 # Nitro nitrogen-generated boilerplate — these are real build artifacts
 # used by CocoaPods + Gradle, so they must be committed. Only ignore
