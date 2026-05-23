@@ -14,6 +14,7 @@ import * as Contacts from 'expo-contacts';
 import { useContactStore } from './repository';
 import {
   parseVCardBundle,
+  uuid,
   type Contact,
   type ParsedVCard,
 } from '@solidarity/shared';
@@ -21,13 +22,13 @@ import {
 function vcfToContact(vc: ParsedVCard): Contact {
   const now = new Date();
   return {
-    id: crypto.randomUUID(),
+    id: uuid(),
     receivedAt: now,
     source: 'Manual',
     tags: [],
     verificationStatus: 'Unverified',
     businessCard: {
-      id: crypto.randomUUID(),
+      id: uuid(),
       name: vc.fullName,
       title: vc.title,
       company: vc.organization,

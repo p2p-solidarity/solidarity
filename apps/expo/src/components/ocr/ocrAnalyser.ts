@@ -10,6 +10,7 @@
  * The pure-TS heuristic in `extractBusinessCardFields` is identical to
  * Swift so we get parity tests for free the moment the recogniser lands.
  */
+import { uuid } from '@solidarity/shared';
 import type { BusinessCard, SharingPreferences } from '@solidarity/shared';
 
 export interface RecognizedText {
@@ -142,7 +143,7 @@ function buildExtractedCard(fields: ExtractedFields): BusinessCard {
   };
 
   return {
-    id: globalThis.crypto.randomUUID(),
+    id: uuid(),
     name: fields.name,
     title: fields.title,
     company: fields.company,

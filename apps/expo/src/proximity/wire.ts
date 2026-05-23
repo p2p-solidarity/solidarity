@@ -65,7 +65,9 @@ export function drainFrames(
   const frames: Uint8Array[] = [];
   let offset = 0;
   while (offset + 2 <= buffer.length) {
-    const len = (buffer[offset] << 8) | buffer[offset + 1];
+    const hi = buffer[offset] ?? 0;
+    const lo = buffer[offset + 1] ?? 0;
+    const len = (hi << 8) | lo;
     if (offset + 2 + len > buffer.length) break;
     frames.push(buffer.slice(offset + 2, offset + 2 + len));
     offset += 2 + len;
@@ -93,7 +95,7 @@ export function decodePsm(bytes: Uint8Array): number {
   if (bytes.length < 2) {
     throw new RangeError(`PSM byte array too short: ${String(bytes.length)}`);
   }
-  return bytes[0] | (bytes[1] << 8);
+  return (bytes[0] ?? 0) | ((bytes[1] ?? 0) << 8);
 }
 
 /**

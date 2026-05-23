@@ -17,6 +17,7 @@ import { Alert, Text, View } from 'react-native';
 
 import { ThemedButton } from '@/components/themed';
 import {
+  uuid,
   type BusinessCard,
   type SharingFormat,
   type SharingPreferences,
@@ -244,7 +245,7 @@ function buildCard(
 
   const now = new Date();
   return {
-    id: existing?.id ?? globalThis.crypto.randomUUID(),
+    id: existing?.id ?? uuid(),
     name: trimmedName,
     title: nilIfEmpty(state.title),
     company: nilIfEmpty(state.company),

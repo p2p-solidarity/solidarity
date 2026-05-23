@@ -21,6 +21,7 @@ import { base64UrlDecode, base64UrlEncode } from '../crypto/base64';
 import { bytesToHex } from '../crypto/hex';
 import { sha256Bytes } from '../crypto/hash';
 import { utf8ToBytes, bytesToUtf8 } from '../crypto/base64';
+import { uuid } from '../crypto/uuid';
 
 export const QR_PREFIX = 'sqc1';
 export const QR_MIN_CHUNK_BYTES = 512;
@@ -73,7 +74,7 @@ export function isChunkFrame(value: string): boolean {
 
 /** Strip dashes from a v4 UUID per the Swift impl. */
 function newSessionId(): string {
-  return crypto.randomUUID().replaceAll('-', '');
+  return uuid().replaceAll('-', '');
 }
 
 function frameByteLength(frame: string): number {

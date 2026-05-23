@@ -5,7 +5,7 @@
  * Keep these stateless so the form component stays small and so the parsers
  * can be unit-tested without renderer setup.
  */
-import { type Skill, type SocialNetwork } from '@solidarity/shared';
+import { uuid, type Skill, type SocialNetwork } from '@solidarity/shared';
 
 export function parseCSV(raw: string): string[] {
   return raw
@@ -16,7 +16,7 @@ export function parseCSV(raw: string): string[] {
 
 export function parseSkills(raw: string): Skill[] {
   return parseCSV(raw).map((name) => ({
-    id: globalThis.crypto.randomUUID(),
+    id: uuid(),
     name,
     category: 'General',
     proficiencyLevel: 'Intermediate',
@@ -28,7 +28,7 @@ export function parseSocialNetworks(linkedIn: string, github: string): SocialNet
   const li = linkedIn.trim();
   if (li.length > 0) {
     out.push({
-      id: globalThis.crypto.randomUUID(),
+      id: uuid(),
       platform: 'LinkedIn',
       username: li,
       url: `https://linkedin.com/in/${li}`,
@@ -37,7 +37,7 @@ export function parseSocialNetworks(linkedIn: string, github: string): SocialNet
   const gh = github.trim();
   if (gh.length > 0) {
     out.push({
-      id: globalThis.crypto.randomUUID(),
+      id: uuid(),
       platform: 'GitHub',
       username: gh,
       url: `https://github.com/${gh}`,

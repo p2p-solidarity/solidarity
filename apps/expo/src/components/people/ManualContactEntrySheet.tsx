@@ -30,6 +30,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Colors } from '@/constants/Colors';
 import { useContactStore } from '@/contacts/repository';
 import { pushToast } from '@/feedback/toast';
+import { uuid } from '@solidarity/shared';
 import type { Contact } from '@solidarity/shared';
 
 export interface ManualContactEntrySheetProps {
@@ -89,14 +90,14 @@ function ManualContactEntryContent({
     }
     const now = new Date();
     const contact: Contact = {
-      id: crypto.randomUUID(),
+      id: uuid(),
       receivedAt: now,
       source: 'Manual',
       tags: [],
       verificationStatus: 'Unverified',
       notes: notes.trim().length > 0 ? notes.trim() : undefined,
       businessCard: {
-        id: crypto.randomUUID(),
+        id: uuid(),
         name: trimmedName,
         title: title.trim().length > 0 ? title.trim() : undefined,
         company: company.trim().length > 0 ? company.trim() : undefined,

@@ -70,7 +70,7 @@ describe('frameMessage', () => {
     const framed = frameMessage(original);
     const { frames, rest } = drainFrames(framed);
     expect(frames.length).toBe(1);
-    expect(Array.from(frames[0])).toEqual(Array.from(original));
+    expect(Array.from(frames[0] ?? new Uint8Array())).toEqual(Array.from(original));
     expect(rest.length).toBe(0);
   });
 });
@@ -101,9 +101,9 @@ describe('drainFrames', () => {
     combined.set(c, a.length + b.length);
     const { frames, rest } = drainFrames(combined);
     expect(frames.length).toBe(3);
-    expect(Array.from(frames[0])).toEqual([1, 1]);
-    expect(Array.from(frames[1])).toEqual([2, 2, 2]);
-    expect(Array.from(frames[2])).toEqual([3]);
+    expect(Array.from(frames[0] ?? new Uint8Array())).toEqual([1, 1]);
+    expect(Array.from(frames[1] ?? new Uint8Array())).toEqual([2, 2, 2]);
+    expect(Array.from(frames[2] ?? new Uint8Array())).toEqual([3]);
     expect(rest.length).toBe(0);
   });
 
@@ -115,7 +115,7 @@ describe('drainFrames', () => {
     combined.set(trailing, full.length);
     const { frames, rest } = drainFrames(combined);
     expect(frames.length).toBe(1);
-    expect(Array.from(frames[0])).toEqual([1, 2, 3]);
+    expect(Array.from(frames[0] ?? new Uint8Array())).toEqual([1, 2, 3]);
     expect(Array.from(rest)).toEqual([0x00, 0x10, 0x99]);
   });
 });
