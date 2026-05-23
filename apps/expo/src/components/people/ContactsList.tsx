@@ -73,12 +73,12 @@ export function ContactsList({
   if (loading && contacts.length === 0) return <LoadingState />;
   if (contacts.length === 0) return <EmptyState />;
 
+  // FlashList v2 auto-measures item size — no `estimatedItemSize` prop.
   return (
     <FlashList
       data={contacts}
       keyExtractor={keyExtractor}
       renderItem={renderItem}
-      estimatedItemSize={84}
       onRefresh={onRefresh}
       refreshing={refreshing}
     />

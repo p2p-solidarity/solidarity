@@ -34,7 +34,7 @@ import {
 } from '@solidarity/shared';
 
 const baseUrl = (): string => {
-  const url = process.env.EXPO_PUBLIC_SAKURA_API_URL;
+  const url = process.env['EXPO_PUBLIC_SAKURA_API_URL'];
   if (!url) throw new Error('EXPO_PUBLIC_SAKURA_API_URL not set');
   return url.replace(/\/+$/u, '');
 };

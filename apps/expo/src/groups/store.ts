@@ -101,7 +101,7 @@ export const useGroupStore = create<GroupStoreState>((set, get) => ({
   },
 
   deleteGroup: async (id) => {
-    getMmkv().delete(`${GROUP_PREFIX}${id}`);
+    getMmkv().remove(`${GROUP_PREFIX}${id}`);
     set((s) => {
       const next = new Map(s.groups);
       next.delete(id);

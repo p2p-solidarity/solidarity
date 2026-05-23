@@ -9,8 +9,8 @@
  * Verification is byte-deterministic given pubkey + signature, so the
  * parity oracle is simply: "Swift signed → TS verifies true" and vice-versa.
  */
-import { p256 } from '@noble/curves/nist';
-import { sha256 } from '@noble/hashes/sha2';
+import { p256 } from '@noble/curves/nist.js';
+import { sha256 } from '@noble/hashes/sha2.js';
 
 import { base64UrlDecode, base64UrlEncode, utf8ToBytes } from '../crypto/base64';
 import { jwkToPublicKey } from './keyPair';
@@ -38,8 +38,9 @@ export function signJwtEs256(
   const payloadB64 = base64UrlEncode(utf8ToBytes(JSON.stringify(payload)));
   const signingInput = `${headerB64}.${payloadB64}`;
   const digest = sha256(utf8ToBytes(signingInput));
-  const sig = p256.sign(digest, privateKey);
-  return `${signingInput}.${base64UrlEncode(sig.toBytes('compact'))}`;
+  // @noble/curves v2 p256.sign returns raw r||s bytes (Uint8Array) directly.
+  const sigBytes = p256.sign(digest, privateKey);
+  return `${signingInput}.${base64UrlEncode(sigBytes)}`;
 }
 
 /**

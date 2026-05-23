@@ -57,7 +57,7 @@ export const useShoutoutStore = create<ShoutoutStoreState>((set, get) => ({
   },
 
   remove: async (id) => {
-    getMmkv().delete(`${KEY_PREFIX}${id}`);
+    getMmkv().remove(`${KEY_PREFIX}${id}`);
     set((state) => ({ items: state.items.filter((i) => i.id !== id) }));
   },
 }));

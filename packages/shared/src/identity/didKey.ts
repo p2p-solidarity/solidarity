@@ -17,7 +17,7 @@ import {
   jwkToPublicKey,
   publicKeyToJwk,
 } from './keyPair';
-import { p256 } from '@noble/curves/nist';
+import { p256 } from '@noble/curves/nist.js';
 import type { PublicKeyJWK } from '../types/jwk';
 
 /** Multicodec varint for P-256 public key (0x1200 → 0x80, 0x24). */

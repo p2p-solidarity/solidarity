@@ -58,7 +58,7 @@ export async function loadAllBusinessCards(): Promise<readonly BusinessCard[]> {
 }
 
 export function deleteBusinessCard(id: string): void {
-  getMmkv().delete(`${CARDS_PREFIX}${id}`);
+  getMmkv().remove(`${CARDS_PREFIX}${id}`);
 }
 
 // ----- Contacts -----
@@ -81,7 +81,7 @@ export async function loadAllContacts(): Promise<readonly Contact[]> {
 }
 
 export function deleteContact(id: string): void {
-  getMmkv().delete(`${CONTACTS_PREFIX}${id}`);
+  getMmkv().remove(`${CONTACTS_PREFIX}${id}`);
 }
 
 // ----- Bulk -----

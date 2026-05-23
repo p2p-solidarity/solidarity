@@ -9,7 +9,8 @@
       "@solidarity/shared/*": ["../../packages/shared/src/*"]
     },
     "types": ["bun", "react-native", "nativewind/types"],
-    "jsx": "react-jsx"
+    "jsx": "react-jsx",
+    "ignoreDeprecations": "6.0"
   },
   "include": [
     "app/**/*",

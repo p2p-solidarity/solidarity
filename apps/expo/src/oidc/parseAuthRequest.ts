@@ -29,18 +29,18 @@ function fromQueryParams(input: string): ParsedOidcRequest {
     obj[k] = v;
   });
 
-  const pd = obj.presentation_definition;
+  const pd = obj['presentation_definition'];
   if (typeof pd === 'string') {
     try {
-      obj.presentation_definition = JSON.parse(pd) as Record<string, unknown>;
+      obj['presentation_definition'] = JSON.parse(pd) as Record<string, unknown>;
     } catch {
       // leave as string — Zod will reject during parse
     }
   }
-  const cm = obj.client_metadata;
+  const cm = obj['client_metadata'];
   if (typeof cm === 'string') {
     try {
-      obj.client_metadata = JSON.parse(cm) as Record<string, unknown>;
+      obj['client_metadata'] = JSON.parse(cm) as Record<string, unknown>;
     } catch {
       // ditto
     }

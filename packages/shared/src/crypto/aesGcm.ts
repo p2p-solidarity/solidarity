@@ -9,8 +9,8 @@
  *
  * Key size: 32 bytes (AES-256). 12-byte nonce per spec.
  */
-import { gcm } from '@noble/ciphers/aes';
-import { randomBytes } from '@noble/hashes/utils';
+import { gcm } from '@noble/ciphers/aes.js';
+import { randomBytes } from '@noble/hashes/utils.js';
 
 const NONCE_LEN = 12;
 const TAG_LEN = 16;

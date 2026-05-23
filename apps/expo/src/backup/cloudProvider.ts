@@ -61,5 +61,5 @@ export async function backupMtime(): Promise<Date | null> {
   const exists = await CloudStorage.exists(BACKUP_PATH, SCOPE);
   if (!exists) return null;
   const stat = await CloudStorage.stat(BACKUP_PATH, SCOPE);
-  return stat.modificationTime ? new Date(stat.modificationTime) : null;
+  return stat.mtime;
 }

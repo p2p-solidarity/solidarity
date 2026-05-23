@@ -12,7 +12,7 @@
  * where y_i = f_i(index) — the i-th byte of the secret evaluated through
  * its own polynomial. Reconstruction runs Lagrange interpolation per byte.
  */
-import { randomBytes } from '@noble/hashes/utils';
+import { randomBytes } from '@noble/hashes/utils.js';
 
 const FIELD_SIZE = 256;
 

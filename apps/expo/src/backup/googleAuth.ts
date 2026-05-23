@@ -17,8 +17,8 @@ let configured = false;
 
 function ensureConfigured(): void {
   if (configured) return;
-  const webClientId = process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID ?? '';
-  const iosClientId = process.env.EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID;
+  const webClientId = process.env['EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID'] ?? '';
+  const iosClientId = process.env['EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID'];
   if (!webClientId) {
     throw new Error(
       'EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID missing — copy .env.example to .env.local'

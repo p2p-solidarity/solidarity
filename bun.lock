@@ -90,14 +90,32 @@
     "nitro-modules/nfc-passport": {
       "name": "@solidarity/nitro-nfc-passport",
       "version": "0.1.0",
+      "devDependencies": {
+        "react-native-nitro-modules": "^0.35.7",
+      },
+      "peerDependencies": {
+        "react-native-nitro-modules": "*",
+      },
     },
     "nitro-modules/passport-zk": {
       "name": "@solidarity/nitro-passport-zk",
       "version": "0.1.0",
+      "devDependencies": {
+        "react-native-nitro-modules": "^0.35.7",
+      },
+      "peerDependencies": {
+        "react-native-nitro-modules": "*",
+      },
     },
     "nitro-modules/proximity": {
       "name": "@solidarity/nitro-proximity",
       "version": "0.1.0",
+      "devDependencies": {
+        "react-native-nitro-modules": "^0.35.7",
+      },
+      "peerDependencies": {
+        "react-native-nitro-modules": "*",
+      },
     },
     "packages/parity-fixtures": {
       "name": "@solidarity/parity-fixtures",

@@ -1,18 +1,18 @@
 /**
- * Encrypted MMKV — the source-of-truth local KV store. Mirrors the role of
- * UserDefaults + StorageManager.swift in the Swift app.
+ * Encrypted MMKV — source of truth for synchronous local KV. Mirrors
+ * UserDefaults + StorageManager.swift.
  *
- * MMKV's built-in encryption derives an AES key from the supplied passphrase,
- * which is itself bound to our master key (held in Keychain/Keystore via
- * expo-secure-store). Combining MMKV-AES + Keychain-bound passphrase gives:
- *   - sync read/write on the JS thread (MMKV is native + memory-mapped)
- *   - at-rest encryption that survives device backup without leaking
+ * react-native-mmkv v4 dropped the `class MMKV` constructor; instances
+ * are now built via the `createMMKV(config)` factory (Nitro under the
+ * hood). The factory returns a `MMKV` *interface* — we keep our own
+ * `getMmkv()` helper so consumers don't worry about lazy init.
  *
  * Usage:
- *   await initMmkv();           // call once at app launch
+ *   await initMmkv();             // call once at app launch (root layout)
  *   solidarityStore.set('k', 'v');
  */
-import { MMKV } from 'react-native-mmkv';
+import { createMMKV } from 'react-native-mmkv';
+import type { MMKV } from 'react-native-mmkv';
 
 import { base64Encode } from '@solidarity/shared';
 
@@ -26,11 +26,12 @@ let instance: MMKV | null = null;
 export async function initMmkv(): Promise<MMKV> {
   if (instance) return instance;
   const masterKey = await getMasterKey();
-  instance = new MMKV({
+  const created = createMMKV({
     id: INSTANCE_ID,
     encryptionKey: base64Encode(masterKey),
   });
-  return instance;
+  instance = created;
+  return created;
 }
 
 /** Sync accessor — call only AFTER `initMmkv()` has resolved. */

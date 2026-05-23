@@ -14,8 +14,8 @@
  *   - Matches the Swift MessageService blob shape exactly so existing
  *     ciphertext from iOS can be opened here without migration.
  */
-import { x25519 } from '@noble/curves/ed25519';
-import { randomBytes } from '@noble/hashes/utils';
+import { x25519 } from '@noble/curves/ed25519.js';
+import { randomBytes } from '@noble/hashes/utils.js';
 
 import { aesGcmOpen, aesGcmSeal } from '../crypto/aesGcm';
 import { utf8ToBytes } from '../crypto/base64';
@@ -30,7 +30,7 @@ const HKDF_INFO = utf8ToBytes('sakura.blob.v1');
 
 /** Generate a fresh X25519 recipient keypair (for inbox owner registration). */
 export function generateRecipientKeyPair(): { privateKey: Uint8Array; publicKey: Uint8Array } {
-  const privateKey = x25519.utils.randomSecretKey(randomBytes(KEY_LEN));
+  const privateKey = x25519.utils.randomSecretKey();
   return { privateKey, publicKey: x25519.getPublicKey(privateKey) };
 }
 
@@ -42,7 +42,7 @@ export function sealBlob(
   if (recipientPublicKey.length !== PUB_LEN) {
     throw new Error(`recipient pubkey must be ${PUB_LEN} bytes`);
   }
-  const ephemPriv = x25519.utils.randomSecretKey(randomBytes(KEY_LEN));
+  const ephemPriv = x25519.utils.randomSecretKey();
   const ephemPub = x25519.getPublicKey(ephemPriv);
   const shared = x25519.getSharedSecret(ephemPriv, recipientPublicKey);
   const key = deriveKey(shared, HKDF_SALT, HKDF_INFO, KEY_LEN);

@@ -10,8 +10,8 @@
  * in DIDService.swift. The TS port keeps the same wire format so DIDs minted
  * on either platform resolve to the same key material.
  */
-import { p256 } from '@noble/curves/nist';
-import { randomBytes } from '@noble/hashes/utils';
+import { p256 } from '@noble/curves/nist.js';
+import { randomBytes } from '@noble/hashes/utils.js';
 
 import { base64UrlDecode, base64UrlEncode } from '../crypto/base64';
 import { publicKeyJwkSchema, type PublicKeyJWK } from '../types/jwk';

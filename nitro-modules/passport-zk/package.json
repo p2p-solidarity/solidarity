@@ -12,5 +12,11 @@
   },
   "react-native": {
     "supportedPlatforms": ["ios", "android"]
+  },
+  "peerDependencies": {
+    "react-native-nitro-modules": "*"
+  },
+  "devDependencies": {
+    "react-native-nitro-modules": "^0.35.7"
   }
 }

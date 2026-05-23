@@ -44,6 +44,7 @@ export default function CardForm() {
         useZK: false,
         sharingFormat: 'didSigned',
       },
+      verifiedFields: undefined,
       nameType: 'display_name',
       createdAt: now,
       updatedAt: now,
