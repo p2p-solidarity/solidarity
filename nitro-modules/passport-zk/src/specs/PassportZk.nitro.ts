@@ -19,7 +19,8 @@
  * matches the way the underlying mopro FFI already expects inputs.
  *
  * NOTE: this file is on the JS↔Native boundary, so `any` is allowed by
- * eslint config (see eslint.config.mjs override on nitro-modules/**/specs).
+ * eslint config (see eslint.config.mjs override on
+ * `nitro-modules / src / specs`).
  */
 import type { HybridObject } from 'react-native-nitro-modules';
 
