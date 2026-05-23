@@ -1,15 +1,17 @@
 /**
  * Onboarding gate — mirrors Swift ContentView.swift conditional based on
- * AppStorage("hasCompletedOnboarding"). Replaced here with a hydrated MMKV
- * flag (see src/storage/onboarding.ts once Phase 1 lands).
+ * AppStorage("hasCompletedOnboarding"). Replaced here with a sync MMKV
+ * lookup (initialised in app/_layout.tsx) so the gate doesn't flash a
+ * skeleton on warm starts (aniseekr-expo CLAUDE.md rule 10).
+ *
+ * Until MMKV is bootstrapped from the layout, we redirect to onboarding by
+ * default. Once Phase 1's storage layer is wired into the layout, replace
+ * the placeholder with `getMmkv().getBoolean('hasCompletedOnboarding')`.
  */
-import { Text, View } from 'react-native';
+import { Redirect } from 'expo-router';
 
 export default function Index() {
-  return (
-    <View className="flex-1 items-center justify-center bg-pageBg">
-      <Text className="text-text1 text-2xl font-semibold">Solidarity</Text>
-      <Text className="text-text2 mt-2">Expo scaffold — port in progress</Text>
-    </View>
-  );
+  // TODO(Phase 5c): read MMKV-backed onboarding flag synchronously here.
+  const completed = false;
+  return <Redirect href={completed ? '/(tabs)/people' : '/onboarding'} />;
 }
