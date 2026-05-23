@@ -1,3 +1,0 @@
-/Users/kidney/Workspace/Work/solidarity/airmeishi/nitro-modules/spruce-did/android/.cxx/Debug/3f3vnz3g/armeabi-v7a/CMakeFiles/SolidaritySpruceDid.dir
-/Users/kidney/Workspace/Work/solidarity/airmeishi/nitro-modules/spruce-did/android/.cxx/Debug/3f3vnz3g/armeabi-v7a/CMakeFiles/edit_cache.dir
-/Users/kidney/Workspace/Work/solidarity/airmeishi/nitro-modules/spruce-did/android/.cxx/Debug/3f3vnz3g/armeabi-v7a/CMakeFiles/rebuild_cache.dir
