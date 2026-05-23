@@ -37,9 +37,6 @@
         "NSBonjourServices": ["_say-share._tcp.", "_airmeishi-share._tcp."],
         "UIBackgroundModes": ["remote-notification", "fetch"],
         "ITSAppUsesNonExemptEncryption": false
-      },
-      "config": {
-        "usesNonExemptEncryption": false
       }
     },
     "android": {
