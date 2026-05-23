@@ -79,6 +79,14 @@
       "expo-secure-store",
       "expo-notifications",
       [
+        "react-native-vision-camera",
+        {
+          "cameraPermissionText": "Solidarity uses the camera to scan QR codes and passport MRZ.",
+          "enableCodeScanner": true,
+          "enableMicrophonePermission": false
+        }
+      ],
+      [
         "expo-build-properties",
         {
           "ios": {
@@ -92,14 +100,7 @@
           }
         }
       ],
-      [
-        "react-native-vision-camera",
-        {
-          "cameraPermissionText": "Solidarity uses the camera to scan QR codes and passport MRZ.",
-          "enableCodeScanner": true,
-          "enableMicrophonePermission": false
-        }
-      ]
+      "./plugins/withXcodeCloudScripts.js"
     ],
     "runtimeVersion": "1.3.1",
     "updates": {

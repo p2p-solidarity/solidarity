@@ -148,3 +148,7 @@ __snapshots__/
 # matches case-insensitively on macOS HFS+ and otherwise hides our packages/ dir.
 !/packages/
 !/packages/**
+# …but workspace node_modules (and bun's symlink hoisting) must stay ignored.
+packages/*/node_modules/
+apps/*/node_modules/
+nitro-modules/*/node_modules/
