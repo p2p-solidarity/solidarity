@@ -1,5 +1,8 @@
 /**
  * Onboarding state-machine tests. Pure reducer — no React, no native modules.
+ *
+ * Mirrors Swift OnboardingFlowView.Step (welcome → profileSetup →
+ * avatarSetup → secureKeys → importContacts → scanPassport → complete).
  */
 import { describe, expect, it } from 'bun:test';
 
@@ -10,21 +13,21 @@ import {
 } from '../../src/onboarding/state';
 
 describe('onboardingReducer', () => {
-  it('starts at terminalWelcome', () => {
-    expect(initialOnboardingState.step).toBe('terminalWelcome');
+  it('starts at welcome', () => {
+    expect(initialOnboardingState.step).toBe('welcome');
   });
 
   it('advances through all 7 steps in order', () => {
     let s = initialOnboardingState;
     for (let i = 1; i < ONBOARDING_STEPS.length; i++) {
       s = onboardingReducer(s, { type: 'next' });
-      expect(s.step).toBe(ONBOARDING_STEPS[i] ?? 'done');
+      expect(s.step).toBe(ONBOARDING_STEPS[i] ?? 'complete');
     }
   });
 
   it('back is a no-op on the first step', () => {
     const s = onboardingReducer(initialOnboardingState, { type: 'back' });
-    expect(s.step).toBe('terminalWelcome');
+    expect(s.step).toBe('welcome');
   });
 
   it('next is a no-op on the last step', () => {
@@ -33,27 +36,48 @@ describe('onboardingReducer', () => {
       s = onboardingReducer(s, { type: 'next' });
     }
     const stuck = onboardingReducer(s, { type: 'next' });
-    expect(stuck.step).toBe('done');
+    expect(stuck.step).toBe('complete');
   });
 
-  it('stores profile + animal + backup choice', () => {
+  it('goTo jumps to an arbitrary step', () => {
+    const s = onboardingReducer(initialOnboardingState, { type: 'goTo', step: 'scanPassport' });
+    expect(s.step).toBe('scanPassport');
+  });
+
+  it('stores profile + animal + key + passport state', () => {
     let s = initialOnboardingState;
-    s = onboardingReducer(s, { type: 'setProfile', name: 'Ada', handle: 'ada' });
+    s = onboardingReducer(s, {
+      type: 'setProfile',
+      profile: {
+        username: 'Ada',
+        link: 'https://ada.dev',
+        xTwitter: 'ada',
+        linkedIn: 'ada',
+        wallet: '0xABCD',
+      },
+    });
     s = onboardingReducer(s, { type: 'setAnimal', animal: 'sheep' });
-    s = onboardingReducer(s, { type: 'setBackupChoice', choice: 'icloud' });
-    s = onboardingReducer(s, { type: 'setFaceId', enabled: true });
-    expect(s.profile.name).toBe('Ada');
+    s = onboardingReducer(s, { type: 'setKeysGenerated', value: true });
+    s = onboardingReducer(s, { type: 'setPassportScanned', value: true });
+    expect(s.profile.username).toBe('Ada');
+    expect(s.profile.wallet).toBe('0xABCD');
     expect(s.animal).toBe('sheep');
-    expect(s.backupChoice).toBe('icloud');
-    expect(s.faceIdEnabled).toBe(true);
+    expect(s.keysGenerated).toBe(true);
+    expect(s.passportScanned).toBe(true);
   });
 
-  it('accumulates granted permissions', () => {
+  it('setProfileField updates a single field', () => {
     let s = initialOnboardingState;
-    s = onboardingReducer(s, { type: 'grantPermission', permission: 'camera' });
-    s = onboardingReducer(s, { type: 'grantPermission', permission: 'contacts' });
-    expect(s.grantedPermissions.has('camera')).toBe(true);
-    expect(s.grantedPermissions.has('contacts')).toBe(true);
-    expect(s.grantedPermissions.has('notifications')).toBe(false);
+    s = onboardingReducer(s, { type: 'setProfileField', field: 'username', value: 'Lovelace' });
+    expect(s.profile.username).toBe('Lovelace');
+    expect(s.profile.link).toBe('');
+  });
+
+  it('accumulates imported contacts count', () => {
+    let s = initialOnboardingState;
+    s = onboardingReducer(s, { type: 'addImportedCount', count: 5 });
+    expect(s.importedCount).toBe(5);
+    s = onboardingReducer(s, { type: 'addImportedCount', count: 3 });
+    expect(s.importedCount).toBe(8);
   });
 });

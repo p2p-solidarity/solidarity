@@ -137,20 +137,21 @@ describe('useShoutoutStore.remove', () => {
 });
 
 describe('useShoutoutStore.hydrate', () => {
-  it('loads previously-persisted items, sorted newest first', async () => {
-    // Seed both items directly into KV via add() so the JSON serialisation
-    // matches production. The store rehydrates dates by reading the
-    // serialised values and parsing them. We mirror what the
-    // encryptJson/decryptJson roundtrip does in real life — JSON.parse keeps
-    // Date as string, so hydrate's sort relies on String compare working for
-    // ISO timestamps (lexicographically ordered).
+  it('loads previously-persisted items, sorted newest first (Date revived from JSON)', async () => {
+    // Seed via add() so the values are JSON-stringified into KV the same
+    // way encryptJson would. Reset the in-memory store to force hydrate()
+    // to actually walk the KV (instead of short-circuiting on hydrated).
     await mod.useShoutoutStore.getState().add(out);
     await mod.useShoutoutStore.getState().add(inc);
-    // Force a fresh hydrate by clearing in-memory + flipping hydrated flag.
     mod.useShoutoutStore.setState({ items: [], hydrated: false });
     await mod.useShoutoutStore.getState().hydrate();
     const items = mod.useShoutoutStore.getState().items;
     expect(items.length).toBe(2);
+    // inc is newer (2025-05-21 > 2025-05-20); sort puts newer first.
+    expect(items[0]?.id).toBe('in-1');
+    expect(items[1]?.id).toBe('out-1');
+    // The createdAt MUST be a Date instance — Swift Codable rehydrates Date.
+    expect(items[0]?.createdAt).toBeInstanceOf(Date);
   });
 
   it('only loads keys with the shoutout: prefix (ignores other namespaces)', async () => {
@@ -165,15 +166,11 @@ describe('useShoutoutStore.hydrate', () => {
   });
 
   it('is idempotent: a second hydrate() call is a no-op', async () => {
-    await mod.useShoutoutStore.getState().add(out);
-    mod.useShoutoutStore.setState({ items: [], hydrated: false });
+    mod.useShoutoutStore.setState({ items: [], hydrated: true });
+    // hydrated=true short-circuits — even if we seed kv now, hydrate skips.
+    kv.set('shoutout:in-1', JSON.stringify(inc));
     await mod.useShoutoutStore.getState().hydrate();
-    await mod.useShoutoutStore.getState().add(inc);
-    // After hydration, adding new in-memory items still works, but hydrate()
-    // itself short-circuits when called a second time.
-    const beforeLen = mod.useShoutoutStore.getState().items.length;
-    await mod.useShoutoutStore.getState().hydrate();
-    expect(mod.useShoutoutStore.getState().items.length).toBe(beforeLen);
+    expect(mod.useShoutoutStore.getState().items.length).toBe(0);
   });
 });
 
