@@ -1,0 +1,161 @@
+/**
+ * ZK Settings — 1:1 port of Swift ZKSettingsView
+ *   (solidarity/Views/IDViews/ZKSettingsView.swift).
+ *
+ * Layout (Swift parity):
+ *   • Nav title "ZK Settings" (inline) + chevron.left "Settings" leading
+ *   • Identity Status block:
+ *       – commitment row (shield.checkered + truncated middle commitment)
+ *         OR "Not initialized" info row (circle.dashed icon)
+ *       – Proofs Supported info row (checkmark.seal + Yes/No)
+ *   • Actions block:
+ *       – Destructive "Delete Identity" row (disabled when no identity)
+ *   • Delete confirmation Alert + delete-error Alert (mirrors Swift)
+ *
+ * TODO(android): wire SemaphoreIdentityManager.shared once the Nitro
+ * module lands. For now the screen reads a placeholder commitment from
+ * the credentials store metadata (none today → "Not initialized" state).
+ */
+import { useEffect, useState } from 'react';
+import { Alert, ScrollView, Text, View } from 'react-native';
+
+import { IDNavBar } from '@/components/id';
+import { shortCommitment } from '@/components/id/shortDid';
+import { SfIcon } from '@/components/icons/SfIcon';
+import {
+  SettingsBlockDangerRow,
+  SettingsBlockInfoRow,
+  SettingsBlockSection,
+} from '@/components/settings/SettingsBlocks';
+import { Colors } from '@/constants/Colors';
+import { pushToast } from '@/feedback/toast';
+
+// TODO(android): swap for real `SemaphoreIdentityManager.getIdentity()`
+// once the Nitro module lands. The Swift version reads
+// `idm.getIdentity()?.commitment` on appear.
+function useZkIdentityCommitment(): string | null {
+  // Until the Nitro module is wired, mirror Swift's "Not initialized"
+  // empty state so the UI still renders correctly.
+  return null;
+}
+
+const PROOFS_SUPPORTED = true;
+
+export default function ZkSettings(): React.JSX.Element {
+  const initialCommitment = useZkIdentityCommitment();
+  const [commitment, setCommitment] = useState<string | null>(initialCommitment);
+  const [isDeleting, setIsDeleting] = useState(false);
+
+  useEffect(() => {
+    setCommitment(initialCommitment);
+  }, [initialCommitment]);
+
+  const performDelete = async (): Promise<void> => {
+    setIsDeleting(true);
+    try {
+      // TODO(android): call SemaphoreIdentityManager.deleteIdentity().
+      // For parity with Swift, simulate the same Result.success path: clear
+      // the local commitment and let the parent show a toast.
+      await new Promise((resolve) => setTimeout(resolve, 250));
+      setCommitment(null);
+      pushToast('Identity deleted', 'success');
+    } catch (e) {
+      const message = e instanceof Error ? e.message : 'Unknown error.';
+      Alert.alert('Delete Failed', message, [{ text: 'OK', style: 'cancel' }]);
+    } finally {
+      setIsDeleting(false);
+    }
+  };
+
+  const confirmDelete = (): void => {
+    Alert.alert(
+      'Delete Identity?',
+      'This will permanently delete your ZK identity. This action cannot be undone.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: () => {
+            void performDelete();
+          },
+        },
+      ]
+    );
+  };
+
+  return (
+    <View className="flex-1 bg-pageBg">
+      <IDNavBar title="ZK Settings" leadingLabel="Settings" />
+
+      <ScrollView
+        className="flex-1"
+        contentContainerStyle={{ paddingVertical: 24 }}
+      >
+        <View className="gap-6">
+          <SettingsBlockSection title="Identity Status">
+            {commitment ? (
+              <CommitmentRow commitment={commitment} />
+            ) : (
+              <SettingsBlockInfoRow
+                icon="circle.dashed"
+                title="Identity"
+                value="Not initialized"
+              />
+            )}
+
+            <SettingsBlockInfoRow
+              icon="checkmark.seal"
+              title="Proofs Supported"
+              value={PROOFS_SUPPORTED ? 'Yes' : 'No'}
+            />
+          </SettingsBlockSection>
+
+          <SettingsBlockSection title="Actions">
+            <View
+              style={{
+                opacity: commitment === null || isDeleting ? 0.5 : 1,
+              }}
+            >
+              <SettingsBlockDangerRow
+                icon="trash"
+                title="Delete Identity"
+                subtitle={commitment === null ? 'No identity to delete' : undefined}
+                onPress={
+                  commitment === null || isDeleting ? undefined : confirmDelete
+                }
+              />
+            </View>
+          </SettingsBlockSection>
+        </View>
+      </ScrollView>
+    </View>
+  );
+}
+
+function CommitmentRow({ commitment }: { readonly commitment: string }): React.JSX.Element {
+  return (
+    <View
+      className="bg-mutedSurface rounded-xl"
+      style={{ paddingHorizontal: 14, paddingVertical: 12 }}
+    >
+      <View className="flex-row items-center" style={{ gap: 12, marginBottom: 8 }}>
+        <View
+          style={{ width: 20, height: 20, alignItems: 'center', justifyContent: 'center' }}
+        >
+          <SfIcon name="shield.checkered" size={14} color={Colors.text1} />
+        </View>
+        <Text className="text-text1 text-[15px] flex-1">Commitment</Text>
+      </View>
+      <Text
+        selectable
+        numberOfLines={2}
+        ellipsizeMode="middle"
+        style={{ fontFamily: 'Menlo' }}
+        className="text-text2 text-[11px]"
+      >
+        {shortCommitment(commitment)}
+      </Text>
+    </View>
+  );
+}

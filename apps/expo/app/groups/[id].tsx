@@ -31,14 +31,16 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { CredentialIssuersSection } from '@/components/groups/CredentialIssuersSection';
+import { DeliverySettingsSection } from '@/components/groups/DeliverySettingsSection';
 import {
   GroupInfoSection,
   IdentityInfoSection,
   InviteSection,
   MerkleTreeSection,
-  SectionHeader,
 } from '@/components/groups/GroupDetailSections';
 import { MembersSection } from '@/components/groups/GroupMembersSection';
+import { GroupVCIssuanceSection } from '@/components/groups/GroupVCIssuanceSection';
 import { SfIcon } from '@/components/icons/SfIcon';
 import { ThemedText } from '@/components/themed';
 import { Colors } from '@/constants/Colors';
@@ -50,6 +52,7 @@ import {
   useGroupMembers,
   useGroupStore,
   type GroupMember,
+  type GroupModel,
 } from '@/groups/store';
 
 const MONO_FONT = 'Menlo';
@@ -86,9 +89,13 @@ function NavBar({
   );
 }
 
-function AdminToolsStub(): React.JSX.Element {
-  // TODO(android): port CredentialIssuersSection, GroupVCIssuanceSection,
-  // DeliverySettingsSection from solidarity/Views/IDViews/GroupViews/*.
+function AdminTools({
+  group,
+}: {
+  readonly group: import('@/groups/store').GroupModel;
+}): React.JSX.Element {
+  // 1:1 port of Swift IDView "Admin Tools" stack
+  // (GroupDetailView.swift: `if isOwner || canIssueCredentials { ... }`).
   return (
     <View className="gap-3">
       <Text
@@ -97,57 +104,9 @@ function AdminToolsStub(): React.JSX.Element {
       >
         Admin Tools
       </Text>
-      <View
-        className="bg-searchBg p-4 gap-2"
-        style={{ borderWidth: 1, borderColor: Colors.divider }}
-      >
-        <SectionHeader title="Credential Issuers" />
-        <Text className="text-text2 text-[13px]">
-          Manage who can issue Group VCs on your behalf.
-        </Text>
-        <Pressable
-          onPress={() => {
-            pushToast('Credential issuers editor lands next iteration', 'info');
-          }}
-          className="self-start mt-1"
-        >
-          <Text className="text-accentRose text-[13px]">Manage</Text>
-        </Pressable>
-      </View>
-      <View
-        className="bg-searchBg p-4 gap-2"
-        style={{ borderWidth: 1, borderColor: Colors.divider }}
-      >
-        <SectionHeader title="Group VC Issuance" />
-        <Text className="text-text2 text-[13px]">
-          Issue a verifiable credential to every member of this group.
-        </Text>
-        <Pressable
-          onPress={() => {
-            pushToast('Bulk Group VC issuance lands next iteration', 'info');
-          }}
-          className="self-start mt-1"
-        >
-          <Text className="text-accentRose text-[13px]">Issue Group VC</Text>
-        </Pressable>
-      </View>
-      <View
-        className="bg-searchBg p-4 gap-2"
-        style={{ borderWidth: 1, borderColor: Colors.divider }}
-      >
-        <SectionHeader title="Delivery Settings" />
-        <Text className="text-text2 text-[13px]">
-          Choose how new credentials are delivered to members.
-        </Text>
-        <Pressable
-          onPress={() => {
-            pushToast('Delivery settings land next iteration', 'info');
-          }}
-          className="self-start mt-1"
-        >
-          <Text className="text-accentRose text-[13px]">Configure</Text>
-        </Pressable>
-      </View>
+      <CredentialIssuersSection group={group} />
+      <GroupVCIssuanceSection group={group} />
+      <DeliverySettingsSection group={group} />
     </View>
   );
 }
@@ -254,7 +213,7 @@ export default function GroupDetail(): React.JSX.Element {
             onReject={onReject}
           />
 
-          {adminVisible ? <AdminToolsStub /> : null}
+          {adminVisible ? <AdminTools group={group} /> : null}
 
           <IdentityInfoSection group={group} />
         </View>

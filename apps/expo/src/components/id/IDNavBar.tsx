@@ -1,0 +1,82 @@
+/**
+ * IDNavBar — shared 44pt navigation bar for IDViews screens. Mirrors the
+ * Swift `.navigationTitle(...).navigationBarTitleDisplayMode(.inline)`
+ * layout used across PersonalIdentityView / GroupIdentityView /
+ * ZKSettingsView / GroupDetailView.
+ *
+ * Layout: chevron.left (leading) + inline 17pt semibold title + optional
+ * trailing slot for toolbar buttons (refresh / qrcode / gearshape).
+ */
+import type { ReactNode } from 'react';
+import { router } from 'expo-router';
+import { Pressable, Text, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+
+import { SfIcon } from '@/components/icons/SfIcon';
+import { Colors } from '@/constants/Colors';
+
+export interface IDNavBarProps {
+  readonly title: string;
+  readonly leadingLabel?: string;
+  readonly onLeading?: () => void;
+  readonly trailing?: ReactNode;
+}
+
+export function IDNavBar({
+  title,
+  leadingLabel,
+  onLeading,
+  trailing,
+}: IDNavBarProps): ReactNode {
+  const insets = useSafeAreaInsets();
+  const handleLeading = (): void => {
+    if (onLeading) {
+      onLeading();
+      return;
+    }
+    if (router.canGoBack()) router.back();
+  };
+
+  return (
+    <View style={{ paddingTop: insets.top }} className="bg-pageBg">
+      <View className="h-11 flex-row items-center px-4">
+        <Pressable
+          onPress={handleLeading}
+          accessibilityRole="button"
+          accessibilityLabel={leadingLabel ?? 'Back'}
+          hitSlop={8}
+          className="flex-row items-center -ml-1 px-1 py-1 active:opacity-60"
+        >
+          <SfIcon
+            name="chevron.left"
+            size={16}
+            weight="semibold"
+            color={Colors.text1}
+          />
+          {leadingLabel ? (
+            <Text className="text-text1 text-[16px] ml-1">{leadingLabel}</Text>
+          ) : null}
+        </Pressable>
+        <View className="flex-1 items-center">
+          <Text
+            numberOfLines={1}
+            className="text-text1 text-[17px] font-semibold"
+          >
+            {title}
+          </Text>
+        </View>
+        <View
+          style={{
+            minWidth: 24,
+            flexDirection: 'row',
+            alignItems: 'center',
+            justifyContent: 'flex-end',
+            gap: 12,
+          }}
+        >
+          {trailing}
+        </View>
+      </View>
+    </View>
+  );
+}

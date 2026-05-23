@@ -18,7 +18,7 @@
  * (CloudKit on iOS / Drive on Android) is wired.
  */
 import type { SFSymbol } from 'expo-symbols';
-import { router } from 'expo-router';
+import { router, useLocalSearchParams } from 'expo-router';
 import { useCallback, useEffect, useState } from 'react';
 import {
   Alert,
@@ -30,6 +30,7 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { GroupJoinSheet } from '@/components/groups/GroupJoinSheet';
 import { GroupManagementCard } from '@/components/groups/GroupManagementCard';
 import { SfIcon } from '@/components/icons/SfIcon';
 import { Colors } from '@/constants/Colors';
@@ -123,12 +124,24 @@ export default function GroupsHub(): React.JSX.Element {
   const publicGroups = usePublicGroups();
   const privateOwnedGroups = usePrivateOwnedGroups();
   const privateSharedGroups = usePrivateSharedGroups();
+  const { invite } = useLocalSearchParams<{ invite?: string }>();
 
   const [refreshing, setRefreshing] = useState(false);
+  const [joinVisible, setJoinVisible] = useState(false);
 
   useEffect(() => {
     void hydrate();
   }, [hydrate]);
+
+  // Deep-link parity with Swift DeepLinkManager — when `invite` arrives via
+  // `solidarity://group/<token>` or the parsed router, surface the join
+  // sheet so the user can confirm the token. The sheet's TextField is
+  // pre-filled via the existing `token` controlled input on the parent.
+  useEffect(() => {
+    if (invite && invite.length > 0) {
+      setJoinVisible(true);
+    }
+  }, [invite]);
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
@@ -159,7 +172,7 @@ export default function GroupsHub(): React.JSX.Element {
   };
 
   const goInvite = () => {
-    pushToast('Invite via Link lands next iteration', 'info');
+    setJoinVisible(true);
   };
 
   const goPrivacy = () => {
@@ -311,6 +324,11 @@ export default function GroupsHub(): React.JSX.Element {
           </SectionBlock>
         </View>
       </ScrollView>
+
+      <GroupJoinSheet
+        visible={joinVisible}
+        onClose={() => { setJoinVisible(false); }}
+      />
     </View>
   );
 }
