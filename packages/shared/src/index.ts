@@ -14,6 +14,7 @@ export * from './crypto';
 export * from './identity';
 export * from './importer';
 export * from './qr';
+export * from './sakura';
 export * from './types';
 export * from './vault';
 export * from './vcf';
