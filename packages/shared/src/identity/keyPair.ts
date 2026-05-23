@@ -11,7 +11,6 @@
  * on either platform resolve to the same key material.
  */
 import { p256 } from '@noble/curves/nist.js';
-import { randomBytes } from '@noble/hashes/utils.js';
 
 import { base64UrlDecode, base64UrlEncode } from '../crypto/base64';
 import { publicKeyJwkSchema, type PublicKeyJWK } from '../types/jwk';
@@ -25,9 +24,11 @@ export interface P256KeyPair {
   readonly publicKey: Uint8Array;
 }
 
-/** Generate a fresh P-256 keypair via OS RNG. */
+/** Generate a fresh P-256 keypair via the curve's internal RNG. */
 export function generateP256KeyPair(): P256KeyPair {
-  const privateKey = p256.utils.randomSecretKey(randomBytes(32));
+  // @noble/curves v2: no-arg call uses internal RNG; passing a seed
+  // would require 48 bytes (extra for RFC 6979 derivation).
+  const privateKey = p256.utils.randomSecretKey();
   const publicKey = p256.getPublicKey(privateKey, false);
   return { privateKey, publicKey };
 }
