@@ -73,11 +73,16 @@ interface CardStoreSurface {
   };
 }
 
-let cardMod: CardStoreSurface;
-let signingMod: {
-  readonly ensureSigningKey: () => Promise<{ privateKey: Uint8Array; publicKey: Uint8Array }>;
+interface SigningSurface {
+  readonly ensureSigningKey: () => Promise<{
+    readonly privateKey: Uint8Array;
+    readonly publicKey: Uint8Array;
+  }>;
   readonly publicJwk: () => Promise<ReturnType<typeof publicKeyToJwk>>;
-};
+}
+
+let cardMod: CardStoreSurface;
+let signingMod: SigningSurface;
 
 /**
  * Walk a value and rewrite Sets to plain arrays so JSON.stringify preserves
@@ -150,7 +155,7 @@ beforeAll(async () => {
   }));
 
   cardMod = (await import('../../src/cards/cardManager')) as unknown as CardStoreSurface;
-  signingMod = (await import('../../src/keychain/signingKey')) as unknown as typeof signingMod;
+  signingMod = (await import('../../src/keychain/signingKey')) as unknown as SigningSurface;
 });
 
 beforeEach(() => {

@@ -149,7 +149,7 @@ describe('deep identity parity: ECDSA sign / verify', () => {
     const parts = jwt.split('.');
     // Mutate one byte of the b64url signature so the curve check fails.
     const sig = parts[2] ?? '';
-    const flipped = (sig[0] === 'A' ? 'B' : 'A') + sig.slice(1);
+    const flipped = (sig.startsWith('A') ? 'B' : 'A') + sig.slice(1);
     const broken = `${parts[0] ?? ''}.${parts[1] ?? ''}.${flipped}`;
     expect(() => verifyJwtEs256(broken, publicKeyToJwk(pub))).toThrow();
   });

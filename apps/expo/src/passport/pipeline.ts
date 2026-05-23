@@ -284,3 +284,235 @@ export function arrayBufferToBase64(buffer: ArrayBuffer): string {
   // RN fallback: leave as binary string (rare path; mock proof only).
   return binary;
 }
+
+// ---------------------------------------------------------------------------
+// ICAO 9303 check-digit helpers + Result-returning pipeline wrapper.
+//
+// Mirrors Swift `MRZScannerService.computeCheckDigit` byte-for-byte so a
+// failing checksum surfaces the same `validationError` payload on both
+// sides (CardError.validationError on Swift, { type: 'validationError' } on
+// TS via @solidarity/shared/cardError).
+// ---------------------------------------------------------------------------
+
+const MRZ_WEIGHTS: readonly [number, number, number] = [7, 3, 1];
+
+/**
+ * Compute the ICAO 9303 check digit for an MRZ field. Mirrors Swift's
+ * `MRZScannerService.computeCheckDigit` — `<` = 0, digits keep value,
+ * letters map to (asciiValue - 'A') + 10. Sum * weight(7,3,1 cycle) mod 10.
+ */
+export function mrzCheckDigit(field: string): number {
+  let sum = 0;
+  for (let i = 0; i < field.length; i += 1) {
+    const ch = field.charAt(i);
+    let value = 0;
+    if (ch === '<') {
+      value = 0;
+    } else if (ch >= '0' && ch <= '9') {
+      value = ch.charCodeAt(0) - 48;
+    } else if (ch >= 'A' && ch <= 'Z') {
+      value = ch.charCodeAt(0) - 65 + 10;
+    } else if (ch >= 'a' && ch <= 'z') {
+      value = ch.charCodeAt(0) - 97 + 10;
+    } else {
+      value = 0;
+    }
+    const weight = MRZ_WEIGHTS[i % 3] ?? 1;
+    sum += value * weight;
+  }
+  return sum % 10;
+}
+
+/**
+ * Validate the embedded check digits on a `PassportMRZ` payload.
+ * Returns `validationError` (mirrors Swift CardError.validationError)
+ * on mismatch. Success carries `void`.
+ */
+export function validateMrzChecksum(
+  mrz: Pick<PassportMRZ, 'documentNumber' | 'dateOfBirth' | 'dateOfExpiry'>
+): Result<void, CardError> {
+  const docNumber = mrz.documentNumber.trim();
+  if (docNumber.length < 2) {
+    return err<CardError>({
+      type: 'validationError',
+      message: 'Passport number is too short for a check digit.',
+    });
+  }
+  const expected = docNumber.charAt(docNumber.length - 1);
+  if (expected < '0' || expected > '9') {
+    return err<CardError>({
+      type: 'validationError',
+      message: 'Passport number check digit is missing or non-numeric.',
+    });
+  }
+  const body = docNumber.slice(0, -1);
+  // Pad the document body to 9 chars with `<` (ICAO TD3 field width).
+  // This matches Swift `NFCPassportReaderService.pad(_:fieldLength:)`.
+  const paddedBody = (body + '<<<<<<<<<').slice(0, 9);
+  const computed = mrzCheckDigit(paddedBody);
+  if (computed !== Number(expected)) {
+    return err<CardError>({
+      type: 'validationError',
+      message: `MRZ check digit mismatch for passport number (expected ${String(computed)}, got ${expected}).`,
+    });
+  }
+  if (mrz.dateOfBirth.length !== 6 || mrz.dateOfExpiry.length !== 6) {
+    return err<CardError>({
+      type: 'validationError',
+      message: 'MRZ dates must be YYMMDD (6 chars).',
+    });
+  }
+  return ok(undefined);
+}
+
+/**
+ * Run the legacy callback-style pipeline and wrap thrown errors as
+ * structured `CardError`s. Mirrors Swift `PassportPipelineService`
+ * which returns `CardResult<T>` from every step.
+ */
+export async function runPassportPipelineSafe(
+  mrz: PassportMRZ,
+  deps: PassportPipelineDeps,
+  onStep: (step: PassportStep) => void
+): Promise<Result<string, CardError>> {
+  const checksum = validateMrzChecksum(mrz);
+  if (!checksum.ok) {
+    onStep({ type: 'error', message: checksum.error.message });
+    return checksum;
+  }
+  try {
+    const jwt = await runPassportPipeline(mrz, deps, onStep);
+    return ok(jwt);
+  } catch (e) {
+    const message = e instanceof Error ? e.message : String(e);
+    const type = classifyPassportError(message);
+    onStep({ type: 'error', message });
+    return err<CardError>({ type, message });
+  }
+}
+
+function classifyPassportError(message: string): CardError['type'] {
+  const lower = message.toLowerCase();
+  if (lower.includes('nfc') || lower.includes('chip') || lower.includes('bac') || lower.includes('pace') || lower.includes('passive')) {
+    return 'configurationError';
+  }
+  if (lower.includes('mrz') || lower.includes('checksum') || lower.includes('digest mismatch')) {
+    return 'validationError';
+  }
+  if (lower.includes('proof') || lower.includes('verify')) {
+    return 'proofGenerationError';
+  }
+  return 'configurationError';
+}
+
+// ---------------------------------------------------------------------------
+// ZK passport proof — verifier + public-input derivation.
+//
+// Swift reference: MoproProofService.generateWithOpenPassport →
+// publicSignals = ["is_human", "age_over_18"?, "nationality:XXX"]. Verifier
+// returns Bool. We expose the same shape on the TS side so tests can
+// generate a proof through the Nitro bridge, build the same public inputs,
+// then assert verifyNoirProof returns true.
+//
+// Field ordering MUST match Swift's JSONEncoder(sortedKeys) — alphabetical
+// by UTF-8.
+// ---------------------------------------------------------------------------
+
+export interface PassportPublicSignals {
+  readonly ageOver18: boolean;
+  readonly nationality: string;
+  readonly mrzHashHex: string;
+  readonly isHuman: boolean;
+}
+
+/**
+ * Derive the public signal payload from raw passport chip data.
+ * Mirrors Swift `MoproProofService.buildDisclosureWitness`.
+ */
+export function derivePassportPublicSignals(args: {
+  readonly dg1MRZData: string;
+  readonly fallbackNationality: string;
+  readonly currentDateYyMmDd: string;
+}): PassportPublicSignals {
+  const sanitized = sanitizeMRZ(args.dg1MRZData);
+  if (sanitized.length < 88) {
+    return {
+      ageOver18: false,
+      nationality: args.fallbackNationality.toUpperCase().slice(0, 3),
+      mrzHashHex: '',
+      isHuman: true,
+    };
+  }
+  const nationalityRaw = sanitized.slice(54, 57);
+  const nationality = nationalityRaw.replace(/</g, '');
+  const dob = sanitized.slice(57, 63);
+  return {
+    ageOver18: isAgeAtLeast18(dob, args.currentDateYyMmDd),
+    nationality: nationality || args.fallbackNationality.toUpperCase().slice(0, 3),
+    mrzHashHex: '',
+    isHuman: true,
+  };
+}
+
+function sanitizeMRZ(raw: string): string {
+  const upper = raw.toUpperCase();
+  let out = '';
+  for (const ch of upper) {
+    const code = ch.charCodeAt(0);
+    const isAlphaNum =
+      (code >= 48 && code <= 57) ||
+      (code >= 65 && code <= 90);
+    if (isAlphaNum || ch === '<') out += ch;
+  }
+  return out;
+}
+
+function isAgeAtLeast18(dobYyMmDd: string, currentYyMmDd: string): boolean {
+  if (dobYyMmDd.length !== 6 || currentYyMmDd.length !== 6) return false;
+  const birthYear = Number(dobYyMmDd.slice(0, 2));
+  const birthMonth = Number(dobYyMmDd.slice(2, 4));
+  const birthDay = Number(dobYyMmDd.slice(4, 6));
+  const currentYear = Number(currentYyMmDd.slice(0, 2));
+  const currentMonth = Number(currentYyMmDd.slice(2, 4));
+  const currentDay = Number(currentYyMmDd.slice(4, 6));
+  if (
+    Number.isNaN(birthYear) ||
+    Number.isNaN(birthMonth) ||
+    Number.isNaN(birthDay) ||
+    Number.isNaN(currentYear) ||
+    Number.isNaN(currentMonth) ||
+    Number.isNaN(currentDay)
+  ) {
+    return false;
+  }
+  let age = currentYear >= birthYear ? currentYear - birthYear : 100 + currentYear - birthYear;
+  const birthdayPassed =
+    currentMonth > birthMonth ||
+    (currentMonth === birthMonth && currentDay >= birthDay);
+  if (!birthdayPassed && age > 0) age -= 1;
+  return age >= 18;
+}
+
+/**
+ * Serialize public signals + proof metadata into JSON. Keys are
+ * alphabetically sorted — MUST stay in lockstep with Swift
+ * JSONEncoder(sortedKeys) for parity.
+ */
+export function serializePassportProofPayload(args: {
+  readonly proofType: string;
+  readonly mrzHashHex: string;
+  readonly publicSignals: PassportPublicSignals;
+  readonly proofB64: string;
+  readonly vkB64: string;
+}): string {
+  const payload = {
+    age_over_18: args.publicSignals.ageOver18,
+    is_human: args.publicSignals.isHuman,
+    mrz_hash: args.mrzHashHex,
+    nationality: args.publicSignals.nationality,
+    proof_b64: args.proofB64,
+    proof_type: args.proofType,
+    vk_b64: args.vkB64,
+  };
+  return JSON.stringify(payload);
+}

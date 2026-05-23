@@ -86,14 +86,14 @@ export default function ShareTab() {
       <NavBar onScan={() => { router.push('/scan'); }} />
 
       <ScrollView contentContainerStyle={{ paddingBottom: 100 }}>
-        <View className="items-center" style={{ height: 260 }}>
+        <View className="items-center justify-center" style={{ height: 260 }}>
           <Pressable
             onPress={() => {
               if (peerCount > 0) setNearbyVisible(true);
             }}
-            style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}
+            style={{ alignItems: 'center', justifyContent: 'center' }}
           >
-            <RadarMatching avatar="📡" />
+            <RadarMatching size={260} isMatching={isMatching} />
           </Pressable>
         </View>
 

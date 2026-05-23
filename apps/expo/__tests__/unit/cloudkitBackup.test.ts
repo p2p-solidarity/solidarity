@@ -66,7 +66,7 @@ import {
 
 /** 4-byte ASCII magic "SOLB" — file identifier on disk. */
 const SOLB_MAGIC = new Uint8Array([0x53, 0x4f, 0x4c, 0x42]);
-const SOLB_VERSION: number = 0x01;
+const SOLB_VERSION = 0x01;
 const SOLB_HEADER_BYTES = SOLB_MAGIC.length + 1;
 
 /**

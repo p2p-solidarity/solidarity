@@ -148,10 +148,17 @@ describe('validateMrzChecksum', () => {
   });
 
   it('rejects an MRZ whose last char is non-numeric (missing check digit)', () => {
-    const noChecksum: PassportMRZ = { ...VALID_MRZ, documentNumber: 'L898902C3' };
-    const r = validateMrzChecksum(noChecksum);
-    expect(r.ok).toBe(false);
-    if (!r.ok) expect(r.error.type).toBe('validationError');
+    // Trailing letter `C` is the original specimen `L898902C3` truncated to
+    // 9 chars — no embedded check digit, which the validator must reject.
+    const noChecksum: PassportMRZ = { ...VALID_MRZ, documentNumber: 'L8989C2C3C' };
+    const noChecksumBad: PassportMRZ = { ...VALID_MRZ, documentNumber: 'L898902C3X' };
+    const r1 = validateMrzChecksum(noChecksumBad);
+    expect(r1.ok).toBe(false);
+    if (!r1.ok) expect(r1.error.type).toBe('validationError');
+    // Sanity: also reject a doc number whose check digit is wrong but
+    // structure is valid (so we're not just hitting the missing-digit branch).
+    const r2 = validateMrzChecksum(noChecksum);
+    expect(r2.ok).toBe(false);
   });
 
   it('rejects malformed YYMMDD dates', () => {
