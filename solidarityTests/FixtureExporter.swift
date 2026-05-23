@@ -91,6 +91,42 @@ final class FixtureExporter: XCTestCase {
     ])
   }
 
+  /// ES256 JWT sign — proves Swift CryptoKit signatures verify under the TS
+  /// `@noble/curves` implementation. Signatures are randomised (CryptoKit
+  /// uses a fresh `k` per call), so byte-equal is NOT asserted; the TS side
+  /// recomputes the JWS and runs verify(pubkey, message, signature).
+  func test_exportEs256JwtSignature() throws {
+    // Fixed 32-byte private scalar (NOT random) so the test is reproducible
+    // across machines. Pubkey + DID derive deterministically from this.
+    let privHex = "11111111222222223333333344444444" +
+                  "55555555666666667777777788888888"
+    let priv = try P256.Signing.PrivateKey(rawRepresentation: Data(hexString: privHex))
+    let pubX963 = priv.publicKey.x963Representation
+
+    let headerJson = #"{"alg":"ES256","typ":"JWT"}"#
+    let payloadJson = #"{"sub":"solidarity-fixture","iat":1700000000}"#
+
+    let headerB64 = base64URL(Data(headerJson.utf8))
+    let payloadB64 = base64URL(Data(payloadJson.utf8))
+    let signingInput = "\(headerB64).\(payloadB64)"
+
+    let sig = try priv.signature(for: Data(signingInput.utf8))
+    let jwt = "\(signingInput).\(base64URL(sig.rawRepresentation))"
+
+    try writeFixture(domain: "identity", file: "es256_jwt.json", payload: [
+      "schema": "1",
+      "source": "solidarityTests/FixtureExporter.test_exportEs256JwtSignature",
+      "cases": [[
+        "name": "fixed_seed_keypair",
+        "privKeyHex": privHex,
+        "publicKeyX963Hex": pubX963.hexString,
+        "headerJson": headerJson,
+        "payloadJson": payloadJson,
+        "jwt": jwt,
+      ]],
+    ])
+  }
+
   /// JSON-encoded `BusinessCard` round trip — pins the Codable byte layout
   /// so the Zod port asserts the same field order/types.
   func test_exportBusinessCardJsonRoundTrip() throws {
@@ -170,6 +206,14 @@ private struct AesGcmFixture {
   let keyHex: String
   let nonceHex: String
   let plaintext: String
+}
+
+/// RFC 4648 base64url (url-safe, no padding) — local helper.
+private func base64URL(_ data: Data) -> String {
+  data.base64EncodedString()
+    .replacingOccurrences(of: "+", with: "-")
+    .replacingOccurrences(of: "/", with: "_")
+    .replacingOccurrences(of: "=", with: "")
 }
 
 // MARK: - Hex helpers (test-local; do NOT leak into production code)

@@ -12,4 +12,5 @@
  *   sakura/     Snake-case wire format encoders for the Sakura relay
  */
 export * from './crypto';
+export * from './identity';
 export * from './types';
