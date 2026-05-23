@@ -9,6 +9,7 @@
 import { router, useLocalSearchParams } from 'expo-router';
 import { ScrollView, View } from 'react-native';
 
+import { MauvePetalMotif } from '@/components/decor/MauvePetalMotif';
 import { ThemedButton, ThemedSurface, ThemedText } from '@/components/themed';
 import { useContact } from '@/contacts/repository';
 
@@ -27,7 +28,13 @@ export default function PersonDetail() {
           onPress={() => { router.back(); }}
         />
       </View>
-      <View className="px-4 pb-2">
+      <View className="px-4 pb-2" style={{ position: 'relative' }}>
+        <View
+          pointerEvents="none"
+          style={{ position: 'absolute', top: -16, left: -16, right: -16, bottom: 0 }}
+        >
+          <MauvePetalMotif cardWidth={361} cardHeight={120} />
+        </View>
         <ThemedText variant="headlineLarge">{displayName}</ThemedText>
         {contact?.businessCard.title ? (
           <ThemedText variant="bodyMedium" tone="secondary">

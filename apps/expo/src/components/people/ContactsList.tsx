@@ -15,6 +15,7 @@ import { useCallback } from 'react';
 import { ActivityIndicator, View } from 'react-native';
 import { FlashList } from '@shopify/flash-list';
 
+import { PaperStackIllustration } from '@/components/decor/PaperStackIllustration';
 import { ThemedSurface, ThemedText } from '@/components/themed';
 import type { Contact } from '@solidarity/shared';
 
@@ -32,6 +33,9 @@ export interface ContactsListProps {
 function EmptyState(): ReactNode {
   return (
     <View className="flex-1 items-center justify-center p-6">
+      <View className="mb-4">
+        <PaperStackIllustration size={120} />
+      </View>
       <ThemedSurface variant="outlined" padded className="w-full items-center">
         <ThemedText variant="titleMedium">No contacts yet</ThemedText>
         <ThemedText variant="bodySmall" tone="tertiary" className="mt-2 text-center">
