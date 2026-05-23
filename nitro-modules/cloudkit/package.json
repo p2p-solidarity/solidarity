@@ -1,0 +1,22 @@
+{
+  "name": "@solidarity/nitro-cloudkit",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Nitro module wrapping Apple CloudKit (iOS) and Google Drive REST (Android) so the same backup + CKShare-style group sync surface works on both platforms.",
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "scripts": {
+    "nitrogen": "nitrogen",
+    "lint": "eslint .",
+    "typecheck": "tsc --noEmit"
+  },
+  "react-native": {
+    "supportedPlatforms": ["ios", "android"]
+  },
+  "peerDependencies": {
+    "react-native-nitro-modules": "*"
+  },
+  "devDependencies": {
+    "react-native-nitro-modules": "^0.35.7"
+  }
+}

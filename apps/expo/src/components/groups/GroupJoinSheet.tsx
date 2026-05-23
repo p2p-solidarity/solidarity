@@ -34,23 +34,16 @@ import { SfIcon } from '@/components/icons/SfIcon';
 import { ThemedButton } from '@/components/themed';
 import { Colors } from '@/constants/Colors';
 import { pushToast } from '@/feedback/toast';
+import { extractShareTarget, syncManager } from '@/groups/cloudSync';
 
 const MONO_FONT = 'Menlo';
 
 function extractToken(raw: string): string {
-  // Mirrors the Swift handleScannedCode logic — extract `token=…` query
-  // param if the input is a URL, otherwise pass the raw value through.
-  try {
-    const url = new URL(raw);
-    const fromQuery = url.searchParams.get('token');
-    if (fromQuery) return fromQuery;
-    // Path-style: solidarity://group/<token>
-    const last = url.pathname.split('/').filter(Boolean).pop();
-    if (last) return last;
-  } catch {
-    // Not a URL — return as-is below.
-  }
-  return raw.trim();
+  // Mirrors the Swift handleScannedCode logic. We re-use the shared
+  // `extractShareTarget` so the same parsing applies whether the input is
+  // a CKShare URL, a Drive webViewLink, a custom-scheme deep link, or a
+  // bare token.
+  return extractShareTarget(raw);
 }
 
 export interface GroupJoinSheetProps {
@@ -87,10 +80,12 @@ export function GroupJoinSheet({
     setErrorMessage(null);
     setSuccessMessage(null);
     try {
-      // TODO(android): CloudKitGroupSyncManager.joinGroup(withInviteToken:)
-      await new Promise((resolve) => setTimeout(resolve, 250));
-      setSuccessMessage(`Successfully joined ${trimmed}!`);
-      pushToast(`Joined ${trimmed}`, 'success');
+      // CloudKit / Drive share acceptance via the Nitro module. The
+      // returned shareId is the handle the local store + Sakura messaging
+      // uses to refer back to the joined group.
+      const shareId = await syncManager().joinGroup(trimmed);
+      setSuccessMessage(`Successfully joined ${shareId}!`);
+      pushToast(`Joined ${shareId}`, 'success');
       setTimeout(() => { closeAndReset(); }, 1500);
     } catch (e) {
       const message = e instanceof Error ? e.message : 'Unknown error';

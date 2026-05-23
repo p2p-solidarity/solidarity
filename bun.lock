@@ -27,9 +27,11 @@
         "@noble/hashes": "^2.2.0",
         "@react-native-google-signin/google-signin": "^16.1.2",
         "@shopify/flash-list": "2.0.2",
+        "@solidarity/nitro-cloudkit": "workspace:*",
         "@solidarity/nitro-nfc-passport": "workspace:*",
         "@solidarity/nitro-passport-zk": "workspace:*",
         "@solidarity/nitro-proximity": "workspace:*",
+        "@solidarity/nitro-spruce-did": "workspace:*",
         "@solidarity/shared": "workspace:*",
         "expo": "~56.0.4",
         "expo-asset": "~56.0.14",
@@ -90,6 +92,16 @@
         "tailwindcss": "^3.4.17",
       },
     },
+    "nitro-modules/cloudkit": {
+      "name": "@solidarity/nitro-cloudkit",
+      "version": "0.1.0",
+      "devDependencies": {
+        "react-native-nitro-modules": "^0.35.7",
+      },
+      "peerDependencies": {
+        "react-native-nitro-modules": "*",
+      },
+    },
     "nitro-modules/nfc-passport": {
       "name": "@solidarity/nitro-nfc-passport",
       "version": "0.1.0",
@@ -112,6 +124,26 @@
     },
     "nitro-modules/proximity": {
       "name": "@solidarity/nitro-proximity",
+      "version": "0.1.0",
+      "devDependencies": {
+        "react-native-nitro-modules": "^0.35.7",
+      },
+      "peerDependencies": {
+        "react-native-nitro-modules": "*",
+      },
+    },
+    "nitro-modules/semaphore": {
+      "name": "@solidarity/nitro-semaphore",
+      "version": "0.1.0",
+      "devDependencies": {
+        "react-native-nitro-modules": "^0.35.7",
+      },
+      "peerDependencies": {
+        "react-native-nitro-modules": "*",
+      },
+    },
+    "nitro-modules/spruce-did": {
+      "name": "@solidarity/nitro-spruce-did",
       "version": "0.1.0",
       "devDependencies": {
         "react-native-nitro-modules": "^0.35.7",
@@ -591,11 +623,17 @@
 
     "@solidarity/expo": ["@solidarity/expo@workspace:apps/expo"],
 
+    "@solidarity/nitro-cloudkit": ["@solidarity/nitro-cloudkit@workspace:nitro-modules/cloudkit"],
+
     "@solidarity/nitro-nfc-passport": ["@solidarity/nitro-nfc-passport@workspace:nitro-modules/nfc-passport"],
 
     "@solidarity/nitro-passport-zk": ["@solidarity/nitro-passport-zk@workspace:nitro-modules/passport-zk"],
 
     "@solidarity/nitro-proximity": ["@solidarity/nitro-proximity@workspace:nitro-modules/proximity"],
+
+    "@solidarity/nitro-semaphore": ["@solidarity/nitro-semaphore@workspace:nitro-modules/semaphore"],
+
+    "@solidarity/nitro-spruce-did": ["@solidarity/nitro-spruce-did@workspace:nitro-modules/spruce-did"],
 
     "@solidarity/parity-fixtures": ["@solidarity/parity-fixtures@workspace:packages/parity-fixtures"],
 

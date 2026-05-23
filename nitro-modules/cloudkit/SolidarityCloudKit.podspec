@@ -2,7 +2,7 @@ require 'json'
 package = JSON.parse(File.read(File.join(__dir__, 'package.json')))
 
 Pod::Spec.new do |s|
-  s.name         = 'NfcPassport'
+  s.name         = 'SolidarityCloudKit'
   s.version      = package['version']
   s.summary      = package['description']
   s.homepage     = 'https://github.com/p2p-solidarity/airmeishi'
@@ -17,21 +17,19 @@ Pod::Spec.new do |s|
     'ios/**/*.{swift,h,m,mm}',
   ]
 
+  # Apple frameworks we link against. CloudKit is the only required link;
+  # Foundation is implicit. UIKit is optional — only pulled for sharing UI
+  # if we ever surface UICloudSharingController; v1 keeps the share URL
+  # string-based so we avoid pulling UIKit into the module.
+  s.frameworks = ['CloudKit', 'Foundation']
+
   s.pod_target_xcconfig = {
     'DEFINES_MODULE' => 'YES',
     'SWIFT_VERSION'  => '5.9',
   }
 
-  # NFCPassportReader (AndyQ) — the upstream SPM is the supported channel;
-  # the CocoaPods spec is deprecated but still publishable. We pin to a
-  # known-good release. The Expo prebuild path also ships an alternative
-  # SwiftPM hookup via plugins/withNfcReader.js for projects that prefer
-  # SPM over CocoaPods.
-  s.dependency 'NFCPassportReader', '~> 2.3.0'
-
-  load File.join(__dir__, 'nitrogen', 'generated', 'ios', 'NfcPassport+autolinking.rb')
+  load File.join(__dir__, 'nitrogen', 'generated', 'ios', 'SolidarityCloudKit+autolinking.rb')
   add_nitrogen_files(s)
 
-  # React Native build phase orchestration (Swift→C++ header ordering, etc.)
   install_modules_dependencies(s)
 end

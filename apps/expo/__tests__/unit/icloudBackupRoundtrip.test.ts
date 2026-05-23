@@ -58,62 +58,58 @@ interface CloudProviderSurface {
   readonly downloadBackup: <T>() => Promise<T | null>;
   readonly backupMtime: () => Promise<Date | null>;
   readonly setProvider: (kind: 'iCloud' | 'googleDrive') => void;
+  readonly getActiveProvider: () => 'iCloud' | 'googleDrive';
 }
 
-// ─── Fake iCloud Drive (react-native-cloud-storage) ────────────────────────
+// ─── Fake @solidarity/nitro-cloudkit (Nitro module) ────────────────────────
 //
-// The real surface has `writeFile / readFile / exists / stat / deleteFile`
-// with scope + provider state. Our test fake stores files in a Map keyed by
-// `<scope>:<path>` and tracks mtime per write. Provider is set globally.
+// The real CloudKit surface stores one record per recordId + recordType.
+// Our test fake stores records in a Map keyed by `<activeProvider>:<recordId>`
+// so the cross-provider isolation test still demonstrates that switching
+// providers wipes the visible record set.
 //
-// TODO(nitro): swap this fake for the real nitro module when
-// nitro-modules/icloud-drive lands (see docs/migration/12-icloud-bridge.md).
+// The post-Nitro cloudProvider.ts surface no longer touches files —
+// uploadBackup serialises into a single `AirmeishiBackup` record whose
+// `fields` payload contains the base64 ciphertext as JSON.
 
-interface FakeFile { readonly content: string; readonly mtime: Date }
-const fakeFiles = new Map<string, FakeFile>();
+interface FakeRecord {
+  readonly recordId: string;
+  readonly recordType: string;
+  readonly fields: string;
+  readonly modifiedTime: number;
+}
+const fakeRecords = new Map<string, FakeRecord>();
 let activeProvider: 'iCloud' | 'googleDrive' = 'iCloud';
 let activeAccessToken: string | undefined;
 
-function fakeKey(path: string, scope: string): string {
-  return `${activeProvider}:${scope}:${path}`;
+function fakeKey(recordId: string): string {
+  return `${activeProvider}:${recordId}`;
 }
 
-const FakeCloudStorage = {
-  setProvider: (p: 'iCloudDocuments' | 'GoogleDrive') => {
-    activeProvider = p === 'iCloudDocuments' ? 'iCloud' : 'googleDrive';
+const FakeCloudKit = {
+  initialize: async () => true,
+  isAvailable: () => true,
+  currentUserId: async () => 'fake-user',
+  saveRecord: async (r: FakeRecord) => {
+    const stamped: FakeRecord = { ...r, modifiedTime: Date.now() };
+    fakeRecords.set(fakeKey(r.recordId), stamped);
+    return stamped;
   },
-  setProviderOptions: (opts: { accessToken?: string }) => {
-    activeAccessToken = opts.accessToken;
+  fetchRecord: async (id: string): Promise<FakeRecord> => {
+    const v = fakeRecords.get(fakeKey(id));
+    if (!v) throw new Error(`fake-cloudkit: missing ${id}`);
+    return v;
   },
-  writeFile: async (path: string, contents: string, scope: string) => {
-    fakeFiles.set(fakeKey(path, scope), { content: contents, mtime: new Date() });
+  deleteRecord: async (id: string) => {
+    fakeRecords.delete(fakeKey(id));
   },
-  readFile: async (path: string, scope: string): Promise<string> => {
-    const v = fakeFiles.get(fakeKey(path, scope));
-    if (!v) throw new Error(`fake-icloud: missing ${path}`);
-    return v.content;
-  },
-  exists: async (path: string, scope: string): Promise<boolean> => {
-    return fakeFiles.has(fakeKey(path, scope));
-  },
-  stat: async (path: string, scope: string): Promise<{ mtime: Date }> => {
-    const v = fakeFiles.get(fakeKey(path, scope));
-    if (!v) throw new Error(`fake-icloud: missing ${path}`);
-    return { mtime: v.mtime };
-  },
-  deleteFile: async (path: string, scope: string): Promise<void> => {
-    fakeFiles.delete(fakeKey(path, scope));
-  },
-};
-
-const FakeCloudStorageProvider = {
-  ICloud: 'iCloudDocuments' as const,
-  GoogleDrive: 'GoogleDrive' as const,
-};
-
-const FakeCloudStorageScope = {
-  AppData: 'AppData' as const,
-  Documents: 'Documents' as const,
+  queryRecords: async () => [],
+  createShare: async () => ({ shareId: '', url: '', title: '', thumbnail: undefined }),
+  acceptShare: async () => '',
+  fetchSharedRecords: async () => [],
+  removeShare: async () => undefined,
+  addEventListener: () => () => undefined,
+  setDriveAccessToken: (token: string) => { activeAccessToken = token; },
 };
 
 // ─── Mock setup ────────────────────────────────────────────────────────────
@@ -123,10 +119,8 @@ const FIXED_MASTER_KEY = new Uint8Array(32).fill(0xa1);
 let cloud: CloudProviderSurface;
 
 beforeAll(async () => {
-  await mock.module('react-native-cloud-storage', () => ({
-    CloudStorage: FakeCloudStorage,
-    CloudStorageProvider: FakeCloudStorageProvider,
-    CloudStorageScope: FakeCloudStorageScope,
+  await mock.module('@solidarity/nitro-cloudkit', () => ({
+    getCloudKit: () => FakeCloudKit,
   }));
   await mock.module('react-native', () => ({
     Platform: { OS: 'ios', select: <T,>(o: { ios?: T; android?: T; default?: T }) =>
@@ -156,7 +150,7 @@ beforeAll(async () => {
 });
 
 beforeEach(() => {
-  fakeFiles.clear();
+  fakeRecords.clear();
   activeProvider = 'iCloud';
   activeAccessToken = undefined;
 });
@@ -289,7 +283,7 @@ describe('iCloud backup round trip — encrypted blob via react-native-cloud-sto
 
     // Storage now holds something — that something must be ciphertext (not
     // plaintext) so the cloud provider can never see the payload bytes.
-    const stored = Array.from(fakeFiles.values())[0]?.content ?? '';
+    const stored = Array.from(fakeRecords.values())[0]?.fields ?? '';
     expect(stored.length).toBeGreaterThan(0);
     expect(stored).not.toContain('Ada Lovelace');
     expect(stored).not.toContain('Aurora');
@@ -336,15 +330,18 @@ describe('iCloud backup round trip — encrypted blob via react-native-cloud-sto
   it('Google Drive provider isolates files from iCloud (cross-provider safety)', async () => {
     // Upload to iCloud.
     cloud.setProvider('iCloud');
+    activeProvider = 'iCloud';
     await cloud.uploadBackup(makeFullPayload());
 
     // Switch to Drive and try to download — must return null (different provider).
     cloud.setProvider('googleDrive');
+    activeProvider = 'googleDrive';
     const drive = await cloud.downloadBackup<SwiftCompatibleBackupData>();
     expect(drive).toBeNull();
 
     // Switch back; iCloud blob still present.
     cloud.setProvider('iCloud');
+    activeProvider = 'iCloud';
     const ic = await cloud.downloadBackup<SwiftCompatibleBackupData>();
     expect(ic).not.toBeNull();
   });
