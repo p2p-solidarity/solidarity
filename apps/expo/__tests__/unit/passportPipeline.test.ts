@@ -46,18 +46,22 @@ describe('runPassportPipeline', () => {
   });
 
   it('propagates NFC errors as thrown promise rejection', async () => {
-    await expect(
-      runPassportPipeline(
+    let captured: Error | null = null;
+    try {
+      await runPassportPipeline(
         { documentNumber: 'X', dateOfBirth: '900101', dateOfExpiry: '300101' },
         {
-          readChip: async () => {
+          readChip: () => {
             throw new Error('NFC: tag lost');
           },
-          generateProof: async () => new ArrayBuffer(0),
-          issueVc: async () => '',
+          generateProof: () => Promise.resolve(new ArrayBuffer(0)),
+          issueVc: () => Promise.resolve(''),
         },
         () => undefined
-      )
-    ).rejects.toThrow('NFC: tag lost');
+      );
+    } catch (err) {
+      captured = err as Error;
+    }
+    expect(captured?.message).toBe('NFC: tag lost');
   });
 });

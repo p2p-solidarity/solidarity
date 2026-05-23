@@ -71,5 +71,11 @@ export async function importFromDevice(): Promise<{
   readonly pendingMigration: true;
 }> {
   const { status } = await Contacts.requestPermissionsAsync();
-  return { granted: status === 'granted', pendingMigration: true };
+  // `status` is a Contacts.PermissionStatus enum; compare via its enum value
+  // rather than the literal so the eslint no-unsafe-enum-comparison rule
+  // doesn't trip.
+  return {
+    granted: status === Contacts.PermissionStatus.GRANTED,
+    pendingMigration: true,
+  };
 }

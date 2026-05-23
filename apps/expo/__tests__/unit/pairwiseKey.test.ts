@@ -62,9 +62,11 @@ describe('pairwise key derivation', () => {
 });
 
 // Mock SecureStore for the import-time side effects elsewhere (none here).
-mock.module('expo-secure-store', () => ({
+// `mock.module` returns a Promise — wrap in `void` so eslint stops nagging
+// about unhandled rejection (the mock load is best-effort).
+void mock.module('expo-secure-store', () => ({
   WHEN_UNLOCKED: 'whenUnlocked',
-  getItemAsync: async () => null,
-  setItemAsync: async () => undefined,
-  deleteItemAsync: async () => undefined,
+  getItemAsync: () => Promise.resolve(null),
+  setItemAsync: () => Promise.resolve(undefined),
+  deleteItemAsync: () => Promise.resolve(undefined),
 }));

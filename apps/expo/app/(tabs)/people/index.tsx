@@ -9,7 +9,7 @@
  */
 import { router } from 'expo-router';
 import { View } from 'react-native';
-import { Gesture, GestureDetector } from 'react-native-gesture-handler';
+import { GestureDetector } from 'react-native-gesture-handler';
 import { useMemo } from 'react';
 
 import { makeGestureAutoBackup } from '@/backup';
