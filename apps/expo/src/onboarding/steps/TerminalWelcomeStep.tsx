@@ -1,79 +1,86 @@
 /**
- * Terminal welcome — typewriter intro + Solidarity wordmark. Mirrors
- * Swift TerminalWelcomeScreen.
+ * TerminalWelcomeStep — 1:1 port of Swift TerminalWelcomeScreen.
  *
- * Animations:
- *   - Char reveal: pure JS setInterval (low frequency, no need for worklet)
- *   - Cursor blink: Reanimated 4 SharedValue + repeating withTiming on the
- *     opacity. Worklet runs off the JS thread so the cursor stays smooth
- *     even while the typewriter setInterval fires.
+ *   "Welcome to\nyour new social\nexperiment"   (32pt monospaced bold)
+ *   "It's good to have you here <3\nLet's set
+ *    up your profile..."                        (14pt regular textSecondary)
+ *   "Begin"                                     (18pt monospaced bold
+ *                                                inverted button)
+ *
+ * Typewriter reveal of the headline; tap anywhere to skip the animation
+ * and surface the subtitle + Begin button immediately.
  */
-import { useEffect, useState } from 'react';
-import { StyleSheet, View } from 'react-native';
-import Animated, {
-  useAnimatedStyle,
-  useSharedValue,
-  withRepeat,
-  withTiming,
-} from 'react-native-reanimated';
+import { useEffect, useRef, useState } from 'react';
+import { Pressable, Text, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { Wordmark } from '@/components/brand/Wordmark';
-import { Colors } from '@/constants/Colors';
-import { ThemedText } from '@/components/themed';
+import { ThemedButton } from '@/components/themed';
 
-const LINES = [
-  '> Solidarity 1.3.1',
-  '> initialising secure enclave…',
-  '> ready.',
-] as const;
-
+const HEADLINE = 'Welcome to\nyour new social\nexperiment';
+const SUBTITLE = "It's good to have you here <3\nLet's set up your profile...";
 const CHARS_PER_SECOND = 32;
 
-export function TerminalWelcomeStep() {
-  const fullText = LINES.join('\n');
+export function TerminalWelcomeStep({ onBegin }: { onBegin?: () => void }) {
+  const insets = useSafeAreaInsets();
   const [revealed, setRevealed] = useState('');
-  const cursorOpacity = useSharedValue(1);
-
-  useEffect(() => {
-    cursorOpacity.value = withRepeat(withTiming(0, { duration: 500 }), -1, true);
-  }, [cursorOpacity]);
+  const [showSubtitle, setShowSubtitle] = useState(false);
+  const [showBegin, setShowBegin] = useState(false);
+  const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   useEffect(() => {
     let i = 0;
     const intervalMs = 1000 / CHARS_PER_SECOND;
-    const timer = setInterval(() => {
-      i++;
-      setRevealed(fullText.slice(0, i));
-      if (i >= fullText.length) clearInterval(timer);
+    timerRef.current = setInterval(() => {
+      i += 1;
+      setRevealed(HEADLINE.slice(0, i));
+      if (i >= HEADLINE.length) {
+        if (timerRef.current) clearInterval(timerRef.current);
+        setShowSubtitle(true);
+        setTimeout(() => setShowBegin(true), 500);
+      }
     }, intervalMs);
-    return () => { clearInterval(timer); };
-  }, [fullText]);
+    return () => {
+      if (timerRef.current) clearInterval(timerRef.current);
+    };
+  }, []);
 
-  const cursorStyle = useAnimatedStyle(() => ({ opacity: cursorOpacity.value }));
+  const skip = () => {
+    if (showBegin) return;
+    if (timerRef.current) clearInterval(timerRef.current);
+    setRevealed(HEADLINE);
+    setShowSubtitle(true);
+    setShowBegin(true);
+  };
 
   return (
-    <View>
-      <View className="mb-6">
-        <Wordmark />
-      </View>
-      <View style={styles.wrap}>
-        <ThemedText variant="bodyMedium" tone="accent" style={styles.mono}>
+    <Pressable
+      onPress={skip}
+      className="flex-1 bg-pageBg"
+      style={{ paddingTop: insets.top + 24, paddingBottom: insets.bottom + 24 }}
+    >
+      <View style={{ flex: 1, justifyContent: 'center', paddingHorizontal: 32, gap: 16 }}>
+        <Text
+          className="text-text1 text-[32px] font-bold"
+          style={{ fontFamily: 'Menlo' }}
+        >
           {revealed}
-        </ThemedText>
-        <Animated.View style={[styles.cursor, cursorStyle]} />
+        </Text>
+        {showSubtitle ? (
+          <Text className="text-text2 text-[14px]">{SUBTITLE}</Text>
+        ) : null}
       </View>
-    </View>
+
+      {showBegin && onBegin ? (
+        <View style={{ paddingHorizontal: 32, paddingBottom: 24 }}>
+          <ThemedButton
+            label="Begin"
+            fullWidth
+            variant="inverted"
+            haptic="warning"
+            onPress={onBegin}
+          />
+        </View>
+      ) : null}
+    </Pressable>
   );
 }
-
-const styles = StyleSheet.create({
-  wrap: { flexDirection: 'row', alignItems: 'flex-end' },
-  mono: { fontFamily: 'Menlo', fontSize: 14, lineHeight: 22 },
-  cursor: {
-    width: 8,
-    height: 18,
-    backgroundColor: Colors.accentRose,
-    marginLeft: 2,
-    marginBottom: 2,
-  },
-});

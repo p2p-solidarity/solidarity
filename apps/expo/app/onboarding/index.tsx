@@ -1,10 +1,15 @@
 /**
  * Onboarding entry — drives the 7-step flow via the local reducer + the
  * per-step component bodies under src/onboarding/steps/.
+ *
+ * Layout mirrors Swift OnboardingFlowView: the first step
+ * (TerminalWelcomeScreen) is full-bleed with its own "Begin" CTA;
+ * subsequent steps share a wrapper with "Step N of M" + step title +
+ * Continue/Back buttons.
  */
+import { router } from 'expo-router';
 import { useReducer } from 'react';
 import { ScrollView, View } from 'react-native';
-import { router } from 'expo-router';
 
 import { ThemedButton, ThemedText } from '@/components/themed';
 import {
@@ -41,20 +46,23 @@ export default function OnboardingFlow() {
     dispatch({ type: 'next' });
   };
 
+  if (state.step === 'terminalWelcome') {
+    return <TerminalWelcomeStep onBegin={() => dispatch({ type: 'next' })} />;
+  }
+
   const stepIdx = ONBOARDING_STEPS.indexOf(state.step) + 1;
 
   return (
     <View className="flex-1 bg-pageBg">
       <ScrollView className="flex-1 px-6 pt-6" contentContainerClassName="pb-10">
         <ThemedText variant="bodySmall" tone="tertiary">
-          Step {String(stepIdx)} of {String(ONBOARDING_STEPS.length)}
+          {`Step ${String(stepIdx)} of ${String(ONBOARDING_STEPS.length)}`}
         </ThemedText>
         <ThemedText variant="headlineLarge" className="mt-1">
           {STEP_TITLES[state.step]}
         </ThemedText>
 
         <View className="mt-6">
-          {state.step === 'terminalWelcome' ? <TerminalWelcomeStep /> : null}
           {state.step === 'profileSetup' ? (
             <ProfileStep
               name={state.profile.name}
@@ -80,16 +88,14 @@ export default function OnboardingFlow() {
           fullWidth
           onPress={onContinue}
         />
-        {state.step !== 'terminalWelcome' ? (
-          <View className="mt-3">
-            <ThemedButton
-              variant="secondary"
-              label="Back"
-              fullWidth
-              onPress={() => { dispatch({ type: 'back' }); }}
-            />
-          </View>
-        ) : null}
+        <View className="mt-3">
+          <ThemedButton
+            variant="secondary"
+            label="Back"
+            fullWidth
+            onPress={() => { dispatch({ type: 'back' }); }}
+          />
+        </View>
       </View>
     </View>
   );
