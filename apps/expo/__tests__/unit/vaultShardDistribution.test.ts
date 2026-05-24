@@ -175,6 +175,21 @@ void mock.module('@solidarity/nitro-cloudkit', () => ({
   }),
 }));
 
+// secretsKeychain.ts now imports `@solidarity/nitro-secrets-vault`. We
+// stub the hardware-backed driver as "unavailable" so this suite keeps
+// driving the legacy v0 raw path (the existing root-secret bytes are
+// pre-seeded into `secureStore` under the rootSecret alias).
+void mock.module('@solidarity/nitro-secrets-vault', () => ({
+  getSecretsVault: () => ({
+    isHardwareAvailable: (): boolean => false,
+    ensureWrappingKey: (): Promise<{ hardwareBacked: boolean }> =>
+      Promise.resolve({ hardwareBacked: false }),
+    wrap: (): Promise<never> => Promise.reject(new Error('hw stub: wrap disabled')),
+    unwrap: (): Promise<never> => Promise.reject(new Error('hw stub: unwrap disabled')),
+    deleteKey: (): Promise<void> => Promise.resolve(),
+  }),
+}));
+
 void mock.module('expo-file-system/legacy', () => ({
   documentDirectory: '/mock/',
   EncodingType: { Base64: 'base64', UTF8: 'utf8' },
