@@ -1,7 +1,8 @@
 {
   "expo": {
-    "name": "Solidarity",
+    "name": "Solid(ar)ity",
     "slug": "airmeishi",
+    "icon": "./assets/icon.png",
     "scheme": [
       "solidarity",
       "airmeishi",
@@ -58,7 +59,11 @@
       "appleTeamId": "538MCM44UX"
     },
     "android": {
-      "package": "kidneyweakx.airmeishi",
+      "package": "gg.solidarity.app",
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#FFFFFF"
+      },
       "permissions": [
         "android.permission.CAMERA",
         "android.permission.READ_CONTACTS",
@@ -118,8 +123,8 @@
           },
           "android": {
             "minSdkVersion": 26,
-            "compileSdkVersion": 35,
-            "targetSdkVersion": 35
+            "compileSdkVersion": 36,
+            "targetSdkVersion": 36
           }
         }
       ],
@@ -127,7 +132,8 @@
       "./plugins/withMoproBindingsPod.js",
       "./plugins/withSemaphoreBindingsPod.js",
       "./plugins/withRustXcframeworkSearchPath.js",
-      "./plugins/withNfcReader.js"
+      "./plugins/withNfcReader.js",
+      "./plugins/withCameraXPin.js"
     ],
     "runtimeVersion": "1.3.1",
     "updates": {
