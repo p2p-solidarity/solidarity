@@ -164,3 +164,7 @@ nitro-modules/*/node_modules/
 nitro-modules/*/android/.cxx/
 nitro-modules/*/android/build/
 nitro-modules/*/android/.gradle/
+
+# Rust xcframework outputs produced by nitro-modules/*/rust/build-ios.sh.
+# These are ~130 MB per build and must be rebuilt locally — never commit.
+nitro-modules/**/*.xcframework/

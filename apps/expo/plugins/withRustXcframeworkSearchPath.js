@@ -33,15 +33,21 @@ const HOOK_END = '# [withRustXcframeworkSearchPath] END';
 
 const HOOK_BODY = `
     ${HOOK_MARKER}
-    # __dir__ is apps/expo/ios/. The Rust binding sibling repos live in
-    # solidarity/ (one level above the airmeishi/ repo root) — go up
-    # four to reach solidarity/. Same relative path as
-    # MoproBindings.podspec / SemaphoreBindings.podspec use.
+    # __dir__ is apps/expo/ios/.
+    #   • The passport-zk mopro xcframework still lives in the sibling
+    #     passport-noir repo (one level above the airmeishi/ root), so we
+    #     reach it via four ".." hops (../../../../).
+    #   • The semaphore xcframework is now built locally from
+    #     nitro-modules/semaphore/rust/build-ios.sh and lands next to
+    #     SemaphoreBindings.podspec inside nitro-modules/semaphore/mopro/.
+    #     Reach the airmeishi monorepo root via three ".." hops
+    #     (apps/expo/ios/ → apps/expo/ → apps/ → airmeishi/).
+    airmeishi_root = File.expand_path(File.join(__dir__, '..', '..', '..'))
     solidarity_root = File.expand_path(File.join(__dir__, '..', '..', '..', '..'))
     mopro_xcf = File.join(solidarity_root, 'passport-noir', 'mopro-binding',
                           'MoproiOSBindings', 'MoproBindings.xcframework')
-    semaphore_xcf = File.join(solidarity_root, 'SemaphoreSwift', 'Sources',
-                              'MoproiOSBindings', 'MoproBindings.xcframework')
+    semaphore_xcf = File.join(airmeishi_root, 'nitro-modules', 'semaphore',
+                              'mopro', 'SemaphoreBindings.xcframework')
 
     installer.aggregate_targets.each do |aggregate_target|
       aggregate_target.user_build_configurations.each_key do |configuration_name|

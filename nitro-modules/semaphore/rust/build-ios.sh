@@ -1,9 +1,14 @@
 #!/usr/bin/env bash
 #
 # build-ios.sh — build libsemaphore_bindings.a slices for the iOS
-# xcframework. Mirrors the layout in
-# `SemaphoreSwift/Sources/MoproiOSBindings/MoproBindings.xcframework`
-# (ios-arm64 + ios-arm64-simulator), so the existing podspec keeps working.
+# xcframework. Output layout (ios-arm64 + ios-arm64-simulator) mirrors
+# what the legacy SwiftUI app ships at
+# `SemaphoreSwift/Sources/MoproiOSBindings/MoproBindings.xcframework`,
+# but the file is named SemaphoreBindings.xcframework here to avoid
+# colliding with the passport-zk MoproBindings.xcframework that lives
+# in the sibling `passport-noir` repo. SemaphoreBindings.podspec +
+# apps/expo/plugins/withRustXcframeworkSearchPath.js consume the
+# produced xcframework directly from this path.
 #
 # Usage:
 #   bash build-ios.sh                 # builds both arm64-device + arm64-sim
@@ -11,20 +16,18 @@
 #
 # Output:
 #   nitro-modules/semaphore/rust/target/<triple>/release/libsemaphore_bindings.a
-#   nitro-modules/semaphore/mopro/MoproBindings.xcframework/<slice>/...
+#   nitro-modules/semaphore/mopro/SemaphoreBindings.xcframework/<slice>/...
 #
-# NOTE: the SwiftUI legacy app already ships a working xcframework at
-#   SemaphoreSwift/Sources/MoproiOSBindings/MoproBindings.xcframework
-# so the podspec currently points there. This script exists so we can
-# rebuild from source when upgrading semaphore-rs without depending on
-# the sibling Swift package being checked out.
+# This script MUST be re-run after any change to rust/src/* or src/semaphore.udl
+# so the static lib's symbol checksums match the regenerated mopro/ios/mopro.swift
+# (uniffi otherwise panics in `uniffiCheckApiChecksums` at runtime).
 
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 RUST_DIR="${SCRIPT_DIR}"
-XCFRAMEWORK_DIR="${PROJECT_ROOT}/mopro/MoproBindings.xcframework"
+XCFRAMEWORK_DIR="${PROJECT_ROOT}/mopro/SemaphoreBindings.xcframework"
 
 IOS_ARCHS="${IOS_ARCHS:-aarch64-apple-ios,aarch64-apple-ios-sim}"
 CONFIGURATION="${CONFIGURATION:-release}"
