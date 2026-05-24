@@ -28,3 +28,10 @@ export {
   useIdentityCoordinator,
 } from './coordinator';
 export type { DIDDescriptor, UnifiedProfile } from './coordinator';
+export {
+  __resetIssuerTrustAnchorStoreForTesting,
+  useIssuerTrustAnchorStore,
+  useTrustAnchors,
+  type TrustAnchor,
+  type TrustAnchorSource,
+} from './issuerTrustAnchor';
