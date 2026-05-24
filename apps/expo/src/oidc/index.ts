@@ -27,3 +27,10 @@ export {
   type RequestCredentialOpts,
   type TxCodeSpec,
 } from './credentialIssuance';
+export {
+  buildVpToken,
+  type BuiltPresentation,
+  type PresentationBuilderInput,
+  type PresentationSubmission,
+  type PresentationSubmissionDescriptor,
+} from './presenter';
