@@ -1,0 +1,22 @@
+{
+  "name": "@solidarity/nitro-secrets-vault",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Nitro module for hardware-backed root-secret wrapping. iOS: Secure Enclave P-256 ECIES (AES-GCM seal). Android: Keystore AES-GCM with StrongBox (TEE fallback).",
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "scripts": {
+    "nitrogen": "nitrogen",
+    "lint": "eslint .",
+    "typecheck": "tsc --noEmit"
+  },
+  "react-native": {
+    "supportedPlatforms": ["ios", "android"]
+  },
+  "peerDependencies": {
+    "react-native-nitro-modules": "*"
+  },
+  "devDependencies": {
+    "react-native-nitro-modules": "^0.35.7"
+  }
+}
