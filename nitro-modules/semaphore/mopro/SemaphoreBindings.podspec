@@ -50,12 +50,13 @@ Pod::Spec.new do |s|
                 'SemaphoreSwift', 'Sources', 'MoproiOSBindings',
                 'MoproBindings.xcframework'))
   xcf_root  = "${PODS_TARGET_SRCROOT}/../../../../SemaphoreSwift/Sources/MoproiOSBindings/MoproBindings.xcframework"
+  # Only the `-l<name>` link flag here — SDK-conditional
+  # `LIBRARY_SEARCH_PATHS[sdk=*]` lives in apps/expo/ios/Podfile's
+  # `post_install` hook. CocoaPods can't merge SDK-conditional keys
+  # across the two bindings pods and bails with "Can't merge
+  # user_target_xcconfig", so the Podfile injects them directly.
   s.user_target_xcconfig = {
     'OTHER_LDFLAGS' => '$(inherited) -lsemaphore_bindings',
-    'LIBRARY_SEARCH_PATHS[sdk=iphonesimulator*]' =>
-      "$(inherited) \"#{xcf_abs}/ios-arm64-simulator\"",
-    'LIBRARY_SEARCH_PATHS[sdk=iphoneos*]' =>
-      "$(inherited) \"#{xcf_abs}/ios-arm64\"",
   }
   s.pod_target_xcconfig = {
     'DEFINES_MODULE' => 'YES',

@@ -125,6 +125,8 @@
       ],
       "./plugins/withXcodeCloudScripts.js",
       "./plugins/withMoproBindingsPod.js",
+      "./plugins/withSemaphoreBindingsPod.js",
+      "./plugins/withRustXcframeworkSearchPath.js",
       "./plugins/withNfcReader.js"
     ],
     "runtimeVersion": "1.3.1",
