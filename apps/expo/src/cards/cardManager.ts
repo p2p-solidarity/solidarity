@@ -4,6 +4,7 @@
  */
 import { create } from 'zustand';
 
+import { CacheService } from '@/storage';
 import {
   deleteBusinessCard as removeFromStorage,
   loadAllBusinessCards,
@@ -15,6 +16,8 @@ import {
   type CardError,
 } from '@solidarity/shared';
 
+const CACHE_KEY = 'cards:v1';
+
 interface CardStoreState {
   readonly cards: readonly BusinessCard[];
   readonly hydrated: boolean;
@@ -23,13 +26,22 @@ interface CardStoreState {
   readonly remove: (id: string) => Promise<void>;
 }
 
+// Rule 10: seed from MMKV hot cache so the first render of Me / Share never
+// awaits storageManager. `getSync` returns null until MMKV is initialised
+// (root layout `initMmkv()` resolves before hydrate runs), at which point
+// it returns the previous list and the screen paints instantly.
+function seedCards(): readonly BusinessCard[] {
+  return CacheService.getSync<readonly BusinessCard[]>(CACHE_KEY) ?? [];
+}
+
 export const useCardStore = create<CardStoreState>((set, get) => ({
-  cards: [],
+  cards: seedCards(),
   hydrated: false,
 
   hydrate: async () => {
     if (get().hydrated) return;
     const list = await loadAllBusinessCards();
+    CacheService.set(CACHE_KEY, list);
     set({ cards: list, hydrated: true });
   },
 
@@ -44,14 +56,26 @@ export const useCardStore = create<CardStoreState>((set, get) => ({
     await saveBusinessCard(validation.data);
     set((s) => {
       const next = s.cards.filter((c) => c.id !== card.id);
-      return { cards: [...next, validation.data] };
+      const merged = [...next, validation.data];
+      CacheService.set(CACHE_KEY, merged);
+      return { cards: merged };
     });
     return { ok: true };
   },
 
   remove: async (id) => {
+    // TODO(biometric-gate): gate this deletion with
+    //   const gate = await requireSensitiveAction(
+    //     'deleteZKIdentity',
+    //     'Authorize deleting your business card'
+    //   );
+    //   if (!gate.success) return { ok: false, error: 'biometricDenied' };
     removeFromStorage(id);
-    set((s) => ({ cards: s.cards.filter((c) => c.id !== id) }));
+    set((s) => {
+      const next = s.cards.filter((c) => c.id !== id);
+      CacheService.set(CACHE_KEY, next);
+      return { cards: next };
+    });
   },
 }));
 

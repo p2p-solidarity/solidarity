@@ -2,6 +2,8 @@ export {
   initMmkv,
   getMmkv,
 } from './mmkv';
+export { CacheService } from './cache';
+export type { CacheEntryMeta } from './cache';
 export {
   encryptJson,
   decryptJson,
