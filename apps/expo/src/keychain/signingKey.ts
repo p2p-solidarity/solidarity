@@ -216,6 +216,17 @@ export async function signJwt(
   if (header.alg !== 'ES256') {
     throw new Error(`signJwt requires alg=ES256 (got ${header.alg})`);
   }
+  // TODO(biometric-gate): replace with
+  //   const gate = await requireSensitiveAction(
+  //     'presentProof',
+  //     'Authorize signing with your identity key'
+  //   );
+  //   if (!gate.success) throw new Error('biometric authentication required');
+  // once the concurrent agent owning this file pulls in
+  // `@/keychain/biometricGatekeeper`. The new policy store
+  // (`useSensitiveActionPolicy`) gives the user per-action control over
+  // when biometric is required + which mode (biometric only vs passcode
+  // fallback). Today `requireBiometric('sign')` always prompts.
   const allowed = await requireBiometric('sign');
   if (!allowed) throw new Error('biometric authentication required');
 

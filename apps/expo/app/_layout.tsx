@@ -38,6 +38,7 @@ import { handleDeepLink } from '@/deeplink/router';
 import { ToastOverlay } from '@/feedback/toast';
 import { useIdentityData } from '@/identity';
 import { installI18n } from '@/i18n';
+import { hydrateSensitiveActionPolicy } from '@/keychain';
 import { syncOnce } from '@/sakura/inbox';
 import { registerForPushNotificationsAsync } from '@/sakura/pushRegistration';
 import { hydratePreferences } from '@/settings/preferences';
@@ -58,6 +59,7 @@ export default function RootLayout() {
       try {
         await initMmkv();
         hydratePreferences();
+        hydrateSensitiveActionPolicy();
         await hydrateContacts();
         await useIdentityData.getState().hydrate();
         await installI18n();

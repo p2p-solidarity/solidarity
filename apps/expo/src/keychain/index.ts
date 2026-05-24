@@ -16,3 +16,23 @@ export {
   pairwisePublicJwk,
   resetPairwiseSeedForTesting,
 } from './pairwiseKey';
+export {
+  SENSITIVE_ACTIONS,
+  getSensitivePolicyFor,
+  getSensitivePolicySnapshot,
+  hydrateSensitiveActionPolicy,
+  resetSensitiveActionPolicyForTesting,
+  useSensitiveActionPolicy,
+  useSensitivePolicy,
+  type BiometricMode,
+  type SensitiveAction,
+  type SensitiveActionEntry,
+  type SensitiveActionPolicy,
+} from './sensitiveActionPolicy';
+export {
+  requireSensitiveAction,
+  requireSensitiveActionBoolean,
+  type BiometricFailureReason,
+  type BiometricResult,
+  type BiometricSuccessMethod,
+} from './biometricGatekeeper';
