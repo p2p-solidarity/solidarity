@@ -26,7 +26,7 @@ import { PaperStackIllustration } from '@/components/decor/PaperStackIllustratio
 import { ManualContactEntrySheet } from '@/components/people/ManualContactEntrySheet';
 import { PeopleSearchField } from '@/components/people/PeopleSearchField';
 import { TrustGraphContactRow } from '@/components/people/TrustGraphContactRow';
-import { Colors } from '@/constants/Colors';
+import { importFromDevice } from '@/contacts/importer';
 import { useContactStore } from '@/contacts/repository';
 import { pushToast } from '@/feedback/toast';
 import { usePeopleScreen } from '@/people/usePeopleScreen';
@@ -44,6 +44,30 @@ export default function PeopleTab() {
   const [searchQuery, setSearchQuery] = useState('');
   const [menuOpen, setMenuOpen] = useState(false);
   const [manualSheetOpen, setManualSheetOpen] = useState(false);
+  const [importing, setImporting] = useState(false);
+
+  // Swift PeopleListView → ContactPickerView → ContactImportService.shared
+  // .importPickedContacts (iOS) / .importAllContacts (Android). We don't
+  // have a CNContactPickerViewController on Android, so we mirror Android-
+  // side behaviour: prompt + iterate all granted contacts via expo-contacts
+  // and surface a single toast.
+  const onImportFromPhone = async () => {
+    if (importing) return;
+    setImporting(true);
+    try {
+      const { granted, count } = await importFromDevice();
+      if (!granted) {
+        pushToast('Contacts permission denied', 'warning');
+        return;
+      }
+      refresh();
+      pushToast(`Imported ${String(count)} contacts`, 'success', 3000);
+    } catch {
+      pushToast('Import failed', 'error');
+    } finally {
+      setImporting(false);
+    }
+  };
 
   const filtered = useMemo(
     () => filterContacts(contacts, searchQuery),
@@ -90,7 +114,7 @@ export default function PeopleTab() {
     <View className="flex-1">
       <Header
         onAddManually={() => { setManualSheetOpen(true); }}
-        onImportPhone={() => router.push('/contacts/picker')}
+        onImportPhone={() => { void onImportFromPhone(); }}
         onImportVcf={() => router.push('/contacts/import-vcf')}
         onRadarExchange={() => router.push('/(tabs)/share')}
         developerMode={developerMode}
@@ -106,33 +130,34 @@ export default function PeopleTab() {
 
       {contacts.length === 0 ? (
         <EmptyState
-          onImportPhone={() => router.push('/contacts/picker')}
+          onImportPhone={() => { void onImportFromPhone(); }}
           onAddManually={() => { setManualSheetOpen(true); }}
+          importing={importing}
         />
-      ) : filtered.length === 0 ? (
-        <>
-          <View className="px-4 pb-3">
-            <PeopleSearchField value={searchQuery} onChangeText={setSearchQuery} />
-          </View>
-          <EmptySearchState query={searchQuery} />
-        </>
       ) : (
         <>
+          {/* Search bar stays mounted whenever there is data so the input
+              doesn't flicker in/out as users type past their last match. */}
           <View className="px-4 pb-3">
             <PeopleSearchField value={searchQuery} onChangeText={setSearchQuery} />
           </View>
-          <FlatList
-            data={filtered}
-            keyExtractor={(c) => c.id}
-            contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: 90 }}
-            renderItem={({ item }) => (
-              <TrustGraphContactRow
-                contact={item}
-                onPress={() => onSelectContact(item)}
-                onLongPress={() => onLongPressContact(item)}
-              />
-            )}
-          />
+          {filtered.length === 0 ? (
+            <EmptySearchState query={searchQuery} />
+          ) : (
+            <FlatList
+              data={filtered as Contact[]}
+              keyExtractor={(item) => item.id}
+              contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: 90 }}
+              keyboardShouldPersistTaps="handled"
+              renderItem={({ item }) => (
+                <TrustGraphContactRow
+                  contact={item}
+                  onPress={() => onSelectContact(item)}
+                  onLongPress={() => onLongPressContact(item)}
+                />
+              )}
+            />
+          )}
         </>
       )}
     </View>
@@ -250,9 +275,11 @@ function MenuItem({
 function EmptyState({
   onImportPhone,
   onAddManually,
+  importing,
 }: {
   onImportPhone: () => void;
   onAddManually: () => void;
+  importing: boolean;
 }) {
   return (
     <ScrollView
@@ -270,6 +297,7 @@ function EmptyState({
         <Pressable
           onPress={onImportPhone}
           accessibilityRole="button"
+          disabled={importing}
           className="rounded-sm2 active:opacity-80"
           style={{
             width: 200,
@@ -277,13 +305,14 @@ function EmptyState({
             backgroundColor: Colors.invertedButtonBg,
             alignItems: 'center',
             justifyContent: 'center',
+            opacity: importing ? 0.6 : 1,
           }}
         >
           <Text
             style={{ color: Colors.invertedButtonText }}
             className="text-[15px]"
           >
-            Import from Phone
+            {importing ? 'Importing...' : 'Import from Phone'}
           </Text>
         </Pressable>
         <Pressable
