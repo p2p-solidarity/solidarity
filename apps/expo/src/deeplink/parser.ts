@@ -23,11 +23,19 @@ export function parseDeepLink(raw: string): DeepLinkRoute {
     return { kind: 'unknown', raw };
   }
 
+  // Android `singleTask` activities replay the original launch intent on every
+  // resume from the launcher. If that intent was an OID4VP / OID4VCI URL, the
+  // app re-routes into the credential flow on every cold start. Treat empty-
+  // query URLs as stale launch intents — a real offer always carries a payload.
   if (url.protocol === 'openid4vp:' || url.protocol === 'openid-vp:') {
-    return { kind: 'oidc', query: url.searchParams.toString() };
+    const query = url.searchParams.toString();
+    return query.length === 0 ? { kind: 'unknown', raw } : { kind: 'oidc', query };
   }
   if (url.protocol === 'openid-credential-offer:') {
-    return { kind: 'credentialOffer', query: url.searchParams.toString() };
+    const query = url.searchParams.toString();
+    return query.length === 0
+      ? { kind: 'unknown', raw }
+      : { kind: 'credentialOffer', query };
   }
 
   if (url.protocol === 'solidarity:' || url.protocol === 'airmeishi:') {

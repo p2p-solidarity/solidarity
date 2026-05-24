@@ -37,6 +37,19 @@ describe('parseDeepLink', () => {
     expect(r.kind).toBe('credentialOffer');
   });
 
+  it('treats an empty credential-offer URL as unknown (stale Android launch intent)', () => {
+    // Android `singleTask` replays the launch intent on every resume; a bare
+    // `openid-credential-offer://` would push us into the import flow with no
+    // payload every cold start.
+    expect(parseDeepLink('openid-credential-offer://').kind).toBe('unknown');
+    expect(parseDeepLink('openid-credential-offer://?').kind).toBe('unknown');
+  });
+
+  it('treats an empty openid4vp URL as unknown (stale Android launch intent)', () => {
+    expect(parseDeepLink('openid4vp://').kind).toBe('unknown');
+    expect(parseDeepLink('openid-vp://?').kind).toBe('unknown');
+  });
+
   it('returns unknown for unrecognised input', () => {
     expect(parseDeepLink('not a url').kind).toBe('unknown');
     expect(parseDeepLink('https://example.com/foo').kind).toBe('unknown');
