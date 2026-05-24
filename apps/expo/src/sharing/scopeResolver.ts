@@ -19,14 +19,25 @@
  *   1. global defaults (`globalDefaults` arg, else
  *      `defaultSharingPreferencesForLevel(audience)`)
  *   2. per-card overrides
- *   3. group-context overlay (intersection — group can only TIGHTEN, never
- *      grant fields the user has not already enabled at the global/per-card
- *      level)
+ *   3. legacy group-context `SharingPreferences` overlay
+ *      (`defaultPreferencesForGroupContext`, intersection)
+ *   4. `GroupSharingPolicy` overlay (explicit `groupPolicy` arg, else the
+ *      conservative `defaultGroupSharingPolicy()` when a group-typed
+ *      `groupContext` is present). Applies four extra knobs on top of
+ *      the base field set:
+ *        - `audienceCeiling` clamps the requested tier downward
+ *        - `fieldAllowlist` intersects the effective field set
+ *        - `fieldDenylist`  subtracts from the effective field set
+ *        - `forceZk` / `disallowForwarding` ratchet flags toward safer
+ *
+ *      The policy can only TIGHTEN — never grants new fields or relaxes
+ *      a flag the user already set.
  *
  * The resolver returns both the redacted card and a manifest of included /
  * excluded fields so callers (QR generator, wallet pass builder, proximity
  * exchange) can render "shared X, redacted Y" UI without re-walking the
- * preferences object.
+ * preferences object. When a policy tightening hits, `appliedPolicy`
+ * surfaces the source + `displayReason` for the UI banner.
  */
 import type {
   BusinessCard,
@@ -35,8 +46,19 @@ import type {
 } from '@solidarity/shared';
 import { effectiveFields } from '@solidarity/shared';
 
-import { ALL_BUSINESS_CARD_FIELDS, defaultPreferencesForGroupContext, defaultSharingPreferencesForLevel } from './defaults';
-import type { AudienceTier, FieldKey, ResolvedCard } from './types';
+import {
+  ALL_BUSINESS_CARD_FIELDS,
+  defaultGroupSharingPolicy,
+  defaultPreferencesForGroupContext,
+  defaultSharingPreferencesForLevel,
+} from './defaults';
+import type {
+  AppliedPolicySource,
+  AudienceTier,
+  FieldKey,
+  GroupSharingPolicy,
+  ResolvedCard,
+} from './types';
 
 interface ResolveArgs {
   readonly card: BusinessCard;
@@ -44,6 +66,113 @@ interface ResolveArgs {
   readonly perCardPrefs?: SharingPreferences;
   readonly groupContext?: GroupCredentialContext | null;
   readonly globalDefaults?: SharingPreferences;
+  /**
+   * Explicit per-group policy overlay. When undefined and `groupContext`
+   * is a group-typed context, the resolver applies
+   * `defaultGroupSharingPolicy()`. Pass `null` to opt out of policy
+   * application entirely (e.g. for personal contexts where the caller
+   * does not want the conservative default).
+   */
+  readonly groupPolicy?: GroupSharingPolicy | null;
+}
+
+/** Canonical ordering of audience tiers — used by `audienceCeiling` clamping. */
+const TIER_RANK: Record<AudienceTier, number> = {
+  public: 0,
+  professional: 1,
+  personal: 2,
+};
+
+/**
+ * Clamp the requested audience by the policy ceiling. Returns the
+ * stricter (lower-rank) of the two. Stable when no ceiling is set.
+ */
+function clampAudience(
+  requested: AudienceTier,
+  ceiling: AudienceTier | undefined
+): AudienceTier {
+  if (!ceiling) return requested;
+  return TIER_RANK[ceiling] < TIER_RANK[requested] ? ceiling : requested;
+}
+
+/**
+ * Pick the effective `GroupSharingPolicy` for a resolution call.
+ *
+ * - Explicit `policy` always wins (including `null`, which opts out).
+ * - When `policy === undefined` and `context` is group-typed, the
+ *   conservative `defaultGroupSharingPolicy()` applies — this is the
+ *   safer-than-Swift default the previous commit's phone-drop rule
+ *   formalised as a typed policy.
+ * - Otherwise (no context / personal context), no policy applies.
+ */
+function effectivePolicy(
+  policy: GroupSharingPolicy | null | undefined,
+  context: GroupCredentialContext | null | undefined
+): { readonly policy: GroupSharingPolicy | null; readonly source: AppliedPolicySource | null } {
+  if (policy !== undefined) {
+    return { policy, source: policy ? 'group' : null };
+  }
+  if (context?.type === 'group') {
+    return { policy: defaultGroupSharingPolicy(), source: 'default' };
+  }
+  return { policy: null, source: null };
+}
+
+/**
+ * Apply a `GroupSharingPolicy`'s field-set knobs (allowlist + denylist)
+ * to the base allowed-set. `.name` is always preserved — matches the
+ * mandatory-name invariant in `defaults.ts`. Returns the policy-restricted
+ * set plus a boolean indicating whether the policy actually changed
+ * anything (used to decide whether to populate `appliedPolicy`).
+ */
+function applyPolicyToFields(
+  base: ReadonlySet<FieldKey>,
+  policy: GroupSharingPolicy
+): { readonly fields: ReadonlySet<FieldKey>; readonly changed: boolean } {
+  const out = new Set<FieldKey>(base);
+  let changed = false;
+  if (policy.fieldAllowlist) {
+    const allow = new Set<FieldKey>(policy.fieldAllowlist);
+    allow.add('name');
+    for (const f of base) {
+      if (!allow.has(f) && out.delete(f)) changed = true;
+    }
+  }
+  if (policy.fieldDenylist) {
+    for (const f of policy.fieldDenylist) {
+      if (f === 'name') continue; // mandatory — never deniable
+      if (out.delete(f)) changed = true;
+    }
+  }
+  out.add('name');
+  return { fields: out, changed };
+}
+
+/**
+ * Did the resolved policy actually influence the result? Encapsulates the
+ * "should the UI banner fire?" decision so `resolveCardForAudience` stays
+ * within the lint complexity ceiling. See the inline comment in the
+ * caller for the per-knob rationale.
+ */
+function isPolicyHit(args: {
+  readonly policy: GroupSharingPolicy;
+  readonly audienceClamped: boolean;
+  readonly fieldsChanged: boolean;
+  readonly cardLevel: SharingPreferences;
+}): boolean {
+  const { policy, audienceClamped, fieldsChanged, cardLevel } = args;
+  const flagsForcedZk = policy.forceZk && !cardLevel.useZK;
+  const flagsDisallowedFwd = policy.disallowForwarding && cardLevel.allowForwarding;
+  const policyDeclaresField =
+    (policy.fieldAllowlist?.length ?? 0) > 0 ||
+    (policy.fieldDenylist?.length ?? 0) > 0;
+  return (
+    audienceClamped ||
+    fieldsChanged ||
+    !!flagsForcedZk ||
+    !!flagsDisallowedFwd ||
+    policyDeclaresField
+  );
 }
 
 /**
@@ -101,7 +230,7 @@ function applyFieldMask(
  * convenience method does the lookups for callers.
  */
 export function resolveCardForAudience(args: ResolveArgs): ResolvedCard {
-  const { card, audience, perCardPrefs, groupContext, globalDefaults } = args;
+  const { card, audience, perCardPrefs, groupContext, globalDefaults, groupPolicy } = args;
 
   // 1. Start with global defaults (or hardcoded per-level defaults).
   const base = globalDefaults ?? defaultSharingPreferencesForLevel(audience);
@@ -111,17 +240,47 @@ export function resolveCardForAudience(args: ResolveArgs): ResolvedCard {
   //    precedence over `ShareSettingsStore.enabledFields` when both exist.
   const cardLevel = perCardPrefs ?? base;
 
-  // 3. Group-context overlay (intersection, never grants new fields).
-  const overlay = defaultPreferencesForGroupContext(groupContext);
-  const allowed = intersectForTier(cardLevel, overlay, audience);
+  // 3. Resolve the effective GroupSharingPolicy (explicit > default > none).
+  const { policy, source } = effectivePolicy(groupPolicy, groupContext);
 
-  // 4. Apply mask + compute the included/excluded manifest.
+  // 4. Apply policy-level audience ceiling BEFORE the field intersection
+  //    so the base SharingPreferences are evaluated at the clamped tier.
+  const effectiveAudience = policy
+    ? clampAudience(audience, policy.audienceCeiling)
+    : audience;
+  const audienceClamped = effectiveAudience !== audience;
+
+  // 5. Legacy group-context SharingPreferences overlay (intersection).
+  const overlay = defaultPreferencesForGroupContext(groupContext);
+  const baseAllowed = intersectForTier(cardLevel, overlay, effectiveAudience);
+
+  // 6. Apply the policy's field allowlist / denylist on top.
+  const { fields: allowed, changed: fieldsChanged } = policy
+    ? applyPolicyToFields(baseAllowed, policy)
+    : { fields: baseAllowed, changed: false };
+
+  // 7. Apply mask + compute the included/excluded manifest.
   const redacted = applyFieldMask(card, allowed);
   const included: FieldKey[] = [];
   const excluded: FieldKey[] = [];
   for (const f of ALL_BUSINESS_CARD_FIELDS) {
     if (allowed.has(f)) included.push(f);
     else excluded.push(f);
+  }
+
+  // 8. Surface the policy reason whenever the policy is constraining —
+  //    see `isPolicyHit` for the per-knob rules.
+  if (
+    policy &&
+    source &&
+    isPolicyHit({ policy, audienceClamped, fieldsChanged, cardLevel })
+  ) {
+    return {
+      card: redacted,
+      includedFields: included,
+      excludedFields: excluded,
+      appliedPolicy: { source, reason: policy.displayReason },
+    };
   }
 
   return { card: redacted, includedFields: included, excludedFields: excluded };
@@ -131,12 +290,43 @@ export function resolveCardForAudience(args: ResolveArgs): ResolvedCard {
  * Compute just the allowed-field set without redacting a card. Useful
  * for the QR scope-string builder (`ShareScopeResolver.scope(...)` in
  * Swift) and the wallet-pass builder that needs the field list ahead
- * of materialising the card payload.
+ * of materialising the card payload. Applies the same policy overlay
+ * as `resolveCardForAudience`.
  */
 export function resolveEffectiveFields(args: ResolveArgs): ReadonlySet<FieldKey> {
-  const { audience, perCardPrefs, groupContext, globalDefaults } = args;
+  const { audience, perCardPrefs, groupContext, globalDefaults, groupPolicy } = args;
   const base = globalDefaults ?? defaultSharingPreferencesForLevel(audience);
   const cardLevel = perCardPrefs ?? base;
+  const { policy } = effectivePolicy(groupPolicy, groupContext);
+  const effectiveAudience = policy
+    ? clampAudience(audience, policy.audienceCeiling)
+    : audience;
   const overlay = defaultPreferencesForGroupContext(groupContext);
-  return intersectForTier(cardLevel, overlay, audience);
+  const baseAllowed = intersectForTier(cardLevel, overlay, effectiveAudience);
+  if (!policy) return baseAllowed;
+  return applyPolicyToFields(baseAllowed, policy).fields;
+}
+
+/**
+ * Resolve the effective ZK / forwarding flags after the policy overlay.
+ * Returns `useZK` and `allowForwarding` ratcheted by the policy:
+ *
+ *   useZK           = base.useZK OR policy.forceZk
+ *   allowForwarding = base.allowForwarding AND NOT policy.disallowForwarding
+ *
+ * Pure — never mutates the input prefs.
+ */
+export function resolveEffectiveFlags(args: ResolveArgs): {
+  readonly useZK: boolean;
+  readonly allowForwarding: boolean;
+} {
+  const { audience, perCardPrefs, groupContext, globalDefaults, groupPolicy } = args;
+  const base = globalDefaults ?? defaultSharingPreferencesForLevel(audience);
+  const cardLevel = perCardPrefs ?? base;
+  const { policy } = effectivePolicy(groupPolicy, groupContext);
+  const useZK = policy?.forceZk ? true : cardLevel.useZK;
+  const allowForwarding = policy?.disallowForwarding
+    ? false
+    : cardLevel.allowForwarding;
+  return { useZK, allowForwarding };
 }

@@ -14,28 +14,36 @@
  * same in `withMandatoryName(...)` so callers can't construct a level
  * that drops the holder's identity.
  *
- * For the per-group overlay, Swift has NO `defaultPreferencesForGroupContext`
- * function — group context only changes the *signing surface* (group VC
- * vs. personal VC), not the field set. The Expo task spec asks for an
- * overlay anyway so callers can opt into stricter redaction during a
- * group exchange; we implement a documented, conservative rule:
+ * Per-group overlay — Expo extends Swift here. Swift has no
+ * `defaultPreferencesForGroupContext` and no per-group field-redaction
+ * policy: `ShareSettingsStore` exposes a single flat per-field enable
+ * map for the whole user. The Expo client owns the multi-group exchange
+ * surface, so we offer:
  *
- *   - `{ type: 'personal' }` → no overlay (returns null)
- *   - `{ type: 'group' }`    → returns a SharingPreferences that hides
- *     `phone` from every tier (phone is the most personal contact channel
- *     and group exchanges are many-to-many by definition; matches Swift's
- *     UX intent that QR-to-group never leaks a phone number unless the
- *     holder explicitly opts in).
- *
- * TODO(sharing): once Swift adopts group-aware redaction, retune this
- * overlay to the new Swift constants and remove this note.
+ *   1. `defaultPreferencesForGroupContext(group)` — legacy, retained for
+ *      backwards compat. Returns a `SharingPreferences` that simply hides
+ *      `phone` for any group-typed context (the conservative rule that
+ *      shipped in commit d7a5787). New callers should prefer the richer
+ *      `GroupSharingPolicy` surface below.
+ *   2. `defaultGroupSharingPolicy()` — documented conservative default:
+ *      `{ fieldDenylist: ['phone'], displayReason: 'Conservative group default' }`.
+ *      Used by `scopeResolver.ts` whenever a group-typed context is
+ *      present but the caller (or `useSharingSettings.perGroupPolicies`)
+ *      hasn't set an explicit policy. Strictly safer than Swift because
+ *      the resolver can additionally clamp the audience tier, intersect
+ *      against an allowlist, force ZK, and forbid forwarding — see
+ *      `GroupSharingPolicy` in `types.ts`.
  */
 import type {
   GroupCredentialContext,
   SharingPreferences,
 } from '@solidarity/shared';
 
-import type { BusinessCardField, SharingLevel } from './types';
+import type {
+  BusinessCardField,
+  GroupSharingPolicy,
+  SharingLevel,
+} from './types';
 
 const ALL_FIELDS: readonly BusinessCardField[] = [
   'name',
@@ -91,9 +99,15 @@ export function defaultSharingPreferencesForLevel(
 }
 
 /**
- * Group-context overlay. Returns `null` when no overlay applies; otherwise
- * a `SharingPreferences` whose field sets should be intersected with the
- * caller's resolved preferences (see `scopeResolver.ts`).
+ * Group-context overlay (legacy `SharingPreferences` form). Returns `null`
+ * when no overlay applies; otherwise a `SharingPreferences` whose field
+ * sets should be intersected with the caller's resolved preferences.
+ *
+ * Retained for backwards compat with commit d7a5787 — the scope resolver
+ * still applies this overlay as part of the base preferences chain.
+ * Net new redaction (audience ceiling, allowlist, ZK / forwarding
+ * forcing) lives on `GroupSharingPolicy` and is layered ON TOP of this
+ * by the resolver.
  */
 export function defaultPreferencesForGroupContext(
   group: GroupCredentialContext | null | undefined
@@ -112,6 +126,25 @@ export function defaultPreferencesForGroupContext(
     expirationDate: undefined,
     useZK: true,
     sharingFormat: 'didSigned',
+  };
+}
+
+/**
+ * Conservative default `GroupSharingPolicy` applied when a group-typed
+ * `GroupCredentialContext` is present but the caller hasn't supplied an
+ * explicit policy. Mirrors the field-redaction intent of the legacy
+ * `defaultPreferencesForGroupContext` rule (`phone` is stripped), and
+ * adds a `displayReason` so UIs can render the redaction banner without
+ * special-casing the "no explicit policy" branch.
+ *
+ * Returning a fresh object per call keeps the policy safe to mutate at
+ * the call site (e.g. spread + override one field) without poisoning a
+ * shared constant.
+ */
+export function defaultGroupSharingPolicy(): GroupSharingPolicy {
+  return {
+    fieldDenylist: ['phone'],
+    displayReason: 'Conservative group default',
   };
 }
 
