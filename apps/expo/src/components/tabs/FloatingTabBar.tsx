@@ -89,8 +89,13 @@ export function FloatingTabBar({
           flexDirection: 'row',
           alignItems: 'center',
           paddingHorizontal: 16,
-          paddingTop: 16,
-          paddingBottom: Math.max(insets.bottom, 16) + 34,
+          paddingTop: 12,
+          // iOS home indicator (`insets.bottom` ≈ 34) and Android gesture /
+          // 3-button nav pill must not overlap the icons. Floor with 12pt so
+          // legacy iPhones without a home-indicator inset still keep breathing
+          // room under the labels (Swift CustomFloatingTabBar uses safeArea
+          // ignoringSafeArea + 12pt bottom).
+          paddingBottom: Math.max(insets.bottom, 12),
           backgroundColor: Colors.pageBg,
         }}
       >
