@@ -75,7 +75,7 @@ export async function issueGroupCredential(opts: {
   readonly memberDid: string;
   readonly trustLevel: TrustLevel;
   readonly claims: Record<string, unknown>;
-}): Promise<Result<IdentityCardEntity, IdentityError>> {
+}): Promise<Result<IdentityCardEntity>> {
   if (!canIssueCredentials(opts.group)) {
     return err<IdentityError>({
       type: 'unauthorized',

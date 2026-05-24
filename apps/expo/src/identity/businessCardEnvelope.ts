@@ -70,7 +70,7 @@ function cardDigestBase64Url(cardJson: string): string {
 export async function wrap(
   card: BusinessCard,
   opts: { senderDid: string; recipientDid?: string }
-): Promise<Result<BusinessCardEnvelope, CardError>> {
+): Promise<Result<BusinessCardEnvelope>> {
   try {
     const issuedAt = new Date().toISOString();
     const cardJson = canonicalCardJson(card);
@@ -109,7 +109,7 @@ async function defaultResolver(did: string): Promise<PublicKeyJWK> {
 export async function unwrap(
   envelope: BusinessCardEnvelope,
   opts: { resolverFn?: ResolverFn } = {}
-): Promise<Result<BusinessCard, CardError>> {
+): Promise<Result<BusinessCard>> {
   if (envelope.version !== ENVELOPE_VERSION) {
     return err<CardError>({
       type: 'invalidData',

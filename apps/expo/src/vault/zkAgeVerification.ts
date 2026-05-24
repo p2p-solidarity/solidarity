@@ -54,7 +54,7 @@ export async function buildAgeProof(opts: {
   readonly minAge: 18 | 21;
   readonly nonce: string;
   readonly audience: string;
-}): Promise<Result<{ readonly proof: string; readonly publicInputs: readonly string[] }, ZkError>> {
+}): Promise<Result<{ readonly proof: string; readonly publicInputs: readonly string[] }>> {
   if (!opts.nonce) {
     return err<ZkError>({ type: 'validationError', message: 'Age proof requires a nonce' });
   }

@@ -53,7 +53,7 @@ function deserialize(raw: string): PassportAnchorCommitment | null {
 }
 
 function byteToDecimalString(bytes: Uint8Array): string {
-  let digits: number[] = [0];
+  const digits: number[] = [0];
   for (const byte of bytes) {
     let carry = byte;
     for (let i = 0; i < digits.length; i++) {

@@ -61,7 +61,7 @@ function sortedStringify(value: unknown): string {
     return `[${value.map(sortedStringify).join(',')}]`;
   }
   if (value !== null && typeof value === 'object') {
-    const keys = Object.keys(value as Record<string, unknown>).sort();
+    const keys = Object.keys(value).sort();
     const parts = keys.map(
       (k) => `${JSON.stringify(k)}:${sortedStringify((value as Record<string, unknown>)[k])}`
     );

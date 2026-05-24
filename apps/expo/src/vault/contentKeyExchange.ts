@@ -70,7 +70,7 @@ export async function wrapKeyForPeer(opts: {
 export async function unwrapKeyFromPeer(opts: {
   readonly wrapped: Uint8Array;
   readonly senderPubKey: Uint8Array;
-}): Promise<Result<Uint8Array, CryptoError>> {
+}): Promise<Result<Uint8Array>> {
   if (opts.senderPubKey.length !== PUB_LEN) {
     return err<CryptoError>({
       type: 'cryptographicError',

@@ -189,7 +189,7 @@ async function buildSnapshot(): Promise<IdentitySnapshot> {
 export async function exportIdentityBlob(opts: {
   password: string;
   iterations?: number;
-}): Promise<Result<string, IdentityError>> {
+}): Promise<Result<string>> {
   if (!opts.password || opts.password.length < 8) {
     return err<IdentityError>({
       type: 'validationError',
@@ -220,7 +220,7 @@ export async function exportIdentityBlob(opts: {
 export async function importIdentityBlob(
   blob: string,
   opts: { password: string }
-): Promise<Result<{ readonly did: string | null; readonly restoredCount: number }, IdentityError>> {
+): Promise<Result<{ readonly did: string | null; readonly restoredCount: number }>> {
   try {
     const bytes = base64Decode(blob);
     if (bytes.length < HEADER_LEN + 12 + 16) {
