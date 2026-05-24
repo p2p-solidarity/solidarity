@@ -50,11 +50,30 @@ export function QrScanner({ onResult, onProgress }: QrScannerProps): ReactNode {
       }
       try {
         const r = reassembler.ingest(value);
-        if (r.kind === 'progress') {
-          onProgress?.(r.progress.receivedCount, r.progress.totalCount);
-        } else {
-          onResult(r.payload);
-          lastValue.current = null;
+        switch (r.kind) {
+          case 'complete':
+            onResult(r.payload);
+            lastValue.current = null;
+            break;
+          case 'incomplete':
+            onProgress?.(r.progress.receivedCount, r.progress.totalCount);
+            break;
+          case 'staleReset':
+            if (r.next.kind === 'complete') {
+              onResult(r.next.payload);
+              lastValue.current = null;
+            } else if (r.next.kind === 'incomplete') {
+              onProgress?.(r.next.progress.receivedCount, r.next.progress.totalCount);
+            }
+            break;
+          case 'conflict':
+          case 'corrupt':
+          case 'unsupportedVersion':
+            // Recoverable — reassembler already cleared its state where
+            // appropriate; clear our scanner-level de-dupe so the next frame
+            // (even an identical one) is re-evaluated.
+            lastValue.current = null;
+            break;
         }
       } catch (err) {
         if (err instanceof QrChunkError) reassembler.reset();
