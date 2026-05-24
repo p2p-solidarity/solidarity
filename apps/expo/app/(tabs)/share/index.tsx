@@ -28,7 +28,6 @@ import {
 import { UwbStatusPill } from '@/components/share/UwbStatusPill';
 import {
   NearbyPeersSheet,
-  ShareCardPickerSheet,
   IncomingInvitationPopup,
 } from '@/components/matching';
 import { useMatchingSession } from '@/matching/session';
@@ -62,7 +61,6 @@ export default function ShareTab() {
   const stopAll = useMatchingSession((s) => s.stopAll);
   const uwb = useMatchingSession((s) => s.uwbSpatial);
   const [nearbyVisible, setNearbyVisible] = useState(false);
-  const [pickerVisible, setPickerVisible] = useState(false);
 
   useEffect(() => { void hydrate(); }, [hydrate]);
 
@@ -72,13 +70,22 @@ export default function ShareTab() {
   const uwbVisible = uwb.kind !== 'idle';
   const currentInvitation = pendingInvitations[0];
 
+  // Swift `toggleMatching` → ProximityManager.startMatching(card, autoSendCardOnConnect:true)
+  // i.e. advertise + browse simultaneously with the user's primary card.
   const toggleMatching = (): void => {
     if (isMatching) {
       void stopAll();
       return;
     }
-    // Browsing only by default — Start Advertising goes via the picker.
     void startBrowsing();
+    if (myCard) {
+      void startAdvertising(myCard.name, 'professional', {
+        name: myCard.name,
+        ...(myCard.title ? { title: myCard.title } : {}),
+        ...(myCard.company ? { company: myCard.company } : {}),
+        ...(myCard.animal ? { animal: myCard.animal } : {}),
+      });
+    }
   };
 
   return (
@@ -125,24 +132,6 @@ export default function ShareTab() {
           />
         </View>
 
-        <View style={{ height: 12 }} />
-        <View className="px-12">
-          <ThemedButton
-            label={isAdvertising ? 'Stop Advertising' : 'Share My Card'}
-            fullWidth
-            variant="secondary"
-            leadingIcon={
-              <SfIcon
-                name={isAdvertising ? 'stop.circle' : 'antenna.radiowaves.left.and.right'}
-                size={15}
-                weight="semibold"
-                color={Colors.accentRose}
-              />
-            }
-            onPress={() => { setPickerVisible(true); }}
-          />
-        </View>
-
         {uwbVisible ? (
           <View style={{ paddingTop: 10 }}>
             <UwbStatusPill state={uwb} distanceMeters={undefined} />
@@ -168,23 +157,6 @@ export default function ShareTab() {
         onClose={() => { setNearbyVisible(false); }}
         onViewLatestCard={() => { setNearbyVisible(false); }}
         onSelectPeer={() => { /* future: open peer detail */ }}
-      />
-
-      <ShareCardPickerSheet
-        visible={pickerVisible}
-        card={myCard}
-        initialLevel="professional"
-        isAdvertising={isAdvertising}
-        onStart={(card, level) => {
-          void startAdvertising(card.name, level, {
-            name: card.name,
-            ...(card.title ? { title: card.title } : {}),
-            ...(card.company ? { company: card.company } : {}),
-            ...(card.animal ? { animal: card.animal } : {}),
-          });
-        }}
-        onStop={() => { void stopAll(); }}
-        onClose={() => { setPickerVisible(false); }}
       />
 
       {currentInvitation ? (
