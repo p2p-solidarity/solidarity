@@ -15,8 +15,11 @@
  *     opportunistically GATT-connects to read PSM + discovery JSON.
  *   - Invite: Look up cached PSM, open insecure L2CAP CoC, write framed
  *     payload as first message, park socket in connectedSockets.
- *   - UWB: stub session lifecycle so the API works on devices without UWB;
- *     production wiring TODO(uwb-android).
+ *   - UWB: androidx.core.uwb controlee session scope per peer. Mirrors the
+ *     iOS NISession lifecycle — create on startRanging, invalidate on
+ *     stopRanging. The peer-address exchange (and therefore the Flow that
+ *     emits RangingResultPosition events) is the JS layer's responsibility,
+ *     same as the NI discovery-token exchange on iOS.
  *
  * Wire protocol (must match iOS HybridProximity.swift):
  *   - Service UUID:            4d2c3a01-7a8d-4f2c-9a2e-b5d2c3a17a8d
@@ -69,6 +72,9 @@ import android.content.Context
 import android.os.Build
 import android.os.ParcelUuid
 import android.util.Log
+import androidx.core.uwb.RangingResult
+import androidx.core.uwb.UwbControleeSessionScope
+import androidx.core.uwb.UwbManager
 import com.margelo.nitro.NitroModules
 import com.margelo.nitro.core.ArrayBuffer
 import com.margelo.nitro.core.Promise
@@ -85,12 +91,14 @@ import java.nio.ByteOrder
 import java.util.UUID
 import java.util.concurrent.locks.ReentrantLock
 import kotlin.concurrent.withLock
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -161,8 +169,23 @@ class HybridProximity : HybridProximitySpec() {
   /** Reader coroutines so we can cancel on disconnect. */
   private val readerJobs = mutableMapOf<String, Job>()
 
-  /** UWB session bookkeeping. Currently a stub — TODO(uwb-android). */
-  private val uwbSessions = mutableSetOf<String>()
+  /**
+   * Active UWB controlee sessions keyed by peerId. We hold onto the
+   * session-scope handle so the underlying ranging service stays bound;
+   * iOS keeps the analogous NISession in `niSessions` for the same reason.
+   * The collection coroutine (started once the JS layer has injected the
+   * peer's UwbAddress + complex channel via sendData) is tracked separately
+   * so stopRanging can cancel cleanly even if collection never began.
+   */
+  private data class UwbSession(
+    val scope: UwbControleeSessionScope,
+    var collectorJob: Job? = null,
+  )
+
+  private val uwbSessions = mutableMapOf<String, UwbSession>()
+
+  /** Latched once we've emitted the uwb_unavailable error so we don't spam JS. */
+  private var uwbUnavailableNotified: Boolean = false
 
   // MARK: - BLE / GATT handles
 
@@ -191,6 +214,15 @@ class HybridProximity : HybridProximitySpec() {
 
   private val bluetoothAdapter: BluetoothAdapter?
     get() = bluetoothManager?.adapter
+
+  /**
+   * UwbManager instance, created lazily on first ranging request. Only safe
+   * to touch when [Build.VERSION.SDK_INT] >= S; callers must gate first.
+   * Marked @Volatile so the double-checked init in [uwbManagerOrNull] is
+   * safe without a full lock on the hot path.
+   */
+  @Volatile
+  private var uwbManager: UwbManager? = null
 
   // MARK: - Helpers
 
@@ -997,39 +1029,196 @@ class HybridProximity : HybridProximitySpec() {
 
   // MARK: - UWB ranging
   //
-  // TODO(uwb-android): Wire androidx.core.uwb properly. The flow is:
-  //   1. UwbManager.getInstance(context)
-  //   2. Choose controller- or controllee-session-scope (the TS layer
-  //      will tell us — same negotiation as iOS NI).
-  //   3. Exchange UwbAddress + (controller) UwbComplexChannel over the
-  //      already-established L2CAP channel (sendData / dataReceived).
-  //   4. session.prepareSession(...) → collect RangingResult flow →
-  //      emit distanceUpdate events.
-  // For now we accept the API call and emit a single distanceUpdate with
-  // distance=null so JS-side code paths compile and run on devices
-  // without UWB hardware.
+  // Mirrors HybridProximity.swift's NISession lifecycle: we own the
+  // androidx.core.uwb controlee session per peer, but the wire-level
+  // exchange of the peer's UwbAddress + UwbComplexChannel rides on the
+  // already-established L2CAP channel via sendData/dataReceived. The JS
+  // layer drives that negotiation (same as iOS NI discovery tokens) and
+  // then asks us to start the ranging Flow.
+  //
+  // Because the Nitro spec doesn't expose `setUwbPeer(...)` today, we
+  // create the session scope on startRanging so the underlying UWB
+  // service stays bound and emit distanceUpdate events lazily once a
+  // collection job is started by a higher-level Kotlin entry point (none
+  // shipping yet). This matches the Swift impl, which also stores the
+  // NISession in `niSessions` and waits for the JS layer to drive the
+  // token exchange before any distance event fires.
+
+  /**
+   * Returns the lazily-created [UwbManager] iff the platform is API 31+
+   * and a manager could be instantiated. Returns null and emits a
+   * one-shot `uwb_unavailable` error event otherwise.
+   */
+  private fun uwbManagerOrNull(): UwbManager? {
+    if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S) {
+      maybeEmitUwbUnavailable(
+        "UWB requires API 31+; current=${Build.VERSION.SDK_INT}"
+      )
+      return null
+    }
+    uwbManager?.let { return it }
+    return synchronized(this) {
+      uwbManager ?: try {
+        UwbManager.createInstance(context).also { uwbManager = it }
+      } catch (e: Throwable) {
+        // createInstance can throw on devices without UWB system service
+        // (some OEM builds report API 31+ but lack the framework class).
+        maybeEmitUwbUnavailable(
+          "UwbManager.createInstance failed: ${e.javaClass.simpleName}: ${e.message}"
+        )
+        null
+      }
+    }
+  }
+
+  /** Emit `uwb_unavailable` at most once per HybridProximity instance lifetime. */
+  private fun maybeEmitUwbUnavailable(message: String) {
+    val shouldEmit = withState {
+      if (uwbUnavailableNotified) {
+        false
+      } else {
+        uwbUnavailableNotified = true
+        true
+      }
+    }
+    if (shouldEmit) emitError(message, "uwb_unavailable")
+  }
 
   override fun startRanging(peerId: String): Promise<Unit> = Promise.async {
-    val supported = Build.VERSION.SDK_INT >= Build.VERSION_CODES.S
-    withState { uwbSessions.add(peerId) }
-    if (!supported) {
-      emitError("UWB requires API 31+; current=${Build.VERSION.SDK_INT}", "uwb_unavailable")
+    // Idempotent: if a session for this peer already exists, no-op so the
+    // JS layer can safely call startRanging on resume/reconnect.
+    val existing = withState { uwbSessions[peerId] }
+    if (existing != null) return@async
+
+    val manager = uwbManagerOrNull() ?: return@async
+
+    val available = try {
+      manager.isAvailable()
+    } catch (e: Throwable) {
+      Log.w(TAG, "UwbManager.isAvailable() threw for peer=$peerId", e)
+      maybeEmitUwbUnavailable(
+        "UwbManager.isAvailable threw: ${e.javaClass.simpleName}: ${e.message}"
+      )
       return@async
     }
-    // Stub: surface a one-shot distanceUpdate with no value so consumers
-    // can render a "ranging…" UI without blowing up on missing data.
-    emit(
-      makeEvent(
-        kind = ProximityEventKind.DISTANCEUPDATE,
-        peerId = peerId,
-        distance = null,
-        direction = null,
+    if (!available) {
+      maybeEmitUwbUnavailable("UWB hardware not currently available")
+      return@async
+    }
+
+    val sessionScope = try {
+      // We default to controlee — the iOS NISession is also symmetric on
+      // discovery-token exchange and either side can act as the responder.
+      // If a future spec change adds setRangingRole, we can branch here.
+      manager.controleeSessionScope()
+    } catch (e: SecurityException) {
+      emitError(
+        "Missing UWB_RANGING permission: ${e.message}",
+        "permission_denied",
       )
-    )
+      return@async
+    } catch (e: Throwable) {
+      Log.w(TAG, "controleeSessionScope() failed for peer=$peerId", e)
+      emitError(
+        "controleeSessionScope failed: ${e.javaClass.simpleName}: ${e.message}",
+        "uwb_session_failed",
+      )
+      return@async
+    }
+
+    withState { uwbSessions[peerId] = UwbSession(scope = sessionScope) }
+    // Distance events fire once a collection job is started against
+    // `sessionScope.prepareSession(...)` with the peer's RangingParameters.
+    // That requires the peer's UwbAddress (and, for controller mode, the
+    // UwbComplexChannel) which the JS layer exchanges over L2CAP. The
+    // Swift side has the same shape — NISession is created here, the
+    // discovery-token round-trip lives in TS.
   }
 
   override fun stopRanging(peerId: String) {
-    withState { uwbSessions.remove(peerId) }
+    val removed = withState { uwbSessions.remove(peerId) } ?: return
+    removed.collectorJob?.cancel()
+    // UwbControleeSessionScope has no explicit close(); cancelling the
+    // collection job tears down the underlying RangingSession. Dropping
+    // the reference lets the manager release its binding.
+  }
+
+  /**
+   * Internal hook for a future JS bridge: once the TS layer has the peer's
+   * UwbAddress + RangingParameters, it can dispatch them here to start the
+   * RangingResult Flow. Distance/direction are forwarded as `distanceUpdate`
+   * events matching the iOS NISession callbacks 1:1. Not exposed via the
+   * Nitro spec yet; kept private and wired through `addControleeRanging`
+   * once the spec grows a setter.
+   */
+  @Suppress("unused")
+  private fun startControleeRangingCollection(
+    peerId: String,
+    parameters: androidx.core.uwb.RangingParameters,
+  ) {
+    val session = withState { uwbSessions[peerId] }
+    if (session == null) {
+      Log.w(TAG, "startControleeRangingCollection: no session for peer=$peerId")
+      return
+    }
+    val job = scope.launch {
+      try {
+        session.scope.prepareSession(parameters).collect { result ->
+          when (result) {
+            is RangingResult.RangingResultPosition -> {
+              val pos = result.position
+              val distance = pos.distance?.value?.toDouble()
+              val azimuth = pos.azimuth?.value?.toDouble()
+              val elevation = pos.elevation?.value?.toDouble()
+              val direction = if (azimuth != null || elevation != null) {
+                // androidx.core.uwb reports azimuth/elevation in degrees;
+                // iOS NearbyInteraction emits a unit vector. We forward the
+                // raw degree values in x (azimuth) / y (elevation) so the
+                // JS layer can normalize per-platform. z is unused on
+                // Android (RangingPosition has no roll component).
+                ProximityDirection(
+                  x = azimuth ?: 0.0,
+                  y = elevation ?: 0.0,
+                  z = 0.0,
+                )
+              } else null
+              emit(
+                makeEvent(
+                  kind = ProximityEventKind.DISTANCEUPDATE,
+                  peerId = peerId,
+                  distance = distance,
+                  direction = direction,
+                )
+              )
+            }
+            is RangingResult.RangingResultPeerDisconnected -> {
+              emit(
+                makeEvent(
+                  kind = ProximityEventKind.SESSIONENDED,
+                  peerId = peerId,
+                  reason = "uwbPeerDisconnected:${result.reason}",
+                )
+              )
+            }
+            else -> {
+              // RangingResultInitialized arrives once before the first
+              // position fix; nothing to forward. Future RangingResult
+              // subtypes (e.g. failure variants) fall through here too —
+              // we'd rather no-op than surface an unstable shape to JS.
+            }
+          }
+        }
+      } catch (e: CancellationException) {
+        throw e
+      } catch (e: Throwable) {
+        Log.w(TAG, "UWB ranging flow threw for peer=$peerId", e)
+        emitError(
+          "UWB ranging flow failed: ${e.javaClass.simpleName}: ${e.message}",
+          "uwb_ranging_failed",
+        )
+      }
+    }
+    withState { uwbSessions[peerId]?.collectorJob = job }
   }
 
   // MARK: - Listener registration
