@@ -33,13 +33,19 @@ export function vcStatusLabel(status: VcStatus, excludedFromVc: boolean): string
 export function FieldRow({
   descriptor,
   isOn,
+  verifiedFields,
   onToggle,
 }: {
   readonly descriptor: FieldDescriptor;
   readonly isOn: boolean;
+  readonly verifiedFields: ReadonlySet<BusinessCardField>;
   readonly onToggle: () => void;
 }): ReactNode {
-  const status: VcStatus = descriptor.excludedFromVc ? 'unverified' : 'selfAttested';
+  const status: VcStatus = descriptor.excludedFromVc
+    ? 'unverified'
+    : verifiedFields.has(descriptor.key)
+      ? 'verified'
+      : 'selfAttested';
   const statusColor = STATUS_COLOR[status];
   const statusLabel = vcStatusLabel(status, descriptor.excludedFromVc ?? false);
 

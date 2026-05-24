@@ -7,8 +7,7 @@
  * Image/Social Networks/Skills) where every row carries a VC status
  * label when on. Legend below explains the colour code. PROOFS section
  * (Real Human + Age 18+) only renders when the corresponding provable
- * claims exist in the identity store — currently gated TODO because the
- * `provableClaims` / `identityCards` stores haven't landed on Expo yet.
+ * claims exist in `useIdentityData.provableClaims`.
  */
 import { router } from 'expo-router';
 import { type ReactNode, useEffect, useMemo } from 'react';
@@ -32,6 +31,12 @@ import { Colors } from '@/constants/Colors';
 import { useMyCard } from '@/cards/cardManager';
 import { toVCard } from '@/cards/vCard';
 import { haptic } from '@/feedback/haptics';
+import {
+  useActiveDid,
+  useHasClaim,
+  useIdentityCoordinator,
+  useVerifiedFields,
+} from '@/identity';
 import { usePreferences } from '@/settings/preferences';
 import type { BusinessCardField, BusinessCard } from '@solidarity/shared';
 
@@ -57,14 +62,15 @@ export default function ShareSettings(): ReactNode {
   const prefs = usePreferences();
   const enforceMandatory = usePreferences((s) => s.set);
 
-  // Mandatory `shareIsHuman` enforcement: when the holder has the
-  // government `is_human` claim the toggle must stay on. The identity
-  // store isn't ported yet, so this no-ops today; the hook stays so the
-  // wire-up needs no changes once the claims store lands.
-  // TODO(identity-store): replace `false` with
-  //   useIdentityStore((s) => s.hasHumanClaim).
-  const hasHumanClaim = false;
-  const hasAgeClaim = false;
+  const seedKeychain = useIdentityCoordinator((s) => s.seedFromKeychain);
+  useEffect(() => {
+    void seedKeychain();
+  }, [seedKeychain]);
+  const activeDid = useActiveDid();
+  const verifiedFields = useVerifiedFields(activeDid);
+
+  const hasHumanClaim = useHasClaim('is_human', activeDid ?? undefined);
+  const hasAgeClaim = useHasClaim('age_over_18', activeDid ?? undefined);
   useEffect(() => {
     if (hasHumanClaim && !prefs.shareIsHuman) {
       enforceMandatory('shareIsHuman', true);
@@ -105,7 +111,7 @@ export default function ShareSettings(): ReactNode {
       <SettingsScreenTitle title="Share Settings" />
       <ScrollView contentContainerStyle={{ padding: 16, gap: 20 }}>
         <QrPreview payload={qrPayload} />
-        <FieldToggles prefs={prefs} />
+        <FieldToggles prefs={prefs} verifiedFields={verifiedFields} />
         {hasHumanClaim || hasAgeClaim ? (
           <ProofToggles
             hasHumanClaim={hasHumanClaim}
@@ -170,8 +176,10 @@ function QrPreview({ payload }: { readonly payload: string | null }): ReactNode 
 
 function FieldToggles({
   prefs,
+  verifiedFields,
 }: {
   readonly prefs: ReturnType<typeof usePreferences.getState>;
+  readonly verifiedFields: ReadonlySet<BusinessCardField>;
 }): ReactNode {
   return (
     <View>
@@ -206,6 +214,7 @@ function FieldToggles({
             key={row.key}
             descriptor={row}
             isOn={isFieldOn(row.key, prefs)}
+            verifiedFields={verifiedFields}
             onToggle={() => {
               if (row.locked) return;
               haptic('selection');
