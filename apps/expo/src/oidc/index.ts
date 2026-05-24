@@ -17,3 +17,13 @@ export {
   type TokenGrant,
   type TokenResponse,
 } from './tokenService';
+export {
+  fetchCredentialOffer,
+  fetchIssuerMetadata,
+  parseCredentialOffer,
+  requestCredential,
+  type CredentialOffer,
+  type IssuerMetadata,
+  type RequestCredentialOpts,
+  type TxCodeSpec,
+} from './credentialIssuance';
