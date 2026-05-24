@@ -9,7 +9,8 @@
  */
 import Constants from 'expo-constants';
 import { router } from 'expo-router';
-import { ScrollView, View } from 'react-native';
+import { useRef } from 'react';
+import { Pressable, ScrollView, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import {
@@ -20,13 +21,44 @@ import {
   SettingsBlockSectionHeader,
   SettingsScreenTitle,
 } from '@/components/settings/SettingsBlocks';
+import { haptic } from '@/feedback/haptics';
+import { pushToast } from '@/feedback/toast';
 import { usePreferences } from '@/settings/preferences';
+
+const DEV_TAP_THRESHOLD = 7;
 
 export default function SettingsHub() {
   const insets = useSafeAreaInsets();
   const developerMode = usePreferences((s) => s.developerMode);
+  const setPref = usePreferences((s) => s.set);
+  const tapCountRef = useRef(0);
 
   const version = Constants.expoConfig?.version ?? 'Unknown';
+
+  // Mirrors Swift DeveloperModeManager.registerVersionTap — 5/6 taps show a
+  // "N taps away" hint, the 7th flips developerMode on with success toast
+  // + haptic. The counter lives in a ref (component-local, not persisted).
+  const onVersionTap = () => {
+    if (developerMode) return;
+    tapCountRef.current += 1;
+    const count = tapCountRef.current;
+    if (count >= DEV_TAP_THRESHOLD) {
+      tapCountRef.current = 0;
+      setPref('developerMode', true);
+      haptic('success');
+      pushToast(
+        'Developer Mode Enabled\nGroup management and Sakura gallery are now accessible in Settings.',
+        'success',
+        3000
+      );
+    } else if (count >= 5) {
+      const remaining = DEV_TAP_THRESHOLD - count;
+      const message = remaining === 1
+        ? 'Almost there...\n1 tap away from developer mode.'
+        : `Almost there...\n${String(remaining)} taps away from developer mode.`;
+      pushToast(message, 'info', 1500);
+    }
+  };
 
   return (
     <View className="flex-1 bg-pageBg" style={{ paddingTop: insets.top }}>
@@ -102,7 +134,7 @@ export default function SettingsHub() {
             <SettingsBlockRow
               icon="arrow.counterclockwise"
               title="Replay Onboarding"
-              onPress={() => { router.push('/onboarding'); }}
+              onPress={() => { router.push('/onboarding?replay=1'); }}
             />
           </SettingsBlockSection>
 
@@ -110,11 +142,17 @@ export default function SettingsHub() {
           <View className="gap-3">
             <SettingsBlockSectionHeader title="About" />
             <View className="px-4">
-              <SettingsBlockInfoRow
-                icon="info.circle"
-                title="Version"
-                value={version}
-              />
+              <Pressable
+                onPress={onVersionTap}
+                accessibilityRole="button"
+                accessibilityLabel="Version"
+              >
+                <SettingsBlockInfoRow
+                  icon="info.circle"
+                  title="Version"
+                  value={version}
+                />
+              </Pressable>
             </View>
           </View>
         </View>

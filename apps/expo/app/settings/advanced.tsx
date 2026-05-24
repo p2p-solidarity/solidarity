@@ -155,6 +155,8 @@ export default function AdvancedSettings() {
 
   const onDisableDeveloperMode = () => {
     setPref('developerMode', false);
+    // Mirrors Swift DeveloperModeManager.disableDeveloperMode toast.
+    pushToast('Developer Mode Disabled', 'info', 2000);
   };
 
   return (
