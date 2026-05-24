@@ -13,6 +13,7 @@
  */
 import { useState } from 'react';
 import { ScrollView, TextInput, View, type KeyboardTypeOptions } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { ThemedButton, ThemedText } from '@/components/themed';
 import { Colors } from '@/constants/Colors';
@@ -26,6 +27,7 @@ export interface DarkProfileSetupStepProps {
 }
 
 export function DarkProfileSetupStep({ profile, onChange, onNext }: DarkProfileSetupStepProps) {
+  const insets = useSafeAreaInsets();
   const [hasAttemptedNext, setHasAttemptedNext] = useState(false);
   const usernameError =
     hasAttemptedNext && profile.username.trim().length === 0 ? 'Username is required' : null;
@@ -43,7 +45,11 @@ export function DarkProfileSetupStep({ profile, onChange, onNext }: DarkProfileS
   return (
     <ScrollView
       className="bg-pageBg flex-1"
-      contentContainerStyle={{ paddingHorizontal: 24, paddingTop: 40, paddingBottom: 32 }}
+      contentContainerStyle={{
+        paddingHorizontal: 24,
+        paddingTop: insets.top + 16,
+        paddingBottom: insets.bottom + 32,
+      }}
       keyboardShouldPersistTaps="handled"
     >
       <View className="items-center" style={{ gap: 8, paddingBottom: 24 }}>

@@ -19,6 +19,7 @@
  *   [ Start Using Solidarity ]   (inverted CTA)
  */
 import { Platform, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { SfIcon } from '@/components/icons/SfIcon';
 import { ThemedButton, ThemedText } from '@/components/themed';
@@ -40,6 +41,7 @@ export function CompleteStep({
   passportScanned,
   onFinish,
 }: CompleteStepProps) {
+  const insets = useSafeAreaInsets();
   const handleFinish = () => {
     haptic('success');
     onFinish();
@@ -50,7 +52,12 @@ export function CompleteStep({
   return (
     <View
       className="bg-pageBg flex-1"
-      style={{ paddingHorizontal: 24, paddingTop: 80, paddingBottom: 40, gap: 24 }}
+      style={{
+        paddingHorizontal: 24,
+        paddingTop: insets.top + 56,
+        paddingBottom: insets.bottom + 24,
+        gap: 24,
+      }}
     >
       <View style={{ flex: 1 }} />
 

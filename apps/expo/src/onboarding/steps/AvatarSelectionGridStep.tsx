@@ -11,24 +11,20 @@
  *   5. "About avatar" outlined info card.
  *   6. "This is the one, set me up" CTA (inverted, disabled until selection).
  *
- * Asset pipeline: horse/pig/sheep ship as PNG under apps/expo/assets/animals/.
- * Dog/dove fall back to SF symbols until their PNGs land — mirrors Swift
- * `ImageProvider.animalImage(for:)` fallback chain.
+ * Asset pipeline: all five animals ship as PNG under apps/expo/assets/animals/
+ * (copied 1:1 from solidarity/Resources/). Matches Swift `ImageProvider`
+ * which prefers `<basename>.png` from the bundle Resources before falling
+ * back to SF Symbols.
  */
-import { Image, Pressable, ScrollView, View, type ImageSourcePropType } from 'react-native';
+import { Image, Pressable, ScrollView, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { ANIMAL_CASES, animalDisplayName, animalSymbolFallback } from '@/cards/animals';
+import { ANIMAL_CASES, animalDisplayName, animalImageSource } from '@/cards/animals';
 import { SfIcon } from '@/components/icons/SfIcon';
 import { ThemedButton, ThemedText } from '@/components/themed';
 import { Colors } from '@/constants/Colors';
 import { haptic } from '@/feedback/haptics';
 import type { Animal } from '@solidarity/shared';
-
-const ANIMAL_PNG: Readonly<Partial<Record<Animal, ImageSourcePropType>>> = {
-  horse: require('../../../assets/animals/horse-white.png') as ImageSourcePropType,
-  pig: require('../../../assets/animals/pig-white.png') as ImageSourcePropType,
-  sheep: require('../../../assets/animals/sheep-white.png') as ImageSourcePropType,
-};
 
 export interface AvatarSelectionGridStepProps {
   readonly selection: Animal | null;
@@ -43,6 +39,7 @@ export function AvatarSelectionGridStep({
   onBack,
   onNext,
 }: AvatarSelectionGridStepProps) {
+  const insets = useSafeAreaInsets();
   const handleNext = () => {
     if (!selection) return;
     haptic('success');
@@ -50,7 +47,7 @@ export function AvatarSelectionGridStep({
   };
 
   return (
-    <View className="bg-pageBg flex-1" style={{ paddingTop: 40 }}>
+    <View className="bg-pageBg flex-1" style={{ paddingTop: insets.top + 16, paddingBottom: insets.bottom }}>
       <View
         className="flex-row"
         style={{ paddingHorizontal: 24 }}
@@ -153,7 +150,8 @@ function AvatarPreview({ animal }: { animal: Animal | null }) {
       </View>
     );
   }
-  const png = ANIMAL_PNG[animal];
+  // Swift: image .frame(150) .clipShape(Circle()) .overlay(Rectangle 160 stroke blue 2)
+  // — no background fill; the rectangle stays square (corners are deliberate).
   return (
     <View style={{ width: 160, height: 160, alignItems: 'center', justifyContent: 'center' }}>
       <View
@@ -161,17 +159,10 @@ function AvatarPreview({ animal }: { animal: Animal | null }) {
           width: 150,
           height: 150,
           borderRadius: 75,
-          backgroundColor: Colors.warmCream,
-          alignItems: 'center',
-          justifyContent: 'center',
           overflow: 'hidden',
         }}
       >
-        {png ? (
-          <Image source={png} style={{ width: 130, height: 130 }} resizeMode="contain" />
-        ) : (
-          <SfIcon name={animalSymbolFallback(animal)} size={96} color={Colors.text1} />
-        )}
+        <Image source={animalImageSource(animal)} style={{ width: 150, height: 150 }} resizeMode="cover" />
       </View>
       <View
         pointerEvents="none"
@@ -196,28 +187,28 @@ function AvatarChip({
   readonly isSelected: boolean;
   readonly onPress: () => void;
 }) {
-  const png = ANIMAL_PNG[animal];
+  // Swift: image .frame(60) .clipShape(Circle()) .overlay(Circle stroke 2 — blue if selected)
+  // → full 60pt image + ring overlay on top (NOT a border that shrinks the image).
   return (
     <Pressable onPress={onPress} accessibilityRole="button" accessibilityLabel={`Pick ${animalDisplayName(animal)}`}>
       <View style={{ alignItems: 'center', gap: 8 }}>
-        <View
-          style={{
-            width: 60,
-            height: 60,
-            borderRadius: 30,
-            backgroundColor: Colors.warmCream,
-            borderWidth: 2,
-            borderColor: isSelected ? Colors.primaryBlue : 'transparent',
-            alignItems: 'center',
-            justifyContent: 'center',
-            overflow: 'hidden',
-          }}
-        >
-          {png ? (
-            <Image source={png} style={{ width: 50, height: 50 }} resizeMode="contain" />
-          ) : (
-            <SfIcon name={animalSymbolFallback(animal)} size={36} color={Colors.text1} />
-          )}
+        <View style={{ width: 60, height: 60 }}>
+          <View style={{ width: 60, height: 60, borderRadius: 30, overflow: 'hidden' }}>
+            <Image source={animalImageSource(animal)} style={{ width: 60, height: 60 }} resizeMode="cover" />
+          </View>
+          {isSelected ? (
+            <View
+              pointerEvents="none"
+              style={{
+                position: 'absolute',
+                width: 60,
+                height: 60,
+                borderRadius: 30,
+                borderWidth: 2,
+                borderColor: Colors.primaryBlue,
+              }}
+            />
+          ) : null}
         </View>
         <ThemedText
           variant="caption"
