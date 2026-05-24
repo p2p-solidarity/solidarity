@@ -20,7 +20,7 @@
  * (https://solidarity.gg/c/{id}) so the QR scans correctly and routes
  * through the existing deep-link handler.
  */
-import { router } from 'expo-router';
+import { router, Stack } from 'expo-router';
 import { useMemo } from 'react';
 import { ActivityIndicator, ScrollView, Text, View } from 'react-native';
 import QRCode from 'react-native-qrcode-svg';
@@ -44,7 +44,8 @@ export default function SolidarityQrSettings() {
 
   return (
     <View className="flex-1 bg-pageBg" style={{ paddingTop: insets.top }}>
-      <SettingsBackToolbar onPress={() => { router.back(); }} />
+      <Stack.Screen options={{ presentation: 'modal' }} />
+      <SettingsBackToolbar title="Close" onPress={() => { router.back(); }} />
       <SettingsScreenTitle title="Solidarity QR" />
 
       <ScrollView

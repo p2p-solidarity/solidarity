@@ -53,7 +53,7 @@ export default function SettingsHub() {
             <SettingsBlockRow
               icon="key.horizontal"
               title="View DIDs"
-              onPress={() => { router.push('/settings/security'); }}
+              onPress={() => { router.push('/settings/dids'); }}
             />
           </SettingsBlockSection>
 
@@ -62,7 +62,7 @@ export default function SettingsHub() {
             <SettingsBlockRow
               icon="square.and.arrow.up"
               title="Share Settings"
-              onPress={() => { router.push('/settings/privacy'); }}
+              onPress={() => { router.push('/settings/share-settings'); }}
             />
           </SettingsBlockSection>
 
