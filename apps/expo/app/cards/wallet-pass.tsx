@@ -20,7 +20,6 @@
  * TODO(nitro-walletpass): write a Nitro module that zips + signs the
  * pass.json + assets locally, then invokes PassKit.addPasses directly.
  */
-import * as FileSystem from 'expo-file-system/legacy';
 import * as Sharing from 'expo-sharing';
 import * as Clipboard from 'expo-clipboard';
 import { router, useLocalSearchParams } from 'expo-router';
@@ -33,7 +32,7 @@ import { SfIcon } from '@/components/icons/SfIcon';
 import {
   PassInformationView,
   PassPreviewView,
-  buildPassJson,
+  buildAndSignPkpass,
   filteredCardFor,
   generateImportString,
 } from '@/components/walletpass';
@@ -98,11 +97,13 @@ export default function WalletPassScreen() {
     if (!targetCard) return;
     setGeneration({ kind: 'generating' });
     try {
-      const passJson = buildPassJson(targetCard, sharingLevel);
-      const fileUri = await writePassJson(targetCard.id, passJson);
+      const { fileUri } = await buildAndSignPkpass(targetCard, sharingLevel);
+      if (!fileUri) {
+        throw new Error('Pass bundle generated without a file URI.');
+      }
       setGeneration({ kind: 'ready', fileUri });
       haptic('success');
-      pushToast('Pass payload generated', 'success');
+      pushToast('Signed pass generated', 'success');
     } catch (err: unknown) {
       const msg =
         err instanceof Error ? err.message : 'Failed to generate pass.';
@@ -122,12 +123,14 @@ export default function WalletPassScreen() {
         );
         return;
       }
-      // TODO(nitro-walletpass): once the Nitro module ships, swap the
-      // share sheet for `PassKit.addPasses(signedPkpassData)` so this
-      // turns into a one-tap "Add to Wallet" experience.
+      // Hand the signed .pkpass off to expo-sharing — on iOS the system
+      // share sheet recognises the MIME type and offers "Add to Wallet"
+      // directly. Once a future Nitro module exposes PassKit's
+      // `addPasses` API we can drop the share sheet entirely.
       await Sharing.shareAsync(generation.fileUri, {
-        mimeType: 'application/json',
-        dialogTitle: 'Send pass payload to signer',
+        mimeType: 'application/vnd.apple.pkpass',
+        UTI: 'com.apple.pkpass',
+        dialogTitle: 'Add to Apple Wallet',
       });
     } catch (err: unknown) {
       const msg =
@@ -375,15 +378,3 @@ function Header({ title, onDone }: HeaderProps) {
   );
 }
 
-async function writePassJson(
-  cardId: string,
-  payload: unknown
-): Promise<string> {
-  const docDir = FileSystem.documentDirectory ?? FileSystem.cacheDirectory;
-  if (!docDir) {
-    throw new Error('No writable directory available.');
-  }
-  const fileUri = `${docDir}wallet-pass-${cardId}.json`;
-  await FileSystem.writeAsStringAsync(fileUri, JSON.stringify(payload, null, 2));
-  return fileUri;
-}
