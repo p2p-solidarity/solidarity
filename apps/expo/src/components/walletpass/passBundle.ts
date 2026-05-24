@@ -34,6 +34,15 @@ import {
   type SharingLevel,
 } from '@solidarity/shared';
 
+import {
+  ANIMAL_ICON_PNG,
+  DEFAULT_ICON_AT_2X_PNG,
+  DEFAULT_ICON_AT_3X_PNG,
+  DEFAULT_ICON_PNG,
+  DEFAULT_LOGO_AT_2X_PNG,
+  DEFAULT_LOGO_AT_3X_PNG,
+  DEFAULT_LOGO_PNG,
+} from './defaultAssets';
 import { filteredCardFor } from './filteredCard';
 import { buildPkpassZip, type ZipEntry } from './pkpassZip';
 import { signManifest } from './passSigner';
@@ -195,26 +204,20 @@ export function buildPassJson(
   };
 }
 
-/**
- * Pre-rendered placeholder logo + icon PNGs. They live as inline base64
- * so the file is self-contained — the Swift counterpart renders them via
- * UIKit at runtime; in Expo we ship the equivalent baked bitmap. The
- * caller may override either via {@link BuildPkpassOptions}.
- *
- * The defaults are deliberately tiny (1x1 transparent for logo, 1x1 blue
- * for icon). PassKit requires the files exist with non-zero size and a
- * valid PNG header; the Wallet UI then uses Apple's own pass chrome for
- * cards lacking branded artwork.
- */
-const DEFAULT_LOGO_PNG_BASE64 =
-  'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNgAAIAAAUAAen63NgAAAAASUVORK5CYII=';
-const DEFAULT_ICON_PNG_BASE64 =
-  'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==';
-
 export interface BuildPkpassOptions extends BuildPassOptions {
-  /** Override the default logo (must be a valid PNG byte stream). */
+  /**
+   * Override the default logo. Applied to logo.png + logo@2x.png + logo@3x.png
+   * (one byte stream reused for every scale — matches the Swift convention).
+   * If omitted, the baked Solidarity wordmark (160×28 / 320×55 / 480×83) ships
+   * via {@link DEFAULT_LOGO_PNG} & friends from `./defaultAssets`.
+   */
   readonly logoPng?: Uint8Array;
-  /** Override the default icon. */
+  /**
+   * Override the default icon. Applied to icon.png + icon@2x.png + icon@3x.png.
+   * If omitted, the bundled sakura-on-blue glyphs at 29×29 / 58×58 / 87×87
+   * are used, or — when `card.animal` is set — the matching animal avatar
+   * (87×87 cropped) is reused for every scale.
+   */
   readonly iconPng?: Uint8Array;
   /** Override the signing endpoint (mainly for tests / staging). */
   readonly signEndpoint?: string;
@@ -252,11 +255,22 @@ export async function buildAndSignPkpass(
   const passJson = buildPassJson(card, sharingLevel, options);
   const passJsonBytes = utf8ToBytes(prettyJson(passJson));
 
-  const logoBytes = options.logoPng ?? base64Decode(DEFAULT_LOGO_PNG_BASE64);
-  const iconBytes = options.iconPng ?? base64Decode(DEFAULT_ICON_PNG_BASE64);
+  // Per-scale defaults. A caller override (`logoPng` / `iconPng`) reuses one
+  // byte stream for every scale alias — same convention as the Swift side
+  // (PassKitManager+Generation renders one bitmap and writes it three times).
+  // When no override is supplied we ship the bundled, correctly-dimensioned
+  // PNGs from `./defaultAssets` (sakura icon, wordmark logo). When the card
+  // has an `animal`, the matching avatar (87×87) is used for every icon
+  // scale — mirrors the Swift "remember-the-pig" UX in BusinessCard.swift.
+  const animalIconBytes =
+    card.animal !== undefined ? ANIMAL_ICON_PNG[card.animal] : undefined;
+  const iconPng = options.iconPng ?? animalIconBytes ?? DEFAULT_ICON_PNG;
+  const iconAt2x = options.iconPng ?? animalIconBytes ?? DEFAULT_ICON_AT_2X_PNG;
+  const iconAt3x = options.iconPng ?? animalIconBytes ?? DEFAULT_ICON_AT_3X_PNG;
+  const logoPng = options.logoPng ?? DEFAULT_LOGO_PNG;
+  const logoAt2x = options.logoPng ?? DEFAULT_LOGO_AT_2X_PNG;
+  const logoAt3x = options.logoPng ?? DEFAULT_LOGO_AT_3X_PNG;
 
-  // The Swift implementation reuses the same byte stream for every scale
-  // alias so the SHA-1 entries are identical. Preserve that mapping.
   const filtered = filteredCardFor(card, sharingLevel);
   const profileImageBytes = filtered.profileImage
     ? safeBase64ToBytes(filtered.profileImage)
@@ -264,12 +278,12 @@ export async function buildAndSignPkpass(
 
   const assetEntries: ZipEntry[] = [
     { name: 'pass.json', data: passJsonBytes },
-    { name: 'logo.png', data: logoBytes },
-    { name: 'logo@2x.png', data: logoBytes },
-    { name: 'logo@3x.png', data: logoBytes },
-    { name: 'icon.png', data: iconBytes },
-    { name: 'icon@2x.png', data: iconBytes },
-    { name: 'icon@3x.png', data: iconBytes },
+    { name: 'logo.png', data: logoPng },
+    { name: 'logo@2x.png', data: logoAt2x },
+    { name: 'logo@3x.png', data: logoAt3x },
+    { name: 'icon.png', data: iconPng },
+    { name: 'icon@2x.png', data: iconAt2x },
+    { name: 'icon@3x.png', data: iconAt3x },
   ];
   if (profileImageBytes) {
     assetEntries.push(
@@ -294,12 +308,12 @@ export async function buildAndSignPkpass(
     { name: 'pass.json', data: passJsonBytes },
     { name: 'manifest.json', data: manifestBytes },
     { name: 'signature', data: signatureBytes },
-    { name: 'logo.png', data: logoBytes },
-    { name: 'logo@2x.png', data: logoBytes },
-    { name: 'logo@3x.png', data: logoBytes },
-    { name: 'icon.png', data: iconBytes },
-    { name: 'icon@2x.png', data: iconBytes },
-    { name: 'icon@3x.png', data: iconBytes },
+    { name: 'logo.png', data: logoPng },
+    { name: 'logo@2x.png', data: logoAt2x },
+    { name: 'logo@3x.png', data: logoAt3x },
+    { name: 'icon.png', data: iconPng },
+    { name: 'icon@2x.png', data: iconAt2x },
+    { name: 'icon@3x.png', data: iconAt3x },
   ];
   if (profileImageBytes) {
     zipEntries.push(
