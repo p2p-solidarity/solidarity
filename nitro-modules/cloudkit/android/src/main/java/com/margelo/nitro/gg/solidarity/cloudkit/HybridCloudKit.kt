@@ -22,14 +22,9 @@
  * `withContext(Dispatchers.IO)` (Promise.async kicks us onto Dispatchers.IO
  * already, but the explicit `withContext` survives any internal refactor).
  */
-package gg.solidarity.cloudkit
+package com.margelo.nitro.gg.solidarity.cloudkit
 
 import com.margelo.nitro.core.Promise
-import com.margelo.nitro.gg.solidarity.cloudkit.CloudKitEvent
-import com.margelo.nitro.gg.solidarity.cloudkit.CloudKitEventKind
-import com.margelo.nitro.gg.solidarity.cloudkit.CloudKitRecord
-import com.margelo.nitro.gg.solidarity.cloudkit.CloudKitShareInvite
-import com.margelo.nitro.gg.solidarity.cloudkit.HybridCloudKitSpec
 import java.util.UUID
 import java.util.concurrent.locks.ReentrantLock
 import kotlin.concurrent.withLock

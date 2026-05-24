@@ -21,7 +21,7 @@
  * this class throws UnsupportedOperationException; storage + canonicalisation
  * still work so the rest of the app can hydrate UI off cached state.
  */
-package gg.solidarity.semaphore
+package com.margelo.nitro.gg.solidarity.semaphore
 
 import android.content.Context
 import android.content.SharedPreferences
@@ -31,8 +31,6 @@ import com.facebook.soloader.SoLoader
 import com.margelo.nitro.NitroModules
 import com.margelo.nitro.core.ArrayBuffer
 import com.margelo.nitro.core.Promise
-import com.margelo.nitro.gg.solidarity.semaphore.HybridSemaphoreSpec
-import com.margelo.nitro.gg.solidarity.semaphore.SemaphoreProof
 import org.json.JSONArray
 import org.json.JSONObject
 import java.security.SecureRandom

@@ -44,7 +44,7 @@
  */
 @file:Suppress("MissingPermission")
 
-package gg.solidarity.sprucedid
+package com.margelo.nitro.gg.solidarity.sprucedid
 
 import android.content.Context
 import android.content.pm.PackageManager
@@ -55,9 +55,6 @@ import android.util.Log
 import com.margelo.nitro.NitroModules
 import com.margelo.nitro.core.ArrayBuffer
 import com.margelo.nitro.core.Promise
-import com.margelo.nitro.gg.solidarity.sprucedid.HybridSpruceDidSpec
-import com.margelo.nitro.gg.solidarity.sprucedid.SpruceDidEvent
-import com.margelo.nitro.gg.solidarity.sprucedid.SpruceDidEventKind
 import java.security.KeyPairGenerator
 import java.security.KeyStore
 import java.security.Signature

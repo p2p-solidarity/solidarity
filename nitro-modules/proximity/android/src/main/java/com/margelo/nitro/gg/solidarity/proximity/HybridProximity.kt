@@ -45,7 +45,7 @@
  */
 @file:Suppress("MissingPermission")
 
-package gg.solidarity.proximity
+package com.margelo.nitro.gg.solidarity.proximity
 
 import android.bluetooth.BluetoothAdapter
 import android.bluetooth.BluetoothDevice
@@ -78,11 +78,6 @@ import androidx.core.uwb.UwbManager
 import com.margelo.nitro.NitroModules
 import com.margelo.nitro.core.ArrayBuffer
 import com.margelo.nitro.core.Promise
-import com.margelo.nitro.gg.solidarity.proximity.HybridProximitySpec
-import com.margelo.nitro.gg.solidarity.proximity.ProximityDirection
-import com.margelo.nitro.gg.solidarity.proximity.ProximityEvent
-import com.margelo.nitro.gg.solidarity.proximity.ProximityEventKind
-import com.margelo.nitro.gg.solidarity.proximity.ProximityPeer
 import java.io.IOException
 import java.io.InputStream
 import java.io.OutputStream

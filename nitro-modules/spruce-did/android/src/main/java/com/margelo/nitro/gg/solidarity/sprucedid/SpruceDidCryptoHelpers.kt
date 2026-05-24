@@ -9,7 +9,7 @@
  * Mirrors `nitro-modules/spruce-did/ios/SpruceDidCryptoHelpers.swift` so
  * any wire-format changes land in both files together.
  */
-package gg.solidarity.sprucedid
+package com.margelo.nitro.gg.solidarity.sprucedid
 
 import android.util.Base64
 import java.math.BigInteger

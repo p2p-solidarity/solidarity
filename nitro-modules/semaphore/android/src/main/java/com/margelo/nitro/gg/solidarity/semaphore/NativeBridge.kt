@@ -26,7 +26,7 @@
  *   • Top-level functions in `semaphore_bindings.kt` live on the
  *     synthetic Kotlin file-class `uniffi.semaphore_bindings.Semaphore_bindingsKt`.
  */
-package gg.solidarity.semaphore
+package com.margelo.nitro.gg.solidarity.semaphore
 
 import java.lang.reflect.Method
 

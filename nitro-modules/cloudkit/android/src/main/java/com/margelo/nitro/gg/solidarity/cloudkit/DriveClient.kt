@@ -15,7 +15,7 @@
  * No PII is logged here — only file IDs / HTTP status codes when something
  * fails. Bodies live in the request stream only.
  */
-package gg.solidarity.cloudkit
+package com.margelo.nitro.gg.solidarity.cloudkit
 
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.MultipartBody
