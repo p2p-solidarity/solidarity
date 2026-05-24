@@ -13,6 +13,7 @@ import type { ReactNode } from 'react';
 import { Pressable, Text, View } from 'react-native';
 
 import { SfIcon } from '@/components/icons/SfIcon';
+import { Colors } from '@/constants/Colors';
 
 export type ProfileHeaderCardProps = {
   name: string;
@@ -51,7 +52,7 @@ export function ProfileHeaderCard({
               <View
                 style={{ width: 12, height: 12, alignItems: 'center', justifyContent: 'center' }}
               >
-                <SfIcon name="key" size={9} color="#5F5E67" />
+                <SfIcon name="key" size={9} color={Colors.text2} />
               </View>
               <Text
                 numberOfLines={1}
