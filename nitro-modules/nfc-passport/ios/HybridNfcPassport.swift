@@ -74,12 +74,19 @@ final class HybridNfcPassport: HybridNfcPassportSpec {
 
       let reader = PassportReader()
 
-      // CSCA Master List — if the host app bundled `masterList.pem` we load
-      // it so passive authentication checks the SOD chain. Without it,
+      // CSCA Master List — if the bundle ships `masterList.pem` we load it
+      // so passive authentication checks the SOD chain. Without it,
       // `passportCorrectlySigned` is always false and we surface
       // `passiveAuthValid = false` to the JS layer (the caller decides how
       // to react — typically downgrade trust level rather than refuse).
-      if let masterListURL = Bundle.main.url(forResource: "masterList", withExtension: "pem") {
+      //
+      // Look in both the module's own bundle (when the file ships inside a
+      // CocoaPods resource bundle) AND the host app's main bundle (when the
+      // pod adds it via `s.resources` and CocoaPods copies it straight into
+      // the main bundle). This is defensive so swapping between
+      // `s.resources` and `s.resource_bundles` later doesn't break runtime
+      // lookup.
+      if let masterListURL = Self.locateMasterList() {
         reader.setMasterListURL(masterListURL)
       }
 
@@ -142,6 +149,39 @@ final class HybridNfcPassport: HybridNfcPassportSpec {
     // user dismiss, on chip removal, or after the system timeout. We leave
     // this as a no-op so the JS API has parity with the Android side once
     // jmrtd lands.
+  }
+
+  // MARK: - Bundle resource lookup
+
+  /// Resolve the `masterList.pem` URL. Checks (in order):
+  ///   1. The Nitro module's own `Bundle(for: HybridNfcPassport.self)` —
+  ///      where it lands when packaged via `s.resource_bundles`.
+  ///   2. The host app's `Bundle.main` — where it lands when packaged via
+  ///      `s.resources` (current podspec wiring) or when the Swift host
+  ///      app added it directly to its iOS target.
+  ///   3. Common pod resource bundle names under `Bundle.main` — Xcode
+  ///      sometimes places sub-bundles inside `.app` even with `s.resources`.
+  ///
+  /// Returns nil if no PEM is bundled. The caller surfaces
+  /// `passiveAuthValid = false` in that case rather than failing the read.
+  internal static func locateMasterList() -> URL? {
+    let moduleBundle = Bundle(for: HybridNfcPassport.self)
+    if let url = moduleBundle.url(forResource: "masterList", withExtension: "pem") {
+      return url
+    }
+    if let url = Bundle.main.url(forResource: "masterList", withExtension: "pem") {
+      return url
+    }
+    for sub in ["NfcPassportResources", "NfcPassport"] {
+      if let url = Bundle.main.url(
+        forResource: "masterList",
+        withExtension: "pem",
+        subdirectory: "\(sub).bundle"
+      ) {
+        return url
+      }
+    }
+    return nil
   }
 
   // MARK: - MRZ Key
@@ -258,10 +298,17 @@ final class HybridNfcPassport: HybridNfcPassportSpec {
       )
     }
 
-    /// Wrap a single data group's raw body bytes in an `ArrayBuffer`.
+    /// Wrap a single data group's raw TLV bytes in an `ArrayBuffer`. We use
+    /// `dg.data` (the full DataGroup TLV) rather than `dg.body` (inner
+    /// content) because:
+    ///   - The SOD hashes are computed over `dg.data`, so downstream passive-
+    ///     auth checks and ZK circuits that re-hash the DGs see the same
+    ///     bytes regardless of platform.
+    ///   - Android jmrtd surfaces the full encoded DG bytes, so emitting the
+    ///     TLV here keeps the JS-facing payload identical across platforms.
     private static func dataGroupBuffer(model: NFCPassportModel, tag: DataGroupId) -> ArrayBuffer? {
-      guard let dg = model.getDataGroup(tag), !dg.body.isEmpty else { return nil }
-      let data = Data(dg.body)
+      guard let dg = model.getDataGroup(tag), !dg.data.isEmpty else { return nil }
+      let data = Data(dg.data)
       return (try? ArrayBuffer.copy(data: data))
     }
 

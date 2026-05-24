@@ -132,4 +132,48 @@ describe('nfcPassport — pipeline integration with mocked Nitro module', () => 
       expect(r.error.type).toBe('configurationError');
     }
   });
+
+  it('prunes dataGroupsRead based on which DG buffers actually came back', async () => {
+    // Older e-passports may not ship DG14/DG15 — make sure the snapshot
+    // labels reflect what the chip actually delivered rather than a
+    // hard-coded list (which would lie about what was authenticated).
+    const { chipFromNitro } = await import('../../src/passport/pipeline');
+    const minimal = {
+      ...fakeRead(VALID_MRZ),
+      dataGroups: { dg1: new ArrayBuffer(88), dg2: new ArrayBuffer(1024) },
+    };
+    const snapshot = chipFromNitro(minimal, 'TWN', VALID_MRZ.documentNumber);
+    expect(snapshot.dataGroupsRead).toEqual(['COM', 'SOD', 'DG1', 'DG2']);
+    expect(snapshot.dataGroupsRead).not.toContain('DG14');
+    expect(snapshot.dataGroupsRead).not.toContain('DG15');
+  });
+
+  it('extracts the printable MRZ string from a DG1 TLV blob', async () => {
+    const { chipFromNitro } = await import('../../src/passport/pipeline');
+    // Synthesize a DG1 TLV: tag 61 + length + tag 5F1F + length + 88 ASCII bytes.
+    const td3Line1 = 'P<TWNDOE<<JOHN<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<';
+    const td3Line2 = 'L898902C36TWN7408122F3001016<<<<<<<<<<<<<<00';
+    const mrzAscii = td3Line1 + td3Line2;
+    const mrzBytes = new Uint8Array(mrzAscii.length);
+    for (let i = 0; i < mrzAscii.length; i += 1) {
+      mrzBytes[i] = mrzAscii.charCodeAt(i);
+    }
+    // Real DG1 TLV starts with tag 0x61 + length + inner tag 0x5F1F +
+    // length, all of which are bytes OUTSIDE the MRZ alphabet (A-Z, 0-9,
+    // `<`). We pad two extra non-MRZ bytes (0x00) at the end too so the
+    // sweeper unambiguously picks the MRZ run as the longest legal
+    // segment without merging trailing junk.
+    const dg1 = new Uint8Array(4 + mrzBytes.length + 2);
+    dg1[0] = 0x61;
+    dg1[1] = 0x5a; // length placeholder
+    dg1[2] = 0x5f; // inner tag part 1 — '_' in ASCII; NOT in MRZ alphabet
+    dg1[3] = 0x1f; // inner tag part 2 — control byte, NOT in MRZ alphabet
+    dg1.set(mrzBytes, 4);
+    dg1[4 + mrzBytes.length] = 0x00;
+    dg1[5 + mrzBytes.length] = 0x00;
+
+    const result = { ...fakeRead(VALID_MRZ), dataGroups: { dg1: dg1.buffer } };
+    const snapshot = chipFromNitro(result, 'TWN', VALID_MRZ.documentNumber);
+    expect(snapshot.dg1MRZData).toBe(mrzAscii);
+  });
 });

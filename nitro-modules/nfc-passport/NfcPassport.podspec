@@ -17,6 +17,17 @@ Pod::Spec.new do |s|
     'ios/**/*.{swift,h,m,mm}',
   ]
 
+  # CSCA Master List — concatenated PEM of country signing CA certificates.
+  # NFCPassportReader.setMasterListURL(_:) needs this to verify the SOD
+  # signature chain (passive authentication). Bundled as a top-level pod
+  # resource so it ships inside the host app's main bundle, reachable via
+  # `Bundle.main.url(forResource: "masterList", withExtension: "pem")`.
+  #
+  # Reference, do not duplicate: the bytes live with the Swift host app at
+  # solidarity/Resources/masterList.pem. CocoaPods resolves this path
+  # relative to the podspec.
+  s.resources = ['../../solidarity/Resources/masterList.pem']
+
   s.pod_target_xcconfig = {
     'DEFINES_MODULE' => 'YES',
     'SWIFT_VERSION'  => '5.9',

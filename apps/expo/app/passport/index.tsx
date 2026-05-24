@@ -13,10 +13,17 @@
  *           then a per-status proof-result card.
  *   persist → "Save Passport Credential" inverted CTA.
  *
- * Falls back to a clearly-labelled mock flow when Nitro NFC + ZK modules
- * aren't linked (Simulator / Android before native impl). Mock chips +
- * proofs are demoted to "selfIssued / white" trust level per CLAUDE.md
- * Sec rules — never present synthetic data as government-grade.
+ * The NFC read path is chosen by `selectNfcReadStrategy`:
+ *   - `real`        — production build with the Nitro bridge linked and
+ *                     Core NFC available (physical iPhone). No fallback.
+ *   - `simulated`   — developer-mode-only mock. Requires BOTH
+ *                     `developerMode` AND `simulateNfc` flags so a
+ *                     toggle-flick alone never substitutes a fake chip.
+ *   - `unavailable` — typed error surfaced to the toast bar (Simulator
+ *                     without dev mode, or Nitro module unlinked).
+ *
+ * Mock chips + proofs are demoted to "selfIssued / white" trust level per
+ * CLAUDE.md Sec rules — never present synthetic data as government-grade.
  */
 import { router, useLocalSearchParams } from 'expo-router';
 import { useEffect, useMemo, useReducer, useState } from 'react';
@@ -42,6 +49,7 @@ import {
   initialPassportPipelineState,
   PASSPORT_STEP_META,
   passportPipelineReducer,
+  selectNfcReadStrategy,
   simulatedChipSnapshot,
   validateMrzDraft,
   type PassportChipSnapshot,
@@ -74,11 +82,21 @@ export default function PassportSetup() {
   const nitro = useMemo(() => tryLoadNitro(), []);
   const developerMode = usePreferences((s) => s.developerMode);
   const simulateNfc = usePreferences((s) => s.simulateNfc);
-  // Mirrors Swift `PassportPipelineService.shouldSimulateNFC` — bypass the
-  // real NFC reader when developer mode + the Simulate NFC toggle are both
-  // on (or when the Nitro module simply isn't linked on this platform).
-  const useSimulatedNfc = nitro.nfc === null || (developerMode && simulateNfc);
-  const isMock = useSimulatedNfc || nitro.zk === null;
+  // Mirrors Swift `PassportPipelineService.shouldSimulateNFC` — pick `real`,
+  // `simulated` (developer-mode only), or `unavailable` (production w/o a
+  // working bridge). No silent mock substitution — `unavailable` surfaces a
+  // typed message to the toast bar instead of returning fake chip data.
+  const nfcStrategy = useMemo(
+    () =>
+      selectNfcReadStrategy({
+        nitroLinked: nitro.nfc !== null,
+        hardwareAvailable: nitro.nfc?.isAvailable() ?? false,
+        developerMode,
+        simulateNfc,
+      }),
+    [nitro.nfc, developerMode, simulateNfc]
+  );
+  const isMock = nfcStrategy.kind === 'simulated' || nitro.zk === null;
 
   useEffect(() => {
     if (state.errorMessage) {
@@ -97,20 +115,44 @@ export default function PassportSetup() {
   };
 
   const onReadNfc = async () => {
+    if (nfcStrategy.kind === 'unavailable') {
+      dispatch({ type: 'setError', message: nfcStrategy.message });
+      return;
+    }
     dispatch({ type: 'setLoading', value: true });
-    dispatch({ type: 'setNfcProgress', message: 'Hold passport near device...' });
+    dispatch({
+      type: 'setNfcProgress',
+      message:
+        nfcStrategy.kind === 'simulated'
+          ? 'Simulating chip read (developer mode)...'
+          : 'Hold passport near device...',
+    });
     try {
-      const chip: PassportChipSnapshot = useSimulatedNfc
-        ? await simulateNfcRead(state.draft)
-        : chipFromNitro(
-            await nitro.nfc!.read({
-              documentNumber: state.draft.passportNumber,
-              dateOfBirth: state.draft.dateOfBirth,
-              dateOfExpiry: state.draft.expiryDate,
-            }),
-            state.draft.nationalityCode,
-            state.draft.passportNumber
+      let chip: PassportChipSnapshot;
+      if (nfcStrategy.kind === 'simulated') {
+        chip = await simulateNfcRead(state.draft);
+      } else {
+        // Production path — talk to the real chip via Nitro. No fallback:
+        // any error (cancellation, tag-lost, BAC/PACE failure) bubbles up
+        // unchanged so the user sees the underlying NFCPassportReader
+        // failure, not a faked green-checkmark snapshot.
+        const nfcReader = nitro.nfc;
+        if (nfcReader === null) {
+          throw new Error(
+            'NFC passport reader is not linked. Rebuild with `pod install`.'
           );
+        }
+        const result = await nfcReader.read({
+          documentNumber: state.draft.passportNumber,
+          dateOfBirth: state.draft.dateOfBirth,
+          dateOfExpiry: state.draft.expiryDate,
+        });
+        chip = chipFromNitro(
+          result,
+          state.draft.nationalityCode,
+          state.draft.passportNumber
+        );
+      }
       dispatch({ type: 'setNfcProgress', message: 'Read complete.' });
       dispatch({ type: 'setChip', chip });
     } catch (err) {

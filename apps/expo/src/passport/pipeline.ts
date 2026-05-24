@@ -240,10 +240,28 @@ export function chipFromNitro(
   fallbackNationality: string,
   fallbackDocNumber: string
 ): PassportChipSnapshot {
+  // Derive the dataGroupsRead label list from which DGs actually came back
+  // with bytes — empty slots are downstream consumers' cue that the chip
+  // skipped that DG (e.g. older e-passports without DG14/DG15).
+  const dg = result.dataGroups;
+  const dataGroupsRead: string[] = ['COM', 'SOD'];
+  if (dg.dg1) dataGroupsRead.push('DG1');
+  if (dg.dg2) dataGroupsRead.push('DG2');
+  if (dg.dg14) dataGroupsRead.push('DG14');
+  if (dg.dg15) dataGroupsRead.push('DG15');
+
+  // Best-effort DG1 → MRZ string. The DG1 TLV body holds the printable MRZ
+  // characters in ASCII; we strip the TLV header by finding the first
+  // ASCII run that looks like an MRZ payload. This mirrors the Swift
+  // `realNFCRead` parser which reads `passport.passportMRZ` directly from
+  // NFCPassportReader — we re-derive it here from raw bytes so the same
+  // logic works once Android jmrtd lands without extending the Nitro spec.
+  const dg1MRZData = dg.dg1 ? decodeDg1Mrz(dg.dg1) : '';
+
   return {
     documentHash: '',
     mrzDigest: '',
-    dg1MRZData: '',
+    dg1MRZData,
     chipUid: result.chipUid ?? '',
     bacVerified: true,
     paceVerified: true,
@@ -252,8 +270,35 @@ export function chipFromNitro(
     readAt: new Date(),
     nationalityCode: result.mrz.nationality || fallbackNationality,
     maskedDocNumber: maskDocumentNumber(result.mrz.documentNumber || fallbackDocNumber),
-    dataGroupsRead: ['COM', 'SOD', 'DG1', 'DG2', 'DG14', 'DG15'],
+    dataGroupsRead,
   };
+}
+
+/**
+ * Extract the printable MRZ string from a DG1 TLV blob. DG1 is a single
+ * tag-61 ASN.1 TLV wrapping a tag-5F1F MRZ string (88 bytes for TD3
+ * passports). We sweep for the longest contiguous run of MRZ-legal chars
+ * (A-Z, 0-9, `<`) which is the MRZ — this is robust to small differences
+ * in how iOS NFCPassportReader vs Android jmrtd encode the TLV header.
+ */
+function decodeDg1Mrz(buffer: ArrayBuffer): string {
+  const bytes = new Uint8Array(buffer);
+  let best = '';
+  let current = '';
+  for (let i = 0; i < bytes.length; i += 1) {
+    const byte = bytes[i] ?? 0;
+    const isDigit = byte >= 0x30 && byte <= 0x39;
+    const isUpper = byte >= 0x41 && byte <= 0x5a;
+    const isFiller = byte === 0x3c; // '<'
+    if (isDigit || isUpper || isFiller) {
+      current += String.fromCharCode(byte);
+    } else {
+      if (current.length > best.length) best = current;
+      current = '';
+    }
+  }
+  if (current.length > best.length) best = current;
+  return best;
 }
 
 /** Stand-in chip snapshot when the Nitro NFC module isn't linked (Sim/Android). */
@@ -273,6 +318,77 @@ export function simulatedChipSnapshot(draft: PassportMRZDraft): PassportChipSnap
     maskedDocNumber: maskDocumentNumber(draft.passportNumber),
     dataGroupsRead: ['DG1 (sim)'],
   };
+}
+
+// ---------------------------------------------------------------------------
+// NFC read strategy selector.
+//
+// Mirrors Swift `PassportPipelineService.shouldSimulateNFC` and the
+// `realNFCRead` / `simulatedNFCRead` split. The screen calls this helper
+// instead of inlining the branch so we can unit-test that:
+//   - Production (developer mode OFF) never silently falls back to the
+//     simulated chip — if the Nitro reader is missing or `isAvailable()`
+//     returns false, we surface `unavailable` with a typed reason and the
+//     UI shows an error instead of a fake green badge.
+//   - Developer mode + simulateNfc toggle keeps the synthetic chip flow
+//     for simulator testing (CLAUDE.md Rule 8 carve-out).
+// ---------------------------------------------------------------------------
+
+export type NfcReadStrategy =
+  | { readonly kind: 'real' }
+  | { readonly kind: 'simulated'; readonly reason: 'developer-mode' }
+  | {
+      readonly kind: 'unavailable';
+      readonly reason:
+        | 'module-missing'
+        | 'hardware-unavailable';
+      readonly message: string;
+    };
+
+export interface SelectNfcReadStrategyInput {
+  /** True when the Nitro HybridObject was successfully created. */
+  readonly nitroLinked: boolean;
+  /** Result of `getNfcPassport().isAvailable()` — only consulted when linked. */
+  readonly hardwareAvailable: boolean;
+  /** `usePreferences((s) => s.developerMode)`. */
+  readonly developerMode: boolean;
+  /** `usePreferences((s) => s.simulateNfc)` — the developer-mode toggle. */
+  readonly simulateNfc: boolean;
+}
+
+/**
+ * Decide whether the NFC chip read should use the real Nitro bridge, the
+ * developer-mode simulator path, or short-circuit with an `unavailable`
+ * error. There is no silent simulator fallback — if `developerMode` is off
+ * and the bridge isn't usable, callers must surface the error to the user.
+ */
+export function selectNfcReadStrategy(
+  input: SelectNfcReadStrategyInput
+): NfcReadStrategy {
+  const devSimulating = input.developerMode && input.simulateNfc;
+  if (!input.nitroLinked) {
+    if (devSimulating) return { kind: 'simulated', reason: 'developer-mode' };
+    return {
+      kind: 'unavailable',
+      reason: 'module-missing',
+      message:
+        'NFC passport reader is not available on this build. ' +
+        'Rebuild with `bunx expo prebuild --platform ios && pod install` ' +
+        'or enable Developer Mode → Simulate NFC to use the offline mock.',
+    };
+  }
+  if (!input.hardwareAvailable) {
+    if (devSimulating) return { kind: 'simulated', reason: 'developer-mode' };
+    return {
+      kind: 'unavailable',
+      reason: 'hardware-unavailable',
+      message:
+        'This device cannot read NFC passports. ' +
+        'Use a physical iPhone 7 or newer, or enable Developer Mode → Simulate NFC.',
+    };
+  }
+  if (devSimulating) return { kind: 'simulated', reason: 'developer-mode' };
+  return { kind: 'real' };
 }
 
 /** Convert raw proof bytes to a base64-encoded payload. */
