@@ -22,6 +22,7 @@ import 'react-native-gesture-handler';
 import '../global.css';
 
 import { useEffect, useState } from 'react';
+import { Appearance } from 'react-native';
 import { Stack } from 'expo-router';
 import * as Linking from 'expo-linking';
 import * as Notifications from 'expo-notifications';
@@ -41,7 +42,7 @@ import { installI18n } from '@/i18n';
 import { hydrateSensitiveActionPolicy } from '@/keychain';
 import { syncOnce } from '@/sakura/inbox';
 import { registerForPushNotificationsAsync } from '@/sakura/pushRegistration';
-import { hydratePreferences } from '@/settings/preferences';
+import { hydratePreferences, usePreferences } from '@/settings/preferences';
 import { initMmkv } from '@/storage';
 
 void SplashScreen.preventAutoHideAsync();
@@ -53,6 +54,14 @@ export default function RootLayout() {
   const receivedVerification = useReceivedCard((s) => s.verificationStatus);
   const dismissReceived = useReceivedCard((s) => s.dismiss);
   const upsertContact = useContactStore((s) => s.upsert);
+  // Swift ThemeManager.applyColorScheme → here we forward the user pref to
+  // RN's Appearance. NativeWind reads colorScheme from Appearance on native,
+  // so toggling Light/Dark/System in Appearance settings actually flips
+  // every `bg-pageBg` / `text-text1` style without a relaunch.
+  const appColorScheme = usePreferences((s) => s.appColorScheme);
+  useEffect(() => {
+    Appearance.setColorScheme(appColorScheme === 'system' ? null : appColorScheme);
+  }, [appColorScheme]);
 
   useEffect(() => {
     void (async () => {

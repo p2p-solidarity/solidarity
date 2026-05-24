@@ -24,7 +24,7 @@ import { Pressable, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { SfIcon } from '@/components/icons/SfIcon';
-import { Colors } from '@/constants/Colors';
+import { useThemeColors } from '@/constants/useThemeColors';
 import { haptic } from '@/feedback/haptics';
 
 interface TabRoute {
@@ -75,13 +75,14 @@ export function FloatingTabBar({
   navigation,
 }: FloatingTabBarProps): ReactNode {
   const insets = useSafeAreaInsets();
+  const c = useThemeColors();
 
   return (
     <View>
       <View
         style={{
           height: 0.5,
-          backgroundColor: Colors.divider,
+          backgroundColor: c.divider,
         }}
       />
       <View
@@ -93,10 +94,9 @@ export function FloatingTabBar({
           // iOS home indicator (`insets.bottom` ≈ 34) and Android gesture /
           // 3-button nav pill must not overlap the icons. Floor with 12pt so
           // legacy iPhones without a home-indicator inset still keep breathing
-          // room under the labels (Swift CustomFloatingTabBar uses safeArea
-          // ignoringSafeArea + 12pt bottom).
+          // room under the labels.
           paddingBottom: Math.max(insets.bottom, 12),
-          backgroundColor: Colors.pageBg,
+          backgroundColor: c.pageBg,
         }}
       >
         {state.routes.map((route, index) => {
@@ -126,6 +126,8 @@ export function FloatingTabBar({
               label={label}
               icon={icon}
               isSelected={isSelected}
+              activeColor={c.text1}
+              inactiveColor={c.text3}
               onPress={onPress}
             />
           );
@@ -139,6 +141,8 @@ interface FlatTabButtonProps {
   readonly label: string;
   readonly icon?: 'person.2' | 'dot.radiowaves.left.and.right' | 'person.crop.circle';
   readonly isSelected: boolean;
+  readonly activeColor: string;
+  readonly inactiveColor: string;
   readonly onPress: () => void;
 }
 
@@ -146,9 +150,11 @@ function FlatTabButton({
   label,
   icon,
   isSelected,
+  activeColor,
+  inactiveColor,
   onPress,
 }: FlatTabButtonProps): ReactNode {
-  const tint = isSelected ? Colors.text1 : Colors.text3;
+  const tint = isSelected ? activeColor : inactiveColor;
   return (
     <Pressable
       accessibilityRole="tab"
