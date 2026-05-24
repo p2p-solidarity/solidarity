@@ -23,6 +23,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { Pressable, ScrollView, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { PresentationSheet } from '@/components/credentials/PresentationSheet';
 import { SfIcon } from '@/components/icons/SfIcon';
 import { ThemedButton } from '@/components/themed';
 import { Colors } from '@/constants/Colors';
@@ -271,6 +272,7 @@ export default function CredentialDetailScreen() {
   const allClaims = useIdentityData((s) => s.provableClaims);
   const markPresented = useIdentityData((s) => s.markClaimPresented);
   const [selectedClaimIDs, setSelectedClaimIDs] = useState<ReadonlySet<string>>(new Set());
+  const [presenting, setPresenting] = useState(false);
 
   useEffect(() => {
     void hydrateIdentity();
@@ -304,7 +306,7 @@ export default function CredentialDetailScreen() {
     for (const claimID of selectedClaimIDs) {
       markPresented(claimID);
     }
-    pushToast(`${selectedClaimIDs.size} claim(s) presented`, 'success');
+    setPresenting(true);
   };
 
   const toggleClaim = (claimID: string) => {
@@ -487,6 +489,13 @@ export default function CredentialDetailScreen() {
           </Pressable>
         </View>
       </View>
+
+      <PresentationSheet
+        visible={presenting}
+        credentialId={credential.id}
+        selectedClaimIds={selectedClaimIDs}
+        onDismiss={() => { setPresenting(false); }}
+      />
     </View>
   );
 }
