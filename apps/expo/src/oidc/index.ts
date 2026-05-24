@@ -12,3 +12,8 @@ export {
   type OIDCNonceStore,
 } from './nonceStore';
 export { oidcError, type OidcError, type OidcErrorCode } from './errors';
+export {
+  requestToken,
+  type TokenGrant,
+  type TokenResponse,
+} from './tokenService';
