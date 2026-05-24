@@ -3,9 +3,15 @@
  *
  * Holds raw VC JWTs + decoded headline fields (issuer, trust level, expiry)
  * so the Me tab list renders sync without re-parsing on every render.
+ *
+ * Each `add(...)` fires a background refresh against
+ * `/.well-known/openid-credential-issuer` via `issuerStore` so the issuer
+ * logo + display name lands in the cache without blocking the writer. Net
+ * failures are swallowed — the IssuerBadge falls back to a placeholder.
  */
 import { create } from 'zustand';
 
+import { fetchAndCacheIssuer } from '@/credentials/issuerStore';
 import { decryptJson, encryptJson } from '@/storage/encryptionManager';
 import { getMmkv } from '@/storage/mmkv';
 
@@ -63,6 +69,12 @@ export const useCredentialStore = create<CredentialStoreState>((set, get) => ({
     set((s) => ({
       items: [v, ...s.items.filter((i) => i.id !== v.id)],
     }));
+    // Fire-and-forget: warm the issuer metadata cache so the badge shows
+    // the real logo on next render. We only attempt this when the issuer
+    // looks like an HTTPS URL — did:* issuers don't expose /.well-known.
+    if (/^https:\/\//iu.test(v.issuerDid)) {
+      void fetchAndCacheIssuer(v.issuerDid).catch(() => undefined);
+    }
   },
 
   remove: async (id) => {

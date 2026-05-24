@@ -20,9 +20,13 @@ import { useEffect } from 'react';
 import { Pressable, ScrollView, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { IssuerBadge } from '@/components/credentials/IssuerBadge';
 import { SfIcon } from '@/components/icons/SfIcon';
 import { VerifiedCredentialRow } from '@/components/me';
 import { Colors } from '@/constants/Colors';
+import {
+  useIssuerMetadataStore,
+} from '@/credentials/issuerStore';
 import { useCredentialStore, type StoredCredential } from '@/credentials/store';
 import { pushToast } from '@/feedback/toast';
 
@@ -93,10 +97,12 @@ export default function VCManagementScreen() {
   const insets = useSafeAreaInsets();
   const items = useCredentialStore((s) => s.items);
   const hydrate = useCredentialStore((s) => s.hydrate);
+  const hydrateIssuers = useIssuerMetadataStore((s) => s.hydrate);
 
   useEffect(() => {
     void hydrate();
-  }, [hydrate]);
+    void hydrateIssuers();
+  }, [hydrate, hydrateIssuers]);
 
   const onBack = () => {
     router.back();
@@ -166,18 +172,26 @@ export default function VCManagementScreen() {
         {items.length > 0 ? (
           <View className="gap-2 mt-6">
             <SectionHeader title="Stored credentials" />
-            <View className="gap-2">
+            <View className="gap-3">
               {items.map((item) => (
-                <VerifiedCredentialRow
-                  key={item.id}
-                  icon={iconFor(item)}
-                  title={item.title}
-                  trustLevel={trustLevelFor(item)}
-                  issuerType={item.type}
-                  onPress={() => {
-                    router.push({ pathname: '/credentials/[id]', params: { id: item.id } });
-                  }}
-                />
+                <View key={item.id} className="gap-1">
+                  <VerifiedCredentialRow
+                    icon={iconFor(item)}
+                    title={item.title}
+                    trustLevel={trustLevelFor(item)}
+                    issuerType={item.type}
+                    onPress={() => {
+                      router.push({ pathname: '/credentials/[id]', params: { id: item.id } });
+                    }}
+                  />
+                  <View className="px-4">
+                    <IssuerBadge
+                      issuerId={item.issuerDid}
+                      fallbackName={item.issuerDid}
+                      compact
+                    />
+                  </View>
+                </View>
               ))}
             </View>
           </View>

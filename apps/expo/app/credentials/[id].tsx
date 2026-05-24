@@ -23,10 +23,14 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { Pressable, ScrollView, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { IssuerBadge } from '@/components/credentials/IssuerBadge';
 import { PresentationSheet } from '@/components/credentials/PresentationSheet';
 import { SfIcon } from '@/components/icons/SfIcon';
 import { ThemedButton } from '@/components/themed';
 import { Colors } from '@/constants/Colors';
+import {
+  useIssuerMetadataStore,
+} from '@/credentials/issuerStore';
 import {
   useCredentialById,
   useCredentialStore,
@@ -269,6 +273,7 @@ export default function CredentialDetailScreen() {
   const credential = useCredentialById(id);
   const remove = useCredentialStore((s) => s.remove);
   const hydrateIdentity = useIdentityData((s) => s.hydrate);
+  const hydrateIssuers = useIssuerMetadataStore((s) => s.hydrate);
   const allClaims = useIdentityData((s) => s.provableClaims);
   const markPresented = useIdentityData((s) => s.markClaimPresented);
   const [selectedClaimIDs, setSelectedClaimIDs] = useState<ReadonlySet<string>>(new Set());
@@ -276,7 +281,8 @@ export default function CredentialDetailScreen() {
 
   useEffect(() => {
     void hydrateIdentity();
-  }, [hydrateIdentity]);
+    void hydrateIssuers();
+  }, [hydrateIdentity, hydrateIssuers]);
 
   const associatedClaims = useMemo<readonly ProvableClaimEntity[]>(() => {
     if (!credential) return [];
@@ -303,6 +309,15 @@ export default function CredentialDetailScreen() {
   const presentDisabled = selectedClaimIDs.size === 0;
 
   const onPresent = () => {
+    // TODO(biometric-gate): wrap in
+    //   const gate = await requireSensitiveAction(
+    //     'presentProof', 'Authenticate to present a proof.'
+    //   );
+    //   if (!gate.success) { pushToast(...); return; }
+    // so credential presentation obeys the SensitiveAction policy. See
+    // `src/keychain/biometricGatekeeper.ts`. The actual VP-token build
+    // happens inside `PresentationSheet`, which already calls `signJwt`
+    // (which is itself biometric-gated), so this is defence-in-depth.
     for (const claimID of selectedClaimIDs) {
       markPresented(claimID);
     }
@@ -384,6 +399,11 @@ export default function CredentialDetailScreen() {
                 <Text className="text-text1" style={{ fontSize: 24, fontWeight: '500' }}>
                   {credential.title}
                 </Text>
+
+                <IssuerBadge
+                  issuerId={credential.issuerDid}
+                  fallbackName={credential.issuerDid}
+                />
 
                 <View style={{ alignSelf: 'stretch', gap: 8 }}>
                   <LevelTag text={levelText(credential.trustLevel)} accent={accent} />
