@@ -61,8 +61,8 @@ const KEYS: readonly ThemeKey[] = [
 ];
 
 export function useThemeColors(): ThemeColors {
-  const scheme = useColorScheme() === 'dark' ? 'dark' : 'light';
-  const out = {} as Record<string, string>;
+  const scheme: 'light' | 'dark' = useColorScheme() === 'dark' ? 'dark' : 'light';
+  const out: Record<string, string> = {};
   for (const k of KEYS) {
     const darkKey = `${k}Dark` as keyof typeof Colors;
     out[k] = scheme === 'dark' && (Colors[darkKey] as string | undefined)
@@ -70,19 +70,19 @@ export function useThemeColors(): ThemeColors {
       : (Colors[k] as string);
   }
   // Brand accents (no light/dark variants in source-of-truth)
-  out.invertedButtonBg = scheme === 'dark' ? Colors.text1Dark : Colors.invertedButtonBg;
-  out.invertedButtonText = scheme === 'dark' ? Colors.pageBgDark : Colors.invertedButtonText;
-  out.accentRose = Colors.accentRose;
-  out.primaryBlue = Colors.primaryBlue;
-  out.primaryMauve = Colors.primaryMauve;
-  out.destructive = Colors.destructive;
-  out.terminalGreen = Colors.terminalGreen;
-  out.warning = Colors.warning;
-  out.featureAccent = Colors.featureAccent;
-  out.dustyMauve = Colors.dustyMauve;
-  out.warmCream = Colors.warmCream;
-  out.radarRing = Colors.radarRing;
-  out.radarGlow = Colors.radarGlow;
-  out.scheme = scheme;
+  out['invertedButtonBg'] = scheme === 'dark' ? Colors.text1Dark : Colors.invertedButtonBg;
+  out['invertedButtonText'] = scheme === 'dark' ? Colors.pageBgDark : Colors.invertedButtonText;
+  out['accentRose'] = Colors.accentRose;
+  out['primaryBlue'] = Colors.primaryBlue;
+  out['primaryMauve'] = Colors.primaryMauve;
+  out['destructive'] = Colors.destructive;
+  out['terminalGreen'] = Colors.terminalGreen;
+  out['warning'] = Colors.warning;
+  out['featureAccent'] = Colors.featureAccent;
+  out['dustyMauve'] = Colors.dustyMauve;
+  out['warmCream'] = Colors.warmCream;
+  out['radarRing'] = Colors.radarRing;
+  out['radarGlow'] = Colors.radarGlow;
+  out['scheme'] = scheme;
   return out as unknown as ThemeColors;
 }

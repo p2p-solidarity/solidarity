@@ -26,6 +26,7 @@ import { PaperStackIllustration } from '@/components/decor/PaperStackIllustratio
 import { ManualContactEntrySheet } from '@/components/people/ManualContactEntrySheet';
 import { PeopleSearchField } from '@/components/people/PeopleSearchField';
 import { TrustGraphContactRow } from '@/components/people/TrustGraphContactRow';
+import { Colors } from '@/constants/Colors';
 import { importFromDevice } from '@/contacts/importer';
 import { useContactStore } from '@/contacts/repository';
 import { pushToast } from '@/feedback/toast';

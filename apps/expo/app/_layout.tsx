@@ -60,7 +60,7 @@ export default function RootLayout() {
   // every `bg-pageBg` / `text-text1` style without a relaunch.
   const appColorScheme = usePreferences((s) => s.appColorScheme);
   useEffect(() => {
-    Appearance.setColorScheme(appColorScheme === 'system' ? null : appColorScheme);
+    Appearance.setColorScheme(appColorScheme === 'system' ? 'unspecified' : appColorScheme);
   }, [appColorScheme]);
 
   useEffect(() => {
