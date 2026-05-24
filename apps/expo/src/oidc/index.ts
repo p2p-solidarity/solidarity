@@ -5,3 +5,10 @@ export {
   type VerifiedVc,
   type VerifyOptions,
 } from './proofVerifier';
+export {
+  DEFAULT_NONCE_TTL_MS,
+  __resetOIDCNonceStoreForTesting,
+  getOIDCNonceStore,
+  type OIDCNonceStore,
+} from './nonceStore';
+export { oidcError, type OidcError, type OidcErrorCode } from './errors';
