@@ -9,5 +9,7 @@ export { BusinessCardForm } from './BusinessCardForm';
 export type { BusinessCardFormProps } from './BusinessCardForm';
 export { BusinessCardRow } from './BusinessCardRow';
 export type { BusinessCardRowProps } from './BusinessCardRow';
+export { ReceivedCardSheet } from './ReceivedCardSheet';
+export type { ReceivedCardSheetProps } from './ReceivedCardSheet';
 export { ZkVerifyButton } from './ZkVerifyButton';
 export type { ZkVerifyButtonProps } from './ZkVerifyButton';
