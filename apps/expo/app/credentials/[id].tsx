@@ -13,15 +13,12 @@
  *   • Bottom bar: "Present proof" primary (disabled if no claims),
  *     "Regenerate Credential" secondary text button.
  *
- * Selective Disclosures is stubbed empty for now: the Expo
- * `StoredCredential` shape doesn't include a `ProvableClaimEntity` list
- * yet (no equivalent of IdentityDataStore.provableClaims). When the
- * passport pipeline starts persisting claims, plug them into the empty
- * branch.
+ * Selective Disclosures are sourced from `useIdentityData.provableClaims`
+ * filtered by this credential's id — mirrors Swift `associatedClaims`.
  */
 import { router, useLocalSearchParams } from 'expo-router';
 import type { SFSymbol } from 'expo-symbols';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Pressable, ScrollView, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -35,6 +32,10 @@ import {
   type StoredCredential,
 } from '@/credentials/store';
 import { pushToast } from '@/feedback/toast';
+import {
+  useIdentityData,
+  type ProvableClaimEntity,
+} from '@/identity';
 
 // MARK: - Helpers (Swift parity)
 
@@ -213,6 +214,52 @@ function Chip({ icon, text }: ChipProps) {
   );
 }
 
+function claimIcon(claimType: string): SFSymbol {
+  switch (claimType) {
+    case 'is_human': return 'faceid';
+    case 'age_over_18': return 'face.smiling';
+    case 'profile_card': return 'person.crop.rectangle.fill';
+    case 'field_name': return 'person.fill';
+    default: return 'checkmark.shield.fill';
+  }
+}
+
+function ClaimRow({
+  claim,
+  selected,
+  onToggle,
+}: {
+  readonly claim: ProvableClaimEntity;
+  readonly selected: boolean;
+  readonly onToggle: () => void;
+}) {
+  return (
+    <Pressable
+      onPress={onToggle}
+      accessibilityRole="button"
+      accessibilityState={{ selected }}
+      style={{
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 8,
+        paddingVertical: 10,
+      }}
+    >
+      <View style={{ width: 18, height: 18, alignItems: 'center', justifyContent: 'center' }}>
+        <SfIcon name={claimIcon(claim.claimType)} size={14} color={Colors.terminalGreen} />
+      </View>
+      <Text className="text-text1 text-[15px]" style={{ flex: 1 }}>
+        {claim.title}
+      </Text>
+      <SfIcon
+        name={selected ? 'checkmark.square.fill' : 'square'}
+        size={18}
+        color={selected ? Colors.terminalGreen : Colors.text3}
+      />
+    </Pressable>
+  );
+}
+
 // MARK: - Screen
 
 export default function CredentialDetailScreen() {
@@ -220,8 +267,19 @@ export default function CredentialDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const credential = useCredentialById(id);
   const remove = useCredentialStore((s) => s.remove);
-  // Placeholder for future provable-claim list (mirrors Swift selectedClaimIDs).
-  const [selectedClaimIDs] = useState<readonly string[]>([]);
+  const hydrateIdentity = useIdentityData((s) => s.hydrate);
+  const allClaims = useIdentityData((s) => s.provableClaims);
+  const markPresented = useIdentityData((s) => s.markClaimPresented);
+  const [selectedClaimIDs, setSelectedClaimIDs] = useState<ReadonlySet<string>>(new Set());
+
+  useEffect(() => {
+    void hydrateIdentity();
+  }, [hydrateIdentity]);
+
+  const associatedClaims = useMemo<readonly ProvableClaimEntity[]>(() => {
+    if (!credential) return [];
+    return allClaims.filter((c) => c.identityCardId === credential.id);
+  }, [allClaims, credential]);
 
   const status = useMemo<string>(() => {
     if (!credential) return '';
@@ -240,10 +298,22 @@ export default function CredentialDetailScreen() {
   }
 
   const accent = levelAccent(credential.trustLevel);
-  const presentDisabled = selectedClaimIDs.length === 0;
+  const presentDisabled = selectedClaimIDs.size === 0;
 
   const onPresent = () => {
-    pushToast('Present proof lands when claim list is wired', 'info');
+    for (const claimID of selectedClaimIDs) {
+      markPresented(claimID);
+    }
+    pushToast(`${selectedClaimIDs.size} claim(s) presented`, 'success');
+  };
+
+  const toggleClaim = (claimID: string) => {
+    setSelectedClaimIDs((prev) => {
+      const next = new Set(prev);
+      if (next.has(claimID)) next.delete(claimID);
+      else next.add(claimID);
+      return next;
+    });
   };
 
   const onRegenerate = () => {
@@ -368,11 +438,24 @@ export default function CredentialDetailScreen() {
           {/* Selective Disclosures section */}
           <View className="gap-2">
             <SectionHeader title="Selective Disclosures" />
-            <View className="px-4">
-              <Text className="text-text3 text-[13px]">
-                No claims associated with this credential.
-              </Text>
-            </View>
+            {associatedClaims.length === 0 ? (
+              <View className="px-4">
+                <Text className="text-text3 text-[13px]">
+                  No claims associated with this credential.
+                </Text>
+              </View>
+            ) : (
+              <View className="px-4" style={{ gap: 8 }}>
+                {associatedClaims.map((c) => (
+                  <ClaimRow
+                    key={c.id}
+                    claim={c}
+                    selected={selectedClaimIDs.has(c.id)}
+                    onToggle={() => { toggleClaim(c.id); }}
+                  />
+                ))}
+              </View>
+            )}
           </View>
         </View>
       </ScrollView>

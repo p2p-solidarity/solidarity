@@ -17,6 +17,7 @@
  * All copy matches Swift verbatim. SF Symbols rendered via expo-symbols.
  */
 import { router } from 'expo-router';
+import type { SFSymbol } from 'expo-symbols';
 import { useEffect } from 'react';
 import { Pressable, ScrollView, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -33,7 +34,14 @@ import {
   VerifiedCredentialRow,
 } from '@/components/me';
 import { Colors } from '@/constants/Colors';
-import { useCredentialStore } from '@/credentials/store';
+import {
+  useActiveDid,
+  useDisplayClaims,
+  useIdentityCoordinator,
+  useIdentityData,
+  type IdentityCardEntity,
+  type ProvableClaimEntity,
+} from '@/identity';
 import { usePreferences } from '@/settings/preferences';
 
 const FALLBACK_NAME = 'User Node';
@@ -41,22 +49,26 @@ const INIT_DID = 'Initializing...';
 
 export default function MeTab() {
   const card = useMyCard();
-  const credentials = useCredentialStore((s) => s.items);
+  const identityCards = useIdentityData((s) => s.identityCards);
   const hydrateCards = useCardStore((s) => s.hydrate);
-  const hydrateCreds = useCredentialStore((s) => s.hydrate);
+  const hydrateIdentity = useIdentityData((s) => s.hydrate);
+  const seedKeychain = useIdentityCoordinator((s) => s.seedFromKeychain);
   const developerMode = usePreferences((s) => s.developerMode);
   const insets = useSafeAreaInsets();
 
   useEffect(() => {
     void hydrateCards();
-    void hydrateCreds();
-  }, [hydrateCards, hydrateCreds]);
+    void hydrateIdentity();
+    void seedKeychain();
+  }, [hydrateCards, hydrateIdentity, seedKeychain]);
 
   const displayName = card?.name ?? FALLBACK_NAME;
-  const displayDid = INIT_DID;
+  const activeDid = useActiveDid();
+  const displayDid = activeDid ?? INIT_DID;
 
   // Swift filters out type === "business_card" — mirror that.
-  const verifiedCreds = credentials.filter((c) => c.type !== 'business_card');
+  const verifiedCreds = identityCards.filter((c) => c.type !== 'business_card');
+  const disclosures = useDisplayClaims();
 
   return (
     <View className="flex-1 bg-pageBg" style={{ paddingTop: insets.top }}>
@@ -78,7 +90,7 @@ export default function MeTab() {
             onImportJson={() => router.push('/credentials')}
           />
 
-          <SelectiveDisclosuresSection />
+          <SelectiveDisclosuresSection claims={disclosures} />
 
           <ActionSection
             onAcquire={() => router.push('/passport')}
@@ -124,16 +136,10 @@ function VerifiedCredentialsSection({
   onManualInput,
   onImportJson,
 }: {
-  items: ReadonlyArray<{
-    id: string;
-    type: string;
-    title: string;
-    trustLevel: 'L1' | 'L2' | 'L3';
-    issuerDid: string;
-  }>;
-  onScanIdentity: () => void;
-  onManualInput: () => void;
-  onImportJson: () => void;
+  readonly items: readonly IdentityCardEntity[];
+  readonly onScanIdentity: () => void;
+  readonly onManualInput: () => void;
+  readonly onImportJson: () => void;
 }) {
   return (
     <View className="gap-2">
@@ -168,17 +174,53 @@ function VerifiedCredentialsSection({
   );
 }
 
-function SelectiveDisclosuresSection() {
+function SelectiveDisclosuresSection({
+  claims,
+}: {
+  readonly claims: readonly ProvableClaimEntity[];
+}) {
   return (
     <View className="gap-2">
       <MeSectionHeader title="Selective Disclosures" />
-      <View className="px-4">
-        <Text className="text-text3 text-[13px]">
-          No derivations available.
-        </Text>
-      </View>
+      {claims.length === 0 ? (
+        <View className="px-4">
+          <Text className="text-text3 text-[13px]">
+            No derivations available.
+          </Text>
+        </View>
+      ) : (
+        <View className="gap-2">
+          {claims.map((c) => (
+            <DisclosureRowView
+              key={c.id}
+              icon={claimIcon(c.claimType)}
+              title={c.title}
+              source={`Src:${capitalize(c.source)}`}
+              actionTitle="Show"
+              onPresent={() => {
+                router.push({ pathname: '/credentials/[id]', params: { id: c.identityCardId } });
+              }}
+            />
+          ))}
+        </View>
+      )}
     </View>
   );
+}
+
+function claimIcon(claimType: string): SFSymbol {
+  switch (claimType) {
+    case 'is_human': return 'faceid';
+    case 'age_over_18': return 'face.smiling';
+    case 'profile_card': return 'person.crop.rectangle.fill';
+    case 'field_name': return 'person.fill';
+    default: return 'checkmark.shield.fill';
+  }
+}
+
+function capitalize(s: string): string {
+  if (s.length === 0) return s;
+  return s.charAt(0).toUpperCase() + s.slice(1);
 }
 
 function ActionSection({
@@ -262,7 +304,7 @@ function shortDid(did: string): string {
   return `${did.slice(0, 12)}...${did.slice(-8)}`;
 }
 
-function credentialIcon(type: string): import('expo-symbols').SFSymbol {
+function credentialIcon(type: string): SFSymbol {
   switch (type) {
     case 'passport': return 'doc.text.fill';
     case 'student': return 'graduationcap.fill';
