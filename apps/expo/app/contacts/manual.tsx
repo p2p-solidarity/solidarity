@@ -6,13 +6,16 @@
 import { router } from 'expo-router';
 import { useState } from 'react';
 import { ScrollView, TextInput, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { useContactStore } from '@/contacts/repository';
 import { ThemedButton, ThemedSurface, ThemedText } from '@/components/themed';
 import { pushToast } from '@/feedback/toast';
+import { uuid } from '@solidarity/shared';
 
 export default function ManualContactEntry() {
   const upsert = useContactStore((s) => s.upsert);
+  const insets = useSafeAreaInsets();
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [phone, setPhone] = useState('');
@@ -25,13 +28,13 @@ export default function ManualContactEntry() {
     }
     const now = new Date();
     await upsert({
-      id: crypto.randomUUID(),
+      id: uuid(),
       receivedAt: now,
       source: 'Manual',
       tags: [],
       verificationStatus: 'Unverified',
       businessCard: {
-        id: crypto.randomUUID(),
+        id: uuid(),
         name: name.trim(),
         email: email.trim() || undefined,
         phone: phone.trim() || undefined,
@@ -58,8 +61,11 @@ export default function ManualContactEntry() {
   };
 
   return (
-    <ScrollView className="flex-1 bg-pageBg">
-      <View className="px-4 pt-6">
+    <ScrollView
+      className="flex-1 bg-pageBg"
+      contentContainerStyle={{ paddingBottom: insets.bottom + 24 }}
+    >
+      <View className="px-4" style={{ paddingTop: insets.top + 12 }}>
         <ThemedButton variant="secondary" size="sm" label="‹ Back" onPress={() => { router.back(); }} />
       </View>
       <View className="px-4 py-4">
