@@ -2,20 +2,17 @@
  * Edit / Create business card — 1:1 port of
  * solidarity/Views/CardViews/BusinessCardFormView.swift.
  *
- * Adds an avatar block at the top (photo picker + AnimalSelectorGrid) so the
- * user can change their profile image and theme animal in-line. The Swift
- * screen keeps profileImage/animal read-only — this is the documented
- * Expo-side enhancement so editing avatar doesn't require a separate flow.
+ * Keeps profileImage read-only (Swift parity — profile photos are sourced
+ * from OCR / received-card flows, not the manual editor). Only the animal
+ * theme is editable here, via AnimalSelectorGrid above the form.
  *
  * Header: chevron.left + "Cancel" leading, centred title that flips between
  * "Edit Identity Card" and "Create Identity Card" — verbatim Swift copy.
  */
-import * as ImagePicker from 'expo-image-picker';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   Alert,
-  Image,
   Pressable,
   ScrollView,
   Text,
@@ -52,44 +49,15 @@ export default function EditCardScreen() {
   );
   const isEditing = targetCard !== undefined;
 
-  // Local avatar state — the form section below owns the rest.
-  const [profileImage, setProfileImage] = useState<string | undefined>(
-    targetCard?.profileImage
-  );
   const [animal, setAnimal] = useState<Animal | undefined>(targetCard?.animal);
 
   useEffect(() => {
-    setProfileImage(targetCard?.profileImage);
     setAnimal(targetCard?.animal);
   }, [targetCard]);
 
-  const handlePickPhoto = useCallback(async () => {
-    const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
-    if (!perm.granted) {
-      Alert.alert(
-        'Photo access denied',
-        'Enable Photos access in Settings to choose a profile picture.'
-      );
-      return;
-    }
-    const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ['images'],
-      allowsEditing: true,
-      aspect: [1, 1],
-      quality: 0.8,
-      base64: true,
-    });
-    if (result.canceled) return;
-    const asset = result.assets[0];
-    if (asset?.base64) {
-      setProfileImage(asset.base64);
-      haptic('selection');
-    }
-  }, []);
-
   const handleSave = useCallback(
     async (card: BusinessCard) => {
-      const merged: BusinessCard = { ...card, profileImage, animal };
+      const merged: BusinessCard = { ...card, animal };
       const result = await upsert(merged);
       if (!result.ok) {
         Alert.alert('Error', result.error.message);
@@ -100,7 +68,7 @@ export default function EditCardScreen() {
       pushToast(isEditing ? 'Card saved' : 'Card created', 'success');
       router.back();
     },
-    [animal, isEditing, profileImage, upsert]
+    [animal, isEditing, upsert]
   );
 
   const handleDelete = useCallback(async () => {
@@ -121,20 +89,19 @@ export default function EditCardScreen() {
       />
 
       <ScrollView
-        contentContainerStyle={{ paddingVertical: 24, paddingBottom: 64 }}
+        contentContainerStyle={{
+          paddingTop: 24,
+          paddingBottom: insets.bottom + 48,
+        }}
         keyboardShouldPersistTaps="handled"
       >
         <View style={{ gap: 24 }}>
-          <AvatarBlock
-            profileImage={profileImage}
+          <AnimalBlock
             animal={animal}
-            onPickPhoto={() => {
-              void handlePickPhoto();
+            onChangeAnimal={(next) => {
+              setAnimal(next);
+              haptic('selection');
             }}
-            onClearPhoto={() => {
-              setProfileImage(undefined);
-            }}
-            onChangeAnimal={setAnimal}
           />
 
           <BusinessCardForm
@@ -190,91 +157,22 @@ function Header({ title, onCancel }: { title: string; onCancel: () => void }) {
   );
 }
 
-// MARK: - Avatar block (photo picker + AnimalSelectorGrid)
+// MARK: - Animal selector block
 
-function AvatarBlock({
-  profileImage,
+function AnimalBlock({
   animal,
-  onPickPhoto,
-  onClearPhoto,
   onChangeAnimal,
 }: {
-  profileImage: string | undefined;
   animal: Animal | undefined;
-  onPickPhoto: () => void;
-  onClearPhoto: () => void;
   onChangeAnimal: (next: Animal) => void;
 }) {
   return (
     <View style={{ gap: 8 }}>
       <Text className="text-text1 text-[14px]" style={{ paddingHorizontal: 16 }}>
-        Profile
+        Theme
       </Text>
-
-      <View style={{ paddingHorizontal: 16, gap: 12 }}>
-        <View
-          style={{
-            flexDirection: 'row',
-            alignItems: 'center',
-            gap: 12,
-            paddingHorizontal: 14,
-            paddingVertical: 12,
-            borderRadius: 12,
-            backgroundColor: Colors.mutedSurface,
-          }}
-        >
-          <Pressable
-            onPress={onPickPhoto}
-            accessibilityRole="button"
-            accessibilityLabel="Choose profile photo"
-            style={{
-              width: 56,
-              height: 56,
-              borderRadius: 28,
-              overflow: 'hidden',
-              backgroundColor: Colors.warmCream,
-              alignItems: 'center',
-              justifyContent: 'center',
-            }}
-          >
-            {profileImage ? (
-              <Image
-                source={{ uri: `data:image/jpeg;base64,${profileImage}` }}
-                style={{ width: 56, height: 56 }}
-                resizeMode="cover"
-              />
-            ) : (
-              <SfIcon name="camera" size={20} color={Colors.text2} />
-            )}
-          </Pressable>
-
-          <View style={{ flex: 1, gap: 4 }}>
-            <Text className="text-text1 text-[15px]">Profile photo</Text>
-            <Text className="text-text3 text-[12px]">
-              {profileImage ? 'Tap photo to change' : 'Tap to choose from library'}
-            </Text>
-          </View>
-
-          {profileImage ? (
-            <Pressable
-              onPress={onClearPhoto}
-              accessibilityRole="button"
-              accessibilityLabel="Remove photo"
-              hitSlop={8}
-              style={{ padding: 4 }}
-            >
-              <SfIcon name="xmark" size={14} color={Colors.text2} />
-            </Pressable>
-          ) : null}
-        </View>
-
-        <AnimalSelectorGrid
-          selection={animal}
-          onChange={(next) => {
-            onChangeAnimal(next);
-            haptic('selection');
-          }}
-        />
+      <View style={{ paddingHorizontal: 16 }}>
+        <AnimalSelectorGrid selection={animal} onChange={onChangeAnimal} />
       </View>
     </View>
   );

@@ -125,6 +125,7 @@ function GroupTypeSegment({
 
 export default function CreateGroup(): React.JSX.Element {
   const upsertGroup = useGroupStore((s) => s.upsertGroup);
+  const insets = useSafeAreaInsets();
   const [groupName, setGroupName] = useState('');
   const [groupDescription, setGroupDescription] = useState('');
   const [isPrivate, setIsPrivate] = useState(false);
@@ -165,7 +166,7 @@ export default function CreateGroup(): React.JSX.Element {
 
       <ScrollView
         className="flex-1"
-        contentContainerStyle={{ padding: 16 }}
+        contentContainerStyle={{ padding: 16, paddingBottom: insets.bottom + 32 }}
         keyboardShouldPersistTaps="handled"
       >
         <View className="gap-4">
