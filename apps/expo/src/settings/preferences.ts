@@ -74,6 +74,8 @@ export interface Preferences {
    * holder owns a `is_human` claim. */
   readonly shareIsHuman: boolean;
   readonly shareAgeOver18: boolean;
+  /** Active UI language tag (`en`, `zh-Hant`). Mirrors Swift LanguageSelectionView. */
+  readonly language: string;
 }
 
 const DEFAULT_BIOMETRIC_POLICY: Readonly<Record<SensitiveActionKey, boolean>> = {
@@ -114,6 +116,7 @@ const DEFAULTS: Preferences = {
   shareSkills: false,
   shareIsHuman: true,
   shareAgeOver18: false,
+  language: 'en',
 };
 
 function readSafe(): Preferences {
