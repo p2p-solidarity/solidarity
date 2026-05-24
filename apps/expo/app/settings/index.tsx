@@ -120,6 +120,11 @@ export default function SettingsHub() {
               title="Notifications"
               onPress={() => { router.push('/settings/notifications'); }}
             />
+            <SettingsBlockRow
+              icon="globe"
+              title="Language"
+              onPress={() => { router.push('/settings/language'); }}
+            />
             {developerMode ? (
               <SettingsBlockRow
                 icon="hammer"
