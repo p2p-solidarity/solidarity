@@ -32,7 +32,9 @@ import { getMmkv } from '@/storage/mmkv';
 // the actions that need them. This preserves the existing
 // vaultEncryption.test.ts which imports `VaultItem` without RN mocks.
 import type {
+  CloudCiphertextStatus,
   SyncResult,
+  VaultManifest,
 } from './cloudSync';
 import type {
   DistributionArgs,
@@ -82,6 +84,12 @@ interface VaultStoreState {
   readonly pendingRecovery: readonly RecoverySnapshot[];
   readonly lastSyncedAt: string | null;
   readonly isLocked: boolean;
+  /**
+   * The last successfully merged manifest from cloudSync. Drives the
+   * `cloudCiphertextStatus` selector so the UI can mark an item as
+   * remote-only vs in-sync without re-reading the cloud.
+   */
+  readonly lastSyncedManifest: VaultManifest | null;
   readonly hydrate: () => Promise<void>;
   readonly upsert: (item: VaultItem) => Promise<void>;
   readonly remove: (id: string) => Promise<void>;
@@ -93,7 +101,16 @@ interface VaultStoreState {
   readonly unlockWithBiometric: () => Promise<boolean>;
   readonly lock: () => void;
   readonly syncCloud: () => Promise<SyncResult>;
-  readonly pullCloud: () => Promise<SyncResult>;
+  readonly pullCloud: (options?: { prefetchAll?: boolean }) => Promise<SyncResult>;
+  /**
+   * Pull the cipher blob for a single item from the cloud and write it
+   * to the local vault directory. Returns the local path the item's
+   * `encryptedPath` should point at after the download — callers update
+   * the item via `upsert` if the path changed.
+   */
+  readonly prefetchVaultCiphertext: (itemId: string) => Promise<string | null>;
+  /** Cross-platform mirror of Swift's per-item sync state. */
+  readonly cloudCiphertextStatus: (itemId: string) => CloudCiphertextStatus;
 }
 
 export const useVaultStore = create<VaultStoreState>((set, get) => ({
@@ -103,6 +120,7 @@ export const useVaultStore = create<VaultStoreState>((set, get) => ({
   pendingRecovery: [],
   lastSyncedAt: null,
   isLocked: true,
+  lastSyncedManifest: null,
 
   hydrate: async () => {
     if (get().hydrated) return;
@@ -200,17 +218,67 @@ export const useVaultStore = create<VaultStoreState>((set, get) => ({
     const { syncVaultMetadata } = await import('./cloudSync');
     const res = await syncVaultMetadata(get().items);
     if (res.kind === 'ok') {
-      set({ lastSyncedAt: res.merged.lastSync });
+      set({
+        lastSyncedAt: res.merged.lastSync,
+        lastSyncedManifest: res.merged,
+      });
     }
     return res;
   },
 
-  pullCloud: async () => {
+  pullCloud: async (options) => {
     const { pullVaultMetadata } = await import('./cloudSync');
-    const res = await pullVaultMetadata(get().items);
+    const res = await pullVaultMetadata(get().items, options ?? {});
     if (res.kind === 'ok') {
-      set({ lastSyncedAt: res.merged.lastSync });
+      set({
+        lastSyncedAt: res.merged.lastSync,
+        lastSyncedManifest: res.merged,
+      });
     }
     return res;
+  },
+
+  prefetchVaultCiphertext: async (itemId) => {
+    const manifest = get().lastSyncedManifest;
+    const entry = manifest?.items[itemId];
+    if (!entry?.remoteRef) return null;
+    const { downloadVaultItemCiphertext } = await import('./cloudSync');
+    try {
+      const localPath = await downloadVaultItemCiphertext(itemId, entry.remoteRef);
+      // If we know about this item locally and its encryptedPath drifted
+      // (fresh-device case), update the metadata so subsequent reads hit
+      // the new file. Otherwise leave the store alone — the metadata
+      // restore is a separate manifest pull responsibility.
+      const existing = get().items.find((i) => i.id === itemId);
+      if (existing && existing.encryptedPath !== localPath) {
+        await get().upsert({ ...existing, encryptedPath: localPath });
+      }
+      return localPath;
+    } catch {
+      return null;
+    }
+  },
+
+  cloudCiphertextStatus: (itemId) => {
+    // Inline classifier mirrors cloudSync.classifyCipherStatus exactly —
+    // duplicated here so this synchronous selector doesn't pull cloudSync
+    // (and its `react-native` import chain) into the module graph for
+    // consumers that never need the cloud rail.
+    const manifest = get().lastSyncedManifest ?? { items: {}, lastSync: null };
+    const local = get().items.find((i) => i.id === itemId);
+    const hasLocal = !!local?.encryptedPath;
+    const entry = manifest.items[itemId];
+    const hasRemote = !!entry?.remoteRef;
+    if (hasLocal && !hasRemote) return 'local-only';
+    if (!hasLocal && hasRemote) return 'remote-only';
+    if (hasLocal && hasRemote) {
+      // Both `entry` and `local` are non-null whenever their hasX flags
+      // are — see the construction above. The narrower needs the cast.
+      if (entry.checksum !== local.checksumSha256) {
+        return 'conflict';
+      }
+      return 'in-sync';
+    }
+    return 'in-sync';
   },
 }));
