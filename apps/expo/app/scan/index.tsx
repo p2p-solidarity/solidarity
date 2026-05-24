@@ -5,7 +5,11 @@
  * `qrcode` (open self-QR), and a footer SolidarityPlaceholderCard
  * "Protocol Router" showing supported flows.
  *
- * Routes the decoded payload via the scan router.
+ * Decoded payload is routed by `classifyPayload`:
+ *   - `openid4vp://present?…` and similar request URLs → ProofPresentationFlowSheet
+ *   - `openid4vp://verify?…` (vp_token in the URL) → VerifierResultSheet
+ *   - anything else falls back to the raw "Scanned" diagnostic view used
+ *     in Wave 1.
  */
 import { router } from 'expo-router';
 import { useCallback, useState } from 'react';
@@ -13,20 +17,35 @@ import { ActivityIndicator, Pressable, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { SfIcon } from '@/components/icons/SfIcon';
+import { ProofPresentationFlowSheet } from '@/components/scan/ProofPresentationFlowSheet';
 import { ScanningFrameView } from '@/components/scan/ScanningFrameView';
+import {
+  VerifierResultSheet,
+  type VerifierResult,
+} from '@/components/scan/VerifierResultSheet';
 import { SolidarityPlaceholderCard } from '@/components/passport/SolidarityPlaceholderCard';
 import { ThemedButton } from '@/components/themed';
 import { Colors } from '@/constants/Colors';
 import { QrScanner } from '@/scan/QrScanner';
 
+type ScanRoute =
+  | { kind: 'proof'; payload: string }
+  | { kind: 'verifier'; result: VerifierResult }
+  | { kind: 'raw'; payload: string };
+
 export default function ScanScreen() {
   const insets = useSafeAreaInsets();
-  const [result, setResult] = useState<string | null>(null);
+  const [route, setRoute] = useState<ScanRoute | null>(null);
   const [progress, setProgress] = useState<{ received: number; total: number } | null>(null);
   const [isScanning, setIsScanning] = useState(true);
 
+  const reset = useCallback(() => {
+    setRoute(null);
+    setIsScanning(true);
+  }, []);
+
   const onResult = useCallback((payload: string) => {
-    setResult(payload);
+    setRoute(classifyPayload(payload));
     setProgress(null);
     setIsScanning(false);
   }, []);
@@ -35,8 +54,8 @@ export default function ScanScreen() {
     setProgress({ received, total });
   }, []);
 
-  if (result) {
-    return <ScannedResultView result={result} onClear={() => { setResult(null); setIsScanning(true); }} />;
+  if (route?.kind === 'raw') {
+    return <ScannedResultView result={route.payload} onClear={reset} />;
   }
 
   return (
@@ -94,6 +113,18 @@ export default function ScanScreen() {
           </View>
         ) : null}
       </View>
+
+      <ProofPresentationFlowSheet
+        visible={route?.kind === 'proof'}
+        requestPayload={route?.kind === 'proof' ? route.payload : ''}
+        onClose={reset}
+      />
+
+      <VerifierResultSheet
+        visible={route?.kind === 'verifier'}
+        result={route?.kind === 'verifier' ? route.result : null}
+        onClose={reset}
+      />
     </View>
   );
 }
@@ -130,4 +161,37 @@ function ScannedResultView({
       </View>
     </View>
   );
+}
+
+function classifyPayload(payload: string): ScanRoute {
+  let url: URL;
+  try {
+    url = new URL(payload);
+  } catch {
+    return { kind: 'raw', payload };
+  }
+
+  const isOidc =
+    url.protocol === 'openid4vp:' ||
+    url.protocol === 'openid-vp:' ||
+    url.protocol === 'openid-credential-offer:';
+  if (!isOidc) return { kind: 'raw', payload };
+
+  const vpToken = url.searchParams.get('vp_token');
+  const presentationSubmission = url.searchParams.get('presentation_submission');
+  if (vpToken && presentationSubmission) {
+    return {
+      kind: 'verifier',
+      result: {
+        valid: true,
+        title: 'Presentation received',
+        reason: `vp_token from ${url.host || url.protocol}`,
+        details: [
+          `Token length: ${String(vpToken.length)} chars`,
+          'Signature verification lands next iteration.',
+        ],
+      },
+    };
+  }
+  return { kind: 'proof', payload };
 }
