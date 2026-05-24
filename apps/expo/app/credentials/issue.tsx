@@ -6,10 +6,12 @@
  * headers are 12pt monospaced bold uppercase text3; field cards are
  * searchBg with 1pt divider overlay.
  *
- * Real issuance lives in GroupCredentialService — not ported yet. The
- * Issue button currently writes a placeholder StoredCredential locally so
- * the full flow is exercisable. Swap the body of `runIssuance` when
- * `src/credentials/groupIssuance.ts` lands.
+ * NOTE on the OIDC wave: this screen is the in-app group-VC ceremony
+ * (Swift `GroupCredentialService`), not an OID4VCI issuer endpoint. The
+ * OID4VCI ceremony lives in `app/credentials/offer.tsx` + the matching
+ * services in `src/oidc/`. Real group-issuance signing still lives in
+ * `GroupCredentialService` — when that lands as `src/credentials/groupIssuance.ts`,
+ * swap the body of `runIssuance` below.
  */
 import { router, useLocalSearchParams } from 'expo-router';
 import type { SFSymbol } from 'expo-symbols';

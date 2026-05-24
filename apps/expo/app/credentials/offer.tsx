@@ -6,11 +6,10 @@
  *   loading → review(offer) → pinEntry(offer) → fetching →
  *   success(message) | error(message)
  *
- * Token exchange + credential request are stubbed — the real
- * CredentialIssuanceService is not ported yet. "Accept & Import"
- * transitions to fetching, then to success after 700 ms so the UI flow is
- * exercisable. Replace `startIssuance` with the real call once
- * `src/oidc/credentialIssuance.ts` lands.
+ * Issuance now drives the real CredentialIssuanceService (token exchange +
+ * proof-of-possession + credential request + persistence). The success
+ * step routes to `/credentials/[id]` so the user can immediately review
+ * the newly stored VC.
  */
 import { router, useLocalSearchParams } from 'expo-router';
 import type { SFSymbol } from 'expo-symbols';
@@ -29,6 +28,14 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { SfIcon } from '@/components/icons/SfIcon';
 import { ThemedButton } from '@/components/themed';
 import { Colors } from '@/constants/Colors';
+import { pushToast } from '@/feedback/toast';
+import { useActiveDid } from '@/identity';
+import {
+  fetchIssuerMetadata,
+  parseCredentialOffer,
+  requestCredential,
+  type CredentialOffer,
+} from '@/oidc/credentialIssuance';
 
 const MONO = Platform.OS === 'ios' ? 'Menlo' : 'monospace';
 
@@ -39,40 +46,35 @@ interface ParsedOffer {
   readonly credentialConfigurationIds: readonly string[];
   readonly preAuthorizedCode?: string;
   readonly userPinRequired: boolean;
-}
-
-interface RawOffer {
-  readonly credential_issuer?: string;
-  readonly credential_configuration_ids?: readonly string[];
-  readonly grants?: Readonly<
-    Record<
-      string,
-      {
-        readonly ['pre-authorized_code']?: string;
-        readonly user_pin_required?: boolean;
-      }
-    >
-  >;
+  readonly raw: CredentialOffer;
 }
 
 function parseOfferQuery(query: string): ParsedOffer | null {
+  const candidates: string[] = [];
+  candidates.push(query);
   try {
-    let raw = query;
-    if (query.includes('credential_offer=')) {
-      const p = new URLSearchParams(query).get('credential_offer');
-      if (p) raw = p;
-    }
-    const obj = JSON.parse(raw) as RawOffer;
-    const grant = obj.grants?.['urn:ietf:params:oauth:grant-type:pre-authorized_code'];
-    return {
-      credentialIssuer: obj.credential_issuer ?? 'unknown',
-      credentialConfigurationIds: obj.credential_configuration_ids ?? [],
-      preAuthorizedCode: grant?.['pre-authorized_code'],
-      userPinRequired: grant?.user_pin_required === true,
-    };
+    const usp = new URLSearchParams(query);
+    const inline = usp.get('credential_offer');
+    if (inline) candidates.push(inline);
   } catch {
-    return null;
+    // not URL-encoded; fall through with raw query
   }
+  for (const candidate of candidates) {
+    const result = parseCredentialOffer(candidate);
+    if (result.ok) {
+      const offer = result.value;
+      return {
+        credentialIssuer: offer.credentialIssuer,
+        credentialConfigurationIds: offer.credentialConfigurationIds,
+        ...(offer.preAuthorizedCode !== undefined
+          ? { preAuthorizedCode: offer.preAuthorizedCode }
+          : {}),
+        userPinRequired: offer.txCode !== undefined,
+        raw: offer,
+      };
+    }
+  }
+  return null;
 }
 
 function issuerDisplayName(offer: ParsedOffer): string {
@@ -356,6 +358,7 @@ function ErrorView({
 export default function ReceiveCredentialScreen() {
   const insets = useSafeAreaInsets();
   const { q } = useLocalSearchParams<{ q?: string }>();
+  const activeDid = useActiveDid();
   const [step, setStep] = useState<Step>({ kind: 'loading' });
   const [userPin, setUserPin] = useState('');
 
@@ -381,22 +384,43 @@ export default function ReceiveCredentialScreen() {
     return () => { clearTimeout(t); };
   }, [parseOffer]);
 
-  const startIssuance = (offer: ParsedOffer) => {
+  const startIssuance = async (offer: ParsedOffer, pin?: string) => {
+    if (!activeDid) {
+      setStep({ kind: 'error', message: 'Active identity not ready.' });
+      return;
+    }
     setStep({ kind: 'fetching' });
+    const metadataResult = await fetchIssuerMetadata(offer.credentialIssuer);
+    if (!metadataResult.ok) {
+      setStep({ kind: 'error', message: metadataResult.error.message });
+      return;
+    }
+    const credentialResult = await requestCredential({
+      offer: offer.raw,
+      metadata: metadataResult.value,
+      holderDid: activeDid,
+      ...(pin ? { userPin: pin } : {}),
+    });
+    if (!credentialResult.ok) {
+      setStep({ kind: 'error', message: credentialResult.error.message });
+      return;
+    }
+    const stored = credentialResult.value;
+    pushToast('Credential received', 'success');
+    setStep({
+      kind: 'success',
+      message: `Stored ${stored.title} from ${issuerDisplayName(offer)}`,
+    });
     setTimeout(() => {
-      const typeName = offer.credentialConfigurationIds[0] ?? 'Credential';
-      setStep({
-        kind: 'success',
-        message: `Stored ${typeName} from ${issuerDisplayName(offer)}`,
-      });
-    }, 700);
+      router.replace({ pathname: '/credentials/[id]', params: { id: stored.id } });
+    }, 600);
   };
 
   const onAccept = (offer: ParsedOffer) => {
     if (offer.userPinRequired) {
       setStep({ kind: 'pinEntry', offer });
     } else {
-      startIssuance(offer);
+      void startIssuance(offer);
     }
   };
 
@@ -440,7 +464,7 @@ export default function ReceiveCredentialScreen() {
             <PinEntryView
               userPin={userPin}
               onChangePin={setUserPin}
-              onSubmit={() => { startIssuance(step.offer); }}
+              onSubmit={() => { void startIssuance(step.offer, userPin); }}
             />
           ) : null}
           {step.kind === 'fetching' ? <FetchingView /> : null}
