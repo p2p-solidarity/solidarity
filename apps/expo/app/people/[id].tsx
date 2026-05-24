@@ -77,7 +77,11 @@ export default function PersonDetailScreen(): ReactNode {
 
   return (
     <View className="flex-1 bg-pageBg" style={{ paddingTop: insets.top }}>
-      <TopBar onBack={() => { router.back(); }} onShare={onShare} />
+      <TopBar
+        onBack={() => { router.back(); }}
+        onShare={onShare}
+        onMore={() => { setShowingMoreSheet(true); }}
+      />
 
       <ScrollView contentContainerStyle={{ paddingTop: 12, paddingBottom: 32, rowGap: 24 }}>
         <HeroCard
@@ -103,15 +107,19 @@ export default function PersonDetailScreen(): ReactNode {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Top bar — chevron.left back + share icon. 56pt tall, 16pt horiz pad.
+// Top bar — chevron.left back + share + ellipsis.circle (more) icons.
+// 56pt tall, 16pt horiz pad. Ellipsis opens PersonDetailMoreSheet (note +
+// destructive delete row).
 // ─────────────────────────────────────────────────────────────────────────────
 
 function TopBar({
   onBack,
   onShare,
+  onMore,
 }: {
   readonly onBack: () => void;
   readonly onShare: () => void;
+  readonly onMore: () => void;
 }): ReactNode {
   return (
     <View
@@ -126,15 +134,26 @@ function TopBar({
       >
         <SfIcon name="chevron.left" size={24} color={Colors.text1} />
       </Pressable>
-      <Pressable
-        accessibilityRole="button"
-        accessibilityLabel="Share"
-        onPress={onShare}
-        hitSlop={8}
-        style={{ width: 22, height: 22, alignItems: 'center', justifyContent: 'center' }}
-      >
-        <SfIcon name="square.and.arrow.up" size={22} color={Colors.text1} />
-      </Pressable>
+      <View className="flex-row items-center" style={{ columnGap: 16 }}>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Share"
+          onPress={onShare}
+          hitSlop={8}
+          style={{ width: 22, height: 22, alignItems: 'center', justifyContent: 'center' }}
+        >
+          <SfIcon name="square.and.arrow.up" size={22} color={Colors.text1} />
+        </Pressable>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="More"
+          onPress={onMore}
+          hitSlop={8}
+          style={{ width: 24, height: 24, alignItems: 'center', justifyContent: 'center' }}
+        >
+          <SfIcon name="ellipsis.circle" size={22} color={Colors.text1} />
+        </Pressable>
+      </View>
     </View>
   );
 }
