@@ -36,6 +36,7 @@ import { ReceivedCardSheet } from '@/components/cards/ReceivedCardSheet';
 import { useContactStore } from '@/contacts/repository';
 import { handleDeepLink } from '@/deeplink/router';
 import { ToastOverlay } from '@/feedback/toast';
+import { useIdentityData } from '@/identity';
 import { installI18n } from '@/i18n';
 import { syncOnce } from '@/sakura/inbox';
 import { registerForPushNotificationsAsync } from '@/sakura/pushRegistration';
@@ -58,6 +59,7 @@ export default function RootLayout() {
         await initMmkv();
         hydratePreferences();
         await hydrateContacts();
+        await useIdentityData.getState().hydrate();
         await installI18n();
         const initial = await Linking.getInitialURL();
         if (initial) handleDeepLink(initial);

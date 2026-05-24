@@ -10,13 +10,15 @@
  *       – Sync    = Same Apple ID devices
  *   • Footer hint identical to Swift copy.
  *
- * Active DID source: cached zustand snapshot from `useIdentitySnapshot`. The
- * actual `did:key:z…` for the signing key is biometric-gated
- * (`didKeyForCurrentIdentity`) so we don't fetch it eagerly here — we show
- * the cached value when present and fall back to a "No active DID"
- * placeholder otherwise, matching Swift's conditional render.
+ * Active DID source: `useIdentityCoordinator.profile.activeDID.did`, seeded
+ * once from the SpruceID-managed signing key. Derivation reads the public
+ * JWK only (no biometric prompt) so the card paints frame 1 with the cached
+ * value when available, mirroring Swift's `IdentityCoordinator.loadIdentity`
+ * cached-descriptor fallback. Falls back to "No active DID" until the seed
+ * resolves or on keychain errors.
  */
 import { router, Stack } from 'expo-router';
+import { useEffect } from 'react';
 import { ScrollView, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -29,12 +31,15 @@ import {
   SettingsScreenTitle,
 } from '@/components/settings/SettingsBlocks';
 import { Colors } from '@/constants/Colors';
-import { useIdentitySnapshot } from '@/zk/coordinator';
+import { useActiveDid, useIdentityCoordinator } from '@/identity';
 
 export default function DIDListSheet() {
   const insets = useSafeAreaInsets();
-  const snapshot = useIdentitySnapshot();
-  const activeDid = snapshot.did;
+  const seedKeychain = useIdentityCoordinator((s) => s.seedFromKeychain);
+  useEffect(() => {
+    void seedKeychain();
+  }, [seedKeychain]);
+  const activeDid = useActiveDid();
 
   return (
     <View className="flex-1 bg-pageBg" style={{ paddingTop: insets.top }}>
