@@ -10,10 +10,9 @@
  * claims exist in the identity store — currently gated TODO because the
  * `provableClaims` / `identityCards` stores haven't landed on Expo yet.
  */
-import type { SFSymbol } from 'expo-symbols';
 import { router } from 'expo-router';
 import { type ReactNode, useEffect, useMemo } from 'react';
-import { Pressable, ScrollView, View } from 'react-native';
+import { ScrollView, View } from 'react-native';
 import QRCode from 'react-native-qrcode-svg';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -22,6 +21,12 @@ import {
   SettingsBackToolbar,
   SettingsScreenTitle,
 } from '@/components/settings/SettingsBlocks';
+import {
+  type FieldDescriptor,
+  FieldRow,
+  LegendItem,
+  ProofRow,
+} from '@/components/settings/ShareSettingsRows';
 import { ThemedText } from '@/components/themed';
 import { Colors } from '@/constants/Colors';
 import { useMyCard } from '@/cards/cardManager';
@@ -29,18 +34,6 @@ import { toVCard } from '@/cards/vCard';
 import { haptic } from '@/feedback/haptics';
 import { usePreferences } from '@/settings/preferences';
 import type { BusinessCardField, BusinessCard } from '@solidarity/shared';
-
-type VcStatus = 'verified' | 'selfAttested' | 'unverified';
-
-interface FieldDescriptor {
-  readonly key: BusinessCardField;
-  readonly icon: SFSymbol;
-  readonly label: string;
-  readonly locked?: boolean;
-  /** Skills + Profile Image never enter the VC payload (unverifiable / too
-   * large), so when on they get the "Shared but not in VC" copy. */
-  readonly excludedFromVc?: boolean;
-}
 
 const FIELD_ROWS: readonly FieldDescriptor[] = [
   { key: 'name', icon: 'person.text.rectangle', label: 'Name', locked: true },
@@ -234,79 +227,6 @@ function FieldToggles({
   );
 }
 
-function FieldRow({
-  descriptor,
-  isOn,
-  onToggle,
-}: {
-  readonly descriptor: FieldDescriptor;
-  readonly isOn: boolean;
-  readonly onToggle: () => void;
-}): ReactNode {
-  // Verified-by-source detection requires the identity claims store
-  // (`VerifiedClaimIndex` in Swift). Until ported, every field defaults
-  // to `selfAttested` — which is the conservative truth without the
-  // index.
-  const status: VcStatus = descriptor.excludedFromVc ? 'unverified' : 'selfAttested';
-  const statusColor = STATUS_COLOR[status];
-  const statusLabel = vcStatusLabel(status, descriptor.excludedFromVc ?? false);
-
-  return (
-    <Pressable
-      accessibilityRole="button"
-      accessibilityLabel={descriptor.label}
-      accessibilityState={{ selected: isOn, disabled: descriptor.locked }}
-      onPress={onToggle}
-      className="flex-row items-center"
-      style={{
-        backgroundColor: Colors.searchBg,
-        paddingHorizontal: 16,
-        paddingVertical: 12,
-        gap: 12,
-      }}
-    >
-      <View style={{ width: 20, alignItems: 'center' }}>
-        <SfIcon
-          name={descriptor.icon}
-          size={14}
-          color={isOn ? statusColor : Colors.text3}
-        />
-      </View>
-      <View style={{ flex: 1 }}>
-        <ThemedText
-          variant="label"
-          tone={isOn ? 'primary' : 'secondary'}
-          style={{ fontWeight: '500' }}
-        >
-          {descriptor.label}
-        </ThemedText>
-        {isOn ? (
-          <ThemedText
-            style={{
-              color: statusColor,
-              fontFamily: 'Menlo',
-              fontSize: 10,
-              fontWeight: '500',
-              marginTop: 2,
-            }}
-          >
-            {statusLabel}
-          </ThemedText>
-        ) : null}
-      </View>
-      {descriptor.locked ? (
-        <SfIcon name="lock.fill" size={12} color={Colors.text3} />
-      ) : (
-        <SfIcon
-          name={isOn ? 'checkmark.square.fill' : 'square'}
-          size={18}
-          color={isOn ? statusColor : Colors.text3}
-        />
-      )}
-    </Pressable>
-  );
-}
-
 function ProofToggles({
   hasHumanClaim,
   hasAgeClaim,
@@ -368,115 +288,6 @@ function ProofToggles({
       </View>
     </View>
   );
-}
-
-function ProofRow({
-  icon,
-  label,
-  badge,
-  badgeColor,
-  isOn,
-  locked = false,
-  onToggle,
-}: {
-  readonly icon: SFSymbol;
-  readonly label: string;
-  readonly badge: string;
-  readonly badgeColor: string;
-  readonly isOn: boolean;
-  readonly locked?: boolean;
-  readonly onToggle: () => void;
-}): ReactNode {
-  return (
-    <Pressable
-      accessibilityRole="button"
-      accessibilityLabel={label}
-      accessibilityState={{ selected: isOn, disabled: locked }}
-      onPress={() => {
-        if (locked) return;
-        onToggle();
-      }}
-      className="flex-row items-center"
-      style={{
-        backgroundColor: Colors.searchBg,
-        paddingHorizontal: 16,
-        paddingVertical: 12,
-        gap: 12,
-      }}
-    >
-      <View style={{ width: 20, alignItems: 'center' }}>
-        <SfIcon
-          name={icon}
-          size={14}
-          color={isOn ? badgeColor : Colors.text3}
-        />
-      </View>
-      <View style={{ flex: 1 }}>
-        <ThemedText
-          variant="label"
-          tone={isOn ? 'primary' : 'secondary'}
-          style={{ fontWeight: '500' }}
-        >
-          {label}
-        </ThemedText>
-        <ThemedText
-          style={{
-            color: badgeColor,
-            fontFamily: 'Menlo',
-            fontSize: 10,
-            fontWeight: '700',
-            marginTop: 2,
-          }}
-        >
-          {badge}
-        </ThemedText>
-      </View>
-      {locked ? (
-        <SfIcon name="lock.fill" size={12} color={Colors.text3} />
-      ) : (
-        <SfIcon
-          name={isOn ? 'checkmark.square.fill' : 'square'}
-          size={18}
-          color={isOn ? badgeColor : Colors.text3}
-        />
-      )}
-    </Pressable>
-  );
-}
-
-function LegendItem({
-  color,
-  label,
-}: {
-  readonly color: string;
-  readonly label: string;
-}): ReactNode {
-  return (
-    <View className="flex-row items-center" style={{ gap: 4 }}>
-      <View
-        style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: color }}
-      />
-      <ThemedText
-        tone="tertiary"
-        style={{ fontFamily: 'Menlo', fontSize: 10 }}
-      >
-        {label}
-      </ThemedText>
-    </View>
-  );
-}
-
-const STATUS_COLOR: Readonly<Record<VcStatus, string>> = {
-  verified: Colors.terminalGreen,
-  selfAttested: Colors.warning,
-  unverified: Colors.text3,
-};
-
-function vcStatusLabel(status: VcStatus, excludedFromVc: boolean): string {
-  if (excludedFromVc) return 'Shared but not in VC';
-  if (status === 'verified') return 'VC: verified';
-  if (status === 'selfAttested') return 'VC: self-attested';
-  return 'Not in VC';
 }
 
 function isFieldOn(
