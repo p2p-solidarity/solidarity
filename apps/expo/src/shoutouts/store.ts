@@ -6,10 +6,20 @@
  * locally before send). We keep the metadata + plaintext in MMKV (encrypted
  * via storageManager) so the gallery renders sync from the cache.
  */
+import { useMemo } from 'react';
 import { create } from 'zustand';
 
 import { decryptJson, encryptJson } from '@/storage/encryptionManager';
 import { getMmkv } from '@/storage/mmkv';
+
+import {
+  aggregateByAuthor,
+  aggregateByTopic,
+  timeSeriesDaily,
+  type AuthorCount,
+  type TimeSeriesPoint,
+  type TopicCount,
+} from './chartData';
 
 export type ShoutoutDirection = 'incoming' | 'outgoing';
 
@@ -74,3 +84,37 @@ export const useShoutoutStore = create<ShoutoutStoreState>((set, get) => ({
     set((state) => ({ items: state.items.filter((i) => i.id !== id) }));
   },
 }));
+
+export interface ShoutoutChartData {
+  readonly topics: readonly TopicCount[];
+  readonly authors: readonly AuthorCount[];
+  readonly activity: readonly TimeSeriesPoint[];
+  readonly hydrated: boolean;
+  readonly totalCount: number;
+}
+
+/**
+ * Memoised aggregations for the Stats section above the gallery.
+ *
+ * Selector pattern (mirrors `useDisplayClaims` after Agent 16's fix):
+ *   - Subscribe to the RAW slice (`s.items`) — zustand returns the same
+ *     reference until something mutates, so `Object.is` is stable.
+ *   - Derive the chart shape inside a `useMemo` so React skips
+ *     recomputation when `items` is reference-equal.
+ * Returning a fresh object from the selector would trip
+ * `useSyncExternalStore`'s infinite-loop guard.
+ */
+export function useShoutoutChartData(): ShoutoutChartData {
+  const items = useShoutoutStore((s) => s.items);
+  const hydrated = useShoutoutStore((s) => s.hydrated);
+  return useMemo(
+    () => ({
+      topics: aggregateByTopic(items),
+      authors: aggregateByAuthor(items),
+      activity: timeSeriesDaily(items),
+      hydrated,
+      totalCount: items.length,
+    }),
+    [items, hydrated]
+  );
+}

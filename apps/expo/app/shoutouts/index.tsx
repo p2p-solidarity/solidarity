@@ -25,6 +25,10 @@ import { SakuraIcon } from '@/components/brand/SakuraIcon';
 import { DecorativeBlobs } from '@/components/decor/DecorativeBlobs';
 import { SfIcon } from '@/components/icons/SfIcon';
 import {
+  SectionTabButton,
+  StatsSection,
+} from '@/components/shoutouts/charts';
+import {
   EMPTY_SHOUTOUT_FILTERS,
   ShoutoutFiltersSheet,
   type ShoutoutFiltersState,
@@ -32,6 +36,7 @@ import {
 import { Colors } from '@/constants/Colors';
 import { useContactList } from '@/contacts/repository';
 import { haptic } from '@/feedback/haptics';
+import { useShoutoutChartData, useShoutoutStore } from '@/shoutouts/store';
 import {
   initials,
   relativeDate,
@@ -42,6 +47,7 @@ import type { Contact } from '@solidarity/shared';
 
 type DisplayMode = 'grid' | 'list';
 type FilterOption = 'All Cards' | 'Verified Only' | 'Recently Added';
+type SectionTab = 'feed' | 'stats';
 
 const FILTER_OPTIONS: readonly FilterOption[] = [
   'All Cards',
@@ -196,10 +202,14 @@ export default function ShoutoutsHub(): ReactNode {
     EMPTY_SHOUTOUT_FILTERS
   );
   const [isSakuraAnimating, setIsSakuraAnimating] = useState(false);
+  const [sectionTab, setSectionTab] = useState<SectionTab>('feed');
+  const hydrateShoutouts = useShoutoutStore((s) => s.hydrate);
+  const chart = useShoutoutChartData();
 
   useEffect(() => {
     setIsSakuraAnimating(true);
-  }, []);
+    void hydrateShoutouts();
+  }, [hydrateShoutouts]);
 
   const filtered = useMemo<readonly Contact[]>(() => {
     let list = contacts;
@@ -417,11 +427,30 @@ export default function ShoutoutsHub(): ReactNode {
         ) : null}
       </View>
 
+      <View
+        className="flex-row px-4"
+        style={{ marginTop: 12, gap: 8 }}
+        accessibilityRole="tablist"
+      >
+        <SectionTabButton
+          label="Feed"
+          active={sectionTab === 'feed'}
+          onPress={() => { setSectionTab('feed'); }}
+        />
+        <SectionTabButton
+          label="Stats"
+          active={sectionTab === 'stats'}
+          onPress={() => { setSectionTab('stats'); }}
+        />
+      </View>
+
       <ScrollView
         className="flex-1"
         contentContainerStyle={{ paddingVertical: 16, paddingBottom: 100 }}
       >
-        {filtered.length === 0 ? (
+        {sectionTab === 'stats' ? (
+          <StatsSection chart={chart} />
+        ) : filtered.length === 0 ? (
           <View className="items-center" style={{ marginTop: 60, gap: 16 }}>
             <SakuraIcon size={60} color={Colors.text2} animating={false} />
             <Text className="text-text2" style={{ fontSize: 20 }}>
