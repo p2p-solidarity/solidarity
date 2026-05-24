@@ -13,6 +13,7 @@ import { Pressable, Switch, Text, View } from 'react-native';
 
 import { SfIcon } from '@/components/icons/SfIcon';
 import { Colors } from '@/constants/Colors';
+import { useThemeColors } from '@/constants/useThemeColors';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Section header (14pt regular textPrimary, horiz pad 16)
@@ -72,11 +73,14 @@ export function SettingsBlockRow({
   subtitle,
   trailingText,
   showsChevron = true,
-  iconColor = Colors.text1,
-  titleColor = Colors.text1,
+  iconColor,
+  titleColor,
   onPress,
   disabled = false,
 }: SettingsBlockRowProps) {
+  const c = useThemeColors();
+  const resolvedIcon = iconColor ?? c.text1;
+  const resolvedTitle = titleColor ?? c.text1;
   const content = (
     <View
       className="bg-mutedSurface rounded-xl flex-row items-center"
@@ -85,11 +89,11 @@ export function SettingsBlockRow({
       <View
         style={{ width: 20, height: 20, alignItems: 'center', justifyContent: 'center', marginRight: 12 }}
       >
-        <SfIcon name={icon} size={14} color={iconColor} />
+        <SfIcon name={icon} size={14} color={resolvedIcon} />
       </View>
 
       <View className="flex-1">
-        <Text className="text-[15px]" style={{ color: titleColor }}>
+        <Text className="text-[15px]" style={{ color: resolvedTitle }}>
           {title}
         </Text>
         {subtitle ? (
@@ -110,7 +114,7 @@ export function SettingsBlockRow({
 
       {showsChevron ? (
         <View style={{ marginLeft: 12 }}>
-          <SfIcon name="chevron.right" size={12} weight="semibold" color={Colors.text3} />
+          <SfIcon name="chevron.right" size={12} weight="semibold" color={c.text3} />
         </View>
       ) : null}
     </View>
@@ -188,7 +192,7 @@ export function SettingsBlockToggleRow({
   icon,
   title,
   subtitle,
-  iconColor = Colors.text1,
+  iconColor,
   value,
   onValueChange,
 }: {
@@ -199,6 +203,7 @@ export function SettingsBlockToggleRow({
   value: boolean;
   onValueChange: (next: boolean) => void;
 }) {
+  const c = useThemeColors();
   return (
     <View
       className="bg-mutedSurface rounded-xl flex-row items-center"
@@ -207,7 +212,7 @@ export function SettingsBlockToggleRow({
       <View
         style={{ width: 20, height: 20, alignItems: 'center', justifyContent: 'center', marginRight: 12 }}
       >
-        <SfIcon name={icon} size={14} color={iconColor} />
+        <SfIcon name={icon} size={14} color={iconColor ?? c.text1} />
       </View>
       <View className="flex-1">
         <Text className="text-text1 text-[15px]">{title}</Text>
@@ -220,9 +225,9 @@ export function SettingsBlockToggleRow({
       <Switch
         value={value}
         onValueChange={onValueChange}
-        trackColor={{ false: Colors.divider, true: Colors.primaryBlue }}
-        thumbColor={Colors.cardBg}
-        ios_backgroundColor={Colors.divider}
+        trackColor={{ false: c.divider, true: Colors.primaryBlue }}
+        thumbColor={c.cardBg}
+        ios_backgroundColor={c.divider}
       />
     </View>
   );
@@ -236,13 +241,14 @@ export function SettingsBlockInfoRow({
   icon,
   title,
   value,
-  iconColor = Colors.text1,
+  iconColor,
 }: {
   icon: SFSymbol;
   title: string;
   value: string;
   iconColor?: string;
 }) {
+  const c = useThemeColors();
   return (
     <View
       className="bg-mutedSurface rounded-xl flex-row items-center"
@@ -251,7 +257,7 @@ export function SettingsBlockInfoRow({
       <View
         style={{ width: 20, height: 20, alignItems: 'center', justifyContent: 'center', marginRight: 12 }}
       >
-        <SfIcon name={icon} size={14} color={iconColor} />
+        <SfIcon name={icon} size={14} color={iconColor ?? c.text1} />
       </View>
       <Text className="text-text1 text-[15px] flex-1">{title}</Text>
       <Text className="text-text2 text-[13px]">{value}</Text>
@@ -270,6 +276,7 @@ export function SettingsBackToolbar({
   title?: string;
   onPress: () => void;
 }) {
+  const c = useThemeColors();
   return (
     <View
       className="flex-row items-center"
@@ -282,7 +289,7 @@ export function SettingsBackToolbar({
         className="flex-row items-center active:opacity-80"
         style={{ paddingHorizontal: 4, paddingVertical: 8 }}
       >
-        <SfIcon name="chevron.left" size={16} weight="semibold" color={Colors.text1} />
+        <SfIcon name="chevron.left" size={16} weight="semibold" color={c.text1} />
         <Text className="text-text1 text-[16px]" style={{ marginLeft: 4 }}>
           {title}
         </Text>

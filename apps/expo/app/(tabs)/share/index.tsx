@@ -33,6 +33,7 @@ import {
 import { useMatchingSession } from '@/matching/session';
 import { ThemedButton } from '@/components/themed';
 import { Colors } from '@/constants/Colors';
+import { useThemeColors } from '@/constants/useThemeColors';
 
 // Default share field set mirrors Swift ShareSettingsReader defaults
 // (everything checked except socialNetworks/skills until user opts in).
@@ -172,6 +173,7 @@ export default function ShareTab() {
 }
 
 function NavBar({ onScan }: { onScan: () => void }) {
+  const c = useThemeColors();
   return (
     <View
       className="flex-row items-center justify-between px-4"
@@ -183,7 +185,7 @@ function NavBar({ onScan }: { onScan: () => void }) {
         style={{ width: 44, height: 44, alignItems: 'flex-start', justifyContent: 'center' }}
         className="active:opacity-60"
       >
-        <SfIcon name="qrcode.viewfinder" size={20} color={Colors.text1} />
+        <SfIcon name="qrcode.viewfinder" size={20} color={c.text1} />
       </Pressable>
       <Text className="text-text1 text-[17px] font-semibold">Share</Text>
       <View style={{ width: 44 }} />

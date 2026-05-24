@@ -19,9 +19,10 @@
 import { router } from 'expo-router';
 import type { SFSymbol } from 'expo-symbols';
 import { useEffect, useMemo } from 'react';
-import { Pressable, ScrollView, Text, View } from 'react-native';
+import { Image, Pressable, ScrollView, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { animalImageSource } from '@/cards/animals';
 import { useCardStore, useMyCard } from '@/cards/cardManager';
 import { SfIcon } from '@/components/icons/SfIcon';
 import {
@@ -34,6 +35,7 @@ import {
   VerifiedCredentialRow,
 } from '@/components/me';
 import { Colors } from '@/constants/Colors';
+import { useThemeColors } from '@/constants/useThemeColors';
 import {
   useActiveDid,
   useDisplayClaims,
@@ -84,7 +86,13 @@ export default function MeTab() {
           <ProfileHeaderCard
             name={displayName}
             did={shortDid(displayDid)}
-            avatar={<InitialAvatar name={displayName} />}
+            avatar={
+              card?.animal ? (
+                <Image source={animalImageSource(card.animal)} style={{ width: 56, height: 56 }} resizeMode="cover" />
+              ) : (
+                <InitialAvatar name={displayName} />
+              )
+            }
             onEdit={() => router.push(card ? { pathname: '/cards/edit', params: { id: card.id } } : '/cards/edit')}
           />
 
@@ -116,6 +124,7 @@ export default function MeTab() {
 }
 
 function NavBar({ onSettings }: { onSettings: () => void }) {
+  const c = useThemeColors();
   return (
     <View
       className="flex-row items-center justify-between px-4"
@@ -129,7 +138,7 @@ function NavBar({ onSettings }: { onSettings: () => void }) {
         style={{ width: 44, height: 44, alignItems: 'flex-end', justifyContent: 'center' }}
         className="active:opacity-60"
       >
-        <SfIcon name="gearshape" size={18} color={Colors.text1} />
+        <SfIcon name="gearshape" size={18} color={c.text1} />
       </Pressable>
     </View>
   );
