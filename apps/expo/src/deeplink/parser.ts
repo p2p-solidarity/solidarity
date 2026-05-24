@@ -3,6 +3,7 @@
  * it tests cleanly under Bun without dragging the Flow-typed RN runtime.
  * The handler (with `router.push` side effects) lives in ./handler.
  */
+import { isVerifiedDomain } from './domainVerification';
 
 export type DeepLinkRoute =
   | { readonly kind: 'card'; readonly cardId: string }
@@ -39,7 +40,7 @@ export function parseDeepLink(raw: string): DeepLinkRoute {
     }
   }
 
-  if (url.protocol === 'https:' && url.host === 'solidarity.gg') {
+  if (url.protocol === 'https:' && isVerifiedDomain(url.host)) {
     const segments = url.pathname.replace(/^\//u, '').split('/');
     if (segments[0] === 'c' && segments[1] && UUID_RE.test(segments[1])) {
       return { kind: 'card', cardId: segments[1] };
