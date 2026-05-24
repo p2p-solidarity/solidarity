@@ -15,6 +15,7 @@
  * the truth and any pending wiring stays in one place.
  */
 import type { ReactNode } from 'react';
+import { useMemo } from 'react';
 import { Modal, Pressable, ScrollView, Text, TextInput, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -22,6 +23,7 @@ import { SfIcon } from '@/components/icons/SfIcon';
 import { ThemedButton } from '@/components/themed';
 import { Colors } from '@/constants/Colors';
 import { haptic } from '@/feedback/haptics';
+import { useShoutoutChart } from '@/shoutouts/chartService';
 
 export type ShoutoutEventType = 'High Activity' | 'Medium Activity' | 'Low Activity';
 
@@ -74,6 +76,12 @@ export function ShoutoutFiltersSheet({
   onClose,
 }: ShoutoutFiltersSheetProps): ReactNode {
   const insets = useSafeAreaInsets();
+  const chart = useShoutoutChart();
+  const tagCounts = useMemo(() => {
+    const map = new Map<string, number>();
+    for (const bucket of chart.byTag) map.set(bucket.label, bucket.count);
+    return map;
+  }, [chart.byTag]);
 
   const setSearch = (q: string) => { onChange({ ...value, searchQuery: q }); };
   const setEventType = (t: ShoutoutEventType | null) => {
@@ -216,6 +224,7 @@ export function ShoutoutFiltersSheet({
                   <TagFilterChip
                     key={tag}
                     tag={tag}
+                    count={tagCounts.get(tag) ?? 0}
                     isSelected={value.selectedTags.includes(tag)}
                     onToggle={() => { toggleTag(tag); }}
                   />
@@ -317,10 +326,12 @@ function OptionRow({
 
 function TagFilterChip({
   tag,
+  count,
   isSelected,
   onToggle,
 }: {
   readonly tag: string;
+  readonly count: number;
   readonly isSelected: boolean;
   readonly onToggle: () => void;
 }): ReactNode {
@@ -328,7 +339,7 @@ function TagFilterChip({
     <Pressable
       onPress={onToggle}
       accessibilityRole="button"
-      accessibilityLabel={`#${tag}`}
+      accessibilityLabel={`#${tag} (${String(count)})`}
       accessibilityState={{ selected: isSelected }}
       style={{
         paddingHorizontal: 8,
@@ -346,7 +357,7 @@ function TagFilterChip({
           color: isSelected ? Colors.cardBg : Colors.primaryBlue,
         }}
       >
-        #{tag}
+        {count > 0 ? `#${tag} (${String(count)})` : `#${tag}`}
       </Text>
     </Pressable>
   );
