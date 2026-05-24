@@ -14,9 +14,8 @@
  * populate. Until then, the message is stored as an outgoing item.
  */
 import { router, useLocalSearchParams } from 'expo-router';
-import { useMemo, useState, type ReactNode } from 'react';
+import { useState, type ReactNode } from 'react';
 import {
-  Modal,
   Pressable,
   ScrollView,
   Text,
@@ -25,15 +24,15 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { SakuraIcon } from '@/components/brand/SakuraIcon';
 import { SfIcon } from '@/components/icons/SfIcon';
 import {
   SettingsBackToolbar,
   SettingsScreenTitle,
 } from '@/components/settings/SettingsBlocks';
+import { ShoutoutUserPicker } from '@/components/shoutouts/ShoutoutUserPicker';
 import { ThemedButton } from '@/components/themed';
 import { Colors } from '@/constants/Colors';
-import { useContact, useContactList } from '@/contacts/repository';
+import { useContact } from '@/contacts/repository';
 import { haptic } from '@/feedback/haptics';
 import { pushToast } from '@/feedback/toast';
 import { SHOUTOUT_MAX_PAYLOAD_BYTES, useShoutoutStore } from '@/shoutouts/store';
@@ -49,160 +48,6 @@ function initials(name: string): string {
     .slice(0, 2)
     .map((p) => p[0]?.toUpperCase() ?? '')
     .join('');
-}
-
-function UserPickerSheet({
-  visible,
-  onPick,
-  onClose,
-}: {
-  readonly visible: boolean;
-  readonly onPick: (c: Contact) => void;
-  readonly onClose: () => void;
-}): ReactNode {
-  const insets = useSafeAreaInsets();
-  const contacts = useContactList();
-  const [search, setSearch] = useState('');
-
-  const filtered = useMemo(() => {
-    if (search.length === 0) return contacts;
-    const q = search.toLowerCase();
-    return contacts.filter((c) => {
-      const card = c.businessCard;
-      return (
-        card.name.toLowerCase().includes(q) ||
-        (card.company?.toLowerCase().includes(q) ?? false) ||
-        (card.title?.toLowerCase().includes(q) ?? false)
-      );
-    });
-  }, [contacts, search]);
-
-  return (
-    <Modal visible={visible} animationType="slide" onRequestClose={onClose}>
-      <View className="flex-1 bg-pageBg" style={{ paddingTop: insets.top }}>
-        <View
-          className="flex-row items-center justify-between"
-          style={{ paddingHorizontal: 16, paddingVertical: 12 }}
-        >
-          <Pressable
-            onPress={onClose}
-            accessibilityRole="button"
-            accessibilityLabel="Cancel"
-          >
-            <Text className="text-primaryBlue" style={{ fontSize: 17 }}>
-              Cancel
-            </Text>
-          </Pressable>
-          <Text className="text-text1" style={{ fontSize: 17, fontWeight: '600' }}>
-            Select Recipient
-          </Text>
-          <View style={{ width: 60 }} />
-        </View>
-
-        <View style={{ padding: 16 }}>
-          <View
-            className="bg-searchBg flex-row items-center"
-            style={{
-              borderRadius: 12,
-              paddingHorizontal: 16,
-              paddingVertical: 12,
-              borderWidth: 1,
-              borderColor: `${Colors.accentRose}4D`,
-            }}
-          >
-            <SfIcon name="magnifyingglass" size={14} color={Colors.accentRose} />
-            <TextInput
-              value={search}
-              onChangeText={setSearch}
-              placeholder="Search contacts..."
-              placeholderTextColor={Colors.text3}
-              style={{ flex: 1, marginLeft: 8, color: Colors.text1, fontSize: 15 }}
-            />
-            {search.length > 0 ? (
-              <Pressable
-                onPress={() => { setSearch(''); }}
-                accessibilityRole="button"
-                accessibilityLabel="Clear"
-              >
-                <Text className="text-text2" style={{ fontSize: 12 }}>
-                  Clear
-                </Text>
-              </Pressable>
-            ) : null}
-          </View>
-        </View>
-
-        <ScrollView
-          contentContainerStyle={{ padding: 16, gap: 12, paddingBottom: 40 + insets.bottom }}
-        >
-          {filtered.map((c) => {
-            const card = c.businessCard;
-            return (
-              <Pressable
-                key={c.id}
-                onPress={() => { onPick(c); }}
-                accessibilityRole="button"
-                accessibilityLabel={`Pick ${card.name}`}
-              >
-                <View
-                  className="bg-cardBg flex-row items-center"
-                  style={{
-                    borderRadius: 12,
-                    padding: 16,
-                    borderWidth: 1,
-                    borderColor: Colors.divider,
-                  }}
-                >
-                  <View
-                    style={{
-                      width: 60,
-                      height: 60,
-                      borderRadius: 30,
-                      borderWidth: 2,
-                      borderColor: Colors.accentRose,
-                      backgroundColor: Colors.primaryMauve,
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                    }}
-                  >
-                    <Text className="text-cardBg" style={{ fontSize: 17, fontWeight: '600' }}>
-                      {initials(card.name)}
-                    </Text>
-                  </View>
-                  <View style={{ flex: 1, marginLeft: 16 }}>
-                    <Text className="text-text1" style={{ fontSize: 17, fontWeight: '600' }}>
-                      {card.name}
-                    </Text>
-                    {card.company ? (
-                      <Text className="text-text2" style={{ fontSize: 15, marginTop: 2 }}>
-                        {card.company}
-                      </Text>
-                    ) : null}
-                    {card.title ? (
-                      <Text className="text-text3" style={{ fontSize: 12, marginTop: 2 }}>
-                        {card.title}
-                      </Text>
-                    ) : null}
-                  </View>
-                  <View className="items-center" style={{ gap: 4 }}>
-                    <SakuraIcon size={24} color={Colors.accentRose} animating={false} />
-                  </View>
-                </View>
-              </Pressable>
-            );
-          })}
-          {filtered.length === 0 ? (
-            <Text
-              className="text-text2 text-center"
-              style={{ fontSize: 14, marginTop: 24 }}
-            >
-              No contacts match your search.
-            </Text>
-          ) : null}
-        </ScrollView>
-      </View>
-    </Modal>
-  );
 }
 
 export default function ShoutoutCompose(): ReactNode {
@@ -444,13 +289,16 @@ export default function ShoutoutCompose(): ReactNode {
         </View>
       </ScrollView>
 
-      <UserPickerSheet
+      <ShoutoutUserPicker
         visible={showingPicker}
-        onPick={(c) => {
-          setRecipient(c);
+        singleSelect
+        initialSelectedIds={recipient ? [recipient.id] : undefined}
+        onConfirm={(picks) => {
+          const first = picks[0];
+          if (first) setRecipient(first);
           setShowingPicker(false);
         }}
-        onClose={() => { setShowingPicker(false); }}
+        onCancel={() => { setShowingPicker(false); }}
       />
     </View>
   );
