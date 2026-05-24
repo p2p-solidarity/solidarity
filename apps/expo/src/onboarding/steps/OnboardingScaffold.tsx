@@ -18,6 +18,7 @@
  */
 import type { ReactNode } from 'react';
 import { Pressable, ScrollView, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { SfIcon } from '@/components/icons/SfIcon';
 import { ThemedText } from '@/components/themed';
@@ -38,13 +39,14 @@ export function OnboardingScaffold({
   children,
   footer,
 }: OnboardingScaffoldProps) {
+  const insets = useSafeAreaInsets();
   return (
     <View className="bg-pageBg flex-1">
       <ScrollView
         contentContainerStyle={{
           paddingHorizontal: 24,
-          paddingTop: 40,
-          paddingBottom: 24,
+          paddingTop: insets.top + 24,
+          paddingBottom: insets.bottom + 24,
           flexGrow: 1,
           gap: 24,
         }}
