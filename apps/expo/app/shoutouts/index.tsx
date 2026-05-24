@@ -24,6 +24,11 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { SakuraIcon } from '@/components/brand/SakuraIcon';
 import { DecorativeBlobs } from '@/components/decor/DecorativeBlobs';
 import { SfIcon } from '@/components/icons/SfIcon';
+import {
+  EMPTY_SHOUTOUT_FILTERS,
+  ShoutoutFiltersSheet,
+  type ShoutoutFiltersState,
+} from '@/components/shoutouts/ShoutoutFiltersSheet';
 import { Colors } from '@/constants/Colors';
 import { useContactList } from '@/contacts/repository';
 import { haptic } from '@/feedback/haptics';
@@ -186,6 +191,10 @@ export default function ShoutoutsHub(): ReactNode {
   const [displayMode, setDisplayMode] = useState<DisplayMode>('grid');
   const [filterOption, setFilterOption] = useState<FilterOption>('All Cards');
   const [showFilterMenu, setShowFilterMenu] = useState(false);
+  const [showFiltersSheet, setShowFiltersSheet] = useState(false);
+  const [sheetFilters, setSheetFilters] = useState<ShoutoutFiltersState>(
+    EMPTY_SHOUTOUT_FILTERS
+  );
   const [isSakuraAnimating, setIsSakuraAnimating] = useState(false);
 
   useEffect(() => {
@@ -229,6 +238,7 @@ export default function ShoutoutsHub(): ReactNode {
     haptic('selection');
     setSearchQuery('');
     setFilterOption('All Cards');
+    setSheetFilters(EMPTY_SHOUTOUT_FILTERS);
   };
 
   return (
@@ -280,6 +290,23 @@ export default function ShoutoutsHub(): ReactNode {
               <SfIcon name="list.bullet" size={14} color={Colors.text1} />
             </Pressable>
           </View>
+
+          <Pressable
+            onPress={() => {
+              haptic('tap');
+              setSheetFilters((prev) => ({ ...prev, searchQuery }));
+              setShowFiltersSheet(true);
+            }}
+            accessibilityRole="button"
+            accessibilityLabel="Open filters"
+            style={{ marginLeft: 8, padding: 4 }}
+          >
+            <SfIcon
+              name="line.3.horizontal.decrease.circle"
+              size={20}
+              color={Colors.text1}
+            />
+          </Pressable>
 
           <Pressable
             onPress={onRefresh}
@@ -445,6 +472,19 @@ export default function ShoutoutsHub(): ReactNode {
       >
         <SakuraIcon size={20} color={Colors.cardBg} animating={isSakuraAnimating} />
       </Pressable>
+
+      <ShoutoutFiltersSheet
+        visible={showFiltersSheet}
+        value={sheetFilters}
+        availableTags={[]}
+        onChange={(next) => {
+          setSheetFilters(next);
+          if (next.searchQuery !== searchQuery) {
+            setSearchQuery(next.searchQuery);
+          }
+        }}
+        onClose={() => { setShowFiltersSheet(false); }}
+      />
     </View>
   );
 }
