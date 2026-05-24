@@ -62,6 +62,18 @@ export interface Preferences {
   readonly notificationsSyncIntervalSeconds: number;
   /** Mirrors Swift DeveloperModeManager.simulateNFC. */
   readonly simulateNfc: boolean;
+  /** Share-field toggles — mirror Swift ShareSettingsView @AppStorage keys. */
+  readonly shareTitle: boolean;
+  readonly shareCompany: boolean;
+  readonly shareEmail: boolean;
+  readonly sharePhone: boolean;
+  readonly shareProfileImage: boolean;
+  readonly shareSocialNetworks: boolean;
+  readonly shareSkills: boolean;
+  /** Mirrors Swift `@AppStorage("share_proof_is_human")` — locked-on once the
+   * holder owns a `is_human` claim. */
+  readonly shareIsHuman: boolean;
+  readonly shareAgeOver18: boolean;
 }
 
 const DEFAULT_BIOMETRIC_POLICY: Readonly<Record<SensitiveActionKey, boolean>> = {
@@ -93,6 +105,15 @@ const DEFAULTS: Preferences = {
   notificationsAutoSync: true,
   notificationsSyncIntervalSeconds: 30,
   simulateNfc: false,
+  shareTitle: false,
+  shareCompany: false,
+  shareEmail: false,
+  sharePhone: false,
+  shareProfileImage: false,
+  shareSocialNetworks: false,
+  shareSkills: false,
+  shareIsHuman: true,
+  shareAgeOver18: false,
 };
 
 function readSafe(): Preferences {
