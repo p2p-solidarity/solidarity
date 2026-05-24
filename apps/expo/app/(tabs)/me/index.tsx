@@ -18,7 +18,7 @@
  */
 import { router } from 'expo-router';
 import type { SFSymbol } from 'expo-symbols';
-import { useEffect } from 'react';
+import { useEffect, useMemo } from 'react';
 import { Pressable, ScrollView, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -66,8 +66,13 @@ export default function MeTab() {
   const activeDid = useActiveDid();
   const displayDid = activeDid ?? INIT_DID;
 
-  // Swift filters out type === "business_card" — mirror that.
-  const verifiedCreds = identityCards.filter((c) => c.type !== 'business_card');
+  // Swift filters out type === "business_card" — mirror that. Memoised so
+  // the derived array keeps a stable reference between renders when the
+  // upstream `identityCards` slice hasn't changed.
+  const verifiedCreds = useMemo(
+    () => identityCards.filter((c) => c.type !== 'business_card'),
+    [identityCards]
+  );
   const disclosures = useDisplayClaims();
 
   return (

@@ -11,6 +11,7 @@
  * Persistence: encrypted MMKV, key prefixes `idcard:` and `provable:`,
  * matching the AES-GCM blob format used by `useCredentialStore`.
  */
+import { useMemo } from 'react';
 import { create } from 'zustand';
 
 import { decryptJson, encryptJson } from '@/storage/encryptionManager';
@@ -251,9 +252,18 @@ export function displayClaims(
   return out;
 }
 
-/** Hook: presentable claims, profile_card deduped — feeds the disclosures list. */
+/**
+ * Hook: presentable claims, profile_card deduped — feeds the disclosures list.
+ *
+ * Returns a stable reference between renders when the underlying
+ * `provableClaims` slice is unchanged. Selecting the raw slice (stable
+ * identity from the store) and memoising the derivation in React-land
+ * keeps `useSyncExternalStore`'s `getSnapshot` Object.is-stable, which
+ * is required to avoid the "infinite loop" runtime error.
+ */
 export function useDisplayClaims(): readonly ProvableClaimEntity[] {
-  return useIdentityData((s) => displayClaims(s.provableClaims));
+  const provableClaims = useIdentityData((s) => s.provableClaims);
+  return useMemo(() => displayClaims(provableClaims), [provableClaims]);
 }
 
 /**
