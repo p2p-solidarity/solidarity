@@ -27,6 +27,7 @@ import { ManualContactEntrySheet } from '@/components/people/ManualContactEntryS
 import { PeopleSearchField } from '@/components/people/PeopleSearchField';
 import { TrustGraphContactRow } from '@/components/people/TrustGraphContactRow';
 import { Colors } from '@/constants/Colors';
+import { useThemeColors } from '@/constants/useThemeColors';
 import { importFromDevice } from '@/contacts/importer';
 import { useContactStore } from '@/contacts/repository';
 import { pushToast } from '@/feedback/toast';
@@ -192,6 +193,7 @@ function Header({
   menuOpen: boolean;
   setMenuOpen: (v: boolean) => void;
 }) {
+  const c = useThemeColors();
   return (
     <View className="px-4" style={{ height: 56 }}>
       <View className="flex-1 flex-row items-center justify-between">
@@ -202,7 +204,7 @@ function Header({
           style={{ width: 24, height: 24, alignItems: 'center', justifyContent: 'center' }}
           className="active:opacity-60"
         >
-          <SfIcon name="plus" size={18} color={Colors.text1} />
+          <SfIcon name="plus" size={18} color={c.text1} />
         </Pressable>
       </View>
       {menuOpen ? (
@@ -257,17 +259,18 @@ function MenuItem({
   onPress: () => void;
   isLast?: boolean;
 }) {
+  const c = useThemeColors();
   return (
     <Pressable
       onPress={onPress}
       className="flex-row items-center gap-3 px-4 py-3 active:opacity-70"
       style={{
         borderBottomWidth: isLast ? 0 : 0.5,
-        borderBottomColor: Colors.divider,
+        borderBottomColor: c.divider,
         minWidth: 200,
       }}
     >
-      <SfIcon name={icon} size={16} color={Colors.text1} />
+      <SfIcon name={icon} size={16} color={c.text1} />
       <Text className="text-text1 text-[15px]">{label}</Text>
     </Pressable>
   );
@@ -282,6 +285,7 @@ function EmptyState({
   onAddManually: () => void;
   importing: boolean;
 }) {
+  const c = useThemeColors();
   return (
     <ScrollView
       contentContainerStyle={{ flexGrow: 1, alignItems: 'center', justifyContent: 'center' }}
@@ -303,14 +307,14 @@ function EmptyState({
           style={{
             width: 200,
             height: 44,
-            backgroundColor: Colors.invertedButtonBg,
+            backgroundColor: c.invertedButtonBg,
             alignItems: 'center',
             justifyContent: 'center',
             opacity: importing ? 0.6 : 1,
           }}
         >
           <Text
-            style={{ color: Colors.invertedButtonText }}
+            style={{ color: c.invertedButtonText }}
             className="text-[15px]"
           >
             {importing ? 'Importing...' : 'Import from Phone'}
