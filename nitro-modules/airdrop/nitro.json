@@ -1,0 +1,23 @@
+{
+  "$schema": "https://nitro.margelo.com/schemas/nitro.schema.json",
+  "cxxNamespace": ["solidarity", "airdrop"],
+  "ios": {
+    "iosModuleName": "Airdrop"
+  },
+  "android": {
+    "androidNamespace": ["gg", "solidarity", "airdrop"],
+    "androidCxxLibName": "Airdrop"
+  },
+  "autolinking": {
+    "Airdrop": {
+      "ios": {
+        "language": "swift",
+        "implementationClassName": "HybridAirdrop"
+      },
+      "android": {
+        "language": "kotlin",
+        "implementationClassName": "HybridAirdrop"
+      }
+    }
+  }
+}
