@@ -159,4 +159,10 @@ dependencies {
   // 1.1.0-alpha06 is the last release that includes `MasterKeys.getOrCreate`;
   // the 1.0.0 stable also has it but exposes a slightly different builder API.
   implementation "androidx.security:security-crypto:1.0.0"
+
+  // JNA — required by uniffi-generated Kotlin (com.sun.jna.Pointer,
+  // Structure, Library, etc.). Use the @aar variant so JNA's own
+  // libjnidispatch.so ships in the APK; without it `Native.load()` fails
+  // at runtime with `UnsatisfiedLinkError: jnidispatch`.
+  implementation "net.java.dev.jna:jna:5.13.0@aar"
 }
