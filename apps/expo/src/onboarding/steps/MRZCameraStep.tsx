@@ -21,7 +21,7 @@
  */
 import type { ReactNode } from 'react';
 import { useCallback, useState } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 import {
   Camera,
   useCameraDevice,
@@ -63,6 +63,29 @@ export function MRZCameraStep({
   const handleUseThis = useCallback(() => {
     if (draft) onScanned(draft);
   }, [draft, onScanned]);
+
+  // Android has no MRZ OCR plugin yet (the iOS Vision recogniser doesn't
+  // exist on AOSP, and the ML Kit frame-processor isn't wired in this
+  // build). Mounting `<Camera>` only to show a preview the user can't
+  // act on regresses to a fail-closed UX on Android — the live feed
+  // briefly lights up, then the only path forward is "Enter Manually".
+  // Skip the camera entirely on Android and route straight to the manual
+  // sheet so the step never appears broken. iOS keeps the preview for
+  // the day the recogniser lands.
+  if (Platform.OS === 'android') {
+    return (
+      <View style={styles.permissionScreen}>
+        <Text style={styles.permissionText}>
+          Live MRZ scan is iOS-only right now. Enter the MRZ from your passport
+          to continue the verification flow.
+        </Text>
+        <View style={{ marginTop: 16, gap: 8, alignItems: 'stretch' }}>
+          <ThemedButton label="Enter Manually" variant="inverted" onPress={onSwitchToManual} />
+          <ThemedButton label="Cancel" variant="secondary" onPress={onCancel} />
+        </View>
+      </View>
+    );
+  }
 
   if (permission !== 'granted') {
     return (
