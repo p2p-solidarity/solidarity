@@ -3,19 +3,21 @@
  * @solidarity/nitro-passport-zk (Android)
  *
  * Wraps the Rust `passport_zk_mopro` cdylib via JNI. Implements the
- * Nitrogen-generated `HybridPassportZkSpec` abstract class.
+ * Nitrogen-generated `HybridPassportZkSpec` abstract class. Package must
+ * live under `com.margelo.nitro.gg.solidarity.passportzk` so the JNI
+ * lookup hits the same FQCN as JHybridPassportZkSpec::initHybrid expects
+ * — the earlier `gg.solidarity.passportzk` placement failed at runtime
+ * with `NoClassDefFoundError`.
  *
  * TODO: build cdylib for aarch64-linux-android + x86_64-linux-android
  * via `cargo ndk` from passport-noir/mopro-binding/, drop into
  * android/src/main/jniLibs/<abi>/libpassport_zk_mopro.so, then call
  * native methods here.
  */
-package gg.solidarity.passportzk
+package com.margelo.nitro.gg.solidarity.passportzk
 
 import com.margelo.nitro.core.ArrayBuffer
 import com.margelo.nitro.core.Promise
-import com.margelo.nitro.solidarity.passportzk.HybridPassportZkSpec
-import com.margelo.nitro.solidarity.passportzk.NitroNoirProof
 
 class HybridPassportZk : HybridPassportZkSpec() {
 
