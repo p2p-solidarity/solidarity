@@ -44,16 +44,26 @@ export type PresentationDefinition = z.infer<typeof presentationDefinitionSchema
 
 export const oidcAuthRequestSchema = z.object({
   client_id: z.string().min(1),
-  redirect_uri: z.string().min(1),
+  redirect_uri: z.string().min(1).optional(),
+  response_uri: z.string().min(1).optional(),
   state: z.string().min(1),
   nonce: z.string().min(1),
-  scope: z.string().transform((s) =>
-    s.split(/\s+/u).filter(Boolean).map((tok) => oidcScopeSchema.parse(tok))
-  ),
+  scope: z
+    .string()
+    .optional()
+    .default('')
+    .transform((s) =>
+      (s ?? '')
+        .split(/\s+/u)
+        .filter(Boolean)
+        .map((tok) => oidcScopeSchema.parse(tok))
+    ),
   response_type: z.string().default('vp_token id_token'),
-  response_mode: z.enum(['direct_post', 'fragment', 'query']).default('direct_post'),
-  code_challenge: z.string().min(1),
-  code_challenge_method: z.literal('S256'),
+  response_mode: z
+    .enum(['direct_post', 'direct_post.jwt', 'fragment', 'query', 'form_post'])
+    .default('direct_post'),
+  code_challenge: z.string().min(1).optional(),
+  code_challenge_method: z.literal('S256').optional(),
   presentation_definition: presentationDefinitionSchema.optional(),
   client_metadata: z.record(z.string(), z.unknown()).optional(),
 });

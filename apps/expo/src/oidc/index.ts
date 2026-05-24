@@ -34,3 +34,8 @@ export {
   type PresentationSubmission,
   type PresentationSubmissionDescriptor,
 } from './presenter';
+export {
+  submitAuthorizationResponse,
+  type SubmitAuthorizationResponseOpts,
+  type SubmitAuthorizationResponseResult,
+} from './submitResponse';
