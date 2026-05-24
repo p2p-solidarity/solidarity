@@ -1,15 +1,33 @@
 /**
- * Solidarity brand palette — the single source of truth for hex literals.
+ * Solidarity brand palette — single source of truth for hex literals.
  * Mirrors Swift `Color.Theme.*` (ThemeManager.swift L200-330) so the same
  * name renders the same colour across the SwiftUI legacy build and the
  * Expo port.
  *
- * Per aniseekr-expo CLAUDE.md rule 4: hex literals are forbidden except
- * for entries in this file (brand source) and contrast.ts (ON_DARK/ON_LIGHT).
- * Always reference via `Colors.<name>` so a future theme switch updates
- * one place.
+ * Dark-mode awareness lives at this layer so every consumer of
+ * `Colors.text1`, `Colors.pageBg`, etc. *automatically* picks up the dark
+ * variant when the user is in dark mode — without each call site having
+ * to wire `useThemeColors()`. The `Colors` export is a Proxy: reading
+ * `Colors.text1` consults the current `Appearance.getColorScheme()` and
+ * returns `RAW.text1Dark` when the scheme is dark and that override
+ * exists; otherwise it falls back to the light token.
+ *
+ * Why a Proxy (and not just a getter object)?
+ *   - Static `const` objects freeze a single value at module-load, so
+ *     `style={{ color: Colors.text1 }}` would burn in the boot-time
+ *     scheme and never flip.
+ *   - A Proxy re-evaluates on every read. NativeWind's StyleSheet
+ *     re-compilation already triggers a re-render of every styled
+ *     component when `Appearance.setColorScheme(...)` fires, so inline
+ *     reads land on the new value the next paint.
+ *
+ * For React-aware reads (when you need a `useMemo` dep that changes on
+ * scheme flips), prefer `useThemeColors()` — it subscribes via
+ * `useColorScheme()` and returns a frozen snapshot for the current pass.
  */
-export const Colors = {
+import { Appearance } from 'react-native';
+
+const RAW = {
   /** Page background — Palette.cream (#fbf9f2) light / #060417 dark. */
   pageBg: '#FBF9F2',
   pageBgDark: '#060417',
@@ -85,7 +103,9 @@ export const Colors = {
 
   /** Inverted button background — text1 (used by Edit / Show buttons). */
   invertedButtonBg: '#2F2F30',
+  invertedButtonBgDark: '#F0E8F0',
   invertedButtonText: '#FBF9F2',
+  invertedButtonTextDark: '#060417',
 
   /** Accent rose — primary brand colour (Palette.purple #83537D mauve in dark). */
   accentRose: '#BF80A7',
@@ -130,4 +150,23 @@ export const Colors = {
   cardBorderDark: 'rgba(255,255,255,0.10)',
 } as const;
 
-export type ColorToken = keyof typeof Colors;
+type RawKey = keyof typeof RAW;
+
+function pick(key: string): string | undefined {
+  if (!(key in RAW)) return undefined;
+  const scheme = Appearance.getColorScheme();
+  if (scheme === 'dark') {
+    const darkKey = `${key}Dark` as RawKey;
+    if (darkKey in RAW) return RAW[darkKey];
+  }
+  return RAW[key as RawKey];
+}
+
+export const Colors = new Proxy(RAW, {
+  get(_, key) {
+    if (typeof key !== 'string') return undefined;
+    return pick(key);
+  },
+}) as typeof RAW;
+
+export type ColorToken = RawKey;
