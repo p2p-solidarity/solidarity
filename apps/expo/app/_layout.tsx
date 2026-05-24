@@ -24,16 +24,21 @@ import '../global.css';
 import { useEffect, useState } from 'react';
 import { Stack } from 'expo-router';
 import * as Linking from 'expo-linking';
+import * as Notifications from 'expo-notifications';
 import * as SplashScreen from 'expo-splash-screen';
 import { StatusBar } from 'expo-status-bar';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { KeyboardProvider } from 'react-native-keyboard-controller';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 
+import { useReceivedCard } from '@/cards/receivedCard';
+import { ReceivedCardSheet } from '@/components/cards/ReceivedCardSheet';
 import { useContactStore } from '@/contacts/repository';
 import { handleDeepLink } from '@/deeplink/router';
 import { ToastOverlay } from '@/feedback/toast';
 import { installI18n } from '@/i18n';
+import { syncOnce } from '@/sakura/inbox';
+import { registerForPushNotificationsAsync } from '@/sakura/pushRegistration';
 import { hydratePreferences } from '@/settings/preferences';
 import { initMmkv } from '@/storage';
 
@@ -42,6 +47,10 @@ void SplashScreen.preventAutoHideAsync();
 export default function RootLayout() {
   const [ready, setReady] = useState(false);
   const hydrateContacts = useContactStore((s) => s.hydrate);
+  const receivedCard = useReceivedCard((s) => s.card);
+  const receivedVerification = useReceivedCard((s) => s.verificationStatus);
+  const dismissReceived = useReceivedCard((s) => s.dismiss);
+  const upsertContact = useContactStore((s) => s.upsert);
 
   useEffect(() => {
     void (async () => {
@@ -66,6 +75,32 @@ export default function RootLayout() {
     return () => { sub.remove(); };
   }, []);
 
+  // Sakura push rail — mirrors Swift AppDelegate.didFinishLaunchingWithOptions
+  // + didReceiveRemoteNotification. Registration is fire-and-forget per
+  // Rule 10 (never await on first paint); listeners trigger an inbox sync
+  // whenever the OS hands us a notification (foreground or interaction tap).
+  useEffect(() => {
+    // Permission denied / no token / relay down — Swift swallows the
+    // equivalent error too. The user can retry from Settings.
+    void registerForPushNotificationsAsync().catch(() => undefined);
+    const received = Notifications.addNotificationReceivedListener(() => {
+      // Inbox decrypt failures are not surfaced to the user; mirrors
+      // Swift MessageService logging behaviour.
+      void syncOnce().catch(() => undefined);
+    });
+    const response = Notifications.addNotificationResponseReceivedListener(() => {
+      void syncOnce().catch(() => undefined);
+    });
+    const tokenChange = Notifications.addPushTokenListener(() => {
+      void registerForPushNotificationsAsync().catch(() => undefined);
+    });
+    return () => {
+      received.remove();
+      response.remove();
+      tokenChange.remove();
+    };
+  }, []);
+
   if (!ready) return null;
 
   return (
@@ -75,6 +110,16 @@ export default function RootLayout() {
           <StatusBar style="auto" />
           <Stack screenOptions={{ headerShown: false }} />
           <ToastOverlay />
+          <ReceivedCardSheet
+            visible={receivedCard !== null}
+            card={receivedCard}
+            verificationStatus={receivedVerification}
+            onSave={async (contact) => {
+              await upsertContact(contact);
+              dismissReceived();
+            }}
+            onDismiss={dismissReceived}
+          />
         </SafeAreaProvider>
       </KeyboardProvider>
     </GestureHandlerRootView>
