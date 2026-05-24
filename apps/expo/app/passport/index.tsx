@@ -48,6 +48,7 @@ import {
   type PassportMRZDraft,
   type PassportProofResult,
 } from '@/passport/pipeline';
+import { usePreferences } from '@/settings/preferences';
 import { getNfcPassport } from '@solidarity/nitro-nfc-passport';
 import { getPassportZk } from '@solidarity/nitro-passport-zk';
 
@@ -71,7 +72,13 @@ export default function PassportSetup() {
 
   const meta = PASSPORT_STEP_META[state.step];
   const nitro = useMemo(() => tryLoadNitro(), []);
-  const isMock = nitro.nfc === null || nitro.zk === null;
+  const developerMode = usePreferences((s) => s.developerMode);
+  const simulateNfc = usePreferences((s) => s.simulateNfc);
+  // Mirrors Swift `PassportPipelineService.shouldSimulateNFC` — bypass the
+  // real NFC reader when developer mode + the Simulate NFC toggle are both
+  // on (or when the Nitro module simply isn't linked on this platform).
+  const useSimulatedNfc = nitro.nfc === null || (developerMode && simulateNfc);
+  const isMock = useSimulatedNfc || nitro.zk === null;
 
   useEffect(() => {
     if (state.errorMessage) {
@@ -93,17 +100,17 @@ export default function PassportSetup() {
     dispatch({ type: 'setLoading', value: true });
     dispatch({ type: 'setNfcProgress', message: 'Hold passport near device...' });
     try {
-      const chip: PassportChipSnapshot = nitro.nfc
-        ? chipFromNitro(
-            await nitro.nfc.read({
+      const chip: PassportChipSnapshot = useSimulatedNfc
+        ? await simulateNfcRead(state.draft)
+        : chipFromNitro(
+            await nitro.nfc!.read({
               documentNumber: state.draft.passportNumber,
               dateOfBirth: state.draft.dateOfBirth,
               dateOfExpiry: state.draft.expiryDate,
             }),
             state.draft.nationalityCode,
             state.draft.passportNumber
-          )
-        : await simulateNfcRead(state.draft);
+          );
       dispatch({ type: 'setNfcProgress', message: 'Read complete.' });
       dispatch({ type: 'setChip', chip });
     } catch (err) {

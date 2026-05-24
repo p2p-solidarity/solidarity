@@ -16,10 +16,13 @@
  *   3. Create the initial BusinessCard (CardManager.createCard).
  *   4. Navigate to /(tabs)/people (MainTabView).
  */
-import { router } from 'expo-router';
+import { router, Stack, useLocalSearchParams } from 'expo-router';
 import { useCallback, useReducer } from 'react';
+import { Pressable, View } from 'react-native';
 
 import { useCardStore } from '@/cards/cardManager';
+import { SfIcon } from '@/components/icons/SfIcon';
+import { Colors } from '@/constants/Colors';
 import { AvatarSelectionGridStep } from '@/onboarding/steps/AvatarSelectionGridStep';
 import { CompleteStep } from '@/onboarding/steps/CompleteStep';
 import { DarkProfileSetupStep } from '@/onboarding/steps/DarkProfileSetupStep';
@@ -38,6 +41,8 @@ import { pushToast } from '@/feedback/toast';
 import type { BusinessCard, SocialNetwork } from '@solidarity/shared';
 
 export default function OnboardingFlow() {
+  const params = useLocalSearchParams<{ replay?: string }>();
+  const isReplay = params.replay === '1';
   const [state, dispatch] = useReducer(onboardingReducer, initialOnboardingState);
   const setPref = usePreferences((s) => s.set);
   const upsertCard = useCardStore((s) => s.upsert);
@@ -69,19 +74,22 @@ export default function OnboardingFlow() {
     router.replace('/(tabs)/people');
   };
 
+  let body: React.ReactNode = null;
   switch (state.step) {
     case 'welcome':
-      return <TerminalWelcomeStep onBegin={next} />;
+      body = <TerminalWelcomeStep onBegin={next} />;
+      break;
     case 'profileSetup':
-      return (
+      body = (
         <DarkProfileSetupStep
           profile={state.profile}
           onChange={handleProfileChange}
           onNext={next}
         />
       );
+      break;
     case 'avatarSetup':
-      return (
+      body = (
         <AvatarSelectionGridStep
           selection={state.animal}
           onSelect={(animal) => { dispatch({ type: 'setAnimal', animal }); }}
@@ -89,8 +97,9 @@ export default function OnboardingFlow() {
           onNext={next}
         />
       );
+      break;
     case 'secureKeys':
-      return (
+      body = (
         <SecureKeysStep
           onBack={() => { goTo('avatarSetup'); }}
           onKeysGenerated={() => {
@@ -99,8 +108,9 @@ export default function OnboardingFlow() {
           }}
         />
       );
+      break;
     case 'importContacts':
-      return (
+      body = (
         <ImportContactsStep
           importedCount={state.importedCount}
           onBack={() => { goTo('secureKeys'); }}
@@ -108,16 +118,18 @@ export default function OnboardingFlow() {
           onImported={(count) => { dispatch({ type: 'addImportedCount', count }); }}
         />
       );
+      break;
     case 'scanPassport':
-      return (
+      body = (
         <ScanPassportStep
           passportScanned={state.passportScanned}
           onBack={() => { goTo('importContacts'); }}
           onAdvance={next}
         />
       );
+      break;
     case 'complete':
-      return (
+      body = (
         <CompleteStep
           username={state.profile.username}
           keysGenerated={state.keysGenerated}
@@ -126,7 +138,39 @@ export default function OnboardingFlow() {
           onFinish={() => { void handleFinish(); }}
         />
       );
+      break;
   }
+
+  if (!isReplay) return body;
+
+  // Replay mode — mirrors Swift OnboardingReplayView: presents the flow as
+  // a fullScreenCover with a top-trailing X button (54pt top, 20pt
+  // trailing, searchBg fill, divider 1pt border).
+  return (
+    <View style={{ flex: 1 }}>
+      <Stack.Screen options={{ presentation: 'fullScreenModal' }} />
+      {body}
+      <View
+        pointerEvents="box-none"
+        style={{ position: 'absolute', top: 54, right: 20 }}
+      >
+        <Pressable
+          onPress={() => { router.back(); }}
+          accessibilityRole="button"
+          accessibilityLabel="Close"
+          hitSlop={8}
+          style={{
+            padding: 10,
+            backgroundColor: Colors.searchBg,
+            borderWidth: 1,
+            borderColor: Colors.divider,
+          }}
+        >
+          <SfIcon name="xmark" size={14} weight="bold" color={Colors.text2} />
+        </Pressable>
+      </View>
+    </View>
+  );
 }
 
 function composeInitialCard(profile: OnboardingProfile, animal: BusinessCard['animal']): BusinessCard {
