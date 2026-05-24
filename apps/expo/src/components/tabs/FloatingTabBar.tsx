@@ -32,14 +32,12 @@ interface TabRoute {
   readonly name: string;
 }
 
-interface TabDescriptors {
-  readonly [key: string]: {
-    readonly options: {
-      readonly title?: string;
-      readonly tabBarLabel?: string;
-    };
+type TabDescriptors = Readonly<Record<string, {
+  readonly options: {
+    readonly title?: string;
+    readonly tabBarLabel?: string;
   };
-}
+}>>;
 
 interface TabNavigationLike {
   readonly emit: (event: { type: 'tabPress'; target: string; canPreventDefault: true }) => {
