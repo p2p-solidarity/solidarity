@@ -40,6 +40,52 @@ interface NitroEventLike {
   readonly distance?: number;
   readonly reason?: string;
   readonly errorMessage?: string;
+  readonly errorCode?: string;
+}
+
+/**
+ * Native error codes the iOS / Android Hybrid layer can raise. Mirrors
+ * the `code` literals in nitro-modules/proximity/{ios,android}/
+ * HybridProximity.*. The native side may add new codes, so the consumer
+ * always sees a plain `string` — this set just powers the hint table.
+ */
+const FATAL_BLE_CODES = new Set<string>([
+  'ble_state_invalid',
+  'bluetooth_unsupported',
+  'bluetooth_unauthorized',
+  'bluetooth_not_ready',
+  'ble_unavailable',
+  'permission_denied',
+]);
+
+/**
+ * Human-readable hint for the most common BLE failure modes. Returning
+ * undefined for unknown codes keeps the upstream behaviour (we just show
+ * `errorMessage` as-is).
+ */
+function describeBleError(code: string | undefined): string | undefined {
+  switch (code) {
+    case 'bluetooth_unsupported':
+      return 'Bluetooth LE is not available on this device. Matching only works on a real iPhone or Android phone with Bluetooth.';
+    case 'bluetooth_unauthorized':
+    case 'permission_denied':
+      return 'Bluetooth permission is required for nearby matching. Grant it in Settings to retry.';
+    case 'ble_state_invalid':
+    case 'bluetooth_not_ready':
+    case 'ble_unavailable':
+      return 'Bluetooth is off or not ready. Turn it on, then start matching again.';
+    default:
+      return undefined;
+  }
+}
+
+/**
+ * True for any code where there's no point retrying automatically — the
+ * user has to toggle Bluetooth / grant permission / switch to a real
+ * device before things can proceed.
+ */
+function isFatalBleCode(code: string | undefined): boolean {
+  return code !== undefined && FATAL_BLE_CODES.has(code);
 }
 
 interface NitroProximityLike {
@@ -282,9 +328,25 @@ function handleNitroEvent(
       }
       return;
     }
-    case 'error':
-      set(() => ({ lastErrorMessage: event.errorMessage ?? 'Proximity error' }));
+    case 'error': {
+      const code = event.errorCode;
+      const hint = describeBleError(code);
+      const message = hint ?? event.errorMessage ?? 'Proximity error';
+      const fatal = isFatalBleCode(code);
+      set((s) => ({
+        lastErrorMessage: message,
+        // When BLE itself is unavailable, drop the advertising/browsing
+        // intent so the radar UI stops spinning. The user has to toggle
+        // Bluetooth (or move to a real device) and tap Start again —
+        // we deliberately don't auto-retry to avoid a crash loop.
+        isAdvertising: fatal ? false : s.isAdvertising,
+        isBrowsing: fatal ? false : s.isBrowsing,
+        connectionStatus: fatal
+          ? deriveConnectionStatus(false, false, s.peers)
+          : s.connectionStatus,
+      }));
       return;
+    }
     default:
       return;
   }

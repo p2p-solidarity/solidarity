@@ -70,6 +70,20 @@ final class HybridProximity: HybridProximitySpec {
   private var pendingAdvertiseDisplayName: String?
   private var pendingAdvertiseDiscoveryJson: String?
 
+  /// True between `startBrowsing` and `stopBrowsing`. Gates the
+  /// "re-arm scan when central reaches .poweredOn" path so we never
+  /// scan when the TS layer hasn't asked us to (the root cause of the
+  /// CoreBluetooth API MISUSE crash).
+  private var wantsBrowsing: Bool = false
+  /// True between `startAdvertising` and `stopAdvertising`. Mirrors
+  /// `wantsBrowsing` for the peripheral side.
+  private var wantsAdvertising: Bool = false
+  /// Latches so we only emit a single `bluetooth_unsupported` /
+  /// `bluetooth_unauthorized` error per manager — without this the
+  /// state delegate would re-emit on every flap.
+  private var didReportCentralUnavailable: Bool = false
+  private var didReportPeripheralUnavailable: Bool = false
+
   /// Discovered peripherals keyed by our externally-visible peerId
   /// (`peripheral.identifier.uuidString`). Stored even before we've read
   /// their PSM so `lostPeer` events can correlate.
@@ -133,6 +147,59 @@ final class HybridProximity: HybridProximitySpec {
     emit(makeEvent(.error, errorMessage: message, errorCode: code))
   }
 
+  /// Returns true when the central manager is `.poweredOn`. On a `false`
+  /// result the caller has already emitted a typed `error` event so the
+  /// TS layer can surface a "Bluetooth not available" state instead of
+  /// the UI spinning forever. NEVER call any CBCentralManager API after
+  /// this returns false — that's what trips API MISUSE.
+  private func ensureCentralPoweredOn(op: String) -> Bool {
+    let state = withState { self.centralManager?.state ?? .unknown }
+    if state == .poweredOn { return true }
+    emitError(
+      "Bluetooth central not ready for \(op) (state=\(describe(state)))",
+      code: "ble_state_invalid"
+    )
+    return false
+  }
+
+  /// Mirror of `ensureCentralPoweredOn` for the peripheral side.
+  private func ensurePeripheralPoweredOn(op: String) -> Bool {
+    let state = withState { self.peripheralManager?.state ?? .unknown }
+    if state == .poweredOn { return true }
+    emitError(
+      "Bluetooth peripheral not ready for \(op) (state=\(describe(state)))",
+      code: "ble_state_invalid"
+    )
+    return false
+  }
+
+  /// Either side powered on is enough for ops that ride an existing
+  /// L2CAP channel (sendData/disconnect can come from either client or
+  /// server depending on who opened it).
+  private func anyManagerPoweredOn(op: String) -> Bool {
+    let (c, p) = withState {
+      (self.centralManager?.state ?? .unknown, self.peripheralManager?.state ?? .unknown)
+    }
+    if c == .poweredOn || p == .poweredOn { return true }
+    emitError(
+      "Bluetooth not ready for \(op) (central=\(describe(c)) peripheral=\(describe(p)))",
+      code: "ble_state_invalid"
+    )
+    return false
+  }
+
+  private func describe(_ state: CBManagerState) -> String {
+    switch state {
+    case .unknown: return "unknown"
+    case .resetting: return "resetting"
+    case .unsupported: return "unsupported"
+    case .unauthorized: return "unauthorized"
+    case .poweredOff: return "poweredOff"
+    case .poweredOn: return "poweredOn"
+    @unknown default: return "unknown"
+    }
+  }
+
   fileprivate func makeEvent(
     _ kind: ProximityEventKind,
     peer: ProximityPeer? = nil,
@@ -166,26 +233,28 @@ final class HybridProximity: HybridProximitySpec {
     withState {
       self.publishedDisplayName = displayName
       self.publishedDiscoveryJson = discoveryInfoJson
+      self.wantsAdvertising = true
+      // Always seed pending* so handlePeripheralStateChange can resume
+      // even if the manager isn't .poweredOn yet.
+      self.pendingAdvertiseDisplayName = displayName
+      self.pendingAdvertiseDiscoveryJson = discoveryInfoJson
     }
     if mgr.state == .poweredOn {
       publishL2cap()
-    } else {
-      // Defer until didUpdateState fires .poweredOn.
-      withState {
-        self.pendingAdvertiseDisplayName = displayName
-        self.pendingAdvertiseDiscoveryJson = discoveryInfoJson
-      }
     }
+    // Otherwise handlePeripheralStateChange will pick it up.
   }
 
   func stopAdvertising() {
     withState {
-      self.peripheralManager?.stopAdvertising()
-      if let s = self.publishedService {
-        self.peripheralManager?.remove(s)
-      }
-      if self.publishedPsm != 0 {
-        self.peripheralManager?.unpublishL2CAPChannel(self.publishedPsm)
+      self.wantsAdvertising = false
+      // Only touch CoreBluetooth APIs while the manager is .poweredOn —
+      // calling stopAdvertising / remove / unpublishL2CAPChannel before
+      // power-on triggers the same API MISUSE we're fixing.
+      if let mgr = self.peripheralManager, mgr.state == .poweredOn {
+        mgr.stopAdvertising()
+        if let s = self.publishedService { mgr.remove(s) }
+        if self.publishedPsm != 0 { mgr.unpublishL2CAPChannel(self.publishedPsm) }
       }
       self.publishedPsm = 0
       self.publishedService = nil
@@ -248,18 +317,27 @@ final class HybridProximity: HybridProximitySpec {
       self.centralManager = new
       return new
     }
+    withState { self.wantsBrowsing = true }
     if mgr.state == .poweredOn {
       mgr.scanForPeripherals(
         withServices: [ProximityWire.serviceUUID],
         options: [CBCentralManagerScanOptionAllowDuplicatesKey: NSNumber(value: false)]
       )
     }
-    // If not powered on yet, `centralManagerDidUpdateState` will retry.
+    // If not powered on yet, `centralManagerDidUpdateState` will retry —
+    // but only because we just set `wantsBrowsing = true`. Without that
+    // flag the handler would scan unconditionally and crash the next
+    // time the central re-armed (the API MISUSE we're fixing).
   }
 
   func stopBrowsing() {
     withState {
-      self.centralManager?.stopScan()
+      self.wantsBrowsing = false
+      // Same guard as stopAdvertising — never invoke stopScan before
+      // the central is .poweredOn or CoreBluetooth raises API MISUSE.
+      if let mgr = self.centralManager, mgr.state == .poweredOn {
+        mgr.stopScan()
+      }
       self.discoveredPeripherals.removeAll()
       self.peripheralPsm.removeAll()
       self.peripheralInfoJson.removeAll()
@@ -270,6 +348,11 @@ final class HybridProximity: HybridProximitySpec {
 
   func invitePeer(peerId: String, payload: ArrayBuffer, timeoutSec: Double) throws -> Promise<Bool> {
     return Promise.async {
+      // Guard up front — the cached `discoveredPeripherals` entry can
+      // outlive an actual .poweredOn state if the user toggled Bluetooth
+      // between scan and invite, and calling openL2CAPChannel in that
+      // window crashes with API MISUSE.
+      guard self.ensureCentralPoweredOn(op: "invitePeer") else { return false }
       let context = self.copyPayload(payload)
       let resolved = await withCheckedContinuation { (cont: CheckedContinuation<Bool, Never>) in
         self.withState {
@@ -294,6 +377,11 @@ final class HybridProximity: HybridProximitySpec {
   }
 
   func acceptInvitation(peerId: String) {
+    // The channel itself is fine to promote in-memory even if Bluetooth
+    // flipped off (the streams will fail their next IO with .endEncountered),
+    // but we surface the bad state so the consumer doesn't think the
+    // session is healthy.
+    guard ensurePeripheralPoweredOn(op: "acceptInvitation") else { return }
     withState {
       guard let ch = self.pendingIncomingChannels.removeValue(forKey: peerId) else { return }
       self.channels[peerId] = ch
@@ -302,6 +390,13 @@ final class HybridProximity: HybridProximitySpec {
   }
 
   func rejectInvitation(peerId: String) {
+    // Cleanup-only — but still guard so we don't issue stream close()
+    // calls into a manager that may have torn down the channel under us.
+    guard ensurePeripheralPoweredOn(op: "rejectInvitation") else {
+      // Best-effort cleanup of in-memory references; skip stream ops.
+      withState { self.pendingIncomingChannels.removeValue(forKey: peerId) }
+      return
+    }
     let ch = withState { self.pendingIncomingChannels.removeValue(forKey: peerId) }
     closeChannel(ch, peerId: peerId, reason: "rejected")
   }
@@ -310,6 +405,17 @@ final class HybridProximity: HybridProximitySpec {
 
   func sendData(peerId: String, data: ArrayBuffer) throws -> Promise<Void> {
     return Promise.async {
+      // sendData rides an existing L2CAP output stream that was attached
+      // when the central or peripheral established the channel. If
+      // Bluetooth has since been turned off the stream's underlying
+      // socket is invalid — bail with a typed error.
+      guard self.anyManagerPoweredOn(op: "sendData") else {
+        throw NSError(
+          domain: "gg.solidarity.proximity",
+          code: 503,
+          userInfo: [NSLocalizedDescriptionKey: "Bluetooth not ready"]
+        )
+      }
       let bytes = self.copyPayload(data)
       let exists: Bool = self.withState {
         guard self.channels[peerId] != nil else { return false }
@@ -329,15 +435,21 @@ final class HybridProximity: HybridProximitySpec {
   }
 
   func disconnect(peerId: String) {
+    // Cleanup is always safe in-memory; only the stream.close() inside
+    // cleanupChannelLocked could fault if Bluetooth flipped. If the
+    // managers aren't ready, drop the in-memory state and emit the
+    // error event but skip the stream close to be defensive.
+    let bleReady = anyManagerPoweredOn(op: "disconnect")
     let ch = withState { () -> CBL2CAPChannel? in
       if peerId == "*" {
-        // Tear down everything.
-        for (id, c) in self.channels { self.cleanupChannelLocked(c, peerId: id) }
+        if bleReady {
+          for (id, c) in self.channels { self.cleanupChannelLocked(c, peerId: id) }
+        }
         self.channels.removeAll()
         return nil
       }
       let c = self.channels.removeValue(forKey: peerId)
-      if let c = c { self.cleanupChannelLocked(c, peerId: peerId) }
+      if let c = c, bleReady { self.cleanupChannelLocked(c, peerId: peerId) }
       return c
     }
     if ch != nil { emit(makeEvent(.sessionended, peerId: peerId, reason: "localDisconnect")) }
@@ -347,6 +459,9 @@ final class HybridProximity: HybridProximitySpec {
 
   func startRanging(peerId: String) throws -> Promise<Void> {
     return Promise.async {
+      // Token exchange rides on L2CAP, so a dead BLE stack means
+      // ranging can never produce updates — surface the error early.
+      guard self.anyManagerPoweredOn(op: "startRanging") else { return }
       self.withState {
         let s = NISession()
         s.delegate = self.niProxy
@@ -359,6 +474,7 @@ final class HybridProximity: HybridProximitySpec {
   }
 
   func stopRanging(peerId: String) {
+    // NI session invalidate() is safe regardless of BLE state — no guard.
     withState {
       if let s = self.niSessions.removeValue(forKey: peerId) {
         self.niSessionPeerNames.removeValue(forKey: ObjectIdentifier(s))
@@ -382,12 +498,33 @@ final class HybridProximity: HybridProximitySpec {
   // MARK: Peripheral (server) side
 
   fileprivate func handlePeripheralStateChange(_ state: CBManagerState) {
-    if state == .poweredOn {
+    switch state {
+    case .poweredOn:
+      // Both flags required so we don't race against `stopAdvertising`
+      // clearing pending* while the state delegate is in-flight.
       let resume = withState {
-        return self.pendingAdvertiseDisplayName != nil
+        return self.wantsAdvertising
+          && self.pendingAdvertiseDisplayName != nil
           && self.pendingAdvertiseDiscoveryJson != nil
       }
       if resume { publishL2cap() }
+    case .unsupported, .unauthorized:
+      let shouldEmit = withState { () -> Bool in
+        if self.didReportPeripheralUnavailable { return false }
+        self.didReportPeripheralUnavailable = true
+        return true
+      }
+      if shouldEmit {
+        let code = (state == .unsupported) ? "bluetooth_unsupported" : "bluetooth_unauthorized"
+        let msg = (state == .unsupported)
+          ? "Bluetooth LE advertising is not supported on this device (e.g. iOS Simulator)"
+          : "Bluetooth permission denied — enable in Settings"
+        emitError(msg, code: code)
+      }
+    case .poweredOff, .resetting, .unknown:
+      break
+    @unknown default:
+      break
     }
   }
 
@@ -420,13 +557,43 @@ final class HybridProximity: HybridProximitySpec {
   // MARK: Central (client) side
 
   fileprivate func handleCentralStateChange(_ state: CBManagerState) {
-    if state == .poweredOn {
-      withState {
-        self.centralManager?.scanForPeripherals(
-          withServices: [ProximityWire.serviceUUID],
-          options: [CBCentralManagerScanOptionAllowDuplicatesKey: NSNumber(value: false)]
-        )
+    switch state {
+    case .poweredOn:
+      // Only scan when the TS layer has actually asked us to. The
+      // previous behaviour scanned unconditionally on every state
+      // transition to .poweredOn, which is exactly what trips the
+      // CoreBluetooth API MISUSE crash when a stale central from a
+      // prior session sees power-on without a startBrowsing call.
+      let shouldScan = withState { self.wantsBrowsing }
+      if shouldScan {
+        withState {
+          self.centralManager?.scanForPeripherals(
+            withServices: [ProximityWire.serviceUUID],
+            options: [CBCentralManagerScanOptionAllowDuplicatesKey: NSNumber(value: false)]
+          )
+        }
       }
+    case .unsupported, .unauthorized:
+      // Latch — Simulator and revoked-permission devices would otherwise
+      // re-fire on every relaunch. The TS layer sees one typed error and
+      // can render "Bluetooth not available" instead of an infinite spinner.
+      let shouldEmit = withState { () -> Bool in
+        if self.didReportCentralUnavailable { return false }
+        self.didReportCentralUnavailable = true
+        return true
+      }
+      if shouldEmit {
+        let code = (state == .unsupported) ? "bluetooth_unsupported" : "bluetooth_unauthorized"
+        let msg = (state == .unsupported)
+          ? "Bluetooth LE is not supported on this device (e.g. iOS Simulator)"
+          : "Bluetooth permission denied — enable in Settings"
+        emitError(msg, code: code)
+      }
+    case .poweredOff, .resetting, .unknown:
+      // Transient — the next state change will tell us what to do.
+      break
+    @unknown default:
+      break
     }
   }
 
