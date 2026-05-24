@@ -87,9 +87,9 @@ export default function MeTab() {
 
           {developerMode ? (
             <DeveloperSection
-              onZk={() => router.push({ pathname: '/settings', params: { section: 'zk' } })}
-              onOidc={() => router.push({ pathname: '/settings', params: { section: 'oidc' } })}
-              onGroups={() => router.push('/groups')}
+              onZk={() => router.push('/id/zk-settings')}
+              onOidc={() => router.push('/settings/oidc-request')}
+              onGroups={() => router.push('/settings/groups')}
             />
           ) : null}
         </View>

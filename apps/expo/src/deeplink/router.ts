@@ -17,7 +17,7 @@ export function handleDeepLink(raw: string): DeepLinkRoute {
       router.push({ pathname: '/people/[id]', params: { id: route.cardId } });
       break;
     case 'groupInvite':
-      router.push({ pathname: '/groups', params: { invite: route.token } });
+      router.push({ pathname: '/settings/groups', params: { invite: route.token } });
       break;
     case 'oidc':
       router.push({ pathname: '/oidc/consent', params: { q: route.query } });

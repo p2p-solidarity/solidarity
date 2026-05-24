@@ -15,11 +15,12 @@
  * banner + invite/privacy/terms rows are toast stubs until the
  * backup-provider identity layer lands.
  */
-import { router } from 'expo-router';
+import { router, useLocalSearchParams } from 'expo-router';
 import { useCallback, useEffect, useState } from 'react';
 import { Alert, RefreshControl, ScrollView, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { GroupJoinSheet } from '@/components/groups/GroupJoinSheet';
 import { SfIcon } from '@/components/icons/SfIcon';
 import {
   SettingsBackToolbar,
@@ -40,10 +41,21 @@ export default function GroupManagementSettings() {
   const hydrate = useGroupStore((s) => s.hydrate);
   const deleteGroup = useGroupStore((s) => s.deleteGroup);
   const [refreshing, setRefreshing] = useState(false);
+  const [joinVisible, setJoinVisible] = useState(false);
+  const { invite } = useLocalSearchParams<{ invite?: string }>();
 
   useEffect(() => {
     void hydrate();
   }, [hydrate]);
+
+  // Deep-link parity with Swift DeepLinkManager — when `invite` arrives via
+  // `solidarity://group/<token>`, surface the join sheet so the user can
+  // confirm the token.
+  useEffect(() => {
+    if (invite && invite.length > 0) {
+      setJoinVisible(true);
+    }
+  }, [invite]);
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
@@ -72,7 +84,7 @@ export default function GroupManagementSettings() {
   };
 
   const goCreate = () => { router.push('/groups/new'); };
-  const goInvite = () => { pushToast('Invite via Link lands next iteration', 'info'); };
+  const goInvite = () => { setJoinVisible(true); };
   const goPrivacy = () => { pushToast('Privacy Policy lands next iteration', 'info'); };
   const goTerms = () => { pushToast('Terms of Service lands next iteration', 'info'); };
 
@@ -145,6 +157,11 @@ export default function GroupManagementSettings() {
           </SettingsBlockSection>
         </View>
       </ScrollView>
+
+      <GroupJoinSheet
+        visible={joinVisible}
+        onClose={() => { setJoinVisible(false); }}
+      />
     </View>
   );
 }

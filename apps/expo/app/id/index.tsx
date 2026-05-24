@@ -83,7 +83,7 @@ export default function IDViewScreen(): React.JSX.Element {
 
   const onCoreLongPress = (): void => {
     // Swift presents the GroupManagementView sheet.
-    router.push('/groups');
+    router.push('/settings/groups');
   };
 
   const onSwitchDid = (): void => {
