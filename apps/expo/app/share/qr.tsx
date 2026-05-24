@@ -19,6 +19,7 @@ import * as FileSystem from 'expo-file-system/legacy';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { SfIcon } from '@/components/icons/SfIcon';
+import { ShareLinkOptionsSheet } from '@/components/share/ShareLinkOptionsSheet';
 import { ON_DARK, ThemedButton } from '@/components/themed';
 import { Colors } from '@/constants/Colors';
 import { useMyCard } from '@/cards/cardManager';
@@ -32,6 +33,7 @@ export default function QrSharingScreen() {
   const myCard = useMyCard();
   const [generation, setGeneration] = useState(0);
   const [secondsLeft, setSecondsLeft] = useState(COUNTDOWN_SECONDS);
+  const [shareSheetVisible, setShareSheetVisible] = useState(false);
   interface QrRefShape {
     readonly toDataURL?: (cb: (data: string) => void) => void;
   }
@@ -146,8 +148,23 @@ export default function QrSharingScreen() {
             disabled={!payload}
             onPress={() => { void shareQr(); }}
           />
+          <ThemedButton
+            fullWidth
+            variant="secondary"
+            label="Share via…"
+            leadingIcon={<SfIcon name="ellipsis.circle" size={14} color={Colors.accentRose} />}
+            disabled={!payload}
+            onPress={() => { setShareSheetVisible(true); }}
+          />
         </View>
       </ScrollView>
+
+      <ShareLinkOptionsSheet
+        visible={shareSheetVisible}
+        url={payload ?? ''}
+        title={myCard?.name}
+        onClose={() => { setShareSheetVisible(false); }}
+      />
     </View>
   );
 }
