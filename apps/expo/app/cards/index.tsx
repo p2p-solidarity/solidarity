@@ -14,12 +14,12 @@
  * (tabs)/me/index.tsx per scope rules.
  */
 import { router, Stack } from 'expo-router';
-import { useEffect, type ReactNode } from 'react';
-import { ActivityIndicator, Pressable, ScrollView, View } from 'react-native';
+import { useEffect, useState, type ReactNode } from 'react';
+import { ActivityIndicator, Pressable, ScrollView, Share, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { useCardStore } from '@/cards/cardManager';
-import { BusinessCardRow } from '@/components/cards';
+import { BusinessCardActionsSheet, BusinessCardRow } from '@/components/cards';
 import { PaperStackIllustration } from '@/components/decor/PaperStackIllustration';
 import { SfIcon } from '@/components/icons/SfIcon';
 import { ThemedButton, ThemedText } from '@/components/themed';
@@ -32,6 +32,9 @@ export default function CardsIndexScreen(): ReactNode {
   const hydrate = useCardStore((s) => s.hydrate);
   const cards = useCardStore((s) => s.cards);
   const hydrated = useCardStore((s) => s.hydrated);
+  const remove = useCardStore((s) => s.remove);
+
+  const [actionsCard, setActionsCard] = useState<BusinessCard | undefined>();
 
   useEffect(() => {
     void hydrate();
@@ -44,6 +47,20 @@ export default function CardsIndexScreen(): ReactNode {
   const goEdit = (card: BusinessCard): void => {
     haptic('selection');
     router.push({ pathname: '/cards/edit', params: { id: card.id } });
+  };
+
+  const goWalletPass = (card: BusinessCard): void => {
+    router.push({ pathname: '/cards/wallet-pass', params: { id: card.id } });
+  };
+
+  const onShare = (card: BusinessCard): void => {
+    void Share.share({ message: `Check out my card on AirMeishi: ${card.name}` }).catch(
+      () => undefined,
+    );
+  };
+
+  const onDelete = (card: BusinessCard): void => {
+    void remove(card.id);
   };
 
   return (
@@ -61,10 +78,25 @@ export default function CardsIndexScreen(): ReactNode {
           contentContainerStyle={{ paddingVertical: 12, paddingBottom: insets.bottom + 24 }}
         >
           {cards.map((card) => (
-            <BusinessCardRow key={card.id} card={card} onPress={goEdit} />
+            <BusinessCardRow
+              key={card.id}
+              card={card}
+              onPress={goEdit}
+              onLongPress={(c) => { setActionsCard(c); }}
+            />
           ))}
         </ScrollView>
       )}
+
+      <BusinessCardActionsSheet
+        visible={actionsCard !== undefined}
+        card={actionsCard}
+        onClose={() => { setActionsCard(undefined); }}
+        onEdit={goEdit}
+        onWalletPass={goWalletPass}
+        onShare={onShare}
+        onDelete={onDelete}
+      />
     </View>
   );
 }
