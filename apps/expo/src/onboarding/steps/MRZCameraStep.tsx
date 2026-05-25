@@ -34,11 +34,14 @@ import { scheduleOnRN } from 'react-native-worklets';
 import { getMrzOcr, type MrzOcr, type RecognizedLines } from '@solidarity/nitro-mrz-ocr';
 
 import { SfIcon } from '@/components/icons/SfIcon';
-import { PassportSketch } from '@/components/scan/PassportSketch';
+import {
+  PassportSketch,
+  type PassportSketchState,
+} from '@/components/scan/PassportSketch';
 import { ThemedButton } from '@/components/themed';
 import { Colors } from '@/constants/Colors';
 import {
-  hasMrzCandidate,
+  countMrzCandidates,
   MrzFrameConsensus,
   parseMrzLines,
 } from '@/passport/mrzOcr';
@@ -62,9 +65,46 @@ export interface MRZCameraStepProps {
 /** Run OCR every Nth frame so the worklet doesn't choke the pipeline. */
 const FRAME_THROTTLE = 4;
 
-/** Hold the "detecting" sketch frame for this long after the last hit so a
- *  one-frame OCR miss doesn't flicker the user's affordance back to white. */
-const DETECTING_HOLD_MS = 800;
+/** Hold the current non-idle phase for this long after the last positive
+ *  ingest so a one-frame OCR miss doesn't flicker the affordance back to
+ *  white. ~1s feels stable in hand-held shots without lagging the user. */
+const PHASE_HOLD_MS = 1000;
+
+/** Consecutive parse-failed-with-MRZ-shape readings before we flip the
+ *  sketch from green to amber and surface a recovery hint. Tuned around
+ *  the FRAME_THROTTLE: 3 parse fails ≈ 1.2s of unsuccessful parsing. */
+const STRUGGLE_THRESHOLD = 3;
+
+type ScanPhase = 'idle' | 'detecting' | 'struggling' | 'confirmed';
+
+interface PhaseCopy {
+  readonly primary: string;
+  readonly secondary?: string;
+}
+
+const PHASE_COPY: Record<ScanPhase, PhaseCopy> = {
+  idle: {
+    primary: 'Align passport MRZ here',
+    secondary: 'Photo page facing the camera',
+  },
+  detecting: {
+    primary: 'Reading MRZ — hold steady',
+  },
+  struggling: {
+    primary: 'MRZ unclear',
+    secondary: 'Move closer, improve lighting, or hold steadier',
+  },
+  confirmed: {
+    primary: 'MRZ verified',
+  },
+};
+
+const PHASE_TO_SKETCH_STATE: Record<ScanPhase, PassportSketchState> = {
+  idle: 'idle',
+  detecting: 'detecting',
+  struggling: 'warning',
+  confirmed: 'confirmed',
+};
 
 export function MRZCameraStep({
   onScanned,
@@ -75,12 +115,16 @@ export function MRZCameraStep({
   const device = useCameraDevice('back');
   const [draft, setDraft] = useState<PassportMRZDraft | null>(null);
 
-  // `detecting` flips on as soon as OCR sees an MRZ-shaped line; flips off
-  // DETECTING_HOLD_MS after the last hit. Decoupling this from the
-  // 3-frame check-digit consensus gives the user real-time "I see your
-  // passport" feedback instead of staring at a static white frame.
-  const [detecting, setDetecting] = useState(false);
-  const detectingTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Live scan phase, driven from `ingestLines`. Decouples user-facing
+  // affordances from the actual draft acceptance — users need to know the
+  // moment OCR sees their MRZ, AND when it's struggling to parse it, so
+  // they can react (move closer, improve lighting) instead of staring at
+  // a static green frame.
+  const [phase, setPhase] = useState<ScanPhase>('idle');
+  const phaseRef = useRef<ScanPhase>('idle');
+  const phaseTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  /** Consecutive parse-failed reads while ≥2 MRZ rows visible. */
+  const failureStreakRef = useRef(0);
 
   // Frame counter lives on the worklet thread (SharedValue) so the
   // throttle doesn't trip a React re-render every frame.
@@ -101,35 +145,79 @@ export function MRZCameraStep({
     consensusRef.current = new MrzFrameConsensus();
   }
 
-  // JS-thread sink for parsed lines: parse → consensus → setDraft. Also
-  // updates the live "detecting" affordance the moment any MRZ-shaped row
-  // appears, well before check-digit consensus.
-  // Returning early on null preserves "Looking for MRZ..." (rule 8).
-  // Debug logs print COUNTS only — never the recognised text content.
-  const ingestLines = useCallback((lines: readonly string[]) => {
-    const consensus = consensusRef.current;
-    if (consensus === null) return;
-
-    if (hasMrzCandidate(lines)) {
-      setDetecting(true);
-      if (detectingTimerRef.current !== null) {
-        clearTimeout(detectingTimerRef.current);
-      }
-      detectingTimerRef.current = setTimeout(() => {
-        setDetecting(false);
-        detectingTimerRef.current = null;
-      }, DETECTING_HOLD_MS);
+  /**
+   * Move to a new phase. Idle is the resting state and only kicks in via
+   * the debounce timer; everything else applies immediately and refreshes
+   * the timer so a one-frame OCR drop doesn't downgrade the affordance.
+   */
+  const moveToPhase = useCallback((next: ScanPhase) => {
+    if (next === 'idle') {
+      if (phaseRef.current === 'idle') return;
+      phaseRef.current = 'idle';
+      setPhase('idle');
+      return;
     }
-
-    const parsed = parseMrzLines(lines);
-    const accepted = consensus.ingest(parsed);
-    if (lines.length > 0) {
-      console.log(
-        `[MRZ] lines=${String(lines.length)} parsed=${String(parsed !== null)} accepted=${String(accepted !== null)}`,
-      );
+    if (phaseRef.current !== next) {
+      phaseRef.current = next;
+      setPhase(next);
     }
-    if (accepted !== null) setDraft(accepted);
+    if (phaseTimerRef.current !== null) clearTimeout(phaseTimerRef.current);
+    if (next === 'confirmed') return; // confirmed stays until rescan
+    phaseTimerRef.current = setTimeout(() => {
+      phaseRef.current = 'idle';
+      setPhase('idle');
+      phaseTimerRef.current = null;
+    }, PHASE_HOLD_MS);
   }, []);
+
+  // JS-thread sink for parsed lines: parse → consensus → setDraft, and
+  // update the live phase. Returning early on null preserves the idle
+  // affordance (rule 8). Debug logs print COUNTS only — never content.
+  const ingestLines = useCallback(
+    (lines: readonly string[]) => {
+      const consensus = consensusRef.current;
+      if (consensus === null) return;
+
+      const candidates = countMrzCandidates(lines);
+      const parsed = parseMrzLines(lines);
+      const accepted = consensus.ingest(parsed);
+
+      if (lines.length > 0) {
+        console.log(
+          `[MRZ] lines=${String(lines.length)} candidates=${String(candidates)} parsed=${String(parsed !== null)} accepted=${String(accepted !== null)}`,
+        );
+      }
+
+      if (accepted !== null) {
+        failureStreakRef.current = 0;
+        moveToPhase('confirmed');
+        setDraft(accepted);
+        return;
+      }
+
+      if (candidates >= 2 && parsed === null) {
+        failureStreakRef.current += 1;
+        moveToPhase(
+          failureStreakRef.current >= STRUGGLE_THRESHOLD
+            ? 'struggling'
+            : 'detecting',
+        );
+        return;
+      }
+
+      if (candidates >= 1) {
+        // Partial / in-flight read — don't count as a failure yet.
+        failureStreakRef.current = 0;
+        moveToPhase('detecting');
+        return;
+      }
+
+      // No candidates this frame — leave the phase alone and let the
+      // debounce timer drop us back to idle if the dry spell persists.
+      failureStreakRef.current = 0;
+    },
+    [moveToPhase],
+  );
 
   // Worklet → JS bridge for OCR diagnostics. Logs the rolling call count
   // and the recognised line count every ~10 OCR calls so a quiet pipeline
@@ -178,11 +266,13 @@ export function MRZCameraStep({
   const handleRescan = useCallback(() => {
     consensusRef.current?.reset();
     frameTick.value = 0;
-    if (detectingTimerRef.current !== null) {
-      clearTimeout(detectingTimerRef.current);
-      detectingTimerRef.current = null;
+    if (phaseTimerRef.current !== null) {
+      clearTimeout(phaseTimerRef.current);
+      phaseTimerRef.current = null;
     }
-    setDetecting(false);
+    failureStreakRef.current = 0;
+    phaseRef.current = 'idle';
+    setPhase('idle');
     setDraft(null);
   }, [frameTick]);
 
@@ -192,9 +282,9 @@ export function MRZCameraStep({
 
   useEffect(() => {
     return () => {
-      if (detectingTimerRef.current !== null) {
-        clearTimeout(detectingTimerRef.current);
-        detectingTimerRef.current = null;
+      if (phaseTimerRef.current !== null) {
+        clearTimeout(phaseTimerRef.current);
+        phaseTimerRef.current = null;
       }
     };
   }, []);
@@ -235,12 +325,8 @@ export function MRZCameraStep({
       <NavBar onCancel={onCancel} onSwitchToManual={onSwitchToManual} />
 
       <View style={styles.overlayContainer}>
-        <PassportSketch active={detecting || draft !== null} />
-        {!draft ? (
-          <Text style={styles.alignLabel}>
-            {detecting ? 'Hold steady…' : 'Align passport MRZ here'}
-          </Text>
-        ) : null}
+        <PassportSketch state={PHASE_TO_SKETCH_STATE[phase]} />
+        {draft === null ? <ScanStatus phase={phase} /> : null}
       </View>
 
       <View style={styles.footer}>
@@ -250,6 +336,33 @@ export function MRZCameraStep({
           <InstructionFooter onSwitchToManual={onSwitchToManual} />
         )}
       </View>
+    </View>
+  );
+}
+
+function ScanStatus({ phase }: { phase: ScanPhase }) {
+  const copy = PHASE_COPY[phase];
+  const tone: 'warning' | 'normal' = phase === 'struggling' ? 'warning' : 'normal';
+  return (
+    <View style={styles.statusGroup} pointerEvents="none">
+      <Text
+        style={[
+          styles.statusPrimary,
+          tone === 'warning' ? styles.statusPrimaryWarning : null,
+        ]}
+      >
+        {copy.primary}
+      </Text>
+      {copy.secondary ? (
+        <Text
+          style={[
+            styles.statusSecondary,
+            tone === 'warning' ? styles.statusSecondaryWarning : null,
+          ]}
+        >
+          {copy.secondary}
+        </Text>
+      ) : null}
     </View>
   );
 }
@@ -283,7 +396,7 @@ function InstructionFooter({ onSwitchToManual }: { onSwitchToManual: () => void 
   return (
     <View style={{ gap: 12, alignItems: 'center' }}>
       <Text style={styles.instructionLabel}>
-        Live MRZ recognition lands when the native plugin ships.
+        Or type the MRZ from the passport's photo page.
       </Text>
       <ThemedButton
         label="Enter Manually"
@@ -362,7 +475,20 @@ const styles = StyleSheet.create({
   navBarText: { color: '#FFFFFF', fontSize: 15 },
   navBarTitle: { color: '#FFFFFF', fontSize: 17, fontWeight: '600' },
   overlayContainer: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 12 },
-  alignLabel: { color: 'rgba(255,255,255,0.7)', fontSize: 12 },
+  statusGroup: { alignItems: 'center', gap: 4, paddingHorizontal: 24 },
+  statusPrimary: {
+    color: 'rgba(255,255,255,0.92)',
+    fontSize: 13,
+    fontWeight: '600',
+    textAlign: 'center',
+  },
+  statusPrimaryWarning: { color: Colors.warning },
+  statusSecondary: {
+    color: 'rgba(255,255,255,0.65)',
+    fontSize: 11,
+    textAlign: 'center',
+  },
+  statusSecondaryWarning: { color: Colors.warning },
   footer: { padding: 16, paddingBottom: 40 },
   instructionLabel: { color: '#FFFFFF', fontSize: 12, textAlign: 'center' },
   confirmationCard: {

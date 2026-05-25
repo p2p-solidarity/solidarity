@@ -45,13 +45,30 @@ function linePath(x1: number, y1: number, x2: number, y2: number): string {
   return `M ${x1} ${y1} L ${x2} ${y2}`;
 }
 
+/**
+ * MRZ band state:
+ *   - `idle`      → white stroke (no detection yet)
+ *   - `detecting` → brand green stroke (OCR sees MRZ-shaped text)
+ *   - `warning`   → brand amber stroke (OCR sees MRZ but parse keeps failing
+ *                   — usually motion blur, low light, or wrong angle)
+ *   - `confirmed` → brand green stroke (parser passed + consensus locked in)
+ */
+export type PassportSketchState = 'idle' | 'detecting' | 'warning' | 'confirmed';
+
 export interface PassportSketchProps {
-  /** Switches the MRZ band stroke to the brand green when a draft is captured. */
-  readonly active?: boolean;
+  /** MRZ band state — drives the bottom stroke colour. Defaults to `idle`. */
+  readonly state?: PassportSketchState;
 }
 
-export function PassportSketch({ active = false }: PassportSketchProps): ReactNode {
-  const mrzColor = active ? Colors.terminalGreen : STROKE_STRONG;
+const STATE_COLOR: Record<PassportSketchState, string> = {
+  idle: STROKE_STRONG,
+  detecting: Colors.terminalGreen,
+  warning: Colors.warning,
+  confirmed: Colors.terminalGreen,
+};
+
+export function PassportSketch({ state = 'idle' }: PassportSketchProps): ReactNode {
+  const mrzColor = STATE_COLOR[state];
   return (
     <View
       style={{

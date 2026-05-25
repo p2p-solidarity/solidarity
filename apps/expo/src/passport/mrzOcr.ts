@@ -44,21 +44,30 @@ const DEFAULT_CONSENSUS_THRESHOLD = 1;
 const CONSENSUS_WINDOW = 4;
 
 /**
- * Cheap "do these recognised lines contain anything MRZ-shaped?" probe.
- * Drives the live "detecting" affordance (green sketch frame) so the user
- * gets feedback the instant the camera sees a candidate row — well before
- * the 3-frame check-digit consensus required by `parseMrzLines`.
+ * Number of recognised lines that match MRZ shape (A–Z, 0–9, `<`, 30..44
+ * chars after space-as-`<` normalisation). Drives the live affordance so
+ * the user can tell whether the camera even SEES candidate rows yet.
  *
- * Caveat per CLAUDE.md rule 8: a green frame here is NOT a claim that the
+ *   0   →  no MRZ visible — reposition the passport
+ *   1   →  one row only — usually the camera is too high / too low
+ *   2+  →  both rows visible — parse will run on the two longest
+ *
+ * Caveat per CLAUDE.md rule 8: a non-zero count is NOT a claim that the
  * MRZ has been *parsed* — only that text in MRZ shape is on screen. The
  * confirmation card is still gated on `parseMrzLines` + consensus.
  */
-export function hasMrzCandidate(lines: readonly string[]): boolean {
+export function countMrzCandidates(lines: readonly string[]): number {
+  let count = 0;
   for (const line of lines) {
-    const normalised = line.toUpperCase().replace(/\s+/g, '');
-    if (MRZ_LINE_RE.test(normalised)) return true;
+    const normalised = line.toUpperCase().replace(/\s+/g, '<');
+    if (MRZ_LINE_RE.test(normalised)) count += 1;
   }
-  return false;
+  return count;
+}
+
+/** @deprecated use `countMrzCandidates(lines) > 0`. */
+export function hasMrzCandidate(lines: readonly string[]): boolean {
+  return countMrzCandidates(lines) > 0;
 }
 
 /**
