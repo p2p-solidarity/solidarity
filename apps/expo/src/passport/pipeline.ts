@@ -111,6 +111,17 @@ export interface PassportPipelineState {
   readonly proof: PassportProofResult | null;
   readonly isLoading: boolean;
   readonly nfcProgressMessage: string;
+  /** 0..100, mirrors the native NfcReadProgress.percent we receive. */
+  readonly nfcProgressPercent: number;
+  /** Coarse phase from the native callback — drives bar colour / icon. */
+  readonly nfcProgressPhase:
+    | 'idle'
+    | 'connecting'
+    | 'authenticating'
+    | 'reading-dg'
+    | 'verifying'
+    | 'done'
+    | 'error';
   readonly proofProgressMessage: string;
   readonly errorMessage: string | null;
 }
@@ -127,6 +138,8 @@ export const initialPassportPipelineState: PassportPipelineState = {
   proof: null,
   isLoading: false,
   nfcProgressMessage: 'Connecting to chip...',
+  nfcProgressPercent: 0,
+  nfcProgressPhase: 'idle',
   proofProgressMessage: '',
   errorMessage: null,
 };
@@ -137,6 +150,12 @@ export type PassportPipelineAction =
   | { readonly type: 'gotoStep'; readonly step: PassportPipelineStep }
   | { readonly type: 'setLoading'; readonly value: boolean }
   | { readonly type: 'setNfcProgress'; readonly message: string }
+  | {
+      readonly type: 'setNfcProgressEvent';
+      readonly phase: PassportPipelineState['nfcProgressPhase'];
+      readonly percent: number;
+      readonly message: string;
+    }
   | { readonly type: 'setProofProgress'; readonly message: string }
   | { readonly type: 'setChip'; readonly chip: PassportChipSnapshot }
   | { readonly type: 'setProof'; readonly proof: PassportProofResult }
@@ -157,6 +176,20 @@ export function passportPipelineReducer(
       return { ...state, isLoading: action.value };
     case 'setNfcProgress':
       return { ...state, nfcProgressMessage: action.message };
+    case 'setNfcProgressEvent':
+      // `percent` is clamped to monotonic non-decreasing for the UI so an
+      // out-of-order callback (rare but possible across native → JS hops)
+      // can't make the bar jump backwards. Only the `done` and `error`
+      // phases are allowed to reset.
+      return {
+        ...state,
+        nfcProgressPhase: action.phase,
+        nfcProgressPercent:
+          action.phase === 'done' || action.phase === 'error'
+            ? action.percent
+            : Math.max(state.nfcProgressPercent, action.percent),
+        nfcProgressMessage: action.message,
+      };
     case 'setProofProgress':
       return { ...state, proofProgressMessage: action.message };
     case 'setChip':

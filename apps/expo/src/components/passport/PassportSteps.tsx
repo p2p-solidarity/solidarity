@@ -38,11 +38,28 @@ import type {
 export function NfcStep({
   busy,
   progress,
+  progressPercent,
+  progressPhase,
   chip,
   onRead,
 }: {
   readonly busy: boolean;
   readonly progress: string;
+  /** 0..100 from the native NfcReadProgress callback. */
+  readonly progressPercent: number;
+  /**
+   * Coarse phase. Used to colour the bar and to skip the determinate
+   * fill on `connecting` (where we don't actually know how long the user
+   * will take to tap the chip).
+   */
+  readonly progressPhase:
+    | 'idle'
+    | 'connecting'
+    | 'authenticating'
+    | 'reading-dg'
+    | 'verifying'
+    | 'done'
+    | 'error';
   readonly chip: PassportChipSnapshot | null;
   readonly onRead: () => void;
 }) {
@@ -58,7 +75,7 @@ export function NfcStep({
       </Text>
       {busy ? (
         <View className="items-center gap-2">
-          <ActivityIndicator color={Colors.terminalGreen} />
+          <NfcProgressBar percent={progressPercent} phase={progressPhase} />
           <Text className="text-text3 text-[12px]">{progress}</Text>
         </View>
       ) : null}
@@ -72,6 +89,66 @@ export function NfcStep({
     </View>
   );
 }
+
+/**
+ * Horizontal progress bar driven by native NfcReadProgress events.
+ *
+ *   `connecting`        → indeterminate spinner (we don't know when the
+ *                          user will tap the chip)
+ *   `authenticating`/   → determinate fill, terminalGreen
+ *   `reading-dg`/
+ *   `verifying`
+ *   `done`              → filled, terminalGreen
+ *   `error`             → filled, warning amber so a failed read doesn't
+ *                          silently zero the bar
+ *
+ * Width animates via the React render path (low frequency — at most a
+ * handful of updates per read), so a SharedValue is overkill here.
+ */
+function NfcProgressBar({
+  percent,
+  phase,
+}: {
+  readonly percent: number;
+  readonly phase:
+    | 'idle'
+    | 'connecting'
+    | 'authenticating'
+    | 'reading-dg'
+    | 'verifying'
+    | 'done'
+    | 'error';
+}) {
+  if (phase === 'connecting' || phase === 'idle') {
+    return <ActivityIndicator color={Colors.terminalGreen} />;
+  }
+  const clamped = Math.max(0, Math.min(100, percent));
+  const tint = phase === 'error' ? Colors.warning : Colors.terminalGreen;
+  return (
+    <View style={progressStyles.track}>
+      <View
+        style={[
+          progressStyles.fill,
+          { width: `${clamped}%`, backgroundColor: tint },
+        ]}
+      />
+    </View>
+  );
+}
+
+const progressStyles = StyleSheet.create({
+  track: {
+    width: '85%',
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: 'rgba(255,255,255,0.08)',
+    overflow: 'hidden',
+  },
+  fill: {
+    height: '100%',
+    borderRadius: 3,
+  },
+});
 
 /**
  * NfcVisual — animated waveform above an iPhone outline.

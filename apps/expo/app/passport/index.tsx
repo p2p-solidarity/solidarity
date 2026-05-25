@@ -122,7 +122,9 @@ export default function PassportSetup() {
     }
     dispatch({ type: 'setLoading', value: true });
     dispatch({
-      type: 'setNfcProgress',
+      type: 'setNfcProgressEvent',
+      phase: nfcStrategy.kind === 'simulated' ? 'connecting' : 'connecting',
+      percent: 0,
       message:
         nfcStrategy.kind === 'simulated'
           ? 'Simulating chip read (developer mode)...'
@@ -143,18 +145,39 @@ export default function PassportSetup() {
             'NFC passport reader is not linked. Rebuild with `pod install`.'
           );
         }
-        const result = await nfcReader.read({
-          documentNumber: state.draft.passportNumber,
-          dateOfBirth: state.draft.dateOfBirth,
-          dateOfExpiry: state.draft.expiryDate,
-        });
+        const result = await nfcReader.read(
+          {
+            documentNumber: state.draft.passportNumber,
+            dateOfBirth: state.draft.dateOfBirth,
+            dateOfExpiry: state.draft.expiryDate,
+          },
+          {
+            // The JS pipeline only consumes DG1 today — dropping DG2 (the
+            // ~15-30KB face JPEG) halves typical read time (~5-8s → ~2-3s).
+            // Flip back to false when face matching ships.
+            skipFaceImage: true,
+            onProgress: (event) => {
+              dispatch({
+                type: 'setNfcProgressEvent',
+                phase: event.phase,
+                percent: event.percent,
+                message: event.message ?? '',
+              });
+            },
+          },
+        );
         chip = chipFromNitro(
           result,
           state.draft.nationalityCode,
           state.draft.passportNumber
         );
       }
-      dispatch({ type: 'setNfcProgress', message: 'Read complete.' });
+      dispatch({
+        type: 'setNfcProgressEvent',
+        phase: 'done',
+        percent: 100,
+        message: 'Read complete.',
+      });
       dispatch({ type: 'setChip', chip });
     } catch (err) {
       dispatch({ type: 'setError', message: (err as Error).message });
@@ -271,6 +294,8 @@ export default function PassportSetup() {
           <NfcStep
             busy={state.isLoading}
             progress={state.nfcProgressMessage}
+            progressPercent={state.nfcProgressPercent}
+            progressPhase={state.nfcProgressPhase}
             chip={state.chip}
             onRead={() => { void onReadNfc(); }}
           />
