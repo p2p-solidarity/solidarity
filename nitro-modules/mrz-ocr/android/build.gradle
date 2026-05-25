@@ -29,6 +29,11 @@ def isNewArchitectureEnabled() {
 apply plugin: "com.android.library"
 apply plugin: "org.jetbrains.kotlin.android"
 apply from: "../nitrogen/generated/android/MrzOcr+autolinking.gradle"
+// VisionCamera prefab publication-ordering workaround — mirrors
+// react-native-vision-camera-barcode-scanner. Without this, AGP can build
+// the prefab config.json before the native .so exists and we link against
+// stale headers (and the build cache then hides the regression).
+apply from: "./fix-prefab.gradle"
 
 if (isNewArchitectureEnabled()) {
   apply plugin: "com.facebook.react"

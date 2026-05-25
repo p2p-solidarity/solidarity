@@ -23,8 +23,14 @@ include(${CMAKE_SOURCE_DIR}/../nitrogen/generated/android/MrzOcr+autolinking.cma
 
 find_library(LOG_LIB log)
 
+# VisionCamera publishes its native headers + .so via prefab. We need its
+# HybridFrameSpec.hpp at compile time because the nitrogen-generated
+# HybridMrzOcrSpec.hpp includes it. Mirrors react-native-vision-camera-barcode-scanner.
+find_package(react-native-vision-camera REQUIRED CONFIG)
+
 target_link_libraries(
   ${PACKAGE_NAME}
   ${LOG_LIB}
   android
+  react-native-vision-camera::VisionCamera
 )
