@@ -180,6 +180,9 @@ __snapshots__/
 packages/*/node_modules/
 apps/*/node_modules/
 nitro-modules/*/node_modules/
+# Re-exclude tsc incremental build cache (the broad re-include above swallows
+# the global `*.tsbuildinfo` rule for anything under packages/).
+packages/**/*.tsbuildinfo
 
 # Android C++ build artifacts (.cxx is regenerated on every assemble*).
 nitro-modules/*/android/.cxx/
