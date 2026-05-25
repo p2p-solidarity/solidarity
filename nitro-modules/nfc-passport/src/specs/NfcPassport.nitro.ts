@@ -49,9 +49,60 @@ export interface PassportReadResult {
   readonly passiveAuthValid: boolean;
 }
 
+/**
+ * Phases of an NFC passport read, ordered roughly by time:
+ *   `connecting`  — waiting for the chip / tag-found
+ *   `authenticating` — BAC + PACE handshake (~5-30%)
+ *   `reading-dg` — streaming a Data Group (each DG fires its own range)
+ *   `verifying`   — passive auth / signature checks
+ *   `done`        — successful read
+ *   `error`       — terminal error (also resolved/rejected on the promise)
+ */
+export type NfcReadPhase =
+  | 'connecting'
+  | 'authenticating'
+  | 'reading-dg'
+  | 'verifying'
+  | 'done'
+  | 'error';
+
+export interface NfcReadProgress {
+  readonly phase: NfcReadPhase;
+  /** 0..100 — best-effort. Some phases only have step transitions. */
+  readonly percent: number;
+  /** When phase=`reading-dg`, the active DG label ("DG1", "DG2", ...). */
+  readonly dataGroup?: string;
+  /** Human-readable copy native already shows on the system NFC sheet. */
+  readonly message?: string;
+}
+
+/**
+ * Per-read options. All fields are optional so existing callers (incl.
+ * legacy `read(mrz)` shape from earlier Nitrogen builds) keep working —
+ * Nitrogen treats `read(mrz)` as `read(mrz, undefined)` when the second
+ * arg is not provided.
+ */
+export interface NfcReadOptions {
+  /**
+   * Skip DG2 (the face JPEG, ~15-30KB, ~3-5 sec NFC transfer). Default
+   * `false` keeps parity with the legacy Swift app; the Expo flow passes
+   * `true` because the JS pipeline only consumes DG1 today, and skipping
+   * DG2 cuts a real read from ~5-8s down to ~1.5-3s.
+   */
+  readonly skipFaceImage?: boolean;
+  /**
+   * Progress callback fired from the native NFCPassportReader /
+   * jmrtd hooks (iOS: `customDisplayMessage`; Android: a polled
+   * progress listener). Fires on the JS thread. Treat as fire-and-forget
+   * — the read still settles on the returned Promise regardless of
+   * whether the callback is provided.
+   */
+  readonly onProgress?: (event: NfcReadProgress) => void;
+}
+
 export interface NfcPassport
   extends HybridObject<{ ios: 'swift'; android: 'kotlin' }> {
   isAvailable(): boolean;
-  read(mrz: PassportMRZ): Promise<PassportReadResult>;
+  read(mrz: PassportMRZ, options?: NfcReadOptions): Promise<PassportReadResult>;
   cancel(): void;
 }

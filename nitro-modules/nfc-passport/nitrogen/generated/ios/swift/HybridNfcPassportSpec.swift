@@ -14,7 +14,7 @@ public protocol HybridNfcPassportSpec_protocol: HybridObject {
 
   // Methods
   func isAvailable() throws -> Bool
-  func read(mrz: PassportMRZ) throws -> Promise<PassportReadResult>
+  func read(mrz: PassportMRZ, options: NfcReadOptions?) throws -> Promise<PassportReadResult>
   func cancel() throws -> Void
 }
 

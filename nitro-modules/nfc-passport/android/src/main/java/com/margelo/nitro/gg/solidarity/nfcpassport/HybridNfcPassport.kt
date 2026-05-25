@@ -209,7 +209,10 @@ class HybridNfcPassport : HybridNfcPassportSpec() {
     return nfcAdapter?.isEnabled == true
   }
 
-  override fun read(mrz: PassportMRZ): Promise<PassportReadResult> = Promise.async {
+  override fun read(
+    mrz: PassportMRZ,
+    options: NfcReadOptions?,
+  ): Promise<PassportReadResult> = Promise.async {
     // Reject overlapping reads. Mirrors iOS NFCTagReaderSession which the
     // OS makes single-shot anyway — keep the API surface consistent.
     val alreadyActive = withState {
@@ -230,7 +233,7 @@ class HybridNfcPassport : HybridNfcPassportSpec() {
     withState { activeJob = currentJob }
 
     try {
-      performRead(mrz)
+      performRead(mrz, options)
     } finally {
       withState {
         if (activeJob === currentJob) activeJob = null
@@ -255,7 +258,10 @@ class HybridNfcPassport : HybridNfcPassportSpec() {
 
   // MARK: - Internal read flow
 
-  private suspend fun performRead(mrz: PassportMRZ): PassportReadResult {
+  private suspend fun performRead(
+    mrz: PassportMRZ,
+    options: NfcReadOptions?,
+  ): PassportReadResult {
     val adapter = nfcAdapter ?: throw error(
       code = "nfc_unavailable",
       message = "NFC is not available on this device.",
@@ -271,6 +277,15 @@ class HybridNfcPassport : HybridNfcPassportSpec() {
       message = "Cannot start NFC reader — no foreground Activity.",
     )
 
+    val onProgress = options?.onProgress
+    emitProgress(
+      onProgress,
+      NfcReadPhase.CONNECTING,
+      percent = 0.0,
+      dataGroup = null,
+      message = "Tap your passport to the back of your phone.",
+    )
+
     // 1. Hook NfcAdapter.enableReaderMode and wait for a tag.
     val tag = enableReaderModeAndAwaitTag(adapter, activity)
     val isoDep = IsoDep.get(tag) ?: throw error(
@@ -279,11 +294,47 @@ class HybridNfcPassport : HybridNfcPassportSpec() {
     )
     isoDep.timeout = ISODEP_TIMEOUT_MS
 
+    emitProgress(
+      onProgress,
+      NfcReadPhase.AUTHENTICATING,
+      percent = 5.0,
+      dataGroup = null,
+      message = "Chip detected — authenticating…",
+    )
+
     // 2. Do the blocking jmrtd dance on Dispatchers.IO. Connection + APDU
     //    transceive cannot run on the main thread.
     return withContext(Dispatchers.IO) {
       val tagId = tag.id?.toHexString() ?: ""
-      readWithJmrtd(isoDep, mrz, tagId)
+      readWithJmrtd(isoDep, mrz, tagId, options)
+    }
+  }
+
+  /**
+   * Marshal a single progress event through the Nitro callback. Wrapped
+   * so the call site stays one line and we silently swallow callback
+   * errors — a misbehaving JS listener must not abort an in-flight NFC
+   * read.
+   */
+  private fun emitProgress(
+    onProgress: Func_void_NfcReadProgress?,
+    phase: NfcReadPhase,
+    percent: Double,
+    dataGroup: String?,
+    message: String?,
+  ) {
+    if (onProgress == null) return
+    try {
+      onProgress.invoke(
+        NfcReadProgress(
+          phase = phase,
+          percent = percent,
+          dataGroup = dataGroup,
+          message = message,
+        )
+      )
+    } catch (e: Throwable) {
+      Log.w(TAG, "onProgress callback threw: ${e.javaClass.simpleName}")
     }
   }
 
@@ -365,12 +416,21 @@ class HybridNfcPassport : HybridNfcPassportSpec() {
   /**
    * Drives the BAC/PACE handshake and pulls each data group. Mirrors the
    * iOS [.COM, .SOD, .DG1, .DG2, .DG14, .DG15] sequence.
+   *
+   * When [options]?.skipFaceImage is true we drop DG2 from the read.
+   * DG2 is the face JPEG (15-30KB over slow NFC) and is the single
+   * biggest contributor to read latency; the Expo JS pipeline only
+   * uses DG1 today so the screen passes `skipFaceImage: true` for a
+   * sub-3s read instead of ~5-8s with DG2.
    */
   private fun readWithJmrtd(
     isoDep: IsoDep,
     mrz: PassportMRZ,
     tagId: String,
+    options: NfcReadOptions?,
   ): PassportReadResult {
+    val onProgress = options?.onProgress
+    val skipFace = options?.skipFaceImage == true
     val cardService = CardService.getInstance(isoDep)
     val service = PassportService(
       cardService,
@@ -455,13 +515,27 @@ class HybridNfcPassport : HybridNfcPassportSpec() {
       }
     }
 
+    emitProgress(onProgress, NfcReadPhase.AUTHENTICATING, 30.0, null, "Authenticated. Reading data…")
+
     // 2. Read each data group. Wrap each in its own try/catch so a missing
-    //    DG14/DG15 doesn't kill the whole read (some chips skip them).
+    //    DG14/DG15 doesn't kill the whole read (some chips skip them). DG2
+    //    is conditional on `options.skipFaceImage` — when true, skip the
+    //    slowest leg of the read entirely.
+    emitProgress(onProgress, NfcReadPhase.READING_DG, 35.0, "SOD", "Reading SOD…")
     val sodBytes = readEf(service, PassportService.EF_SOD, required = true)
+    emitProgress(onProgress, NfcReadPhase.READING_DG, 50.0, "DG1", "Reading DG1…")
     val dg1Bytes = readEf(service, PassportService.EF_DG1, required = true)
-    val dg2Bytes = readEf(service, PassportService.EF_DG2, required = false)
+    val dg2Bytes = if (skipFace) {
+      null
+    } else {
+      emitProgress(onProgress, NfcReadPhase.READING_DG, 65.0, "DG2", "Reading DG2 (face image)…")
+      readEf(service, PassportService.EF_DG2, required = false)
+    }
+    emitProgress(onProgress, NfcReadPhase.READING_DG, 80.0, "DG14", "Reading DG14…")
     val dg14Bytes = readEf(service, PassportService.EF_DG14, required = false)
+    emitProgress(onProgress, NfcReadPhase.READING_DG, 88.0, "DG15", "Reading DG15…")
     val dg15Bytes = readEf(service, PassportService.EF_DG15, required = false)
+    emitProgress(onProgress, NfcReadPhase.VERIFYING, 92.0, null, "Verifying signatures…")
 
     try {
       service.close()
@@ -495,6 +569,8 @@ class HybridNfcPassport : HybridNfcPassportSpec() {
       documentNumber = parsedMrz.documentNumber,
       mrzData = passportMrzString.ifEmpty { tagId },
     )
+
+    emitProgress(onProgress, NfcReadPhase.DONE, 100.0, null, "Passport read.")
 
     return PassportReadResult(
       mrz = parsedMrz,

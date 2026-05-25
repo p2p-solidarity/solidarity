@@ -55,7 +55,7 @@ namespace margelo::nitro::solidarity::nfcpassport {
   public:
     // Methods
     bool isAvailable() override;
-    std::shared_ptr<Promise<PassportReadResult>> read(const PassportMRZ& mrz) override;
+    std::shared_ptr<Promise<PassportReadResult>> read(const PassportMRZ& mrz, const std::optional<NfcReadOptions>& options) override;
     void cancel() override;
 
   private:

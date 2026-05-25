@@ -14,6 +14,12 @@ namespace NitroModules { class ArrayBufferHolder; }
 namespace margelo::nitro::solidarity::nfcpassport { struct DataGroupsBundle; }
 // Forward declaration of `HybridNfcPassportSpec` to properly resolve imports.
 namespace margelo::nitro::solidarity::nfcpassport { class HybridNfcPassportSpec; }
+// Forward declaration of `NfcReadOptions` to properly resolve imports.
+namespace margelo::nitro::solidarity::nfcpassport { struct NfcReadOptions; }
+// Forward declaration of `NfcReadPhase` to properly resolve imports.
+namespace margelo::nitro::solidarity::nfcpassport { enum class NfcReadPhase; }
+// Forward declaration of `NfcReadProgress` to properly resolve imports.
+namespace margelo::nitro::solidarity::nfcpassport { struct NfcReadProgress; }
 // Forward declaration of `ParsedMrz` to properly resolve imports.
 namespace margelo::nitro::solidarity::nfcpassport { struct ParsedMrz; }
 // Forward declaration of `PassportReadResult` to properly resolve imports.
@@ -26,6 +32,9 @@ namespace NfcPassport { class HybridNfcPassportSpec_cxx; }
 // Include C++ defined types
 #include "DataGroupsBundle.hpp"
 #include "HybridNfcPassportSpec.hpp"
+#include "NfcReadOptions.hpp"
+#include "NfcReadPhase.hpp"
+#include "NfcReadProgress.hpp"
 #include "ParsedMrz.hpp"
 #include "PassportReadResult.hpp"
 #include <NitroModules/ArrayBuffer.hpp>
@@ -129,6 +138,73 @@ namespace margelo::nitro::solidarity::nfcpassport::bridge::swift {
   Func_void_std__exception_ptr create_Func_void_std__exception_ptr(void* NON_NULL swiftClosureWrapper) noexcept;
   inline Func_void_std__exception_ptr_Wrapper wrap_Func_void_std__exception_ptr(Func_void_std__exception_ptr value) noexcept {
     return Func_void_std__exception_ptr_Wrapper(std::move(value));
+  }
+  
+  // pragma MARK: std::optional<bool>
+  /**
+   * Specialized version of `std::optional<bool>`.
+   */
+  using std__optional_bool_ = std::optional<bool>;
+  inline std::optional<bool> create_std__optional_bool_(const bool& value) noexcept {
+    return std::optional<bool>(value);
+  }
+  inline bool has_value_std__optional_bool_(const std::optional<bool>& optional) noexcept {
+    return optional.has_value();
+  }
+  inline bool get_std__optional_bool_(const std::optional<bool>& optional) noexcept {
+    return optional.value();
+  }
+  
+  // pragma MARK: std::function<void(const NfcReadProgress& /* event */)>
+  /**
+   * Specialized version of `std::function<void(const NfcReadProgress&)>`.
+   */
+  using Func_void_NfcReadProgress = std::function<void(const NfcReadProgress& /* event */)>;
+  /**
+   * Wrapper class for a `std::function<void(const NfcReadProgress& / * event * /)>`, this can be used from Swift.
+   */
+  class Func_void_NfcReadProgress_Wrapper final {
+  public:
+    explicit Func_void_NfcReadProgress_Wrapper(std::function<void(const NfcReadProgress& /* event */)>&& func): _function(std::make_unique<std::function<void(const NfcReadProgress& /* event */)>>(std::move(func))) {}
+    inline void call(NfcReadProgress event) const noexcept {
+      _function->operator()(event);
+    }
+  private:
+    std::unique_ptr<std::function<void(const NfcReadProgress& /* event */)>> _function;
+  } SWIFT_NONCOPYABLE;
+  Func_void_NfcReadProgress create_Func_void_NfcReadProgress(void* NON_NULL swiftClosureWrapper) noexcept;
+  inline Func_void_NfcReadProgress_Wrapper wrap_Func_void_NfcReadProgress(Func_void_NfcReadProgress value) noexcept {
+    return Func_void_NfcReadProgress_Wrapper(std::move(value));
+  }
+  
+  // pragma MARK: std::optional<std::function<void(const NfcReadProgress& /* event */)>>
+  /**
+   * Specialized version of `std::optional<std::function<void(const NfcReadProgress& / * event * /)>>`.
+   */
+  using std__optional_std__function_void_const_NfcReadProgress_____event______ = std::optional<std::function<void(const NfcReadProgress& /* event */)>>;
+  inline std::optional<std::function<void(const NfcReadProgress& /* event */)>> create_std__optional_std__function_void_const_NfcReadProgress_____event______(const std::function<void(const NfcReadProgress& /* event */)>& value) noexcept {
+    return std::optional<std::function<void(const NfcReadProgress& /* event */)>>(value);
+  }
+  inline bool has_value_std__optional_std__function_void_const_NfcReadProgress_____event______(const std::optional<std::function<void(const NfcReadProgress& /* event */)>>& optional) noexcept {
+    return optional.has_value();
+  }
+  inline std::function<void(const NfcReadProgress& /* event */)> get_std__optional_std__function_void_const_NfcReadProgress_____event______(const std::optional<std::function<void(const NfcReadProgress& /* event */)>>& optional) noexcept {
+    return optional.value();
+  }
+  
+  // pragma MARK: std::optional<NfcReadOptions>
+  /**
+   * Specialized version of `std::optional<NfcReadOptions>`.
+   */
+  using std__optional_NfcReadOptions_ = std::optional<NfcReadOptions>;
+  inline std::optional<NfcReadOptions> create_std__optional_NfcReadOptions_(const NfcReadOptions& value) noexcept {
+    return std::optional<NfcReadOptions>(value);
+  }
+  inline bool has_value_std__optional_NfcReadOptions_(const std::optional<NfcReadOptions>& optional) noexcept {
+    return optional.has_value();
+  }
+  inline NfcReadOptions get_std__optional_NfcReadOptions_(const std::optional<NfcReadOptions>& optional) noexcept {
+    return optional.value();
   }
   
   // pragma MARK: std::shared_ptr<HybridNfcPassportSpec>

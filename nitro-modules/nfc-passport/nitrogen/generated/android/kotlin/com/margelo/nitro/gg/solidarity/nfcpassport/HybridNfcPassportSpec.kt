@@ -35,7 +35,7 @@ abstract class HybridNfcPassportSpec: HybridObject() {
   
   @DoNotStrip
   @Keep
-  abstract fun read(mrz: PassportMRZ): Promise<PassportReadResult>
+  abstract fun read(mrz: PassportMRZ, options: NfcReadOptions?): Promise<PassportReadResult>
   
   @DoNotStrip
   @Keep

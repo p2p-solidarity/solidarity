@@ -12,6 +12,12 @@
 namespace margelo::nitro::solidarity::nfcpassport { struct DataGroupsBundle; }
 // Forward declaration of `HybridNfcPassportSpec` to properly resolve imports.
 namespace margelo::nitro::solidarity::nfcpassport { class HybridNfcPassportSpec; }
+// Forward declaration of `NfcReadOptions` to properly resolve imports.
+namespace margelo::nitro::solidarity::nfcpassport { struct NfcReadOptions; }
+// Forward declaration of `NfcReadPhase` to properly resolve imports.
+namespace margelo::nitro::solidarity::nfcpassport { enum class NfcReadPhase; }
+// Forward declaration of `NfcReadProgress` to properly resolve imports.
+namespace margelo::nitro::solidarity::nfcpassport { struct NfcReadProgress; }
 // Forward declaration of `ParsedMrz` to properly resolve imports.
 namespace margelo::nitro::solidarity::nfcpassport { struct ParsedMrz; }
 // Forward declaration of `PassportMRZ` to properly resolve imports.
@@ -22,6 +28,9 @@ namespace margelo::nitro::solidarity::nfcpassport { struct PassportReadResult; }
 // Include C++ defined types
 #include "DataGroupsBundle.hpp"
 #include "HybridNfcPassportSpec.hpp"
+#include "NfcReadOptions.hpp"
+#include "NfcReadPhase.hpp"
+#include "NfcReadProgress.hpp"
 #include "ParsedMrz.hpp"
 #include "PassportMRZ.hpp"
 #include "PassportReadResult.hpp"
@@ -29,6 +38,7 @@ namespace margelo::nitro::solidarity::nfcpassport { struct PassportReadResult; }
 #include <NitroModules/Promise.hpp>
 #include <NitroModules/Result.hpp>
 #include <exception>
+#include <functional>
 #include <memory>
 #include <optional>
 #include <string>

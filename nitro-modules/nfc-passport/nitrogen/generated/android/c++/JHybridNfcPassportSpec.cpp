@@ -15,6 +15,12 @@ namespace margelo::nitro::solidarity::nfcpassport { struct ParsedMrz; }
 namespace margelo::nitro::solidarity::nfcpassport { struct DataGroupsBundle; }
 // Forward declaration of `PassportMRZ` to properly resolve imports.
 namespace margelo::nitro::solidarity::nfcpassport { struct PassportMRZ; }
+// Forward declaration of `NfcReadOptions` to properly resolve imports.
+namespace margelo::nitro::solidarity::nfcpassport { struct NfcReadOptions; }
+// Forward declaration of `NfcReadProgress` to properly resolve imports.
+namespace margelo::nitro::solidarity::nfcpassport { struct NfcReadProgress; }
+// Forward declaration of `NfcReadPhase` to properly resolve imports.
+namespace margelo::nitro::solidarity::nfcpassport { enum class NfcReadPhase; }
 
 #include "PassportReadResult.hpp"
 #include <NitroModules/Promise.hpp>
@@ -30,6 +36,15 @@ namespace margelo::nitro::solidarity::nfcpassport { struct PassportMRZ; }
 #include <NitroModules/JArrayBuffer.hpp>
 #include "PassportMRZ.hpp"
 #include "JPassportMRZ.hpp"
+#include "NfcReadOptions.hpp"
+#include "JNfcReadOptions.hpp"
+#include "NfcReadProgress.hpp"
+#include <functional>
+#include "JFunc_void_NfcReadProgress.hpp"
+#include <NitroModules/JNICallable.hpp>
+#include "JNfcReadProgress.hpp"
+#include "NfcReadPhase.hpp"
+#include "JNfcReadPhase.hpp"
 
 namespace margelo::nitro::solidarity::nfcpassport {
 
@@ -69,9 +84,9 @@ namespace margelo::nitro::solidarity::nfcpassport {
     auto __result = method(_javaPart);
     return static_cast<bool>(__result);
   }
-  std::shared_ptr<Promise<PassportReadResult>> JHybridNfcPassportSpec::read(const PassportMRZ& mrz) {
-    static const auto method = _javaPart->javaClassStatic()->getMethod<jni::local_ref<JPromise::javaobject>(jni::alias_ref<JPassportMRZ> /* mrz */)>("read");
-    auto __result = method(_javaPart, JPassportMRZ::fromCpp(mrz));
+  std::shared_ptr<Promise<PassportReadResult>> JHybridNfcPassportSpec::read(const PassportMRZ& mrz, const std::optional<NfcReadOptions>& options) {
+    static const auto method = _javaPart->javaClassStatic()->getMethod<jni::local_ref<JPromise::javaobject>(jni::alias_ref<JPassportMRZ> /* mrz */, jni::alias_ref<JNfcReadOptions> /* options */)>("read");
+    auto __result = method(_javaPart, JPassportMRZ::fromCpp(mrz), options.has_value() ? JNfcReadOptions::fromCpp(options.value()) : nullptr);
     return [&]() {
       auto __promise = Promise<PassportReadResult>::create();
       __result->cthis()->addOnResolvedListener([=](const jni::alias_ref<jni::JObject>& __boxedResult) {

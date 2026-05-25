@@ -22,6 +22,12 @@ namespace margelo::nitro::solidarity::nfcpassport { struct DataGroupsBundle; }
 namespace NitroModules { class ArrayBufferHolder; }
 // Forward declaration of `PassportMRZ` to properly resolve imports.
 namespace margelo::nitro::solidarity::nfcpassport { struct PassportMRZ; }
+// Forward declaration of `NfcReadOptions` to properly resolve imports.
+namespace margelo::nitro::solidarity::nfcpassport { struct NfcReadOptions; }
+// Forward declaration of `NfcReadProgress` to properly resolve imports.
+namespace margelo::nitro::solidarity::nfcpassport { struct NfcReadProgress; }
+// Forward declaration of `NfcReadPhase` to properly resolve imports.
+namespace margelo::nitro::solidarity::nfcpassport { enum class NfcReadPhase; }
 
 #include "PassportReadResult.hpp"
 #include <NitroModules/Promise.hpp>
@@ -32,6 +38,10 @@ namespace margelo::nitro::solidarity::nfcpassport { struct PassportMRZ; }
 #include <optional>
 #include <NitroModules/ArrayBufferHolder.hpp>
 #include "PassportMRZ.hpp"
+#include "NfcReadOptions.hpp"
+#include "NfcReadProgress.hpp"
+#include <functional>
+#include "NfcReadPhase.hpp"
 
 #include "NfcPassport-Swift-Cxx-Umbrella.hpp"
 
@@ -91,8 +101,8 @@ namespace margelo::nitro::solidarity::nfcpassport {
       auto __value = std::move(__result.value());
       return __value;
     }
-    inline std::shared_ptr<Promise<PassportReadResult>> read(const PassportMRZ& mrz) override {
-      auto __result = _swiftPart.read(std::forward<decltype(mrz)>(mrz));
+    inline std::shared_ptr<Promise<PassportReadResult>> read(const PassportMRZ& mrz, const std::optional<NfcReadOptions>& options) override {
+      auto __result = _swiftPart.read(std::forward<decltype(mrz)>(mrz), options);
       if (__result.hasError()) [[unlikely]] {
         std::rethrow_exception(__result.error());
       }

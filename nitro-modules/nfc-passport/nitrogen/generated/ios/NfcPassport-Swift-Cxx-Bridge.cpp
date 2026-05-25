@@ -30,6 +30,14 @@ namespace margelo::nitro::solidarity::nfcpassport::bridge::swift {
     };
   }
   
+  // pragma MARK: std::function<void(const NfcReadProgress& /* event */)>
+  Func_void_NfcReadProgress create_Func_void_NfcReadProgress(void* NON_NULL swiftClosureWrapper) noexcept {
+    auto swiftClosure = NfcPassport::Func_void_NfcReadProgress::fromUnsafe(swiftClosureWrapper);
+    return [swiftClosure = std::move(swiftClosure)](const NfcReadProgress& event) mutable -> void {
+      swiftClosure.call(event);
+    };
+  }
+  
   // pragma MARK: std::shared_ptr<HybridNfcPassportSpec>
   std::shared_ptr<HybridNfcPassportSpec> create_std__shared_ptr_HybridNfcPassportSpec_(void* NON_NULL swiftUnsafePointer) noexcept {
     NfcPassport::HybridNfcPassportSpec_cxx swiftPart = NfcPassport::HybridNfcPassportSpec_cxx::fromUnsafe(swiftUnsafePointer);

@@ -53,13 +53,16 @@ final class HybridNfcPassport: HybridNfcPassportSpec {
 
   // MARK: - Read
 
-  func read(mrz: PassportMRZ) throws -> Promise<PassportReadResult> {
+  func read(mrz: PassportMRZ, options: NfcReadOptions?) throws -> Promise<PassportReadResult> {
     return Promise.async {
-      try await self.performRead(mrz: mrz)
+      try await self.performRead(mrz: mrz, options: options)
     }
   }
 
-  private func performRead(mrz: PassportMRZ) async throws -> PassportReadResult {
+  private func performRead(
+    mrz: PassportMRZ,
+    options: NfcReadOptions?
+  ) async throws -> PassportReadResult {
     #if targetEnvironment(simulator)
       throw self.error(
         code: "nfc_unavailable",
@@ -90,30 +93,85 @@ final class HybridNfcPassport: HybridNfcPassportSpec {
         reader.setMasterListURL(masterListURL)
       }
 
+      // Build the data-group request list. DG2 (face JPEG) is the slowest
+      // ~3-5 sec piece of the read; the JS pipeline only uses DG1 today so
+      // the Expo flow passes `skipFaceImage: true` to cut total read time
+      // in half. Leave DG2 in by default so existing callers (none yet,
+      // but the Swift-app parity tests) don't silently lose the image.
+      let skipFace = options?.skipFaceImage ?? false
+      var tags: [DataGroupId] = [.COM, .SOD, .DG1, .DG14, .DG15]
+      if !skipFace {
+        tags.insert(.DG2, at: 3)
+      }
+
+      // Forward NFCPassportReader's progress dispatch (the same hook that
+      // drives the system NFC sheet text) to the JS callback so the app
+      // can paint a real progress bar. Returning the display string from
+      // the closure is what populates the Core NFC sheet — preserve that
+      // exact mapping for parity with the Swift app.
+      let onProgress = options?.onProgress
+      let displayMessageHandler: (NFCViewDisplayMessage) -> String? = { message in
+        switch message {
+        case .requestPresentPassport:
+          onProgress?(NfcReadProgress(
+            phase: .connecting,
+            percent: 0,
+            dataGroup: nil,
+            message: "Hold your passport against the back of your iPhone."
+          ))
+          return "Hold your passport against the back of your iPhone."
+        case .authenticatingWithPassport(let progress):
+          // Auth covers BAC+PACE — give it the 0..30% range.
+          let pct = min(30.0, Double(progress) * 0.30)
+          onProgress?(NfcReadProgress(
+            phase: .authenticating,
+            percent: pct,
+            dataGroup: nil,
+            message: "Authenticating… \(progress)%"
+          ))
+          return "Authenticating… \(progress)%"
+        case .readingDataGroupProgress(let dg, let progress):
+          // DG read covers 30..95%. The library doesn't tell us which DG
+          // index we're on relative to the total — just report the local
+          // %% for this DG and rely on the JS side to coarse-bucket.
+          let pct = 30.0 + (min(100.0, Double(progress)) * 0.65)
+          onProgress?(NfcReadProgress(
+            phase: .readingDg,
+            percent: pct,
+            dataGroup: "\(dg)",
+            message: "Reading \(dg)… \(progress)%"
+          ))
+          return "Reading \(dg)… \(progress)%"
+        case .error(let nfcError):
+          onProgress?(NfcReadProgress(
+            phase: .error,
+            percent: 0,
+            dataGroup: nil,
+            message: nfcError.localizedDescription
+          ))
+          return "Error: \(nfcError.localizedDescription)"
+        case .successfulRead:
+          onProgress?(NfcReadProgress(
+            phase: .done,
+            percent: 100,
+            dataGroup: nil,
+            message: "Passport read successfully."
+          ))
+          return "Passport read successfully."
+        default:
+          return nil
+        }
+      }
+
       let model: NFCPassportModel
       do {
         model = try await reader.readPassport(
           mrzKey: mrzKey,
-          tags: [.COM, .SOD, .DG1, .DG2, .DG14, .DG15],
+          tags: tags,
           skipSecureElements: false,
           skipCA: false,
           skipPACE: false,
-          customDisplayMessage: { message in
-            switch message {
-            case .requestPresentPassport:
-              return "Hold your passport against the back of your iPhone."
-            case .authenticatingWithPassport(let progress):
-              return "Authenticating… \(progress)%"
-            case .readingDataGroupProgress(let dg, let progress):
-              return "Reading \(dg)… \(progress)%"
-            case .error(let nfcError):
-              return "Error: \(nfcError.localizedDescription)"
-            case .successfulRead:
-              return "Passport read successfully."
-            default:
-              return nil
-            }
-          }
+          customDisplayMessage: displayMessageHandler
         )
       } catch let libError as NFCPassportReaderError {
         switch libError {

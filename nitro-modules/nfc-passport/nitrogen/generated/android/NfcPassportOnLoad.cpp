@@ -16,6 +16,7 @@
 #include <NitroModules/HybridObjectRegistry.hpp>
 
 #include "JHybridNfcPassportSpec.hpp"
+#include "JFunc_void_NfcReadProgress.hpp"
 #include <NitroModules/DefaultConstructableObject.hpp>
 
 namespace margelo::nitro::solidarity::nfcpassport {
@@ -41,6 +42,7 @@ void registerAllNatives() {
 
   // Register native JNI methods
   margelo::nitro::solidarity::nfcpassport::JHybridNfcPassportSpec::CxxPart::registerNatives();
+  margelo::nitro::solidarity::nfcpassport::JFunc_void_NfcReadProgress_cxx::registerNatives();
 
   // Register Nitro Hybrid Objects
   HybridObjectRegistry::registerHybridObjectConstructor(

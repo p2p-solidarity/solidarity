@@ -137,9 +137,9 @@ open class HybridNfcPassportSpec_cxx {
   }
   
   @inline(__always)
-  public final func read(mrz: PassportMRZ) -> bridge.Result_std__shared_ptr_Promise_PassportReadResult___ {
+  public final func read(mrz: PassportMRZ, options: bridge.std__optional_NfcReadOptions_) -> bridge.Result_std__shared_ptr_Promise_PassportReadResult___ {
     do {
-      let __result = try self.__implementation.read(mrz: mrz)
+      let __result = try self.__implementation.read(mrz: mrz, options: options.value)
       let __resultCpp = { () -> bridge.std__shared_ptr_Promise_PassportReadResult__ in
         let __promise = bridge.create_std__shared_ptr_Promise_PassportReadResult__()
         let __promiseHolder = bridge.wrap_std__shared_ptr_Promise_PassportReadResult__(__promise)
