@@ -9,6 +9,7 @@
  * inventory (docs/migration/03-models-inventory.md).
  */
 import { create } from 'zustand';
+import { useShallow } from 'zustand/shallow';
 
 import { decryptJson, encryptJson } from '@/storage/encryptionManager';
 import { getMmkv } from '@/storage/mmkv';
@@ -139,29 +140,42 @@ export const useGroupMembers = (id: string | undefined): readonly GroupMember[] 
  */
 export const CURRENT_USER_RECORD_ID = 'me';
 
-/** All groups (insertion order). */
+/**
+ * All groups (insertion order).
+ *
+ * `useShallow` is required for any selector that derives a fresh array from
+ * the underlying `ReadonlyMap`. Without it the new reference returned each
+ * render trips Zustand v5's `useSyncExternalStore` cache and React loops on
+ * "Maximum update depth exceeded".
+ */
 export const useAllGroups = (): readonly GroupModel[] =>
-  useGroupStore((s) => Array.from(s.groups.values()));
+  useGroupStore(useShallow((s) => Array.from(s.groups.values())));
 
 /** Public (non-private) groups. Mirrors Swift YourGroupsSectionView.publicGroups. */
 export const usePublicGroups = (): readonly GroupModel[] =>
-  useGroupStore((s) =>
-    Array.from(s.groups.values()).filter((g) => !g.isPrivate)
+  useGroupStore(
+    useShallow((s) =>
+      Array.from(s.groups.values()).filter((g) => !g.isPrivate)
+    )
   );
 
 /** Private groups owned by the current user. */
 export const usePrivateOwnedGroups = (): readonly GroupModel[] =>
-  useGroupStore((s) =>
-    Array.from(s.groups.values()).filter(
-      (g) => g.isPrivate && g.ownerRecordID === CURRENT_USER_RECORD_ID
+  useGroupStore(
+    useShallow((s) =>
+      Array.from(s.groups.values()).filter(
+        (g) => g.isPrivate && g.ownerRecordID === CURRENT_USER_RECORD_ID
+      )
     )
   );
 
 /** Private groups shared with the current user. */
 export const usePrivateSharedGroups = (): readonly GroupModel[] =>
-  useGroupStore((s) =>
-    Array.from(s.groups.values()).filter(
-      (g) => g.isPrivate && g.ownerRecordID !== CURRENT_USER_RECORD_ID
+  useGroupStore(
+    useShallow((s) =>
+      Array.from(s.groups.values()).filter(
+        (g) => g.isPrivate && g.ownerRecordID !== CURRENT_USER_RECORD_ID
+      )
     )
   );
 
