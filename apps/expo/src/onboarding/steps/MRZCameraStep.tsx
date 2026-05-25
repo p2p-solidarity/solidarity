@@ -2,32 +2,34 @@
  * MRZCameraStep — 1:1 visual port of Swift MRZCameraView.swift.
  *
  * Layout (top → bottom):
- *   1. Live camera feed (fullscreen, black backdrop).
- *   2. 320x60 rounded-rect MRZ alignment overlay centered on screen.
- *      White stroke → green stroke once a draft is detected.
+ *   1. Live camera feed (fullscreen, black backdrop) — same on iOS + Android.
+ *   2. PassportSketch overlay (open-passport SVG with photo + field lines +
+ *      a 320×60 MRZ alignment band at the bottom). The MRZ band stroke
+ *      flips from white to terminalGreen once a draft is captured.
  *   3. Footer:
  *      - Before scan: "Looking for MRZ..." (progress) or error label.
  *      - After scan : "MRZ Detected" confirmation card with passport
  *                     number, nationality, DOB, expiry; Rescan + Use This.
  *   4. NavBar with Cancel button (left).
  *
- * MRZ scanning: production MRZ detection requires a native frame-processor
- * plugin (e.g. mlkit-text-recognition + ICAO 9303 parser). Until that
- * lands as a Nitro module / dev-client plugin, the camera shows the live
- * preview + overlay + an explicit "Enter Manually" CTA — honest about the
- * missing capability per CLAUDE.md rule 8. Surface stays Swift-identical
- * so the day the plugin lands it's a one-prop change to start receiving
- * drafts.
+ * MRZ recognition: production MRZ detection requires a native
+ * frame-processor plugin (ML Kit Text Recognition on Android, VisionKit on
+ * iOS) + the `mrz` parser. Until that lands as a Nitro module the camera
+ * shows the live preview + sketch + an explicit "Enter Manually" CTA —
+ * honest about the missing capability per CLAUDE.md rule 8. Both platforms
+ * paint the same screen so the day the plugin lands it's a one-prop change
+ * to start receiving drafts.
  */
 import type { ReactNode } from 'react';
 import { useCallback, useState } from 'react';
-import { Platform, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
 import {
   Camera,
   useCameraDevice,
 } from 'react-native-vision-camera';
 
 import { SfIcon } from '@/components/icons/SfIcon';
+import { PassportSketch } from '@/components/scan/PassportSketch';
 import { ThemedButton } from '@/components/themed';
 import { Colors } from '@/constants/Colors';
 import { useCameraPermission } from '@/scan/useCameraPermission';
@@ -64,29 +66,6 @@ export function MRZCameraStep({
     if (draft) onScanned(draft);
   }, [draft, onScanned]);
 
-  // Android has no MRZ OCR plugin yet (the iOS Vision recogniser doesn't
-  // exist on AOSP, and the ML Kit frame-processor isn't wired in this
-  // build). Mounting `<Camera>` only to show a preview the user can't
-  // act on regresses to a fail-closed UX on Android — the live feed
-  // briefly lights up, then the only path forward is "Enter Manually".
-  // Skip the camera entirely on Android and route straight to the manual
-  // sheet so the step never appears broken. iOS keeps the preview for
-  // the day the recogniser lands.
-  if (Platform.OS === 'android') {
-    return (
-      <View style={styles.permissionScreen}>
-        <Text style={styles.permissionText}>
-          Live MRZ scan is iOS-only right now. Enter the MRZ from your passport
-          to continue the verification flow.
-        </Text>
-        <View style={{ marginTop: 16, gap: 8, alignItems: 'stretch' }}>
-          <ThemedButton label="Enter Manually" variant="inverted" onPress={onSwitchToManual} />
-          <ThemedButton label="Cancel" variant="secondary" onPress={onCancel} />
-        </View>
-      </View>
-    );
-  }
-
   if (permission !== 'granted') {
     return (
       <View style={styles.permissionScreen}>
@@ -122,14 +101,8 @@ export function MRZCameraStep({
       <NavBar onCancel={onCancel} />
 
       <View style={styles.overlayContainer}>
-        <View
-          style={[
-            styles.mrzOverlay,
-            { borderColor: draft ? Colors.terminalGreen : '#FFFFFF' },
-          ]}
-        >
-          {!draft ? <Text style={styles.overlayLabel}>Align MRZ zone here</Text> : null}
-        </View>
+        <PassportSketch active={draft !== null} />
+        {!draft ? <Text style={styles.alignLabel}>Align passport MRZ here</Text> : null}
       </View>
 
       <View style={styles.footer}>
@@ -237,16 +210,8 @@ const styles = StyleSheet.create({
   navBarButton: { width: 80, height: 44, justifyContent: 'center' },
   navBarText: { color: '#FFFFFF', fontSize: 15 },
   navBarTitle: { color: '#FFFFFF', fontSize: 17, fontWeight: '600' },
-  overlayContainer: { flex: 1, alignItems: 'center', justifyContent: 'center' },
-  mrzOverlay: {
-    width: 320,
-    height: 60,
-    borderRadius: 8,
-    borderWidth: 2,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  overlayLabel: { color: 'rgba(255,255,255,0.7)', fontSize: 12 },
+  overlayContainer: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 12 },
+  alignLabel: { color: 'rgba(255,255,255,0.7)', fontSize: 12 },
   footer: { padding: 16, paddingBottom: 40 },
   instructionLabel: { color: '#FFFFFF', fontSize: 12, textAlign: 'center' },
   confirmationCard: {

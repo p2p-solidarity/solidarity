@@ -158,6 +158,11 @@ const RAW = {
   /** Adaptive card border — `Color.Theme.cardBorder(for:)`. */
   cardBorder: 'rgba(200,184,200,0.6)',
   cardBorderDark: 'rgba(255,255,255,0.10)',
+
+  /** Dim mask painted around a camera-scan window. No dark variant — always over a dark feed. */
+  scanDim: 'rgba(0,0,0,0.55)',
+  /** Shutter-flash overlay for the screenshot-style capture animation. */
+  scanFlash: 'rgba(255,255,255,0.55)',
 } as const;
 
 type RawKey = keyof typeof RAW;

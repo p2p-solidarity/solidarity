@@ -1,9 +1,14 @@
 /**
  * Scan screen — 1:1 port of Swift ScanTabView. Full-screen camera preview
- * with ScanningFrameView overlay (250×250 white square + 30pt
- * terminalGreen corner indicators), nav bar "Scan" inline + trailing
- * `qrcode` (open self-QR), and a footer SolidarityPlaceholderCard
- * "Protocol Router" showing supported flows.
+ * with a dimmed-mask ScanWindowOverlay (centred square cut-out + four
+ * green corner brackets), nav bar "Scan" inline + trailing `qrcode`
+ * (open self-QR), and a footer SolidarityPlaceholderCard "Protocol
+ * Router" showing supported flows.
+ *
+ * Capture feedback: when a payload is decoded we play a short shutter-style
+ * animation (corner brackets pulse + a brief white flash overlay) on the
+ * Reanimated UI thread, then route after ~280ms so the user sees the
+ * "got it" moment instead of an instant cut.
  *
  * Decoded payload is routed by `classifyPayload`:
  *   - `openid4vp://present?…` and similar request URLs → ProofPresentationFlowSheet
@@ -12,13 +17,20 @@
  *     in Wave 1.
  */
 import { router } from 'expo-router';
-import { useCallback, useState } from 'react';
-import { ActivityIndicator, Pressable, Text, View } from 'react-native';
+import { useCallback, useRef, useState } from 'react';
+import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
+import Animated, {
+  useAnimatedStyle,
+  useSharedValue,
+  withSequence,
+  withTiming,
+} from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { scheduleOnRN } from 'react-native-worklets';
 
 import { SfIcon } from '@/components/icons/SfIcon';
 import { ProofPresentationFlowSheet } from '@/components/scan/ProofPresentationFlowSheet';
-import { ScanningFrameView } from '@/components/scan/ScanningFrameView';
+import { ScanWindowOverlay } from '@/components/scan/ScanWindowOverlay';
 import {
   VerifierResultSheet,
   type VerifierResult,
@@ -27,6 +39,8 @@ import { SolidarityPlaceholderCard } from '@/components/passport/SolidarityPlace
 import { ThemedButton } from '@/components/themed';
 import { Colors } from '@/constants/Colors';
 import { QrScanner } from '@/scan/QrScanner';
+
+const SCAN_WINDOW_SIZE = 260;
 
 type ScanRoute =
   | { kind: 'proof'; payload: string }
@@ -39,16 +53,46 @@ export default function ScanScreen() {
   const [progress, setProgress] = useState<{ received: number; total: number } | null>(null);
   const [isScanning, setIsScanning] = useState(true);
 
+  // Capture animation lives on the UI thread — bracketScale pulses the
+  // ScanWindowOverlay corners and flashOpacity blinks a white shutter.
+  // Both stay 0 / 1 unless a payload is decoded.
+  const bracketScale = useSharedValue(1);
+  const flashOpacity = useSharedValue(0);
+  const capturing = useRef(false);
+
+  const flashStyle = useAnimatedStyle(() => ({ opacity: flashOpacity.value }));
+
   const reset = useCallback(() => {
     setRoute(null);
     setIsScanning(true);
+    capturing.current = false;
   }, []);
 
-  const onResult = useCallback((payload: string) => {
+  const finalize = useCallback((payload: string) => {
     setRoute(classifyPayload(payload));
     setProgress(null);
     setIsScanning(false);
+    capturing.current = false;
   }, []);
+
+  const onResult = useCallback(
+    (payload: string) => {
+      if (capturing.current) return;
+      capturing.current = true;
+      bracketScale.value = withSequence(
+        withTiming(1.18, { duration: 140 }),
+        withTiming(1, { duration: 120 }),
+      );
+      flashOpacity.value = withSequence(
+        withTiming(1, { duration: 80 }),
+        withTiming(0, { duration: 180 }, (finished) => {
+          'worklet';
+          if (finished) scheduleOnRN(finalize, payload);
+        }),
+      );
+    },
+    [bracketScale, flashOpacity, finalize],
+  );
 
   const onProgress = useCallback((received: number, total: number) => {
     setProgress({ received, total });
@@ -63,6 +107,8 @@ export default function ScanScreen() {
       <View style={{ position: 'absolute', inset: 0 }}>
         <QrScanner onResult={onResult} onProgress={onProgress} />
       </View>
+
+      <ScanWindowOverlay size={SCAN_WINDOW_SIZE} bracketScale={bracketScale} />
 
       <View
         className="flex-row items-center justify-between px-4"
@@ -87,9 +133,7 @@ export default function ScanScreen() {
         </Pressable>
       </View>
 
-      <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
-        <ScanningFrameView />
-      </View>
+      <View style={{ flex: 1 }} />
 
       <View
         style={{ paddingBottom: insets.bottom + 16, paddingHorizontal: 16, gap: 8 }}
@@ -127,6 +171,15 @@ export default function ScanScreen() {
         visible={route?.kind === 'verifier'}
         result={route?.kind === 'verifier' ? route.result : null}
         onClose={reset}
+      />
+
+      <Animated.View
+        pointerEvents="none"
+        style={[
+          StyleSheet.absoluteFill,
+          { backgroundColor: Colors.scanFlash },
+          flashStyle,
+        ]}
       />
     </View>
   );
