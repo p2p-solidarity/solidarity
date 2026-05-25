@@ -192,3 +192,8 @@ nitro-modules/*/android/.gradle/
 # Rust xcframework outputs produced by nitro-modules/*/rust/build-ios.sh.
 # These are ~130 MB per build and must be rebuilt locally — never commit.
 nitro-modules/**/*.xcframework/
+
+# Android cdylibs built by nitro-modules/passport-zk/scripts/build-android.sh
+# from ../passport-noir/mopro-binding. ~30 MB per ABI — rebuild locally.
+nitro-modules/passport-zk/android/src/main/jniLibs/*/libpassport_zk_mopro.so
+nitro-modules/passport-zk/android/src/main/jniLibs/*/libc++_shared.so

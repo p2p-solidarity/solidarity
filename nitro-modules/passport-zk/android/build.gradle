@@ -155,4 +155,12 @@ dependencies {
 
   // Coroutines for the off-thread proof generation.
   implementation "org.jetbrains.kotlinx:kotlinx-coroutines-android:1.8.1"
+
+  // JNA backs the mopro UniFFI Kotlin bindings (uniffi.mopro.*) — the
+  // generated mopro.kt declares `com.sun.jna.Library` interfaces that load
+  // `libpassport_zk_mopro.so` from jniLibs at runtime. `@aar` is required
+  // because JNA ships a regular jar + an aar with the native libs; we
+  // need the aar for Android. Version pinned to what mopro-ffi 0.3.x's
+  // generated bindings expect (UniFFI Kotlin runtime).
+  implementation "net.java.dev.jna:jna:5.13.0@aar"
 }
