@@ -22,7 +22,7 @@ import * as FileSystem from 'expo-file-system/legacy';
 import { SfIcon } from '@/components/icons/SfIcon';
 import { ThemedButton, ThemedText } from '@/components/themed';
 import { Colors } from '@/constants/Colors';
-import { importFromVcf } from '@/contacts/importer';
+import { importFromDevicePicker, importFromVcf } from '@/contacts/importer';
 import { pushToast } from '@/feedback/toast';
 import { OnboardingScaffold } from './OnboardingScaffold';
 
@@ -63,11 +63,26 @@ export function ImportContactsStep({
     }
   };
 
-  const handlePhoneImport = () => {
-    // The expo-contacts v56 class-based API for picker UIs is still in
-    // flux; surface a clear message until the picker hook lands.
-    // Falling through to "Skip" is a valid UX per the Swift design.
-    pushToast('Phone picker lands when expo-contacts picker is ready', 'info');
+  const handlePhoneImport = async () => {
+    setIsWorking(true);
+    try {
+      const { granted, cancelled, count } = await importFromDevicePicker();
+      if (!granted) {
+        pushToast('Contacts access denied. Enable in Settings.', 'error');
+        return;
+      }
+      if (cancelled) return;
+      const total = (importedCount ?? 0) + count;
+      onImported(total);
+      pushToast(
+        count === 1 ? 'Imported 1 contact' : `Imported ${String(count)} contacts`,
+        'success'
+      );
+    } catch (err) {
+      pushToast(`Import failed: ${(err as Error).message}`, 'error');
+    } finally {
+      setIsWorking(false);
+    }
   };
 
   return (
@@ -99,7 +114,7 @@ export function ImportContactsStep({
               label="Import from Phone"
               fullWidth
               leadingIcon={<SfIcon name="person.crop.circle.badge.plus" size={17} color={Colors.invertedButtonText} />}
-              onPress={handlePhoneImport}
+              onPress={() => { void handlePhoneImport(); }}
             />
             <ThemedButton
               label="Import VCF File"

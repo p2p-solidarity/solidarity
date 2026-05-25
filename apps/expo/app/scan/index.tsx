@@ -78,7 +78,10 @@ export default function ScanScreen() {
         <Text className="text-text1 text-[17px] font-semibold">Scan</Text>
         <Pressable
           accessibilityRole="button"
+          accessibilityLabel="My QR"
+          onPress={() => { router.push('/share/qr'); }}
           style={{ width: 60, height: 44, alignItems: 'flex-end', justifyContent: 'center' }}
+          className="active:opacity-60"
         >
           <SfIcon name="qrcode" size={20} color={Colors.text1} />
         </Pressable>

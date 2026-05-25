@@ -19,7 +19,7 @@
  */
 import { router, Stack } from 'expo-router';
 import { useEffect } from 'react';
-import { ScrollView, Text, View } from 'react-native';
+import { Platform, ScrollView, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { SfIcon } from '@/components/icons/SfIcon';
@@ -60,20 +60,24 @@ export default function DIDListSheet() {
             </View>
           </View>
 
-          {/* Key Storage */}
+          {/* Key Storage — platform-specific labels */}
           <SettingsBlockSection
             title="Key Storage"
-            footer="DID keys are stored in iCloud Keychain and shared across your signed-in devices."
+            footer={
+              Platform.OS === 'ios'
+                ? 'DID keys are stored in iCloud Keychain and shared across your signed-in devices.'
+                : 'DID keys are stored in the Android Keystore and backed up via Google Drive when sync is enabled.'
+            }
           >
             <SettingsBlockInfoRow
-              icon="key.icloud"
+              icon={Platform.OS === 'ios' ? 'key.icloud' : 'lock.shield'}
               title="Storage"
-              value="iCloud Keychain"
+              value={Platform.OS === 'ios' ? 'iCloud Keychain' : 'Android Keystore'}
             />
             <SettingsBlockInfoRow
               icon="arrow.triangle.2.circlepath"
               title="Sync"
-              value="Same Apple ID devices"
+              value={Platform.OS === 'ios' ? 'Same Apple ID devices' : 'Google Drive'}
             />
           </SettingsBlockSection>
         </View>

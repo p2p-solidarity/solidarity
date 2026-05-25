@@ -10,7 +10,7 @@
 import Constants from 'expo-constants';
 import { router } from 'expo-router';
 import { useRef } from 'react';
-import { Pressable, ScrollView, View } from 'react-native';
+import { Platform, Pressable, ScrollView, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import {
@@ -98,7 +98,8 @@ export default function SettingsHub() {
             />
           </SettingsBlockSection>
 
-          {/* Preferences */}
+          {/* Preferences — matches Swift v1.3.1: Security & Keys → Data & Sync → Advanced.
+              Notifications/Language live under Advanced; Developer only after dev unlock. */}
           <SettingsBlockSection title="Preferences">
             <SettingsBlockRow
               icon="lock.shield"
@@ -106,7 +107,7 @@ export default function SettingsHub() {
               onPress={() => { router.push('/settings/security'); }}
             />
             <SettingsBlockRow
-              icon="icloud"
+              icon={Platform.OS === 'ios' ? 'icloud' : 'arrow.counterclockwise.icloud'}
               title="Data & Sync"
               onPress={() => { router.push('/settings/data-sync'); }}
             />
@@ -114,16 +115,6 @@ export default function SettingsHub() {
               icon="slider.horizontal.3"
               title="Advanced"
               onPress={() => { router.push('/settings/advanced'); }}
-            />
-            <SettingsBlockRow
-              icon="bell"
-              title="Notifications"
-              onPress={() => { router.push('/settings/notifications'); }}
-            />
-            <SettingsBlockRow
-              icon="globe"
-              title="Language"
-              onPress={() => { router.push('/settings/language'); }}
             />
             {developerMode ? (
               <SettingsBlockRow

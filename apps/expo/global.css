@@ -21,7 +21,8 @@
   --color-text2: #5F5E67;
   --color-text3: #9C9AA6;
   --color-accentRose: #BF80A7;
-  --color-primaryBlue: #007AFF;
+  /* primaryBlue is brand mauve — Solidarity palette has no blue. */
+  --color-primaryBlue: #83537D;
   --color-primaryMauve: #83537D;
   --color-destructive: #CD556A;
   --color-terminalGreen: #4CAF51;
@@ -50,5 +51,7 @@
     --color-text2: #A898A8;
     --color-text3: #808080;
     --color-blobCenter: #2A1F26;
+    /* primaryBlue dark — Swift ThemeManager.swift:396 (#C088A0). */
+    --color-primaryBlue: #C088A0;
   }
 }

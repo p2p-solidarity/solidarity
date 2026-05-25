@@ -176,6 +176,16 @@ export default function AdvancedSettings() {
               title="Appearance"
               onPress={() => { router.push('/settings/appearance'); }}
             />
+            <SettingsBlockRow
+              icon="globe"
+              title="Language"
+              onPress={() => { router.push('/settings/language'); }}
+            />
+            <SettingsBlockRow
+              icon="bell"
+              title="Notifications"
+              onPress={() => { router.push('/settings/notifications'); }}
+            />
           </SettingsBlockSection>
 
           {/* Developer Tools */}

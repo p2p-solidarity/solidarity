@@ -12,7 +12,17 @@
  * Validates username on Next-tap; haptic.error on empty, haptic.success on valid.
  */
 import { useState } from 'react';
-import { ScrollView, TextInput, View, type KeyboardTypeOptions } from 'react-native';
+import {
+  Keyboard,
+  KeyboardAvoidingView,
+  Platform,
+  ScrollView,
+  TextInput,
+  TouchableWithoutFeedback,
+  View,
+  type KeyboardTypeOptions,
+  type ReturnKeyTypeOptions,
+} from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { ThemedButton, ThemedText } from '@/components/themed';
@@ -43,84 +53,100 @@ export function DarkProfileSetupStep({ profile, onChange, onNext }: DarkProfileS
   };
 
   return (
-    <ScrollView
+    <KeyboardAvoidingView
+      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       className="bg-pageBg flex-1"
-      contentContainerStyle={{
-        paddingHorizontal: 24,
-        paddingTop: insets.top + 16,
-        paddingBottom: insets.bottom + 32,
-      }}
-      keyboardShouldPersistTaps="handled"
+      keyboardVerticalOffset={Platform.OS === 'ios' ? insets.top : 0}
     >
-      <View className="items-center" style={{ gap: 8, paddingBottom: 24 }}>
-        <ThemedText variant="headlineMedium">Hi,</ThemedText>
-        <ThemedText variant="bodySmall" tone="secondary" style={{ textAlign: 'center' }}>
-          {"It's good to have you here <3\nLet's set up your profile"}
-        </ThemedText>
-      </View>
+      <TouchableWithoutFeedback onPress={Keyboard.dismiss} accessible={false}>
+        <ScrollView
+          className="flex-1"
+          contentContainerStyle={{
+            paddingHorizontal: 24,
+            paddingTop: insets.top + 16,
+            paddingBottom: insets.bottom + 80,
+          }}
+          keyboardShouldPersistTaps="handled"
+          keyboardDismissMode={Platform.OS === 'ios' ? 'interactive' : 'on-drag'}
+          showsVerticalScrollIndicator={false}
+        >
+          <View className="items-center" style={{ gap: 8, paddingBottom: 24 }}>
+            <ThemedText variant="headlineMedium">Hi,</ThemedText>
+            <ThemedText variant="bodySmall" tone="secondary" style={{ textAlign: 'center' }}>
+              {"It's good to have you here <3\nLet's set up your profile"}
+            </ThemedText>
+          </View>
 
-      <View style={{ gap: 24 }}>
-        <DarkInputField
-          title="Choose your username"
-          placeholder="Enter your username"
-          value={profile.username}
-          onChangeText={(v) => { onChange('username', v); }}
-          isRequired
-          errorMessage={usernameError}
-        />
+          <View style={{ gap: 24 }}>
+            <DarkInputField
+              title="Choose your username"
+              placeholder="Enter your username"
+              value={profile.username}
+              onChangeText={(v) => { onChange('username', v); }}
+              isRequired
+              errorMessage={usernameError}
+              returnKeyType="next"
+            />
 
-        <DarkInputField
-          title="Link"
-          placeholder="https://yoursite.com"
-          value={profile.link}
-          onChangeText={(v) => { onChange('link', v); }}
-          keyboardType="url"
-          autoCapitalize="none"
-        />
+            <DarkInputField
+              title="Link"
+              placeholder="https://yoursite.com"
+              value={profile.link}
+              onChangeText={(v) => { onChange('link', v); }}
+              keyboardType="url"
+              autoCapitalize="none"
+              returnKeyType="next"
+            />
 
-        <DarkInputField
-          title="X(twitter)"
-          placeholder="https://x.com/username"
-          value={profile.xTwitter}
-          onChangeText={(v) => { onChange('xTwitter', v); }}
-          autoCapitalize="none"
-        />
+            <DarkInputField
+              title="X(twitter)"
+              placeholder="https://x.com/username"
+              value={profile.xTwitter}
+              onChangeText={(v) => { onChange('xTwitter', v); }}
+              autoCapitalize="none"
+              returnKeyType="next"
+            />
 
-        <DarkInputField
-          title="LinkedIn"
-          placeholder="linkedin/links/here"
-          value={profile.linkedIn}
-          onChangeText={(v) => { onChange('linkedIn', v); }}
-          autoCapitalize="none"
-        />
+            <DarkInputField
+              title="LinkedIn"
+              placeholder="linkedin/links/here"
+              value={profile.linkedIn}
+              onChangeText={(v) => { onChange('linkedIn', v); }}
+              autoCapitalize="none"
+              returnKeyType="next"
+            />
 
-        <View style={{ gap: 4 }}>
-          <ThemedText variant="label">Export</ThemedText>
-          <ThemedText variant="caption" tone="tertiary">
-            You can do this later or whenever you&apos;re ready to export your data.
-          </ThemedText>
-        </View>
+            <View style={{ gap: 4 }}>
+              <ThemedText variant="label">Export</ThemedText>
+              <ThemedText variant="caption" tone="tertiary">
+                You can do this later or whenever you&apos;re ready to export your data.
+              </ThemedText>
+            </View>
 
-        <DarkInputField
-          title="Link to your ERC20 wallet (?)"
-          placeholder="0x..."
-          value={profile.wallet}
-          onChangeText={(v) => { onChange('wallet', v); }}
-          autoCapitalize="none"
-          autoCorrect={false}
-        />
+            <DarkInputField
+              title="Link to your ERC20 wallet (?)"
+              placeholder="0x..."
+              value={profile.wallet}
+              onChangeText={(v) => { onChange('wallet', v); }}
+              autoCapitalize="none"
+              autoCorrect={false}
+              returnKeyType="done"
+              onSubmitEditing={Keyboard.dismiss}
+            />
 
-        <View style={{ paddingTop: 16 }}>
-          <ThemedButton
-            label="Next"
-            variant="inverted"
-            fullWidth
-            haptic={false}
-            onPress={handleNext}
-          />
-        </View>
-      </View>
-    </ScrollView>
+            <View style={{ paddingTop: 16 }}>
+              <ThemedButton
+                label="Next"
+                variant="inverted"
+                fullWidth
+                haptic={false}
+                onPress={handleNext}
+              />
+            </View>
+          </View>
+        </ScrollView>
+      </TouchableWithoutFeedback>
+    </KeyboardAvoidingView>
   );
 }
 
@@ -134,6 +160,8 @@ interface DarkInputFieldProps {
   readonly keyboardType?: KeyboardTypeOptions;
   readonly autoCapitalize?: 'none' | 'sentences' | 'words' | 'characters';
   readonly autoCorrect?: boolean;
+  readonly returnKeyType?: ReturnKeyTypeOptions;
+  readonly onSubmitEditing?: () => void;
 }
 
 function DarkInputField({
@@ -146,6 +174,8 @@ function DarkInputField({
   keyboardType = 'default',
   autoCapitalize = 'sentences',
   autoCorrect = true,
+  returnKeyType,
+  onSubmitEditing,
 }: DarkInputFieldProps) {
   return (
     <View style={{ gap: 8 }}>
@@ -162,6 +192,9 @@ function DarkInputField({
         keyboardType={keyboardType}
         autoCapitalize={autoCapitalize}
         autoCorrect={autoCorrect}
+        returnKeyType={returnKeyType}
+        onSubmitEditing={onSubmitEditing}
+        submitBehavior={returnKeyType === 'done' ? 'blurAndSubmit' : 'submit'}
         className="bg-searchBg text-text1"
         style={{
           paddingHorizontal: 14,

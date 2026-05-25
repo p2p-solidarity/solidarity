@@ -20,11 +20,11 @@
  * dropping in this component is a single follow-up commit.
  */
 import type { ReactNode } from 'react';
-import { Pressable, Text, useColorScheme, View } from 'react-native';
+import { Pressable, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { SfIcon } from '@/components/icons/SfIcon';
-import { Colors } from '@/constants/Colors';
+import { useThemeColors } from '@/constants/useThemeColors';
 import { haptic } from '@/feedback/haptics';
 
 interface TabRoute {
@@ -75,16 +75,19 @@ export function FloatingTabBar({
   navigation,
 }: FloatingTabBarProps): ReactNode {
   const insets = useSafeAreaInsets();
-  // Subscribe to scheme changes — the `Colors` Proxy reads at access time,
-  // so we need *some* hook to force a re-render when the user flips theme.
-  useColorScheme();
+  // useThemeColors subscribes via useColorScheme() so the bar re-renders on
+  // theme flips and reads the scheme-correct values (Colors Proxy alone was
+  // returning the light pageBg here even in dark mode — observed on Android).
+  const c = useThemeColors();
 
   return (
-    <View>
+    // Outer wrapper carries the bg too so the safe-area inset region under
+    // the labels can't bleed through as cream when the dark scheme is active.
+    <View style={{ backgroundColor: c.pageBg }}>
       <View
         style={{
           height: 0.5,
-          backgroundColor: Colors.divider,
+          backgroundColor: c.divider,
         }}
       />
       <View
@@ -98,7 +101,7 @@ export function FloatingTabBar({
           // legacy iPhones without a home-indicator inset still keep breathing
           // room under the labels.
           paddingBottom: Math.max(insets.bottom, 12),
-          backgroundColor: Colors.pageBg,
+          backgroundColor: c.pageBg,
         }}
       >
         {state.routes.map((route, index) => {
@@ -129,6 +132,8 @@ export function FloatingTabBar({
               icon={icon}
               isSelected={isSelected}
               onPress={onPress}
+              activeColor={c.text1}
+              inactiveColor={c.text3}
             />
           );
         })}
@@ -142,6 +147,8 @@ interface FlatTabButtonProps {
   readonly icon?: 'person.2' | 'dot.radiowaves.left.and.right' | 'person.crop.circle';
   readonly isSelected: boolean;
   readonly onPress: () => void;
+  readonly activeColor: string;
+  readonly inactiveColor: string;
 }
 
 function FlatTabButton({
@@ -149,10 +156,10 @@ function FlatTabButton({
   icon,
   isSelected,
   onPress,
+  activeColor,
+  inactiveColor,
 }: FlatTabButtonProps): ReactNode {
-  // Subscribes via `useColorScheme()` so the Proxy reads flip on theme change.
-  useColorScheme();
-  const tint = isSelected ? Colors.text1 : Colors.text3;
+  const tint = isSelected ? activeColor : inactiveColor;
   return (
     <Pressable
       accessibilityRole="tab"

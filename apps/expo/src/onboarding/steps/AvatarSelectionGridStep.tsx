@@ -16,7 +16,8 @@
  * which prefers `<basename>.png` from the bundle Resources before falling
  * back to SF Symbols.
  */
-import { Image, Pressable, ScrollView, View } from 'react-native';
+import { Image as ExpoImage } from 'expo-image';
+import { Pressable, ScrollView, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { ANIMAL_CASES, animalDisplayName, animalImageSource } from '@/cards/animals';
@@ -162,7 +163,14 @@ function AvatarPreview({ animal }: { animal: Animal | null }) {
           overflow: 'hidden',
         }}
       >
-        <Image source={animalImageSource(animal)} style={{ width: 150, height: 150 }} resizeMode="cover" />
+        <ExpoImage
+          source={animalImageSource(animal)}
+          style={{ width: 150, height: 150 }}
+          contentFit="cover"
+          cachePolicy="memory-disk"
+          recyclingKey={`animal-${animal}-large`}
+          transition={0}
+        />
       </View>
       <View
         pointerEvents="none"
@@ -194,7 +202,14 @@ function AvatarChip({
       <View style={{ alignItems: 'center', gap: 8 }}>
         <View style={{ width: 60, height: 60 }}>
           <View style={{ width: 60, height: 60, borderRadius: 30, overflow: 'hidden' }}>
-            <Image source={animalImageSource(animal)} style={{ width: 60, height: 60 }} resizeMode="cover" />
+            <ExpoImage
+              source={animalImageSource(animal)}
+              style={{ width: 60, height: 60 }}
+              contentFit="cover"
+              cachePolicy="memory-disk"
+              recyclingKey={`animal-${animal}-chip`}
+              transition={0}
+            />
           </View>
           {isSelected ? (
             <View

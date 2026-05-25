@@ -16,10 +16,12 @@
  *   3. Create the initial BusinessCard (CardManager.createCard).
  *   4. Navigate to /(tabs)/people (MainTabView).
  */
+import { Image as ExpoImage } from 'expo-image';
 import { router, Stack, useLocalSearchParams } from 'expo-router';
-import { useCallback, useReducer } from 'react';
+import { useCallback, useEffect, useReducer } from 'react';
 import { Pressable, View } from 'react-native';
 
+import { ANIMAL_CASES, animalImageSource } from '@/cards/animals';
 import { useCardStore } from '@/cards/cardManager';
 import { SfIcon } from '@/components/icons/SfIcon';
 import { Colors } from '@/constants/Colors';
@@ -38,7 +40,7 @@ import {
 } from '@/onboarding/state';
 import { usePreferences } from '@/settings/preferences';
 import { pushToast } from '@/feedback/toast';
-import type { BusinessCard, SocialNetwork } from '@solidarity/shared';
+import { uuid, type BusinessCard, type SocialNetwork } from '@solidarity/shared';
 
 export default function OnboardingFlow() {
   const params = useLocalSearchParams<{ replay?: string }>();
@@ -46,6 +48,13 @@ export default function OnboardingFlow() {
   const [state, dispatch] = useReducer(onboardingReducer, initialOnboardingState);
   const setPref = usePreferences((s) => s.set);
   const upsertCard = useCardStore((s) => s.upsert);
+
+  // Warm the expo-image cache on entry so the avatar step paints frame 1
+  // without a first-load hitch. PNGs are bundled via `require()` so prefetch
+  // resolves immediately from the JS bundle — no network round-trip.
+  useEffect(() => {
+    void ExpoImage.prefetch(ANIMAL_CASES.map((a) => animalImageSource(a) as never));
+  }, []);
 
   const goTo = useCallback((step: OnboardingStep) => {
     dispatch({ type: 'goTo', step });
@@ -178,14 +187,14 @@ function composeInitialCard(profile: OnboardingProfile, animal: BusinessCard['an
   const socials: SocialNetwork[] = [];
   const x = profile.xTwitter.trim();
   if (x.length > 0) {
-    socials.push({ id: crypto.randomUUID(), platform: 'Twitter', username: x, url: undefined });
+    socials.push({ id: uuid(), platform: 'Twitter', username: x, url: undefined });
   }
   const li = profile.linkedIn.trim();
   if (li.length > 0) {
-    socials.push({ id: crypto.randomUUID(), platform: 'LinkedIn', username: li, url: undefined });
+    socials.push({ id: uuid(), platform: 'LinkedIn', username: li, url: undefined });
   }
   return {
-    id: crypto.randomUUID(),
+    id: uuid(),
     name: profile.username.trim(),
     title: undefined,
     company: undefined,

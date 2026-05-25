@@ -109,8 +109,18 @@ const RAW = {
 
   /** Accent rose — primary brand colour (Palette.purple #83537D mauve in dark). */
   accentRose: '#BF80A7',
-  /** iOS-system blue (CTAs that aren't brand-tinted). */
-  primaryBlue: '#007AFF',
+  /**
+   * Brand-tinted "primary" accent for tiles, toggles, badges, switches.
+   * Named `primaryBlue` for historical parity with the Swift token, but
+   * the Solidarity palette has no blue. Mirrors Swift `Color.Theme.primaryBlue`
+   * (ThemeManager.swift:394) — comment in Swift literally reads
+   * "Brand mauve (replaces cyber blue as primary accent)".
+   *   light: #83537D  (UIColor 0.514, 0.325, 0.490)
+   *   dark:  #C088A0  (UIColor 0.75,  0.53,  0.63)
+   * Do NOT change to #007AFF or any blue; the brand has none.
+   */
+  primaryBlue: '#83537D',
+  primaryBlueDark: '#C088A0',
   /** Brand mauve — secondary accent. */
   primaryMauve: '#83537D',
   /** Destructive red — Palette.red. */

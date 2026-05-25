@@ -147,7 +147,7 @@ export default function ShareTab() {
             cardName={myCard?.name}
             enabledFields={DEFAULT_FIELDS}
             hasRealHuman={false}
-            onOpenSettings={() => { router.push('/settings'); }}
+            onOpenSettings={() => { router.push('/settings/share-settings'); }}
             onShare={() => { router.push('/share/qr'); }}
           />
         </View>

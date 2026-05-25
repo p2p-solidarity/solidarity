@@ -32,8 +32,11 @@ module.exports = {
         text3: 'var(--color-text3, #9C9AA6)',
 
         // Accents — map to Color.Theme.accentRose/primaryBlue/destructive
+        // NOTE: `primaryBlue` is brand mauve, NOT iOS system blue — the
+        // Solidarity palette has no blue. The token name is preserved
+        // verbatim from the Swift source for grep-parity only.
         accentRose: 'var(--color-accentRose, #BF80A7)',
-        primaryBlue: 'var(--color-primaryBlue, #007AFF)',
+        primaryBlue: 'var(--color-primaryBlue, #83537D)',
         primaryMauve: 'var(--color-primaryMauve, #83537D)',
         destructive: 'var(--color-destructive, #CD556A)',
         terminalGreen: 'var(--color-terminalGreen, #4CAF51)',

@@ -25,6 +25,7 @@ import { SfIcon } from '@/components/icons/SfIcon';
 import {
   SettingsBlockDangerRow,
   SettingsBlockInfoRow,
+  SettingsBlockRow,
   SettingsBlockSection,
 } from '@/components/settings/SettingsBlocks';
 import { Colors } from '@/constants/Colors';
@@ -41,11 +42,23 @@ export default function ZkSettings(): React.JSX.Element {
   const proofsSupported = useProofsSupported();
   const seedFromNative = useZkIdentity((s) => s.seedFromNative);
   const deleteIdentity = useZkIdentity((s) => s.deleteIdentity);
+  const createIdentity = useZkIdentity((s) => s.createIdentity);
+  const isWorking = useZkIdentity((s) => s.isWorking);
   const [isDeleting, setIsDeleting] = useState(false);
 
   useEffect(() => {
     void seedFromNative();
   }, [seedFromNative]);
+
+  const performCreate = async (): Promise<void> => {
+    try {
+      await createIdentity();
+      pushToast('ZK identity created', 'success');
+    } catch (e) {
+      const message = e instanceof Error ? e.message : 'Unknown error.';
+      Alert.alert('Create Failed', message, [{ text: 'OK', style: 'cancel' }]);
+    }
+  };
 
   const performDelete = async (): Promise<void> => {
     setIsDeleting(true);
@@ -110,6 +123,16 @@ export default function ZkSettings(): React.JSX.Element {
           </SettingsBlockSection>
 
           <SettingsBlockSection title="Actions">
+            {commitment === null ? (
+              <SettingsBlockRow
+                icon="plus"
+                title="Create Identity"
+                subtitle={isWorking ? 'Working…' : 'Generate a Semaphore commitment'}
+                showsChevron={false}
+                disabled={isWorking}
+                onPress={() => { void performCreate(); }}
+              />
+            ) : null}
             <View
               style={{
                 opacity: commitment === null || isDeleting ? 0.5 : 1,

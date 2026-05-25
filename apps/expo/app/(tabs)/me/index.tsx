@@ -16,10 +16,11 @@
  *
  * All copy matches Swift verbatim. SF Symbols rendered via expo-symbols.
  */
+import { Image as ExpoImage } from 'expo-image';
 import { router } from 'expo-router';
 import type { SFSymbol } from 'expo-symbols';
 import { useEffect, useMemo } from 'react';
-import { Image, Pressable, ScrollView, Text, View } from 'react-native';
+import { Pressable, ScrollView, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { animalImageSource } from '@/cards/animals';
@@ -88,7 +89,14 @@ export default function MeTab() {
             did={shortDid(displayDid)}
             avatar={
               card?.animal ? (
-                <Image source={animalImageSource(card.animal)} style={{ width: 56, height: 56 }} resizeMode="cover" />
+                <ExpoImage
+                  source={animalImageSource(card.animal)}
+                  style={{ width: 56, height: 56 }}
+                  contentFit="cover"
+                  cachePolicy="memory-disk"
+                  recyclingKey={`animal-${card.animal}-me-header`}
+                  transition={0}
+                />
               ) : (
                 <InitialAvatar name={displayName} />
               )
