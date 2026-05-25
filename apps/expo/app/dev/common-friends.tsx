@@ -20,11 +20,12 @@
  */
 import { router, Stack } from 'expo-router';
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Alert, ScrollView, Text, View } from 'react-native';
+import { Alert, ScrollView, Text, useWindowDimensions, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { schnorr } from '@noble/curves/secp256k1.js';
 import { randomBytes } from '@noble/hashes/utils.js';
 
+import { DagGraph3D } from '@/components/sandbox/DagGraph3D';
 import {
   SettingsBackToolbar,
   SettingsBlockRow,
@@ -124,6 +125,7 @@ function intersect(mine: AuthorBucket, theirs: AuthorBucket): readonly CommonRow
 
 export default function CommonFriendsLab() {
   const insets = useSafeAreaInsets();
+  const screen = useWindowDimensions();
   const developerMode = usePreferences((s) => s.developerMode);
   const [devPubkey, setDevPubkey] = useState<string>('');
   const [nodes, setNodes] = useState<readonly DagNode[]>([]);
@@ -269,6 +271,16 @@ export default function CommonFriendsLab() {
             <Text className="text-text3 text-[12px]" style={{ marginTop: 8 }}>
               {`This store currently holds ${String(nodes.length)} node${nodes.length === 1 ? '' : 's'} from ${String(buckets.size)} author${buckets.size === 1 ? '' : 's'}.`}
             </Text>
+          </View>
+
+          <View className="px-4">
+            <DagGraph3D
+              nodes={nodes}
+              heads={[]}
+              width={screen.width - 32}
+              height={260}
+              localAuthorPubkey={devPubkey}
+            />
           </View>
 
           <SettingsBlockSection

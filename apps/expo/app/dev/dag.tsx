@@ -20,9 +20,10 @@
 import * as Clipboard from 'expo-clipboard';
 import { router, Stack } from 'expo-router';
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Alert, Pressable, ScrollView, Text, TextInput, View } from 'react-native';
+import { Alert, Pressable, ScrollView, Text, TextInput, useWindowDimensions, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { DagGraph3D } from '@/components/sandbox/DagGraph3D';
 import {
   SettingsBackToolbar,
   SettingsBlockRow,
@@ -73,6 +74,7 @@ function summarize(p: DagProjection, elapsedMs: number): ReplaySummary {
 
 export default function DagLab() {
   const insets = useSafeAreaInsets();
+  const screen = useWindowDimensions();
   const developerMode = usePreferences((s) => s.developerMode);
   const [noteInput, setNoteInput] = useState('');
   const [nodes, setNodes] = useState<readonly DagNode[]>([]);
@@ -80,6 +82,16 @@ export default function DagLab() {
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [verification, setVerification] = useState<VerificationReport | null>(null);
   const [replaySummary, setReplaySummary] = useState<ReplaySummary | null>(null);
+  const [localPubkey, setLocalPubkey] = useState<string>('');
+
+  useEffect(() => {
+    if (!developerMode) return;
+    try {
+      setLocalPubkey(loadOrCreateDevKey().pubkeyHex);
+    } catch {
+      setLocalPubkey('');
+    }
+  }, [developerMode]);
 
   const refresh = useCallback(() => {
     try {
@@ -294,6 +306,17 @@ export default function DagLab() {
             <Text className="text-text2 text-[13px]">
               {`Append-only event chain. ${String(nodes.length)} node${nodes.length === 1 ? '' : 's'} · ${String(heads.length)} HEAD${heads.length === 1 ? '' : 's'}. Persistent across restarts (MMKV).`}
             </Text>
+          </View>
+
+          <View className="px-4">
+            <DagGraph3D
+              nodes={nodes}
+              heads={heads}
+              width={screen.width - 32}
+              height={300}
+              localAuthorPubkey={localPubkey}
+              onSelectNode={(id) => { setExpandedId(id); }}
+            />
           </View>
 
           <SettingsBlockSection
