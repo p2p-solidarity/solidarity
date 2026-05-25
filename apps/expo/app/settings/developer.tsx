@@ -20,21 +20,13 @@ import {
   SettingsBlockToggleRow,
   SettingsScreenTitle,
 } from '@/components/settings/SettingsBlocks';
-import { pushToast } from '@/feedback/toast';
 import { usePreferences } from '@/settings/preferences';
-
-const LAB_STUB_TOAST =
-  'Lab not implemented yet — see apps/expo/docs/dev-sandbox-identity-graph.md';
 
 export default function DeveloperSettings() {
   const insets = useSafeAreaInsets();
   const developerMode = usePreferences((s) => s.developerMode);
   const setPref = usePreferences((s) => s.set);
   const reset = usePreferences((s) => s.reset);
-
-  const stub = (): void => {
-    pushToast(LAB_STUB_TOAST, 'info', 2500);
-  };
 
   return (
     <View className="flex-1 bg-pageBg" style={{ paddingTop: insets.top }}>
@@ -117,8 +109,8 @@ export default function DeveloperSettings() {
                 <SettingsBlockRow
                   icon="arrow.triangle.2.circlepath"
                   title="Nostr Bridge Lab"
-                  subtitle="Stub — docs §3.4"
-                  onPress={stub}
+                  subtitle="Live · publish/subscribe HEAD via NIP-78 kind 30078"
+                  onPress={() => { router.push('/dev/nostr'); }}
                 />
               </SettingsBlockSection>
 
