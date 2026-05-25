@@ -129,8 +129,8 @@ export default function DeveloperSettings() {
                 <SettingsBlockRow
                   icon="qrcode"
                   title="Common Friends"
-                  subtitle="Stub — docs §3.5"
-                  onPress={stub}
+                  subtitle="Live · DAG diff intersection (no PSI)"
+                  onPress={() => { router.push('/dev/common-friends'); }}
                 />
               </SettingsBlockSection>
 
