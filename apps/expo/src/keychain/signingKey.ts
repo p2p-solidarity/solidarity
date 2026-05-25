@@ -7,11 +7,13 @@
  *
  * Storage:
  *   iOS    : SpruceID native impl → SecureEnclave.P256.Signing.PrivateKey,
- *            stored as Keychain item keyed by `solidarity.master.v2`. Sign
- *            triggers Face ID/Touch ID prompt (key generated with
- *            `requireBiometric: true`).
+ *            stored as Keychain item keyed by `solidarity.master.v2`. When
+ *            biometrics are available, the native key is generated with
+ *            `requireBiometric: true`.
  *   Android: AndroidKeyStore EC key (StrongBox-backed where available), same
- *            alias. Sign triggers BiometricPrompt.
+ *            alias. The native biometric key flag is enabled only when the
+ *            OS reports enrolled biometrics; Android rejects that key spec
+ *            on fresh emulators/devices with no fingerprint enrolled.
  *
  * The private key never reaches JS — every sign call posts the payload to
  * native, which returns the JWS string. Earlier callers that called
@@ -60,7 +62,8 @@ import {
   type SpruceDid,
 } from '@solidarity/nitro-spruce-did';
 
-import { requireBiometric } from './biometric';
+import { isBiometricAvailable, requireBiometric } from './biometric';
+import { shouldRequireNativeBiometricBinding } from './signingKeyPolicy';
 
 /**
  * Modern alias — matches the Swift app's `KeychainService.modernMasterAlias`
@@ -189,8 +192,13 @@ export async function ensureSigningKey(): Promise<SigningIdentity> {
     await clearLegacyExpoBytes();
   }
 
-  // 3. Provision a fresh hardware-backed key.
-  await d.generateKey(SIGNING_KEY_ALIAS, 'p256', /* requireBiometric */ true);
+  // 3. Provision a fresh hardware-backed key. AndroidKeyStore cannot create
+  // a per-use biometric key when no biometric is enrolled, so bind the native
+  // key to biometric auth only when the OS reports that it can support it.
+  const requireNativeBiometric = shouldRequireNativeBiometricBinding(
+    await isBiometricAvailable().catch(() => false)
+  );
+  await d.generateKey(SIGNING_KEY_ALIAS, 'p256', requireNativeBiometric);
   const publicJwkValue = await readPublicJwk(SIGNING_KEY_ALIAS);
   cachedIdentity = { alias: SIGNING_KEY_ALIAS, publicJwk: publicJwkValue };
   return cachedIdentity;
