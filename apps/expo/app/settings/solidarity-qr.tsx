@@ -4,43 +4,85 @@
  *
  * Renders a single rounded card with:
  *   • "Solidarity QR" sub-headline (semibold, textPrimary)
- *   • Square QR area on a white background — generated from the current
- *     business card payload at the user's default sharing level.
+ *   • Square QR area on a white background — generated through the same
+ *     DID-signed-first, plaintext-fallback flow Swift's QRCodeManager uses.
  *   • Caption "Use this mode when both users are in Solidarity for direct
  *     exchange." centred under the QR.
  *
- * Mirrors Swift's `defaultSharingLevel` `@AppStorage` by reading the same
- * preference key (`defaultSharingLevel`) from the existing zustand store.
- * Until that preference is persisted in Expo we fall back to the
- * "professional" level — matching Swift's default behaviour exactly.
- *
- * TODO(android): the Swift original calls `QRCodeManager.shared.generateQRCode`
- * which slices the business card by sharing level via Privacy-Aware Selective
- * Disclosure. Until that pipeline ports we encode a stable URL pointer
- * (https://solidarity.gg/c/{id}) so the QR scans correctly and routes
- * through the existing deep-link handler.
+ * Expo does not yet persist Swift's `defaultSharingLevel` key, so this uses
+ * Swift's default professional level. Field toggles mirror
+ * ShareSettingsStore via `usePreferences`.
  */
 import { router, Stack } from 'expo-router';
-import { useMemo } from 'react';
+import { useEffect, useState } from 'react';
 import { ActivityIndicator, ScrollView, Text, View } from 'react-native';
 import QRCode from 'react-native-qrcode-svg';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { useMyCard } from '@/cards/cardManager';
 import {
+  buildSolidarityQrPayloadAsync,
+  type ShareFieldPreferences,
+} from '@/cards/solidarityQrPayload';
+import {
   SettingsBackToolbar,
   SettingsScreenTitle,
 } from '@/components/settings/SettingsBlocks';
 import { Colors } from '@/constants/Colors';
+import {
+  didKeyForCurrentIdentity,
+  publicJwk,
+  signJwt,
+} from '@/keychain/signingKey';
+import { usePreferences } from '@/settings/preferences';
 
 export default function SolidarityQrSettings() {
   const insets = useSafeAreaInsets();
   const card = useMyCard();
+  const [payload, setPayload] = useState<string | null>(null);
+  const shareTitle = usePreferences((s) => s.shareTitle);
+  const shareCompany = usePreferences((s) => s.shareCompany);
+  const shareEmail = usePreferences((s) => s.shareEmail);
+  const sharePhone = usePreferences((s) => s.sharePhone);
+  const shareProfileImage = usePreferences((s) => s.shareProfileImage);
+  const shareSocialNetworks = usePreferences((s) => s.shareSocialNetworks);
+  const shareSkills = usePreferences((s) => s.shareSkills);
 
-  const payload = useMemo(() => {
-    if (!card) return null;
-    return `https://solidarity.gg/c/${card.id}`;
-  }, [card]);
+  useEffect(() => {
+    if (!card) {
+      setPayload(null);
+      return;
+    }
+
+    let cancelled = false;
+    const shareFieldPreferences: ShareFieldPreferences = {
+      shareTitle,
+      shareCompany,
+      shareEmail,
+      sharePhone,
+      shareProfileImage,
+      shareSocialNetworks,
+      shareSkills,
+    };
+
+    setPayload(null);
+    void buildSettingsQrPayload(card, shareFieldPreferences).then((next) => {
+      if (!cancelled) setPayload(next);
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    card,
+    shareCompany,
+    shareEmail,
+    sharePhone,
+    shareProfileImage,
+    shareSkills,
+    shareSocialNetworks,
+    shareTitle,
+  ]);
 
   return (
     <View className="flex-1 bg-pageBg" style={{ paddingTop: insets.top }}>
@@ -102,4 +144,30 @@ export default function SolidarityQrSettings() {
       </ScrollView>
     </View>
   );
+}
+
+async function buildSettingsQrPayload(
+  card: NonNullable<ReturnType<typeof useMyCard>>,
+  shareFieldPreferences: ShareFieldPreferences
+): Promise<string> {
+  try {
+    const [issuerDid, jwk] = await Promise.all([
+      didKeyForCurrentIdentity(),
+      publicJwk(),
+    ]);
+    return await buildSolidarityQrPayloadAsync(card, {
+      sharingLevel: 'professional',
+      shareFieldPreferences,
+      signer: {
+        issuerDid,
+        publicKeyJwk: jwk,
+        signJwt,
+      },
+    });
+  } catch {
+    return buildSolidarityQrPayloadAsync(card, {
+      sharingLevel: 'professional',
+      shareFieldPreferences,
+    });
+  }
 }
