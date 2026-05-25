@@ -354,18 +354,28 @@ async function simulateNfcRead(draft: PassportMRZDraft): Promise<PassportChipSna
 }
 
 /**
- * Pattern that flags the deliberate "Rust cdylib not in jniLibs yet" throw
- * from `nitro-modules/passport-zk/android/.../HybridPassportZk.kt`. We treat
- * it as a soft-fail (caller drops into SD-JWT fallback) rather than letting
- * the raw Java exception bubble into a toast — see screenshot in issue.
+ * Pattern that flags the OLD pre-Path-1 stub throw from
+ * `HybridPassportZk.kt` ("passport-zk Android impl not linked yet — build
+ * libpassport_zk_mopro.so first"). We treat that one specific message as
+ * a soft-fail and drop into the SD-JWT fallback so legacy APKs without
+ * the cdylib don't dead-end the user.
+ *
+ * IMPORTANT: kept narrow on purpose. An earlier broader regex matched any
+ * error message that mentioned `libpassport_zk_mopro` (e.g. JNA load
+ * failures), which made every Rust-side circuit / witness error look
+ * like "not built in" and routed the user into a misleading toast. Real
+ * errors from the prover (circuit not found, witness shape mismatch,
+ * out-of-memory, etc.) now bubble up as themselves so the user / Metro
+ * console see what actually failed.
  */
-const ZK_NOT_LINKED_RE = /(not linked|UnsupportedOperationException|libpassport_zk_mopro)/i;
+const ZK_NOT_LINKED_RE =
+  /passport-zk Android impl not linked|build libpassport_zk_mopro\.so first/i;
 
 /**
- * Run the Nitro ZK prover, but treat the "native impl not linked" pre-build
- * state as soft `null` so the caller can transparently fall through to the
- * SD-JWT path. Real prover errors (memory, malformed inputs, etc.) still
- * re-throw so they surface as toast-friendly errors.
+ * Run the Nitro ZK prover. Real prover errors (memory, malformed inputs,
+ * circuit not bundled, etc.) re-throw verbatim so the JS layer can show
+ * them; only the legacy stub throw is treated as a soft `null` to keep
+ * older-APK installs running through the SD-JWT path.
  */
 async function tryGenerateZkProof(
   zk: NonNullable<ReturnType<typeof getPassportZk>>,
@@ -373,15 +383,27 @@ async function tryGenerateZkProof(
   setProgress: (message: string) => void,
 ): Promise<{ proof: ArrayBuffer } | null> {
   setProgress('Generating ZK proof (~5–15s)…');
+  console.log('[zk] generateNoirProof start — inputs:', inputsJson.length, 'chars');
+  const startedAt = Date.now();
   try {
     // Empty `circuitPath` / `undefined` SRS resolve to the bundled
-    // passport_verifier assets on Android (see HybridPassportZk.kt
+    // disclosure assets on Android (see HybridPassportZk.kt
     // resolveCircuitPath / resolveSrsPath). iOS will need the matching
     // bundle wiring in MoproShim.swift before this works there.
-    return await zk.generateNoirProof('', undefined, inputsJson);
+    const result = await zk.generateNoirProof('', undefined, inputsJson);
+    console.log(
+      `[zk] generateNoirProof ok in ${String(Date.now() - startedAt)}ms — proof=${String(result.proof.byteLength)}B vk=${String(result.vk.byteLength)}B`,
+    );
+    return result;
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
-    if (ZK_NOT_LINKED_RE.test(message)) return null;
+    console.log(
+      `[zk] generateNoirProof failed in ${String(Date.now() - startedAt)}ms — ${message}`,
+    );
+    if (ZK_NOT_LINKED_RE.test(message)) {
+      console.log('[zk] error matches legacy stub regex — falling back to SD-JWT');
+      return null;
+    }
     throw err;
   }
 }

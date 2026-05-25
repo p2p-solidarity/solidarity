@@ -56,21 +56,53 @@ class HybridPassportZk : HybridPassportZkSpec() {
     inputsJson: String,
   ): Promise<NitroNoirProof> = Promise.async {
     val started = System.currentTimeMillis()
+    Log.d(TAG, "generateNoirProof: enter (inputsJson=${inputsJson.length}B)")
     try {
       val resolvedCircuit = resolveCircuitPath(circuitPath)
       val resolvedSrs = resolveSrsPath(srsPath)
+      Log.d(TAG, "generateNoirProof: circuit=$resolvedCircuit srs=$resolvedSrs")
       val inputs = parseInputs(inputsJson)
+      Log.d(
+        TAG,
+        "generateNoirProof: parsed ${inputs.size} witness slots — calling mopro…",
+      )
       val result = moproGenerateNoirProof(resolvedCircuit, resolvedSrs, inputs)
-      Log.d(TAG, "generateNoirProof ok in ${System.currentTimeMillis() - started}ms")
+      Log.d(
+        TAG,
+        "generateNoirProof: mopro ok in ${System.currentTimeMillis() - started}ms " +
+          "(proof=${result.proof.size}B vk=${result.vk.size}B)",
+      )
       NitroNoirProof(
         proof = ArrayBuffer.copy(result.proof),
         vk = ArrayBuffer.copy(result.vk),
       )
     } catch (e: MoproException) {
-      Log.d(TAG, "generateNoirProof failed: ${e::class.simpleName}")
+      Log.e(
+        TAG,
+        "generateNoirProof: MoproException ${e::class.simpleName} — ${e.message ?: "(no message)"}",
+      )
       throw RuntimeException(friendlyMoproMessage(e))
     } catch (e: IllegalArgumentException) {
+      Log.e(TAG, "generateNoirProof: inputsJson malformed — ${e.message ?: "(no message)"}")
       throw RuntimeException("inputsJson malformed: ${e.message ?: "unknown"}")
+    } catch (e: UnsatisfiedLinkError) {
+      // JNA / dlopen failure — most common cause is .so for wrong ABI or
+      // missing libc++_shared.so. Surface a specific, actionable message
+      // instead of falling through to the generic "unknown error" path.
+      Log.e(TAG, "generateNoirProof: UnsatisfiedLinkError — ${e.message ?: "(no message)"}")
+      throw RuntimeException(
+        "Native ZK library failed to load: ${e.message ?: "see logcat"}. " +
+          "Likely cause: libpassport_zk_mopro.so is missing the device's ABI.",
+      )
+    } catch (e: Throwable) {
+      Log.e(
+        TAG,
+        "generateNoirProof: unexpected ${e::class.simpleName} — ${e.message ?: "(no message)"}",
+        e,
+      )
+      throw RuntimeException(
+        "ZK prover crashed: ${e::class.simpleName}: ${e.message ?: "(no message)"}",
+      )
     }
   }
 
@@ -143,10 +175,19 @@ class HybridPassportZk : HybridPassportZkSpec() {
         parentFile?.mkdirs()
       }
       val bundledSize = ctx.assets.open(assetName).use { it.available().toLong() }
-      if (dest.exists() && dest.length() == bundledSize) return dest
+      if (dest.exists() && dest.length() == bundledSize) {
+        Log.d(TAG, "extractAsset: $assetName already cached (${dest.length()}B)")
+        return dest
+      }
+      val started = System.currentTimeMillis()
       ctx.assets.open(assetName).use { input ->
         dest.outputStream().use { out -> input.copyTo(out) }
       }
+      Log.d(
+        TAG,
+        "extractAsset: $assetName extracted (${dest.length()}B) in " +
+          "${System.currentTimeMillis() - started}ms",
+      )
       return dest
     }
 
