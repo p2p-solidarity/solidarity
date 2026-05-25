@@ -69,7 +69,9 @@ beforeAll(async () => {
   await mock.module('@/credentials/store', () => ({
     useCredentialStore: {
       getState: () => ({
-        items: [] as readonly unknown[],
+        manifest: [] as readonly unknown[],
+        details: new Map<string, unknown>(),
+        detailsHydrated: true,
         hydrate: async () => undefined,
       }),
     },

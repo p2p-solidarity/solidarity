@@ -39,6 +39,10 @@ import {
 
 export default function GroupManagementSettings() {
   const insets = useSafeAreaInsets();
+  // Seed the manifest synchronously so the section headers + counts render
+  // on frame 1; hydrate() resolves the full GroupModel in the background so
+  // `YourGroupsSection`'s ownership-filtered sub-lists fill in.
+  const seedFromManifest = useGroupStore((s) => s.seedFromManifest);
   const hydrate = useGroupStore((s) => s.hydrate);
   const deleteGroup = useGroupStore((s) => s.deleteGroup);
   const [refreshing, setRefreshing] = useState(false);
@@ -46,8 +50,9 @@ export default function GroupManagementSettings() {
   const { invite } = useLocalSearchParams<{ invite?: string }>();
 
   useEffect(() => {
+    seedFromManifest();
     void hydrate();
-  }, [hydrate]);
+  }, [seedFromManifest, hydrate]);
 
   // Deep-link parity with Swift DeepLinkManager — when `invite` arrives via
   // `solidarity://group/<token>`, surface the join sheet so the user can

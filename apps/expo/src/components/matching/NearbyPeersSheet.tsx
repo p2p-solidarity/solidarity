@@ -51,7 +51,7 @@ export function NearbyPeersSheet({
   const peers = useMatchingSession((s) => s.peers);
   const receivedCardIds = useMatchingSession((s) => s.receivedCardIds);
   const disconnect = useMatchingSession((s) => s.disconnectFromPeer);
-  const cards = useCardStore((s) => s.cards);
+  const cardCount = useCardStore((s) => s.manifest.length);
 
   const [searchText, setSearchText] = useState('');
   const [connectTarget, setConnectTarget] = useState<MatchingPeer | null>(null);
@@ -62,7 +62,7 @@ export function NearbyPeersSheet({
   const filtered = useMemo(() => filterPeers(peers, searchText), [peers, searchText]);
 
   const handleSendCard = (peer: MatchingPeer): void => {
-    if (cards.length === 0) {
+    if (cardCount === 0) {
       pushToast('Create an identity card in the Me tab first.', 'error');
       return;
     }

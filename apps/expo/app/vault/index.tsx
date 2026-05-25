@@ -18,11 +18,16 @@ import {
   SettingsScreenTitle,
 } from '@/components/settings/SettingsBlocks';
 import { Colors } from '@/constants/Colors';
-import { useVaultStore, type VaultItem } from '@/vault/store';
+import {
+  useVaultStore,
+  type VaultItem,
+  type VaultItemKind,
+  type VaultManifestEntry,
+} from '@/vault/store';
 
 import type { SFSymbol } from 'expo-symbols';
 
-const KIND_ICON: Readonly<Record<VaultItem['kind'], SFSymbol>> = {
+const KIND_ICON: Readonly<Record<VaultItemKind, SFSymbol>> = {
   file: 'doc',
   json: 'curlybraces',
   text: 'doc.text',
@@ -37,7 +42,17 @@ function formatBytes(bytes: number): string {
   return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
 }
 
-function VaultRow({ item }: { readonly item: VaultItem }): ReactNode {
+interface VaultRowProps {
+  readonly entry: VaultManifestEntry;
+  readonly detail: VaultItem | undefined;
+}
+
+function VaultRow({ entry, detail }: VaultRowProps): ReactNode {
+  // Frame-1 paint uses the manifest entry (kind + size + updatedAt). The
+  // filename is encrypted-only — see vaultManifest.ts privacy note — so
+  // we show a neutral placeholder until `hydrate()` decrypts it.
+  const displayName = detail?.name ?? 'Encrypted item';
+  const updatedDate = detail?.updatedAt ?? new Date(entry.updatedAt);
   return (
     <Pressable
       onPress={() => {
@@ -46,7 +61,7 @@ function VaultRow({ item }: { readonly item: VaultItem }): ReactNode {
         // /vault/[id] lands.
       }}
       accessibilityRole="button"
-      accessibilityLabel={`Open ${item.name}`}
+      accessibilityLabel={`Open ${displayName}`}
       className="active:opacity-80"
     >
       <View
@@ -56,14 +71,14 @@ function VaultRow({ item }: { readonly item: VaultItem }): ReactNode {
         <View
           style={{ width: 20, height: 20, alignItems: 'center', justifyContent: 'center', marginRight: 12 }}
         >
-          <SfIcon name={KIND_ICON[item.kind]} size={14} color={Colors.text1} />
+          <SfIcon name={KIND_ICON[entry.kind]} size={14} color={Colors.text1} />
         </View>
         <View className="flex-1">
           <Text className="text-text1 text-[15px]" numberOfLines={1}>
-            {item.name}
+            {displayName}
           </Text>
           <Text className="text-text3 text-[12px]" style={{ marginTop: 2 }}>
-            {formatBytes(item.size)} · updated {item.updatedAt.toLocaleDateString()}
+            {formatBytes(entry.size)} · updated {updatedDate.toLocaleDateString()}
           </Text>
         </View>
         <SfIcon name="chevron.right" size={12} weight="semibold" color={Colors.text3} />
@@ -74,12 +89,17 @@ function VaultRow({ item }: { readonly item: VaultItem }): ReactNode {
 
 export default function VaultHub() {
   const insets = useSafeAreaInsets();
-  const items = useVaultStore((s) => s.items);
+  const manifest = useVaultStore((s) => s.manifest);
+  const details = useVaultStore((s) => s.details);
+  const seedFromManifest = useVaultStore((s) => s.seedFromManifest);
   const hydrate = useVaultStore((s) => s.hydrate);
 
+  // Frame 1: paint manifest from sync MMKV (no awaits). Then fire the
+  // background bulk decrypt so names + the rest of `VaultItem` populate.
   useEffect(() => {
+    seedFromManifest();
     void hydrate();
-  }, [hydrate]);
+  }, [seedFromManifest, hydrate]);
 
   return (
     <View className="flex-1 bg-pageBg" style={{ paddingTop: insets.top }}>
@@ -124,15 +144,19 @@ export default function VaultHub() {
         <View className="h-6" />
 
         <View className="gap-2">
-          <SettingsBlockSectionHeader title={`Items (${String(items.length)})`} />
-          {items.length === 0 ? (
+          <SettingsBlockSectionHeader title={`Items (${String(manifest.length)})`} />
+          {manifest.length === 0 ? (
             <Text className="px-4 text-text3 text-[12px]">
               No files yet. Files added here are sealed with your master key (AES-256-GCM) before they touch disk.
             </Text>
           ) : (
             <View className="px-4 gap-2">
-              {items.map((it) => (
-                <VaultRow key={it.id} item={it} />
+              {manifest.map((entry) => (
+                <VaultRow
+                  key={entry.id}
+                  entry={entry}
+                  detail={details.get(entry.id)}
+                />
               ))}
             </View>
           )}

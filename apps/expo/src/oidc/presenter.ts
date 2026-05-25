@@ -72,7 +72,7 @@ export interface BuiltPresentation {
 function rawCredentialIdsFor(claimIds: readonly string[]): readonly string[] {
   if (claimIds.length === 0) return [];
   const claims = useIdentityData.getState().provableClaims;
-  const credentials = useCredentialStore.getState().items;
+  const credentials = useCredentialStore.getState().details;
   const claimById = new Map<string, ProvableClaimEntity>(claims.map((c) => [c.id, c]));
   const cardIds = new Set<string>();
   const directCredentialIds = new Set<string>();
@@ -85,7 +85,7 @@ function rawCredentialIdsFor(claimIds: readonly string[]): readonly string[] {
     }
   }
   const jwts: string[] = [];
-  for (const c of credentials) {
+  for (const c of credentials.values()) {
     if (cardIds.has(c.id) || directCredentialIds.has(c.id)) {
       jwts.push(c.rawJwt);
     }

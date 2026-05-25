@@ -37,7 +37,11 @@ import { SfIcon } from '@/components/icons/SfIcon';
 import { Colors } from '@/constants/Colors';
 import { haptic } from '@/feedback/haptics';
 import { pushToast } from '@/feedback/toast';
-import { useGroupStore, type GroupModel } from '@/groups/store';
+import {
+  useGroupManifest,
+  useGroupStore,
+  type GroupManifestEntry,
+} from '@/groups/store';
 import { usePreferences } from '@/settings/preferences';
 import { useIdentitySnapshot, useZkIdentity } from '@/zk';
 
@@ -51,13 +55,19 @@ export default function IDViewScreen(): React.JSX.Element {
   const isWorking = isWorkingFromStore || isWorkingLocal;
   const developerMode = usePreferences((s) => s.developerMode);
 
+  // Frame-1 group list comes from the synchronous manifest (id / name /
+  // memberCount). The full record (ownerRecordID, merkleRoot, isSynced) is
+  // background-decrypted by `hydrate()` and only needed when the user opens
+  // a group's detail.
+  const seedFromManifest = useGroupStore((s) => s.seedFromManifest);
   const hydrate = useGroupStore((s) => s.hydrate);
-  const groups = useGroupStore((s) => Array.from(s.groups.values()));
+  const groups = useGroupManifest();
 
   useEffect(() => {
+    seedFromManifest();
     void hydrate();
     void seedFromNative();
-  }, [hydrate, seedFromNative]);
+  }, [seedFromManifest, hydrate, seedFromNative]);
 
   const rippleState: RippleButtonState = isWorking ? 'processing' : 'idle';
   const isDidKeyActive = did === null || did.startsWith('did:key');
@@ -288,9 +298,9 @@ function BadgeSection({
   onAdd,
   onSelectGroup,
 }: {
-  readonly groups: readonly GroupModel[];
+  readonly groups: readonly GroupManifestEntry[];
   readonly onAdd: () => void;
-  readonly onSelectGroup: (g: GroupModel) => void;
+  readonly onSelectGroup: (g: GroupManifestEntry) => void;
 }): React.JSX.Element {
   return (
     <View style={{ gap: 16 }}>
@@ -333,8 +343,10 @@ function BadgeSection({
             <BadgeGroupRow
               key={g.id}
               name={g.name}
-              memberCount={g.memberCount}
-              providerLabel={g.isSynced ? 'CloudKit' : undefined}
+              memberCount={g.memberCount ?? 0}
+              // `isSynced` is intentionally not in the manifest — the
+              // CloudKit pill only renders after `hydrate()` warms the full
+              // record (which happens for the detail screen anyway).
               onPress={() => { onSelectGroup(g); }}
             />
           ))}

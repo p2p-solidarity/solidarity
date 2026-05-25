@@ -57,7 +57,7 @@ const EXPORT_FILENAME = 'solidarity_vcs.json';
 
 export default function VcSettings() {
   const insets = useSafeAreaInsets();
-  const credentials = useCredentialStore((s) => s.items);
+  const credentials = useCredentialStore((s) => s.manifest);
   const hydrate = useCredentialStore((s) => s.hydrate);
   const policy = usePreferences((s) => s.biometricPolicy);
   const [busy, setBusy] = useState(false);
@@ -88,9 +88,15 @@ export default function VcSettings() {
           return;
         }
       }
+      // Export pulls raw JWTs from the encrypted detail map — `hydrate()`
+      // guarantees every manifest entry has a corresponding detail record
+      // before we serialise. Reading from `getState()` instead of the
+      // captured `details` prop avoids a stale render closure.
+      await hydrate();
+      const fresh = useCredentialStore.getState().details;
       const wrapper: VcExportWrapper = {
         version: 1,
-        vcs: credentials.map((c) => c.rawJwt),
+        vcs: Array.from(fresh.values()).map((c) => c.rawJwt),
       };
       const cache = FileSystem.cacheDirectory ?? '';
       if (!cache) throw new Error('Cache directory unavailable.');

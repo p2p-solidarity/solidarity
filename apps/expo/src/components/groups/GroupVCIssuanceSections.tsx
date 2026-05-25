@@ -12,12 +12,12 @@ import { Pressable, Switch, Text, TextInput, View } from 'react-native';
 import { IDSectionHeader } from '@/components/id';
 import { SfIcon } from '@/components/icons/SfIcon';
 import { Colors } from '@/constants/Colors';
+import type { CardManifestEntry } from '@/cards/cardManifest';
 import {
   DELIVERY_METHODS,
   deliveryMethodLabel,
   type DeliveryMethod,
 } from '@/groups/deliverySettings';
-import type { BusinessCard } from '@solidarity/shared';
 
 export interface IssuanceResult {
   readonly memberId: string;
@@ -30,9 +30,9 @@ export function CardSelectSection({
   selectedCardId,
   onSelect,
 }: {
-  readonly cards: readonly BusinessCard[];
+  readonly cards: readonly CardManifestEntry[];
   readonly selectedCardId: string | null;
-  readonly onSelect: (c: BusinessCard | null) => void;
+  readonly onSelect: (c: CardManifestEntry | null) => void;
 }): ReactNode {
   return (
     <View>

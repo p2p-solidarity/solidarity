@@ -153,7 +153,7 @@ export const useIdentityData = create<IdentityDataState>((set, get) => ({
 
     await useCredentialStore.getState().hydrate();
     const seen = new Set(cards.map((c) => c.id));
-    for (const item of useCredentialStore.getState().items) {
+    for (const item of useCredentialStore.getState().details.values()) {
       if (seen.has(item.id)) continue;
       const mirrored = cardFromStoredCredential(item);
       cards.push(mirrored);

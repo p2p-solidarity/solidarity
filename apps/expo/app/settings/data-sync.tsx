@@ -49,7 +49,7 @@ export default function DataSyncSettings() {
   const developerMode = usePreferences((s) => s.developerMode);
   const backupEnabled = usePreferences((s) => s.backupEnabled);
   const policy = usePreferences((s) => s.biometricPolicy);
-  const credentials = useCredentialStore((s) => s.items);
+  const credentials = useCredentialStore((s) => s.manifest);
   const hydrateCreds = useCredentialStore((s) => s.hydrate);
   const [busy, setBusy] = useState(false);
 

@@ -25,10 +25,14 @@ interface ImporterModule {
 interface RepositoryModule {
   readonly useContactStore: {
     getState: () => {
-      readonly contacts: ReadonlyMap<string, unknown>;
+      readonly manifest: readonly unknown[];
+      readonly details: ReadonlyMap<string, unknown>;
       readonly upsert: (c: unknown) => Promise<void>;
     };
-    setState: (s: { contacts: ReadonlyMap<string, unknown> }) => void;
+    setState: (s: {
+      readonly manifest?: readonly unknown[];
+      readonly details?: ReadonlyMap<string, unknown>;
+    }) => void;
   };
 }
 
@@ -115,7 +119,7 @@ beforeAll(async () => {
 
 beforeEach(() => {
   kv.clear();
-  repository.useContactStore.setState({ contacts: new Map() });
+  repository.useContactStore.setState({ manifest: [], details: new Map() });
   mockPermission = 'granted';
   mockContacts = [];
 });
@@ -140,7 +144,7 @@ describe('importFromVcf', () => {
   it('parses a single vCard and inserts one contact', async () => {
     const count = await importer.importFromVcf(SIMPLE_VCF);
     expect(count).toBe(1);
-    const all = Array.from(repository.useContactStore.getState().contacts.values());
+    const all = Array.from(repository.useContactStore.getState().details.values());
     expect(all.length).toBe(1);
   });
 
@@ -161,7 +165,7 @@ describe('importFromDevice — permission flow', () => {
     const result = await importer.importFromDevice();
     expect(result.granted).toBe(false);
     expect(result.count).toBe(0);
-    expect(repository.useContactStore.getState().contacts.size).toBe(0);
+    expect(repository.useContactStore.getState().details.size).toBe(0);
   });
 });
 
@@ -185,7 +189,7 @@ describe('importFromDevice — VCF parse → Contact mapping', () => {
     expect(result.count).toBe(1);
 
     const list = Array.from(
-      repository.useContactStore.getState().contacts.values()
+      repository.useContactStore.getState().details.values()
     ) as readonly {
       readonly source: string;
       readonly verificationStatus: string;
@@ -217,7 +221,7 @@ describe('importFromDevice — VCF parse → Contact mapping', () => {
     ];
     const result = await importer.importFromDevice();
     expect(result.count).toBe(1);
-    expect(repository.useContactStore.getState().contacts.size).toBe(1);
+    expect(repository.useContactStore.getState().details.size).toBe(1);
   });
 
   it('falls back to givenName + familyName when fullName is missing', async () => {
@@ -227,7 +231,7 @@ describe('importFromDevice — VCF parse → Contact mapping', () => {
     const result = await importer.importFromDevice();
     expect(result.count).toBe(1);
     const c = Array.from(
-      repository.useContactStore.getState().contacts.values()
+      repository.useContactStore.getState().details.values()
     )[0] as { readonly businessCard: { readonly name: string } };
     expect(c.businessCard.name).toBe('Ada Lovelace');
   });
@@ -244,12 +248,12 @@ describe('importFromDevice — dedupe on re-import', () => {
       },
     ];
     await importer.importFromDevice();
-    const sizeAfterFirst = repository.useContactStore.getState().contacts.size;
+    const sizeAfterFirst = repository.useContactStore.getState().details.size;
     expect(sizeAfterFirst).toBe(1);
 
     // Second import of the same OS contact should not create a duplicate.
     await importer.importFromDevice();
-    const sizeAfterSecond = repository.useContactStore.getState().contacts.size;
+    const sizeAfterSecond = repository.useContactStore.getState().details.size;
     expect(sizeAfterSecond).toBe(1);
   });
 });

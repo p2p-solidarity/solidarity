@@ -2,17 +2,18 @@
  * BusinessCardRow — list item for the My Cards screen.
  *
  * Compact row variant of `WalletCardView` (Swift
- * solidarity/Views/CardViews/BusinessCardActionsView.swift). Shows the
- * card's animal/initial avatar, name, title/company line, and a chevron
- * affordance so tap → /cards/edit reads as a navigation row.
+ * solidarity/Views/CardViews/BusinessCardActionsView.swift). Renders from
+ * the card manifest (id, name, title, company, animal) so list paint is
+ * instant on cold launch. Full `BusinessCard` (incl. profileImage) is
+ * decrypted lazily on row tap → /cards/edit.
  */
 import type { ReactNode } from 'react';
-import { Image, Pressable, View } from 'react-native';
+import { Pressable, View } from 'react-native';
 
+import type { CardManifestEntry } from '@/cards/cardManifest';
 import { SfIcon } from '@/components/icons/SfIcon';
 import { ThemedText } from '@/components/themed';
 import { Colors } from '@/constants/Colors';
-import type { BusinessCard } from '@solidarity/shared';
 
 const ANIMAL_GLYPH: Readonly<Record<string, string>> = {
   dog: '🐕',
@@ -23,9 +24,9 @@ const ANIMAL_GLYPH: Readonly<Record<string, string>> = {
 };
 
 export interface BusinessCardRowProps {
-  readonly card: BusinessCard;
-  readonly onPress: (card: BusinessCard) => void;
-  readonly onLongPress?: (card: BusinessCard) => void;
+  readonly card: CardManifestEntry;
+  readonly onPress: (card: CardManifestEntry) => void;
+  readonly onLongPress?: (card: CardManifestEntry) => void;
 }
 
 export function BusinessCardRow({
@@ -59,16 +60,7 @@ export function BusinessCardRow({
   );
 }
 
-function Avatar({ card }: { readonly card: BusinessCard }): ReactNode {
-  if (card.profileImage) {
-    return (
-      <Image
-        source={{ uri: `data:image/jpeg;base64,${card.profileImage}` }}
-        style={{ width: 48, height: 48, borderRadius: 24 }}
-        resizeMode="cover"
-      />
-    );
-  }
+function Avatar({ card }: { readonly card: CardManifestEntry }): ReactNode {
   return (
     <View
       className="bg-warmCream items-center justify-center"

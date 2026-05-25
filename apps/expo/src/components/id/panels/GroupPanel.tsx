@@ -17,7 +17,11 @@ import { SfIcon } from '@/components/icons/SfIcon';
 import { ThemedButton } from '@/components/themed';
 import { Colors } from '@/constants/Colors';
 import { pushToast } from '@/feedback/toast';
-import { useGroupStore, type GroupModel } from '@/groups/store';
+import {
+  useGroupManifest,
+  useGroupStore,
+  type GroupManifestEntry,
+} from '@/groups/store';
 
 const MONO_FONT = 'Menlo';
 
@@ -26,19 +30,24 @@ export interface GroupPanelProps {
 }
 
 export function GroupPanel({ onRequestJoin }: GroupPanelProps): ReactNode {
+  // Frame-1 list comes from the plaintext manifest (id/name/memberCount);
+  // hydrate kicks off in the background so detail navigation has the full
+  // record cached by the time the user taps a row.
+  const seedFromManifest = useGroupStore((s) => s.seedFromManifest);
   const hydrate = useGroupStore((s) => s.hydrate);
-  const groups = useGroupStore((s) => Array.from(s.groups.values()));
+  const groups = useGroupManifest();
 
   useEffect(() => {
+    seedFromManifest();
     void hydrate();
-  }, [hydrate]);
+  }, [seedFromManifest, hydrate]);
 
   const onRefresh = (): void => {
     pushToast('Group refresh lands next iteration', 'info');
     void hydrate();
   };
 
-  const onSelect = (g: GroupModel): void => {
+  const onSelect = (g: GroupManifestEntry): void => {
     router.push({ pathname: '/groups/[id]', params: { id: g.id } });
   };
 
@@ -78,7 +87,7 @@ export function GroupPanel({ onRequestJoin }: GroupPanelProps): ReactNode {
                       style={{ fontFamily: MONO_FONT }}
                       className="text-text2 text-[12px] mt-1"
                     >
-                      {`Members: ${String(g.memberCount)}`}
+                      {`Members: ${String(g.memberCount ?? 0)}`}
                     </Text>
                   </View>
                 </Pressable>

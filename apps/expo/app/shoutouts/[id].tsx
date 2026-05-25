@@ -49,14 +49,20 @@ export default function ShoutoutDetail(): ReactNode {
   const { id, name } = useLocalSearchParams<{ id: string; name?: string }>();
   const contact = useContact(id);
   const removeContact = useContactStore((s) => s.remove);
+  const seedFromManifest = useShoutoutStore((s) => s.seedFromManifest);
   const hydrateShoutouts = useShoutoutStore((s) => s.hydrate);
   const shoutoutItems = useShoutoutStore((s) => s.items);
+  const shoutoutManifest = useShoutoutStore((s) => s.manifest);
   const [isSakuraAnimating, setIsSakuraAnimating] = useState(false);
 
   useEffect(() => {
     setIsSakuraAnimating(true);
+    // Seed the manifest synchronously so the per-counterpart message
+    // count badge can paint on frame 1 even before `hydrate()` decrypts
+    // the bodies needed for the bullet list.
+    seedFromManifest();
     void hydrateShoutouts();
-  }, [hydrateShoutouts]);
+  }, [hydrateShoutouts, seedFromManifest]);
 
   const displayName = contact?.businessCard.name ?? name ?? 'Sakura';
   const status = contact?.verificationStatus ?? 'Unverified';
@@ -67,6 +73,13 @@ export default function ShoutoutDetail(): ReactNode {
     () => shoutoutItems.filter((m) => m.counterpartName === displayName),
     [shoutoutItems, displayName]
   );
+  // Frame-1 count: read from the manifest so the badge renders without
+  // waiting for `hydrate()` to decrypt every body. Falls back to the
+  // hydrated `messages` length once details land (same number, but
+  // recomputed defensively in case a new send happens mid-screen).
+  const messageCount = messages.length > 0
+    ? messages.length
+    : shoutoutManifest.filter((m) => m.counterpartName === displayName).length;
   const latestIncoming = useMemo(
     () => messages.find((m) => m.direction === 'incoming'),
     [messages]
@@ -279,7 +292,7 @@ export default function ShoutoutDetail(): ReactNode {
               Message History
             </Text>
             <View style={{ flex: 1 }} />
-            {messages.length > 0 ? (
+            {messageCount > 0 ? (
               <View
                 className="bg-searchBg"
                 style={{
@@ -289,7 +302,7 @@ export default function ShoutoutDetail(): ReactNode {
                 }}
               >
                 <Text className="text-text2" style={{ fontSize: 12 }}>
-                  {String(messages.length)}
+                  {String(messageCount)}
                 </Text>
               </View>
             ) : null}

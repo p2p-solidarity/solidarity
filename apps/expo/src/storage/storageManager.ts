@@ -38,6 +38,31 @@ function listKeys(prefix: string): readonly string[] {
     .filter((k) => k.startsWith(prefix));
 }
 
+/**
+ * Tolerant bulk-load. A single corrupt record (e.g. a schema-incompatible
+ * leftover from a prior app version) used to throw and wipe the entire
+ * list — `loadAllBusinessCards()` rejecting meant the cards store stayed
+ * empty forever after upgrade. Here we skip the bad key, log in dev, and
+ * return everything that parses cleanly.
+ */
+async function loadAllEncrypted<T>(
+  prefix: string,
+  parse: (raw: unknown) => T,
+): Promise<readonly T[]> {
+  const out: T[] = [];
+  for (const key of listKeys(prefix)) {
+    try {
+      const raw = await getEncrypted<unknown>(key);
+      if (raw) out.push(parse(raw));
+    } catch (err) {
+      if (__DEV__) {
+        console.warn(`[storageManager] skipping corrupt record ${key}:`, err);
+      }
+    }
+  }
+  return out;
+}
+
 // ----- Business cards -----
 
 export const saveBusinessCard = (card: BusinessCard): Promise<void> =>
@@ -48,13 +73,13 @@ export async function loadBusinessCard(id: string): Promise<BusinessCard | null>
   return raw ? businessCardSchema.parse(raw) : null;
 }
 
-export async function loadAllBusinessCards(): Promise<readonly BusinessCard[]> {
-  const out: BusinessCard[] = [];
-  for (const key of listKeys(CARDS_PREFIX)) {
-    const raw = await getEncrypted<unknown>(key);
-    if (raw) out.push(businessCardSchema.parse(raw));
-  }
-  return out;
+export function loadAllBusinessCards(): Promise<readonly BusinessCard[]> {
+  return loadAllEncrypted(CARDS_PREFIX, (r) => businessCardSchema.parse(r));
+}
+
+/** True if any encrypted card record exists. Used by manifest migration. */
+export function hasAnyBusinessCard(): boolean {
+  return listKeys(CARDS_PREFIX).length > 0;
 }
 
 export function deleteBusinessCard(id: string): void {
@@ -71,13 +96,13 @@ export async function loadContact(id: string): Promise<Contact | null> {
   return raw ? contactSchema.parse(raw) : null;
 }
 
-export async function loadAllContacts(): Promise<readonly Contact[]> {
-  const out: Contact[] = [];
-  for (const key of listKeys(CONTACTS_PREFIX)) {
-    const raw = await getEncrypted<unknown>(key);
-    if (raw) out.push(contactSchema.parse(raw));
-  }
-  return out;
+export function loadAllContacts(): Promise<readonly Contact[]> {
+  return loadAllEncrypted(CONTACTS_PREFIX, (r) => contactSchema.parse(r));
+}
+
+/** True if any encrypted contact record exists. Used by manifest migration. */
+export function hasAnyContact(): boolean {
+  return listKeys(CONTACTS_PREFIX).length > 0;
 }
 
 export function deleteContact(id: string): void {

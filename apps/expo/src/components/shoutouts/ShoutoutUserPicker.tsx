@@ -30,7 +30,7 @@ import { SakuraIcon } from '@/components/brand/SakuraIcon';
 import { SfIcon } from '@/components/icons/SfIcon';
 import { ThemedButton } from '@/components/themed';
 import { Colors } from '@/constants/Colors';
-import { useContactList } from '@/contacts/repository';
+import { useContactListDetail } from '@/contacts/repository';
 import { haptic } from '@/feedback/haptics';
 import { initials } from '@/shoutouts/ui';
 import type { Contact } from '@solidarity/shared';
@@ -51,7 +51,7 @@ export function ShoutoutUserPicker({
   onCancel,
 }: ShoutoutUserPickerProps): ReactNode {
   const insets = useSafeAreaInsets();
-  const contacts = useContactList();
+  const contacts = useContactListDetail();
   const [search, setSearch] = useState('');
   const [selected, setSelected] = useState<ReadonlySet<string>>(
     () => new Set(initialSelectedIds ?? [])

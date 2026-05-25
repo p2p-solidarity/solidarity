@@ -26,6 +26,7 @@ const preloaded: PreloadedTrustAnchor[] = [];
 interface IssuerStoreSurface {
   readonly useIssuerMetadataStore: {
     getState: () => {
+      readonly manifest: readonly { readonly did: string; readonly displayName?: string }[];
       readonly entries: Readonly<Record<string, IssuerMetadata>>;
       readonly hydrated: boolean;
       readonly hydrate: () => Promise<void>;
@@ -37,6 +38,7 @@ interface IssuerStoreSurface {
       ) => Promise<readonly string[]>;
     };
     setState: (s: Partial<{
+      readonly manifest: readonly { readonly did: string; readonly displayName?: string }[];
       readonly entries: Readonly<Record<string, IssuerMetadata>>;
       readonly hydrated: boolean;
     }>) => void;
@@ -80,7 +82,9 @@ beforeAll(async () => {
   await mock.module('@/credentials/store', () => ({
     useCredentialStore: {
       getState: () => ({
-        items: [] as readonly unknown[],
+        manifest: [] as readonly unknown[],
+        details: new Map<string, unknown>(),
+        detailsHydrated: true,
         hydrate: async () => undefined,
       }),
     },
@@ -125,6 +129,7 @@ describe('IssuerMetadataStore — cache round-trip', () => {
 
     // Fresh process simulation
     issuerMod.useIssuerMetadataStore.setState({
+      manifest: [],
       entries: {},
       hydrated: false,
     });
@@ -152,6 +157,7 @@ describe('IssuerMetadataStore — cache round-trip', () => {
     expect(Object.keys(entries)).toEqual(['https://b.example/']);
 
     issuerMod.useIssuerMetadataStore.setState({
+      manifest: [],
       entries: {},
       hydrated: false,
     });

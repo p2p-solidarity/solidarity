@@ -30,7 +30,14 @@ import { create } from 'zustand';
 import { base64Encode } from '@solidarity/shared';
 
 import { decryptJson, encryptJson } from '@/storage/encryptionManager';
+import { ManifestStorage } from '@/storage/manifestStorage';
 import { getMmkv } from '@/storage/mmkv';
+
+import {
+  ISSUERS_MANIFEST_SCOPE,
+  toIssuerManifest,
+  type IssuerManifestEntry,
+} from './issuerManifest';
 
 const STORAGE_KEY = 'gg.solidarity.credentials.issuers.v1';
 const MAX_LOGO_BYTES = 100 * 1024;
@@ -84,12 +91,22 @@ function deserialize(s: SerializedMetadata): IssuerMetadata {
 }
 
 interface IssuerMetadataState {
+  /** Sidecar list for frame-1 paint. Mirrored from `entries` on writes. */
+  readonly manifest: readonly IssuerManifestEntry[];
   readonly entries: Readonly<Record<string, IssuerMetadata>>;
   readonly hydrated: boolean;
+  /** Re-read the manifest from MMKV. Sync; safe to call before hydrate. */
+  readonly seedFromManifest: () => void;
   readonly hydrate: () => Promise<void>;
   readonly upsert: (m: IssuerMetadata) => Promise<void>;
   readonly remove: (id: string) => Promise<void>;
   readonly clearStale: (maxAgeMs: number, now?: Date) => Promise<readonly string[]>;
+}
+
+function manifestFromEntries(
+  entries: Readonly<Record<string, IssuerMetadata>>
+): readonly IssuerManifestEntry[] {
+  return Object.values(entries).map(toIssuerManifest);
 }
 
 async function persistEntries(
@@ -101,11 +118,20 @@ async function persistEntries(
     ),
   };
   getMmkv().set(STORAGE_KEY, await encryptJson(persisted));
+  ManifestStorage.set(ISSUERS_MANIFEST_SCOPE, manifestFromEntries(entries));
 }
 
 export const useIssuerMetadataStore = create<IssuerMetadataState>((set, get) => ({
+  manifest: [],
   entries: {},
   hydrated: false,
+
+  seedFromManifest: () => {
+    const seed = ManifestStorage.get<IssuerManifestEntry>(
+      ISSUERS_MANIFEST_SCOPE,
+    );
+    if (seed) set({ manifest: seed });
+  },
 
   hydrate: async () => {
     if (get().hydrated) return;
@@ -118,22 +144,32 @@ export const useIssuerMetadataStore = create<IssuerMetadataState>((set, get) => 
       const decoded = await decryptJson<PersistedShape>(raw);
       const entries: Record<string, IssuerMetadata> = {};
       for (const [k, v] of Object.entries(decoded.entries)) {
-        entries[k] = deserialize(v);
+        // Tolerant load: a single corrupt entry must not blank the whole
+        // issuer cache.
+        try {
+          entries[k] = deserialize(v);
+        } catch {
+          // skip
+        }
       }
-      set({ entries, hydrated: true });
+      const manifest = manifestFromEntries(entries);
+      ManifestStorage.set(ISSUERS_MANIFEST_SCOPE, manifest);
+      set({ manifest, entries, hydrated: true });
     } catch {
       // Corrupt blob (key rotated, tampered, schema bump) — wipe and start
       // clean. The metadata is purely a cache; nothing depends on
       // historical entries surviving a decrypt failure.
       getMmkv().remove(STORAGE_KEY);
-      set({ hydrated: true });
+      ManifestStorage.clear(ISSUERS_MANIFEST_SCOPE);
+      set({ manifest: [], entries: {}, hydrated: true });
     }
   },
 
   upsert: async (m) => {
     const normalized: IssuerMetadata = { ...m, id: normalizeId(m.id) };
     const nextEntries = { ...get().entries, [normalized.id]: normalized };
-    set({ entries: nextEntries });
+    const nextManifest = manifestFromEntries(nextEntries);
+    set({ manifest: nextManifest, entries: nextEntries });
     await persistEntries(nextEntries);
   },
 
@@ -145,7 +181,8 @@ export const useIssuerMetadataStore = create<IssuerMetadataState>((set, get) => 
     for (const [k, v] of Object.entries(current)) {
       if (k !== key) next[k] = v;
     }
-    set({ entries: next });
+    const nextManifest = manifestFromEntries(next);
+    set({ manifest: nextManifest, entries: next });
     await persistEntries(next);
   },
 
@@ -161,7 +198,8 @@ export const useIssuerMetadataStore = create<IssuerMetadataState>((set, get) => 
       }
     }
     if (evicted.length === 0) return [];
-    set({ entries: next });
+    const nextManifest = manifestFromEntries(next);
+    set({ manifest: nextManifest, entries: next });
     await persistEntries(next);
     return evicted;
   },
@@ -283,13 +321,17 @@ export async function fetchAndCacheIssuer(
 
 /** Test-only — wipe in-memory state + persisted blob. */
 export function __resetIssuerMetadataStoreForTesting(): void {
-  useIssuerMetadataStore.setState({ entries: {}, hydrated: false });
+  useIssuerMetadataStore.setState({ manifest: [], entries: {}, hydrated: false });
   try {
     getMmkv().remove(STORAGE_KEY);
   } catch {
     // MMKV may not be initialised in pure parity tests; safe to ignore.
   }
+  ManifestStorage.clear(ISSUERS_MANIFEST_SCOPE);
 }
 
 export const __ISSUER_METADATA_STORAGE_KEY = STORAGE_KEY;
 export const __ISSUER_METADATA_MAX_LOGO_BYTES = MAX_LOGO_BYTES;
+
+export type { IssuerManifestEntry } from './issuerManifest';
+export { ISSUERS_MANIFEST_SCOPE } from './issuerManifest';

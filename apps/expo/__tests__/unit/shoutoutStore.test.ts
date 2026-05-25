@@ -64,7 +64,16 @@ beforeAll(async () => {
 beforeEach(() => {
   resetKv();
   // Reset store between tests so add/remove/hydrate stay deterministic.
-  mod.useShoutoutStore.setState({ items: [], hydrated: false });
+  // `items` is derived from `details` post-manifest-refactor — must clear
+  // both, plus the manifest mirror, or earlier-test residue keeps leaking
+  // into the derived array.
+  mod.useShoutoutStore.setState({
+    items: [],
+    hydrated: false,
+    details: new Map(),
+    detailsHydrated: false,
+    manifest: [],
+  });
 });
 
 const out: Shoutout = {
@@ -143,7 +152,12 @@ describe('useShoutoutStore.hydrate', () => {
     // to actually walk the KV (instead of short-circuiting on hydrated).
     await mod.useShoutoutStore.getState().add(out);
     await mod.useShoutoutStore.getState().add(inc);
-    mod.useShoutoutStore.setState({ items: [], hydrated: false });
+    mod.useShoutoutStore.setState({
+      items: [],
+      hydrated: false,
+      details: new Map(),
+      detailsHydrated: false,
+    });
     await mod.useShoutoutStore.getState().hydrate();
     const items = mod.useShoutoutStore.getState().items;
     expect(items.length).toBe(2);
@@ -158,7 +172,12 @@ describe('useShoutoutStore.hydrate', () => {
     await mod.useShoutoutStore.getState().add(out);
     kv.set('vault:item-x', JSON.stringify({ id: 'item-x' }));
     kv.set('group:g1', JSON.stringify({ id: 'g1' }));
-    mod.useShoutoutStore.setState({ items: [], hydrated: false });
+    mod.useShoutoutStore.setState({
+      items: [],
+      hydrated: false,
+      details: new Map(),
+      detailsHydrated: false,
+    });
     await mod.useShoutoutStore.getState().hydrate();
     const items = mod.useShoutoutStore.getState().items;
     expect(items.length).toBe(1);
@@ -166,7 +185,12 @@ describe('useShoutoutStore.hydrate', () => {
   });
 
   it('is idempotent: a second hydrate() call is a no-op', async () => {
-    mod.useShoutoutStore.setState({ items: [], hydrated: true });
+    mod.useShoutoutStore.setState({
+      items: [],
+      hydrated: true,
+      details: new Map(),
+      detailsHydrated: true,
+    });
     // hydrated=true short-circuits — even if we seed kv now, hydrate skips.
     kv.set('shoutout:in-1', JSON.stringify(inc));
     await mod.useShoutoutStore.getState().hydrate();

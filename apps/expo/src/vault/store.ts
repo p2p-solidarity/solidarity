@@ -22,8 +22,15 @@
  */
 import { create } from 'zustand';
 
+import { ManifestStorage } from '@/storage';
 import { decryptJson, encryptJson } from '@/storage/encryptionManager';
 import { getMmkv } from '@/storage/mmkv';
+
+import {
+  VAULT_MANIFEST_SCOPE,
+  toVaultManifest,
+  type VaultManifestEntry,
+} from './vaultManifest';
 
 // All recovery-rail modules are imported as TYPES at the top of the file so
 // that consumers who only need `VaultItem` don't drag react-native (via
@@ -78,7 +85,22 @@ function listKeys(): readonly string[] {
 }
 
 interface VaultStoreState {
+  /**
+   * Plaintext (MMKV-encrypted, not per-blob AES) manifest entries —
+   * id/kind/size/updatedAt only. Seeded synchronously from MMKV via
+   * `seedFromManifest()` so the list paints on frame 1 without
+   * decrypting every vault blob. Filename stays encrypted-only; see
+   * `vaultManifest.ts` for the privacy rationale.
+   */
+  readonly manifest: readonly VaultManifestEntry[];
+  /**
+   * Full `VaultItem` records, populated lazily by `loadDetail(id)` or
+   * in one shot by `hydrate()`. Detail screens read from this map.
+   */
+  readonly details: ReadonlyMap<string, VaultItem>;
+  /** Sorted list of fully-hydrated items. Empty until `hydrate()` runs. */
   readonly items: readonly VaultItem[];
+  /** True once `hydrate()` has completed at least once. */
   readonly hydrated: boolean;
   readonly distributedShards: readonly DistributionRecord[];
   readonly pendingRecovery: readonly RecoverySnapshot[];
@@ -90,7 +112,12 @@ interface VaultStoreState {
    * remote-only vs in-sync without re-reading the cloud.
    */
   readonly lastSyncedManifest: VaultManifest | null;
+  /** Re-read the manifest from MMKV. Call once after `initMmkv()` resolves. */
+  readonly seedFromManifest: () => void;
+  /** Background bulk-decrypt of every vault item. Idempotent. */
   readonly hydrate: () => Promise<void>;
+  /** Lazy single-record decrypt for detail screens. */
+  readonly loadDetail: (id: string) => Promise<VaultItem | null>;
   readonly upsert: (item: VaultItem) => Promise<void>;
   readonly remove: (id: string) => Promise<void>;
   readonly distributeShards: (args: DistributionArgs) => Promise<DistributionResult>;
@@ -113,7 +140,19 @@ interface VaultStoreState {
   readonly cloudCiphertextStatus: (itemId: string) => CloudCiphertextStatus;
 }
 
+function rehydrateDates(v: VaultItem): VaultItem {
+  // Same JSON-round-trip Date fix as shoutoutStore — `.getTime()`
+  // after decryptJson would throw otherwise.
+  return {
+    ...v,
+    createdAt: new Date(v.createdAt),
+    updatedAt: new Date(v.updatedAt),
+  };
+}
+
 export const useVaultStore = create<VaultStoreState>((set, get) => ({
+  manifest: [],
+  details: new Map(),
   items: [],
   hydrated: false,
   distributedShards: [],
@@ -122,22 +161,32 @@ export const useVaultStore = create<VaultStoreState>((set, get) => ({
   isLocked: true,
   lastSyncedManifest: null,
 
+  seedFromManifest: () => {
+    const seed = ManifestStorage.get<VaultManifestEntry>(VAULT_MANIFEST_SCOPE);
+    if (seed) set({ manifest: seed });
+  },
+
   hydrate: async () => {
     if (get().hydrated) return;
     const out: VaultItem[] = [];
     for (const k of listKeys()) {
-      const v = await getEncrypted<VaultItem>(k);
-      if (!v) continue;
-      // Same JSON-round-trip Date fix as shoutoutStore — `.getTime()`
-      // after decryptJson would throw otherwise.
-      out.push({
-        ...v,
-        createdAt: new Date(v.createdAt),
-        updatedAt: new Date(v.updatedAt),
-      });
+      // Tolerant load — a corrupt MMKV value or stale schema for one
+      // item must not blow up the whole vault. Skip and continue so
+      // the rest of the vault still renders.
+      try {
+        const v = await getEncrypted<VaultItem>(k);
+        if (!v) continue;
+        out.push(rehydrateDates(v));
+      } catch {
+        continue;
+      }
     }
     out.sort((a, b) => b.updatedAt.getTime() - a.updatedAt.getTime());
-    set({ items: out, hydrated: true });
+    const details = new Map<string, VaultItem>();
+    for (const it of out) details.set(it.id, it);
+    const manifest = out.map(toVaultManifest);
+    ManifestStorage.set(VAULT_MANIFEST_SCOPE, manifest);
+    set({ items: out, details, manifest, hydrated: true });
 
     // Lazy-load the recovery rail so consumers that only need `VaultItem`
     // never pay the cost (or pull react-native via cloudSync.ts). Failure
@@ -161,17 +210,53 @@ export const useVaultStore = create<VaultStoreState>((set, get) => ({
     }
   },
 
+  loadDetail: async (id) => {
+    const cached = get().details.get(id);
+    if (cached) return cached;
+    try {
+      const v = await getEncrypted<VaultItem>(`${PREFIX}${id}`);
+      if (!v) return null;
+      const item = rehydrateDates(v);
+      set((s) => {
+        const next = new Map(s.details);
+        next.set(id, item);
+        return { details: next };
+      });
+      return item;
+    } catch {
+      return null;
+    }
+  },
+
   upsert: async (item) => {
     await setEncrypted(`${PREFIX}${item.id}`, item);
     set((s) => {
-      const next = s.items.filter((i) => i.id !== item.id);
-      return { items: [item, ...next] };
+      const nextItems = [item, ...s.items.filter((i) => i.id !== item.id)];
+      const entry = toVaultManifest(item);
+      const idx = s.manifest.findIndex((m) => m.id === entry.id);
+      const nextManifest = idx >= 0
+        ? s.manifest.map((m, i) => (i === idx ? entry : m))
+        : [entry, ...s.manifest];
+      ManifestStorage.set(VAULT_MANIFEST_SCOPE, nextManifest);
+      const nextDetails = new Map(s.details);
+      nextDetails.set(item.id, item);
+      return { items: nextItems, manifest: nextManifest, details: nextDetails };
     });
   },
 
   remove: async (id) => {
     getMmkv().remove(`${PREFIX}${id}`);
-    set((s) => ({ items: s.items.filter((i) => i.id !== id) }));
+    set((s) => {
+      const nextManifest = s.manifest.filter((m) => m.id !== id);
+      ManifestStorage.set(VAULT_MANIFEST_SCOPE, nextManifest);
+      const nextDetails = new Map(s.details);
+      nextDetails.delete(id);
+      return {
+        items: s.items.filter((i) => i.id !== id),
+        manifest: nextManifest,
+        details: nextDetails,
+      };
+    });
   },
 
   distributeShards: async (args) => {
@@ -282,3 +367,6 @@ export const useVaultStore = create<VaultStoreState>((set, get) => ({
     return 'in-sync';
   },
 }));
+
+export type { VaultManifestEntry } from './vaultManifest';
+export { VAULT_MANIFEST_SCOPE, toVaultManifest } from './vaultManifest';

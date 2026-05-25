@@ -24,10 +24,11 @@ import { IssuerBadge } from '@/components/credentials/IssuerBadge';
 import { SfIcon } from '@/components/icons/SfIcon';
 import { VerifiedCredentialRow } from '@/components/me';
 import { Colors } from '@/constants/Colors';
+import type { CredentialManifestEntry } from '@/credentials/credentialManifest';
 import {
   useIssuerMetadataStore,
 } from '@/credentials/issuerStore';
-import { useCredentialStore, type StoredCredential } from '@/credentials/store';
+import { useCredentialStore } from '@/credentials/store';
 import { pushToast } from '@/feedback/toast';
 
 interface ActionRowProps {
@@ -72,14 +73,14 @@ function SectionFooter({ text }: { readonly text: string }) {
 }
 
 function trustLevelFor(
-  item: StoredCredential
+  item: CredentialManifestEntry
 ): 'green' | 'blue' | 'other' {
   if (item.trustLevel === 'L3') return 'green';
   if (item.trustLevel === 'L2') return 'blue';
   return 'other';
 }
 
-function iconFor(item: StoredCredential): SFSymbol {
+function iconFor(item: CredentialManifestEntry): SFSymbol {
   switch (item.type) {
     case 'passport':
       return 'doc.text.fill';
@@ -95,7 +96,8 @@ function iconFor(item: StoredCredential): SFSymbol {
 
 export default function VCManagementScreen() {
   const insets = useSafeAreaInsets();
-  const items = useCredentialStore((s) => s.items);
+  const manifest = useCredentialStore((s) => s.manifest);
+  const details = useCredentialStore((s) => s.details);
   const hydrate = useCredentialStore((s) => s.hydrate);
   const hydrateIssuers = useIssuerMetadataStore((s) => s.hydrate);
 
@@ -117,7 +119,7 @@ export default function VCManagementScreen() {
   };
 
   const onExport = () => {
-    if (items.length === 0) {
+    if (manifest.length === 0) {
       pushToast('No VCs found to export.', 'warning');
       return;
     }
@@ -169,30 +171,41 @@ export default function VCManagementScreen() {
           </View>
         </View>
 
-        {items.length > 0 ? (
+        {manifest.length > 0 ? (
           <View className="gap-2 mt-6">
             <SectionHeader title="Stored credentials" />
             <View className="gap-3">
-              {items.map((item) => (
-                <View key={item.id} className="gap-1">
-                  <VerifiedCredentialRow
-                    icon={iconFor(item)}
-                    title={item.title}
-                    trustLevel={trustLevelFor(item)}
-                    issuerType={item.type}
-                    onPress={() => {
-                      router.push({ pathname: '/credentials/[id]', params: { id: item.id } });
-                    }}
-                  />
-                  <View className="px-4">
-                    <IssuerBadge
-                      issuerId={item.issuerDid}
-                      fallbackName={item.issuerDid}
-                      compact
+              {manifest.map((item) => {
+                // `issuerDid` lives in the encrypted record. Once
+                // `hydrate()` resolves, `details.get(id)` returns the
+                // full credential and the badge renders the real issuer.
+                // Until then the badge falls back to "—" rather than
+                // leaking did from the manifest sidecar.
+                const detail = details.get(item.id);
+                const issuerId = detail?.issuerDid ?? '';
+                return (
+                  <View key={item.id} className="gap-1">
+                    <VerifiedCredentialRow
+                      icon={iconFor(item)}
+                      title={item.title}
+                      trustLevel={trustLevelFor(item)}
+                      issuerType={item.type}
+                      onPress={() => {
+                        router.push({ pathname: '/credentials/[id]', params: { id: item.id } });
+                      }}
                     />
+                    {issuerId ? (
+                      <View className="px-4">
+                        <IssuerBadge
+                          issuerId={issuerId}
+                          fallbackName={issuerId}
+                          compact
+                        />
+                      </View>
+                    ) : null}
                   </View>
-                </View>
-              ))}
+                );
+              })}
             </View>
           </View>
         ) : (

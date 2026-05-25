@@ -63,21 +63,23 @@ export default function WalletPassScreen() {
   const { id, level: levelParam } =
     useLocalSearchParams<{ id?: string; level?: string }>();
 
-  const hydrate = useCardStore((s) => s.hydrate);
-  const cards = useCardStore((s) => s.cards);
-
-  useEffect(() => {
-    void hydrate();
-  }, [hydrate]);
+  const manifest = useCardStore((s) => s.manifest);
+  const detailsById = useCardStore((s) => s.details);
+  const loadDetail = useCardStore((s) => s.loadDetail);
 
   const sharingLevel: SharingLevel = isSharingLevel(levelParam)
     ? levelParam
     : 'professional';
 
-  const targetCard: BusinessCard | undefined = useMemo(() => {
-    if (id) return cards.find((c) => c.id === id);
-    return cards[0];
-  }, [cards, id]);
+  const targetId = id ?? manifest[0]?.id;
+
+  useEffect(() => {
+    if (targetId) void loadDetail(targetId);
+  }, [targetId, loadDetail]);
+
+  const targetCard: BusinessCard | undefined = targetId
+    ? detailsById.get(targetId)
+    : undefined;
 
   const filtered = useMemo(
     () => (targetCard ? filteredCardFor(targetCard, sharingLevel) : undefined),

@@ -18,16 +18,16 @@ import { ThemedText } from '@/components/themed';
 import { Colors } from '@/constants/Colors';
 import { confirmDialog } from '@/feedback/confirmDialog';
 import { haptic } from '@/feedback/haptics';
-import type { BusinessCard } from '@solidarity/shared';
+import type { CardManifestEntry } from '@/cards/cardManifest';
 
 export interface BusinessCardActionsSheetProps {
   readonly visible: boolean;
-  readonly card: BusinessCard | undefined;
+  readonly card: CardManifestEntry | undefined;
   readonly onClose: () => void;
-  readonly onEdit: (card: BusinessCard) => void;
-  readonly onWalletPass: (card: BusinessCard) => void;
-  readonly onShare: (card: BusinessCard) => void;
-  readonly onDelete: (card: BusinessCard) => void;
+  readonly onEdit: (card: CardManifestEntry) => void;
+  readonly onWalletPass: (card: CardManifestEntry) => void;
+  readonly onShare: (card: CardManifestEntry) => void;
+  readonly onDelete: (card: CardManifestEntry) => void;
 }
 
 export function BusinessCardActionsSheet({
@@ -77,12 +77,12 @@ function SheetBody({
   onShare,
   onDelete,
 }: {
-  readonly card: BusinessCard;
+  readonly card: CardManifestEntry;
   readonly onClose: () => void;
-  readonly onEdit: (card: BusinessCard) => void;
-  readonly onWalletPass: (card: BusinessCard) => void;
-  readonly onShare: (card: BusinessCard) => void;
-  readonly onDelete: (card: BusinessCard) => void;
+  readonly onEdit: (card: CardManifestEntry) => void;
+  readonly onWalletPass: (card: CardManifestEntry) => void;
+  readonly onShare: (card: CardManifestEntry) => void;
+  readonly onDelete: (card: CardManifestEntry) => void;
 }): ReactNode {
   const insets = useSafeAreaInsets();
 

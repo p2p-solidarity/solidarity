@@ -25,7 +25,7 @@ import Animated, {
 import { Colors } from '@/constants/Colors';
 import { UwbStatusPill } from '@/components/share/UwbStatusPill';
 import { useMatchingSession } from '@/matching/session';
-import { useMyCard } from '@/cards/cardManager';
+import { useMyCardDetail } from '@/cards/cardManager';
 
 import { IncomingInvitationPopup } from './IncomingInvitationPopup';
 import { MatchingOrbit } from './MatchingOrbit';
@@ -64,7 +64,7 @@ export function MatchingRoot({
   const startAdvertising = useMatchingSession((s) => s.startAdvertising);
   const stopAdvertising = useMatchingSession((s) => s.stopAdvertising);
 
-  const card = useMyCard();
+  const card = useMyCardDetail();
   const [showNearby, setShowNearby] = useState(false);
   const [showPicker, setShowPicker] = useState(false);
 

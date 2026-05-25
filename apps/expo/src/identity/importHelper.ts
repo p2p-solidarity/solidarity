@@ -182,7 +182,7 @@ async function buildSnapshot(): Promise<IdentitySnapshot> {
     activeDid: coordinator.profile.activeDID?.did ?? null,
     identityCards: identityState.identityCards.map(serializeCard),
     provableClaims: identityState.provableClaims.map(serializeClaim),
-    storedCredentials: credentialState.items.map(serializeCredential),
+    storedCredentials: Array.from(credentialState.details.values()).map(serializeCredential),
   };
 }
 

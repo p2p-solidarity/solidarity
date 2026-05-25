@@ -18,6 +18,7 @@ import { useEffect, useState, type ReactNode } from 'react';
 import { ActivityIndicator, Pressable, ScrollView, Share, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import type { CardManifestEntry } from '@/cards/cardManifest';
 import { useCardStore } from '@/cards/cardManager';
 import { BusinessCardActionsSheet, BusinessCardRow } from '@/components/cards';
 import { PaperStackIllustration } from '@/components/decor/PaperStackIllustration';
@@ -25,16 +26,15 @@ import { SfIcon } from '@/components/icons/SfIcon';
 import { ThemedButton, ThemedText } from '@/components/themed';
 import { Colors } from '@/constants/Colors';
 import { haptic } from '@/feedback/haptics';
-import type { BusinessCard } from '@solidarity/shared';
 
 export default function CardsIndexScreen(): ReactNode {
   const insets = useSafeAreaInsets();
   const hydrate = useCardStore((s) => s.hydrate);
-  const cards = useCardStore((s) => s.cards);
-  const hydrated = useCardStore((s) => s.hydrated);
+  const manifest = useCardStore((s) => s.manifest);
+  const detailsHydrated = useCardStore((s) => s.detailsHydrated);
   const remove = useCardStore((s) => s.remove);
 
-  const [actionsCard, setActionsCard] = useState<BusinessCard | undefined>();
+  const [actionsCard, setActionsCard] = useState<CardManifestEntry | undefined>();
 
   useEffect(() => {
     void hydrate();
@@ -44,40 +44,41 @@ export default function CardsIndexScreen(): ReactNode {
     router.push('/cards/edit');
   };
 
-  const goEdit = (card: BusinessCard): void => {
+  const goEdit = (card: CardManifestEntry): void => {
     haptic('selection');
     router.push({ pathname: '/cards/edit', params: { id: card.id } });
   };
 
-  const goWalletPass = (card: BusinessCard): void => {
+  const goWalletPass = (card: CardManifestEntry): void => {
     router.push({ pathname: '/cards/wallet-pass', params: { id: card.id } });
   };
 
-  const onShare = (card: BusinessCard): void => {
+  const onShare = (card: CardManifestEntry): void => {
     void Share.share({ message: `Check out my card on AirMeishi: ${card.name}` }).catch(
       () => undefined,
     );
   };
 
-  const onDelete = (card: BusinessCard): void => {
+  const onDelete = (card: CardManifestEntry): void => {
     void remove(card.id);
   };
 
+  // Rule 10: when the manifest is already populated (warm start) we paint
+  // rows on frame 1. The skeleton only appears on truly cold launches
+  // where MMKV has never held cards (e.g. fresh install pre-onboarding).
   return (
     <View className="flex-1 bg-pageBg" style={{ paddingTop: insets.top }}>
       <Stack.Screen options={{ headerShown: false }} />
 
       <Header onAdd={goCreate} />
 
-      {!hydrated ? (
-        <Loading />
-      ) : cards.length === 0 ? (
-        <EmptyState onCreate={goCreate} />
+      {manifest.length === 0 ? (
+        detailsHydrated ? <EmptyState onCreate={goCreate} /> : <Loading />
       ) : (
         <ScrollView
           contentContainerStyle={{ paddingVertical: 12, paddingBottom: insets.bottom + 24 }}
         >
-          {cards.map((card) => (
+          {manifest.map((card) => (
             <BusinessCardRow
               key={card.id}
               card={card}

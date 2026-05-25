@@ -49,7 +49,7 @@ import { pushToast } from '@/feedback/toast';
 import { type DeliveryMethod } from '@/groups/deliverySettings';
 import { useGroup, useGroupMembers } from '@/groups/store';
 import { getMmkv } from '@/storage/mmkv';
-import type { BusinessCard } from '@solidarity/shared';
+import type { CardManifestEntry } from '@/cards/cardManifest';
 
 const BINDING_PREFIX = 'group_issuance_binding_';
 
@@ -80,7 +80,7 @@ export default function GroupVCIssuanceScreen(): React.JSX.Element {
   const { id } = useLocalSearchParams<{ id: string }>();
   const group = useGroup(id);
   const members = useGroupMembers(id);
-  const cards = useCardStore((s) => s.cards);
+  const cards = useCardStore((s) => s.manifest);
   const hydrateCards = useCardStore((s) => s.hydrate);
 
   const [selectedCardId, setSelectedCardId] = useState<string | null>(null);
@@ -115,7 +115,7 @@ export default function GroupVCIssuanceScreen(): React.JSX.Element {
   const selectedCard = cards.find((c) => c.id === selectedCardId) ?? null;
   const sendToAll = selectedMembers.size === 0;
 
-  const onSelectCard = (card: BusinessCard | null): void => {
+  const onSelectCard = (card: CardManifestEntry | null): void => {
     setSelectedCardId(card?.id ?? null);
     if (card && customName.length === 0) {
       setCustomName(card.name);

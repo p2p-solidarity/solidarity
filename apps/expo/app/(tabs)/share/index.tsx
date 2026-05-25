@@ -16,8 +16,12 @@ import { useEffect, useMemo, useState } from 'react';
 import { Pressable, ScrollView, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { useCardStore, useMyCard } from '@/cards/cardManager';
-import { toVCard } from '@/cards/vCard';
+import { useCardStore, useMyCard, useMyCardDetail } from '@/cards/cardManager';
+import {
+  enabledFieldsFromSharePreferences,
+  type ShareFieldPreferences,
+} from '@/cards/solidarityQrPayload';
+import { buildRuntimeSolidarityQrPayload } from '@/cards/solidarityQrRuntime';
 import { SfIcon } from '@/components/icons/SfIcon';
 import { RadarMatching } from '@/components/share/RadarMatching';
 import { QrShareCard } from '@/components/share/QrShareCard';
@@ -34,20 +38,11 @@ import { useMatchingSession } from '@/matching/session';
 import { ThemedButton } from '@/components/themed';
 import { Colors } from '@/constants/Colors';
 import { useThemeColors } from '@/constants/useThemeColors';
-
-// Default share field set mirrors Swift ShareSettingsReader defaults
-// (everything checked except socialNetworks/skills until user opts in).
-const DEFAULT_FIELDS: readonly EnabledField[] = [
-  'name',
-  'title',
-  'company',
-  'email',
-  'phone',
-  'profileImage',
-];
+import { usePreferences } from '@/settings/preferences';
 
 export default function ShareTab() {
   const myCard = useMyCard();
+  const myCardDetail = useMyCardDetail();
   const hydrate = useCardStore((s) => s.hydrate);
   const insets = useSafeAreaInsets();
   const peerCount = useMatchingSession((s) => s.peers.length);
@@ -62,10 +57,61 @@ export default function ShareTab() {
   const stopAll = useMatchingSession((s) => s.stopAll);
   const uwb = useMatchingSession((s) => s.uwbSpatial);
   const [nearbyVisible, setNearbyVisible] = useState(false);
+  const [payload, setPayload] = useState<string | undefined>(undefined);
+  const shareTitle = usePreferences((s) => s.shareTitle);
+  const shareCompany = usePreferences((s) => s.shareCompany);
+  const shareEmail = usePreferences((s) => s.shareEmail);
+  const sharePhone = usePreferences((s) => s.sharePhone);
+  const shareProfileImage = usePreferences((s) => s.shareProfileImage);
+  const shareSocialNetworks = usePreferences((s) => s.shareSocialNetworks);
+  const shareSkills = usePreferences((s) => s.shareSkills);
 
   useEffect(() => { void hydrate(); }, [hydrate]);
 
-  const payload = useMemo(() => (myCard ? toVCard(myCard) : undefined), [myCard]);
+  const shareFieldPreferences = useMemo<ShareFieldPreferences>(
+    () => ({
+      shareTitle,
+      shareCompany,
+      shareEmail,
+      sharePhone,
+      shareProfileImage,
+      shareSocialNetworks,
+      shareSkills,
+    }),
+    [
+      shareCompany,
+      shareEmail,
+      sharePhone,
+      shareProfileImage,
+      shareSkills,
+      shareSocialNetworks,
+      shareTitle,
+    ]
+  );
+  const enabledFields = useMemo<readonly EnabledField[]>(
+    () =>
+      enabledFieldsFromSharePreferences(
+        shareFieldPreferences
+      ) as readonly EnabledField[],
+    [shareFieldPreferences]
+  );
+
+  useEffect(() => {
+    if (!myCardDetail) {
+      setPayload(undefined);
+      return;
+    }
+
+    let cancelled = false;
+    setPayload(undefined);
+    void buildRuntimeSolidarityQrPayload(myCardDetail, shareFieldPreferences).then((next) => {
+      if (!cancelled) setPayload(next);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [myCardDetail, shareFieldPreferences]);
+
   const statusTitle = isMatching ? 'Scanning Nearby' : 'Ready To Match';
   const subtitle = statusSubtitle(isMatching, peerCount);
   const uwbVisible = uwb.kind !== 'idle';
@@ -145,7 +191,7 @@ export default function ShareTab() {
           <QrShareCard
             payload={payload}
             cardName={myCard?.name}
-            enabledFields={DEFAULT_FIELDS}
+            enabledFields={enabledFields}
             hasRealHuman={false}
             onOpenSettings={() => { router.push('/settings/share-settings'); }}
             onShare={() => { router.push('/share/qr'); }}

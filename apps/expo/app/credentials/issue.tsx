@@ -35,7 +35,7 @@ import { useCredentialStore } from '@/credentials/store';
 import { pushToast } from '@/feedback/toast';
 import { useGroup, useGroupMembers } from '@/groups/store';
 import { getMmkv } from '@/storage/mmkv';
-import type { BusinessCard } from '@solidarity/shared';
+import type { CardManifestEntry } from '@/cards/cardManifest';
 
 const MONO = Platform.OS === 'ios' ? 'Menlo' : 'monospace';
 
@@ -197,7 +197,7 @@ export default function GroupVCIssuanceScreen() {
   const { groupId } = useLocalSearchParams<{ groupId?: string }>();
   const group = useGroup(groupId);
   const members = useGroupMembers(groupId);
-  const cards = useCardStore((s) => s.cards);
+  const cards = useCardStore((s) => s.manifest);
   const hydrateCards = useCardStore((s) => s.hydrate);
   const addCredential = useCredentialStore((s) => s.add);
 
@@ -223,7 +223,7 @@ export default function GroupVCIssuanceScreen() {
     }
   }, [groupId, cards]);
 
-  const selectedCard = useMemo<BusinessCard | undefined>(
+  const selectedCard = useMemo<CardManifestEntry | undefined>(
     () => cards.find((c) => c.id === selectedCardId),
     [cards, selectedCardId]
   );

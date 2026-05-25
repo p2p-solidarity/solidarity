@@ -3,17 +3,23 @@
  * solidarity/Views/PeopleViews/TrustGraphContactRow.swift.
  * Figma 723:2195 — round avatar | name + subtitle + context tag | radar
  * icon + ISO date column.
+ *
+ * Consumes a `ContactManifestEntry` (non-PII view of a Contact) so the row
+ * stays paintable on frame 1 from the MMKV manifest, before full record
+ * decryption resolves. The Swift `notes` fallback in the subtitle is
+ * intentionally dropped here — notes stay encrypted-only and only surface
+ * on the detail screen.
  */
 import { Pressable, Text, View } from 'react-native';
 
 import { SfIcon } from '@/components/icons/SfIcon';
 import { Colors } from '@/constants/Colors';
-import type { Contact } from '@solidarity/shared';
+import type { ContactManifestEntry } from '@/contacts/repository';
 
 import { RadarTickIcon } from './RadarTickIcon';
 
 export type TrustGraphContactRowProps = {
-  contact: Contact;
+  contact: ContactManifestEntry;
   onPress?: () => void;
   onLongPress?: () => void;
 };
@@ -49,7 +55,7 @@ export function TrustGraphContactRow({
               }}
             >
               <Text className="text-text2 text-[14px] font-medium">
-                {initial(contact.businessCard.name)}
+                {initial(contact.name)}
               </Text>
             </View>
             {isVerified ? (
@@ -82,7 +88,7 @@ export function TrustGraphContactRow({
                   numberOfLines={1}
                   className="text-text1 text-[16px] font-medium"
                 >
-                  {contact.businessCard.name}
+                  {contact.name}
                 </Text>
                 {subtitle ? (
                   <Text
@@ -127,16 +133,15 @@ function initial(name: string): string {
   return trimmed.charAt(0).toUpperCase();
 }
 
-function subtitleText(c: Contact): string | undefined {
-  const parts = [c.businessCard.company, c.businessCard.title]
+function subtitleText(c: ContactManifestEntry): string | undefined {
+  const parts = [c.company, c.title]
     .map((p) => (p ?? '').trim())
     .filter((p) => p.length > 0);
   if (parts.length > 0) return parts.join(' • ');
-  const note = (c.notes ?? '').trim().replace(/\n/g, ' ');
-  return note.length > 0 ? note : undefined;
+  return undefined;
 }
 
-function contextTag(c: Contact): string | undefined {
+function contextTag(c: ContactManifestEntry): string | undefined {
   const customTag = c.tags
     .map((t) => t.trim())
     .find((t) => t.length > 0);
@@ -149,9 +154,11 @@ function contextTag(c: Contact): string | undefined {
       return 'Added manually';
     case 'qrcode':
     case 'qr_code':
+    case 'qr code':
     case 'proximity':
     case 'appclip':
     case 'app_clip':
+    case 'app clip':
     case 'airdrop':
       return 'Met in person';
     default:
@@ -159,7 +166,9 @@ function contextTag(c: Contact): string | undefined {
   }
 }
 
-function formatIsoDate(d: Date): string {
+function formatIsoDate(iso: string): string {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return iso.slice(0, 10);
   const yyyy = d.getFullYear();
   const mm = String(d.getMonth() + 1).padStart(2, '0');
   const dd = String(d.getDate()).padStart(2, '0');

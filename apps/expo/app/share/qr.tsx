@@ -5,17 +5,16 @@
  * intentional anti-replay window so a screenshot leaks at most a 45s
  * authorisation request. Manual "Refresh QR" resets the timer.
  *
- * Share button goes through expo-sharing. The Swift version emits an
- * OID4VP authorisation request URL (`openid4vp://present?…`); the Expo
- * port encodes the same payload via a synchronous helper for now so
- * the screen works even before OIDCService lands in apps/expo.
+ * Share button goes through expo-sharing. The payload is an OID4VP
+ * authorisation request URL, matching Swift's OIDCService-backed QR flow.
  */
 import { router } from 'expo-router';
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import QRCode from 'react-native-qrcode-svg';
 import * as Sharing from 'expo-sharing';
 import * as FileSystem from 'expo-file-system/legacy';
+import { randomUUID } from 'expo-crypto';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { SfIcon } from '@/components/icons/SfIcon';
@@ -23,8 +22,9 @@ import { ShareLinkOptionsSheet } from '@/components/share/ShareLinkOptionsSheet'
 import { ON_DARK, ThemedButton } from '@/components/themed';
 import { Colors } from '@/constants/Colors';
 import { useMyCard } from '@/cards/cardManager';
-import { toVCard } from '@/cards/vCard';
 import { pushToast } from '@/feedback/toast';
+import { didKeyForCurrentIdentity } from '@/keychain/signingKey';
+import { buildOid4VpRequestUrl } from '@/oidc/requestQr';
 
 const COUNTDOWN_SECONDS = 45;
 
@@ -38,16 +38,31 @@ export default function QrSharingScreen() {
     readonly toDataURL?: (cb: (data: string) => void) => void;
   }
   const qrRef = useRef<QrRefShape | null>(null);
+  const [payload, setPayload] = useState<string | null>(null);
 
-  const payload = useMemo(() => {
-    if (!myCard) return null;
-    // Bumping `generation` re-renders to mimic Swift's "refresh QR every
-    // 45s" behaviour. We embed the timestamp so each refresh produces a
-    // unique payload even when the underlying card hasn't changed.
-    void generation;
-    const ts = Date.now().toString(36);
-    return `${toVCard(myCard)}\nX-SOLIDARITY-NONCE:${ts}`;
-  }, [myCard, generation]);
+  useEffect(() => {
+    let cancelled = false;
+    setPayload(null);
+
+    const nonce = randomUUID();
+    const state = randomUUID();
+    void didKeyForCurrentIdentity()
+      .catch(() => 'https://solidarity.gg/oidc/me')
+      .then((clientId) =>
+        buildOid4VpRequestUrl({
+          nonce,
+          state,
+          clientId,
+        })
+      )
+      .then((next) => {
+        if (!cancelled) setPayload(next);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [generation]);
 
   const refresh = useCallback(() => {
     setGeneration((g) => g + 1);
@@ -109,7 +124,7 @@ export default function QrSharingScreen() {
                 value={payload}
                 size={260}
                 backgroundColor="#FFFFFF"
-                color={Colors.text1}
+                color="#000000"
                 getRef={(c: QrRefShape | null) => {
                   qrRef.current = c;
                 }}
@@ -117,7 +132,7 @@ export default function QrSharingScreen() {
             ) : (
               <View style={styles.placeholder}>
                 <SfIcon name="qrcode" size={44} color={Colors.text3} />
-                <Text style={styles.placeholderText}>Create a card to generate QR</Text>
+                <Text style={styles.placeholderText}>Generating QR...</Text>
               </View>
             )}
           </View>

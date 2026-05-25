@@ -10,7 +10,7 @@
  * claims exist in `useIdentityData.provableClaims`.
  */
 import { router } from 'expo-router';
-import { type ReactNode, useEffect, useMemo } from 'react';
+import { type ReactNode, useEffect, useMemo, useState } from 'react';
 import { ScrollView, View } from 'react-native';
 import QRCode from 'react-native-qrcode-svg';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -28,8 +28,9 @@ import {
 } from '@/components/settings/ShareSettingsRows';
 import { ThemedText } from '@/components/themed';
 import { Colors } from '@/constants/Colors';
-import { useMyCard } from '@/cards/cardManager';
-import { toVCard } from '@/cards/vCard';
+import { useCardStore, useMyCardDetail } from '@/cards/cardManager';
+import { shareFieldPreferencesFromFields } from '@/cards/solidarityQrPayload';
+import { buildRuntimeSolidarityQrPayload } from '@/cards/solidarityQrRuntime';
 import { haptic } from '@/feedback/haptics';
 import {
   useActiveDid,
@@ -38,7 +39,7 @@ import {
   useVerifiedFields,
 } from '@/identity';
 import { usePreferences } from '@/settings/preferences';
-import type { BusinessCardField, BusinessCard } from '@solidarity/shared';
+import type { BusinessCardField } from '@solidarity/shared';
 
 const FIELD_ROWS: readonly FieldDescriptor[] = [
   { key: 'name', icon: 'person.text.rectangle', label: 'Name', locked: true },
@@ -58,9 +59,12 @@ const FIELD_ROWS: readonly FieldDescriptor[] = [
 
 export default function ShareSettings(): ReactNode {
   const insets = useSafeAreaInsets();
-  const myCard = useMyCard();
+  const myCard = useMyCardDetail();
+  const hydrateCards = useCardStore((s) => s.hydrate);
+  useEffect(() => { void hydrateCards(); }, [hydrateCards]);
   const prefs = usePreferences();
   const enforceMandatory = usePreferences((s) => s.set);
+  const [qrPayload, setQrPayload] = useState<string | null>(null);
 
   const seedKeychain = useIdentityCoordinator((s) => s.seedFromKeychain);
   useEffect(() => {
@@ -97,9 +101,24 @@ export default function ShareSettings(): ReactNode {
     prefs.shareTitle,
   ]);
 
-  const qrPayload = useMemo(() => {
-    if (!myCard) return null;
-    return toVCard(filterCard(myCard, enabled));
+  useEffect(() => {
+    if (!myCard) {
+      setQrPayload(null);
+      return;
+    }
+
+    let cancelled = false;
+    setQrPayload(null);
+    void buildRuntimeSolidarityQrPayload(
+      myCard,
+      shareFieldPreferencesFromFields(enabled)
+    ).then((next) => {
+      if (!cancelled) setQrPayload(next);
+    });
+
+    return () => {
+      cancelled = true;
+    };
   }, [enabled, myCard]);
 
   return (
@@ -156,7 +175,12 @@ function QrPreview({ payload }: { readonly payload: string | null }): ReactNode 
         }}
       >
         {payload ? (
-          <QRCode value={payload} size={220} backgroundColor="#FFFFFF" />
+          <QRCode
+            value={payload}
+            size={220}
+            backgroundColor="#FFFFFF"
+            color="#000000"
+          />
         ) : (
           <View style={{ alignItems: 'center', gap: 8 }}>
             <SfIcon name="qrcode" size={40} color={Colors.text3} />
@@ -352,22 +376,4 @@ function toggleField(
     case 'name':
       return;
   }
-}
-
-/** Strip card fields that aren't in `enabled`. Name always passes through. */
-function filterCard(
-  card: BusinessCard,
-  enabled: readonly BusinessCardField[]
-): BusinessCard {
-  const set = new Set(enabled);
-  return {
-    ...card,
-    title: set.has('title') ? card.title : undefined,
-    company: set.has('company') ? card.company : undefined,
-    email: set.has('email') ? card.email : undefined,
-    phone: set.has('phone') ? card.phone : undefined,
-    profileImage: set.has('profileImage') ? card.profileImage : undefined,
-    socialNetworks: set.has('socialNetworks') ? card.socialNetworks : [],
-    skills: set.has('skills') ? card.skills : [],
-  };
 }

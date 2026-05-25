@@ -10,7 +10,7 @@
  * "Edit Identity Card" and "Create Identity Card" — verbatim Swift copy.
  */
 import { router, useLocalSearchParams } from 'expo-router';
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import {
   Alert,
   Pressable,
@@ -34,19 +34,18 @@ export default function EditCardScreen() {
   const { id } = useLocalSearchParams<{ id?: string }>();
   const insets = useSafeAreaInsets();
 
-  const hydrate = useCardStore((s) => s.hydrate);
-  const cards = useCardStore((s) => s.cards);
+  const loadDetail = useCardStore((s) => s.loadDetail);
+  const detailsById = useCardStore((s) => s.details);
   const upsert = useCardStore((s) => s.upsert);
   const remove = useCardStore((s) => s.remove);
 
-  useEffect(() => {
-    void hydrate();
-  }, [hydrate]);
+  const targetId = id && id !== NEW_ID ? id : undefined;
+  const targetCard = targetId ? detailsById.get(targetId) : undefined;
 
-  const targetCard = useMemo(
-    () => (id && id !== NEW_ID ? cards.find((c) => c.id === id) : undefined),
-    [cards, id]
-  );
+  useEffect(() => {
+    if (targetId) void loadDetail(targetId);
+  }, [targetId, loadDetail]);
+
   const isEditing = targetCard !== undefined;
 
   const [animal, setAnimal] = useState<Animal | undefined>(targetCard?.animal);

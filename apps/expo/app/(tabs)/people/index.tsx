@@ -29,12 +29,11 @@ import { TrustGraphContactRow } from '@/components/people/TrustGraphContactRow';
 import { Colors } from '@/constants/Colors';
 import { useThemeColors } from '@/constants/useThemeColors';
 import { importFromDevice } from '@/contacts/importer';
-import { useContactStore } from '@/contacts/repository';
+import { useContactStore, type ContactManifestEntry } from '@/contacts/repository';
 import { confirmDialog } from '@/feedback/confirmDialog';
 import { pushToast } from '@/feedback/toast';
 import { usePeopleScreen } from '@/people/usePeopleScreen';
 import { usePreferences } from '@/settings/preferences';
-import type { Contact } from '@solidarity/shared';
 
 export default function PeopleTab() {
   const { contacts, refresh } = usePeopleScreen();
@@ -77,17 +76,17 @@ export default function PeopleTab() {
     [contacts, searchQuery],
   );
 
-  const onSelectContact = (c: Contact) => {
+  const onSelectContact = (c: ContactManifestEntry) => {
     router.push({
       pathname: '/people/[id]',
-      params: { id: c.id, name: c.businessCard.name },
+      params: { id: c.id, name: c.name },
     });
   };
 
-  const onLongPressContact = (c: Contact) => {
+  const onLongPressContact = (c: ContactManifestEntry) => {
     void (async () => {
       const ok = await confirmDialog({
-        title: `Delete ${c.businessCard.name}?`,
+        title: `Delete ${c.name}?`,
         message: 'This contact will be permanently removed.',
         confirmLabel: 'Delete',
         destructive: true,
@@ -142,7 +141,7 @@ export default function PeopleTab() {
             <EmptySearchState query={searchQuery} />
           ) : (
             <FlatList
-              data={filtered as Contact[]}
+              data={filtered as ContactManifestEntry[]}
               keyExtractor={(item) => item.id}
               contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: 90 }}
               keyboardShouldPersistTaps="handled"
@@ -343,19 +342,21 @@ function EmptySearchState({ query }: { query: string }) {
 }
 
 function filterContacts(
-  contacts: readonly Contact[],
+  contacts: readonly ContactManifestEntry[],
   query: string,
-): readonly Contact[] {
+): readonly ContactManifestEntry[] {
   const trimmed = query.trim();
-  const sorted = [...contacts].sort(
-    (a, b) => b.receivedAt.getTime() - a.receivedAt.getTime(),
+  // Manifest `receivedAt` is an ISO string; lexicographic compare matches
+  // chronological order so we skip an unnecessary `new Date()` per row.
+  const sorted = [...contacts].sort((a, b) =>
+    a.receivedAt < b.receivedAt ? 1 : a.receivedAt > b.receivedAt ? -1 : 0,
   );
   if (trimmed.length === 0) return sorted;
   const q = trimmed.toLowerCase();
   return sorted.filter((c) => {
-    const name = c.businessCard.name.toLowerCase();
-    const company = (c.businessCard.company ?? '').toLowerCase();
-    const title = (c.businessCard.title ?? '').toLowerCase();
+    const name = c.name.toLowerCase();
+    const company = (c.company ?? '').toLowerCase();
+    const title = (c.title ?? '').toLowerCase();
     return name.includes(q) || company.includes(q) || title.includes(q);
   });
 }

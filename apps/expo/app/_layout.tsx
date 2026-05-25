@@ -7,15 +7,22 @@
  * `crypto.getRandomValues` synchronously at module top). RN doesn't ship
  * Web Crypto by default.
  *
- * Boot order (mirrors Swift SolidarityApp.setupApp()):
+ * Boot order (Path A — manifest-first, sub-50 ms cold launch):
  *   1. install crypto polyfill (top-of-file import)
- *   2. initMmkv()         — derives master key, opens encrypted KV store
- *   3. hydratePreferences + hydrateContacts
- *   4. install i18n catalog
- *   5. attach deep-link listener
- *   6. render the router stack
+ *   2. await initMmkv()                  — Keychain hop + MMKV open
+ *   3. sync seed all feature manifests   — zero await, frame-1 ready
+ *      (cards, contacts, groups, vault, shoutouts, credentials, issuers)
+ *   4. await installI18n + preferences   — cheap, on-the-spot
+ *   5. setReady(true) → splash hides     — UI paints from manifests
+ *   6. fire-and-forget bulk hydrate      — per-record decrypt in background;
+ *                                          fills the `details` maps and
+ *                                          rebuilds the manifest if it was
+ *                                          missing (migration path).
  *
- * Splash stays up through step 3 so warm-start render isn't empty.
+ * Splash hides as soon as manifests are seeded so warm-start render isn't
+ * empty. The bulk hydrate runs while the user is already looking at the
+ * Me / People / Share tabs and silently swaps placeholder rows for full
+ * data the moment each store's `details` map populates.
  */
 import 'react-native-get-random-values';
 import 'react-native-gesture-handler';
@@ -32,19 +39,52 @@ import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { KeyboardProvider } from 'react-native-keyboard-controller';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 
+import { useCardStore } from '@/cards/cardManager';
 import { useReceivedCard } from '@/cards/receivedCard';
 import { ReceivedCardSheet } from '@/components/cards/ReceivedCardSheet';
 import { useContactStore } from '@/contacts/repository';
+import { useCredentialStore } from '@/credentials/store';
+import { useIssuerMetadataStore } from '@/credentials/issuerStore';
 import { handleDeepLink } from '@/deeplink/router';
 import { ConfirmDialogOverlay } from '@/feedback/confirmDialog';
 import { ToastOverlay } from '@/feedback/toast';
+import { useGroupStore } from '@/groups/store';
 import { useIdentityData } from '@/identity';
 import { installI18n } from '@/i18n';
 import { hydrateSensitiveActionPolicy } from '@/keychain';
 import { syncOnce } from '@/sakura/inbox';
 import { registerForPushNotificationsAsync } from '@/sakura/pushRegistration';
 import { hydratePreferences, usePreferences } from '@/settings/preferences';
-import { initMmkv } from '@/storage';
+import { useShoutoutStore } from '@/shoutouts/store';
+import { initMmkv, ManifestStorage } from '@/storage';
+import { useVaultStore } from '@/vault/store';
+
+import { CARDS_MANIFEST_SCOPE } from '@/cards/cardManifest';
+import { CONTACTS_MANIFEST_SCOPE } from '@/contacts/contactManifest';
+import { CREDENTIALS_MANIFEST_SCOPE } from '@/credentials/credentialManifest';
+import { ISSUERS_MANIFEST_SCOPE } from '@/credentials/issuerManifest';
+import { GROUPS_MANIFEST_SCOPE } from '@/groups/groupManifest';
+import { SHOUTOUTS_MANIFEST_SCOPE } from '@/shoutouts/shoutoutManifest';
+import { VAULT_MANIFEST_SCOPE } from '@/vault/vaultManifest';
+
+/**
+ * Migration check — on first launch after the manifest-pattern upgrade,
+ * none of the per-store manifests exist yet but the encrypted records do.
+ * Block the splash briefly that one time so the user sees populated lists
+ * instead of a blank frame followed by a pop-in. After this runs once,
+ * every store has written its manifest (even an empty `[]`), so the
+ * `exists()` check returns true on every subsequent boot and we skip the
+ * await entirely.
+ */
+const MIGRATION_SCOPES = [
+  CARDS_MANIFEST_SCOPE,
+  CONTACTS_MANIFEST_SCOPE,
+  GROUPS_MANIFEST_SCOPE,
+  VAULT_MANIFEST_SCOPE,
+  SHOUTOUTS_MANIFEST_SCOPE,
+  CREDENTIALS_MANIFEST_SCOPE,
+  ISSUERS_MANIFEST_SCOPE,
+] as const;
 
 void SplashScreen.preventAutoHideAsync();
 
@@ -68,19 +108,59 @@ export default function RootLayout() {
     void (async () => {
       try {
         await initMmkv();
+        // Sync, sub-millisecond: each store reads its plaintext manifest
+        // from MMKV and seeds the zustand initial state. List/hero views
+        // can render on the next frame without any decryption.
+        useCardStore.getState().seedFromManifest();
+        useContactStore.getState().seedFromManifest();
+        useGroupStore.getState().seedFromManifest();
+        useVaultStore.getState().seedFromManifest();
+        useShoutoutStore.getState().seedFromManifest();
+        useCredentialStore.getState().seedFromManifest();
+        useIssuerMetadataStore.getState().seedFromManifest();
+
         hydratePreferences();
         hydrateSensitiveActionPolicy();
-        await hydrateContacts();
-        await useIdentityData.getState().hydrate();
+
+        // First-boot migration: if any manifest is missing, block splash
+        // for the parallel bulk-decrypt so lists paint on frame 1 instead
+        // of flashing empty rows. Runs at most once per device.
+        const needsMigration = MIGRATION_SCOPES.some(
+          (scope) => !ManifestStorage.exists(scope)
+        );
+        if (needsMigration) {
+          await Promise.all([
+            useCardStore.getState().hydrate(),
+            useContactStore.getState().hydrate(),
+            useGroupStore.getState().hydrate(),
+            useVaultStore.getState().hydrate(),
+            useShoutoutStore.getState().hydrate(),
+            useCredentialStore.getState().hydrate(),
+            useIssuerMetadataStore.getState().hydrate(),
+          ]);
+        }
+
         await installI18n();
         const initial = await Linking.getInitialURL();
         if (initial) handleDeepLink(initial);
       } finally {
         setReady(true);
         await SplashScreen.hideAsync();
+        // Background bulk-decrypt for the steady-state path (manifests
+        // already exist). Idempotent — each store's `hydrate()` checks
+        // its own `detailsHydrated` flag and bails out cheaply if it's
+        // already been called by the migration branch above.
+        void useCardStore.getState().hydrate();
+        void useContactStore.getState().hydrate();
+        void useGroupStore.getState().hydrate();
+        void useVaultStore.getState().hydrate();
+        void useShoutoutStore.getState().hydrate();
+        void useCredentialStore.getState().hydrate();
+        void useIssuerMetadataStore.getState().hydrate();
+        void useIdentityData.getState().hydrate();
       }
     })();
-  }, [hydrateContacts]);
+  }, []);
 
   useEffect(() => {
     const sub = Linking.addEventListener('url', ({ url }) => {

@@ -271,7 +271,11 @@ export default function CredentialDetailScreen() {
   const insets = useSafeAreaInsets();
   const { id } = useLocalSearchParams<{ id: string }>();
   const credential = useCredentialById(id);
+  const manifestEntry = useCredentialStore((s) =>
+    id ? s.manifest.find((m) => m.id === id) : undefined,
+  );
   const remove = useCredentialStore((s) => s.remove);
+  const loadDetail = useCredentialStore((s) => s.loadDetail);
   const hydrateIdentity = useIdentityData((s) => s.hydrate);
   const hydrateIssuers = useIssuerMetadataStore((s) => s.hydrate);
   const allClaims = useIdentityData((s) => s.provableClaims);
@@ -282,7 +286,8 @@ export default function CredentialDetailScreen() {
   useEffect(() => {
     void hydrateIdentity();
     void hydrateIssuers();
-  }, [hydrateIdentity, hydrateIssuers]);
+    if (id) void loadDetail(id);
+  }, [hydrateIdentity, hydrateIssuers, loadDetail, id]);
 
   const associatedClaims = useMemo<readonly ProvableClaimEntity[]>(() => {
     if (!credential) return [];
@@ -298,9 +303,14 @@ export default function CredentialDetailScreen() {
   }, [credential]);
 
   if (!credential) {
+    // Frame-1 render path: the manifest entry seeds the title before
+    // `loadDetail(id)` resolves, so we never show "not found" until we
+    // also have no manifest hit.
     return (
       <View className="flex-1 bg-pageBg items-center justify-center">
-        <Text className="text-text2 text-[15px]">Credential not found.</Text>
+        <Text className="text-text2 text-[15px]">
+          {manifestEntry ? 'Loading credential…' : 'Credential not found.'}
+        </Text>
       </View>
     );
   }

@@ -113,6 +113,11 @@ function AdminTools({
 
 export default function GroupDetail(): React.JSX.Element {
   const { id, name } = useLocalSearchParams<{ id: string; name?: string }>();
+  // `loadDetail` is the cheap path — decrypts ONE group record so the hero
+  // (name / merkle root / owner chip) paints without bulk-decrypting every
+  // group on the device. `hydrate()` still runs because the Members /
+  // Merkle Tree sections need the full encrypted member list.
+  const loadDetail = useGroupStore((s) => s.loadDetail);
   const hydrate = useGroupStore((s) => s.hydrate);
   const upsertMember = useGroupStore((s) => s.upsertMember);
   const group = useGroup(id);
@@ -125,6 +130,7 @@ export default function GroupDetail(): React.JSX.Element {
     setIsLoadingMembers(true);
     try {
       // TODO(android): pull members from CloudKitGroupSyncManager.getMembers.
+      await loadDetail(id);
       await hydrate();
       setErrorMessage(null);
     } catch (e) {
@@ -132,7 +138,7 @@ export default function GroupDetail(): React.JSX.Element {
     } finally {
       setIsLoadingMembers(false);
     }
-  }, [hydrate]);
+  }, [id, loadDetail, hydrate]);
 
   useEffect(() => {
     void loadData();

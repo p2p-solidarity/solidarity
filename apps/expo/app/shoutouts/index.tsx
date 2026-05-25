@@ -34,7 +34,7 @@ import {
   type ShoutoutFiltersState,
 } from '@/components/shoutouts/ShoutoutFiltersSheet';
 import { Colors } from '@/constants/Colors';
-import { useContactList } from '@/contacts/repository';
+import { useContactListDetail } from '@/contacts/repository';
 import { haptic } from '@/feedback/haptics';
 import { useShoutoutChartData, useShoutoutStore } from '@/shoutouts/store';
 import {
@@ -192,7 +192,7 @@ function ListRow({
 
 export default function ShoutoutsHub(): ReactNode {
   const insets = useSafeAreaInsets();
-  const contacts = useContactList();
+  const contacts = useContactListDetail();
   const [searchQuery, setSearchQuery] = useState('');
   const [displayMode, setDisplayMode] = useState<DisplayMode>('grid');
   const [filterOption, setFilterOption] = useState<FilterOption>('All Cards');

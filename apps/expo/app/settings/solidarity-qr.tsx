@@ -19,26 +19,21 @@ import { ActivityIndicator, ScrollView, Text, View } from 'react-native';
 import QRCode from 'react-native-qrcode-svg';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { useMyCard } from '@/cards/cardManager';
-import {
-  buildSolidarityQrPayloadAsync,
-  type ShareFieldPreferences,
-} from '@/cards/solidarityQrPayload';
+import { useCardStore, useMyCardDetail } from '@/cards/cardManager';
+import type { ShareFieldPreferences } from '@/cards/solidarityQrPayload';
+import { buildRuntimeSolidarityQrPayload } from '@/cards/solidarityQrRuntime';
 import {
   SettingsBackToolbar,
   SettingsScreenTitle,
 } from '@/components/settings/SettingsBlocks';
 import { Colors } from '@/constants/Colors';
-import {
-  didKeyForCurrentIdentity,
-  publicJwk,
-  signJwt,
-} from '@/keychain/signingKey';
 import { usePreferences } from '@/settings/preferences';
 
 export default function SolidarityQrSettings() {
   const insets = useSafeAreaInsets();
-  const card = useMyCard();
+  const card = useMyCardDetail();
+  const hydrateCards = useCardStore((s) => s.hydrate);
+  useEffect(() => { void hydrateCards(); }, [hydrateCards]);
   const [payload, setPayload] = useState<string | null>(null);
   const shareTitle = usePreferences((s) => s.shareTitle);
   const shareCompany = usePreferences((s) => s.shareCompany);
@@ -66,9 +61,11 @@ export default function SolidarityQrSettings() {
     };
 
     setPayload(null);
-    void buildSettingsQrPayload(card, shareFieldPreferences).then((next) => {
-      if (!cancelled) setPayload(next);
-    });
+    void buildRuntimeSolidarityQrPayload(card, shareFieldPreferences).then(
+      (next) => {
+        if (!cancelled) setPayload(next);
+      }
+    );
 
     return () => {
       cancelled = true;
@@ -124,7 +121,7 @@ export default function SolidarityQrSettings() {
                     value={payload}
                     size={260}
                     backgroundColor="#FFFFFF"
-                    color={Colors.text1}
+                    color="#000000"
                   />
                 ) : (
                   <ActivityIndicator color={Colors.accentRose} />
@@ -144,30 +141,4 @@ export default function SolidarityQrSettings() {
       </ScrollView>
     </View>
   );
-}
-
-async function buildSettingsQrPayload(
-  card: NonNullable<ReturnType<typeof useMyCard>>,
-  shareFieldPreferences: ShareFieldPreferences
-): Promise<string> {
-  try {
-    const [issuerDid, jwk] = await Promise.all([
-      didKeyForCurrentIdentity(),
-      publicJwk(),
-    ]);
-    return await buildSolidarityQrPayloadAsync(card, {
-      sharingLevel: 'professional',
-      shareFieldPreferences,
-      signer: {
-        issuerDid,
-        publicKeyJwk: jwk,
-        signJwt,
-      },
-    });
-  } catch {
-    return buildSolidarityQrPayloadAsync(card, {
-      sharingLevel: 'professional',
-      shareFieldPreferences,
-    });
-  }
 }
