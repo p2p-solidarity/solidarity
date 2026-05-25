@@ -10,12 +10,13 @@
  * dismiss feel matches the rest of the app.
  */
 import type { ReactNode } from 'react';
-import { Alert, Modal, Pressable, View } from 'react-native';
+import { Modal, Pressable, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { SfIcon } from '@/components/icons/SfIcon';
 import { ThemedText } from '@/components/themed';
 import { Colors } from '@/constants/Colors';
+import { confirmDialog } from '@/feedback/confirmDialog';
 import { haptic } from '@/feedback/haptics';
 import type { BusinessCard } from '@solidarity/shared';
 
@@ -86,22 +87,18 @@ function SheetBody({
   const insets = useSafeAreaInsets();
 
   const handleDeletePress = (): void => {
-    Alert.alert(
-      `Delete ${card.name}?`,
-      'This card will be permanently removed.',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Delete',
-          style: 'destructive',
-          onPress: () => {
-            haptic('warning');
-            onDelete(card);
-            onClose();
-          },
-        },
-      ],
-    );
+    void (async () => {
+      const ok = await confirmDialog({
+        title: `Delete ${card.name}?`,
+        message: 'This card will be permanently removed.',
+        confirmLabel: 'Delete',
+        destructive: true,
+      });
+      if (!ok) return;
+      haptic('warning');
+      onDelete(card);
+      onClose();
+    })();
   };
 
   const wrap = (run: () => void): (() => void) => () => {

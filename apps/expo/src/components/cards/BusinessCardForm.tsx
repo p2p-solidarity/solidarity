@@ -13,9 +13,10 @@
  *   • ./cardFormRows.tsx     — FieldRow / NameField / ToggleRow / FormatRow / etc.
  *   • ./cardFormParsers.ts   — parseCSV / parseSkills / parseSocialNetworks
  */
-import { Alert, Text, View } from 'react-native';
+import { Text, View } from 'react-native';
 
 import { ThemedButton } from '@/components/themed';
+import { confirmDialog } from '@/feedback/confirmDialog';
 import {
   uuid,
   type BusinessCard,
@@ -95,10 +96,16 @@ export function BusinessCardForm({
 
   const handleDelete = () => {
     if (!onDelete) return;
-    Alert.alert('Delete this card?', 'This action cannot be undone.', [
-      { text: 'Cancel', style: 'cancel' },
-      { text: 'Delete', style: 'destructive', onPress: () => void onDelete() },
-    ]);
+    void (async () => {
+      const ok = await confirmDialog({
+        title: 'Delete this card?',
+        message: 'This action cannot be undone.',
+        confirmLabel: 'Delete',
+        destructive: true,
+      });
+      if (!ok) return;
+      await onDelete();
+    })();
   };
 
   const cycleFormat = () => {

@@ -17,7 +17,7 @@
  */
 import { router, useLocalSearchParams } from 'expo-router';
 import { useCallback, useEffect, useState } from 'react';
-import { Alert, RefreshControl, ScrollView, Text, View } from 'react-native';
+import { RefreshControl, ScrollView, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { GroupJoinSheet } from '@/components/groups/GroupJoinSheet';
@@ -30,6 +30,7 @@ import {
 } from '@/components/settings/SettingsBlocks';
 import { YourGroupsSection } from '@/components/settings/YourGroupsSection';
 import { Colors } from '@/constants/Colors';
+import { confirmDialog } from '@/feedback/confirmDialog';
 import { pushToast } from '@/feedback/toast';
 import {
   useGroupStore,
@@ -69,18 +70,16 @@ export default function GroupManagementSettings() {
   };
 
   const onDelete = (group: GroupModel) => {
-    Alert.alert(
-      'Delete Group?',
-      'This will remove the group. This action cannot be undone.',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Delete',
-          style: 'destructive',
-          onPress: () => { void deleteGroup(group.id); },
-        },
-      ]
-    );
+    void (async () => {
+      const ok = await confirmDialog({
+        title: 'Delete Group?',
+        message: 'This will remove the group. This action cannot be undone.',
+        confirmLabel: 'Delete',
+        destructive: true,
+      });
+      if (!ok) return;
+      await deleteGroup(group.id);
+    })();
   };
 
   const goCreate = () => { router.push('/groups/new'); };

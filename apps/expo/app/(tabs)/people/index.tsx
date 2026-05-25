@@ -16,7 +16,7 @@
  */
 import { router } from 'expo-router';
 import { useMemo, useState } from 'react';
-import { Alert, FlatList, Pressable, ScrollView, Text, View } from 'react-native';
+import { FlatList, Pressable, ScrollView, Text, View } from 'react-native';
 import { GestureDetector } from 'react-native-gesture-handler';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -30,6 +30,7 @@ import { Colors } from '@/constants/Colors';
 import { useThemeColors } from '@/constants/useThemeColors';
 import { importFromDevice } from '@/contacts/importer';
 import { useContactStore } from '@/contacts/repository';
+import { confirmDialog } from '@/feedback/confirmDialog';
 import { pushToast } from '@/feedback/toast';
 import { usePeopleScreen } from '@/people/usePeopleScreen';
 import { usePreferences } from '@/settings/preferences';
@@ -84,23 +85,17 @@ export default function PeopleTab() {
   };
 
   const onLongPressContact = (c: Contact) => {
-    Alert.alert(
-      `Delete ${c.businessCard.name}?`,
-      'This contact will be permanently removed.',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Delete',
-          style: 'destructive',
-          onPress: () => {
-            void (async () => {
-              await removeContact(c.id);
-              refresh();
-            })();
-          },
-        },
-      ],
-    );
+    void (async () => {
+      const ok = await confirmDialog({
+        title: `Delete ${c.businessCard.name}?`,
+        message: 'This contact will be permanently removed.',
+        confirmLabel: 'Delete',
+        destructive: true,
+      });
+      if (!ok) return;
+      await removeContact(c.id);
+      refresh();
+    })();
   };
 
   const backupGesture = useMemo(

@@ -12,7 +12,6 @@
  */
 import { useState, type ReactNode } from 'react';
 import {
-  Alert,
   KeyboardAvoidingView,
   Modal,
   Platform,
@@ -25,6 +24,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { SfIcon } from '@/components/icons/SfIcon';
 import { Colors } from '@/constants/Colors';
+import { confirmDialog } from '@/feedback/confirmDialog';
 import type { Contact } from '@solidarity/shared';
 
 export interface PersonDetailMoreSheetProps {
@@ -81,21 +81,17 @@ function PersonDetailMoreSheetContent({
   };
 
   const handleDelete = (): void => {
-    Alert.alert(
-      `Delete ${contact.businessCard.name}?`,
-      'This contact will be permanently removed.',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Delete',
-          style: 'destructive',
-          onPress: () => {
-            onDelete();
-            onClose();
-          },
-        },
-      ],
-    );
+    void (async () => {
+      const ok = await confirmDialog({
+        title: `Delete ${contact.businessCard.name}?`,
+        message: 'This contact will be permanently removed.',
+        confirmLabel: 'Delete',
+        destructive: true,
+      });
+      if (!ok) return;
+      onDelete();
+      onClose();
+    })();
   };
 
   return (

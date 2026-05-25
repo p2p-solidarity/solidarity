@@ -29,6 +29,7 @@ import {
   SettingsBlockSection,
 } from '@/components/settings/SettingsBlocks';
 import { Colors } from '@/constants/Colors';
+import { confirmDialog } from '@/feedback/confirmDialog';
 import { pushToast } from '@/feedback/toast';
 import { requireBiometric } from '@/keychain/biometric';
 import {
@@ -79,20 +80,17 @@ export default function ZkSettings(): React.JSX.Element {
   };
 
   const confirmDelete = (): void => {
-    Alert.alert(
-      'Delete Identity?',
-      'This will permanently delete your ZK identity. This action cannot be undone.',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Delete',
-          style: 'destructive',
-          onPress: () => {
-            void performDelete();
-          },
-        },
-      ]
-    );
+    void (async () => {
+      const ok = await confirmDialog({
+        title: 'Delete Identity?',
+        message:
+          'This will permanently delete your ZK identity. This action cannot be undone.',
+        confirmLabel: 'Delete',
+        destructive: true,
+      });
+      if (!ok) return;
+      await performDelete();
+    })();
   };
 
   return (

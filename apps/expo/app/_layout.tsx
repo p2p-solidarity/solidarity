@@ -36,6 +36,7 @@ import { useReceivedCard } from '@/cards/receivedCard';
 import { ReceivedCardSheet } from '@/components/cards/ReceivedCardSheet';
 import { useContactStore } from '@/contacts/repository';
 import { handleDeepLink } from '@/deeplink/router';
+import { ConfirmDialogOverlay } from '@/feedback/confirmDialog';
 import { ToastOverlay } from '@/feedback/toast';
 import { useIdentityData } from '@/identity';
 import { installI18n } from '@/i18n';
@@ -123,6 +124,7 @@ export default function RootLayout() {
           <StatusBar style="auto" />
           <Stack screenOptions={{ headerShown: false }} />
           <ToastOverlay />
+          <ConfirmDialogOverlay />
           <ReceivedCardSheet
             visible={receivedCard !== null}
             card={receivedCard}

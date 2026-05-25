@@ -18,7 +18,7 @@
  */
 import { router, useLocalSearchParams } from 'expo-router';
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
-import { Alert, ScrollView, Share, Text, View } from 'react-native';
+import { ScrollView, Share, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { SakuraIcon } from '@/components/brand/SakuraIcon';
@@ -31,6 +31,7 @@ import {
 import { ThemedButton } from '@/components/themed';
 import { Colors } from '@/constants/Colors';
 import { useContact, useContactStore } from '@/contacts/repository';
+import { confirmDialog } from '@/feedback/confirmDialog';
 import { pushToast } from '@/feedback/toast';
 import { useShoutoutStore } from '@/shoutouts/store';
 import {
@@ -96,23 +97,18 @@ export default function ShoutoutDetail(): ReactNode {
 
   const onDelete = (): void => {
     if (!contact) return;
-    Alert.alert(
-      'Delete Contact?',
-      `Are you sure you want to delete ${displayName}? This action cannot be undone.`,
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Delete',
-          style: 'destructive',
-          onPress: () => {
-            void removeContact(contact.id).then(() => {
-              pushToast(`Deleted ${displayName}`, 'success');
-              router.back();
-            });
-          },
-        },
-      ]
-    );
+    void (async () => {
+      const ok = await confirmDialog({
+        title: 'Delete Contact?',
+        message: `Are you sure you want to delete ${displayName}? This action cannot be undone.`,
+        confirmLabel: 'Delete',
+        destructive: true,
+      });
+      if (!ok) return;
+      await removeContact(contact.id);
+      pushToast(`Deleted ${displayName}`, 'success');
+      router.back();
+    })();
   };
 
   return (
