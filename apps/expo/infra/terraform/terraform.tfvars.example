@@ -1,0 +1,5 @@
+# All variables have safe defaults — this file is only needed if you
+# want to host the SA in a different GCP project or rename it.
+#
+# project_id   = "aniseekr-android-release"
+# sa_account_id = "solidarity-publisher"

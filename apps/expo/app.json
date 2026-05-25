@@ -1,7 +1,8 @@
 {
   "expo": {
     "name": "Solid(ar)ity",
-    "slug": "airmeishi",
+    "slug": "solidarity",
+    "owner": "kidney",
     "icon": "./assets/icon.png",
     "scheme": [
       "solidarity",
@@ -76,8 +77,14 @@
         "android.permission.BLUETOOTH_CONNECT",
         "android.permission.ACCESS_FINE_LOCATION",
         "android.permission.INTERNET",
-        "android.permission.POST_NOTIFICATIONS",
-        "android.permission.READ_MEDIA_IMAGES"
+        "android.permission.POST_NOTIFICATIONS"
+      ],
+      "blockedPermissions": [
+        "android.permission.READ_MEDIA_IMAGES",
+        "android.permission.READ_MEDIA_VIDEO",
+        "android.permission.READ_MEDIA_VISUAL_USER_SELECTED",
+        "android.permission.READ_EXTERNAL_STORAGE",
+        "android.permission.WRITE_EXTERNAL_STORAGE"
       ],
       "intentFilters": [
         {
@@ -101,6 +108,30 @@
         "expo-router",
         {
           "origin": "https://solidarity.gg"
+        }
+      ],
+      [
+        "expo-splash-screen",
+        {
+          "backgroundColor": "#000000",
+          "image": "./assets/splash-icon.png",
+          "imageWidth": 220,
+          "resizeMode": "contain",
+          "dark": {
+            "backgroundColor": "#000000",
+            "image": "./assets/splash-icon.png"
+          },
+          "ios": {
+            "enableFullScreenImage_legacy": true,
+            "image": "./assets/splash.png",
+            "tabletImage": "./assets/splash.png",
+            "resizeMode": "cover",
+            "backgroundColor": "#000000"
+          },
+          "android": {
+            "image": "./assets/splash-icon.png",
+            "backgroundColor": "#000000"
+          }
         }
       ],
       "expo-localization",
@@ -133,12 +164,22 @@
       "./plugins/withSemaphoreBindingsPod.js",
       "./plugins/withRustXcframeworkSearchPath.js",
       "./plugins/withNfcReader.js",
-      "./plugins/withCameraXPin.js"
+      "./plugins/withCameraXPin.js",
+      "./plugins/withAndroidReleaseSigning.js",
+      "expo-sqlite"
     ],
     "runtimeVersion": "1.3.1",
     "updates": {
       "url": "https://u.expo.dev/REPLACE-WITH-EAS-PROJECT-ID",
       "enabled": true
+    },
+    "extra": {
+      "router": {
+        "origin": "https://solidarity.gg"
+      },
+      "eas": {
+        "projectId": "425c3486-6541-4fad-a5d5-182bb340c7b0"
+      }
     }
   }
 }
