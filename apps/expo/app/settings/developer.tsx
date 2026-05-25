@@ -93,8 +93,8 @@ export default function DeveloperSettings() {
                 <SettingsBlockRow
                   icon="person.text.rectangle"
                   title="Identity Tree"
-                  subtitle="Stub — docs §3.1"
-                  onPress={stub}
+                  subtitle="Live · DID-rooted projection of cards, contacts, groups, DAG"
+                  onPress={() => { router.push('/dev/identity-tree'); }}
                 />
               </SettingsBlockSection>
 
