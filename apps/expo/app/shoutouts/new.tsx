@@ -36,7 +36,7 @@ import { useContact } from '@/contacts/repository';
 import { haptic } from '@/feedback/haptics';
 import { pushToast } from '@/feedback/toast';
 import { SHOUTOUT_MAX_PAYLOAD_BYTES, useShoutoutStore } from '@/shoutouts/store';
-import type { Contact } from '@solidarity/shared';
+import { uuid, type Contact } from '@solidarity/shared';
 
 const MONO_FONT = 'Menlo';
 const MAX_BYTES = SHOUTOUT_MAX_PAYLOAD_BYTES;
@@ -73,7 +73,7 @@ export default function ShoutoutCompose(): ReactNode {
     haptic('tap');
     try {
       await add({
-        id: crypto.randomUUID(),
+        id: uuid(),
         direction: 'outgoing',
         counterpartName: recipient.businessCard.name,
         subject: message.slice(0, 64),

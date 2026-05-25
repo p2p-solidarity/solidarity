@@ -30,8 +30,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Colors } from '@/constants/Colors';
 import { useContactStore } from '@/contacts/repository';
 import { pushToast } from '@/feedback/toast';
-import { uuid } from '@solidarity/shared';
-import type { Contact } from '@solidarity/shared';
+import { uuid, type Contact } from '@solidarity/shared';
 
 export interface ManualContactEntrySheetProps {
   readonly visible: boolean;

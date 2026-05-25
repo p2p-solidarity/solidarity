@@ -24,6 +24,7 @@ import { Colors } from '@/constants/Colors';
 import { pushToast } from '@/feedback/toast';
 import { writeVaultBlob } from '@/vault/storage';
 import { useVaultStore, type VaultItemKind } from '@/vault/store';
+import { uuid } from '@solidarity/shared';
 
 function inferKind(mimeType: string | undefined, name: string): VaultItemKind {
   if (mimeType?.startsWith('image/')) return 'image';
@@ -70,7 +71,7 @@ export default function VaultNew() {
       const base64 = await FileSystem.readAsStringAsync(asset.uri, {
         encoding: FileSystem.EncodingType.Base64,
       });
-      const id = crypto.randomUUID();
+      const id = uuid();
       const written = await writeVaultBlob(id, base64);
       const now = new Date();
       const name = asset.name || 'file';

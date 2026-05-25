@@ -10,8 +10,7 @@
  * The pure-TS heuristic in `extractBusinessCardFields` is identical to
  * Swift so we get parity tests for free the moment the recogniser lands.
  */
-import { uuid } from '@solidarity/shared';
-import type { BusinessCard, SharingPreferences } from '@solidarity/shared';
+import { uuid, type BusinessCard, type SharingPreferences } from '@solidarity/shared';
 
 export interface RecognizedText {
   /** Recognised string. */
