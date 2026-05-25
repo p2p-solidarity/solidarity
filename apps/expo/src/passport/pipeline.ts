@@ -55,11 +55,34 @@ export interface PassportChipSnapshot {
   readonly dataGroupsRead: readonly string[];
 }
 
+/**
+ * Public attributes the verifier sees alongside the v3 disclosure proof.
+ * Mirrors the `out_*` public outputs of `circuits/disclosure/src/main.nr`
+ * after the ZK prover has bound them to the user's MRZ hash.
+ */
+export interface PassportDisclosure {
+  /** 3-letter ICAO code, or null if the user opted to hide nationality. */
+  readonly nationality: string | null;
+  /** Display name (given + surname), or null if hidden. */
+  readonly name: string | null;
+  /** True if `age >= ageThreshold` was proven, null if hidden. */
+  readonly isOlder: boolean | null;
+  /** Threshold the prover committed to (e.g. 18). */
+  readonly ageThreshold: number;
+  /** Hex of `mrz_hash` — public anchor for chaining to a verify proof. */
+  readonly mrzHashHex: string;
+}
+
 export interface PassportProofResult {
   readonly proofType: string;
   readonly proofPayload: string;
   readonly trustLevel: string;
   readonly generationFailed: boolean;
+  /**
+   * Disclosure outputs from the v3 `disclosure` circuit. Present on
+   * successful ZK proofs; null on SD-JWT fallback or other paths.
+   */
+  readonly disclosure?: PassportDisclosure | null;
 }
 
 export interface ValidationError {

@@ -56,7 +56,10 @@ import {
   type PassportMRZDraft,
   type PassportProofResult,
 } from '@/passport/pipeline';
-import { buildPassportVerifierWitness } from '@/passport/zkInputs';
+import {
+  buildDisclosureWitness,
+  DEFAULT_DISCLOSURE_POLICY,
+} from '@/passport/zkInputs';
 import { usePreferences } from '@/settings/preferences';
 import { getNfcPassport } from '@solidarity/nitro-nfc-passport';
 import { getPassportZk } from '@solidarity/nitro-passport-zk';
@@ -192,15 +195,15 @@ export default function PassportSetup() {
     dispatch({ type: 'setProofProgress', message: 'Initializing prover...' });
     try {
       let proof: PassportProofResult;
-      // Build the witness *before* invoking the prover so a bad inputs
-      // map surfaces as a typed JS error, not buried inside a Promise
-      // rejection from the Rust side.
-      const witness = buildPassportVerifierWitness(state.chip);
-      const inputsJson = JSON.stringify(witness);
+      // Build the v3 disclosure witness from real chip MRZ + the default
+      // KYC policy (disclose nationality + age ≥ 18, hide name). Anything
+      // malformed (e.g. MRZ length mismatch) throws synchronously here so
+      // the user sees a typed JS error, not a Rust witness-shape failure.
+      const built = buildDisclosureWitness(state.chip, DEFAULT_DISCLOSURE_POLICY);
       const zkProof = nitro.zk
         ? await tryGenerateZkProof(
             nitro.zk,
-            inputsJson,
+            built.inputsJson,
             (m) => {
               dispatch({ type: 'setProofProgress', message: m });
             },
@@ -208,15 +211,21 @@ export default function PassportSetup() {
         : null;
       if (zkProof !== null) {
         proof = {
-          // Demo witness is in flight — the bundled passport_verifier circuit
-          // produces a valid RSA-2048 ZK proof but the modulus + signature
-          // are upstream test vectors, NOT this user's DSC. Trust stays at
-          // `white` and the type tag flags it so credential consumers can
-          // refuse to count it as government-grade attestation (rule 8).
-          proofType: 'mopro-noir-demo',
+          // Real v3 disclosure proof. Trust upgrades to `green` only when
+          // the chip wasn't simulated — a synthetic MRZ still produces a
+          // valid ZK proof but should not be claimed as attestation
+          // (CLAUDE.md rule 8).
+          proofType: 'mopro-noir-disclosure',
           proofPayload: arrayBufferToBase64(zkProof.proof),
-          trustLevel: 'white',
+          trustLevel: state.chip.isSimulated ? 'white' : 'green',
           generationFailed: false,
+          disclosure: {
+            nationality: built.disclosedNationality,
+            name: built.disclosedName,
+            isOlder: built.isOlder,
+            ageThreshold: built.ageThreshold,
+            mrzHashHex: built.mrzHashHex,
+          },
         };
       } else {
         // Either no ZK module linked OR the native Rust/mopro cdylib

@@ -405,20 +405,24 @@ export function ProofStep({
 
 function ProofResultCard({ proof }: { proof: PassportProofResult }) {
   const failed = proof.generationFailed;
-  // Demo proofs are real ZK proofs but built from upstream test-vector
-  // bytes, not the user's actual DSC. Surface as amber-with-checkmark so
-  // it's clearly distinct from a true-attestation green ZK proof and from
-  // an orange SD-JWT fallback (rule 8 — never imply we know more than we do).
-  const isDemo = proof.proofType === 'mopro-noir-demo';
-  const accent = failed || isDemo ? '#FF9500' : Colors.terminalGreen;
+  // Trust level: `white` is the synthetic / lower-trust band (mock chip,
+  // demo witness, or SD-JWT fallback). `green` is a real v3 ZK proof
+  // bound to a real chip's MRZ. Card color tracks trust directly so the
+  // user never confuses a simulated proof with attestation (rule 8).
+  const isDemoTrust = proof.trustLevel !== 'green';
+  const accent = failed || isDemoTrust ? '#FF9500' : Colors.terminalGreen;
   const title = failed
     ? 'Fallback (SD-JWT)'
-    : isDemo
-      ? 'Demo ZK proof (synthetic witness)'
-      : 'ZK proof ready';
+    : proof.proofType === 'mopro-noir-disclosure'
+      ? isDemoTrust
+        ? 'ZK disclosure proof (synthetic MRZ)'
+        : 'ZK disclosure proof'
+      : isDemoTrust
+        ? 'Demo ZK proof (synthetic witness)'
+        : 'ZK proof ready';
   const iconName = failed
     ? 'exclamationmark.triangle'
-    : isDemo
+    : isDemoTrust
       ? 'checkmark.seal'
       : 'checkmark.seal.fill';
   return (
@@ -448,6 +452,74 @@ function ProofResultCard({ proof }: { proof: PassportProofResult }) {
       </View>
       <Text className="text-text3" style={{ fontSize: 10, fontFamily: 'Menlo' }}>
         {`Type: ${proof.proofType}`}
+      </Text>
+      {proof.disclosure ? <DisclosureRows disclosure={proof.disclosure} /> : null}
+    </View>
+  );
+}
+
+/**
+ * v3 disclosure circuit's public outputs, rendered alongside the proof so
+ * the user — and any downstream verifier UI — sees exactly which MRZ
+ * attributes were committed. Hidden attributes show "— hidden" rather
+ * than leaving the row empty, so the user can audit the policy that ran.
+ */
+function DisclosureRows({ disclosure }: { disclosure: NonNullable<PassportProofResult['disclosure']> }) {
+  return (
+    <View style={{ gap: 2, paddingTop: 4 }}>
+      <DisclosureRow
+        label="Nationality"
+        value={disclosure.nationality ?? '— hidden'}
+        hidden={disclosure.nationality === null}
+      />
+      <DisclosureRow
+        label={`Age ≥ ${String(disclosure.ageThreshold)}`}
+        value={
+          disclosure.isOlder === null
+            ? '— hidden'
+            : disclosure.isOlder
+              ? 'verified'
+              : 'not met'
+        }
+        hidden={disclosure.isOlder === null}
+      />
+      <DisclosureRow
+        label="Name"
+        value={disclosure.name ?? '— hidden'}
+        hidden={disclosure.name === null}
+      />
+      <Text
+        className="text-text3"
+        style={{ fontSize: 10, fontFamily: 'Menlo', paddingTop: 2 }}
+      >
+        {`MRZ hash: ${disclosure.mrzHashHex.slice(0, 16)}…`}
+      </Text>
+    </View>
+  );
+}
+
+function DisclosureRow({
+  label,
+  value,
+  hidden,
+}: {
+  label: string;
+  value: string;
+  hidden: boolean;
+}) {
+  return (
+    <View style={{ flexDirection: 'row', gap: 6 }}>
+      <Text
+        className="text-text3"
+        style={{ fontSize: 10, fontWeight: '600', width: 84 }}
+      >
+        {label}
+      </Text>
+      <Text
+        className={hidden ? 'text-text3' : 'text-text2'}
+        style={{ fontSize: 10, fontFamily: 'Menlo', flex: 1 }}
+      >
+        {value}
       </Text>
     </View>
   );

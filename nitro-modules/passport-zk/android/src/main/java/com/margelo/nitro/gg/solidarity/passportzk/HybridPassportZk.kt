@@ -104,9 +104,15 @@ class HybridPassportZk : HybridPassportZkSpec() {
   companion object {
     private const val TAG = "HybridPassportZk"
 
-    /** Assets we ship inside the AAR for the default v3 passport flow. */
-    private const val DEFAULT_CIRCUIT_ASSET = "passport_verifier.json"
-    private const val DEFAULT_SRS_ASSET = "passport_verifier.srs.bin"
+    /**
+     * Bundled v3 default — the `disclosure` circuit: selective disclosure
+     * of MRZ attributes (nationality / age / name) without revealing the
+     * full document. Witness comes entirely from `chip.dg1MRZData` + a
+     * user policy struct + the current date — no off-chain Merkle / SMT
+     * trust infrastructure required, unlike `passport_adapter` v3.
+     */
+    private const val DEFAULT_CIRCUIT_ASSET = "disclosure.json"
+    private const val DEFAULT_SRS_ASSET = "disclosure.srs.bin"
 
     /**
      * Resolve a JS-supplied circuit path. Empty → extract the bundled
