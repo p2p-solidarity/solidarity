@@ -105,8 +105,8 @@ export default function DeveloperSettings() {
                 <SettingsBlockRow
                   icon="square.and.arrow.up"
                   title="DAG Lab"
-                  subtitle="Stub — docs §3.2"
-                  onPress={stub}
+                  subtitle="Live · append / verify / replay / export / import"
+                  onPress={() => { router.push('/dev/dag'); }}
                 />
               </SettingsBlockSection>
 
