@@ -523,6 +523,7 @@ export default function CredentialDetailScreen() {
       <PresentationSheet
         visible={presenting}
         credentialId={credential.id}
+        credentialTitle={credential.title}
         selectedClaimIds={selectedClaimIDs}
         onDismiss={() => { setPresenting(false); }}
       />
