@@ -33,7 +33,9 @@ export function parseDeepLink(raw: string): DeepLinkRoute {
   }
   if (url.protocol === 'openid-credential-offer:') {
     const query = url.searchParams.toString();
-    return query.length === 0
+    const hasOfferPayload =
+      url.searchParams.has('credential_offer') || url.searchParams.has('credential_offer_uri');
+    return query.length === 0 || !hasOfferPayload
       ? { kind: 'unknown', raw }
       : { kind: 'credentialOffer', query };
   }

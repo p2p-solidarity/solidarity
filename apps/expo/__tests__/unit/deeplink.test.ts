@@ -45,6 +45,12 @@ describe('parseDeepLink', () => {
     expect(parseDeepLink('openid-credential-offer://?').kind).toBe('unknown');
   });
 
+  it('treats credential-offer URLs without an offer payload as unknown', () => {
+    expect(parseDeepLink('openid-credential-offer://?url=exp%3A%2F%2F127.0.0.1').kind).toBe(
+      'unknown'
+    );
+  });
+
   it('treats an empty openid4vp URL as unknown (stale Android launch intent)', () => {
     expect(parseDeepLink('openid4vp://').kind).toBe('unknown');
     expect(parseDeepLink('openid-vp://?').kind).toBe('unknown');
