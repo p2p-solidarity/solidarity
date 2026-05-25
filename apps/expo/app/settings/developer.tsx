@@ -75,8 +75,8 @@ export default function DeveloperSettings() {
                 <SettingsBlockRow
                   icon="dot.radiowaves.left.and.right"
                   title="P2P Lab"
-                  subtitle="Stub — docs §3.3"
-                  onPress={stub}
+                  subtitle="Live · DAG three-step sync demo, handshake QR, ICE field"
+                  onPress={() => { router.push('/dev/p2p'); }}
                 />
                 <SettingsBlockRow
                   icon="hand.tap"

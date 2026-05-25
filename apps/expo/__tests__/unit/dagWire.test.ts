@@ -5,6 +5,7 @@
 import { describe, expect, test } from 'bun:test';
 
 import {
+  type DagFrame,
   FRAME_KIND_HEADS,
   FRAME_KIND_NODE,
   FRAME_KIND_WANT,
@@ -29,7 +30,7 @@ const HASH_C = 'ef'.repeat(32);
 
 describe('dagWire — round-trip', () => {
   test('encode + drain returns the same DAG frame', () => {
-    const original = { kind: FRAME_KIND_HEADS as const, body: encodeHashList([HASH_A]) };
+    const original: DagFrame = { kind: FRAME_KIND_HEADS, body: encodeHashList([HASH_A]) };
     const wire = encodeDagFrame(original);
     const { dag, otherPayloads, rest } = drainDagFrames(wire);
     expect(rest.length).toBe(0);
