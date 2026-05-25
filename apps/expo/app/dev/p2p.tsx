@@ -36,6 +36,7 @@ import {
 import { Colors } from '@/constants/Colors';
 import { KIND_DAG_NODE, signNode, type DagNodeUnsigned } from '@/dag/node';
 import { loadOrCreateDevKey, resetDevKey } from '@/dag/devKey';
+import { getDagStore } from '@/dag/instance';
 import { InMemoryDagBackend, createDagStore, type DagStore } from '@/dag/store';
 import {
   buildHeadsFrame,
@@ -103,7 +104,10 @@ export default function P2PLab() {
       setPubkeyHex(`error: ${err instanceof Error ? err.message : 'unknown'}`);
       setKeyReady(false);
     }
-    myStoreRef.current = createDagStore(new InMemoryDagBackend());
+    // "Mine" is the persistent singleton — nodes appended here survive
+    // restart and are visible to Identity Tree / DAG Lab / Nostr Bridge.
+    // "Mock Peer" stays ephemeral so the sync demo always starts clean.
+    myStoreRef.current = getDagStore();
     peerStoreRef.current = createDagStore(new InMemoryDagBackend());
     refreshSnapshots();
     return () => {
