@@ -1,0 +1,23 @@
+{
+  "$schema": "https://nitro.margelo.com/schemas/nitro.schema.json",
+  "cxxNamespace": ["solidarity", "mrzocr"],
+  "ios": {
+    "iosModuleName": "MrzOcr"
+  },
+  "android": {
+    "androidNamespace": ["gg", "solidarity", "mrzocr"],
+    "androidCxxLibName": "MrzOcr"
+  },
+  "autolinking": {
+    "MrzOcr": {
+      "ios": {
+        "language": "swift",
+        "implementationClassName": "HybridMrzOcr"
+      },
+      "android": {
+        "language": "kotlin",
+        "implementationClassName": "HybridMrzOcr"
+      }
+    }
+  }
+}

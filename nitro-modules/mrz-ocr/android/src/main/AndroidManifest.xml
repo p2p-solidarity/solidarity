@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  AndroidManifest.xml
+  @solidarity/nitro-mrz-ocr (Android)
+
+  MRZ OCR runs on Frames produced by react-native-vision-camera; the
+  camera permission is declared by the consumer app (apps/expo/app.json
+  android.permissions). This module ships an empty manifest so the merger
+  has something to attach the gradle-side metadata to.
+-->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+</manifest>

@@ -12,26 +12,35 @@
  *                     number, nationality, DOB, expiry; Rescan + Use This.
  *   4. NavBar with Cancel button (left).
  *
- * MRZ recognition: production MRZ detection requires a native
- * frame-processor plugin (ML Kit Text Recognition on Android, VisionKit on
- * iOS) + the `mrz` parser. Until that lands as a Nitro module the camera
- * shows the live preview + sketch + an explicit "Enter Manually" CTA —
- * honest about the missing capability per CLAUDE.md rule 8. Both platforms
- * paint the same screen so the day the plugin lands it's a one-prop change
- * to start receiving drafts.
+ * MRZ recognition runs through the `@solidarity/nitro-mrz-ocr` plugin
+ * (VisionKit on iOS, ML Kit Text Recognition on Android). The
+ * frame-processor worklet calls `getMrzOcr().scanFrame(frame)` every
+ * 4th frame and ships the recognised lines back to the JS thread via
+ * `scheduleOnRN`. JS parses them with the `mrz` package + an N-frame
+ * consensus aggregator before lighting up the confirmation card.
  */
 import type { ReactNode } from 'react';
-import { useCallback, useState } from 'react';
+import { useCallback, useMemo, useRef, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { useSharedValue } from 'react-native-reanimated';
 import {
   Camera,
   useCameraDevice,
+  useFrameOutput,
+  type Frame,
 } from 'react-native-vision-camera';
+import { scheduleOnRN } from 'react-native-worklets';
+
+import { getMrzOcr, type RecognizedLines } from '@solidarity/nitro-mrz-ocr';
 
 import { SfIcon } from '@/components/icons/SfIcon';
 import { PassportSketch } from '@/components/scan/PassportSketch';
 import { ThemedButton } from '@/components/themed';
 import { Colors } from '@/constants/Colors';
+import {
+  MrzFrameConsensus,
+  parseMrzLines,
+} from '@/passport/mrzOcr';
 import { useCameraPermission } from '@/scan/useCameraPermission';
 
 export interface PassportMRZDraft {
@@ -49,6 +58,9 @@ export interface MRZCameraStepProps {
   readonly onSwitchToManual: () => void;
 }
 
+/** Run OCR every Nth frame so the worklet doesn't choke the pipeline. */
+const FRAME_THROTTLE = 4;
+
 export function MRZCameraStep({
   onScanned,
   onCancel,
@@ -58,9 +70,58 @@ export function MRZCameraStep({
   const device = useCameraDevice('back');
   const [draft, setDraft] = useState<PassportMRZDraft | null>(null);
 
-  const handleRescan = useCallback(() => {
-    setDraft(null);
+  // Frame counter lives on the worklet thread (SharedValue) so the
+  // throttle doesn't trip a React re-render every frame.
+  const frameTick = useSharedValue<number>(0);
+
+  // Consensus state is JS-side and stable across re-renders — instantiate
+  // once and hold via ref so `handleRescan` can reset() without touching
+  // it from the worklet.
+  const consensusRef = useRef<MrzFrameConsensus | null>(null);
+  if (consensusRef.current === null) {
+    consensusRef.current = new MrzFrameConsensus();
+  }
+
+  // JS-thread sink for parsed lines: parse → consensus → setDraft.
+  // Returning early on null preserves "Looking for MRZ..." (rule 8).
+  const ingestLines = useCallback((lines: readonly string[]) => {
+    const consensus = consensusRef.current;
+    if (consensus === null) return;
+    const parsed = parseMrzLines(lines);
+    const accepted = consensus.ingest(parsed);
+    if (accepted !== null) setDraft(accepted);
   }, []);
+
+  const onFrame = useMemo(() => {
+    return (frame: Frame): void => {
+      'worklet';
+      try {
+        const tick = frameTick.value + 1;
+        frameTick.value = tick;
+        if (tick % FRAME_THROTTLE !== 0) return;
+
+        const result: RecognizedLines = getMrzOcr().scanFrame(frame);
+        // Copy into a plain array so the value is safe to ship across
+        // the worklet → JS bridge.
+        const lines: string[] = [];
+        for (const line of result.lines) lines.push(line);
+        scheduleOnRN(ingestLines, lines);
+      } finally {
+        frame.dispose();
+      }
+    };
+  }, [frameTick, ingestLines]);
+
+  const frameOutput = useFrameOutput({
+    pixelFormat: 'yuv',
+    onFrame,
+  });
+
+  const handleRescan = useCallback(() => {
+    consensusRef.current?.reset();
+    frameTick.value = 0;
+    setDraft(null);
+  }, [frameTick]);
 
   const handleUseThis = useCallback(() => {
     if (draft) onScanned(draft);
@@ -96,6 +157,7 @@ export function MRZCameraStep({
         style={StyleSheet.absoluteFill}
         device={device}
         isActive={draft === null}
+        outputs={[frameOutput]}
       />
 
       <NavBar onCancel={onCancel} onSwitchToManual={onSwitchToManual} />

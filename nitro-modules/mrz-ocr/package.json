@@ -1,0 +1,24 @@
+{
+  "name": "@solidarity/nitro-mrz-ocr",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Nitro module for ICAO 9303 MRZ OCR. iOS: VisionKit VNRecognizeTextRequest. Android: ML Kit Text Recognition (bundled). Returns raw recognised lines — TD3 parsing + check-digit validation live in JS (`mrz` package).",
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "scripts": {
+    "nitrogen": "nitrogen",
+    "lint": "eslint .",
+    "typecheck": "tsc --noEmit"
+  },
+  "react-native": {
+    "supportedPlatforms": ["ios", "android"]
+  },
+  "peerDependencies": {
+    "react-native-nitro-modules": "*",
+    "react-native-vision-camera": "*"
+  },
+  "devDependencies": {
+    "react-native-nitro-modules": "^0.35.7",
+    "react-native-vision-camera": "^5.0.10"
+  }
+}
