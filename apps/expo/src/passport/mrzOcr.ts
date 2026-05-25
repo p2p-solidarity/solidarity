@@ -23,8 +23,22 @@ import type { PassportMRZDraft } from '@/onboarding/steps/MRZCameraStep';
 /** Lines that *could* be MRZ rows — A–Z, 0–9, `<` filler, 30..44 chars. */
 const MRZ_LINE_RE = /^[A-Z0-9<]{30,44}$/;
 
-/** Streak length required before we trust a draft (rule 8: no fake data). */
-const CONSENSUS_THRESHOLD = 3;
+/**
+ * Default streak length before we trust a draft.
+ *
+ * `1` is intentional: `parseMrzLines` already requires `mrz`'s
+ * `result.valid === true`, which means every single ICAO 9303 check digit
+ * (document, DOB, expiry, optional, composite) passed. Demanding multiple
+ * identical OCR reads on top of that was overzealous — OCR naturally
+ * jitters between `0`/`O`, `1`/`I`, `S`/`5` between frames, so the streak
+ * almost never grew to 3 in practice and the user was stranded on the
+ * green-frame "detecting" affordance forever. Acceptance is still gated
+ * by the user's "Use This" tap in the confirmation card.
+ *
+ * Tests that exercise the multi-frame branch construct `MrzFrameConsensus`
+ * with an explicit threshold.
+ */
+const DEFAULT_CONSENSUS_THRESHOLD = 1;
 
 /** Bounded ring length — never grow unbounded. */
 const CONSENSUS_WINDOW = 4;
@@ -55,9 +69,11 @@ export function hasMrzCandidate(lines: readonly string[]): boolean {
 export function parseMrzLines(
   lines: readonly string[],
 ): PassportMRZDraft | null {
-  // 1. Normalise + filter.
+  // 1. Normalise + filter. ML Kit occasionally returns MRZ `<` fillers as
+  // spaces (or runs of spaces inside an otherwise valid row) — convert
+  // them back so the length + regex tests stay accurate.
   const candidates = lines
-    .map((line) => line.toUpperCase().replace(/\s+/g, ''))
+    .map((line) => line.toUpperCase().replace(/\s+/g, '<'))
     .filter((line) => MRZ_LINE_RE.test(line));
 
   if (candidates.length < 2) return null;
@@ -76,7 +92,18 @@ export function parseMrzLines(
   } catch {
     return null;
   }
-  if (result.valid !== true) return null;
+  if (result.valid !== true) {
+    // Log which detail failed so we can diagnose without dumping the MRZ
+    // contents (rule 8 — never log PII). Field labels only.
+    const failed = result.details
+      .filter((d) => d.valid !== true)
+      .map((d) => d.field)
+      .join(',');
+    if (failed.length > 0) {
+      console.log(`[MRZ] parser rejected, failed details: ${failed}`);
+    }
+    return null;
+  }
 
   // 4. Belt-and-suspenders — even if `valid === true`, every detail
   // must individually pass before we trust the draft.
@@ -123,14 +150,22 @@ function draftsEqual(
 }
 
 /**
- * N-frame consensus aggregator. The same `PassportMRZDraft` must appear
- * three times in a row before we accept it; any null / mismatched draft
- * breaks the streak. Bounded history prevents unbounded growth.
+ * N-frame consensus aggregator. A draft must appear `threshold` frames in
+ * a row before we accept it; any null / mismatched draft breaks the
+ * streak. Bounded history prevents unbounded growth.
+ *
+ * Default threshold is `DEFAULT_CONSENSUS_THRESHOLD` (1) so we accept on
+ * the first check-digit-valid frame; pass an explicit value to tighten.
  */
 export class MrzFrameConsensus {
   private readonly history: PassportMRZDraft[] = [];
   private streakDraft: PassportMRZDraft | null = null;
   private streakLength = 0;
+  private readonly threshold: number;
+
+  constructor(threshold: number = DEFAULT_CONSENSUS_THRESHOLD) {
+    this.threshold = threshold;
+  }
 
   ingest(draft: PassportMRZDraft | null): PassportMRZDraft | null {
     if (draft === null) {
@@ -149,7 +184,7 @@ export class MrzFrameConsensus {
       this.streakLength = 1;
     }
 
-    return this.streakLength >= CONSENSUS_THRESHOLD ? draft : null;
+    return this.streakLength >= this.threshold ? draft : null;
   }
 
   reset(): void {

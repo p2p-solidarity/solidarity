@@ -87,21 +87,21 @@ describe('MrzFrameConsensus', () => {
   };
 
   it('returns the draft once it has appeared three times in a row', () => {
-    const c = new MrzFrameConsensus();
+    const c = new MrzFrameConsensus(3);
     expect(c.ingest(DRAFT_A)).toBeNull();
     expect(c.ingest(DRAFT_A)).toBeNull();
     expect(c.ingest(DRAFT_A)).toEqual(DRAFT_A);
   });
 
   it('does not return after two identical + one mismatched draft', () => {
-    const c = new MrzFrameConsensus();
+    const c = new MrzFrameConsensus(3);
     expect(c.ingest(DRAFT_A)).toBeNull();
     expect(c.ingest(DRAFT_A)).toBeNull();
     expect(c.ingest(DRAFT_B)).toBeNull();
   });
 
   it('resets the streak when a null frame arrives', () => {
-    const c = new MrzFrameConsensus();
+    const c = new MrzFrameConsensus(3);
     expect(c.ingest(DRAFT_A)).toBeNull();
     expect(c.ingest(DRAFT_A)).toBeNull();
     expect(c.ingest(null)).toBeNull();
@@ -110,7 +110,7 @@ describe('MrzFrameConsensus', () => {
   });
 
   it('recovers after three different drafts followed by three identical', () => {
-    const c = new MrzFrameConsensus();
+    const c = new MrzFrameConsensus(3);
     c.ingest(DRAFT_A);
     c.ingest(DRAFT_B);
     c.ingest(DRAFT_A);
@@ -120,12 +120,23 @@ describe('MrzFrameConsensus', () => {
   });
 
   it('reset() clears the state machine', () => {
-    const c = new MrzFrameConsensus();
+    const c = new MrzFrameConsensus(3);
     c.ingest(DRAFT_A);
     c.ingest(DRAFT_A);
     c.reset();
     expect(c.ingest(DRAFT_A)).toBeNull();
     expect(c.ingest(DRAFT_A)).toBeNull();
+    expect(c.ingest(DRAFT_A)).toEqual(DRAFT_A);
+  });
+
+  it('default threshold is 1 — single check-digit-valid frame accepts', () => {
+    const c = new MrzFrameConsensus();
+    expect(c.ingest(DRAFT_A)).toEqual(DRAFT_A);
+  });
+
+  it('default threshold still treats null as a streak break', () => {
+    const c = new MrzFrameConsensus();
+    expect(c.ingest(null)).toBeNull();
     expect(c.ingest(DRAFT_A)).toEqual(DRAFT_A);
   });
 });
