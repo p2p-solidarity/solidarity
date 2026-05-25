@@ -56,6 +56,7 @@ import {
   type PassportMRZDraft,
   type PassportProofResult,
 } from '@/passport/pipeline';
+import { buildPassportVerifierWitness } from '@/passport/zkInputs';
 import { usePreferences } from '@/settings/preferences';
 import { getNfcPassport } from '@solidarity/nitro-nfc-passport';
 import { getPassportZk } from '@solidarity/nitro-passport-zk';
@@ -168,16 +169,30 @@ export default function PassportSetup() {
     dispatch({ type: 'setProofProgress', message: 'Initializing prover...' });
     try {
       let proof: PassportProofResult;
+      // Build the witness *before* invoking the prover so a bad inputs
+      // map surfaces as a typed JS error, not buried inside a Promise
+      // rejection from the Rust side.
+      const witness = buildPassportVerifierWitness(state.chip);
+      const inputsJson = JSON.stringify(witness);
       const zkProof = nitro.zk
-        ? await tryGenerateZkProof(nitro.zk, (m) => {
-            dispatch({ type: 'setProofProgress', message: m });
-          })
+        ? await tryGenerateZkProof(
+            nitro.zk,
+            inputsJson,
+            (m) => {
+              dispatch({ type: 'setProofProgress', message: m });
+            },
+          )
         : null;
       if (zkProof !== null) {
         proof = {
-          proofType: 'mopro-noir',
+          // Demo witness is in flight — the bundled passport_verifier circuit
+          // produces a valid RSA-2048 ZK proof but the modulus + signature
+          // are upstream test vectors, NOT this user's DSC. Trust stays at
+          // `white` and the type tag flags it so credential consumers can
+          // refuse to count it as government-grade attestation (rule 8).
+          proofType: 'mopro-noir-demo',
           proofPayload: arrayBufferToBase64(zkProof.proof),
-          trustLevel: state.chip.isSimulated ? 'white' : 'green',
+          trustLevel: 'white',
           generationFailed: false,
         };
       } else {
@@ -320,11 +335,16 @@ const ZK_NOT_LINKED_RE = /(not linked|UnsupportedOperationException|libpassport_
  */
 async function tryGenerateZkProof(
   zk: NonNullable<ReturnType<typeof getPassportZk>>,
+  inputsJson: string,
   setProgress: (message: string) => void,
 ): Promise<{ proof: ArrayBuffer } | null> {
-  setProgress('Generating ZK proof...');
+  setProgress('Generating ZK proof (~5–15s)…');
   try {
-    return await zk.generateNoirProof('', undefined, '{}');
+    // Empty `circuitPath` / `undefined` SRS resolve to the bundled
+    // passport_verifier assets on Android (see HybridPassportZk.kt
+    // resolveCircuitPath / resolveSrsPath). iOS will need the matching
+    // bundle wiring in MoproShim.swift before this works there.
+    return await zk.generateNoirProof('', undefined, inputsJson);
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     if (ZK_NOT_LINKED_RE.test(message)) return null;

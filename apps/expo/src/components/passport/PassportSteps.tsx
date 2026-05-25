@@ -328,20 +328,31 @@ export function ProofStep({
 
 function ProofResultCard({ proof }: { proof: PassportProofResult }) {
   const failed = proof.generationFailed;
-  const accent = failed ? '#FF9500' : Colors.terminalGreen;
+  // Demo proofs are real ZK proofs but built from upstream test-vector
+  // bytes, not the user's actual DSC. Surface as amber-with-checkmark so
+  // it's clearly distinct from a true-attestation green ZK proof and from
+  // an orange SD-JWT fallback (rule 8 — never imply we know more than we do).
+  const isDemo = proof.proofType === 'mopro-noir-demo';
+  const accent = failed || isDemo ? '#FF9500' : Colors.terminalGreen;
+  const title = failed
+    ? 'Fallback (SD-JWT)'
+    : isDemo
+      ? 'Demo ZK proof (synthetic witness)'
+      : 'ZK proof ready';
+  const iconName = failed
+    ? 'exclamationmark.triangle'
+    : isDemo
+      ? 'checkmark.seal'
+      : 'checkmark.seal.fill';
   return (
     <View
       className="mx-4 rounded-xl p-3"
       style={{ backgroundColor: Colors.mutedSurface, gap: 4 }}
     >
       <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-        <SfIcon
-          name={failed ? 'exclamationmark.triangle' : 'checkmark.seal.fill'}
-          size={14}
-          color={accent}
-        />
+        <SfIcon name={iconName} size={14} color={accent} />
         <Text style={{ color: accent, fontSize: 12, fontWeight: '600', flex: 1 }}>
-          {failed ? 'Fallback (SD-JWT)' : 'ZK proof ready'}
+          {title}
         </Text>
         <Text
           style={{
