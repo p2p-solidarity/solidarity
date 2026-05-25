@@ -82,6 +82,37 @@ export function buildDisclosureWitness(
 ): BuiltDisclosureWitness {
   const mrzBytes = toMrzBytes(chip.dg1MRZData);
 
+  // Diagnostic: the disclosure circuit's age computation assumes the
+  // DOB at mrz_data[57..62] is six ASCII digit bytes (`'0'..'9'`).
+  // If chip-side DG1 parsing trimmed the run short and our
+  // `toMrzBytes` had to right-pad with `<` (0x3C), the underflow path
+  // `100 + curr_yy - birth_yy` inside Noir asserts and the prover
+  // returns the generic "Failed assertion" with no field name. Count
+  // the non-digit bytes in the DOB slot and log a SHAPE-ONLY warning
+  // so we know to look at the chip read instead of the prover.
+  // Counts/booleans only — never the actual digits (CLAUDE.md rule 8).
+  let dobNonDigits = 0;
+  for (let i = 0; i < 6; i += 1) {
+    const b = mrzBytes[MRZ_LINE_LEN + 13 + i] ?? 0;
+    if (b < 0x30 || b > 0x39) dobNonDigits += 1;
+  }
+  let natNonAlpha = 0;
+  for (let i = 0; i < 3; i += 1) {
+    const b = mrzBytes[MRZ_LINE_LEN + 10 + i] ?? 0;
+    const isUpper = b >= 0x41 && b <= 0x5a;
+    if (!isUpper) natNonAlpha += 1;
+  }
+  const rawLen = chip.dg1MRZData.length;
+  if (dobNonDigits > 0 || natNonAlpha > 0 || rawLen !== MRZ_TOTAL_LEN) {
+    console.warn(
+      `[zk] disclosure witness SHAPE WARNING — dg1 raw len=${String(rawLen)}/${String(MRZ_TOTAL_LEN)}, ` +
+        `DOB non-digits=${String(dobNonDigits)}/6, nationality non-A-Z=${String(natNonAlpha)}/3, ` +
+        `simulated=${String(chip.isSimulated)}. ` +
+        `Prover will likely "Failed assertion" — check NFC DG1 parse or fall back to SD-JWT.`,
+    );
+  }
+
+
   const mrzHash = sha256(mrzBytes);
   const currentDate = currentDateAscii(now);
 

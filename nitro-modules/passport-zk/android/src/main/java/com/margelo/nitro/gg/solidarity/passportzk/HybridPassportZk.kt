@@ -135,6 +135,16 @@ class HybridPassportZk : HybridPassportZkSpec() {
 
   companion object {
     private const val TAG = "HybridPassportZk"
+    // NOTE: An earlier iteration of this companion object preloaded a
+    // `libcxx_stream_shim.so` to inject `std::__1::basic_ostringstream`
+    // and ~18 other RTTI/VTT symbols via `.set` asm aliases mapping
+    // `__1` → `__ndk1`. That experiment is preserved under
+    // `android/src/main/cpp/cxx_stream_shim.cpp` because the build
+    // pipeline works and the discovery is valuable, but the preload was
+    // removed: AztecProtocol's prebuilt `libbb-external.a` references
+    // ~3978 `__1`-namespaced libc++ symbols (not just stream RTTI), so
+    // alias-shimming is not maintainable. See `KNOWN_ISSUES.md` for the
+    // full story and the real-fix paths.
 
     /**
      * Bundled v3 default — the `disclosure` circuit: selective disclosure

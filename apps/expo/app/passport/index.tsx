@@ -200,7 +200,15 @@ export default function PassportSetup() {
       // malformed (e.g. MRZ length mismatch) throws synchronously here so
       // the user sees a typed JS error, not a Rust witness-shape failure.
       const built = buildDisclosureWitness(state.chip, DEFAULT_DISCLOSURE_POLICY);
-      const zkProof = nitro.zk
+      // Gate the ZK prover on a real chip read. `simulatedChipSnapshot`
+      // returns `P<{nat}<<<...` with all `<` filler in the DOB slot
+      // (mrz_data[57..62]). Feeding that to the disclosure circuit makes
+      // its age computation overflow (`100 + 26 - 132` in u16) and the
+      // constraint asserts fail with "Failed assertion" inside
+      // barretenberg — surfacing as a useless toast for the user even
+      // though the prover itself is fine. With no real chip, SD-JWT
+      // (white trust) is the only honest path (CLAUDE.md rule 8).
+      const zkProof = nitro.zk && !state.chip.isSimulated
         ? await tryGenerateZkProof(
             nitro.zk,
             built.inputsJson,

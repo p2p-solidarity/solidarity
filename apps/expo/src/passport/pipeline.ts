@@ -337,6 +337,13 @@ export function chipFromNitro(
  * (A-Z, 0-9, `<`) which is the MRZ — this is robust to small differences
  * in how iOS NFCPassportReader vs Android jmrtd encode the TLV header.
  */
+/**
+ * TD3 (passport) MRZ is always exactly 2 × 44 = 88 chars. Other ICAO
+ * doc types are smaller (TD1 = 90, TD2 = 72), but for passports the
+ * 88-char anchor is reliable.
+ */
+const TD3_MRZ_LEN = 88;
+
 function decodeDg1Mrz(buffer: ArrayBuffer): string {
   const bytes = new Uint8Array(buffer);
   let best = '';
@@ -354,6 +361,22 @@ function decodeDg1Mrz(buffer: ArrayBuffer): string {
     }
   }
   if (current.length > best.length) best = current;
+
+  // DG1 TLV layout: outer `61 <len>` then inner `5F 1F <len> <MRZ>`.
+  // The length byte just before the 88 MRZ chars is `0x58` (which
+  // demangles to ASCII 'X') for TD3 passports — our greedy filter
+  // happily includes that 'X' into the longest run, producing an
+  // 89-char string that shifts the nationality + DOB byte positions
+  // by 1 and makes the disclosure circuit's age computation underflow
+  // ("Failed assertion" inside the prover with no field hint).
+  //
+  // The MRZ always sits at the end of DG1 (no trailing TLVs after
+  // `5F 1F`), so taking the last 88 chars of the run is a reliable
+  // trim. Anything shorter passes through unchanged for the caller's
+  // own length checks downstream.
+  if (best.length > TD3_MRZ_LEN) {
+    best = best.slice(best.length - TD3_MRZ_LEN);
+  }
   return best;
 }
 
