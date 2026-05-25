@@ -31,7 +31,7 @@ import {
 } from 'react-native-vision-camera';
 import { scheduleOnRN } from 'react-native-worklets';
 
-import { getMrzOcr, type RecognizedLines } from '@solidarity/nitro-mrz-ocr';
+import { getMrzOcr, type MrzOcr, type RecognizedLines } from '@solidarity/nitro-mrz-ocr';
 
 import { SfIcon } from '@/components/icons/SfIcon';
 import { PassportSketch } from '@/components/scan/PassportSketch';
@@ -74,6 +74,13 @@ export function MRZCameraStep({
   // throttle doesn't trip a React re-render every frame.
   const frameTick = useSharedValue<number>(0);
 
+  // Resolve the Nitro HybridObject once on the JS thread. Worklets can't
+  // call non-worklet JS functions like `getMrzOcr()` synchronously, but
+  // once we have the HybridObject in hand it IS worklet-safe (the methods
+  // are Nitro proxies backed by native code — same pattern as
+  // `useBarcodeScanner` in react-native-vision-camera-barcode-scanner).
+  const mrzOcr = useMemo<MrzOcr>(() => getMrzOcr(), []);
+
   // Consensus state is JS-side and stable across re-renders — instantiate
   // once and hold via ref so `handleRescan` can reset() without touching
   // it from the worklet.
@@ -100,7 +107,7 @@ export function MRZCameraStep({
         frameTick.value = tick;
         if (tick % FRAME_THROTTLE !== 0) return;
 
-        const result: RecognizedLines = getMrzOcr().scanFrame(frame);
+        const result: RecognizedLines = mrzOcr.scanFrame(frame);
         // Copy into a plain array so the value is safe to ship across
         // the worklet → JS bridge.
         const lines: string[] = [];
@@ -110,7 +117,7 @@ export function MRZCameraStep({
         frame.dispose();
       }
     };
-  }, [frameTick, ingestLines]);
+  }, [frameTick, ingestLines, mrzOcr]);
 
   const frameOutput = useFrameOutput({
     pixelFormat: 'yuv',
