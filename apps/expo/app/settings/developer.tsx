@@ -81,8 +81,8 @@ export default function DeveloperSettings() {
                 <SettingsBlockRow
                   icon="hand.tap"
                   title="UWB Bump Exchange"
-                  subtitle="Stub — docs §3.3.1 (the NFC-tap-feel upgrade)"
-                  onPress={stub}
+                  subtitle="Live · simulate the NFC-tap-feel state machine"
+                  onPress={() => { router.push('/dev/bump'); }}
                 />
               </SettingsBlockSection>
 
