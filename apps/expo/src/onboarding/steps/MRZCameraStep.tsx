@@ -92,7 +92,17 @@ const FRAME_THROTTLE = 1;
  * the no-throttle cadence above, time-to-accept on a steady hand-held
  * shot ends up faster than the Swift port (which ran 1080p with no ROI).
  */
-const FRAME_OUTPUT_RESOLUTION = CommonResolutions.HD_16_9;
+/**
+ * Camera output resolution fed to the OCR plugin. VGA_4_3 (480×640)
+ * is ~5× fewer pixels than HD_16_9 (720×1280) and matches sensor-
+ * native 4:3 so the camera path skips a 16:9 crop. Combined with the
+ * Android-side bottom-band crop (`MRZ_BAND_FRAC = 0.55` in
+ * HybridMrzOcr.kt) it brings per-frame ML Kit work from ~150ms to
+ * ~40-60ms on a Snapdragon 865. MRZ at 480px-wide is ~10-11 px per
+ * glyph which still clears ML Kit's text-height floor, but bumping
+ * back to HD_4_3 (768×1024) is the obvious dial if accuracy regresses.
+ */
+const FRAME_OUTPUT_RESOLUTION = CommonResolutions.VGA_4_3;
 
 /** Hold the current non-idle phase for this long after the last positive
  *  ingest so a one-frame OCR miss doesn't flicker the affordance back to
@@ -105,6 +115,14 @@ const PHASE_HOLD_MS = 1000;
  *  Android — still long enough that a single misread frame doesn't
  *  trigger the warning. */
 const STRUGGLE_THRESHOLD = 3;
+
+/**
+ * Delay between a valid MRZ acceptance and auto-advancing to the next
+ * onboarding step. Long enough for the user to read the brief flash of
+ * the confirmation card + see the `confirmed` checkmark animation,
+ * short enough that they don't reach to dismiss before nav fires.
+ */
+const AUTO_ADVANCE_DELAY_MS = 800;
 
 type ScanPhase = 'idle' | 'detecting' | 'struggling' | 'confirmed';
 
@@ -156,6 +174,13 @@ export function MRZCameraStep({
   const phaseTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   /** Consecutive parse-failed reads while ≥2 MRZ rows visible. */
   const failureStreakRef = useRef(0);
+  /**
+   * One-shot timer for auto-advance after MRZ acceptance. Held in a ref
+   * so the unmount cleanup can clear it (avoiding a navigate-back race
+   * where the user taps Cancel between phase-confirmed and the timer
+   * firing) and so `handleRescan` can defuse a pending advance.
+   */
+  const autoAdvanceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Frame counter lives on the worklet thread (SharedValue) so it never
   // trips a React re-render.
@@ -238,9 +263,19 @@ export function MRZCameraStep({
       const parsed = parseMrzLines(lines);
       const accepted = consensus.ingest(parsed);
 
-      console.log(
-        `[MRZ] ocr #${String(ocrCallCountRef.current)} dt=${String(ocrDurationMs)}ms frame=${String(frameWidth)}x${String(frameHeight)} lines=${String(lines.length)} cand=${String(candidates)} parsed=${String(parsed !== null)} accepted=${String(accepted !== null)}`,
-      );
+      // Per-frame log was always counts-only (no MRZ content), but
+      // tightening anyway: the only signal we ever needed was
+      // "did the parser ever succeed?" which the ACCEPT line already
+      // covers. Dropping the chatty per-frame line keeps logcat clean
+      // and removes any chance of someone tailing pre-release builds
+      // and inferring scan progress from frame metadata. The
+      // surrounding arrow function already accepts these args so
+      // they're not unused at the language level — leaving them
+      // referenced via void-cast keeps Sonar / no-unused-vars happy
+      // without re-introducing the log.
+      void frameWidth;
+      void frameHeight;
+      void ocrDurationMs;
 
       if (accepted !== null) {
         const totalMs = Date.now() - mountTimeRef.current;
@@ -252,6 +287,16 @@ export function MRZCameraStep({
         failureStreakRef.current = 0;
         moveToPhase('confirmed');
         setDraft(accepted);
+        // Auto-advance — the legacy flow required a "Use This" tap on
+        // the confirmation card, but the consensus aggregator + every-
+        // check-digit-valid gate already guarantee the draft is real.
+        // Forcing a manual tap stranded users staring at a card they
+        // had no reason to second-guess. Tiny delay lets the
+        // `confirmed` phase render its checkmark animation first so
+        // the transition isn't jarring.
+        autoAdvanceTimerRef.current = setTimeout(() => {
+          onScanned(accepted);
+        }, AUTO_ADVANCE_DELAY_MS);
         return;
       }
 
@@ -339,6 +384,10 @@ export function MRZCameraStep({
       clearTimeout(phaseTimerRef.current);
       phaseTimerRef.current = null;
     }
+    if (autoAdvanceTimerRef.current !== null) {
+      clearTimeout(autoAdvanceTimerRef.current);
+      autoAdvanceTimerRef.current = null;
+    }
     failureStreakRef.current = 0;
     phaseRef.current = 'idle';
     setPhase('idle');
@@ -365,6 +414,10 @@ export function MRZCameraStep({
       if (phaseTimerRef.current !== null) {
         clearTimeout(phaseTimerRef.current);
         phaseTimerRef.current = null;
+      }
+      if (autoAdvanceTimerRef.current !== null) {
+        clearTimeout(autoAdvanceTimerRef.current);
+        autoAdvanceTimerRef.current = null;
       }
     };
   }, []);

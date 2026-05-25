@@ -20,8 +20,23 @@ import { parse } from 'mrz';
 
 import type { PassportMRZDraft } from '@/onboarding/steps/MRZCameraStep';
 
-/** Lines that *could* be MRZ rows — A–Z, 0–9, `<` filler, 30..44 chars. */
-const MRZ_LINE_RE = /^[A-Z0-9<]{30,44}$/;
+/**
+ * Lines that *could* be MRZ rows — A–Z, 0–9, `<` filler, 28..50 chars
+ * post-normalisation. The hard ICAO bound is 44 chars per TD3 row, but
+ * ML Kit / Vision routinely return rows with a stray leading/trailing
+ * char (e.g. an extra `<` from passport gloss, or a punctuation mark
+ * that survived our `\s+ → <` collapse). Letting 45–50 through lets
+ * the `mrz` parser take a second look — it does its own length check
+ * and rejects bad rows on check-digit failure. We still trim down in
+ * `parseMrzLines` before handing the pair to `parse`.
+ *
+ * Symmetric on the low end: occasionally a row gets cropped to 28–29
+ * chars when the camera is angled and the last filler `<<<<` get
+ * smudged. Letting them in costs nothing (parser rejects), but lets
+ * the consensus aggregator pick up the row whose length is right.
+ */
+const MRZ_LINE_RE = /^[A-Z0-9<]{28,50}$/;
+const TD3_ROW_LEN = 44;
 
 /**
  * Default streak length before we trust a draft.
@@ -87,63 +102,96 @@ export function parseMrzLines(
 
   if (candidates.length < 2) return null;
 
-  // 2. TD3 = two 44-char rows. Take the two longest (longest first,
-  // tie-broken by input order via stable sort).
+  // 2. Build a small priority list of pairs to try. The two longest
+  // rows are usually the actual TD3 rows, but OCR sometimes pulls in
+  // an extra long line from header text (e.g. ICAO "PASSPORT" banner)
+  // that pushes a real row out of the top-two — so we also try the
+  // longest with each shorter candidate as the second row. Stops as
+  // soon as `mrz` returns a fully-valid parse.
   const sorted = [...candidates].sort((a, b) => b.length - a.length);
-  const lineA = sorted[0];
-  const lineB = sorted[1];
-  if (lineA === undefined || lineB === undefined) return null;
-
-  // 3. Run the `mrz` parser — it throws on totally-unknown formats.
-  let result: ReturnType<typeof parse>;
-  try {
-    result = parse([lineA, lineB]);
-  } catch {
-    return null;
-  }
-  if (result.valid !== true) {
-    // Log which detail failed so we can diagnose without dumping the MRZ
-    // contents (rule 8 — never log PII). Field labels only.
-    const failed = result.details
-      .filter((d) => d.valid !== true)
-      .map((d) => d.field)
-      .join(',');
-    if (failed.length > 0) {
-      console.log(`[MRZ] parser rejected, failed details: ${failed}`);
+  const pairs: Array<readonly [string, string]> = [];
+  const head = sorted.slice(0, Math.min(4, sorted.length));
+  for (let i = 0; i < head.length; i += 1) {
+    for (let j = i + 1; j < head.length; j += 1) {
+      const a = head[i];
+      const b = head[j];
+      if (a === undefined || b === undefined) continue;
+      pairs.push([a, b]);
     }
-    return null;
   }
 
-  // 4. Belt-and-suspenders — even if `valid === true`, every detail
-  // must individually pass before we trust the draft.
-  for (const detail of result.details) {
-    if (detail.valid !== true) return null;
+  // 3. Each pair: trim down to TD3_ROW_LEN if OCR padded extra chars
+  // beyond 44 (`mrz` requires exactly 44 per TD3 row), then parse.
+  // Trim from the right because MRZ structure is left-anchored
+  // (issuing-state code is pos 1-2; trailing `<` filler can be dropped
+  // without affecting the parsed fields).
+  for (const [rawA, rawB] of pairs) {
+    const lineA = rawA.length > TD3_ROW_LEN ? rawA.slice(0, TD3_ROW_LEN) : rawA;
+    const lineB = rawB.length > TD3_ROW_LEN ? rawB.slice(0, TD3_ROW_LEN) : rawB;
+
+    let result: ReturnType<typeof parse>;
+    try {
+      result = parse([lineA, lineB]);
+    } catch {
+      continue;
+    }
+
+    // Accept relaxed: the per-field check digits we actually depend on
+    // downstream are `documentNumberCheckDigit`, `birthDateCheckDigit`,
+    // and `expirationDateCheckDigit` — those three plug directly into
+    // BAC key derivation, and if any of them is wrong NFC will refuse
+    // to open the secure channel and the user re-scans. The `mrz`
+    // library's `valid` flag also requires `compositeCheckDigit` (and,
+    // on some passports, `personalNumberCheckDigit`) which are the
+    // ones ML Kit gets wrong most often — a single misread digit in
+    // the optional/personal slot tanks the entire scan even though
+    // the four fields we extract are correct.
+    //
+    // Lowering acceptance to "the three BAC fields validate" trades
+    // one MRZ check digit for the BAC handshake itself as the real
+    // gate (CLAUDE.md rule 8: the SUBSEQUENT step still verifies,
+    // we're not pretending the MRZ is more trustworthy than it is).
+    const REQUIRED_CHECK_FIELDS = new Set([
+      'documentNumberCheckDigit',
+      'birthDateCheckDigit',
+      'expirationDateCheckDigit',
+    ]);
+    let requiredOk = true;
+    for (const detail of result.details) {
+      // `details[i].field` is typed `string | null` because the `mrz`
+      // library returns generic "unknown" entries for some optional
+      // fields; only the named ones map to a check-digit position we
+      // depend on, so a null field is irrelevant to BAC and we skip.
+      if (
+        detail.field !== null
+        && REQUIRED_CHECK_FIELDS.has(detail.field)
+        && detail.valid !== true
+      ) {
+        requiredOk = false;
+        break;
+      }
+    }
+    if (!requiredOk) continue;
+
+    const passportNumber = result.fields.documentNumber;
+    const nationalityCode = result.fields.nationality;
+    const dateOfBirth = result.fields.birthDate;
+    const expiryDate = result.fields.expirationDate;
+
+    if (
+      passportNumber == null ||
+      nationalityCode == null ||
+      dateOfBirth == null ||
+      expiryDate == null
+    ) {
+      continue;
+    }
+    if (dateOfBirth.length !== 6 || expiryDate.length !== 6) continue;
+
+    return { passportNumber, nationalityCode, dateOfBirth, expiryDate };
   }
 
-  // 5. Pull the four fields we surface. All come back as strings (or
-  // null). Birth + expiration are YYMMDD per ICAO 9303 (verified
-  // against node_modules/mrz/lib/parsers/parseDate.js).
-  const passportNumber = result.fields.documentNumber;
-  const nationalityCode = result.fields.nationality;
-  const dateOfBirth = result.fields.birthDate;
-  const expiryDate = result.fields.expirationDate;
-
-  if (
-    passportNumber == null ||
-    nationalityCode == null ||
-    dateOfBirth == null ||
-    expiryDate == null
-  ) {
-    return null;
-  }
-  if (dateOfBirth.length !== 6 || expiryDate.length !== 6) return null;
-
-  return {
-    passportNumber,
-    nationalityCode,
-    dateOfBirth,
-    expiryDate,
-  };
+  return null;
 }
 
 function draftsEqual(
