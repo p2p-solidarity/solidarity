@@ -7,11 +7,22 @@
  */
 import * as Haptics from 'expo-haptics';
 
-export type HapticKind = 'selection' | 'tap' | 'success' | 'warning' | 'error';
+export type HapticKind =
+  | 'selection'
+  | 'tap'
+  | 'soft'
+  | 'heavy'
+  | 'success'
+  | 'warning'
+  | 'error';
 
 const MAP: Readonly<Record<HapticKind, () => Promise<void>>> = {
   selection: async () => Haptics.selectionAsync(),
   tap: async () => Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light),
+  // Soft + Heavy mirror Swift HapticFeedbackManager — used by the UWB
+  // bump driver (docs §3.3.1) for approaching / confirmed transitions.
+  soft: async () => Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Soft),
+  heavy: async () => Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy),
   success: async () => Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success),
   warning: async () => Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning),
   error: async () => Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error),
