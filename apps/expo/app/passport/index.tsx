@@ -168,17 +168,33 @@ export default function PassportSetup() {
     dispatch({ type: 'setProofProgress', message: 'Initializing prover...' });
     try {
       let proof: PassportProofResult;
-      if (nitro.zk) {
-        dispatch({ type: 'setProofProgress', message: 'Generating ZK proof...' });
-        const result = await nitro.zk.generateNoirProof('', undefined, '{}');
+      const zkProof = nitro.zk
+        ? await tryGenerateZkProof(nitro.zk, (m) => {
+            dispatch({ type: 'setProofProgress', message: m });
+          })
+        : null;
+      if (zkProof !== null) {
         proof = {
           proofType: 'mopro-noir',
-          proofPayload: arrayBufferToBase64(result.proof),
+          proofPayload: arrayBufferToBase64(zkProof.proof),
           trustLevel: state.chip.isSimulated ? 'white' : 'green',
           generationFailed: false,
         };
       } else {
-        await new Promise<void>((r) => setTimeout(r, 1200));
+        // Either no ZK module linked OR the native Rust/mopro cdylib
+        // hasn't been built into this APK yet — fall back to a self-issued
+        // SD-JWT so the user still progresses to the persist step. The
+        // `white` trust level + `generationFailed: true` make the UI
+        // clearly label the credential as "Fallback (SD-JWT)" per
+        // ProofResultCard's branch.
+        dispatch({ type: 'setProofProgress', message: 'ZK prover unavailable — using fallback…' });
+        if (nitro.zk) {
+          pushToast(
+            'ZK prover not built into this APK — using SD-JWT fallback.',
+            'info',
+          );
+        }
+        await new Promise<void>((r) => setTimeout(r, 600));
         proof = {
           proofType: 'sd-jwt-fallback',
           proofPayload: 'demo.vc.jwt',
@@ -188,7 +204,7 @@ export default function PassportSetup() {
       }
       dispatch({ type: 'setProof', proof });
     } catch (err) {
-      dispatch({ type: 'setError', message: (err as Error).message });
+      dispatch({ type: 'setError', message: friendlyProofError(err) });
     } finally {
       dispatch({ type: 'setLoading', value: false });
     }
@@ -286,6 +302,48 @@ export default function PassportSetup() {
 async function simulateNfcRead(draft: PassportMRZDraft): Promise<PassportChipSnapshot> {
   await new Promise<void>((r) => setTimeout(r, 800));
   return simulatedChipSnapshot(draft);
+}
+
+/**
+ * Pattern that flags the deliberate "Rust cdylib not in jniLibs yet" throw
+ * from `nitro-modules/passport-zk/android/.../HybridPassportZk.kt`. We treat
+ * it as a soft-fail (caller drops into SD-JWT fallback) rather than letting
+ * the raw Java exception bubble into a toast — see screenshot in issue.
+ */
+const ZK_NOT_LINKED_RE = /(not linked|UnsupportedOperationException|libpassport_zk_mopro)/i;
+
+/**
+ * Run the Nitro ZK prover, but treat the "native impl not linked" pre-build
+ * state as soft `null` so the caller can transparently fall through to the
+ * SD-JWT path. Real prover errors (memory, malformed inputs, etc.) still
+ * re-throw so they surface as toast-friendly errors.
+ */
+async function tryGenerateZkProof(
+  zk: NonNullable<ReturnType<typeof getPassportZk>>,
+  setProgress: (message: string) => void,
+): Promise<{ proof: ArrayBuffer } | null> {
+  setProgress('Generating ZK proof...');
+  try {
+    return await zk.generateNoirProof('', undefined, '{}');
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    if (ZK_NOT_LINKED_RE.test(message)) return null;
+    throw err;
+  }
+}
+
+/**
+ * Sanitises proof-generation errors before they reach the toast/Alert so
+ * Android users never see raw `java.lang.…` stack traces (rule 8 spirit:
+ * surface honest UX state, not implementation noise).
+ */
+function friendlyProofError(err: unknown): string {
+  const raw = err instanceof Error ? err.message : String(err);
+  if (ZK_NOT_LINKED_RE.test(raw)) {
+    return 'ZK prover not yet built for this device — try again or use the SD-JWT fallback.';
+  }
+  // Trim any embedded stack trace so the toast stays one line.
+  return raw.split('\n')[0] ?? 'Proof generation failed';
 }
 
 function applyScannedDraft(

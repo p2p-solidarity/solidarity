@@ -14,7 +14,17 @@
  * They take props rather than reading the view-model directly so the
  * page-level reducer remains the single source of truth.
  */
-import { ActivityIndicator, Text, View } from 'react-native';
+import { useEffect } from 'react';
+import { ActivityIndicator, StyleSheet, Text, View } from 'react-native';
+import Animated, {
+  Easing,
+  useAnimatedStyle,
+  useSharedValue,
+  withDelay,
+  withRepeat,
+  withTiming,
+} from 'react-native-reanimated';
+import Svg, { Path } from 'react-native-svg';
 
 import { BulletGuaranteeRow } from '@/components/passport/BulletGuaranteeRow';
 import { SfIcon } from '@/components/icons/SfIcon';
@@ -38,16 +48,13 @@ export function NfcStep({
 }) {
   return (
     <View className="bg-mutedSurface gap-3 rounded-xl p-3.5">
-      <View style={{ height: 80, alignItems: 'center', justifyContent: 'center' }}>
-        <View style={{ position: 'absolute' }}>
-          <SfIcon name="iphone" size={48} color={Colors.text3} />
-        </View>
-        <View style={{ position: 'absolute', left: '40%', top: 8 }}>
-          <SfIcon name="wave.3.forward" size={24} color={Colors.text2} />
-        </View>
-      </View>
+      <NfcVisual busy={busy} success={chip !== null} />
       <Text className="text-text2 px-6 text-center text-[15px]">
-        Bring your passport close to the device to read NFC chip data.
+        {chip
+          ? 'Chip read successfully.'
+          : busy
+          ? 'Hold steady — reading chip…'
+          : 'Bring your passport close to the device to read NFC chip data.'}
       </Text>
       {busy ? (
         <View className="items-center gap-2">
@@ -65,6 +72,127 @@ export function NfcStep({
     </View>
   );
 }
+
+/**
+ * NfcVisual — animated waveform above an iPhone outline.
+ *
+ *   • idle    → 3 concentric arcs pulse outward at 1.8s/cycle, staggered
+ *                so the effect reads as a continuous ripple
+ *   • busy    → same arcs, sped to 1.1s + tinted terminalGreen so the
+ *                user can tell at a glance the chip read is in flight
+ *   • success → arcs disappear, a single checkmark scale-ins from 0
+ *                with a small bounce so the success moment lands
+ *
+ * Everything runs on the Reanimated UI thread (SharedValues + worklets);
+ * the React render only fires on the three discrete state transitions.
+ */
+function NfcVisual({ busy, success }: { busy: boolean; success: boolean }) {
+  if (success) {
+    return (
+      <View style={nfcStyles.container}>
+        <SuccessCheck />
+      </View>
+    );
+  }
+  const duration = busy ? 1100 : 1800;
+  const tint = busy ? Colors.terminalGreen : Colors.text2;
+  return (
+    <View style={nfcStyles.container}>
+      <View style={nfcStyles.waveStack} pointerEvents="none">
+        <NfcWaveArc delay={0} duration={duration} color={tint} />
+        <NfcWaveArc delay={duration / 3} duration={duration} color={tint} />
+        <NfcWaveArc delay={(2 * duration) / 3} duration={duration} color={tint} />
+      </View>
+      <View style={nfcStyles.phoneSlot}>
+        <SfIcon name="iphone" size={56} color={Colors.text2} />
+      </View>
+    </View>
+  );
+}
+
+const ARC_VIEWBOX = 100;
+const ARC_RADIUS = 40;
+
+function NfcWaveArc({
+  delay,
+  duration,
+  color,
+}: {
+  delay: number;
+  duration: number;
+  color: string;
+}) {
+  const t = useSharedValue(0);
+
+  useEffect(() => {
+    t.value = 0;
+    t.value = withDelay(
+      delay,
+      withRepeat(
+        withTiming(1, { duration, easing: Easing.out(Easing.quad) }),
+        -1,
+        false,
+      ),
+    );
+  }, [delay, duration, t]);
+
+  const animatedStyle = useAnimatedStyle(() => ({
+    transform: [{ scale: 0.4 + t.value * 1.0 }],
+    opacity: 1 - t.value,
+  }));
+
+  return (
+    <Animated.View style={[nfcStyles.arc, animatedStyle]}>
+      <Svg width={ARC_VIEWBOX} height={ARC_VIEWBOX / 2} viewBox={`0 0 ${ARC_VIEWBOX} ${ARC_VIEWBOX / 2}`}>
+        <Path
+          d={`M ${ARC_VIEWBOX / 2 - ARC_RADIUS} ${ARC_VIEWBOX / 2} A ${ARC_RADIUS} ${ARC_RADIUS} 0 0 1 ${ARC_VIEWBOX / 2 + ARC_RADIUS} ${ARC_VIEWBOX / 2}`}
+          stroke={color}
+          strokeWidth={2.5}
+          fill="none"
+          strokeLinecap="round"
+        />
+      </Svg>
+    </Animated.View>
+  );
+}
+
+function SuccessCheck() {
+  const scale = useSharedValue(0);
+  useEffect(() => {
+    scale.value = withTiming(1, {
+      duration: 400,
+      // Slight overshoot so the check "lands" with intent.
+      easing: Easing.out(Easing.back(1.5)),
+    });
+  }, [scale]);
+  const animatedStyle = useAnimatedStyle(() => ({
+    transform: [{ scale: scale.value }],
+  }));
+  return (
+    <Animated.View style={animatedStyle}>
+      <SfIcon name="checkmark.seal.fill" size={56} color={Colors.terminalGreen} />
+    </Animated.View>
+  );
+}
+
+const nfcStyles = StyleSheet.create({
+  container: { height: 130, alignItems: 'center', justifyContent: 'flex-end' },
+  waveStack: {
+    position: 'absolute',
+    top: 0,
+    width: ARC_VIEWBOX,
+    height: ARC_VIEWBOX / 2 + 12,
+    alignItems: 'center',
+    justifyContent: 'flex-end',
+  },
+  arc: {
+    position: 'absolute',
+    bottom: 0,
+    width: ARC_VIEWBOX,
+    height: ARC_VIEWBOX / 2,
+  },
+  phoneSlot: { marginTop: 4 },
+});
 
 function ChipSnapshotCard({ chip }: { chip: PassportChipSnapshot }) {
   return (
