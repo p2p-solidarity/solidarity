@@ -25,6 +25,7 @@ import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { useSharedValue } from 'react-native-reanimated';
 import {
   Camera,
+  CommonResolutions,
   useCameraDevice,
   useFrameOutput,
   type Frame,
@@ -62,8 +63,36 @@ export interface MRZCameraStepProps {
   readonly onSwitchToManual: () => void;
 }
 
-/** Run OCR every Nth frame so the worklet doesn't choke the pipeline. */
-const FRAME_THROTTLE = 4;
+/**
+ * Run OCR on every frame VisionCamera dispatches (no JS-side throttle).
+ *
+ * The original SwiftUI `MRZScannerService` runs OCR back-to-back via an
+ * `_isProcessingFrame` lock + `alwaysDiscardsLateVideoFrames = true` — as
+ * soon as one Vision call returns, the next available frame is OCR'd.
+ * No artificial gating.
+ *
+ * In VisionCamera v5 the frame-processor worklet is synchronous, so OCR
+ * already blocks the worklet thread for its full duration (~100-150ms on
+ * 720p `.accurate`) and the camera drops frames at the native layer for
+ * us. Adding a JS-side `tick % N` gate on top of that was costing one
+ * extra ~33ms frame cycle per OCR round for no gain — the throttle never
+ * activated when OCR was the bottleneck (always true on iOS Vision), and
+ * on Android ML Kit (fast — ~80ms) it just halved attempts/sec.
+ *
+ * Keeping the constant + tick counter as a future knob (e.g. for thermal
+ * back-off) — `1` means "run every frame, match Swift's cadence".
+ */
+const FRAME_THROTTLE = 1;
+
+/**
+ * Target a 720p frame for OCR instead of the negotiated default (often
+ * 1080p+). MRZ OCR-B characters at 720p are still ~30-50px tall — plenty
+ * for both VisionKit `.accurate` and ML Kit's bundled Latin recognizer —
+ * but the smaller buffer cuts iOS OCR latency by ~3-4×. Combined with
+ * the no-throttle cadence above, time-to-accept on a steady hand-held
+ * shot ends up faster than the Swift port (which ran 1080p with no ROI).
+ */
+const FRAME_OUTPUT_RESOLUTION = CommonResolutions.HD_16_9;
 
 /** Hold the current non-idle phase for this long after the last positive
  *  ingest so a one-frame OCR miss doesn't flicker the affordance back to
@@ -71,8 +100,10 @@ const FRAME_THROTTLE = 4;
 const PHASE_HOLD_MS = 1000;
 
 /** Consecutive parse-failed-with-MRZ-shape readings before we flip the
- *  sketch from green to amber and surface a recovery hint. Tuned around
- *  the FRAME_THROTTLE: 3 parse fails ≈ 1.2s of unsuccessful parsing. */
+ *  sketch from green to amber and surface a recovery hint. With OCR
+ *  running continuously, 3 parse fails ≈ 300-450ms on iOS, ~240ms on
+ *  Android — still long enough that a single misread frame doesn't
+ *  trigger the warning. */
 const STRUGGLE_THRESHOLD = 3;
 
 type ScanPhase = 'idle' | 'detecting' | 'struggling' | 'confirmed';
@@ -126,9 +157,17 @@ export function MRZCameraStep({
   /** Consecutive parse-failed reads while ≥2 MRZ rows visible. */
   const failureStreakRef = useRef(0);
 
-  // Frame counter lives on the worklet thread (SharedValue) so the
-  // throttle doesn't trip a React re-render every frame.
+  // Frame counter lives on the worklet thread (SharedValue) so it never
+  // trips a React re-render.
   const frameTick = useSharedValue<number>(0);
+
+  // Diagnostics — wall-clock timestamp of mount, OCR call counter, and a
+  // rolling average of the last few OCR durations. All JS-side so the
+  // worklet stays cheap. `mountTimeRef.current` doubles as the "time
+  // since session start" anchor for the accept log line.
+  const mountTimeRef = useRef<number>(Date.now());
+  const ocrCallCountRef = useRef<number>(0);
+  const ocrDurationsRef = useRef<number[]>([]);
 
   // Resolve the Nitro HybridObject once on the JS thread. Worklets can't
   // call non-worklet JS functions like `getMrzOcr()` synchronously, but
@@ -153,17 +192,20 @@ export function MRZCameraStep({
   const moveToPhase = useCallback((next: ScanPhase) => {
     if (next === 'idle') {
       if (phaseRef.current === 'idle') return;
+      console.log(`[MRZ] phase: ${phaseRef.current} → idle`);
       phaseRef.current = 'idle';
       setPhase('idle');
       return;
     }
     if (phaseRef.current !== next) {
+      console.log(`[MRZ] phase: ${phaseRef.current} → ${next}`);
       phaseRef.current = next;
       setPhase(next);
     }
     if (phaseTimerRef.current !== null) clearTimeout(phaseTimerRef.current);
     if (next === 'confirmed') return; // confirmed stays until rescan
     phaseTimerRef.current = setTimeout(() => {
+      console.log(`[MRZ] phase: ${phaseRef.current} → idle (timeout)`);
       phaseRef.current = 'idle';
       setPhase('idle');
       phaseTimerRef.current = null;
@@ -172,23 +214,41 @@ export function MRZCameraStep({
 
   // JS-thread sink for parsed lines: parse → consensus → setDraft, and
   // update the live phase. Returning early on null preserves the idle
-  // affordance (rule 8). Debug logs print COUNTS only — never content.
+  // affordance (rule 8). Logs include call #, native OCR latency, frame
+  // dimensions (so resolution-bias takedown is verifiable), and per-stage
+  // outcome — COUNTS only, never MRZ content (no PII).
   const ingestLines = useCallback(
-    (lines: readonly string[]) => {
+    (
+      lines: readonly string[],
+      ocrDurationMs: number,
+      frameWidth: number,
+      frameHeight: number,
+    ) => {
       const consensus = consensusRef.current;
       if (consensus === null) return;
+
+      ocrCallCountRef.current += 1;
+      // Keep a rolling window of the last 10 OCR durations for the
+      // "ACCEPT after" summary.
+      const durations = ocrDurationsRef.current;
+      durations.push(ocrDurationMs);
+      if (durations.length > 10) durations.shift();
 
       const candidates = countMrzCandidates(lines);
       const parsed = parseMrzLines(lines);
       const accepted = consensus.ingest(parsed);
 
-      if (lines.length > 0) {
-        console.log(
-          `[MRZ] lines=${String(lines.length)} candidates=${String(candidates)} parsed=${String(parsed !== null)} accepted=${String(accepted !== null)}`,
-        );
-      }
+      console.log(
+        `[MRZ] ocr #${String(ocrCallCountRef.current)} dt=${String(ocrDurationMs)}ms frame=${String(frameWidth)}x${String(frameHeight)} lines=${String(lines.length)} cand=${String(candidates)} parsed=${String(parsed !== null)} accepted=${String(accepted !== null)}`,
+      );
 
       if (accepted !== null) {
+        const totalMs = Date.now() - mountTimeRef.current;
+        const avgMs =
+          durations.reduce((s, v) => s + v, 0) / Math.max(1, durations.length);
+        console.log(
+          `[MRZ] ACCEPT after ${String(totalMs)}ms / ${String(ocrCallCountRef.current)} ocr calls (avg ${String(Math.round(avgMs))}ms/call)`,
+        );
         failureStreakRef.current = 0;
         moveToPhase('confirmed');
         setDraft(accepted);
@@ -219,12 +279,6 @@ export function MRZCameraStep({
     [moveToPhase],
   );
 
-  // Worklet → JS bridge for OCR diagnostics. Logs the rolling call count
-  // and the recognised line count every ~10 OCR calls so a quiet pipeline
-  // is visible in Metro without spamming.
-  const logOcrTick = useCallback((callCount: number, lineCount: number) => {
-    console.log(`[MRZ] ocr call #${String(callCount)} lines=${String(lineCount)}`);
-  }, []);
   const logOcrError = useCallback((message: string) => {
     console.warn(`[MRZ] scanFrame threw: ${message}`);
   }, []);
@@ -238,16 +292,20 @@ export function MRZCameraStep({
         if (tick % FRAME_THROTTLE !== 0) return;
 
         try {
+          const startedAt = Date.now();
           const result: RecognizedLines = mrzOcr.scanFrame(frame);
+          const durationMs = Date.now() - startedAt;
           // Copy into a plain array so the value is safe to ship across
           // the worklet → JS bridge.
           const lines: string[] = [];
           for (const line of result.lines) lines.push(line);
-          scheduleOnRN(ingestLines, lines);
-          const ocrCallCount = tick / FRAME_THROTTLE;
-          if (ocrCallCount % 10 === 0) {
-            scheduleOnRN(logOcrTick, ocrCallCount, lines.length);
-          }
+          scheduleOnRN(
+            ingestLines,
+            lines,
+            durationMs,
+            result.frameWidth,
+            result.frameHeight,
+          );
         } catch (e) {
           const message = e instanceof Error ? e.message : String(e);
           scheduleOnRN(logOcrError, message);
@@ -256,14 +314,25 @@ export function MRZCameraStep({
         frame.dispose();
       }
     };
-  }, [frameTick, ingestLines, logOcrError, logOcrTick, mrzOcr]);
+  }, [frameTick, ingestLines, logOcrError, mrzOcr]);
 
   const frameOutput = useFrameOutput({
     pixelFormat: 'yuv',
+    targetResolution: FRAME_OUTPUT_RESOLUTION,
     onFrame,
   });
 
+  // Bias the negotiated session toward the frame output's target — this
+  // is what actually pulls the camera down from its native 1080p/4K
+  // default to the 720p we asked for. Without it `targetResolution` is
+  // only a hint and the Camera can still pick higher.
+  const cameraConstraints = useMemo(
+    () => [{ resolutionBias: frameOutput }],
+    [frameOutput],
+  );
+
   const handleRescan = useCallback(() => {
+    console.log('[MRZ] rescan — resetting consensus, counters, timer');
     consensusRef.current?.reset();
     frameTick.value = 0;
     if (phaseTimerRef.current !== null) {
@@ -274,6 +343,10 @@ export function MRZCameraStep({
     phaseRef.current = 'idle';
     setPhase('idle');
     setDraft(null);
+    // Reset diagnostics so the next ACCEPT log measures from rescan.
+    mountTimeRef.current = Date.now();
+    ocrCallCountRef.current = 0;
+    ocrDurationsRef.current = [];
   }, [frameTick]);
 
   const handleUseThis = useCallback(() => {
@@ -281,7 +354,14 @@ export function MRZCameraStep({
   }, [draft, onScanned]);
 
   useEffect(() => {
+    console.log(
+      `[MRZ] mount — target=${String(FRAME_OUTPUT_RESOLUTION.width)}x${String(FRAME_OUTPUT_RESOLUTION.height)} throttle=${String(FRAME_THROTTLE)} struggle=${String(STRUGGLE_THRESHOLD)} hold=${String(PHASE_HOLD_MS)}ms`,
+    );
+    mountTimeRef.current = Date.now();
     return () => {
+      console.log(
+        `[MRZ] unmount after ${String(Date.now() - mountTimeRef.current)}ms / ${String(ocrCallCountRef.current)} ocr calls`,
+      );
       if (phaseTimerRef.current !== null) {
         clearTimeout(phaseTimerRef.current);
         phaseTimerRef.current = null;
@@ -320,6 +400,7 @@ export function MRZCameraStep({
         device={device}
         isActive={draft === null}
         outputs={[frameOutput]}
+        constraints={cameraConstraints}
       />
 
       <NavBar onCancel={onCancel} onSwitchToManual={onSwitchToManual} />

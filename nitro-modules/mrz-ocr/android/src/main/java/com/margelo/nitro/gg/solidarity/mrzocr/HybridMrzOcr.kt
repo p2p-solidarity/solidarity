@@ -69,7 +69,11 @@ class HybridMrzOcr : HybridMrzOcrSpec() {
 
     val sortedTexts = orderedLines.map { it.text }.toTypedArray()
 
-    Log.d(TAG, "scanned ${sortedTexts.size} lines in ${System.currentTimeMillis() - started}ms")
+    Log.d(
+      TAG,
+      "scanFrame: ${sortedTexts.size} lines in ${System.currentTimeMillis() - started}ms " +
+        "(frame ${frameWidth.toInt()}x${frameHeight.toInt()}, minConf=${"%.2f".format(minConfidence)})"
+    )
 
     return RecognizedLines(
       lines = sortedTexts,

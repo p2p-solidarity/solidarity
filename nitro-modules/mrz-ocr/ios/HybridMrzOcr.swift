@@ -15,8 +15,11 @@
 
 import CoreVideo
 import NitroModules
+import os
 import Vision
 import VisionCamera
+
+private let mrzLog = OSLog(subsystem: "gg.solidarity.mrz-ocr", category: "scan")
 
 private func cgImageOrientation(from orientation: CameraOrientation) -> CGImagePropertyOrientation {
   switch orientation {
@@ -48,13 +51,23 @@ final class HybridMrzOcr: HybridMrzOcrSpec {
       options: [:]
     )
 
+    let startedAt = CFAbsoluteTimeGetCurrent()
     do {
       try handler.perform([request])
     } catch {
       throw RuntimeError.error(withMessage: "Vision OCR failed: \(error.localizedDescription)")
     }
+    let elapsedMs = Int((CFAbsoluteTimeGetCurrent() - startedAt) * 1000)
 
     guard let observations = request.results, !observations.isEmpty else {
+      os_log(
+        "scanFrame: 0 lines in %{public}dms (frame %{public}gx%{public}g)",
+        log: mrzLog,
+        type: .debug,
+        elapsedMs,
+        native.width,
+        native.height
+      )
       return RecognizedLines(
         lines: [],
         confidence: 0,
@@ -81,6 +94,14 @@ final class HybridMrzOcr: HybridMrzOcrSpec {
     }
 
     if lines.isEmpty {
+      os_log(
+        "scanFrame: 0 lines in %{public}dms (frame %{public}gx%{public}g)",
+        log: mrzLog,
+        type: .debug,
+        elapsedMs,
+        native.width,
+        native.height
+      )
       return RecognizedLines(
         lines: [],
         confidence: 0,
@@ -88,6 +109,17 @@ final class HybridMrzOcr: HybridMrzOcrSpec {
         frameHeight: native.height
       )
     }
+
+    os_log(
+      "scanFrame: %{public}d lines in %{public}dms (frame %{public}gx%{public}g, minConf=%.2f)",
+      log: mrzLog,
+      type: .debug,
+      lines.count,
+      elapsedMs,
+      native.width,
+      native.height,
+      Double(minConfidence)
+    )
 
     return RecognizedLines(
       lines: lines,
