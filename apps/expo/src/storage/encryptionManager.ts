@@ -19,10 +19,19 @@ import {
 
 import { getMasterKey } from './secureMasterKey';
 
+// Set/Map have no enumerable own props, so JSON.stringify(new Set(['a'])) is
+// "{}" and the entries vanish. Convert them to plain arrays at the boundary so
+// runtime Sets (e.g. SharingPreferences.publicFields) round-trip through disk.
+function jsonReplacer(_key: string, val: unknown): unknown {
+  if (val instanceof Set) return Array.from(val);
+  if (val instanceof Map) return Array.from(val.entries());
+  return val;
+}
+
 /** Serialise + encrypt; returns base64 of the Swift-compatible combined blob. */
 export async function encryptJson(value: unknown): Promise<string> {
   const key = await getMasterKey();
-  const plaintext = utf8ToBytes(JSON.stringify(value));
+  const plaintext = utf8ToBytes(JSON.stringify(value, jsonReplacer));
   return base64Encode(aesGcmSeal(key, plaintext));
 }
 

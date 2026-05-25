@@ -17,9 +17,21 @@ import { z } from 'zod';
 
 import { businessCardFieldSchema, sharingFormatSchema } from './sharingFormat';
 
+// Three input shapes survive a safeParse round-trip:
+//   1. Set            — in-memory value handed back into safeParse.
+//   2. Array          — wire format produced by the new JSON encoder.
+//   3. Plain object   — legacy on-disk data from before the encoder fix, when
+//                       JSON.stringify(Set) erased the entries to "{}". The
+//                       entries are genuinely gone; we recover as empty set
+//                       rather than crash, and the user re-edits to repopulate.
 const fieldSetSchema = z
   .preprocess(
-    (val) => (val instanceof Set ? Array.from(val) : val),
+    (val) => {
+      if (val instanceof Set) return Array.from(val);
+      if (Array.isArray(val)) return val;
+      if (val && typeof val === 'object') return [];
+      return val;
+    },
     z.array(businessCardFieldSchema)
   )
   .transform((a) => new Set(a));

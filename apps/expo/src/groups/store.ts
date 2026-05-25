@@ -124,8 +124,13 @@ export const useGroupStore = create<GroupStoreState>((set, get) => ({
 export const useGroup = (id: string | undefined): GroupModel | undefined =>
   useGroupStore((s) => (id ? s.groups.get(id) : undefined));
 
+// Stable empty fallback — a fresh `[]` literal in the selector trips Zustand
+// v5's snapshot identity check and loops on "Maximum update depth exceeded",
+// same as the `useShallow`-wrapped derivations below.
+const EMPTY_MEMBERS: readonly GroupMember[] = Object.freeze([]);
+
 export const useGroupMembers = (id: string | undefined): readonly GroupMember[] =>
-  useGroupStore((s) => (id ? (s.members.get(id) ?? []) : []));
+  useGroupStore((s) => (id ? (s.members.get(id) ?? EMPTY_MEMBERS) : EMPTY_MEMBERS));
 
 /**
  * Local-only "current user" record id. The Swift app reads
