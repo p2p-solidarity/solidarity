@@ -29,3 +29,39 @@ target_link_libraries(
   ${LOG_LIB}
   android
 )
+
+# ─────────────────────────────────────────────────────────────────────
+# libcxx_stream_shim.so — VTT workaround for NDK r25+ libc++ ABI clash
+# with libpassport_zk_mopro.so. See src/main/cpp/cxx_stream_shim.cpp
+# for the full explanation. HybridPassportZk.kt's companion init
+# preloads this .so before JNA lazy-loads the mopro cdylib.
+# ─────────────────────────────────────────────────────────────────────
+add_library(cxx_stream_shim SHARED src/main/cpp/cxx_stream_shim.cpp)
+
+# Override the project-wide -fvisibility=hidden (set on the Rust /
+# barretenberg cdylib via cc-rs). With default visibility the explicit
+# template instantiations land in the dynamic symbol table where the
+# loader can find them at dlopen time. -O0 prevents -O2 / LTO from
+# dead-stripping the vtables before the linker emits them.
+#
+# Critical: barretenberg-rs was compiled against an upstream libc++
+# that uses the `__1` inline namespace; the active NDK r27's libc++
+# uses `__ndk1` (its Android fork). Without forcing the namespace, our
+# explicit instantiations would mangle as `St6__ndk1…` and never satisfy
+# mopro's `St3__1…` undefined references. The `-D_LIBCPP_ABI_NAMESPACE=__1`
+# and `-D_LIBCPP_ABI_VERSION=1` defines flip the headers back to the
+# upstream namespace for THIS TU only, so the produced symbols match
+# what dlopen is looking for at byte level.
+#
+# `-include` forces the macros to be set before any libc++ header is
+# included even if the .cpp itself forgets; safer than relying on
+# include ordering.
+target_compile_options(cxx_stream_shim PRIVATE
+  -fvisibility=default
+  -fvisibility-inlines-hidden
+  -O0
+  -fno-lto
+)
+
+# Link against libc++_shared.so explicitly so the shim is self-contained.
+target_link_libraries(cxx_stream_shim ${LOG_LIB})
