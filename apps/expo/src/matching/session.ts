@@ -409,6 +409,14 @@ export const useMatchingSession = create<MatchingState>((set, get) => ({
   },
 
   connectToPeer: async (peer) => {
+    // TODO(biometric-gate): prepend
+    //   const gate = await requireSensitiveAction(
+    //     'presentProof', 'Authorize a peer card exchange'
+    //   );
+    //   if (!gate.success) { set(...); return; }
+    // so card exchanges obey the SensitiveAction policy. See
+    // `src/keychain/biometricGatekeeper.ts`. Skipped today because the
+    // concurrent agent owns this file.
     set((s) => ({ peers: updateStatus(s.peers, peer.peerId, 'connecting') }));
     const nitro = await loadNitro();
     if (!nitro) return;
@@ -444,6 +452,9 @@ export const useMatchingSession = create<MatchingState>((set, get) => ({
   },
 
   acceptInvitation: async (peerId) => {
+    // TODO(biometric-gate): see connectToPeer above — same
+    // `requireSensitiveAction('presentProof', ...)` gate applies here for
+    // the inviter-accepts-card-exchange flow.
     const nitro = await loadNitro();
     if (nitro) nitro.acceptInvitation(peerId);
     set((s) => ({
