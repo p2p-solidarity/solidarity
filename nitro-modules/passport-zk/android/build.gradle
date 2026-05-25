@@ -108,6 +108,14 @@ android {
     prefab true
   }
 
+  // Keep the bundled circuit + SRS uncompressed so AGP mmaps them straight
+  // out of the APK instead of inflating into /data/data/.../files at
+  // install time. The circuit JSON is 650 KB; the SRS is 4 MB — neither is
+  // small enough to want a second on-disk copy.
+  androidResources {
+    noCompress += ['json', 'bin']
+  }
+
   buildTypes {
     release {
       minifyEnabled false

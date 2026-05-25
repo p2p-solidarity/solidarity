@@ -35,9 +35,12 @@
  */
 package com.margelo.nitro.gg.solidarity.passportzk
 
+import android.content.Context
 import android.util.Log
+import com.margelo.nitro.NitroModules
 import com.margelo.nitro.core.ArrayBuffer
 import com.margelo.nitro.core.Promise
+import java.io.File
 import org.json.JSONArray
 import org.json.JSONObject
 import uniffi.mopro.MoproException
@@ -54,8 +57,10 @@ class HybridPassportZk : HybridPassportZkSpec() {
   ): Promise<NitroNoirProof> = Promise.async {
     val started = System.currentTimeMillis()
     try {
+      val resolvedCircuit = resolveCircuitPath(circuitPath)
+      val resolvedSrs = resolveSrsPath(srsPath)
       val inputs = parseInputs(inputsJson)
-      val result = moproGenerateNoirProof(circuitPath, srsPath, inputs)
+      val result = moproGenerateNoirProof(resolvedCircuit, resolvedSrs, inputs)
       Log.d(TAG, "generateNoirProof ok in ${System.currentTimeMillis() - started}ms")
       NitroNoirProof(
         proof = ArrayBuffer.copy(result.proof),
@@ -74,7 +79,12 @@ class HybridPassportZk : HybridPassportZkSpec() {
     srsPath: String?,
   ): Promise<ArrayBuffer> = Promise.async {
     try {
-      ArrayBuffer.copy(moproGetNoirVerificationKey(circuitPath, srsPath))
+      ArrayBuffer.copy(
+        moproGetNoirVerificationKey(
+          resolveCircuitPath(circuitPath),
+          resolveSrsPath(srsPath),
+        ),
+      )
     } catch (e: MoproException) {
       throw RuntimeException(friendlyMoproMessage(e))
     }
@@ -93,6 +103,46 @@ class HybridPassportZk : HybridPassportZkSpec() {
 
   companion object {
     private const val TAG = "HybridPassportZk"
+
+    /** Assets we ship inside the AAR for the default v3 passport flow. */
+    private const val DEFAULT_CIRCUIT_ASSET = "passport_verifier.json"
+    private const val DEFAULT_SRS_ASSET = "passport_verifier.srs.bin"
+
+    /**
+     * Resolve a JS-supplied circuit path. Empty → extract the bundled
+     * `passport_verifier.json` into `filesDir/passport_zk/` once and reuse
+     * the extracted path on subsequent calls (UniFFI's
+     * `generate_noir_proof` reads from `std::fs`, so the asset has to live
+     * on a real filesystem path, not inside the APK's `assets/` zip).
+     */
+    private fun resolveCircuitPath(supplied: String): String =
+      if (supplied.isEmpty()) extractAsset(DEFAULT_CIRCUIT_ASSET).absolutePath else supplied
+
+    private fun resolveSrsPath(supplied: String?): String? =
+      if (supplied.isNullOrEmpty()) extractAsset(DEFAULT_SRS_ASSET).absolutePath else supplied
+
+    /**
+     * Idempotent asset → filesDir copy. The cache key is uncompressed size
+     * (`InputStream.available()` returns uncompressed bytes for asset
+     * streams regardless of AGP compression). When the user reinstalls a
+     * new APK with refreshed circuits, `extractedSize != bundledSize` and
+     * the file gets rewritten.
+     */
+    private fun extractAsset(assetName: String): File {
+      val ctx: Context = NitroModules.applicationContext
+        ?: throw IllegalStateException(
+          "NitroModules.applicationContext is null — cannot extract $assetName",
+        )
+      val dest = File(ctx.filesDir, "passport_zk/$assetName").apply {
+        parentFile?.mkdirs()
+      }
+      val bundledSize = ctx.assets.open(assetName).use { it.available().toLong() }
+      if (dest.exists() && dest.length() == bundledSize) return dest
+      ctx.assets.open(assetName).use { input ->
+        dest.outputStream().use { out -> input.copyTo(out) }
+      }
+      return dest
+    }
 
     /**
      * Parse the JS-side `{ [name]: string[] }` witness map. We trust the
