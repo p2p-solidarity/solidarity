@@ -98,7 +98,7 @@ export function MRZCameraStep({
         isActive={draft === null}
       />
 
-      <NavBar onCancel={onCancel} />
+      <NavBar onCancel={onCancel} onSwitchToManual={onSwitchToManual} />
 
       <View style={styles.overlayContainer}>
         <PassportSketch active={draft !== null} />
@@ -116,14 +116,27 @@ export function MRZCameraStep({
   );
 }
 
-function NavBar({ onCancel }: { onCancel: () => void }) {
+function NavBar({
+  onCancel,
+  onSwitchToManual,
+}: {
+  onCancel: () => void;
+  onSwitchToManual: () => void;
+}) {
   return (
     <View style={styles.navBar}>
       <Pressable onPress={onCancel} accessibilityRole="button" style={styles.navBarButton}>
         <Text style={styles.navBarText}>Cancel</Text>
       </Pressable>
       <Text style={styles.navBarTitle}>Scan Passport</Text>
-      <View style={styles.navBarButton} />
+      <Pressable
+        onPress={onSwitchToManual}
+        accessibilityRole="button"
+        accessibilityLabel="Enter passport MRZ manually"
+        style={[styles.navBarButton, { alignItems: 'flex-end' }]}
+      >
+        <Text style={styles.navBarText}>Manual</Text>
+      </Pressable>
     </View>
   );
 }
