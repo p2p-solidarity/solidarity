@@ -170,4 +170,14 @@ dependencies {
   // ImageProxy instances; we need the ImageProxy type to read mediaImage
   // out of them. Pinned to the same version VisionCamera v5 ships.
   implementation "androidx.camera:camera-core:1.7.0-alpha01"
+
+  // Tesseract4Android — pure-algorithm OCR engine (classical CV
+  // pipeline: thresholding + connected-components + LSTM-free dict
+  // matching). User explicitly requested an OCR path that doesn't
+  // depend on a learned model. Toggled at the bottom of HybridMrzOcr
+  // via the USE_TESSERACT companion constant; ML Kit Text Recognition
+  // is the (faster, learned-model) fallback. Adds ~12 MB to the APK
+  // (native libtesseract.so + libleptonica.so) plus the eng_fast
+  // traineddata bundled as an asset (~4 MB).
+  implementation "cz.adaptech.tesseract4android:tesseract4android:4.7.0"
 }
