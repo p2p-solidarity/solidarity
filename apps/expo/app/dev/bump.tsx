@@ -29,6 +29,11 @@ import {
 import { Colors } from '@/constants/Colors';
 import { haptic } from '@/feedback/haptics';
 import {
+  attachBumpDriverToNitro,
+  detachBumpDriverFromNitro,
+  invitePeerViaNitro,
+} from '@/matching/bumpDriverAttach';
+import {
   type BumpDriver,
   type BumpEvent,
   type BumpHapticKind,
@@ -100,12 +105,18 @@ export default function BumpLab() {
   const insets = useSafeAreaInsets();
   const developerMode = usePreferences((s) => s.developerMode);
   const [alwaysConfirm, setAlwaysConfirm] = useState(false);
+  const [liveMode, setLiveMode] = useState(false);
+  const [liveAvailable, setLiveAvailable] = useState<boolean | null>(null);
   const [peers, setPeers] = useState<readonly PeerView[]>([]);
   const [logs, setLogs] = useState<readonly LogEntry[]>([]);
   const [flashing, setFlashing] = useState(false);
   const [consent, setConsent] = useState<ConsentSheet | null>(null);
   const driverRef = useRef<BumpDriver | null>(null);
   const consentTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const liveModeRef = useRef(false);
+  useEffect(() => {
+    liveModeRef.current = liveMode;
+  }, [liveMode]);
 
   // Driver lives one instance per Lab session. Re-created when the
   // alwaysConfirm flag flips so the new config takes effect; state
@@ -115,9 +126,13 @@ export default function BumpLab() {
     const driver = createBumpDriver({
       alwaysConfirm,
       onHaptic: (kind: BumpHapticKind) => { haptic(kind); },
-      invitePeer: () => {
-        // Sandbox: no real invite. P2P Lab handles the wire-level invite
-        // once it ships; this Lab is for the state machine + UX only.
+      invitePeer: (peerId: string) => {
+        // In Live mode a `confirmed` transition really invites the peer
+        // over BLE; simulate-only peers (sim-*) never resolve via Nitro
+        // because they aren't in the proximity registry — safely noops.
+        if (liveModeRef.current) {
+          void invitePeerViaNitro(peerId);
+        }
       },
       onEvent: (event: BumpEvent) => {
         if (event.kind === 'stateChanged') {
@@ -155,12 +170,26 @@ export default function BumpLab() {
     setLogs([]);
     return () => {
       driverRef.current = null;
+      detachBumpDriverFromNitro();
       if (consentTimerRef.current) {
         clearTimeout(consentTimerRef.current);
         consentTimerRef.current = null;
       }
     };
   }, [developerMode, alwaysConfirm]);
+
+  // Drive Live attach/detach as the toggle flips. Re-attach is a no-op
+  // when already subscribed (bumpDriverAttach is idempotent).
+  useEffect(() => {
+    if (!developerMode) return;
+    const driver = driverRef.current;
+    if (!driver) return;
+    if (liveMode) {
+      void attachBumpDriverToNitro(driver).then((ok) => { setLiveAvailable(ok); });
+    } else {
+      detachBumpDriverFromNitro();
+    }
+  }, [developerMode, liveMode, alwaysConfirm]);
 
   const totalCount = peers.length;
   const activeStates = useMemo(
@@ -256,8 +285,19 @@ export default function BumpLab() {
 
           <SettingsBlockSection
             title="Settings"
-            footer="When on, even the UWB branch shows the 3-second consent sheet on every bump. Off matches the default NFC-tap-feel experience."
+            footer={
+              liveMode && liveAvailable === false
+                ? 'Live mode attempted, but @solidarity/nitro-proximity is unavailable on this build. Use simulate buttons instead.'
+                : 'When Live is on, the driver subscribes to the nitro-proximity event stream and auto-invite fires real BLE invitations on `confirmed`. Always Confirm forces the 3-second sheet even on UWB devices.'
+            }
           >
+            <SettingsBlockToggleRow
+              icon="dot.radiowaves.left.and.right"
+              title="Live (attach to BLE proximity)"
+              subtitle="Requires Start Matching on the Share tab"
+              value={liveMode}
+              onValueChange={(v) => { setLiveMode(v); }}
+            />
             <SettingsBlockToggleRow
               icon="checkmark.shield"
               title="Always confirm bumps"
