@@ -2,31 +2,37 @@
  * Camera permission helper for the QR scanner. Centralised so the
  * "request → check → guard" dance lives in one place; callers just
  * read `granted`.
+ *
+ * Vision Camera v5 exposes permission state through a hook. We keep the
+ * consumer-facing `'pending' | 'granted' | 'denied'` contract and translate
+ * at the edge so callers don't have to learn the camera library shape.
  */
 import { useEffect, useState } from 'react';
-import { Camera } from 'react-native-vision-camera';
+import {
+  useCameraPermission as useVisionCameraPermission,
+} from 'react-native-vision-camera';
 
 export type CameraPermissionState = 'pending' | 'granted' | 'denied';
 
 export function useCameraPermission(): CameraPermissionState {
   const [state, setState] = useState<CameraPermissionState>('pending');
+  const { hasPermission, requestPermission } = useVisionCameraPermission();
 
   useEffect(() => {
     let cancelled = false;
     void (async () => {
-      const current = Camera.getCameraPermissionStatus();
-      if (current === 'granted') {
+      if (hasPermission) {
         if (!cancelled) setState('granted');
         return;
       }
-      const next = await Camera.requestCameraPermission();
+      const granted = await requestPermission().catch(() => false);
       if (cancelled) return;
-      setState(next === 'granted' ? 'granted' : 'denied');
+      setState(granted ? 'granted' : 'denied');
     })();
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [hasPermission, requestPermission]);
 
   return state;
 }

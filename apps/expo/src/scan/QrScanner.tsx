@@ -1,9 +1,11 @@
 /**
  * Vision-camera v5 QR scanner — mirrors Swift QRCodeManager.startScanning.
  *
- * v5 has a built-in `useCodeScanner` that runs barcode detection off the
- * JS thread (Nitro frame processor under the hood), so the JS callback
- * fires only when a new code is decoded — no per-frame churn.
+ * v5 moved barcode detection out of core into
+ * `react-native-vision-camera-barcode-scanner` (MLKit on both platforms).
+ * We attach a `useBarcodeScannerOutput` to the Camera's `outputs={[…]}`
+ * array; the JS callback fires only when a new code is decoded, so there
+ * is no per-frame churn.
  *
  * Chunked frames (sqc1 prefix) are routed into the shared QR reassembler
  * automatically; the consumer's onResult fires once with the reassembled
@@ -12,11 +14,8 @@
 import type { ReactNode } from 'react';
 import { useCallback, useMemo, useRef } from 'react';
 import { StyleSheet, View } from 'react-native';
-import {
-  Camera,
-  useCameraDevice,
-  useCodeScanner,
-} from 'react-native-vision-camera';
+import { Camera, useCameraDevice } from 'react-native-vision-camera';
+import { useBarcodeScannerOutput } from 'react-native-vision-camera-barcode-scanner';
 
 import { ThemedSurface, ThemedText } from '@/components/themed';
 import { useCameraPermission } from './useCameraPermission';
@@ -82,12 +81,16 @@ export function QrScanner({ onResult, onProgress }: QrScannerProps): ReactNode {
     [onProgress, onResult, reassembler]
   );
 
-  const codeScanner = useCodeScanner({
-    codeTypes: ['qr'],
-    onCodeScanned: (codes) => {
+  const barcodeOutput = useBarcodeScannerOutput({
+    barcodeFormats: ['qr-code'],
+    onBarcodeScanned: (codes) => {
       for (const c of codes) {
-        if (c.value) handleValue(c.value);
+        if (c.rawValue) handleValue(c.rawValue);
       }
+    },
+    onError: () => {
+      // Reassembler state isn't tied to scan errors — keep silent so a
+      // transient MLKit hiccup doesn't blank a partial chunked burst.
     },
   });
 
@@ -123,7 +126,7 @@ export function QrScanner({ onResult, onProgress }: QrScannerProps): ReactNode {
       style={styles.fill}
       device={device}
       isActive
-      codeScanner={codeScanner}
+      outputs={[barcodeOutput]}
     />
   );
 }
