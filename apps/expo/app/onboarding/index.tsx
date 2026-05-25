@@ -16,12 +16,10 @@
  *   3. Create the initial BusinessCard (CardManager.createCard).
  *   4. Navigate to /(tabs)/people (MainTabView).
  */
-import { Image as ExpoImage } from 'expo-image';
 import { router, Stack, useLocalSearchParams } from 'expo-router';
-import { useCallback, useEffect, useReducer } from 'react';
+import { useCallback, useReducer } from 'react';
 import { Pressable, View } from 'react-native';
 
-import { ANIMAL_CASES, animalImageSource } from '@/cards/animals';
 import { useCardStore } from '@/cards/cardManager';
 import { SfIcon } from '@/components/icons/SfIcon';
 import { Colors } from '@/constants/Colors';
@@ -48,13 +46,6 @@ export default function OnboardingFlow() {
   const [state, dispatch] = useReducer(onboardingReducer, initialOnboardingState);
   const setPref = usePreferences((s) => s.set);
   const upsertCard = useCardStore((s) => s.upsert);
-
-  // Warm the expo-image cache on entry so the avatar step paints frame 1
-  // without a first-load hitch. PNGs are bundled via `require()` so prefetch
-  // resolves immediately from the JS bundle — no network round-trip.
-  useEffect(() => {
-    void ExpoImage.prefetch(ANIMAL_CASES.map((a) => animalImageSource(a) as never));
-  }, []);
 
   const goTo = useCallback((step: OnboardingStep) => {
     dispatch({ type: 'goTo', step });
