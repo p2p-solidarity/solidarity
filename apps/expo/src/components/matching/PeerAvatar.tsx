@@ -1,19 +1,15 @@
 /**
- * PeerAvatar — circular avatar used by every matching component.
- * Mirrors Swift `ImageProvider.animalImage(for:)` placement: animal SF
- * symbol centred inside a searchBg circle with a 1pt status-colour ring.
- *
- * Assets TODO (parity with `cards/animals.ts` note): the Swift app ships
- * a PNG per animal. Until those assets land in Expo we draw the SF
- * symbol fallback so every peer still has a recognisable face.
+ * PeerAvatar — circular animal avatar used by every matching component.
+ * Mirrors Swift `ImageProvider.animalImage(for:)`:
+ *   `Image .resizable .scaledToFill .frame(size) .clipShape(Circle())`
+ * plus a 1pt status-colour ring (and optional 2pt pulsing outer ring).
  */
 import type { ReactNode } from 'react';
-import { View } from 'react-native';
+import { Image, View } from 'react-native';
 
 import type { Animal } from '@solidarity/shared';
 
-import { animalSymbolFallback } from '@/cards/animals';
-import { SfIcon } from '@/components/icons/SfIcon';
+import { animalImageSource } from '@/cards/animals';
 import { Colors } from '@/constants/Colors';
 
 export interface PeerAvatarProps {
@@ -30,7 +26,6 @@ export function PeerAvatar({
   ringColor = Colors.divider,
   outerRingColor,
 }: PeerAvatarProps): ReactNode {
-  const iconSize = Math.round(size * 0.46);
   return (
     <View style={{ width: size, height: size, alignItems: 'center', justifyContent: 'center' }}>
       <View
@@ -38,14 +33,16 @@ export function PeerAvatar({
           width: size,
           height: size,
           borderRadius: size / 2,
-          backgroundColor: Colors.searchBg,
-          alignItems: 'center',
-          justifyContent: 'center',
           borderWidth: 1,
           borderColor: ringColor,
+          overflow: 'hidden',
         }}
       >
-        <SfIcon name={animalSymbolFallback(animal)} size={iconSize} color={Colors.text2} />
+        <Image
+          source={animalImageSource(animal)}
+          style={{ width: size, height: size }}
+          resizeMode="cover"
+        />
       </View>
       {outerRingColor ? (
         <View

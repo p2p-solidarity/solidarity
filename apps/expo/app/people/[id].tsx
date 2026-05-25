@@ -16,6 +16,7 @@ import { router, useLocalSearchParams } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useMemo, useState, type ReactNode } from 'react';
 import {
+  Image,
   Pressable,
   ScrollView,
   Share,
@@ -25,6 +26,7 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { animalImageSource } from '@/cards/animals';
 import { MauvePetalMotif } from '@/components/decor/MauvePetalMotif';
 import { SfIcon } from '@/components/icons/SfIcon';
 import { PersonDetailEphemeralSection } from '@/components/people/PersonDetailEphemeralSection';
@@ -38,7 +40,7 @@ import {
 } from '@/components/people/personDetailSupport';
 import { Colors } from '@/constants/Colors';
 import { useContact, useContactStore } from '@/contacts/repository';
-import type { Contact } from '@solidarity/shared';
+import type { Animal, Contact } from '@solidarity/shared';
 
 const HERO_HORIZONTAL_PADDING = 16;
 
@@ -207,7 +209,7 @@ function HeroCard({
 
       <View style={{ paddingHorizontal: 12, paddingTop: 16, paddingBottom: 24, rowGap: 16 }}>
         <View style={{ alignItems: 'center', rowGap: 16 }}>
-          <AvatarCircle name={displayName} />
+          <AvatarCircle name={displayName} animal={contact?.businessCard.animal} />
           <View style={{ alignItems: 'center', rowGap: 8, alignSelf: 'stretch' }}>
             <Text
               numberOfLines={2}
@@ -327,11 +329,18 @@ function HeroNoteLine({
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Avatar circle — 88pt warm cream disc with an initial glyph. Once the
-// asset pipeline lands, swap the initial for ImageProvider.animalImage(for:).
+// Avatar circle — 88pt warm cream disc. Renders animal PNG (Swift parity:
+// ImageProvider.animalImage(for:)) when the contact has an animal set,
+// otherwise falls back to the initial glyph.
 // ─────────────────────────────────────────────────────────────────────────────
 
-function AvatarCircle({ name }: { readonly name: string }): ReactNode {
+function AvatarCircle({
+  name,
+  animal,
+}: {
+  readonly name: string;
+  readonly animal: Animal | undefined;
+}): ReactNode {
   return (
     <View
       style={{
@@ -346,9 +355,13 @@ function AvatarCircle({ name }: { readonly name: string }): ReactNode {
         overflow: 'hidden',
       }}
     >
-      <Text className="text-text2" style={{ fontSize: 32, fontWeight: '500' }}>
-        {initialOf(name)}
-      </Text>
+      {animal ? (
+        <Image source={animalImageSource(animal)} style={{ width: 88, height: 88 }} resizeMode="cover" />
+      ) : (
+        <Text className="text-text2" style={{ fontSize: 32, fontWeight: '500' }}>
+          {initialOf(name)}
+        </Text>
+      )}
     </View>
   );
 }

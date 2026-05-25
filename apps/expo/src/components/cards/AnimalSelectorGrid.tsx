@@ -3,13 +3,13 @@
  * solidarity/Views/CardViews/AnimalSelectorView.swift.
  *
  * Horizontal scroll row of `AnimalChip`s. Selected chip gets a stronger
- * border + searchBg fill. Until the PNG asset pipeline ports we render
- * an SF Symbol placeholder inside the 36×24 thumb (`animalSymbolFallback`).
+ * border + searchBg fill. The 36×24 thumb shows the plain animal PNG
+ * with cornerRadius(12) per Swift (`.scaledToFill .frame(36,24) .clipped
+ * .cornerRadius(12)`).
  */
-import { Pressable, ScrollView, Text, View } from 'react-native';
+import { Image, Pressable, ScrollView, Text, View } from 'react-native';
 
-import { ANIMAL_CASES, animalDisplayName, animalSymbolFallback } from '@/cards/animals';
-import { SfIcon } from '@/components/icons/SfIcon';
+import { ANIMAL_CASES, animalDisplayName, animalImageSource } from '@/cards/animals';
 import { Colors } from '@/constants/Colors';
 import { type Animal } from '@solidarity/shared';
 
@@ -46,8 +46,6 @@ interface AnimalChipProps {
 }
 
 function AnimalChip({ animal, isSelected, onPress }: AnimalChipProps) {
-  // TODO(asset-pipeline): swap the SF Symbol placeholder for
-  // ImageProvider.animalImage(for:) once the PNG assets are bundled.
   return (
     <Pressable
       onPress={onPress}
@@ -72,13 +70,10 @@ function AnimalChip({ animal, isSelected, onPress }: AnimalChipProps) {
           borderRadius: 12,
           borderWidth: 1,
           borderColor: isSelected ? Colors.divider : `${Colors.divider}99`,
-          backgroundColor: Colors.warmCream,
-          alignItems: 'center',
-          justifyContent: 'center',
           overflow: 'hidden',
         }}
       >
-        <SfIcon name={animalSymbolFallback(animal)} size={14} color={Colors.text1} />
+        <Image source={animalImageSource(animal)} style={{ width: 36, height: 24 }} resizeMode="cover" />
       </View>
       <Text className="text-text1 text-[12px] font-semibold">
         {animalDisplayName(animal)}
