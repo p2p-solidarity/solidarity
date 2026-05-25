@@ -408,6 +408,11 @@ export function arrayBufferToBase64(buffer: ArrayBuffer): string {
 // failing checksum surfaces the same `validationError` payload on both
 // sides (CardError.validationError on Swift, { type: 'validationError' } on
 // TS via @solidarity/shared/cardError).
+//
+// Why this exists in TS as well: until the Nitro NFC module is linked on
+// Android we still need to validate user-entered MRZ strings before
+// hitting the chip, otherwise an off-by-one OCR scan wastes a 30-second
+// NFC attempt for an error that should have been caught up front.
 // ---------------------------------------------------------------------------
 
 const MRZ_WEIGHTS: readonly [number, number, number] = [7, 3, 1];
@@ -441,6 +446,16 @@ export function mrzCheckDigit(field: string): number {
 
 /**
  * Validate the embedded check digits on a `PassportMRZ` payload.
+ *
+ * Expectations (per ICAO 9303 + Swift NFCPassportReaderService.buildMRZKey):
+ *   - `documentNumber` is the 9-char passport number padded with `<`
+ *     followed by exactly one digit check digit (10 chars total).
+ *     If the input is shorter than 10 chars we left-pad with `<` so the
+ *     wire format matches what the chip expects.
+ *   - `dateOfBirth` / `dateOfExpiry` are 6 chars (YYMMDD). They do NOT
+ *     embed a check digit on the wire because the chip computes them
+ *     internally — we only validate the document-number digit here.
+ *
  * Returns `validationError` (mirrors Swift CardError.validationError)
  * on mismatch. Success carries `void`.
  */
@@ -454,6 +469,9 @@ export function validateMrzChecksum(
       message: 'Passport number is too short for a check digit.',
     });
   }
+  // Last char must be a digit (the check digit). If it isn't, the caller
+  // never embedded one, which is itself a validation failure for the
+  // strict "with check digit included" contract on PassportMRZ.
   const expected = docNumber.charAt(docNumber.length - 1);
   if (expected < '0' || expected > '9') {
     return err<CardError>({
@@ -472,6 +490,8 @@ export function validateMrzChecksum(
       message: `MRZ check digit mismatch for passport number (expected ${String(computed)}, got ${expected}).`,
     });
   }
+  // YYMMDD fields are not validated here — chip-level CA verifies them
+  // against DG1. A wrong DOB or expiry will surface as BAC failure later.
   if (mrz.dateOfBirth.length !== 6 || mrz.dateOfExpiry.length !== 6) {
     return err<CardError>({
       type: 'validationError',
@@ -484,13 +504,20 @@ export function validateMrzChecksum(
 /**
  * Run the legacy callback-style pipeline and wrap thrown errors as
  * structured `CardError`s. Mirrors Swift `PassportPipelineService`
- * which returns `CardResult<T>` from every step.
+ * which returns `CardResult<T>` from every step (validateMRZ →
+ * validationError, readNFCChip → configurationError on NFC failure,
+ * generateProof → validationError on MRZ-digest mismatch /
+ * configurationError otherwise).
+ *
+ * Tests use this wrapper to assert typed error codes without losing the
+ * step-event stream (`onStep` still fires up to the failure point).
  */
 export async function runPassportPipelineSafe(
   mrz: PassportMRZ,
   deps: PassportPipelineDeps,
   onStep: (step: PassportStep) => void
 ): Promise<Result<string, CardError>> {
+  // Up-front checksum validation (mirrors Swift PassportPipelineService.validateMRZ).
   const checksum = validateMrzChecksum(mrz);
   if (!checksum.ok) {
     onStep({ type: 'error', message: checksum.error.message });
@@ -507,6 +534,7 @@ export async function runPassportPipelineSafe(
   }
 }
 
+/** Map a thrown error message into a typed CardError variant. */
 function classifyPassportError(message: string): CardError['type'] {
   const lower = message.toLowerCase();
   if (lower.includes('nfc') || lower.includes('chip') || lower.includes('bac') || lower.includes('pace') || lower.includes('passive')) {
@@ -531,19 +559,30 @@ function classifyPassportError(message: string): CardError['type'] {
 // then assert verifyNoirProof returns true.
 //
 // Field ordering MUST match Swift's JSONEncoder(sortedKeys) — alphabetical
-// by UTF-8.
+// by UTF-8. See packages/parity-fixtures/fixtures/passport/*.json for the
+// reference layout.
 // ---------------------------------------------------------------------------
 
+/**
+ * Public-signal payload exposed by a passport ZK proof. Mirrors Swift
+ * `MoproProofOutput.publicSignals` — the disclosed claims that downstream
+ * verifiers need to bind to the proof bytes.
+ */
 export interface PassportPublicSignals {
+  /** True when the chip witness attested DOB → current age ≥ 18. */
   readonly ageOver18: boolean;
+  /** Disclosed nationality (ISO 3166 alpha-3) or empty if undisclosed. */
   readonly nationality: string;
+  /** Hex digest of the DG1 MRZ bytes (lowercase, no `0x` prefix). */
   readonly mrzHashHex: string;
+  /** Always true for any passport that produced a valid witness. */
   readonly isHuman: boolean;
 }
 
 /**
  * Derive the public signal payload from raw passport chip data.
- * Mirrors Swift `MoproProofService.buildDisclosureWitness`.
+ * Mirrors Swift `MoproProofService.buildDisclosureWitness` — same input
+ * → same signals. No randomness; safe to use as a parity fixture key.
  */
 export function derivePassportPublicSignals(args: {
   readonly dg1MRZData: string;
@@ -551,6 +590,8 @@ export function derivePassportPublicSignals(args: {
   readonly currentDateYyMmDd: string;
 }): PassportPublicSignals {
   const sanitized = sanitizeMRZ(args.dg1MRZData);
+  // Without 88 chars of MRZ we can't derive nationality / DOB from DG1.
+  // Fall back to the user-entered nationality and assume ageOver18 = false.
   if (sanitized.length < 88) {
     return {
       ageOver18: false,
@@ -559,13 +600,14 @@ export function derivePassportPublicSignals(args: {
       isHuman: true,
     };
   }
+  // TD3 line 2 positions 10-12 = nationality, 13-18 = DOB.
   const nationalityRaw = sanitized.slice(54, 57);
   const nationality = nationalityRaw.replace(/</g, '');
   const dob = sanitized.slice(57, 63);
   return {
     ageOver18: isAgeAtLeast18(dob, args.currentDateYyMmDd),
     nationality: nationality || args.fallbackNationality.toUpperCase().slice(0, 3),
-    mrzHashHex: '',
+    mrzHashHex: '', // computed by the caller via @solidarity/shared sha256Bytes
     isHuman: true,
   };
 }
@@ -610,9 +652,9 @@ function isAgeAtLeast18(dobYyMmDd: string, currentYyMmDd: string): boolean {
 }
 
 /**
- * Serialize public signals + proof metadata into JSON. Keys are
- * alphabetically sorted — MUST stay in lockstep with Swift
- * JSONEncoder(sortedKeys) for parity.
+ * Serialize public signals + proof metadata into the JSON shape Swift
+ * `buildOpenPassportPayload` emits. Keys are alphabetically sorted —
+ * MUST stay in lockstep with Swift JSONEncoder(sortedKeys) for parity.
  */
 export function serializePassportProofPayload(args: {
   readonly proofType: string;

@@ -195,6 +195,16 @@ export default function PassportSetup() {
   };
 
   const onPersist = () => {
+    // TODO(biometric-gate): when this stub is replaced with an actual
+    // credential write (issueCredential VC), wrap it in
+    //   const gate = await requireSensitiveAction(
+    //     'issueCredential',
+    //     'Authenticate to issue a verifiable credential.'
+    //   );
+    //   if (!gate.success) { pushToast(t(`security.error.${gate.reason}`), 'warning'); return; }
+    // so the passport-save path obeys the SensitiveAction policy in
+    // `src/keychain/biometricGatekeeper.ts`. Today the persist step is a
+    // toast-only placeholder (Rule 8 mock label), so no biometric needed.
     pushToast(
       isMock ? 'Mock passport credential issued (demo only)' : 'Passport credential issued',
       'success'
