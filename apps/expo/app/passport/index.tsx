@@ -228,16 +228,20 @@ export default function PassportSetup() {
           },
         };
       } else {
-        // Either no ZK module linked OR the native Rust/mopro cdylib
-        // hasn't been built into this APK yet — fall back to a self-issued
-        // SD-JWT so the user still progresses to the persist step. The
-        // `white` trust level + `generationFailed: true` make the UI
-        // clearly label the credential as "Fallback (SD-JWT)" per
-        // ProofResultCard's branch.
+        // ZK prover is unavailable for one of three reasons:
+        //   1. No ZK module linked (legacy build, missing .so)
+        //   2. Native cdylib loaded but its libc++ symbol set clashes with
+        //      the libc++_shared.so AGP picked for the APK (the common
+        //      Path-1+ failure mode — barretenberg references hidden
+        //      libc++ template VTTs that NDK r25+ doesn't export)
+        //   3. The cdylib loaded fine but threw the legacy stub
+        // All three surface a "use SD-JWT" toast so the user reaches the
+        // persist step; the `white` trust level + `generationFailed: true`
+        // tag the credential as fallback in ProofResultCard.
         dispatch({ type: 'setProofProgress', message: 'ZK prover unavailable — using fallback…' });
         if (nitro.zk) {
           pushToast(
-            'ZK prover not built into this APK — using SD-JWT fallback.',
+            "ZK prover can't load on this device — using SD-JWT fallback.",
             'info',
           );
         }
@@ -354,22 +358,25 @@ async function simulateNfcRead(draft: PassportMRZDraft): Promise<PassportChipSna
 }
 
 /**
- * Pattern that flags the OLD pre-Path-1 stub throw from
- * `HybridPassportZk.kt` ("passport-zk Android impl not linked yet — build
- * libpassport_zk_mopro.so first"). We treat that one specific message as
- * a soft-fail and drop into the SD-JWT fallback so legacy APKs without
- * the cdylib don't dead-end the user.
+ * Errors we treat as "the ZK prover is unavailable on this build" and
+ * route to the SD-JWT fallback rather than show as an error toast.
  *
- * IMPORTANT: kept narrow on purpose. An earlier broader regex matched any
- * error message that mentioned `libpassport_zk_mopro` (e.g. JNA load
- * failures), which made every Rust-side circuit / witness error look
- * like "not built in" and routed the user into a misleading toast. Real
- * errors from the prover (circuit not found, witness shape mismatch,
- * out-of-memory, etc.) now bubble up as themselves so the user / Metro
- * console see what actually failed.
+ *   1. The legacy stub throw from the pre-Path-1 cdylib placeholder.
+ *   2. JNA `UnsatisfiedLinkError` from a `dlopen` failure on the cdylib —
+ *      most commonly NDK r25+'s `_LIBCPP_HIDE_FROM_ABI` mismatch where the
+ *      libc++_shared.so picked by AGP doesn't expose VTTs that barretenberg
+ *      pulls in (`_ZTT…basic_ostringstream…`). The cdylib is in the APK,
+ *      but the runtime can't actually use it.
+ *   3. Explicit "Native ZK library failed to load" from our own Kotlin
+ *      catch-block wrapper, also from a dlopen failure.
+ *
+ * Real proof-time errors (circuit missing, witness shape mismatch,
+ * out-of-memory, etc.) still bubble up unchanged so the user sees them.
  */
-const ZK_NOT_LINKED_RE =
-  /passport-zk Android impl not linked|build libpassport_zk_mopro\.so first/i;
+const ZK_UNAVAILABLE_RE =
+  /passport-zk Android impl not linked|build libpassport_zk_mopro\.so first|UnsatisfiedLinkError|Native ZK library failed to load|cannot locate symbol/i;
+/** @deprecated alias retained for grep; use `ZK_UNAVAILABLE_RE`. */
+const ZK_NOT_LINKED_RE = ZK_UNAVAILABLE_RE;
 
 /**
  * Run the Nitro ZK prover. Real prover errors (memory, malformed inputs,
