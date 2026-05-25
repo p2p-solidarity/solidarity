@@ -30,6 +30,24 @@ const CONSENSUS_THRESHOLD = 3;
 const CONSENSUS_WINDOW = 4;
 
 /**
+ * Cheap "do these recognised lines contain anything MRZ-shaped?" probe.
+ * Drives the live "detecting" affordance (green sketch frame) so the user
+ * gets feedback the instant the camera sees a candidate row — well before
+ * the 3-frame check-digit consensus required by `parseMrzLines`.
+ *
+ * Caveat per CLAUDE.md rule 8: a green frame here is NOT a claim that the
+ * MRZ has been *parsed* — only that text in MRZ shape is on screen. The
+ * confirmation card is still gated on `parseMrzLines` + consensus.
+ */
+export function hasMrzCandidate(lines: readonly string[]): boolean {
+  for (const line of lines) {
+    const normalised = line.toUpperCase().replace(/\s+/g, '');
+    if (MRZ_LINE_RE.test(normalised)) return true;
+  }
+  return false;
+}
+
+/**
  * Filter, pick the two longest MRZ-shaped lines, run the `mrz` parser,
  * and return a validated `PassportMRZDraft` or `null` if anything
  * (line count, check digits, required fields) fails.

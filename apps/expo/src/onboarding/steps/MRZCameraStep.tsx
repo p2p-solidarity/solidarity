@@ -20,7 +20,7 @@
  * consensus aggregator before lighting up the confirmation card.
  */
 import type { ReactNode } from 'react';
-import { useCallback, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { useSharedValue } from 'react-native-reanimated';
 import {
@@ -38,6 +38,7 @@ import { PassportSketch } from '@/components/scan/PassportSketch';
 import { ThemedButton } from '@/components/themed';
 import { Colors } from '@/constants/Colors';
 import {
+  hasMrzCandidate,
   MrzFrameConsensus,
   parseMrzLines,
 } from '@/passport/mrzOcr';
@@ -61,6 +62,10 @@ export interface MRZCameraStepProps {
 /** Run OCR every Nth frame so the worklet doesn't choke the pipeline. */
 const FRAME_THROTTLE = 4;
 
+/** Hold the "detecting" sketch frame for this long after the last hit so a
+ *  one-frame OCR miss doesn't flicker the user's affordance back to white. */
+const DETECTING_HOLD_MS = 800;
+
 export function MRZCameraStep({
   onScanned,
   onCancel,
@@ -69,6 +74,13 @@ export function MRZCameraStep({
   const permission = useCameraPermission();
   const device = useCameraDevice('back');
   const [draft, setDraft] = useState<PassportMRZDraft | null>(null);
+
+  // `detecting` flips on as soon as OCR sees an MRZ-shaped line; flips off
+  // DETECTING_HOLD_MS after the last hit. Decoupling this from the
+  // 3-frame check-digit consensus gives the user real-time "I see your
+  // passport" feedback instead of staring at a static white frame.
+  const [detecting, setDetecting] = useState(false);
+  const detectingTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Frame counter lives on the worklet thread (SharedValue) so the
   // throttle doesn't trip a React re-render every frame.
@@ -89,12 +101,26 @@ export function MRZCameraStep({
     consensusRef.current = new MrzFrameConsensus();
   }
 
-  // JS-thread sink for parsed lines: parse → consensus → setDraft.
+  // JS-thread sink for parsed lines: parse → consensus → setDraft. Also
+  // updates the live "detecting" affordance the moment any MRZ-shaped row
+  // appears, well before check-digit consensus.
   // Returning early on null preserves "Looking for MRZ..." (rule 8).
   // Debug logs print COUNTS only — never the recognised text content.
   const ingestLines = useCallback((lines: readonly string[]) => {
     const consensus = consensusRef.current;
     if (consensus === null) return;
+
+    if (hasMrzCandidate(lines)) {
+      setDetecting(true);
+      if (detectingTimerRef.current !== null) {
+        clearTimeout(detectingTimerRef.current);
+      }
+      detectingTimerRef.current = setTimeout(() => {
+        setDetecting(false);
+        detectingTimerRef.current = null;
+      }, DETECTING_HOLD_MS);
+    }
+
     const parsed = parseMrzLines(lines);
     const accepted = consensus.ingest(parsed);
     if (lines.length > 0) {
@@ -152,12 +178,26 @@ export function MRZCameraStep({
   const handleRescan = useCallback(() => {
     consensusRef.current?.reset();
     frameTick.value = 0;
+    if (detectingTimerRef.current !== null) {
+      clearTimeout(detectingTimerRef.current);
+      detectingTimerRef.current = null;
+    }
+    setDetecting(false);
     setDraft(null);
   }, [frameTick]);
 
   const handleUseThis = useCallback(() => {
     if (draft) onScanned(draft);
   }, [draft, onScanned]);
+
+  useEffect(() => {
+    return () => {
+      if (detectingTimerRef.current !== null) {
+        clearTimeout(detectingTimerRef.current);
+        detectingTimerRef.current = null;
+      }
+    };
+  }, []);
 
   if (permission !== 'granted') {
     return (
@@ -195,8 +235,12 @@ export function MRZCameraStep({
       <NavBar onCancel={onCancel} onSwitchToManual={onSwitchToManual} />
 
       <View style={styles.overlayContainer}>
-        <PassportSketch active={draft !== null} />
-        {!draft ? <Text style={styles.alignLabel}>Align passport MRZ here</Text> : null}
+        <PassportSketch active={detecting || draft !== null} />
+        {!draft ? (
+          <Text style={styles.alignLabel}>
+            {detecting ? 'Hold steady…' : 'Align passport MRZ here'}
+          </Text>
+        ) : null}
       </View>
 
       <View style={styles.footer}>
