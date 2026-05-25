@@ -34,8 +34,10 @@ export const businessCardSchema = z.object({
   sharingPreferences: sharingPreferencesSchema,
   groupContext: groupCredentialContextSchema.optional(),
   verifiedFields: z
-    .array(businessCardFieldSchema)
-    .optional()
+    .preprocess(
+      (val) => (val instanceof Set ? Array.from(val) : val),
+      z.array(businessCardFieldSchema).optional()
+    )
     .transform((a) => (a ? new Set(a) : undefined)),
   nameType: nameTypeSchema.default('display_name'),
   createdAt: z.coerce.date(),
