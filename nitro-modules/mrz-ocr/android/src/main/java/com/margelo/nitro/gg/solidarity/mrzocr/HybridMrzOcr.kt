@@ -17,6 +17,8 @@
 package com.margelo.nitro.gg.solidarity.mrzocr
 
 import android.util.Log
+import androidx.annotation.OptIn
+import androidx.camera.core.ExperimentalGetImage
 import com.google.android.gms.tasks.Tasks
 import com.google.mlkit.vision.common.InputImage
 import com.google.mlkit.vision.text.TextRecognition
@@ -28,6 +30,7 @@ import java.util.concurrent.TimeoutException
 class HybridMrzOcr : HybridMrzOcrSpec() {
   private val recognizer = TextRecognition.getClient(TextRecognizerOptions.DEFAULT_OPTIONS)
 
+  @OptIn(ExperimentalGetImage::class)
   override fun scanFrame(frame: com.margelo.nitro.camera.HybridFrameSpec): RecognizedLines {
     val native = frame as? com.margelo.nitro.camera.public.NativeFrame
       ?: throw RuntimeException("Frame is not a NativeFrame — was it dispatched from a different pipeline?")

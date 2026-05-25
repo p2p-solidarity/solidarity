@@ -91,12 +91,28 @@ export function MRZCameraStep({
 
   // JS-thread sink for parsed lines: parse → consensus → setDraft.
   // Returning early on null preserves "Looking for MRZ..." (rule 8).
+  // Debug logs print COUNTS only — never the recognised text content.
   const ingestLines = useCallback((lines: readonly string[]) => {
     const consensus = consensusRef.current;
     if (consensus === null) return;
     const parsed = parseMrzLines(lines);
     const accepted = consensus.ingest(parsed);
+    if (lines.length > 0) {
+      console.log(
+        `[MRZ] lines=${String(lines.length)} parsed=${String(parsed !== null)} accepted=${String(accepted !== null)}`,
+      );
+    }
     if (accepted !== null) setDraft(accepted);
+  }, []);
+
+  // Worklet → JS bridge for OCR diagnostics. Logs the rolling call count
+  // and the recognised line count every ~10 OCR calls so a quiet pipeline
+  // is visible in Metro without spamming.
+  const logOcrTick = useCallback((callCount: number, lineCount: number) => {
+    console.log(`[MRZ] ocr call #${String(callCount)} lines=${String(lineCount)}`);
+  }, []);
+  const logOcrError = useCallback((message: string) => {
+    console.warn(`[MRZ] scanFrame threw: ${message}`);
   }, []);
 
   const onFrame = useMemo(() => {
@@ -107,17 +123,26 @@ export function MRZCameraStep({
         frameTick.value = tick;
         if (tick % FRAME_THROTTLE !== 0) return;
 
-        const result: RecognizedLines = mrzOcr.scanFrame(frame);
-        // Copy into a plain array so the value is safe to ship across
-        // the worklet → JS bridge.
-        const lines: string[] = [];
-        for (const line of result.lines) lines.push(line);
-        scheduleOnRN(ingestLines, lines);
+        try {
+          const result: RecognizedLines = mrzOcr.scanFrame(frame);
+          // Copy into a plain array so the value is safe to ship across
+          // the worklet → JS bridge.
+          const lines: string[] = [];
+          for (const line of result.lines) lines.push(line);
+          scheduleOnRN(ingestLines, lines);
+          const ocrCallCount = tick / FRAME_THROTTLE;
+          if (ocrCallCount % 10 === 0) {
+            scheduleOnRN(logOcrTick, ocrCallCount, lines.length);
+          }
+        } catch (e) {
+          const message = e instanceof Error ? e.message : String(e);
+          scheduleOnRN(logOcrError, message);
+        }
       } finally {
         frame.dispose();
       }
     };
-  }, [frameTick, ingestLines, mrzOcr]);
+  }, [frameTick, ingestLines, logOcrError, logOcrTick, mrzOcr]);
 
   const frameOutput = useFrameOutput({
     pixelFormat: 'yuv',
