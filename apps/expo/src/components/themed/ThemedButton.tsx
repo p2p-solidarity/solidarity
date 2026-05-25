@@ -1,17 +1,21 @@
 /**
- * ThemedButton — single CTA primitive, 5 variants matching the Swift
- * Themed*ButtonStyle family + auto-haptic per aniseekr-expo CLAUDE rule 7:
- *   primary           → solid accentRose, contrast-safe foreground
- *   inverted          → white background, dark text (Swift ThemedInverted)
- *   secondary         → translucent border, accent text
- *   dottedOutline     → dashed border, accent text
- *   destructive       → red outline + red text
+ * ThemedButton — single CTA primitive, 5 variants matching
+ * solidarity/Views/Common/ThemedButtonStyles.swift verbatim.
  *
- * Haptic policy (rule 7):
- *   primary           → success
- *   destructive       → warning
- *   * (default)       → tap
- * Override with `haptic="…"` or `haptic={false}` to disable.
+ *   primary       → bg=textPrimary (ink), fg=pageBg, 1pt 30% textPrimary stroke
+ *   inverted      → bg=white, fg=black, NO border
+ *   secondary     → bg=cardSurface, fg=textPrimary, 1pt divider stroke
+ *   dottedOutline → bg=clear, fg=primaryBlue, dashed primaryBlue stroke
+ *   destructive   → bg=clear, fg=destructive, 1pt destructive stroke
+ *
+ * Every variant uses `clipShape(Rectangle())` → SQUARE corners (no borderRadius).
+ * Font is 16pt medium (primary/inverted/destructive) or 16pt regular
+ * (secondary/dottedOutline). 24h/14v padding. Pressed scale = 0.98.
+ *
+ * Haptic policy (aniseekr CLAUDE rule 7):
+ *   primary/inverted/destructive → heavyImpact (Swift)
+ *   secondary/dottedOutline      → rigidImpact / tap
+ * Override with `haptic="…"` or `haptic={false}`.
  */
 import type { ReactNode } from 'react';
 import {
@@ -20,14 +24,17 @@ import {
   type GestureResponderEvent,
   type PressableProps,
   StyleSheet,
+  Text,
   View,
 } from 'react-native';
+import Animated, {
+  useAnimatedStyle,
+  useSharedValue,
+  withSpring,
+} from 'react-native-reanimated';
 
 import { Colors } from '@/constants/Colors';
 import { haptic as fireHaptic, type HapticKind } from '@/feedback/haptics';
-
-import { ON_DARK, ON_LIGHT, readableTextOn } from './contrast';
-import { ThemedText, type TextVariant } from './ThemedText';
 
 export type ButtonVariant =
   | 'primary'
@@ -38,47 +45,64 @@ export type ButtonVariant =
 
 export type ButtonSize = 'sm' | 'md' | 'lg';
 
-const SIZE_HEIGHT: Readonly<Record<ButtonSize, number>> = {
-  sm: 36,
-  md: 44,
-  lg: 52,
+/** Vertical padding per Swift (.padding(.vertical, 14)). Height = padding * 2 + line. */
+const SIZE_PADDING_Y: Readonly<Record<ButtonSize, number>> = {
+  sm: 10,
+  md: 14,
+  lg: 18,
 };
+/** Horizontal padding per Swift (.padding(.horizontal, 24)). */
 const SIZE_PADDING_X: Readonly<Record<ButtonSize, number>> = {
-  sm: 12,
-  md: 16,
-  lg: 20,
-};
-const SIZE_TEXT_VARIANT: Readonly<Record<ButtonSize, TextVariant>> = {
-  sm: 'label',
-  md: 'titleMedium',
-  lg: 'titleLarge',
+  sm: 16,
+  md: 24,
+  lg: 28,
 };
 
 interface VariantStyle {
-  readonly container: string;
-  readonly textColor: string;
+  readonly bg: string;
+  readonly fg: string;
+  readonly borderColor?: string;
+  readonly borderWidth: number;
+  readonly dashed?: boolean;
+  /** Swift font weight per variant. */
+  readonly weight: '400' | '500';
 }
 
 const VARIANT_CONFIG: Readonly<Record<ButtonVariant, VariantStyle>> = {
   primary: {
-    container: 'bg-accentRose',
-    textColor: readableTextOn(Colors.accentRose),
+    bg: Colors.text1,                         // textPrimary
+    fg: Colors.pageBg,                        // cream/ink-inverse
+    borderColor: `${Colors.text1}4D`,         // textPrimary @ 30%
+    borderWidth: 1,
+    weight: '500',
   },
   inverted: {
-    container: 'bg-cardBg border border-divider',
-    textColor: ON_LIGHT,
+    bg: '#FFFFFF',                            // pure white per Swift
+    fg: '#000000',                            // pure black per Swift
+    borderWidth: 0,                           // NO border
+    weight: '500',
   },
   secondary: {
-    container: 'bg-transparent border border-divider',
-    textColor: '',
+    bg: Colors.cardBg,                        // cardSurface
+    fg: Colors.text1,                         // textPrimary
+    borderColor: Colors.divider,
+    borderWidth: 1,
+    weight: '400',                            // regular
   },
   dottedOutline: {
-    container: 'bg-transparent',
-    textColor: '',
+    bg: 'transparent',
+    fg: Colors.primaryBlue,
+    borderColor: Colors.primaryBlue,
+    borderWidth: 1,
+    dashed: true,
+    weight: '400',
   },
   destructive: {
-    container: 'bg-transparent border border-destructive',
-    textColor: '',
+    bg: 'transparent',
+    fg: Colors.destructive,
+    borderColor: Colors.destructive,
+    borderWidth: 1,
+    weight: '500',
   },
 };
 
@@ -110,80 +134,67 @@ export function ThemedButton({
   leadingIcon,
   haptic,
   disabled,
-  className,
+  className: _className,
   onPress,
   ...rest
 }: ThemedButtonProps): ReactNode {
   const cfg = VARIANT_CONFIG[variant];
-  const minHeight = SIZE_HEIGHT[size];
-  const isDashed = variant === 'dottedOutline';
+  const scale = useSharedValue(1);
+  const animStyle = useAnimatedStyle(() => ({ transform: [{ scale: scale.value }] }));
 
-  const baseClass = [
-    cfg.container,
-    'flex-row items-center justify-center rounded-2xl',
-    fullWidth ? 'self-stretch' : 'self-start',
-    disabled || loading ? 'opacity-50' : '',
-    className ?? '',
-  ]
-    .filter(Boolean)
-    .join(' ')
-    .trim();
-
-  const containerStyle = {
-    minHeight,
-    paddingHorizontal: SIZE_PADDING_X[size],
-    ...(isDashed
-      ? { borderStyle: 'dashed' as const, borderWidth: 1, borderColor: Colors.accentRose }
-      : {}),
+  const handlePressIn = () => {
+    scale.value = withSpring(0.98, { damping: 100, stiffness: 600 });
   };
-
-  const inlineTextColor =
-    variant === 'primary'
-      ? { color: cfg.textColor }
-      : variant === 'inverted'
-        ? { color: ON_LIGHT }
-        : undefined;
+  const handlePressOut = () => {
+    scale.value = withSpring(1, { damping: 100, stiffness: 600 });
+  };
 
   const handlePress = (e: GestureResponderEvent) => {
     if (haptic !== false) fireHaptic(haptic ?? DEFAULT_HAPTIC[variant]);
     onPress?.(e);
   };
 
+  // Swift uses `.clipShape(Rectangle())` — square corners on every variant.
+  const containerStyle = {
+    backgroundColor: cfg.bg,
+    paddingHorizontal: SIZE_PADDING_X[size],
+    paddingVertical: SIZE_PADDING_Y[size],
+    borderWidth: cfg.borderWidth,
+    borderColor: cfg.borderColor,
+    borderStyle: cfg.dashed ? ('dashed' as const) : ('solid' as const),
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
+    flexDirection: 'row' as const,
+    alignSelf: fullWidth ? ('stretch' as const) : ('flex-start' as const),
+    opacity: disabled || loading ? 0.5 : 1,
+  };
+
   return (
-    <Pressable
-      className={baseClass}
-      style={containerStyle}
-      disabled={disabled || loading}
-      accessibilityRole="button"
-      accessibilityLabel={label}
-      onPress={handlePress}
-      {...rest}
-    >
-      {loading ? (
-        <ActivityIndicator color={variant === 'primary' ? ON_DARK : Colors.accentRose} />
-      ) : (
-        <View style={styles.row}>
-          {leadingIcon ? <View style={styles.icon}>{leadingIcon}</View> : null}
-          <ThemedText
-            variant={SIZE_TEXT_VARIANT[size]}
-            tone={
-              variant === 'destructive'
-                ? 'error'
-                : variant === 'secondary' || variant === 'dottedOutline'
-                  ? 'accent'
-                  : 'primary'
-            }
-            style={inlineTextColor}
-          >
-            {label}
-          </ThemedText>
-        </View>
-      )}
-    </Pressable>
+    <Animated.View style={[animStyle, fullWidth ? styles.fullWidth : undefined]}>
+      <Pressable
+        style={containerStyle}
+        disabled={disabled || loading}
+        accessibilityRole="button"
+        accessibilityLabel={label}
+        onPress={handlePress}
+        onPressIn={handlePressIn}
+        onPressOut={handlePressOut}
+        {...rest}
+      >
+        {loading ? (
+          <ActivityIndicator color={cfg.fg} />
+        ) : (
+          <>
+            {leadingIcon ? <View style={styles.icon}>{leadingIcon}</View> : null}
+            <Text style={{ color: cfg.fg, fontSize: 16, fontWeight: cfg.weight }}>{label}</Text>
+          </>
+        )}
+      </Pressable>
+    </Animated.View>
   );
 }
 
 const styles = StyleSheet.create({
-  row: { flexDirection: 'row', alignItems: 'center' },
+  fullWidth: { alignSelf: 'stretch' },
   icon: { marginRight: 8 },
 });
