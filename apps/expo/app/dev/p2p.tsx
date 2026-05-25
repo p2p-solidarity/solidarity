@@ -41,6 +41,7 @@ import {
   buildHeadsFrame,
   runSyncStep,
 } from '@/dag/sync';
+import { smokeTestPair, type SmokeTestResult } from '@/dag/webrtc';
 import {
   FRAME_KIND_HEADS,
   FRAME_KIND_NODE,
@@ -85,6 +86,8 @@ export default function P2PLab() {
   const [peerHeads, setPeerHeads] = useState<readonly string[]>([]);
   const [logs, setLogs] = useState<readonly TransportLogEntry[]>([]);
   const [busy, setBusy] = useState(false);
+  const [webrtcResult, setWebrtcResult] = useState<SmokeTestResult | null>(null);
+  const [webrtcBusy, setWebrtcBusy] = useState(false);
   const myStoreRef = useRef<DagStore | null>(null);
   const peerStoreRef = useRef<DagStore | null>(null);
   const privkeyRef = useRef<Uint8Array | null>(null);
@@ -212,6 +215,18 @@ export default function P2PLab() {
     setLogs([]);
     refreshSnapshots();
   }, [refreshSnapshots]);
+
+  const runWebRtcSmoke = useCallback(async () => {
+    if (webrtcBusy) return;
+    setWebrtcBusy(true);
+    setWebrtcResult(null);
+    try {
+      const result = await smokeTestPair();
+      setWebrtcResult(result);
+    } finally {
+      setWebrtcBusy(false);
+    }
+  }, [webrtcBusy]);
 
   const handleResetDevKey = useCallback(() => {
     resetDevKey();
@@ -384,6 +399,22 @@ export default function P2PLab() {
               icon="key.slash"
               title="Reset sandbox key (regenerate)"
               onPress={handleResetDevKey}
+            />
+          </SettingsBlockSection>
+
+          <SettingsBlockSection
+            title="WebRTC"
+            footer={
+              webrtcResult
+                ? `Last smoke test: ${webrtcResult.status} · ${webrtcResult.elapsedMs.toFixed(0)}ms · ${webrtcResult.note}`
+                : 'In-process pair smoke test: builds two RTCPeerConnections in the same app, exchanges offer/answer + ICE, opens DataChannel, sends a ping. Verifies the LAN-direct wrapper works without a second device.'
+            }
+          >
+            <SettingsBlockRow
+              icon="antenna.radiowaves.left.and.right"
+              title={webrtcBusy ? 'Running smoke test…' : 'Smoke test WebRTC pair'}
+              subtitle="iceServers:[] · DataChannel solidarity-dag-v1"
+              onPress={() => { void runWebRtcSmoke(); }}
             />
           </SettingsBlockSection>
 
