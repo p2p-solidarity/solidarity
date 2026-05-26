@@ -61,8 +61,12 @@ import {
   DEFAULT_DISCLOSURE_POLICY,
 } from '@/passport/zkInputs';
 import { usePreferences } from '@/settings/preferences';
+import { useCredentialStore, type TrustLevel } from '@/credentials/store';
+import { useActiveDid, useIdentityData } from '@/identity';
+import type { ProvableClaimEntity } from '@/identity/entities';
 import { getNfcPassport } from '@solidarity/nitro-nfc-passport';
 import { getPassportZk } from '@solidarity/nitro-passport-zk';
+import { uuid } from '@solidarity/shared';
 
 function tryLoadNitro(): {
   nfc: ReturnType<typeof getNfcPassport> | null;
@@ -75,9 +79,46 @@ function tryLoadNitro(): {
   }
 }
 
+/**
+ * Map the passport pipeline's string trustLevel ('green'/'blue'/'white')
+ * to the entity-level discriminated union ('L1'/'L2'/'L3') the
+ * identity/credentials stores use. Mirrors the inverse mapper in
+ * `app/(tabs)/me/index.tsx`. `'white'` = synthetic / SD-JWT-only =
+ * Level 1. `'blue'` = ZK fallback path = Level 2. `'green'` = real ZK
+ * proof on real chip = Level 3.
+ */
+function mapTrustLevel(passportLevel: string): TrustLevel {
+  switch (passportLevel) {
+    case 'green':
+      return 'L3';
+    case 'blue':
+      return 'L2';
+    default:
+      return 'L1';
+  }
+}
+
+/**
+ * Parse a YYMMDD MRZ date into a JS Date in UTC. Returns null on
+ * malformed input so the credential just doesn't get an expiry field
+ * rather than ending up with `Invalid Date`. Years 00..69 map to
+ * 2000..2069, 70..99 map to 1970..1999 — the ICAO 9303 sliding window.
+ */
+function parseMrzYyMmDd(yymmdd: string): Date | null {
+  if (yymmdd.length !== 6) return null;
+  const yy = Number.parseInt(yymmdd.slice(0, 2), 10);
+  const mm = Number.parseInt(yymmdd.slice(2, 4), 10);
+  const dd = Number.parseInt(yymmdd.slice(4, 6), 10);
+  if (Number.isNaN(yy) || Number.isNaN(mm) || Number.isNaN(dd)) return null;
+  const year = yy <= 69 ? 2000 + yy : 1900 + yy;
+  const d = new Date(Date.UTC(year, mm - 1, dd));
+  return Number.isNaN(d.getTime()) ? null : d;
+}
+
 export default function PassportSetup() {
   const params = useLocalSearchParams<{ manual?: string }>();
   const insets = useSafeAreaInsets();
+  const activeDid = useActiveDid();
   const [state, dispatch] = useReducer(passportPipelineReducer, initialPassportPipelineState);
   const [showManualInput, setShowManualInput] = useState(params.manual === '1');
   const [showCamera, setShowCamera] = useState(false);
@@ -269,20 +310,137 @@ export default function PassportSetup() {
     }
   };
 
-  const onPersist = () => {
-    // TODO(biometric-gate): when this stub is replaced with an actual
-    // credential write (issueCredential VC), wrap it in
-    //   const gate = await requireSensitiveAction(
-    //     'issueCredential',
-    //     'Authenticate to issue a verifiable credential.'
-    //   );
-    //   if (!gate.success) { pushToast(t(`security.error.${gate.reason}`), 'warning'); return; }
-    // so the passport-save path obeys the SensitiveAction policy in
-    // `src/keychain/biometricGatekeeper.ts`. Today the persist step is a
-    // toast-only placeholder (Rule 8 mock label), so no biometric needed.
+  const onPersist = async () => {
+    // 1:1 port of Swift PassportPipelineService.persistProof (lines
+    // 150-225 in solidarity/Services/Identity/PassportPipelineService.swift).
+    // Persists the verified credential AND seeds the three provable
+    // claims (age_over_18 / is_human / field_name) so the Me page's
+    // Selective Disclosures section actually populates with the
+    // chunked-QR / age-QR / true-human-QR rows. Before this fix the
+    // RN persist step was a toast-only stub which is why the user
+    // saw zero credentials and zero disclosures even after a
+    // successful end-to-end ZK passport scan.
+    if (!state.draft || !state.chip || !state.proof) {
+      pushToast('Passport flow not complete', 'warning');
+      return;
+    }
+    const draft = state.draft;
+    const chip = state.chip;
+    const proof = state.proof;
+
+    const trustLevel = mapTrustLevel(proof.trustLevel);
+    const cardId = uuid();
+    const now = new Date();
+    const issuerType = chip.isSimulated ? 'selfIssued' : 'government';
+    const issuerDid = chip.isSimulated
+      ? `did:self:passport:${cardId}`
+      : `did:gov:passport:${draft.nationalityCode}`;
+    const holderDid = activeDid ?? `did:key:${cardId}`;
+    const expiry = parseMrzYyMmDd(draft.expiryDate);
+    const metadataTags: string[] = [];
+    if (proof.proofType.startsWith('mopro-noir')) metadataTags.push('mopro-noir');
+    if (proof.proofType.startsWith('semaphore')) metadataTags.push('semaphore-zk');
+    if (proof.proofType === 'sd-jwt-fallback') metadataTags.push('sd-jwt-fallback');
+    if (chip.isSimulated) metadataTags.push('simulated');
+    if (proof.generationFailed) metadataTags.push('fallback');
+
+    await useCredentialStore.getState().add({
+      id: cardId,
+      type: 'passport',
+      title: chip.isSimulated ? 'Passport (dev-mode)' : 'Passport',
+      issuerDid,
+      holderDid,
+      trustLevel,
+      rawJwt: proof.proofPayload,
+      issuedAt: now,
+      ...(expiry ? { expiresAt: expiry } : {}),
+      metadataTags,
+    });
+
+    await useIdentityData.getState().upsertIdentityCard({
+      id: cardId,
+      type: 'passport',
+      issuerType,
+      trustLevel,
+      title: chip.isSimulated ? 'Passport (dev-mode)' : 'Passport',
+      issuerDid,
+      holderDid,
+      issuedAt: now,
+      ...(expiry ? { expiresAt: expiry } : {}),
+      status: proof.generationFailed
+        ? 'fallback'
+        : chip.isSimulated
+        ? 'simulated'
+        : 'verified',
+      sourceReference: chip.isSimulated ? 'MRZ+NFC(simulated)' : 'MRZ+NFC',
+      rawCredentialJWT: proof.proofPayload,
+      metadataTags,
+      createdAt: now,
+      updatedAt: now,
+    });
+
+    const claimPayload = (claim: string): string => {
+      const parts: string[] = [
+        `"claim":"${claim}"`,
+        `"proof":"${proof.proofType}"`,
+        `"identity_card_id":"${cardId}"`,
+      ];
+      if (chip.isSimulated) parts.push(`"is_simulated":true`);
+      return `{${parts.join(',')}}`;
+    };
+    const claims: ProvableClaimEntity[] = [
+      {
+        id: uuid(),
+        identityCardId: cardId,
+        claimType: 'age_over_18',
+        title: 'I am over 18',
+        issuerType,
+        trustLevel,
+        source: 'Passport',
+        payload: claimPayload('age_over_18'),
+        isPresentable: true,
+        createdAt: now,
+        updatedAt: now,
+      },
+      {
+        id: uuid(),
+        identityCardId: cardId,
+        claimType: 'is_human',
+        title: 'I am a real person',
+        issuerType,
+        trustLevel,
+        source: 'Passport',
+        payload: claimPayload('is_human'),
+        isPresentable: true,
+        createdAt: now,
+        updatedAt: now,
+      },
+      {
+        id: uuid(),
+        identityCardId: cardId,
+        claimType: 'field_name',
+        title: chip.isSimulated
+          ? 'Name (dev-mode passport)'
+          : 'Name verified by passport',
+        issuerType,
+        trustLevel,
+        source: 'Passport',
+        payload: claimPayload('field_name'),
+        sourceField: 'name',
+        isPresentable: true,
+        createdAt: now,
+        updatedAt: now,
+      },
+    ];
+    for (const c of claims) {
+      await useIdentityData.getState().upsertProvableClaim(c);
+    }
+
     pushToast(
-      isMock ? 'Mock passport credential issued (demo only)' : 'Passport credential issued',
-      'success'
+      chip.isSimulated
+        ? 'Mock passport credential issued (demo only)'
+        : 'Passport credential issued',
+      'success',
     );
     router.back();
   };
