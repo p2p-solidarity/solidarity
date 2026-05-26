@@ -31,7 +31,7 @@ abstract class HybridMrzOcrSpec: HybridObject() {
   // Methods
   @DoNotStrip
   @Keep
-  abstract fun scanFrame(frame: com.margelo.nitro.camera.HybridFrameSpec): RecognizedLines
+  abstract fun scanFrame(frame: com.margelo.nitro.camera.HybridFrameSpec): MrzScanResult
 
   // Default implementation of `HybridObject.toString()`
   override fun toString(): String {

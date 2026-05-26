@@ -13,11 +13,9 @@
  *   4. NavBar with Cancel button (left).
  *
  * MRZ recognition runs through the `@solidarity/nitro-mrz-ocr` plugin
- * (VisionKit on iOS, ML Kit Text Recognition on Android). The
- * frame-processor worklet calls `getMrzOcr().scanFrame(frame)` every
- * 4th frame and ships the recognised lines back to the JS thread via
- * `scheduleOnRN`. JS parses them with the `mrz` package + an N-frame
- * consensus aggregator before lighting up the confirmation card.
+ * (Vision on iOS, ML Kit Text Recognition on Android). Native now
+ * returns a TD3 draft only after ICAO 9303 check-digit validation; JS only
+ * drives transient scan phase UI and advances once a draft appears.
  */
 import type { ReactNode } from 'react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
@@ -32,7 +30,7 @@ import {
 } from 'react-native-vision-camera';
 import { scheduleOnRN } from 'react-native-worklets';
 
-import { getMrzOcr, type MrzOcr, type RecognizedLines } from '@solidarity/nitro-mrz-ocr';
+import { getMrzOcr, type MrzOcr, type MrzScanResult } from '@solidarity/nitro-mrz-ocr';
 
 import { SfIcon } from '@/components/icons/SfIcon';
 import {
@@ -41,11 +39,7 @@ import {
 } from '@/components/scan/PassportSketch';
 import { ThemedButton } from '@/components/themed';
 import { Colors } from '@/constants/Colors';
-import {
-  countMrzCandidates,
-  MrzFrameConsensus,
-  parseMrzLines,
-} from '@/passport/mrzOcr';
+import { evaluateNativeMrzScan } from '@/passport/mrzOcr';
 import { useCameraPermission } from '@/scan/useCameraPermission';
 
 export interface PassportMRZDraft {
@@ -85,44 +79,28 @@ export interface MRZCameraStepProps {
 const FRAME_THROTTLE = 1;
 
 /**
- * Target a 720p frame for OCR instead of the negotiated default (often
- * 1080p+). MRZ OCR-B characters at 720p are still ~30-50px tall — plenty
- * for both VisionKit `.accurate` and ML Kit's bundled Latin recognizer —
- * but the smaller buffer cuts iOS OCR latency by ~3-4×. Combined with
- * the no-throttle cadence above, time-to-accept on a steady hand-held
- * shot ends up faster than the Swift port (which ran 1080p with no ROI).
+ * HD_4_3 keeps enough vertical detail for OCR-B glyphs while preserving
+ * a sensor-native 4:3 path. The native OCR currently reads the full frame
+ * for reliability; ROI/crop can come back only after first-hit rate is
+ * stable on real passports.
  */
-/**
- * Camera output resolution fed to the OCR plugin. VGA_4_3 (480×640)
- * is ~5× fewer pixels than HD_16_9 (720×1280) and matches sensor-
- * native 4:3 so the camera path skips a 16:9 crop. Combined with the
- * Android-side bottom-band crop (`MRZ_BAND_FRAC = 0.55` in
- * HybridMrzOcr.kt) it brings per-frame ML Kit work from ~150ms to
- * ~40-60ms on a Snapdragon 865. MRZ at 480px-wide is ~10-11 px per
- * glyph which still clears ML Kit's text-height floor, but bumping
- * back to HD_4_3 (768×1024) is the obvious dial if accuracy regresses.
- */
-const FRAME_OUTPUT_RESOLUTION = CommonResolutions.VGA_4_3;
+const FRAME_OUTPUT_RESOLUTION = CommonResolutions.HD_4_3;
 
 /** Hold the current non-idle phase for this long after the last positive
  *  ingest so a one-frame OCR miss doesn't flicker the affordance back to
- *  white. ~1s feels stable in hand-held shots without lagging the user. */
-const PHASE_HOLD_MS = 1000;
+ *  white. Keep this short: phase is decorative, not part of validation. */
+const PHASE_HOLD_MS = 250;
 
-/** Consecutive parse-failed-with-MRZ-shape readings before we flip the
+/** Consecutive native-parse-missed-with-MRZ-shape readings before we flip the
  *  sketch from green to amber and surface a recovery hint. With OCR
- *  running continuously, 3 parse fails ≈ 300-450ms on iOS, ~240ms on
- *  Android — still long enough that a single misread frame doesn't
- *  trigger the warning. */
-const STRUGGLE_THRESHOLD = 3;
+ *  running continuously. */
+const STRUGGLE_THRESHOLD = 6;
 
 /**
- * Delay between a valid MRZ acceptance and auto-advancing to the next
- * onboarding step. Long enough for the user to read the brief flash of
- * the confirmation card + see the `confirmed` checkmark animation,
- * short enough that they don't reach to dismiss before nav fires.
+ * Briefly lets the confirmed state render before advancing. Validation has
+ * already happened in native; this is only visual continuity.
  */
-const AUTO_ADVANCE_DELAY_MS = 800;
+const AUTO_ADVANCE_DELAY_MS = 120;
 
 type ScanPhase = 'idle' | 'detecting' | 'struggling' | 'confirmed';
 
@@ -164,7 +142,7 @@ export function MRZCameraStep({
   const device = useCameraDevice('back');
   const [draft, setDraft] = useState<PassportMRZDraft | null>(null);
 
-  // Live scan phase, driven from `ingestLines`. Decouples user-facing
+  // Live scan phase, driven from `ingestResult`. Decouples user-facing
   // affordances from the actual draft acceptance — users need to know the
   // moment OCR sees their MRZ, AND when it's struggling to parse it, so
   // they can react (move closer, improve lighting) instead of staring at
@@ -181,10 +159,12 @@ export function MRZCameraStep({
    * firing) and so `handleRescan` can defuse a pending advance.
    */
   const autoAdvanceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const hasAcceptedRef = useRef(false);
 
   // Frame counter lives on the worklet thread (SharedValue) so it never
   // trips a React re-render.
   const frameTick = useSharedValue<number>(0);
+  const scanAccepted = useSharedValue<boolean>(false);
 
   // Diagnostics — wall-clock timestamp of mount, OCR call counter, and a
   // rolling average of the last few OCR durations. All JS-side so the
@@ -200,14 +180,6 @@ export function MRZCameraStep({
   // are Nitro proxies backed by native code — same pattern as
   // `useBarcodeScanner` in react-native-vision-camera-barcode-scanner).
   const mrzOcr = useMemo<MrzOcr>(() => getMrzOcr(), []);
-
-  // Consensus state is JS-side and stable across re-renders — instantiate
-  // once and hold via ref so `handleRescan` can reset() without touching
-  // it from the worklet.
-  const consensusRef = useRef<MrzFrameConsensus | null>(null);
-  if (consensusRef.current === null) {
-    consensusRef.current = new MrzFrameConsensus();
-  }
 
   /**
    * Move to a new phase. Idle is the resting state and only kicks in via
@@ -237,21 +209,11 @@ export function MRZCameraStep({
     }, PHASE_HOLD_MS);
   }, []);
 
-  // JS-thread sink for parsed lines: parse → consensus → setDraft, and
-  // update the live phase. Returning early on null preserves the idle
-  // affordance (rule 8). Logs include call #, native OCR latency, frame
-  // dimensions (so resolution-bias takedown is verifiable), and per-stage
-  // outcome — COUNTS only, never MRZ content (no PII).
-  const ingestLines = useCallback(
-    (
-      lines: readonly string[],
-      ocrDurationMs: number,
-      frameWidth: number,
-      frameHeight: number,
-    ) => {
-      const consensus = consensusRef.current;
-      if (consensus === null) return;
-
+  // JS-thread sink for native OCR results. Native already performs TD3
+  // check-digit validation before returning `draft`, so this function only
+  // updates phase/counters and accepts the draft immediately.
+  const ingestResult = useCallback(
+    (result: MrzScanResult, ocrDurationMs: number) => {
       ocrCallCountRef.current += 1;
       // Keep a rolling window of the last 10 OCR durations for the
       // "ACCEPT after" summary.
@@ -259,25 +221,29 @@ export function MRZCameraStep({
       durations.push(ocrDurationMs);
       if (durations.length > 10) durations.shift();
 
-      const candidates = countMrzCandidates(lines);
-      const parsed = parseMrzLines(lines);
-      const accepted = consensus.ingest(parsed);
+      if (
+        typeof __DEV__ !== 'undefined'
+        && __DEV__
+        && (ocrCallCountRef.current <= 5 || ocrCallCountRef.current % 30 === 0)
+      ) {
+        console.log(
+          `[MRZ] OCR #${String(ocrCallCountRef.current)}: candidates=${String(result.candidateCount)} draft=${result.draft == null ? 'no' : 'yes'} duration=${String(Math.round(ocrDurationMs))}ms frame=${String(result.frameWidth)}x${String(result.frameHeight)} conf=${result.confidence.toFixed(2)}`,
+        );
+      }
 
-      // Per-frame log was always counts-only (no MRZ content), but
-      // tightening anyway: the only signal we ever needed was
-      // "did the parser ever succeed?" which the ACCEPT line already
-      // covers. Dropping the chatty per-frame line keeps logcat clean
-      // and removes any chance of someone tailing pre-release builds
-      // and inferring scan progress from frame metadata. The
-      // surrounding arrow function already accepts these args so
-      // they're not unused at the language level — leaving them
-      // referenced via void-cast keeps Sonar / no-unused-vars happy
-      // without re-introducing the log.
-      void frameWidth;
-      void frameHeight;
+      const evaluation = evaluateNativeMrzScan(result, {
+        failureStreak: failureStreakRef.current,
+        struggleThreshold: STRUGGLE_THRESHOLD,
+      });
+
+      void result.frameWidth;
+      void result.frameHeight;
       void ocrDurationMs;
 
-      if (accepted !== null) {
+      if (evaluation.acceptedDraft !== null) {
+        if (hasAcceptedRef.current) return;
+        hasAcceptedRef.current = true;
+        const accepted = evaluation.acceptedDraft;
         const totalMs = Date.now() - mountTimeRef.current;
         const avgMs =
           durations.reduce((s, v) => s + v, 0) / Math.max(1, durations.length);
@@ -287,41 +253,24 @@ export function MRZCameraStep({
         failureStreakRef.current = 0;
         moveToPhase('confirmed');
         setDraft(accepted);
-        // Auto-advance — the legacy flow required a "Use This" tap on
-        // the confirmation card, but the consensus aggregator + every-
-        // check-digit-valid gate already guarantee the draft is real.
-        // Forcing a manual tap stranded users staring at a card they
-        // had no reason to second-guess. Tiny delay lets the
-        // `confirmed` phase render its checkmark animation first so
-        // the transition isn't jarring.
+        // Tiny delay lets the `confirmed` phase render once before the
+        // modal closes and the pipeline moves to NFC.
         autoAdvanceTimerRef.current = setTimeout(() => {
           onScanned(accepted);
         }, AUTO_ADVANCE_DELAY_MS);
         return;
       }
 
-      if (candidates >= 2 && parsed === null) {
-        failureStreakRef.current += 1;
-        moveToPhase(
-          failureStreakRef.current >= STRUGGLE_THRESHOLD
-            ? 'struggling'
-            : 'detecting',
-        );
-        return;
-      }
-
-      if (candidates >= 1) {
-        // Partial / in-flight read — don't count as a failure yet.
-        failureStreakRef.current = 0;
-        moveToPhase('detecting');
+      failureStreakRef.current = evaluation.nextFailureStreak;
+      if (evaluation.phase !== null) {
+        moveToPhase(evaluation.phase);
         return;
       }
 
       // No candidates this frame — leave the phase alone and let the
       // debounce timer drop us back to idle if the dry spell persists.
-      failureStreakRef.current = 0;
     },
-    [moveToPhase],
+    [moveToPhase, onScanned],
   );
 
   const logOcrError = useCallback((message: string) => {
@@ -331,35 +280,48 @@ export function MRZCameraStep({
   const onFrame = useMemo(() => {
     return (frame: Frame): void => {
       'worklet';
-      try {
-        const tick = frameTick.value + 1;
-        frameTick.value = tick;
-        if (tick % FRAME_THROTTLE !== 0) return;
+      if (scanAccepted.value) {
+        frame.dispose();
+        return;
+      }
 
-        try {
-          const startedAt = Date.now();
-          const result: RecognizedLines = mrzOcr.scanFrame(frame);
-          const durationMs = Date.now() - startedAt;
-          // Copy into a plain array so the value is safe to ship across
-          // the worklet → JS bridge.
-          const lines: string[] = [];
-          for (const line of result.lines) lines.push(line);
-          scheduleOnRN(
-            ingestLines,
-            lines,
-            durationMs,
-            result.frameWidth,
-            result.frameHeight,
-          );
-        } catch (e) {
-          const message = e instanceof Error ? e.message : String(e);
-          scheduleOnRN(logOcrError, message);
-        }
+      const tick = frameTick.value + 1;
+      frameTick.value = tick;
+      if (tick % FRAME_THROTTLE !== 0) {
+        frame.dispose();
+        return;
+      }
+
+      try {
+        const startedAt = Date.now();
+        const result: MrzScanResult = mrzOcr.scanFrame(frame);
+        const durationMs = Date.now() - startedAt;
+
+        const draft = result.draft == null
+          ? undefined
+          : {
+              passportNumber: result.draft.passportNumber,
+              nationalityCode: result.draft.nationalityCode,
+              dateOfBirth: result.draft.dateOfBirth,
+              expiryDate: result.draft.expiryDate,
+            };
+        if (draft != null) scanAccepted.value = true;
+        const plainResult: MrzScanResult = {
+          draft,
+          candidateCount: result.candidateCount,
+          confidence: result.confidence,
+          frameWidth: result.frameWidth,
+          frameHeight: result.frameHeight,
+        };
+        scheduleOnRN(ingestResult, plainResult, durationMs);
+      } catch (e) {
+        const message = e instanceof Error ? e.message : String(e);
+        scheduleOnRN(logOcrError, message);
       } finally {
         frame.dispose();
       }
     };
-  }, [frameTick, ingestLines, logOcrError, mrzOcr]);
+  }, [frameTick, ingestResult, logOcrError, mrzOcr, scanAccepted]);
 
   const frameOutput = useFrameOutput({
     pixelFormat: 'yuv',
@@ -367,19 +329,18 @@ export function MRZCameraStep({
     onFrame,
   });
 
-  // Bias the negotiated session toward the frame output's target — this
-  // is what actually pulls the camera down from its native 1080p/4K
-  // default to the 720p we asked for. Without it `targetResolution` is
-  // only a hint and the Camera can still pick higher.
+  // Bias the negotiated session toward a steady 30 FPS and the frame
+  // output's target resolution. VisionCamera v5 expresses FPS through
+  // constraints, not a Camera `fps` prop.
   const cameraConstraints = useMemo(
-    () => [{ resolutionBias: frameOutput }],
+    () => [{ fps: 30 }, { resolutionBias: frameOutput }],
     [frameOutput],
   );
 
   const handleRescan = useCallback(() => {
-    console.log('[MRZ] rescan — resetting consensus, counters, timer');
-    consensusRef.current?.reset();
+    console.log('[MRZ] rescan — resetting counters and timers');
     frameTick.value = 0;
+    scanAccepted.value = false;
     if (phaseTimerRef.current !== null) {
       clearTimeout(phaseTimerRef.current);
       phaseTimerRef.current = null;
@@ -389,6 +350,7 @@ export function MRZCameraStep({
       autoAdvanceTimerRef.current = null;
     }
     failureStreakRef.current = 0;
+    hasAcceptedRef.current = false;
     phaseRef.current = 'idle';
     setPhase('idle');
     setDraft(null);
@@ -396,15 +358,19 @@ export function MRZCameraStep({
     mountTimeRef.current = Date.now();
     ocrCallCountRef.current = 0;
     ocrDurationsRef.current = [];
-  }, [frameTick]);
+  }, [frameTick, scanAccepted]);
 
   const handleUseThis = useCallback(() => {
+    if (autoAdvanceTimerRef.current !== null) {
+      clearTimeout(autoAdvanceTimerRef.current);
+      autoAdvanceTimerRef.current = null;
+    }
     if (draft) onScanned(draft);
   }, [draft, onScanned]);
 
   useEffect(() => {
     console.log(
-      `[MRZ] mount — target=${String(FRAME_OUTPUT_RESOLUTION.width)}x${String(FRAME_OUTPUT_RESOLUTION.height)} throttle=${String(FRAME_THROTTLE)} struggle=${String(STRUGGLE_THRESHOLD)} hold=${String(PHASE_HOLD_MS)}ms`,
+      `[MRZ] mount — target=${String(FRAME_OUTPUT_RESOLUTION.width)}x${String(FRAME_OUTPUT_RESOLUTION.height)} fps=30 throttle=${String(FRAME_THROTTLE)} struggle=${String(STRUGGLE_THRESHOLD)} hold=${String(PHASE_HOLD_MS)}ms advance=${String(AUTO_ADVANCE_DELAY_MS)}ms nativeDraft=true`,
     );
     mountTimeRef.current = Date.now();
     return () => {

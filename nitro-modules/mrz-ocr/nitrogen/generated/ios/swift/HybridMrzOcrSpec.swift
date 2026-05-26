@@ -14,7 +14,7 @@ public protocol HybridMrzOcrSpec_protocol: HybridObject {
   
 
   // Methods
-  func scanFrame(frame: (any HybridFrameSpec)) throws -> RecognizedLines
+  func scanFrame(frame: (any HybridFrameSpec)) throws -> MrzScanResult
 }
 
 public extension HybridMrzOcrSpec_protocol {

@@ -29,6 +29,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { animalImageSource } from '@/cards/animals';
 import { MauvePetalMotif } from '@/components/decor/MauvePetalMotif';
 import { SfIcon } from '@/components/icons/SfIcon';
+import { EditContactSheet } from '@/components/people/EditContactSheet';
 import { PersonDetailEphemeralSection } from '@/components/people/PersonDetailEphemeralSection';
 import { PersonDetailMoreSheet } from '@/components/people/PersonDetailMoreSheet';
 import {
@@ -52,6 +53,7 @@ export default function PersonDetailScreen(): ReactNode {
   const insets = useSafeAreaInsets();
 
   const [showingMoreSheet, setShowingMoreSheet] = useState(false);
+  const [showingEditSheet, setShowingEditSheet] = useState(false);
   const displayName = contact?.businessCard.name ?? name ?? 'Contact';
 
   const onShare = (): void => {
@@ -101,7 +103,16 @@ export default function PersonDetailScreen(): ReactNode {
           contact={contact}
           onSave={onSaveNote}
           onDelete={onDelete}
+          onEditContact={() => { setShowingEditSheet(true); }}
           onClose={() => { setShowingMoreSheet(false); }}
+        />
+      ) : null}
+
+      {contact ? (
+        <EditContactSheet
+          visible={showingEditSheet}
+          contact={contact}
+          onClose={() => { setShowingEditSheet(false); }}
         />
       ) : null}
     </View>

@@ -12,14 +12,17 @@
 // Forward declaration of `HybridMrzOcrSpec_cxx` to properly resolve imports.
 namespace MrzOcr { class HybridMrzOcrSpec_cxx; }
 
-// Forward declaration of `RecognizedLines` to properly resolve imports.
-namespace margelo::nitro::solidarity::mrzocr { struct RecognizedLines; }
+// Forward declaration of `MrzScanResult` to properly resolve imports.
+namespace margelo::nitro::solidarity::mrzocr { struct MrzScanResult; }
+// Forward declaration of `PassportMrzDraft` to properly resolve imports.
+namespace margelo::nitro::solidarity::mrzocr { struct PassportMrzDraft; }
 // Forward declaration of `HybridFrameSpec` to properly resolve imports.
 namespace margelo::nitro::camera { class HybridFrameSpec; }
 
-#include "RecognizedLines.hpp"
+#include "MrzScanResult.hpp"
+#include "PassportMrzDraft.hpp"
+#include <optional>
 #include <string>
-#include <vector>
 #include <memory>
 #include <VisionCamera/HybridFrameSpec.hpp>
 
@@ -73,7 +76,7 @@ namespace margelo::nitro::solidarity::mrzocr {
 
   public:
     // Methods
-    inline RecognizedLines scanFrame(const std::shared_ptr<margelo::nitro::camera::HybridFrameSpec>& frame) override {
+    inline MrzScanResult scanFrame(const std::shared_ptr<margelo::nitro::camera::HybridFrameSpec>& frame) override {
       auto __result = _swiftPart.scanFrame(frame);
       if (__result.hasError()) [[unlikely]] {
         std::rethrow_exception(__result.error());

@@ -27,6 +27,8 @@ import { Colors } from '@/constants/Colors';
 import { confirmDialog } from '@/feedback/confirmDialog';
 import type { Contact } from '@solidarity/shared';
 
+import type { SFSymbol } from 'expo-symbols';
+
 export interface PersonDetailMoreSheetProps {
   readonly visible: boolean;
   readonly contact: Contact;
@@ -34,6 +36,8 @@ export interface PersonDetailMoreSheetProps {
   readonly onSave: (note: string) => void;
   /** Delete the contact. Called after the user confirms. */
   readonly onDelete: () => void;
+  /** Open the full Edit Contact sheet. */
+  readonly onEditContact: () => void;
   readonly onClose: () => void;
 }
 
@@ -42,6 +46,7 @@ export function PersonDetailMoreSheet({
   contact,
   onSave,
   onDelete,
+  onEditContact,
   onClose,
 }: PersonDetailMoreSheetProps): ReactNode {
   return (
@@ -55,6 +60,7 @@ export function PersonDetailMoreSheet({
         contact={contact}
         onSave={onSave}
         onDelete={onDelete}
+        onEditContact={onEditContact}
         onClose={onClose}
       />
     </Modal>
@@ -65,11 +71,13 @@ function PersonDetailMoreSheetContent({
   contact,
   onSave,
   onDelete,
+  onEditContact,
   onClose,
 }: {
   readonly contact: Contact;
   readonly onSave: (note: string) => void;
   readonly onDelete: () => void;
+  readonly onEditContact: () => void;
   readonly onClose: () => void;
 }): ReactNode {
   const insets = useSafeAreaInsets();
@@ -78,6 +86,14 @@ function PersonDetailMoreSheetContent({
   const handleDone = (): void => {
     onSave(noteDraft);
     onClose();
+  };
+
+  const handleEditContact = (): void => {
+    // Persist the in-flight note so the user doesn't lose what they just
+    // typed when they hop to the full editor.
+    onSave(noteDraft);
+    onClose();
+    onEditContact();
   };
 
   const handleDelete = (): void => {
@@ -105,9 +121,10 @@ function PersonDetailMoreSheetContent({
 
       <View
         className="flex-1"
-        style={{ paddingHorizontal: 16, paddingTop: 12, rowGap: 32 }}
+        style={{ paddingHorizontal: 16, paddingTop: 12, rowGap: 24 }}
       >
         <NoteBlock value={noteDraft} onChange={setNoteDraft} />
+        <EditContactButton onPress={handleEditContact} />
         <DeleteButton onPress={handleDelete} />
       </View>
     </KeyboardAvoidingView>
@@ -199,24 +216,67 @@ function NoteBlock({
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// Edit-contact button — neutral fill, surfaces the full editor sheet for the
+// remaining business-card fields (name, title, company, email, phone, tags).
+// ─────────────────────────────────────────────────────────────────────────────
+
+function EditContactButton({ onPress }: { readonly onPress: () => void }): ReactNode {
+  return (
+    <ActionRow
+      icon="square.and.pencil"
+      label="Edit Contact"
+      onPress={onPress}
+      tone="default"
+    />
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // Delete button — destructive text on destructive@10% fill, 48pt tall
 // ─────────────────────────────────────────────────────────────────────────────
 
 function DeleteButton({ onPress }: { readonly onPress: () => void }): ReactNode {
   return (
+    <ActionRow
+      icon="trash"
+      label="Delete Contact"
+      onPress={onPress}
+      tone="destructive"
+    />
+  );
+}
+
+function ActionRow({
+  icon,
+  label,
+  onPress,
+  tone,
+}: {
+  readonly icon: SFSymbol;
+  readonly label: string;
+  readonly onPress: () => void;
+  readonly tone: 'default' | 'destructive';
+}): ReactNode {
+  const fg = tone === 'destructive' ? Colors.destructive : Colors.text1;
+  const bg =
+    tone === 'destructive' ? `${Colors.destructive}1A` : Colors.searchBg;
+  return (
     <Pressable
       onPress={onPress}
       accessibilityRole="button"
-      accessibilityLabel="Delete Contact"
+      accessibilityLabel={label}
       className="rounded-sm2 active:opacity-80"
       style={{
         height: 48,
-        backgroundColor: `${Colors.destructive}1A`,
+        backgroundColor: bg,
         paddingHorizontal: 12,
-        justifyContent: 'center',
+        flexDirection: 'row',
+        alignItems: 'center',
+        columnGap: 10,
       }}
     >
-      <Text style={{ color: Colors.destructive, fontSize: 15 }}>Delete Contact</Text>
+      <SfIcon name={icon} size={15} color={fg} />
+      <Text style={{ color: fg, fontSize: 15 }}>{label}</Text>
     </Pressable>
   );
 }

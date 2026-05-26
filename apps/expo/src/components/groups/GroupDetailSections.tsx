@@ -305,7 +305,12 @@ export function InviteSection({
           className="items-center justify-center p-4 self-center bg-cardBg"
           style={{ borderRadius: 12 }}
         >
-          <QRCode value={link} size={180} backgroundColor="#FFFFFF" />
+          <QRCode
+            value={link}
+            size={180}
+            backgroundColor="#FFFFFF"
+            color="#000000"
+          />
         </View>
       ) : null}
     </View>
@@ -418,4 +423,3 @@ export function IdentityInfoSection({
     </View>
   );
 }
-

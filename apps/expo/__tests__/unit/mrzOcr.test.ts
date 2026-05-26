@@ -10,6 +10,7 @@
 import { describe, expect, it } from 'bun:test';
 
 import {
+  evaluateNativeMrzScan,
   MrzFrameConsensus,
   parseMrzLines,
 } from '../../src/passport/mrzOcr';
@@ -40,6 +41,19 @@ describe('parseMrzLines', () => {
       'Signature',
     ]);
     expect(draft?.passportNumber).toBe('C01X00T47');
+  });
+
+  it('parses when OCR drops trailing filler characters', () => {
+    const draft = parseMrzLines([
+      SPECIMEN_LINE_A.slice(0, 22),
+      SPECIMEN_LINE_B.slice(0, 28),
+    ]);
+    expect(draft).toEqual({
+      passportNumber: 'C01X00T47',
+      nationalityCode: 'D',
+      dateOfBirth: '640812',
+      expiryDate: '270228',
+    });
   });
 
   it('returns null for random English text', () => {
@@ -138,5 +152,40 @@ describe('MrzFrameConsensus', () => {
     const c = new MrzFrameConsensus();
     expect(c.ingest(null)).toBeNull();
     expect(c.ingest(DRAFT_A)).toEqual(DRAFT_A);
+  });
+});
+
+describe('evaluateNativeMrzScan', () => {
+  const DRAFT = {
+    passportNumber: 'L898902C3',
+    nationalityCode: 'UTO',
+    dateOfBirth: '740812',
+    expiryDate: '120415',
+  };
+
+  it('accepts a native validated draft immediately', () => {
+    expect(
+      evaluateNativeMrzScan(
+        { draft: DRAFT, candidateCount: 0 },
+        { failureStreak: 3, struggleThreshold: 6 },
+      ),
+    ).toEqual({
+      acceptedDraft: DRAFT,
+      nextFailureStreak: 0,
+      phase: 'confirmed',
+    });
+  });
+
+  it('moves from detecting to struggling only after repeated native misses', () => {
+    expect(
+      evaluateNativeMrzScan(
+        { candidateCount: 2 },
+        { failureStreak: 5, struggleThreshold: 6 },
+      ),
+    ).toEqual({
+      acceptedDraft: null,
+      nextFailureStreak: 6,
+      phase: 'struggling',
+    });
   });
 });

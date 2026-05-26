@@ -176,7 +176,12 @@ export function PassPreviewView({
             }}
           >
             {qrPayload && qrPayload.length > 0 ? (
-              <QRCode value={qrPayload} size={80} />
+              <QRCode
+                value={qrPayload}
+                size={80}
+                backgroundColor="#FFFFFF"
+                color="#000000"
+              />
             ) : (
               <View
                 style={{

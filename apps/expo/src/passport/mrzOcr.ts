@@ -20,8 +20,68 @@ import { parse } from 'mrz';
 
 import type { PassportMRZDraft } from '@/onboarding/steps/MRZCameraStep';
 
+export type NativeMrzScanPhase = 'idle' | 'detecting' | 'struggling' | 'confirmed';
+
+export interface NativeMrzScanResult {
+  readonly draft?: PassportMRZDraft;
+  readonly candidateCount: number;
+}
+
+export interface NativeMrzScanState {
+  readonly failureStreak: number;
+  readonly struggleThreshold: number;
+}
+
+export interface NativeMrzScanEvaluation {
+  readonly acceptedDraft: PassportMRZDraft | null;
+  readonly nextFailureStreak: number;
+  readonly phase: NativeMrzScanPhase | null;
+}
+
 /**
- * Lines that *could* be MRZ rows — A–Z, 0–9, `<` filler, 28..50 chars
+ * Interpret the native MRZ OCR result for UI state. Native has already
+ * validated the three BAC-critical TD3 check digits before populating
+ * `draft`, so JS accepts that payload immediately; `candidateCount`
+ * only drives transient affordances while no draft is ready yet.
+ */
+export function evaluateNativeMrzScan(
+  result: NativeMrzScanResult,
+  state: NativeMrzScanState,
+): NativeMrzScanEvaluation {
+  if (result.draft) {
+    return {
+      acceptedDraft: result.draft,
+      nextFailureStreak: 0,
+      phase: 'confirmed',
+    };
+  }
+
+  if (result.candidateCount >= 2) {
+    const nextFailureStreak = state.failureStreak + 1;
+    return {
+      acceptedDraft: null,
+      nextFailureStreak,
+      phase: nextFailureStreak >= state.struggleThreshold ? 'struggling' : 'detecting',
+    };
+  }
+
+  if (result.candidateCount >= 1) {
+    return {
+      acceptedDraft: null,
+      nextFailureStreak: 0,
+      phase: 'detecting',
+    };
+  }
+
+  return {
+    acceptedDraft: null,
+    nextFailureStreak: 0,
+    phase: null,
+  };
+}
+
+/**
+ * Lines that *could* be MRZ rows — A–Z, 0–9, `<` filler, 20..50 chars
  * post-normalisation. The hard ICAO bound is 44 chars per TD3 row, but
  * ML Kit / Vision routinely return rows with a stray leading/trailing
  * char (e.g. an extra `<` from passport gloss, or a punctuation mark
@@ -30,12 +90,12 @@ import type { PassportMRZDraft } from '@/onboarding/steps/MRZCameraStep';
  * and rejects bad rows on check-digit failure. We still trim down in
  * `parseMrzLines` before handing the pair to `parse`.
  *
- * Symmetric on the low end: occasionally a row gets cropped to 28–29
- * chars when the camera is angled and the last filler `<<<<` get
- * smudged. Letting them in costs nothing (parser rejects), but lets
- * the consensus aggregator pick up the row whose length is right.
+ * Symmetric on the low end: OCR often drops the trailing filler `<<<<`
+ * runs entirely. Row 1 can become just document type + country + name,
+ * which is still enough because row 2's check digits are the validation
+ * gate and short rows are right-padded before parsing.
  */
-const MRZ_LINE_RE = /^[A-Z0-9<]{28,50}$/;
+const MRZ_LINE_RE = /^[A-Z0-9<]{20,50}$/;
 const TD3_ROW_LEN = 44;
 
 /**
@@ -59,7 +119,7 @@ const DEFAULT_CONSENSUS_THRESHOLD = 1;
 const CONSENSUS_WINDOW = 4;
 
 /**
- * Number of recognised lines that match MRZ shape (A–Z, 0–9, `<`, 30..44
+ * Number of recognised lines that match MRZ shape (A–Z, 0–9, `<`, 20..50
  * chars after space-as-`<` normalisation). Drives the live affordance so
  * the user can tell whether the camera even SEES candidate rows yet.
  *
@@ -120,78 +180,87 @@ export function parseMrzLines(
     }
   }
 
-  // 3. Each pair: trim down to TD3_ROW_LEN if OCR padded extra chars
-  // beyond 44 (`mrz` requires exactly 44 per TD3 row), then parse.
-  // Trim from the right because MRZ structure is left-anchored
-  // (issuing-state code is pos 1-2; trailing `<` filler can be dropped
-  // without affecting the parsed fields).
+  // 3. Each pair: canonicalise to TD3_ROW_LEN (`mrz` requires exactly
+  // 44 per row), then parse. MRZ structure is left-anchored and OCR often
+  // drops trailing filler `<` runs, so short rows are right-padded while
+  // long rows are trimmed from the right.
   for (const [rawA, rawB] of pairs) {
-    const lineA = rawA.length > TD3_ROW_LEN ? rawA.slice(0, TD3_ROW_LEN) : rawA;
-    const lineB = rawB.length > TD3_ROW_LEN ? rawB.slice(0, TD3_ROW_LEN) : rawB;
+    const orientations: Array<readonly [string, string]> = [
+      [toTd3Row(rawA), toTd3Row(rawB)],
+      [toTd3Row(rawB), toTd3Row(rawA)],
+    ];
 
-    let result: ReturnType<typeof parse>;
-    try {
-      result = parse([lineA, lineB]);
-    } catch {
-      continue;
-    }
-
-    // Accept relaxed: the per-field check digits we actually depend on
-    // downstream are `documentNumberCheckDigit`, `birthDateCheckDigit`,
-    // and `expirationDateCheckDigit` — those three plug directly into
-    // BAC key derivation, and if any of them is wrong NFC will refuse
-    // to open the secure channel and the user re-scans. The `mrz`
-    // library's `valid` flag also requires `compositeCheckDigit` (and,
-    // on some passports, `personalNumberCheckDigit`) which are the
-    // ones ML Kit gets wrong most often — a single misread digit in
-    // the optional/personal slot tanks the entire scan even though
-    // the four fields we extract are correct.
-    //
-    // Lowering acceptance to "the three BAC fields validate" trades
-    // one MRZ check digit for the BAC handshake itself as the real
-    // gate (CLAUDE.md rule 8: the SUBSEQUENT step still verifies,
-    // we're not pretending the MRZ is more trustworthy than it is).
-    const REQUIRED_CHECK_FIELDS = new Set([
-      'documentNumberCheckDigit',
-      'birthDateCheckDigit',
-      'expirationDateCheckDigit',
-    ]);
-    let requiredOk = true;
-    for (const detail of result.details) {
-      // `details[i].field` is typed `string | null` because the `mrz`
-      // library returns generic "unknown" entries for some optional
-      // fields; only the named ones map to a check-digit position we
-      // depend on, so a null field is irrelevant to BAC and we skip.
-      if (
-        detail.field !== null
-        && REQUIRED_CHECK_FIELDS.has(detail.field)
-        && detail.valid !== true
-      ) {
-        requiredOk = false;
-        break;
+    for (const [lineA, lineB] of orientations) {
+      let result: ReturnType<typeof parse>;
+      try {
+        result = parse([lineA, lineB]);
+      } catch {
+        continue;
       }
+
+      // Accept relaxed: the per-field check digits we actually depend on
+      // downstream are `documentNumberCheckDigit`, `birthDateCheckDigit`,
+      // and `expirationDateCheckDigit` — those three plug directly into
+      // BAC key derivation, and if any of them is wrong NFC will refuse
+      // to open the secure channel and the user re-scans. The `mrz`
+      // library's `valid` flag also requires `compositeCheckDigit` (and,
+      // on some passports, `personalNumberCheckDigit`) which are the
+      // ones ML Kit gets wrong most often — a single misread digit in
+      // the optional/personal slot tanks the entire scan even though
+      // the four fields we extract are correct.
+      //
+      // Lowering acceptance to "the three BAC fields validate" trades
+      // one MRZ check digit for the BAC handshake itself as the real
+      // gate (CLAUDE.md rule 8: the SUBSEQUENT step still verifies,
+      // we're not pretending the MRZ is more trustworthy than it is).
+      const REQUIRED_CHECK_FIELDS = new Set([
+        'documentNumberCheckDigit',
+        'birthDateCheckDigit',
+        'expirationDateCheckDigit',
+      ]);
+      let requiredOk = true;
+      for (const detail of result.details) {
+        // `details[i].field` is typed `string | null` because the `mrz`
+        // library returns generic "unknown" entries for some optional
+        // fields; only the named ones map to a check-digit position we
+        // depend on, so a null field is irrelevant to BAC and we skip.
+        if (
+          detail.field !== null
+          && REQUIRED_CHECK_FIELDS.has(detail.field)
+          && detail.valid !== true
+        ) {
+          requiredOk = false;
+          break;
+        }
+      }
+      if (!requiredOk) continue;
+
+      const passportNumber = result.fields.documentNumber;
+      const nationalityCode = result.fields.nationality;
+      const dateOfBirth = result.fields.birthDate;
+      const expiryDate = result.fields.expirationDate;
+
+      if (
+        passportNumber == null ||
+        nationalityCode == null ||
+        dateOfBirth == null ||
+        expiryDate == null
+      ) {
+        continue;
+      }
+      if (dateOfBirth.length !== 6 || expiryDate.length !== 6) continue;
+
+      return { passportNumber, nationalityCode, dateOfBirth, expiryDate };
     }
-    if (!requiredOk) continue;
-
-    const passportNumber = result.fields.documentNumber;
-    const nationalityCode = result.fields.nationality;
-    const dateOfBirth = result.fields.birthDate;
-    const expiryDate = result.fields.expirationDate;
-
-    if (
-      passportNumber == null ||
-      nationalityCode == null ||
-      dateOfBirth == null ||
-      expiryDate == null
-    ) {
-      continue;
-    }
-    if (dateOfBirth.length !== 6 || expiryDate.length !== 6) continue;
-
-    return { passportNumber, nationalityCode, dateOfBirth, expiryDate };
   }
 
   return null;
+}
+
+function toTd3Row(line: string): string {
+  if (line.length > TD3_ROW_LEN) return line.slice(0, TD3_ROW_LEN);
+  if (line.length < TD3_ROW_LEN) return line.padEnd(TD3_ROW_LEN, '<');
+  return line;
 }
 
 function draftsEqual(

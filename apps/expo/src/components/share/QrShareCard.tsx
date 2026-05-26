@@ -21,7 +21,7 @@ import {
 import { Colors } from '@/constants/Colors';
 
 export type QrShareCardProps = {
-  /** vCard payload to encode. `undefined` → placeholder state. */
+  /** QR payload to encode. `undefined` → placeholder state. */
   payload?: string;
   cardName?: string;
   enabledFields: readonly EnabledField[];
@@ -63,7 +63,12 @@ export function QrShareCard({
         >
           {payload ? (
             <View style={{ padding: 24 }}>
-              <QRCode value={payload} size={240} backgroundColor="#FFFFFF" />
+              <QRCode
+                value={payload}
+                size={240}
+                backgroundColor="#FFFFFF"
+                color="#000000"
+              />
             </View>
           ) : (
             <View className="items-center gap-2.5">

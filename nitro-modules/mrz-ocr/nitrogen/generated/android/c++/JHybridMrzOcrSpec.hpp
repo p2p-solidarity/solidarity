@@ -54,7 +54,7 @@ namespace margelo::nitro::solidarity::mrzocr {
 
   public:
     // Methods
-    RecognizedLines scanFrame(const std::shared_ptr<margelo::nitro::camera::HybridFrameSpec>& frame) override;
+    MrzScanResult scanFrame(const std::shared_ptr<margelo::nitro::camera::HybridFrameSpec>& frame) override;
 
   private:
     jni::global_ref<JHybridMrzOcrSpec::JavaPart> _javaPart;

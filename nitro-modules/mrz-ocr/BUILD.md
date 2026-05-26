@@ -4,15 +4,13 @@ ICAO 9303 MRZ text recognition for VisionCamera v5 frame processors.
 
 | Platform | Recogniser | Native side |
 |---|---|---|
-| iOS | VisionKit `VNRecognizeTextRequest` (built-in) | `ios/HybridMrzOcr.swift` |
+| iOS | Vision `VNRecognizeTextRequest` (built-in) | `ios/HybridMrzOcr.swift` |
 | Android | ML Kit Text Recognition v2 (bundled model) | `android/HybridMrzOcr.kt` |
 
-The native side returns *every* recognised line on the Frame. The
-JS layer (`apps/expo/src/passport/mrzOcr.ts`) filters lines that look
-like MRZ (regex `^[A-Z0-9<]{30,44}$`), feeds the candidate pair to the
-[`mrz`](https://www.npmjs.com/package/mrz) npm parser, and only accepts a
-draft after N consecutive frames produce the same check-digit-valid
-result.
+The native side recognises text on the Frame, filters TD3-looking rows,
+canonicalises OCR-shortened rows back to 44 chars, and returns a draft
+only after the BAC-critical ICAO 9303 check digits validate. JS receives
+only scan progress metadata plus the validated draft.
 
 ## Codegen
 

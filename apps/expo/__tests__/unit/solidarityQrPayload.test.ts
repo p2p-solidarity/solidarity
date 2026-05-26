@@ -10,6 +10,7 @@ import {
   buildSolidarityQrPayloadAsync,
   buildSolidarityQrPayload,
   enabledFieldsFromSharePreferences,
+  shareFieldPreferencesFromFields,
 } from '../../src/cards/solidarityQrPayload';
 
 const NOW = new Date('2026-05-25T12:34:56.789Z');
@@ -94,6 +95,20 @@ describe('Solidarity settings QR payload', () => {
     });
 
     expect(fields).toEqual(['email', 'name', 'profileImage', 'skills', 'title']);
+  });
+
+  it('maps Swift enabled fields back into share-field preferences', () => {
+    expect(
+      shareFieldPreferencesFromFields(['name', 'company', 'phone', 'skills'])
+    ).toEqual({
+      shareTitle: false,
+      shareCompany: true,
+      shareEmail: false,
+      sharePhone: true,
+      shareProfileImage: false,
+      shareSocialNetworks: false,
+      shareSkills: true,
+    });
   });
 
   it('builds a plaintext QRCodeEnvelope instead of a card-id URL pointer', () => {

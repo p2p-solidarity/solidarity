@@ -13,12 +13,12 @@
 #error NitroModules cannot be found! Are you sure you installed NitroModules properly?
 #endif
 
-// Forward declaration of `RecognizedLines` to properly resolve imports.
-namespace margelo::nitro::solidarity::mrzocr { struct RecognizedLines; }
+// Forward declaration of `MrzScanResult` to properly resolve imports.
+namespace margelo::nitro::solidarity::mrzocr { struct MrzScanResult; }
 // Forward declaration of `HybridFrameSpec` to properly resolve imports.
 namespace margelo::nitro::camera { class HybridFrameSpec; }
 
-#include "RecognizedLines.hpp"
+#include "MrzScanResult.hpp"
 #include <memory>
 #include <VisionCamera/HybridFrameSpec.hpp>
 
@@ -53,7 +53,7 @@ namespace margelo::nitro::solidarity::mrzocr {
 
     public:
       // Methods
-      virtual RecognizedLines scanFrame(const std::shared_ptr<margelo::nitro::camera::HybridFrameSpec>& frame) = 0;
+      virtual MrzScanResult scanFrame(const std::shared_ptr<margelo::nitro::camera::HybridFrameSpec>& frame) = 0;
 
     protected:
       // Hybrid Setup

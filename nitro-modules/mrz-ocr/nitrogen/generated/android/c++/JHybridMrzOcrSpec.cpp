@@ -7,15 +7,19 @@
 
 #include "JHybridMrzOcrSpec.hpp"
 
-// Forward declaration of `RecognizedLines` to properly resolve imports.
-namespace margelo::nitro::solidarity::mrzocr { struct RecognizedLines; }
+// Forward declaration of `MrzScanResult` to properly resolve imports.
+namespace margelo::nitro::solidarity::mrzocr { struct MrzScanResult; }
+// Forward declaration of `PassportMrzDraft` to properly resolve imports.
+namespace margelo::nitro::solidarity::mrzocr { struct PassportMrzDraft; }
 // Forward declaration of `HybridFrameSpec` to properly resolve imports.
 namespace margelo::nitro::camera { class HybridFrameSpec; }
 
-#include "RecognizedLines.hpp"
-#include "JRecognizedLines.hpp"
+#include "MrzScanResult.hpp"
+#include "JMrzScanResult.hpp"
+#include "PassportMrzDraft.hpp"
+#include <optional>
+#include "JPassportMrzDraft.hpp"
 #include <string>
-#include <vector>
 #include <memory>
 #include <VisionCamera/HybridFrameSpec.hpp>
 #include <VisionCamera/JHybridFrameSpec.hpp>
@@ -53,8 +57,8 @@ namespace margelo::nitro::solidarity::mrzocr {
   
 
   // Methods
-  RecognizedLines JHybridMrzOcrSpec::scanFrame(const std::shared_ptr<margelo::nitro::camera::HybridFrameSpec>& frame) {
-    static const auto method = _javaPart->javaClassStatic()->getMethod<jni::local_ref<JRecognizedLines>(jni::alias_ref<margelo::nitro::camera::JHybridFrameSpec::JavaPart> /* frame */)>("scanFrame");
+  MrzScanResult JHybridMrzOcrSpec::scanFrame(const std::shared_ptr<margelo::nitro::camera::HybridFrameSpec>& frame) {
+    static const auto method = _javaPart->javaClassStatic()->getMethod<jni::local_ref<JMrzScanResult>(jni::alias_ref<margelo::nitro::camera::JHybridFrameSpec::JavaPart> /* frame */)>("scanFrame");
     auto __result = method(_javaPart, std::dynamic_pointer_cast<margelo::nitro::camera::JHybridFrameSpec>(frame)->getJavaPart());
     return __result->toCpp();
   }

@@ -14,15 +14,17 @@
  *
  * Footer: "Continue" if any imported, otherwise "Skip" (both inverted CTA).
  */
-import { useState, type ReactNode } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
 import { ActivityIndicator, View } from 'react-native';
 import * as DocumentPicker from 'expo-document-picker';
 import * as FileSystem from 'expo-file-system/legacy';
+import { router } from 'expo-router';
 
 import { SfIcon } from '@/components/icons/SfIcon';
 import { ThemedButton, ThemedText } from '@/components/themed';
 import { Colors } from '@/constants/Colors';
-import { importFromDevicePicker, importFromVcf } from '@/contacts/importer';
+import { importFromVcf } from '@/contacts/importer';
+import { useContactStore } from '@/contacts/repository';
 import { pushToast } from '@/feedback/toast';
 import { OnboardingScaffold } from './OnboardingScaffold';
 
@@ -40,6 +42,14 @@ export function ImportContactsStep({
   onImported,
 }: ImportContactsStepProps) {
   const [isWorking, setIsWorking] = useState(false);
+  // Watch the in-memory manifest so when the picker screen finishes upserting
+  // and pops back here, we surface the new total + flip the "Continue" CTA.
+  const manifestCount = useContactStore((s) => s.manifest.length);
+  useEffect(() => {
+    if (manifestCount > 0 && manifestCount !== importedCount) {
+      onImported(manifestCount);
+    }
+  }, [manifestCount, importedCount, onImported]);
 
   const handleVcfImport = async () => {
     setIsWorking(true);
@@ -63,26 +73,11 @@ export function ImportContactsStep({
     }
   };
 
-  const handlePhoneImport = async () => {
-    setIsWorking(true);
-    try {
-      const { granted, cancelled, count } = await importFromDevicePicker();
-      if (!granted) {
-        pushToast('Contacts access denied. Enable in Settings.', 'error');
-        return;
-      }
-      if (cancelled) return;
-      const total = (importedCount ?? 0) + count;
-      onImported(total);
-      pushToast(
-        count === 1 ? 'Imported 1 contact' : `Imported ${String(count)} contacts`,
-        'success'
-      );
-    } catch (err) {
-      pushToast(`Import failed: ${(err as Error).message}`, 'error');
-    } finally {
-      setIsWorking(false);
-    }
+  const handlePhoneImport = () => {
+    // Multi-select picker — pushes a sheet that lets the user choose which
+    // contacts to bring in. On dismiss we re-read the manifest count above
+    // so the imported badge / CTA reflects the result.
+    router.push('/contacts/import-phone');
   };
 
   return (
@@ -114,7 +109,7 @@ export function ImportContactsStep({
               label="Import from Phone"
               fullWidth
               leadingIcon={<SfIcon name="person.crop.circle.badge.plus" size={17} color={Colors.invertedButtonText} />}
-              onPress={() => { void handlePhoneImport(); }}
+              onPress={handlePhoneImport}
             />
             <ThemedButton
               label="Import VCF File"

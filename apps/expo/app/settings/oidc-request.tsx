@@ -32,6 +32,8 @@ import {
 import { ThemedButton } from '@/components/themed';
 import { Colors } from '@/constants/Colors';
 import { pushToast } from '@/feedback/toast';
+import { didKeyForCurrentIdentity } from '@/keychain/signingKey';
+import { buildOid4VpRequestUrl } from '@/oidc/requestQr';
 
 const MONO_FONT = 'Menlo';
 
@@ -41,9 +43,7 @@ interface GeneratedRequest {
 }
 
 function randomNonce(): string {
-  // expo-crypto.randomUUID returns 36-char hex (with hyphens); strip them
-  // for a 32-char OAuth nonce.
-  return randomUUID().replace(/-/g, '');
+  return randomUUID();
 }
 
 export default function OidcRequestSettings() {
@@ -52,16 +52,14 @@ export default function OidcRequestSettings() {
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
 
-  const onGenerate = () => {
+  const onGenerate = async () => {
     try {
       const nonce = randomNonce();
-      const params = new URLSearchParams({
-        response_type: 'vp_token',
-        client_id: 'https://solidarity.gg/oidc/me',
-        nonce,
-        response_mode: 'direct_post.jwt',
-      });
-      const url = `openid4vp://?${params.toString()}`;
+      const state = randomUUID();
+      const clientId = await didKeyForCurrentIdentity().catch(
+        () => 'https://solidarity.gg/oidc/me'
+      );
+      const url = buildOid4VpRequestUrl({ nonce, state, clientId });
       setRequest({ url, nonce });
       setErrorMessage(null);
     } catch (err) {
@@ -137,7 +135,7 @@ export default function OidcRequestSettings() {
                   value={request.url}
                   size={240}
                   backgroundColor="#FFFFFF"
-                  color={Colors.text1}
+                  color="#000000"
                 />
               </View>
             ) : (
@@ -255,7 +253,7 @@ export default function OidcRequestSettings() {
                   color="#FFFFFF"
                 />
               }
-              onPress={onGenerate}
+              onPress={() => { void onGenerate(); }}
             />
           </View>
         </View>

@@ -1,22 +1,25 @@
 /**
  * Contact importer — mirrors Swift ContactImportService.
  *
- * Two entry points:
- *   - importFromVcf(text)     — parse a .vcf paste / file pick.
- *   - importFromDevice()      — request OS Contacts permission, iterate every
- *                                contact via the v56 class API
- *                                (`Contact.getAllDetails([...])`) and upsert
- *                                each into the local repository. Mirrors
- *                                Swift's "iterates all contacts on grant"
- *                                behaviour: there's no system multi-select
- *                                picker sheet on Android, so the in-app list
- *                                + dedupe is the picker.
+ * Entry points:
+ *   - importFromVcf(text)         — parse a .vcf paste / file pick.
+ *   - loadDeviceContacts()        — request OS Contacts permission and return
+ *                                    a lightweight list (id + display fields)
+ *                                    for an in-app multi-select picker. No
+ *                                    writes to the local repository.
+ *   - importDeviceContacts(rows)  — upsert the picked rows. Used by the new
+ *                                    in-app picker so the user controls what
+ *                                    gets imported instead of dumping the
+ *                                    entire address book.
+ *   - importFromDevice()          — legacy "import everything" path, kept as a
+ *                                    fallback / for tests. New UI flows use
+ *                                    the picker above.
  *
  * Dedupe note: the Swift service builds a deterministic SHA-256 UUID from
  * a stable identity key (email > phone > CN identifier > name|company|title)
  * so re-running an import never produces a duplicate row. We replicate that
- * here so a user who taps "Import from Phone" twice ends up with the same
- * contacts, not 2x copies.
+ * here so a user who picks the same contact twice ends up with the same
+ * stored ID, not 2x copies.
  */
 import * as Contacts from 'expo-contacts';
 
@@ -263,4 +266,90 @@ export async function importFromDevicePicker(): Promise<{
 
   await useContactStore.getState().upsert(c);
   return { granted: true, cancelled: false, count: 1 };
+}
+
+/**
+ * In-app multi-select picker payload — what the picker UI lists. Mirrors the
+ * fields we render in the row + the raw bag we need to re-map at import time
+ * so the picker doesn't fetch the address book twice.
+ */
+export interface DeviceContactPickerRow {
+  /** Local picker key — stable across the session, not the OS id. */
+  readonly key: string;
+  readonly name: string;
+  readonly subtitle: string | undefined;
+  readonly email: string | undefined;
+  readonly phone: string | undefined;
+  readonly raw: DeviceContactDetails;
+}
+
+/**
+ * Permission-gated read of every visible device contact. Returns rows ready
+ * to render in the picker. No repository writes — callers decide which rows
+ * to upsert via `importDeviceContacts(...)`.
+ */
+export async function loadDeviceContacts(): Promise<{
+  readonly granted: boolean;
+  readonly rows: readonly DeviceContactPickerRow[];
+}> {
+  const { status } = await Contacts.requestPermissionsAsync();
+  const granted = status === Contacts.PermissionStatus.GRANTED;
+  if (!granted) return { granted: false, rows: [] };
+
+  const details = (await Contacts.Contact.getAllDetails([
+    Contacts.ContactField.FULL_NAME,
+    Contacts.ContactField.GIVEN_NAME,
+    Contacts.ContactField.FAMILY_NAME,
+    Contacts.ContactField.EMAILS,
+    Contacts.ContactField.PHONES,
+    Contacts.ContactField.COMPANY,
+    Contacts.ContactField.JOB_TITLE,
+    Contacts.ContactField.IMAGE,
+  ])) as readonly DeviceContactDetails[];
+
+  const rows: DeviceContactPickerRow[] = [];
+  const seen = new Set<string>();
+  for (let i = 0; i < details.length; i += 1) {
+    const raw = details[i]!;
+    const composed = nilIfBlank(raw.fullName ?? undefined);
+    const fallback = nilIfBlank(`${raw.givenName ?? ''} ${raw.familyName ?? ''}`.trim());
+    const name = composed ?? fallback;
+    if (!name) continue;
+    const email = nilIfBlank(raw.emails?.[0]?.address);
+    const phone = nilIfBlank(raw.phones?.[0]?.number);
+    const company = nilIfBlank(raw.company ?? undefined);
+    const title = nilIfBlank(raw.jobTitle);
+    const orgLine = [company, title].filter(Boolean).join(' · ');
+    const subtitle = email ?? phone ?? (orgLine.length > 0 ? orgLine : undefined);
+    // Use the OS id when available, fall back to an index-stamped key so
+    // FlashList keys stay unique even on platforms that surface `null`.
+    const key = raw.id && raw.id.length > 0 ? `cn:${raw.id}` : `idx:${String(i)}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    rows.push({ key, name, subtitle, email, phone, raw });
+  }
+  rows.sort((a, b) => a.name.localeCompare(b.name));
+  return { granted: true, rows };
+}
+
+/**
+ * Upsert the rows the user picked. Dedupe is deterministic so re-importing
+ * the same contact does not create a second row.
+ */
+export async function importDeviceContacts(
+  rows: readonly DeviceContactPickerRow[],
+): Promise<number> {
+  if (rows.length === 0) return 0;
+  const upsert = useContactStore.getState().upsert;
+  const seen = new Set<string>();
+  let inserted = 0;
+  for (const row of rows) {
+    const c = deviceContactToContact(row.raw);
+    if (!c) continue;
+    if (seen.has(c.id)) continue;
+    seen.add(c.id);
+    await upsert(c);
+    inserted += 1;
+  }
+  return inserted;
 }

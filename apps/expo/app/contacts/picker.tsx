@@ -1,51 +1,18 @@
 /**
- * Contacts picker shim — mirrors Swift `ContactPickerView` which presents
- * `CNContactPickerViewController` on iOS. We don't have a native multi-
- * select picker on Android (or iOS via Expo today), so the screen kicks
- * off the bulk device-contact import and bounces back to People. The
- * People tab's "Import from Phone" path calls `importFromDevice()`
- * directly; this route exists for any deeplink / legacy nav.
+ * Contacts picker shim — kept as a deep-link / legacy redirect target so
+ * older nav paths still land on something useful. The bulk-import flow has
+ * been replaced by `/contacts/import-phone` which surfaces a multi-select
+ * list (see `apps/expo/app/contacts/import-phone.tsx`) so users pick which
+ * contacts to bring across instead of getting their entire address book
+ * dumped on first tap.
  */
 import { router } from 'expo-router';
-import { useEffect, useRef } from 'react';
-import { ActivityIndicator, Text, View } from 'react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
-
-import { importFromDevice } from '@/contacts/importer';
-import { pushToast } from '@/feedback/toast';
+import { useEffect } from 'react';
+import { View } from 'react-native';
 
 export default function ContactPicker() {
-  const insets = useSafeAreaInsets();
-  const ranRef = useRef(false);
-
   useEffect(() => {
-    if (ranRef.current) return;
-    ranRef.current = true;
-    void (async () => {
-      try {
-        const { granted, count } = await importFromDevice();
-        if (!granted) {
-          pushToast('Contacts permission denied', 'warning');
-        } else {
-          pushToast(`Imported ${String(count)} contacts`, 'success', 3000);
-        }
-      } catch {
-        pushToast('Import failed', 'error');
-      } finally {
-        router.back();
-      }
-    })();
+    router.replace('/contacts/import-phone');
   }, []);
-
-  return (
-    <View
-      className="flex-1 bg-pageBg items-center justify-center"
-      style={{ paddingTop: insets.top, paddingBottom: insets.bottom }}
-    >
-      <ActivityIndicator />
-      <Text className="text-text2 text-[14px]" style={{ marginTop: 12 }}>
-        Importing contacts…
-      </Text>
-    </View>
-  );
+  return <View className="flex-1 bg-pageBg" />;
 }

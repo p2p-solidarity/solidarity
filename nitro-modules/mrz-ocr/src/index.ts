@@ -10,7 +10,11 @@ import { NitroModules } from 'react-native-nitro-modules';
 
 import type { MrzOcr } from './specs/MrzOcr.nitro';
 
-export type { MrzOcr, RecognizedLines } from './specs/MrzOcr.nitro';
+export type {
+  MrzOcr,
+  MrzScanResult,
+  PassportMrzDraft,
+} from './specs/MrzOcr.nitro';
 
 let cached: MrzOcr | null = null;
 

@@ -124,6 +124,21 @@ export function enabledFieldsFromSharePreferences(
   return sortFields(fields);
 }
 
+export function shareFieldPreferencesFromFields(
+  fields: Iterable<BusinessCardField | string>
+): ShareFieldPreferences {
+  const enabled = new Set(sortFields(fields));
+  return {
+    shareTitle: enabled.has('title'),
+    shareCompany: enabled.has('company'),
+    shareEmail: enabled.has('email'),
+    sharePhone: enabled.has('phone'),
+    shareProfileImage: enabled.has('profileImage'),
+    shareSocialNetworks: enabled.has('socialNetworks'),
+    shareSkills: enabled.has('skills'),
+  };
+}
+
 export function buildSolidarityQrPayload(
   card: BusinessCard,
   options: SolidarityQrPayloadOptions = {}

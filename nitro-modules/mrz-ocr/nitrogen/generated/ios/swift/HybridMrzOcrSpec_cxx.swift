@@ -126,7 +126,7 @@ open class HybridMrzOcrSpec_cxx {
 
   // Methods
   @inline(__always)
-  public final func scanFrame(frame: bridge.std__shared_ptr_margelo__nitro__camera__HybridFrameSpec_) -> bridge.Result_RecognizedLines_ {
+  public final func scanFrame(frame: bridge.std__shared_ptr_margelo__nitro__camera__HybridFrameSpec_) -> bridge.Result_MrzScanResult_ {
     do {
       let __result = try self.__implementation.scanFrame(frame: { () -> any HybridFrameSpec in
         let __unsafePointer = bridge.get_std__shared_ptr_margelo__nitro__camera__HybridFrameSpec_(frame)
@@ -134,10 +134,10 @@ open class HybridMrzOcrSpec_cxx {
         return __instance.getHybridFrameSpec()
       }())
       let __resultCpp = __result
-      return bridge.create_Result_RecognizedLines_(__resultCpp)
+      return bridge.create_Result_MrzScanResult_(__resultCpp)
     } catch (let __error) {
       let __exceptionPtr = __error.toCpp()
-      return bridge.create_Result_RecognizedLines_(__exceptionPtr)
+      return bridge.create_Result_MrzScanResult_(__exceptionPtr)
     }
   }
 }

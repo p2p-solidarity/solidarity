@@ -12,18 +12,21 @@
 namespace margelo::nitro::camera { class HybridFrameSpec; }
 // Forward declaration of `HybridMrzOcrSpec` to properly resolve imports.
 namespace margelo::nitro::solidarity::mrzocr { class HybridMrzOcrSpec; }
-// Forward declaration of `RecognizedLines` to properly resolve imports.
-namespace margelo::nitro::solidarity::mrzocr { struct RecognizedLines; }
+// Forward declaration of `MrzScanResult` to properly resolve imports.
+namespace margelo::nitro::solidarity::mrzocr { struct MrzScanResult; }
+// Forward declaration of `PassportMrzDraft` to properly resolve imports.
+namespace margelo::nitro::solidarity::mrzocr { struct PassportMrzDraft; }
 
 // Include C++ defined types
 #include "HybridMrzOcrSpec.hpp"
-#include "RecognizedLines.hpp"
+#include "MrzScanResult.hpp"
+#include "PassportMrzDraft.hpp"
 #include <NitroModules/Result.hpp>
 #include <VisionCamera/HybridFrameSpec.hpp>
 #include <exception>
 #include <memory>
+#include <optional>
 #include <string>
-#include <vector>
 
 // C++ helpers for Swift
 #include "MrzOcr-Swift-Cxx-Bridge.hpp"

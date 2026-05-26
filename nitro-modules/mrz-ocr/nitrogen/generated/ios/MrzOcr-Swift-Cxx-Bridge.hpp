@@ -12,8 +12,10 @@
 namespace margelo::nitro::camera { class HybridFrameSpec; }
 // Forward declaration of `HybridMrzOcrSpec` to properly resolve imports.
 namespace margelo::nitro::solidarity::mrzocr { class HybridMrzOcrSpec; }
-// Forward declaration of `RecognizedLines` to properly resolve imports.
-namespace margelo::nitro::solidarity::mrzocr { struct RecognizedLines; }
+// Forward declaration of `MrzScanResult` to properly resolve imports.
+namespace margelo::nitro::solidarity::mrzocr { struct MrzScanResult; }
+// Forward declaration of `PassportMrzDraft` to properly resolve imports.
+namespace margelo::nitro::solidarity::mrzocr { struct PassportMrzDraft; }
 
 // Forward declarations of Swift defined types
 // Forward declaration of `HybridFrameSpec_cxx` to properly resolve imports.
@@ -23,13 +25,14 @@ namespace MrzOcr { class HybridMrzOcrSpec_cxx; }
 
 // Include C++ defined types
 #include "HybridMrzOcrSpec.hpp"
-#include "RecognizedLines.hpp"
+#include "MrzScanResult.hpp"
+#include "PassportMrzDraft.hpp"
 #include <NitroModules/Result.hpp>
 #include <VisionCamera/HybridFrameSpec.hpp>
 #include <exception>
 #include <memory>
+#include <optional>
 #include <string>
-#include <vector>
 
 /**
  * Contains specialized versions of C++ templated types so they can be accessed from Swift,
@@ -37,15 +40,19 @@ namespace MrzOcr { class HybridMrzOcrSpec_cxx; }
  */
 namespace margelo::nitro::solidarity::mrzocr::bridge::swift {
 
-  // pragma MARK: std::vector<std::string>
+  // pragma MARK: std::optional<PassportMrzDraft>
   /**
-   * Specialized version of `std::vector<std::string>`.
+   * Specialized version of `std::optional<PassportMrzDraft>`.
    */
-  using std__vector_std__string_ = std::vector<std::string>;
-  inline std::vector<std::string> create_std__vector_std__string_(size_t size) noexcept {
-    std::vector<std::string> vector;
-    vector.reserve(size);
-    return vector;
+  using std__optional_PassportMrzDraft_ = std::optional<PassportMrzDraft>;
+  inline std::optional<PassportMrzDraft> create_std__optional_PassportMrzDraft_(const PassportMrzDraft& value) noexcept {
+    return std::optional<PassportMrzDraft>(value);
+  }
+  inline bool has_value_std__optional_PassportMrzDraft_(const std::optional<PassportMrzDraft>& optional) noexcept {
+    return optional.has_value();
+  }
+  inline PassportMrzDraft get_std__optional_PassportMrzDraft_(const std::optional<PassportMrzDraft>& optional) noexcept {
+    return optional.value();
   }
   
   // pragma MARK: std::shared_ptr<margelo::nitro::camera::HybridFrameSpec>
@@ -72,13 +79,13 @@ namespace margelo::nitro::solidarity::mrzocr::bridge::swift {
   using std__weak_ptr_HybridMrzOcrSpec_ = std::weak_ptr<HybridMrzOcrSpec>;
   inline std__weak_ptr_HybridMrzOcrSpec_ weakify_std__shared_ptr_HybridMrzOcrSpec_(const std::shared_ptr<HybridMrzOcrSpec>& strong) noexcept { return strong; }
   
-  // pragma MARK: Result<RecognizedLines>
-  using Result_RecognizedLines_ = Result<RecognizedLines>;
-  inline Result_RecognizedLines_ create_Result_RecognizedLines_(const RecognizedLines& value) noexcept {
-    return Result<RecognizedLines>::withValue(value);
+  // pragma MARK: Result<MrzScanResult>
+  using Result_MrzScanResult_ = Result<MrzScanResult>;
+  inline Result_MrzScanResult_ create_Result_MrzScanResult_(const MrzScanResult& value) noexcept {
+    return Result<MrzScanResult>::withValue(value);
   }
-  inline Result_RecognizedLines_ create_Result_RecognizedLines_(const std::exception_ptr& error) noexcept {
-    return Result<RecognizedLines>::withError(error);
+  inline Result_MrzScanResult_ create_Result_MrzScanResult_(const std::exception_ptr& error) noexcept {
+    return Result<MrzScanResult>::withError(error);
   }
 
 } // namespace margelo::nitro::solidarity::mrzocr::bridge::swift
