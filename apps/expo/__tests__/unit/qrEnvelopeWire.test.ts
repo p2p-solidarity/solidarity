@@ -72,6 +72,38 @@ beforeAll(async () => {
     resetMasterKeyForTesting: async () => undefined,
     evictMasterKeyCache: () => undefined,
   }));
+  // Stub `@/keychain/signingKey` + `@/zk/proofManager` so the dynamic
+  // imports buildZKEnvelope does at runtime succeed (the real chain pulls
+  // in `@solidarity/nitro-spruce-did` → `react-native`, which Bun can't
+  // parse). We deliberately return a NO-OP signer + a proofManager whose
+  // generators always throw — the envelope-build path then swallows the
+  // error and emits an envelope with no proofs, which is exactly what
+  // these wire-format tests need to assert.
+  await mock.module('@/keychain/signingKey', () => ({
+    signRawEs256: async () => {
+      throw new Error('test: signing key unavailable in qrEnvelopeWire suite');
+    },
+    wrapRawSigningInputForSpruce: (p: Uint8Array) => p,
+    ensureSigningKey: async () => {
+      throw new Error('test: signing key unavailable');
+    },
+    publicJwk: async () => {
+      throw new Error('test: signing key unavailable');
+    },
+    signJwt: async () => 'signed.jwt.fake',
+    didKeyForCurrentIdentity: async () => 'did:key:zTestStub',
+    resetSigningKeyForTesting: async () => undefined,
+  }));
+  // Same shape — stub the issuer-proof path so it short-circuits to null
+  // without hitting the Semaphore Nitro bridge.
+  await mock.module('@/zk/issuerProof', () => ({
+    generateIssuerProof: async () => null,
+    buildShareScope: (selected: readonly string[]) => {
+      const set = new Set<string>(selected);
+      set.add('name');
+      return `fields:${[...set].sort().join(',')}`;
+    },
+  }));
   const payloadMod = (await import('../../src/cards/solidarityQrPayload')) as unknown as SolidarityQrPayloadModule;
   const envelopeMod = (await import('../../src/cards/qrEnvelope')) as unknown as QrEnvelopeModule;
   mod = { ...payloadMod, ...envelopeMod };

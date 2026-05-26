@@ -114,14 +114,13 @@ export interface QRCodeEnvelopePayload {
   readonly didSigned?: QRDidSignedPayload;
 }
 
-// Opaque pass-through until ProofGenerationManager lands in RN.
-export interface SelectiveDisclosureProof {
-  readonly _placeholder?: never;
-}
+// Re-export the real `SelectiveDisclosureProof` from `proofManager.ts` so
+// existing consumers (QRSharingPayload below + qrEnvelope's decrypted
+// payload type) keep working without changing imports.
+export type { SelectiveDisclosureProof } from '@/zk/proofManager';
+import type { SelectiveDisclosureProof } from '@/zk/proofManager';
 
 // Mirrors Swift QRSharingPayload (Services/Card/QRCodeModels.swift L95-147).
-// Proof fields (issuerProof, sdProof) intentionally left null/undefined —
-// ProofGenerationManager port is out of scope for this task.
 export interface QRSharingPayload {
   readonly businessCard: BusinessCardSnapshotPayload;
   readonly sharingLevel: SharingLevel;
@@ -237,8 +236,22 @@ export async function buildSolidarityQrPayloadAsync(
  *
  * Same-sender escrow: `encryptJson` uses the user's master key, so the
  * recipient must hold the same key (synced via iCloud Keychain on iOS, or
- * explicitly restored from backup). Proof fields (issuerProof, sdProof,
- * proofClaims) are left undefined until ProofGenerationManager lands in RN.
+ * explicitly restored from backup).
+ *
+ * Attaches three best-effort proofs (each independently failable):
+ *   - `sdProof`            via `generateSelectiveDisclosureProof`
+ *                          (when `useZK || sharingFormat==='zkProof'`)
+ *   - `issuerCommitment` + `issuerProof`
+ *                          via `generateIssuerProof` — Semaphore group
+ *                          membership proof. Null when the user isn't a
+ *                          member of any qualifying group.
+ *   - `proofClaims`        filter of `ShareSettingsStore.selectedProofClaims`
+ *                          intersected with the proofs that ACTUALLY landed
+ *                          (Swift `filteredProofClaims` lines 354-369).
+ *
+ * Failure mode: each proof generator is wrapped in try/catch and logged via
+ * console.warn; an envelope without proofs is still emitted so QR sharing
+ * doesn't block on transient errors.
  */
 export async function buildZKEnvelope(
   card: BusinessCard,
@@ -252,15 +265,68 @@ export async function buildZKEnvelope(
   const expirationDate =
     options.expirationDate ?? new Date(now.getTime() + 24 * 60 * 60 * 1000);
 
+  // Generate the selective-disclosure proof when the card's preferences ask
+  // for it (useZK toggle or explicit zkProof format). Lazy-imported so this
+  // module stays importable from Bun's unit-test loader; the proof manager
+  // pulls in @noble/curves + the SpruceID Nitro module.
+  let sdProof: SelectiveDisclosureProof | undefined;
+  if (
+    card.sharingPreferences.useZK ||
+    card.sharingPreferences.sharingFormat === 'zkProof'
+  ) {
+    try {
+      const { generateSelectiveDisclosureProof } = await import(
+        '@/zk/proofManager'
+      );
+      sdProof = await generateSelectiveDisclosureProof({
+        businessCard: card,
+        selectedFields: new Set(selectedFields),
+        recipientId: undefined,
+        now,
+      });
+    } catch (err) {
+      console.warn('[buildZKEnvelope] sdProof generation failed', err);
+    }
+  }
+
+  // Semaphore group-membership proof (best-effort). Skipped on platforms
+  // where the native module isn't available or the user isn't in any
+  // qualifying group.
+  let issuerCommitment: string | undefined;
+  let issuerProof: string | undefined;
+  try {
+    const { generateIssuerProof, buildShareScope } = await import(
+      '@/zk/issuerProof'
+    );
+    const scope = buildShareScope(selectedFields);
+    const issuer = await generateIssuerProof({ message: shareId, scope });
+    if (issuer) {
+      issuerCommitment = issuer.commitment;
+      issuerProof = issuer.proof;
+    }
+  } catch (err) {
+    console.warn('[buildZKEnvelope] issuerProof generation failed', err);
+  }
+
+  const proofClaims = await filteredProofClaims({
+    hasIssuerProof: issuerProof !== undefined,
+    hasSdProof: sdProof !== undefined,
+  });
+
   const sharingPayload: QRSharingPayload = {
     businessCard: buildSnapshot(card, selectedFields, options.sealedRoute),
     sharingLevel,
     selectedFields,
+    scope: buildShareScopeInline(selectedFields),
     expirationDate: formatSwiftIso8601(expirationDate),
     shareId,
     createdAt: formatSwiftIso8601(now),
     format: 'zkProof',
     sealedRoute: options.sealedRoute,
+    issuerCommitment,
+    issuerProof,
+    sdProof,
+    proofClaims,
   };
 
   const { encryptJson } = await loadEncryptionManager();
@@ -273,6 +339,65 @@ export async function buildZKEnvelope(
     shareId,
     encryptedPayload,
   };
+}
+
+/**
+ * Lightweight inline mirror of `buildShareScope` from `@/zk/issuerProof`,
+ * kept in this file to avoid a sync import of the ZK module at envelope
+ * build time. Result MUST match `ShareScopeResolver.scope(selectedFields:)`
+ * in Swift so the canonical scope string stays interoperable.
+ */
+function buildShareScopeInline(
+  selectedFields: readonly BusinessCardField[]
+): string {
+  const normalised = new Set<string>(selectedFields);
+  normalised.add('name');
+  const sorted = [...normalised].sort();
+  return `fields:${sorted.join(',')}`;
+}
+
+/**
+ * Filter `ShareSettingsStore.selectedProofClaims` against the proofs that
+ * actually landed in this envelope. Mirrors Swift `filteredProofClaims`
+ * (QRCodeGenerationService.swift:354-369) one-to-one:
+ *   - `is_human`    only when issuerProof was generated
+ *   - `age_over_18` only when sdProof was generated
+ *
+ * Returns undefined when no claims survive (Swift returns nil to keep the
+ * JSON Codable wire format clean).
+ */
+async function filteredProofClaims(args: {
+  readonly hasIssuerProof: boolean;
+  readonly hasSdProof: boolean;
+}): Promise<readonly string[] | undefined> {
+  // Lazy-load the preferences module to dodge MMKV bootstrap during unit
+  // tests that don't install the storage mock. On any failure we return
+  // undefined — claims are advisory.
+  let selected: readonly string[];
+  try {
+    const prefsMod = (await import('@/settings/preferences')) as {
+      readonly usePreferences: {
+        getState: () => {
+          readonly shareIsHuman: boolean;
+          readonly shareAgeOver18: boolean;
+        };
+      };
+    };
+    const state = prefsMod.usePreferences.getState();
+    const out: string[] = [];
+    if (state.shareIsHuman) out.push('is_human');
+    if (state.shareAgeOver18) out.push('age_over_18');
+    selected = out;
+  } catch {
+    return undefined;
+  }
+
+  const filtered = selected.filter((claim) => {
+    if (claim === 'is_human') return args.hasIssuerProof;
+    if (claim === 'age_over_18') return args.hasSdProof;
+    return false;
+  });
+  return filtered.length > 0 ? filtered : undefined;
 }
 
 export async function buildDidSignedEnvelope(

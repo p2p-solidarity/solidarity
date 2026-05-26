@@ -38,7 +38,10 @@ import {
 import { SolidarityPlaceholderCard } from '@/components/passport/SolidarityPlaceholderCard';
 import { ThemedButton } from '@/components/themed';
 import { Colors } from '@/constants/Colors';
+import { presentReceivedCard } from '@/cards/receivedCard';
+import { pushToast } from '@/feedback/toast';
 import { QrScanner } from '@/scan/QrScanner';
+import { handleScannedPayload } from '@/scan/envelopeHandler';
 
 const SCAN_WINDOW_SIZE = 260;
 
@@ -69,10 +72,28 @@ export default function ScanScreen() {
   }, []);
 
   const finalize = useCallback((payload: string) => {
-    setRoute(classifyPayload(payload));
     setProgress(null);
     setIsScanning(false);
     capturing.current = false;
+    // Try the envelope pipeline first — plaintext / zkProof / didSigned
+    // payloads route into the ReceivedCardSheet mounted in `_layout.tsx`.
+    // Everything else (OIDC URLs, deep links, raw JWTs that aren't cards)
+    // falls through to the legacy `classifyPayload` router.
+    void (async () => {
+      const outcome = await handleScannedPayload(payload);
+      if (outcome.kind === 'card' && outcome.card) {
+        presentReceivedCard(outcome.card, outcome.verificationStatus);
+        router.back();
+        return;
+      }
+      if (outcome.kind === 'error') {
+        pushToast(outcome.errorMessage ?? 'Scan failed', 'error');
+        setRoute(null);
+        setIsScanning(true);
+        return;
+      }
+      setRoute(classifyPayload(payload));
+    })();
   }, []);
 
   const onResult = useCallback(
