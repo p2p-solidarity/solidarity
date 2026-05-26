@@ -8,7 +8,21 @@ import { PresentationChunkPlaybackControls } from '@/components/me/PresentationC
 import { ThemedText } from '@/components/themed/ThemedText';
 import { Colors } from '@/constants/Colors';
 import { useIdentityData, type ProvableClaimEntity } from '@/identity';
+import type { TrustLevel } from '@/identity/entities';
 import { buildPresentationQrPages } from '@/me/presentationQrPages';
+
+// Local helper: matches `levelAccent` in app/credentials/[id].tsx
+// (L3 → terminalGreen, L2 → primaryBlue, L1 → text3). Kept local — not exported.
+function levelAccent(trustLevel: TrustLevel): string {
+  switch (trustLevel) {
+    case 'L3':
+      return Colors.terminalGreen;
+    case 'L2':
+      return Colors.primaryBlue;
+    default:
+      return Colors.text3;
+  }
+}
 
 const AUTO_ADVANCE_MS = 1200;
 
@@ -163,26 +177,48 @@ function PresentationBody({
               justifyContent: 'center',
             }}
           >
-            {selectedClaims.map((claim) => (
-              <View
-                key={claim.id}
-                style={{
-                  paddingHorizontal: 10,
-                  paddingVertical: 5,
-                  borderRadius: 4,
-                  backgroundColor: Colors.chipSurface,
-                  borderWidth: 1,
-                  borderColor: Colors.terminalGreen,
-                }}
-              >
-                <ThemedText
-                  variant="caption"
-                  style={{ fontWeight: '500', fontSize: 10 }}
+            {selectedClaims.map((claim) => {
+              const accent = levelAccent(claim.trustLevel);
+              return (
+                <View
+                  key={claim.id}
+                  style={{
+                    flexDirection: 'row',
+                    alignItems: 'center',
+                    gap: 6,
+                    paddingHorizontal: 8,
+                    paddingVertical: 5,
+                    borderRadius: 4,
+                    backgroundColor: Colors.chipSurface,
+                    borderWidth: 1,
+                    borderColor: accent,
+                  }}
                 >
-                  {claim.claimType}
-                </ThemedText>
-              </View>
-            ))}
+                  <View
+                    style={{
+                      borderWidth: 0.5,
+                      borderColor: accent,
+                      borderRadius: 2,
+                      paddingHorizontal: 4,
+                      paddingVertical: 1,
+                    }}
+                  >
+                    <ThemedText
+                      variant="caption"
+                      style={{ color: accent, fontSize: 9, fontWeight: '600' }}
+                    >
+                      {claim.trustLevel}
+                    </ThemedText>
+                  </View>
+                  <ThemedText
+                    variant="caption"
+                    style={{ fontWeight: '500', fontSize: 10 }}
+                  >
+                    {claim.claimType}
+                  </ThemedText>
+                </View>
+              );
+            })}
           </View>
         ) : null}
 

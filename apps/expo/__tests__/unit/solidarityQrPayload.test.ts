@@ -7,6 +7,7 @@ import type {
 } from '@solidarity/shared';
 
 import {
+  buildDidSignedEnvelope,
   buildSolidarityQrPayloadAsync,
   buildSolidarityQrPayload,
   enabledFieldsFromSharePreferences,
@@ -334,5 +335,43 @@ describe('Solidarity settings QR payload', () => {
 
     const envelope = JSON.parse(payload) as { readonly format: string };
     expect(envelope.format).toBe('plaintext');
+  });
+
+  it('builds a didSigned envelope mirroring Swift QRCodeEnvelope shape', async () => {
+    const envelope = await buildDidSignedEnvelope(makeCard(), {
+      now: NOW,
+      shareId: SHARE_ID,
+      credentialId: CREDENTIAL_ID,
+      sharingLevel: 'professional',
+      signer: {
+        issuerDid: DID,
+        publicKeyJwk: PUBLIC_JWK,
+        signJwt: async () => 'signed.vc.jwt',
+      },
+    });
+
+    expect(envelope).not.toBeNull();
+    if (!envelope) return;
+
+    expect(envelope.format).toBe('didSigned');
+    expect(envelope.version).toBe(2);
+    expect(envelope.sharingLevel).toBe('professional');
+    expect(envelope.shareId).toBe(SHARE_ID);
+    expect(envelope.didSigned).toBeDefined();
+    expect(envelope.didSigned?.jwt).toBe('signed.vc.jwt');
+    expect(envelope.didSigned?.issuerDid).toBe(DID);
+    expect(envelope.didSigned?.holderDid).toBe(DID);
+    expect(envelope.didSigned?.shareId).toBe(envelope.shareId);
+    expect(envelope.didSigned?.createdAt).toBe('2026-05-25T12:34:56Z');
+    expect(envelope.plaintext).toBeUndefined();
+    expect(envelope.encryptedPayload).toBeUndefined();
+  });
+
+  it('returns null from buildDidSignedEnvelope when no signer is provided', async () => {
+    const envelope = await buildDidSignedEnvelope(makeCard(), {
+      now: NOW,
+      shareId: SHARE_ID,
+    });
+    expect(envelope).toBeNull();
   });
 });

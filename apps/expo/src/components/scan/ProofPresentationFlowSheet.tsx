@@ -5,15 +5,18 @@
  * Multi-step modal driven by the OID4VP request scanned from a verifier
  * QR. Steps: parse → review (verifier + requested claims) → sign → done.
  *
- * The actual signing pipeline (BiometricGatekeeper + VCService +
- * OID4VPPresentationService) is not yet wired in apps/expo, so the
- * sign step emits a placeholder vp_token derived from the request nonce
- * and surfaces a toast — keeping the UI parity-complete while the
- * crypto layer lands.
+ * Wired to the real signing pipeline: the submit step runs the
+ * `presentProof` biometric gate, then builds + signs the VP token via
+ * `buildVpToken` (Secure-Enclave-backed ES256 signature) and submits the
+ * token to the verifier's `response_uri` / `redirect_uri` via
+ * `submitAuthorizationResponse` — matching Swift's BiometricGatekeeper →
+ * VCService → OID4VPPresentationService.wrapCredentialsAsVP →
+ * submitVpToken chain.
  */
 import { type ReactNode, useEffect, useState } from 'react';
 import {
   ActivityIndicator,
+  Linking,
   Modal,
   Pressable,
   ScrollView,
@@ -25,7 +28,11 @@ import { SfIcon } from '@/components/icons/SfIcon';
 import { ThemedButton, ThemedText } from '@/components/themed';
 import { Colors } from '@/constants/Colors';
 import { pushToast } from '@/feedback/toast';
+import { useActiveDid, useIdentityData } from '@/identity';
+import { requireSensitiveAction } from '@/keychain';
 import { parseOidcRequest, type ParsedOidcRequest } from '@/oidc';
+import { buildVpToken } from '@/oidc/presenter';
+import { submitAuthorizationResponse } from '@/oidc/submitResponse';
 
 type Step = 'review' | 'signing' | 'submitted';
 type ParseState =
@@ -67,6 +74,7 @@ function FlowBody({
   const [step, setStep] = useState<Step>('review');
   const [parseState, setParseState] = useState<ParseState>({ kind: 'loading' });
   const [submittedToken, setSubmittedToken] = useState('');
+  const activeDid = useActiveDid();
 
   useEffect(() => {
     try {
@@ -90,17 +98,10 @@ function FlowBody({
       pushToast(reason, 'warning');
       return;
     }
-    setStep('signing');
-    // Placeholder for the real biometric-gated VP signing pipeline.
-    // The Swift app calls BiometricGatekeeper + VCService here; the Expo
-    // crypto layer lands in a later wave. We mimic the latency so the
-    // UI transitions feel native instead of jumping straight to success.
-    setTimeout(() => {
-      const token = `vp_token_${parseState.parsed.request.nonce ?? 'pending'}`;
-      setSubmittedToken(token);
-      setStep('submitted');
-      pushToast('Proof signing lands next iteration.', 'warning');
-    }, 800);
+    void runPresentation(parseState.parsed, activeDid, {
+      setStep,
+      setSubmittedToken,
+    });
   };
 
   return (
@@ -295,6 +296,163 @@ function SubmittedStep({
       <ThemedButton fullWidth label="Done" onPress={onClose} />
     </View>
   );
+}
+
+interface PresentationCallbacks {
+  readonly setStep: (step: Step) => void;
+  readonly setSubmittedToken: (token: string) => void;
+}
+
+/**
+ * Drive the OID4VP presentation: biometric gate → buildVpToken (signs the
+ * VP envelope with the Secure-Enclave-backed ES256 key) → optional POST to
+ * the verifier `response_uri` / `redirect_uri`. Mirrors Swift's
+ * `BiometricGatekeeper.authorizeIfRequired(.presentProof)` → VCService →
+ * OID4VPPresentationService.wrapCredentialsAsVP → submitVpToken chain.
+ *
+ * Failure modes (each surfaces a toast and returns the UI to `review` so
+ * the user can retry without re-scanning):
+ *   - biometric cancelled / locked-out / unavailable / policy-disabled
+ *   - no provable claims available for presentation
+ *   - signing throws (key gone, hardware fault)
+ *   - verifier POST non-2xx / network error
+ */
+async function runPresentation(
+  parsed: ParsedOidcRequest,
+  activeDid: string | null,
+  cb: PresentationCallbacks
+): Promise<void> {
+  cb.setStep('signing');
+
+  const gate = await requireSensitiveAction(
+    'presentProof',
+    'Authorize signing your proof presentation'
+  );
+  if (!gate.success) {
+    pushToast(biometricErrorMessage(gate.reason), 'error');
+    cb.setStep('review');
+    return;
+  }
+
+  // Collect the provable-claim ids the verifier asked for. When the
+  // request omits a presentation_definition (or has zero input
+  // descriptors), Swift falls back to "best effort: include everything
+  // the holder can present" — match that so a bare openid4vp:// request
+  // still completes against a default verifier.
+  const selectedClaimIds = resolveSelectedClaimIds(parsed);
+  if (selectedClaimIds.length === 0) {
+    pushToast('No credentials available to present.', 'error');
+    cb.setStep('review');
+    return;
+  }
+
+  // Holder DID for the VP binding. `buildVpToken` re-derives the canonical
+  // `did:key` from the active signing key anyway, but pass the cached value
+  // so the request audit log matches IdentityCoordinator's view of "who I
+  // am right now". Falls back to an empty string — presenter ignores the
+  // input and uses its derived value.
+  const holderDid = activeDid ?? '';
+
+  const vpResult = await buildVpToken({
+    request: parsed,
+    selectedClaimIds,
+    holderDid,
+  });
+  if (!vpResult.ok) {
+    pushToast(vpResult.error.message, 'error');
+    cb.setStep('review');
+    return;
+  }
+
+  const { vpJwt, presentationSubmission } = vpResult.value;
+  const req = parsed.request;
+  const hasSubmissionTarget =
+    Boolean(req.response_uri) || Boolean(req.redirect_uri);
+
+  // No verifier callback URL — Swift treats this as "verifier scanned the
+  // QR back from us out-of-band" and stays on the success screen with the
+  // signed JWT shown for the user to relay manually. Match that behaviour.
+  if (!hasSubmissionTarget) {
+    cb.setSubmittedToken(vpJwt);
+    cb.setStep('submitted');
+    pushToast('Proof signed', 'success');
+    return;
+  }
+
+  const submitResult = await submitAuthorizationResponse({
+    request: parsed,
+    vpJwt,
+    presentationSubmission,
+  });
+  if (!submitResult.ok) {
+    pushToast(submitResult.error.message, 'error');
+    cb.setStep('review');
+    return;
+  }
+
+  cb.setSubmittedToken(vpJwt);
+  cb.setStep('submitted');
+  pushToast('Proof submitted', 'success');
+
+  // Follow any post-submission redirect (verifier "thanks" page or
+  // back-to-app deep link). Failure to open the URL is non-fatal — the
+  // signed token already landed.
+  const redirectTo = submitResult.value.redirectTo;
+  if (redirectTo) {
+    try {
+      await Linking.openURL(redirectTo);
+    } catch {
+      // Swallow — caller already saw the success state.
+    }
+  }
+}
+
+function biometricErrorMessage(
+  reason: 'cancelled' | 'lockedOut' | 'unavailable' | 'policyDisabled'
+): string {
+  if (reason === 'lockedOut') return 'Biometric is locked. Try again later.';
+  if (reason === 'unavailable') {
+    return 'Biometric is unavailable. Enable Face ID / fingerprint to present proofs.';
+  }
+  if (reason === 'policyDisabled') return 'Presentation gate is disabled.';
+  return 'Biometric authorization cancelled.';
+}
+
+/**
+ * Map `presentation_definition.input_descriptors` to provable-claim ids
+ * from the local identity store. Matches by descriptor `id` first
+ * (canonical OID4VP path), then falls back to matching the descriptor
+ * `name` against the claim's `claimType` (Swift exposes claim types as
+ * the user-facing name on the verifier side too). When no descriptors are
+ * present, returns every presentable claim id so the verifier still gets
+ * the holder's full attested set.
+ */
+function resolveSelectedClaimIds(parsed: ParsedOidcRequest): readonly string[] {
+  const provableClaims = useIdentityData.getState().provableClaims;
+  const presentable = provableClaims.filter((c) => c.isPresentable);
+  if (presentable.length === 0) return [];
+
+  const inputDescriptors = parsed.request.presentation_definition?.input_descriptors ?? [];
+  if (inputDescriptors.length === 0) {
+    return presentable.map((c) => c.id);
+  }
+
+  const matched = new Set<string>();
+  for (const d of inputDescriptors) {
+    for (const c of presentable) {
+      if (c.id === d.id || c.claimType === d.id || c.claimType === d.name) {
+        matched.add(c.id);
+      }
+    }
+  }
+
+  // Verifier asked for claims we don't hold — fall back to "everything we
+  // can present" so the user still gets a chance to attempt the exchange
+  // (the verifier rejects on its end if the missing claim is mandatory).
+  if (matched.size === 0) {
+    return presentable.map((c) => c.id);
+  }
+  return Array.from(matched);
 }
 
 function submitButtonLabel(parseState: ParseState): string {

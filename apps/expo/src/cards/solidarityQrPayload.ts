@@ -71,7 +71,7 @@ interface BusinessCardSnapshotPayload {
   readonly sealedRoute?: string;
 }
 
-interface QRPlaintextPayload {
+export interface QRPlaintextPayload {
   readonly snapshot: BusinessCardSnapshotPayload;
   readonly shareId: string;
   readonly createdAt: string;
@@ -80,13 +80,26 @@ interface QRPlaintextPayload {
   readonly selectedFields: readonly BusinessCardField[];
 }
 
-interface QRCodeEnvelopePayload {
+export interface QRDidSignedPayload {
+  readonly jwt: string;
+  readonly shareId: string;
+  readonly createdAt: string;
+  readonly expirationDate?: string;
+  readonly issuerDid: string;
+  readonly holderDid: string;
+}
+
+export type SharingFormat = 'plaintext' | 'zkProof' | 'didSigned';
+
+export interface QRCodeEnvelopePayload {
   readonly version: 2;
-  readonly format: 'plaintext';
+  readonly format: SharingFormat;
   readonly sharingLevel: SharingLevel;
   readonly selectedFields: readonly BusinessCardField[];
   readonly shareId: string;
-  readonly plaintext: QRPlaintextPayload;
+  readonly plaintext?: QRPlaintextPayload;
+  readonly encryptedPayload?: string;
+  readonly didSigned?: QRDidSignedPayload;
 }
 
 const SHARE_FIELD_ORDER: readonly BusinessCardField[] = [
@@ -171,12 +184,37 @@ export async function buildSolidarityQrPayloadAsync(
 ): Promise<string> {
   if (card.sharingPreferences.sharingFormat === 'didSigned' && options.signer) {
     try {
-      return await buildDidSignedPayload(card, options);
+      const signed = await buildDidSignedJwt(card, options);
+      return signed.jwt;
     } catch {
       return buildSolidarityQrPayload(card, options);
     }
   }
   return buildSolidarityQrPayload(card, options);
+}
+
+export async function buildDidSignedEnvelope(
+  card: BusinessCard,
+  options: SolidarityQrPayloadOptions = {}
+): Promise<QRCodeEnvelopePayload | null> {
+  if (!options.signer) return null;
+
+  const signed = await buildDidSignedJwt(card, options);
+  return {
+    version: 2,
+    format: 'didSigned',
+    sharingLevel: signed.sharingLevel,
+    selectedFields: signed.selectedFields,
+    shareId: signed.shareId,
+    didSigned: {
+      jwt: signed.jwt,
+      shareId: signed.shareId,
+      createdAt: signed.createdAt,
+      expirationDate: signed.expirationDate,
+      issuerDid: signed.issuerDid,
+      holderDid: signed.holderDid,
+    },
+  };
 }
 
 function resolveSelectedFields(
@@ -191,12 +229,23 @@ function resolveSelectedFields(
   return fields.filter((field) => field !== 'profileImage');
 }
 
-async function buildDidSignedPayload(
+interface DidSignedResult {
+  readonly jwt: string;
+  readonly shareId: string;
+  readonly createdAt: string;
+  readonly expirationDate?: string;
+  readonly issuerDid: string;
+  readonly holderDid: string;
+  readonly sharingLevel: SharingLevel;
+  readonly selectedFields: readonly BusinessCardField[];
+}
+
+async function buildDidSignedJwt(
   card: BusinessCard,
   options: SolidarityQrPayloadOptions
-): Promise<string> {
+): Promise<DidSignedResult> {
   const signer = options.signer;
-  if (!signer) return buildSolidarityQrPayload(card, options);
+  if (!signer) throw new Error('No signer available for didSigned payload');
 
   const sharingLevel = options.sharingLevel ?? 'professional';
   const selectedFields = resolveSelectedFields(card, sharingLevel, options);
@@ -205,7 +254,8 @@ async function buildDidSignedPayload(
   );
   const snapshot = buildSnapshot(card, vcEligibleFields, undefined);
   const credentialId = options.credentialId ?? uuid();
-  const issuedAt = Math.round((options.now ?? new Date()).getTime() / 1000);
+  const now = options.now ?? new Date();
+  const issuedAt = Math.round(now.getTime() / 1000);
   const holderDid = signer.holderDid ?? signer.issuerDid;
 
   const payload = buildBusinessCardCredentialPayload({
@@ -219,7 +269,19 @@ async function buildDidSignedPayload(
     attestedFields: vcEligibleFields,
   });
 
-  return signer.signJwt({ alg: 'ES256' }, payload);
+  const jwt = await signer.signJwt({ alg: 'ES256' }, payload);
+  return {
+    jwt,
+    shareId: options.shareId ?? uuid(),
+    createdAt: formatSwiftIso8601(now),
+    expirationDate: options.expirationDate
+      ? formatSwiftIso8601(options.expirationDate)
+      : undefined,
+    issuerDid: signer.issuerDid,
+    holderDid,
+    sharingLevel,
+    selectedFields,
+  };
 }
 
 function buildBusinessCardCredentialPayload(args: {
