@@ -33,13 +33,11 @@ Pod::Spec.new do |s|
     'SWIFT_VERSION'  => '5.9',
   }
 
-  # NFCPassportReader (AndyQ) is intentionally NOT a dependency here:
-  # its transitive OpenSSL-Universal 3.3.x ships headers that break
-  # Xcode 26's strict Clang module build ("@import inside extern \"C\"").
-  # The Swift impl gates the import behind `canImport(NFCPassportReader)`
-  # so this pod compiles into a stub on iOS while Android jmrtd remains
-  # the production NFC path. Re-introduce when OpenSSL-Universal ships
-  # clean headers, or swap to a hand-rolled ICAO 9303 reader.
+  # Real iOS ePassport NFC path. apps/expo/plugins/withNfcReader.js also
+  # injects NFCPassportReader from GitHub into the generated Podfile so
+  # CocoaPods resolves the 2.3.0 podspec even though newer releases are not
+  # published through the trunk spec repo.
+  s.dependency 'NFCPassportReader', '2.3.0'
 
   load File.join(__dir__, 'nitrogen', 'generated', 'ios', 'NfcPassport+autolinking.rb')
   add_nitrogen_files(s)

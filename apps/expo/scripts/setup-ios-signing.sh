@@ -44,7 +44,7 @@ cat > "$EXPORT_OPTIONS" <<EOF
 <plist version="1.0">
 <dict>
   <key>method</key>
-  <string>app-store</string>
+  <string>app-store-connect</string>
   <key>teamID</key>
   <string>$TEAM_ID</string>
   <key>signingStyle</key>
@@ -68,5 +68,5 @@ echo
 green "✅ Setup complete"
 echo
 echo "Then run:"
-echo "  bun run prebuild:ios:local      # prep only → open Xcode and Archive"
+echo "  bun run ios:prebuild:local      # prep only → open Xcode and Archive"
 echo "  bun run build:ios:local         # full pipeline → signed .ipa"

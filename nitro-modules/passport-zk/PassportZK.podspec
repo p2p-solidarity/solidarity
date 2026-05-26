@@ -18,6 +18,10 @@ Pod::Spec.new do |s|
   s.source_files = [
     'ios/**/*.{swift,h,m,mm}',
   ]
+  s.resources = [
+    'android/src/main/assets/disclosure.json',
+    'android/src/main/assets/disclosure.srs.bin',
+  ]
 
   s.pod_target_xcconfig = {
     'DEFINES_MODULE' => 'YES',

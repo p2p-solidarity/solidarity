@@ -31,12 +31,9 @@ import CryptoKit
 import Foundation
 import NitroModules
 
-// NFCPassportReader (AndyQ) pulls OpenSSL-Universal 3.3.x, whose headers
-// break Xcode 26's strict Clang module build with "@import inside extern \"C\"".
-// Until that's resolved upstream, iOS passport NFC is stubbed: we drop the
-// pod dependency in NfcPassport.podspec and gate all NFCPassportReader use
-// behind `canImport(NFCPassportReader)`, which yields false when the pod
-// isn't present. Android jmrtd remains the production NFC path.
+// Keep the NFCPassportReader import gated so simulator builds and partially
+// configured native projects still compile. Production iOS builds resolve the
+// pod through NfcPassport.podspec + apps/expo/plugins/withNfcReader.js.
 #if canImport(NFCPassportReader) && !targetEnvironment(simulator)
   import CoreNFC
   import NFCPassportReader
@@ -49,7 +46,7 @@ final class HybridNfcPassport: HybridNfcPassportSpec {
   func isAvailable() -> Bool {
     #if canImport(NFCPassportReader) && !targetEnvironment(simulator)
       if #available(iOS 13.0, *) {
-        return NFCNDEFReaderSession.readingAvailable
+        return NFCTagReaderSession.readingAvailable
       }
     #endif
     return false

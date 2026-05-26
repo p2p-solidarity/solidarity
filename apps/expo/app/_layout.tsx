@@ -88,6 +88,25 @@ const MIGRATION_SCOPES = [
 
 void SplashScreen.preventAutoHideAsync();
 
+const BOOT_TIMEOUT_MS = 8000;
+const BOOT_LOG_PREFIX = '[solidarity:boot]';
+
+function logBoot(message: string, payload?: unknown): void {
+  if (payload === undefined) {
+    console.info(`${BOOT_LOG_PREFIX} ${message}`);
+    return;
+  }
+  console.info(`${BOOT_LOG_PREFIX} ${message}`, payload);
+}
+
+function warnBoot(message: string, error?: unknown): void {
+  if (error === undefined) {
+    console.warn(`${BOOT_LOG_PREFIX} ${message}`);
+    return;
+  }
+  console.warn(`${BOOT_LOG_PREFIX} ${message}`, error);
+}
+
 export default function RootLayout() {
   const [ready, setReady] = useState(false);
   const hydrateContacts = useContactStore((s) => s.hydrate);
@@ -105,9 +124,37 @@ export default function RootLayout() {
   }, [appColorScheme]);
 
   useEffect(() => {
-    void (async () => {
+    let cancelled = false;
+    let shown = false;
+
+    const showApp = async (reason: string) => {
+      if (cancelled || shown) return;
+      shown = true;
+      logBoot(`show-app:${reason}`);
+      setReady(true);
       try {
+        await SplashScreen.hideAsync();
+      } catch (error) {
+        warnBoot('splash-hide-failed', error);
+      }
+    };
+
+    const hydrateDetailsInBackground = () => {
+      void useCardStore.getState().hydrate();
+      void useContactStore.getState().hydrate();
+      void useGroupStore.getState().hydrate();
+      void useVaultStore.getState().hydrate();
+      void useShoutoutStore.getState().hydrate();
+      void useCredentialStore.getState().hydrate();
+      void useIssuerMetadataStore.getState().hydrate();
+      void useIdentityData.getState().hydrate();
+    };
+
+    const boot = async () => {
+      try {
+        logBoot('mmkv:start');
         await initMmkv();
+        logBoot('mmkv:done');
         // Sync, sub-millisecond: each store reads its plaintext manifest
         // from MMKV and seeds the zustand initial state. List/hero views
         // can render on the next frame without any decryption.
@@ -118,9 +165,11 @@ export default function RootLayout() {
         useShoutoutStore.getState().seedFromManifest();
         useCredentialStore.getState().seedFromManifest();
         useIssuerMetadataStore.getState().seedFromManifest();
+        logBoot('manifest-seed:done');
 
         hydratePreferences();
         hydrateSensitiveActionPolicy();
+        logBoot('preferences:done');
 
         // First-boot migration: if any manifest is missing, block splash
         // for the parallel bulk-decrypt so lists paint on frame 1 instead
@@ -129,6 +178,7 @@ export default function RootLayout() {
           (scope) => !ManifestStorage.exists(scope)
         );
         if (needsMigration) {
+          logBoot('migration:start');
           await Promise.all([
             useCardStore.getState().hydrate(),
             useContactStore.getState().hydrate(),
@@ -138,28 +188,44 @@ export default function RootLayout() {
             useCredentialStore.getState().hydrate(),
             useIssuerMetadataStore.getState().hydrate(),
           ]);
+          logBoot('migration:done');
+        } else {
+          logBoot('migration:skip');
         }
 
+        logBoot('i18n:start');
         await installI18n();
+        logBoot('i18n:done');
         const initial = await Linking.getInitialURL();
-        if (initial) handleDeepLink(initial);
+        if (initial) {
+          logBoot('deeplink:initial', initial);
+          handleDeepLink(initial);
+        }
+        await showApp('boot-complete');
+      } catch (error) {
+        warnBoot('boot-failed-before-first-paint', error);
+        await showApp('boot-error');
       } finally {
-        setReady(true);
-        await SplashScreen.hideAsync();
         // Background bulk-decrypt for the steady-state path (manifests
         // already exist). Idempotent — each store's `hydrate()` checks
         // its own `detailsHydrated` flag and bails out cheaply if it's
         // already been called by the migration branch above.
-        void useCardStore.getState().hydrate();
-        void useContactStore.getState().hydrate();
-        void useGroupStore.getState().hydrate();
-        void useVaultStore.getState().hydrate();
-        void useShoutoutStore.getState().hydrate();
-        void useCredentialStore.getState().hydrate();
-        void useIssuerMetadataStore.getState().hydrate();
-        void useIdentityData.getState().hydrate();
+        if (!cancelled) hydrateDetailsInBackground();
       }
-    })();
+    };
+
+    const timeout = setTimeout(() => {
+      void showApp(`timeout-${BOOT_TIMEOUT_MS}ms`);
+    }, BOOT_TIMEOUT_MS);
+
+    void boot().finally(() => {
+      clearTimeout(timeout);
+    });
+
+    return () => {
+      cancelled = true;
+      clearTimeout(timeout);
+    };
   }, []);
 
   useEffect(() => {

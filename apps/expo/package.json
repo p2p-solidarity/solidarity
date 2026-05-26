@@ -12,7 +12,7 @@
     "setup:android": "./scripts/setup-android-signing.sh",
     "setup:ios": "./scripts/setup-ios-signing.sh",
     "build:android:local": "./scripts/build-android-local.sh",
-    "prebuild:ios:local": "./scripts/prebuild-ios-local.sh",
+    "ios:prebuild:local": "./scripts/prebuild-ios-local.sh",
     "build:ios:local": "./scripts/build-ios-local.sh",
     "submit:android": "./scripts/android-submit.sh",
     "gcp:bootstrap": "./scripts/gcp-bootstrap.sh",
