@@ -9,6 +9,18 @@ import {
 
 import type { Preferences } from '@/settings/preferences';
 
+// Lazy-loaded so this module stays importable from environments (notably
+// Bun's unit-test loader) that haven't installed an `expo-secure-store` shim.
+// `encryptionManager` transitively pulls in `react-native`, which trips Bun's
+// flow-syntax parser without a mock.
+import type * as EncryptionManagerModuleNs from '@/storage/encryptionManager';
+type EncryptionManagerModule = typeof EncryptionManagerModuleNs;
+let encryptionManagerCache: EncryptionManagerModule | null = null;
+async function loadEncryptionManager(): Promise<EncryptionManagerModule> {
+  encryptionManagerCache ??= await import('@/storage/encryptionManager');
+  return encryptionManagerCache;
+}
+
 export type ShareFieldPreferences = Pick<
   Preferences,
   | 'shareTitle'
@@ -102,6 +114,32 @@ export interface QRCodeEnvelopePayload {
   readonly didSigned?: QRDidSignedPayload;
 }
 
+// Opaque pass-through until ProofGenerationManager lands in RN.
+export interface SelectiveDisclosureProof {
+  readonly _placeholder?: never;
+}
+
+// Mirrors Swift QRSharingPayload (Services/Card/QRCodeModels.swift L95-147).
+// Proof fields (issuerProof, sdProof) intentionally left null/undefined —
+// ProofGenerationManager port is out of scope for this task.
+export interface QRSharingPayload {
+  readonly businessCard: BusinessCardSnapshotPayload;
+  readonly sharingLevel: SharingLevel;
+  readonly selectedFields?: readonly BusinessCardField[];
+  readonly scope?: string;
+  readonly expirationDate: string;
+  readonly shareId: string;
+  readonly createdAt: string;
+  readonly maxUses?: number;
+  readonly currentUses?: number;
+  readonly issuerCommitment?: string;
+  readonly issuerProof?: string;
+  readonly sdProof?: SelectiveDisclosureProof;
+  readonly format?: SharingFormat;
+  readonly sealedRoute?: string;
+  readonly proofClaims?: readonly string[];
+}
+
 const SHARE_FIELD_ORDER: readonly BusinessCardField[] = [
   'name',
   'title',
@@ -191,6 +229,50 @@ export async function buildSolidarityQrPayloadAsync(
     }
   }
   return buildSolidarityQrPayload(card, options);
+}
+
+/**
+ * Build a zkProof envelope mirroring Swift `buildZKEnvelope`
+ * (Services/Card/QRCodeGenerationService.swift L281-353).
+ *
+ * Same-sender escrow: `encryptJson` uses the user's master key, so the
+ * recipient must hold the same key (synced via iCloud Keychain on iOS, or
+ * explicitly restored from backup). Proof fields (issuerProof, sdProof,
+ * proofClaims) are left undefined until ProofGenerationManager lands in RN.
+ */
+export async function buildZKEnvelope(
+  card: BusinessCard,
+  options: SolidarityQrPayloadOptions = {}
+): Promise<QRCodeEnvelopePayload> {
+  const sharingLevel = options.sharingLevel ?? 'professional';
+  const shareId = options.shareId ?? uuid();
+  const selectedFields = resolveSelectedFields(card, sharingLevel, options);
+  const now = options.now ?? new Date();
+  // Swift default: now + 24h. Mirror that so unset expirations don't last forever.
+  const expirationDate =
+    options.expirationDate ?? new Date(now.getTime() + 24 * 60 * 60 * 1000);
+
+  const sharingPayload: QRSharingPayload = {
+    businessCard: buildSnapshot(card, selectedFields, options.sealedRoute),
+    sharingLevel,
+    selectedFields,
+    expirationDate: formatSwiftIso8601(expirationDate),
+    shareId,
+    createdAt: formatSwiftIso8601(now),
+    format: 'zkProof',
+    sealedRoute: options.sealedRoute,
+  };
+
+  const { encryptJson } = await loadEncryptionManager();
+  const encryptedPayload = await encryptJson(sharingPayload);
+  return {
+    version: 2,
+    format: 'zkProof',
+    sharingLevel,
+    selectedFields,
+    shareId,
+    encryptedPayload,
+  };
 }
 
 export async function buildDidSignedEnvelope(
@@ -480,7 +562,8 @@ function buildSummary(
   return title ?? company;
 }
 
-function formatSwiftIso8601(date: Date): string {
+/** @internal — shared with `qrEnvelope.ts`. */
+export function formatSwiftIso8601(date: Date): string {
   return date.toISOString().replace(/\.\d{3}Z$/u, 'Z');
 }
 
@@ -488,7 +571,8 @@ function formatSwiftFullIso8601(date: Date): string {
   return date.toISOString();
 }
 
-function stableStringify(value: unknown): string {
+/** @internal — shared with `qrEnvelope.ts`. */
+export function stableStringify(value: unknown): string {
   return JSON.stringify(normalizeForJson(value));
 }
 
