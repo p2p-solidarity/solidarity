@@ -32,6 +32,8 @@ import type {
   QRPlaintextPayload,
   QRSharingPayload,
 } from '@/cards/solidarityQrPayload';
+import { verifySelectiveDisclosureProof } from '@/zk/proofManager';
+import { verifyGroupProof } from '@/zk';
 
 export interface ScanOutcome {
   readonly kind: 'card' | 'oidc-request' | 'oidc-response' | 'vp-token' | 'unknown' | 'error';
@@ -180,37 +182,26 @@ async function verifyZkProofs(payload: QRSharingPayload): Promise<ZkProofResult>
   let sdValid = false;
   let issuerValid = false;
 
-  if (result.sdPresent) {
+  if (payload.sdProof !== undefined) {
     try {
-      const proofManager = (await dynamicImport('@/zk/proofManager')) as {
-        readonly verifySelectiveDisclosureProof?: (
-          proof: unknown,
-          cardId: string
-        ) => Promise<{ readonly isValid: boolean } | boolean>;
-      };
-      if (typeof proofManager.verifySelectiveDisclosureProof === 'function') {
-        const outcome = await proofManager.verifySelectiveDisclosureProof(
-          payload.sdProof,
-          payload.businessCard.cardId
-        );
-        sdValid = typeof outcome === 'boolean' ? outcome : outcome.isValid;
-      }
+      const outcome = await verifySelectiveDisclosureProof(
+        payload.sdProof,
+        payload.businessCard.cardId
+      );
+      sdValid = typeof outcome === 'boolean' ? outcome : outcome.isValid;
     } catch {
-      // proofManager not yet shipped → treat as unverified (graceful degrade).
+      // Treat verifier exceptions as unverified rather than failing the scan.
     }
   }
 
-  if (result.issuerPresent) {
+  if (payload.issuerProof !== undefined) {
     try {
-      const zk = (await dynamicImport('@/zk')) as {
-        readonly verifyGroupProof?: (proof: unknown) => Promise<boolean>;
-      };
-      if (typeof zk.verifyGroupProof === 'function' && payload.issuerProof) {
-        const proofObject = safeJsonParse(payload.issuerProof);
-        if (proofObject) issuerValid = await zk.verifyGroupProof(proofObject);
-      }
+      const proofObject = safeJsonParse(payload.issuerProof) as
+        | Parameters<typeof verifyGroupProof>[0]
+        | null;
+      if (proofObject) issuerValid = await verifyGroupProof(proofObject);
     } catch {
-      // module shape mismatch — skip.
+      // Treat verifier exceptions as unverified.
     }
   }
 
@@ -441,16 +432,6 @@ function isExpired(iso: string | undefined): boolean {
   const ts = Date.parse(iso);
   if (Number.isNaN(ts)) return false;
   return ts < Date.now();
-}
-
-/**
- * Indirect dynamic import — bypasses TS static module resolution so a
- * not-yet-shipped module (e.g. `@/zk/proofManager`) compiles cleanly. At
- * runtime Metro/Hermes throws when the module truly doesn't exist; the
- * caller catches and degrades to "unverified".
- */
-function dynamicImport(id: string): Promise<unknown> {
-  return (import(/* @vite-ignore */ id) as Promise<unknown>);
 }
 
 function safeJsonParse(value: string): unknown {

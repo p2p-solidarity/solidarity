@@ -31,7 +31,13 @@ import CryptoKit
 import Foundation
 import NitroModules
 
-#if !targetEnvironment(simulator)
+// NFCPassportReader (AndyQ) pulls OpenSSL-Universal 3.3.x, whose headers
+// break Xcode 26's strict Clang module build with "@import inside extern \"C\"".
+// Until that's resolved upstream, iOS passport NFC is stubbed: we drop the
+// pod dependency in NfcPassport.podspec and gate all NFCPassportReader use
+// behind `canImport(NFCPassportReader)`, which yields false when the pod
+// isn't present. Android jmrtd remains the production NFC path.
+#if canImport(NFCPassportReader) && !targetEnvironment(simulator)
   import CoreNFC
   import NFCPassportReader
 #endif
@@ -41,14 +47,12 @@ final class HybridNfcPassport: HybridNfcPassportSpec {
   // MARK: - Availability
 
   func isAvailable() -> Bool {
-    #if targetEnvironment(simulator)
-      return false
-    #else
+    #if canImport(NFCPassportReader) && !targetEnvironment(simulator)
       if #available(iOS 13.0, *) {
         return NFCNDEFReaderSession.readingAvailable
       }
-      return false
     #endif
+    return false
   }
 
   // MARK: - Read
@@ -63,7 +67,12 @@ final class HybridNfcPassport: HybridNfcPassportSpec {
     mrz: PassportMRZ,
     options: NfcReadOptions?
   ) async throws -> PassportReadResult {
-    #if targetEnvironment(simulator)
+    #if !canImport(NFCPassportReader)
+      throw self.error(
+        code: "nfc_unavailable",
+        message: "iOS NFC passport read is disabled in this build. Use Android."
+      )
+    #elseif targetEnvironment(simulator)
       throw self.error(
         code: "nfc_unavailable",
         message: "NFC passport read is not available on the iOS Simulator. Use a physical device."
@@ -291,7 +300,7 @@ final class HybridNfcPassport: HybridNfcPassportSpec {
 
   // MARK: - Mapping NFCPassportModel → PassportReadResult
 
-  #if !targetEnvironment(simulator)
+  #if canImport(NFCPassportReader) && !targetEnvironment(simulator)
     private func mapToNitroResult(
       model: NFCPassportModel,
       mrz incomingMrz: PassportMRZ

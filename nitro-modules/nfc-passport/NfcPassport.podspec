@@ -33,12 +33,13 @@ Pod::Spec.new do |s|
     'SWIFT_VERSION'  => '5.9',
   }
 
-  # NFCPassportReader (AndyQ) — the upstream SPM is the supported channel;
-  # the CocoaPods spec is deprecated but still publishable. We pin to a
-  # known-good release. The Expo prebuild path also ships an alternative
-  # SwiftPM hookup via plugins/withNfcReader.js for projects that prefer
-  # SPM over CocoaPods.
-  s.dependency 'NFCPassportReader', '~> 2.3.0'
+  # NFCPassportReader (AndyQ) is intentionally NOT a dependency here:
+  # its transitive OpenSSL-Universal 3.3.x ships headers that break
+  # Xcode 26's strict Clang module build ("@import inside extern \"C\"").
+  # The Swift impl gates the import behind `canImport(NFCPassportReader)`
+  # so this pod compiles into a stub on iOS while Android jmrtd remains
+  # the production NFC path. Re-introduce when OpenSSL-Universal ships
+  # clean headers, or swap to a hand-rolled ICAO 9303 reader.
 
   load File.join(__dir__, 'nitrogen', 'generated', 'ios', 'NfcPassport+autolinking.rb')
   add_nitrogen_files(s)

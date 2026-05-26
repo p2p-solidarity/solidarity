@@ -44,6 +44,7 @@
         "NSContactsUsageDescription": "Solidarity can save business card information to your Contacts.",
         "NSLocalNetworkUsageDescription": "Solidarity discovers nearby devices for proximity sharing.",
         "NSNearbyInteractionUsageDescription": "Solidarity uses Nearby Interaction to measure distance and direction of nearby devices.",
+        "NSBluetoothAlwaysUsageDescription": "Solidarity uses Bluetooth to discover and connect with nearby devices for business card sharing and proximity matching.",
         "NFCReaderUsageDescription": "Solidarity reads your passport's NFC chip to verify identity.",
         "NSFaceIDUsageDescription": "Solidarity uses Face ID to protect identity keys and authorize sensitive actions.",
         "NSPhotoLibraryUsageDescription": "Solidarity saves QR codes and business card images to your Photo Library.",
@@ -51,6 +52,10 @@
           "_say-share._tcp.",
           "_airmeishi-share._tcp."
         ],
+        "UIApplicationSceneManifest": {
+          "UIApplicationSupportsMultipleScenes": true
+        },
+        "UIApplicationSupportsIndirectInputEvents": true,
         "UIBackgroundModes": [
           "remote-notification",
           "fetch"
@@ -155,7 +160,9 @@
       "./plugins/withMoproBindingsPod.js",
       "./plugins/withSemaphoreBindingsPod.js",
       "./plugins/withRustXcframeworkSearchPath.js",
+      "./plugins/withDisableClangExplicitModules.js",
       "./plugins/withNfcReader.js",
+      "./plugins/withIosBuildNumber.js",
       "./plugins/withAndroidReleaseSigning.js",
       "expo-sqlite"
     ],
