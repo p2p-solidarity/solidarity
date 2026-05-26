@@ -178,7 +178,7 @@ export function MRZCameraStep({
   // call non-worklet JS functions like `getMrzOcr()` synchronously, but
   // once we have the HybridObject in hand it IS worklet-safe (the methods
   // are Nitro proxies backed by native code — same pattern as
-  // `useBarcodeScanner` in react-native-vision-camera-barcode-scanner).
+  // VisionCamera frame outputs).
   const mrzOcr = useMemo<MrzOcr>(() => getMrzOcr(), []);
 
   /**

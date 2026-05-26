@@ -85,7 +85,6 @@
     "react-native-screens": "~4.25.2",
     "react-native-svg": "15.15.4",
     "react-native-vision-camera": "^5.0.10",
-    "react-native-vision-camera-barcode-scanner": "^5.0.10",
     "react-native-vision-camera-resizer": "^5.0.10",
     "react-native-vision-camera-worklets": "^5.0.10",
     "react-native-webrtc": "^124.0.7",

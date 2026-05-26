@@ -88,7 +88,6 @@
         "react-native-screens": "~4.25.2",
         "react-native-svg": "15.15.4",
         "react-native-vision-camera": "^5.0.10",
-        "react-native-vision-camera-barcode-scanner": "^5.0.10",
         "react-native-vision-camera-resizer": "^5.0.10",
         "react-native-vision-camera-worklets": "^5.0.10",
         "react-native-webrtc": "^124.0.7",
@@ -1951,8 +1950,6 @@
     "react-native-svg": ["react-native-svg@15.15.4", "", { "dependencies": { "css-select": "^5.1.0", "css-tree": "^1.1.3", "warn-once": "0.1.1" }, "peerDependencies": { "react": "*", "react-native": "*" } }, "sha512-boT/vIRgj6zZKBpfTPJJiYWMbZE9duBMOwPK6kCSTgxsS947IFMOq9OgIFkpWZTB7t229H24pDRkh3W9ZK/J1A=="],
 
     "react-native-vision-camera": ["react-native-vision-camera@5.0.10", "", { "peerDependencies": { "react": "*", "react-native": "*", "react-native-nitro-image": "*", "react-native-nitro-modules": "*" } }, "sha512-NE1SyeI09VhpV9S9SIHq5WHylvviZIfToLmaLLA3jvXCuwTJ5qfIIiYXaJuJW5+6gxGl7Y05LjmLLWZgup4dNA=="],
-
-    "react-native-vision-camera-barcode-scanner": ["react-native-vision-camera-barcode-scanner@5.0.10", "", { "peerDependencies": { "react": "*", "react-native": "*", "react-native-nitro-modules": "*", "react-native-vision-camera": "*" } }, "sha512-Y4AlmtON1BXqPRFr0N4SzJ5ESAm3QCnOOJOUtFs45G0eY6Dmt7x0/9UOyK/J6rPYlsgZhd+QQnVeEUifPd3WtA=="],
 
     "react-native-vision-camera-resizer": ["react-native-vision-camera-resizer@5.0.10", "", { "peerDependencies": { "react": "*", "react-native": "*", "react-native-nitro-modules": "*", "react-native-vision-camera": "*" } }, "sha512-cGU7DJ4zYewf2lwv9uKkeAL64MrL9Xge79tNhn3ZfhNUcqit539jAedIMPAlgTyGd+1oI127XrEP3fc7IQ1JXg=="],
 

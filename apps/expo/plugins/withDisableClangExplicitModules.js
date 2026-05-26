@@ -33,7 +33,7 @@ const MARKER_END = '# [withDisableClangExplicitModules] END';
 const SNIPPET = `
     ${MARKER_BEGIN}
     suppress_cc = ['-Wno-error=module-import-in-extern-c', '-Wno-module-import-in-extern-c']
-    suppress_swift = ['-Xcc', '-Wno-error=module-import-in-extern-c', '-Xcc', '-Wno-module-import-in-extern-c']
+    suppress_swift = ['-Wno-error=module-import-in-extern-c', '-Wno-module-import-in-extern-c']
     installer.pods_project.targets.each do |t|
       t.build_configurations.each do |c|
         c.build_settings['CLANG_ENABLE_MODULES'] = 'YES'
@@ -48,7 +48,11 @@ const SNIPPET = `
         end
         cur = c.build_settings['OTHER_SWIFT_FLAGS']
         arr = cur.is_a?(Array) ? cur.dup : (cur.is_a?(String) ? cur.split(' ') : ['$(inherited)'])
-        suppress_swift.each { |f| arr << f unless arr.include?(f) }
+        suppress_swift.each do |f|
+          next if arr.include?(f)
+          arr << '-Xcc'
+          arr << f
+        end
         c.build_settings['OTHER_SWIFT_FLAGS'] = arr
       end
     end
@@ -60,6 +64,7 @@ const SNIPPET = `
         xc = agg.xcconfig_path(cfg_name)
         next unless File.exist?(xc)
         body = File.read(xc)
+        body = body.gsub(/^EXCLUDED_ARCHS\\[sdk=iphonesimulator\\*\\] = arm64\\s*\\n?/, '')
         appends = []
         appends << "_EXPERIMENTAL_CLANG_EXPLICIT_MODULES = NO" unless body.include?('_EXPERIMENTAL_CLANG_EXPLICIT_MODULES')
         appends << "CLANG_ENABLE_EXPLICIT_MODULES = NO"        unless body.include?('CLANG_ENABLE_EXPLICIT_MODULES')

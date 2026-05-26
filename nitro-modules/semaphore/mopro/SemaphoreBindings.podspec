@@ -42,23 +42,33 @@ Pod::Spec.new do |s|
 
   # CocoaPods doesn't auto-`-l` a static `.a` wrapped in an xcframework
   # (only true `.framework`s get implicit linkage), so spell out
-  # `-lsemaphore_bindings` explicitly. CocoaPods already copies the
-  # xcframework headers into ${PODS_XCFRAMEWORKS_BUILD_DIR}/SemaphoreBindings/Headers
-  # and adds that path to HEADER_SEARCH_PATHS, so we do NOT redeclare
-  # SWIFT_INCLUDE_PATHS / HEADER_SEARCH_PATHS pointing inside the source
-  # xcframework — doing so would import the same `module.modulemap` twice
-  # ("redefinition of module 'semaphore_bindingsFFI'").
+  # `-lsemaphore_bindings` explicitly. The Swift glue imports the UniFFI
+  # C shim as `semaphore_bindingsFFI`; its module map lives one level below
+  # the xcframework Headers root, so expose that subdirectory directly.
   #
-  # The SDK-conditional LIBRARY_SEARCH_PATHS lives in apps/expo/ios/Podfile's
-  # `post_install` hook (also adds the passport-zk xcframework path).
-  # Centralising there avoids CocoaPods bailing with "Can't merge
-  # user_target_xcconfig" when two bindings pods both contribute paths.
+  # The app target's SDK-conditional LIBRARY_SEARCH_PATHS lives in
+  # apps/expo/ios/Podfile's `post_install` hook. Centralising the app-level
+  # paths there avoids CocoaPods bailing with "Can't merge user_target_xcconfig"
+  # when two bindings pods both contribute different paths.
+  xcf_root = "${PODS_TARGET_SRCROOT}/SemaphoreBindings.xcframework"
   s.user_target_xcconfig = {
     'OTHER_LDFLAGS' => '$(inherited) -lsemaphore_bindings',
   }
   s.pod_target_xcconfig = {
     'DEFINES_MODULE' => 'YES',
     'SWIFT_VERSION'  => '5.9',
+    'SWIFT_INCLUDE_PATHS[sdk=iphonesimulator*]' =>
+      "#{xcf_root}/ios-arm64-simulator/Headers/semaphore_bindings",
+    'SWIFT_INCLUDE_PATHS[sdk=iphoneos*]' =>
+      "#{xcf_root}/ios-arm64/Headers/semaphore_bindings",
+    'HEADER_SEARCH_PATHS[sdk=iphonesimulator*]' =>
+      "$(inherited) #{xcf_root}/ios-arm64-simulator/Headers/semaphore_bindings",
+    'HEADER_SEARCH_PATHS[sdk=iphoneos*]' =>
+      "$(inherited) #{xcf_root}/ios-arm64/Headers/semaphore_bindings",
+    'LIBRARY_SEARCH_PATHS[sdk=iphonesimulator*]' =>
+      "$(inherited) \"#{xcf_root}/ios-arm64-simulator\"",
+    'LIBRARY_SEARCH_PATHS[sdk=iphoneos*]' =>
+      "$(inherited) \"#{xcf_root}/ios-arm64\"",
     'OTHER_LDFLAGS'  => '$(inherited) -lsemaphore_bindings',
   }
 end

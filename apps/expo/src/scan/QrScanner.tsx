@@ -1,21 +1,14 @@
 /**
- * Vision-camera v5 QR scanner — mirrors Swift QRCodeManager.startScanning.
- *
- * v5 moved barcode detection out of core into
- * `react-native-vision-camera-barcode-scanner` (MLKit on both platforms).
- * We attach a `useBarcodeScannerOutput` to the Camera's `outputs={[…]}`
- * array; the JS callback fires only when a new code is decoded, so there
- * is no per-frame churn.
+ * QR scanner — mirrors Swift QRCodeManager.startScanning.
  *
  * Chunked frames (sqc1 prefix) are routed into the shared QR reassembler
  * automatically; the consumer's onResult fires once with the reassembled
  * payload.
  */
 import type { ReactNode } from 'react';
-import { useCallback, useMemo, useRef } from 'react';
+import { useCallback, useMemo, useRef, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
-import { Camera, useCameraDevice } from 'react-native-vision-camera';
-import { useBarcodeScannerOutput } from 'react-native-vision-camera-barcode-scanner';
+import { CameraView, type BarcodeScanningResult } from 'expo-camera';
 
 import { ThemedSurface, ThemedText } from '@/components/themed';
 import { useCameraPermission } from './useCameraPermission';
@@ -34,9 +27,9 @@ export interface QrScannerProps {
 
 export function QrScanner({ onResult, onProgress }: QrScannerProps): ReactNode {
   const permission = useCameraPermission();
-  const device = useCameraDevice('back');
   const reassembler = useMemo(() => new QrChunkReassembler(), []);
   const lastValue = useRef<string | null>(null);
+  const [mountError, setMountError] = useState<string | null>(null);
 
   const handleValue = useCallback(
     (value: string) => {
@@ -81,18 +74,12 @@ export function QrScanner({ onResult, onProgress }: QrScannerProps): ReactNode {
     [onProgress, onResult, reassembler]
   );
 
-  const barcodeOutput = useBarcodeScannerOutput({
-    barcodeFormats: ['qr-code'],
-    onBarcodeScanned: (codes) => {
-      for (const c of codes) {
-        if (c.rawValue) handleValue(c.rawValue);
-      }
+  const handleBarcodeScanned = useCallback(
+    (result: BarcodeScanningResult) => {
+      if (result.data) handleValue(result.data);
     },
-    onError: () => {
-      // Reassembler state isn't tied to scan errors — keep silent so a
-      // transient MLKit hiccup doesn't blank a partial chunked burst.
-    },
-  });
+    [handleValue]
+  );
 
   if (permission === 'pending') {
     return (
@@ -113,20 +100,23 @@ export function QrScanner({ onResult, onProgress }: QrScannerProps): ReactNode {
       </View>
     );
   }
-  if (!device) {
+  if (mountError) {
     return (
       <View style={styles.fill} className="items-center justify-center bg-pageBg">
-        <ThemedText tone="secondary">No camera available</ThemedText>
+        <ThemedText tone="secondary">{mountError}</ThemedText>
       </View>
     );
   }
 
   return (
-    <Camera
+    <CameraView
       style={styles.fill}
-      device={device}
-      isActive
-      outputs={[barcodeOutput]}
+      facing="back"
+      barcodeScannerSettings={{ barcodeTypes: ['qr'] }}
+      onBarcodeScanned={handleBarcodeScanned}
+      onMountError={({ message }) => {
+        setMountError(message || 'No camera available');
+      }}
     />
   );
 }
