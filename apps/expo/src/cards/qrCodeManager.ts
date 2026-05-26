@@ -27,12 +27,24 @@ export interface ParsedQrPayload {
   readonly raw: string;
 }
 
+type ErrorCorrectionLevel = 'L' | 'M' | 'Q' | 'H';
+
 interface GenerateOptions {
   readonly size?: number;
+  /**
+   * Starting error-correction level for the cascade. Mirrors Swift's
+   * `QRCodeGenerationService.generateImageCascading`:
+   *   - `'H'` for plaintext envelopes (default — densest error correction
+   *     when the payload fits, gracefully degrades for large payloads).
+   *   - `'M'` for compressed ZK proofs.
+   *   - `'L'` for didSigned JWTs (already long; aim for capacity headroom).
+   * On exception, falls through `H → Q → M → L` until a level encodes.
+   */
+  readonly startingLevel?: ErrorCorrectionLevel;
 }
 
 interface QrCodeModule {
-  toString(text: string, opts: { type: 'svg'; width?: number; margin?: number; errorCorrectionLevel?: 'L' | 'M' | 'Q' | 'H' }): Promise<string>;
+  toString(text: string, opts: { type: 'svg'; width?: number; margin?: number; errorCorrectionLevel?: ErrorCorrectionLevel }): Promise<string>;
 }
 
 let qrModuleCache: QrCodeModule | null = null;
@@ -61,24 +73,50 @@ async function loadQrModule(): Promise<QrCodeModule | null> {
   }
 }
 
+const CASCADE_LEVELS: readonly ErrorCorrectionLevel[] = ['H', 'Q', 'M', 'L'] as const;
+
 /**
  * Render `value` as a QR code and return a `data:image/svg+xml;base64,…`
- * URL. Mirrors Swift's `QRCodeManager.generateQRCode(from:)` which tries
- * descending error-correction levels until the payload fits; here the
- * `qrcode` engine handles capacity automatically so we always request
- * `M` (the Swift default for non-VP payloads).
+ * URL. Mirrors Swift's `QRCodeGenerationService.generateImageCascading`:
+ * tries `opts.startingLevel` (default `'H'` — Swift's plaintext default)
+ * then progressively lower error-correction levels in the order
+ * `H → Q → M → L` until the payload fits. The underlying `qrcode` engine
+ * throws `'The amount of data is too big to be stored in a QR Code'` when
+ * capacity is exceeded; we catch that and step down one level.
+ *
+ * Caller hints (match Swift `encodeEnvelopeToImage`):
+ *   - plaintext envelopes → `startingLevel: 'H'` (default)
+ *   - compressed zkProof  → `startingLevel: 'M'`
+ *   - didSigned JWT       → `startingLevel: 'L'`
  */
 export async function generateQrPng(value: string, opts: GenerateOptions = {}): Promise<string> {
   const size = opts.size ?? 256;
+  const startingLevel = opts.startingLevel ?? 'H';
   const mod = await loadQrModule();
   if (mod) {
-    const svg = await mod.toString(value, {
-      type: 'svg',
-      width: size,
-      margin: 1,
-      errorCorrectionLevel: 'M',
-    });
-    return `data:image/svg+xml;base64,${base64Encode(utf8ToBytes(svg))}`;
+    const startIndex = Math.max(0, CASCADE_LEVELS.indexOf(startingLevel));
+    let lastError: unknown = null;
+    for (let i = startIndex; i < CASCADE_LEVELS.length; i += 1) {
+      const level = CASCADE_LEVELS[i];
+      try {
+        const svg = await mod.toString(value, {
+          type: 'svg',
+          width: size,
+          margin: 1,
+          errorCorrectionLevel: level,
+        });
+        return `data:image/svg+xml;base64,${base64Encode(utf8ToBytes(svg))}`;
+      } catch (err) {
+        lastError = err;
+        // Try the next (lower) correction level. `qrcode` throws
+        // 'The amount of data is too big to be stored in a QR Code'
+        // when the payload exceeds the chosen level's capacity.
+      }
+    }
+    // Engine present but every level rejected the payload — fall through
+    // to the safety-net SVG below so the caller still renders *something*
+    // rather than propagating the throw.
+    void lastError;
   }
 
   // Fallback — never expected in production builds (the engine is a

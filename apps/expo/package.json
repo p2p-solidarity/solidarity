@@ -63,6 +63,7 @@
     "expo-splash-screen": "~56.0.10",
     "expo-sqlite": "~56.0.4",
     "expo-status-bar": "~56.0.4",
+    "fflate": "^0.8.2",
     "i18next": "^26.2.0",
     "mrz": "5.0.2",
     "nativewind": "^4.2.4",
