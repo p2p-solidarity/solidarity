@@ -22,7 +22,8 @@
     "expo:android": "cd apps/expo && bun run android",
     "expo:start": "cd apps/expo && bun run start",
     "expo:prebuild:ios": "cd apps/expo && bunx expo prebuild --platform ios",
-    "expo:prebuild:android": "cd apps/expo && bunx expo prebuild --platform android"
+    "expo:prebuild:android": "cd apps/expo && bunx expo prebuild --platform android",
+    "build:ios:local": "cd apps/expo && bun run build:ios:local"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",

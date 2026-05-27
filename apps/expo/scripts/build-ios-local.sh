@@ -43,7 +43,9 @@ fi
 
 CURRENT_BN="$(tr -d '[:space:]' < "$VERSION_FILE" 2>/dev/null || echo 0)"
 NEXT_BN=$((CURRENT_BN + 1))
-IOS_SKIP_VERSION_WRITEBACK=1 "$APP_DIR/scripts/prebuild-ios-local.sh"
+AIRMEISHI_BUN_INSTALL_ARGS="${AIRMEISHI_BUN_INSTALL_ARGS:---frozen-lockfile}" \
+IOS_SKIP_VERSION_WRITEBACK=1 \
+"$APP_DIR/scripts/prebuild-ios-local.sh"
 
 ARCHIVE_PATH="$OUT_DIR/Solidarity-b${NEXT_BN}.xcarchive"
 EXPORT_PATH="$OUT_DIR/Solidarity-b${NEXT_BN}"

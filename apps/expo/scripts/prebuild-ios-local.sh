@@ -41,20 +41,11 @@ NEXT_BN=$((CURRENT_BN + 1))
 green "    buildNumber: $CURRENT_BN → $NEXT_BN"
 export IOS_BUILD_NUMBER="$NEXT_BN"
 
-step "bun install (workspace root)"
-( cd "$ROOT_DIR" && bun install )
-
-step "expo prebuild --platform ios"
-cd "$APP_DIR"
-bunx expo prebuild --platform ios --no-install
-
-step "pod install"
-cd "$APP_DIR/ios"
-if ! command -v pod >/dev/null 2>&1; then
-  red "✗ CocoaPods not found — install with: sudo gem install cocoapods"
-  exit 1
-fi
-pod install
+step "prepare iOS workspace"
+AIRMEISHI_EXPO_APP_DIR="$APP_DIR" \
+AIRMEISHI_IOS_PREBUILD_CLEAN="${AIRMEISHI_IOS_PREBUILD_CLEAN:-0}" \
+AIRMEISHI_REPO_ROOT="$ROOT_DIR" \
+"$APP_DIR/scripts/prepare-ios-workspace.sh"
 
 if [[ "${IOS_SKIP_VERSION_WRITEBACK:-0}" != "1" ]]; then
   step "Writing buildNumber $NEXT_BN → $VERSION_FILE"
