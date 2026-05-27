@@ -71,15 +71,24 @@ const SNIPPET = `
         appends << "SWIFT_ENABLE_EXPLICIT_MODULES = NO"        unless body.include?('SWIFT_ENABLE_EXPLICIT_MODULES =')
         # Splice flags into the *existing* OTHER_* lines so we don't shadow
         # the upstream pod-managed values with a new assignment.
-        body = body.gsub(/^OTHER_CFLAGS = (.+)$/) { |line| line.include?('module-import-in-extern-c') ? line : "OTHER_CFLAGS = #{$1} -Wno-error=module-import-in-extern-c -Wno-module-import-in-extern-c" }
-        body = body.gsub(/^OTHER_CPLUSPLUSFLAGS = (.+)$/) { |line| line.include?('module-import-in-extern-c') ? line : "OTHER_CPLUSPLUSFLAGS = #{$1} -Wno-error=module-import-in-extern-c -Wno-module-import-in-extern-c" }
-        body = body.gsub(/^OTHER_SWIFT_FLAGS = (.+)$/) { |line| line.include?('module-import-in-extern-c') ? line : "OTHER_SWIFT_FLAGS = #{$1} -Xcc -Wno-error=module-import-in-extern-c -Xcc -Wno-module-import-in-extern-c" }
+        body = body.gsub(/^OTHER_CFLAGS = (.+)$/) { |line| line.include?('module-import-in-extern-c') ? line : "OTHER_CFLAGS = #{Regexp.last_match(1)} -Wno-error=module-import-in-extern-c -Wno-module-import-in-extern-c" }
+        body = body.gsub(/^OTHER_CPLUSPLUSFLAGS = (.+)$/) { |line| line.include?('module-import-in-extern-c') ? line : "OTHER_CPLUSPLUSFLAGS = #{Regexp.last_match(1)} -Wno-error=module-import-in-extern-c -Wno-module-import-in-extern-c" }
+        body = body.gsub(/^OTHER_SWIFT_FLAGS = (.+)$/) { |line| line.include?('module-import-in-extern-c') ? line : "OTHER_SWIFT_FLAGS = #{Regexp.last_match(1)} -Xcc -Wno-error=module-import-in-extern-c -Xcc -Wno-module-import-in-extern-c" }
         body = "#{body.chomp}\n#{appends.join("\\n")}\n" unless appends.empty?
         File.write(xc, body)
       end
     end
     ${MARKER_END}
 `;
+
+function patchPodfile(contents) {
+  if (contents.includes(MARKER_BEGIN)) return contents;
+
+  return contents.replace(
+    /(react_native_post_install\([\s\S]*?\n\s*\)\n)/,
+    (_match, postInstallCall) => `${postInstallCall}${SNIPPET}`
+  );
+}
 
 const withDisableClangExplicitModules = (config) =>
   withDangerousMod(config, [
@@ -91,12 +100,8 @@ const withDisableClangExplicitModules = (config) =>
         return cfg;
       }
       let contents = fs.readFileSync(podfilePath, 'utf8');
-      if (contents.includes(MARKER_BEGIN)) return cfg;
 
-      const patched = contents.replace(
-        /(react_native_post_install\([\s\S]*?\n\s*\)\n)/,
-        `$1${SNIPPET}`,
-      );
+      const patched = patchPodfile(contents);
       if (patched === contents) {
         console.warn('[withDisableClangExplicitModules] anchor not found, skipping');
         return cfg;
@@ -108,3 +113,4 @@ const withDisableClangExplicitModules = (config) =>
   ]);
 
 module.exports = withDisableClangExplicitModules;
+module.exports._internal = { patchPodfile };

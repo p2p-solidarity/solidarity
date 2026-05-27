@@ -13,6 +13,14 @@ RUN_BUN_INSTALL="${AIRMEISHI_RUN_BUN_INSTALL:-1}"
 RUN_POD_INSTALL="${AIRMEISHI_RUN_POD_INSTALL:-1}"
 PREBUILD_CLEAN="${AIRMEISHI_IOS_PREBUILD_CLEAN:-0}"
 BUN_INSTALL_ARGS="${AIRMEISHI_BUN_INSTALL_ARGS:-}"
+SETUP_IOS_NATIVE_BINDINGS="${AIRMEISHI_SETUP_IOS_NATIVE_BINDINGS:-1}"
+PASSPORT_NOIR_DIR="${AIRMEISHI_PASSPORT_NOIR_DIR:-$(cd "$REPO_ROOT/.." && pwd)/passport-noir}"
+PASSPORT_MOPRO_VERSION="${AIRMEISHI_PASSPORT_MOPRO_VERSION:-v0.2.2}"
+PASSPORT_MOPRO_ZIP_URL="${AIRMEISHI_PASSPORT_MOPRO_ZIP_URL:-https://github.com/p2p-solidarity/passport-noir/releases/download/${PASSPORT_MOPRO_VERSION}/PassportMoproBindings.xcframework.zip}"
+PASSPORT_MOPRO_SHA256="${AIRMEISHI_PASSPORT_MOPRO_SHA256-2bcc469e369816d4924960070dab85039230a032b96bd6dcc0bd64f1567eb3fa}"
+SEMAPHORE_SWIFT_REF="${AIRMEISHI_SEMAPHORE_SWIFT_REF:-850680a5adcc258d6861005b55a4925bd08a48eb}"
+SEMAPHORE_SWIFT_ZIP_URL="${AIRMEISHI_SEMAPHORE_SWIFT_ZIP_URL:-https://github.com/zkmopro/SemaphoreSwift/archive/${SEMAPHORE_SWIFT_REF}.zip}"
+SEMAPHORE_SWIFT_SHA256="${AIRMEISHI_SEMAPHORE_SWIFT_SHA256-}"
 
 red()    { printf '\033[31m%s\033[0m\n' "$*"; }
 green()  { printf '\033[32m%s\033[0m\n' "$*"; }
@@ -78,6 +86,126 @@ normalize_xcode_cloud_scheme() {
   fi
 }
 
+xcframework_has_static_module() {
+  local root="$1"
+  local module_dir="$2"
+  local header="$3"
+  local library="$4"
+
+  [[ -f "$root/Info.plist" ]] || return 1
+
+  local slice
+  for slice in ios-arm64 ios-arm64-simulator; do
+    [[ -f "$root/$slice/$library" ]] || return 1
+    [[ -f "$root/$slice/Headers/$module_dir/module.modulemap" ]] || return 1
+    [[ -f "$root/$slice/Headers/$module_dir/$header" ]] || return 1
+  done
+}
+
+download_zip() {
+  local url="$1"
+  local output="$2"
+  local token="${AIRMEISHI_GITHUB_TOKEN:-${GITHUB_TOKEN:-}}"
+  local curl_args=(-fL --retry 3 --retry-delay 2 --connect-timeout 20 --output "$output")
+
+  if [[ -n "$token" ]]; then
+    curl_args+=(-H "Authorization: Bearer $token" -H "Accept: application/octet-stream")
+  fi
+
+  curl "${curl_args[@]}" "$url"
+}
+
+verify_sha256() {
+  local file="$1"
+  local expected="$2"
+
+  if [[ -z "$expected" ]]; then
+    return 0
+  fi
+
+  ensure_command shasum
+  local actual
+  actual="$(shasum -a 256 "$file" | awk '{print $1}')"
+  [[ "$actual" == "$expected" ]] || die "SHA-256 mismatch for $file: expected $expected, got $actual"
+}
+
+stage_xcframework_from_zip() {
+  local label="$1"
+  local url="$2"
+  local expected_sha="$3"
+  local source_name="$4"
+  local destination="$5"
+  local zip_name="$6"
+  local temp_dir
+  temp_dir="$(mktemp -d)"
+
+  step "Downloading $label"
+  local zip_path="$temp_dir/$zip_name"
+  download_zip "$url" "$zip_path"
+  verify_sha256 "$zip_path" "$expected_sha"
+
+  local unpack_dir="$temp_dir/unpacked"
+  mkdir -p "$unpack_dir"
+  unzip -q "$zip_path" -d "$unpack_dir"
+
+  local source
+  source="$(find "$unpack_dir" -type d -name "$source_name" -print -quit)"
+  [[ -n "$source" ]] || die "Downloaded $label did not contain $source_name"
+
+  rm -rf "$destination"
+  mkdir -p "$(dirname "$destination")"
+  cp -R "$source" "$destination"
+  rm -rf "$temp_dir"
+}
+
+ensure_passport_mopro_xcframework() {
+  local xcf="$PASSPORT_NOIR_DIR/mopro-binding/MoproiOSBindings/MoproBindings.xcframework"
+
+  if xcframework_has_static_module "$xcf" passport_zk_mopro passport_zk_moproFFI.h libpassport_zk_mopro.a; then
+    green "OK Passport MoproBindings.xcframework already present"
+    return 0
+  fi
+
+  stage_xcframework_from_zip \
+    "Passport MoproBindings.xcframework ($PASSPORT_MOPRO_VERSION)" \
+    "$PASSPORT_MOPRO_ZIP_URL" \
+    "$PASSPORT_MOPRO_SHA256" \
+    "MoproBindings.xcframework" \
+    "$xcf" \
+    "passport-mopro.zip"
+
+  xcframework_has_static_module "$xcf" passport_zk_mopro passport_zk_moproFFI.h libpassport_zk_mopro.a \
+    || die "Passport MoproBindings.xcframework is incomplete at $xcf"
+}
+
+ensure_semaphore_bindings_xcframework() {
+  local xcf="$REPO_ROOT/nitro-modules/semaphore/mopro/SemaphoreBindings.xcframework"
+
+  if xcframework_has_static_module "$xcf" semaphore_bindings semaphore_bindingsFFI.h libsemaphore_bindings.a; then
+    green "OK SemaphoreBindings.xcframework already present"
+    return 0
+  fi
+
+  stage_xcframework_from_zip \
+    "SemaphoreSwift xcframework ($SEMAPHORE_SWIFT_REF)" \
+    "$SEMAPHORE_SWIFT_ZIP_URL" \
+    "$SEMAPHORE_SWIFT_SHA256" \
+    "MoproBindings.xcframework" \
+    "$xcf" \
+    "semaphore-swift.zip"
+
+  xcframework_has_static_module "$xcf" semaphore_bindings semaphore_bindingsFFI.h libsemaphore_bindings.a \
+    || die "SemaphoreBindings.xcframework is incomplete at $xcf"
+}
+
+stage_ios_native_bindings() {
+  ensure_command curl
+  ensure_command unzip
+
+  ensure_passport_mopro_xcframework
+  ensure_semaphore_bindings_xcframework
+}
+
 cd "$REPO_ROOT"
 
 install_if_missing node node
@@ -103,6 +231,10 @@ if is_enabled "$RUN_BUN_INSTALL"; then
     bun_args=($BUN_INSTALL_ARGS)
   fi
   bun install "${bun_args[@]}"
+fi
+
+if is_enabled "$SETUP_IOS_NATIVE_BINDINGS"; then
+  stage_ios_native_bindings
 fi
 
 step "expo prebuild --platform ios"
