@@ -56,6 +56,28 @@ ensure_command() {
   command -v "$command_name" >/dev/null 2>&1 || die "$command_name is still unavailable after setup"
 }
 
+normalize_xcode_cloud_scheme() {
+  local scheme_dir="$APP_DIR/ios/Solidarity.xcodeproj/xcshareddata/xcschemes"
+  local expo_scheme="$scheme_dir/Solidarity.xcscheme"
+  local cloud_scheme="$scheme_dir/solidarity.xcscheme"
+  local temp_scheme="$scheme_dir/.solidarity.xcscheme.tmp"
+
+  if [[ ! -f "$expo_scheme" && ! -f "$cloud_scheme" ]]; then
+    die "Expected Expo to generate $expo_scheme"
+  fi
+
+  if [[ -f "$expo_scheme" ]]; then
+    rm -f "$temp_scheme"
+    if [[ "$expo_scheme" -ef "$cloud_scheme" ]]; then
+      mv "$expo_scheme" "$temp_scheme"
+      mv "$temp_scheme" "$cloud_scheme"
+    else
+      rm -f "$cloud_scheme"
+      mv "$expo_scheme" "$cloud_scheme"
+    fi
+  fi
+}
+
 cd "$REPO_ROOT"
 
 install_if_missing node node
@@ -90,6 +112,7 @@ if is_enabled "$PREBUILD_CLEAN"; then
 fi
 prebuild_args+=(--platform ios --no-install)
 ( cd "$APP_DIR" && bunx "${prebuild_args[@]}" )
+normalize_xcode_cloud_scheme
 
 if is_enabled "$RUN_POD_INSTALL"; then
   step "pod install"

@@ -24,7 +24,7 @@ EXPORT_OPTIONS="$SECRETS_DIR/ios-export-options.plist"
 OUT_DIR="$APP_DIR/build"
 VERSION_FILE="$APP_DIR/.ios-build-number"
 WORKSPACE="$APP_DIR/ios/Solidarity.xcworkspace"
-SCHEME="Solidarity"
+SCHEME="solidarity"
 
 red()    { printf '\033[31m%s\033[0m\n' "$*"; }
 green()  { printf '\033[32m%s\033[0m\n' "$*"; }

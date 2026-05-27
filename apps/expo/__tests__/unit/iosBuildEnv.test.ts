@@ -1,5 +1,13 @@
 import { afterEach, describe, expect, test } from 'bun:test';
-import { mkdtempSync, mkdirSync, existsSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import {
+  mkdtempSync,
+  mkdirSync,
+  existsSync,
+  readdirSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 
@@ -7,6 +15,10 @@ const appDir = resolve(import.meta.dir, '../..');
 const repoRoot = resolve(appDir, '../..');
 const prepareScript = join(appDir, 'scripts', 'prepare-ios-workspace.sh');
 const cloudPostCloneScript = join(appDir, 'ci-scripts', 'ci_post_clone.sh');
+const generatedSchemeXml = readFileSync(
+  join(appDir, 'ios', 'Solidarity.xcodeproj', 'xcshareddata', 'xcschemes', 'solidarity.xcscheme'),
+  'utf8'
+);
 
 const tempDirs: string[] = [];
 
@@ -30,7 +42,13 @@ function createFakeToolchain(binDir: string, logPath: string): void {
   mkdirSync(binDir, { recursive: true });
   const loggingStub = `#!/usr/bin/env bash
 set -euo pipefail
-printf '%s\\t%s\\t%s\\n' "$(basename "$0")" "$PWD" "$*" >> "${logPath}"
+command_name="$(basename "$0")"
+printf '%s\\t%s\\t%s\\n' "$command_name" "$PWD" "$*" >> "${logPath}"
+if [[ "$command_name" == "bunx" && "$*" == expo\\ prebuild* ]]; then
+  scheme_dir="$PWD/ios/Solidarity.xcodeproj/xcshareddata/xcschemes"
+  mkdir -p "$scheme_dir"
+  printf '${generatedSchemeXml.replace(/\n/g, '\\n')}' > "$scheme_dir/Solidarity.xcscheme"
+fi
 exit 0
 `;
 
@@ -53,6 +71,14 @@ function readCommandLog(logPath: string): string[] {
 
 function readOptional(path: string): string {
   return existsSync(path) ? readFileSync(path, 'utf8') : '';
+}
+
+function writeGeneratedScheme(appDir: string): string {
+  const schemeDir = join(appDir, 'ios', 'Solidarity.xcodeproj', 'xcshareddata', 'xcschemes');
+  const schemePath = join(schemeDir, 'Solidarity.xcscheme');
+  mkdirSync(schemeDir, { recursive: true });
+  writeFileSync(schemePath, generatedSchemeXml);
+  return schemePath;
 }
 
 describe('iOS build environment scripts', () => {
@@ -108,6 +134,52 @@ describe('iOS build environment scripts', () => {
       `bunx\t${fixtureApp}\texpo prebuild --clean --platform ios --no-install`,
       `pod\t${join(fixtureApp, 'ios')}\tinstall`,
     ]);
+  });
+
+  test('shared prepare script exposes lowercase Xcode Cloud scheme alias', () => {
+    const fixtureRoot = makeTempDir();
+    const fixtureApp = join(fixtureRoot, 'apps', 'expo');
+    const fakeBin = join(fixtureRoot, 'bin');
+    const logPath = join(fixtureRoot, 'commands.log');
+    const stdoutPath = join(fixtureRoot, 'stdout.log');
+    const stderrPath = join(fixtureRoot, 'stderr.log');
+    writeGeneratedScheme(fixtureApp);
+    const schemeDir = join(fixtureApp, 'ios', 'Solidarity.xcodeproj', 'xcshareddata', 'xcschemes');
+    const cloudScheme = join(schemeDir, 'solidarity.xcscheme');
+    createFakeToolchain(fakeBin, logPath);
+
+    const result = Bun.spawnSync({
+      cmd: [
+        '/bin/bash',
+        '-c',
+        '/bin/bash "$1" >"$2" 2>"$3"',
+        'runner',
+        prepareScript,
+        stdoutPath,
+        stderrPath,
+      ],
+      env: {
+        ...process.env,
+        AIRMEISHI_BUN_INSTALL_ARGS: '--frozen-lockfile',
+        AIRMEISHI_EXPO_APP_DIR: fixtureApp,
+        AIRMEISHI_INSTALL_TOOLING: '0',
+        AIRMEISHI_REPO_ROOT: fixtureRoot,
+        PATH: `${fakeBin}:${process.env['PATH'] ?? ''}`,
+      },
+      stdout: 'ignore',
+      stderr: 'ignore',
+    });
+
+    expect(
+      result.exitCode,
+      JSON.stringify({
+        stderr: readOptional(stderrPath),
+        stdout: readOptional(stdoutPath),
+      })
+    ).toBe(0);
+    expect(readdirSync(schemeDir)).toContain('solidarity.xcscheme');
+    expect(readdirSync(schemeDir)).not.toContain('Solidarity.xcscheme');
+    expect(readOptional(cloudScheme)).toBe(generatedSchemeXml);
   });
 
   test('Xcode Cloud post-clone hook delegates to the same clean prepare flow', () => {
