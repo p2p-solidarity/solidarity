@@ -35,12 +35,32 @@ private func cgImageOrientation(from orientation: CameraOrientation) -> CGImageP
 final class HybridMrzOcr: HybridMrzOcrSpec {
   private let requestLock = NSLock()
 
+  /// Adaptive region-of-interest carried frame→frame. When the previous frame
+  /// located ≥2 MRZ-shaped rows, we restrict Vision to their padded union next
+  /// frame so it only scans the MRZ band — far fewer text regions to detect +
+  /// recognise (faster per call) and no passport-header / name distractors.
+  /// `nil` means "scan the full frame", the state we reset to the instant the
+  /// band is lost, so adaptive ROI can NEVER regress correctness vs. full-frame
+  /// OCR. Vision's `regionOfInterest` and `VNRecognizedTextObservation.bounding`
+  /// `Box` share the same normalised, bottom-left, orientation-corrected space,
+  /// so the union needs no manual coordinate mapping. Guarded by `requestLock`.
+  private var lastRoi: CGRect?
+
+  private static let fullFrameRoi = CGRect(x: 0, y: 0, width: 1, height: 1)
+
   private lazy var textRequest: VNRecognizeTextRequest = {
     let request = VNRecognizeTextRequest()
     request.recognitionLevel = .accurate
     request.usesLanguageCorrection = false
     request.recognitionLanguages = ["en-US"]
-    request.minimumTextHeight = 0.015
+    // Vision default (1/32 ≈ 0.0312) — match native MRZScannerService, which
+    // leaves this unset. The previous 0.015 was a workaround for the old
+    // low-resolution (768-wide) frame output where the MRZ glyphs were tiny;
+    // it ~doubled the detector's candidate search per call for no gain now
+    // that the frame is a full 1920×1080 (see MRZCameraStep's
+    // FRAME_OUTPUT_RESOLUTION). Lower it again only if users must hold the
+    // passport far from the lens.
+    request.minimumTextHeight = 0.03125
     return request
   }()
 
@@ -55,6 +75,9 @@ final class HybridMrzOcr: HybridMrzOcrSpec {
     requestLock.lock()
     defer { requestLock.unlock() }
     let request = textRequest
+    // Restrict to the previously located MRZ band, or scan the whole frame
+    // when we have no lock yet / just lost it.
+    request.regionOfInterest = lastRoi ?? Self.fullFrameRoi
 
     let handler = VNImageRequestHandler(
       cvPixelBuffer: pixelBuffer,
@@ -71,6 +94,7 @@ final class HybridMrzOcr: HybridMrzOcrSpec {
     let elapsedMs = Int((CFAbsoluteTimeGetCurrent() - startedAt) * 1000)
 
     guard let observations = request.results, !observations.isEmpty else {
+      lastRoi = nil
       os_log(
         "scanFrame: 0 lines in %{public}dms (frame %{public}gx%{public}g)",
         log: mrzLog,
@@ -93,6 +117,7 @@ final class HybridMrzOcr: HybridMrzOcrSpec {
     }
 
     var lines: [String] = []
+    var mrzBoxes: [CGRect] = []
     var minConfidence: Float = 1.0
     lines.reserveCapacity(sorted.count)
     for observation in sorted {
@@ -103,9 +128,14 @@ final class HybridMrzOcr: HybridMrzOcrSpec {
       if candidate.confidence < minConfidence {
         minConfidence = candidate.confidence
       }
+      // Collect boxes of MRZ-shaped rows for the next frame's adaptive ROI.
+      if Self.isMrzCandidate(Self.normaliseMrzLine(candidate.string)) {
+        mrzBoxes.append(observation.boundingBox)
+      }
     }
 
     if lines.isEmpty {
+      lastRoi = nil
       os_log(
         "scanFrame: 0 lines in %{public}dms (frame %{public}gx%{public}g)",
         log: mrzLog,
@@ -124,6 +154,9 @@ final class HybridMrzOcr: HybridMrzOcrSpec {
     }
 
     let scan = Self.scanTD3(lines: lines)
+    // Lock onto the MRZ band next frame when we clearly saw both rows; reset
+    // to full-frame otherwise so a lost band re-acquires on the very next call.
+    lastRoi = mrzBoxes.count >= 2 ? Self.paddedUnion(mrzBoxes) : nil
     os_log(
       "scanFrame: %{public}d lines / %{public}d candidates / draft=%{public}@ in %{public}dms (frame %{public}gx%{public}g, minConf=%.2f)",
       log: mrzLog,
@@ -181,6 +214,23 @@ final class HybridMrzOcr: HybridMrzOcrSpec {
     return line.unicodeScalars.allSatisfy { scalar in
       scalar.value == 60 || (65...90).contains(scalar.value) || (48...57).contains(scalar.value)
     }
+  }
+
+  /// Padded union of the MRZ rows' bounding boxes, clamped to the unit square.
+  /// Padding is generous on Y (rows are thin and drift vertically with hand
+  /// shake) and moderate on X, so the band still contains the text next frame.
+  private static func paddedUnion(_ boxes: [CGRect]) -> CGRect {
+    var union = boxes[0]
+    for box in boxes.dropFirst() {
+      union = union.union(box)
+    }
+    let padX: CGFloat = 0.06
+    let padY: CGFloat = 0.14
+    let minX = max(0, union.minX - padX)
+    let minY = max(0, union.minY - padY)
+    let maxX = min(1, union.maxX + padX)
+    let maxY = min(1, union.maxY + padY)
+    return CGRect(x: minX, y: minY, width: maxX - minX, height: maxY - minY)
   }
 
   private static func canonicalTD3Row(_ line: String) -> String {

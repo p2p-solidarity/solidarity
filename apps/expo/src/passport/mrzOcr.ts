@@ -20,66 +20,6 @@ import { parse } from 'mrz';
 
 import type { PassportMRZDraft } from '@/onboarding/steps/MRZCameraStep';
 
-export type NativeMrzScanPhase = 'idle' | 'detecting' | 'struggling' | 'confirmed';
-
-export interface NativeMrzScanResult {
-  readonly draft?: PassportMRZDraft;
-  readonly candidateCount: number;
-}
-
-export interface NativeMrzScanState {
-  readonly failureStreak: number;
-  readonly struggleThreshold: number;
-}
-
-export interface NativeMrzScanEvaluation {
-  readonly acceptedDraft: PassportMRZDraft | null;
-  readonly nextFailureStreak: number;
-  readonly phase: NativeMrzScanPhase | null;
-}
-
-/**
- * Interpret the native MRZ OCR result for UI state. Native has already
- * validated the three BAC-critical TD3 check digits before populating
- * `draft`, so JS accepts that payload immediately; `candidateCount`
- * only drives transient affordances while no draft is ready yet.
- */
-export function evaluateNativeMrzScan(
-  result: NativeMrzScanResult,
-  state: NativeMrzScanState,
-): NativeMrzScanEvaluation {
-  if (result.draft) {
-    return {
-      acceptedDraft: result.draft,
-      nextFailureStreak: 0,
-      phase: 'confirmed',
-    };
-  }
-
-  if (result.candidateCount >= 2) {
-    const nextFailureStreak = state.failureStreak + 1;
-    return {
-      acceptedDraft: null,
-      nextFailureStreak,
-      phase: nextFailureStreak >= state.struggleThreshold ? 'struggling' : 'detecting',
-    };
-  }
-
-  if (result.candidateCount >= 1) {
-    return {
-      acceptedDraft: null,
-      nextFailureStreak: 0,
-      phase: 'detecting',
-    };
-  }
-
-  return {
-    acceptedDraft: null,
-    nextFailureStreak: 0,
-    phase: null,
-  };
-}
-
 /**
  * Lines that *could* be MRZ rows — A–Z, 0–9, `<` filler, 20..50 chars
  * post-normalisation. The hard ICAO bound is 44 chars per TD3 row, but
