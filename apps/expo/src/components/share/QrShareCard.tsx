@@ -10,15 +10,25 @@
  *      + 50×46 share icon button (warmCream + pillBorder).
  */
 import { useState } from 'react';
-import { Pressable, Text, View } from 'react-native';
+import { type LayoutChangeEvent, Text, View } from 'react-native';
 import QRCode from 'react-native-qrcode-svg';
 
+import { PressableScale } from '@/components/common/PressableScale';
 import { SfIcon } from '@/components/icons/SfIcon';
 import {
   type EnabledField,
   FieldPillRow,
 } from '@/components/share/FieldPillRow';
 import { Colors } from '@/constants/Colors';
+import { SCALE } from '@/feedback/motion';
+
+/**
+ * White quiet-zone between the QR modules and the card frame. The QR is sized
+ * to the measured square minus this margin so it hugs the frame instead of
+ * floating in the middle of an oversized white box (the previous fixed 240pt
+ * QR + 24pt pad left a wide gutter on most devices).
+ */
+const QR_FRAME_PADDING = 16;
 
 export type QrShareCardProps = {
   /** QR payload to encode. `undefined` → placeholder state. */
@@ -39,6 +49,12 @@ export function QrShareCard({
   onShare,
 }: QrShareCardProps) {
   const [expanded, setExpanded] = useState(true);
+  // Measured edge of the square white QR area, so the code can be sized to
+  // fill it (minus the quiet-zone) on any device width.
+  const [qrBox, setQrBox] = useState(0);
+  const onQrLayout = (e: LayoutChangeEvent) => {
+    setQrBox(e.nativeEvent.layout.width);
+  };
 
   return (
     <View
@@ -54,6 +70,7 @@ export function QrShareCard({
     >
       {expanded ? (
         <View
+          onLayout={onQrLayout}
           style={{
             backgroundColor: '#FFFFFF',
             aspectRatio: 1,
@@ -62,14 +79,14 @@ export function QrShareCard({
           }}
         >
           {payload ? (
-            <View style={{ padding: 24 }}>
+            qrBox > 0 ? (
               <QRCode
                 value={payload}
-                size={240}
+                size={qrBox - QR_FRAME_PADDING * 2}
                 backgroundColor="#FFFFFF"
                 color="#000000"
               />
-            </View>
+            ) : null
           ) : (
             <View className="items-center gap-2.5">
               <SfIcon name="qrcode" size={44} color="#C7C7C7" />
@@ -85,10 +102,11 @@ export function QrShareCard({
       ) : null}
 
       <View className="p-4 bg-featuredCardBg gap-3">
-        <Pressable
+        <PressableScale
+          haptic="tap"
           onPress={onOpenSettings}
           accessibilityRole="button"
-          className="flex-row items-center gap-2.5 active:opacity-70"
+          className="flex-row items-center gap-2.5"
         >
           <View
             className="overflow-hidden rounded-full bg-searchBg"
@@ -114,15 +132,17 @@ export function QrShareCard({
             weight="semibold"
             color={Colors.text3}
           />
-        </Pressable>
+        </PressableScale>
 
         <FieldPillRow fields={enabledFields} />
 
         <View className="flex-row items-center gap-2.5">
-          <Pressable
+          <PressableScale
+            fill
+            haptic="tap"
             onPress={() => setExpanded(!expanded)}
             accessibilityRole="button"
-            className="flex-1 rounded-lg active:opacity-80"
+            className="rounded-lg"
             style={{
               paddingVertical: 14,
               backgroundColor: Colors.text1,
@@ -135,27 +155,31 @@ export function QrShareCard({
             >
               {expanded ? 'Hide code' : 'Show code'}
             </Text>
-          </Pressable>
-          <Pressable
+          </PressableScale>
+          {/* Solid ink fill + real share glyph (`square.and.arrow.up` →
+              Material `ios_share`): the old warmCream-on-cream button was
+              effectively invisible on Android. */}
+          <PressableScale
+            haptic="tap"
+            scaleTo={SCALE.icon}
             onPress={onShare}
             accessibilityRole="button"
-            className="rounded-lg active:opacity-80"
+            accessibilityLabel="Share"
+            className="rounded-lg"
             style={{
               width: 50,
               height: 46,
-              backgroundColor: Colors.warmCream,
+              backgroundColor: Colors.text1,
               alignItems: 'center',
               justifyContent: 'center',
-              borderWidth: 1,
-              borderColor: Colors.pillBorder,
             }}
           >
             <SfIcon
-              name="arrow.up.forward.app"
+              name="square.and.arrow.up"
               size={18}
-              color={Colors.text1}
+              color={Colors.pageBg}
             />
-          </Pressable>
+          </PressableScale>
         </View>
       </View>
     </View>

@@ -17,12 +17,14 @@
 import { router } from 'expo-router';
 import { useMemo, useState } from 'react';
 import { Pressable, ScrollView, Text, View } from 'react-native';
+import Animated, { FadeIn } from 'react-native-reanimated';
 import { FlashList } from '@shopify/flash-list';
 import ReanimatedSwipeable from 'react-native-gesture-handler/ReanimatedSwipeable';
 import { GestureDetector } from 'react-native-gesture-handler';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { makeGestureAutoBackup } from '@/backup';
+import { PressableScale } from '@/components/common/PressableScale';
 import { SfIcon } from '@/components/icons/SfIcon';
 import { PaperStackIllustration } from '@/components/decor/PaperStackIllustration';
 import { ManualContactEntrySheet } from '@/components/people/ManualContactEntrySheet';
@@ -33,6 +35,7 @@ import { useThemeColors } from '@/constants/useThemeColors';
 import { useContactStore, type ContactManifestEntry } from '@/contacts/repository';
 import { confirmDialog } from '@/feedback/confirmDialog';
 import { haptic } from '@/feedback/haptics';
+import { SCALE } from '@/feedback/motion';
 import { pushToast } from '@/feedback/toast';
 import { usePeopleScreen } from '@/people/usePeopleScreen';
 import { usePreferences } from '@/settings/preferences';
@@ -82,7 +85,9 @@ export default function PeopleTab() {
   };
 
   const onLongPressContact = (c: ContactManifestEntry) => {
-    haptic('tap');
+    // The long-press 'heavy' haptic + zoom lift fire inside
+    // TrustGraphContactRow (coupled to the animation); this handler just
+    // arms select mode so the two can't drift out of sync.
     if (!editMode) {
       setEditMode(true);
       setSelectedIds(new Set([c.id]));
@@ -101,6 +106,7 @@ export default function PeopleTab() {
       });
       if (!ok) return;
       await removeContact(c.id);
+      haptic('success');
       refresh();
     })();
   };
@@ -119,6 +125,8 @@ export default function PeopleTab() {
       for (const id of ids) {
         await removeContact(id);
       }
+      // Confirm the batch landed with a success impact (the "震動" on delete).
+      haptic('success');
       pushToast(
         ids.length === 1 ? 'Contact deleted' : `Deleted ${String(ids.length)} contacts`,
         'success',
@@ -184,23 +192,25 @@ export default function PeopleTab() {
           {filtered.length === 0 ? (
             <EmptySearchState query={searchQuery} />
           ) : (
-            <FlashList
-              data={filtered as ContactManifestEntry[]}
-              keyExtractor={(item) => item.id}
-              contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: editMode ? 100 : 90 }}
-              keyboardShouldPersistTaps="handled"
-              extraData={{ editMode, selectedIds }}
-              renderItem={({ item }) => (
-                <PeopleRow
-                  contact={item}
-                  editMode={editMode}
-                  selected={selectedIds.has(item.id)}
-                  onPress={() => onSelectContact(item)}
-                  onLongPress={() => onLongPressContact(item)}
-                  onSwipeDelete={() => onDeleteContact(item)}
-                />
-              )}
-            />
+            <Animated.View entering={FadeIn.duration(280)} style={{ flex: 1 }}>
+              <FlashList
+                data={filtered as ContactManifestEntry[]}
+                keyExtractor={(item) => item.id}
+                contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: editMode ? 100 : 90 }}
+                keyboardShouldPersistTaps="handled"
+                extraData={{ editMode, selectedIds }}
+                renderItem={({ item }) => (
+                  <PeopleRow
+                    contact={item}
+                    editMode={editMode}
+                    selected={selectedIds.has(item.id)}
+                    onPress={() => onSelectContact(item)}
+                    onLongPress={() => onLongPressContact(item)}
+                    onSwipeDelete={() => onDeleteContact(item)}
+                  />
+                )}
+              />
+            </Animated.View>
           )}
           {editMode ? (
             <BatchActionBar
@@ -357,34 +367,34 @@ function BatchActionBar({
         elevation: 6,
       }}
     >
-      <Pressable
+      <PressableScale
+        fill
+        haptic="tap"
         onPress={onCancel}
         accessibilityRole="button"
         accessibilityLabel="Cancel selection"
         style={{
-          flex: 1,
           height: 44,
           alignItems: 'center',
           justifyContent: 'center',
         }}
-        className="active:opacity-70"
       >
         <Text className="text-text1 text-[15px]">Cancel</Text>
-      </Pressable>
-      <Pressable
+      </PressableScale>
+      <PressableScale
+        fill
+        haptic="warning"
         onPress={onDelete}
         disabled={count === 0}
         accessibilityRole="button"
         accessibilityLabel="Delete selected contacts"
         style={{
-          flex: 1,
           height: 44,
           alignItems: 'center',
           justifyContent: 'center',
           backgroundColor: count === 0 ? `${Colors.destructive}55` : Colors.destructive,
           borderRadius: 8,
         }}
-        className="active:opacity-80"
       >
         <Text
           style={{
@@ -395,7 +405,7 @@ function BatchActionBar({
         >
           {count === 0 ? 'Delete' : `Delete ${String(count)}`}
         </Text>
-      </Pressable>
+      </PressableScale>
     </View>
   );
 }
@@ -487,14 +497,15 @@ function Header({
           >
             <Text className="text-text1 text-[14px]">Edit</Text>
           </Pressable>
-          <Pressable
+          <PressableScale
+            haptic="tap"
+            scaleTo={SCALE.icon}
             accessibilityRole="button"
             onPress={() => setMenuOpen(!menuOpen)}
             style={{ width: 24, height: 24, alignItems: 'center', justifyContent: 'center' }}
-            className="active:opacity-60"
           >
             <SfIcon name="plus" size={18} color={c.text1} />
-          </Pressable>
+          </PressableScale>
         </View>
       </View>
       {menuOpen ? (
@@ -551,9 +562,10 @@ function MenuItem({
 }) {
   const c = useThemeColors();
   return (
-    <Pressable
+    <PressableScale
+      haptic="tap"
       onPress={onPress}
-      className="flex-row items-center gap-3 px-4 py-3 active:opacity-70"
+      className="flex-row items-center gap-3 px-4 py-3"
       style={{
         borderBottomWidth: isLast ? 0 : 0.5,
         borderBottomColor: c.divider,
@@ -562,7 +574,7 @@ function MenuItem({
     >
       <SfIcon name={icon} size={16} color={c.text1} />
       <Text className="text-text1 text-[15px]">{label}</Text>
-    </Pressable>
+    </PressableScale>
   );
 }
 
@@ -587,10 +599,11 @@ function EmptyState({
         Your contact list is empty
       </Text>
       <View className="gap-2 py-4 items-center">
-        <Pressable
+        <PressableScale
+          haptic="tap"
           onPress={onImportPhone}
           accessibilityRole="button"
-          className="rounded-sm2 active:opacity-80"
+          className="rounded-sm2"
           style={{
             width: 200,
             height: 44,
@@ -602,8 +615,9 @@ function EmptyState({
           <Text style={{ color: c.invertedButtonText }} className="text-[15px]">
             Import from Phone
           </Text>
-        </Pressable>
-        <Pressable
+        </PressableScale>
+        <PressableScale
+          haptic="tap"
           onPress={onAddManually}
           accessibilityRole="button"
           style={{
@@ -612,10 +626,9 @@ function EmptyState({
             alignItems: 'center',
             justifyContent: 'center',
           }}
-          className="active:opacity-60"
         >
           <Text className="text-text1 text-[15px]">Add Manually</Text>
-        </Pressable>
+        </PressableScale>
       </View>
     </ScrollView>
   );

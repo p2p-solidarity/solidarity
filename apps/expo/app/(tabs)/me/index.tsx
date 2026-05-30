@@ -20,11 +20,13 @@ import { Image as ExpoImage } from 'expo-image';
 import { router } from 'expo-router';
 import type { SFSymbol } from 'expo-symbols';
 import { useEffect, useMemo } from 'react';
-import { Pressable, ScrollView, Text, View } from 'react-native';
+import { ScrollView, Text, View } from 'react-native';
+import Animated, { FadeInDown } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { animalImageSource } from '@/cards/animals';
 import { useCardStore, useMyCard } from '@/cards/cardManager';
+import { PressableScale } from '@/components/common/PressableScale';
 import { SfIcon } from '@/components/icons/SfIcon';
 import {
   DisclosureRowView,
@@ -37,6 +39,7 @@ import {
 } from '@/components/me';
 import { Colors } from '@/constants/Colors';
 import { useThemeColors } from '@/constants/useThemeColors';
+import { SCALE, STAGGER_MS } from '@/feedback/motion';
 import {
   useActiveDid,
   useDisplayClaims,
@@ -84,46 +87,59 @@ export default function MeTab() {
 
       <ScrollView contentContainerStyle={{ paddingTop: 12, paddingBottom: 100 }}>
         <View className="gap-8">
-          <ProfileHeaderCard
-            name={displayName}
-            did={shortDid(displayDid)}
-            avatar={
-              card?.animal ? (
-                <ExpoImage
-                  source={animalImageSource(card.animal)}
-                  style={{ width: 56, height: 56 }}
-                  contentFit="cover"
-                  cachePolicy="memory-disk"
-                  recyclingKey={`animal-${card.animal}-me-header`}
-                  transition={0}
-                />
-              ) : (
-                <InitialAvatar name={displayName} />
-              )
-            }
-            onEdit={() => router.push(card ? { pathname: '/cards/edit', params: { id: card.id } } : '/cards/edit')}
-          />
+          {/* Sections assemble top-down on first paint — a subtle staggered
+              drop-in. Tabs stay mounted (rule 10) so it plays once, not on
+              every re-focus. */}
+          <Animated.View entering={FadeInDown.duration(360)}>
+            <ProfileHeaderCard
+              name={displayName}
+              did={shortDid(displayDid)}
+              avatar={
+                card?.animal ? (
+                  <ExpoImage
+                    source={animalImageSource(card.animal)}
+                    style={{ width: 56, height: 56 }}
+                    contentFit="cover"
+                    cachePolicy="memory-disk"
+                    recyclingKey={`animal-${card.animal}-me-header`}
+                    transition={0}
+                  />
+                ) : (
+                  <InitialAvatar name={displayName} />
+                )
+              }
+              onEdit={() => router.push(card ? { pathname: '/cards/edit', params: { id: card.id } } : '/cards/edit')}
+            />
+          </Animated.View>
 
-          <VerifiedCredentialsSection
-            items={verifiedCreds}
-            onScanIdentity={() => router.push('/passport')}
-            onManualInput={() => router.push({ pathname: '/passport', params: { manual: '1' } })}
-            onImportJson={() => router.push('/credentials')}
-          />
+          <Animated.View entering={FadeInDown.duration(360).delay(STAGGER_MS)}>
+            <VerifiedCredentialsSection
+              items={verifiedCreds}
+              onScanIdentity={() => router.push('/passport')}
+              onManualInput={() => router.push({ pathname: '/passport', params: { manual: '1' } })}
+              onImportJson={() => router.push('/credentials')}
+            />
+          </Animated.View>
 
-          <SelectiveDisclosuresSection claims={disclosures} />
+          <Animated.View entering={FadeInDown.duration(360).delay(STAGGER_MS * 2)}>
+            <SelectiveDisclosuresSection claims={disclosures} />
+          </Animated.View>
 
-          <ActionSection
-            onAcquire={() => router.push('/passport')}
-            onImportRaw={() => router.push('/credentials')}
-          />
+          <Animated.View entering={FadeInDown.duration(360).delay(STAGGER_MS * 3)}>
+            <ActionSection
+              onAcquire={() => router.push('/passport')}
+              onImportRaw={() => router.push('/credentials')}
+            />
+          </Animated.View>
 
           {developerMode ? (
-            <DeveloperSection
-              onZk={() => router.push('/id/zk-settings')}
-              onOidc={() => router.push('/settings/oidc-request')}
-              onGroups={() => router.push('/settings/groups')}
-            />
+            <Animated.View entering={FadeInDown.duration(360).delay(STAGGER_MS * 4)}>
+              <DeveloperSection
+                onZk={() => router.push('/id/zk-settings')}
+                onOidc={() => router.push('/settings/oidc-request')}
+                onGroups={() => router.push('/settings/groups')}
+              />
+            </Animated.View>
           ) : null}
         </View>
       </ScrollView>
@@ -140,14 +156,16 @@ function NavBar({ onSettings }: { onSettings: () => void }) {
     >
       <View style={{ width: 44 }} />
       <Text className="text-text1 text-[17px] font-semibold">Me</Text>
-      <Pressable
+      <PressableScale
+        haptic="tap"
+        scaleTo={SCALE.icon}
         onPress={onSettings}
         accessibilityRole="button"
+        accessibilityLabel="Settings"
         style={{ width: 44, height: 44, alignItems: 'flex-end', justifyContent: 'center' }}
-        className="active:opacity-60"
       >
         <SfIcon name="gearshape" size={18} color={c.text1} />
-      </Pressable>
+      </PressableScale>
     </View>
   );
 }

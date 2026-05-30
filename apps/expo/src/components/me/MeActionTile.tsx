@@ -6,10 +6,12 @@
  * Source: solidarity/Views/MeViews/MeTabComponents.swift (MeActionTile).
  */
 import type { SFSymbol } from 'expo-symbols';
-import { Pressable, Text, View } from 'react-native';
+import { Text, View } from 'react-native';
 
+import { PressableScale } from '@/components/common/PressableScale';
 import { SfIcon } from '@/components/icons/SfIcon';
 import { Colors } from '@/constants/Colors';
+import { SCALE } from '@/feedback/motion';
 
 export type MeActionTileProps = {
   icon: SFSymbol;
@@ -19,10 +21,13 @@ export type MeActionTileProps = {
 
 export function MeActionTile({ icon, title, onPress }: MeActionTileProps) {
   return (
-    <Pressable
+    <PressableScale
+      fill
+      haptic="tap"
+      scaleTo={SCALE.tile}
       onPress={onPress}
       accessibilityRole="button"
-      className="flex-1 flex-row items-center gap-2 rounded-sm2 bg-mutedSurface px-3 py-4 active:opacity-80"
+      className="flex-1 flex-row items-center gap-2 rounded-sm2 bg-mutedSurface px-3 py-4"
       style={{ minHeight: 72 }}
     >
       <View
@@ -43,6 +48,6 @@ export function MeActionTile({ icon, title, onPress }: MeActionTileProps) {
       >
         {title}
       </Text>
-    </Pressable>
+    </PressableScale>
   );
 }

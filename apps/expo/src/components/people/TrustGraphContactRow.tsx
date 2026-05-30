@@ -11,10 +11,17 @@
  * on the detail screen.
  */
 import { Pressable, Text, View } from 'react-native';
+import Animated, {
+  useAnimatedStyle,
+  useSharedValue,
+  withSpring,
+} from 'react-native-reanimated';
 
 import { SfIcon } from '@/components/icons/SfIcon';
 import { Colors } from '@/constants/Colors';
 import type { ContactManifestEntry } from '@/contacts/repository';
+import { haptic } from '@/feedback/haptics';
+import { SCALE, SPRING } from '@/feedback/motion';
 
 import { RadarTickIcon } from './RadarTickIcon';
 
@@ -33,97 +40,117 @@ export function TrustGraphContactRow({
   const subtitle = subtitleText(contact);
   const tag = contextTag(contact);
 
+  // Touch-down shrinks the row (crisp, damped); a long-press lifts it back
+  // *up* past rest (the "zoom" pickup) and fires a heavier impact right as
+  // edit/select mode arms. Release springs either back to rest.
+  const scale = useSharedValue(1);
+  const animStyle = useAnimatedStyle(() => ({ transform: [{ scale: scale.value }] }));
+
   return (
-    <Pressable
-      onPress={onPress}
-      onLongPress={onLongPress}
-      accessibilityRole="button"
-      className="active:opacity-80"
-    >
-      <View className="flex-col">
-        <View className="flex-row items-start gap-4 p-3">
-          <View
-            className="overflow-hidden rounded-full bg-searchBg"
-            style={{ width: 38, height: 38, borderWidth: 0.5, borderColor: Colors.searchBg }}
-          >
+    <Animated.View style={animStyle}>
+      <Pressable
+        onPressIn={() => {
+          scale.value = withSpring(SCALE.press, SPRING.press);
+        }}
+        onPressOut={() => {
+          scale.value = withSpring(1, SPRING.press);
+        }}
+        onPress={() => {
+          haptic('tap');
+          onPress?.();
+        }}
+        onLongPress={() => {
+          scale.value = withSpring(SCALE.longPress, SPRING.zoom);
+          haptic('heavy');
+          onLongPress?.();
+        }}
+        accessibilityRole="button"
+      >
+        <View className="flex-col">
+          <View className="flex-row items-start gap-4 p-3">
             <View
-              style={{
-                flex: 1,
-                alignItems: 'center',
-                justifyContent: 'center',
-                backgroundColor: Colors.searchBg,
-              }}
+              className="overflow-hidden rounded-full bg-searchBg"
+              style={{ width: 38, height: 38, borderWidth: 0.5, borderColor: Colors.searchBg }}
             >
-              <Text className="text-text2 text-[14px] font-medium">
-                {initial(contact.name)}
-              </Text>
-            </View>
-            {isVerified ? (
               <View
                 style={{
-                  position: 'absolute',
-                  right: -2,
-                  bottom: -2,
-                  width: 14,
-                  height: 14,
-                  borderRadius: 7,
-                  backgroundColor: Colors.pageBg,
+                  flex: 1,
                   alignItems: 'center',
                   justifyContent: 'center',
+                  backgroundColor: Colors.searchBg,
                 }}
               >
-                <SfIcon
-                  name="checkmark.seal.fill"
-                  size={12}
-                  color={Colors.terminalGreen}
-                />
+                <Text className="text-text2 text-[14px] font-medium">
+                  {initial(contact.name)}
+                </Text>
               </View>
-            ) : null}
-          </View>
-
-          <View className="flex-1 gap-2">
-            <View className="flex-row items-start gap-3">
-              <View className="flex-1 gap-0.5">
-                <Text
-                  numberOfLines={1}
-                  className="text-text1 text-[16px] font-medium"
+              {isVerified ? (
+                <View
+                  style={{
+                    position: 'absolute',
+                    right: -2,
+                    bottom: -2,
+                    width: 14,
+                    height: 14,
+                    borderRadius: 7,
+                    backgroundColor: Colors.pageBg,
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                  }}
                 >
-                  {contact.name}
-                </Text>
-                {subtitle ? (
-                  <Text
-                    numberOfLines={1}
-                    ellipsizeMode="tail"
-                    className="text-text2 text-[14px]"
-                  >
-                    {subtitle}
-                  </Text>
-                ) : null}
-              </View>
-
-              <View className="flex-row items-center gap-1">
-                <RadarTickIcon size={16} />
-                <Text className="text-text2 text-[10px]">
-                  {formatIsoDate(contact.receivedAt)}
-                </Text>
-              </View>
+                  <SfIcon
+                    name="checkmark.seal.fill"
+                    size={12}
+                    color={Colors.terminalGreen}
+                  />
+                </View>
+              ) : null}
             </View>
 
-            {tag ? (
-              <View className="flex-row gap-1.5">
-                <View className="rounded-sm2 bg-searchBg px-1 py-0.5 self-start">
-                  <Text className="text-text2 text-[10px]">{tag}</Text>
+            <View className="flex-1 gap-2">
+              <View className="flex-row items-start gap-3">
+                <View className="flex-1 gap-0.5">
+                  <Text
+                    numberOfLines={1}
+                    className="text-text1 text-[16px] font-medium"
+                  >
+                    {contact.name}
+                  </Text>
+                  {subtitle ? (
+                    <Text
+                      numberOfLines={1}
+                      ellipsizeMode="tail"
+                      className="text-text2 text-[14px]"
+                    >
+                      {subtitle}
+                    </Text>
+                  ) : null}
+                </View>
+
+                <View className="flex-row items-center gap-1">
+                  <RadarTickIcon size={16} />
+                  <Text className="text-text2 text-[10px]">
+                    {formatIsoDate(contact.receivedAt)}
+                  </Text>
                 </View>
               </View>
-            ) : null}
-          </View>
-        </View>
 
-        <View
-          style={{ height: 1, backgroundColor: Colors.searchBg, marginHorizontal: 0 }}
-        />
-      </View>
-    </Pressable>
+              {tag ? (
+                <View className="flex-row gap-1.5">
+                  <View className="rounded-sm2 bg-searchBg px-1 py-0.5 self-start">
+                    <Text className="text-text2 text-[10px]">{tag}</Text>
+                  </View>
+                </View>
+              ) : null}
+            </View>
+          </View>
+
+          <View
+            style={{ height: 1, backgroundColor: Colors.searchBg, marginHorizontal: 0 }}
+          />
+        </View>
+      </Pressable>
+    </Animated.View>
   );
 }
 

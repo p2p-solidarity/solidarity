@@ -10,8 +10,9 @@
  * Source: solidarity/Views/MeViews/MeTabComponents.swift (ProfileHeaderCard).
  */
 import type { ReactNode } from 'react';
-import { Pressable, Text, View } from 'react-native';
+import { Text, View } from 'react-native';
 
+import { PressableScale } from '@/components/common/PressableScale';
 import { SfIcon } from '@/components/icons/SfIcon';
 import { Colors } from '@/constants/Colors';
 
@@ -65,16 +66,17 @@ export function ProfileHeaderCard({
           </View>
         </View>
 
-        <Pressable
+        <PressableScale
+          haptic="tap"
           onPress={onEdit}
           accessibilityRole="button"
-          className="rounded-sm2 bg-invertedButtonBg px-4 active:opacity-80"
+          className="rounded-sm2 bg-invertedButtonBg px-4"
           style={{ height: 28, justifyContent: 'center' }}
         >
           <Text className="text-invertedButtonText text-[13px] font-medium">
             Edit
           </Text>
-        </Pressable>
+        </PressableScale>
       </View>
     </View>
   );

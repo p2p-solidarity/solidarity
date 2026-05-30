@@ -10,8 +10,9 @@
  * as the MRZ-native YYMMDD because the BAC/PACE key derivation hashes that
  * 6-char string verbatim — see passport/pipeline.parseYyMmDd.
  */
-import { Pressable, Text, TextInput, View } from 'react-native';
+import { Text, TextInput, View } from 'react-native';
 
+import { PressableScale } from '@/components/common/PressableScale';
 import { SfIcon } from '@/components/icons/SfIcon';
 import { ThemedButton } from '@/components/themed';
 import { Colors } from '@/constants/Colors';
@@ -58,33 +59,53 @@ export function PassportMrzStep({
 }) {
   if (!showManualInput) {
     return (
-      <View className="bg-mutedSurface gap-3 rounded-xl p-3.5">
-        <ThemedButton
-          label="Scan Passport"
-          fullWidth
-          leadingIcon={
-            <SfIcon
-              name="camera.viewfinder"
-              size={15}
-              weight="semibold"
-              color={Colors.invertedButtonText}
-            />
-          }
-          onPress={onScanPressed}
-        />
-        <Pressable
-          onPress={() => { setShowManualInput(true); }}
-          accessibilityRole="button"
-          className="rounded-sm2 active:opacity-70"
-          style={{
-            paddingVertical: 12,
-            alignItems: 'center',
-            borderWidth: 1,
-            borderColor: Colors.text1,
-          }}
-        >
-          <Text className="text-text1 text-[15px]">Manual Input</Text>
-        </Pressable>
+      <View className="gap-6">
+        {/* Centred icon → focused copy, matching the ProofStep header so every
+            passport-setup screen shares the same calm, centred intro. */}
+        <View className="items-center gap-4 pt-2">
+          <View style={{ width: 64, height: 64, alignItems: 'center', justifyContent: 'center' }}>
+            <SfIcon name="doc.viewfinder" size={48} color={Colors.primaryBlue} />
+          </View>
+          <View className="items-center gap-2">
+            <Text className="text-text1 text-center text-[16px] font-medium">
+              Scan your passport
+            </Text>
+            <Text className="text-text2 px-8 text-center text-[14px]" style={{ lineHeight: 22 }}>
+              Position the photo page in the frame to read the MRZ — or enter the
+              details by hand.
+            </Text>
+          </View>
+        </View>
+
+        <View className="bg-mutedSurface gap-3 rounded-xl p-3.5">
+          <ThemedButton
+            label="Scan Passport"
+            fullWidth
+            leadingIcon={
+              <SfIcon
+                name="camera.viewfinder"
+                size={15}
+                weight="semibold"
+                color={Colors.invertedButtonText}
+              />
+            }
+            onPress={onScanPressed}
+          />
+          <PressableScale
+            haptic="tap"
+            onPress={() => { setShowManualInput(true); }}
+            accessibilityRole="button"
+            className="rounded-sm2"
+            style={{
+              paddingVertical: 12,
+              alignItems: 'center',
+              borderWidth: 1,
+              borderColor: Colors.text1,
+            }}
+          >
+            <Text className="text-text1 text-[15px]">Manual Input</Text>
+          </PressableScale>
+        </View>
       </View>
     );
   }
@@ -129,13 +150,14 @@ export function PassportMrzStep({
       <View className="pt-2">
         <ThemedButton label="Continue to NFC" fullWidth onPress={onContinue} />
       </View>
-      <Pressable
+      <PressableScale
+        haptic="tap"
         onPress={() => { setShowManualInput(false); }}
         accessibilityRole="button"
-        className="self-center active:opacity-60"
+        containerStyle={{ alignSelf: 'center' }}
       >
         <Text className="text-text2 text-[12px]">Back to Scan</Text>
-      </Pressable>
+      </PressableScale>
     </View>
   );
 }

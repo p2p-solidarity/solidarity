@@ -28,6 +28,7 @@ import Animated, {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { scheduleOnRN } from 'react-native-worklets';
 
+import { PressableScale } from '@/components/common/PressableScale';
 import { SfIcon } from '@/components/icons/SfIcon';
 import { ProofPresentationFlowSheet } from '@/components/scan/ProofPresentationFlowSheet';
 import { ScanWindowOverlay } from '@/components/scan/ScanWindowOverlay';
@@ -39,6 +40,8 @@ import { SolidarityPlaceholderCard } from '@/components/passport/SolidarityPlace
 import { ThemedButton } from '@/components/themed';
 import { Colors } from '@/constants/Colors';
 import { presentReceivedCard } from '@/cards/receivedCard';
+import { haptic } from '@/feedback/haptics';
+import { SCALE } from '@/feedback/motion';
 import { pushToast } from '@/feedback/toast';
 import { QrScanner } from '@/scan/QrScanner';
 import { handleScannedPayload } from '@/scan/envelopeHandler';
@@ -100,6 +103,9 @@ export default function ScanScreen() {
     (payload: string) => {
       if (capturing.current) return;
       capturing.current = true;
+      // Tactile "got it" the instant a code resolves — fires with the bracket
+      // pulse + shutter flash so the capture lands on three senses at once.
+      haptic('success');
       bracketScale.value = withSequence(
         withTiming(1.18, { duration: 140 }),
         withTiming(1, { duration: 120 }),
@@ -143,15 +149,16 @@ export default function ScanScreen() {
           <Text className="text-text1 text-[15px]">Close</Text>
         </Pressable>
         <Text className="text-text1 text-[17px] font-semibold">Scan</Text>
-        <Pressable
+        <PressableScale
+          haptic="tap"
+          scaleTo={SCALE.icon}
           accessibilityRole="button"
           accessibilityLabel="My QR"
           onPress={() => { router.push('/share/qr'); }}
           style={{ width: 60, height: 44, alignItems: 'flex-end', justifyContent: 'center' }}
-          className="active:opacity-60"
         >
           <SfIcon name="qrcode" size={20} color={Colors.text1} />
-        </Pressable>
+        </PressableScale>
       </View>
 
       <View style={{ flex: 1 }} />

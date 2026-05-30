@@ -19,13 +19,21 @@
  * Not wired here — _layout currently uses the default Tabs bar so
  * dropping in this component is a single follow-up commit.
  */
-import type { ReactNode } from 'react';
+import { type ReactNode, useEffect } from 'react';
 import { Pressable, Text, View } from 'react-native';
+import Animated, {
+  useAnimatedStyle,
+  useSharedValue,
+  withSequence,
+  withSpring,
+  withTiming,
+} from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { SfIcon } from '@/components/icons/SfIcon';
 import { useThemeColors } from '@/constants/useThemeColors';
 import { haptic } from '@/feedback/haptics';
+import { SPRING } from '@/feedback/motion';
 
 interface TabRoute {
   readonly key: string;
@@ -160,18 +168,42 @@ function FlatTabButton({
   inactiveColor,
 }: FlatTabButtonProps): ReactNode {
   const tint = isSelected ? activeColor : inactiveColor;
+
+  // The icon shrinks under the finger and "pops" the moment its tab becomes
+  // active (overdamped settle → crisp, no wobble), so switching tabs reads as
+  // a deliberate selection rather than an instant cut.
+  const iconScale = useSharedValue(1);
+  const iconAnim = useAnimatedStyle(() => ({ transform: [{ scale: iconScale.value }] }));
+
+  useEffect(() => {
+    if (isSelected) {
+      iconScale.value = withSequence(
+        withTiming(1.18, { duration: 130 }),
+        withSpring(1, SPRING.press),
+      );
+    }
+  }, [isSelected, iconScale]);
+
   return (
     <Pressable
       accessibilityRole="tab"
       accessibilityState={{ selected: isSelected }}
       accessibilityLabel={label}
       onPress={onPress}
+      onPressIn={() => {
+        iconScale.value = withTiming(0.86, { duration: 90 });
+      }}
+      onPressOut={() => {
+        iconScale.value = withSpring(1, SPRING.press);
+      }}
       style={{ flex: 1, alignItems: 'center', rowGap: 3 }}
       hitSlop={8}
     >
-      <View style={{ height: 24, alignItems: 'center', justifyContent: 'center' }}>
+      <Animated.View
+        style={[{ height: 24, alignItems: 'center', justifyContent: 'center' }, iconAnim]}
+      >
         {icon ? <SfIcon name={icon} size={20} color={tint} /> : null}
-      </View>
+      </Animated.View>
       <Text style={{ fontSize: 11, fontWeight: '500', color: tint }}>{label}</Text>
     </Pressable>
   );

@@ -12,8 +12,9 @@
  * Source: solidarity/Views/MeViews/MeTabComponents.swift (VerifiedCredentialRow).
  */
 import type { SFSymbol } from 'expo-symbols';
-import { Pressable, Text, View } from 'react-native';
+import { Text, View } from 'react-native';
 
+import { PressableScale } from '@/components/common/PressableScale';
 import { SfIcon } from '@/components/icons/SfIcon';
 import { Colors } from '@/constants/Colors';
 
@@ -48,10 +49,11 @@ export function VerifiedCredentialRow({
       : Colors.text3;
 
   return (
-    <Pressable
+    <PressableScale
+      haptic="tap"
       onPress={onPress}
       accessibilityRole="button"
-      className="mx-4 rounded-lg bg-mutedSurface p-3 active:opacity-80"
+      className="mx-4 rounded-lg bg-mutedSurface p-3"
     >
       <View>
         <View className="flex-row items-center gap-2 pb-3">
@@ -97,7 +99,7 @@ export function VerifiedCredentialRow({
           </Text>
         </View>
       </View>
-    </Pressable>
+    </PressableScale>
   );
 }
 

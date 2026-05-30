@@ -8,8 +8,9 @@
  * Source: solidarity/Views/MeViews/MeTabComponents.swift (DisclosureRowView).
  */
 import type { SFSymbol } from 'expo-symbols';
-import { ActivityIndicator, Pressable, Text, View } from 'react-native';
+import { ActivityIndicator, Text, View } from 'react-native';
 
+import { PressableScale } from '@/components/common/PressableScale';
 import { SfIcon } from '@/components/icons/SfIcon';
 import { Colors } from '@/constants/Colors';
 
@@ -46,7 +47,8 @@ export function DisclosureRowView({
         <Text className="text-text3 text-[11px]">{source}</Text>
       </View>
 
-      <Pressable
+      <PressableScale
+        haptic="tap"
         onPress={onPresent}
         disabled={isDisabled}
         accessibilityRole="button"
@@ -71,7 +73,7 @@ export function DisclosureRowView({
             {actionTitle}
           </Text>
         )}
-      </Pressable>
+      </PressableScale>
     </View>
   );
 }
