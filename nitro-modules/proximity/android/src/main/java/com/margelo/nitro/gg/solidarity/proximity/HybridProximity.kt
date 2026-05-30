@@ -1216,6 +1216,21 @@ class HybridProximity : HybridProximitySpec() {
     withState { uwbSessions[peerId]?.collectorJob = job }
   }
 
+  // MARK: - Transport selection
+
+  /**
+   * Transport selector. Android only has the BLE/L2CAP transport — there is
+   * no MultipeerConnectivity peer on this platform — so `multipeer` and `ble`
+   * and `auto` all resolve to the same BLE path. We keep the call as a no-op
+   * (rather than throwing) so the cross-platform JS layer can set the mode
+   * uniformly; the iOS side is where `multipeer` actually swaps transports.
+   */
+  override fun setTransportMode(mode: String) {
+    // Intentionally a no-op: BLE is the only Android transport. Logged so the
+    // selection is visible when debugging cross-device sessions.
+    Log.i(TAG, "setTransportMode($mode) — Android always uses BLE/L2CAP")
+  }
+
   // MARK: - Listener registration
 
   override fun addEventListener(handler: (ProximityEvent) -> Unit): () -> Unit {

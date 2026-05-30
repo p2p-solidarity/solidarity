@@ -117,6 +117,17 @@ final class HybridProximity: HybridProximitySpec {
   private var niSessions: [String: NISession] = [:]
   private var niSessionPeerNames: [ObjectIdentifier: String] = [:]
 
+  // MARK: Transport selection
+
+  /// Active transport. `ble` (default) uses the cross-platform CoreBluetooth +
+  /// L2CAP stack below. `multipeer` routes every lifecycle call to
+  /// `multipeerTransport` so we interoperate with the deployed SwiftUI app.
+  private enum Transport { case ble, multipeer }
+  private var transport: Transport = .ble
+  /// Lazily created the first time `multipeer` is selected. Holds all
+  /// MultipeerConnectivity state; its events fan into the same listeners.
+  private var multipeerTransport: MultipeerTransport?
+
   /// Event-listener fan-out. UUID key so unsubscribe stays O(1).
   private var listeners: [UUID: (ProximityEvent) -> Void] = [:]
 
@@ -224,6 +235,12 @@ final class HybridProximity: HybridProximitySpec {
   func startAdvertising(
     displayName: String, serviceType: String, discoveryInfoJson: String
   ) throws {
+    if useMultipeer {
+      multipeer(displayName: displayName).startAdvertising(
+        displayName: displayName, discoveryInfoJson: discoveryInfoJson
+      )
+      return
+    }
     let mgr = withState { () -> CBPeripheralManager in
       if let existing = self.peripheralManager { return existing }
       let new = CBPeripheralManager(delegate: self.peripheralProxy, queue: self.bleQueue)
@@ -246,6 +263,7 @@ final class HybridProximity: HybridProximitySpec {
   }
 
   func stopAdvertising() {
+    if let mc = withState({ self.multipeerTransport }) { mc.stopAdvertising() }
     withState {
       self.wantsAdvertising = false
       // Only touch CoreBluetooth APIs while the manager is .poweredOn —
@@ -311,6 +329,10 @@ final class HybridProximity: HybridProximitySpec {
   // MARK: Lifecycle — browse
 
   func startBrowsing(serviceType: String) {
+    if useMultipeer {
+      multipeer().startBrowsing()
+      return
+    }
     let mgr = withState { () -> CBCentralManager in
       if let existing = self.centralManager { return existing }
       let new = CBCentralManager(delegate: self.centralProxy, queue: self.bleQueue)
@@ -331,6 +353,7 @@ final class HybridProximity: HybridProximitySpec {
   }
 
   func stopBrowsing() {
+    if let mc = withState({ self.multipeerTransport }) { mc.stopBrowsing() }
     withState {
       self.wantsBrowsing = false
       // Same guard as stopAdvertising — never invoke stopScan before
@@ -347,6 +370,10 @@ final class HybridProximity: HybridProximitySpec {
   // MARK: Invitation lifecycle
 
   func invitePeer(peerId: String, payload: ArrayBuffer, timeoutSec: Double) throws -> Promise<Bool> {
+    if let mc = withState({ self.multipeerTransport }), useMultipeer {
+      let bytes = copyPayload(payload)
+      return Promise.async { await mc.invitePeer(peerId: peerId, payload: bytes, timeoutSec: timeoutSec) }
+    }
     return Promise.async {
       // Guard up front — the cached `discoveredPeripherals` entry can
       // outlive an actual .poweredOn state if the user toggled Bluetooth
@@ -377,6 +404,10 @@ final class HybridProximity: HybridProximitySpec {
   }
 
   func acceptInvitation(peerId: String) {
+    if let mc = withState({ self.multipeerTransport }), useMultipeer {
+      mc.acceptInvitation(peerId: peerId)
+      return
+    }
     // The channel itself is fine to promote in-memory even if Bluetooth
     // flipped off (the streams will fail their next IO with .endEncountered),
     // but we surface the bad state so the consumer doesn't think the
@@ -390,6 +421,10 @@ final class HybridProximity: HybridProximitySpec {
   }
 
   func rejectInvitation(peerId: String) {
+    if let mc = withState({ self.multipeerTransport }), useMultipeer {
+      mc.rejectInvitation(peerId: peerId)
+      return
+    }
     // Cleanup-only — but still guard so we don't issue stream close()
     // calls into a manager that may have torn down the channel under us.
     guard ensurePeripheralPoweredOn(op: "rejectInvitation") else {
@@ -404,6 +439,10 @@ final class HybridProximity: HybridProximitySpec {
   // MARK: Data transport
 
   func sendData(peerId: String, data: ArrayBuffer) throws -> Promise<Void> {
+    if let mc = withState({ self.multipeerTransport }), useMultipeer {
+      let bytes = copyPayload(data)
+      return Promise.async { try mc.sendData(peerId: peerId, data: bytes) }
+    }
     return Promise.async {
       // sendData rides an existing L2CAP output stream that was attached
       // when the central or peripheral established the channel. If
@@ -435,6 +474,10 @@ final class HybridProximity: HybridProximitySpec {
   }
 
   func disconnect(peerId: String) {
+    if let mc = withState({ self.multipeerTransport }), useMultipeer {
+      mc.disconnect(peerId: peerId)
+      return
+    }
     // Cleanup is always safe in-memory; only the stream.close() inside
     // cleanupChannelLocked could fault if Bluetooth flipped. If the
     // managers aren't ready, drop the in-memory state and emit the
@@ -491,6 +534,44 @@ final class HybridProximity: HybridProximitySpec {
     return { [weak self] in
       self?.withState { self?.listeners.removeValue(forKey: id) }
     }
+  }
+
+  // MARK: Transport selection
+
+  /// Select the active transport. `auto`/`ble` keep the cross-platform BLE
+  /// stack; `multipeer` swaps to MultipeerConnectivity to reach the deployed
+  /// SwiftUI app. Switching while a session is active tears down the BLE side
+  /// so the two transports never advertise the same identity at once.
+  func setTransportMode(mode: String) {
+    let next: Transport = (mode == "multipeer") ? .multipeer : .ble
+    // Switch the mode and, if we're leaving multipeer, detach the MC stack so
+    // it stops advertising/browsing under the old identity. Tear down outside
+    // the lock (teardown touches MC APIs that can call back in).
+    let mcToTeardown: MultipeerTransport? = withState {
+      let changed = self.transport != next
+      self.transport = next
+      if changed && next == .ble {
+        let mc = self.multipeerTransport
+        self.multipeerTransport = nil
+        return mc
+      }
+      return nil
+    }
+    mcToTeardown?.teardown()
+  }
+
+  /// True when the legacy MC transport should handle lifecycle calls.
+  private var useMultipeer: Bool { withState { self.transport == .multipeer } }
+
+  /// Lazily build (or reuse) the MC transport. `displayName` seeds the
+  /// MCPeerID on first creation; later calls reuse the existing instance.
+  @discardableResult
+  private func multipeer(displayName: String = "solidarity-peer") -> MultipeerTransport {
+    if let existing = withState({ self.multipeerTransport }) { return existing }
+    let t = MultipeerTransport(displayName: displayName)
+    t.delegate = self
+    withState { self.multipeerTransport = t }
+    return t
   }
 
   // MARK: - Delegate callback receivers
@@ -889,6 +970,16 @@ final class HybridProximity: HybridProximitySpec {
     let count = buffer.size
     guard count > 0 else { return Data() }
     return Data(bytes: buffer.data, count: count)
+  }
+}
+
+// MARK: - MultipeerTransportDelegate
+
+extension HybridProximity: MultipeerTransportDelegate {
+  /// MC events join the same listener fan-out as the BLE transport, so the TS
+  /// layer (`src/matching/session.ts`) consumes both identically.
+  func multipeerDidEmit(_ event: ProximityEvent) {
+    emit(event)
   }
 }
 
