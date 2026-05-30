@@ -25,6 +25,7 @@ namespace margelo::nitro::solidarity::proximity {
       prototype.registerHybridMethod("disconnect", &HybridProximitySpec::disconnect);
       prototype.registerHybridMethod("startRanging", &HybridProximitySpec::startRanging);
       prototype.registerHybridMethod("stopRanging", &HybridProximitySpec::stopRanging);
+      prototype.registerHybridMethod("setTransportMode", &HybridProximitySpec::setTransportMode);
       prototype.registerHybridMethod("addEventListener", &HybridProximitySpec::addEventListener);
     });
   }

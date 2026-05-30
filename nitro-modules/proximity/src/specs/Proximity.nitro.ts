@@ -90,6 +90,17 @@ export interface Proximity
   startRanging(peerId: string): Promise<void>;
   stopRanging(peerId: string): void;
 
+  /**
+   * Select the active transport.
+   *   - 'auto' | 'ble' → cross-platform BLE/L2CAP (iOS ↔ Android).
+   *   - 'multipeer'    → legacy MultipeerConnectivity (iOS-only; reaches the
+   *                      deployed SwiftUI Solidarity app on service type
+   *                      `say-share`, browsing `airmeishi-share` too). On
+   *                      Android there is no MC peer, so this is a no-op that
+   *                      keeps the BLE transport.
+   */
+  setTransportMode(mode: string): void;
+
   /** Returns an unsubscribe function. */
   addEventListener(handler: (event: ProximityEvent) => void): () => void;
 }

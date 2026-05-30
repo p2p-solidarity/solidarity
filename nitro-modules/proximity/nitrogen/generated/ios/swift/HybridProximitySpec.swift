@@ -24,6 +24,7 @@ public protocol HybridProximitySpec_protocol: HybridObject {
   func disconnect(peerId: String) throws -> Void
   func startRanging(peerId: String) throws -> Promise<Void>
   func stopRanging(peerId: String) throws -> Void
+  func setTransportMode(mode: String) throws -> Void
   func addEventListener(handler: @escaping (_ event: ProximityEvent) -> Void) throws -> () -> Void
 }
 

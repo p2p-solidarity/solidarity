@@ -64,6 +64,7 @@ namespace margelo::nitro::solidarity::proximity {
       virtual void disconnect(const std::string& peerId) = 0;
       virtual std::shared_ptr<Promise<void>> startRanging(const std::string& peerId) = 0;
       virtual void stopRanging(const std::string& peerId) = 0;
+      virtual void setTransportMode(const std::string& mode) = 0;
       virtual std::function<void()> addEventListener(const std::function<void(const ProximityEvent& /* event */)>& handler) = 0;
 
     protected:

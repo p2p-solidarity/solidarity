@@ -74,6 +74,10 @@ abstract class HybridProximitySpec: HybridObject() {
   @Keep
   abstract fun stopRanging(peerId: String): Unit
   
+  @DoNotStrip
+  @Keep
+  abstract fun setTransportMode(mode: String): Unit
+  
   abstract fun addEventListener(handler: (event: ProximityEvent) -> Unit): () -> Unit
   
   @DoNotStrip

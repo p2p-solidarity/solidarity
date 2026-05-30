@@ -156,6 +156,12 @@ namespace margelo::nitro::solidarity::proximity {
         std::rethrow_exception(__result.error());
       }
     }
+    inline void setTransportMode(const std::string& mode) override {
+      auto __result = _swiftPart.setTransportMode(mode);
+      if (__result.hasError()) [[unlikely]] {
+        std::rethrow_exception(__result.error());
+      }
+    }
     inline std::function<void()> addEventListener(const std::function<void(const ProximityEvent& /* event */)>& handler) override {
       auto __result = _swiftPart.addEventListener(handler);
       if (__result.hasError()) [[unlikely]] {

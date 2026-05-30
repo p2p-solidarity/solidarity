@@ -147,6 +147,10 @@ namespace margelo::nitro::solidarity::proximity {
     static const auto method = _javaPart->javaClassStatic()->getMethod<void(jni::alias_ref<jni::JString> /* peerId */)>("stopRanging");
     method(_javaPart, jni::make_jstring(peerId));
   }
+  void JHybridProximitySpec::setTransportMode(const std::string& mode) {
+    static const auto method = _javaPart->javaClassStatic()->getMethod<void(jni::alias_ref<jni::JString> /* mode */)>("setTransportMode");
+    method(_javaPart, jni::make_jstring(mode));
+  }
   std::function<void()> JHybridProximitySpec::addEventListener(const std::function<void(const ProximityEvent& /* event */)>& handler) {
     static const auto method = _javaPart->javaClassStatic()->getMethod<jni::local_ref<JFunc_void::javaobject>(jni::alias_ref<JFunc_void_ProximityEvent::javaobject> /* handler */)>("addEventListener_cxx");
     auto __result = method(_javaPart, JFunc_void_ProximityEvent_cxx::fromCpp(handler));
