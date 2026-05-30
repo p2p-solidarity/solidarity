@@ -32,6 +32,17 @@ export type AppColorScheme = 'system' | 'light' | 'dark';
 /** Mirrors Swift AnimalCharacter. */
 export type AnimalCharacter = 'dog' | 'horse' | 'pig' | 'sheep' | 'dove';
 
+/**
+ * Proximity matching transport (developer setting).
+ *   - `auto`      best available — BLE everywhere today; will also try the
+ *                 legacy MultipeerConnectivity path once that lands.
+ *   - `ble`       force the cross-platform BLE/L2CAP path (iOS ↔ Android).
+ *   - `multipeer` legacy MultipeerConnectivity to reach the old Swift iOS app.
+ *                 Native transport not ported yet — selecting it currently
+ *                 falls back to BLE (surfaced as "pending" in the dev UI).
+ */
+export type ProximityTransport = 'auto' | 'ble' | 'multipeer';
+
 export interface Preferences {
   readonly hasCompletedOnboarding: boolean;
   readonly biometricSensitiveOps: boolean;
@@ -62,6 +73,8 @@ export interface Preferences {
   readonly notificationsSyncIntervalSeconds: number;
   /** Mirrors Swift DeveloperModeManager.simulateNFC. */
   readonly simulateNfc: boolean;
+  /** Proximity matching transport selector (developer setting). */
+  readonly proximityTransport: ProximityTransport;
   /** Share-field toggles — mirror Swift ShareSettingsView @AppStorage keys. */
   readonly shareTitle: boolean;
   readonly shareCompany: boolean;
@@ -107,6 +120,7 @@ const DEFAULTS: Preferences = {
   notificationsAutoSync: true,
   notificationsSyncIntervalSeconds: 30,
   simulateNfc: false,
+  proximityTransport: 'auto',
   shareTitle: false,
   shareCompany: false,
   shareEmail: false,

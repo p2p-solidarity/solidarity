@@ -13,7 +13,8 @@
  */
 import { router } from 'expo-router';
 import { useEffect, useMemo, useState } from 'react';
-import { Pressable, ScrollView, Text, View } from 'react-native';
+import { ScrollView, Text, View } from 'react-native';
+import Animated, { FadeInDown } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { useCardStore, useMyCard, useMyCardDetail } from '@/cards/cardManager';
@@ -35,9 +36,13 @@ import {
   IncomingInvitationPopup,
 } from '@/components/matching';
 import { useMatchingSession } from '@/matching/session';
+import { ensureProximityPermissions } from '@/matching/permissions';
 import { ThemedButton } from '@/components/themed';
+import { PressableScale } from '@/components/common/PressableScale';
 import { Colors } from '@/constants/Colors';
 import { useThemeColors } from '@/constants/useThemeColors';
+import { pushToast } from '@/feedback/toast';
+import { SCALE, STAGGER_MS } from '@/feedback/motion';
 import { usePreferences } from '@/settings/preferences';
 
 export default function ShareTab() {
@@ -56,6 +61,10 @@ export default function ShareTab() {
   const startAdvertising = useMatchingSession((s) => s.startAdvertising);
   const stopAll = useMatchingSession((s) => s.stopAll);
   const uwb = useMatchingSession((s) => s.uwbSpatial);
+  const lastErrorMessage = useMatchingSession((s) => s.lastErrorMessage);
+  const clearError = useMatchingSession((s) => s.clearError);
+  const setTransportMode = useMatchingSession((s) => s.setTransportMode);
+  const proximityTransport = usePreferences((s) => s.proximityTransport);
   const [nearbyVisible, setNearbyVisible] = useState(false);
   const [payload, setPayload] = useState<string | undefined>(undefined);
   const shareTitle = usePreferences((s) => s.shareTitle);
@@ -67,6 +76,12 @@ export default function ShareTab() {
   const shareSkills = usePreferences((s) => s.shareSkills);
 
   useEffect(() => { void hydrate(); }, [hydrate]);
+
+  // Keep the matching session's transport in sync with the developer pref so
+  // the next advertise/browse uses the selected mode.
+  useEffect(() => {
+    void setTransportMode(proximityTransport);
+  }, [proximityTransport, setTransportMode]);
 
   const shareFieldPreferences = useMemo<ShareFieldPreferences>(
     () => ({
@@ -119,9 +134,25 @@ export default function ShareTab() {
 
   // Swift `toggleMatching` → ProximityManager.startMatching(card, autoSendCardOnConnect:true)
   // i.e. advertise + browse simultaneously with the user's primary card.
-  const toggleMatching = (): void => {
+  //
+  // Android 12+ requires the "Nearby devices" runtime grant before any BLE
+  // call — without it the native module throws and the session swallows the
+  // error, which read as a dead button. Request up-front and bail honestly
+  // (with a toast) instead of optimistically flipping into a matching state
+  // that can never find a peer.
+  const toggleMatching = async (): Promise<void> => {
     if (isMatching) {
       void stopAll();
+      return;
+    }
+    const perm = await ensureProximityPermissions();
+    if (!perm.granted) {
+      pushToast(
+        perm.reason === 'unavailable'
+          ? 'Bluetooth is not available on this device.'
+          : 'Bluetooth permission is needed for nearby matching. Enable it in Settings to continue.',
+        'warning'
+      );
       return;
     }
     void startBrowsing();
@@ -141,43 +172,70 @@ export default function ShareTab() {
 
       <ScrollView contentContainerStyle={{ paddingBottom: 100 }}>
         <View className="items-center justify-center" style={{ height: 260 }}>
-          <Pressable
+          <PressableScale
+            haptic={peerCount > 0 ? 'tap' : false}
+            scaleTo={peerCount > 0 ? 0.96 : 1}
             onPress={() => {
               if (peerCount > 0) setNearbyVisible(true);
             }}
             style={{ alignItems: 'center', justifyContent: 'center' }}
           >
             <RadarMatching size={260} isMatching={isMatching} />
-          </Pressable>
+          </PressableScale>
         </View>
 
         <View style={{ height: 16 }} />
 
-        <View className="items-center gap-2">
-          <Text className="text-text1 text-[20px] font-bold">{statusTitle}</Text>
-          <Text className="text-text2 text-[13px] text-center px-10">
-            {subtitle}
-          </Text>
-        </View>
+        <Animated.View entering={FadeInDown.duration(360)}>
+          <View className="items-center gap-2">
+            <Text className="text-text1 text-[20px] font-bold">{statusTitle}</Text>
+            <Text className="text-text2 text-[13px] text-center px-10">
+              {subtitle}
+            </Text>
+          </View>
+        </Animated.View>
 
         <View style={{ height: 16 }} />
 
-        <View className="px-12">
-          <ThemedButton
-            label={isMatching ? 'Stop Matching' : 'Start Matching'}
-            fullWidth
-            haptic="warning"
-            leadingIcon={
+        <Animated.View entering={FadeInDown.duration(360).delay(STAGGER_MS)}>
+          <View className="px-12">
+            <ThemedButton
+              label={isMatching ? 'Stop Matching' : 'Start Matching'}
+              fullWidth
+              haptic="warning"
+              leadingIcon={
+                <SfIcon
+                  name={isMatching ? 'stop.fill' : 'dot.radiowaves.left.and.right'}
+                  size={15}
+                  weight="semibold"
+                  color={Colors.invertedButtonText}
+                />
+              }
+              onPress={() => { void toggleMatching(); }}
+            />
+          </View>
+        </Animated.View>
+
+        {lastErrorMessage ? (
+          <View style={{ paddingHorizontal: 24, paddingTop: 12 }}>
+            <PressableScale
+              haptic="tap"
+              onPress={() => { clearError(); }}
+              accessibilityRole="button"
+              accessibilityLabel="Dismiss matching error"
+              className="bg-mutedSurface rounded-xl flex-row items-center"
+              style={{ paddingHorizontal: 12, paddingVertical: 10, gap: 8 }}
+            >
               <SfIcon
-                name={isMatching ? 'stop.fill' : 'dot.radiowaves.left.and.right'}
-                size={15}
-                weight="semibold"
-                color={Colors.invertedButtonText}
+                name="exclamationmark.triangle.fill"
+                size={14}
+                color={Colors.warning}
               />
-            }
-            onPress={toggleMatching}
-          />
-        </View>
+              <Text className="text-text2 text-[12px] flex-1">{lastErrorMessage}</Text>
+              <SfIcon name="xmark" size={11} weight="semibold" color={Colors.text3} />
+            </PressableScale>
+          </View>
+        ) : null}
 
         {uwbVisible ? (
           <View style={{ paddingTop: 10 }}>
@@ -187,16 +245,18 @@ export default function ShareTab() {
 
         <View style={{ height: 24 }} />
 
-        <View className="px-4">
-          <QrShareCard
-            payload={payload}
-            cardName={myCard?.name}
-            enabledFields={enabledFields}
-            hasRealHuman={false}
-            onOpenSettings={() => { router.push('/settings/share-settings'); }}
-            onShare={() => { router.push('/share/qr'); }}
-          />
-        </View>
+        <Animated.View entering={FadeInDown.duration(360).delay(STAGGER_MS * 2)}>
+          <View className="px-4">
+            <QrShareCard
+              payload={payload}
+              cardName={myCard?.name}
+              enabledFields={enabledFields}
+              hasRealHuman={false}
+              onOpenSettings={() => { router.push('/settings/share-settings'); }}
+              onShare={() => { router.push('/share/qr'); }}
+            />
+          </View>
+        </Animated.View>
       </ScrollView>
 
       <NearbyPeersSheet
@@ -225,14 +285,16 @@ function NavBar({ onScan }: { onScan: () => void }) {
       className="flex-row items-center justify-between px-4"
       style={{ height: 44 }}
     >
-      <Pressable
+      <PressableScale
+        haptic="tap"
+        scaleTo={SCALE.icon}
         onPress={onScan}
         accessibilityRole="button"
+        accessibilityLabel="Scan"
         style={{ width: 44, height: 44, alignItems: 'flex-start', justifyContent: 'center' }}
-        className="active:opacity-60"
       >
         <SfIcon name="qrcode.viewfinder" size={20} color={c.text1} />
-      </Pressable>
+      </PressableScale>
       <Text className="text-text1 text-[17px] font-semibold">Share</Text>
       <View style={{ width: 44 }} />
     </View>

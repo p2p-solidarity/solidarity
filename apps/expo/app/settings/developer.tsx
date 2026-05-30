@@ -8,7 +8,7 @@
  *   public goes through the graduation criteria in docs §11.
  */
 import { router } from 'expo-router';
-import { ScrollView, Text, View } from 'react-native';
+import { Pressable, ScrollView, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import {
@@ -20,11 +20,22 @@ import {
   SettingsBlockToggleRow,
   SettingsScreenTitle,
 } from '@/components/settings/SettingsBlocks';
-import { usePreferences } from '@/settings/preferences';
+import { Colors } from '@/constants/Colors';
+import { type ProximityTransport, usePreferences } from '@/settings/preferences';
+
+const TRANSPORT_OPTIONS: readonly {
+  value: ProximityTransport;
+  label: string;
+}[] = [
+  { value: 'auto', label: 'Auto' },
+  { value: 'ble', label: 'BLE' },
+  { value: 'multipeer', label: 'Legacy iOS' },
+];
 
 export default function DeveloperSettings() {
   const insets = useSafeAreaInsets();
   const developerMode = usePreferences((s) => s.developerMode);
+  const proximityTransport = usePreferences((s) => s.proximityTransport);
   const setPref = usePreferences((s) => s.set);
   const reset = usePreferences((s) => s.reset);
 
@@ -76,6 +87,44 @@ export default function DeveloperSettings() {
                   subtitle="Live · simulate the NFC-tap-feel state machine"
                   onPress={() => { router.push('/dev/bump'); }}
                 />
+              </SettingsBlockSection>
+
+              <SettingsBlockSection
+                title="Proximity transport"
+                footer="BLE/L2CAP is the cross-platform iOS↔Android path (Auto = BLE). 'Legacy iOS' uses MultipeerConnectivity to reach the deployed SwiftUI Solidarity app (service `say-share`); iOS-only — on Android it stays on BLE."
+              >
+                <View
+                  className="bg-mutedSurface rounded-xl flex-row"
+                  style={{ padding: 4 }}
+                >
+                  {TRANSPORT_OPTIONS.map((opt) => {
+                    const active = proximityTransport === opt.value;
+                    return (
+                      <Pressable
+                        key={opt.value}
+                        onPress={() => { setPref('proximityTransport', opt.value); }}
+                        accessibilityRole="button"
+                        accessibilityState={{ selected: active }}
+                        accessibilityLabel={opt.label}
+                        className="flex-1 items-center rounded-lg active:opacity-80"
+                        style={{
+                          paddingVertical: 8,
+                          backgroundColor: active ? Colors.cardBg : 'transparent',
+                        }}
+                      >
+                        <Text
+                          className="text-[13px]"
+                          style={{
+                            color: active ? Colors.text1 : Colors.text2,
+                            fontWeight: active ? '600' : '400',
+                          }}
+                        >
+                          {opt.label}
+                        </Text>
+                      </Pressable>
+                    );
+                  })}
+                </View>
               </SettingsBlockSection>
 
               <SettingsBlockSection
