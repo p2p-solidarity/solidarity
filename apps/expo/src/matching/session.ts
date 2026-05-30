@@ -15,6 +15,8 @@ import { create } from 'zustand';
 
 import { defaultAnimalForId, type SharingLevel } from '@solidarity/shared';
 
+import type { ProximityTransport } from '@/settings/preferences';
+
 import {
   type MatchingConnectionStatus,
   type MatchingPeer,
@@ -98,6 +100,13 @@ interface NitroProximityLike {
   rejectInvitation(peerId: string): void;
   sendData(peerId: string, data: ArrayBuffer): Promise<void>;
   disconnect(peerId: string): void;
+  /**
+   * Select the native transport. Optional because the Nitro spec doesn't
+   * expose it yet — the legacy MultipeerConnectivity path is a pending native
+   * port. The guarded call is a safe no-op until the spec gains the method,
+   * at which point `multipeer` reaches the old Swift iOS app.
+   */
+  setTransportMode?(mode: string): void;
   addEventListener(handler: (event: NitroEventLike) => void): () => void;
 }
 
@@ -137,6 +146,8 @@ interface MatchingState {
   readonly lastErrorMessage?: string;
   readonly infoMessage?: string;
   readonly uwbSpatial: UwbSpatialState;
+  /** Selected proximity transport (mirrors the `proximityTransport` pref). */
+  readonly transportMode: ProximityTransport;
 
   readonly startAdvertising: (
     displayName: string,
@@ -155,6 +166,7 @@ interface MatchingState {
   readonly sendText: (text: string) => void;
   readonly sendSakura: () => void;
   readonly setSharingLevel: (level: SharingLevel) => void;
+  readonly setTransportMode: (mode: ProximityTransport) => Promise<void>;
   readonly clearError: () => void;
 }
 
@@ -361,12 +373,14 @@ export const useMatchingSession = create<MatchingState>((set, get) => ({
   pendingInvitations: [],
   receivedCardIds: [],
   uwbSpatial: { kind: 'idle' },
+  transportMode: 'auto',
 
   startAdvertising: async (displayName, level, discoveryInfo) => {
     await ensureListener(set);
     const nitro = await loadNitro();
     set(() => ({ isAdvertising: true, sharingLevel: level }));
     if (nitro) {
+      nitro.setTransportMode?.(get().transportMode);
       const info = JSON.stringify({ level, ...(discoveryInfo ?? {}) });
       nitro.startAdvertising(displayName, SERVICE_TYPE, info);
     }
@@ -388,7 +402,10 @@ export const useMatchingSession = create<MatchingState>((set, get) => ({
     await ensureListener(set);
     const nitro = await loadNitro();
     set(() => ({ isBrowsing: true }));
-    if (nitro) nitro.startBrowsing(SERVICE_TYPE);
+    if (nitro) {
+      nitro.setTransportMode?.(get().transportMode);
+      nitro.startBrowsing(SERVICE_TYPE);
+    }
     set((s) => ({
       connectionStatus: deriveConnectionStatus(s.isAdvertising, true, s.peers),
     }));
@@ -484,6 +501,14 @@ export const useMatchingSession = create<MatchingState>((set, get) => ({
 
   setSharingLevel: (level) => {
     set(() => ({ sharingLevel: level }));
+  },
+
+  setTransportMode: async (mode) => {
+    set(() => ({ transportMode: mode }));
+    // Push to native if it's already running; the guarded call is a no-op
+    // until the Nitro spec exposes setTransportMode (MC port pending).
+    const nitro = await loadNitro();
+    nitro?.setTransportMode?.(mode);
   },
 
   clearError: () => {
