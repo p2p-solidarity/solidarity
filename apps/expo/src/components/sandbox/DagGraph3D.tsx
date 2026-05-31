@@ -8,23 +8,24 @@
  *     identity (useMemo). Force-directed simulation runs ~200 iterations
  *     with O(n²) repulsion + O(edges) springs. For ≤ 200 nodes this is
  *     under ~50 ms on a modern phone — acceptable for the sandbox.
- *   - Rotation around the Y axis is driven by a Reanimated SharedValue
- *     (UI thread tick), but the per-node projection happens on the JS
- *     thread inside a `useDerivedValue`-like manual loop. To keep both
- *     paths simple we drive a React state mirror at ~30 fps; SVG with
- *     ≤ 200 elements handles that fine.
+ *   - The projection is STATIC (a fixed yaw + tilt) — the force-directed
+ *     layout + perspective already read as 3D. An earlier version drove an
+ *     auto-rotate via a ~30 fps React `setTick`, which re-rendered the whole
+ *     SVG every frame and froze DAG Lab on the A12 ("Maximum update depth
+ *     exceeded"). Per CLAUDE rule 9, high-frequency animation must NOT be React
+ *     state — re-add rotation via a Reanimated SharedValue + Animated SVG if
+ *     it's worth it.
  *   - Author color is deterministic per author pubkey (cheap hash → HSL).
  *   - HEAD nodes render larger + with an outer halo so they stand out.
- *   - Tap-to-pause / tap-to-resume on the auto-rotate ticker, and an
- *     optional `onSelectNode` callback when a node is tapped.
+ *   - `onSelectNode` fires when a node is tapped.
  *
  * No new dependencies — react-native-svg (already pinned in package.json)
  * + react-native-reanimated drive everything. Bundle stays lean.
  *
  * This is sandbox-only; never mounted on the public surface.
  */
-import { useEffect, useMemo, useRef, useState } from 'react';
-import { Pressable, Text, View } from 'react-native';
+import { useMemo } from 'react';
+import { Text, View } from 'react-native';
 import Svg, { Circle, G, Line } from 'react-native-svg';
 
 import { Colors } from '@/constants/Colors';
@@ -61,8 +62,7 @@ interface Edge {
   readonly to: string;
 }
 
-const ROTATE_PERIOD_MS = 24_000; // one revolution in ~24 s
-const FRAME_INTERVAL_MS = 33;     // ~30 fps
+const STATIC_YAW = 0.6;            // fixed 3D viewing angle (no auto-rotate — see `projected`)
 const FORCE_ITERATIONS = 180;
 const FOCAL_DEPTH = 2.4;          // larger = less perspective foreshortening
 const NODE_BASE_RADIUS = 5;
@@ -78,11 +78,6 @@ export function DagGraph3D({
   onSelectNode,
   maxNodes = 200,
 }: DagGraph3DProps) {
-  const [paused, setPaused] = useState(false);
-  const [tick, setTick] = useState(0); // re-render driver
-  const rafRef = useRef<number | null>(null);
-  const startedAtRef = useRef<number>(Date.now());
-
   const limitedNodes = useMemo(
     () => (nodes.length <= maxNodes ? nodes : nodes.slice(0, maxNodes)),
     [nodes, maxNodes]
@@ -91,31 +86,16 @@ export function DagGraph3D({
 
   const { layout, edges } = useMemo(() => computeLayout(limitedNodes, heads), [limitedNodes, heads]);
 
-  useEffect(() => {
-    if (paused || layout.length === 0) return undefined;
-    startedAtRef.current = Date.now();
-    let lastTick = 0;
-    const loop = (): void => {
-      const now = Date.now();
-      if (now - lastTick >= FRAME_INTERVAL_MS) {
-        lastTick = now;
-        setTick((t) => (t + 1) & 0xffff);
-      }
-      rafRef.current = requestAnimationFrame(loop);
-    };
-    rafRef.current = requestAnimationFrame(loop);
-    return () => {
-      if (rafRef.current !== null) cancelAnimationFrame(rafRef.current);
-      rafRef.current = null;
-    };
-  }, [paused, layout.length]);
-
   const projected = useMemo(() => {
     if (layout.length === 0) return { points: [], orderedEdges: [] };
-    const yawRad = paused
-      ? 0
-      : ((Date.now() - startedAtRef.current) % ROTATE_PERIOD_MS) / ROTATE_PERIOD_MS * Math.PI * 2;
-    const tiltRad = 0.45; // a gentle X-axis tilt so the graph looks 3D even when stationary
+    // Static 3D projection: a fixed yaw + tilt gives depth with NO per-frame
+    // re-render. The old `tick`-driven 30 fps auto-rotate re-rendered the whole
+    // SVG (≤200 elements) and pegged the JS thread on the A12 — DAG Lab froze
+    // and React threw "Maximum update depth exceeded". CLAUDE rule 9: high-
+    // frequency animation must never be React state. Re-add rotation via a
+    // Reanimated SharedValue + Animated SVG later if it's worth it.
+    const yawRad = STATIC_YAW;
+    const tiltRad = 0.45; // a gentle X-axis tilt so the graph looks 3D
     const cy = Math.cos(yawRad), sy = Math.sin(yawRad);
     const cx = Math.cos(tiltRad), sx = Math.sin(tiltRad);
     const cw = width / 2;
@@ -175,9 +155,7 @@ export function DagGraph3D({
     points.sort((p, q) => p.z - q.z);
     orderedEdges.sort((p, q) => p.z - q.z);
     return { points, orderedEdges };
-    // Re-evaluated whenever `tick` updates (auto-rotate) or layout/size changes.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [tick, paused, layout, edges, width, height, localAuthorPubkey]);
+  }, [layout, edges, width, height, localAuthorPubkey]);
 
   if (layout.length === 0) {
     return (
@@ -201,10 +179,7 @@ export function DagGraph3D({
   }
 
   return (
-    <Pressable
-      onPress={() => { setPaused((p) => !p); }}
-      accessibilityRole="button"
-      accessibilityLabel={paused ? 'Resume rotation' : 'Pause rotation'}
+    <View
       style={{
         width,
         height,
@@ -269,11 +244,8 @@ export function DagGraph3D({
           {`${String(layout.length)} node${layout.length === 1 ? '' : 's'} · ${String(heads.length)} HEAD${heads.length === 1 ? '' : 's'} · ${String(edges.length)} edge${edges.length === 1 ? '' : 's'}`}
           {overflow > 0 ? ` · +${String(overflow)} hidden` : ''}
         </Text>
-        <Text style={{ color: Colors.text3, fontSize: 10 }}>
-          {paused ? 'tap to resume' : 'tap to pause'}
-        </Text>
       </View>
-    </Pressable>
+    </View>
   );
 }
 

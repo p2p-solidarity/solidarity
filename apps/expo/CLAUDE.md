@@ -225,3 +225,83 @@ Skeletons are for **cold** loads only. If a skeleton flashes when the data is al
 - [ ] Zero `await`s between mount and first paint
 - [ ] `loading` initial value derives from sync cache miss, not `true`
 - [ ] List that links here calls prefetch on press-in
+
+## Error handling & crash diagnostics
+
+Hard-won from the MRZ-camera + DAG/P2P-Lab 閃退 hunt. Read this BEFORE debugging
+any crash — it turns "hours" into "minutes". The recurring failure was an
+exception escaping opaquely (`abort() called`, no type) because error handling
+itself was broken or absent.
+
+### Where crashes are caught — and where they are NOT
+
+| Crash class | Caught by | Result |
+|---|---|---|
+| JS **render** throw in any screen | `RootErrorBoundary` (Expo Router `ErrorBoundary`, re-exported from `app/_layout.tsx`) | Themed error screen + Retry, never a white screen |
+| Uncaught JS error off the render path (timers, events, un-awaited rejects) | global `ErrorUtils` handler (installed by `src/feedback/RootErrorBoundary.tsx`) | Logged `[solidarity:uncaught]`, chained to default |
+| **Native** uncaught exception — a TurboModule raising an NSException on its queue, a worklet throwing out of VisionCamera's async-runner, a C++ `abort` | **nothing — it terminates the process** | …but it NAMES ITSELF (see below). Fix at the call site. |
+
+JS error boundaries CANNOT catch native crashes. The DAG/P2P-Lab crashes are a
+native TurboModule NSException (`ObjCTurboModule::performVoidMethodInvocation`) —
+no JS try/catch or boundary will stop them; read the crash report and guard the
+call site (e.g. don't mount the native view when its module is unavailable).
+
+### Self-identifying crashes — `MrzInstallCrashDiagnostics`
+
+`nitro-modules/mrz-ocr/ios/MrzVisionGuard.mm` installs a process-wide
+`std::set_terminate` handler **at app launch** (`+load` → `dispatch_async(main)`
+so it wraps RN/Hermes' handlers). On any uncaught exception it writes the
+demangled type + message into:
+- the crash report's **Application Specific Information** (`CRSetCrashLogMessage`,
+  via `dlsym` — so it lands in the `.ips` you pull WITHOUT sudo), and
+- an `os_log` fault tagged `[MRZ-FATAL]`.
+
+A `facebook::jsi::JSError`'s message carries the **JS stack**, so a worklet/JS
+crash names the exact function. Without this you get only `abort() called`.
+
+### Pulling a device crash report (the A12 test phone)
+
+Crashes live ON the device (`~/Library/Logs/DiagnosticReports` on the Mac only
+has the Mac's own). Repro device = iPhone XR / A12 (`idevice_id -l`).
+
+```bash
+idevicecrashreport -u <UDID> -k /tmp/xr-crashes   # -k keeps them on device
+# newest Solidarity-*.ips → read the header `asi` (now names the exception) +
+# the faulting thread's queue/stack.
+```
+
+Need the full unified log (Espresso/ANE lines, the raw libc++abi message)?
+`log collect` needs root — run it yourself with `! sudo …`, then `log show` the
+archive with an ABSOLUTE PATH (a `log` shell function shadows `/usr/bin/log`):
+
+```bash
+! sudo log collect --device-udid <UDID> --last 20m --output /tmp/dev.logarchive
+/usr/bin/log show /tmp/dev.logarchive --predicate 'process == "Solidarity"' --info --debug
+```
+
+### Worklet rules (VisionCamera frame processors / async-runner)
+
+The OCR worklet runs on VisionCamera's **async-runner runtime** — NOT the
+Reanimated UI runtime — which has NONE of react-native-worklets' JS-scheduling
+globals. On that runtime:
+
+- ❌ `scheduleOnRN(...)` and `console.log(...)` **throw** (`Object is not a
+  function`; `console.log` routes through `scheduleOnRN`). A throw out of
+  `runAsync` unwinds past Nitro and `std::terminate`s the whole app.
+- ✅ A worklet must be **incapable of escaping**: body in try/catch/finally where
+  the catch and finally only write SharedValues or swallow — never call anything
+  that can throw (guard `frame.dispose()` too).
+- ✅ Hand results back to JS via **SharedValues** (the one channel shared across
+  runtimes), drained by a JS-thread poll. See `MRZCameraStep.tsx`
+  (`acceptSeq`/`errorSeq` channel + 100 ms drain). `scheduleOnRN` IS fine on the
+  UI runtime (gestures/animations, e.g. `FocusedCardView.tsx`) — the ban is
+  async-runner only.
+
+### Native (Nitro / Vision) rules
+
+- A Nitro HybridObject method must NOT throw per-frame for a transient failure —
+  return an empty/no-op result and let the caller skip. Re-throwing across the
+  Nitro/worklet boundary every frame is a terminate risk.
+- Apple Vision `.accurate` on the A12 ANE raises an uncaught **C++** exception
+  (Espresso), NOT an NSException, mid-inference. Catch it in ObjC++ with
+  `catch (...)`, not only `@catch (NSException *)`. See `MrzPerformVisionRequest`.

@@ -17,6 +17,12 @@ Pod::Spec.new do |s|
     'ios/**/*.{swift,h,m,mm}',
   ]
 
+  # Expose the Objective-C exception barrier (MrzVisionGuard) in the pod's
+  # umbrella so the pod's own Swift can call MrzPerformVisionRequest without a
+  # bridging header (CocoaPods pods can't use one). Pods can't catch an
+  # NSException from Swift; this guard does it in ObjC. See MrzVisionGuard.h.
+  s.public_header_files = 'ios/MrzVisionGuard.h'
+
   s.pod_target_xcconfig = {
     'DEFINES_MODULE' => 'YES',
     'SWIFT_VERSION'  => '5.9',
@@ -24,9 +30,13 @@ Pod::Spec.new do |s|
 
   # VisionCamera is required so we can downcast `any HybridFrameSpec` to
   # the concrete `HybridFrame` and read its CMSampleBuffer / CVPixelBuffer
-  # in `HybridMrzOcr.swift`. Vision (text recogniser) is bundled with the
-  # iOS SDK and needs no additional dep.
+  # in `HybridMrzOcr.swift`.
   s.dependency 'VisionCamera'
+
+  # Vision ships with the iOS SDK. Swift's `import Vision` auto-links it, but
+  # MrzVisionGuard.mm calls VNImageRequestHandler via the framework header, so
+  # link it explicitly to be safe.
+  s.frameworks = 'Vision'
 
   load File.join(__dir__, 'nitrogen', 'generated', 'ios', 'MrzOcr+autolinking.rb')
   add_nitrogen_files(s)

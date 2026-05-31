@@ -17,6 +17,10 @@
  * lazy-loads its native deps).
  */
 
+// Type-only import — erased at build time, so it never loads react-native at
+// runtime (the runtime load happens via require() inside the request below).
+import type * as ReactNative from 'react-native';
+
 export type ProximityPermissionResult =
   | { readonly granted: true }
   | {
@@ -52,7 +56,19 @@ export function androidProximityPermissions(apiLevel: number): readonly string[]
  * a silently-dead button.
  */
 export async function ensureProximityPermissions(): Promise<ProximityPermissionResult> {
-  const { PermissionsAndroid, Platform } = await import('react-native');
+  // Load react-native lazily (kept out of static imports so the pure
+  // `androidProximityPermissions` helper above stays unit-testable without RN).
+  //
+  // IMPORTANT: use require(), NOT `await import('react-native')`. A dynamic
+  // wildcard import makes Metro run `metroImportAll` over EVERY react-native
+  // export, which invokes the deprecated `PushNotificationIOS` getter →
+  // `new NativeEventEmitter(NativeModules.PushNotificationManager)`. This app
+  // ships expo-notifications, so RCTPushNotificationManager is NOT linked, the
+  // argument is null, and RN throws an uncaught "Invariant Violation:
+  // `new NativeEventEmitter()` requires a non-null argument" that hard-crashes
+  // the app on the first proximity tap (iOS + Android). require() only touches
+  // the two members we destructure, never PushNotificationIOS.
+  const { PermissionsAndroid, Platform } = require('react-native') as typeof ReactNative;
   if (Platform.OS !== 'android') return { granted: true };
 
   const apiLevel =

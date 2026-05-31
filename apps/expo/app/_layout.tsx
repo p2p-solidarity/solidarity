@@ -68,6 +68,13 @@ import { GROUPS_MANIFEST_SCOPE } from '@/groups/groupManifest';
 import { SHOUTOUTS_MANIFEST_SCOPE } from '@/shoutouts/shoutoutManifest';
 import { VAULT_MANIFEST_SCOPE } from '@/vault/vaultManifest';
 
+// App-wide JS error boundary (wraps <Stack> below so it gets the React
+// component stack of any render throw) + global uncaught-JS handler (installed
+// as a side effect of this import). NATIVE crashes are out of its reach — those
+// self-identify in the crash report via MrzInstallCrashDiagnostics. See
+// src/feedback/RootErrorBoundary.tsx and the CLAUDE.md "Error handling" section.
+import { AppErrorBoundary } from '@/feedback/RootErrorBoundary';
+
 /**
  * Migration check — on first launch after the manifest-pattern upgrade,
  * none of the per-store manifests exist yet but the encrypted records do.
@@ -269,7 +276,9 @@ export default function RootLayout() {
       <KeyboardProvider>
         <SafeAreaProvider>
           <StatusBar style="auto" />
-          <Stack screenOptions={{ headerShown: false }} />
+          <AppErrorBoundary>
+            <Stack screenOptions={{ headerShown: false }} />
+          </AppErrorBoundary>
           <ToastOverlay />
           <ConfirmDialogOverlay />
           <AppAlertOverlay />

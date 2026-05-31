@@ -48,6 +48,15 @@ final class HybridMrzOcr: HybridMrzOcrSpec {
 
   private static let fullFrameRoi = CGRect(x: 0, y: 0, width: 1, height: 1)
 
+  /// Installs the crash-diagnostics terminate handler exactly once, lazily on
+  /// first access (Swift guarantees once-only static-let init). Referenced at
+  /// the top of `scanFrame` so it lands AFTER RN/Hermes install theirs, letting
+  /// ours wrap them — see `MrzInstallCrashDiagnostics`.
+  private static let diagnosticsInstalled: Bool = {
+    MrzInstallCrashDiagnostics()
+    return true
+  }()
+
   private lazy var textRequest: VNRecognizeTextRequest = {
     let request = VNRecognizeTextRequest()
     request.recognitionLevel = .accurate
@@ -65,6 +74,7 @@ final class HybridMrzOcr: HybridMrzOcrSpec {
   }()
 
   func scanFrame(frame: any HybridFrameSpec) throws -> MrzScanResult {
+    _ = Self.diagnosticsInstalled
     guard let native = frame as? NativeFrame else {
       throw RuntimeError.error(withMessage: "Frame is not a native VisionCamera frame")
     }
@@ -86,19 +96,42 @@ final class HybridMrzOcr: HybridMrzOcrSpec {
     )
 
     let startedAt = CFAbsoluteTimeGetCurrent()
-    do {
-      // `scanFrame` runs back-to-back on VisionCamera's async-runner thread,
-      // whose autorelease pool may not drain between calls. Vision allocates
-      // sizeable autoreleased scratch per `perform`; draining it per frame
-      // keeps peak memory flat instead of climbing until iOS jetsams us.
-      // `request.results` survives the pool — it is retained by the request.
-      try autoreleasepool {
-        try handler.perform([request])
-      }
-    } catch {
-      throw RuntimeError.error(withMessage: "Vision OCR failed: \(error.localizedDescription)")
+    // `scanFrame` runs back-to-back on VisionCamera's async-runner thread,
+    // whose autorelease pool may not drain between calls. Vision allocates
+    // sizeable autoreleased scratch per `perform`; draining it per frame keeps
+    // peak memory flat instead of climbing until iOS jetsams us.
+    // (`request.results` survives the pool — it is retained by the request.)
+    //
+    // The perform goes through `MrzPerformVisionRequest`, an Objective-C++
+    // exception barrier: on the A12 (iPhone XR) ANE, Espresso throws an
+    // *uncaught C++ exception* mid neural-net pass (it can also raise an
+    // NSException) — neither is a Swift error, so a Swift `do/catch` cannot
+    // catch it. Uncaught, it unwinds through Nitro's `runOnThread` dispatch
+    // block and `std::terminate`s the whole app (EXC_CRASH / SIGABRT on
+    // `async-runner-1`). The barrier catches both and turns whichever fired —
+    // or any ordinary perform failure — into an `NSError`.
+    // Swift imports the ObjC `NSError *` return as `Error?`, not `NSError?`.
+    let visionError: Error? = autoreleasepool {
+      MrzPerformVisionRequest(handler, [request])
     }
     let elapsedMs = Int((CFAbsoluteTimeGetCurrent() - startedAt) * 1000)
+
+    // Treat any perform failure as "no MRZ this frame" and return an empty
+    // result — identical to a zero-observation frame. We deliberately do NOT
+    // throw: a per-frame OCR miss is a no-op, and re-throwing a Swift error
+    // across the Nitro/worklet boundary every frame buys nothing and is one
+    // more chance to terminate the runner. The user just sees the next frame.
+    if let visionError {
+      lastRoi = nil
+      os_log(
+        "scanFrame: vision perform failed in %{public}dms — skipping frame (%{public}@)",
+        log: mrzLog,
+        type: .error,
+        elapsedMs,
+        visionError.localizedDescription
+      )
+      return Self.emptyResult(for: frame)
+    }
 
     guard let observations = request.results, !observations.isEmpty else {
       lastRoi = nil
@@ -110,13 +143,7 @@ final class HybridMrzOcr: HybridMrzOcrSpec {
         frame.width,
         frame.height
       )
-      return MrzScanResult(
-        draft: nil,
-        candidateCount: 0,
-        confidence: 0,
-        frameWidth: frame.width,
-        frameHeight: frame.height
-      )
+      return Self.emptyResult(for: frame)
     }
 
     let sorted = observations.sorted { lhs, rhs in
@@ -151,13 +178,7 @@ final class HybridMrzOcr: HybridMrzOcrSpec {
         frame.width,
         frame.height
       )
-      return MrzScanResult(
-        draft: nil,
-        candidateCount: 0,
-        confidence: 0,
-        frameWidth: frame.width,
-        frameHeight: frame.height
-      )
+      return Self.emptyResult(for: frame)
     }
 
     let scan = Self.scanTD3(lines: lines)
@@ -181,6 +202,19 @@ final class HybridMrzOcr: HybridMrzOcrSpec {
       draft: scan.draft,
       candidateCount: Double(scan.candidateCount),
       confidence: Double(minConfidence),
+      frameWidth: frame.width,
+      frameHeight: frame.height
+    )
+  }
+
+  /// The "no MRZ visible in this frame" result, shared by the zero-observation,
+  /// empty-lines, and guarded-Vision-failure branches so the empty shape lives
+  /// in one place. Each caller resets `lastRoi` and logs its own reason.
+  private static func emptyResult(for frame: any HybridFrameSpec) -> MrzScanResult {
+    MrzScanResult(
+      draft: nil,
+      candidateCount: 0,
+      confidence: 0,
       frameWidth: frame.width,
       frameHeight: frame.height
     )

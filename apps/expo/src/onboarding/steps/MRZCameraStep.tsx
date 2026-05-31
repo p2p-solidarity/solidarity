@@ -29,7 +29,6 @@ import {
   useFrameOutput,
   type Frame,
 } from 'react-native-vision-camera';
-import { scheduleOnRN } from 'react-native-worklets';
 
 import { getMrzOcr, type MrzOcr, type MrzScanResult } from '@solidarity/nitro-mrz-ocr';
 
@@ -196,6 +195,18 @@ export function MRZCameraStep({
   const ocrCount = useSharedValue<number>(0);
   const ocrDurationSum = useSharedValue<number>(0);
 
+  // Async-runner → JS hand-off channel. The OCR worklet runs on VisionCamera's
+  // async-runner runtime, which has NONE of react-native-worklets' JS-scheduling
+  // globals — so `scheduleOnRN` AND `console.log` are unavailable there and
+  // THROW (that throw, re-thrown from the worklet's own catch, was the 閃退).
+  // SharedValues are the one channel that crosses that runtime boundary, so the
+  // worklet publishes here and the JS poll below drains it. A monotonic seq
+  // counter signals "new value"; the payload rides alongside.
+  const acceptedDraft = useSharedValue<PassportMRZDraft | null>(null);
+  const acceptSeq = useSharedValue<number>(0);
+  const errorMsg = useSharedValue<string | null>(null);
+  const errorSeq = useSharedValue<number>(0);
+
   // Wall-clock anchor for the accept log line (time since mount / rescan).
   const mountTimeRef = useRef<number>(Date.now());
 
@@ -315,6 +326,12 @@ export function MRZCameraStep({
       // disposes the frames the runner rejects.
       const queued = asyncRunner.runAsync(() => {
         'worklet';
+        // Runs on VisionCamera's async-runner runtime. NOTHING may escape this
+        // worklet: an uncaught throw out of `runAsync` unwinds past Nitro's
+        // dispatch block and `std::terminate`s the whole app (this was the
+        // 閃退). `scheduleOnRN` / `console.log` are unavailable on this runtime
+        // and throw, so we hand everything to JS via SharedValues and the catch/
+        // finally only write SharedValues or swallow — they can never throw.
         try {
           const startedAt = Date.now();
           const result: MrzScanResult = mrzOcr.scanFrame(frame);
@@ -322,34 +339,43 @@ export function MRZCameraStep({
           ocrDurationSum.value += Date.now() - startedAt;
 
           if (result.draft != null) {
-            // Validated in native — accept exactly once. Gate further frames on
-            // the worklet thread so no late frame double-fires.
-            scanAccepted.value = true;
-            const accepted: PassportMRZDraft = {
+            // Validated in native — accept exactly once. Publish the draft, then
+            // gate further frames on the worklet thread so no late frame
+            // double-fires. The JS poll reads `acceptedDraft` when `acceptSeq`
+            // advances.
+            acceptedDraft.value = {
               passportNumber: result.draft.passportNumber,
               nationalityCode: result.draft.nationalityCode,
               dateOfBirth: result.draft.dateOfBirth,
               expiryDate: result.draft.expiryDate,
             };
-            const calls = ocrCount.value;
-            const avgMs = Math.round(ocrDurationSum.value / Math.max(1, calls));
-            scheduleOnRN(acceptDraft, accepted, calls, avgMs);
+            scanAccepted.value = true;
+            acceptSeq.value = acceptSeq.value + 1;
             return;
           }
 
-          // No draft — only wake JS when the coarse bucket CHANGES. Steady
-          // scanning (same bucket frame after frame) does zero JS-thread work.
+          // No draft — publish the coarse candidate bucket. The JS poll only
+          // reacts when it CHANGES, so steady scanning does zero React work.
           const bucket =
             result.candidateCount >= 2 ? 2 : result.candidateCount >= 1 ? 1 : 0;
           if (bucket !== lastBucket.value) {
             lastBucket.value = bucket;
-            scheduleOnRN(reportBucket, bucket);
           }
         } catch (e) {
-          const message = e instanceof Error ? e.message : String(e);
-          scheduleOnRN(logOcrError, message);
+          // Must not throw. Stash a best-effort message (extraction itself is
+          // guarded) for the JS poll to surface via `logOcrError`.
+          let message = 'scanFrame worklet error';
+          try {
+            message = e instanceof Error ? e.message : String(e);
+          } catch {}
+          errorMsg.value = message;
+          errorSeq.value = errorSeq.value + 1;
         } finally {
-          frame.dispose();
+          // `dispose` is a native call; guard it so a late / double dispose can
+          // never escape the worklet either.
+          try {
+            frame.dispose();
+          } catch {}
         }
       });
 
@@ -364,8 +390,55 @@ export function MRZCameraStep({
     ocrCount,
     ocrDurationSum,
     mrzOcr,
+    acceptedDraft,
+    acceptSeq,
+    errorMsg,
+    errorSeq,
+  ]);
+
+  // Drain the async-runner SharedValue channel on the JS thread. The OCR
+  // worklet can't call back into JS directly (see onFrame), so it publishes to
+  // SharedValues; reading `.value` here on the JS thread sees those cross-
+  // runtime writes. We dispatch only when a seq counter advances, so a steady
+  // scan does no React work. 100 ms is imperceptible for phase / accept and far
+  // safer than the per-frame JS hop that was terminating the app.
+  useEffect(() => {
+    let seenAccept = 0;
+    let seenError = 0;
+    let seenBucket = -1;
+    const id = setInterval(() => {
+      const accept = acceptSeq.value;
+      if (accept !== seenAccept) {
+        seenAccept = accept;
+        const captured = acceptedDraft.value;
+        if (captured != null) {
+          const calls = ocrCount.value;
+          const avgMs = Math.round(ocrDurationSum.value / Math.max(1, calls));
+          acceptDraft(captured, calls, avgMs);
+        }
+      }
+      const bucket = lastBucket.value;
+      if (bucket !== seenBucket) {
+        seenBucket = bucket;
+        if (bucket >= 0) reportBucket(bucket);
+      }
+      const error = errorSeq.value;
+      if (error !== seenError) {
+        seenError = error;
+        logOcrError(errorMsg.value ?? 'unknown worklet error');
+      }
+    }, 100);
+    return () => clearInterval(id);
+  }, [
+    acceptSeq,
+    acceptedDraft,
+    ocrCount,
+    ocrDurationSum,
     acceptDraft,
+    lastBucket,
     reportBucket,
+    errorSeq,
+    errorMsg,
     logOcrError,
   ]);
 
