@@ -46,6 +46,7 @@ import { useContactStore } from '@/contacts/repository';
 import { useCredentialStore } from '@/credentials/store';
 import { useIssuerMetadataStore } from '@/credentials/issuerStore';
 import { handleDeepLink } from '@/deeplink/router';
+import { AppAlertOverlay } from '@/feedback/appAlert';
 import { ConfirmDialogOverlay } from '@/feedback/confirmDialog';
 import { ToastOverlay } from '@/feedback/toast';
 import { useGroupStore } from '@/groups/store';
@@ -271,6 +272,7 @@ export default function RootLayout() {
           <Stack screenOptions={{ headerShown: false }} />
           <ToastOverlay />
           <ConfirmDialogOverlay />
+          <AppAlertOverlay />
           <ReceivedCardSheet
             visible={receivedCard !== null}
             card={receivedCard}
