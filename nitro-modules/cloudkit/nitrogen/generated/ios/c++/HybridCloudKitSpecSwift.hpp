@@ -187,6 +187,46 @@ namespace margelo::nitro::solidarity::cloudkit {
         std::rethrow_exception(__result.error());
       }
     }
+    inline std::shared_ptr<Promise<void>> writeFileBackup(const std::string& filename, const std::string& content) override {
+      auto __result = _swiftPart.writeFileBackup(filename, content);
+      if (__result.hasError()) [[unlikely]] {
+        std::rethrow_exception(__result.error());
+      }
+      auto __value = std::move(__result.value());
+      return __value;
+    }
+    inline std::shared_ptr<Promise<std::string>> readFileBackup(const std::string& filename) override {
+      auto __result = _swiftPart.readFileBackup(filename);
+      if (__result.hasError()) [[unlikely]] {
+        std::rethrow_exception(__result.error());
+      }
+      auto __value = std::move(__result.value());
+      return __value;
+    }
+    inline std::shared_ptr<Promise<std::vector<std::string>>> listFileBackups() override {
+      auto __result = _swiftPart.listFileBackups();
+      if (__result.hasError()) [[unlikely]] {
+        std::rethrow_exception(__result.error());
+      }
+      auto __value = std::move(__result.value());
+      return __value;
+    }
+    inline std::shared_ptr<Promise<void>> deleteFileBackup(const std::string& filename) override {
+      auto __result = _swiftPart.deleteFileBackup(filename);
+      if (__result.hasError()) [[unlikely]] {
+        std::rethrow_exception(__result.error());
+      }
+      auto __value = std::move(__result.value());
+      return __value;
+    }
+    inline std::shared_ptr<Promise<double>> getFileBackupMtime(const std::string& filename) override {
+      auto __result = _swiftPart.getFileBackupMtime(filename);
+      if (__result.hasError()) [[unlikely]] {
+        std::rethrow_exception(__result.error());
+      }
+      auto __value = std::move(__result.value());
+      return __value;
+    }
 
   private:
     SolidarityCloudKit::HybridCloudKitSpec_cxx _swiftPart;

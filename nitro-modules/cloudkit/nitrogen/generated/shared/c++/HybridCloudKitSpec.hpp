@@ -72,6 +72,11 @@ namespace margelo::nitro::solidarity::cloudkit {
       virtual std::shared_ptr<Promise<void>> removeShare(const std::string& shareId) = 0;
       virtual std::function<void()> addEventListener(const std::function<void(const CloudKitEvent& /* event */)>& handler) = 0;
       virtual void setDriveAccessToken(const std::string& accessToken) = 0;
+      virtual std::shared_ptr<Promise<void>> writeFileBackup(const std::string& filename, const std::string& content) = 0;
+      virtual std::shared_ptr<Promise<std::string>> readFileBackup(const std::string& filename) = 0;
+      virtual std::shared_ptr<Promise<std::vector<std::string>>> listFileBackups() = 0;
+      virtual std::shared_ptr<Promise<void>> deleteFileBackup(const std::string& filename) = 0;
+      virtual std::shared_ptr<Promise<double>> getFileBackupMtime(const std::string& filename) = 0;
 
     protected:
       // Hybrid Setup

@@ -113,4 +113,31 @@ export interface CloudKit
    * CloudKit authenticates the user via the system iCloud account.
    */
   setDriveAccessToken(accessToken: string): void;
+
+  // ── File-based backup blobs ────────────────────────────────────────────
+  /**
+   * Backup storage that mirrors the legacy Swift app's file-based backups
+   * (`Documents/AirMeishiBackup/backup_<ts>.solbk`) rather than a custom
+   * CloudKit record type — so it needs NO production CloudKit schema and
+   * never hits the "Cannot create new type … in production schema" error.
+   *
+   * iOS: writes into the iCloud ubiquity container
+   *   (`FileManager.url(forUbiquityContainerIdentifier:)` →
+   *   `Documents/AirMeishiBackup`), falling back to the app's local
+   *   Documents/AirMeishiBackup when iCloud is unavailable (1:1 with
+   *   solidarity/Services/Backup/BackupManager.swift).
+   * Android: writes into a `Solidarity/Backups` Drive folder via the same
+   *   bearer-token Drive client used for records.
+   *
+   * `content` is base64 of the raw file bytes (a SOLB-framed AES-GCM blob),
+   * so the on-disk file stays byte-compatible with the Swift `.solbk` format.
+   */
+  writeFileBackup(filename: string, content: string): Promise<void>;
+  /** base64 of the raw file bytes. Rejects when the file is missing. */
+  readFileBackup(filename: string): Promise<string>;
+  /** Backup filenames present in the backup folder (unsorted). */
+  listFileBackups(): Promise<string[]>;
+  deleteFileBackup(filename: string): Promise<void>;
+  /** File modification time in epoch ms; 0 when unknown or missing. */
+  getFileBackupMtime(filename: string): Promise<number>;
 }

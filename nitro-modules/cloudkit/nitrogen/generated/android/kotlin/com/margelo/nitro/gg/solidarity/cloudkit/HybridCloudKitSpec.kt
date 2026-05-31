@@ -85,6 +85,26 @@ abstract class HybridCloudKitSpec: HybridObject() {
   @DoNotStrip
   @Keep
   abstract fun setDriveAccessToken(accessToken: String): Unit
+  
+  @DoNotStrip
+  @Keep
+  abstract fun writeFileBackup(filename: String, content: String): Promise<Unit>
+  
+  @DoNotStrip
+  @Keep
+  abstract fun readFileBackup(filename: String): Promise<String>
+  
+  @DoNotStrip
+  @Keep
+  abstract fun listFileBackups(): Promise<Array<String>>
+  
+  @DoNotStrip
+  @Keep
+  abstract fun deleteFileBackup(filename: String): Promise<Unit>
+  
+  @DoNotStrip
+  @Keep
+  abstract fun getFileBackupMtime(filename: String): Promise<Double>
 
   // Default implementation of `HybridObject.toString()`
   override fun toString(): String {

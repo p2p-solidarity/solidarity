@@ -67,6 +67,11 @@ namespace margelo::nitro::solidarity::cloudkit {
     std::shared_ptr<Promise<void>> removeShare(const std::string& shareId) override;
     std::function<void()> addEventListener(const std::function<void(const CloudKitEvent& /* event */)>& handler) override;
     void setDriveAccessToken(const std::string& accessToken) override;
+    std::shared_ptr<Promise<void>> writeFileBackup(const std::string& filename, const std::string& content) override;
+    std::shared_ptr<Promise<std::string>> readFileBackup(const std::string& filename) override;
+    std::shared_ptr<Promise<std::vector<std::string>>> listFileBackups() override;
+    std::shared_ptr<Promise<void>> deleteFileBackup(const std::string& filename) override;
+    std::shared_ptr<Promise<double>> getFileBackupMtime(const std::string& filename) override;
 
   private:
     jni::global_ref<JHybridCloudKitSpec::JavaPart> _javaPart;

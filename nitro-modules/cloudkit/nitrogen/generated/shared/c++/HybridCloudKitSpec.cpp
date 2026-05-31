@@ -27,6 +27,11 @@ namespace margelo::nitro::solidarity::cloudkit {
       prototype.registerHybridMethod("removeShare", &HybridCloudKitSpec::removeShare);
       prototype.registerHybridMethod("addEventListener", &HybridCloudKitSpec::addEventListener);
       prototype.registerHybridMethod("setDriveAccessToken", &HybridCloudKitSpec::setDriveAccessToken);
+      prototype.registerHybridMethod("writeFileBackup", &HybridCloudKitSpec::writeFileBackup);
+      prototype.registerHybridMethod("readFileBackup", &HybridCloudKitSpec::readFileBackup);
+      prototype.registerHybridMethod("listFileBackups", &HybridCloudKitSpec::listFileBackups);
+      prototype.registerHybridMethod("deleteFileBackup", &HybridCloudKitSpec::deleteFileBackup);
+      prototype.registerHybridMethod("getFileBackupMtime", &HybridCloudKitSpec::getFileBackupMtime);
     });
   }
 

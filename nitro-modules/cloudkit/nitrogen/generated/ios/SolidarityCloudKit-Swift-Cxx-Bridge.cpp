@@ -78,6 +78,22 @@ namespace margelo::nitro::solidarity::cloudkit::bridge::swift {
     };
   }
   
+  // pragma MARK: std::function<void(const std::vector<std::string>& /* result */)>
+  Func_void_std__vector_std__string_ create_Func_void_std__vector_std__string_(void* NON_NULL swiftClosureWrapper) noexcept {
+    auto swiftClosure = SolidarityCloudKit::Func_void_std__vector_std__string_::fromUnsafe(swiftClosureWrapper);
+    return [swiftClosure = std::move(swiftClosure)](const std::vector<std::string>& result) mutable -> void {
+      swiftClosure.call(result);
+    };
+  }
+  
+  // pragma MARK: std::function<void(double /* result */)>
+  Func_void_double create_Func_void_double(void* NON_NULL swiftClosureWrapper) noexcept {
+    auto swiftClosure = SolidarityCloudKit::Func_void_double::fromUnsafe(swiftClosureWrapper);
+    return [swiftClosure = std::move(swiftClosure)](double result) mutable -> void {
+      swiftClosure.call(result);
+    };
+  }
+  
   // pragma MARK: std::shared_ptr<HybridCloudKitSpec>
   std::shared_ptr<HybridCloudKitSpec> create_std__shared_ptr_HybridCloudKitSpec_(void* NON_NULL swiftUnsafePointer) noexcept {
     SolidarityCloudKit::HybridCloudKitSpec_cxx swiftPart = SolidarityCloudKit::HybridCloudKitSpec_cxx::fromUnsafe(swiftUnsafePointer);

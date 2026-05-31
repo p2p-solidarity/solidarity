@@ -26,6 +26,11 @@ public protocol HybridCloudKitSpec_protocol: HybridObject {
   func removeShare(shareId: String) throws -> Promise<Void>
   func addEventListener(handler: @escaping (_ event: CloudKitEvent) -> Void) throws -> () -> Void
   func setDriveAccessToken(accessToken: String) throws -> Void
+  func writeFileBackup(filename: String, content: String) throws -> Promise<Void>
+  func readFileBackup(filename: String) throws -> Promise<String>
+  func listFileBackups() throws -> Promise<[String]>
+  func deleteFileBackup(filename: String) throws -> Promise<Void>
+  func getFileBackupMtime(filename: String) throws -> Promise<Double>
 }
 
 public extension HybridCloudKitSpec_protocol {

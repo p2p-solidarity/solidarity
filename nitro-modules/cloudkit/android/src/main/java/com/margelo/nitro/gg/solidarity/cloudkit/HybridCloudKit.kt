@@ -24,6 +24,7 @@
  */
 package com.margelo.nitro.gg.solidarity.cloudkit
 
+import android.util.Base64
 import com.margelo.nitro.core.Promise
 import java.util.UUID
 import java.util.concurrent.locks.ReentrantLock
@@ -41,6 +42,9 @@ class HybridCloudKit : HybridCloudKitSpec() {
 
   /** recordType → folder id, populated lazily. */
   private val typeFolderIds = mutableMapOf<String, String>()
+
+  /** `Solidarity/Backups` folder id for file-based backups, lazily resolved. */
+  private var backupFolderId: String? = null
 
   /** recordId (UUID) → Drive file id. */
   private val recordIdToFileId = mutableMapOf<String, String>()
@@ -62,6 +66,12 @@ class HybridCloudKit : HybridCloudKitSpec() {
 
     /** MIME type written to Drive for record bodies. */
     private const val RECORD_MIME = "application/json"
+
+    /** Subfolder under `Solidarity/` holding file-based backups. */
+    private const val BACKUP_FOLDER_NAME = "Backups"
+
+    /** MIME type for SOLB-framed backup blobs. */
+    private const val BACKUP_MIME = "application/octet-stream"
   }
 
   // MARK: - Helpers
@@ -311,6 +321,54 @@ class HybridCloudKit : HybridCloudKitSpec() {
     }
   }
 
+  // MARK: - File-based backup (Drive Solidarity/Backups)
+  //
+  // Mirrors the iOS ubiquity-container file backup. `content` is base64 of
+  // the SOLB-framed AES-GCM blob; we store it as an opaque file in a
+  // dedicated Drive folder so backups need no CloudKit-style schema.
+
+  override fun writeFileBackup(filename: String, content: String): Promise<Unit> = Promise.async {
+    val folder = ensureBackupFolder()
+    val existing = drive.listFiles(backupQuery(folder, filename)).firstOrNull()
+    val body = Base64.decode(content, Base64.NO_WRAP)
+    drive.upsertFile(
+      name = filename,
+      mimeType = BACKUP_MIME,
+      body = body,
+      parents = listOf(folder),
+      appProperties = mapOf("solidarityBackupFile" to filename),
+      existingId = existing?.id,
+    )
+    emit(makeEvent(CloudKitEventKind.RECORDSAVED, recordId = filename, recordType = "FileBackup"))
+  }
+
+  override fun readFileBackup(filename: String): Promise<String> = Promise.async {
+    val folder = ensureBackupFolder()
+    val file = drive.listFiles(backupQuery(folder, filename)).firstOrNull()
+      ?: throw IllegalArgumentException("Backup not found: $filename")
+    val bytes = drive.fetchFileContent(file.id)
+    return@async Base64.encodeToString(bytes, Base64.NO_WRAP)
+  }
+
+  override fun listFileBackups(): Promise<Array<String>> = Promise.async {
+    val folder = ensureBackupFolder()
+    val q = "'$folder' in parents and trashed = false"
+    return@async drive.listFiles(q).map { it.name }.toTypedArray()
+  }
+
+  override fun deleteFileBackup(filename: String): Promise<Unit> = Promise.async {
+    val folder = ensureBackupFolder()
+    val file = drive.listFiles(backupQuery(folder, filename)).firstOrNull() ?: return@async
+    drive.deleteFile(file.id)
+    emit(makeEvent(CloudKitEventKind.RECORDDELETED, recordId = filename))
+  }
+
+  override fun getFileBackupMtime(filename: String): Promise<Double> = Promise.async {
+    val folder = ensureBackupFolder()
+    val file = drive.listFiles(backupQuery(folder, filename)).firstOrNull() ?: return@async 0.0
+    return@async file.modifiedTime.toDouble()
+  }
+
   // MARK: - Internals
 
   private fun ensureRootFolder(): String {
@@ -329,6 +387,18 @@ class HybridCloudKit : HybridCloudKitSpec() {
     withState { typeFolderIds[recordType] = id }
     return id
   }
+
+  private fun ensureBackupFolder(): String {
+    val existing = withState { backupFolderId }
+    if (existing != null) return existing
+    val root = ensureRootFolder()
+    val id = drive.ensureFolder(BACKUP_FOLDER_NAME, parentId = root)
+    withState { backupFolderId = id }
+    return id
+  }
+
+  private fun backupQuery(folderId: String, filename: String): String =
+    "name = '${filename.replace("'", "\\'")}' and '$folderId' in parents and trashed = false"
 
   /** Best-effort fallback: list the type folders and try to find the record. */
   private fun resolveRecordIdToFileId(recordId: String): String? {
