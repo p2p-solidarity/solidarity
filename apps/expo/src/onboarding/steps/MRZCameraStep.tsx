@@ -24,6 +24,7 @@ import { useSharedValue } from 'react-native-reanimated';
 import {
   Camera,
   CommonResolutions,
+  useAsyncRunner,
   useCameraDevice,
   useFrameOutput,
   type Frame,
@@ -57,23 +58,21 @@ export interface MRZCameraStepProps {
 }
 
 /**
- * Run OCR on every frame VisionCamera dispatches (no JS-side throttle).
+ * No JS-side frame gate (`1` = consider every frame).
  *
  * The original SwiftUI `MRZScannerService` runs OCR back-to-back via an
  * `_isProcessingFrame` lock + `alwaysDiscardsLateVideoFrames = true` — as
  * soon as one Vision call returns, the next available frame is OCR'd.
- * No artificial gating.
  *
- * In VisionCamera v5 the frame-processor worklet is synchronous, so OCR
- * already blocks the worklet thread for its full duration (~100-150ms on
- * 720p `.accurate`) and the camera drops frames at the native layer for
- * us. Adding a JS-side `tick % N` gate on top of that was costing one
- * extra ~33ms frame cycle per OCR round for no gain — the throttle never
- * activated when OCR was the bottleneck (always true on iOS Vision), and
- * on Android ML Kit (fast — ~80ms) it just halved attempts/sec.
- *
- * Keeping the constant + tick counter as a future knob (e.g. for thermal
- * back-off) — `1` means "run every frame, match Swift's cadence".
+ * We get the same "one in flight, drop the rest" cadence from VisionCamera's
+ * `useAsyncRunner` (see `onFrame`): the heavy `.accurate` OCR runs on a
+ * dedicated worklet runtime and `runAsync` rejects new frames while one is in
+ * flight, so the capture thread is NEVER blocked and the bounded buffer pool
+ * never backs up. (Running OCR synchronously on the frame-output worklet —
+ * the previous design — blocked that thread for ~100-300ms at 1080p and
+ * accumulated pixel-buffer + Vision scratch memory until iOS jetsammed the
+ * app mid-scan.) A JS-side `tick % N` gate on top of that backpressure buys
+ * nothing, so this stays `1`. Keep the constant as a future thermal knob.
  */
 const FRAME_THROTTLE = 1;
 
@@ -207,6 +206,13 @@ export function MRZCameraStep({
   // VisionCamera frame outputs).
   const mrzOcr = useMemo<MrzOcr>(() => getMrzOcr(), []);
 
+  // Dedicated worklet runtime for the heavy Vision OCR. `runAsync` keeps a
+  // single task in flight and rejects frames while busy, so the camera's
+  // frame-output thread is never blocked and its bounded buffer pool never
+  // backs up (the previous synchronous design starved both → mid-scan jetsam
+  // crash on device).
+  const asyncRunner = useAsyncRunner();
+
   /** Set the React-visible phase, guarding against a redundant setState so a
    *  repeated signal never re-renders. */
   const setPhaseTo = useCallback((next: ScanPhase) => {
@@ -287,6 +293,7 @@ export function MRZCameraStep({
   const onFrame = useMemo(() => {
     return (frame: Frame): void => {
       'worklet';
+      // Cheap synchronous gates stay on the capture thread and dispose at once.
       if (scanAccepted.value) {
         frame.dispose();
         return;
@@ -299,45 +306,58 @@ export function MRZCameraStep({
         return;
       }
 
-      try {
-        const startedAt = Date.now();
-        const result: MrzScanResult = mrzOcr.scanFrame(frame);
-        ocrCount.value += 1;
-        ocrDurationSum.value += Date.now() - startedAt;
+      // Offload the heavy Vision `.accurate` OCR to the async runtime. While
+      // one OCR is in flight `runAsync` returns false for every new frame, so
+      // the capture thread keeps flowing and only ONE frame's worth of pixel
+      // buffer + Vision scratch memory is ever alive — the backpressure that
+      // keeps this off iOS's jetsam radar. We own the frame until the task
+      // finishes, so it is disposed INSIDE the callback; the outer worklet only
+      // disposes the frames the runner rejects.
+      const queued = asyncRunner.runAsync(() => {
+        'worklet';
+        try {
+          const startedAt = Date.now();
+          const result: MrzScanResult = mrzOcr.scanFrame(frame);
+          ocrCount.value += 1;
+          ocrDurationSum.value += Date.now() - startedAt;
 
-        if (result.draft != null) {
-          // Validated in native — accept exactly once. Gate further frames on
-          // the worklet thread so no late frame double-fires.
-          scanAccepted.value = true;
-          const accepted: PassportMRZDraft = {
-            passportNumber: result.draft.passportNumber,
-            nationalityCode: result.draft.nationalityCode,
-            dateOfBirth: result.draft.dateOfBirth,
-            expiryDate: result.draft.expiryDate,
-          };
-          const calls = ocrCount.value;
-          const avgMs = Math.round(ocrDurationSum.value / Math.max(1, calls));
-          scheduleOnRN(acceptDraft, accepted, calls, avgMs);
+          if (result.draft != null) {
+            // Validated in native — accept exactly once. Gate further frames on
+            // the worklet thread so no late frame double-fires.
+            scanAccepted.value = true;
+            const accepted: PassportMRZDraft = {
+              passportNumber: result.draft.passportNumber,
+              nationalityCode: result.draft.nationalityCode,
+              dateOfBirth: result.draft.dateOfBirth,
+              expiryDate: result.draft.expiryDate,
+            };
+            const calls = ocrCount.value;
+            const avgMs = Math.round(ocrDurationSum.value / Math.max(1, calls));
+            scheduleOnRN(acceptDraft, accepted, calls, avgMs);
+            return;
+          }
+
+          // No draft — only wake JS when the coarse bucket CHANGES. Steady
+          // scanning (same bucket frame after frame) does zero JS-thread work.
+          const bucket =
+            result.candidateCount >= 2 ? 2 : result.candidateCount >= 1 ? 1 : 0;
+          if (bucket !== lastBucket.value) {
+            lastBucket.value = bucket;
+            scheduleOnRN(reportBucket, bucket);
+          }
+        } catch (e) {
+          const message = e instanceof Error ? e.message : String(e);
+          scheduleOnRN(logOcrError, message);
+        } finally {
           frame.dispose();
-          return;
         }
+      });
 
-        // No draft — only wake JS when the coarse bucket CHANGES. Steady
-        // scanning (same bucket frame after frame) does zero JS-thread work.
-        const bucket =
-          result.candidateCount >= 2 ? 2 : result.candidateCount >= 1 ? 1 : 0;
-        if (bucket !== lastBucket.value) {
-          lastBucket.value = bucket;
-          scheduleOnRN(reportBucket, bucket);
-        }
-      } catch (e) {
-        const message = e instanceof Error ? e.message : String(e);
-        scheduleOnRN(logOcrError, message);
-      } finally {
-        frame.dispose();
-      }
+      // Runner busy → drop this frame immediately so the pipeline never stalls.
+      if (!queued) frame.dispose();
     };
   }, [
+    asyncRunner,
     frameTick,
     scanAccepted,
     lastBucket,

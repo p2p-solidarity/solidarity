@@ -87,7 +87,14 @@ final class HybridMrzOcr: HybridMrzOcrSpec {
 
     let startedAt = CFAbsoluteTimeGetCurrent()
     do {
-      try handler.perform([request])
+      // `scanFrame` runs back-to-back on VisionCamera's async-runner thread,
+      // whose autorelease pool may not drain between calls. Vision allocates
+      // sizeable autoreleased scratch per `perform`; draining it per frame
+      // keeps peak memory flat instead of climbing until iOS jetsams us.
+      // `request.results` survives the pool — it is retained by the request.
+      try autoreleasepool {
+        try handler.perform([request])
+      }
     } catch {
       throw RuntimeError.error(withMessage: "Vision OCR failed: \(error.localizedDescription)")
     }
