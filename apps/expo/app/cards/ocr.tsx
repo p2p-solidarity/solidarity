@@ -24,10 +24,11 @@
 import * as ImagePicker from 'expo-image-picker';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useCallback, useState } from 'react';
-import { Alert, Image, Linking, Pressable, ScrollView, View } from 'react-native';
+import { Image, Linking, Pressable, ScrollView, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { SfIcon } from '@/components/icons/SfIcon';
+import { appAlert, showError } from '@/feedback/appAlert';
 import {
   ExtractedDataContent,
   LanguageSelectionContent,
@@ -79,11 +80,13 @@ export default function OcrScannerScreen() {
         setExtraction({ kind: 'ready', card, confidenceScores });
         haptic('success');
       } catch (err: unknown) {
-        const msg =
-          err instanceof Error ? err.message : 'Failed to extract information.';
         setExtraction({ kind: 'idle' });
         haptic('error');
-        Alert.alert('Error', msg);
+        showError({
+          context: 'Scan Business Card › OCR',
+          summary: 'Failed to extract information.',
+          error: err,
+        });
       }
     },
     [selectedLanguage]
@@ -97,19 +100,18 @@ export default function OcrScannerScreen() {
       granted = req.granted;
     }
     if (!granted) {
-      Alert.alert(
-        'Camera access required',
-        'Enable Camera in Settings to scan business cards.',
-        [
-          { text: 'Cancel', style: 'cancel' },
+      appAlert({
+        title: 'Camera access required',
+        message: 'Enable Camera in Settings to scan business cards.',
+        buttons: [
+          { label: 'Cancel', style: 'cancel' },
           {
-            text: 'Open Settings',
-            onPress: () => {
-              void Linking.openSettings();
-            },
+            label: 'Open Settings',
+            style: 'default',
+            onPress: () => { void Linking.openSettings(); },
           },
-        ]
-      );
+        ],
+      });
       return;
     }
     const result = await ImagePicker.launchCameraAsync({
@@ -128,10 +130,18 @@ export default function OcrScannerScreen() {
   const handleChooseFromLibrary = useCallback(async () => {
     const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (!perm.granted) {
-      Alert.alert(
-        'Photo access required',
-        'Enable Photos access in Settings to choose a business card image.'
-      );
+      appAlert({
+        title: 'Photo access required',
+        message: 'Enable Photos access in Settings to choose a business card image.',
+        buttons: [
+          { label: 'Cancel', style: 'cancel' },
+          {
+            label: 'Open Settings',
+            style: 'default',
+            onPress: () => { void Linking.openSettings(); },
+          },
+        ],
+      });
       return;
     }
     const result = await ImagePicker.launchImageLibraryAsync({

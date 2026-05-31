@@ -21,7 +21,6 @@ import { router } from 'expo-router';
 import { useState } from 'react';
 import {
   ActivityIndicator,
-  Alert,
   Pressable,
   ScrollView,
   Text,
@@ -32,6 +31,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { ThemedButton } from '@/components/themed';
 import { Colors } from '@/constants/Colors';
+import { showError } from '@/feedback/appAlert';
 import { pushToast } from '@/feedback/toast';
 import {
   CURRENT_USER_RECORD_ID,
@@ -154,7 +154,7 @@ export default function CreateGroup(): React.JSX.Element {
       pushToast(`Created "${trimmed}"`, 'success');
       router.replace({ pathname: '/groups/[id]', params: { id } });
     } catch (e) {
-      Alert.alert('Error', e instanceof Error ? e.message : 'Unknown error');
+      showError({ context: 'Groups › Create', summary: "Couldn't create the group.", error: e });
     } finally {
       setIsCreating(false);
     }

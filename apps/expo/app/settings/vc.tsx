@@ -26,7 +26,7 @@ import * as FileSystem from 'expo-file-system/legacy';
 import { router } from 'expo-router';
 import * as Sharing from 'expo-sharing';
 import { useEffect, useState } from 'react';
-import { Alert, ScrollView, View } from 'react-native';
+import { ScrollView, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import {
@@ -36,6 +36,7 @@ import {
   SettingsScreenTitle,
 } from '@/components/settings/SettingsBlocks';
 import { useCredentialStore } from '@/credentials/store';
+import { appAlert, showError } from '@/feedback/appAlert';
 import { pushToast } from '@/feedback/toast';
 import { requireBiometric } from '@/keychain';
 import { usePreferences } from '@/settings/preferences';
@@ -76,7 +77,7 @@ export default function VcSettings() {
   const onExportVcs = async () => {
     if (busy) return;
     if (credentials.length === 0) {
-      Alert.alert('VC Management', 'No VCs found to export.');
+      appAlert({ title: 'VC Management', message: 'No VCs found to export.' });
       return;
     }
     setBusy(true);
@@ -105,7 +106,7 @@ export default function VcSettings() {
         encoding: FileSystem.EncodingType.UTF8,
       });
       if (!(await Sharing.isAvailableAsync())) {
-        Alert.alert('VC Management', `Saved to ${fileUri}`);
+        appAlert({ title: 'VC Management', message: `Saved to ${fileUri}` });
         return;
       }
       await Sharing.shareAsync(fileUri, {
@@ -113,7 +114,7 @@ export default function VcSettings() {
         dialogTitle: 'Export Verifiable Credentials',
       });
     } catch (err) {
-      Alert.alert('VC Management', (err as Error).message);
+      showError({ context: 'VC Management › Export', summary: 'Export failed.', error: err });
     } finally {
       setBusy(false);
     }
@@ -149,7 +150,7 @@ export default function VcSettings() {
       // Until the verifier ports we just count the JWTs.
       const total = parsed.vcs.length;
       if (total === 0) {
-        Alert.alert('VC Management', 'No VCs found in the file.');
+        appAlert({ title: 'VC Management', message: 'No VCs found in the file.' });
         return;
       }
       pushToast(
@@ -157,7 +158,7 @@ export default function VcSettings() {
         'info'
       );
     } catch (err) {
-      Alert.alert('VC Management', `Failed to read file: ${(err as Error).message}`);
+      showError({ context: 'VC Management › Import', summary: 'Failed to read file.', error: err });
     } finally {
       setBusy(false);
     }

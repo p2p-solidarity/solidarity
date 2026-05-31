@@ -12,7 +12,6 @@
 import { router, useLocalSearchParams } from 'expo-router';
 import { useCallback, useEffect, useState } from 'react';
 import {
-  Alert,
   Pressable,
   ScrollView,
   Text,
@@ -23,6 +22,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useCardStore } from '@/cards/cardManager';
 import { AnimalSelectorGrid, BusinessCardForm } from '@/components/cards';
 import { SfIcon } from '@/components/icons/SfIcon';
+import { appAlert } from '@/feedback/appAlert';
 import { Colors } from '@/constants/Colors';
 import { haptic } from '@/feedback/haptics';
 import { pushToast } from '@/feedback/toast';
@@ -59,7 +59,7 @@ export default function EditCardScreen() {
       const merged: BusinessCard = { ...card, animal };
       const result = await upsert(merged);
       if (!result.ok) {
-        Alert.alert('Error', result.error.message);
+        appAlert({ title: 'Error', message: result.error.message });
         haptic('error');
         return;
       }

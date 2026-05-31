@@ -24,7 +24,7 @@
  */
 import { router } from 'expo-router';
 import { useEffect, useState } from 'react';
-import { Alert, ScrollView, View } from 'react-native';
+import { ScrollView, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import {
@@ -36,6 +36,8 @@ import {
   SettingsScreenTitle,
 } from '@/components/settings/SettingsBlocks';
 import { useCredentialStore } from '@/credentials/store';
+import { appAlert, showError } from '@/feedback/appAlert';
+import { confirmDialog } from '@/feedback/confirmDialog';
 import { pushToast } from '@/feedback/toast';
 import {
   ensureSigningKey,
@@ -57,19 +59,16 @@ export default function DataSyncSettings() {
     void hydrateCreds();
   }, [hydrateCreds]);
 
-  const onResetIdentityKeys = () => {
-    Alert.alert(
-      'Reset Identity Keys?',
-      "Removes corrupted iCloud Keychain DID entries and switches your master key to local-only. Existing credentials will need to be re-issued. You'll be asked to relaunch the app.",
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Reset & Disable iCloud DID Sync',
-          style: 'destructive',
-          onPress: () => { void resetIdentityKeys(); },
-        },
-      ]
-    );
+  const onResetIdentityKeys = async () => {
+    const ok = await confirmDialog({
+      title: 'Reset Identity Keys?',
+      message:
+        "Removes corrupted iCloud Keychain DID entries and switches your master key to local-only. Existing credentials will need to be re-issued. You'll be asked to relaunch the app.",
+      confirmLabel: 'Reset & Disable iCloud DID Sync',
+      destructive: true,
+    });
+    if (!ok) return;
+    await resetIdentityKeys();
   };
 
   const resetIdentityKeys = async () => {
@@ -85,12 +84,16 @@ export default function DataSyncSettings() {
       }
       await resetSigningKeyForTesting();
       await ensureSigningKey();
-      Alert.alert(
-        'Reset Complete',
-        'Identity keys reset to local-only. Please force-quit and relaunch the app.'
-      );
+      appAlert({
+        title: 'Reset Complete',
+        message: 'Identity keys reset to local-only. Please force-quit and relaunch the app.',
+      });
     } catch (err) {
-      Alert.alert('Authentication Failed', (err as Error).message);
+      showError({
+        context: 'Data & Sync › Reset Identity Keys',
+        summary: 'Authentication failed.',
+        error: err,
+      });
     } finally {
       setBusy(false);
     }
@@ -106,7 +109,11 @@ export default function DataSyncSettings() {
       // expo-sharing.shareAsync(uri) once the JSON exporter ships.
       pushToast('Graph export lands next iteration', 'info');
     } catch (err) {
-      Alert.alert('Export Error', (err as Error).message);
+      showError({
+        context: 'Data & Sync › Export Graph',
+        summary: 'Export failed.',
+        error: err,
+      });
     }
   };
 
@@ -142,7 +149,7 @@ export default function DataSyncSettings() {
                 icon="key.slash"
                 title="Reset Identity Keys (Local-Only)"
                 subtitle="Use if Save Passport Credential keeps failing"
-                onPress={onResetIdentityKeys}
+                onPress={() => { void onResetIdentityKeys(); }}
               />
             </SettingsBlockSection>
           ) : null}

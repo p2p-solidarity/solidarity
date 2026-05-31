@@ -20,7 +20,7 @@
  */
 import { router, Stack } from 'expo-router';
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Alert, ScrollView, Text, useWindowDimensions, View } from 'react-native';
+import { ScrollView, Text, useWindowDimensions, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { schnorr } from '@noble/curves/secp256k1.js';
 import { randomBytes } from '@noble/hashes/utils.js';
@@ -42,6 +42,7 @@ import {
   hexEncode,
   signNode,
 } from '@/dag/node';
+import { confirmDialog } from '@/feedback/confirmDialog';
 import { haptic } from '@/feedback/haptics';
 import { pushToast } from '@/feedback/toast';
 import { usePreferences } from '@/settings/preferences';
@@ -215,27 +216,24 @@ export default function CommonFriendsLab() {
   }, [refresh]);
 
   const clearOthersOnly = useCallback(() => {
-    Alert.alert(
-      'Clear all DAG nodes?',
-      'Common Friends shares the same DAG store as other Labs. Clearing here wipes everything (your nodes too). Use DAG Lab "Clear all" if you want explicit control.',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Clear all',
-          style: 'destructive',
-          onPress: () => {
-            try {
-              getDagStore().clear();
-              setSelectedOther(null);
-              refresh();
-              pushToast('DAG cleared', 'success', 2000);
-            } catch (err) {
-              pushToast(err instanceof Error ? err.message : 'Clear failed', 'error', 3000);
-            }
-          },
-        },
-      ]
-    );
+    void (async () => {
+      const ok = await confirmDialog({
+        title: 'Clear all DAG nodes?',
+        message:
+          'Common Friends shares the same DAG store as other Labs. Clearing here wipes everything (your nodes too). Use DAG Lab "Clear all" if you want explicit control.',
+        confirmLabel: 'Clear all',
+        destructive: true,
+      });
+      if (!ok) return;
+      try {
+        getDagStore().clear();
+        setSelectedOther(null);
+        refresh();
+        pushToast('DAG cleared', 'success', 2000);
+      } catch (err) {
+        pushToast(err instanceof Error ? err.message : 'Clear failed', 'error', 3000);
+      }
+    })();
   }, [refresh]);
 
   if (!developerMode) {

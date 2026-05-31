@@ -21,10 +21,11 @@
  */
 import { router } from 'expo-router';
 import { useState } from 'react';
-import { Alert, Pressable, ScrollView, Text, View } from 'react-native';
+import { Pressable, ScrollView, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { SfIcon } from '@/components/icons/SfIcon';
+import { appAlert, showError } from '@/feedback/appAlert';
 import {
   SettingsBackToolbar,
   SettingsBlockDangerRow,
@@ -107,19 +108,23 @@ export default function SecuritySettings() {
           t('security.prompt.rotateMasterKey')
         );
         if (!result.success) {
-          Alert.alert(
-            t('security.alertTitle'),
-            t(`security.error.${result.reason}`)
-          );
+          appAlert({
+            title: t('security.alertTitle'),
+            message: t(`security.error.${result.reason}`),
+          });
           setRotating(false);
           return;
         }
       }
       await resetSigningKeyForTesting();
       await ensureSigningKey();
-      Alert.alert(t('security.alertTitle'), t('security.rotation.success'));
+      appAlert({ title: t('security.alertTitle'), message: t('security.rotation.success') });
     } catch (err) {
-      Alert.alert(t('security.alertTitle'), (err as Error).message);
+      showError({
+        context: 'Security › Rotate Master Key',
+        summary: t('security.alertTitle'),
+        error: err,
+      });
     } finally {
       setRotating(false);
     }

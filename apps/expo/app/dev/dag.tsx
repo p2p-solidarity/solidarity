@@ -20,7 +20,7 @@
 import * as Clipboard from 'expo-clipboard';
 import { router, Stack } from 'expo-router';
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Alert, Pressable, ScrollView, Text, TextInput, useWindowDimensions, View } from 'react-native';
+import { Pressable, ScrollView, Text, TextInput, useWindowDimensions, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { DagGraph3D } from '@/components/sandbox/DagGraph3D';
@@ -41,6 +41,7 @@ import {
   verifyNode,
 } from '@/dag/node';
 import { replay, type DagProjection } from '@/dag/replay';
+import { confirmDialog } from '@/feedback/confirmDialog';
 import { haptic } from '@/feedback/haptics';
 import { pushToast } from '@/feedback/toast';
 import { usePreferences } from '@/settings/preferences';
@@ -146,40 +147,36 @@ export default function DagLab() {
   }, [noteInput, refresh]);
 
   const revokeNode = useCallback((targetId: string) => {
-    Alert.alert(
-      'Revoke node?',
-      `Appends a "revoked" node referencing ${targetId.slice(0, 12)}…. Replay will skip it; the raw node stays in the store.`,
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Revoke',
-          style: 'destructive',
-          onPress: () => {
-            try {
-              const { privkey, pubkeyHex } = loadOrCreateDevKey();
-              const store = getDagStore();
-              const unsigned: DagNodeUnsigned = {
-                author: pubkeyHex,
-                parents: [targetId],
-                kind: KIND_DAG_NODE,
-                action: 'revoked',
-                payload: { revokes_id: targetId },
-                created_at: Math.floor(Date.now() / 1000),
-              };
-              const node = signNode(unsigned, privkey);
-              store.appendNode(node);
-              pushToast('Revocation appended', 'success', 2000);
-              haptic('success');
-              refresh();
-              setReplaySummary(null); // stale
-            } catch (err) {
-              pushToast(err instanceof Error ? err.message : 'Revoke failed', 'error', 3000);
-              haptic('error');
-            }
-          },
-        },
-      ]
-    );
+    void (async () => {
+      const ok = await confirmDialog({
+        title: 'Revoke node?',
+        message: `Appends a "revoked" node referencing ${targetId.slice(0, 12)}…. Replay will skip it; the raw node stays in the store.`,
+        confirmLabel: 'Revoke',
+        destructive: true,
+      });
+      if (!ok) return;
+      try {
+        const { privkey, pubkeyHex } = loadOrCreateDevKey();
+        const store = getDagStore();
+        const unsigned: DagNodeUnsigned = {
+          author: pubkeyHex,
+          parents: [targetId],
+          kind: KIND_DAG_NODE,
+          action: 'revoked',
+          payload: { revokes_id: targetId },
+          created_at: Math.floor(Date.now() / 1000),
+        };
+        const node = signNode(unsigned, privkey);
+        store.appendNode(node);
+        pushToast('Revocation appended', 'success', 2000);
+        haptic('success');
+        refresh();
+        setReplaySummary(null); // stale
+      } catch (err) {
+        pushToast(err instanceof Error ? err.message : 'Revoke failed', 'error', 3000);
+        haptic('error');
+      }
+    })();
   }, [refresh]);
 
   const verifyAll = useCallback(() => {
@@ -252,28 +249,25 @@ export default function DagLab() {
   }, [refresh]);
 
   const clearAll = useCallback(() => {
-    Alert.alert(
-      'Clear DAG?',
-      'Wipes every node and the HEAD set. The sandbox secp256k1 key survives — use Reset sandbox key in P2P Lab to regenerate that too.',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Clear',
-          style: 'destructive',
-          onPress: () => {
-            try {
-              getDagStore().clear();
-              setVerification(null);
-              setReplaySummary(null);
-              refresh();
-              pushToast('DAG cleared', 'success', 2000);
-            } catch (err) {
-              pushToast(err instanceof Error ? err.message : 'Clear failed', 'error', 3000);
-            }
-          },
-        },
-      ]
-    );
+    void (async () => {
+      const ok = await confirmDialog({
+        title: 'Clear DAG?',
+        message:
+          'Wipes every node and the HEAD set. The sandbox secp256k1 key survives — use Reset sandbox key in P2P Lab to regenerate that too.',
+        confirmLabel: 'Clear',
+        destructive: true,
+      });
+      if (!ok) return;
+      try {
+        getDagStore().clear();
+        setVerification(null);
+        setReplaySummary(null);
+        refresh();
+        pushToast('DAG cleared', 'success', 2000);
+      } catch (err) {
+        pushToast(err instanceof Error ? err.message : 'Clear failed', 'error', 3000);
+      }
+    })();
   }, [refresh]);
 
   if (!developerMode) {

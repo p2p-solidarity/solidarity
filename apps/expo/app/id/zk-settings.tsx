@@ -17,7 +17,7 @@
  * the credentials store metadata (none today → "Not initialized" state).
  */
 import { useEffect, useState } from 'react';
-import { Alert, ScrollView, Text, View } from 'react-native';
+import { ScrollView, Text, View } from 'react-native';
 
 import { IDNavBar } from '@/components/id';
 import { shortCommitment } from '@/components/id/shortDid';
@@ -29,6 +29,7 @@ import {
   SettingsBlockSection,
 } from '@/components/settings/SettingsBlocks';
 import { Colors } from '@/constants/Colors';
+import { showError } from '@/feedback/appAlert';
 import { confirmDialog } from '@/feedback/confirmDialog';
 import { pushToast } from '@/feedback/toast';
 import { requireBiometric } from '@/keychain/biometric';
@@ -56,8 +57,7 @@ export default function ZkSettings(): React.JSX.Element {
       await createIdentity();
       pushToast('ZK identity created', 'success');
     } catch (e) {
-      const message = e instanceof Error ? e.message : 'Unknown error.';
-      Alert.alert('Create Failed', message, [{ text: 'OK', style: 'cancel' }]);
+      showError({ context: 'ZK › Create Identity', summary: 'Create failed.', error: e });
     }
   };
 
@@ -72,8 +72,7 @@ export default function ZkSettings(): React.JSX.Element {
       await deleteIdentity();
       pushToast('Identity deleted', 'success');
     } catch (e) {
-      const message = e instanceof Error ? e.message : 'Unknown error.';
-      Alert.alert('Delete Failed', message, [{ text: 'OK', style: 'cancel' }]);
+      showError({ context: 'ZK › Delete Identity', summary: 'Delete failed.', error: e });
     } finally {
       setIsDeleting(false);
     }

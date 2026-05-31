@@ -23,7 +23,7 @@
  */
 import { router } from 'expo-router';
 import { useState } from 'react';
-import { Alert, ScrollView, Text, View } from 'react-native';
+import { ScrollView, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import {
@@ -35,6 +35,8 @@ import {
   SettingsBlockToggleRow,
   SettingsScreenTitle,
 } from '@/components/settings/SettingsBlocks';
+import { appAlert, showError } from '@/feedback/appAlert';
+import { confirmDialog } from '@/feedback/confirmDialog';
 import { pushToast } from '@/feedback/toast';
 import {
   ensureSigningKey,
@@ -61,19 +63,16 @@ export default function AdvancedSettings() {
     return requireBiometric('delete');
   };
 
-  const onResetAppData = () => {
-    Alert.alert(
-      'Reset local app data?',
-      'This clears local encrypted files, contacts, credentials, and onboarding status. Keys are preserved.',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Reset',
-          style: 'destructive',
-          onPress: () => { void resetAppData(); },
-        },
-      ]
-    );
+  const onResetAppData = async () => {
+    const ok = await confirmDialog({
+      title: 'Reset local app data?',
+      message:
+        'This clears local encrypted files, contacts, credentials, and onboarding status. Keys are preserved.',
+      confirmLabel: 'Reset',
+      destructive: true,
+    });
+    if (!ok) return;
+    await resetAppData();
   };
 
   const resetAppData = async () => {
@@ -96,7 +95,7 @@ export default function AdvancedSettings() {
       resetPrefs();
       pushToast('Local data reset completed.', 'success');
     } catch (err) {
-      Alert.alert('Settings', (err as Error).message);
+      showError({ context: 'Advanced › Reset App Data', summary: 'Reset failed.', error: err });
     } finally {
       setBusy(false);
     }
@@ -110,22 +109,19 @@ export default function AdvancedSettings() {
         mmkv.remove(k);
       }
     }
-    Alert.alert('Settings', 'Passport credential has been reset.');
+    appAlert({ title: 'Settings', message: 'Passport credential has been reset.' });
   };
 
-  const onWipeEverything = () => {
-    Alert.alert(
-      'Wipe everything?',
-      'This deletes ALL data including private keys, DIDs, credentials, and keychain items. Relaunch the app after wipe.',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Wipe',
-          style: 'destructive',
-          onPress: () => { void wipeEverything(); },
-        },
-      ]
-    );
+  const onWipeEverything = async () => {
+    const ok = await confirmDialog({
+      title: 'Wipe everything?',
+      message:
+        'This deletes ALL data including private keys, DIDs, credentials, and keychain items. Relaunch the app after wipe.',
+      confirmLabel: 'Wipe',
+      destructive: true,
+    });
+    if (!ok) return;
+    await wipeEverything();
   };
 
   const wipeEverything = async () => {
@@ -145,9 +141,9 @@ export default function AdvancedSettings() {
       // Drop the signing key + regenerate.
       await resetSigningKeyForTesting();
       await ensureSigningKey();
-      Alert.alert('Settings', 'All data wiped. Please relaunch the app.');
+      appAlert({ title: 'Settings', message: 'All data wiped. Please relaunch the app.' });
     } catch (err) {
-      Alert.alert('Settings', (err as Error).message);
+      showError({ context: 'Advanced › Wipe Everything', summary: 'Wipe failed.', error: err });
     } finally {
       setBusy(false);
     }
@@ -230,7 +226,7 @@ export default function AdvancedSettings() {
                 icon="arrow.counterclockwise"
                 title="Reset App Data"
                 subtitle="Clears data, preserves keys"
-                onPress={onResetAppData}
+                onPress={() => { void onResetAppData(); }}
               />
 
               {developerMode ? (
@@ -244,7 +240,7 @@ export default function AdvancedSettings() {
                     icon="trash.slash"
                     title="Wipe Everything"
                     subtitle="Deletes all data + keys"
-                    onPress={onWipeEverything}
+                    onPress={() => { void onWipeEverything(); }}
                   />
                   <View style={{ height: 1, backgroundColor: 'rgba(0,0,0,0.08)' }} />
                   <SettingsBlockRow

@@ -24,11 +24,12 @@ import * as Sharing from 'expo-sharing';
 import * as Clipboard from 'expo-clipboard';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Alert, Pressable, ScrollView, View } from 'react-native';
+import { Pressable, ScrollView, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { useCardStore } from '@/cards/cardManager';
 import { SfIcon } from '@/components/icons/SfIcon';
+import { appAlert, showError } from '@/feedback/appAlert';
 import {
   PassInformationView,
   PassPreviewView,
@@ -107,11 +108,13 @@ export default function WalletPassScreen() {
       haptic('success');
       pushToast('Signed pass generated', 'success');
     } catch (err: unknown) {
-      const msg =
-        err instanceof Error ? err.message : 'Failed to generate pass.';
       setGeneration({ kind: 'idle' });
       haptic('error');
-      Alert.alert('Unable to Create Pass', msg);
+      showError({
+        context: 'Wallet Pass › Generate',
+        summary: 'Unable to create pass.',
+        error: err,
+      });
     }
   }, [sharingLevel, targetCard]);
 
@@ -119,10 +122,10 @@ export default function WalletPassScreen() {
     if (generation.kind !== 'ready' || !generation.fileUri) return;
     try {
       if (!(await Sharing.isAvailableAsync())) {
-        Alert.alert(
-          'Sharing unavailable',
-          'Sharing is not available on this device.'
-        );
+        appAlert({
+          title: 'Sharing unavailable',
+          message: 'Sharing is not available on this device.',
+        });
         return;
       }
       // Hand the signed .pkpass off to expo-sharing — on iOS the system
@@ -135,9 +138,11 @@ export default function WalletPassScreen() {
         dialogTitle: 'Add to Apple Wallet',
       });
     } catch (err: unknown) {
-      const msg =
-        err instanceof Error ? err.message : 'Sharing failed.';
-      Alert.alert('Unable to Add to Wallet', msg);
+      showError({
+        context: 'Wallet Pass › Add to Wallet',
+        summary: 'Unable to add to Wallet.',
+        error: err,
+      });
     }
   }, [generation]);
 
