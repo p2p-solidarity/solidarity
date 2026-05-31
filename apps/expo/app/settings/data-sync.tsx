@@ -39,6 +39,7 @@ import { useCredentialStore } from '@/credentials/store';
 import { appAlert, showError } from '@/feedback/appAlert';
 import { confirmDialog } from '@/feedback/confirmDialog';
 import { pushToast } from '@/feedback/toast';
+import { useTranslation } from '@/i18n';
 import {
   ensureSigningKey,
   requireBiometric,
@@ -48,6 +49,7 @@ import { usePreferences } from '@/settings/preferences';
 
 export default function DataSyncSettings() {
   const insets = useSafeAreaInsets();
+  const { t } = useTranslation();
   const developerMode = usePreferences((s) => s.developerMode);
   const backupEnabled = usePreferences((s) => s.backupEnabled);
   const policy = usePreferences((s) => s.biometricPolicy);
@@ -61,10 +63,9 @@ export default function DataSyncSettings() {
 
   const onResetIdentityKeys = async () => {
     const ok = await confirmDialog({
-      title: 'Reset Identity Keys?',
-      message:
-        "Removes corrupted iCloud Keychain DID entries and switches your master key to local-only. Existing credentials will need to be re-issued. You'll be asked to relaunch the app.",
-      confirmLabel: 'Reset & Disable iCloud DID Sync',
+      title: t('dataSync.resetKeys.confirmTitle'),
+      message: t('dataSync.resetKeys.confirmMessage'),
+      confirmLabel: t('dataSync.resetKeys.confirmAction'),
       destructive: true,
     });
     if (!ok) return;
@@ -85,13 +86,13 @@ export default function DataSyncSettings() {
       await resetSigningKeyForTesting();
       await ensureSigningKey();
       appAlert({
-        title: 'Reset Complete',
-        message: 'Identity keys reset to local-only. Please force-quit and relaunch the app.',
+        title: t('dataSync.resetKeys.doneTitle'),
+        message: t('dataSync.resetKeys.doneMessage'),
       });
     } catch (err) {
       showError({
         context: 'Data & Sync › Reset Identity Keys',
-        summary: 'Authentication failed.',
+        summary: t('dataSync.resetKeys.authFailed'),
         error: err,
       });
     } finally {
@@ -107,11 +108,11 @@ export default function DataSyncSettings() {
       }
       // TODO(android): wire SocialGraphExportService analogue and
       // expo-sharing.shareAsync(uri) once the JSON exporter ships.
-      pushToast('Graph export lands next iteration', 'info');
+      pushToast(t('dataSync.exportGraph.todo'), 'info');
     } catch (err) {
       showError({
         context: 'Data & Sync › Export Graph',
-        summary: 'Export failed.',
+        summary: t('dataSync.exportGraph.failed'),
         error: err,
       });
     }
@@ -120,7 +121,7 @@ export default function DataSyncSettings() {
   return (
     <View className="flex-1 bg-pageBg" style={{ paddingTop: insets.top }}>
       <SettingsBackToolbar onPress={() => { router.back(); }} />
-      <SettingsScreenTitle title="Data & Sync" />
+      <SettingsScreenTitle title={t('dataSync.title')} />
 
       <ScrollView
         className="flex-1"
@@ -128,42 +129,42 @@ export default function DataSyncSettings() {
       >
         <View className="gap-6">
           {/* Sync & Backup */}
-          <SettingsBlockSection title="Sync & Backup">
+          <SettingsBlockSection title={t('dataSync.section.syncBackup')}>
             <SettingsBlockRow
               icon="icloud"
-              title="iCloud Backup & Restore"
-              trailingText={backupEnabled ? 'On' : 'Off'}
+              title={t('dataSync.icloudBackup')}
+              trailingText={backupEnabled ? t('common.on') : t('common.off')}
               onPress={() => { router.push('/settings/backup'); }}
             />
             <SettingsBlockInfoRow
               icon="list.bullet.rectangle"
-              title="Identity records in Vault"
-              value={`${String(credentials.length)} cards`}
+              title={t('dataSync.recordsInVault')}
+              value={t('dataSync.cardsCount', { count: credentials.length })}
             />
           </SettingsBlockSection>
 
           {/* Identity Key Recovery (dev only) */}
           {developerMode ? (
-            <SettingsBlockSection title="Identity Key Recovery">
+            <SettingsBlockSection title={t('dataSync.section.keyRecovery')}>
               <SettingsBlockDangerRow
                 icon="key.slash"
-                title="Reset Identity Keys (Local-Only)"
-                subtitle="Use if Save Passport Credential keeps failing"
+                title={t('dataSync.resetKeys.row')}
+                subtitle={t('dataSync.resetKeys.subtitle')}
                 onPress={() => { void onResetIdentityKeys(); }}
               />
             </SettingsBlockSection>
           ) : null}
 
           {/* Import / Export */}
-          <SettingsBlockSection title="Import / Export">
+          <SettingsBlockSection title={t('dataSync.section.importExport')}>
             <SettingsBlockRow
               icon="square.and.arrow.down"
-              title="Import W3C Credentials"
+              title={t('dataSync.importVc')}
               onPress={() => { router.push('/settings/vc'); }}
             />
             <SettingsBlockRow
               icon="square.and.arrow.up"
-              title="Export Verified Graph Data"
+              title={t('dataSync.exportGraph')}
               showsChevron={false}
               onPress={() => { void onExportGraph(); }}
             />

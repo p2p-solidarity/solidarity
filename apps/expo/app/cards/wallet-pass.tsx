@@ -41,6 +41,7 @@ import { ThemedButton, ThemedSurface, ThemedText } from '@/components/themed';
 import { Colors } from '@/constants/Colors';
 import { haptic } from '@/feedback/haptics';
 import { pushToast } from '@/feedback/toast';
+import { useTranslation } from '@/i18n';
 import type { BusinessCard, SharingLevel } from '@solidarity/shared';
 
 const SHARING_LEVELS: readonly SharingLevel[] = [
@@ -61,6 +62,7 @@ interface GenerationState {
 
 export default function WalletPassScreen() {
   const insets = useSafeAreaInsets();
+  const { t } = useTranslation();
   const { id, level: levelParam } =
     useLocalSearchParams<{ id?: string; level?: string }>();
 
@@ -112,19 +114,19 @@ export default function WalletPassScreen() {
       haptic('error');
       showError({
         context: 'Wallet Pass › Generate',
-        summary: 'Unable to create pass.',
+        summary: t('walletPass.createFailed'),
         error: err,
       });
     }
-  }, [sharingLevel, targetCard]);
+  }, [sharingLevel, targetCard, t]);
 
   const handleAddToWallet = useCallback(async () => {
     if (generation.kind !== 'ready' || !generation.fileUri) return;
     try {
       if (!(await Sharing.isAvailableAsync())) {
         appAlert({
-          title: 'Sharing unavailable',
-          message: 'Sharing is not available on this device.',
+          title: t('walletPass.sharingUnavailable.title'),
+          message: t('walletPass.sharingUnavailable.message'),
         });
         return;
       }
@@ -140,11 +142,11 @@ export default function WalletPassScreen() {
     } catch (err: unknown) {
       showError({
         context: 'Wallet Pass › Add to Wallet',
-        summary: 'Unable to add to Wallet.',
+        summary: t('walletPass.addFailed'),
         error: err,
       });
     }
-  }, [generation]);
+  }, [generation, t]);
 
   const handleCopyImportString = useCallback(async () => {
     if (importString.length === 0) return;

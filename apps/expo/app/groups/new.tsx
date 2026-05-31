@@ -33,6 +33,7 @@ import { ThemedButton } from '@/components/themed';
 import { Colors } from '@/constants/Colors';
 import { showError } from '@/feedback/appAlert';
 import { pushToast } from '@/feedback/toast';
+import { useTranslation } from '@/i18n';
 import {
   CURRENT_USER_RECORD_ID,
   useGroupStore,
@@ -126,6 +127,7 @@ function GroupTypeSegment({
 export default function CreateGroup(): React.JSX.Element {
   const upsertGroup = useGroupStore((s) => s.upsertGroup);
   const insets = useSafeAreaInsets();
+  const { t } = useTranslation();
   const [groupName, setGroupName] = useState('');
   const [groupDescription, setGroupDescription] = useState('');
   const [isPrivate, setIsPrivate] = useState(false);
@@ -154,7 +156,7 @@ export default function CreateGroup(): React.JSX.Element {
       pushToast(`Created "${trimmed}"`, 'success');
       router.replace({ pathname: '/groups/[id]', params: { id } });
     } catch (e) {
-      showError({ context: 'Groups › Create', summary: "Couldn't create the group.", error: e });
+      showError({ context: 'Groups › Create', summary: t('groupNew.createFailed'), error: e });
     } finally {
       setIsCreating(false);
     }

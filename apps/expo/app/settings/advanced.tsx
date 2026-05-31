@@ -38,6 +38,7 @@ import {
 import { appAlert, showError } from '@/feedback/appAlert';
 import { confirmDialog } from '@/feedback/confirmDialog';
 import { pushToast } from '@/feedback/toast';
+import { useTranslation } from '@/i18n';
 import {
   ensureSigningKey,
   requireBiometric,
@@ -50,6 +51,7 @@ const MONO_FONT = 'Menlo';
 
 export default function AdvancedSettings() {
   const insets = useSafeAreaInsets();
+  const { t } = useTranslation();
   const developerMode = usePreferences((s) => s.developerMode);
   const simulateNfc = usePreferences((s) => s.simulateNfc);
   const policy = usePreferences((s) => s.biometricPolicy);
@@ -65,10 +67,9 @@ export default function AdvancedSettings() {
 
   const onResetAppData = async () => {
     const ok = await confirmDialog({
-      title: 'Reset local app data?',
-      message:
-        'This clears local encrypted files, contacts, credentials, and onboarding status. Keys are preserved.',
-      confirmLabel: 'Reset',
+      title: t('advanced.resetAppData.confirmTitle'),
+      message: t('advanced.resetAppData.confirmMessage'),
+      confirmLabel: t('advanced.resetAppData.confirmAction'),
       destructive: true,
     });
     if (!ok) return;
@@ -93,9 +94,9 @@ export default function AdvancedSettings() {
         if (k.startsWith('contact:')) mmkv.remove(k);
       }
       resetPrefs();
-      pushToast('Local data reset completed.', 'success');
+      pushToast(t('advanced.resetAppData.done'), 'success');
     } catch (err) {
-      showError({ context: 'Advanced › Reset App Data', summary: 'Reset failed.', error: err });
+      showError({ context: 'Advanced › Reset App Data', summary: t('advanced.resetAppData.failed'), error: err });
     } finally {
       setBusy(false);
     }
@@ -109,15 +110,14 @@ export default function AdvancedSettings() {
         mmkv.remove(k);
       }
     }
-    appAlert({ title: 'Settings', message: 'Passport credential has been reset.' });
+    appAlert({ title: t('advanced.settingsTitle'), message: t('advanced.resetPassport.done') });
   };
 
   const onWipeEverything = async () => {
     const ok = await confirmDialog({
-      title: 'Wipe everything?',
-      message:
-        'This deletes ALL data including private keys, DIDs, credentials, and keychain items. Relaunch the app after wipe.',
-      confirmLabel: 'Wipe',
+      title: t('advanced.wipe.confirmTitle'),
+      message: t('advanced.wipe.confirmMessage'),
+      confirmLabel: t('advanced.wipe.confirmAction'),
       destructive: true,
     });
     if (!ok) return;
@@ -141,9 +141,9 @@ export default function AdvancedSettings() {
       // Drop the signing key + regenerate.
       await resetSigningKeyForTesting();
       await ensureSigningKey();
-      appAlert({ title: 'Settings', message: 'All data wiped. Please relaunch the app.' });
+      appAlert({ title: t('advanced.settingsTitle'), message: t('advanced.wipe.done') });
     } catch (err) {
-      showError({ context: 'Advanced › Wipe Everything', summary: 'Wipe failed.', error: err });
+      showError({ context: 'Advanced › Wipe Everything', summary: t('advanced.wipe.failed'), error: err });
     } finally {
       setBusy(false);
     }
@@ -152,13 +152,13 @@ export default function AdvancedSettings() {
   const onDisableDeveloperMode = () => {
     setPref('developerMode', false);
     // Mirrors Swift DeveloperModeManager.disableDeveloperMode toast.
-    pushToast('Developer Mode Disabled', 'info', 2000);
+    pushToast(t('advanced.devModeDisabled'), 'info', 2000);
   };
 
   return (
     <View className="flex-1 bg-pageBg" style={{ paddingTop: insets.top }}>
       <SettingsBackToolbar onPress={() => { router.back(); }} />
-      <SettingsScreenTitle title="Advanced" />
+      <SettingsScreenTitle title={t('advanced.title')} />
 
       <ScrollView
         className="flex-1"
@@ -166,53 +166,53 @@ export default function AdvancedSettings() {
       >
         <View className="gap-6">
           {/* Interface */}
-          <SettingsBlockSection title="Interface">
+          <SettingsBlockSection title={t('advanced.section.interface')}>
             <SettingsBlockRow
               icon="paintbrush"
-              title="Appearance"
+              title={t('advanced.appearance')}
               onPress={() => { router.push('/settings/appearance'); }}
             />
             <SettingsBlockRow
               icon="globe"
-              title="Language"
+              title={t('advanced.language')}
               onPress={() => { router.push('/settings/language'); }}
             />
             <SettingsBlockRow
               icon="bell"
-              title="Notifications"
+              title={t('advanced.notifications')}
               onPress={() => { router.push('/settings/notifications'); }}
             />
           </SettingsBlockSection>
 
           {/* Developer Tools */}
           {developerMode ? (
-            <SettingsBlockSection title="Developer Tools">
+            <SettingsBlockSection title={t('advanced.section.devTools')}>
               <SettingsBlockRow
                 icon="person.3"
-                title="Group Management"
+                title={t('advanced.groupManagement')}
                 onPress={() => { router.push('/settings/groups'); }}
               />
               <SettingsBlockRow
                 icon="doc.viewfinder"
-                title="Passport Pipeline"
+                title={t('advanced.passportPipeline')}
                 onPress={() => { router.push('/passport'); }}
               />
               <SettingsBlockToggleRow
                 icon="wave.3.forward"
-                title="Simulate NFC"
+                title={t('advanced.simulateNfc')}
                 value={simulateNfc}
                 onValueChange={(v) => { setPref('simulateNfc', v); }}
               />
               <SettingsBlockRow
                 icon="shield.checkered"
-                title="ZK Identity Settings"
+                title={t('advanced.zkSettings')}
                 onPress={() => {
-                  pushToast('ZK Identity Settings lands next iteration', 'info');
+                  pushToast(t('advanced.zkSettings.todo'), 'info');
                 }}
               />
               <SettingsBlockRow
                 icon="qrcode"
-                title="OIDC Request Scanner"
+                title={t('advanced.oidcScanner')}
                 onPress={() => { router.push('/settings/oidc-request'); }}
               />
             </SettingsBlockSection>
@@ -220,12 +220,12 @@ export default function AdvancedSettings() {
 
           {/* Danger Zone */}
           <View className="gap-3">
-            <SettingsBlockSectionHeader title="Danger Zone" />
+            <SettingsBlockSectionHeader title={t('advanced.section.dangerZone')} />
             <View className="px-4 gap-2">
               <SettingsBlockDangerRow
                 icon="arrow.counterclockwise"
-                title="Reset App Data"
-                subtitle="Clears data, preserves keys"
+                title={t('advanced.resetAppData')}
+                subtitle={t('advanced.resetAppData.subtitle')}
                 onPress={() => { void onResetAppData(); }}
               />
 
@@ -233,19 +233,19 @@ export default function AdvancedSettings() {
                 <>
                   <SettingsBlockDangerRow
                     icon="xmark.bin"
-                    title="Reset Passport Credential"
+                    title={t('advanced.resetPassport')}
                     onPress={onResetPassport}
                   />
                   <SettingsBlockDangerRow
                     icon="trash.slash"
-                    title="Wipe Everything"
-                    subtitle="Deletes all data + keys"
+                    title={t('advanced.wipe')}
+                    subtitle={t('advanced.wipe.subtitle')}
                     onPress={() => { void onWipeEverything(); }}
                   />
                   <View style={{ height: 1, backgroundColor: 'rgba(0,0,0,0.08)' }} />
                   <SettingsBlockRow
                     icon="xmark.circle"
-                    title="Disable Developer Mode"
+                    title={t('advanced.disableDevMode')}
                     showsChevron={false}
                     onPress={onDisableDeveloperMode}
                   />
@@ -258,7 +258,7 @@ export default function AdvancedSettings() {
                 className="text-text3 text-[10px] px-6"
                 style={{ fontFamily: MONO_FONT }}
               >
-                Tap the version number in Settings to enable developer mode.
+                {t('advanced.devModeHint')}
               </Text>
             ) : null}
           </View>

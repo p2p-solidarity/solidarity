@@ -38,6 +38,7 @@ import {
 import { useCredentialStore } from '@/credentials/store';
 import { appAlert, showError } from '@/feedback/appAlert';
 import { pushToast } from '@/feedback/toast';
+import { useTranslation } from '@/i18n';
 import { requireBiometric } from '@/keychain';
 import { usePreferences } from '@/settings/preferences';
 
@@ -58,6 +59,7 @@ const EXPORT_FILENAME = 'solidarity_vcs.json';
 
 export default function VcSettings() {
   const insets = useSafeAreaInsets();
+  const { t } = useTranslation();
   const credentials = useCredentialStore((s) => s.manifest);
   const hydrate = useCredentialStore((s) => s.hydrate);
   const policy = usePreferences((s) => s.biometricPolicy);
@@ -71,13 +73,13 @@ export default function VcSettings() {
     // TODO(android): wire VCService.issueAndStoreBusinessCardCredential.
     // The signing flow needs `ensureSigningKey` + `signJwt` + a verifier
     // round-trip; deferred until the issuer service ports.
-    pushToast('Create did:key VC lands next iteration', 'info');
+    pushToast(t('vc.createDidKey.todo'), 'info');
   };
 
   const onExportVcs = async () => {
     if (busy) return;
     if (credentials.length === 0) {
-      appAlert({ title: 'VC Management', message: 'No VCs found to export.' });
+      appAlert({ title: t('vc.title'), message: t('vc.noneToExport') });
       return;
     }
     setBusy(true);
@@ -106,7 +108,7 @@ export default function VcSettings() {
         encoding: FileSystem.EncodingType.UTF8,
       });
       if (!(await Sharing.isAvailableAsync())) {
-        appAlert({ title: 'VC Management', message: `Saved to ${fileUri}` });
+        appAlert({ title: t('vc.title'), message: t('vc.savedTo', { uri: fileUri }) });
         return;
       }
       await Sharing.shareAsync(fileUri, {
@@ -114,7 +116,7 @@ export default function VcSettings() {
         dialogTitle: 'Export Verifiable Credentials',
       });
     } catch (err) {
-      showError({ context: 'VC Management › Export', summary: 'Export failed.', error: err });
+      showError({ context: 'VC Management › Export', summary: t('vc.exportFailed'), error: err });
     } finally {
       setBusy(false);
     }
@@ -150,15 +152,12 @@ export default function VcSettings() {
       // Until the verifier ports we just count the JWTs.
       const total = parsed.vcs.length;
       if (total === 0) {
-        appAlert({ title: 'VC Management', message: 'No VCs found in the file.' });
+        appAlert({ title: t('vc.title'), message: t('vc.noneInFile') });
         return;
       }
-      pushToast(
-        `Found ${String(total)} VCs — verifier lands next iteration`,
-        'info'
-      );
+      pushToast(t('vc.foundCount', { count: total }), 'info');
     } catch (err) {
-      showError({ context: 'VC Management › Import', summary: 'Failed to read file.', error: err });
+      showError({ context: 'VC Management › Import', summary: t('vc.readFailed'), error: err });
     } finally {
       setBusy(false);
     }
@@ -167,7 +166,7 @@ export default function VcSettings() {
   return (
     <View className="flex-1 bg-pageBg" style={{ paddingTop: insets.top }}>
       <SettingsBackToolbar onPress={() => { router.back(); }} />
-      <SettingsScreenTitle title="VC Management" />
+      <SettingsScreenTitle title={t('vc.title')} />
 
       <ScrollView
         className="flex-1"
@@ -176,36 +175,36 @@ export default function VcSettings() {
         <View className="gap-6">
           {/* About — empty section with footer */}
           <SettingsBlockSection
-            title="About"
-            footer="Manage your Verifiable Credentials (VCs) for did:key."
+            title={t('vc.section.about')}
+            footer={t('vc.about.footer')}
           >
             {/* Swift EmptyView() — render nothing. */}
             <View />
           </SettingsBlockSection>
 
           {/* Actions */}
-          <SettingsBlockSection title="Actions">
+          <SettingsBlockSection title={t('vc.section.actions')}>
             <SettingsBlockRow
               icon="key.fill"
-              title="Create did:key VC"
+              title={t('vc.createDidKey')}
               showsChevron={false}
               onPress={onCreateDidKeyVc}
             />
             <SettingsBlockRow
               icon="qrcode"
-              title="Receive Card (OIDC)"
+              title={t('vc.receiveOidc')}
               onPress={() => { router.push('/settings/oidc-request'); }}
             />
             <SettingsBlockRow
               icon="square.and.arrow.up"
-              title="Export VCs"
+              title={t('vc.export')}
               showsChevron={false}
               disabled={busy}
               onPress={() => { void onExportVcs(); }}
             />
             <SettingsBlockRow
               icon="square.and.arrow.down"
-              title="Import VCs"
+              title={t('vc.import')}
               showsChevron={false}
               disabled={busy}
               onPress={() => { void onImportVcs(); }}

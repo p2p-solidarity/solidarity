@@ -26,6 +26,7 @@ import { appAlert } from '@/feedback/appAlert';
 import { Colors } from '@/constants/Colors';
 import { haptic } from '@/feedback/haptics';
 import { pushToast } from '@/feedback/toast';
+import { useTranslation } from '@/i18n';
 import { type Animal, type BusinessCard } from '@solidarity/shared';
 
 const NEW_ID = '00000000-0000-0000-0000-000000000000';
@@ -33,6 +34,7 @@ const NEW_ID = '00000000-0000-0000-0000-000000000000';
 export default function EditCardScreen() {
   const { id } = useLocalSearchParams<{ id?: string }>();
   const insets = useSafeAreaInsets();
+  const { t } = useTranslation();
 
   const loadDetail = useCardStore((s) => s.loadDetail);
   const detailsById = useCardStore((s) => s.details);
@@ -59,7 +61,7 @@ export default function EditCardScreen() {
       const merged: BusinessCard = { ...card, animal };
       const result = await upsert(merged);
       if (!result.ok) {
-        appAlert({ title: 'Error', message: result.error.message });
+        appAlert({ title: t('cardEdit.errorTitle'), message: result.error.message });
         haptic('error');
         return;
       }
@@ -67,7 +69,7 @@ export default function EditCardScreen() {
       pushToast(isEditing ? 'Card saved' : 'Card created', 'success');
       router.back();
     },
-    [animal, isEditing, upsert]
+    [animal, isEditing, upsert, t]
   );
 
   const handleDelete = useCallback(async () => {

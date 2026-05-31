@@ -42,6 +42,7 @@ import { ThemedButton, ThemedSurface, ThemedText } from '@/components/themed';
 import { Colors } from '@/constants/Colors';
 import { haptic } from '@/feedback/haptics';
 import { pushToast } from '@/feedback/toast';
+import { useTranslation } from '@/i18n';
 import type { BusinessCard } from '@solidarity/shared';
 
 type ExtractionState =
@@ -55,6 +56,7 @@ type ExtractionState =
 
 export default function OcrScannerScreen() {
   const insets = useSafeAreaInsets();
+  const { t } = useTranslation();
   const params = useLocalSearchParams<{ redirect?: string }>();
 
   const [showingLanguagePicker, setShowingLanguagePicker] = useState(true);
@@ -84,12 +86,12 @@ export default function OcrScannerScreen() {
         haptic('error');
         showError({
           context: 'Scan Business Card › OCR',
-          summary: 'Failed to extract information.',
+          summary: t('ocr.extractFailed'),
           error: err,
         });
       }
     },
-    [selectedLanguage]
+    [selectedLanguage, t]
   );
 
   const handleTakePhoto = useCallback(async () => {
@@ -101,12 +103,12 @@ export default function OcrScannerScreen() {
     }
     if (!granted) {
       appAlert({
-        title: 'Camera access required',
-        message: 'Enable Camera in Settings to scan business cards.',
+        title: t('ocr.cameraRequired.title'),
+        message: t('ocr.cameraRequired.message'),
         buttons: [
-          { label: 'Cancel', style: 'cancel' },
+          { label: t('alert.cancel'), style: 'cancel' },
           {
-            label: 'Open Settings',
+            label: t('common.openSettings'),
             style: 'default',
             onPress: () => { void Linking.openSettings(); },
           },
@@ -125,18 +127,18 @@ export default function OcrScannerScreen() {
     setCapturedUri(asset.uri);
     setExtraction({ kind: 'idle' });
     void handleProcess(asset.uri);
-  }, [handleProcess]);
+  }, [handleProcess, t]);
 
   const handleChooseFromLibrary = useCallback(async () => {
     const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (!perm.granted) {
       appAlert({
-        title: 'Photo access required',
-        message: 'Enable Photos access in Settings to choose a business card image.',
+        title: t('ocr.photoRequired.title'),
+        message: t('ocr.photoRequired.message'),
         buttons: [
-          { label: 'Cancel', style: 'cancel' },
+          { label: t('alert.cancel'), style: 'cancel' },
           {
-            label: 'Open Settings',
+            label: t('common.openSettings'),
             style: 'default',
             onPress: () => { void Linking.openSettings(); },
           },
@@ -155,7 +157,7 @@ export default function OcrScannerScreen() {
     setCapturedUri(asset.uri);
     setExtraction({ kind: 'idle' });
     void handleProcess(asset.uri);
-  }, [handleProcess]);
+  }, [handleProcess, t]);
 
   const handleRetake = useCallback(() => {
     setCapturedUri(undefined);

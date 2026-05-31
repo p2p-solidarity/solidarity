@@ -32,6 +32,7 @@ import { Colors } from '@/constants/Colors';
 import { showError } from '@/feedback/appAlert';
 import { confirmDialog } from '@/feedback/confirmDialog';
 import { pushToast } from '@/feedback/toast';
+import { useTranslation } from '@/i18n';
 import { requireBiometric } from '@/keychain/biometric';
 import {
   useProofsSupported,
@@ -46,6 +47,7 @@ export default function ZkSettings(): React.JSX.Element {
   const deleteIdentity = useZkIdentity((s) => s.deleteIdentity);
   const createIdentity = useZkIdentity((s) => s.createIdentity);
   const isWorking = useZkIdentity((s) => s.isWorking);
+  const { t } = useTranslation();
   const [isDeleting, setIsDeleting] = useState(false);
 
   useEffect(() => {
@@ -57,7 +59,7 @@ export default function ZkSettings(): React.JSX.Element {
       await createIdentity();
       pushToast('ZK identity created', 'success');
     } catch (e) {
-      showError({ context: 'ZK › Create Identity', summary: 'Create failed.', error: e });
+      showError({ context: 'ZK › Create Identity', summary: t('zk.createFailed'), error: e });
     }
   };
 
@@ -72,7 +74,7 @@ export default function ZkSettings(): React.JSX.Element {
       await deleteIdentity();
       pushToast('Identity deleted', 'success');
     } catch (e) {
-      showError({ context: 'ZK › Delete Identity', summary: 'Delete failed.', error: e });
+      showError({ context: 'ZK › Delete Identity', summary: t('zk.deleteFailed'), error: e });
     } finally {
       setIsDeleting(false);
     }
@@ -81,10 +83,9 @@ export default function ZkSettings(): React.JSX.Element {
   const confirmDelete = (): void => {
     void (async () => {
       const ok = await confirmDialog({
-        title: 'Delete Identity?',
-        message:
-          'This will permanently delete your ZK identity. This action cannot be undone.',
-        confirmLabel: 'Delete',
+        title: t('zk.delete.confirmTitle'),
+        message: t('zk.delete.confirmMessage'),
+        confirmLabel: t('zk.delete.confirmAction'),
         destructive: true,
       });
       if (!ok) return;
