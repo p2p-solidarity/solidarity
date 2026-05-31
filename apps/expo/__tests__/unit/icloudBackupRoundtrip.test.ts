@@ -18,22 +18,20 @@
  *         "SOLB" (4 bytes magic) || 0x01 (version) || AES-GCM(BackupData)
  *
  * Expo port:
- *   apps/expo/src/backup/cloudProvider.ts      — react-native-cloud-storage
- *                                                  facade (iCloud OR Drive)
+ *   apps/expo/src/backup/cloudProvider.ts      — file-based facade over the
+ *                                                  @solidarity/nitro-cloudkit
+ *                                                  file API (iCloud OR Drive)
+ *   apps/expo/src/backup/solbEnvelope.ts       — SOLB magic + version framing
  *   apps/expo/src/backup/backupManager.ts      — performBackupNow / restore
  *   apps/expo/src/backup/gestureAutoBackup.ts  — pull-down pan to trigger
  *
- * NOTE on the magic header: the TS port intentionally DROPS the "SOLB" + 0x01
- * prefix because react-native-cloud-storage writes one versioned file (path
- * is fixed at /solidarity/backup.enc) and the encryption manager's JSON
- * envelope already self-identifies via shape. The serialised JSON field
- * NAMES match Swift Codable verbatim so a Swift-produced blob can be read
- * by the Expo port and vice-versa, with the magic header stripped on the
- * Swift side first.
+ * NOTE on the magic header: the Expo port now PRESERVES the "SOLB" + 0x01
+ * prefix (encodeSolb/decodeSolb) so each `backup_<ts>.solbk` file is
+ * byte-compatible with the SwiftUI app's format and a Swift build can read
+ * ours. The serialised JSON field NAMES match Swift Codable verbatim.
  *
- * The native iCloud nitro bridge is NOT done yet — there's no nitro module
- * for iCloud Drive. We mock `react-native-cloud-storage` here. When the
- * nitro bridge lands, swap the mock for the real module's surface.
+ * We mock the @solidarity/nitro-cloudkit file API here (writeFileBackup /
+ * readFileBackup / listFileBackups) with an in-memory file store.
  *
  * Run:
  *   cd apps/expo && bun test __tests__/unit/icloudBackupRoundtrip.test.ts
@@ -72,44 +70,57 @@ interface CloudProviderSurface {
 // uploadBackup serialises into a single `AirmeishiBackup` record whose
 // `fields` payload contains the base64 ciphertext as JSON.
 
-interface FakeRecord {
-  readonly recordId: string;
-  readonly recordType: string;
-  readonly fields: string;
-  readonly modifiedTime: number;
+interface FakeFile {
+  content: string;
+  modifiedTime: number;
 }
-const fakeRecords = new Map<string, FakeRecord>();
+// File-based store keyed by `<activeProvider>:<filename>`. The cloudProvider
+// now writes SOLB-framed `.solbk` files via writeFileBackup (iOS ubiquity /
+// Android Drive), not a CloudKit record.
+const fakeFiles = new Map<string, FakeFile>();
 let activeProvider: 'iCloud' | 'googleDrive' = 'iCloud';
-let activeAccessToken: string | undefined;
+let fakeClock = 1_700_000_000_000;
 
-function fakeKey(recordId: string): string {
-  return `${activeProvider}:${recordId}`;
+function fileKey(filename: string): string {
+  return `${activeProvider}:${filename}`;
 }
 
 const FakeCloudKit = {
   initialize: async () => true,
   isAvailable: () => true,
   currentUserId: async () => 'fake-user',
-  saveRecord: async (r: FakeRecord) => {
-    const stamped: FakeRecord = { ...r, modifiedTime: Date.now() };
-    fakeRecords.set(fakeKey(r.recordId), stamped);
-    return stamped;
-  },
-  fetchRecord: async (id: string): Promise<FakeRecord> => {
-    const v = fakeRecords.get(fakeKey(id));
-    if (!v) throw new Error(`fake-cloudkit: missing ${id}`);
-    return v;
-  },
-  deleteRecord: async (id: string) => {
-    fakeRecords.delete(fakeKey(id));
-  },
+  // Record CRUD retained as no-ops — backup no longer uses it.
+  saveRecord: async (r: unknown) => r,
+  fetchRecord: async (id: string) => { throw new Error(`fake-cloudkit: records unused (${id})`); },
+  deleteRecord: async () => undefined,
   queryRecords: async () => [],
   createShare: async () => ({ shareId: '', url: '', title: '', thumbnail: undefined }),
   acceptShare: async () => '',
   fetchSharedRecords: async () => [],
   removeShare: async () => undefined,
   addEventListener: () => () => undefined,
-  setDriveAccessToken: (token: string) => { activeAccessToken = token; },
+  setDriveAccessToken: () => undefined,
+  // File-based backup surface.
+  writeFileBackup: async (filename: string, content: string) => {
+    fakeClock += 1000;
+    fakeFiles.set(fileKey(filename), { content, modifiedTime: fakeClock });
+  },
+  readFileBackup: async (filename: string): Promise<string> => {
+    const f = fakeFiles.get(fileKey(filename));
+    if (!f) throw new Error(`fake-cloudkit: missing ${filename}`);
+    return f.content;
+  },
+  listFileBackups: async (): Promise<string[]> => {
+    const prefix = `${activeProvider}:`;
+    return Array.from(fakeFiles.keys())
+      .filter((k) => k.startsWith(prefix))
+      .map((k) => k.slice(prefix.length));
+  },
+  deleteFileBackup: async (filename: string) => {
+    fakeFiles.delete(fileKey(filename));
+  },
+  getFileBackupMtime: async (filename: string): Promise<number> =>
+    fakeFiles.get(fileKey(filename))?.modifiedTime ?? 0,
 };
 
 // ─── Mock setup ────────────────────────────────────────────────────────────
@@ -146,13 +157,12 @@ beforeAll(async () => {
     },
   }));
 
-  cloud = (await import('../../src/backup/cloudProvider')) as unknown as CloudProviderSurface;
+  cloud = await import('../../src/backup/cloudProvider');
 });
 
 beforeEach(() => {
-  fakeRecords.clear();
+  fakeFiles.clear();
   activeProvider = 'iCloud';
-  activeAccessToken = undefined;
 });
 
 // ─── Backup payload shape — mirrors Swift BackupData ───────────────────────
@@ -283,7 +293,7 @@ describe('iCloud backup round trip — encrypted blob via react-native-cloud-sto
 
     // Storage now holds something — that something must be ciphertext (not
     // plaintext) so the cloud provider can never see the payload bytes.
-    const stored = Array.from(fakeRecords.values())[0]?.fields ?? '';
+    const stored = Array.from(fakeFiles.values())[0]?.content ?? '';
     expect(stored.length).toBeGreaterThan(0);
     expect(stored).not.toContain('Ada Lovelace');
     expect(stored).not.toContain('Aurora');
@@ -433,7 +443,7 @@ describe('iCloud backup — gesture-triggered (pull-down pan)', () => {
       saveContact: async () => undefined,
     }));
 
-    gestureMod = (await import('../../src/backup/gestureAutoBackup')) as unknown as GestureModule;
+    gestureMod = await import('../../src/backup/gestureAutoBackup');
   });
 
   it('triggers backup when translationY exceeds the 80px threshold', async () => {

@@ -1,37 +1,44 @@
 /**
- * Cloud-storage provider — Nitro-backed.
+ * Cloud-storage provider — file-based, 1:1 with the native Swift app.
  *
- * After `@solidarity/nitro-cloudkit` landed (May 2026), the simple
- * "upload/download a single encrypted blob" path can sit on top of the
- * real CKContainer (iOS) or Drive REST (Android) Nitro module instead of
- * `react-native-cloud-storage`. The public surface is unchanged so
- * existing consumers (backupManager, gestureAutoBackup, settings/backup)
- * compile without edits.
+ * The legacy SwiftUI app (`solidarity/Services/Backup/BackupManager.swift`)
+ * writes encrypted, SOLB-framed `.solbk` files into the iCloud Drive
+ * ubiquity container (`Documents/AirMeishiBackup/`), with a local fallback
+ * when iCloud is unavailable. The first Expo port instead saved a single
+ * **CloudKit custom record** (`AirmeishiBackup`) — which production CloudKit
+ * refuses to auto-create ("Cannot create new type AirmeishiBackup in
+ * production schema"), so every TestFlight/App Store backup failed.
  *
- * The backup payload still goes through `encryptionManager.encryptJson`
- * before upload — the cloud provider only ever sees ciphertext.
+ * This module restores the native design: backups are files written via the
+ * `@solidarity/nitro-cloudkit` file API (iOS ubiquity container / Android
+ * Drive folder). No CloudKit schema is involved, so the production-schema
+ * error class is gone. The public surface is unchanged so existing consumers
+ * (backupManager, gestureAutoBackup, settings/backup) compile without edits.
  *
- * The single "backup blob" lives in a single record:
- *   recordType = "AirmeishiBackup"
- *   recordId   = "solidarity.backup.latest"
- *   fields     = JSON-encoded { ciphertextB64: string }
+ * Layout (mirrors Swift):
+ *   AirMeishiBackup/backup_<unixSeconds>.solbk
+ *     bytes = "SOLB" || 0x01 || AES-GCM(encryptJson(payload))
+ *   newest 5 retained; older rotated out.
  *
- * On iOS we drop into private DB (no share). On Android the same record
- * lives under `Solidarity/AirmeishiBackup/solidarity.backup.latest`.
+ * The payload still goes through `encryptionManager.encryptJson` before
+ * upload — the cloud provider only ever sees ciphertext.
  */
 import { Platform } from 'react-native';
 import { getCloudKit, type CloudKit } from '@solidarity/nitro-cloudkit';
 
 import { decryptJson, encryptJson } from '../storage/encryptionManager';
+import { decodeSolb, encodeSolb } from './solbEnvelope';
 
 export type ProviderKind = 'iCloud' | 'googleDrive';
 
 export const DEFAULT_PROVIDER: ProviderKind =
   Platform.OS === 'ios' ? 'iCloud' : 'googleDrive';
 
-const RECORD_TYPE = 'AirmeishiBackup';
-const RECORD_ID = 'solidarity.backup.latest';
 const CONTAINER_ID = 'iCloud.kidneyweakx.airmeishi';
+const BACKUP_PREFIX = 'backup_';
+const BACKUP_EXT = '.solbk';
+/** Mirror Swift BackupManager.maxBackupCount. */
+const MAX_BACKUPS = 5;
 
 let activeProvider: ProviderKind = DEFAULT_PROVIDER;
 let initialized = false;
@@ -39,7 +46,13 @@ let initialized = false;
 async function ensureInitialized(): Promise<CloudKit> {
   const ck = getCloudKit();
   if (!initialized) {
-    await ck.initialize(CONTAINER_ID);
+    try {
+      await ck.initialize(CONTAINER_ID);
+    } catch {
+      // iCloud may be signed out — iOS file backup falls back to local
+      // storage, and Android Drive ops surface their own errors on use.
+      // Mirrors native, which never blocks backup on iCloud availability.
+    }
     initialized = true;
   }
   return ck;
@@ -63,43 +76,71 @@ export function getActiveProvider(): ProviderKind {
   return activeProvider;
 }
 
-interface BackupRecordPayload {
-  readonly ciphertextB64: string;
+function isBackupName(name: string): boolean {
+  return name.startsWith(BACKUP_PREFIX) && name.endsWith(BACKUP_EXT);
+}
+
+function newBackupName(): string {
+  // Unix seconds, matching Swift's `backup_\(Date().timeIntervalSince1970)`.
+  // Fixed-width integers sort lexicographically == chronologically.
+  return `${BACKUP_PREFIX}${String(Math.floor(Date.now() / 1000))}${BACKUP_EXT}`;
+}
+
+/** Backup filenames, newest last. */
+async function sortedBackups(ck: CloudKit): Promise<readonly string[]> {
+  const names = (await ck.listFileBackups()).filter(isBackupName);
+  return [...names].sort();
+}
+
+/** Keep only the newest MAX_BACKUPS. Best-effort — never fails a backup. */
+async function rotateBackups(ck: CloudKit): Promise<void> {
+  try {
+    const names = await sortedBackups(ck);
+    if (names.length <= MAX_BACKUPS) return;
+    const stale = names.slice(0, names.length - MAX_BACKUPS);
+    for (const name of stale) {
+      await ck.deleteFileBackup(name);
+    }
+  } catch {
+    // Rotation is housekeeping; a failure here must not surface as a
+    // backup failure to the user.
+  }
 }
 
 /** Upload an arbitrary serialisable value, encrypted with the master key. */
 export async function uploadBackup<T>(value: T): Promise<void> {
   const ciphertextB64 = await encryptJson(value);
-  const payload: BackupRecordPayload = { ciphertextB64 };
+  const fileB64 = encodeSolb(ciphertextB64);
   const ck = await ensureInitialized();
-  await ck.saveRecord({
-    recordId: RECORD_ID,
-    recordType: RECORD_TYPE,
-    fields: JSON.stringify(payload),
-    modifiedTime: 0,
-  });
+  await ck.writeFileBackup(newBackupName(), fileB64);
+  await rotateBackups(ck);
 }
 
-/** Pull the latest backup (if any) from the active provider. */
+/**
+ * Pull the latest backup (if any). Returns null only when no backup file
+ * exists; a present-but-unreadable/undecryptable backup throws so the caller
+ * can distinguish "nothing to restore" from a real failure.
+ */
 export async function downloadBackup<T>(): Promise<T | null> {
-  try {
-    const ck = await ensureInitialized();
-    const record = await ck.fetchRecord(RECORD_ID);
-    const payload = JSON.parse(record.fields) as BackupRecordPayload;
-    if (!payload.ciphertextB64) return null;
-    return await decryptJson<T>(payload.ciphertextB64);
-  } catch {
-    return null;
-  }
+  const ck = await ensureInitialized();
+  const names = await sortedBackups(ck);
+  const latest = names[names.length - 1];
+  if (!latest) return null;
+  const fileB64 = await ck.readFileBackup(latest);
+  const ciphertextB64 = decodeSolb(fileB64);
+  return await decryptJson<T>(ciphertextB64);
 }
 
 /** Returns the cloud-mtime so the UI can show "last backed up …". */
 export async function backupMtime(): Promise<Date | null> {
   try {
     const ck = await ensureInitialized();
-    const record = await ck.fetchRecord(RECORD_ID);
-    if (record.modifiedTime <= 0) return null;
-    return new Date(record.modifiedTime);
+    const names = await sortedBackups(ck);
+    const latest = names[names.length - 1];
+    if (!latest) return null;
+    const ms = await ck.getFileBackupMtime(latest);
+    if (ms <= 0) return null;
+    return new Date(ms);
   } catch {
     return null;
   }

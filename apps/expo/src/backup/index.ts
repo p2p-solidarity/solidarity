@@ -3,6 +3,7 @@ export {
   type ProviderKind,
   setProvider,
   setGoogleAccessToken,
+  getActiveProvider,
   uploadBackup,
   downloadBackup,
   backupMtime,
@@ -17,6 +18,7 @@ export {
 export {
   performBackupNow,
   restoreFromBackup,
+  probeLatestBackup,
   type BackupPayload,
   type RestoreResult,
 } from './backupManager';

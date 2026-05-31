@@ -10,7 +10,7 @@
  */
 import { router } from 'expo-router';
 import { useEffect, useState } from 'react';
-import { Alert, ScrollView, View } from 'react-native';
+import { ScrollView, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import {
@@ -26,11 +26,15 @@ import {
   performBackupNow,
   restoreFromBackup,
 } from '@/backup';
+import { appAlert, showError } from '@/feedback/appAlert';
+import { confirmDialog } from '@/feedback/confirmDialog';
 import { pushToast } from '@/feedback/toast';
+import { useTranslation } from '@/i18n';
 import { usePreferences } from '@/settings/preferences';
 
 export default function BackupSettings() {
   const insets = useSafeAreaInsets();
+  const { t } = useTranslation();
   const provider = usePreferences((s) => s.backupProvider);
   const backupEnabled = usePreferences((s) => s.backupEnabled);
   const autoBackup = usePreferences((s) => s.autoBackupOnPull);
@@ -54,45 +58,53 @@ export default function BackupSettings() {
 
   const onBackupNow = async () => {
     setIsBackingUp(true);
-    pushToast('Encrypting and uploading to iCloud', 'info', 2000);
+    pushToast(t('backup.encrypting'), 'info', 2000);
     try {
       const result = await performBackupNow(provider);
       setLastBackup(new Date(result.exportedAt));
-      pushToast('Your data is safely backed up', 'success');
+      pushToast(t('backup.success'), 'success');
     } catch (err) {
-      const msg = (err as Error).message;
-      pushToast(msg, 'error');
-      Alert.alert('Error', msg);
+      // Absorb the failure into our themed report sheet — no raw CKError in
+      // a native UIAlertController, no duplicate toast. The sheet's "Send
+      // report" mails the trace to err@solidarity.gg.
+      showError({
+        context: 'Backup › Back Up Now',
+        summary: t('backup.failedSummary'),
+        error: err,
+      });
     } finally {
       setIsBackingUp(false);
     }
   };
 
-  const onRestore = () => {
-    Alert.alert(
-      'Restore from Backup?',
-      'This will replace your current cards and contacts with the backed up data.',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Restore',
-          style: 'destructive',
-          onPress: () => { void performRestoreNow(); },
-        },
-      ]
-    );
+  const onRestore = async () => {
+    const ok = await confirmDialog({
+      title: t('backup.restorePrompt.title'),
+      message: t('backup.restorePrompt.message'),
+      confirmLabel: t('backup.restore.confirm'),
+      destructive: true,
+    });
+    if (!ok) return;
+    await performRestoreNow();
   };
 
   const performRestoreNow = async () => {
     try {
       const r = await restoreFromBackup();
       if (!r) {
-        Alert.alert('Error', 'No backup found.');
+        appAlert({
+          title: t('backup.restore.notFoundTitle'),
+          message: t('backup.restore.notFound'),
+        });
         return;
       }
       router.back();
     } catch (err) {
-      Alert.alert('Error', (err as Error).message);
+      showError({
+        context: 'Backup › Restore',
+        summary: t('backup.restore.failedSummary'),
+        error: err,
+      });
     }
   };
 
@@ -149,7 +161,7 @@ export default function BackupSettings() {
               icon="arrow.counterclockwise.icloud"
               title="Restore from Backup"
               showsChevron={false}
-              onPress={onRestore}
+              onPress={() => { void onRestore(); }}
             />
           </SettingsBlockSection>
 

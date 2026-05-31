@@ -27,6 +27,9 @@
         "com.apple.developer.icloud-container-identifiers": [
           "iCloud.$(CFBundleIdentifier)"
         ],
+        "com.apple.developer.ubiquity-container-identifiers": [
+          "iCloud.$(CFBundleIdentifier)"
+        ],
         "com.apple.developer.icloud-services": [
           "CloudDocuments",
           "CloudKit"
