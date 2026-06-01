@@ -84,6 +84,57 @@ internal struct SpruceDidKeyStore {
     return hardware
   }
 
+  /// Software (NON-Secure-Enclave) P-256 key stored as a SYNCHRONISABLE
+  /// keychain item, so iCloud Keychain replicates it across the user's devices
+  /// on the same Apple ID. This is the *portable identity* path used by the
+  /// master signing alias (see `apps/expo/src/keychain/signingKey.ts`): the
+  /// did:key derived from this key survives a wipe / reinstall / device
+  /// migration, which a Secure Enclave key fundamentally cannot — an SE
+  /// private key never leaves hardware, so it can be neither backed up nor
+  /// synced, and a restore-from-iCloud therefore always orphaned the user's
+  /// credentials (the bug this fixes).
+  ///
+  /// Tradeoffs vs `generateP256Key`, by deliberate design choice:
+  ///   • The private key is software-resident (weaker extraction resistance
+  ///     than Secure Enclave).
+  ///   • It carries NO biometric access-control flag — iCloud-syncable items
+  ///     cannot be biometric-bound (the ACL is device-specific). The biometric
+  ///     gate is enforced one layer up in JS (`requireBiometric('sign')`)
+  ///     before every sign, so the Face ID UX is unchanged.
+  ///   • Accessibility is `WhenUnlocked` (NOT `…ThisDeviceOnly`, which would
+  ///     opt the item out of sync) — the closest syncable equivalent to the
+  ///     SE key's `WhenUnlockedThisDeviceOnly`.
+  ///
+  /// No special entitlement is required: synchronizable items replicate within
+  /// the app's own default keychain access group when the user has iCloud
+  /// Keychain enabled. iOS-only — Android has no iCloud Keychain.
+  func generateSyncableP256Key(alias: String) throws {
+    _ = deleteKey(alias: alias)
+
+    let privateKeyAttributes: [String: Any] = [
+      kSecAttrIsPermanent as String: true,
+      kSecAttrApplicationTag as String: keyTag(for: alias),
+      kSecAttrAccessible as String: kSecAttrAccessibleWhenUnlocked,
+      kSecAttrSynchronizable as String: true,
+    ]
+
+    // No `kSecAttrTokenID` → software key. Secure Enclave keys cannot be
+    // marked synchronizable, so the SE path is intentionally not taken here.
+    let attributes: [String: Any] = [
+      kSecAttrKeyType as String: kSecAttrKeyTypeECSECPrimeRandom,
+      kSecAttrKeySizeInBits as String: 256,
+      kSecPrivateKeyAttrs as String: privateKeyAttributes,
+    ]
+
+    var keyError: Unmanaged<CFError>?
+    guard SecKeyCreateRandomKey(attributes as CFDictionary, &keyError) != nil else {
+      let cfError = keyError?.takeRetainedValue()
+      let msg = (cfError as Error?)?.localizedDescription ?? "unknown"
+      throw SpruceDidError.keychainFailure(
+        -4, "SecKeyCreateRandomKey (syncable) failed: \(msg)")
+    }
+  }
+
   /// Generates a fresh Curve25519 keypair, stored as a Keychain generic
   /// password protected by `userPresence` when biometrics required.
   func generateEd25519Key(alias: String, requireBiometric: Bool) throws {
@@ -143,6 +194,10 @@ internal struct SpruceDidKeyStore {
       kSecAttrKeyClass as String: kSecAttrKeyClassPrivate,
       kSecMatchLimit as String: kSecMatchLimitOne,
       kSecReturnRef as String: true,
+      // Match both the legacy non-synced SE key AND the synchronizable
+      // software key (`generateSyncableP256Key`) so iCloud-synced identities
+      // are found on a second device.
+      kSecAttrSynchronizable as String: kSecAttrSynchronizableAny,
     ]
     var item: CFTypeRef?
     if SecItemCopyMatching(ecQuery as CFDictionary, &item) == errSecSuccess {
@@ -164,6 +219,10 @@ internal struct SpruceDidKeyStore {
       kSecAttrKeyClass as String: kSecAttrKeyClassPrivate,
       kSecMatchLimit as String: kSecMatchLimitOne,
       kSecReturnRef as String: true,
+      // Match both the legacy non-synced SE key AND the synchronizable
+      // software key (`generateSyncableP256Key`) so iCloud-synced identities
+      // are found on a second device.
+      kSecAttrSynchronizable as String: kSecAttrSynchronizableAny,
     ]
     var item: CFTypeRef?
     let status = SecItemCopyMatching(query as CFDictionary, &item)
@@ -184,6 +243,10 @@ internal struct SpruceDidKeyStore {
       kSecAttrKeyClass as String: kSecAttrKeyClassPrivate,
       kSecMatchLimit as String: kSecMatchLimitOne,
       kSecReturnRef as String: true,
+      // Match both the legacy non-synced SE key AND the synchronizable
+      // software key (`generateSyncableP256Key`) so iCloud-synced identities
+      // are found on a second device.
+      kSecAttrSynchronizable as String: kSecAttrSynchronizableAny,
     ]
     var item: CFTypeRef?
     if SecItemCopyMatching(ecQuery as CFDictionary, &item) == errSecSuccess,
@@ -230,6 +293,9 @@ internal struct SpruceDidKeyStore {
     let ecQuery: [String: Any] = [
       kSecClass as String: kSecClassKey,
       kSecAttrApplicationTag as String: keyTag(for: alias),
+      // Delete both the non-synced SE key and a synchronizable software key,
+      // so regenerating a syncable key is idempotent.
+      kSecAttrSynchronizable as String: kSecAttrSynchronizableAny,
     ]
     if SecItemDelete(ecQuery as CFDictionary) == errSecSuccess { anySuccess = true }
 

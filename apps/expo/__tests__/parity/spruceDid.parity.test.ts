@@ -68,7 +68,11 @@ class InMemorySpruceDidDriver implements SpruceDid {
     keyType: string,
     requireBiometric: boolean
   ): Promise<string> {
-    if (keyType !== 'p256') {
+    // 'p256-syncable' is the iCloud-Keychain-portable variant (software P-256,
+    // synchronizable item) — cryptographically identical to 'p256' from the
+    // test driver's POV, so it shares the in-memory keypair path.
+    const isP256 = keyType === 'p256' || keyType === 'p256-syncable';
+    if (!isP256) {
       throw new Error(`unsupported keyType in test driver: ${keyType}`);
     }
     // Drop any prior entry so generateKey is idempotent.
@@ -83,7 +87,8 @@ class InMemorySpruceDidDriver implements SpruceDid {
       kind: 'keyGenerated',
       alias,
       keyType,
-      hardwareBacked: true,
+      // Syncable software keys are not hardware-backed.
+      hardwareBacked: keyType === 'p256',
     });
     return alias;
   }

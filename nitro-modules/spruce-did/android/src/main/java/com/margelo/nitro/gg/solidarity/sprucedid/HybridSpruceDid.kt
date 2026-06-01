@@ -154,7 +154,13 @@ class HybridSpruceDid : HybridSpruceDidSpec() {
     requireBiometric: Boolean,
   ): Promise<String> = Promise.async {
     when (keyType.lowercase()) {
-      "p256" -> generateP256(alias, requireBiometric)
+      // "p256-syncable" is the iOS portable-identity path (iCloud Keychain
+      // sync). Android has no iCloud Keychain, so it maps to the normal
+      // hardware-backed AndroidKeyStore key — the key does NOT sync across
+      // devices here (cross-device Android identity is a separate, future
+      // concern, e.g. Block Store). Accepting the type keeps the JS caller
+      // platform-agnostic instead of branching on Platform.OS.
+      "p256", "p256-syncable", "p256_sync" -> generateP256(alias, requireBiometric)
       "ed25519" -> generateEd25519(alias, requireBiometric)
       "secp256k1" -> generateSecp256k1(alias, requireBiometric)
       else -> throw IllegalArgumentException("Unsupported keyType: $keyType")

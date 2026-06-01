@@ -6,10 +6,17 @@
  * to a non-CSPRNG entropy source and never gave us hardware-backed forensics.
  *
  * Storage:
- *   iOS    : SpruceID native impl → SecureEnclave.P256.Signing.PrivateKey,
- *            stored as Keychain item keyed by `solidarity.master.v2`. When
- *            biometrics are available, the native key is generated with
- *            `requireBiometric: true`.
+ *   iOS    : software P-256 key stored as a SYNCHRONISABLE Keychain item keyed
+ *            by `solidarity.master.v2`, so iCloud Keychain replicates the DID
+ *            across the user's devices and it survives a wipe / reinstall.
+ *            (A Secure Enclave key — the prior design — cannot sync or be
+ *            restored, which silently orphaned credentials after clear-data.)
+ *            The private key still never reaches JS: signing is done natively
+ *            via `SecKeyCreateSignature`. Biometric gating is enforced in JS
+ *            (syncable items can't carry a biometric keychain ACL). Existing
+ *            installs that already hold a non-syncable Secure Enclave key keep
+ *            it (no forced rotation); the syncable key is minted only for fresh
+ *            keys (new install / post-wipe). See `generateSyncableP256Key`.
  *   Android: AndroidKeyStore EC key (StrongBox-backed where available), same
  *            alias. The native biometric key flag is enabled only when the
  *            OS reports enrolled biometrics; Android rejects that key spec
@@ -193,13 +200,29 @@ export async function ensureSigningKey(): Promise<SigningIdentity> {
     await clearLegacyExpoBytes();
   }
 
-  // 3. Provision a fresh hardware-backed key. AndroidKeyStore cannot create
-  // a per-use biometric key when no biometric is enrolled, so bind the native
-  // key to biometric auth only when the OS reports that it can support it.
+  // 3. Provision a fresh identity key.
+  //
+  //    keyType 'p256-syncable' makes the identity portable across a wipe /
+  //    reinstall / new device:
+  //      iOS     — a software P-256 key stored as a SYNCHRONISABLE keychain
+  //                item, so iCloud Keychain replicates the DID across the
+  //                user's devices (same Apple ID). A Secure Enclave key
+  //                cannot do this — its private bytes never leave hardware, so
+  //                it can be neither backed up nor synced, and restore always
+  //                orphaned the user's credentials. Biometric gating moves to
+  //                the JS layer (`requireBiometric('sign')` in signJwt /
+  //                signRawEs256), since syncable items can't carry a biometric
+  //                keychain ACL.
+  //      Android — no iCloud Keychain; maps to the normal hardware-backed
+  //                AndroidKeyStore key (does NOT sync — a separate concern).
+  //
+  //    AndroidKeyStore cannot create a per-use biometric key when no biometric
+  //    is enrolled, so bind the native key to biometric auth only when the OS
+  //    reports it can support it (ignored by the iOS syncable path).
   const requireNativeBiometric = shouldRequireNativeBiometricBinding(
     await isBiometricAvailable().catch(() => false)
   );
-  await d.generateKey(SIGNING_KEY_ALIAS, 'p256', requireNativeBiometric);
+  await d.generateKey(SIGNING_KEY_ALIAS, 'p256-syncable', requireNativeBiometric);
   const publicJwkValue = await readPublicJwk(SIGNING_KEY_ALIAS);
   cachedIdentity = { alias: SIGNING_KEY_ALIAS, publicJwk: publicJwkValue };
   return cachedIdentity;

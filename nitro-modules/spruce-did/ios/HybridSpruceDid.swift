@@ -98,6 +98,14 @@ final class HybridSpruceDid: HybridSpruceDidSpec {
       case "p256":
         hardware = try self.store.generateP256Key(
           alias: alias, requireBiometric: requireBiometric)
+      case "p256-syncable", "p256_sync":
+        // Portable identity key — software P-256 stored as a synchronizable
+        // keychain item so iCloud Keychain replicates the DID across devices.
+        // Not hardware-backed (Secure Enclave keys cannot sync). Biometric
+        // gating is enforced in JS, not via a keychain ACL. See
+        // SpruceDidKeyStore.generateSyncableP256Key.
+        try self.store.generateSyncableP256Key(alias: alias)
+        hardware = false
       case "ed25519":
         try self.store.generateEd25519Key(
           alias: alias, requireBiometric: requireBiometric)
