@@ -39,6 +39,7 @@ import { appAlert, showError } from '@/feedback/appAlert';
 import { confirmDialog } from '@/feedback/confirmDialog';
 import { pushToast } from '@/feedback/toast';
 import { useTranslation } from '@/i18n';
+import { useIdentityData } from '@/identity';
 import {
   ensureSigningKey,
   requireBiometric,
@@ -46,6 +47,7 @@ import {
 } from '@/keychain';
 import { usePreferences } from '@/settings/preferences';
 import { getMmkv } from '@/storage/mmkv';
+import { clearAll as clearPassportAnchors } from '@/zk/passportAnchorStore';
 
 const MONO_FONT = 'Menlo';
 
@@ -57,6 +59,7 @@ export default function AdvancedSettings() {
   const policy = usePreferences((s) => s.biometricPolicy);
   const setPref = usePreferences((s) => s.set);
   const resetPrefs = usePreferences((s) => s.reset);
+  const removePassportCredentials = useIdentityData((s) => s.removePassportCredentials);
 
   const [busy, setBusy] = useState(false);
 
@@ -102,15 +105,27 @@ export default function AdvancedSettings() {
     }
   };
 
-  const onResetPassport = () => {
-    // Mirrors Swift: IdentityDataStore.shared.removePassportCredentials()
-    const mmkv = getMmkv();
-    for (const k of mmkv.getAllKeys()) {
-      if (k.startsWith('vc:passport') || k.startsWith('passport:')) {
-        mmkv.remove(k);
+  const onResetPassport = async () => {
+    if (busy) return;
+    setBusy(true);
+    try {
+      // Mirrors Swift: IdentityDataStore.shared.removePassportCredentials()
+      await removePassportCredentials();
+      clearPassportAnchors();
+      const mmkv = getMmkv();
+      for (const k of mmkv.getAllKeys()) {
+        if (k.startsWith('passport:')) mmkv.remove(k);
       }
+      appAlert({ title: t('advanced.settingsTitle'), message: t('advanced.resetPassport.done') });
+    } catch (err) {
+      showError({
+        context: 'Advanced › Reset Passport Credential',
+        summary: t('advanced.resetAppData.failed'),
+        error: err,
+      });
+    } finally {
+      setBusy(false);
     }
-    appAlert({ title: t('advanced.settingsTitle'), message: t('advanced.resetPassport.done') });
   };
 
   const onWipeEverything = async () => {
@@ -229,13 +244,14 @@ export default function AdvancedSettings() {
                 onPress={() => { void onResetAppData(); }}
               />
 
+              <SettingsBlockDangerRow
+                icon="xmark.bin"
+                title={t('advanced.resetPassport')}
+                onPress={() => { void onResetPassport(); }}
+              />
+
               {developerMode ? (
                 <>
-                  <SettingsBlockDangerRow
-                    icon="xmark.bin"
-                    title={t('advanced.resetPassport')}
-                    onPress={onResetPassport}
-                  />
                   <SettingsBlockDangerRow
                     icon="trash.slash"
                     title={t('advanced.wipe')}

@@ -172,9 +172,10 @@ export const useIdentityData = create<IdentityDataState>((set, get) => ({
     }));
   },
 
-  removeIdentityCard: async (id) => {
+  removeIdentityCard: (id) => {
     getMmkv().remove(`${CARD_PREFIX}${id}`);
     set((s) => ({ identityCards: s.identityCards.filter((c) => c.id !== id) }));
+    return Promise.resolve();
   },
 
   upsertProvableClaim: async (claim) => {
@@ -184,9 +185,10 @@ export const useIdentityData = create<IdentityDataState>((set, get) => ({
     }));
   },
 
-  removeProvableClaim: async (id) => {
+  removeProvableClaim: (id) => {
     getMmkv().remove(`${CLAIM_PREFIX}${id}`);
     set((s) => ({ provableClaims: s.provableClaims.filter((c) => c.id !== id) }));
+    return Promise.resolve();
   },
 
   markClaimPresented: (id) => {
@@ -201,11 +203,26 @@ export const useIdentityData = create<IdentityDataState>((set, get) => ({
   },
 
   removePassportCredentials: async () => {
+    if (!get().hydrated) {
+      await get().hydrate();
+    }
+    await useCredentialStore.getState().hydrate();
+    const credentialPassportIds = new Set<string>();
+    for (const entry of useCredentialStore.getState().manifest) {
+      if (entry.type === 'passport') credentialPassportIds.add(entry.id);
+    }
+    for (const credential of useCredentialStore.getState().details.values()) {
+      if (credential.type === 'passport') credentialPassportIds.add(credential.id);
+    }
     const passportCardIds = new Set(
-      get().identityCards.filter((c) => c.type === 'passport').map((c) => c.id)
+      [
+        ...get().identityCards.filter((c) => c.type === 'passport').map((c) => c.id),
+        ...credentialPassportIds,
+      ]
     );
     for (const id of passportCardIds) {
       getMmkv().remove(`${CARD_PREFIX}${id}`);
+      await useCredentialStore.getState().remove(id);
     }
     const droppedClaimIds: string[] = [];
     for (const c of get().provableClaims) {
@@ -221,13 +238,14 @@ export const useIdentityData = create<IdentityDataState>((set, get) => ({
     }));
   },
 
-  clearAllIdentityData: async () => {
+  clearAllIdentityData: () => {
     for (const k of getMmkv().getAllKeys()) {
       if (k.startsWith(CARD_PREFIX) || k.startsWith(CLAIM_PREFIX)) {
         getMmkv().remove(k);
       }
     }
     set({ identityCards: [], provableClaims: [] });
+    return Promise.resolve();
   },
 }));
 
