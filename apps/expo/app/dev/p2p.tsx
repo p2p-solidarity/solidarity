@@ -75,6 +75,12 @@ interface HandshakePayload {
   readonly ice: readonly string[];
 }
 
+// Hoisted so the object identity is STABLE across renders — an inline
+// `options={{ presentation: 'modal' }}` is a new object each render → expo-router
+// re-runs setOptions every render → re-render loop → "Maximum update depth
+// exceeded". See apps/expo/CLAUDE.md "Error handling".
+const MODAL_SCREEN_OPTIONS = { presentation: 'modal' } as const;
+
 export default function P2PLab() {
   const insets = useSafeAreaInsets();
   const developerMode = usePreferences((s) => s.developerMode);
@@ -261,7 +267,7 @@ export default function P2PLab() {
   if (!developerMode) {
     return (
       <View className="flex-1 bg-pageBg" style={{ paddingTop: insets.top }}>
-        <Stack.Screen options={{ presentation: 'modal' }} />
+        <Stack.Screen options={MODAL_SCREEN_OPTIONS} />
         <SettingsBackToolbar title="Close" onPress={() => { router.back(); }} />
         <SettingsScreenTitle title="P2P Lab" />
         <View className="px-4 pt-6">
@@ -275,7 +281,7 @@ export default function P2PLab() {
 
   return (
     <View className="flex-1 bg-pageBg" style={{ paddingTop: insets.top }}>
-      <Stack.Screen options={{ presentation: 'modal' }} />
+      <Stack.Screen options={MODAL_SCREEN_OPTIONS} />
       <SettingsBackToolbar title="Close" onPress={() => { router.back(); }} />
       <SettingsScreenTitle title="P2P Lab" />
 

@@ -73,6 +73,13 @@ function summarize(p: DagProjection, elapsedMs: number): ReplaySummary {
   };
 }
 
+// Hoisted so the object identity is STABLE across renders. An inline
+// `options={{ presentation: 'modal' }}` is a NEW object every render, so
+// expo-router re-runs its `setOptions` effect each render → re-render → new
+// object → "Maximum update depth exceeded" (this screen re-renders after mount
+// from its data effects). See apps/expo/CLAUDE.md "Error handling".
+const MODAL_SCREEN_OPTIONS = { presentation: 'modal' } as const;
+
 export default function DagLab() {
   const insets = useSafeAreaInsets();
   const screen = useWindowDimensions();
@@ -273,7 +280,7 @@ export default function DagLab() {
   if (!developerMode) {
     return (
       <View className="flex-1 bg-pageBg" style={{ paddingTop: insets.top }}>
-        <Stack.Screen options={{ presentation: 'modal' }} />
+        <Stack.Screen options={MODAL_SCREEN_OPTIONS} />
         <SettingsBackToolbar title="Close" onPress={() => { router.back(); }} />
         <SettingsScreenTitle title="DAG Lab" />
         <View className="px-4 pt-6">
@@ -287,7 +294,7 @@ export default function DagLab() {
 
   return (
     <View className="flex-1 bg-pageBg" style={{ paddingTop: insets.top }}>
-      <Stack.Screen options={{ presentation: 'modal' }} />
+      <Stack.Screen options={MODAL_SCREEN_OPTIONS} />
       <SettingsBackToolbar title="Close" onPress={() => { router.back(); }} />
       <SettingsScreenTitle title="DAG Lab" />
 
