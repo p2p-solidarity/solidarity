@@ -160,12 +160,34 @@ const HOOK_END = '# [withSpruceIdSpmPackage] END';
 // linked to the app.
 const HOOK_BODY = `
     ${HOOK_MARKER}
+    # The SpruceID SwiftPM products land in the SHARED products dir
+    # ($(BUILD_DIR)/$(CONFIGURATION)$(EFFECTIVE_PLATFORM_NAME)), NOT the pod's
+    # own $(BUILT_PRODUCTS_DIR) — under use_frameworks!:static that resolves to
+    # the per-pod .../<Pod>/ subdir. SpruceIDMobileSdkRs.swiftmodule sits in the
+    # shared dir, and its transitive Rust clang module 'RustFramework' is
+    # exposed via <shared>/include/RustFramework/module.modulemap. The pod isn't
+    # an SPM target so it inherits none of these — wire them by hand:
+    #   • SWIFT_INCLUDE_PATHS  → find SpruceIDMobileSdkRs.swiftmodule (canImport)
+    #   • -fmodule-map-file    → resolve the 'RustFramework' clang module that
+    #                            SpruceIDMobileSdkRs depends on (else: "missing
+    #                            required module 'RustFramework'").
+    spm_shared = '$(BUILD_DIR)/$(CONFIGURATION)$(EFFECTIVE_PLATFORM_NAME)'
+    rust_modulemap = '-fmodule-map-file=' + spm_shared + '/include/RustFramework/module.modulemap'
     installer.pods_project.targets.each do |t|
       next unless t.name == '${POD_TARGET_NAME}'
       t.build_configurations.each do |config|
-        spm_dirs = '$(inherited) "$(BUILT_PRODUCTS_DIR)" "$(BUILD_DIR)/$(CONFIGURATION)$(EFFECTIVE_PLATFORM_NAME)"'
-        config.build_settings['SWIFT_INCLUDE_PATHS'] = spm_dirs
-        config.build_settings['FRAMEWORK_SEARCH_PATHS'] = spm_dirs
+        config.build_settings['SWIFT_INCLUDE_PATHS'] =
+          '$(inherited) "$(BUILT_PRODUCTS_DIR)" "' + spm_shared + '" "' + spm_shared + '/include"'
+        config.build_settings['FRAMEWORK_SEARCH_PATHS'] =
+          '$(inherited) "$(BUILT_PRODUCTS_DIR)" "' + spm_shared + '"'
+        # Append (don't clobber) so the sibling withDisableClangExplicitModules
+        # OTHER_SWIFT_FLAGS survive. Idempotent on re-runs.
+        flags = config.build_settings['OTHER_SWIFT_FLAGS']
+        flags = flags.is_a?(Array) ? flags.dup : (flags.is_a?(String) ? flags.split(' ') : ['$(inherited)'])
+        unless flags.join(' ').include?('RustFramework/module.modulemap')
+          flags << '-Xcc' << rust_modulemap
+        end
+        config.build_settings['OTHER_SWIFT_FLAGS'] = flags
       end
     end
     ${HOOK_END}
@@ -180,9 +202,26 @@ const withSprucePodSearchPaths = (config) =>
         console.warn(`[withSpruceIdSpmPackage] missing ${podfilePath}`);
         return cfg;
       }
-      const original = fs.readFileSync(podfilePath, 'utf8');
+      let original = fs.readFileSync(podfilePath, 'utf8');
+      // Self-updating: if a PRIOR version of our block is present, strip it so
+      // the current HOOK_BODY is re-injected. `expo prebuild` without --clean
+      // reuses the Podfile, so a "skip if marker present" check would freeze a
+      // stale hook in place (this is exactly what shipped the wrong RustFramework
+      // wiring). Removing + re-adding keeps the block in sync with this file.
       if (original.includes(HOOK_MARKER)) {
-        return cfg;
+        const esc = (s) => s.replace(/[.*+?^${}()|[\]\\]/gu, '\\$&');
+        const blockRe = new RegExp(
+          `\\n?[^\\n]*${esc(HOOK_MARKER)}[\\s\\S]*?${esc(HOOK_END)}[^\\n]*\\n?`,
+          'u'
+        );
+        const stripped = original.replace(blockRe, '\n');
+        if (stripped === original) {
+          console.warn(
+            '[withSpruceIdSpmPackage] existing hook present but not cleanly removable — leaving as-is'
+          );
+          return cfg;
+        }
+        original = stripped;
       }
       // Inject just before the closing `end` of the post_install block — the
       // Expo-generated Podfile contains exactly one such block.
