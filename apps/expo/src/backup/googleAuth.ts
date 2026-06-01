@@ -1,17 +1,21 @@
 /**
  * Google Sign-In wrapper for Drive backup — Android primary path; iOS opt-in.
  *
- * Scope: only `drive.appdata` (private per-app folder). We never request
- * full Drive access — keeps the OAuth consent screen friendly and aligns
- * with the principle that backup payloads are end-to-end encrypted (the
- * cloud provider only sees ciphertext).
+ * Scope: `drive.file` — per-file access limited to the files THIS app creates.
+ * This MUST match the native Drive client (DriveClient.kt queries/writes in
+ * `spaces=drive` with an app-created backup folder); the previous
+ * `drive.appdata` scope could only reach the hidden appDataFolder space, so a
+ * `drive.appdata` grant + `spaces=drive` query found nothing → Android backup
+ * silently failed to authenticate/restore. `drive.file` is still NOT full
+ * Drive access (the app only sees its own files) and backups remain
+ * end-to-end encrypted, so the cloud provider only ever sees ciphertext.
  */
 import {
   GoogleSignin,
   statusCodes,
 } from '@react-native-google-signin/google-signin';
 
-const DRIVE_APPDATA_SCOPE = 'https://www.googleapis.com/auth/drive.appdata';
+const DRIVE_FILE_SCOPE = 'https://www.googleapis.com/auth/drive.file';
 
 let configured = false;
 
@@ -27,7 +31,7 @@ function ensureConfigured(): void {
   GoogleSignin.configure({
     webClientId,
     iosClientId,
-    scopes: [DRIVE_APPDATA_SCOPE],
+    scopes: [DRIVE_FILE_SCOPE],
     offlineAccess: true,
   });
   configured = true;

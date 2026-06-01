@@ -42,10 +42,50 @@ const MAX_BACKUPS = 5;
 
 let activeProvider: ProviderKind = DEFAULT_PROVIDER;
 let initialized = false;
+/** True once a Drive access token has been pushed to the native client. */
+let driveAuthorized = false;
+
+/**
+ * Acquire a Google Drive access token and hand it to the native Drive client.
+ * Without this the Nitro Drive client has NO bearer token, so every Drive op
+ * returns 401 — the root reason Android Drive backup never authenticated
+ * (signInForDrive existed but was never called). Silent refresh if the user is
+ * already signed in; interactive sign-in on the first backup. Lazily imported
+ * so the iOS / iCloud path never loads the Google Sign-In native module.
+ *
+ * Degrades gracefully: if the Google Sign-In module is unavailable (unit
+ * tests, or a build without it) or the user declines, we DON'T throw/crash —
+ * the subsequent Drive op surfaces its own 401, telling the user to connect
+ * Google Drive. Never blocks the backup pipeline on an auth side-effect.
+ */
+async function ensureDriveAuth(): Promise<void> {
+  if (driveAuthorized) return;
+  try {
+    const { signInForDrive, refreshDriveAccessToken } = await import('./googleAuth');
+    try {
+      setGoogleAccessToken(await refreshDriveAccessToken());
+    } catch {
+      // Not signed in yet (or token expired without a refresh) — prompt.
+      const session = await signInForDrive();
+      setGoogleAccessToken(session.accessToken);
+    }
+  } catch {
+    // Sign-in module absent or declined — proceed; the Drive op surfaces a
+    // clear 401 if it genuinely has no token. Do not crash the pipeline here.
+  }
+}
 
 async function ensureInitialized(): Promise<CloudKit> {
   const ck = getCloudKit();
   if (!initialized) {
+    // Authenticate Drive BEFORE any file op when Drive is the active provider.
+    // A failure here is a real, surfaced error (can't back up without Drive
+    // access) — not a silent no-op — so the caller/UI can prompt the user to
+    // connect Google. Done before initialize() so the token is present for any
+    // Drive setup the native module performs.
+    if (activeProvider === 'googleDrive') {
+      await ensureDriveAuth();
+    }
     try {
       await ck.initialize(CONTAINER_ID);
     } catch {
@@ -69,6 +109,7 @@ export function setProvider(kind: ProviderKind): void {
 /** Push the Google Sign-In access token into the Nitro module (Android). */
 export function setGoogleAccessToken(accessToken: string): void {
   getCloudKit().setDriveAccessToken(accessToken);
+  driveAuthorized = true;
 }
 
 /** Currently-active provider — convenience accessor for callers. */
