@@ -40,6 +40,10 @@ import { usePreferences } from '@/settings/preferences';
 
 const DAG_PREVIEW_MAX = 10;
 
+// Hoisted to a stable ref — inline `options={{ presentation: 'modal' }}` is a
+// new object each render → expo-router setOptions loop → "Maximum update depth".
+const MODAL_SCREEN_OPTIONS = { presentation: 'modal' } as const;
+
 export default function IdentityTreeLab() {
   const insets = useSafeAreaInsets();
   const developerMode = usePreferences((s) => s.developerMode);
@@ -80,7 +84,7 @@ export default function IdentityTreeLab() {
   if (!developerMode) {
     return (
       <View className="flex-1 bg-pageBg" style={{ paddingTop: insets.top }}>
-        <Stack.Screen options={{ presentation: 'modal' }} />
+        <Stack.Screen options={MODAL_SCREEN_OPTIONS} />
         <SettingsBackToolbar title="Close" onPress={() => { router.back(); }} />
         <SettingsScreenTitle title="Identity Tree" />
         <View className="px-4 pt-6">
@@ -94,7 +98,7 @@ export default function IdentityTreeLab() {
 
   return (
     <View className="flex-1 bg-pageBg" style={{ paddingTop: insets.top }}>
-      <Stack.Screen options={{ presentation: 'modal' }} />
+      <Stack.Screen options={MODAL_SCREEN_OPTIONS} />
       <SettingsBackToolbar title="Close" onPress={() => { router.back(); }} />
       <SettingsScreenTitle title="Identity Tree" />
 
