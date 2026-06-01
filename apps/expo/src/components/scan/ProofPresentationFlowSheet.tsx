@@ -432,26 +432,43 @@ function resolveSelectedClaimIds(parsed: ParsedOidcRequest): readonly string[] {
   const presentable = provableClaims.filter((c) => c.isPresentable);
   if (presentable.length === 0) return [];
 
-  const inputDescriptors = parsed.request.presentation_definition?.input_descriptors ?? [];
-  if (inputDescriptors.length === 0) {
-    return presentable.map((c) => c.id);
+  // Collect every identifier the verifier asked for — from a
+  // presentation_definition AND/OR a DCQL query. We deliberately gather both
+  // so an OID4VP 1.0 DCQL-only request scopes disclosure correctly instead of
+  // being treated as "unspecified".
+  const requested = new Set<string>();
+  for (const d of parsed.request.presentation_definition?.input_descriptors ?? []) {
+    requested.add(d.id);
+    if (d.name) requested.add(d.name);
   }
-
-  const matched = new Set<string>();
-  for (const d of inputDescriptors) {
-    for (const c of presentable) {
-      if (c.id === d.id || c.claimType === d.id || c.claimType === d.name) {
-        matched.add(c.id);
-      }
+  for (const cq of parsed.request.dcql_query?.credentials ?? []) {
+    requested.add(cq.id);
+    for (const claim of cq.claims ?? []) {
+      if (claim.id) requested.add(claim.id);
+      // The last path segment is the claim name (e.g. ["...","age_over_18"]).
+      const tail = claim.path?.filter((p): p is string => typeof p === 'string').at(-1);
+      if (tail) requested.add(tail);
     }
   }
 
-  // Verifier asked for claims we don't hold — fall back to "everything we
-  // can present" so the user still gets a chance to attempt the exchange
-  // (the verifier rejects on its end if the missing claim is mandatory).
-  if (matched.size === 0) {
-    return presentable.map((c) => c.id);
+  // FAIL CLOSED — never present everything. If the verifier specified no
+  // disclosure target at all (no PD, no DCQL — e.g. an unrecognised or
+  // request_uri-only request we can't resolve), disclose NOTHING rather than
+  // dumping every claim we hold (the previous behaviour was a real
+  // over-disclosure leak). Our own requests always carry a presentation
+  // definition, so this only affects external/unspecified requests.
+  if (requested.size === 0) return [];
+
+  const matched = new Set<string>();
+  for (const c of presentable) {
+    if (requested.has(c.id) || requested.has(c.claimType)) {
+      matched.add(c.id);
+    }
   }
+  // The verifier asked for specific claims we don't hold → present nothing
+  // (fail closed). Presenting unrelated claims to satisfy a mismatch would
+  // over-disclose; the verifier rejects on its end if a mandatory claim is
+  // missing, which is the correct, privacy-preserving outcome.
   return Array.from(matched);
 }
 
@@ -480,9 +497,21 @@ function resolveVerifierDomain(parseState: ParseState, payload: string): string 
 
 function resolveRequestedClaims(parseState: ParseState): readonly string[] {
   if (parseState.kind !== 'ready') return [];
-  const pd = parseState.parsed.request.presentation_definition;
-  if (!pd) return [];
-  return pd.input_descriptors
-    .map((d) => d.name ?? d.purpose ?? d.id)
-    .filter((s): s is string => Boolean(s) && s.length > 0);
+  const req = parseState.parsed.request;
+  const names: string[] = [];
+  for (const d of req.presentation_definition?.input_descriptors ?? []) {
+    const label = d.name ?? d.purpose ?? d.id;
+    if (label.length > 0) names.push(label);
+  }
+  // Surface DCQL-requested claims too, so the consent UI shows exactly what an
+  // OID4VP 1.0 verifier asked for (not a blank "no claims" list).
+  for (const cq of req.dcql_query?.credentials ?? []) {
+    for (const claim of cq.claims ?? []) {
+      const tail = claim.path?.filter((p): p is string => typeof p === 'string').at(-1);
+      const label = claim.id ?? tail ?? cq.id;
+      if (label.length > 0) names.push(label);
+    }
+    if ((cq.claims ?? []).length === 0) names.push(cq.id);
+  }
+  return names;
 }

@@ -97,3 +97,59 @@ export async function verifyVcJwt(
     claims: payload as unknown as Record<string, unknown>,
   };
 }
+
+interface VpClaims {
+  readonly iss?: string;
+  readonly aud?: string | readonly string[];
+  readonly nonce?: string;
+  readonly nbf?: number;
+  readonly exp?: number;
+  readonly vp?: { readonly verifiableCredential?: readonly string[] | string };
+}
+
+export interface VerifiedVp {
+  readonly holderDid: string;
+  readonly credentials: readonly VerifiedVc[];
+  readonly nonce?: string;
+}
+
+/**
+ * Verify a scanned `vp_token` (a holder-signed `vp+jwt`) — the verifier side
+ * of OID4VP, mirroring Swift ProofVerifierService.verifyVpToken
+ * (QRCodeScanService+Handlers.swift:230). Throws on ANY failure so the caller
+ * never shows an unverified presentation as valid:
+ *   1. verify the outer VP signature against the holder `did:key`,
+ *   2. check the VP's own nbf/exp (+ aud if the caller supplies one),
+ *   3. verify EVERY embedded verifiable credential via verifyVcJwt.
+ * NOTE: replay/nonce binding to a specific verifier request is out of scope
+ * here (a standalone QR scan has no originating request context); signature,
+ * expiry, and issuer trust of the embedded VCs are enforced.
+ */
+export async function verifyVpToken(
+  vpJwt: string,
+  opts: VerifyOptions = {}
+): Promise<VerifiedVp> {
+  const { header, payload } = decodeJwtUnsafe<VpClaims>(vpJwt);
+  const holder = payload.iss ?? header.kid?.split('#')[0];
+  if (!holder) throw new Error('VP has no holder (iss / kid)');
+
+  const jwk = await resolveIssuerJwk(holder);
+  verifyJwtEs256<VpClaims>(vpJwt, jwk);
+
+  const now = opts.now ?? Math.floor(Date.now() / 1000);
+  checkTime(payload as VcClaims, now);
+  checkAud(payload as VcClaims, opts.expectedAud);
+
+  const raw = payload.vp?.verifiableCredential;
+  const vcJwts = raw === undefined ? [] : Array.isArray(raw) ? raw : [raw];
+  if (vcJwts.length === 0) throw new Error('VP carries no verifiable credentials');
+
+  const credentials: VerifiedVc[] = [];
+  for (const vc of vcJwts) {
+    // verifyVcJwt throws if a single embedded credential fails — the whole
+    // presentation is then rejected (fail closed).
+    credentials.push(await verifyVcJwt(vc, { now: opts.now }));
+  }
+
+  return { holderDid: holder, credentials, nonce: payload.nonce };
+}

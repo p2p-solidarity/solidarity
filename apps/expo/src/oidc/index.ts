@@ -1,8 +1,10 @@
 export { parseOidcRequest, type ParsedOidcRequest } from './parseAuthRequest';
 export {
   verifyVcJwt,
+  verifyVpToken,
   type TrustLevel,
   type VerifiedVc,
+  type VerifiedVp,
   type VerifyOptions,
 } from './proofVerifier';
 export {

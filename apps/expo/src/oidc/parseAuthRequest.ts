@@ -37,6 +37,14 @@ function fromQueryParams(input: string): ParsedOidcRequest {
       // leave as string — Zod will reject during parse
     }
   }
+  const dcql = obj['dcql_query'];
+  if (typeof dcql === 'string') {
+    try {
+      obj['dcql_query'] = JSON.parse(dcql) as Record<string, unknown>;
+    } catch {
+      // leave as string — Zod will reject during parse
+    }
+  }
   const cm = obj['client_metadata'];
   if (typeof cm === 'string') {
     try {

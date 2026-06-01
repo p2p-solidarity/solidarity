@@ -45,6 +45,7 @@ import { SCALE } from '@/feedback/motion';
 import { pushToast } from '@/feedback/toast';
 import { QrScanner } from '@/scan/QrScanner';
 import { handleScannedPayload } from '@/scan/envelopeHandler';
+import { verifyVpToken } from '@/oidc';
 
 const SCAN_WINDOW_SIZE = 260;
 
@@ -95,7 +96,7 @@ export default function ScanScreen() {
         setIsScanning(true);
         return;
       }
-      setRoute(classifyPayload(payload));
+      setRoute(await classifyPayload(payload));
     })();
   }, []);
 
@@ -247,7 +248,7 @@ function ScannedResultView({
   );
 }
 
-function classifyPayload(payload: string): ScanRoute {
+async function classifyPayload(payload: string): Promise<ScanRoute> {
   let url: URL;
   try {
     url = new URL(payload);
@@ -264,18 +265,40 @@ function classifyPayload(payload: string): ScanRoute {
   const vpToken = url.searchParams.get('vp_token');
   const presentationSubmission = url.searchParams.get('presentation_submission');
   if (vpToken && presentationSubmission) {
-    return {
-      kind: 'verifier',
-      result: {
-        valid: true,
-        title: 'Presentation received',
-        reason: `vp_token from ${url.host || url.protocol}`,
-        details: [
-          `Token length: ${String(vpToken.length)} chars`,
-          'Signature verification lands next iteration.',
-        ],
-      },
-    };
+    // REAL verification — never rubber-stamp a scanned presentation as valid.
+    // verifyVpToken throws unless the holder VP signature, expiry, AND every
+    // embedded credential verify (fail closed), matching Swift
+    // ProofVerifierService.verifyVpToken.
+    try {
+      const vp = await verifyVpToken(vpToken);
+      return {
+        kind: 'verifier',
+        result: {
+          valid: true,
+          title: 'Presentation verified',
+          reason: `${String(vp.credentials.length)} credential(s) · ${url.host || url.protocol}`,
+          details: [
+            `Holder: ${vp.holderDid}`,
+            ...vp.credentials.map(
+              (c, i) => `VC ${String(i + 1)} issuer: ${c.issuerDid}`
+            ),
+          ],
+        },
+      };
+    } catch (e) {
+      return {
+        kind: 'verifier',
+        result: {
+          valid: false,
+          title: 'Verification failed',
+          reason:
+            e instanceof Error ? e.message : 'Presentation could not be verified',
+          details: [
+            'The presentation signature, expiry, or an embedded credential did not verify.',
+          ],
+        },
+      };
+    }
   }
   return { kind: 'proof', payload };
 }

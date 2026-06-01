@@ -42,11 +42,35 @@ export const presentationDefinitionSchema = z.object({
 });
 export type PresentationDefinition = z.infer<typeof presentationDefinitionSchema>;
 
+// DCQL (Digital Credentials Query Language) — the OID4VP 1.0 default query
+// mechanism that supersedes presentation_definition. Swift OIDCService parses
+// dcqlQueryJSON; the Expo parser previously DROPPED it, which (combined with
+// the resolver's "present everything when no descriptors" fallback) caused
+// over-disclosure. We model the subset we need to scope disclosure: each
+// credential query's id + its requested claim paths.
+export const dcqlClaimSchema = z.object({
+  id: z.string().optional(),
+  // A claim path is an array of selectors (string keys / array indices / null).
+  path: z.array(z.union([z.string(), z.number(), z.null()])).optional(),
+});
+export const dcqlCredentialQuerySchema = z.object({
+  id: z.string().min(1),
+  format: z.string().optional(),
+  claims: z.array(dcqlClaimSchema).optional(),
+});
+export const dcqlQuerySchema = z.object({
+  credentials: z.array(dcqlCredentialQuerySchema),
+});
+export type DcqlQuery = z.infer<typeof dcqlQuerySchema>;
+
 export const oidcAuthRequestSchema = z.object({
   client_id: z.string().min(1),
   redirect_uri: z.string().min(1).optional(),
   response_uri: z.string().min(1).optional(),
-  state: z.string().min(1),
+  // `state` is OPTIONAL per OAuth 2.0 / OID4VP — a stateless verifier omits
+  // it. Requiring it rejected spec-valid requests that a legacy iOS holder
+  // accepts. Response propagation is already guarded with `if (request.state)`.
+  state: z.string().min(1).optional(),
   nonce: z.string().min(1),
   scope: z
     .string()
@@ -65,6 +89,15 @@ export const oidcAuthRequestSchema = z.object({
   code_challenge: z.string().min(1).optional(),
   code_challenge_method: z.literal('S256').optional(),
   presentation_definition: presentationDefinitionSchema.optional(),
+  // OID4VP 1.0 DCQL query (alternative to presentation_definition). Parsed so
+  // disclosure can be scoped to exactly what the verifier asked for instead of
+  // silently falling back to presenting all claims.
+  dcql_query: dcqlQuerySchema.optional(),
+  // JWT-Secured Authorization Request: a remote (request_uri) or inline
+  // (request) signed Request Object. Captured so the request isn't dropped;
+  // remote fetch + JWS trust-anchor verification is handled by the parser.
+  request_uri: z.string().min(1).optional(),
+  request: z.string().min(1).optional(),
   client_metadata: z.record(z.string(), z.unknown()).optional(),
 });
 export type OIDCAuthRequest = z.infer<typeof oidcAuthRequestSchema>;
