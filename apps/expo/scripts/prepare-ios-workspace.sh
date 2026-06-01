@@ -251,4 +251,18 @@ if is_enabled "$RUN_POD_INSTALL"; then
   ( cd "$APP_DIR/ios" && pod install )
 fi
 
+# Xcode Cloud archives with AUTOMATIC Swift Package resolution DISABLED, so the
+# build step demands an up-to-date Package.resolved. We cannot commit one:
+# `ios/` is gitignored and `expo prebuild --clean` wipes the workspace every run.
+# So generate it HERE, once the .xcworkspace exists, pinning the SwiftPM deps
+# (e.g. sprucekit-mobile) before Xcode Cloud builds. Without this the archive
+# fails: "a resolved file is required when automatic dependency resolution is
+# disabled". See apps/expo/CLAUDE.md (CI) + plugins/withSpruceIdSpmPackage.js.
+if [[ -d "$APP_DIR/ios/Solidarity.xcworkspace" ]]; then
+  step "resolve Swift Package dependencies (write Package.resolved)"
+  ( cd "$APP_DIR/ios" && xcodebuild -resolvePackageDependencies \
+      -workspace Solidarity.xcworkspace -scheme solidarity \
+      -skipPackagePluginValidation )
+fi
+
 green "OK iOS workspace prepared at $APP_DIR/ios/Solidarity.xcworkspace"
