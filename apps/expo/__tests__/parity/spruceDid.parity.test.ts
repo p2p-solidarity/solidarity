@@ -27,6 +27,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 import {
   base64UrlDecode,
   base64UrlEncode,
+  didKeyFromJwk,
   generateP256KeyPair,
   publicKeyJwkSchema,
   publicKeyToJwk,
@@ -210,8 +211,14 @@ mock.module('@solidarity/nitro-spruce-did', () => ({
 }));
 
 // Pull the module under test AFTER the mocks are installed.
-const { ensureSigningKey, publicJwk, signJwt, resetSigningKeyForTesting } =
-  await import('@/keychain');
+const {
+  didKeyForCurrentIdentity,
+  ensureSigningKey,
+  publicJwk,
+  signJwt,
+  resetSigningKeyForTesting,
+} =
+  await import('@/keychain/signingKey');
 
 describe('SpruceID DID Nitro module — JS-side wiring', () => {
   beforeEach(async () => {
@@ -239,6 +246,12 @@ describe('SpruceID DID Nitro module — JS-side wiring', () => {
     expect(jwk.kty).toBe('EC');
     expect(jwk.crv).toBe('P-256');
     expect(jwk.alg).toBe('ES256');
+  });
+
+  it('didKeyForCurrentIdentity derives from the public JWK without native SpruceID resolver', async () => {
+    const jwk = await publicJwk();
+    const did = await didKeyForCurrentIdentity();
+    expect(did).toBe(didKeyFromJwk(jwk));
   });
 
   it('signJwt round-trips through verifyJwtEs256 with the stored public key', async () => {

@@ -59,6 +59,7 @@ import {
   base64Decode,
   base64UrlDecode,
   base64UrlEncode,
+  didKeyFromJwk,
   publicKeyToJwk,
   publicKeyFromPrivate,
   type PublicKeyJWK,
@@ -286,12 +287,14 @@ export async function signJwt(
 }
 
 /**
- * Resolve a `did:key:z…` for the active signing key. Routes through the
- * native side so the wire format matches Spruce's DID resolver.
+ * Resolve a `did:key:z…` for the active signing key. The native side already
+ * exposes a validated P-256 public JWK; derive the DID locally with the shared
+ * parity-tested encoder so share / VC issuance do not depend on SpruceID's
+ * runtime resolver.
  */
 export async function didKeyForCurrentIdentity(): Promise<string> {
   const id = await ensureSigningKey();
-  return driver().didKeyFromAlias(id.alias);
+  return didKeyFromJwk(id.publicJwk);
 }
 
 /**

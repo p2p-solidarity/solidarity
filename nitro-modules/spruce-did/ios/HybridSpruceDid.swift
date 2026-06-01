@@ -169,25 +169,16 @@ final class HybridSpruceDid: HybridSpruceDidSpec {
 
   func didDocumentJson(did: String) throws -> Promise<String> {
     return Promise.async {
-      #if canImport(SpruceIDMobileSdkRs)
-        // Spruce's DID resolver returns a JSON-serialised document. The
-        // resolver covers did:key / did:web / did:jwk natively.
-        let resolver = DidResolver()
-        do {
-          let document = try await resolver.resolve(did: did)
-          // The Rust binding returns the document as JSON via a stringified
-          // method. Fall back to a manual encode if `toJsonString()` isn't
-          // present in the linked version.
-          if let str = (document as AnyObject).value(forKey: "json") as? String {
-            return str
-          }
-          return String(describing: document)
-        } catch {
-          throw SpruceDidError.spruceSdkError(error.localizedDescription)
-        }
-      #else
-        throw SpruceDidError.spruceSdkUnavailable
-      #endif
+      // SpruceID 0.15.x removed the standalone `DidResolver`; DID-document
+      // resolution now lives behind `AnyDidMethod`. This method is currently
+      // unused by the app (the JS `didDocumentJson` state is never populated
+      // from native — see apps/expo/src/zk/coordinator.ts), so rather than
+      // ship an unverified resolver we surface a clear, machine-readable error
+      // and keep the live did:key flow (`didKeyFromAlias`) intact.
+      // TODO(spruce-0.15): reimplement via `AnyDidMethod` + real-device
+      // verification when a caller actually needs DID-document resolution.
+      throw SpruceDidError.spruceSdkError(
+        "didDocumentJson unsupported on SpruceID 0.15.x (DidResolver removed): \(did)")
     }
   }
 
@@ -239,51 +230,17 @@ final class HybridSpruceDid: HybridSpruceDidSpec {
 
   func verifyJws(jws: String, did: String) throws -> Promise<Bool> {
     return Promise.async {
-      let parts = jws.split(separator: ".")
-      guard parts.count == 3,
-        let sigBytes = Base64Url.decode(String(parts[2]))
-      else {
-        throw SpruceDidError.verifyFailed("malformed JWS")
-      }
-      let signingInput = "\(parts[0]).\(parts[1])".data(using: .utf8) ?? Data()
-      let digest = SHA256.hash(data: signingInput)
-
-      #if canImport(SpruceIDMobileSdkRs)
-        // Resolve the DID to find the verification method, then call
-        // CryptoKit verify with the extracted JWK. Doing the verification
-        // locally (rather than the Spruce SDK's `Verifier`) keeps the API
-        // permissive for did:key / did:web inputs that the SDK doesn't
-        // round-trip-verify out of the box.
-        do {
-          let utils = DidMethodUtils(method: .key)
-          // For did:key we can extract the JWK directly without resolving.
-          let jwkString: String
-          if did.hasPrefix("did:key:") {
-            jwkString = try utils.jwkFromDid(did: did)
-          } else {
-            let docJson = try await DidResolver().resolve(did: did)
-            jwkString = String(describing: docJson)
-          }
-          guard let jwkData = jwkString.data(using: .utf8),
-            let jwk = try JSONSerialization.jsonObject(with: jwkData) as? [String: Any]
-          else {
-            throw SpruceDidError.verifyFailed("could not parse resolved JWK")
-          }
-          let pubKey = try JwkUtils.p256PublicKeyFromJwk(jwk)
-          let r = sigBytes.prefix(32)
-          let s = sigBytes.suffix(32)
-          let signature = try P256.Signing.ECDSASignature(rawRepresentation: r + s)
-          return pubKey.isValidSignature(signature, for: digest)
-        } catch let e as SpruceDidError {
-          throw e
-        } catch {
-          throw SpruceDidError.verifyFailed(error.localizedDescription)
-        }
-      #else
-        // No Spruce SDK linked — fall back to a strict reject so callers
-        // know hardware-backed verification is unavailable.
-        throw SpruceDidError.spruceSdkUnavailable
-      #endif
+      // SpruceID 0.15.x removed `DidMethodUtils.jwkFromDid` and the standalone
+      // `DidResolver`, so the original DID→JWK verification path no longer
+      // compiles. This method is currently unused by the app (no JS caller),
+      // so we throw a clear error instead of returning an unverified result —
+      // shipping an untested signature check would be worse than a loud
+      // failure. TODO(spruce-0.15): recover the did:key JWK via a local
+      // multicodec decoder (did:key embeds the key) or `AnyDidMethod`, then
+      // verify with CryptoKit P-256 as the prior implementation did.
+      _ = jws
+      throw SpruceDidError.verifyFailed(
+        "verifyJws by DID is unsupported on SpruceID 0.15.x (jwkFromDid/DidResolver removed): \(did)")
     }
   }
 
