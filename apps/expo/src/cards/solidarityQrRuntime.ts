@@ -14,6 +14,10 @@ import {
   signJwt,
 } from '@/keychain/signingKey';
 
+export interface RuntimeSolidarityQrOptions {
+  readonly proofClaims?: readonly string[];
+}
+
 /**
  * Produce the wire string the share screens drop into `<QRCode value/>`.
  *
@@ -32,11 +36,13 @@ import {
  */
 export async function buildRuntimeSolidarityQrPayload(
   card: BusinessCard,
-  shareFieldPreferences: ShareFieldPreferences
+  shareFieldPreferences: ShareFieldPreferences,
+  runtimeOptions: RuntimeSolidarityQrOptions = {}
 ): Promise<string> {
   const options: SolidarityQrPayloadOptions = {
     sharingLevel: 'professional',
     shareFieldPreferences,
+    proofClaims: runtimeOptions.proofClaims,
   };
   const format = card.sharingPreferences.sharingFormat;
 

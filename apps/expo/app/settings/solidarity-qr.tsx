@@ -27,6 +27,7 @@ import {
   SettingsScreenTitle,
 } from '@/components/settings/SettingsBlocks';
 import { Colors } from '@/constants/Colors';
+import { useHasClaim, useIdentityData } from '@/identity';
 import { useTranslation } from '@/i18n';
 import { usePreferences } from '@/settings/preferences';
 
@@ -35,7 +36,11 @@ export default function SolidarityQrSettings() {
   const { t } = useTranslation();
   const card = useMyCardDetail();
   const hydrateCards = useCardStore((s) => s.hydrate);
-  useEffect(() => { void hydrateCards(); }, [hydrateCards]);
+  const hydrateIdentity = useIdentityData((s) => s.hydrate);
+  useEffect(() => {
+    void hydrateCards();
+    void hydrateIdentity();
+  }, [hydrateCards, hydrateIdentity]);
   const [payload, setPayload] = useState<string | null>(null);
   const shareTitle = usePreferences((s) => s.shareTitle);
   const shareCompany = usePreferences((s) => s.shareCompany);
@@ -44,6 +49,10 @@ export default function SolidarityQrSettings() {
   const shareProfileImage = usePreferences((s) => s.shareProfileImage);
   const shareSocialNetworks = usePreferences((s) => s.shareSocialNetworks);
   const shareSkills = usePreferences((s) => s.shareSkills);
+  const shareIsHuman = usePreferences((s) => s.shareIsHuman);
+  const shareAgeOver18 = usePreferences((s) => s.shareAgeOver18);
+  const hasHumanClaim = useHasClaim('is_human');
+  const hasAgeClaim = useHasClaim('age_over_18');
 
   useEffect(() => {
     if (!card) {
@@ -61,21 +70,30 @@ export default function SolidarityQrSettings() {
       shareSocialNetworks,
       shareSkills,
     };
+    const proofClaims: string[] = [];
+    if (hasHumanClaim && shareIsHuman) proofClaims.push('is_human');
+    if (hasAgeClaim && shareAgeOver18) proofClaims.push('age_over_18');
 
     setPayload(null);
-    void buildRuntimeSolidarityQrPayload(card, shareFieldPreferences).then(
-      (next) => {
-        if (!cancelled) setPayload(next);
-      }
-    );
+    void buildRuntimeSolidarityQrPayload(
+      card,
+      shareFieldPreferences,
+      { proofClaims }
+    ).then((next) => {
+      if (!cancelled) setPayload(next);
+    });
 
     return () => {
       cancelled = true;
     };
   }, [
     card,
+    hasAgeClaim,
+    hasHumanClaim,
+    shareAgeOver18,
     shareCompany,
     shareEmail,
+    shareIsHuman,
     sharePhone,
     shareProfileImage,
     shareSkills,

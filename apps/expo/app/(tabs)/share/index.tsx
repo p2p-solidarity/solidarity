@@ -26,10 +26,7 @@ import { buildRuntimeSolidarityQrPayload } from '@/cards/solidarityQrRuntime';
 import { SfIcon } from '@/components/icons/SfIcon';
 import { RadarMatching } from '@/components/share/RadarMatching';
 import { QrShareCard } from '@/components/share/QrShareCard';
-import {
-  type EnabledField,
-  FieldPillRow as _FieldPillRow,
-} from '@/components/share/FieldPillRow';
+import { FieldPillRow as _FieldPillRow } from '@/components/share/FieldPillRow';
 import { UwbStatusPill } from '@/components/share/UwbStatusPill';
 import {
   NearbyPeersSheet,
@@ -45,12 +42,14 @@ import { useTranslation } from '@/i18n';
 import { pushToast } from '@/feedback/toast';
 import { SCALE, STAGGER_MS } from '@/feedback/motion';
 import { usePreferences } from '@/settings/preferences';
+import { useHasClaim, useIdentityData } from '@/identity';
 
 export default function ShareTab() {
   const { t } = useTranslation();
   const myCard = useMyCard();
   const myCardDetail = useMyCardDetail();
   const hydrate = useCardStore((s) => s.hydrate);
+  const hydrateIdentity = useIdentityData((s) => s.hydrate);
   const insets = useSafeAreaInsets();
   const peerCount = useMatchingSession((s) => s.peers.length);
   const isAdvertising = useMatchingSession((s) => s.isAdvertising);
@@ -76,8 +75,15 @@ export default function ShareTab() {
   const shareProfileImage = usePreferences((s) => s.shareProfileImage);
   const shareSocialNetworks = usePreferences((s) => s.shareSocialNetworks);
   const shareSkills = usePreferences((s) => s.shareSkills);
+  const shareIsHuman = usePreferences((s) => s.shareIsHuman);
+  const shareAgeOver18 = usePreferences((s) => s.shareAgeOver18);
+  const hasHumanClaim = useHasClaim('is_human');
+  const hasAgeClaim = useHasClaim('age_over_18');
 
-  useEffect(() => { void hydrate(); }, [hydrate]);
+  useEffect(() => {
+    void hydrate();
+    void hydrateIdentity();
+  }, [hydrate, hydrateIdentity]);
 
   // Keep the matching session's transport in sync with the developer pref so
   // the next advertise/browse uses the selected mode.
@@ -105,13 +111,16 @@ export default function ShareTab() {
       shareTitle,
     ]
   );
-  const enabledFields = useMemo<readonly EnabledField[]>(
-    () =>
-      enabledFieldsFromSharePreferences(
-        shareFieldPreferences
-      ) as readonly EnabledField[],
+  const enabledFields = useMemo(
+    () => enabledFieldsFromSharePreferences(shareFieldPreferences),
     [shareFieldPreferences]
   );
+  const selectedProofClaims = useMemo<readonly string[]>(() => {
+    const out: string[] = [];
+    if (hasHumanClaim && shareIsHuman) out.push('is_human');
+    if (hasAgeClaim && shareAgeOver18) out.push('age_over_18');
+    return out;
+  }, [hasAgeClaim, hasHumanClaim, shareAgeOver18, shareIsHuman]);
 
   useEffect(() => {
     if (!myCardDetail) {
@@ -121,13 +130,17 @@ export default function ShareTab() {
 
     let cancelled = false;
     setPayload(undefined);
-    void buildRuntimeSolidarityQrPayload(myCardDetail, shareFieldPreferences).then((next) => {
+    void buildRuntimeSolidarityQrPayload(
+      myCardDetail,
+      shareFieldPreferences,
+      { proofClaims: selectedProofClaims }
+    ).then((next) => {
       if (!cancelled) setPayload(next);
     });
     return () => {
       cancelled = true;
     };
-  }, [myCardDetail, shareFieldPreferences]);
+  }, [myCardDetail, selectedProofClaims, shareFieldPreferences]);
 
   const statusTitle = isMatching ? t('shareTab.scanningNearby') : t('shareTab.readyToMatch');
   const subtitle = statusSubtitle(t, isMatching, peerCount);

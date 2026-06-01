@@ -195,6 +195,30 @@ describe('Solidarity settings QR payload', () => {
     ]);
   });
 
+  it('includes selected proof claims in plaintext QR payloads', () => {
+    const withoutProofs = buildSolidarityQrPayload(makeCard(), {
+      now: NOW,
+      shareId: SHARE_ID,
+      sharingLevel: 'professional',
+      proofClaims: [],
+    });
+    const withProofs = buildSolidarityQrPayload(makeCard(), {
+      now: NOW,
+      shareId: SHARE_ID,
+      sharingLevel: 'professional',
+      proofClaims: ['age_over_18'],
+    });
+
+    expect(withProofs).not.toBe(withoutProofs);
+
+    const envelope = JSON.parse(withProofs) as {
+      readonly plaintext: {
+        readonly proofClaims?: readonly string[];
+      };
+    };
+    expect(envelope.plaintext.proofClaims).toEqual(['age_over_18']);
+  });
+
   it('prefers Swift-style DID-signed VC JWT payload when a signer is available', async () => {
     const signedPayloads: Record<string, unknown>[] = [];
     const jwt = await buildSolidarityQrPayloadAsync(makeCard(), {
@@ -213,9 +237,9 @@ describe('Solidarity settings QR payload', () => {
       signer: {
         issuerDid: DID,
         publicKeyJwk: PUBLIC_JWK,
-        signJwt: async (_header, payload) => {
+        signJwt: (_header, payload) => {
           signedPayloads.push(payload);
-          return 'signed.vc.jwt';
+          return Promise.resolve('signed.vc.jwt');
         },
       },
     });
@@ -327,9 +351,7 @@ describe('Solidarity settings QR payload', () => {
       signer: {
         issuerDid: DID,
         publicKeyJwk: PUBLIC_JWK,
-        signJwt: async () => {
-          throw new Error('biometric cancelled');
-        },
+        signJwt: () => Promise.reject(new Error('biometric cancelled')),
       },
     });
 
@@ -346,7 +368,7 @@ describe('Solidarity settings QR payload', () => {
       signer: {
         issuerDid: DID,
         publicKeyJwk: PUBLIC_JWK,
-        signJwt: async () => 'signed.vc.jwt',
+        signJwt: () => Promise.resolve('signed.vc.jwt'),
       },
     });
 

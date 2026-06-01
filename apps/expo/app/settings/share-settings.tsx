@@ -36,6 +36,7 @@ import { useTranslation } from '@/i18n';
 import {
   useActiveDid,
   useHasClaim,
+  useIdentityData,
   useIdentityCoordinator,
   useVerifiedFields,
 } from '@/identity';
@@ -73,15 +74,23 @@ export default function ShareSettings(): ReactNode {
   const enforceMandatory = usePreferences((s) => s.set);
   const [qrPayload, setQrPayload] = useState<string | null>(null);
 
+  const hydrateIdentity = useIdentityData((s) => s.hydrate);
   const seedKeychain = useIdentityCoordinator((s) => s.seedFromKeychain);
   useEffect(() => {
+    void hydrateIdentity();
     void seedKeychain();
-  }, [seedKeychain]);
+  }, [hydrateIdentity, seedKeychain]);
   const activeDid = useActiveDid();
   const verifiedFields = useVerifiedFields(activeDid);
 
   const hasHumanClaim = useHasClaim('is_human', activeDid ?? undefined);
   const hasAgeClaim = useHasClaim('age_over_18', activeDid ?? undefined);
+  const selectedProofClaims = useMemo<readonly string[]>(() => {
+    const out: string[] = [];
+    if (hasHumanClaim && prefs.shareIsHuman) out.push('is_human');
+    if (hasAgeClaim && prefs.shareAgeOver18) out.push('age_over_18');
+    return out;
+  }, [hasAgeClaim, hasHumanClaim, prefs.shareAgeOver18, prefs.shareIsHuman]);
   useEffect(() => {
     if (hasHumanClaim && !prefs.shareIsHuman) {
       enforceMandatory('shareIsHuman', true);
@@ -118,7 +127,8 @@ export default function ShareSettings(): ReactNode {
     setQrPayload(null);
     void buildRuntimeSolidarityQrPayload(
       myCard,
-      shareFieldPreferencesFromFields(enabled)
+      shareFieldPreferencesFromFields(enabled),
+      { proofClaims: selectedProofClaims }
     ).then((next) => {
       if (!cancelled) setQrPayload(next);
     });
@@ -126,7 +136,7 @@ export default function ShareSettings(): ReactNode {
     return () => {
       cancelled = true;
     };
-  }, [enabled, myCard]);
+  }, [enabled, myCard, selectedProofClaims]);
 
   return (
     <View
