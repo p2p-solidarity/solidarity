@@ -15,11 +15,8 @@
  * so a JSON exported from the iOS build imports cleanly on Android and
  * vice-versa.
  *
- * TODO(android): Swift's `VCService.issueAndStoreBusinessCardCredential`
- * mints + verifies a self-issued L1 VC. The Expo signing-key path
- * (`ensureSigningKey` + `signJwt`) ships next iteration; until then the
- * "Create did:key VC" button toasts a friendly stub instead of writing a
- * malformed credential.
+ * "Create did:key VC" uses the active hardware-backed did:key signer to
+ * mint and persist a self-issued L1 BusinessCardCredential.
  */
 import * as DocumentPicker from 'expo-document-picker';
 import * as FileSystem from 'expo-file-system/legacy';
@@ -35,55 +32,89 @@ import {
   SettingsBlockSection,
   SettingsScreenTitle,
 } from '@/components/settings/SettingsBlocks';
+import { useCardStore } from '@/cards/cardManager';
+import { createDidKeyBusinessCardCredential } from '@/credentials/didKeyCredential';
 import { useCredentialStore } from '@/credentials/store';
+import {
+  buildVcExportText,
+  importCredentialJwts,
+  parseVcExportText,
+  VC_EXPORT_FILENAME,
+} from '@/credentials/vcImportExport';
 import { appAlert, showError } from '@/feedback/appAlert';
 import { pushToast } from '@/feedback/toast';
 import { useTranslation } from '@/i18n';
 import { requireBiometric } from '@/keychain';
 import { usePreferences } from '@/settings/preferences';
 
-interface VcExportWrapper {
-  readonly version: number;
-  readonly vcs: readonly string[];
-}
-
-function isVcExportWrapper(value: unknown): value is VcExportWrapper {
-  if (typeof value !== 'object' || value === null) return false;
-  const v = value as { vcs?: unknown };
-  return (
-    Array.isArray(v.vcs) && v.vcs.every((s) => typeof s === 'string')
-  );
-}
-
-const EXPORT_FILENAME = 'solidarity_vcs.json';
-
 export default function VcSettings() {
   const insets = useSafeAreaInsets();
   const { t } = useTranslation();
-  const credentials = useCredentialStore((s) => s.manifest);
   const hydrate = useCredentialStore((s) => s.hydrate);
+  const hydrateCards = useCardStore((s) => s.hydrate);
+  const loadCardDetail = useCardStore((s) => s.loadDetail);
   const policy = usePreferences((s) => s.biometricPolicy);
+  const shareTitle = usePreferences((s) => s.shareTitle);
+  const shareCompany = usePreferences((s) => s.shareCompany);
+  const shareEmail = usePreferences((s) => s.shareEmail);
+  const sharePhone = usePreferences((s) => s.sharePhone);
+  const shareProfileImage = usePreferences((s) => s.shareProfileImage);
+  const shareSocialNetworks = usePreferences((s) => s.shareSocialNetworks);
+  const shareSkills = usePreferences((s) => s.shareSkills);
   const [busy, setBusy] = useState(false);
 
   useEffect(() => {
     void hydrate();
-  }, [hydrate]);
+    void hydrateCards();
+  }, [hydrate, hydrateCards]);
 
-  const onCreateDidKeyVc = () => {
-    // TODO(android): wire VCService.issueAndStoreBusinessCardCredential.
-    // The signing flow needs `ensureSigningKey` + `signJwt` + a verifier
-    // round-trip; deferred until the issuer service ports.
-    pushToast(t('vc.createDidKey.todo'), 'info');
+  const onCreateDidKeyVc = async () => {
+    if (busy) return;
+    setBusy(true);
+    try {
+      await hydrateCards();
+      const cardState = useCardStore.getState();
+      const first = cardState.manifest[0];
+      const card = first
+        ? cardState.details.get(first.id) ?? await loadCardDetail(first.id)
+        : null;
+      if (!card) {
+        appAlert({ title: t('vc.title'), message: t('vc.createDidKey.noCard') });
+        return;
+      }
+      const stored = await createDidKeyBusinessCardCredential(card, {
+        shareFieldPreferences: {
+          shareTitle,
+          shareCompany,
+          shareEmail,
+          sharePhone,
+          shareProfileImage,
+          shareSocialNetworks,
+          shareSkills,
+        },
+      });
+      pushToast(t('vc.createDidKey.success', { title: stored.title }), 'success');
+    } catch (err) {
+      showError({
+        context: 'VC Management › Create did:key VC',
+        summary: t('vc.createDidKey.failed'),
+        error: err,
+      });
+    } finally {
+      setBusy(false);
+    }
   };
 
   const onExportVcs = async () => {
     if (busy) return;
-    if (credentials.length === 0) {
-      appAlert({ title: t('vc.title'), message: t('vc.noneToExport') });
-      return;
-    }
     setBusy(true);
     try {
+      await hydrate();
+      const fresh = Array.from(useCredentialStore.getState().details.values());
+      if (fresh.length === 0) {
+        appAlert({ title: t('vc.title'), message: t('vc.noneToExport') });
+        return;
+      }
       if (policy.exportGraph) {
         const ok = await requireBiometric('export');
         if (!ok) {
@@ -91,20 +122,11 @@ export default function VcSettings() {
           return;
         }
       }
-      // Export pulls raw JWTs from the encrypted detail map — `hydrate()`
-      // guarantees every manifest entry has a corresponding detail record
-      // before we serialise. Reading from `getState()` instead of the
-      // captured `details` prop avoids a stale render closure.
-      await hydrate();
-      const fresh = useCredentialStore.getState().details;
-      const wrapper: VcExportWrapper = {
-        version: 1,
-        vcs: Array.from(fresh.values()).map((c) => c.rawJwt),
-      };
+      const text = buildVcExportText(fresh.map((c) => c.rawJwt));
       const cache = FileSystem.cacheDirectory ?? '';
       if (!cache) throw new Error('Cache directory unavailable.');
-      const fileUri = `${cache}${EXPORT_FILENAME}`;
-      await FileSystem.writeAsStringAsync(fileUri, JSON.stringify(wrapper, null, 2), {
+      const fileUri = `${cache}${VC_EXPORT_FILENAME}`;
+      await FileSystem.writeAsStringAsync(fileUri, text, {
         encoding: FileSystem.EncodingType.UTF8,
       });
       if (!(await Sharing.isAvailableAsync())) {
@@ -143,19 +165,26 @@ export default function VcSettings() {
       const text = await FileSystem.readAsStringAsync(asset.uri, {
         encoding: FileSystem.EncodingType.UTF8,
       });
-      const parsed: unknown = JSON.parse(text);
-      if (!isVcExportWrapper(parsed)) {
-        throw new Error('Invalid VC export file: missing `vcs` array.');
-      }
-      // TODO(android): wire VCService.importPresentedCredential to verify
-      // each JWT, derive its credential subject, and call useCredentialStore.add.
-      // Until the verifier ports we just count the JWTs.
-      const total = parsed.vcs.length;
+      const jwts = parseVcExportText(text);
+      const total = jwts.length;
       if (total === 0) {
         appAlert({ title: t('vc.title'), message: t('vc.noneInFile') });
         return;
       }
-      pushToast(t('vc.foundCount', { count: total }), 'info');
+      await hydrate();
+      const state = useCredentialStore.getState();
+      const result = await importCredentialJwts(jwts, {
+        existingIds: [
+          ...state.manifest.map((entry) => entry.id),
+          ...state.details.keys(),
+        ],
+        addCredential: state.add,
+      });
+      if (result.imported === 0) {
+        appAlert({ title: t('vc.title'), message: t('vc.noneNewInFile') });
+        return;
+      }
+      pushToast(t('vc.importSuccess', { count: result.imported }), 'success');
     } catch (err) {
       showError({ context: 'VC Management › Import', summary: t('vc.readFailed'), error: err });
     } finally {
@@ -188,7 +217,8 @@ export default function VcSettings() {
               icon="key.fill"
               title={t('vc.createDidKey')}
               showsChevron={false}
-              onPress={onCreateDidKeyVc}
+              disabled={busy}
+              onPress={() => { void onCreateDidKeyVc(); }}
             />
             <SettingsBlockRow
               icon="qrcode"
