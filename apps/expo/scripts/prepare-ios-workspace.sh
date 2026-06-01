@@ -251,18 +251,38 @@ if is_enabled "$RUN_POD_INSTALL"; then
   ( cd "$APP_DIR/ios" && pod install )
 fi
 
-# Xcode Cloud archives with AUTOMATIC Swift Package resolution DISABLED, so the
-# build step demands an up-to-date Package.resolved. We cannot commit one:
-# `ios/` is gitignored and `expo prebuild --clean` wipes the workspace every run.
-# So generate it HERE, once the .xcworkspace exists, pinning the SwiftPM deps
-# (e.g. sprucekit-mobile) before Xcode Cloud builds. Without this the archive
-# fails: "a resolved file is required when automatic dependency resolution is
-# disabled". See apps/expo/CLAUDE.md (CI) + plugins/withSpruceIdSpmPackage.js.
+# Xcode Cloud archives with AUTOMATIC Swift Package resolution DISABLED, and
+# `expo prebuild --clean` wipes `ios/` every run — so neither a committed
+# workspace Package.resolved nor an in-CI `xcodebuild -resolvePackageDependencies`
+# works (the latter is refused outright: "a resolved file is required when
+# automatic dependency resolution is disabled"). So we ship a CHECKED-IN,
+# pre-resolved pin (scripts/ios-spm.Package.resolved) and drop it into the
+# freshly generated workspace, so the archive finds a satisfying file and never
+# resolves. We still try a real resolve first (best-effort re-enable) so a
+# perfect file is produced when the environment allows it.
+#
+# Regenerate the checked-in pin after bumping SPM_VERSION in
+# plugins/withSpruceIdSpmPackage.js:
+#   (cd apps/expo/ios && xcodebuild -resolvePackageDependencies \
+#      -workspace Solidarity.xcworkspace -scheme Solidarity) \
+#   && cp apps/expo/ios/Solidarity.xcworkspace/xcshareddata/swiftpm/Package.resolved \
+#         apps/expo/scripts/ios-spm.Package.resolved
+# See apps/expo/CLAUDE.md (CI).
 if [[ -d "$APP_DIR/ios/Solidarity.xcworkspace" ]]; then
+  resolved_dst_dir="$APP_DIR/ios/Solidarity.xcworkspace/xcshareddata/swiftpm"
+  resolved_src="$APP_DIR/scripts/ios-spm.Package.resolved"
   step "resolve Swift Package dependencies (write Package.resolved)"
-  ( cd "$APP_DIR/ios" && xcodebuild -resolvePackageDependencies \
-      -workspace Solidarity.xcworkspace -scheme solidarity \
-      -skipPackagePluginValidation )
+  defaults write com.apple.dt.Xcode IDEDisableAutomaticPackageResolution -bool NO 2>/dev/null || true
+  defaults write com.apple.dt.Xcode IDEPackageOnlyUseVersionsFromResolvedFile -bool NO 2>/dev/null || true
+  if ! ( cd "$APP_DIR/ios" && xcodebuild -resolvePackageDependencies \
+           -workspace Solidarity.xcworkspace -scheme solidarity \
+           -skipPackagePluginValidation ); then
+    red "x in-CI SwiftPM resolution refused — seeding checked-in Package.resolved"
+    [[ -f "$resolved_src" ]] || die "missing $resolved_src — regenerate it (see comment above)"
+    mkdir -p "$resolved_dst_dir"
+    cp "$resolved_src" "$resolved_dst_dir/Package.resolved"
+    green "OK seeded Package.resolved from $resolved_src"
+  fi
 fi
 
 green "OK iOS workspace prepared at $APP_DIR/ios/Solidarity.xcworkspace"
