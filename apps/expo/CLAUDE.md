@@ -305,3 +305,21 @@ globals. On that runtime:
 - Apple Vision `.accurate` on the A12 ANE raises an uncaught **C++** exception
   (Espresso), NOT an NSException, mid-inference. Catch it in ObjC++ with
   `catch (...)`, not only `@catch (NSException *)`. See `MrzPerformVisionRequest`.
+- A Nitro `ArrayBuffer` **argument from JS is non-owning** — its backing store is
+  valid ONLY for the synchronous duration of the call. NEVER touch
+  `buffer.data` / `buffer.size` inside `Promise.async` (that body runs later, on
+  the Swift-concurrency cooperative pool): the buffer is gone, Nitro raises an
+  Objective-C exception → `EXC_BREAKPOINT` / SIGTRAP — an **uncatchable native
+  crash**. No JS `try/catch`, `RootErrorBoundary`, or `Result` can stop it, so it
+  reads as a silent 閃退 with "no error". **Copy to an owning `Data` BEFORE
+  `return Promise.async {` and capture the `Data`**, e.g.
+  `let bytes = copyPayload(payload); return Promise.async { … use bytes … }`.
+  Buffers you create yourself via `ArrayBuffer.copy(data:)` are owning → exempt.
+  This bug hid for months because an earlier throw (SpruceID-unavailable)
+  short-circuited the flow before signing ever reached the `ArrayBuffer` read;
+  fixing that throw unmasked it. Swept across `signJws`, proximity
+  `invitePeer`/`sendData` (L2CAP path only — Multipeer was already correct),
+  secrets-vault `wrap`, semaphore `identityFromSeed`/`importPrivateKey`,
+  passport-zk `verifyNoirProof` (commit `6c77010`). When auditing a new
+  HybridObject method: any `: ArrayBuffer` param read inside `Promise.async` is
+  this bug.
