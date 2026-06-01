@@ -51,6 +51,7 @@ export function NearbyPeersSheet({
   const peers = useMatchingSession((s) => s.peers);
   const receivedCardIds = useMatchingSession((s) => s.receivedCardIds);
   const disconnect = useMatchingSession((s) => s.disconnectFromPeer);
+  const connectToPeer = useMatchingSession((s) => s.connectToPeer);
   const cardCount = useCardStore((s) => s.manifest.length);
 
   const [searchText, setSearchText] = useState('');
@@ -66,9 +67,16 @@ export function NearbyPeersSheet({
       pushToast('Create an identity card in the Me tab first.', 'error');
       return;
     }
-    pushToast(`Sent your card to ${peer.cardName ?? peer.displayName}.`, 'success');
-    // Actual native send is handled by the matching session via dataReceived
-    // round-tripping. UI feedback is the toast above.
+    // Initiate the REAL proximity connection (native invitePeer). The card
+    // exchange completes over the established session (dataReceived). We must
+    // NOT claim the card was "sent" here — the previous toast asserted
+    // delivery while nothing was transmitted, which is a no-fake-data
+    // violation (CLAUDE.md Rule 8). Report the truthful state: connecting.
+    void connectToPeer(peer);
+    pushToast(
+      `Connecting to ${peer.cardName ?? peer.displayName}…`,
+      'info'
+    );
   };
 
   return (
