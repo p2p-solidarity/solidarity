@@ -217,3 +217,9 @@ nitro-modules/passport-zk/android/src/main/assets/passport_verifier.*
 nitro-modules/passport-zk/android/src/main/assets/passport_adapter.*
 nitro-modules/passport-zk/android/src/main/assets/composite_show.*
 nitro-modules/passport-zk/android/src/main/assets/openac_show.*
+
+# Crash-hunt debug log archives pulled via `log collect` / `idevicecrashreport`.
+# ~190MB each, device-specific, never commit. See apps/expo/CLAUDE.md crash section.
+*.logarchive/
+*.logarchive
+system_logs.logarchive/
