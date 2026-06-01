@@ -26,8 +26,10 @@ import { SfIcon } from '@/components/icons/SfIcon';
 import { ThemedButton, ThemedText } from '@/components/themed';
 import { Colors } from '@/constants/Colors';
 import { haptic } from '@/feedback/haptics';
+import { useTranslation } from '@/i18n';
 
 export default function CardsIndexScreen(): ReactNode {
+  const { t } = useTranslation();
   const insets = useSafeAreaInsets();
   const hydrate = useCardStore((s) => s.hydrate);
   const manifest = useCardStore((s) => s.manifest);
@@ -54,8 +56,8 @@ export default function CardsIndexScreen(): ReactNode {
   };
 
   const onShare = (card: CardManifestEntry): void => {
-    void Share.share({ message: `Check out my card on AirMeishi: ${card.name}` }).catch(
-      () => undefined,
+    void Share.share({ message: t('cardsList.shareMessage', { name: card.name }) }).catch(
+      () => undefined
     );
   };
 
@@ -70,20 +72,25 @@ export default function CardsIndexScreen(): ReactNode {
     <View className="flex-1 bg-pageBg" style={{ paddingTop: insets.top }}>
       <Stack.Screen options={{ headerShown: false }} />
 
-      <Header onAdd={goCreate} />
+      <Header onAdd={goCreate} t={t} />
 
       {manifest.length === 0 ? (
-        detailsHydrated ? <EmptyState onCreate={goCreate} /> : <Loading />
+        detailsHydrated ? (
+          <EmptyState onCreate={goCreate} t={t} />
+        ) : (
+          <Loading />
+        )
       ) : (
         <ScrollView
-          contentContainerStyle={{ paddingVertical: 12, paddingBottom: insets.bottom + 24 }}
-        >
+          contentContainerStyle={{ paddingVertical: 12, paddingBottom: insets.bottom + 24 }}>
           {manifest.map((card) => (
             <BusinessCardRow
               key={card.id}
               card={card}
               onPress={goEdit}
-              onLongPress={(c) => { setActionsCard(c); }}
+              onLongPress={(c) => {
+                setActionsCard(c);
+              }}
             />
           ))}
         </ScrollView>
@@ -92,7 +99,9 @@ export default function CardsIndexScreen(): ReactNode {
       <BusinessCardActionsSheet
         visible={actionsCard !== undefined}
         card={actionsCard}
-        onClose={() => { setActionsCard(undefined); }}
+        onClose={() => {
+          setActionsCard(undefined);
+        }}
         onEdit={goEdit}
         onWalletPass={goWalletPass}
         onShare={onShare}
@@ -102,32 +111,37 @@ export default function CardsIndexScreen(): ReactNode {
   );
 }
 
-function Header({ onAdd }: { readonly onAdd: () => void }): ReactNode {
+function Header({
+  onAdd,
+  t,
+}: {
+  readonly onAdd: () => void;
+  readonly t: (key: string) => string;
+}): ReactNode {
   return (
     <View
       className="flex-row items-center justify-between"
-      style={{ height: 44, paddingHorizontal: 16 }}
-    >
+      style={{ height: 44, paddingHorizontal: 16 }}>
       <Pressable
         accessibilityRole="button"
-        accessibilityLabel="Back"
-        onPress={() => { router.back(); }}
-        hitSlop={8}
-      >
+        accessibilityLabel={t('cardsList.back')}
+        onPress={() => {
+          router.back();
+        }}
+        hitSlop={8}>
         <SfIcon name="chevron.left" size={24} color={Colors.text1} />
       </Pressable>
 
       <ThemedText variant="titleMedium" numberOfLines={1}>
-        My Cards
+        {t('cardsList.title')}
       </ThemedText>
 
       <Pressable
         accessibilityRole="button"
-        accessibilityLabel="Add card"
+        accessibilityLabel={t('cardsList.addCard')}
         onPress={onAdd}
         hitSlop={8}
-        style={{ width: 24, alignItems: 'flex-end' }}
-      >
+        style={{ width: 24, alignItems: 'flex-end' }}>
         <SfIcon name="plus" size={22} weight="semibold" color={Colors.text1} />
       </Pressable>
     </View>
@@ -142,26 +156,30 @@ function Loading(): ReactNode {
   );
 }
 
-function EmptyState({ onCreate }: { readonly onCreate: () => void }): ReactNode {
+function EmptyState({
+  onCreate,
+  t,
+}: {
+  readonly onCreate: () => void;
+  readonly t: (key: string) => string;
+}): ReactNode {
   return (
-    <View className="flex-1 items-center justify-center" style={{ rowGap: 32, paddingHorizontal: 32 }}>
+    <View
+      className="flex-1 items-center justify-center"
+      style={{ rowGap: 32, paddingHorizontal: 32 }}>
       <PaperStackIllustration size={160} />
 
       <View style={{ rowGap: 12, alignItems: 'center' }}>
         <ThemedText variant="headlineMedium" style={{ textAlign: 'center' }}>
-          No business cards yet
+          {t('cardsList.emptyTitle')}
         </ThemedText>
-        <ThemedText
-          variant="bodyMedium"
-          tone="secondary"
-          style={{ textAlign: 'center' }}
-        >
-          Create your first business card to start sharing.
+        <ThemedText variant="bodyMedium" tone="secondary" style={{ textAlign: 'center' }}>
+          {t('cardsList.emptySubtitle')}
         </ThemedText>
       </View>
 
       <ThemedButton
-        label="Create card"
+        label={t('cardsList.createCard')}
         variant="primary"
         onPress={onCreate}
         leadingIcon={<SfIcon name="plus.circle.fill" size={16} color={Colors.cardBg} />}

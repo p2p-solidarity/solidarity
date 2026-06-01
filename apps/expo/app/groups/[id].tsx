@@ -45,6 +45,7 @@ import { SfIcon } from '@/components/icons/SfIcon';
 import { ThemedText } from '@/components/themed';
 import { Colors } from '@/constants/Colors';
 import { pushToast } from '@/feedback/toast';
+import { useTranslation } from '@/i18n';
 import {
   canIssueCredentials,
   isOwner,
@@ -63,13 +64,14 @@ function NavBar({
   readonly title: string;
 }): React.JSX.Element {
   const insets = useSafeAreaInsets();
+  const { t } = useTranslation();
   return (
     <View style={{ paddingTop: insets.top }} className="bg-pageBg">
       <View className="h-11 flex-row items-center px-4">
         <Pressable
           onPress={() => { router.back(); }}
           accessibilityRole="button"
-          accessibilityLabel="Back"
+          accessibilityLabel={t('groupDetail.back')}
           hitSlop={8}
           className="-ml-1 px-1 py-1 active:opacity-60"
         >
@@ -96,13 +98,14 @@ function AdminTools({
 }): React.JSX.Element {
   // 1:1 port of Swift IDView "Admin Tools" stack
   // (GroupDetailView.swift: `if isOwner || canIssueCredentials { ... }`).
+  const { t } = useTranslation();
   return (
     <View className="gap-3">
       <Text
         className="text-text2 text-[12px] font-bold pl-1"
         style={{ fontFamily: MONO_FONT }}
       >
-        Admin Tools
+        {t('groupDetail.adminTools')}
       </Text>
       <CredentialIssuersSection group={group} />
       <GroupVCIssuanceSection group={group} />
@@ -112,6 +115,7 @@ function AdminTools({
 }
 
 export default function GroupDetail(): React.JSX.Element {
+  const { t } = useTranslation();
   const { id, name } = useLocalSearchParams<{ id: string; name?: string }>();
   // `loadDetail` is the cheap path — decrypts ONE group record so the hero
   // (name / merkle root / owner chip) paints without bulk-decrypting every
@@ -134,11 +138,11 @@ export default function GroupDetail(): React.JSX.Element {
       await hydrate();
       setErrorMessage(null);
     } catch (e) {
-      setErrorMessage(e instanceof Error ? e.message : 'Unknown error');
+      setErrorMessage(e instanceof Error ? e.message : t('groupDetail.unknownError'));
     } finally {
       setIsLoadingMembers(false);
     }
-  }, [id, loadDetail, hydrate]);
+  }, [id, loadDetail, hydrate, t]);
 
   useEffect(() => {
     void loadData();
@@ -152,27 +156,27 @@ export default function GroupDetail(): React.JSX.Element {
 
   const onKick = (m: GroupMember) => {
     void upsertMember({ ...m, status: 'kicked' });
-    pushToast(`Kicked ${m.userRecordID}`, 'warning');
+    pushToast(t('groupDetail.kicked', { member: m.userRecordID }), 'warning');
   };
 
   const onApprove = (m: GroupMember) => {
     void upsertMember({ ...m, status: 'active' });
-    pushToast(`Approved ${m.userRecordID}`, 'success');
+    pushToast(t('groupDetail.approved', { member: m.userRecordID }), 'success');
   };
 
   const onReject = (m: GroupMember) => {
     void upsertMember({ ...m, status: 'left' });
-    pushToast(`Rejected ${m.userRecordID}`, 'info');
+    pushToast(t('groupDetail.rejected', { member: m.userRecordID }), 'info');
   };
 
-  const displayName = group?.name ?? name ?? 'Group';
+  const displayName = group?.name ?? name ?? t('groupDetail.fallbackTitle');
 
   if (!group) {
     return (
       <View className="flex-1 bg-pageBg">
         <NavBar title={displayName} />
         <View className="flex-1 items-center justify-center p-6">
-          <ThemedText>Group not found.</ThemedText>
+          <ThemedText>{t('groupDetail.notFound')}</ThemedText>
         </View>
       </View>
     );

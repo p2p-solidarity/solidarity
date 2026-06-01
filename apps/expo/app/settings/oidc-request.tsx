@@ -32,6 +32,7 @@ import {
 import { ThemedButton } from '@/components/themed';
 import { Colors } from '@/constants/Colors';
 import { pushToast } from '@/feedback/toast';
+import { useTranslation } from '@/i18n';
 import { didKeyForCurrentIdentity } from '@/keychain/signingKey';
 import { buildOid4VpRequestUrl } from '@/oidc/requestQr';
 
@@ -48,6 +49,7 @@ function randomNonce(): string {
 
 export default function OidcRequestSettings() {
   const insets = useSafeAreaInsets();
+  const { t } = useTranslation();
   const [request, setRequest] = useState<GeneratedRequest | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
@@ -72,7 +74,7 @@ export default function OidcRequestSettings() {
     try {
       await Clipboard.setStringAsync(request.url);
       setCopied(true);
-      pushToast('Copied to clipboard', 'success', 1500);
+      pushToast(t('oidcRequest.copied'), 'success', 1500);
       setTimeout(() => { setCopied(false); }, 1500);
     } catch (err) {
       pushToast((err as Error).message, 'error');
@@ -82,7 +84,7 @@ export default function OidcRequestSettings() {
   return (
     <View className="flex-1 bg-pageBg" style={{ paddingTop: insets.top }}>
       <SettingsBackToolbar onPress={() => { router.back(); }} />
-      <SettingsScreenTitle title="OIDC Request" />
+      <SettingsScreenTitle title={t('oidcRequest.title')} />
 
       <ScrollView
         className="flex-1"
@@ -107,14 +109,13 @@ export default function OidcRequestSettings() {
             </View>
             <View className="items-center gap-1.5">
               <Text className="text-text1 text-[17px] font-semibold">
-                Receive a Credential
+                {t('oidcRequest.heroTitle')}
               </Text>
               <Text
                 className="text-text2 text-[13px] text-center"
                 style={{ paddingHorizontal: 24, lineHeight: 18 }}
               >
-                Generate a one-time request link. The issuer scans your QR to
-                deliver a credential straight to your wallet.
+                {t('oidcRequest.heroSubtitle')}
               </Text>
             </View>
           </View>
@@ -150,13 +151,13 @@ export default function OidcRequestSettings() {
                   color={Colors.text3}
                 />
                 <Text className="text-text2 text-[14px] font-medium">
-                  No request yet
+                  {t('oidcRequest.noRequest')}
                 </Text>
                 <Text
                   className="text-text3 text-[12px] text-center"
                   style={{ paddingHorizontal: 16 }}
                 >
-                  Tap Generate Request to create a fresh QR.
+                  {t('oidcRequest.noRequestHint')}
                 </Text>
               </View>
             )}
@@ -165,7 +166,7 @@ export default function OidcRequestSettings() {
           {/* Request URL block */}
           {request ? (
             <View className="gap-2">
-              <SettingsBlockSectionHeader title="Request URL" />
+              <SettingsBlockSectionHeader title={t('oidcRequest.requestUrl')} />
               <View
                 className="mx-4 bg-mutedSurface rounded-xl flex-row items-start"
                 style={{ paddingHorizontal: 14, paddingVertical: 12 }}
@@ -193,7 +194,7 @@ export default function OidcRequestSettings() {
                 <Pressable
                   onPress={() => { void onCopy(); }}
                   accessibilityRole="button"
-                  accessibilityLabel="Copy URL"
+                  accessibilityLabel={t('oidcRequest.copyUrl')}
                   className="active:opacity-80"
                   style={{
                     width: 28,
@@ -245,7 +246,7 @@ export default function OidcRequestSettings() {
             <ThemedButton
               variant="primary"
               fullWidth
-              label={request ? 'Regenerate Request' : 'Generate Request'}
+              label={request ? t('oidcRequest.regenerate') : t('oidcRequest.generate')}
               leadingIcon={
                 <SfIcon
                   name={request ? 'arrow.clockwise' : 'sparkles'}

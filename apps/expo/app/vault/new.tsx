@@ -21,6 +21,7 @@ import {
 } from '@/components/settings/SettingsBlocks';
 import { ThemedButton } from '@/components/themed';
 import { Colors } from '@/constants/Colors';
+import { useTranslation } from '@/i18n';
 import { pushToast } from '@/feedback/toast';
 import { writeVaultBlob } from '@/vault/storage';
 import { useVaultStore, type VaultItemKind } from '@/vault/store';
@@ -47,6 +48,7 @@ function InfoBullet({ children }: { readonly children: ReactNode }): ReactNode {
 }
 
 export default function VaultNew() {
+  const { t } = useTranslation();
   const insets = useSafeAreaInsets();
   const upsert = useVaultStore((s) => s.upsert);
   const [busy, setBusy] = useState(false);
@@ -87,10 +89,10 @@ export default function VaultNew() {
         updatedAt: now,
         tags: [],
       });
-      pushToast(`Encrypted ${name} (${written.size.toFixed(0)} B)`, 'success');
+      pushToast(t('vault.encryptedToast', { name, size: written.size.toFixed(0) }), 'success');
       router.back();
     } catch (err) {
-      pushToast(`Upload failed: ${(err as Error).message}`, 'error');
+      pushToast(t('vault.uploadFailed', { message: (err as Error).message }), 'error');
     } finally {
       setBusy(false);
     }
@@ -98,24 +100,24 @@ export default function VaultNew() {
 
   return (
     <View className="flex-1 bg-pageBg" style={{ paddingTop: insets.top }}>
-      <SettingsBackToolbar title="Vault" onPress={() => { router.back(); }} />
-      <SettingsScreenTitle title="Add to vault" />
+      <SettingsBackToolbar title={t('vault.title')} onPress={() => { router.back(); }} />
+      <SettingsScreenTitle title={t('vault.addToVault')} />
 
       <ScrollView
         className="flex-1"
         contentContainerStyle={{ paddingTop: 12, paddingBottom: 60 + insets.bottom }}
       >
         <View className="gap-2">
-          <SettingsBlockSectionHeader title="About" />
+          <SettingsBlockSectionHeader title={t('vaultNew.aboutHeader')} />
           <Text className="px-4 text-text3 text-[12px]">
-            Files are sealed with your master key (AES-256-GCM) before they touch disk.
+            {t('vaultNew.aboutBody')}
           </Text>
         </View>
 
         <View className="h-6" />
 
         <View className="gap-2">
-          <SettingsBlockSectionHeader title="Privacy" />
+          <SettingsBlockSectionHeader title={t('vaultNew.privacyHeader')} />
           <View className="px-4">
             <View
               className="bg-mutedSurface rounded-xl"
@@ -127,12 +129,12 @@ export default function VaultNew() {
                 >
                   <SfIcon name="lock.shield" size={14} color={Colors.text1} />
                 </View>
-                <Text className="text-text1 text-[15px] flex-1">Local-first storage</Text>
+                <Text className="text-text1 text-[15px] flex-1">{t('vaultNew.localFirst')}</Text>
               </View>
               <View style={{ marginTop: 6, paddingLeft: 32 }}>
-                <InfoBullet>Stored in your app&apos;s private documentDir</InfoBullet>
-                <InfoBullet>Plain bytes never persist after the picker copy step</InfoBullet>
-                <InfoBullet>Decryption requires the device&apos;s Keychain-backed master key</InfoBullet>
+                <InfoBullet>{t('vaultNew.bulletStored')}</InfoBullet>
+                <InfoBullet>{t('vaultNew.bulletPlainBytes')}</InfoBullet>
+                <InfoBullet>{t('vaultNew.bulletDecryption')}</InfoBullet>
               </View>
             </View>
           </View>
@@ -142,14 +144,14 @@ export default function VaultNew() {
 
         <View className="px-4 gap-2">
           <ThemedButton
-            label={busy ? 'Encrypting…' : 'Pick file'}
+            label={busy ? t('vaultNew.encrypting') : t('vaultNew.pickFile')}
             fullWidth
             loading={busy}
             onPress={() => void onPick()}
           />
           <ThemedButton
             variant="secondary"
-            label="Cancel"
+            label={t('vaultNew.cancel')}
             fullWidth
             onPress={() => { router.back(); }}
           />

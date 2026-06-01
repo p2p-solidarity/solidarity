@@ -32,40 +32,42 @@ import {
 import { SfIcon } from '@/components/icons/SfIcon';
 import { Colors } from '@/constants/Colors';
 import { pushToast } from '@/feedback/toast';
+import { useTranslation } from '@/i18n';
 
 type DashboardSection = 'personal' | 'group';
 
 interface SectionDef {
   readonly id: DashboardSection;
-  readonly title: string;
+  readonly titleKey: string;
   readonly icon: SFSymbol;
 }
 
 const SECTIONS: readonly SectionDef[] = [
-  { id: 'personal', title: 'Personal', icon: 'person.circle' },
-  { id: 'group', title: 'Group', icon: 'person.3' },
+  { id: 'personal', titleKey: 'identityDashboard.tabPersonal', icon: 'person.circle' },
+  { id: 'group', titleKey: 'identityDashboard.tabGroup', icon: 'person.3' },
 ];
 
 export default function IdentityDashboard(): React.JSX.Element {
+  const { t } = useTranslation();
   const [selection, setSelection] = useState<DashboardSection>('personal');
   const [joinVisible, setJoinVisible] = useState(false);
 
   const onRefresh = (): void => {
-    pushToast('Identity refresh lands next iteration', 'info');
+    pushToast(t('identityDashboard.refreshPending'), 'info');
   };
 
   const onClearError = (): void => {
-    pushToast('Error cleared', 'success');
+    pushToast(t('identityDashboard.errorCleared'), 'success');
   };
 
   return (
     <View className="flex-1 bg-pageBg">
       <IDNavBar
-        title="Identity Center"
+        title={t('identityDashboard.title')}
         trailing={
           <Pressable
             accessibilityRole="button"
-            accessibilityLabel="Refresh"
+            accessibilityLabel={t('identityDashboard.refresh')}
             hitSlop={8}
             className="active:opacity-60"
             onPress={onRefresh}
@@ -80,8 +82,8 @@ export default function IdentityDashboard(): React.JSX.Element {
         contentContainerStyle={{ padding: 16, paddingBottom: 40 }}
       >
         <View className="gap-5">
-          <IdentitySummary />
-          <TabSwitcher selection={selection} onSelect={setSelection} />
+          <IdentitySummary t={t} />
+          <TabSwitcher selection={selection} onSelect={setSelection} t={t} />
           {selection === 'personal' ? (
             <PersonalPanel
               state={EMPTY_PERSONAL_STATE}
@@ -102,7 +104,11 @@ export default function IdentityDashboard(): React.JSX.Element {
   );
 }
 
-function IdentitySummary(): React.JSX.Element {
+function IdentitySummary({
+  t,
+}: {
+  readonly t: (key: string) => string;
+}): React.JSX.Element {
   return (
     <View
       className="bg-cardBg rounded-2xl"
@@ -115,7 +121,7 @@ function IdentitySummary(): React.JSX.Element {
     >
       <View className="flex-row items-center" style={{ gap: 8 }}>
         <SfIcon name="clock" size={14} color={Colors.text2} />
-        <Text className="text-text2 text-[12px]">No identity events yet.</Text>
+        <Text className="text-text2 text-[12px]">{t('identityDashboard.noEvents')}</Text>
       </View>
     </View>
   );
@@ -124,9 +130,11 @@ function IdentitySummary(): React.JSX.Element {
 function TabSwitcher({
   selection,
   onSelect,
+  t,
 }: {
   readonly selection: DashboardSection;
   readonly onSelect: (s: DashboardSection) => void;
+  readonly t: (key: string) => string;
 }): React.JSX.Element {
   return (
     <View className="flex-row" style={{ gap: 10 }}>
@@ -137,7 +145,7 @@ function TabSwitcher({
             key={s.id}
             onPress={() => { onSelect(s.id); }}
             accessibilityRole="button"
-            accessibilityLabel={s.title}
+            accessibilityLabel={t(s.titleKey)}
             style={{
               flex: 1,
               borderRadius: 12,
@@ -165,7 +173,7 @@ function TabSwitcher({
                 fontWeight: '600',
               }}
             >
-              {s.title}
+              {t(s.titleKey)}
             </Text>
           </Pressable>
         );

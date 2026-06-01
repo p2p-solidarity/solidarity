@@ -17,15 +17,17 @@ import {
   SettingsBackToolbar,
   SettingsScreenTitle,
 } from '@/components/settings/SettingsBlocks';
+import { useTranslation } from '@/i18n';
 
 import SelectiveDisclosureBody from './disclosure';
 
 export default function PrivacySettings() {
   const insets = useSafeAreaInsets();
+  const { t } = useTranslation();
   return (
     <View className="flex-1 bg-pageBg" style={{ paddingTop: insets.top }}>
       <SettingsBackToolbar onPress={() => { router.back(); }} />
-      <SettingsScreenTitle title="Privacy Settings" />
+      <SettingsScreenTitle title={t('privacySettings.title')} />
       <SelectiveDisclosureBody headerless />
     </View>
   );

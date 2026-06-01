@@ -26,13 +26,14 @@ import {
   SettingsScreenTitle,
 } from '@/components/settings/SettingsBlocks';
 import { Colors } from '@/constants/Colors';
+import { useTranslation } from '@/i18n';
 import { usePreferences } from '@/settings/preferences';
 
-const SYNC_INTERVAL_OPTIONS: readonly { label: string; seconds: number }[] = [
-  { label: '15 seconds', seconds: 15 },
-  { label: '30 seconds', seconds: 30 },
-  { label: '1 minute', seconds: 60 },
-  { label: '5 minutes', seconds: 300 },
+const SYNC_INTERVAL_OPTIONS: readonly { labelKey: string; seconds: number }[] = [
+  { labelKey: 'notifications.interval.15s', seconds: 15 },
+  { labelKey: 'notifications.interval.30s', seconds: 30 },
+  { labelKey: 'notifications.interval.1m', seconds: 60 },
+  { labelKey: 'notifications.interval.5m', seconds: 300 },
 ];
 
 const DEFAULTS = {
@@ -44,6 +45,7 @@ const DEFAULTS = {
 
 export default function NotificationSettings() {
   const insets = useSafeAreaInsets();
+  const { t } = useTranslation();
   const inAppToast = usePreferences((s) => s.notificationsInAppToast);
   const remote = usePreferences((s) => s.notificationsRemote);
   const autoSync = usePreferences((s) => s.notificationsAutoSync);
@@ -63,13 +65,14 @@ export default function NotificationSettings() {
     setPref('notificationsSyncIntervalSeconds', DEFAULTS.syncIntervalSeconds);
   };
 
-  const currentIntervalLabel =
-    SYNC_INTERVAL_OPTIONS.find((o) => o.seconds === intervalSeconds)?.label ?? '—';
+  const currentIntervalKey =
+    SYNC_INTERVAL_OPTIONS.find((o) => o.seconds === intervalSeconds)?.labelKey;
+  const currentIntervalLabel = currentIntervalKey ? t(currentIntervalKey) : '—';
 
   return (
     <View className="flex-1 bg-pageBg" style={{ paddingTop: insets.top }}>
       <SettingsBackToolbar onPress={() => { router.back(); }} />
-      <SettingsScreenTitle title="Notifications" />
+      <SettingsScreenTitle title={t('notifications.title')} />
 
       <ScrollView
         className="flex-1"
@@ -78,13 +81,13 @@ export default function NotificationSettings() {
         <View className="gap-6">
           {/* In-App Notifications */}
           <SettingsBlockSection
-            title="In-App Notifications"
-            footer="Toast notifications appear at the top of the screen when the app is in foreground."
+            title={t('notifications.inApp.header')}
+            footer={t('notifications.inApp.footer')}
           >
             <SettingsBlockToggleRow
               icon="bell.badge.fill"
-              title="In-App Toast"
-              subtitle="Show toast when Sakura message arrives"
+              title={t('notifications.inApp.toastTitle')}
+              subtitle={t('notifications.inApp.toastSubtitle')}
               value={inAppToast}
               onValueChange={(v) => { setPref('notificationsInAppToast', v); }}
             />
@@ -92,20 +95,20 @@ export default function NotificationSettings() {
 
           {/* Remote Notifications */}
           <SettingsBlockSection
-            title="Remote Notifications"
-            footer="When disabled, you won't receive push notifications from other users sending Sakura messages."
+            title={t('notifications.remote.header')}
+            footer={t('notifications.remote.footer')}
           >
             <SettingsBlockToggleRow
               icon="iphone.radiowaves.left.and.right"
-              title="Remote Notifications"
-              subtitle="Receive push notifications from others"
+              title={t('notifications.remote.title')}
+              subtitle={t('notifications.remote.subtitle')}
               value={remote}
               onValueChange={(v) => { setPref('notificationsRemote', v); }}
             />
             <SettingsBlockRow
               icon="gearshape"
-              title="System Notification Settings"
-              trailingText="Open"
+              title={t('notifications.systemSettings.title')}
+              trailingText={t('notifications.systemSettings.open')}
               showsChevron={false}
               onPress={openSystemSettings}
             />
@@ -113,12 +116,12 @@ export default function NotificationSettings() {
 
           {/* Sync Settings */}
           <View className="gap-2">
-            <SettingsBlockSectionHeader title="Sync Settings" />
+            <SettingsBlockSectionHeader title={t('notifications.sync.header')} />
             <View className="px-4 gap-2">
               <SettingsBlockToggleRow
                 icon="arrow.triangle.2.circlepath"
-                title="Auto-Sync"
-                subtitle="Automatically check for new messages"
+                title={t('notifications.autoSync.title')}
+                subtitle={t('notifications.autoSync.subtitle')}
                 value={autoSync}
                 onValueChange={(v) => { setPref('notificationsAutoSync', v); }}
               />
@@ -126,7 +129,7 @@ export default function NotificationSettings() {
                 <Pressable
                   onPress={() => { setPickerOpen(true); }}
                   accessibilityRole="button"
-                  accessibilityLabel="Sync Interval"
+                  accessibilityLabel={t('notifications.syncInterval.title')}
                   className="bg-mutedSurface rounded-xl flex-row items-center active:opacity-80"
                   style={{ paddingHorizontal: 14, paddingVertical: 14 }}
                 >
@@ -135,7 +138,7 @@ export default function NotificationSettings() {
                   >
                     <SfIcon name="timer" size={14} color={Colors.text1} />
                   </View>
-                  <Text className="text-text1 text-[15px] flex-1">Sync Interval</Text>
+                  <Text className="text-text1 text-[15px] flex-1">{t('notifications.syncInterval.title')}</Text>
                   <Text className="text-text2 text-[13px]" style={{ marginRight: 6 }}>
                     {currentIntervalLabel}
                   </Text>
@@ -144,15 +147,15 @@ export default function NotificationSettings() {
               ) : null}
             </View>
             <Text className="px-4 text-text3 text-[12px]">
-              Auto-sync periodically checks for new messages. Higher intervals reduce battery and network usage.
+              {t('notifications.sync.footer')}
             </Text>
           </View>
 
           {/* Reset */}
-          <SettingsBlockSection title="Reset">
+          <SettingsBlockSection title={t('notifications.reset.header')}>
             <SettingsBlockDangerRow
               icon="arrow.counterclockwise"
-              title="Reset to Defaults"
+              title={t('notifications.reset.title')}
               onPress={resetToDefaults}
             />
           </SettingsBlockSection>
@@ -179,7 +182,7 @@ export default function NotificationSettings() {
               className="text-text2 text-[13px]"
               style={{ paddingHorizontal: 16, paddingVertical: 8 }}
             >
-              Sync Interval
+              {t('notifications.syncInterval.title')}
             </Text>
             {SYNC_INTERVAL_OPTIONS.map((opt) => {
               const active = opt.seconds === intervalSeconds;
@@ -198,7 +201,7 @@ export default function NotificationSettings() {
                     className="text-text1 text-[15px] flex-1"
                     style={{ fontWeight: active ? '600' : '400' }}
                   >
-                    {opt.label}
+                    {t(opt.labelKey)}
                   </Text>
                   {active ? (
                     <SfIcon name="checkmark" size={14} weight="semibold" color={Colors.primaryBlue} />

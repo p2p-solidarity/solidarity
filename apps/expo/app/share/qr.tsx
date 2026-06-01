@@ -23,12 +23,14 @@ import { ON_DARK, ThemedButton } from '@/components/themed';
 import { Colors } from '@/constants/Colors';
 import { useMyCard } from '@/cards/cardManager';
 import { pushToast } from '@/feedback/toast';
+import { useTranslation } from '@/i18n';
 import { didKeyForCurrentIdentity } from '@/keychain/signingKey';
 import { buildOid4VpRequestUrl } from '@/oidc/requestQr';
 
 const COUNTDOWN_SECONDS = 45;
 
 export default function QrSharingScreen() {
+  const { t } = useTranslation();
   const insets = useSafeAreaInsets();
   const myCard = useMyCard();
   const [generation, setGeneration] = useState(0);
@@ -85,7 +87,7 @@ export default function QrSharingScreen() {
     const ref = qrRef.current;
     const toDataURL = ref?.toDataURL;
     if (!toDataURL) {
-      pushToast('Share unavailable on this device.', 'warning');
+      pushToast(t('shareQr.shareUnavailable'), 'warning');
       return;
     }
     const dataUrl = await new Promise<string>((resolve) => {
@@ -104,20 +106,20 @@ export default function QrSharingScreen() {
     <View style={[styles.root, { paddingTop: insets.top }]}>
       <View style={styles.navBar}>
         <View style={styles.navSpacer} />
-        <Text style={styles.navTitle}>My QR</Text>
+        <Text style={styles.navTitle}>{t('shareQr.title')}</Text>
         <Pressable
           accessibilityRole="button"
-          accessibilityLabel="Done"
+          accessibilityLabel={t('shareQr.done')}
           onPress={() => { router.back(); }}
           style={styles.navAction}
         >
-          <Text style={styles.navActionText}>Done</Text>
+          <Text style={styles.navActionText}>{t('shareQr.done')}</Text>
         </Pressable>
       </View>
 
       <ScrollView contentContainerStyle={styles.scroll}>
         <View style={styles.qrCard}>
-          <Text style={styles.qrTitle}>Universal Verification QR</Text>
+          <Text style={styles.qrTitle}>{t('shareQr.cardTitle')}</Text>
           <View style={styles.qrFrame}>
             {payload ? (
               <QRCode
@@ -132,19 +134,19 @@ export default function QrSharingScreen() {
             ) : (
               <View style={styles.placeholder}>
                 <SfIcon name="qrcode" size={44} color={Colors.text3} />
-                <Text style={styles.placeholderText}>Generating QR...</Text>
+                <Text style={styles.placeholderText}>{t('shareQr.generating')}</Text>
               </View>
             )}
           </View>
           <Text style={styles.qrSubtitle}>
-            Verifier-compatible OID4VP style request.
+            {t('shareQr.subtitle')}
           </Text>
         </View>
 
         <View style={styles.countdownBadge}>
           <SfIcon name="clock" size={12} color={Colors.text2} />
           <Text style={styles.countdownText}>
-            {`Refresh in ${String(secondsLeft)}s`}
+            {t('shareQr.refreshIn', { seconds: secondsLeft })}
           </Text>
         </View>
 
@@ -152,13 +154,13 @@ export default function QrSharingScreen() {
           <ThemedButton
             fullWidth
             variant="secondary"
-            label="Refresh QR"
+            label={t('shareQr.refresh')}
             leadingIcon={<SfIcon name="arrow.clockwise" size={14} color={Colors.accentRose} />}
             onPress={refresh}
           />
           <ThemedButton
             fullWidth
-            label="Share QR"
+            label={t('shareQr.share')}
             leadingIcon={<SfIcon name="square.and.arrow.up" size={14} color={ON_DARK} />}
             disabled={!payload}
             onPress={() => { void shareQr(); }}
@@ -166,7 +168,7 @@ export default function QrSharingScreen() {
           <ThemedButton
             fullWidth
             variant="secondary"
-            label="Share via…"
+            label={t('shareQr.shareVia')}
             leadingIcon={<SfIcon name="ellipsis.circle" size={14} color={Colors.accentRose} />}
             disabled={!payload}
             onPress={() => { setShareSheetVisible(true); }}

@@ -37,6 +37,7 @@ import {
   type StoredCredential,
 } from '@/credentials/store';
 import { pushToast } from '@/feedback/toast';
+import { useTranslation } from '@/i18n';
 import {
   useIdentityData,
   type ProvableClaimEntity,
@@ -91,14 +92,17 @@ function proofIcon(metadataTags: readonly string[]): SFSymbol {
   return 'doc.text.fill';
 }
 
-function levelText(trustLevel: StoredCredential['trustLevel']): string {
+function levelText(
+  trustLevel: StoredCredential['trustLevel'],
+  t: (key: string) => string,
+): string {
   switch (trustLevel) {
     case 'L3':
-      return 'Level 3 - ZK Verified';
+      return t('credentialDetail.levelL3');
     case 'L2':
-      return 'Level 2 - Fallback';
+      return t('credentialDetail.levelL2');
     default:
-      return 'Level 1 - Self-attested';
+      return t('credentialDetail.levelL1');
   }
 }
 
@@ -268,6 +272,7 @@ function ClaimRow({
 // MARK: - Screen
 
 export default function CredentialDetailScreen() {
+  const { t } = useTranslation();
   const insets = useSafeAreaInsets();
   const { id } = useLocalSearchParams<{ id: string }>();
   const credential = useCredentialById(id);
@@ -297,10 +302,10 @@ export default function CredentialDetailScreen() {
   const status = useMemo<string>(() => {
     if (!credential) return '';
     if (credential.expiresAt && credential.expiresAt.getTime() < Date.now()) {
-      return 'Expired';
+      return t('credentialDetail.statusExpired');
     }
-    return 'Valid';
-  }, [credential]);
+    return t('credentialDetail.statusValid');
+  }, [credential, t]);
 
   if (!credential) {
     // Frame-1 render path: the manifest entry seeds the title before
@@ -309,7 +314,7 @@ export default function CredentialDetailScreen() {
     return (
       <View className="flex-1 bg-pageBg items-center justify-center">
         <Text className="text-text2 text-[15px]">
-          {manifestEntry ? 'Loading credential…' : 'Credential not found.'}
+          {manifestEntry ? t('credentialDetail.loading') : t('credentialDetail.notFound')}
         </Text>
       </View>
     );
@@ -346,7 +351,7 @@ export default function CredentialDetailScreen() {
   const onRegenerate = () => {
     void (async () => {
       await remove(credential.id);
-      pushToast('Credential removed. Re-scan to regenerate.', 'success');
+      pushToast(t('credentialDetail.removedToast'), 'success');
       router.back();
     })();
   };
@@ -359,13 +364,13 @@ export default function CredentialDetailScreen() {
           <Pressable
             onPress={() => { router.back(); }}
             accessibilityRole="button"
-            accessibilityLabel="Back"
+            accessibilityLabel={t('credentialDetail.back')}
             className="flex-row items-center gap-1 -ml-1 px-1 py-1 active:opacity-60"
           >
             <SfIcon name="chevron.left" size={16} weight="semibold" color={Colors.text1} />
           </Pressable>
           <View className="flex-1 items-center">
-            <Text className="text-text1 text-[17px] font-semibold">Credential</Text>
+            <Text className="text-text1 text-[17px] font-semibold">{t('credentialDetail.title')}</Text>
           </View>
           <View style={{ width: 24 }} />
         </View>
@@ -416,7 +421,7 @@ export default function CredentialDetailScreen() {
                 />
 
                 <View style={{ alignSelf: 'stretch', gap: 8 }}>
-                  <LevelTag text={levelText(credential.trustLevel)} accent={accent} />
+                  <LevelTag text={levelText(credential.trustLevel, t)} accent={accent} />
                   <View
                     style={{
                       flexDirection: 'row',
@@ -437,30 +442,30 @@ export default function CredentialDetailScreen() {
 
           {/* Metadata section */}
           <View className="gap-2">
-            <SectionHeader title="Credential metadata" />
+            <SectionHeader title={t('credentialDetail.metadataHeader')} />
             <View className="px-4">
               <MetadataRow
-                label="Issuer"
+                label={t('credentialDetail.issuer')}
                 value={credential.issuerDid}
                 position="first"
               />
               <MetadataRow
-                label="Holder"
+                label={t('credentialDetail.holder')}
                 value={shortDid(credential.holderDid)}
                 position="middle"
               />
               <MetadataRow
-                label="Issued"
+                label={t('credentialDetail.issued')}
                 value={formatDate(credential.issuedAt)}
                 position="middle"
               />
               <MetadataRow
-                label="Expires"
-                value={credential.expiresAt ? formatDate(credential.expiresAt) : 'None'}
+                label={t('credentialDetail.expires')}
+                value={credential.expiresAt ? formatDate(credential.expiresAt) : t('credentialDetail.expiresNone')}
                 position="middle"
               />
               <MetadataRow
-                label="Proof"
+                label={t('credentialDetail.proof')}
                 value={proofTypeText(credential.metadataTags)}
                 position="last"
               />
@@ -469,11 +474,11 @@ export default function CredentialDetailScreen() {
 
           {/* Selective Disclosures section */}
           <View className="gap-2">
-            <SectionHeader title="Selective Disclosures" />
+            <SectionHeader title={t('credentialDetail.disclosuresHeader')} />
             {associatedClaims.length === 0 ? (
               <View className="px-4">
                 <Text className="text-text3 text-[13px]">
-                  No claims associated with this credential.
+                  {t('credentialDetail.noClaims')}
                 </Text>
               </View>
             ) : (
@@ -498,7 +503,7 @@ export default function CredentialDetailScreen() {
         style={{ paddingBottom: 12 + insets.bottom }}
       >
         <ThemedButton
-          label="Present proof"
+          label={t('credentialDetail.presentProof')}
           fullWidth
           disabled={presentDisabled}
           onPress={onPresent}
@@ -507,14 +512,14 @@ export default function CredentialDetailScreen() {
           <Pressable
             onPress={onRegenerate}
             accessibilityRole="button"
-            accessibilityLabel="Regenerate Credential"
+            accessibilityLabel={t('credentialDetail.regenerate')}
             className="px-2 py-2 active:opacity-60"
           >
             <Text
               className="text-text2"
               style={{ fontSize: 12, fontWeight: '500' }}
             >
-              Regenerate Credential
+              {t('credentialDetail.regenerate')}
             </Text>
           </Pressable>
         </View>

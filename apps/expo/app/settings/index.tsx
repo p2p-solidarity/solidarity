@@ -23,12 +23,14 @@ import {
 } from '@/components/settings/SettingsBlocks';
 import { haptic } from '@/feedback/haptics';
 import { pushToast } from '@/feedback/toast';
+import { useTranslation } from '@/i18n';
 import { usePreferences } from '@/settings/preferences';
 
 const DEV_TAP_THRESHOLD = 7;
 
 export default function SettingsHub() {
   const insets = useSafeAreaInsets();
+  const { t } = useTranslation();
   const developerMode = usePreferences((s) => s.developerMode);
   const setPref = usePreferences((s) => s.set);
   const tapCountRef = useRef(0);
@@ -47,15 +49,15 @@ export default function SettingsHub() {
       setPref('developerMode', true);
       haptic('success');
       pushToast(
-        'Developer Mode Enabled\nGroup management and Sakura gallery are now accessible in Settings.',
+        t('settingsHub.devUnlock.enabled'),
         'success',
         3000
       );
     } else if (count >= 5) {
       const remaining = DEV_TAP_THRESHOLD - count;
       const message = remaining === 1
-        ? 'Almost there...\n1 tap away from developer mode.'
-        : `Almost there...\n${String(remaining)} taps away from developer mode.`;
+        ? t('settingsHub.devUnlock.almostOne')
+        : t('settingsHub.devUnlock.almostMany', { count: remaining });
       pushToast(message, 'info', 1500);
     }
   };
@@ -63,7 +65,7 @@ export default function SettingsHub() {
   return (
     <View className="flex-1 bg-pageBg" style={{ paddingTop: insets.top }}>
       <SettingsBackToolbar onPress={() => { router.back(); }} />
-      <SettingsScreenTitle title="Settings" />
+      <SettingsScreenTitle title={t('settingsHub.title')} />
 
       <ScrollView
         className="flex-1"
@@ -71,81 +73,81 @@ export default function SettingsHub() {
       >
         <View className="gap-6">
           {/* Account & Identity */}
-          <SettingsBlockSection title="Account & Identity">
+          <SettingsBlockSection title={t('settingsHub.accountIdentity')}>
             <SettingsBlockRow
               icon="person.text.rectangle"
-              title="Identity Profile"
+              title={t('settingsHub.identityProfile')}
               onPress={() => { router.push('/settings/vc'); }}
             />
             <SettingsBlockRow
               icon="qrcode"
-              title="Solidarity QR"
+              title={t('settingsHub.solidarityQr')}
               onPress={() => { router.push('/settings/solidarity-qr'); }}
             />
             <SettingsBlockRow
               icon="key.horizontal"
-              title="View DIDs"
+              title={t('settingsHub.viewDids')}
               onPress={() => { router.push('/settings/dids'); }}
             />
           </SettingsBlockSection>
 
           {/* QR Sharing */}
-          <SettingsBlockSection title="QR Sharing">
+          <SettingsBlockSection title={t('settingsHub.qrSharing')}>
             <SettingsBlockRow
               icon="square.and.arrow.up"
-              title="Share Settings"
+              title={t('settingsHub.shareSettings')}
               onPress={() => { router.push('/settings/share-settings'); }}
             />
           </SettingsBlockSection>
 
           {/* Preferences — matches Swift v1.3.1: Security & Keys → Data & Sync → Advanced.
               Notifications/Language live under Advanced; Developer only after dev unlock. */}
-          <SettingsBlockSection title="Preferences">
+          <SettingsBlockSection title={t('settingsHub.preferences')}>
             <SettingsBlockRow
               icon="lock.shield"
-              title="Security & Keys"
+              title={t('settingsHub.securityKeys')}
               onPress={() => { router.push('/settings/security'); }}
             />
             <SettingsBlockRow
               icon={Platform.OS === 'ios' ? 'icloud' : 'arrow.counterclockwise.icloud'}
-              title="Data & Sync"
+              title={t('settingsHub.dataSync')}
               onPress={() => { router.push('/settings/data-sync'); }}
             />
             <SettingsBlockRow
               icon="slider.horizontal.3"
-              title="Advanced"
+              title={t('settingsHub.advanced')}
               onPress={() => { router.push('/settings/advanced'); }}
             />
             {developerMode ? (
               <SettingsBlockRow
                 icon="hammer"
-                title="Developer"
+                title={t('settingsHub.developer')}
                 onPress={() => { router.push('/settings/developer'); }}
               />
             ) : null}
           </SettingsBlockSection>
 
           {/* Guide */}
-          <SettingsBlockSection title="Guide">
+          <SettingsBlockSection title={t('settingsHub.guide')}>
             <SettingsBlockRow
               icon="arrow.counterclockwise"
-              title="Replay Onboarding"
+              title={t('settingsHub.replayOnboarding')}
               onPress={() => { router.push('/onboarding?replay=1'); }}
             />
           </SettingsBlockSection>
 
           {/* About — Swift renders this inline with 12pt spacing (not 8) */}
           <View className="gap-3">
-            <SettingsBlockSectionHeader title="About" />
+            <SettingsBlockSectionHeader title={t('settingsHub.about')} />
             <View className="px-4">
               <Pressable
                 onPress={onVersionTap}
                 accessibilityRole="button"
-                accessibilityLabel="Version"
+                accessibilityLabel={t('settingsHub.version')}
               >
                 <SettingsBlockInfoRow
                   icon="info.circle"
-                  title="Version"
+                  title={t('settingsHub.version')}
                   value={version}
                 />
               </Pressable>

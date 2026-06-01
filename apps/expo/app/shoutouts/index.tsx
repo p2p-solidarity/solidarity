@@ -36,6 +36,7 @@ import {
 import { Colors } from '@/constants/Colors';
 import { useContactListDetail } from '@/contacts/repository';
 import { haptic } from '@/feedback/haptics';
+import { useTranslation } from '@/i18n';
 import { useShoutoutChartData, useShoutoutStore } from '@/shoutouts/store';
 import {
   initials,
@@ -55,6 +56,12 @@ const FILTER_OPTIONS: readonly FilterOption[] = [
   'Recently Added',
 ];
 
+const FILTER_OPTION_KEYS: Record<FilterOption, string> = {
+  'All Cards': 'shoutouts.filter.allCards',
+  'Verified Only': 'shoutouts.filter.verifiedOnly',
+  'Recently Added': 'shoutouts.filter.recentlyAdded',
+};
+
 function GridCard({
   contact,
   onPress,
@@ -62,13 +69,14 @@ function GridCard({
   readonly contact: Contact;
   readonly onPress: () => void;
 }): ReactNode {
+  const { t } = useTranslation();
   const { businessCard: card } = contact;
   const subtitle = [card.title, card.company].filter(Boolean).join(' · ');
   return (
     <Pressable
       onPress={onPress}
       accessibilityRole="button"
-      accessibilityLabel={`Open ${card.name}`}
+      accessibilityLabel={t('shoutouts.openCard', { name: card.name })}
       style={{ flex: 1, minWidth: '47%', height: 180 }}
       className="bg-cardBg rounded-lg border border-divider p-3"
     >
@@ -125,13 +133,14 @@ function ListRow({
   readonly contact: Contact;
   readonly onPress: () => void;
 }): ReactNode {
+  const { t } = useTranslation();
   const { businessCard: card } = contact;
   const subtitle = [card.title, card.company].filter(Boolean).join(' · ');
   return (
     <Pressable
       onPress={onPress}
       accessibilityRole="button"
-      accessibilityLabel={`Open ${card.name}`}
+      accessibilityLabel={t('shoutouts.openCard', { name: card.name })}
     >
       <View style={{ height: 0.5, backgroundColor: Colors.divider }} />
       <View className="flex-row" style={{ paddingVertical: 12 }}>
@@ -191,6 +200,7 @@ function ListRow({
 }
 
 export default function ShoutoutsHub(): ReactNode {
+  const { t } = useTranslation();
   const insets = useSafeAreaInsets();
   const contacts = useContactListDetail();
   const [searchQuery, setSearchQuery] = useState('');
@@ -278,7 +288,7 @@ export default function ShoutoutsHub(): ReactNode {
             <Pressable
               onPress={() => { setDisplayMode('grid'); }}
               accessibilityRole="button"
-              accessibilityLabel="Grid view"
+              accessibilityLabel={t('shoutouts.gridView')}
               style={{
                 padding: 8,
                 backgroundColor:
@@ -290,7 +300,7 @@ export default function ShoutoutsHub(): ReactNode {
             <Pressable
               onPress={() => { setDisplayMode('list'); }}
               accessibilityRole="button"
-              accessibilityLabel="List view"
+              accessibilityLabel={t('shoutouts.listView')}
               style={{
                 padding: 8,
                 backgroundColor:
@@ -308,7 +318,7 @@ export default function ShoutoutsHub(): ReactNode {
               setShowFiltersSheet(true);
             }}
             accessibilityRole="button"
-            accessibilityLabel="Open filters"
+            accessibilityLabel={t('shoutouts.openFilters')}
             style={{ marginLeft: 8, padding: 4 }}
           >
             <SfIcon
@@ -321,7 +331,7 @@ export default function ShoutoutsHub(): ReactNode {
           <Pressable
             onPress={onRefresh}
             accessibilityRole="button"
-            accessibilityLabel="Refresh"
+            accessibilityLabel={t('shoutouts.refresh')}
             style={{ marginLeft: 8, padding: 4 }}
           >
             <SfIcon name="arrow.triangle.2.circlepath" size={20} color={Colors.text1} />
@@ -338,7 +348,7 @@ export default function ShoutoutsHub(): ReactNode {
             }}
           />
           <Text className="text-text2" style={{ fontSize: 12, marginLeft: 6 }}>
-            {String(filtered.length)} cards
+            {t('shoutouts.cardCount', { count: filtered.length })}
           </Text>
         </View>
       </View>
@@ -358,7 +368,7 @@ export default function ShoutoutsHub(): ReactNode {
           <TextInput
             value={searchQuery}
             onChangeText={setSearchQuery}
-            placeholder="Search contacts, companies..."
+            placeholder={t('shoutouts.searchPlaceholder')}
             placeholderTextColor={Colors.text3}
             style={{ flex: 1, marginLeft: 8, color: Colors.text1, fontSize: 15 }}
           />
@@ -366,7 +376,7 @@ export default function ShoutoutsHub(): ReactNode {
             <Pressable
               onPress={() => { setSearchQuery(''); }}
               accessibilityRole="button"
-              accessibilityLabel="Clear search"
+              accessibilityLabel={t('shoutouts.clearSearch')}
             >
               <SfIcon name="xmark.circle.fill" size={14} color={Colors.text2} />
             </Pressable>
@@ -374,7 +384,7 @@ export default function ShoutoutsHub(): ReactNode {
           <Pressable
             onPress={() => { setShowFilterMenu((v) => !v); }}
             accessibilityRole="button"
-            accessibilityLabel="Filter options"
+            accessibilityLabel={t('shoutouts.filterOptions')}
             style={{ marginLeft: 12 }}
           >
             <View className="flex-row items-center">
@@ -384,7 +394,7 @@ export default function ShoutoutsHub(): ReactNode {
                 color={Colors.text2}
               />
               <Text className="text-text2" style={{ fontSize: 12, marginLeft: 4 }}>
-                {filterOption}
+                {t(FILTER_OPTION_KEYS[filterOption])}
               </Text>
             </View>
           </Pressable>
@@ -409,7 +419,7 @@ export default function ShoutoutsHub(): ReactNode {
                   setShowFilterMenu(false);
                 }}
                 accessibilityRole="button"
-                accessibilityLabel={opt}
+                accessibilityLabel={t(FILTER_OPTION_KEYS[opt])}
                 className="active:opacity-80"
                 style={{
                   paddingHorizontal: 14,
@@ -419,7 +429,7 @@ export default function ShoutoutsHub(): ReactNode {
                 }}
               >
                 <Text className="text-text1" style={{ fontSize: 13 }}>
-                  {opt}
+                  {t(FILTER_OPTION_KEYS[opt])}
                 </Text>
               </Pressable>
             ))}
@@ -433,12 +443,12 @@ export default function ShoutoutsHub(): ReactNode {
         accessibilityRole="tablist"
       >
         <SectionTabButton
-          label="Feed"
+          label={t('shoutouts.tabFeed')}
           active={sectionTab === 'feed'}
           onPress={() => { setSectionTab('feed'); }}
         />
         <SectionTabButton
-          label="Stats"
+          label={t('shoutouts.tabStats')}
           active={sectionTab === 'stats'}
           onPress={() => { setSectionTab('stats'); }}
         />

@@ -30,6 +30,7 @@ import {
 } from '@/credentials/issuerStore';
 import { useCredentialStore } from '@/credentials/store';
 import { pushToast } from '@/feedback/toast';
+import { useTranslation } from '@/i18n';
 
 interface ActionRowProps {
   readonly icon: SFSymbol;
@@ -95,6 +96,7 @@ function iconFor(item: CredentialManifestEntry): SFSymbol {
 }
 
 export default function VCManagementScreen() {
+  const { t } = useTranslation();
   const insets = useSafeAreaInsets();
   const manifest = useCredentialStore((s) => s.manifest);
   const details = useCredentialStore((s) => s.details);
@@ -111,23 +113,23 @@ export default function VCManagementScreen() {
   };
 
   const onCreateDidKey = () => {
-    pushToast('did:key VC creation lands next iteration', 'info');
+    pushToast(t('vcManage.createPending'), 'info');
   };
 
   const onReceiveOidc = () => {
-    pushToast('OIDC inbound (Receive Card) lands next iteration', 'info');
+    pushToast(t('vcManage.receivePending'), 'info');
   };
 
   const onExport = () => {
     if (manifest.length === 0) {
-      pushToast('No VCs found to export.', 'warning');
+      pushToast(t('vcManage.noneToExport'), 'warning');
       return;
     }
-    pushToast('Export to JSON lands next iteration', 'info');
+    pushToast(t('vcManage.exportPending'), 'info');
   };
 
   const onImport = () => {
-    pushToast('Import from JSON lands next iteration', 'info');
+    pushToast(t('vcManage.importPending'), 'info');
   };
 
   return (
@@ -141,13 +143,13 @@ export default function VCManagementScreen() {
           <Pressable
             onPress={onBack}
             accessibilityRole="button"
-            accessibilityLabel="Back"
+            accessibilityLabel={t('vcManage.back')}
             className="flex-row items-center gap-1 -ml-1 px-1 py-1 active:opacity-60"
           >
             <SfIcon name="chevron.left" size={16} weight="semibold" color={Colors.text1} />
           </Pressable>
           <View className="flex-1 items-center">
-            <Text className="text-text1 text-[17px] font-semibold">VC Management</Text>
+            <Text className="text-text1 text-[17px] font-semibold">{t('vcManage.title')}</Text>
           </View>
           <View style={{ width: 24 }} />
         </View>
@@ -155,25 +157,25 @@ export default function VCManagementScreen() {
 
       <ScrollView className="flex-1" contentContainerStyle={{ paddingVertical: 24 }}>
         <View className="gap-2">
-          <SectionHeader title="About" />
-          <SectionFooter text="Manage your Verifiable Credentials (VCs) for did:key." />
+          <SectionHeader title={t('vcManage.aboutHeader')} />
+          <SectionFooter text={t('vcManage.aboutFooter')} />
         </View>
 
         <View className="h-6" />
 
         <View className="gap-2">
-          <SectionHeader title="Actions" />
+          <SectionHeader title={t('vcManage.actionsHeader')} />
           <View className="px-4 gap-2">
-            <ActionRow icon="key.fill" title="Create did:key VC" onPress={onCreateDidKey} />
-            <ActionRow icon="qrcode" title="Receive Card (OIDC)" onPress={onReceiveOidc} />
-            <ActionRow icon="square.and.arrow.up" title="Export VCs" onPress={onExport} />
-            <ActionRow icon="square.and.arrow.down" title="Import VCs" onPress={onImport} />
+            <ActionRow icon="key.fill" title={t('vcManage.createDidKey')} onPress={onCreateDidKey} />
+            <ActionRow icon="qrcode" title={t('vcManage.receiveCard')} onPress={onReceiveOidc} />
+            <ActionRow icon="square.and.arrow.up" title={t('vcManage.exportVcs')} onPress={onExport} />
+            <ActionRow icon="square.and.arrow.down" title={t('vcManage.importVcs')} onPress={onImport} />
           </View>
         </View>
 
         {manifest.length > 0 ? (
           <View className="gap-2 mt-6">
-            <SectionHeader title="Stored credentials" />
+            <SectionHeader title={t('vcManage.storedHeader')} />
             <View className="gap-3">
               {manifest.map((item) => {
                 // `issuerDid` lives in the encrypted record. Once
@@ -210,8 +212,8 @@ export default function VCManagementScreen() {
           </View>
         ) : (
           <View className="gap-2 mt-6">
-            <SectionHeader title="Stored credentials" />
-            <SectionFooter text="No credentials yet. Use Create did:key VC or Receive Card (OIDC) above." />
+            <SectionHeader title={t('vcManage.storedHeader')} />
+            <SectionFooter text={t('vcManage.storedEmpty')} />
           </View>
         )}
 

@@ -130,7 +130,10 @@ const DEFAULTS: Preferences = {
   shareSkills: false,
   shareIsHuman: true,
   shareAgeOver18: false,
-  language: 'en',
+  // Empty = "no explicit choice yet → follow device locale" (resolved in
+  // installI18n). Only a real selection ('en' | 'zh-Hant') persists and
+  // overrides the device locale on relaunch.
+  language: '',
 };
 
 function readSafe(): Preferences {

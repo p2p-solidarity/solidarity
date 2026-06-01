@@ -31,10 +31,12 @@ import {
   SettingsScreenTitle,
 } from '@/components/settings/SettingsBlocks';
 import { Colors } from '@/constants/Colors';
+import { useTranslation } from '@/i18n';
 import { useActiveDid, useIdentityCoordinator } from '@/identity';
 
 export default function DIDListSheet() {
   const insets = useSafeAreaInsets();
+  const { t } = useTranslation();
   const seedKeychain = useIdentityCoordinator((s) => s.seedFromKeychain);
   useEffect(() => {
     void seedKeychain();
@@ -44,8 +46,8 @@ export default function DIDListSheet() {
   return (
     <View className="flex-1 bg-pageBg" style={{ paddingTop: insets.top }}>
       <Stack.Screen options={{ presentation: 'modal' }} />
-      <SettingsBackToolbar title="Close" onPress={() => { router.back(); }} />
-      <SettingsScreenTitle title="Your DIDs" />
+      <SettingsBackToolbar title={t('dids.close')} onPress={() => { router.back(); }} />
+      <SettingsScreenTitle title={t('dids.title')} />
 
       <ScrollView
         className="flex-1"
@@ -54,30 +56,30 @@ export default function DIDListSheet() {
         <View className="gap-6">
           {/* Active DID */}
           <View className="gap-2">
-            <SettingsBlockSectionHeader title="Active DID" />
+            <SettingsBlockSectionHeader title={t('dids.activeDid')} />
             <View className="px-4">
-              {activeDid ? <DidCard did={activeDid} /> : <NoActiveDidCard />}
+              {activeDid ? <DidCard did={activeDid} /> : <NoActiveDidCard label={t('dids.noActiveDid')} />}
             </View>
           </View>
 
           {/* Key Storage — platform-specific labels */}
           <SettingsBlockSection
-            title="Key Storage"
+            title={t('dids.keyStorage')}
             footer={
               Platform.OS === 'ios'
-                ? 'DID keys are stored in iCloud Keychain and shared across your signed-in devices.'
-                : 'DID keys are stored in the Android Keystore and backed up via Google Drive when sync is enabled.'
+                ? t('dids.keyStorageFooter.ios')
+                : t('dids.keyStorageFooter.android')
             }
           >
             <SettingsBlockInfoRow
               icon={Platform.OS === 'ios' ? 'key.icloud' : 'lock.shield'}
-              title="Storage"
-              value={Platform.OS === 'ios' ? 'iCloud Keychain' : 'Android Keystore'}
+              title={t('dids.storage')}
+              value={Platform.OS === 'ios' ? t('dids.storageValue.ios') : t('dids.storageValue.android')}
             />
             <SettingsBlockInfoRow
               icon="arrow.triangle.2.circlepath"
-              title="Sync"
-              value={Platform.OS === 'ios' ? 'Same Apple ID devices' : 'Google Drive'}
+              title={t('dids.sync')}
+              value={Platform.OS === 'ios' ? t('dids.syncValue.ios') : t('dids.syncValue.android')}
             />
           </SettingsBlockSection>
         </View>
@@ -118,7 +120,7 @@ function DidCard({ did }: { did: string }) {
   );
 }
 
-function NoActiveDidCard() {
+function NoActiveDidCard({ label }: { label: string }) {
   return (
     <View
       className="bg-mutedSurface rounded-xl flex-row items-center"
@@ -129,7 +131,7 @@ function NoActiveDidCard() {
       >
         <SfIcon name="circle.dashed" size={14} color={Colors.text2} />
       </View>
-      <Text className="text-text2 text-[15px] flex-1">No active DID</Text>
+      <Text className="text-text2 text-[15px] flex-1">{label}</Text>
     </View>
   );
 }

@@ -38,9 +38,11 @@ import {
 } from '@/onboarding/state';
 import { usePreferences } from '@/settings/preferences';
 import { pushToast } from '@/feedback/toast';
+import { useTranslation } from '@/i18n';
 import { uuid, type BusinessCard, type SocialNetwork } from '@solidarity/shared';
 
 export default function OnboardingFlow() {
+  const { t } = useTranslation();
   const params = useLocalSearchParams<{ replay?: string }>();
   const isReplay = params.replay === '1';
   const [state, dispatch] = useReducer(onboardingReducer, initialOnboardingState);
@@ -68,7 +70,7 @@ export default function OnboardingFlow() {
       const card = composeInitialCard(state.profile, state.animal ?? undefined);
       const result = await upsertCard(card);
       if (!result.ok) {
-        pushToast(`Could not save card: ${result.error.message}`, 'warning');
+        pushToast(`${t('onboardingFlow.saveCardFailed')}: ${result.error.message}`, 'warning');
       }
     }
     router.replace('/(tabs)/people');
@@ -157,7 +159,7 @@ export default function OnboardingFlow() {
         <Pressable
           onPress={() => { router.back(); }}
           accessibilityRole="button"
-          accessibilityLabel="Close"
+          accessibilityLabel={t('onboardingFlow.close')}
           hitSlop={8}
           style={{
             padding: 10,

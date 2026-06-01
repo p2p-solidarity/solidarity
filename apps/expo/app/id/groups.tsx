@@ -12,13 +12,15 @@ import { ScrollView, View } from 'react-native';
 import { GroupJoinSheet } from '@/components/groups/GroupJoinSheet';
 import { IDNavBar } from '@/components/id';
 import { GroupPanel } from '@/components/id/panels/GroupPanel';
+import { useTranslation } from '@/i18n';
 
 export default function GroupIdentity(): React.JSX.Element {
+  const { t } = useTranslation();
   const [joinVisible, setJoinVisible] = useState(false);
 
   return (
     <View className="flex-1 bg-pageBg">
-      <IDNavBar title="Group" />
+      <IDNavBar title={t('groupIdentity.title')} />
 
       <ScrollView
         className="flex-1"

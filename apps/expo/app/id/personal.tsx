@@ -15,9 +15,11 @@ import { PersonalPanel } from '@/components/id/panels/PersonalPanel';
 import { SfIcon } from '@/components/icons/SfIcon';
 import { Colors } from '@/constants/Colors';
 import { pushToast } from '@/feedback/toast';
+import { useTranslation } from '@/i18n';
 import { useIdentityState, useZkIdentity } from '@/zk';
 
 export default function PersonalIdentity(): React.JSX.Element {
+  const { t } = useTranslation();
   const state = useIdentityState();
   const seedFromNative = useZkIdentity((s) => s.seedFromNative);
   const createIdentity = useZkIdentity((s) => s.createIdentity);
@@ -29,25 +31,25 @@ export default function PersonalIdentity(): React.JSX.Element {
 
   const onRefresh = (): void => {
     void createIdentity().then(() => {
-      pushToast('Identity refreshed', 'success');
+      pushToast(t('personalIdentity.refreshed'), 'success');
     });
   };
 
   const onClearError = (): void => {
     clearError();
-    pushToast('Error cleared', 'success');
+    pushToast(t('personalIdentity.errorCleared'), 'success');
   };
 
   return (
     <View className="flex-1 bg-pageBg">
       <IDNavBar
-        title="Personal"
+        title={t('personalIdentity.title')}
         onLeading={() => { router.back(); }}
         trailing={
           <Pressable
             onPress={onRefresh}
             accessibilityRole="button"
-            accessibilityLabel="Refresh"
+            accessibilityLabel={t('personalIdentity.refresh')}
             hitSlop={8}
             className="active:opacity-60"
           >

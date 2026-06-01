@@ -27,10 +27,12 @@ import {
   SettingsScreenTitle,
 } from '@/components/settings/SettingsBlocks';
 import { Colors } from '@/constants/Colors';
+import { useTranslation } from '@/i18n';
 import { usePreferences } from '@/settings/preferences';
 
 export default function SolidarityQrSettings() {
   const insets = useSafeAreaInsets();
+  const { t } = useTranslation();
   const card = useMyCardDetail();
   const hydrateCards = useCardStore((s) => s.hydrate);
   useEffect(() => { void hydrateCards(); }, [hydrateCards]);
@@ -84,8 +86,8 @@ export default function SolidarityQrSettings() {
   return (
     <View className="flex-1 bg-pageBg" style={{ paddingTop: insets.top }}>
       <Stack.Screen options={{ presentation: 'modal' }} />
-      <SettingsBackToolbar title="Close" onPress={() => { router.back(); }} />
-      <SettingsScreenTitle title="Solidarity QR" />
+      <SettingsBackToolbar title={t('solidarityQr.close')} onPress={() => { router.back(); }} />
+      <SettingsScreenTitle title={t('solidarityQr.title')} />
 
       <ScrollView
         className="flex-1"
@@ -132,8 +134,7 @@ export default function SolidarityQrSettings() {
                 className="text-text2 text-[12px] text-center"
                 style={{ paddingHorizontal: 8 }}
               >
-                Use this mode when both users are in Solidarity for direct
-                exchange.
+                {t('solidarityQr.caption')}
               </Text>
             </View>
           </View>

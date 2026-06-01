@@ -202,7 +202,10 @@ export default function RootLayout() {
         }
 
         logBoot('i18n:start');
-        await installI18n();
+        // Pass the persisted language choice so the user's explicit selection
+        // survives relaunch. hydratePreferences() ran above, so the store now
+        // holds the MMKV value; an empty string means "follow device locale".
+        await installI18n(usePreferences.getState().language);
         logBoot('i18n:done');
         const initial = await Linking.getInitialURL();
         if (initial) {

@@ -33,6 +33,7 @@ import { FlashList } from '@shopify/flash-list';
 import { SfIcon } from '@/components/icons/SfIcon';
 import { ThemedButton } from '@/components/themed';
 import { Colors } from '@/constants/Colors';
+import { useTranslation } from '@/i18n';
 import {
   importDeviceContacts,
   loadDeviceContacts,
@@ -47,6 +48,7 @@ type Phase =
   | { readonly kind: 'error'; readonly message: string };
 
 export default function ImportFromPhoneScreen(): ReactNode {
+  const { t } = useTranslation();
   const insets = useSafeAreaInsets();
   const [phase, setPhase] = useState<Phase>({ kind: 'loading' });
   const [query, setQuery] = useState('');
@@ -109,13 +111,15 @@ export default function ImportFromPhoneScreen(): ReactNode {
       try {
         const count = await importDeviceContacts(picked);
         pushToast(
-          count === 1 ? 'Imported 1 contact' : `Imported ${String(count)} contacts`,
+          count === 1
+            ? t('contactImport.importedOne')
+            : t('contactImport.importedMany', { count }),
           'success',
           3000,
         );
         router.back();
       } catch {
-        pushToast('Import failed', 'error');
+        pushToast(t('contactImport.importFailed'), 'error');
       } finally {
         setImporting(false);
       }
@@ -161,8 +165,8 @@ export default function ImportFromPhoneScreen(): ReactNode {
                 <EmptyMessage
                   text={
                     query.trim().length > 0
-                      ? `No results for "${query}"`
-                      : 'No contacts on this device'
+                      ? t('contactImport.noResults', { query })
+                      : t('contactImport.noContacts')
                   }
                 />
               }
@@ -176,7 +180,7 @@ export default function ImportFromPhoneScreen(): ReactNode {
           <CenterMessage>
             <ActivityIndicator />
             <Text className="text-text2 text-[14px]" style={{ marginTop: 12 }}>
-              Loading contacts…
+              {t('contactImport.loading')}
             </Text>
           </CenterMessage>
         ) : null}
@@ -188,7 +192,7 @@ export default function ImportFromPhoneScreen(): ReactNode {
         {phase.kind === 'error' ? (
           <CenterMessage>
             <Text className="text-text1 text-[15px]" style={{ textAlign: 'center' }}>
-              Couldn’t read contacts.
+              {t('contactImport.readError')}
             </Text>
             <Text className="text-text2 text-[13px]" style={{ marginTop: 6, textAlign: 'center' }}>
               {phase.message}
@@ -216,15 +220,16 @@ function TopBar({
   readonly onCancel: () => void;
   readonly selectedCount: number;
 }): ReactNode {
+  const { t } = useTranslation();
   return (
     <View
       className="flex-row items-center justify-between"
       style={{ paddingHorizontal: 16, height: 56 }}
     >
       <Pressable accessibilityRole="button" onPress={onCancel} hitSlop={8}>
-        <Text className="text-text1 text-[16px]">Cancel</Text>
+        <Text className="text-text1 text-[16px]">{t('contactImport.cancel')}</Text>
       </Pressable>
-      <Text className="text-text1 text-[17px] font-semibold">Import from Phone</Text>
+      <Text className="text-text1 text-[17px] font-semibold">{t('contactImport.title')}</Text>
       <Text
         className="text-text2 text-[14px]"
         style={{ minWidth: 56, textAlign: 'right' }}
@@ -242,6 +247,7 @@ function SearchBar({
   readonly value: string;
   readonly onChange: (v: string) => void;
 }): ReactNode {
+  const { t } = useTranslation();
   return (
     <View style={{ paddingHorizontal: 16, paddingVertical: 8 }}>
       <View
@@ -257,7 +263,7 @@ function SearchBar({
         <TextInput
           value={value}
           onChangeText={onChange}
-          placeholder="Search"
+          placeholder={t('contactImport.search')}
           placeholderTextColor={Colors.text3}
           autoCapitalize="none"
           autoCorrect={false}
@@ -278,12 +284,13 @@ function SelectAllRow({
   readonly allSelected: boolean;
   readonly onToggle: () => void;
 }): ReactNode {
+  const { t } = useTranslation();
   if (count === 0) return null;
   return (
     <Pressable
       onPress={onToggle}
       accessibilityRole="button"
-      accessibilityLabel={allSelected ? 'Deselect all' : 'Select all'}
+      accessibilityLabel={allSelected ? t('contactImport.deselectAll') : t('contactImport.selectAll')}
       className="flex-row items-center justify-between active:opacity-70"
       style={{
         paddingHorizontal: 16,
@@ -294,9 +301,9 @@ function SelectAllRow({
       }}
     >
       <Text className="text-text1 text-[14px] font-medium">
-        {allSelected ? 'Deselect all' : 'Select all'}
+        {allSelected ? t('contactImport.deselectAll') : t('contactImport.selectAll')}
       </Text>
-      <Text className="text-text3 text-[12px]">{`${String(count)} contacts`}</Text>
+      <Text className="text-text3 text-[12px]">{t('contactImport.contactsCount', { count })}</Text>
     </Pressable>
   );
 }
@@ -366,6 +373,7 @@ function Footer({
   readonly onCancel: () => void;
   readonly onImport: () => void;
 }): ReactNode {
+  const { t } = useTranslation();
   return (
     <View
       className="flex-row items-center"
@@ -379,11 +387,11 @@ function Footer({
       }}
     >
       <View style={{ flex: 1 }}>
-        <ThemedButton label="Cancel" variant="secondary" fullWidth onPress={onCancel} />
+        <ThemedButton label={t('contactImport.cancel')} variant="secondary" fullWidth onPress={onCancel} />
       </View>
       <View style={{ flex: 1 }}>
         <ThemedButton
-          label={count === 0 ? 'Import' : `Import ${String(count)}`}
+          label={count === 0 ? t('contactImport.import') : t('contactImport.importCount', { count })}
           variant="inverted"
           fullWidth
           disabled={count === 0}
@@ -396,19 +404,20 @@ function Footer({
 }
 
 function DeniedState({ onCancel }: { readonly onCancel: () => void }): ReactNode {
+  const { t } = useTranslation();
   return (
     <CenterMessage>
       <Text className="text-text1 text-[16px] font-medium" style={{ textAlign: 'center' }}>
-        Contacts access denied
+        {t('contactImport.deniedTitle')}
       </Text>
       <Text
         className="text-text2 text-[13px]"
         style={{ marginTop: 8, textAlign: 'center', paddingHorizontal: 32 }}
       >
-        Enable Contacts permission in Settings to pick which contacts to import.
+        {t('contactImport.deniedBody')}
       </Text>
       <View style={{ marginTop: 20 }}>
-        <ThemedButton label="Close" variant="secondary" onPress={onCancel} />
+        <ThemedButton label={t('contactImport.close')} variant="secondary" onPress={onCancel} />
       </View>
     </CenterMessage>
   );

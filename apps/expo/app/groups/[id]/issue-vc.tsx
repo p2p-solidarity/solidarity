@@ -46,6 +46,7 @@ import {
 import { IDNavBar } from '@/components/id';
 import { ThemedButton } from '@/components/themed';
 import { pushToast } from '@/feedback/toast';
+import { useTranslation } from '@/i18n';
 import { type DeliveryMethod } from '@/groups/deliverySettings';
 import { useGroup, useGroupMembers } from '@/groups/store';
 import { getMmkv } from '@/storage/mmkv';
@@ -77,6 +78,7 @@ function saveBinding(groupId: string, binding: IssuanceBinding): void {
 }
 
 export default function GroupVCIssuanceScreen(): React.JSX.Element {
+  const { t } = useTranslation();
   const { id } = useLocalSearchParams<{ id: string }>();
   const group = useGroup(id);
   const members = useGroupMembers(id);
@@ -169,11 +171,11 @@ export default function GroupVCIssuanceScreen(): React.JSX.Element {
         });
       }
       pushToast(
-        `${String(fakeResults.length)} credential${fakeResults.length === 1 ? '' : 's'} issued`,
+        t('groupIssue.issued', { count: fakeResults.length }),
         'success'
       );
     } catch (e) {
-      pushToast(e instanceof Error ? e.message : 'Issuance failed', 'error');
+      pushToast(e instanceof Error ? e.message : t('groupIssue.failed'), 'error');
     } finally {
       setIsIssuing(false);
     }
@@ -182,17 +184,17 @@ export default function GroupVCIssuanceScreen(): React.JSX.Element {
   return (
     <View className="flex-1 bg-pageBg">
       <IDNavBar
-        title="Issue Group VC"
-        leadingLabel={group?.name ?? 'Group'}
+        title={t('groupIssue.title')}
+        leadingLabel={group?.name ?? t('groupIssue.fallbackGroup')}
         trailing={
           <Pressable
             onPress={() => { router.back(); }}
             accessibilityRole="button"
-            accessibilityLabel="Done"
+            accessibilityLabel={t('groupIssue.done')}
             hitSlop={8}
             className="px-1 py-1 active:opacity-60"
           >
-            <Text className="text-text1 text-[16px]">Done</Text>
+            <Text className="text-text1 text-[16px]">{t('groupIssue.done')}</Text>
           </Pressable>
         }
       />
@@ -235,7 +237,7 @@ export default function GroupVCIssuanceScreen(): React.JSX.Element {
 
           <ThemedButton
             variant="primary"
-            label={isIssuing ? 'Issuing...' : 'Issue Group Credential'}
+            label={isIssuing ? t('groupIssue.issuing') : t('groupIssue.issueButton')}
             fullWidth
             disabled={selectedCard === null || isIssuing}
             leadingIcon={

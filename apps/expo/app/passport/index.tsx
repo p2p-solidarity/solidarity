@@ -60,6 +60,7 @@ import {
   buildDisclosureWitness,
   DEFAULT_DISCLOSURE_POLICY,
 } from '@/passport/zkInputs';
+import { didKeyForCurrentIdentity } from '@/keychain';
 import { usePreferences } from '@/settings/preferences';
 import { useCredentialStore, type TrustLevel } from '@/credentials/store';
 import { useActiveDid, useIdentityData } from '@/identity';
@@ -335,7 +336,29 @@ export default function PassportSetup() {
     const issuerDid = chip.isSimulated
       ? `did:self:passport:${cardId}`
       : `did:gov:passport:${draft.nationalityCode}`;
-    const holderDid = activeDid ?? `did:key:${cardId}`;
+    // FAIL CLOSED on the holder binding — 1:1 with Swift
+    // PassportPipelineService.persistProof (lines 132-141): if the master
+    // signing key has not resolved yet (e.g. iCloud Keychain not synced),
+    // NEVER fabricate a `did:key:${cardId}` placeholder. That UUID is not
+    // derived from any key, so the credential would look valid in lists /
+    // presentation but cannot be cryptographically bound to the user — it
+    // "poisons the vault". Resolve the real signing-key DID and abort if it
+    // is unavailable so the user re-tries after sync.
+    let holderDid = activeDid;
+    if (holderDid == null || holderDid.length === 0) {
+      try {
+        holderDid = await didKeyForCurrentIdentity();
+      } catch {
+        holderDid = null;
+      }
+    }
+    if (holderDid == null || holderDid.length === 0) {
+      pushToast(
+        'Identity key not ready — wait for iCloud Keychain sync, then retry.',
+        'error'
+      );
+      return;
+    }
     const expiry = parseMrzYyMmDd(draft.expiryDate);
     const metadataTags: string[] = [];
     if (proof.proofType.startsWith('mopro-noir')) metadataTags.push('mopro-noir');

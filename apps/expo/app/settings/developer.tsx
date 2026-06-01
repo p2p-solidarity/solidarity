@@ -21,19 +21,21 @@ import {
   SettingsScreenTitle,
 } from '@/components/settings/SettingsBlocks';
 import { Colors } from '@/constants/Colors';
+import { useTranslation } from '@/i18n';
 import { type ProximityTransport, usePreferences } from '@/settings/preferences';
 
 const TRANSPORT_OPTIONS: readonly {
   value: ProximityTransport;
-  label: string;
+  labelKey: string;
 }[] = [
-  { value: 'auto', label: 'Auto' },
-  { value: 'ble', label: 'BLE' },
-  { value: 'multipeer', label: 'Legacy iOS' },
+  { value: 'auto', labelKey: 'developer.transport.auto' },
+  { value: 'ble', labelKey: 'developer.transport.ble' },
+  { value: 'multipeer', labelKey: 'developer.transport.legacyIos' },
 ];
 
 export default function DeveloperSettings() {
   const insets = useSafeAreaInsets();
+  const { t } = useTranslation();
   const developerMode = usePreferences((s) => s.developerMode);
   const proximityTransport = usePreferences((s) => s.proximityTransport);
   const setPref = usePreferences((s) => s.set);
@@ -42,7 +44,7 @@ export default function DeveloperSettings() {
   return (
     <View className="flex-1 bg-pageBg" style={{ paddingTop: insets.top }}>
       <SettingsBackToolbar onPress={() => { router.back(); }} />
-      <SettingsScreenTitle title="Developer" />
+      <SettingsScreenTitle title={t('developer.title')} />
 
       <ScrollView
         className="flex-1"
@@ -51,19 +53,19 @@ export default function DeveloperSettings() {
         <View className="gap-6">
           <View className="px-4">
             <Text className="text-text2 text-[13px]">
-              Unsupported tools — proceed at your own risk.
+              {t('developer.warning')}
             </Text>
           </View>
 
           <SettingsBlockSection
-            title="Mode"
+            title={t('developer.mode.header')}
             footer={developerMode
-              ? 'DID-first extension playground. Every Lab is something your active DID can already do — but the public surface does not expose. Public surface stays frozen at Swift v1.3.1 parity.'
-              : 'Enable Developer Mode to reveal the DID-first extension playground (P2P, Identity Tree, DAG, Nostr Bridge, Common Friends).'}
+              ? t('developer.mode.footerOn')
+              : t('developer.mode.footerOff')}
           >
             <SettingsBlockToggleRow
               icon="hammer"
-              title="Developer mode"
+              title={t('developer.mode.toggle')}
               value={developerMode}
               onValueChange={(v) => { setPref('developerMode', v); }}
             />
@@ -72,26 +74,26 @@ export default function DeveloperSettings() {
           {developerMode ? (
             <>
               <SettingsBlockSection
-                title="P2P (headline)"
-                footer="BLE L2CAP signaling → WebRTC LAN data channel. Backend-less. Works offline when both devices share Wi-Fi; BLE-only path works in airplane mode + BT on. UWB Bump turns the existing radar exchange into a tap-your-phones gesture (NFC/NameDrop feel) — the state machine is already typed in src/components/share/UwbStatusPill.tsx but the driver in session.ts is not wired yet."
+                title={t('developer.p2p.header')}
+                footer={t('developer.p2p.footer')}
               >
                 <SettingsBlockRow
                   icon="dot.radiowaves.left.and.right"
-                  title="P2P Lab"
-                  subtitle="Live · DAG three-step sync demo, handshake QR, ICE field"
+                  title={t('developer.p2p.labTitle')}
+                  subtitle={t('developer.p2p.labSubtitle')}
                   onPress={() => { router.push('/dev/p2p'); }}
                 />
                 <SettingsBlockRow
                   icon="hand.tap"
-                  title="UWB Bump Exchange"
-                  subtitle="Live · simulate the NFC-tap-feel state machine"
+                  title={t('developer.p2p.uwbTitle')}
+                  subtitle={t('developer.p2p.uwbSubtitle')}
                   onPress={() => { router.push('/dev/bump'); }}
                 />
               </SettingsBlockSection>
 
               <SettingsBlockSection
-                title="Proximity transport"
-                footer="BLE/L2CAP is the cross-platform iOS↔Android path (Auto = BLE). 'Legacy iOS' uses MultipeerConnectivity to reach the deployed SwiftUI Solidarity app (service `say-share`); iOS-only — on Android it stays on BLE."
+                title={t('developer.transport.header')}
+                footer={t('developer.transport.footer')}
               >
                 <View
                   className="bg-mutedSurface rounded-xl flex-row"
@@ -99,13 +101,14 @@ export default function DeveloperSettings() {
                 >
                   {TRANSPORT_OPTIONS.map((opt) => {
                     const active = proximityTransport === opt.value;
+                    const label = t(opt.labelKey);
                     return (
                       <Pressable
                         key={opt.value}
                         onPress={() => { setPref('proximityTransport', opt.value); }}
                         accessibilityRole="button"
                         accessibilityState={{ selected: active }}
-                        accessibilityLabel={opt.label}
+                        accessibilityLabel={label}
                         className="flex-1 items-center rounded-lg active:opacity-80"
                         style={{
                           paddingVertical: 8,
@@ -119,7 +122,7 @@ export default function DeveloperSettings() {
                             fontWeight: active ? '600' : '400',
                           }}
                         >
-                          {opt.label}
+                          {label}
                         </Text>
                       </Pressable>
                     );
@@ -128,60 +131,60 @@ export default function DeveloperSettings() {
               </SettingsBlockSection>
 
               <SettingsBlockSection
-                title="Identity"
-                footer="Read-only projection: your DID as root, with leaves drawn from the existing cards, contacts, groups, and event stores. No new data — a different angle on the state your DID already owns."
+                title={t('developer.identity.header')}
+                footer={t('developer.identity.footer')}
               >
                 <SettingsBlockRow
                   icon="person.text.rectangle"
-                  title="Identity Tree"
-                  subtitle="Live · DID-rooted projection of cards, contacts, groups, DAG"
+                  title={t('developer.identity.treeTitle')}
+                  subtitle={t('developer.identity.treeSubtitle')}
                   onPress={() => { router.push('/dev/identity-tree'); }}
                 />
               </SettingsBlockSection>
 
               <SettingsBlockSection
-                title="DAG"
-                footer="Append-only event chain. Every node is signed by your DID's sandbox secp256k1 dev-key. Same identity, new substrate. Replays into state, exports to Nostr."
+                title={t('developer.dag.header')}
+                footer={t('developer.dag.footer')}
               >
                 <SettingsBlockRow
                   icon="square.and.arrow.up"
-                  title="DAG Lab"
-                  subtitle="Live · append / verify / replay / export / import"
+                  title={t('developer.dag.labTitle')}
+                  subtitle={t('developer.dag.labSubtitle')}
                   onPress={() => { router.push('/dev/dag'); }}
                 />
               </SettingsBlockSection>
 
               <SettingsBlockSection
-                title="Nostr Bridge"
-                footer="Projects your DID's sandbox secp256k1 key onto a Nostr event envelope. Any relay carries the DAG. No default relay list — relays come from your input only."
+                title={t('developer.nostr.header')}
+                footer={t('developer.nostr.footer')}
               >
                 <SettingsBlockRow
                   icon="arrow.triangle.2.circlepath"
-                  title="Nostr Bridge Lab"
-                  subtitle="Live · publish/subscribe HEAD via NIP-78 kind 30078"
+                  title={t('developer.nostr.labTitle')}
+                  subtitle={t('developer.nostr.labSubtitle')}
                   onPress={() => { router.push('/dev/nostr'); }}
                 />
               </SettingsBlockSection>
 
               <SettingsBlockSection
-                title="Social Graph"
-                footer="Common-friend discovery via DAG diff. Replaces the Swift SocialGraphIntersectionService hash-of-name PSI, which leaks ordering and is dictionary-attackable."
+                title={t('developer.socialGraph.header')}
+                footer={t('developer.socialGraph.footer')}
               >
                 <SettingsBlockRow
                   icon="qrcode"
-                  title="Common Friends"
-                  subtitle="Live · DAG diff intersection (no PSI)"
+                  title={t('developer.socialGraph.commonFriendsTitle')}
+                  subtitle={t('developer.socialGraph.commonFriendsSubtitle')}
                   onPress={() => { router.push('/dev/common-friends'); }}
                 />
               </SettingsBlockSection>
 
               <View className="gap-3">
-                <SettingsBlockSectionHeader title="Danger Zone" />
+                <SettingsBlockSectionHeader title={t('developer.dangerZone.header')} />
                 <View className="px-4 gap-2">
                   <SettingsBlockDangerRow
                     icon="arrow.counterclockwise"
-                    title="Reset all preferences"
-                    subtitle="Restores every preference to defaults"
+                    title={t('developer.dangerZone.resetTitle')}
+                    subtitle={t('developer.dangerZone.resetSubtitle')}
                     onPress={() => { reset(); }}
                   />
                 </View>

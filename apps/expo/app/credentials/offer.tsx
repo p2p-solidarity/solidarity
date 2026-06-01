@@ -29,6 +29,7 @@ import { SfIcon } from '@/components/icons/SfIcon';
 import { ThemedButton } from '@/components/themed';
 import { Colors } from '@/constants/Colors';
 import { pushToast } from '@/feedback/toast';
+import { useTranslation } from '@/i18n';
 import { useActiveDid } from '@/identity';
 import {
   fetchIssuerMetadata,
@@ -146,11 +147,12 @@ function CenteredStatus({
 // MARK: - Step views
 
 function LoadingView() {
+  const { t } = useTranslation();
   return (
     <View className="flex-1 items-center justify-center gap-5">
       <ActivityIndicator size="large" color={Colors.terminalGreen} />
       <Text style={{ fontFamily: MONO, fontSize: 14, color: Colors.text2 }}>
-        Parsing credential offer...
+        {t('receiveCred.parsing')}
       </Text>
     </View>
   );
@@ -165,6 +167,7 @@ function ReviewView({
   readonly onAccept: () => void;
   readonly onDecline: () => void;
 }) {
+  const { t } = useTranslation();
   return (
     <View className="flex-1 gap-4">
       <View
@@ -176,7 +179,7 @@ function ReviewView({
           gap: 12,
         }}
       >
-        <MonoText text="— ISSUER" size={11} color={Colors.text2} weight="700" />
+        <MonoText text={t('receiveCred.issuerLabel')} size={11} color={Colors.text2} weight="700" />
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
           <SfIcon name="building.2" size={16} color={Colors.terminalGreen} />
           <Text
@@ -194,7 +197,7 @@ function ReviewView({
         </View>
 
         <Divider />
-        <MonoText text="— CREDENTIALS OFFERED" size={11} color={Colors.text2} weight="700" />
+        <MonoText text={t('receiveCred.credentialsOfferedLabel')} size={11} color={Colors.text2} weight="700" />
         {offer.credentialConfigurationIds.map((credType) => (
           <View
             key={credType}
@@ -213,7 +216,7 @@ function ReviewView({
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
               <SfIcon name="checkmark.shield.fill" size={12} color={Colors.terminalGreen} />
               <MonoText
-                text="Pre-authorized"
+                text={t('receiveCred.preAuthorized')}
                 size={12}
                 color={Colors.terminalGreen}
                 weight="700"
@@ -225,14 +228,14 @@ function ReviewView({
 
       <View className="flex-1" />
 
-      <ThemedButton label="Accept & Import" fullWidth onPress={onAccept} />
+      <ThemedButton label={t('receiveCred.acceptImport')} fullWidth onPress={onAccept} />
       <Pressable
         onPress={onDecline}
         accessibilityRole="button"
-        accessibilityLabel="Decline"
+        accessibilityLabel={t('receiveCred.decline')}
         className="self-center px-2 py-3 active:opacity-60"
       >
-        <MonoText text="Decline" size={14} color={Colors.text2} weight="700" />
+        <MonoText text={t('receiveCred.decline')} size={14} color={Colors.text2} weight="700" />
       </Pressable>
     </View>
   );
@@ -247,11 +250,12 @@ function PinEntryView({
   readonly onChangePin: (s: string) => void;
   readonly onSubmit: () => void;
 }) {
+  const { t } = useTranslation();
   return (
     <View className="flex-1 items-center justify-center gap-5">
       <SfIcon name="lock.rectangle" size={48} color={Colors.terminalGreen} />
       <MonoText
-        text="Issuer requires a PIN"
+        text={t('receiveCred.pinRequired')}
         size={18}
         color={Colors.text1}
         weight="700"
@@ -259,7 +263,7 @@ function PinEntryView({
       <TextInput
         value={userPin}
         onChangeText={onChangePin}
-        placeholder="Enter PIN"
+        placeholder={t('receiveCred.pinPlaceholder')}
         placeholderTextColor={Colors.text3}
         keyboardType="number-pad"
         style={{
@@ -277,7 +281,7 @@ function PinEntryView({
       />
       <View className="flex-1" />
       <ThemedButton
-        label="Submit"
+        label={t('receiveCred.submit')}
         fullWidth
         disabled={userPin.length === 0}
         onPress={onSubmit}
@@ -287,17 +291,18 @@ function PinEntryView({
 }
 
 function FetchingView() {
+  const { t } = useTranslation();
   return (
     <View className="flex-1 items-center justify-center gap-5">
       <ActivityIndicator size="large" color={Colors.terminalGreen} />
       <MonoText
-        text="Fetching Credential"
+        text={t('receiveCred.fetching')}
         size={18}
         color={Colors.text1}
         weight="700"
       />
       <Text className="text-text2 text-[13px] text-center" style={{ paddingHorizontal: 16 }}>
-        Authenticating and downloading from issuer.
+        {t('receiveCred.fetchingDetail')}
       </Text>
     </View>
   );
@@ -310,15 +315,16 @@ function SuccessView({
   readonly message: string;
   readonly onDone: () => void;
 }) {
+  const { t } = useTranslation();
   return (
     <View className="flex-1 gap-4">
       <CenteredStatus
         icon="checkmark.seal.fill"
         iconColor={Colors.terminalGreen}
-        title="Credential Received"
+        title={t('receiveCred.receivedTitle')}
         subtitle={message}
       />
-      <ThemedButton label="Done" fullWidth onPress={onDone} />
+      <ThemedButton label={t('receiveCred.done')} fullWidth onPress={onDone} />
     </View>
   );
 }
@@ -332,22 +338,23 @@ function ErrorView({
   readonly onRetry: () => void;
   readonly onClose: () => void;
 }) {
+  const { t } = useTranslation();
   return (
     <View className="flex-1 gap-4">
       <CenteredStatus
         icon="xmark.seal"
         iconColor={Colors.destructive}
-        title="Import Failed"
+        title={t('receiveCred.importFailed')}
         subtitle={message}
       />
-      <ThemedButton label="Retry" fullWidth onPress={onRetry} />
+      <ThemedButton label={t('receiveCred.retry')} fullWidth onPress={onRetry} />
       <Pressable
         onPress={onClose}
         accessibilityRole="button"
-        accessibilityLabel="Close"
+        accessibilityLabel={t('receiveCred.close')}
         className="self-center px-2 py-3 active:opacity-60"
       >
-        <MonoText text="Close" size={14} color={Colors.text2} weight="700" />
+        <MonoText text={t('receiveCred.close')} size={14} color={Colors.text2} weight="700" />
       </Pressable>
     </View>
   );
@@ -356,6 +363,7 @@ function ErrorView({
 // MARK: - Screen
 
 export default function ReceiveCredentialScreen() {
+  const { t } = useTranslation();
   const insets = useSafeAreaInsets();
   const { q } = useLocalSearchParams<{ q?: string }>();
   const activeDid = useActiveDid();
@@ -365,17 +373,17 @@ export default function ReceiveCredentialScreen() {
   const parseOffer = useMemo(
     () => () => {
       if (!q) {
-        setStep({ kind: 'error', message: 'No credential offer provided.' });
+        setStep({ kind: 'error', message: t('receiveCred.errNoOffer') });
         return;
       }
       const parsed = parseOfferQuery(q);
       if (!parsed) {
-        setStep({ kind: 'error', message: 'Invalid credential offer.' });
+        setStep({ kind: 'error', message: t('receiveCred.errInvalidOffer') });
         return;
       }
       setStep({ kind: 'review', offer: parsed });
     },
-    [q]
+    [q, t]
   );
 
   useEffect(() => {
@@ -386,7 +394,7 @@ export default function ReceiveCredentialScreen() {
 
   const startIssuance = async (offer: ParsedOffer, pin?: string) => {
     if (!activeDid) {
-      setStep({ kind: 'error', message: 'Active identity not ready.' });
+      setStep({ kind: 'error', message: t('receiveCred.errNoIdentity') });
       return;
     }
     setStep({ kind: 'fetching' });
@@ -406,10 +414,13 @@ export default function ReceiveCredentialScreen() {
       return;
     }
     const stored = credentialResult.value;
-    pushToast('Credential received', 'success');
+    pushToast(t('receiveCred.receivedToast'), 'success');
     setStep({
       kind: 'success',
-      message: `Stored ${stored.title} from ${issuerDisplayName(offer)}`,
+      message: t('receiveCred.storedMessage', {
+        title: stored.title,
+        issuer: issuerDisplayName(offer),
+      }),
     });
     setTimeout(() => {
       router.replace({ pathname: '/credentials/[id]', params: { id: stored.id } });
@@ -437,14 +448,14 @@ export default function ReceiveCredentialScreen() {
             <Pressable
               onPress={onDismiss}
               accessibilityRole="button"
-              accessibilityLabel="Close"
+              accessibilityLabel={t('receiveCred.close')}
               className="px-1 py-1 active:opacity-60"
             >
-              <Text className="text-text1 text-[17px]">Close</Text>
+              <Text className="text-text1 text-[17px]">{t('receiveCred.close')}</Text>
             </Pressable>
             <View className="flex-1 items-center">
               <Text className="text-text1 text-[17px] font-semibold">
-                Receive Credential
+                {t('receiveCred.title')}
               </Text>
             </View>
             <View style={{ width: 50 }} />

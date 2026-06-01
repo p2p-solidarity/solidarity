@@ -32,6 +32,7 @@ import { useCardStore, useMyCardDetail } from '@/cards/cardManager';
 import { shareFieldPreferencesFromFields } from '@/cards/solidarityQrPayload';
 import { buildRuntimeSolidarityQrPayload } from '@/cards/solidarityQrRuntime';
 import { haptic } from '@/feedback/haptics';
+import { useTranslation } from '@/i18n';
 import {
   useActiveDid,
   useHasClaim,
@@ -41,24 +42,30 @@ import {
 import { usePreferences } from '@/settings/preferences';
 import type { BusinessCardField } from '@solidarity/shared';
 
-const FIELD_ROWS: readonly FieldDescriptor[] = [
-  { key: 'name', icon: 'person.text.rectangle', label: 'Name', locked: true },
-  { key: 'title', icon: 'briefcase', label: 'Title' },
-  { key: 'company', icon: 'building.2', label: 'Company' },
-  { key: 'email', icon: 'envelope', label: 'Email' },
-  { key: 'phone', icon: 'phone', label: 'Phone' },
+/**
+ * Field rows carry an i18n `labelKey` instead of a literal label; the
+ * displayed `FieldDescriptor.label` is filled in at render via `t()` so the
+ * shared `FieldRow` component stays untouched.
+ */
+const FIELD_ROWS: readonly (Omit<FieldDescriptor, 'label'> & { labelKey: string })[] = [
+  { key: 'name', icon: 'person.text.rectangle', labelKey: 'shareSettings.field.name', locked: true },
+  { key: 'title', icon: 'briefcase', labelKey: 'shareSettings.field.title' },
+  { key: 'company', icon: 'building.2', labelKey: 'shareSettings.field.company' },
+  { key: 'email', icon: 'envelope', labelKey: 'shareSettings.field.email' },
+  { key: 'phone', icon: 'phone', labelKey: 'shareSettings.field.phone' },
   {
     key: 'profileImage',
     icon: 'person.crop.circle',
-    label: 'Profile Image',
+    labelKey: 'shareSettings.field.profileImage',
     excludedFromVc: true,
   },
-  { key: 'socialNetworks', icon: 'link', label: 'Social Networks' },
-  { key: 'skills', icon: 'star', label: 'Skills', excludedFromVc: true },
+  { key: 'socialNetworks', icon: 'link', labelKey: 'shareSettings.field.socialNetworks' },
+  { key: 'skills', icon: 'star', labelKey: 'shareSettings.field.skills', excludedFromVc: true },
 ];
 
 export default function ShareSettings(): ReactNode {
   const insets = useSafeAreaInsets();
+  const { t } = useTranslation();
   const myCard = useMyCardDetail();
   const hydrateCards = useCardStore((s) => s.hydrate);
   useEffect(() => { void hydrateCards(); }, [hydrateCards]);
@@ -127,12 +134,13 @@ export default function ShareSettings(): ReactNode {
       style={{ paddingTop: insets.top }}
     >
       <SettingsBackToolbar onPress={() => { router.back(); }} />
-      <SettingsScreenTitle title="Share Settings" />
+      <SettingsScreenTitle title={t('shareSettings.title')} />
       <ScrollView contentContainerStyle={{ padding: 16, gap: 20 }}>
-        <QrPreview payload={qrPayload} />
-        <FieldToggles prefs={prefs} verifiedFields={verifiedFields} />
+        <QrPreview payload={qrPayload} t={t} />
+        <FieldToggles prefs={prefs} verifiedFields={verifiedFields} t={t} />
         {hasHumanClaim || hasAgeClaim ? (
           <ProofToggles
+            t={t}
             hasHumanClaim={hasHumanClaim}
             hasAgeClaim={hasAgeClaim}
             shareIsHuman={prefs.shareIsHuman}
@@ -146,7 +154,13 @@ export default function ShareSettings(): ReactNode {
   );
 }
 
-function QrPreview({ payload }: { readonly payload: string | null }): ReactNode {
+function QrPreview({
+  payload,
+  t,
+}: {
+  readonly payload: string | null;
+  readonly t: (key: string) => string;
+}): ReactNode {
   return (
     <View
       style={{
@@ -162,7 +176,7 @@ function QrPreview({ payload }: { readonly payload: string | null }): ReactNode 
         tone="tertiary"
         style={{ fontFamily: 'Menlo', fontWeight: '700', textAlign: 'center' }}
       >
-        QR PREVIEW
+        {t('shareSettings.qrPreview')}
       </ThemedText>
       <View
         style={{
@@ -189,7 +203,7 @@ function QrPreview({ payload }: { readonly payload: string | null }): ReactNode 
               tone="tertiary"
               style={{ fontFamily: 'Menlo' }}
             >
-              Create a card first
+              {t('shareSettings.createCardFirst')}
             </ThemedText>
           </View>
         )}
@@ -201,9 +215,11 @@ function QrPreview({ payload }: { readonly payload: string | null }): ReactNode 
 function FieldToggles({
   prefs,
   verifiedFields,
+  t,
 }: {
   readonly prefs: ReturnType<typeof usePreferences.getState>;
   readonly verifiedFields: ReadonlySet<BusinessCardField>;
+  readonly t: (key: string) => string;
 }): ReactNode {
   return (
     <View>
@@ -216,13 +232,13 @@ function FieldToggles({
           tone="tertiary"
           style={{ fontFamily: 'Menlo', fontWeight: '700' }}
         >
-          SHARE FIELDS
+          {t('shareSettings.shareFields')}
         </ThemedText>
         <ThemedText
           tone="tertiary"
           style={{ fontFamily: 'Menlo', fontSize: 10 }}
         >
-          VC = enters signed credential
+          {t('shareSettings.vcLegendHint')}
         </ThemedText>
       </View>
 
@@ -233,34 +249,38 @@ function FieldToggles({
           borderColor: Colors.divider,
         }}
       >
-        {FIELD_ROWS.map((row) => (
-          <FieldRow
-            key={row.key}
-            descriptor={row}
-            isOn={isFieldOn(row.key, prefs)}
-            verifiedFields={verifiedFields}
-            onToggle={() => {
-              if (row.locked) return;
-              haptic('selection');
-              toggleField(row.key, prefs);
-            }}
-          />
-        ))}
+        {FIELD_ROWS.map((row) => {
+          const { labelKey, ...rest } = row;
+          return (
+            <FieldRow
+              key={row.key}
+              descriptor={{ ...rest, label: t(labelKey) }}
+              isOn={isFieldOn(row.key, prefs)}
+              verifiedFields={verifiedFields}
+              onToggle={() => {
+                if (row.locked) return;
+                haptic('selection');
+                toggleField(row.key, prefs);
+              }}
+            />
+          );
+        })}
       </View>
 
       <View
         className="flex-row items-center"
         style={{ gap: 16, paddingTop: 8 }}
       >
-        <LegendItem color={Colors.terminalGreen} label="Verified" />
-        <LegendItem color={Colors.warning} label="Self-attested" />
-        <LegendItem color={Colors.text3} label="Not in VC" />
+        <LegendItem color={Colors.terminalGreen} label={t('shareSettings.legend.verified')} />
+        <LegendItem color={Colors.warning} label={t('shareSettings.legend.selfAttested')} />
+        <LegendItem color={Colors.text3} label={t('shareSettings.legend.notInVc')} />
       </View>
     </View>
   );
 }
 
 function ProofToggles({
+  t,
   hasHumanClaim,
   hasAgeClaim,
   shareIsHuman,
@@ -268,6 +288,7 @@ function ProofToggles({
   setShareIsHuman,
   setShareAgeOver18,
 }: {
+  readonly t: (key: string) => string;
   readonly hasHumanClaim: boolean;
   readonly hasAgeClaim: boolean;
   readonly shareIsHuman: boolean;
@@ -282,7 +303,7 @@ function ProofToggles({
         tone="tertiary"
         style={{ fontFamily: 'Menlo', fontWeight: '700', paddingBottom: 8 }}
       >
-        PROOFS
+        {t('shareSettings.proofs')}
       </ThemedText>
       <View
         style={{
@@ -294,8 +315,8 @@ function ProofToggles({
         {hasHumanClaim ? (
           <ProofRow
             icon="person.badge.shield.checkmark.fill"
-            label="Real Human"
-            badge="Government"
+            label={t('shareSettings.proof.realHuman')}
+            badge={t('shareSettings.proof.government')}
             badgeColor={Colors.terminalGreen}
             isOn={shareIsHuman}
             locked
@@ -308,8 +329,8 @@ function ProofToggles({
         {hasAgeClaim ? (
           <ProofRow
             icon="calendar.badge.checkmark"
-            label="Age 18+"
-            badge="Government"
+            label={t('shareSettings.proof.ageOver18')}
+            badge={t('shareSettings.proof.government')}
             badgeColor={Colors.terminalGreen}
             isOn={shareAgeOver18}
             onToggle={() => {

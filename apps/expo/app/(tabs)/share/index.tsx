@@ -41,11 +41,13 @@ import { ThemedButton } from '@/components/themed';
 import { PressableScale } from '@/components/common/PressableScale';
 import { Colors } from '@/constants/Colors';
 import { useThemeColors } from '@/constants/useThemeColors';
+import { useTranslation } from '@/i18n';
 import { pushToast } from '@/feedback/toast';
 import { SCALE, STAGGER_MS } from '@/feedback/motion';
 import { usePreferences } from '@/settings/preferences';
 
 export default function ShareTab() {
+  const { t } = useTranslation();
   const myCard = useMyCard();
   const myCardDetail = useMyCardDetail();
   const hydrate = useCardStore((s) => s.hydrate);
@@ -127,8 +129,8 @@ export default function ShareTab() {
     };
   }, [myCardDetail, shareFieldPreferences]);
 
-  const statusTitle = isMatching ? 'Scanning Nearby' : 'Ready To Match';
-  const subtitle = statusSubtitle(isMatching, peerCount);
+  const statusTitle = isMatching ? t('shareTab.scanningNearby') : t('shareTab.readyToMatch');
+  const subtitle = statusSubtitle(t, isMatching, peerCount);
   const uwbVisible = uwb.kind !== 'idle';
   const currentInvitation = pendingInvitations[0];
 
@@ -149,8 +151,8 @@ export default function ShareTab() {
     if (!perm.granted) {
       pushToast(
         perm.reason === 'unavailable'
-          ? 'Bluetooth is not available on this device.'
-          : 'Bluetooth permission is needed for nearby matching. Enable it in Settings to continue.',
+          ? t('shareTab.bluetoothUnavailable')
+          : t('shareTab.bluetoothPermissionNeeded'),
         'warning'
       );
       return;
@@ -200,7 +202,7 @@ export default function ShareTab() {
         <Animated.View entering={FadeInDown.duration(360).delay(STAGGER_MS)}>
           <View className="px-12">
             <ThemedButton
-              label={isMatching ? 'Stop Matching' : 'Start Matching'}
+              label={isMatching ? t('shareTab.stopMatching') : t('shareTab.startMatching')}
               fullWidth
               haptic="warning"
               leadingIcon={
@@ -222,7 +224,7 @@ export default function ShareTab() {
               haptic="tap"
               onPress={() => { clearError(); }}
               accessibilityRole="button"
-              accessibilityLabel="Dismiss matching error"
+              accessibilityLabel={t('shareTab.dismissError')}
               className="bg-mutedSurface rounded-xl flex-row items-center"
               style={{ paddingHorizontal: 12, paddingVertical: 10, gap: 8 }}
             >
@@ -280,6 +282,7 @@ export default function ShareTab() {
 
 function NavBar({ onScan }: { onScan: () => void }) {
   const c = useThemeColors();
+  const { t } = useTranslation();
   return (
     <View
       className="flex-row items-center justify-between px-4"
@@ -290,20 +293,24 @@ function NavBar({ onScan }: { onScan: () => void }) {
         scaleTo={SCALE.icon}
         onPress={onScan}
         accessibilityRole="button"
-        accessibilityLabel="Scan"
+        accessibilityLabel={t('shareTab.scan')}
         style={{ width: 44, height: 44, alignItems: 'flex-start', justifyContent: 'center' }}
       >
         <SfIcon name="qrcode.viewfinder" size={20} color={c.text1} />
       </PressableScale>
-      <Text className="text-text1 text-[17px] font-semibold">Share</Text>
+      <Text className="text-text1 text-[17px] font-semibold">{t('tab.share')}</Text>
       <View style={{ width: 44 }} />
     </View>
   );
 }
 
-function statusSubtitle(isMatching: boolean, peerCount: number): string {
-  if (!isMatching) return 'Start matching to discover nearby people.';
-  if (peerCount === 0) return 'Searching for nearby peers...';
-  if (peerCount === 1) return 'Found 1 nearby peer. Tap the radar to connect.';
-  return `Found ${String(peerCount)} nearby peers. Tap the radar to connect.`;
+function statusSubtitle(
+  t: (key: string, options?: Record<string, unknown>) => string,
+  isMatching: boolean,
+  peerCount: number,
+): string {
+  if (!isMatching) return t('shareTab.subtitleIdle');
+  if (peerCount === 0) return t('shareTab.subtitleSearching');
+  if (peerCount === 1) return t('shareTab.subtitleOnePeer');
+  return t('shareTab.subtitleManyPeers', { count: peerCount });
 }

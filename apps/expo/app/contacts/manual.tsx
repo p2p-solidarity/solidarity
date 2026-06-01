@@ -10,10 +10,12 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { useContactStore } from '@/contacts/repository';
 import { ThemedButton, ThemedSurface, ThemedText } from '@/components/themed';
+import { useTranslation } from '@/i18n';
 import { pushToast } from '@/feedback/toast';
 import { uuid } from '@solidarity/shared';
 
 export default function ManualContactEntry() {
+  const { t } = useTranslation();
   const upsert = useContactStore((s) => s.upsert);
   const insets = useSafeAreaInsets();
   const [name, setName] = useState('');
@@ -23,7 +25,7 @@ export default function ManualContactEntry() {
 
   const onSave = async () => {
     if (name.trim().length === 0) {
-      pushToast('Name is required', 'warning');
+      pushToast(t('contactManual.nameRequired'), 'warning');
       return;
     }
     const now = new Date();
@@ -56,7 +58,7 @@ export default function ManualContactEntry() {
         updatedAt: now,
       },
     });
-    pushToast(`Saved ${name}`, 'success');
+    pushToast(t('contactManual.saved', { name }), 'success');
     router.back();
   };
 
@@ -66,20 +68,20 @@ export default function ManualContactEntry() {
       contentContainerStyle={{ paddingBottom: insets.bottom + 24 }}
     >
       <View className="px-4" style={{ paddingTop: insets.top + 12 }}>
-        <ThemedButton variant="secondary" size="sm" label="‹ Back" onPress={() => { router.back(); }} />
+        <ThemedButton variant="secondary" size="sm" label={t('contactManual.back')} onPress={() => { router.back(); }} />
       </View>
       <View className="px-4 py-4">
-        <ThemedText variant="headlineLarge">Add contact</ThemedText>
+        <ThemedText variant="headlineLarge">{t('contactManual.title')}</ThemedText>
       </View>
 
       {[
-        { label: 'NAME', value: name, set: setName, placeholder: 'Ada Lovelace' },
-        { label: 'EMAIL', value: email, set: setEmail, placeholder: 'ada@solidarity.gg' },
-        { label: 'PHONE', value: phone, set: setPhone, placeholder: '+1 555 0100' },
-        { label: 'COMPANY', value: company, set: setCompany, placeholder: 'Solidarity' },
+        { label: 'NAME', displayLabel: t('contactManual.fieldName'), value: name, set: setName, placeholder: 'Ada Lovelace' },
+        { label: 'EMAIL', displayLabel: t('contactManual.fieldEmail'), value: email, set: setEmail, placeholder: 'ada@solidarity.gg' },
+        { label: 'PHONE', displayLabel: t('contactManual.fieldPhone'), value: phone, set: setPhone, placeholder: '+1 555 0100' },
+        { label: 'COMPANY', displayLabel: t('contactManual.fieldCompany'), value: company, set: setCompany, placeholder: 'Solidarity' },
       ].map((f) => (
         <ThemedSurface key={f.label} variant="card" padded className="mx-4 mb-2">
-          <ThemedText variant="caption" tone="tertiary">{f.label}</ThemedText>
+          <ThemedText variant="caption" tone="tertiary">{f.displayLabel}</ThemedText>
           <TextInput
             value={f.value}
             onChangeText={f.set}
@@ -96,7 +98,7 @@ export default function ManualContactEntry() {
 
       <View className="px-4 mt-4 mb-10">
         <ThemedButton
-          label="Save contact"
+          label={t('contactManual.save')}
           fullWidth
           disabled={name.trim().length === 0}
           onPress={() => { void onSave(); }}

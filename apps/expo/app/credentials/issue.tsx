@@ -33,6 +33,7 @@ import { ThemedButton } from '@/components/themed';
 import { Colors } from '@/constants/Colors';
 import { useCredentialStore } from '@/credentials/store';
 import { pushToast } from '@/feedback/toast';
+import { useTranslation } from '@/i18n';
 import { useGroup, useGroupMembers } from '@/groups/store';
 import { getMmkv } from '@/storage/mmkv';
 import type { CardManifestEntry } from '@/cards/cardManifest';
@@ -171,12 +172,18 @@ function ToggleRow({
   );
 }
 
-function ResultRow({ result }: { readonly result: IssuanceResult }) {
+function ResultRow({
+  result,
+  t,
+}: {
+  readonly result: IssuanceResult;
+  readonly t: (key: string, opts?: Record<string, unknown>) => string;
+}) {
   const icon: SFSymbol = result.ok ? 'checkmark.circle.fill' : 'xmark.circle.fill';
   const color = result.ok ? Colors.terminalGreen : Colors.destructive;
   const label = result.ok
-    ? `Sent to ${result.memberId}`
-    : `Failed: ${result.memberId} - ${result.error}`;
+    ? t('groupIssue.resultSent', { member: result.memberId })
+    : t('groupIssue.resultFailed', { member: result.memberId, error: result.error });
   return (
     <View
       style={{
@@ -193,6 +200,7 @@ function ResultRow({ result }: { readonly result: IssuanceResult }) {
 // MARK: - Screen
 
 export default function GroupVCIssuanceScreen() {
+  const { t } = useTranslation();
   const insets = useSafeAreaInsets();
   const { groupId } = useLocalSearchParams<{ groupId?: string }>();
   const group = useGroup(groupId);
@@ -274,13 +282,13 @@ export default function GroupVCIssuanceScreen() {
 
     setResults(issuanceResults);
     setIsIssuing(false);
-    pushToast('Group credential issued', 'success');
+    pushToast(t('groupIssue.issuedToast'), 'success');
   };
 
   if (!group || !groupId) {
     return (
       <View className="flex-1 bg-pageBg items-center justify-center">
-        <Text className="text-text2 text-[15px]">Group not found.</Text>
+        <Text className="text-text2 text-[15px]">{t('groupIssue.notFound')}</Text>
       </View>
     );
   }
@@ -293,24 +301,24 @@ export default function GroupVCIssuanceScreen() {
         <View className="h-11 flex-row items-center px-4">
           <View style={{ width: 50 }} />
           <View className="flex-1 items-center">
-            <Text className="text-text1 text-[17px] font-semibold">Issue Group VC</Text>
+            <Text className="text-text1 text-[17px] font-semibold">{t('groupIssue.title')}</Text>
           </View>
           <Pressable
             onPress={() => { router.back(); }}
             accessibilityRole="button"
-            accessibilityLabel="Done"
+            accessibilityLabel={t('groupIssue.done')}
             className="px-1 py-1 active:opacity-60"
           >
-            <Text className="text-text1 text-[17px]">Done</Text>
+            <Text className="text-text1 text-[17px]">{t('groupIssue.done')}</Text>
           </Pressable>
         </View>
       </View>
 
       <ScrollView className="flex-1" contentContainerStyle={{ padding: 16, gap: 16 }}>
-        <Section title="SELECT BUSINESS CARD">
+        <Section title={t('groupIssue.selectCardHeader')}>
           <SegmentedRow>
             <SegmentedOption
-              label="None"
+              label={t('groupIssue.cardNone')}
               isSelected={selectedCardId === undefined}
               onPress={() => { setSelectedCardId(undefined); }}
             />
@@ -328,7 +336,7 @@ export default function GroupVCIssuanceScreen() {
           </SegmentedRow>
         </Section>
 
-        <Section title="GROUP DISPLAY">
+        <Section title={t('groupIssue.groupDisplayHeader')}>
           <View style={{ gap: 1 }}>
             {selectedCard ? (
               <>
@@ -336,7 +344,7 @@ export default function GroupVCIssuanceScreen() {
                   <TextInput
                     value={customName}
                     onChangeText={setCustomName}
-                    placeholder="Name shown in this group"
+                    placeholder={t('groupIssue.namePlaceholder')}
                     placeholderTextColor={Colors.text3}
                     autoCapitalize="words"
                     autoCorrect={false}
@@ -344,23 +352,23 @@ export default function GroupVCIssuanceScreen() {
                   />
                 </View>
                 <ToggleRow
-                  label="Remember this card for this group"
+                  label={t('groupIssue.rememberCard')}
                   isOn={rememberSelection}
                   onChange={setRememberSelection}
                 />
               </>
             ) : (
               <View style={{ backgroundColor: Colors.searchBg, padding: 16 }}>
-                <Text className="text-text2 text-[14px]">Select a card first</Text>
+                <Text className="text-text2 text-[14px]">{t('groupIssue.selectCardFirst')}</Text>
               </View>
             )}
           </View>
         </Section>
 
-        <Section title="RECIPIENTS">
+        <Section title={t('groupIssue.recipientsHeader')}>
           <View style={{ gap: 1 }}>
             <ToggleRow
-              label="Send to All Active Members"
+              label={t('groupIssue.sendToAll')}
               isOn={sendToAllMembers}
               onChange={(on) => { if (on) setSelectedMemberIds([]); }}
             />
@@ -377,7 +385,7 @@ export default function GroupVCIssuanceScreen() {
           </View>
         </Section>
 
-        <Section title="DELIVERY METHOD">
+        <Section title={t('groupIssue.deliveryHeader')}>
           <SegmentedRow>
             {DELIVERY_METHODS.map((method) => (
               <SegmentedOption
@@ -390,10 +398,10 @@ export default function GroupVCIssuanceScreen() {
           </SegmentedRow>
         </Section>
 
-        <Section title="EXPIRATION (OPTIONAL)">
+        <Section title={t('groupIssue.expirationHeader')}>
           <View style={{ gap: 1 }}>
             <ToggleRow
-              label="Set Expiration"
+              label={t('groupIssue.setExpiration')}
               isOn={expirationDate !== undefined}
               onChange={(on) => { setExpirationDate(on ? thirtyDaysFromNow() : undefined); }}
             />
@@ -407,7 +415,7 @@ export default function GroupVCIssuanceScreen() {
                   alignItems: 'center',
                 }}
               >
-                <Text className="text-text1 text-[14px] flex-1">Expires</Text>
+                <Text className="text-text1 text-[14px] flex-1">{t('groupIssue.expires')}</Text>
                 <Text className="text-text1 text-[14px]">
                   {expirationDate.toLocaleDateString()}
                 </Text>
@@ -417,7 +425,7 @@ export default function GroupVCIssuanceScreen() {
         </Section>
 
         <ThemedButton
-          label={isIssuing ? 'Issuing…' : 'Issue Group Credential'}
+          label={isIssuing ? t('groupIssue.issuing') : t('groupIssue.issueCredential')}
           fullWidth
           loading={isIssuing}
           disabled={issueDisabled}
@@ -425,10 +433,10 @@ export default function GroupVCIssuanceScreen() {
         />
 
         {results.length > 0 ? (
-          <Section title="RESULTS">
+          <Section title={t('groupIssue.resultsHeader')}>
             <View style={{ gap: 1 }}>
               {results.map((r, idx) => (
-                <ResultRow key={`${r.memberId}-${idx}`} result={r} />
+                <ResultRow key={`${r.memberId}-${idx}`} result={r} t={t} />
               ))}
             </View>
           </Section>

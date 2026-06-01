@@ -32,6 +32,7 @@ import { PeopleSearchField } from '@/components/people/PeopleSearchField';
 import { TrustGraphContactRow } from '@/components/people/TrustGraphContactRow';
 import { Colors } from '@/constants/Colors';
 import { useThemeColors } from '@/constants/useThemeColors';
+import { useTranslation } from '@/i18n';
 import { useContactStore, type ContactManifestEntry } from '@/contacts/repository';
 import { confirmDialog } from '@/feedback/confirmDialog';
 import { haptic } from '@/feedback/haptics';
@@ -41,6 +42,7 @@ import { usePeopleScreen } from '@/people/usePeopleScreen';
 import { usePreferences } from '@/settings/preferences';
 
 export default function PeopleTab() {
+  const { t } = useTranslation();
   const { contacts, refresh } = usePeopleScreen();
   const removeContact = useContactStore((s) => s.remove);
   const provider = usePreferences((s) => s.backupProvider);
@@ -99,9 +101,9 @@ export default function PeopleTab() {
   const onDeleteContact = (c: ContactManifestEntry) => {
     void (async () => {
       const ok = await confirmDialog({
-        title: `Delete ${c.name}?`,
-        message: 'This contact will be permanently removed.',
-        confirmLabel: 'Delete',
+        title: t('peopleList.deleteNameTitle', { name: c.name }),
+        message: t('peopleList.deleteOneMessage'),
+        confirmLabel: t('peopleList.delete'),
         destructive: true,
       });
       if (!ok) return;
@@ -116,9 +118,11 @@ export default function PeopleTab() {
     if (ids.length === 0) return;
     void (async () => {
       const ok = await confirmDialog({
-        title: ids.length === 1 ? 'Delete contact?' : `Delete ${String(ids.length)} contacts?`,
-        message: 'These contacts will be permanently removed.',
-        confirmLabel: 'Delete',
+        title: ids.length === 1
+          ? t('peopleList.deleteContactTitle')
+          : t('peopleList.deleteCountTitle', { count: ids.length }),
+        message: t('peopleList.deleteManyMessage'),
+        confirmLabel: t('peopleList.delete'),
         destructive: true,
       });
       if (!ok) return;
@@ -128,7 +132,9 @@ export default function PeopleTab() {
       // Confirm the batch landed with a success impact (the "震動" on delete).
       haptic('success');
       pushToast(
-        ids.length === 1 ? 'Contact deleted' : `Deleted ${String(ids.length)} contacts`,
+        ids.length === 1
+          ? t('peopleList.contactDeleted')
+          : t('peopleList.deletedCount', { count: ids.length }),
         'success',
         2000,
       );
@@ -140,10 +146,10 @@ export default function PeopleTab() {
   const backupGesture = useMemo(
     () =>
       makeGestureAutoBackup(provider, {
-        onComplete: () => { pushToast('Backed up to cloud', 'success', 2000); },
-        onError: () => { pushToast('Backup failed', 'error'); },
+        onComplete: () => { pushToast(t('peopleList.backedUp'), 'success', 2000); },
+        onError: () => { pushToast(t('peopleList.backupFailed'), 'error'); },
       }),
-    [provider],
+    [provider, t],
   );
 
   const body = (
@@ -310,11 +316,12 @@ function PeopleRow({
 }
 
 function SwipeDeleteAction({ onPress }: { readonly onPress: () => void }) {
+  const { t } = useTranslation();
   return (
     <Pressable
       onPress={onPress}
       accessibilityRole="button"
-      accessibilityLabel="Delete contact"
+      accessibilityLabel={t('peopleList.deleteContactA11y')}
       style={{
         width: 88,
         backgroundColor: Colors.destructive,
@@ -331,7 +338,7 @@ function SwipeDeleteAction({ onPress }: { readonly onPress: () => void }) {
           fontWeight: '500',
         }}
       >
-        Delete
+        {t('peopleList.delete')}
       </Text>
     </Pressable>
   );
@@ -346,6 +353,7 @@ function BatchActionBar({
   readonly onCancel: () => void;
   readonly onDelete: () => void;
 }) {
+  const { t } = useTranslation();
   return (
     <View
       style={{
@@ -372,14 +380,14 @@ function BatchActionBar({
         haptic="tap"
         onPress={onCancel}
         accessibilityRole="button"
-        accessibilityLabel="Cancel selection"
+        accessibilityLabel={t('peopleList.cancelSelectionA11y')}
         style={{
           height: 44,
           alignItems: 'center',
           justifyContent: 'center',
         }}
       >
-        <Text className="text-text1 text-[15px]">Cancel</Text>
+        <Text className="text-text1 text-[15px]">{t('peopleList.cancel')}</Text>
       </PressableScale>
       <PressableScale
         fill
@@ -387,7 +395,7 @@ function BatchActionBar({
         onPress={onDelete}
         disabled={count === 0}
         accessibilityRole="button"
-        accessibilityLabel="Delete selected contacts"
+        accessibilityLabel={t('peopleList.deleteSelectedA11y')}
         style={{
           height: 44,
           alignItems: 'center',
@@ -403,7 +411,7 @@ function BatchActionBar({
             fontWeight: '500',
           }}
         >
-          {count === 0 ? 'Delete' : `Delete ${String(count)}`}
+          {count === 0 ? t('peopleList.delete') : t('peopleList.deleteCount', { count })}
         </Text>
       </PressableScale>
     </View>
@@ -442,6 +450,7 @@ function Header({
   setMenuOpen: (v: boolean) => void;
 }) {
   const c = useThemeColors();
+  const { t } = useTranslation();
 
   if (editMode) {
     return (
@@ -458,15 +467,15 @@ function Header({
               className="text-text1 text-[15px]"
               style={{ opacity: totalVisible === 0 ? 0.4 : 1 }}
             >
-              {allSelected ? 'Deselect All' : 'Select All'}
+              {allSelected ? t('peopleList.deselectAll') : t('peopleList.selectAll')}
             </Text>
           </Pressable>
           <Text className="text-text1 text-[15px] font-semibold">
             {selectedCount > 0
               ? selectedCount === 1
-                ? '1 Selected'
-                : `${String(selectedCount)} Selected`
-              : 'Select Contacts'}
+                ? t('peopleList.oneSelected')
+                : t('peopleList.countSelected', { count: selectedCount })
+              : t('peopleList.selectContacts')}
           </Text>
           <Pressable
             accessibilityRole="button"
@@ -474,7 +483,7 @@ function Header({
             hitSlop={8}
             className="active:opacity-60"
           >
-            <Text className="text-text1 text-[15px] font-medium">Done</Text>
+            <Text className="text-text1 text-[15px] font-medium">{t('peopleList.done')}</Text>
           </Pressable>
         </View>
       </View>
@@ -484,18 +493,18 @@ function Header({
   return (
     <View className="px-4" style={{ height: 56 }}>
       <View className="flex-1 flex-row items-center justify-between">
-        <Text className="text-text1 text-[18px] font-semibold">People List</Text>
+        <Text className="text-text1 text-[18px] font-semibold">{t('peopleList.title')}</Text>
         <View className="flex-row items-center" style={{ columnGap: 16 }}>
           <Pressable
             accessibilityRole="button"
-            accessibilityLabel="Edit contacts"
+            accessibilityLabel={t('peopleList.editContactsA11y')}
             onPress={onEnterEditMode}
             disabled={totalVisible === 0}
             hitSlop={8}
             style={{ opacity: totalVisible === 0 ? 0.4 : 1 }}
             className="active:opacity-60"
           >
-            <Text className="text-text1 text-[14px]">Edit</Text>
+            <Text className="text-text1 text-[14px]">{t('peopleList.edit')}</Text>
           </Pressable>
           <PressableScale
             haptic="tap"
@@ -523,23 +532,23 @@ function Header({
           {developerMode ? (
             <MenuItem
               icon="antenna.radiowaves.left.and.right"
-              label="Radar Exchange"
+              label={t('peopleList.radarExchange')}
               onPress={() => { setMenuOpen(false); onRadarExchange(); }}
             />
           ) : null}
           <MenuItem
             icon="square.and.pencil"
-            label="Add Manually"
+            label={t('peopleList.addManually')}
             onPress={() => { setMenuOpen(false); onAddManually(); }}
           />
           <MenuItem
             icon="person.crop.circle.badge.plus"
-            label="Import from Phone"
+            label={t('peopleList.importFromPhone')}
             onPress={() => { setMenuOpen(false); onImportPhone(); }}
           />
           <MenuItem
             icon="doc.badge.plus"
-            label="Import VCF File"
+            label={t('peopleList.importVcfFile')}
             onPress={() => { setMenuOpen(false); onImportVcf(); }}
             isLast
           />
@@ -586,6 +595,7 @@ function EmptyState({
   onAddManually: () => void;
 }) {
   const c = useThemeColors();
+  const { t } = useTranslation();
   return (
     <ScrollView
       contentContainerStyle={{ flexGrow: 1, alignItems: 'center', justifyContent: 'center' }}
@@ -596,7 +606,7 @@ function EmptyState({
         <PaperStackIllustration size={214} />
       </View>
       <Text className="text-text2 text-[14px] text-center pb-8">
-        Your contact list is empty
+        {t('peopleList.emptyTitle')}
       </Text>
       <View className="gap-2 py-4 items-center">
         <PressableScale
@@ -613,7 +623,7 @@ function EmptyState({
           }}
         >
           <Text style={{ color: c.invertedButtonText }} className="text-[15px]">
-            Import from Phone
+            {t('peopleList.importFromPhone')}
           </Text>
         </PressableScale>
         <PressableScale
@@ -627,7 +637,7 @@ function EmptyState({
             justifyContent: 'center',
           }}
         >
-          <Text className="text-text1 text-[15px]">Add Manually</Text>
+          <Text className="text-text1 text-[15px]">{t('peopleList.addManually')}</Text>
         </PressableScale>
       </View>
     </ScrollView>
@@ -635,10 +645,11 @@ function EmptyState({
 }
 
 function EmptySearchState({ query }: { query: string }) {
+  const { t } = useTranslation();
   return (
     <View className="flex-1 items-center justify-center gap-3">
       <SfIcon name="magnifyingglass" size={36} color={Colors.text3} />
-      <Text className="text-text2 text-[14px]">{`No results for "${query}"`}</Text>
+      <Text className="text-text2 text-[14px]">{t('peopleList.noResults', { query })}</Text>
     </View>
   );
 }

@@ -39,6 +39,7 @@ import {
 } from '@/components/me';
 import { Colors } from '@/constants/Colors';
 import { useThemeColors } from '@/constants/useThemeColors';
+import { useTranslation } from '@/i18n';
 import { SCALE, STAGGER_MS } from '@/feedback/motion';
 import {
   useActiveDid,
@@ -50,10 +51,8 @@ import {
 } from '@/identity';
 import { usePreferences } from '@/settings/preferences';
 
-const FALLBACK_NAME = 'User Node';
-const INIT_DID = 'Initializing...';
-
 export default function MeTab() {
+  const { t } = useTranslation();
   const card = useMyCard();
   const identityCards = useIdentityData((s) => s.identityCards);
   const hydrateCards = useCardStore((s) => s.hydrate);
@@ -68,9 +67,9 @@ export default function MeTab() {
     void seedKeychain();
   }, [hydrateCards, hydrateIdentity, seedKeychain]);
 
-  const displayName = card?.name ?? FALLBACK_NAME;
+  const displayName = card?.name ?? t('meTab.fallbackName');
   const activeDid = useActiveDid();
-  const displayDid = activeDid ?? INIT_DID;
+  const displayDid = activeDid ?? t('meTab.initializingDid');
 
   // Swift filters out type === "business_card" — mirror that. Memoised so
   // the derived array keeps a stable reference between renders when the
@@ -149,19 +148,20 @@ export default function MeTab() {
 
 function NavBar({ onSettings }: { onSettings: () => void }) {
   const c = useThemeColors();
+  const { t } = useTranslation();
   return (
     <View
       className="flex-row items-center justify-between px-4"
       style={{ height: 44 }}
     >
       <View style={{ width: 44 }} />
-      <Text className="text-text1 text-[17px] font-semibold">Me</Text>
+      <Text className="text-text1 text-[17px] font-semibold">{t('tab.me')}</Text>
       <PressableScale
         haptic="tap"
         scaleTo={SCALE.icon}
         onPress={onSettings}
         accessibilityRole="button"
-        accessibilityLabel="Settings"
+        accessibilityLabel={t('meTab.settings')}
         style={{ width: 44, height: 44, alignItems: 'flex-end', justifyContent: 'center' }}
       >
         <SfIcon name="gearshape" size={18} color={c.text1} />
@@ -181,18 +181,19 @@ function VerifiedCredentialsSection({
   readonly onManualInput: () => void;
   readonly onImportJson: () => void;
 }) {
+  const { t } = useTranslation();
   return (
     <View className="gap-2">
-      <MeSectionHeader title="Verified Credentials" />
+      <MeSectionHeader title={t('meTab.verifiedCredentials')} />
       {items.length === 0 ? (
         <View className="px-4 gap-2">
           <View className="flex-row gap-2">
-            <MeActionTile icon="viewfinder" title="Scan Identity" onPress={onScanIdentity} />
-            <MeActionTile icon="keyboard" title="Manual Input" onPress={onManualInput} />
+            <MeActionTile icon="viewfinder" title={t('meTab.scanIdentity')} onPress={onScanIdentity} />
+            <MeActionTile icon="keyboard" title={t('meTab.manualInput')} onPress={onManualInput} />
           </View>
           <MeActionTile
             icon="square.and.arrow.up"
-            title="Import JSON"
+            title={t('meTab.importJson')}
             onPress={onImportJson}
           />
         </View>
@@ -219,13 +220,14 @@ function SelectiveDisclosuresSection({
 }: {
   readonly claims: readonly ProvableClaimEntity[];
 }) {
+  const { t } = useTranslation();
   return (
     <View className="gap-2">
-      <MeSectionHeader title="Selective Disclosures" />
+      <MeSectionHeader title={t('meTab.selectiveDisclosures')} />
       {claims.length === 0 ? (
         <View className="px-4">
           <Text className="text-text3 text-[13px]">
-            No derivations available.
+            {t('meTab.noDerivations')}
           </Text>
         </View>
       ) : (
@@ -236,7 +238,7 @@ function SelectiveDisclosuresSection({
               icon={claimIcon(c.claimType)}
               title={c.title}
               source={`Src:${capitalize(c.source)}`}
-              actionTitle="Show"
+              actionTitle={t('meTab.show')}
               onPresent={() => {
                 router.push({ pathname: '/credentials/[id]', params: { id: c.identityCardId } });
               }}
@@ -270,14 +272,15 @@ function ActionSection({
   onAcquire: () => void;
   onImportRaw: () => void;
 }) {
+  const { t } = useTranslation();
   return (
     <View className="gap-2">
-      <MeSectionHeader title="Action" />
+      <MeSectionHeader title={t('meTab.action')} />
       <View className="px-4 flex-row gap-2">
-        <MeActionTile icon="plus" title="Acquire New Proof" onPress={onAcquire} />
+        <MeActionTile icon="plus" title={t('meTab.acquireNewProof')} onPress={onAcquire} />
         <MeActionTile
           icon="square.and.arrow.up"
-          title="Import Raw Credential"
+          title={t('meTab.importRawCredential')}
           onPress={onImportRaw}
         />
       </View>
@@ -294,23 +297,24 @@ function DeveloperSection({
   onOidc: () => void;
   onGroups: () => void;
 }) {
+  const { t } = useTranslation();
   return (
-    <SettingsBlockSection title="Developer">
+    <SettingsBlockSection title={t('meTab.developer')}>
       <SettingsBlockRow
         icon="shield"
-        title="ZK Identity"
-        trailingText="Not initialized"
+        title={t('meTab.zkIdentity')}
+        trailingText={t('meTab.notInitialized')}
         onPress={onZk}
       />
       <SettingsBlockRow
         icon="qrcode"
-        title="OIDC Request Scanner"
+        title={t('meTab.oidcRequestScanner')}
         onPress={onOidc}
       />
       <SettingsBlockRow
         icon="person.2"
-        title="Group Management"
-        trailingText="0 Groups"
+        title={t('meTab.groupManagement')}
+        trailingText={t('meTab.zeroGroups')}
         onPress={onGroups}
         isLast
       />

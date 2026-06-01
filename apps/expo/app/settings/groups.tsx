@@ -36,9 +36,11 @@ import {
   useGroupStore,
   type GroupModel,
 } from '@/groups/store';
+import { useTranslation } from '@/i18n';
 
 export default function GroupManagementSettings() {
   const insets = useSafeAreaInsets();
+  const { t } = useTranslation();
   // Seed the manifest synchronously so the section headers + counts render
   // on frame 1; hydrate() resolves the full GroupModel in the background so
   // `YourGroupsSection`'s ownership-filtered sub-lists fill in.
@@ -77,9 +79,9 @@ export default function GroupManagementSettings() {
   const onDelete = (group: GroupModel) => {
     void (async () => {
       const ok = await confirmDialog({
-        title: 'Delete Group?',
-        message: 'This will remove the group. This action cannot be undone.',
-        confirmLabel: 'Delete',
+        title: t('settingsGroups.deleteConfirm.title'),
+        message: t('settingsGroups.deleteConfirm.message'),
+        confirmLabel: t('settingsGroups.deleteConfirm.confirm'),
         destructive: true,
       });
       if (!ok) return;
@@ -89,13 +91,13 @@ export default function GroupManagementSettings() {
 
   const goCreate = () => { router.push('/groups/new'); };
   const goInvite = () => { setJoinVisible(true); };
-  const goPrivacy = () => { pushToast('Privacy Policy lands next iteration', 'info'); };
-  const goTerms = () => { pushToast('Terms of Service lands next iteration', 'info'); };
+  const goPrivacy = () => { pushToast(t('settingsGroups.privacyToast'), 'info'); };
+  const goTerms = () => { pushToast(t('settingsGroups.termsToast'), 'info'); };
 
   return (
     <View className="flex-1 bg-pageBg" style={{ paddingTop: insets.top }}>
       <SettingsBackToolbar onPress={() => { router.back(); }} />
-      <SettingsScreenTitle title="Group Management" />
+      <SettingsScreenTitle title={t('settingsGroups.title')} />
 
       <ScrollView
         className="flex-1"
@@ -119,24 +121,24 @@ export default function GroupManagementSettings() {
             </View>
             <View className="flex-1">
               <Text className="text-text1 text-[18px] font-semibold">
-                Group Management
+                {t('settingsGroups.title')}
               </Text>
               {/* TODO(android): real sync status (idle/syncing/error/offline) */}
             </View>
           </View>
 
           {/* Actions */}
-          <SettingsBlockSection title="Actions">
+          <SettingsBlockSection title={t('settingsGroups.actions')}>
             <SettingsBlockRow
               icon="plus.circle.fill"
-              title="Create Group"
-              subtitle="Create a new CloudKit group"
+              title={t('settingsGroups.createGroup')}
+              subtitle={t('settingsGroups.createGroupSubtitle')}
               onPress={goCreate}
             />
             <SettingsBlockRow
               icon="link"
-              title="Invite via Link"
-              subtitle="Generate invite link for members"
+              title={t('settingsGroups.inviteViaLink')}
+              subtitle={t('settingsGroups.inviteViaLinkSubtitle')}
               onPress={goInvite}
             />
           </SettingsBlockSection>
@@ -145,17 +147,17 @@ export default function GroupManagementSettings() {
           <YourGroupsSection onOpen={onOpen} onDelete={onDelete} />
 
           {/* Legal & Privacy */}
-          <SettingsBlockSection title="Legal & Privacy">
+          <SettingsBlockSection title={t('settingsGroups.legalPrivacy')}>
             <SettingsBlockRow
               icon="hand.raised"
-              title="Privacy Policy"
-              subtitle="View our privacy policy"
+              title={t('settingsGroups.privacyPolicy')}
+              subtitle={t('settingsGroups.privacyPolicySubtitle')}
               onPress={goPrivacy}
             />
             <SettingsBlockRow
               icon="doc.text"
-              title="Terms of Service"
-              subtitle="View terms of service"
+              title={t('settingsGroups.termsOfService')}
+              subtitle={t('settingsGroups.termsOfServiceSubtitle')}
               onPress={goTerms}
             />
           </SettingsBlockSection>

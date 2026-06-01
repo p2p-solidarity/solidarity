@@ -18,6 +18,7 @@ import {
   SettingsScreenTitle,
 } from '@/components/settings/SettingsBlocks';
 import { Colors } from '@/constants/Colors';
+import { useTranslation } from '@/i18n';
 import {
   useVaultStore,
   type VaultItem,
@@ -48,10 +49,11 @@ interface VaultRowProps {
 }
 
 function VaultRow({ entry, detail }: VaultRowProps): ReactNode {
+  const { t } = useTranslation();
   // Frame-1 paint uses the manifest entry (kind + size + updatedAt). The
   // filename is encrypted-only — see vaultManifest.ts privacy note — so
   // we show a neutral placeholder until `hydrate()` decrypts it.
-  const displayName = detail?.name ?? 'Encrypted item';
+  const displayName = detail?.name ?? t('vault.encryptedItem');
   const updatedDate = detail?.updatedAt ?? new Date(entry.updatedAt);
   return (
     <Pressable
@@ -61,7 +63,7 @@ function VaultRow({ entry, detail }: VaultRowProps): ReactNode {
         // /vault/[id] lands.
       }}
       accessibilityRole="button"
-      accessibilityLabel={`Open ${displayName}`}
+      accessibilityLabel={t('vault.openItem', { name: displayName })}
       className="active:opacity-80"
     >
       <View
@@ -78,7 +80,10 @@ function VaultRow({ entry, detail }: VaultRowProps): ReactNode {
             {displayName}
           </Text>
           <Text className="text-text3 text-[12px]" style={{ marginTop: 2 }}>
-            {formatBytes(entry.size)} · updated {updatedDate.toLocaleDateString()}
+            {t('vault.rowMeta', {
+              size: formatBytes(entry.size),
+              date: updatedDate.toLocaleDateString(),
+            })}
           </Text>
         </View>
         <SfIcon name="chevron.right" size={12} weight="semibold" color={Colors.text3} />
@@ -88,6 +93,7 @@ function VaultRow({ entry, detail }: VaultRowProps): ReactNode {
 }
 
 export default function VaultHub() {
+  const { t } = useTranslation();
   const insets = useSafeAreaInsets();
   const manifest = useVaultStore((s) => s.manifest);
   const details = useVaultStore((s) => s.details);
@@ -103,17 +109,17 @@ export default function VaultHub() {
 
   return (
     <View className="flex-1 bg-pageBg" style={{ paddingTop: insets.top }}>
-      <SettingsBackToolbar title="Back" onPress={() => { router.back(); }} />
-      <SettingsScreenTitle title="Vault" />
+      <SettingsBackToolbar title={t('vault.back')} onPress={() => { router.back(); }} />
+      <SettingsScreenTitle title={t('vault.title')} />
 
       <ScrollView
         className="flex-1"
         contentContainerStyle={{ paddingTop: 12, paddingBottom: 60 + insets.bottom }}
       >
         <View className="gap-2">
-          <SettingsBlockSectionHeader title="Encrypted files" />
+          <SettingsBlockSectionHeader title={t('vault.encryptedFiles')} />
           <Text className="px-4 text-text3 text-[12px]">
-            End-to-end encrypted private storage.
+            {t('vault.encryptedFilesSubtitle')}
           </Text>
         </View>
 
@@ -123,7 +129,7 @@ export default function VaultHub() {
           <Pressable
             onPress={() => { router.push('/vault/new'); }}
             accessibilityRole="button"
-            accessibilityLabel="Add to vault"
+            accessibilityLabel={t('vault.addToVault')}
             className="active:opacity-80"
           >
             <View
@@ -135,7 +141,7 @@ export default function VaultHub() {
               >
                 <SfIcon name="plus" size={14} color={Colors.text1} />
               </View>
-              <Text className="text-text1 text-[15px] flex-1">Add to vault</Text>
+              <Text className="text-text1 text-[15px] flex-1">{t('vault.addToVault')}</Text>
               <SfIcon name="chevron.right" size={12} weight="semibold" color={Colors.text3} />
             </View>
           </Pressable>
@@ -144,10 +150,10 @@ export default function VaultHub() {
         <View className="h-6" />
 
         <View className="gap-2">
-          <SettingsBlockSectionHeader title={`Items (${String(manifest.length)})`} />
+          <SettingsBlockSectionHeader title={t('vault.itemsCount', { count: manifest.length })} />
           {manifest.length === 0 ? (
             <Text className="px-4 text-text3 text-[12px]">
-              No files yet. Files added here are sealed with your master key (AES-256-GCM) before they touch disk.
+              {t('vault.emptyState')}
             </Text>
           ) : (
             <View className="px-4 gap-2">

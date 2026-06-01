@@ -41,11 +41,13 @@ import {
 } from '@/components/people/personDetailSupport';
 import { Colors } from '@/constants/Colors';
 import { useContact, useContactStore } from '@/contacts/repository';
+import { useTranslation } from '@/i18n';
 import type { Animal, Contact } from '@solidarity/shared';
 
 const HERO_HORIZONTAL_PADDING = 16;
 
 export default function PersonDetailScreen(): ReactNode {
+  const { t } = useTranslation();
   const { id, name } = useLocalSearchParams<{ id: string; name?: string }>();
   const contact = useContact(id);
   const upsert = useContactStore((s) => s.upsert);
@@ -54,10 +56,10 @@ export default function PersonDetailScreen(): ReactNode {
 
   const [showingMoreSheet, setShowingMoreSheet] = useState(false);
   const [showingEditSheet, setShowingEditSheet] = useState(false);
-  const displayName = contact?.businessCard.name ?? name ?? 'Contact';
+  const displayName = contact?.businessCard.name ?? name ?? t('personDetail.fallbackName');
 
   const onShare = (): void => {
-    void Share.share({ message: `Check out ${displayName} on AirMeishi!` }).catch(
+    void Share.share({ message: t('personDetail.shareMessage', { name: displayName }) }).catch(
       () => {
         // Swallow — share sheet cancellation isn't an error worth surfacing.
       },
@@ -134,6 +136,7 @@ function TopBar({
   readonly onShare: () => void;
   readonly onMore: () => void;
 }): ReactNode {
+  const { t } = useTranslation();
   return (
     <View
       className="flex-row items-center justify-between"
@@ -141,7 +144,7 @@ function TopBar({
     >
       <Pressable
         accessibilityRole="button"
-        accessibilityLabel="Back"
+        accessibilityLabel={t('personDetail.back')}
         onPress={onBack}
         hitSlop={8}
       >
@@ -150,7 +153,7 @@ function TopBar({
       <View className="flex-row items-center" style={{ columnGap: 16 }}>
         <Pressable
           accessibilityRole="button"
-          accessibilityLabel="Share"
+          accessibilityLabel={t('personDetail.share')}
           onPress={onShare}
           hitSlop={8}
           style={{ width: 22, height: 22, alignItems: 'center', justifyContent: 'center' }}
@@ -159,7 +162,7 @@ function TopBar({
         </Pressable>
         <Pressable
           accessibilityRole="button"
-          accessibilityLabel="More"
+          accessibilityLabel={t('personDetail.more')}
           onPress={onMore}
           hitSlop={8}
           style={{ width: 24, height: 24, alignItems: 'center', justifyContent: 'center' }}
@@ -262,10 +265,11 @@ function HeroEditButton({
   readonly hasNote: boolean;
   readonly onPress: () => void;
 }): ReactNode {
+  const { t } = useTranslation();
   return (
     <Pressable
       accessibilityRole="button"
-      accessibilityLabel={hasNote ? 'Edit note' : 'Add note'}
+      accessibilityLabel={hasNote ? t('personDetail.editNote') : t('personDetail.addNote')}
       onPress={onPress}
       hitSlop={8}
       style={{
@@ -294,11 +298,12 @@ function HeroNoteLine({
   readonly note: string | undefined;
   readonly onEditNote: () => void;
 }): ReactNode {
+  const { t } = useTranslation();
   return (
     <Pressable
       onPress={onEditNote}
       accessibilityRole="button"
-      accessibilityLabel={note ? 'Edit note' : 'Add note'}
+      accessibilityLabel={note ? t('personDetail.editNote') : t('personDetail.addNote')}
       style={{ alignSelf: 'stretch' }}
     >
       {note ? (
@@ -331,7 +336,7 @@ function HeroNoteLine({
               color: Colors.text3,
             }}
           >
-            tap to add note
+            {t('personDetail.tapToAddNote')}
           </Text>
         </View>
       )}
@@ -390,12 +395,13 @@ function initialOf(name: string): string {
 // ─────────────────────────────────────────────────────────────────────────────
 
 function ContactInfoSection({ contact }: { readonly contact: Contact }): ReactNode {
+  const { t } = useTranslation();
   const rows = useMemo(() => buildContactRows(contact), [contact]);
   if (rows.length === 0) return null;
   return (
     <View style={{ paddingHorizontal: 16, rowGap: 10 }}>
       <Text className="text-text1" style={{ fontSize: 14 }}>
-        contact info
+        {t('personDetail.contactInfo')}
       </Text>
       <View style={{ rowGap: 8 }}>
         {rows.map((row) => (

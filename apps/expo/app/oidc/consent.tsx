@@ -13,6 +13,7 @@ import { Linking, ScrollView, View } from 'react-native';
 
 import { ThemedButton, ThemedSurface, ThemedText } from '@/components/themed';
 import { pushToast } from '@/feedback/toast';
+import { useTranslation } from '@/i18n';
 import { useActiveDid } from '@/identity';
 import { parseOidcRequest } from '@/oidc/parseAuthRequest';
 import { buildVpToken } from '@/oidc/presenter';

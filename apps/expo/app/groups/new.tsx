@@ -49,17 +49,18 @@ function NavBar({
   readonly onCancel: () => void;
 }): React.JSX.Element {
   const insets = useSafeAreaInsets();
+  const { t } = useTranslation();
   return (
     <View style={{ paddingTop: insets.top }} className="bg-pageBg">
       <View className="h-11 flex-row items-center px-4">
         <Pressable
           onPress={onCancel}
           accessibilityRole="button"
-          accessibilityLabel="Cancel"
+          accessibilityLabel={t('groupNew.cancel')}
           hitSlop={8}
           className="px-1 py-1 active:opacity-60"
         >
-          <Text className="text-text1 text-[16px]">Cancel</Text>
+          <Text className="text-text1 text-[16px]">{t('groupNew.cancel')}</Text>
         </Pressable>
         <View className="flex-1 items-center">
           <Text className="text-text1 text-[17px] font-semibold">{title}</Text>
@@ -79,6 +80,7 @@ function GroupTypeSegment({
   value,
   onChange,
 }: GroupTypeSegmentProps): React.JSX.Element {
+  const { t } = useTranslation();
   return (
     <View
       className="flex-row p-1 rounded-lg bg-searchBg"
@@ -99,7 +101,7 @@ function GroupTypeSegment({
         <Text
           className={`text-[14px] ${!value ? 'text-text1 font-semibold' : 'text-text2'}`}
         >
-          Public Group
+          {t('groupNew.typePublic')}
         </Text>
       </Pressable>
       <Pressable
@@ -117,7 +119,7 @@ function GroupTypeSegment({
         <Text
           className={`text-[14px] ${value ? 'text-text1 font-semibold' : 'text-text2'}`}
         >
-          Private Group
+          {t('groupNew.typePrivate')}
         </Text>
       </Pressable>
     </View>
@@ -153,7 +155,7 @@ export default function CreateGroup(): React.JSX.Element {
         isSynced: false,
         credentialIssuers: [],
       });
-      pushToast(`Created "${trimmed}"`, 'success');
+      pushToast(t('groupNew.created', { name: trimmed }), 'success');
       router.replace({ pathname: '/groups/[id]', params: { id } });
     } catch (e) {
       showError({ context: 'Groups › Create', summary: t('groupNew.createFailed'), error: e });
@@ -164,7 +166,7 @@ export default function CreateGroup(): React.JSX.Element {
 
   return (
     <View className="flex-1 bg-pageBg">
-      <NavBar title="New Group" onCancel={() => { router.back(); }} />
+      <NavBar title={t('groupNew.title')} onCancel={() => { router.back(); }} />
 
       <ScrollView
         className="flex-1"
@@ -181,7 +183,7 @@ export default function CreateGroup(): React.JSX.Element {
               <TextInput
                 value={groupName}
                 onChangeText={setGroupName}
-                placeholder="Group Name"
+                placeholder={t('groupNew.namePlaceholder')}
                 placeholderTextColor={Colors.text3}
                 autoCapitalize="words"
                 className="text-text1 text-[14px] bg-searchBg px-4 py-4"
@@ -190,7 +192,7 @@ export default function CreateGroup(): React.JSX.Element {
               <TextInput
                 value={groupDescription}
                 onChangeText={setGroupDescription}
-                placeholder="Description (Optional)"
+                placeholder={t('groupNew.descriptionPlaceholder')}
                 placeholderTextColor={Colors.text3}
                 autoCapitalize="sentences"
                 className="text-text1 text-[14px] bg-searchBg px-4 py-4"
@@ -200,7 +202,7 @@ export default function CreateGroup(): React.JSX.Element {
               className="text-text3 text-[12px] pt-2"
               style={{ fontFamily: MONO_FONT }}
             >
-              Give your group a recognizable name and description.
+              {t('groupNew.nameHelper')}
             </Text>
           </View>
 
@@ -210,7 +212,7 @@ export default function CreateGroup(): React.JSX.Element {
               className="text-text3 text-[12px] font-bold pb-2"
               style={{ fontFamily: MONO_FONT }}
             >
-              GROUP TYPE
+              {t('groupNew.typeHeader')}
             </Text>
             <GroupTypeSegment value={isPrivate} onChange={setIsPrivate} />
             <Text
@@ -218,8 +220,8 @@ export default function CreateGroup(): React.JSX.Element {
               style={{ fontFamily: MONO_FONT }}
             >
               {isPrivate
-                ? 'Private groups use native iCloud Sharing. Only invited people can join.'
-                : 'Public groups use simple link sharing. Anyone with the link can join.'}
+                ? t('groupNew.privateHelper')
+                : t('groupNew.publicHelper')}
             </Text>
           </View>
 
@@ -228,7 +230,7 @@ export default function CreateGroup(): React.JSX.Element {
             variant="primary"
             fullWidth
             disabled={disabled}
-            label={isCreating ? 'Creating...' : 'Create Group'}
+            label={isCreating ? t('groupNew.creating') : t('groupNew.createButton')}
             onPress={() => { void onCreate(); }}
           />
           {isCreating ? (

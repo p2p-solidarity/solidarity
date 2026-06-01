@@ -42,10 +42,12 @@ import {
   useGroupStore,
   type GroupManifestEntry,
 } from '@/groups/store';
+import { useTranslation } from '@/i18n';
 import { usePreferences } from '@/settings/preferences';
 import { useIdentitySnapshot, useZkIdentity } from '@/zk';
 
 export default function IDViewScreen(): React.JSX.Element {
+  const { t } = useTranslation();
   const insets = useSafeAreaInsets();
   const { did, commitment } = useIdentitySnapshot();
   const isWorkingFromStore = useZkIdentity((s) => s.isWorking);
@@ -80,14 +82,14 @@ export default function IDViewScreen(): React.JSX.Element {
         .then(() => { haptic('success'); })
         .catch((error: unknown) => {
           const message = error instanceof Error ? error.message : String(error);
-          pushToast(`Identity creation failed: ${message}`, 'warning');
+          pushToast(`${t('idView.identityCreationFailed')}: ${message}`, 'warning');
         })
         .finally(() => { setIsWorkingLocal(false); });
     } else {
       // TODO(android): IdentityCoordinator.refreshIdentity() — full refresh
       // sweep (DID metadata, group root pulls) lands in a follow-up iteration;
       // for now the ZK identity itself is already authoritative.
-      pushToast('Identity is up to date', 'info');
+      pushToast(t('idView.identityUpToDate'), 'info');
     }
   };
 
@@ -99,14 +101,14 @@ export default function IDViewScreen(): React.JSX.Element {
   const onSwitchDid = (): void => {
     // did:key is currently the only supported method; capsule kept for
     // visual parity with Swift but no-ops on press.
-    pushToast('did:key is the only supported method', 'info');
+    pushToast(t('idView.didKeyOnly'), 'info');
   };
 
   const onCopyDid = async (): Promise<void> => {
     if (!did) return;
     await Clipboard.setStringAsync(did);
     haptic('selection');
-    pushToast('DID copied', 'success');
+    pushToast(t('idView.didCopied'), 'success');
   };
 
   const onZkSettings = (): void => {
@@ -119,12 +121,12 @@ export default function IDViewScreen(): React.JSX.Element {
 
   const onRefresh = (): void => {
     // TODO(android): IdentityCoordinator.refreshIdentity()
-    pushToast('Identity refresh lands next iteration', 'info');
+    pushToast(t('idView.refreshPending'), 'info');
   };
 
   return (
     <View className="flex-1 bg-pageBg" style={{ paddingTop: insets.top }}>
-      <NavBar onZk={onZkSettings} onOidc={onOidc} onRefresh={onRefresh} />
+      <NavBar onZk={onZkSettings} onOidc={onOidc} onRefresh={onRefresh} t={t} />
 
       <ScrollView
         className="flex-1"
@@ -138,6 +140,7 @@ export default function IDViewScreen(): React.JSX.Element {
               isDidKeyActive={isDidKeyActive}
               onSwitch={onSwitchDid}
               onCopyDid={() => { void onCopyDid(); }}
+              t={t}
             />
           </View>
 
@@ -162,6 +165,7 @@ export default function IDViewScreen(): React.JSX.Element {
               onSelectGroup={(g) => {
                 router.push({ pathname: '/groups/[id]', params: { id: g.id } });
               }}
+              t={t}
             />
           ) : null}
         </View>
@@ -174,10 +178,12 @@ function NavBar({
   onZk,
   onOidc,
   onRefresh,
+  t,
 }: {
   readonly onZk: () => void;
   readonly onOidc: () => void;
   readonly onRefresh: () => void;
+  readonly t: (key: string) => string;
 }): React.JSX.Element {
   return (
     <View
@@ -187,7 +193,7 @@ function NavBar({
       <Pressable
         onPress={onZk}
         accessibilityRole="button"
-        accessibilityLabel="ZK Settings"
+        accessibilityLabel={t('idView.zkSettings')}
         style={{
           width: 44,
           height: 44,
@@ -199,7 +205,7 @@ function NavBar({
         <SfIcon name="gearshape" size={18} color={Colors.text1} />
       </Pressable>
 
-      <Text className="text-text1 text-[17px] font-semibold">ID</Text>
+      <Text className="text-text1 text-[17px] font-semibold">{t('idView.title')}</Text>
 
       <View
         className="flex-row items-center"
@@ -208,7 +214,7 @@ function NavBar({
         <Pressable
           onPress={onOidc}
           accessibilityRole="button"
-          accessibilityLabel="Scan"
+          accessibilityLabel={t('idView.scan')}
           hitSlop={8}
           className="active:opacity-60"
         >
@@ -217,7 +223,7 @@ function NavBar({
         <Pressable
           onPress={onRefresh}
           accessibilityRole="button"
-          accessibilityLabel="Refresh"
+          accessibilityLabel={t('idView.refresh')}
           hitSlop={8}
           className="active:opacity-60"
         >
@@ -233,11 +239,13 @@ function MaskSection({
   isDidKeyActive,
   onSwitch,
   onCopyDid,
+  t,
 }: {
   readonly did: string | null;
   readonly isDidKeyActive: boolean;
   readonly onSwitch: () => void;
   readonly onCopyDid: () => void;
+  readonly t: (key: string) => string;
 }): React.JSX.Element {
   return (
     <View style={{ alignItems: 'center', gap: 12 }}>
@@ -256,7 +264,7 @@ function MaskSection({
         }}
       >
         <DidCapsule
-          title="Anonymous"
+          title={t('idView.anonymous')}
           subtitle="did:key"
           isActive={isDidKeyActive}
           onPress={onSwitch}
@@ -267,7 +275,7 @@ function MaskSection({
         <Pressable
           onPress={onCopyDid}
           accessibilityRole="button"
-          accessibilityLabel={`Copy DID ${did}`}
+          accessibilityLabel={`${t('idView.copyDid')} ${did}`}
           style={{
             flexDirection: 'row',
             alignItems: 'center',
@@ -297,10 +305,12 @@ function BadgeSection({
   groups,
   onAdd,
   onSelectGroup,
+  t,
 }: {
   readonly groups: readonly GroupManifestEntry[];
   readonly onAdd: () => void;
   readonly onSelectGroup: (g: GroupManifestEntry) => void;
+  readonly t: (key: string) => string;
 }): React.JSX.Element {
   return (
     <View style={{ gap: 16 }}>
@@ -315,12 +325,12 @@ function BadgeSection({
           className="text-text2 text-[17px] font-semibold"
           style={{ paddingLeft: 24 }}
         >
-          Groups
+          {t('idView.groups')}
         </Text>
         <Pressable
           onPress={onAdd}
           accessibilityRole="button"
-          accessibilityLabel="Create group"
+          accessibilityLabel={t('idView.createGroup')}
           hitSlop={8}
           style={{ paddingRight: 24 }}
           className="active:opacity-60"
@@ -335,7 +345,7 @@ function BadgeSection({
 
       {groups.length === 0 ? (
         <View style={{ paddingVertical: 20, alignItems: 'center' }}>
-          <Text className="text-text2 text-[15px]">No group memberships</Text>
+          <Text className="text-text2 text-[15px]">{t('idView.noGroups')}</Text>
         </View>
       ) : (
         <View style={{ paddingHorizontal: 20, gap: 12 }}>

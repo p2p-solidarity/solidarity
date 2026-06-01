@@ -22,21 +22,19 @@ import { Modal, Pressable, ScrollView, Switch, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { SfIcon } from '@/components/icons/SfIcon';
-import {
-  SettingsBackToolbar,
-  SettingsScreenTitle,
-} from '@/components/settings/SettingsBlocks';
+import { SettingsBackToolbar, SettingsScreenTitle } from '@/components/settings/SettingsBlocks';
 import { Colors } from '@/constants/Colors';
 import { haptic } from '@/feedback/haptics';
+import { useTranslation } from '@/i18n';
 import type { BusinessCardField, SharingLevel } from '@solidarity/shared';
 import type { SFSymbol } from 'expo-symbols';
 
 const LEVELS: readonly SharingLevel[] = ['public', 'professional', 'personal'];
 
-const LEVEL_DISPLAY: Readonly<Record<SharingLevel, string>> = {
-  public: 'Public',
-  professional: 'Professional',
-  personal: 'Personal',
+const LEVEL_DISPLAY_KEY: Readonly<Record<SharingLevel, string>> = {
+  public: 'disclosure.level.public',
+  professional: 'disclosure.level.professional',
+  personal: 'disclosure.level.personal',
 };
 
 const LEVEL_ICON: Readonly<Record<SharingLevel, SFSymbol>> = {
@@ -45,12 +43,10 @@ const LEVEL_ICON: Readonly<Record<SharingLevel, SFSymbol>> = {
   personal: 'person.2',
 };
 
-const LEVEL_DESCRIPTION: Readonly<Record<SharingLevel, string>> = {
-  public:
-    'Fields visible when you share your public card (e.g. QR in slides or website).',
-  professional:
-    'For work contacts and events. Usually includes email and skills.',
-  personal: 'For close contacts. Typically includes all fields.',
+const LEVEL_DESCRIPTION_KEY: Readonly<Record<SharingLevel, string>> = {
+  public: 'disclosure.levelDescription.public',
+  professional: 'disclosure.levelDescription.professional',
+  personal: 'disclosure.levelDescription.personal',
 };
 
 const FIELDS: readonly BusinessCardField[] = [
@@ -64,15 +60,15 @@ const FIELDS: readonly BusinessCardField[] = [
   'skills',
 ];
 
-const FIELD_DISPLAY: Readonly<Record<BusinessCardField, string>> = {
-  name: 'Name',
-  title: 'Title',
-  company: 'Company',
-  email: 'Email',
-  phone: 'Phone',
-  profileImage: 'Profile Image',
-  socialNetworks: 'Social Networks',
-  skills: 'Skills',
+const FIELD_DISPLAY_KEY: Readonly<Record<BusinessCardField, string>> = {
+  name: 'disclosure.field.name',
+  title: 'disclosure.field.title',
+  company: 'disclosure.field.company',
+  email: 'disclosure.field.email',
+  phone: 'disclosure.field.phone',
+  profileImage: 'disclosure.field.profileImage',
+  socialNetworks: 'disclosure.field.socialNetworks',
+  skills: 'disclosure.field.skills',
 };
 
 const FIELD_ICON: Readonly<Record<BusinessCardField, SFSymbol>> = {
@@ -86,11 +82,11 @@ const FIELD_ICON: Readonly<Record<BusinessCardField, SFSymbol>> = {
   skills: 'star',
 };
 
-const EXPIRATION_OPTIONS: readonly { label: string; days: number }[] = [
-  { label: '7 days', days: 7 },
-  { label: '30 days', days: 30 },
-  { label: '90 days', days: 90 },
-  { label: 'Never', days: 36500 },
+const EXPIRATION_OPTIONS: readonly { labelKey: string; days: number }[] = [
+  { labelKey: 'disclosure.expiration.7days', days: 7 },
+  { labelKey: 'disclosure.expiration.30days', days: 30 },
+  { labelKey: 'disclosure.expiration.90days', days: 90 },
+  { labelKey: 'disclosure.expiration.never', days: 36500 },
 ];
 
 const DEFAULT_FIELDS: Readonly<Record<SharingLevel, readonly BusinessCardField[]>> = {
@@ -106,6 +102,7 @@ interface DisclosureBodyProps {
 
 export default function SelectiveDisclosureBody({ headerless = false }: DisclosureBodyProps) {
   const insets = useSafeAreaInsets();
+  const { t } = useTranslation();
 
   // Local UI state mirrors Swift @State (these are not yet persisted —
   // Swift wires them to a @Binding<SharingPreferences>; that store binding
@@ -132,7 +129,9 @@ export default function SelectiveDisclosureBody({ headerless = false }: Disclosu
       haptic('warning');
     } else {
       setTapCount(next);
-      setTimeout(() => { setTapCount(0); }, 500);
+      setTimeout(() => {
+        setTapCount(0);
+      }, 500);
     }
   };
 
@@ -145,35 +144,38 @@ export default function SelectiveDisclosureBody({ headerless = false }: Disclosu
     });
   };
 
-  const currentExpirationLabel =
-    EXPIRATION_OPTIONS.find((o) => o.days === expirationDays)?.label ?? '30 days';
+  const currentExpirationLabel = t(
+    EXPIRATION_OPTIONS.find((o) => o.days === expirationDays)?.labelKey ??
+      'disclosure.expiration.30days'
+  );
 
   return (
     <View className="flex-1 bg-pageBg" style={{ paddingTop: headerless ? 0 : insets.top }}>
       {!headerless ? (
         <>
-          <SettingsBackToolbar onPress={() => { router.back(); }} />
-          <SettingsScreenTitle title="Selective Disclosure" />
+          <SettingsBackToolbar
+            onPress={() => {
+              router.back();
+            }}
+          />
+          <SettingsScreenTitle title={t('disclosure.title')} />
         </>
       ) : null}
 
       <ScrollView
         className="flex-1"
-        contentContainerStyle={{ paddingVertical: 16, paddingBottom: 24 + insets.bottom }}
-      >
+        contentContainerStyle={{ paddingVertical: 16, paddingBottom: 24 + insets.bottom }}>
         {/* Overall section — one rounded card containing 3 rows */}
         <View
-          className="mx-4 bg-cardBg rounded-xl overflow-hidden"
-          style={{ borderWidth: 1, borderColor: Colors.divider }}
-        >
+          className="mx-4 overflow-hidden rounded-xl bg-cardBg"
+          style={{ borderWidth: 1, borderColor: Colors.divider }}>
           {/* Zero-Knowledge Privacy row */}
           <Pressable
             onPress={onZkTap}
             accessibilityRole="button"
-            accessibilityLabel="Zero-Knowledge Privacy"
+            accessibilityLabel={t('disclosure.zkPrivacy')}
             className="flex-row items-center active:opacity-90"
-            style={{ padding: 16, opacity: useZK ? 1 : showDevToggle ? 1 : 0.8 }}
-          >
+            style={{ padding: 16, opacity: useZK ? 1 : showDevToggle ? 1 : 0.8 }}>
             <View
               className="items-center justify-center rounded-lg"
               style={{
@@ -181,8 +183,7 @@ export default function SelectiveDisclosureBody({ headerless = false }: Disclosu
                 height: 30,
                 marginRight: 12,
                 backgroundColor: useZK ? 'rgba(128,0,255,0.1)' : 'rgba(255,0,0,0.1)',
-              }}
-            >
+              }}>
               <SfIcon
                 name={useZK ? 'eye.slash.fill' : 'exclamationmark.triangle.fill'}
                 size={20}
@@ -190,15 +191,14 @@ export default function SelectiveDisclosureBody({ headerless = false }: Disclosu
               />
             </View>
             <View className="flex-1">
-              <Text className="text-text1 text-[17px]">Zero-Knowledge Privacy</Text>
+              <Text className="text-[17px] text-text1">{t('disclosure.zkPrivacy')}</Text>
               <Text
                 className="text-[12px]"
                 style={{
                   marginTop: 2,
                   color: useZK ? Colors.text2 : Colors.destructive,
-                }}
-              >
-                {useZK ? 'Active' : 'Disabled (Unsafe)'}
+                }}>
+                {useZK ? t('disclosure.active') : t('disclosure.disabledUnsafe')}
               </Text>
             </View>
             {showDevToggle ? (
@@ -210,8 +210,8 @@ export default function SelectiveDisclosureBody({ headerless = false }: Disclosu
                 ios_backgroundColor={Colors.divider}
               />
             ) : (
-              <Text className="text-text2 text-[15px] font-semibold">
-                {useZK ? 'ON' : 'OFF'}
+              <Text className="text-[15px] font-semibold text-text2">
+                {useZK ? t('common.on').toUpperCase() : t('common.off').toUpperCase()}
               </Text>
             )}
           </Pressable>
@@ -233,18 +233,13 @@ export default function SelectiveDisclosureBody({ headerless = false }: Disclosu
                 height: 30,
                 marginRight: 12,
                 backgroundColor: 'rgba(0,122,255,0.1)',
-              }}
-            >
-              <SfIcon
-                name="arrowshape.turn.up.right.fill"
-                size={20}
-                color={Colors.primaryBlue}
-              />
+              }}>
+              <SfIcon name="arrowshape.turn.up.right.fill" size={20} color={Colors.primaryBlue} />
             </View>
             <View className="flex-1">
-              <Text className="text-text1 text-[17px]">Allow Forwarding</Text>
-              <Text className="text-text2 text-[12px]" style={{ marginTop: 2 }}>
-                Allow recipients to re-share your card.
+              <Text className="text-[17px] text-text1">{t('disclosure.allowForwarding')}</Text>
+              <Text className="text-[12px] text-text2" style={{ marginTop: 2 }}>
+                {t('disclosure.allowForwardingSubtitle')}
               </Text>
             </View>
             <Switch
@@ -266,12 +261,13 @@ export default function SelectiveDisclosureBody({ headerless = false }: Disclosu
 
           {/* Expiration row */}
           <Pressable
-            onPress={() => { setExpirationOpen(true); }}
+            onPress={() => {
+              setExpirationOpen(true);
+            }}
             accessibilityRole="button"
-            accessibilityLabel="Expiration"
+            accessibilityLabel={t('disclosure.expiration')}
             className="flex-row items-center active:opacity-80"
-            style={{ padding: 16 }}
-          >
+            style={{ padding: 16 }}>
             <View
               className="items-center justify-center rounded-lg"
               style={{
@@ -279,14 +275,13 @@ export default function SelectiveDisclosureBody({ headerless = false }: Disclosu
                 height: 30,
                 marginRight: 12,
                 backgroundColor: 'rgba(255,149,0,0.1)',
-              }}
-            >
+              }}>
               <SfIcon name="clock.fill" size={20} color="#FF9500" />
             </View>
             <View className="flex-1">
-              <Text className="text-text1 text-[17px]">Expiration</Text>
+              <Text className="text-[17px] text-text1">{t('disclosure.expiration')}</Text>
             </View>
-            <Text className="text-text2 text-[15px]" style={{ marginRight: 6 }}>
+            <Text className="text-[15px] text-text2" style={{ marginRight: 6 }}>
               {currentExpirationLabel}
             </Text>
             <SfIcon name="chevron.up.chevron.down" size={11} color={Colors.text3} />
@@ -295,23 +290,23 @@ export default function SelectiveDisclosureBody({ headerless = false }: Disclosu
 
         {/* Level picker — 3 segmented icon-buttons */}
         <View
-          className="mx-4 mt-4 bg-cardBg rounded-xl flex-row"
-          style={{ padding: 4, borderWidth: 1, borderColor: Colors.divider }}
-        >
+          className="mx-4 mt-4 flex-row rounded-xl bg-cardBg"
+          style={{ padding: 4, borderWidth: 1, borderColor: Colors.divider }}>
           {LEVELS.map((level) => {
             const active = selectedLevel === level;
             return (
               <Pressable
                 key={level}
-                onPress={() => { setSelectedLevel(level); }}
+                onPress={() => {
+                  setSelectedLevel(level);
+                }}
                 accessibilityRole="button"
-                accessibilityLabel={LEVEL_DISPLAY[level]}
+                accessibilityLabel={t(LEVEL_DISPLAY_KEY[level])}
                 className="flex-1 items-center rounded-lg active:opacity-80"
                 style={{
                   paddingVertical: 8,
                   backgroundColor: active ? 'rgba(191,128,167,0.1)' : 'transparent',
-                }}
-              >
+                }}>
                 <View style={{ marginBottom: 6 }}>
                   <SfIcon
                     name={LEVEL_ICON[level]}
@@ -322,9 +317,8 @@ export default function SelectiveDisclosureBody({ headerless = false }: Disclosu
                 </View>
                 <Text
                   className="text-[12px] font-medium"
-                  style={{ color: active ? Colors.accentRose : Colors.text2 }}
-                >
-                  {LEVEL_DISPLAY[level]}
+                  style={{ color: active ? Colors.accentRose : Colors.text2 }}>
+                  {t(LEVEL_DISPLAY_KEY[level])}
                 </Text>
               </Pressable>
             );
@@ -334,16 +328,14 @@ export default function SelectiveDisclosureBody({ headerless = false }: Disclosu
         {/* Privacy level fields */}
         <View className="mt-4">
           <Text
-            className="text-text2 text-[13px] text-center"
-            style={{ paddingHorizontal: 16, marginBottom: 16 }}
-          >
-            {LEVEL_DESCRIPTION[selectedLevel]}
+            className="text-center text-[13px] text-text2"
+            style={{ paddingHorizontal: 16, marginBottom: 16 }}>
+            {t(LEVEL_DESCRIPTION_KEY[selectedLevel])}
           </Text>
 
           <View
-            className="mx-4 bg-cardBg rounded-xl overflow-hidden"
-            style={{ borderWidth: 1, borderColor: Colors.divider }}
-          >
+            className="mx-4 overflow-hidden rounded-xl bg-cardBg"
+            style={{ borderWidth: 1, borderColor: Colors.divider }}>
             {FIELDS.map((field, idx) => {
               const isName = field === 'name';
               const isOn = matrix[selectedLevel].has(field);
@@ -357,23 +349,20 @@ export default function SelectiveDisclosureBody({ headerless = false }: Disclosu
                         alignItems: 'center',
                         justifyContent: 'center',
                         marginRight: 12,
-                      }}
-                    >
+                      }}>
                       <SfIcon name={FIELD_ICON[field]} size={16} color={Colors.text2} />
                     </View>
-                    <Text className="text-text1 text-[17px] flex-1">
-                      {FIELD_DISPLAY[field]}
+                    <Text className="flex-1 text-[17px] text-text1">
+                      {t(FIELD_DISPLAY_KEY[field])}
                     </Text>
                     {isName ? (
-                      <SfIcon
-                        name="checkmark.circle.fill"
-                        size={20}
-                        color={Colors.text2}
-                      />
+                      <SfIcon name="checkmark.circle.fill" size={20} color={Colors.text2} />
                     ) : (
                       <Switch
                         value={isOn}
-                        onValueChange={() => { toggleField(selectedLevel, field); }}
+                        onValueChange={() => {
+                          toggleField(selectedLevel, field);
+                        }}
                         trackColor={{ false: Colors.divider, true: Colors.primaryBlue }}
                         thumbColor={Colors.cardBg}
                         ios_backgroundColor={Colors.divider}
@@ -401,22 +390,20 @@ export default function SelectiveDisclosureBody({ headerless = false }: Disclosu
         visible={expirationOpen}
         transparent
         animationType="fade"
-        onRequestClose={() => { setExpirationOpen(false); }}
-      >
+        onRequestClose={() => {
+          setExpirationOpen(false);
+        }}>
         <Pressable
           className="flex-1 items-center justify-center"
           style={{ backgroundColor: 'rgba(0,0,0,0.4)' }}
-          onPress={() => { setExpirationOpen(false); }}
-        >
-          <View
-            className="bg-cardBg rounded-2xl"
-            style={{ width: 280, paddingVertical: 8 }}
-          >
+          onPress={() => {
+            setExpirationOpen(false);
+          }}>
+          <View className="rounded-2xl bg-cardBg" style={{ width: 280, paddingVertical: 8 }}>
             <Text
-              className="text-text2 text-[13px]"
-              style={{ paddingHorizontal: 16, paddingVertical: 8 }}
-            >
-              Expiration
+              className="text-[13px] text-text2"
+              style={{ paddingHorizontal: 16, paddingVertical: 8 }}>
+              {t('disclosure.expiration')}
             </Text>
             {EXPIRATION_OPTIONS.map((opt) => {
               const active = opt.days === expirationDays;
@@ -429,13 +416,11 @@ export default function SelectiveDisclosureBody({ headerless = false }: Disclosu
                   }}
                   accessibilityRole="button"
                   className="flex-row items-center active:opacity-80"
-                  style={{ paddingHorizontal: 16, paddingVertical: 12 }}
-                >
+                  style={{ paddingHorizontal: 16, paddingVertical: 12 }}>
                   <Text
-                    className="text-text1 text-[15px] flex-1"
-                    style={{ fontWeight: active ? '600' : '400' }}
-                  >
-                    {opt.label}
+                    className="flex-1 text-[15px] text-text1"
+                    style={{ fontWeight: active ? '600' : '400' }}>
+                    {t(opt.labelKey)}
                   </Text>
                   {active ? (
                     <SfIcon

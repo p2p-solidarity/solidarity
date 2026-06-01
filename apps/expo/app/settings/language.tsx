@@ -27,20 +27,21 @@ import {
 } from '@/components/settings/SettingsBlocks';
 import { Colors } from '@/constants/Colors';
 import { haptic } from '@/feedback/haptics';
+import { useTranslation } from '@/i18n';
 import { usePreferences } from '@/settings/preferences';
 
 interface LanguageOption {
   readonly code: string;
-  readonly displayName: string;
+  readonly displayNameKey: string;
   readonly nativeName: string;
   readonly flag: string;
 }
 
 const LANGUAGES: readonly LanguageOption[] = [
-  { code: 'en', displayName: 'English', nativeName: 'English', flag: 'EN' },
+  { code: 'en', displayNameKey: 'language.name.en', nativeName: 'English', flag: 'EN' },
   {
     code: 'zh-Hant',
-    displayName: 'Traditional Chinese',
+    displayNameKey: 'language.name.zhHant',
     nativeName: '繁體中文',
     flag: 'ZH',
   },
@@ -48,7 +49,12 @@ const LANGUAGES: readonly LanguageOption[] = [
 
 export default function LanguageSettings(): ReactNode {
   const insets = useSafeAreaInsets();
-  const current = usePreferences((s) => s.language);
+  const { t } = useTranslation();
+  // Fall back to the live i18n language when no explicit choice is stored yet
+  // (language defaults to '' = follow device), so the active language still
+  // shows a checkmark before the user makes a selection.
+  const stored = usePreferences((s) => s.language);
+  const current = stored || i18n.language;
   const set = usePreferences((s) => s.set);
 
   const onSelect = (code: string) => {
@@ -60,7 +66,7 @@ export default function LanguageSettings(): ReactNode {
   return (
     <View className="flex-1 bg-pageBg" style={{ paddingTop: insets.top }}>
       <SettingsBackToolbar onPress={() => { router.back(); }} />
-      <SettingsScreenTitle title="Language Selection" />
+      <SettingsScreenTitle title={t('language.title')} />
 
       <ScrollView
         contentContainerStyle={{
@@ -75,13 +81,13 @@ export default function LanguageSettings(): ReactNode {
             className="text-text1"
             style={{ fontSize: 20, fontWeight: '600' }}
           >
-            Select Language
+            {t('language.selectHeading')}
           </Text>
           <Text
             className="text-text2 text-center"
             style={{ fontSize: 14, paddingHorizontal: 16 }}
           >
-            Choose the language used throughout the app.
+            {t('language.selectSubtitle')}
           </Text>
         </View>
 
@@ -90,6 +96,7 @@ export default function LanguageSettings(): ReactNode {
             <LanguageRow
               key={lang.code}
               option={lang}
+              displayName={t(lang.displayNameKey)}
               isSelected={current === lang.code}
               onPress={() => { onSelect(lang.code); }}
             />
@@ -102,10 +109,12 @@ export default function LanguageSettings(): ReactNode {
 
 function LanguageRow({
   option,
+  displayName,
   isSelected,
   onPress,
 }: {
   readonly option: LanguageOption;
+  readonly displayName: string;
   readonly isSelected: boolean;
   readonly onPress: () => void;
 }): ReactNode {
@@ -113,7 +122,7 @@ function LanguageRow({
     <Pressable
       onPress={onPress}
       accessibilityRole="button"
-      accessibilityLabel={option.displayName}
+      accessibilityLabel={displayName}
       accessibilityState={{ selected: isSelected }}
       className="active:opacity-80"
     >
@@ -152,7 +161,7 @@ function LanguageRow({
             className="text-text1"
             style={{ fontSize: 16, fontWeight: '600' }}
           >
-            {option.displayName}
+            {displayName}
           </Text>
           <Text className="text-text2" style={{ fontSize: 13 }}>
             {option.nativeName}

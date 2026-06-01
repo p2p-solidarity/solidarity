@@ -18,6 +18,7 @@ import { ScrollView, Switch, Text, TextInput, View } from 'react-native';
 
 import { IDNavBar, IDSectionHeader } from '@/components/id';
 import { Colors } from '@/constants/Colors';
+import { useTranslation } from '@/i18n';
 import {
   DEFAULT_DELIVERY_SETTINGS,
   DELIVERY_METHODS,
@@ -33,6 +34,7 @@ import { Pressable } from 'react-native';
 const MONO_FONT = 'Menlo';
 
 export default function GroupDeliverySettingsScreen(): React.JSX.Element {
+  const { t } = useTranslation();
   const { id } = useLocalSearchParams<{ id: string }>();
   const group = useGroup(id);
   const [settings, setSettings] = useState<GroupDeliverySettings>(
@@ -52,7 +54,7 @@ export default function GroupDeliverySettingsScreen(): React.JSX.Element {
     if (id) saveDeliverySettings(id, settings);
   }, [id, settings]);
 
-  const title = group?.name ?? 'Delivery Settings';
+  const title = group?.name ?? t('groupDelivery.title');
 
   const onMethodChange = (m: DeliveryMethod): void => {
     setSettings((s) => ({ ...s, defaultDeliveryMethod: m }));
@@ -72,7 +74,7 @@ export default function GroupDeliverySettingsScreen(): React.JSX.Element {
 
   return (
     <View className="flex-1 bg-pageBg">
-      <IDNavBar title="Delivery Settings" leadingLabel={title} />
+      <IDNavBar title={t('groupDelivery.title')} leadingLabel={title} />
 
       <ScrollView
         className="flex-1"
@@ -81,7 +83,7 @@ export default function GroupDeliverySettingsScreen(): React.JSX.Element {
         <View className="gap-4">
           <View>
             <View className="pb-2">
-              <IDSectionHeader title="DEFAULT METHOD" />
+              <IDSectionHeader title={t('groupDelivery.defaultMethod')} />
             </View>
             <View
               className="bg-searchBg p-4"
@@ -96,13 +98,13 @@ export default function GroupDeliverySettingsScreen(): React.JSX.Element {
               style={{ fontFamily: MONO_FONT }}
               className="text-text3 text-[12px] pt-1.5"
             >
-              These settings only affect how you, as an issuer, deliver Group VCs.
+              {t('groupDelivery.defaultMethodHelper')}
             </Text>
           </View>
 
           <View>
             <View className="pb-2">
-              <IDSectionHeader title="PROXIMITY SETTINGS" />
+              <IDSectionHeader title={t('groupDelivery.proximitySettings')} />
             </View>
             <View
               className="bg-searchBg p-4"
@@ -110,7 +112,7 @@ export default function GroupDeliverySettingsScreen(): React.JSX.Element {
             >
               <View className="flex-row items-center">
                 <Text className="text-text1 text-[14px] flex-1">
-                  Require PIN
+                  {t('groupDelivery.requirePin')}
                 </Text>
                 <Switch
                   value={settings.requirePIN}
@@ -124,7 +126,7 @@ export default function GroupDeliverySettingsScreen(): React.JSX.Element {
                 <TextInput
                   value={settings.pin ?? ''}
                   onChangeText={onPinChange}
-                  placeholder="PIN"
+                  placeholder={t('groupDelivery.pinPlaceholder')}
                   placeholderTextColor={Colors.text3}
                   secureTextEntry
                   className="text-text1 text-[14px] bg-cardBg px-3 py-2 rounded-md"
@@ -136,7 +138,7 @@ export default function GroupDeliverySettingsScreen(): React.JSX.Element {
 
           <View>
             <View className="pb-2">
-              <IDSectionHeader title="SAKURA SETTINGS" />
+              <IDSectionHeader title={t('groupDelivery.sakuraSettings')} />
             </View>
             <View
               className="bg-searchBg p-4"
@@ -144,7 +146,7 @@ export default function GroupDeliverySettingsScreen(): React.JSX.Element {
             >
               <View className="flex-row items-center">
                 <Text className="text-text1 text-[14px] flex-1">
-                  Encrypt Messages
+                  {t('groupDelivery.encryptMessages')}
                 </Text>
                 <Switch
                   value={settings.encryptMessages}
