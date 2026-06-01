@@ -76,11 +76,14 @@ final class HybridSecretsVault: HybridSecretsVaultSpec {
   // MARK: - wrap
 
   func wrap(keyAlias: String, plaintext: ArrayBuffer) throws -> Promise<WrappedSecret> {
+    // Copy the NON-OWNING JS ArrayBuffer synchronously, before Promise.async —
+    // touching plaintext.data/.size on the async executor (another thread,
+    // later) traps the process (SIGTRAP) and is uncatchable by JS try/catch.
+    let plaintextData = copyPayload(plaintext)
     return Promise.async {
       guard let key = try self.loadStoredKey(alias: keyAlias) else {
         throw self.makeError(code: 404, "wrapping key not found for alias=\(keyAlias)")
       }
-      let plaintextData = self.copyPayload(plaintext)
       guard !plaintextData.isEmpty else {
         throw self.makeError(code: 400, "plaintext is empty")
       }

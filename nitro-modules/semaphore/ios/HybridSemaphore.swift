@@ -43,8 +43,11 @@ final class HybridSemaphore: HybridSemaphoreSpec {
   }
 
   func identityFromSeed(seed: ArrayBuffer) throws -> Promise<String> {
+    // Copy the NON-OWNING JS ArrayBuffer synchronously, before Promise.async —
+    // touching seed.data/.size on the async executor (another thread, later)
+    // traps the process (SIGTRAP) and is uncatchable by JS try/catch.
+    let bytes = Data(bytes: seed.data, count: seed.size)
     return Promise.async {
-      let bytes = Data(bytes: seed.data, count: seed.size)
       guard bytes.count == 32 else {
         throw HybridError.invalidSeed(bytes.count)
       }
@@ -107,8 +110,11 @@ final class HybridSemaphore: HybridSemaphoreSpec {
   }
 
   func importPrivateKey(bytes: ArrayBuffer) throws -> Promise<String> {
+    // Copy the NON-OWNING JS ArrayBuffer synchronously, before Promise.async —
+    // touching bytes.data/.size on the async executor traps the process
+    // (SIGTRAP) and is uncatchable by JS try/catch.
+    let data = Data(bytes: bytes.data, count: bytes.size)
     return Promise.async {
-      let data = Data(bytes: bytes.data, count: bytes.size)
       guard data.count == 32 else {
         throw HybridError.invalidSeed(data.count)
       }

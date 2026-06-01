@@ -370,8 +370,13 @@ final class HybridProximity: HybridProximitySpec {
   // MARK: Invitation lifecycle
 
   func invitePeer(peerId: String, payload: ArrayBuffer, timeoutSec: Double) throws -> Promise<Bool> {
+    // Copy the NON-OWNING JS ArrayBuffer synchronously, before ANY Promise.async
+    // — accessing payload.data/.size on the async executor (another thread,
+    // later) raises an ObjC exception that traps the process (SIGTRAP),
+    // uncatchable by JS try/catch. The Multipeer path already did this; the
+    // L2CAP path below previously re-copied INSIDE the async closure (the bug).
+    let bytes = copyPayload(payload)
     if let mc = withState({ self.multipeerTransport }), useMultipeer {
-      let bytes = copyPayload(payload)
       return Promise.async { await mc.invitePeer(peerId: peerId, payload: bytes, timeoutSec: timeoutSec) }
     }
     return Promise.async {
@@ -380,7 +385,7 @@ final class HybridProximity: HybridProximitySpec {
       // between scan and invite, and calling openL2CAPChannel in that
       // window crashes with API MISUSE.
       guard self.ensureCentralPoweredOn(op: "invitePeer") else { return false }
-      let context = self.copyPayload(payload)
+      let context = bytes
       let resolved = await withCheckedContinuation { (cont: CheckedContinuation<Bool, Never>) in
         self.withState {
           guard let peripheral = self.discoveredPeripherals[peerId],
@@ -439,8 +444,12 @@ final class HybridProximity: HybridProximitySpec {
   // MARK: Data transport
 
   func sendData(peerId: String, data: ArrayBuffer) throws -> Promise<Void> {
+    // Copy the NON-OWNING JS ArrayBuffer synchronously, before ANY Promise.async
+    // — accessing data.data/.size on the async executor traps the process
+    // (SIGTRAP), uncatchable by JS try/catch. The L2CAP path below previously
+    // re-copied INSIDE the async closure (the bug).
+    let bytes = copyPayload(data)
     if let mc = withState({ self.multipeerTransport }), useMultipeer {
-      let bytes = copyPayload(data)
       return Promise.async { try mc.sendData(peerId: peerId, data: bytes) }
     }
     return Promise.async {
@@ -455,7 +464,6 @@ final class HybridProximity: HybridProximitySpec {
           userInfo: [NSLocalizedDescriptionKey: "Bluetooth not ready"]
         )
       }
-      let bytes = self.copyPayload(data)
       let exists: Bool = self.withState {
         guard self.channels[peerId] != nil else { return false }
         let prev = self.pendingWrites[peerId] ?? Data()

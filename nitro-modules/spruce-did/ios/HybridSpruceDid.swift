@@ -194,8 +194,17 @@ final class HybridSpruceDid: HybridSpruceDidSpec {
   // MARK: - Sign / Verify JWS
 
   func signJws(alias: String, payload: ArrayBuffer) throws -> Promise<String> {
+    // A Nitro `ArrayBuffer` handed in from JS is NON-OWNING: its backing store
+    // is only valid for the SYNCHRONOUS duration of this call. Copy it to an
+    // owning `Data` HERE, on the caller thread, BEFORE deferring to
+    // `Promise.async`. Touching `payload.size` / `payload.data` inside the async
+    // closure (a different thread, later) makes Nitro raise an Objective-C
+    // exception that traps the whole process (EXC_BREAKPOINT / SIGTRAP) — and a
+    // native trap is uncatchable by any JS try/catch, so it reads as a silent
+    // 閃退. Latent bug, unmasked once the SpruceID-unavailable error stopped
+    // short-circuiting the share / VC-issuance flows before signing.
+    let bytes = copyPayload(payload)
     return Promise.async {
-      let bytes = self.copyPayload(payload)
 
       // Currently only P-256 (ES256) signing is wired — matches the
       // legacy app's Swift signer which only ever produced ES256 JWS.

@@ -49,9 +49,12 @@ final class HybridPassportZk: HybridPassportZkSpec {
     proof: ArrayBuffer,
     vk: ArrayBuffer
   ) throws -> Promise<Bool> {
+    // Copy the NON-OWNING JS ArrayBuffers synchronously, before Promise.async —
+    // touching proof/vk .data/.size on the async executor (another thread,
+    // later) traps the process (SIGTRAP) and is uncatchable by JS try/catch.
+    let proofData = Data(bytes: proof.data, count: proof.size)
+    let vkData = Data(bytes: vk.data, count: vk.size)
     return Promise.async {
-      let proofData = Data(bytes: proof.data, count: proof.size)
-      let vkData = Data(bytes: vk.data, count: vk.size)
       return try MoproShim.verify(proof: proofData, vk: vkData)
     }
   }
