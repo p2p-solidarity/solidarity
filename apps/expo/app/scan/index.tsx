@@ -46,6 +46,7 @@ import { pushToast } from '@/feedback/toast';
 import { QrScanner } from '@/scan/QrScanner';
 import { handleScannedPayload } from '@/scan/envelopeHandler';
 import { verifyVpToken } from '@/oidc';
+import { useTranslation } from '@/i18n';
 
 const SCAN_WINDOW_SIZE = 260;
 
@@ -55,6 +56,7 @@ type ScanRoute =
   | { kind: 'raw'; payload: string };
 
 export default function ScanScreen() {
+  const { t } = useTranslation();
   const insets = useSafeAreaInsets();
   const [route, setRoute] = useState<ScanRoute | null>(null);
   const [progress, setProgress] = useState<{ received: number; total: number } | null>(null);
@@ -147,7 +149,7 @@ export default function ScanScreen() {
           accessibilityRole="button"
           style={{ width: 60, height: 44, justifyContent: 'center' }}
         >
-          <Text className="text-text1 text-[15px]">Close</Text>
+          <Text className="text-text1 text-[15px]">{t('scan.close')}</Text>
         </Pressable>
         <Text className="text-text1 text-[17px] font-semibold">Scan</Text>
         <PressableScale

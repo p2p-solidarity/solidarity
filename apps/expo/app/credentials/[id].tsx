@@ -117,6 +117,42 @@ function levelAccent(trustLevel: StoredCredential['trustLevel']): string {
   }
 }
 
+/**
+ * Issuer-trust badge (Figma hero "Verified" chip, 724:22818). Derived from
+ * REAL credential fields — the issuer DID prefix plus trust level — never a
+ * fabricated label:
+ *   • `did:gov…` issuer (a passport read off a real chip via NFC) → the
+ *     name is attested by the issuing authority → "Verified by passport".
+ *   • everything else (self-issued `did:self…`, SD-JWT fallback, L1) →
+ *     "Self-attested".
+ * Returns `null` when the credential carries no signal we can stand behind,
+ * so the chip is simply omitted rather than guessing (CLAUDE.md rule 8).
+ */
+function issuerTrustBadge(
+  credential: StoredCredential,
+  t: (key: string) => string,
+): { text: string; icon: SFSymbol } | null {
+  const isGovernment =
+    credential.issuerDid.startsWith('did:gov') && credential.trustLevel !== 'L1';
+  if (isGovernment) {
+    return {
+      text: t('credentialDetail.verifiedByPassport'),
+      icon: 'checkmark.seal',
+    };
+  }
+  const isSelfIssued =
+    credential.issuerDid.startsWith('did:self') ||
+    credential.issuerDid.startsWith('did:key') ||
+    credential.trustLevel === 'L1';
+  if (isSelfIssued) {
+    return {
+      text: t('credentialDetail.selfAttested'),
+      icon: 'person.crop.circle',
+    };
+  }
+  return null;
+}
+
 // MARK: - Sub-views
 
 type RowPosition = 'first' | 'middle' | 'last';
@@ -260,11 +296,25 @@ function ClaimRow({
       <Text className="text-text1 text-[15px]" style={{ flex: 1 }}>
         {claim.title}
       </Text>
-      <SfIcon
-        name={selected ? 'checkmark.square.fill' : 'square'}
-        size={18}
-        color={selected ? Colors.terminalGreen : Colors.text3}
-      />
+      {/* Selective-disclosure checkbox (Figma 724:22852 / 724:22864):
+          18×18 rounded-2 box — terminalGreen filled + white check when
+          included, grey-bordered + hollow when excluded. */}
+      <View
+        style={{
+          width: 18,
+          height: 18,
+          borderRadius: 2,
+          alignItems: 'center',
+          justifyContent: 'center',
+          backgroundColor: selected ? Colors.terminalGreen : 'transparent',
+          borderWidth: selected ? 0 : 1,
+          borderColor: Colors.text3,
+        }}
+      >
+        {selected ? (
+          <SfIcon name="checkmark" size={11} weight="bold" color="#FFFFFF" />
+        ) : null}
+      </View>
     </Pressable>
   );
 }
@@ -274,7 +324,14 @@ function ClaimRow({
 export default function CredentialDetailScreen() {
   const { t } = useTranslation();
   const insets = useSafeAreaInsets();
-  const { id } = useLocalSearchParams<{ id: string }>();
+  const { id, context, groupId } = useLocalSearchParams<{
+    id: string;
+    /** 'work' when launched from the Me "Work" action — scopes the
+     *  presentation to the group identified by `groupId`. */
+    context?: string;
+    groupId?: string;
+  }>();
+  const isWorkContext = context === 'work' && typeof groupId === 'string' && groupId.length > 0;
   const credential = useCredentialById(id);
   const manifestEntry = useCredentialStore((s) =>
     id ? s.manifest.find((m) => m.id === id) : undefined,
@@ -321,6 +378,9 @@ export default function CredentialDetailScreen() {
   }
 
   const accent = levelAccent(credential.trustLevel);
+  const trustBadge = issuerTrustBadge(credential, t);
+  const isExpired =
+    credential.expiresAt != null && credential.expiresAt.getTime() < Date.now();
   const presentDisabled = selectedClaimIDs.size === 0;
 
   const onPresent = () => {
@@ -378,6 +438,20 @@ export default function CredentialDetailScreen() {
 
       <ScrollView className="flex-1">
         <View className="gap-8 pt-3 pb-6">
+          {/* Work-context banner — only when launched from the Me "Work"
+              action with a real group id. Signals the presentation is scoped
+              to that group rather than the personal context. */}
+          {isWorkContext ? (
+            <View
+              className="mx-4 flex-row items-center gap-2 rounded-lg bg-mutedSurface px-3 py-3"
+            >
+              <SfIcon name="briefcase" size={14} color={Colors.terminalGreen} />
+              <Text className="text-text2 text-[13px] flex-1">
+                {t('credentialDetail.workContextBanner')}
+              </Text>
+            </View>
+          ) : null}
+
           {/* Hero */}
           <View className="mx-4 overflow-hidden rounded">
             <LinearGradient
@@ -429,7 +503,18 @@ export default function CredentialDetailScreen() {
                       justifyContent: 'center',
                     }}
                   >
-                    <Chip icon="checkmark.seal" text={status} />
+                    {/* Issuer-trust badge (Figma "Verified" chip) — derived
+                        from real issuer DID + trust level. Falls back to the
+                        validity status only when no trust signal exists, and
+                        always surfaces an expired warning. */}
+                    {trustBadge ? (
+                      <Chip icon={trustBadge.icon} text={trustBadge.text} />
+                    ) : (
+                      <Chip icon="checkmark.seal" text={status} />
+                    )}
+                    {isExpired && trustBadge ? (
+                      <Chip icon="exclamationmark.triangle" text={status} />
+                    ) : null}
                     <Chip
                       icon={proofIcon(credential.metadataTags)}
                       text={proofTagText(credential.metadataTags)}

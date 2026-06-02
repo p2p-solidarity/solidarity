@@ -8,9 +8,19 @@
  *     + 1pt featureAccent border.
  *   • When `isMatching`, 3 expanding pulse rings (scale 0.3→1.0, opacity
  *     0.6→0.0, 3s easeOut, staggered 1s) using featureAccent.
+ *   • Up to 8 peer avatars orbiting the radar at
+ *     `angle = (2π/total)*i − π/2` on `radius = size*0.35`, each a 36pt
+ *     searchBg-backed animal image with a status-coloured ring
+ *     (connected=featureAccent 2pt, connecting=warning 1pt,
+ *     disconnected=divider 1pt) — matching Swift `peerDot`.
+ *
+ * State-ownership: the pulse animations live on the Reanimated UI thread
+ * (SharedValue). The `peers` list is a low-frequency prop driven by the
+ * matching-session zustand selector — positions are derived once per render,
+ * never per frame.
  */
 import { useEffect } from 'react';
-import { StyleSheet, View } from 'react-native';
+import { Image, StyleSheet, View } from 'react-native';
 import Animated, {
   Easing,
   cancelAnimation,
@@ -22,7 +32,11 @@ import Animated, {
 } from 'react-native-reanimated';
 import Svg, { Circle, Defs, RadialGradient, Stop } from 'react-native-svg';
 
+import type { Animal } from '@solidarity/shared';
+
+import { animalImageSource } from '@/cards/animals';
 import { Colors } from '@/constants/Colors';
+import type { PeerStatus } from '@/matching/types';
 
 const PULSE_DURATION_MS = 3000;
 const PULSE_STAGGER_MS = 1000;
@@ -30,9 +44,33 @@ const PULSE_COUNT = 3;
 const PULSE_SCALE_FROM = 0.3;
 const PULSE_OPACITY_FROM = 0.6;
 
+/** Max orbiting avatars (Swift `peers.prefix(8)`). */
+const MAX_PEER_DOTS = 8;
+/** Avatar diameter (Swift `size: CGFloat = 36`). */
+const PEER_DOT_SIZE = 36;
+
+/** Minimal peer shape the radar needs to render an orbiting avatar. */
+export interface RadarPeer {
+  readonly peerId: string;
+  readonly cardAnimal: Animal;
+  readonly status: PeerStatus;
+}
+
 interface Props {
   readonly size?: number;
   readonly isMatching?: boolean;
+  readonly peers?: readonly RadarPeer[];
+}
+
+function peerRingColor(status: PeerStatus): string {
+  switch (status) {
+    case 'connected':
+      return Colors.featureAccent;
+    case 'connecting':
+      return Colors.warning;
+    case 'disconnected':
+      return Colors.divider;
+  }
 }
 
 function PulseRing({ size, delayMs }: { readonly size: number; readonly delayMs: number }) {
@@ -75,10 +113,61 @@ function PulseRing({ size, delayMs }: { readonly size: number; readonly delayMs:
   );
 }
 
-export function RadarMatching({ size = 260, isMatching = false }: Props) {
+/**
+ * Single orbiting peer avatar. Centred via a full-bleed overlay so the dot's
+ * own centre sits on the radar centre, then offset by (x, y) — matching
+ * SwiftUI's `.offset(x:y:)` on a ZStack-centred child.
+ */
+function PeerDot({
+  peer,
+  index,
+  total,
+  radius,
+}: {
+  readonly peer: RadarPeer;
+  readonly index: number;
+  readonly total: number;
+  readonly radius: number;
+}) {
+  const angle = ((2 * Math.PI) / total) * index - Math.PI / 2;
+  const x = Math.cos(angle) * radius;
+  const y = Math.sin(angle) * radius;
+  const ringColor = peerRingColor(peer.status);
+  const ringWidth = peer.status === 'connected' ? 2 : 1;
+
+  return (
+    <View
+      pointerEvents="none"
+      style={[StyleSheet.absoluteFill, { alignItems: 'center', justifyContent: 'center' }]}
+    >
+      <View
+        style={{
+          width: PEER_DOT_SIZE,
+          height: PEER_DOT_SIZE,
+          borderRadius: PEER_DOT_SIZE / 2,
+          backgroundColor: Colors.searchBg,
+          borderWidth: ringWidth,
+          borderColor: ringColor,
+          overflow: 'hidden',
+          transform: [{ translateX: x }, { translateY: y }],
+        }}
+      >
+        <Image
+          source={animalImageSource(peer.cardAnimal)}
+          style={{ width: PEER_DOT_SIZE, height: PEER_DOT_SIZE }}
+          resizeMode="cover"
+        />
+      </View>
+    </View>
+  );
+}
+
+export function RadarMatching({ size = 260, isMatching = false, peers = [] }: Props) {
   const half = size / 2;
   const glowR = size * 0.18;   // 36% diameter → 18% radius
   const orbR = size * 0.08;    // 16% diameter → 8% radius
+  const peerRadius = size * 0.35;
+  const visiblePeers = peers.slice(0, MAX_PEER_DOTS);
 
   return (
     <View style={{ width: size, height: size, alignSelf: 'center' }}>
@@ -130,6 +219,17 @@ export function RadarMatching({ size = 260, isMatching = false }: Props) {
           fill="none"
         />
       </Svg>
+
+      {/* Orbiting peer avatars (≤8) — rendered above the radar SVG. */}
+      {visiblePeers.map((peer, i) => (
+        <PeerDot
+          key={peer.peerId}
+          peer={peer}
+          index={i}
+          total={visiblePeers.length}
+          radius={peerRadius}
+        />
+      ))}
     </View>
   );
 }

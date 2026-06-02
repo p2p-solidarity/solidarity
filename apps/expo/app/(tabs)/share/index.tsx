@@ -51,7 +51,8 @@ export default function ShareTab() {
   const hydrate = useCardStore((s) => s.hydrate);
   const hydrateIdentity = useIdentityData((s) => s.hydrate);
   const insets = useSafeAreaInsets();
-  const peerCount = useMatchingSession((s) => s.peers.length);
+  const peers = useMatchingSession((s) => s.peers);
+  const peerCount = peers.length;
   const isAdvertising = useMatchingSession((s) => s.isAdvertising);
   const isBrowsing = useMatchingSession((s) => s.isBrowsing);
   const isMatching = isAdvertising || isBrowsing;
@@ -195,7 +196,7 @@ export default function ShareTab() {
             }}
             style={{ alignItems: 'center', justifyContent: 'center' }}
           >
-            <RadarMatching size={260} isMatching={isMatching} />
+            <RadarMatching size={260} isMatching={isMatching} peers={peers} />
           </PressableScale>
         </View>
 
@@ -266,7 +267,7 @@ export default function ShareTab() {
               payload={payload}
               cardName={myCard?.name}
               enabledFields={enabledFields}
-              hasRealHuman={false}
+              hasRealHuman={hasHumanClaim && shareIsHuman}
               onOpenSettings={() => { router.push('/settings/share-settings'); }}
               onShare={() => { router.push('/share/qr'); }}
             />

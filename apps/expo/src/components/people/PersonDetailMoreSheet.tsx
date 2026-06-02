@@ -4,9 +4,12 @@
  *
  * "More" sheet presented from the Person detail hero edit pencil. Contains:
  *   • chevron.left back + dark "Done" pill in the top bar
- *   • "Note" 14pt label + 48pt searchBg input (placeholder "Add text")
+ *   • Note label + 48pt searchBg input (placeholder)
  *   • Destructive "Delete Contact" row (rgba destructive @ 10% fill,
  *     destructive text), tapping triggers a confirm Alert.
+ *
+ * All user-facing copy routes through i18n (peopleList.* / personDetail.*)
+ * so the zh-Hant locale matches Figma (node 723:2397).
  *
  * Wrapped in a slide-in RN `Modal` so it doesn't push the navigation stack.
  */
@@ -25,6 +28,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { SfIcon } from '@/components/icons/SfIcon';
 import { Colors } from '@/constants/Colors';
 import { confirmDialog } from '@/feedback/confirmDialog';
+import { useTranslation } from '@/i18n';
 import type { Contact } from '@solidarity/shared';
 
 import type { SFSymbol } from 'expo-symbols';
@@ -80,6 +84,7 @@ function PersonDetailMoreSheetContent({
   readonly onEditContact: () => void;
   readonly onClose: () => void;
 }): ReactNode {
+  const { t } = useTranslation();
   const insets = useSafeAreaInsets();
   const [noteDraft, setNoteDraft] = useState<string>(contact.notes ?? '');
 
@@ -99,9 +104,9 @@ function PersonDetailMoreSheetContent({
   const handleDelete = (): void => {
     void (async () => {
       const ok = await confirmDialog({
-        title: `Delete ${contact.businessCard.name}?`,
-        message: 'This contact will be permanently removed.',
-        confirmLabel: 'Delete',
+        title: t('peopleList.deleteNameTitle', { name: contact.businessCard.name }),
+        message: t('peopleList.deleteOneMessage'),
+        confirmLabel: t('peopleList.delete'),
         destructive: true,
       });
       if (!ok) return;
@@ -142,18 +147,24 @@ function TopBar({
   readonly onClose: () => void;
   readonly onDone: () => void;
 }): ReactNode {
+  const { t } = useTranslation();
   return (
     <View
       className="flex-row items-center justify-between"
       style={{ paddingHorizontal: 16, height: 56 }}
     >
-      <Pressable accessibilityRole="button" accessibilityLabel="Back" onPress={onClose} hitSlop={8}>
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel={t('personDetail.back')}
+        onPress={onClose}
+        hitSlop={8}
+      >
         <SfIcon name="chevron.left" size={24} color={Colors.text1} />
       </Pressable>
 
       <Pressable
         accessibilityRole="button"
-        accessibilityLabel="Done"
+        accessibilityLabel={t('peopleList.done')}
         onPress={onDone}
         className="rounded-sm2 active:opacity-80"
         style={{
@@ -169,7 +180,7 @@ function TopBar({
             fontWeight: '500',
           }}
         >
-          Done
+          {t('peopleList.done')}
         </Text>
       </Pressable>
     </View>
@@ -187,10 +198,11 @@ function NoteBlock({
   readonly value: string;
   readonly onChange: (next: string) => void;
 }): ReactNode {
+  const { t } = useTranslation();
   return (
     <View style={{ rowGap: 8 }}>
       <Text className="text-text1" style={{ fontSize: 14 }}>
-        Note
+        {t('personDetail.noteLabel')}
       </Text>
       <View
         className="bg-searchBg rounded-sm2"
@@ -205,7 +217,7 @@ function NoteBlock({
         <TextInput
           value={value}
           onChangeText={onChange}
-          placeholder="Add text"
+          placeholder={t('personDetail.notePlaceholder')}
           placeholderTextColor={Colors.text3}
           className="text-text1"
           style={{ fontSize: 15, padding: 0 }}
@@ -221,10 +233,11 @@ function NoteBlock({
 // ─────────────────────────────────────────────────────────────────────────────
 
 function EditContactButton({ onPress }: { readonly onPress: () => void }): ReactNode {
+  const { t } = useTranslation();
   return (
     <ActionRow
       icon="square.and.pencil"
-      label="Edit Contact"
+      label={t('personDetail.editContact')}
       onPress={onPress}
       tone="default"
     />
@@ -236,10 +249,11 @@ function EditContactButton({ onPress }: { readonly onPress: () => void }): React
 // ─────────────────────────────────────────────────────────────────────────────
 
 function DeleteButton({ onPress }: { readonly onPress: () => void }): ReactNode {
+  const { t } = useTranslation();
   return (
     <ActionRow
       icon="trash"
-      label="Delete Contact"
+      label={t('personDetail.deleteContact')}
       onPress={onPress}
       tone="destructive"
     />

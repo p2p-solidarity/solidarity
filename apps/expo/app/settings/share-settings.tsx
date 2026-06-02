@@ -171,53 +171,39 @@ function QrPreview({
   readonly payload: string | null;
   readonly t: (key: string) => string;
 }): ReactNode {
+  // Figma 726:23661 — the QR sits directly inside a searchBg-grey rounded
+  // card (no white inner box, no border, no "QR PREVIEW" caption). The QR's
+  // own white module background supplies the scannable quiet-zone.
   return (
     <View
       style={{
-        padding: 16,
-        gap: 12,
-        backgroundColor: Colors.cardBg,
-        borderWidth: 1,
-        borderColor: Colors.divider,
+        padding: 32,
+        backgroundColor: Colors.searchBg,
+        borderRadius: 2,
+        aspectRatio: 1,
+        alignItems: 'center',
+        justifyContent: 'center',
       }}
     >
-      <ThemedText
-        variant="caption"
-        tone="tertiary"
-        style={{ fontFamily: 'Menlo', fontWeight: '700', textAlign: 'center' }}
-      >
-        {t('shareSettings.qrPreview')}
-      </ThemedText>
-      <View
-        style={{
-          backgroundColor: '#FFFFFF',
-          padding: 12,
-          aspectRatio: 1,
-          borderRadius: 8,
-          alignItems: 'center',
-          justifyContent: 'center',
-        }}
-      >
-        {payload ? (
-          <QRCode
-            value={payload}
-            size={220}
-            backgroundColor="#FFFFFF"
-            color="#000000"
-          />
-        ) : (
-          <View style={{ alignItems: 'center', gap: 8 }}>
-            <SfIcon name="qrcode" size={40} color={Colors.text3} />
-            <ThemedText
-              variant="caption"
-              tone="tertiary"
-              style={{ fontFamily: 'Menlo' }}
-            >
-              {t('shareSettings.createCardFirst')}
-            </ThemedText>
-          </View>
-        )}
-      </View>
+      {payload ? (
+        <QRCode
+          value={payload}
+          size={220}
+          backgroundColor="#FFFFFF"
+          color="#000000"
+        />
+      ) : (
+        <View style={{ alignItems: 'center', gap: 8 }}>
+          <SfIcon name="qrcode" size={40} color={Colors.text3} />
+          <ThemedText
+            variant="caption"
+            tone="tertiary"
+            style={{ fontFamily: 'Menlo' }}
+          >
+            {t('shareSettings.createCardFirst')}
+          </ThemedText>
+        </View>
+      )}
     </View>
   );
 }

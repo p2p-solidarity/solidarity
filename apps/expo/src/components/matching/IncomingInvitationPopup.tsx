@@ -74,7 +74,7 @@ export function IncomingInvitationPopup({
               <PeerAvatar animal={animal} size={54} ringColor={statusColor} />
               <Animated.View
                 pointerEvents="none"
-                style={[styles.pulseRing, ringStyle]}
+                style={[styles.pulseRing, { borderColor: statusColor }, ringStyle]}
               />
             </View>
             <View style={styles.headerText}>
@@ -158,7 +158,7 @@ const styles = StyleSheet.create({
     height: 60,
     borderRadius: 30,
     borderWidth: 2,
-    borderColor: Colors.featureAccent,
+    // borderColor is set inline from the peer's status colour.
   },
   headerText: { flex: 1, gap: 6 },
   headerName: { color: Colors.text1, fontSize: 17, fontWeight: '600' },

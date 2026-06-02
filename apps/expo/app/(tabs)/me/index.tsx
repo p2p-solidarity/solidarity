@@ -25,7 +25,7 @@ import Animated, { FadeInDown } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { animalImageSource } from '@/cards/animals';
-import { useCardStore, useMyCard } from '@/cards/cardManager';
+import { useCardStore, useMyCard, useMyCardDetail } from '@/cards/cardManager';
 import { PressableScale } from '@/components/common/PressableScale';
 import { SfIcon } from '@/components/icons/SfIcon';
 import {
@@ -70,6 +70,21 @@ export default function MeTab() {
   const displayName = card?.name ?? t('meTab.fallbackName');
   const activeDid = useActiveDid();
   const displayDid = activeDid ?? t('meTab.initializingDid');
+
+  // Work / group presentation context — REAL only. Derived from the user's
+  // primary business card's `groupContext` (Swift parity:
+  // BusinessCard.groupContext = .group(info)). When the card belongs to a
+  // group, claims backed by that card gain a "Work" action that presents
+  // them scoped to the group; otherwise the button is never rendered (no
+  // no-op placeholder — CLAUDE.md rule 8).
+  const cardDetail = useMyCardDetail();
+  const workContext = useMemo(() => {
+    const ctx = cardDetail?.groupContext;
+    if (ctx?.type === 'group') {
+      return { groupId: ctx.info.groupId, groupName: ctx.info.groupName };
+    }
+    return null;
+  }, [cardDetail?.groupContext]);
 
   // Swift filters out type === "business_card" — mirror that. Memoised so
   // the derived array keeps a stable reference between renders when the
@@ -121,7 +136,7 @@ export default function MeTab() {
           </Animated.View>
 
           <Animated.View entering={FadeInDown.duration(360).delay(STAGGER_MS * 2)}>
-            <SelectiveDisclosuresSection claims={disclosures} />
+            <SelectiveDisclosuresSection claims={disclosures} workContext={workContext} />
           </Animated.View>
 
           <Animated.View entering={FadeInDown.duration(360).delay(STAGGER_MS * 3)}>
@@ -217,8 +232,11 @@ function VerifiedCredentialsSection({
 
 function SelectiveDisclosuresSection({
   claims,
+  workContext,
 }: {
   readonly claims: readonly ProvableClaimEntity[];
+  /** Real work/group context derived from the user's card; null when none. */
+  readonly workContext: { readonly groupId: string; readonly groupName: string } | null;
 }) {
   const { t } = useTranslation();
   return (
@@ -232,18 +250,49 @@ function SelectiveDisclosuresSection({
         </View>
       ) : (
         <View className="gap-2">
-          {claims.map((c) => (
-            <DisclosureRowView
-              key={c.id}
-              icon={claimIcon(c.claimType)}
-              title={c.title}
-              source={`Src:${capitalize(c.source)}`}
-              actionTitle={t('meTab.show')}
-              onPresent={() => {
-                router.push({ pathname: '/credentials/[id]', params: { id: c.identityCardId } });
-              }}
-            />
-          ))}
+          {claims.map((c) => {
+            // The "Work" action only exists for the business card itself
+            // (the `profile_card` claim), and only when the card carries a
+            // real group context. Passport claims (age/human/name) have no
+            // work scope, so they never get the button.
+            const canPresentInWork =
+              workContext !== null && c.claimType === 'profile_card';
+            return (
+              <DisclosureRowView
+                key={c.id}
+                icon={claimIcon(c.claimType)}
+                title={c.title}
+                source={`Src:${capitalize(c.source)}`}
+                actionTitle={t('meTab.show')}
+                onPresent={() => {
+                  router.push({
+                    pathname: '/credentials/[id]',
+                    params: { id: c.identityCardId },
+                  });
+                }}
+                work={
+                  canPresentInWork
+                    ? {
+                        title: t('meTab.work'),
+                        accessibilityLabel: t('meTab.workAccessibility', {
+                          group: workContext.groupName,
+                        }),
+                        onPress: () => {
+                          router.push({
+                            pathname: '/credentials/[id]',
+                            params: {
+                              id: c.identityCardId,
+                              context: 'work',
+                              groupId: workContext.groupId,
+                            },
+                          });
+                        },
+                      }
+                    : undefined
+                }
+              />
+            );
+          })}
         </View>
       )}
     </View>

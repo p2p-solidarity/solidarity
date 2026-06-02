@@ -22,23 +22,25 @@ import { Colors } from '@/constants/Colors';
 import type { ContactManifestEntry } from '@/contacts/repository';
 import { haptic } from '@/feedback/haptics';
 import { SCALE, SPRING } from '@/feedback/motion';
+import { useTranslation } from '@/i18n';
 
 import { RadarTickIcon } from './RadarTickIcon';
 
-export type TrustGraphContactRowProps = {
+export interface TrustGraphContactRowProps {
   contact: ContactManifestEntry;
   onPress?: () => void;
   onLongPress?: () => void;
-};
+}
 
 export function TrustGraphContactRow({
   contact,
   onPress,
   onLongPress,
 }: TrustGraphContactRowProps) {
+  const { t } = useTranslation();
   const isVerified = contact.verificationStatus === 'Verified';
   const subtitle = subtitleText(contact);
-  const tag = contextTag(contact);
+  const tag = contextTag(contact, t);
 
   // Touch-down shrinks the row (crisp, damped); a long-press lifts it back
   // *up* past rest (the "zoom" pickup) and fires a heavier impact right as
@@ -168,17 +170,28 @@ function subtitleText(c: ContactManifestEntry): string | undefined {
   return undefined;
 }
 
-function contextTag(c: ContactManifestEntry): string | undefined {
+/**
+ * Single meeting-context tag (Figma 723:2211 / 723:2231). Prefers a
+ * user-applied tag (e.g. "在 DID Workshop 認識的"), which is real user data and
+ * stays verbatim. Otherwise falls back to a localized source-derived default
+ * so the zh-Hant locale renders Figma's "#手機通訊錄" (phone) etc. 1:1 port of
+ * Swift TrustGraphContactRow.contextTag — the label is always driven by
+ * `contact.source`, never hardcoded per row.
+ */
+function contextTag(
+  c: ContactManifestEntry,
+  t: (key: string) => string,
+): string | undefined {
   const customTag = c.tags
-    .map((t) => t.trim())
-    .find((t) => t.length > 0);
+    .map((tag) => tag.trim())
+    .find((tag) => tag.length > 0);
   if (customTag) return customTag;
   const source = c.source.trim().toLowerCase();
   switch (source) {
     case 'imported':
-      return '#Phone Contacts';
+      return t('peopleList.sourcePhoneContacts');
     case 'manual':
-      return 'Added manually';
+      return t('peopleList.sourceAddedManually');
     case 'qrcode':
     case 'qr_code':
     case 'qr code':
@@ -187,7 +200,7 @@ function contextTag(c: ContactManifestEntry): string | undefined {
     case 'app_clip':
     case 'app clip':
     case 'airdrop':
-      return 'Met in person';
+      return t('peopleList.sourceMetInPerson');
     default:
       return undefined;
   }

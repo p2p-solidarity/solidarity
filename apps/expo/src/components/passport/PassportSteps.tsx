@@ -30,10 +30,12 @@ import { BulletGuaranteeRow } from '@/components/passport/BulletGuaranteeRow';
 import { SfIcon } from '@/components/icons/SfIcon';
 import { ThemedButton } from '@/components/themed';
 import { Colors } from '@/constants/Colors';
+import { useTranslation } from '@/i18n';
 import type {
   PassportChipSnapshot,
   PassportProofResult,
 } from '@/passport/pipeline';
+import { DEFAULT_DISCLOSURE_POLICY } from '@/passport/zkInputs';
 
 export function NfcStep({
   busy,
@@ -355,6 +357,25 @@ export function ProofStep({
   readonly disabled: boolean;
   readonly onGenerate: () => void;
 }) {
+  const { t } = useTranslation();
+  // Real disclosure decisions from the policy that actually runs in
+  // `onGenerateProof` — not a fabricated list. Disclosed fields earn a
+  // green check; hidden fields (e.g. Name under DEFAULT_DISCLOSURE_POLICY)
+  // render a hollow badge so the screen never claims to share what it hides.
+  const policyRows: readonly { text: string; checked: boolean }[] = [
+    {
+      text: t('passportProof.discloseNationality'),
+      checked: DEFAULT_DISCLOSURE_POLICY.discloseNationality,
+    },
+    {
+      text: t('passportProof.discloseAgeOver18'),
+      checked: DEFAULT_DISCLOSURE_POLICY.discloseOlderThan,
+    },
+    {
+      text: t('passportProof.discloseName'),
+      checked: DEFAULT_DISCLOSURE_POLICY.discloseName,
+    },
+  ];
   return (
     <View className="gap-12 pt-8">
       <View className="items-center gap-4">
@@ -374,10 +395,21 @@ export function ProofStep({
 
       <View className="gap-8">
         <View className="gap-2 px-4">
-          <Text className="text-text1 text-[14px]">Selective Disclosures</Text>
+          <Text className="text-text1 text-[14px]">
+            {t('passportProof.selectiveDisclosures')}
+          </Text>
           <View className="gap-2">
-            <BulletGuaranteeRow text="Runs entirely on your device" />
-            <BulletGuaranteeRow text="No personal data is uploaded" />
+            <BulletGuaranteeRow text={t('passportProof.runsOnDevice')} />
+            <BulletGuaranteeRow text={t('passportProof.noDataUploaded')} />
+            {/* Real policy-derived rows — what DEFAULT_DISCLOSURE_POLICY
+                actually shares vs hides for this proof. */}
+            {policyRows.map((row) => (
+              <BulletGuaranteeRow
+                key={row.text}
+                text={row.text}
+                checked={row.checked}
+              />
+            ))}
           </View>
         </View>
 

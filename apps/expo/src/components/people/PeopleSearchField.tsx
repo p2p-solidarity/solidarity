@@ -7,6 +7,7 @@ import { Text, TextInput, View } from 'react-native';
 
 import { SfIcon } from '@/components/icons/SfIcon';
 import { Colors } from '@/constants/Colors';
+import { useTranslation } from '@/i18n';
 
 export function PeopleSearchField({
   value,
@@ -15,6 +16,7 @@ export function PeopleSearchField({
   value: string;
   onChangeText: (v: string) => void;
 }) {
+  const { t } = useTranslation();
   return (
     <View
       className="flex-row items-center gap-2 rounded-sm2 px-3 py-2.5"
@@ -23,7 +25,7 @@ export function PeopleSearchField({
       <SfIcon name="magnifyingglass" size={14} color={Colors.text2} />
       <View className="flex-1">
         {value.length === 0 ? (
-          <Text className="text-text2 text-[14px] absolute">Search</Text>
+          <Text className="text-text2 text-[14px] absolute">{t('peopleList.search')}</Text>
         ) : null}
         <TextInput
           value={value}

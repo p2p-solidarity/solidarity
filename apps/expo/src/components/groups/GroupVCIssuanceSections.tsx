@@ -25,6 +25,20 @@ export interface IssuanceResult {
   readonly error?: string;
 }
 
+/**
+ * Toggle palette for the Issue Group VC switches (Figma 763:5102 switch:
+ * `on` track #1a1a1a, `off` track #e4e4e4, white thumb). The Solidarity
+ * accent is mauve, not iOS blue, so the active state uses the inverted
+ * button fill (`invertedButtonBg` ≈ #2F2F30) to read as the same near-black
+ * Figma chip — keeping every "on" affordance consistent. Off track uses the
+ * divider grey. Shared so all three switches stay identical.
+ */
+const SWITCH_TRACK_COLOR = {
+  false: Colors.divider,
+  true: Colors.invertedButtonBg,
+} as const;
+const SWITCH_THUMB_COLOR = '#FFFFFF';
+
 export function CardSelectSection({
   cards,
   selectedCardId,
@@ -104,8 +118,8 @@ export function DisplaySection({
               <Switch
                 value={remember}
                 onValueChange={onChangeRemember}
-                trackColor={{ false: Colors.divider, true: Colors.primaryBlue }}
-                thumbColor={Colors.cardBg}
+                trackColor={SWITCH_TRACK_COLOR}
+                thumbColor={SWITCH_THUMB_COLOR}
                 ios_backgroundColor={Colors.divider}
               />
             </View>
@@ -151,8 +165,8 @@ export function RecipientsSection({
           <Switch
             value={sendToAll}
             onValueChange={onToggleSendAll}
-            trackColor={{ false: Colors.divider, true: Colors.primaryBlue }}
-            thumbColor={Colors.cardBg}
+            trackColor={SWITCH_TRACK_COLOR}
+            thumbColor={SWITCH_THUMB_COLOR}
             ios_backgroundColor={Colors.divider}
           />
         </View>
@@ -176,11 +190,8 @@ export function RecipientsSection({
                     onValueChange={(next) => {
                       onToggleMember(m.userRecordID, next);
                     }}
-                    trackColor={{
-                      false: Colors.divider,
-                      true: Colors.primaryBlue,
-                    }}
-                    thumbColor={Colors.cardBg}
+                    trackColor={SWITCH_TRACK_COLOR}
+                    thumbColor={SWITCH_THUMB_COLOR}
                     ios_backgroundColor={Colors.divider}
                   />
                 </View>
@@ -246,8 +257,8 @@ export function ExpirationSection({
           <Switch
             value={enabled}
             onValueChange={onToggle}
-            trackColor={{ false: Colors.divider, true: Colors.primaryBlue }}
-            thumbColor={Colors.cardBg}
+            trackColor={SWITCH_TRACK_COLOR}
+            thumbColor={SWITCH_THUMB_COLOR}
             ios_backgroundColor={Colors.divider}
           />
         </View>

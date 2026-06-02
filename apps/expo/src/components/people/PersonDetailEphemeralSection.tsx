@@ -5,7 +5,7 @@
  * PersonDetailView.swift's ephemeralSection.
  *
  * Layout:
- *   "sakura" 14pt label
+ *   ephemeral 14pt label ("Moments" / zh "一期一會", Figma 723:2364)
  *   12pt mutedSurface container
  *     outgoing bubble (right-aligned, accentRose fill, square bottom-right)
  *     incoming bubble (left-aligned, warmCream fill, square bottom-left)
@@ -23,6 +23,7 @@ import {
   formatIsoDate,
 } from '@/components/people/personDetailSupport';
 import { Colors } from '@/constants/Colors';
+import { useTranslation } from '@/i18n';
 import type { Contact } from '@solidarity/shared';
 
 export function PersonDetailEphemeralSection({
@@ -30,6 +31,7 @@ export function PersonDetailEphemeralSection({
 }: {
   readonly contact: Contact;
 }): ReactNode {
+  const { t } = useTranslation();
   const mine = contact.myEphemeralMessage?.trim() ?? '';
   const theirs = contact.theirEphemeralMessage?.trim() ?? '';
   const hasMine = mine.length > 0;
@@ -41,7 +43,7 @@ export function PersonDetailEphemeralSection({
   return (
     <View style={{ paddingHorizontal: 16, rowGap: 8 }}>
       <Text className="text-text1" style={{ fontSize: 14 }}>
-        sakura
+        {t('personDetail.ephemeralLabel')}
       </Text>
       <View
         className="bg-mutedSurface"
@@ -144,8 +146,11 @@ function BubbleRow({
 // ─────────────────────────────────────────────────────────────────────────────
 
 function SeeMorePill({ count }: { readonly count: number }): ReactNode {
+  const { t } = useTranslation();
   const label =
-    count === 1 ? 'see more 1 message' : `see more ${String(count)} messages`;
+    count === 1
+      ? t('personDetail.seeMoreOne')
+      : t('personDetail.seeMoreCount', { count });
   return (
     <View
       className="flex-row items-center bg-pillSurface"
