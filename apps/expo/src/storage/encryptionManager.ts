@@ -19,6 +19,19 @@ import {
 
 import { getMasterKey } from './secureMasterKey';
 
+/**
+ * Thrown when AES-GCM open fails — a wrong master key (e.g. an in-place
+ * SwiftUI→Expo upgrader that minted a fresh key) or tampered ciphertext.
+ * Typed so callers (backup restore) can distinguish it from I/O failures and
+ * show a clear "different key" message instead of a generic error.
+ */
+export class DecryptError extends Error {
+  constructor(message = 'decrypt-failed', options?: { cause?: unknown }) {
+    super(message, options);
+    this.name = 'DecryptError';
+  }
+}
+
 // Set/Map have no enumerable own props, so JSON.stringify(new Set(['a'])) is
 // "{}" and the entries vanish. Convert them to plain arrays at the boundary so
 // runtime Sets (e.g. SharingPreferences.publicFields) round-trip through disk.
@@ -43,6 +56,14 @@ export async function encryptJson(value: unknown): Promise<string> {
 export async function decryptJson<T = unknown>(blob: string): Promise<T> {
   const key = await getMasterKey();
   const combined = base64Decode(blob);
-  const plaintext = aesGcmOpen(key, combined);
+  let plaintext: Uint8Array;
+  try {
+    plaintext = aesGcmOpen(key, combined);
+  } catch (cause) {
+    // Auth-tag failure → wrong key or tampered ciphertext. Surface as a typed
+    // error so restore can say "different key", not a generic failure. JSON
+    // parsing stays outside the catch so a parse bug isn't mislabelled.
+    throw new DecryptError('decrypt-failed', { cause });
+  }
   return JSON.parse(bytesToUtf8(plaintext)) as T;
 }

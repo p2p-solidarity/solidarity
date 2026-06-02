@@ -23,7 +23,8 @@ import {
 } from '@/components/settings/SettingsBlocks';
 import {
   backupMtime,
-  performBackupNow,
+  BackupRestoreError,
+  requestBackup,
   restoreFromBackup,
 } from '@/backup';
 import { appAlert, showError } from '@/feedback/appAlert';
@@ -60,8 +61,14 @@ export default function BackupSettings() {
     setIsBackingUp(true);
     pushToast(t('backup.encrypting'), 'info', 2000);
     try {
-      const result = await performBackupNow(provider);
-      setLastBackup(new Date(result.exportedAt));
+      const result = await requestBackup('manual');
+      if (!result.ran) {
+        if (result.skipReason === 'needs-connection') {
+          pushToast(t('backup.drive.needsConnection'), 'info', 3000);
+        }
+        return;
+      }
+      if (result.payload) setLastBackup(new Date(result.payload.exportedAt));
       pushToast(t('backup.success'), 'success');
     } catch (err) {
       // Absorb the failure into our themed report sheet — no raw CKError in
@@ -100,11 +107,11 @@ export default function BackupSettings() {
       }
       router.back();
     } catch (err) {
-      showError({
-        context: 'Backup › Restore',
-        summary: t('backup.restore.failedSummary'),
-        error: err,
-      });
+      const summary =
+        err instanceof BackupRestoreError && err.kind === 'key-mismatch'
+          ? t('backup.restore.keyMismatch')
+          : t('backup.restore.failedSummary');
+      showError({ context: 'Backup › Restore', summary, error: err });
     }
   };
 

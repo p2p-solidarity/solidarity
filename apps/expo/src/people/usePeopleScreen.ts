@@ -16,7 +16,7 @@
  */
 import { useCallback, useEffect, useState } from 'react';
 
-import { performBackupNow, DEFAULT_PROVIDER } from '@/backup';
+import { requestBackup } from '@/backup';
 import {
   useContactList,
   useContactStore,
@@ -50,7 +50,9 @@ export function usePeopleScreen(): PeopleScreenState {
     void (async () => {
       try {
         await hydrate();
-        await performBackupNow(DEFAULT_PROVIDER);
+        // Self-gates on backupEnabled + autoBackupOnPull + the shared cooldown,
+        // and uses the user's chosen provider — no more unconditional backup.
+        await requestBackup('pull');
       } finally {
         setRefreshing(false);
       }

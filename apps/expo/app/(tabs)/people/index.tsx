@@ -45,7 +45,6 @@ export default function PeopleTab() {
   const { t } = useTranslation();
   const { contacts, refresh } = usePeopleScreen();
   const removeContact = useContactStore((s) => s.remove);
-  const provider = usePreferences((s) => s.backupProvider);
   const autoEnabled = usePreferences((s) => s.autoBackupOnPull);
   const developerMode = usePreferences((s) => s.developerMode);
   const insets = useSafeAreaInsets();
@@ -145,11 +144,11 @@ export default function PeopleTab() {
 
   const backupGesture = useMemo(
     () =>
-      makeGestureAutoBackup(provider, {
+      makeGestureAutoBackup({
         onComplete: () => { pushToast(t('peopleList.backedUp'), 'success', 2000); },
         onError: () => { pushToast(t('peopleList.backupFailed'), 'error'); },
       }),
-    [provider, t],
+    [t],
   );
 
   const body = (

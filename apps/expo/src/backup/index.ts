@@ -17,9 +17,13 @@ export {
 } from './googleAuth';
 export {
   performBackupNow,
+  requestBackup,
   restoreFromBackup,
   probeLatestBackup,
+  BackupRestoreError,
+  type BackupReason,
   type BackupPayload,
+  type BackupRequestOutcome,
   type RestoreResult,
 } from './backupManager';
 export { makeGestureAutoBackup } from './gestureAutoBackup';

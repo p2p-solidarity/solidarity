@@ -69,6 +69,8 @@
   "backup.restore.notFound": "找不到備份。",
   "backup.restore.success": "已還原 {{cards}} 張名片與 {{contacts}} 位聯絡人。",
   "backup.restore.failedSummary": "無法從 iCloud 還原。",
+  "backup.restore.keyMismatch": "此備份是以不同的金鑰建立的（可能來自舊版 App 或其他裝置），無法在此安裝上解密。",
+  "backup.drive.needsConnection": "請先連接 Google 雲端硬碟以在 Android 上備份。",
   "backup.icloudRestore.title": "從 iCloud 還原？",
   "backup.icloudRestore.message": "我們在 iCloud 找到 {{date}} 的備份。要還原您的名片、聯絡人與憑證嗎？",
   "backup.icloudRestore.restore": "還原",

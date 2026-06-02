@@ -24,12 +24,18 @@ import {
 } from '../storage/storageManager';
 import {
   downloadBackup,
+  prepareProvider,
+  setProvider,
   uploadBackup,
   type ProviderKind,
 } from './cloudProvider';
+import { shouldRunBackup, type BackupReason } from './backupPolicy';
+import { usePreferences } from '@/settings/preferences';
 import type { BusinessCard, Contact } from '@solidarity/shared';
 import type { IdentityCardEntity, ProvableClaimEntity } from '../identity/entities';
 import type { StoredCredential } from '../credentials/store';
+
+export type { BackupReason } from './backupPolicy';
 
 export interface BackupPayload {
   readonly schemaVersion: 3;
@@ -109,6 +115,53 @@ export async function performBackupNow(provider: ProviderKind): Promise<BackupPa
   return payload;
 }
 
+/** Shared cooldown for automatic backups (manual bypasses it). Matches the
+ *  30s window gestureAutoBackup previously enforced on its own. */
+const BACKUP_COOLDOWN_MS = 30_000;
+let lastBackupAtMs: number | null = null;
+
+export interface BackupRequestOutcome {
+  readonly ran: boolean;
+  readonly skipReason?: string;
+  readonly payload?: BackupPayload;
+}
+
+/**
+ * THE single coordinated backup entrypoint. Every trigger — manual button,
+ * People pull-to-refresh, pan gesture — routes through here so the prefs
+ * (enabled / pull / provider), provider selection, and the cooldown are all
+ * applied in ONE place. Returns without backing up (`ran: false`) when the
+ * policy says skip; only throws for a genuine upload error, never for a skip.
+ *
+ * This replaces the old footgun where `usePeopleScreen.refresh()` called
+ * `performBackupNow(DEFAULT_PROVIDER)` unconditionally on every pull —
+ * ignoring `backupEnabled`/`autoBackupOnPull`, racing the rotation, and using
+ * a different provider than the gesture path.
+ */
+export async function requestBackup(reason: BackupReason): Promise<BackupRequestOutcome> {
+  const prefs = usePreferences.getState();
+  const decision = shouldRunBackup({
+    reason,
+    backupEnabled: prefs.backupEnabled,
+    autoBackupOnPull: prefs.autoBackupOnPull,
+    lastRunAtMs: lastBackupAtMs,
+    nowMs: Date.now(),
+    cooldownMs: BACKUP_COOLDOWN_MS,
+  });
+  if (!decision.run) return { ran: false, skipReason: decision.skipReason };
+  // Make the provider preference actually take effect (it was never applied).
+  setProvider(prefs.backupProvider);
+  // On Android Drive, detect a missing Google connection up front and prompt,
+  // rather than letting the upload 401 with an opaque error.
+  const driveStatus = await prepareProvider();
+  if (prefs.backupProvider === 'googleDrive' && driveStatus === 'needs-connection') {
+    return { ran: false, skipReason: 'needs-connection' };
+  }
+  const payload = await performBackupNow(prefs.backupProvider);
+  lastBackupAtMs = Date.now();
+  return { ran: true, payload };
+}
+
 interface IdentityRestoreCounts {
   readonly identityCardsRestored: number;
   readonly claimsRestored: number;
@@ -172,10 +225,38 @@ async function restoreIdentity(payload: BackupPayload): Promise<IdentityRestoreC
   return { credentialsRestored, identityCardsRestored, claimsRestored };
 }
 
+/**
+ * A restore that found a backup file but couldn't use it. `key-mismatch` means
+ * the file decrypts with a DIFFERENT master key (the classic in-place
+ * SwiftUI→Expo upgrade case) — surfaced so the UI can say so plainly instead
+ * of looking like flaky iCloud. `unreadable` is any other download/IO failure.
+ */
+export class BackupRestoreError extends Error {
+  constructor(
+    readonly kind: 'key-mismatch' | 'unreadable',
+    options?: { cause?: unknown },
+  ) {
+    super(kind, options);
+    this.name = 'BackupRestoreError';
+  }
+}
+
 export async function restoreFromBackup(): Promise<RestoreResult | null> {
-  // Throws on a present-but-corrupt/undecryptable backup; null = nothing to
-  // restore. The caller distinguishes the two (notFound vs error sheet).
-  const payload = await downloadBackup<BackupPayload>();
+  // null = nothing to restore (no file). A present-but-unusable backup throws
+  // a typed BackupRestoreError so the caller can show the right message.
+  let payload: BackupPayload | null;
+  try {
+    payload = await downloadBackup<BackupPayload>();
+  } catch (err) {
+    // Duck-type by name rather than `instanceof DecryptError` so backupManager
+    // doesn't statically depend on encryptionManager's export — tests that mock
+    // encryptionManager without DecryptError must still be able to link this.
+    const isDecryptError = err instanceof Error && err.name === 'DecryptError';
+    throw new BackupRestoreError(
+      isDecryptError ? 'key-mismatch' : 'unreadable',
+      { cause: err },
+    );
+  }
   if (!payload) return null;
 
   for (const card of payload.cards) await saveBusinessCard(card);

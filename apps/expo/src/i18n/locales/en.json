@@ -69,6 +69,8 @@
   "backup.restore.notFound": "No backup found.",
   "backup.restore.success": "Restored {{cards}} cards and {{contacts}} contacts.",
   "backup.restore.failedSummary": "Couldn't restore from iCloud.",
+  "backup.restore.keyMismatch": "This backup was made with a different key — likely an older app version or another device. It can't be decrypted on this install.",
+  "backup.drive.needsConnection": "Connect Google Drive to back up on Android.",
   "backup.icloudRestore.title": "Restore from iCloud?",
   "backup.icloudRestore.message": "We found a backup from {{date}} in iCloud. Restore your cards, contacts, and credentials?",
   "backup.icloudRestore.restore": "Restore",

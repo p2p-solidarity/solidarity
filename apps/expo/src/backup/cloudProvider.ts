@@ -27,6 +27,12 @@ import { Platform } from 'react-native';
 import { getCloudKit, type CloudKit } from '@solidarity/nitro-cloudkit';
 
 import { decryptJson, encryptJson } from '../storage/encryptionManager';
+import {
+  newBackupName,
+  parseBackupTimestampMs,
+  selectNewestBackup,
+  sortBackupsByTimestamp,
+} from './backupPolicy';
 import { decodeSolb, encodeSolb } from './solbEnvelope';
 
 export type ProviderKind = 'iCloud' | 'googleDrive';
@@ -35,8 +41,6 @@ export const DEFAULT_PROVIDER: ProviderKind =
   Platform.OS === 'ios' ? 'iCloud' : 'googleDrive';
 
 const CONTAINER_ID = 'iCloud.kidneyweakx.airmeishi';
-const BACKUP_PREFIX = 'backup_';
-const BACKUP_EXT = '.solbk';
 /** Mirror Swift BackupManager.maxBackupCount. */
 const MAX_BACKUPS = 5;
 
@@ -44,6 +48,12 @@ let activeProvider: ProviderKind = DEFAULT_PROVIDER;
 let initialized = false;
 /** True once a Drive access token has been pushed to the native client. */
 let driveAuthorized = false;
+
+export type DriveAuthStatus = 'authorized' | 'needs-connection' | 'unavailable';
+/** Last-known Drive auth result (Android). 'needs-connection' means the user
+ *  must connect Google Drive before a Drive backup can succeed — surfaced so
+ *  the UI can prompt instead of an opaque downstream 401. */
+let lastDriveAuthStatus: DriveAuthStatus = 'authorized';
 
 /**
  * Acquire a Google Drive access token and hand it to the native Drive client.
@@ -58,20 +68,24 @@ let driveAuthorized = false;
  * the subsequent Drive op surfaces its own 401, telling the user to connect
  * Google Drive. Never blocks the backup pipeline on an auth side-effect.
  */
-async function ensureDriveAuth(): Promise<void> {
-  if (driveAuthorized) return;
+async function ensureDriveAuth(): Promise<DriveAuthStatus> {
+  if (driveAuthorized) return 'authorized';
   try {
     const { signInForDrive, refreshDriveAccessToken } = await import('./googleAuth');
     try {
       setGoogleAccessToken(await refreshDriveAccessToken());
+      return 'authorized';
     } catch {
       // Not signed in yet (or token expired without a refresh) — prompt.
       const session = await signInForDrive();
       setGoogleAccessToken(session.accessToken);
+      return 'authorized';
     }
   } catch {
-    // Sign-in module absent or declined — proceed; the Drive op surfaces a
-    // clear 401 if it genuinely has no token. Do not crash the pipeline here.
+    // Sign-in module absent (unit tests) OR user declined / not connected.
+    // Report 'needs-connection' so the caller can prompt instead of letting a
+    // downstream 401 surface as an opaque failure. Never crash the pipeline.
+    return 'needs-connection';
   }
 }
 
@@ -84,7 +98,7 @@ async function ensureInitialized(): Promise<CloudKit> {
     // connect Google. Done before initialize() so the token is present for any
     // Drive setup the native module performs.
     if (activeProvider === 'googleDrive') {
-      await ensureDriveAuth();
+      lastDriveAuthStatus = await ensureDriveAuth();
     }
     try {
       await ck.initialize(CONTAINER_ID);
@@ -117,20 +131,27 @@ export function getActiveProvider(): ProviderKind {
   return activeProvider;
 }
 
-function isBackupName(name: string): boolean {
-  return name.startsWith(BACKUP_PREFIX) && name.endsWith(BACKUP_EXT);
+/**
+ * Ensure the active provider is initialised (and Drive authed on Android),
+ * returning the Drive auth status so a caller can prompt the user to connect
+ * Google Drive BEFORE attempting a backup that would otherwise 401.
+ */
+export async function prepareProvider(): Promise<DriveAuthStatus> {
+  await ensureInitialized();
+  return lastDriveAuthStatus;
 }
 
-function newBackupName(): string {
-  // Unix seconds, matching Swift's `backup_\(Date().timeIntervalSince1970)`.
-  // Fixed-width integers sort lexicographically == chronologically.
-  return `${BACKUP_PREFIX}${String(Math.floor(Date.now() / 1000))}${BACKUP_EXT}`;
-}
-
-/** Backup filenames, newest last. */
+/**
+ * Backup filenames, oldest first → newest last. Chronological by parsed
+ * timestamp (NOT a lexical filename sort, which mis-ordered across digit-count
+ * boundaries and Swift decimal vs expo integer timestamps). Non-backup /
+ * unparseable names are dropped here.
+ */
 async function sortedBackups(ck: CloudKit): Promise<readonly string[]> {
-  const names = (await ck.listFileBackups()).filter(isBackupName);
-  return [...names].sort();
+  const names = (await ck.listFileBackups()).filter(
+    (n) => parseBackupTimestampMs(n) !== null,
+  );
+  return sortBackupsByTimestamp(names);
 }
 
 /** Keep only the newest MAX_BACKUPS. Best-effort — never fails a backup. */
@@ -153,7 +174,7 @@ export async function uploadBackup<T>(value: T): Promise<void> {
   const ciphertextB64 = await encryptJson(value);
   const fileB64 = encodeSolb(ciphertextB64);
   const ck = await ensureInitialized();
-  await ck.writeFileBackup(newBackupName(), fileB64);
+  await ck.writeFileBackup(newBackupName(Date.now()), fileB64);
   await rotateBackups(ck);
 }
 
@@ -165,7 +186,7 @@ export async function uploadBackup<T>(value: T): Promise<void> {
 export async function downloadBackup<T>(): Promise<T | null> {
   const ck = await ensureInitialized();
   const names = await sortedBackups(ck);
-  const latest = names[names.length - 1];
+  const latest = selectNewestBackup(names);
   if (!latest) return null;
   const fileB64 = await ck.readFileBackup(latest);
   const ciphertextB64 = decodeSolb(fileB64);
@@ -177,7 +198,7 @@ export async function backupMtime(): Promise<Date | null> {
   try {
     const ck = await ensureInitialized();
     const names = await sortedBackups(ck);
-    const latest = names[names.length - 1];
+    const latest = selectNewestBackup(names);
     if (!latest) return null;
     const ms = await ck.getFileBackupMtime(latest);
     if (ms <= 0) return null;

@@ -36,7 +36,9 @@
  * Run:
  *   cd apps/expo && bun test __tests__/unit/icloudBackupRoundtrip.test.ts
  */
-import { beforeAll, beforeEach, describe, expect, it, mock } from 'bun:test';
+import { afterAll, beforeAll, beforeEach, describe, expect, it, mock } from 'bun:test';
+
+import type { Preferences } from '../../src/settings/preferences';
 
 import {
   aesGcmOpen,
@@ -145,14 +147,26 @@ beforeAll(async () => {
   // installed by sibling tests via mock.module). cloudProvider uses encryptJson
   // / decryptJson; we need the stored bytes to be actual ciphertext so the
   // confidentiality assertions hold.
+  class DecryptError extends Error {
+    constructor(message = 'decrypt-failed', options?: { cause?: unknown }) {
+      super(message, options);
+      this.name = 'DecryptError';
+    }
+  }
   await mock.module('@/storage/encryptionManager', () => ({
+    DecryptError,
     encryptJson: async (value: unknown) => {
       const sealed = aesGcmSeal(FIXED_MASTER_KEY, utf8ToBytes(JSON.stringify(value)));
       return base64Encode(sealed);
     },
     decryptJson: async <T,>(blob: string): Promise<T> => {
       const sealed = base64Decode(blob);
-      const opened = aesGcmOpen(FIXED_MASTER_KEY, sealed);
+      let opened: Uint8Array;
+      try {
+        opened = aesGcmOpen(FIXED_MASTER_KEY, sealed);
+      } catch (cause) {
+        throw new DecryptError('decrypt-failed', { cause });
+      }
       return JSON.parse(bytesToUtf8(opened)) as T;
     },
   }));
@@ -401,7 +415,6 @@ describe('iCloud backup — Swift BackupData field parity', () => {
 interface GestureEvent { readonly translationY: number }
 interface GestureModule {
   readonly makeGestureAutoBackup: (
-    provider: 'iCloud' | 'googleDrive',
     handlers: {
       readonly onStart?: () => void;
       readonly onComplete?: (payload: unknown) => void;
@@ -412,6 +425,7 @@ interface GestureModule {
 
 describe('iCloud backup — gesture-triggered (pull-down pan)', () => {
   let gestureMod: GestureModule;
+  let prefsStore: { setState: (partial: Partial<Preferences>) => void } | null = null;
 
   beforeAll(async () => {
     // Mock the gesture-handler + worklets surface so the module loads in bun.
@@ -442,13 +456,50 @@ describe('iCloud backup — gesture-triggered (pull-down pan)', () => {
       saveBusinessCard: async () => undefined,
       saveContact: async () => undefined,
     }));
-
+    // backupManager now reads usePreferences (→ mmkv) and routes gesture
+    // backups through the coordinated requestBackup, which gates on
+    // backupEnabled. Mock mmkv and enable backup so the pull-down fires.
+    const prefKv = new Map<string, string>();
+    await mock.module('@/storage/mmkv', () => ({
+      getMmkv: () => ({
+        getString: (k: string): string | undefined => prefKv.get(k),
+        set: (k: string, v: string): void => { prefKv.set(k, v); },
+        remove: (k: string): void => { prefKv.delete(k); },
+        // getAllKeys keeps the REAL storageManager.listKeys() safe if
+        // backupManager was already cached with it (full-suite module order),
+        // so performBackupNow loads an empty card/contact set instead of throwing.
+        getAllKeys: (): string[] => Array.from(prefKv.keys()),
+      }),
+    }));
     gestureMod = await import('../../src/backup/gestureAutoBackup');
+
+    // Enable backup AFTER importing gestureAutoBackup so backupManager's
+    // usePreferences binding (same '@/settings/preferences' singleton) is
+    // already established — otherwise requestBackup('gesture') self-gates on
+    // the default backupEnabled:false and the pull-down never fires.
+    const { usePreferences } = await import('@/settings/preferences');
+    prefsStore = usePreferences;
+    usePreferences.setState({
+      backupEnabled: true,
+      autoBackupOnPull: true,
+      backupProvider: 'iCloud',
+    });
+  });
+
+  afterAll(() => {
+    // usePreferences is a process-global singleton; reset the enabled flag so
+    // this suite doesn't bleed backupEnabled:true into later tests
+    // (e.g. preferencesKeys.parity asserts the Swift default stays false).
+    prefsStore?.setState({
+      backupEnabled: false,
+      autoBackupOnPull: true,
+      backupProvider: 'iCloud',
+    });
   });
 
   it('triggers backup when translationY exceeds the 80px threshold', async () => {
     let completedPayload: unknown = null;
-    const gesture = gestureMod.makeGestureAutoBackup('iCloud', {
+    const gesture = gestureMod.makeGestureAutoBackup({
       onComplete: (payload) => { completedPayload = payload; },
     });
     expect(gesture).toBeDefined();
@@ -465,7 +516,7 @@ describe('iCloud backup — gesture-triggered (pull-down pan)', () => {
 
     // Fire a pan event above threshold — triggers backup.
     cb!({ translationY: 120 });
-    await new Promise((r) => setTimeout(r, 50));
+    await new Promise((r) => setTimeout(r, 200));
     expect(completedPayload).not.toBeNull();
   });
 
@@ -474,7 +525,7 @@ describe('iCloud backup — gesture-triggered (pull-down pan)', () => {
     const ghMod = await import('react-native-gesture-handler') as unknown as {
       __getPendingOnEnd: () => ((e: GestureEvent) => void) | null;
     };
-    gestureMod.makeGestureAutoBackup('iCloud', {
+    gestureMod.makeGestureAutoBackup({
       onComplete: () => { calls += 1; },
     });
     const cb = ghMod.__getPendingOnEnd();
