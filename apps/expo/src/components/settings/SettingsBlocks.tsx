@@ -299,13 +299,73 @@ export function SettingsBackToolbar({
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Screen title — inline nav title (17pt semibold textPrimary, centered)
+// Screen title — inline nav title (17pt semibold textPrimary, centered).
+// Optional leading/trailing actions render pinned 44×44 icon buttons on the
+// same row so the title stays optically centered.
 // ─────────────────────────────────────────────────────────────────────────────
 
-export function SettingsScreenTitle({ title }: { title: string }) {
+export interface SettingsScreenTitleLeadingAction {
+  icon?: SFSymbol;
+  accessibilityLabel: string;
+  onPress: () => void;
+}
+
+export interface SettingsScreenTitleTrailingAction {
+  icon: SFSymbol;
+  accessibilityLabel: string;
+  onPress: () => void;
+}
+
+export function SettingsScreenTitle({
+  title,
+  leadingAction,
+  trailingAction,
+}: {
+  title: string;
+  leadingAction?: SettingsScreenTitleLeadingAction;
+  trailingAction?: SettingsScreenTitleTrailingAction;
+}) {
+  const c = useThemeColors();
+  const hasNavAction = leadingAction != null || trailingAction != null;
   return (
-    <View className="items-center" style={{ paddingVertical: 4, paddingBottom: 12 }}>
-      <Text className="text-text1 text-[17px] font-semibold">{title}</Text>
+    <View
+      className="items-center justify-center"
+      style={{
+        paddingHorizontal: hasNavAction ? 56 : 0,
+        paddingVertical: 4,
+        paddingBottom: 12,
+        minHeight: hasNavAction ? 44 : undefined,
+      }}
+    >
+      {leadingAction ? (
+        <Pressable
+          onPress={leadingAction.onPress}
+          accessibilityRole="button"
+          accessibilityLabel={leadingAction.accessibilityLabel}
+          className="absolute items-center justify-center active:opacity-80"
+          style={{ left: 8, top: 0, bottom: 0, width: 44 }}
+        >
+          <SfIcon name={leadingAction.icon ?? 'chevron.left'} size={22} weight="semibold" color={c.text1} />
+        </Pressable>
+      ) : null}
+      <Text
+        className="text-text1 text-[17px] font-semibold"
+        numberOfLines={1}
+        style={{ maxWidth: '100%' }}
+      >
+        {title}
+      </Text>
+      {trailingAction ? (
+        <Pressable
+          onPress={trailingAction.onPress}
+          accessibilityRole="button"
+          accessibilityLabel={trailingAction.accessibilityLabel}
+          className="absolute items-center justify-center active:opacity-80"
+          style={{ right: 8, top: 0, bottom: 0, width: 44 }}
+        >
+          <SfIcon name={trailingAction.icon} size={22} color={c.text1} />
+        </Pressable>
+      ) : null}
     </View>
   );
 }

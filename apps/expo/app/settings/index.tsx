@@ -14,13 +14,13 @@ import { Platform, Pressable, ScrollView, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import {
-  SettingsBackToolbar,
   SettingsBlockInfoRow,
   SettingsBlockRow,
   SettingsBlockSection,
   SettingsBlockSectionHeader,
   SettingsScreenTitle,
 } from '@/components/settings/SettingsBlocks';
+import { Colors } from '@/constants/Colors';
 import { haptic } from '@/feedback/haptics';
 import { pushToast } from '@/feedback/toast';
 import { useTranslation } from '@/i18n';
@@ -64,8 +64,18 @@ export default function SettingsHub() {
 
   return (
     <View className="flex-1 bg-pageBg" style={{ paddingTop: insets.top }}>
-      <SettingsBackToolbar onPress={() => { router.back(); }} />
-      <SettingsScreenTitle title={t('settingsHub.title')} />
+      <SettingsScreenTitle
+        title={t('settingsHub.title')}
+        leadingAction={{
+          accessibilityLabel: 'Back',
+          onPress: () => { router.back(); },
+        }}
+        trailingAction={{
+          icon: 'qrcode.viewfinder',
+          accessibilityLabel: t('idView.scan'),
+          onPress: () => { router.push('/scan'); },
+        }}
+      />
 
       <ScrollView
         className="flex-1"
@@ -127,11 +137,14 @@ export default function SettingsHub() {
             ) : null}
           </SettingsBlockSection>
 
-          {/* Guide */}
+          {/* Guide — Figma 758:4610 renders Replay Onboarding in the rose accent
+              (icon + title), the one accented row in the hub. */}
           <SettingsBlockSection title={t('settingsHub.guide')}>
             <SettingsBlockRow
               icon="arrow.counterclockwise"
               title={t('settingsHub.replayOnboarding')}
+              iconColor={Colors.accentRose}
+              titleColor={Colors.accentRose}
               onPress={() => { router.push('/onboarding?replay=1'); }}
             />
           </SettingsBlockSection>
