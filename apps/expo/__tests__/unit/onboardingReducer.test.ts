@@ -73,11 +73,16 @@ describe('onboardingReducer', () => {
     expect(s.profile.link).toBe('');
   });
 
-  it('accumulates imported contacts count', () => {
+  it('sets imported contacts count to the latest total (does not accumulate)', () => {
     let s = initialOnboardingState;
-    s = onboardingReducer(s, { type: 'addImportedCount', count: 5 });
+    s = onboardingReducer(s, { type: 'setImportedCount', count: 5 });
     expect(s.importedCount).toBe(5);
-    s = onboardingReducer(s, { type: 'addImportedCount', count: 3 });
+    // ImportContactsStep feeds the manifest TOTAL on every render; the reducer
+    // must REPLACE, not add. Re-reporting the same total must be idempotent —
+    // otherwise the effect runs away to thousands (the 23082-contacts bug).
+    s = onboardingReducer(s, { type: 'setImportedCount', count: 5 });
+    expect(s.importedCount).toBe(5);
+    s = onboardingReducer(s, { type: 'setImportedCount', count: 8 });
     expect(s.importedCount).toBe(8);
   });
 });

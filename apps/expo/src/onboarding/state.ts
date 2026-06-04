@@ -70,7 +70,7 @@ export type OnboardingAction =
   | { readonly type: 'setProfileField'; readonly field: keyof OnboardingProfile; readonly value: string }
   | { readonly type: 'setAnimal'; readonly animal: Animal }
   | { readonly type: 'setKeysGenerated'; readonly value: boolean }
-  | { readonly type: 'addImportedCount'; readonly count: number }
+  | { readonly type: 'setImportedCount'; readonly count: number }
   | { readonly type: 'setPassportScanned'; readonly value: boolean };
 
 function stepIndex(s: OnboardingStep): number {
@@ -104,11 +104,10 @@ export function onboardingReducer(
       return { ...state, animal: action.animal };
     case 'setKeysGenerated':
       return { ...state, keysGenerated: action.value };
-    case 'addImportedCount':
-      return {
-        ...state,
-        importedCount: (state.importedCount ?? 0) + action.count,
-      };
+    case 'setImportedCount':
+      // SET, not add. ImportContactsStep reports the manifest TOTAL on every
+      // render; accumulating it made importedCount run away to thousands.
+      return { ...state, importedCount: action.count };
     case 'setPassportScanned':
       return { ...state, passportScanned: action.value };
   }

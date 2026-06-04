@@ -64,7 +64,8 @@ export function ImportContactsStep({
       if (!asset) return;
       const text = await FileSystem.readAsStringAsync(asset.uri);
       const count = await importFromVcf(text);
-      onImported(count);
+      // The manifest-watching effect below sets `importedCount` to the new
+      // total — don't also report the delta here or the two race / double up.
       pushToast(`Imported ${String(count)} contacts`, 'success');
     } catch (err) {
       pushToast(`Import failed: ${(err as Error).message}`, 'error');

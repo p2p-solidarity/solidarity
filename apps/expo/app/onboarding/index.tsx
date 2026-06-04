@@ -133,7 +133,7 @@ export default function OnboardingFlow() {
           importedCount={state.importedCount}
           onBack={() => { goTo('secureKeys'); }}
           onAdvance={next}
-          onImported={(count) => { dispatch({ type: 'addImportedCount', count }); }}
+          onImported={(count) => { dispatch({ type: 'setImportedCount', count }); }}
         />
       );
       break;
