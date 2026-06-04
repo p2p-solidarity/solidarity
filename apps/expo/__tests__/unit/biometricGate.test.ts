@@ -88,6 +88,7 @@ const secureStoreMock = {
 interface BiometricMod {
   readonly requireBiometric: (reason: BiometricReason) => Promise<boolean>;
   readonly isBiometricAvailable: () => Promise<boolean>;
+  readonly resetBiometricGrace: () => void;
 }
 
 interface SigningMod {
@@ -117,6 +118,9 @@ beforeEach(() => {
   nextAuthResult = { success: true };
   hasHwResult = true;
   isEnrolledResult = true;
+  // The signing grace persists across calls within the process; clear it so
+  // each test starts from a cold "must prompt" state.
+  bio.resetBiometricGrace();
 });
 
 afterEach(() => {
@@ -182,6 +186,46 @@ describe('requireBiometric: pass / fail return value', () => {
   it('returns false on a denied delete attempt (matches Swift authorize flow)', async () => {
     nextAuthResult = { success: false };
     expect(await bio.requireBiometric('delete')).toBe(false);
+  });
+});
+
+// ── Session grace: sign authorizes once per window, reused silently ─────────
+
+describe('requireBiometric: session grace for signing', () => {
+  it('a second sign within the grace window does NOT re-prompt the OS', async () => {
+    nextAuthResult = { success: true };
+    expect(await bio.requireBiometric('sign')).toBe(true);
+    expect(authCalls.length).toBe(1);
+    // The share/QR flow re-signs on every field toggle. Within the grace
+    // window the second sign reuses the prior authorization — no OS sheet.
+    expect(await bio.requireBiometric('sign')).toBe(true);
+    expect(authCalls.length).toBe(1);
+  });
+
+  it('grace is scoped to "sign" — delete still prompts every time', async () => {
+    await bio.requireBiometric('sign'); // opens the grace window
+    authCalls.length = 0;
+    expect(await bio.requireBiometric('delete')).toBe(true);
+    // Destructive actions are never graced: deleting must always re-auth.
+    expect(authCalls.length).toBe(1);
+  });
+
+  it('a failed sign does NOT open a grace window', async () => {
+    nextAuthResult = { success: false };
+    expect(await bio.requireBiometric('sign')).toBe(false);
+    expect(authCalls.length).toBe(1);
+    nextAuthResult = { success: true };
+    // No grace was set, so the next sign has to prompt again.
+    expect(await bio.requireBiometric('sign')).toBe(true);
+    expect(authCalls.length).toBe(2);
+  });
+
+  it('resetBiometricGrace() forces the next sign to prompt', async () => {
+    await bio.requireBiometric('sign'); // sets grace
+    bio.resetBiometricGrace();
+    authCalls.length = 0;
+    await bio.requireBiometric('sign');
+    expect(authCalls.length).toBe(1);
   });
 });
 

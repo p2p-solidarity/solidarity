@@ -64,6 +64,32 @@ const FIELD_ROWS: readonly (Omit<FieldDescriptor, 'label'> & { labelKey: string 
   { key: 'skills', icon: 'star', labelKey: 'shareSettings.field.skills', excludedFromVc: true },
 ];
 
+/**
+ * Single source of truth: each toggleable share field maps 1:1 to its boolean
+ * preference key. `name` is always shared and has no toggle, so it's excluded.
+ * Everything else (`enabled`, `isFieldOn`, `toggleField`) derives from here
+ * instead of repeating the same field→pref switch three times.
+ */
+type ShareFieldKey = Exclude<BusinessCardField, 'name'>;
+type ShareFieldPrefKey =
+  | 'shareTitle'
+  | 'shareCompany'
+  | 'shareEmail'
+  | 'sharePhone'
+  | 'shareProfileImage'
+  | 'shareSocialNetworks'
+  | 'shareSkills';
+
+const FIELD_PREF_KEY: Readonly<Record<ShareFieldKey, ShareFieldPrefKey>> = {
+  title: 'shareTitle',
+  company: 'shareCompany',
+  email: 'shareEmail',
+  phone: 'sharePhone',
+  profileImage: 'shareProfileImage',
+  socialNetworks: 'shareSocialNetworks',
+  skills: 'shareSkills',
+};
+
 export default function ShareSettings(): ReactNode {
   const insets = useSafeAreaInsets();
   const { t } = useTranslation();
@@ -97,25 +123,10 @@ export default function ShareSettings(): ReactNode {
     }
   }, [enforceMandatory, hasHumanClaim, prefs.shareIsHuman]);
 
-  const enabled = useMemo<readonly BusinessCardField[]>(() => {
-    const out: BusinessCardField[] = ['name'];
-    if (prefs.shareTitle) out.push('title');
-    if (prefs.shareCompany) out.push('company');
-    if (prefs.shareEmail) out.push('email');
-    if (prefs.sharePhone) out.push('phone');
-    if (prefs.shareProfileImage) out.push('profileImage');
-    if (prefs.shareSocialNetworks) out.push('socialNetworks');
-    if (prefs.shareSkills) out.push('skills');
-    return out;
-  }, [
-    prefs.shareCompany,
-    prefs.shareEmail,
-    prefs.sharePhone,
-    prefs.shareProfileImage,
-    prefs.shareSkills,
-    prefs.shareSocialNetworks,
-    prefs.shareTitle,
-  ]);
+  const enabled = useMemo<readonly BusinessCardField[]>(
+    () => FIELD_ROWS.filter((r) => isFieldOn(r.key, prefs)).map((r) => r.key),
+    [prefs]
+  );
 
   useEffect(() => {
     if (!myCard) {
@@ -124,17 +135,22 @@ export default function ShareSettings(): ReactNode {
     }
 
     let cancelled = false;
-    setQrPayload(null);
-    void buildRuntimeSolidarityQrPayload(
-      myCard,
-      shareFieldPreferencesFromFields(enabled),
-      { proofClaims: selectedProofClaims }
-    ).then((next) => {
-      if (!cancelled) setQrPayload(next);
-    });
+    // Debounce: toggling several fields in a row coalesces into one signed
+    // rebuild instead of one Face ID sign per toggle. The previous QR stays
+    // on screen until the new one resolves — no spinner flash per tap.
+    const handle = setTimeout(() => {
+      void buildRuntimeSolidarityQrPayload(
+        myCard,
+        shareFieldPreferencesFromFields(enabled),
+        { proofClaims: selectedProofClaims }
+      ).then((next) => {
+        if (!cancelled) setQrPayload(next);
+      });
+    }, 350);
 
     return () => {
       cancelled = true;
+      clearTimeout(handle);
     };
   }, [enabled, myCard, selectedProofClaims]);
 
@@ -344,53 +360,15 @@ function isFieldOn(
   field: BusinessCardField,
   prefs: ReturnType<typeof usePreferences.getState>
 ): boolean {
-  switch (field) {
-    case 'name':
-      return true;
-    case 'title':
-      return prefs.shareTitle;
-    case 'company':
-      return prefs.shareCompany;
-    case 'email':
-      return prefs.shareEmail;
-    case 'phone':
-      return prefs.sharePhone;
-    case 'profileImage':
-      return prefs.shareProfileImage;
-    case 'socialNetworks':
-      return prefs.shareSocialNetworks;
-    case 'skills':
-      return prefs.shareSkills;
-  }
+  if (field === 'name') return true;
+  return prefs[FIELD_PREF_KEY[field]];
 }
 
 function toggleField(
   field: BusinessCardField,
   prefs: ReturnType<typeof usePreferences.getState>
 ): void {
-  switch (field) {
-    case 'title':
-      prefs.set('shareTitle', !prefs.shareTitle);
-      return;
-    case 'company':
-      prefs.set('shareCompany', !prefs.shareCompany);
-      return;
-    case 'email':
-      prefs.set('shareEmail', !prefs.shareEmail);
-      return;
-    case 'phone':
-      prefs.set('sharePhone', !prefs.sharePhone);
-      return;
-    case 'profileImage':
-      prefs.set('shareProfileImage', !prefs.shareProfileImage);
-      return;
-    case 'socialNetworks':
-      prefs.set('shareSocialNetworks', !prefs.shareSocialNetworks);
-      return;
-    case 'skills':
-      prefs.set('shareSkills', !prefs.shareSkills);
-      return;
-    case 'name':
-      return;
-  }
+  if (field === 'name') return;
+  const key = FIELD_PREF_KEY[field];
+  prefs.set(key, !prefs[key]);
 }

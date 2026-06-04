@@ -35,15 +35,37 @@ export async function isBiometricAvailable(): Promise<boolean> {
 }
 
 /**
+ * Session grace for signing. The share / QR-field flow re-signs the DID-signed
+ * QR on every toggle, which would otherwise pop Face ID once per checkbox. A
+ * successful `'sign'` authorization is reused for `SIGN_GRACE_MS` so the user
+ * authorizes once per sharing session, not once per toggle.
+ *
+ * Scoped to `'sign'` ONLY — delete / export / exchange / passportSave stay
+ * gated on every call. Time-based so it always auto-expires; call
+ * `resetBiometricGrace()` on sign-out / app background for a hard reset.
+ */
+const SIGN_GRACE_MS = 5 * 60 * 1000;
+let signGraceUntil = 0;
+
+/** Drop any active signing grace so the next sensitive action re-prompts. */
+export function resetBiometricGrace(): void {
+  signGraceUntil = 0;
+}
+
+/**
  * Prompt the user. Resolves to `true` on success, `false` on cancel/fail.
  * Callers should treat false as "user denied" and abort the sensitive op.
  */
 export async function requireBiometric(reason: BiometricReason): Promise<boolean> {
+  if (reason === 'sign' && Date.now() < signGraceUntil) return true;
   const r = await LocalAuthentication.authenticateAsync({
     promptMessage: PROMPT_BY_REASON[reason],
     fallbackLabel: 'Use device passcode',
     disableDeviceFallback: false,
     cancelLabel: 'Cancel',
   });
+  if (r.success && reason === 'sign') {
+    signGraceUntil = Date.now() + SIGN_GRACE_MS;
+  }
   return r.success;
 }
