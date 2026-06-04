@@ -18,9 +18,17 @@
  * the user knows what to do next (open Settings, or add a contact manually).
  */
 import { router } from 'expo-router';
-import { useEffect, useMemo, useState, type ReactNode } from 'react';
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ReactNode,
+} from 'react';
 import {
   ActivityIndicator,
+  Linking,
   Modal,
   Pressable,
   Text,
@@ -31,12 +39,14 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { FlashList } from '@shopify/flash-list';
 
 import { SfIcon } from '@/components/icons/SfIcon';
+import { LimitedAccessBanner } from '@/components/people/LimitedAccessBanner';
 import { ThemedButton } from '@/components/themed';
 import { Colors } from '@/constants/Colors';
 import { useTranslation } from '@/i18n';
 import {
   importDeviceContacts,
   loadDeviceContacts,
+  presentContactAccessPicker,
   type DeviceContactPickerRow,
 } from '@/contacts/importer';
 import { pushToast } from '@/feedback/toast';
@@ -44,7 +54,11 @@ import { pushToast } from '@/feedback/toast';
 type Phase =
   | { readonly kind: 'loading' }
   | { readonly kind: 'denied' }
-  | { readonly kind: 'ready'; readonly rows: readonly DeviceContactPickerRow[] }
+  | {
+      readonly kind: 'ready';
+      readonly access: 'all' | 'limited';
+      readonly rows: readonly DeviceContactPickerRow[];
+    }
   | { readonly kind: 'error'; readonly message: string };
 
 export default function ImportFromPhoneScreen(): ReactNode {
@@ -54,26 +68,56 @@ export default function ImportFromPhoneScreen(): ReactNode {
   const [query, setQuery] = useState('');
   const [selected, setSelected] = useState<ReadonlySet<string>>(() => new Set());
   const [importing, setImporting] = useState(false);
+  const [selectingMore, setSelectingMore] = useState(false);
+
+  // Non-rendered guard so the shared load path can run both on mount and after
+  // the limited-access picker without setting state on an unmounted screen.
+  const mountedRef = useRef(true);
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+    };
+  }, []);
+
+  const applyLoad = useCallback(async (): Promise<void> => {
+    try {
+      const { access, rows } = await loadDeviceContacts();
+      if (!mountedRef.current) return;
+      if (access === 'none') {
+        setPhase({ kind: 'denied' });
+        return;
+      }
+      setPhase({ kind: 'ready', access, rows });
+    } catch (err) {
+      if (!mountedRef.current) return;
+      setPhase({ kind: 'error', message: (err as Error).message });
+    }
+  }, []);
 
   useEffect(() => {
-    let cancelled = false;
+    void applyLoad();
+  }, [applyLoad]);
+
+  const onSelectMore = useCallback((): void => {
+    if (selectingMore) return;
+    setSelectingMore(true);
     void (async () => {
       try {
-        const { granted, rows } = await loadDeviceContacts();
-        if (cancelled) return;
-        if (!granted) {
-          setPhase({ kind: 'denied' });
-          return;
-        }
-        setPhase({ kind: 'ready', rows });
-      } catch (err) {
-        if (cancelled) return;
-        setPhase({ kind: 'error', message: (err as Error).message });
+        // iOS 18+ limited access: the system sheet shows the FULL address book
+        // so the user grants more contacts, then we re-read the expanded set.
+        await presentContactAccessPicker();
+        await applyLoad();
+      } catch {
+        // Sheet dismissed / unsupported — leave the current list untouched.
+      } finally {
+        if (mountedRef.current) setSelectingMore(false);
       }
     })();
-    return () => {
-      cancelled = true;
-    };
+  }, [selectingMore, applyLoad]);
+
+  const onOpenSettings = useCallback((): void => {
+    void Linking.openSettings();
   }, []);
 
   const allRows = phase.kind === 'ready' ? phase.rows : [];
@@ -145,6 +189,14 @@ export default function ImportFromPhoneScreen(): ReactNode {
 
         {phase.kind === 'ready' ? (
           <>
+            {phase.access === 'limited' ? (
+              <LimitedAccessBanner
+                count={phase.rows.length}
+                working={selectingMore}
+                onSelectMore={onSelectMore}
+                onOpenSettings={onOpenSettings}
+              />
+            ) : null}
             <SearchBar value={query} onChange={setQuery} />
             <SelectAllRow
               count={filtered.length}
@@ -186,7 +238,7 @@ export default function ImportFromPhoneScreen(): ReactNode {
         ) : null}
 
         {phase.kind === 'denied' ? (
-          <DeniedState onCancel={onCancel} />
+          <DeniedState onCancel={onCancel} onOpenSettings={onOpenSettings} />
         ) : null}
 
         {phase.kind === 'error' ? (
@@ -403,7 +455,13 @@ function Footer({
   );
 }
 
-function DeniedState({ onCancel }: { readonly onCancel: () => void }): ReactNode {
+function DeniedState({
+  onCancel,
+  onOpenSettings,
+}: {
+  readonly onCancel: () => void;
+  readonly onOpenSettings: () => void;
+}): ReactNode {
   const { t } = useTranslation();
   return (
     <CenterMessage>
@@ -416,7 +474,12 @@ function DeniedState({ onCancel }: { readonly onCancel: () => void }): ReactNode
       >
         {t('contactImport.deniedBody')}
       </Text>
-      <View style={{ marginTop: 20 }}>
+      <View style={{ marginTop: 20, flexDirection: 'row', gap: 12 }}>
+        <ThemedButton
+          label={t('common.openSettings')}
+          variant="inverted"
+          onPress={onOpenSettings}
+        />
         <ThemedButton label={t('contactImport.close')} variant="secondary" onPress={onCancel} />
       </View>
     </CenterMessage>

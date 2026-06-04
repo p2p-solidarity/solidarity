@@ -284,17 +284,34 @@ export interface DeviceContactPickerRow {
 }
 
 /**
+ * Tier of Contacts access the OS granted.
+ *   - `'all'`     — full access; `getAllDetails()` returns the whole book.
+ *   - `'limited'` — iOS 18+ partial access; only the contacts the user
+ *                   hand-picked are visible. Re-prompting does nothing, so the
+ *                   UI must offer `presentContactAccessPicker()` / Settings.
+ *   - `'none'`    — denied or undetermined-and-refused.
+ */
+export type ContactAccess = 'all' | 'limited' | 'none';
+
+/**
  * Permission-gated read of every visible device contact. Returns rows ready
- * to render in the picker. No repository writes — callers decide which rows
- * to upsert via `importDeviceContacts(...)`.
+ * to render in the picker plus the access tier. No repository writes — callers
+ * decide which rows to upsert via `importDeviceContacts(...)`.
+ *
+ * `accessPrivileges === 'limited'` (iOS 18+) still reports `granted` and yields
+ * only the user-selected subset; callers surface a "select more" affordance so
+ * the user isn't trapped with whatever they shared first. It's `undefined` on
+ * Android / pre-iOS-18, which we treat as full access.
  */
 export async function loadDeviceContacts(): Promise<{
-  readonly granted: boolean;
+  readonly access: ContactAccess;
   readonly rows: readonly DeviceContactPickerRow[];
 }> {
-  const { status } = await Contacts.requestPermissionsAsync();
-  const granted = status === Contacts.PermissionStatus.GRANTED;
-  if (!granted) return { granted: false, rows: [] };
+  const perm = await Contacts.requestPermissionsAsync();
+  const granted = perm.status === Contacts.PermissionStatus.GRANTED;
+  if (!granted) return { access: 'none', rows: [] };
+  const access: ContactAccess =
+    perm.accessPrivileges === 'limited' ? 'limited' : 'all';
 
   const details = (await Contacts.Contact.getAllDetails([
     Contacts.ContactField.FULL_NAME,
@@ -329,7 +346,20 @@ export async function loadDeviceContacts(): Promise<{
     rows.push({ key, name, subtitle, email, phone, raw });
   }
   rows.sort((a, b) => a.name.localeCompare(b.name));
-  return { granted: true, rows };
+  return { access, rows };
+}
+
+/**
+ * iOS 18+ limited access: present the system contact-access sheet so the user
+ * can browse their FULL address book and grant the app more contacts. The
+ * newly-shared set is reflected on the next `loadDeviceContacts()` call.
+ *
+ * Returns the count of contacts the user added (0 if they cancelled). Only
+ * meaningful when access is `'limited'`; the API is iOS 18+ only.
+ */
+export async function presentContactAccessPicker(): Promise<number> {
+  const granted = await Contacts.Contact.presentAccessPicker();
+  return granted.length;
 }
 
 /**

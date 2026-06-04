@@ -20,6 +20,10 @@ interface ImporterModule {
     readonly granted: boolean;
     readonly count: number;
   }>;
+  readonly loadDeviceContacts: () => Promise<{
+    readonly access: 'all' | 'limited' | 'none';
+    readonly rows: readonly { readonly key: string; readonly name: string }[];
+  }>;
 }
 
 interface RepositoryModule {
@@ -52,12 +56,39 @@ type MockContact = {
 };
 
 let mockPermission: 'granted' | 'denied' = 'granted';
+let mockAccessPrivileges: 'all' | 'limited' | 'none' = 'all';
 let mockContacts: readonly MockContact[] = [];
 
 let importer: ImporterModule;
 let repository: RepositoryModule;
 
 beforeAll(async () => {
+  // `@/storage` (imported transitively via the contact repository) drags in
+  // `react-native` + the `expo` runtime (`__DEV__`) + `expo-sqlite` /
+  // `expo-secure-store` native modules — none of which load under bun. Stub
+  // them like the sibling storage suites so this file runs standalone instead
+  // of depending on another suite's mock leaking through the shared registry.
+  (globalThis as { __DEV__?: boolean }).__DEV__ = false;
+  await mock.module('react-native', () => ({
+    Platform: {
+      OS: 'ios',
+      select: <T,>(o: { ios?: T; android?: T; default?: T }): T | undefined =>
+        o.ios ?? o.default,
+    },
+  }));
+  await mock.module('expo-sqlite', () => ({
+    openDatabaseAsync: async () => ({
+      execAsync: async () => undefined,
+      getFirstAsync: async () => null,
+      runAsync: async () => undefined,
+    }),
+  }));
+  await mock.module('expo-secure-store', () => ({
+    WHEN_UNLOCKED: 'whenUnlocked',
+    getItemAsync: async () => null,
+    setItemAsync: async () => undefined,
+    deleteItemAsync: async () => undefined,
+  }));
   await mock.module('@/storage/mmkv', () => ({
     getMmkv: () => ({
       getString: (k: string): string | undefined => kv.get(k),
@@ -104,11 +135,19 @@ beforeAll(async () => {
         DENIED: 'denied',
         UNDETERMINED: 'undetermined',
       },
-      requestPermissionsAsync: async (): Promise<{ status: string }> => ({
+      requestPermissionsAsync: async (): Promise<{
+        status: string;
+        accessPrivileges: string;
+      }> => ({
         status: mockPermission,
+        accessPrivileges: mockAccessPrivileges,
       }),
-      getPermissionsAsync: async (): Promise<{ status: string }> => ({
+      getPermissionsAsync: async (): Promise<{
+        status: string;
+        accessPrivileges: string;
+      }> => ({
         status: mockPermission,
+        accessPrivileges: mockAccessPrivileges,
       }),
     };
   });
@@ -121,6 +160,7 @@ beforeEach(() => {
   kv.clear();
   repository.useContactStore.setState({ manifest: [], details: new Map() });
   mockPermission = 'granted';
+  mockAccessPrivileges = 'all';
   mockContacts = [];
 });
 
@@ -234,6 +274,36 @@ describe('importFromDevice — VCF parse → Contact mapping', () => {
       repository.useContactStore.getState().details.values()
     )[0] as { readonly businessCard: { readonly name: string } };
     expect(c.businessCard.name).toBe('Ada Lovelace');
+  });
+});
+
+describe('loadDeviceContacts — iOS 18+ limited access', () => {
+  it("reports access 'all' when the user granted full access", async () => {
+    mockPermission = 'granted';
+    mockAccessPrivileges = 'all';
+    mockContacts = [{ id: 'cn-1', givenName: 'Ada', familyName: 'Lovelace' }];
+    const result = await importer.loadDeviceContacts();
+    expect(result.access).toBe('all');
+    expect(result.rows.length).toBe(1);
+  });
+
+  it("reports access 'limited' when the user shared only selected contacts", async () => {
+    mockPermission = 'granted';
+    mockAccessPrivileges = 'limited';
+    mockContacts = [{ id: 'cn-1', givenName: 'Ada', familyName: 'Lovelace' }];
+    const result = await importer.loadDeviceContacts();
+    expect(result.access).toBe('limited');
+    // Limited still surfaces the shared subset so the picker can list them.
+    expect(result.rows.length).toBe(1);
+  });
+
+  it("reports access 'none' and no rows when permission is denied", async () => {
+    mockPermission = 'denied';
+    mockAccessPrivileges = 'none';
+    mockContacts = [{ id: 'cn-1', givenName: 'Ada', familyName: 'Lovelace' }];
+    const result = await importer.loadDeviceContacts();
+    expect(result.access).toBe('none');
+    expect(result.rows.length).toBe(0);
   });
 });
 
