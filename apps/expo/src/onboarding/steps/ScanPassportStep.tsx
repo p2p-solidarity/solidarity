@@ -33,9 +33,11 @@ export function ScanPassportStep({
   onAdvance,
 }: ScanPassportStepProps) {
   const openPassportFlow = () => {
-    // Swift presents PassportOnboardingFlowView as a fullScreenCover. In
-    // Expo Router we navigate to /passport which lives at app/passport/index.tsx.
-    router.push('/passport');
+    // Swift presents PassportOnboardingFlowView as a fullScreenCover with an
+    // `onCompleted` closure. In Expo Router we navigate to the shared /passport
+    // route (app/passport/index.tsx); `from=onboarding` lets that route signal
+    // completion back so the wizard marks the passport scanned and advances.
+    router.push({ pathname: '/passport', params: { from: 'onboarding' } });
   };
 
   return (

@@ -43,6 +43,7 @@ import {
   MRZCameraStep,
   type PassportMRZDraft as MrzScannedDraft,
 } from '@/onboarding/steps/MRZCameraStep';
+import { notifyPassportOnboardingCompleted } from '@/onboarding/passportHandoff';
 import {
   arrayBufferToBase64,
   chipFromNitro,
@@ -117,7 +118,8 @@ function parseMrzYyMmDd(yymmdd: string): Date | null {
 }
 
 export default function PassportSetup() {
-  const params = useLocalSearchParams<{ manual?: string }>();
+  const params = useLocalSearchParams<{ manual?: string; from?: string }>();
+  const fromOnboarding = params.from === 'onboarding';
   const insets = useSafeAreaInsets();
   const activeDid = useActiveDid();
   const [state, dispatch] = useReducer(passportPipelineReducer, initialPassportPipelineState);
@@ -465,6 +467,11 @@ export default function PassportSetup() {
         : 'Passport credential issued',
       'success',
     );
+    // Mirror Swift's `onCompleted(proof)` closure: when this flow was launched
+    // from onboarding, signal completion so the wizard sets passportScanned and
+    // advances to the `complete` step. The listener runs synchronously, so
+    // onboarding is already on `complete` before router.back() reveals it.
+    if (fromOnboarding) notifyPassportOnboardingCompleted();
     router.back();
   };
 

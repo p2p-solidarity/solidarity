@@ -17,7 +17,7 @@
  *   4. Navigate to /(tabs)/people (MainTabView).
  */
 import { router, Stack, useLocalSearchParams } from 'expo-router';
-import { useCallback, useReducer } from 'react';
+import { useCallback, useEffect, useReducer } from 'react';
 import { Pressable, View } from 'react-native';
 
 import { useCardStore } from '@/cards/cardManager';
@@ -30,6 +30,7 @@ import { ImportContactsStep } from '@/onboarding/steps/ImportContactsStep';
 import { ScanPassportStep } from '@/onboarding/steps/ScanPassportStep';
 import { SecureKeysStep } from '@/onboarding/steps/SecureKeysStep';
 import { TerminalWelcomeStep } from '@/onboarding/steps/TerminalWelcomeStep';
+import { subscribePassportOnboardingCompleted } from '@/onboarding/passportHandoff';
 import {
   initialOnboardingState,
   onboardingReducer,
@@ -54,6 +55,21 @@ export default function OnboardingFlow() {
   }, []);
 
   const next = useCallback(() => { dispatch({ type: 'next' }); }, []);
+
+  // Faithful port of Swift's `PassportOnboardingFlowView(onCompleted:)` closure
+  // (OnboardingFlowView.swift): when the shared /passport route finishes a
+  // persist launched from onboarding, mark the passport scanned and advance to
+  // the `complete` step. Without this the wizard returned to the scanPassport
+  // step with passportScanned stuck false (so "Skip" stayed and Complete showed
+  // "Skipped" despite a successful scan).
+  useEffect(
+    () =>
+      subscribePassportOnboardingCompleted(() => {
+        dispatch({ type: 'setPassportScanned', value: true });
+        dispatch({ type: 'goTo', step: 'complete' });
+      }),
+    []
+  );
 
   const handleProfileChange = useCallback(
     (field: keyof OnboardingProfile, value: string) => {
