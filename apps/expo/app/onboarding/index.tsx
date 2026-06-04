@@ -218,7 +218,8 @@ function composeInitialCard(profile: OnboardingProfile, animal: BusinessCard['an
       professionalFields: new Set(['name', 'title', 'company', 'email']),
       personalFields: new Set(['name', 'email', 'phone']),
       allowForwarding: true,
-      useZK: false,
+      // ZK on by default for the user's own identity card — never share raw.
+      useZK: true,
       sharingFormat: 'didSigned',
     },
     verifiedFields: undefined,

@@ -71,8 +71,10 @@ const SHARING_FORMAT_META: Readonly<Record<SharingFormat, SharingFormatMeta>> = 
   },
 };
 
+// `plaintext` is intentionally excluded — the user's identity card must never
+// be shared as raw, unattested data. The picker only cycles the cryptographic
+// formats; a legacy card stored as plaintext escapes to zkProof on first cycle.
 const SHARING_FORMAT_ORDER: readonly SharingFormat[] = [
-  'plaintext',
   'zkProof',
   'didSigned',
 ];
