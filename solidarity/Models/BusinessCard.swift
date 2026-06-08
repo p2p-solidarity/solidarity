@@ -269,7 +269,7 @@ struct SharingPreferences: Codable, Equatable, Hashable {
     allowForwarding: Bool = false,
     expirationDate: Date? = nil,
     useZK: Bool = true,
-    sharingFormat: SharingFormat = .didSigned
+    sharingFormat: SharingFormat = .zkProof
   ) {
     var publicSet = publicFields
     publicSet.insert(.name)

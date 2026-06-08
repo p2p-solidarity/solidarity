@@ -8,7 +8,7 @@
  *   personalFields     = BusinessCardField.allCases     // all 8
  *   allowForwarding    = false
  *   useZK              = true
- *   sharingFormat      = .didSigned
+ *   sharingFormat      = .zkProof
  *
  * The Swift init also force-inserts `.name` into every level. We do the
  * same in `withMandatoryName(...)` so callers can't construct a level
@@ -34,16 +34,9 @@
  *      against an allowlist, force ZK, and forbid forwarding — see
  *      `GroupSharingPolicy` in `types.ts`.
  */
-import type {
-  GroupCredentialContext,
-  SharingPreferences,
-} from '@solidarity/shared';
+import type { GroupCredentialContext, SharingPreferences } from '@solidarity/shared';
 
-import type {
-  BusinessCardField,
-  GroupSharingPolicy,
-  SharingLevel,
-} from './types';
+import type { BusinessCardField, GroupSharingPolicy, SharingLevel } from './types';
 
 const ALL_FIELDS: readonly BusinessCardField[] = [
   'name',
@@ -65,9 +58,7 @@ const PROFESSIONAL_FIELDS: readonly BusinessCardField[] = [
   'skills',
 ];
 
-function withMandatoryName(
-  fields: readonly BusinessCardField[]
-): Set<BusinessCardField> {
+function withMandatoryName(fields: readonly BusinessCardField[]): Set<BusinessCardField> {
   const out = new Set<BusinessCardField>(fields);
   out.add('name');
   return out;
@@ -84,9 +75,7 @@ function withMandatoryName(
  * task spec and so a future "tier-specific tightening" can land without
  * a signature change.
  */
-export function defaultSharingPreferencesForLevel(
-  _level: SharingLevel
-): SharingPreferences {
+export function defaultSharingPreferencesForLevel(_level: SharingLevel): SharingPreferences {
   return {
     publicFields: withMandatoryName(PUBLIC_FIELDS),
     professionalFields: withMandatoryName(PROFESSIONAL_FIELDS),
@@ -94,7 +83,7 @@ export function defaultSharingPreferencesForLevel(
     allowForwarding: false,
     expirationDate: undefined,
     useZK: true,
-    sharingFormat: 'didSigned',
+    sharingFormat: 'zkProof',
   };
 }
 
@@ -125,7 +114,7 @@ export function defaultPreferencesForGroupContext(
     allowForwarding: false,
     expirationDate: undefined,
     useZK: true,
-    sharingFormat: 'didSigned',
+    sharingFormat: 'zkProof',
   };
 }
 

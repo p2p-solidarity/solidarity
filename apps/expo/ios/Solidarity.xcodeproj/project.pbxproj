@@ -8,30 +8,30 @@
 
 /* Begin PBXBuildFile section */
 		13B07FBF1A68108700A75B9A /* Images.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 13B07FB51A68108700A75B9A /* Images.xcassets */; };
-		23E7E3B394DF5DC15251D3FB /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = 8004EF9DC5F06F34EC395F78 /* PrivacyInfo.xcprivacy */; };
 		3E461D99554A48A4959DE609 /* SplashScreen.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = AA286B85B6C04FC6940260E9 /* SplashScreen.storyboard */; };
-		9A281D005346B5E706F0FBDF /* ExpoModulesProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = 42FCE9930CE2B3E456047AE0 /* ExpoModulesProvider.swift */; };
-		9E982E057C0BF173F6A175E9 /* Pods_Solidarity.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 38F054811D0AE1394459674C /* Pods_Solidarity.framework */; };
-		9F0A3177AE9A40DCBACC87E3 /* SpruceIDMobileSdkRs in Frameworks */ = {isa = PBXBuildFile; productRef = 8A4A0E5BC2D74FED8358E335 /* SpruceIDMobileSdkRs */; };
+		6EA33B56ED6EC13F60AB949A /* Pods_Solidarity.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = D27742B6A29A3350BAE27643 /* Pods_Solidarity.framework */; };
+		7AA61D3B67A5F0A75C955849 /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = F2A218475718916DE80502B7 /* PrivacyInfo.xcprivacy */; };
+		7FB70EE9BF9F7C149B3273B2 /* ExpoModulesProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3250A2CF4F9A50758B55E866 /* ExpoModulesProvider.swift */; };
 		BB2F792D24A3F905000567C9 /* Expo.plist in Resources */ = {isa = PBXBuildFile; fileRef = BB2F792C24A3F905000567C9 /* Expo.plist */; };
-		D66D1509752444E3A9000C3A /* SpruceIDMobileSdk in Frameworks */ = {isa = PBXBuildFile; productRef = E2DADD929D74487499BF1888 /* SpruceIDMobileSdk */; };
+		BE177675CB064D559A42E6D5 /* SpruceIDMobileSdkRs in Frameworks */ = {isa = PBXBuildFile; productRef = CFDE777C76A341E494C0BAF4 /* SpruceIDMobileSdkRs */; };
 		F11748422D0307B40044C1D9 /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = F11748412D0307B40044C1D9 /* AppDelegate.swift */; };
+		FF281DB73ADD4CA5B47B9928 /* SpruceIDMobileSdk in Frameworks */ = {isa = PBXBuildFile; productRef = 2E3B22AE531F4E4B854AA840 /* SpruceIDMobileSdk */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
 		13B07F961A680F5B00A75B9A /* Solidarity.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Solidarity.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		13B07FB51A68108700A75B9A /* Images.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; name = Images.xcassets; path = Solidarity/Images.xcassets; sourceTree = "<group>"; };
 		13B07FB61A68108700A75B9A /* Info.plist */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text.plist.xml; name = Info.plist; path = Solidarity/Info.plist; sourceTree = "<group>"; };
-		26096E2060E97AA14637CB7C /* Pods-Solidarity.debug.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-Solidarity.debug.xcconfig"; path = "Target Support Files/Pods-Solidarity/Pods-Solidarity.debug.xcconfig"; sourceTree = "<group>"; };
-		38F054811D0AE1394459674C /* Pods_Solidarity.framework */ = {isa = PBXFileReference; explicitFileType = wrapper.framework; includeInIndex = 0; path = Pods_Solidarity.framework; sourceTree = BUILT_PRODUCTS_DIR; };
-		42FCE9930CE2B3E456047AE0 /* ExpoModulesProvider.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = ExpoModulesProvider.swift; path = "Pods/Target Support Files/Pods-Solidarity/ExpoModulesProvider.swift"; sourceTree = "<group>"; };
-		66C78EDFEA234A5815F7BB87 /* Pods-Solidarity.release.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-Solidarity.release.xcconfig"; path = "Target Support Files/Pods-Solidarity/Pods-Solidarity.release.xcconfig"; sourceTree = "<group>"; };
-		8004EF9DC5F06F34EC395F78 /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; includeInIndex = 1; name = PrivacyInfo.xcprivacy; path = Solidarity/PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
+		3250A2CF4F9A50758B55E866 /* ExpoModulesProvider.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = ExpoModulesProvider.swift; path = "Pods/Target Support Files/Pods-Solidarity/ExpoModulesProvider.swift"; sourceTree = "<group>"; };
+		3DD70B8C67AD4B8510086410 /* Pods-Solidarity.release.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-Solidarity.release.xcconfig"; path = "Target Support Files/Pods-Solidarity/Pods-Solidarity.release.xcconfig"; sourceTree = "<group>"; };
 		AA286B85B6C04FC6940260E9 /* SplashScreen.storyboard */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = file.storyboard; name = SplashScreen.storyboard; path = Solidarity/SplashScreen.storyboard; sourceTree = "<group>"; };
 		BB2F792C24A3F905000567C9 /* Expo.plist */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text.plist.xml; path = Expo.plist; sourceTree = "<group>"; };
+		D27742B6A29A3350BAE27643 /* Pods_Solidarity.framework */ = {isa = PBXFileReference; explicitFileType = wrapper.framework; includeInIndex = 0; path = Pods_Solidarity.framework; sourceTree = BUILT_PRODUCTS_DIR; };
+		E60D01D188BA52D481E3B3E4 /* Pods-Solidarity.debug.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-Solidarity.debug.xcconfig"; path = "Target Support Files/Pods-Solidarity/Pods-Solidarity.debug.xcconfig"; sourceTree = "<group>"; };
 		ED297162215061F000B7C4FE /* JavaScriptCore.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = JavaScriptCore.framework; path = System/Library/Frameworks/JavaScriptCore.framework; sourceTree = SDKROOT; };
 		F11748412D0307B40044C1D9 /* AppDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = AppDelegate.swift; path = Solidarity/AppDelegate.swift; sourceTree = "<group>"; };
 		F11748442D0722820044C1D9 /* Solidarity-Bridging-Header.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; name = "Solidarity-Bridging-Header.h"; path = "Solidarity/Solidarity-Bridging-Header.h"; sourceTree = "<group>"; };
+		F2A218475718916DE80502B7 /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; includeInIndex = 1; name = PrivacyInfo.xcprivacy; path = Solidarity/PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -39,9 +39,9 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				D66D1509752444E3A9000C3A /* SpruceIDMobileSdk in Frameworks */,
-				9F0A3177AE9A40DCBACC87E3 /* SpruceIDMobileSdkRs in Frameworks */,
-				9E982E057C0BF173F6A175E9 /* Pods_Solidarity.framework in Frameworks */,
+				FF281DB73ADD4CA5B47B9928 /* SpruceIDMobileSdk in Frameworks */,
+				BE177675CB064D559A42E6D5 /* SpruceIDMobileSdkRs in Frameworks */,
+				6EA33B56ED6EC13F60AB949A /* Pods_Solidarity.framework in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -57,15 +57,7 @@
 				13B07FB51A68108700A75B9A /* Images.xcassets */,
 				13B07FB61A68108700A75B9A /* Info.plist */,
 				AA286B85B6C04FC6940260E9 /* SplashScreen.storyboard */,
-				8004EF9DC5F06F34EC395F78 /* PrivacyInfo.xcprivacy */,
-			);
-			name = Solidarity;
-			sourceTree = "<group>";
-		};
-		2C13A3574BB60AAD11D1CFB0 /* Solidarity */ = {
-			isa = PBXGroup;
-			children = (
-				42FCE9930CE2B3E456047AE0 /* ExpoModulesProvider.swift */,
+				F2A218475718916DE80502B7 /* PrivacyInfo.xcprivacy */,
 			);
 			name = Solidarity;
 			sourceTree = "<group>";
@@ -74,9 +66,27 @@
 			isa = PBXGroup;
 			children = (
 				ED297162215061F000B7C4FE /* JavaScriptCore.framework */,
-				38F054811D0AE1394459674C /* Pods_Solidarity.framework */,
+				D27742B6A29A3350BAE27643 /* Pods_Solidarity.framework */,
 			);
 			name = Frameworks;
+			sourceTree = "<group>";
+		};
+		541EAB6200B9B8D497C692EB /* ExpoModulesProviders */ = {
+			isa = PBXGroup;
+			children = (
+				FBD067109A318362E974E6EA /* Solidarity */,
+			);
+			name = ExpoModulesProviders;
+			sourceTree = "<group>";
+		};
+		68EF0A49AB1A7B2BF86FDA81 /* Pods */ = {
+			isa = PBXGroup;
+			children = (
+				E60D01D188BA52D481E3B3E4 /* Pods-Solidarity.debug.xcconfig */,
+				3DD70B8C67AD4B8510086410 /* Pods-Solidarity.release.xcconfig */,
+			);
+			name = Pods;
+			path = Pods;
 			sourceTree = "<group>";
 		};
 		832341AE1AAA6A7D00B99B32 /* Libraries */ = {
@@ -93,8 +103,8 @@
 				832341AE1AAA6A7D00B99B32 /* Libraries */,
 				83CBBA001A601CBA00E9B192 /* Products */,
 				2D16E6871FA4F8E400B85C8A /* Frameworks */,
-				D056DD6CC02397B65CDC2603 /* Pods */,
-				F97FE569040AC51394A1608E /* ExpoModulesProviders */,
+				68EF0A49AB1A7B2BF86FDA81 /* Pods */,
+				541EAB6200B9B8D497C692EB /* ExpoModulesProviders */,
 			);
 			indentWidth = 2;
 			sourceTree = "<group>";
@@ -118,22 +128,12 @@
 			path = Solidarity/Supporting;
 			sourceTree = "<group>";
 		};
-		D056DD6CC02397B65CDC2603 /* Pods */ = {
+		FBD067109A318362E974E6EA /* Solidarity */ = {
 			isa = PBXGroup;
 			children = (
-				26096E2060E97AA14637CB7C /* Pods-Solidarity.debug.xcconfig */,
-				66C78EDFEA234A5815F7BB87 /* Pods-Solidarity.release.xcconfig */,
+				3250A2CF4F9A50758B55E866 /* ExpoModulesProvider.swift */,
 			);
-			name = Pods;
-			path = Pods;
-			sourceTree = "<group>";
-		};
-		F97FE569040AC51394A1608E /* ExpoModulesProviders */ = {
-			isa = PBXGroup;
-			children = (
-				2C13A3574BB60AAD11D1CFB0 /* Solidarity */,
-			);
-			name = ExpoModulesProviders;
+			name = Solidarity;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
@@ -144,13 +144,13 @@
 			buildConfigurationList = 13B07F931A680F5B00A75B9A /* Build configuration list for PBXNativeTarget "Solidarity" */;
 			buildPhases = (
 				08A4A3CD28434E44B6B9DE2E /* [CP] Check Pods Manifest.lock */,
-				ACE9FC817C2BE250C3F7EDEE /* [Expo] Configure project */,
+				1E71C764B9A4922C96B71E0C /* [Expo] Configure project */,
 				13B07F871A680F5B00A75B9A /* Sources */,
 				13B07F8C1A680F5B00A75B9A /* Frameworks */,
 				13B07F8E1A680F5B00A75B9A /* Resources */,
 				00DD1BFF1BD5951E006B06BC /* Bundle React Native code and images */,
 				800E24972A6A228C8D4807E9 /* [CP] Copy Pods Resources */,
-				406A80ACAB34963F0D77B54F /* [CP] Embed Pods Frameworks */,
+				2D625D1E20CF8520A3FDB914 /* [CP] Embed Pods Frameworks */,
 			);
 			buildRules = (
 			);
@@ -158,8 +158,8 @@
 			);
 			name = Solidarity;
 			packageProductDependencies = (
-				E2DADD929D74487499BF1888 /* SpruceIDMobileSdk */,
-				8A4A0E5BC2D74FED8358E335 /* SpruceIDMobileSdkRs */,
+				2E3B22AE531F4E4B854AA840 /* SpruceIDMobileSdk */,
+				CFDE777C76A341E494C0BAF4 /* SpruceIDMobileSdkRs */,
 			);
 			productName = Solidarity;
 			productReference = 13B07F961A680F5B00A75B9A /* Solidarity.app */;
@@ -188,7 +188,7 @@
 			);
 			mainGroup = 83CBB9F61A601CBA00E9B192;
 			packageReferences = (
-				7400E5B0FB60496A9A87FA3D /* XCRemoteSwiftPackageReference "sprucekit-mobile" */,
+				B9C95CE74585454985453E68 /* XCRemoteSwiftPackageReference "sprucekit-mobile" */,
 			);
 			productRefGroup = 83CBBA001A601CBA00E9B192 /* Products */;
 			projectDirPath = "";
@@ -207,7 +207,7 @@
 				BB2F792D24A3F905000567C9 /* Expo.plist in Resources */,
 				13B07FBF1A68108700A75B9A /* Images.xcassets in Resources */,
 				3E461D99554A48A4959DE609 /* SplashScreen.storyboard in Resources */,
-				23E7E3B394DF5DC15251D3FB /* PrivacyInfo.xcprivacy in Resources */,
+				7AA61D3B67A5F0A75C955849 /* PrivacyInfo.xcprivacy in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -253,7 +253,31 @@
 			shellScript = "diff \"${PODS_PODFILE_DIR_PATH}/Podfile.lock\" \"${PODS_ROOT}/Manifest.lock\" > /dev/null\nif [ $? != 0 ] ; then\n    # print error to STDERR\n    echo \"error: The sandbox is not in sync with the Podfile.lock. Run 'pod install' or update your CocoaPods installation.\" >&2\n    exit 1\nfi\n# This output is used by Xcode 'outputs' to avoid re-running this script phase.\necho \"SUCCESS\" > \"${SCRIPT_OUTPUT_FILE_0}\"\n";
 			showEnvVarsInLog = 0;
 		};
-		406A80ACAB34963F0D77B54F /* [CP] Embed Pods Frameworks */ = {
+		1E71C764B9A4922C96B71E0C /* [Expo] Configure project */ = {
+			isa = PBXShellScriptBuildPhase;
+			alwaysOutOfDate = 1;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputFileListPaths = (
+			);
+			inputPaths = (
+				"$(SRCROOT)/.xcode.env",
+				"$(SRCROOT)/.xcode.env.local",
+				"$(SRCROOT)/Solidarity/Solidarity.entitlements",
+				"$(SRCROOT)/Pods/Target Support Files/Pods-Solidarity/expo-configure-project.sh",
+			);
+			name = "[Expo] Configure project";
+			outputFileListPaths = (
+			);
+			outputPaths = (
+				"$(SRCROOT)/Pods/Target Support Files/Pods-Solidarity/ExpoModulesProvider.swift",
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "# This script configures Expo modules and generates the modules provider file.\nbash -l -c \"./Pods/Target\\ Support\\ Files/Pods-Solidarity/expo-configure-project.sh\"\n";
+		};
+		2D625D1E20CF8520A3FDB914 /* [CP] Embed Pods Frameworks */ = {
 			isa = PBXShellScriptBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -361,30 +385,6 @@
 			shellScript = "\"${PODS_ROOT}/Target Support Files/Pods-Solidarity/Pods-Solidarity-resources.sh\"\n";
 			showEnvVarsInLog = 0;
 		};
-		ACE9FC817C2BE250C3F7EDEE /* [Expo] Configure project */ = {
-			isa = PBXShellScriptBuildPhase;
-			alwaysOutOfDate = 1;
-			buildActionMask = 2147483647;
-			files = (
-			);
-			inputFileListPaths = (
-			);
-			inputPaths = (
-				"$(SRCROOT)/.xcode.env",
-				"$(SRCROOT)/.xcode.env.local",
-				"$(SRCROOT)/Solidarity/Solidarity.entitlements",
-				"$(SRCROOT)/Pods/Target Support Files/Pods-Solidarity/expo-configure-project.sh",
-			);
-			name = "[Expo] Configure project";
-			outputFileListPaths = (
-			);
-			outputPaths = (
-				"$(SRCROOT)/Pods/Target Support Files/Pods-Solidarity/ExpoModulesProvider.swift",
-			);
-			runOnlyForDeploymentPostprocessing = 0;
-			shellPath = /bin/sh;
-			shellScript = "# This script configures Expo modules and generates the modules provider file.\nbash -l -c \"./Pods/Target\\ Support\\ Files/Pods-Solidarity/expo-configure-project.sh\"\n";
-		};
 /* End PBXShellScriptBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
@@ -393,7 +393,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				F11748422D0307B40044C1D9 /* AppDelegate.swift in Sources */,
-				9A281D005346B5E706F0FBDF /* ExpoModulesProvider.swift in Sources */,
+				7FB70EE9BF9F7C149B3273B2 /* ExpoModulesProvider.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -402,7 +402,7 @@
 /* Begin XCBuildConfiguration section */
 		13B07F941A680F5B00A75B9A /* Debug */ = {
 			isa = XCBuildConfiguration;
-			baseConfigurationReference = 26096E2060E97AA14637CB7C /* Pods-Solidarity.debug.xcconfig */;
+			baseConfigurationReference = E60D01D188BA52D481E3B3E4 /* Pods-Solidarity.debug.xcconfig */;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CLANG_ENABLE_MODULES = YES;
@@ -440,7 +440,7 @@
 		};
 		13B07F951A680F5B00A75B9A /* Release */ = {
 			isa = XCBuildConfiguration;
-			baseConfigurationReference = 66C78EDFEA234A5815F7BB87 /* Pods-Solidarity.release.xcconfig */;
+			baseConfigurationReference = 3DD70B8C67AD4B8510086410 /* Pods-Solidarity.release.xcconfig */;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CLANG_ENABLE_MODULES = YES;
@@ -658,7 +658,7 @@
 /* End XCConfigurationList section */
 
 /* Begin XCRemoteSwiftPackageReference section */
-		7400E5B0FB60496A9A87FA3D /* XCRemoteSwiftPackageReference "sprucekit-mobile" */ = {
+		B9C95CE74585454985453E68 /* XCRemoteSwiftPackageReference "sprucekit-mobile" */ = {
 			isa = XCRemoteSwiftPackageReference;
 			repositoryURL = "https://github.com/spruceid/sprucekit-mobile";
 			requirement = {
@@ -669,15 +669,15 @@
 /* End XCRemoteSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
-		8A4A0E5BC2D74FED8358E335 /* SpruceIDMobileSdkRs */ = {
+		2E3B22AE531F4E4B854AA840 /* SpruceIDMobileSdk */ = {
 			isa = XCSwiftPackageProductDependency;
-			package = 7400E5B0FB60496A9A87FA3D /* XCRemoteSwiftPackageReference "sprucekit-mobile" */;
-			productName = SpruceIDMobileSdkRs;
-		};
-		E2DADD929D74487499BF1888 /* SpruceIDMobileSdk */ = {
-			isa = XCSwiftPackageProductDependency;
-			package = 7400E5B0FB60496A9A87FA3D /* XCRemoteSwiftPackageReference "sprucekit-mobile" */;
+			package = B9C95CE74585454985453E68 /* XCRemoteSwiftPackageReference "sprucekit-mobile" */;
 			productName = SpruceIDMobileSdk;
+		};
+		CFDE777C76A341E494C0BAF4 /* SpruceIDMobileSdkRs */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = B9C95CE74585454985453E68 /* XCRemoteSwiftPackageReference "sprucekit-mobile" */;
+			productName = SpruceIDMobileSdkRs;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};

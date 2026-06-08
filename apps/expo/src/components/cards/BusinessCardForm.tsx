@@ -5,7 +5,7 @@
  * Sections (verbatim Swift headings + placeholders):
  *   • Basic Info        → Name (required, * marker) / Title / Company
  *   • Contact and Skills→ Email / Phone / Skills / Categories / LinkedIn / GitHub
- *   • Sharing Preferences → ZK toggle / Allow forwarding toggle / Format picker
+ *   • Sharing Preferences → Allow forwarding toggle / ZK-DID format switch
  *   • Save Changes | Create Card (full-width primary, disabled until name)
  *   • Danger Zone (edit only) → Delete Card
  *
@@ -13,16 +13,11 @@
  *   • ./cardFormRows.tsx     — FieldRow / NameField / ToggleRow / FormatRow / etc.
  *   • ./cardFormParsers.ts   — parseCSV / parseSkills / parseSocialNetworks
  */
-import { Text, View } from 'react-native';
+import { View } from 'react-native';
 
 import { ThemedButton } from '@/components/themed';
 import { confirmDialog } from '@/feedback/confirmDialog';
-import {
-  uuid,
-  type BusinessCard,
-  type SharingFormat,
-  type SharingPreferences,
-} from '@solidarity/shared';
+import { uuid, type BusinessCard, type SharingPreferences } from '@solidarity/shared';
 
 import {
   DangerRow,
@@ -32,13 +27,8 @@ import {
   SectionHeader,
   ToggleRow,
 } from './cardFormRows';
-import {
-  nilIfEmpty,
-  parseCSV,
-  parseSkills,
-  parseSocialNetworks,
-} from './cardFormParsers';
-import { useBusinessCardFormState } from './useBusinessCardFormState';
+import { nilIfEmpty, parseCSV, parseSkills, parseSocialNetworks } from './cardFormParsers';
+import { type SelectableSharingFormat, useBusinessCardFormState } from './useBusinessCardFormState';
 
 export interface BusinessCardFormProps {
   readonly initialCard?: BusinessCard;
@@ -47,37 +37,12 @@ export interface BusinessCardFormProps {
   readonly onDelete?: () => void | Promise<void>;
 }
 
-interface SharingFormatMeta {
-  readonly id: SharingFormat;
-  readonly displayName: string;
-  readonly detail: string;
-}
-
-const SHARING_FORMAT_META: Readonly<Record<SharingFormat, SharingFormatMeta>> = {
-  plaintext: {
-    id: 'plaintext',
-    displayName: 'Plaintext',
-    detail: 'Share raw card data without cryptographic attestation.',
-  },
-  zkProof: {
-    id: 'zkProof',
-    displayName: 'ZK Proof',
-    detail: 'Generate a zero-knowledge proof for the selected fields.',
-  },
-  didSigned: {
-    id: 'didSigned',
-    displayName: 'DID-Signed',
-    detail: 'Sign the card payload with your DID for verifiable authenticity.',
-  },
+const SHARING_FORMAT_LABEL: Readonly<Record<SelectableSharingFormat, string>> = {
+  zkProof: 'ZK Proof',
+  didSigned: 'DID-Signed',
 };
 
-// `plaintext` is intentionally excluded — the user's identity card must never
-// be shared as raw, unattested data. The picker only cycles the cryptographic
-// formats; a legacy card stored as plaintext escapes to zkProof on first cycle.
-const SHARING_FORMAT_ORDER: readonly SharingFormat[] = [
-  'zkProof',
-  'didSigned',
-];
+const SHARING_FORMAT_ORDER: readonly SelectableSharingFormat[] = ['zkProof', 'didSigned'];
 
 export function BusinessCardForm({
   initialCard,
@@ -88,8 +53,6 @@ export function BusinessCardForm({
   const isEditing = initialCard !== undefined && !forceCreate;
   const state = useBusinessCardFormState(initialCard);
   const trimmedName = state.name.trim();
-  const detail = SHARING_FORMAT_META[state.selectedFormat].detail;
-  const formatLabel = SHARING_FORMAT_META[state.selectedFormat].displayName;
 
   const handleSave = async () => {
     if (trimmedName.length === 0) return;
@@ -111,10 +74,8 @@ export function BusinessCardForm({
   };
 
   const cycleFormat = () => {
-    const idx = SHARING_FORMAT_ORDER.indexOf(state.selectedFormat);
-    const next =
-      SHARING_FORMAT_ORDER[(idx + 1) % SHARING_FORMAT_ORDER.length] ??
-      state.selectedFormat;
+    const index = SHARING_FORMAT_ORDER.indexOf(state.selectedFormat);
+    const next = SHARING_FORMAT_ORDER[(index + 1) % SHARING_FORMAT_ORDER.length] ?? 'zkProof';
     state.setSelectedFormat(next);
   };
 
@@ -183,22 +144,13 @@ export function BusinessCardForm({
         <SectionHeader title="Sharing Preferences" />
         <View style={{ paddingHorizontal: 16, gap: 8 }}>
           <ToggleRow
-            icon="shield"
-            title="Use ZK proof by default"
-            value={state.useZK}
-            onChange={state.setUseZK}
-          />
-          <ToggleRow
             icon="arrowshape.turn.up.right"
             title="Allow forwarding"
             value={state.allowForwarding}
             onChange={state.setAllowForwarding}
           />
-          <FormatRow trailing={formatLabel} onPress={cycleFormat} />
+          <FormatRow trailing={SHARING_FORMAT_LABEL[state.selectedFormat]} onPress={cycleFormat} />
         </View>
-        <Text className="text-text3 text-[12px]" style={{ paddingHorizontal: 16 }}>
-          {detail}
-        </Text>
       </View>
 
       <View style={{ paddingHorizontal: 16 }}>
@@ -238,20 +190,6 @@ function buildCard(
   state: ReturnType<typeof useBusinessCardFormState>,
   trimmedName: string
 ): BusinessCard {
-  const preferences: SharingPreferences = {
-    publicFields: existing?.sharingPreferences.publicFields ?? new Set(['name']),
-    professionalFields:
-      existing?.sharingPreferences.professionalFields ??
-      new Set(['name', 'title', 'company', 'email']),
-    personalFields:
-      existing?.sharingPreferences.personalFields ??
-      new Set(['name', 'email', 'phone']),
-    allowForwarding: state.allowForwarding,
-    useZK: state.useZK,
-    sharingFormat: state.selectedFormat,
-    expirationDate: existing?.sharingPreferences.expirationDate,
-  };
-
   const now = new Date();
   return {
     id: existing?.id ?? uuid(),
@@ -265,11 +203,33 @@ function buildCard(
     socialNetworks: parseSocialNetworks(state.linkedInHandle, state.githubHandle),
     skills: parseSkills(state.skillsText),
     categories: parseCSV(state.categoriesText),
-    sharingPreferences: preferences,
+    sharingPreferences: buildSharingPreferences(
+      existing,
+      state.allowForwarding,
+      state.selectedFormat
+    ),
     groupContext: existing?.groupContext,
     verifiedFields: existing?.verifiedFields,
     nameType: existing?.nameType ?? 'display_name',
     createdAt: existing?.createdAt ?? now,
     updatedAt: now,
+  };
+}
+
+function buildSharingPreferences(
+  existing: BusinessCard | undefined,
+  allowForwarding: boolean,
+  selectedFormat: SelectableSharingFormat
+): SharingPreferences {
+  const existingPreferences = existing?.sharingPreferences;
+  return {
+    publicFields: existingPreferences?.publicFields ?? new Set(['name']),
+    professionalFields:
+      existingPreferences?.professionalFields ?? new Set(['name', 'title', 'company', 'email']),
+    personalFields: existingPreferences?.personalFields ?? new Set(['name', 'email', 'phone']),
+    allowForwarding,
+    useZK: selectedFormat === 'zkProof',
+    sharingFormat: selectedFormat,
+    expirationDate: existingPreferences?.expirationDate,
   };
 }

@@ -54,7 +54,9 @@ export default function OnboardingFlow() {
     dispatch({ type: 'goTo', step });
   }, []);
 
-  const next = useCallback(() => { dispatch({ type: 'next' }); }, []);
+  const next = useCallback(() => {
+    dispatch({ type: 'next' });
+  }, []);
 
   // Faithful port of Swift's `PassportOnboardingFlowView(onCompleted:)` closure
   // (OnboardingFlowView.swift): when the shared /passport route finishes a
@@ -71,12 +73,9 @@ export default function OnboardingFlow() {
     []
   );
 
-  const handleProfileChange = useCallback(
-    (field: keyof OnboardingProfile, value: string) => {
-      dispatch({ type: 'setProfileField', field, value });
-    },
-    []
-  );
+  const handleProfileChange = useCallback((field: keyof OnboardingProfile, value: string) => {
+    dispatch({ type: 'setProfileField', field, value });
+  }, []);
 
   const handleFinish = async () => {
     setPref('hasCompletedOnboarding', true);
@@ -110,8 +109,12 @@ export default function OnboardingFlow() {
       body = (
         <AvatarSelectionGridStep
           selection={state.animal}
-          onSelect={(animal) => { dispatch({ type: 'setAnimal', animal }); }}
-          onBack={() => { goTo('profileSetup'); }}
+          onSelect={(animal) => {
+            dispatch({ type: 'setAnimal', animal });
+          }}
+          onBack={() => {
+            goTo('profileSetup');
+          }}
           onNext={next}
         />
       );
@@ -119,7 +122,9 @@ export default function OnboardingFlow() {
     case 'secureKeys':
       body = (
         <SecureKeysStep
-          onBack={() => { goTo('avatarSetup'); }}
+          onBack={() => {
+            goTo('avatarSetup');
+          }}
           onKeysGenerated={() => {
             dispatch({ type: 'setKeysGenerated', value: true });
             next();
@@ -131,9 +136,13 @@ export default function OnboardingFlow() {
       body = (
         <ImportContactsStep
           importedCount={state.importedCount}
-          onBack={() => { goTo('secureKeys'); }}
+          onBack={() => {
+            goTo('secureKeys');
+          }}
           onAdvance={next}
-          onImported={(count) => { dispatch({ type: 'setImportedCount', count }); }}
+          onImported={(count) => {
+            dispatch({ type: 'setImportedCount', count });
+          }}
         />
       );
       break;
@@ -141,7 +150,9 @@ export default function OnboardingFlow() {
       body = (
         <ScanPassportStep
           passportScanned={state.passportScanned}
-          onBack={() => { goTo('importContacts'); }}
+          onBack={() => {
+            goTo('importContacts');
+          }}
           onAdvance={next}
         />
       );
@@ -153,7 +164,9 @@ export default function OnboardingFlow() {
           keysGenerated={state.keysGenerated}
           importedCount={state.importedCount}
           passportScanned={state.passportScanned}
-          onFinish={() => { void handleFinish(); }}
+          onFinish={() => {
+            void handleFinish();
+          }}
         />
       );
       break;
@@ -168,12 +181,11 @@ export default function OnboardingFlow() {
     <View style={{ flex: 1 }}>
       <Stack.Screen options={{ presentation: 'fullScreenModal' }} />
       {body}
-      <View
-        pointerEvents="box-none"
-        style={{ position: 'absolute', top: 54, right: 20 }}
-      >
+      <View pointerEvents="box-none" style={{ position: 'absolute', top: 54, right: 20 }}>
         <Pressable
-          onPress={() => { router.back(); }}
+          onPress={() => {
+            router.back();
+          }}
           accessibilityRole="button"
           accessibilityLabel={t('onboardingFlow.close')}
           hitSlop={8}
@@ -182,8 +194,7 @@ export default function OnboardingFlow() {
             backgroundColor: Colors.searchBg,
             borderWidth: 1,
             borderColor: Colors.divider,
-          }}
-        >
+          }}>
           <SfIcon name="xmark" size={14} weight="bold" color={Colors.text2} />
         </Pressable>
       </View>
@@ -191,7 +202,10 @@ export default function OnboardingFlow() {
   );
 }
 
-function composeInitialCard(profile: OnboardingProfile, animal: BusinessCard['animal']): BusinessCard {
+function composeInitialCard(
+  profile: OnboardingProfile,
+  animal: BusinessCard['animal']
+): BusinessCard {
   const now = new Date();
   const socials: SocialNetwork[] = [];
   const x = profile.xTwitter.trim();
@@ -220,7 +234,7 @@ function composeInitialCard(profile: OnboardingProfile, animal: BusinessCard['an
       allowForwarding: true,
       // ZK on by default for the user's own identity card — never share raw.
       useZK: true,
-      sharingFormat: 'didSigned',
+      sharingFormat: 'zkProof',
     },
     verifiedFields: undefined,
     nameType: 'display_name',

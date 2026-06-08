@@ -2,7 +2,7 @@
  * SharingPreferences — mirrors solidarity/Models/BusinessCard.swift.
  *
  * Migration path: legacy Swift Codable instances may lack `sharingFormat`.
- * In Swift it defaults to `.didSigned` via a custom init(from decoder:).
+ * In Swift it defaults to `.zkProof` via a custom init(from decoder:).
  * We replicate that default via `.default(...)` so legacy JSON parses
  * cleanly without losing data.
  *
@@ -25,15 +25,12 @@ import { businessCardFieldSchema, sharingFormatSchema } from './sharingFormat';
 //                       entries are genuinely gone; we recover as empty set
 //                       rather than crash, and the user re-edits to repopulate.
 const fieldSetSchema = z
-  .preprocess(
-    (val) => {
-      if (val instanceof Set) return Array.from(val);
-      if (Array.isArray(val)) return val;
-      if (val && typeof val === 'object') return [];
-      return val;
-    },
-    z.array(businessCardFieldSchema)
-  )
+  .preprocess((val: unknown): unknown => {
+    if (val instanceof Set) return Array.from(val);
+    if (Array.isArray(val)) return val;
+    if (val && typeof val === 'object') return [];
+    return val;
+  }, z.array(businessCardFieldSchema))
   .transform((a) => new Set(a));
 
 export const sharingPreferencesSchema = z.object({
@@ -43,7 +40,7 @@ export const sharingPreferencesSchema = z.object({
   allowForwarding: z.boolean().default(true),
   expirationDate: z.coerce.date().optional(),
   useZK: z.boolean().default(false),
-  sharingFormat: sharingFormatSchema.default('didSigned'),
+  sharingFormat: sharingFormatSchema.default('zkProof'),
 });
 export type SharingPreferences = z.infer<typeof sharingPreferencesSchema>;
 

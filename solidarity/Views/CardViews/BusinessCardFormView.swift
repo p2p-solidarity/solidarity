@@ -17,9 +17,8 @@ struct BusinessCardFormView: View {
   @State private var categoriesText = ""
   @State private var linkedInHandle = ""
   @State private var githubHandle = ""
-  @State private var useZK = true
   @State private var allowForwarding = false
-  @State private var selectedFormat: SharingFormat = .didSigned
+  @State private var selectedFormat: SharingFormat = .zkProof
 
   @State private var showingDeleteConfirm = false
   @State private var showingErrorAlert = false
@@ -39,6 +38,10 @@ struct BusinessCardFormView: View {
 
   private var trimmedName: String {
     name.trimmingCharacters(in: .whitespacesAndNewlines)
+  }
+
+  private var selectableSharingFormats: [SharingFormat] {
+    [.zkProof, .didSigned]
   }
 
   var body: some View {
@@ -162,11 +165,6 @@ struct BusinessCardFormView: View {
 
       VStack(spacing: 8) {
         SettingsBlockToggleRow(
-          icon: "shield",
-          title: "Use ZK proof by default",
-          isOn: $useZK
-        )
-        SettingsBlockToggleRow(
           icon: "arrowshape.turn.up.right",
           title: "Allow forwarding",
           isOn: $allowForwarding
@@ -174,7 +172,7 @@ struct BusinessCardFormView: View {
 
         Menu {
           Picker("Sharing format", selection: $selectedFormat) {
-            ForEach(SharingFormat.allCases) { format in
+            ForEach(selectableSharingFormats) { format in
               Text(format.displayName).tag(format)
             }
           }
@@ -188,11 +186,6 @@ struct BusinessCardFormView: View {
         }
       }
       .padding(.horizontal, 16)
-
-      Text(selectedFormat.detail)
-        .font(.system(size: 12))
-        .foregroundColor(Color.Theme.textTertiary)
-        .padding(.horizontal, 16)
     }
   }
 
@@ -266,9 +259,8 @@ struct BusinessCardFormView: View {
       businessCard.socialNetworks.first(where: { $0.platform == .linkedin })?.username ?? ""
     githubHandle =
       businessCard.socialNetworks.first(where: { $0.platform == .github })?.username ?? ""
-    useZK = businessCard.sharingPreferences.useZK
     allowForwarding = businessCard.sharingPreferences.allowForwarding
-    selectedFormat = businessCard.sharingPreferences.sharingFormat
+    selectedFormat = selectableFormat(businessCard.sharingPreferences.sharingFormat)
   }
 
   private func persistCard() {
@@ -285,7 +277,7 @@ struct BusinessCardFormView: View {
 
     let preferences = SharingPreferences(
       allowForwarding: allowForwarding,
-      useZK: useZK,
+      useZK: selectedFormat == .zkProof,
       sharingFormat: selectedFormat
     )
 
@@ -319,6 +311,10 @@ struct BusinessCardFormView: View {
     case .failure(let error):
       showError(error.localizedDescription)
     }
+  }
+
+  private func selectableFormat(_ format: SharingFormat) -> SharingFormat {
+    format == .didSigned ? .didSigned : .zkProof
   }
 
   private func deleteCard() {

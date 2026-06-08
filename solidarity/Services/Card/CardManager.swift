@@ -29,7 +29,7 @@ class CardManager: BusinessCardManagerProtocol, ObservableObject {
   private let storageManager = StorageManager.shared
   private var cancellables = Set<AnyCancellable>()
 
-  private static let didMigrateSharingFormatKey = "migration_sharing_format_to_didSigned_v1"
+  private static let didMigrateSharingFormatKey = "migration_sharing_format_to_zkProof_v1"
 
   private init() {
     loadCardsFromStorage()
@@ -37,12 +37,12 @@ class CardManager: BusinessCardManagerProtocol, ObservableObject {
   }
 
   /// One-shot migration: upgrade any existing cards with .plaintext format
-  /// to .didSigned so all users get VC-based sharing by default.
+  /// to .zkProof so all users get ZK-proof sharing by default.
   private func migrateSharingFormatIfNeeded() {
     guard !UserDefaults.standard.bool(forKey: Self.didMigrateSharingFormatKey) else { return }
     var didMigrate = false
     for i in businessCards.indices where businessCards[i].sharingPreferences.sharingFormat == .plaintext {
-      businessCards[i].sharingPreferences.sharingFormat = .didSigned
+      businessCards[i].sharingPreferences.sharingFormat = .zkProof
       didMigrate = true
     }
     if didMigrate {

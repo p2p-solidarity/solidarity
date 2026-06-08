@@ -25,12 +25,7 @@ import * as Contacts from 'expo-contacts';
 
 import { useContactStore } from './repository';
 import { sha256 } from '@noble/hashes/sha2.js';
-import {
-  parseVCardBundle,
-  uuid,
-  type Contact,
-  type ParsedVCard,
-} from '@solidarity/shared';
+import { parseVCardBundle, uuid, type Contact, type ParsedVCard } from '@solidarity/shared';
 
 function vcfToContact(vc: ParsedVCard): Contact {
   const now = new Date();
@@ -56,8 +51,8 @@ function vcfToContact(vc: ParsedVCard): Contact {
         professionalFields: new Set(['name', 'title', 'company', 'email']),
         personalFields: new Set(['name', 'email', 'phone']),
         allowForwarding: true,
-        useZK: false,
-        sharingFormat: 'didSigned',
+        useZK: true,
+        sharingFormat: 'zkProof',
       },
       verifiedFields: undefined,
       nameType: 'display_name',
@@ -127,7 +122,7 @@ function deterministicUUID(seed: string): string {
   );
 }
 
-type DeviceContactDetails = {
+interface DeviceContactDetails {
   readonly id: string;
   readonly fullName?: string | null;
   readonly givenName?: string | null;
@@ -137,13 +132,11 @@ type DeviceContactDetails = {
   readonly company?: string | null;
   readonly jobTitle?: string;
   readonly image?: string | null;
-};
+}
 
 function deviceContactToContact(c: DeviceContactDetails): Contact | undefined {
   const composed = nilIfBlank(c.fullName ?? undefined);
-  const fallback = nilIfBlank(
-    `${c.givenName ?? ''} ${c.familyName ?? ''}`.trim()
-  );
+  const fallback = nilIfBlank(`${c.givenName ?? ''} ${c.familyName ?? ''}`.trim());
   const name = composed ?? fallback;
   if (!name) return undefined;
 
@@ -183,8 +176,8 @@ function deviceContactToContact(c: DeviceContactDetails): Contact | undefined {
         professionalFields: new Set(['name', 'title', 'company', 'email']),
         personalFields: new Set(['name', 'email', 'phone']),
         allowForwarding: true,
-        useZK: false,
-        sharingFormat: 'didSigned',
+        useZK: true,
+        sharingFormat: 'zkProof',
       },
       verifiedFields: undefined,
       nameType: 'display_name',
@@ -256,9 +249,7 @@ export async function importFromDevicePicker(): Promise<{
   // v56 class API: `Contact.presentPicker()` returns the selected contact's
   // detail bag (or null when the user cancels). The older
   // `presentContactPickerAsync` throws at runtime in v56.
-  const picked = (await Contacts.Contact.presentPicker()) as
-    | DeviceContactDetails
-    | null;
+  const picked = (await Contacts.Contact.presentPicker()) as DeviceContactDetails | null;
   if (!picked) return { granted: true, cancelled: true, count: 0 };
 
   const c = deviceContactToContact(picked);
@@ -310,8 +301,7 @@ export async function loadDeviceContacts(): Promise<{
   const perm = await Contacts.requestPermissionsAsync();
   const granted = perm.status === Contacts.PermissionStatus.GRANTED;
   if (!granted) return { access: 'none', rows: [] };
-  const access: ContactAccess =
-    perm.accessPrivileges === 'limited' ? 'limited' : 'all';
+  const access: ContactAccess = perm.accessPrivileges === 'limited' ? 'limited' : 'all';
 
   const details = (await Contacts.Contact.getAllDetails([
     Contacts.ContactField.FULL_NAME,
@@ -326,27 +316,35 @@ export async function loadDeviceContacts(): Promise<{
 
   const rows: DeviceContactPickerRow[] = [];
   const seen = new Set<string>();
-  for (let i = 0; i < details.length; i += 1) {
-    const raw = details[i]!;
-    const composed = nilIfBlank(raw.fullName ?? undefined);
-    const fallback = nilIfBlank(`${raw.givenName ?? ''} ${raw.familyName ?? ''}`.trim());
-    const name = composed ?? fallback;
-    if (!name) continue;
-    const email = nilIfBlank(raw.emails?.[0]?.address);
-    const phone = nilIfBlank(raw.phones?.[0]?.number);
-    const company = nilIfBlank(raw.company ?? undefined);
-    const title = nilIfBlank(raw.jobTitle);
-    const orgLine = [company, title].filter(Boolean).join(' · ');
-    const subtitle = email ?? phone ?? (orgLine.length > 0 ? orgLine : undefined);
-    // Use the OS id when available, fall back to an index-stamped key so
-    // FlashList keys stay unique even on platforms that surface `null`.
-    const key = raw.id && raw.id.length > 0 ? `cn:${raw.id}` : `idx:${String(i)}`;
-    if (seen.has(key)) continue;
-    seen.add(key);
-    rows.push({ key, name, subtitle, email, phone, raw });
+  for (const [index, raw] of details.entries()) {
+    const row = deviceContactPickerRow(raw, index, seen);
+    if (row) rows.push(row);
   }
   rows.sort((a, b) => a.name.localeCompare(b.name));
   return { access, rows };
+}
+
+function deviceContactPickerRow(
+  raw: DeviceContactDetails,
+  index: number,
+  seen: Set<string>
+): DeviceContactPickerRow | undefined {
+  const composed = nilIfBlank(raw.fullName ?? undefined);
+  const fallback = nilIfBlank(`${raw.givenName ?? ''} ${raw.familyName ?? ''}`.trim());
+  const name = composed ?? fallback;
+  if (!name) return undefined;
+
+  const email = nilIfBlank(raw.emails?.[0]?.address);
+  const phone = nilIfBlank(raw.phones?.[0]?.number);
+  const company = nilIfBlank(raw.company ?? undefined);
+  const title = nilIfBlank(raw.jobTitle);
+  const orgLine = [company, title].filter(Boolean).join(' · ');
+  const subtitle = email ?? phone ?? (orgLine.length > 0 ? orgLine : undefined);
+  const key = raw.id && raw.id.length > 0 ? `cn:${raw.id}` : `idx:${String(index)}`;
+  if (seen.has(key)) return undefined;
+
+  seen.add(key);
+  return { key, name, subtitle, email, phone, raw };
 }
 
 /**
@@ -367,7 +365,7 @@ export async function presentContactAccessPicker(): Promise<number> {
  * the same contact does not create a second row.
  */
 export async function importDeviceContacts(
-  rows: readonly DeviceContactPickerRow[],
+  rows: readonly DeviceContactPickerRow[]
 ): Promise<number> {
   if (rows.length === 0) return 0;
   const upsert = useContactStore.getState().upsert;

@@ -238,14 +238,6 @@ extension BusinessCardListView {
     }
   }
 
-  fileprivate func updateSharingFormat(for cardId: UUID, format: SharingFormat) {
-    guard var updatedCard = cardManager.businessCards.first(where: { $0.id == cardId }) else { return }
-    updatedCard.sharingPreferences.sharingFormat = format
-    // Enforce ZK by default as requested
-    updatedCard.sharingPreferences.useZK = true
-    _ = cardManager.updateCard(updatedCard)
-  }
-
   @ViewBuilder
   fileprivate var sharingBannerTop: some View {
     if proximityManager.isAdvertising {

@@ -49,8 +49,8 @@ export default function ManualContactEntry() {
           professionalFields: new Set(['name', 'title', 'company', 'email']),
           personalFields: new Set(['name', 'email', 'phone']),
           allowForwarding: true,
-          useZK: false,
-          sharingFormat: 'didSigned',
+          useZK: true,
+          sharingFormat: 'zkProof',
         },
         verifiedFields: undefined,
         nameType: 'display_name',
@@ -65,23 +65,55 @@ export default function ManualContactEntry() {
   return (
     <ScrollView
       className="flex-1 bg-pageBg"
-      contentContainerStyle={{ paddingBottom: insets.bottom + 24 }}
-    >
+      contentContainerStyle={{ paddingBottom: insets.bottom + 24 }}>
       <View className="px-4" style={{ paddingTop: insets.top + 12 }}>
-        <ThemedButton variant="secondary" size="sm" label={t('contactManual.back')} onPress={() => { router.back(); }} />
+        <ThemedButton
+          variant="secondary"
+          size="sm"
+          label={t('contactManual.back')}
+          onPress={() => {
+            router.back();
+          }}
+        />
       </View>
       <View className="px-4 py-4">
         <ThemedText variant="headlineLarge">{t('contactManual.title')}</ThemedText>
       </View>
 
       {[
-        { label: 'NAME', displayLabel: t('contactManual.fieldName'), value: name, set: setName, placeholder: 'Ada Lovelace' },
-        { label: 'EMAIL', displayLabel: t('contactManual.fieldEmail'), value: email, set: setEmail, placeholder: 'ada@solidarity.gg' },
-        { label: 'PHONE', displayLabel: t('contactManual.fieldPhone'), value: phone, set: setPhone, placeholder: '+1 555 0100' },
-        { label: 'COMPANY', displayLabel: t('contactManual.fieldCompany'), value: company, set: setCompany, placeholder: 'Solidarity' },
+        {
+          label: 'NAME',
+          displayLabel: t('contactManual.fieldName'),
+          value: name,
+          set: setName,
+          placeholder: 'Ada Lovelace',
+        },
+        {
+          label: 'EMAIL',
+          displayLabel: t('contactManual.fieldEmail'),
+          value: email,
+          set: setEmail,
+          placeholder: 'ada@solidarity.gg',
+        },
+        {
+          label: 'PHONE',
+          displayLabel: t('contactManual.fieldPhone'),
+          value: phone,
+          set: setPhone,
+          placeholder: '+1 555 0100',
+        },
+        {
+          label: 'COMPANY',
+          displayLabel: t('contactManual.fieldCompany'),
+          value: company,
+          set: setCompany,
+          placeholder: 'Solidarity',
+        },
       ].map((f) => (
         <ThemedSurface key={f.label} variant="card" padded className="mx-4 mb-2">
-          <ThemedText variant="caption" tone="tertiary">{f.displayLabel}</ThemedText>
+          <ThemedText variant="caption" tone="tertiary">
+            {f.displayLabel}
+          </ThemedText>
           <TextInput
             value={f.value}
             onChangeText={f.set}
@@ -91,17 +123,19 @@ export default function ManualContactEntry() {
             keyboardType={
               f.label === 'EMAIL' ? 'email-address' : f.label === 'PHONE' ? 'phone-pad' : 'default'
             }
-            className="text-text1 mt-1 py-1"
+            className="mt-1 py-1 text-text1"
           />
         </ThemedSurface>
       ))}
 
-      <View className="px-4 mt-4 mb-10">
+      <View className="mb-10 mt-4 px-4">
         <ThemedButton
           label={t('contactManual.save')}
           fullWidth
           disabled={name.trim().length === 0}
-          onPress={() => { void onSave(); }}
+          onPress={() => {
+            void onSave();
+          }}
         />
       </View>
     </ScrollView>

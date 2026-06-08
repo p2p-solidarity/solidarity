@@ -48,9 +48,7 @@ export function recogniseText(
   return Promise.resolve([] as readonly RecognizedText[]);
 }
 
-export function extractBusinessCardFields(
-  observations: readonly RecognizedText[]
-): OcrResult {
+export function extractBusinessCardFields(observations: readonly RecognizedText[]): OcrResult {
   const confidenceScores: Record<string, number> = {};
   // Top → bottom matches Swift `sort { $0.boundingBox.minY > $1.boundingBox.minY }`.
   // In Vision's coordinate system minY=0 is the bottom, so the largest minY
@@ -136,8 +134,8 @@ function buildExtractedCard(fields: ExtractedFields): BusinessCard {
     professionalFields: new Set(['name', 'title', 'company', 'email']),
     personalFields: new Set(['name', 'email', 'phone']),
     allowForwarding: true,
-    useZK: false,
-    sharingFormat: 'didSigned',
+    useZK: true,
+    sharingFormat: 'zkProof',
     expirationDate: undefined,
   };
 
@@ -171,10 +169,7 @@ function extractEmail(text: string): string | undefined {
   return m ? m[0] : undefined;
 }
 
-const PHONE_PATTERNS: readonly RegExp[] = [
-  /\+?1?[0-9]{10,}/u,
-  /[0-9]{3}[0-9]{3}[0-9]{4}/u,
-];
+const PHONE_PATTERNS: readonly RegExp[] = [/\+?1?[0-9]{10,}/u, /[0-9]{3}[0-9]{3}[0-9]{4}/u];
 
 function extractPhone(text: string): string | undefined {
   const cleaned = text

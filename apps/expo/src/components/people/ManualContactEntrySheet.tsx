@@ -49,8 +49,7 @@ export function ManualContactEntrySheet({
       visible={visible}
       animationType="slide"
       presentationStyle="formSheet"
-      onRequestClose={onClose}
-    >
+      onRequestClose={onClose}>
       <ManualContactEntryContent onClose={onClose} onSaved={onSaved} />
     </Modal>
   );
@@ -110,8 +109,8 @@ function ManualContactEntryContent({
           professionalFields: new Set(['name', 'title', 'company', 'email']),
           personalFields: new Set(['name', 'email', 'phone']),
           allowForwarding: true,
-          useZK: false,
-          sharingFormat: 'didSigned',
+          useZK: true,
+          sharingFormat: 'zkProof',
         },
         verifiedFields: undefined,
         nameType: 'display_name',
@@ -131,16 +130,14 @@ function ManualContactEntryContent({
   return (
     <KeyboardAvoidingView
       behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-      style={{ flex: 1, backgroundColor: Colors.pageBg }}
-    >
+      style={{ flex: 1, backgroundColor: Colors.pageBg }}>
       <View style={{ paddingTop: insets.top }}>
         <Toolbar onCancel={onClose} onSave={onSave} canSave={canSave} />
       </View>
 
       <ScrollView
         keyboardShouldPersistTaps="handled"
-        contentContainerStyle={{ paddingHorizontal: 16, paddingTop: 16, paddingBottom: 32 }}
-      >
+        contentContainerStyle={{ paddingHorizontal: 16, paddingTop: 16, paddingBottom: 32 }}>
         <View style={{ rowGap: 20 }}>
           <FieldRow
             label="Name"
@@ -194,8 +191,7 @@ function ManualContactEntryContent({
                 fontFamily: 'Menlo',
                 color: Colors.destructive,
                 paddingTop: 4,
-              }}
-            >
+              }}>
               {validationMessage}
             </Text>
           ) : null}
@@ -222,8 +218,7 @@ function Toolbar({
   return (
     <View
       className="flex-row items-center justify-between"
-      style={{ paddingHorizontal: 16, height: 44 }}
-    >
+      style={{ paddingHorizontal: 16, height: 44 }}>
       <Pressable accessibilityRole="button" onPress={onCancel} hitSlop={8}>
         <Text className="text-text1" style={{ fontSize: 16 }}>
           Cancel
@@ -234,19 +229,13 @@ function Toolbar({
         Add Contact
       </Text>
 
-      <Pressable
-        accessibilityRole="button"
-        onPress={onSave}
-        disabled={!canSave}
-        hitSlop={8}
-      >
+      <Pressable accessibilityRole="button" onPress={onSave} disabled={!canSave} hitSlop={8}>
         <Text
           style={{
             fontSize: 16,
             color: canSave ? Colors.text1 : Colors.text3,
             fontWeight: '600',
-          }}
-        >
+          }}>
           Save
         </Text>
       </Pressable>
@@ -277,22 +266,18 @@ function FieldRow({
 }: FieldRowProps): ReactNode {
   return (
     <View style={{ rowGap: 6 }}>
-      <Text
-        className="text-text3"
-        style={{ fontSize: 12, fontWeight: '700', fontFamily: 'Menlo' }}
-      >
+      <Text className="text-text3" style={{ fontSize: 12, fontWeight: '700', fontFamily: 'Menlo' }}>
         {label}
       </Text>
       <View
-        className="bg-searchBg rounded-sm2"
+        className="rounded-sm2 bg-searchBg"
         style={{
           height: 44,
           paddingHorizontal: 12,
           borderWidth: 0.5,
           borderColor: Colors.divider,
           justifyContent: 'center',
-        }}
-      >
+        }}>
         <TextInput
           value={value}
           onChangeText={onChange}

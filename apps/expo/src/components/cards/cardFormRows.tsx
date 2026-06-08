@@ -96,9 +96,7 @@ export function NameField({
         style={{ flex: 1, fontSize: 15, color: Colors.text1, padding: 0 }}
       />
       {trimmed.length === 0 ? (
-        <Text style={{ fontSize: 15, fontWeight: '600', color: Colors.destructive }}>
-          *
-        </Text>
+        <Text style={{ fontSize: 15, fontWeight: '600', color: Colors.destructive }}>*</Text>
       ) : null}
     </View>
   );
@@ -120,7 +118,7 @@ export function ToggleRow({
       <View style={ROW_STYLES.iconBox}>
         <SfIcon name={icon} size={14} color={Colors.text1} />
       </View>
-      <Text className="text-text1 text-[15px]" style={{ flex: 1 }}>
+      <Text className="text-[15px] text-text1" style={{ flex: 1 }}>
         {title}
       </Text>
       <Switch
@@ -132,28 +130,21 @@ export function ToggleRow({
   );
 }
 
-export function FormatRow({
-  trailing,
-  onPress,
-}: {
-  trailing: string;
-  onPress: () => void;
-}) {
+export function FormatRow({ trailing, onPress }: { trailing: string; onPress: () => void }) {
   return (
     <Pressable
       onPress={onPress}
       accessibilityRole="button"
       accessibilityLabel="Sharing format"
       accessibilityValue={{ text: trailing }}
-      style={ROW_STYLES.container}
-    >
+      style={ROW_STYLES.container}>
       <View style={ROW_STYLES.iconBox}>
         <SfIcon name="square.and.arrow.up.on.square" size={14} color={Colors.text1} />
       </View>
-      <Text className="text-text1 text-[15px]" style={{ flex: 1 }}>
+      <Text className="text-[15px] text-text1" style={{ flex: 1 }}>
         Sharing format
       </Text>
-      <Text className="text-text2 text-[13px]">{trailing}</Text>
+      <Text className="text-[13px] text-text2">{trailing}</Text>
     </Pressable>
   );
 }
@@ -171,8 +162,7 @@ export function DangerRow({
     <Pressable
       onPress={onPress}
       accessibilityRole="button"
-      style={[ROW_STYLES.container, { paddingVertical: 14 }]}
-    >
+      style={[ROW_STYLES.container, { paddingVertical: 14 }]}>
       <View style={ROW_STYLES.iconBox}>
         <SfIcon name={icon} size={14} color={Colors.destructive} />
       </View>
@@ -184,7 +174,7 @@ export function DangerRow({
 export function SectionHeader({ title }: { title: string }) {
   return (
     <View style={{ paddingHorizontal: 16 }}>
-      <Text className="text-text1 text-[14px]">{title}</Text>
+      <Text className="text-[14px] text-text1">{title}</Text>
     </View>
   );
 }
