@@ -8,6 +8,7 @@
  * every level has rejected the payload (or the engine itself isn't loaded).
  */
 import { describe, expect, it } from 'bun:test';
+import { readFileSync } from 'node:fs';
 
 import { generateQrPng } from '@/cards/qrCodeManager';
 import { base64Encode, utf8ToBytes } from '@solidarity/shared';
@@ -40,6 +41,16 @@ async function engineAvailable(): Promise<boolean> {
 }
 
 describe('generateQrPng — cascading error-correction levels', () => {
+  it('loads qrcode with Metro-compatible static syntax', () => {
+    const source = readFileSync(
+      new URL('../../src/cards/qrCodeManager.ts', import.meta.url),
+      'utf8',
+    );
+
+    expect(source).not.toContain('@vite-ignore');
+    expect(source).not.toMatch(/import\(\s*[^'"`]/u);
+  });
+
   it('emits a real SVG (not the fallback rectangle) for short payloads', async () => {
     if (!(await engineAvailable())) {
       // Without the engine the only output is the fallback rectangle, so

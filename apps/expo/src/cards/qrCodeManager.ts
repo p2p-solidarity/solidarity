@@ -50,16 +50,14 @@ interface QrCodeModule {
 let qrModuleCache: QrCodeModule | null = null;
 let qrModuleFailed = false;
 
-async function loadQrModule(): Promise<QrCodeModule | null> {
+function loadQrModule(): QrCodeModule | null {
   if (qrModuleCache) return qrModuleCache;
   if (qrModuleFailed) return null;
   try {
     // `qrcode` ships no .d.ts in this version; cast through unknown so
     // the type system doesn't complain. Behaviour is verified at runtime
     // via the `toString` typeof guard below.
-    const dynamicImport = (id: string): Promise<unknown> =>
-      (import(/* @vite-ignore */ id) as Promise<unknown>);
-    const raw = (await dynamicImport('qrcode')) as { default?: QrCodeModule } & Partial<QrCodeModule>;
+    const raw = require('qrcode') as { default?: QrCodeModule } & Partial<QrCodeModule>;
     const candidate = raw.default ?? (raw as QrCodeModule);
     if (typeof candidate.toString === 'function') {
       qrModuleCache = candidate;
@@ -92,7 +90,7 @@ const CASCADE_LEVELS: readonly ErrorCorrectionLevel[] = ['H', 'Q', 'M', 'L'] as 
 export async function generateQrPng(value: string, opts: GenerateOptions = {}): Promise<string> {
   const size = opts.size ?? 256;
   const startingLevel = opts.startingLevel ?? 'H';
-  const mod = await loadQrModule();
+  const mod = loadQrModule();
   if (mod) {
     const startIndex = Math.max(0, CASCADE_LEVELS.indexOf(startingLevel));
     let lastError: unknown = null;
