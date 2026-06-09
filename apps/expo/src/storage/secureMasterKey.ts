@@ -8,12 +8,13 @@
  *
  * Behaviour (parity with Swift):
  *   - First launch: generate 32 random bytes, store under MASTER_KEY_ALIAS_V2.
- *   - Subsequent launches: read MASTER_KEY_ALIAS_V2.
- *   - Legacy upgrade: if v2 missing AND v1 alias present (from the prior
- *     Swift install), copy v1 into v2 and KEEP v1 around (Swift treated
- *     v1 as a quarantined fallback after iCloud Keychain phantom-entry
- *     bug; we preserve that defence in case the user's iCloud syncs
- *     bring back the phantom).
+ *   - Subsequent launches: read MASTER_KEY_ALIAS_V2, unless a Swift legacy
+ *     raw key is still present; that key wins and repairs any bad v2 value
+ *     minted by the pre-recovery Expo restore path.
+ *   - Legacy upgrade: if a Swift-era alias is present, copy it into v2 and
+ *     KEEP the legacy item around (Swift treated v1 as a quarantined fallback
+ *     after an iCloud Keychain phantom-entry bug; we preserve that defence in
+ *     case the user's iCloud syncs bring back the phantom).
  */
 import * as SecureStore from 'expo-secure-store';
 
@@ -39,17 +40,10 @@ const MASTER_KEY_ALIAS_V2 = 'gg.solidarity.master.v2';
 // wrote, so the legacy branch was always a miss → a fresh key was minted and
 // the user's encrypted cards/contacts/vault became undecryptable.
 //
-// CORRECT FIX (requires native, hence a device-verified follow-up — NOT added
-// here to keep the JS/native build green): add a raw-Keychain read to the
-// secrets-vault Nitro module —
-//   func readLegacyGenericPassword(service: String, account: String) -> Data?
-//     { SecItemCopyMatching([kSecClass: kSecClassGenericPassword,
-//        kSecAttrService: service, kSecAttrAccount: account,
-//        kSecReturnData: true, kSecMatchLimit: kSecMatchLimitOne]) }
-// then, in getMasterKey(), before generating a fresh key, try the four
-// (service, account) legacy combinations above and base64-store the recovered
-// raw bytes under MASTER_KEY_ALIAS_V2. Android returns nil (no legacy iOS data).
-// See memory `parity-audit-2026-06`.
+// Recovery path: before generating a fresh key, try the four legacy
+// (service, account) combinations through the secrets-vault Nitro module's
+// raw Keychain reader, then base64-store any recovered 32-byte value under
+// MASTER_KEY_ALIAS_V2. Android returns an empty buffer (no legacy iOS data).
 const LEGACY_IOS_KEY_SERVICES = ['solidarity', 'airmeishi'] as const;
 const LEGACY_IOS_KEY_ACCOUNTS = [
   'com.kidneyweakx.solidarity.encryption.key',
@@ -66,19 +60,31 @@ async function readKey(alias: string): Promise<Uint8Array | null> {
   return stored ? base64Decode(stored) : null;
 }
 
+async function readRawLegacyKey(service: string, account: string): Promise<Uint8Array | null> {
+  try {
+    const { getSecretsVault } = await import('@solidarity/nitro-secrets-vault');
+    const raw = await getSecretsVault().readRawKeychainGenericPassword(service, account);
+    if (!raw) return null;
+    const bytes = new Uint8Array(raw);
+    return bytes.length === 32 ? Uint8Array.from(bytes) : null;
+  } catch {
+    return null;
+  }
+}
+
 /**
  * Best-effort recovery of a legacy iOS master key written by the Swift app.
  * Targets the CORRECT Keychain coordinates (service + account) the Swift
- * EncryptionManager used. NOTE: this succeeds only if the stored value decodes
- * as 32 bytes; the Swift app wrote RAW bytes (not base64) into kSecValueData,
- * which expo-secure-store cannot return as a string — so for most upgraders
- * this returns null and the caller mints a fresh key. Full recovery of the
- * raw-byte key needs the native secrets-vault read documented above. Returns
- * null on any miss/format mismatch; never throws.
+ * EncryptionManager used. Prefer the native raw-byte reader because the Swift
+ * app stored raw AES bytes in kSecValueData. The SecureStore/base64 path stays
+ * as a compatibility fallback for prerelease Expo builds that wrote the same
+ * aliases as strings. Returns null on any miss/format mismatch; never throws.
  */
 async function tryRecoverLegacyMasterKey(): Promise<Uint8Array | null> {
   for (const service of LEGACY_IOS_KEY_SERVICES) {
     for (const account of LEGACY_IOS_KEY_ACCOUNTS) {
+      const raw = await readRawLegacyKey(service, account);
+      if (raw) return raw;
       try {
         const stored = await SecureStore.getItemAsync(account, {
           ...SECURE_OPTS,
@@ -100,6 +106,15 @@ async function writeKey(alias: string, bytes: Uint8Array): Promise<void> {
   await SecureStore.setItemAsync(alias, base64Encode(bytes), SECURE_OPTS);
 }
 
+function bytesEqual(a: Uint8Array, b: Uint8Array): boolean {
+  if (a.length !== b.length) return false;
+  let diff = 0;
+  for (let i = 0; i < a.length; i += 1) {
+    diff |= a[i]! ^ b[i]!;
+  }
+  return diff === 0;
+}
+
 // Cache the master key for the JS runtime. Without this, every encrypt /
 // decrypt call hit SecureStore — loading 100 records cost 100 × ~2ms
 // Keychain hops *before* any AES work, blowing the cold-launch budget.
@@ -111,8 +126,8 @@ let cachedKey: Uint8Array | null = null;
 let pending: Promise<Uint8Array> | null = null;
 
 /**
- * Get the active master key. Generates one if absent. Performs the v1→v2
- * upgrade exactly once per install. Subsequent calls hit the in-memory
+ * Get the active master key. Reconciles a Swift-era legacy key into the v2
+ * slot before using or generating a key. Subsequent calls hit the in-memory
  * cache; concurrent first-callers coalesce on a single SecureStore read.
  */
 export async function getMasterKey(): Promise<Uint8Array> {
@@ -121,18 +136,21 @@ export async function getMasterKey(): Promise<Uint8Array> {
   pending = (async () => {
     try {
       const v2 = await readKey(MASTER_KEY_ALIAS_V2);
-      if (v2) { cachedKey = v2; return v2; }
 
       // Legacy iOS in-place upgrade: try to recover the Swift-era master key
-      // from its real Keychain coordinates. (Best-effort — see the
-      // tryRecoverLegacyMasterKey / LEGACY_IOS_KEY_* notes above; raw-byte
-      // recovery needs the native secrets-vault read.)
+      // from its real Keychain coordinates. It must win even when v2 already
+      // exists because build 137 could mint and persist the wrong v2 key
+      // during a failed restore attempt.
       const legacy = await tryRecoverLegacyMasterKey();
       if (legacy) {
-        await writeKey(MASTER_KEY_ALIAS_V2, legacy);
+        if (!v2 || !bytesEqual(v2, legacy)) {
+          await writeKey(MASTER_KEY_ALIAS_V2, legacy);
+        }
         cachedKey = legacy;
         return legacy;
       }
+
+      if (v2) { cachedKey = v2; return v2; }
 
       const fresh = generateAesKey();
       await writeKey(MASTER_KEY_ALIAS_V2, fresh);

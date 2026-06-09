@@ -49,6 +49,10 @@ abstract class HybridSecretsVaultSpec: HybridObject() {
   @DoNotStrip
   @Keep
   abstract fun deleteKey(keyAlias: String): Promise<Unit>
+  
+  @DoNotStrip
+  @Keep
+  abstract fun readRawKeychainGenericPassword(service: String, account: String): Promise<ArrayBuffer>
 
   // Default implementation of `HybridObject.toString()`
   override fun toString(): String {

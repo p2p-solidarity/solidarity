@@ -126,6 +126,36 @@ final class HybridSecretsVault: HybridSecretsVaultSpec {
     }
   }
 
+  // MARK: - readRawKeychainGenericPassword
+
+  func readRawKeychainGenericPassword(service: String, account: String) throws -> Promise<ArrayBuffer> {
+    return Promise.async {
+      guard !service.isEmpty, !account.isEmpty else {
+        return ArrayBuffer.allocate(size: 0)
+      }
+      let query: [String: Any] = [
+        kSecClass as String: kSecClassGenericPassword,
+        kSecAttrService as String: service,
+        kSecAttrAccount as String: account,
+        kSecAttrSynchronizable as String: kSecAttrSynchronizableAny,
+        kSecReturnData as String: true,
+        kSecMatchLimit as String: kSecMatchLimitOne,
+      ]
+      var item: AnyObject?
+      let status = SecItemCopyMatching(query as CFDictionary, &item)
+      if status == errSecItemNotFound {
+        return ArrayBuffer.allocate(size: 0)
+      }
+      guard status == errSecSuccess, let data = item as? Data else {
+        if status == errSecSuccess {
+          return ArrayBuffer.allocate(size: 0)
+        }
+        throw self.makeError(code: Int(status), "legacy keychain read failed status=\(status)")
+      }
+      return self.toArrayBuffer(data)
+    }
+  }
+
   // MARK: - Key store (Secure Enclave preferred, software fallback on sim)
 
   /// Stored shape: opaque `dataRepresentation` of the SE / software P-256

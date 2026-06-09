@@ -238,6 +238,15 @@ class HybridSecretsVault : HybridSecretsVaultSpec() {
     Unit
   }
 
+  // MARK: - readRawKeychainGenericPassword
+
+  override fun readRawKeychainGenericPassword(
+    service: String,
+    account: String
+  ): Promise<ArrayBuffer> = Promise.async {
+    ArrayBuffer.allocate(0)
+  }
+
   // MARK: - Internal
 
   private fun loadKey(keyAlias: String): SecretKey {

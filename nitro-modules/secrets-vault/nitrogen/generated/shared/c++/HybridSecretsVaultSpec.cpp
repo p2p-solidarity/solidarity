@@ -19,6 +19,7 @@ namespace margelo::nitro::solidarity::secretsvault {
       prototype.registerHybridMethod("wrap", &HybridSecretsVaultSpec::wrap);
       prototype.registerHybridMethod("unwrap", &HybridSecretsVaultSpec::unwrap);
       prototype.registerHybridMethod("deleteKey", &HybridSecretsVaultSpec::deleteKey);
+      prototype.registerHybridMethod("readRawKeychainGenericPassword", &HybridSecretsVaultSpec::readRawKeychainGenericPassword);
     });
   }
 

@@ -63,4 +63,14 @@ export interface SecretsVault
   unwrap(wrapped: WrappedSecret): Promise<ArrayBuffer>;
   /** Delete the wrapping key. The wrapped blob becomes permanently unrecoverable. */
   deleteKey(keyAlias: string): Promise<void>;
+  /**
+   * iOS-only legacy migration helper. Reads a raw generic-password Keychain
+   * item addressed by `(service, account)` and returns its bytes. Returns an
+   * empty buffer when the item is missing or the platform has no matching
+   * legacy Keychain store.
+   */
+  readRawKeychainGenericPassword(
+    service: string,
+    account: string
+  ): Promise<ArrayBuffer>;
 }

@@ -59,6 +59,7 @@ namespace margelo::nitro::solidarity::secretsvault {
     std::shared_ptr<Promise<WrappedSecret>> wrap(const std::string& keyAlias, const std::shared_ptr<ArrayBuffer>& plaintext) override;
     std::shared_ptr<Promise<std::shared_ptr<ArrayBuffer>>> unwrap(const WrappedSecret& wrapped) override;
     std::shared_ptr<Promise<void>> deleteKey(const std::string& keyAlias) override;
+    std::shared_ptr<Promise<std::shared_ptr<ArrayBuffer>>> readRawKeychainGenericPassword(const std::string& service, const std::string& account) override;
 
   private:
     jni::global_ref<JHybridSecretsVaultSpec::JavaPart> _javaPart;
