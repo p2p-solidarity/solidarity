@@ -58,6 +58,11 @@ import {
   type PassportProofResult,
 } from '@/passport/pipeline';
 import {
+  derivePassportFingerprint,
+  findPassportDuplicate,
+  passportFingerprintTag,
+} from '@/passport/persistence';
+import {
   buildDisclosureWitness,
   DEFAULT_DISCLOSURE_POLICY,
 } from '@/passport/zkInputs';
@@ -115,6 +120,22 @@ function parseMrzYyMmDd(yymmdd: string): Date | null {
   const year = yy <= 69 ? 2000 + yy : 1900 + yy;
   const d = new Date(Date.UTC(year, mm - 1, dd));
   return Number.isNaN(d.getTime()) ? null : d;
+}
+
+async function findSavedPassportDuplicate(fingerprint: string) {
+  await useCredentialStore.getState().hydrate();
+  await useIdentityData.getState().hydrate();
+
+  const identityDuplicate = findPassportDuplicate(
+    fingerprint,
+    useIdentityData.getState().identityCards
+  );
+  if (identityDuplicate) return identityDuplicate;
+
+  return findPassportDuplicate(
+    fingerprint,
+    Array.from(useCredentialStore.getState().details.values())
+  );
 }
 
 export default function PassportSetup() {
@@ -235,9 +256,18 @@ export default function PassportSetup() {
 
   const onGenerateProof = async () => {
     if (!state.chip) return;
-    dispatch({ type: 'setLoading', value: true });
-    dispatch({ type: 'setProofProgress', message: 'Initializing prover...' });
     try {
+      const passportFingerprint = derivePassportFingerprint(state.draft);
+      const duplicate = await findSavedPassportDuplicate(passportFingerprint);
+      if (duplicate) {
+        pushToast(
+          'This passport credential is already saved. Delete the existing passport before scanning it again.',
+          'warning'
+        );
+        return;
+      }
+      dispatch({ type: 'setLoading', value: true });
+      dispatch({ type: 'setProofProgress', message: 'Initializing prover...' });
       let proof: PassportProofResult;
       // Build the v3 disclosure witness from real chip MRZ + the default
       // KYC policy (disclose nationality + age ≥ 18, hide name). Anything
@@ -327,152 +357,172 @@ export default function PassportSetup() {
       pushToast('Passport flow not complete', 'warning');
       return;
     }
-    const draft = state.draft;
-    const chip = state.chip;
-    const proof = state.proof;
+    dispatch({ type: 'setLoading', value: true });
+    try {
+      const draft = state.draft;
+      const chip = state.chip;
+      const proof = state.proof;
 
-    const trustLevel = mapTrustLevel(proof.trustLevel);
-    const cardId = uuid();
-    const now = new Date();
-    const issuerType = chip.isSimulated ? 'selfIssued' : 'government';
-    const issuerDid = chip.isSimulated
-      ? `did:self:passport:${cardId}`
-      : `did:gov:passport:${draft.nationalityCode}`;
-    // FAIL CLOSED on the holder binding — 1:1 with Swift
-    // PassportPipelineService.persistProof (lines 132-141): if the master
-    // signing key has not resolved yet (e.g. iCloud Keychain not synced),
-    // NEVER fabricate a `did:key:${cardId}` placeholder. That UUID is not
-    // derived from any key, so the credential would look valid in lists /
-    // presentation but cannot be cryptographically bound to the user — it
-    // "poisons the vault". Resolve the real signing-key DID and abort if it
-    // is unavailable so the user re-tries after sync.
-    let holderDid = activeDid;
-    if (holderDid == null || holderDid.length === 0) {
-      try {
-        holderDid = await didKeyForCurrentIdentity();
-      } catch {
-        holderDid = null;
+      const trustLevel = mapTrustLevel(proof.trustLevel);
+      const passportFingerprint = derivePassportFingerprint(draft);
+      const duplicate = await findSavedPassportDuplicate(passportFingerprint);
+      if (duplicate) {
+        pushToast(
+          'This passport credential is already saved. Delete the existing passport before scanning it again.',
+          'warning'
+        );
+        return;
       }
-    }
-    if (holderDid == null || holderDid.length === 0) {
-      pushToast(
-        'Identity key not ready — wait for iCloud Keychain sync, then retry.',
-        'error'
-      );
-      return;
-    }
-    const expiry = parseMrzYyMmDd(draft.expiryDate);
-    const metadataTags: string[] = [];
-    if (proof.proofType.startsWith('mopro-noir')) metadataTags.push('mopro-noir');
-    if (proof.proofType.startsWith('semaphore')) metadataTags.push('semaphore-zk');
-    if (proof.proofType === 'sd-jwt-fallback') metadataTags.push('sd-jwt-fallback');
-    if (chip.isSimulated) metadataTags.push('simulated');
-    if (proof.generationFailed) metadataTags.push('fallback');
+      const cardId = uuid();
+      const now = new Date();
+      const issuerType = chip.isSimulated ? 'selfIssued' : 'government';
+      const issuerDid = chip.isSimulated
+        ? `did:self:passport:${cardId}`
+        : `did:gov:passport:${draft.nationalityCode}`;
+      // FAIL CLOSED on the holder binding — 1:1 with Swift
+      // PassportPipelineService.persistProof (lines 132-141): if the master
+      // signing key has not resolved yet (e.g. iCloud Keychain not synced),
+      // NEVER fabricate a `did:key:${cardId}` placeholder. That UUID is not
+      // derived from any key, so the credential would look valid in lists /
+      // presentation but cannot be cryptographically bound to the user — it
+      // "poisons the vault". Resolve the real signing-key DID and abort if it
+      // is unavailable so the user re-tries after sync.
+      let holderDid = activeDid;
+      if (holderDid == null || holderDid.length === 0) {
+        try {
+          holderDid = await didKeyForCurrentIdentity();
+        } catch {
+          holderDid = null;
+        }
+      }
+      if (holderDid == null || holderDid.length === 0) {
+        pushToast(
+          'Identity key not ready — wait for iCloud Keychain sync, then retry.',
+          'error'
+        );
+        return;
+      }
+      const expiry = parseMrzYyMmDd(draft.expiryDate);
+      const metadataTags: string[] = [passportFingerprintTag(passportFingerprint)];
+      if (proof.proofType.startsWith('mopro-noir')) metadataTags.push('mopro-noir');
+      if (proof.proofType.startsWith('semaphore')) metadataTags.push('semaphore-zk');
+      if (proof.proofType === 'sd-jwt-fallback') metadataTags.push('sd-jwt-fallback');
+      if (chip.isSimulated) metadataTags.push('simulated');
+      if (proof.generationFailed) metadataTags.push('fallback');
 
-    await useCredentialStore.getState().add({
-      id: cardId,
-      type: 'passport',
-      title: chip.isSimulated ? 'Passport (dev-mode)' : 'Passport',
-      issuerDid,
-      holderDid,
-      trustLevel,
-      rawJwt: proof.proofPayload,
-      issuedAt: now,
-      ...(expiry ? { expiresAt: expiry } : {}),
-      metadataTags,
-    });
+      await useCredentialStore.getState().add({
+        id: cardId,
+        type: 'passport',
+        title: chip.isSimulated ? 'Passport (dev-mode)' : 'Passport',
+        issuerDid,
+        holderDid,
+        trustLevel,
+        rawJwt: proof.proofPayload,
+        issuedAt: now,
+        ...(expiry ? { expiresAt: expiry } : {}),
+        metadataTags,
+      });
 
-    await useIdentityData.getState().upsertIdentityCard({
-      id: cardId,
-      type: 'passport',
-      issuerType,
-      trustLevel,
-      title: chip.isSimulated ? 'Passport (dev-mode)' : 'Passport',
-      issuerDid,
-      holderDid,
-      issuedAt: now,
-      ...(expiry ? { expiresAt: expiry } : {}),
-      status: proof.generationFailed
-        ? 'fallback'
-        : chip.isSimulated
-        ? 'simulated'
-        : 'verified',
-      sourceReference: chip.isSimulated ? 'MRZ+NFC(simulated)' : 'MRZ+NFC',
-      rawCredentialJWT: proof.proofPayload,
-      metadataTags,
-      createdAt: now,
-      updatedAt: now,
-    });
+      await useIdentityData.getState().upsertIdentityCard({
+        id: cardId,
+        type: 'passport',
+        issuerType,
+        trustLevel,
+        title: chip.isSimulated ? 'Passport (dev-mode)' : 'Passport',
+        issuerDid,
+        holderDid,
+        issuedAt: now,
+        ...(expiry ? { expiresAt: expiry } : {}),
+        status: proof.generationFailed
+          ? 'fallback'
+          : chip.isSimulated
+          ? 'simulated'
+          : 'verified',
+        sourceReference: chip.isSimulated ? 'MRZ+NFC(simulated)' : 'MRZ+NFC',
+        rawCredentialJWT: proof.proofPayload,
+        metadataTags,
+        createdAt: now,
+        updatedAt: now,
+      });
 
-    const claimPayload = (claim: string): string => {
-      const parts: string[] = [
-        `"claim":"${claim}"`,
-        `"proof":"${proof.proofType}"`,
-        `"identity_card_id":"${cardId}"`,
+      const claimPayload = (claim: string): string => {
+        const parts: string[] = [
+          `"claim":"${claim}"`,
+          `"proof":"${proof.proofType}"`,
+          `"identity_card_id":"${cardId}"`,
+        ];
+        if (chip.isSimulated) parts.push(`"is_simulated":true`);
+        return `{${parts.join(',')}}`;
+      };
+      const claims: ProvableClaimEntity[] = [
+        {
+          id: uuid(),
+          identityCardId: cardId,
+          claimType: 'age_over_18',
+          title: 'I am over 18',
+          issuerType,
+          trustLevel,
+          source: 'Passport',
+          payload: claimPayload('age_over_18'),
+          isPresentable: true,
+          createdAt: now,
+          updatedAt: now,
+        },
+        {
+          id: uuid(),
+          identityCardId: cardId,
+          claimType: 'is_human',
+          title: 'I am a real person',
+          issuerType,
+          trustLevel,
+          source: 'Passport',
+          payload: claimPayload('is_human'),
+          isPresentable: true,
+          createdAt: now,
+          updatedAt: now,
+        },
+        {
+          id: uuid(),
+          identityCardId: cardId,
+          claimType: 'field_name',
+          title: chip.isSimulated
+            ? 'Name (dev-mode passport)'
+            : 'Name verified by passport',
+          issuerType,
+          trustLevel,
+          source: 'Passport',
+          payload: claimPayload('field_name'),
+          sourceField: 'name',
+          isPresentable: true,
+          createdAt: now,
+          updatedAt: now,
+        },
       ];
-      if (chip.isSimulated) parts.push(`"is_simulated":true`);
-      return `{${parts.join(',')}}`;
-    };
-    const claims: ProvableClaimEntity[] = [
-      {
-        id: uuid(),
-        identityCardId: cardId,
-        claimType: 'age_over_18',
-        title: 'I am over 18',
-        issuerType,
-        trustLevel,
-        source: 'Passport',
-        payload: claimPayload('age_over_18'),
-        isPresentable: true,
-        createdAt: now,
-        updatedAt: now,
-      },
-      {
-        id: uuid(),
-        identityCardId: cardId,
-        claimType: 'is_human',
-        title: 'I am a real person',
-        issuerType,
-        trustLevel,
-        source: 'Passport',
-        payload: claimPayload('is_human'),
-        isPresentable: true,
-        createdAt: now,
-        updatedAt: now,
-      },
-      {
-        id: uuid(),
-        identityCardId: cardId,
-        claimType: 'field_name',
-        title: chip.isSimulated
-          ? 'Name (dev-mode passport)'
-          : 'Name verified by passport',
-        issuerType,
-        trustLevel,
-        source: 'Passport',
-        payload: claimPayload('field_name'),
-        sourceField: 'name',
-        isPresentable: true,
-        createdAt: now,
-        updatedAt: now,
-      },
-    ];
-    for (const c of claims) {
-      await useIdentityData.getState().upsertProvableClaim(c);
-    }
+      for (const c of claims) {
+        await useIdentityData.getState().upsertProvableClaim(c);
+      }
 
-    pushToast(
-      chip.isSimulated
-        ? 'Mock passport credential issued (demo only)'
-        : 'Passport credential issued',
-      'success',
-    );
-    // Mirror Swift's `onCompleted(proof)` closure: when this flow was launched
-    // from onboarding, signal completion so the wizard sets passportScanned and
-    // advances to the `complete` step. The listener runs synchronously, so
-    // onboarding is already on `complete` before router.back() reveals it.
-    if (fromOnboarding) notifyPassportOnboardingCompleted();
-    router.back();
+      pushToast(
+        chip.isSimulated
+          ? 'Mock passport credential issued (demo only)'
+          : 'Passport credential issued',
+        'success',
+      );
+      // Mirror Swift's `onCompleted(proof)` closure: when this flow was launched
+      // from onboarding, signal completion so the wizard sets passportScanned and
+      // advances to the `complete` step. The listener runs synchronously, so
+      // onboarding is already on `complete` before router.back() reveals it.
+      if (fromOnboarding) notifyPassportOnboardingCompleted();
+      router.back();
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      dispatch({
+        type: 'setError',
+        message: message.split('\n')[0] ?? 'Failed to save passport credential',
+      });
+    } finally {
+      dispatch({ type: 'setLoading', value: false });
+    }
   };
 
   return (
@@ -521,7 +571,7 @@ export default function PassportSetup() {
         ) : null}
 
         {state.step === 'persist' ? (
-          <PersistStep proof={state.proof} busy={state.isLoading} onSave={onPersist} />
+          <PersistStep proof={state.proof} busy={state.isLoading} onSave={() => { void onPersist(); }} />
         ) : null}
       </ScrollView>
 
