@@ -24,6 +24,7 @@ import { Pressable, ScrollView, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { IssuerBadge } from '@/components/credentials/IssuerBadge';
+import { PresentationProofQr } from '@/components/credentials/PresentationProofQr';
 import { PresentationSheet } from '@/components/credentials/PresentationSheet';
 import { SfIcon } from '@/components/icons/SfIcon';
 import { ThemedButton } from '@/components/themed';
@@ -36,6 +37,13 @@ import {
   useCredentialStore,
   type StoredCredential,
 } from '@/credentials/store';
+import {
+  buildPresentationProofQrPages,
+  initialPresentationClaimIds,
+  isPresentationDisabled,
+  presentedClaimIds,
+  selectPresentationClaims,
+} from '@/credentials/presentationProof';
 import { pushToast } from '@/feedback/toast';
 import { useTranslation } from '@/i18n';
 import {
@@ -324,8 +332,11 @@ function ClaimRow({
 export default function CredentialDetailScreen() {
   const { t } = useTranslation();
   const insets = useSafeAreaInsets();
-  const { id, context, groupId } = useLocalSearchParams<{
+  const { id, context, groupId, claimId } = useLocalSearchParams<{
     id: string;
+    /** Optional disclosure-row entry point. When present, start with only
+     *  that claim selected so "Show" does not over-disclose. */
+    claimId?: string;
     /** 'work' when launched from the Me "Work" action — scopes the
      *  presentation to the group identified by `groupId`. */
     context?: string;
@@ -342,7 +353,7 @@ export default function CredentialDetailScreen() {
   const hydrateIssuers = useIssuerMetadataStore((s) => s.hydrate);
   const allClaims = useIdentityData((s) => s.provableClaims);
   const markPresented = useIdentityData((s) => s.markClaimPresented);
-  const [selectedClaimIDs, setSelectedClaimIDs] = useState<ReadonlySet<string>>(new Set());
+  const [selectedClaimIDs, setSelectedClaimIDs] = useState<ReadonlySet<string> | null>(null);
   const [presenting, setPresenting] = useState(false);
 
   useEffect(() => {
@@ -351,10 +362,47 @@ export default function CredentialDetailScreen() {
     if (id) void loadDetail(id);
   }, [hydrateIdentity, hydrateIssuers, loadDetail, id]);
 
+  useEffect(() => {
+    setSelectedClaimIDs(null);
+    setPresenting(false);
+  }, [id, claimId]);
+
   const associatedClaims = useMemo<readonly ProvableClaimEntity[]>(() => {
     if (!credential) return [];
     return allClaims.filter((c) => c.identityCardId === credential.id);
   }, [allClaims, credential]);
+
+  const initialClaimIdsForPresentation = useMemo(
+    () => initialPresentationClaimIds(
+      associatedClaims,
+      typeof claimId === 'string' ? claimId : undefined,
+    ),
+    [associatedClaims, claimId],
+  );
+
+  const selectedClaimIdsForPresentation = useMemo(
+    () => selectedClaimIDs ?? initialClaimIdsForPresentation,
+    [initialClaimIdsForPresentation, selectedClaimIDs],
+  );
+
+  const selectedClaimsForPresentation = useMemo(
+    () => selectPresentationClaims(
+      associatedClaims,
+      selectedClaimIdsForPresentation,
+    ),
+    [associatedClaims, selectedClaimIdsForPresentation],
+  );
+
+  const presentationPages = useMemo(
+    () =>
+      credential && selectedClaimsForPresentation.length > 0
+        ? buildPresentationProofQrPages({
+            credential,
+            selectedClaims: selectedClaimsForPresentation,
+          })
+        : [],
+    [credential, selectedClaimsForPresentation],
+  );
 
   const status = useMemo<string>(() => {
     if (!credential) return '';
@@ -381,7 +429,7 @@ export default function CredentialDetailScreen() {
   const trustBadge = issuerTrustBadge(credential, t);
   const isExpired =
     credential.expiresAt != null && credential.expiresAt.getTime() < Date.now();
-  const presentDisabled = selectedClaimIDs.size === 0;
+  const presentDisabled = isPresentationDisabled(selectedClaimIdsForPresentation);
 
   const onPresent = () => {
     // TODO(biometric-gate): wrap in
@@ -389,11 +437,12 @@ export default function CredentialDetailScreen() {
     //     'presentProof', 'Authenticate to present a proof.'
     //   );
     //   if (!gate.success) { pushToast(...); return; }
-    // so credential presentation obeys the SensitiveAction policy. See
-    // `src/keychain/biometricGatekeeper.ts`. The actual VP-token build
-    // happens inside `PresentationSheet`, which already calls `signJwt`
-    // (which is itself biometric-gated), so this is defence-in-depth.
-    for (const claimID of selectedClaimIDs) {
+    // so enlarging the already-visible proof QR obeys the SensitiveAction
+    // policy. See `src/keychain/biometricGatekeeper.ts`.
+    for (const claimID of presentedClaimIds(
+      associatedClaims,
+      selectedClaimIdsForPresentation,
+    )) {
       markPresented(claimID);
     }
     setPresenting(true);
@@ -401,7 +450,7 @@ export default function CredentialDetailScreen() {
 
   const toggleClaim = (claimID: string) => {
     setSelectedClaimIDs((prev) => {
-      const next = new Set(prev);
+      const next = new Set(prev ?? initialClaimIdsForPresentation);
       if (next.has(claimID)) next.delete(claimID);
       else next.add(claimID);
       return next;
@@ -567,15 +616,22 @@ export default function CredentialDetailScreen() {
                 </Text>
               </View>
             ) : (
-              <View className="px-4" style={{ gap: 8 }}>
-                {associatedClaims.map((c) => (
-                  <ClaimRow
-                    key={c.id}
-                    claim={c}
-                    selected={selectedClaimIDs.has(c.id)}
-                    onToggle={() => { toggleClaim(c.id); }}
-                  />
-                ))}
+              <View className="px-4" style={{ gap: 16 }}>
+                <PresentationProofQr
+                  selectedClaims={selectedClaimsForPresentation}
+                  pages={presentationPages}
+                  emptyText={t('credentialDetail.noClaims')}
+                />
+                <View style={{ gap: 8 }}>
+                  {associatedClaims.map((c) => (
+                    <ClaimRow
+                      key={c.id}
+                      claim={c}
+                      selected={selectedClaimIdsForPresentation.has(c.id)}
+                      onToggle={() => { toggleClaim(c.id); }}
+                    />
+                  ))}
+                </View>
               </View>
             )}
           </View>
@@ -612,9 +668,8 @@ export default function CredentialDetailScreen() {
 
       <PresentationSheet
         visible={presenting}
-        credentialId={credential.id}
-        credentialTitle={credential.title}
-        selectedClaimIds={selectedClaimIDs}
+        credential={credential}
+        selectedClaimIds={selectedClaimIdsForPresentation}
         onDismiss={() => { setPresenting(false); }}
       />
     </View>

@@ -267,7 +267,7 @@ function SelectiveDisclosuresSection({
                 onPresent={() => {
                   router.push({
                     pathname: '/credentials/[id]',
-                    params: { id: c.identityCardId },
+                    params: { id: c.identityCardId, claimId: c.id },
                   });
                 }}
                 work={
@@ -282,6 +282,7 @@ function SelectiveDisclosuresSection({
                             pathname: '/credentials/[id]',
                             params: {
                               id: c.identityCardId,
+                              claimId: c.id,
                               context: 'work',
                               groupId: workContext.groupId,
                             },
