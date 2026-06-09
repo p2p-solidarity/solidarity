@@ -1,6 +1,6 @@
 import type { BusinessCard } from '@solidarity/shared';
 
-import { encodeEnvelopeToWire } from '@/cards/qrEnvelope';
+import { encodeEnvelopeToWire, type EnvelopeWireResult } from '@/cards/qrEnvelope';
 import {
   buildDidSignedEnvelope,
   buildSolidarityQrPayload,
@@ -39,6 +39,14 @@ export async function buildRuntimeSolidarityQrPayload(
   shareFieldPreferences: ShareFieldPreferences,
   runtimeOptions: RuntimeSolidarityQrOptions = {}
 ): Promise<string> {
+  return (await buildRuntimeSolidarityQrWire(card, shareFieldPreferences, runtimeOptions)).wire;
+}
+
+export async function buildRuntimeSolidarityQrWire(
+  card: BusinessCard,
+  shareFieldPreferences: ShareFieldPreferences,
+  runtimeOptions: RuntimeSolidarityQrOptions = {}
+): Promise<EnvelopeWireResult> {
   const options: SolidarityQrPayloadOptions = {
     sharingLevel: 'professional',
     shareFieldPreferences,
@@ -56,7 +64,7 @@ export async function buildRuntimeSolidarityQrPayload(
         ...options,
         signer: { issuerDid, publicKeyJwk: jwk, signJwt },
       });
-      if (envelope) return encodeEnvelopeToWire(envelope).wire;
+      if (envelope) return encodeEnvelopeToWire(envelope);
     } catch {
       // fall through to plaintext
     }
@@ -65,11 +73,14 @@ export async function buildRuntimeSolidarityQrPayload(
   if (format === 'zkProof') {
     try {
       const envelope = await buildZKEnvelope(card, options);
-      return encodeEnvelopeToWire(envelope).wire;
+      return encodeEnvelopeToWire(envelope);
     } catch {
       // fall through to plaintext
     }
   }
 
-  return buildSolidarityQrPayload(card, options);
+  return {
+    wire: buildSolidarityQrPayload(card, options),
+    startingLevel: 'H',
+  };
 }

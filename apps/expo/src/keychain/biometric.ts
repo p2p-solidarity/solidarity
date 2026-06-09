@@ -46,10 +46,12 @@ export async function isBiometricAvailable(): Promise<boolean> {
  */
 const SIGN_GRACE_MS = 5 * 60 * 1000;
 let signGraceUntil = 0;
+let signPromptInFlight: Promise<boolean> | null = null;
 
 /** Drop any active signing grace so the next sensitive action re-prompts. */
 export function resetBiometricGrace(): void {
   signGraceUntil = 0;
+  signPromptInFlight = null;
 }
 
 /**
@@ -57,7 +59,19 @@ export function resetBiometricGrace(): void {
  * Callers should treat false as "user denied" and abort the sensitive op.
  */
 export async function requireBiometric(reason: BiometricReason): Promise<boolean> {
-  if (reason === 'sign' && Date.now() < signGraceUntil) return true;
+  if (reason === 'sign') {
+    if (Date.now() < signGraceUntil) return true;
+    if (signPromptInFlight) return signPromptInFlight;
+    signPromptInFlight = authenticate(reason).finally(() => {
+      signPromptInFlight = null;
+    });
+    return signPromptInFlight;
+  }
+
+  return authenticate(reason);
+}
+
+async function authenticate(reason: BiometricReason): Promise<boolean> {
   const r = await LocalAuthentication.authenticateAsync({
     promptMessage: PROMPT_BY_REASON[reason],
     fallbackLabel: 'Use device passcode',

@@ -15,7 +15,7 @@
  */
 import { useState } from 'react';
 import { type LayoutChangeEvent, Text, View } from 'react-native';
-import QRCode from 'react-native-qrcode-svg';
+import { Image } from 'expo-image';
 
 import { PressableScale } from '@/components/common/PressableScale';
 import { SfIcon } from '@/components/icons/SfIcon';
@@ -36,8 +36,8 @@ import { useTranslation } from '@/i18n';
 const QR_FRAME_PADDING = 16;
 
 export interface QrShareCardProps {
-  /** QR payload to encode. `undefined` → placeholder state. */
-  payload?: string;
+  /** Renderable QR image URI. `undefined` → placeholder state. */
+  qrImageUri?: string;
   cardName?: string;
   enabledFields: readonly EnabledField[];
   hasRealHuman?: boolean;
@@ -46,7 +46,7 @@ export interface QrShareCardProps {
 }
 
 export function QrShareCard({
-  payload,
+  qrImageUri,
   cardName,
   enabledFields,
   hasRealHuman = false,
@@ -125,13 +125,15 @@ export function QrShareCard({
               justifyContent: 'center',
             }}
           >
-            {payload ? (
+            {qrImageUri ? (
               qrBox > 0 ? (
-                <QRCode
-                  value={payload}
-                  size={qrBox - QR_FRAME_PADDING * 2}
-                  backgroundColor="#FFFFFF"
-                  color="#000000"
+                <Image
+                  source={{ uri: qrImageUri }}
+                  contentFit="contain"
+                  style={{
+                    width: qrBox - QR_FRAME_PADDING * 2,
+                    height: qrBox - QR_FRAME_PADDING * 2,
+                  }}
                 />
               ) : null
             ) : (

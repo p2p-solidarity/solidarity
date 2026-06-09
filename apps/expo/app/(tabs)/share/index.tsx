@@ -22,7 +22,8 @@ import {
   enabledFieldsFromSharePreferences,
   type ShareFieldPreferences,
 } from '@/cards/solidarityQrPayload';
-import { buildRuntimeSolidarityQrPayload } from '@/cards/solidarityQrRuntime';
+import { generateQrPng } from '@/cards/qrCodeManager';
+import { buildRuntimeSolidarityQrWire } from '@/cards/solidarityQrRuntime';
 import { SfIcon } from '@/components/icons/SfIcon';
 import { RadarMatching } from '@/components/share/RadarMatching';
 import { QrShareCard } from '@/components/share/QrShareCard';
@@ -68,7 +69,7 @@ export default function ShareTab() {
   const setTransportMode = useMatchingSession((s) => s.setTransportMode);
   const proximityTransport = usePreferences((s) => s.proximityTransport);
   const [nearbyVisible, setNearbyVisible] = useState(false);
-  const [payload, setPayload] = useState<string | undefined>(undefined);
+  const [qrImageUri, setQrImageUri] = useState<string | undefined>(undefined);
   const shareTitle = usePreferences((s) => s.shareTitle);
   const shareCompany = usePreferences((s) => s.shareCompany);
   const shareEmail = usePreferences((s) => s.shareEmail);
@@ -125,21 +126,31 @@ export default function ShareTab() {
 
   useEffect(() => {
     if (!myCardDetail) {
-      setPayload(undefined);
+      setQrImageUri(undefined);
       return;
     }
 
     let cancelled = false;
-    setPayload(undefined);
-    void buildRuntimeSolidarityQrPayload(
-      myCardDetail,
-      shareFieldPreferences,
-      { proofClaims: selectedProofClaims }
-    ).then((next) => {
-      if (!cancelled) setPayload(next);
-    });
+    setQrImageUri(undefined);
+    const timer = setTimeout(() => {
+      void buildRuntimeSolidarityQrWire(
+        myCardDetail,
+        shareFieldPreferences,
+        { proofClaims: selectedProofClaims }
+      )
+        .then((next) =>
+          generateQrPng(next.wire, { startingLevel: next.startingLevel })
+        )
+        .then((nextImageUri) => {
+          if (!cancelled) setQrImageUri(nextImageUri);
+        })
+        .catch(() => {
+          if (!cancelled) setQrImageUri(undefined);
+        });
+    }, 250);
     return () => {
       cancelled = true;
+      clearTimeout(timer);
     };
   }, [myCardDetail, selectedProofClaims, shareFieldPreferences]);
 
@@ -264,7 +275,7 @@ export default function ShareTab() {
         <Animated.View entering={FadeInDown.duration(360).delay(STAGGER_MS * 2)}>
           <View className="px-4">
             <QrShareCard
-              payload={payload}
+              qrImageUri={qrImageUri}
               cardName={myCard?.name}
               enabledFields={enabledFields}
               hasRealHuman={hasHumanClaim && shareIsHuman}
