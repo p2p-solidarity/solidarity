@@ -137,6 +137,18 @@ open class HybridNfcPassportSpec_cxx {
   }
   
   @inline(__always)
+  public final func getRevocationSnapshotJson() -> bridge.Result_std__string_ {
+    do {
+      let __result = try self.__implementation.getRevocationSnapshotJson()
+      let __resultCpp = std.string(__result)
+      return bridge.create_Result_std__string_(__resultCpp)
+    } catch (let __error) {
+      let __exceptionPtr = __error.toCpp()
+      return bridge.create_Result_std__string_(__exceptionPtr)
+    }
+  }
+  
+  @inline(__always)
   public final func read(mrz: PassportMRZ, options: bridge.std__optional_NfcReadOptions_) -> bridge.Result_std__shared_ptr_Promise_PassportReadResult___ {
     do {
       let __result = try self.__implementation.read(mrz: mrz, options: options.value)

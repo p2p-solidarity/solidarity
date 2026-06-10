@@ -20,6 +20,7 @@ namespace margelo::nitro::solidarity::nfcpassport { struct PassportMRZ; }
 // Forward declaration of `NfcReadOptions` to properly resolve imports.
 namespace margelo::nitro::solidarity::nfcpassport { struct NfcReadOptions; }
 
+#include <string>
 #include "PassportReadResult.hpp"
 #include <NitroModules/Promise.hpp>
 #include "PassportMRZ.hpp"
@@ -58,6 +59,7 @@ namespace margelo::nitro::solidarity::nfcpassport {
     public:
       // Methods
       virtual bool isAvailable() = 0;
+      virtual std::string getRevocationSnapshotJson() = 0;
       virtual std::shared_ptr<Promise<PassportReadResult>> read(const PassportMRZ& mrz, const std::optional<NfcReadOptions>& options) = 0;
       virtual void cancel() = 0;
 

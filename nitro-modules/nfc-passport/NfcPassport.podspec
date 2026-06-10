@@ -17,16 +17,18 @@ Pod::Spec.new do |s|
     'ios/**/*.{swift,h,m,mm}',
   ]
 
-  # CSCA Master List — concatenated PEM of country signing CA certificates.
-  # NFCPassportReader.setMasterListURL(_:) needs this to verify the SOD
-  # signature chain (passive authentication). Bundled as a top-level pod
-  # resource so it ships inside the host app's main bundle, reachable via
-  # `Bundle.main.url(forResource: "masterList", withExtension: "pem")`.
+  # Passport trust resources. `masterList.pem` drives passive authentication;
+  # `passportRevocationSnapshot*.json` is generated from ICAO PKD dsccrl LDIF
+  # or CRL sources and feeds OpenAC v3 DSC revocation checks. The snapshot glob
+  # intentionally matches only files that have been generated; missing
+  # revocation input should fail in scripts/generate_masterlist.py, not here.
   #
-  # Reference, do not duplicate: the bytes live with the Swift host app at
-  # solidarity/Resources/masterList.pem. CocoaPods resolves this path
-  # relative to the podspec.
-  s.resources = ['../../solidarity/Resources/masterList.pem']
+  # Reference, do not duplicate: the bytes live with the Swift host app under
+  # solidarity/Resources. CocoaPods resolves these paths relative to the podspec.
+  s.resources = [
+    '../../solidarity/Resources/masterList.pem',
+    '../../solidarity/Resources/passportRevocationSnapshot*.json',
+  ]
 
   s.pod_target_xcconfig = {
     'DEFINES_MODULE' => 'YES',

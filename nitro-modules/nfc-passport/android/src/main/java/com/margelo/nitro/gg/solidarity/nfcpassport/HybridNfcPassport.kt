@@ -108,6 +108,9 @@ class HybridNfcPassport : HybridNfcPassportSpec() {
     /** AAR-bundled CSCA Master List filename. Mirrors iOS `masterList.pem`. */
     private const val MASTER_LIST_ASSET = "masterList.pem"
 
+    /** AAR-bundled OpenAC v3 revocation snapshot generated from real CRLs. */
+    private const val REVOCATION_SNAPSHOT_ASSET = "passportRevocationSnapshot.v3.json"
+
     /** Default IsoDep transceive timeout — long enough for slow EAC1 chips. */
     private const val ISODEP_TIMEOUT_MS: Int = 15_000
 
@@ -207,6 +210,18 @@ class HybridNfcPassport : HybridNfcPassportSpec() {
 
   override fun isAvailable(): Boolean {
     return nfcAdapter?.isEnabled == true
+  }
+
+  override fun getRevocationSnapshotJson(): String {
+    val bytes = try {
+      context.assets.open(REVOCATION_SNAPSHOT_ASSET).use { it.readBytes() }
+    } catch (e: IOException) {
+      throw error(
+        code = "revocation_snapshot_missing",
+        message = "$REVOCATION_SNAPSHOT_ASSET is not bundled.",
+      )
+    }
+    return bytes.toString(Charsets.UTF_8)
   }
 
   override fun read(
@@ -535,6 +550,14 @@ class HybridNfcPassport : HybridNfcPassportSpec() {
     val dg14Bytes = readEf(service, PassportService.EF_DG14, required = false)
     emitProgress(onProgress, NfcReadPhase.READING_DG, 88.0, "DG15", "Reading DG15…")
     val dg15Bytes = readEf(service, PassportService.EF_DG15, required = false)
+
+    // DG15 Active Authentication — must run while the session is still open.
+    // Emitted only for ECDSA-P256 keys (the only AA variant the OpenAC v3
+    // circuit verifies); any failure leaves activeAuthJson null so a
+    // requireAA proof fails closed rather than proceeding without chip
+    // presence.
+    val activeAuthJson = activeAuthEvidence(service, dg15Bytes)
+
     emitProgress(onProgress, NfcReadPhase.VERIFYING, 92.0, null, "Verifying signatures…")
 
     try {
@@ -583,7 +606,95 @@ class HybridNfcPassport : HybridNfcPassportSpec() {
       ),
       chipUid = chipUid,
       passiveAuthValid = passiveAuthValid,
+      openAcV3WitnessBundleJson = null,
+      activeAuthJson = activeAuthJson,
     )
+  }
+
+  /**
+   * Perform DG15 Active Authentication and return the OpenAC v3 evidence JSON
+   * `{ challengeB64, signatureRawB64 }`, or null when AA is unavailable /
+   * unsupported.
+   *
+   * Only ECDSA-P256 AA keys are emitted: the passport_adapter circuit
+   * verifies `ecdsa_secp256r1(aa_pk, aa_signature, aa_challenge[32])`. The
+   * chip signs `SHA-256(RND.IFD)`, so the circuit's `aa_challenge` is that
+   * 32-byte digest; the raw `r ‖ s` signature comes straight from INTERNAL
+   * AUTHENTICATE. The Rust witness builder re-verifies the triple against the
+   * real DG15 key and fails closed if the chip used a different digest.
+   */
+  private fun activeAuthEvidence(service: PassportService, dg15Bytes: ByteArray?): String? {
+    if (dg15Bytes == null) return null
+    return try {
+      val dg15 = org.jmrtd.lds.icao.DG15File(java.io.ByteArrayInputStream(dg15Bytes))
+      val publicKey = dg15.publicKey
+      if (publicKey !is java.security.interfaces.ECPublicKey) return null
+      // P-256 only: field size 256 bits.
+      val fieldBits = publicKey.params.curve.field.fieldSize
+      if (fieldBits != 256) return null
+
+      val challenge = ByteArray(8).also { java.security.SecureRandom().nextBytes(it) }
+      val aaResult = service.doAA(publicKey, "SHA-256", "SHA256withECDSA", challenge)
+      val rawSignature = ecdsaToRaw64(aaResult.response) ?: return null
+
+      val aaChallengeDigest = java.security.MessageDigest.getInstance("SHA-256").digest(challenge)
+      val b64 = android.util.Base64.NO_WRAP
+      val payload = org.json.JSONObject()
+        .put("challengeB64", android.util.Base64.encodeToString(aaChallengeDigest, b64))
+        .put("signatureRawB64", android.util.Base64.encodeToString(rawSignature, b64))
+      payload.toString()
+    } catch (e: Throwable) {
+      Log.i(TAG, "Active Authentication unavailable (${e.javaClass.simpleName}); proceeding without AA evidence")
+      null
+    }
+  }
+
+  /**
+   * Normalise an ECDSA-P256 signature to the raw 64-byte `r ‖ s` the circuit
+   * expects. INTERNAL AUTHENTICATE usually returns plain r‖s already, but some
+   * chips DER-encode it (`SEQUENCE { INTEGER r, INTEGER s }`); handle both.
+   * Returns null for any other shape.
+   */
+  private fun ecdsaToRaw64(signature: ByteArray): ByteArray? {
+    if (signature.size == 64) return signature
+    // Minimal DER ECDSA decode: 30 len 02 rlen r 02 slen s.
+    if (signature.size < 8 || signature[0].toInt() != 0x30) return null
+    return try {
+      var idx = 2
+      // Skip a long-form length byte on the outer SEQUENCE if present.
+      if (signature[1].toInt() and 0x80 != 0) idx = 2 + (signature[1].toInt() and 0x7F)
+      if (signature[idx].toInt() != 0x02) return null
+      val rLen = signature[idx + 1].toInt()
+      val rStart = idx + 2
+      val rEnd = rStart + rLen
+      if (signature[rEnd].toInt() != 0x02) return null
+      val sLen = signature[rEnd + 1].toInt()
+      val sStart = rEnd + 2
+      val sEnd = sStart + sLen
+      val out = ByteArray(64)
+      copyFixedRight(signature, rStart, rEnd, out, 0, 32)
+      copyFixedRight(signature, sStart, sEnd, out, 32, 32)
+      out
+    } catch (e: Throwable) {
+      null
+    }
+  }
+
+  /** Right-align `[start,end)` of `src` into `dst[offset, offset+width)`,
+   *  stripping a leading sign byte and rejecting oversized integers. */
+  private fun copyFixedRight(
+    src: ByteArray,
+    start: Int,
+    end: Int,
+    dst: ByteArray,
+    offset: Int,
+    width: Int,
+  ) {
+    var s = start
+    while (s < end && src[s].toInt() == 0) s++ // strip leading zero/sign bytes
+    val len = end - s
+    require(len in 1..width) { "ECDSA integer width $len exceeds $width" }
+    System.arraycopy(src, s, dst, offset + (width - len), len)
   }
 
   /**

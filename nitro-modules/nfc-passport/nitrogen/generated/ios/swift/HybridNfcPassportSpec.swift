@@ -14,6 +14,7 @@ public protocol HybridNfcPassportSpec_protocol: HybridObject {
 
   // Methods
   func isAvailable() throws -> Bool
+  func getRevocationSnapshotJson() throws -> String
   func read(mrz: PassportMRZ, options: NfcReadOptions?) throws -> Promise<PassportReadResult>
   func cancel() throws -> Void
 }

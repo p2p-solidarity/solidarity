@@ -22,13 +22,13 @@ namespace margelo::nitro::solidarity::nfcpassport { struct NfcReadProgress; }
 // Forward declaration of `NfcReadPhase` to properly resolve imports.
 namespace margelo::nitro::solidarity::nfcpassport { enum class NfcReadPhase; }
 
+#include <string>
 #include "PassportReadResult.hpp"
 #include <NitroModules/Promise.hpp>
 #include <NitroModules/JPromise.hpp>
 #include "JPassportReadResult.hpp"
 #include "ParsedMrz.hpp"
 #include "JParsedMrz.hpp"
-#include <string>
 #include "DataGroupsBundle.hpp"
 #include "JDataGroupsBundle.hpp"
 #include <NitroModules/ArrayBuffer.hpp>
@@ -83,6 +83,11 @@ namespace margelo::nitro::solidarity::nfcpassport {
     static const auto method = _javaPart->javaClassStatic()->getMethod<jboolean()>("isAvailable");
     auto __result = method(_javaPart);
     return static_cast<bool>(__result);
+  }
+  std::string JHybridNfcPassportSpec::getRevocationSnapshotJson() {
+    static const auto method = _javaPart->javaClassStatic()->getMethod<jni::local_ref<jni::JString>()>("getRevocationSnapshotJson");
+    auto __result = method(_javaPart);
+    return __result->toStdString();
   }
   std::shared_ptr<Promise<PassportReadResult>> JHybridNfcPassportSpec::read(const PassportMRZ& mrz, const std::optional<NfcReadOptions>& options) {
     static const auto method = _javaPart->javaClassStatic()->getMethod<jni::local_ref<JPromise::javaobject>(jni::alias_ref<JPassportMRZ> /* mrz */, jni::alias_ref<JNfcReadOptions> /* options */)>("read");

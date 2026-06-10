@@ -49,10 +49,12 @@ namespace margelo::nitro::solidarity::nfcpassport {
     DataGroupsBundle dataGroups     SWIFT_PRIVATE;
     std::optional<std::string> chipUid     SWIFT_PRIVATE;
     bool passiveAuthValid     SWIFT_PRIVATE;
+    std::optional<std::string> openAcV3WitnessBundleJson     SWIFT_PRIVATE;
+    std::optional<std::string> activeAuthJson     SWIFT_PRIVATE;
 
   public:
     PassportReadResult() = default;
-    explicit PassportReadResult(ParsedMrz mrz, DataGroupsBundle dataGroups, std::optional<std::string> chipUid, bool passiveAuthValid): mrz(mrz), dataGroups(dataGroups), chipUid(chipUid), passiveAuthValid(passiveAuthValid) {}
+    explicit PassportReadResult(ParsedMrz mrz, DataGroupsBundle dataGroups, std::optional<std::string> chipUid, bool passiveAuthValid, std::optional<std::string> openAcV3WitnessBundleJson, std::optional<std::string> activeAuthJson): mrz(mrz), dataGroups(dataGroups), chipUid(chipUid), passiveAuthValid(passiveAuthValid), openAcV3WitnessBundleJson(openAcV3WitnessBundleJson), activeAuthJson(activeAuthJson) {}
 
   public:
     friend bool operator==(const PassportReadResult& lhs, const PassportReadResult& rhs) = default;
@@ -71,7 +73,9 @@ namespace margelo::nitro {
         JSIConverter<margelo::nitro::solidarity::nfcpassport::ParsedMrz>::fromJSI(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "mrz"))),
         JSIConverter<margelo::nitro::solidarity::nfcpassport::DataGroupsBundle>::fromJSI(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "dataGroups"))),
         JSIConverter<std::optional<std::string>>::fromJSI(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "chipUid"))),
-        JSIConverter<bool>::fromJSI(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "passiveAuthValid")))
+        JSIConverter<bool>::fromJSI(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "passiveAuthValid"))),
+        JSIConverter<std::optional<std::string>>::fromJSI(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "openAcV3WitnessBundleJson"))),
+        JSIConverter<std::optional<std::string>>::fromJSI(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "activeAuthJson")))
       );
     }
     static inline jsi::Value toJSI(jsi::Runtime& runtime, const margelo::nitro::solidarity::nfcpassport::PassportReadResult& arg) {
@@ -80,6 +84,8 @@ namespace margelo::nitro {
       obj.setProperty(runtime, PropNameIDCache::get(runtime, "dataGroups"), JSIConverter<margelo::nitro::solidarity::nfcpassport::DataGroupsBundle>::toJSI(runtime, arg.dataGroups));
       obj.setProperty(runtime, PropNameIDCache::get(runtime, "chipUid"), JSIConverter<std::optional<std::string>>::toJSI(runtime, arg.chipUid));
       obj.setProperty(runtime, PropNameIDCache::get(runtime, "passiveAuthValid"), JSIConverter<bool>::toJSI(runtime, arg.passiveAuthValid));
+      obj.setProperty(runtime, PropNameIDCache::get(runtime, "openAcV3WitnessBundleJson"), JSIConverter<std::optional<std::string>>::toJSI(runtime, arg.openAcV3WitnessBundleJson));
+      obj.setProperty(runtime, PropNameIDCache::get(runtime, "activeAuthJson"), JSIConverter<std::optional<std::string>>::toJSI(runtime, arg.activeAuthJson));
       return obj;
     }
     static inline bool canConvert(jsi::Runtime& runtime, const jsi::Value& value) {
@@ -94,6 +100,8 @@ namespace margelo::nitro {
       if (!JSIConverter<margelo::nitro::solidarity::nfcpassport::DataGroupsBundle>::canConvert(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "dataGroups")))) return false;
       if (!JSIConverter<std::optional<std::string>>::canConvert(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "chipUid")))) return false;
       if (!JSIConverter<bool>::canConvert(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "passiveAuthValid")))) return false;
+      if (!JSIConverter<std::optional<std::string>>::canConvert(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "openAcV3WitnessBundleJson")))) return false;
+      if (!JSIConverter<std::optional<std::string>>::canConvert(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "activeAuthJson")))) return false;
       return true;
     }
   };

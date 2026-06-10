@@ -47,6 +47,26 @@ export interface PassportReadResult {
   readonly dataGroups: DataGroupsBundle;
   readonly chipUid?: string;
   readonly passiveAuthValid: boolean;
+  /**
+   * Complete passport-noir 0.3.0 OpenAC v3 witness bundle, produced by the
+   * native NFC/passport layer after it has parsed SOD/DSC/CSCA, revocation,
+   * AA, and holder-binding material. JS treats this as opaque JSON and only
+   * passes it to the v3 prover; missing means the app must fail closed to
+   * fallback rather than synthesize legacy disclosure inputs.
+   */
+  readonly openAcV3WitnessBundleJson?: string;
+  /**
+   * DG15 Active Authentication evidence, JSON
+   * `{ challengeB64, signatureRawB64 }`:
+   *   - `challengeB64`     — base64 of the 32-byte SHA-256 digest the chip's
+   *                          AA key signed (the circuit's `aa_challenge`).
+   *   - `signatureRawB64`  — base64 of the raw 64-byte `r ‖ s` ECDSA-P256
+   *                          signature from INTERNAL AUTHENTICATE.
+   * Present only when the chip performed ECDSA-P256 Active Authentication
+   * (the only AA variant the OpenAC v3 circuit verifies). Absent for RSA-AA
+   * or AA-less passports, in which case a `requireAA` proof fails closed.
+   */
+  readonly activeAuthJson?: string;
 }
 
 /**
@@ -103,6 +123,14 @@ export interface NfcReadOptions {
 export interface NfcPassport
   extends HybridObject<{ ios: 'swift'; android: 'kotlin' }> {
   isAvailable(): boolean;
+  /**
+   * Returns the bundled OpenAC v3 DSC revocation snapshot JSON.
+   *
+   * The native layer only exposes the build-time artifact. It does not fetch,
+   * mutate, or synthesize revocation data. Missing resources throw so callers
+   * can fail closed instead of treating an empty revocation set as valid.
+   */
+  getRevocationSnapshotJson(): string;
   read(mrz: PassportMRZ, options?: NfcReadOptions): Promise<PassportReadResult>;
   cancel(): void;
 }

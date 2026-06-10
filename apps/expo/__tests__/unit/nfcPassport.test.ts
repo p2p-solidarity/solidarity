@@ -39,6 +39,8 @@ function fakeRead(mrz: PassportMRZ): PassportReadResult {
     dataGroups: {
       dg1: new ArrayBuffer(88),
       dg2: new ArrayBuffer(1024),
+      dg15: new ArrayBuffer(32),
+      sod: new ArrayBuffer(512),
     },
     chipUid: `NFC-${mrz.documentNumber}`,
     passiveAuthValid: true,
@@ -96,6 +98,26 @@ describe('nfcPassport — pipeline integration with mocked Nitro module', () => 
     expect(snapshot.nationalityCode).toBe('TWN');
     expect(snapshot.dataGroupsRead).toContain('DG1');
     expect(snapshot.dataGroupsRead).toContain('DG2');
+    expect(snapshot.dataGroups?.dg1).toBe(result.dataGroups.dg1);
+    expect(snapshot.dataGroups?.dg15).toBe(result.dataGroups.dg15);
+    expect(snapshot.dataGroups?.sod).toBe(result.dataGroups.sod);
+  });
+
+  it('preserves the native OpenAC v3 witness bundle JSON for the proof stage', async () => {
+    const { chipFromNitro } = await import('../../src/passport/pipeline');
+    const openAcV3WitnessBundleJson = JSON.stringify({
+      dscChainInputsJson: '{"dsc":true}',
+      passportAdapterInputsJson: '{"passport":true}',
+      openAcShowInputsJson: '{"show":true}',
+    });
+    const result = {
+      ...fakeRead(VALID_MRZ),
+      openAcV3WitnessBundleJson,
+    };
+
+    const snapshot = chipFromNitro(result, 'TWN', VALID_MRZ.documentNumber);
+
+    expect(snapshot.openAcV3WitnessBundleJson).toBe(openAcV3WitnessBundleJson);
   });
 
   it('classifies an NFC cancellation as a configurationError', async () => {
