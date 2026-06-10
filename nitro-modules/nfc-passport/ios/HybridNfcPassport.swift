@@ -129,6 +129,7 @@ final class HybridNfcPassport: HybridNfcPassportSpec {
       if !skipFace {
         tags.insert(.DG2, at: 3)
       }
+      print("[nfc] requested-data-groups \(tags.map { "\($0)" }.joined(separator: ",")) skipFace=\(skipFace)")
 
       // Forward NFCPassportReader's progress dispatch (the same hook that
       // drives the system NFC sheet text) to the JS callback so the app
@@ -386,6 +387,13 @@ final class HybridNfcPassport: HybridNfcPassportSpec {
       let downgraded = supportsPACE && bacOK && !paceOK
       let signedAndUntampered = model.passportCorrectlySigned && model.passportDataNotTampered
       let passiveAuthValid = signedAndUntampered && !downgraded
+      let activeAuthJson = Self.activeAuthEvidence(model: model)
+      Self.logReadDiagnostics(
+        model: model,
+        passiveAuthValid: passiveAuthValid,
+        downgraded: downgraded,
+        activeAuthEvidencePresent: activeAuthJson != nil
+      )
 
       // ── Chip UID — the library doesn't expose a raw chip UID, so we
       // derive a deterministic stable handle from the document number
@@ -405,7 +413,30 @@ final class HybridNfcPassport: HybridNfcPassportSpec {
         chipUid: chipUid,
         passiveAuthValid: passiveAuthValid,
         openAcV3WitnessBundleJson: nil,
-        activeAuthJson: Self.activeAuthEvidence(model: model)
+        activeAuthJson: activeAuthJson
+      )
+    }
+
+    private static func logReadDiagnostics(
+      model: NFCPassportModel,
+      passiveAuthValid: Bool,
+      downgraded: Bool,
+      activeAuthEvidencePresent: Bool
+    ) {
+      func length(_ tag: DataGroupId) -> Int {
+        guard let dg = model.getDataGroup(tag) else { return 0 }
+        return dg.data.count
+      }
+
+      let sodLength = length(.SOD)
+      let dg1Length = length(.DG1)
+      let dg2Length = length(.DG2)
+      let dg14Length = length(.DG14)
+      let dg15Length = length(.DG15)
+      print(
+        """
+        [nfc] read-diagnostics sod=\(sodLength > 0)(\(sodLength)) dg1=\(dg1Length > 0)(\(dg1Length)) dg2=\(dg2Length > 0)(\(dg2Length)) dg14=\(dg14Length > 0)(\(dg14Length)) dg15=\(dg15Length > 0)(\(dg15Length)) passiveAuthValid=\(passiveAuthValid) signed=\(model.passportCorrectlySigned) tamper=\(model.passportDataNotTampered) bac=\(model.BACStatus) pace=\(model.PACEStatus) paceSupported=\(model.isPACESupported) downgraded=\(downgraded) aaSupported=\(model.activeAuthenticationSupported) aaPassed=\(model.activeAuthenticationPassed) aaEvidence=\(activeAuthEvidencePresent)
+        """
       )
     }
 

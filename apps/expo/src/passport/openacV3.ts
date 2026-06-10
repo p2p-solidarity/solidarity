@@ -356,6 +356,36 @@ export function shouldAllowPassportOpenAcV3FallbackProof(
   return source.isSimulated === true;
 }
 
+export function describePassportOpenAcV3Unavailable(
+  plan: PassportOpenAcV3ProofPlan,
+  zkMissing: boolean
+): string {
+  if (zkMissing) {
+    return `passport-noir ${PASSPORT_NOIR_VERSION} prover is not linked.`;
+  }
+  if (plan.kind === 'fallback') {
+    switch (plan.readiness.reason) {
+      case 'simulated-chip':
+        return 'OpenAC v3 requires a real passport chip.';
+      case 'passive-auth-failed':
+        return 'Passport passive authentication did not pass.';
+      case 'missing-data-groups':
+        if (
+          plan.readiness.missingDataGroups.length === 1 &&
+          plan.readiness.missingDataGroups[0] === 'DG15'
+        ) {
+          return 'This passport does not expose DG15 / Active Authentication, so OpenAC v3 cannot generate a passport_v3 proof.';
+        }
+        return `OpenAC v3 missing ${plan.readiness.missingDataGroups.join(', ')}.`;
+      case 'missing-revocation-snapshot':
+        return 'OpenAC v3 revocation snapshot is not bundled.';
+      case 'invalid-revocation-snapshot':
+        return 'OpenAC v3 revocation snapshot is invalid.';
+    }
+  }
+  return `passport-noir ${PASSPORT_NOIR_VERSION} circuits are selected, but OpenAC v3 witness inputs are not available yet.`;
+}
+
 export function buildPassportOpenAcV3ProofCalls(
   plan: Extract<PassportOpenAcV3ProofPlan, { kind: 'openac-v3' }>,
   witnesses: PassportOpenAcV3WitnessBundle

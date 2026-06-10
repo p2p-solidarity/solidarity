@@ -23,11 +23,12 @@ Pod::Spec.new do |s|
   # intentionally matches only files that have been generated; missing
   # revocation input should fail in scripts/generate_masterlist.py, not here.
   #
-  # Reference, do not duplicate: the bytes live with the Swift host app under
-  # solidarity/Resources. CocoaPods resolves these paths relative to the podspec.
+  # Use the module-local asset copies so CocoaPods includes them in the host app
+  # resources script. Paths outside the pod root are easy for local validation
+  # to resolve but can be omitted from the generated Pods resource phase.
   s.resources = [
-    '../../solidarity/Resources/masterList.pem',
-    '../../solidarity/Resources/passportRevocationSnapshot*.json',
+    'android/src/main/assets/masterList.pem',
+    'android/src/main/assets/passportRevocationSnapshot.v3.json',
   ]
 
   s.pod_target_xcconfig = {

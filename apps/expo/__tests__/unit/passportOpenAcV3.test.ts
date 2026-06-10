@@ -14,6 +14,7 @@ import {
   buildPassportOpenAcV3WitnessBundleJson,
   buildPassportOpenAcV3WitnessRequestJson,
   bindPassportOpenAcV3DeviceSignature,
+  describePassportOpenAcV3Unavailable,
   generatePassportOpenAcV3ProofPayload,
   parsePassportOpenAcV3WitnessBundleJson,
   shouldAllowPassportOpenAcV3FallbackProof,
@@ -507,6 +508,18 @@ describe('passport OpenAC v3.1 / passport-noir 0.3.0 contract', () => {
     );
     expect(untrusted.ready).toBe(false);
     if (!untrusted.ready) expect(untrusted.reason).toBe('passive-auth-failed');
+  });
+
+  it('explains missing DG15 as unsupported Active Authentication', () => {
+    const plan = buildPassportOpenAcV3ProofPlan({
+      ...readResult({ dataGroups: { dg1: bytes('dg1'), sod: bytes('sod') } }),
+      revocationSnapshot: REVOCATION_SNAPSHOT,
+    });
+
+    expect(plan.kind).toBe('fallback');
+    expect(describePassportOpenAcV3Unavailable(plan, false)).toBe(
+      'This passport does not expose DG15 / Active Authentication, so OpenAC v3 cannot generate a passport_v3 proof.'
+    );
   });
 
   it('does not require read-stage witness preparation when passive auth is unavailable', () => {

@@ -63,6 +63,7 @@ import {
   bindPassportOpenAcV3DeviceSignature,
   buildPassportOpenAcV3ProofPlan,
   buildPassportOpenAcV3WitnessBundleJson,
+  describePassportOpenAcV3Unavailable,
   generatePassportOpenAcV3ProofPayload,
   parsePassportOpenAcV3ActiveAuthJson,
   parsePassportOpenAcV3WitnessBundleJson,
@@ -161,7 +162,7 @@ async function attachOpenAcV3WitnessDuringRead(args: {
     );
   }
   if (!witnessDecision.prepare) {
-    return skip(describeOpenAcV3Unavailable(witnessDecision.plan, false));
+    return skip(describePassportOpenAcV3Unavailable(witnessDecision.plan, false));
   }
 
   const activeAuth = parsePassportOpenAcV3ActiveAuthJson(args.result.activeAuthJson);
@@ -414,7 +415,7 @@ export default function PassportSetup() {
           disclosure: null,
         };
       } else {
-        const fallbackReason = describeOpenAcV3Unavailable(
+        const fallbackReason = describePassportOpenAcV3Unavailable(
           proofPlan,
           nitro.zk === null
         );
@@ -787,30 +788,6 @@ async function tryGenerateOpenAcV3Proof(
     }
     throw err;
   }
-}
-
-function describeOpenAcV3Unavailable(
-  plan: PassportOpenAcV3ProofPlan,
-  zkMissing: boolean
-): string {
-  if (zkMissing) {
-    return `passport-noir ${PASSPORT_NOIR_VERSION} prover is not linked.`;
-  }
-  if (plan.kind === 'fallback') {
-    switch (plan.readiness.reason) {
-      case 'simulated-chip':
-        return 'OpenAC v3 requires a real passport chip.';
-      case 'passive-auth-failed':
-        return 'Passport passive authentication did not pass.';
-      case 'missing-data-groups':
-        return `OpenAC v3 missing ${plan.readiness.missingDataGroups.join(', ')}.`;
-      case 'missing-revocation-snapshot':
-        return 'OpenAC v3 revocation snapshot is not bundled.';
-      case 'invalid-revocation-snapshot':
-        return 'OpenAC v3 revocation snapshot is invalid.';
-    }
-  }
-  return `passport-noir ${PASSPORT_NOIR_VERSION} circuits are selected, but OpenAC v3 witness inputs are not available yet.`;
 }
 
 /**
