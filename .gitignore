@@ -210,9 +210,12 @@ nitro-modules/**/*.xcframework/
 nitro-modules/passport-zk/android/src/main/jniLibs/*/libpassport_zk_mopro.so
 nitro-modules/passport-zk/android/src/main/jniLibs/*/libc++_shared.so
 
-# Other circuit/SRS pairs that build-android.sh might drop into assets/
-# while we iterate on non-passport OpenAC circuits. The passport-noir
-# 0.3.0 bundle (dsc_chain/passport_adapter/openac_show) is checked in.
+# SRS proving keys (*.srs.bin) are distributed via GitHub Release, not git —
+# the 0.3.0 passport_adapter SRS alone is 128MB, over GitHub's 100MB push
+# limit. build-android.sh / `make gen-srs` drop them into assets/ at build
+# time; only the small *.json circuit manifests are checked in.
+nitro-modules/passport-zk/android/src/main/assets/*.srs.bin
+# Other non-passport circuit/SRS pairs build-android.sh may drop into assets/.
 nitro-modules/passport-zk/android/src/main/assets/passport_verifier.*
 nitro-modules/passport-zk/android/src/main/assets/composite_show.*
 
@@ -221,3 +224,7 @@ nitro-modules/passport-zk/android/src/main/assets/composite_show.*
 *.logarchive/
 *.logarchive
 system_logs.logarchive/
+
+# Python bytecode cache from scripts/ (generate_masterlist + its tests).
+__pycache__/
+*.pyc
