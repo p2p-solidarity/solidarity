@@ -175,7 +175,7 @@ class HybridSpruceDid : HybridSpruceDidSpec() {
     val purposes = KeyProperties.PURPOSE_SIGN or KeyProperties.PURPOSE_VERIFY
     val specBuilder = KeyGenParameterSpec.Builder(keystoreAlias(alias), purposes)
       .setAlgorithmParameterSpec(ECGenParameterSpec(P256_CURVE_SPEC))
-      .setDigests(KeyProperties.DIGEST_SHA256)
+      .setDigests(KeyProperties.DIGEST_SHA256, KeyProperties.DIGEST_NONE)
       .setUserAuthenticationRequired(requireBiometric)
 
     // BiometricPrompt-backed keys: require the user re-authenticate on every
@@ -320,6 +320,20 @@ class HybridSpruceDid : HybridSpruceDidSpec() {
     val derSig = sig.sign()
     val rawSig = SpruceDidEcdsa.derToRaw(derSig)
     "$headerB64.$payloadB64.${SpruceDidBase64.urlEncode(rawSig)}"
+  }
+
+  override fun signRawP256(alias: String, digest: ArrayBuffer): Promise<ArrayBuffer> = Promise.async {
+    val digestBytes = digest.toByteArray()
+    require(digestBytes.size == 32) {
+      "signRawP256 expects a 32-byte SHA-256 digest, got ${digestBytes.size}"
+    }
+    val entry = keyStore.getEntry(keystoreAlias(alias), null) as? KeyStore.PrivateKeyEntry
+      ?: throw IllegalStateException("No key for alias=$alias")
+    val signer = Signature.getInstance("NONEwithECDSA")
+    signer.initSign(entry.privateKey)
+    signer.update(digestBytes)
+    val derSig = signer.sign()
+    ArrayBuffer.copy(SpruceDidEcdsa.derToRaw(derSig))
   }
 
   override fun verifyJws(jws: String, did: String): Promise<Boolean> = Promise.async {

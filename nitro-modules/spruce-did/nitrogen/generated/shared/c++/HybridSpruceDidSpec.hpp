@@ -60,6 +60,7 @@ namespace margelo::nitro::solidarity::sprucedid {
       virtual std::shared_ptr<Promise<std::string>> didKeyFromAlias(const std::string& alias) = 0;
       virtual std::shared_ptr<Promise<std::string>> didDocumentJson(const std::string& did) = 0;
       virtual std::shared_ptr<Promise<std::string>> signJws(const std::string& alias, const std::shared_ptr<ArrayBuffer>& payload) = 0;
+      virtual std::shared_ptr<Promise<std::shared_ptr<ArrayBuffer>>> signRawP256(const std::string& alias, const std::shared_ptr<ArrayBuffer>& digest) = 0;
       virtual std::shared_ptr<Promise<bool>> verifyJws(const std::string& jws, const std::string& did) = 0;
       virtual std::shared_ptr<Promise<std::string>> signCredentialJwt(const std::string& alias, const std::string& claimsJson) = 0;
       virtual std::shared_ptr<Promise<std::string>> verifyCredentialJwt(const std::string& jwt) = 0;

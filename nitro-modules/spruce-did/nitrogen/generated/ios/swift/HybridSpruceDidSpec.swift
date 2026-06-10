@@ -20,6 +20,7 @@ public protocol HybridSpruceDidSpec_protocol: HybridObject {
   func didKeyFromAlias(alias: String) throws -> Promise<String>
   func didDocumentJson(did: String) throws -> Promise<String>
   func signJws(alias: String, payload: ArrayBuffer) throws -> Promise<String>
+  func signRawP256(alias: String, digest: ArrayBuffer) throws -> Promise<ArrayBuffer>
   func verifyJws(jws: String, did: String) throws -> Promise<Bool>
   func signCredentialJwt(alias: String, claimsJson: String) throws -> Promise<String>
   func verifyCredentialJwt(jwt: String) throws -> Promise<String>

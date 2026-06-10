@@ -60,6 +60,10 @@ abstract class HybridSpruceDidSpec: HybridObject() {
   
   @DoNotStrip
   @Keep
+  abstract fun signRawP256(alias: String, digest: ArrayBuffer): Promise<ArrayBuffer>
+  
+  @DoNotStrip
+  @Keep
   abstract fun verifyJws(jws: String, did: String): Promise<Boolean>
   
   @DoNotStrip

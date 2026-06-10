@@ -29,12 +29,15 @@ import {
   base64UrlEncode,
   didKeyFromJwk,
   generateP256KeyPair,
+  jwkToPublicKey,
   publicKeyJwkSchema,
   publicKeyToJwk,
+  sha256Bytes,
   signJwtEs256,
   utf8ToBytes,
   verifyJwtEs256,
 } from '@solidarity/shared';
+import { p256 } from '@noble/curves/nist.js';
 import type {
   SpruceDid,
   SpruceDidEvent,
@@ -134,6 +137,19 @@ class InMemorySpruceDidDriver implements SpruceDid {
     );
   }
 
+  async signRawP256(alias: string, digest: ArrayBuffer): Promise<ArrayBuffer> {
+    const entry = this.keys.get(alias);
+    if (!entry) throw new Error(`no key for ${alias}`);
+    const digestBytes = new Uint8Array(digest);
+    if (digestBytes.length !== 32) {
+      throw new Error(`signRawP256 expects 32-byte digest, got ${digestBytes.length}`);
+    }
+    const signature = p256.sign(digestBytes, entry.privateKey, { prehash: false });
+    const out = new ArrayBuffer(signature.length);
+    new Uint8Array(out).set(signature);
+    return out;
+  }
+
   async verifyJws(jws: string, did: string): Promise<boolean> {
     throw new Error(`verifyJws not implemented in test driver (${jws}, ${did})`);
   }
@@ -214,7 +230,10 @@ mock.module('@solidarity/nitro-spruce-did', () => ({
 const {
   didKeyForCurrentIdentity,
   ensureSigningKey,
+  publicRawP256ForCurrentIdentity,
   publicJwk,
+  signOpenAcDeviceBindingDigest,
+  signRawEs256,
   signJwt,
   resetSigningKeyForTesting,
 } =
@@ -254,6 +273,14 @@ describe('SpruceID DID Nitro module — JS-side wiring', () => {
     expect(did).toBe(didKeyFromJwk(jwk));
   });
 
+  it('publicRawP256ForCurrentIdentity exposes x||y without signing', async () => {
+    const jwk = await publicJwk();
+    const raw = await publicRawP256ForCurrentIdentity();
+
+    expect(raw.length).toBe(64);
+    expect(raw).toEqual(jwkToPublicKey(jwk).slice(1));
+  });
+
   it('signJwt round-trips through verifyJwtEs256 with the stored public key', async () => {
     const jwk = await publicJwk();
     const jwt = await signJwt(
@@ -265,6 +292,35 @@ describe('SpruceID DID Nitro module — JS-side wiring', () => {
     const { payload } = verifyJwtEs256<{ sub: string; iat: number }>(jwt, jwk);
     expect(payload.sub).toBe('integration-test');
     expect(payload.iat).toBe(1700000000);
+  });
+
+  it('signRawEs256 signs the SHA-256 digest of arbitrary payload bytes', async () => {
+    const payload = utf8ToBytes('selective-disclosure-canonical-payload');
+    const { signature, publicKeyRaw } = await signRawEs256(payload);
+    const jwk = await publicJwk();
+
+    expect(signature.length).toBe(64);
+    expect(publicKeyRaw.length).toBe(64);
+    const expectedPublicKeyRaw = jwkToPublicKey(jwk).slice(1);
+    expect(publicKeyRaw).toEqual(expectedPublicKeyRaw);
+    expect(
+      p256.verify(signature, sha256Bytes(payload), jwkToPublicKey(jwk), {
+        prehash: false,
+      })
+    ).toBe(true);
+  });
+
+  it('signOpenAcDeviceBindingDigest signs the raw 32-byte nonce_hash digest', async () => {
+    const nonceHash = utf8ToBytes('openac_device_binding_nonce_hash');
+    const { signature, publicKeyRaw } = await signOpenAcDeviceBindingDigest(nonceHash);
+    const jwk = await publicJwk();
+
+    expect(signature.length).toBe(64);
+    expect(publicKeyRaw.length).toBe(64);
+    expect(publicKeyRaw).toEqual(jwkToPublicKey(jwk).slice(1));
+    expect(
+      p256.verify(signature, nonceHash, jwkToPublicKey(jwk), { prehash: false })
+    ).toBe(true);
   });
 
   it('signJwt splices custom typ/kid headers without breaking the signature', async () => {

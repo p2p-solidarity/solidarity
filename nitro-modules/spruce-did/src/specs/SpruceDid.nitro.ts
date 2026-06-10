@@ -110,6 +110,15 @@ export interface SpruceDid
   signJws(alias: string, payload: ArrayBuffer): Promise<string>;
 
   /**
+   * Sign a 32-byte SHA-256 digest directly with P-256 ECDSA and return the
+   * raw 64-byte `r || s` signature. This is the OpenAC v3 device-binding
+   * path: the circuit verifies the signature against `nonce_hash` as a
+   * digest, not a JWS payload or JSON wrapper. Throws if `digest` is not
+   * exactly 32 bytes.
+   */
+  signRawP256(alias: string, digest: ArrayBuffer): Promise<ArrayBuffer>;
+
+  /**
    * Verify a compact JWS using the DID's published verification method.
    * Resolves to true iff the signature passes. Throws on malformed JWS or
    * DID resolution failures.

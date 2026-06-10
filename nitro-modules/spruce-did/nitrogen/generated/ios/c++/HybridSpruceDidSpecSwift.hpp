@@ -134,6 +134,14 @@ namespace margelo::nitro::solidarity::sprucedid {
       auto __value = std::move(__result.value());
       return __value;
     }
+    inline std::shared_ptr<Promise<std::shared_ptr<ArrayBuffer>>> signRawP256(const std::string& alias, const std::shared_ptr<ArrayBuffer>& digest) override {
+      auto __result = _swiftPart.signRawP256(alias, ArrayBufferHolder(digest));
+      if (__result.hasError()) [[unlikely]] {
+        std::rethrow_exception(__result.error());
+      }
+      auto __value = std::move(__result.value());
+      return __value;
+    }
     inline std::shared_ptr<Promise<bool>> verifyJws(const std::string& jws, const std::string& did) override {
       auto __result = _swiftPart.verifyJws(jws, did);
       if (__result.hasError()) [[unlikely]] {

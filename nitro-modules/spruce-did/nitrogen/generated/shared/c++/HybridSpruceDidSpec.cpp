@@ -21,6 +21,7 @@ namespace margelo::nitro::solidarity::sprucedid {
       prototype.registerHybridMethod("didKeyFromAlias", &HybridSpruceDidSpec::didKeyFromAlias);
       prototype.registerHybridMethod("didDocumentJson", &HybridSpruceDidSpec::didDocumentJson);
       prototype.registerHybridMethod("signJws", &HybridSpruceDidSpec::signJws);
+      prototype.registerHybridMethod("signRawP256", &HybridSpruceDidSpec::signRawP256);
       prototype.registerHybridMethod("verifyJws", &HybridSpruceDidSpec::verifyJws);
       prototype.registerHybridMethod("signCredentialJwt", &HybridSpruceDidSpec::signCredentialJwt);
       prototype.registerHybridMethod("verifyCredentialJwt", &HybridSpruceDidSpec::verifyCredentialJwt);

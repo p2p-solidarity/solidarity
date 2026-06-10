@@ -228,6 +228,40 @@ final class HybridSpruceDid: HybridSpruceDidSpec {
     }
   }
 
+  func signRawP256(alias: String, digest: ArrayBuffer) throws -> Promise<ArrayBuffer> {
+    let bytes = copyPayload(digest)
+    guard bytes.count == 32 else {
+      throw SpruceDidError.invalidInput(
+        "signRawP256 expects a 32-byte SHA-256 digest, got \(bytes.count)")
+    }
+    return Promise.async {
+      let priv = try self.store.fetchECPrivateKey(alias: alias)
+      let algorithm = SecKeyAlgorithm.ecdsaSignatureDigestX962SHA256
+      guard SecKeyIsAlgorithmSupported(priv, .sign, algorithm) else {
+        throw SpruceDidError.signFailed("P-256 digest signing is not supported for alias=\(alias)")
+      }
+
+      var error: Unmanaged<CFError>?
+      guard
+        let derSig = SecKeyCreateSignature(
+          priv, algorithm, bytes as CFData, &error
+        ) as Data?
+      else {
+        let cfError = error?.takeRetainedValue()
+        let msg = (cfError as Error?)?.localizedDescription ?? "unknown"
+        if msg.contains("cancel") || msg.contains("Cancel") {
+          self.emit(
+            self.makeEvent(
+              .biometricpromptcancelled, alias: alias, message: msg))
+          throw SpruceDidError.biometricCancelled
+        }
+        throw SpruceDidError.signFailed(msg)
+      }
+      let raw = try EcdsaCodec.derToRaw(derSig)
+      return try ArrayBuffer.copy(data: raw)
+    }
+  }
+
   func verifyJws(jws: String, did: String) throws -> Promise<Bool> {
     return Promise.async {
       // SpruceID 0.15.x removed `DidMethodUtils.jwkFromDid` and the standalone
