@@ -22,10 +22,10 @@
  *            OS reports enrolled biometrics; Android rejects that key spec
  *            on fresh emulators/devices with no fingerprint enrolled.
  *
- * The private key never reaches JS — every sign call posts the payload to
- * native, which returns the JWS string. Earlier callers that called
- * `signJwt(header, payload)` keep working because we re-export the same
- * function signature; only the implementation is replaced.
+ * The private key never reaches JS — JWS signing and raw P-256 digest signing
+ * both happen in native. Earlier callers that called `signJwt(header, payload)`
+ * keep working because we re-export the same function signature; only the
+ * implementation is replaced.
  *
  * Backwards-compatibility & migration story:
  *   1. v1 expo (this repo before the SpruceID nitro module) stored a raw
@@ -62,6 +62,7 @@ import {
   didKeyFromJwk,
   publicKeyToJwk,
   publicKeyFromPrivate,
+  sha256Bytes,
   type PublicKeyJWK,
   utf8ToBytes,
 } from '@solidarity/shared';
@@ -299,26 +300,9 @@ export async function didKeyForCurrentIdentity(): Promise<string> {
 
 /**
  * Raw P-256 ECDSA signature over arbitrary bytes, plus the matching raw
- * verification key. Used by `ProofGenerationManager` so the embedded
- * `signerPublicKey` on a `SelectiveDisclosureProof` matches what verifiers
- * (including the Swift CryptoKit path) recompute from the JWK.
- *
- * Implementation note: SpruceID never exposes the private key to JS — every
- * sign call goes through the hardware-backed `signJws` API. ES256 JWS
- * signatures are exactly `base64url(r||s)`, the same 64-byte
- * `rawRepresentation` Swift's CryptoKit emits. So we sign the canonical
- * proof bytes inside a synthetic single-segment JWT envelope (the JWS
- * `header.payload.signature` shape Spruce produces), then peel the last
- * segment off and base64url-decode it.
- *
- * Why we don't expose this everywhere: the JWS payload is the canonical
- * proof string — anything else routed through `signJws` would also produce
- * a valid signature over its own JSON-stringified payload, NOT over the
- * raw bytes we want. Callers who need raw ECDSA over arbitrary bytes
- * (proof signatures, ECIES handshake, etc.) go through this helper which
- * frames the payload as a `{c: base64url(bytes)}` JWS payload, so the
- * resulting signature commits to the same UTF-8 bytes the Swift
- * `KeyManager.signProofData(...)` would have signed.
+ * verification key. Native signs `SHA-256(payload)` directly and returns
+ * raw 64-byte `r || s`, matching Swift CryptoKit-style raw signatures
+ * without routing through a JWS wrapper.
  *
  * Biometric gate: same as `signJwt` — `requireBiometric('sign')` runs first.
  */
@@ -326,93 +310,73 @@ export async function signRawEs256(payload: Uint8Array): Promise<{
   readonly signature: Uint8Array;
   readonly publicKeyRaw: Uint8Array;
 }> {
+  return signDigestWithCurrentKey(sha256Bytes(payload), 'signRawEs256');
+}
+
+export async function signOpenAcDeviceBindingDigest(
+  nonceHash: Uint8Array
+): Promise<{
+  readonly signature: Uint8Array;
+  readonly publicKeyRaw: Uint8Array;
+}> {
+  if (nonceHash.length !== 32) {
+    throw new Error(
+      `signOpenAcDeviceBindingDigest: expected 32-byte nonce_hash (got ${nonceHash.length})`
+    );
+  }
+  return signDigestWithCurrentKey(nonceHash, 'signOpenAcDeviceBindingDigest');
+}
+
+export async function publicRawP256ForCurrentIdentity(): Promise<Uint8Array> {
+  const id = await ensureSigningKey();
+  return rawP256PublicKeyFromJwk(id.publicJwk, 'publicRawP256ForCurrentIdentity');
+}
+
+async function signDigestWithCurrentKey(
+  digest: Uint8Array,
+  context: string
+): Promise<{
+  readonly signature: Uint8Array;
+  readonly publicKeyRaw: Uint8Array;
+}> {
   const allowed = await requireBiometric('sign');
   if (!allowed) throw new Error('biometric authentication required');
 
   const id = await ensureSigningKey();
-  // Wrap the raw bytes in a one-field JSON payload so the ES256 signature
-  // commits to them exactly. The header is whatever Spruce emits (we don't
-  // use it for verification — we only need the 64-byte r||s from segment 3).
-  const wrappedPayload = JSON.stringify({ c: base64UrlEncode(payload) });
-  const payloadBytes = utf8ToBytes(wrappedPayload);
-  const buf = new ArrayBuffer(payloadBytes.length);
-  new Uint8Array(buf).set(payloadBytes);
-  const jws = await driver().signJws(id.alias, buf);
-  const parts = jws.split('.');
-  if (parts.length !== 3) {
-    throw new Error('signRawEs256: SpruceID returned malformed JWS');
-  }
-  const signingInput = `${parts[0]}.${parts[1]}`;
-  const signature = base64UrlDecode(parts[2] ?? '');
+  const buf = new ArrayBuffer(digest.length);
+  new Uint8Array(buf).set(digest);
+  const signatureBuffer = await driver().signRawP256(id.alias, buf);
+  const signature = new Uint8Array(signatureBuffer);
   if (signature.length !== 64) {
     throw new Error(
-      `signRawEs256: expected 64-byte raw P-256 signature (got ${signature.length})`
+      `${context}: expected 64-byte raw P-256 signature (got ${signature.length})`
     );
   }
-  // Recover the X||Y raw form of the public key. The JWK is parsed from
-  // the Spruce-emitted JSON string; both halves are base64url-encoded
-  // 32-byte coordinates.
-  const x = base64UrlDecode(id.publicJwk.x);
-  const y = base64UrlDecode(id.publicJwk.y);
+  const publicKeyRaw = rawP256PublicKeyFromJwk(id.publicJwk, context);
+  return { signature, publicKeyRaw };
+}
+
+function rawP256PublicKeyFromJwk(
+  jwk: PublicKeyJWK,
+  context: string
+): Uint8Array {
+  const x = base64UrlDecode(jwk.x);
+  const y = base64UrlDecode(jwk.y);
   if (x.length !== 32 || y.length !== 32) {
-    throw new Error('signRawEs256: invalid P-256 public-key JWK shape');
+    throw new Error(`${context}: invalid P-256 public-key JWK shape`);
   }
   const publicKeyRaw = new Uint8Array(64);
   publicKeyRaw.set(x, 0);
   publicKeyRaw.set(y, 32);
-  // signingInput is not used directly by the caller — but expose it via
-  // the JWS shape if a future debug surface needs to re-verify the JWS
-  // independently. Callers of `signRawEs256` only need the raw signature
-  // + public key (which together verify the WRAPPED payload, not the
-  // original bytes; we therefore export the wrapped payload below so
-  // verifiers can reconstruct the exact bytes that were signed).
-  void signingInput;
-  return { signature, publicKeyRaw };
+  return publicKeyRaw;
 }
 
 /**
- * Canonical wrapper applied by `signRawEs256` — exposed so verifiers can
- * reconstruct the exact JWS-payload bytes the signature commits to (the
- * raw bytes are NOT what gets signed; the bytes hashed by ECDSA are
- * `<header>.<payload>` where `payload` is base64url(JSON.stringify({c: …}))`).
- *
- * Returns the signing-input bytes (the `<header>.<payload>` string) so
- * verifiers feed exactly those bytes into P-256 `verify(sig, sha256(input), pub)`.
- *
- * This lives next to `signRawEs256` because the wrapping is an
- * implementation detail of how we route raw signing through Spruce's
- * `signJws`. The Swift side does NOT use this wrapping — it calls
- * `P256.Signing.PrivateKey.signature(for: data)` directly. So we MUST keep
- * the wrapping internal: the canonical proof signing data sent to ECDSA is
- * different on iOS Swift v1.3.x (raw `canonical` bytes) vs Expo
- * (`b64url(header).b64url({c: base64url(canonical)})`).
- *
- * Cross-platform implication: a SelectiveDisclosureProof signed in Expo
- * verifies in Expo (we recompute the wrapper) but does NOT verify in
- * Swift (which expects raw-bytes ECDSA). This is captured in the
- * `verifySelectiveDisclosureProof` reason string when a mismatch is
- * detected. Closing the loop requires either:
- *   1. Add a `signRaw(alias, bytes)` method to the SpruceID nitro spec
- *      (preferred — both Swift KeyManager + Expo do raw P-256 over the
- *      same bytes), or
- *   2. Migrate the Swift signer to use the same JWS wrapper.
- *
- * Until then, ZK proofs round-trip within a single platform; cross-platform
- * verification is captured by `proof.format === 'expo-v2'` (set by the
- * generator) so verifiers know which wrapping rule to apply.
+ * Digest that `signRawEs256(payload)` signs. Retained for existing verifier
+ * code that asks this module how to reconstruct the signed bytes.
  */
 export function wrapRawSigningInputForSpruce(payload: Uint8Array): Uint8Array {
-  // Mirror what Spruce's signJws does internally so verifiers can hash the
-  // exact same input. SpruceID emits header `{"alg":"ES256","typ":"JWT"}`
-  // by default (see `apps/expo/__tests__/parity/spruceDid.parity.test.ts`
-  // line 124-128 for the canonical test-driver behaviour) and signs
-  // `b64url(header) || "." || b64url(payload)`.
-  const headerB64 = base64UrlEncode(
-    utf8ToBytes(JSON.stringify({ alg: 'ES256', typ: 'JWT' }))
-  );
-  const payloadJson = JSON.stringify({ c: base64UrlEncode(payload) });
-  const payloadB64 = base64UrlEncode(utf8ToBytes(payloadJson));
-  return utf8ToBytes(`${headerB64}.${payloadB64}`);
+  return sha256Bytes(payload);
 }
 
 /** Test-only — wipes the active alias plus all legacy aliases. */

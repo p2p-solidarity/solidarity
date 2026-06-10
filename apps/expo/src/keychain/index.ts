@@ -6,7 +6,10 @@ export {
 export {
   ensureSigningKey,
   publicJwk,
+  publicRawP256ForCurrentIdentity,
   signJwt,
+  signOpenAcDeviceBindingDigest,
+  signRawEs256,
   didKeyForCurrentIdentity,
   resetSigningKeyForTesting,
   type SigningIdentity,

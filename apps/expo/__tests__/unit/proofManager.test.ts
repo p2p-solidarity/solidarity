@@ -121,15 +121,14 @@ beforeAll(async () => {
   // is covered by the SpruceID parity test.
   await mock.module('@/keychain/signingKey', () => ({
     signRawEs256: async (payload: Uint8Array) => {
-      // Mirror Swift CryptoKit's `signature(for:)` which internally
-      // SHA256-hashes the message before P-256 ECDSA. @noble/curves v2
-      // takes a pre-hashed digest, so we hash here.
+      // Mirror native raw P-256 signing: hash the canonical payload once,
+      // then sign the digest with prehash disabled.
       // eslint-disable-next-line @typescript-eslint/no-require-imports
       const { sha256: hashFn } = require('@noble/hashes/sha2.js') as {
         readonly sha256: (b: Uint8Array) => Uint8Array;
       };
       const digest = hashFn(payload);
-      const signature = p256.sign(digest, TEST_PRIV);
+      const signature = p256.sign(digest, TEST_PRIV, { prehash: false });
       return { signature, publicKeyRaw: TEST_PUB_RAW };
     },
     wrapRawSigningInputForSpruce: (payload: Uint8Array) => payload,

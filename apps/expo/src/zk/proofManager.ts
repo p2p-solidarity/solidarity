@@ -258,9 +258,9 @@ export async function generateSelectiveDisclosureProof(
  * Verify a selective-disclosure proof. Checks expiration, business-card
  * identifier match, and the ECDSA signature over the canonical payload.
  *
- * Cross-platform: `proof.format` selects which signing-input rule to
- * apply. `'expo-v2'` (or absent on proofs produced by this file) uses
- * the SpruceID JWS-wrapping path; `'swift-v2'` uses the raw-bytes path.
+ * Cross-platform: `proof.format` selects which signing-input rule to apply.
+ * Expo v2 now signs SHA-256(canonical) through native raw P-256, matching
+ * Swift's raw signature format without the old Spruce JWS wrapper.
  *
  * `signerPublicKey` is mandatory in v2. Returns `{ isValid: false }`
  * with a reason when missing — the legacy fallback to the local
@@ -327,8 +327,8 @@ export async function verifySelectiveDisclosureProof(
     return { isValid: false, reason: 'Invalid signerPublicKey length' };
   }
 
-  // 5. ECDSA verify. The bytes hashed depend on which signer produced the
-  //    proof — see `signRawEs256` documentation for the cross-platform note.
+  // 5. ECDSA verify. `wrapRawSigningInputForSpruce` returns the digest that
+  //    native signed for Expo v2; Swift v2 signs SHA-256(canonical).
   const uncompressed = new Uint8Array(65);
   uncompressed[0] = 0x04;
   uncompressed.set(pubBytes, 1);
@@ -341,12 +341,11 @@ export async function verifySelectiveDisclosureProof(
   const inputs: readonly Uint8Array[] =
     proof.format === 'expo-v2'
       ? [wrapRawSigningInputForSpruce(canonical)]
-      : [canonical];
+      : [sha256(canonical)];
 
   for (const input of inputs) {
-    const digest = sha256(input);
     try {
-      if (p256.verify(sigBytes, digest, uncompressed)) {
+      if (p256.verify(sigBytes, input, uncompressed, { prehash: false })) {
         return { isValid: true };
       }
     } catch {
