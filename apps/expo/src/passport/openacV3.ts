@@ -13,40 +13,49 @@ export type PassportOpenAcV3CircuitName =
   | 'passport_adapter'
   | 'openac_show';
 
+/**
+ * All three circuits share ONE merged SRS. barretenberg's SRS is a prefix, so
+ * a single blob sized to the largest circuit serves every circuit — the app
+ * bundles `passport.srs.bin` once instead of one SRS per circuit (~256→128MB).
+ */
+export const PASSPORT_OPENAC_V3_MERGED_SRS_ALIAS = 'passport' as const;
+export const PASSPORT_OPENAC_V3_MERGED_SRS_ASSET = 'passport.srs.bin' as const;
+
 export interface PassportOpenAcV3Circuit {
   readonly name: PassportOpenAcV3CircuitName;
   /**
-   * Alias passed to the Nitro native resolver. 0.3.0 release artifacts are
-   * bundled as `<name>.json` and `<name>.srs.bin`; native resolves aliases to
-   * real filesystem paths before calling mopro.
+   * Alias passed to the Nitro native resolver. 0.3.0 release artifacts bundle
+   * one `<name>.json` per circuit plus a single merged `passport.srs.bin`;
+   * native resolves aliases to real filesystem paths before calling mopro.
    */
   readonly circuitPath: PassportOpenAcV3CircuitName;
-  readonly srsPath: PassportOpenAcV3CircuitName;
+  /** Shared merged-SRS alias — every circuit resolves to the same blob. */
+  readonly srsPath: typeof PASSPORT_OPENAC_V3_MERGED_SRS_ALIAS;
   readonly circuitAsset: `${PassportOpenAcV3CircuitName}.json`;
-  readonly srsAsset: `${PassportOpenAcV3CircuitName}.srs.bin`;
+  readonly srsAsset: typeof PASSPORT_OPENAC_V3_MERGED_SRS_ASSET;
 }
 
 export const PASSPORT_OPENAC_V3_CIRCUITS: readonly PassportOpenAcV3Circuit[] = [
   {
     name: 'dsc_chain',
     circuitPath: 'dsc_chain',
-    srsPath: 'dsc_chain',
+    srsPath: PASSPORT_OPENAC_V3_MERGED_SRS_ALIAS,
     circuitAsset: 'dsc_chain.json',
-    srsAsset: 'dsc_chain.srs.bin',
+    srsAsset: PASSPORT_OPENAC_V3_MERGED_SRS_ASSET,
   },
   {
     name: 'passport_adapter',
     circuitPath: 'passport_adapter',
-    srsPath: 'passport_adapter',
+    srsPath: PASSPORT_OPENAC_V3_MERGED_SRS_ALIAS,
     circuitAsset: 'passport_adapter.json',
-    srsAsset: 'passport_adapter.srs.bin',
+    srsAsset: PASSPORT_OPENAC_V3_MERGED_SRS_ASSET,
   },
   {
     name: 'openac_show',
     circuitPath: 'openac_show',
-    srsPath: 'openac_show',
+    srsPath: PASSPORT_OPENAC_V3_MERGED_SRS_ALIAS,
     circuitAsset: 'openac_show.json',
-    srsAsset: 'openac_show.srs.bin',
+    srsAsset: PASSPORT_OPENAC_V3_MERGED_SRS_ASSET,
   },
 ] as const;
 
@@ -120,6 +129,10 @@ export interface PassportOpenAcV3ReadinessSource {
   readonly revocationSnapshot?: unknown;
 }
 
+export interface PassportOpenAcV3FallbackProofSource {
+  readonly isSimulated?: boolean;
+}
+
 export type PassportOpenAcV3ProofPlan =
   | {
       readonly kind: 'openac-v3';
@@ -134,6 +147,18 @@ export type PassportOpenAcV3ProofPlan =
       readonly version: typeof PASSPORT_NOIR_VERSION;
       readonly proofType: 'sd-jwt-fallback';
       readonly readiness: Extract<PassportOpenAcV3Readiness, { ready: false }>;
+    };
+
+export type PassportOpenAcV3ReadWitnessPreparationDecision =
+  | {
+      readonly prepare: true;
+      readonly plan: Extract<PassportOpenAcV3ProofPlan, { kind: 'openac-v3' }>;
+      readonly reason?: never;
+    }
+  | {
+      readonly prepare: false;
+      readonly plan: Extract<PassportOpenAcV3ProofPlan, { kind: 'fallback' }>;
+      readonly reason: PassportOpenAcV3NotReadyReason;
     };
 
 export interface PassportOpenAcV3WitnessBundle {
@@ -309,6 +334,26 @@ export function buildPassportOpenAcV3ProofPlan(
     requiredDataGroups: PASSPORT_OPENAC_V3_REQUIRED_DATA_GROUPS,
     revocationSnapshot: readiness.revocationSnapshot,
   };
+}
+
+export function shouldPreparePassportOpenAcV3WitnessDuringRead(
+  source: PassportOpenAcV3ReadinessSource
+): PassportOpenAcV3ReadWitnessPreparationDecision {
+  const plan = buildPassportOpenAcV3ProofPlan(source);
+  if (plan.kind === 'openac-v3') {
+    return { prepare: true, plan };
+  }
+  return {
+    prepare: false,
+    plan,
+    reason: plan.readiness.reason,
+  };
+}
+
+export function shouldAllowPassportOpenAcV3FallbackProof(
+  source: PassportOpenAcV3FallbackProofSource
+): boolean {
+  return source.isSimulated === true;
 }
 
 export function buildPassportOpenAcV3ProofCalls(

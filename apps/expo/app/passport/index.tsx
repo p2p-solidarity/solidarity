@@ -66,6 +66,8 @@ import {
   generatePassportOpenAcV3ProofPayload,
   parsePassportOpenAcV3ActiveAuthJson,
   parsePassportOpenAcV3WitnessBundleJson,
+  shouldAllowPassportOpenAcV3FallbackProof,
+  shouldPreparePassportOpenAcV3WitnessDuringRead,
   type PassportOpenAcV3ProofPlan,
 } from '@/passport/openacV3';
 import {
@@ -82,7 +84,10 @@ import { usePreferences } from '@/settings/preferences';
 import { useCredentialStore, type TrustLevel } from '@/credentials/store';
 import { useActiveDid, useIdentityData } from '@/identity';
 import type { ProvableClaimEntity } from '@/identity/entities';
-import { getNfcPassport } from '@solidarity/nitro-nfc-passport';
+import {
+  getNfcPassport,
+  type PassportReadResult,
+} from '@solidarity/nitro-nfc-passport';
 import { getPassportZk } from '@solidarity/nitro-passport-zk';
 import { sha256Bytes, uuid } from '@solidarity/shared';
 
@@ -130,6 +135,60 @@ function freshOpenAcV3NonceHash(): Uint8Array {
     return bytes;
   }
   return sha256Bytes(`airmeishi-openac-v3:${uuid()}:${String(Date.now())}`);
+}
+
+async function attachOpenAcV3WitnessDuringRead(args: {
+  readonly result: PassportReadResult;
+  readonly nfc: ReturnType<typeof getNfcPassport> | null;
+  readonly zk: ReturnType<typeof getPassportZk> | null;
+  readonly setProgress: () => void;
+}): Promise<PassportReadResult> {
+  if (args.result.openAcV3WitnessBundleJson) return args.result;
+
+  const skip = (reason: string): PassportReadResult => {
+    console.warn(`[zk] OpenAC v3 read-stage witness skipped — ${reason}`);
+    return args.result;
+  };
+
+  const revocationSnapshot = loadBundledRevocationSnapshot(args.nfc);
+  const witnessDecision = shouldPreparePassportOpenAcV3WitnessDuringRead({
+    ...args.result,
+    revocationSnapshot,
+  });
+  if (args.zk === null) {
+    return skip(
+      `passport-noir ${PASSPORT_NOIR_VERSION} witness builder is not linked.`
+    );
+  }
+  if (!witnessDecision.prepare) {
+    return skip(describeOpenAcV3Unavailable(witnessDecision.plan, false));
+  }
+
+  const activeAuth = parsePassportOpenAcV3ActiveAuthJson(args.result.activeAuthJson);
+  if (activeAuth === null) {
+    return skip('passport has no ECDSA-P256 Active Authentication evidence');
+  }
+
+  args.setProgress();
+  try {
+    const witnessBundleJson = await buildPassportOpenAcV3WitnessBundleJson({
+      chip: args.result,
+      revocationSnapshot: witnessDecision.plan.revocationSnapshot,
+      devicePublicKeyRaw: await publicRawP256ForCurrentIdentity(),
+      nonceHash: freshOpenAcV3NonceHash(),
+      linkScope: 'airmeishi-passport-v3',
+      requireAA: true,
+      activeAuth,
+      builder: args.zk,
+    });
+    return {
+      ...args.result,
+      openAcV3WitnessBundleJson: witnessBundleJson,
+    };
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    return skip(message);
+  }
 }
 
 /**
@@ -280,52 +339,19 @@ export default function PassportSetup() {
             },
           },
         );
-        let resultWithWitness = result;
-        if (!result.openAcV3WitnessBundleJson) {
-          const zk = nitro.zk;
-          if (zk === null) {
-            throw new Error(
-              `passport-noir ${PASSPORT_NOIR_VERSION} witness builder is not linked.`
-            );
-          }
-          dispatch({
-            type: 'setNfcProgressEvent',
-            phase: 'verifying',
-            percent: 96,
-            message: 'Preparing OpenAC v3 witness...',
-          });
-          const revocationSnapshot = loadBundledRevocationSnapshot(nitro.nfc);
-          const proofPlan = buildPassportOpenAcV3ProofPlan({
-            ...result,
-            revocationSnapshot,
-          });
-          if (proofPlan.kind !== 'openac-v3') {
-            throw new Error(describeOpenAcV3Unavailable(proofPlan, zk === null));
-          }
-          const activeAuth = parsePassportOpenAcV3ActiveAuthJson(
-            result.activeAuthJson
-          );
-          if (activeAuth === null) {
-            throw new Error(
-              'Passport did not provide ECDSA-P256 Active Authentication. ' +
-                'OpenAC v3 requires an AA-capable chip.'
-            );
-          }
-          const witnessBundleJson = await buildPassportOpenAcV3WitnessBundleJson({
-            chip: result,
-            revocationSnapshot: proofPlan.revocationSnapshot,
-            devicePublicKeyRaw: await publicRawP256ForCurrentIdentity(),
-            nonceHash: freshOpenAcV3NonceHash(),
-            linkScope: 'airmeishi-passport-v3',
-            requireAA: true,
-            activeAuth,
-            builder: zk,
-          });
-          resultWithWitness = {
-            ...result,
-            openAcV3WitnessBundleJson: witnessBundleJson,
-          };
-        }
+        const resultWithWitness = await attachOpenAcV3WitnessDuringRead({
+          result,
+          nfc: nitro.nfc,
+          zk: nitro.zk,
+          setProgress: () => {
+            dispatch({
+              type: 'setNfcProgressEvent',
+              phase: 'verifying',
+              percent: 96,
+              message: 'Preparing OpenAC v3 witness...',
+            });
+          },
+        });
         chip = chipFromNitro(
           resultWithWitness,
           state.draft.nationalityCode,
@@ -388,15 +414,19 @@ export default function PassportSetup() {
           disclosure: null,
         };
       } else {
-        const fallbackReason = describeOpenAcV3Unavailable(proofPlan, nitro.zk === null);
-        if (!state.chip.isSimulated) {
+        const fallbackReason = describeOpenAcV3Unavailable(
+          proofPlan,
+          nitro.zk === null
+        );
+        console.warn(`[zk] OpenAC v3 unavailable — ${fallbackReason}`);
+        if (!shouldAllowPassportOpenAcV3FallbackProof(state.chip)) {
           throw new Error(fallbackReason);
         }
         dispatch({
           type: 'setProofProgress',
-          message: 'OpenAC v3 unavailable — using dev fallback…',
+          message: 'OpenAC v3 unavailable — using SD-JWT fallback…',
         });
-        pushToast(`${fallbackReason} Using dev fallback.`, 'info');
+        pushToast('OpenAC v3 unavailable — using SD-JWT fallback.', 'info');
         await new Promise<void>((r) => setTimeout(r, 600));
         proof = {
           proofType: 'sd-jwt-fallback',

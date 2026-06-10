@@ -15,13 +15,20 @@ import { createRequire } from 'node:module';
 const appDir = resolve(import.meta.dir, '../..');
 const repoRoot = resolve(appDir, '../..');
 const prepareScript = join(appDir, 'scripts', 'prepare-ios-workspace.sh');
+const stageOpenAcSrsScript = join(appDir, 'scripts', 'stage-openac-srs.sh');
 const cloudPostCloneScript = join(appDir, 'ci-scripts', 'ci_post_clone.sh');
+const prepareScriptSource = readFileSync(prepareScript, 'utf8');
+const stageOpenAcSrsScriptSource = readFileSync(stageOpenAcSrsScript, 'utf8');
 const require = createRequire(import.meta.url);
 const disableClangExplicitModulesPlugin = require(
   join(appDir, 'plugins', 'withDisableClangExplicitModules.js')
 );
 const generatedSchemeXml = readFileSync(
   join(appDir, 'ios', 'Solidarity.xcodeproj', 'xcshareddata', 'xcschemes', 'solidarity.xcscheme'),
+  'utf8'
+);
+const xcodeProject = readFileSync(
+  join(appDir, 'ios', 'Solidarity.xcodeproj', 'project.pbxproj'),
   'utf8'
 );
 
@@ -155,6 +162,7 @@ function writeGeneratedScheme(appDir: string): string {
 describe('iOS build environment scripts', () => {
   test('test fixture paths resolve to the Expo app', () => {
     expect(existsSync(prepareScript), prepareScript).toBe(true);
+    expect(existsSync(stageOpenAcSrsScript), stageOpenAcSrsScript).toBe(true);
     expect(existsSync(cloudPostCloneScript), cloudPostCloneScript).toBe(true);
   });
 
@@ -175,6 +183,86 @@ end
     expect(patched).toContain('Regexp.last_match(1)');
     expect(patched).not.toContain('OTHER_CFLAGS = #{react_native_post_install(');
     expect(patched).not.toContain('OTHER_SWIFT_FLAGS = #{react_native_post_install(');
+  });
+
+  test('iOS project bundles the single merged OpenAC SRS resource', () => {
+    expect(xcodeProject).toContain(
+      'nitro-modules/passport-zk/android/src/main/assets/passport.srs.bin'
+    );
+    expect(xcodeProject).toContain(
+      '${TARGET_BUILD_DIR}/${UNLOCALIZED_RESOURCES_FOLDER_PATH}/passport.srs.bin'
+    );
+    expect(xcodeProject.indexOf('Stage Passport OpenAC SRS')).toBeGreaterThan(-1);
+    expect(xcodeProject.indexOf('Stage Passport OpenAC SRS')).toBeLessThan(
+      xcodeProject.indexOf('[CP] Copy Pods Resources')
+    );
+    expect(xcodeProject).toContain('scripts/stage-openac-srs.sh');
+    expect(xcodeProject).not.toContain('dsc_chain.srs.bin');
+    expect(xcodeProject).not.toContain('passport_adapter.srs.bin');
+    expect(xcodeProject).not.toContain('openac_show.srs.bin');
+  });
+
+  test('prepare script stages OpenAC SRS from local files instead of downloading it', () => {
+    expect(prepareScriptSource).toContain('stage-openac-srs.sh');
+    expect(prepareScriptSource).not.toContain('PASSPORT_OPENAC_SRS_ZIP_URL');
+    expect(prepareScriptSource).not.toContain('PassportOpenAcV3Srs.zip');
+  });
+
+  test('OpenAC SRS staging promotes the largest legacy SRS when merged SRS is absent', () => {
+    const fixtureRoot = makeTempDir();
+    const fixtureApp = join(fixtureRoot, 'apps', 'expo');
+    const stdoutPath = join(fixtureRoot, 'stdout.log');
+    const stderrPath = join(fixtureRoot, 'stderr.log');
+    const passportNoirDir = join(fixtureRoot, 'passport-noir');
+    const localSrsDir = join(passportNoirDir, 'mopro-binding', 'test-vectors', 'srs');
+    const assetsDir = join(
+      fixtureRoot,
+      'nitro-modules',
+      'passport-zk',
+      'android',
+      'src',
+      'main',
+      'assets'
+    );
+    mkdirSync(join(fixtureApp, 'ios'), { recursive: true });
+    mkdirSync(localSrsDir, { recursive: true });
+    mkdirSync(assetsDir, { recursive: true });
+    writeFileSync(join(localSrsDir, 'dsc_chain.srs.bin'), 'small');
+    writeFileSync(join(localSrsDir, 'passport_adapter.srs.bin'), 'largest local srs');
+    writeFileSync(join(localSrsDir, 'openac_show.srs.bin'), 'medium srs');
+    writeFileSync(join(assetsDir, 'passport_adapter.srs.bin'), 'stale');
+
+    const result = Bun.spawnSync({
+      cmd: [
+        '/bin/bash',
+        '-c',
+        '/bin/bash "$1" >"$2" 2>"$3"',
+        'runner',
+        stageOpenAcSrsScript,
+        stdoutPath,
+        stderrPath,
+      ],
+      env: {
+        ...process.env,
+        AIRMEISHI_EXPO_APP_DIR: fixtureApp,
+        AIRMEISHI_PASSPORT_NOIR_DIR: passportNoirDir,
+        AIRMEISHI_REPO_ROOT: fixtureRoot,
+      },
+      stdout: 'pipe',
+      stderr: 'pipe',
+    });
+
+    expect(
+      result.exitCode,
+      JSON.stringify({
+        stderr: readOptional(stderrPath),
+        stdout: readOptional(stdoutPath),
+      })
+    ).toBe(0);
+    expect(readFileSync(join(assetsDir, 'passport.srs.bin'), 'utf8')).toBe(
+      'largest local srs'
+    );
+    expect(existsSync(join(assetsDir, 'passport_adapter.srs.bin'))).toBe(false);
   });
 
   test('shared prepare script runs workspace install, clean prebuild, and pod install', () => {
@@ -276,10 +364,21 @@ end
 
   test('Xcode Cloud post-clone hook delegates to the same clean prepare flow', () => {
     const fixtureRoot = makeTempDir();
+    const fixtureApp = join(fixtureRoot, 'apps', 'expo');
     const fakeBin = join(fixtureRoot, 'bin');
     const logPath = join(fixtureRoot, 'commands.log');
     const stdoutPath = join(fixtureRoot, 'stdout.log');
     const stderrPath = join(fixtureRoot, 'stderr.log');
+    const fixtureScriptsDir = join(fixtureApp, 'scripts');
+    const fixtureCiScriptsDir = join(fixtureApp, 'ios', 'ci_scripts');
+    mkdirSync(fixtureScriptsDir, { recursive: true });
+    mkdirSync(fixtureCiScriptsDir, { recursive: true });
+    writeFileSync(join(fixtureScriptsDir, 'prepare-ios-workspace.sh'), prepareScriptSource, {
+      mode: 0o755,
+    });
+    writeFileSync(join(fixtureScriptsDir, 'stage-openac-srs.sh'), stageOpenAcSrsScriptSource, {
+      mode: 0o755,
+    });
     createFakeToolchain(fakeBin, logPath);
 
     const result = Bun.spawnSync({
@@ -292,10 +391,10 @@ end
         stdoutPath,
         stderrPath,
       ],
-      cwd: join(appDir, 'ios', 'ci_scripts'),
+      cwd: fixtureCiScriptsDir,
       env: {
         ...process.env,
-        CI_PRIMARY_REPOSITORY_PATH: repoRoot,
+        CI_PRIMARY_REPOSITORY_PATH: fixtureRoot,
         COMMAND_LOG: logPath,
         AIRMEISHI_SETUP_IOS_NATIVE_BINDINGS: '0',
         PATH: `${fakeBin}:${process.env['PATH'] ?? ''}`,
@@ -312,12 +411,12 @@ end
       })
     ).toBe(0);
     const commands = readCommandLog(logPath);
-    expect(commands).toContain(`bun\t${repoRoot}\tinstall --frozen-lockfile`);
+    expect(commands).toContain(`bun\t${fixtureRoot}\tinstall --frozen-lockfile`);
     expect(commands).toContain(
-      `bunx\t${appDir}\texpo prebuild --clean --platform ios --no-install`
+      `bunx\t${fixtureApp}\texpo prebuild --clean --platform ios --no-install`
     );
-    expect(commands).toContain(`pod\t${join(appDir, 'ios')}\tinstall`);
-  });
+    expect(commands).toContain(`pod\t${join(fixtureApp, 'ios')}\tinstall`);
+  }, 10_000);
 
   test('shared prepare script stages native iOS binding xcframeworks before pod install', () => {
     const fixtureRoot = makeTempDir();
@@ -327,7 +426,27 @@ end
     const stdoutPath = join(fixtureRoot, 'stdout.log');
     const stderrPath = join(fixtureRoot, 'stderr.log');
     const passportNoirDir = join(fixtureRoot, 'passport-noir');
+    const localSrsDir = join(passportNoirDir, 'mopro-binding', 'test-vectors', 'srs');
+    const passportAssetsDir = join(
+      fixtureRoot,
+      'nitro-modules',
+      'passport-zk',
+      'android',
+      'src',
+      'main',
+      'assets'
+    );
     mkdirSync(join(fixtureApp, 'ios'), { recursive: true });
+    mkdirSync(localSrsDir, { recursive: true });
+    writeFileSync(join(localSrsDir, 'passport.srs.bin'), 'new merged local srs');
+    mkdirSync(passportAssetsDir, { recursive: true });
+    for (const staleSrs of [
+      'dsc_chain.srs.bin',
+      'passport_adapter.srs.bin',
+      'openac_show.srs.bin',
+    ]) {
+      writeFileSync(join(passportAssetsDir, staleSrs), 'stale srs');
+    }
     createFakeToolchain(fakeBin, logPath);
     writeNativeBindingDownloadStubs(fakeBin, logPath);
 
@@ -390,8 +509,22 @@ end
         )
       )
     ).toBe(true);
+    expect(
+      existsSync(join(passportAssetsDir, 'passport.srs.bin'))
+    ).toBe(true);
+    for (const staleSrs of [
+      'dsc_chain.srs.bin',
+      'passport_adapter.srs.bin',
+      'openac_show.srs.bin',
+    ]) {
+      expect(existsSync(join(passportAssetsDir, staleSrs))).toBe(false);
+    }
 
     const commands = readCommandLog(logPath);
+    const downloads = commands.filter((line) => line.startsWith('curl\t'));
+    expect(downloads).toHaveLength(2);
+    expect(downloads.join('\n')).not.toContain('PassportOpenAcV3Srs.zip');
+    expect(downloads.join('\n')).not.toContain('openac');
     const firstDownload = commands.findIndex((line) => line.startsWith('curl\t'));
     const podInstall = commands.findIndex((line) =>
       line === `pod\t${join(fixtureApp, 'ios')}\tinstall`

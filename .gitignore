@@ -210,10 +210,12 @@ nitro-modules/**/*.xcframework/
 nitro-modules/passport-zk/android/src/main/jniLibs/*/libpassport_zk_mopro.so
 nitro-modules/passport-zk/android/src/main/jniLibs/*/libc++_shared.so
 
-# SRS proving keys (*.srs.bin) are distributed via GitHub Release, not git —
-# the 0.3.0 passport_adapter SRS alone is 128MB, over GitHub's 100MB push
-# limit. build-android.sh / `make gen-srs` drop them into assets/ at build
-# time; only the small *.json circuit manifests are checked in.
+# SRS proving keys (*.srs.bin) are generated/staged locally, not committed.
+# The OpenAC v3 passport set uses ONE merged `passport.srs.bin` (sized to the
+# largest of the three circuits; barretenberg's SRS is a prefix so it serves
+# all three). `scripts/stage-openac-srs.sh`, build-android.sh, or `make gen-srs`
+# drop it into assets/ at build time; only the small *.json manifests are
+# checked in.
 nitro-modules/passport-zk/android/src/main/assets/*.srs.bin
 # Other non-passport circuit/SRS pairs build-android.sh may drop into assets/.
 nitro-modules/passport-zk/android/src/main/assets/passport_verifier.*

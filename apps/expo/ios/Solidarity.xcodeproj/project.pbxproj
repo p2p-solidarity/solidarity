@@ -8,13 +8,13 @@
 
 /* Begin PBXBuildFile section */
 		13B07FBF1A68108700A75B9A /* Images.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 13B07FB51A68108700A75B9A /* Images.xcassets */; };
-		30C99575318C4D819A9FA8B3 /* SpruceIDMobileSdk in Frameworks */ = {isa = PBXBuildFile; productRef = EB826485BB1940F68C4E7BC7 /* SpruceIDMobileSdk */; };
+		25683354C0E84E61ACDF888A /* SpruceIDMobileSdk in Frameworks */ = {isa = PBXBuildFile; productRef = E38E8FCD38E642D59DDF1F84 /* SpruceIDMobileSdk */; };
+		2A9BBBEAE39B568F864FD8F3 /* Pods_Solidarity.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 89D551FE2C572987ECACADC9 /* Pods_Solidarity.framework */; };
 		3E461D99554A48A4959DE609 /* SplashScreen.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = AA286B85B6C04FC6940260E9 /* SplashScreen.storyboard */; };
-		415BCAD28DC8DF3C4295FB74 /* Pods_Solidarity.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 14DABBCF0EED94A3B3902463 /* Pods_Solidarity.framework */; };
-		4C7E57C29A6B4DF6B55585BA /* SpruceIDMobileSdkRs in Frameworks */ = {isa = PBXBuildFile; productRef = B1330BE38C9A42F0A5542349 /* SpruceIDMobileSdkRs */; };
+		4E6370462ECD4D28B21D76E0 /* SpruceIDMobileSdkRs in Frameworks */ = {isa = PBXBuildFile; productRef = 098E7CC90F1B4798ABD3F8A7 /* SpruceIDMobileSdkRs */; };
+		4FF4CB7BD1E506DD7D2CBB49 /* ExpoModulesProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = C19280E2CFBD0F9BCD50FA0A /* ExpoModulesProvider.swift */; };
 		BB2F792D24A3F905000567C9 /* Expo.plist in Resources */ = {isa = PBXBuildFile; fileRef = BB2F792C24A3F905000567C9 /* Expo.plist */; };
-		DDE66901F35A840D3B846E58 /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = 37DCA20F92233B5E33B5ADCA /* PrivacyInfo.xcprivacy */; };
-		E54BEBE9D2C020E83EF0898C /* ExpoModulesProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7E8AFEB7C701CE4D53291B56 /* ExpoModulesProvider.swift */; };
+		E28DD2C402543A1AB7C301B9 /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = E322B9D537EFC5EDA214E784 /* PrivacyInfo.xcprivacy */; };
 		F11748422D0307B40044C1D9 /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = F11748412D0307B40044C1D9 /* AppDelegate.swift */; };
 /* End PBXBuildFile section */
 
@@ -22,13 +22,13 @@
 		13B07F961A680F5B00A75B9A /* Solidarity.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Solidarity.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		13B07FB51A68108700A75B9A /* Images.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; name = Images.xcassets; path = Solidarity/Images.xcassets; sourceTree = "<group>"; };
 		13B07FB61A68108700A75B9A /* Info.plist */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text.plist.xml; name = Info.plist; path = Solidarity/Info.plist; sourceTree = "<group>"; };
-		14DABBCF0EED94A3B3902463 /* Pods_Solidarity.framework */ = {isa = PBXFileReference; explicitFileType = wrapper.framework; includeInIndex = 0; path = Pods_Solidarity.framework; sourceTree = BUILT_PRODUCTS_DIR; };
-		2D96AFDC1FC289C6919C87EE /* Pods-Solidarity.debug.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-Solidarity.debug.xcconfig"; path = "Target Support Files/Pods-Solidarity/Pods-Solidarity.debug.xcconfig"; sourceTree = "<group>"; };
-		37DCA20F92233B5E33B5ADCA /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; includeInIndex = 1; name = PrivacyInfo.xcprivacy; path = Solidarity/PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
-		7E8AFEB7C701CE4D53291B56 /* ExpoModulesProvider.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = ExpoModulesProvider.swift; path = "Pods/Target Support Files/Pods-Solidarity/ExpoModulesProvider.swift"; sourceTree = "<group>"; };
+		89D551FE2C572987ECACADC9 /* Pods_Solidarity.framework */ = {isa = PBXFileReference; explicitFileType = wrapper.framework; includeInIndex = 0; path = Pods_Solidarity.framework; sourceTree = BUILT_PRODUCTS_DIR; };
+		9165E3E3D4F58CC8B7EE30B1 /* Pods-Solidarity.debug.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-Solidarity.debug.xcconfig"; path = "Target Support Files/Pods-Solidarity/Pods-Solidarity.debug.xcconfig"; sourceTree = "<group>"; };
 		AA286B85B6C04FC6940260E9 /* SplashScreen.storyboard */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = file.storyboard; name = SplashScreen.storyboard; path = Solidarity/SplashScreen.storyboard; sourceTree = "<group>"; };
 		BB2F792C24A3F905000567C9 /* Expo.plist */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text.plist.xml; path = Expo.plist; sourceTree = "<group>"; };
-		C690FA9B279C59B9B6E3136F /* Pods-Solidarity.release.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-Solidarity.release.xcconfig"; path = "Target Support Files/Pods-Solidarity/Pods-Solidarity.release.xcconfig"; sourceTree = "<group>"; };
+		BB3A8FB8008BD843F0BDDD00 /* Pods-Solidarity.release.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-Solidarity.release.xcconfig"; path = "Target Support Files/Pods-Solidarity/Pods-Solidarity.release.xcconfig"; sourceTree = "<group>"; };
+		C19280E2CFBD0F9BCD50FA0A /* ExpoModulesProvider.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = ExpoModulesProvider.swift; path = "Pods/Target Support Files/Pods-Solidarity/ExpoModulesProvider.swift"; sourceTree = "<group>"; };
+		E322B9D537EFC5EDA214E784 /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; includeInIndex = 1; name = PrivacyInfo.xcprivacy; path = Solidarity/PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
 		ED297162215061F000B7C4FE /* JavaScriptCore.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = JavaScriptCore.framework; path = System/Library/Frameworks/JavaScriptCore.framework; sourceTree = SDKROOT; };
 		F11748412D0307B40044C1D9 /* AppDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = AppDelegate.swift; path = Solidarity/AppDelegate.swift; sourceTree = "<group>"; };
 		F11748442D0722820044C1D9 /* Solidarity-Bridging-Header.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; name = "Solidarity-Bridging-Header.h"; path = "Solidarity/Solidarity-Bridging-Header.h"; sourceTree = "<group>"; };
@@ -39,9 +39,9 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				30C99575318C4D819A9FA8B3 /* SpruceIDMobileSdk in Frameworks */,
-				4C7E57C29A6B4DF6B55585BA /* SpruceIDMobileSdkRs in Frameworks */,
-				415BCAD28DC8DF3C4295FB74 /* Pods_Solidarity.framework in Frameworks */,
+				25683354C0E84E61ACDF888A /* SpruceIDMobileSdk in Frameworks */,
+				4E6370462ECD4D28B21D76E0 /* SpruceIDMobileSdkRs in Frameworks */,
+				2A9BBBEAE39B568F864FD8F3 /* Pods_Solidarity.framework in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -57,7 +57,23 @@
 				13B07FB51A68108700A75B9A /* Images.xcassets */,
 				13B07FB61A68108700A75B9A /* Info.plist */,
 				AA286B85B6C04FC6940260E9 /* SplashScreen.storyboard */,
-				37DCA20F92233B5E33B5ADCA /* PrivacyInfo.xcprivacy */,
+				E322B9D537EFC5EDA214E784 /* PrivacyInfo.xcprivacy */,
+			);
+			name = Solidarity;
+			sourceTree = "<group>";
+		};
+		1D3F94CDA9DF70C0AEE36887 /* ExpoModulesProviders */ = {
+			isa = PBXGroup;
+			children = (
+				281512B81E1FA04A2B11882C /* Solidarity */,
+			);
+			name = ExpoModulesProviders;
+			sourceTree = "<group>";
+		};
+		281512B81E1FA04A2B11882C /* Solidarity */ = {
+			isa = PBXGroup;
+			children = (
+				C19280E2CFBD0F9BCD50FA0A /* ExpoModulesProvider.swift */,
 			);
 			name = Solidarity;
 			sourceTree = "<group>";
@@ -66,35 +82,9 @@
 			isa = PBXGroup;
 			children = (
 				ED297162215061F000B7C4FE /* JavaScriptCore.framework */,
-				14DABBCF0EED94A3B3902463 /* Pods_Solidarity.framework */,
+				89D551FE2C572987ECACADC9 /* Pods_Solidarity.framework */,
 			);
 			name = Frameworks;
-			sourceTree = "<group>";
-		};
-		328072F258986C39A9ADE7C7 /* ExpoModulesProviders */ = {
-			isa = PBXGroup;
-			children = (
-				62DDC2D122939904E8EC73D0 /* Solidarity */,
-			);
-			name = ExpoModulesProviders;
-			sourceTree = "<group>";
-		};
-		62DDC2D122939904E8EC73D0 /* Solidarity */ = {
-			isa = PBXGroup;
-			children = (
-				7E8AFEB7C701CE4D53291B56 /* ExpoModulesProvider.swift */,
-			);
-			name = Solidarity;
-			sourceTree = "<group>";
-		};
-		698250413FA7CE437659F6EB /* Pods */ = {
-			isa = PBXGroup;
-			children = (
-				2D96AFDC1FC289C6919C87EE /* Pods-Solidarity.debug.xcconfig */,
-				C690FA9B279C59B9B6E3136F /* Pods-Solidarity.release.xcconfig */,
-			);
-			name = Pods;
-			path = Pods;
 			sourceTree = "<group>";
 		};
 		832341AE1AAA6A7D00B99B32 /* Libraries */ = {
@@ -111,8 +101,8 @@
 				832341AE1AAA6A7D00B99B32 /* Libraries */,
 				83CBBA001A601CBA00E9B192 /* Products */,
 				2D16E6871FA4F8E400B85C8A /* Frameworks */,
-				698250413FA7CE437659F6EB /* Pods */,
-				328072F258986C39A9ADE7C7 /* ExpoModulesProviders */,
+				F2CD0305620726240BBA1CEB /* Pods */,
+				1D3F94CDA9DF70C0AEE36887 /* ExpoModulesProviders */,
 			);
 			indentWidth = 2;
 			sourceTree = "<group>";
@@ -136,6 +126,16 @@
 			path = Solidarity/Supporting;
 			sourceTree = "<group>";
 		};
+		F2CD0305620726240BBA1CEB /* Pods */ = {
+			isa = PBXGroup;
+			children = (
+				9165E3E3D4F58CC8B7EE30B1 /* Pods-Solidarity.debug.xcconfig */,
+				BB3A8FB8008BD843F0BDDD00 /* Pods-Solidarity.release.xcconfig */,
+			);
+			name = Pods;
+			path = Pods;
+			sourceTree = "<group>";
+		};
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
@@ -144,13 +144,14 @@
 			buildConfigurationList = 13B07F931A680F5B00A75B9A /* Build configuration list for PBXNativeTarget "Solidarity" */;
 			buildPhases = (
 				08A4A3CD28434E44B6B9DE2E /* [CP] Check Pods Manifest.lock */,
-				BF3C82456BFAE7FC61D4A3BF /* [Expo] Configure project */,
+				45501B604C138071B96B74D8 /* [Expo] Configure project */,
 				13B07F871A680F5B00A75B9A /* Sources */,
 				13B07F8C1A680F5B00A75B9A /* Frameworks */,
 				13B07F8E1A680F5B00A75B9A /* Resources */,
 				00DD1BFF1BD5951E006B06BC /* Bundle React Native code and images */,
+				8F0B04D22B1A4C22A08D3C11 /* Stage Passport OpenAC SRS */,
 				800E24972A6A228C8D4807E9 /* [CP] Copy Pods Resources */,
-				A74C6ED0148E9791CCB1F7AF /* [CP] Embed Pods Frameworks */,
+				65219A9D0757696E5C8B4F05 /* [CP] Embed Pods Frameworks */,
 			);
 			buildRules = (
 			);
@@ -158,8 +159,8 @@
 			);
 			name = Solidarity;
 			packageProductDependencies = (
-				EB826485BB1940F68C4E7BC7 /* SpruceIDMobileSdk */,
-				B1330BE38C9A42F0A5542349 /* SpruceIDMobileSdkRs */,
+				E38E8FCD38E642D59DDF1F84 /* SpruceIDMobileSdk */,
+				098E7CC90F1B4798ABD3F8A7 /* SpruceIDMobileSdkRs */,
 			);
 			productName = Solidarity;
 			productReference = 13B07F961A680F5B00A75B9A /* Solidarity.app */;
@@ -188,7 +189,7 @@
 			);
 			mainGroup = 83CBB9F61A601CBA00E9B192;
 			packageReferences = (
-				7438FACE49F04293A02C0420 /* XCRemoteSwiftPackageReference "sprucekit-mobile" */,
+				F5C6B2DEA5AA4A45AD861968 /* XCRemoteSwiftPackageReference "sprucekit-mobile" */,
 			);
 			productRefGroup = 83CBBA001A601CBA00E9B192 /* Products */;
 			projectDirPath = "";
@@ -207,7 +208,7 @@
 				BB2F792D24A3F905000567C9 /* Expo.plist in Resources */,
 				13B07FBF1A68108700A75B9A /* Images.xcassets in Resources */,
 				3E461D99554A48A4959DE609 /* SplashScreen.storyboard in Resources */,
-				DDE66901F35A840D3B846E58 /* PrivacyInfo.xcprivacy in Resources */,
+				E28DD2C402543A1AB7C301B9 /* PrivacyInfo.xcprivacy in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -253,67 +254,31 @@
 			shellScript = "diff \"${PODS_PODFILE_DIR_PATH}/Podfile.lock\" \"${PODS_ROOT}/Manifest.lock\" > /dev/null\nif [ $? != 0 ] ; then\n    # print error to STDERR\n    echo \"error: The sandbox is not in sync with the Podfile.lock. Run 'pod install' or update your CocoaPods installation.\" >&2\n    exit 1\nfi\n# This output is used by Xcode 'outputs' to avoid re-running this script phase.\necho \"SUCCESS\" > \"${SCRIPT_OUTPUT_FILE_0}\"\n";
 			showEnvVarsInLog = 0;
 		};
-		800E24972A6A228C8D4807E9 /* [CP] Copy Pods Resources */ = {
+		45501B604C138071B96B74D8 /* [Expo] Configure project */ = {
 			isa = PBXShellScriptBuildPhase;
+			alwaysOutOfDate = 1;
 			buildActionMask = 2147483647;
 			files = (
 			);
-			inputPaths = (
-				"${PODS_ROOT}/Target Support Files/Pods-Solidarity/Pods-Solidarity-resources.sh",
-				"${PODS_CONFIGURATION_BUILD_DIR}/AppAuth/AppAuthCore_Privacy.bundle",
-				"${PODS_CONFIGURATION_BUILD_DIR}/EXApplication/ExpoApplication_privacy.bundle",
-				"${PODS_CONFIGURATION_BUILD_DIR}/EXConstants/EXConstants.bundle",
-				"${PODS_CONFIGURATION_BUILD_DIR}/EXConstants/ExpoConstants_privacy.bundle",
-				"${PODS_CONFIGURATION_BUILD_DIR}/ExpoFileSystem/ExpoFileSystem_privacy.bundle",
-				"${PODS_CONFIGURATION_BUILD_DIR}/ExpoLocalization/ExpoLocalization_privacy.bundle",
-				"${PODS_CONFIGURATION_BUILD_DIR}/ExpoNotifications/ExpoNotifications_privacy.bundle",
-				"${PODS_CONFIGURATION_BUILD_DIR}/GTMAppAuth/GTMAppAuth_Privacy.bundle",
-				"${PODS_CONFIGURATION_BUILD_DIR}/GTMSessionFetcher/GTMSessionFetcher_Core_Privacy.bundle",
-				"${PODS_CONFIGURATION_BUILD_DIR}/GoogleSignIn/GoogleSignIn.bundle",
-				"${PODS_CONFIGURATION_BUILD_DIR}/GoogleUtilities/GoogleUtilities_Privacy.bundle",
-				"${PODS_ROOT}/../../../../nitro-modules/passport-zk/android/src/main/assets/dsc_chain.json",
-				"${PODS_ROOT}/../../../../nitro-modules/passport-zk/android/src/main/assets/dsc_chain.srs.bin",
-				"${PODS_ROOT}/../../../../nitro-modules/passport-zk/android/src/main/assets/passport_adapter.json",
-				"${PODS_ROOT}/../../../../nitro-modules/passport-zk/android/src/main/assets/passport_adapter.srs.bin",
-				"${PODS_ROOT}/../../../../nitro-modules/passport-zk/android/src/main/assets/openac_show.json",
-				"${PODS_ROOT}/../../../../nitro-modules/passport-zk/android/src/main/assets/openac_show.srs.bin",
-				"${PODS_CONFIGURATION_BUILD_DIR}/PromisesObjC/FBLPromises_Privacy.bundle",
-				"${PODS_CONFIGURATION_BUILD_DIR}/RNSVG/RNSVGFilters.bundle",
-				"${PODS_CONFIGURATION_BUILD_DIR}/React-Core/React-Core_privacy.bundle",
-				"${PODS_CONFIGURATION_BUILD_DIR}/React-cxxreact/React-cxxreact_privacy.bundle",
-				"${PODS_CONFIGURATION_BUILD_DIR}/VisionCameraResizer/VisionCameraResizerShaders.bundle",
+			inputFileListPaths = (
 			);
-			name = "[CP] Copy Pods Resources";
+			inputPaths = (
+				"$(SRCROOT)/.xcode.env",
+				"$(SRCROOT)/.xcode.env.local",
+				"$(SRCROOT)/Solidarity/Solidarity.entitlements",
+				"$(SRCROOT)/Pods/Target Support Files/Pods-Solidarity/expo-configure-project.sh",
+			);
+			name = "[Expo] Configure project";
+			outputFileListPaths = (
+			);
 			outputPaths = (
-				"${TARGET_BUILD_DIR}/${UNLOCALIZED_RESOURCES_FOLDER_PATH}/AppAuthCore_Privacy.bundle",
-				"${TARGET_BUILD_DIR}/${UNLOCALIZED_RESOURCES_FOLDER_PATH}/ExpoApplication_privacy.bundle",
-				"${TARGET_BUILD_DIR}/${UNLOCALIZED_RESOURCES_FOLDER_PATH}/EXConstants.bundle",
-				"${TARGET_BUILD_DIR}/${UNLOCALIZED_RESOURCES_FOLDER_PATH}/ExpoConstants_privacy.bundle",
-				"${TARGET_BUILD_DIR}/${UNLOCALIZED_RESOURCES_FOLDER_PATH}/ExpoFileSystem_privacy.bundle",
-				"${TARGET_BUILD_DIR}/${UNLOCALIZED_RESOURCES_FOLDER_PATH}/ExpoLocalization_privacy.bundle",
-				"${TARGET_BUILD_DIR}/${UNLOCALIZED_RESOURCES_FOLDER_PATH}/ExpoNotifications_privacy.bundle",
-				"${TARGET_BUILD_DIR}/${UNLOCALIZED_RESOURCES_FOLDER_PATH}/GTMAppAuth_Privacy.bundle",
-				"${TARGET_BUILD_DIR}/${UNLOCALIZED_RESOURCES_FOLDER_PATH}/GTMSessionFetcher_Core_Privacy.bundle",
-				"${TARGET_BUILD_DIR}/${UNLOCALIZED_RESOURCES_FOLDER_PATH}/GoogleSignIn.bundle",
-				"${TARGET_BUILD_DIR}/${UNLOCALIZED_RESOURCES_FOLDER_PATH}/GoogleUtilities_Privacy.bundle",
-				"${TARGET_BUILD_DIR}/${UNLOCALIZED_RESOURCES_FOLDER_PATH}/dsc_chain.json",
-				"${TARGET_BUILD_DIR}/${UNLOCALIZED_RESOURCES_FOLDER_PATH}/dsc_chain.srs.bin",
-				"${TARGET_BUILD_DIR}/${UNLOCALIZED_RESOURCES_FOLDER_PATH}/passport_adapter.json",
-				"${TARGET_BUILD_DIR}/${UNLOCALIZED_RESOURCES_FOLDER_PATH}/passport_adapter.srs.bin",
-				"${TARGET_BUILD_DIR}/${UNLOCALIZED_RESOURCES_FOLDER_PATH}/openac_show.json",
-				"${TARGET_BUILD_DIR}/${UNLOCALIZED_RESOURCES_FOLDER_PATH}/openac_show.srs.bin",
-				"${TARGET_BUILD_DIR}/${UNLOCALIZED_RESOURCES_FOLDER_PATH}/FBLPromises_Privacy.bundle",
-				"${TARGET_BUILD_DIR}/${UNLOCALIZED_RESOURCES_FOLDER_PATH}/RNSVGFilters.bundle",
-				"${TARGET_BUILD_DIR}/${UNLOCALIZED_RESOURCES_FOLDER_PATH}/React-Core_privacy.bundle",
-				"${TARGET_BUILD_DIR}/${UNLOCALIZED_RESOURCES_FOLDER_PATH}/React-cxxreact_privacy.bundle",
-				"${TARGET_BUILD_DIR}/${UNLOCALIZED_RESOURCES_FOLDER_PATH}/VisionCameraResizerShaders.bundle",
+				"$(SRCROOT)/Pods/Target Support Files/Pods-Solidarity/ExpoModulesProvider.swift",
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/sh;
-			shellScript = "\"${PODS_ROOT}/Target Support Files/Pods-Solidarity/Pods-Solidarity-resources.sh\"\n";
-			showEnvVarsInLog = 0;
+			shellScript = "# This script configures Expo modules and generates the modules provider file.\nbash -l -c \"./Pods/Target\\ Support\\ Files/Pods-Solidarity/expo-configure-project.sh\"\n";
 		};
-		A74C6ED0148E9791CCB1F7AF /* [CP] Embed Pods Frameworks */ = {
+		65219A9D0757696E5C8B4F05 /* [CP] Embed Pods Frameworks */ = {
 			isa = PBXShellScriptBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -369,29 +334,78 @@
 			shellScript = "\"${PODS_ROOT}/Target Support Files/Pods-Solidarity/Pods-Solidarity-frameworks.sh\"\n";
 			showEnvVarsInLog = 0;
 		};
-		BF3C82456BFAE7FC61D4A3BF /* [Expo] Configure project */ = {
+		800E24972A6A228C8D4807E9 /* [CP] Copy Pods Resources */ = {
 			isa = PBXShellScriptBuildPhase;
-			alwaysOutOfDate = 1;
 			buildActionMask = 2147483647;
 			files = (
 			);
-			inputFileListPaths = (
-			);
 			inputPaths = (
-				"$(SRCROOT)/.xcode.env",
-				"$(SRCROOT)/.xcode.env.local",
-				"$(SRCROOT)/Solidarity/Solidarity.entitlements",
-				"$(SRCROOT)/Pods/Target Support Files/Pods-Solidarity/expo-configure-project.sh",
+				"${PODS_ROOT}/Target Support Files/Pods-Solidarity/Pods-Solidarity-resources.sh",
+				"${PODS_CONFIGURATION_BUILD_DIR}/AppAuth/AppAuthCore_Privacy.bundle",
+				"${PODS_CONFIGURATION_BUILD_DIR}/EXApplication/ExpoApplication_privacy.bundle",
+				"${PODS_CONFIGURATION_BUILD_DIR}/EXConstants/EXConstants.bundle",
+				"${PODS_CONFIGURATION_BUILD_DIR}/EXConstants/ExpoConstants_privacy.bundle",
+				"${PODS_CONFIGURATION_BUILD_DIR}/ExpoFileSystem/ExpoFileSystem_privacy.bundle",
+				"${PODS_CONFIGURATION_BUILD_DIR}/ExpoLocalization/ExpoLocalization_privacy.bundle",
+				"${PODS_CONFIGURATION_BUILD_DIR}/ExpoNotifications/ExpoNotifications_privacy.bundle",
+				"${PODS_CONFIGURATION_BUILD_DIR}/GTMAppAuth/GTMAppAuth_Privacy.bundle",
+				"${PODS_CONFIGURATION_BUILD_DIR}/GTMSessionFetcher/GTMSessionFetcher_Core_Privacy.bundle",
+				"${PODS_CONFIGURATION_BUILD_DIR}/GoogleSignIn/GoogleSignIn.bundle",
+				"${PODS_CONFIGURATION_BUILD_DIR}/GoogleUtilities/GoogleUtilities_Privacy.bundle",
+				"${PODS_ROOT}/../../../../nitro-modules/passport-zk/android/src/main/assets/dsc_chain.json",
+				"${PODS_ROOT}/../../../../nitro-modules/passport-zk/android/src/main/assets/passport_adapter.json",
+				"${PODS_ROOT}/../../../../nitro-modules/passport-zk/android/src/main/assets/openac_show.json",
+				"${PODS_ROOT}/../../../../nitro-modules/passport-zk/android/src/main/assets/passport.srs.bin",
+				"${PODS_CONFIGURATION_BUILD_DIR}/PromisesObjC/FBLPromises_Privacy.bundle",
+				"${PODS_CONFIGURATION_BUILD_DIR}/RNSVG/RNSVGFilters.bundle",
+				"${PODS_CONFIGURATION_BUILD_DIR}/React-Core/React-Core_privacy.bundle",
+				"${PODS_CONFIGURATION_BUILD_DIR}/React-cxxreact/React-cxxreact_privacy.bundle",
+				"${PODS_CONFIGURATION_BUILD_DIR}/VisionCameraResizer/VisionCameraResizerShaders.bundle",
 			);
-			name = "[Expo] Configure project";
-			outputFileListPaths = (
-			);
+			name = "[CP] Copy Pods Resources";
 			outputPaths = (
-				"$(SRCROOT)/Pods/Target Support Files/Pods-Solidarity/ExpoModulesProvider.swift",
+				"${TARGET_BUILD_DIR}/${UNLOCALIZED_RESOURCES_FOLDER_PATH}/AppAuthCore_Privacy.bundle",
+				"${TARGET_BUILD_DIR}/${UNLOCALIZED_RESOURCES_FOLDER_PATH}/ExpoApplication_privacy.bundle",
+				"${TARGET_BUILD_DIR}/${UNLOCALIZED_RESOURCES_FOLDER_PATH}/EXConstants.bundle",
+				"${TARGET_BUILD_DIR}/${UNLOCALIZED_RESOURCES_FOLDER_PATH}/ExpoConstants_privacy.bundle",
+				"${TARGET_BUILD_DIR}/${UNLOCALIZED_RESOURCES_FOLDER_PATH}/ExpoFileSystem_privacy.bundle",
+				"${TARGET_BUILD_DIR}/${UNLOCALIZED_RESOURCES_FOLDER_PATH}/ExpoLocalization_privacy.bundle",
+				"${TARGET_BUILD_DIR}/${UNLOCALIZED_RESOURCES_FOLDER_PATH}/ExpoNotifications_privacy.bundle",
+				"${TARGET_BUILD_DIR}/${UNLOCALIZED_RESOURCES_FOLDER_PATH}/GTMAppAuth_Privacy.bundle",
+				"${TARGET_BUILD_DIR}/${UNLOCALIZED_RESOURCES_FOLDER_PATH}/GTMSessionFetcher_Core_Privacy.bundle",
+				"${TARGET_BUILD_DIR}/${UNLOCALIZED_RESOURCES_FOLDER_PATH}/GoogleSignIn.bundle",
+				"${TARGET_BUILD_DIR}/${UNLOCALIZED_RESOURCES_FOLDER_PATH}/GoogleUtilities_Privacy.bundle",
+				"${TARGET_BUILD_DIR}/${UNLOCALIZED_RESOURCES_FOLDER_PATH}/dsc_chain.json",
+				"${TARGET_BUILD_DIR}/${UNLOCALIZED_RESOURCES_FOLDER_PATH}/passport_adapter.json",
+				"${TARGET_BUILD_DIR}/${UNLOCALIZED_RESOURCES_FOLDER_PATH}/openac_show.json",
+				"${TARGET_BUILD_DIR}/${UNLOCALIZED_RESOURCES_FOLDER_PATH}/passport.srs.bin",
+				"${TARGET_BUILD_DIR}/${UNLOCALIZED_RESOURCES_FOLDER_PATH}/FBLPromises_Privacy.bundle",
+				"${TARGET_BUILD_DIR}/${UNLOCALIZED_RESOURCES_FOLDER_PATH}/RNSVGFilters.bundle",
+				"${TARGET_BUILD_DIR}/${UNLOCALIZED_RESOURCES_FOLDER_PATH}/React-Core_privacy.bundle",
+				"${TARGET_BUILD_DIR}/${UNLOCALIZED_RESOURCES_FOLDER_PATH}/React-cxxreact_privacy.bundle",
+				"${TARGET_BUILD_DIR}/${UNLOCALIZED_RESOURCES_FOLDER_PATH}/VisionCameraResizerShaders.bundle",
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/sh;
-			shellScript = "# This script configures Expo modules and generates the modules provider file.\nbash -l -c \"./Pods/Target\\ Support\\ Files/Pods-Solidarity/expo-configure-project.sh\"\n";
+			shellScript = "\"${PODS_ROOT}/Target Support Files/Pods-Solidarity/Pods-Solidarity-resources.sh\"\n";
+			showEnvVarsInLog = 0;
+		};
+		8F0B04D22B1A4C22A08D3C11 /* Stage Passport OpenAC SRS */ = {
+			isa = PBXShellScriptBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputPaths = (
+				"${SRCROOT}/../scripts/stage-openac-srs.sh",
+			);
+			name = "Stage Passport OpenAC SRS";
+			outputPaths = (
+				"${PODS_ROOT}/../../../../nitro-modules/passport-zk/android/src/main/assets/passport.srs.bin",
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/bash;
+			shellScript = "set -euo pipefail\nAPP_DIR=\"${SRCROOT}/..\"\nAIRMEISHI_EXPO_APP_DIR=\"$APP_DIR\" \"$APP_DIR/scripts/stage-openac-srs.sh\"\n";
+			showEnvVarsInLog = 0;
 		};
 /* End PBXShellScriptBuildPhase section */
 
@@ -401,7 +415,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				F11748422D0307B40044C1D9 /* AppDelegate.swift in Sources */,
-				E54BEBE9D2C020E83EF0898C /* ExpoModulesProvider.swift in Sources */,
+				4FF4CB7BD1E506DD7D2CBB49 /* ExpoModulesProvider.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -410,7 +424,7 @@
 /* Begin XCBuildConfiguration section */
 		13B07F941A680F5B00A75B9A /* Debug */ = {
 			isa = XCBuildConfiguration;
-			baseConfigurationReference = 2D96AFDC1FC289C6919C87EE /* Pods-Solidarity.debug.xcconfig */;
+			baseConfigurationReference = 9165E3E3D4F58CC8B7EE30B1 /* Pods-Solidarity.debug.xcconfig */;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CLANG_ENABLE_MODULES = YES;
@@ -448,7 +462,7 @@
 		};
 		13B07F951A680F5B00A75B9A /* Release */ = {
 			isa = XCBuildConfiguration;
-			baseConfigurationReference = C690FA9B279C59B9B6E3136F /* Pods-Solidarity.release.xcconfig */;
+			baseConfigurationReference = BB3A8FB8008BD843F0BDDD00 /* Pods-Solidarity.release.xcconfig */;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CLANG_ENABLE_MODULES = YES;
@@ -666,7 +680,7 @@
 /* End XCConfigurationList section */
 
 /* Begin XCRemoteSwiftPackageReference section */
-		7438FACE49F04293A02C0420 /* XCRemoteSwiftPackageReference "sprucekit-mobile" */ = {
+		F5C6B2DEA5AA4A45AD861968 /* XCRemoteSwiftPackageReference "sprucekit-mobile" */ = {
 			isa = XCRemoteSwiftPackageReference;
 			repositoryURL = "https://github.com/spruceid/sprucekit-mobile";
 			requirement = {
@@ -677,14 +691,14 @@
 /* End XCRemoteSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
-		B1330BE38C9A42F0A5542349 /* SpruceIDMobileSdkRs */ = {
+		098E7CC90F1B4798ABD3F8A7 /* SpruceIDMobileSdkRs */ = {
 			isa = XCSwiftPackageProductDependency;
-			package = 7438FACE49F04293A02C0420 /* XCRemoteSwiftPackageReference "sprucekit-mobile" */;
+			package = F5C6B2DEA5AA4A45AD861968 /* XCRemoteSwiftPackageReference "sprucekit-mobile" */;
 			productName = SpruceIDMobileSdkRs;
 		};
-		EB826485BB1940F68C4E7BC7 /* SpruceIDMobileSdk */ = {
+		E38E8FCD38E642D59DDF1F84 /* SpruceIDMobileSdk */ = {
 			isa = XCSwiftPackageProductDependency;
-			package = 7438FACE49F04293A02C0420 /* XCRemoteSwiftPackageReference "sprucekit-mobile" */;
+			package = F5C6B2DEA5AA4A45AD861968 /* XCRemoteSwiftPackageReference "sprucekit-mobile" */;
 			productName = SpruceIDMobileSdk;
 		};
 /* End XCSwiftPackageProductDependency section */

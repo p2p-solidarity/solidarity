@@ -23,6 +23,7 @@ AIRMEISHI_EXPO_APP_DIR="$APP_DIR" \
 AIRMEISHI_INSTALL_TOOLING=1 \
 AIRMEISHI_IOS_PREBUILD_CLEAN=1 \
 AIRMEISHI_REPO_ROOT="$REPO_ROOT" \
+AIRMEISHI_SETUP_IOS_NATIVE_BINDINGS="${AIRMEISHI_SETUP_IOS_NATIVE_BINDINGS:-1}" \
 "$APP_DIR/scripts/prepare-ios-workspace.sh"
 
 echo "✓ Ready — Xcode Cloud will now archive + sign + ship to TestFlight."

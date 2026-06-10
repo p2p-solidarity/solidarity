@@ -18,13 +18,15 @@ Pod::Spec.new do |s|
   s.source_files = [
     'ios/**/*.{swift,h,m,mm}',
   ]
+  # One circuit manifest per circuit (small, checked in) + a SINGLE merged SRS.
+  # barretenberg's SRS is a prefix, so `passport.srs.bin` (sized to the largest
+  # of the three circuits) serves all of them — half the bundle vs one SRS each.
+  # The .srs.bin is gitignored and produced by `make gen-srs` / build-android.sh.
   s.resources = [
     'android/src/main/assets/dsc_chain.json',
-    'android/src/main/assets/dsc_chain.srs.bin',
     'android/src/main/assets/passport_adapter.json',
-    'android/src/main/assets/passport_adapter.srs.bin',
     'android/src/main/assets/openac_show.json',
-    'android/src/main/assets/openac_show.srs.bin',
+    'android/src/main/assets/passport.srs.bin',
   ]
 
   s.pod_target_xcconfig = {

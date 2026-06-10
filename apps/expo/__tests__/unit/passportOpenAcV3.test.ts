@@ -16,6 +16,8 @@ import {
   bindPassportOpenAcV3DeviceSignature,
   generatePassportOpenAcV3ProofPayload,
   parsePassportOpenAcV3WitnessBundleJson,
+  shouldAllowPassportOpenAcV3FallbackProof,
+  shouldPreparePassportOpenAcV3WitnessDuringRead,
 } from '../../src/passport/openacV3';
 
 function bytes(text: string): ArrayBuffer {
@@ -118,10 +120,16 @@ describe('passport OpenAC v3.1 / passport-noir 0.3.0 contract', () => {
       'passport_adapter',
       'openac_show',
     ]);
+    // All three circuits share the single merged SRS.
     expect(plan.circuits.map((c) => c.srsPath)).toEqual([
-      'dsc_chain',
-      'passport_adapter',
-      'openac_show',
+      'passport',
+      'passport',
+      'passport',
+    ]);
+    expect(plan.circuits.map((c) => c.srsAsset)).toEqual([
+      'passport.srs.bin',
+      'passport.srs.bin',
+      'passport.srs.bin',
     ]);
 
     const calls = buildPassportOpenAcV3ProofCalls(plan, {
@@ -161,12 +169,13 @@ describe('passport OpenAC v3.1 / passport-noir 0.3.0 contract', () => {
       },
     });
 
+    // Every circuit is proved against the shared merged-SRS alias 'passport'.
     expect(calls).toEqual([
-      'generate:dsc_chain:dsc_chain:{"dsc":true}',
+      'generate:dsc_chain:passport:{"dsc":true}',
       'verify:proof:dsc_chain:{"dsc":true}:vk:dsc_chain',
-      'generate:passport_adapter:passport_adapter:{"passport":true}',
+      'generate:passport_adapter:passport:{"passport":true}',
       'verify:proof:passport_adapter:{"passport":true}:vk:passport_adapter',
-      'generate:openac_show:openac_show:{"show":true}',
+      'generate:openac_show:passport:{"show":true}',
       'verify:proof:openac_show:{"show":true}:vk:openac_show',
     ]);
 
@@ -498,6 +507,26 @@ describe('passport OpenAC v3.1 / passport-noir 0.3.0 contract', () => {
     );
     expect(untrusted.ready).toBe(false);
     if (!untrusted.ready) expect(untrusted.reason).toBe('passive-auth-failed');
+  });
+
+  it('does not require read-stage witness preparation when passive auth is unavailable', () => {
+    const decision = shouldPreparePassportOpenAcV3WitnessDuringRead({
+      ...readResult({ passiveAuthValid: false }),
+      revocationSnapshot: REVOCATION_SNAPSHOT,
+    });
+
+    expect(decision.prepare).toBe(false);
+    expect(decision.reason).toBe('passive-auth-failed');
+  });
+
+  it('allows SD-JWT fallback proof only for simulated passport chips', () => {
+    expect(
+      shouldAllowPassportOpenAcV3FallbackProof({ isSimulated: true })
+    ).toBe(true);
+    expect(
+      shouldAllowPassportOpenAcV3FallbackProof({ isSimulated: false })
+    ).toBe(false);
+    expect(shouldAllowPassportOpenAcV3FallbackProof({})).toBe(false);
   });
 
   it('fails closed when the revocation snapshot is missing or malformed', () => {

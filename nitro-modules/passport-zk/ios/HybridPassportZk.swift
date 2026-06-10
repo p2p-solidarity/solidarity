@@ -126,14 +126,17 @@ final class HybridPassportZk: HybridPassportZkSpec {
   }
 
   private static func resolveSrsPath(_ supplied: String?) throws -> String? {
-    let key = (supplied?.isEmpty ?? true) ? "passport_adapter" : (supplied ?? "")
+    // Every circuit shares one merged SRS (barretenberg's SRS is a prefix, so
+    // a blob sized to the largest circuit serves all three). Empty or any
+    // known alias → `passport.srs.bin`; unknown values pass through.
+    let key = (supplied?.isEmpty ?? true) ? "passport" : (supplied ?? "")
     guard let resource = srsResourceAliases[key] else {
       return supplied
     }
     return try bundledResourcePath(
       resource: resource,
       extension: "bin",
-      description: "passport-noir 0.3.0 \(resource).bin SRS"
+      description: "passport-noir 0.3.0 merged \(resource).bin SRS"
     )
   }
 
@@ -146,13 +149,17 @@ final class HybridPassportZk: HybridPassportZkSpec {
     "openac_show.json": "openac_show",
   ]
 
+  // Every circuit alias resolves to the one merged SRS resource
+  // (`passport.srs.bin`, looked up as resource "passport.srs" + ext "bin").
   private static let srsResourceAliases: [String: String] = [
-    "dsc_chain": "dsc_chain.srs",
-    "dsc_chain.srs.bin": "dsc_chain.srs",
-    "passport_adapter": "passport_adapter.srs",
-    "passport_adapter.srs.bin": "passport_adapter.srs",
-    "openac_show": "openac_show.srs",
-    "openac_show.srs.bin": "openac_show.srs",
+    "dsc_chain": "passport.srs",
+    "dsc_chain.srs.bin": "passport.srs",
+    "passport_adapter": "passport.srs",
+    "passport_adapter.srs.bin": "passport.srs",
+    "openac_show": "passport.srs",
+    "openac_show.srs.bin": "passport.srs",
+    "passport": "passport.srs",
+    "passport.srs.bin": "passport.srs",
   ]
 
   private static func bundledResourcePath(

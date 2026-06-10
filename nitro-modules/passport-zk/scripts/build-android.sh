@@ -146,28 +146,35 @@ echo ">> Copying UniFFI Kotlin bindings into $KT_DEST"
 mkdir -p "$KT_DEST"
 cp "$SRC_BINDINGS/uniffi/mopro/mopro.kt" "$KT_DEST/mopro.kt"
 
-# Bundle passport-noir 0.3.0 OpenAC v3 passport circuits + SRS files as
-# Android assets so HybridPassportZk can resolve JS aliases to real paths.
+# Bundle the passport-noir 0.3.0 OpenAC v3 circuit JSONs (one per circuit) plus
+# a SINGLE merged SRS as Android assets so HybridPassportZk can resolve JS
+# aliases to real paths. barretenberg's SRS is a prefix, so one blob sized to
+# the largest circuit serves all three (~256MB→128MB in the APK).
 ASSETS_DEST="$MODULE_DIR/android/src/main/assets"
 mkdir -p "$ASSETS_DEST"
 
+# Drop any stale per-circuit SRS from earlier builds so the APK never ships
+# both the old split blobs and the new merged one.
+rm -f "$ASSETS_DEST"/dsc_chain.srs.bin \
+      "$ASSETS_DEST"/passport_adapter.srs.bin \
+      "$ASSETS_DEST"/openac_show.srs.bin
+
 for circuit in dsc_chain passport_adapter openac_show; do
   CIRCUIT_SRC="$PASSPORT_NOIR_DIR/circuits/target/$circuit.json"
-  SRS_SRC="$MOPRO_DIR/test-vectors/srs/$circuit.srs.bin"
-
   if [[ -f "$CIRCUIT_SRC" ]]; then
     echo ">> Bundling $CIRCUIT_SRC → $ASSETS_DEST/"
     cp "$CIRCUIT_SRC" "$ASSETS_DEST/$circuit.json"
   else
     echo "Warning: $CIRCUIT_SRC not found — run \`nargo compile --workspace\` in passport-noir/circuits first." >&2
   fi
-
-  if [[ -f "$SRS_SRC" ]]; then
-    echo ">> Bundling $SRS_SRC → $ASSETS_DEST/"
-    cp "$SRS_SRC" "$ASSETS_DEST/$circuit.srs.bin"
-  else
-    echo "Warning: $SRS_SRC not found — run \`make gen-srs\` in passport-noir first." >&2
-  fi
 done
+
+MERGED_SRS_SRC="$MOPRO_DIR/test-vectors/srs/passport.srs.bin"
+if [[ -f "$MERGED_SRS_SRC" ]]; then
+  echo ">> Bundling merged SRS $MERGED_SRS_SRC → $ASSETS_DEST/passport.srs.bin"
+  cp "$MERGED_SRS_SRC" "$ASSETS_DEST/passport.srs.bin"
+else
+  echo "Warning: $MERGED_SRS_SRC not found — run \`make gen-srs\` in passport-noir first." >&2
+fi
 
 echo "Done. Next: rebuild the Android app (cd apps/expo && bun run android)."

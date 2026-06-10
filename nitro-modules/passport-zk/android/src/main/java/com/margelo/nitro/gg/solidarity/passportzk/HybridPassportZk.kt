@@ -158,7 +158,11 @@ class HybridPassportZk : HybridPassportZkSpec() {
     // full story and the real-fix paths.
 
     private const val DEFAULT_CIRCUIT_ALIAS = "passport_adapter"
-    private const val DEFAULT_SRS_ALIAS = "passport_adapter"
+
+    // Single merged SRS for the whole OpenAC v3 passport set. barretenberg's
+    // SRS is a prefix, so one blob sized to the largest circuit serves all
+    // three — every circuit alias resolves to the same `passport.srs.bin`.
+    private const val MERGED_SRS_ASSET = "passport.srs.bin"
 
     private val CIRCUIT_ASSETS = mapOf(
       "dsc_chain" to "dsc_chain.json",
@@ -169,13 +173,16 @@ class HybridPassportZk : HybridPassportZkSpec() {
       "openac_show.json" to "openac_show.json",
     )
 
+    // Every known circuit/SRS alias maps to the one merged SRS asset.
     private val SRS_ASSETS = mapOf(
-      "dsc_chain" to "dsc_chain.srs.bin",
-      "dsc_chain.srs.bin" to "dsc_chain.srs.bin",
-      "passport_adapter" to "passport_adapter.srs.bin",
-      "passport_adapter.srs.bin" to "passport_adapter.srs.bin",
-      "openac_show" to "openac_show.srs.bin",
-      "openac_show.srs.bin" to "openac_show.srs.bin",
+      "dsc_chain" to MERGED_SRS_ASSET,
+      "dsc_chain.srs.bin" to MERGED_SRS_ASSET,
+      "passport_adapter" to MERGED_SRS_ASSET,
+      "passport_adapter.srs.bin" to MERGED_SRS_ASSET,
+      "openac_show" to MERGED_SRS_ASSET,
+      "openac_show.srs.bin" to MERGED_SRS_ASSET,
+      "passport" to MERGED_SRS_ASSET,
+      "passport.srs.bin" to MERGED_SRS_ASSET,
     )
 
     /**
@@ -193,7 +200,9 @@ class HybridPassportZk : HybridPassportZkSpec() {
     }
 
     private fun resolveSrsPath(supplied: String?): String? {
-      val key = if (supplied.isNullOrEmpty()) DEFAULT_SRS_ALIAS else supplied
+      // Empty or any known circuit alias → the single merged SRS; unknown
+      // values pass through as external filesystem paths.
+      val key = if (supplied.isNullOrEmpty()) MERGED_SRS_ASSET else supplied
       val assetName = SRS_ASSETS[key] ?: return supplied
       return extractAsset(assetName).absolutePath
     }
