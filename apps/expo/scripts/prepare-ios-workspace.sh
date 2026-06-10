@@ -18,6 +18,14 @@ PASSPORT_NOIR_DIR="${AIRMEISHI_PASSPORT_NOIR_DIR:-$(cd "$REPO_ROOT/.." && pwd)/p
 PASSPORT_MOPRO_VERSION="${AIRMEISHI_PASSPORT_MOPRO_VERSION:-v0.2.2}"
 PASSPORT_MOPRO_ZIP_URL="${AIRMEISHI_PASSPORT_MOPRO_ZIP_URL:-https://github.com/p2p-solidarity/passport-noir/releases/download/${PASSPORT_MOPRO_VERSION}/PassportMoproBindings.xcframework.zip}"
 PASSPORT_MOPRO_SHA256="${AIRMEISHI_PASSPORT_MOPRO_SHA256-2bcc469e369816d4924960070dab85039230a032b96bd6dcc0bd64f1567eb3fa}"
+# OpenAC v3 proving keys (*.srs.bin) ship via passport-noir GitHub Release, not
+# git — passport_adapter.srs.bin alone is 128MB, over GitHub's 100MB push limit.
+# They are bundled into the iOS app by PassportZK.podspec (s.resources), so a
+# fresh checkout / Xcode Cloud MUST stage them before `pod install`. Override the
+# URL/SHA below if you cut the Release under a different tag or asset name.
+PASSPORT_OPENAC_SRS_VERSION="${AIRMEISHI_PASSPORT_OPENAC_SRS_VERSION:-v0.3.0}"
+PASSPORT_OPENAC_SRS_ZIP_URL="${AIRMEISHI_PASSPORT_OPENAC_SRS_ZIP_URL:-https://github.com/p2p-solidarity/passport-noir/releases/download/${PASSPORT_OPENAC_SRS_VERSION}/PassportOpenAcV3Srs.zip}"
+PASSPORT_OPENAC_SRS_SHA256="${AIRMEISHI_PASSPORT_OPENAC_SRS_SHA256-}"
 SEMAPHORE_SWIFT_REF="${AIRMEISHI_SEMAPHORE_SWIFT_REF:-850680a5adcc258d6861005b55a4925bd08a48eb}"
 SEMAPHORE_SWIFT_ZIP_URL="${AIRMEISHI_SEMAPHORE_SWIFT_ZIP_URL:-https://github.com/zkmopro/SemaphoreSwift/archive/${SEMAPHORE_SWIFT_REF}.zip}"
 SEMAPHORE_SWIFT_SHA256="${AIRMEISHI_SEMAPHORE_SWIFT_SHA256-}"
@@ -198,12 +206,63 @@ ensure_semaphore_bindings_xcframework() {
     || die "SemaphoreBindings.xcframework is incomplete at $xcf"
 }
 
+# Stage the OpenAC v3 SRS proving keys into the shared passport-zk assets dir.
+# PassportZK.podspec lists them as explicit `s.resources`, so a missing file
+# makes `Pods-Solidarity-resources.sh` (set -e) fail the "[CP] Copy Pods
+# Resources" phase. They are gitignored, so a fresh checkout must download them.
+# Skips when all three are already on disk (local dev keeps the build artifacts).
+ensure_passport_openac_srs() {
+  local dest="$REPO_ROOT/nitro-modules/passport-zk/android/src/main/assets"
+  local files=(dsc_chain.srs.bin passport_adapter.srs.bin openac_show.srs.bin)
+
+  local present=1
+  local f
+  for f in "${files[@]}"; do
+    [[ -f "$dest/$f" ]] || present=0
+  done
+  if [[ "$present" == "1" ]]; then
+    green "OK OpenAC v3 SRS already present"
+    return 0
+  fi
+
+  local temp_dir
+  temp_dir="$(mktemp -d)"
+  step "Downloading OpenAC v3 SRS ($PASSPORT_OPENAC_SRS_VERSION)"
+  local zip_path="$temp_dir/passport-openac-srs.zip"
+  if ! download_zip "$PASSPORT_OPENAC_SRS_ZIP_URL" "$zip_path"; then
+    rm -rf "$temp_dir"
+    die "Could not download OpenAC v3 SRS from $PASSPORT_OPENAC_SRS_ZIP_URL.
+  Attach dsc_chain/passport_adapter/openac_show .srs.bin to a passport-noir
+  Release, or set AIRMEISHI_PASSPORT_OPENAC_SRS_ZIP_URL to the right asset."
+  fi
+  verify_sha256 "$zip_path" "$PASSPORT_OPENAC_SRS_SHA256"
+
+  local unpack_dir="$temp_dir/unpacked"
+  mkdir -p "$unpack_dir"
+  unzip -q "$zip_path" -d "$unpack_dir"
+
+  mkdir -p "$dest"
+  for f in "${files[@]}"; do
+    local src
+    src="$(find "$unpack_dir" -type f -name "$f" -print -quit)"
+    [[ -n "$src" ]] || die "OpenAC v3 SRS archive did not contain $f"
+    cp "$src" "$dest/$f"
+  done
+  rm -rf "$temp_dir"
+
+  for f in "${files[@]}"; do
+    [[ -f "$dest/$f" ]] || die "OpenAC v3 SRS staging incomplete: missing $dest/$f"
+  done
+  green "OK OpenAC v3 SRS staged into passport-zk assets"
+}
+
 stage_ios_native_bindings() {
   ensure_command curl
   ensure_command unzip
 
   ensure_passport_mopro_xcframework
   ensure_semaphore_bindings_xcframework
+  ensure_passport_openac_srs
 }
 
 cd "$REPO_ROOT"
