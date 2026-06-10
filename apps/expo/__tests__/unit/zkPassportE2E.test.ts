@@ -55,6 +55,10 @@ import {
   serializePassportProofPayload,
   type PassportStep,
 } from '../../src/passport/pipeline';
+import {
+  PASSPORT_OPENAC_V3_CIRCUITS,
+  PASSPORT_V3_PROOF_TYPE,
+} from '../../src/passport/openacV3';
 
 // ---------------------------------------------------------------------------
 // Deterministic mock for @solidarity/nitro-passport-zk.
@@ -163,9 +167,11 @@ const FIXTURE_NFC_DUMP: PassportReadResult = {
     gender: 'F',
   },
   dataGroups: {
-    // Pin the DG1 bytes to the canonical MRZ so the proof witness is
-    // deterministic. dg2/dg14/dg15/sod are unused by the disclosure circuit.
+    // Pin the DG1 bytes to the canonical MRZ so the stub proof witness is
+    // deterministic. Real OpenAC v3 witnesses additionally need SOD/DG15.
     dg1: toArrayBuffer(utf8ToBytes(FIXTURE_MRZ_STRING)),
+    dg15: toArrayBuffer(utf8ToBytes('fixture-dg15')),
+    sod: toArrayBuffer(utf8ToBytes('fixture-sod')),
   },
   chipUid: 'NFC-L898902C36',
   passiveAuthValid: true,
@@ -180,19 +186,20 @@ describe('ZK passport pipeline — MRZ → NFC → proof → verify', () => {
     const { getPassportZk } = await import('@solidarity/nitro-passport-zk');
     const zk = getPassportZk();
 
-    // Build the inputs the disclosure circuit consumes — keyed off the
-    // DG1 bytes from the NFC dump. Matches Swift's MoproProofService
-    // `buildDisclosureWitness` shape (witness map → JSON string).
+    // Stub-only witness payload. The real passport-noir 0.3.0 adapter
+    // witness is built from SOD/DG hashes + DSC/CSCA trust data; here we
+    // only need a deterministic payload so the Nitro bridge contract can
+    // be tested without native proving.
     const dg1Bytes = new Uint8Array(FIXTURE_NFC_DUMP.dataGroups.dg1 ?? new ArrayBuffer(0));
     const inputs = {
       mrz_data: Array.from(dg1Bytes).map((b) => String(b)),
-      disclose_nationality: ['1'],
-      disclose_older_than: ['1'],
-      age_threshold: ['18'],
+      adapter_contract: ['3'],
     };
     const inputsJson = JSON.stringify(inputs);
+    const circuit = PASSPORT_OPENAC_V3_CIRCUITS.find((c) => c.name === 'passport_adapter');
+    if (!circuit) throw new Error('passport_adapter circuit missing from OpenAC v3 contract');
 
-    const proof = await zk.generateNoirProof('disclosure.acir', 'srs.bin', inputsJson);
+    const proof = await zk.generateNoirProof(circuit.circuitPath, circuit.srsPath, inputsJson);
     const verified = await zk.verifyNoirProof(proof.proof, proof.vk);
     expect(verified).toBe(true);
 
@@ -201,7 +208,7 @@ describe('ZK passport pipeline — MRZ → NFC → proof → verify', () => {
     // the stub). The real Barretenberg backend has fresh k per call, so
     // this assertion is stub-only and would be relaxed against a real
     // prover (we'd verify, not byte-compare).
-    const second = await zk.generateNoirProof('disclosure.acir', 'srs.bin', inputsJson);
+    const second = await zk.generateNoirProof(circuit.circuitPath, circuit.srsPath, inputsJson);
     expect(bytesToHex(new Uint8Array(second.proof))).toBe(bytesToHex(new Uint8Array(proof.proof)));
   });
 
@@ -209,7 +216,7 @@ describe('ZK passport pipeline — MRZ → NFC → proof → verify', () => {
     const { getPassportZk } = await import('@solidarity/nitro-passport-zk');
     const zk = getPassportZk();
     const inputsJson = JSON.stringify({ mrz_data: ['1', '2', '3'] });
-    const proof = await zk.generateNoirProof('disclosure.acir', undefined, inputsJson);
+    const proof = await zk.generateNoirProof('passport_adapter', 'passport_adapter', inputsJson);
 
     // Flip the first byte (XOR with 0x01) — verifier must reject.
     const tampered = new Uint8Array(proof.proof.slice(0));
@@ -225,7 +232,7 @@ describe('ZK passport pipeline — MRZ → NFC → proof → verify', () => {
     const zk = getPassportZk();
 
     const originalInputs = JSON.stringify({ mrz_data: ['85', '60'], age_threshold: ['18'] });
-    const original = await zk.generateNoirProof('disclosure.acir', undefined, originalInputs);
+    const original = await zk.generateNoirProof('passport_adapter', 'passport_adapter', originalInputs);
 
     // Tamper: pretend the public input was different from what we proved
     // by reusing the original proof bytes but rebuilding "inputs" with a
@@ -233,7 +240,7 @@ describe('ZK passport pipeline — MRZ → NFC → proof → verify', () => {
     // inputsJson that produced the proof, the tampered witness changes
     // the expected proof bytes — and the original proof no longer matches.
     const tamperedInputs = JSON.stringify({ mrz_data: ['85', '61'], age_threshold: ['18'] });
-    const expectedForTamper = expectedProofBytes(tamperedInputs, 'disclosure.acir');
+    const expectedForTamper = expectedProofBytes(tamperedInputs, 'passport_adapter');
 
     // Submit the original proof bytes but ask verify to check them against
     // what the tampered inputs SHOULD have produced.
@@ -259,9 +266,9 @@ describe('ZK passport pipeline — MRZ → NFC → proof → verify', () => {
           const dg1Bytes = new Uint8Array(chipData.dataGroups.dg1 ?? new ArrayBuffer(0));
           const inputs = {
             mrz_data: Array.from(dg1Bytes).map((b) => String(b)),
-            disclose_nationality: ['1'],
+            adapter_contract: ['3'],
           };
-          const result = await zk.generateNoirProof('disclosure.acir', undefined, JSON.stringify(inputs));
+          const result = await zk.generateNoirProof('passport_adapter', 'passport_adapter', JSON.stringify(inputs));
           // Verify on-device immediately (mirrors Swift MoproProofService
           // generateWithOpenPassport which calls verifyNoirProof right after).
           const verified = await zk.verifyNoirProof(result.proof, result.vk);
@@ -276,7 +283,7 @@ describe('ZK passport pipeline — MRZ → NFC → proof → verify', () => {
             currentDateYyMmDd: '260524',
           });
           const envelope = serializePassportProofPayload({
-            proofType: 'mopro-noir',
+            proofType: PASSPORT_V3_PROOF_TYPE,
             mrzHashHex: bytesToHex(sha256Bytes(utf8ToBytes(FIXTURE_MRZ_STRING))),
             publicSignals: signals,
             proofB64: arrayBufferToBase64(proof),

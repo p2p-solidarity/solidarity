@@ -44,6 +44,7 @@ export interface PassportChipSnapshot {
   readonly documentHash: string;
   readonly mrzDigest: string;
   readonly dg1MRZData: string;
+  readonly dataGroups?: PassportReadResult['dataGroups'];
   readonly chipUid: string;
   readonly bacVerified: boolean;
   readonly paceVerified: boolean;
@@ -53,12 +54,13 @@ export interface PassportChipSnapshot {
   readonly nationalityCode: string;
   readonly maskedDocNumber: string;
   readonly dataGroupsRead: readonly string[];
+  readonly openAcV3WitnessBundleJson?: string;
 }
 
 /**
- * Public attributes the verifier sees alongside the v3 disclosure proof.
- * Mirrors the `out_*` public outputs of `circuits/disclosure/src/main.nr`
- * after the ZK prover has bound them to the user's MRZ hash.
+ * Public attributes the verifier sees alongside the retired disclosure
+ * proof. Kept for legacy payloads; passport-noir 0.3.0 uses OpenAC v3
+ * proof envelopes instead.
  */
 export interface PassportDisclosure {
   /** 3-letter ICAO code, or null if the user opted to hide nationality. */
@@ -79,8 +81,8 @@ export interface PassportProofResult {
   readonly trustLevel: string;
   readonly generationFailed: boolean;
   /**
-   * Disclosure outputs from the v3 `disclosure` circuit. Present on
-   * successful ZK proofs; null on SD-JWT fallback or other paths.
+   * Legacy disclosure outputs. Null for passport-noir 0.3.0 OpenAC proofs,
+   * SD-JWT fallback, or any non-disclosure proof path.
    */
   readonly disclosure?: PassportDisclosure | null;
 }
@@ -318,6 +320,7 @@ export function chipFromNitro(
     documentHash: '',
     mrzDigest: '',
     dg1MRZData,
+    dataGroups: result.dataGroups,
     chipUid: result.chipUid ?? '',
     bacVerified: true,
     paceVerified: true,
@@ -327,6 +330,7 @@ export function chipFromNitro(
     nationalityCode: result.mrz.nationality || fallbackNationality,
     maskedDocNumber: maskDocumentNumber(result.mrz.documentNumber || fallbackDocNumber),
     dataGroupsRead,
+    openAcV3WitnessBundleJson: result.openAcV3WitnessBundleJson,
   };
 }
 
@@ -367,7 +371,7 @@ function decodeDg1Mrz(buffer: ArrayBuffer): string {
   // demangles to ASCII 'X') for TD3 passports — our greedy filter
   // happily includes that 'X' into the longest run, producing an
   // 89-char string that shifts the nationality + DOB byte positions
-  // by 1 and makes the disclosure circuit's age computation underflow
+  // by 1 and makes the legacy disclosure circuit's age computation underflow
   // ("Failed assertion" inside the prover with no field hint).
   //
   // The MRZ always sits at the end of DG1 (no trailing TLVs after
@@ -387,6 +391,7 @@ export function simulatedChipSnapshot(draft: PassportMRZDraft): PassportChipSnap
     documentHash: fakeDigest,
     mrzDigest: fakeDigest,
     dg1MRZData: `P<${draft.nationalityCode}<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<`,
+    dataGroups: {},
     chipUid: `SIM-${fakeDigest.slice(0, 8).toUpperCase()}`,
     bacVerified: true,
     paceVerified: false,

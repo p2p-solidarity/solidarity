@@ -1,5 +1,5 @@
 /**
- * passport-zk witness builder for the v3 `disclosure` circuit.
+ * Legacy passport-zk witness builder for the retired `disclosure` circuit.
  *
  *   circuits/disclosure/src/main.nr → fn main(
  *     mrz_data:             [u8; 88],       // private — raw MRZ bytes
@@ -14,12 +14,10 @@
  *     out_is_older:         pub bool,
  *   )
  *
- * All inputs derive from `chip.dg1MRZData` + a user-supplied disclosure
- * policy + the current date. No off-chain Merkle proofs or RSA limb
- * encoding is needed — this is what makes `disclosure` the right v3 entry
- * point for end-to-end demonstrations from real chip data, as opposed to
- * `passport_adapter` which additionally requires CSCA Master List
- * Merkle proofs + DSC revocation SMT non-membership.
+ * This is kept for old fixtures only. passport-noir 0.3.0 moved the
+ * production passport path to OpenAC v3.1 (`dsc_chain` +
+ * `passport_adapter` + `openac_show`), which requires CSCA/DSC Merkle
+ * proofs and revocation SMT inputs instead of this DG1-only witness.
  */
 import { sha256 } from '@noble/hashes/sha2.js';
 
@@ -65,7 +63,7 @@ export interface BuiltDisclosureWitness {
 }
 
 /**
- * Build the witness for the v3 disclosure circuit.
+ * Build the witness for the legacy disclosure circuit.
  *
  *   - On a real chip, `chip.dg1MRZData` is the 88-char MRZ string parsed
  *     from DG1; we encode it as ASCII bytes and run real disclosure.
