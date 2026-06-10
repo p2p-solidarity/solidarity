@@ -8,6 +8,7 @@ import type { PassportZk } from './specs/PassportZk.nitro';
 export type {
   PassportZk,
   NitroNoirProof,
+  OpenAcV3WitnessBuildResult,
 } from './specs/PassportZk.nitro';
 
 let cached: PassportZk | null = null;

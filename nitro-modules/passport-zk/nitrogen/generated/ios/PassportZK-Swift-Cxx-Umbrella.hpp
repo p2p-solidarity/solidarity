@@ -12,10 +12,13 @@
 namespace margelo::nitro::solidarity::passportzk { class HybridPassportZkSpec; }
 // Forward declaration of `NitroNoirProof` to properly resolve imports.
 namespace margelo::nitro::solidarity::passportzk { struct NitroNoirProof; }
+// Forward declaration of `OpenAcV3WitnessBuildResult` to properly resolve imports.
+namespace margelo::nitro::solidarity::passportzk { struct OpenAcV3WitnessBuildResult; }
 
 // Include C++ defined types
 #include "HybridPassportZkSpec.hpp"
 #include "NitroNoirProof.hpp"
+#include "OpenAcV3WitnessBuildResult.hpp"
 #include <NitroModules/ArrayBuffer.hpp>
 #include <NitroModules/Promise.hpp>
 #include <NitroModules/Result.hpp>

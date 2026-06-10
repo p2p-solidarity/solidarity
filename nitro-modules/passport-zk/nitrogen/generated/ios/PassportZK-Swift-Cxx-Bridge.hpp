@@ -14,6 +14,8 @@ namespace NitroModules { class ArrayBufferHolder; }
 namespace margelo::nitro::solidarity::passportzk { class HybridPassportZkSpec; }
 // Forward declaration of `NitroNoirProof` to properly resolve imports.
 namespace margelo::nitro::solidarity::passportzk { struct NitroNoirProof; }
+// Forward declaration of `OpenAcV3WitnessBuildResult` to properly resolve imports.
+namespace margelo::nitro::solidarity::passportzk { struct OpenAcV3WitnessBuildResult; }
 
 // Forward declarations of Swift defined types
 // Forward declaration of `HybridPassportZkSpec_cxx` to properly resolve imports.
@@ -22,6 +24,7 @@ namespace PassportZK { class HybridPassportZkSpec_cxx; }
 // Include C++ defined types
 #include "HybridPassportZkSpec.hpp"
 #include "NitroNoirProof.hpp"
+#include "OpenAcV3WitnessBuildResult.hpp"
 #include <NitroModules/ArrayBuffer.hpp>
 #include <NitroModules/ArrayBufferHolder.hpp>
 #include <NitroModules/Promise.hpp>
@@ -178,6 +181,40 @@ namespace margelo::nitro::solidarity::passportzk::bridge::swift {
     return Func_void_bool_Wrapper(std::move(value));
   }
   
+  // pragma MARK: std::shared_ptr<Promise<OpenAcV3WitnessBuildResult>>
+  /**
+   * Specialized version of `std::shared_ptr<Promise<OpenAcV3WitnessBuildResult>>`.
+   */
+  using std__shared_ptr_Promise_OpenAcV3WitnessBuildResult__ = std::shared_ptr<Promise<OpenAcV3WitnessBuildResult>>;
+  inline std::shared_ptr<Promise<OpenAcV3WitnessBuildResult>> create_std__shared_ptr_Promise_OpenAcV3WitnessBuildResult__() noexcept {
+    return Promise<OpenAcV3WitnessBuildResult>::create();
+  }
+  inline PromiseHolder<OpenAcV3WitnessBuildResult> wrap_std__shared_ptr_Promise_OpenAcV3WitnessBuildResult__(std::shared_ptr<Promise<OpenAcV3WitnessBuildResult>> promise) noexcept {
+    return PromiseHolder<OpenAcV3WitnessBuildResult>(std::move(promise));
+  }
+  
+  // pragma MARK: std::function<void(const OpenAcV3WitnessBuildResult& /* result */)>
+  /**
+   * Specialized version of `std::function<void(const OpenAcV3WitnessBuildResult&)>`.
+   */
+  using Func_void_OpenAcV3WitnessBuildResult = std::function<void(const OpenAcV3WitnessBuildResult& /* result */)>;
+  /**
+   * Wrapper class for a `std::function<void(const OpenAcV3WitnessBuildResult& / * result * /)>`, this can be used from Swift.
+   */
+  class Func_void_OpenAcV3WitnessBuildResult_Wrapper final {
+  public:
+    explicit Func_void_OpenAcV3WitnessBuildResult_Wrapper(std::function<void(const OpenAcV3WitnessBuildResult& /* result */)>&& func): _function(std::make_unique<std::function<void(const OpenAcV3WitnessBuildResult& /* result */)>>(std::move(func))) {}
+    inline void call(OpenAcV3WitnessBuildResult result) const noexcept {
+      _function->operator()(result);
+    }
+  private:
+    std::unique_ptr<std::function<void(const OpenAcV3WitnessBuildResult& /* result */)>> _function;
+  } SWIFT_NONCOPYABLE;
+  Func_void_OpenAcV3WitnessBuildResult create_Func_void_OpenAcV3WitnessBuildResult(void* NON_NULL swiftClosureWrapper) noexcept;
+  inline Func_void_OpenAcV3WitnessBuildResult_Wrapper wrap_Func_void_OpenAcV3WitnessBuildResult(Func_void_OpenAcV3WitnessBuildResult value) noexcept {
+    return Func_void_OpenAcV3WitnessBuildResult_Wrapper(std::move(value));
+  }
+  
   // pragma MARK: std::shared_ptr<HybridPassportZkSpec>
   /**
    * Specialized version of `std::shared_ptr<HybridPassportZkSpec>`.
@@ -215,6 +252,15 @@ namespace margelo::nitro::solidarity::passportzk::bridge::swift {
   }
   inline Result_std__shared_ptr_Promise_bool___ create_Result_std__shared_ptr_Promise_bool___(const std::exception_ptr& error) noexcept {
     return Result<std::shared_ptr<Promise<bool>>>::withError(error);
+  }
+  
+  // pragma MARK: Result<std::shared_ptr<Promise<OpenAcV3WitnessBuildResult>>>
+  using Result_std__shared_ptr_Promise_OpenAcV3WitnessBuildResult___ = Result<std::shared_ptr<Promise<OpenAcV3WitnessBuildResult>>>;
+  inline Result_std__shared_ptr_Promise_OpenAcV3WitnessBuildResult___ create_Result_std__shared_ptr_Promise_OpenAcV3WitnessBuildResult___(const std::shared_ptr<Promise<OpenAcV3WitnessBuildResult>>& value) noexcept {
+    return Result<std::shared_ptr<Promise<OpenAcV3WitnessBuildResult>>>::withValue(value);
+  }
+  inline Result_std__shared_ptr_Promise_OpenAcV3WitnessBuildResult___ create_Result_std__shared_ptr_Promise_OpenAcV3WitnessBuildResult___(const std::exception_ptr& error) noexcept {
+    return Result<std::shared_ptr<Promise<OpenAcV3WitnessBuildResult>>>::withError(error);
   }
 
 } // namespace margelo::nitro::solidarity::passportzk::bridge::swift

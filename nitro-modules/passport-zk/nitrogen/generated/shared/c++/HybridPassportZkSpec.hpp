@@ -15,12 +15,15 @@
 
 // Forward declaration of `NitroNoirProof` to properly resolve imports.
 namespace margelo::nitro::solidarity::passportzk { struct NitroNoirProof; }
+// Forward declaration of `OpenAcV3WitnessBuildResult` to properly resolve imports.
+namespace margelo::nitro::solidarity::passportzk { struct OpenAcV3WitnessBuildResult; }
 
 #include "NitroNoirProof.hpp"
 #include <NitroModules/Promise.hpp>
 #include <string>
 #include <optional>
 #include <NitroModules/ArrayBuffer.hpp>
+#include "OpenAcV3WitnessBuildResult.hpp"
 
 namespace margelo::nitro::solidarity::passportzk {
 
@@ -56,6 +59,7 @@ namespace margelo::nitro::solidarity::passportzk {
       virtual std::shared_ptr<Promise<NitroNoirProof>> generateNoirProof(const std::string& circuitPath, const std::optional<std::string>& srsPath, const std::string& inputsJson) = 0;
       virtual std::shared_ptr<Promise<std::shared_ptr<ArrayBuffer>>> getNoirVerificationKey(const std::string& circuitPath, const std::optional<std::string>& srsPath) = 0;
       virtual std::shared_ptr<Promise<bool>> verifyNoirProof(const std::shared_ptr<ArrayBuffer>& proof, const std::shared_ptr<ArrayBuffer>& vk) = 0;
+      virtual std::shared_ptr<Promise<OpenAcV3WitnessBuildResult>> buildOpenAcV3WitnessBundle(const std::string& requestJson) = 0;
 
     protected:
       // Hybrid Setup

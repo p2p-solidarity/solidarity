@@ -194,4 +194,23 @@ open class HybridPassportZkSpec_cxx {
       return bridge.create_Result_std__shared_ptr_Promise_bool___(__exceptionPtr)
     }
   }
+  
+  @inline(__always)
+  public final func buildOpenAcV3WitnessBundle(requestJson: std.string) -> bridge.Result_std__shared_ptr_Promise_OpenAcV3WitnessBuildResult___ {
+    do {
+      let __result = try self.__implementation.buildOpenAcV3WitnessBundle(requestJson: String(requestJson))
+      let __resultCpp = { () -> bridge.std__shared_ptr_Promise_OpenAcV3WitnessBuildResult__ in
+        let __promise = bridge.create_std__shared_ptr_Promise_OpenAcV3WitnessBuildResult__()
+        let __promiseHolder = bridge.wrap_std__shared_ptr_Promise_OpenAcV3WitnessBuildResult__(__promise)
+        __result
+          .then({ __result in __promiseHolder.resolve(__result) })
+          .catch({ __error in __promiseHolder.reject(__error.toCpp()) })
+        return __promise
+      }()
+      return bridge.create_Result_std__shared_ptr_Promise_OpenAcV3WitnessBuildResult___(__resultCpp)
+    } catch (let __error) {
+      let __exceptionPtr = __error.toCpp()
+      return bridge.create_Result_std__shared_ptr_Promise_OpenAcV3WitnessBuildResult___(__exceptionPtr)
+    }
+  }
 }

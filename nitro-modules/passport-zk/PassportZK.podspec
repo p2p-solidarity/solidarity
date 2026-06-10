@@ -19,8 +19,12 @@ Pod::Spec.new do |s|
     'ios/**/*.{swift,h,m,mm}',
   ]
   s.resources = [
-    'android/src/main/assets/disclosure.json',
-    'android/src/main/assets/disclosure.srs.bin',
+    'android/src/main/assets/dsc_chain.json',
+    'android/src/main/assets/dsc_chain.srs.bin',
+    'android/src/main/assets/passport_adapter.json',
+    'android/src/main/assets/passport_adapter.srs.bin',
+    'android/src/main/assets/openac_show.json',
+    'android/src/main/assets/openac_show.srs.bin',
   ]
 
   s.pod_target_xcconfig = {

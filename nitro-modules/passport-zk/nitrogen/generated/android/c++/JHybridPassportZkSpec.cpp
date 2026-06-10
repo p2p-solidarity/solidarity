@@ -9,6 +9,8 @@
 
 // Forward declaration of `NitroNoirProof` to properly resolve imports.
 namespace margelo::nitro::solidarity::passportzk { struct NitroNoirProof; }
+// Forward declaration of `OpenAcV3WitnessBuildResult` to properly resolve imports.
+namespace margelo::nitro::solidarity::passportzk { struct OpenAcV3WitnessBuildResult; }
 
 #include "NitroNoirProof.hpp"
 #include <NitroModules/Promise.hpp>
@@ -16,6 +18,8 @@ namespace margelo::nitro::solidarity::passportzk { struct NitroNoirProof; }
 #include "JNitroNoirProof.hpp"
 #include <NitroModules/ArrayBuffer.hpp>
 #include <NitroModules/JArrayBuffer.hpp>
+#include "OpenAcV3WitnessBuildResult.hpp"
+#include "JOpenAcV3WitnessBuildResult.hpp"
 #include <string>
 #include <optional>
 
@@ -92,6 +96,22 @@ namespace margelo::nitro::solidarity::passportzk {
       __result->cthis()->addOnResolvedListener([=](const jni::alias_ref<jni::JObject>& __boxedResult) {
         auto __result = jni::static_ref_cast<jni::JBoolean>(__boxedResult);
         __promise->resolve(static_cast<bool>(__result->value()));
+      });
+      __result->cthis()->addOnRejectedListener([=](const jni::alias_ref<jni::JThrowable>& __throwable) {
+        jni::JniException __jniError(__throwable);
+        __promise->reject(std::make_exception_ptr(__jniError));
+      });
+      return __promise;
+    }();
+  }
+  std::shared_ptr<Promise<OpenAcV3WitnessBuildResult>> JHybridPassportZkSpec::buildOpenAcV3WitnessBundle(const std::string& requestJson) {
+    static const auto method = _javaPart->javaClassStatic()->getMethod<jni::local_ref<JPromise::javaobject>(jni::alias_ref<jni::JString> /* requestJson */)>("buildOpenAcV3WitnessBundle");
+    auto __result = method(_javaPart, jni::make_jstring(requestJson));
+    return [&]() {
+      auto __promise = Promise<OpenAcV3WitnessBuildResult>::create();
+      __result->cthis()->addOnResolvedListener([=](const jni::alias_ref<jni::JObject>& __boxedResult) {
+        auto __result = jni::static_ref_cast<JOpenAcV3WitnessBuildResult>(__boxedResult);
+        __promise->resolve(__result->toCpp());
       });
       __result->cthis()->addOnRejectedListener([=](const jni::alias_ref<jni::JThrowable>& __throwable) {
         jni::JniException __jniError(__throwable);

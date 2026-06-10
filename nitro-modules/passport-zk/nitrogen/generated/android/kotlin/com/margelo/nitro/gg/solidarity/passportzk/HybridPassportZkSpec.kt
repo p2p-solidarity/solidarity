@@ -41,6 +41,10 @@ abstract class HybridPassportZkSpec: HybridObject() {
   @DoNotStrip
   @Keep
   abstract fun verifyNoirProof(proof: ArrayBuffer, vk: ArrayBuffer): Promise<Boolean>
+  
+  @DoNotStrip
+  @Keep
+  abstract fun buildOpenAcV3WitnessBundle(requestJson: String): Promise<OpenAcV3WitnessBuildResult>
 
   // Default implementation of `HybridObject.toString()`
   override fun toString(): String {

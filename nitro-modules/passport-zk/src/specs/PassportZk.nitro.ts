@@ -31,6 +31,14 @@ export interface NitroNoirProof {
   readonly vk: ArrayBuffer;
 }
 
+export interface OpenAcV3WitnessBuildResult {
+  readonly schema: string;
+  readonly passportNoirVersion: string;
+  readonly ready: boolean;
+  readonly reason?: string;
+  readonly bundleJson?: string;
+}
+
 export interface PassportZk
   extends HybridObject<{ ios: 'swift'; android: 'kotlin' }> {
   /**
@@ -53,4 +61,17 @@ export interface PassportZk
 
   /** Verify a proof against a verifying key. */
   verifyNoirProof(proof: ArrayBuffer, vk: ArrayBuffer): Promise<boolean>;
+
+  /**
+   * Shared Rust OpenAC v3 witness builder.
+   *
+   * Input is the canonical request JSON emitted by
+   * `buildPassportOpenAcV3WitnessRequestJson`. The Rust layer returns a
+   * result JSON instead of `null`: `ready=true` carries a complete
+   * `PassportOpenAcV3WitnessBundle` JSON string, while `ready=false` carries
+   * a fail-closed reason such as `missing-active-auth-witness`.
+   */
+  buildOpenAcV3WitnessBundle(
+    requestJson: string
+  ): Promise<OpenAcV3WitnessBuildResult>;
 }

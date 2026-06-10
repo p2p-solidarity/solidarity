@@ -17,6 +17,7 @@ namespace margelo::nitro::solidarity::passportzk {
       prototype.registerHybridMethod("generateNoirProof", &HybridPassportZkSpec::generateNoirProof);
       prototype.registerHybridMethod("getNoirVerificationKey", &HybridPassportZkSpec::getNoirVerificationKey);
       prototype.registerHybridMethod("verifyNoirProof", &HybridPassportZkSpec::verifyNoirProof);
+      prototype.registerHybridMethod("buildOpenAcV3WitnessBundle", &HybridPassportZkSpec::buildOpenAcV3WitnessBundle);
     });
   }
 

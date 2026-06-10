@@ -211,12 +211,10 @@ nitro-modules/passport-zk/android/src/main/jniLibs/*/libpassport_zk_mopro.so
 nitro-modules/passport-zk/android/src/main/jniLibs/*/libc++_shared.so
 
 # Other circuit/SRS pairs that build-android.sh might drop into assets/
-# while we iterate on which v3 circuit to default to. Only the current
-# default (disclosure.{json,srs.bin}) is checked in.
+# while we iterate on non-passport OpenAC circuits. The passport-noir
+# 0.3.0 bundle (dsc_chain/passport_adapter/openac_show) is checked in.
 nitro-modules/passport-zk/android/src/main/assets/passport_verifier.*
-nitro-modules/passport-zk/android/src/main/assets/passport_adapter.*
 nitro-modules/passport-zk/android/src/main/assets/composite_show.*
-nitro-modules/passport-zk/android/src/main/assets/openac_show.*
 
 # Crash-hunt debug log archives pulled via `log collect` / `idevicecrashreport`.
 # ~190MB each, device-specific, never commit. See apps/expo/CLAUDE.md crash section.

@@ -59,6 +59,15 @@ final class HybridPassportZk: HybridPassportZkSpec {
     }
   }
 
+  func buildOpenAcV3WitnessBundle(
+    requestJson: String
+  ) throws -> Promise<OpenAcV3WitnessBuildResult> {
+    return Promise.async {
+      let resultJson = try MoproShim.buildOpenAcV3WitnessBundle(requestJson: requestJson)
+      return try Self.decodeWitnessResult(resultJson)
+    }
+  }
+
   private static func parseInputs(_ json: String) throws -> [String: [String]] {
     guard let data = json.data(using: .utf8) else {
       throw NSError(domain: "PassportZk", code: 1, userInfo: [
@@ -74,27 +83,77 @@ final class HybridPassportZk: HybridPassportZkSpec {
     return map
   }
 
+  /// Decode the Rust builder's result JSON
+  /// (`gg.solidarity.passport.openac-v3.witness-build-result.v1`) into the
+  /// Nitro struct the JS layer consumes.
+  private static func decodeWitnessResult(
+    _ resultJson: String
+  ) throws -> OpenAcV3WitnessBuildResult {
+    guard let data = resultJson.data(using: .utf8) else {
+      throw NSError(domain: "PassportZk", code: 4, userInfo: [
+        NSLocalizedDescriptionKey: "OpenAC v3 witness result is not valid UTF-8"
+      ])
+    }
+    let raw = try JSONSerialization.jsonObject(with: data, options: [])
+    guard let result = raw as? [String: Any],
+          let schema = result["schema"] as? String,
+          let passportNoirVersion = result["passportNoirVersion"] as? String,
+          let ready = result["ready"] as? Bool
+    else {
+      throw NSError(domain: "PassportZk", code: 5, userInfo: [
+        NSLocalizedDescriptionKey: "OpenAC v3 witness result is malformed"
+      ])
+    }
+    return OpenAcV3WitnessBuildResult(
+      schema: schema,
+      passportNoirVersion: passportNoirVersion,
+      ready: ready,
+      reason: result["reason"] as? String,
+      bundleJson: result["bundleJson"] as? String
+    )
+  }
+
   private static func resolveCircuitPath(_ supplied: String) throws -> String {
-    if !supplied.isEmpty {
+    let key = supplied.isEmpty ? "passport_adapter" : supplied
+    guard let resource = circuitResourceAliases[key] else {
       return supplied
     }
     return try bundledResourcePath(
-      resource: "disclosure",
+      resource: resource,
       extension: "json",
-      description: "default disclosure circuit"
+      description: "passport-noir 0.3.0 \(resource) circuit"
     )
   }
 
   private static func resolveSrsPath(_ supplied: String?) throws -> String? {
-    guard supplied?.isEmpty ?? true else {
+    let key = (supplied?.isEmpty ?? true) ? "passport_adapter" : (supplied ?? "")
+    guard let resource = srsResourceAliases[key] else {
       return supplied
     }
     return try bundledResourcePath(
-      resource: "disclosure.srs",
+      resource: resource,
       extension: "bin",
-      description: "default disclosure SRS"
+      description: "passport-noir 0.3.0 \(resource).bin SRS"
     )
   }
+
+  private static let circuitResourceAliases: [String: String] = [
+    "dsc_chain": "dsc_chain",
+    "dsc_chain.json": "dsc_chain",
+    "passport_adapter": "passport_adapter",
+    "passport_adapter.json": "passport_adapter",
+    "openac_show": "openac_show",
+    "openac_show.json": "openac_show",
+  ]
+
+  private static let srsResourceAliases: [String: String] = [
+    "dsc_chain": "dsc_chain.srs",
+    "dsc_chain.srs.bin": "dsc_chain.srs",
+    "passport_adapter": "passport_adapter.srs",
+    "passport_adapter.srs.bin": "passport_adapter.srs",
+    "openac_show": "openac_show.srs",
+    "openac_show.srs.bin": "openac_show.srs",
+  ]
 
   private static func bundledResourcePath(
     resource: String,

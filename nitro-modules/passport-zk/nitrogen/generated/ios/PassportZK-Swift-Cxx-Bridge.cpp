@@ -46,6 +46,14 @@ namespace margelo::nitro::solidarity::passportzk::bridge::swift {
     };
   }
   
+  // pragma MARK: std::function<void(const OpenAcV3WitnessBuildResult& /* result */)>
+  Func_void_OpenAcV3WitnessBuildResult create_Func_void_OpenAcV3WitnessBuildResult(void* NON_NULL swiftClosureWrapper) noexcept {
+    auto swiftClosure = PassportZK::Func_void_OpenAcV3WitnessBuildResult::fromUnsafe(swiftClosureWrapper);
+    return [swiftClosure = std::move(swiftClosure)](const OpenAcV3WitnessBuildResult& result) mutable -> void {
+      swiftClosure.call(result);
+    };
+  }
+  
   // pragma MARK: std::shared_ptr<HybridPassportZkSpec>
   std::shared_ptr<HybridPassportZkSpec> create_std__shared_ptr_HybridPassportZkSpec_(void* NON_NULL swiftUnsafePointer) noexcept {
     PassportZK::HybridPassportZkSpec_cxx swiftPart = PassportZK::HybridPassportZkSpec_cxx::fromUnsafe(swiftUnsafePointer);

@@ -16,6 +16,8 @@ namespace PassportZK { class HybridPassportZkSpec_cxx; }
 namespace margelo::nitro::solidarity::passportzk { struct NitroNoirProof; }
 // Forward declaration of `ArrayBufferHolder` to properly resolve imports.
 namespace NitroModules { class ArrayBufferHolder; }
+// Forward declaration of `OpenAcV3WitnessBuildResult` to properly resolve imports.
+namespace margelo::nitro::solidarity::passportzk { struct OpenAcV3WitnessBuildResult; }
 
 #include "NitroNoirProof.hpp"
 #include <NitroModules/Promise.hpp>
@@ -23,6 +25,7 @@ namespace NitroModules { class ArrayBufferHolder; }
 #include <NitroModules/ArrayBufferHolder.hpp>
 #include <string>
 #include <optional>
+#include "OpenAcV3WitnessBuildResult.hpp"
 
 #include "PassportZK-Swift-Cxx-Umbrella.hpp"
 
@@ -92,6 +95,14 @@ namespace margelo::nitro::solidarity::passportzk {
     }
     inline std::shared_ptr<Promise<bool>> verifyNoirProof(const std::shared_ptr<ArrayBuffer>& proof, const std::shared_ptr<ArrayBuffer>& vk) override {
       auto __result = _swiftPart.verifyNoirProof(ArrayBufferHolder(proof), ArrayBufferHolder(vk));
+      if (__result.hasError()) [[unlikely]] {
+        std::rethrow_exception(__result.error());
+      }
+      auto __value = std::move(__result.value());
+      return __value;
+    }
+    inline std::shared_ptr<Promise<OpenAcV3WitnessBuildResult>> buildOpenAcV3WitnessBundle(const std::string& requestJson) override {
+      auto __result = _swiftPart.buildOpenAcV3WitnessBundle(requestJson);
       if (__result.hasError()) [[unlikely]] {
         std::rethrow_exception(__result.error());
       }

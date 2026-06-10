@@ -16,6 +16,7 @@ public protocol HybridPassportZkSpec_protocol: HybridObject {
   func generateNoirProof(circuitPath: String, srsPath: String?, inputsJson: String) throws -> Promise<NitroNoirProof>
   func getNoirVerificationKey(circuitPath: String, srsPath: String?) throws -> Promise<ArrayBuffer>
   func verifyNoirProof(proof: ArrayBuffer, vk: ArrayBuffer) throws -> Promise<Bool>
+  func buildOpenAcV3WitnessBundle(requestJson: String) throws -> Promise<OpenAcV3WitnessBuildResult>
 }
 
 public extension HybridPassportZkSpec_protocol {

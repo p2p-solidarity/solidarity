@@ -146,26 +146,28 @@ echo ">> Copying UniFFI Kotlin bindings into $KT_DEST"
 mkdir -p "$KT_DEST"
 cp "$SRC_BINDINGS/uniffi/mopro/mopro.kt" "$KT_DEST/mopro.kt"
 
-# Bundle the v3 disclosure circuit + its SRS as Android assets so
-# HybridPassportZk's empty-path branch can resolve to a real circuit.
+# Bundle passport-noir 0.3.0 OpenAC v3 passport circuits + SRS files as
+# Android assets so HybridPassportZk can resolve JS aliases to real paths.
 ASSETS_DEST="$MODULE_DIR/android/src/main/assets"
 mkdir -p "$ASSETS_DEST"
 
-CIRCUIT_SRC="$PASSPORT_NOIR_DIR/circuits/target/disclosure.json"
-SRS_SRC="$MOPRO_DIR/test-vectors/srs/disclosure.srs.bin"
+for circuit in dsc_chain passport_adapter openac_show; do
+  CIRCUIT_SRC="$PASSPORT_NOIR_DIR/circuits/target/$circuit.json"
+  SRS_SRC="$MOPRO_DIR/test-vectors/srs/$circuit.srs.bin"
 
-if [[ -f "$CIRCUIT_SRC" ]]; then
-  echo ">> Bundling $CIRCUIT_SRC → $ASSETS_DEST/"
-  cp "$CIRCUIT_SRC" "$ASSETS_DEST/disclosure.json"
-else
-  echo "Warning: $CIRCUIT_SRC not found — run \`nargo compile --workspace\` in passport-noir/circuits first." >&2
-fi
+  if [[ -f "$CIRCUIT_SRC" ]]; then
+    echo ">> Bundling $CIRCUIT_SRC → $ASSETS_DEST/"
+    cp "$CIRCUIT_SRC" "$ASSETS_DEST/$circuit.json"
+  else
+    echo "Warning: $CIRCUIT_SRC not found — run \`nargo compile --workspace\` in passport-noir/circuits first." >&2
+  fi
 
-if [[ -f "$SRS_SRC" ]]; then
-  echo ">> Bundling $SRS_SRC → $ASSETS_DEST/"
-  cp "$SRS_SRC" "$ASSETS_DEST/disclosure.srs.bin"
-else
-  echo "Warning: $SRS_SRC not found — run \`make gen-srs\` in passport-noir first." >&2
-fi
+  if [[ -f "$SRS_SRC" ]]; then
+    echo ">> Bundling $SRS_SRC → $ASSETS_DEST/"
+    cp "$SRS_SRC" "$ASSETS_DEST/$circuit.srs.bin"
+  else
+    echo "Warning: $SRS_SRC not found — run \`make gen-srs\` in passport-noir first." >&2
+  fi
+done
 
 echo "Done. Next: rebuild the Android app (cd apps/expo && bun run android)."

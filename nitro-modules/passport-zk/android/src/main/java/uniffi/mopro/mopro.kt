@@ -717,6 +717,8 @@ internal interface UniffiForeignFutureCompleteVoid : com.sun.jna.Callback {
 
 
 
+
+
 // For large crates we prevent `MethodTooLargeException` (see #2340)
 // N.B. the name of the extension is very misleading, since it is 
 // rather `InterfaceTooLargeException`, caused by too many methods 
@@ -732,7 +734,9 @@ internal interface UniffiForeignFutureCompleteVoid : com.sun.jna.Callback {
 // when the library is loaded.
 internal interface IntegrityCheckingUniffiLib : Library {
     // Integrity check functions only
-    fun uniffi_passport_zk_mopro_checksum_func_generate_noir_proof(
+    fun uniffi_passport_zk_mopro_checksum_func_build_open_ac_v3_witness_bundle(
+): Short
+fun uniffi_passport_zk_mopro_checksum_func_generate_noir_proof(
 ): Short
 fun uniffi_passport_zk_mopro_checksum_func_get_noir_verification_key(
 ): Short
@@ -783,7 +787,9 @@ internal interface UniffiLib : Library {
     }
 
     // FFI functions
-    fun uniffi_passport_zk_mopro_fn_func_generate_noir_proof(`circuitPath`: RustBuffer.ByValue,`srsPath`: RustBuffer.ByValue,`inputs`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+    fun uniffi_passport_zk_mopro_fn_func_build_open_ac_v3_witness_bundle(`requestJson`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+): RustBuffer.ByValue
+fun uniffi_passport_zk_mopro_fn_func_generate_noir_proof(`circuitPath`: RustBuffer.ByValue,`srsPath`: RustBuffer.ByValue,`inputs`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
 ): RustBuffer.ByValue
 fun uniffi_passport_zk_mopro_fn_func_get_noir_verification_key(`circuitPath`: RustBuffer.ByValue,`srsPath`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
 ): RustBuffer.ByValue
@@ -915,6 +921,9 @@ private fun uniffiCheckContractApiVersion(lib: IntegrityCheckingUniffiLib) {
 }
 @Suppress("UNUSED_PARAMETER")
 private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
+    if (lib.uniffi_passport_zk_mopro_checksum_func_build_open_ac_v3_witness_bundle() != 10629.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
     if (lib.uniffi_passport_zk_mopro_checksum_func_generate_noir_proof() != 30133.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
@@ -1270,6 +1279,19 @@ public object FfiConverterMapStringSequenceString: FfiConverterRustBuffer<Map<ko
         }
     }
 }
+        /**
+         * UniFFI entry point — generates fresh attestation keys per request.
+         */
+    @Throws(MoproException::class) fun `buildOpenAcV3WitnessBundle`(`requestJson`: kotlin.String): kotlin.String {
+            return FfiConverterString.lift(
+    uniffiRustCallWithError(MoproException) { _status ->
+    UniffiLib.INSTANCE.uniffi_passport_zk_mopro_fn_func_build_open_ac_v3_witness_bundle(
+        FfiConverterString.lower(`requestJson`),_status)
+}
+    )
+    }
+    
+
         /**
          * Generate a Noir proof for a given circuit.
          *

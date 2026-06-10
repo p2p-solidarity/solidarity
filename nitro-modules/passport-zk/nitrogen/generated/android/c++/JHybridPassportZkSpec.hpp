@@ -57,6 +57,7 @@ namespace margelo::nitro::solidarity::passportzk {
     std::shared_ptr<Promise<NitroNoirProof>> generateNoirProof(const std::string& circuitPath, const std::optional<std::string>& srsPath, const std::string& inputsJson) override;
     std::shared_ptr<Promise<std::shared_ptr<ArrayBuffer>>> getNoirVerificationKey(const std::string& circuitPath, const std::optional<std::string>& srsPath) override;
     std::shared_ptr<Promise<bool>> verifyNoirProof(const std::shared_ptr<ArrayBuffer>& proof, const std::shared_ptr<ArrayBuffer>& vk) override;
+    std::shared_ptr<Promise<OpenAcV3WitnessBuildResult>> buildOpenAcV3WitnessBundle(const std::string& requestJson) override;
 
   private:
     jni::global_ref<JHybridPassportZkSpec::JavaPart> _javaPart;

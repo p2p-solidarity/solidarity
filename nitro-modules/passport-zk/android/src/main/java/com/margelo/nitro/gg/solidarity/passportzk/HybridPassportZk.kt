@@ -44,6 +44,7 @@ import java.io.File
 import org.json.JSONArray
 import org.json.JSONObject
 import uniffi.mopro.MoproException
+import uniffi.mopro.buildOpenAcV3WitnessBundle as moproBuildOpenAcV3WitnessBundle
 import uniffi.mopro.generateNoirProof as moproGenerateNoirProof
 import uniffi.mopro.getNoirVerificationKey as moproGetNoirVerificationKey
 import uniffi.mopro.verifyNoirProof as moproVerifyNoirProof
@@ -133,6 +134,16 @@ class HybridPassportZk : HybridPassportZkSpec() {
     }
   }
 
+  override fun buildOpenAcV3WitnessBundle(
+    requestJson: String,
+  ): Promise<OpenAcV3WitnessBuildResult> = Promise.async {
+    try {
+      decodeWitnessResult(moproBuildOpenAcV3WitnessBundle(requestJson))
+    } catch (e: MoproException) {
+      throw RuntimeException(friendlyMoproMessage(e))
+    }
+  }
+
   companion object {
     private const val TAG = "HybridPassportZk"
     // NOTE: An earlier iteration of this companion object preloaded a
@@ -146,28 +157,46 @@ class HybridPassportZk : HybridPassportZkSpec() {
     // alias-shimming is not maintainable. See `KNOWN_ISSUES.md` for the
     // full story and the real-fix paths.
 
-    /**
-     * Bundled v3 default — the `disclosure` circuit: selective disclosure
-     * of MRZ attributes (nationality / age / name) without revealing the
-     * full document. Witness comes entirely from `chip.dg1MRZData` + a
-     * user policy struct + the current date — no off-chain Merkle / SMT
-     * trust infrastructure required, unlike `passport_adapter` v3.
-     */
-    private const val DEFAULT_CIRCUIT_ASSET = "disclosure.json"
-    private const val DEFAULT_SRS_ASSET = "disclosure.srs.bin"
+    private const val DEFAULT_CIRCUIT_ALIAS = "passport_adapter"
+    private const val DEFAULT_SRS_ALIAS = "passport_adapter"
+
+    private val CIRCUIT_ASSETS = mapOf(
+      "dsc_chain" to "dsc_chain.json",
+      "dsc_chain.json" to "dsc_chain.json",
+      "passport_adapter" to "passport_adapter.json",
+      "passport_adapter.json" to "passport_adapter.json",
+      "openac_show" to "openac_show.json",
+      "openac_show.json" to "openac_show.json",
+    )
+
+    private val SRS_ASSETS = mapOf(
+      "dsc_chain" to "dsc_chain.srs.bin",
+      "dsc_chain.srs.bin" to "dsc_chain.srs.bin",
+      "passport_adapter" to "passport_adapter.srs.bin",
+      "passport_adapter.srs.bin" to "passport_adapter.srs.bin",
+      "openac_show" to "openac_show.srs.bin",
+      "openac_show.srs.bin" to "openac_show.srs.bin",
+    )
 
     /**
      * Resolve a JS-supplied circuit path. Empty → extract the bundled
-     * `passport_verifier.json` into `filesDir/passport_zk/` once and reuse
-     * the extracted path on subsequent calls (UniFFI's
+     * passport-noir 0.3.0 passport adapter into `filesDir/passport_zk/`.
+     * Known aliases resolve to bundled assets; unknown values pass through
+     * as external filesystem paths. UniFFI's
      * `generate_noir_proof` reads from `std::fs`, so the asset has to live
      * on a real filesystem path, not inside the APK's `assets/` zip).
      */
-    private fun resolveCircuitPath(supplied: String): String =
-      if (supplied.isEmpty()) extractAsset(DEFAULT_CIRCUIT_ASSET).absolutePath else supplied
+    private fun resolveCircuitPath(supplied: String): String {
+      val key = if (supplied.isEmpty()) DEFAULT_CIRCUIT_ALIAS else supplied
+      val assetName = CIRCUIT_ASSETS[key] ?: return supplied
+      return extractAsset(assetName).absolutePath
+    }
 
-    private fun resolveSrsPath(supplied: String?): String? =
-      if (supplied.isNullOrEmpty()) extractAsset(DEFAULT_SRS_ASSET).absolutePath else supplied
+    private fun resolveSrsPath(supplied: String?): String? {
+      val key = if (supplied.isNullOrEmpty()) DEFAULT_SRS_ALIAS else supplied
+      val assetName = SRS_ASSETS[key] ?: return supplied
+      return extractAsset(assetName).absolutePath
+    }
 
     /**
      * Idempotent asset → filesDir copy. The cache key is uncompressed size
@@ -226,6 +255,28 @@ class HybridPassportZk : HybridPassportZkSpec() {
     }
 
     /**
+     * Decode the Rust builder's result JSON
+     * (`gg.solidarity.passport.openac-v3.witness-build-result.v1`) into the
+     * Nitro struct the JS layer consumes.
+     */
+    private fun decodeWitnessResult(resultJson: String): OpenAcV3WitnessBuildResult {
+      val result = try {
+        JSONObject(resultJson)
+      } catch (e: Throwable) {
+        throw RuntimeException(
+          "OpenAC v3 witness result malformed: ${e.message ?: e.javaClass.simpleName}",
+        )
+      }
+      return OpenAcV3WitnessBuildResult(
+        schema = result.getString("schema"),
+        passportNoirVersion = result.getString("passportNoirVersion"),
+        ready = result.getBoolean("ready"),
+        reason = if (result.isNull("reason")) null else result.optString("reason", null),
+        bundleJson = if (result.isNull("bundleJson")) null else result.optString("bundleJson", null),
+      )
+    }
+
+    /**
      * Turn MoproException's typed variants into a single-line message
      * that's safe to surface in a toast. Never leaks the raw Java
      * exception class chain (see screenshot in issue — that's how
@@ -243,4 +294,3 @@ class HybridPassportZk : HybridPassportZkSpec() {
     }
   }
 }
-
