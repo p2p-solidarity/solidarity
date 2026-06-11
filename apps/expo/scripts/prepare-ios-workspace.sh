@@ -15,9 +15,9 @@ PREBUILD_CLEAN="${AIRMEISHI_IOS_PREBUILD_CLEAN:-0}"
 BUN_INSTALL_ARGS="${AIRMEISHI_BUN_INSTALL_ARGS:-}"
 SETUP_IOS_NATIVE_BINDINGS="${AIRMEISHI_SETUP_IOS_NATIVE_BINDINGS:-1}"
 PASSPORT_NOIR_DIR="${AIRMEISHI_PASSPORT_NOIR_DIR:-$(cd "$REPO_ROOT/.." && pwd)/passport-noir}"
-PASSPORT_MOPRO_VERSION="${AIRMEISHI_PASSPORT_MOPRO_VERSION:-v0.3.1}"
+PASSPORT_MOPRO_VERSION="${AIRMEISHI_PASSPORT_MOPRO_VERSION:-v0.3.2}"
 PASSPORT_MOPRO_ZIP_URL="${AIRMEISHI_PASSPORT_MOPRO_ZIP_URL:-https://github.com/p2p-solidarity/passport-noir/releases/download/${PASSPORT_MOPRO_VERSION}/PassportMoproBindings.xcframework.zip}"
-PASSPORT_MOPRO_SHA256="${AIRMEISHI_PASSPORT_MOPRO_SHA256-964b32a5a725bfd3eb48935bbcd5f2a3bf127a7c558f4a157e836e716b690dd1}"
+PASSPORT_MOPRO_SHA256="${AIRMEISHI_PASSPORT_MOPRO_SHA256-3a81c5e6a743f3a875e88c3b54b9fd3c4ca8cc250a31d3cc79b53b87dc940c49}"
 # OpenAC v3 uses one merged `passport.srs.bin`. It is large and gitignored, so
 # the iOS workspace stages it from local passport-noir build artifacts only:
 # no network download happens for SRS during prepare or xcodebuild.
