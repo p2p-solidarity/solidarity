@@ -32,16 +32,28 @@ import type {
   QRPlaintextPayload,
   QRSharingPayload,
 } from '@/cards/solidarityQrPayload';
+import {
+  handlePassportShowScan,
+  type PassportShowScanResult,
+} from '@/scan/showPresentationHandler';
 import { verifySelectiveDisclosureProof } from '@/zk/proofManager';
 import { verifyGroupProof } from '@/zk';
 
 export interface ScanOutcome {
-  readonly kind: 'card' | 'oidc-request' | 'oidc-response' | 'vp-token' | 'unknown' | 'error';
+  readonly kind:
+    | 'card'
+    | 'oidc-request'
+    | 'oidc-response'
+    | 'vp-token'
+    | 'passport-show'
+    | 'unknown'
+    | 'error';
   readonly card?: BusinessCard;
   readonly verificationStatus?: VerificationStatus;
   readonly sealedRoute?: string;
   readonly oidcPayload?: string;
   readonly errorMessage?: string;
+  readonly passportShow?: PassportShowScanResult;
 }
 
 const SUPPORTED_PROOF_CLAIMS = new Set(['is_human', 'age_over_18']);
@@ -68,6 +80,12 @@ export async function handleScannedPayload(payload: string): Promise<ScanOutcome
   // vCard — no parser exists yet; fall through to raw routing.
   if (payload.startsWith('BEGIN:VCARD')) {
     return { kind: 'unknown' };
+  }
+
+  // Passport show presentation (passport_show_v1) — fresh-proof ZK route.
+  const passportShow = await handlePassportShowScan(payload);
+  if (passportShow !== null) {
+    return { kind: 'passport-show', passportShow };
   }
 
   const envelope = parseEnvelopeFromWire(payload);

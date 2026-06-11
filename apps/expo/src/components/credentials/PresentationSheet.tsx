@@ -2,6 +2,7 @@ import { useMemo, type ReactNode } from 'react';
 import { Modal, Pressable, ScrollView, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { PassportShowPresentation } from '@/components/credentials/PassportShowPresentation';
 import { PresentationProofQr } from '@/components/credentials/PresentationProofQr';
 import { SfIcon } from '@/components/icons/SfIcon';
 import { ThemedText } from '@/components/themed/ThemedText';
@@ -12,12 +13,19 @@ import {
   selectPresentationClaims,
   type PresentationCredential,
 } from '@/credentials/presentationProof';
+import { selectPassportShowPresentationClaims } from '@/passport/presentationClaims';
 
 export interface PresentationSheetProps {
   readonly visible: boolean;
   readonly credential: PresentationCredential & { readonly title: string };
   readonly selectedClaimIds: ReadonlySet<string>;
   readonly onDismiss: () => void;
+  /**
+   * OpenAC-v3 passports with a vaulted show witness present a FRESH
+   * `openac_show` proof (small animated QR) instead of replaying the
+   * enrollment envelope. Decided by the caller (metadata tag + vault check).
+   */
+  readonly passportShowEligible?: boolean;
 }
 
 export function PresentationSheet({
@@ -25,6 +33,7 @@ export function PresentationSheet({
   credential,
   selectedClaimIds,
   onDismiss,
+  passportShowEligible = false,
 }: PresentationSheetProps): ReactNode {
   return (
     <Modal
@@ -37,6 +46,7 @@ export function PresentationSheet({
         credential={credential}
         selectedClaimIds={selectedClaimIds}
         onDismiss={onDismiss}
+        passportShowEligible={passportShowEligible}
       />
     </Modal>
   );
@@ -46,28 +56,32 @@ function PresentationBody({
   credential,
   selectedClaimIds,
   onDismiss,
+  passportShowEligible,
 }: {
   readonly credential: PresentationCredential & { readonly title: string };
   readonly selectedClaimIds: ReadonlySet<string>;
   readonly onDismiss: () => void;
+  readonly passportShowEligible: boolean;
 }): ReactNode {
   const insets = useSafeAreaInsets();
   const provableClaims = useIdentityData((s) => s.provableClaims);
 
   const selectedClaims: readonly ProvableClaimEntity[] = useMemo(
-    () => selectPresentationClaims(
-      provableClaims.filter((c) => c.identityCardId === credential.id),
-      selectedClaimIds,
-    ),
-    [provableClaims, credential.id, selectedClaimIds],
+    () => {
+      const claims = provableClaims.filter((c) => c.identityCardId === credential.id);
+      return passportShowEligible
+        ? selectPassportShowPresentationClaims(claims, selectedClaimIds)
+        : selectPresentationClaims(claims, selectedClaimIds);
+    },
+    [provableClaims, credential.id, selectedClaimIds, passportShowEligible],
   );
 
   const pages = useMemo(
     () =>
-      selectedClaims.length > 0
+      !passportShowEligible && selectedClaims.length > 0
         ? buildPresentationProofQrPages({ credential, selectedClaims })
         : [],
-    [credential, selectedClaims],
+    [credential, selectedClaims, passportShowEligible],
   );
 
   return (
@@ -99,12 +113,21 @@ function PresentationBody({
           gap: 24,
         }}
       >
-        <PresentationProofQr
-          credentialTitle={credential.title}
-          selectedClaims={selectedClaims}
-          pages={pages}
-          showTitle
-        />
+        {passportShowEligible ? (
+          <PassportShowPresentation
+            credentialId={credential.id}
+            credentialTitle={credential.title}
+            holderDid={credential.holderDid}
+            selectedClaims={selectedClaims}
+          />
+        ) : (
+          <PresentationProofQr
+            credentialTitle={credential.title}
+            selectedClaims={selectedClaims}
+            pages={pages}
+            showTitle
+          />
+        )}
       </ScrollView>
     </View>
   );

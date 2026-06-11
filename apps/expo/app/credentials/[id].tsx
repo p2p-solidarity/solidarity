@@ -26,6 +26,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { IssuerBadge } from '@/components/credentials/IssuerBadge';
 import { PresentationProofQr } from '@/components/credentials/PresentationProofQr';
 import { PresentationSheet } from '@/components/credentials/PresentationSheet';
+import { hasPassportShowWitnessSafe } from '@/passport/showWitnessVault';
 import { SfIcon } from '@/components/icons/SfIcon';
 import { ThemedButton } from '@/components/themed';
 import { Colors } from '@/constants/Colors';
@@ -45,8 +46,6 @@ import {
 import {
   buildPresentationProofQrPages,
   initialPresentationClaimIds,
-  isPresentationDisabled,
-  presentedClaimIds,
   selectPresentationClaims,
 } from '@/credentials/presentationProof';
 import { pushToast } from '@/feedback/toast';
@@ -55,6 +54,10 @@ import {
   useIdentityData,
   type ProvableClaimEntity,
 } from '@/identity';
+import {
+  filterPassportShowPresentationClaims,
+  selectPassportShowPresentationClaims,
+} from '@/passport/presentationClaims';
 
 // MARK: - Helpers (Swift parity)
 
@@ -379,12 +382,31 @@ export default function CredentialDetailScreen() {
     return allClaims.filter((c) => c.identityCardId === credential.id);
   }, [allClaims, credential]);
 
+  // OpenAC-v3 passports with a vaulted show witness present a FRESH
+  // openac_show proof in the sheet instead of replaying the (huge)
+  // enrollment envelope — only show claim rows backed by that circuit.
+  const passportShowEligible = useMemo(
+    () =>
+      credential !== undefined &&
+      credential.metadataTags.includes('passport-openac-v3') &&
+      hasPassportShowWitnessSafe(credential.id),
+    [credential],
+  );
+
+  const presentationClaimRows = useMemo(
+    () =>
+      passportShowEligible
+        ? filterPassportShowPresentationClaims(associatedClaims)
+        : associatedClaims,
+    [associatedClaims, passportShowEligible],
+  );
+
   const initialClaimIdsForPresentation = useMemo(
     () => initialPresentationClaimIds(
-      associatedClaims,
+      presentationClaimRows,
       typeof claimId === 'string' ? claimId : undefined,
     ),
-    [associatedClaims, claimId],
+    [presentationClaimRows, claimId],
   );
 
   const selectedClaimIdsForPresentation = useMemo(
@@ -393,22 +415,28 @@ export default function CredentialDetailScreen() {
   );
 
   const selectedClaimsForPresentation = useMemo(
-    () => selectPresentationClaims(
-      associatedClaims,
-      selectedClaimIdsForPresentation,
-    ),
-    [associatedClaims, selectedClaimIdsForPresentation],
+    () =>
+      passportShowEligible
+        ? selectPassportShowPresentationClaims(
+            presentationClaimRows,
+            selectedClaimIdsForPresentation,
+          )
+        : selectPresentationClaims(
+            presentationClaimRows,
+            selectedClaimIdsForPresentation,
+          ),
+    [passportShowEligible, presentationClaimRows, selectedClaimIdsForPresentation],
   );
 
   const presentationPages = useMemo(
     () =>
-      credential && selectedClaimsForPresentation.length > 0
+      credential && !passportShowEligible && selectedClaimsForPresentation.length > 0
         ? buildPresentationProofQrPages({
             credential,
             selectedClaims: selectedClaimsForPresentation,
           })
         : [],
-    [credential, selectedClaimsForPresentation],
+    [credential, passportShowEligible, selectedClaimsForPresentation],
   );
 
   const status = useMemo<string>(() => {
@@ -437,7 +465,7 @@ export default function CredentialDetailScreen() {
   const trustBadge = issuerTrustBadge(credential, t);
   const isExpired =
     credential.expiresAt != null && credential.expiresAt.getTime() < Date.now();
-  const presentDisabled = isPresentationDisabled(selectedClaimIdsForPresentation);
+  const presentDisabled = selectedClaimsForPresentation.length === 0;
 
   const onPresent = () => {
     // TODO(biometric-gate): wrap in
@@ -447,10 +475,7 @@ export default function CredentialDetailScreen() {
     //   if (!gate.success) { pushToast(...); return; }
     // so enlarging the already-visible proof QR obeys the SensitiveAction
     // policy. See `src/keychain/biometricGatekeeper.ts`.
-    for (const claimID of presentedClaimIds(
-      associatedClaims,
-      selectedClaimIdsForPresentation,
-    )) {
+    for (const claimID of selectedClaimsForPresentation.map((claim) => claim.id)) {
       markPresented(claimID);
     }
     setPresenting(true);
@@ -617,7 +642,7 @@ export default function CredentialDetailScreen() {
           {/* Selective Disclosures section */}
           <View className="gap-2">
             <SectionHeader title={t('credentialDetail.disclosuresHeader')} />
-            {associatedClaims.length === 0 ? (
+            {presentationClaimRows.length === 0 ? (
               <View className="px-4">
                 <Text className="text-text3 text-[13px]">
                   {t('credentialDetail.noClaims')}
@@ -625,13 +650,19 @@ export default function CredentialDetailScreen() {
               </View>
             ) : (
               <View className="px-4" style={{ gap: 16 }}>
-                <PresentationProofQr
-                  selectedClaims={selectedClaimsForPresentation}
-                  pages={presentationPages}
-                  emptyText={t('credentialDetail.noClaims')}
-                />
+                {passportShowEligible ? (
+                  <Text className="text-text3 text-[13px]">
+                    {t('passportShow.inlineHint')}
+                  </Text>
+                ) : (
+                  <PresentationProofQr
+                    selectedClaims={selectedClaimsForPresentation}
+                    pages={presentationPages}
+                    emptyText={t('credentialDetail.noClaims')}
+                  />
+                )}
                 <View style={{ gap: 8 }}>
-                  {associatedClaims.map((c) => (
+                  {presentationClaimRows.map((c) => (
                     <ClaimRow
                       key={c.id}
                       claim={c}
@@ -679,6 +710,7 @@ export default function CredentialDetailScreen() {
         credential={credential}
         selectedClaimIds={selectedClaimIdsForPresentation}
         onDismiss={() => { setPresenting(false); }}
+        passportShowEligible={passportShowEligible}
       />
     </View>
   );

@@ -6,20 +6,22 @@
  * already emits, so a scanner built against either side reassembles correctly.
  *
  * Wire format and chunk math live in `@solidarity/shared` (`qr/chunking.ts`).
- * This module is a thin adapter that picks a chunk size (capped to
- * `QR_DEFAULT_CHUNK_BYTES`, matching `QRCodeChunkingService.defaultChunkDataBytes`)
- * and exposes 1-based page indices for UI.
+ * This module is a thin adapter that picks a chunk size and exposes 1-based
+ * page indices for UI. The shared wire cap is level-L sized; Expo renders with
+ * react-native-qrcode-svg at ecl:M, so the default chunk is intentionally lower
+ * to keep every frame renderable on device.
  *
  * Integration point: a future Expo `PresentationSheet` mirroring Swift's
  * `PresentationSheet` in CredentialDetailView.swift; pair these pages with
  * `PresentationChunkPlaybackControls` when `pages.length > 1`.
  */
 import {
-  QR_DEFAULT_CHUNK_BYTES,
   QR_MIN_CHUNK_BYTES,
   QrChunkError,
   makeFrames,
 } from '@solidarity/shared';
+
+export const PRESENTATION_QR_RENDER_SAFE_CHUNK_BYTES = 1500;
 
 export interface PresentationQRPage {
   readonly index: number;
@@ -36,7 +38,10 @@ export function buildPresentationQrPages(
   options?: BuildPresentationQrPagesOptions,
 ): readonly PresentationQRPage[] {
   const byteCount = new TextEncoder().encode(vpJson).length;
-  const requestedMax = options?.maxBytesPerChunk ?? QR_DEFAULT_CHUNK_BYTES;
+  const requestedMax = Math.min(
+    options?.maxBytesPerChunk ?? PRESENTATION_QR_RENDER_SAFE_CHUNK_BYTES,
+    PRESENTATION_QR_RENDER_SAFE_CHUNK_BYTES,
+  );
   const upperBound = Math.min(
     requestedMax,
     Math.max(byteCount, QR_MIN_CHUNK_BYTES),

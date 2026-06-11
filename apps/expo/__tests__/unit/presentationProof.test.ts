@@ -12,6 +12,14 @@ import {
 } from '../../src/credentials/presentationProof';
 import type { StoredCredential } from '../../src/credentials/store';
 import type { ProvableClaimEntity } from '../../src/identity';
+import { buildPresentationQrPages } from '../../src/me/presentationQrPages';
+
+type QrEngine = {
+  create: (
+    value: string,
+    opts: { readonly errorCorrectionLevel: 'M' }
+  ) => unknown;
+};
 
 const now = new Date('2026-06-09T00:00:00Z');
 
@@ -51,6 +59,22 @@ const humanClaim: ProvableClaimEntity = {
 };
 
 const claims: readonly ProvableClaimEntity[] = [ageClaim, humanClaim];
+
+async function loadQrEngine(): Promise<QrEngine | null> {
+  try {
+    const dynamicImport = (id: string): Promise<unknown> => import(id);
+    const raw = (await dynamicImport('qrcode')) as {
+      readonly create?: QrEngine['create'];
+      readonly default?: { readonly create?: QrEngine['create'] };
+    };
+    const candidate = raw.default ?? raw;
+    return typeof candidate.create === 'function'
+      ? { create: candidate.create }
+      : null;
+  } catch {
+    return null;
+  }
+}
 
 function decodePayload(payload: string): Record<string, unknown> {
   const decompressed = payload.startsWith('sce1:')
@@ -137,5 +161,22 @@ describe('presentation proof helpers', () => {
 
     expect(pages.length).toBeGreaterThan(0);
     expect(pages[0]?.payload.startsWith('sqc1.')).toBe(true);
+  });
+
+  it('keeps default chunk frames renderable by react-native-qrcode-svg ecl:M', async () => {
+    const engine = await loadQrEngine();
+    if (engine === null) return;
+
+    const payload = Array.from({ length: 12_000 }, (_, i) =>
+      String.fromCharCode(33 + (i % 90))
+    ).join('');
+    const pages = buildPresentationQrPages(payload);
+
+    expect(pages.length).toBeGreaterThan(1);
+    for (const page of pages) {
+      expect(() => {
+        engine.create(page.payload, { errorCorrectionLevel: 'M' });
+      }).not.toThrow();
+    }
   });
 });

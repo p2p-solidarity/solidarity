@@ -32,6 +32,7 @@
 import { create } from 'zustand';
 
 import { fetchAndCacheIssuer } from '@/credentials/issuerStore';
+import { deletePassportShowWitness } from '@/passport/showWitnessVault';
 import { decryptJson, encryptJson } from '@/storage/encryptionManager';
 import { ManifestStorage } from '@/storage/manifestStorage';
 import { getMmkv } from '@/storage/mmkv';
@@ -185,6 +186,10 @@ export const useCredentialStore = create<CredentialStoreState>((set, get) => ({
 
   remove: async (id) => {
     getMmkv().remove(`${PREFIX}${id}`);
+    // Passport credentials keep their show-witness bundle (commitment
+    // opening) in the vault keyed by the same id — drop it with the
+    // credential. No-op for every other credential type.
+    deletePassportShowWitness(id);
     set((s) => {
       const nextManifest = s.manifest.filter((m) => m.id !== id);
       ManifestStorage.set(CREDENTIALS_MANIFEST_SCOPE, nextManifest);

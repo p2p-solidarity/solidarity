@@ -115,6 +115,7 @@ export function PresentationProofQr({
             <QRCode
               value={current.payload}
               size={qrSize}
+              ecl="M"
               backgroundColor="#FFFFFF"
               color="#000000"
             />

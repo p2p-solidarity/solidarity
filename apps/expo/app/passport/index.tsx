@@ -80,6 +80,15 @@ import {
   passportFingerprintTag,
 } from '@/passport/persistence';
 import {
+  PASSPORT_SHOW_LINK_SCOPE,
+  extractPassportShowVkSha256FromProofPayload,
+} from '@/passport/showPresentation';
+import { buildPassportProvableClaims } from '@/passport/presentationClaims';
+import {
+  savePassportShowVkSelfPin,
+  savePassportShowWitness,
+} from '@/passport/showWitnessVault';
+import {
   buildPassportErrorDetail,
   classifyPassportProofError,
   friendlyProofError,
@@ -95,7 +104,6 @@ import { usePreferences } from '@/settings/preferences';
 import { useCredentialStore, type TrustLevel } from '@/credentials/store';
 import { passportTrustLevelFromProof } from '@/credentials/trustDisplay';
 import { useActiveDid, useIdentityData } from '@/identity';
-import type { ProvableClaimEntity } from '@/identity/entities';
 import type {
   getNfcPassport,
   PassportReadResult,
@@ -183,7 +191,7 @@ async function attachOpenAcV3WitnessDuringRead(args: {
       revocationSnapshot: witnessDecision.plan.revocationSnapshot,
       devicePublicKeyRaw: await publicRawP256ForCurrentIdentity(),
       nonceHash: freshOpenAcV3NonceHash(),
-      linkScope: 'airmeishi-passport-v3',
+      linkScope: PASSPORT_SHOW_LINK_SCOPE,
       requireAA,
       activeAuth: requireAA ? activeAuth ?? undefined : undefined,
       builder: args.zk,
@@ -416,7 +424,7 @@ export default function PassportSetup() {
               revocationSnapshot: proofPlan.revocationSnapshot,
               devicePublicKeyRaw: await publicRawP256ForCurrentIdentity(),
               nonceHash: freshOpenAcV3NonceHash(),
-              linkScope: 'airmeishi-passport-v3',
+              linkScope: PASSPORT_SHOW_LINK_SCOPE,
               builder: nitro.zk,
             })
           : proofChip.openAcV3WitnessBundleJson;
@@ -567,6 +575,21 @@ export default function PassportSetup() {
         metadataTags,
       });
 
+      // Show-witness vault: keep the witness bundle so every later
+      // presentation proves a FRESH openac_show (new nonce + today's date)
+      // instead of replaying the enrollment proof. Non-fatal — without it
+      // the credential still works via the legacy presentation path.
+      if (proof.proofType === PASSPORT_V3_PROOF_TYPE && chip.openAcV3WitnessBundleJson) {
+        try {
+          await savePassportShowWitness(cardId, chip.openAcV3WitnessBundleJson);
+          const vkSelfPin = extractPassportShowVkSha256FromProofPayload(proof.proofPayload);
+          if (vkSelfPin) savePassportShowVkSelfPin(vkSelfPin);
+        } catch (err) {
+          const message = err instanceof Error ? err.message : String(err);
+          console.warn(`[zk] show-witness vault save failed — ${message}`);
+        }
+      }
+
       await useIdentityData.getState().upsertIdentityCard({
         id: cardId,
         type: 'passport',
@@ -589,59 +612,16 @@ export default function PassportSetup() {
         updatedAt: now,
       });
 
-      const claimPayload = (claim: string): string => {
-        const parts: string[] = [
-          `"claim":"${claim}"`,
-          `"proof":"${proof.proofType}"`,
-          `"identity_card_id":"${cardId}"`,
-        ];
-        if (chip.isSimulated) parts.push(`"is_simulated":true`);
-        return `{${parts.join(',')}}`;
-      };
-      const claims: ProvableClaimEntity[] = [
-        {
-          id: uuid(),
-          identityCardId: cardId,
-          claimType: 'age_over_18',
-          title: 'I am over 18',
-          issuerType,
-          trustLevel,
-          source: 'Passport',
-          payload: claimPayload('age_over_18'),
-          isPresentable: true,
-          createdAt: now,
-          updatedAt: now,
-        },
-        {
-          id: uuid(),
-          identityCardId: cardId,
-          claimType: 'is_human',
-          title: 'I am a real person',
-          issuerType,
-          trustLevel,
-          source: 'Passport',
-          payload: claimPayload('is_human'),
-          isPresentable: true,
-          createdAt: now,
-          updatedAt: now,
-        },
-        {
-          id: uuid(),
-          identityCardId: cardId,
-          claimType: 'field_name',
-          title: chip.isSimulated
-            ? 'Name (dev-mode passport)'
-            : 'Name verified by passport',
-          issuerType,
-          trustLevel,
-          source: 'Passport',
-          payload: claimPayload('field_name'),
-          sourceField: 'name',
-          isPresentable: true,
-          createdAt: now,
-          updatedAt: now,
-        },
-      ];
+      const claims = buildPassportProvableClaims({
+        cardId,
+        proofType: proof.proofType,
+        issuerType,
+        trustLevel,
+        nationalityCode: draft.nationalityCode,
+        isSimulated: chip.isSimulated,
+        now,
+        uuid,
+      });
       for (const c of claims) {
         await useIdentityData.getState().upsertProvableClaim(c);
       }

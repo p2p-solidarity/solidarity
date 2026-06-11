@@ -30,6 +30,7 @@ import { scheduleOnRN } from 'react-native-worklets';
 
 import { PressableScale } from '@/components/common/PressableScale';
 import { SfIcon } from '@/components/icons/SfIcon';
+import { PassportShowChallengeSheet } from '@/components/scan/PassportShowChallengeSheet';
 import { ProofPresentationFlowSheet } from '@/components/scan/ProofPresentationFlowSheet';
 import { ScanWindowOverlay } from '@/components/scan/ScanWindowOverlay';
 import {
@@ -43,8 +44,11 @@ import { presentReceivedCard } from '@/cards/receivedCard';
 import { haptic } from '@/feedback/haptics';
 import { SCALE } from '@/feedback/motion';
 import { pushToast } from '@/feedback/toast';
+import { PASSPORT_SHOW_LINK_SCOPE } from '@/passport/showPresentation';
+import { issuePassportShowChallenge } from '@/passport/showVerifier';
 import { QrScanner } from '@/scan/QrScanner';
 import { handleScannedPayload } from '@/scan/envelopeHandler';
+import { passportShowVerifierResult } from '@/scan/passportShowResult';
 import { verifyVpToken } from '@/oidc';
 import { useTranslation } from '@/i18n';
 
@@ -61,6 +65,10 @@ export default function ScanScreen() {
   const [route, setRoute] = useState<ScanRoute | null>(null);
   const [progress, setProgress] = useState<{ received: number; total: number } | null>(null);
   const [isScanning, setIsScanning] = useState(true);
+  // Verifier challenge for passport show presentations. The nonce lives in
+  // the outstanding-challenge store (TTL-bound); this state only drives the
+  // sheet showing the QR.
+  const [showChallenge, setShowChallenge] = useState<string | null>(null);
 
   // Capture animation lives on the UI thread — bracketScale pulses the
   // ScanWindowOverlay corners and flashOpacity blinks a white shutter.
@@ -98,9 +106,16 @@ export default function ScanScreen() {
         setIsScanning(true);
         return;
       }
+      if (outcome.kind === 'passport-show' && outcome.passportShow) {
+        setRoute({
+          kind: 'verifier',
+          result: passportShowVerifierResult(outcome.passportShow, t),
+        });
+        return;
+      }
       setRoute(await classifyPayload(payload));
     })();
-  }, []);
+  }, [t]);
 
   const onResult = useCallback(
     (payload: string) => {
@@ -184,6 +199,20 @@ export default function ScanScreen() {
             subtitle="Supports OID4VP request, vp_token verify, credential offers, and SIOPv2."
           />
         )}
+        <ThemedButton
+          variant="secondary"
+          label={t('passportShow.verifyEntry')}
+          fullWidth
+          onPress={() => {
+            const issued = issuePassportShowChallenge({
+              scope: PASSPORT_SHOW_LINK_SCOPE,
+              ageThreshold: 18,
+              requestAge: true,
+              requestNationality: false,
+            });
+            setShowChallenge(issued.challengeJson);
+          }}
+        />
         {isScanning ? (
           <View className="flex-row items-center justify-center gap-1.5">
             <ActivityIndicator size="small" />
@@ -202,6 +231,12 @@ export default function ScanScreen() {
         visible={route?.kind === 'verifier'}
         result={route?.kind === 'verifier' ? route.result : null}
         onClose={reset}
+      />
+
+      <PassportShowChallengeSheet
+        visible={showChallenge !== null}
+        challengeJson={showChallenge}
+        onClose={() => { setShowChallenge(null); }}
       />
 
       <Animated.View
