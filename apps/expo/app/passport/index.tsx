@@ -38,6 +38,7 @@ import {
   ProofStep,
 } from '@/components/passport/PassportSteps';
 import { SolidarityPlaceholderCard } from '@/components/passport/SolidarityPlaceholderCard';
+import { showError } from '@/feedback/appAlert';
 import { pushToast } from '@/feedback/toast';
 import {
   MRZCameraStep,
@@ -67,6 +68,7 @@ import {
   generatePassportOpenAcV3ProofPayload,
   parsePassportOpenAcV3ActiveAuthJson,
   parsePassportOpenAcV3WitnessBundleJson,
+  resolvePassportOpenAcV3WitnessBundleJson,
   shouldAllowPassportOpenAcV3FallbackProof,
   shouldPreparePassportOpenAcV3WitnessDuringRead,
   type PassportOpenAcV3ProofPlan,
@@ -76,6 +78,13 @@ import {
   findPassportDuplicate,
   passportFingerprintTag,
 } from '@/passport/persistence';
+import {
+  buildPassportErrorDetail,
+  classifyPassportProofError,
+  friendlyProofError,
+  ZK_UNAVAILABLE_RE,
+  type PassportErrorPhase,
+} from '@/passport/diagnostics';
 import {
   didKeyForCurrentIdentity,
   publicRawP256ForCurrentIdentity,
@@ -138,6 +147,20 @@ function freshOpenAcV3NonceHash(): Uint8Array {
   return sha256Bytes(`airmeishi-openac-v3:${uuid()}:${String(Date.now())}`);
 }
 
+function hasDataGroupBytes(value: ArrayBuffer | undefined): boolean {
+  return value !== undefined && value.byteLength > 0;
+}
+
+function hasOpenAcV3ActiveAuthentication(result: {
+  readonly dataGroups?: PassportReadResult['dataGroups'];
+  readonly activeAuthJson?: string;
+}): boolean {
+  return (
+    hasDataGroupBytes(result.dataGroups?.dg15) &&
+    parsePassportOpenAcV3ActiveAuthJson(result.activeAuthJson) !== null
+  );
+}
+
 async function attachOpenAcV3WitnessDuringRead(args: {
   readonly result: PassportReadResult;
   readonly nfc: ReturnType<typeof getNfcPassport> | null;
@@ -166,9 +189,7 @@ async function attachOpenAcV3WitnessDuringRead(args: {
   }
 
   const activeAuth = parsePassportOpenAcV3ActiveAuthJson(args.result.activeAuthJson);
-  if (activeAuth === null) {
-    return skip('passport has no ECDSA-P256 Active Authentication evidence');
-  }
+  const requireAA = hasDataGroupBytes(args.result.dataGroups?.dg15) && activeAuth !== null;
 
   args.setProgress();
   try {
@@ -178,8 +199,8 @@ async function attachOpenAcV3WitnessDuringRead(args: {
       devicePublicKeyRaw: await publicRawP256ForCurrentIdentity(),
       nonceHash: freshOpenAcV3NonceHash(),
       linkScope: 'airmeishi-passport-v3',
-      requireAA: true,
-      activeAuth,
+      requireAA,
+      activeAuth: requireAA ? activeAuth : undefined,
       builder: args.zk,
     });
     return {
@@ -197,8 +218,9 @@ async function attachOpenAcV3WitnessDuringRead(args: {
  * to the entity-level discriminated union ('L1'/'L2'/'L3') the
  * identity/credentials stores use. Mirrors the inverse mapper in
  * `app/(tabs)/me/index.tsx`. `'white'` = synthetic / SD-JWT-only =
- * Level 1. `'blue'` = ZK fallback path = Level 2. `'green'` = real ZK
- * proof on real chip = Level 3.
+ * Level 1. `'blue'` = passive-authenticated passport_v3 without DG15/AA =
+ * Level 2. `'green'` = passport_v3 with DG15 Active Authentication =
+ * Level 3.
  */
 function mapTrustLevel(passportLevel: string): TrustLevel {
   switch (passportLevel) {
@@ -291,7 +313,12 @@ export default function PassportSetup() {
 
   const onReadNfc = async () => {
     if (nfcStrategy.kind === 'unavailable') {
-      dispatch({ type: 'setError', message: nfcStrategy.message });
+      reportPassportError({
+        context: 'Passport › NFC Read',
+        phase: 'nfc-read',
+        summary: nfcStrategy.message,
+        error: nfcStrategy.message,
+      });
       return;
     }
     dispatch({ type: 'setLoading', value: true });
@@ -304,6 +331,7 @@ export default function PassportSetup() {
           ? 'Simulating chip read (developer mode)...'
           : 'Hold passport near device...',
     });
+    let diagnosticResult: PassportReadResult | null = null;
     try {
       let chip: PassportChipSnapshot;
       if (nfcStrategy.kind === 'simulated') {
@@ -340,6 +368,7 @@ export default function PassportSetup() {
             },
           },
         );
+        diagnosticResult = result;
         const resultWithWitness = await attachOpenAcV3WitnessDuringRead({
           result,
           nfc: nitro.nfc,
@@ -353,6 +382,7 @@ export default function PassportSetup() {
             });
           },
         });
+        diagnosticResult = resultWithWitness;
         chip = chipFromNitro(
           resultWithWitness,
           state.draft.nationalityCode,
@@ -367,7 +397,19 @@ export default function PassportSetup() {
       });
       dispatch({ type: 'setChip', chip });
     } catch (err) {
-      dispatch({ type: 'setError', message: (err as Error).message });
+      dispatch({
+        type: 'setNfcProgressEvent',
+        phase: 'error',
+        percent: 0,
+        message: 'Passport NFC read failed.',
+      });
+      reportPassportError({
+        context: 'Passport › NFC Read',
+        phase: 'nfc-read',
+        summary: 'Could not read the passport NFC chip.',
+        error: err,
+        chip: diagnosticResult,
+      });
     } finally {
       dispatch({ type: 'setLoading', value: false });
     }
@@ -375,6 +417,7 @@ export default function PassportSetup() {
 
   const onGenerateProof = async () => {
     if (!state.chip) return;
+    let proofChip = state.chip;
     try {
       const passportFingerprint = derivePassportFingerprint(state.draft);
       const duplicate = await findSavedPassportDuplicate(passportFingerprint);
@@ -389,15 +432,31 @@ export default function PassportSetup() {
       dispatch({ type: 'setProofProgress', message: 'Initializing prover...' });
       let proof: PassportProofResult;
       const proofPlan = buildPassportOpenAcV3ProofPlan({
-        ...state.chip,
+        ...proofChip,
         revocationSnapshot: loadBundledRevocationSnapshot(nitro.nfc),
       });
+      const witnessBundleJson =
+        proofPlan.kind === 'openac-v3' && nitro.zk && !proofChip.isSimulated
+          ? await resolvePassportOpenAcV3WitnessBundleJson({
+              existingWitnessBundleJson: proofChip.openAcV3WitnessBundleJson,
+              chip: proofChip,
+              revocationSnapshot: proofPlan.revocationSnapshot,
+              devicePublicKeyRaw: await publicRawP256ForCurrentIdentity(),
+              nonceHash: freshOpenAcV3NonceHash(),
+              linkScope: 'airmeishi-passport-v3',
+              builder: nitro.zk,
+            })
+          : proofChip.openAcV3WitnessBundleJson;
+      if (witnessBundleJson && witnessBundleJson !== proofChip.openAcV3WitnessBundleJson) {
+        proofChip = { ...proofChip, openAcV3WitnessBundleJson: witnessBundleJson };
+        dispatch({ type: 'setChip', chip: proofChip });
+      }
       const zkProof =
-        proofPlan.kind === 'openac-v3' && nitro.zk && !state.chip.isSimulated
+        proofPlan.kind === 'openac-v3' && nitro.zk && !proofChip.isSimulated
           ? await tryGenerateOpenAcV3Proof(
               nitro.zk,
               proofPlan,
-              state.chip.openAcV3WitnessBundleJson,
+              witnessBundleJson,
               (m) => {
                 dispatch({ type: 'setProofProgress', message: m });
               },
@@ -410,7 +469,7 @@ export default function PassportSetup() {
           // passive-authenticated chip read.
           proofType: PASSPORT_V3_PROOF_TYPE,
           proofPayload: zkProof.proofPayload,
-          trustLevel: 'green',
+          trustLevel: hasOpenAcV3ActiveAuthentication(proofChip) ? 'green' : 'blue',
           generationFailed: false,
           disclosure: null,
         };
@@ -420,7 +479,7 @@ export default function PassportSetup() {
           nitro.zk === null
         );
         console.warn(`[zk] OpenAC v3 unavailable — ${fallbackReason}`);
-        if (!shouldAllowPassportOpenAcV3FallbackProof(state.chip)) {
+        if (!shouldAllowPassportOpenAcV3FallbackProof(proofChip)) {
           throw new Error(fallbackReason);
         }
         dispatch({
@@ -438,7 +497,14 @@ export default function PassportSetup() {
       }
       dispatch({ type: 'setProof', proof });
     } catch (err) {
-      dispatch({ type: 'setError', message: friendlyProofError(err) });
+      reportPassportError({
+        context: 'Passport › Generate Proof',
+        phase: 'proof-generation',
+        summary: friendlyProofError(err),
+        error: err,
+        chip: proofChip,
+        code: classifyPassportProofError(err),
+      });
     } finally {
       dispatch({ type: 'setLoading', value: false });
     }
@@ -507,6 +573,7 @@ export default function PassportSetup() {
       const metadataTags: string[] = [passportFingerprintTag(passportFingerprint)];
       if (proof.proofType === PASSPORT_V3_PROOF_TYPE) {
         metadataTags.push('passport-openac-v3', 'passport-noir');
+        if (proof.trustLevel === 'blue') metadataTags.push('passport-openac-v3-no-aa');
       }
       if (proof.proofType.startsWith('mopro-noir')) metadataTags.push('mopro-noir');
       if (proof.proofType.startsWith('semaphore')) metadataTags.push('semaphore-zk');
@@ -620,9 +687,12 @@ export default function PassportSetup() {
       router.back();
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
-      dispatch({
-        type: 'setError',
-        message: message.split('\n')[0] ?? 'Failed to save passport credential',
+      reportPassportError({
+        context: 'Passport › Save Credential',
+        phase: 'persist',
+        summary: message.split('\n')[0] ?? 'Failed to save passport credential',
+        error: err,
+        chip: state.chip,
       });
     } finally {
       dispatch({ type: 'setLoading', value: false });
@@ -707,28 +777,6 @@ async function simulateNfcRead(draft: PassportMRZDraft): Promise<PassportChipSna
   return simulatedChipSnapshot(draft);
 }
 
-/**
- * Errors we treat as "the ZK prover is unavailable on this build". The
- * caller decides whether that becomes a dev fallback (simulated chip only)
- * or a hard error (real passport chip).
- *
- *   1. The legacy stub throw from the pre-Path-1 cdylib placeholder.
- *   2. JNA `UnsatisfiedLinkError` from a `dlopen` failure on the cdylib —
- *      most commonly NDK r25+'s `_LIBCPP_HIDE_FROM_ABI` mismatch where the
- *      libc++_shared.so picked by AGP doesn't expose VTTs that barretenberg
- *      pulls in (`_ZTT…basic_ostringstream…`). The cdylib is in the APK,
- *      but the runtime can't actually use it.
- *   3. Explicit "Native ZK library failed to load" from our own Kotlin
- *      catch-block wrapper, also from a dlopen failure.
- *
- * Real proof-time errors (circuit missing, witness shape mismatch,
- * out-of-memory, etc.) still bubble up unchanged so the user sees them.
- */
-const ZK_UNAVAILABLE_RE =
-  /passport-zk Android impl not linked|build libpassport_zk_mopro\.so first|UnsatisfiedLinkError|Native ZK library failed to load|cannot locate symbol/i;
-/** @deprecated alias retained for grep; use `ZK_UNAVAILABLE_RE`. */
-const ZK_NOT_LINKED_RE = ZK_UNAVAILABLE_RE;
-
 async function tryGenerateOpenAcV3Proof(
   zk: NonNullable<ReturnType<typeof getPassportZk>>,
   plan: Extract<PassportOpenAcV3ProofPlan, { kind: 'openac-v3' }>,
@@ -743,6 +791,10 @@ async function tryGenerateOpenAcV3Proof(
     return null;
   }
 
+  // Device-binding signature is biometric-gated like every other signing
+  // op (CLAUDE.md Sec rule). The `'sign'` grace means one Face ID covers
+  // this whole proof session — and any recent sign (share / QR) is reused,
+  // so the user is not re-prompted mid-flow.
   const deviceBound = await bindPassportOpenAcV3DeviceSignature(
     witnessBundle,
     signOpenAcDeviceBindingDigest
@@ -782,7 +834,7 @@ async function tryGenerateOpenAcV3Proof(
     console.log(
       `[zk] OpenAC v3 proof failed in ${String(Date.now() - startedAt)}ms — ${message}`,
     );
-    if (ZK_NOT_LINKED_RE.test(message)) {
+    if (ZK_UNAVAILABLE_RE.test(message)) {
       console.log('[zk] error matches native-unavailable regex — OpenAC v3 unavailable');
       return null;
     }
@@ -790,18 +842,24 @@ async function tryGenerateOpenAcV3Proof(
   }
 }
 
-/**
- * Sanitises proof-generation errors before they reach the toast/Alert so
- * Android users never see raw `java.lang.…` stack traces (rule 8 spirit:
- * surface honest UX state, not implementation noise).
- */
-function friendlyProofError(err: unknown): string {
-  const raw = err instanceof Error ? err.message : String(err);
-  if (ZK_NOT_LINKED_RE.test(raw)) {
-    return 'ZK prover not yet built for this device.';
-  }
-  // Trim any embedded stack trace so the toast stays one line.
-  return raw.split('\n')[0] ?? 'Proof generation failed';
+function reportPassportError(args: {
+  readonly context: string;
+  readonly phase: PassportErrorPhase;
+  readonly summary: string;
+  readonly error: unknown;
+  readonly chip?: PassportReadResult | PassportChipSnapshot | null;
+  readonly code?: string;
+}): void {
+  showError({
+    context: args.context,
+    summary: args.summary,
+    code: args.code,
+    error: buildPassportErrorDetail({
+      phase: args.phase,
+      error: args.error,
+      chip: args.chip,
+    }),
+  });
 }
 
 function applyScannedDraft(
