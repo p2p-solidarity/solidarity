@@ -30,6 +30,11 @@ import { BulletGuaranteeRow } from '@/components/passport/BulletGuaranteeRow';
 import { SfIcon } from '@/components/icons/SfIcon';
 import { ThemedButton } from '@/components/themed';
 import { Colors } from '@/constants/Colors';
+import {
+  credentialTrustDisplayFor,
+  passportTrustLevelFromProof,
+  type TrustDisplayTone,
+} from '@/credentials/trustDisplay';
 import { useTranslation } from '@/i18n';
 import type {
   PassportChipSnapshot,
@@ -437,24 +442,32 @@ export function ProofStep({
 
 function ProofResultCard({ proof }: { proof: PassportProofResult }) {
   const failed = proof.generationFailed;
-  // Trust level: `white` is the synthetic / lower-trust band (mock chip,
-  // demo witness, or SD-JWT fallback). `green` is a real v3 ZK proof
-  // bound to a real chip's MRZ. Card color tracks trust directly so the
-  // user never confuses a simulated proof with attestation (rule 8).
-  const isDemoTrust = proof.trustLevel !== 'green';
-  const accent = failed || isDemoTrust ? '#FF9500' : Colors.terminalGreen;
+  const storedTrustLevel = passportTrustLevelFromProof(proof.trustLevel);
+  const trustDisplay = credentialTrustDisplayFor({
+    type: 'passport',
+    trustLevel: storedTrustLevel,
+    metadataTags:
+      proof.trustLevel === 'blue'
+        ? ['passport-openac-v3', 'passport-openac-v3-no-aa']
+        : proof.trustLevel === 'green'
+          ? ['passport-openac-v3']
+          : ['fallback'],
+  });
+  const accent = levelColorForTone(trustDisplay.tone);
   const title = failed
-    ? 'Fallback (SD-JWT)'
+    ? 'Fallback / Non-ZK proof'
     : proof.proofType === 'mopro-noir-disclosure'
-      ? isDemoTrust
+      ? trustDisplay.level === 'L1'
         ? 'ZK disclosure proof (synthetic MRZ)'
         : 'ZK disclosure proof'
-      : isDemoTrust
-        ? 'Demo ZK proof (synthetic witness)'
-        : 'ZK proof ready';
+      : trustDisplay.level === 'L3+'
+        ? 'Passport ZK + AA proof ready'
+        : trustDisplay.level === 'L3'
+          ? 'Passport ZK proof ready (no AA)'
+          : 'Fallback / Non-ZK proof';
   const iconName = failed
     ? 'exclamationmark.triangle'
-    : isDemoTrust
+    : trustDisplay.level === 'L1'
       ? 'checkmark.seal'
       : 'checkmark.seal.fill';
   return (
@@ -479,7 +492,7 @@ function ProofResultCard({ proof }: { proof: PassportProofResult }) {
             borderRadius: 4,
           }}
         >
-          {proof.trustLevel.toUpperCase()}
+          {trustDisplay.level}
         </Text>
       </View>
       <Text className="text-text3" style={{ fontSize: 10, fontFamily: 'Menlo' }}>
@@ -488,6 +501,17 @@ function ProofResultCard({ proof }: { proof: PassportProofResult }) {
       {proof.disclosure ? <DisclosureRows disclosure={proof.disclosure} /> : null}
     </View>
   );
+}
+
+function levelColorForTone(tone: TrustDisplayTone): string {
+  switch (tone) {
+    case 'green':
+      return Colors.terminalGreen;
+    case 'blue':
+      return Colors.primaryBlue;
+    default:
+      return Colors.text3;
+  }
 }
 
 /**

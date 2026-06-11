@@ -333,6 +333,32 @@ describe('passport OpenAC v3.1 / passport-noir 0.3.0 contract', () => {
     expect(parsed).not.toHaveProperty('activeAuth');
   });
 
+  it('omits chain-bound DG15 bytes from the witness request when AA is not required', () => {
+    // RSA-AA chip shape: DG15 bytes were read, but no usable ECDSA evidence
+    // exists. The request must not carry dg15 — the Rust builder fails
+    // closed on (Some(dg15), no evidence), so the passive path requires the
+    // DG15 slot to stay empty (dg_count = 1, placeholder triple).
+    const requestJson = buildPassportOpenAcV3WitnessRequestJson({
+      chip: readResult({ activeAuthJson: undefined }),
+      revocationSnapshot: REVOCATION_SNAPSHOT,
+      devicePublicKeyRaw: Uint8Array.from([...byteArray(32, 11), ...byteArray(32, 71)]),
+      nonceHash: Uint8Array.from(byteArray(32, 151)),
+      linkScope: 'airmeishi-passport-v3',
+      requireAA: false,
+    });
+
+    const parsed = JSON.parse(requestJson) as {
+      dataGroups: Record<string, string>;
+      requireAA: boolean;
+      activeAuth?: unknown;
+    };
+    expect(parsed.dataGroups['sod']).toBeDefined();
+    expect(parsed.dataGroups['dg1']).toBeDefined();
+    expect(parsed.dataGroups).not.toHaveProperty('dg15');
+    expect(parsed.requireAA).toBe(false);
+    expect(parsed).not.toHaveProperty('activeAuth');
+  });
+
   it('threads DG15 Active Authentication evidence into the witness request', async () => {
     const { parsePassportOpenAcV3ActiveAuthJson } = await import(
       '../../src/passport/openacV3'
@@ -456,6 +482,47 @@ describe('passport OpenAC v3.1 / passport-noir 0.3.0 contract', () => {
     expect(request.requireAA).toBe(false);
     expect(request.dataGroups['sod']).toBeDefined();
     expect(request.dataGroups['dg1']).toBeDefined();
+    expect(request.dataGroups).not.toHaveProperty('dg15');
+    expect(request).not.toHaveProperty('activeAuth');
+  });
+
+  it('resolves a passive-only witness request for a chip with DG15 bytes but no AA evidence', async () => {
+    const bundleJson = JSON.stringify({
+      dscChainInputsJson: '{"dsc":true}',
+      passportAdapterInputsJson: '{"passport":true}',
+      openAcShowInputsJson: '{"show":true}',
+    });
+    const requests: unknown[] = [];
+
+    await expect(
+      resolvePassportOpenAcV3WitnessBundleJson({
+        existingWitnessBundleJson: undefined,
+        chip: readResult({ activeAuthJson: undefined }),
+        revocationSnapshot: REVOCATION_SNAPSHOT,
+        devicePublicKeyRaw: Uint8Array.from([...byteArray(32, 11), ...byteArray(32, 71)]),
+        nonceHash: Uint8Array.from(byteArray(32, 151)),
+        linkScope: 'airmeishi-passport-v3',
+        builder: {
+          buildOpenAcV3WitnessBundle: async (requestJson) => {
+            requests.push(JSON.parse(requestJson));
+            return {
+              schema: 'gg.solidarity.passport.openac-v3.witness-build-result.v1',
+              passportNoirVersion: '0.3.0',
+              ready: true,
+              bundleJson,
+            };
+          },
+        },
+      })
+    ).resolves.toBe(bundleJson);
+
+    expect(requests.length).toBe(1);
+    const request = requests[0] as {
+      dataGroups: Record<string, string>;
+      requireAA: boolean;
+      activeAuth?: unknown;
+    };
+    expect(request.requireAA).toBe(false);
     expect(request.dataGroups).not.toHaveProperty('dg15');
     expect(request).not.toHaveProperty('activeAuth');
   });
@@ -607,6 +674,7 @@ describe('passport OpenAC v3.1 / passport-noir 0.3.0 contract', () => {
     expect(readiness.ready).toBe(true);
     if (readiness.ready) {
       expect(readiness.requiredDataGroups).toEqual(['SOD', 'DG1']);
+      expect(readiness.aaMode).toBe('passive');
     }
 
     const plan = buildPassportOpenAcV3ProofPlan({
@@ -628,18 +696,27 @@ describe('passport OpenAC v3.1 / passport-noir 0.3.0 contract', () => {
     expect(readStageDecision.prepare).toBe(true);
   });
 
-  it('fails closed when DG15 is present but AA evidence is absent', () => {
+  it('degrades to passive-only when DG15 is present but AA evidence is absent', () => {
     // A chain-bound DG15 key without the chip's signature cannot produce a
     // verifying witness (the prover constrains only succeeding ECDSA), so
-    // the plan must degrade before witness work instead of erroring later.
+    // the chip routes to the passive-only path (require_aa = false, DG15
+    // kept out of the witness request) instead of losing the ZK path. This
+    // is the RSA-AA passport shape: the native reader only emits evidence
+    // for ECDSA-P256 AA keys.
     const readiness = assessPassportOpenAcV3Readiness({
       ...readResult({ activeAuthJson: undefined }),
       revocationSnapshot: REVOCATION_SNAPSHOT,
     });
-    expect(readiness.ready).toBe(false);
-    if (!readiness.ready) {
-      expect(readiness.reason).toBe('missing-active-authentication');
+    expect(readiness.ready).toBe(true);
+    if (readiness.ready) {
+      expect(readiness.aaMode).toBe('passive');
     }
+
+    const plan = buildPassportOpenAcV3ProofPlan({
+      ...readResult({ activeAuthJson: undefined }),
+      revocationSnapshot: REVOCATION_SNAPSHOT,
+    });
+    expect(plan.kind).toBe('openac-v3');
   });
 
   it('marks a passive-authenticated real chip with SOD/DG1/DG15, AA evidence, and revocation snapshot as v3-ready', () => {
@@ -651,6 +728,7 @@ describe('passport OpenAC v3.1 / passport-noir 0.3.0 contract', () => {
     expect(readiness.ready).toBe(true);
     if (readiness.ready) {
       expect(readiness.requiredDataGroups).toEqual(['SOD', 'DG1']);
+      expect(readiness.aaMode).toBe('active');
     }
   });
 

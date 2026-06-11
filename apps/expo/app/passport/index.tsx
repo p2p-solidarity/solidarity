@@ -68,6 +68,7 @@ import {
   generatePassportOpenAcV3ProofPayload,
   parsePassportOpenAcV3ActiveAuthJson,
   parsePassportOpenAcV3WitnessBundleJson,
+  passportOpenAcV3AaMode,
   resolvePassportOpenAcV3WitnessBundleJson,
   shouldAllowPassportOpenAcV3FallbackProof,
   shouldPreparePassportOpenAcV3WitnessDuringRead,
@@ -92,25 +93,16 @@ import {
 } from '@/keychain';
 import { usePreferences } from '@/settings/preferences';
 import { useCredentialStore, type TrustLevel } from '@/credentials/store';
+import { passportTrustLevelFromProof } from '@/credentials/trustDisplay';
 import { useActiveDid, useIdentityData } from '@/identity';
 import type { ProvableClaimEntity } from '@/identity/entities';
-import {
+import type {
   getNfcPassport,
-  type PassportReadResult,
+  PassportReadResult,
 } from '@solidarity/nitro-nfc-passport';
-import { getPassportZk } from '@solidarity/nitro-passport-zk';
+import type { getPassportZk } from '@solidarity/nitro-passport-zk';
 import { sha256Bytes, uuid } from '@solidarity/shared';
-
-function tryLoadNitro(): {
-  nfc: ReturnType<typeof getNfcPassport> | null;
-  zk: ReturnType<typeof getPassportZk> | null;
-} {
-  try {
-    return { nfc: getNfcPassport(), zk: getPassportZk() };
-  } catch {
-    return { nfc: null, zk: null };
-  }
-}
+import { loadPassportNitroModules } from '@/passport/nitroModules';
 
 function loadBundledRevocationSnapshot(
   nfc: ReturnType<typeof getNfcPassport> | null
@@ -147,18 +139,11 @@ function freshOpenAcV3NonceHash(): Uint8Array {
   return sha256Bytes(`airmeishi-openac-v3:${uuid()}:${String(Date.now())}`);
 }
 
-function hasDataGroupBytes(value: ArrayBuffer | undefined): boolean {
-  return value !== undefined && value.byteLength > 0;
-}
-
 function hasOpenAcV3ActiveAuthentication(result: {
   readonly dataGroups?: PassportReadResult['dataGroups'];
   readonly activeAuthJson?: string;
 }): boolean {
-  return (
-    hasDataGroupBytes(result.dataGroups?.dg15) &&
-    parsePassportOpenAcV3ActiveAuthJson(result.activeAuthJson) !== null
-  );
+  return passportOpenAcV3AaMode(result) === 'active';
 }
 
 async function attachOpenAcV3WitnessDuringRead(args: {
@@ -189,7 +174,7 @@ async function attachOpenAcV3WitnessDuringRead(args: {
   }
 
   const activeAuth = parsePassportOpenAcV3ActiveAuthJson(args.result.activeAuthJson);
-  const requireAA = hasDataGroupBytes(args.result.dataGroups?.dg15) && activeAuth !== null;
+  const requireAA = passportOpenAcV3AaMode(args.result) === 'active';
 
   args.setProgress();
   try {
@@ -200,7 +185,7 @@ async function attachOpenAcV3WitnessDuringRead(args: {
       nonceHash: freshOpenAcV3NonceHash(),
       linkScope: 'airmeishi-passport-v3',
       requireAA,
-      activeAuth: requireAA ? activeAuth : undefined,
+      activeAuth: requireAA ? activeAuth ?? undefined : undefined,
       builder: args.zk,
     });
     return {
@@ -215,22 +200,12 @@ async function attachOpenAcV3WitnessDuringRead(args: {
 
 /**
  * Map the passport pipeline's string trustLevel ('green'/'blue'/'white')
- * to the entity-level discriminated union ('L1'/'L2'/'L3') the
- * identity/credentials stores use. Mirrors the inverse mapper in
- * `app/(tabs)/me/index.tsx`. `'white'` = synthetic / SD-JWT-only =
- * Level 1. `'blue'` = passive-authenticated passport_v3 without DG15/AA =
- * Level 2. `'green'` = passport_v3 with DG15 Active Authentication =
- * Level 3.
+ * to the entity-level trust union. Proof generation stays unchanged:
+ * `'white'` = fallback / non-ZK = L1, `'blue'` = passport_v3 ZK without
+ * DG15-AA = L3, and `'green'` = passport_v3 ZK with DG15-AA = L3+.
  */
 function mapTrustLevel(passportLevel: string): TrustLevel {
-  switch (passportLevel) {
-    case 'green':
-      return 'L3';
-    case 'blue':
-      return 'L2';
-    default:
-      return 'L1';
-  }
+  return passportTrustLevelFromProof(passportLevel);
 }
 
 /**
@@ -276,7 +251,7 @@ export default function PassportSetup() {
   const [showCamera, setShowCamera] = useState(false);
 
   const meta = PASSPORT_STEP_META[state.step];
-  const nitro = useMemo(() => tryLoadNitro(), []);
+  const nitro = useMemo(() => loadPassportNitroModules(), []);
   const developerMode = usePreferences((s) => s.developerMode);
   const simulateNfc = usePreferences((s) => s.simulateNfc);
   // Mirrors Swift `PassportPipelineService.shouldSimulateNFC` — pick `real`,
@@ -293,8 +268,6 @@ export default function PassportSetup() {
       }),
     [nitro.nfc, developerMode, simulateNfc]
   );
-  const isMock = nfcStrategy.kind === 'simulated' || nitro.zk === null;
-
   useEffect(() => {
     if (state.errorMessage) {
       pushToast(state.errorMessage, 'error');
@@ -464,9 +437,9 @@ export default function PassportSetup() {
           : null;
       if (zkProof !== null) {
         proof = {
-          // Real passport-noir 0.3.0 proof. Trust upgrades to green only
-          // when OpenAC v3 prepare + show have both verified against a real,
-          // passive-authenticated chip read.
+          // Real passport-noir 0.3.0 proof. The pipeline keeps its visual
+          // proof bands (`blue` without DG15-AA, `green` with DG15-AA);
+          // persist maps those bands to L3 / L3+.
           proofType: PASSPORT_V3_PROOF_TYPE,
           proofPayload: zkProof.proofPayload,
           trustLevel: hasOpenAcV3ActiveAuthentication(proofChip) ? 'green' : 'blue',

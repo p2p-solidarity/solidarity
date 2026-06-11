@@ -72,9 +72,19 @@ export type PassportOpenAcV3NotReadyReason =
   | 'simulated-chip'
   | 'passive-auth-failed'
   | 'missing-data-groups'
-  | 'missing-active-authentication'
   | 'missing-revocation-snapshot'
   | 'invalid-revocation-snapshot';
+
+/**
+ * Which AA flavour the proof path runs with. `active` = DG15 bytes are
+ * chain-bound AND the native read produced usable ECDSA-P256 AA evidence
+ * (`require_aa = true`, green / L3+). `passive` = everything else that is
+ * still v3-eligible — no DG15 at all, or DG15 whose AA key is RSA / whose
+ * AA exchange failed (`require_aa = false`, blue / L3). The passive path
+ * keeps DG15 out of the witness request entirely: the Rust builder fails
+ * closed on a chain-bound DG15 slot it cannot sign under.
+ */
+export type PassportOpenAcV3AaMode = 'active' | 'passive';
 
 export interface PassportRevocationSnapshotSource {
   readonly id: string;
@@ -113,6 +123,7 @@ export type PassportOpenAcV3Readiness =
       readonly proofType: typeof PASSPORT_V3_PROOF_TYPE;
       readonly requiredDataGroups: typeof PASSPORT_OPENAC_V3_REQUIRED_DATA_GROUPS;
       readonly revocationSnapshot: PassportRevocationSnapshot;
+      readonly aaMode: PassportOpenAcV3AaMode;
     }
   | {
       readonly ready: false;
@@ -314,19 +325,6 @@ export function assessPassportOpenAcV3Readiness(
     return notReady('missing-data-groups', missingDataGroups);
   }
 
-  // A chip that exposes DG15 binds its AA key into the SOD hash chain, and
-  // the prover's secp256r1 gadget can only constrain a SUCCEEDING
-  // verification — only the chip's own signature satisfies it. Without
-  // usable ECDSA-P256 evidence the Rust witness builder fails closed
-  // (missing-active-auth-witness), so classify the chip here before any
-  // witness work starts. Chips without DG15 stay eligible passive-only.
-  if (
-    hasBytes(source.dataGroups?.dg15) &&
-    parsePassportOpenAcV3ActiveAuthJson(source.activeAuthJson) === null
-  ) {
-    return notReady('missing-active-authentication', []);
-  }
-
   if (source.revocationSnapshot == null) {
     return notReady('missing-revocation-snapshot', []);
   }
@@ -340,7 +338,25 @@ export function assessPassportOpenAcV3Readiness(
     proofType: PASSPORT_V3_PROOF_TYPE,
     requiredDataGroups: PASSPORT_OPENAC_V3_REQUIRED_DATA_GROUPS,
     revocationSnapshot: source.revocationSnapshot,
+    aaMode: passportOpenAcV3AaMode(source),
   };
+}
+
+/**
+ * Route the chip to its AA flavour. `active` needs both halves: chain-bound
+ * DG15 bytes AND usable ECDSA-P256 evidence from the native read — the
+ * prover's secp256r1 gadget can only constrain a SUCCEEDING verification,
+ * so only the chip's own signature satisfies `require_aa = true`. Everything
+ * else (no DG15, RSA AA key, failed AA exchange) degrades to `passive`
+ * rather than losing the ZK path to the SD-JWT fallback.
+ */
+export function passportOpenAcV3AaMode(
+  source: Pick<PassportOpenAcV3ReadinessSource, 'dataGroups' | 'activeAuthJson'>
+): PassportOpenAcV3AaMode {
+  return hasBytes(source.dataGroups?.dg15) &&
+    parsePassportOpenAcV3ActiveAuthJson(source.activeAuthJson) !== null
+    ? 'active'
+    : 'passive';
 }
 
 export function buildPassportOpenAcV3ProofPlan(
@@ -400,8 +416,6 @@ export function describePassportOpenAcV3Unavailable(
         return 'Passport passive authentication did not pass.';
       case 'missing-data-groups':
         return `OpenAC v3 missing ${plan.readiness.missingDataGroups.join(', ')}.`;
-      case 'missing-active-authentication':
-        return 'OpenAC v3 missing Active Authentication evidence.';
       case 'missing-revocation-snapshot':
         return 'OpenAC v3 revocation snapshot is not bundled.';
       case 'invalid-revocation-snapshot':
@@ -477,7 +491,11 @@ export function buildPassportOpenAcV3WitnessRequestJson(
     throw new Error('OpenAC v3 witness request missing DG15');
   }
   const optionalDataGroups: Record<string, string> = { ...dataGroups };
-  if (dg15 !== undefined && dg15.byteLength > 0) {
+  // DG15 enters the request ONLY on the active path. On the passive path
+  // (require_aa = false) the Rust builder fails closed when handed a
+  // chain-bound DG15 it cannot sign under (missing-active-auth-witness) —
+  // the slot must stay empty so it uses the placeholder triple, dg_count = 1.
+  if (args.requireAA && dg15 !== undefined && dg15.byteLength > 0) {
     optionalDataGroups['dg15'] = base64Encode(new Uint8Array(dg15));
   }
 
@@ -567,7 +585,7 @@ export async function resolvePassportOpenAcV3WitnessBundleJson(
   }
 
   const activeAuth = parsePassportOpenAcV3ActiveAuthJson(args.chip.activeAuthJson);
-  const requireAA = hasBytes(args.chip.dataGroups?.dg15) && activeAuth !== null;
+  const requireAA = passportOpenAcV3AaMode(args.chip) === 'active';
   return buildPassportOpenAcV3WitnessBundleJson({
     chip: args.chip,
     revocationSnapshot: args.revocationSnapshot,
@@ -575,7 +593,7 @@ export async function resolvePassportOpenAcV3WitnessBundleJson(
     nonceHash: args.nonceHash,
     linkScope: args.linkScope,
     requireAA,
-    activeAuth: requireAA ? activeAuth : undefined,
+    activeAuth: requireAA ? activeAuth ?? undefined : undefined,
     builder: args.builder,
   });
 }
