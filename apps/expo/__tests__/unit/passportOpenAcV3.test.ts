@@ -14,9 +14,9 @@ import {
   buildPassportOpenAcV3WitnessBundleJson,
   buildPassportOpenAcV3WitnessRequestJson,
   bindPassportOpenAcV3DeviceSignature,
-  describePassportOpenAcV3Unavailable,
   generatePassportOpenAcV3ProofPayload,
   parsePassportOpenAcV3WitnessBundleJson,
+  resolvePassportOpenAcV3WitnessBundleJson,
   shouldAllowPassportOpenAcV3FallbackProof,
   shouldPreparePassportOpenAcV3WitnessDuringRead,
 } from '../../src/passport/openacV3';
@@ -32,6 +32,11 @@ function text(buffer: ArrayBuffer): string {
 function byteArray(length: number, seed: number): number[] {
   return Array.from({ length }, (_unused, index) => (seed + index) & 0xff);
 }
+
+const ACTIVE_AUTH_JSON = JSON.stringify({
+  challengeB64: 'Y2hhbGxlbmdl',
+  signatureRawB64: 'c2lnbmF0dXJl',
+});
 
 function readResult(
   overrides: Partial<PassportReadResult> = {}
@@ -50,6 +55,7 @@ function readResult(
       dg15: bytes('dg15'),
       sod: bytes('sod'),
     },
+    activeAuthJson: ACTIVE_AUTH_JSON,
     chipUid: 'NFC-L898902C36',
     passiveAuthValid: true,
     ...overrides,
@@ -103,7 +109,7 @@ describe('passport OpenAC v3.1 / passport-noir 0.3.0 contract', () => {
     expect(PASSPORT_NOIR_VERSION).toBe('0.3.0');
     expect(PASSPORT_V3_PROOF_TYPE).toBe('passport_v3');
     expect(PASSPORT_REVOCATION_SNAPSHOT_SCHEMA).toBe('gg.solidarity.passport.revocation.v1');
-    expect(PASSPORT_OPENAC_V3_REQUIRED_DATA_GROUPS).toEqual(['SOD', 'DG1', 'DG15']);
+    expect(PASSPORT_OPENAC_V3_REQUIRED_DATA_GROUPS).toEqual(['SOD', 'DG1']);
     expect(PASSPORT_OPENAC_V3_CIRCUITS.map((c) => c.name)).toEqual([
       'dsc_chain',
       'passport_adapter',
@@ -296,6 +302,28 @@ describe('passport OpenAC v3.1 / passport-noir 0.3.0 contract', () => {
     expect(parsed.revocationSnapshot).toEqual(REVOCATION_SNAPSHOT);
   });
 
+  it('builds a passive-only witness request without DG15 when AA is not required', () => {
+    const requestJson = buildPassportOpenAcV3WitnessRequestJson({
+      chip: readResult({ dataGroups: { dg1: bytes('dg1'), sod: bytes('sod') } }),
+      revocationSnapshot: REVOCATION_SNAPSHOT,
+      devicePublicKeyRaw: Uint8Array.from([...byteArray(32, 11), ...byteArray(32, 71)]),
+      nonceHash: Uint8Array.from(byteArray(32, 151)),
+      linkScope: 'airmeishi-passport-v3',
+      requireAA: false,
+    });
+
+    const parsed = JSON.parse(requestJson) as {
+      dataGroups: Record<string, string>;
+      requireAA: boolean;
+      activeAuth?: unknown;
+    };
+    expect(parsed.dataGroups['sod']).toBeDefined();
+    expect(parsed.dataGroups['dg1']).toBeDefined();
+    expect(parsed.dataGroups).not.toHaveProperty('dg15');
+    expect(parsed.requireAA).toBe(false);
+    expect(parsed).not.toHaveProperty('activeAuth');
+  });
+
   it('threads DG15 Active Authentication evidence into the witness request', async () => {
     const { parsePassportOpenAcV3ActiveAuthJson } = await import(
       '../../src/passport/openacV3'
@@ -375,6 +403,76 @@ describe('passport OpenAC v3.1 / passport-noir 0.3.0 contract', () => {
         },
       })
     ).resolves.toBe(bundleJson);
+  });
+
+  it('rebuilds a passive-only witness bundle at proof time when the read-stage witness is missing', async () => {
+    const bundleJson = JSON.stringify({
+      dscChainInputsJson: '{"dsc":true}',
+      passportAdapterInputsJson: '{"passport":true}',
+      openAcShowInputsJson: '{"show":true}',
+    });
+    const requests: unknown[] = [];
+
+    await expect(
+      resolvePassportOpenAcV3WitnessBundleJson({
+        existingWitnessBundleJson: undefined,
+        chip: readResult({
+          dataGroups: { dg1: bytes('dg1'), sod: bytes('sod') },
+          activeAuthJson: undefined,
+        }),
+        revocationSnapshot: REVOCATION_SNAPSHOT,
+        devicePublicKeyRaw: Uint8Array.from([...byteArray(32, 11), ...byteArray(32, 71)]),
+        nonceHash: Uint8Array.from(byteArray(32, 151)),
+        linkScope: 'airmeishi-passport-v3',
+        builder: {
+          buildOpenAcV3WitnessBundle: async (requestJson) => {
+            requests.push(JSON.parse(requestJson));
+            return {
+              schema: 'gg.solidarity.passport.openac-v3.witness-build-result.v1',
+              passportNoirVersion: '0.3.0',
+              ready: true,
+              bundleJson,
+            };
+          },
+        },
+      })
+    ).resolves.toBe(bundleJson);
+
+    expect(requests.length).toBe(1);
+    const request = requests[0] as {
+      dataGroups: Record<string, string>;
+      requireAA: boolean;
+      activeAuth?: unknown;
+    };
+    expect(request.requireAA).toBe(false);
+    expect(request.dataGroups['sod']).toBeDefined();
+    expect(request.dataGroups['dg1']).toBeDefined();
+    expect(request.dataGroups).not.toHaveProperty('dg15');
+    expect(request).not.toHaveProperty('activeAuth');
+  });
+
+  it('uses an existing valid witness bundle without calling the proof-stage builder', async () => {
+    const bundleJson = JSON.stringify({
+      dscChainInputsJson: '{"dsc":true}',
+      passportAdapterInputsJson: '{"passport":true}',
+      openAcShowInputsJson: '{"show":true}',
+    });
+
+    const resolved = await resolvePassportOpenAcV3WitnessBundleJson({
+      existingWitnessBundleJson: bundleJson,
+      chip: readResult(),
+      revocationSnapshot: REVOCATION_SNAPSHOT,
+      devicePublicKeyRaw: Uint8Array.from([...byteArray(32, 11), ...byteArray(32, 71)]),
+      nonceHash: Uint8Array.from(byteArray(32, 151)),
+      linkScope: 'airmeishi-passport-v3',
+      builder: {
+        buildOpenAcV3WitnessBundle: async () => {
+          throw new Error('builder should not be called');
+        },
+      },
+    });
+
+    expect(resolved).toBe(bundleJson);
   });
 
   it('fails closed with the shared Rust witness unavailable reason', async () => {
@@ -478,7 +576,53 @@ describe('passport OpenAC v3.1 / passport-noir 0.3.0 contract', () => {
     });
   });
 
-  it('marks a passive-authenticated real chip with SOD/DG1/DG15 and revocation snapshot as v3-ready', () => {
+  it('marks a passive-authenticated real chip without DG15 as passive-only v3-ready', () => {
+    const readiness = assessPassportOpenAcV3Readiness({
+      ...readResult({
+        activeAuthJson: undefined,
+        dataGroups: { dg1: bytes('dg1'), sod: bytes('sod') },
+      }),
+      revocationSnapshot: REVOCATION_SNAPSHOT,
+    });
+    expect(readiness.ready).toBe(true);
+    if (readiness.ready) {
+      expect(readiness.requiredDataGroups).toEqual(['SOD', 'DG1']);
+    }
+
+    const plan = buildPassportOpenAcV3ProofPlan({
+      ...readResult({
+        activeAuthJson: undefined,
+        dataGroups: { dg1: bytes('dg1'), sod: bytes('sod') },
+      }),
+      revocationSnapshot: REVOCATION_SNAPSHOT,
+    });
+    expect(plan.kind).toBe('openac-v3');
+
+    const readStageDecision = shouldPreparePassportOpenAcV3WitnessDuringRead({
+      ...readResult({
+        activeAuthJson: undefined,
+        dataGroups: { dg1: bytes('dg1'), sod: bytes('sod') },
+      }),
+      revocationSnapshot: REVOCATION_SNAPSHOT,
+    });
+    expect(readStageDecision.prepare).toBe(true);
+  });
+
+  it('fails closed when DG15 is present but AA evidence is absent', () => {
+    // A chain-bound DG15 key without the chip's signature cannot produce a
+    // verifying witness (the prover constrains only succeeding ECDSA), so
+    // the plan must degrade before witness work instead of erroring later.
+    const readiness = assessPassportOpenAcV3Readiness({
+      ...readResult({ activeAuthJson: undefined }),
+      revocationSnapshot: REVOCATION_SNAPSHOT,
+    });
+    expect(readiness.ready).toBe(false);
+    if (!readiness.ready) {
+      expect(readiness.reason).toBe('missing-active-authentication');
+    }
+  });
+
+  it('marks a passive-authenticated real chip with SOD/DG1/DG15, AA evidence, and revocation snapshot as v3-ready', () => {
     const readiness = assessPassportOpenAcV3Readiness({
       ...readResult(),
       revocationSnapshot: REVOCATION_SNAPSHOT,
@@ -486,18 +630,18 @@ describe('passport OpenAC v3.1 / passport-noir 0.3.0 contract', () => {
 
     expect(readiness.ready).toBe(true);
     if (readiness.ready) {
-      expect(readiness.requiredDataGroups).toEqual(['SOD', 'DG1', 'DG15']);
+      expect(readiness.requiredDataGroups).toEqual(['SOD', 'DG1']);
     }
   });
 
   it('fails closed when OpenAC v3 inputs are missing or untrusted', () => {
     const missing = assessPassportOpenAcV3Readiness(
-      readResult({ dataGroups: { dg1: bytes('dg1'), sod: bytes('sod') } })
+      readResult({ dataGroups: { dg1: bytes('dg1') } })
     );
     expect(missing.ready).toBe(false);
     if (!missing.ready) {
       expect(missing.reason).toBe('missing-data-groups');
-      expect(missing.missingDataGroups).toEqual(['DG15']);
+      expect(missing.missingDataGroups).toEqual(['SOD']);
     }
 
     const untrusted = assessPassportOpenAcV3Readiness(
@@ -508,18 +652,6 @@ describe('passport OpenAC v3.1 / passport-noir 0.3.0 contract', () => {
     );
     expect(untrusted.ready).toBe(false);
     if (!untrusted.ready) expect(untrusted.reason).toBe('passive-auth-failed');
-  });
-
-  it('explains missing DG15 as unsupported Active Authentication', () => {
-    const plan = buildPassportOpenAcV3ProofPlan({
-      ...readResult({ dataGroups: { dg1: bytes('dg1'), sod: bytes('sod') } }),
-      revocationSnapshot: REVOCATION_SNAPSHOT,
-    });
-
-    expect(plan.kind).toBe('fallback');
-    expect(describePassportOpenAcV3Unavailable(plan, false)).toBe(
-      'This passport does not expose DG15 / Active Authentication, so OpenAC v3 cannot generate a passport_v3 proof.'
-    );
   });
 
   it('does not require read-stage witness preparation when passive auth is unavailable', () => {

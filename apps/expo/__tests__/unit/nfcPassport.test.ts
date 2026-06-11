@@ -1,6 +1,6 @@
 /**
  * nfcPassport — verifies the Nitro NFC passport surface is honoured by
- * the passport pipeline reducer.
+ * pipeline reducer.
  *
  * The actual NFCPassportReader read can only be exercised on a physical
  * iPhone (Core NFC refuses to start on the simulator). What we *can* test
@@ -95,6 +95,8 @@ describe('nfcPassport — pipeline integration with mocked Nitro module', () => 
     const snapshot = chipFromNitro(result, 'TWN', VALID_MRZ.documentNumber);
     expect(snapshot.chipUid).toBe(`NFC-${VALID_MRZ.documentNumber}`);
     expect(snapshot.passiveAuthPassed).toBe(true);
+    expect(snapshot.passiveAuthValid).toBe(true);
+    expect(snapshot.mrz).toEqual(result.mrz);
     expect(snapshot.nationalityCode).toBe('TWN');
     expect(snapshot.dataGroupsRead).toContain('DG1');
     expect(snapshot.dataGroupsRead).toContain('DG2');
@@ -118,6 +120,22 @@ describe('nfcPassport — pipeline integration with mocked Nitro module', () => 
     const snapshot = chipFromNitro(result, 'TWN', VALID_MRZ.documentNumber);
 
     expect(snapshot.openAcV3WitnessBundleJson).toBe(openAcV3WitnessBundleJson);
+  });
+
+  it('preserves native DG15 Active Authentication evidence for trust and diagnostics', async () => {
+    const { chipFromNitro } = await import('../../src/passport/pipeline');
+    const activeAuthJson = JSON.stringify({
+      challengeB64: 'challenge',
+      signatureRawB64: 'signature',
+    });
+    const result = {
+      ...fakeRead(VALID_MRZ),
+      activeAuthJson,
+    };
+
+    const snapshot = chipFromNitro(result, 'TWN', VALID_MRZ.documentNumber);
+
+    expect(snapshot.activeAuthJson).toBe(activeAuthJson);
   });
 
   it('classifies an NFC cancellation as a configurationError', async () => {

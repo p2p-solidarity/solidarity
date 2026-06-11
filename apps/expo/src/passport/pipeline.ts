@@ -43,11 +43,13 @@ export interface PassportMRZDraft {
 export interface PassportChipSnapshot {
   readonly documentHash: string;
   readonly mrzDigest: string;
+  readonly mrz: PassportReadResult['mrz'];
   readonly dg1MRZData: string;
   readonly dataGroups?: PassportReadResult['dataGroups'];
   readonly chipUid: string;
   readonly bacVerified: boolean;
   readonly paceVerified: boolean;
+  readonly passiveAuthValid: boolean;
   readonly passiveAuthPassed: boolean;
   readonly isSimulated: boolean;
   readonly readAt: Date;
@@ -55,6 +57,7 @@ export interface PassportChipSnapshot {
   readonly maskedDocNumber: string;
   readonly dataGroupsRead: readonly string[];
   readonly openAcV3WitnessBundleJson?: string;
+  readonly activeAuthJson?: string;
 }
 
 /**
@@ -303,10 +306,10 @@ export function chipFromNitro(
   // skipped that DG (e.g. older e-passports without DG14/DG15).
   const dg = result.dataGroups;
   const dataGroupsRead: string[] = ['COM', 'SOD'];
-  if (dg.dg1) dataGroupsRead.push('DG1');
-  if (dg.dg2) dataGroupsRead.push('DG2');
-  if (dg.dg14) dataGroupsRead.push('DG14');
-  if (dg.dg15) dataGroupsRead.push('DG15');
+  if (hasDataGroupBytes(dg.dg1)) dataGroupsRead.push('DG1');
+  if (hasDataGroupBytes(dg.dg2)) dataGroupsRead.push('DG2');
+  if (hasDataGroupBytes(dg.dg14)) dataGroupsRead.push('DG14');
+  if (hasDataGroupBytes(dg.dg15)) dataGroupsRead.push('DG15');
 
   // Best-effort DG1 → MRZ string. The DG1 TLV body holds the printable MRZ
   // characters in ASCII; we strip the TLV header by finding the first
@@ -319,11 +322,13 @@ export function chipFromNitro(
   return {
     documentHash: '',
     mrzDigest: '',
+    mrz: result.mrz,
     dg1MRZData,
     dataGroups: result.dataGroups,
     chipUid: result.chipUid ?? '',
     bacVerified: true,
     paceVerified: true,
+    passiveAuthValid: result.passiveAuthValid,
     passiveAuthPassed: result.passiveAuthValid,
     isSimulated: false,
     readAt: new Date(),
@@ -331,7 +336,12 @@ export function chipFromNitro(
     maskedDocNumber: maskDocumentNumber(result.mrz.documentNumber || fallbackDocNumber),
     dataGroupsRead,
     openAcV3WitnessBundleJson: result.openAcV3WitnessBundleJson,
+    activeAuthJson: result.activeAuthJson,
   };
+}
+
+function hasDataGroupBytes(value: ArrayBuffer | undefined): boolean {
+  return value !== undefined && value.byteLength > 0;
 }
 
 /**
@@ -390,11 +400,20 @@ export function simulatedChipSnapshot(draft: PassportMRZDraft): PassportChipSnap
   return {
     documentHash: fakeDigest,
     mrzDigest: fakeDigest,
+    mrz: {
+      nationality: draft.nationalityCode,
+      documentNumber: draft.passportNumber,
+      name: '',
+      dateOfBirth: draft.dateOfBirth,
+      dateOfExpiry: draft.expiryDate,
+      gender: '',
+    },
     dg1MRZData: `P<${draft.nationalityCode}<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<`,
     dataGroups: {},
     chipUid: `SIM-${fakeDigest.slice(0, 8).toUpperCase()}`,
     bacVerified: true,
     paceVerified: false,
+    passiveAuthValid: false,
     passiveAuthPassed: false,
     isSimulated: true,
     readAt: new Date(),

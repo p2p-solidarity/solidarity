@@ -62,16 +62,17 @@ export const PASSPORT_OPENAC_V3_CIRCUITS: readonly PassportOpenAcV3Circuit[] = [
 export const PASSPORT_OPENAC_V3_REQUIRED_DATA_GROUPS = [
   'SOD',
   'DG1',
-  'DG15',
 ] as const;
 
 export type PassportOpenAcV3DataGroup =
-  (typeof PASSPORT_OPENAC_V3_REQUIRED_DATA_GROUPS)[number];
+  | (typeof PASSPORT_OPENAC_V3_REQUIRED_DATA_GROUPS)[number]
+  | 'DG15';
 
 export type PassportOpenAcV3NotReadyReason =
   | 'simulated-chip'
   | 'passive-auth-failed'
   | 'missing-data-groups'
+  | 'missing-active-authentication'
   | 'missing-revocation-snapshot'
   | 'invalid-revocation-snapshot';
 
@@ -126,6 +127,7 @@ export interface PassportOpenAcV3ReadinessSource {
   readonly passiveAuthValid?: boolean;
   readonly passiveAuthPassed?: boolean;
   readonly isSimulated?: boolean;
+  readonly activeAuthJson?: string;
   readonly revocationSnapshot?: unknown;
 }
 
@@ -175,7 +177,9 @@ export interface PassportOpenAcV3ActiveAuthEvidence {
 }
 
 export interface BuildPassportOpenAcV3WitnessRequestJsonArgs {
-  readonly chip: Pick<PassportReadResult, 'dataGroups' | 'mrz' | 'passiveAuthValid'>;
+  readonly chip: Pick<PassportReadResult, 'mrz' | 'passiveAuthValid'> & {
+    readonly dataGroups?: PassportReadResult['dataGroups'];
+  };
   readonly revocationSnapshot: PassportRevocationSnapshot;
   readonly devicePublicKeyRaw: Uint8Array;
   readonly nonceHash: Uint8Array;
@@ -206,6 +210,18 @@ export interface PassportOpenAcV3WitnessBuilder {
 
 export interface BuildPassportOpenAcV3WitnessBundleJsonArgs
   extends BuildPassportOpenAcV3WitnessRequestJsonArgs {
+  readonly builder: PassportOpenAcV3WitnessBuilder;
+}
+
+export interface ResolvePassportOpenAcV3WitnessBundleJsonArgs {
+  readonly existingWitnessBundleJson?: string;
+  readonly chip: Pick<PassportReadResult, 'mrz' | 'passiveAuthValid' | 'activeAuthJson'> & {
+    readonly dataGroups?: PassportReadResult['dataGroups'];
+  };
+  readonly revocationSnapshot: PassportRevocationSnapshot;
+  readonly devicePublicKeyRaw: Uint8Array;
+  readonly nonceHash: Uint8Array;
+  readonly linkScope: string;
   readonly builder: PassportOpenAcV3WitnessBuilder;
 }
 
@@ -298,6 +314,19 @@ export function assessPassportOpenAcV3Readiness(
     return notReady('missing-data-groups', missingDataGroups);
   }
 
+  // A chip that exposes DG15 binds its AA key into the SOD hash chain, and
+  // the prover's secp256r1 gadget can only constrain a SUCCEEDING
+  // verification — only the chip's own signature satisfies it. Without
+  // usable ECDSA-P256 evidence the Rust witness builder fails closed
+  // (missing-active-auth-witness), so classify the chip here before any
+  // witness work starts. Chips without DG15 stay eligible passive-only.
+  if (
+    hasBytes(source.dataGroups?.dg15) &&
+    parsePassportOpenAcV3ActiveAuthJson(source.activeAuthJson) === null
+  ) {
+    return notReady('missing-active-authentication', []);
+  }
+
   if (source.revocationSnapshot == null) {
     return notReady('missing-revocation-snapshot', []);
   }
@@ -370,13 +399,9 @@ export function describePassportOpenAcV3Unavailable(
       case 'passive-auth-failed':
         return 'Passport passive authentication did not pass.';
       case 'missing-data-groups':
-        if (
-          plan.readiness.missingDataGroups.length === 1 &&
-          plan.readiness.missingDataGroups[0] === 'DG15'
-        ) {
-          return 'This passport does not expose DG15 / Active Authentication, so OpenAC v3 cannot generate a passport_v3 proof.';
-        }
         return `OpenAC v3 missing ${plan.readiness.missingDataGroups.join(', ')}.`;
+      case 'missing-active-authentication':
+        return 'OpenAC v3 missing Active Authentication evidence.';
       case 'missing-revocation-snapshot':
         return 'OpenAC v3 revocation snapshot is not bundled.';
       case 'invalid-revocation-snapshot':
@@ -446,15 +471,22 @@ export function buildPassportOpenAcV3WitnessRequestJson(
   const dataGroups = {
     sod: encodeRequiredDataGroup(args.chip.dataGroups?.sod, 'SOD'),
     dg1: encodeRequiredDataGroup(args.chip.dataGroups?.dg1, 'DG1'),
-    dg15: encodeRequiredDataGroup(args.chip.dataGroups?.dg15, 'DG15'),
   };
+  const dg15 = args.chip.dataGroups?.dg15;
+  if (args.requireAA && !hasBytes(dg15)) {
+    throw new Error('OpenAC v3 witness request missing DG15');
+  }
+  const optionalDataGroups: Record<string, string> = { ...dataGroups };
+  if (dg15 !== undefined && dg15.byteLength > 0) {
+    optionalDataGroups['dg15'] = base64Encode(new Uint8Array(dg15));
+  }
 
   return JSON.stringify({
     schema: PASSPORT_OPENAC_V3_WITNESS_REQUEST_SCHEMA,
     passportNoirVersion: PASSPORT_NOIR_VERSION,
     mrz: args.chip.mrz,
     passiveAuthValid: args.chip.passiveAuthValid,
-    dataGroups,
+    dataGroups: optionalDataGroups,
     revocationSnapshot: args.revocationSnapshot,
     devicePublicKeyRawB64: base64Encode(args.devicePublicKeyRaw),
     nonceHashB64: base64Encode(args.nonceHash),
@@ -524,6 +556,28 @@ export async function buildPassportOpenAcV3WitnessBundleJson(
     throw new Error('OpenAC v3 witness builder returned malformed bundleJson');
   }
   return result.bundleJson;
+}
+
+export async function resolvePassportOpenAcV3WitnessBundleJson(
+  args: ResolvePassportOpenAcV3WitnessBundleJsonArgs
+): Promise<string> {
+  const existing = args.existingWitnessBundleJson;
+  if (existing !== undefined && parsePassportOpenAcV3WitnessBundleJson(existing) !== null) {
+    return existing;
+  }
+
+  const activeAuth = parsePassportOpenAcV3ActiveAuthJson(args.chip.activeAuthJson);
+  const requireAA = hasBytes(args.chip.dataGroups?.dg15) && activeAuth !== null;
+  return buildPassportOpenAcV3WitnessBundleJson({
+    chip: args.chip,
+    revocationSnapshot: args.revocationSnapshot,
+    devicePublicKeyRaw: args.devicePublicKeyRaw,
+    nonceHash: args.nonceHash,
+    linkScope: args.linkScope,
+    requireAA,
+    activeAuth: requireAA ? activeAuth : undefined,
+    builder: args.builder,
+  });
 }
 
 export async function bindPassportOpenAcV3DeviceSignature(
@@ -707,7 +761,6 @@ function missingOpenAcDataGroups(
   const missing: PassportOpenAcV3DataGroup[] = [];
   if (!hasBytes(dataGroups?.sod)) missing.push('SOD');
   if (!hasBytes(dataGroups?.dg1)) missing.push('DG1');
-  if (!hasBytes(dataGroups?.dg15)) missing.push('DG15');
   return missing;
 }
 
