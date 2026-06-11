@@ -111,6 +111,9 @@ export interface SigningIdentity {
 
 let cachedIdentity: SigningIdentity | null = null;
 
+const P256_N =
+  0xffffffff00000000ffffffffffffffffbce6faada7179e84f3b9cac2fc632551n;
+
 /**
  * Returns the Nitro driver. Production callers always get the real
  * HybridObject; tests inject a stub via `globalThis.__SPRUCE_DID_TEST_DRIVER__`.
@@ -339,6 +342,10 @@ async function signDigestWithCurrentKey(
   readonly signature: Uint8Array;
   readonly publicKeyRaw: Uint8Array;
 }> {
+  // Biometric-gate every raw signature (CLAUDE.md Sec rule). The `'sign'`
+  // reason carries a 5-minute grace (see biometric.ts), so a recent
+  // authorization — e.g. the device-binding sign that produced the OpenAC
+  // v3 passport proof — is reused instead of re-prompting per call.
   const allowed = await requireBiometric('sign');
   if (!allowed) throw new Error('biometric authentication required');
 
@@ -353,7 +360,32 @@ async function signDigestWithCurrentKey(
     );
   }
   const publicKeyRaw = rawP256PublicKeyFromJwk(id.publicJwk, context);
-  return { signature, publicKeyRaw };
+  return { signature: normalizeP256LowS(signature), publicKeyRaw };
+}
+
+function normalizeP256LowS(signature: Uint8Array): Uint8Array {
+  const s = rawBigEndianToBigInt(signature.slice(32));
+  if (s <= P256_N / 2n) return signature;
+
+  const out = new Uint8Array(signature);
+  out.set(bigIntToRawBigEndian(P256_N - s), 32);
+  return out;
+}
+
+function rawBigEndianToBigInt(bytes: Uint8Array): bigint {
+  let out = 0n;
+  for (const byte of bytes) out = (out << 8n) | BigInt(byte);
+  return out;
+}
+
+function bigIntToRawBigEndian(value: bigint): Uint8Array {
+  const out = new Uint8Array(32);
+  let remaining = value;
+  for (let i = 31; i >= 0; i -= 1) {
+    out[i] = Number(remaining & 0xffn);
+    remaining >>= 8n;
+  }
+  return out;
 }
 
 function rawP256PublicKeyFromJwk(

@@ -189,6 +189,7 @@ class InMemorySecureStore {
 // because bun's `mock.module()` doesn't automatically reset between
 // `it` blocks.
 const sharedSecureStore = new InMemorySecureStore();
+const authCalls: string[] = [];
 
 // Replace expo-secure-store and @solidarity/nitro-spruce-did with stubs.
 // Use bun's `mock.module()` so the imports inside `signingKey.ts` resolve to
@@ -198,6 +199,7 @@ import { mock } from 'bun:test';
 
 mock.module('expo-secure-store', () => ({
   WHEN_UNLOCKED: 'WHEN_UNLOCKED',
+  WHEN_UNLOCKED_THIS_DEVICE_ONLY: 'WHEN_UNLOCKED_THIS_DEVICE_ONLY',
   async getItemAsync(key: string): Promise<string | null> {
     return sharedSecureStore.getItem(key);
   },
@@ -212,12 +214,24 @@ mock.module('expo-secure-store', () => ({
 mock.module('expo-local-authentication', () => ({
   async hasHardwareAsync(): Promise<boolean> { return true; },
   async isEnrolledAsync(): Promise<boolean> { return true; },
-  async authenticateAsync(): Promise<{ success: true }> { return { success: true }; },
+  async authenticateAsync(): Promise<{ success: true }> {
+    authCalls.push('authenticate');
+    return { success: true };
+  },
 }));
 
 const driver = new InMemorySpruceDidDriver();
 (globalThis as { __SPRUCE_DID_TEST_DRIVER__?: SpruceDid }).__SPRUCE_DID_TEST_DRIVER__ =
   driver as unknown as SpruceDid;
+
+const P256_N =
+  0xffffffff00000000ffffffffffffffffbce6faada7179e84f3b9cac2fc632551n;
+
+function rawBigEndianToBigInt(bytes: Uint8Array): bigint {
+  let out = 0n;
+  for (const byte of bytes) out = (out << 8n) | BigInt(byte);
+  return out;
+}
 
 // Mock the native module's `getSpruceDid()` factory so any code that
 // imports the package directly (rather than going through the
@@ -238,14 +252,18 @@ const {
   resetSigningKeyForTesting,
 } =
   await import('@/keychain/signingKey');
+const { resetBiometricGrace } = await import('@/keychain/biometric');
 
 describe('SpruceID DID Nitro module — JS-side wiring', () => {
   beforeEach(async () => {
     sharedSecureStore.clear();
+    authCalls.length = 0;
+    resetBiometricGrace();
     await resetSigningKeyForTesting();
   });
 
   afterEach(async () => {
+    resetBiometricGrace();
     await resetSigningKeyForTesting();
   });
 
@@ -318,6 +336,34 @@ describe('SpruceID DID Nitro module — JS-side wiring', () => {
     expect(signature.length).toBe(64);
     expect(publicKeyRaw.length).toBe(64);
     expect(publicKeyRaw).toEqual(jwkToPublicKey(jwk).slice(1));
+    expect(rawBigEndianToBigInt(signature.slice(32))).toBeLessThanOrEqual(
+      P256_N / 2n
+    );
+    expect(
+      p256.verify(signature, nonceHash, jwkToPublicKey(jwk), { prehash: false })
+    ).toBe(true);
+  });
+
+  it('signOpenAcDeviceBindingDigest is biometric-gated and reuses the sign grace in-session', async () => {
+    const nonceHash = utf8ToBytes('openac_device_binding_nonce_hash');
+
+    // The passport device-binding signature is a real `'sign'` op, so the
+    // first call authorizes Face ID once…
+    await signOpenAcDeviceBindingDigest(nonceHash);
+    expect(authCalls.length).toBe(1);
+
+    // …and a second sign in the same session rides the 5-minute `'sign'`
+    // grace instead of re-prompting (the OpenAC v3 proof reuses that one
+    // authorization rather than bypassing biometrics).
+    const { signature, publicKeyRaw } = await signOpenAcDeviceBindingDigest(nonceHash);
+    expect(authCalls.length).toBe(1);
+
+    const jwk = await publicJwk();
+    expect(signature.length).toBe(64);
+    expect(publicKeyRaw).toEqual(jwkToPublicKey(jwk).slice(1));
+    expect(rawBigEndianToBigInt(signature.slice(32))).toBeLessThanOrEqual(
+      P256_N / 2n
+    );
     expect(
       p256.verify(signature, nonceHash, jwkToPublicKey(jwk), { prehash: false })
     ).toBe(true);
