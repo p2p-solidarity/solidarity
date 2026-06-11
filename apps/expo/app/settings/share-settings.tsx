@@ -10,9 +10,9 @@
  * claims exist in `useIdentityData.provableClaims`.
  */
 import { router } from 'expo-router';
+import { Image } from 'expo-image';
 import { type ReactNode, useEffect, useMemo, useState } from 'react';
 import { ScrollView, View } from 'react-native';
-import QRCode from 'react-native-qrcode-svg';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { SfIcon } from '@/components/icons/SfIcon';
@@ -29,8 +29,9 @@ import {
 import { ThemedText } from '@/components/themed';
 import { Colors } from '@/constants/Colors';
 import { useCardStore, useMyCardDetail } from '@/cards/cardManager';
+import { generateQrPng } from '@/cards/qrCodeManager';
 import { shareFieldPreferencesFromFields } from '@/cards/solidarityQrPayload';
-import { buildRuntimeSolidarityQrPayload } from '@/cards/solidarityQrRuntime';
+import { buildRuntimeSolidarityQrWire } from '@/cards/solidarityQrRuntime';
 import { haptic } from '@/feedback/haptics';
 import { useTranslation } from '@/i18n';
 import {
@@ -98,7 +99,7 @@ export default function ShareSettings(): ReactNode {
   useEffect(() => { void hydrateCards(); }, [hydrateCards]);
   const prefs = usePreferences();
   const enforceMandatory = usePreferences((s) => s.set);
-  const [qrPayload, setQrPayload] = useState<string | null>(null);
+  const [qrImageUri, setQrImageUri] = useState<string | null>(null);
 
   const hydrateIdentity = useIdentityData((s) => s.hydrate);
   const seedKeychain = useIdentityCoordinator((s) => s.seedFromKeychain);
@@ -130,7 +131,7 @@ export default function ShareSettings(): ReactNode {
 
   useEffect(() => {
     if (!myCard) {
-      setQrPayload(null);
+      setQrImageUri(null);
       return;
     }
 
@@ -139,13 +140,20 @@ export default function ShareSettings(): ReactNode {
     // rebuild instead of one Face ID sign per toggle. The previous QR stays
     // on screen until the new one resolves — no spinner flash per tap.
     const handle = setTimeout(() => {
-      void buildRuntimeSolidarityQrPayload(
+      void buildRuntimeSolidarityQrWire(
         myCard,
         shareFieldPreferencesFromFields(enabled),
         { proofClaims: selectedProofClaims }
-      ).then((next) => {
-        if (!cancelled) setQrPayload(next);
-      });
+      )
+        .then((next) =>
+          generateQrPng(next.wire, { size: 220, startingLevel: next.startingLevel })
+        )
+        .then((next) => {
+          if (!cancelled) setQrImageUri(next);
+        })
+        .catch(() => {
+          if (!cancelled) setQrImageUri(null);
+        });
     }, 350);
 
     return () => {
@@ -162,7 +170,7 @@ export default function ShareSettings(): ReactNode {
       <SettingsBackToolbar onPress={() => { router.back(); }} />
       <SettingsScreenTitle title={t('shareSettings.title')} />
       <ScrollView contentContainerStyle={{ padding: 16, gap: 20 }}>
-        <QrPreview payload={qrPayload} t={t} />
+        <QrPreview imageUri={qrImageUri} t={t} />
         <FieldToggles prefs={prefs} verifiedFields={verifiedFields} t={t} />
         {hasHumanClaim || hasAgeClaim ? (
           <ProofToggles
@@ -181,10 +189,10 @@ export default function ShareSettings(): ReactNode {
 }
 
 function QrPreview({
-  payload,
+  imageUri,
   t,
 }: {
-  readonly payload: string | null;
+  readonly imageUri: string | null;
   readonly t: (key: string) => string;
 }): ReactNode {
   // Figma 726:23661 — the QR sits directly inside a searchBg-grey rounded
@@ -201,12 +209,14 @@ function QrPreview({
         justifyContent: 'center',
       }}
     >
-      {payload ? (
-        <QRCode
-          value={payload}
-          size={220}
-          backgroundColor="#FFFFFF"
-          color="#000000"
+      {imageUri ? (
+        <Image
+          source={{ uri: imageUri }}
+          contentFit="contain"
+          style={{
+            width: 220,
+            height: 220,
+          }}
         />
       ) : (
         <View style={{ alignItems: 'center', gap: 8 }}>

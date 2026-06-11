@@ -5,7 +5,11 @@ import QRCode from 'react-native-qrcode-svg';
 import { PresentationChunkPlaybackControls } from '@/components/me/PresentationChunkPlaybackControls';
 import { ThemedText } from '@/components/themed/ThemedText';
 import { Colors } from '@/constants/Colors';
-import type { ProvableClaimEntity, TrustLevel } from '@/identity/entities';
+import {
+  credentialTrustDisplayFor,
+  type TrustDisplayTone,
+} from '@/credentials/trustDisplay';
+import type { ProvableClaimEntity } from '@/identity/entities';
 import type { PresentationQRPage } from '@/me/presentationQrPages';
 
 const AUTO_ADVANCE_MS = 1200;
@@ -153,7 +157,12 @@ export function PresentationProofQr({
 }
 
 function ClaimChip({ claim }: { readonly claim: ProvableClaimEntity }): ReactNode {
-  const accent = levelAccent(claim.trustLevel);
+  const trustDisplay = credentialTrustDisplayFor({
+    source: claim.source,
+    trustLevel: claim.trustLevel,
+    payload: claim.payload,
+  });
+  const accent = levelAccent(trustDisplay.tone);
   return (
     <View
       style={{
@@ -181,7 +190,7 @@ function ClaimChip({ claim }: { readonly claim: ProvableClaimEntity }): ReactNod
           variant="caption"
           style={{ color: accent, fontSize: 9, fontWeight: '600' }}
         >
-          {claim.trustLevel}
+          {trustDisplay.level}
         </ThemedText>
       </View>
       <ThemedText
@@ -194,11 +203,11 @@ function ClaimChip({ claim }: { readonly claim: ProvableClaimEntity }): ReactNod
   );
 }
 
-function levelAccent(trustLevel: TrustLevel): string {
-  switch (trustLevel) {
-    case 'L3':
+function levelAccent(tone: TrustDisplayTone): string {
+  switch (tone) {
+    case 'green':
       return Colors.terminalGreen;
-    case 'L2':
+    case 'blue':
       return Colors.primaryBlue;
     default:
       return Colors.text3;

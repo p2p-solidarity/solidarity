@@ -17,7 +17,4 @@ export {
 } from './SettingsBlockSection';
 export type { SettingsBlockRowProps } from './SettingsBlockSection';
 export { VerifiedCredentialRow } from './VerifiedCredentialRow';
-export type {
-  TrustLevel,
-  VerifiedCredentialRowProps,
-} from './VerifiedCredentialRow';
+export type { VerifiedCredentialRowProps } from './VerifiedCredentialRow';

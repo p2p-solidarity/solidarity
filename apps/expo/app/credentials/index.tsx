@@ -33,6 +33,7 @@ import {
   useIssuerMetadataStore,
 } from '@/credentials/issuerStore';
 import { useCredentialStore } from '@/credentials/store';
+import { credentialTrustDisplayFor } from '@/credentials/trustDisplay';
 import {
   buildVcExportText,
   importCredentialJwts,
@@ -86,14 +87,6 @@ function SectionFooter({ text }: { readonly text: string }) {
       <Text className="text-text3 text-[12px]">{text}</Text>
     </View>
   );
-}
-
-function trustLevelFor(
-  item: CredentialManifestEntry
-): 'green' | 'blue' | 'other' {
-  if (item.trustLevel === 'L3') return 'green';
-  if (item.trustLevel === 'L2') return 'blue';
-  return 'other';
 }
 
 function iconFor(item: CredentialManifestEntry): SFSymbol {
@@ -320,12 +313,13 @@ export default function VCManagementScreen() {
                 // leaking did from the manifest sidecar.
                 const detail = details.get(item.id);
                 const issuerId = detail?.issuerDid ?? '';
+                const trustDisplay = credentialTrustDisplayFor(detail ?? item);
                 return (
                   <View key={item.id} className="gap-1">
                     <VerifiedCredentialRow
                       icon={iconFor(item)}
                       title={item.title}
-                      trustLevel={trustLevelFor(item)}
+                      trustLevel={trustDisplay.level}
                       issuerType={item.type}
                       onPress={() => {
                         router.push({ pathname: '/credentials/[id]', params: { id: item.id } });

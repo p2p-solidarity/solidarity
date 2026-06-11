@@ -14,14 +14,15 @@
  * ShareSettingsStore via `usePreferences`.
  */
 import { router, Stack } from 'expo-router';
+import { Image } from 'expo-image';
 import { useEffect, useState } from 'react';
 import { ActivityIndicator, ScrollView, Text, View } from 'react-native';
-import QRCode from 'react-native-qrcode-svg';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { useCardStore, useMyCardDetail } from '@/cards/cardManager';
+import { generateQrPng } from '@/cards/qrCodeManager';
 import type { ShareFieldPreferences } from '@/cards/solidarityQrPayload';
-import { buildRuntimeSolidarityQrPayload } from '@/cards/solidarityQrRuntime';
+import { buildRuntimeSolidarityQrWire } from '@/cards/solidarityQrRuntime';
 import {
   SettingsBackToolbar,
   SettingsScreenTitle,
@@ -41,7 +42,7 @@ export default function SolidarityQrSettings() {
     void hydrateCards();
     void hydrateIdentity();
   }, [hydrateCards, hydrateIdentity]);
-  const [payload, setPayload] = useState<string | null>(null);
+  const [qrImageUri, setQrImageUri] = useState<string | null>(null);
   const shareTitle = usePreferences((s) => s.shareTitle);
   const shareCompany = usePreferences((s) => s.shareCompany);
   const shareEmail = usePreferences((s) => s.shareEmail);
@@ -56,7 +57,7 @@ export default function SolidarityQrSettings() {
 
   useEffect(() => {
     if (!card) {
-      setPayload(null);
+      setQrImageUri(null);
       return;
     }
 
@@ -74,14 +75,21 @@ export default function SolidarityQrSettings() {
     if (hasHumanClaim && shareIsHuman) proofClaims.push('is_human');
     if (hasAgeClaim && shareAgeOver18) proofClaims.push('age_over_18');
 
-    setPayload(null);
-    void buildRuntimeSolidarityQrPayload(
+    setQrImageUri(null);
+    void buildRuntimeSolidarityQrWire(
       card,
       shareFieldPreferences,
       { proofClaims }
-    ).then((next) => {
-      if (!cancelled) setPayload(next);
-    });
+    )
+      .then((next) =>
+        generateQrPng(next.wire, { size: 260, startingLevel: next.startingLevel })
+      )
+      .then((next) => {
+        if (!cancelled) setQrImageUri(next);
+      })
+      .catch(() => {
+        if (!cancelled) setQrImageUri(null);
+      });
 
     return () => {
       cancelled = true;
@@ -136,12 +144,14 @@ export default function SolidarityQrSettings() {
                   padding: 12,
                 }}
               >
-                {payload ? (
-                  <QRCode
-                    value={payload}
-                    size={260}
-                    backgroundColor="#FFFFFF"
-                    color="#000000"
+                {qrImageUri ? (
+                  <Image
+                    source={{ uri: qrImageUri }}
+                    contentFit="contain"
+                    style={{
+                      width: 260,
+                      height: 260,
+                    }}
                   />
                 ) : (
                   <ActivityIndicator color={Colors.accentRose} />

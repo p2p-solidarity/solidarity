@@ -10,7 +10,7 @@
  * Safe to include:
  *   - id          — opaque UUID (stable record key)
  *   - title       — display label already shown on lists/hero
- *   - trustLevel  — L1/L2/L3 enum → drives the green/blue/grey row chip
+ *   - trustLevel  — L1/L2/L3/L3+ enum → drives the green/blue/grey row chip
  *   - type        — coarse enum the list uses to pick an SF Symbol
  *                   (passport / student / social_graph / …)
  *

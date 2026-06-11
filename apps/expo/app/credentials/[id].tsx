@@ -38,6 +38,11 @@ import {
   type StoredCredential,
 } from '@/credentials/store';
 import {
+  credentialTrustDisplayFor,
+  type CredentialTrustDisplay,
+  type TrustDisplayTone,
+} from '@/credentials/trustDisplay';
+import {
   buildPresentationProofQrPages,
   initialPresentationClaimIds,
   isPresentationDisabled,
@@ -83,42 +88,44 @@ function credentialIcon(type: string): SFSymbol {
 }
 
 function proofTagText(metadataTags: readonly string[]): string {
+  if (metadataTags.includes('passport-openac-v3') || metadataTags.includes('passport-noir')) {
+    return 'Passport ZK';
+  }
   if (metadataTags.includes('mopro-noir')) return 'OpenPassport';
   if (metadataTags.includes('semaphore-zk')) return 'Semaphore ZK';
   return 'SD-JWT Fallback';
 }
 
 function proofTypeText(metadataTags: readonly string[]): string {
+  if (metadataTags.includes('passport-openac-v3') || metadataTags.includes('passport-noir')) {
+    return 'Passport ZK (OpenAC v3)';
+  }
   if (metadataTags.includes('mopro-noir')) return 'OpenPassport (Noir/Mopro)';
   if (metadataTags.includes('semaphore-zk')) return 'Semaphore ZK';
   return 'SD-JWT Fallback';
 }
 
 function proofIcon(metadataTags: readonly string[]): SFSymbol {
+  if (metadataTags.includes('passport-openac-v3') || metadataTags.includes('passport-noir')) {
+    return 'checkmark.shield.fill';
+  }
   if (metadataTags.includes('mopro-noir')) return 'bolt.shield.fill';
   if (metadataTags.includes('semaphore-zk')) return 'shield.checkered';
   return 'doc.text.fill';
 }
 
 function levelText(
-  trustLevel: StoredCredential['trustLevel'],
+  trustDisplay: CredentialTrustDisplay,
   t: (key: string) => string,
 ): string {
-  switch (trustLevel) {
-    case 'L3':
-      return t('credentialDetail.levelL3');
-    case 'L2':
-      return t('credentialDetail.levelL2');
-    default:
-      return t('credentialDetail.levelL1');
-  }
+  return t(trustDisplay.i18nKey);
 }
 
-function levelAccent(trustLevel: StoredCredential['trustLevel']): string {
-  switch (trustLevel) {
-    case 'L3':
+function levelAccent(tone: TrustDisplayTone): string {
+  switch (tone) {
+    case 'green':
       return Colors.terminalGreen;
-    case 'L2':
+    case 'blue':
       return Colors.primaryBlue;
     default:
       return Colors.text3;
@@ -425,7 +432,8 @@ export default function CredentialDetailScreen() {
     );
   }
 
-  const accent = levelAccent(credential.trustLevel);
+  const trustDisplay = credentialTrustDisplayFor(credential);
+  const accent = levelAccent(trustDisplay.tone);
   const trustBadge = issuerTrustBadge(credential, t);
   const isExpired =
     credential.expiresAt != null && credential.expiresAt.getTime() < Date.now();
@@ -544,7 +552,7 @@ export default function CredentialDetailScreen() {
                 />
 
                 <View style={{ alignSelf: 'stretch', gap: 8 }}>
-                  <LevelTag text={levelText(credential.trustLevel, t)} accent={accent} />
+                  <LevelTag text={levelText(trustDisplay, t)} accent={accent} />
                   <View
                     style={{
                       flexDirection: 'row',

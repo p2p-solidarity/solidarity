@@ -6,9 +6,9 @@
  *   • Bottom row: checkmark.seal.fill (11pt) + level text 11pt +
  *     issuerType.capitalized 11pt tertiary, right-aligned
  *   • Trust levels:
- *       green  → "Level 3 - ZK Verified" / Color.Theme.terminalGreen
- *       blue   → "Level 2 - Fallback"    / Color.Theme.primaryBlue
- *       else   → "Level 1 - Self-attested" / textTertiary
+ *       L3+ → "Level 3+ - Passport ZK + AA" / Color.Theme.terminalGreen
+ *       L3  → "Level 3 - Passport ZK (No AA)" / Color.Theme.primaryBlue
+ *       L1  → "Level 1 - Fallback / Non-ZK" / textTertiary
  * Source: solidarity/Views/MeViews/MeTabComponents.swift (VerifiedCredentialRow).
  */
 import type { SFSymbol } from 'expo-symbols';
@@ -17,16 +17,20 @@ import { Text, View } from 'react-native';
 import { PressableScale } from '@/components/common/PressableScale';
 import { SfIcon } from '@/components/icons/SfIcon';
 import { Colors } from '@/constants/Colors';
+import {
+  credentialTrustLabelForLevel,
+  credentialTrustToneForLevel,
+  type TrustDisplayTone,
+} from '@/credentials/trustDisplay';
+import type { TrustLevel as StoredTrustLevel } from '@/credentials/store';
 
-export type TrustLevel = 'green' | 'blue' | 'other';
-
-export type VerifiedCredentialRowProps = {
-  icon: SFSymbol;
-  title: string;
-  trustLevel: TrustLevel;
-  issuerType: string;
-  onPress?: () => void;
-};
+export interface VerifiedCredentialRowProps {
+  readonly icon: SFSymbol;
+  readonly title: string;
+  readonly trustLevel: StoredTrustLevel;
+  readonly issuerType: string;
+  readonly onPress?: () => void;
+}
 
 export function VerifiedCredentialRow({
   icon,
@@ -35,18 +39,8 @@ export function VerifiedCredentialRow({
   issuerType,
   onPress,
 }: VerifiedCredentialRowProps) {
-  const levelText =
-    trustLevel === 'green'
-      ? 'Level 3 - ZK Verified'
-      : trustLevel === 'blue'
-      ? 'Level 2 - Fallback'
-      : 'Level 1 - Self-attested';
-  const levelColor =
-    trustLevel === 'green'
-      ? Colors.terminalGreen
-      : trustLevel === 'blue'
-      ? Colors.primaryBlue
-      : Colors.text3;
+  const levelText = credentialTrustLabelForLevel(trustLevel);
+  const levelColor = levelColorForTone(credentialTrustToneForLevel(trustLevel));
 
   return (
     <PressableScale
@@ -106,4 +100,15 @@ export function VerifiedCredentialRow({
 function capitalize(s: string): string {
   if (s.length === 0) return s;
   return s.charAt(0).toUpperCase() + s.slice(1);
+}
+
+function levelColorForTone(tone: TrustDisplayTone): string {
+  switch (tone) {
+    case 'green':
+      return Colors.terminalGreen;
+    case 'blue':
+      return Colors.primaryBlue;
+    default:
+      return Colors.text3;
+  }
 }

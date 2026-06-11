@@ -38,6 +38,7 @@ import {
   VerifiedCredentialRow,
 } from '@/components/me';
 import { Colors } from '@/constants/Colors';
+import { credentialTrustDisplayFor } from '@/credentials/trustDisplay';
 import { useThemeColors } from '@/constants/useThemeColors';
 import { useTranslation } from '@/i18n';
 import { SCALE, STAGGER_MS } from '@/feedback/motion';
@@ -219,7 +220,7 @@ function VerifiedCredentialsSection({
               key={c.id}
               icon={credentialIcon(c.type)}
               title={c.title}
-              trustLevel={mapTrustLevel(c.trustLevel)}
+              trustLevel={credentialTrustDisplayFor(c).level}
               issuerType={c.issuerDid.startsWith('did:') ? (c.issuerDid.split(':')[1] ?? 'unknown') : 'unknown'}
               onPress={() => router.push({ pathname: '/credentials/[id]', params: { id: c.id } })}
             />
@@ -406,13 +407,5 @@ function credentialIcon(type: string): SFSymbol {
     case 'socialGraph':
       return 'person.2.fill';
     default: return 'checkmark.shield.fill';
-  }
-}
-
-function mapTrustLevel(t: 'L1' | 'L2' | 'L3'): 'green' | 'blue' | 'other' {
-  switch (t) {
-    case 'L3': return 'green';
-    case 'L2': return 'blue';
-    default:   return 'other';
   }
 }

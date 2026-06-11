@@ -10,7 +10,7 @@
  * code can read either side without translation.
  */
 
-export type TrustLevel = 'L1' | 'L2' | 'L3';
+export type TrustLevel = 'L1' | 'L2' | 'L3' | 'L3+';
 
 export interface IdentityCardEntity {
   readonly id: string;

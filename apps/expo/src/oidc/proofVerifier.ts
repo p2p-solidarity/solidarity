@@ -17,7 +17,7 @@ import {
   verifyJwtEs256,
 } from '@solidarity/shared';
 
-export type TrustLevel = 'L1' | 'L2' | 'L3';
+export type TrustLevel = 'L1' | 'L2' | 'L3' | 'L3+';
 
 export interface VerifiedVc {
   readonly issuerDid: string;
