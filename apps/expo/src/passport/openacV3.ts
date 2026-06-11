@@ -618,7 +618,10 @@ export async function bindPassportOpenAcV3DeviceSignature(
       ...witnesses,
       openAcShowInputsJson: JSON.stringify({
         ...openAcShow,
-        signature: Array.from(signed.signature),
+        // Decimal strings, not numbers — the native prover decodes the
+        // witness map as { [string]: string[] } and rejects byte numbers
+        // (PassportZk Code=2), matching the Rust builder's Vec<String>.
+        signature: Array.from(signed.signature, String),
       }),
     },
   };

@@ -33,6 +33,15 @@ function byteArray(length: number, seed: number): number[] {
   return Array.from({ length }, (_unused, index) => (seed + index) & 0xff);
 }
 
+/**
+ * Witness values exactly as the Rust builder emits them — every byte a
+ * decimal string. Native parseInputs ([String: [String]] on iOS) rejects
+ * number arrays, so fixtures must mirror the string shape.
+ */
+function witnessBytes(length: number, seed: number): string[] {
+  return byteArray(length, seed).map(String);
+}
+
 const ACTIVE_AUTH_JSON = JSON.stringify({
   challengeB64: 'Y2hhbGxlbmdl',
   signatureRawB64: 'c2lnbmF0dXJl',
@@ -508,14 +517,14 @@ describe('passport OpenAC v3.1 / passport-noir 0.3.0 contract', () => {
       {
         dscChainInputsJson: '{"dsc":true}',
         passportAdapterInputsJson: JSON.stringify({
-          enclave_pk_x: byteArray(32, 1),
-          enclave_pk_y: byteArray(32, 101),
+          enclave_pk_x: witnessBytes(32, 1),
+          enclave_pk_y: witnessBytes(32, 101),
         }),
         openAcShowInputsJson: JSON.stringify({
-          nonce_hash: nonceHash,
-          enclave_pk_x: byteArray(32, 1),
-          enclave_pk_y: byteArray(32, 101),
-          signature: byteArray(64, 0),
+          nonce_hash: nonceHash.map(String),
+          enclave_pk_x: witnessBytes(32, 1),
+          enclave_pk_y: witnessBytes(32, 101),
+          signature: witnessBytes(64, 0),
         }),
       },
       async (digest) => {
@@ -526,14 +535,23 @@ describe('passport OpenAC v3.1 / passport-noir 0.3.0 contract', () => {
 
     expect(result.ready).toBe(true);
     if (!result.ready) return;
-    const show = JSON.parse(result.witnesses.openAcShowInputsJson) as {
-      signature: number[];
-      enclave_pk_x: number[];
-      enclave_pk_y: number[];
-    };
-    expect(show.signature).toEqual(Array.from(signature));
-    expect(show.enclave_pk_x).toEqual(byteArray(32, 1));
-    expect(show.enclave_pk_y).toEqual(byteArray(32, 101));
+    const show = JSON.parse(result.witnesses.openAcShowInputsJson) as Record<
+      string,
+      unknown
+    >;
+    expect(show['signature']).toEqual(Array.from(signature, String));
+    expect(show['enclave_pk_x']).toEqual(witnessBytes(32, 1));
+    expect(show['enclave_pk_y']).toEqual(witnessBytes(32, 101));
+    // Native prover contract: every witness value must stay a string array
+    // ({ [string]: string[] } — PassportZk Code=2 rejects anything else).
+    const nonStringArrayKeys = Object.entries(show)
+      .filter(
+        ([, value]) =>
+          !Array.isArray(value) ||
+          value.some((item) => typeof item !== 'string')
+      )
+      .map(([key]) => key);
+    expect(nonStringArrayKeys).toEqual([]);
   });
 
   it('fails closed when OpenAC device binding witness material is missing or mismatched', async () => {
@@ -546,7 +564,9 @@ describe('passport OpenAC v3.1 / passport-noir 0.3.0 contract', () => {
       {
         dscChainInputsJson: '{"dsc":true}',
         passportAdapterInputsJson: '{"passport":true}',
-        openAcShowInputsJson: JSON.stringify({ nonce_hash: byteArray(32, 1) }),
+        openAcShowInputsJson: JSON.stringify({
+          nonce_hash: witnessBytes(32, 1),
+        }),
       },
       signer
     );
@@ -559,13 +579,13 @@ describe('passport OpenAC v3.1 / passport-noir 0.3.0 contract', () => {
       {
         dscChainInputsJson: '{"dsc":true}',
         passportAdapterInputsJson: JSON.stringify({
-          enclave_pk_x: byteArray(32, 9),
-          enclave_pk_y: byteArray(32, 9),
+          enclave_pk_x: witnessBytes(32, 9),
+          enclave_pk_y: witnessBytes(32, 9),
         }),
         openAcShowInputsJson: JSON.stringify({
-          nonce_hash: byteArray(32, 1),
-          enclave_pk_x: byteArray(32, 9),
-          enclave_pk_y: byteArray(32, 9),
+          nonce_hash: witnessBytes(32, 1),
+          enclave_pk_x: witnessBytes(32, 9),
+          enclave_pk_y: witnessBytes(32, 9),
         }),
       },
       signer

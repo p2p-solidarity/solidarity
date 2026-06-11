@@ -202,10 +202,26 @@ end
     expect(xcodeProject).not.toContain('openac_show.srs.bin');
   });
 
-  test('prepare script stages OpenAC SRS from local files instead of downloading it', () => {
+  test('prepare script stages OpenAC SRS locally, with a SHA-pinned release fallback', () => {
     expect(prepareScriptSource).toContain('stage-openac-srs.sh');
+    // The retired per-circuit SRS zip must not come back.
     expect(prepareScriptSource).not.toContain('PASSPORT_OPENAC_SRS_ZIP_URL');
     expect(prepareScriptSource).not.toContain('PassportOpenAcV3Srs.zip');
+    // Fresh checkouts (Xcode Cloud) download the merged SRS attached to the
+    // passport-noir release — pinned by SHA-256 so the proving key cannot
+    // drift silently.
+    expect(prepareScriptSource).toContain(
+      'releases/download/${PASSPORT_MOPRO_VERSION}/passport.srs.bin'
+    );
+    expect(prepareScriptSource).toMatch(
+      /PASSPORT_OPENAC_SRS_SHA256="\$\{AIRMEISHI_PASSPORT_OPENAC_SRS_SHA256-[0-9a-f]{64}\}"/
+    );
+    // The staging helper doubles as an Xcode build phase and must stay
+    // offline — downloads live in prepare-ios-workspace.sh only.
+    expect(stageOpenAcSrsScriptSource).not.toContain('curl');
+    expect(stageOpenAcSrsScriptSource).toContain(
+      'intentionally does not download anything'
+    );
   });
 
   test('OpenAC SRS staging promotes the largest legacy SRS when merged SRS is absent', () => {
@@ -531,5 +547,84 @@ end
     );
     expect(firstDownload).toBeGreaterThan(-1);
     expect(podInstall).toBeGreaterThan(firstDownload);
+  });
+
+  test('prepare script downloads the pinned merged SRS when local artifacts are absent', () => {
+    const fixtureRoot = makeTempDir();
+    const fixtureApp = join(fixtureRoot, 'apps', 'expo');
+    const fakeBin = join(fixtureRoot, 'bin');
+    const logPath = join(fixtureRoot, 'commands.log');
+    const stdoutPath = join(fixtureRoot, 'stdout.log');
+    const stderrPath = join(fixtureRoot, 'stderr.log');
+    const passportNoirDir = join(fixtureRoot, 'passport-noir');
+    const passportAssetsDir = join(
+      fixtureRoot,
+      'nitro-modules',
+      'passport-zk',
+      'android',
+      'src',
+      'main',
+      'assets'
+    );
+    mkdirSync(join(fixtureApp, 'ios'), { recursive: true });
+    createFakeToolchain(fakeBin, logPath);
+    writeNativeBindingDownloadStubs(fakeBin, logPath);
+
+    const result = Bun.spawnSync({
+      cmd: [
+        '/bin/bash',
+        '-c',
+        '/bin/bash "$1" >"$2" 2>"$3"',
+        'runner',
+        prepareScript,
+        stdoutPath,
+        stderrPath,
+      ],
+      env: {
+        ...process.env,
+        AIRMEISHI_BUN_INSTALL_ARGS: '--frozen-lockfile',
+        AIRMEISHI_EXPO_APP_DIR: fixtureApp,
+        AIRMEISHI_INSTALL_TOOLING: '0',
+        AIRMEISHI_PASSPORT_MOPRO_SHA256: '',
+        AIRMEISHI_PASSPORT_MOPRO_ZIP_URL: 'https://example.invalid/passport.zip',
+        AIRMEISHI_PASSPORT_NOIR_DIR: passportNoirDir,
+        AIRMEISHI_PASSPORT_OPENAC_SRS_SHA256: '',
+        AIRMEISHI_REPO_ROOT: fixtureRoot,
+        AIRMEISHI_SEMAPHORE_SWIFT_ZIP_URL: 'https://example.invalid/semaphore.zip',
+        COMMAND_LOG: logPath,
+        PATH: `${fakeBin}:${process.env['PATH'] ?? ''}`,
+      },
+      stdout: 'ignore',
+      stderr: 'ignore',
+    });
+
+    expect(
+      result.exitCode,
+      JSON.stringify({
+        stderr: readOptional(stderrPath),
+        stdout: readOptional(stdoutPath),
+      })
+    ).toBe(0);
+    // Downloaded into the canonical local artifact path, then staged into the
+    // pod assets dir by stage-openac-srs.sh exactly like a local build.
+    expect(
+      readFileSync(
+        join(passportNoirDir, 'mopro-binding', 'test-vectors', 'srs', 'passport.srs.bin'),
+        'utf8'
+      )
+    ).toBe('fake zip');
+    expect(readFileSync(join(passportAssetsDir, 'passport.srs.bin'), 'utf8')).toBe(
+      'fake zip'
+    );
+    const downloads = readCommandLog(logPath).filter((line) =>
+      line.startsWith('curl\t')
+    );
+    expect(downloads).toHaveLength(3);
+    expect(
+      downloads.some(
+        (line) =>
+          line.includes('releases/download/') && line.includes('passport.srs.bin')
+      )
+    ).toBe(true);
   });
 });

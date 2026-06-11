@@ -18,9 +18,14 @@ PASSPORT_NOIR_DIR="${AIRMEISHI_PASSPORT_NOIR_DIR:-$(cd "$REPO_ROOT/.." && pwd)/p
 PASSPORT_MOPRO_VERSION="${AIRMEISHI_PASSPORT_MOPRO_VERSION:-v0.3.2}"
 PASSPORT_MOPRO_ZIP_URL="${AIRMEISHI_PASSPORT_MOPRO_ZIP_URL:-https://github.com/p2p-solidarity/passport-noir/releases/download/${PASSPORT_MOPRO_VERSION}/PassportMoproBindings.xcframework.zip}"
 PASSPORT_MOPRO_SHA256="${AIRMEISHI_PASSPORT_MOPRO_SHA256-3a81c5e6a743f3a875e88c3b54b9fd3c4ca8cc250a31d3cc79b53b87dc940c49}"
-# OpenAC v3 uses one merged `passport.srs.bin`. It is large and gitignored, so
-# the iOS workspace stages it from local passport-noir build artifacts only:
-# no network download happens for SRS during prepare or xcodebuild.
+# OpenAC v3 uses one merged `passport.srs.bin`. It is large (128MB) and
+# gitignored, so staging prefers local passport-noir build artifacts; when they
+# are absent (fresh checkout / Xcode Cloud) the SHA-pinned copy attached to the
+# passport-noir release is downloaded into the same local path first. The
+# stage-openac-srs.sh helper itself never downloads (it also runs as an Xcode
+# build phase, which must stay offline + deterministic).
+PASSPORT_OPENAC_SRS_URL="${AIRMEISHI_PASSPORT_OPENAC_SRS_URL:-https://github.com/p2p-solidarity/passport-noir/releases/download/${PASSPORT_MOPRO_VERSION}/passport.srs.bin}"
+PASSPORT_OPENAC_SRS_SHA256="${AIRMEISHI_PASSPORT_OPENAC_SRS_SHA256-7d368f9342b99252a06249e46a3edfbda9aa2e9afb482bfe848245ab538c6996}"
 SEMAPHORE_SWIFT_REF="${AIRMEISHI_SEMAPHORE_SWIFT_REF:-850680a5adcc258d6861005b55a4925bd08a48eb}"
 SEMAPHORE_SWIFT_ZIP_URL="${AIRMEISHI_SEMAPHORE_SWIFT_ZIP_URL:-https://github.com/zkmopro/SemaphoreSwift/archive/${SEMAPHORE_SWIFT_REF}.zip}"
 SEMAPHORE_SWIFT_SHA256="${AIRMEISHI_SEMAPHORE_SWIFT_SHA256-}"
@@ -201,10 +206,32 @@ ensure_semaphore_bindings_xcframework() {
     || die "SemaphoreBindings.xcframework is incomplete at $xcf"
 }
 
-# Stage the OpenAC v3 merged SRS proving key from local files. This also runs as
-# an Xcode build phase, but doing it before `pod install` keeps CocoaPods'
-# generated resource scripts and input paths in a good state.
+# Stage the OpenAC v3 merged SRS proving key. Local passport-noir build
+# artifacts win; a fresh checkout (Xcode Cloud) downloads the SHA-pinned
+# release copy into that same local path first. Staging itself stays in
+# stage-openac-srs.sh, which also runs as an Xcode build phase and therefore
+# must never touch the network. Doing all this before `pod install` keeps
+# CocoaPods' generated resource scripts and input paths in a good state.
 ensure_passport_openac_srs() {
+  local srs_dir="$PASSPORT_NOIR_DIR/mopro-binding/test-vectors/srs"
+  local srs_file="$srs_dir/passport.srs.bin"
+
+  if [[ ! -f "$srs_file" && -z "${AIRMEISHI_PASSPORT_OPENAC_SRS_PATH:-}" ]]; then
+    step "Downloading OpenAC v3 merged SRS ($PASSPORT_MOPRO_VERSION)"
+    mkdir -p "$srs_dir"
+    local srs_tmp="$srs_file.download.$$"
+    if ! download_zip "$PASSPORT_OPENAC_SRS_URL" "$srs_tmp"; then
+      rm -f "$srs_tmp"
+      die "Could not download OpenAC v3 merged SRS from $PASSPORT_OPENAC_SRS_URL.
+  Attach passport.srs.bin to the passport-noir $PASSPORT_MOPRO_VERSION Release,
+  or point AIRMEISHI_PASSPORT_OPENAC_SRS_URL / AIRMEISHI_PASSPORT_OPENAC_SRS_PATH
+  at a copy of the merged SRS."
+    fi
+    verify_sha256 "$srs_tmp" "$PASSPORT_OPENAC_SRS_SHA256"
+    mv "$srs_tmp" "$srs_file"
+    green "OK downloaded OpenAC v3 merged SRS to $srs_file"
+  fi
+
   AIRMEISHI_EXPO_APP_DIR="$APP_DIR" \
   AIRMEISHI_REPO_ROOT="$REPO_ROOT" \
   AIRMEISHI_PASSPORT_NOIR_DIR="$PASSPORT_NOIR_DIR" \
@@ -266,36 +293,49 @@ if is_enabled "$RUN_POD_INSTALL"; then
 fi
 
 # Xcode Cloud archives with AUTOMATIC Swift Package resolution DISABLED, and
-# `expo prebuild --clean` wipes `ios/` every run — so neither a committed
-# workspace Package.resolved nor an in-CI `xcodebuild -resolvePackageDependencies`
-# works (the latter is refused outright: "a resolved file is required when
-# automatic dependency resolution is disabled"). So we ship a CHECKED-IN,
-# pre-resolved pin (scripts/ios-spm.Package.resolved) and drop it into the
-# freshly generated workspace, so the archive finds a satisfying file and never
-# resolves. We still try a real resolve first (best-effort re-enable) so a
-# perfect file is produced when the environment allows it.
+# `expo prebuild --clean` wipes `ios/` every run — so a bare in-CI
+# `xcodebuild -resolvePackageDependencies` is refused outright ("a resolved
+# file is required when automatic dependency resolution is disabled ...
+# dependencies were added: 'sprucekit-mobile'"). So we ship a CHECKED-IN,
+# pre-resolved pin (scripts/ios-spm.Package.resolved), seed it into the freshly
+# generated workspace FIRST, then validate it under the same disabled-resolution
+# rules the archive uses — a stale pin fails here with a clear remedy instead of
+# as a confusing archive-time resolver error. When the environment still allows
+# real resolution (local dev), a failed validation falls back to a live resolve
+# and refreshes the checked-in pin so it can be committed.
 #
 # Regenerate the checked-in pin after bumping SPM_VERSION in
 # plugins/withSpruceIdSpmPackage.js:
 #   (cd apps/expo/ios && xcodebuild -resolvePackageDependencies \
-#      -workspace Solidarity.xcworkspace -scheme Solidarity) \
+#      -workspace Solidarity.xcworkspace -scheme solidarity) \
 #   && cp apps/expo/ios/Solidarity.xcworkspace/xcshareddata/swiftpm/Package.resolved \
 #         apps/expo/scripts/ios-spm.Package.resolved
 # See apps/expo/CLAUDE.md (CI).
 if [[ -d "$APP_DIR/ios/Solidarity.xcworkspace" ]]; then
   resolved_dst_dir="$APP_DIR/ios/Solidarity.xcworkspace/xcshareddata/swiftpm"
   resolved_src="$APP_DIR/scripts/ios-spm.Package.resolved"
-  step "resolve Swift Package dependencies (write Package.resolved)"
+  step "seed + validate Swift Package pins (Package.resolved)"
+  [[ -f "$resolved_src" ]] || die "missing $resolved_src — regenerate it (see comment above)"
+  mkdir -p "$resolved_dst_dir"
+  cp "$resolved_src" "$resolved_dst_dir/Package.resolved"
+  green "OK seeded Package.resolved from $resolved_src"
   defaults write com.apple.dt.Xcode IDEDisableAutomaticPackageResolution -bool NO 2>/dev/null || true
   defaults write com.apple.dt.Xcode IDEPackageOnlyUseVersionsFromResolvedFile -bool NO 2>/dev/null || true
-  if ! ( cd "$APP_DIR/ios" && xcodebuild -resolvePackageDependencies \
-           -workspace Solidarity.xcworkspace -scheme solidarity \
-           -skipPackagePluginValidation ); then
-    red "x in-CI SwiftPM resolution refused — seeding checked-in Package.resolved"
-    [[ -f "$resolved_src" ]] || die "missing $resolved_src — regenerate it (see comment above)"
-    mkdir -p "$resolved_dst_dir"
-    cp "$resolved_src" "$resolved_dst_dir/Package.resolved"
-    green "OK seeded Package.resolved from $resolved_src"
+  if ( cd "$APP_DIR/ios" && xcodebuild -resolvePackageDependencies \
+         -workspace Solidarity.xcworkspace -scheme solidarity \
+         -disableAutomaticPackageResolution \
+         -skipPackagePluginValidation ); then
+    green "OK seeded Package.resolved satisfies the workspace"
+  else
+    red "x seeded Package.resolved is stale for this workspace — attempting a live resolve"
+    ( cd "$APP_DIR/ios" && xcodebuild -resolvePackageDependencies \
+        -workspace Solidarity.xcworkspace -scheme solidarity \
+        -skipPackagePluginValidation ) \
+      || die "Swift Package resolution failed and the checked-in pin is stale.
+  Regenerate apps/expo/scripts/ios-spm.Package.resolved on a Mac with network
+  access (see comment above) and commit it."
+    cp "$resolved_dst_dir/Package.resolved" "$resolved_src"
+    red "! refreshed $resolved_src from the live resolve — commit it"
   fi
 fi
 
