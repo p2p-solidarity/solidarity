@@ -419,6 +419,7 @@ export default function PassportSetup() {
       }
       dispatch({ type: 'setLoading', value: true });
       dispatch({ type: 'setProofProgress', message: 'Initializing prover...' });
+      dispatch({ type: 'setProofOverlayStage', stage: 'init' });
       const timer = createProofStageTimer('prepare');
       let proof: PassportProofResult;
       const proofPlan = buildPassportOpenAcV3ProofPlan({
@@ -451,6 +452,7 @@ export default function PassportSetup() {
               timer,
               (m) => {
                 dispatch({ type: 'setProofProgress', message: m });
+                dispatch({ type: 'setProofOverlayStage', stage: 'proving' });
               },
             )
           : null;
@@ -474,6 +476,9 @@ export default function PassportSetup() {
         if (!shouldAllowPassportOpenAcV3FallbackProof(proofChip)) {
           throw new Error(fallbackReason);
         }
+        // SD-JWT fallback is NOT a verified proof — the overlay must never
+        // celebrate it (rule 8).
+        dispatch({ type: 'setProofOverlayStage', stage: null });
         dispatch({
           type: 'setProofProgress',
           message: 'OpenAC v3 unavailable — using SD-JWT fallback…',
@@ -488,7 +493,11 @@ export default function PassportSetup() {
         };
       }
       dispatch({ type: 'setProof', proof });
+      if (proof.proofType === PASSPORT_V3_PROOF_TYPE) {
+        dispatch({ type: 'setProofOverlayStage', stage: 'done' });
+      }
     } catch (err) {
+      dispatch({ type: 'setProofOverlayStage', stage: null });
       reportPassportError({
         context: 'Passport › Generate Proof',
         phase: 'proof-generation',
@@ -683,7 +692,14 @@ export default function PassportSetup() {
   return (
     <View className="bg-pageBg flex-1" style={{ paddingTop: insets.top }}>
       <NavBar onClose={() => { router.back(); }} />
-      <CryptoCompilingOverlay visible={state.isLoading && state.step === 'proof'} />
+      <CryptoCompilingOverlay
+        visible={state.proofOverlayStage !== null}
+        stage={state.proofOverlayStage ?? 'init'}
+        statusText={state.proofProgressMessage}
+        onDone={() => {
+          dispatch({ type: 'setProofOverlayStage', stage: null });
+        }}
+      />
       <ScrollView contentContainerStyle={{ padding: 16, paddingBottom: 80 }}>
         <SolidarityPlaceholderCard
           screenID={meta.id}

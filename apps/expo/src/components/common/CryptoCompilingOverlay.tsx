@@ -1,17 +1,16 @@
 /**
- * CryptoCompilingOverlay — 1:1 port of Swift CryptoCompilingOverlay.
+ * CryptoCompilingOverlay — terminal-style proof progress overlay.
  *
- * Three-phase animation that simulates ZK proof generation:
- *   1. preparing (0–0.8s)  → "Initializing Circuit..." in textPrimary
- *   2. compiling (0.8–3.5s) → "Generating ZK Proof..." in primaryBlue
- *                              + scrolling pseudo-hash list at 20Hz
- *   3. verified  (3.5–5.0s) → "[ VERIFIED ]" badge in terminalGreen,
- *                              spring entrance, glow shadow
+ * Driven by REAL pipeline milestones (CLAUDE.md rule 8 — no fake states):
+ * the parent maps proof events to `stage`:
+ *   'init'    → "Initializing…" while the prover/witness is being prepared
+ *   'proving' → real status text per circuit + decorative hash scroll
+ *   'done'    → "[ VERIFIED ]" badge — rendered ONLY after the proof
+ *               bundle actually completed; auto-hands control back via
+ *               `onDone` after a short celebration delay.
  *
- * Auto-dismisses at 5.0s and invokes `onCompletion`.
- *
- * Haptics mirror Swift: rigid impact on mount, soft impacts during
- * compile (≈25% probability per tick), success notification at verify.
+ * The visual language (Menlo, hash terminal, spring badge, haptics) is the
+ * 1:1 Swift port; only the fake 0.8s/3.5s/5s timeline was removed.
  */
 import { useEffect, useRef, useState } from 'react';
 import { ScrollView, Text, View } from 'react-native';
@@ -27,11 +26,16 @@ import Animated, {
 import { Colors } from '@/constants/Colors';
 import { haptic } from '@/feedback/haptics';
 
-type Phase = 'preparing' | 'compiling' | 'verified';
+type Stage = 'init' | 'proving' | 'done';
 
 interface CryptoCompilingOverlayProps {
   readonly visible: boolean;
-  readonly onCompletion?: () => void;
+  /** Real pipeline stage — drives phases 1:1; no internal timeline. */
+  readonly stage: Stage;
+  /** Real progress text from the proof runner (e.g. "Generating dsc_chain proof…"). */
+  readonly statusText: string;
+  /** Fired ~1.2s after `stage` becomes 'done' (celebration delay AFTER real completion). */
+  readonly onDone?: () => void;
 }
 
 const HEX = '0123456789abcdef';
@@ -45,68 +49,56 @@ function randomHash(): string {
   return out;
 }
 
-const STATUS_TEXT: Readonly<Record<Phase, string>> = {
-  preparing: 'Initializing Circuit...',
-  compiling: 'Generating ZK Proof...',
-  verified: 'Proof Accepted.',
-};
-
-const STATUS_COLOR: Readonly<Record<Phase, string>> = {
-  preparing: Colors.text1,
-  compiling: Colors.primaryBlue,
-  verified: Colors.terminalGreen,
+const STATUS_COLOR: Readonly<Record<Stage, string>> = {
+  init: Colors.text1,
+  proving: Colors.primaryBlue,
+  done: Colors.terminalGreen,
 };
 
 export function CryptoCompilingOverlay({
   visible,
-  onCompletion,
+  stage,
+  statusText,
+  onDone,
 }: CryptoCompilingOverlayProps) {
-  const [phase, setPhase] = useState<Phase>('preparing');
   const [hashes, setHashes] = useState<readonly string[]>([]);
   const scrollRef = useRef<ScrollView | null>(null);
   const cursorOpacity = useSharedValue(0);
   const verifiedScale = useSharedValue(0.5);
   const verifiedOpacity = useSharedValue(0);
 
+  // Mount: haptic + cursor blink while work is actually running.
   useEffect(() => {
     if (!visible) return;
-    setPhase('preparing');
     setHashes([]);
     verifiedScale.value = 0.5;
     verifiedOpacity.value = 0;
-    cursorOpacity.value = 0;
     haptic('tap');
+    cursorOpacity.value = withRepeat(
+      withTiming(1, { duration: 300, easing: Easing.inOut(Easing.ease) }),
+      -1,
+      true
+    );
+  }, [visible, cursorOpacity, verifiedOpacity, verifiedScale]);
 
-    const compileT = setTimeout(() => {
-      setPhase('compiling');
-      cursorOpacity.value = withRepeat(
-        withTiming(1, { duration: 300, easing: Easing.inOut(Easing.ease) }),
-        -1,
-        true
-      );
-    }, 800);
-
-    const verifyT = setTimeout(() => {
-      setPhase('verified');
-      cursorOpacity.value = 0;
-      verifiedScale.value = withSpring(1, { damping: 6, stiffness: 120 });
-      verifiedOpacity.value = withTiming(1, { duration: 200 });
-      haptic('success');
-    }, 3500);
-
-    const closeT = setTimeout(() => {
-      onCompletion?.();
-    }, 5000);
-
-    return () => {
-      clearTimeout(compileT);
-      clearTimeout(verifyT);
-      clearTimeout(closeT);
-    };
-  }, [visible, cursorOpacity, verifiedOpacity, verifiedScale, onCompletion]);
-
+  // 'done' = REAL completion: spring the badge, success haptic, then hand
+  // control back to the parent. This is the only timer left and it runs
+  // strictly AFTER the work finished.
   useEffect(() => {
-    if (phase !== 'compiling') return;
+    if (!visible || stage !== 'done') return;
+    cursorOpacity.value = 0;
+    verifiedScale.value = withSpring(1, { damping: 6, stiffness: 120 });
+    verifiedOpacity.value = withTiming(1, { duration: 200 });
+    haptic('success');
+    const doneT = setTimeout(() => {
+      onDone?.();
+    }, 1200);
+    return () => clearTimeout(doneT);
+  }, [visible, stage, cursorOpacity, verifiedOpacity, verifiedScale, onDone]);
+
+  // Decorative hash scroll ONLY while a circuit is actually proving.
+  useEffect(() => {
+    if (!visible || stage !== 'proving') return;
     const id = setInterval(() => {
       setHashes((prev) => {
         const next = [...prev, randomHash()];
@@ -116,13 +108,13 @@ export function CryptoCompilingOverlay({
       if (Math.random() < 0.25) haptic('tap');
     }, 50);
     return () => clearInterval(id);
-  }, [phase]);
+  }, [visible, stage]);
 
   useEffect(() => {
-    if (phase === 'compiling') {
+    if (stage === 'proving') {
       scrollRef.current?.scrollToEnd({ animated: true });
     }
-  }, [hashes, phase]);
+  }, [hashes, stage]);
 
   const cursorStyle = useAnimatedStyle(() => ({
     opacity: cursorOpacity.value,
@@ -156,12 +148,12 @@ export function CryptoCompilingOverlay({
               fontFamily: 'Menlo',
               fontSize: 24,
               fontWeight: '700',
-              color: STATUS_COLOR[phase],
+              color: STATUS_COLOR[stage],
             }}
           >
-            {STATUS_TEXT[phase]}
+            {stage === 'done' ? 'Proof Accepted.' : statusText}
           </Text>
-          {phase !== 'verified' ? (
+          {stage !== 'done' ? (
             <Animated.View
               style={[
                 {
@@ -175,7 +167,7 @@ export function CryptoCompilingOverlay({
           ) : null}
         </View>
 
-        {phase === 'compiling' ? (
+        {stage === 'proving' ? (
           <View
             style={{
               height: 200,
@@ -203,7 +195,7 @@ export function CryptoCompilingOverlay({
           </View>
         ) : null}
 
-        {phase === 'verified' ? (
+        {stage === 'done' ? (
           <Animated.Text
             style={[
               {
