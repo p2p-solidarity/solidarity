@@ -80,6 +80,12 @@ import {
   passportFingerprintTag,
 } from '@/passport/persistence';
 import {
+  createProofStageTimer,
+  withTimedProver,
+  withTimedSigner,
+  type ProofStageTimer,
+} from '@/passport/proofTiming';
+import {
   PASSPORT_SHOW_LINK_SCOPE,
   extractPassportShowVkSha256FromProofPayload,
 } from '@/passport/showPresentation';
@@ -411,6 +417,7 @@ export default function PassportSetup() {
       }
       dispatch({ type: 'setLoading', value: true });
       dispatch({ type: 'setProofProgress', message: 'Initializing prover...' });
+      const timer = createProofStageTimer('prepare');
       let proof: PassportProofResult;
       const proofPlan = buildPassportOpenAcV3ProofPlan({
         ...proofChip,
@@ -428,6 +435,7 @@ export default function PassportSetup() {
               builder: nitro.zk,
             })
           : proofChip.openAcV3WitnessBundleJson;
+      timer.mark('witness-resolve');
       if (witnessBundleJson && witnessBundleJson !== proofChip.openAcV3WitnessBundleJson) {
         proofChip = { ...proofChip, openAcV3WitnessBundleJson: witnessBundleJson };
         dispatch({ type: 'setChip', chip: proofChip });
@@ -438,6 +446,7 @@ export default function PassportSetup() {
               nitro.zk,
               proofPlan,
               witnessBundleJson,
+              timer,
               (m) => {
                 dispatch({ type: 'setProofProgress', message: m });
               },
@@ -734,6 +743,7 @@ async function tryGenerateOpenAcV3Proof(
   zk: NonNullable<ReturnType<typeof getPassportZk>>,
   plan: Extract<PassportOpenAcV3ProofPlan, { kind: 'openac-v3' }>,
   witnessBundleJson: string | undefined,
+  timer: ProofStageTimer,
   setProgress: (message: string) => void,
 ): Promise<{ proofPayload: string } | null> {
   const witnessBundle = parsePassportOpenAcV3WitnessBundleJson(witnessBundleJson);
@@ -750,7 +760,7 @@ async function tryGenerateOpenAcV3Proof(
   // so the user is not re-prompted mid-flow.
   const deviceBound = await bindPassportOpenAcV3DeviceSignature(
     witnessBundle,
-    signOpenAcDeviceBindingDigest
+    withTimedSigner(signOpenAcDeviceBindingDigest, timer)
   );
   if (!deviceBound.ready) {
     console.log(
@@ -765,7 +775,7 @@ async function tryGenerateOpenAcV3Proof(
     const generated = await generatePassportOpenAcV3ProofPayload({
       plan,
       witnesses: deviceBound.witnesses,
-      prover: zk,
+      prover: withTimedProver(zk, timer),
       encodeProofBytes: arrayBufferToBase64,
       onProgress: ({ phase, circuit }) => {
         const verb = phase === 'generate' ? 'Generating' : 'Verifying';
