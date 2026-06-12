@@ -24,6 +24,11 @@ import {
 import { loadPassportNitroModules } from '@/passport/nitroModules';
 import { arrayBufferToBase64 } from '@/passport/pipeline';
 import {
+  createProofStageTimer,
+  withTimedProver,
+  withTimedSigner,
+} from '@/passport/proofTiming';
+import {
   PASSPORT_SHOW_LINK_SCOPE,
   derivePassportShowBucketNonceHash,
   generatePassportShowPresentation,
@@ -97,16 +102,19 @@ export function usePassportShowPresentation(
       proving.current = true;
       setState({ phase: 'proving', message: 'Preparing witness…' });
       void (async () => {
+        const timer = createProofStageTimer('show');
         try {
           const witnessBundleJson = await loadPassportShowWitness(
             args.credentialId
           );
+          timer.mark('witness-load');
           if (witnessBundleJson === null) {
             throw new Error(
               'No show witness stored for this credential — re-scan the passport once to enable fresh presentations.'
             );
           }
           const zk = loadPassportNitroModules().zk;
+          timer.mark('nitro-load');
           if (zk === null) {
             throw new Error('ZK prover is not linked on this build.');
           }
@@ -123,14 +131,19 @@ export function usePassportShowPresentation(
             freshness,
             holderDid: args.holderDid,
             selectedClaims: passportShowSelectedClaimTypes(showClaims),
-            signDeviceDigest: signOpenAcDeviceBindingDigest,
-            prover: zk,
+            signDeviceDigest: withTimedSigner(signOpenAcDeviceBindingDigest, timer),
+            prover: withTimedProver(zk, timer),
             encodeProofBytes: arrayBufferToBase64,
           });
           const payload = compressForQR(utf8ToBytes(envelopeJson)) ?? envelopeJson;
+          const pages = buildPresentationQrPages(payload);
+          timer.mark('compress+qr-pages');
+          console.log(
+            `[zk:timing] flow=show stage=total ms=${String(timer.totalMs())}`
+          );
           setState({
             phase: 'ready',
-            pages: buildPresentationQrPages(payload),
+            pages,
             freshness,
           });
         } catch (err) {
