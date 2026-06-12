@@ -277,6 +277,12 @@ export interface GeneratePassportShowPresentationArgs {
   readonly signDeviceDigest: PassportOpenAcV3DeviceSigner;
   readonly prover: PassportOpenAcV3Prover;
   readonly encodeProofBytes: (buffer: ArrayBuffer) => string;
+  /**
+   * On-device sanity verify after proving. Defaults ON; the show hook passes
+   * `__DEV__` so release builds skip it — the verifier device verifies for
+   * real, and the self-check roughly doubled show's native cost (spec §3).
+   */
+  readonly selfVerify?: boolean;
 }
 
 export async function generatePassportShowPresentation(
@@ -310,9 +316,11 @@ export async function generatePassportShowPresentation(
     PASSPORT_OPENAC_V3_MERGED_SRS_ALIAS,
     bound.witnesses.openAcShowInputsJson
   );
-  const verified = await args.prover.verifyNoirProof(proof.proof, proof.vk);
-  if (!verified) {
-    throw new Error('openac_show presentation proof did not verify');
+  if (args.selfVerify ?? true) {
+    const verified = await args.prover.verifyNoirProof(proof.proof, proof.vk);
+    if (!verified) {
+      throw new Error('openac_show presentation proof did not verify');
+    }
   }
 
   return {

@@ -134,6 +134,7 @@ export function usePassportShowPresentation(
             signDeviceDigest: withTimedSigner(signOpenAcDeviceBindingDigest, timer),
             prover: withTimedProver(zk, timer),
             encodeProofBytes: arrayBufferToBase64,
+            selfVerify: typeof __DEV__ !== 'undefined' ? __DEV__ : true,
           });
           const payload = compressForQR(utf8ToBytes(envelopeJson)) ?? envelopeJson;
           const pages = buildPresentationQrPages(payload);

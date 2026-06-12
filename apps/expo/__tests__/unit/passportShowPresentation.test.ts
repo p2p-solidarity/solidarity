@@ -423,6 +423,34 @@ describe('passport show presentation — generation orchestrator', () => {
     expect(envelope?.holderDid).toBe('did:key:zHolder');
   });
 
+  it('skips the on-device self-verify when selfVerify is false', async () => {
+    let verifyCalls = 0;
+    const result = await generatePassportShowPresentation({
+      witnessBundleJson: witnessBundleFixture(),
+      nonceHash: FRESH_NONCE,
+      today: TODAY,
+      disclosure: { discloseAge: true, discloseNationality: true },
+      freshness: 'challenge',
+      holderDid: 'did:key:zHolder',
+      selectedClaims: ['age_over_18'],
+      signDeviceDigest: signer,
+      selfVerify: false,
+      prover: {
+        generateNoirProof: async () => ({
+          proof: Uint8Array.from([9, 9, 9]).buffer,
+          vk: Uint8Array.from([7, 7]).buffer,
+        }),
+        verifyNoirProof: async () => {
+          verifyCalls += 1;
+          return true;
+        },
+      },
+      encodeProofBytes: (buffer) => base64Encode(new Uint8Array(buffer)),
+    });
+    expect(result.envelopeJson.length).toBeGreaterThan(0);
+    expect(verifyCalls).toBe(0);
+  });
+
   it('fails closed when the fresh proof does not self-verify', async () => {
     await expect(
       generatePassportShowPresentation({
