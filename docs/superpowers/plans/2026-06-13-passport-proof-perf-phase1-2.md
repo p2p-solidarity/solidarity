@@ -18,7 +18,7 @@
 
 **Files:** none (read-only)
 
-- [ ] **Step 1: Record baseline**
+- [x] **Step 1: Record baseline**
 
 ```bash
 cd apps/expo && bun run typecheck 2>&1 | tail -5; bun test 2>&1 | tail -10
@@ -34,7 +34,7 @@ Save the pass/fail counts. All later full-suite runs are compared against this.
 - Create: `apps/expo/src/passport/proofTiming.ts`
 - Test: `apps/expo/__tests__/unit/proofTiming.test.ts`
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 ```ts
 import { describe, expect, it } from 'bun:test';
@@ -123,7 +123,7 @@ describe('withTimedSigner', () => {
 });
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 ```bash
 cd apps/expo && bun test __tests__/unit/proofTiming.test.ts
@@ -131,7 +131,7 @@ cd apps/expo && bun test __tests__/unit/proofTiming.test.ts
 
 Expected: FAIL — cannot resolve `../../src/passport/proofTiming`.
 
-- [ ] **Step 3: Write the implementation**
+- [x] **Step 3: Write the implementation**
 
 ```ts
 /**
@@ -221,7 +221,7 @@ export function withTimedSigner(
 }
 ```
 
-- [ ] **Step 4: Run test to verify it passes**
+- [x] **Step 4: Run test to verify it passes**
 
 ```bash
 cd apps/expo && bun test __tests__/unit/proofTiming.test.ts
@@ -229,7 +229,7 @@ cd apps/expo && bun test __tests__/unit/proofTiming.test.ts
 
 Expected: PASS (4 tests).
 
-- [ ] **Step 5: Typecheck + commit**
+- [x] **Step 5: Typecheck + commit**
 
 ```bash
 cd apps/expo && bun run typecheck
@@ -244,7 +244,7 @@ git commit -m "feat(passport): add proof stage timing decorators"
 **Files:**
 - Modify: `apps/expo/src/passport/useShowPresentation.ts` (the `prove` callback, lines 94–145)
 
-- [ ] **Step 1: Add imports**
+- [x] **Step 1: Add imports**
 
 In `useShowPresentation.ts`, after the existing imports add:
 
@@ -256,7 +256,7 @@ import {
 } from '@/passport/proofTiming';
 ```
 
-- [ ] **Step 2: Instrument the prove body**
+- [x] **Step 2: Instrument the prove body**
 
 Replace the `void (async () => { try { … } …})()` body of `prove` with (changed lines marked):
 
@@ -315,7 +315,7 @@ Replace the `void (async () => { try { … } …})()` body of `prove` with (chan
       })();
 ```
 
-- [ ] **Step 3: Typecheck + targeted tests**
+- [x] **Step 3: Typecheck + targeted tests**
 
 ```bash
 cd apps/expo && bun run typecheck && bun test __tests__/unit/passportShowPresentation.test.ts
@@ -323,7 +323,7 @@ cd apps/expo && bun run typecheck && bun test __tests__/unit/passportShowPresent
 
 Expected: typecheck 0 errors; existing show tests unchanged/PASS (the hook itself has no unit test — decorators are tested in Task 1).
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add apps/expo/src/passport/useShowPresentation.ts
@@ -337,7 +337,7 @@ git commit -m "feat(passport): time show-path stages (witness, nitro, sign, prov
 **Files:**
 - Modify: `apps/expo/app/passport/index.tsx` (`onGenerateProof` ~line 399, `tryGenerateOpenAcV3Proof` ~line 733)
 
-- [ ] **Step 1: Add imports**
+- [x] **Step 1: Add imports**
 
 In `app/passport/index.tsx` add to the existing `@/passport/…` import block:
 
@@ -350,7 +350,7 @@ import {
 } from '@/passport/proofTiming';
 ```
 
-- [ ] **Step 2: Create the timer in `onGenerateProof` and mark witness resolution**
+- [x] **Step 2: Create the timer in `onGenerateProof` and mark witness resolution**
 
 Right after `dispatch({ type: 'setProofProgress', message: 'Initializing prover...' });` (line ~413) add:
 
@@ -378,7 +378,7 @@ Pass the timer to the generator: change the call
             )
 ```
 
-- [ ] **Step 3: Accept + use the timer in `tryGenerateOpenAcV3Proof`**
+- [x] **Step 3: Accept + use the timer in `tryGenerateOpenAcV3Proof`**
 
 Change the signature:
 
@@ -413,7 +413,7 @@ Wrap the prover (line ~765–768):
 
 The existing `[zk] OpenAC v3 proof bundle ok in {ms}ms` log (line ~780) stays — it is the prepare `total`.
 
-- [ ] **Step 4: Typecheck + commit**
+- [x] **Step 4: Typecheck + commit**
 
 ```bash
 cd apps/expo && bun run typecheck
@@ -434,7 +434,7 @@ Run the app on the test device, complete one passport prepare and one show, and 
 - Test: `apps/expo/__tests__/unit/passportOpenAcV3.test.ts`
 - Check: `apps/expo/__tests__/parity/passportProof.parity.test.ts` (update counts if it asserts the payload shape)
 
-- [ ] **Step 1: Update the unit test to the new contract (failing first)**
+- [x] **Step 1: Update the unit test to the new contract (failing first)**
 
 In `passportOpenAcV3.test.ts`, find the test(s) covering `buildPassportOpenAcV3ProofCalls` and `generatePassportOpenAcV3ProofPayload`. Update expectations:
 
@@ -443,7 +443,7 @@ In `passportOpenAcV3.test.ts`, find the test(s) covering `buildPassportOpenAcV3P
 
 Keep the witness-bundle fixtures (all three input JSONs) — the bundle shape is unchanged; only the proof run shrinks.
 
-- [ ] **Step 2: Run to verify the updated tests fail**
+- [x] **Step 2: Run to verify the updated tests fail**
 
 ```bash
 cd apps/expo && bun test __tests__/unit/passportOpenAcV3.test.ts
@@ -451,7 +451,7 @@ cd apps/expo && bun test __tests__/unit/passportOpenAcV3.test.ts
 
 Expected: FAIL on the updated assertions (still 3 proofs / `phases.show` present).
 
-- [ ] **Step 3: Implement**
+- [x] **Step 3: Implement**
 
 In `openacV3.ts`:
 
@@ -503,7 +503,7 @@ export function buildPassportOpenAcV3ProofCalls(
 
 (`findEncodedProof(proofs, 'openac_show')` call is deleted; the helper itself stays for the two remaining uses.)
 
-- [ ] **Step 4: Run unit + parity tests**
+- [x] **Step 4: Run unit + parity tests**
 
 ```bash
 cd apps/expo && bun test __tests__/unit/passportOpenAcV3.test.ts __tests__/parity/passportProof.parity.test.ts
@@ -511,7 +511,7 @@ cd apps/expo && bun test __tests__/unit/passportOpenAcV3.test.ts __tests__/parit
 
 Expected: unit PASS. If the parity test asserts 3 proofs / a `phases.show` slot, update its fixture/assertions the same way (2 proofs, prepare-only phases) and re-run to PASS.
 
-- [ ] **Step 5: Sweep for `phases.show` consumers**
+- [x] **Step 5: Sweep for `phases.show` consumers**
 
 ```bash
 grep -rn "phases\.show\|openAcShow" apps/expo/src apps/expo/app packages --include="*.ts" --include="*.tsx" | grep -v __tests__ | grep -v InputsJson
@@ -519,7 +519,7 @@ grep -rn "phases\.show\|openAcShow" apps/expo/src apps/expo/app packages --inclu
 
 Expected remaining hits: only `extractPassportShowVkSha256FromProofPayload` in `showPresentation.ts` (removed in Task 5) and witness-bundle `openAcShowInputsJson` plumbing (unchanged, still needed). Anything else: stop and re-assess before proceeding.
 
-- [ ] **Step 6: Typecheck + commit**
+- [x] **Step 6: Typecheck + commit**
 
 ```bash
 cd apps/expo && bun run typecheck
@@ -536,7 +536,7 @@ git commit -m "feat(passport): drop openac_show from enrollment proof run (show 
 - Modify: `apps/expo/app/passport/index.tsx` (persist block, line ~585)
 - Test: `apps/expo/__tests__/unit/passportShowPresentation.test.ts`
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 In `passportShowPresentation.test.ts` add (and DELETE any existing tests of `extractPassportShowVkSha256FromProofPayload` in the same file — the function is removed this task):
 
@@ -569,7 +569,7 @@ describe('computePassportShowVkSha256', () => {
 });
 ```
 
-- [ ] **Step 2: Run to verify it fails**
+- [x] **Step 2: Run to verify it fails**
 
 ```bash
 cd apps/expo && bun test __tests__/unit/passportShowPresentation.test.ts
@@ -577,7 +577,7 @@ cd apps/expo && bun test __tests__/unit/passportShowPresentation.test.ts
 
 Expected: FAIL — `computePassportShowVkSha256` is not exported.
 
-- [ ] **Step 3: Implement in `showPresentation.ts`**
+- [x] **Step 3: Implement in `showPresentation.ts`**
 
 Replace the whole `extractPassportShowVkSha256FromProofPayload` function (line 246–) with:
 
@@ -611,7 +611,7 @@ export async function computePassportShowVkSha256(
 
 (`bytesToHex`, `sha256Bytes`, `base64Decode` imports: drop `base64Decode` only if now unused — check other usages in the file first.)
 
-- [ ] **Step 4: Rewire persist in `app/passport/index.tsx`**
+- [x] **Step 4: Rewire persist in `app/passport/index.tsx`**
 
 Update imports: remove `extractPassportShowVkSha256FromProofPayload`, add `computePassportShowVkSha256` (from `@/passport/showPresentation`) and `loadPassportShowVkSelfPin` (from `@/passport/showWitnessVault`).
 
@@ -639,7 +639,7 @@ Replace the persist block (line ~582–591) with:
       }
 ```
 
-- [ ] **Step 5: Run tests + typecheck**
+- [x] **Step 5: Run tests + typecheck**
 
 ```bash
 cd apps/expo && bun test __tests__/unit/passportShowPresentation.test.ts && bun run typecheck
@@ -647,7 +647,7 @@ cd apps/expo && bun test __tests__/unit/passportShowPresentation.test.ts && bun 
 
 Expected: PASS, 0 type errors (typecheck also catches any other `extractPassportShowVkSha256FromProofPayload` import left behind — fix any it reports).
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add -A apps/expo
@@ -661,7 +661,7 @@ git commit -m "feat(passport): derive show vk self-pin via getNoirVerificationKe
 **Files:**
 - Modify: `apps/expo/app/passport/index.tsx` (`onPersist`, line ~494)
 
-- [ ] **Step 1: Wire the gate**
+- [x] **Step 1: Wire the gate**
 
 Add `requireBiometric` to the existing `@/keychain` import (it is re-exported there). At the top of `onPersist`, immediately after the completeness guard:
 
@@ -681,7 +681,7 @@ Add `requireBiometric` to the existing `@/keychain` import (it is re-exported th
     dispatch({ type: 'setLoading', value: true });
 ```
 
-- [ ] **Step 2: Typecheck + commit**
+- [x] **Step 2: Typecheck + commit**
 
 ```bash
 cd apps/expo && bun run typecheck
@@ -702,7 +702,7 @@ Device verification (with Task 11): exactly ONE prompt during enrollment (at sav
 - Modify: `apps/expo/src/passport/useShowPresentation.ts` (pass the flag)
 - Test: `apps/expo/__tests__/unit/passportShowPresentation.test.ts`
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 In the existing `generatePassportShowPresentation` test block (it already has a stub prover fixture — reuse it), add:
 
@@ -729,7 +729,7 @@ In the existing `generatePassportShowPresentation` test block (it already has a 
 
 (`happyPathArgs` = whatever fixture name the existing passing test uses; extract it to a shared const in the test file if it is currently inlined.)
 
-- [ ] **Step 2: Run to verify it fails**
+- [x] **Step 2: Run to verify it fails**
 
 ```bash
 cd apps/expo && bun test __tests__/unit/passportShowPresentation.test.ts
@@ -737,7 +737,7 @@ cd apps/expo && bun test __tests__/unit/passportShowPresentation.test.ts
 
 Expected: FAIL — `selfVerify` is not a known property (TS) / verify still called.
 
-- [ ] **Step 3: Implement**
+- [x] **Step 3: Implement**
 
 In `GeneratePassportShowPresentationArgs` add:
 
@@ -767,7 +767,7 @@ In `useShowPresentation.ts`, add to the `generatePassportShowPresentation({ … 
             selfVerify: typeof __DEV__ !== 'undefined' ? __DEV__ : true,
 ```
 
-- [ ] **Step 4: Run tests + typecheck, then commit**
+- [x] **Step 4: Run tests + typecheck, then commit**
 
 ```bash
 cd apps/expo && bun test __tests__/unit/passportShowPresentation.test.ts && bun run typecheck
@@ -786,7 +786,7 @@ git commit -m "feat(passport): dev-flag the show self-verify"
 - Modify: `apps/expo/src/credentials/store.ts` (clear on credential delete, line ~192)
 - Test: `apps/expo/__tests__/unit/passportShowPrefetch.test.ts`
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 ```ts
 import { describe, expect, it } from 'bun:test';
@@ -842,7 +842,7 @@ describe('passport show prefetch', () => {
 });
 ```
 
-- [ ] **Step 2: Run to verify it fails**
+- [x] **Step 2: Run to verify it fails**
 
 ```bash
 cd apps/expo && bun test __tests__/unit/passportShowPrefetch.test.ts
@@ -850,7 +850,7 @@ cd apps/expo && bun test __tests__/unit/passportShowPrefetch.test.ts
 
 Expected: FAIL — module does not exist.
 
-- [ ] **Step 3: Implement `showPrefetch.ts`**
+- [x] **Step 3: Implement `showPrefetch.ts`**
 
 ```ts
 /**
@@ -900,7 +900,7 @@ export function clearPassportShowPrefetch(credentialId?: string): void {
 }
 ```
 
-- [ ] **Step 4: Run to verify it passes**
+- [x] **Step 4: Run to verify it passes**
 
 ```bash
 cd apps/expo && bun test __tests__/unit/passportShowPrefetch.test.ts
@@ -908,7 +908,7 @@ cd apps/expo && bun test __tests__/unit/passportShowPrefetch.test.ts
 
 Expected: PASS (3 tests).
 
-- [ ] **Step 5: Consume in `useShowPresentation.ts`**
+- [x] **Step 5: Consume in `useShowPresentation.ts`**
 
 Add import:
 
@@ -927,7 +927,7 @@ In the instrumented `prove` body (Task 2), change the witness load line to:
 
 (Prefetched `null` — vault miss or failed decrypt — falls through to the same explicit error below it; do NOT retry the load on prefetched null, a second read of the same immutable key would return the same result.)
 
-- [ ] **Step 6: Trigger/clear in `PassportShowPresentation.tsx`**
+- [x] **Step 6: Trigger/clear in `PassportShowPresentation.tsx`**
 
 Add imports (`useEffect` from `react`, prefetch fns):
 
@@ -950,7 +950,7 @@ Inside the component, before the `usePassportShowPresentation` call:
   }, [credentialId]);
 ```
 
-- [ ] **Step 7: Clear on credential delete in `credentials/store.ts`**
+- [x] **Step 7: Clear on credential delete in `credentials/store.ts`**
 
 Next to `deletePassportShowWitness(id);` (line ~192) add:
 
@@ -964,7 +964,7 @@ with the import added to the existing `@/passport/…` imports in that file:
 import { clearPassportShowPrefetch } from '@/passport/showPrefetch';
 ```
 
-- [ ] **Step 8: Full targeted tests + typecheck + commit**
+- [x] **Step 8: Full targeted tests + typecheck + commit**
 
 ```bash
 cd apps/expo && bun test __tests__/unit/passportShowPrefetch.test.ts __tests__/unit/passportShowPresentation.test.ts && bun run typecheck
@@ -980,7 +980,7 @@ git commit -m "feat(passport): prefetch show witness + nitro modules on sheet op
 - Modify: `apps/expo/src/passport/pipeline.ts` (state line ~153, actions line ~175, reducer line ~192)
 - Test: `apps/expo/__tests__/unit/passportPipeline.test.ts`
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 In `passportPipeline.test.ts` add:
 
@@ -1017,7 +1017,7 @@ describe('proofOverlayStage', () => {
 });
 ```
 
-- [ ] **Step 2: Run to verify it fails**
+- [x] **Step 2: Run to verify it fails**
 
 ```bash
 cd apps/expo && bun test __tests__/unit/passportPipeline.test.ts
@@ -1025,7 +1025,7 @@ cd apps/expo && bun test __tests__/unit/passportPipeline.test.ts
 
 Expected: FAIL — unknown action / missing field.
 
-- [ ] **Step 3: Implement in `pipeline.ts`**
+- [x] **Step 3: Implement in `pipeline.ts`**
 
 State (after `proofProgressMessage`, line ~153):
 
@@ -1061,7 +1061,7 @@ Reducer case (after `setProofProgress`):
       return { ...state, proofOverlayStage: action.stage };
 ```
 
-- [ ] **Step 4: Run tests + typecheck + commit**
+- [x] **Step 4: Run tests + typecheck + commit**
 
 ```bash
 cd apps/expo && bun test __tests__/unit/passportPipeline.test.ts && bun run typecheck
@@ -1077,7 +1077,7 @@ git commit -m "feat(passport): add explicit proofOverlayStage to pipeline state"
 - Modify: `apps/expo/src/components/common/CryptoCompilingOverlay.tsx` (full rewrite of timing logic; visuals kept)
 - Modify: `apps/expo/app/passport/index.tsx` (overlay mount line ~658, stage dispatches in `onGenerateProof`)
 
-- [ ] **Step 1: Rewrite the overlay component**
+- [x] **Step 1: Rewrite the overlay component**
 
 Props change from `{ visible, onCompletion }` to real-milestone-driven. Replace the component's interface, phase state, and the timer `useEffect` (lines 30–106) — the render JSX below the hooks keeps its current structure with `phase` mapped as shown:
 
@@ -1167,7 +1167,7 @@ Render mapping (same JSX skeleton, renamed conditions):
 - `[ VERIFIED ]` renders when `stage === 'done'`.
 - Delete the old `Phase` type, `STATUS_TEXT` map, and every `setTimeout` for 800/3500/5000 ms.
 
-- [ ] **Step 2: Wire the screen — stage dispatches in `onGenerateProof`**
+- [x] **Step 2: Wire the screen — stage dispatches in `onGenerateProof`**
 
 In `app/passport/index.tsx` `onGenerateProof`:
 
@@ -1200,7 +1200,7 @@ In the `catch` block of `onGenerateProof` (before `reportPassportError`) and in 
 
 and in `catch` add the same `null` dispatch as its first statement.
 
-- [ ] **Step 3: Wire the mount (line ~658)**
+- [x] **Step 3: Wire the mount (line ~658)**
 
 ```tsx
       <CryptoCompilingOverlay
@@ -1215,7 +1215,7 @@ and in `catch` add the same `null` dispatch as its first statement.
 
 (The old `visible={state.isLoading && state.step === 'proof'}` condition is deleted — visibility is now owned by the explicit stage, so the overlay survives exactly as long as the real work + 1.2 s celebration.)
 
-- [ ] **Step 4: Typecheck + grep for stale props**
+- [x] **Step 4: Typecheck + grep for stale props**
 
 ```bash
 cd apps/expo && bun run typecheck
@@ -1224,7 +1224,7 @@ grep -rn "CryptoCompilingOverlay" apps/expo/src apps/expo/app --include="*.tsx" 
 
 Expected: 0 type errors; the only mount is `app/passport/index.tsx` with the new props. If another mount exists, update it the same way.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add -A apps/expo
@@ -1237,7 +1237,7 @@ git commit -m "feat(passport): drive proof overlay from real milestones, kill fa
 
 **Files:** none (verification only)
 
-- [ ] **Step 1: Full suite vs baseline**
+- [x] **Step 1: Full suite vs baseline**
 
 ```bash
 cd apps/expo && bun run typecheck && bun test 2>&1 | tail -10 && bun run lint 2>&1 | tail -5
