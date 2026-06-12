@@ -148,6 +148,8 @@ describe('passport OpenAC v3.1 / passport-noir 0.3.0 contract', () => {
       'passport.srs.bin',
     ]);
 
+    // `openac_show` is proven FRESH per presentation (show-presentation
+    // spec) — the enrollment run only proves the two prepare circuits.
     const calls = buildPassportOpenAcV3ProofCalls(plan, {
       dscChainInputsJson: '{"dsc":true}',
       passportAdapterInputsJson: '{"passport":true}',
@@ -156,7 +158,6 @@ describe('passport OpenAC v3.1 / passport-noir 0.3.0 contract', () => {
     expect(calls.map((c) => [c.circuit.name, c.inputsJson])).toEqual([
       ['dsc_chain', '{"dsc":true}'],
       ['passport_adapter', '{"passport":true}'],
-      ['openac_show', '{"show":true}'],
     ]);
   });
 
@@ -185,14 +186,13 @@ describe('passport OpenAC v3.1 / passport-noir 0.3.0 contract', () => {
       },
     });
 
-    // Every circuit is proved against the shared merged-SRS alias 'passport'.
+    // Both prepare circuits are proved against the shared merged-SRS alias
+    // 'passport'; openac_show never runs at enrollment.
     expect(calls).toEqual([
       'generate:dsc_chain:passport:{"dsc":true}',
       'verify:proof:dsc_chain:{"dsc":true}:vk:dsc_chain',
       'generate:passport_adapter:passport:{"passport":true}',
       'verify:proof:passport_adapter:{"passport":true}:vk:passport_adapter',
-      'generate:openac_show:passport:{"show":true}',
-      'verify:proof:openac_show:{"show":true}:vk:openac_show',
     ]);
 
     const parsed = JSON.parse(payload.proofPayload) as {
@@ -204,9 +204,6 @@ describe('passport OpenAC v3.1 / passport-noir 0.3.0 contract', () => {
           dscChain: { circuit: string };
           passportAdapter: { circuit: string };
         };
-        show: {
-          openAcShow: { circuit: string };
-        };
       };
     };
     expect(parsed.proofType).toBe('passport_v3');
@@ -214,17 +211,15 @@ describe('passport OpenAC v3.1 / passport-noir 0.3.0 contract', () => {
     expect(parsed.proofs.map((proof) => proof.circuit)).toEqual([
       'dsc_chain',
       'passport_adapter',
-      'openac_show',
     ]);
     expect(parsed.proofs.map((proof) => proof.stage)).toEqual([
       'prepare',
       'prepare',
-      'show',
     ]);
     expect(parsed.proofs.map((proof) => proof.circuit)).not.toContain('disclosure');
     expect(parsed.phases.prepare.dscChain.circuit).toBe('dsc_chain');
     expect(parsed.phases.prepare.passportAdapter.circuit).toBe('passport_adapter');
-    expect(parsed.phases.show.openAcShow.circuit).toBe('openac_show');
+    expect('show' in parsed.phases).toBe(false);
   });
 
   it('fails the v3 flow when any generated proof does not verify', async () => {

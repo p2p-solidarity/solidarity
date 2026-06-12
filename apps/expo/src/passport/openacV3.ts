@@ -435,10 +435,14 @@ export function buildPassportOpenAcV3ProofCalls(
     openac_show: witnesses.openAcShowInputsJson,
   } satisfies Record<PassportOpenAcV3CircuitName, string>;
 
-  return plan.circuits.map((circuit) => ({
-    circuit,
-    inputsJson: witnessByCircuit[circuit.name],
-  }));
+  // `openac_show` is proven FRESH per presentation (show-presentation spec);
+  // proving it at enrollment was dead weight — the show flow never replays it.
+  return plan.circuits
+    .filter((circuit) => circuit.name !== 'openac_show')
+    .map((circuit) => ({
+      circuit,
+      inputsJson: witnessByCircuit[circuit.name],
+    }));
 }
 
 export function parsePassportOpenAcV3WitnessBundleJson(
@@ -677,7 +681,6 @@ export async function generatePassportOpenAcV3ProofPayload(
 
   const dscChain = findEncodedProof(proofs, 'dsc_chain');
   const passportAdapter = findEncodedProof(proofs, 'passport_adapter');
-  const openAcShow = findEncodedProof(proofs, 'openac_show');
 
   return {
     proofPayload: JSON.stringify({
@@ -688,9 +691,6 @@ export async function generatePassportOpenAcV3ProofPayload(
         prepare: {
           dscChain,
           passportAdapter,
-        },
-        show: {
-          openAcShow,
         },
       },
     }),
