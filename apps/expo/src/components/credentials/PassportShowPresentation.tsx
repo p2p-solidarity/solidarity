@@ -7,7 +7,7 @@
  * progress message, ready shows the actual proof QR, error shows the real
  * failure with a retry — never a plausible placeholder.
  */
-import type { ReactNode } from 'react';
+import { useEffect, type ReactNode } from 'react';
 import { View } from 'react-native';
 
 import { PresentationProofQr } from '@/components/credentials/PresentationProofQr';
@@ -16,6 +16,10 @@ import { ThemedText } from '@/components/themed/ThemedText';
 import { Colors } from '@/constants/Colors';
 import { useTranslation } from '@/i18n';
 import type { ProvableClaimEntity } from '@/identity/entities';
+import {
+  clearPassportShowPrefetch,
+  prefetchPassportShowPresentation,
+} from '@/passport/showPrefetch';
 import { usePassportShowPresentation } from '@/passport/useShowPresentation';
 import { QrScanner } from '@/scan/QrScanner';
 
@@ -33,6 +37,14 @@ export function PassportShowPresentation({
   selectedClaims,
 }: PassportShowPresentationProps): ReactNode {
   const { t } = useTranslation();
+  // Start the witness decrypt + nitro lazy-load while the user is still
+  // looking at the sheet — by prove time both are warm (spec §3).
+  useEffect(() => {
+    prefetchPassportShowPresentation(credentialId);
+    return () => {
+      clearPassportShowPrefetch(credentialId);
+    };
+  }, [credentialId]);
   const flow = usePassportShowPresentation({
     credentialId,
     holderDid,

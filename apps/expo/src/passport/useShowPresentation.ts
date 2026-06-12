@@ -37,6 +37,7 @@ import {
   type PassportShowFreshness,
   type PassportShowToday,
 } from '@/passport/showPresentation';
+import { consumePrefetchedPassportShowWitness } from '@/passport/showPrefetch';
 import { loadPassportShowWitness } from '@/passport/showWitnessVault';
 import {
   filterPassportShowPresentationClaims,
@@ -104,8 +105,9 @@ export function usePassportShowPresentation(
       void (async () => {
         const timer = createProofStageTimer('show');
         try {
-          const witnessBundleJson = await loadPassportShowWitness(
-            args.credentialId
+          const witnessBundleJson = await (
+            consumePrefetchedPassportShowWitness(args.credentialId) ??
+            loadPassportShowWitness(args.credentialId)
           );
           timer.mark('witness-load');
           if (witnessBundleJson === null) {

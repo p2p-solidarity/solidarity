@@ -32,6 +32,7 @@
 import { create } from 'zustand';
 
 import { fetchAndCacheIssuer } from '@/credentials/issuerStore';
+import { clearPassportShowPrefetch } from '@/passport/showPrefetch';
 import { deletePassportShowWitness } from '@/passport/showWitnessVault';
 import { decryptJson, encryptJson } from '@/storage/encryptionManager';
 import { ManifestStorage } from '@/storage/manifestStorage';
@@ -190,6 +191,7 @@ export const useCredentialStore = create<CredentialStoreState>((set, get) => ({
     // opening) in the vault keyed by the same id — drop it with the
     // credential. No-op for every other credential type.
     deletePassportShowWitness(id);
+    clearPassportShowPrefetch(id);
     set((s) => {
       const nextManifest = s.manifest.filter((m) => m.id !== id);
       ManifestStorage.set(CREDENTIALS_MANIFEST_SCOPE, nextManifest);
