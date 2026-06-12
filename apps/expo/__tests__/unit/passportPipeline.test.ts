@@ -8,7 +8,9 @@ import { describe, expect, it } from 'bun:test';
 import type { PassportMRZ } from '@solidarity/nitro-nfc-passport';
 
 import {
+  initialPassportPipelineState,
   mrzCheckDigit,
+  passportPipelineReducer,
   runPassportPipeline,
   runPassportPipelineSafe,
   selectNfcReadStrategy,
@@ -316,5 +318,31 @@ describe('selectNfcReadStrategy', () => {
       simulateNfc: false,
     });
     expect(s.kind).toBe('real');
+  });
+});
+
+describe('proofOverlayStage', () => {
+  it('starts null and follows explicit stage transitions', () => {
+    expect(initialPassportPipelineState.proofOverlayStage).toBeNull();
+    const init = passportPipelineReducer(initialPassportPipelineState, {
+      type: 'setProofOverlayStage',
+      stage: 'init',
+    });
+    expect(init.proofOverlayStage).toBe('init');
+    const proving = passportPipelineReducer(init, {
+      type: 'setProofOverlayStage',
+      stage: 'proving',
+    });
+    expect(proving.proofOverlayStage).toBe('proving');
+    const done = passportPipelineReducer(proving, {
+      type: 'setProofOverlayStage',
+      stage: 'done',
+    });
+    expect(done.proofOverlayStage).toBe('done');
+    const cleared = passportPipelineReducer(done, {
+      type: 'setProofOverlayStage',
+      stage: null,
+    });
+    expect(cleared.proofOverlayStage).toBeNull();
   });
 });

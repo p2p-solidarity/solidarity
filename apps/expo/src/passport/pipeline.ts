@@ -151,6 +151,13 @@ export interface PassportPipelineState {
     | 'done'
     | 'error';
   readonly proofProgressMessage: string;
+  /**
+   * Explicit overlay stage for proof generation — real milestones only
+   * (CLAUDE.md rule 8): 'init' when the prover is starting, 'proving' on
+   * the first real generate event, 'done' on actual completion, null when
+   * no overlay should show.
+   */
+  readonly proofOverlayStage: 'init' | 'proving' | 'done' | null;
   readonly errorMessage: string | null;
 }
 
@@ -169,6 +176,7 @@ export const initialPassportPipelineState: PassportPipelineState = {
   nfcProgressPercent: 0,
   nfcProgressPhase: 'idle',
   proofProgressMessage: '',
+  proofOverlayStage: null,
   errorMessage: null,
 };
 
@@ -185,6 +193,10 @@ export type PassportPipelineAction =
       readonly message: string;
     }
   | { readonly type: 'setProofProgress'; readonly message: string }
+  | {
+      readonly type: 'setProofOverlayStage';
+      readonly stage: PassportPipelineState['proofOverlayStage'];
+    }
   | { readonly type: 'setChip'; readonly chip: PassportChipSnapshot }
   | { readonly type: 'setProof'; readonly proof: PassportProofResult }
   | { readonly type: 'setError'; readonly message: string | null };
@@ -220,6 +232,8 @@ export function passportPipelineReducer(
       };
     case 'setProofProgress':
       return { ...state, proofProgressMessage: action.message };
+    case 'setProofOverlayStage':
+      return { ...state, proofOverlayStage: action.stage };
     case 'setChip':
       return { ...state, chip: action.chip, step: 'proof' };
     case 'setProof':
