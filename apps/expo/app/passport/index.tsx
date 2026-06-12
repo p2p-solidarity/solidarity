@@ -87,10 +87,11 @@ import {
 } from '@/passport/proofTiming';
 import {
   PASSPORT_SHOW_LINK_SCOPE,
-  extractPassportShowVkSha256FromProofPayload,
+  computePassportShowVkSha256,
 } from '@/passport/showPresentation';
 import { buildPassportProvableClaims } from '@/passport/presentationClaims';
 import {
+  loadPassportShowVkSelfPin,
   savePassportShowVkSelfPin,
   savePassportShowWitness,
 } from '@/passport/showWitnessVault';
@@ -591,11 +592,20 @@ export default function PassportSetup() {
       if (proof.proofType === PASSPORT_V3_PROOF_TYPE && chip.openAcV3WitnessBundleJson) {
         try {
           await savePassportShowWitness(cardId, chip.openAcV3WitnessBundleJson);
-          const vkSelfPin = extractPassportShowVkSha256FromProofPayload(proof.proofPayload);
-          if (vkSelfPin) savePassportShowVkSelfPin(vkSelfPin);
         } catch (err) {
           const message = err instanceof Error ? err.message : String(err);
           console.warn(`[zk] show-witness vault save failed — ${message}`);
+        }
+        // Self-pin derivation pays a cold circuit setup pre-warm-prover, so
+        // it must NOT block the save UX. Fire-and-forget: the pin is only
+        // needed before this device first VERIFIES someone else's show
+        // presentation, and the verifier fails closed without it.
+        if (nitro.zk && loadPassportShowVkSelfPin() === null) {
+          const zkForPin = nitro.zk;
+          void computePassportShowVkSha256(zkForPin).then((vkSelfPin) => {
+            if (vkSelfPin) savePassportShowVkSelfPin(vkSelfPin);
+            else console.warn('[zk] show vk self-pin derivation failed');
+          });
         }
       }
 

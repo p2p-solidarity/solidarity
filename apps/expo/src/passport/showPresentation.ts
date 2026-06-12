@@ -14,7 +14,7 @@
  * the prover and device signer are injected with the same interfaces the
  * enrollment path uses (`PassportOpenAcV3Prover` / `...DeviceSigner`).
  */
-import { base64Decode, base64Encode, bytesToHex, sha256Bytes } from '@solidarity/shared';
+import { base64Encode, bytesToHex, sha256Bytes } from '@solidarity/shared';
 
 import {
   PASSPORT_OPENAC_V3_MERGED_SRS_ALIAS,
@@ -25,7 +25,6 @@ import {
 } from '@/passport/openacV3';
 import {
   buildPassportShowEnvelopeJson,
-  isNonEmptyString,
   isStringArray,
   parseJsonRecord,
   type PassportShowFreshness,
@@ -238,31 +237,29 @@ function parseShowInputsMap(json: string): Record<string, string[]> | null {
 // ---------------------------------------------------------------------------
 
 /**
- * Pull the `openac_show` vk out of an enrollment `passport_v3` proof payload
- * and hash it (sha256 hex). Recorded at enrollment as the verifier self-pin:
- * same circuit + SRS ⇒ same vk, so this device can trust-on-first-use other
- * holders' presentations even before a build-time pin ships.
+ * Verifier self-pin source. Same circuit + SRS ⇒ same vk, so deriving the
+ * vk locally pins the same value the old enrollment payload carried —
+ * without paying a full openac_show prove+verify at enrollment.
  */
-export function extractPassportShowVkSha256FromProofPayload(
-  proofPayload: string
-): string | null {
-  const record = parseJsonRecord(proofPayload);
-  if (record === null) return null;
-  const proofs = record['proofs'];
-  if (!Array.isArray(proofs)) return null;
-  for (const entry of proofs) {
-    if (typeof entry !== 'object' || entry === null) continue;
-    const candidate = entry as Record<string, unknown>;
-    if (candidate['circuit'] !== 'openac_show') continue;
-    const vkB64 = candidate['vkB64'];
-    if (!isNonEmptyString(vkB64)) return null;
-    try {
-      return bytesToHex(sha256Bytes(base64Decode(vkB64)));
-    } catch {
-      return null;
-    }
+export interface PassportShowVkSource {
+  getNoirVerificationKey(
+    circuitPath: string,
+    srsPath: string | undefined
+  ): Promise<ArrayBuffer>;
+}
+
+export async function computePassportShowVkSha256(
+  zk: PassportShowVkSource
+): Promise<string | null> {
+  try {
+    const vk = await zk.getNoirVerificationKey(
+      'openac_show',
+      PASSPORT_OPENAC_V3_MERGED_SRS_ALIAS
+    );
+    return bytesToHex(sha256Bytes(new Uint8Array(vk)));
+  } catch {
+    return null;
   }
-  return null;
 }
 
 // ---------------------------------------------------------------------------

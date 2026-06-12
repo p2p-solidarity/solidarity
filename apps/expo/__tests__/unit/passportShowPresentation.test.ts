@@ -9,9 +9,9 @@ import {
   acceptablePassportShowBucketNonceHashes,
   buildPassportShowChallengeJson,
   buildPassportShowEnvelopeJson,
+  computePassportShowVkSha256,
   decodePassportClaimsField,
   derivePassportShowBucketNonceHash,
-  extractPassportShowVkSha256FromProofPayload,
   generatePassportShowPresentation,
   isPassportAgeAtLeast,
   parsePassportShowChallengeJson,
@@ -345,24 +345,29 @@ describe('passport show presentation — envelope', () => {
 });
 
 describe('passport show presentation — enrollment vk self-pin', () => {
-  it('extracts and hashes the openac_show vk from a passport_v3 payload', () => {
-    const vk = Uint8Array.from([1, 2, 3, 4]);
-    const payload = JSON.stringify({
-      proofType: 'passport_v3',
-      proofs: [
-        { circuit: 'dsc_chain', vkB64: 'AAAA' },
-        { circuit: 'openac_show', vkB64: base64Encode(vk) },
-      ],
+  it('hashes the vk produced by getNoirVerificationKey for openac_show + merged SRS', async () => {
+    const vkBytes = Uint8Array.from([1, 2, 3, 4]);
+    const calls: Array<readonly [string, string | undefined]> = [];
+    const pin = await computePassportShowVkSha256({
+      getNoirVerificationKey: async (circuitPath, srsPath) => {
+        calls.push([circuitPath, srsPath]);
+        return vkBytes.slice().buffer;
+      },
     });
-    const expected = '9f64a747e1b97f131fabb6b447296c9b6f0201e79fb3c5356e6c77e89b6a806a';
-    expect(extractPassportShowVkSha256FromProofPayload(payload)).toBe(expected);
+    expect(calls).toEqual([['openac_show', 'passport']]);
+    // sha256([1,2,3,4]) — precomputed, NOT derived via the implementation.
+    expect(pin).toBe(
+      '9f64a747e1b97f131fabb6b447296c9b6f0201e79fb3c5356e6c77e89b6a806a'
+    );
   });
 
-  it('returns null for payloads without an openac_show proof', () => {
-    expect(extractPassportShowVkSha256FromProofPayload('not json')).toBe(null);
-    expect(
-      extractPassportShowVkSha256FromProofPayload(JSON.stringify({ proofs: [] }))
-    ).toBe(null);
+  it('returns null when the native call fails (never throws on the persist path)', async () => {
+    const pin = await computePassportShowVkSha256({
+      getNoirVerificationKey: async () => {
+        throw new Error('not linked');
+      },
+    });
+    expect(pin).toBe(null);
   });
 });
 
