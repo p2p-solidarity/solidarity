@@ -15,6 +15,7 @@ public protocol HybridSpruceDidSpec_protocol: HybridObject {
   // Methods
   func generateKey(alias: String, keyType: String, requireBiometric: Bool) throws -> Promise<String>
   func hasKey(alias: String) throws -> Bool
+  func keyAuthMode(alias: String) throws -> Promise<String>
   func deleteKey(alias: String) throws -> Promise<Bool>
   func getPublicKeyJwk(alias: String) throws -> Promise<String>
   func didKeyFromAlias(alias: String) throws -> Promise<String>

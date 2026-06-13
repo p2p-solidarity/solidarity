@@ -94,6 +94,14 @@ namespace margelo::nitro::solidarity::sprucedid {
       auto __value = std::move(__result.value());
       return __value;
     }
+    inline std::shared_ptr<Promise<std::string>> keyAuthMode(const std::string& alias) override {
+      auto __result = _swiftPart.keyAuthMode(alias);
+      if (__result.hasError()) [[unlikely]] {
+        std::rethrow_exception(__result.error());
+      }
+      auto __value = std::move(__result.value());
+      return __value;
+    }
     inline std::shared_ptr<Promise<bool>> deleteKey(const std::string& alias) override {
       auto __result = _swiftPart.deleteKey(alias);
       if (__result.hasError()) [[unlikely]] {

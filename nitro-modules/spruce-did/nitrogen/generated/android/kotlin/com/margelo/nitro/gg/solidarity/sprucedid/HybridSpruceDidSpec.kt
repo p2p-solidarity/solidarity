@@ -40,6 +40,10 @@ abstract class HybridSpruceDidSpec: HybridObject() {
   
   @DoNotStrip
   @Keep
+  abstract fun keyAuthMode(alias: String): Promise<String>
+  
+  @DoNotStrip
+  @Keep
   abstract fun deleteKey(alias: String): Promise<Boolean>
   
   @DoNotStrip

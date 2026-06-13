@@ -81,6 +81,24 @@ export interface SpruceDid
   /** Synchronous existence check — does not trigger biometric prompt. */
   hasKey(alias: string): boolean;
 
+  /**
+   * How signing with this alias is biometric-gated.
+   *
+   *   'native-acl' — the OS prompts INSIDE the keychain/keystore signing
+   *                  operation itself (iOS legacy Secure Enclave key with
+   *                  `.userPresence`; Android auth-bound key). The JS layer
+   *                  must NOT stack its own prompt on top.
+   *   'js-gated'   — no native gate on the key; the JS layer prompts
+   *                  (`requireBiometric('sign')`).
+   *
+   * iOS detects via a one-time probe signature under an
+   * `interactionNotAllowed` LAContext (result cached per alias per
+   * process); Android reads `KeyInfo.isUserAuthenticationRequired`.
+   * Unknown/edge cases resolve to 'js-gated' — fail-safe: the worst case
+   * is the legacy double prompt, never a missing gate.
+   */
+  keyAuthMode(alias: string): Promise<string>;
+
   /** Tear down the key from the secure store. Returns true on success. */
   deleteKey(alias: string): Promise<boolean>;
 

@@ -261,6 +261,26 @@ class HybridSpruceDid : HybridSpruceDidSpec() {
     return runCatching { keyStore.containsAlias(keystoreAlias(alias)) }.getOrDefault(false)
   }
 
+  /**
+   * 'native-acl' when the keystore key was generated with
+   * setUserAuthenticationRequired(true) — Android then requires its own
+   * authenticated session for signing, so the JS layer must not stack a
+   * second prompt. KeyInfo is authoritative here (no probe needed).
+   * Any failure resolves 'js-gated' — fail-safe: worst case is a double
+   * prompt, never a missing gate.
+   */
+  override fun keyAuthMode(alias: String): Promise<String> = Promise.async {
+    runCatching {
+      val entry = keyStore.getEntry(keystoreAlias(alias), null)
+        as? KeyStore.PrivateKeyEntry ?: return@runCatching "js-gated"
+      val factory = java.security.KeyFactory.getInstance(
+        entry.privateKey.algorithm, ANDROID_KEYSTORE)
+      val info = factory.getKeySpec(
+        entry.privateKey, android.security.keystore.KeyInfo::class.java)
+      if (info.isUserAuthenticationRequired) "native-acl" else "js-gated"
+    }.getOrDefault("js-gated")
+  }
+
   override fun deleteKey(alias: String): Promise<Boolean> = Promise.async {
     val ok = runCatching {
       keyStore.deleteEntry(keystoreAlias(alias))

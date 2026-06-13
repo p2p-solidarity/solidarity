@@ -16,6 +16,7 @@ namespace margelo::nitro::solidarity::sprucedid {
     registerHybrids(this, [](Prototype& prototype) {
       prototype.registerHybridMethod("generateKey", &HybridSpruceDidSpec::generateKey);
       prototype.registerHybridMethod("hasKey", &HybridSpruceDidSpec::hasKey);
+      prototype.registerHybridMethod("keyAuthMode", &HybridSpruceDidSpec::keyAuthMode);
       prototype.registerHybridMethod("deleteKey", &HybridSpruceDidSpec::deleteKey);
       prototype.registerHybridMethod("getPublicKeyJwk", &HybridSpruceDidSpec::getPublicKeyJwk);
       prototype.registerHybridMethod("didKeyFromAlias", &HybridSpruceDidSpec::didKeyFromAlias);

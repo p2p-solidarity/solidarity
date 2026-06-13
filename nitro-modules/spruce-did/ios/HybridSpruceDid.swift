@@ -62,6 +62,21 @@ final class HybridSpruceDid: HybridSpruceDidSpec {
     keyTagPrefix: "gg.solidarity.sprucedid."
   )
 
+  /// Probe results per alias — stable for the process lifetime (a key's
+  /// ACL cannot change without regenerating the key).
+  private var keyAuthModeCache: [String: String] = [:]
+
+  /// Shared signing context: one Face ID evaluation is reused for later
+  /// native-ACL signs within the window, mirroring the JS grace bucket
+  /// (biometric.ts GRACE_MS). Attached via kSecUseAuthenticationContext in
+  /// the sign-path key fetches.
+  private let signContext: LAContext = {
+    let ctx = LAContext()
+    ctx.touchIDAuthenticationAllowableReuseDuration = min(
+      300, LATouchIDAuthenticationMaximumAllowableReuseDuration)
+    return ctx
+  }()
+
   // MARK: Helpers
 
   @inline(__always)
@@ -84,6 +99,58 @@ final class HybridSpruceDid: HybridSpruceDidSpec {
       kind: kind, alias: alias, keyType: keyType,
       hardwareBacked: hardwareBacked, message: message, errorCode: errorCode
     )
+  }
+
+  // MARK: - Sign-gate mode
+
+  func keyAuthMode(alias: String) throws -> Promise<String> {
+    return Promise.async {
+      if let cached = self.withState({ self.keyAuthModeCache[alias] }) {
+        return cached
+      }
+      let mode = self.probeKeyAuthMode(alias: alias)
+      self.withState { self.keyAuthModeCache[alias] = mode }
+      return mode
+    }
+  }
+
+  /// Probe: attempt a signature over 32 random bytes under an
+  /// `interactionNotAllowed` context. A key whose ACL demands user
+  /// presence fails with an interaction-required error → 'native-acl'.
+  /// A silent success (probe signature discarded; the digest is random,
+  /// so it attests nothing) or any other failure → 'js-gated' —
+  /// fail-safe: the worst case is the legacy double prompt, never a
+  /// missing gate.
+  private func probeKeyAuthMode(alias: String) -> String {
+    let probeContext = LAContext()
+    probeContext.interactionNotAllowed = true
+    guard
+      let priv = try? store.fetchECPrivateKey(alias: alias, context: probeContext)
+    else {
+      return "js-gated"
+    }
+    var digestBytes = [UInt8](repeating: 0, count: 32)
+    guard SecRandomCopyBytes(kSecRandomDefault, 32, &digestBytes) == errSecSuccess else {
+      return "js-gated"
+    }
+    var error: Unmanaged<CFError>?
+    let signature = SecKeyCreateSignature(
+      priv, .ecdsaSignatureDigestX962SHA256,
+      Data(digestBytes) as CFData, &error
+    )
+    if signature != nil { return "js-gated" }
+    guard let cfError = error?.takeRetainedValue() else { return "js-gated" }
+    let nsError = cfError as Error as NSError
+    let interactionNotAllowedCodes = [
+      Int(errSecInteractionNotAllowed),
+      LAError.notInteractive.rawValue,
+    ]
+    if interactionNotAllowedCodes.contains(nsError.code)
+      || nsError.localizedDescription.lowercased().contains("interaction")
+    {
+      return "native-acl"
+    }
+    return "js-gated"
   }
 
   // MARK: - Key generation
@@ -201,7 +268,7 @@ final class HybridSpruceDid: HybridSpruceDidSpec {
       // legacy app's Swift signer which only ever produced ES256 JWS.
       // Ed25519 (EdDSA) signing is gated until the Spruce SDK side is
       // confirmed to accept arbitrary CryptoKit-signed payloads.
-      let priv = try self.store.fetchECPrivateKey(alias: alias)
+      let priv = try self.store.fetchECPrivateKey(alias: alias, context: self.signContext)
       var error: Unmanaged<CFError>?
       // The legacy code uses `.ecdsaSignatureMessageX962SHA256` — it
       // emits a DER-encoded signature which we then have to convert to raw
@@ -235,7 +302,7 @@ final class HybridSpruceDid: HybridSpruceDidSpec {
         "signRawP256 expects a 32-byte SHA-256 digest, got \(bytes.count)")
     }
     return Promise.async {
-      let priv = try self.store.fetchECPrivateKey(alias: alias)
+      let priv = try self.store.fetchECPrivateKey(alias: alias, context: self.signContext)
       let algorithm = SecKeyAlgorithm.ecdsaSignatureDigestX962SHA256
       guard SecKeyIsAlgorithmSupported(priv, .sign, algorithm) else {
         throw SpruceDidError.signFailed("P-256 digest signing is not supported for alias=\(alias)")

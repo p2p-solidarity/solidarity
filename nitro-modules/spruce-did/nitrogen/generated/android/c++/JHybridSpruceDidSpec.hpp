@@ -56,6 +56,7 @@ namespace margelo::nitro::solidarity::sprucedid {
     // Methods
     std::shared_ptr<Promise<std::string>> generateKey(const std::string& alias, const std::string& keyType, bool requireBiometric) override;
     bool hasKey(const std::string& alias) override;
+    std::shared_ptr<Promise<std::string>> keyAuthMode(const std::string& alias) override;
     std::shared_ptr<Promise<bool>> deleteKey(const std::string& alias) override;
     std::shared_ptr<Promise<std::string>> getPublicKeyJwk(const std::string& alias) override;
     std::shared_ptr<Promise<std::string>> didKeyFromAlias(const std::string& alias) override;

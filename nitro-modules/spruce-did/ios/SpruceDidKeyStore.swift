@@ -11,6 +11,7 @@
 
 import CryptoKit
 import Foundation
+import LocalAuthentication
 import Security
 
 internal struct SpruceDidKeyStore {
@@ -213,7 +214,17 @@ internal struct SpruceDidKeyStore {
   }
 
   func fetchECPrivateKey(alias: String) throws -> SecKey {
-    let query: [String: Any] = [
+    try fetchECPrivateKey(alias: alias, context: nil)
+  }
+
+  /// Context-aware variant: `kSecUseAuthenticationContext` binds the key's
+  /// later `SecKeyCreateSignature` evaluation to the supplied LAContext —
+  /// a context with `touchIDAuthenticationAllowableReuseDuration` set lets
+  /// repeated ACL-gated signs within the window skip re-prompting, and a
+  /// context with `interactionNotAllowed = true` turns "would prompt" into
+  /// a detectable error (the keyAuthMode probe).
+  func fetchECPrivateKey(alias: String, context: LAContext?) throws -> SecKey {
+    var query: [String: Any] = [
       kSecClass as String: kSecClassKey,
       kSecAttrApplicationTag as String: keyTag(for: alias),
       kSecAttrKeyClass as String: kSecAttrKeyClassPrivate,
@@ -224,6 +235,9 @@ internal struct SpruceDidKeyStore {
       // are found on a second device.
       kSecAttrSynchronizable as String: kSecAttrSynchronizableAny,
     ]
+    if let context {
+      query[kSecUseAuthenticationContext as String] = context
+    }
     var item: CFTypeRef?
     let status = SecItemCopyMatching(query as CFDictionary, &item)
     guard status == errSecSuccess, let candidate = item,
