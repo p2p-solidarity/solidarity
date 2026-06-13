@@ -67,6 +67,17 @@ class InMemorySpruceDidDriver implements SpruceDid {
   >();
   private readonly listeners = new Set<(e: SpruceDidEvent) => void>();
 
+  /**
+   * Settable per test: 'native-acl' simulates a legacy SE key whose
+   * keychain ACL prompts inside the native sign (the JS gate must step
+   * aside); 'js-gated' is the syncable-key default.
+   */
+  keyAuthModeResult: 'native-acl' | 'js-gated' = 'js-gated';
+
+  keyAuthMode(_alias: string): Promise<string> {
+    return Promise.resolve(this.keyAuthModeResult);
+  }
+
   async generateKey(
     alias: string,
     keyType: string,
