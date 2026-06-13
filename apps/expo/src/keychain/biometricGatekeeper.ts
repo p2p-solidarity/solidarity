@@ -27,10 +27,22 @@
  */
 import * as LocalAuthentication from 'expo-local-authentication';
 
+import { armBiometricGrace, hasBiometricGrace } from './biometric';
 import {
   getSensitivePolicyFor,
   type SensitiveAction,
 } from './sensitiveActionPolicy';
+
+/**
+ * Destructive / recovery-secret actions never ride the shared grace bucket
+ * (aggressive policy, 2026-06-13): they re-prompt every time and their
+ * success does not open the family window.
+ */
+const ALWAYS_PROMPT_ACTIONS: ReadonlySet<SensitiveAction> = new Set([
+  'rotateMasterKey',
+  'revealRecoveryBundle',
+  'deleteZKIdentity',
+]);
 
 export type BiometricSuccessMethod = 'biometric' | 'passcode';
 
@@ -93,9 +105,16 @@ export async function requireSensitiveAction(
 
   // Short-circuit: user disabled the gate for this action. We surface a
   // `passcode` method label so audit logs distinguish this from an actual
-  // biometric pass.
+  // biometric pass. Does NOT arm the grace bucket — no auth happened.
   if (!policy.enabled) {
     return { success: true, method: 'passcode' };
+  }
+
+  // Shared grace bucket: a recent successful gate (this module or
+  // biometric.ts) covers the whole non-destructive family — one prompt per
+  // user session. Destructive actions always reach the OS sheet.
+  if (!ALWAYS_PROMPT_ACTIONS.has(action) && hasBiometricGrace()) {
+    return { success: true, method: 'biometric' };
   }
 
   const capability = await probeBiometricCapability();
@@ -108,6 +127,10 @@ export async function requireSensitiveAction(
   const outcome = await prompt(reason, policy.mode === 'biometricOnly');
   if (!outcome.success) {
     return { success: false, reason: classifyError(outcome.error) };
+  }
+
+  if (!ALWAYS_PROMPT_ACTIONS.has(action)) {
+    armBiometricGrace();
   }
 
   // expo-local-authentication doesn't tell us which factor satisfied the

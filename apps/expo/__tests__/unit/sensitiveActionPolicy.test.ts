@@ -122,8 +122,15 @@ function readLocale(mod: LocaleModule): Record<string, string> {
   return withDefault.default ?? (mod as Record<string, string>);
 }
 
+interface BioMod {
+  readonly resetBiometricGrace: () => void;
+  readonly armBiometricGrace: () => void;
+  readonly hasBiometricGrace: () => boolean;
+}
+
 let policyMod: PolicyMod;
 let gatekeeper: GatekeeperMod;
+let bio: BioMod;
 let enLocale: LocaleModule;
 let zhHantLocale: LocaleModule;
 
@@ -132,6 +139,7 @@ beforeAll(async () => {
   await mock.module('expo-local-authentication', () => localAuthMock);
   policyMod = (await import('../../src/keychain/sensitiveActionPolicy')) as unknown as PolicyMod;
   gatekeeper = (await import('../../src/keychain/biometricGatekeeper')) as unknown as GatekeeperMod;
+  bio = (await import('../../src/keychain/biometric')) as unknown as BioMod;
   enLocale = (await import('../../src/i18n/locales/en.json')) as unknown as LocaleModule;
   zhHantLocale = (await import('../../src/i18n/locales/zh-Hant.json')) as unknown as LocaleModule;
 });
@@ -142,6 +150,7 @@ beforeEach(() => {
   nextAuthResult = { success: true };
   hasHwResult = true;
   isEnrolledResult = true;
+  bio.resetBiometricGrace();
 });
 
 afterEach(() => {
@@ -420,5 +429,61 @@ describe('useSensitivePolicy: atomic-slice stability', () => {
     policyMod.useSensitiveActionPolicy.getState().togglePolicy('exportGraph');
     const after = policyMod.useSensitiveActionPolicy.getState().policy;
     expect(Object.is(after, before)).toBe(false);
+  });
+});
+
+// ── Shared grace bucket: gatekeeper rides biometric.ts's window ────────────
+
+describe('requireSensitiveAction: shared grace bucket', () => {
+  it('an armed bucket silences graced actions (presentProof) without prompting', async () => {
+    bio.armBiometricGrace();
+    const r = await gatekeeper.requireSensitiveAction('presentProof', 'present');
+    expect(r.success).toBe(true);
+    if (r.success) expect(r.method).toBe('biometric');
+    expect(authCalls.length).toBe(0);
+  });
+
+  it('a cold presentProof success arms the bucket for later sign-family calls', async () => {
+    expect(bio.hasBiometricGrace()).toBe(false);
+    const r = await gatekeeper.requireSensitiveAction('presentProof', 'present');
+    expect(r.success).toBe(true);
+    expect(authCalls.length).toBe(1);
+    expect(bio.hasBiometricGrace()).toBe(true);
+  });
+
+  it('destructive actions prompt even inside an armed window and do NOT arm', async () => {
+    for (const action of ['rotateMasterKey', 'revealRecoveryBundle', 'deleteZKIdentity']) {
+      bio.resetBiometricGrace();
+      bio.armBiometricGrace();
+      authCalls.length = 0;
+      const r = await gatekeeper.requireSensitiveAction(action, `do ${action}`);
+      expect(r.success).toBe(true);
+      expect(authCalls.length).toBe(1);
+    }
+    bio.resetBiometricGrace();
+    await gatekeeper.requireSensitiveAction('rotateMasterKey', 'rotate');
+    // Success of a destructive gate must not open the family window.
+    expect(bio.hasBiometricGrace()).toBe(false);
+  });
+
+  it('policy-disabled short-circuit does NOT arm the bucket', async () => {
+    resetPolicyInline();
+    policyMod.useSensitiveActionPolicy.getState().setPolicy('presentProof', {
+      enabled: false,
+      mode: 'biometricOrPasscode',
+    });
+    const r = await gatekeeper.requireSensitiveAction('presentProof', 'present');
+    expect(r.success).toBe(true);
+    expect(authCalls.length).toBe(0);
+    expect(bio.hasBiometricGrace()).toBe(false);
+    resetPolicyInline();
+  });
+
+  it('a failed prompt does NOT arm the bucket', async () => {
+    resetPolicyInline();
+    nextAuthResult = { success: false };
+    const r = await gatekeeper.requireSensitiveAction('presentProof', 'present');
+    expect(r.success).toBe(false);
+    expect(bio.hasBiometricGrace()).toBe(false);
   });
 });
