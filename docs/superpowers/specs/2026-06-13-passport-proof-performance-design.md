@@ -165,6 +165,16 @@ NFC read (witness built during read, as today)
   `…show-presentation.v2`; the verifier accepts v1 (embedded vk + pin check)
   for one release window.
 
+> **2026-06-13 device baseline (after phases 1–2):** prepare ≈ 15 s,
+> show > 10 s. Show runs the smallest circuit, so per-call fixed cost
+> (SRS read + barretenberg setup) dominates — phase 3 (warm prover) is
+> confirmed as the critical lever. Phase 4 is pulled forward ahead of
+> phase 3 (Face ID friction blocks silent show), with an AGGRESSIVE gate
+> policy chosen by the owner: only destructive/recovery actions
+> (delete, rotateMasterKey, revealRecoveryBundle, deleteZKIdentity)
+> always prompt; everything else (sign, present, export, exchange,
+> passportSave) shares ONE 5-minute grace bucket.
+
 ### 4. Single Face ID
 
 - `spruce-did` exposes key auth metadata: `keyAuthMode(alias): 'none' |
