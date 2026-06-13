@@ -44,4 +44,22 @@ describe('requireBiometric sign prompt coalescing', () => {
 
     expect(await Promise.all([first, second])).toEqual([true, true]);
   });
+
+  it('coalesces concurrent prompts ACROSS graced reasons (shared bucket)', async () => {
+    let resolveAuth!: (value: { success: boolean }) => void;
+    nextAuthPromise = new Promise((resolve) => {
+      resolveAuth = resolve;
+    });
+
+    const sign = bio.requireBiometric('sign');
+    const present = bio.requireBiometric('present');
+    await Promise.resolve();
+
+    // One OS sheet covers both intents — they share the grace bucket.
+    expect(authCalls.length).toBe(1);
+    resolveAuth({ success: true });
+    nextAuthPromise = null;
+
+    expect(await Promise.all([sign, present])).toEqual([true, true]);
+  });
 });
