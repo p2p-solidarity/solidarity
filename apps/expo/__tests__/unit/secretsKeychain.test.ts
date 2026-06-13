@@ -195,6 +195,7 @@ interface SecretsKeychainMod {
 
 const ROOT_ALIAS = 'gg.solidarity.vault.rootSecret.v1';
 const WRAP_ALIAS = 'gg.solidarity.vault.rootSecret.wrapping.v1';
+const WRAP_ALIAS_V2 = 'gg.solidarity.vault.rootSecret.wrapping.v2';
 
 let mod: SecretsKeychainMod;
 
@@ -231,14 +232,16 @@ describe('hardware-backed root secret (Secure Enclave / StrongBox)', () => {
     if (a.kind !== 'ok') return;
     expect(a.bytes.length).toBe(32);
 
-    // The wrapping key was provisioned with biometric=true (because we
-    // asked for `biometric` mode), and wrap was called against the
-    // dedicated wrapping alias — not the rootSecret alias.
+    // The wrapping key is provisioned ACL-FREE on the v2 alias: the JS
+    // 'exchange' gate (graced) is the canonical prompt, the SE key only
+    // provides non-extractability. A `.userPresence` ACL here stacked a
+    // second (and third, via the envelope item ACL) OS prompt on every
+    // vault unlock.
     expect(nitro.ensureCalls.length).toBe(1);
-    expect(nitro.ensureCalls[0]?.alias).toBe(WRAP_ALIAS);
-    expect(nitro.ensureCalls[0]?.requireBiometric).toBe(true);
+    expect(nitro.ensureCalls[0]?.alias).toBe(WRAP_ALIAS_V2);
+    expect(nitro.ensureCalls[0]?.requireBiometric).toBe(false);
     expect(nitro.wrapCalls.length).toBe(1);
-    expect(nitro.wrapCalls[0]?.alias).toBe(WRAP_ALIAS);
+    expect(nitro.wrapCalls[0]?.alias).toBe(WRAP_ALIAS_V2);
 
     // The persisted blob is a JSON envelope, NOT the raw 32 bytes.
     const stored = secureStore.get(ROOT_ALIAS);
@@ -246,7 +249,7 @@ describe('hardware-backed root secret (Secure Enclave / StrongBox)', () => {
     const parsed = JSON.parse(stored ?? '{}') as Record<string, unknown>;
     expect(parsed['kind']).toBe('v1.hw');
     expect(parsed['algorithm']).toBe('aes-gcm-secure-enclave-ecies');
-    expect(parsed['keyAlias']).toBe(WRAP_ALIAS);
+    expect(parsed['keyAlias']).toBe(WRAP_ALIAS_V2);
     expect(parsed['hardwareBacked']).toBe(true);
     expect(typeof parsed['wrappedB64']).toBe('string');
 
@@ -303,12 +306,97 @@ describe('hardware-backed root secret (Secure Enclave / StrongBox)', () => {
     expect(nitro.unwrapCalls.length).toBe(0);
   });
 
-  it('resetRootSecretForTesting calls deleteKey on the wrapping alias', async () => {
+  it('resetRootSecretForTesting calls deleteKey on both wrapping aliases', async () => {
     await mod.getOrCreateRootSecret('biometric');
     nitro.deleteCalls.length = 0;
     await mod.resetRootSecretForTesting();
     expect(nitro.deleteCalls).toContain(WRAP_ALIAS);
+    expect(nitro.deleteCalls).toContain(WRAP_ALIAS_V2);
     expect(secureStore.get(ROOT_ALIAS)).toBeUndefined();
+  });
+});
+
+// ── ACL-free v2 wrapping-key migration ─────────────────────────────────────
+
+function seedV1Envelope(root: Uint8Array): void {
+  // A pre-phase-4 envelope: wrapped under the v1 alias whose SE key was
+  // provisioned with `.userPresence` (prompting natively on every unwrap).
+  const key = freshXorKey(WRAP_ALIAS);
+  driverKeys.set(WRAP_ALIAS, key);
+  const sealed = aesGcmSeal(key, root);
+  secureStore.set(
+    ROOT_ALIAS,
+    JSON.stringify({
+      kind: 'v1.hw',
+      algorithm: 'aes-gcm-secure-enclave-ecies',
+      keyAlias: WRAP_ALIAS,
+      wrappedB64: base64Encode(sealed),
+      hardwareBacked: true,
+    })
+  );
+}
+
+describe('wrapping-key v2 migration (drops the native ACL double prompt)', () => {
+  const ROOT = Uint8Array.from({ length: 32 }, (_, i) => i + 1);
+
+  it('a biometric read of a v1-alias envelope rewraps under v2 and deletes v1', async () => {
+    seedV1Envelope(ROOT);
+    nitro.deleteCalls.length = 0; // reset helper deletes both aliases in beforeEach
+    const r = await mod.getOrCreateRootSecret('biometric');
+    expect(r.kind).toBe('ok');
+    if (r.kind !== 'ok') return;
+    expect(Buffer.from(r.bytes).toString('hex')).toBe(Buffer.from(ROOT).toString('hex'));
+
+    // Re-provisioned ACL-free on v2, old SE key dropped.
+    expect(nitro.ensureCalls).toContainEqual({ alias: WRAP_ALIAS_V2, requireBiometric: false });
+    expect(nitro.wrapCalls.map((c) => c.alias)).toContain(WRAP_ALIAS_V2);
+    expect(nitro.deleteCalls).toContain(WRAP_ALIAS);
+
+    const parsed = JSON.parse(secureStore.get(ROOT_ALIAS) ?? '{}') as Record<string, unknown>;
+    expect(parsed['keyAlias']).toBe(WRAP_ALIAS_V2);
+
+    // And the migrated envelope still round-trips to the same root.
+    mod.evictCachedRootSecret();
+    const again = await mod.getOrCreateRootSecret('biometric');
+    expect(again.kind).toBe('ok');
+    if (again.kind !== 'ok') return;
+    expect(Buffer.from(again.bytes).toString('hex')).toBe(Buffer.from(ROOT).toString('hex'));
+  });
+
+  it('silent mode does NOT migrate (no user present for the unwrap prompt)', async () => {
+    seedV1Envelope(ROOT);
+    nitro.deleteCalls.length = 0; // reset helper deletes both aliases in beforeEach
+    const r = await mod.getOrCreateRootSecret('silent');
+    expect(r.kind).toBe('ok');
+    const parsed = JSON.parse(secureStore.get(ROOT_ALIAS) ?? '{}') as Record<string, unknown>;
+    expect(parsed['keyAlias']).toBe(WRAP_ALIAS);
+    expect(nitro.deleteCalls).not.toContain(WRAP_ALIAS);
+  });
+
+  it('migration failure keeps the v1 envelope intact and still returns the root', async () => {
+    seedV1Envelope(ROOT);
+    nitro.deleteCalls.length = 0; // reset helper deletes both aliases in beforeEach
+    nitro.failWrap = true; // the v2 rewrap will throw
+    const warnings: string[] = [];
+    const originalWarn = console.warn;
+    console.warn = (...args: unknown[]) => {
+      warnings.push(args.map((a) => String(a)).join(' '));
+    };
+    let r: Awaited<ReturnType<typeof mod.getOrCreateRootSecret>>;
+    try {
+      r = await mod.getOrCreateRootSecret('biometric');
+    } finally {
+      console.warn = originalWarn;
+    }
+    expect(r.kind).toBe('ok');
+    if (r.kind !== 'ok') return;
+    expect(Buffer.from(r.bytes).toString('hex')).toBe(Buffer.from(ROOT).toString('hex'));
+    // Old envelope untouched — NEVER downgraded to a v0 plaintext root.
+    const parsed = JSON.parse(secureStore.get(ROOT_ALIAS) ?? '{}') as Record<string, unknown>;
+    expect(parsed['kind']).toBe('v1.hw');
+    expect(parsed['keyAlias']).toBe(WRAP_ALIAS);
+    expect(nitro.deleteCalls).not.toContain(WRAP_ALIAS);
+    expect(warnings.join('\n')).toMatch(/migration/i);
   });
 });
 

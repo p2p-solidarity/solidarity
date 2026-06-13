@@ -69,6 +69,17 @@ const ROOT_SECRET_ALIAS = 'gg.solidarity.vault.rootSecret.v1';
 const WRAPPING_KEY_ALIAS = 'gg.solidarity.vault.rootSecret.wrapping.v1';
 
 /**
+ * v2 wrapping key — ACL-FREE (no `.userPresence` / auth-bound flag).
+ * The v1 key was provisioned with a native biometric ACL, which stacked a
+ * SECOND OS prompt inside `unwrap` on top of the JS `'exchange'` gate
+ * (and broke silent-mode background unwraps). Phase 4 (2026-06-13): the
+ * JS gate — now riding the shared grace bucket — is the canonical prompt;
+ * the SE/StrongBox key keeps non-extractability only. v1 envelopes are
+ * migrated on the next biometric-mode read.
+ */
+const WRAPPING_KEY_ALIAS_V2 = 'gg.solidarity.vault.rootSecret.wrapping.v2';
+
+/**
  * Whether the persisted blob is a hardware-wrapped envelope (`v1.hw`) or
  * a legacy plain 32-byte AES root (`v0.raw`). Stored as a JSON envelope
  * inside expo-secure-store so future migrations stay cheap.
@@ -183,10 +194,14 @@ async function readEnvelope(
 
 async function writeEnvelope(
   env: EncodedRootSecret,
-  mode: AccessMode
+  _mode: AccessMode
 ): Promise<void> {
   const serialised = env.kind === 'v0.raw' ? env.rootB64 : JSON.stringify(env);
-  await SecureStore.setItemAsync(ROOT_SECRET_ALIAS, serialised, opts(mode));
+  // Always stored WITHOUT an item-level auth ACL (phase 4): the envelope is
+  // ciphertext under the hardware wrapping key, and the JS 'exchange' gate
+  // is the user-facing prompt. The old `requireAuthentication: true` write
+  // made even silent-mode reads trigger a native keychain prompt.
+  await SecureStore.setItemAsync(ROOT_SECRET_ALIAS, serialised, SECURE_OPTS_NO_BIOMETRIC);
 }
 
 /**
@@ -195,10 +210,7 @@ async function writeEnvelope(
  * the hardware driver throws — but emits a console.warn so the
  * downgrade is observable.
  */
-async function wrapRoot(
-  bytes: Uint8Array,
-  requireBio: boolean
-): Promise<EncodedRootSecret> {
+async function wrapRoot(bytes: Uint8Array): Promise<EncodedRootSecret> {
   if (!hardwareAvailable()) {
     console.warn(
       '[secretsKeychain] hardware-backed wrapping unavailable; storing plain root in secure-store'
@@ -207,10 +219,10 @@ async function wrapRoot(
   }
   try {
     const driver = vaultDriver();
-    await driver.ensureWrappingKey(WRAPPING_KEY_ALIAS, requireBio);
+    await driver.ensureWrappingKey(WRAPPING_KEY_ALIAS_V2, false);
     const buf = new ArrayBuffer(bytes.length);
     new Uint8Array(buf).set(bytes);
-    const wrapped = await driver.wrap(WRAPPING_KEY_ALIAS, buf);
+    const wrapped = await driver.wrap(WRAPPING_KEY_ALIAS_V2, buf);
     return encodeWrapped(wrapped);
   } catch (e) {
     console.warn(
@@ -279,16 +291,57 @@ export async function getOrCreateRootSecret(
     const restored = stored ? await unwrapRoot(stored) : null;
     if (restored?.length === 32 && stored) {
       await maybeUpgradeToHardware(stored, restored, mode);
+      await maybeMigrateWrappingKeyToV2(stored, restored, mode);
       cachedSecret = restored;
       return { kind: 'ok', bytes: restored };
     }
     const fresh = generateAesKey();
-    const envelope = await wrapRoot(fresh, mode === 'biometric');
+    const envelope = await wrapRoot(fresh);
     await writeEnvelope(envelope, mode);
     cachedSecret = fresh;
     return { kind: 'ok', bytes: fresh };
   } catch {
     return { kind: 'err', reason: 'storageFailed' };
+  }
+}
+
+/**
+ * One-time migration off the v1 wrapping key (native `.userPresence` ACL →
+ * double prompt). Runs only on biometric-mode reads (the user is present,
+ * and the v1 unwrap that just succeeded consumed its native prompt). Direct
+ * driver calls — NOT `wrapRoot` — so a failure can never downgrade the
+ * envelope to a v0 plaintext root; on any error the v1 envelope stays.
+ */
+async function maybeMigrateWrappingKeyToV2(
+  stored: EncodedRootSecret,
+  bytes: Uint8Array,
+  mode: AccessMode
+): Promise<void> {
+  if (
+    mode !== 'biometric' ||
+    stored.kind !== 'v1.hw' ||
+    stored.keyAlias !== WRAPPING_KEY_ALIAS
+  ) {
+    return;
+  }
+  try {
+    const driver = vaultDriver();
+    await driver.ensureWrappingKey(WRAPPING_KEY_ALIAS_V2, false);
+    const buf = new ArrayBuffer(bytes.length);
+    new Uint8Array(buf).set(bytes);
+    const wrapped = await driver.wrap(WRAPPING_KEY_ALIAS_V2, buf);
+    // Delete-then-write so the new item is created without the old
+    // item-level auth ACL (SecItemUpdate cannot swap kSecAttrAccessControl).
+    await SecureStore.deleteItemAsync(ROOT_SECRET_ALIAS, SECURE_OPTS_NO_BIOMETRIC).catch(
+      () => undefined
+    );
+    await writeEnvelope(encodeWrapped(wrapped), mode);
+    await driver.deleteKey(WRAPPING_KEY_ALIAS).catch(() => undefined);
+  } catch (e) {
+    console.warn(
+      '[secretsKeychain] wrapping-key v2 migration failed; keeping v1 envelope',
+      e
+    );
   }
 }
 
@@ -304,7 +357,7 @@ async function maybeUpgradeToHardware(
   mode: AccessMode
 ): Promise<void> {
   if (stored.kind !== 'v0.raw' || !hardwareAvailable()) return;
-  const upgraded = await wrapRoot(bytes, mode === 'biometric');
+  const upgraded = await wrapRoot(bytes);
   if (upgraded.kind !== 'v1.hw') return;
   await writeEnvelope(upgraded, mode).catch(() => undefined);
 }
@@ -379,7 +432,7 @@ export async function rotateRootSecret(
   }
 
   try {
-    const envelope = await wrapRoot(next, true);
+    const envelope = await wrapRoot(next);
     await writeEnvelope(envelope, 'biometric');
     cachedSecret = next;
   } catch {
@@ -406,11 +459,13 @@ export async function resetRootSecretForTesting(): Promise<void> {
   await SecureStore.deleteItemAsync(ROOT_SECRET_ALIAS, SECURE_OPTS_NO_BIOMETRIC).catch(
     () => undefined
   );
-  try {
-    await vaultDriver().deleteKey(WRAPPING_KEY_ALIAS);
-  } catch {
-    // Wrapping-key teardown is best-effort; the next
-    // `getOrCreateRootSecret` call will re-provision if needed.
+  for (const alias of [WRAPPING_KEY_ALIAS, WRAPPING_KEY_ALIAS_V2]) {
+    try {
+      await vaultDriver().deleteKey(alias);
+    } catch {
+      // Wrapping-key teardown is best-effort; the next
+      // `getOrCreateRootSecret` call will re-provision if needed.
+    }
   }
   cachedSecret = null;
   hardwareAvailability = null;

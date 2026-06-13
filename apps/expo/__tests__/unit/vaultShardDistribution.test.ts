@@ -222,7 +222,7 @@ beforeAll(async () => {
   cloudSync = await import('../../src/vault/cloudSync');
 }, 30_000);
 
-beforeEach(() => {
+beforeEach(async () => {
   kv.clear();
   sentRequests.length = 0;
   cloudKitStore.clear();
@@ -231,6 +231,10 @@ beforeEach(() => {
   const b64 = Buffer.from(FIXED_ROOT_SECRET).toString('base64');
   secureStore.set('gg.solidarity.vault.rootSecret.v1', b64);
   secretsKeychain.evictCachedRootSecret();
+  // The shared grace bucket (phase 4) persists across tests in this file —
+  // a prior successful auth would silence the denial-path assertions.
+  const bio = await import('../../src/keychain/biometric');
+  bio.resetBiometricGrace();
 });
 
 // ── 1. Envelope binding semantics ───────────────────────────────────────────
