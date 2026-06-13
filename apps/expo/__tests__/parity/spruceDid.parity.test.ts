@@ -355,6 +355,34 @@ describe('SpruceID DID Nitro module — JS-side wiring', () => {
     ).toBe(true);
   });
 
+  it('skips the JS prompt when the driver reports native-acl (single-layer gate)', async () => {
+    driver.keyAuthModeResult = 'native-acl';
+    try {
+      const nonceHash = new Uint8Array(32).fill(9);
+      const { signature } = await signOpenAcDeviceBindingDigest(nonceHash);
+      expect(signature.length).toBe(64);
+      // The legacy SE key's keychain ACL prompts inside the native sign —
+      // stacking the JS prompt on top was the "Face ID twice" bug.
+      expect(authCalls.length).toBe(0);
+    } finally {
+      driver.keyAuthModeResult = 'js-gated';
+      await resetSigningKeyForTesting();
+    }
+  });
+
+  it('treats a driver without keyAuthMode (older native binary) as js-gated', async () => {
+    const original = driver.keyAuthMode.bind(driver);
+    (driver as unknown as { keyAuthMode?: unknown }).keyAuthMode = undefined;
+    try {
+      const nonceHash = new Uint8Array(32).fill(7);
+      await signOpenAcDeviceBindingDigest(nonceHash);
+      expect(authCalls.length).toBe(1);
+    } finally {
+      (driver as unknown as { keyAuthMode?: unknown }).keyAuthMode = original;
+      await resetSigningKeyForTesting();
+    }
+  });
+
   it('signOpenAcDeviceBindingDigest is biometric-gated and reuses the sign grace in-session', async () => {
     const nonceHash = utf8ToBytes('openac_device_binding_nonce_hash');
 

@@ -111,6 +111,33 @@ export interface SigningIdentity {
 
 let cachedIdentity: SigningIdentity | null = null;
 
+/**
+ * How the active key is biometric-gated — resolved once per process from
+ * the native driver. 'native-acl' = the OS prompts inside the keychain /
+ * keystore sign itself (legacy SE key with .userPresence; auth-bound
+ * Android key), so the JS layer must NOT stack its own prompt. Anything
+ * unresolvable (older native binary without `keyAuthMode`, probe failure)
+ * is 'js-gated' — fail-safe: worst case is the legacy double prompt,
+ * never a missing gate.
+ */
+type KeyAuthMode = 'native-acl' | 'js-gated';
+let cachedAuthMode: KeyAuthMode | null = null;
+
+async function resolveKeyAuthMode(d: SpruceDid, alias: string): Promise<KeyAuthMode> {
+  if (cachedAuthMode) return cachedAuthMode;
+  let mode: KeyAuthMode = 'js-gated';
+  try {
+    const probe = (d as { keyAuthMode?: (alias: string) => Promise<string> }).keyAuthMode;
+    if (typeof probe === 'function') {
+      mode = (await probe.call(d, alias)) === 'native-acl' ? 'native-acl' : 'js-gated';
+    }
+  } catch {
+    mode = 'js-gated';
+  }
+  cachedAuthMode = mode;
+  return mode;
+}
+
 const P256_N =
   0xffffffff00000000ffffffffffffffffbce6faada7179e84f3b9cac2fc632551n;
 
@@ -253,21 +280,14 @@ export async function signJwt(
   if (header.alg !== 'ES256') {
     throw new Error(`signJwt requires alg=ES256 (got ${header.alg})`);
   }
-  // TODO(biometric-gate): replace with
-  //   const gate = await requireSensitiveAction(
-  //     'presentProof',
-  //     'Authorize signing with your identity key'
-  //   );
-  //   if (!gate.success) throw new Error('biometric authentication required');
-  // once the concurrent agent owning this file pulls in
-  // `@/keychain/biometricGatekeeper`. The new policy store
-  // (`useSensitiveActionPolicy`) gives the user per-action control over
-  // when biometric is required + which mode (biometric only vs passcode
-  // fallback). Today `requireBiometric('sign')` always prompts.
-  const allowed = await requireBiometric('sign');
-  if (!allowed) throw new Error('biometric authentication required');
-
   const id = await ensureSigningKey();
+  // Single-layer gate (phase 4): when the key carries a native ACL the OS
+  // prompts inside the sign itself — the JS prompt would be a second
+  // Face ID sheet for the same intent. JS gates only 'js-gated' keys.
+  if ((await resolveKeyAuthMode(driver(), id.alias)) === 'js-gated') {
+    const allowed = await requireBiometric('sign');
+    if (!allowed) throw new Error('biometric authentication required');
+  }
   // SpruceID's `signJws` always uses an ES256 / JWT header — so we hand it
   // just the payload bytes. For headers with custom `typ` or `kid`, the
   // caller can post-process the returned JWS (replace the first segment),
@@ -342,14 +362,15 @@ async function signDigestWithCurrentKey(
   readonly signature: Uint8Array;
   readonly publicKeyRaw: Uint8Array;
 }> {
-  // Biometric-gate every raw signature (CLAUDE.md Sec rule). The `'sign'`
-  // reason carries a 5-minute grace (see biometric.ts), so a recent
-  // authorization — e.g. the device-binding sign that produced the OpenAC
-  // v3 passport proof — is reused instead of re-prompting per call.
-  const allowed = await requireBiometric('sign');
-  if (!allowed) throw new Error('biometric authentication required');
-
+  // Biometric-gate every raw signature (CLAUDE.md Sec rule). The shared
+  // grace bucket (see biometric.ts) reuses a recent authorization instead
+  // of re-prompting per call; keys with a native ACL are gated by the OS
+  // prompt inside the sign itself (single-layer gate, phase 4).
   const id = await ensureSigningKey();
+  if ((await resolveKeyAuthMode(driver(), id.alias)) === 'js-gated') {
+    const allowed = await requireBiometric('sign');
+    if (!allowed) throw new Error('biometric authentication required');
+  }
   const buf = new ArrayBuffer(digest.length);
   new Uint8Array(buf).set(digest);
   const signatureBuffer = await driver().signRawP256(id.alias, buf);
@@ -416,4 +437,5 @@ export async function resetSigningKeyForTesting(): Promise<void> {
   await driver().deleteKey(SIGNING_KEY_ALIAS).catch(() => false);
   await clearLegacyExpoBytes();
   cachedIdentity = null;
+  cachedAuthMode = null;
 }
