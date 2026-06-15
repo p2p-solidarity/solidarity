@@ -1,0 +1,23 @@
+{
+  "$schema": "https://nitro.margelo.com/schemas/nitro.schema.json",
+  "cxxNamespace": ["solidarity", "secretsvault"],
+  "ios": {
+    "iosModuleName": "SecretsVault"
+  },
+  "android": {
+    "androidNamespace": ["gg", "solidarity", "secretsvault"],
+    "androidCxxLibName": "SecretsVault"
+  },
+  "autolinking": {
+    "SecretsVault": {
+      "ios": {
+        "language": "swift",
+        "implementationClassName": "HybridSecretsVault"
+      },
+      "android": {
+        "language": "kotlin",
+        "implementationClassName": "HybridSecretsVault"
+      }
+    }
+  }
+}

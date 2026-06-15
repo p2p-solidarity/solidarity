@@ -36,9 +36,9 @@ extension SharingPreferences {
     self.allowForwarding = try container.decodeIfPresent(Bool.self, forKey: .allowForwarding) ?? false
     self.expirationDate = try container.decodeIfPresent(Date.self, forKey: .expirationDate)
     self.useZK = try container.decodeIfPresent(Bool.self, forKey: .useZK) ?? true
-    // Old data without sharingFormat key → upgrade to .didSigned (VC default).
-    // Previously defaulted to .plaintext; now all sharing paths default to signed VC.
-    self.sharingFormat = try container.decodeIfPresent(SharingFormat.self, forKey: .sharingFormat) ?? .didSigned
+    // Old data without sharingFormat key → upgrade to .zkProof.
+    // Previously defaulted to .plaintext, then .didSigned; now the default share format is ZK proof.
+    self.sharingFormat = try container.decodeIfPresent(SharingFormat.self, forKey: .sharingFormat) ?? .zkProof
   }
 
   func encode(to encoder: Encoder) throws {

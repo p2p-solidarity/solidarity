@@ -1,0 +1,44 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "baseUrl": ".",
+    "paths": {
+      "@/*": [
+        "./src/*"
+      ],
+      "@app/*": [
+        "./app/*"
+      ],
+      "@solidarity/shared": [
+        "../../packages/shared/src/index.ts"
+      ],
+      "@solidarity/shared/*": [
+        "../../packages/shared/src/*"
+      ]
+    },
+    "types": [
+      "bun",
+      "react-native",
+      "nativewind/types"
+    ],
+    "jsx": "react-jsx",
+    "ignoreDeprecations": "6.0"
+  },
+  "include": [
+    "app/**/*",
+    "src/**/*",
+    "test-setup.ts",
+    "__tests__/**/*",
+    "*.config.{ts,js,mjs,cjs}",
+    "expo-env.d.ts",
+    "nativewind-env.d.ts",
+    ".expo/types/**/*.ts"
+  ],
+  "exclude": [
+    "node_modules",
+    "ios",
+    "android",
+    ".expo",
+    "dist"
+  ]
+}

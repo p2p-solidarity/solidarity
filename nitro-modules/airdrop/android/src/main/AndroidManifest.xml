@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  AndroidManifest.xml
+  @solidarity/nitro-airdrop (Android)
+
+  Empty manifest — AirDrop is an iOS-only feature and the Android impl
+  is a clean stub (no permissions, no intents, no features). The host
+  app's manifest already declares anything else it needs.
+-->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android" />

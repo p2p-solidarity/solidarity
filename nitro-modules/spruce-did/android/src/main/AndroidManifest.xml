@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  AndroidManifest.xml
+  @solidarity/nitro-spruce-did (Android)
+
+  Minimal manifest. Runtime permissions (USE_BIOMETRIC) live in the
+  consuming app's manifest (apps/expo/app.json already lists it),
+  because the merger respects the strictest set.
+-->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android" />

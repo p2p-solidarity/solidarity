@@ -1,0 +1,11 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "baseUrl": ".",
+    "outDir": "./lib",
+    "rootDir": "./src",
+    "types": ["react-native"]
+  },
+  "include": ["src/**/*"],
+  "exclude": ["node_modules", "lib", "nitrogen/generated"]
+}

@@ -1,0 +1,121 @@
+/**
+ * OIDC / OID4VP / OID4VCI schemas — mirror solidarity/Models/OIDC/OIDCScope.swift.
+ *
+ * Wire format: snake_case per OAuth/OIDC convention; Zod schemas accept the
+ * wire shape directly so URL queryparam → object parse is one step.
+ */
+import { z } from 'zod';
+
+export const oidcScopeSchema = z.enum([
+  'backup_write',
+  'backup_read',
+  'preferences',
+  'age_over_18',
+  'decrypt_content',
+  'config_sync',
+]);
+export type OIDCScope = z.infer<typeof oidcScopeSchema>;
+
+export const oidcRiskLevelSchema = z.enum(['low', 'medium', 'high']);
+export type OIDCRiskLevel = z.infer<typeof oidcRiskLevelSchema>;
+
+const RISK_BY_SCOPE: Readonly<Record<OIDCScope, OIDCRiskLevel>> = {
+  backup_read: 'low',
+  preferences: 'low',
+  age_over_18: 'medium',
+  config_sync: 'medium',
+  backup_write: 'high',
+  decrypt_content: 'high',
+};
+export const riskLevel = (s: OIDCScope): OIDCRiskLevel => RISK_BY_SCOPE[s];
+
+export const inputDescriptorSchema = z.object({
+  id: z.string().min(1),
+  name: z.string().optional(),
+  purpose: z.string().optional(),
+});
+export type InputDescriptor = z.infer<typeof inputDescriptorSchema>;
+
+export const presentationDefinitionSchema = z.object({
+  id: z.string().min(1),
+  input_descriptors: z.array(inputDescriptorSchema),
+});
+export type PresentationDefinition = z.infer<typeof presentationDefinitionSchema>;
+
+// DCQL (Digital Credentials Query Language) — the OID4VP 1.0 default query
+// mechanism that supersedes presentation_definition. Swift OIDCService parses
+// dcqlQueryJSON; the Expo parser previously DROPPED it, which (combined with
+// the resolver's "present everything when no descriptors" fallback) caused
+// over-disclosure. We model the subset we need to scope disclosure: each
+// credential query's id + its requested claim paths.
+export const dcqlClaimSchema = z.object({
+  id: z.string().optional(),
+  // A claim path is an array of selectors (string keys / array indices / null).
+  path: z.array(z.union([z.string(), z.number(), z.null()])).optional(),
+});
+export const dcqlCredentialQuerySchema = z.object({
+  id: z.string().min(1),
+  format: z.string().optional(),
+  claims: z.array(dcqlClaimSchema).optional(),
+});
+export const dcqlQuerySchema = z.object({
+  credentials: z.array(dcqlCredentialQuerySchema),
+});
+export type DcqlQuery = z.infer<typeof dcqlQuerySchema>;
+
+export const oidcAuthRequestSchema = z.object({
+  client_id: z.string().min(1),
+  redirect_uri: z.string().min(1).optional(),
+  response_uri: z.string().min(1).optional(),
+  // `state` is OPTIONAL per OAuth 2.0 / OID4VP — a stateless verifier omits
+  // it. Requiring it rejected spec-valid requests that a legacy iOS holder
+  // accepts. Response propagation is already guarded with `if (request.state)`.
+  state: z.string().min(1).optional(),
+  nonce: z.string().min(1),
+  scope: z
+    .string()
+    .optional()
+    .default('')
+    .transform((s) =>
+      (s ?? '')
+        .split(/\s+/u)
+        .filter(Boolean)
+        .map((tok) => oidcScopeSchema.parse(tok))
+    ),
+  response_type: z.string().default('vp_token id_token'),
+  response_mode: z
+    .enum(['direct_post', 'direct_post.jwt', 'fragment', 'query', 'form_post'])
+    .default('direct_post'),
+  code_challenge: z.string().min(1).optional(),
+  code_challenge_method: z.literal('S256').optional(),
+  presentation_definition: presentationDefinitionSchema.optional(),
+  // OID4VP 1.0 DCQL query (alternative to presentation_definition). Parsed so
+  // disclosure can be scoped to exactly what the verifier asked for instead of
+  // silently falling back to presenting all claims.
+  dcql_query: dcqlQuerySchema.optional(),
+  // JWT-Secured Authorization Request: a remote (request_uri) or inline
+  // (request) signed Request Object. Captured so the request isn't dropped;
+  // remote fetch + JWS trust-anchor verification is handled by the parser.
+  request_uri: z.string().min(1).optional(),
+  request: z.string().min(1).optional(),
+  client_metadata: z.record(z.string(), z.unknown()).optional(),
+});
+export type OIDCAuthRequest = z.infer<typeof oidcAuthRequestSchema>;
+
+export const oidcAuthResponseSchema = z.object({
+  state: z.string().min(1),
+  code: z.string().optional(),
+  id_token: z.string().optional(),
+  vp_token: z.union([z.string(), z.array(z.string())]).optional(),
+  presentation_submission: z.unknown().optional(),
+});
+export type OIDCAuthResponse = z.infer<typeof oidcAuthResponseSchema>;
+
+export const oidcClientInfoSchema = z.object({
+  client_id: z.string().min(1),
+  display_name: z.string().optional(),
+  icon_url: z.url().optional(),
+  trusted: z.boolean().default(false),
+  last_used: z.coerce.date().optional(),
+});
+export type OIDCClientInfo = z.infer<typeof oidcClientInfoSchema>;

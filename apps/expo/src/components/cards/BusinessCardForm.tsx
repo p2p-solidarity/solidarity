@@ -1,0 +1,235 @@
+/**
+ * BusinessCardForm — 1:1 port of
+ * solidarity/Views/CardViews/BusinessCardFormView.swift.
+ *
+ * Sections (verbatim Swift headings + placeholders):
+ *   • Basic Info        → Name (required, * marker) / Title / Company
+ *   • Contact and Skills→ Email / Phone / Skills / Categories / LinkedIn / GitHub
+ *   • Sharing Preferences → Allow forwarding toggle / ZK-DID format switch
+ *   • Save Changes | Create Card (full-width primary, disabled until name)
+ *   • Danger Zone (edit only) → Delete Card
+ *
+ * Row primitives + parsers live in sibling files to keep this view ≤300 lines:
+ *   • ./cardFormRows.tsx     — FieldRow / NameField / ToggleRow / FormatRow / etc.
+ *   • ./cardFormParsers.ts   — parseCSV / parseSkills / parseSocialNetworks
+ */
+import { View } from 'react-native';
+
+import { ThemedButton } from '@/components/themed';
+import { confirmDialog } from '@/feedback/confirmDialog';
+import { uuid, type BusinessCard, type SharingPreferences } from '@solidarity/shared';
+
+import {
+  DangerRow,
+  FieldRow,
+  FormatRow,
+  NameField,
+  SectionHeader,
+  ToggleRow,
+} from './cardFormRows';
+import { nilIfEmpty, parseCSV, parseSkills, parseSocialNetworks } from './cardFormParsers';
+import { type SelectableSharingFormat, useBusinessCardFormState } from './useBusinessCardFormState';
+
+export interface BusinessCardFormProps {
+  readonly initialCard?: BusinessCard;
+  readonly forceCreate?: boolean;
+  readonly onSave: (card: BusinessCard) => void | Promise<void>;
+  readonly onDelete?: () => void | Promise<void>;
+}
+
+const SHARING_FORMAT_LABEL: Readonly<Record<SelectableSharingFormat, string>> = {
+  zkProof: 'ZK Proof',
+  didSigned: 'DID-Signed',
+};
+
+const SHARING_FORMAT_ORDER: readonly SelectableSharingFormat[] = ['zkProof', 'didSigned'];
+
+export function BusinessCardForm({
+  initialCard,
+  forceCreate = false,
+  onSave,
+  onDelete,
+}: BusinessCardFormProps) {
+  const isEditing = initialCard !== undefined && !forceCreate;
+  const state = useBusinessCardFormState(initialCard);
+  const trimmedName = state.name.trim();
+
+  const handleSave = async () => {
+    if (trimmedName.length === 0) return;
+    await onSave(buildCard(initialCard, state, trimmedName));
+  };
+
+  const handleDelete = () => {
+    if (!onDelete) return;
+    void (async () => {
+      const ok = await confirmDialog({
+        title: 'Delete this card?',
+        message: 'This action cannot be undone.',
+        confirmLabel: 'Delete',
+        destructive: true,
+      });
+      if (!ok) return;
+      await onDelete();
+    })();
+  };
+
+  const cycleFormat = () => {
+    const index = SHARING_FORMAT_ORDER.indexOf(state.selectedFormat);
+    const next = SHARING_FORMAT_ORDER[(index + 1) % SHARING_FORMAT_ORDER.length] ?? 'zkProof';
+    state.setSelectedFormat(next);
+  };
+
+  return (
+    <View style={{ gap: 24 }}>
+      <Section title="Basic Info">
+        <NameField value={state.name} onChange={state.setName} trimmed={trimmedName} />
+        <FieldRow
+          icon="briefcase"
+          placeholder="Title"
+          value={state.title}
+          onChangeText={state.setTitle}
+        />
+        <FieldRow
+          icon="building.2"
+          placeholder="Company"
+          value={state.company}
+          onChangeText={state.setCompany}
+        />
+      </Section>
+
+      <Section title="Contact and Skills">
+        <FieldRow
+          icon="envelope"
+          placeholder="Email"
+          value={state.email}
+          onChangeText={state.setEmail}
+          keyboardType="email-address"
+          autoCapitalize="none"
+        />
+        <FieldRow
+          icon="phone"
+          placeholder="Phone"
+          value={state.phone}
+          onChangeText={state.setPhone}
+          keyboardType="phone-pad"
+        />
+        <FieldRow
+          icon="sparkles"
+          placeholder="Skills (comma separated)"
+          value={state.skillsText}
+          onChangeText={state.setSkillsText}
+        />
+        <FieldRow
+          icon="tag"
+          placeholder="Categories (comma separated)"
+          value={state.categoriesText}
+          onChangeText={state.setCategoriesText}
+        />
+        <FieldRow
+          icon="link"
+          placeholder="LinkedIn username"
+          value={state.linkedInHandle}
+          onChangeText={state.setLinkedInHandle}
+        />
+        <FieldRow
+          icon="chevron.left.forwardslash.chevron.right"
+          placeholder="GitHub username"
+          value={state.githubHandle}
+          onChangeText={state.setGithubHandle}
+          autoCapitalize="none"
+        />
+      </Section>
+
+      <View style={{ gap: 8 }}>
+        <SectionHeader title="Sharing Preferences" />
+        <View style={{ paddingHorizontal: 16, gap: 8 }}>
+          <ToggleRow
+            icon="arrowshape.turn.up.right"
+            title="Allow forwarding"
+            value={state.allowForwarding}
+            onChange={state.setAllowForwarding}
+          />
+          <FormatRow trailing={SHARING_FORMAT_LABEL[state.selectedFormat]} onPress={cycleFormat} />
+        </View>
+      </View>
+
+      <View style={{ paddingHorizontal: 16 }}>
+        <ThemedButton
+          label={isEditing ? 'Save Changes' : 'Create Card'}
+          fullWidth
+          disabled={trimmedName.length === 0}
+          onPress={() => {
+            void handleSave();
+          }}
+        />
+      </View>
+
+      {isEditing && onDelete ? (
+        <View style={{ gap: 8 }}>
+          <SectionHeader title="Danger Zone" />
+          <View style={{ paddingHorizontal: 16 }}>
+            <DangerRow icon="trash" title="Delete Card" onPress={handleDelete} />
+          </View>
+        </View>
+      ) : null}
+    </View>
+  );
+}
+
+function Section({ title, children }: { title: string; children: React.ReactNode }) {
+  return (
+    <View style={{ gap: 8 }}>
+      <SectionHeader title={title} />
+      <View style={{ paddingHorizontal: 16, gap: 8 }}>{children}</View>
+    </View>
+  );
+}
+
+function buildCard(
+  existing: BusinessCard | undefined,
+  state: ReturnType<typeof useBusinessCardFormState>,
+  trimmedName: string
+): BusinessCard {
+  const now = new Date();
+  return {
+    id: existing?.id ?? uuid(),
+    name: trimmedName,
+    title: nilIfEmpty(state.title),
+    company: nilIfEmpty(state.company),
+    email: nilIfEmpty(state.email),
+    phone: nilIfEmpty(state.phone),
+    profileImage: existing?.profileImage,
+    animal: existing?.animal,
+    socialNetworks: parseSocialNetworks(state.linkedInHandle, state.githubHandle),
+    skills: parseSkills(state.skillsText),
+    categories: parseCSV(state.categoriesText),
+    sharingPreferences: buildSharingPreferences(
+      existing,
+      state.allowForwarding,
+      state.selectedFormat
+    ),
+    groupContext: existing?.groupContext,
+    verifiedFields: existing?.verifiedFields,
+    nameType: existing?.nameType ?? 'display_name',
+    createdAt: existing?.createdAt ?? now,
+    updatedAt: now,
+  };
+}
+
+function buildSharingPreferences(
+  existing: BusinessCard | undefined,
+  allowForwarding: boolean,
+  selectedFormat: SelectableSharingFormat
+): SharingPreferences {
+  const existingPreferences = existing?.sharingPreferences;
+  return {
+    publicFields: existingPreferences?.publicFields ?? new Set(['name']),
+    professionalFields:
+      existingPreferences?.professionalFields ?? new Set(['name', 'title', 'company', 'email']),
+    personalFields: existingPreferences?.personalFields ?? new Set(['name', 'email', 'phone']),
+    allowForwarding,
+    useZK: selectedFormat === 'zkProof',
+    sharingFormat: selectedFormat,
+    expirationDate: existingPreferences?.expirationDate,
+  };
+}

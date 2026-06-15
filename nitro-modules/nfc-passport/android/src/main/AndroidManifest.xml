@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  AndroidManifest.xml
+  @solidarity/nitro-nfc-passport (Android)
+
+  Declares the NFC permission + hardware feature so the manifest merger
+  surfaces them in the host app. The consuming app's AndroidManifest
+  (apps/expo/app.json `android.permissions`) already lists
+  `android.permission.NFC`, so this is the belt-and-suspenders form — the
+  merger respects the strictest set.
+
+  `android:required="false"` on the feature so the app is still
+  installable on devices without NFC hardware (read() will throw
+  `nfc_unavailable` at runtime instead).
+-->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+  <uses-permission android:name="android.permission.NFC" />
+  <uses-feature android:name="android.hardware.nfc" android:required="false" />
+</manifest>

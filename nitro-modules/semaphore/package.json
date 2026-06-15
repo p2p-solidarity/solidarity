@@ -1,0 +1,24 @@
+{
+  "name": "@solidarity/nitro-semaphore",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Nitro module wrapping the semaphore_bindings Rust crate for on-device Semaphore identity + membership proofs. iOS reuses MoproBindings.xcframework (libsemaphore_bindings.a); Android rebuilds the cdylib + JNI shim via cargo-ndk.",
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "scripts": {
+    "nitrogen": "nitrogen",
+    "build:ios": "bash rust/build-ios.sh",
+    "build:android": "bash rust/build-android.sh",
+    "lint": "eslint .",
+    "typecheck": "tsc --noEmit"
+  },
+  "react-native": {
+    "supportedPlatforms": ["ios", "android"]
+  },
+  "peerDependencies": {
+    "react-native-nitro-modules": "*"
+  },
+  "devDependencies": {
+    "react-native-nitro-modules": "^0.35.7"
+  }
+}

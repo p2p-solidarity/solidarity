@@ -1,0 +1,173 @@
+/*
+ * build.gradle
+ * @solidarity/nitro-mrz-ocr (Android)
+ *
+ * Modeled after nitro-modules/nfc-passport. Pulls in the nitrogen
+ * autolinking gradle, defines the Kotlin/C++ build, and declares ML Kit
+ * Text Recognition (bundled model — no Play Services dep, ~3MB APK uplift,
+ * works without Google account, ideal for a privacy-focused app).
+ */
+buildscript {
+  repositories {
+    google()
+    mavenCentral()
+  }
+  dependencies {
+    classpath "com.android.tools.build:gradle:9.1.0"
+  }
+}
+
+def reactNativeArchitectures() {
+  def value = rootProject.getProperties().get("reactNativeArchitectures")
+  return value ? value.split(",") : ["x86", "x86_64", "armeabi-v7a", "arm64-v8a"]
+}
+
+def isNewArchitectureEnabled() {
+  return rootProject.hasProperty("newArchEnabled") && rootProject.getProperty("newArchEnabled") == "true"
+}
+
+apply plugin: "com.android.library"
+apply plugin: "org.jetbrains.kotlin.android"
+apply from: "../nitrogen/generated/android/MrzOcr+autolinking.gradle"
+// VisionCamera prefab publication-ordering workaround — mirrors
+// react-native-vision-camera-barcode-scanner. Without this, AGP can build
+// the prefab config.json before the native .so exists and we link against
+// stale headers (and the build cache then hides the regression).
+apply from: "./fix-prefab.gradle"
+
+if (isNewArchitectureEnabled()) {
+  apply plugin: "com.facebook.react"
+}
+
+def getExtOrDefault(name) {
+  return rootProject.ext.has(name) ? rootProject.ext.get(name) : project.properties["SolidarityMrzOcr_" + name]
+}
+
+def getExtOrIntegerDefault(name) {
+  return rootProject.ext.has(name) ? rootProject.ext.get(name) : (project.properties["SolidarityMrzOcr_" + name]).toInteger()
+}
+
+android {
+  namespace "com.margelo.nitro.gg.solidarity.mrzocr"
+
+  ndkVersion getExtOrDefault("ndkVersion")
+  compileSdkVersion getExtOrIntegerDefault("compileSdkVersion")
+
+  defaultConfig {
+    minSdkVersion getExtOrIntegerDefault("minSdkVersion")
+    targetSdkVersion getExtOrIntegerDefault("targetSdkVersion")
+    buildConfigField "boolean", "IS_NEW_ARCHITECTURE_ENABLED", isNewArchitectureEnabled().toString()
+
+    externalNativeBuild {
+      cmake {
+        cppFlags "-frtti -fexceptions -Wall -Wextra -fstack-protector-all"
+        arguments "-DANDROID_STL=c++_shared", "-DANDROID_SUPPORT_FLEXIBLE_PAGE_SIZES=ON"
+        abiFilters (*reactNativeArchitectures())
+
+        buildTypes {
+          debug {
+            cppFlags "-O1 -g"
+          }
+          release {
+            cppFlags "-O2"
+          }
+        }
+      }
+    }
+  }
+
+  externalNativeBuild {
+    cmake {
+      path "CMakeLists.txt"
+    }
+  }
+
+  packagingOptions {
+    excludes = [
+      "META-INF",
+      "META-INF/**",
+      "**/libNitroModules.so",
+      "**/libc++_shared.so",
+      "**/libfbjni.so",
+      "**/libjsi.so",
+      "**/libfolly_json.so",
+      "**/libfolly_runtime.so",
+      "**/libglog.so",
+      "**/libhermes.so",
+      "**/libhermes-executor-debug.so",
+      "**/libhermes_executor.so",
+      "**/libreactnative.so",
+      "**/libreactnativejni.so",
+      "**/libturbomodulejsijni.so",
+      "**/libreact_nativemodule_core.so",
+      "**/libjscexecutor.so"
+    ]
+  }
+
+  buildFeatures {
+    buildConfig true
+    prefab true
+  }
+
+  buildTypes {
+    release {
+      minifyEnabled false
+    }
+  }
+
+  lintOptions {
+    disable "GradleCompatible"
+  }
+
+  compileOptions {
+    sourceCompatibility JavaVersion.VERSION_1_8
+    targetCompatibility JavaVersion.VERSION_1_8
+  }
+
+  sourceSets {
+    main {
+      java.srcDirs += [
+        "${project.projectDir}/../nitrogen/generated/android/kotlin",
+      ]
+
+      if (isNewArchitectureEnabled()) {
+        java.srcDirs += [
+          "${project.buildDir}/generated/source/codegen/java"
+        ]
+      }
+    }
+  }
+}
+
+repositories {
+  mavenCentral()
+  google()
+}
+
+dependencies {
+  // RN: provided by the app's react-native gradle plugin.
+  //noinspection GradleDynamicVersion
+  implementation "com.facebook.react:react-native:+"
+
+  // NitroModules core — provides HybridObject base, ArrayBuffer, Promise.
+  implementation project(":react-native-nitro-modules")
+
+  // VisionCamera — gives us the concrete `Frame` class to downcast to
+  // and read the underlying ImageProxy/MediaImage from. The Frame
+  // Processor plugin contract requires us to depend on this.
+  implementation project(":react-native-vision-camera")
+
+  // ML Kit Text Recognition v2 — bundled Latin script model.
+  //   * No Play Services dependency (works on AOSP / GMS-less devices).
+  //   * Model ships inside the AAR (~3MB APK uplift) so the first scan
+  //     is fast and no network call is made on launch.
+  //   * Latin-script recogniser handles ICAO 9303 OCR-B fine; native
+  //     TD3 check-digit validation filters OCR noise before JS sees it.
+  // https://developers.google.com/ml-kit/vision/text-recognition/v2/android
+  implementation "com.google.mlkit:text-recognition:16.0.1"
+
+  // CameraX core — required because VisionCamera frames are wrapped
+  // ImageProxy instances; we need the ImageProxy type to read mediaImage
+  // out of them. Pinned to the same version VisionCamera v5 ships.
+  implementation "androidx.camera:camera-core:1.7.0-alpha01"
+}

@@ -1,0 +1,168 @@
+/*
+ * build.gradle
+ * @solidarity/nitro-proximity (Android)
+ *
+ * Modeled after react-native-mmkv's Nitro module gradle setup. Pulls in
+ * the nitrogen autolinking gradle, defines the Kotlin/C++ build, and
+ * declares the runtime deps we need (kotlinx coroutines, androidx UWB).
+ */
+buildscript {
+  repositories {
+    google()
+    mavenCentral()
+  }
+  dependencies {
+    // Match react-native-mmkv's pin so we don't drift from the rest of the
+    // Nitro ecosystem when Expo upgrades.
+    classpath "com.android.tools.build:gradle:9.1.0"
+  }
+}
+
+def reactNativeArchitectures() {
+  def value = rootProject.getProperties().get("reactNativeArchitectures")
+  return value ? value.split(",") : ["x86", "x86_64", "armeabi-v7a", "arm64-v8a"]
+}
+
+def isNewArchitectureEnabled() {
+  return rootProject.hasProperty("newArchEnabled") && rootProject.getProperty("newArchEnabled") == "true"
+}
+
+apply plugin: "com.android.library"
+apply plugin: "org.jetbrains.kotlin.android"
+apply from: "../nitrogen/generated/android/SolidarityProximity+autolinking.gradle"
+
+if (isNewArchitectureEnabled()) {
+  apply plugin: "com.facebook.react"
+}
+
+def getExtOrDefault(name) {
+  return rootProject.ext.has(name) ? rootProject.ext.get(name) : project.properties["SolidarityProximity_" + name]
+}
+
+def getExtOrIntegerDefault(name) {
+  return rootProject.ext.has(name) ? rootProject.ext.get(name) : (project.properties["SolidarityProximity_" + name]).toInteger()
+}
+
+android {
+  namespace "com.margelo.nitro.gg.solidarity.proximity"
+
+  ndkVersion getExtOrDefault("ndkVersion")
+  compileSdkVersion getExtOrIntegerDefault("compileSdkVersion")
+
+  defaultConfig {
+    // L2CAP insecure channel + BLE advertising require API 29+ and
+    // BLUETOOTH_ADVERTISE/CONNECT/SCAN runtime permissions require API 31+;
+    // androidx UWB requires API 31+. Set minSdk=29 so the L2CAP code
+    // compiles, then runtime-gate UWB by Build.VERSION.SDK_INT.
+    minSdkVersion getExtOrIntegerDefault("minSdkVersion")
+    targetSdkVersion getExtOrIntegerDefault("targetSdkVersion")
+    buildConfigField "boolean", "IS_NEW_ARCHITECTURE_ENABLED", isNewArchitectureEnabled().toString()
+
+    externalNativeBuild {
+      cmake {
+        cppFlags "-frtti -fexceptions -Wall -Wextra -fstack-protector-all"
+        arguments "-DANDROID_STL=c++_shared", "-DANDROID_SUPPORT_FLEXIBLE_PAGE_SIZES=ON"
+        abiFilters (*reactNativeArchitectures())
+
+        buildTypes {
+          debug {
+            cppFlags "-O1 -g"
+          }
+          release {
+            cppFlags "-O2"
+          }
+        }
+      }
+    }
+  }
+
+  externalNativeBuild {
+    cmake {
+      path "CMakeLists.txt"
+    }
+  }
+
+  packagingOptions {
+    excludes = [
+      "META-INF",
+      "META-INF/**",
+      "**/libNitroModules.so",
+      "**/libc++_shared.so",
+      "**/libfbjni.so",
+      "**/libjsi.so",
+      "**/libfolly_json.so",
+      "**/libfolly_runtime.so",
+      "**/libglog.so",
+      "**/libhermes.so",
+      "**/libhermes-executor-debug.so",
+      "**/libhermes_executor.so",
+      "**/libreactnative.so",
+      "**/libreactnativejni.so",
+      "**/libturbomodulejsijni.so",
+      "**/libreact_nativemodule_core.so",
+      "**/libjscexecutor.so"
+    ]
+  }
+
+  buildFeatures {
+    buildConfig true
+    prefab true
+  }
+
+  buildTypes {
+    release {
+      minifyEnabled false
+    }
+  }
+
+  lintOptions {
+    disable "GradleCompatible"
+  }
+
+  compileOptions {
+    sourceCompatibility JavaVersion.VERSION_1_8
+    targetCompatibility JavaVersion.VERSION_1_8
+  }
+
+  sourceSets {
+    main {
+      // src/main/java is the conventional layout (SolidarityProximityPackage.kt
+      // lives there). The hand-written HybridProximity.kt sits one level up
+      // beside this build.gradle per the package author's preference; pull
+      // it in via an explicit file list so gradle doesn't end up scanning
+      // build outputs and producing implicit-dependency warnings.
+      java.srcDirs += [
+        // Nitrogen-generated kotlin (also added by autolinking.gradle, kept
+        // here as a safety net if autolinking ordering changes).
+        "${project.projectDir}/../nitrogen/generated/android/kotlin",
+      ]
+
+      if (isNewArchitectureEnabled()) {
+        java.srcDirs += [
+          "${project.buildDir}/generated/source/codegen/java"
+        ]
+      }
+    }
+  }
+}
+
+repositories {
+  mavenCentral()
+  google()
+}
+
+dependencies {
+  // RN: provided by the app's react-native gradle plugin.
+  //noinspection GradleDynamicVersion
+  implementation "com.facebook.react:react-native:+"
+
+  // NitroModules core — provides HybridObject base, ArrayBuffer, Promise.
+  implementation project(":react-native-nitro-modules")
+
+  // Coroutines for L2CAP/GATT async I/O.
+  implementation "org.jetbrains.kotlinx:kotlinx-coroutines-android:1.8.1"
+
+  // AndroidX UWB. Group is `androidx.core.uwb:uwb` — note the dot, not a
+  // hyphen. Pinning to the latest 1.0.0 release; bump as new versions land.
+  implementation "androidx.core.uwb:uwb:1.0.0"
+}

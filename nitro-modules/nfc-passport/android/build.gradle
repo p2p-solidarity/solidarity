@@ -1,0 +1,191 @@
+/*
+ * build.gradle
+ * @solidarity/nitro-nfc-passport (Android)
+ *
+ * Modeled after react-native-mmkv's Nitro module gradle setup. Pulls in
+ * the nitrogen autolinking gradle, defines the Kotlin/C++ build, and
+ * declares the runtime deps we need (kotlinx coroutines, jmrtd, scuba,
+ * bouncycastle).
+ */
+buildscript {
+  repositories {
+    google()
+    mavenCentral()
+  }
+  dependencies {
+    // Match react-native-mmkv's pin so we don't drift from the rest of the
+    // Nitro ecosystem when Expo upgrades.
+    classpath "com.android.tools.build:gradle:9.1.0"
+  }
+}
+
+def reactNativeArchitectures() {
+  def value = rootProject.getProperties().get("reactNativeArchitectures")
+  return value ? value.split(",") : ["x86", "x86_64", "armeabi-v7a", "arm64-v8a"]
+}
+
+def isNewArchitectureEnabled() {
+  return rootProject.hasProperty("newArchEnabled") && rootProject.getProperty("newArchEnabled") == "true"
+}
+
+apply plugin: "com.android.library"
+apply plugin: "org.jetbrains.kotlin.android"
+apply from: "../nitrogen/generated/android/NfcPassport+autolinking.gradle"
+
+if (isNewArchitectureEnabled()) {
+  apply plugin: "com.facebook.react"
+}
+
+def getExtOrDefault(name) {
+  return rootProject.ext.has(name) ? rootProject.ext.get(name) : project.properties["SolidarityNfcPassport_" + name]
+}
+
+def getExtOrIntegerDefault(name) {
+  return rootProject.ext.has(name) ? rootProject.ext.get(name) : (project.properties["SolidarityNfcPassport_" + name]).toInteger()
+}
+
+android {
+  namespace "com.margelo.nitro.gg.solidarity.nfcpassport"
+
+  ndkVersion getExtOrDefault("ndkVersion")
+  compileSdkVersion getExtOrIntegerDefault("compileSdkVersion")
+
+  defaultConfig {
+    // jmrtd + scuba-sc-android target API 23 but the rest of Solidarity
+    // Android runs at 26+. We follow the higher floor so we can use the
+    // newer NfcAdapter.enableReaderMode API and java.time without runtime
+    // version gates.
+    minSdkVersion getExtOrIntegerDefault("minSdkVersion")
+    targetSdkVersion getExtOrIntegerDefault("targetSdkVersion")
+    buildConfigField "boolean", "IS_NEW_ARCHITECTURE_ENABLED", isNewArchitectureEnabled().toString()
+
+    externalNativeBuild {
+      cmake {
+        cppFlags "-frtti -fexceptions -Wall -Wextra -fstack-protector-all"
+        arguments "-DANDROID_STL=c++_shared", "-DANDROID_SUPPORT_FLEXIBLE_PAGE_SIZES=ON"
+        abiFilters (*reactNativeArchitectures())
+
+        buildTypes {
+          debug {
+            cppFlags "-O1 -g"
+          }
+          release {
+            cppFlags "-O2"
+          }
+        }
+      }
+    }
+  }
+
+  externalNativeBuild {
+    cmake {
+      path "CMakeLists.txt"
+    }
+  }
+
+  packagingOptions {
+    excludes = [
+      "META-INF",
+      "META-INF/**",
+      "**/libNitroModules.so",
+      "**/libc++_shared.so",
+      "**/libfbjni.so",
+      "**/libjsi.so",
+      "**/libfolly_json.so",
+      "**/libfolly_runtime.so",
+      "**/libglog.so",
+      "**/libhermes.so",
+      "**/libhermes-executor-debug.so",
+      "**/libhermes_executor.so",
+      "**/libreactnative.so",
+      "**/libreactnativejni.so",
+      "**/libturbomodulejsijni.so",
+      "**/libreact_nativemodule_core.so",
+      "**/libjscexecutor.so"
+    ]
+  }
+
+  buildFeatures {
+    buildConfig true
+    prefab true
+  }
+
+  buildTypes {
+    release {
+      minifyEnabled false
+    }
+  }
+
+  lintOptions {
+    disable "GradleCompatible"
+  }
+
+  compileOptions {
+    sourceCompatibility JavaVersion.VERSION_1_8
+    targetCompatibility JavaVersion.VERSION_1_8
+  }
+
+  sourceSets {
+    main {
+      java.srcDirs += [
+        // Nitrogen-generated kotlin (also added by autolinking.gradle, kept
+        // here as a safety net if autolinking ordering changes).
+        "${project.projectDir}/../nitrogen/generated/android/kotlin",
+      ]
+
+      if (isNewArchitectureEnabled()) {
+        java.srcDirs += [
+          "${project.buildDir}/generated/source/codegen/java"
+        ]
+      }
+    }
+  }
+}
+
+repositories {
+  mavenCentral()
+  google()
+}
+
+dependencies {
+  // RN: provided by the app's react-native gradle plugin.
+  //noinspection GradleDynamicVersion
+  implementation "com.facebook.react:react-native:+"
+
+  // NitroModules core — provides HybridObject base, ArrayBuffer, Promise.
+  implementation project(":react-native-nitro-modules")
+
+  // Coroutines for the off-thread NFC read loop. Matches the proximity /
+  // spruce-did pin so the workspace doesn't end up with two coroutine
+  // runtimes.
+  implementation "org.jetbrains.kotlinx:kotlinx-coroutines-android:1.8.1"
+
+  // jmrtd — the de-facto Android MRTD (Machine Readable Travel Document)
+  // reader. Implements BAC + PACE + secure messaging + LDS parsing per
+  // ICAO 9303. The 0.7.x line is the last release supporting the API
+  // surface we mirror from the AndyQ iOS library; 0.8.x changed key
+  // wrappers we don't want to track yet.
+  // https://central.sonatype.com/artifact/org.jmrtd/jmrtd
+  implementation("org.jmrtd:jmrtd:0.7.42") {
+    // Strip the cvc dep — we don't use Card Verifiable Certificates
+    // (EAC2 terminal auth path) and it drags in extra BouncyCastle
+    // variants that conflict with the ones we pin below.
+    exclude group: "org.ejbca.cvc"
+  }
+
+  // scuba-sc-android — Android-specific Smart Card adapter that jmrtd
+  // delegates to for IsoDep transceive (CardService impl). Pulls in the
+  // matching scuba-smartcards core jar (which carries net.sf.scuba.data.Gender
+  // and CardService base classes).
+  // https://central.sonatype.com/artifact/net.sf.scuba/scuba-sc-android
+  implementation "net.sf.scuba:scuba-sc-android:0.0.23"
+
+  // BouncyCastle — used by jmrtd for SOD signature verification (CMS
+  // SignedData), DG14 parsing, and PACE/BAC key derivation. jmrtd 0.7.42
+  // transitively pulls `bcprov-jdk18on` + `bcpkix-jdk18on:1.78`; we pin
+  // 1.78.1 here so we pick up the SHA-3 + EdDSA fixes without exploding
+  // the dep graph. The `jdk18on` artifact runs on Android (ART >= API 24).
+  implementation "org.bouncycastle:bcprov-jdk18on:1.78.1"
+  implementation "org.bouncycastle:bcutil-jdk18on:1.78.1"
+  implementation "org.bouncycastle:bcpkix-jdk18on:1.78.1"
+}

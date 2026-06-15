@@ -1,0 +1,23 @@
+{
+  "schema": "1",
+  "source": "Hand-pinned deterministic fixture. Swift FixtureExporter does NOT yet emit this file because the OpenPassport native prover ships randomness internally (Barretenberg fresh-k per proof), so byte-exact proof bytes can't be pinned across the boundary. This fixture pins everything that IS deterministic: the MRZ input, the derived MRZ digest, the public signals (is_human / age_over_18 / nationality), and the field-ordering contract on the proof envelope JSON (alphabetically sorted keys, matches Swift JSONEncoder(sortedKeys)). TODO(parity): wire solidarityTests/FixtureExporter.swift to dump (mrzHashHex, publicSignals[], envelope JSON shape) for the SAME mrz_string. Re-run `xcodebuild test -only-testing solidarityTests/FixtureExporter` then drop the JSON here. Swift reference: MoproProofService.buildDisclosureWitness + buildOpenPassportPayload.",
+  "mrz_string": "P<UTOERIKSSON<<ANNA<MARIA<<<<<<<<<<<<<<<<<<<L898902C36UTO7408122F1204159ZE184226B<<<<<10",
+  "current_date_yyMMdd": "260524",
+  "fallback_nationality": "UTO",
+  "expected_public_signals": {
+    "is_human": true,
+    "age_over_18": true,
+    "nationality": "UTO",
+    "mrz_hash_hex": "aa17b54d39f2a8794527d2f4ad43b1f9f36abfc634156991ddf7d0ed11e3ada8"
+  },
+  "expected_envelope_keys_sorted": [
+    "age_over_18",
+    "is_human",
+    "mrz_hash",
+    "nationality",
+    "proof_b64",
+    "proof_type",
+    "vk_b64"
+  ],
+  "deterministic_seed": "solidarity.passport.zk.fixture.v1"
+}
