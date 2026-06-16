@@ -188,22 +188,58 @@ internal struct SpruceDidKeyStore {
 
   // MARK: - Lookup
 
-  func hasKey(alias: String) -> Bool {
-    let ecQuery: [String: Any] = [
+  /// Builds the EC private-key query for `alias`, scoped to a SPECIFIC
+  /// synchronizable class (never `kSecAttrSynchronizableAny`). Pinning the
+  /// class is what makes resolution deterministic — see `copyECPrivateKey`.
+  private func ecPrivateKeyQuery(
+    alias: String, synchronizable: Bool, context: LAContext?
+  ) -> [String: Any] {
+    var query: [String: Any] = [
       kSecClass as String: kSecClassKey,
       kSecAttrApplicationTag as String: keyTag(for: alias),
       kSecAttrKeyClass as String: kSecAttrKeyClassPrivate,
       kSecMatchLimit as String: kSecMatchLimitOne,
       kSecReturnRef as String: true,
-      // Match both the legacy non-synced SE key AND the synchronizable
-      // software key (`generateSyncableP256Key`) so iCloud-synced identities
-      // are found on a second device.
-      kSecAttrSynchronizable as String: kSecAttrSynchronizableAny,
+      kSecAttrSynchronizable as String: synchronizable,
     ]
-    var item: CFTypeRef?
-    if SecItemCopyMatching(ecQuery as CFDictionary, &item) == errSecSuccess {
-      return true
+    if let context {
+      query[kSecUseAuthenticationContext as String] = context
     }
+    return query
+  }
+
+  /// Deterministically resolve the EC private key for `alias`. The
+  /// synchronizable SOFTWARE identity key (`generateSyncableP256Key`) is
+  /// preferred over any non-synced / Secure-Enclave entry under the same tag.
+  ///
+  /// This is the core of the CryptoTokenKit -5 fix: the previous lookups used
+  /// `kSecAttrSynchronizableAny` + `kSecMatchLimitOne`, which returns an
+  /// UNSPECIFIED item when several share the tag (an iCloud-synced copy, or a
+  /// stale Secure-Enclave key under the same alias). That let a token-backed
+  /// phantom be signed against a non-authenticated LAContext → SE auth failure
+  /// (`authenticationFailed`, CryptoTokenKit -5). A synchronizable item is
+  /// ALWAYS software (SE keys cannot sync), so preferring it can never resolve
+  /// a token phantom, and it keeps the DID public key and the signing key on
+  /// the SAME entry. Falls back to the non-synced class for legacy device-only
+  /// SE aliases. Returns nil when neither class matches.
+  private func copyECPrivateKey(alias: String, context: LAContext?) -> SecKey? {
+    for synchronizable in [true, false] {
+      let query = ecPrivateKeyQuery(
+        alias: alias, synchronizable: synchronizable, context: context)
+      var item: CFTypeRef?
+      let status = SecItemCopyMatching(query as CFDictionary, &item)
+      guard status == errSecSuccess, let candidate = item,
+        CFGetTypeID(candidate) == SecKeyGetTypeID()
+      else { continue }
+      // The CFGetTypeID equality guard above makes this cast provably safe
+      // (cannot crash) — matches the established pattern in this file.
+      return candidate as! SecKey  // swiftlint:disable:this force_cast
+    }
+    return nil
+  }
+
+  func hasKey(alias: String) -> Bool {
+    if copyECPrivateKey(alias: alias, context: nil) != nil { return true }
     let genQuery: [String: Any] = [
       kSecClass as String: kSecClassGenericPassword,
       kSecAttrService as String: keychainService,
@@ -224,49 +260,19 @@ internal struct SpruceDidKeyStore {
   /// context with `interactionNotAllowed = true` turns "would prompt" into
   /// a detectable error (the keyAuthMode probe).
   func fetchECPrivateKey(alias: String, context: LAContext?) throws -> SecKey {
-    var query: [String: Any] = [
-      kSecClass as String: kSecClassKey,
-      kSecAttrApplicationTag as String: keyTag(for: alias),
-      kSecAttrKeyClass as String: kSecAttrKeyClassPrivate,
-      kSecMatchLimit as String: kSecMatchLimitOne,
-      kSecReturnRef as String: true,
-      // Match both the legacy non-synced SE key AND the synchronizable
-      // software key (`generateSyncableP256Key`) so iCloud-synced identities
-      // are found on a second device.
-      kSecAttrSynchronizable as String: kSecAttrSynchronizableAny,
-    ]
-    if let context {
-      query[kSecUseAuthenticationContext as String] = context
-    }
-    var item: CFTypeRef?
-    let status = SecItemCopyMatching(query as CFDictionary, &item)
-    guard status == errSecSuccess, let candidate = item,
-      CFGetTypeID(candidate) == SecKeyGetTypeID()
-    else {
+    guard let key = copyECPrivateKey(alias: alias, context: context) else {
       throw SpruceDidError.keyNotFound(alias)
     }
-    return candidate as! SecKey  // swiftlint:disable:this force_cast
+    return key
   }
 
   /// Resolves the alias to its public-key JWK JSON string. Tries EC first
   /// (the primary path), then ed25519, then throws `keyNotFound`.
   func publicKeyJwk(alias: String) throws -> String {
-    let ecQuery: [String: Any] = [
-      kSecClass as String: kSecClassKey,
-      kSecAttrApplicationTag as String: keyTag(for: alias),
-      kSecAttrKeyClass as String: kSecAttrKeyClassPrivate,
-      kSecMatchLimit as String: kSecMatchLimitOne,
-      kSecReturnRef as String: true,
-      // Match both the legacy non-synced SE key AND the synchronizable
-      // software key (`generateSyncableP256Key`) so iCloud-synced identities
-      // are found on a second device.
-      kSecAttrSynchronizable as String: kSecAttrSynchronizableAny,
-    ]
-    var item: CFTypeRef?
-    if SecItemCopyMatching(ecQuery as CFDictionary, &item) == errSecSuccess,
-      let candidate = item, CFGetTypeID(candidate) == SecKeyGetTypeID()
-    {
-      let priv = candidate as! SecKey  // swiftlint:disable:this force_cast
+    // Resolve via the same deterministic path as signing so the DID public
+    // key and the signing key are guaranteed to be the SAME entry (never a
+    // phantom under the shared tag).
+    if let priv = copyECPrivateKey(alias: alias, context: nil) {
       guard let pub = SecKeyCopyPublicKey(priv) else {
         throw SpruceDidError.signFailed("SecKeyCopyPublicKey returned nil")
       }
