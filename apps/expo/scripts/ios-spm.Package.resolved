@@ -6,8 +6,8 @@
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/spruceid/sprucekit-mobile",
       "state" : {
-        "revision" : "a04e8a32d2f061424e45ecb85197e88206f7c696",
-        "version" : "0.15.10"
+        "revision" : "80a2ef8247de455bbc9db9bcbf131079dc953972",
+        "version" : "0.17.3"
       }
     },
     {
