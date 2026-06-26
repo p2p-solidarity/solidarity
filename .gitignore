@@ -145,6 +145,7 @@ crash.log
 crash.*.log
 
 # EAS local build artifacts
+apps/expo/build/
 apps/expo/build-*.aab
 apps/expo/*.aab
 # Local versionCode cache (populated by `eas build:version:get`)
