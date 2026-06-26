@@ -63,7 +63,7 @@ export function BusinessCardRow({
 function Avatar({ card }: { readonly card: CardManifestEntry }): ReactNode {
   return (
     <View
-      className="bg-warmCream items-center justify-center"
+      className="bg-warmCream items-center justify-center border border-divider"
       style={{ width: 48, height: 48, borderRadius: 24 }}
     >
       <ThemedText variant="titleLarge">

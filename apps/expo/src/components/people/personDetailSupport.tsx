@@ -12,9 +12,10 @@
  */
 import type { SFSymbol } from 'expo-symbols';
 import type { ReactNode } from 'react';
-import { Linking, Pressable, Text, View } from 'react-native';
+import { Linking, Text, View } from 'react-native';
 import Svg, { Path } from 'react-native-svg';
 
+import { PressableScale } from '@/components/common/PressableScale';
 import { SfIcon } from '@/components/icons/SfIcon';
 import { Colors } from '@/constants/Colors';
 import type { Contact, ContactSource, VerificationStatus } from '@solidarity/shared';
@@ -65,11 +66,10 @@ export function PersonDetailContactRowView({
     }
   };
   return (
-    <Pressable
+    <PressableScale
       onPress={onPress}
       accessibilityRole={row.url ? 'link' : undefined}
       accessibilityLabel={row.value}
-      className="active:opacity-70"
     >
       <View
         className="flex-row items-center bg-mutedSurface rounded-sm2"
@@ -82,7 +82,7 @@ export function PersonDetailContactRowView({
           {row.value}
         </Text>
       </View>
-    </Pressable>
+    </PressableScale>
   );
 }
 

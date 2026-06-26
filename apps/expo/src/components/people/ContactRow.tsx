@@ -62,7 +62,7 @@ export function ContactRow({
       accessibilityRole="button"
       accessibilityLabel={`Contact ${card.name}`}
     >
-      <View className="bg-searchBg h-12 w-12 items-center justify-center rounded-full mr-3">
+      <View className="bg-searchBg h-12 w-12 items-center justify-center rounded-full border border-divider mr-3">
         {card.profileImage ? (
           <Image
             source={{ uri: `data:image/png;base64,${card.profileImage}` }}

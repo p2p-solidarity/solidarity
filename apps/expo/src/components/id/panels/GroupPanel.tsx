@@ -10,8 +10,9 @@
 import { router } from 'expo-router';
 import type { ReactNode } from 'react';
 import { useEffect } from 'react';
-import { Pressable, Text, View } from 'react-native';
+import { Text, View } from 'react-native';
 
+import { PressableScale } from '@/components/common/PressableScale';
 import { IDSectionHeader } from '@/components/id';
 import { SfIcon } from '@/components/icons/SfIcon';
 import { ThemedButton } from '@/components/themed';
@@ -73,11 +74,10 @@ export function GroupPanel({ onRequestJoin }: GroupPanelProps): ReactNode {
           ) : (
             groups.map((g, idx) => (
               <View key={g.id}>
-                <Pressable
+                <PressableScale
                   onPress={() => { onSelect(g); }}
                   accessibilityRole="button"
                   accessibilityLabel={g.name}
-                  className="active:opacity-80"
                 >
                   <View className="bg-searchBg" style={{ padding: 16 }}>
                     <Text className="text-text1 text-[14px] font-semibold">
@@ -90,7 +90,7 @@ export function GroupPanel({ onRequestJoin }: GroupPanelProps): ReactNode {
                       {`Members: ${String(g.memberCount ?? 0)}`}
                     </Text>
                   </View>
-                </Pressable>
+                </PressableScale>
                 {idx !== groups.length - 1 ? (
                   <View style={{ height: 1, backgroundColor: Colors.divider }} />
                 ) : null}

@@ -1,7 +1,8 @@
 import { useMemo, type ReactNode } from 'react';
-import { Modal, Pressable, ScrollView, View } from 'react-native';
+import { Modal, ScrollView, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { PressableScale } from '@/components/common/PressableScale';
 import { PassportShowPresentation } from '@/components/credentials/PassportShowPresentation';
 import { PresentationProofQr } from '@/components/credentials/PresentationProofQr';
 import { SfIcon } from '@/components/icons/SfIcon';
@@ -94,15 +95,14 @@ function PresentationBody({
         <ThemedText variant="bodyMedium" style={{ fontWeight: '600' }}>
           Present
         </ThemedText>
-        <Pressable
+        <PressableScale
           onPress={onDismiss}
           accessibilityRole="button"
           accessibilityLabel="Close"
           style={{ width: 44, height: 44, alignItems: 'center', justifyContent: 'center' }}
-          className="active:opacity-60"
         >
           <SfIcon name="xmark" size={16} weight="semibold" color={Colors.text1} />
-        </Pressable>
+        </PressableScale>
       </View>
 
       <ScrollView

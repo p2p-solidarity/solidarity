@@ -11,8 +11,9 @@
  */
 import type { SFSymbol } from 'expo-symbols';
 import type { ReactNode } from 'react';
-import { Pressable, Text, View } from 'react-native';
+import { Text, View } from 'react-native';
 
+import { PressableScale } from '@/components/common/PressableScale';
 import { SfIcon } from '@/components/icons/SfIcon';
 import { Colors } from '@/constants/Colors';
 
@@ -52,10 +53,9 @@ export function SettingsBlockRow({
   isLast = false,
 }: SettingsBlockRowProps) {
   return (
-    <Pressable
+    <PressableScale
       onPress={onPress}
       accessibilityRole="button"
-      className="active:opacity-80"
     >
       <View className="flex-row items-center gap-2 px-3 py-4">
         <View
@@ -87,6 +87,6 @@ export function SettingsBlockRow({
           }}
         />
       ) : null}
-    </Pressable>
+    </PressableScale>
   );
 }

@@ -7,8 +7,9 @@
  * (solidarity/Views/IDViews/GroupVCIssuanceView.swift).
  */
 import type { ReactNode } from 'react';
-import { Pressable, Switch, Text, TextInput, View } from 'react-native';
+import { Switch, Text, TextInput, View } from 'react-native';
 
+import { PressableScale } from '@/components/common/PressableScale';
 import { IDSectionHeader } from '@/components/id';
 import { SfIcon } from '@/components/icons/SfIcon';
 import { Colors } from '@/constants/Colors';
@@ -349,7 +350,7 @@ function RadioRow({
   readonly onPress: () => void;
 }): ReactNode {
   return (
-    <Pressable
+    <PressableScale
       onPress={onPress}
       accessibilityRole="button"
       accessibilityLabel={label}
@@ -359,7 +360,6 @@ function RadioRow({
         gap: 10,
         paddingVertical: 8,
       }}
-      className="active:opacity-70"
     >
       <View
         style={{
@@ -390,6 +390,6 @@ function RadioRow({
       >
         {label}
       </Text>
-    </Pressable>
+    </PressableScale>
   );
 }

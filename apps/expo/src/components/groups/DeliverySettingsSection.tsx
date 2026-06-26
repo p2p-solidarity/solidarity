@@ -7,8 +7,9 @@
  */
 import type { ReactNode } from 'react';
 import { router } from 'expo-router';
-import { Pressable, Text, View } from 'react-native';
+import { Text, View } from 'react-native';
 
+import { PressableScale } from '@/components/common/PressableScale';
 import { SfIcon } from '@/components/icons/SfIcon';
 import { Colors } from '@/constants/Colors';
 import type { GroupModel } from '@/groups/store';
@@ -28,11 +29,10 @@ export function DeliverySettingsSection({
   };
 
   return (
-    <Pressable
+    <PressableScale
       onPress={onPress}
       accessibilityRole="button"
       accessibilityLabel="Delivery settings"
-      className="active:opacity-80"
     >
       <View
         className="bg-searchBg p-4 flex-row items-center"
@@ -51,6 +51,6 @@ export function DeliverySettingsSection({
           color={Colors.text3}
         />
       </View>
-    </Pressable>
+    </PressableScale>
   );
 }

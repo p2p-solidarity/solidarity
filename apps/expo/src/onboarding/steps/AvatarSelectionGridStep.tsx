@@ -57,6 +57,7 @@ export function AvatarSelectionGridStep({
           onPress={onBack}
           accessibilityRole="button"
           accessibilityLabel="Back"
+          hitSlop={8}
           style={{
             padding: 12,
             borderWidth: 1,

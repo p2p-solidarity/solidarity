@@ -13,10 +13,11 @@
  */
 import type { ReactNode } from 'react';
 import { useState } from 'react';
-import { Pressable, Text, View } from 'react-native';
+import { Text, View } from 'react-native';
 
 import { AddIssuerSheet } from './AddIssuerSheet';
 import { SectionHeader } from './GroupDetailSections';
+import { PressableScale } from '@/components/common/PressableScale';
 import { SfIcon } from '@/components/icons/SfIcon';
 import { Colors } from '@/constants/Colors';
 import { pushToast } from '@/feedback/toast';
@@ -73,19 +74,18 @@ export function CredentialIssuersSection({
         <SectionHeader title="Credential Issuers" />
         <View className="flex-1" />
         {owner ? (
-          <Pressable
+          <PressableScale
             onPress={() => { setShowAdd(true); }}
             accessibilityRole="button"
             accessibilityLabel="Add credential issuer"
             hitSlop={8}
-            className="active:opacity-60"
           >
             <SfIcon
               name="plus.circle.fill"
               size={20}
               color={Colors.primaryBlue}
             />
-          </Pressable>
+          </PressableScale>
         ) : null}
       </View>
 
@@ -170,19 +170,18 @@ function IssuerRow({
         </Text>
       ) : null}
       {canRemove && onRemove ? (
-        <Pressable
+        <PressableScale
           onPress={onRemove}
           accessibilityRole="button"
           accessibilityLabel="Remove issuer"
           hitSlop={8}
-          className="active:opacity-60"
         >
           <SfIcon
             name="minus.circle.fill"
             size={20}
             color={Colors.destructive}
           />
-        </Pressable>
+        </PressableScale>
       ) : null}
     </View>
   );

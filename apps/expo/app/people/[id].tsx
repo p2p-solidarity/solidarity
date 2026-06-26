@@ -365,7 +365,7 @@ function AvatarCircle({
         borderRadius: 44,
         backgroundColor: Colors.gradientCream,
         borderWidth: 1,
-        borderColor: Colors.gradientCream,
+        borderColor: Colors.divider,
         alignItems: 'center',
         justifyContent: 'center',
         overflow: 'hidden',

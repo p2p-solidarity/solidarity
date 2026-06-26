@@ -198,6 +198,7 @@ function DisconnectButton({ onPress }: { readonly onPress: () => void }): ReactN
       }}
       accessibilityRole="button"
       accessibilityLabel="Disconnect"
+      hitSlop={8}
       style={styles.disconnect}
     >
       <SfIcon name="xmark.circle.fill" size={14} color={Colors.text2} />

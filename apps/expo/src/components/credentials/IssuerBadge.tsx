@@ -13,9 +13,10 @@
  *     `Colors.text2` per Rule 4.
  *   - 44 × 44 minimum touch target when `onPress` is provided.
  */
-import { Image, Pressable, View } from 'react-native';
+import { Image, View } from 'react-native';
 import { useMemo, type ReactNode } from 'react';
 
+import { PressableScale } from '@/components/common/PressableScale';
 import { SfIcon } from '@/components/icons/SfIcon';
 import { ThemedText } from '@/components/themed';
 import { Colors } from '@/constants/Colors';
@@ -87,7 +88,7 @@ export function IssuerBadge({
 
   if (!onPress) return body;
   return (
-    <Pressable
+    <PressableScale
       onPress={onPress}
       accessibilityRole="button"
       accessibilityLabel={`Issuer ${displayName}`}
@@ -95,10 +96,9 @@ export function IssuerBadge({
         minHeight: TOUCH_TARGET,
         justifyContent: 'center',
       }}
-      className="active:opacity-60"
     >
       {body}
-    </Pressable>
+    </PressableScale>
   );
 }
 
@@ -124,6 +124,8 @@ function LogoOrPlaceholder({
           height: size,
           borderRadius: size / 2,
           backgroundColor: Colors.warmCream,
+          borderWidth: 1,
+          borderColor: Colors.divider,
         }}
       />
     );

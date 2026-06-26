@@ -77,6 +77,7 @@ export function PresentationProofQr({
           ) : null}
           <ThemedText
             variant="caption"
+            tabularNums
             style={{
               color: Colors.terminalGreen,
               fontWeight: '500',

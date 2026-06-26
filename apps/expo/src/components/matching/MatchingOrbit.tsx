@@ -173,7 +173,7 @@ const styles = StyleSheet.create({
     gap: 2,
   },
   centerLabel: { color: Colors.text1, fontSize: 12, fontWeight: '600' },
-  centerCount: { color: Colors.text1, fontSize: 14, fontWeight: '700' },
+  centerCount: { color: Colors.text1, fontSize: 14, fontWeight: '700', fontVariant: ['tabular-nums'] },
   satellite: {
     position: 'absolute',
     backgroundColor: `${Colors.featureAccent}99`,

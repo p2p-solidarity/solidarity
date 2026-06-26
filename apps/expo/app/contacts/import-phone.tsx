@@ -355,7 +355,7 @@ function SelectAllRow({
       <Text className="text-text1 text-[14px] font-medium">
         {allSelected ? t('contactImport.deselectAll') : t('contactImport.selectAll')}
       </Text>
-      <Text className="text-text3 text-[12px]">{t('contactImport.contactsCount', { count })}</Text>
+      <Text className="text-text3 text-[12px]" style={{ fontVariant: ['tabular-nums'] }}>{t('contactImport.contactsCount', { count })}</Text>
     </Pressable>
   );
 }

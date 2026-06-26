@@ -11,12 +11,12 @@ import type { ReactNode } from 'react';
 import {
   FlatList,
   Modal,
-  Pressable,
   Text,
   View,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { PressableScale } from '@/components/common/PressableScale';
 import { SfIcon } from '@/components/icons/SfIcon';
 import { Colors } from '@/constants/Colors';
 import type { GroupMember, GroupModel } from '@/groups/store';
@@ -55,15 +55,15 @@ export function AddIssuerSheet({
       <View className="flex-1 bg-pageBg">
         <View style={{ paddingTop: insets.top }} className="bg-pageBg">
           <View className="h-11 flex-row items-center px-4">
-            <Pressable
+            <PressableScale
               onPress={onClose}
               accessibilityRole="button"
               accessibilityLabel="Cancel"
               hitSlop={8}
-              className="px-1 py-1 active:opacity-60"
+              className="px-1 py-1"
             >
               <Text className="text-text1 text-[16px]">Cancel</Text>
-            </Pressable>
+            </PressableScale>
             <View className="flex-1 items-center">
               <Text className="text-text1 text-[17px] font-semibold">
                 Add Issuer
@@ -107,11 +107,10 @@ export function AddIssuerSheet({
               />
             )}
             renderItem={({ item }) => (
-              <Pressable
+              <PressableScale
                 onPress={() => { onSelect(item); }}
                 accessibilityRole="button"
                 accessibilityLabel={`Add ${item.userRecordID}`}
-                className="active:opacity-80"
               >
                 <View
                   style={{
@@ -142,7 +141,7 @@ export function AddIssuerSheet({
                     color={Colors.primaryBlue}
                   />
                 </View>
-              </Pressable>
+              </PressableScale>
             )}
           />
         )}

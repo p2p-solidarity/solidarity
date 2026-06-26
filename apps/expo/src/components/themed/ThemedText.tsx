@@ -42,15 +42,21 @@ const VARIANT_STYLE: Readonly<Record<TextVariant, TextStyle>> = {
   label: { fontSize: 13, fontWeight: '600', lineHeight: 18 },
 };
 
+/** Fixed-width figures so live-updating numbers don't reflow their neighbours. */
+const TABULAR_STYLE: TextStyle = { fontVariant: ['tabular-nums'] };
+
 export interface ThemedTextProps extends Omit<TextProps, 'children'> {
   readonly variant?: TextVariant;
   readonly tone?: TextTone;
+  /** Equal-width figures (`tabular-nums`) for numbers that update in place. */
+  readonly tabularNums?: boolean;
   readonly children: ReactNode;
 }
 
 export function ThemedText({
   variant = 'bodyMedium',
   tone = 'primary',
+  tabularNums = false,
   className,
   style,
   children,
@@ -58,7 +64,11 @@ export function ThemedText({
 }: ThemedTextProps): ReactNode {
   const tw = `${TONE_CLASS[tone]} ${className ?? ''}`.trim();
   return (
-    <Text className={tw} style={[VARIANT_STYLE[variant], style]} {...rest}>
+    <Text
+      className={tw}
+      style={[VARIANT_STYLE[variant], tabularNums ? TABULAR_STYLE : null, style]}
+      {...rest}
+    >
       {children}
     </Text>
   );
