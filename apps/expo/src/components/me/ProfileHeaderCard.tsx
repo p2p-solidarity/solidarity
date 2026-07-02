@@ -35,7 +35,7 @@ export function ProfileHeaderCard({
       <View className="flex-row items-start gap-6">
         <View className="flex-1 flex-row items-start gap-4">
           <View
-            className="overflow-hidden rounded-full bg-warmCream"
+            className="overflow-hidden rounded-full border border-divider bg-warmCream"
             style={{ width: 56, height: 56 }}
           >
             {avatar}

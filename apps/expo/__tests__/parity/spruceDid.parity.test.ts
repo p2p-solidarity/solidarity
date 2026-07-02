@@ -78,6 +78,62 @@ class InMemorySpruceDidDriver implements SpruceDid {
     return Promise.resolve(this.keyAuthModeResult);
   }
 
+  // ---- Dual-key-under-one-tag modeling (key-resolution invariant) -----------
+  // The native iOS fix (`SpruceDidKeyStore.copyECPrivateKey`) deterministically
+  // resolves ONE physical key per alias for BOTH `getPublicKeyJwk` and
+  // `signRawP256`, even when several entries share the keychain tag (an
+  // iCloud-synced copy + a stale Secure-Enclave key). The pre-fix lookup used
+  // `kSecAttrSynchronizableAny` + `kSecMatchLimitOne`, which could return a
+  // DIFFERENT entry per call → the bound device pubkey and the signer disagree
+  // → the OpenAC device-binding (and the ZK proof that consumes it) fail. The
+  // default driver stores one keypair per alias, so it cannot exercise that
+  // divergence; this models it explicitly.
+
+  /**
+   * A SECOND ("phantom") keypair planted under the same tag as `alias`, the
+   * stand-in for the SE phantom / non-synced copy the legacy lookup could pick.
+   * Only consulted when `signResolution === 'divergent'`.
+   */
+  private readonly phantomKeys = new Map<
+    string,
+    { privateKey: Uint8Array; publicKey: Uint8Array }
+  >();
+
+  /**
+   * Which physical key `signRawP256` resolves to:
+   *  - 'deterministic' (the `copyECPrivateKey` fix): the SAME primary entry
+   *    `getPublicKeyJwk` returns — pubkey and signer always agree.
+   *  - 'divergent' (the pre-fix `SynchronizableAny` ambiguity): the phantom,
+   *    so the bound pubkey and the signer disagree.
+   */
+  signResolution: 'deterministic' | 'divergent' = 'deterministic';
+
+  /** Plant a distinct phantom keypair under `alias`'s tag. */
+  seedPhantomKeyForTag(alias: string): void {
+    const kp = generateP256KeyPair();
+    this.phantomKeys.set(alias, {
+      privateKey: kp.privateKey,
+      publicKey: kp.publicKey,
+    });
+  }
+
+  /** The public key `signRawP256` will actually sign with for `alias`. */
+  resolvedSignerPublicKey(alias: string): Uint8Array {
+    if (this.signResolution === 'divergent') {
+      const phantom = this.phantomKeys.get(alias);
+      if (phantom) return phantom.publicKey;
+    }
+    const entry = this.keys.get(alias);
+    if (!entry) throw new Error(`no key for ${alias}`);
+    return entry.publicKey;
+  }
+
+  /** Restore the deterministic default + drop phantoms (per-test teardown). */
+  resetResolutionForTesting(): void {
+    this.signResolution = 'deterministic';
+    this.phantomKeys.clear();
+  }
+
   async generateKey(
     alias: string,
     keyType: string,
@@ -155,7 +211,16 @@ class InMemorySpruceDidDriver implements SpruceDid {
     if (digestBytes.length !== 32) {
       throw new Error(`signRawP256 expects 32-byte digest, got ${digestBytes.length}`);
     }
-    const signature = p256.sign(digestBytes, entry.privateKey, { prehash: false });
+    // Deterministic resolution (the fix) signs with the SAME primary entry
+    // `getPublicKeyJwk` returns. 'divergent' signs with the phantom under the
+    // same tag — the pre-fix `SynchronizableAny` ambiguity that makes the bound
+    // pubkey and the signer disagree.
+    const phantom = this.phantomKeys.get(alias);
+    const signingPriv =
+      this.signResolution === 'divergent' && phantom
+        ? phantom.privateKey
+        : entry.privateKey;
+    const signature = p256.sign(digestBytes, signingPriv, { prehash: false });
     const out = new ArrayBuffer(signature.length);
     new Uint8Array(out).set(signature);
     return out;
@@ -454,5 +519,78 @@ describe('SpruceID DID Nitro module — JS-side wiring', () => {
     expect(driver.hasKey('solidarity.master.v2')).toBe(true);
     await resetSigningKeyForTesting();
     expect(driver.hasKey('solidarity.master.v2')).toBe(false);
+  });
+
+  // The OpenAC device binding (and the ZK proof that consumes it) is only safe
+  // if the pubkey it binds is the pubkey of the key that signs. `signingKey.ts`
+  // takes `publicKeyRaw` from `getPublicKeyJwk` and the signature from
+  // `signRawP256` — two SEPARATE native calls on the same alias. The iOS fix
+  // (`SpruceDidKeyStore.copyECPrivateKey`, deterministic `[true,false]`
+  // ordering) guarantees both resolve ONE physical key even under a shared tag.
+  // These tests pin that invariant cryptographically (verify the binding output
+  // against itself) and prove the assertion is NOT tautological by exhibiting
+  // the divergence the fix prevents.
+  describe('device-binding key-resolution invariant (dual-key tag)', () => {
+    const ALIAS = 'solidarity.master.v2';
+
+    function uncompressedPoint(raw64: Uint8Array): Uint8Array {
+      const point = new Uint8Array(65);
+      point[0] = 0x04;
+      point.set(raw64, 1);
+      return point;
+    }
+
+    afterEach(() => {
+      driver.resetResolutionForTesting();
+    });
+
+    it('deterministic resolver keeps the bound pubkey and the signer on one key (binding verifies)', async () => {
+      // Provision the identity, then plant a phantom under the SAME tag — the
+      // legacy ambiguity the fix removes. Deterministic resolution must still
+      // sign with the primary entry `getPublicKeyJwk` returned.
+      await ensureSigningKey();
+      driver.seedPhantomKeyForTag(ALIAS);
+      driver.signResolution = 'deterministic';
+
+      const nonceHash = new Uint8Array(32).fill(3);
+      const { signature, publicKeyRaw } =
+        await signOpenAcDeviceBindingDigest(nonceHash);
+
+      // CRUX: the returned pubkey verifies its OWN signature. Checking against
+      // `publicKeyRaw` directly (not a separately stored jwk) is what makes
+      // this catch a pubkey/signer divergence.
+      expect(
+        p256.verify(signature, nonceHash, uncompressedPoint(publicKeyRaw), {
+          prehash: false,
+        })
+      ).toBe(true);
+    });
+
+    it('divergent resolver (pre-fix SynchronizableAny bug) breaks the binding — proving the invariant has teeth', async () => {
+      // Model the exact bug `copyECPrivateKey` prevents: `signRawP256` resolves
+      // to a phantom under the same tag while `getPublicKeyJwk` resolves to the
+      // primary, so the bound pubkey ≠ the signer. The binding must FAIL to
+      // verify — and the consistent-case assertion above is meaningful precisely
+      // because this one can fail.
+      await ensureSigningKey();
+      driver.seedPhantomKeyForTag(ALIAS);
+      driver.signResolution = 'divergent';
+
+      const nonceHash = new Uint8Array(32).fill(4);
+      const { signature, publicKeyRaw } =
+        await signOpenAcDeviceBindingDigest(nonceHash);
+
+      // The bound pubkey cannot verify the phantom's signature…
+      expect(
+        p256.verify(signature, nonceHash, uncompressedPoint(publicKeyRaw), {
+          prehash: false,
+        })
+      ).toBe(false);
+      // …and it is a different key from the one that actually signed.
+      const signerRaw = jwkToPublicKey(
+        publicKeyToJwk(driver.resolvedSignerPublicKey(ALIAS))
+      ).slice(1);
+      expect(publicKeyRaw).not.toEqual(signerRaw);
+    });
   });
 });

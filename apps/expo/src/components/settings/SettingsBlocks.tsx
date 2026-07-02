@@ -11,6 +11,7 @@ import type { SFSymbol } from 'expo-symbols';
 import type { ReactNode } from 'react';
 import { Pressable, Switch, Text, View } from 'react-native';
 
+import { PressableScale } from '@/components/common/PressableScale';
 import { SfIcon } from '@/components/icons/SfIcon';
 import { Colors } from '@/constants/Colors';
 import { useThemeColors } from '@/constants/useThemeColors';
@@ -124,14 +125,13 @@ export function SettingsBlockRow({
     return content;
   }
   return (
-    <Pressable
+    <PressableScale
       onPress={onPress}
       accessibilityRole="button"
       accessibilityLabel={title}
-      className="active:opacity-80"
     >
       {content}
-    </Pressable>
+    </PressableScale>
   );
 }
 
@@ -173,14 +173,13 @@ export function SettingsBlockDangerRow({
 
   if (!onPress) return content;
   return (
-    <Pressable
+    <PressableScale
       onPress={onPress}
       accessibilityRole="button"
       accessibilityLabel={title}
-      className="active:opacity-80"
     >
       {content}
-    </Pressable>
+    </PressableScale>
   );
 }
 
@@ -282,18 +281,18 @@ export function SettingsBackToolbar({
       className="flex-row items-center"
       style={{ paddingHorizontal: 12, paddingVertical: 10 }}
     >
-      <Pressable
+      <PressableScale
         onPress={onPress}
         accessibilityRole="button"
         accessibilityLabel="Back"
-        className="flex-row items-center active:opacity-80"
+        className="flex-row items-center"
         style={{ paddingHorizontal: 4, paddingVertical: 8 }}
       >
         <SfIcon name="chevron.left" size={16} weight="semibold" color={c.text1} />
         <Text className="text-text1 text-[16px]" style={{ marginLeft: 4 }}>
           {title}
         </Text>
-      </Pressable>
+      </PressableScale>
     </View>
   );
 }

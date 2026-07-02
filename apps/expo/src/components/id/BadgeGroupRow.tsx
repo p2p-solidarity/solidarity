@@ -6,8 +6,9 @@
  * count + chevron.right. Used inside the dev-mode badge section.
  */
 import type { ReactNode } from 'react';
-import { Pressable, Text, View } from 'react-native';
+import { Text, View } from 'react-native';
 
+import { PressableScale } from '@/components/common/PressableScale';
 import { SfIcon } from '@/components/icons/SfIcon';
 import { Colors } from '@/constants/Colors';
 import { ON_DARK } from '@/components/themed';
@@ -26,7 +27,7 @@ export function BadgeGroupRow({
   onPress,
 }: BadgeGroupRowProps): ReactNode {
   return (
-    <Pressable
+    <PressableScale
       onPress={onPress}
       accessibilityRole="button"
       accessibilityLabel={name}
@@ -40,7 +41,6 @@ export function BadgeGroupRow({
         borderWidth: 1,
         borderColor: Colors.divider,
       }}
-      className="active:opacity-80"
     >
       <View
         style={{
@@ -98,6 +98,6 @@ export function BadgeGroupRow({
         weight="semibold"
         color={Colors.text3}
       />
-    </Pressable>
+    </PressableScale>
   );
 }

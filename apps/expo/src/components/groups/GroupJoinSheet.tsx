@@ -21,7 +21,6 @@ import { useState } from 'react';
 import {
   ActivityIndicator,
   Modal,
-  Pressable,
   ScrollView,
   Text,
   TextInput,
@@ -29,6 +28,7 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { PressableScale } from '@/components/common/PressableScale';
 import { IDSectionHeader } from '@/components/id';
 import { SfIcon } from '@/components/icons/SfIcon';
 import { ThemedButton } from '@/components/themed';
@@ -110,15 +110,15 @@ export function GroupJoinSheet({
       <View className="flex-1 bg-pageBg">
         <View style={{ paddingTop: insets.top }} className="bg-pageBg">
           <View className="h-11 flex-row items-center px-4">
-            <Pressable
+            <PressableScale
               onPress={closeAndReset}
               accessibilityRole="button"
               accessibilityLabel="Cancel"
               hitSlop={8}
-              className="px-1 py-1 active:opacity-60"
+              className="px-1 py-1"
             >
               <Text className="text-text1 text-[16px]">Cancel</Text>
-            </Pressable>
+            </PressableScale>
             <View className="flex-1 items-center">
               <Text className="text-text1 text-[17px] font-semibold">
                 Join Group

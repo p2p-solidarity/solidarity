@@ -104,14 +104,28 @@ final class HybridSpruceDid: HybridSpruceDidSpec {
   // MARK: - Sign-gate mode
 
   func keyAuthMode(alias: String) throws -> Promise<String> {
-    return Promise.async {
-      if let cached = self.withState({ self.keyAuthModeCache[alias] }) {
-        return cached
-      }
-      let mode = self.probeKeyAuthMode(alias: alias)
-      self.withState { self.keyAuthModeCache[alias] = mode }
-      return mode
-    }
+    return Promise.async { self.cachedKeyAuthMode(alias) }
+  }
+
+  /// Synchronous, process-cached auth-mode resolution (shared by `keyAuthMode`
+  /// and the sign path). A key's ACL cannot change without regenerating it, so
+  /// the first probe result is stable for the process lifetime.
+  private func cachedKeyAuthMode(_ alias: String) -> String {
+    if let cached = withState({ self.keyAuthModeCache[alias] }) { return cached }
+    let mode = probeKeyAuthMode(alias: alias)
+    withState { self.keyAuthModeCache[alias] = mode }
+    return mode
+  }
+
+  /// LAContext to attach to a sign for `alias`, or nil. Only a native-ACL key
+  /// (legacy Secure-Enclave `.userPresence`) gets `signContext`, so repeated
+  /// ACL-gated signs reuse one Face ID evaluation. A js-gated SOFTWARE key gets
+  /// NO context: it is gated in JS, and attaching `kSecUseAuthenticationContext`
+  /// to it would drive Secure-Enclave auth — which, if a stale phantom key were
+  /// ever resolved, fails with CryptoTokenKit -5. Pairs with the deterministic
+  /// resolution in `SpruceDidKeyStore.copyECPrivateKey`.
+  private func signingContext(for alias: String) -> LAContext? {
+    cachedKeyAuthMode(alias) == "native-acl" ? signContext : nil
   }
 
   /// Probe: attempt a signature over 32 random bytes under an
@@ -268,7 +282,8 @@ final class HybridSpruceDid: HybridSpruceDidSpec {
       // legacy app's Swift signer which only ever produced ES256 JWS.
       // Ed25519 (EdDSA) signing is gated until the Spruce SDK side is
       // confirmed to accept arbitrary CryptoKit-signed payloads.
-      let priv = try self.store.fetchECPrivateKey(alias: alias, context: self.signContext)
+      let priv = try self.store.fetchECPrivateKey(
+        alias: alias, context: self.signingContext(for: alias))
       var error: Unmanaged<CFError>?
       // The legacy code uses `.ecdsaSignatureMessageX962SHA256` — it
       // emits a DER-encoded signature which we then have to convert to raw
@@ -302,7 +317,8 @@ final class HybridSpruceDid: HybridSpruceDidSpec {
         "signRawP256 expects a 32-byte SHA-256 digest, got \(bytes.count)")
     }
     return Promise.async {
-      let priv = try self.store.fetchECPrivateKey(alias: alias, context: self.signContext)
+      let priv = try self.store.fetchECPrivateKey(
+        alias: alias, context: self.signingContext(for: alias))
       let algorithm = SecKeyAlgorithm.ecdsaSignatureDigestX962SHA256
       guard SecKeyIsAlgorithmSupported(priv, .sign, algorithm) else {
         throw SpruceDidError.signFailed("P-256 digest signing is not supported for alias=\(alias)")

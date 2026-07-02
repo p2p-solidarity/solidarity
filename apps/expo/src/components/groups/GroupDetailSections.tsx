@@ -281,6 +281,7 @@ export function InviteSection({
         <Pressable
           accessibilityRole="button"
           accessibilityLabel="Copy invite link"
+          hitSlop={8}
           onPress={() => {
             void Clipboard.setStringAsync(link);
             pushToast('Copied to clipboard', 'success');

@@ -231,7 +231,7 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.searchBg,
     alignSelf: 'center',
   },
-  countdownText: { color: Colors.text2, fontSize: 12, fontWeight: '600' },
+  countdownText: { color: Colors.text2, fontSize: 12, fontWeight: '600', fontVariant: ['tabular-nums'] },
 
   actions: { gap: 10 },
 });

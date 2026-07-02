@@ -19,6 +19,7 @@ import { useMemo } from 'react';
 import { Modal, Pressable, ScrollView, Text, TextInput, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { PressableScale } from '@/components/common/PressableScale';
 import { SfIcon } from '@/components/icons/SfIcon';
 import { ThemedButton } from '@/components/themed';
 import { Colors } from '@/constants/Colors';
@@ -293,11 +294,12 @@ function OptionRow({
   readonly onPress: () => void;
 }): ReactNode {
   return (
-    <Pressable
+    <PressableScale
       onPress={onPress}
       accessibilityRole="button"
       accessibilityLabel={label}
-      className="flex-row items-center active:opacity-80"
+      haptic={false}
+      className="flex-row items-center"
       style={{ paddingVertical: 8 }}
     >
       <View style={{ width: 20, alignItems: 'center' }}>
@@ -320,7 +322,7 @@ function OptionRow({
       {active ? (
         <SfIcon name="checkmark" size={14} weight="semibold" color={Colors.primaryBlue} />
       ) : null}
-    </Pressable>
+    </PressableScale>
   );
 }
 

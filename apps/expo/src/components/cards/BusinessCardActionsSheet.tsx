@@ -13,6 +13,7 @@ import type { ReactNode } from 'react';
 import { Modal, Pressable, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { PressableScale } from '@/components/common/PressableScale';
 import { SfIcon } from '@/components/icons/SfIcon';
 import { ThemedText } from '@/components/themed';
 import { Colors } from '@/constants/Colors';
@@ -171,11 +172,11 @@ function ActionRow({
 }): ReactNode {
   const tint = destructive ? Colors.destructive : Colors.text1;
   return (
-    <Pressable
+    <PressableScale
       accessibilityRole="button"
       accessibilityLabel={label}
       onPress={onPress}
-      className="active:opacity-70"
+      haptic={false}
       style={{
         flexDirection: 'row',
         alignItems: 'center',
@@ -193,6 +194,6 @@ function ActionRow({
       >
         {label}
       </ThemedText>
-    </Pressable>
+    </PressableScale>
   );
 }

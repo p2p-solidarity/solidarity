@@ -7,8 +7,9 @@
  * pure UI. Used inside the same parent that owns `buildPresentationQrPages`
  * output (see `src/me/presentationQrPages.ts`).
  */
-import { Pressable, View } from 'react-native';
+import { View } from 'react-native';
 
+import { PressableScale } from '@/components/common/PressableScale';
 import { SfIcon } from '@/components/icons/SfIcon';
 import { ThemedText } from '@/components/themed/ThemedText';
 import { Colors } from '@/constants/Colors';
@@ -41,7 +42,7 @@ export function PresentationChunkPlaybackControls({
   return (
     <View style={{ paddingHorizontal: 20, gap: 10 }}>
       <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-        <ThemedText variant="caption" tone="secondary">
+        <ThemedText variant="caption" tone="secondary" tabularNums>
           {`Chunk ${currentIndex + 1} of ${totalChunks}`}
         </ThemedText>
         <View style={{ flex: 1 }} />
@@ -132,13 +133,14 @@ function ChunkControlButton({
 }: ChunkControlButtonProps) {
   const tint = disabled ? Colors.text3 : Colors.terminalGreen;
   return (
-    <Pressable
+    <PressableScale
       onPress={onPress}
       disabled={disabled}
+      haptic={false}
       accessibilityRole="button"
       accessibilityLabel={accessibilityLabel}
       accessibilityState={{ disabled }}
-      style={({ pressed }) => ({
+      style={{
         width: HIT_SIZE,
         height: HIT_SIZE,
         alignItems: 'center',
@@ -146,10 +148,9 @@ function ChunkControlButton({
         borderRadius: 8,
         borderWidth: 1,
         borderColor: disabled ? Colors.divider : Colors.terminalGreen,
-        opacity: pressed && !disabled ? 0.6 : 1,
-      })}
+      }}
     >
       <SfIcon name={symbol} size={17} weight="semibold" color={tint} />
-    </Pressable>
+    </PressableScale>
   );
 }

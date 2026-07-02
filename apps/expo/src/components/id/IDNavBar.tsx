@@ -9,9 +9,10 @@
  */
 import type { ReactNode } from 'react';
 import { router } from 'expo-router';
-import { Pressable, Text, View } from 'react-native';
+import { Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { PressableScale } from '@/components/common/PressableScale';
 import { SfIcon } from '@/components/icons/SfIcon';
 import { Colors } from '@/constants/Colors';
 
@@ -40,12 +41,13 @@ export function IDNavBar({
   return (
     <View style={{ paddingTop: insets.top }} className="bg-pageBg">
       <View className="h-11 flex-row items-center px-4">
-        <Pressable
+        <PressableScale
           onPress={handleLeading}
           accessibilityRole="button"
           accessibilityLabel={leadingLabel ?? 'Back'}
           hitSlop={8}
-          className="flex-row items-center -ml-1 px-1 py-1 active:opacity-60"
+          containerStyle={{ marginLeft: -4 }}
+          className="flex-row items-center px-1 py-1"
         >
           <SfIcon
             name="chevron.left"
@@ -56,7 +58,7 @@ export function IDNavBar({
           {leadingLabel ? (
             <Text className="text-text1 text-[16px] ml-1">{leadingLabel}</Text>
           ) : null}
-        </Pressable>
+        </PressableScale>
         <View className="flex-1 items-center">
           <Text
             numberOfLines={1}

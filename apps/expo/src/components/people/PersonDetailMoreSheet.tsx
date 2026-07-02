@@ -25,6 +25,7 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { PressableScale } from '@/components/common/PressableScale';
 import { SfIcon } from '@/components/icons/SfIcon';
 import { Colors } from '@/constants/Colors';
 import { confirmDialog } from '@/feedback/confirmDialog';
@@ -275,11 +276,11 @@ function ActionRow({
   const bg =
     tone === 'destructive' ? `${Colors.destructive}1A` : Colors.searchBg;
   return (
-    <Pressable
+    <PressableScale
       onPress={onPress}
       accessibilityRole="button"
       accessibilityLabel={label}
-      className="rounded-sm2 active:opacity-80"
+      className="rounded-sm2"
       style={{
         height: 48,
         backgroundColor: bg,
@@ -291,6 +292,6 @@ function ActionRow({
     >
       <SfIcon name={icon} size={15} color={fg} />
       <Text style={{ color: fg, fontSize: 15 }}>{label}</Text>
-    </Pressable>
+    </PressableScale>
   );
 }

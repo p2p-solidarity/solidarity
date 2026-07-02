@@ -67,7 +67,7 @@ export default function ImportVcf() {
       {lastImport !== null ? (
         <ThemedSurface variant="card" padded className="mx-4 mt-3">
           <ThemedText variant="caption" tone="tertiary">{t('contactVcf.lastImportHeader')}</ThemedText>
-          <ThemedText variant="bodyLarge">{t('contactVcf.lastImportCount', { count: lastImport })}</ThemedText>
+          <ThemedText variant="bodyLarge" tabularNums>{t('contactVcf.lastImportCount', { count: lastImport })}</ThemedText>
         </ThemedSurface>
       ) : null}
 
