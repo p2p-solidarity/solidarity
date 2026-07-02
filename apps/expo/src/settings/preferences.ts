@@ -76,6 +76,15 @@ export interface Preferences {
   readonly shareAgeOver18: boolean;
   /** Active UI language tag (`en`, `zh-Hant`). Mirrors Swift LanguageSelectionView. */
   readonly language: string;
+  /**
+   * Root-key (seed-derived did:key, `src/identity/rootKey.ts`) backup
+   * consent — recorded at the onboarding `backup.tsx` step. `'icloud'` is
+   * the recommended one-tap path; `'mnemonicOnly'` means the user completed
+   * the write-it-down ceremony instead. This is an INTENT flag, not proof
+   * that iCloud sync is active — see rootKey.ts's module doc for the
+   * current storage-capability ceiling.
+   */
+  readonly rootKeySyncChoice: 'undecided' | 'icloud' | 'mnemonicOnly';
 }
 
 const DEFAULT_BIOMETRIC_POLICY: Readonly<Record<SensitiveActionKey, boolean>> = {
@@ -120,6 +129,7 @@ const DEFAULTS: Preferences = {
   // installI18n). Only a real selection ('en' | 'zh-Hant') persists and
   // overrides the device locale on relaunch.
   language: '',
+  rootKeySyncChoice: 'undecided',
 };
 
 function readSafe(): Preferences {

@@ -2,7 +2,9 @@
  * Onboarding state-machine tests. Pure reducer — no React, no native modules.
  *
  * Mirrors Swift OnboardingFlowView.Step (welcome → profileSetup →
- * avatarSetup → secureKeys → importContacts → scanPassport → complete).
+ * avatarSetup → secureKeys → importContacts → scanPassport → complete),
+ * plus the Expo-only `backup` step (04-plan Phase A1 task A1.4, inserted
+ * after `secureKeys`) — see src/onboarding/state.ts.
  */
 import { describe, expect, it } from 'bun:test';
 
@@ -17,7 +19,7 @@ describe('onboardingReducer', () => {
     expect(initialOnboardingState.step).toBe('welcome');
   });
 
-  it('advances through all 7 steps in order', () => {
+  it('advances through every step in order', () => {
     let s = initialOnboardingState;
     for (let i = 1; i < ONBOARDING_STEPS.length; i++) {
       s = onboardingReducer(s, { type: 'next' });

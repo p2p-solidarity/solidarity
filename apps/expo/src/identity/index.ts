@@ -35,3 +35,18 @@ export {
   type TrustAnchor,
   type TrustAnchorSource,
 } from './issuerTrustAnchor';
+export {
+  __setRootKeyBiometricGateForTesting,
+  __setRootKeyStorageForTesting,
+  createFromFreshMnemonic,
+  deleteRootKey,
+  deriveDidFromMnemonic,
+  getRootDid,
+  getRootSigner,
+  hasRootKey,
+  importFromMnemonic,
+  revealMnemonicForExport,
+  type BiometricGate,
+  type RootKeyError,
+  type RootKeyStorage,
+} from './rootKey';

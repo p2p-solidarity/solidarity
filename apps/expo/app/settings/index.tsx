@@ -99,6 +99,11 @@ export default function SettingsHub() {
               title={t('settingsHub.viewDids')}
               onPress={() => { router.push('/settings/dids'); }}
             />
+            <SettingsBlockRow
+              icon="arrow.up.arrow.down.square"
+              title={t('settingsHub.identityExport')}
+              onPress={() => { router.push('/settings/identity-export'); }}
+            />
           </SettingsBlockSection>
 
           {/* QR Sharing */}

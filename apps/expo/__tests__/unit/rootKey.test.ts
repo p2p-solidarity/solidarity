@@ -1,0 +1,313 @@
+/**
+ * Root identity — seed-derived did:key (BIP-39 mnemonic -> HKDF -> P-256
+ * scalar), the App<->Web portable identity from packages/shared/derive.ts
+ * (04-plan Phase A1 task A1.4).
+ *
+ * TS port under test:
+ *   apps/expo/src/identity/rootKey.ts
+ *
+ * What this suite pins:
+ *   1. `createFromFreshMnemonic()` mints + persists a mnemonic, returning a
+ *      did:key that `getRootDid()` reproduces on a later call.
+ *   2. `getRootSigner()` returns a `Signer` whose output round-trips through
+ *      `packages/shared`'s `signCompact` / `verifyCompact` (the actual
+ *      Phase-A1 conformance contract every downstream phase depends on).
+ *   3. Importing a pinned `packages/shared/vectors/derive.json` mnemonic
+ *      reproduces the pinned did — the App<->Web portability guarantee.
+ *   4. Re-importing the SAME mnemonic is idempotent (same did, no error).
+ *   5. Face ID gating: `getRootSigner()`'s returned Signer rejects when the
+ *      biometric prompt is denied; `revealMnemonicForExport()` returns
+ *      `err({kind:'biometricDenied'})` without ever reading storage.
+ *   6. `Result`-only error contract: not-provisioned / invalid-mnemonic
+ *      never throw — always a typed `err(...)`.
+ *   7. The mnemonic on disk is exactly what the injected `RootKeyStorage`
+ *      received (never routed through MMKV — this file never mocks
+ *      `@/storage/mmkv`).
+ *
+ * Isolation note: this suite deliberately uses ONLY rootKey.ts's own
+ * dependency-injection hooks (`__setRootKeyStorageForTesting`,
+ * `__setRootKeyBiometricGateForTesting`) instead of `mock.module('expo-
+ * secure-store', ...)` / `mock.module('@/keychain/biometric', ...)`. Bun's
+ * `mock.module` registry is GLOBAL for the whole `bun test` process — two
+ * files independently mocking the same specifier with different fakes can
+ * silently corrupt each OTHER's state once both are loaded in the same run
+ * (reproduced empirically between `secretsKeychain.test.ts` and
+ * `__tests__/parity/spruceDid.parity.test.ts`, which is why rootKey.ts's
+ * SecureStore/biometric access is lazy-loaded + injectable in the first
+ * place — see that module's doc). Do not add `mock.module` calls here.
+ */
+import { afterEach, beforeAll, beforeEach, describe, expect, it } from 'bun:test';
+
+import {
+  didKeyFromPublicKey,
+  publicKeyFromPrivate,
+  signCompact,
+  verifyCompact,
+  type Signer,
+} from '@solidarity/shared';
+
+import derivedVectors from '../../../../packages/shared/vectors/derive.json';
+
+// ── In-memory storage + biometric gate, injected via rootKey.ts's own DI
+//    hooks (no global `mock.module` — see the isolation note above) ───────
+
+const secureStore = new Map<string, string>();
+let nextBiometricSuccess = true;
+const biometricCalls: string[] = [];
+
+const fakeStorage = {
+  getMnemonic: (): Promise<string | null> => Promise.resolve(secureStore.get('mnemonic') ?? null),
+  setMnemonic: (mnemonic: string): Promise<void> => {
+    secureStore.set('mnemonic', mnemonic);
+    return Promise.resolve();
+  },
+  deleteMnemonic: (): Promise<void> => {
+    secureStore.delete('mnemonic');
+    return Promise.resolve();
+  },
+};
+
+const fakeBiometricGate = (reason: 'sign' | 'export'): Promise<boolean> => {
+  biometricCalls.push(reason);
+  return Promise.resolve(nextBiometricSuccess);
+};
+
+interface RootKeyMod {
+  readonly __setRootKeyStorageForTesting: (storage: typeof fakeStorage | null) => void;
+  readonly __setRootKeyBiometricGateForTesting: (gate: typeof fakeBiometricGate | null) => void;
+  readonly createFromFreshMnemonic: () => Promise<
+    | { readonly ok: true; readonly value: { readonly mnemonic: string; readonly did: string } }
+    | { readonly ok: false; readonly error: { readonly kind: string; readonly message?: string } }
+  >;
+  readonly importFromMnemonic: (mnemonic: string) => Promise<
+    | { readonly ok: true; readonly value: { readonly did: string } }
+    | { readonly ok: false; readonly error: { readonly kind: string; readonly message?: string } }
+  >;
+  readonly deriveDidFromMnemonic: (mnemonic: string) =>
+    | { readonly ok: true; readonly value: string }
+    | { readonly ok: false; readonly error: { readonly kind: string; readonly message?: string } };
+  readonly getRootDid: () => Promise<
+    | { readonly ok: true; readonly value: string }
+    | { readonly ok: false; readonly error: { readonly kind: string } }
+  >;
+  readonly getRootSigner: () => Promise<
+    | { readonly ok: true; readonly value: Signer }
+    | { readonly ok: false; readonly error: { readonly kind: string } }
+  >;
+  readonly revealMnemonicForExport: () => Promise<
+    | { readonly ok: true; readonly value: string }
+    | { readonly ok: false; readonly error: { readonly kind: string } }
+  >;
+  readonly hasRootKey: () => Promise<boolean>;
+  readonly deleteRootKey: () => Promise<void>;
+}
+
+let mod: RootKeyMod;
+
+beforeAll(async () => {
+  const imported: unknown = await import('../../src/identity/rootKey');
+  mod = imported as RootKeyMod;
+  mod.__setRootKeyStorageForTesting(fakeStorage);
+  mod.__setRootKeyBiometricGateForTesting(fakeBiometricGate);
+});
+
+beforeEach(async () => {
+  secureStore.clear();
+  nextBiometricSuccess = true;
+  biometricCalls.length = 0;
+  await mod.deleteRootKey();
+});
+
+afterEach(async () => {
+  await mod.deleteRootKey();
+});
+
+// ── 1. Create + resolve ────────────────────────────────────────────────────
+
+describe('createFromFreshMnemonic / getRootDid', () => {
+  it('mints a mnemonic + did, and getRootDid() reproduces the same did later', async () => {
+    const created = await mod.createFromFreshMnemonic();
+    expect(created.ok).toBe(true);
+    if (!created.ok) return;
+    expect(created.value.mnemonic.split(' ').length).toBe(24);
+    expect(created.value.did.startsWith('did:key:z')).toBe(true);
+
+    const resolved = await mod.getRootDid();
+    expect(resolved.ok).toBe(true);
+    if (!resolved.ok) return;
+    expect(resolved.value).toBe(created.value.did);
+  });
+
+  it('getRootDid() before provisioning returns err(notProvisioned)', async () => {
+    const r = await mod.getRootDid();
+    expect(r.ok).toBe(false);
+    if (r.ok) return;
+    expect(r.error.kind).toBe('notProvisioned');
+  });
+
+  it('hasRootKey() reflects provisioning state', async () => {
+    expect(await mod.hasRootKey()).toBe(false);
+    await mod.createFromFreshMnemonic();
+    expect(await mod.hasRootKey()).toBe(true);
+  });
+
+  it('persists the mnemonic verbatim via the injected storage (not MMKV — no MMKV mock exists in this file)', async () => {
+    const created = await mod.createFromFreshMnemonic();
+    expect(created.ok).toBe(true);
+    if (!created.ok) return;
+    const stored = [...secureStore.values()];
+    expect(stored).toContain(created.value.mnemonic);
+  });
+});
+
+// ── 2. Signer output verifiable by verifyCompact ───────────────────────────
+
+describe('getRootSigner — Phase A1 conformance contract', () => {
+  it('the returned Signer produces a JWS verifyCompact accepts', async () => {
+    const created = await mod.createFromFreshMnemonic();
+    expect(created.ok).toBe(true);
+    if (!created.ok) return;
+
+    const signerResult = await mod.getRootSigner();
+    expect(signerResult.ok).toBe(true);
+    if (!signerResult.ok) return;
+
+    const payload = { hello: 'root-key', n: 1 };
+    const jws = await signCompact(payload, created.value.did, signerResult.value);
+    const verified = verifyCompact(jws, created.value.did);
+    expect(verified.ok).toBe(true);
+    if (verified.ok) expect(verified.value).toEqual(payload);
+  });
+
+  it('getRootSigner() before provisioning returns err(notProvisioned)', async () => {
+    const r = await mod.getRootSigner();
+    expect(r.ok).toBe(false);
+    if (r.ok) return;
+    expect(r.error.kind).toBe('notProvisioned');
+  });
+
+  it('the returned Signer gates every call behind Face ID and rejects on denial', async () => {
+    const created = await mod.createFromFreshMnemonic();
+    expect(created.ok).toBe(true);
+    if (!created.ok) return;
+    const signerResult = await mod.getRootSigner();
+    expect(signerResult.ok).toBe(true);
+    if (!signerResult.ok) return;
+
+    nextBiometricSuccess = false;
+    const digest = new Uint8Array(32).fill(7);
+    await expect(signerResult.value(digest)).rejects.toThrow();
+    expect(biometricCalls).toContain('sign');
+  });
+});
+
+// ── 3. App<->Web portability vectors ───────────────────────────────────────
+
+describe('derive.json vectors — App<->Web portability', () => {
+  for (const v of derivedVectors.valid) {
+    it(`importing "${v.name}" yields the pinned did`, async () => {
+      const imported = await mod.importFromMnemonic(v.mnemonic);
+      expect(imported.ok).toBe(true);
+      if (!imported.ok) return;
+      expect(imported.value.did).toBe(v.did);
+
+      const resolved = await mod.getRootDid();
+      expect(resolved.ok).toBe(true);
+      if (resolved.ok) expect(resolved.value).toBe(v.did);
+    });
+  }
+
+  for (const v of derivedVectors.invalid) {
+    it(`importing invalid mnemonic "${v.name}" returns err(invalidMnemonic)`, async () => {
+      const imported = await mod.importFromMnemonic(v.mnemonic);
+      expect(imported.ok).toBe(false);
+      if (imported.ok) return;
+      expect(imported.error.kind).toBe('invalidMnemonic');
+    });
+  }
+
+  it('deriveDidFromMnemonic is a pure function matching the pinned vector (no storage IO)', () => {
+    const v = derivedVectors.valid[0]!;
+    const a = mod.deriveDidFromMnemonic(v.mnemonic);
+    const b = mod.deriveDidFromMnemonic(v.mnemonic);
+    expect(a.ok).toBe(true);
+    expect(b.ok).toBe(true);
+    if (a.ok && b.ok) {
+      expect(a.value).toBe(v.did);
+      expect(a.value).toBe(b.value);
+    }
+    expect(secureStore.size).toBe(0); // pure — never touched storage
+  });
+});
+
+// ── 4. Re-import idempotency ────────────────────────────────────────────────
+
+describe('importFromMnemonic — idempotent re-import', () => {
+  it('importing the same mnemonic twice yields the same did both times', async () => {
+    const v = derivedVectors.valid[0]!;
+    const first = await mod.importFromMnemonic(v.mnemonic);
+    const second = await mod.importFromMnemonic(v.mnemonic);
+    expect(first.ok).toBe(true);
+    expect(second.ok).toBe(true);
+    if (!first.ok || !second.ok) return;
+    expect(first.value.did).toBe(second.value.did);
+    expect(first.value.did).toBe(v.did);
+
+    // Storage holds exactly one mnemonic value (overwritten, not duplicated).
+    expect(secureStore.size).toBe(1);
+  });
+
+  it('switching to a DIFFERENT mnemonic changes the resolved did', async () => {
+    const a = derivedVectors.valid[0]!;
+    const b = derivedVectors.valid[1]!;
+    await mod.importFromMnemonic(a.mnemonic);
+    const switched = await mod.importFromMnemonic(b.mnemonic);
+    expect(switched.ok).toBe(true);
+    if (!switched.ok) return;
+    expect(switched.value.did).toBe(b.did);
+    expect(switched.value.did).not.toBe(a.did);
+  });
+});
+
+// ── 5. Export ceremony — Face ID gate ───────────────────────────────────────
+
+describe('revealMnemonicForExport', () => {
+  it('denies without reading storage when biometric fails', async () => {
+    await mod.createFromFreshMnemonic();
+    nextBiometricSuccess = false;
+    const r = await mod.revealMnemonicForExport();
+    expect(r.ok).toBe(false);
+    if (r.ok) return;
+    expect(r.error.kind).toBe('biometricDenied');
+    expect(biometricCalls).toContain('export');
+  });
+
+  it('returns the exact persisted mnemonic when biometric succeeds', async () => {
+    const created = await mod.createFromFreshMnemonic();
+    expect(created.ok).toBe(true);
+    if (!created.ok) return;
+    const revealed = await mod.revealMnemonicForExport();
+    expect(revealed.ok).toBe(true);
+    if (revealed.ok) expect(revealed.value).toBe(created.value.mnemonic);
+  });
+
+  it('returns err(notProvisioned) when nothing has been provisioned yet', async () => {
+    const r = await mod.revealMnemonicForExport();
+    expect(r.ok).toBe(false);
+    if (r.ok) return;
+    expect(r.error.kind).toBe('notProvisioned');
+  });
+});
+
+// ── 6. did derivation cross-checks against packages/shared primitives ─────
+
+describe('did derivation matches packages/shared primitives directly', () => {
+  it('deriveDidFromMnemonic matches didKeyFromPublicKey(publicKeyFromPrivate(deriveP256Scalar(...)))', async () => {
+    const { deriveP256Scalar, HKDF_INFO_ROOT } = await import('@solidarity/shared');
+    const v = derivedVectors.valid[1]!;
+    const expected = didKeyFromPublicKey(publicKeyFromPrivate(deriveP256Scalar(v.mnemonic, HKDF_INFO_ROOT)));
+    const actual = mod.deriveDidFromMnemonic(v.mnemonic);
+    expect(actual.ok).toBe(true);
+    if (actual.ok) expect(actual.value).toBe(expected);
+  });
+});

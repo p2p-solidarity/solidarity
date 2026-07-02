@@ -1,15 +1,20 @@
 /**
  * Onboarding state machine — mirrors Swift OnboardingFlowView.Step verbatim
- * (solidarity/Views/Onboarding/OnboardingFlowView.swift L5-13).
+ * (solidarity/Views/Onboarding/OnboardingFlowView.swift L5-13), plus one
+ * Expo-only addition.
  *
- * Step list (Swift parity):
+ * Step list:
  *   1. welcome          — TerminalWelcomeScreen (typewriter intro)
  *   2. profileSetup     — DarkProfileSetupForm (name, link, X, LinkedIn, wallet)
  *   3. avatarSetup      — AvatarSelectionGrid (pick AnimalCharacter)
- *   4. secureKeys       — Generate DID + iCloud restore probe
- *   5. importContacts   — Phone picker / VCF import (skippable)
- *   6. scanPassport     — Open PassportOnboardingFlowView (skippable)
- *   7. complete         — `[ SYSTEM READY ]` summary + "Start Using Solidarity"
+ *   4. secureKeys       — Generate DID + iCloud restore probe (Swift parity)
+ *   5. backup           — [Expo-only, 04-plan Phase A1 task A1.4] seed-derived
+ *                         root key backup consent (iCloud vs. mnemonic
+ *                         ceremony). Non-skippable — see
+ *                         app/onboarding/backup.tsx.
+ *   6. importContacts   — Phone picker / VCF import (skippable)
+ *   7. scanPassport     — Open PassportOnboardingFlowView (skippable)
+ *   8. complete         — `[ SYSTEM READY ]` summary + "Start Using Solidarity"
  *
  * Plain reducer (no zustand) so the flow stays unit-testable; promote to
  * a store only if cross-screen state grows beyond the wizard.
@@ -21,6 +26,7 @@ export const ONBOARDING_STEPS = [
   'profileSetup',
   'avatarSetup',
   'secureKeys',
+  'backup',
   'importContacts',
   'scanPassport',
   'complete',

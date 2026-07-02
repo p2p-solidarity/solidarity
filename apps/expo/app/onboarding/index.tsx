@@ -6,9 +6,10 @@
  * (back-chevron, title, subtitle, CTA), matching Swift's per-step `+Steps`
  * extensions — there is NO shared "Step N of M" wrapper in the iOS design.
  *
- * Step order (Swift OnboardingFlowView.Step):
- *   welcome → profileSetup → avatarSetup → secureKeys → importContacts
- *           → scanPassport → complete
+ * Step order (Swift OnboardingFlowView.Step, plus the Expo-only `backup`
+ * step — 04-plan Phase A1 task A1.4):
+ *   welcome → profileSetup → avatarSetup → secureKeys → backup
+ *           → importContacts → scanPassport → complete
  *
  * Side effects on `Start Using Solidarity`:
  *   1. Persist hasCompletedOnboarding = true (Swift AppStorage).
@@ -24,6 +25,7 @@ import { useCardStore } from '@/cards/cardManager';
 import { SfIcon } from '@/components/icons/SfIcon';
 import { Colors } from '@/constants/Colors';
 import { AvatarSelectionGridStep } from '@/onboarding/steps/AvatarSelectionGridStep';
+import { BackupStep } from '@/onboarding/steps/BackupStep';
 import { CompleteStep } from '@/onboarding/steps/CompleteStep';
 import { DarkProfileSetupStep } from '@/onboarding/steps/DarkProfileSetupStep';
 import { ImportContactsStep } from '@/onboarding/steps/ImportContactsStep';
@@ -132,12 +134,22 @@ export default function OnboardingFlow() {
         />
       );
       break;
+    case 'backup':
+      body = (
+        <BackupStep
+          onBack={() => {
+            goTo('secureKeys');
+          }}
+          onDone={next}
+        />
+      );
+      break;
     case 'importContacts':
       body = (
         <ImportContactsStep
           importedCount={state.importedCount}
           onBack={() => {
-            goTo('secureKeys');
+            goTo('backup');
           }}
           onAdvance={next}
           onImported={(count) => {
