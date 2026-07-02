@@ -65,16 +65,16 @@ export interface FloatingTabBarProps {
   readonly navigation: TabNavigationLike;
 }
 
-const TAB_ICONS: Readonly<Record<string, 'person.2' | 'dot.radiowaves.left.and.right' | 'person.crop.circle'>> = {
+const TAB_ICONS: Readonly<Record<string, 'person.2' | 'checkmark.shield' | 'person.crop.circle'>> = {
   'people/index': 'person.2',
-  'share/index': 'dot.radiowaves.left.and.right',
   'me/index': 'person.crop.circle',
+  'verify/index': 'checkmark.shield',
 };
 
 const TAB_LABELS: Readonly<Record<string, string>> = {
   'people/index': 'People',
-  'share/index': 'Share',
   'me/index': 'Me',
+  'verify/index': 'Verify',
 };
 
 export function FloatingTabBar({
@@ -152,7 +152,7 @@ export function FloatingTabBar({
 
 interface FlatTabButtonProps {
   readonly label: string;
-  readonly icon?: 'person.2' | 'dot.radiowaves.left.and.right' | 'person.crop.circle';
+  readonly icon?: 'person.2' | 'checkmark.shield' | 'person.crop.circle';
   readonly isSelected: boolean;
   readonly onPress: () => void;
   readonly activeColor: string;

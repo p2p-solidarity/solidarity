@@ -221,9 +221,7 @@ export default function AdvancedSettings() {
               <SettingsBlockRow
                 icon="shield.checkered"
                 title={t('advanced.zkSettings')}
-                onPress={() => {
-                  pushToast(t('advanced.zkSettings.todo'), 'info');
-                }}
+                onPress={() => { router.push('/id/zk-settings'); }}
               />
               <SettingsBlockRow
                 icon="qrcode"

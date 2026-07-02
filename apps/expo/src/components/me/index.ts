@@ -16,5 +16,7 @@ export {
   SettingsBlockSection,
 } from './SettingsBlockSection';
 export type { SettingsBlockRowProps } from './SettingsBlockSection';
+export { VerifiedCard } from './VerifiedCard';
+export type { VerifiedCardProps } from './VerifiedCard';
 export { VerifiedCredentialRow } from './VerifiedCredentialRow';
 export type { VerifiedCredentialRowProps } from './VerifiedCredentialRow';
