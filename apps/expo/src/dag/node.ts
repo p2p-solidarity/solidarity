@@ -13,10 +13,16 @@
  *
  * Determinism: `stableJSON` sorts object keys recursively before
  * stringification so payloads constructed in different key orders
- * still hash to the same id.
+ * still hash to the same id. Moved to `@solidarity/shared` (task A1.1)
+ * so it can be shared with compact-JWS payload encoding; re-exported here
+ * so existing imports of `stableJSON` from this module keep working.
  */
 import { schnorr } from '@noble/curves/secp256k1.js';
 import { sha256 } from '@noble/hashes/sha2.js';
+
+import { stableJSON } from '@solidarity/shared';
+
+export { stableJSON };
 
 export type DagPayload = Readonly<Record<string, unknown>>;
 
@@ -57,22 +63,6 @@ export interface DagNode extends DagNodeUnsigned {
   readonly id: string;
   /** schnorr BIP-340 signature over the id bytes, 128-char lowercase hex. */
   readonly sig: string;
-}
-
-/** Recursive stable JSON — sorts object keys so payload-id is order-insensitive. */
-export function stableJSON(value: unknown): string {
-  if (value === null || value === undefined) return JSON.stringify(value);
-  if (typeof value !== 'object') return JSON.stringify(value);
-  if (Array.isArray(value)) {
-    return '[' + value.map((v) => stableJSON(v)).join(',') + ']';
-  }
-  const obj = value as Record<string, unknown>;
-  const keys = Object.keys(obj).sort();
-  const parts: string[] = [];
-  for (const k of keys) {
-    parts.push(JSON.stringify(k) + ':' + stableJSON(obj[k]));
-  }
-  return '{' + parts.join(',') + '}';
 }
 
 /** Project a DagNode into the Nostr-event tags array (docs §6.2). */

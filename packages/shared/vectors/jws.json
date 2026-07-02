@@ -1,0 +1,44 @@
+{
+  "description": "Compact JWS (ES256, did:key) conformance vectors for packages/shared/src/jws.ts. testKey.privateKeyHex is TEST-ONLY — never used for anything but generating these fixtures. valid[] entries must verifyCompact(jws, testKey.did) -> ok(payload). invalid[] entries must verifyCompact(jws, did) -> err(...) for the stated reason. Consumed by packages/shared/test/jws.test.ts; intended to be replayed by the web viewer against its own JWS implementation (03-spec §3).",
+  "testKey": {
+    "privateKeyHex": "0102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f20",
+    "note": "TEST-ONLY private key scalar. Never used in production.",
+    "did": "did:key:zDnaeVuZeVRqvscGkiEoR9PFFra2xZUMp97ZPuGFK1VLU7iYN"
+  },
+  "valid": [
+    {
+      "name": "simple-object-payload",
+      "payload": { "hello": "world", "n": 1 },
+      "jws": "eyJhbGciOiJFUzI1NiIsImtpZCI6ImRpZDprZXk6ekRuYWVWdVplVlJxdnNjR2tpRW9SOVBGRnJhMnhaVU1wOTdaUHVHRksxVkxVN2lZTiMwIn0.eyJoZWxsbyI6IndvcmxkIiwibiI6MX0.vAxG2CW8OgA0CJqxRdvlPxhqsHmdMzbmz__r5iWio8Ucj36_WUx9fGv6QUeXTPwoR4QfzHtIWFWv77W8m4ssoA"
+    },
+    {
+      "name": "nested-unicode-payload",
+      "payload": {
+        "sub": "did:key:zExample",
+        "claims": { "name": "花子", "age": 30 },
+        "iat": 1751000000
+      },
+      "jws": "eyJhbGciOiJFUzI1NiIsImtpZCI6ImRpZDprZXk6ekRuYWVWdVplVlJxdnNjR2tpRW9SOVBGRnJhMnhaVU1wOTdaUHVHRksxVkxVN2lZTiMwIn0.eyJjbGFpbXMiOnsiYWdlIjozMCwibmFtZSI6IuiKseWtkCJ9LCJpYXQiOjE3NTEwMDAwMDAsInN1YiI6ImRpZDprZXk6ekV4YW1wbGUifQ.lamVnh3sY05-C7waRkalMIjDD4OME-UxVMl4uL7H0JZ9bj2dYsHcjjnkCnp5eTOjrOwXutZSEZ6yHoanJkisSA"
+    }
+  ],
+  "invalid": [
+    {
+      "name": "bad-signature",
+      "did": "did:key:zDnaeVuZeVRqvscGkiEoR9PFFra2xZUMp97ZPuGFK1VLU7iYN",
+      "jws": "eyJhbGciOiJFUzI1NiIsImtpZCI6ImRpZDprZXk6ekRuYWVWdVplVlJxdnNjR2tpRW9SOVBGRnJhMnhaVU1wOTdaUHVHRksxVkxVN2lZTiMwIn0.eyJhY3Rpb24iOiJleGNoYW5nZSJ9.25_b13qavbBNS5ctofOEW4n6EMXjM_5kYOS0M3-PhbBXfajWHLsE-q0ElIXuUwbLmno3_6Goo10-aAF8WUtdvQ",
+      "reason": "signature byte corrupted after signing (originally signed { action: 'exchange' })"
+    },
+    {
+      "name": "tampered-payload",
+      "did": "did:key:zDnaeVuZeVRqvscGkiEoR9PFFra2xZUMp97ZPuGFK1VLU7iYN",
+      "jws": "eyJhbGciOiJFUzI1NiIsImtpZCI6ImRpZDprZXk6ekRuYWVWdVplVlJxdnNjR2tpRW9SOVBGRnJhMnhaVU1wOTdaUHVHRksxVkxVN2lZTiMwIn0.eyJhbW91bnQiOjk5OTk5OX0.FZly6Ed0pyLA16KsZcMeGRUlmK2B0F16VVYOEcqA2b9V0LfvZ2s4qEz9ClplXvvu7SdGdO4iSjxJ5BydmEZ5Rw",
+      "reason": "payload segment replaced with { amount: 999999 } after signing { amount: 1 }; signature no longer matches"
+    },
+    {
+      "name": "kid-did-mismatch",
+      "did": "did:key:zDnaeaQHQpDWivip1SugnEwZaF5JUCmSyPrYewToLKYmv8CyV",
+      "jws": "eyJhbGciOiJFUzI1NiIsImtpZCI6ImRpZDprZXk6ekRuYWVWdVplVlJxdnNjR2tpRW9SOVBGRnJhMnhaVU1wOTdaUHVHRksxVkxVN2lZTiMwIn0.eyJzY29wZSI6InByb2ZpbGUifQ.Z0Pj8r41TJkeiWWAO8doHX1mSLAkLy8O4g-o4_In9OE9fyXZib5WQzuUHrkrxoakLax-KnBen1AW2bmV0V_GwQ",
+      "reason": "JWS is validly signed by testKey but its kid says testKey.did; verifying it against an unrelated did (the identityDeep parity fixture DID) must fail the kid/did check"
+    }
+  ]
+}
