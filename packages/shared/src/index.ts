@@ -15,9 +15,14 @@
  *                 node ids (apps/expo/src/dag/node.ts) and JWS payloads
  *   jws.ts        The one compact-JWS sign/verify primitive for did:key
  *                 authenticated payloads (profile / challenge / Pear)
+ *   challenge.ts  DID-challenge/response (Verify scan + Pear channel)
+ *   derive.ts     Unified BIP-39 mnemonic -> P-256/secp256k1 scalar
+ *                 derivation (App<->Web portability)
  */
 export * from './canonical';
+export * from './challenge';
 export * from './crypto';
+export * from './derive';
 export * from './identity';
 export * from './importer';
 export * from './jws';

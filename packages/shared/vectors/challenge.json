@@ -1,0 +1,96 @@
+{
+  "description": "DID-challenge/response conformance vectors for packages/shared/src/challenge.ts. valid[] entries must verifyChallengeResponse(jws, expected, opts) -> ok. invalid[] entries must -> err(reason) whose message contains `errorContains`. Every vector pins `opts.nowMs` explicitly so the fixed `ts: 1751000000` doesn't drift out of the default 120s skew window as real time passes — the vectors test the field/signature/skew *policy*, not wall-clock luck. Consumed by packages/shared/test/challenge.test.ts; intended to be replayed by the web viewer against its own implementation (03-spec §3).",
+  "testKeys": {
+    "subject": {
+      "privateKeyHex": "0102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f20",
+      "note": "TEST-ONLY private key scalar (same as vectors/jws.json testKey). Never used in production.",
+      "did": "did:key:zDnaeVuZeVRqvscGkiEoR9PFFra2xZUMp97ZPuGFK1VLU7iYN"
+    },
+    "requester": {
+      "did": "did:key:zDnaeaQHQpDWivip1SugnEwZaF5JUCmSyPrYewToLKYmv8CyV",
+      "note": "Label-only DID (never signs anything) — same value as vectors/didkey.json's swift-parity-fixed-seed vector."
+    }
+  },
+  "valid": [
+    {
+      "name": "valid-verify-scan-response",
+      "expected": {
+        "v": 1,
+        "typ": "solidarity/challenge",
+        "requester": "did:key:zDnaeaQHQpDWivip1SugnEwZaF5JUCmSyPrYewToLKYmv8CyV",
+        "subject": "did:key:zDnaeVuZeVRqvscGkiEoR9PFFra2xZUMp97ZPuGFK1VLU7iYN",
+        "purpose": "verify.scan",
+        "nonce": "AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8",
+        "ts": 1751000000
+      },
+      "jws": "eyJhbGciOiJFUzI1NiIsImtpZCI6ImRpZDprZXk6ekRuYWVWdVplVlJxdnNjR2tpRW9SOVBGRnJhMnhaVU1wOTdaUHVHRksxVkxVN2lZTiMwIn0.eyJub25jZSI6IkFBRUNBd1FGQmdjSUNRb0xEQTBPRHhBUkVoTVVGUllYR0JrYUd4d2RIaDgiLCJwdXJwb3NlIjoidmVyaWZ5LnNjYW4iLCJyZXF1ZXN0ZXIiOiJkaWQ6a2V5OnpEbmFlYVFIUXBEV2l2aXAxU3VnbkV3WmFGNUpVQ21TeVByWWV3VG9MS1ltdjhDeVYiLCJzdWJqZWN0IjoiZGlkOmtleTp6RG5hZVZ1WmVWUnF2c2NHa2lFb1I5UEZGcmEyeFpVTXA5N1pQdUdGSzFWTFU3aVlOIiwidHMiOjE3NTEwMDAwMDAsInR5cCI6InNvbGlkYXJpdHkvY2hhbGxlbmdlIiwidiI6MX0.Hp5DLzxmfr8i7aTxECkK8_bHh76jF_Ygm4m8GmKDU9lQwGWB5IdXqaRDCIyFa_FKD5_lAqCJ4OtaMqvwaZ3eYQ",
+      "opts": { "nowMs": 1751000000000 }
+    }
+  ],
+  "invalid": [
+    {
+      "name": "bad-signature",
+      "expected": {
+        "v": 1,
+        "typ": "solidarity/challenge",
+        "requester": "did:key:zDnaeaQHQpDWivip1SugnEwZaF5JUCmSyPrYewToLKYmv8CyV",
+        "subject": "did:key:zDnaeVuZeVRqvscGkiEoR9PFFra2xZUMp97ZPuGFK1VLU7iYN",
+        "purpose": "verify.scan",
+        "nonce": "AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8",
+        "ts": 1751000000
+      },
+      "jws": "eyJhbGciOiJFUzI1NiIsImtpZCI6ImRpZDprZXk6ekRuYWVWdVplVlJxdnNjR2tpRW9SOVBGRnJhMnhaVU1wOTdaUHVHRksxVkxVN2lZTiMwIn0.eyJub25jZSI6IkFBRUNBd1FGQmdjSUNRb0xEQTBPRHhBUkVoTVVGUllYR0JrYUd4d2RIaDgiLCJwdXJwb3NlIjoidmVyaWZ5LnNjYW4iLCJyZXF1ZXN0ZXIiOiJkaWQ6a2V5OnpEbmFlYVFIUXBEV2l2aXAxU3VnbkV3WmFGNUpVQ21TeVByWWV3VG9MS1ltdjhDeVYiLCJzdWJqZWN0IjoiZGlkOmtleTp6RG5hZVZ1WmVWUnF2c2NHa2lFb1I5UEZGcmEyeFpVTXA5N1pQdUdGSzFWTFU3aVlOIiwidHMiOjE3NTEwMDAwMDAsInR5cCI6InNvbGlkYXJpdHkvY2hhbGxlbmdlIiwidiI6MX0.Hp5DLzxmfr8i7aTxECkK8_bHh76jF_Ygm4m8GmKDU9lQwGWB5IdXqaRDCIyFa_FKD5_lAqCJ4OtaMqvwaZ3eng",
+      "opts": { "nowMs": 1751000000000 },
+      "errorContains": "signature",
+      "reason": "last byte of the valid-verify-scan-response signature flipped after signing — must fail verifyCompact's signature check, not the field/skew checks"
+    },
+    {
+      "name": "expired-ts",
+      "expected": {
+        "v": 1,
+        "typ": "solidarity/challenge",
+        "requester": "did:key:zDnaeaQHQpDWivip1SugnEwZaF5JUCmSyPrYewToLKYmv8CyV",
+        "subject": "did:key:zDnaeVuZeVRqvscGkiEoR9PFFra2xZUMp97ZPuGFK1VLU7iYN",
+        "purpose": "verify.scan",
+        "nonce": "AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8",
+        "ts": 1750999000
+      },
+      "jws": "eyJhbGciOiJFUzI1NiIsImtpZCI6ImRpZDprZXk6ekRuYWVWdVplVlJxdnNjR2tpRW9SOVBGRnJhMnhaVU1wOTdaUHVHRksxVkxVN2lZTiMwIn0.eyJub25jZSI6IkFBRUNBd1FGQmdjSUNRb0xEQTBPRHhBUkVoTVVGUllYR0JrYUd4d2RIaDgiLCJwdXJwb3NlIjoidmVyaWZ5LnNjYW4iLCJyZXF1ZXN0ZXIiOiJkaWQ6a2V5OnpEbmFlYVFIUXBEV2l2aXAxU3VnbkV3WmFGNUpVQ21TeVByWWV3VG9MS1ltdjhDeVYiLCJzdWJqZWN0IjoiZGlkOmtleTp6RG5hZVZ1WmVWUnF2c2NHa2lFb1I5UEZGcmEyeFpVTXA5N1pQdUdGSzFWTFU3aVlOIiwidHMiOjE3NTA5OTkwMDAsInR5cCI6InNvbGlkYXJpdHkvY2hhbGxlbmdlIiwidiI6MX0.SbFRO8xLIxXQhqTvDbooIg7QihKOb5csJMOKzT5ktk4ojNhM9PJTs2hb_2NfuFQ6qbwJ8dR6ewSB0l0E___6gA",
+      "opts": { "nowMs": 1751000000000 },
+      "errorContains": "expired",
+      "reason": "ts is 1000s before opts.nowMs, exceeding the default 120s maxSkewSec — a validly-signed, field-correct response can still be a stale replay"
+    },
+    {
+      "name": "nonce-tampered",
+      "expected": {
+        "v": 1,
+        "typ": "solidarity/challenge",
+        "requester": "did:key:zDnaeaQHQpDWivip1SugnEwZaF5JUCmSyPrYewToLKYmv8CyV",
+        "subject": "did:key:zDnaeVuZeVRqvscGkiEoR9PFFra2xZUMp97ZPuGFK1VLU7iYN",
+        "purpose": "verify.scan",
+        "nonce": "ZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZY",
+        "ts": 1751000000
+      },
+      "jws": "eyJhbGciOiJFUzI1NiIsImtpZCI6ImRpZDprZXk6ekRuYWVWdVplVlJxdnNjR2tpRW9SOVBGRnJhMnhaVU1wOTdaUHVHRksxVkxVN2lZTiMwIn0.eyJub25jZSI6IkFBRUNBd1FGQmdjSUNRb0xEQTBPRHhBUkVoTVVGUllYR0JrYUd4d2RIaDgiLCJwdXJwb3NlIjoidmVyaWZ5LnNjYW4iLCJyZXF1ZXN0ZXIiOiJkaWQ6a2V5OnpEbmFlYVFIUXBEV2l2aXAxU3VnbkV3WmFGNUpVQ21TeVByWWV3VG9MS1ltdjhDeVYiLCJzdWJqZWN0IjoiZGlkOmtleTp6RG5hZVZ1WmVWUnF2c2NHa2lFb1I5UEZGcmEyeFpVTXA5N1pQdUdGSzFWTFU3aVlOIiwidHMiOjE3NTEwMDAwMDAsInR5cCI6InNvbGlkYXJpdHkvY2hhbGxlbmdlIiwidiI6MX0.Hp5DLzxmfr8i7aTxECkK8_bHh76jF_Ygm4m8GmKDU9lQwGWB5IdXqaRDCIyFa_FKD5_lAqCJ4OtaMqvwaZ3eYQ",
+      "opts": { "nowMs": 1751000000000 },
+      "errorContains": "does not match",
+      "reason": "jws is validly signed over the valid-verify-scan-response challenge (nonce AAEC...), but `expected` here carries a different nonce — proves the payload is checked field-by-field against `expected`, not just verified as a legitimate JWS from `subject`"
+    },
+    {
+      "name": "purpose-mismatch",
+      "expected": {
+        "v": 1,
+        "typ": "solidarity/challenge",
+        "requester": "did:key:zDnaeaQHQpDWivip1SugnEwZaF5JUCmSyPrYewToLKYmv8CyV",
+        "subject": "did:key:zDnaeVuZeVRqvscGkiEoR9PFFra2xZUMp97ZPuGFK1VLU7iYN",
+        "purpose": "pear.card",
+        "nonce": "AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8",
+        "ts": 1751000000
+      },
+      "jws": "eyJhbGciOiJFUzI1NiIsImtpZCI6ImRpZDprZXk6ekRuYWVWdVplVlJxdnNjR2tpRW9SOVBGRnJhMnhaVU1wOTdaUHVHRksxVkxVN2lZTiMwIn0.eyJub25jZSI6IkFBRUNBd1FGQmdjSUNRb0xEQTBPRHhBUkVoTVVGUllYR0JrYUd4d2RIaDgiLCJwdXJwb3NlIjoidmVyaWZ5LnNjYW4iLCJyZXF1ZXN0ZXIiOiJkaWQ6a2V5OnpEbmFlYVFIUXBEV2l2aXAxU3VnbkV3WmFGNUpVQ21TeVByWWV3VG9MS1ltdjhDeVYiLCJzdWJqZWN0IjoiZGlkOmtleTp6RG5hZVZ1WmVWUnF2c2NHa2lFb1I5UEZGcmEyeFpVTXA5N1pQdUdGSzFWTFU3aVlOIiwidHMiOjE3NTEwMDAwMDAsInR5cCI6InNvbGlkYXJpdHkvY2hhbGxlbmdlIiwidiI6MX0.Hp5DLzxmfr8i7aTxECkK8_bHh76jF_Ygm4m8GmKDU9lQwGWB5IdXqaRDCIyFa_FKD5_lAqCJ4OtaMqvwaZ3eYQ",
+      "opts": { "nowMs": 1751000000000 },
+      "errorContains": "does not match",
+      "reason": "jws is validly signed over purpose='verify.scan', but `expected` asks for purpose='pear.card' — a verify-scan response must not be replayable as proof against a Pear card-exchange challenge"
+    }
+  ]
+}
