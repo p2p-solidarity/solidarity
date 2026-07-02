@@ -8,7 +8,7 @@
  *   public goes through the graduation criteria in docs §11.
  */
 import { router } from 'expo-router';
-import { Pressable, ScrollView, Text, View } from 'react-native';
+import { ScrollView, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import {
@@ -20,24 +20,13 @@ import {
   SettingsBlockToggleRow,
   SettingsScreenTitle,
 } from '@/components/settings/SettingsBlocks';
-import { Colors } from '@/constants/Colors';
 import { useTranslation } from '@/i18n';
-import { type ProximityTransport, usePreferences } from '@/settings/preferences';
-
-const TRANSPORT_OPTIONS: readonly {
-  value: ProximityTransport;
-  labelKey: string;
-}[] = [
-  { value: 'auto', labelKey: 'developer.transport.auto' },
-  { value: 'ble', labelKey: 'developer.transport.ble' },
-  { value: 'multipeer', labelKey: 'developer.transport.legacyIos' },
-];
+import { usePreferences } from '@/settings/preferences';
 
 export default function DeveloperSettings() {
   const insets = useSafeAreaInsets();
   const { t } = useTranslation();
   const developerMode = usePreferences((s) => s.developerMode);
-  const proximityTransport = usePreferences((s) => s.proximityTransport);
   const setPref = usePreferences((s) => s.set);
   const reset = usePreferences((s) => s.reset);
 
@@ -83,51 +72,6 @@ export default function DeveloperSettings() {
                   subtitle={t('developer.p2p.labSubtitle')}
                   onPress={() => { router.push('/dev/p2p'); }}
                 />
-                <SettingsBlockRow
-                  icon="hand.tap"
-                  title={t('developer.p2p.uwbTitle')}
-                  subtitle={t('developer.p2p.uwbSubtitle')}
-                  onPress={() => { router.push('/dev/bump'); }}
-                />
-              </SettingsBlockSection>
-
-              <SettingsBlockSection
-                title={t('developer.transport.header')}
-                footer={t('developer.transport.footer')}
-              >
-                <View
-                  className="bg-mutedSurface rounded-xl flex-row"
-                  style={{ padding: 4 }}
-                >
-                  {TRANSPORT_OPTIONS.map((opt) => {
-                    const active = proximityTransport === opt.value;
-                    const label = t(opt.labelKey);
-                    return (
-                      <Pressable
-                        key={opt.value}
-                        onPress={() => { setPref('proximityTransport', opt.value); }}
-                        accessibilityRole="button"
-                        accessibilityState={{ selected: active }}
-                        accessibilityLabel={label}
-                        className="flex-1 items-center rounded-lg active:opacity-80"
-                        style={{
-                          paddingVertical: 8,
-                          backgroundColor: active ? Colors.cardBg : 'transparent',
-                        }}
-                      >
-                        <Text
-                          className="text-[13px]"
-                          style={{
-                            color: active ? Colors.text1 : Colors.text2,
-                            fontWeight: active ? '600' : '400',
-                          }}
-                        >
-                          {label}
-                        </Text>
-                      </Pressable>
-                    );
-                  })}
-                </View>
               </SettingsBlockSection>
 
               <SettingsBlockSection

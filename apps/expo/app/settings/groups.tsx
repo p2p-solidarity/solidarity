@@ -5,22 +5,20 @@
  *
  * Layout matches the Swift screen exactly:
  *   • SettingsBackToolbar + screen title "Group Management"
- *   • Header card (person.3.sequence.fill + title, optional sync sub-row)
- *   • iCloud Sign-In Required banner (TODO(android) stub kept hidden)
- *   • Actions section: Create Group, Invite via Link
+ *   • Header card (person.3.sequence.fill + title)
+ *   • Actions section: Create Group
  *   • Your Groups (delegated to YourGroupsSection)
  *   • Legal & Privacy: Privacy Policy, Terms of Service
  *
- * TODO(android): CloudKitGroupSyncManager isn't ported. The iCloud sign-in
- * banner + invite/privacy/terms rows are toast stubs until the
- * backup-provider identity layer lands.
+ * Groups are local-only (MMKV) — CloudKit / Drive group sync (and the
+ * invite-link join flow it powered) has been removed; see
+ * `docs/ref/01-spec-verified-page.md` §9.
  */
-import { router, useLocalSearchParams } from 'expo-router';
+import { router } from 'expo-router';
 import { useCallback, useEffect, useState } from 'react';
 import { RefreshControl, ScrollView, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { GroupJoinSheet } from '@/components/groups/GroupJoinSheet';
 import { SfIcon } from '@/components/icons/SfIcon';
 import {
   SettingsBackToolbar,
@@ -48,26 +46,14 @@ export default function GroupManagementSettings() {
   const hydrate = useGroupStore((s) => s.hydrate);
   const deleteGroup = useGroupStore((s) => s.deleteGroup);
   const [refreshing, setRefreshing] = useState(false);
-  const [joinVisible, setJoinVisible] = useState(false);
-  const { invite } = useLocalSearchParams<{ invite?: string }>();
 
   useEffect(() => {
     seedFromManifest();
     void hydrate();
   }, [seedFromManifest, hydrate]);
 
-  // Deep-link parity with Swift DeepLinkManager — when `invite` arrives via
-  // `solidarity://group/<token>`, surface the join sheet so the user can
-  // confirm the token.
-  useEffect(() => {
-    if (invite && invite.length > 0) {
-      setJoinVisible(true);
-    }
-  }, [invite]);
-
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
-    // TODO(android): plug CloudKit fetchLatestChanges / Drive sync here.
     await hydrate();
     setRefreshing(false);
   }, [hydrate]);
@@ -90,7 +76,6 @@ export default function GroupManagementSettings() {
   };
 
   const goCreate = () => { router.push('/groups/new'); };
-  const goInvite = () => { setJoinVisible(true); };
   const goPrivacy = () => { pushToast(t('settingsGroups.privacyToast'), 'info'); };
   const goTerms = () => { pushToast(t('settingsGroups.termsToast'), 'info'); };
 
@@ -135,12 +120,6 @@ export default function GroupManagementSettings() {
               subtitle={t('settingsGroups.createGroupSubtitle')}
               onPress={goCreate}
             />
-            <SettingsBlockRow
-              icon="link"
-              title={t('settingsGroups.inviteViaLink')}
-              subtitle={t('settingsGroups.inviteViaLinkSubtitle')}
-              onPress={goInvite}
-            />
           </SettingsBlockSection>
 
           {/* Your Groups */}
@@ -163,11 +142,6 @@ export default function GroupManagementSettings() {
           </SettingsBlockSection>
         </View>
       </ScrollView>
-
-      <GroupJoinSheet
-        visible={joinVisible}
-        onClose={() => { setJoinVisible(false); }}
-      />
     </View>
   );
 }

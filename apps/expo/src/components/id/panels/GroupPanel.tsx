@@ -4,8 +4,9 @@
  * `app/id/dashboard.tsx`. Mirrors the body of Swift GroupIdentityView
  * (solidarity/Views/IDViews/GroupIdentityView.swift).
  *
- * The screen wrapper is responsible for the `<GroupJoinSheet>` modal
- * (so the dashboard can present it from its own state).
+ * Groups are local-only (MMKV, no cloud sync) — see
+ * `docs/ref/01-spec-verified-page.md` §9. Joining a remote group by
+ * invite link required CloudKit / Drive sync, which has been removed.
  */
 import { router } from 'expo-router';
 import type { ReactNode } from 'react';
@@ -26,11 +27,7 @@ import {
 
 const MONO_FONT = 'Menlo';
 
-export interface GroupPanelProps {
-  readonly onRequestJoin: () => void;
-}
-
-export function GroupPanel({ onRequestJoin }: GroupPanelProps): ReactNode {
+export function GroupPanel(): ReactNode {
   // Frame-1 list comes from the plaintext manifest (id/name/memberCount);
   // hydrate kicks off in the background so detail navigation has the full
   // record cached by the time the user taps a row.
@@ -113,7 +110,7 @@ export function GroupPanel({ onRequestJoin }: GroupPanelProps): ReactNode {
           }}
         >
           <Text className="text-text2 text-[14px]">
-            Member details are managed via CloudKit.
+            Open a group to view its members.
           </Text>
         </View>
       </View>
@@ -123,19 +120,6 @@ export function GroupPanel({ onRequestJoin }: GroupPanelProps): ReactNode {
           <IDSectionHeader title="ACTIONS" />
         </View>
         <View className="gap-3">
-          <ThemedButton
-            variant="secondary"
-            label="Join Group"
-            fullWidth
-            leadingIcon={
-              <SfIcon
-                name="person.badge.plus"
-                size={14}
-                color={Colors.accentRose}
-              />
-            }
-            onPress={onRequestJoin}
-          />
           <ThemedButton
             variant="secondary"
             label="Refresh Groups"

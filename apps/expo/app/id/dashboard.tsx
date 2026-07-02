@@ -22,7 +22,6 @@ import type { SFSymbol } from 'expo-symbols';
 import { useState } from 'react';
 import { Pressable, ScrollView, Text, View } from 'react-native';
 
-import { GroupJoinSheet } from '@/components/groups/GroupJoinSheet';
 import { IDNavBar } from '@/components/id';
 import { GroupPanel } from '@/components/id/panels/GroupPanel';
 import {
@@ -50,7 +49,6 @@ const SECTIONS: readonly SectionDef[] = [
 export default function IdentityDashboard(): React.JSX.Element {
   const { t } = useTranslation();
   const [selection, setSelection] = useState<DashboardSection>('personal');
-  const [joinVisible, setJoinVisible] = useState(false);
 
   const onRefresh = (): void => {
     pushToast(t('identityDashboard.refreshPending'), 'info');
@@ -91,15 +89,10 @@ export default function IdentityDashboard(): React.JSX.Element {
               onClearError={onClearError}
             />
           ) : (
-            <GroupPanel onRequestJoin={() => { setJoinVisible(true); }} />
+            <GroupPanel />
           )}
         </View>
       </ScrollView>
-
-      <GroupJoinSheet
-        visible={joinVisible}
-        onClose={() => { setJoinVisible(false); }}
-      />
     </View>
   );
 }

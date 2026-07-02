@@ -3,20 +3,16 @@
  *   (solidarity/Views/IDViews/GroupIdentityView.swift).
  *
  * Standalone screen wrapper that re-uses the shared <GroupPanel> sections
- * (defined in `@/components/id/panels/GroupPanel`) and owns the
- * <GroupJoinSheet> modal state.
+ * (defined in `@/components/id/panels/GroupPanel`).
  */
-import { useState } from 'react';
 import { ScrollView, View } from 'react-native';
 
-import { GroupJoinSheet } from '@/components/groups/GroupJoinSheet';
 import { IDNavBar } from '@/components/id';
 import { GroupPanel } from '@/components/id/panels/GroupPanel';
 import { useTranslation } from '@/i18n';
 
 export default function GroupIdentity(): React.JSX.Element {
   const { t } = useTranslation();
-  const [joinVisible, setJoinVisible] = useState(false);
 
   return (
     <View className="flex-1 bg-pageBg">
@@ -26,13 +22,8 @@ export default function GroupIdentity(): React.JSX.Element {
         className="flex-1"
         contentContainerStyle={{ padding: 16, paddingBottom: 40 }}
       >
-        <GroupPanel onRequestJoin={() => { setJoinVisible(true); }} />
+        <GroupPanel />
       </ScrollView>
-
-      <GroupJoinSheet
-        visible={joinVisible}
-        onClose={() => { setJoinVisible(false); }}
-      />
     </View>
   );
 }

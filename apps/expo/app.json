@@ -45,16 +45,9 @@
       "infoPlist": {
         "NSCameraUsageDescription": "Solidarity uses the camera to scan QR codes and passport MRZ.",
         "NSContactsUsageDescription": "Solidarity can save business card information to your Contacts.",
-        "NSLocalNetworkUsageDescription": "Solidarity discovers nearby devices for proximity sharing.",
-        "NSNearbyInteractionUsageDescription": "Solidarity uses Nearby Interaction to measure distance and direction of nearby devices.",
-        "NSBluetoothAlwaysUsageDescription": "Solidarity uses Bluetooth to discover and connect with nearby devices for business card sharing and proximity matching.",
         "NFCReaderUsageDescription": "Solidarity reads your passport's NFC chip to verify identity.",
         "NSFaceIDUsageDescription": "Solidarity uses Face ID to protect identity keys and authorize sensitive actions.",
         "NSPhotoLibraryUsageDescription": "Solidarity saves QR codes and business card images to your Photo Library.",
-        "NSBonjourServices": [
-          "_say-share._tcp.",
-          "_airmeishi-share._tcp."
-        ],
         "UIApplicationSupportsIndirectInputEvents": true,
         "UIBackgroundModes": [
           "remote-notification",
@@ -76,11 +69,6 @@
         "android.permission.WRITE_CONTACTS",
         "android.permission.USE_BIOMETRIC",
         "android.permission.NFC",
-        "android.permission.UWB_RANGING",
-        "android.permission.BLUETOOTH_SCAN",
-        "android.permission.BLUETOOTH_ADVERTISE",
-        "android.permission.BLUETOOTH_CONNECT",
-        "android.permission.ACCESS_FINE_LOCATION",
         "android.permission.INTERNET",
         "android.permission.POST_NOTIFICATIONS"
       ],

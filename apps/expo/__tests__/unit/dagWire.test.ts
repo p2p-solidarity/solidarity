@@ -20,9 +20,9 @@ import {
   encodeHashList,
   encodeNodeBody,
   encodeStringBody,
+  frameMessage as proxFrameMessage,
   isDagFrameKind,
 } from '@/dag/wire';
-import { frameMessage as proxFrameMessage } from '@/proximity/wire';
 
 const HASH_A = 'ab'.repeat(32);
 const HASH_B = 'cd'.repeat(32);
@@ -72,14 +72,15 @@ describe('dagWire — round-trip', () => {
 });
 
 describe('dagWire — dispatch boundary', () => {
-  test('proximity frames in the 0x80–0xFF window route to otherPayloads, not dag', () => {
+  test('frames in the 0x80–0xFF window route to otherPayloads, not dag', () => {
     const dagBytes = encodeDagFrame({ kind: FRAME_KIND_HEADS, body: encodeHashList([HASH_A]) });
-    // Simulate the existing card-exchange protocol: a proximity-wire-framed
-    // payload whose first byte is 0x80 (well outside the DAG kind window).
-    const cardExchange = proxFrameMessage(new Uint8Array([0x80, 1, 2, 3, 4, 5]));
-    const buf = new Uint8Array(dagBytes.length + cardExchange.length);
+    // Simulate a non-DAG framed payload sharing the same wire (well outside
+    // the DAG kind window) — any other protocol multiplexed onto the same
+    // transport must round-trip through `otherPayloads` untouched.
+    const otherFramed = proxFrameMessage(new Uint8Array([0x80, 1, 2, 3, 4, 5]));
+    const buf = new Uint8Array(dagBytes.length + otherFramed.length);
     buf.set(dagBytes, 0);
-    buf.set(cardExchange, dagBytes.length);
+    buf.set(otherFramed, dagBytes.length);
     const { dag, otherPayloads, rest } = drainDagFrames(buf);
     expect(rest.length).toBe(0);
     expect(dag.length).toBe(1);

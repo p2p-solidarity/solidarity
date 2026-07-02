@@ -31,9 +31,9 @@ import Animated, {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { SakuraIcon } from '@/components/brand/SakuraIcon';
+import { PeerAvatar } from '@/components/cards/PeerAvatar';
 import { DecorativeBlobs } from '@/components/decor/DecorativeBlobs';
 import { SfIcon } from '@/components/icons/SfIcon';
-import { PeerAvatar } from '@/components/matching/PeerAvatar';
 import { ThemedButton } from '@/components/themed/ThemedButton';
 import { Colors } from '@/constants/Colors';
 import { pushToast } from '@/feedback/toast';

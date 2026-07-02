@@ -34,7 +34,6 @@
     "@solidarity/nitro-mrz-ocr": "workspace:*",
     "@solidarity/nitro-nfc-passport": "workspace:*",
     "@solidarity/nitro-passport-zk": "workspace:*",
-    "@solidarity/nitro-proximity": "workspace:*",
     "@solidarity/nitro-secrets-vault": "workspace:*",
     "@solidarity/nitro-semaphore": "workspace:*",
     "@solidarity/nitro-spruce-did": "workspace:*",

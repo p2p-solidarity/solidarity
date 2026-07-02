@@ -2,8 +2,7 @@
  * People tab — 1:1 port of solidarity/Views/PeopleViews/PeopleListView.swift.
  *
  *   • Title "People List" (semibold 18pt, left-aligned) + trailing "+" menu
- *     (Radar Exchange [dev-mode] / Add Manually / Import from Phone /
- *     Import VCF File)
+ *     (Add Manually / Import from Phone / Import VCF File)
  *   • Search field (magnifyingglass + "Search" placeholder, 0.5pt
  *     textPrimary border) once contact list is non-empty
  *   • Empty state: PaperStackIllustration 214×214 +
@@ -46,7 +45,6 @@ export default function PeopleTab() {
   const { contacts, refresh } = usePeopleScreen();
   const removeContact = useContactStore((s) => s.remove);
   const autoEnabled = usePreferences((s) => s.autoBackupOnPull);
-  const developerMode = usePreferences((s) => s.developerMode);
   const insets = useSafeAreaInsets();
 
   const [searchQuery, setSearchQuery] = useState('');
@@ -161,7 +159,6 @@ export default function PeopleTab() {
         onAddManually={() => { setManualSheetOpen(true); }}
         onImportPhone={() => router.push('/contacts/import-phone')}
         onImportVcf={() => router.push('/contacts/import-vcf')}
-        onRadarExchange={() => router.push('/(tabs)/share')}
         onEnterEditMode={() => { setEditMode(true); }}
         onExitEditMode={exitEditMode}
         onToggleSelectAll={() => {
@@ -171,7 +168,6 @@ export default function PeopleTab() {
             return new Set(filtered.map((c) => c.id));
           });
         }}
-        developerMode={developerMode}
         menuOpen={menuOpen}
         setMenuOpen={setMenuOpen}
       />
@@ -425,11 +421,9 @@ function Header({
   onAddManually,
   onImportPhone,
   onImportVcf,
-  onRadarExchange,
   onEnterEditMode,
   onExitEditMode,
   onToggleSelectAll,
-  developerMode,
   menuOpen,
   setMenuOpen,
 }: {
@@ -440,11 +434,9 @@ function Header({
   onAddManually: () => void;
   onImportPhone: () => void;
   onImportVcf: () => void;
-  onRadarExchange: () => void;
   onEnterEditMode: () => void;
   onExitEditMode: () => void;
   onToggleSelectAll: () => void;
-  developerMode: boolean;
   menuOpen: boolean;
   setMenuOpen: (v: boolean) => void;
 }) {
@@ -528,13 +520,6 @@ function Header({
             zIndex: 10,
           }}
         >
-          {developerMode ? (
-            <MenuItem
-              icon="antenna.radiowaves.left.and.right"
-              label={t('peopleList.radarExchange')}
-              onPress={() => { setMenuOpen(false); onRadarExchange(); }}
-            />
-          ) : null}
           <MenuItem
             icon="square.and.pencil"
             label={t('peopleList.addManually')}
