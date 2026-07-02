@@ -3,8 +3,6 @@
  *
  * Keeps the TS layer importable on platforms where the native module isn't
  * registered yet (Expo Go, web preview, bun test without the JSI bridge).
- * Mirrors the pattern used in `src/matching/session.ts` for the proximity
- * native module.
  *
  * Consumers should treat a `null` return value as "native unavailable" and
  * keep the UI interactive (the ID screens have empty-state visuals for
