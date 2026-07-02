@@ -241,6 +241,15 @@ export async function hasRootKey(): Promise<boolean> {
  * may reject (matches `keychain/signingKey.ts`'s `signJwt`/`signRawEs256`
  * contract, which also throws rather than returning Result on denial,
  * since `Signer`'s shape is fixed by `@solidarity/shared`).
+ *
+ * @warning The returned `Signer` REJECTS (throws) on biometric denial — it
+ * does not return a `Result`. `Signer`'s shape is fixed by
+ * `@solidarity/shared`'s `jws.ts` (used directly by `signCompact`), so this
+ * function cannot change that contract on its own. Every call site —
+ * including future `signCompact(...)` wrappers built on top of this
+ * signer — MUST wrap the call in try/catch (or handle the rejected
+ * promise) rather than assume it always resolves. An uncaught rejection
+ * here is an unhandled promise rejection, not a typed error.
  */
 export async function getRootSigner(): Promise<Result<Signer, RootKeyError>> {
   let mnemonic: string | null;

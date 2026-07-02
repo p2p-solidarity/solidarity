@@ -20,20 +20,29 @@
  *   1. On mount, provision the root key if one doesn't already exist
  *      (idempotent — replaying onboarding, e.g. via Settings › Replay
  *      Onboarding, must not rotate an existing identity).
- *   2. Main question: "Back up your key with iCloud?" — ONE tap,
- *      recommended. Accepting records the user's INTENT
- *      (`rootKeySyncChoice`) and completes immediately; the mnemonic
- *      ceremony is entirely skipped on this path.
- *   3. Declining opens the mnemonic ceremony: show the 24 words with a
- *      screenshot warning, then re-enter 3 randomly-chosen words to prove
- *      the user actually recorded them. **This ceremony only appears on
- *      the decline path.**
+ *   2. Main question renders both options, but "Use iCloud Keychain" is
+ *      VISIBLY DISABLED with a "Coming soon" badge — see the "iCloud
+ *      backup" note below for why. That leaves the mnemonic ceremony as
+ *      the ONLY functioning path right now; every user goes through it.
+ *      `acceptICloud` / `rootKeySyncChoice` plumbing is kept intact
+ *      (unused while the button is disabled) so A1.5 can turn iCloud sync
+ *      on by flipping `disabled` once the mnemonic is actually persisted
+ *      as a synchronizable Keychain item — no rewire needed then.
+ *   3. The mnemonic ceremony: show the 24 words with a screenshot warning,
+ *      then re-enter 3 randomly-chosen words to prove the user actually
+ *      recorded them. On REPLAY (root key already provisioned, so the
+ *      effect below never populated `mnemonicWords`), the words are
+ *      fetched on demand via the Face-ID-gated `revealMnemonicForExport`
+ *      — see `backupStepLogic.ts`'s `resolveMnemonicForCeremony`.
  *
- * NOTE on "iCloud backup": today this records intent only — the mnemonic
- * itself is stored device-local (see rootKey.ts's module doc: `expo-secure-
- * store` has no `kSecAttrSynchronizable` option). We deliberately never
- * show a "synced ✓" state here — only the recommendation copy — since we
- * cannot yet prove sync happened (CLAUDE.md rule 8, no fake data).
+ * NOTE on "iCloud backup": the mnemonic is stored device-local only (see
+ * rootKey.ts's module doc: `expo-secure-store` has no
+ * `kSecAttrSynchronizable` option) — tapping "Use iCloud Keychain" would
+ * NOT actually back anything up today. Per CLAUDE.md rule 8 (no fake data)
+ * we do not offer a button that claims to do something it doesn't: the
+ * option is disabled and clearly labelled "Coming soon" instead of being
+ * hidden (it's real roadmap, not vaporware) or silently accepted (it was
+ * previously reachable and recorded a sync intent with no sync behind it).
  */
 import { useEffect, useMemo, useState } from 'react';
 import { ActivityIndicator, TextInput, View } from 'react-native';
@@ -43,8 +52,9 @@ import { Colors } from '@/constants/Colors';
 import { showError } from '@/feedback/appAlert';
 import { haptic } from '@/feedback/haptics';
 import { useTranslation } from '@/i18n';
-import { createFromFreshMnemonic, hasRootKey } from '@/identity';
+import { createFromFreshMnemonic, hasRootKey, revealMnemonicForExport } from '@/identity';
 import { usePreferences } from '@/settings/preferences';
+import { resolveMnemonicForCeremony } from './backupStepLogic';
 import { OnboardingScaffold } from './OnboardingScaffold';
 
 export interface BackupStepProps {
@@ -78,6 +88,10 @@ export function BackupStep({ onBack, onDone }: BackupStepProps) {
   );
   const [confirmInputs, setConfirmInputs] = useState<Readonly<Record<number, string>>>({});
   const [confirmError, setConfirmError] = useState(false);
+  // Only set while resolving the mnemonic-ceremony words on the REPLAY path
+  // (Face-ID-gated reveal) — the fresh-provisioning path already has the
+  // words in hand and never touches this.
+  const [revealingForCeremony, setRevealingForCeremony] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -108,15 +122,34 @@ export function BackupStep({ onBack, onDone }: BackupStepProps) {
     };
   }, [t]);
 
+  // Kept for A1.5: wired to the (currently disabled) iCloud button so
+  // turning real sync on is a one-line `disabled` flip, not a rewire —
+  // see the module doc's "iCloud backup" note for why it's disabled today.
   const acceptICloud = () => {
     haptic('success');
     setPref('rootKeySyncChoice', 'icloud');
     onDone();
   };
 
-  const declineToMnemonic = () => {
-    if (mnemonicWords.length === 0) return;
-    setPhase('reveal');
+  const declineToMnemonic = async () => {
+    setRevealingForCeremony(true);
+    try {
+      const outcome = await resolveMnemonicForCeremony(mnemonicWords, revealMnemonicForExport);
+      if (outcome.kind === 'error') {
+        // Replay path, Face ID gate failed (denied) or storage errored —
+        // never a silent no-op; the user needs to know why nothing moved.
+        showError({
+          context: 'Onboarding › Backup',
+          summary: t('backupStep.revealFailed'),
+          error: new Error(outcome.error.kind),
+        });
+        return;
+      }
+      if (mnemonicWords.length === 0) setMnemonicWords(outcome.words);
+      setPhase('reveal');
+    } finally {
+      setRevealingForCeremony(false);
+    }
   };
 
   const confirmWordsMatch = (): boolean =>
@@ -174,12 +207,39 @@ export function BackupStep({ onBack, onDone }: BackupStepProps) {
         subtitle={t('backupStep.subtitle')}
         footer={
           <View style={{ gap: 12 }}>
-            <ThemedButton label={t('backupStep.useICloud')} variant="inverted" fullWidth onPress={acceptICloud} />
+            <View style={{ position: 'relative' }}>
+              <ThemedButton
+                label={t('backupStep.useICloud')}
+                variant="inverted"
+                fullWidth
+                disabled
+                onPress={acceptICloud}
+              />
+              <View
+                style={{
+                  position: 'absolute',
+                  top: -9,
+                  right: 8,
+                  backgroundColor: Colors.pillSurface,
+                  borderWidth: 1,
+                  borderColor: Colors.pillBorder,
+                  paddingHorizontal: 8,
+                  paddingVertical: 3,
+                }}
+              >
+                <ThemedText variant="caption" tone="secondary">
+                  {t('backupStep.comingSoon')}
+                </ThemedText>
+              </View>
+            </View>
             <ThemedButton
               label={t('backupStep.useMnemonic')}
               variant="dottedOutline"
               fullWidth
-              onPress={declineToMnemonic}
+              loading={revealingForCeremony}
+              onPress={() => {
+                void declineToMnemonic();
+              }}
             />
           </View>
         }
