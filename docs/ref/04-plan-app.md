@@ -56,6 +56,8 @@
 
 ## Phase A1 — verify-core + 金鑰核心 + 恢復 + DID-challenge
 
+> **AMENDMENT(執行時發現,2026-07-03)**:repo 既有 `packages/shared`(@solidarity/shared)已是「純 TS、零 RN 依賴、noble/scure/zod only」的共用套件,且已含 did:key P-256 codec(`identity/didKey.ts`)、ES256 JWT 簽驗(`identity/jwt.ts`)、P-256 keypair、HKDF、`Result` 型別。**不另建 verify-core — A1 起所有「packages/verify-core/...」一律改讀為「packages/shared/...」擴充**:新增 `canonical.ts`、`jws.ts`(compact-over-canonical,復用 jwt.ts 內部)、`challenge.ts`、`derive.ts`(新增 @scure/bip39)、`profile.ts`、`fragment.ts`、`badges/*`、`vectors/*`;既有 didKey/jwt 以向量補測不重寫。原 A1.1(did:key 重寫)縮為向量補測;原 A1.3(derive)併入 A1.2。05/06-plan 中的 `@solidarity/verify-core` 同義改讀 `@solidarity/shared`。
+
 **Spec:** 建立 `packages/verify-core`(純 TS、零 RN 依賴、app/web 共用;**全部純函式、IO 注入 — v1 TS,API 保持可移植,未來可換 Rust 核心(app 走 nitro binding、web 走 wasm)而不動呼叫端**)。定案四個 day-0 格式:BIP39 seed 統一派生規則(同一助記詞在 App/Web 得到同一 did — 可攜的基礎)、did:key 編碼、compact JWS 簽名原語、DID-challenge。備份 UX(01 §3):**預設推薦 iCloud Keychain 且必須徵求同意**;助記詞只服務「拒絕 iCloud」與「自由匯入匯出」兩個場景,不強加給預設路徑。
 
 **Files:**
@@ -115,6 +117,15 @@ deriveSecp256k1Scalar(mnemonic: string, info: string): Uint8Array
 - [ ] `app/settings/identity-export.tsx`:匯出(Face ID → 顯示助記詞 + 截圖警語)/ 匯入(輸入助記詞 → 派生 did → 若與現有身份不同,確認後切換)— 自由匯入匯出,App ↔ Web 可攜
 - [ ] 單元測試(mock keychain):Signer 輸出可被 `verifyCompact` 驗過;匯入同助記詞 → 同 did
 - [ ] Commit: `feat(identity): seed-derived root key, iCloud-first backup with consent, free import/export`
+
+### Task A1.5: iCloud Keychain 同步真正接上(執行時新增,2026-07-03)
+
+背景:A1.4 執行發現 expo-secure-store 與 secrets-vault 都不暴露 `kSecAttrSynchronizable`;可行先例在 `nitro-modules/spruce-did/ios/SpruceDidKeyStore.swift:119`(該模組 A10 將刪除)。過渡期 iCloud 選項顯示「即將推出」停用(誠實規則)。
+
+- [ ] 把 synchronizable 支援(~20 行)從 SpruceDidKeyStore 移植進 `nitro-modules/secrets-vault`(iOS;Android no-op — Android 本來只有助記詞路徑);nitrogen 重生成、prebuild 編譯過
+- [ ] `rootKey.ts` iCloud 路徑接真同步(seed 存 synchronizable item、無 biometry ACL、簽名層 Face ID gate 不變);`rootKeySyncChoice` 由 intent 變為實際行為
+- [ ] BackupStep 重新啟用 iCloud 選項(文案改回現在式,僅在真的寫入 synchronizable item 成功後前進);onboarding 流程恢復「同意 iCloud = 免助記詞儀式」
+- [ ] 實機驗收(двух裝置同 Apple ID seed 同步)列入 checklist;模擬器至少驗 keychain 寫入成功路徑;Commit
 
 ---
 
@@ -281,6 +292,7 @@ verifyNostrBinding(profile: ProfileRecord, fetchEvents: (filter) => Promise<Nost
 - [ ] Task A10.1: `sdjwt.ts` TDD
 - [ ] Task A10.2: pipeline 改接 sdjwt + cnf 綁定;Face ID 於發證;OpenAC 呼叫移除
 - [ ] Task A10.3: SpruceKit 縮面執行(依 A0.3 清單)+ nitro HybridObject 表面同步刪;prebuild + 實機 NFC 迴歸;Commit each
+- [ ] Task A10.4: **jwt.ts 單雜湊遷移**(A1.1 review 發現的既有產線 bug):`identity/jwt.ts` 因 noble v2 `prehash:true` 預設而雙重 SHA256,非真 ES256;四個產線驗章點(businessCardEnvelope.ts:122、proofVerifier.ts:87,137、envelopeHandler.ts:165)零跨實作覆蓋(Swift parity fixture 是空的)。**決策(使用者,2026-07-03):既存簽章必須相容 — 走 dual-verify 過渡**(驗章先試單雜湊,失敗 fallback 雙雜湊並標記 legacy;簽章一律改單雜湊;過渡期後移除 fallback)→ 修正 + 補跨實作測試;**任何外部 verifier 接觸這些 JWT 前必須完成**;Commit each
 
 ---
 

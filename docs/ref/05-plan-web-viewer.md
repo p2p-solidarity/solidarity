@@ -3,6 +3,10 @@
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 > 對應 spec:`docs/ref/01` §7–§8、`02` US-10、`03` §2 Viewer 表。App 主軌見 `04-plan-app.md`(V1 依賴其 Phase A1/A2 的 verify-core);Builder 見 `06-plan-web-builder.md`(同一顆 SPA)。
 
+
+> **AMENDMENT(2026-07-03)**:`@solidarity/verify-core` 不另建 — 一律改讀為擴充既有 `packages/shared`(@solidarity/shared),詳見 04-plan Phase A1 amendment。
+> **AMENDMENT 2(2026-07-03)**:web 程式碼**不住在本 repo 的 apps/web**(該目錄為未入庫 WIP,不 commit)— 正式 web 在獨立 repo `~/workspace/solidarity/solidarity-web`。本 plan 的 `apps/web/...` 路徑改讀為該 repo 對應路徑;`@solidarity/shared` 的跨 repo 消費策略(bun link / 發佈 / vendored vectors)於 V0 開工時定案。
+
 **Goal:** 靜態 SPA viewer — 收到連結的人零安裝在瀏覽器看到頁面與每枚綠勾的即時驗證結果與證據;viewer 死亡 ≠ 頁面死亡。
 
 **Architecture:** `apps/web`(Vite + React + TS),全部驗證在客戶端執行,邏輯 100% 來自 `@solidarity/verify-core`(與 app 同一組 conformance 向量)— viewer 只寫 IO adapter(fetch/WS/DoH)與渲染。無任何自有後端;部署 = CDN 靜態檔(Cloudflare Pages 免費層)。

@@ -3,6 +3,10 @@
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 > 對應 spec:`docs/ref/01` §8 Web Builder 段、`02` US-21/US-22、`03` §2 Builder 表 + §7 Web 軌 W1–W4。前置:`05-plan-web-viewer.md` V0(同一顆 SPA)、`04-plan-app.md` A1(verify-core 簽名原語與向量)。
 
+
+> **AMENDMENT(2026-07-03)**:`@solidarity/verify-core` 不另建 — 一律改讀為擴充既有 `packages/shared`(@solidarity/shared),詳見 04-plan Phase A1 amendment。
+> **AMENDMENT 2(2026-07-03)**:web 程式碼**不住在本 repo 的 apps/web**(該目錄為未入庫 WIP,不 commit)— 正式 web 在獨立 repo `~/workspace/solidarity/solidarity-web`。本 plan 的 `apps/web/...` 路徑改讀為該 repo 對應路徑;`@solidarity/shared` 的跨 repo 消費策略(bun link / 發佈 / vendored vectors)於 V0 開工時定案。
+
 **Goal:** solidarity.gg `/edit` — 無 App 的人在瀏覽器建立、簽名、發布同規格的 Verified Page;之後可 supersession 升級到 App 的 SE 金鑰。全程零伺服器、零帳號。
 
 **Architecture:** Builder 是 viewer SPA 的另一條路由,共用 verify-core 與 config。金鑰派生規則放進 verify-core `derive.ts`(**app 的 US-22 匯入流程用同一份常數,兩端必須一致**)。私鑰以 WebCrypto `extractable:false` 匯入後只留 handle 在 IndexedDB;助記詞 = 唯一恢復碼。
