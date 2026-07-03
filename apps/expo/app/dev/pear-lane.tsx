@@ -43,7 +43,7 @@ import { getRootDid, getRootSigner, type RootKeyError } from '@/identity/rootKey
 import { useTranslation } from '@/i18n';
 import { authenticateChannel, type AuthenticatedChannel } from '@/pear/handshake';
 import { ensureLane, releaseLane } from '@/pear/laneManager';
-import { pearTopicFor, type PearChannel } from '@/pear/lane';
+import { firstConnection, pearTopicFor, type PearChannel } from '@/pear/lane';
 import { usePreferences } from '@/settings/preferences';
 
 const MODAL_SCREEN_OPTIONS = { presentation: 'modal' } as const;
@@ -193,35 +193,39 @@ function LoopbackLab() {
       settle({ kind: 'error', message: t('developer.pearLane.timeoutError') });
     }, LOOPBACK_TIMEOUT_MS);
 
-    // Both sides start authenticating immediately (before `open` can fire) —
-    // `authenticateChannel` itself waits for the ctrl 'open' event. Not
-    // strictly required (a late subscriber gets `open` replayed by
-    // `lane.ts`), but there's no reason to delay here.
-    const aliceAuth = authenticateChannel(channelA, {
-      myDid: ALICE_TEST.did,
-      peerDid: BOB_TEST.did,
-      signer: ALICE_TEST.signer,
-    });
-    const bobAuth = authenticateChannel(channelB, {
-      myDid: BOB_TEST.did,
-      peerDid: ALICE_TEST.did,
-      signer: BOB_TEST.signer,
-    });
-
-    void Promise.all([aliceAuth, bobAuth]).then(([aliceResult, bobResult]) => {
+    // Wait for each side's own connection to open before authenticating it
+    // — `authenticateChannel` now takes a connId-pinned `PearConnection`
+    // (connection-scoping fix), which doesn't exist until the worklet
+    // assigns a connId on 'open'. `firstConnection` resolves with exactly
+    // that for a single-connection channel like these.
+    void Promise.all([firstConnection(channelA), firstConnection(channelB)]).then(([connA, connB]) => {
       if (!mountedRef.current) return;
-      if (!aliceResult.ok) {
-        settle({ kind: 'error', message: t('developer.pearLane.handshakeError', { message: aliceResult.error }) });
-        return;
-      }
-      if (!bobResult.ok) {
-        settle({ kind: 'error', message: t('developer.pearLane.handshakeError', { message: bobResult.error }) });
-        return;
-      }
+      const aliceAuth = authenticateChannel(connA, {
+        myDid: ALICE_TEST.did,
+        peerDid: BOB_TEST.did,
+        signer: ALICE_TEST.signer,
+      });
+      const bobAuth = authenticateChannel(connB, {
+        myDid: BOB_TEST.did,
+        peerDid: ALICE_TEST.did,
+        signer: BOB_TEST.signer,
+      });
 
-      setState({ kind: 'authenticated', topic });
-      runAuthenticatedRoundTrip(aliceResult.value, bobResult.value, unsubscribersRef, (roundTripMs, frame) => {
-        settle({ kind: 'frame-received', topic, roundTripMs, frame });
+      void Promise.all([aliceAuth, bobAuth]).then(([aliceResult, bobResult]) => {
+        if (!mountedRef.current) return;
+        if (!aliceResult.ok) {
+          settle({ kind: 'error', message: t('developer.pearLane.handshakeError', { message: aliceResult.error }) });
+          return;
+        }
+        if (!bobResult.ok) {
+          settle({ kind: 'error', message: t('developer.pearLane.handshakeError', { message: bobResult.error }) });
+          return;
+        }
+
+        setState({ kind: 'authenticated', topic });
+        runAuthenticatedRoundTrip(aliceResult.value, bobResult.value, unsubscribersRef, (roundTripMs, frame) => {
+          settle({ kind: 'frame-received', topic, roundTripMs, frame });
+        });
       });
     });
   }, [settle, t, teardown]);
@@ -426,29 +430,36 @@ function CrossDeviceLab() {
         settle({ kind: 'error', message: t('developer.pearLane.timeoutError') });
       }, CROSS_DEVICE_TIMEOUT_MS);
 
-      void authenticateChannel(channel, { myDid, peerDid, signer: signerResult.value }).then((authResult) => {
+      // `authenticateChannel` now takes a connId-pinned `PearConnection`
+      // (connection-scoping fix) — `firstConnection` resolves with the
+      // one connection this manual single-peer PoC lab expects, whichever
+      // role ('wait'/'dial') this side is playing.
+      void firstConnection(channel).then((conn) => {
         if (!mountedRef.current) return;
-        if (!authResult.ok) {
-          settle({ kind: 'error', message: t('developer.pearLane.handshakeError', { message: authResult.error }) });
-          return;
-        }
-        setState({ kind: 'authenticated', topic });
-        const authed = authResult.value;
-        if (role === 'dial') {
-          runAuthenticatedRoundTrip(authed, null, unsubscribersRef, (roundTripMs, frame) => {
-            settle({ kind: 'frame-received', topic, roundTripMs, frame });
-          });
-        } else {
-          // "wait" only echoes — the dialer is the one measuring the round
-          // trip, matching a real caller/callee asymmetry.
-          const unsubEcho = authed.onFrame((frame) => {
-            if (frame['t'] === 'dev.ping') {
-              authed.send({ t: 'dev.pong', nonce: frame['nonce'], echoedAt: Date.now() });
-              settle({ kind: 'echoed', topic, frame: JSON.stringify(frame) });
-            }
-          });
-          unsubscribersRef.current.push(unsubEcho);
-        }
+        void authenticateChannel(conn, { myDid, peerDid, signer: signerResult.value }).then((authResult) => {
+          if (!mountedRef.current) return;
+          if (!authResult.ok) {
+            settle({ kind: 'error', message: t('developer.pearLane.handshakeError', { message: authResult.error }) });
+            return;
+          }
+          setState({ kind: 'authenticated', topic });
+          const authed = authResult.value;
+          if (role === 'dial') {
+            runAuthenticatedRoundTrip(authed, null, unsubscribersRef, (roundTripMs, frame) => {
+              settle({ kind: 'frame-received', topic, roundTripMs, frame });
+            });
+          } else {
+            // "wait" only echoes — the dialer is the one measuring the round
+            // trip, matching a real caller/callee asymmetry.
+            const unsubEcho = authed.onFrame((frame) => {
+              if (frame['t'] === 'dev.ping') {
+                authed.send({ t: 'dev.pong', nonce: frame['nonce'], echoedAt: Date.now() });
+                settle({ kind: 'echoed', topic, frame: JSON.stringify(frame) });
+              }
+            });
+            unsubscribersRef.current.push(unsubEcho);
+          }
+        });
       });
     });
   }, [peerDidInput, role, rootDidState, settle, t, teardown]);

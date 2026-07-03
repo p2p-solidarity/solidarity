@@ -25,6 +25,16 @@ import { authenticateChannel } from '../../src/pear/handshake';
 import { encodeFrame, FrameDecoder } from '../../src/pear/frames';
 import type * as LaneModule from '../../src/pear/lane';
 
+// TEST-ONLY scalars — mirrors pearHandshake.test.ts's fixed-hex-scalar
+// convention. Used only by the connection-scoping security tests below.
+const ALICE_PRIV = new Uint8Array(32).fill(0).map((_, i) => (i + 1) & 0xff);
+const ALICE_DID = didKeyFromPublicKey(publicKeyFromPrivate(ALICE_PRIV));
+const aliceSigner: Signer = async (digest) => p256.sign(digest, ALICE_PRIV, { prehash: false });
+
+const BOB_PRIV = new Uint8Array(32).fill(0).map((_, i) => (i * 7 + 3) & 0xff);
+const BOB_DID = didKeyFromPublicKey(publicKeyFromPrivate(BOB_PRIV));
+const bobSigner: Signer = async (digest) => p256.sign(digest, BOB_PRIV, { prehash: false });
+
 class FakeIpc {
   readonly written: Uint8Array[] = [];
   private readonly handlers = new Set<(chunk: Uint8Array) => void>();
@@ -183,14 +193,14 @@ describe('pear/lane — joinTopic', () => {
     expect(commands).toEqual([{ t: '_join', topic: 'b'.repeat(64), mode: 'client' }]);
   });
 
-  it('channel.send() sends a _send command carrying the frame verbatim', () => {
+  it('connection(connId).send() sends a _send command carrying the topic, connId, and frame verbatim', () => {
     const result = lane.startLane();
     if (!result.ok) throw new Error('setup failed');
     const channel = result.value.joinTopic('c'.repeat(64));
-    channel.send({ t: 'card.request' });
+    channel.connection(1).send({ t: 'card.request' });
 
     const commands = writtenCommands(currentWorklet().IPC);
-    expect(commands[1]).toEqual({ t: '_send', topic: 'c'.repeat(64), frame: { t: 'card.request' } });
+    expect(commands[1]).toEqual({ t: '_send', topic: 'c'.repeat(64), connId: 1, frame: { t: 'card.request' } });
   });
 
   it('channel.close() sends a _leave command', () => {
@@ -203,23 +213,53 @@ describe('pear/lane — joinTopic', () => {
     expect(commands[1]).toEqual({ t: '_leave', topic: 'd'.repeat(64) });
   });
 
-  it('routes a relayed _frame envelope to onFrame for the matching topic only', () => {
+  it('connection(connId).close() sends a _closeConn command scoped to that connId only', () => {
     const result = lane.startLane();
     if (!result.ok) throw new Error('setup failed');
-    const topicA = 'a'.repeat(64);
-    const topicB = 'b'.repeat(64);
-    const channelA = result.value.joinTopic(topicA);
-    const channelB = result.value.joinTopic(topicB);
+    const channel = result.value.joinTopic('p'.repeat(64));
+    channel.connection(7).close();
+
+    const commands = writtenCommands(currentWorklet().IPC);
+    expect(commands[1]).toEqual({ t: '_closeConn', topic: 'p'.repeat(64), connId: 7 });
+  });
+
+  it('routes a relayed _frame envelope to onFrame for the matching CONNECTION only — not merely the matching topic', () => {
+    // SECURITY: this is the connection-scoping property the A5.2 fix
+    // establishes. Two connections (1 and 2) open on the SAME topic — e.g.
+    // the legitimate authenticated peer and an uninvited third party who
+    // merely knows the topic (an unkeyed hash of the responder's own did,
+    // per `pearTopicFor`'s doc) and joined it too. A frame tagged connId 2
+    // must never reach connId 1's listeners, even though both are on the
+    // one topic `lane.ts` sees.
+    const result = lane.startLane();
+    if (!result.ok) throw new Error('setup failed');
+    const topic = 'a'.repeat(64);
+    const channel = result.value.joinTopic(topic);
+    const connA = channel.connection(1);
+    const connB = channel.connection(2);
 
     const receivedA: Record<string, unknown>[] = [];
     const receivedB: Record<string, unknown>[] = [];
-    channelA.onFrame((f) => receivedA.push(f));
-    channelB.onFrame((f) => receivedB.push(f));
+    connA.onFrame((f) => receivedA.push(f));
+    connB.onFrame((f) => receivedB.push(f));
 
-    currentWorklet().IPC.emitEnvelope({ t: '_frame', topic: topicA, frame: { t: 'hello-a' } });
+    currentWorklet().IPC.emitEnvelope({ t: '_frame', topic, connId: 1, frame: { t: 'hello-a' } });
 
     expect(receivedA).toEqual([{ t: 'hello-a' }]);
     expect(receivedB).toEqual([]);
+  });
+
+  it('a _frame envelope with no connId is dropped (nothing safe to route it to)', () => {
+    const result = lane.startLane();
+    if (!result.ok) throw new Error('setup failed');
+    const topic = 'q'.repeat(64);
+    const channel = result.value.joinTopic(topic);
+    const received: Record<string, unknown>[] = [];
+    channel.connection(1).onFrame((f) => received.push(f));
+
+    currentWorklet().IPC.emitEnvelope({ t: '_frame', topic, frame: { t: 'no-connid' } });
+
+    expect(received).toEqual([]);
   });
 
   it('routes a _ctrl envelope to onCtrl for the matching topic', () => {
@@ -240,15 +280,53 @@ describe('pear/lane — joinTopic', () => {
     ]);
   });
 
+  it('routes a _ctrl envelope to connection(connId).onCtrl for the matching connId only', () => {
+    const result = lane.startLane();
+    if (!result.ok) throw new Error('setup failed');
+    const topic = 'r'.repeat(64);
+    const channel = result.value.joinTopic(topic);
+
+    const eventsA: unknown[] = [];
+    const eventsB: unknown[] = [];
+    channel.connection(1).onCtrl((ev) => eventsA.push(ev));
+    channel.connection(2).onCtrl((ev) => eventsB.push(ev));
+
+    currentWorklet().IPC.emitEnvelope({ t: '_ctrl', topic, ev: 'open', connId: 1 });
+    currentWorklet().IPC.emitEnvelope({ t: '_ctrl', topic, ev: 'close', connId: 1 });
+
+    expect(eventsA).toEqual([
+      { t: '_ctrl', topic, ev: 'open', connId: 1 },
+      { t: '_ctrl', topic, ev: 'close', connId: 1 },
+    ]);
+    // connId 2 never opened/closed — it must see NOTHING from connId 1's
+    // lifecycle, even on the same topic.
+    expect(eventsB).toEqual([]);
+  });
+
+  it('a topic-wide _ctrl error (no connId) still reaches every connection on that topic', () => {
+    const result = lane.startLane();
+    if (!result.ok) throw new Error('setup failed');
+    const topic = 's'.repeat(64);
+    const channel = result.value.joinTopic(topic);
+    currentWorklet().IPC.emitEnvelope({ t: '_ctrl', topic, ev: 'open', connId: 1 });
+
+    const events: unknown[] = [];
+    channel.connection(1).onCtrl((ev) => events.push(ev));
+
+    currentWorklet().IPC.emitEnvelope({ t: '_ctrl', topic, ev: 'error', message: 'DHT bootstrap timed out' });
+
+    expect(events.at(-1)).toEqual({ t: '_ctrl', topic, ev: 'error', message: 'DHT bootstrap timed out' });
+  });
+
   it('a frame that arrives split across multiple IPC chunks still routes once complete', () => {
     const result = lane.startLane();
     if (!result.ok) throw new Error('setup failed');
     const topic = 'f'.repeat(64);
     const channel = result.value.joinTopic(topic);
     const received: Record<string, unknown>[] = [];
-    channel.onFrame((f) => received.push(f));
+    channel.connection(1).onFrame((f) => received.push(f));
 
-    const encoded = encodeFrame({ t: '_frame', topic, frame: { t: 'fragmented' } });
+    const encoded = encodeFrame({ t: '_frame', topic, connId: 1, frame: { t: 'fragmented' } });
     if (!encoded.ok) throw new Error('setup failed');
     currentWorklet().IPC.emit(encoded.value.slice(0, 5));
     currentWorklet().IPC.emit(encoded.value.slice(5));
@@ -263,24 +341,133 @@ describe('pear/lane — joinTopic', () => {
     const channel = result.value.joinTopic(topic);
 
     const received: Record<string, unknown>[] = [];
-    const unsubscribe = channel.onFrame((f) => received.push(f));
+    const unsubscribe = channel.connection(1).onFrame((f) => received.push(f));
     unsubscribe();
 
-    currentWorklet().IPC.emitEnvelope({ t: '_frame', topic, frame: { t: 'should-not-arrive' } });
+    currentWorklet().IPC.emitEnvelope({ t: '_frame', topic, connId: 1, frame: { t: 'should-not-arrive' } });
     expect(received).toEqual([]);
   });
 
-  it('close() stops routing further frames for that topic', () => {
+  it('topic close() stops routing further frames for connections that were seen on that topic', () => {
     const result = lane.startLane();
     if (!result.ok) throw new Error('setup failed');
     const topic = 'h'.repeat(64);
     const channel = result.value.joinTopic(topic);
+    currentWorklet().IPC.emitEnvelope({ t: '_ctrl', topic, ev: 'open', connId: 1 });
+
     const received: Record<string, unknown>[] = [];
-    channel.onFrame((f) => received.push(f));
+    channel.connection(1).onFrame((f) => received.push(f));
     channel.close();
 
-    currentWorklet().IPC.emitEnvelope({ t: '_frame', topic, frame: { t: 'after-close' } });
+    currentWorklet().IPC.emitEnvelope({ t: '_frame', topic, connId: 1, frame: { t: 'after-close' } });
     expect(received).toEqual([]);
+  });
+});
+
+// ── SECURITY: cross-connection attack repro (task A5.2 round 1) ────────────
+//
+// Permanent regression coverage for the connection-scoping fix. Mirrors
+// EXACTLY the attack described in the task: `useReachableMode` opens a
+// long-lived server on `pearTopicFor(myDid)` (an unkeyed, non-secret hash
+// of the responder's own did); an uninvited third party who merely knows
+// that did can join the same topic — no handshake required — and, pre-fix,
+// have its raw frames delivered to whatever session was authenticated on a
+// DIFFERENT connection, and receive a broadcast of that session's replies
+// (e.g. a `card.offer`). This test drives the exact same stack a real
+// responder uses (`joinTopic` -> per-connection `authenticateChannel` ->
+// `createPearSession` -> `onCardRequest`) and asserts BOTH halves of the
+// leak are closed: (1) an uninvited connection's `card.request` never
+// reaches the OTHER connection's session/consent handler, and (2) that
+// session's `card.offer` — sent in response to ITS OWN legitimate
+// request — is never delivered to the uninvited connection.
+//
+// Against the pre-fix topic-scoped `PearChannel` (`.send`/`.onFrame` with
+// no `connId`) this fails on both counts — see this task's round-1 report
+// for the RED evidence captured against that code (recorded separately;
+// the pre-fix API no longer exists to run it against once the fix lands).
+describe('pear/lane — SECURITY: connection-scoping (cross-connection attack repro)', () => {
+  it('GREEN: a card.offer sent by the session on connection A is never delivered to an uninvited connection B, and B\'s raw card.request never reaches A\'s consent handler', async () => {
+    const { createPearSession } = await import('../../src/pear/protocol');
+
+    const result = lane.startLane();
+    if (!result.ok) throw new Error('setup failed');
+    const topic = 'n'.repeat(64);
+    const channel = result.value.joinTopic(topic, 'server');
+
+    // Connection A: the legitimate peer, completes the real mutual handshake.
+    currentWorklet().IPC.emitEnvelope({ t: '_ctrl', topic, ev: 'open', connId: 1 });
+    const connA = channel.connection(1);
+    const auth = authenticateChannel(connA, {
+      myDid: ALICE_DID,
+      peerDid: BOB_DID,
+      signer: aliceSigner,
+      handshakeTimeoutMs: 200,
+    });
+
+    await Promise.resolve();
+    await Promise.resolve();
+    const challengeCmd = writtenCommands(currentWorklet().IPC).find(
+      (c) => c['t'] === '_send' && c['connId'] === 1 && (c['frame'] as Record<string, unknown> | undefined)?.['t'] === 'challenge'
+    );
+    const aliceChallenge = (challengeCmd?.['frame'] as { c: unknown }).c;
+
+    const jwsFromBob = await respondChallenge(aliceChallenge as never, BOB_DID, bobSigner);
+    // Bob's answer + his own challenge both arrive tagged connId: 1 — this
+    // IS connection A's traffic.
+    currentWorklet().IPC.emitEnvelope({ t: '_frame', topic, connId: 1, frame: { t: 'challenge.response', jws: jwsFromBob } });
+    const bobChallenge = buildChallenge({
+      requester: BOB_DID,
+      subject: ALICE_DID,
+      purpose: 'pear.card',
+      nonce: randomChallengeNonce(),
+      ts: Math.floor(Date.now() / 1000),
+    });
+    currentWorklet().IPC.emitEnvelope({ t: '_frame', topic, connId: 1, frame: { t: 'challenge', c: bobChallenge } });
+
+    const authResult = await auth;
+    expect(authResult.ok).toBe(true);
+    if (!authResult.ok) return;
+
+    const session = createPearSession(authResult.value);
+    let cardRequestHandlerInvoked = 0;
+    session.onCardRequest(async () => {
+      cardRequestHandlerInvoked += 1;
+      return { cardJws: 'fake-card-jws-for-routing-test' };
+    });
+
+    // Connection B: an uninvited third party joins the SAME topic (it only
+    // needed the responder's did, per `pearTopicFor`'s doc) and — with NO
+    // handshake at all — sends a raw card.request. (`connB.onFrame` is
+    // deliberately NOT subscribed here to observe "what B receives" — it
+    // would also observe the very frame this test injects AS COMING FROM
+    // B below, which is a test-harness artifact, not a leak. Outbound
+    // delivery to B is instead verified below by inspecting every `_send`
+    // command's `connId`.)
+    currentWorklet().IPC.emitEnvelope({ t: '_ctrl', topic, ev: 'open', connId: 2 });
+
+    currentWorklet().IPC.emitEnvelope({ t: '_frame', topic, connId: 2, frame: { t: 'card.request', reqId: 999 } });
+    await Promise.resolve();
+
+    // (1) B's request never reached A's session/consent handler.
+    expect(cardRequestHandlerInvoked).toBe(0);
+
+    // Now A (the real, authenticated peer) sends its OWN legitimate
+    // card.request on connection A.
+    currentWorklet().IPC.emitEnvelope({ t: '_frame', topic, connId: 1, frame: { t: 'card.request', reqId: 1 } });
+    await Promise.resolve();
+    expect(cardRequestHandlerInvoked).toBe(1);
+
+    // (2) The resulting card.offer must be sent ONLY to connId 1 — never
+    // broadcast, and specifically never addressed to connId 2 (B).
+    const allSendCommands = writtenCommands(currentWorklet().IPC).filter((c) => c['t'] === '_send');
+    const offerCommands = allSendCommands.filter(
+      (c) => (c['frame'] as Record<string, unknown> | undefined)?.['t'] === 'card.offer'
+    );
+    expect(offerCommands).toHaveLength(1);
+    expect(offerCommands[0]?.['connId']).toBe(1);
+    // No `_send` command of ANY kind was ever targeted at connId 2 — the
+    // uninvited connection never receives a single byte of session traffic.
+    expect(allSendCommands.some((c) => c['connId'] === 2)).toBe(false);
   });
 });
 
@@ -360,7 +547,11 @@ describe('pear/lane — onCtrl late-subscriber replay', () => {
       currentWorklet().IPC.emitEnvelope({ t: '_ctrl', topic, ev: 'open', connId: 1 });
       await Promise.resolve(); // the gap: at least one microtask between 'open' and subscribing
 
-      const aliceAuth = authenticateChannel(channel, {
+      // `channel.connection(1)` is constructed AFTER 'open' already fired —
+      // it still observes it via the same per-connId replay buffer
+      // `PearChannel.onCtrl` uses at the topic level (see `lane.ts`'s
+      // `PearConnection.onCtrl` doc).
+      const aliceAuth = authenticateChannel(channel.connection(1), {
         myDid: ALICE_DID,
         peerDid: BOB_DID,
         signer: aliceSigner,
@@ -374,7 +565,7 @@ describe('pear/lane — onCtrl late-subscriber replay', () => {
       // out at `handshakeTimeoutMs`.
       const sentCommands = writtenCommands(currentWorklet().IPC);
       const challengeCmd = sentCommands.find(
-        (c) => c['t'] === '_send' && (c['frame'] as Record<string, unknown> | undefined)?.['t'] === 'challenge'
+        (c) => c['t'] === '_send' && c['connId'] === 1 && (c['frame'] as Record<string, unknown> | undefined)?.['t'] === 'challenge'
       );
       expect(challengeCmd).toBeDefined();
       const aliceChallenge = (challengeCmd?.['frame'] as { c: unknown }).c;
@@ -384,6 +575,7 @@ describe('pear/lane — onCtrl late-subscriber replay', () => {
       currentWorklet().IPC.emitEnvelope({
         t: '_frame',
         topic,
+        connId: 1,
         frame: { t: 'challenge.response', jws: jwsFromBob },
       });
 
@@ -395,7 +587,7 @@ describe('pear/lane — onCtrl late-subscriber replay', () => {
         nonce: randomChallengeNonce(),
         ts: Math.floor(Date.now() / 1000),
       });
-      currentWorklet().IPC.emitEnvelope({ t: '_frame', topic, frame: { t: 'challenge', c: bobChallenge } });
+      currentWorklet().IPC.emitEnvelope({ t: '_frame', topic, connId: 1, frame: { t: 'challenge', c: bobChallenge } });
 
       const aliceResult = await aliceAuth;
       expect(aliceResult.ok).toBe(true);

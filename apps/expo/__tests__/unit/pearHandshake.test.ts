@@ -1,10 +1,13 @@
 /**
  * `src/pear/handshake.ts` — mutual DID-challenge handshake over an
- * in-memory fake `PearChannel` pair (no worklet/hyperswarm involved; that
- * plumbing is `pearLane.test.ts`'s job). `FakeChannelPair` wires two
- * `PearChannel`s so `a.send()` delivers to `b`'s `onFrame` listeners and
- * vice versa, and `open()` fires a `_ctrl` 'open' event on both sides —
- * mirroring what `lane.ts` does once hyperswarm's Noise socket connects.
+ * in-memory fake `PearConnection` pair (no worklet/hyperswarm involved;
+ * that plumbing is `pearLane.test.ts`'s job — including the connection-
+ * scoping regression coverage). `FakeChannelPair` wires two
+ * `PearConnection`s (each with its own fixed `connId`, mirroring two
+ * distinct physical connections) so `a.send()` delivers to `b`'s `onFrame`
+ * listeners and vice versa, and `open()` fires a `_ctrl` 'open' event
+ * (with `connId`) on both sides — mirroring what `lane.ts` does once
+ * hyperswarm's Noise socket connects.
  */
 import { describe, expect, it } from 'bun:test';
 import { p256 } from '@noble/curves/nist.js';
@@ -16,7 +19,7 @@ import {
   HANDSHAKE_TIMEOUT_MS,
   type AuthenticatedChannel,
 } from '../../src/pear/handshake';
-import type { PearChannel, PearCtrlEvent } from '../../src/pear/lane';
+import type { PearConnection, PearCtrlEvent } from '../../src/pear/lane';
 
 // TEST-ONLY scalars — never used for anything but these fixtures (mirrors
 // packages/shared/test/challenge.test.ts's fixed-hex-scalar convention).
@@ -34,12 +37,17 @@ const MALLORY_PRIV = new Uint8Array(32).fill(0).map((_, i) => (i * 13 + 5) & 0xf
 const MALLORY_DID = didKeyFromPublicKey(publicKeyFromPrivate(MALLORY_PRIV));
 const mallorySigner: Signer = async (digest) => p256.sign(digest, MALLORY_PRIV, { prehash: false });
 
-class FakeSide implements PearChannel {
+class FakeSide implements PearConnection {
+  readonly connId: number;
   readonly frameListeners = new Set<(frame: Record<string, unknown>) => void>();
   readonly ctrlListeners = new Set<(ev: PearCtrlEvent) => void>();
   closed = false;
   sent: Record<string, unknown>[] = [];
   private peer: FakeSide | null = null;
+
+  constructor(connId: number) {
+    this.connId = connId;
+  }
 
   linkTo(peer: FakeSide): void {
     this.peer = peer;
@@ -80,16 +88,16 @@ class FakeSide implements PearChannel {
 
 /** Two linked `FakeSide`s + an `open()` helper that fires 'open' on both. */
 function fakeChannelPair(): { a: FakeSide; b: FakeSide; open: () => void } {
-  const a = new FakeSide();
-  const b = new FakeSide();
+  const a = new FakeSide(1);
+  const b = new FakeSide(2);
   a.linkTo(b);
   b.linkTo(a);
   return {
     a,
     b,
     open: () => {
-      a.fireCtrl({ topic: 'test-topic', ev: 'open' });
-      b.fireCtrl({ topic: 'test-topic', ev: 'open' });
+      a.fireCtrl({ topic: 'test-topic', ev: 'open', connId: a.connId });
+      b.fireCtrl({ topic: 'test-topic', ev: 'open', connId: b.connId });
     },
   };
 }
@@ -215,7 +223,7 @@ describe('pear/handshake — authenticateChannel', () => {
     });
     // Alice's own side opens, but Bob's side (and thus a response) never
     // arrives — this intentionally never calls the pair's `open()`.
-    a.fireCtrl({ topic: 'test-topic', ev: 'open' });
+    a.fireCtrl({ topic: 'test-topic', ev: 'open', connId: a.connId });
 
     const result = await aliceAuth;
     expect(result.ok).toBe(false);
@@ -255,7 +263,7 @@ describe('pear/handshake — authenticateChannel', () => {
       signer: aliceSigner,
       handshakeTimeoutMs: 200,
     });
-    a.fireCtrl({ topic: 'test-topic', ev: 'open' });
+    a.fireCtrl({ topic: 'test-topic', ev: 'open', connId: a.connId });
 
     const { buildChallenge, randomChallengeNonce } = await import('@solidarity/shared');
     const misdirected = buildChallenge({

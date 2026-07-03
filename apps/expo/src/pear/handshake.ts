@@ -1,6 +1,9 @@
 /**
  * Pear channel handshake — mutual DID-challenge authentication over a raw
- * `PearChannel` (A3.3, on top of A3.2's `lane.ts`/`frames.ts`). Neither side
+ * `PearConnection` (A3.3, on top of A3.2's `lane.ts`/`frames.ts`; upgraded
+ * from a topic-scoped `PearChannel` to a connId-pinned `PearConnection` by
+ * the A5.2 connection-scoping security fix — see `lane.ts`'s module doc).
+ * Neither side
  * trusts the DID it *thinks* it dialed until it has cryptographic proof: on
  * `open`, both peers send `{t:'challenge', c}` (a `pear.card`-purpose
  * `Challenge` from `@solidarity/shared`, addressed at the other side); each
@@ -41,7 +44,7 @@ import {
   type Signer,
 } from '@solidarity/shared';
 
-import type { PearChannel } from './lane';
+import type { PearConnection } from './lane';
 
 /** Mutual handshake must complete within this window or the attempt is
  *  abandoned and the channel closed. Generous relative to a LAN/relay round
@@ -63,11 +66,12 @@ export interface AuthenticateChannelOpts {
   readonly handshakeTimeoutMs?: number;
 }
 
-/** A `PearChannel` that has completed mutual DID-challenge authentication.
- *  `send`/`onFrame` are the SAME underlying channel, just exposed only once
- *  authenticated — callers can't accidentally read/write pre-auth traffic
- *  through this handle because it doesn't exist until `authenticateChannel`
- *  resolves. */
+/** A `PearConnection` that has completed mutual DID-challenge authentication.
+ *  `send`/`onFrame` are the SAME underlying connId-pinned connection, just
+ *  exposed only once authenticated — callers can't accidentally read/write
+ *  pre-auth traffic through this handle because it doesn't exist until
+ *  `authenticateChannel` resolves, and can never observe/affect a different
+ *  connection on the same topic (see `lane.ts`'s connection-scoping doc). */
 export interface AuthenticatedChannel {
   readonly myDid: string;
   readonly peerDid: string;
@@ -94,17 +98,25 @@ function isChallengeAddressedToMe(c: unknown, myDid: string, peerDid: string): c
 }
 
 /**
- * Run the mutual DID-challenge handshake over an already-`joinTopic`'d
- * `PearChannel`. Safe to call any time after `joinTopic` — even after
- * `open` already fired (e.g. across an `await` gap before this function's
- * `onCtrl` subscription attaches) — because `PearChannel.onCtrl` replays the
- * topic's last ctrl event to a newly-attached subscriber (`lane.ts`). This
+ * Run the mutual DID-challenge handshake over a `PearConnection` already
+ * bound to one physical connection (`channel.connection(connId)`, normally
+ * right after that `connId`'s `onCtrl` 'open' event — `firstConnection()`
+ * in `lane.ts` does exactly that for the common single-dial case). Safe to
+ * call any time after the connection was obtained — even after 'open'
+ * already fired on it (e.g. across an `await` gap before this function's
+ * `onCtrl` subscription attaches) — because `PearConnection.onCtrl` replays
+ * its last ctrl event to a newly-attached subscriber (`lane.ts`). This
  * function's own `open` handling is already idempotent (`sendMyChallenge`
  * no-ops once `myChallenge` is set), so a replayed `open` behaves the same
  * as a live one.
+ *
+ * Because `ch` is pinned to one `connId`, every `send`/`onFrame` this
+ * function (and the `AuthenticatedChannel` it resolves) does is inherently
+ * isolated from any other connection on the same topic — see `lane.ts`'s
+ * connection-scoping doc.
  */
 export async function authenticateChannel(
-  ch: PearChannel,
+  ch: PearConnection,
   opts: AuthenticateChannelOpts
 ): Promise<Result<AuthenticatedChannel, string>> {
   const { myDid, peerDid, signer } = opts;

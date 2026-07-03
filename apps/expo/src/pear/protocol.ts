@@ -22,6 +22,13 @@
  * that's a structural (type-level), not just behavioural, guarantee that no
  * application frame can be sent/received before mutual DID authentication:
  * there is no constructor path into this module that accepts anything less.
+ * Since `handshake.ts` builds every `AuthenticatedChannel` from a single
+ * connId-pinned `PearConnection` (the A5.2 connection-scoping security
+ * fix — see `lane.ts`'s module doc), this module inherits connection
+ * isolation for free: a `PearSession`'s `ch.send`/`ch.onFrame` can never
+ * reach or be reached by a different connection on the same hyperswarm
+ * topic, even an uninvited one that knows the topic (a bare hash of a did)
+ * but never completed its own handshake.
  *
  * Hardening decisions (each one is a place a careless implementation could
  * hang forever, crash, or misattribute a response to the wrong request):

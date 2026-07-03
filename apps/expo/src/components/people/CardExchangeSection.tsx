@@ -32,7 +32,12 @@ import { useTranslation } from '@/i18n';
 import { useProfileSnapshotStore } from '@/people/profileSnapshots';
 import { formatPeerLabel } from '@/pear/cardRelease';
 import type { CardRequestErrorKind, CardRequestPhase } from '@/pear/cardRequestState';
-import { useCardRequestFlow, useReachableMode, type ReachableStatus } from '@/pear/useCardExchange';
+import {
+  useCardRequestFlow,
+  useReachableMode,
+  type ReachableErrorKind,
+  type ReachableStatus,
+} from '@/pear/useCardExchange';
 
 import { VerifiedProfileView } from '@/components/scan/VerifiedProfileView';
 
@@ -49,6 +54,15 @@ const ERROR_I18N_SUFFIX: Readonly<Record<CardRequestErrorKind, string>> = {
   protocol: 'protocol',
   connection: 'connection',
   authentication: 'authentication',
+};
+
+/** Same pattern as `ERROR_I18N_SUFFIX` above, for the reachable
+ *  (responder) side — no raw diagnostic text ever reaches the UI, only a
+ *  kind-keyed friendly string. See `useCardExchange.ts`'s
+ *  `ReachableErrorKind` doc for what each kind actually means. */
+const REACHABLE_ERROR_I18N_SUFFIX: Readonly<Record<ReachableErrorKind, string>> = {
+  connection: 'connection',
+  protocol: 'protocol',
 };
 
 function requestButtonLabel(phase: CardRequestPhase, t: (key: string) => string): string {
@@ -97,7 +111,7 @@ function reachableStatusLine(status: ReachableStatus, t: (key: string, opts?: Re
     case 'ready':
       return t('pearExchange.reachable.state.ready');
     case 'error':
-      return t('pearExchange.reachable.state.error', { message: status.message });
+      return t(`pearExchange.reachable.state.error.${REACHABLE_ERROR_I18N_SUFFIX[status.errorKind]}`);
   }
 }
 

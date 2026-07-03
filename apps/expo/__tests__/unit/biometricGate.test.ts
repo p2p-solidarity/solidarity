@@ -7,11 +7,17 @@
  * TS port under test: apps/expo/src/keychain/biometric.ts
  *
  * Policy (2026-06-13, owner-approved AGGRESSIVE tiering — see
- * docs/superpowers/plans/2026-06-13-faceid-single-gate-phase4.md):
- *   - ONE shared 5-minute grace bucket covers the non-destructive family
- *     (sign / export / present / exchange / passportSave): a single
- *     successful authorization silences the whole family for the window.
- *   - 'delete' ALWAYS prompts and never arms the bucket.
+ * docs/superpowers/plans/2026-06-13-faceid-single-gate-phase4.md; amended
+ * for the Pear connection-scoping security fix, see task A5.2 round-1
+ * report):
+ *   - ONE shared 5-minute grace bucket covers the same-device,
+ *     same-session family (sign / export / present / passportSave): a
+ *     single successful authorization silences the whole family for the
+ *     window.
+ *   - 'delete' and 'exchange' ALWAYS prompt and never arm the bucket.
+ *     'exchange' releases a signed credential to a REMOTE peer over Pear —
+ *     riding a grace window armed by an unrelated `sign` would let a
+ *     `card.request` release the card with no live Face ID at all.
  *   - `armBiometricGrace()` / `hasBiometricGrace()` expose the bucket so
  *     `biometricGatekeeper.requireSensitiveAction` shares it.
  *
@@ -148,6 +154,16 @@ describe('requireBiometric: session grace', () => {
     expect(authCalls.length).toBe(1);
   });
 
+  it('exchange still prompts every time, even inside an armed window (card-release fresh-prompt fix)', async () => {
+    await bio.requireBiometric('sign'); // opens the grace window (e.g. the handshake challenge-response)
+    authCalls.length = 0;
+    expect(await bio.requireBiometric('exchange')).toBe(true);
+    // Releasing a card to a remote peer must always re-auth, even though a
+    // 'sign' moments earlier (the mutual handshake) armed the shared grace
+    // bucket — see the module-doc policy note above.
+    expect(authCalls.length).toBe(1);
+  });
+
   it('a failed auth does NOT open a grace window', async () => {
     nextAuthResult = { success: false };
     expect(await bio.requireBiometric('sign')).toBe(false);
@@ -170,15 +186,23 @@ describe('requireBiometric: session grace', () => {
 // ── Shared grace bucket: one prompt covers the whole non-destructive family ─
 
 describe('requireBiometric: shared grace bucket (aggressive policy)', () => {
-  it('a successful sign silences export/present/exchange/passportSave within the window', async () => {
+  it('a successful sign silences export/present/passportSave within the window', async () => {
     nextAuthResult = { success: true };
     expect(await bio.requireBiometric('sign')).toBe(true);
     expect(authCalls.length).toBe(1);
-    for (const reason of ['export', 'present', 'exchange', 'passportSave'] as const) {
+    for (const reason of ['export', 'present', 'passportSave'] as const) {
       expect(await bio.requireBiometric(reason)).toBe(true);
     }
     // Still only the one original prompt — the bucket covered all of them.
     expect(authCalls.length).toBe(1);
+  });
+
+  it('a successful sign does NOT silence exchange — card release always re-prompts', async () => {
+    nextAuthResult = { success: true };
+    expect(await bio.requireBiometric('sign')).toBe(true);
+    expect(authCalls.length).toBe(1);
+    expect(await bio.requireBiometric('exchange')).toBe(true);
+    expect(authCalls.length).toBe(2);
   });
 
   it('a successful export arms the bucket for a later sign', async () => {
@@ -192,6 +216,14 @@ describe('requireBiometric: shared grace bucket (aggressive policy)', () => {
   it('delete success does NOT arm the bucket', async () => {
     nextAuthResult = { success: true };
     await bio.requireBiometric('delete');
+    authCalls.length = 0;
+    await bio.requireBiometric('sign');
+    expect(authCalls.length).toBe(1);
+  });
+
+  it('exchange success does NOT arm the bucket', async () => {
+    nextAuthResult = { success: true };
+    await bio.requireBiometric('exchange');
     authCalls.length = 0;
     await bio.requireBiometric('sign');
     expect(authCalls.length).toBe(1);

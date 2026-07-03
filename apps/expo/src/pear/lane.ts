@@ -8,14 +8,35 @@
  * Everything RN sends/receives from the worklet is a length-prefixed JSON
  * "envelope" frame over `Worklet.IPC` (see `frames.ts` for the wire
  * format, and `pear/worklet/index.js`'s header for the envelope
- * vocabulary: `_join`/`_leave`/`_send` out, `_ctrl`/`_frame` in). This
- * module owns demultiplexing those envelopes back to the right
- * `PearChannel` by topic.
+ * vocabulary: `_join`/`_leave`/`_send`/`_closeConn` out, `_ctrl`/`_frame`
+ * in). This module owns demultiplexing those envelopes back to the right
+ * `PearChannel`/`PearConnection`.
  *
  * No challenge/response, card exchange, or presentation protocol lives
- * here — `PearChannel.send`/`onFrame` pass application frames through
+ * here — `PearConnection.send`/`onFrame` pass application frames through
  * completely opaque to this module. That protocol is A3.3 (real PoC) and
  * A5 (card/present wire protocol) work, entirely RN-side per the plan.
+ *
+ * ── CONNECTION-SCOPING (task A5.2 round-1 security fix) ─────────────────
+ *
+ * A hyperswarm TOPIC is not secret once its preimage (e.g. a peer's own
+ * did, via `pearTopicFor`) is known — anyone who knows the did can join
+ * the same topic. It therefore MUST NOT be the unit of trust: `PearChannel`
+ * (what `joinTopic` returns) is topic-scoped and exposes only lifecycle —
+ * `onCtrl` — plus a way to get a handle bound to exactly one underlying
+ * Noise socket, `connection(connId)`. `PearConnection` is that handle:
+ * its `send`/`onFrame`/`onCtrl` are ALL scoped to that one `connId`, both
+ * ways — a frame from a different connection on the SAME topic can never
+ * reach a `PearConnection`'s `onFrame` listeners, and `send` can never
+ * reach a different connection's socket. `handshake.ts`'s
+ * `authenticateChannel` and `protocol.ts`'s `createPearSession` both take
+ * a `PearConnection` (or something built from one), so authentication and
+ * every application frame are pinned to one physical connection end to
+ * end — an uninvited peer who joins the same topic gets its OWN `connId`
+ * and can never observe or trigger anything on a different, already-
+ * authenticated connection's session. See `pear/worklet/index.js`'s header
+ * for the matching wire-level fix (`_frame`/`_send` now carry `connId`,
+ * `_send` targets one socket instead of broadcasting).
  */
 import { Worklet } from 'react-native-bare-kit';
 import { bytesToHex, sha256Bytes, err, ok, type Result } from '@solidarity/shared';
@@ -39,22 +60,43 @@ export type PearJoinMode = 'server' | 'client' | 'both';
 
 export type PearCtrlEvent =
   | { readonly topic: string; readonly ev: 'joined' }
-  | { readonly topic: string; readonly ev: 'open'; readonly connId?: number }
-  | { readonly topic: string; readonly ev: 'close'; readonly connId?: number }
+  | { readonly topic: string; readonly ev: 'open'; readonly connId: number }
+  | { readonly topic: string; readonly ev: 'close'; readonly connId: number }
   | { readonly topic: string; readonly ev: 'error'; readonly connId?: number; readonly message: string };
 
-export interface PearChannel {
-  /** Broadcast `frame` verbatim to every open connection on this topic.
-   *  A no-op if nothing is connected yet (frame is dropped, not queued —
-   *  callers that need queueing should hold off until an `onCtrl` 'open'
-   *  fires). */
+/** A handle bound to exactly ONE underlying Noise connection (`connId`) —
+ *  see this module's connection-scoping doc above. Obtained via
+ *  `PearChannel.connection(connId)`, normally right after that `connId`'s
+ *  `onCtrl` 'open' event. */
+export interface PearConnection {
+  readonly connId: number;
+  /** Send `frame` verbatim to THIS connection only. A no-op if the
+   *  connection is already closed (frame is dropped, not queued). */
   send(frame: Record<string, unknown>): void;
-  /** Subscribe to frames relayed from any peer on this topic. Returns an
-   *  unsubscribe function. */
+  /** Subscribe to frames relayed from THIS connection's peer only —
+   *  another connection on the same topic, however many are open, can
+   *  never trigger this callback. Returns an unsubscribe function. */
   onFrame(cb: (frame: Record<string, unknown>) => void): () => void;
-  /** Subscribe to this topic's lifecycle events. Returns an unsubscribe
-   *  function. BehaviorSubject-style: if a `_ctrl` event already arrived for
-   *  this topic before `cb` subscribed, `cb` is replayed that LAST event
+  /** Subscribe to lifecycle events for THIS connection only ('open' once,
+   *  then 'close' or 'error'), plus any topic-wide 'error' (join failed /
+   *  DHT bootstrap timed out — fatal regardless of which connection asked).
+   *  Replays the last such event synchronously to a late subscriber, same
+   *  semantics as `PearChannel.onCtrl` below. Returns an unsubscribe
+   *  function. */
+  onCtrl(cb: (ev: PearCtrlEvent) => void): () => void;
+  /** Close THIS connection only — the topic and any other connection on it
+   *  are unaffected. */
+  close(): void;
+}
+
+export interface PearChannel {
+  /** Subscribe to this topic's lifecycle events: 'joined' (discovery
+   *  flushed), topic-wide 'error' (join failed / DHT bootstrap timed out),
+   *  and 'open'/'close'/connection-scoped 'error' for EVERY connection that
+   *  opens on this topic — this is how a caller discovers a new `connId` to
+   *  hand to `connection()`. Returns an unsubscribe function.
+   *  BehaviorSubject-style: if a `_ctrl` event already arrived for this
+   *  topic before `cb` subscribed, `cb` is replayed that LAST event
    *  synchronously (before `onCtrl` returns) so a listener attached after
    *  `open` (e.g. across an `await` gap) still observes the current
    *  connection state instead of waiting out a timeout for an event that
@@ -64,10 +106,35 @@ export interface PearChannel {
    *  idempotent (a second `open` — live or replayed — is a no-op once this
    *  side's challenge has been sent). */
   onCtrl(cb: (ev: PearCtrlEvent) => void): () => void;
-  /** Leave the topic and drop this channel's listeners. Does not shut
-   *  down the underlying lane/worklet — call `LaneHandle.shutdown()` for
-   *  that. */
+  /** A handle bound to exactly `connId` — see `PearConnection`'s doc. Safe
+   *  to call any time (doesn't require `connId` to still be open); frames/
+   *  ctrl events for a since-closed `connId` simply never arrive again. */
+  connection(connId: number): PearConnection;
+  /** Leave the topic and drop this channel's + every connection's
+   *  listeners. Does not shut down the underlying lane/worklet — call
+   *  `LaneHandle.shutdown()` for that. */
   close(): void;
+}
+
+/** Resolves once the FIRST connection opens on `channel`'s topic, with the
+ *  `PearConnection` bound to that `connId`. For a `mode:'client'` (dialer)
+ *  channel this is exactly the one outbound connection a dial produces —
+ *  the common case for `authenticateChannel(await firstConnection(ch), …)`.
+ *  A long-lived, multi-peer-tolerant responder (e.g. `useReachableMode`)
+ *  should NOT use this — it only ever resolves once and silently ignores
+ *  every later connection; drive `channel.onCtrl` directly instead so each
+ *  incoming `connId` gets its own independent handshake/session attempt
+ *  (see that hook's module doc for why per-connection handling, not
+ *  first-connection-only, is required for correctness). */
+export function firstConnection(channel: PearChannel): Promise<PearConnection> {
+  return new Promise((resolve) => {
+    const unsubscribe = channel.onCtrl((ev) => {
+      if (ev.ev === 'open') {
+        unsubscribe();
+        resolve(channel.connection(ev.connId));
+      }
+    });
+  });
 }
 
 export interface LaneHandle {
@@ -101,34 +168,78 @@ export function startLane(_opts: StartLaneOptions = {}): Result<LaneHandle, Lane
   }
 
   const decoder = new FrameDecoder();
-  const frameListeners = new Map<string, Set<(frame: Record<string, unknown>) => void>>();
+  // Topic-scoped ctrl listeners/replay — unchanged from before the
+  // connection-scoping fix (topic lifecycle is genuinely topic-wide:
+  // 'joined', topic-level 'error', plus every connection's 'open').
   const ctrlListeners = new Map<string, Set<(ev: PearCtrlEvent) => void>>();
-  // Single-slot replay buffer per topic — the most recent `_ctrl` event seen
-  // for that topic, so a late `onCtrl` subscriber (see that method's doc)
-  // can be caught up synchronously instead of missing an event that already
-  // fired. Cleared on (re)join and on close so a new connection never
-  // replays a previous connection's stale state.
   const lastCtrlEvent = new Map<string, PearCtrlEvent>();
+
+  // Connection-scoped state — keyed by `connId` (globally unique for the
+  // life of this worklet, assigned by its own monotonic counter; see
+  // `pear/worklet/index.js`), NOT by topic, mirroring how `PearConnection`
+  // objects are handed out per-connId regardless of which `joinTopic()`
+  // closure asked for them. This is the crux of the security fix: a frame
+  // or ctrl event for connId X can only ever reach a listener that asked
+  // specifically for connId X.
+  const connFrameListeners = new Map<number, Set<(frame: Record<string, unknown>) => void>>();
+  const connCtrlListeners = new Map<number, Set<(ev: PearCtrlEvent) => void>>();
+  const lastConnCtrlEvent = new Map<number, PearCtrlEvent>();
+  // Which connIds belong to which topic, purely so a topic's close() can
+  // sweep its connections' listener state instead of leaking it for the
+  // life of the lane. Not consulted for routing.
+  const topicConnIds = new Map<string, Set<number>>();
+
+  function notifyConnCtrl(connId: number, ctrlEvent: PearCtrlEvent): void {
+    const connListeners = connCtrlListeners.get(connId);
+    if (!connListeners) return;
+    for (const cb of connListeners) cb(ctrlEvent);
+  }
+
+  function routeCtrlEnvelope(topic: string, ctrlEvent: PearCtrlEvent): void {
+    lastCtrlEvent.set(topic, ctrlEvent);
+    const listeners = ctrlListeners.get(topic);
+    if (listeners) for (const cb of listeners) cb(ctrlEvent);
+
+    const connId = 'connId' in ctrlEvent ? ctrlEvent.connId : undefined;
+    if (typeof connId === 'number') {
+      let ids = topicConnIds.get(topic);
+      if (!ids) { ids = new Set(); topicConnIds.set(topic, ids); }
+      ids.add(connId);
+      lastConnCtrlEvent.set(connId, ctrlEvent);
+      notifyConnCtrl(connId, ctrlEvent);
+      return;
+    }
+
+    if (ctrlEvent.ev !== 'error') return;
+    // Topic-wide error (no connId) — fatal for every connection on this
+    // topic, so every connection-scoped subscriber hears it too (this is
+    // the one case a `PearConnection.onCtrl` listener sees an event that
+    // isn't its own connId — see that method's doc).
+    const ids = topicConnIds.get(topic);
+    if (!ids) return;
+    for (const id of ids) notifyConnCtrl(id, ctrlEvent);
+  }
+
+  function routeFrameEnvelope(value: Record<string, unknown>): void {
+    const frame = value['frame'];
+    if (!frame || typeof frame !== 'object' || Array.isArray(frame)) return;
+    const connId = value['connId'];
+    if (typeof connId !== 'number') return; // malformed/unattributed frame — nothing safe to route it to
+    const listeners = connFrameListeners.get(connId);
+    if (!listeners || listeners.size === 0) return;
+    for (const cb of listeners) cb(frame as Record<string, unknown>);
+  }
 
   function routeEnvelope(value: Record<string, unknown>): void {
     const topic = typeof value['topic'] === 'string' ? value['topic'] : null;
     if (!topic) return;
 
     if (value['t'] === '_ctrl' && typeof value['ev'] === 'string') {
-      const ctrlEvent = value as unknown as PearCtrlEvent;
-      lastCtrlEvent.set(topic, ctrlEvent);
-      const listeners = ctrlListeners.get(topic);
-      if (!listeners || listeners.size === 0) return;
-      for (const cb of listeners) cb(ctrlEvent);
+      routeCtrlEnvelope(topic, value as unknown as PearCtrlEvent);
       return;
     }
 
-    const frame = value['frame'];
-    if (value['t'] === '_frame' && frame && typeof frame === 'object' && !Array.isArray(frame)) {
-      const listeners = frameListeners.get(topic);
-      if (!listeners || listeners.size === 0) return;
-      for (const cb of listeners) cb(frame as Record<string, unknown>);
-    }
+    if (value['t'] === '_frame') routeFrameEnvelope(value);
   }
 
   const onIpcData = (chunk: Uint8Array): void => {
@@ -150,26 +261,63 @@ export function startLane(_opts: StartLaneOptions = {}): Result<LaneHandle, Lane
     }
   }
 
+  /** Drops every connection-scoped listener/replay entry that belongs to
+   *  `topicHex` — called from a topic's `close()` so a repeatedly
+   *  joined-and-left topic doesn't leak listener Sets for the life of the
+   *  lane. Connection IDs never repeat within one worklet (monotonic
+   *  counter), so this is purely hygiene, not a correctness requirement. */
+  function forgetTopicConnections(topicHex: string): void {
+    const ids = topicConnIds.get(topicHex);
+    if (!ids) return;
+    for (const id of ids) {
+      connFrameListeners.delete(id);
+      connCtrlListeners.delete(id);
+      lastConnCtrlEvent.delete(id);
+    }
+    topicConnIds.delete(topicHex);
+  }
+
   function joinTopic(topicHex: string, mode: PearJoinMode = 'both'): PearChannel {
-    if (!frameListeners.has(topicHex)) frameListeners.set(topicHex, new Set());
     if (!ctrlListeners.has(topicHex)) ctrlListeners.set(topicHex, new Set());
     // A fresh join starts a new connection lifecycle — never replay a prior
     // connection's leftover ctrl state (close() already clears this on the
     // normal leave path; this also covers a re-join of the same topic
     // without an intervening close()).
     lastCtrlEvent.delete(topicHex);
+    forgetTopicConnections(topicHex);
     sendCommand({ t: '_join', topic: topicHex, mode });
 
+    /** Builds the `PearConnection` bound to `connId` on THIS topic.
+     *  Stateless to construct (just closures over the shared maps above) —
+     *  safe to call more than once for the same `connId`; every returned
+     *  handle shares the same underlying listener sets. */
+    function connection(connId: number): PearConnection {
+      return {
+        connId,
+        send(frame) {
+          sendCommand({ t: '_send', topic: topicHex, connId, frame });
+        },
+        onFrame(cb) {
+          let listeners = connFrameListeners.get(connId);
+          if (!listeners) { listeners = new Set(); connFrameListeners.set(connId, listeners); }
+          listeners.add(cb);
+          return () => { listeners.delete(cb); };
+        },
+        onCtrl(cb) {
+          let listeners = connCtrlListeners.get(connId);
+          if (!listeners) { listeners = new Set(); connCtrlListeners.set(connId, listeners); }
+          listeners.add(cb);
+          const last = lastConnCtrlEvent.get(connId);
+          if (last) cb(last); // replay — see PearConnection.onCtrl doc
+          return () => { listeners.delete(cb); };
+        },
+        close() {
+          sendCommand({ t: '_closeConn', topic: topicHex, connId });
+        },
+      };
+    }
+
     return {
-      send(frame) {
-        sendCommand({ t: '_send', topic: topicHex, frame });
-      },
-      onFrame(cb) {
-        const listeners = frameListeners.get(topicHex) ?? new Set();
-        frameListeners.set(topicHex, listeners);
-        listeners.add(cb);
-        return () => { listeners.delete(cb); };
-      },
       onCtrl(cb) {
         const listeners = ctrlListeners.get(topicHex) ?? new Set();
         ctrlListeners.set(topicHex, listeners);
@@ -178,11 +326,12 @@ export function startLane(_opts: StartLaneOptions = {}): Result<LaneHandle, Lane
         if (last) cb(last); // replay — see PearChannel.onCtrl doc
         return () => { listeners.delete(cb); };
       },
+      connection,
       close() {
         sendCommand({ t: '_leave', topic: topicHex });
-        frameListeners.delete(topicHex);
         ctrlListeners.delete(topicHex);
         lastCtrlEvent.delete(topicHex);
+        forgetTopicConnections(topicHex);
       },
     };
   }
@@ -198,9 +347,12 @@ export function startLane(_opts: StartLaneOptions = {}): Result<LaneHandle, Lane
     } catch {
       // Already dead.
     }
-    frameListeners.clear();
     ctrlListeners.clear();
     lastCtrlEvent.clear();
+    connFrameListeners.clear();
+    connCtrlListeners.clear();
+    lastConnCtrlEvent.clear();
+    topicConnIds.clear();
   }
 
   return ok({ joinTopic, shutdown });

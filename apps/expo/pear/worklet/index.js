@@ -46,21 +46,59 @@
  *   RN -> worklet  {t:'_leave', topic}          leave a topic, close its
  *                                               open connections, destroy
  *                                               that topic's swarm.
- *   RN -> worklet  {t:'_send',  topic, frame}   broadcast `frame` verbatim
- *                                               to every open connection
- *                                               on `topic`.
+ *   RN -> worklet  {t:'_send',  topic, connId, frame}
+ *                                               send `frame` verbatim to
+ *                                               ONLY the connection `connId`
+ *                                               on `topic` — never a
+ *                                               broadcast (see the
+ *                                               connection-scoping security
+ *                                               fix note below). A no-op if
+ *                                               `connId` names no live
+ *                                               connection on `topic`
+ *                                               (already closed / never
+ *                                               existed).
+ *   RN -> worklet  {t:'_closeConn', topic, connId}
+ *                                               close ONLY connection
+ *                                               `connId` on `topic` — the
+ *                                               topic itself and every
+ *                                               other connection on it stay
+ *                                               up. A no-op if `connId`
+ *                                               names no live connection.
  *   worklet -> RN  {t:'_ctrl', topic, ev, connId?, message?}
  *                    ev: 'joined' — swarm.join()'s discovery flushed (we're
  *                        announced/looking; does NOT mean a peer is
  *                        connected yet).
- *                    ev: 'open'   — a Noise connection opened for `topic`.
- *                    ev: 'close'  — that connection closed.
+ *                    ev: 'open'   — a Noise connection opened for `topic`;
+ *                        `connId` always present.
+ *                    ev: 'close'  — that connection closed; `connId` always
+ *                        present.
  *                    ev: 'error'  — join failed, DHT bootstrap timed out,
  *                        or a connection errored. `connId` present iff the
  *                        error is connection-scoped.
- *   worklet -> RN  {t:'_frame', topic, frame}   a JSON frame relayed
- *                                               verbatim from a peer on
+ *   worklet -> RN  {t:'_frame', topic, connId, frame}
+ *                                               a JSON frame relayed
+ *                                               verbatim from the peer on
+ *                                               connection `connId` of
  *                                               `topic`.
+ *
+ * CONNECTION-SCOPING SECURITY FIX (see apps/expo's task A5.2 round-1
+ * report): a hyperswarm topic accepts any number of independent
+ * connections (`entry.connections` below is a `Map<connId, socket>`), and
+ * this worklet's topic itself is only as secret as `pearTopicFor(did)`'s
+ * preimage — i.e. NOT secret at all once the did is known (that's the
+ * whole point of the rendezvous scheme). Before this fix, `_send` broadcast
+ * to every connection on a topic and `_frame` didn't identify which
+ * connection a relayed frame came from, so RN's `PearChannel` was
+ * inherently TOPIC-scoped, not connection-scoped: an uninvited third party
+ * who merely knew the topic (== the responder's did) could join the same
+ * topic and both (a) have its raw frames delivered to whatever session RN
+ * had authenticated on a DIFFERENT connection, and (b) receive a broadcast
+ * of that session's outbound replies — including a credential a consent
+ * sheet approved releasing to the REAL peer. Tagging every `_frame`/`_send`
+ * with `connId` (and adding `_closeConn` so RN can drop one bad connection
+ * without leaving the whole topic) lets `src/pear/lane.ts` build a
+ * `PearConnection` bound to exactly one socket, so `handshake.ts`/
+ * `protocol.ts` sessions can never cross connections.
  *
  * Deliberately NOT handled here (OS backgrounding): `Worklet.suspend()` /
  * `.resume()` are host-side (`react-native-bare-kit`) lifecycle calls that
@@ -176,8 +214,16 @@ function handleCommand(msg) {
     joinTopic(msg.topic, msg.mode)
   } else if (msg.t === '_leave' && typeof msg.topic === 'string') {
     leaveTopic(msg.topic)
-  } else if (msg.t === '_send' && typeof msg.topic === 'string' && msg.frame && typeof msg.frame === 'object') {
-    broadcast(msg.topic, msg.frame)
+  } else if (
+    msg.t === '_send' &&
+    typeof msg.topic === 'string' &&
+    typeof msg.connId === 'number' &&
+    msg.frame &&
+    typeof msg.frame === 'object'
+  ) {
+    sendToConnection(msg.topic, msg.connId, msg.frame)
+  } else if (msg.t === '_closeConn' && typeof msg.topic === 'string' && typeof msg.connId === 'number') {
+    closeConnection(msg.topic, msg.connId)
   }
 }
 
@@ -187,7 +233,7 @@ function attachConnection(topicHex, entry, socket) {
   sendToRN({ t: '_ctrl', topic: topicHex, ev: 'open', connId })
 
   const pumpSocket = makeFramePump(
-    (frame) => { sendToRN({ t: '_frame', topic: topicHex, frame }) },
+    (frame) => { sendToRN({ t: '_frame', topic: topicHex, connId, frame }) },
     (message) => { sendToRN({ t: '_ctrl', topic: topicHex, ev: 'error', connId, message }) }
   )
   socket.on('data', (chunk) => { pumpSocket(chunk) })
@@ -265,11 +311,25 @@ function leaveTopic(topicHex) {
   }
 }
 
-function broadcast(topicHex, frame) {
+/** Send `frame` to exactly ONE connection — never a broadcast. See the
+ *  connection-scoping security fix note in this file's header. */
+function sendToConnection(topicHex, connId, frame) {
   const entry = topics.get(topicHex)
-  if (!entry || entry.connections.size === 0) return
+  if (!entry) return
+  const socket = entry.connections.get(connId)
+  if (!socket) return
   const encoded = encodeFrame(frame)
-  for (const socket of entry.connections.values()) {
-    try { socket.write(encoded) } catch { /* connection mid-teardown */ }
-  }
+  try { socket.write(encoded) } catch { /* connection mid-teardown */ }
+}
+
+/** Close exactly ONE connection — the topic and any other connection on it
+ *  are unaffected. The socket's own 'close' handler (in `attachConnection`)
+ *  does the `entry.connections` bookkeeping and emits the `_ctrl` 'close'
+ *  event, so there's nothing else to do here. */
+function closeConnection(topicHex, connId) {
+  const entry = topics.get(topicHex)
+  if (!entry) return
+  const socket = entry.connections.get(connId)
+  if (!socket) return
+  try { socket.destroy() } catch { /* already closing */ }
 }

@@ -48,29 +48,50 @@
  *    v1 (battery/lifecycle tradeoffs per 01-spec §8) — this is the same
  *    honesty tradeoff `pear-lane.tsx`'s cross-network lab already documents
  *    for its own timeouts.
- * 3. Only the FIRST connection `useReachableMode` sees on its topic is
- *    authenticated. A second, concurrent `open` event on the same topic
- *    while already authenticating/authenticated is ignored. For a
- *    reachable-to-one-peer topic this is already the expected case (nobody
- *    else can compute `pearTopicFor(myDid)`'s preimage without the did,
- *    which only the intended peer was given), so this is a defensive floor,
- *    not a real multi-peer feature gap.
- * 4. `useReachableMode` deliberately does NOT call `authenticateChannel`
- *    until the channel's `onCtrl` reports `'open'` — unlike
- *    `useCardRequestFlow` (REQUESTER) and the existing `/dev/pear-lane.tsx`
- *    lab, both of which call it immediately after `joinTopic` and rely on
- *    its internal `HANDSHAKE_TIMEOUT_MS` (15s) as a bounded "attempt this
- *    now or give up" budget. That's correct for an ACTIVE dial (the user
- *    just tapped "Request full card" and expects a bounded wait) but wrong
- *    for a passive, open-ended "reachable" toggle: `authenticateChannel`'s
- *    15s timer starts the instant it's called, REGARDLESS of whether a peer
- *    has connected yet, and on timeout it CLOSES the channel (see
- *    `handshake.ts`'s `fail()`). Calling it eagerly here would make
- *    "reachable" mode spuriously die ~15 seconds after being toggled on if
- *    the peer hasn't shown up yet — exactly the kind of fake "still
- *    working" state CLAUDE.md rule 8 forbids. Deferring to `'open'` means
- *    the 15s handshake budget only starts once a real connection exists,
- *    which is the correct bound for an actual handshake attempt.
+ * 3. `useReachableMode` handles EVERY connection it sees on its topic —
+ *    independently, each with its own handshake + (if authentication
+ *    succeeds) its own `PearSession` — not just the first. This used to be
+ *    "only the first `open` event is authenticated, later ones ignored" on
+ *    the theory that `pearTopicFor(myDid)`'s preimage was effectively
+ *    private to the intended peer. That premise was WRONG and was the root
+ *    cause of a real card-leak bug (task A5.2 round-1 security fix,
+ *    connection-scoping): `pearTopicFor` is an UNKEYED, non-secret hash of
+ *    this device's own did — and the entire point of "reachable" is that an
+ *    already-verified contact, who by definition already has this did from
+ *    an earlier scan/exchange, can dial it. Anyone else who has ever seen
+ *    that did (it's shown on a business card / QR / prior presentation) can
+ *    compute the same topic and join it too, with no handshake required.
+ *    "First connection wins" therefore let an uninvited third party who
+ *    merely raced the real peer's connection attempt occupy the one
+ *    handled slot — and, before the connection-scoping fix, even a SECOND,
+ *    concurrent connection's raw frames were delivered to whatever session
+ *    was authenticated on the first (topic-scoped `PearChannel.onFrame` had
+ *    no concept of "which connection"). Every connId now gets its own
+ *    `PearConnection` (`lane.ts`), so an uninvited connection's failed
+ *    handshake can never block, delay, or leak data to a different,
+ *    legitimate connection on the same topic — see `lane.ts`'s
+ *    connection-scoping doc and this hook's `ConnAttempt`
+ *    bookkeeping below.
+ * 4. No caller — `useReachableMode` here, `useCardRequestFlow` below, or the
+ *    `/dev/pear-lane.tsx` lab — can call `authenticateChannel` until a
+ *    `connId` actually exists (the channel's `onCtrl` reports `'open'`):
+ *    since the connection-scoping fix, `authenticateChannel` takes a
+ *    `PearConnection` (`channel.connection(connId)`), which structurally
+ *    cannot be constructed before a connId is known. This used to be a
+ *    behavioural discipline only `useReachableMode` bothered with (the
+ *    REQUESTER side and the dev lab called `authenticateChannel` on the
+ *    topic-level channel immediately after `joinTopic`, relying on its
+ *    internal `HANDSHAKE_TIMEOUT_MS` (15s) as a bounded "attempt this now or
+ *    give up" budget) — it's now enforced for every caller by the type
+ *    system. That still matters here specifically: `useReachableMode` is a
+ *    passive, open-ended toggle, not a bounded dial, so it must never start
+ *    a 15s "authenticate or CLOSE the connection" clock (`handshake.ts`'s
+ *    `fail()`) before a peer has actually shown up — that would make
+ *    "reachable" mode spuriously die on a stale connId, exactly the kind of
+ *    fake "still working" state CLAUDE.md rule 8 forbids. Each incoming
+ *    connId's 15s handshake budget only starts once THAT connection's
+ *    `'open'` fires (`handleConnectionOpen` below), which is the correct
+ *    bound for an actual handshake attempt.
  */
 import { useCallback, useEffect, useReducer, useRef, useState } from 'react';
 
@@ -89,7 +110,7 @@ import {
 import { askCardConsent } from './consent';
 import { authenticateChannel } from './handshake';
 import { ensureLane, releaseLane } from './laneManager';
-import { pearTopicFor, type PearChannel } from './lane';
+import { firstConnection, pearTopicFor, type PearChannel } from './lane';
 import { createPearSession, type PearSession } from './protocol';
 
 const CARD_REQUEST_LANE_ID = 'pear:card-request';
@@ -211,63 +232,71 @@ export function useCardRequestFlow(peerDid: string): CardRequestFlow {
           }
         });
 
-        void authenticateChannel(channel, { myDid, peerDid, signer: signerResult.value }).then((authResult) => {
-          if (connectTimeoutRef.current) {
-            clearTimeout(connectTimeoutRef.current);
-            connectTimeoutRef.current = null;
-          }
+        // A `mode:'client'` dial produces exactly one outbound connection —
+        // `firstConnection` resolves with the `PearConnection` pinned to
+        // that `connId` once it opens (connection-scoping fix, `lane.ts`'s
+        // module doc). `authenticateChannel` (and the `PearSession` built
+        // on it below) then only ever sends/receives on THAT connection.
+        void firstConnection(channel).then((conn) => {
           if (!mountedRef.current) return;
-          if (!authResult.ok) {
-            dispatch({
-              type: 'failed',
-              error: { stage: 'authenticate', kind: 'authentication', message: authResult.error },
-            });
-            teardown();
-            return;
-          }
-          dispatch({ type: 'authenticated' });
-
-          const session = createPearSession(authResult.value);
-          sessionRef.current = session;
-
-          void session.requestCard().then((cardResult) => {
+          void authenticateChannel(conn, { myDid, peerDid, signer: signerResult.value }).then((authResult) => {
+            if (connectTimeoutRef.current) {
+              clearTimeout(connectTimeoutRef.current);
+              connectTimeoutRef.current = null;
+            }
             if (!mountedRef.current) return;
-            if (!cardResult.ok) {
-              if (cardResult.error.kind === 'declined') {
-                dispatch({ type: 'declined' });
-              } else {
-                dispatch({
-                  type: 'failed',
-                  error: { stage: 'request', kind: cardResult.error.kind, message: cardResult.error.message },
-                });
+            if (!authResult.ok) {
+              dispatch({
+                type: 'failed',
+                error: { stage: 'authenticate', kind: 'authentication', message: authResult.error },
+              });
+              teardown();
+              return;
+            }
+            dispatch({ type: 'authenticated' });
+
+            const session = createPearSession(authResult.value);
+            sessionRef.current = session;
+
+            void session.requestCard().then((cardResult) => {
+              if (!mountedRef.current) return;
+              if (!cardResult.ok) {
+                if (cardResult.error.kind === 'declined') {
+                  dispatch({ type: 'declined' });
+                } else {
+                  dispatch({
+                    type: 'failed',
+                    error: { stage: 'request', kind: cardResult.error.kind, message: cardResult.error.message },
+                  });
+                }
+                teardown();
+                return;
               }
-              teardown();
-              return;
-            }
 
-            // Belt-and-suspenders re-derivation, not a new trust decision:
-            // `protocol.ts` already verified `card.offer` (compact-JWS
-            // signature by the peer's OWN did + schema-valid payload)
-            // before resolving `ok(...)` — see that module's doc. Its
-            // success type only carries the raw `cardJws` string though, so
-            // this is the only way to get a `ProfileRecord` to render; both
-            // calls are pure and deterministic over the SAME already-proven
-            // inputs (`cardJws`, `peerDid`).
-            const verified = verifyCompact(cardResult.value.cardJws, peerDid);
-            if (!verified.ok) {
-              dispatch({ type: 'failed', error: { stage: 'verify', kind: 'verification', message: verified.error } });
-              teardown();
-              return;
-            }
-            const parsed = parseProfile(verified.value);
-            if (!parsed.ok) {
-              dispatch({ type: 'failed', error: { stage: 'verify', kind: 'malformed', message: parsed.error } });
-              teardown();
-              return;
-            }
+              // Belt-and-suspenders re-derivation, not a new trust decision:
+              // `protocol.ts` already verified `card.offer` (compact-JWS
+              // signature by the peer's OWN did + schema-valid payload)
+              // before resolving `ok(...)` — see that module's doc. Its
+              // success type only carries the raw `cardJws` string though, so
+              // this is the only way to get a `ProfileRecord` to render; both
+              // calls are pure and deterministic over the SAME already-proven
+              // inputs (`cardJws`, `peerDid`).
+              const verified = verifyCompact(cardResult.value.cardJws, peerDid);
+              if (!verified.ok) {
+                dispatch({ type: 'failed', error: { stage: 'verify', kind: 'verification', message: verified.error } });
+                teardown();
+                return;
+              }
+              const parsed = parseProfile(verified.value);
+              if (!parsed.ok) {
+                dispatch({ type: 'failed', error: { stage: 'verify', kind: 'malformed', message: parsed.error } });
+                teardown();
+                return;
+              }
 
-            dispatch({ type: 'received', cardJws: cardResult.value.cardJws, record: parsed.value });
-            teardown(); // one-shot — release the lane once we have what we came for
+              dispatch({ type: 'received', cardJws: cardResult.value.cardJws, record: parsed.value });
+              teardown(); // one-shot — release the lane once we have what we came for
+            });
           });
         });
       });
@@ -282,16 +311,42 @@ export function useCardRequestFlow(peerDid: string): CardRequestFlow {
   return { phase, start, reset };
 }
 
+/** No raw diagnostic text ever reaches `ReachableStatus` — see
+ *  `CardExchangeSection.tsx`'s `ERROR_I18N_SUFFIX` for the analogous
+ *  requester-side pattern this mirrors. `'connection'` covers everything
+ *  needed before a specific peer connection can even be evaluated (no
+ *  local identity / signer, or the topic itself failed to join) — these
+ *  are session-ending: `useReachableMode` stops and the user must retoggle.
+ *  `'protocol'` covers a connection attempt that reached (and failed)
+ *  mutual authentication — see `ConnAttempt`/`recomputeStatus` below for
+ *  why that is deliberately NOT session-ending: anyone who has ever seen
+ *  this device's did can dial the topic and predictably fail auth, so one
+ *  failed attempt must never look like (or behave like) reachable mode
+ *  being broken. */
+export type ReachableErrorKind = 'connection' | 'protocol';
+
 export type ReachableStatus =
   | { readonly kind: 'off' }
   | { readonly kind: 'listening' }
   | { readonly kind: 'authenticating' }
   | { readonly kind: 'ready' }
-  | { readonly kind: 'error'; readonly message: string };
+  | { readonly kind: 'error'; readonly errorKind: ReachableErrorKind };
 
 export interface ReachableMode {
   readonly status: ReachableStatus;
   readonly toggle: () => void;
+}
+
+/** Per-connection bookkeeping for `useReachableMode` — one entry per
+ *  `connId` currently mid-handshake or already authenticated (see module
+ *  doc point 3). Lives in a ref, not React state: it's an imperative
+ *  in-flight/handle collection, not something that itself needs to be
+ *  rendered (CLAUDE.md rule 9) — `status` is the one small derived value
+ *  that does. */
+interface ConnAttempt {
+  /** `null` while the handshake for this connId is still in flight. */
+  session: PearSession | null;
+  unsubConnCtrl: (() => void) | null;
 }
 
 /** RESPONDER side, scoped to exactly `peerDid` — see module doc. `peerLabel`
@@ -301,18 +356,66 @@ export interface ReachableMode {
 export function useReachableMode(peerDid: string, peerLabel: string): ReachableMode {
   const [status, setStatusRaw] = useState<ReachableStatus>({ kind: 'off' });
   const mountedRef = useRef(true);
-  const sessionRef = useRef<PearSession | null>(null);
   const unsubCtrlRef = useRef<(() => void) | null>(null);
+  // One independent handshake/session attempt PER incoming connId — see
+  // module doc point 3. An uninvited connection that fails its own
+  // handshake never touches another connId's entry.
+  const connectionsRef = useRef<Map<number, ConnAttempt>>(new Map());
+  // The most recent PER-CONNECTION authentication failure kind, shown only
+  // as a transient 'error' status when nothing is currently authenticating/
+  // ready (see `recomputeStatus`) — self-heals the moment a new connection
+  // starts handshaking, never requires the user to retoggle.
+  const lastConnErrorRef = useRef<ReachableErrorKind | null>(null);
 
   const setStatus = useCallback((next: ReachableStatus) => {
     if (mountedRef.current) setStatusRaw(next);
   }, []);
 
+  /** Recomputes the single displayed status from every in-flight/ready
+   *  connection: 'ready' beats 'authenticating' beats a transient 'error'
+   *  beats 'listening'. A rejected/uninvited connection attempt on some
+   *  OTHER connId can never regress an already-`ready` legitimate session —
+   *  and, symmetrically, a fresh connection attempt always supersedes a
+   *  stale transient error instead of requiring an explicit clear. */
+  const recomputeStatus = useCallback(() => {
+    if (!mountedRef.current) return;
+    const attempts = [...connectionsRef.current.values()];
+    if (attempts.some((a) => a.session !== null)) {
+      lastConnErrorRef.current = null;
+      setStatus({ kind: 'ready' });
+    } else if (attempts.length > 0) {
+      setStatus({ kind: 'authenticating' });
+    } else if (lastConnErrorRef.current) {
+      setStatus({ kind: 'error', errorKind: lastConnErrorRef.current });
+    } else {
+      setStatus({ kind: 'listening' });
+    }
+  }, [setStatus]);
+
+  /** Drops one connId's bookkeeping (unsubscribes its ctrl listener, closes
+   *  its session if it had one) and recomputes the displayed status. Safe
+   *  to call for a connId that's already gone. */
+  const dropConnection = useCallback(
+    (connId: number) => {
+      const attempt = connectionsRef.current.get(connId);
+      if (!attempt) return;
+      attempt.unsubConnCtrl?.();
+      attempt.session?.close();
+      connectionsRef.current.delete(connId);
+      recomputeStatus();
+    },
+    [recomputeStatus]
+  );
+
   const teardown = useCallback(() => {
     unsubCtrlRef.current?.();
     unsubCtrlRef.current = null;
-    sessionRef.current?.close();
-    sessionRef.current = null;
+    for (const attempt of connectionsRef.current.values()) {
+      attempt.unsubConnCtrl?.();
+      attempt.session?.close();
+    }
+    connectionsRef.current.clear();
+    lastConnErrorRef.current = null;
     releaseLane(REACHABLE_LANE_ID);
   }, []);
 
@@ -336,63 +439,94 @@ export function useReachableMode(peerDid: string, peerLabel: string): ReachableM
     void getRootDid().then((didResult) => {
       if (!mountedRef.current) return;
       if (!didResult.ok) {
-        setStatus({ kind: 'error', message: rootKeyErrorDiagnostic(didResult.error) });
+        setStatus({ kind: 'error', errorKind: 'connection' });
         return;
       }
       const myDid = didResult.value;
 
       const laneResult = ensureLane(REACHABLE_LANE_ID);
       if (!laneResult.ok) {
-        setStatus({ kind: 'error', message: laneResult.error.message });
+        setStatus({ kind: 'error', errorKind: 'connection' });
         return;
       }
       const topic = pearTopicFor(myDid);
       const channel: PearChannel = laneResult.value.joinTopic(topic, 'server');
 
-      // See module doc point 4 — deferred to 'open' on purpose, unlike the
-      // requester side above.
-      let handshakeStarted = false;
-      unsubCtrlRef.current = channel.onCtrl((ev) => {
-        if (!mountedRef.current) return;
-        if (ev.ev === 'open' && !handshakeStarted) {
-          // Only the first connection on this topic is handled — see
-          // module doc point 3.
-          handshakeStarted = true;
-          setStatus({ kind: 'authenticating' });
+      /** Runs an independent handshake + (on success) session attempt for
+       *  one incoming connId — see module doc point 3. Never touches any
+       *  other connId's `ConnAttempt`. */
+      const handleConnectionOpen = (connId: number): void => {
+        if (connectionsRef.current.has(connId)) return; // 'open' should only fire once per connId
+        const conn = channel.connection(connId);
+        const attempt: ConnAttempt = { session: null, unsubConnCtrl: null };
+        connectionsRef.current.set(connId, attempt);
+        recomputeStatus();
 
-          void getRootSigner().then((signerResult) => {
+        attempt.unsubConnCtrl = conn.onCtrl((ev) => {
+          if (ev.ev === 'close' || ev.ev === 'error') dropConnection(connId);
+        });
+
+        void getRootSigner().then((signerResult) => {
+          if (!mountedRef.current) return;
+          if (!connectionsRef.current.has(connId)) return; // already dropped while we awaited
+          if (!signerResult.ok) {
+            // Not specific to this connection — the whole device can't
+            // produce a signer, so every future connection would fail
+            // identically. Unlike a per-connection handshake failure (see
+            // below), this genuinely ends the reachable session.
+            conn.close();
+            dropConnection(connId);
+            setStatus({ kind: 'error', errorKind: 'connection' });
+            teardown();
+            return;
+          }
+          void authenticateChannel(conn, { myDid, peerDid, signer: signerResult.value }).then((authResult) => {
             if (!mountedRef.current) return;
-            if (!signerResult.ok) {
-              setStatus({ kind: 'error', message: rootKeyErrorDiagnostic(signerResult.error) });
-              teardown();
+            if (!connectionsRef.current.has(connId)) return; // already dropped while we awaited
+            if (!authResult.ok) {
+              // Routine/expected: THIS connection failed mutual
+              // authentication — could be the uninvited-stranger case the
+              // connection-scoping fix defends against (anyone who has seen
+              // this device's did can dial the topic and predictably fail),
+              // or just a dropped connect. `authenticateChannel` already
+              // closed `conn`. Only this connId is torn down; a
+              // concurrently-authenticating or already-`ready` legitimate
+              // connection is completely unaffected — see module doc
+              // point 3 and `recomputeStatus`.
+              lastConnErrorRef.current = 'protocol';
+              dropConnection(connId);
               return;
             }
-            void authenticateChannel(channel, { myDid, peerDid, signer: signerResult.value }).then((authResult) => {
-              if (!mountedRef.current) return;
-              if (!authResult.ok) {
-                setStatus({ kind: 'error', message: authResult.error });
-                teardown();
-                return;
-              }
-              const session = createPearSession(authResult.value);
-              sessionRef.current = session;
-              session.onCardRequest(
-                makeCardRequestHandler({
-                  askConsent: () => askCardConsent(peerLabel),
-                  requireBiometric: () => requireBiometric('exchange'),
-                  getCardJws: () => useProfileStore.getState().jws,
-                })
-              );
-              setStatus({ kind: 'ready' });
-            });
+            const session = createPearSession(authResult.value);
+            session.onCardRequest(
+              makeCardRequestHandler({
+                askConsent: () => askCardConsent(peerLabel),
+                requireBiometric: () => requireBiometric('exchange'),
+                getCardJws: () => useProfileStore.getState().jws,
+              })
+            );
+            const current = connectionsRef.current.get(connId);
+            if (current) current.session = session;
+            recomputeStatus();
           });
-        } else if (ev.ev === 'error') {
-          setStatus({ kind: 'error', message: ev.message });
+        });
+      };
+
+      unsubCtrlRef.current = channel.onCtrl((ev) => {
+        if (!mountedRef.current) return;
+        if (ev.ev === 'open') {
+          handleConnectionOpen(ev.connId);
+        } else if (ev.ev === 'error' && ev.connId === undefined) {
+          // Topic-wide failure (join failed / DHT bootstrap timed out) —
+          // fatal for the whole reachable session, unlike a per-connection
+          // error (handled inside `handleConnectionOpen`/`dropConnection`
+          // above).
+          setStatus({ kind: 'error', errorKind: 'connection' });
           teardown();
         }
       });
     });
-  }, [peerDid, peerLabel, teardown, setStatus]);
+  }, [peerDid, peerLabel, teardown, setStatus, recomputeStatus, dropConnection]);
 
   const toggle = useCallback(() => {
     if (status.kind === 'off' || status.kind === 'error') start();

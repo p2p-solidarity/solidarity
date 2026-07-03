@@ -233,10 +233,13 @@ describe('hardware-backed root secret (Secure Enclave / StrongBox)', () => {
     expect(a.bytes.length).toBe(32);
 
     // The wrapping key is provisioned ACL-FREE on the v2 alias: the JS
-    // 'exchange' gate (graced) is the canonical prompt, the SE key only
-    // provides non-extractability. A `.userPresence` ACL here stacked a
-    // second (and third, via the envelope item ACL) OS prompt on every
-    // vault unlock.
+    // 'exchange' gate is the canonical prompt (now ALWAYS a fresh live
+    // prompt, not grace-shared — moved into biometric.ts's ALWAYS_PROMPT by
+    // the Pear connection-scoping security fix, task A5.2 round 1, since
+    // the SAME reason also gates handing a credential to a remote peer),
+    // the SE key only provides non-extractability. A `.userPresence` ACL
+    // here stacked a second (and third, via the envelope item ACL) OS
+    // prompt on every vault unlock.
     expect(nitro.ensureCalls.length).toBe(1);
     expect(nitro.ensureCalls[0]?.alias).toBe(WRAP_ALIAS_V2);
     expect(nitro.ensureCalls[0]?.requireBiometric).toBe(false);
