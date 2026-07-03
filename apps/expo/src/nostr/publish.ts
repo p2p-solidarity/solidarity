@@ -181,9 +181,15 @@ export async function publishProfile(opts: PublishProfileOptions): Promise<Resul
 
 // ── Direction 2: merge did:key into kind-0 `alsoKnownAs` ──────────────────
 
-const DEFAULT_FETCH_TIMEOUT_MS = 4000;
+/**
+ * Exported (not just used internally) so `fetchKind0.ts` (task A4.4's
+ * verifier-side IO adapter) shares the exact same default wait budget and
+ * JSON-parsing tolerance as the publish-side fetch below — the verifier and
+ * the publisher must agree on what "the newest kind-0" means.
+ */
+export const DEFAULT_FETCH_TIMEOUT_MS = 4000;
 
-function parseKind0Content(raw: string): Record<string, unknown> {
+export function parseKind0Content(raw: string): Record<string, unknown> {
   try {
     const parsed: unknown = JSON.parse(raw);
     if (typeof parsed === 'object' && parsed !== null && !Array.isArray(parsed)) {
@@ -202,8 +208,13 @@ function parseKind0Content(raw: string): Record<string, unknown> {
  * timeout. Each relay gets its own bounded wait — one slow/dead relay
  * never blocks the others (`Promise.all` over independent per-relay
  * promises, each with its own timeout fallback).
+ *
+ * Exported so `fetchKind0.ts` (task A4.4's badge-verifier IO adapter) reuses
+ * this exact per-relay racing logic instead of re-implementing it — the
+ * publish path (this file) and the verify path must resolve "the newest
+ * kind-0 event" identically.
  */
-async function fetchLatestKind0(
+export async function fetchLatestKind0(
   relays: readonly string[],
   pubkeyHex: string,
   subscribeFn: SubscribeEventsFn,
