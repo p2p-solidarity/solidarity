@@ -69,13 +69,79 @@ describe('pear/lifecycle', () => {
     expect(b.shutdownCalls[0]).toBe(1);
   });
 
-  it('shuts down lanes on inactive too, not just background', () => {
-    lifecycle.startPearLifecycle();
+  it('shuts down lanes on inactive too, after the debounce grace elapses', async () => {
+    lifecycle.startPearLifecycle({ inactiveGraceMs: 10 });
+    const a = fakeLane();
+    lifecycle.registerLane(a.handle);
+
+    lifecycle._testHandleAppStateChange('inactive');
+    // Still within the grace window — no shutdown yet.
+    expect(a.shutdownCalls[0]).toBe(0);
+
+    await new Promise((resolve) => setTimeout(resolve, 30));
+    expect(a.shutdownCalls[0]).toBe(1);
+  });
+
+  it('inactive -> active within the grace window cancels the pending shutdown', async () => {
+    lifecycle.startPearLifecycle({ inactiveGraceMs: 10 });
+    const a = fakeLane();
+    lifecycle.registerLane(a.handle);
+
+    lifecycle._testHandleAppStateChange('inactive');
+    lifecycle._testHandleAppStateChange('active');
+
+    await new Promise((resolve) => setTimeout(resolve, 30));
+    expect(a.shutdownCalls[0]).toBe(0);
+  });
+
+  it('inactive -> background during the grace window shuts down immediately, not after the grace delay', () => {
+    lifecycle.startPearLifecycle({ inactiveGraceMs: 5000 });
+    const a = fakeLane();
+    lifecycle.registerLane(a.handle);
+
+    lifecycle._testHandleAppStateChange('inactive');
+    lifecycle._testHandleAppStateChange('background');
+
+    // No await — background shutdown must be synchronous, not waiting on
+    // the (much longer) inactive grace timer.
+    expect(a.shutdownCalls[0]).toBe(1);
+  });
+
+  it('background is always immediate, with no grace period', () => {
+    lifecycle.startPearLifecycle({ inactiveGraceMs: 5000 });
+    const a = fakeLane();
+    lifecycle.registerLane(a.handle);
+
+    lifecycle._testHandleAppStateChange('background');
+
+    expect(a.shutdownCalls[0]).toBe(1);
+  });
+
+  it('inactiveGraceMs: 0 shuts down synchronously on inactive (opt-out of debounce)', () => {
+    lifecycle.startPearLifecycle({ inactiveGraceMs: 0 });
     const a = fakeLane();
     lifecycle.registerLane(a.handle);
 
     lifecycle._testHandleAppStateChange('inactive');
 
+    expect(a.shutdownCalls[0]).toBe(1);
+  });
+
+  it('a repeated inactive transition restarts the debounce window instead of stacking timers', async () => {
+    lifecycle.startPearLifecycle({ inactiveGraceMs: 20 });
+    const a = fakeLane();
+    lifecycle.registerLane(a.handle);
+
+    lifecycle._testHandleAppStateChange('inactive');
+    await new Promise((resolve) => setTimeout(resolve, 10));
+    lifecycle._testHandleAppStateChange('inactive'); // restarts the 20ms window
+
+    await new Promise((resolve) => setTimeout(resolve, 15));
+    // 25ms since the first `inactive`, but only 15ms since the restart —
+    // still pending.
+    expect(a.shutdownCalls[0]).toBe(0);
+
+    await new Promise((resolve) => setTimeout(resolve, 15));
     expect(a.shutdownCalls[0]).toBe(1);
   });
 
