@@ -1,48 +1,51 @@
 /**
- * Onboarding entry — 1:1 port of Swift OnboardingFlowView.swift.
+ * Onboarding entry — 1.3.3 Task A2.5 converged the 7-step Swift-parity flow
+ * onto the Verified Page story (US-01).
  *
- * Drives the 7-step flow via the local reducer + per-step component bodies
- * under src/onboarding/steps/. Each step has its own header chrome
- * (back-chevron, title, subtitle, CTA), matching Swift's per-step `+Steps`
- * extensions — there is NO shared "Step N of M" wrapper in the iOS design.
+ * Drives the flow via the local reducer + per-step component bodies under
+ * src/onboarding/steps/. Each step has its own header chrome (back-chevron,
+ * title, subtitle, CTA) — matching Swift's per-step `+Steps` extensions —
+ * there is NO shared "Step N of M" wrapper in the design.
  *
- * Step order (Swift OnboardingFlowView.Step, plus the Expo-only `backup`
- * step — 04-plan Phase A1 task A1.4):
- *   welcome → profileSetup → avatarSetup → secureKeys → backup
- *           → importContacts → scanPassport → complete
+ * Step order (src/onboarding/state.ts's `ONBOARDING_STEPS`):
+ *   welcome → secureKeys → backup → page → share → complete
+ *
+ * Dropped from the default sequence (see state.ts's module doc for the
+ * full rationale + replay implications): profileSetup, avatarSetup,
+ * importContacts, scanPassport. Those features (BusinessCard creation,
+ * contacts import, passport scan) remain reachable from their normal
+ * surfaces (cards/edit, People tab, Settings/Me) — only the onboarding
+ * steps were removed.
  *
  * Side effects on `Start Using Solidarity`:
  *   1. Persist hasCompletedOnboarding = true (Swift AppStorage).
- *   2. Persist selectedAnimal (Swift theme_selected_animal).
- *   3. Create the initial BusinessCard (CardManager.createCard).
- *   4. Navigate to /(tabs)/people (MainTabView).
+ *   2. Navigate to /(tabs)/people (MainTabView).
+ *
+ * (The old step 2/3 side effects — creating an initial BusinessCard from a
+ * username + persisting a selected avatar — no longer apply: onboarding
+ * doesn't collect either anymore. `selectedAnimal` stays reachable from
+ * Settings › Appearance; a BusinessCard is still creatable from
+ * /cards/edit.)
  */
 import { router, Stack, useLocalSearchParams } from 'expo-router';
-import { useCallback, useEffect, useReducer } from 'react';
+import { useCallback, useReducer } from 'react';
 import { Pressable, View } from 'react-native';
 
-import { useCardStore } from '@/cards/cardManager';
 import { SfIcon } from '@/components/icons/SfIcon';
 import { Colors } from '@/constants/Colors';
-import { AvatarSelectionGridStep } from '@/onboarding/steps/AvatarSelectionGridStep';
 import { BackupStep } from '@/onboarding/steps/BackupStep';
 import { CompleteStep } from '@/onboarding/steps/CompleteStep';
-import { DarkProfileSetupStep } from '@/onboarding/steps/DarkProfileSetupStep';
-import { ImportContactsStep } from '@/onboarding/steps/ImportContactsStep';
-import { ScanPassportStep } from '@/onboarding/steps/ScanPassportStep';
+import { PageStep } from '@/onboarding/steps/PageStep';
 import { SecureKeysStep } from '@/onboarding/steps/SecureKeysStep';
+import { ShareStep } from '@/onboarding/steps/ShareStep';
 import { TerminalWelcomeStep } from '@/onboarding/steps/TerminalWelcomeStep';
-import { subscribePassportOnboardingCompleted } from '@/onboarding/passportHandoff';
 import {
   initialOnboardingState,
   onboardingReducer,
-  type OnboardingProfile,
   type OnboardingStep,
 } from '@/onboarding/state';
 import { usePreferences } from '@/settings/preferences';
-import { pushToast } from '@/feedback/toast';
 import { useTranslation } from '@/i18n';
-import { uuid, type BusinessCard, type SocialNetwork } from '@solidarity/shared';
 
 export default function OnboardingFlow() {
   const { t } = useTranslation();
@@ -50,7 +53,6 @@ export default function OnboardingFlow() {
   const isReplay = params.replay === '1';
   const [state, dispatch] = useReducer(onboardingReducer, initialOnboardingState);
   const setPref = usePreferences((s) => s.set);
-  const upsertCard = useCardStore((s) => s.upsert);
 
   const goTo = useCallback((step: OnboardingStep) => {
     dispatch({ type: 'goTo', step });
@@ -60,36 +62,8 @@ export default function OnboardingFlow() {
     dispatch({ type: 'next' });
   }, []);
 
-  // Faithful port of Swift's `PassportOnboardingFlowView(onCompleted:)` closure
-  // (OnboardingFlowView.swift): when the shared /passport route finishes a
-  // persist launched from onboarding, mark the passport scanned and advance to
-  // the `complete` step. Without this the wizard returned to the scanPassport
-  // step with passportScanned stuck false (so "Skip" stayed and Complete showed
-  // "Skipped" despite a successful scan).
-  useEffect(
-    () =>
-      subscribePassportOnboardingCompleted(() => {
-        dispatch({ type: 'setPassportScanned', value: true });
-        dispatch({ type: 'goTo', step: 'complete' });
-      }),
-    []
-  );
-
-  const handleProfileChange = useCallback((field: keyof OnboardingProfile, value: string) => {
-    dispatch({ type: 'setProfileField', field, value });
-  }, []);
-
-  const handleFinish = async () => {
+  const handleFinish = () => {
     setPref('hasCompletedOnboarding', true);
-    if (state.animal) setPref('selectedAnimal', state.animal);
-    const trimmed = state.profile.username.trim();
-    if (trimmed.length > 0) {
-      const card = composeInitialCard(state.profile, state.animal ?? undefined);
-      const result = await upsertCard(card);
-      if (!result.ok) {
-        pushToast(`${t('onboardingFlow.saveCardFailed')}: ${result.error.message}`, 'warning');
-      }
-    }
     router.replace('/(tabs)/people');
   };
 
@@ -98,34 +72,11 @@ export default function OnboardingFlow() {
     case 'welcome':
       body = <TerminalWelcomeStep onBegin={next} />;
       break;
-    case 'profileSetup':
-      body = (
-        <DarkProfileSetupStep
-          profile={state.profile}
-          onChange={handleProfileChange}
-          onNext={next}
-        />
-      );
-      break;
-    case 'avatarSetup':
-      body = (
-        <AvatarSelectionGridStep
-          selection={state.animal}
-          onSelect={(animal) => {
-            dispatch({ type: 'setAnimal', animal });
-          }}
-          onBack={() => {
-            goTo('profileSetup');
-          }}
-          onNext={next}
-        />
-      );
-      break;
     case 'secureKeys':
       body = (
         <SecureKeysStep
           onBack={() => {
-            goTo('avatarSetup');
+            goTo('welcome');
           }}
           onKeysGenerated={() => {
             dispatch({ type: 'setKeysGenerated', value: true });
@@ -144,43 +95,28 @@ export default function OnboardingFlow() {
         />
       );
       break;
-    case 'importContacts':
+    case 'page':
       body = (
-        <ImportContactsStep
-          importedCount={state.importedCount}
+        <PageStep
           onBack={() => {
             goTo('backup');
           }}
-          onAdvance={next}
-          onImported={(count) => {
-            dispatch({ type: 'setImportedCount', count });
-          }}
+          onNext={next}
         />
       );
       break;
-    case 'scanPassport':
+    case 'share':
       body = (
-        <ScanPassportStep
-          passportScanned={state.passportScanned}
+        <ShareStep
           onBack={() => {
-            goTo('importContacts');
+            goTo('page');
           }}
-          onAdvance={next}
+          onNext={next}
         />
       );
       break;
     case 'complete':
-      body = (
-        <CompleteStep
-          username={state.profile.username}
-          keysGenerated={state.keysGenerated}
-          importedCount={state.importedCount}
-          passportScanned={state.passportScanned}
-          onFinish={() => {
-            void handleFinish();
-          }}
-        />
-      );
+      body = <CompleteStep keysGenerated={state.keysGenerated} onFinish={handleFinish} />;
       break;
   }
 
@@ -212,46 +148,4 @@ export default function OnboardingFlow() {
       </View>
     </View>
   );
-}
-
-function composeInitialCard(
-  profile: OnboardingProfile,
-  animal: BusinessCard['animal']
-): BusinessCard {
-  const now = new Date();
-  const socials: SocialNetwork[] = [];
-  const x = profile.xTwitter.trim();
-  if (x.length > 0) {
-    socials.push({ id: uuid(), platform: 'Twitter', username: x, url: undefined });
-  }
-  const li = profile.linkedIn.trim();
-  if (li.length > 0) {
-    socials.push({ id: uuid(), platform: 'LinkedIn', username: li, url: undefined });
-  }
-  return {
-    id: uuid(),
-    name: profile.username.trim(),
-    title: undefined,
-    company: undefined,
-    email: undefined,
-    phone: undefined,
-    profileImage: undefined,
-    socialNetworks: socials,
-    skills: [],
-    categories: [],
-    sharingPreferences: {
-      publicFields: new Set(['name']),
-      professionalFields: new Set(['name', 'title', 'company', 'email']),
-      personalFields: new Set(['name', 'email', 'phone']),
-      allowForwarding: true,
-      // ZK on by default for the user's own identity card — never share raw.
-      useZK: true,
-      sharingFormat: 'zkProof',
-    },
-    verifiedFields: undefined,
-    nameType: 'display_name',
-    animal: animal ?? undefined,
-    createdAt: now,
-    updatedAt: now,
-  };
 }

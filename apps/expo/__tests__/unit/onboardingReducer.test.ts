@@ -1,10 +1,13 @@
 /**
  * Onboarding state-machine tests. Pure reducer — no React, no native modules.
  *
- * Mirrors Swift OnboardingFlowView.Step (welcome → profileSetup →
- * avatarSetup → secureKeys → importContacts → scanPassport → complete),
- * plus the Expo-only `backup` step (04-plan Phase A1 task A1.4, inserted
- * after `secureKeys`) — see src/onboarding/state.ts.
+ * 1.3.3 Task A2.5 converged the onboarding flow onto the Verified Page
+ * story (US-01): welcome → secureKeys → backup → page → share → complete.
+ * The legacy Swift-parity steps (profileSetup/avatarSetup — a name+animal
+ * form that fed a now-superseded BusinessCard — plus importContacts and
+ * scanPassport) were dropped from the DEFAULT sequence; those features stay
+ * reachable from their normal surfaces (People tab import, Settings/Me →
+ * /passport) — see src/onboarding/state.ts's module doc.
  */
 import { describe, expect, it } from 'bun:test';
 
@@ -17,6 +20,23 @@ import {
 describe('onboardingReducer', () => {
   it('starts at welcome', () => {
     expect(initialOnboardingState.step).toBe('welcome');
+  });
+
+  it('the default sequence is exactly welcome → secureKeys → backup → page → share → complete', () => {
+    expect(ONBOARDING_STEPS).toEqual([
+      'welcome',
+      'secureKeys',
+      'backup',
+      'page',
+      'share',
+      'complete',
+    ]);
+  });
+
+  it('drops every legacy step not in the US-01 sequence', () => {
+    for (const legacy of ['profileSetup', 'avatarSetup', 'importContacts', 'scanPassport']) {
+      expect(ONBOARDING_STEPS).not.toContain(legacy);
+    }
   });
 
   it('advances through every step in order', () => {
@@ -32,6 +52,14 @@ describe('onboardingReducer', () => {
     expect(s.step).toBe('welcome');
   });
 
+  it('back retreats one step at a time (e.g. share → page → backup)', () => {
+    let s = onboardingReducer(initialOnboardingState, { type: 'goTo', step: 'share' });
+    s = onboardingReducer(s, { type: 'back' });
+    expect(s.step).toBe('page');
+    s = onboardingReducer(s, { type: 'back' });
+    expect(s.step).toBe('backup');
+  });
+
   it('next is a no-op on the last step', () => {
     let s = initialOnboardingState;
     for (let i = 1; i < ONBOARDING_STEPS.length; i++) {
@@ -42,49 +70,13 @@ describe('onboardingReducer', () => {
   });
 
   it('goTo jumps to an arbitrary step', () => {
-    const s = onboardingReducer(initialOnboardingState, { type: 'goTo', step: 'scanPassport' });
-    expect(s.step).toBe('scanPassport');
+    const s = onboardingReducer(initialOnboardingState, { type: 'goTo', step: 'page' });
+    expect(s.step).toBe('page');
   });
 
-  it('stores profile + animal + key + passport state', () => {
-    let s = initialOnboardingState;
-    s = onboardingReducer(s, {
-      type: 'setProfile',
-      profile: {
-        username: 'Ada',
-        link: 'https://ada.dev',
-        xTwitter: 'ada',
-        linkedIn: 'ada',
-        wallet: '0xABCD',
-      },
-    });
-    s = onboardingReducer(s, { type: 'setAnimal', animal: 'sheep' });
-    s = onboardingReducer(s, { type: 'setKeysGenerated', value: true });
-    s = onboardingReducer(s, { type: 'setPassportScanned', value: true });
-    expect(s.profile.username).toBe('Ada');
-    expect(s.profile.wallet).toBe('0xABCD');
-    expect(s.animal).toBe('sheep');
+  it('tracks keysGenerated', () => {
+    expect(initialOnboardingState.keysGenerated).toBe(false);
+    const s = onboardingReducer(initialOnboardingState, { type: 'setKeysGenerated', value: true });
     expect(s.keysGenerated).toBe(true);
-    expect(s.passportScanned).toBe(true);
-  });
-
-  it('setProfileField updates a single field', () => {
-    let s = initialOnboardingState;
-    s = onboardingReducer(s, { type: 'setProfileField', field: 'username', value: 'Lovelace' });
-    expect(s.profile.username).toBe('Lovelace');
-    expect(s.profile.link).toBe('');
-  });
-
-  it('sets imported contacts count to the latest total (does not accumulate)', () => {
-    let s = initialOnboardingState;
-    s = onboardingReducer(s, { type: 'setImportedCount', count: 5 });
-    expect(s.importedCount).toBe(5);
-    // ImportContactsStep feeds the manifest TOTAL on every render; the reducer
-    // must REPLACE, not add. Re-reporting the same total must be idempotent —
-    // otherwise the effect runs away to thousands (the 23082-contacts bug).
-    s = onboardingReducer(s, { type: 'setImportedCount', count: 5 });
-    expect(s.importedCount).toBe(5);
-    s = onboardingReducer(s, { type: 'setImportedCount', count: 8 });
-    expect(s.importedCount).toBe(8);
   });
 });

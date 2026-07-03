@@ -1,83 +1,74 @@
 /**
- * Onboarding state machine — mirrors Swift OnboardingFlowView.Step verbatim
- * (solidarity/Views/Onboarding/OnboardingFlowView.swift L5-13), plus one
- * Expo-only addition.
+ * Onboarding state machine — 1.3.3 Task A2.5 converged the 7-step Swift-
+ * parity wizard onto the Verified Page flow (US-01, docs/ref/02):
  *
- * Step list:
- *   1. welcome          — TerminalWelcomeScreen (typewriter intro)
- *   2. profileSetup     — DarkProfileSetupForm (name, link, X, LinkedIn, wallet)
- *   3. avatarSetup      — AvatarSelectionGrid (pick AnimalCharacter)
- *   4. secureKeys       — Generate DID + iCloud restore probe (Swift parity)
- *   5. backup           — [Expo-only, 04-plan Phase A1 task A1.4] seed-derived
- *                         root key backup consent (iCloud vs. mnemonic
- *                         ceremony). Non-skippable — see
- *                         app/onboarding/backup.tsx.
- *   6. importContacts   — Phone picker / VCF import (skippable)
- *   7. scanPassport     — Open PassportOnboardingFlowView (skippable)
- *   8. complete         — `[ SYSTEM READY ]` summary + "Start Using Solidarity"
+ *   1. welcome     — TerminalWelcomeScreen (typewriter intro)
+ *   2. secureKeys  — Generate DID + iCloud restore probe (Swift parity)
+ *   3. backup      — [Phase A1 task A1.4] seed-derived root key backup
+ *                     consent (iCloud vs. mnemonic ceremony). Non-skippable
+ *                     — see app/onboarding steps/BackupStep.tsx.
+ *   4. page        — [Phase A2 task A2.5] minimal Profile Record creation
+ *                     (displayName + optional bio/link), signed + persisted
+ *                     via `useProfileStore().saveProfile()`. Skippable with
+ *                     honest "do it later from Me" copy — see
+ *                     steps/PageStep.tsx.
+ *   5. share       — [Phase A2 task A2.5] shows the just-created page's
+ *                     link + QR (only if one exists) — see
+ *                     steps/ShareStep.tsx.
+ *   6. complete    — `[ SYSTEM READY ]` summary + "Start Using Solidarity".
+ *
+ * Dropped from the DEFAULT sequence (not in US-01's list):
+ *   - profileSetup / avatarSetup — the old username+animal form that fed a
+ *     legacy BusinessCard (`composeInitialCard` in app/onboarding/index.tsx,
+ *     since removed). The Verified Page (`page`/`share` above) is now the
+ *     "first thing you own"; a BusinessCard is still creatable manually via
+ *     /cards/edit for anyone who wants the legacy card/QR-exchange surface,
+ *     and `useMyCard()`'s consumers already render a real fallback when no
+ *     card exists (see app/(tabs)/me/index.tsx's `card?.name ?? …`), so this
+ *     is not a new unhandled state.
+ *   - importContacts — still reachable from the People tab (`/contacts/
+ *     import-phone`, `/contacts/import-vcf`), unrelated to identity setup.
+ *   - scanPassport — still reachable from Settings/Me (`/passport`). The
+ *     onboarding→/passport completion handoff (`passportHandoff.ts`) is now
+ *     dormant (nothing passes `from=onboarding` anymore) but is left intact
+ *     since `/passport` is a shared route outside this task's scope.
+ *
+ * `profile`/`animal`/`importedCount`/`passportScanned` are gone from this
+ * state entirely — `page`/`share`/`complete` read the Profile Record
+ * straight from `useProfileStore` (the real source of truth, including on
+ * REPLAY when a page already exists) instead of duplicating it into a
+ * parallel reducer field that could desync (CLAUDE.md rule 8/9).
  *
  * Plain reducer (no zustand) so the flow stays unit-testable; promote to
  * a store only if cross-screen state grows beyond the wizard.
  */
-import type { Animal } from '@solidarity/shared';
 
 export const ONBOARDING_STEPS = [
   'welcome',
-  'profileSetup',
-  'avatarSetup',
   'secureKeys',
   'backup',
-  'importContacts',
-  'scanPassport',
+  'page',
+  'share',
   'complete',
 ] as const;
 
 export type OnboardingStep = (typeof ONBOARDING_STEPS)[number];
 
-export interface OnboardingProfile {
-  readonly username: string;
-  readonly link: string;
-  readonly xTwitter: string;
-  readonly linkedIn: string;
-  readonly wallet: string;
-}
-
 export interface OnboardingState {
   readonly step: OnboardingStep;
-  readonly profile: OnboardingProfile;
-  readonly animal: Animal | null;
   readonly keysGenerated: boolean;
-  readonly importedCount: number | null;
-  readonly passportScanned: boolean;
 }
-
-const EMPTY_PROFILE: OnboardingProfile = {
-  username: '',
-  link: '',
-  xTwitter: '',
-  linkedIn: '',
-  wallet: '',
-};
 
 export const initialOnboardingState: OnboardingState = {
   step: 'welcome',
-  profile: EMPTY_PROFILE,
-  animal: null,
   keysGenerated: false,
-  importedCount: null,
-  passportScanned: false,
 };
 
 export type OnboardingAction =
   | { readonly type: 'next' }
   | { readonly type: 'back' }
   | { readonly type: 'goTo'; readonly step: OnboardingStep }
-  | { readonly type: 'setProfile'; readonly profile: OnboardingProfile }
-  | { readonly type: 'setProfileField'; readonly field: keyof OnboardingProfile; readonly value: string }
-  | { readonly type: 'setAnimal'; readonly animal: Animal }
-  | { readonly type: 'setKeysGenerated'; readonly value: boolean }
-  | { readonly type: 'setImportedCount'; readonly count: number }
-  | { readonly type: 'setPassportScanned'; readonly value: boolean };
+  | { readonly type: 'setKeysGenerated'; readonly value: boolean };
 
 function stepIndex(s: OnboardingStep): number {
   return ONBOARDING_STEPS.indexOf(s);
@@ -102,19 +93,7 @@ export function onboardingReducer(
       return { ...state, step: prevStep(state.step) };
     case 'goTo':
       return { ...state, step: action.step };
-    case 'setProfile':
-      return { ...state, profile: action.profile };
-    case 'setProfileField':
-      return { ...state, profile: { ...state.profile, [action.field]: action.value } };
-    case 'setAnimal':
-      return { ...state, animal: action.animal };
     case 'setKeysGenerated':
       return { ...state, keysGenerated: action.value };
-    case 'setImportedCount':
-      // SET, not add. ImportContactsStep reports the manifest TOTAL on every
-      // render; accumulating it made importedCount run away to thousands.
-      return { ...state, importedCount: action.count };
-    case 'setPassportScanned':
-      return { ...state, passportScanned: action.value };
   }
 }
