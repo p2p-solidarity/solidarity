@@ -19,6 +19,32 @@
  *      claim X's credential never leaks claim Y's credential.
  *   3. The produced VP round-trips through the REAL `verifyVpToken`,
  *      including the `expectedAud` binding this task's design relies on.
+ *
+ * Fix round 1 (post-review) also adds a DIRECT test of
+ * `usePresentRequestFlow.ts::buildPearPresentation` — the effectful glue
+ * this file's other tests only exercised indirectly via hand-shaped calls
+ * to its constituent pieces. `buildPearPresentation` used to pass
+ * `selectedClaimIds` (`PresentableClaim.id`s, e.g. `'claim-age-over-18'`)
+ * straight through as `buildSyntheticPresentRequest`'s `requestedClaimTypes`
+ * param (which needs claim TYPES, e.g. `'age_over_18'`) — silently
+ * mislabelling every `presentation_definition.input_descriptors[].id`.
+ * Inert only because `buildPearPresentation` discards
+ * `result.value.presentationSubmission` and no wire consumer inspects it
+ * today. Loading `usePresentRequestFlow.ts` additionally pulls in
+ * `lane.ts` (`react-native-bare-kit` + the worklet bundle) and
+ * `lifecycle.ts` (`react-native`'s `AppState`) even though this suite never
+ * calls the `usePresentRequestFlow` hook itself (only the plain async
+ * `buildPearPresentation` export) — those three get the same inert-stub
+ * treatment `pearLaneManager.test.ts` already established. Observing the
+ * fixed/broken `input_descriptors` requires capturing the `ParsedOidcRequest`
+ * `buildPearPresentation` builds internally (it's never returned to the
+ * caller), so `presentBuilder.ts` is also mocked here — but ONLY to wrap
+ * `buildSyntheticPresentRequest` with a capturing spy that delegates to the
+ * REAL implementation (already bound via the static import above, before
+ * any mock.module call runs); `matchPresentableClaims` is re-exported
+ * verbatim so this mock doesn't drop it for any other file sharing the
+ * process-wide module cache — the exact class of bug fixed below for
+ * `@/keychain/signingKey`.
  */
 import { describe, expect, it, mock } from 'bun:test';
 
@@ -32,8 +58,9 @@ import {
 } from '@solidarity/shared';
 
 import type { StoredCredential } from '../../src/credentials/store';
+import type { ParsedOidcRequest } from '../../src/oidc/parseAuthRequest';
 import { verifyVpToken } from '../../src/oidc/proofVerifier';
-import { buildSyntheticPresentRequest } from '../../src/pear/presentBuilder';
+import { buildSyntheticPresentRequest, matchPresentableClaims } from '../../src/pear/presentBuilder';
 
 const HOLDER_PRIV = new Uint8Array(32).fill(0).map((_, i) => (i * 3 + 1) & 0xff);
 const HOLDER_PUB = publicKeyFromPrivate(HOLDER_PRIV);
@@ -80,12 +107,65 @@ function storedCredential(id: string, rawJwt: string): StoredCredential {
 // `identitySelectors.test.ts`/`spruceDid.parity.test.ts`'s top-level-await
 // pattern, which this mirrors (rather than a `beforeAll` + explicit
 // `typeof import(...)` type annotation for a deferred binding).
+//
+// This is the ONLY member of `signJwt`/`publicJwk` this suite actually
+// exercises, but `mock.module` registrations are process-wide — see
+// `envelopeHandler.test.ts`'s identical-shaped mock, the established
+// precedent for this exact module. Enumerating every OTHER currently-
+// exported member as a loud stub (rather than omitting them, as this file
+// previously did with only `publicJwk`/`signJwt`) is the fix for a real
+// cross-file bug: whichever test file's module cache entry for
+// `@/keychain/signingKey` bun's file-scan order resolves LAST wins for
+// every later-running file, so an incomplete mock here silently shadowed
+// `spruceDid.parity.test.ts`'s `resetSigningKeyForTesting`/
+// `wrapRawSigningInputForSpruce` imports with `undefined`. The real module
+// itself can't be spread (`await import('@/keychain/signingKey')` pulls in
+// `expo-secure-store` -> `react-native`'s Flow-syntax entry point, which
+// bun's parser rejects), so this enumerates by hand instead, mirroring the
+// 4 pre-existing files' convention exactly.
 await mock.module('@/keychain/signingKey', () => ({
   publicJwk: async () => HOLDER_JWK,
   signJwt: async (
     header: { alg: 'ES256'; typ?: string; kid?: string },
     payload: Record<string, unknown>
   ) => signJwtEs256(header, payload, HOLDER_PRIV),
+  signRawEs256: async () => {
+    throw new Error('test: signRawEs256 unavailable in pearPresentRoundTrip suite');
+  },
+  signOpenAcDeviceBindingDigest: async () => {
+    throw new Error('test: signOpenAcDeviceBindingDigest unavailable in pearPresentRoundTrip suite');
+  },
+  publicRawP256ForCurrentIdentity: async () => {
+    throw new Error('test: publicRawP256ForCurrentIdentity unavailable in pearPresentRoundTrip suite');
+  },
+  wrapRawSigningInputForSpruce: (p: Uint8Array) => p,
+  ensureSigningKey: async () => {
+    throw new Error('test: ensureSigningKey unavailable in pearPresentRoundTrip suite');
+  },
+  didKeyForCurrentIdentity: async () => {
+    throw new Error('test: didKeyForCurrentIdentity unavailable in pearPresentRoundTrip suite');
+  },
+  resetSigningKeyForTesting: async () => undefined,
+}));
+// `usePresentRequestFlow.ts` (the module `buildPearPresentation` lives in,
+// exercised below) transitively imports `lane.ts` (`react-native-bare-kit`
+// + the worklet bundle) and `lifecycle.ts` (`react-native`'s `AppState`)
+// via `laneManager.ts` — none of which this suite calls (only the plain
+// async `buildPearPresentation` export, never the `usePresentRequestFlow`
+// hook). Inert stubs, same recipe as `pearLaneManager.test.ts`.
+await mock.module('react-native-bare-kit', () => ({
+  Worklet: function FakeWorklet(): void {
+    // Never actually constructed — this suite only calls the plain async
+    // `buildPearPresentation` export, never `usePresentRequestFlow`'s
+    // `start()` (the only path that reaches `lane.ts`'s real `new
+    // Worklet(...)`). Throws loudly rather than silently no-op-ing if that
+    // ever changes.
+    throw new Error('test: Worklet unavailable in pearPresentRoundTrip suite');
+  },
+}));
+await mock.module('../../pear/worklet/dist/index.bundle.js', () => ({ default: 'fake-bundle-source' }));
+await mock.module('react-native', () => ({
+  AppState: { addEventListener: () => ({ remove: (): undefined => undefined }) },
 }));
 await mock.module('@/identity', () => ({
   useIdentityData: {
@@ -132,10 +212,61 @@ await mock.module('@/credentials/store', () => ({
   },
 }));
 
+// A plain value copy of the real implementation, taken BEFORE the
+// `mock.module` call below — `bun:test`'s mock.module rebinds the module's
+// export object in place, which also repoints already-resolved static
+// `import` bindings (confirmed empirically: closing over the imported name
+// directly inside the mock factory recurses into the mock itself and blows
+// the call stack). A local `const` captures the function value, not a live
+// binding, so it stays pinned to the real implementation.
+const realBuildSyntheticPresentRequest = buildSyntheticPresentRequest;
+
+/** Captures the `ParsedOidcRequest` the module-under-test's internal
+ *  `buildSyntheticPresentRequest` call actually built, so the fix-round-1
+ *  tests below can inspect `presentation_definition.input_descriptors`
+ *  directly — `buildPearPresentation` never returns that object to its
+ *  caller (see this file's module doc). Reset/read go through functions
+ *  (not direct variable/property access) deliberately — TS narrows a
+ *  dotted name exactly like a bare `let`: a literal `x.current = undefined`
+ *  reset earlier in the SAME test body pins later reads of `x.current` to
+ *  `undefined` across the `await buildPearPresentation(...)` call that
+ *  actually mutates it from a different closure, collapsing the type to
+ *  `never`. A function call's declared return type isn't narrowed this
+ *  way, so routing through `readCapturedPearRequest()` sidesteps it. */
+let capturedPearRequestValue: ParsedOidcRequest | undefined;
+function resetCapturedPearRequest(): void {
+  capturedPearRequestValue = undefined;
+}
+function readCapturedPearRequest(): ParsedOidcRequest | undefined {
+  return capturedPearRequestValue;
+}
+await mock.module('../../src/pear/presentBuilder', () => ({
+  // Re-exported verbatim (not omitted) so this mock doesn't shadow
+  // `matchPresentableClaims` for any other file sharing bun's process-wide
+  // module cache — the same completeness fix applied to the
+  // `@/keychain/signingKey` mock above, applied here preemptively.
+  matchPresentableClaims,
+  buildSyntheticPresentRequest: (
+    requestedClaimTypes: readonly string[],
+    audienceDid: string,
+    nonce: string
+  ): ParsedOidcRequest => {
+    // Delegates to the REAL implementation captured above — a capturing
+    // spy, not a behavioural fake.
+    capturedPearRequestValue = realBuildSyntheticPresentRequest(
+      requestedClaimTypes,
+      audienceDid,
+      nonce
+    );
+    return capturedPearRequestValue;
+  },
+}));
+
 // Pull the module under test AFTER the mocks are installed — TS infers
 // `buildVpToken`'s type from the destructure, no `typeof import(...)`
 // annotation needed.
 const { buildVpToken } = await import('../../src/oidc/presenter');
+const { buildPearPresentation } = await import('../../src/pear/usePresentRequestFlow');
 
 describe('A5.3 round trip: presentBuilder -> real buildVpToken -> real verifyVpToken', () => {
   it('builds against the synthetic Pear request and verifies with expectedAud bound to the requester', async () => {
@@ -198,5 +329,59 @@ describe('A5.3 round trip: presentBuilder -> real buildVpToken -> real verifyVpT
     await expect(
       verifyVpToken(built.value.vpJwt, { expectedAud: 'did:key:zSomeOtherRequester' })
     ).rejects.toThrow(/aud mismatch/u);
+  });
+});
+
+describe('A5.3 fix round 1: buildPearPresentation threads claim TYPES, not PresentableClaim ids', () => {
+  it("builds input_descriptors keyed by the selected claim's TYPE, not its PresentableClaim id", async () => {
+    resetCapturedPearRequest();
+
+    const built = await buildPearPresentation(['claim-age-over-18'], REQUESTER_DID);
+    expect(built.ok).toBe(true);
+
+    // This is the object `buildVpToken` actually received — proof the
+    // threading fix reaches `presentation_definition`, not just an
+    // assertion against `buildSyntheticPresentRequest` called by hand.
+    const request = readCapturedPearRequest();
+    if (!request) throw new Error('expected buildSyntheticPresentRequest to have been called');
+    const descriptorIds = (request.request.presentation_definition?.input_descriptors ?? []).map(
+      (d) => d.id
+    );
+    expect(descriptorIds).toEqual(['age_over_18']);
+    // The exact bug this guards: the `PresentableClaim.id` leaking through
+    // as a "claim type" instead of the real one.
+    expect(descriptorIds).not.toContain('claim-age-over-18');
+  });
+
+  it('two selected claims of different types produce one descriptor per distinct TYPE', async () => {
+    resetCapturedPearRequest();
+
+    const built = await buildPearPresentation(
+      ['claim-age-over-18', 'claim-nationality'],
+      REQUESTER_DID
+    );
+    expect(built.ok).toBe(true);
+
+    const request = readCapturedPearRequest();
+    if (!request) throw new Error('expected buildSyntheticPresentRequest to have been called');
+    const descriptorIds = (request.request.presentation_definition?.input_descriptors ?? []).map(
+      (d) => d.id
+    );
+    expect(new Set(descriptorIds)).toEqual(new Set(['age_over_18', 'nationality']));
+    expect(descriptorIds).not.toContain('claim-age-over-18');
+    expect(descriptorIds).not.toContain('claim-nationality');
+  });
+
+  it('round-trips through the real verifyVpToken for exactly the selected claim', async () => {
+    const built = await buildPearPresentation(['claim-age-over-18'], REQUESTER_DID);
+    expect(built.ok).toBe(true);
+    if (!built.ok) return;
+
+    const verified = await verifyVpToken(built.sdJwt, { expectedAud: REQUESTER_DID });
+    expect(verified.holderDid).toBe(HOLDER_DID);
+    expect(verified.credentials).toHaveLength(1);
+    expect(verified.credentials[0]?.claims['vc']).toEqual({
+      credentialSubject: { id: HOLDER_DID, claim: 'age_over_18' },
+    });
   });
 });

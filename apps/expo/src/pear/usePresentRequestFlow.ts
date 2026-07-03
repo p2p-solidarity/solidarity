@@ -20,6 +20,7 @@
  */
 import { useCallback, useEffect, useReducer, useRef } from 'react';
 
+import { useIdentityData } from '@/identity';
 import { getRootDid, getRootSigner, type RootKeyError } from '@/identity/rootKey';
 import { buildVpToken } from '@/oidc/presenter';
 import { verifyVpToken } from '@/oidc/proofVerifier';
@@ -66,15 +67,48 @@ function rootKeyErrorDiagnostic(e: RootKeyError): string {
  * to itself specifically. See `presentBuilder.ts`'s module doc for why
  * `nonce` doesn't round-trip a caller-chosen value. Exported for
  * `useCardExchange.ts`'s `useReachableMode` (the RESPONDER side) to reuse.
+ *
+ * `selectedClaimIds` are `PresentableClaim.id`s (e.g. `'claim-age-over-18'`)
+ * — `presentRelease.ts`'s `PresentReleaseDeps.buildPresentation` contract,
+ * which only carries ids forward past the consent sheet (never the fuller
+ * `PresentableClaim` shape). `buildSyntheticPresentRequest`'s first param is
+ * `requestedClaimTypes` though (e.g. `'age_over_18'`) — it becomes
+ * `presentation_definition.input_descriptors[].id`, which
+ * `oidc/presenter.ts::buildVpToken` echoes into the (currently-discarded-
+ * by-this-function) `presentationSubmission.descriptor_map`. Passing the
+ * raw ids straight through would silently mislabel every descriptor. So we
+ * resolve ids -> claim TYPES here via `useIdentityData`, mirroring
+ * `presenter.ts`'s own `rawCredentialIdsFor` id->entity lookup against the
+ * exact same store.
  */
 export async function buildPearPresentation(
   selectedClaimIds: readonly string[],
   audienceDid: string
 ): Promise<BuildPresentationResult> {
-  const request = buildSyntheticPresentRequest(selectedClaimIds, audienceDid, cryptoRandomNonce());
+  const claimTypes = claimTypesForSelectedIds(selectedClaimIds);
+  const request = buildSyntheticPresentRequest(claimTypes, audienceDid, cryptoRandomNonce());
   const result = await buildVpToken({ request, selectedClaimIds, holderDid: '' });
   if (!result.ok) return { ok: false, message: result.error.message };
   return { ok: true, sdJwt: result.value.vpJwt };
+}
+
+/** Resolve selected `PresentableClaim.id`s to their `claimType`s for
+ *  `buildSyntheticPresentRequest`'s `requestedClaimTypes` param — see
+ *  `buildPearPresentation`'s doc above for why this lookup exists.
+ *  Deduped (two selected claims could theoretically share a type); ids
+ *  that no longer resolve (claim vanished between match and build) are
+ *  silently skipped, same as `rawCredentialIdsFor`'s "just omit it" stance
+ *  — `buildVpToken` will itself fail closed with "No credentials selected"
+ *  if that leaves nothing presentable. */
+function claimTypesForSelectedIds(claimIds: readonly string[]): readonly string[] {
+  const claims = useIdentityData.getState().provableClaims;
+  const claimById = new Map(claims.map((c) => [c.id, c] as const));
+  const types = new Set<string>();
+  for (const id of claimIds) {
+    const claim = claimById.get(id);
+    if (claim) types.add(claim.claimType);
+  }
+  return Array.from(types);
 }
 
 /** Cryptographically-random hex nonce for the synthetic present request. */
