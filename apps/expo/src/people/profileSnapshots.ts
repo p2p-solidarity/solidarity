@@ -29,6 +29,7 @@
  * whole store (matches `profile/store.ts`'s `readPersisted` policy).
  */
 import { create } from 'zustand';
+import { useShallow } from 'zustand/shallow';
 
 import { getMmkv } from '@/storage/mmkv';
 import { parseProfile, type ProfileRecord } from '@solidarity/shared';
@@ -121,3 +122,22 @@ export function getProfileSnapshot(did: string): ProfileSnapshot | undefined {
 
 export const useProfileSnapshot = (did: string | undefined): ProfileSnapshot | undefined =>
   useProfileSnapshotStore((s) => (did ? s.snapshots.get(did) : undefined));
+
+/** Newest-verified-first — the order the People tab's Verified Pages
+ * section renders in. Exported standalone (not just the hook below) so the
+ * ordering is unit-testable without mounting React. */
+export function sortedProfileSnapshots(
+  snapshots: ReadonlyMap<string, ProfileSnapshot>,
+): readonly ProfileSnapshot[] {
+  return Array.from(snapshots.values()).sort((a, b) =>
+    a.verifiedAt < b.verifiedAt ? 1 : a.verifiedAt > b.verifiedAt ? -1 : 0,
+  );
+}
+
+/** `useShallow` is required: this selector derives a fresh array every
+ * call, and Zustand v5's `useSyncExternalStore` snapshot caching would
+ * otherwise treat that new reference as a state change on every render —
+ * see the equivalent note on `useContactListDetail` in
+ * `contacts/repository.ts`. */
+export const useSortedProfileSnapshots = (): readonly ProfileSnapshot[] =>
+  useProfileSnapshotStore(useShallow((s) => sortedProfileSnapshots(s.snapshots)));

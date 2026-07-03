@@ -16,16 +16,24 @@ import { beforeAll, beforeEach, describe, expect, it, mock } from 'bun:test';
 
 import type { ProfileRecord } from '@solidarity/shared';
 
+interface Snapshot {
+  readonly did: string;
+  readonly record: ProfileRecord;
+  readonly jws: string;
+  readonly verifiedAt: string;
+}
+
 interface ProfileSnapshotModuleSurface {
   readonly useProfileSnapshotStore: {
     getState: () => {
-      readonly snapshots: ReadonlyMap<string, { readonly did: string; readonly record: ProfileRecord; readonly jws: string; readonly verifiedAt: string }>;
+      readonly snapshots: ReadonlyMap<string, Snapshot>;
       readonly upsert: (record: ProfileRecord, jws: string) => { readonly verifiedAt: string };
     };
     setState: (s: { snapshots: ReadonlyMap<string, unknown> }) => void;
   };
   readonly hydrateProfileSnapshots: () => void;
   readonly getProfileSnapshot: (did: string) => { readonly did: string } | undefined;
+  readonly sortedProfileSnapshots: (snapshots: ReadonlyMap<string, Snapshot>) => readonly Snapshot[];
 }
 
 const kv = new Map<string, string>();
@@ -130,5 +138,34 @@ describe('hydrateProfileSnapshots — fails closed per-entry on corrupt data', (
     kv.set('profileSnapshots:v1', '{not json');
     expect(() => { mod.hydrateProfileSnapshots(); }).not.toThrow();
     expect(mod.useProfileSnapshotStore.getState().snapshots.size).toBe(0);
+  });
+});
+
+describe('sortedProfileSnapshots — newest verifiedAt first (People tab section order)', () => {
+  it('returns an empty array for an empty store', () => {
+    expect(mod.sortedProfileSnapshots(new Map())).toEqual([]);
+  });
+
+  it('orders multiple snapshots by verifiedAt descending, independent of insertion order', async () => {
+    mod.useProfileSnapshotStore.getState().upsert(record({ did: 'did:key:zA', displayName: 'A' }), 'a.b.c');
+    await new Promise((resolve) => setTimeout(resolve, 5));
+    mod.useProfileSnapshotStore.getState().upsert(record({ did: 'did:key:zB', displayName: 'B' }), 'a.b.c');
+    await new Promise((resolve) => setTimeout(resolve, 5));
+    mod.useProfileSnapshotStore.getState().upsert(record({ did: 'did:key:zC', displayName: 'C' }), 'a.b.c');
+
+    const sorted = mod.sortedProfileSnapshots(mod.useProfileSnapshotStore.getState().snapshots);
+    expect(sorted.map((s) => s.did)).toEqual(['did:key:zC', 'did:key:zB', 'did:key:zA']);
+  });
+
+  it('re-scanning (upsert on an existing did) moves it back to the front', async () => {
+    mod.useProfileSnapshotStore.getState().upsert(record({ did: 'did:key:zA', displayName: 'A' }), 'a.b.c');
+    await new Promise((resolve) => setTimeout(resolve, 5));
+    mod.useProfileSnapshotStore.getState().upsert(record({ did: 'did:key:zB', displayName: 'B' }), 'a.b.c');
+    await new Promise((resolve) => setTimeout(resolve, 5));
+    // Re-scan A — its verifiedAt refreshes even though the did already exists.
+    mod.useProfileSnapshotStore.getState().upsert(record({ did: 'did:key:zA', displayName: 'A' }), 'x.y.z');
+
+    const sorted = mod.sortedProfileSnapshots(mod.useProfileSnapshotStore.getState().snapshots);
+    expect(sorted.map((s) => s.did)).toEqual(['did:key:zA', 'did:key:zB']);
   });
 });

@@ -49,7 +49,10 @@ export function VerifiedPageResultSheet(): ReactNode {
       const ok = await confirmDialog({
         title: t('verifiedPage.duplicateTitle'),
         message: t('verifiedPage.duplicateMessage'),
-        confirmLabel: t('verifiedPage.saveToPeople'),
+        // Mirrors the CTA button's ternary below (review: keep both labels
+        // in sync rather than hardcoding "Save" here while the button below
+        // correctly reads "Update").
+        confirmLabel: existing ? t('verifiedPage.updateInPeople') : t('verifiedPage.saveToPeople'),
       });
       if (!ok) return;
     }

@@ -29,6 +29,7 @@ import { PaperStackIllustration } from '@/components/decor/PaperStackIllustratio
 import { ManualContactEntrySheet } from '@/components/people/ManualContactEntrySheet';
 import { PeopleSearchField } from '@/components/people/PeopleSearchField';
 import { TrustGraphContactRow } from '@/components/people/TrustGraphContactRow';
+import { VerifiedPagesSection } from '@/components/people/VerifiedPagesSection';
 import { Colors } from '@/constants/Colors';
 import { useThemeColors } from '@/constants/useThemeColors';
 import { useTranslation } from '@/i18n';
@@ -177,6 +178,8 @@ export default function PeopleTab() {
         onClose={() => { setManualSheetOpen(false); }}
         onSaved={() => { refresh(); }}
       />
+
+      <VerifiedPagesSection />
 
       {contacts.length === 0 ? (
         <EmptyState
