@@ -66,6 +66,7 @@ interface UserKeyMod {
   }) => Promise<Res<NostrEventLike>>;
   readonly hasNostrKey: () => Promise<boolean>;
   readonly deleteNostrKey: () => Promise<void>;
+  readonly npubEncode: (pubkeyHex: string) => Res<string>;
 }
 
 // ── In-memory storage + mnemonic revealer, injected via userKey.ts's own
@@ -345,7 +346,70 @@ describe('signNostrEvent — verifiable by dag/nostrAdapter.ts verifyNostrEvent'
   });
 });
 
-// ── 6. deleteNostrKey ────────────────────────────────────────────────────
+// ── 6. npubEncode — NIP-19 bech32 encode (task A4.2) ────────────────────
+
+describe('npubEncode', () => {
+  // Same reference secret key as `importNsec`'s suite above (nostr-tools'
+  // NIP-19 reference vector) so this pins the encode step of the SAME
+  // round-trip that suite already pins the decode step of. The expected
+  // npub is computed independently via `@scure/base`'s own
+  // `bech32.encodeFromBytes('npub', pubkeyBytes)` — the exact primitive
+  // `npubEncode` calls internally — over `REFERENCE_PUBKEY_HEX` (itself
+  // derived via `@noble/curves`' `schnorr.getPublicKey`, not by this
+  // module), so the vector is sourced independently of `npubEncode`'s own
+  // implementation.
+  const REFERENCE_PUBKEY_HEX = '7e7e9c42a91bfef19fa929e5fda1b72e0ebc1a4c1141673e2794234d86addf4e';
+  const REFERENCE_NPUB = 'npub10elfcs4fr0l0r8af98jlmgdh9c8tcxjvz9qkw038js35mp4dma8qzvjptg';
+
+  it('encodes the reference pubkey hex to the pinned npub vector', () => {
+    const r = mod.npubEncode(REFERENCE_PUBKEY_HEX);
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.value).toBe(REFERENCE_NPUB);
+  });
+
+  it('round-trips: bech32-decoding the encoded npub yields back the original pubkey bytes', () => {
+    const r = mod.npubEncode(REFERENCE_PUBKEY_HEX);
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    const decoded = bech32.decodeToBytes(r.value);
+    expect(decoded.prefix).toBe('npub');
+    const hex = Array.from(decoded.bytes, (b) => b.toString(16).padStart(2, '0')).join('');
+    expect(hex).toBe(REFERENCE_PUBKEY_HEX);
+  });
+
+  it('round-trips a freshly provisioned key end-to-end (provision -> npubEncode -> bech32 decode)', async () => {
+    nextRevealResult = { ok: true, value: derivedVectors.valid[0]!.mnemonic };
+    const provisioned = await mod.provisionFromRootMnemonic();
+    expect(provisioned.ok).toBe(true);
+    if (!provisioned.ok) return;
+
+    const encoded = mod.npubEncode(provisioned.value);
+    expect(encoded.ok).toBe(true);
+    if (!encoded.ok) return;
+    expect(encoded.value.startsWith('npub1')).toBe(true);
+
+    const decoded = bech32.decodeToBytes(encoded.value);
+    const hex = Array.from(decoded.bytes, (b) => b.toString(16).padStart(2, '0')).join('');
+    expect(hex).toBe(provisioned.value);
+  });
+
+  it('rejects a wrong-length hex string without throwing', () => {
+    const r = mod.npubEncode('deadbeef');
+    expect(r.ok).toBe(false);
+    if (r.ok) return;
+    expect(r.error).toContain('32 bytes');
+  });
+
+  it('rejects non-hex input without throwing', () => {
+    const r = mod.npubEncode('not-hex-zz');
+    expect(r.ok).toBe(false);
+    if (r.ok) return;
+    expect(r.error).toContain('hex');
+  });
+});
+
+// ── 7. deleteNostrKey ────────────────────────────────────────────────────
 
 describe('deleteNostrKey', () => {
   it('clears the persisted key so getNostrPubkey() reverts to notProvisioned', async () => {

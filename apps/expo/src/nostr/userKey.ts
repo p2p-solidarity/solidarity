@@ -71,6 +71,7 @@ import { HKDF_INFO_NOSTR, deriveSecp256k1Scalar, err, ok, type Result } from '@s
 
 const SCALAR_ALIAS = 'gg.solidarity.nostrkey.scalar.v1';
 const NSEC_HRP = 'nsec';
+const NPUB_HRP = 'npub';
 const SCALAR_BYTE_LENGTH = 32;
 
 // ── Storage — own alias, own namespace (never shares state with
@@ -228,6 +229,38 @@ export async function hasNostrKey(): Promise<boolean> {
 /** Delete the persisted key. Used by tests and a future rotate/reset flow. */
 export async function deleteNostrKey(): Promise<void> {
   await activeStorage.deleteScalarHex();
+}
+
+// ── NIP-19 bech32 — npub ENCODE only ────────────────────────────────────
+//
+// `importNsec` (above) already decodes `nsec1…`; this is the encode-only
+// counterpart for the public side, deferred by task A4.1 to A4.2 because
+// nothing needed it until `profile.alsoKnownAs`'s `nostr:npub…` entry
+// (`publish.ts`, this task). No `npubDecode` — no call site needs it yet
+// (subscribe/publish filters use the raw hex pubkey `getNostrPubkey()`
+// already returns); add it if/when a screen needs to accept a pasted
+// `npub1…` string.
+
+/**
+ * Bech32-encode an x-only pubkey hex (64 lowercase hex chars, as returned
+ * by `getNostrPubkey()`) into its NIP-19 `npub1…` form. Never throws —
+ * malformed input (wrong length / non-hex) is `err(...)`.
+ */
+export function npubEncode(pubkeyHex: string): Result<string, string> {
+  let bytes: Uint8Array;
+  try {
+    bytes = hexDecode(pubkeyHex);
+  } catch {
+    return err('npubEncode: pubkeyHex is not valid hex');
+  }
+  if (bytes.length !== SCALAR_BYTE_LENGTH) {
+    return err('npubEncode: pubkey must be 32 bytes');
+  }
+  try {
+    return ok(bech32.encodeFromBytes(NPUB_HRP, bytes));
+  } catch (e) {
+    return err(storageErrorMessage(e));
+  }
 }
 
 // ── Read + sign ──────────────────────────────────────────────────────────

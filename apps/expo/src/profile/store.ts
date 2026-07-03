@@ -42,6 +42,8 @@ import { create } from 'zustand';
 // store's test (`__tests__/unit/profileStore.test.ts`) import-safe without
 // any `mock.module` on `@/identity`.
 import { getRootDid, getRootSigner, type RootKeyError } from '@/identity/rootKey';
+import { publishProfile, updateKind0AlsoKnownAs, type PublishReport } from '@/nostr/publish';
+import { getNostrPubkey, npubEncode } from '@/nostr/userKey';
 import { getMmkv } from '@/storage/mmkv';
 import {
   PROFILE_VERSION,
@@ -55,6 +57,32 @@ import {
 } from '@solidarity/shared';
 
 const KEY = 'profile:v1';
+
+// ── Nostr publish seam — own module-level DI (same pattern as `userKey.ts`'s
+//    `__setNostrKeyStorageForTesting` / `rootKey.ts`'s
+//    `__setRootKeyStorageForTesting`) rather than `mock.module('@/nostr/
+//    publish', ...)`: `mock.module` patches the module registry for the
+//    whole `bun test` process, which would leak into `nostrPublish.test.ts`
+//    (which imports the REAL `publishProfile`/`updateKind0AlsoKnownAs` to
+//    test their actual relay-quorum logic) if both files run in the same
+//    process — see `rootKey.test.ts`'s isolation note for the identical
+//    reasoning. This seam also keeps `publishToNostr`'s tests from ever
+//    opening a real WebSocket (CLAUDE.md: "Do NOT hit real relays in
+//    tests"). ───────────────────────────────────────────────────────────
+
+type PublishProfileFn = typeof publishProfile;
+type UpdateKind0Fn = typeof updateKind0AlsoKnownAs;
+
+let activePublishProfile: PublishProfileFn = publishProfile;
+let activeUpdateKind0AlsoKnownAs: UpdateKind0Fn = updateKind0AlsoKnownAs;
+
+/** Test-only override. Pass `null` to restore the real relay-backed implementations. */
+export function __setNostrPublishForTesting(
+  overrides: { readonly publishProfile?: PublishProfileFn; readonly updateKind0AlsoKnownAs?: UpdateKind0Fn } | null
+): void {
+  activePublishProfile = overrides?.publishProfile ?? publishProfile;
+  activeUpdateKind0AlsoKnownAs = overrides?.updateKind0AlsoKnownAs ?? updateKind0AlsoKnownAs;
+}
 
 export type ProfileStatus = 'empty' | 'ready';
 
@@ -129,6 +157,14 @@ function rootKeyErrorMessage(prefix: string, e: RootKeyError): string {
   }
 }
 
+/** Combined publish outcome — both bindings of task A4.2's bidirectional pair. */
+export interface NostrPublishOutcome {
+  /** kind-30078 profile pointer (`content` = the profile JWS). */
+  readonly profile: PublishReport;
+  /** kind-0 metadata event with `did:key` merged into `content.alsoKnownAs`. */
+  readonly kind0: PublishReport;
+}
+
 interface ProfileState {
   readonly record: ProfileRecord | null;
   readonly jws: string | null;
@@ -139,6 +175,24 @@ interface ProfileState {
    * prompting Face ID) when `fields` don't produce a valid `ProfileRecord`.
    */
   readonly saveProfile: (fields: ProfileEditableFields) => Promise<Result<void, string>>;
+  /**
+   * Publish the signed profile to Nostr (kind 30078) AND merge the
+   * user's did:key into their kind-0 `alsoKnownAs` — the two directions
+   * of task A4.2's bidirectional binding (see `nostr/publish.ts`'s
+   * module doc). Does NOT auto-run and does NOT provision a Nostr key —
+   * the caller (A4.4's UI) is responsible for both user consent to
+   * `confirmedRelays` and for having already run `userKey.ts`'s
+   * provisioning flow; this returns `err('publishToNostr: no Nostr key
+   * is provisioned...')` rather than silently provisioning one.
+   *
+   * Sequence (matters — see module doc): if the profile's
+   * `alsoKnownAs` doesn't already carry this device's `nostr:npub…`
+   * entry, it is added, the record is re-validated and RE-SIGNED (a
+   * fresh Face-ID-gated `signCompact`, same as `saveProfile`) and
+   * persisted BEFORE anything is published — a stale JWS (missing the
+   * npub claim) must never reach a relay.
+   */
+  readonly publishToNostr: (confirmedRelays: readonly string[]) => Promise<Result<NostrPublishOutcome, string>>;
 }
 
 export const useProfileStore = create<ProfileState>((set, get) => ({
@@ -180,6 +234,65 @@ export const useProfileStore = create<ProfileState>((set, get) => ({
     writePersisted({ record: validated.value, jws });
     set({ record: validated.value, jws, status: 'ready' });
     return ok(undefined);
+  },
+
+  publishToNostr: async (confirmedRelays) => {
+    if (confirmedRelays.length === 0) return err('publishToNostr: relays list is empty');
+
+    const current = get();
+    if (!current.record || !current.jws) {
+      return err('publishToNostr: no profile has been saved yet');
+    }
+
+    const pubkeyResult = await getNostrPubkey();
+    if (!pubkeyResult.ok) {
+      return err(
+        pubkeyResult.error === 'notProvisioned'
+          ? 'publishToNostr: no Nostr key is provisioned on this device yet'
+          : `publishToNostr: ${pubkeyResult.error}`
+      );
+    }
+
+    const npubResult = npubEncode(pubkeyResult.value);
+    if (!npubResult.ok) return err(`publishToNostr: ${npubResult.error}`);
+    const akaEntry = `nostr:${npubResult.value}`;
+
+    let record = current.record;
+    let jws = current.jws;
+
+    // Only re-sign if the claim is actually missing — re-signing on every
+    // publish would churn `updatedAt` for no reason once the binding is
+    // already established.
+    if (!record.alsoKnownAs.includes(akaEntry)) {
+      const candidate = {
+        ...record,
+        alsoKnownAs: [...record.alsoKnownAs, akaEntry],
+        updatedAt: nextUpdatedAt(record.updatedAt),
+      };
+      const validated = parseProfile(candidate);
+      if (!validated.ok) return err(`publishToNostr: ${validated.error}`);
+
+      const signerResult = await getRootSigner();
+      if (!signerResult.ok) return err(rootKeyErrorMessage('publishToNostr', signerResult.error));
+
+      try {
+        jws = await signCompact(validated.value, validated.value.did, signerResult.value);
+      } catch (e) {
+        return err(`publishToNostr: signing was denied or failed (${e instanceof Error ? e.message : String(e)})`);
+      }
+      record = validated.value;
+
+      writePersisted({ record, jws });
+      set({ record, jws, status: 'ready' });
+    }
+
+    const profileReport = await activePublishProfile({ jws, relays: confirmedRelays });
+    if (!profileReport.ok) return err(`publishToNostr: ${profileReport.error}`);
+
+    const kind0Report = await activeUpdateKind0AlsoKnownAs({ did: record.did, relays: confirmedRelays });
+    if (!kind0Report.ok) return err(`publishToNostr: ${kind0Report.error}`);
+
+    return ok({ profile: profileReport.value, kind0: kind0Report.value });
   },
 }));
 

@@ -1,6 +1,7 @@
 /**
  * Profile store — local Profile Record persistence + append-only save flow
- * (1.3.3 Task A2.2, apps/expo/src/profile/store.ts).
+ * (1.3.3 Task A2.2, apps/expo/src/profile/store.ts) + Nostr publish wiring
+ * (1.3.3 Task A4.2's `publishToNostr`).
  *
  * What this suite pins:
  *   1. `saveProfile` constructs a record that `verifyCompact` accepts as
@@ -17,18 +18,42 @@
  *   6. `hydrateProfile()` round-trips a save through the MMKV mock after an
  *      in-memory reset (simulated app restart), and fails closed to
  *      `'empty'` on missing/corrupt persisted data.
+ *   7. `publishToNostr`: guards (empty relays / no profile / no Nostr key)
+ *      return `err(...)` before touching signing or any relay; the happy
+ *      path adds `nostr:npub…` to `alsoKnownAs`, RE-SIGNS the profile
+ *      (verifiable by `verifyCompact`), persists it, THEN calls the
+ *      injected `publishProfile`/`updateKind0AlsoKnownAs` fakes (task
+ *      A4.2's own DI seam — never a real relay); re-running once the
+ *      claim already exists skips the re-sign (jws unchanged) but still
+ *      republishes.
  *
  * Isolation: mocks ONLY `@/storage/mmkv` (this store's own persistence
  * layer — same pattern as `groupStore.test.ts`) and drives the REAL
  * root-key signing path through `rootKey.ts`'s own DI seams
- * (`__setRootKeyStorageForTesting` / `__setRootKeyBiometricGateForTesting`)
- * instead of `mock.module('@/identity', ...)` — see `rootKey.test.ts`'s
- * isolation note for why a global `mock.module` on the same specifier two
- * files both touch is avoided.
+ * (`__setRootKeyStorageForTesting` / `__setRootKeyBiometricGateForTesting`),
+ * the REAL Nostr-key path through `userKey.ts`'s own DI seams
+ * (`__setNostrKeyStorageForTesting` / `__setNostrMnemonicRevealerForTesting`),
+ * and fakes ONLY the relay-facing functions via `store.ts`'s own
+ * `__setNostrPublishForTesting` seam — never `mock.module('@/identity', ...)`
+ * or `mock.module('@/nostr/publish', ...)` — see `rootKey.test.ts`'s
+ * isolation note and `store.ts`'s own seam doc for why a global
+ * `mock.module` on a specifier another file imports for real is avoided.
  */
 import { beforeAll, beforeEach, describe, expect, it, mock, setSystemTime } from 'bun:test';
 
 import { verifyCompact, type ProfileRecord } from '@solidarity/shared';
+
+interface PublishReportShape {
+  readonly event: { readonly kind: number; readonly content: string };
+  readonly results: readonly unknown[];
+  readonly acceptedCount: number;
+  readonly requiredCount: number;
+  readonly success: boolean;
+}
+
+type NostrRes<T> =
+  | { readonly ok: true; readonly value: T }
+  | { readonly ok: false; readonly error: string };
 
 interface ProfileFieldsShape {
   readonly displayName: string;
@@ -47,12 +72,30 @@ interface ProfileModuleSurface {
       readonly jws: string | null;
       readonly status: 'empty' | 'ready';
       readonly saveProfile: (fields: ProfileFieldsShape) => Promise<SaveResult>;
+      readonly publishToNostr: (
+        confirmedRelays: readonly string[]
+      ) => Promise<
+        | { readonly ok: true; readonly value: { readonly profile: PublishReportShape; readonly kind0: PublishReportShape } }
+        | { readonly ok: false; readonly error: string }
+      >;
     };
     setState: (
       s: Partial<{ record: ProfileRecord | null; jws: string | null; status: 'empty' | 'ready' }>
     ) => void;
   };
   readonly hydrateProfile: () => void;
+  readonly __setNostrPublishForTesting: (
+    overrides: {
+      readonly publishProfile?: (opts: {
+        readonly jws: string;
+        readonly relays: readonly string[];
+      }) => Promise<NostrRes<PublishReportShape>>;
+      readonly updateKind0AlsoKnownAs?: (opts: {
+        readonly did: string;
+        readonly relays: readonly string[];
+      }) => Promise<NostrRes<PublishReportShape>>;
+    } | null
+  ) => void;
 }
 
 interface RootKeyModuleSurface {
@@ -65,13 +108,30 @@ interface RootKeyModuleSurface {
   readonly deleteRootKey: () => Promise<void>;
 }
 
+interface NostrUserKeyModuleSurface {
+  readonly __setNostrKeyStorageForTesting: (storage: unknown) => void;
+  readonly __setNostrMnemonicRevealerForTesting: (
+    revealer: (() => Promise<NostrRes<string>>) | null
+  ) => void;
+  readonly provisionFromRootMnemonic: () => Promise<NostrRes<string>>;
+  readonly deleteNostrKey: () => Promise<void>;
+}
+
 const kv = new Map<string, string>();
 const secureStore = new Map<string, string>();
+const nostrScalarStore = new Map<string, string>();
 let nextBiometricSuccess = true;
 const biometricCalls: string[] = [];
+// A fixed, independently-valid BIP-39 mnemonic (Trezor test-vector "abandon
+// x11 about") used ONLY to provision the Nostr key in these tests — does
+// NOT need to match whatever mnemonic `rootKeyMod.createFromFreshMnemonic()`
+// generates for the root did; `userKey.ts`'s revealer seam is independent.
+const NOSTR_TEST_MNEMONIC =
+  'abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about';
 
 let mod: ProfileModuleSurface;
 let rootKeyMod: RootKeyModuleSurface;
+let nostrUserKeyMod: NostrUserKeyModuleSurface;
 
 beforeAll(async () => {
   await mock.module('@/storage/mmkv', () => ({
@@ -105,16 +165,35 @@ beforeAll(async () => {
     return Promise.resolve(nextBiometricSuccess);
   });
 
+  nostrUserKeyMod = (await import('../../src/nostr/userKey')) as unknown as NostrUserKeyModuleSurface;
+  nostrUserKeyMod.__setNostrKeyStorageForTesting({
+    getScalarHex: (): Promise<string | null> => Promise.resolve(nostrScalarStore.get('scalar') ?? null),
+    setScalarHex: (hex: string): Promise<void> => {
+      nostrScalarStore.set('scalar', hex);
+      return Promise.resolve();
+    },
+    deleteScalarHex: (): Promise<void> => {
+      nostrScalarStore.delete('scalar');
+      return Promise.resolve();
+    },
+  });
+  nostrUserKeyMod.__setNostrMnemonicRevealerForTesting(() =>
+    Promise.resolve({ ok: true, value: NOSTR_TEST_MNEMONIC })
+  );
+
   mod = (await import('../../src/profile/store')) as unknown as ProfileModuleSurface;
 });
 
 beforeEach(async () => {
   kv.clear();
   secureStore.clear();
+  nostrScalarStore.clear();
   nextBiometricSuccess = true;
   biometricCalls.length = 0;
   mod.useProfileStore.setState({ record: null, jws: null, status: 'empty' });
   await rootKeyMod.deleteRootKey();
+  await nostrUserKeyMod.deleteNostrKey();
+  mod.__setNostrPublishForTesting(null);
 });
 
 describe('saveProfile — signed, verifiable record', () => {
@@ -295,5 +374,189 @@ describe('hydrateProfile — MMKV round-trip', () => {
     kv.set('profile:v1', JSON.stringify({ record: { v: 1, did: 'did:key:zBad' }, jws: 'a.b.c' }));
     mod.hydrateProfile();
     expect(mod.useProfileStore.getState().status).toBe('empty');
+  });
+});
+
+// ── publishToNostr (task A4.2) ──────────────────────────────────────────
+
+function fakeReport(kind: number, content: string): PublishReportShape {
+  return {
+    event: { kind, content },
+    results: [
+      { relay: 'a', accepted: true, message: 'ok', elapsedMs: 1 },
+      { relay: 'b', accepted: true, message: 'ok', elapsedMs: 1 },
+    ],
+    acceptedCount: 2,
+    requiredCount: 2,
+    success: true,
+  };
+}
+
+describe('publishToNostr', () => {
+  it('rejects an empty relay list before touching anything', async () => {
+    const r = await mod.useProfileStore.getState().publishToNostr([]);
+    expect(r.ok).toBe(false);
+    if (r.ok) return;
+    expect(r.error).toContain('relays list is empty');
+    expect(biometricCalls).toEqual([]);
+  });
+
+  it('returns err when no profile has been saved yet', async () => {
+    const r = await mod.useProfileStore.getState().publishToNostr(['wss://a']);
+    expect(r.ok).toBe(false);
+    if (r.ok) return;
+    expect(r.error).toContain('no profile has been saved');
+    expect(biometricCalls).toEqual([]);
+  });
+
+  it('returns err when no Nostr key is provisioned — no biometric prompt, no MMKV mutation, no relay calls', async () => {
+    await rootKeyMod.createFromFreshMnemonic();
+    await mod.useProfileStore.getState().saveProfile({ displayName: 'Alice', bio: '', links: [] });
+    biometricCalls.length = 0;
+    const jwsBefore = mod.useProfileStore.getState().jws;
+
+    let publishProfileCalls = 0;
+    mod.__setNostrPublishForTesting({
+      publishProfile: () => {
+        publishProfileCalls++;
+        return Promise.resolve({ ok: true, value: fakeReport(30078, 'x') });
+      },
+    });
+
+    const r = await mod.useProfileStore.getState().publishToNostr(['wss://a']);
+    expect(r.ok).toBe(false);
+    if (r.ok) return;
+    expect(r.error).toContain('no Nostr key is provisioned');
+    expect(biometricCalls).toEqual([]);
+    expect(publishProfileCalls).toBe(0);
+    expect(mod.useProfileStore.getState().jws).toBe(jwsBefore);
+  });
+
+  it('adds nostr:npub… to alsoKnownAs, re-signs (verifiable), persists, then publishes both directions', async () => {
+    await rootKeyMod.createFromFreshMnemonic();
+    await mod.useProfileStore.getState().saveProfile({ displayName: 'Alice', bio: '', links: [] });
+    const beforeRecord = mod.useProfileStore.getState().record;
+    expect(beforeRecord?.alsoKnownAs).toEqual([]);
+
+    const provisioned = await nostrUserKeyMod.provisionFromRootMnemonic();
+    expect(provisioned.ok).toBe(true);
+
+    const profileCalls: { readonly jws: string; readonly relays: readonly string[] }[] = [];
+    const kind0Calls: { readonly did: string; readonly relays: readonly string[] }[] = [];
+    mod.__setNostrPublishForTesting({
+      publishProfile: (opts) => {
+        profileCalls.push({ jws: opts.jws, relays: opts.relays });
+        return Promise.resolve({ ok: true, value: fakeReport(30078, opts.jws) });
+      },
+      updateKind0AlsoKnownAs: (opts) => {
+        kind0Calls.push({ did: opts.did, relays: opts.relays });
+        return Promise.resolve({ ok: true, value: fakeReport(0, JSON.stringify({ alsoKnownAs: [opts.did] })) });
+      },
+    });
+
+    const relays = ['wss://relay-one', 'wss://relay-two'];
+    const r = await mod.useProfileStore.getState().publishToNostr(relays);
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.value.profile.event.kind).toBe(30078);
+    expect(r.value.kind0.event.kind).toBe(0);
+
+    const state = mod.useProfileStore.getState();
+    expect(state.record).not.toBeNull();
+    expect(state.jws).not.toBeNull();
+    if (!state.record || !state.jws) return;
+
+    // alsoKnownAs now carries exactly one nostr:npub… entry.
+    expect(state.record.alsoKnownAs).toHaveLength(1);
+    expect(state.record.alsoKnownAs[0]).toMatch(/^nostr:npub1/);
+
+    // Re-signed record verifies under the same did.
+    const verified = verifyCompact(state.jws, state.record.did);
+    expect(verified.ok).toBe(true);
+    if (verified.ok) expect(verified.value).toEqual(state.record);
+
+    // Persisted to MMKV wholesale (same append-only contract as saveProfile).
+    const raw = kv.get('profile:v1');
+    expect(raw).toBeDefined();
+    if (raw) {
+      const persisted = JSON.parse(raw) as { jws: string };
+      expect(persisted.jws).toBe(state.jws);
+    }
+
+    // Both directions were published with the caller-confirmed relays.
+    expect(profileCalls).toHaveLength(1);
+    expect(profileCalls[0]?.relays).toEqual(relays);
+    expect(profileCalls[0]?.jws).toBe(state.jws);
+    expect(kind0Calls).toHaveLength(1);
+    expect(kind0Calls[0]?.relays).toEqual(relays);
+    expect(kind0Calls[0]?.did).toBe(state.record.did);
+  });
+
+  it('skips the re-sign on a second call once the nostr:npub… claim already exists, but still republishes', async () => {
+    await rootKeyMod.createFromFreshMnemonic();
+    await mod.useProfileStore.getState().saveProfile({ displayName: 'Alice', bio: '', links: [] });
+    await nostrUserKeyMod.provisionFromRootMnemonic();
+
+    let profileCalls = 0;
+    let kind0Calls = 0;
+    mod.__setNostrPublishForTesting({
+      publishProfile: (opts) => {
+        profileCalls++;
+        return Promise.resolve({ ok: true, value: fakeReport(30078, opts.jws) });
+      },
+      updateKind0AlsoKnownAs: (opts) => {
+        kind0Calls++;
+        return Promise.resolve({ ok: true, value: fakeReport(0, JSON.stringify({ alsoKnownAs: [opts.did] })) });
+      },
+    });
+
+    const first = await mod.useProfileStore.getState().publishToNostr(['wss://a']);
+    expect(first.ok).toBe(true);
+    const jwsAfterFirst = mod.useProfileStore.getState().jws;
+    biometricCalls.length = 0;
+
+    const second = await mod.useProfileStore.getState().publishToNostr(['wss://a']);
+    expect(second.ok).toBe(true);
+    expect(mod.useProfileStore.getState().jws).toBe(jwsAfterFirst); // no re-sign -> jws unchanged
+    expect(biometricCalls).toEqual([]); // no Face ID prompt on the second call
+    expect(profileCalls).toBe(2); // still republishes both directions
+    expect(kind0Calls).toBe(2);
+  });
+
+  it('propagates a publishProfile failure without calling updateKind0AlsoKnownAs', async () => {
+    await rootKeyMod.createFromFreshMnemonic();
+    await mod.useProfileStore.getState().saveProfile({ displayName: 'Alice', bio: '', links: [] });
+    await nostrUserKeyMod.provisionFromRootMnemonic();
+
+    let kind0Calls = 0;
+    mod.__setNostrPublishForTesting({
+      publishProfile: () => Promise.resolve({ ok: false, error: 'publishProfile: only 1/3 relays accepted' }),
+      updateKind0AlsoKnownAs: () => {
+        kind0Calls++;
+        return Promise.resolve({ ok: true, value: fakeReport(0, '{}') });
+      },
+    });
+
+    const r = await mod.useProfileStore.getState().publishToNostr(['wss://a']);
+    expect(r.ok).toBe(false);
+    if (r.ok) return;
+    expect(r.error).toContain('publishProfile');
+    expect(kind0Calls).toBe(0);
+  });
+
+  it('propagates an updateKind0AlsoKnownAs failure', async () => {
+    await rootKeyMod.createFromFreshMnemonic();
+    await mod.useProfileStore.getState().saveProfile({ displayName: 'Alice', bio: '', links: [] });
+    await nostrUserKeyMod.provisionFromRootMnemonic();
+
+    mod.__setNostrPublishForTesting({
+      publishProfile: (opts) => Promise.resolve({ ok: true, value: fakeReport(30078, opts.jws) }),
+      updateKind0AlsoKnownAs: () => Promise.resolve({ ok: false, error: 'updateKind0AlsoKnownAs: relay timeout' }),
+    });
+
+    const r = await mod.useProfileStore.getState().publishToNostr(['wss://a']);
+    expect(r.ok).toBe(false);
+    if (r.ok) return;
+    expect(r.error).toContain('updateKind0AlsoKnownAs');
   });
 });
