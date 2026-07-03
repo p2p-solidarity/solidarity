@@ -138,7 +138,7 @@
             "useFrameworks": "static"
           },
           "android": {
-            "minSdkVersion": 26,
+            "minSdkVersion": 29,
             "compileSdkVersion": 36,
             "targetSdkVersion": 36
           }

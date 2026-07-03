@@ -122,6 +122,18 @@ export default function DeveloperSettings() {
                 />
               </SettingsBlockSection>
 
+              <SettingsBlockSection
+                title={t('developer.pear.header')}
+                footer={t('developer.pear.footer')}
+              >
+                <SettingsBlockRow
+                  icon="waveform"
+                  title={t('developer.pear.labTitle')}
+                  subtitle={t('developer.pear.labSubtitle')}
+                  onPress={() => { router.push('/dev/pear-echo'); }}
+                />
+              </SettingsBlockSection>
+
               <View className="gap-3">
                 <SettingsBlockSectionHeader title={t('developer.dangerZone.header')} />
                 <View className="px-4 gap-2">

@@ -16,6 +16,31 @@ bun test                                                     # 78+ unit + parity
 bun run lint                                                 # 0 errors (cosmetic warnings ok)
 ```
 
+### Dev client required — Expo Go is not a development path
+
+`react-native-bare-kit` (Pear lane, `docs/ref/04-plan-app.md` Phase A3) ships
+a `BareKit` TurboModule + a vendored `BareKit.xcframework` / Bare Android
+runtime. Expo Go only bundles Expo's own module set, so **Expo Go cannot run
+this app** — it never could, given the existing Nitro modules
+(`nitro-nfc-passport`, `nitro-passport-zk`, `nitro-spruce-did`, …), but
+bare-kit makes it explicit. Always build a **dev client**:
+
+```bash
+bunx expo prebuild --clean --platform ios --no-install
+bun run ios       # expo run:ios     — builds + installs the dev client
+bun run android   # expo run:android — builds + installs the dev client
+```
+
+`expo start` alone (no `--dev-client` build first) will still print a QR
+code, but scanning it into Expo Go fails at the native-module-not-found
+stage. Build the dev client once per native dependency change, then
+`expo start` for the JS iteration loop.
+
+**Android `minSdkVersion` is 29**, not 26 — bumped in `app.json`
+(`expo-build-properties.android.minSdkVersion`) because
+`react-native-bare-kit`'s own `android/build.gradle` declares `minSdk 29`;
+AGP fails the manifest merge if the app's minSdk is lower than a library's.
+
 ## Aniseekr-expo rules — adopted
 
 These are pinned from `../../ani/aniseekr-expo/CLAUDE.md`. Skip them and
@@ -151,6 +176,12 @@ after every `expo prebuild --clean` from the persistent source at
 
 Android builds via **EAS Build** or `expo prebuild --platform android`
 + `./gradlew bundleRelease`.
+
+`react-native-bare-kit` needs **no custom config plugin** — it autolinks
+via its own `react-native.config.js` + `react-native-bare-kit.podspec` +
+`android/build.gradle` (same as `holepunchto/bare-expo`'s reference
+integration). The only app.json change it required is the
+`minSdkVersion: 29` bump above.
 
 ### 8. No fake data — ever
 
