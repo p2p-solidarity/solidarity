@@ -16,6 +16,7 @@ import {
   type PublicKeyJWK,
   verifyJwtEs256,
 } from '@solidarity/shared';
+import { verifyCardKeyBindingJws } from './cardKeyBinding';
 
 export type TrustLevel = 'L1' | 'L2' | 'L3' | 'L3+';
 
@@ -29,6 +30,8 @@ export interface VerifiedVc {
 export interface VerifyOptions {
   /** RFC 7519 `aud` value the caller expects to find. */
   readonly expectedAud?: string;
+  /** Pear-only: root DID authenticated by the channel handshake. */
+  readonly expectedRootDid?: string;
   /** Optional clock override (test-only). */
   readonly now?: number;
 }
@@ -44,6 +47,12 @@ interface VcClaims {
   readonly trustLevel?: TrustLevel;
 }
 
+interface TimedAudClaims {
+  readonly aud?: string | readonly string[];
+  readonly nbf?: number;
+  readonly exp?: number;
+}
+
 function inferTrust(claims: VcClaims): TrustLevel {
   if (claims.trustLevel) return claims.trustLevel;
   if (claims.iss?.startsWith('did:web:')) return 'L2';
@@ -51,7 +60,7 @@ function inferTrust(claims: VcClaims): TrustLevel {
   return 'L1';
 }
 
-function checkTime(claims: VcClaims, now: number): void {
+function checkTime(claims: TimedAudClaims, now: number): void {
   if (claims.exp !== undefined && now >= claims.exp) {
     throw new Error(`VC expired at ${String(claims.exp)}`);
   }
@@ -60,7 +69,7 @@ function checkTime(claims: VcClaims, now: number): void {
   }
 }
 
-function checkAud(claims: VcClaims, expectedAud?: string): void {
+function checkAud(claims: TimedAudClaims, expectedAud?: string): void {
   if (!expectedAud) return;
   const aud = claims.aud;
   if (typeof aud === 'string' ? aud !== expectedAud : !aud?.includes(expectedAud)) {
@@ -105,6 +114,7 @@ interface VpClaims {
   readonly nbf?: number;
   readonly exp?: number;
   readonly vp?: { readonly verifiableCredential?: readonly string[] | string };
+  readonly solidarity?: { readonly cardKeyBinding?: string };
 }
 
 export interface VerifiedVp {
@@ -137,8 +147,22 @@ export async function verifyVpToken(
   verifyJwtEs256<VpClaims>(vpJwt, jwk);
 
   const now = opts.now ?? Math.floor(Date.now() / 1000);
-  checkTime(payload as VcClaims, now);
-  checkAud(payload as VcClaims, opts.expectedAud);
+  checkTime(payload, now);
+  checkAud(payload, opts.expectedAud);
+
+  if (opts.expectedRootDid) {
+    const bindingJws = payload.solidarity?.cardKeyBinding;
+    if (typeof bindingJws !== 'string' || bindingJws.length === 0) {
+      throw new Error('VP missing card-key binding for expected root DID');
+    }
+    verifyCardKeyBindingJws(bindingJws, {
+      expectedRootDid: opts.expectedRootDid,
+      expectedCardDid: holder,
+      expectedAud: opts.expectedAud,
+      expectedNonce: payload.nonce,
+      now,
+    });
+  }
 
   const raw = payload.vp?.verifiableCredential;
   const vcJwts = raw === undefined ? [] : Array.isArray(raw) ? raw : [raw];

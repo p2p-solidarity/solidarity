@@ -47,6 +47,7 @@
  * `@/keychain/signingKey`.
  */
 import { describe, expect, it, mock } from 'bun:test';
+import { p256 } from '@noble/curves/nist.js';
 
 import {
   decodeJwtUnsafe,
@@ -54,6 +55,7 @@ import {
   publicKeyFromPrivate,
   publicKeyToJwk,
   signJwtEs256,
+  type Signer,
   type PublicKeyJWK,
 } from '@solidarity/shared';
 
@@ -68,6 +70,12 @@ const HOLDER_DID = didKeyFromPublicKey(HOLDER_PUB);
 const HOLDER_JWK: PublicKeyJWK = publicKeyToJwk(HOLDER_PUB);
 
 const REQUESTER_DID = 'did:key:zRequesterRootDid';
+const RESPONDER_ROOT_PRIV = new Uint8Array(32).fill(0).map((_, i) => (i * 11 + 7) & 0xff);
+const RESPONDER_ROOT_PUB = publicKeyFromPrivate(RESPONDER_ROOT_PRIV);
+const RESPONDER_ROOT_DID = didKeyFromPublicKey(RESPONDER_ROOT_PUB);
+const OTHER_ROOT_DID = 'did:key:zOtherAuthenticatedPeerRoot';
+const responderRootSigner: Signer = async (digest) =>
+  p256.sign(digest, RESPONDER_ROOT_PRIV, { prehash: false });
 
 function signVc(claimTag: string): string {
   const now = Math.floor(Date.now() / 1000);
@@ -103,50 +111,73 @@ function storedCredential(id: string, rawJwt: string): StoredCredential {
   };
 }
 
-// Mocks must be registered BEFORE the module under test is imported — see
-// `identitySelectors.test.ts`/`spruceDid.parity.test.ts`'s top-level-await
-// pattern, which this mirrors (rather than a `beforeAll` + explicit
-// `typeof import(...)` type annotation for a deferred binding).
-//
-// This is the ONLY member of `signJwt`/`publicJwk` this suite actually
-// exercises, but `mock.module` registrations are process-wide — see
-// `envelopeHandler.test.ts`'s identical-shaped mock, the established
-// precedent for this exact module. Enumerating every OTHER currently-
-// exported member as a loud stub (rather than omitting them, as this file
-// previously did with only `publicJwk`/`signJwt`) is the fix for a real
-// cross-file bug: whichever test file's module cache entry for
-// `@/keychain/signingKey` bun's file-scan order resolves LAST wins for
-// every later-running file, so an incomplete mock here silently shadowed
-// `spruceDid.parity.test.ts`'s `resetSigningKeyForTesting`/
-// `wrapRawSigningInputForSpruce` imports with `undefined`. The real module
-// itself can't be spread (`await import('@/keychain/signingKey')` pulls in
-// `expo-secure-store` -> `react-native`'s Flow-syntax entry point, which
-// bun's parser rejects), so this enumerates by hand instead, mirroring the
-// 4 pre-existing files' convention exactly.
-await mock.module('@/keychain/signingKey', () => ({
+async function expectRejectsWith(promise: Promise<unknown>, pattern: RegExp): Promise<void> {
+  try {
+    await promise;
+  } catch (e) {
+    expect(e).toBeInstanceOf(Error);
+    expect(e instanceof Error ? e.message : String(e)).toMatch(pattern);
+    return;
+  }
+  throw new Error('expected promise to reject');
+}
+
+const PROVABLE_CLAIMS = [
+  {
+    id: 'claim-age-over-18',
+    identityCardId: CRED_AGE_ID,
+    claimType: 'age_over_18',
+    title: 'I am over 18',
+    issuerType: 'self',
+    trustLevel: 'L1',
+    source: 'test',
+    payload: '{}',
+    isPresentable: true,
+    createdAt: new Date(),
+    updatedAt: new Date(),
+  },
+  {
+    id: 'claim-nationality',
+    identityCardId: CRED_NATIONALITY_ID,
+    claimType: 'nationality',
+    title: 'Nationality verified',
+    issuerType: 'self',
+    trustLevel: 'L1',
+    source: 'test',
+    payload: '{}',
+    isPresentable: true,
+    createdAt: new Date(),
+    updatedAt: new Date(),
+  },
+] as const;
+
+const CREDENTIALS = new Map<string, StoredCredential>([
+  [CRED_AGE_ID, storedCredential(CRED_AGE_ID, VC_AGE_JWT)],
+  [CRED_NATIONALITY_ID, storedCredential(CRED_NATIONALITY_ID, VC_NATIONALITY_JWT)],
+]);
+
+const PRESENTATION_DEPS = {
   publicJwk: async () => HOLDER_JWK,
   signJwt: async (
     header: { alg: 'ES256'; typ?: string; kid?: string },
     payload: Record<string, unknown>
   ) => signJwtEs256(header, payload, HOLDER_PRIV),
-  signRawEs256: async () => {
-    throw new Error('test: signRawEs256 unavailable in pearPresentRoundTrip suite');
-  },
-  signOpenAcDeviceBindingDigest: async () => {
-    throw new Error('test: signOpenAcDeviceBindingDigest unavailable in pearPresentRoundTrip suite');
-  },
-  publicRawP256ForCurrentIdentity: async () => {
-    throw new Error('test: publicRawP256ForCurrentIdentity unavailable in pearPresentRoundTrip suite');
-  },
-  wrapRawSigningInputForSpruce: (p: Uint8Array) => p,
-  ensureSigningKey: async () => {
-    throw new Error('test: ensureSigningKey unavailable in pearPresentRoundTrip suite');
-  },
-  didKeyForCurrentIdentity: async () => {
-    throw new Error('test: didKeyForCurrentIdentity unavailable in pearPresentRoundTrip suite');
-  },
-  resetSigningKeyForTesting: async () => undefined,
-}));
+  getProvableClaims: () => PROVABLE_CLAIMS,
+  getCredentials: () => CREDENTIALS,
+};
+
+const PEAR_PRESENTATION_DEPS = {
+  getRootDid: async () => ({ ok: true as const, value: RESPONDER_ROOT_DID }),
+  getRootSigner: async () => ({ ok: true as const, value: responderRootSigner }),
+  getProvableClaims: () => PROVABLE_CLAIMS,
+  presentationDeps: PRESENTATION_DEPS,
+};
+
+// Mocks must be registered BEFORE the module under test is imported — see
+// `identitySelectors.test.ts`/`spruceDid.parity.test.ts`'s top-level-await
+// pattern, which this mirrors (rather than a `beforeAll` + explicit
+// `typeof import(...)` type annotation for a deferred binding).
+//
 // `usePresentRequestFlow.ts` (the module `buildPearPresentation` lives in,
 // exercised below) transitively imports `lane.ts` (`react-native-bare-kit`
 // + the worklet bundle) and `lifecycle.ts` (`react-native`'s `AppState`)
@@ -164,53 +195,6 @@ await mock.module('react-native-bare-kit', () => ({
   },
 }));
 await mock.module('../../pear/worklet/dist/index.bundle.js', () => ({ default: 'fake-bundle-source' }));
-await mock.module('react-native', () => ({
-  AppState: { addEventListener: () => ({ remove: (): undefined => undefined }) },
-}));
-await mock.module('@/identity', () => ({
-  useIdentityData: {
-    getState: () => ({
-      provableClaims: [
-        {
-          id: 'claim-age-over-18',
-          identityCardId: CRED_AGE_ID,
-          claimType: 'age_over_18',
-          title: 'I am over 18',
-          issuerType: 'self',
-          trustLevel: 'L1',
-          source: 'test',
-          payload: '{}',
-          isPresentable: true,
-          createdAt: new Date(),
-          updatedAt: new Date(),
-        },
-        {
-          id: 'claim-nationality',
-          identityCardId: CRED_NATIONALITY_ID,
-          claimType: 'nationality',
-          title: 'Nationality verified',
-          issuerType: 'self',
-          trustLevel: 'L1',
-          source: 'test',
-          payload: '{}',
-          isPresentable: true,
-          createdAt: new Date(),
-          updatedAt: new Date(),
-        },
-      ],
-    }),
-  },
-}));
-await mock.module('@/credentials/store', () => ({
-  useCredentialStore: {
-    getState: () => ({
-      details: new Map<string, StoredCredential>([
-        [CRED_AGE_ID, storedCredential(CRED_AGE_ID, VC_AGE_JWT)],
-        [CRED_NATIONALITY_ID, storedCredential(CRED_NATIONALITY_ID, VC_NATIONALITY_JWT)],
-      ]),
-    }),
-  },
-}));
 
 // A plain value copy of the real implementation, taken BEFORE the
 // `mock.module` call below — `bun:test`'s mock.module rebinds the module's
@@ -276,6 +260,7 @@ describe('A5.3 round trip: presentBuilder -> real buildVpToken -> real verifyVpT
       request,
       selectedClaimIds: ['claim-age-over-18'],
       holderDid: HOLDER_DID,
+      deps: PRESENTATION_DEPS,
     });
     expect(built.ok).toBe(true);
     if (!built.ok) return;
@@ -291,6 +276,7 @@ describe('A5.3 round trip: presentBuilder -> real buildVpToken -> real verifyVpT
       request,
       selectedClaimIds: ['claim-age-over-18'],
       holderDid: HOLDER_DID,
+      deps: PRESENTATION_DEPS,
     });
     expect(built.ok).toBe(true);
     if (!built.ok) return;
@@ -322,13 +308,15 @@ describe('A5.3 round trip: presentBuilder -> real buildVpToken -> real verifyVpT
       request,
       selectedClaimIds: ['claim-age-over-18'],
       holderDid: HOLDER_DID,
+      deps: PRESENTATION_DEPS,
     });
     expect(built.ok).toBe(true);
     if (!built.ok) return;
 
-    await expect(
-      verifyVpToken(built.value.vpJwt, { expectedAud: 'did:key:zSomeOtherRequester' })
-    ).rejects.toThrow(/aud mismatch/u);
+    await expectRejectsWith(
+      verifyVpToken(built.value.vpJwt, { expectedAud: 'did:key:zSomeOtherRequester' }),
+      /aud mismatch/u
+    );
   });
 });
 
@@ -336,7 +324,11 @@ describe('A5.3 fix round 1: buildPearPresentation threads claim TYPES, not Prese
   it("builds input_descriptors keyed by the selected claim's TYPE, not its PresentableClaim id", async () => {
     resetCapturedPearRequest();
 
-    const built = await buildPearPresentation(['claim-age-over-18'], REQUESTER_DID);
+    const built = await buildPearPresentation(
+      ['claim-age-over-18'],
+      REQUESTER_DID,
+      PEAR_PRESENTATION_DEPS
+    );
     expect(built.ok).toBe(true);
 
     // This is the object `buildVpToken` actually received — proof the
@@ -358,7 +350,8 @@ describe('A5.3 fix round 1: buildPearPresentation threads claim TYPES, not Prese
 
     const built = await buildPearPresentation(
       ['claim-age-over-18', 'claim-nationality'],
-      REQUESTER_DID
+      REQUESTER_DID,
+      PEAR_PRESENTATION_DEPS
     );
     expect(built.ok).toBe(true);
 
@@ -373,15 +366,40 @@ describe('A5.3 fix round 1: buildPearPresentation threads claim TYPES, not Prese
   });
 
   it('round-trips through the real verifyVpToken for exactly the selected claim', async () => {
-    const built = await buildPearPresentation(['claim-age-over-18'], REQUESTER_DID);
+    const built = await buildPearPresentation(
+      ['claim-age-over-18'],
+      REQUESTER_DID,
+      PEAR_PRESENTATION_DEPS
+    );
     expect(built.ok).toBe(true);
     if (!built.ok) return;
 
-    const verified = await verifyVpToken(built.sdJwt, { expectedAud: REQUESTER_DID });
+    const verified = await verifyVpToken(built.sdJwt, {
+      expectedAud: REQUESTER_DID,
+      expectedRootDid: RESPONDER_ROOT_DID,
+    });
     expect(verified.holderDid).toBe(HOLDER_DID);
     expect(verified.credentials).toHaveLength(1);
     expect(verified.credentials[0]?.claims['vc']).toEqual({
       credentialSubject: { id: HOLDER_DID, claim: 'age_over_18' },
     });
+  });
+
+  it('rejects a Pear presentation when the authenticated peer root DID is not the root bound to the card key', async () => {
+    const built = await buildPearPresentation(
+      ['claim-age-over-18'],
+      REQUESTER_DID,
+      PEAR_PRESENTATION_DEPS
+    );
+    expect(built.ok).toBe(true);
+    if (!built.ok) return;
+
+    await expectRejectsWith(
+      verifyVpToken(built.sdJwt, {
+        expectedAud: REQUESTER_DID,
+        expectedRootDid: OTHER_ROOT_DID,
+      }),
+      /root DID/u
+    );
   });
 });

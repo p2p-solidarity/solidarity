@@ -20,9 +20,9 @@
  */
 import { useCallback, useEffect, useReducer, useRef } from 'react';
 
-import { useIdentityData } from '@/identity';
+import type { ProvableClaimEntity } from '@/identity';
 import { getRootDid, getRootSigner, type RootKeyError } from '@/identity/rootKey';
-import { buildVpToken } from '@/oidc/presenter';
+import { buildVpToken, type PresentationBuilderDeps } from '@/oidc/presenter';
 import { verifyVpToken } from '@/oidc/proofVerifier';
 
 import { authenticateChannel } from './handshake';
@@ -55,6 +55,16 @@ function rootKeyErrorDiagnostic(e: RootKeyError): string {
   }
 }
 
+export interface BuildPearPresentationDeps {
+  readonly getRootDid?: typeof getRootDid;
+  readonly getRootSigner?: typeof getRootSigner;
+  readonly getProvableClaims?: () =>
+    | readonly ProvableClaimEntity[]
+    | Promise<readonly ProvableClaimEntity[]>;
+  readonly presentationDeps?: PresentationBuilderDeps;
+  readonly nonce?: () => string;
+}
+
 /**
  * Build the SD-JWT (VP-wrapped) presentation for the Pear channel — the
  * effectful glue between `presentBuilder.ts`'s pure `buildSyntheticPresentRequest`
@@ -83,11 +93,33 @@ function rootKeyErrorDiagnostic(e: RootKeyError): string {
  */
 export async function buildPearPresentation(
   selectedClaimIds: readonly string[],
-  audienceDid: string
+  audienceDid: string,
+  deps: BuildPearPresentationDeps = {},
 ): Promise<BuildPresentationResult> {
-  const claimTypes = claimTypesForSelectedIds(selectedClaimIds);
-  const request = buildSyntheticPresentRequest(claimTypes, audienceDid, cryptoRandomNonce());
-  const result = await buildVpToken({ request, selectedClaimIds, holderDid: '' });
+  const claimTypes = await claimTypesForSelectedIds(selectedClaimIds, deps.getProvableClaims);
+  const request = buildSyntheticPresentRequest(
+    claimTypes,
+    audienceDid,
+    (deps.nonce ?? cryptoRandomNonce)(),
+  );
+  const rootDidResult = await (deps.getRootDid ?? getRootDid)();
+  if (!rootDidResult.ok) {
+    return { ok: false, message: rootKeyErrorDiagnostic(rootDidResult.error) };
+  }
+  const rootSignerResult = await (deps.getRootSigner ?? getRootSigner)();
+  if (!rootSignerResult.ok) {
+    return { ok: false, message: rootKeyErrorDiagnostic(rootSignerResult.error) };
+  }
+  const result = await buildVpToken({
+    request,
+    selectedClaimIds,
+    holderDid: '',
+    cardKeyBinding: {
+      rootDid: rootDidResult.value,
+      sign: rootSignerResult.value,
+    },
+    deps: deps.presentationDeps,
+  });
   if (!result.ok) return { ok: false, message: result.error.message };
   return { ok: true, sdJwt: result.value.vpJwt };
 }
@@ -100,8 +132,16 @@ export async function buildPearPresentation(
  *  silently skipped, same as `rawCredentialIdsFor`'s "just omit it" stance
  *  — `buildVpToken` will itself fail closed with "No credentials selected"
  *  if that leaves nothing presentable. */
-function claimTypesForSelectedIds(claimIds: readonly string[]): readonly string[] {
-  const claims = useIdentityData.getState().provableClaims;
+async function defaultProvableClaims(): Promise<readonly ProvableClaimEntity[]> {
+  const { useIdentityData } = await import('@/identity');
+  return useIdentityData.getState().provableClaims;
+}
+
+async function claimTypesForSelectedIds(
+  claimIds: readonly string[],
+  getProvableClaims?: () => readonly ProvableClaimEntity[] | Promise<readonly ProvableClaimEntity[]>,
+): Promise<readonly string[]> {
+  const claims = await (getProvableClaims?.() ?? defaultProvableClaims());
   const claimById = new Map(claims.map((c) => [c.id, c] as const));
   const types = new Set<string>();
   for (const id of claimIds) {
@@ -271,7 +311,7 @@ export function usePresentRequestFlow(
               }
 
               const { sdJwt } = presentResult.value;
-              void verifyVpToken(sdJwt, { expectedAud: myDid })
+              void verifyVpToken(sdJwt, { expectedAud: myDid, expectedRootDid: peerDid })
                 .then((verified) => {
                   if (!mountedRef.current) return;
                   dispatch({ type: 'verified', sdJwt, verified });
