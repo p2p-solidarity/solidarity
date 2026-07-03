@@ -33,7 +33,8 @@
         "bio": "Building solidarity — a no-server verified page.",
         "links": [
           { "label": "Website", "url": "https://example.com" },
-          { "label": "GitHub", "url": "https://github.com/alice" }
+          { "label": "GitHub", "url": "https://github.com/alice" },
+          { "label": "Old Blog (plain http)", "url": "http://example.net/blog" }
         ],
         "alsoKnownAs": ["dns:example.com", "at://alice.bsky.social", "nostr:npub1exampleexampleexampleexampleexampleexampleexampleexamp"],
         "badges": [
@@ -317,6 +318,57 @@
       },
       "errorContains": "links:",
       "reason": "links must be an array, not a bare string"
+    },
+    {
+      "name": "link-url-javascript-scheme",
+      "profile": {
+        "v": 1,
+        "did": "did:key:zDnaeVuZeVRqvscGkiEoR9PFFra2xZUMp97ZPuGFK1VLU7iYN",
+        "displayName": "Alice",
+        "avatar": null,
+        "bio": "",
+        "links": [{ "label": "evil", "url": "javascript:alert(1)" }],
+        "alsoKnownAs": [],
+        "badges": [],
+        "supersededBy": null,
+        "updatedAt": "2026-07-03T00:00:00Z"
+      },
+      "errorContains": "links.0.url",
+      "reason": "the viewer renders links[].url as a clickable <a href> anchor; a javascript: URI must never pass schema validation or it becomes an XSS vector at render time"
+    },
+    {
+      "name": "link-url-data-scheme",
+      "profile": {
+        "v": 1,
+        "did": "did:key:zDnaeVuZeVRqvscGkiEoR9PFFra2xZUMp97ZPuGFK1VLU7iYN",
+        "displayName": "Alice",
+        "avatar": null,
+        "bio": "",
+        "links": [{ "label": "evil", "url": "data:text/html,<script>alert(1)</script>" }],
+        "alsoKnownAs": [],
+        "badges": [],
+        "supersededBy": null,
+        "updatedAt": "2026-07-03T00:00:00Z"
+      },
+      "errorContains": "links.0.url",
+      "reason": "data: URIs can carry an inline HTML/script payload; only http(s) is a renderable-as-anchor scheme for this viewer"
+    },
+    {
+      "name": "link-url-whitespace-prefixed",
+      "profile": {
+        "v": 1,
+        "did": "did:key:zDnaeVuZeVRqvscGkiEoR9PFFra2xZUMp97ZPuGFK1VLU7iYN",
+        "displayName": "Alice",
+        "avatar": null,
+        "bio": "",
+        "links": [{ "label": "sneaky", "url": " https://example.com" }],
+        "alsoKnownAs": [],
+        "badges": [],
+        "supersededBy": null,
+        "updatedAt": "2026-07-03T00:00:00Z"
+      },
+      "errorContains": "links.0.url",
+      "reason": "a leading space defeats a naive scheme-prefix check in some URL parsers/sanitizers ('trim then allow' bypass); this schema rejects leading/trailing whitespace outright rather than silently trimming it"
     },
     {
       "name": "null-input",

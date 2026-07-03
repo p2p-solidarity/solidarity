@@ -16,7 +16,23 @@
  * to warn on (06-plan W2.3: ">2KB 顯示尺寸警告"). `decodeFragment` never
  * throws — malformed base64url, a corrupt/non-DEFLATE byte stream, or an
  * empty string all fail closed via `Result`, since `frag` is
- * attacker-controlled (scanned from an arbitrary QR code).
+ * attacker-controlled (scanned from an arbitrary QR code, or carried in a
+ * deep link with no size limit of its own).
+ *
+ * `decodeFragment` enforces two hard caps, both well above any legitimate
+ * payload (see `FRAGMENT_SIZE_BUDGET_BYTES` above) but far below what an
+ * attacker-controlled input could otherwise force:
+ *  - `FRAGMENT_MAX_INPUT_BYTES` rejects an oversized fragment string before
+ *    any base64url decode or inflate work starts.
+ *  - `FRAGMENT_MAX_DECOMPRESSED_BYTES` bounds the inflated output. fflate's
+ *    `inflateSync` has no built-in cap, and raw DEFLATE can reach roughly
+ *    1000:1 expansion, so decompressing a degenerate ("zip bomb"-style)
+ *    input fully before measuring it would let attacker-controlled bytes
+ *    force an unbounded allocation. Instead we pass a fixed-size `out`
+ *    buffer (`FRAGMENT_MAX_DECOMPRESSED_BYTES + 1`) so fflate can only
+ *    truncate into it, never grow past it — a single fixed allocation
+ *    regardless of the compression ratio — and treat a fully-filled buffer
+ *    as "exceeded the cap".
  */
 import { deflateSync, inflateSync } from 'fflate';
 
@@ -31,6 +47,25 @@ import { err, ok, type Result } from './types/result';
  * would see.
  */
 export const FRAGMENT_SIZE_BUDGET_BYTES = 2048;
+
+/**
+ * Hard cap on `decodeFragment`'s input string length, checked before any
+ * decode/inflate work. `frag` is attacker-controlled (QR scan, deep link),
+ * and a legitimate fragment never approaches this — `FRAGMENT_SIZE_BUDGET_BYTES`
+ * (2048) is already the *soft* QR/URL practical budget, so 16KB leaves
+ * generous headroom while still bounding worst-case work on garbage input.
+ */
+export const FRAGMENT_MAX_INPUT_BYTES = 16_384;
+
+/**
+ * Hard cap on `decodeFragment`'s decompressed output size. A real Profile
+ * Record JWS is a few KB at most (see vectors/profile.json's
+ * `oversize-fragment-budget` vector, ~2.6KB pre-compression); 64KB leaves
+ * generous headroom while still bounding a DEFLATE "zip bomb" to one fixed
+ * allocation instead of an unbounded one (fflate's `inflateSync` has no
+ * built-in cap of its own).
+ */
+export const FRAGMENT_MAX_DECOMPRESSED_BYTES = 65_536;
 
 export interface FragmentResult {
   /** base64url(deflateRaw(profileJws)) — safe to embed after `#` in a URL. */
@@ -60,6 +95,9 @@ export function encodeFragment(profileJws: string): FragmentResult {
  */
 export function decodeFragment(frag: string): Result<string, string> {
   if (frag.length === 0) return err('fragment: empty input');
+  if (frag.length > FRAGMENT_MAX_INPUT_BYTES) {
+    return err(`fragment: input exceeds ${FRAGMENT_MAX_INPUT_BYTES} byte cap`);
+  }
 
   let compressed: Uint8Array;
   try {
@@ -71,7 +109,19 @@ export function decodeFragment(frag: string): Result<string, string> {
 
   let inflated: Uint8Array;
   try {
-    inflated = inflateSync(compressed);
+    // Bounded-memory decompression: a caller-provided fixed-size `out`
+    // buffer means fflate can only truncate into it, never reallocate past
+    // it, regardless of how compressible (or how much of a "zip bomb") the
+    // input is. `+1` lets us tell "output was exactly at the cap" (buffer
+    // not full) apart from "output was truncated" (buffer completely full)
+    // by checking the returned length.
+    const bounded = inflateSync(compressed, {
+      out: new Uint8Array(FRAGMENT_MAX_DECOMPRESSED_BYTES + 1),
+    });
+    if (bounded.length > FRAGMENT_MAX_DECOMPRESSED_BYTES) {
+      return err(`fragment: decompressed output exceeds ${FRAGMENT_MAX_DECOMPRESSED_BYTES} byte cap`);
+    }
+    inflated = bounded;
   } catch (e) {
     return err(`fragment: corrupt deflate stream (${e instanceof Error ? e.message : String(e)})`);
   }

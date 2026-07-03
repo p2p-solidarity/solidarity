@@ -29,10 +29,24 @@ import { err, ok, type Result } from './types/result';
 
 export const PROFILE_VERSION = 1;
 
+/**
+ * The viewer renders every `links[].url` as a clickable `<a href>` anchor,
+ * so only `http://`/`https://` (case-insensitive) may pass — a
+ * `javascript:`/`data:`/any other scheme URI must never reach an anchor tag.
+ * No implicit trim: a leading- or trailing-whitespace URL is rejected
+ * outright rather than silently normalized, since whitespace before the
+ * scheme is a classic sanitizer-bypass trick against naive
+ * `url.startsWith('http')`-style checks.
+ */
+const LINK_URL_SCHEME_RE = /^https?:\/\//i;
+const isRenderableLinkUrl = (url: string): boolean => url === url.trim() && LINK_URL_SCHEME_RE.test(url);
+
 export const profileLinkSchema = z
   .object({
     label: z.string(),
-    url: z.string(),
+    url: z.string().refine(isRenderableLinkUrl, {
+      message: 'must be an http:// or https:// URL with no leading/trailing whitespace',
+    }),
   })
   .strict();
 export type ProfileLink = z.infer<typeof profileLinkSchema>;
@@ -52,7 +66,15 @@ export const profileRecordSchema = z
     v: z.literal(PROFILE_VERSION),
     did: z.string().min(1),
     displayName: z.string(),
-    /** URL string, blob-hash string, or absent avatar. */
+    /**
+     * URL string, blob-hash string, or absent avatar. Free-form by design —
+     * unlike `links[].url`, this field is NOT scheme-validated here (it
+     * must be able to hold an opaque blob-hash, not just a URL). Rendering
+     * an `avatar` value is entirely the consumer's responsibility: never
+     * treat it as a navigable/clickable URL (`<a href>`, `Linking.openURL`,
+     * WebView navigation, ...) without the consumer doing its own scheme
+     * validation first.
+     */
     avatar: z.string().nullable(),
     bio: z.string(),
     links: z.array(profileLinkSchema),

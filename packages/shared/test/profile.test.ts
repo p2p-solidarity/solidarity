@@ -80,6 +80,44 @@ describe('parseProfile', () => {
     expect(result.ok).toBe(false);
   });
 
+  test('rejects a link url with a javascript: scheme (must never render as a clickable anchor)', () => {
+    const bad = baseProfile({ links: [{ label: 'evil', url: 'javascript:alert(1)' }] });
+    const result = parseProfile(bad);
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.error).toContain('links.0.url');
+  });
+
+  test('rejects a link url with a data: scheme', () => {
+    const bad = baseProfile({ links: [{ label: 'evil', url: 'data:text/html,<script>alert(1)</script>' }] });
+    const result = parseProfile(bad);
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.error).toContain('links.0.url');
+  });
+
+  test('rejects a link url with leading whitespace (no silent trim)', () => {
+    const bad = baseProfile({ links: [{ label: 'sneaky', url: ' https://example.com' }] });
+    const result = parseProfile(bad);
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.error).toContain('links.0.url');
+  });
+
+  test('rejects a link url with trailing whitespace (no silent trim)', () => {
+    const bad = baseProfile({ links: [{ label: 'sneaky', url: 'https://example.com ' }] });
+    const result = parseProfile(bad);
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.error).toContain('links.0.url');
+  });
+
+  test('accepts a link url with a plain http:// scheme (not just https://)', () => {
+    const result = parseProfile(baseProfile({ links: [{ label: 'old site', url: 'http://example.net' }] }));
+    expect(result.ok).toBe(true);
+  });
+
+  test('accepts a link url with an https:// scheme', () => {
+    const result = parseProfile(baseProfile({ links: [{ label: 'site', url: 'https://example.com' }] }));
+    expect(result.ok).toBe(true);
+  });
+
   test('rejects a badge missing attestation', () => {
     const bad = baseProfile({
       badges: [{ type: 'dns', subject: 'example.com' } as unknown as {

@@ -12,9 +12,16 @@
  */
 import { describe, expect, test } from 'bun:test';
 import { p256 } from '@noble/curves/nist.js';
+import { deflateSync } from 'fflate';
 
-import { decodeFragment, encodeFragment } from '../src/fragment';
+import {
+  decodeFragment,
+  encodeFragment,
+  FRAGMENT_MAX_DECOMPRESSED_BYTES,
+  FRAGMENT_MAX_INPUT_BYTES,
+} from '../src/fragment';
 import { signCompact, type Signer } from '../src/jws';
+import { base64UrlEncode } from '../src/crypto/base64';
 import { hexToBytes } from '../src/crypto/hex';
 import fragmentVectors from '../vectors/fragment.json';
 import profileVectors from '../vectors/profile.json';
@@ -83,6 +90,62 @@ describe('decodeFragment — malformed input never throws', () => {
     expect(() => decodeFragment('')).not.toThrow();
     expect(() => decodeFragment('!!!')).not.toThrow();
     expect(() => decodeFragment('a'.repeat(10000))).not.toThrow();
+  });
+});
+
+describe('decodeFragment — bounded decode (attacker-controlled input hardening)', () => {
+  test('rejects a fragment string longer than FRAGMENT_MAX_INPUT_BYTES before any decode work', () => {
+    const oversized = 'a'.repeat(FRAGMENT_MAX_INPUT_BYTES + 1);
+    const result = decodeFragment(oversized);
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.error).toContain(`exceeds ${FRAGMENT_MAX_INPUT_BYTES} byte cap`);
+  });
+
+  test('accepts a fragment string exactly at FRAGMENT_MAX_INPUT_BYTES (boundary, not off-by-one)', () => {
+    // A valid deflate+base64url payload padded out to exactly the cap by
+    // repeating a small encoded fragment's trailing bytes would corrupt the
+    // stream, so instead assert the cap check itself is `>`, not `>=`, by
+    // confirming a same-length *invalid* base64url string is rejected for a
+    // base64url reason, never the length-cap reason.
+    const atCap = 'a'.repeat(FRAGMENT_MAX_INPUT_BYTES);
+    const result = decodeFragment(atCap);
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.error).not.toContain('byte cap');
+  });
+
+  test('rejects a degenerate high-compression-ratio ("zip bomb"-style) payload without fully decompressing it', () => {
+    // 200KB of zero bytes compresses (level 9) to ~210 bytes raw DEFLATE —
+    // a ~280-byte base64url fragment, comfortably under the input cap, that
+    // would inflate to 200,000 bytes if decompressed unbounded: far past
+    // FRAGMENT_MAX_DECOMPRESSED_BYTES. Constructed directly here (not just
+    // via the vector) to prove the cap trips regardless of how the
+    // compressed bytes were produced.
+    const bombPlain = new Uint8Array(200_000);
+    const bombCompressed = deflateSync(bombPlain, { level: 9 });
+    const bombFragment = base64UrlEncode(bombCompressed);
+    expect(bombFragment.length).toBeLessThan(FRAGMENT_MAX_INPUT_BYTES);
+
+    const result = decodeFragment(bombFragment);
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.error).toContain(`exceeds ${FRAGMENT_MAX_DECOMPRESSED_BYTES} byte cap`);
+  });
+
+  test('accepts a decompressed payload right at FRAGMENT_MAX_DECOMPRESSED_BYTES (boundary, not off-by-one)', () => {
+    // A single repeated ASCII character compresses extremely well but still
+    // round-trips through UTF-8 decode, letting us hit the exact byte cap.
+    const atCapPlain = 'x'.repeat(FRAGMENT_MAX_DECOMPRESSED_BYTES);
+    const encoded = encodeFragment(atCapPlain);
+    const result = decodeFragment(encoded.fragment);
+    expect(result.ok).toBe(true);
+    if (result.ok) expect(result.value).toBe(atCapPlain);
+  });
+
+  test('rejects a decompressed payload one byte over FRAGMENT_MAX_DECOMPRESSED_BYTES', () => {
+    const overCapPlain = 'x'.repeat(FRAGMENT_MAX_DECOMPRESSED_BYTES + 1);
+    const encoded = encodeFragment(overCapPlain);
+    const result = decodeFragment(encoded.fragment);
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.error).toContain(`exceeds ${FRAGMENT_MAX_DECOMPRESSED_BYTES} byte cap`);
   });
 });
 
