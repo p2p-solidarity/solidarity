@@ -26,7 +26,7 @@
  * isolation note for why a global `mock.module` on the same specifier two
  * files both touch is avoided.
  */
-import { beforeAll, beforeEach, describe, expect, it, mock } from 'bun:test';
+import { beforeAll, beforeEach, describe, expect, it, mock, setSystemTime } from 'bun:test';
 
 import { verifyCompact, type ProfileRecord } from '@solidarity/shared';
 
@@ -216,6 +216,37 @@ describe('saveProfile — append-only replacement semantics', () => {
     expect(secondRecord.displayName).toBe('Two');
     expect(secondRecord.did).toBe(firstRecord.did);
     expect(Date.parse(secondRecord.updatedAt)).toBeGreaterThan(Date.parse(firstRecord.updatedAt));
+  });
+
+  it('updatedAt still strictly advances when the system clock skews backward between saves', async () => {
+    const created = await rootKeyMod.createFromFreshMnemonic();
+    expect(created.ok).toBe(true);
+    if (!created.ok) return;
+
+    try {
+      setSystemTime(new Date('2026-01-01T00:00:00.000Z'));
+      const first = await mod.useProfileStore.getState().saveProfile({ displayName: 'One', bio: '', links: [] });
+      expect(first.ok).toBe(true);
+      const firstRecord = mod.useProfileStore.getState().record;
+      expect(firstRecord).not.toBeNull();
+      if (!firstRecord) return;
+      const previousMs = Date.parse(firstRecord.updatedAt);
+
+      // Backward clock skew (e.g. an NTP correction) before the next save —
+      // Date.now() at save #2 is at or before the first record's updatedAt.
+      setSystemTime(new Date('2025-12-31T23:59:00.000Z'));
+      const second = await mod.useProfileStore.getState().saveProfile({ displayName: 'Two', bio: '', links: [] });
+      expect(second.ok).toBe(true);
+      const secondRecord = mod.useProfileStore.getState().record;
+      expect(secondRecord).not.toBeNull();
+      if (!secondRecord) return;
+
+      const nextMs = Date.parse(secondRecord.updatedAt);
+      expect(nextMs).toBeGreaterThan(previousMs);
+      expect(nextMs).toBe(previousMs + 1);
+    } finally {
+      setSystemTime(); // restore the real clock for subsequent tests
+    }
   });
 
   it('carries forward avatar/alsoKnownAs/badges/supersededBy as real empties across saves (never fabricated)', async () => {
