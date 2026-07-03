@@ -1,7 +1,7 @@
 # 04 — App 主軌 Implementation Plan(1.3.3 Verified Page)
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
-> 對應 spec:`docs/ref/01`(SSOT)、`02`(US)、`03`(機制分工)。Web 軌另見 `05-plan-web-viewer.md`、`06-plan-web-builder.md`。
+> 對應 spec:`docs/ref/01`(SSOT)、`02`(US)、`03`(機制分工)。Web 軌已移至 `~/Workspace/solidarity/solidarity-web/docs/ref/05-plan-web-viewer.md`、`~/Workspace/solidarity/solidarity-web/docs/ref/06-plan-web-builder.md`。
 
 **Goal:** 把 apps/expo 從名片交換 app 轉換為 Verified Page holder:did:key 根身份 + 徽章綁定 + 無伺服器發布 + Pear 私有通道,同時執行拆除清單(Sharing/proximity/CloudKit 群組/SpruceKit 瘦身)。
 
@@ -234,12 +234,20 @@ verifyNostrBinding(profile: ProfileRecord, fetchEvents: (filter) => Promise<Nost
 
 ---
 
+## Phase A5b — root-did ↔ card-signing-did 綁定(執行時發現,2026-07-03)
+
+**背景(A5.3 review)**:Pear 私有出示中,握手密碼學上綁定 peer 到 **root-did**,但出示的 VP 是用結構上不同的 **card-signing-did** 簽的;`verifyVpToken` 已修成保證「VP 簽名者 == 內嵌 VC 持有者」(A5.3,fail-closed,惠及所有呼叫者含 OIDC),但原先**未**保證「card-signing-did 由認證過的 root-did 持有者控制」。
+
+**落地決策(1.3.3)**:採 root key 簽一張短效 `solidarity.cardKeyBinding.v1` JWS,內含 `rootDid/cardDid/aud/nonce/iat/exp`;Pear responder 把此 binding 放進 VP 的 `solidarity.cardKeyBinding`,requester 用通道握手已驗證的 `peerDid` 作為 `expectedRootDid` 驗證。一般 OIDC/QR 呼叫不傳 `expectedRootDid`,行為維持原本只檢查 VP/VC holder binding。
+
+- [x] Task A5b.1: 定案 card-did↔root-did 錨定機制(root key 簽 card-key 授權)+ `verifyVpToken`/Pear 出示驗證「出示者的 card-did 錨定到認證 peer 的 root-did」;TDD 攻擊樣本(peer A 出示 B 綁定的憑證 → 拒收)
+
 ## Phase A6 — atproto OAuth + PDS + Bluesky 徽章(US-02)
 
 **Spec:** atproto OAuth(client-metadata.json 靜態掛 solidarity.gg — web 軌 V0 部署時一併放);lexicon `app.solidarity.profile` record 寫入使用者 PDS(`com.atproto.repo.putRecord`,rkey `self`,value = `{ jws: <profile JWS> }`);Bluesky 徽章 = record 存在(repo 所有權)+ JWS 內 `alsoKnownAs` 含 `at://<handle>` 雙向。PLC 解析快取 TTL 24h。
 
 **Files:**
-- Create: `apps/expo/src/atproto/{oauth.ts,pds.ts}`、`packages/verify-core/src/badges/atproto.ts`、`apps/web/public/oauth/client-metadata.json`
+- Create: `apps/expo/src/atproto/{oauth.ts,pds.ts}`、`packages/verify-core/src/badges/atproto.ts`; Web repo static metadata:`~/Workspace/solidarity/solidarity-web/public/oauth/client-metadata.json`
 - Test: verify-core 向量(壞 record、did 不符 repo)
 
 - [ ] Task A6.1: OAuth(expo-auth-session,universal link redirect;token 存 SecureStore)
