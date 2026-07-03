@@ -23,7 +23,10 @@
     "expo:start": "cd apps/expo && bun run start",
     "expo:prebuild:ios": "cd apps/expo && bunx expo prebuild --platform ios",
     "expo:prebuild:android": "cd apps/expo && bunx expo prebuild --platform android",
-    "build:ios:local": "cd apps/expo && bun run build:ios:local"
+    "build:ios:local": "cd apps/expo && bun run build:ios:local",
+    "web:dev": "cd apps/web && bun run dev",
+    "web:build": "cd apps/web && bun run build",
+    "web:typecheck": "cd apps/web && bun run typecheck"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
@@ -43,6 +46,7 @@
   },
   "dependencies": {
     "expo": "~56.0.4",
+    "hyperswarm": "^4.17.0",
     "react": "19.2.3",
     "react-native": "0.85.3"
   }

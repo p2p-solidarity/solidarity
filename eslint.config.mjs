@@ -32,6 +32,14 @@ export default tseslint.config(
       '**/babel.config.{js,cjs,mjs}',
       'scripts/**',
       'apps/expo/plugins/**',
+      // Bare-side worklet source (`Bare`/`BareKit`/`Buffer` globals, no RN
+      // types; packed by `bare-pack`, never part of the apps/expo TS
+      // project — see pear/worklet/index.js's header) + the Node-only
+      // packing script that bundles it. Same treatment as root
+      // `scripts/**` above; the generated `dist/` bundle is already
+      // covered by `**/dist/**`.
+      'apps/expo/pear/worklet/index.js',
+      'apps/expo/scripts/**',
       'apps/ios-legacy/**',
       'solidarity/**',
       'solidarityClip/**',

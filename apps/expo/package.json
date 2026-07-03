@@ -20,7 +20,8 @@
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
     "test": "bun test --preload ./test-setup.ts",
-    "test:parity": "bun test --preload ./test-setup.ts __tests__/parity"
+    "test:parity": "bun test --preload ./test-setup.ts __tests__/parity",
+    "pear:pack": "node scripts/pack-pear-worklet.mjs"
   },
   "dependencies": {
     "@gorhom/bottom-sheet": "^5.2.14",
@@ -66,6 +67,7 @@
     "expo-sqlite": "~56.0.4",
     "expo-status-bar": "~56.0.4",
     "fflate": "^0.8.2",
+    "hyperswarm": "^4.17.0",
     "i18next": "^26.2.0",
     "mrz": "5.0.2",
     "nativewind": "^4.2.4",

@@ -132,6 +132,12 @@ export default function DeveloperSettings() {
                   subtitle={t('developer.pear.labSubtitle')}
                   onPress={() => { router.push('/dev/pear-echo'); }}
                 />
+                <SettingsBlockRow
+                  icon="dot.radiowaves.left.and.right"
+                  title={t('developer.pear.laneLabTitle')}
+                  subtitle={t('developer.pear.laneLabSubtitle')}
+                  onPress={() => { router.push('/dev/pear-lane'); }}
+                />
               </SettingsBlockSection>
 
               <View className="gap-3">

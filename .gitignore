@@ -118,6 +118,13 @@ build/
 *.tsbuildinfo
 .eslintcache
 
+# Exception: the checked-in `bare-pack` worklet bundle is a committed
+# artifact, not disposable build output — regenerate via
+# `bun run pear:pack` (apps/expo/scripts/pack-pear-worklet.mjs) whenever
+# apps/expo/pear/worklet/index.js changes; see that file's header.
+!apps/expo/pear/worklet/dist/
+!apps/expo/pear/worklet/dist/**
+
 # Expo
 .expo/
 .expo-shared/
