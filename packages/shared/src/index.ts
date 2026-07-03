@@ -23,6 +23,7 @@
  *   fragment.ts   URL-fragment codec (deflate + base64url) for QR/offline
  *                 profile publication (01-spec §4.3)
  */
+export * from './badges';
 export * from './canonical';
 export * from './challenge';
 export * from './crypto';
@@ -31,6 +32,7 @@ export * from './fragment';
 export * from './identity';
 export * from './importer';
 export * from './jws';
+export * from './nostr';
 export * from './profile';
 export * from './qr';
 export * from './sakura';
