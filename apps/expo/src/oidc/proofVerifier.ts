@@ -148,7 +148,29 @@ export async function verifyVpToken(
   for (const vc of vcJwts) {
     // verifyVcJwt throws if a single embedded credential fails — the whole
     // presentation is then rejected (fail closed).
-    credentials.push(await verifyVcJwt(vc, { now: opts.now }));
+    const verified = await verifyVcJwt(vc, { now: opts.now });
+    // HOLDER BINDING: an embedded VC must be bound to the SAME holder that
+    // signed the outer VP (`verified.holderDid`, from the VC's own
+    // `sub`/`credentialSubject.id`, must equal `holder`, the VP's own
+    // self-certifying `iss`/`kid`). Without this check, whoever controls
+    // the VP-signing key could wrap ANY credential JWT they merely hold a
+    // copy of — including one legitimately issued to and bound to a
+    // DIFFERENT holder — and have it accepted as their own presentation.
+    // That's the exact "presenting someone else's credential" attack
+    // holder binding exists to prevent; it is self-contained (no
+    // caller-supplied `expectedHolder` needed) so it protects every
+    // caller of `verifyVpToken` — the QR-scan verify path
+    // (`app/scan/index.tsx`) and A5.3's Pear-channel verify alike — not
+    // just one call site. A VC with no holder claim at all
+    // (`holderDid === null`) also fails this (never strictly equals a
+    // real did string), which is correct: an unbound credential proves
+    // nothing about who may present it.
+    if (verified.holderDid !== holder) {
+      throw new Error(
+        `VP embeds a credential bound to a different holder (VP holder ${holder}, credential holder ${String(verified.holderDid)})`
+      );
+    }
+    credentials.push(verified);
   }
 
   return { holderDid: holder, credentials, nonce: payload.nonce };

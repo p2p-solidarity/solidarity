@@ -32,14 +32,24 @@ import { useTranslation } from '@/i18n';
 import { useProfileSnapshotStore } from '@/people/profileSnapshots';
 import { formatPeerLabel } from '@/pear/cardRelease';
 import type { CardRequestErrorKind, CardRequestPhase } from '@/pear/cardRequestState';
+import type { PresentRequestErrorKind, PresentRequestPhase } from '@/pear/presentRequestState';
 import {
   useCardRequestFlow,
   useReachableMode,
   type ReachableErrorKind,
   type ReachableStatus,
 } from '@/pear/useCardExchange';
+import { usePresentRequestFlow } from '@/pear/usePresentRequestFlow';
 
 import { VerifiedProfileView } from '@/components/scan/VerifiedProfileView';
+
+/** Claim types this screen asks a peer to prove — see A5.3's report for
+ *  what's actually presentable today (passport claims backed by a
+ *  non-ZK/`sd-jwt-fallback` credential; ZK-backed passport claims are
+ *  filtered out by `presentBuilder.ts`'s `matchPresentableClaims` and read
+ *  as an honest decline). Module-level constant so `usePresentRequestFlow`
+ *  gets a stable array reference across renders. */
+const PRESENT_CLAIMS: readonly string[] = ['age_over_18'];
 
 export interface CardExchangeSectionProps {
   readonly did: string;
@@ -63,6 +73,20 @@ const ERROR_I18N_SUFFIX: Readonly<Record<CardRequestErrorKind, string>> = {
 const REACHABLE_ERROR_I18N_SUFFIX: Readonly<Record<ReachableErrorKind, string>> = {
   connection: 'connection',
   protocol: 'protocol',
+};
+
+/** Same pattern as `ERROR_I18N_SUFFIX` above, for A5.3's present-request
+ *  (requester) side — includes the extra `'verification'` kind for a local
+ *  `verifyVpToken` failure, which `CardRequestErrorKind` has no analogue
+ *  for (the card flow's verification happens inside `protocol.ts` itself). */
+const PRESENT_ERROR_I18N_SUFFIX: Readonly<Record<PresentRequestErrorKind, string>> = {
+  declined: 'declined',
+  timeout: 'timeout',
+  malformed: 'malformed',
+  verification: 'verification',
+  protocol: 'protocol',
+  connection: 'connection',
+  authentication: 'authentication',
 };
 
 function requestButtonLabel(phase: CardRequestPhase, t: (key: string) => string): string {
@@ -100,6 +124,79 @@ function RequestStatusLine({ phase, t }: { readonly phase: CardRequestPhase; rea
   return null;
 }
 
+function presentButtonLabel(phase: PresentRequestPhase, t: (key: string) => string): string {
+  switch (phase.kind) {
+    case 'connecting':
+      return t('pearExchange.present.state.connecting');
+    case 'authenticating':
+      return t('pearExchange.present.state.authenticating');
+    case 'requesting':
+      return t('pearExchange.present.state.requesting');
+    case 'verified':
+    case 'declined':
+    case 'error':
+      return t('pearExchange.present.retry');
+    case 'idle':
+      return t('pearExchange.present.button');
+  }
+}
+
+function PresentStatusLine({
+  phase,
+  t,
+}: {
+  readonly phase: PresentRequestPhase;
+  readonly t: (key: string) => string;
+}): ReactNode {
+  if (phase.kind === 'declined') {
+    return (
+      <ThemedText variant="caption" tone="secondary">
+        {t('pearExchange.present.declinedMessage')}
+      </ThemedText>
+    );
+  }
+  if (phase.kind === 'error') {
+    return (
+      <ThemedText variant="caption" tone="error">
+        {t(`pearExchange.present.error.${PRESENT_ERROR_I18N_SUFFIX[phase.error.kind]}`)}
+      </ThemedText>
+    );
+  }
+  return null;
+}
+
+/** Renders ONLY what `verifyVpToken` actually proved — holder + each
+ *  embedded credential's issuer/trust level. Never renders raw claim
+ *  values that would need semantic interpretation this component doesn't
+ *  have (CLAUDE.md rule 8: don't claim to know something we didn't check). */
+function PresentVerifiedView({
+  phase,
+  t,
+}: {
+  readonly phase: Extract<PresentRequestPhase, { kind: 'verified' }>;
+  readonly t: (key: string, opts?: Record<string, unknown>) => string;
+}): ReactNode {
+  return (
+    <ThemedSurface variant="inset" padded style={{ gap: 6 }}>
+      <ThemedText variant="label" tone="secondary">
+        {t('pearExchange.present.verified.title')}
+      </ThemedText>
+      <ThemedText variant="caption" tone="tertiary">
+        {t('pearExchange.present.verified.holder', { did: phase.verified.holderDid })}
+      </ThemedText>
+      {phase.verified.credentials.map((c, i) => (
+        <ThemedText key={`${String(i)}-${c.issuerDid}`} variant="caption" tone="tertiary">
+          {t('pearExchange.present.verified.credential', {
+            index: i + 1,
+            issuer: c.issuerDid,
+            trust: c.trustLevel,
+          })}
+        </ThemedText>
+      ))}
+    </ThemedSurface>
+  );
+}
+
 function reachableStatusLine(status: ReachableStatus, t: (key: string, opts?: Record<string, unknown>) => string): string | null {
   switch (status.kind) {
     case 'off':
@@ -119,12 +216,18 @@ export function CardExchangeSection({ did, verifiedDisplayName }: CardExchangeSe
   const { t } = useTranslation();
   const peerLabel = formatPeerLabel(did, verifiedDisplayName);
   const requestFlow = useCardRequestFlow(did);
+  const presentFlow = usePresentRequestFlow(did, PRESENT_CLAIMS);
   const reachable = useReachableMode(did, peerLabel);
   const upsert = useProfileSnapshotStore((s) => s.upsert);
   const [saving, setSaving] = useState(false);
 
   const phase = requestFlow.phase;
   const requestBusy = phase.kind === 'connecting' || phase.kind === 'authenticating' || phase.kind === 'requesting';
+  const presentPhase = presentFlow.phase;
+  const presentBusy =
+    presentPhase.kind === 'connecting' ||
+    presentPhase.kind === 'authenticating' ||
+    presentPhase.kind === 'requesting';
   const reachableOn = reachable.status.kind !== 'off' && reachable.status.kind !== 'error';
   const reachableLine = reachableStatusLine(reachable.status, t);
 
@@ -174,6 +277,22 @@ export function CardExchangeSection({ did, verifiedDisplayName }: CardExchangeSe
             />
           </View>
         ) : null}
+      </ThemedSurface>
+
+      <ThemedSurface variant="outlined" padded style={{ gap: 12 }}>
+        <ThemedButton
+          label={presentButtonLabel(presentPhase, t)}
+          variant="secondary"
+          fullWidth
+          loading={presentBusy}
+          disabled={presentBusy}
+          leadingIcon={<SfIcon name="checkmark.shield" size={16} color={Colors.text1} />}
+          onPress={() => {
+            presentFlow.start();
+          }}
+        />
+        <PresentStatusLine phase={presentPhase} t={t} />
+        {presentPhase.kind === 'verified' ? <PresentVerifiedView phase={presentPhase} t={t} /> : null}
       </ThemedSurface>
 
       <ThemedSurface variant="outlined" padded style={{ gap: 8 }}>

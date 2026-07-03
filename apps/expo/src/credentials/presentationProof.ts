@@ -98,7 +98,10 @@ function parseRawCredential(rawCredential: string): unknown {
   }
 }
 
-function cryptoNonce(): string {
+/** Cryptographically-random hex nonce. Exported so other presentation
+ *  builders (`pear/presentBuilder.ts`, A5.3) can mint a fresh per-request
+ *  nonce without duplicating this fallback logic. */
+export function cryptoNonce(): string {
   const arr = new Uint8Array(16);
   try {
     crypto.getRandomValues(arr);

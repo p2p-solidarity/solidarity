@@ -97,6 +97,8 @@ import { useCallback, useEffect, useReducer, useRef, useState } from 'react';
 
 import { parseProfile, verifyCompact } from '@solidarity/shared';
 
+import { useCredentialStore } from '@/credentials/store';
+import { useIdentityData } from '@/identity';
 import { requireBiometric } from '@/keychain/biometric';
 import { getRootDid, getRootSigner, type RootKeyError } from '@/identity/rootKey';
 import { useProfileStore } from '@/profile/store';
@@ -107,11 +109,18 @@ import {
   type CardRequestEvent,
   type CardRequestPhase,
 } from './cardRequestState';
-import { askCardConsent } from './consent';
+import { askCardConsent, askPresentConsent } from './consent';
 import { authenticateChannel } from './handshake';
 import { ensureLane, releaseLane } from './laneManager';
 import { firstConnection, pearTopicFor, type PearChannel } from './lane';
+import { matchPresentableClaims } from './presentBuilder';
+import { makePresentRequestHandler } from './presentRelease';
 import { createPearSession, type PearSession } from './protocol';
+// A5.3 — `buildPearPresentation` is the RESPONDER-side VP-building glue;
+// it lives in `usePresentRequestFlow.ts` alongside the REQUESTER hook it
+// was extracted with (see that module's doc), and is reused here for
+// `useReachableMode`'s `onPresentRequest` handler below.
+import { buildPearPresentation } from './usePresentRequestFlow';
 
 const CARD_REQUEST_LANE_ID = 'pear:card-request';
 const REACHABLE_LANE_ID = 'pear:reachable';
@@ -503,6 +512,29 @@ export function useReachableMode(peerDid: string, peerLabel: string): ReachableM
                 askConsent: () => askCardConsent(peerLabel),
                 requireBiometric: () => requireBiometric('cardRelease'),
                 getCardJws: () => useProfileStore.getState().jws,
+              })
+            );
+            // A5.3 — present is a peer of card-exchange on this SAME
+            // connection-scoped session (`protocol.ts`'s `onCardRequest`/
+            // `onPresentRequest` are independent handler slots on one
+            // `PearSession`, not separate connections). `getMatchedClaims`/
+            // `buildPresentation` re-read the credential/claim stores fresh
+            // on every incoming request rather than closing over a stale
+            // snapshot taken at `start()` time. `audienceDid: peerDid` is
+            // THIS specific, already-authenticated requester's root did —
+            // see `buildPearPresentation`'s doc for why that becomes the
+            // VP's `aud`.
+            session.onPresentRequest(
+              makePresentRequestHandler({
+                getMatchedClaims: (claimTypes) =>
+                  matchPresentableClaims(
+                    claimTypes,
+                    useIdentityData.getState().provableClaims,
+                    useCredentialStore.getState().details
+                  ),
+                askConsent: (matched) => askPresentConsent(peerLabel, matched),
+                requireBiometric: () => requireBiometric('cardRelease'),
+                buildPresentation: (selectedClaimIds) => buildPearPresentation(selectedClaimIds, peerDid),
               })
             );
             const current = connectionsRef.current.get(connId);
