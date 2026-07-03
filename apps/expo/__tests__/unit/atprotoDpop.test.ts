@@ -70,6 +70,13 @@ describe('buildDpopProof', () => {
     expect(payload.jti.length).toBeGreaterThan(0);
   });
 
+  it('strips query and fragment from htu before signing (RFC 9449 §4.2)', () => {
+    const kp = generateDpopKeyPair();
+    const proof = buildDpopProof(kp, { htm: 'POST', htu: 'https://pds.example/xrpc/foo?x=1#f' });
+    const { payload } = verifyJwtEs256<{ htu: string }>(proof, kp.publicJwk);
+    expect(payload.htu).toBe('https://pds.example/xrpc/foo');
+  });
+
   it('omits nonce/ath when not provided', () => {
     const kp = generateDpopKeyPair();
     const proof = buildDpopProof(kp, { htm: 'POST', htu: 'https://pds.example/xrpc/foo' });

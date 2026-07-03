@@ -84,6 +84,38 @@ function isWellFormedDid(value: string): boolean {
   return DID_RE.test(value);
 }
 
+// ── Handle syntax validation — MANDATORY before any resolution ────────────
+//
+// This is a security boundary, not just a format nicety:
+// `resolveHandleViaWellKnown` (below) builds
+// `https://${handle}/.well-known/atproto-did` from the handle verbatim. A
+// handle like `alice.bsky.social@evil.tld` parses as `evil.tld` being the
+// actual fetch host (`alice.bsky.social` is swallowed as URL userinfo) — an
+// attacker who controls evil.tld can stand up a reciprocal did:web document
+// there and hijack the entire OAuth flow. Rejecting anything that isn't
+// unambiguously hostname-shaped BEFORE the first network call (DoH or
+// well-known) closes that hole for both resolution mechanisms.
+//
+// Grammar per https://atproto.com/specs/handle (RFC 1035 domain syntax plus
+// atproto's own constraints):
+//   - overall length <= 253 chars
+//   - dot-separated labels, each 1-63 chars, `[A-Za-z0-9-]` only, no
+//     leading/trailing hyphen
+//   - at least two labels (a handle is always a domain, never a bare label)
+//   - the last label (TLD) must not be all-numeric
+const HANDLE_LABEL_RE = /^[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?$/u;
+const HANDLE_MAX_LENGTH = 253;
+
+/** True iff `handle` is syntactically a valid atproto handle. Does not check DNS/well-known resolvability. */
+export function isValidAtprotoHandle(handle: string): boolean {
+  if (handle.length === 0 || handle.length > HANDLE_MAX_LENGTH) return false;
+  const labels = handle.split('.');
+  if (labels.length < 2) return false;
+  if (!labels.every((label) => HANDLE_LABEL_RE.test(label))) return false;
+  const tld = labels[labels.length - 1];
+  return tld !== undefined && !/^[0-9]+$/u.test(tld);
+}
+
 // ── 1. Handle → DID ───────────────────────────────────────────────────────
 
 async function resolveHandleViaDns(handle: string, fetchImpl: typeof fetch): Promise<string | null> {
@@ -121,6 +153,7 @@ async function resolveHandleViaWellKnown(handle: string, fetchImpl: typeof fetch
 export async function resolveHandleToDid(handle: string, fetchImpl: typeof fetch = fetch): Promise<Result<string, string>> {
   const normalized = handle.trim().toLowerCase();
   if (!normalized) return err('handle is empty');
+  if (!isValidAtprotoHandle(normalized)) return err('invalid handle');
 
   const did = (await resolveHandleViaDns(normalized, fetchImpl)) ?? (await resolveHandleViaWellKnown(normalized, fetchImpl));
   if (!did) {
@@ -182,6 +215,13 @@ export function verifyHandleReciprocation(doc: AtprotoDidDocument, handle: strin
 export function extractPdsEndpoint(doc: AtprotoDidDocument): Result<string, string> {
   const svc = doc.service.find((s) => s.id === '#atproto_pds' || s.type === 'AtprotoPersonalDataServer');
   if (!svc) return err('DID document has no #atproto_pds / AtprotoPersonalDataServer service entry');
+  let protocol: string;
+  try {
+    protocol = new URL(svc.serviceEndpoint).protocol;
+  } catch {
+    return err(`PDS serviceEndpoint is not a valid URL: ${svc.serviceEndpoint}`);
+  }
+  if (protocol !== 'https:') return err(`PDS serviceEndpoint must be https, got non-https endpoint: ${svc.serviceEndpoint}`);
   return ok(svc.serviceEndpoint);
 }
 
@@ -222,7 +262,17 @@ async function fetchAuthServerOrigin(pdsUrl: string, fetchImpl: typeof fetch): P
   if (!isRecord(result.value) || !Array.isArray(result.value['authorization_servers']) || typeof result.value['authorization_servers'][0] !== 'string') {
     return err(`${origin}/.well-known/oauth-protected-resource is missing authorization_servers[0]`);
   }
-  return ok(result.value['authorization_servers'][0]);
+  const authServer = result.value['authorization_servers'][0];
+  let authServerProtocol: string;
+  try {
+    authServerProtocol = new URL(authServer).protocol;
+  } catch {
+    return err(`authorization_servers[0] is not a valid URL: ${authServer}`);
+  }
+  if (authServerProtocol !== 'https:') {
+    return err(`authorization_servers[0] must be https, got non-https endpoint: ${authServer}`);
+  }
+  return ok(authServer);
 }
 
 async function fetchAuthServerMetadata(issuerOrigin: string, fetchImpl: typeof fetch): Promise<Result<AuthServerMetadata, string>> {

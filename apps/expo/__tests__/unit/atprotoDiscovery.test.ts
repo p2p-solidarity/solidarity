@@ -142,6 +142,49 @@ describe('resolveHandleToDid', () => {
   });
 });
 
+// ── resolveHandleToDid — handle syntax validation (finding 1) ─────────────
+//
+// `resolveHandleViaWellKnown` builds `https://${handle}/.well-known/atproto-did`
+// from the handle verbatim. A handle like `alice.bsky.social@evil.tld` makes
+// `evil.tld` the actual fetch host (with `alice.bsky.social` swallowed as URL
+// userinfo) — an attacker controlling evil.tld can hijack the flow. Every
+// syntactically-invalid handle MUST be rejected BEFORE any network call.
+
+describe('resolveHandleToDid — handle syntax validation (host-confusion defense)', () => {
+  const invalidHandles: readonly string[] = [
+    'alice.bsky.social@evil.tld',
+    'a/b.com',
+    'a b.com',
+    'a:80.com',
+    '',
+    '   ',
+    `${'a'.repeat(250)}.com`, // > 253 chars total
+  ];
+
+  for (const bad of invalidHandles) {
+    it(`rejects ${JSON.stringify(bad)} without ever calling fetch`, async () => {
+      let calls = 0;
+      const fetchImpl = ((..._args: unknown[]) => {
+        calls += 1;
+        throw new Error('fetch must not be called for a syntactically invalid handle');
+      }) as unknown as typeof fetch;
+      const r = await resolveHandleToDid(bad, fetchImpl);
+      expect(r.ok).toBe(false);
+      expect(calls).toBe(0);
+    });
+  }
+
+  const validHandles: readonly string[] = ['alice.bsky.social', 'my-domain.com'];
+
+  for (const good of validHandles) {
+    it(`accepts syntactically valid handle ${JSON.stringify(good)}`, async () => {
+      const fetchImpl = makeFetch([{ match: (u) => u.includes('dns-query'), respond: () => dnsAnswer(DID) }]);
+      const r = await resolveHandleToDid(good, fetchImpl);
+      expect(r.ok).toBe(true);
+    });
+  }
+});
+
 // ── resolveDidDocument ───────────────────────────────────────────────────
 
 describe('resolveDidDocument', () => {
@@ -233,6 +276,25 @@ describe('extractPdsEndpoint', () => {
   it('errs when no PDS service entry exists', () => {
     const r = extractPdsEndpoint({ ...DID_DOC, service: [] });
     expect(r.ok).toBe(false);
+  });
+
+  // ── finding 2: https-only on the discovered PDS serviceEndpoint ─────────
+
+  it('rejects a non-https serviceEndpoint', () => {
+    const doc: AtprotoDidDocument = {
+      ...DID_DOC,
+      service: [{ id: '#atproto_pds', type: 'AtprotoPersonalDataServer', serviceEndpoint: 'http://pds.example.social' }],
+    };
+    const r = extractPdsEndpoint(doc);
+    expect(r.ok).toBe(false);
+    if (r.ok) return;
+    expect(r.error).toContain('https');
+  });
+
+  it('accepts an https serviceEndpoint', () => {
+    const r = extractPdsEndpoint(DID_DOC);
+    expect(r.ok).toBe(true);
+    if (r.ok) expect(r.value).toBe(PDS_URL);
   });
 });
 
@@ -373,5 +435,20 @@ describe('discoverAuthServerMetadata', () => {
     expect(r.ok).toBe(false);
     if (r.ok) return;
     expect(r.error).toContain('S256');
+  });
+
+  // ── finding 2: https-only on the discovered authorization_servers[0] ────
+
+  it('rejects a non-https authorization_servers[0]', async () => {
+    const fetchImpl = makeFetch([
+      {
+        match: (u) => u.endsWith('/.well-known/oauth-protected-resource'),
+        respond: () => json({ authorization_servers: ['http://auth.example.social'] }),
+      },
+    ]);
+    const r = await discoverAuthServerMetadata(PDS_URL, fetchImpl);
+    expect(r.ok).toBe(false);
+    if (r.ok) return;
+    expect(r.error).toContain('https');
   });
 });

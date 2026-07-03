@@ -319,6 +319,34 @@ describe('startAtprotoOAuth', () => {
     const r = await startAtprotoOAuth(HANDLE, { fetchImpl, browserLauncher });
     expect(r.ok).toBe(false);
   });
+
+  // ── finding 4: no-throw contract ─────────────────────────────────────────
+
+  it('a storage failure persisting the pending flow returns err(...) rather than rejecting (no-throw contract)', async () => {
+    const throwingStorage: AtprotoSessionStorage = {
+      ...fakeStorage,
+      setPendingFlow: () => {
+        throw new Error('secure store locked mid-write');
+      },
+    };
+    __setAtprotoSessionStorageForTesting(throwingStorage);
+    const fetchImpl = makeFetch(baseHandlers());
+    const r = await startAtprotoOAuth(HANDLE, { fetchImpl, browserLauncher: successBrowserLauncher() });
+    expect(r.ok).toBe(false);
+  });
+
+  it('a storage failure persisting the completed session returns err(...) rather than rejecting (no-throw contract, completeAtprotoOAuthCallback)', async () => {
+    const throwingStorage: AtprotoSessionStorage = {
+      ...fakeStorage,
+      setSession: () => {
+        throw new Error('secure store locked mid-write');
+      },
+    };
+    __setAtprotoSessionStorageForTesting(throwingStorage);
+    const fetchImpl = makeFetch(baseHandlers());
+    const r = await startAtprotoOAuth(HANDLE, { fetchImpl, browserLauncher: successBrowserLauncher() });
+    expect(r.ok).toBe(false);
+  });
 });
 
 // ── getAtprotoSession ────────────────────────────────────────────────────
@@ -387,6 +415,21 @@ describe('refreshAtprotoSession', () => {
     expect(r.ok).toBe(false);
     if (r.ok) return;
     expect(r.error).toContain('sub');
+  });
+
+  it('a storage failure returns err(...) rather than rejecting (no-throw contract)', async () => {
+    const fetchImpl = makeFetch(baseHandlers());
+    await startAtprotoOAuth(HANDLE, { fetchImpl, browserLauncher: successBrowserLauncher() });
+
+    const throwingStorage: AtprotoSessionStorage = {
+      ...fakeStorage,
+      getSession: () => {
+        throw new Error('secure store locked mid-read');
+      },
+    };
+    __setAtprotoSessionStorageForTesting(throwingStorage);
+    const r = await refreshAtprotoSession({ fetchImpl: makeFetch([]) });
+    expect(r.ok).toBe(false);
   });
 });
 

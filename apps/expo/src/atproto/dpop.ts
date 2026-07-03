@@ -67,7 +67,7 @@ export function generateDpopKeyPair(): DpopKeyPair {
 export interface DpopProofInput {
   /** HTTP method, e.g. 'POST'. Case doesn't matter to us; upper-cased before signing. */
   readonly htm: string;
-  /** Target URL with no query string or fragment (RFC 9449 §4.2). */
+  /** Target URL. Query string and fragment are stripped before signing regardless (RFC 9449 §4.2). */
   readonly htu: string;
   /** Most recent `DPoP-Nonce` value seen from this server, if any. */
   readonly nonce?: string;
@@ -78,6 +78,20 @@ export interface DpopProofInput {
 /** Minimal RFC 9449 §4.2 public JWK: kty/crv/x/y only — no `alg`, no `d`. */
 function minimalPublicJwk(jwk: PublicKeyJWK): { kty: 'EC'; crv: 'P-256'; x: string; y: string } {
   return { kty: jwk.kty, crv: jwk.crv, x: jwk.x, y: jwk.y };
+}
+
+/** RFC 9449 §4.2: `htu` MUST NOT include the query or fragment parts. Strips them before signing. */
+function normalizeHtu(htu: string): string {
+  try {
+    const u = new URL(htu);
+    u.search = '';
+    u.hash = '';
+    return u.href;
+  } catch {
+    // Not a parseable absolute URL — pass through verbatim rather than
+    // throwing; a malformed `htu` will simply fail server-side verification.
+    return htu;
+  }
 }
 
 /**
@@ -94,7 +108,7 @@ export function buildDpopProof(keyPair: DpopKeyPair, input: DpopProofInput): str
   const payload: Record<string, unknown> = {
     jti: randomChallengeNonce(),
     htm: input.htm.toUpperCase(),
-    htu: input.htu,
+    htu: normalizeHtu(input.htu),
     iat: Math.floor(Date.now() / 1000),
   };
   if (input.nonce) payload['nonce'] = input.nonce;

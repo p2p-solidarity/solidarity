@@ -79,6 +79,11 @@ function isRecord(v: unknown): v is Record<string, unknown> {
   return typeof v === 'object' && v !== null && !Array.isArray(v);
 }
 
+/** Never echoes secret material — same discipline as `nostr/userKey.ts`'s equivalent helper. */
+function storageErrorMessage(e: unknown): string {
+  return e instanceof Error ? e.message : String(e);
+}
+
 // ── Browser launcher — the one non-fetch, non-storage IO seam ─────────────
 
 export interface BrowserAuthResult {
@@ -166,6 +171,9 @@ async function postWithDpop(
     }
     return ok({ json, dpopNonce: freshNonce });
   }
+  // unreachable: every iteration above returns directly (success, the
+  // attempt===0 nonce-retry `continue`, or the attempt===1 error return) —
+  // kept only so TS sees an explicit return on this control-flow path.
   return err(`DPoP nonce retry exhausted for ${url}`);
 }
 
@@ -183,164 +191,172 @@ export interface StartAtprotoOAuthOpts {
  * sign-in for `handle`. Never throws — every failure path is `err(...)`.
  */
 export async function startAtprotoOAuth(handle: string, opts?: StartAtprotoOAuthOpts): Promise<Result<AtprotoSession, string>> {
-  const fetchImpl = opts?.fetchImpl ?? fetch;
-  const browserLauncher = opts?.browserLauncher ?? defaultBrowserLauncher;
-  const storage = getAtprotoSessionStorage();
+  try {
+    const fetchImpl = opts?.fetchImpl ?? fetch;
+    const browserLauncher = opts?.browserLauncher ?? defaultBrowserLauncher;
+    const storage = getAtprotoSessionStorage();
 
-  const identityResult = await resolveAtprotoIdentity(handle, fetchImpl);
-  if (!identityResult.ok) return identityResult;
-  const identity = identityResult.value;
+    const identityResult = await resolveAtprotoIdentity(handle, fetchImpl);
+    if (!identityResult.ok) return identityResult;
+    const identity = identityResult.value;
 
-  const asMetadataResult = await discoverAuthServerMetadata(identity.pdsUrl, fetchImpl);
-  if (!asMetadataResult.ok) return asMetadataResult;
-  const asMetadata = asMetadataResult.value;
+    const asMetadataResult = await discoverAuthServerMetadata(identity.pdsUrl, fetchImpl);
+    if (!asMetadataResult.ok) return asMetadataResult;
+    const asMetadata = asMetadataResult.value;
 
-  const pkce = generatePkce();
-  const state = randomChallengeNonce();
-  const dpopKeyPair = generateDpopKeyPair();
+    const pkce = generatePkce();
+    const state = randomChallengeNonce();
+    const dpopKeyPair = generateDpopKeyPair();
 
-  const parBody = new URLSearchParams();
-  parBody.set('response_type', 'code');
-  parBody.set('client_id', ATPROTO_CLIENT_ID);
-  parBody.set('redirect_uri', ATPROTO_REDIRECT_URI);
-  parBody.set('scope', ATPROTO_SCOPE);
-  parBody.set('code_challenge', pkce.codeChallenge);
-  parBody.set('code_challenge_method', pkce.codeChallengeMethod);
-  parBody.set('state', state);
-  parBody.set('login_hint', identity.handle);
+    const parBody = new URLSearchParams();
+    parBody.set('response_type', 'code');
+    parBody.set('client_id', ATPROTO_CLIENT_ID);
+    parBody.set('redirect_uri', ATPROTO_REDIRECT_URI);
+    parBody.set('scope', ATPROTO_SCOPE);
+    parBody.set('code_challenge', pkce.codeChallenge);
+    parBody.set('code_challenge_method', pkce.codeChallengeMethod);
+    parBody.set('state', state);
+    parBody.set('login_hint', identity.handle);
 
-  const parResult = await postWithDpop(asMetadata.pushedAuthorizationRequestEndpoint, parBody, dpopKeyPair, fetchImpl);
-  if (!parResult.ok) return err(`pushed authorization request failed: ${parResult.error}`);
-  if (!isRecord(parResult.value.json) || typeof parResult.value.json['request_uri'] !== 'string') {
-    return err('pushed authorization response is missing request_uri');
+    const parResult = await postWithDpop(asMetadata.pushedAuthorizationRequestEndpoint, parBody, dpopKeyPair, fetchImpl);
+    if (!parResult.ok) return err(`pushed authorization request failed: ${parResult.error}`);
+    if (!isRecord(parResult.value.json) || typeof parResult.value.json['request_uri'] !== 'string') {
+      return err('pushed authorization response is missing request_uri');
+    }
+    const requestUri = parResult.value.json['request_uri'];
+
+    const pending: PendingAtprotoFlow = {
+      state,
+      codeVerifier: pkce.codeVerifier,
+      handle: identity.handle,
+      expectedDid: identity.did,
+      pdsUrl: identity.pdsUrl,
+      authServerIssuer: asMetadata.issuer,
+      authorizationEndpoint: asMetadata.authorizationEndpoint,
+      tokenEndpoint: asMetadata.tokenEndpoint,
+      pushedAuthorizationRequestEndpoint: asMetadata.pushedAuthorizationRequestEndpoint,
+      redirectUri: ATPROTO_REDIRECT_URI,
+      dpopPrivateKeyHex: bytesToHex(dpopKeyPair.privateKey),
+      dpopPublicJwk: dpopKeyPair.publicJwk,
+      dpopNonce: parResult.value.dpopNonce,
+    };
+    await storage.setPendingFlow(pending);
+
+    const authorizeUrl = `${asMetadata.authorizationEndpoint}?${new URLSearchParams({
+      client_id: ATPROTO_CLIENT_ID,
+      request_uri: requestUri,
+    }).toString()}`;
+
+    const browserResult = await browserLauncher(authorizeUrl, ATPROTO_REDIRECT_URI);
+    if (browserResult.type !== 'success' || !browserResult.url) {
+      await storage.deletePendingFlow();
+      return err(
+        browserResult.type === 'cancel'
+          ? 'user cancelled the atproto sign-in'
+          : 'atproto sign-in browser session ended without a result'
+      );
+    }
+
+    return await completeAtprotoOAuthCallback(browserResult.url, fetchImpl);
+  } catch (e) {
+    return err(storageErrorMessage(e));
   }
-  const requestUri = parResult.value.json['request_uri'];
-
-  const pending: PendingAtprotoFlow = {
-    state,
-    codeVerifier: pkce.codeVerifier,
-    handle: identity.handle,
-    expectedDid: identity.did,
-    pdsUrl: identity.pdsUrl,
-    authServerIssuer: asMetadata.issuer,
-    authorizationEndpoint: asMetadata.authorizationEndpoint,
-    tokenEndpoint: asMetadata.tokenEndpoint,
-    pushedAuthorizationRequestEndpoint: asMetadata.pushedAuthorizationRequestEndpoint,
-    redirectUri: ATPROTO_REDIRECT_URI,
-    dpopPrivateKeyHex: bytesToHex(dpopKeyPair.privateKey),
-    dpopPublicJwk: dpopKeyPair.publicJwk,
-    dpopNonce: parResult.value.dpopNonce,
-  };
-  await storage.setPendingFlow(pending);
-
-  const authorizeUrl = `${asMetadata.authorizationEndpoint}?${new URLSearchParams({
-    client_id: ATPROTO_CLIENT_ID,
-    request_uri: requestUri,
-  }).toString()}`;
-
-  const browserResult = await browserLauncher(authorizeUrl, ATPROTO_REDIRECT_URI);
-  if (browserResult.type !== 'success' || !browserResult.url) {
-    await storage.deletePendingFlow();
-    return err(
-      browserResult.type === 'cancel'
-        ? 'user cancelled the atproto sign-in'
-        : 'atproto sign-in browser session ended without a result'
-    );
-  }
-
-  return completeAtprotoOAuthCallback(browserResult.url, fetchImpl);
 }
 
 // ── Step 7-9: parse the redirect, exchange the code, persist the session ──
 
 async function completeAtprotoOAuthCallback(redirectUrl: string, fetchImpl: typeof fetch): Promise<Result<AtprotoSession, string>> {
-  const storage = getAtprotoSessionStorage();
-  const pending = await storage.getPendingFlow();
-  if (!pending) return err('no pending atproto authorization flow — call startAtprotoOAuth first');
-
-  let redirect: URL;
   try {
-    redirect = new URL(redirectUrl);
-  } catch {
+    const storage = getAtprotoSessionStorage();
+    const pending = await storage.getPendingFlow();
+    if (!pending) return err('no pending atproto authorization flow — call startAtprotoOAuth first');
+
+    let redirect: URL;
+    try {
+      redirect = new URL(redirectUrl);
+    } catch {
+      await storage.deletePendingFlow();
+      return err('redirect URL is malformed');
+    }
+    const params = redirect.searchParams;
+
+    const oauthError = params.get('error');
+    if (oauthError) {
+      await storage.deletePendingFlow();
+      const description = params.get('error_description');
+      return err(`authorization server rejected the request: ${oauthError}${description ? ` — ${description}` : ''}`);
+    }
+
+    const returnedState = params.get('state');
+    if (returnedState !== pending.state) {
+      await storage.deletePendingFlow();
+      return err('state mismatch on OAuth redirect — possible CSRF or a stale callback');
+    }
+
+    // Mandatory per spec: "critical (mandatory) to confirm... issuer field matches".
+    const issuer = params.get('iss');
+    if (issuer !== pending.authServerIssuer) {
+      await storage.deletePendingFlow();
+      return err(
+        `redirect iss (${String(issuer)}) does not match the Authorization Server bound to this flow (${pending.authServerIssuer}) — refusing to trust the response`
+      );
+    }
+
+    const code = params.get('code');
+    if (!code) {
+      await storage.deletePendingFlow();
+      return err('OAuth redirect is missing the authorization code');
+    }
+
+    const dpopKeyPair: DpopKeyPair = { privateKey: hexToBytes(pending.dpopPrivateKeyHex), publicJwk: pending.dpopPublicJwk };
+
+    const tokenBody = new URLSearchParams();
+    tokenBody.set('grant_type', 'authorization_code');
+    tokenBody.set('code', code);
+    tokenBody.set('redirect_uri', pending.redirectUri);
+    tokenBody.set('client_id', ATPROTO_CLIENT_ID);
+    tokenBody.set('code_verifier', pending.codeVerifier);
+
+    const tokenResult = await postWithDpop(pending.tokenEndpoint, tokenBody, dpopKeyPair, fetchImpl, pending.dpopNonce);
+    if (!tokenResult.ok) {
+      await storage.deletePendingFlow();
+      return err(`token exchange failed: ${tokenResult.error}`);
+    }
+
+    const parsed = parseAtprotoTokenResponse(tokenResult.value.json);
+    if (!parsed.ok) {
+      await storage.deletePendingFlow();
+      return err(`token exchange: ${parsed.error}`);
+    }
+
+    // Mandatory per spec: "critical for the client to verify that this DID
+    // matches the expected DID bound to the session earlier".
+    if (parsed.value.sub !== pending.expectedDid) {
+      await storage.deletePendingFlow();
+      return err(
+        `token response sub (${parsed.value.sub}) does not match the identity resolved before sign-in (${pending.expectedDid}) — refusing to bind a mismatched account`
+      );
+    }
+
+    const session: PersistedAtprotoSession = {
+      did: pending.expectedDid,
+      handle: pending.handle,
+      pdsUrl: pending.pdsUrl,
+      authServerIssuer: pending.authServerIssuer,
+      tokenEndpoint: pending.tokenEndpoint,
+      accessToken: parsed.value.accessToken,
+      accessTokenExpiresAtMs: parsed.value.expiresAtMs,
+      scope: parsed.value.scope,
+      refreshToken: parsed.value.refreshToken,
+      dpopPrivateKeyHex: pending.dpopPrivateKeyHex,
+      dpopPublicJwk: pending.dpopPublicJwk,
+    };
+    await storage.setSession(session);
     await storage.deletePendingFlow();
-    return err('redirect URL is malformed');
+    return ok(toPublicSession(session));
+  } catch (e) {
+    return err(storageErrorMessage(e));
   }
-  const params = redirect.searchParams;
-
-  const oauthError = params.get('error');
-  if (oauthError) {
-    await storage.deletePendingFlow();
-    const description = params.get('error_description');
-    return err(`authorization server rejected the request: ${oauthError}${description ? ` — ${description}` : ''}`);
-  }
-
-  const returnedState = params.get('state');
-  if (returnedState !== pending.state) {
-    await storage.deletePendingFlow();
-    return err('state mismatch on OAuth redirect — possible CSRF or a stale callback');
-  }
-
-  // Mandatory per spec: "critical (mandatory) to confirm... issuer field matches".
-  const issuer = params.get('iss');
-  if (issuer !== pending.authServerIssuer) {
-    await storage.deletePendingFlow();
-    return err(
-      `redirect iss (${String(issuer)}) does not match the Authorization Server bound to this flow (${pending.authServerIssuer}) — refusing to trust the response`
-    );
-  }
-
-  const code = params.get('code');
-  if (!code) {
-    await storage.deletePendingFlow();
-    return err('OAuth redirect is missing the authorization code');
-  }
-
-  const dpopKeyPair: DpopKeyPair = { privateKey: hexToBytes(pending.dpopPrivateKeyHex), publicJwk: pending.dpopPublicJwk };
-
-  const tokenBody = new URLSearchParams();
-  tokenBody.set('grant_type', 'authorization_code');
-  tokenBody.set('code', code);
-  tokenBody.set('redirect_uri', pending.redirectUri);
-  tokenBody.set('client_id', ATPROTO_CLIENT_ID);
-  tokenBody.set('code_verifier', pending.codeVerifier);
-
-  const tokenResult = await postWithDpop(pending.tokenEndpoint, tokenBody, dpopKeyPair, fetchImpl, pending.dpopNonce);
-  if (!tokenResult.ok) {
-    await storage.deletePendingFlow();
-    return err(`token exchange failed: ${tokenResult.error}`);
-  }
-
-  const parsed = parseAtprotoTokenResponse(tokenResult.value.json);
-  if (!parsed.ok) {
-    await storage.deletePendingFlow();
-    return err(`token exchange: ${parsed.error}`);
-  }
-
-  // Mandatory per spec: "critical for the client to verify that this DID
-  // matches the expected DID bound to the session earlier".
-  if (parsed.value.sub !== pending.expectedDid) {
-    await storage.deletePendingFlow();
-    return err(
-      `token response sub (${parsed.value.sub}) does not match the identity resolved before sign-in (${pending.expectedDid}) — refusing to bind a mismatched account`
-    );
-  }
-
-  const session: PersistedAtprotoSession = {
-    did: pending.expectedDid,
-    handle: pending.handle,
-    pdsUrl: pending.pdsUrl,
-    authServerIssuer: pending.authServerIssuer,
-    tokenEndpoint: pending.tokenEndpoint,
-    accessToken: parsed.value.accessToken,
-    accessTokenExpiresAtMs: parsed.value.expiresAtMs,
-    scope: parsed.value.scope,
-    refreshToken: parsed.value.refreshToken,
-    dpopPrivateKeyHex: pending.dpopPrivateKeyHex,
-    dpopPublicJwk: pending.dpopPublicJwk,
-  };
-  await storage.setSession(session);
-  await storage.deletePendingFlow();
-  return ok(toPublicSession(session));
 }
 
 // ── Read / refresh / sign-out ───────────────────────────────────────────
@@ -366,37 +382,41 @@ export interface RefreshAtprotoSessionOpts {
  * single-use — the stored one is atomically replaced on success.
  */
 export async function refreshAtprotoSession(opts?: RefreshAtprotoSessionOpts): Promise<Result<AtprotoSession, string>> {
-  const fetchImpl = opts?.fetchImpl ?? fetch;
-  const storage = getAtprotoSessionStorage();
-  const stored = await storage.getSession();
-  if (!stored) return err('not signed in to atproto — call startAtprotoOAuth first');
+  try {
+    const fetchImpl = opts?.fetchImpl ?? fetch;
+    const storage = getAtprotoSessionStorage();
+    const stored = await storage.getSession();
+    if (!stored) return err('not signed in to atproto — call startAtprotoOAuth first');
 
-  const dpopKeyPair: DpopKeyPair = { privateKey: hexToBytes(stored.dpopPrivateKeyHex), publicJwk: stored.dpopPublicJwk };
+    const dpopKeyPair: DpopKeyPair = { privateKey: hexToBytes(stored.dpopPrivateKeyHex), publicJwk: stored.dpopPublicJwk };
 
-  const body = new URLSearchParams();
-  body.set('grant_type', 'refresh_token');
-  body.set('refresh_token', stored.refreshToken);
-  body.set('client_id', ATPROTO_CLIENT_ID);
+    const body = new URLSearchParams();
+    body.set('grant_type', 'refresh_token');
+    body.set('refresh_token', stored.refreshToken);
+    body.set('client_id', ATPROTO_CLIENT_ID);
 
-  const tokenResult = await postWithDpop(stored.tokenEndpoint, body, dpopKeyPair, fetchImpl);
-  if (!tokenResult.ok) return err(`token refresh failed: ${tokenResult.error}`);
+    const tokenResult = await postWithDpop(stored.tokenEndpoint, body, dpopKeyPair, fetchImpl);
+    if (!tokenResult.ok) return err(`token refresh failed: ${tokenResult.error}`);
 
-  const parsed = parseAtprotoTokenResponse(tokenResult.value.json);
-  if (!parsed.ok) return err(`token refresh: ${parsed.error}`);
+    const parsed = parseAtprotoTokenResponse(tokenResult.value.json);
+    if (!parsed.ok) return err(`token refresh: ${parsed.error}`);
 
-  if (parsed.value.sub !== stored.did) {
-    return err(`refresh response sub (${parsed.value.sub}) does not match the signed-in account (${stored.did})`);
+    if (parsed.value.sub !== stored.did) {
+      return err(`refresh response sub (${parsed.value.sub}) does not match the signed-in account (${stored.did})`);
+    }
+
+    const updated: PersistedAtprotoSession = {
+      ...stored,
+      accessToken: parsed.value.accessToken,
+      accessTokenExpiresAtMs: parsed.value.expiresAtMs,
+      scope: parsed.value.scope,
+      refreshToken: parsed.value.refreshToken,
+    };
+    await storage.setSession(updated);
+    return ok(toPublicSession(updated));
+  } catch (e) {
+    return err(storageErrorMessage(e));
   }
-
-  const updated: PersistedAtprotoSession = {
-    ...stored,
-    accessToken: parsed.value.accessToken,
-    accessTokenExpiresAtMs: parsed.value.expiresAtMs,
-    scope: parsed.value.scope,
-    refreshToken: parsed.value.refreshToken,
-  };
-  await storage.setSession(updated);
-  return ok(toPublicSession(updated));
 }
 
 /**
