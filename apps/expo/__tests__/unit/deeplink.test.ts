@@ -78,4 +78,59 @@ describe('parseDeepLink', () => {
     const r = parseDeepLink('https://solidarity.gg/c/f47ac10b-58cc-4372-a567-0e02b2c3d479#ignored');
     expect(r.kind).toBe('card');
   });
+
+  // Task A5.4 — `solidarity://pear/<did>` into the Pear requester flow. A
+  // real did:key so `isValidPearDid`'s `resolveDidKey` round-trip actually
+  // succeeds (base58 + P-256 multicodec check), not just a plausible-looking
+  // string.
+  const REAL_DID = 'did:key:zDnaeuchQNqLi4x1P85fs3QsiMPahCH2snwHU4SaV6MQnan2Q';
+
+  it('parses a solidarity://pear/<did> link', () => {
+    const r = parseDeepLink(`solidarity://pear/${REAL_DID}`);
+    expect(r.kind).toBe('pear');
+    if (r.kind === 'pear') {
+      expect(r.did).toBe(REAL_DID);
+    }
+  });
+
+  it('parses a https://solidarity.gg/pear/<did> universal link', () => {
+    const r = parseDeepLink(`https://solidarity.gg/pear/${REAL_DID}`);
+    expect(r.kind).toBe('pear');
+    if (r.kind === 'pear') {
+      expect(r.did).toBe(REAL_DID);
+    }
+  });
+
+  it('rejects a pear link with no did, never throwing', () => {
+    expect(() => parseDeepLink('solidarity://pear/')).not.toThrow();
+    expect(parseDeepLink('solidarity://pear/').kind).toBe('unknown');
+    expect(parseDeepLink('solidarity://pear').kind).toBe('unknown');
+  });
+
+  it('rejects a pear link with a malformed did, never throwing', () => {
+    expect(() => parseDeepLink('solidarity://pear/not-a-did')).not.toThrow();
+    expect(parseDeepLink('solidarity://pear/not-a-did').kind).toBe('unknown');
+    expect(parseDeepLink('solidarity://pear/did:key:zNotBase58!!!').kind).toBe('unknown');
+  });
+
+  it('rejects a pear link with path traversal / extra segments, never throwing', () => {
+    expect(parseDeepLink(`solidarity://pear/${REAL_DID}/extra`).kind).toBe('unknown');
+    expect(parseDeepLink('solidarity://pear/../../etc/passwd').kind).toBe('unknown');
+    expect(() => parseDeepLink(`solidarity://pear/${REAL_DID}/../../etc`)).not.toThrow();
+  });
+
+  it('rejects hostile injection-shaped input in the pear path, never throwing', () => {
+    expect(() =>
+      parseDeepLink('solidarity://pear/%3Cscript%3Ealert(1)%3C%2Fscript%3E')
+    ).not.toThrow();
+    expect(parseDeepLink('solidarity://pear/%3Cscript%3Ealert(1)%3C%2Fscript%3E').kind).toBe(
+      'unknown'
+    );
+  });
+
+  it('rejects a https pear link with a malformed did or extra segments', () => {
+    expect(parseDeepLink('https://solidarity.gg/pear/not-a-did').kind).toBe('unknown');
+    expect(parseDeepLink(`https://solidarity.gg/pear/${REAL_DID}/extra`).kind).toBe('unknown');
+    expect(parseDeepLink('https://solidarity.gg/pear/').kind).toBe('unknown');
+  });
 });

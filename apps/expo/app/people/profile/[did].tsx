@@ -9,9 +9,19 @@
  *
  * Reads the snapshot store directly by `did` route param — no PII carried
  * in the route itself, matching CLAUDE.md rule 10's "route params carry
- * chrome" only where it doesn't leak sensitive fields. A missing snapshot
- * (bad/stale deep link) renders an honest not-found state rather than a
- * blank screen.
+ * chrome" only where it doesn't leak sensitive fields.
+ *
+ * Task A5.4 (US-20) extended this screen to also be the `solidarity://
+ * pear/<did>` deep-link landing target: a `did` with no saved snapshot yet
+ * renders `PearConnectSection`'s honest "connect privately" flow instead of
+ * a dead-end not-found state — see that component's doc for why it's safe
+ * to offer a Pear dial for ANY structurally valid did:key reaching this
+ * screen (deep link or otherwise), not just ones that arrived via the deep
+ * link specifically. A `did` that isn't even a well-formed did:key
+ * (`isValidPearDid`, `@/deeplink/parser`) still falls back to the honest
+ * not-found state — the deep-link parser already rejects those before
+ * routing here, so this is only a fallback for a stale/mistyped snapshot
+ * route.
  */
 import { router, useLocalSearchParams } from 'expo-router';
 import type { ReactNode } from 'react';
@@ -21,9 +31,11 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { PressableScale } from '@/components/common/PressableScale';
 import { SfIcon } from '@/components/icons/SfIcon';
 import { CardExchangeSection } from '@/components/people/CardExchangeSection';
+import { PearConnectSection } from '@/components/people/PearConnectSection';
 import { VerifiedProfileView } from '@/components/scan/VerifiedProfileView';
 import { ThemedText } from '@/components/themed';
 import { Colors } from '@/constants/Colors';
+import { isValidPearDid } from '@/deeplink/parser';
 import { useTranslation } from '@/i18n';
 import { useProfileSnapshot } from '@/people/profileSnapshots';
 
@@ -50,6 +62,10 @@ export default function VerifiedProfileDetailScreen(): ReactNode {
         <ScrollView contentContainerStyle={{ padding: 16, gap: 24 }}>
           <VerifiedProfileView record={snapshot.record} />
           <CardExchangeSection did={snapshot.did} verifiedDisplayName={snapshot.record.displayName} />
+        </ScrollView>
+      ) : did && isValidPearDid(did) ? (
+        <ScrollView contentContainerStyle={{ padding: 16, gap: 24 }}>
+          <PearConnectSection did={did} />
         </ScrollView>
       ) : (
         <View className="flex-1 items-center justify-center gap-2 px-8">

@@ -963,5 +963,9 @@
   "pearExchange.presentConsent.title": "{{name}} requests proof of: {{claims}}",
   "pearExchange.presentConsent.message": "Choose exactly what to disclose. This is gated by Face ID — nothing is sent until you approve.",
   "pearExchange.presentConsent.share": "Share selected",
-  "pearExchange.presentConsent.decline": "Decline"
+  "pearExchange.presentConsent.decline": "Decline",
+  "pearConnect.title": "Connect privately",
+  "pearConnect.subtitle": "Attempting to connect to {{did}}. This is an unverified link target — connecting proves they control this identity over a live encrypted channel before anything is shared.",
+  "pearConnect.button": "Connect privately",
+  "pearConnect.retry": "Try again"
 }

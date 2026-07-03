@@ -963,5 +963,9 @@
   "pearExchange.presentConsent.title": "{{name}} 請求以下證明:{{claims}}",
   "pearExchange.presentConsent.message": "選擇要揭露的內容。這一步會經過 Face ID 把關——你核准前不會送出任何內容。",
   "pearExchange.presentConsent.share": "分享所選項目",
-  "pearExchange.presentConsent.decline": "拒絕"
+  "pearExchange.presentConsent.decline": "拒絕",
+  "pearConnect.title": "私下連線",
+  "pearConnect.subtitle": "正在嘗試連線至 {{did}}。這是尚未驗證的連結對象——連線成功即可證明對方確實掌控此身分,且透過即時加密通道進行,任何內容送出前都不會外洩。",
+  "pearConnect.button": "私下連線",
+  "pearConnect.retry": "再試一次"
 }

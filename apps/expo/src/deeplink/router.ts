@@ -35,6 +35,15 @@ export function handleDeepLink(raw: string): DeepLinkRoute {
       // which screen is currently focused.
       presentVerifiedPageResult(verifyFragment(route.fragment));
       break;
+    case 'pear':
+      // Task A5.4 (US-20) — reuse the Verified Page detail route: it already
+      // renders the full card-exchange surface for a did with a saved
+      // `VerifiedSnapshot`, and now also renders `PearConnectSection`'s
+      // honest "connect privately" landing for a did with none (see that
+      // screen's doc). Same route either way — the screen itself decides
+      // which to show based on whether it already knows this did.
+      router.push({ pathname: '/people/profile/[did]', params: { did: route.did } });
+      break;
     case 'unknown':
       break;
   }
