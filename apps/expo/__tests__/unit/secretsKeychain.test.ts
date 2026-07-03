@@ -233,13 +233,18 @@ describe('hardware-backed root secret (Secure Enclave / StrongBox)', () => {
     expect(a.bytes.length).toBe(32);
 
     // The wrapping key is provisioned ACL-FREE on the v2 alias: the JS
-    // 'exchange' gate is the canonical prompt (now ALWAYS a fresh live
-    // prompt, not grace-shared — moved into biometric.ts's ALWAYS_PROMPT by
-    // the Pear connection-scoping security fix, task A5.2 round 1, since
-    // the SAME reason also gates handing a credential to a remote peer),
-    // the SE key only provides non-extractability. A `.userPresence` ACL
-    // here stacked a second (and third, via the envelope item ACL) OS
-    // prompt on every vault unlock.
+    // 'exchange' gate (biometric.ts) is the canonical prompt — graced like
+    // sign/export/present/passportSave, so repeat vault unlocks within the
+    // 5-minute window don't re-prompt — the SE key only provides
+    // non-extractability. A `.userPresence` ACL here stacked a second (and
+    // third, via the envelope item ACL) OS prompt on every vault unlock.
+    // (task A5.2 round 1 briefly moved 'exchange' into biometric.ts's
+    // ALWAYS_PROMPT to harden the unrelated Pear card-release path, which
+    // regressed this grace by accident since both features shared the
+    // 'exchange' reason string; round 2 introduced a dedicated
+    // 'cardRelease' reason for Pear and restored 'exchange' to the graced
+    // family, so this comment's original "canonical prompt" claim holds
+    // again.)
     expect(nitro.ensureCalls.length).toBe(1);
     expect(nitro.ensureCalls[0]?.alias).toBe(WRAP_ALIAS_V2);
     expect(nitro.ensureCalls[0]?.requireBiometric).toBe(false);

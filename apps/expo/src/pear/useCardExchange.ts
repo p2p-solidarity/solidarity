@@ -501,7 +501,7 @@ export function useReachableMode(peerDid: string, peerLabel: string): ReachableM
             session.onCardRequest(
               makeCardRequestHandler({
                 askConsent: () => askCardConsent(peerLabel),
-                requireBiometric: () => requireBiometric('exchange'),
+                requireBiometric: () => requireBiometric('cardRelease'),
                 getCardJws: () => useProfileStore.getState().jws,
               })
             );
