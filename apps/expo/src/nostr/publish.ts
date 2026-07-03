@@ -202,12 +202,33 @@ export function parseKind0Content(raw: string): Record<string, unknown> {
 }
 
 /**
+ * Outcome of a kind-0 fetch across a relay set.
+ *
+ * `confirmed` distinguishes the two very different meanings of
+ * `event === null`, which callers MUST NOT conflate:
+ *   - `confirmed: true`  → at least one relay answered authoritatively
+ *     (EOSE) with no matching event: the pubkey genuinely has no kind-0.
+ *   - `confirmed: false` → every relay errored or timed out before EOSE
+ *     and none delivered an event: we are BLIND. A writer must not treat
+ *     this as "no existing content" — doing so overwrites (wipes) whatever
+ *     kind-0 the user actually has. See `updateKind0AlsoKnownAs`.
+ * (The badge verifier only needs `event` today; `confirmed` is also the
+ * hook to later separate `stale` from `declared` — 04-plan A4.3 honesty
+ * table — but that's not wired here yet.)
+ * ponytail: `confirmed` exists solely to gate the clobber-guard below.
+ */
+export interface Kind0FetchResult {
+  readonly event: NostrEvent | null;
+  readonly confirmed: boolean;
+}
+
+/**
  * Query every relay in `relays` for the user's existing kind-0 event
  * (`authors: [pubkeyHex]`) and return the newest one (by `created_at`)
- * seen across all of them, or `null` if none replied before EOSE/error/
- * timeout. Each relay gets its own bounded wait — one slow/dead relay
- * never blocks the others (`Promise.all` over independent per-relay
- * promises, each with its own timeout fallback).
+ * seen across all of them — plus whether any relay gave a definitive EOSE
+ * (see `Kind0FetchResult`). Each relay gets its own bounded wait — one
+ * slow/dead relay never blocks the others (`Promise.all` over independent
+ * per-relay promises, each with its own timeout fallback).
  *
  * Exported so `fetchKind0.ts` (task A4.4's badge-verifier IO adapter) reuses
  * this exact per-relay racing logic instead of re-implementing it — the
@@ -219,21 +240,22 @@ export async function fetchLatestKind0(
   pubkeyHex: string,
   subscribeFn: SubscribeEventsFn,
   timeoutMs: number
-): Promise<NostrEvent | null> {
-  if (relays.length === 0) return null;
+): Promise<Kind0FetchResult> {
+  if (relays.length === 0) return { event: null, confirmed: false };
   const filter: NostrFilter = { kinds: [KIND_METADATA], authors: [pubkeyHex], limit: 1 };
 
   const perRelay = relays.map(
     (relay) =>
-      new Promise<NostrEvent | null>((resolve) => {
+      new Promise<Kind0FetchResult>((resolve) => {
         let latest: NostrEvent | null = null;
+        let sawEose = false;
         let settled = false;
         // Mutable box (rather than a reassigned `let`) so `finish` can
         // close the subscription even if `subscribeFn` invokes one of its
         // callbacks synchronously, before its own return value would
         // otherwise have been assigned.
         const box: { handle?: SubscriptionHandle } = {};
-        const finish = (v: NostrEvent | null): void => {
+        const finish = (): void => {
           if (settled) return;
           settled = true;
           try {
@@ -241,11 +263,9 @@ export async function fetchLatestKind0(
           } catch {
             // already closed
           }
-          resolve(v);
+          resolve({ event: latest, confirmed: sawEose });
         };
-        const timer = setTimeout(() => {
-          finish(latest);
-        }, timeoutMs);
+        const timer = setTimeout(finish, timeoutMs); // timed out → not confirmed
         box.handle = subscribeFn(
           relay,
           filter,
@@ -253,12 +273,15 @@ export async function fetchLatestKind0(
             if (!latest || event.created_at > latest.created_at) latest = event;
           },
           () => {
+            // EOSE — this relay authoritatively delivered its whole result set.
+            sawEose = true;
             clearTimeout(timer);
-            finish(latest);
+            finish();
           },
           () => {
+            // error/notice/close before EOSE — this relay's answer is unknown.
             clearTimeout(timer);
-            finish(latest);
+            finish();
           }
         );
       })
@@ -266,10 +289,12 @@ export async function fetchLatestKind0(
 
   const perRelayResults = await Promise.all(perRelay);
   let best: NostrEvent | null = null;
+  let confirmed = false;
   for (const candidate of perRelayResults) {
-    if (candidate && (!best || candidate.created_at > best.created_at)) best = candidate;
+    if (candidate.confirmed) confirmed = true;
+    if (candidate.event && (!best || candidate.event.created_at > best.created_at)) best = candidate.event;
   }
-  return best;
+  return { event: best, confirmed };
 }
 
 export interface UpdateKind0Options {
@@ -310,7 +335,17 @@ export async function updateKind0AlsoKnownAs(opts: UpdateKind0Options): Promise<
     subscribeFn,
     opts.fetchTimeoutMs ?? DEFAULT_FETCH_TIMEOUT_MS
   );
-  const baseContent = existing ? parseKind0Content(existing.content) : {};
+  // Blind read: no event AND no relay reached EOSE (all errored/timed out).
+  // We don't know whether a kind-0 with name/about/picture already exists, so
+  // publishing a fresh {alsoKnownAs:[did]} would overwrite it. Abort instead
+  // of clobbering. (Only proceed with an empty base when a relay authoritatively
+  // confirmed there is no existing kind-0.)
+  if (existing.event === null && !existing.confirmed) {
+    return err(
+      'updateKind0AlsoKnownAs: could not read your existing Nostr profile from any relay (all unreachable or timed out) — not publishing, as it could overwrite your current profile metadata. Check your connection and retry.'
+    );
+  }
+  const baseContent = existing.event ? parseKind0Content(existing.event.content) : {};
 
   const existingAka = Array.isArray(baseContent['alsoKnownAs'])
     ? baseContent['alsoKnownAs'].filter((v): v is string => typeof v === 'string')

@@ -382,6 +382,61 @@ describe('updateKind0AlsoKnownAs', () => {
     const content = JSON.parse(r.value.event.content) as { alsoKnownAs: string[] };
     expect(content.alsoKnownAs).toEqual([DID]);
   });
+
+  it('refuses to publish (does not clobber existing metadata) when every relay is unreachable', async () => {
+    await userKeyMod.provisionFromRootMnemonic();
+
+    // Every relay errors before EOSE — we cannot know whether the user already
+    // has a kind-0 carrying name/about/picture. Publishing a fresh
+    // {alsoKnownAs:[did]} here would wipe it, so the call must abort WITHOUT
+    // writing. (Regression guard for the flaky-network metadata-wipe bug.)
+    const subCalls: string[] = [];
+    const subFn: SubscribeEventsFn = (relayUrl, _filter, _onEvent, _onEose, onError) => {
+      subCalls.push(relayUrl);
+      setTimeout(() => onError?.('websocket error'), 0);
+      return { subscriptionId: `fake-${relayUrl}`, close: () => undefined };
+    };
+    const { fn: pubFn, calls: pubCalls } = makeFakePublish({ a: true, b: true, c: true });
+
+    const r = await mod.updateKind0AlsoKnownAs({
+      did: DID,
+      relays: ['a', 'b', 'c'],
+      subscribeEventsFn: subFn,
+      publishEventFn: pubFn,
+    });
+
+    expect(r.ok).toBe(false);
+    if (r.ok) return;
+    expect(r.error).toContain('overwrite');
+    expect(subCalls.sort()).toEqual(['a', 'b', 'c']); // it did try to read
+    expect(pubCalls).toEqual([]); // but never wrote
+  });
+
+  it('still publishes fresh when ≥1 relay confirms (EOSE) no existing kind-0, even if others are unreachable', async () => {
+    await userKeyMod.provisionFromRootMnemonic();
+
+    // relay "a" errors, but "b" reaches EOSE with no events → a definitive
+    // "no kind-0 exists", so publishing fresh is safe (not blind).
+    const subFn: SubscribeEventsFn = (relayUrl, _filter, _onEvent, onEose, onError) => {
+      setTimeout(() => {
+        if (relayUrl === 'a') onError?.('websocket error');
+        else onEose?.();
+      }, 0);
+      return { subscriptionId: `fake-${relayUrl}`, close: () => undefined };
+    };
+    const { fn: pubFn } = makeFakePublish({ a: true, b: true });
+
+    const r = await mod.updateKind0AlsoKnownAs({
+      did: DID,
+      relays: ['a', 'b'],
+      subscribeEventsFn: subFn,
+      publishEventFn: pubFn,
+    });
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    const content = JSON.parse(r.value.event.content) as { alsoKnownAs: string[] };
+    expect(content.alsoKnownAs).toEqual([DID]);
+  });
 });
 
 // ── 3. DEFAULT_RELAYS — exposed, never used implicitly ──────────────────

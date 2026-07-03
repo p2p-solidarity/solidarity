@@ -39,7 +39,7 @@ export async function fetchKind0FromRelays(
   relays: readonly string[],
   opts: FetchKind0Options = {}
 ): Promise<NostrKind0Content | null> {
-  const event = await fetchLatestKind0(
+  const { event } = await fetchLatestKind0(
     relays,
     pubkeyHex,
     opts.subscribeEventsFn ?? subscribeEvents,
