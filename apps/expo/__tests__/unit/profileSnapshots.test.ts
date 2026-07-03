@@ -264,6 +264,32 @@ describe('upsertDeclared — persists and round-trips through MMKV, same shape a
     expect(mod.stableDeclaredId('https://linktr.ee/alice')).not.toBe(mod.stableDeclaredId('https://linktr.ee/bob'));
   });
 
+  // Post-review fix (round 1): normalize scheme/host/path/fragment before
+  // hashing so trivially-equivalent URLs collapse to one declared id, while
+  // deliberately keeping the query string significant (see module doc's
+  // `normalizeForHashing` comment for why).
+  it('stableDeclaredId treats a trailing slash, a different scheme/host case, and a fragment as the SAME page', () => {
+    const base = mod.stableDeclaredId('https://linktr.ee/alice');
+    expect(mod.stableDeclaredId('https://linktr.ee/alice/')).toBe(base);
+    expect(mod.stableDeclaredId('HTTPS://LinkTr.EE/alice')).toBe(base);
+    expect(mod.stableDeclaredId('https://linktr.ee/alice#section')).toBe(base);
+    // All three combined at once.
+    expect(mod.stableDeclaredId('HTTPS://LinkTr.EE/alice/#top')).toBe(base);
+  });
+
+  it('stableDeclaredId treats a different query string as a DIFFERENT page', () => {
+    const base = mod.stableDeclaredId('https://linktr.ee/alice');
+    const tagged = mod.stableDeclaredId('https://linktr.ee/alice?tab=2');
+    expect(tagged).not.toBe(base);
+    // Same query string still collapses with the other normalizations.
+    expect(mod.stableDeclaredId('https://linktr.ee/alice/?tab=2#x')).toBe(tagged);
+  });
+
+  it('stableDeclaredId falls back to the trimmed raw string (never throws) for a URL the URL parser rejects', () => {
+    expect(() => mod.stableDeclaredId('not a url at all')).not.toThrow();
+    expect(mod.stableDeclaredId('not a url at all')).toBe(mod.stableDeclaredId('  not a url at all  '));
+  });
+
   it('a null title persists and restores as null, never fabricated', () => {
     const saved = mod.useProfileSnapshotStore.getState().upsertDeclared('https://bare.example/', null, LINKS);
     mod.useProfileSnapshotStore.setState({ snapshots: new Map() });

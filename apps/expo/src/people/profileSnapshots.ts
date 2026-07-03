@@ -86,12 +86,57 @@ export interface DeclaredSnapshot {
 
 export type ProfileSnapshot = VerifiedSnapshot | DeclaredSnapshot;
 
+/** Normalizes a source URL before it's hashed by `stableDeclaredId`, so
+ * trivially-equivalent URLs a user might paste for the "same" page all
+ * resolve to the same declared id instead of silently duplicating:
+ *   - scheme + host lowercased (`HTTPS://Linktr.EE/…` === `https://linktr.ee/…`)
+ *   - a single trailing slash on the path stripped (`/alice/` === `/alice`)
+ *   - the fragment dropped (`#section` is a client-side scroll target, not
+ *     part of what the server serves)
+ *
+ * The query string is deliberately KEPT significant — `?tab=2` can be a
+ * genuinely different page (a different Linktree tab, a paginated view,
+ * etc.), and collapsing it would risk two different real pages silently
+ * overwriting one another in the declared store. Unlike the fragment, the
+ * server sees the query string, so "same URL" can't be assumed without it.
+ *
+ * Falls back to the trimmed raw string (never throws) when `URL` can't
+ * parse the input — `stableDeclaredId` must still produce SOME deterministic
+ * id for a malformed paste rather than blowing up the caller.
+ *
+ * Migration note: this only changes the id computed for URLs normalized
+ * from now on. Any `DeclaredSnapshot` already persisted under the OLD
+ * (un-normalized) id keeps that id — there is no migration pass over
+ * existing MMKV entries, and none is needed: the entry is still valid and
+ * still reachable at its existing `/people/declared/[id]` route. The only
+ * user-visible effect is that re-pasting the exact same URL in a
+ * differently-cased/slashed/fragmented form will, going forward, dedupe
+ * against the NEW id rather than the old one — a one-time, harmless quirk
+ * for anyone who re-imports a page they'd already saved before this fix.
+ */
+function normalizeForHashing(sourceUrl: string): string {
+  const trimmed = sourceUrl.trim();
+  try {
+    const parsed = new URL(trimmed);
+    const scheme = parsed.protocol.toLowerCase();
+    const host = parsed.host.toLowerCase();
+    const path =
+      parsed.pathname.length > 1 && parsed.pathname.endsWith('/')
+        ? parsed.pathname.slice(0, -1)
+        : parsed.pathname;
+    return `${scheme}//${host}${path}${parsed.search}`;
+  } catch {
+    return trimmed;
+  }
+}
+
 /** Stable, non-secret id for a declared entry — first 24 hex chars of
- * SHA-256(sourceUrl). Deterministic so re-pasting the same URL always
+ * SHA-256(normalizeForHashing(sourceUrl)). Deterministic so re-pasting the
+ * same (or trivially-equivalent, see `normalizeForHashing`) URL always
  * resolves to the same Map key / route param (upsert-in-place, not a
  * duplicate), without needing to persist a separately-generated uuid. */
 export function stableDeclaredId(sourceUrl: string): string {
-  return bytesToHex(sha256Bytes(sourceUrl.trim())).slice(0, 24);
+  return bytesToHex(sha256Bytes(normalizeForHashing(sourceUrl))).slice(0, 24);
 }
 
 const declaredLinksSchema = z.array(profileLinkSchema);

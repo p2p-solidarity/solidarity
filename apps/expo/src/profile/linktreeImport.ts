@@ -36,6 +36,37 @@
  * codes (mirrors `VerifiedPageErrorReason` in
  * `src/scan/verifiedPageHandler.ts`) that UI callers map to a real i18n
  * string via `t(\`meEdit.linktreeImport.reason.${reason}\`)`.
+ *
+ * Bounded fetch (post-review fix): a bare `fetchImpl(url)` with no timeout
+ * and an unbounded `response.text()` read is a hang-and-OOM risk against a
+ * slow or hostile host, so every request is bounded two ways —
+ *   - `FETCH_TIMEOUT_MS` via a real `AbortController` (same
+ *     create-timer-abort-clear shape as `src/oidc/tokenService.ts`'s
+ *     `requestToken` / `src/credentials/issuerStore.ts`'s
+ *     `fetchLogoBytes`). `AbortSignal.timeout()` is NOT used: this RN
+ *     runtime's `AbortSignal` comes from the `abort-controller` npm
+ *     polyfill (wired in by `react-native/Libraries/Core/setUpXHR.js`),
+ *     and that polyfill's version pinned here (3.0.0) has no `.timeout()`
+ *     static — confirmed by reading the polyfill source, not assumed.
+ *   - `MAX_RESPONSE_BYTES` (1 MiB) checked via the `Content-Length` header
+ *     FIRST when the server sends one honest — `response.text()` is never
+ *     called in that case, so an oversized page costs nothing. When
+ *     `Content-Length` is absent or understated (chunked transfer, or a
+ *     server that simply omits it — both legal HTTP), there is no
+ *     fallback that avoids a full read: this RN runtime's `fetch` is the
+ *     `whatwg-fetch` polyfill over `RCTNetworking`
+ *     (`node_modules/react-native/Libraries/Network/fetch.js` re-exports
+ *     `whatwg-fetch`'s `Response`), and that polyfill's `Response` has no
+ *     `ReadableStream` `.body` / `.getReader()` to abort mid-download past
+ *     the cap — confirmed by reading its source, not assumed. In that case
+ *     `response.text()` — which ALREADY reads the whole body into memory
+ *     before resolving even today, timeout aside — is read once and then
+ *     measured; a page that both omits `Content-Length` and exceeds the
+ *     cap is still rejected, just after paying for one full buffer instead
+ *     of zero. `timeout` and `pageTooLarge` are additions to
+ *     `LinkPageImportErrorReason` below, each with its own i18n string
+ *     (never a raw exception message — CLAUDE.md rule "Sec: ... no PII
+ *     logs / return Result").
  */
 import { err, ok, type Result } from '@solidarity/shared';
 
@@ -44,7 +75,9 @@ export type LinkPageImportErrorReason =
   | 'networkError'
   | 'httpError'
   | 'nonHtmlResponse'
-  | 'noLinksFound';
+  | 'noLinksFound'
+  | 'timeout'
+  | 'pageTooLarge';
 
 export interface LinkPageLink {
   readonly label: string;
@@ -60,34 +93,103 @@ export interface LinkPageImport {
  * the confirm checklist unusable and inflate the eventual Profile Record. */
 const MAX_LINKS = 50;
 
+/** Request timeout budget — see the module doc's "Bounded fetch" section
+ * for why this is a manual `AbortController` timer rather than
+ * `AbortSignal.timeout()`. Exported so a caller with an unusually slow/fast
+ * expected host can override it and so tests can inject a short budget. */
+export const FETCH_TIMEOUT_MS = 15_000;
+
+/** Response body budget (1 MiB) — see the module doc's "Bounded fetch"
+ * section for the two enforcement paths (Content-Length fast path vs. the
+ * read-then-measure fallback) and why RN's fetch can't do better than the
+ * fallback when a server omits the header. */
+export const MAX_RESPONSE_BYTES = 1_048_576;
+
 const HTTP_URL_RE = /^https?:\/\//i;
+
+/** `AbortController.abort()` rejects the in-flight `fetch`/`.text()` with a
+ * `DOMException`/`Error` named `'AbortError'` in every runtime this code
+ * runs in (native browser, Node/Bun test runner, and the `whatwg-fetch`
+ * polyfill used by RN — all three confirmed by reading source, not
+ * assumed). Checking `.name` rather than `instanceof Error` is what makes
+ * this safe across all three, since `whatwg-fetch`'s own `DOMException`
+ * fallback constructor only sometimes chains onto `Error.prototype`. */
+function isAbortError(e: unknown): boolean {
+  return typeof e === 'object' && e !== null && (e as { name?: unknown }).name === 'AbortError';
+}
+
+function utf8ByteLength(text: string): number {
+  return new TextEncoder().encode(text).length;
+}
+
+/** The bounded network leg of `fetchLinkPage`: fetch with a timeout, then
+ * validate + read the response body within the byte cap. Split out purely
+ * to keep `fetchLinkPage` itself under the lint complexity budget — the
+ * two halves (fetch-and-bound vs. parse-the-html) are independently
+ * reasoned about anyway. */
+async function fetchHtmlBounded(
+  sourceUrl: string,
+  fetchImpl: typeof fetch,
+  timeoutMs: number
+): Promise<Result<string, LinkPageImportErrorReason>> {
+  const ac = new AbortController();
+  const timeout = setTimeout(() => { ac.abort(); }, timeoutMs);
+  try {
+    let response: Response;
+    try {
+      response = await fetchImpl(sourceUrl, { signal: ac.signal });
+    } catch (e) {
+      return err(isAbortError(e) ? 'timeout' : 'networkError');
+    }
+    if (!response.ok) return err('httpError');
+
+    const contentType = response.headers.get('content-type') ?? '';
+    if (contentType.length > 0 && !contentType.toLowerCase().includes('html')) {
+      return err('nonHtmlResponse');
+    }
+
+    // Fast path: an honest Content-Length rejects an oversized page WITHOUT
+    // ever pulling its body into memory. See module doc for the fallback
+    // below when this header is missing or understated.
+    const contentLengthHeader = response.headers.get('content-length');
+    if (contentLengthHeader !== null) {
+      const contentLength = Number(contentLengthHeader);
+      if (Number.isFinite(contentLength) && contentLength > MAX_RESPONSE_BYTES) {
+        return err('pageTooLarge');
+      }
+    }
+
+    let html: string;
+    try {
+      html = await response.text();
+    } catch (e) {
+      return err(isAbortError(e) ? 'timeout' : 'networkError');
+    }
+
+    // Fallback path (no/lying Content-Length): the body is already fully
+    // buffered by `response.text()` above — this RN runtime has no
+    // streaming reader to have aborted mid-download instead (module doc)
+    // — so this is the last-resort check, paid for after one full read
+    // rather than zero.
+    if (utf8ByteLength(html) > MAX_RESPONSE_BYTES) return err('pageTooLarge');
+
+    return ok(html);
+  } finally {
+    clearTimeout(timeout);
+  }
+}
 
 export async function fetchLinkPage(
   url: string,
-  fetchImpl: typeof fetch = fetch
+  fetchImpl: typeof fetch = fetch,
+  opts: { readonly timeoutMs?: number } = {}
 ): Promise<Result<LinkPageImport, LinkPageImportErrorReason>> {
   const sourceUrl = url.trim();
   if (!HTTP_URL_RE.test(sourceUrl)) return err('invalidUrl');
 
-  let response: Response;
-  try {
-    response = await fetchImpl(sourceUrl);
-  } catch {
-    return err('networkError');
-  }
-  if (!response.ok) return err('httpError');
-
-  const contentType = response.headers.get('content-type') ?? '';
-  if (contentType.length > 0 && !contentType.toLowerCase().includes('html')) {
-    return err('nonHtmlResponse');
-  }
-
-  let html: string;
-  try {
-    html = await response.text();
-  } catch {
-    return err('networkError');
-  }
+  const htmlResult = await fetchHtmlBounded(sourceUrl, fetchImpl, opts.timeoutMs ?? FETCH_TIMEOUT_MS);
+  if (!htmlResult.ok) return htmlResult;
+  const html = htmlResult.value;
 
   const title = extractTitle(html);
   const jsonCandidates = extractNextDataLinks(html);

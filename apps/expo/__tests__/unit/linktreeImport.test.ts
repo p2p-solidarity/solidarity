@@ -23,12 +23,24 @@
  *      fabricated result (CLAUDE.md rule 8).
  *   4. Network/HTTP/scheme/content-type failures each surface their own
  *      reason, and a >50-link page is capped to the first 50.
+ *   5. Bounded fetch (post-review fix, Task A2.4 round 1): a request that
+ *      outlives its timeout budget surfaces `timeout` (via a real
+ *      `AbortController` signal, not just a message-sniffed guess), and an
+ *      oversized response surfaces `pageTooLarge` — via the fast
+ *      Content-Length-header path (body never read) and via the fallback
+ *      read-then-measure path (no/lying Content-Length) — see
+ *      `fetchLinkPage`'s body-read comment for why RN's fetch needs a
+ *      fallback at all.
  */
 import { describe, expect, it } from 'bun:test';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
-import { fetchLinkPage } from '../../src/profile/linktreeImport';
+import {
+  fetchLinkPage,
+  FETCH_TIMEOUT_MS,
+  MAX_RESPONSE_BYTES,
+} from '../../src/profile/linktreeImport';
 
 function fixture(name: string): string {
   return readFileSync(join(__dirname, 'fixtures', 'linktreeImport', name), 'utf-8');
@@ -161,5 +173,74 @@ describe('fetchLinkPage — no fabricated results on failure (CLAUDE.md rule 8)'
     expect(result.ok).toBe(false);
     if (result.ok) return;
     expect(result.error).toBe('nonHtmlResponse');
+  });
+});
+
+describe('fetchLinkPage — bounded fetch: timeout + size cap (post-review fix)', () => {
+  it('exports the timeout and byte-cap budgets used to bound the request', () => {
+    expect(FETCH_TIMEOUT_MS).toBe(15_000);
+    expect(MAX_RESPONSE_BYTES).toBe(1_048_576);
+  });
+
+  it('passes an AbortSignal to fetchImpl and aborts it once the timeout budget elapses, surfacing timeout (not a hang or a generic networkError)', async () => {
+    let sawSignal = false;
+    // A "fake slow" fetchImpl: never resolves on its own, but honors the
+    // real AbortSignal it's given — exactly like whatwg-fetch's XHR-backed
+    // fetch does when `signal`'s abort event fires mid-request.
+    const fetchImpl = ((_url: string, init?: RequestInit) =>
+      new Promise<Response>((_resolve, reject) => {
+        sawSignal = init?.signal instanceof AbortSignal;
+        init?.signal?.addEventListener('abort', () => {
+          reject(new DOMException('Aborted', 'AbortError'));
+        });
+      })) as unknown as typeof fetch;
+
+    const result = await fetchLinkPage('https://slow.example/', fetchImpl, { timeoutMs: 20 });
+    expect(sawSignal).toBe(true);
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.error).toBe('timeout');
+  });
+
+  it('a Content-Length header over the byte cap surfaces pageTooLarge WITHOUT ever reading the body', async () => {
+    let textCalled = false;
+    const response = {
+      ok: true,
+      headers: new Headers({
+        'content-type': 'text/html',
+        'content-length': String(MAX_RESPONSE_BYTES + 1),
+      }),
+      text: async () => {
+        textCalled = true;
+        return '<html></html>';
+      },
+    } as unknown as Response;
+    const fetchImpl = fetchReturning(response);
+
+    const result = await fetchLinkPage('https://huge.example/', fetchImpl);
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.error).toBe('pageTooLarge');
+    expect(textCalled).toBe(false);
+  });
+
+  it('a response with no (or an understated) Content-Length still surfaces pageTooLarge once the real body is measured (documented fallback path)', async () => {
+    const hugeBody = `<html><head><title>Huge</title></head><body>${'a'.repeat(MAX_RESPONSE_BYTES + 1)}</body></html>`;
+    // No content-length header at all — the honesty-of-last-resort
+    // fallback: read, then measure, then reject.
+    const response = htmlResponse(hugeBody);
+    expect(response.headers.get('content-length')).toBeNull();
+    const fetchImpl = fetchReturning(response);
+
+    const result = await fetchLinkPage('https://huge-chunked.example/', fetchImpl);
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.error).toBe('pageTooLarge');
+  });
+
+  it('a response within the byte cap still succeeds normally', async () => {
+    const fetchImpl = fetchReturning(htmlResponse(fixture('generic.html')));
+    const result = await fetchLinkPage('https://bob.example/', fetchImpl);
+    expect(result.ok).toBe(true);
   });
 });

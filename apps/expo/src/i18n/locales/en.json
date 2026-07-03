@@ -803,9 +803,9 @@
   "linkPageImport.reason.httpError": "That page couldn't be loaded (the server returned an error).",
   "linkPageImport.reason.nonHtmlResponse": "That URL isn't a web page.",
   "linkPageImport.reason.noLinksFound": "No links were found on that page.",
-  "declaredPage.title": "Declared Page",
+  "linkPageImport.reason.timeout": "That page took too long to load — check your connection and try again.",
+  "linkPageImport.reason.pageTooLarge": "That page is too large to import.",
   "declaredPage.badge": "Declared · unverified",
   "declaredPage.disclaimer": "This page hasn't been cryptographically verified — the content is exactly what was published at the source URL.",
-  "declaredPage.sourceLabel": "Source URL",
   "declaredPage.notFound": "This declared page couldn't be found."
 }
