@@ -7,28 +7,28 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		081C93C3D9268D7BD19D735E /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = 1CB30AA8B8E85191BFCC6946 /* PrivacyInfo.xcprivacy */; };
 		13B07FBF1A68108700A75B9A /* Images.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 13B07FB51A68108700A75B9A /* Images.xcassets */; };
-		22FC7F70369E433E84BF7B2C /* SpruceIDMobileSdk in Frameworks */ = {isa = PBXBuildFile; productRef = FC5C68100F804FABA90C43E5 /* SpruceIDMobileSdk */; };
+		17CA5617AEA948E5B6D3E3CC /* SpruceIDMobileSdk in Frameworks */ = {isa = PBXBuildFile; productRef = D53518F4AFC24252A44A6141 /* SpruceIDMobileSdk */; };
+		1966C9BE796548099B5F3879 /* SpruceIDMobileSdkRs in Frameworks */ = {isa = PBXBuildFile; productRef = 3D48A4318D7243A8A8B33DED /* SpruceIDMobileSdkRs */; };
 		3E461D99554A48A4959DE609 /* SplashScreen.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = AA286B85B6C04FC6940260E9 /* SplashScreen.storyboard */; };
-		5200E44E1A487A1893CE9C79 /* ExpoModulesProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = D0902648A3F22ABD345315F4 /* ExpoModulesProvider.swift */; };
-		A757AA8E09E3E3C40EE003BC /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = 4115685B2FF6273DF0202201 /* PrivacyInfo.xcprivacy */; };
+		6D8CB27E3BF24A79012053A7 /* ExpoModulesProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3DCC866D1C5BB05962D65F43 /* ExpoModulesProvider.swift */; };
+		725F5E80AD661717773E735E /* Pods_Solidarity.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = A44B9304FC15F569546A6193 /* Pods_Solidarity.framework */; };
 		BB2F792D24A3F905000567C9 /* Expo.plist in Resources */ = {isa = PBXBuildFile; fileRef = BB2F792C24A3F905000567C9 /* Expo.plist */; };
-		CE84344853F9D57BFC9E4290 /* Pods_Solidarity.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = C3148AD2715C97E93E8A818B /* Pods_Solidarity.framework */; };
-		E1A313BBF5254AC29787F75A /* SpruceIDMobileSdkRs in Frameworks */ = {isa = PBXBuildFile; productRef = EC99A5F9CCC24F7BB00FF811 /* SpruceIDMobileSdkRs */; };
 		F11748422D0307B40044C1D9 /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = F11748412D0307B40044C1D9 /* AppDelegate.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
-		0A7B2E03F62E286EADC81FAE /* Pods-Solidarity.release.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-Solidarity.release.xcconfig"; path = "Target Support Files/Pods-Solidarity/Pods-Solidarity.release.xcconfig"; sourceTree = "<group>"; };
+		0E6DB1E717B9FA94FAB9BE6B /* Pods-Solidarity.debug.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-Solidarity.debug.xcconfig"; path = "Target Support Files/Pods-Solidarity/Pods-Solidarity.debug.xcconfig"; sourceTree = "<group>"; };
 		13B07F961A680F5B00A75B9A /* Solidarity.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Solidarity.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		13B07FB51A68108700A75B9A /* Images.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; name = Images.xcassets; path = Solidarity/Images.xcassets; sourceTree = "<group>"; };
 		13B07FB61A68108700A75B9A /* Info.plist */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text.plist.xml; name = Info.plist; path = Solidarity/Info.plist; sourceTree = "<group>"; };
-		4115685B2FF6273DF0202201 /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; includeInIndex = 1; name = PrivacyInfo.xcprivacy; path = Solidarity/PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
+		1CB30AA8B8E85191BFCC6946 /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; includeInIndex = 1; name = PrivacyInfo.xcprivacy; path = Solidarity/PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
+		3DCC866D1C5BB05962D65F43 /* ExpoModulesProvider.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = ExpoModulesProvider.swift; path = "Pods/Target Support Files/Pods-Solidarity/ExpoModulesProvider.swift"; sourceTree = "<group>"; };
+		6AC6EF0678CA248242638F2A /* Pods-Solidarity.release.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-Solidarity.release.xcconfig"; path = "Target Support Files/Pods-Solidarity/Pods-Solidarity.release.xcconfig"; sourceTree = "<group>"; };
+		A44B9304FC15F569546A6193 /* Pods_Solidarity.framework */ = {isa = PBXFileReference; explicitFileType = wrapper.framework; includeInIndex = 0; path = Pods_Solidarity.framework; sourceTree = BUILT_PRODUCTS_DIR; };
 		AA286B85B6C04FC6940260E9 /* SplashScreen.storyboard */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = file.storyboard; name = SplashScreen.storyboard; path = Solidarity/SplashScreen.storyboard; sourceTree = "<group>"; };
 		BB2F792C24A3F905000567C9 /* Expo.plist */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text.plist.xml; path = Expo.plist; sourceTree = "<group>"; };
-		C3148AD2715C97E93E8A818B /* Pods_Solidarity.framework */ = {isa = PBXFileReference; explicitFileType = wrapper.framework; includeInIndex = 0; path = Pods_Solidarity.framework; sourceTree = BUILT_PRODUCTS_DIR; };
-		D0902648A3F22ABD345315F4 /* ExpoModulesProvider.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = ExpoModulesProvider.swift; path = "Pods/Target Support Files/Pods-Solidarity/ExpoModulesProvider.swift"; sourceTree = "<group>"; };
-		DCD9FFBA71F0A5B3F16E5DC5 /* Pods-Solidarity.debug.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-Solidarity.debug.xcconfig"; path = "Target Support Files/Pods-Solidarity/Pods-Solidarity.debug.xcconfig"; sourceTree = "<group>"; };
 		ED297162215061F000B7C4FE /* JavaScriptCore.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = JavaScriptCore.framework; path = System/Library/Frameworks/JavaScriptCore.framework; sourceTree = SDKROOT; };
 		F11748412D0307B40044C1D9 /* AppDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = AppDelegate.swift; path = Solidarity/AppDelegate.swift; sourceTree = "<group>"; };
 		F11748442D0722820044C1D9 /* Solidarity-Bridging-Header.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; name = "Solidarity-Bridging-Header.h"; path = "Solidarity/Solidarity-Bridging-Header.h"; sourceTree = "<group>"; };
@@ -39,9 +39,9 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				22FC7F70369E433E84BF7B2C /* SpruceIDMobileSdk in Frameworks */,
-				E1A313BBF5254AC29787F75A /* SpruceIDMobileSdkRs in Frameworks */,
-				CE84344853F9D57BFC9E4290 /* Pods_Solidarity.framework in Frameworks */,
+				17CA5617AEA948E5B6D3E3CC /* SpruceIDMobileSdk in Frameworks */,
+				1966C9BE796548099B5F3879 /* SpruceIDMobileSdkRs in Frameworks */,
+				725F5E80AD661717773E735E /* Pods_Solidarity.framework in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -57,42 +57,42 @@
 				13B07FB51A68108700A75B9A /* Images.xcassets */,
 				13B07FB61A68108700A75B9A /* Info.plist */,
 				AA286B85B6C04FC6940260E9 /* SplashScreen.storyboard */,
-				4115685B2FF6273DF0202201 /* PrivacyInfo.xcprivacy */,
+				1CB30AA8B8E85191BFCC6946 /* PrivacyInfo.xcprivacy */,
 			);
 			name = Solidarity;
 			sourceTree = "<group>";
 		};
-		18C500730BF631F325840168 /* ExpoModulesProviders */ = {
+		25C4B113AD34BC087D662CF9 /* ExpoModulesProviders */ = {
 			isa = PBXGroup;
 			children = (
-				490C06B283AB6D5F44FD6F92 /* Solidarity */,
+				7E31CAB4A8213974EF2A9CD6 /* Solidarity */,
 			);
 			name = ExpoModulesProviders;
-			sourceTree = "<group>";
-		};
-		28966F162D2CEA7815999BBF /* Pods */ = {
-			isa = PBXGroup;
-			children = (
-				DCD9FFBA71F0A5B3F16E5DC5 /* Pods-Solidarity.debug.xcconfig */,
-				0A7B2E03F62E286EADC81FAE /* Pods-Solidarity.release.xcconfig */,
-			);
-			name = Pods;
-			path = Pods;
 			sourceTree = "<group>";
 		};
 		2D16E6871FA4F8E400B85C8A /* Frameworks */ = {
 			isa = PBXGroup;
 			children = (
 				ED297162215061F000B7C4FE /* JavaScriptCore.framework */,
-				C3148AD2715C97E93E8A818B /* Pods_Solidarity.framework */,
+				A44B9304FC15F569546A6193 /* Pods_Solidarity.framework */,
 			);
 			name = Frameworks;
 			sourceTree = "<group>";
 		};
-		490C06B283AB6D5F44FD6F92 /* Solidarity */ = {
+		73934383479FB9BD9647DC98 /* Pods */ = {
 			isa = PBXGroup;
 			children = (
-				D0902648A3F22ABD345315F4 /* ExpoModulesProvider.swift */,
+				0E6DB1E717B9FA94FAB9BE6B /* Pods-Solidarity.debug.xcconfig */,
+				6AC6EF0678CA248242638F2A /* Pods-Solidarity.release.xcconfig */,
+			);
+			name = Pods;
+			path = Pods;
+			sourceTree = "<group>";
+		};
+		7E31CAB4A8213974EF2A9CD6 /* Solidarity */ = {
+			isa = PBXGroup;
+			children = (
+				3DCC866D1C5BB05962D65F43 /* ExpoModulesProvider.swift */,
 			);
 			name = Solidarity;
 			sourceTree = "<group>";
@@ -111,8 +111,8 @@
 				832341AE1AAA6A7D00B99B32 /* Libraries */,
 				83CBBA001A601CBA00E9B192 /* Products */,
 				2D16E6871FA4F8E400B85C8A /* Frameworks */,
-				28966F162D2CEA7815999BBF /* Pods */,
-				18C500730BF631F325840168 /* ExpoModulesProviders */,
+				73934383479FB9BD9647DC98 /* Pods */,
+				25C4B113AD34BC087D662CF9 /* ExpoModulesProviders */,
 			);
 			indentWidth = 2;
 			sourceTree = "<group>";
@@ -144,14 +144,14 @@
 			buildConfigurationList = 13B07F931A680F5B00A75B9A /* Build configuration list for PBXNativeTarget "Solidarity" */;
 			buildPhases = (
 				08A4A3CD28434E44B6B9DE2E /* [CP] Check Pods Manifest.lock */,
-				36765A9E6C7DF589F3447AF7 /* [Expo] Configure project */,
+				BAF7CFA8A798522BA1F79DFD /* [Expo] Configure project */,
 				13B07F871A680F5B00A75B9A /* Sources */,
 				13B07F8C1A680F5B00A75B9A /* Frameworks */,
 				13B07F8E1A680F5B00A75B9A /* Resources */,
 				00DD1BFF1BD5951E006B06BC /* Bundle React Native code and images */,
-				5BD2AE10EB6C466B8D50961E /* Stage Passport OpenAC SRS */,
+				AB031EBA2C014A5EB2E1AA03 /* Stage Passport OpenAC SRS */,
 				800E24972A6A228C8D4807E9 /* [CP] Copy Pods Resources */,
-				C7088B306C7271E6F605F179 /* [CP] Embed Pods Frameworks */,
+				E2A74BB355958BB326E5721E /* [CP] Embed Pods Frameworks */,
 			);
 			buildRules = (
 			);
@@ -159,8 +159,8 @@
 			);
 			name = Solidarity;
 			packageProductDependencies = (
-				FC5C68100F804FABA90C43E5 /* SpruceIDMobileSdk */,
-				EC99A5F9CCC24F7BB00FF811 /* SpruceIDMobileSdkRs */,
+				D53518F4AFC24252A44A6141 /* SpruceIDMobileSdk */,
+				3D48A4318D7243A8A8B33DED /* SpruceIDMobileSdkRs */,
 			);
 			productName = Solidarity;
 			productReference = 13B07F961A680F5B00A75B9A /* Solidarity.app */;
@@ -189,7 +189,7 @@
 			);
 			mainGroup = 83CBB9F61A601CBA00E9B192;
 			packageReferences = (
-				3F85B65D80DD484CB6277F7C /* XCRemoteSwiftPackageReference "sprucekit-mobile" */,
+				C52CD1D27D024A1AB651FEE0 /* XCRemoteSwiftPackageReference "sprucekit-mobile" */,
 			);
 			productRefGroup = 83CBBA001A601CBA00E9B192 /* Products */;
 			projectDirPath = "";
@@ -208,7 +208,7 @@
 				BB2F792D24A3F905000567C9 /* Expo.plist in Resources */,
 				13B07FBF1A68108700A75B9A /* Images.xcassets in Resources */,
 				3E461D99554A48A4959DE609 /* SplashScreen.storyboard in Resources */,
-				A757AA8E09E3E3C40EE003BC /* PrivacyInfo.xcprivacy in Resources */,
+				081C93C3D9268D7BD19D735E /* PrivacyInfo.xcprivacy in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -252,47 +252,6 @@
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/sh;
 			shellScript = "diff \"${PODS_PODFILE_DIR_PATH}/Podfile.lock\" \"${PODS_ROOT}/Manifest.lock\" > /dev/null\nif [ $? != 0 ] ; then\n    # print error to STDERR\n    echo \"error: The sandbox is not in sync with the Podfile.lock. Run 'pod install' or update your CocoaPods installation.\" >&2\n    exit 1\nfi\n# This output is used by Xcode 'outputs' to avoid re-running this script phase.\necho \"SUCCESS\" > \"${SCRIPT_OUTPUT_FILE_0}\"\n";
-			showEnvVarsInLog = 0;
-		};
-		36765A9E6C7DF589F3447AF7 /* [Expo] Configure project */ = {
-			isa = PBXShellScriptBuildPhase;
-			alwaysOutOfDate = 1;
-			buildActionMask = 2147483647;
-			files = (
-			);
-			inputFileListPaths = (
-			);
-			inputPaths = (
-				"$(SRCROOT)/.xcode.env",
-				"$(SRCROOT)/.xcode.env.local",
-				"$(SRCROOT)/Solidarity/Solidarity.entitlements",
-				"$(SRCROOT)/Pods/Target Support Files/Pods-Solidarity/expo-configure-project.sh",
-			);
-			name = "[Expo] Configure project";
-			outputFileListPaths = (
-			);
-			outputPaths = (
-				"$(SRCROOT)/Pods/Target Support Files/Pods-Solidarity/ExpoModulesProvider.swift",
-			);
-			runOnlyForDeploymentPostprocessing = 0;
-			shellPath = /bin/sh;
-			shellScript = "# This script configures Expo modules and generates the modules provider file.\nbash -l -c \"./Pods/Target\\ Support\\ Files/Pods-Solidarity/expo-configure-project.sh\"\n";
-		};
-		5BD2AE10EB6C466B8D50961E /* Stage Passport OpenAC SRS */ = {
-			isa = PBXShellScriptBuildPhase;
-			buildActionMask = 2147483647;
-			files = (
-			);
-			inputPaths = (
-				"${SRCROOT}/../scripts/stage-openac-srs.sh",
-			);
-			name = "Stage Passport OpenAC SRS";
-			outputPaths = (
-				"${PODS_ROOT}/../../../../nitro-modules/passport-zk/android/src/main/assets/passport.srs.bin",
-			);
-			runOnlyForDeploymentPostprocessing = 0;
-			shellPath = /bin/bash;
-			shellScript = "set -euo pipefail\nAPP_DIR=\"${SRCROOT}/..\"\nAIRMEISHI_EXPO_APP_DIR=\"$APP_DIR\" \"$APP_DIR/scripts/stage-openac-srs.sh\"\n";
 			showEnvVarsInLog = 0;
 		};
 		800E24972A6A228C8D4807E9 /* [CP] Copy Pods Resources */ = {
@@ -355,7 +314,48 @@
 			shellScript = "\"${PODS_ROOT}/Target Support Files/Pods-Solidarity/Pods-Solidarity-resources.sh\"\n";
 			showEnvVarsInLog = 0;
 		};
-		C7088B306C7271E6F605F179 /* [CP] Embed Pods Frameworks */ = {
+		AB031EBA2C014A5EB2E1AA03 /* Stage Passport OpenAC SRS */ = {
+			isa = PBXShellScriptBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputPaths = (
+				"${SRCROOT}/../scripts/stage-openac-srs.sh",
+			);
+			name = "Stage Passport OpenAC SRS";
+			outputPaths = (
+				"${PODS_ROOT}/../../../../nitro-modules/passport-zk/android/src/main/assets/passport.srs.bin",
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/bash;
+			shellScript = "set -euo pipefail\nAPP_DIR=\"${SRCROOT}/..\"\nAIRMEISHI_EXPO_APP_DIR=\"$APP_DIR\" \"$APP_DIR/scripts/stage-openac-srs.sh\"\n";
+			showEnvVarsInLog = 0;
+		};
+		BAF7CFA8A798522BA1F79DFD /* [Expo] Configure project */ = {
+			isa = PBXShellScriptBuildPhase;
+			alwaysOutOfDate = 1;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputFileListPaths = (
+			);
+			inputPaths = (
+				"$(SRCROOT)/.xcode.env",
+				"$(SRCROOT)/.xcode.env.local",
+				"$(SRCROOT)/Solidarity/Solidarity.entitlements",
+				"$(SRCROOT)/Pods/Target Support Files/Pods-Solidarity/expo-configure-project.sh",
+			);
+			name = "[Expo] Configure project";
+			outputFileListPaths = (
+			);
+			outputPaths = (
+				"$(SRCROOT)/Pods/Target Support Files/Pods-Solidarity/ExpoModulesProvider.swift",
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "# This script configures Expo modules and generates the modules provider file.\nbash -l -c \"./Pods/Target\\ Support\\ Files/Pods-Solidarity/expo-configure-project.sh\"\n";
+		};
+		E2A74BB355958BB326E5721E /* [CP] Embed Pods Frameworks */ = {
 			isa = PBXShellScriptBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -382,6 +382,15 @@
 				"${PODS_XCFRAMEWORKS_BUILD_DIR}/React-Core-prebuilt/React.framework/React",
 				"${PODS_XCFRAMEWORKS_BUILD_DIR}/ReactNativeDependencies/ReactNativeDependencies.framework/ReactNativeDependencies",
 				"${PODS_XCFRAMEWORKS_BUILD_DIR}/hermes-engine/Pre-built/hermesvm.framework/hermesvm",
+				"${PODS_XCFRAMEWORKS_BUILD_DIR}/react-native-bare-kit/BareKit.framework/BareKit",
+				"${PODS_XCFRAMEWORKS_BUILD_DIR}/react-native-bare-kit/bare-buffer.3.6.1.framework/bare-buffer.3.6.1",
+				"${PODS_XCFRAMEWORKS_BUILD_DIR}/react-native-bare-kit/bare-fs.4.7.3.framework/bare-fs.4.7.3",
+				"${PODS_XCFRAMEWORKS_BUILD_DIR}/react-native-bare-kit/bare-inspect.3.1.4.framework/bare-inspect.3.1.4",
+				"${PODS_XCFRAMEWORKS_BUILD_DIR}/react-native-bare-kit/bare-os.3.9.3.framework/bare-os.3.9.3",
+				"${PODS_XCFRAMEWORKS_BUILD_DIR}/react-native-bare-kit/bare-type.1.1.0.framework/bare-type.1.1.0",
+				"${PODS_XCFRAMEWORKS_BUILD_DIR}/react-native-bare-kit/bare-url.2.4.5.framework/bare-url.2.4.5",
+				"${PODS_XCFRAMEWORKS_BUILD_DIR}/react-native-bare-kit/sodium-native.5.1.0.framework/sodium-native.5.1.0",
+				"${PODS_XCFRAMEWORKS_BUILD_DIR}/react-native-bare-kit/udx-native.1.20.7.framework/udx-native.1.20.7",
 			);
 			name = "[CP] Embed Pods Frameworks";
 			outputPaths = (
@@ -405,6 +414,15 @@
 				"${TARGET_BUILD_DIR}/${FRAMEWORKS_FOLDER_PATH}/React.framework",
 				"${TARGET_BUILD_DIR}/${FRAMEWORKS_FOLDER_PATH}/ReactNativeDependencies.framework",
 				"${TARGET_BUILD_DIR}/${FRAMEWORKS_FOLDER_PATH}/hermesvm.framework",
+				"${TARGET_BUILD_DIR}/${FRAMEWORKS_FOLDER_PATH}/BareKit.framework",
+				"${TARGET_BUILD_DIR}/${FRAMEWORKS_FOLDER_PATH}/bare-buffer.3.6.1.framework",
+				"${TARGET_BUILD_DIR}/${FRAMEWORKS_FOLDER_PATH}/bare-fs.4.7.3.framework",
+				"${TARGET_BUILD_DIR}/${FRAMEWORKS_FOLDER_PATH}/bare-inspect.3.1.4.framework",
+				"${TARGET_BUILD_DIR}/${FRAMEWORKS_FOLDER_PATH}/bare-os.3.9.3.framework",
+				"${TARGET_BUILD_DIR}/${FRAMEWORKS_FOLDER_PATH}/bare-type.1.1.0.framework",
+				"${TARGET_BUILD_DIR}/${FRAMEWORKS_FOLDER_PATH}/bare-url.2.4.5.framework",
+				"${TARGET_BUILD_DIR}/${FRAMEWORKS_FOLDER_PATH}/sodium-native.5.1.0.framework",
+				"${TARGET_BUILD_DIR}/${FRAMEWORKS_FOLDER_PATH}/udx-native.1.20.7.framework",
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/sh;
@@ -419,7 +437,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				F11748422D0307B40044C1D9 /* AppDelegate.swift in Sources */,
-				5200E44E1A487A1893CE9C79 /* ExpoModulesProvider.swift in Sources */,
+				6D8CB27E3BF24A79012053A7 /* ExpoModulesProvider.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -428,7 +446,7 @@
 /* Begin XCBuildConfiguration section */
 		13B07F941A680F5B00A75B9A /* Debug */ = {
 			isa = XCBuildConfiguration;
-			baseConfigurationReference = DCD9FFBA71F0A5B3F16E5DC5 /* Pods-Solidarity.debug.xcconfig */;
+			baseConfigurationReference = 0E6DB1E717B9FA94FAB9BE6B /* Pods-Solidarity.debug.xcconfig */;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CLANG_ENABLE_MODULES = YES;
@@ -447,7 +465,7 @@
 					"@executable_path/Frameworks",
 				);
 				MACOSX_DEPLOYMENT_TARGET = 13.4;
-				MARKETING_VERSION = 1.0;
+				MARKETING_VERSION = 1.3.3;
 				OTHER_LDFLAGS = (
 					"$(inherited)",
 					"-ObjC",
@@ -466,7 +484,7 @@
 		};
 		13B07F951A680F5B00A75B9A /* Release */ = {
 			isa = XCBuildConfiguration;
-			baseConfigurationReference = 0A7B2E03F62E286EADC81FAE /* Pods-Solidarity.release.xcconfig */;
+			baseConfigurationReference = 6AC6EF0678CA248242638F2A /* Pods-Solidarity.release.xcconfig */;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CLANG_ENABLE_MODULES = YES;
@@ -480,7 +498,7 @@
 					"@executable_path/Frameworks",
 				);
 				MACOSX_DEPLOYMENT_TARGET = 13.4;
-				MARKETING_VERSION = 1.0;
+				MARKETING_VERSION = 1.3.3;
 				OTHER_LDFLAGS = (
 					"$(inherited)",
 					"-ObjC",
@@ -684,7 +702,7 @@
 /* End XCConfigurationList section */
 
 /* Begin XCRemoteSwiftPackageReference section */
-		3F85B65D80DD484CB6277F7C /* XCRemoteSwiftPackageReference "sprucekit-mobile" */ = {
+		C52CD1D27D024A1AB651FEE0 /* XCRemoteSwiftPackageReference "sprucekit-mobile" */ = {
 			isa = XCRemoteSwiftPackageReference;
 			repositoryURL = "https://github.com/spruceid/sprucekit-mobile";
 			requirement = {
@@ -695,14 +713,14 @@
 /* End XCRemoteSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
-		EC99A5F9CCC24F7BB00FF811 /* SpruceIDMobileSdkRs */ = {
+		3D48A4318D7243A8A8B33DED /* SpruceIDMobileSdkRs */ = {
 			isa = XCSwiftPackageProductDependency;
-			package = 3F85B65D80DD484CB6277F7C /* XCRemoteSwiftPackageReference "sprucekit-mobile" */;
+			package = C52CD1D27D024A1AB651FEE0 /* XCRemoteSwiftPackageReference "sprucekit-mobile" */;
 			productName = SpruceIDMobileSdkRs;
 		};
-		FC5C68100F804FABA90C43E5 /* SpruceIDMobileSdk */ = {
+		D53518F4AFC24252A44A6141 /* SpruceIDMobileSdk */ = {
 			isa = XCSwiftPackageProductDependency;
-			package = 3F85B65D80DD484CB6277F7C /* XCRemoteSwiftPackageReference "sprucekit-mobile" */;
+			package = C52CD1D27D024A1AB651FEE0 /* XCRemoteSwiftPackageReference "sprucekit-mobile" */;
 			productName = SpruceIDMobileSdk;
 		};
 /* End XCSwiftPackageProductDependency section */
