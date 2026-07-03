@@ -11,6 +11,7 @@ export { PresentationChunkPlaybackControls } from './PresentationChunkPlaybackCo
 export type { PresentationChunkPlaybackControlsProps } from './PresentationChunkPlaybackControls';
 export { ProfileHeaderCard } from './ProfileHeaderCard';
 export type { ProfileHeaderCardProps } from './ProfileHeaderCard';
+export { ProfileSummaryCard } from './ProfileSummaryCard';
 export {
   SettingsBlockRow,
   SettingsBlockSection,

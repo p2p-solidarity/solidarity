@@ -16,11 +16,18 @@
  * yet — badges land in later phases (Nostr/atproto/DNS/OIDC/passport, see
  * docs/ref/04-plan-app.md Phase A4+) — so it renders an honest empty state,
  * never placeholder badges (CLAUDE.md rule 8: no fake data).
+ *
+ * `ProfileSummaryCard` (1.3.3 Task A2.2) adds the new Profile Record
+ * (01-spec §3) surface below the badge row — see that component's doc for
+ * its three-state (needs-setup / empty / ready) contract and the
+ * fragment-QR coexistence rule with the OLD `QrShareCard` exchange QR
+ * below, which stays completely untouched.
  */
 import { Text, View } from 'react-native';
 
 import { SfIcon } from '@/components/icons/SfIcon';
 import { ProfileHeaderCard, type ProfileHeaderCardProps } from '@/components/me/ProfileHeaderCard';
+import { ProfileSummaryCard } from '@/components/me/ProfileSummaryCard';
 import { QrShareCard, type QrShareCardProps } from '@/components/share/QrShareCard';
 import { Colors } from '@/constants/Colors';
 import { useTranslation } from '@/i18n';
@@ -43,6 +50,7 @@ export function VerifiedCard({
     <View className="gap-3">
       <ProfileHeaderCard name={name} did={did} avatar={avatar} onEdit={onEdit} />
       <BadgeRow />
+      <ProfileSummaryCard />
       <View className="px-4">
         <QrShareCard
           qrImageUri={qrImageUri}

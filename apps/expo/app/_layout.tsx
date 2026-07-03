@@ -53,6 +53,7 @@ import { useGroupStore } from '@/groups/store';
 import { useIdentityData } from '@/identity';
 import { installI18n } from '@/i18n';
 import { hydrateSensitiveActionPolicy } from '@/keychain';
+import { hydrateProfile } from '@/profile/store';
 import { syncOnce } from '@/sakura/inbox';
 import { registerForPushNotificationsAsync } from '@/sakura/pushRegistration';
 import { hydratePreferences, usePreferences } from '@/settings/preferences';
@@ -177,6 +178,7 @@ export default function RootLayout() {
 
         hydratePreferences();
         hydrateSensitiveActionPolicy();
+        hydrateProfile();
         logBoot('preferences:done');
 
         // First-boot migration: if any manifest is missing, block splash
