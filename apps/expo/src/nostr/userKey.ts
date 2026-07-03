@@ -165,8 +165,10 @@ export async function provisionFromRootMnemonic(): Promise<Result<string, string
   let pubkeyHex: string;
   try {
     pubkeyHex = hexEncode(schnorr.getPublicKey(scalar));
-  } catch (e) {
-    return err(storageErrorMessage(e));
+  } catch {
+    // Fixed, content-free reason — same discipline as `importNsec`'s
+    // equivalent branch below; never forward the underlying error text.
+    return err('derivedScalarOutOfRange: scalar out of range for secp256k1');
   }
 
   try {
@@ -240,8 +242,13 @@ async function loadScalar(): Promise<Result<Uint8Array, string>> {
   if (!scalarHex) return err('notProvisioned');
   try {
     return ok(hexDecode(scalarHex));
-  } catch (e) {
-    return err(storageErrorMessage(e));
+  } catch {
+    // `hexDecode`'s own RangeError interpolates the offending substring
+    // of `scalarHex` — i.e. a fragment of the secret scalar itself — into
+    // its message (see `dag/node.ts`). Never forward it: collapse to a
+    // fixed reason, same rationale as `importNsec`'s bech32-decode-failure
+    // handling above (never echo secret bytes back to the caller/logs).
+    return err('corruptedScalar');
   }
 }
 

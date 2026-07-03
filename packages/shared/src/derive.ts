@@ -13,9 +13,11 @@
  *   scalar = (BE(okm) mod (n - 1)) + 1                        // n = curve order
  *
  * `info` is a fixed per-purpose label (`HKDF_INFO_ROOT` for the P-256
- * root/did:key identity, `HKDF_INFO_NOSTR` for the secp256k1 Nostr
- * sandbox key — see `apps/expo/src/dag/devKey.ts`) so the two keys never
- * share material even though they come from the same mnemonic and seed.
+ * root/did:key identity, `HKDF_INFO_NOSTR` for the secp256k1 production
+ * Nostr identity — see `apps/expo/src/nostr/userKey.ts`) so the two keys
+ * never share material even though they come from the same mnemonic and
+ * seed. The sandbox dev-key (`apps/expo/src/dag/devKey.ts`) is unrelated
+ * to either label — it is randomly generated, never mnemonic-derived.
  *
  * The 48-byte (384-bit) OKM reduced modulo a ~256-bit curve order biases
  * the result by at most 2^-128 of the range — negligible, and avoids a

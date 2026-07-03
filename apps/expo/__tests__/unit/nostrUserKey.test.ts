@@ -136,6 +136,25 @@ describe('getNostrPubkey / signNostrEvent — never auto-provision', () => {
     await mod.provisionFromRootMnemonic();
     expect(await mod.hasNostrKey()).toBe(true);
   });
+
+  it('corrupted stored scalar hex returns a fixed err(corruptedScalar) without echoing any secret bytes', async () => {
+    // Not a valid provisioning path — simulates on-disk corruption by
+    // writing directly to the fake storage's backing map.
+    const corrupted = 'zz'.repeat(32);
+    scalarStore.set('scalar', corrupted);
+
+    const pubkeyResult = await mod.getNostrPubkey();
+    expect(pubkeyResult.ok).toBe(false);
+    if (pubkeyResult.ok) return;
+    expect(pubkeyResult.error).toBe('corruptedScalar');
+    expect(pubkeyResult.error).not.toContain('zz');
+
+    const signResult = await mod.signNostrEvent({ kind: 0, tags: [], content: '{}' });
+    expect(signResult.ok).toBe(false);
+    if (signResult.ok) return;
+    expect(signResult.error).toBe('corruptedScalar');
+    expect(signResult.error).not.toContain('zz');
+  });
 });
 
 // ── 2. provisionFromRootMnemonic — one gated reveal, derive once ───────
