@@ -451,4 +451,49 @@ describe('discoverAuthServerMetadata', () => {
     if (r.ok) return;
     expect(r.error).toContain('https');
   });
+
+  // ── finding 2 round 2: https-only on the AS metadata's own OAuth
+  // endpoints — `postWithDpop` (oauth.ts) POSTs the PKCE code_verifier,
+  // authorization code, refresh token, and DPoP proof to these; a
+  // non-https endpoint here leaks that body in cleartext even though the
+  // PDS serviceEndpoint and authorization_servers[0] origin are already
+  // https-validated above. ─────────────────────────────────────────────
+
+  it('rejects a non-https token_endpoint', async () => {
+    const r = await discoverAuthServerMetadata(
+      PDS_URL,
+      mockedFetch(validAsMetadata({ token_endpoint: 'http://auth.example.social/oauth/token' }))
+    );
+    expect(r.ok).toBe(false);
+    if (r.ok) return;
+    expect(r.error).toContain('https');
+    expect(r.error).toContain('token_endpoint');
+  });
+
+  it('rejects a non-https pushed_authorization_request_endpoint', async () => {
+    const r = await discoverAuthServerMetadata(
+      PDS_URL,
+      mockedFetch(validAsMetadata({ pushed_authorization_request_endpoint: 'http://auth.example.social/oauth/par' }))
+    );
+    expect(r.ok).toBe(false);
+    if (r.ok) return;
+    expect(r.error).toContain('https');
+    expect(r.error).toContain('pushed_authorization_request_endpoint');
+  });
+
+  it('rejects a non-https authorization_endpoint', async () => {
+    const r = await discoverAuthServerMetadata(
+      PDS_URL,
+      mockedFetch(validAsMetadata({ authorization_endpoint: 'http://auth.example.social/oauth/authorize' }))
+    );
+    expect(r.ok).toBe(false);
+    if (r.ok) return;
+    expect(r.error).toContain('https');
+    expect(r.error).toContain('authorization_endpoint');
+  });
+
+  it('accepts all-https metadata (happy path re-confirmed with the stricter checks)', async () => {
+    const r = await discoverAuthServerMetadata(PDS_URL, mockedFetch(validAsMetadata()));
+    expect(r.ok).toBe(true);
+  });
 });

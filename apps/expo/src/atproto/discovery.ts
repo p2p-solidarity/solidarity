@@ -275,6 +275,22 @@ async function fetchAuthServerOrigin(pdsUrl: string, fetchImpl: typeof fetch): P
   return ok(authServer);
 }
 
+/**
+ * These three endpoints are where `postWithDpop` (oauth.ts) POSTs the PKCE
+ * code_verifier, the authorization code, the refresh token, and the DPoP
+ * proof — a non-https endpoint here leaks that body in cleartext, same
+ * security boundary as the PDS serviceEndpoint / authorization_servers[0]
+ * checks above. No-throw: a malformed URL string returns false rather than
+ * throwing, matching the rest of this module's no-throw contract.
+ */
+function isHttpsUrl(value: string): boolean {
+  try {
+    return new URL(value).protocol === 'https:';
+  } catch {
+    return false;
+  }
+}
+
 async function fetchAuthServerMetadata(issuerOrigin: string, fetchImpl: typeof fetch): Promise<Result<AuthServerMetadata, string>> {
   const result = await safeFetchJson(`${issuerOrigin}/.well-known/oauth-authorization-server`, fetchImpl);
   if (!result.ok) return result;
@@ -286,9 +302,20 @@ async function fetchAuthServerMetadata(issuerOrigin: string, fetchImpl: typeof f
     return err(`Authorization Server metadata issuer (${v['issuer']}) does not match its own origin (${issuerOrigin}) — RFC 8414 §3.3 requires an exact match`);
   }
   if (typeof v['authorization_endpoint'] !== 'string') return err('Authorization Server metadata missing authorization_endpoint');
+  if (!isHttpsUrl(v['authorization_endpoint'])) {
+    return err(`Authorization Server metadata authorization_endpoint must be https, got non-https endpoint: ${v['authorization_endpoint']}`);
+  }
   if (typeof v['token_endpoint'] !== 'string') return err('Authorization Server metadata missing token_endpoint');
+  if (!isHttpsUrl(v['token_endpoint'])) {
+    return err(`Authorization Server metadata token_endpoint must be https, got non-https endpoint: ${v['token_endpoint']}`);
+  }
   if (typeof v['pushed_authorization_request_endpoint'] !== 'string') {
     return err('Authorization Server metadata missing pushed_authorization_request_endpoint — atproto mandates PAR');
+  }
+  if (!isHttpsUrl(v['pushed_authorization_request_endpoint'])) {
+    return err(
+      `Authorization Server metadata pushed_authorization_request_endpoint must be https, got non-https endpoint: ${v['pushed_authorization_request_endpoint']}`
+    );
   }
   if (v['require_pushed_authorization_requests'] !== true) {
     return err('Authorization Server metadata require_pushed_authorization_requests must be true — atproto mandates PAR');
