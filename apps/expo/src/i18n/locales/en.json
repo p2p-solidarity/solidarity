@@ -831,6 +831,8 @@
   "nostrConnect.chooseNsec": "Paste an Existing Key (nsec)",
   "nostrConnect.nsecLabel": "Nostr Private Key (nsec)",
   "nostrConnect.nsecPlaceholder": "nsec1…",
+  "nostrConnect.revealNsec": "Show private key",
+  "nostrConnect.hideNsec": "Hide private key",
   "nostrConnect.connect": "Connect",
   "nostrConnect.back": "Back",
   "nostrConnect.provisioning": "Connecting…",

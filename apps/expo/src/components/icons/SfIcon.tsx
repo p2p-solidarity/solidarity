@@ -104,6 +104,7 @@ const SF_TO_MATERIAL: Partial<Record<SFSymbol, AndroidSymbol>> = {
   'exclamationmark.triangle': 'warning',
   'exclamationmark.triangle.fill': 'warning',
   eye: 'visibility',
+  'eye.slash': 'visibility_off',
   'face.smiling': 'mood',
   faceid: 'face',
   gearshape: 'settings',

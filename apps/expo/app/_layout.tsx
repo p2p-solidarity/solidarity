@@ -10,6 +10,8 @@
  * Boot order (Path A — manifest-first, sub-50 ms cold launch):
  *   1. install crypto polyfill (top-of-file import)
  *   2. await initMmkv()                  — Keychain hop + MMKV open
+ *   2b. await warmNostrKeyMirror()       — resident already; warms the
+ *                                          userKey.ts sync-mirror cache
  *   3. sync seed all feature manifests   — zero await, frame-1 ready
  *      (cards, contacts, groups, vault, shoutouts, credentials, issuers)
  *   4. await installI18n + preferences   — cheap, on-the-spot
@@ -54,6 +56,7 @@ import { useGroupStore } from '@/groups/store';
 import { useIdentityData } from '@/identity';
 import { installI18n } from '@/i18n';
 import { hydrateSensitiveActionPolicy } from '@/keychain';
+import { warmNostrKeyMirror } from '@/nostr/userKey';
 import { hydrateProfileSnapshots } from '@/people/profileSnapshots';
 import { hydrateProfile } from '@/profile/store';
 import { syncOnce } from '@/sakura/inbox';
@@ -166,6 +169,12 @@ export default function RootLayout() {
         logBoot('mmkv:start');
         await initMmkv();
         logBoot('mmkv:done');
+        // Warm the Nostr sync mirror's MMKV reference NOW so every later
+        // `hasNostrKeySync()` call (e.g. the Verify tab's badge-bindings
+        // row) is a real synchronous read instead of a cold-cache `false`
+        // — see userKey.ts's module doc. Cheap: `@/storage/mmkv` is
+        // already resident from `initMmkv()` above.
+        await warmNostrKeyMirror();
         // Sync, sub-millisecond: each store reads its plaintext manifest
         // from MMKV and seeds the zustand initial state. List/hero views
         // can render on the next frame without any decryption.

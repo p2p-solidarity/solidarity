@@ -66,6 +66,10 @@ import type * as SecureStoreNS from 'expo-secure-store';
 
 import { computeNip01EventId, hexDecode, hexEncode, type Nip01UnsignedEvent } from '@/dag/node';
 import type { NostrEvent } from '@/dag/nostrAdapter';
+// Type-only, same reasoning as SecureStoreNS above — `react-native-mmkv`
+// also pulls in React Native's Flow-syntax entry point. See
+// `warmNostrKeyMirror` below for the runtime (lazy, cached) load.
+import type { getMmkv as GetMmkvFn } from '@/storage/mmkv';
 
 import { HKDF_INFO_NOSTR, deriveSecp256k1Scalar, err, ok, type Result } from '@solidarity/shared';
 
@@ -73,6 +77,7 @@ const SCALAR_ALIAS = 'gg.solidarity.nostrkey.scalar.v1';
 const NSEC_HRP = 'nsec';
 const NPUB_HRP = 'npub';
 const SCALAR_BYTE_LENGTH = 32;
+const HAS_KEY_MIRROR_KEY = 'nostr:hasKey:v1';
 
 // ── Storage — own alias, own namespace (never shares state with
 //    `identity/rootKey.ts`'s mnemonic alias or `dag/devKey.ts`'s MMKV
@@ -115,6 +120,95 @@ let activeStorage: NostrKeyStorage = defaultStorage;
 /** Test-only override. Pass `null` to restore the real SecureStore-backed implementation. */
 export function __setNostrKeyStorageForTesting(storage: NostrKeyStorage | null): void {
   activeStorage = storage ?? defaultStorage;
+}
+
+// ── Sync mirror — an MMKV boolean written alongside every SecureStore
+//    write above, so a caller that only needs "is a key provisioned?" can
+//    read it on the render path instead of awaiting `hasNostrKey()`. This
+//    is the same seed-from-sync-cache pattern `settings/preferences.ts`
+//    uses for MMKV-backed state. SecureStore (`activeStorage` above) stays
+//    the source of truth; this mirror can only be trusted to say "no key
+//    yet", which is exactly the direction `BadgeBindingsSection`
+//    (app/(tabs)/verify/index.tsx) needs to avoid flashing a wrong
+//    definite state for an already-connected user.
+//
+//    `getMmkv` is genuinely synchronous (see `storage/mmkv.ts`), but this
+//    module can't statically `import { getMmkv } from '@/storage/mmkv'` —
+//    that pulls real `react-native-mmkv` in at MODULE-LOAD time, and
+//    (unlike `loadSecureStore` below, which every caller already awaits)
+//    `hasNostrKeySync()` must stay callable with zero `await`s. So the app
+//    root (`app/_layout.tsx`) calls `warmNostrKeyMirror()` ONCE, right
+//    after its own `await initMmkv()` — by the time any screen mounts,
+//    `cachedGetMmkv` is already warm and every `hasNostrKeySync()` call
+//    after that is a plain synchronous MMKV read. Until warmed (or on any
+//    storage error), reads/writes are safe no-ops that degrade to `false`
+//    — never a fabricated `true`. ─────────────────────────────────────────
+
+export interface NostrKeyMirrorStorage {
+  readonly getHasKey: () => boolean;
+  readonly setHasKey: (value: boolean) => void;
+}
+
+let cachedGetMmkv: typeof GetMmkvFn | undefined;
+
+/**
+ * Warm the sync-mirror's MMKV reference. Call exactly once, from
+ * `app/_layout.tsx`, right after `await initMmkv()` resolves. A no-op
+ * (never throws) if `react-native-mmkv` is unavailable (web preview,
+ * tests) — the mirror simply stays cold and `hasNostrKeySync()` degrades
+ * to `false`.
+ */
+export async function warmNostrKeyMirror(): Promise<void> {
+  try {
+    const mod = await import('@/storage/mmkv');
+    cachedGetMmkv = mod.getMmkv;
+  } catch {
+    // Native module unavailable — mirror stays cold, degrades to `false`.
+  }
+}
+
+const defaultMirrorStorage: NostrKeyMirrorStorage = {
+  getHasKey: () => {
+    if (!cachedGetMmkv) return false;
+    try {
+      return cachedGetMmkv().getBoolean(HAS_KEY_MIRROR_KEY) ?? false;
+    } catch {
+      return false;
+    }
+  },
+  setHasKey: (value) => {
+    if (!cachedGetMmkv) return;
+    try {
+      cachedGetMmkv().set(HAS_KEY_MIRROR_KEY, value);
+    } catch {
+      // MMKV write failed — best effort. `hasNostrKeySync()` may lag one
+      // write behind; the async `hasNostrKey()` path is unaffected.
+    }
+  },
+};
+
+let activeMirrorStorage: NostrKeyMirrorStorage = defaultMirrorStorage;
+
+/** Test-only override. Pass `null` to restore the real MMKV-backed implementation. */
+export function __setNostrKeyMirrorStorageForTesting(storage: NostrKeyMirrorStorage | null): void {
+  activeMirrorStorage = storage ?? defaultMirrorStorage;
+}
+
+/**
+ * Synchronous mirror of `hasNostrKey()` — call this on the render path
+ * (e.g. `useState(() => hasNostrKeySync())`) instead of seeding from a
+ * fabricated default and correcting later. Written to `true` by
+ * `provisionFromRootMnemonic()`/`importNsec()` on success, and to `false`
+ * by `deleteNostrKey()` — see each function below. Any read error
+ * (including from an injected `NostrKeyMirrorStorage`) degrades to
+ * `false`, never a fabricated `true`.
+ */
+export function hasNostrKeySync(): boolean {
+  try {
+    return activeMirrorStorage.getHasKey();
+  } catch {
+    return false;
+  }
 }
 
 // ── Root-mnemonic reveal seam — lazy-loaded so importing this module
@@ -177,6 +271,7 @@ export async function provisionFromRootMnemonic(): Promise<Result<string, string
   } catch (e) {
     return err(storageErrorMessage(e));
   }
+  activeMirrorStorage.setHasKey(true);
   return ok(pubkeyHex);
 }
 
@@ -214,6 +309,7 @@ export async function importNsec(nsec: string): Promise<Result<string, string>> 
   } catch (e) {
     return err(storageErrorMessage(e));
   }
+  activeMirrorStorage.setHasKey(true);
   return ok(pubkeyHex);
 }
 
@@ -229,6 +325,7 @@ export async function hasNostrKey(): Promise<boolean> {
 /** Delete the persisted key. Used by tests and a future rotate/reset flow. */
 export async function deleteNostrKey(): Promise<void> {
   await activeStorage.deleteScalarHex();
+  activeMirrorStorage.setHasKey(false);
 }
 
 // ── NIP-19 bech32 — npub ENCODE only ────────────────────────────────────

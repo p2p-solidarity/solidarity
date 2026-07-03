@@ -831,6 +831,8 @@
   "nostrConnect.chooseNsec": "貼上既有金鑰(nsec)",
   "nostrConnect.nsecLabel": "Nostr 私鑰(nsec)",
   "nostrConnect.nsecPlaceholder": "nsec1…",
+  "nostrConnect.revealNsec": "顯示私鑰",
+  "nostrConnect.hideNsec": "隱藏私鑰",
   "nostrConnect.connect": "連結",
   "nostrConnect.back": "返回",
   "nostrConnect.provisioning": "連結中…",

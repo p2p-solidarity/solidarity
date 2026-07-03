@@ -22,13 +22,21 @@
  *      never auto-provision — both return `err('notProvisioned')` before
  *      any key exists.
  *   6. `hasNostrKey()` / `deleteNostrKey()` reflect provisioning state.
+ *   7. `hasNostrKeySync()` — the sync MMKV mirror added for A4.4 fix round
+ *      1 (`BadgeBindingsSection`'s connect-status flash) — flips true/false
+ *      in lockstep with successful provisioning/import/delete, and never
+ *      flips true on a failed attempt or a storage error.
  *
  * Isolation note: this suite uses ONLY userKey.ts's own DI hooks
- * (`__setNostrKeyStorageForTesting`, `__setNostrMnemonicRevealerForTesting`)
- * instead of `mock.module('expo-secure-store', ...)` / mocking
- * `@/identity/rootKey` globally — see rootKey.test.ts's isolation note for
- * why global `mock.module` is unsafe across files in the same `bun test`
- * process.
+ * (`__setNostrKeyStorageForTesting`, `__setNostrMnemonicRevealerForTesting`,
+ * `__setNostrKeyMirrorStorageForTesting`) instead of `mock.module
+ * ('expo-secure-store', ...)` / mocking `@/identity/rootKey` globally — see
+ * rootKey.test.ts's isolation note for why global `mock.module` is unsafe
+ * across files in the same `bun test` process. `getMmkv` (the sync
+ * mirror's real backing store) is type-only imported by userKey.ts and
+ * only ever touched via `warmNostrKeyMirror()` (called from
+ * `app/_layout.tsx`, never from this suite), so `@/storage/mmkv` /
+ * `react-native-mmkv` is never resolved here either — no stub needed.
  */
 import { afterEach, beforeAll, beforeEach, describe, expect, it } from 'bun:test';
 import { bech32 } from '@scure/base';
@@ -55,6 +63,7 @@ interface UserKeyMod {
   readonly __setNostrMnemonicRevealerForTesting: (
     revealer: (() => Promise<Res<string>>) | null
   ) => void;
+  readonly __setNostrKeyMirrorStorageForTesting: (storage: typeof fakeMirrorStorage | null) => void;
   readonly getNostrPubkey: () => Promise<Res<string>>;
   readonly provisionFromRootMnemonic: () => Promise<Res<string>>;
   readonly importNsec: (nsec: string) => Promise<Res<string>>;
@@ -65,6 +74,7 @@ interface UserKeyMod {
     readonly created_at?: number;
   }) => Promise<Res<NostrEventLike>>;
   readonly hasNostrKey: () => Promise<boolean>;
+  readonly hasNostrKeySync: () => boolean;
   readonly deleteNostrKey: () => Promise<void>;
   readonly npubEncode: (pubkeyHex: string) => Res<string>;
 }
@@ -94,6 +104,18 @@ const fakeRevealer = (): Promise<Res<string>> => {
   return Promise.resolve(nextRevealResult);
 };
 
+// Sync-mirror fake — a plain in-memory boolean standing in for the real
+// MMKV-backed mirror, so this suite pins the write/read contract without
+// touching `getMmkv()` (unavailable under `bun test`, see storage/mmkv.ts).
+let mirrorHasKey = false;
+
+const fakeMirrorStorage = {
+  getHasKey: (): boolean => mirrorHasKey,
+  setHasKey: (value: boolean): void => {
+    mirrorHasKey = value;
+  },
+};
+
 let mod: UserKeyMod;
 
 beforeAll(async () => {
@@ -101,11 +123,13 @@ beforeAll(async () => {
   mod = imported as UserKeyMod;
   mod.__setNostrKeyStorageForTesting(fakeStorage);
   mod.__setNostrMnemonicRevealerForTesting(fakeRevealer);
+  mod.__setNostrKeyMirrorStorageForTesting(fakeMirrorStorage);
 });
 
 beforeEach(async () => {
   scalarStore.clear();
   revealCalls = 0;
+  mirrorHasKey = false;
   nextRevealResult = { ok: false, error: 'notProvisioned' };
   await mod.deleteNostrKey();
 });
@@ -423,5 +447,78 @@ describe('deleteNostrKey', () => {
     expect(r.ok).toBe(false);
     if (r.ok) return;
     expect(r.error).toBe('notProvisioned');
+  });
+});
+
+// ── 8. hasNostrKeySync — MMKV mirror, written on every provisioning path ──
+//
+// A4.4 fix round 1: `BadgeBindingsSection`
+// (app/(tabs)/verify/index.tsx) seeds its "Connected" render state from
+// this sync mirror instead of a fabricated default that flashes wrong for
+// an already-connected user — see CLAUDE.md nav rule 10. Pins:
+//   - starts `false` (never a fabricated `true`)
+//   - flips `true` the moment a provisioning path SUCCEEDS
+//   - never flips `true` on a FAILED provisioning attempt
+//   - flips back to `false` on `deleteNostrKey()`
+//   - a storage error degrades to `false`, never `true`
+
+describe('hasNostrKeySync — synchronous MMKV mirror', () => {
+  it('starts false when no key has ever been provisioned', () => {
+    expect(mod.hasNostrKeySync()).toBe(false);
+  });
+
+  it('flips true immediately after provisionFromRootMnemonic() succeeds', async () => {
+    expect(mod.hasNostrKeySync()).toBe(false);
+    nextRevealResult = { ok: true, value: derivedVectors.valid[0]!.mnemonic };
+    const r = await mod.provisionFromRootMnemonic();
+    expect(r.ok).toBe(true);
+    expect(mod.hasNostrKeySync()).toBe(true);
+  });
+
+  it('flips true immediately after importNsec() succeeds', async () => {
+    expect(mod.hasNostrKeySync()).toBe(false);
+    const r = await mod.importNsec(
+      'nsec1vl029mgpspedva04g90vltkh6fvh240zqtv9k0t9af8935ke9laqsnlfe5'
+    );
+    expect(r.ok).toBe(true);
+    expect(mod.hasNostrKeySync()).toBe(true);
+  });
+
+  it('stays false when provisionFromRootMnemonic() fails (e.g. biometricDenied)', async () => {
+    nextRevealResult = { ok: false, error: 'biometricDenied' };
+    const r = await mod.provisionFromRootMnemonic();
+    expect(r.ok).toBe(false);
+    expect(mod.hasNostrKeySync()).toBe(false);
+  });
+
+  it('stays false when importNsec() rejects a malformed nsec', async () => {
+    const r = await mod.importNsec('not-even-bech32');
+    expect(r.ok).toBe(false);
+    expect(mod.hasNostrKeySync()).toBe(false);
+  });
+
+  it('flips back to false after deleteNostrKey()', async () => {
+    nextRevealResult = { ok: true, value: derivedVectors.valid[0]!.mnemonic };
+    await mod.provisionFromRootMnemonic();
+    expect(mod.hasNostrKeySync()).toBe(true);
+
+    await mod.deleteNostrKey();
+    expect(mod.hasNostrKeySync()).toBe(false);
+  });
+
+  it('a mirror storage error degrades to false, never a fabricated true', () => {
+    mod.__setNostrKeyMirrorStorageForTesting({
+      getHasKey: () => {
+        throw new Error('mmkv not initialised');
+      },
+      setHasKey: () => {
+        throw new Error('mmkv not initialised');
+      },
+    });
+    try {
+      expect(mod.hasNostrKeySync()).toBe(false);
+    } finally {
+      mod.__setNostrKeyMirrorStorageForTesting(fakeMirrorStorage);
+    }
   });
 });

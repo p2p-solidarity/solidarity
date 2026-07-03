@@ -48,7 +48,7 @@ import {
   type IdentityCardEntity,
   type ProvableClaimEntity,
 } from '@/identity';
-import { hasNostrKey } from '@/nostr/userKey';
+import { hasNostrKey, hasNostrKeySync } from '@/nostr/userKey';
 
 export default function VerifyTab() {
   const { t } = useTranslation();
@@ -149,10 +149,18 @@ function ScanEntrySection({ onScan }: { onScan: () => void }) {
  * A4) is the first platform wired up; the row's status re-checks on every
  * focus (`useFocusEffect`, not just mount) so returning here right after
  * completing the wizard shows "Connected" immediately, no manual refresh.
+ *
+ * Initial render state comes from `hasNostrKeySync()` — a synchronous MMKV
+ * mirror (`src/nostr/userKey.ts`) — instead of a fabricated `false`
+ * default, so an already-connected user never sees a false "Not connected"
+ * flash on tab focus while the async `hasNostrKey()` SecureStore read is
+ * still in flight (CLAUDE.md nav rule 10). `useFocusEffect` still silently
+ * re-verifies against the SecureStore source of truth on every focus, the
+ * same as before this fix.
  */
 function BadgeBindingsSection({ onConnectNostr }: { readonly onConnectNostr: () => void }) {
   const { t } = useTranslation();
-  const [nostrConnected, setNostrConnected] = useState(false);
+  const [nostrConnected, setNostrConnected] = useState(() => hasNostrKeySync());
 
   useFocusEffect(
     useCallback(() => {

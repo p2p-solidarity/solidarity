@@ -31,6 +31,7 @@ import { ActivityIndicator, ScrollView, Text, TextInput, View } from 'react-nati
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { truncateNpub } from '@/badges/nostrBadgeDisplay';
+import { PressableScale } from '@/components/common/PressableScale';
 import { SfIcon } from '@/components/icons/SfIcon';
 import { SettingsBackToolbar, SettingsScreenTitle } from '@/components/settings/SettingsBlocks';
 import { ThemedButton, ThemedText } from '@/components/themed';
@@ -275,26 +276,58 @@ function PasteNsecStep({
   readonly onSubmit: () => void;
 }) {
   const { t } = useTranslation();
+  // Masked by default — this field holds a raw Nostr PRIVATE key. Local UI
+  // state only (rule 9): the smallest component that renders the control.
+  const [revealed, setRevealed] = useState(false);
   return (
     <View style={{ gap: 12 }}>
       <ThemedText variant="label">{t('nostrConnect.nsecLabel')}</ThemedText>
-      <TextInput
-        value={value}
-        onChangeText={onChange}
-        placeholder={t('nostrConnect.nsecPlaceholder')}
-        placeholderTextColor={Colors.text3}
-        autoCapitalize="none"
-        autoCorrect={false}
-        className="bg-searchBg text-text1"
-        style={{
-          paddingHorizontal: 14,
-          paddingVertical: 12,
-          fontSize: 14,
-          fontFamily: 'Menlo',
-          borderWidth: 1,
-          borderColor: Colors.divider,
-        }}
-      />
+      <View style={{ justifyContent: 'center' }}>
+        <TextInput
+          value={value}
+          onChangeText={onChange}
+          placeholder={t('nostrConnect.nsecPlaceholder')}
+          placeholderTextColor={Colors.text3}
+          autoCapitalize="none"
+          autoCorrect={false}
+          autoComplete="off"
+          // `oneTimeCode`, not `password` — this is a raw crypto private
+          // key, not a website login. `password` invites iOS to offer
+          // "Save Password to Keychain" (the opposite of what we want:
+          // this key should never get cached by a password manager).
+          // `oneTimeCode` still disables autofill suggestions/autocorrect
+          // without that prompt.
+          textContentType="oneTimeCode"
+          secureTextEntry={!revealed}
+          className="bg-searchBg text-text1"
+          style={{
+            paddingHorizontal: 14,
+            paddingRight: 44,
+            paddingVertical: 12,
+            fontSize: 14,
+            fontFamily: 'Menlo',
+            borderWidth: 1,
+            borderColor: Colors.divider,
+          }}
+        />
+        <PressableScale
+          onPress={() => { setRevealed((r) => !r); }}
+          haptic={false}
+          accessibilityRole="button"
+          accessibilityLabel={revealed ? t('nostrConnect.hideNsec') : t('nostrConnect.revealNsec')}
+          style={{
+            position: 'absolute',
+            right: 0,
+            top: 0,
+            bottom: 0,
+            width: 44,
+            alignItems: 'center',
+            justifyContent: 'center',
+          }}
+        >
+          <SfIcon name={revealed ? 'eye.slash' : 'eye'} size={18} color={Colors.text3} />
+        </PressableScale>
+      </View>
       <ThemedButton
         label={t('nostrConnect.connect')}
         variant="primary"
