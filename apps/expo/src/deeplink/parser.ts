@@ -5,7 +5,7 @@
  */
 import { resolveDidKey } from '@solidarity/shared';
 
-import { isVerifiedDomain } from './domainVerification';
+import { isProductHost, isVerifiedDomain } from './domainVerification';
 
 export type DeepLinkRoute =
   | { readonly kind: 'card'; readonly cardId: string }
@@ -18,6 +18,15 @@ export type DeepLinkRoute =
 
 const UUID_RE =
   /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/u;
+
+/**
+ * A real did:key:z… (P-256) is ~58 chars (`did:key:z` + base58 of 35
+ * bytes). 128 is generous headroom for future did:key variants while
+ * still rejecting a pathologically long path segment (e.g. a 100 KB
+ * string) before it ever reaches `resolveDidKey`'s base58 decode — cheap
+ * DoS defense for a value that arrives as unauthenticated deep-link input.
+ */
+const MAX_PEAR_DID_LENGTH = 128;
 
 /**
  * True iff `did` is a well-formed `did:key:z…` (P-256) — the ONLY validation
@@ -36,6 +45,7 @@ const UUID_RE =
  * module doc for how the UI stays honest about that distinction.
  */
 export function isValidPearDid(did: string): boolean {
+  if (did.length > MAX_PEAR_DID_LENGTH) return false;
   try {
     resolveDidKey(did);
     return true;
@@ -53,7 +63,15 @@ export function isValidPearDid(did: string): boolean {
  */
 function parseVerifiedDomainRoute(url: URL): DeepLinkRoute | null {
   const segments = url.pathname.replace(/^\//u, '').split('/');
-  if (segments[0] === 'c' && segments[1] && UUID_RE.test(segments[1])) {
+  // `isVerifiedDomain` (the gate the caller already applied to reach this
+  // function) also allowlists third-party identity hosts — apple.com,
+  // google.com, microsoft.com, github.com, linkedin.com — trusted for a
+  // DIFFERENT purpose (OIDC/domain verification). An in-app routing side
+  // effect (card connect, Pear connect) must only fire on hosts WE own, so
+  // the `card`/`pear` branches below additionally require `isProductHost`.
+  // Code-review Finding 1, Task A5.4 follow-up.
+  const productHost = isProductHost(url.host);
+  if (productHost && segments[0] === 'c' && segments[1] && UUID_RE.test(segments[1])) {
     return { kind: 'card', cardId: segments[1] };
   }
   // Pear deep link universal-link equivalent (1.3.3 Task A5.4, US-20):
@@ -63,7 +81,13 @@ function parseVerifiedDomainRoute(url: URL): DeepLinkRoute | null {
   // `segments.length === 2` (no trailing/extra path parts) mirrors the
   // custom-scheme branch's strictness — reject path traversal / extra
   // segments rather than silently ignoring them.
-  if (segments[0] === 'pear' && segments.length === 2 && segments[1] && isValidPearDid(segments[1])) {
+  if (
+    productHost &&
+    segments[0] === 'pear' &&
+    segments.length === 2 &&
+    segments[1] &&
+    isValidPearDid(segments[1])
+  ) {
     return { kind: 'pear', did: segments[1] };
   }
   // Verified Page link (1.3.3 Task A2.3, US-11): `https://solidarity.gg/#<fragment>`

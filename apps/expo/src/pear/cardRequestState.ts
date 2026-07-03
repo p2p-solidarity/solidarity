@@ -40,6 +40,22 @@ import type { PearErrorKind } from './protocol';
  *  a coarser bucket than the wire-protocol kinds). */
 export type CardRequestErrorKind = PearErrorKind | 'connection' | 'authentication';
 
+/**
+ * `CardRequestErrorKind` → `pearExchange.request.error.<suffix>` i18n key
+ * suffix. Single source of truth for the mapping both `PearConnectSection`
+ * and `CardExchangeSection` render (was copy-pasted between the two —
+ * code-review Finding 2, Task A5.4 follow-up).
+ */
+export const CARD_REQUEST_ERROR_I18N_SUFFIX: Readonly<Record<CardRequestErrorKind, string>> = {
+  declined: 'declined',
+  timeout: 'timeout',
+  malformed: 'malformed',
+  verification: 'verification',
+  protocol: 'protocol',
+  connection: 'connection',
+  authentication: 'authentication',
+};
+
 export type CardRequestErrorStage = 'connect' | 'authenticate' | 'request' | 'verify';
 
 export interface CardRequestError {

@@ -31,7 +31,7 @@ import { pushToast } from '@/feedback/toast';
 import { useTranslation } from '@/i18n';
 import { useProfileSnapshotStore } from '@/people/profileSnapshots';
 import { formatPeerLabel } from '@/pear/cardRelease';
-import type { CardRequestErrorKind, CardRequestPhase } from '@/pear/cardRequestState';
+import { CARD_REQUEST_ERROR_I18N_SUFFIX, type CardRequestPhase } from '@/pear/cardRequestState';
 import type { PresentRequestErrorKind, PresentRequestPhase } from '@/pear/presentRequestState';
 import {
   useCardRequestFlow,
@@ -56,17 +56,7 @@ export interface CardExchangeSectionProps {
   readonly verifiedDisplayName: string;
 }
 
-const ERROR_I18N_SUFFIX: Readonly<Record<CardRequestErrorKind, string>> = {
-  declined: 'declined',
-  timeout: 'timeout',
-  malformed: 'malformed',
-  verification: 'verification',
-  protocol: 'protocol',
-  connection: 'connection',
-  authentication: 'authentication',
-};
-
-/** Same pattern as `ERROR_I18N_SUFFIX` above, for the reachable
+/** Same pattern as `CARD_REQUEST_ERROR_I18N_SUFFIX` (`cardRequestState.ts`), for the reachable
  *  (responder) side — no raw diagnostic text ever reaches the UI, only a
  *  kind-keyed friendly string. See `useCardExchange.ts`'s
  *  `ReachableErrorKind` doc for what each kind actually means. */
@@ -75,7 +65,7 @@ const REACHABLE_ERROR_I18N_SUFFIX: Readonly<Record<ReachableErrorKind, string>> 
   protocol: 'protocol',
 };
 
-/** Same pattern as `ERROR_I18N_SUFFIX` above, for A5.3's present-request
+/** Same pattern as `CARD_REQUEST_ERROR_I18N_SUFFIX` above, for A5.3's present-request
  *  (requester) side — includes the extra `'verification'` kind for a local
  *  `verifyVpToken` failure, which `CardRequestErrorKind` has no analogue
  *  for (the card flow's verification happens inside `protocol.ts` itself). */
@@ -117,7 +107,7 @@ function RequestStatusLine({ phase, t }: { readonly phase: CardRequestPhase; rea
   if (phase.kind === 'error') {
     return (
       <ThemedText variant="caption" tone="error">
-        {t(`pearExchange.request.error.${ERROR_I18N_SUFFIX[phase.error.kind]}`)}
+        {t(`pearExchange.request.error.${CARD_REQUEST_ERROR_I18N_SUFFIX[phase.error.kind]}`)}
       </ThemedText>
     );
   }

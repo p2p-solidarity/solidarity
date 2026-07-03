@@ -39,25 +39,12 @@ import { Colors } from '@/constants/Colors';
 import { pushToast } from '@/feedback/toast';
 import { useTranslation } from '@/i18n';
 import { useProfileSnapshotStore } from '@/people/profileSnapshots';
-import type { CardRequestErrorKind, CardRequestPhase } from '@/pear/cardRequestState';
+import { CARD_REQUEST_ERROR_I18N_SUFFIX, type CardRequestPhase } from '@/pear/cardRequestState';
 import { useCardRequestFlow } from '@/pear/useCardExchange';
 
 export interface PearConnectSectionProps {
   readonly did: string;
 }
-
-// Same kind → i18n-suffix mapping as `CardExchangeSection.tsx`'s
-// `ERROR_I18N_SUFFIX` — reused wholesale via the shared `pearExchange.request.*`
-// error strings rather than forking a parallel copy.
-const ERROR_I18N_SUFFIX: Readonly<Record<CardRequestErrorKind, string>> = {
-  declined: 'declined',
-  timeout: 'timeout',
-  malformed: 'malformed',
-  verification: 'verification',
-  protocol: 'protocol',
-  connection: 'connection',
-  authentication: 'authentication',
-};
 
 function connectButtonLabel(phase: CardRequestPhase, t: (key: string) => string): string {
   switch (phase.kind) {
@@ -119,7 +106,7 @@ export function PearConnectSection({ did }: PearConnectSectionProps): ReactNode 
         ) : null}
         {phase.kind === 'error' ? (
           <ThemedText variant="caption" tone="error">
-            {t(`pearExchange.request.error.${ERROR_I18N_SUFFIX[phase.error.kind]}`)}
+            {t(`pearExchange.request.error.${CARD_REQUEST_ERROR_I18N_SUFFIX[phase.error.kind]}`)}
           </ThemedText>
         ) : null}
         {phase.kind === 'received' ? (

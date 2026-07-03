@@ -133,4 +133,56 @@ describe('parseDeepLink', () => {
     expect(parseDeepLink(`https://solidarity.gg/pear/${REAL_DID}/extra`).kind).toBe('unknown');
     expect(parseDeepLink('https://solidarity.gg/pear/').kind).toBe('unknown');
   });
+
+  // Code-review Finding 1 (Task A5.4 follow-up): `isVerifiedDomain`/
+  // `TRUSTED_HOSTS` also allowlists third-party identity hosts
+  // (apple.com/google.com/microsoft.com/github.com/linkedin.com) for a
+  // DIFFERENT purpose (OIDC/domain verification). The `pear` and `card`
+  // universal-link routes must only fire on OUR OWN product hosts
+  // (solidarity.gg / airmeishi.app) — not on every host that list trusts
+  // for something else entirely.
+  it('does NOT route a pear link on a trusted-but-non-product host (github.com)', () => {
+    expect(parseDeepLink(`https://github.com/pear/${REAL_DID}`).kind).toBe('unknown');
+  });
+
+  it('does NOT route a card link on a trusted-but-non-product host (github.com)', () => {
+    expect(parseDeepLink('https://github.com/c/f47ac10b-58cc-4372-a567-0e02b2c3d479').kind).toBe(
+      'unknown'
+    );
+  });
+
+  it('does NOT route pear/card links on the other allowlisted identity hosts', () => {
+    for (const host of ['apple.com', 'google.com', 'microsoft.com', 'linkedin.com']) {
+      expect(parseDeepLink(`https://${host}/pear/${REAL_DID}`).kind).toBe('unknown');
+      expect(
+        parseDeepLink(`https://${host}/c/f47ac10b-58cc-4372-a567-0e02b2c3d479`).kind
+      ).toBe('unknown');
+    }
+  });
+
+  it('still routes pear/card links on both product hosts', () => {
+    for (const host of ['solidarity.gg', 'airmeishi.app']) {
+      expect(parseDeepLink(`https://${host}/pear/${REAL_DID}`).kind).toBe('pear');
+      expect(
+        parseDeepLink(`https://${host}/c/f47ac10b-58cc-4372-a567-0e02b2c3d479`).kind
+      ).toBe('card');
+    }
+  });
+
+  // Finding 2 (minor, pinned): unpinned edge cases named in review.
+  it('rejects an absurdly-long did string without crashing or hanging', () => {
+    const huge = `did:key:z${'1'.repeat(100_000)}`;
+    expect(() => parseDeepLink(`solidarity://pear/${huge}`)).not.toThrow();
+    expect(parseDeepLink(`solidarity://pear/${huge}`).kind).toBe('unknown');
+    expect(() => parseDeepLink(`https://solidarity.gg/pear/${huge}`)).not.toThrow();
+    expect(parseDeepLink(`https://solidarity.gg/pear/${huge}`).kind).toBe('unknown');
+  });
+
+  it('extracts the did cleanly from a solidarity://pear/<did>?query link, ignoring the query string', () => {
+    const r = parseDeepLink(`solidarity://pear/${REAL_DID}?evil=1&other=2`);
+    expect(r.kind).toBe('pear');
+    if (r.kind === 'pear') {
+      expect(r.did).toBe(REAL_DID);
+    }
+  });
 });
