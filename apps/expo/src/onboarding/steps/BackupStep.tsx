@@ -50,7 +50,7 @@ import { haptic } from '@/feedback/haptics';
 import { useTranslation } from '@/i18n';
 import { createFromFreshMnemonic, enableICloudBackup, hasRootKey, revealMnemonicForExport } from '@/identity';
 import { usePreferences } from '@/settings/preferences';
-import { resolveMnemonicForCeremony } from './backupStepLogic';
+import { resolveIcloudAcceptOutcome, resolveMnemonicForCeremony } from './backupStepLogic';
 import { OnboardingScaffold } from './OnboardingScaffold';
 
 /** Android has no iCloud Keychain — the option is never offered there
@@ -155,12 +155,12 @@ export function BackupStep({ onBack, onDone }: BackupStepProps) {
   const acceptICloud = async () => {
     setIcloudSubmitting(true);
     try {
-      const result = await enableICloudBackup();
-      if (!result.ok) {
+      const outcome = await resolveIcloudAcceptOutcome(enableICloudBackup);
+      if (outcome.kind === 'error') {
         showError({
           context: 'Onboarding › Backup',
           summary: t('backupStep.icloudFailed'),
-          error: new Error(result.error.kind),
+          error: new Error(outcome.error.kind),
         });
         await declineToMnemonic();
         return;

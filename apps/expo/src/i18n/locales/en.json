@@ -80,7 +80,7 @@
   "backupStep.title": "Back Up Your Key",
   "backupStep.subtitle": "Your identity lives on this key. Choose how to keep it safe.",
   "backupStep.subtitleMnemonicOnly": "Your identity lives on this key. Write down a recovery phrase to keep it safe.",
-  "backupStep.icloudExplainer": "iCloud Keychain backs up your key end-to-end encrypted, and makes it available on your other devices signed into the same Apple ID. Recommended — no phrase to write down.",
+  "backupStep.icloudExplainer": "iCloud Keychain backs up your key end-to-end encrypted, and makes it available on your other devices signed into the same Apple ID. Recommended — no phrase to write down. Cross-device sync requires iCloud Keychain to be turned on in Settings → [your name] → iCloud → Passwords and Keychain — your key is saved either way, and will sync once you turn it on.",
   "backupStep.useICloud": "Use iCloud Keychain",
   "backupStep.useMnemonic": "Write down my recovery phrase",
   "backupStep.icloudFailed": "Couldn't back up to iCloud Keychain. Write down a recovery phrase instead.",

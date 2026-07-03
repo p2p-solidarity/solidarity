@@ -80,7 +80,7 @@
   "backupStep.title": "備份你的金鑰",
   "backupStep.subtitle": "你的身分存放在這把金鑰中。選擇如何妥善保存它。",
   "backupStep.subtitleMnemonicOnly": "你的身分存放在這把金鑰中。請寫下復原助記詞以妥善保存它。",
-  "backupStep.icloudExplainer": "iCloud 鑰匙圈會以端對端加密備份你的金鑰,並讓你在使用相同 Apple ID 登入的其他裝置上使用。建議選項 — 不需要手寫任何字詞。",
+  "backupStep.icloudExplainer": "iCloud 鑰匙圈會以端對端加密備份你的金鑰,並讓你在使用相同 Apple ID 登入的其他裝置上使用。建議選項 — 不需要手寫任何字詞。跨裝置同步需要在「設定」→「你的姓名」→「iCloud」→「密碼與鑰匙圈」中開啟 iCloud 鑰匙圈 — 金鑰無論如何都會先儲存,開啟後才會同步。",
   "backupStep.useICloud": "使用 iCloud 鑰匙圈",
   "backupStep.useMnemonic": "手寫我的復原助記詞",
   "backupStep.icloudFailed": "無法備份到 iCloud 鑰匙圈，請改為手寫復原助記詞。",

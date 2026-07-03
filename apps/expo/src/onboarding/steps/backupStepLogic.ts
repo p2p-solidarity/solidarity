@@ -41,3 +41,26 @@ export async function resolveMnemonicForCeremony(
   if (!revealed.ok) return { kind: 'error', error: revealed.error };
   return { kind: 'ready', words: revealed.value.split(' ') };
 }
+
+export type IcloudAcceptOutcome =
+  | { readonly kind: 'success' }
+  | { readonly kind: 'error'; readonly error: RootKeyError };
+
+/**
+ * Resolve the outcome of accepting the "Use iCloud Keychain" option: calls
+ * `enableFn` (`enableICloudBackup`) and reports whether the write actually
+ * succeeded. Pure decision only — `BackupStep.tsx`'s `acceptICloud` owns the
+ * side effects gated on this outcome: on `'success'`, record
+ * `rootKeySyncChoice = 'icloud'` and advance (`onDone()`); on `'error'`, show
+ * the real error and fall back to the mnemonic ceremony
+ * (`declineToMnemonic`). `rootKeySyncChoice` must NEVER be set before this
+ * resolves `'success'` — CLAUDE.md rule 8 (no fake data), and the exact bug
+ * task A1.5 exists to fix (see `rootKey.ts`'s module doc).
+ */
+export async function resolveIcloudAcceptOutcome(
+  enableFn: () => Promise<Result<void, RootKeyError>>
+): Promise<IcloudAcceptOutcome> {
+  const result = await enableFn();
+  if (!result.ok) return { kind: 'error', error: result.error };
+  return { kind: 'success' };
+}

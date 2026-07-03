@@ -12,12 +12,12 @@ import { describe, expect, it } from 'bun:test';
 import type { Result } from '@solidarity/shared';
 import type { RootKeyError } from '@/identity';
 
-import { resolveMnemonicForCeremony } from '../../src/onboarding/steps/backupStepLogic';
+import { resolveIcloudAcceptOutcome, resolveMnemonicForCeremony } from '../../src/onboarding/steps/backupStepLogic';
 
 function ok<T>(value: T): Result<T, RootKeyError> {
   return { ok: true, value };
 }
-function err(error: RootKeyError): Result<string, RootKeyError> {
+function err<T>(error: RootKeyError): Result<T, RootKeyError> {
   return { ok: false, error };
 }
 
@@ -66,6 +66,39 @@ describe('resolveMnemonicForCeremony', () => {
     expect(outcome).toEqual({
       kind: 'error',
       error: { kind: 'storageFailed', message: 'disk full' },
+    });
+  });
+});
+
+/**
+ * Regression target: `BackupStep.tsx`'s `acceptICloud` must gate
+ * `setPref('rootKeySyncChoice', 'icloud')` (and `onDone()`) on the
+ * synchronizable-item write actually resolving `ok(...)` — never on tap
+ * alone (CLAUDE.md rule 8, no fake data; the exact bug task A1.5 exists to
+ * fix). `resolveIcloudAcceptOutcome` is the pure decision `acceptICloud`
+ * branches on, so asserting its outcome here is equivalent to asserting the
+ * gating: the component only reaches the choice-recording branch on
+ * `'success'`, and only reaches the showError + mnemonic-ceremony-fallback
+ * branch on `'error'`.
+ */
+describe('resolveIcloudAcceptOutcome', () => {
+  it('write ok: resolves success — caller records the choice and advances', async () => {
+    const enableFn = async (): Promise<Result<void, RootKeyError>> => ok(undefined);
+
+    const outcome = await resolveIcloudAcceptOutcome(enableFn);
+
+    expect(outcome).toEqual({ kind: 'success' });
+  });
+
+  it('write err: resolves error — caller must NOT record the choice, shows the real error, and falls back to the mnemonic ceremony', async () => {
+    const enableFn = async (): Promise<Result<void, RootKeyError>> =>
+      err({ kind: 'storageFailed', message: 'icloud keychain write rejected' });
+
+    const outcome = await resolveIcloudAcceptOutcome(enableFn);
+
+    expect(outcome).toEqual({
+      kind: 'error',
+      error: { kind: 'storageFailed', message: 'icloud keychain write rejected' },
     });
   });
 });
