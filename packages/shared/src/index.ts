@@ -18,14 +18,20 @@
  *   challenge.ts  DID-challenge/response (Verify scan + Pear channel)
  *   derive.ts     Unified BIP-39 mnemonic -> P-256/secp256k1 scalar
  *                 derivation (App<->Web portability)
+ *   profile.ts    Profile Record schema (01-spec §3) + Result-returning
+ *                 parser
+ *   fragment.ts   URL-fragment codec (deflate + base64url) for QR/offline
+ *                 profile publication (01-spec §4.3)
  */
 export * from './canonical';
 export * from './challenge';
 export * from './crypto';
 export * from './derive';
+export * from './fragment';
 export * from './identity';
 export * from './importer';
 export * from './jws';
+export * from './profile';
 export * from './qr';
 export * from './sakura';
 export * from './types';

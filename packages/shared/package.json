@@ -23,6 +23,7 @@
     "@noble/hashes": "^2.2.0",
     "@scure/base": "^2.0.0",
     "@scure/bip39": "^2.0.0",
+    "fflate": "^0.8.3",
     "zod": "^4.4.3"
   }
 }
