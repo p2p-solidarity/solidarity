@@ -761,5 +761,21 @@
   "meEdit.save": "Save",
   "meEdit.saving": "Saving…",
   "meEdit.saved": "Profile saved",
-  "meEdit.saveFailed": "Couldn't save your profile"
+  "meEdit.saveFailed": "Couldn't save your profile",
+  "verifiedPage.title": "Verified Page",
+  "verifiedPage.signatureValid": "Signature valid",
+  "verifiedPage.linksHeader": "LINKS",
+  "verifiedPage.badgesHeader": "BADGES",
+  "verifiedPage.badgeDeclared": "Offline — not verified live",
+  "verifiedPage.saveToPeople": "Save to People",
+  "verifiedPage.updateInPeople": "Update in People",
+  "verifiedPage.saved": "Saved to People",
+  "verifiedPage.duplicateTitle": "Already in People",
+  "verifiedPage.duplicateMessage": "You've already saved this person. Update their saved page with this scan?",
+  "verifiedPage.invalidTitle": "Couldn't Verify",
+  "verifiedPage.reason.decodeFailed": "This QR code's data couldn't be read.",
+  "verifiedPage.reason.malformedPayload": "This page's data is missing required information.",
+  "verifiedPage.reason.verificationFailed": "This page's signature doesn't check out.",
+  "verifiedPage.reason.schemaInvalid": "This page's data doesn't match the expected format.",
+  "verifiedPage.notFound": "This person's page couldn't be found."
 }

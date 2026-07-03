@@ -761,5 +761,21 @@
   "meEdit.save": "儲存",
   "meEdit.saving": "儲存中…",
   "meEdit.saved": "個人頁面已儲存",
-  "meEdit.saveFailed": "個人頁面儲存失敗"
+  "meEdit.saveFailed": "個人頁面儲存失敗",
+  "verifiedPage.title": "已驗證頁面",
+  "verifiedPage.signatureValid": "簽章有效",
+  "verifiedPage.linksHeader": "連結",
+  "verifiedPage.badgesHeader": "徽章",
+  "verifiedPage.badgeDeclared": "離線,未即時查驗",
+  "verifiedPage.saveToPeople": "存入 People",
+  "verifiedPage.updateInPeople": "更新 People 資料",
+  "verifiedPage.saved": "已存入 People",
+  "verifiedPage.duplicateTitle": "此人已在 People 中",
+  "verifiedPage.duplicateMessage": "你已儲存過這個人,要用這次掃描更新已儲存的資料嗎？",
+  "verifiedPage.invalidTitle": "無法驗證",
+  "verifiedPage.reason.decodeFailed": "無法讀取此 QR Code 的資料。",
+  "verifiedPage.reason.malformedPayload": "此頁面的資料缺少必要欄位。",
+  "verifiedPage.reason.verificationFailed": "此頁面的簽章驗證失敗。",
+  "verifiedPage.reason.schemaInvalid": "此頁面的資料格式不正確。",
+  "verifiedPage.notFound": "找不到這個人的頁面。"
 }

@@ -4,6 +4,9 @@
  */
 import { router } from 'expo-router';
 
+import { presentVerifiedPageResult } from '@/scan/verifiedPageResult';
+import { verifyFragment } from '@/scan/verifiedPageHandler';
+
 import { parseDeepLink, type DeepLinkRoute } from './parser';
 
 export type { DeepLinkRoute };
@@ -24,6 +27,13 @@ export function handleDeepLink(raw: string): DeepLinkRoute {
       break;
     case 'credentialOffer':
       router.push({ pathname: '/credentials/offer', params: { q: route.query } });
+      break;
+    case 'verifiedProfile':
+      // Same local-only verify pipeline the scanner uses, presented through
+      // the same globally-mounted `VerifiedPageResultSheet` (`_layout.tsx`)
+      // — no route push needed, the sheet reacts to the store regardless of
+      // which screen is currently focused.
+      presentVerifiedPageResult(verifyFragment(route.fragment));
       break;
     case 'unknown':
       break;

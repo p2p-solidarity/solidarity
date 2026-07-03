@@ -49,6 +49,8 @@ import { issuePassportShowChallenge } from '@/passport/showVerifier';
 import { QrScanner } from '@/scan/QrScanner';
 import { handleScannedPayload } from '@/scan/envelopeHandler';
 import { passportShowVerifierResult } from '@/scan/passportShowResult';
+import { parseVerifiedPagePayload } from '@/scan/verifiedPageHandler';
+import { presentVerifiedPageResult } from '@/scan/verifiedPageResult';
 import { verifyVpToken } from '@/oidc';
 import { useTranslation } from '@/i18n';
 
@@ -89,7 +91,21 @@ export default function ScanScreen() {
     setProgress(null);
     setIsScanning(false);
     capturing.current = false;
-    // Try the envelope pipeline first — plaintext / zkProof / didSigned
+
+    // Verified Page fragment QR (1.3.3 Task A2.3, US-11) — tried first as a
+    // cheap, self-contained format sniff. Returns `null` for anything that
+    // isn't a verified-page payload at all (old exchange-QR wire formats,
+    // OIDC URLs, ...), so every existing format below is completely
+    // unaffected. A non-null result (verified OR a structured invalid
+    // reason) routes into VerifiedPageResultSheet, mounted in `_layout.tsx`.
+    const verifiedPage = parseVerifiedPagePayload(payload);
+    if (verifiedPage !== null) {
+      presentVerifiedPageResult(verifiedPage);
+      router.back();
+      return;
+    }
+
+    // Try the envelope pipeline next — plaintext / zkProof / didSigned
     // payloads route into the ReceivedCardSheet mounted in `_layout.tsx`.
     // Everything else (OIDC URLs, deep links, raw JWTs that aren't cards)
     // falls through to the legacy `classifyPayload` router.

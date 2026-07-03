@@ -10,10 +10,34 @@ export type DeepLinkRoute =
   | { readonly kind: 'groupInvite'; readonly token: string }
   | { readonly kind: 'oidc'; readonly query: string }
   | { readonly kind: 'credentialOffer'; readonly query: string }
+  | { readonly kind: 'verifiedProfile'; readonly fragment: string }
   | { readonly kind: 'unknown'; readonly raw: string };
 
 const UUID_RE =
   /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/u;
+
+/**
+ * `https://<verified-domain>/...` routes only — split out of `parseDeepLink`
+ * to keep that function's cyclomatic complexity under budget as this branch
+ * grows (card link, and now the Verified Page fragment link, 1.3.3 Task
+ * A2.3 US-11). `null` means "recognised host, but no known route" — falls
+ * through to `unknown` at the call site.
+ */
+function parseVerifiedDomainRoute(url: URL): DeepLinkRoute | null {
+  const segments = url.pathname.replace(/^\//u, '').split('/');
+  if (segments[0] === 'c' && segments[1] && UUID_RE.test(segments[1])) {
+    return { kind: 'card', cardId: segments[1] };
+  }
+  // Verified Page link (1.3.3 Task A2.3, US-11): `https://solidarity.gg/#<fragment>`
+  // — the fragment never leaves the device over the network (01-spec §1/§8),
+  // so this is just recognising the shape and handing the raw fragment blob
+  // to the same local-only verify pipeline the scanner uses
+  // (`src/scan/verifiedPageHandler.ts`'s `verifyFragment`).
+  if (url.hash.length > 1) {
+    return { kind: 'verifiedProfile', fragment: url.hash.slice(1) };
+  }
+  return null;
+}
 
 export function parseDeepLink(raw: string): DeepLinkRoute {
   let url: URL;
@@ -51,10 +75,8 @@ export function parseDeepLink(raw: string): DeepLinkRoute {
   }
 
   if (url.protocol === 'https:' && isVerifiedDomain(url.host)) {
-    const segments = url.pathname.replace(/^\//u, '').split('/');
-    if (segments[0] === 'c' && segments[1] && UUID_RE.test(segments[1])) {
-      return { kind: 'card', cardId: segments[1] };
-    }
+    const route = parseVerifiedDomainRoute(url);
+    if (route !== null) return route;
   }
 
   return { kind: 'unknown', raw };

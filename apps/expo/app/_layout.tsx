@@ -42,6 +42,7 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { useCardStore } from '@/cards/cardManager';
 import { useReceivedCard } from '@/cards/receivedCard';
 import { ReceivedCardSheet } from '@/components/cards/ReceivedCardSheet';
+import { VerifiedPageResultSheet } from '@/components/scan/VerifiedPageResultSheet';
 import { useContactStore } from '@/contacts/repository';
 import { useCredentialStore } from '@/credentials/store';
 import { useIssuerMetadataStore } from '@/credentials/issuerStore';
@@ -53,6 +54,7 @@ import { useGroupStore } from '@/groups/store';
 import { useIdentityData } from '@/identity';
 import { installI18n } from '@/i18n';
 import { hydrateSensitiveActionPolicy } from '@/keychain';
+import { hydrateProfileSnapshots } from '@/people/profileSnapshots';
 import { hydrateProfile } from '@/profile/store';
 import { syncOnce } from '@/sakura/inbox';
 import { registerForPushNotificationsAsync } from '@/sakura/pushRegistration';
@@ -179,6 +181,7 @@ export default function RootLayout() {
         hydratePreferences();
         hydrateSensitiveActionPolicy();
         hydrateProfile();
+        hydrateProfileSnapshots();
         logBoot('preferences:done');
 
         // First-boot migration: if any manifest is missing, block splash
@@ -297,6 +300,7 @@ export default function RootLayout() {
             }}
             onDismiss={dismissReceived}
           />
+          <VerifiedPageResultSheet />
         </SafeAreaProvider>
       </KeyboardProvider>
     </GestureHandlerRootView>
