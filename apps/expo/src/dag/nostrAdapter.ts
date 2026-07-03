@@ -16,11 +16,11 @@
  * relay is intentionally NOT persisted across app restarts.
  */
 import { schnorr } from '@noble/curves/secp256k1.js';
-import { sha256 } from '@noble/hashes/sha2.js';
 
 import {
   KIND_DAG_HEAD,
   type DagNode,
+  computeNip01EventId,
   hexDecode,
   hexEncode,
   nostrTagsFor,
@@ -69,8 +69,7 @@ export function buildHeadPointerEvent(
     ...heads.map((h) => ['e', h] as const),
   ];
   const content = stableJSON({ v: 1, head_count: heads.length });
-  const serialized = JSON.stringify([0, pubkeyHex, createdAt, kind, tags, content]);
-  const id = hexEncode(sha256(new TextEncoder().encode(serialized)));
+  const id = computeNip01EventId({ pubkey: pubkeyHex, created_at: createdAt, kind, tags, content });
   const sig = hexEncode(schnorr.sign(hexDecode(id), privkey));
   return { id, pubkey: pubkeyHex, created_at: createdAt, kind, tags, content, sig };
 }
@@ -234,15 +233,7 @@ export function subscribeEvents(
 /** Verify a received Nostr event's id + signature (BIP-340 schnorr over NIP-01 serialization). */
 export function verifyNostrEvent(event: NostrEvent): boolean {
   try {
-    const serialized = JSON.stringify([
-      0,
-      event.pubkey,
-      event.created_at,
-      event.kind,
-      event.tags,
-      event.content,
-    ]);
-    const id = hexEncode(sha256(new TextEncoder().encode(serialized)));
+    const id = computeNip01EventId(event);
     if (id !== event.id) return false;
     return schnorr.verify(hexDecode(event.sig), hexDecode(event.id), hexDecode(event.pubkey));
   } catch {

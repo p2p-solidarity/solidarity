@@ -101,6 +101,41 @@ export function computeNodeId(unsigned: DagNodeUnsigned): string {
   return hexEncode(sha256(bytes));
 }
 
+/**
+ * Generic NIP-01 unsigned-event shape — `[0, pubkey, created_at, kind,
+ * tags, content]`, the tuple every Nostr event id is a sha256 of. Unlike
+ * `DagNodeUnsigned` (whose tags are derived from `parents`/`action` via
+ * `nostrTagsFor`), this takes `tags`/`content` verbatim — the shape
+ * needed to sign arbitrary Nostr events (NIP-78 profile pointers,
+ * kind-0 metadata, …), not just DAG-node projections.
+ */
+export interface Nip01UnsignedEvent {
+  readonly pubkey: string;
+  readonly created_at: number;
+  readonly kind: number;
+  readonly tags: readonly (readonly string[])[];
+  readonly content: string;
+}
+
+/**
+ * Compute the canonical NIP-01 event id (hex) for an arbitrary Nostr
+ * event. The ONE implementation of this serialization — `dag/nostrAdapter
+ * .ts` (`buildHeadPointerEvent` / `verifyNostrEvent`) and `nostr/userKey
+ * .ts` (`signNostrEvent`) all call this rather than each re-deriving the
+ * `[0, pubkey, created_at, kind, tags, content]` tuple themselves.
+ */
+export function computeNip01EventId(event: Nip01UnsignedEvent): string {
+  const serialized = JSON.stringify([
+    0,
+    event.pubkey,
+    event.created_at,
+    event.kind,
+    event.tags,
+    event.content,
+  ]);
+  return hexEncode(sha256(new TextEncoder().encode(serialized)));
+}
+
 /** Sign an unsigned DAG node with a 32-byte schnorr private key, returning a full node. */
 export function signNode(unsigned: DagNodeUnsigned, privkey: Uint8Array): DagNode {
   if (privkey.length !== 32) {
