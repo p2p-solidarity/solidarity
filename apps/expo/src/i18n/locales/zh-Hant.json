@@ -329,6 +329,8 @@
   "developer.pear.header": "Pear（Bare Kit）",
   "developer.pear.labSubtitle": "煙霧測試 · 透過 Bare worklet 收發一則 IPC echo",
   "developer.pear.labTitle": "Pear Echo",
+  "developer.pear.runError": "Echo 失敗：{{message}}",
+  "developer.pear.timeoutError": "Echo 逾時（10 秒）— worklet 已終止。",
   "developer.socialGraph.commonFriendsSubtitle": "即時 · DAG diff 交集（無 PSI）",
   "developer.socialGraph.commonFriendsTitle": "共同好友",
   "developer.socialGraph.footer": "透過 DAG diff 發現共同好友。取代 Swift SocialGraphIntersectionService 的姓名雜湊 PSI，避免暴露排序並降低字典攻擊風險。",

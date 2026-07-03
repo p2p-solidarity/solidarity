@@ -329,6 +329,8 @@
   "developer.pear.header": "Pear (Bare Kit)",
   "developer.pear.labSubtitle": "Smoke · one-message IPC echo through a Bare worklet",
   "developer.pear.labTitle": "Pear Echo",
+  "developer.pear.runError": "Echo failed: {{message}}",
+  "developer.pear.timeoutError": "Echo timed out after 10s — worklet terminated.",
   "developer.socialGraph.commonFriendsSubtitle": "Live · DAG diff intersection (no PSI)",
   "developer.socialGraph.commonFriendsTitle": "Common Friends",
   "developer.socialGraph.footer": "Common-friend discovery via DAG diff. Replaces the Swift SocialGraphIntersectionService hash-of-name PSI, which leaks ordering and is dictionary-attackable.",
