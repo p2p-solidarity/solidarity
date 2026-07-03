@@ -1,6 +1,7 @@
 /**
  * Profile snapshots — People-side persistence for a scanned/verified
- * Verified Page (1.3.3 Task A2.3, apps/expo/src/people/profileSnapshots.ts).
+ * Verified Page AND a declared (unverified) link-page import (1.3.3 Tasks
+ * A2.3 + A2.4, apps/expo/src/people/profileSnapshots.ts).
  *
  * What this suite pins:
  *   1. `upsert` persists to MMKV and is readable back through `hydrate`
@@ -9,6 +10,14 @@
  *      and refreshes `verifiedAt`.
  *   3. A corrupt/schema-invalid persisted entry is dropped, not surfaced —
  *      fails closed per-entry rather than nuking the whole store.
+ *   4. (A2.4) A legacy persisted entry with NO `kind` field (written before
+ *      A2.4 shipped) hydrates as `kind: 'verified'` — the back-compat
+ *      migration path.
+ *   5. (A2.4) `upsertDeclared` round-trips the same way `upsert` does,
+ *      dedupes by `stableDeclaredId(sourceUrl)`, and a schema-invalid
+ *      declared entry is dropped the same way a bad verified one is.
+ *   6. (A2.4) `sortedProfileSnapshots` with mixed kinds: every verified
+ *      entry sorts before every declared entry, regardless of timestamps.
  *
  * Isolation: mocks only `@/storage/mmkv`, same pattern as profileStore.test.ts.
  */
@@ -16,24 +25,49 @@ import { beforeAll, beforeEach, describe, expect, it, mock } from 'bun:test';
 
 import type { ProfileRecord } from '@solidarity/shared';
 
-interface Snapshot {
+interface DeclaredLink {
+  readonly label: string;
+  readonly url: string;
+}
+
+interface VerifiedSnapshotShape {
+  readonly kind: 'verified';
   readonly did: string;
   readonly record: ProfileRecord;
   readonly jws: string;
   readonly verifiedAt: string;
 }
 
+interface DeclaredSnapshotShape {
+  readonly kind: 'declared';
+  readonly id: string;
+  readonly did: null;
+  readonly sourceUrl: string;
+  readonly title: string | null;
+  readonly links: readonly DeclaredLink[];
+  readonly importedAt: string;
+}
+
+type SnapshotShape = VerifiedSnapshotShape | DeclaredSnapshotShape;
+
 interface ProfileSnapshotModuleSurface {
   readonly useProfileSnapshotStore: {
     getState: () => {
-      readonly snapshots: ReadonlyMap<string, Snapshot>;
-      readonly upsert: (record: ProfileRecord, jws: string) => { readonly verifiedAt: string };
+      readonly snapshots: ReadonlyMap<string, SnapshotShape>;
+      readonly upsert: (record: ProfileRecord, jws: string) => VerifiedSnapshotShape;
+      readonly upsertDeclared: (
+        sourceUrl: string,
+        title: string | null,
+        links: readonly DeclaredLink[]
+      ) => DeclaredSnapshotShape;
     };
     setState: (s: { snapshots: ReadonlyMap<string, unknown> }) => void;
   };
   readonly hydrateProfileSnapshots: () => void;
-  readonly getProfileSnapshot: (did: string) => { readonly did: string } | undefined;
-  readonly sortedProfileSnapshots: (snapshots: ReadonlyMap<string, Snapshot>) => readonly Snapshot[];
+  readonly getProfileSnapshot: (did: string) => VerifiedSnapshotShape | undefined;
+  readonly getDeclaredSnapshot: (id: string) => DeclaredSnapshotShape | undefined;
+  readonly stableDeclaredId: (sourceUrl: string) => string;
+  readonly sortedProfileSnapshots: (snapshots: ReadonlyMap<string, SnapshotShape>) => readonly SnapshotShape[];
 }
 
 const kv = new Map<string, string>();
@@ -167,5 +201,138 @@ describe('sortedProfileSnapshots — newest verifiedAt first (People tab section
 
     const sorted = mod.sortedProfileSnapshots(mod.useProfileSnapshotStore.getState().snapshots);
     expect(sorted.map((s) => s.did)).toEqual(['did:key:zA', 'did:key:zB']);
+  });
+});
+
+describe('legacy shape back-compat — a pre-A2.4 persisted entry has no `kind` field', () => {
+  it('hydrates a kind-less entry as kind: "verified"', () => {
+    // Exact shape `writePersisted` produced before Task A2.4 added the
+    // discriminated union: no `kind` key at all.
+    kv.set(
+      'profileSnapshots:v1',
+      JSON.stringify({
+        'did:key:zLegacy': {
+          record: record({ did: 'did:key:zLegacy', displayName: 'Legacy' }),
+          jws: 'a.b.c',
+          verifiedAt: '2026-01-01T00:00:00Z',
+        },
+      })
+    );
+    mod.hydrateProfileSnapshots();
+    const restored = mod.getProfileSnapshot('did:key:zLegacy');
+    expect(restored).toBeDefined();
+    expect(restored?.kind).toBe('verified');
+    expect(restored?.record.displayName).toBe('Legacy');
+  });
+});
+
+describe('upsertDeclared — persists and round-trips through MMKV, same shape as upsert', () => {
+  const PORTFOLIO_LINK: DeclaredLink = { label: 'Portfolio', url: 'https://alice.example/portfolio' };
+  const TWITTER_LINK: DeclaredLink = { label: 'Twitter', url: 'https://x.com/alice' };
+  const LINKS: DeclaredLink[] = [PORTFOLIO_LINK, TWITTER_LINK];
+
+  it('persists a declared snapshot readable back after hydrate (simulated app restart)', () => {
+    const saved = mod.useProfileSnapshotStore.getState().upsertDeclared('https://linktr.ee/alice', 'Alice', LINKS);
+    expect(saved.kind).toBe('declared');
+    expect(saved.did).toBeNull();
+    expect(mod.getDeclaredSnapshot(saved.id)).toBeDefined();
+
+    mod.useProfileSnapshotStore.setState({ snapshots: new Map() });
+    expect(mod.getDeclaredSnapshot(saved.id)).toBeUndefined();
+
+    mod.hydrateProfileSnapshots();
+    const restored = mod.getDeclaredSnapshot(saved.id);
+    expect(restored).toBeDefined();
+    expect(restored?.sourceUrl).toBe('https://linktr.ee/alice');
+    expect(restored?.title).toBe('Alice');
+    expect(restored?.links).toEqual(LINKS);
+  });
+
+  it('re-pasting the same sourceUrl overwrites in place (same stableDeclaredId), not a second entry', () => {
+    mod.useProfileSnapshotStore.getState().upsertDeclared('https://linktr.ee/alice', 'Alice', LINKS);
+    mod.useProfileSnapshotStore.getState().upsertDeclared('https://linktr.ee/alice', 'Alice V2', [PORTFOLIO_LINK]);
+
+    expect(mod.useProfileSnapshotStore.getState().snapshots.size).toBe(1);
+    const id = mod.stableDeclaredId('https://linktr.ee/alice');
+    const restored = mod.getDeclaredSnapshot(id);
+    expect(restored?.title).toBe('Alice V2');
+    expect(restored?.links).toEqual([PORTFOLIO_LINK]);
+  });
+
+  it('stableDeclaredId is deterministic for the same URL (after trim) and differs across URLs', () => {
+    expect(mod.stableDeclaredId('https://linktr.ee/alice')).toBe(mod.stableDeclaredId('  https://linktr.ee/alice  '));
+    expect(mod.stableDeclaredId('https://linktr.ee/alice')).not.toBe(mod.stableDeclaredId('https://linktr.ee/bob'));
+  });
+
+  it('a null title persists and restores as null, never fabricated', () => {
+    const saved = mod.useProfileSnapshotStore.getState().upsertDeclared('https://bare.example/', null, LINKS);
+    mod.useProfileSnapshotStore.setState({ snapshots: new Map() });
+    mod.hydrateProfileSnapshots();
+    expect(mod.getDeclaredSnapshot(saved.id)?.title).toBeNull();
+  });
+
+  it('a declared entry with schema-invalid links is dropped on hydrate without corrupting the rest', () => {
+    kv.set(
+      'profileSnapshots:v1',
+      JSON.stringify({
+        goodDeclared: {
+          kind: 'declared',
+          sourceUrl: 'https://good.example/',
+          title: 'Good',
+          links: [{ label: 'Site', url: 'https://good.example/site' }],
+          importedAt: '2026-01-01T00:00:00Z',
+        },
+        badDeclared: {
+          kind: 'declared',
+          sourceUrl: 'https://bad.example/',
+          title: 'Bad',
+          links: [{ label: 'Evil', url: 'javascript:alert(1)' }], // fails profileLinkSchema
+          importedAt: '2026-01-01T00:00:00Z',
+        },
+      })
+    );
+    expect(() => { mod.hydrateProfileSnapshots(); }).not.toThrow();
+    expect(mod.getDeclaredSnapshot('goodDeclared')).toBeDefined();
+    expect(mod.getDeclaredSnapshot('badDeclared')).toBeUndefined();
+  });
+});
+
+describe('sortedProfileSnapshots — mixed kinds: verified first, then declared by importedAt', () => {
+  it('every verified entry sorts before every declared entry, regardless of timestamps', async () => {
+    // Declared entry is imported FIRST (older importedAt)...
+    mod.useProfileSnapshotStore.getState().upsertDeclared('https://old-declared.example/', 'Old Declared', []);
+    await new Promise((resolve) => setTimeout(resolve, 5));
+    // ...then a verified entry is scanned LATER (newer verifiedAt). A naive
+    // single-timestamp sort would still put verified first here, so this
+    // alone doesn't prove the "kind" precedence — the next assertion does.
+    mod.useProfileSnapshotStore.getState().upsert(record({ did: 'did:key:zNewVerified', displayName: 'New Verified' }), 'a.b.c');
+
+    const sorted = mod.sortedProfileSnapshots(mod.useProfileSnapshotStore.getState().snapshots);
+    expect(sorted.map((s) => s.kind)).toEqual(['verified', 'declared']);
+  });
+
+  it('an OLDER verified entry still sorts before a NEWER declared entry (kind beats recency)', async () => {
+    mod.useProfileSnapshotStore.getState().upsert(record({ did: 'did:key:zOldVerified', displayName: 'Old Verified' }), 'a.b.c');
+    await new Promise((resolve) => setTimeout(resolve, 5));
+    mod.useProfileSnapshotStore.getState().upsertDeclared('https://new-declared.example/', 'New Declared', []);
+
+    const sorted = mod.sortedProfileSnapshots(mod.useProfileSnapshotStore.getState().snapshots);
+    expect(sorted.map((s) => s.kind)).toEqual(['verified', 'declared']);
+  });
+
+  it('within each kind, newest timestamp sorts first', async () => {
+    mod.useProfileSnapshotStore.getState().upsert(record({ did: 'did:key:zV1', displayName: 'V1' }), 'a.b.c');
+    await new Promise((resolve) => setTimeout(resolve, 5));
+    mod.useProfileSnapshotStore.getState().upsert(record({ did: 'did:key:zV2', displayName: 'V2' }), 'a.b.c');
+    await new Promise((resolve) => setTimeout(resolve, 5));
+    mod.useProfileSnapshotStore.getState().upsertDeclared('https://d1.example/', 'D1', []);
+    await new Promise((resolve) => setTimeout(resolve, 5));
+    mod.useProfileSnapshotStore.getState().upsertDeclared('https://d2.example/', 'D2', []);
+
+    const sorted = mod.sortedProfileSnapshots(mod.useProfileSnapshotStore.getState().snapshots);
+    const verifiedDids = sorted.filter((s) => s.kind === 'verified').map((s) => s.did);
+    const declaredIds = sorted.filter((s) => s.kind === 'declared').map((s) => s.sourceUrl);
+    expect(verifiedDids).toEqual(['did:key:zV2', 'did:key:zV1']);
+    expect(declaredIds).toEqual(['https://d2.example/', 'https://d1.example/']);
   });
 });

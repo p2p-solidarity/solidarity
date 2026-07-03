@@ -25,6 +25,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { PressableScale } from '@/components/common/PressableScale';
 import { SfIcon } from '@/components/icons/SfIcon';
+import { LinkPageImportSheet, type LinkPageImportResult } from '@/components/profile/LinkPageImportSheet';
 import { SettingsBackToolbar, SettingsScreenTitle } from '@/components/settings/SettingsBlocks';
 import { ThemedButton, ThemedText } from '@/components/themed';
 import { Colors } from '@/constants/Colors';
@@ -86,6 +87,7 @@ export default function MeEditScreen() {
   const [bio, setBio] = useState(record?.bio ?? '');
   const [links, setLinks] = useState<readonly EditableLink[]>(() => (record?.links ?? []).map(toEditableLink));
   const [saving, setSaving] = useState(false);
+  const [linktreeSheetOpen, setLinktreeSheetOpen] = useState(false);
 
   const linkErrors = useMemo(() => links.map((l) => (isBlankLink(l) ? null : validateLinkUrl(l.url))), [links]);
   const hasLinkErrors = linkErrors.some((e) => e !== null);
@@ -112,6 +114,21 @@ export default function MeEditScreen() {
   };
   const updateLink = (id: string, field: 'label' | 'url', value: string) => {
     setLinks((prev) => prev.map((l) => (l.id === id ? { ...l, [field]: value } : l)));
+  };
+
+  /** Merges CHECKED imported links into the editable rows, deduped against
+   * what's already here by url — never a silent overwrite, never a second
+   * copy of a link the user already has. The user still has to press the
+   * normal Save (Face ID) below; this only edits local draft state. */
+  const mergeImportedLinks = (result: LinkPageImportResult) => {
+    const existingUrls = new Set(links.map((l) => l.url));
+    const additions = result.links
+      .filter((l) => !existingUrls.has(l.url))
+      .map((l) => ({ id: uuid(), label: l.label, url: l.url }));
+    if (additions.length === 0) return;
+    setLinks((prev) => [...prev, ...additions]);
+    haptic('success');
+    pushToast(t('meEdit.linktreeImportMerged', { count: additions.length }), 'success');
   };
 
   const handleSave = async () => {
@@ -197,6 +214,7 @@ export default function MeEditScreen() {
           onRemove={removeLink}
           onMove={moveLink}
           onChangeField={updateLink}
+          onImportLinktree={() => { setLinktreeSheetOpen(true); }}
         />
 
         <ThemedButton
@@ -208,6 +226,14 @@ export default function MeEditScreen() {
           onPress={() => { void handleSave(); }}
         />
       </ScrollView>
+
+      <LinkPageImportSheet
+        visible={linktreeSheetOpen}
+        title={t('meEdit.importFromLinktree')}
+        confirmLabel={t('meEdit.linktreeImportConfirm')}
+        onClose={() => { setLinktreeSheetOpen(false); }}
+        onImport={mergeImportedLinks}
+      />
     </View>
   );
 }
@@ -256,6 +282,7 @@ function LinksEditor({
   onRemove,
   onMove,
   onChangeField,
+  onImportLinktree,
 }: {
   readonly links: readonly EditableLink[];
   readonly errors: readonly (string | null)[];
@@ -263,11 +290,25 @@ function LinksEditor({
   readonly onRemove: (id: string) => void;
   readonly onMove: (id: string, direction: -1 | 1) => void;
   readonly onChangeField: (id: string, field: 'label' | 'url', value: string) => void;
+  readonly onImportLinktree: () => void;
 }) {
   const { t } = useTranslation();
   return (
     <View style={{ gap: 12 }}>
-      <ThemedText variant="label">{t('meEdit.links')}</ThemedText>
+      <View className="flex-row items-center justify-between">
+        <ThemedText variant="label">{t('meEdit.links')}</ThemedText>
+        <PressableScale
+          haptic="tap"
+          onPress={onImportLinktree}
+          accessibilityRole="button"
+          className="flex-row items-center gap-1"
+        >
+          <SfIcon name="square.and.arrow.down" size={12} color={Colors.primaryBlue} />
+          <ThemedText variant="caption" style={{ color: Colors.primaryBlue }}>
+            {t('meEdit.importFromLinktree')}
+          </ThemedText>
+        </PressableScale>
+      </View>
 
       {links.map((link, i) => (
         <View key={link.id} style={{ gap: 6, borderWidth: 1, borderColor: Colors.divider, padding: 10 }}>

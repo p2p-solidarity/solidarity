@@ -30,6 +30,7 @@ import { ManualContactEntrySheet } from '@/components/people/ManualContactEntryS
 import { PeopleSearchField } from '@/components/people/PeopleSearchField';
 import { TrustGraphContactRow } from '@/components/people/TrustGraphContactRow';
 import { VerifiedPagesSection } from '@/components/people/VerifiedPagesSection';
+import { LinkPageImportSheet, type LinkPageImportResult } from '@/components/profile/LinkPageImportSheet';
 import { Colors } from '@/constants/Colors';
 import { useThemeColors } from '@/constants/useThemeColors';
 import { useTranslation } from '@/i18n';
@@ -38,6 +39,7 @@ import { confirmDialog } from '@/feedback/confirmDialog';
 import { haptic } from '@/feedback/haptics';
 import { SCALE } from '@/feedback/motion';
 import { pushToast } from '@/feedback/toast';
+import { useProfileSnapshotStore } from '@/people/profileSnapshots';
 import { usePeopleScreen } from '@/people/usePeopleScreen';
 import { usePreferences } from '@/settings/preferences';
 
@@ -45,12 +47,14 @@ export default function PeopleTab() {
   const { t } = useTranslation();
   const { contacts, refresh } = usePeopleScreen();
   const removeContact = useContactStore((s) => s.remove);
+  const upsertDeclared = useProfileSnapshotStore((s) => s.upsertDeclared);
   const autoEnabled = usePreferences((s) => s.autoBackupOnPull);
   const insets = useSafeAreaInsets();
 
   const [searchQuery, setSearchQuery] = useState('');
   const [menuOpen, setMenuOpen] = useState(false);
   const [manualSheetOpen, setManualSheetOpen] = useState(false);
+  const [linkPageSheetOpen, setLinkPageSheetOpen] = useState(false);
   const [editMode, setEditMode] = useState(false);
   const [selectedIds, setSelectedIds] = useState<ReadonlySet<string>>(() => new Set());
 
@@ -160,6 +164,7 @@ export default function PeopleTab() {
         onAddManually={() => { setManualSheetOpen(true); }}
         onImportPhone={() => router.push('/contacts/import-phone')}
         onImportVcf={() => router.push('/contacts/import-vcf')}
+        onPasteLinkPage={() => { setLinkPageSheetOpen(true); }}
         onEnterEditMode={() => { setEditMode(true); }}
         onExitEditMode={exitEditMode}
         onToggleSelectAll={() => {
@@ -177,6 +182,19 @@ export default function PeopleTab() {
         visible={manualSheetOpen}
         onClose={() => { setManualSheetOpen(false); }}
         onSaved={() => { refresh(); }}
+      />
+
+      <LinkPageImportSheet
+        visible={linkPageSheetOpen}
+        title={t('peopleList.pasteLinkPage')}
+        confirmLabel={t('peopleList.declaredImportConfirm')}
+        onClose={() => { setLinkPageSheetOpen(false); }}
+        onImport={(result: LinkPageImportResult) => {
+          const snapshot = upsertDeclared(result.sourceUrl, result.title, result.links);
+          haptic('success');
+          pushToast(t('peopleList.declaredSaved'), 'success');
+          router.push({ pathname: '/people/declared/[id]', params: { id: snapshot.id } });
+        }}
       />
 
       <VerifiedPagesSection />
@@ -424,6 +442,7 @@ function Header({
   onAddManually,
   onImportPhone,
   onImportVcf,
+  onPasteLinkPage,
   onEnterEditMode,
   onExitEditMode,
   onToggleSelectAll,
@@ -437,6 +456,7 @@ function Header({
   onAddManually: () => void;
   onImportPhone: () => void;
   onImportVcf: () => void;
+  onPasteLinkPage: () => void;
   onEnterEditMode: () => void;
   onExitEditMode: () => void;
   onToggleSelectAll: () => void;
@@ -537,6 +557,11 @@ function Header({
             icon="doc.badge.plus"
             label={t('peopleList.importVcfFile')}
             onPress={() => { setMenuOpen(false); onImportVcf(); }}
+          />
+          <MenuItem
+            icon="link"
+            label={t('peopleList.pasteLinkPage')}
+            onPress={() => { setMenuOpen(false); onPasteLinkPage(); }}
             isLast
           />
         </View>

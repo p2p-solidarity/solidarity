@@ -1,6 +1,23 @@
 /**
- * Profile snapshots — local record of Verified Pages the user has scanned
- * and saved to People (1.3.3 Task A2.3, US-11: 「存入 People」).
+ * Profile snapshots — local record of pages the user has scanned/verified
+ * or imported and saved to People.
+ *
+ * Two kinds, one store (1.3.3 Task A2.4, US-19 fast-follow to A2.3):
+ *   - `kind: 'verified'` — a Verified Page the device cryptographically
+ *     checked itself (record + jws + `verifiedAt`), scanned via the Verify
+ *     tab (Task A2.3, commit 1afb4a2). Keyed by `did`, its one stable
+ *     identity — the natural de-dupe key for "I already have this person".
+ *   - `kind: 'declared'` — a plaintext link page (Linktree or similar) the
+ *     user pasted a URL for (`src/profile/linktreeImport.ts`). There is NO
+ *     did, NO signature, NO cryptographic verification of any kind — just
+ *     "this person told us this page is theirs". Never rendered with a
+ *     verified indicator (CLAUDE.md rule 8); keyed by `stableDeclaredId
+ *     (sourceUrl)` since there's no did to key on. Re-pasting the same URL
+ *     upserts in place rather than duplicating.
+ *
+ * A legacy persisted entry with no `kind` field at all (written before this
+ * task) is read as `'verified'` — see `readPersisted`'s back-compat branch,
+ * pinned by `profileSnapshots.test.ts`'s "legacy shape" describe block.
  *
  * Deliberately a PARALLEL store, not folded into `src/contacts/repository.ts`:
  * a Profile Record (`displayName`/`bio`/`links`/`badges`, 01-spec §3) is a
@@ -8,35 +25,45 @@
  * (`name`/`title`/`company`/`email`/`phone`/`sharingPreferences`/exchange
  * signatures/...). Mapping a scanned Profile Record into a `Contact` would
  * mean inventing fields no Verified Page carries (CLAUDE.md rule 8: no fake
- * data) just to satisfy a schema built for a different exchange flow.
- * Badge *verification* UI is a later task (A4+); this store only persists
- * what was actually verified today: the record, its signature, and when.
- *
- * Keyed by `did` — a Verified Page's one stable identity, and the natural
- * de-dupe key for "I already have this person" (re-scanning the same page
- * after they edited it should update the snapshot in place, not create a
- * second entry).
+ * data) just to satisfy a schema built for a different exchange flow. A
+ * declared link-page snapshot is even further from a `Contact` — it isn't
+ * even a full Profile Record. Badge *verification* UI is a later task
+ * (A4+); this store only persists what was actually verified/declared
+ * today: the record (or link list) and when.
  *
  * Storage: same pattern as `src/profile/store.ts` (a single JSON blob under
  * one MMKV key via `getMmkv()`, which already opens the DB with an
  * encryption passphrase — see `storage/mmkv.ts`) rather than
  * `contacts/repository.ts`'s per-record-AES-GCM + manifest split. That
  * split exists to keep the FULL contacts list's cold-start decrypt cheap;
- * a user's set of saved Verified Pages has no equivalent frame-1 budget to
- * protect, so the simpler single-blob shape is the least-invasive choice.
- * Re-validated on every read via `parseProfile` — a hand-edited or
- * schema-drifted MMKV blob drops that one entry rather than corrupting the
- * whole store (matches `profile/store.ts`'s `readPersisted` policy).
+ * a user's set of saved pages has no equivalent frame-1 budget to protect,
+ * so the simpler single-blob shape is the least-invasive choice. Both maps
+ * share ONE `Map<string, ProfileSnapshot>` keyed by whichever id applies
+ * (did or declared id) — collision between a `did:key:…` string and a
+ * lowercase-hex declared id is not a realistic concern.
+ * Re-validated on every read via `parseProfile` / `profileLinkSchema` — a
+ * hand-edited or schema-drifted MMKV blob drops that one entry rather than
+ * corrupting the whole store (matches `profile/store.ts`'s `readPersisted`
+ * policy).
  */
 import { create } from 'zustand';
 import { useShallow } from 'zustand/shallow';
+import { z } from 'zod';
 
 import { getMmkv } from '@/storage/mmkv';
-import { parseProfile, type ProfileRecord } from '@solidarity/shared';
+import {
+  bytesToHex,
+  parseProfile,
+  profileLinkSchema,
+  sha256Bytes,
+  type ProfileLink,
+  type ProfileRecord,
+} from '@solidarity/shared';
 
 const KEY = 'profileSnapshots:v1';
 
-export interface ProfileSnapshot {
+export interface VerifiedSnapshot {
+  readonly kind: 'verified';
   readonly did: string;
   readonly record: ProfileRecord;
   readonly jws: string;
@@ -44,10 +71,50 @@ export interface ProfileSnapshot {
   readonly verifiedAt: string;
 }
 
-interface PersistedSnapshot {
+export interface DeclaredSnapshot {
+  readonly kind: 'declared';
+  /** `stableDeclaredId(sourceUrl)` — the Map key and the `/people/declared/[id]` route param. */
+  readonly id: string;
+  /** Always null — a declared entry has no did; never fabricate one. */
+  readonly did: null;
+  readonly sourceUrl: string;
+  readonly title: string | null;
+  readonly links: readonly ProfileLink[];
+  /** ISO timestamp of when THIS DEVICE last imported the page. */
+  readonly importedAt: string;
+}
+
+export type ProfileSnapshot = VerifiedSnapshot | DeclaredSnapshot;
+
+/** Stable, non-secret id for a declared entry — first 24 hex chars of
+ * SHA-256(sourceUrl). Deterministic so re-pasting the same URL always
+ * resolves to the same Map key / route param (upsert-in-place, not a
+ * duplicate), without needing to persist a separately-generated uuid. */
+export function stableDeclaredId(sourceUrl: string): string {
+  return bytesToHex(sha256Bytes(sourceUrl.trim())).slice(0, 24);
+}
+
+const declaredLinksSchema = z.array(profileLinkSchema);
+
+interface PersistedVerifiedEntry {
+  readonly kind?: 'verified'; // absent on entries persisted before this task — back-compat
   readonly record: unknown;
   readonly jws: unknown;
   readonly verifiedAt: unknown;
+}
+
+interface PersistedDeclaredEntry {
+  readonly kind: 'declared';
+  readonly sourceUrl: unknown;
+  readonly title: unknown;
+  readonly links: unknown;
+  readonly importedAt: unknown;
+}
+
+type PersistedEntry = PersistedVerifiedEntry | PersistedDeclaredEntry;
+
+function isPersistedDeclared(entry: PersistedEntry): entry is PersistedDeclaredEntry {
+  return entry.kind === 'declared';
 }
 
 function readPersisted(): ReadonlyMap<string, ProfileSnapshot> {
@@ -55,13 +122,46 @@ function readPersisted(): ReadonlyMap<string, ProfileSnapshot> {
   try {
     const raw = getMmkv().getString(KEY);
     if (!raw) return out;
-    const parsed = JSON.parse(raw) as Record<string, PersistedSnapshot>;
-    for (const [did, entry] of Object.entries(parsed)) {
+    // Typed `unknown` (not `Record<string, PersistedEntry>`) so the
+    // null/object runtime guard below is real, not a type-narrowed no-op —
+    // `JSON.parse` on an untrusted persisted blob can hand back anything,
+    // regardless of what we assert its shape to be.
+    const parsed = JSON.parse(raw) as Record<string, unknown>;
+    for (const [key, rawEntry] of Object.entries(parsed)) {
+      if (rawEntry === null || typeof rawEntry !== 'object') continue;
+      const entry = rawEntry as PersistedEntry;
+
+      if (isPersistedDeclared(entry)) {
+        if (typeof entry.sourceUrl !== 'string' || entry.sourceUrl.length === 0) continue;
+        if (typeof entry.importedAt !== 'string' || entry.importedAt.length === 0) continue;
+        const linksResult = declaredLinksSchema.safeParse(entry.links);
+        if (!linksResult.success) continue;
+        const title = typeof entry.title === 'string' ? entry.title : null;
+        out.set(key, {
+          kind: 'declared',
+          id: key,
+          did: null,
+          sourceUrl: entry.sourceUrl,
+          title,
+          links: linksResult.data,
+          importedAt: entry.importedAt,
+        });
+        continue;
+      }
+
+      // No `kind`, or explicit `kind: 'verified'` — identical validation
+      // path either way, so a legacy (pre-A2.4) blob hydrates unchanged.
       if (typeof entry.jws !== 'string' || entry.jws.length === 0) continue;
       if (typeof entry.verifiedAt !== 'string' || entry.verifiedAt.length === 0) continue;
       const validated = parseProfile(entry.record);
       if (!validated.ok) continue;
-      out.set(did, { did, record: validated.value, jws: entry.jws, verifiedAt: entry.verifiedAt });
+      out.set(key, {
+        kind: 'verified',
+        did: validated.value.did,
+        record: validated.value,
+        jws: entry.jws,
+        verifiedAt: entry.verifiedAt,
+      });
     }
   } catch {
     // Corrupt MMKV blob — fail closed to an empty snapshot set.
@@ -71,9 +171,18 @@ function readPersisted(): ReadonlyMap<string, ProfileSnapshot> {
 
 function writePersisted(snapshots: ReadonlyMap<string, ProfileSnapshot>): void {
   try {
-    const plain: Record<string, PersistedSnapshot> = {};
-    for (const [did, snapshot] of snapshots) {
-      plain[did] = { record: snapshot.record, jws: snapshot.jws, verifiedAt: snapshot.verifiedAt };
+    const plain: Record<string, unknown> = {};
+    for (const [key, snapshot] of snapshots) {
+      plain[key] =
+        snapshot.kind === 'verified'
+          ? { kind: 'verified', record: snapshot.record, jws: snapshot.jws, verifiedAt: snapshot.verifiedAt }
+          : {
+              kind: 'declared',
+              sourceUrl: snapshot.sourceUrl,
+              title: snapshot.title,
+              links: snapshot.links,
+              importedAt: snapshot.importedAt,
+            };
     }
     getMmkv().set(KEY, JSON.stringify(plain));
   } catch {
@@ -88,14 +197,22 @@ interface ProfileSnapshotState {
   /** Insert-or-replace by `record.did`. Always a fresh `verifiedAt` — this
    * device just re-verified the page, even if the record content is
    * unchanged from a previous scan. */
-  readonly upsert: (record: ProfileRecord, jws: string) => ProfileSnapshot;
+  readonly upsert: (record: ProfileRecord, jws: string) => VerifiedSnapshot;
+  /** Insert-or-replace by `stableDeclaredId(sourceUrl)` — re-pasting the
+   * same link page updates the saved link list rather than duplicating. */
+  readonly upsertDeclared: (
+    sourceUrl: string,
+    title: string | null,
+    links: readonly ProfileLink[]
+  ) => DeclaredSnapshot;
 }
 
 export const useProfileSnapshotStore = create<ProfileSnapshotState>((set, get) => ({
   snapshots: new Map(),
 
   upsert: (record, jws) => {
-    const snapshot: ProfileSnapshot = {
+    const snapshot: VerifiedSnapshot = {
+      kind: 'verified',
       did: record.did,
       record,
       jws,
@@ -103,6 +220,24 @@ export const useProfileSnapshotStore = create<ProfileSnapshotState>((set, get) =
     };
     const next = new Map(get().snapshots);
     next.set(record.did, snapshot);
+    writePersisted(next);
+    set({ snapshots: next });
+    return snapshot;
+  },
+
+  upsertDeclared: (sourceUrl, title, links) => {
+    const id = stableDeclaredId(sourceUrl);
+    const snapshot: DeclaredSnapshot = {
+      kind: 'declared',
+      id,
+      did: null,
+      sourceUrl,
+      title,
+      links,
+      importedAt: new Date().toISOString(),
+    };
+    const next = new Map(get().snapshots);
+    next.set(id, snapshot);
     writePersisted(next);
     set({ snapshots: next });
     return snapshot;
@@ -116,22 +251,54 @@ export function hydrateProfileSnapshots(): void {
   if (persisted.size > 0) useProfileSnapshotStore.setState({ snapshots: persisted });
 }
 
-export function getProfileSnapshot(did: string): ProfileSnapshot | undefined {
-  return useProfileSnapshotStore.getState().snapshots.get(did);
+/** Verified-only lookup by did — used by the scan-result sheet (dup check)
+ * and `/people/profile/[did]`. A declared entry is never returned here
+ * even in the practically-impossible case its hash id collided with a did
+ * string, since `kind` is checked explicitly. */
+export function getProfileSnapshot(did: string): VerifiedSnapshot | undefined {
+  const found = useProfileSnapshotStore.getState().snapshots.get(did);
+  return found?.kind === 'verified' ? found : undefined;
 }
 
-export const useProfileSnapshot = (did: string | undefined): ProfileSnapshot | undefined =>
-  useProfileSnapshotStore((s) => (did ? s.snapshots.get(did) : undefined));
+export const useProfileSnapshot = (did: string | undefined): VerifiedSnapshot | undefined =>
+  useProfileSnapshotStore((s) => {
+    if (!did) return undefined;
+    const found = s.snapshots.get(did);
+    return found?.kind === 'verified' ? found : undefined;
+  });
 
-/** Newest-verified-first — the order the People tab's Verified Pages
- * section renders in. Exported standalone (not just the hook below) so the
- * ordering is unit-testable without mounting React. */
+/** Declared-only lookup by `stableDeclaredId(sourceUrl)` — used by
+ * `/people/declared/[id]`. */
+export function getDeclaredSnapshot(id: string): DeclaredSnapshot | undefined {
+  const found = useProfileSnapshotStore.getState().snapshots.get(id);
+  return found?.kind === 'declared' ? found : undefined;
+}
+
+export const useDeclaredSnapshot = (id: string | undefined): DeclaredSnapshot | undefined =>
+  useProfileSnapshotStore((s) => {
+    if (!id) return undefined;
+    const found = s.snapshots.get(id);
+    return found?.kind === 'declared' ? found : undefined;
+  });
+
+/** Verified entries first (newest `verifiedAt` first, unchanged from A2.3),
+ * then declared entries (newest `importedAt` first) — the order the People
+ * tab's saved-pages section renders in. A cryptographically-verified page
+ * always outranks an unverified claim, regardless of recency. Exported
+ * standalone (not just the hook below) so the ordering is unit-testable
+ * without mounting React. */
 export function sortedProfileSnapshots(
   snapshots: ReadonlyMap<string, ProfileSnapshot>,
 ): readonly ProfileSnapshot[] {
-  return Array.from(snapshots.values()).sort((a, b) =>
-    a.verifiedAt < b.verifiedAt ? 1 : a.verifiedAt > b.verifiedAt ? -1 : 0,
-  );
+  const verified: VerifiedSnapshot[] = [];
+  const declared: DeclaredSnapshot[] = [];
+  for (const snapshot of snapshots.values()) {
+    if (snapshot.kind === 'verified') verified.push(snapshot);
+    else declared.push(snapshot);
+  }
+  verified.sort((a, b) => (a.verifiedAt < b.verifiedAt ? 1 : a.verifiedAt > b.verifiedAt ? -1 : 0));
+  declared.sort((a, b) => (a.importedAt < b.importedAt ? 1 : a.importedAt > b.importedAt ? -1 : 0));
+  return [...verified, ...declared];
 }
 
 /** `useShallow` is required: this selector derives a fresh array every
