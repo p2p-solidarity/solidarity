@@ -75,6 +75,8 @@ describe('verifyNostrBinding conformance vectors', () => {
     expect(names).toContain('profile-claims-npub-but-kind0-missing-did');
     expect(names).toContain('did-mismatch');
     expect(names).toContain('kind0-fetch-null');
+    expect(names).toContain('kind0-content-not-an-object');
+    expect(names).toContain('kind0-content-field-null');
     expect(names).toContain('no-npub-in-profile');
     expect(names).toContain('malformed-npub-in-profile');
 
@@ -97,6 +99,24 @@ describe('verifyNostrBinding — direct unit behaviour not covered by the vector
     const result = await verifyNostrBinding(profile.value, throwingFetch);
     expect(result.state).toBe('stale');
     expect(result.evidence.direction2).toBe(null);
+  });
+
+  it('extracts the first nostr:npub… entry when alsoKnownAs carries more than one (deterministic first-match-wins)', async () => {
+    const secondNpub = 'npub1qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqrz80x0';
+    const base = (vectors.cases as readonly VectorCase[])[0]!.profile as Record<string, unknown>;
+    const profile = parseProfile({
+      ...base,
+      alsoKnownAs: [
+        `nostr:${vectors.referenceNpub}`,
+        `nostr:${secondNpub}`,
+      ],
+    });
+    expect(profile.ok).toBe(true);
+    if (!profile.ok) return;
+
+    const fetchKind0: NostrKind0Fetcher = async () => null;
+    const result = await verifyNostrBinding(profile.value, fetchKind0);
+    expect(result.npub).toBe(vectors.referenceNpub);
   });
 
   it('never calls fetchKind0 more than once per verify call', async () => {

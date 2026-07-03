@@ -91,6 +91,60 @@
       }
     },
     {
+      "name": "kind0-content-not-an-object",
+      "reason": "the kind-0 fetch SUCCEEDS (this is NOT a network/relay failure — kind0CreatedAt is populated), but the resolved content JSON is a scalar (here, the string \"garbage\") rather than an object, so there is no alsoKnownAs field to read at all. Because the fetch itself completed, this is an affirmatively-observed non-reciprocation, not an unknown — must be `declared`, never `stale`.",
+      "profile": {
+        "v": 1,
+        "did": "did:key:zDnaeVuZeVRqvscGkiEoR9PFFra2xZUMp97ZPuGFK1VLU7iYN",
+        "displayName": "Alice",
+        "avatar": null,
+        "bio": "",
+        "links": [],
+        "alsoKnownAs": ["nostr:npub10elfcs4fr0l0r8af98jlmgdh9c8tcxjvz9qkw038js35mp4dma8qzvjptg"],
+        "badges": [],
+        "supersededBy": null,
+        "updatedAt": "2026-07-03T00:00:00Z"
+      },
+      "kind0": {
+        "contentJson": "garbage",
+        "created_at": 1751500000
+      },
+      "expected": {
+        "state": "declared",
+        "npub": "npub10elfcs4fr0l0r8af98jlmgdh9c8tcxjvz9qkw038js35mp4dma8qzvjptg",
+        "direction1": true,
+        "direction2": false,
+        "kind0CreatedAt": 1751500000
+      }
+    },
+    {
+      "name": "kind0-content-field-null",
+      "reason": "the kind-0 fetch SUCCEEDS (distinct from `kind0-fetch-null`, where the whole event resolution failed) but the event's own content field happens to be JSON `null` rather than an object or a missing field. Same honesty rule as the string case above: fetch completed, so this is `declared`, not `stale` — a fetched-but-empty content field is not a network failure.",
+      "profile": {
+        "v": 1,
+        "did": "did:key:zDnaeVuZeVRqvscGkiEoR9PFFra2xZUMp97ZPuGFK1VLU7iYN",
+        "displayName": "Alice",
+        "avatar": null,
+        "bio": "",
+        "links": [],
+        "alsoKnownAs": ["nostr:npub10elfcs4fr0l0r8af98jlmgdh9c8tcxjvz9qkw038js35mp4dma8qzvjptg"],
+        "badges": [],
+        "supersededBy": null,
+        "updatedAt": "2026-07-03T00:00:00Z"
+      },
+      "kind0": {
+        "contentJson": null,
+        "created_at": 1751500000
+      },
+      "expected": {
+        "state": "declared",
+        "npub": "npub10elfcs4fr0l0r8af98jlmgdh9c8tcxjvz9qkw038js35mp4dma8qzvjptg",
+        "direction1": true,
+        "direction2": false,
+        "kind0CreatedAt": 1751500000
+      }
+    },
+    {
       "name": "kind0-fetch-null",
       "reason": "profile claims the npub, but the kind-0 fetch could not complete at all (relay unreachable/timeout) — we genuinely do not know whether Direction 2 holds right now. Must be `stale`, distinct from the `declared` cases above where we DID see a kind-0 that doesn't reciprocate.",
       "profile": {

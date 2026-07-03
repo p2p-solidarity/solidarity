@@ -19,7 +19,7 @@
  * `userKey.ts`'s `npubEncode`. Direction 2 is `updateKind0AlsoKnownAs`
  * below: the user's kind-0 (metadata) event content gets an
  * `alsoKnownAs` array containing their `did:key:…`. A verifier
- * (`packages/verify-core/src/badges/nostr.ts`, task A4.3) only shows the
+ * (`packages/shared/src/badges/nostr.ts`, task A4.3) only shows the
  * green check once BOTH directions resolve to each other.
  *
  * ── kind-0 binding convention: JSON `content.alsoKnownAs`, not a NIP-39
