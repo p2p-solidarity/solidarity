@@ -53,7 +53,16 @@ export interface PearChannel {
    *  unsubscribe function. */
   onFrame(cb: (frame: Record<string, unknown>) => void): () => void;
   /** Subscribe to this topic's lifecycle events. Returns an unsubscribe
-   *  function. */
+   *  function. BehaviorSubject-style: if a `_ctrl` event already arrived for
+   *  this topic before `cb` subscribed, `cb` is replayed that LAST event
+   *  synchronously (before `onCtrl` returns) so a listener attached after
+   *  `open` (e.g. across an `await` gap) still observes the current
+   *  connection state instead of waiting out a timeout for an event that
+   *  already happened. The replay only reaches the newly-attached `cb` —
+   *  already-subscribed listeners are not re-delivered. Safe to treat like
+   *  any other delivery: `authenticateChannel`'s `open` handling is already
+   *  idempotent (a second `open` — live or replayed — is a no-op once this
+   *  side's challenge has been sent). */
   onCtrl(cb: (ev: PearCtrlEvent) => void): () => void;
   /** Leave the topic and drop this channel's listeners. Does not shut
    *  down the underlying lane/worklet — call `LaneHandle.shutdown()` for
@@ -94,15 +103,22 @@ export function startLane(_opts: StartLaneOptions = {}): Result<LaneHandle, Lane
   const decoder = new FrameDecoder();
   const frameListeners = new Map<string, Set<(frame: Record<string, unknown>) => void>>();
   const ctrlListeners = new Map<string, Set<(ev: PearCtrlEvent) => void>>();
+  // Single-slot replay buffer per topic — the most recent `_ctrl` event seen
+  // for that topic, so a late `onCtrl` subscriber (see that method's doc)
+  // can be caught up synchronously instead of missing an event that already
+  // fired. Cleared on (re)join and on close so a new connection never
+  // replays a previous connection's stale state.
+  const lastCtrlEvent = new Map<string, PearCtrlEvent>();
 
   function routeEnvelope(value: Record<string, unknown>): void {
     const topic = typeof value['topic'] === 'string' ? value['topic'] : null;
     if (!topic) return;
 
     if (value['t'] === '_ctrl' && typeof value['ev'] === 'string') {
+      const ctrlEvent = value as unknown as PearCtrlEvent;
+      lastCtrlEvent.set(topic, ctrlEvent);
       const listeners = ctrlListeners.get(topic);
       if (!listeners || listeners.size === 0) return;
-      const ctrlEvent = value as unknown as PearCtrlEvent;
       for (const cb of listeners) cb(ctrlEvent);
       return;
     }
@@ -137,6 +153,11 @@ export function startLane(_opts: StartLaneOptions = {}): Result<LaneHandle, Lane
   function joinTopic(topicHex: string, mode: PearJoinMode = 'both'): PearChannel {
     if (!frameListeners.has(topicHex)) frameListeners.set(topicHex, new Set());
     if (!ctrlListeners.has(topicHex)) ctrlListeners.set(topicHex, new Set());
+    // A fresh join starts a new connection lifecycle — never replay a prior
+    // connection's leftover ctrl state (close() already clears this on the
+    // normal leave path; this also covers a re-join of the same topic
+    // without an intervening close()).
+    lastCtrlEvent.delete(topicHex);
     sendCommand({ t: '_join', topic: topicHex, mode });
 
     return {
@@ -153,12 +174,15 @@ export function startLane(_opts: StartLaneOptions = {}): Result<LaneHandle, Lane
         const listeners = ctrlListeners.get(topicHex) ?? new Set();
         ctrlListeners.set(topicHex, listeners);
         listeners.add(cb);
+        const last = lastCtrlEvent.get(topicHex);
+        if (last) cb(last); // replay — see PearChannel.onCtrl doc
         return () => { listeners.delete(cb); };
       },
       close() {
         sendCommand({ t: '_leave', topic: topicHex });
         frameListeners.delete(topicHex);
         ctrlListeners.delete(topicHex);
+        lastCtrlEvent.delete(topicHex);
       },
     };
   }
@@ -176,6 +200,7 @@ export function startLane(_opts: StartLaneOptions = {}): Result<LaneHandle, Lane
     }
     frameListeners.clear();
     ctrlListeners.clear();
+    lastCtrlEvent.clear();
   }
 
   return ok({ joinTopic, shutdown });

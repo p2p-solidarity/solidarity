@@ -95,11 +95,13 @@ function isChallengeAddressedToMe(c: unknown, myDid: string, peerDid: string): c
 
 /**
  * Run the mutual DID-challenge handshake over an already-`joinTopic`'d
- * `PearChannel`. Must be called before the channel's `open` ctrl event fires
- * (it subscribes to `onCtrl`/`onFrame` itself and sends this side's
- * challenge on `open`) — calling it after `open` has already fired once
- * will simply wait out the full timeout with nothing sent, since there's no
- * later `open` event to react to.
+ * `PearChannel`. Safe to call any time after `joinTopic` — even after
+ * `open` already fired (e.g. across an `await` gap before this function's
+ * `onCtrl` subscription attaches) — because `PearChannel.onCtrl` replays the
+ * topic's last ctrl event to a newly-attached subscriber (`lane.ts`). This
+ * function's own `open` handling is already idempotent (`sendMyChallenge`
+ * no-ops once `myChallenge` is set), so a replayed `open` behaves the same
+ * as a live one.
  */
 export async function authenticateChannel(
   ch: PearChannel,
@@ -204,6 +206,11 @@ export async function authenticateChannel(
         fail('handshake: protocol violation — challenge.response missing a string jws field');
         return;
       }
+      // Primary replay defense is the fresh per-handshake `randomChallengeNonce()`
+      // in `myChallenge` — a captured response can't be replayed into a later
+      // handshake because the nonce won't match. The verifier's ±120s clock-skew
+      // window (`DEFAULT_MAX_SKEW_SEC` in `@solidarity/shared`) is secondary,
+      // bounding how long a captured-but-unused response stays valid at all.
       const verified = verifyChallengeResponse(rawJws, myChallenge, { nowMs });
       if (!verified.ok) {
         fail(`handshake: peer response failed verification — ${verified.error}`);
@@ -217,7 +224,14 @@ export async function authenticateChannel(
       if (settled) return;
       const t = frame['t'];
       if (t === 'challenge') {
-        void handleChallengeFrame(frame['c']);
+        // `handleChallengeFrame` has its own try/catch around the signer call,
+        // but a throw from anything else in its body (e.g. `ch.send`) would
+        // otherwise reject this promise with nothing awaiting it. `fail` is
+        // idempotent (`settled` guard), so a late/duplicate rejection here is
+        // a no-op if the handshake already settled some other way.
+        void handleChallengeFrame(frame['c']).catch((e: unknown) => {
+          fail(`handshake: unexpected error while handling challenge — ${e instanceof Error ? e.message : String(e)}`);
+        });
         return;
       }
       if (t === 'challenge.response') {

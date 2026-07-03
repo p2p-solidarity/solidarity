@@ -8,9 +8,20 @@
  * generate real reference vectors in `pearFrames.test.ts`.
  */
 import { beforeEach, describe, expect, it, mock } from 'bun:test';
+import { p256 } from '@noble/curves/nist.js';
 
-import { bytesToHex, sha256Bytes } from '@solidarity/shared';
+import {
+  buildChallenge,
+  bytesToHex,
+  didKeyFromPublicKey,
+  publicKeyFromPrivate,
+  randomChallengeNonce,
+  respondChallenge,
+  sha256Bytes,
+  type Signer,
+} from '@solidarity/shared';
 
+import { authenticateChannel } from '../../src/pear/handshake';
 import { encodeFrame, FrameDecoder } from '../../src/pear/frames';
 import type * as LaneModule from '../../src/pear/lane';
 
@@ -271,4 +282,123 @@ describe('pear/lane — joinTopic', () => {
     currentWorklet().IPC.emitEnvelope({ t: '_frame', topic, frame: { t: 'after-close' } });
     expect(received).toEqual([]);
   });
+});
+
+// Regression coverage for the structural fix to the open-event race
+// documented in `lane.ts`'s `PearChannel.onCtrl` doc and `handshake.ts`'s
+// module doc: `onCtrl` used to only deliver FUTURE `_ctrl` events, so a
+// subscriber (e.g. `authenticateChannel`) that attached even one microtask
+// after `open` fired would silently miss it and time out. `lane.ts` now
+// retains the last `_ctrl` event per topic and replays it synchronously to
+// a newly-attached `onCtrl` listener.
+describe('pear/lane — onCtrl late-subscriber replay', () => {
+  it('replays the last _ctrl event synchronously to a listener attached after it fired', () => {
+    const result = lane.startLane();
+    if (!result.ok) throw new Error('setup failed');
+    const topic = 'i'.repeat(64);
+    const channel = result.value.joinTopic(topic);
+
+    currentWorklet().IPC.emitEnvelope({ t: '_ctrl', topic, ev: 'open', connId: 1 });
+
+    // Nobody was listening when 'open' arrived — this is the late-attach case.
+    const events: unknown[] = [];
+    channel.onCtrl((ev) => events.push(ev));
+
+    expect(events).toEqual([{ t: '_ctrl', topic, ev: 'open', connId: 1 }]);
+  });
+
+  it('does not re-deliver the replayed event to a listener that was already subscribed', () => {
+    const result = lane.startLane();
+    if (!result.ok) throw new Error('setup failed');
+    const topic = 'j'.repeat(64);
+    const channel = result.value.joinTopic(topic);
+
+    const events: unknown[] = [];
+    channel.onCtrl((ev) => events.push(ev)); // subscribed BEFORE 'open'
+    currentWorklet().IPC.emitEnvelope({ t: '_ctrl', topic, ev: 'open', connId: 1 });
+
+    // Exactly one delivery (the live one) — no duplicate from replay logic.
+    expect(events).toEqual([{ t: '_ctrl', topic, ev: 'open', connId: 1 }]);
+  });
+
+  it('a fresh joinTopic() on the same topic does not replay a previous connection\'s stale ctrl event', () => {
+    const result = lane.startLane();
+    if (!result.ok) throw new Error('setup failed');
+    const topic = 'k'.repeat(64);
+    const first = result.value.joinTopic(topic);
+    currentWorklet().IPC.emitEnvelope({ t: '_ctrl', topic, ev: 'open', connId: 1 });
+    first.close();
+
+    const second = result.value.joinTopic(topic);
+    const events: unknown[] = [];
+    second.onCtrl((ev) => events.push(ev));
+
+    expect(events).toEqual([]);
+  });
+
+  it(
+    'authenticateChannel still completes mutual authentication when it attaches onCtrl after ' +
+      "'open' already fired (await gap between joinTopic and authenticateChannel)",
+    async () => {
+      // TEST-ONLY scalars — mirrors pearHandshake.test.ts's fixed-hex-scalar
+      // convention.
+      const ALICE_PRIV = new Uint8Array(32).fill(0).map((_, i) => (i + 1) & 0xff);
+      const ALICE_DID = didKeyFromPublicKey(publicKeyFromPrivate(ALICE_PRIV));
+      const aliceSigner: Signer = async (digest) => p256.sign(digest, ALICE_PRIV, { prehash: false });
+
+      const BOB_PRIV = new Uint8Array(32).fill(0).map((_, i) => (i * 7 + 3) & 0xff);
+      const BOB_DID = didKeyFromPublicKey(publicKeyFromPrivate(BOB_PRIV));
+      const bobSigner: Signer = async (digest) => p256.sign(digest, BOB_PRIV, { prehash: false });
+
+      const result = lane.startLane();
+      if (!result.ok) throw new Error('setup failed');
+      const topic = 'l'.repeat(64);
+      const channel = result.value.joinTopic(topic);
+
+      // The worklet reports 'open' before anyone has called
+      // `authenticateChannel` — exactly the race the structural fix covers.
+      currentWorklet().IPC.emitEnvelope({ t: '_ctrl', topic, ev: 'open', connId: 1 });
+      await Promise.resolve(); // the gap: at least one microtask between 'open' and subscribing
+
+      const aliceAuth = authenticateChannel(channel, {
+        myDid: ALICE_DID,
+        peerDid: BOB_DID,
+        signer: aliceSigner,
+        handshakeTimeoutMs: 200,
+      });
+
+      // Without the fix, `open` was dropped (no listeners existed when it
+      // arrived) and `authenticateChannel`'s later `onCtrl` subscription has
+      // no future 'open' to react to — Alice never sends a challenge and
+      // `sentCommands` stays empty, so this lookup fails and the test times
+      // out at `handshakeTimeoutMs`.
+      const sentCommands = writtenCommands(currentWorklet().IPC);
+      const challengeCmd = sentCommands.find(
+        (c) => c['t'] === '_send' && (c['frame'] as Record<string, unknown> | undefined)?.['t'] === 'challenge'
+      );
+      expect(challengeCmd).toBeDefined();
+      const aliceChallenge = (challengeCmd?.['frame'] as { c: unknown }).c;
+
+      // Bob answers Alice's challenge.
+      const jwsFromBob = await respondChallenge(aliceChallenge as never, BOB_DID, bobSigner);
+      currentWorklet().IPC.emitEnvelope({
+        t: '_frame',
+        topic,
+        frame: { t: 'challenge.response', jws: jwsFromBob },
+      });
+
+      // Bob issues his own challenge to Alice, completing the mutual pair.
+      const bobChallenge = buildChallenge({
+        requester: BOB_DID,
+        subject: ALICE_DID,
+        purpose: 'pear.card',
+        nonce: randomChallengeNonce(),
+        ts: Math.floor(Date.now() / 1000),
+      });
+      currentWorklet().IPC.emitEnvelope({ t: '_frame', topic, frame: { t: 'challenge', c: bobChallenge } });
+
+      const aliceResult = await aliceAuth;
+      expect(aliceResult.ok).toBe(true);
+    }
+  );
 });

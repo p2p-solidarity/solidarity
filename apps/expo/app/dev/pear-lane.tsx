@@ -194,7 +194,9 @@ function LoopbackLab() {
     }, LOOPBACK_TIMEOUT_MS);
 
     // Both sides start authenticating immediately (before `open` can fire) —
-    // `authenticateChannel` itself waits for the ctrl 'open' event.
+    // `authenticateChannel` itself waits for the ctrl 'open' event. Not
+    // strictly required (a late subscriber gets `open` replayed by
+    // `lane.ts`), but there's no reason to delay here.
     const aliceAuth = authenticateChannel(channelA, {
       myDid: ALICE_TEST.did,
       peerDid: BOB_TEST.did,
@@ -386,15 +388,16 @@ function CrossDeviceLab() {
     const topic = pearTopicFor(role === 'wait' ? myDid : peerDid);
     setState({ kind: 'discovering', topic });
 
-    // Resolve the signer BEFORE joining the topic. `authenticateChannel`
-    // must subscribe to the channel's ctrl/frame events in the SAME
-    // synchronous tick as `joinTopic()` — `PearChannel.onCtrl` only
-    // delivers FUTURE events, so if `open` fired while we were still
-    // `await`-ing a signer, `authenticateChannel`'s own listener (only
-    // attached once this resolves) would miss it and every run would
-    // silently time out. `getRootSigner()` itself never prompts Face ID —
-    // only actually calling the returned `Signer` does, which happens
-    // inside `authenticateChannel` once the peer's challenge arrives.
+    // Resolve the signer BEFORE joining the topic. This ordering used to be
+    // load-bearing for correctness (a channel's `open` firing while we were
+    // still `await`-ing a signer would have been missed entirely), but
+    // `PearChannel.onCtrl` now replays a topic's last ctrl event to a
+    // late-attaching subscriber (`lane.ts`), so `authenticateChannel` would
+    // still observe `open` even across this `await` gap. Kept anyway because
+    // it avoids joining the topic (and incurring hyperswarm/DHT traffic) when
+    // the signer isn't available. `getRootSigner()` itself never prompts
+    // Face ID — only actually calling the returned `Signer` does, which
+    // happens inside `authenticateChannel` once the peer's challenge arrives.
     void getRootSigner().then((signerResult) => {
       if (!mountedRef.current) return;
       if (!signerResult.ok) {
