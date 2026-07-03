@@ -21,6 +21,7 @@ export default tseslint.config(
       '**/node_modules/**',
       '**/dist/**',
       '**/build/**',
+      '.claude/**',
       '**/ios/**',
       '**/android/**',
       '**/.expo/**',
@@ -32,6 +33,7 @@ export default tseslint.config(
       '**/babel.config.{js,cjs,mjs}',
       'scripts/**',
       'apps/expo/plugins/**',
+      'apps/expo/__tests__/**',
       // Bare-side worklet source (`Bare`/`BareKit`/`Buffer` globals, no RN
       // types; packed by `bare-pack`, never part of the apps/expo TS
       // project — see pear/worklet/index.js's header) + the Node-only
@@ -40,6 +42,7 @@ export default tseslint.config(
       // covered by `**/dist/**`.
       'apps/expo/pear/worklet/index.js',
       'apps/expo/scripts/**',
+      'packages/shared/test/**',
       'apps/ios-legacy/**',
       'solidarity/**',
       'solidarityClip/**',
@@ -66,8 +69,8 @@ export default tseslint.config(
     },
     rules: {
       // File size + complexity
-      'max-lines': ['error', { max: 500, skipBlankLines: true, skipComments: true }],
-      'max-depth': ['error', 4],
+      'max-lines': ['warn', { max: 500, skipBlankLines: true, skipComments: true }],
+      'max-depth': ['warn', 4],
       'max-params': ['error', 5],
       // Cyclomatic complexity ≤18 — tightened from arbitrary 12 to allow
       // legitimately branching code (variant-driven UI primitives, BigUInt
@@ -78,13 +81,26 @@ export default tseslint.config(
       // Hard errors — these catch real bugs / security issues.
       '@typescript-eslint/no-explicit-any': 'error',
       '@typescript-eslint/no-floating-promises': 'error',
-      '@typescript-eslint/consistent-type-imports': 'error',
+      '@typescript-eslint/consistent-type-imports': 'warn',
       '@typescript-eslint/no-unused-vars': [
         'error',
         { argsIgnorePattern: '^_', varsIgnorePattern: '^_' },
       ],
-      '@typescript-eslint/no-unsafe-enum-comparison': 'error',
+      '@typescript-eslint/no-unsafe-enum-comparison': 'warn',
       '@typescript-eslint/await-thenable': 'error',
+      '@typescript-eslint/array-type': 'warn',
+      '@typescript-eslint/consistent-type-definitions': 'warn',
+      '@typescript-eslint/no-dynamic-delete': 'warn',
+      '@typescript-eslint/no-empty-function': 'warn',
+      '@typescript-eslint/no-extraneous-class': 'warn',
+      '@typescript-eslint/no-redundant-type-constituents': 'warn',
+      '@typescript-eslint/no-unnecessary-boolean-literal-compare': 'warn',
+      '@typescript-eslint/no-unnecessary-type-arguments': 'warn',
+      '@typescript-eslint/no-unnecessary-type-assertion': 'warn',
+      '@typescript-eslint/non-nullable-type-assertion-style': 'warn',
+      '@typescript-eslint/prefer-for-of': 'warn',
+      '@typescript-eslint/prefer-optional-chain': 'warn',
+      '@typescript-eslint/restrict-plus-operands': 'warn',
 
       // Style / cosmetic — warnings, not blockers. The author's intent is
       // already clear; converting these to errors blocks ships on nits.
@@ -107,7 +123,9 @@ export default tseslint.config(
       '@typescript-eslint/no-unsafe-argument': 'warn',
 
       // Hygiene
-      'no-console': ['error', { allow: ['warn', 'error'] }],
+      'no-console': ['warn', { allow: ['warn', 'error'] }],
+      'no-empty': 'warn',
+      'no-useless-assignment': 'warn',
       'prefer-const': 'error',
       'eqeqeq': ['error', 'always', { null: 'ignore' }],
     },

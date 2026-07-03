@@ -238,3 +238,4 @@ system_logs.logarchive/
 # Python bytecode cache from scripts/ (generate_masterlist + its tests).
 __pycache__/
 *.pyc
+.alma-snapshots

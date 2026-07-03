@@ -124,7 +124,6 @@ function warnBoot(message: string, error?: unknown): void {
 
 export default function RootLayout() {
   const [ready, setReady] = useState(false);
-  const hydrateContacts = useContactStore((s) => s.hydrate);
   const receivedCard = useReceivedCard((s) => s.card);
   const receivedVerification = useReceivedCard((s) => s.verificationStatus);
   const dismissReceived = useReceivedCard((s) => s.dismiss);
