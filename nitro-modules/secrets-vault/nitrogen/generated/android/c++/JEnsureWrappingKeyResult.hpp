@@ -17,7 +17,7 @@ namespace margelo::nitro::solidarity::secretsvault {
   using namespace facebook;
 
   /**
-   * The C++ JNI bridge between the C++ struct "EnsureWrappingKeyResult" and the the Kotlin data class "EnsureWrappingKeyResult".
+   * The C++ JNI bridge between the C++ struct "EnsureWrappingKeyResult" and the Kotlin data class "EnsureWrappingKeyResult".
    */
   struct JEnsureWrappingKeyResult final: public jni::JavaClass<JEnsureWrappingKeyResult> {
   public:

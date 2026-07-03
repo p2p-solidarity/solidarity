@@ -36,14 +36,16 @@ export {
   type TrustAnchorSource,
 } from './issuerTrustAnchor';
 // NOTE: `__setRootKeyBiometricGateForTesting` / `__setRootKeyStorageForTesting`
-// are deliberately NOT re-exported here — they are test-only DI hooks and this
-// barrel is the production import surface. `__tests__/unit/rootKey.test.ts`
-// already imports them directly from `./rootKey`; keep it that way rather
-// than shipping test seams through app code's import path.
+// / `__setRootKeySyncStorageForTesting` are deliberately NOT re-exported
+// here — they are test-only DI hooks and this barrel is the production
+// import surface. `__tests__/unit/rootKey.test.ts` already imports them
+// directly from `./rootKey`; keep it that way rather than shipping test
+// seams through app code's import path.
 export {
   createFromFreshMnemonic,
   deleteRootKey,
   deriveDidFromMnemonic,
+  enableICloudBackup,
   getRootDid,
   getRootSigner,
   hasRootKey,

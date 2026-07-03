@@ -29,19 +29,26 @@
  * then both identities coexist; nothing here reads or writes
  * `solidarity.master.v2`.
  *
- * ── Storage ceiling (today) ────────────────────────────────────────────
+ * ── Storage (today) ─────────────────────────────────────────────────────
  *
- * The mnemonic is persisted via `expo-secure-store`, LOCAL-ONLY
- * (`WHEN_UNLOCKED_THIS_DEVICE_ONLY` — expo-secure-store has no
- * `kSecAttrSynchronizable` option at all, see `SecureStoreOptions` in its
- * type defs). This means the "back up via iCloud Keychain" consent offered
- * in `src/onboarding/steps/BackupStep.tsx` records an *intent* (a
- * preference flag, `usePreferences().rootKeySyncChoice`) today, not yet
- * real iCloud sync of this particular item — see that screen's docstring
- * and the task report for the two concrete options to close the gap
- * (`react-native-keychain`, or a small `SecItemAdd`
- * `kSecAttrSynchronizable=true` addition to `nitro-modules/secrets-vault`,
- * modelled directly on the working precedent above).
+ * The mnemonic is ALWAYS persisted locally via `expo-secure-store`
+ * (`WHEN_UNLOCKED_THIS_DEVICE_ONLY`) regardless of the user's backup
+ * choice — `RootKeyStorage` above. That local copy is what the mnemonic
+ * ceremony in `src/onboarding/steps/BackupStep.tsx` shows/reveals, and
+ * what every `createFromFreshMnemonic` / `importFromMnemonic` caller reads
+ * back through `getRootDid` / `getRootSigner`.
+ *
+ * `enableICloudBackup()` (below) is a SEPARATE, ADDITIVE write: it copies
+ * the already-persisted mnemonic into an iCloud-Keychain-SYNCHRONIZABLE
+ * item via `@solidarity/nitro-secrets-vault`'s `setSynchronizableItem`
+ * (iOS: `kSecAttrSynchronizable=true`, `kSecAttrAccessibleWhenUnlocked`, no
+ * biometry ACL — see that module's doc; task A1.5). It does NOT replace or
+ * gate the local copy — the local copy is the durable source of truth this
+ * module reads from, and it is what backs the mnemonic-ceremony fallback
+ * when a synchronizable write fails (see that function's doc for the exact
+ * failure contract). `usePreferences().rootKeySyncChoice` is set to
+ * `'icloud'` by the CALLER (`BackupStep.tsx`) only after
+ * `enableICloudBackup()` resolves `ok(...)` — never on intent alone.
  *
  * Face ID gating happens at the SIGNING/EXPORT CALL layer
  * (`requireBiometric('sign'|'export')`), never via a Keychain ACL — this is
@@ -117,6 +124,45 @@ const defaultStorage: RootKeyStorage = {
   },
 };
 
+// ── iCloud Keychain sync (task A1.5) ────────────────────────────────────
+//
+// Separate alias namespace from `MNEMONIC_ALIAS` above — the synchronizable
+// item lives in a DIFFERENT keychain service inside `secrets-vault`
+// (`gg.solidarity.secretsvault.sync`, see that module's iOS implementation)
+// so a delete of one can never collide with the other.
+const ICLOUD_SYNC_ALIAS = 'gg.solidarity.rootkey.mnemonic.icloud.v1';
+
+export interface RootKeySyncStorage {
+  readonly setSyncedMnemonic: (mnemonic: string) => Promise<void>;
+  readonly deleteSyncedMnemonic: () => Promise<void>;
+}
+
+/**
+ * Lazy-loaded for the same reason as `loadSecureStore` above: importing
+ * `@solidarity/nitro-secrets-vault` eagerly would pull in
+ * `react-native-nitro-modules`' native binding at module-load time, which
+ * has no counterpart in the bun test runtime. Every real call site resolves
+ * it on first use; tests inject `__setRootKeySyncStorageForTesting` instead.
+ */
+async function loadSecretsVault(): Promise<{
+  readonly setSynchronizableItem: (alias: string, value: string) => Promise<void>;
+  readonly deleteSynchronizableItem: (alias: string) => Promise<void>;
+}> {
+  const { getSecretsVault } = await import('@solidarity/nitro-secrets-vault');
+  return getSecretsVault();
+}
+
+const defaultSyncStorage: RootKeySyncStorage = {
+  setSyncedMnemonic: async (mnemonic) => {
+    const vault = await loadSecretsVault();
+    await vault.setSynchronizableItem(ICLOUD_SYNC_ALIAS, mnemonic);
+  },
+  deleteSyncedMnemonic: async () => {
+    const vault = await loadSecretsVault();
+    await vault.deleteSynchronizableItem(ICLOUD_SYNC_ALIAS);
+  },
+};
+
 let activeStorage: RootKeyStorage = defaultStorage;
 
 /**
@@ -125,6 +171,16 @@ let activeStorage: RootKeyStorage = defaultStorage;
  */
 export function __setRootKeyStorageForTesting(storage: RootKeyStorage | null): void {
   activeStorage = storage ?? defaultStorage;
+}
+
+let activeSyncStorage: RootKeySyncStorage = defaultSyncStorage;
+
+/**
+ * Test-only override — inject an in-memory sync-storage mock. Pass `null`
+ * to restore the default secrets-vault-backed implementation.
+ */
+export function __setRootKeySyncStorageForTesting(storage: RootKeySyncStorage | null): void {
+  activeSyncStorage = storage ?? defaultSyncStorage;
 }
 
 /**
@@ -299,7 +355,57 @@ export async function revealMnemonicForExport(): Promise<Result<string, RootKeyE
   return ok(mnemonic);
 }
 
-/** Delete the persisted root key. Used by tests and by a future rotate/reset flow. */
+/**
+ * iCloud Keychain backup (task A1.5): copy the ALREADY-PROVISIONED local
+ * mnemonic into a synchronizable Keychain item via `secrets-vault`'s
+ * `setSynchronizableItem` (iOS: `kSecAttrSynchronizable=true`,
+ * `kSecAttrAccessibleWhenUnlocked`, no biometry ACL — see that module's
+ * doc). Requires `createFromFreshMnemonic` / `importFromMnemonic` to have
+ * already run (returns `err({kind:'notProvisioned'})` otherwise, WITHOUT
+ * touching sync storage).
+ *
+ * On any failure — including the unconditional rejection Android's
+ * `secrets-vault` implementation returns for every synchronizable-item
+ * call, since Android has no iCloud Keychain — this returns
+ * `err({kind:'storageFailed', ...})` and leaves the local mnemonic
+ * untouched, so the caller's mnemonic-ceremony fallback (`BackupStep.tsx`'s
+ * `declineToMnemonic`) always has a valid mnemonic to reveal.
+ *
+ * @warning Callers MUST NOT record `rootKeySyncChoice = 'icloud'` (or any
+ * other "sync is on" state) unless this resolves `ok(...)` — recording
+ * intent before a confirmed write violates CLAUDE.md rule 8 (no fake data)
+ * and is the exact bug task A1.5 exists to fix (see rootKey.ts's module
+ * doc).
+ */
+export async function enableICloudBackup(): Promise<Result<void, RootKeyError>> {
+  let mnemonic: string | null;
+  try {
+    mnemonic = await activeStorage.getMnemonic();
+  } catch (e) {
+    return err(toStorageError(e));
+  }
+  if (!mnemonic) return err({ kind: 'notProvisioned' });
+  try {
+    await activeSyncStorage.setSyncedMnemonic(mnemonic);
+  } catch (e) {
+    return err(toStorageError(e));
+  }
+  return ok(undefined);
+}
+
+/**
+ * Delete the persisted root key. Used by tests and by a future rotate/reset
+ * flow. Also best-effort deletes the synchronizable iCloud item (if any)
+ * so a reset never leaves an orphaned synced mnemonic behind — swallowed on
+ * failure (Android's `secrets-vault` implementation always rejects here,
+ * and an iOS delete of a missing item is already a no-op at the native
+ * layer, so a real failure here is not actionable for the caller).
+ */
 export async function deleteRootKey(): Promise<void> {
   await activeStorage.deleteMnemonic();
+  try {
+    await activeSyncStorage.deleteSyncedMnemonic();
+  } catch {
+    // best-effort — see doc above.
+  }
 }

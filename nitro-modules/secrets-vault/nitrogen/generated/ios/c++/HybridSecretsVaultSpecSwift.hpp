@@ -124,6 +124,30 @@ namespace margelo::nitro::solidarity::secretsvault {
       auto __value = std::move(__result.value());
       return __value;
     }
+    inline std::shared_ptr<Promise<void>> setSynchronizableItem(const std::string& alias, const std::string& value) override {
+      auto __result = _swiftPart.setSynchronizableItem(alias, value);
+      if (__result.hasError()) [[unlikely]] {
+        std::rethrow_exception(__result.error());
+      }
+      auto __value = std::move(__result.value());
+      return __value;
+    }
+    inline std::shared_ptr<Promise<std::string>> getSynchronizableItem(const std::string& alias) override {
+      auto __result = _swiftPart.getSynchronizableItem(alias);
+      if (__result.hasError()) [[unlikely]] {
+        std::rethrow_exception(__result.error());
+      }
+      auto __value = std::move(__result.value());
+      return __value;
+    }
+    inline std::shared_ptr<Promise<void>> deleteSynchronizableItem(const std::string& alias) override {
+      auto __result = _swiftPart.deleteSynchronizableItem(alias);
+      if (__result.hasError()) [[unlikely]] {
+        std::rethrow_exception(__result.error());
+      }
+      auto __value = std::move(__result.value());
+      return __value;
+    }
 
   private:
     SecretsVault::HybridSecretsVaultSpec_cxx _swiftPart;

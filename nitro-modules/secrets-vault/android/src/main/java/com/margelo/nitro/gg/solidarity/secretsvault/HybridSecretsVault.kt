@@ -247,6 +247,28 @@ class HybridSecretsVault : HybridSecretsVaultSpec() {
     ArrayBuffer.allocate(0)
   }
 
+  // MARK: - Synchronizable item (iCloud Keychain) — iOS-only capability
+  //
+  // Android has no iCloud Keychain equivalent, and the onboarding UI never
+  // offers the iCloud backup option on this platform (see
+  // apps/expo/src/onboarding/steps/BackupStep.tsx / src/identity/rootKey.ts).
+  // These three methods exist only to satisfy the shared TS HybridObject
+  // spec: every call REJECTS with a clear "not supported" error rather than
+  // silently no-opping, so a caller that somehow reaches this path on
+  // Android fails loudly instead of recording a false sync success.
+
+  override fun setSynchronizableItem(alias: String, value: String): Promise<Unit> = Promise.async {
+    throw UnsupportedOperationException("iCloud Keychain sync is not supported on Android")
+  }
+
+  override fun getSynchronizableItem(alias: String): Promise<String> = Promise.async {
+    throw UnsupportedOperationException("iCloud Keychain sync is not supported on Android")
+  }
+
+  override fun deleteSynchronizableItem(alias: String): Promise<Unit> = Promise.async {
+    throw UnsupportedOperationException("iCloud Keychain sync is not supported on Android")
+  }
+
   // MARK: - Internal
 
   private fun loadKey(keyAlias: String): SecretKey {

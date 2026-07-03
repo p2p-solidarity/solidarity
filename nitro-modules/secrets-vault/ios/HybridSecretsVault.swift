@@ -156,6 +156,98 @@ final class HybridSecretsVault: HybridSecretsVaultSpec {
     }
   }
 
+  // MARK: - Synchronizable item (iCloud Keychain) — root-key seed backup
+  //
+  // A SEPARATE keychain namespace from the wrapping-key rows above
+  // (`keychainService`): these items are plain generic passwords with
+  // `kSecAttrSynchronizable = true`, so they must never collide with (or be
+  // swept by a delete query targeting) the non-synced wrapping-key rows.
+  // Ported from the working precedent in
+  // `nitro-modules/spruce-did/ios/SpruceDidKeyStore.swift:112`
+  // (`generateSyncableP256Key`) — same accessibility choice (`WhenUnlocked`,
+  // NOT `…ThisDeviceOnly`, which would opt the item out of sync) and same
+  // "no biometry ACL" rule (synchronizable items can't carry a
+  // device-specific SecAccessControl; any Face ID gate belongs one layer up
+  // at the JS call site — see `apps/expo/src/identity/rootKey.ts`).
+
+  private static let syncableItemService = "gg.solidarity.secretsvault.sync"
+
+  func setSynchronizableItem(alias: String, value: String) throws -> Promise<Void> {
+    return Promise.async {
+      guard !alias.isEmpty else {
+        throw self.makeError(code: 400, "alias is empty")
+      }
+      let data = Data(value.utf8)
+
+      // Idempotent: overwrite any stale entry under the same alias. Delete
+      // across BOTH synchronizable states first so a prior non-synced
+      // leftover under the same (service, account) can never collide with
+      // the add below.
+      let deleteQuery: [String: Any] = [
+        kSecClass as String: kSecClassGenericPassword,
+        kSecAttrService as String: Self.syncableItemService,
+        kSecAttrAccount as String: alias,
+        kSecAttrSynchronizable as String: kSecAttrSynchronizableAny,
+      ]
+      SecItemDelete(deleteQuery as CFDictionary)
+
+      let addQuery: [String: Any] = [
+        kSecClass as String: kSecClassGenericPassword,
+        kSecAttrService as String: Self.syncableItemService,
+        kSecAttrAccount as String: alias,
+        kSecValueData as String: data,
+        kSecAttrAccessible as String: kSecAttrAccessibleWhenUnlocked,
+        kSecAttrSynchronizable as String: true,
+      ]
+      let status = SecItemAdd(addQuery as CFDictionary, nil)
+      guard status == errSecSuccess else {
+        throw self.makeError(
+          code: Int(status), "synchronizable keychain add failed status=\(status)")
+      }
+    }
+  }
+
+  func getSynchronizableItem(alias: String) throws -> Promise<String> {
+    return Promise.async {
+      guard !alias.isEmpty else { return "" }
+      let query: [String: Any] = [
+        kSecClass as String: kSecClassGenericPassword,
+        kSecAttrService as String: Self.syncableItemService,
+        kSecAttrAccount as String: alias,
+        kSecAttrSynchronizable as String: kSecAttrSynchronizableAny,
+        kSecReturnData as String: true,
+        kSecMatchLimit as String: kSecMatchLimitOne,
+      ]
+      var item: AnyObject?
+      let status = SecItemCopyMatching(query as CFDictionary, &item)
+      if status == errSecItemNotFound { return "" }
+      guard status == errSecSuccess, let data = item as? Data,
+        let value = String(data: data, encoding: .utf8)
+      else {
+        if status == errSecSuccess { return "" }
+        throw self.makeError(
+          code: Int(status), "synchronizable keychain read failed status=\(status)")
+      }
+      return value
+    }
+  }
+
+  func deleteSynchronizableItem(alias: String) throws -> Promise<Void> {
+    return Promise.async {
+      let query: [String: Any] = [
+        kSecClass as String: kSecClassGenericPassword,
+        kSecAttrService as String: Self.syncableItemService,
+        kSecAttrAccount as String: alias,
+        kSecAttrSynchronizable as String: kSecAttrSynchronizableAny,
+      ]
+      let status = SecItemDelete(query as CFDictionary)
+      guard status == errSecSuccess || status == errSecItemNotFound else {
+        throw self.makeError(
+          code: Int(status), "synchronizable keychain delete failed status=\(status)")
+      }
+    }
+  }
+
   // MARK: - Key store (Secure Enclave preferred, software fallback on sim)
 
   /// Stored shape: opaque `dataRepresentation` of the SE / software P-256

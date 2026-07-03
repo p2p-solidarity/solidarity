@@ -72,9 +72,35 @@ const fakeBiometricGate = (reason: 'sign' | 'export'): Promise<boolean> => {
   return Promise.resolve(nextBiometricSuccess);
 };
 
+// ── Fake synchronizable-item storage (A1.5) — mirrors the real
+//    secrets-vault-backed implementation's shape (`setSyncedMnemonic` /
+//    `deleteSyncedMnemonic`) without touching the native module. ──────────
+
+const syncStore = new Map<string, string>();
+let nextSyncWriteError: Error | null = null;
+let nextSyncDeleteError: Error | null = null;
+
+const fakeSyncStorage = {
+  setSyncedMnemonic: (mnemonic: string): Promise<void> => {
+    if (nextSyncWriteError) return Promise.reject(nextSyncWriteError);
+    syncStore.set('mnemonic', mnemonic);
+    return Promise.resolve();
+  },
+  deleteSyncedMnemonic: (): Promise<void> => {
+    if (nextSyncDeleteError) return Promise.reject(nextSyncDeleteError);
+    syncStore.delete('mnemonic');
+    return Promise.resolve();
+  },
+};
+
 interface RootKeyMod {
   readonly __setRootKeyStorageForTesting: (storage: typeof fakeStorage | null) => void;
   readonly __setRootKeyBiometricGateForTesting: (gate: typeof fakeBiometricGate | null) => void;
+  readonly __setRootKeySyncStorageForTesting: (storage: typeof fakeSyncStorage | null) => void;
+  readonly enableICloudBackup: () => Promise<
+    | { readonly ok: true; readonly value: undefined }
+    | { readonly ok: false; readonly error: { readonly kind: string; readonly message?: string } }
+  >;
   readonly createFromFreshMnemonic: () => Promise<
     | { readonly ok: true; readonly value: { readonly mnemonic: string; readonly did: string } }
     | { readonly ok: false; readonly error: { readonly kind: string; readonly message?: string } }
@@ -109,11 +135,15 @@ beforeAll(async () => {
   mod = imported as RootKeyMod;
   mod.__setRootKeyStorageForTesting(fakeStorage);
   mod.__setRootKeyBiometricGateForTesting(fakeBiometricGate);
+  mod.__setRootKeySyncStorageForTesting(fakeSyncStorage);
 });
 
 beforeEach(async () => {
   secureStore.clear();
+  syncStore.clear();
   nextBiometricSuccess = true;
+  nextSyncWriteError = null;
+  nextSyncDeleteError = null;
   biometricCalls.length = 0;
   await mod.deleteRootKey();
 });
@@ -299,7 +329,74 @@ describe('revealMnemonicForExport', () => {
   });
 });
 
-// ── 6. did derivation cross-checks against packages/shared primitives ─────
+// ── 6. enableICloudBackup — real synchronizable-item write (A1.5) ─────────
+
+describe('enableICloudBackup', () => {
+  it('returns err(notProvisioned) when no root key exists yet, and never touches sync storage', async () => {
+    const r = await mod.enableICloudBackup();
+    expect(r.ok).toBe(false);
+    if (r.ok) return;
+    expect(r.error.kind).toBe('notProvisioned');
+    expect(syncStore.size).toBe(0);
+  });
+
+  it('writes the exact persisted mnemonic to the synchronizable item and returns ok on success', async () => {
+    const created = await mod.createFromFreshMnemonic();
+    expect(created.ok).toBe(true);
+    if (!created.ok) return;
+
+    const r = await mod.enableICloudBackup();
+    expect(r.ok).toBe(true);
+    expect(syncStore.get('mnemonic')).toBe(created.value.mnemonic);
+  });
+
+  it('returns err(storageFailed) and leaves the local mnemonic untouched when the synchronizable write fails', async () => {
+    const created = await mod.createFromFreshMnemonic();
+    expect(created.ok).toBe(true);
+    if (!created.ok) return;
+
+    nextSyncWriteError = new Error('synchronizable keychain add failed status=-25299');
+    const r = await mod.enableICloudBackup();
+    expect(r.ok).toBe(false);
+    if (r.ok) return;
+    expect(r.error.kind).toBe('storageFailed');
+    expect(syncStore.size).toBe(0);
+
+    // The local (mnemonic-ceremony) copy is untouched — the ceremony
+    // fallback in BackupStep must still have a valid mnemonic to show.
+    const stillLocal = await mod.getRootDid();
+    expect(stillLocal.ok).toBe(true);
+    if (stillLocal.ok) expect(stillLocal.value).toBe(created.value.did);
+  });
+});
+
+// ── 7. deleteRootKey — best-effort cleans the synchronizable item too ─────
+
+describe('deleteRootKey', () => {
+  it('clears both local and synced storage', async () => {
+    const created = await mod.createFromFreshMnemonic();
+    expect(created.ok).toBe(true);
+    const enabled = await mod.enableICloudBackup();
+    expect(enabled.ok).toBe(true);
+    expect(syncStore.size).toBe(1);
+
+    await mod.deleteRootKey();
+
+    expect(syncStore.size).toBe(0);
+    expect(await mod.hasRootKey()).toBe(false);
+  });
+
+  it('never throws even when the synced-storage delete fails (best-effort)', async () => {
+    await mod.createFromFreshMnemonic();
+    nextSyncDeleteError = new Error('unsupported');
+    // If this rejected, the `await` below would fail the test with an
+    // unhandled rejection — that IS the "never throws" assertion.
+    await mod.deleteRootKey();
+    expect(await mod.hasRootKey()).toBe(false);
+  });
+});
+
+// ── 8. did derivation cross-checks against packages/shared primitives ─────
 
 describe('did derivation matches packages/shared primitives directly', () => {
   it('deriveDidFromMnemonic matches didKeyFromPublicKey(publicKeyFromPrivate(deriveP256Scalar(...)))', async () => {

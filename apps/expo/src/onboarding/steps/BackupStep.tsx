@@ -20,42 +20,42 @@
  *   1. On mount, provision the root key if one doesn't already exist
  *      (idempotent — replaying onboarding, e.g. via Settings › Replay
  *      Onboarding, must not rotate an existing identity).
- *   2. Main question renders both options, but "Use iCloud Keychain" is
- *      VISIBLY DISABLED with a "Coming soon" badge — see the "iCloud
- *      backup" note below for why. That leaves the mnemonic ceremony as
- *      the ONLY functioning path right now; every user goes through it.
- *      `acceptICloud` / `rootKeySyncChoice` plumbing is kept intact
- *      (unused while the button is disabled) so A1.5 can turn iCloud sync
- *      on by flipping `disabled` once the mnemonic is actually persisted
- *      as a synchronizable Keychain item — no rewire needed then.
+ *   2. Main question renders both options on iOS: "Use iCloud Keychain"
+ *      (one-tap, real sync — task A1.5) and "Write down my recovery
+ *      phrase". Android has no iCloud Keychain, so only the mnemonic
+ *      option renders there (`secrets-vault`'s synchronizable-item calls
+ *      unconditionally reject on Android — see that module's doc — so the
+ *      option is never offered rather than offered-and-always-fails).
+ *      Accepting iCloud calls `enableICloudBackup()` (`rootKey.ts`), which
+ *      writes the ALREADY-PROVISIONED mnemonic into a real iCloud-
+ *      Keychain-synchronizable item. `rootKeySyncChoice` is only set to
+ *      `'icloud'` AFTER that write resolves `ok(...)` — never on tap alone
+ *      (CLAUDE.md rule 8, no fake data). On failure, the mnemonic ceremony
+ *      runs instead so the user always leaves this step with a completed
+ *      backup.
  *   3. The mnemonic ceremony: show the 24 words with a screenshot warning,
  *      then re-enter 3 randomly-chosen words to prove the user actually
  *      recorded them. On REPLAY (root key already provisioned, so the
  *      effect below never populated `mnemonicWords`), the words are
  *      fetched on demand via the Face-ID-gated `revealMnemonicForExport`
  *      — see `backupStepLogic.ts`'s `resolveMnemonicForCeremony`.
- *
- * NOTE on "iCloud backup": the mnemonic is stored device-local only (see
- * rootKey.ts's module doc: `expo-secure-store` has no
- * `kSecAttrSynchronizable` option) — tapping "Use iCloud Keychain" would
- * NOT actually back anything up today. Per CLAUDE.md rule 8 (no fake data)
- * we do not offer a button that claims to do something it doesn't: the
- * option is disabled and clearly labelled "Coming soon" instead of being
- * hidden (it's real roadmap, not vaporware) or silently accepted (it was
- * previously reachable and recorded a sync intent with no sync behind it).
  */
 import { useEffect, useMemo, useState } from 'react';
-import { ActivityIndicator, TextInput, View } from 'react-native';
+import { ActivityIndicator, Platform, TextInput, View } from 'react-native';
 
 import { ThemedButton, ThemedText } from '@/components/themed';
 import { Colors } from '@/constants/Colors';
 import { showError } from '@/feedback/appAlert';
 import { haptic } from '@/feedback/haptics';
 import { useTranslation } from '@/i18n';
-import { createFromFreshMnemonic, hasRootKey, revealMnemonicForExport } from '@/identity';
+import { createFromFreshMnemonic, enableICloudBackup, hasRootKey, revealMnemonicForExport } from '@/identity';
 import { usePreferences } from '@/settings/preferences';
 import { resolveMnemonicForCeremony } from './backupStepLogic';
 import { OnboardingScaffold } from './OnboardingScaffold';
+
+/** Android has no iCloud Keychain — the option is never offered there
+ * rather than offered-and-guaranteed-to-fail (see module doc). */
+const SUPPORTS_ICLOUD_BACKUP = Platform.OS === 'ios';
 
 export interface BackupStepProps {
   readonly onBack: () => void;
@@ -92,6 +92,8 @@ export function BackupStep({ onBack, onDone }: BackupStepProps) {
   // (Face-ID-gated reveal) — the fresh-provisioning path already has the
   // words in hand and never touches this.
   const [revealingForCeremony, setRevealingForCeremony] = useState(false);
+  // Only set while the real iCloud Keychain write is in flight.
+  const [icloudSubmitting, setIcloudSubmitting] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -122,15 +124,6 @@ export function BackupStep({ onBack, onDone }: BackupStepProps) {
     };
   }, [t]);
 
-  // Kept for A1.5: wired to the (currently disabled) iCloud button so
-  // turning real sync on is a one-line `disabled` flip, not a rewire —
-  // see the module doc's "iCloud backup" note for why it's disabled today.
-  const acceptICloud = () => {
-    haptic('success');
-    setPref('rootKeySyncChoice', 'icloud');
-    onDone();
-  };
-
   const declineToMnemonic = async () => {
     setRevealingForCeremony(true);
     try {
@@ -149,6 +142,34 @@ export function BackupStep({ onBack, onDone }: BackupStepProps) {
       setPhase('reveal');
     } finally {
       setRevealingForCeremony(false);
+    }
+  };
+
+  /**
+   * Real iCloud Keychain write (`rootKey.ts`'s `enableICloudBackup`).
+   * `rootKeySyncChoice` is only recorded AFTER the write resolves `ok(...)`
+   * — never on tap alone (CLAUDE.md rule 8, no fake data). On failure this
+   * falls back to the mnemonic ceremony so the user always leaves this step
+   * with a completed, real backup rather than stuck on an error.
+   */
+  const acceptICloud = async () => {
+    setIcloudSubmitting(true);
+    try {
+      const result = await enableICloudBackup();
+      if (!result.ok) {
+        showError({
+          context: 'Onboarding › Backup',
+          summary: t('backupStep.icloudFailed'),
+          error: new Error(result.error.kind),
+        });
+        await declineToMnemonic();
+        return;
+      }
+      haptic('success');
+      setPref('rootKeySyncChoice', 'icloud');
+      onDone();
+    } finally {
+      setIcloudSubmitting(false);
     }
   };
 
@@ -204,39 +225,27 @@ export function BackupStep({ onBack, onDone }: BackupStepProps) {
       <OnboardingScaffold
         onBack={onBack}
         title={t('backupStep.title')}
-        subtitle={t('backupStep.subtitle')}
+        subtitle={t(SUPPORTS_ICLOUD_BACKUP ? 'backupStep.subtitle' : 'backupStep.subtitleMnemonicOnly')}
         footer={
           <View style={{ gap: 12 }}>
-            <View style={{ position: 'relative' }}>
+            {SUPPORTS_ICLOUD_BACKUP ? (
               <ThemedButton
                 label={t('backupStep.useICloud')}
                 variant="inverted"
                 fullWidth
-                disabled
-                onPress={acceptICloud}
-              />
-              <View
-                style={{
-                  position: 'absolute',
-                  top: -9,
-                  right: 8,
-                  backgroundColor: Colors.pillSurface,
-                  borderWidth: 1,
-                  borderColor: Colors.pillBorder,
-                  paddingHorizontal: 8,
-                  paddingVertical: 3,
+                loading={icloudSubmitting}
+                disabled={revealingForCeremony}
+                onPress={() => {
+                  void acceptICloud();
                 }}
-              >
-                <ThemedText variant="caption" tone="secondary">
-                  {t('backupStep.comingSoon')}
-                </ThemedText>
-              </View>
-            </View>
+              />
+            ) : null}
             <ThemedButton
               label={t('backupStep.useMnemonic')}
               variant="dottedOutline"
               fullWidth
               loading={revealingForCeremony}
+              disabled={icloudSubmitting}
               onPress={() => {
                 void declineToMnemonic();
               }}
@@ -245,9 +254,11 @@ export function BackupStep({ onBack, onDone }: BackupStepProps) {
         }
       >
         <View style={{ flex: 1 }} />
-        <ThemedText variant="bodySmall" tone="secondary">
-          {t('backupStep.icloudExplainer')}
-        </ThemedText>
+        {SUPPORTS_ICLOUD_BACKUP ? (
+          <ThemedText variant="bodySmall" tone="secondary">
+            {t('backupStep.icloudExplainer')}
+          </ThemedText>
+        ) : null}
         <View style={{ flex: 1 }} />
       </OnboardingScaffold>
     );
