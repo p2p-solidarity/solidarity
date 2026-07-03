@@ -20,6 +20,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { PressableScale } from '@/components/common/PressableScale';
 import { SfIcon } from '@/components/icons/SfIcon';
+import { CardExchangeSection } from '@/components/people/CardExchangeSection';
 import { VerifiedProfileView } from '@/components/scan/VerifiedProfileView';
 import { ThemedText } from '@/components/themed';
 import { Colors } from '@/constants/Colors';
@@ -46,8 +47,9 @@ export default function VerifiedProfileDetailScreen(): ReactNode {
       </View>
 
       {snapshot ? (
-        <ScrollView contentContainerStyle={{ padding: 16, gap: 16 }}>
+        <ScrollView contentContainerStyle={{ padding: 16, gap: 24 }}>
           <VerifiedProfileView record={snapshot.record} />
+          <CardExchangeSection did={snapshot.did} verifiedDisplayName={snapshot.record.displayName} />
         </ScrollView>
       ) : (
         <View className="flex-1 items-center justify-center gap-2 px-8">

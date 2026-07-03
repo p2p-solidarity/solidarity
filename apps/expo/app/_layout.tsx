@@ -57,6 +57,7 @@ import { useIdentityData } from '@/identity';
 import { installI18n } from '@/i18n';
 import { hydrateSensitiveActionPolicy } from '@/keychain';
 import { warmNostrKeyMirror } from '@/nostr/userKey';
+import { PearConsentOverlay } from '@/pear/consent';
 import { hydrateProfileSnapshots } from '@/people/profileSnapshots';
 import { hydrateProfile } from '@/profile/store';
 import { syncOnce } from '@/sakura/inbox';
@@ -299,6 +300,7 @@ export default function RootLayout() {
           <ToastOverlay />
           <ConfirmDialogOverlay />
           <AppAlertOverlay />
+          <PearConsentOverlay />
           <ReceivedCardSheet
             visible={receivedCard !== null}
             card={receivedCard}
