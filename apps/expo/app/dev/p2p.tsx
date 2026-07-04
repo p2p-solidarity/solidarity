@@ -10,10 +10,9 @@
  *     ephemeral peer store; transport log shows every frame
  *   - "Generate handshake QR" — real signed payload with the dev pubkey
  *   - ICE servers field (state-only per §13.1; webrtc.ts consumer
- *     lands in the next phase along with the real BLE/WebRTC wire)
+ *     lands in the next phase along with the real WebRTC wire)
  *
- * Deferred (TODOs marked inline below):
- *   - Real BLE-side wire integration (sendData hook into nitro-proximity)
+ * Deferred:
  *   - Real WebRTC LAN-direct DataChannel (src/dag/webrtc.ts)
  *   - Scan-peer-handshake camera flow
  *
