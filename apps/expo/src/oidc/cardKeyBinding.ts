@@ -4,7 +4,7 @@ export const CARD_KEY_BINDING_TYPE = 'solidarity.cardKeyBinding.v1';
 const DEFAULT_LIFETIME_SECONDS = 300;
 
 export interface CardKeyBindingClaims {
-  readonly typ: typeof CARD_KEY_BINDING_TYPE;
+  readonly typ: string;
   readonly rootDid: string;
   readonly cardDid: string;
   readonly aud: string;
@@ -67,7 +67,7 @@ function readNumber(payload: Record<string, unknown>, key: string): number {
 function toClaims(payload: object): CardKeyBindingClaims {
   const record = payload as Record<string, unknown>;
   return {
-    typ: readString(record, 'typ') as typeof CARD_KEY_BINDING_TYPE,
+    typ: readString(record, 'typ'),
     rootDid: readString(record, 'rootDid'),
     cardDid: readString(record, 'cardDid'),
     aud: readString(record, 'aud'),

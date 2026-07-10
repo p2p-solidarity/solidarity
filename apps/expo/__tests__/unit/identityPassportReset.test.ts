@@ -58,8 +58,12 @@ beforeAll(async () => {
     initMmkv: () => Promise.resolve(undefined),
   }));
   await mock.module('@/storage/encryptionManager', () => ({
-    encryptJson: (value: unknown) => Promise.resolve(JSON.stringify(value)),
-    decryptJson: <T,>(value: string): Promise<T> => Promise.resolve(JSON.parse(value) as T),
+    encryptJson: (value: unknown) =>
+      Promise.resolve(Buffer.from(JSON.stringify(value)).toString('base64')),
+    decryptJson: <T,>(value: string): Promise<T> => {
+      const raw = value.startsWith('{') ? value : Buffer.from(value, 'base64').toString('utf8');
+      return Promise.resolve(JSON.parse(raw) as T);
+    },
   }));
 
   credentials = await import('../../src/credentials/store');

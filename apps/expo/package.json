@@ -19,8 +19,9 @@
     "gcp:rotate-key": "./scripts/gcp-rotate-key.sh",
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
-    "test": "bun test --preload ./test-setup.ts",
-    "test:parity": "bun test --preload ./test-setup.ts __tests__/parity",
+    "test": "bun run test:unit && bun run test:parity",
+    "test:unit": "SKIP_INTEGRATION=1 bun test --preload ./test-setup.ts --max-concurrency=1 __tests__/unit",
+    "test:parity": "bun test --preload ./test-setup.ts --max-concurrency=1 __tests__/parity",
     "pear:pack": "node scripts/pack-pear-worklet.mjs"
   },
   "dependencies": {

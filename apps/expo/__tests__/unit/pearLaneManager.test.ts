@@ -56,6 +56,8 @@ class FakeWorklet implements FakeWorkletInstance {
 void mock.module('react-native-bare-kit', () => ({ Worklet: FakeWorklet }));
 void mock.module('../../pear/worklet/dist/index.bundle.js', () => ({ default: 'fake-bundle-source' }));
 void mock.module('react-native', () => ({
+  ...((globalThis as unknown as { __AIRMEISHI_RN_MOCK__: Record<string, unknown> })
+    .__AIRMEISHI_RN_MOCK__),
   AppState: {
     addEventListener: () => ({ remove: (): undefined => undefined }),
   },

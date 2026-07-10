@@ -13,6 +13,8 @@ import type * as LifecycleModule from '../../src/pear/lifecycle';
 import type { LaneHandle } from '../../src/pear/lane';
 
 void mock.module('react-native', () => ({
+  ...((globalThis as unknown as { __AIRMEISHI_RN_MOCK__: Record<string, unknown> })
+    .__AIRMEISHI_RN_MOCK__),
   AppState: {
     addEventListener: () => ({ remove: (): undefined => undefined }),
   },

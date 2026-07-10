@@ -136,12 +136,15 @@ beforeAll(async () => {
     getCloudKit: () => FakeCloudKit,
   }));
   await mock.module('react-native', () => ({
+    ...((globalThis as unknown as { __AIRMEISHI_RN_MOCK__: Record<string, unknown> })
+      .__AIRMEISHI_RN_MOCK__),
     Platform: { OS: 'ios', select: <T,>(o: { ios?: T; android?: T; default?: T }) =>
       o.ios ?? o.default },
   }));
   await mock.module('@/storage/secureMasterKey', () => ({
     getMasterKey: async () => FIXED_MASTER_KEY,
     resetMasterKeyForTesting: async () => undefined,
+    evictMasterKeyCache: () => undefined,
   }));
   // Install a REAL AES-GCM encryption manager (overrides any plaintext stub
   // installed by sibling tests via mock.module). cloudProvider uses encryptJson

@@ -156,6 +156,8 @@ void mock.module('expo-file-system/legacy', () => ({
 // We never touch the real RN API in this suite — the keychain module
 // transitively imports it via `@/keychain` → expo bindings.
 void mock.module('react-native', () => ({
+  ...((globalThis as unknown as { __AIRMEISHI_RN_MOCK__: Record<string, unknown> })
+    .__AIRMEISHI_RN_MOCK__),
   Platform: { OS: 'ios' },
   TurboModuleRegistry: {
     get: (): null => null,

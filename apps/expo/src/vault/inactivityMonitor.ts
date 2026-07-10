@@ -24,8 +24,6 @@ import { AppState, type NativeEventSubscription } from 'react-native';
 
 import { getMmkv } from '@/storage/mmkv';
 
-import { evictCachedRootSecret } from './secretsKeychain';
-
 const LAST_ACTIVITY_KEY = 'vault.inactivity.lastActivity';
 /** Swift InactivityMonitorService.minimumCheckInterval = 3600s = 1h. */
 export const PERIODIC_CHECK_INTERVAL_MS = 3600 * 1000;
@@ -50,7 +48,9 @@ const state: MonitorState = {
   idleMs: DEFAULT_IDLE_LOCK_MS,
   now: () => Date.now(),
   onLock: () => {
-    evictCachedRootSecret();
+    void import('./secretsKeychain').then(({ evictCachedRootSecret }) => {
+      evictCachedRootSecret();
+    });
   },
 };
 

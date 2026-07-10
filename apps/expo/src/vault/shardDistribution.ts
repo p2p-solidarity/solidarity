@@ -33,10 +33,7 @@ import {
   sendMessage as sakuraSendMessage,
 } from '@/sakura/client';
 
-import {
-  getOrCreateRootSecret,
-  type RootSecretResult,
-} from './secretsKeychain';
+import type { RootSecretResult } from './secretsKeychain';
 import {
   encodeEnvelope,
   wrapShard,
@@ -99,6 +96,11 @@ export type DistributionResult =
         | 'wrapFailed'
         | 'sendFailed';
     };
+
+async function getBiometricRootSecret(): Promise<RootSecretResult> {
+  const { getOrCreateRootSecret } = await import('./secretsKeychain');
+  return getOrCreateRootSecret('biometric');
+}
 
 function recordKey(vaultId: string, contactId: string): string {
   // Normalise casing so callers using either lowercase or uppercase UUIDs
@@ -183,7 +185,7 @@ export async function distributeRecoveryShards(
     return { kind: 'err', reason: 'invalidThreshold' };
   }
 
-  const root: RootSecretResult = await getOrCreateRootSecret('biometric');
+  const root = await getBiometricRootSecret();
   if (root.kind === 'err') {
     return { kind: 'err', reason: root.reason };
   }

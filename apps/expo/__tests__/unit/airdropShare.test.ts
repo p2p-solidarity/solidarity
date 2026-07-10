@@ -52,6 +52,8 @@ beforeAll(async () => {
     getAirdrop: () => FakeAirdrop,
   }));
   await mock.module('react-native', () => ({
+    ...((globalThis as unknown as { __AIRMEISHI_RN_MOCK__: Record<string, unknown> })
+      .__AIRMEISHI_RN_MOCK__),
     Platform: {
       get OS() {
         return currentPlatformOS;

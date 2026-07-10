@@ -24,6 +24,8 @@ await mock.module('react', () => ({
 }));
 
 await mock.module('react-native', () => ({
+  ...((globalThis as unknown as { __AIRMEISHI_RN_MOCK__: Record<string, unknown> })
+    .__AIRMEISHI_RN_MOCK__),
   Appearance: { getColorScheme: () => 'light' },
   Text: 'Text',
   View: 'View',

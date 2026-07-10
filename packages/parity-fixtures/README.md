@@ -39,19 +39,17 @@ apps/expo/__tests__/parity/
 
 ## Running parity tests
 
-```bash
-# Re-export fixtures from Swift (one-time per behavioural change):
-xcodebuild test -project solidarity.xcodeproj \
-  -scheme solidarity -only-testing solidarityTests/FixtureExporter \
-  -destination 'platform=iOS Simulator,name=iPhone 17 Pro' \
-  -skipPackagePluginValidation
+> **These fixtures are FROZEN.** The Swift app (and its `FixtureExporter`
+> XCTest target) was deleted on 2026-06-27, so the fixtures can no longer
+> be regenerated. They are golden vectors pinning the TS implementation to
+> the verified Swift behaviour — never edit or regenerate them. If a
+> behavioural change is genuinely intended, write the new expected values
+> by hand from primary sources (e.g. NIST CAVP vectors) and document why.
 
-# Run TS parity assertions:
+```bash
+# Run TS parity assertions (from apps/expo):
 bun test --preload ./test-setup.ts __tests__/parity
 ```
-
-CI fails if either side diverges, forcing both implementations to stay
-in lockstep.
 
 ## What does NOT go here
 

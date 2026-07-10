@@ -86,9 +86,10 @@ beforeAll(async () => {
     initMmkv: async () => undefined,
   }));
   await mock.module('@/storage/encryptionManager', () => ({
-    encryptJson: async (v: unknown) => JSON.stringify(v),
+    encryptJson: async (v: unknown) => Buffer.from(JSON.stringify(v)).toString('base64'),
     decryptJson: async <T,>(s: string): Promise<T> => {
-      const parsed = JSON.parse(s) as Record<string, unknown>;
+      const raw = s.startsWith('{') ? s : Buffer.from(s, 'base64').toString('utf8');
+      const parsed = JSON.parse(raw) as Record<string, unknown>;
       // GroupMember.joinedAt is a Date — rebuild prototype like Swift Codable.
       if (typeof parsed['joinedAt'] === 'string') {
         (parsed as { joinedAt: Date }).joinedAt = new Date(parsed['joinedAt']);

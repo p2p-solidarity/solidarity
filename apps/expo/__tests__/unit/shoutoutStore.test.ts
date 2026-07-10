@@ -54,8 +54,11 @@ beforeAll(async () => {
   await mock.module('@/storage/encryptionManager', () => ({
     // Bypass crypto — store the JSON directly. Encryption parity lives in
     // the encryption.parity.test + vaultEncryption.test files.
-    encryptJson: async (v: unknown) => JSON.stringify(v),
-    decryptJson: async <T,>(s: string): Promise<T> => JSON.parse(s) as T,
+    encryptJson: async (v: unknown) => Buffer.from(JSON.stringify(v)).toString('base64'),
+    decryptJson: async <T,>(s: string): Promise<T> => {
+      const raw = s.startsWith('{') ? s : Buffer.from(s, 'base64').toString('utf8');
+      return JSON.parse(raw) as T;
+    },
   }));
   const imported = (await import('../../src/shoutouts/store')) as unknown as ShoutoutModule;
   mod = imported;

@@ -67,7 +67,7 @@ beforeAll(async () => {
   handlerMod = await import('../../src/scan/envelopeHandler');
 });
 
-const NOW = new Date('2026-05-25T12:34:56.789Z');
+const NOW = new Date('2027-05-25T12:34:56.789Z');
 const SHARE_ID = '11111111-2222-4333-8444-555555555555';
 const CREDENTIAL_ID = '22222222-3333-4444-8555-666666666666';
 const CARD_ID = 'f47ac10b-58cc-4372-a567-0e02b2c3d479';
@@ -282,4 +282,3 @@ function signTestVcJwt(args: {
   const jwt = signJwtEs256({ alg: 'ES256' }, payload, privateKey);
   return { jwt, publicKeyJwk: jwk };
 }
-

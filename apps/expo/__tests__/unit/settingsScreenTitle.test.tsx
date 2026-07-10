@@ -1,6 +1,8 @@
 import { describe, expect, it, mock } from 'bun:test';
 
 await mock.module('react-native', () => ({
+  ...((globalThis as unknown as { __AIRMEISHI_RN_MOCK__: Record<string, unknown> })
+    .__AIRMEISHI_RN_MOCK__),
   Appearance: { getColorScheme: () => 'light' },
   FlatList: 'FlatList',
   Platform: { OS: 'ios' },

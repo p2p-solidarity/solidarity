@@ -158,5 +158,23 @@ export default tseslint.config(
     },
   },
 
+  // Machine enforcement of the token rule (apps/expo/CLAUDE.md): UI code
+  // never hardcodes hex — Colors.ts is the only hex source. Warn first;
+  // raise to error once the existing violations are cleaned.
+  {
+    files: ['apps/expo/app/**/*.{ts,tsx}', 'apps/expo/src/components/**/*.{ts,tsx}'],
+    ignores: ['apps/expo/src/components/themed/contrast.ts'],
+    rules: {
+      'no-restricted-syntax': [
+        'warn',
+        {
+          selector: "Literal[value=/^#(?:[0-9a-fA-F]{3,4}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})$/]",
+          message:
+            'Raw hex color — use src/constants/Colors.ts tokens or NativeWind classes (bg-pageBg, text-text1…).',
+        },
+      ],
+    },
+  },
+
   prettier,
 );

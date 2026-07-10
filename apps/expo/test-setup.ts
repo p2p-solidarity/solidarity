@@ -6,6 +6,7 @@
  * are stubbed lazily — only the suites that import them install a mock,
  * which keeps the parity tests (pure TS over fixtures) fast + isolated.
  */
+/* eslint-disable @typescript-eslint/require-await */
 import { mock } from 'bun:test';
 
 Object.defineProperty(globalThis, '__DEV__', {
@@ -25,10 +26,31 @@ Object.defineProperty(globalThis, 'NitroModulesProxy', {
   writable: true,
 });
 
+Object.defineProperty(globalThis, 'expo', {
+  configurable: true,
+  value: {
+    EventEmitter: class {
+      addListener(): { remove: () => undefined } {
+        return { remove: (): undefined => undefined };
+      }
+      removeAllListeners(): undefined {
+        return undefined;
+      }
+    },
+  },
+  writable: true,
+});
+
 const host = (type: string) => type;
 
-await mock.module('react-native', () => ({
+const baseReactNativeMock = {
   ActivityIndicator: host('ActivityIndicator'),
+  AppRegistry: {
+    registerComponent: () => undefined,
+    registerRunnable: () => undefined,
+    runApplication: () => undefined,
+    unmountApplicationComponentAtRootTag: () => undefined,
+  },
   Appearance: {
     getColorScheme: () => 'light',
     setColorScheme: () => undefined,
@@ -50,6 +72,10 @@ await mock.module('react-native', () => ({
   Linking: {
     canOpenURL: async () => true,
     openURL: async () => undefined,
+  },
+  LogBox: {
+    ignoreAllLogs: () => undefined,
+    ignoreLogs: () => undefined,
   },
   Modal: host('Modal'),
   NativeEventEmitter: class {
@@ -95,10 +121,97 @@ await mock.module('react-native', () => ({
   findNodeHandle: () => null,
   useColorScheme: () => 'light',
   useWindowDimensions: () => ({ width: 390, height: 844, scale: 3, fontScale: 1 }),
-}));
+};
+
+Object.defineProperty(globalThis, '__AIRMEISHI_RN_MOCK__', {
+  configurable: true,
+  value: baseReactNativeMock,
+  writable: false,
+});
+
+await mock.module('react-native', () => baseReactNativeMock);
 
 await mock.module('react-native/Libraries/NativeComponent/NativeComponentRegistry', () => ({
   get: (name: string) => host(name),
   getWithFallback_DEPRECATED: (name: string) => host(name),
   setRuntimeConfigProvider: () => undefined,
+}));
+
+class MockAsset {
+  uri: string;
+  localUri: string | null;
+  downloaded = true;
+
+  constructor(uri = '') {
+    this.uri = uri;
+    this.localUri = uri;
+  }
+
+  static fromModule(moduleId: unknown): MockAsset {
+    return new MockAsset(typeof moduleId === 'string' ? moduleId : '');
+  }
+
+  static fromURI(uri: string): MockAsset {
+    return new MockAsset(uri);
+  }
+
+  async downloadAsync(): Promise<this> {
+    return this;
+  }
+}
+
+await mock.module('expo-asset', () => ({
+  Asset: MockAsset,
+  useAssets: () => [[], null],
+}));
+
+await mock.module('expo-asset/build/ExpoAsset', () => ({
+  downloadAsync: async (url: string) => url,
+}));
+
+await mock.module('expo-asset/build/ExpoAsset.js', () => ({
+  downloadAsync: async (url: string) => url,
+}));
+
+await mock.module('expo-constants', () => ({
+  default: {
+    expoConfig: {},
+    manifest: {},
+    platform: { ios: {}, android: {} },
+  },
+  expoConfig: {},
+  manifest: {},
+}));
+
+await mock.module('expo-local-authentication', () => ({
+  hasHardwareAsync: async () => true,
+  isEnrolledAsync: async () => true,
+  authenticateAsync: async () => ({ success: true }),
+}));
+
+const mockSQLiteDatabase = {
+  execAsync: async () => undefined,
+  runAsync: async () => ({ changes: 0, lastInsertRowId: 0 }),
+  getAllAsync: async () => [],
+  getFirstAsync: async () => null,
+  closeAsync: async () => undefined,
+};
+
+await mock.module('expo-sqlite', () => ({
+  openDatabaseAsync: async () => mockSQLiteDatabase,
+  openDatabaseSync: () => mockSQLiteDatabase,
+}));
+
+await mock.module('expo-sqlite/build/ExpoSQLite', () => ({
+  default: {
+    openDatabaseAsync: async () => mockSQLiteDatabase,
+    openDatabaseSync: () => mockSQLiteDatabase,
+  },
+}));
+
+await mock.module('expo-sqlite/build/ExpoSQLite.js', () => ({
+  default: {
+    openDatabaseAsync: async () => mockSQLiteDatabase,
+    openDatabaseSync: () => mockSQLiteDatabase,
+  },
 }));

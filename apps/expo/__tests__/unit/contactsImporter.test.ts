@@ -70,6 +70,8 @@ beforeAll(async () => {
   // of depending on another suite's mock leaking through the shared registry.
   (globalThis as { __DEV__?: boolean }).__DEV__ = false;
   await mock.module('react-native', () => ({
+    ...((globalThis as unknown as { __AIRMEISHI_RN_MOCK__: Record<string, unknown> })
+      .__AIRMEISHI_RN_MOCK__),
     Platform: {
       OS: 'ios',
       select: <T,>(o: { ios?: T; android?: T; default?: T }): T | undefined =>
@@ -103,8 +105,11 @@ beforeAll(async () => {
     initMmkv: async () => undefined,
   }));
   await mock.module('@/storage/encryptionManager', () => ({
-    encryptJson: async (v: unknown) => JSON.stringify(v),
-    decryptJson: async <T,>(s: string): Promise<T> => JSON.parse(s) as T,
+    encryptJson: async (v: unknown) => Buffer.from(JSON.stringify(v)).toString('base64'),
+    decryptJson: async <T,>(s: string): Promise<T> => {
+      const raw = s.startsWith('{') ? s : Buffer.from(s, 'base64').toString('utf8');
+      return JSON.parse(raw) as T;
+    },
   }));
   await mock.module('expo-contacts', () => {
     class Contact {

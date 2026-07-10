@@ -63,13 +63,18 @@ const FIXED_PRIV = hexToBytes(
 interface CardStoreSurface {
   readonly useCardStore: {
     getState: () => {
-      readonly cards: readonly BusinessCard[];
-      readonly hydrated: boolean;
+      readonly manifest: readonly unknown[];
+      readonly details: ReadonlyMap<string, BusinessCard>;
+      readonly detailsHydrated: boolean;
       readonly hydrate: () => Promise<void>;
       readonly upsert: (card: BusinessCard) => Promise<{ ok: true } | { ok: false; error: CardError }>;
       readonly remove: (id: string) => Promise<void>;
     };
-    setState: (s: Partial<{ cards: readonly BusinessCard[]; hydrated: boolean }>) => void;
+    setState: (s: Partial<{
+      manifest: readonly unknown[];
+      details: ReadonlyMap<string, BusinessCard>;
+      detailsHydrated: boolean;
+    }>) => void;
   };
 }
 
@@ -126,8 +131,12 @@ beforeAll(async () => {
   // Bypass at-rest crypto. The vault / encryption parity tests already
   // cover that layer; here we only need the JSON round-trip to be stable.
   await mock.module('@/storage/encryptionManager', () => ({
-    encryptJson: async (v: unknown) => JSON.stringify(setsToArrays(v)),
-    decryptJson: async <T,>(s: string): Promise<T> => JSON.parse(s) as T,
+    encryptJson: async (v: unknown) =>
+      Buffer.from(JSON.stringify(setsToArrays(v))).toString('base64'),
+    decryptJson: async <T,>(s: string): Promise<T> => {
+      const raw = s.startsWith('{') ? s : Buffer.from(s, 'base64').toString('utf8');
+      return JSON.parse(raw) as T;
+    },
   }));
 
   // Mock the master master key + signing key paths so we can assert that
@@ -160,7 +169,11 @@ beforeAll(async () => {
 
 beforeEach(() => {
   kv.clear();
-  cardMod.useCardStore.setState({ cards: [], hydrated: false });
+  cardMod.useCardStore.setState({
+    manifest: [],
+    details: new Map(),
+    detailsHydrated: false,
+  });
 });
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
@@ -251,12 +264,16 @@ describe('cardRestore: save → wipe → restore round trip', () => {
     // 2. Wipe the in-memory zustand state (simulates app cold-start /
     //    factory-reset before restore). MMKV (the persistent layer) is
     //    intentionally NOT cleared — that's the "restore" data source.
-    cardMod.useCardStore.setState({ cards: [], hydrated: false });
-    expect(cardMod.useCardStore.getState().cards.length).toBe(0);
+    cardMod.useCardStore.setState({
+      manifest: [],
+      details: new Map(),
+      detailsHydrated: false,
+    });
+    expect(cardMod.useCardStore.getState().details.size).toBe(0);
 
     // 3. Restore via hydrate().
     await cardMod.useCardStore.getState().hydrate();
-    const restored = cardMod.useCardStore.getState().cards[0];
+    const restored = Array.from(cardMod.useCardStore.getState().details.values())[0];
 
     expect(restored).toBeDefined();
     expect(restored?.id).toBe(card.id);
@@ -299,11 +316,14 @@ describe('cardRestore: save → wipe → restore round trip', () => {
     expect((await cardMod.useCardStore.getState().upsert(c)).ok).toBe(true);
 
     // Wipe + rehydrate.
-    cardMod.useCardStore.setState({ cards: [], hydrated: false });
+    cardMod.useCardStore.setState({
+      manifest: [],
+      details: new Map(),
+      detailsHydrated: false,
+    });
     await cardMod.useCardStore.getState().hydrate();
-    const names = cardMod.useCardStore
-      .getState()
-      .cards.map((x) => x.name)
+    const names = Array.from(cardMod.useCardStore.getState().details.values())
+      .map((x) => x.name)
       .sort();
     expect(names).toEqual(['Alice', 'Bob', 'Carol']);
   });
@@ -313,10 +333,14 @@ describe('cardRestore: save → wipe → restore round trip', () => {
     expect((await cardMod.useCardStore.getState().upsert(makeCardInput({ id, name: 'Original' }))).ok).toBe(true);
     expect((await cardMod.useCardStore.getState().upsert(makeCardInput({ id, name: 'Edited' }))).ok).toBe(true);
 
-    cardMod.useCardStore.setState({ cards: [], hydrated: false });
+    cardMod.useCardStore.setState({
+      manifest: [],
+      details: new Map(),
+      detailsHydrated: false,
+    });
     await cardMod.useCardStore.getState().hydrate();
 
-    const cards = cardMod.useCardStore.getState().cards;
+    const cards = Array.from(cardMod.useCardStore.getState().details.values());
     expect(cards.length).toBe(1);
     expect(cards[0]?.name).toBe('Edited');
   });
@@ -328,7 +352,11 @@ describe('cardRestore: identity key is keychain-scoped, NOT backup-scoped', () =
 
     // Drive a full save → wipe → restore cycle.
     expect((await cardMod.useCardStore.getState().upsert(makeCardInput())).ok).toBe(true);
-    cardMod.useCardStore.setState({ cards: [], hydrated: false });
+    cardMod.useCardStore.setState({
+      manifest: [],
+      details: new Map(),
+      detailsHydrated: false,
+    });
     await cardMod.useCardStore.getState().hydrate();
 
     const afterPub = (await signingMod.ensureSigningKey()).publicKey;
@@ -341,7 +369,11 @@ describe('cardRestore: identity key is keychain-scoped, NOT backup-scoped', () =
     );
 
     expect((await cardMod.useCardStore.getState().upsert(makeCardInput())).ok).toBe(true);
-    cardMod.useCardStore.setState({ cards: [], hydrated: false });
+    cardMod.useCardStore.setState({
+      manifest: [],
+      details: new Map(),
+      detailsHydrated: false,
+    });
     await cardMod.useCardStore.getState().hydrate();
 
     const afterDid = didKeyFromPublicKey(
@@ -354,7 +386,11 @@ describe('cardRestore: identity key is keychain-scoped, NOT backup-scoped', () =
     const beforeJwk = await signingMod.publicJwk();
 
     expect((await cardMod.useCardStore.getState().upsert(makeCardInput())).ok).toBe(true);
-    cardMod.useCardStore.setState({ cards: [], hydrated: false });
+    cardMod.useCardStore.setState({
+      manifest: [],
+      details: new Map(),
+      detailsHydrated: false,
+    });
     await cardMod.useCardStore.getState().hydrate();
 
     const afterJwk = await signingMod.publicJwk();
