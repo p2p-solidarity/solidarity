@@ -93,6 +93,7 @@ const SF_TO_MATERIAL: Partial<Record<SFSymbol, AndroidSymbol>> = {
   'clock.fill': 'schedule',
   'crown.fill': 'workspace_premium',
   'doc.badge.plus': 'note_add',
+  'doc.on.clipboard': 'content_paste',
   'doc.on.doc': 'content_copy',
   'doc.text': 'description',
   'doc.text.fill': 'description',

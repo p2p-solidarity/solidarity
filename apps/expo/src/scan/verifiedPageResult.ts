@@ -13,20 +13,38 @@ import type { VerifiedPageResult } from './verifiedPageHandler';
 
 interface VerifiedPageResultState {
   readonly result: VerifiedPageResult | null;
+  /**
+   * True while a `#nostr:<npub>` short pointer is being resolved against
+   * relays (`resolveProfile.ts`) — an async round-trip the sync fragment
+   * path never needs. The sheet shows a spinner; `present(result)` then
+   * swaps in the resolved verdict. `false` for every fragment payload
+   * (those verify synchronously, so `result` is set in the same tick).
+   */
+  readonly resolving: boolean;
   readonly present: (result: VerifiedPageResult) => void;
+  readonly presentResolving: () => void;
   readonly dismiss: () => void;
 }
 
 export const useVerifiedPageResult = create<VerifiedPageResultState>((set) => ({
   result: null,
+  resolving: false,
   present: (result) => {
-    set({ result });
+    set({ result, resolving: false });
+  },
+  presentResolving: () => {
+    set({ result: null, resolving: true });
   },
   dismiss: () => {
-    set({ result: null });
+    set({ result: null, resolving: false });
   },
 }));
 
 export function presentVerifiedPageResult(result: VerifiedPageResult): void {
   useVerifiedPageResult.getState().present(result);
+}
+
+/** Open the sheet in its loading state while a `#nostr:` pointer resolves. */
+export function presentVerifiedPageResolving(): void {
+  useVerifiedPageResult.getState().presentResolving();
 }

@@ -4,7 +4,8 @@
  */
 import { router } from 'expo-router';
 
-import { presentVerifiedPageResult } from '@/scan/verifiedPageResult';
+import { resolveProfileByNpub } from '@/nostr/resolveProfile';
+import { presentVerifiedPageResolving, presentVerifiedPageResult } from '@/scan/verifiedPageResult';
 import { verifyFragment } from '@/scan/verifiedPageHandler';
 
 import { parseDeepLink, type DeepLinkRoute } from './parser';
@@ -34,6 +35,15 @@ export function handleDeepLink(raw: string): DeepLinkRoute {
       // — no route push needed, the sheet reacts to the store regardless of
       // which screen is currently focused.
       presentVerifiedPageResult(verifyFragment(route.fragment));
+      break;
+    case 'verifiedPointer':
+      // Short `#nostr:<npub>` form — open the sheet in its loading state,
+      // then swap in the resolved verdict once relays answer (or an honest
+      // unreachable/notFound/bindingMismatch). Fire-and-forget: the sheet is
+      // store-driven, so it doesn't matter that `handleDeepLink` returns
+      // before resolution completes. `resolveProfileByNpub` never throws.
+      presentVerifiedPageResolving();
+      void resolveProfileByNpub(route.npub).then(presentVerifiedPageResult);
       break;
     case 'pear':
       // Task A5.4 (US-20) — reuse the Verified Page detail route: it already

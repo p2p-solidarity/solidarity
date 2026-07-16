@@ -76,20 +76,35 @@ export function ProfileSummaryCard() {
   const fragment = useMemo(() => (jws ? encodeFragment(jws) : null), [jws]);
   const fragmentUrl = fragment ? `${FRAGMENT_BASE_URL}${fragment.fragment}` : null;
 
+  // Short-pointer URL (`#nostr:<npub>`), available ONLY once the profile has
+  // been published to Nostr — `publishToNostr` writes the `nostr:npub…` entry
+  // into `alsoKnownAs`, so its presence IS the "published" signal. It's far
+  // shorter than the full offline blob (sparser QR too), but resolving it
+  // needs a network round-trip, so it's offered ALONGSIDE the offline
+  // fragment, never as a replacement (the app-vs-server short-link decision).
+  const nostrAka = useMemo(
+    () => record?.alsoKnownAs.find((a) => a.startsWith('nostr:npub')) ?? null,
+    [record?.alsoKnownAs]
+  );
+  const shortUrl = nostrAka ? `${FRAGMENT_BASE_URL}${nostrAka}` : null;
+  const [preferShort, setPreferShort] = useState(true);
+  const useShort = preferShort && shortUrl !== null;
+  const activeUrl = useShort ? shortUrl : fragmentUrl;
+
   const [qrImageUri, setQrImageUri] = useState<string | undefined>(undefined);
   useEffect(() => {
-    if (!expanded || !fragmentUrl) {
+    if (!expanded || !activeUrl) {
       setQrImageUri(undefined);
       return;
     }
     let cancelled = false;
-    void generateQrPng(fragmentUrl, { size: QR_SIZE }).then((uri) => {
+    void generateQrPng(activeUrl, { size: QR_SIZE }).then((uri) => {
       if (!cancelled) setQrImageUri(uri);
     });
     return () => {
       cancelled = true;
     };
-  }, [expanded, fragmentUrl]);
+  }, [expanded, activeUrl]);
 
   if (!rootKeyPresent) {
     return (
@@ -176,6 +191,37 @@ export function ProfileSummaryCard() {
 
       {expanded ? (
         <View className="items-center gap-2 pt-1">
+          {shortUrl ? (
+            <>
+              <View className="flex-row gap-2 self-stretch">
+                <View style={{ flex: 1 }}>
+                  <ThemedButton
+                    label={t('profileCard.shortLink')}
+                    variant={useShort ? 'primary' : 'secondary'}
+                    haptic="tap"
+                    fullWidth
+                    onPress={() => {
+                      setPreferShort(true);
+                    }}
+                  />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <ThemedButton
+                    label={t('profileCard.offlineLink')}
+                    variant={!useShort ? 'primary' : 'secondary'}
+                    haptic="tap"
+                    fullWidth
+                    onPress={() => {
+                      setPreferShort(false);
+                    }}
+                  />
+                </View>
+              </View>
+              <ThemedText variant="caption" tone="secondary" style={{ textAlign: 'center' }}>
+                {t(useShort ? 'profileCard.shortLinkHint' : 'profileCard.offlineLinkHint')}
+              </ThemedText>
+            </>
+          ) : null}
           {qrImageUri ? (
             <View
               style={{

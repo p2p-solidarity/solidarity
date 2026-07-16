@@ -276,14 +276,14 @@ export async function provisionFromRootMnemonic(): Promise<Result<string, string
 }
 
 /**
- * Path (b): import an externally-generated NIP-19 `nsec1…` string.
- * Decodes + validates (hrp, length, in-range scalar) without ever
- * forwarding the bech32 decoder's own error text (which echoes the raw
- * input) back to the caller — see module doc. Never throws; every
- * failure is `err('invalidNsec: …')`.
+ * Pure NIP-19 `nsec1…` → 32-byte scalar decode + validation. PRIVATE: the
+ * raw scalar must never leave this module (`decodeNsec` returns only the
+ * derived pubkey; `importNsec` persists it internally). Same secret-echo
+ * discipline as everywhere else here — the bech32 decoder's own errors
+ * interpolate the raw input, so every failure collapses to a fixed,
+ * content-free `'invalidNsec: …'` reason.
  */
-export async function importNsec(nsec: string): Promise<Result<string, string>> {
-  let scalar: Uint8Array;
+function nsecToScalar(nsec: string): Result<Uint8Array, string> {
   try {
     const decoded = bech32.decodeToBytes(nsec);
     if (decoded.prefix.toLowerCase() !== NSEC_HRP) {
@@ -292,10 +292,41 @@ export async function importNsec(nsec: string): Promise<Result<string, string>> 
     if (decoded.bytes.length !== SCALAR_BYTE_LENGTH) {
       return err('invalidNsec: payload must be 32 bytes');
     }
-    scalar = decoded.bytes;
+    return ok(decoded.bytes);
   } catch {
     return err('invalidNsec: malformed bech32');
   }
+}
+
+/**
+ * Pure `nsec1…` → x-only pubkey hex, WITHOUT persisting anything (unlike
+ * `importNsec`). Lets the Connect-Nostr wizard (`app/verify/nostr.tsx`) show
+ * a live "✓ npub1…" preview as the user pastes, and enable "Connect" only
+ * once the string is a valid key — instead of committing first and only
+ * then surfacing an error. Never throws; every failure is the same fixed
+ * `'invalidNsec: …'` reason `importNsec` uses, never echoing the input.
+ */
+export function decodeNsec(nsec: string): Result<string, string> {
+  const scalar = nsecToScalar(nsec);
+  if (!scalar.ok) return scalar;
+  try {
+    return ok(hexEncode(schnorr.getPublicKey(scalar.value)));
+  } catch {
+    return err('invalidNsec: scalar out of range for secp256k1');
+  }
+}
+
+/**
+ * Path (b): import an externally-generated NIP-19 `nsec1…` string.
+ * Decodes + validates (hrp, length, in-range scalar) via the shared
+ * `nsecToScalar` without ever forwarding the bech32 decoder's own error
+ * text (which echoes the raw input) back to the caller — see module doc.
+ * Never throws; every failure is `err('invalidNsec: …')`.
+ */
+export async function importNsec(nsec: string): Promise<Result<string, string>> {
+  const scalarResult = nsecToScalar(nsec);
+  if (!scalarResult.ok) return scalarResult;
+  const scalar = scalarResult.value;
 
   let pubkeyHex: string;
   try {
@@ -337,6 +368,30 @@ export async function deleteNostrKey(): Promise<void> {
 // (subscribe/publish filters use the raw hex pubkey `getNostrPubkey()`
 // already returns); add it if/when a screen needs to accept a pasted
 // `npub1…` string.
+
+/**
+ * Bech32-DECODE a NIP-19 `npub1…` string back to its x-only pubkey hex (64
+ * lowercase hex chars) — the inverse of `npubEncode`. Added for the
+ * `#nostr:<npub>` short-pointer share URL (viewer/app resolves the profile
+ * by fetching the pubkey's kind-30078 event). Never throws; malformed input
+ * (wrong hrp / length / checksum) is `err(...)`. An npub is public, so —
+ * unlike `importNsec`/`decodeNsec` — echoing the input in an error would be
+ * harmless, but the reasons stay fixed for consistency.
+ */
+export function npubDecode(npub: string): Result<string, string> {
+  try {
+    const decoded = bech32.decodeToBytes(npub);
+    if (decoded.prefix.toLowerCase() !== NPUB_HRP) {
+      return err('npubDecode: wrong hrp (expected npub)');
+    }
+    if (decoded.bytes.length !== SCALAR_BYTE_LENGTH) {
+      return err('npubDecode: payload must be 32 bytes');
+    }
+    return ok(hexEncode(decoded.bytes));
+  } catch {
+    return err('npubDecode: malformed bech32');
+  }
+}
 
 /**
  * Bech32-encode an x-only pubkey hex (64 lowercase hex chars, as returned

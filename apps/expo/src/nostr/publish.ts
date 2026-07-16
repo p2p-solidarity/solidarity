@@ -223,26 +223,24 @@ export interface Kind0FetchResult {
 }
 
 /**
- * Query every relay in `relays` for the user's existing kind-0 event
- * (`authors: [pubkeyHex]`) and return the newest one (by `created_at`)
- * seen across all of them — plus whether any relay gave a definitive EOSE
- * (see `Kind0FetchResult`). Each relay gets its own bounded wait — one
+ * Query every relay in `relays` for the newest event (by `created_at`)
+ * matching `filter`, returning it plus whether any relay gave a definitive
+ * EOSE (see `Kind0FetchResult`). Each relay gets its own bounded wait — one
  * slow/dead relay never blocks the others (`Promise.all` over independent
  * per-relay promises, each with its own timeout fallback).
  *
- * Exported so `fetchKind0.ts` (task A4.4's badge-verifier IO adapter) reuses
- * this exact per-relay racing logic instead of re-implementing it — the
- * publish path (this file) and the verify path must resolve "the newest
- * kind-0 event" identically.
+ * The shared per-relay racing core: `fetchLatestKind0` (badge verification)
+ * and `fetchLatestProfilePointer` (the `#nostr:` short-pointer resolver)
+ * both delegate here so every path resolves "the newest matching event"
+ * identically instead of re-implementing the WS fan-out.
  */
-export async function fetchLatestKind0(
+export async function fetchLatestEvent(
   relays: readonly string[],
-  pubkeyHex: string,
+  filter: NostrFilter,
   subscribeFn: SubscribeEventsFn,
   timeoutMs: number
 ): Promise<Kind0FetchResult> {
   if (relays.length === 0) return { event: null, confirmed: false };
-  const filter: NostrFilter = { kinds: [KIND_METADATA], authors: [pubkeyHex], limit: 1 };
 
   const perRelay = relays.map(
     (relay) =>
@@ -295,6 +293,43 @@ export async function fetchLatestKind0(
     if (candidate.event && (!best || candidate.event.created_at > best.created_at)) best = candidate.event;
   }
   return { event: best, confirmed };
+}
+
+/**
+ * The user's newest kind-0 (metadata) event. Thin wrapper over
+ * `fetchLatestEvent` — reused by `fetchKind0.ts`'s badge-verifier IO adapter
+ * and by `updateKind0AlsoKnownAs` below.
+ */
+export async function fetchLatestKind0(
+  relays: readonly string[],
+  pubkeyHex: string,
+  subscribeFn: SubscribeEventsFn,
+  timeoutMs: number
+): Promise<Kind0FetchResult> {
+  return fetchLatestEvent(relays, { kinds: [KIND_METADATA], authors: [pubkeyHex], limit: 1 }, subscribeFn, timeoutMs);
+}
+
+/**
+ * The user's newest kind-30078 profile-pointer event (NIP-78,
+ * `#d=solidarity.profile`), whose `content` is their profile JWS. This is
+ * the discovery half of the `#nostr:<npub>` short-pointer share URL:
+ * `resolveProfile.ts` decodes the npub to `pubkeyHex`, fetches this event,
+ * then verifies the embedded JWS signature AND the reverse `alsoKnownAs`
+ * binding (so a relay can't substitute someone else's validly-signed
+ * profile for the npub the sharer pointed at).
+ */
+export async function fetchLatestProfilePointer(
+  relays: readonly string[],
+  pubkeyHex: string,
+  subscribeFn: SubscribeEventsFn,
+  timeoutMs: number
+): Promise<Kind0FetchResult> {
+  return fetchLatestEvent(
+    relays,
+    { kinds: [KIND_PROFILE_POINTER], authors: [pubkeyHex], '#d': [PROFILE_D_TAG], limit: 1 },
+    subscribeFn,
+    timeoutMs
+  );
 }
 
 export interface UpdateKind0Options {

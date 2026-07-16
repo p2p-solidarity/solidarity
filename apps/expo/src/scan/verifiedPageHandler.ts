@@ -42,7 +42,16 @@ export type VerifiedPageErrorReason =
   | 'decodeFailed'
   | 'malformedPayload'
   | 'verificationFailed'
-  | 'schemaInvalid';
+  | 'schemaInvalid'
+  // ── `#nostr:<npub>` short-pointer resolution failures (resolveProfile.ts) ──
+  /** No relay we asked could be reached before timeout — we're blind, retry. */
+  | 'unreachable'
+  /** A relay authoritatively confirmed the npub has no published profile. */
+  | 'notFound'
+  /** Profile JWS verified, but its `alsoKnownAs` doesn't claim this npub back
+   *  — the reverse binding is missing, so a relay may have substituted a
+   *  different (validly-signed) profile for the npub the sharer pointed at. */
+  | 'bindingMismatch';
 
 export type VerifiedPageResult =
   | { readonly kind: 'verified'; readonly record: ProfileRecord; readonly jws: string }
@@ -111,11 +120,15 @@ function readUnverifiedDid(jws: string): string | null {
  * already have the fragment (not a full payload string) can skip
  * `extractFragmentCandidate`.
  */
-export function verifyFragment(fragment: string): VerifiedPageResult {
-  const decoded = decodeFragment(fragment);
-  if (!decoded.ok) return { kind: 'invalid', reason: 'decodeFailed', detail: decoded.error };
-
-  const jws = decoded.value;
+/**
+ * Verify a profile JWS directly — the shared tail of the pipeline, used by
+ * BOTH the offline fragment path (`verifyFragment`, after decompressing the
+ * blob) and the `#nostr:<npub>` pointer path (`resolveProfile.ts`, where the
+ * relay's kind-30078 `content` IS the JWS, no fragment decode). Verifying
+ * the embedded did:key signature is what makes the relay untrusted — it can
+ * deliver the bytes, it can't forge a signature under the did.
+ */
+export function verifyProfileJws(jws: string): VerifiedPageResult {
   const did = readUnverifiedDid(jws);
   if (did === null) {
     return { kind: 'invalid', reason: 'malformedPayload', detail: 'payload is missing a did field' };
@@ -130,6 +143,12 @@ export function verifyFragment(fragment: string): VerifiedPageResult {
   return { kind: 'verified', record: parsed.value, jws };
 }
 
+export function verifyFragment(fragment: string): VerifiedPageResult {
+  const decoded = decodeFragment(fragment);
+  if (!decoded.ok) return { kind: 'invalid', reason: 'decodeFailed', detail: decoded.error };
+  return verifyProfileJws(decoded.value);
+}
+
 /**
  * Entry point for a raw scanned QR string. Returns `null` when `payload`
  * isn't a Verified Page form at all (let the caller fall through to the
@@ -142,4 +161,58 @@ export function parseVerifiedPagePayload(payload: string): VerifiedPageResult | 
   const fragment = extractFragmentCandidate(payload);
   if (fragment === null) return null;
   return verifyFragment(fragment);
+}
+
+/**
+ * The two Verified Page share forms a scanned QR / typed string can carry:
+ *   - `fragment` — the self-contained offline blob (deflate+base64url of the
+ *     profile JWS), verifiable locally in airplane mode;
+ *   - `pointer` — the short `#nostr:<npub>` locator, which needs an async
+ *     relay round-trip (`resolveProfile.ts`) to fetch + verify.
+ * The scanner (`app/scan/index.tsx`) branches on this to pick the sync-local
+ * vs. async-network path. `null` = not a Verified Page payload at all.
+ */
+export type VerifiedPagePayload =
+  | { readonly kind: 'fragment'; readonly fragment: string }
+  | { readonly kind: 'pointer'; readonly npub: string };
+
+/** `npub1` + bech32 data. `resolveProfile.ts`'s `npubDecode` does the real
+ *  checksum/length validation; this is just the cheap shape gate + a DoS
+ *  length cap on unauthenticated scanned/deep-link input (an npub is ~63
+ *  chars; 90 is generous headroom). */
+const NPUB_RE = /^npub1[023456789acdefghjklmnpqrstuvwxyz]+$/u;
+const MAX_NPUB_LENGTH = 90;
+
+/**
+ * Pull the inner hash/blob out of a URL / bare-`#` / bare string. Kept
+ * SEPARATE from `extractFragmentCandidate` above (rather than refactoring
+ * that tested extractor) so the existing fragment-only path is untouched —
+ * this one must surface a `nostr:` prefix that `looksLikeBareFragment`
+ * (base64url-only) would otherwise reject.
+ */
+function extractInner(payload: string): string | null {
+  const trimmed = payload.trim();
+  if (trimmed.length === 0) return null;
+  try {
+    const url = new URL(trimmed);
+    if (url.protocol !== 'https:' && url.protocol !== 'http:') return null;
+    return url.hash.length > 1 ? url.hash.slice(1) : null;
+  } catch {
+    return trimmed.startsWith('#') ? trimmed.slice(1) : trimmed;
+  }
+}
+
+export function classifyVerifiedPagePayload(payload: string): VerifiedPagePayload | null {
+  if (typeof payload !== 'string') return null;
+  const inner = extractInner(payload);
+  if (inner === null || inner.length === 0) return null;
+
+  // Pointer form `nostr:npub1…` — checked BEFORE the fragment heuristic
+  // (the `nostr:` prefix's `:` fails the base64url charset check anyway).
+  if (inner.startsWith('nostr:')) {
+    const npub = inner.slice('nostr:'.length);
+    return NPUB_RE.test(npub) && npub.length <= MAX_NPUB_LENGTH ? { kind: 'pointer', npub } : null;
+  }
+
+  return looksLikeBareFragment(inner) ? { kind: 'fragment', fragment: inner } : null;
 }

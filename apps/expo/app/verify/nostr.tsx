@@ -27,14 +27,14 @@
  */
 import { router } from 'expo-router';
 import { useEffect, useReducer, useState } from 'react';
-import { ActivityIndicator, ScrollView, Text, TextInput, View } from 'react-native';
+import { ActivityIndicator, Text, View } from 'react-native';
+import { KeyboardAwareScrollView } from 'react-native-keyboard-controller';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { truncateNpub } from '@/badges/nostrBadgeDisplay';
-import { PressableScale } from '@/components/common/PressableScale';
 import { SfIcon } from '@/components/icons/SfIcon';
 import { SettingsBackToolbar, SettingsScreenTitle } from '@/components/settings/SettingsBlocks';
-import { ThemedButton, ThemedText } from '@/components/themed';
+import { ThemedButton, ThemedText, ThemedTextInput } from '@/components/themed';
 import { Colors } from '@/constants/Colors';
 import { useTranslation } from '@/i18n';
 import { hasRootKey } from '@/identity/rootKey';
@@ -43,7 +43,7 @@ import {
   nostrConnectWizardReducer,
 } from '@/nostr/connectWizard';
 import { DEFAULT_RELAYS, type PublishReport } from '@/nostr/publish';
-import { getNostrPubkey, hasNostrKey, importNsec, npubEncode, provisionFromRootMnemonic } from '@/nostr/userKey';
+import { decodeNsec, getNostrPubkey, hasNostrKey, importNsec, npubEncode, provisionFromRootMnemonic } from '@/nostr/userKey';
 import { useProfileStore } from '@/profile/store';
 
 type TFn = ReturnType<typeof useTranslation>['t'];
@@ -162,9 +162,10 @@ export default function ConnectNostrScreen() {
       <SettingsBackToolbar title={t('nostrConnect.cancel')} onPress={() => { router.back(); }} />
       <SettingsScreenTitle title={t('nostrConnect.title')} />
 
-      <ScrollView
+      <KeyboardAwareScrollView
         contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: insets.bottom + 48, gap: 24 }}
         keyboardShouldPersistTaps="handled"
+        bottomOffset={16}
       >
         {state.status === 'idle' && state.step === 'chooseMethod' ? (
           <ChooseMethodStep onChooseMnemonic={() => { void onChooseMnemonic(); }} onChooseNsec={() => { dispatch({ type: 'chooseNsec' }); }} />
@@ -202,7 +203,7 @@ export default function ConnectNostrScreen() {
             onCancel={() => { router.back(); }}
           />
         ) : null}
-      </ScrollView>
+      </KeyboardAwareScrollView>
     </View>
   );
 }
@@ -276,63 +277,34 @@ function PasteNsecStep({
   readonly onSubmit: () => void;
 }) {
   const { t } = useTranslation();
-  // Masked by default — this field holds a raw Nostr PRIVATE key. Local UI
-  // state only (rule 9): the smallest component that renders the control.
-  const [revealed, setRevealed] = useState(false);
+  // Live validation as the user pastes/types — decode WITHOUT persisting
+  // (`decodeNsec`, not `importNsec`), so the field shows the resolved npub
+  // the instant the string is a real key and gates "Connect" on it, instead
+  // of committing first and only then surfacing "invalid" in an error step.
+  // reveal/paste/secure-entry all come from ThemedTextInput kind="secret".
+  const trimmed = value.trim();
+  const decoded = trimmed.length > 0 ? decodeNsec(trimmed) : null;
+  const npub = decoded?.ok === true ? npubEncode(decoded.value) : null;
+  const validNpub = npub?.ok === true ? npub.value : null;
+
   return (
     <View style={{ gap: 12 }}>
-      <ThemedText variant="label">{t('nostrConnect.nsecLabel')}</ThemedText>
-      <View style={{ justifyContent: 'center' }}>
-        <TextInput
-          value={value}
-          onChangeText={onChange}
-          placeholder={t('nostrConnect.nsecPlaceholder')}
-          placeholderTextColor={Colors.text3}
-          autoCapitalize="none"
-          autoCorrect={false}
-          autoComplete="off"
-          // `oneTimeCode`, not `password` — this is a raw crypto private
-          // key, not a website login. `password` invites iOS to offer
-          // "Save Password to Keychain" (the opposite of what we want:
-          // this key should never get cached by a password manager).
-          // `oneTimeCode` still disables autofill suggestions/autocorrect
-          // without that prompt.
-          textContentType="oneTimeCode"
-          secureTextEntry={!revealed}
-          className="bg-searchBg text-text1"
-          style={{
-            paddingHorizontal: 14,
-            paddingRight: 44,
-            paddingVertical: 12,
-            fontSize: 14,
-            fontFamily: 'Menlo',
-            borderWidth: 1,
-            borderColor: Colors.divider,
-          }}
-        />
-        <PressableScale
-          onPress={() => { setRevealed((r) => !r); }}
-          haptic={false}
-          accessibilityRole="button"
-          accessibilityLabel={revealed ? t('nostrConnect.hideNsec') : t('nostrConnect.revealNsec')}
-          style={{
-            position: 'absolute',
-            right: 0,
-            top: 0,
-            bottom: 0,
-            width: 44,
-            alignItems: 'center',
-            justifyContent: 'center',
-          }}
-        >
-          <SfIcon name={revealed ? 'eye.slash' : 'eye'} size={18} color={Colors.text3} />
-        </PressableScale>
-      </View>
+      <ThemedTextInput
+        kind="secret"
+        label={t('nostrConnect.nsecLabel')}
+        value={value}
+        onChangeText={onChange}
+        placeholder={t('nostrConnect.nsecPlaceholder')}
+        showPaste
+        error={trimmed.length > 0 && validNpub === null ? t('nostrConnect.nsecInvalid') : null}
+        hint={validNpub ? t('nostrConnect.nsecValid', { npub: truncateNpub(validNpub) }) : null}
+        hintTone="success"
+      />
       <ThemedButton
         label={t('nostrConnect.connect')}
         variant="primary"
         fullWidth
-        disabled={value.trim().length === 0}
+        disabled={validNpub === null}
         onPress={onSubmit}
       />
       <ThemedButton label={t('nostrConnect.back')} variant="secondary" fullWidth onPress={onBack} />

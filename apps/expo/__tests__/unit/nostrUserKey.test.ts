@@ -67,6 +67,7 @@ interface UserKeyMod {
   readonly getNostrPubkey: () => Promise<Res<string>>;
   readonly provisionFromRootMnemonic: () => Promise<Res<string>>;
   readonly importNsec: (nsec: string) => Promise<Res<string>>;
+  readonly decodeNsec: (nsec: string) => Res<string>;
   readonly signNostrEvent: (unsigned: {
     readonly kind: number;
     readonly tags: readonly (readonly string[])[];
@@ -77,6 +78,7 @@ interface UserKeyMod {
   readonly hasNostrKeySync: () => boolean;
   readonly deleteNostrKey: () => Promise<void>;
   readonly npubEncode: (pubkeyHex: string) => Res<string>;
+  readonly npubDecode: (npub: string) => Res<string>;
 }
 
 // ── In-memory storage + mnemonic revealer, injected via userKey.ts's own
@@ -307,6 +309,50 @@ describe('importNsec', () => {
   });
 });
 
+// ── 4b. decodeNsec — PURE decode+derive, never persists (Connect-Nostr
+//        wizard's live "valid key?" preview). Same secret-echo discipline
+//        and same fixed reasons as importNsec, minus the storage write. ──
+
+describe('decodeNsec', () => {
+  const REFERENCE_NSEC = 'nsec1vl029mgpspedva04g90vltkh6fvh240zqtv9k0t9af8935ke9laqsnlfe5';
+  const REFERENCE_PUBKEY_HEX = '7e7e9c42a91bfef19fa929e5fda1b72e0ebc1a4c1141673e2794234d86addf4e';
+
+  it('resolves the reference nsec to the expected pubkey WITHOUT persisting anything', () => {
+    const r = mod.decodeNsec(REFERENCE_NSEC);
+    expect(r.ok).toBe(true);
+    if (r.ok) expect(r.value).toBe(REFERENCE_PUBKEY_HEX);
+    // The distinguishing property vs importNsec: no key is written.
+    expect(scalarStore.size).toBe(0);
+    expect(mod.hasNostrKeySync()).toBe(false);
+  });
+
+  it('rejects a wrong-hrp string (npub) without echoing the input', () => {
+    const wrongHrp = bech32.encodeFromBytes('npub', new Uint8Array(32).fill(0x11));
+    const r = mod.decodeNsec(wrongHrp);
+    expect(r.ok).toBe(false);
+    if (r.ok) return;
+    expect(r.error).toContain('wrong hrp');
+    expect(r.error).not.toContain(wrongHrp);
+  });
+
+  it('rejects a wrong-length payload', () => {
+    const wrongLength = bech32.encodeFromBytes('nsec', new Uint8Array(16).fill(0x22));
+    const r = mod.decodeNsec(wrongLength);
+    expect(r.ok).toBe(false);
+    if (r.ok) return;
+    expect(r.error).toContain('32 bytes');
+  });
+
+  it('rejects a malformed bech32 string with the fixed reason (no input echo)', () => {
+    const corrupted = REFERENCE_NSEC.slice(0, -1) + (REFERENCE_NSEC.endsWith('5') ? '4' : '5');
+    const r = mod.decodeNsec(corrupted);
+    expect(r.ok).toBe(false);
+    if (r.ok) return;
+    expect(r.error).toBe('invalidNsec: malformed bech32');
+    expect(r.error).not.toContain(corrupted);
+  });
+});
+
 // ── 5. signNostrEvent — NIP-01 conformance against dag/nostrAdapter.ts ──
 
 describe('signNostrEvent — verifiable by dag/nostrAdapter.ts verifyNostrEvent', () => {
@@ -430,6 +476,40 @@ describe('npubEncode', () => {
     expect(r.ok).toBe(false);
     if (r.ok) return;
     expect(r.error).toContain('hex');
+  });
+});
+
+// ── 6b. npubDecode — inverse of npubEncode (for the #nostr:<npub> pointer) ─
+
+describe('npubDecode', () => {
+  const REFERENCE_PUBKEY_HEX = '7e7e9c42a91bfef19fa929e5fda1b72e0ebc1a4c1141673e2794234d86addf4e';
+  const REFERENCE_NPUB = 'npub10elfcs4fr0l0r8af98jlmgdh9c8tcxjvz9qkw038js35mp4dma8qzvjptg';
+
+  it('decodes the reference npub to the expected pubkey hex', () => {
+    const r = mod.npubDecode(REFERENCE_NPUB);
+    expect(r.ok).toBe(true);
+    if (r.ok) expect(r.value).toBe(REFERENCE_PUBKEY_HEX);
+  });
+
+  it('round-trips npubEncode → npubDecode', () => {
+    const enc = mod.npubEncode(REFERENCE_PUBKEY_HEX);
+    expect(enc.ok).toBe(true);
+    if (!enc.ok) return;
+    const dec = mod.npubDecode(enc.value);
+    expect(dec.ok).toBe(true);
+    if (dec.ok) expect(dec.value).toBe(REFERENCE_PUBKEY_HEX);
+  });
+
+  it('rejects a wrong-hrp string (nsec)', () => {
+    const r = mod.npubDecode('nsec1vl029mgpspedva04g90vltkh6fvh240zqtv9k0t9af8935ke9laqsnlfe5');
+    expect(r.ok).toBe(false);
+    if (r.ok) return;
+    expect(r.error).toContain('wrong hrp');
+  });
+
+  it('rejects malformed bech32 without throwing', () => {
+    const r = mod.npubDecode('npub1!!!notvalid');
+    expect(r.ok).toBe(false);
   });
 });
 

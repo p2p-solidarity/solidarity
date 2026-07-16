@@ -20,20 +20,22 @@
  */
 import { router } from 'expo-router';
 import { useEffect, useMemo, useState } from 'react';
-import { ScrollView, Text, TextInput, View } from 'react-native';
+import { View } from 'react-native';
+import { KeyboardAwareScrollView } from 'react-native-keyboard-controller';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { PressableScale } from '@/components/common/PressableScale';
 import { SfIcon } from '@/components/icons/SfIcon';
 import { LinkPageImportSheet, type LinkPageImportResult } from '@/components/profile/LinkPageImportSheet';
 import { SettingsBackToolbar, SettingsScreenTitle } from '@/components/settings/SettingsBlocks';
-import { ThemedButton, ThemedText } from '@/components/themed';
+import { ThemedButton, ThemedText, ThemedTextInput } from '@/components/themed';
 import { Colors } from '@/constants/Colors';
 import { showError } from '@/feedback/appAlert';
 import { haptic } from '@/feedback/haptics';
 import { pushToast } from '@/feedback/toast';
 import { useTranslation } from '@/i18n';
 import { hasRootKey } from '@/identity/rootKey';
+import { normalizeLinkUrl } from '@/profile/linkUrl';
 import { useProfileStore } from '@/profile/store';
 import { profileLinkSchema, uuid, type ProfileLink } from '@solidarity/shared';
 
@@ -189,17 +191,18 @@ export default function MeEditScreen() {
       <SettingsBackToolbar title={t('meEdit.cancel')} onPress={() => { router.back(); }} />
       <SettingsScreenTitle title={t('meEdit.title')} />
 
-      <ScrollView
+      <KeyboardAwareScrollView
         contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: insets.bottom + 48, gap: 24 }}
         keyboardShouldPersistTaps="handled"
+        bottomOffset={16}
       >
-        <FieldBlock
+        <ThemedTextInput
           label={t('meEdit.displayName')}
           value={displayName}
           onChangeText={setDisplayName}
           placeholder={t('meEdit.displayNamePlaceholder')}
         />
-        <FieldBlock
+        <ThemedTextInput
           label={t('meEdit.bio')}
           value={bio}
           onChangeText={setBio}
@@ -225,7 +228,7 @@ export default function MeEditScreen() {
           disabled={hasLinkErrors}
           onPress={() => { void handleSave(); }}
         />
-      </ScrollView>
+      </KeyboardAwareScrollView>
 
       <LinkPageImportSheet
         visible={linktreeSheetOpen}
@@ -233,43 +236,6 @@ export default function MeEditScreen() {
         confirmLabel={t('meEdit.linktreeImportConfirm')}
         onClose={() => { setLinktreeSheetOpen(false); }}
         onImport={mergeImportedLinks}
-      />
-    </View>
-  );
-}
-
-function FieldBlock({
-  label,
-  value,
-  onChangeText,
-  placeholder,
-  multiline = false,
-}: {
-  readonly label: string;
-  readonly value: string;
-  readonly onChangeText: (v: string) => void;
-  readonly placeholder: string;
-  readonly multiline?: boolean;
-}) {
-  return (
-    <View style={{ gap: 8 }}>
-      <ThemedText variant="label">{label}</ThemedText>
-      <TextInput
-        value={value}
-        onChangeText={onChangeText}
-        placeholder={placeholder}
-        placeholderTextColor={Colors.text3}
-        multiline={multiline}
-        className="bg-searchBg text-text1"
-        style={{
-          paddingHorizontal: 14,
-          paddingVertical: multiline ? 12 : 14,
-          fontSize: 15,
-          minHeight: multiline ? 88 : undefined,
-          textAlignVertical: multiline ? 'top' : 'center',
-          borderWidth: 1,
-          borderColor: Colors.divider,
-        }}
       />
     </View>
   );
@@ -311,16 +277,16 @@ function LinksEditor({
       </View>
 
       {links.map((link, i) => (
-        <View key={link.id} style={{ gap: 6, borderWidth: 1, borderColor: Colors.divider, padding: 10 }}>
+        <View key={link.id} style={{ gap: 8 }}>
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-            <TextInput
-              value={link.label}
-              onChangeText={(v) => { onChangeField(link.id, 'label', v); }}
-              placeholder={t('meEdit.linkLabelPlaceholder')}
-              placeholderTextColor={Colors.text3}
-              className="text-text1"
-              style={{ flex: 1, fontSize: 14, paddingVertical: 8 }}
-            />
+            <View style={{ flex: 1 }}>
+              <ThemedTextInput
+                value={link.label}
+                onChangeText={(v) => { onChangeField(link.id, 'label', v); }}
+                placeholder={t('meEdit.linkLabelPlaceholder')}
+                accessibilityLabel={t('meEdit.linkLabelPlaceholder')}
+              />
+            </View>
             <View style={{ flexDirection: 'row', gap: 2 }}>
               <PressableScale
                 haptic="tap"
@@ -354,25 +320,22 @@ function LinksEditor({
             </View>
           </View>
 
-          <TextInput
+          <ThemedTextInput
+            kind="url"
             value={link.url}
             onChangeText={(v) => { onChangeField(link.id, 'url', v); }}
-            placeholder="https://…"
-            placeholderTextColor={Colors.text3}
-            autoCapitalize="none"
-            autoCorrect={false}
-            keyboardType="url"
-            className="text-text1"
-            style={{
-              fontSize: 14,
-              paddingVertical: 8,
-              borderTopWidth: 1,
-              borderTopColor: Colors.divider,
+            // Forgiving formatting: a user who typed `example.com` gets
+            // `https://example.com` on blur instead of a schema rejection
+            // (normalizeLinkUrl leaves any already-schemed input alone).
+            onBlur={() => {
+              const normalized = normalizeLinkUrl(link.url);
+              if (normalized !== link.url) onChangeField(link.id, 'url', normalized);
             }}
+            placeholder="https://…"
+            accessibilityLabel="URL"
+            error={errors[i]}
+            showClear
           />
-          {errors[i] ? (
-            <Text className="text-destructive text-[12px]">{errors[i]}</Text>
-          ) : null}
         </View>
       ))}
 

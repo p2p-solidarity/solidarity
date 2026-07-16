@@ -46,11 +46,12 @@ import { SCALE } from '@/feedback/motion';
 import { pushToast } from '@/feedback/toast';
 import { PASSPORT_SHOW_LINK_SCOPE } from '@/passport/showPresentation';
 import { issuePassportShowChallenge } from '@/passport/showVerifier';
+import { resolveProfileByNpub } from '@/nostr/resolveProfile';
 import { QrScanner } from '@/scan/QrScanner';
 import { handleScannedPayload } from '@/scan/envelopeHandler';
 import { passportShowVerifierResult } from '@/scan/passportShowResult';
-import { parseVerifiedPagePayload } from '@/scan/verifiedPageHandler';
-import { presentVerifiedPageResult } from '@/scan/verifiedPageResult';
+import { classifyVerifiedPagePayload, verifyFragment } from '@/scan/verifiedPageHandler';
+import { presentVerifiedPageResolving, presentVerifiedPageResult } from '@/scan/verifiedPageResult';
 import { verifyVpToken } from '@/oidc';
 import { useTranslation } from '@/i18n';
 
@@ -98,9 +99,18 @@ export default function ScanScreen() {
     // OIDC URLs, ...), so every existing format below is completely
     // unaffected. A non-null result (verified OR a structured invalid
     // reason) routes into VerifiedPageResultSheet, mounted in `_layout.tsx`.
-    const verifiedPage = parseVerifiedPagePayload(payload);
-    if (verifiedPage !== null) {
-      presentVerifiedPageResult(verifiedPage);
+    const verifiedPageForm = classifyVerifiedPagePayload(payload);
+    if (verifiedPageForm !== null) {
+      if (verifiedPageForm.kind === 'fragment') {
+        // Self-contained offline blob — verified locally in this tick.
+        presentVerifiedPageResult(verifyFragment(verifiedPageForm.fragment));
+      } else {
+        // `#nostr:<npub>` short pointer — open the loading state, then swap
+        // in the resolved verdict once relays answer. resolveProfileByNpub
+        // never throws (structured invalid on any failure).
+        presentVerifiedPageResolving();
+        void resolveProfileByNpub(verifiedPageForm.npub).then(presentVerifiedPageResult);
+      }
       router.back();
       return;
     }
@@ -176,7 +186,7 @@ export default function ScanScreen() {
         style={{ height: 44, paddingTop: insets.top }}
       >
         <Pressable
-          onPress={() => router.back()}
+          onPress={() => { router.back(); }}
           accessibilityRole="button"
           style={{ width: 60, height: 44, justifyContent: 'center' }}
         >
@@ -295,7 +305,7 @@ function ScannedResultView({
       </View>
       <View className="gap-2" style={{ paddingBottom: insets.bottom }}>
         <ThemedButton label="Scan another" fullWidth onPress={onClear} />
-        <ThemedButton variant="secondary" label="Close" fullWidth onPress={() => router.back()} />
+        <ThemedButton variant="secondary" label="Close" fullWidth onPress={() => { router.back(); }} />
       </View>
     </View>
   );

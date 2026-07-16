@@ -13,8 +13,17 @@ export type DeepLinkRoute =
   | { readonly kind: 'oidc'; readonly query: string }
   | { readonly kind: 'credentialOffer'; readonly query: string }
   | { readonly kind: 'verifiedProfile'; readonly fragment: string }
+  | { readonly kind: 'verifiedPointer'; readonly npub: string }
   | { readonly kind: 'pear'; readonly did: string }
   | { readonly kind: 'unknown'; readonly raw: string };
+
+/** Cheap structural gate for the `#nostr:<npub>` short-pointer form — the
+ *  real checksum/length validation is `userKey.ts`'s `npubDecode` in the
+ *  resolver. This just filters obvious garbage and caps length on
+ *  unauthenticated deep-link input (an npub is ~63 chars; 90 = headroom).
+ *  Mirror of `verifiedPageHandler.ts`'s scanner-side gate. */
+const NPUB_RE = /^npub1[023456789acdefghjklmnpqrstuvwxyz]+$/u;
+const MAX_NPUB_LENGTH = 90;
 
 const UUID_RE =
   /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/u;
@@ -96,7 +105,18 @@ function parseVerifiedDomainRoute(url: URL): DeepLinkRoute | null {
   // to the same local-only verify pipeline the scanner uses
   // (`src/scan/verifiedPageHandler.ts`'s `verifyFragment`).
   if (url.hash.length > 1) {
-    return { kind: 'verifiedProfile', fragment: url.hash.slice(1) };
+    const hash = url.hash.slice(1);
+    // Short-pointer form `#nostr:<npub>` — resolved asynchronously against
+    // relays (`resolveProfile.ts`), unlike the self-contained offline blob.
+    if (hash.startsWith('nostr:')) {
+      const npub = hash.slice('nostr:'.length);
+      // A `nostr:` prefix but a non-npub tail is NOT a fragment — fail to
+      // `unknown` rather than mis-decoding `nostr:garbage` as a blob.
+      return NPUB_RE.test(npub) && npub.length <= MAX_NPUB_LENGTH
+        ? { kind: 'verifiedPointer', npub }
+        : null;
+    }
+    return { kind: 'verifiedProfile', fragment: hash };
   }
   return null;
 }

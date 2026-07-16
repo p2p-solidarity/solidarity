@@ -74,6 +74,20 @@ describe('parseDeepLink', () => {
     expect(parseDeepLink('https://solidarity.gg').kind).toBe('unknown');
   });
 
+  it('parses a https://solidarity.gg/#nostr:<npub> short-pointer link', () => {
+    const npub = 'npub10elfcs4fr0l0r8af98jlmgdh9c8tcxjvz9qkw038js35mp4dma8qzvjptg';
+    const r = parseDeepLink(`https://solidarity.gg/#nostr:${npub}`);
+    expect(r.kind).toBe('verifiedPointer');
+    if (r.kind === 'verifiedPointer') expect(r.npub).toBe(npub);
+  });
+
+  it('does not misread a #nostr: prefix with a non-npub tail as a fragment — falls to unknown', () => {
+    expect(parseDeepLink('https://solidarity.gg/#nostr:not-an-npub').kind).toBe('unknown');
+    expect(parseDeepLink('https://solidarity.gg/#nostr:').kind).toBe('unknown');
+    // An overlong tail (DoS guard) is also rejected.
+    expect(parseDeepLink(`https://solidarity.gg/#nostr:npub1${'q'.repeat(200)}`).kind).toBe('unknown');
+  });
+
   it('still prefers the /c/<uuid> card route over a Verified Page fragment on the same host', () => {
     const r = parseDeepLink('https://solidarity.gg/c/f47ac10b-58cc-4372-a567-0e02b2c3d479#ignored');
     expect(r.kind).toBe('card');

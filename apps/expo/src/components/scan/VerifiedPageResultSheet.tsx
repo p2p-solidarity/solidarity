@@ -18,8 +18,8 @@
  */
 import { router } from 'expo-router';
 import { useState, type ReactNode } from 'react';
-import { Modal, ScrollView, View } from 'react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { ActivityIndicator, Modal, ScrollView, View } from 'react-native';
+import { useSafeAreaInsets, type EdgeInsets } from 'react-native-safe-area-context';
 
 import { PressableScale } from '@/components/common/PressableScale';
 import { SfIcon } from '@/components/icons/SfIcon';
@@ -37,6 +37,7 @@ import { VerifiedProfileView } from './VerifiedProfileView';
 export function VerifiedPageResultSheet(): ReactNode {
   const { t } = useTranslation();
   const result = useVerifiedPageResult((s) => s.result);
+  const resolving = useVerifiedPageResult((s) => s.resolving);
   const dismiss = useVerifiedPageResult((s) => s.dismiss);
   const upsert = useProfileSnapshotStore((s) => s.upsert);
   const existing = useProfileSnapshot(result?.kind === 'verified' ? result.record.did : undefined);
@@ -67,7 +68,7 @@ export function VerifiedPageResultSheet(): ReactNode {
 
   return (
     <Modal
-      visible={result !== null}
+      visible={result !== null || resolving}
       animationType="slide"
       presentationStyle="pageSheet"
       onRequestClose={dismiss}
@@ -104,8 +105,36 @@ export function VerifiedPageResultSheet(): ReactNode {
             </View>
           ) : null}
         </View>
+      ) : resolving ? (
+        <ResolvingView insets={insets} onDone={dismiss} title={t('verifiedPage.title')} label={t('verifiedPage.resolving')} closeLabel={t('scan.close')} />
       ) : null}
     </Modal>
+  );
+}
+
+function ResolvingView({
+  insets,
+  onDone,
+  title,
+  label,
+  closeLabel,
+}: {
+  readonly insets: EdgeInsets;
+  readonly onDone: () => void;
+  readonly title: string;
+  readonly label: string;
+  readonly closeLabel: string;
+}): ReactNode {
+  return (
+    <View style={{ flex: 1, backgroundColor: Colors.pageBg, paddingTop: insets.top }}>
+      <Toolbar title={title} onDone={onDone} doneLabel={closeLabel} />
+      <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', gap: 12 }}>
+        <ActivityIndicator size="small" color={Colors.text2} />
+        <ThemedText variant="bodyMedium" tone="secondary">
+          {label}
+        </ThemedText>
+      </View>
+    </View>
   );
 }
 
