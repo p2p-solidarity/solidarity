@@ -12,10 +12,11 @@
  *                     via `useProfileStore().saveProfile()`. Skippable with
  *                     honest "do it later from Me" copy — see
  *                     steps/PageStep.tsx.
- *   5. share       — [Phase A2 task A2.5] shows the just-created page's
+ *   5. connect     — bind a real Bluesky or Nostr badge, or defer to Me.
+ *   6. share       — [Phase A2 task A2.5] shows the just-created page's
  *                     link + QR (only if one exists) — see
  *                     steps/ShareStep.tsx.
- *   6. complete    — `[ SYSTEM READY ]` summary + "Start Using Solidarity".
+ *   7. complete    — `[ SYSTEM READY ]` summary + "Start Using Solidarity".
  *
  * Dropped from the DEFAULT sequence (not in US-01's list):
  *   - profileSetup / avatarSetup — the old username+animal form that fed a
@@ -34,7 +35,7 @@
  *     since `/passport` is a shared route outside this task's scope.
  *
  * `profile`/`animal`/`importedCount`/`passportScanned` are gone from this
- * state entirely — `page`/`share`/`complete` read the Profile Record
+ * state entirely — `page`/`connect`/`share`/`complete` read the Profile Record
  * straight from `useProfileStore` (the real source of truth, including on
  * REPLAY when a page already exists) instead of duplicating it into a
  * parallel reducer field that could desync (CLAUDE.md rule 8/9).
@@ -43,11 +44,14 @@
  * a store only if cross-screen state grows beyond the wizard.
  */
 
+import type { OnboardingBadgeProvider, OnboardingBadgeResult } from './badgeVerification';
+
 export const ONBOARDING_STEPS = [
   'welcome',
   'secureKeys',
   'backup',
   'page',
+  'connect',
   'share',
   'complete',
 ] as const;
@@ -57,18 +61,26 @@ export type OnboardingStep = (typeof ONBOARDING_STEPS)[number];
 export interface OnboardingState {
   readonly step: OnboardingStep;
   readonly keysGenerated: boolean;
+  /** Navigation intent only; verifier evidence below remains authoritative. */
+  readonly badgeProvider: OnboardingBadgeProvider | null;
+  /** A real shared-verifier result retained warm for the terminal step. */
+  readonly badgeResult: OnboardingBadgeResult | null;
 }
 
 export const initialOnboardingState: OnboardingState = {
   step: 'welcome',
   keysGenerated: false,
+  badgeProvider: null,
+  badgeResult: null,
 };
 
 export type OnboardingAction =
   | { readonly type: 'next' }
   | { readonly type: 'back' }
   | { readonly type: 'goTo'; readonly step: OnboardingStep }
-  | { readonly type: 'setKeysGenerated'; readonly value: boolean };
+  | { readonly type: 'setKeysGenerated'; readonly value: boolean }
+  | { readonly type: 'setBadgeProvider'; readonly value: OnboardingBadgeProvider | null }
+  | { readonly type: 'setBadgeResult'; readonly value: OnboardingBadgeResult | null };
 
 function stepIndex(s: OnboardingStep): number {
   return ONBOARDING_STEPS.indexOf(s);
@@ -95,5 +107,9 @@ export function onboardingReducer(
       return { ...state, step: action.step };
     case 'setKeysGenerated':
       return { ...state, keysGenerated: action.value };
+    case 'setBadgeProvider':
+      return { ...state, badgeProvider: action.value };
+    case 'setBadgeResult':
+      return { ...state, badgeResult: action.value };
   }
 }

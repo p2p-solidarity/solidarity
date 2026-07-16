@@ -1,0 +1,115 @@
+/** Truth selection shared by onboarding's Connect and Complete steps. */
+import {
+  verifyAtprotoBinding,
+  verifyNostrBinding,
+  type BadgeState,
+  type ProfileRecord,
+  type VerifyAtprotoBindingResult,
+  type VerifyNostrBindingResult,
+} from '@solidarity/shared';
+
+export type OnboardingBadgeProvider = 'bluesky' | 'nostr';
+
+export type OnboardingBadgeResult =
+  | { readonly provider: 'bluesky'; readonly result: VerifyAtprotoBindingResult }
+  | { readonly provider: 'nostr'; readonly result: VerifyNostrBindingResult };
+
+export interface OnboardingBadgeVerificationDependencies {
+  readonly verifyAtproto: (profile: ProfileRecord) => Promise<VerifyAtprotoBindingResult>;
+  readonly verifyNostr: (profile: ProfileRecord) => Promise<VerifyNostrBindingResult>;
+}
+
+const DEFAULT_DEPENDENCIES: OnboardingBadgeVerificationDependencies = {
+  verifyAtproto: async (profile) => {
+    const { atprotoBindingIO } = await import('@/atproto/bindingIo');
+    return await verifyAtprotoBinding(profile, atprotoBindingIO);
+  },
+  verifyNostr: async (profile) => {
+    const [{ makeKind0Fetcher }, { DEFAULT_RELAYS }] = await Promise.all([
+      import('@/nostr/fetchKind0'),
+      import('@/nostr/publish'),
+    ]);
+    return await verifyNostrBinding(profile, makeKind0Fetcher(DEFAULT_RELAYS));
+  },
+};
+
+export function claimedBadgeProviders(profile: ProfileRecord): readonly OnboardingBadgeProvider[] {
+  const providers: OnboardingBadgeProvider[] = [];
+  if (profile.alsoKnownAs.some((alias) => alias.startsWith('at://'))) providers.push('bluesky');
+  if (profile.alsoKnownAs.some((alias) => alias.startsWith('nostr:npub'))) providers.push('nostr');
+  return providers;
+}
+
+function stateRank(state: BadgeState): number {
+  switch (state) {
+    case 'verified':
+      return 3;
+    case 'declared':
+      return 2;
+    case 'stale':
+      return 1;
+    case 'revoked':
+      return 0;
+  }
+}
+
+async function verifyProvider(
+  profile: ProfileRecord,
+  provider: OnboardingBadgeProvider,
+  dependencies: OnboardingBadgeVerificationDependencies
+): Promise<OnboardingBadgeResult> {
+  if (provider === 'bluesky') {
+    return { provider, result: await dependencies.verifyAtproto(profile) };
+  }
+  return { provider, result: await dependencies.verifyNostr(profile) };
+}
+
+/**
+ * A provider explicitly chosen in this run wins when it has a real claim.
+ * Replay has no hint, so it prefers the strongest verifier evidence and
+ * uses Bluesky only as the equal-state tie-break from D5.
+ */
+export async function verifyOnboardingBadge(
+  profile: ProfileRecord,
+  preferredProvider: OnboardingBadgeProvider | null,
+  dependencies: OnboardingBadgeVerificationDependencies = DEFAULT_DEPENDENCIES
+): Promise<OnboardingBadgeResult | null> {
+  const claimed = claimedBadgeProviders(profile);
+  if (claimed.length === 0) return null;
+
+  if (preferredProvider !== null && claimed.includes(preferredProvider)) {
+    return await verifyProvider(profile, preferredProvider, dependencies);
+  }
+
+  const results = await Promise.all(
+    claimed.map((provider) => verifyProvider(profile, provider, dependencies))
+  );
+  return (
+    results.sort((left, right) => {
+      const stateDifference = stateRank(right.result.state) - stateRank(left.result.state);
+      if (stateDifference !== 0) return stateDifference;
+      return left.provider === 'bluesky' ? -1 : 1;
+    })[0] ?? null
+  );
+}
+
+/** Warm verifier evidence is renderable only while its public claim remains current. */
+export function badgeResultMatchesProfile(
+  badge: OnboardingBadgeResult,
+  profile: ProfileRecord,
+  preferredProvider: OnboardingBadgeProvider | null = null
+): boolean {
+  const claimed = claimedBadgeProviders(profile);
+  if (
+    preferredProvider !== null &&
+    claimed.includes(preferredProvider) &&
+    badge.provider !== preferredProvider
+  ) {
+    return false;
+  }
+  if (badge.provider === 'bluesky') {
+    const handle = badge.result.evidence.handleClaim;
+    return handle !== null && profile.alsoKnownAs.includes(`at://${handle}`);
+  }
+  return badge.result.npub !== null && profile.alsoKnownAs.includes(`nostr:${badge.result.npub}`);
+}

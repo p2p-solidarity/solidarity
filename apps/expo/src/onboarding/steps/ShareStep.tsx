@@ -1,6 +1,6 @@
 /**
  * ShareStep — onboarding "分享" step (1.3.3 Task A2.5, converges onboarding
- * onto the Verified Page flow, US-01). Immediately after `page`, shows the
+ * onto the Verified Page flow, US-01). After the new `connect` step, shows the
  * just-created Verified Page link + QR — reusing the exact fragment/QR
  * pipeline `ProfileSummaryCard` uses (`encodeFragment` + `generateQrPng`),
  * so the code scanned here is byte-identical to the one Me shows later.
@@ -74,9 +74,13 @@ export function ShareStep({ onBack, onNext }: ShareStepProps) {
         title={t('shareStep.title')}
         subtitle={t('shareStep.noPageSubtitle')}
         footer={
-          <ThemedButton label={t('onboarding.continue')} variant="inverted" fullWidth onPress={onNext} />
-        }
-      >
+          <ThemedButton
+            label={t('onboarding.continue')}
+            variant="inverted"
+            fullWidth
+            onPress={onNext}
+          />
+        }>
         <View style={{ flex: 1 }} />
         <ThemedText variant="bodyMedium" tone="secondary" style={{ textAlign: 'center' }}>
           {t('shareStep.noPageHint')}
@@ -92,9 +96,13 @@ export function ShareStep({ onBack, onNext }: ShareStepProps) {
       title={t('shareStep.title')}
       subtitle={t('shareStep.subtitle')}
       footer={
-        <ThemedButton label={t('onboarding.continue')} variant="inverted" fullWidth onPress={onNext} />
-      }
-    >
+        <ThemedButton
+          label={t('onboarding.continue')}
+          variant="inverted"
+          fullWidth
+          onPress={onNext}
+        />
+      }>
       <View style={{ alignItems: 'center', gap: 16 }}>
         <ThemedText variant="titleMedium">{record.displayName}</ThemedText>
 
@@ -106,8 +114,7 @@ export function ShareStep({ onBack, onNext }: ShareStepProps) {
             alignItems: 'center',
             justifyContent: 'center',
             borderRadius: 2,
-          }}
-        >
+          }}>
           {qrImageUri ? (
             <Image
               source={{ uri: qrImageUri }}
@@ -125,8 +132,7 @@ export function ShareStep({ onBack, onNext }: ShareStepProps) {
           variant="caption"
           tone="secondary"
           numberOfLines={1}
-          style={{ maxWidth: '100%' }}
-        >
+          style={{ maxWidth: '100%' }}>
           {fragmentUrl}
         </ThemedText>
 

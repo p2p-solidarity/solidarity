@@ -6,12 +6,7 @@ export {
   CLIENT_METADATA_DOCUMENT,
 } from './clientMetadata';
 export { generatePkce, type PkcePair } from './pkce';
-export {
-  buildDpopProof,
-  generateDpopKeyPair,
-  type DpopKeyPair,
-  type DpopProofInput,
-} from './dpop';
+export { buildDpopProof, generateDpopKeyPair, type DpopKeyPair, type DpopProofInput } from './dpop';
 export {
   discoverAuthServerMetadata,
   extractPdsEndpoint,
@@ -66,3 +61,15 @@ export {
   type AtprotoConnectOutcome,
   type AtprotoDisconnectDependencies,
 } from './connect';
+export {
+  beginBlueskyConnect,
+  classifyAtprotoOAuthError,
+  confirmBlueskyReplacement,
+  normalizeBlueskyHandle,
+  type BlueskyConnectedOutcome,
+  type BlueskyReplacementOutcome,
+  type BlueskyWizardDependencies,
+  type BlueskyWizardError,
+  type BlueskyWizardErrorKind,
+  type BlueskyWizardOutcome,
+} from './blueskyWizard';

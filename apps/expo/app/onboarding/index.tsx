@@ -8,7 +8,7 @@
  * there is NO shared "Step N of M" wrapper in the design.
  *
  * Step order (src/onboarding/state.ts's `ONBOARDING_STEPS`):
- *   welcome → secureKeys → backup → page → share → complete
+ *   welcome → secureKeys → backup → page → connect → share → complete
  *
  * Dropped from the default sequence (see state.ts's module doc for the
  * full rationale + replay implications): profileSetup, avatarSetup,
@@ -29,21 +29,19 @@
  */
 import { router, Stack, useLocalSearchParams } from 'expo-router';
 import { useCallback, useReducer } from 'react';
-import { Pressable, View } from 'react-native';
+import { View } from 'react-native';
 
+import { PressableScale } from '@/components/common/PressableScale';
 import { SfIcon } from '@/components/icons/SfIcon';
 import { Colors } from '@/constants/Colors';
 import { BackupStep } from '@/onboarding/steps/BackupStep';
 import { CompleteStep } from '@/onboarding/steps/CompleteStep';
+import { ConnectStep } from '@/onboarding/steps/ConnectStep';
 import { PageStep } from '@/onboarding/steps/PageStep';
 import { SecureKeysStep } from '@/onboarding/steps/SecureKeysStep';
 import { ShareStep } from '@/onboarding/steps/ShareStep';
 import { TerminalWelcomeStep } from '@/onboarding/steps/TerminalWelcomeStep';
-import {
-  initialOnboardingState,
-  onboardingReducer,
-  type OnboardingStep,
-} from '@/onboarding/state';
+import { initialOnboardingState, onboardingReducer, type OnboardingStep } from '@/onboarding/state';
 import { usePreferences } from '@/settings/preferences';
 import { useTranslation } from '@/i18n';
 
@@ -105,9 +103,17 @@ export default function OnboardingFlow() {
         />
       );
       break;
-    case 'share':
+    case 'connect':
       body = (
-        <ShareStep
+        <ConnectStep
+          preferredProvider={state.badgeProvider}
+          warmResult={state.badgeResult}
+          onSelectProvider={(provider) => {
+            dispatch({ type: 'setBadgeProvider', value: provider });
+          }}
+          onBadgeResult={(result) => {
+            dispatch({ type: 'setBadgeResult', value: result });
+          }}
           onBack={() => {
             goTo('page');
           }}
@@ -115,8 +121,28 @@ export default function OnboardingFlow() {
         />
       );
       break;
+    case 'share':
+      body = (
+        <ShareStep
+          onBack={() => {
+            goTo('connect');
+          }}
+          onNext={next}
+        />
+      );
+      break;
     case 'complete':
-      body = <CompleteStep keysGenerated={state.keysGenerated} onFinish={handleFinish} />;
+      body = (
+        <CompleteStep
+          keysGenerated={state.keysGenerated}
+          badgeProvider={state.badgeProvider}
+          badgeResult={state.badgeResult}
+          onBadgeResult={(result) => {
+            dispatch({ type: 'setBadgeResult', value: result });
+          }}
+          onFinish={handleFinish}
+        />
+      );
       break;
   }
 
@@ -130,7 +156,8 @@ export default function OnboardingFlow() {
       <Stack.Screen options={{ presentation: 'fullScreenModal' }} />
       {body}
       <View pointerEvents="box-none" style={{ position: 'absolute', top: 54, right: 20 }}>
-        <Pressable
+        <PressableScale
+          scaleTo={1}
           onPress={() => {
             router.back();
           }}
@@ -144,7 +171,7 @@ export default function OnboardingFlow() {
             borderColor: Colors.divider,
           }}>
           <SfIcon name="xmark" size={14} weight="bold" color={Colors.text2} />
-        </Pressable>
+        </PressableScale>
       </View>
     </View>
   );

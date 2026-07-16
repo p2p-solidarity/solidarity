@@ -17,12 +17,14 @@
  *   {footer}
  */
 import type { ReactNode } from 'react';
-import { Pressable, ScrollView, View } from 'react-native';
+import { ScrollView, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { PressableScale } from '@/components/common/PressableScale';
 import { SfIcon } from '@/components/icons/SfIcon';
 import { ThemedText } from '@/components/themed';
 import { Colors } from '@/constants/Colors';
+import { useTranslation } from '@/i18n';
 
 export interface OnboardingScaffoldProps {
   readonly title: string;
@@ -40,8 +42,9 @@ export function OnboardingScaffold({
   footer,
 }: OnboardingScaffoldProps) {
   const insets = useSafeAreaInsets();
+  const { t } = useTranslation();
   return (
-    <View className="bg-pageBg flex-1">
+    <View className="flex-1 bg-pageBg">
       <ScrollView
         contentContainerStyle={{
           paddingHorizontal: 24,
@@ -49,21 +52,20 @@ export function OnboardingScaffold({
           paddingBottom: insets.bottom + 24,
           flexGrow: 1,
           gap: 24,
-        }}
-      >
+        }}>
         <View style={{ flexDirection: 'row' }}>
-          <Pressable
+          <PressableScale
+            scaleTo={1}
             onPress={onBack}
             accessibilityRole="button"
-            accessibilityLabel="Back"
+            accessibilityLabel={t('onboarding.back')}
             style={{
               padding: 12,
               borderWidth: 1,
               borderColor: Colors.divider,
-            }}
-          >
+            }}>
             <SfIcon name="chevron.left" size={17} color={Colors.text1} />
-          </Pressable>
+          </PressableScale>
         </View>
 
         <View style={{ gap: 8 }}>

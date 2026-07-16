@@ -1,4 +1,4 @@
-import { useFocusEffect } from 'expo-router';
+import { router, useFocusEffect } from 'expo-router';
 import type { SFSymbol } from 'expo-symbols';
 import { useCallback, useState, type ReactNode } from 'react';
 import { View } from 'react-native';
@@ -25,14 +25,18 @@ export function IdentityCredentialRows({
   onOpenCredentials,
 }: IdentityCredentialRowsProps): ReactNode {
   const { t } = useTranslation();
-  const [nostrConnected, setNostrConnected] = useState(() => hasNostrKeySync());
+  const [nostrKeyReady, setNostrKeyReady] = useState(() => hasNostrKeySync());
+  const [bindingsExpanded, setBindingsExpanded] = useState(false);
   const identity = profileIdentityLine(record);
+  const blueskyHandle =
+    record.alsoKnownAs.find((alias) => alias.startsWith('at://'))?.slice('at://'.length) ?? null;
+  const nostrClaimed = record.alsoKnownAs.some((alias) => alias.startsWith('nostr:npub'));
 
   useFocusEffect(
     useCallback(() => {
       let cancelled = false;
       void hasNostrKey().then((has) => {
-        if (!cancelled) setNostrConnected(has);
+        if (!cancelled) setNostrKeyReady(has);
       });
       return () => {
         cancelled = true;
@@ -49,13 +53,42 @@ export function IdentityCredentialRows({
         <InsetRow
           icon="key.horizontal"
           title={t('mePage.identityAndBindings')}
-          subtitle={`${identity.label} · ${t('mePage.nostrBindingStatus', {
-            status: nostrConnected
-              ? t('mePage.nostrConnected')
-              : t('mePage.nostrNotConnected'),
-          })}`}
-          onPress={onOpenBindings}
+          subtitle={`${identity.label} · ${t('mePage.bindingsPortableHint')}`}
+          trailingIcon={bindingsExpanded ? 'chevron.up' : 'chevron.down'}
+          onPress={() => {
+            setBindingsExpanded((expanded) => !expanded);
+          }}
         />
+        {bindingsExpanded ? (
+          <>
+            <View style={{ height: 1, marginLeft: 48, backgroundColor: Colors.divider }} />
+            <InsetRow
+              icon="checkmark.seal.fill"
+              title={t('mePage.blueskyBinding')}
+              subtitle={
+                blueskyHandle === null
+                  ? t('mePage.bindingNotConnected')
+                  : t('mePage.blueskyClaimed', { handle: blueskyHandle })
+              }
+              onPress={() => {
+                router.push('/verify/bluesky');
+              }}
+            />
+            <View style={{ height: 1, marginLeft: 48, backgroundColor: Colors.divider }} />
+            <InsetRow
+              icon="bolt.fill"
+              title={t('mePage.nostrBinding')}
+              subtitle={
+                nostrClaimed
+                  ? t('mePage.nostrClaimed')
+                  : nostrKeyReady
+                    ? t('mePage.nostrReadyToBind')
+                    : t('mePage.bindingNotConnected')
+              }
+              onPress={onOpenBindings}
+            />
+          </>
+        ) : null}
         <View style={{ height: 1, marginLeft: 48, backgroundColor: Colors.divider }} />
         <InsetRow
           icon="checkmark.shield.fill"
@@ -73,11 +106,13 @@ function InsetRow({
   title,
   subtitle,
   onPress,
+  trailingIcon = 'chevron.right',
 }: {
   readonly icon: SFSymbol;
   readonly title: string;
   readonly subtitle: string;
   readonly onPress: () => void;
+  readonly trailingIcon?: SFSymbol;
 }): ReactNode {
   return (
     <PressableScale
@@ -102,7 +137,7 @@ function InsetRow({
           {subtitle}
         </ThemedText>
       </View>
-      <SfIcon name="chevron.right" size={12} color={Colors.text3} />
+      <SfIcon name={trailingIcon} size={12} color={Colors.text3} />
     </PressableScale>
   );
 }
