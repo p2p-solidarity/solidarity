@@ -150,7 +150,6 @@
       "./plugins/withRustXcframeworkSearchPath.js",
       "./plugins/withDisableClangExplicitModules.js",
       "./plugins/withNfcReader.js",
-      "./plugins/withSpruceIdSpmPackage.js",
       "./plugins/withPassportOpenAcSrsPhase.js",
       "./plugins/withIosBuildNumber.js",
       "./plugins/withAndroidReleaseSigning.js",

@@ -118,22 +118,6 @@ namespace margelo::nitro::solidarity::sprucedid {
       auto __value = std::move(__result.value());
       return __value;
     }
-    inline std::shared_ptr<Promise<std::string>> didKeyFromAlias(const std::string& alias) override {
-      auto __result = _swiftPart.didKeyFromAlias(alias);
-      if (__result.hasError()) [[unlikely]] {
-        std::rethrow_exception(__result.error());
-      }
-      auto __value = std::move(__result.value());
-      return __value;
-    }
-    inline std::shared_ptr<Promise<std::string>> didDocumentJson(const std::string& did) override {
-      auto __result = _swiftPart.didDocumentJson(did);
-      if (__result.hasError()) [[unlikely]] {
-        std::rethrow_exception(__result.error());
-      }
-      auto __value = std::move(__result.value());
-      return __value;
-    }
     inline std::shared_ptr<Promise<std::string>> signJws(const std::string& alias, const std::shared_ptr<ArrayBuffer>& payload) override {
       auto __result = _swiftPart.signJws(alias, ArrayBufferHolder(payload));
       if (__result.hasError()) [[unlikely]] {
@@ -144,30 +128,6 @@ namespace margelo::nitro::solidarity::sprucedid {
     }
     inline std::shared_ptr<Promise<std::shared_ptr<ArrayBuffer>>> signRawP256(const std::string& alias, const std::shared_ptr<ArrayBuffer>& digest) override {
       auto __result = _swiftPart.signRawP256(alias, ArrayBufferHolder(digest));
-      if (__result.hasError()) [[unlikely]] {
-        std::rethrow_exception(__result.error());
-      }
-      auto __value = std::move(__result.value());
-      return __value;
-    }
-    inline std::shared_ptr<Promise<bool>> verifyJws(const std::string& jws, const std::string& did) override {
-      auto __result = _swiftPart.verifyJws(jws, did);
-      if (__result.hasError()) [[unlikely]] {
-        std::rethrow_exception(__result.error());
-      }
-      auto __value = std::move(__result.value());
-      return __value;
-    }
-    inline std::shared_ptr<Promise<std::string>> signCredentialJwt(const std::string& alias, const std::string& claimsJson) override {
-      auto __result = _swiftPart.signCredentialJwt(alias, claimsJson);
-      if (__result.hasError()) [[unlikely]] {
-        std::rethrow_exception(__result.error());
-      }
-      auto __value = std::move(__result.value());
-      return __value;
-    }
-    inline std::shared_ptr<Promise<std::string>> verifyCredentialJwt(const std::string& jwt) override {
-      auto __result = _swiftPart.verifyCredentialJwt(jwt);
       if (__result.hasError()) [[unlikely]] {
         std::rethrow_exception(__result.error());
       }

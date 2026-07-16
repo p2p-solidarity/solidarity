@@ -307,7 +307,7 @@ fi
 # Regenerate the checked-in pin after bumping SPM_VERSION in
 # plugins/withSpruceIdSpmPackage.js:
 #   (cd apps/expo/ios && xcodebuild -resolvePackageDependencies \
-#      -workspace Solidarity.xcworkspace -scheme solidarity) \
+#      -workspace Solidarity.xcworkspace -scheme Solidarity) \
 #   && cp apps/expo/ios/Solidarity.xcworkspace/xcshareddata/swiftpm/Package.resolved \
 #         apps/expo/scripts/ios-spm.Package.resolved
 # See apps/expo/CLAUDE.md (CI).
@@ -322,14 +322,14 @@ if [[ -d "$APP_DIR/ios/Solidarity.xcworkspace" ]]; then
   defaults write com.apple.dt.Xcode IDEDisableAutomaticPackageResolution -bool NO 2>/dev/null || true
   defaults write com.apple.dt.Xcode IDEPackageOnlyUseVersionsFromResolvedFile -bool NO 2>/dev/null || true
   if ( cd "$APP_DIR/ios" && xcodebuild -resolvePackageDependencies \
-         -workspace Solidarity.xcworkspace -scheme solidarity \
+         -workspace Solidarity.xcworkspace -scheme Solidarity \
          -disableAutomaticPackageResolution \
          -skipPackagePluginValidation ); then
     green "OK seeded Package.resolved satisfies the workspace"
   else
     red "x seeded Package.resolved is stale for this workspace — attempting a live resolve"
     ( cd "$APP_DIR/ios" && xcodebuild -resolvePackageDependencies \
-        -workspace Solidarity.xcworkspace -scheme solidarity \
+        -workspace Solidarity.xcworkspace -scheme Solidarity \
         -skipPackagePluginValidation ) \
       || die "Swift Package resolution failed and the checked-in pin is stale.
   Regenerate apps/expo/scripts/ios-spm.Package.resolved on a Mac with network

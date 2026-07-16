@@ -157,15 +157,7 @@ dependencies {
   // BiometricPrompt — androidx wrapper that covers API 23+ uniformly.
   implementation "androidx.biometric:biometric:1.2.0-alpha05"
 
-  // SpruceID Android SDK. Same major.minor as the iOS SPM pin (0.14.x) so
-  // the wire format (did:key, JWK encoding, VC-JWT claim shape) is
-  // byte-identical across platforms.
-  // Source: https://central.sonatype.com/artifact/com.spruceid.mobile.sdk/mobilesdk
-  implementation("com.spruceid.mobile.sdk:mobilesdk:0.14.10") {
-    // mobilesdk 0.14.10 still drags in com.android.support:appcompat-v7:28.0.0
-    // which collides with androidx.core in the app's manifest merger
-    // (duplicate application@appComponentFactory). We're androidx-only across
-    // the whole app, so strip the legacy support tree here at the source.
-    exclude group: "com.android.support"
-  }
+  // The SpruceID Android SDK (com.spruceid.mobile.sdk:mobilesdk) dependency
+  // was removed in 1.3.3 S7a — its only consumer was the reflective
+  // SpruceSdkBridge, deleted with the 5 zero-caller wrapper methods.
 }

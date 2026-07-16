@@ -20,7 +20,7 @@ namespace margelo::nitro::solidarity::sprucedid {
   using namespace facebook;
 
   /**
-   * The C++ JNI bridge between the C++ struct "SpruceDidEvent" and the the Kotlin data class "SpruceDidEvent".
+   * The C++ JNI bridge between the C++ struct "SpruceDidEvent" and the Kotlin data class "SpruceDidEvent".
    */
   struct JSpruceDidEvent final: public jni::JavaClass<JSpruceDidEvent> {
   public:

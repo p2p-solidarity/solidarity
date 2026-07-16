@@ -1,9 +1,18 @@
 /**
- * Nitro spec — SpruceID DID
+ * Nitro spec — hardware-backed DID signing keys
  *
- * Wraps SpruceID's mobile SDKs (https://github.com/spruceid/sprucekit-mobile)
- * to back DID key generation + DID document management with hardware-backed
- * keystores:
+ * (Historically "SpruceID DID": this module once wrapped SpruceID's mobile
+ * SDK for DID derivation + JWS/VC verification. Those 5 methods had ZERO
+ * production TS callers — did:key codec + verification live in pure TS at
+ * `packages/shared` (`didKeyFromJwk` / `resolveDidKey` / `verifyJwtEs256`)
+ * — so 1.3.3 S7a removed them together with the whole SpruceID SDK
+ * dependency (iOS SPM `sprucekit-mobile`, Android Maven
+ * `com.spruceid.mobile.sdk`). What remains is the hardware key-management
+ * shell: generation, existence, auth-mode probe, deletion, public-JWK
+ * export, ES256 JWS + raw-digest signing, and the key lifecycle event
+ * stream. Inventory + rationale: docs/ref/notes-sprucekit-slim.md.)
+ *
+ * Hardware-backed keystores:
  *   iOS    : Secure Enclave (P-256) via Apple Security framework. Keys are
  *            stored as Keychain items keyed by `alias` and never leave the
  *            enclave; `sign()` requires biometric/passcode if the alias was
@@ -105,19 +114,9 @@ export interface SpruceDid
   /** Public-key JWK (JSON string). Safe to publish; no private material exposed. */
   getPublicKeyJwk(alias: string): Promise<string>;
 
-  // -- DID method helpers ---------------------------------------------------
-
-  /**
-   * Derive `did:key:z…` from a stored alias using the Spruce DID resolver.
-   * The output is byte-identical to the legacy Swift KeychainService +
-   * DIDKeyResolver pipeline so installs upgrading from v1 keep their DID.
-   */
-  didKeyFromAlias(alias: string): Promise<string>;
-
-  /** Resolve a DID to its DID document (JSON string). did:key / did:web / did:jwk. */
-  didDocumentJson(did: string): Promise<string>;
-
-  // -- JWS sign / verify (raw payload, not a full credential) --------------
+  // -- JWS signing (raw payload, not a full credential) ---------------------
+  // DID derivation and JWS/VC *verification* are pure TS in packages/shared
+  // (didKeyFromJwk / resolveDidKey / verifyJwtEs256) — never native.
 
   /**
    * Sign arbitrary bytes with the key referenced by `alias`. Returns compact
@@ -135,28 +134,6 @@ export interface SpruceDid
    * exactly 32 bytes.
    */
   signRawP256(alias: string, digest: ArrayBuffer): Promise<ArrayBuffer>;
-
-  /**
-   * Verify a compact JWS using the DID's published verification method.
-   * Resolves to true iff the signature passes. Throws on malformed JWS or
-   * DID resolution failures.
-   */
-  verifyJws(jws: string, did: string): Promise<boolean>;
-
-  // -- VC issuance + verification (full sd-jwt + JSON-LD via Spruce) -------
-
-  /**
-   * Issue a signed Verifiable Credential. `claimsJson` is a JSON-stringified
-   * object matching the W3C VC data model (or VC-JWT shape). Returns the
-   * signed VC-JWT.
-   */
-  signCredentialJwt(alias: string, claimsJson: string): Promise<string>;
-
-  /**
-   * Verify a VC-JWT issued by any compatible issuer. Returns the verified
-   * claims as a JSON string, or throws on signature / status / schema failure.
-   */
-  verifyCredentialJwt(jwt: string): Promise<string>;
 
   // -- Event stream ---------------------------------------------------------
 

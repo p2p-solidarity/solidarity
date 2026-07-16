@@ -309,18 +309,9 @@ class HybridSpruceDid : HybridSpruceDidSpec() {
    */
   private fun p256JwkJson(pub: ECPublicKey): String = SpruceDidJwk.p256JwkJson(pub)
 
-  // MARK: - DID derivation
-
-  override fun didKeyFromAlias(alias: String): Promise<String> = Promise.async {
-    val jwkJson = getPublicKeyJwk(alias).await()
-    SpruceSdkBridge.didFromJwk(jwkJson)
-  }
-
-  override fun didDocumentJson(did: String): Promise<String> = Promise.async {
-    SpruceSdkBridge.resolveDid(did)
-  }
-
-  // MARK: - Sign / Verify JWS
+  // MARK: - Sign JWS
+  // DID derivation and JWS/VC verification are pure TS in packages/shared —
+  // the SpruceID SDK wrapper methods were removed in 1.3.3 S7a (zero callers).
 
   override fun signJws(alias: String, payload: ArrayBuffer): Promise<String> = Promise.async {
     val payloadBytes = payload.toByteArray()
@@ -356,45 +347,6 @@ class HybridSpruceDid : HybridSpruceDidSpec() {
     ArrayBuffer.copy(SpruceDidEcdsa.derToRaw(derSig))
   }
 
-  override fun verifyJws(jws: String, did: String): Promise<Boolean> = Promise.async {
-    val parts = jws.split(".")
-    if (parts.size != 3) throw IllegalArgumentException("malformed JWS")
-    val (h, p, sigB64) = Triple(parts[0], parts[1], parts[2])
-    val rawSig = SpruceDidBase64.urlDecode(sigB64)
-    val derSig = SpruceDidEcdsa.rawToDer(rawSig)
-
-    val jwkJson = SpruceSdkBridge.jwkFromDid(did)
-    val pub = SpruceDidJwk.ecPublicKeyFromJwkJson(jwkJson)
-    val verifier = Signature.getInstance("SHA256withECDSA")
-    verifier.initVerify(pub)
-    verifier.update("$h.$p".toByteArray(Charsets.UTF_8))
-    verifier.verify(derSig)
-  }
-
-  // MARK: - VC sign / verify
-
-  override fun signCredentialJwt(alias: String, claimsJson: String): Promise<String> = Promise.async {
-    val claimsBytes = claimsJson.toByteArray(Charsets.UTF_8)
-    val arrayBuf = ArrayBuffer.copy(claimsBytes)
-    signJws(alias, arrayBuf).await()
-  }
-
-  override fun verifyCredentialJwt(jwt: String): Promise<String> = Promise.async {
-    val parts = jwt.split(".")
-    if (parts.size != 3) throw IllegalArgumentException("malformed VC-JWT")
-    val payloadBytes = SpruceDidBase64.urlDecode(parts[1])
-    val payloadJson = String(payloadBytes, Charsets.UTF_8)
-
-    // Pull issuer DID from `iss` claim.
-    val issMatch = Regex(""""iss"\s*:\s*"([^"]+)"""").find(payloadJson)
-    val iss = issMatch?.groupValues?.getOrNull(1)
-      ?: throw IllegalStateException("VC-JWT missing iss claim")
-
-    val ok = verifyJws(jwt, iss).await()
-    if (!ok) throw IllegalStateException("VC-JWT signature invalid")
-    payloadJson
-  }
-
   // MARK: - Listener registration
 
   override fun addEventListener(handler: (SpruceDidEvent) -> Unit): () -> Unit {
@@ -407,8 +359,8 @@ class HybridSpruceDid : HybridSpruceDidSpec() {
   }
 
   // ECDSA DER ↔ raw + JWK + Base64URL helpers live in
-  // SpruceDidCryptoHelpers.kt as `SpruceDidEcdsa`, `SpruceDidJwk`,
-  // `SpruceDidBase64`, and `SpruceSdkBridge`.
+  // SpruceDidCryptoHelpers.kt as `SpruceDidEcdsa`, `SpruceDidJwk`, and
+  // `SpruceDidBase64`.
 }
 
 /**

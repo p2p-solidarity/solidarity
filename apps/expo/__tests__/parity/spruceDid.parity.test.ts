@@ -180,14 +180,10 @@ class InMemorySpruceDidDriver implements SpruceDid {
     return JSON.stringify(publicKeyToJwk(entry.publicKey));
   }
 
-  async didKeyFromAlias(alias: string): Promise<string> {
-    // Not used by the test cases we own; throw so misuse is loud.
-    throw new Error(`didKeyFromAlias not implemented in test driver (${alias})`);
-  }
-
-  async didDocumentJson(did: string): Promise<string> {
-    throw new Error(`didDocumentJson not implemented in test driver (${did})`);
-  }
+  // didKeyFromAlias / didDocumentJson / verifyJws / signCredentialJwt /
+  // verifyCredentialJwt were removed from the SpruceDid spec in 1.3.3 S7a
+  // (zero production callers — DID derivation + verification are pure TS in
+  // packages/shared), so the driver no longer implements them.
 
   async signJws(alias: string, payload: ArrayBuffer): Promise<string> {
     const entry = this.keys.get(alias);
@@ -224,21 +220,6 @@ class InMemorySpruceDidDriver implements SpruceDid {
     const out = new ArrayBuffer(signature.length);
     new Uint8Array(out).set(signature);
     return out;
-  }
-
-  async verifyJws(jws: string, did: string): Promise<boolean> {
-    throw new Error(`verifyJws not implemented in test driver (${jws}, ${did})`);
-  }
-
-  async signCredentialJwt(alias: string, claimsJson: string): Promise<string> {
-    const payloadBytes = utf8ToBytes(claimsJson);
-    const buf = new ArrayBuffer(payloadBytes.length);
-    new Uint8Array(buf).set(payloadBytes);
-    return this.signJws(alias, buf);
-  }
-
-  async verifyCredentialJwt(jwt: string): Promise<string> {
-    throw new Error(`verifyCredentialJwt not implemented in test driver (${jwt})`);
   }
 
   addEventListener(handler: (event: SpruceDidEvent) => void): () => void {
