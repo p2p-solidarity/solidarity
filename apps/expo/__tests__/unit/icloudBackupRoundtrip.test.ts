@@ -56,7 +56,9 @@ import {
 import {
   DecryptError,
   decryptJsonWithKey,
+  encryptJsonWithKey,
 } from '../../src/storage/jsonCrypto';
+import { encodeSolb } from '../../src/backup/solbEnvelope';
 
 // ─── Module surface types (imported lazily after mocks install) ─────────────
 
@@ -64,9 +66,16 @@ interface DownloadedArchive {
   readonly keyScheme: 'device-storage-v1' | 'recovery-phrase-hkdf-v1';
   readonly ciphertextB64: string;
 }
+interface BackupArchiveInfo {
+  readonly name: string;
+  readonly timestampMs: number;
+  readonly version: 1 | 2 | null;
+}
 interface CloudProviderSurface {
   readonly uploadBackup: <T>(value: T, key: Uint8Array) => Promise<void>;
   readonly downloadLatestArchive: () => Promise<DownloadedArchive | null>;
+  readonly downloadArchive: (name: string) => Promise<DownloadedArchive>;
+  readonly listBackupArchives: () => Promise<readonly BackupArchiveInfo[]>;
   readonly backupMtime: () => Promise<Date | null>;
   readonly setProvider: (kind: 'iCloud' | 'googleDrive') => void;
   readonly getActiveProvider: () => 'iCloud' | 'googleDrive';
@@ -385,6 +394,50 @@ describe('iCloud backup round trip — portable SOLB v2 archive across devices',
     await cloud.uploadBackup(makeFullPayload(), PORTABLE_KEY_A);
     const after = await cloud.backupMtime();
     expect(after).toBeInstanceOf(Date);
+  });
+
+  it('listBackupArchives returns dated rows newest-first with the format version', async () => {
+    await cloud.uploadBackup(makeFullPayload(), PORTABLE_KEY_A);
+    await new Promise((r) => setTimeout(r, 2)); // distinct ms filenames
+    await cloud.uploadBackup(makeFullPayload(), PORTABLE_KEY_A);
+
+    // Inject a legacy v1 (device-key) archive + a corrupt file alongside.
+    fakeFiles.set('iCloud:backup_1500000000000.solbk', {
+      content: encodeSolb(encryptJsonWithKey(FIXED_MASTER_KEY, makeFullPayload()), 1),
+      modifiedTime: 1_500_000_000_000,
+    });
+    fakeFiles.set('iCloud:backup_1400000000000.solbk', {
+      content: 'bm90LWEtc29sYi1maWxl', // "not-a-solb-file" — header decode fails
+      modifiedTime: 1_400_000_000_000,
+    });
+
+    const list = await cloud.listBackupArchives();
+    expect(list.length).toBe(4);
+    // Newest first.
+    const stamps = list.map((a) => a.timestampMs);
+    expect([...stamps].sort((x, y) => y - x)).toEqual(stamps);
+    // The two fresh uploads are portable v2.
+    expect(list[0]?.version).toBe(2);
+    expect(list[1]?.version).toBe(2);
+    // The injected legacy + corrupt files are classified, not hidden.
+    expect(list.find((a) => a.name === 'backup_1500000000000.solbk')?.version).toBe(1);
+    expect(list.find((a) => a.name === 'backup_1400000000000.solbk')?.version).toBeNull();
+  });
+
+  it('downloadArchive(name) restores a SPECIFIC older archive (explicit choice, no silent fallback)', async () => {
+    const older = { ...makeFullPayload(), timestamp: '2026-05-01T00:00:00Z' };
+    await cloud.uploadBackup(older, PORTABLE_KEY_A);
+    await new Promise((r) => setTimeout(r, 2));
+    await cloud.uploadBackup({ ...makeFullPayload(), timestamp: '2026-06-01T00:00:00Z' }, PORTABLE_KEY_A);
+
+    const list = await cloud.listBackupArchives();
+    const oldest = list[list.length - 1]!;
+    const archive = await cloud.downloadArchive(oldest.name);
+    const restored = decryptJsonWithKey<SwiftCompatibleBackupData>(
+      PORTABLE_KEY_A,
+      archive.ciphertextB64
+    );
+    expect(restored.timestamp).toBe('2026-05-01T00:00:00Z');
   });
 
   it('Google Drive provider isolates files from iCloud (cross-provider safety)', async () => {

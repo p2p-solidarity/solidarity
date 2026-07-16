@@ -191,6 +191,55 @@ export interface DownloadedArchive {
   readonly ciphertextB64: string;
 }
 
+/** One row in the user-facing archive picker (plan G6: dated explicit choice). */
+export interface BackupArchiveInfo {
+  readonly name: string;
+  /** Parsed from the filename — when the archive was created. */
+  readonly timestampMs: number;
+  /**
+   * 2 = portable (recovery-phrase key), 1 = legacy (device key, original
+   * device only), null = header unreadable (corrupt / unknown format).
+   */
+  readonly version: 1 | 2 | null;
+}
+
+/**
+ * List every archive on the active provider, NEWEST FIRST, with its creation
+ * date and format version so the UI can label rows (dated explicit choice —
+ * never a silent fallback to an older file, plan G6). Reads each file's 5-byte
+ * SOLB header to classify it; MAX_BACKUPS caps this at 5 small files. A file
+ * whose header fails to decode is listed as `version: null` rather than
+ * hidden, so the user can see it exists even though it can't be restored.
+ */
+export async function listBackupArchives(): Promise<readonly BackupArchiveInfo[]> {
+  const ck = await ensureInitialized();
+  const names = await sortedBackups(ck); // oldest → newest
+  const out: BackupArchiveInfo[] = [];
+  for (const name of [...names].reverse()) {
+    const timestampMs = parseBackupTimestampMs(name);
+    if (timestampMs === null) continue;
+    let version: 1 | 2 | null = null;
+    try {
+      version = decodeSolb(await ck.readFileBackup(name)).version;
+    } catch {
+      version = null;
+    }
+    out.push({ name, timestampMs, version });
+  }
+  return out;
+}
+
+/**
+ * Pull + decode (NOT decrypt) a SPECIFIC archive by filename — the picker's
+ * restore path. Same contract as `downloadLatestArchive`; throws when the file
+ * is missing or unframeable.
+ */
+export async function downloadArchive(name: string): Promise<DownloadedArchive> {
+  const ck = await ensureInitialized();
+  const decoded = decodeSolb(await ck.readFileBackup(name));
+  return { keyScheme: decoded.keyScheme, ciphertextB64: decoded.ciphertextB64 };
+}
+
 /**
  * Pull + decode (NOT decrypt) the latest Backup Archive. Returns null only
  * when no backup file exists; a present-but-unframeable file throws (bad

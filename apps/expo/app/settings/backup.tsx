@@ -24,8 +24,10 @@ import {
 import {
   backupMtime,
   BackupRestoreError,
+  listBackupArchives,
   requestBackup,
   restoreFromBackup,
+  type BackupArchiveInfo,
 } from '@/backup';
 import { appAlert, showError } from '@/feedback/appAlert';
 import { confirmDialog } from '@/feedback/confirmDialog';
@@ -44,6 +46,20 @@ export default function BackupSettings() {
   const [lastBackup, setLastBackup] = useState<Date | null>(null);
   const [isBackingUp, setIsBackingUp] = useState(false);
   const [iCloudAvailable, setICloudAvailable] = useState(true);
+  // Dated archive list (plan G6: explicit choice) — strict 3-state, no
+  // placeholder rows while loading (CLAUDE.md rule 8).
+  const [archives, setArchives] = useState<'loading' | 'error' | readonly BackupArchiveInfo[]>(
+    'loading'
+  );
+
+  const reloadArchives = async () => {
+    setArchives('loading');
+    try {
+      setArchives(await listBackupArchives());
+    } catch {
+      setArchives('error');
+    }
+  };
 
   useEffect(() => {
     void backupMtime()
@@ -55,6 +71,7 @@ export default function BackupSettings() {
         setLastBackup(null);
         setICloudAvailable(false);
       });
+    void reloadArchives();
   }, [provider]);
 
   const onBackupNow = async () => {
@@ -70,6 +87,7 @@ export default function BackupSettings() {
       }
       if (result.payload) setLastBackup(new Date(result.payload.exportedAt));
       pushToast(t('backup.success'), 'success');
+      void reloadArchives();
     } catch (err) {
       // Absorb the failure into our themed report sheet — no raw CKError in
       // a native UIAlertController, no duplicate toast. The sheet's "Send
@@ -84,20 +102,22 @@ export default function BackupSettings() {
     }
   };
 
-  const onRestore = async () => {
+  const onRestore = async (archiveName?: string, archiveDate?: string) => {
     const ok = await confirmDialog({
-      title: t('backup.restorePrompt.title'),
-      message: t('backup.restorePrompt.message'),
+      title: archiveName ? t('backup.archives.restoreThis.title') : t('backup.restorePrompt.title'),
+      message: archiveName
+        ? t('backup.archives.restoreThis.message', { date: archiveDate ?? '' })
+        : t('backup.restorePrompt.message'),
       confirmLabel: t('backup.restore.confirm'),
       destructive: true,
     });
     if (!ok) return;
-    await performRestoreNow();
+    await performRestoreNow(archiveName);
   };
 
-  const performRestoreNow = async () => {
+  const performRestoreNow = async (archiveName?: string) => {
     try {
-      const r = await restoreFromBackup();
+      const r = await restoreFromBackup(archiveName);
       if (!r) {
         appAlert({
           title: t('backup.restore.notFoundTitle'),
@@ -108,15 +128,26 @@ export default function BackupSettings() {
       router.back();
     } catch (err) {
       // A "wrong key" failure (v2 under a different Recovery Phrase, or a v1
-      // device-key archive on a device that lacks that key) gets the plain
-      // "different key" message; everything else is the generic failure. T5
-      // adds per-kind copy (root-key-unavailable / unsupported-version).
+      // device-key archive on a device that lacks that key): explain plainly,
+      // then offer to keep the CURRENT data and create a fresh portable backup
+      // instead of dead-ending (user request 2026-07-17). Never deletes the
+      // old archive.
       const isWrongKey =
         err instanceof BackupRestoreError &&
         (err.kind === 'portable-key-mismatch' || err.kind === 'legacy-key-unavailable');
-      const summary = isWrongKey
-        ? t('backup.restore.keyMismatch')
-        : t('backup.restore.failedSummary');
+      if (isWrongKey) {
+        const createNew = await confirmDialog({
+          title: t('backup.restore.keyFailedCreateNew.title'),
+          message: `${t('backup.restore.keyMismatch')}\n\n${t('backup.restore.keyFailedCreateNew.message')}`,
+          confirmLabel: t('backup.restore.keyFailedCreateNew.confirm'),
+        });
+        if (createNew) await onBackupNow();
+        return;
+      }
+      const summary =
+        err instanceof BackupRestoreError && err.kind === 'root-key-unavailable'
+          ? t('backup.restore.rootKeyUnavailable')
+          : t('backup.restore.failedSummary');
       showError({ context: 'Backup › Restore', summary, error: err });
     }
   };
@@ -176,6 +207,46 @@ export default function BackupSettings() {
               showsChevron={false}
               onPress={() => { void onRestore(); }}
             />
+          </SettingsBlockSection>
+
+          {/* Archives — dated explicit choice (plan G6). 3-state: loading /
+              error / list (empty list = honest "none" footer, no placeholder). */}
+          <SettingsBlockSection
+            title={t('backup.archives.title')}
+            footer={
+              archives === 'loading'
+                ? undefined
+                : archives === 'error'
+                  ? t('backup.archives.loadError')
+                  : archives.length === 0
+                    ? t('backup.archives.none')
+                    : t('backup.archives.footer')
+            }
+          >
+            {Array.isArray(archives)
+              ? archives.map((a) => {
+                  const date = new Date(a.timestampMs).toLocaleString();
+                  return (
+                    <SettingsBlockRow
+                      key={a.name}
+                      icon={a.version === 2 ? 'icloud' : 'doc.text'}
+                      title={date}
+                      subtitle={
+                        a.version === 2
+                          ? t('backup.archives.portable')
+                          : a.version === 1
+                            ? t('backup.archives.legacy')
+                            : t('backup.archives.unknown')
+                      }
+                      showsChevron={false}
+                      disabled={a.version === null}
+                      onPress={() => {
+                        void onRestore(a.name, date);
+                      }}
+                    />
+                  );
+                })
+              : null}
           </SettingsBlockSection>
 
           {/* Status */}

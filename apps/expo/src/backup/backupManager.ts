@@ -23,6 +23,7 @@ import {
   saveContact,
 } from '../storage/storageManager';
 import {
+  downloadArchive,
   downloadLatestArchive,
   prepareProvider,
   setProvider,
@@ -33,6 +34,7 @@ import { decryptJson } from '../storage/encryptionManager';
 import { decryptJsonWithKey } from '../storage/jsonCrypto';
 import { getPortableBackupKey } from '../identity/rootKey';
 import { shouldRunBackup, type BackupReason } from './backupPolicy';
+import { normalizeRestoredPayload } from './normalizeBackupPayload';
 import { usePreferences } from '@/settings/preferences';
 import type { BusinessCard, Contact } from '@solidarity/shared';
 import type { IdentityCardEntity, ProvableClaimEntity } from '../identity/entities';
@@ -274,12 +276,17 @@ export class BackupRestoreError extends Error {
   }
 }
 
-export async function restoreFromBackup(): Promise<RestoreResult | null> {
+/**
+ * Restore from the newest archive, or — when `archiveName` is given — from a
+ * SPECIFIC archive the user picked in the dated backup list (plan G6: explicit
+ * choice, never a silent fallback to an older file).
+ */
+export async function restoreFromBackup(archiveName?: string): Promise<RestoreResult | null> {
   // null = nothing to restore (no file). A present-but-unusable backup throws
   // a typed BackupRestoreError so the caller can show the right message.
   let archive: Awaited<ReturnType<typeof downloadLatestArchive>>;
   try {
-    archive = await downloadLatestArchive();
+    archive = archiveName ? await downloadArchive(archiveName) : await downloadLatestArchive();
   } catch (err) {
     // Framing failures from decodeSolb: unknown version fails closed as its own
     // kind; anything else (bad magic, legacy plaintext, IO) is unreadable.
@@ -293,15 +300,23 @@ export async function restoreFromBackup(): Promise<RestoreResult | null> {
 
   let payload: BackupPayload;
   try {
+    let raw: unknown;
     if (archive.keyScheme === 'recovery-phrase-hkdf-v1') {
       // v2 portable archive → Recovery-Phrase-derived Portable Backup Key.
       const keyRes = await getPortableBackupKey();
       if (!keyRes.ok) throw new BackupRestoreError('root-key-unavailable', { cause: keyRes.error });
-      payload = decryptJsonWithKey<BackupPayload>(keyRes.value, archive.ciphertextB64);
+      raw = decryptJsonWithKey(keyRes.value, archive.ciphertextB64);
     } else {
       // v1 legacy archive → device-local Device Storage Key (same-device only).
-      payload = await decryptJson<BackupPayload>(archive.ciphertextB64);
+      raw = await decryptJson(archive.ciphertextB64);
     }
+    const normalized = normalizeRestoredPayload(raw);
+    if (!normalized) {
+      throw new BackupRestoreError('unreadable', {
+        cause: new Error('backup payload is not an object'),
+      });
+    }
+    payload = normalized;
   } catch (err) {
     if (err instanceof BackupRestoreError) throw err;
     // Duck-type by name rather than `instanceof DecryptError` so tests that mock
