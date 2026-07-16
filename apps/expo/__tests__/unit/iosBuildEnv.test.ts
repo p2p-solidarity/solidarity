@@ -326,18 +326,19 @@ end
     expect(readCommandLog(logPath)).toEqual([
       `node\t${fixtureRoot}\t-e const [maj,min]=process.versions.node.split('.').map(Number); process.exit(maj > 20 || (maj === 20 && min >= 18) ? 0 : 1)`,
       `bun\t${fixtureRoot}\tinstall --frozen-lockfile`,
-      `node\t${fixtureRoot}\t-e require('lightningcss')`,
+      `node\t${fixtureRoot}\t-p process.arch`,
+      `bun\t${fixtureRoot}\t-e process.stdout.write(process.arch)`,
+      `node\t${fixtureApp}\t-e require('${fixtureApp}/metro.config.js'); process.exit(0)`,
       `bunx\t${fixtureApp}\texpo prebuild --clean --platform ios --no-install`,
       `pod\t${join(fixtureApp, 'ios')}\tinstall`,
     ]);
   });
 
-  // Xcode Cloud's Tahoe image installs x86_64 node (Intel-prefix Homebrew,
-  // Rosetta) but native arm64 bun, so bun never installs the lightningcss
-  // binding the Metro bundle phase's NODE_BINARY needs (Builds 153/154). The
-  // prepare script must detect the broken require and stage the platform
-  // package for node's arch from the npm registry.
-  test('shared prepare script stages the lightningcss binding when node arch differs from bun', () => {
+  // Layer 3 of the bundle-node defense (see prepare-ios-workspace.sh): when
+  // the metro.config.js probe fails and no arch-matched node could be staged,
+  // the script must self-heal the one known bundle-time native dep by staging
+  // the lightningcss platform package for node's arch from the npm registry.
+  test('shared prepare script stages the lightningcss binding when the bundle probe fails', () => {
     const fixtureRoot = makeTempDir();
     const fixtureApp = join(fixtureRoot, 'apps', 'expo');
     const fakeBin = join(fixtureRoot, 'bin');
@@ -355,15 +356,17 @@ end
     );
 
     const stagedBinding = join(fixtureRoot, 'node_modules', 'lightningcss-fake-arch', 'binding.node');
-    // node succeeds at require('lightningcss') only once the platform package
-    // exists — mirrors the real resolution failure on Xcode Cloud.
+    const probeCommand = `-e require('${fixtureApp}/metro.config.js'); process.exit(0)`;
+    // node loads the metro config chain only once the platform package
+    // exists — mirrors the real resolution failure on Xcode Cloud. Arch
+    // probes print nothing, so node and bun agree and no node is staged.
     writeExecutable(
       join(fakeBin, 'node'),
       `#!/usr/bin/env bash
 set -euo pipefail
 printf 'node\\t%s\\t%s\\n' "$PWD" "$*" >> "${logPath}"
 case "$*" in
-  *"require('lightningcss')"*) [[ -f "${stagedBinding}" ]] || exit 1 ;;
+  *metro.config.js*) [[ -f "${stagedBinding}" ]] || exit 1 ;;
   *"package.json').version"*) printf '9.9.9' ;;
   *"process.platform + '-' + process.arch"*) printf 'fake-arch' ;;
 esac
@@ -419,10 +422,144 @@ rm -rf package
     expect(commands.some((line) => line.includes('pack lightningcss-fake-arch@9.9.9'))).toBe(true);
     expect(existsSync(stagedBinding)).toBe(true);
     expect(readFileSync(stagedBinding, 'utf8')).toBe('fake native binding');
-    // The staged package must satisfy a fresh require probe before prebuild.
+    // The staged package must satisfy a fresh metro.config probe before prebuild.
     expect(
-      commands.filter((line) => line === `node\t${fixtureRoot}\t-e require('lightningcss')`).length
+      commands.filter((line) => line === `node\t${fixtureApp}\t${probeCommand}`).length
     ).toBe(2);
+    // Archs agreed, so no node override may be written.
+    expect(existsSync(join(fixtureApp, 'ios', '.xcode.env.local'))).toBe(false);
+  });
+
+  // Layer 1 of the bundle-node defense: when node's arch differs from bun's,
+  // the prepare script downloads the SHA-pinned nodejs.org build matching
+  // bun's arch and points the RN bundle phase at it via ios/.xcode.env.local
+  // (written after prebuild, which wipes ios/).
+  test('shared prepare script stages an arch-matched node and writes .xcode.env.local when node and bun disagree', () => {
+    const fixtureRoot = makeTempDir();
+    const fixtureApp = join(fixtureRoot, 'apps', 'expo');
+    const fakeBin = join(fixtureRoot, 'bin');
+    const logPath = join(fixtureRoot, 'commands.log');
+    const stdoutPath = join(fixtureRoot, 'stdout.log');
+    const stderrPath = join(fixtureRoot, 'stderr.log');
+    const nodeCacheDir = join(fixtureRoot, 'node-cache');
+    mkdirSync(join(fixtureApp, 'ios'), { recursive: true });
+    createFakeToolchain(fakeBin, logPath);
+
+    // PATH node reports x64, bun reports arm64 — the Build 153/154 mismatch.
+    writeExecutable(
+      join(fakeBin, 'node'),
+      `#!/usr/bin/env bash
+set -euo pipefail
+printf 'node\\t%s\\t%s\\n' "$PWD" "$*" >> "${logPath}"
+case "$*" in
+  "-p process.arch") printf 'x64' ;;
+  "-p process.platform") printf 'darwin' ;;
+esac
+exit 0
+`
+    );
+    writeExecutable(
+      join(fakeBin, 'bun'),
+      `#!/usr/bin/env bash
+set -euo pipefail
+printf 'bun\\t%s\\t%s\\n' "$PWD" "$*" >> "${logPath}"
+if [[ "$*" == *process.arch* ]]; then
+  printf 'arm64'
+fi
+exit 0
+`
+    );
+    // The staged node must be exercised by the probe — make it self-identify.
+    const stagedNodeTemplate = join(fixtureRoot, 'staged-node-template');
+    writeExecutable(
+      stagedNodeTemplate,
+      `#!/usr/bin/env bash
+set -euo pipefail
+printf 'staged-node\\t%s\\t%s\\n' "$PWD" "$*" >> "${logPath}"
+exit 0
+`
+    );
+    // curl serves the pinned Node tarball (top-level dir + bin/node layout).
+    writeExecutable(
+      join(fakeBin, 'curl'),
+      `#!/usr/bin/env bash
+set -euo pipefail
+printf 'curl\\t%s\\t%s\\n' "$PWD" "$*" >> "${logPath}"
+out=""
+prev=""
+for arg in "$@"; do
+  if [[ "$prev" == "--output" ]]; then
+    out="$arg"
+    break
+  fi
+  prev="$arg"
+done
+if [[ -z "$out" ]]; then
+  echo "curl stub did not receive --output" >&2
+  exit 2
+fi
+mkdir -p "$(dirname "$out")"
+work="$(mktemp -d)"
+mkdir -p "$work/nodefixture/bin"
+cp "${stagedNodeTemplate}" "$work/nodefixture/bin/node"
+tar -czf "$out" -C "$work" nodefixture
+rm -rf "$work"
+`
+    );
+
+    const result = Bun.spawnSync({
+      cmd: [
+        '/bin/bash',
+        '-c',
+        '/bin/bash "$1" >"$2" 2>"$3"',
+        'runner',
+        prepareScript,
+        stdoutPath,
+        stderrPath,
+      ],
+      env: {
+        ...process.env,
+        AIRMEISHI_BUN_INSTALL_ARGS: '--frozen-lockfile',
+        AIRMEISHI_EXPO_APP_DIR: fixtureApp,
+        AIRMEISHI_INSTALL_TOOLING: '0',
+        AIRMEISHI_MATCHED_NODE_BASE_URL: 'https://example.invalid/dist',
+        AIRMEISHI_MATCHED_NODE_CACHE_DIR: nodeCacheDir,
+        AIRMEISHI_MATCHED_NODE_SHA256_DARWIN_ARM64: '',
+        AIRMEISHI_MATCHED_NODE_VERSION: 'v9.9.9',
+        AIRMEISHI_SETUP_IOS_NATIVE_BINDINGS: '0',
+        AIRMEISHI_REPO_ROOT: fixtureRoot,
+        COMMAND_LOG: logPath,
+        PATH: `${fakeBin}:${process.env['PATH'] ?? ''}`,
+      },
+      stdout: 'ignore',
+      stderr: 'ignore',
+    });
+
+    expect(
+      result.exitCode,
+      JSON.stringify({
+        stderr: readOptional(stderrPath),
+        stdout: readOptional(stdoutPath),
+      })
+    ).toBe(0);
+    const commands = readCommandLog(logPath);
+    const stagedNode = join(nodeCacheDir, 'node-v9.9.9-darwin-arm64', 'bin', 'node');
+    expect(
+      commands.some((line) =>
+        line.includes('https://example.invalid/dist/v9.9.9/node-v9.9.9-darwin-arm64.tar.gz')
+      )
+    ).toBe(true);
+    expect(existsSync(stagedNode)).toBe(true);
+    // The metro.config probe must run on the staged node, not the PATH node.
+    expect(commands).toContain(
+      `staged-node\t${fixtureApp}\t-e require('${fixtureApp}/metro.config.js'); process.exit(0)`
+    );
+    // The bundle phase override lands after prebuild regenerates ios/.
+    const xcodeEnvLocal = join(fixtureApp, 'ios', '.xcode.env.local');
+    expect(existsSync(xcodeEnvLocal)).toBe(true);
+    expect(readFileSync(xcodeEnvLocal, 'utf8')).toBe(`export NODE_BINARY=${stagedNode}\n`);
+    // Probe passed on the matched node — the npm self-heal must not fire.
+    expect(commands.some((line) => line.startsWith('npm'))).toBe(false);
   });
 
   // Xcode Cloud's workflow archives the lowercase `solidarity` scheme. Expo

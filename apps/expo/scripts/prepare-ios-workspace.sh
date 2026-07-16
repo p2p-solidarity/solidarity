@@ -29,6 +29,15 @@ PASSPORT_OPENAC_SRS_SHA256="${AIRMEISHI_PASSPORT_OPENAC_SRS_SHA256-7d368f9342b99
 SEMAPHORE_SWIFT_REF="${AIRMEISHI_SEMAPHORE_SWIFT_REF:-850680a5adcc258d6861005b55a4925bd08a48eb}"
 SEMAPHORE_SWIFT_ZIP_URL="${AIRMEISHI_SEMAPHORE_SWIFT_ZIP_URL:-https://github.com/zkmopro/SemaphoreSwift/archive/${SEMAPHORE_SWIFT_REF}.zip}"
 SEMAPHORE_SWIFT_SHA256="${AIRMEISHI_SEMAPHORE_SWIFT_SHA256-}"
+# SHA-pinned Node build staged when the PATH node's CPU arch differs from
+# bun's (see ensure_bundle_node_matches_bun). Pins from
+# https://nodejs.org/dist/${MATCHED_NODE_VERSION}/SHASUMS256.txt — update both
+# arch hashes together when bumping the version.
+MATCHED_NODE_VERSION="${AIRMEISHI_MATCHED_NODE_VERSION:-v24.18.0}"
+MATCHED_NODE_SHA256_DARWIN_ARM64="${AIRMEISHI_MATCHED_NODE_SHA256_DARWIN_ARM64-e1a97e14c99c803e96c7339403282ea05a499c32f8d83defe9ef5ec66f979ed1}"
+MATCHED_NODE_SHA256_DARWIN_X64="${AIRMEISHI_MATCHED_NODE_SHA256_DARWIN_X64-dfd0dbd3e721503434df7b7205e719f61b3a3a31b2bcf9729b8b91fea240f080}"
+MATCHED_NODE_BASE_URL="${AIRMEISHI_MATCHED_NODE_BASE_URL:-https://nodejs.org/dist}"
+MATCHED_NODE_CACHE_DIR="${AIRMEISHI_MATCHED_NODE_CACHE_DIR:-$HOME/.cache/airmeishi/node}"
 
 red()    { printf '\033[31m%s\033[0m\n' "$*"; }
 green()  { printf '\033[32m%s\033[0m\n' "$*"; }
@@ -257,30 +266,89 @@ stage_ios_native_bindings() {
   ensure_passport_openac_srs
 }
 
-# bun and node can disagree on CPU arch on Xcode Cloud's macOS Tahoe image:
-# `brew install node` comes from the image's Intel-prefix Homebrew
-# (/usr/local, x86_64 under Rosetta), while the oven-sh/bun formula detects
-# the physical Apple Silicon CPU and installs native arm64 bun. bun only
-# installs the lightningcss platform binding matching ITS arch, but the
-# "Bundle React Native code and images" archive phase runs Metro under
-# NODE_BINARY (= that x86_64 node), so the archive dies at the very end with
-# "Cannot find module '../lightningcss.darwin-x64.node'" (Builds 153/154).
-# Probe with the same `node` the build phase resolves and stage the missing
-# platform package from the npm registry when the archs diverge.
-ensure_lightningcss_node_binding() {
-  if node -e "require('lightningcss')" >/dev/null 2>&1; then
-    green "OK lightningcss native binding loads under $(command -v node)"
+# The "Bundle React Native code and images" archive phase runs Metro under
+# NODE_BINARY (ios/.xcode.env → `command -v node`), while platform-specific
+# npm native bindings were installed by bun for BUN's arch. Xcode Cloud's
+# macOS Tahoe image mixes the two: `brew install node` comes from the image's
+# Intel-prefix Homebrew (/usr/local, x86_64 under Rosetta), while the
+# oven-sh/bun formula detects the physical Apple Silicon CPU and installs
+# native arm64 bun — so the archive died at the very end with "Cannot find
+# module '../lightningcss.darwin-x64.node'" (Builds 153/154). Three layers of
+# defense, checked right after bun install so a failure surfaces at
+# post-clone time with a clear message instead of five minutes into the
+# archive:
+#   1. ensure_bundle_node_matches_bun — when the archs diverge, stage a
+#      SHA-pinned nodejs.org build matching bun's arch and point the bundle
+#      phase at it via ios/.xcode.env.local (fixes the whole class).
+#   2. probe_bundle_node_deps — load metro.config.js (expo/metro-config →
+#      nativewind → react-native-css-interop → lightningcss) with the same
+#      node the bundle phase will use, so ANY missing bundle-time native
+#      binding is caught here.
+#   3. ensure_lightningcss_node_binding — last-resort self-heal for the one
+#      known native dep when the matched node could not be staged.
+BUNDLE_NODE_BINARY=""
+
+ensure_bundle_node_matches_bun() {
+  BUNDLE_NODE_BINARY="$(command -v node)"
+  local node_arch bun_arch platform
+  node_arch="$(node -p "process.arch")"
+  bun_arch="$(bun -e "process.stdout.write(process.arch)")"
+  if [[ "$node_arch" == "$bun_arch" ]]; then
+    green "OK node and bun agree on CPU arch ($node_arch)"
     return 0
   fi
 
+  red "! node is $node_arch but bun is $bun_arch — bun installed $bun_arch-only native bindings"
+  platform="$(node -p "process.platform")"
+  local sha
+  case "$platform-$bun_arch" in
+    darwin-arm64) sha="$MATCHED_NODE_SHA256_DARWIN_ARM64" ;;
+    darwin-x64) sha="$MATCHED_NODE_SHA256_DARWIN_X64" ;;
+    *)
+      red "! no pinned Node build for $platform-$bun_arch — falling back to per-package binding staging"
+      return 0
+      ;;
+  esac
+
+  local dist_dir="$MATCHED_NODE_CACHE_DIR/node-$MATCHED_NODE_VERSION-$platform-$bun_arch"
+  local staged="$dist_dir/bin/node"
+  if [[ ! -x "$staged" ]]; then
+    step "Staging Node $MATCHED_NODE_VERSION ($platform-$bun_arch) to match bun"
+    local temp_dir tarball url
+    temp_dir="$(mktemp -d)"
+    tarball="$temp_dir/node.tar.gz"
+    url="$MATCHED_NODE_BASE_URL/$MATCHED_NODE_VERSION/node-$MATCHED_NODE_VERSION-$platform-$bun_arch.tar.gz"
+    # Plain curl, not download_zip: that helper attaches the GitHub token,
+    # which must not leak to nodejs.org.
+    if ! curl -fL --retry 3 --retry-delay 2 --connect-timeout 20 --output "$tarball" "$url"; then
+      rm -rf "$temp_dir"
+      red "! could not download $url — falling back to per-package binding staging"
+      return 0
+    fi
+    verify_sha256 "$tarball" "$sha"
+    rm -rf "$dist_dir"
+    mkdir -p "$dist_dir"
+    tar -xzf "$tarball" -C "$dist_dir" --strip-components 1
+    rm -rf "$temp_dir"
+    [[ -x "$staged" ]] || die "staged Node tarball did not contain bin/node"
+  fi
+  BUNDLE_NODE_BINARY="$staged"
+  green "OK bundle phase will use $staged"
+}
+
+probe_bundle_node_deps() {
+  ( cd "$APP_DIR" && "$BUNDLE_NODE_BINARY" -e "require('$APP_DIR/metro.config.js'); process.exit(0)" )
+}
+
+ensure_lightningcss_node_binding() {
   # Direct path, not require('lightningcss/package.json'): the package's
   # exports map blocks the subpath.
   local version
-  version="$(node -p "require('$REPO_ROOT/node_modules/lightningcss/package.json').version" 2>/dev/null)" \
+  version="$("$BUNDLE_NODE_BINARY" -p "require('$REPO_ROOT/node_modules/lightningcss/package.json').version" 2>/dev/null)" \
     || die "lightningcss is not installed — run bun install first"
 
   local pkg
-  pkg="lightningcss-$(node -p "process.platform + '-' + process.arch")"
+  pkg="lightningcss-$("$BUNDLE_NODE_BINARY" -p "process.platform + '-' + process.arch")"
   step "Staging $pkg@$version (bun arch != node arch)"
   ensure_command npm
 
@@ -294,10 +362,20 @@ ensure_lightningcss_node_binding() {
   mkdir -p "$dest"
   tar -xzf "$temp_dir"/lightningcss-*.tgz -C "$dest" --strip-components 1
   rm -rf "$temp_dir"
-
-  node -e "require('lightningcss')" >/dev/null 2>&1 \
-    || die "lightningcss still cannot load a native binding under $(command -v node)"
   green "OK staged $pkg@$version into node_modules"
+}
+
+ensure_bundle_node_deps() {
+  ensure_bundle_node_matches_bun
+  if probe_bundle_node_deps >/dev/null 2>&1; then
+    green "OK bundle-time native bindings load under $BUNDLE_NODE_BINARY"
+    return 0
+  fi
+  ensure_lightningcss_node_binding
+  probe_bundle_node_deps \
+    || die "metro.config.js still cannot load under $BUNDLE_NODE_BINARY —
+  a bundle-time dependency is missing a native binding for this node's arch."
+  green "OK bundle-time native bindings load under $BUNDLE_NODE_BINARY (after staging lightningcss)"
 }
 
 cd "$REPO_ROOT"
@@ -327,7 +405,7 @@ if is_enabled "$RUN_BUN_INSTALL"; then
   bun install "${bun_args[@]}"
 fi
 
-ensure_lightningcss_node_binding
+ensure_bundle_node_deps
 
 if is_enabled "$SETUP_IOS_NATIVE_BINDINGS"; then
   stage_ios_native_bindings
@@ -341,6 +419,15 @@ fi
 prebuild_args+=(--platform ios --no-install)
 ( cd "$APP_DIR" && bunx "${prebuild_args[@]}" )
 normalize_xcode_cloud_scheme
+
+# Written AFTER prebuild: `expo prebuild --clean` wipes ios/. The RN bundle
+# phase sources ios/.xcode.env (NODE_BINARY=$(command -v node)) and then
+# ios/.xcode.env.local, so this override wins and the bundle runs on the
+# arch-matched node staged above. Gitignored (ios/.gitignore).
+if [[ -n "$BUNDLE_NODE_BINARY" && "$BUNDLE_NODE_BINARY" != "$(command -v node)" ]]; then
+  printf 'export NODE_BINARY=%q\n' "$BUNDLE_NODE_BINARY" > "$APP_DIR/ios/.xcode.env.local"
+  green "OK wrote ios/.xcode.env.local → NODE_BINARY=$BUNDLE_NODE_BINARY"
+fi
 
 if is_enabled "$RUN_POD_INSTALL"; then
   step "pod install"
