@@ -1,24 +1,24 @@
 /**
- * View DIDs — 1:1 port of the private DIDListSheet inside
- * solidarity/Views/SettingsViews/SettingsView.swift (lines 138-212).
+ * View DIDs — originally a 1:1 port of the Swift DIDListSheet; 1.3.3 S7b
+ * reshaped it around the two-key architecture (04-plan 方向決策 D1):
  *
- * Layout:
- *   • SettingsBackToolbar + screen title "Your DIDs"
- *   • Active DID card (header + did:* method label + truncated DID body)
- *   • Key Storage block:
- *       – Storage = iCloud Keychain
- *       – Sync    = Same Apple ID devices
- *   • Footer hint identical to Swift copy.
+ *   • ROOT IDENTITY (primary) — the seed-derived did:key from
+ *     `identity/rootKey.ts`. Portable: the same mnemonic yields the same
+ *     did on App and Web. This is the ONLY user-facing identity; profile,
+ *     badges, Pear handshake and Nostr keys all hang off it.
+ *   • CARD SIGNING KEY (secondary) — the hardware-backed (Secure Enclave /
+ *     StrongBox) key that signs credentials, SD-JWTs and ZK device
+ *     bindings. Hardware keys cannot be derived from a mnemonic, so it is
+ *     NOT an identity: it is anchored to the root via the
+ *     `solidarity.cardKeyBinding.v1` JWS (Phase A5b). Shown here so the
+ *     anchor relationship is inspectable, never presented as "your DID".
  *
- * Active DID source: `useIdentityCoordinator.profile.activeDID.did`, seeded
- * once from the SpruceID-managed signing key. Derivation reads the public
- * JWK only (no biometric prompt) so the card paints frame 1 with the cached
- * value when available, mirroring Swift's `IdentityCoordinator.loadIdentity`
- * cached-descriptor fallback. Falls back to "No active DID" until the seed
- * resolves or on keychain errors.
+ * Root did loads async (no await before first paint — rule 10): the screen
+ * paints with the signing-key card from the coordinator cache, and the root
+ * section resolves in with a REAL absent-state when no root exists.
  */
 import { router, Stack, useLocalSearchParams } from 'expo-router';
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { Platform, ScrollView, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -34,6 +34,11 @@ import {
 import { Colors } from '@/constants/Colors';
 import { useTranslation } from '@/i18n';
 import { useActiveDid, useIdentityCoordinator } from '@/identity';
+import { getRootDid } from '@/identity/rootKey';
+
+type RootDidState =
+  | { readonly kind: 'loading' }
+  | { readonly kind: 'resolved'; readonly did: string | null };
 
 export default function DIDListSheet() {
   const insets = useSafeAreaInsets();
@@ -45,6 +50,18 @@ export default function DIDListSheet() {
   }, [seedKeychain]);
   const activeDid = useActiveDid();
   const displayDid = activeDid ?? params.did ?? null;
+
+  // Root identity resolves async; loading → real did or honest absence.
+  const [rootDid, setRootDid] = useState<RootDidState>({ kind: 'loading' });
+  useEffect(() => {
+    let cancelled = false;
+    void getRootDid().then((result) => {
+      if (!cancelled) setRootDid({ kind: 'resolved', did: result.ok ? result.value : null });
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   return (
     <View className="flex-1 bg-pageBg" style={{ paddingTop: insets.top }}>
@@ -61,15 +78,33 @@ export default function DIDListSheet() {
         className="flex-1"
         contentContainerStyle={{ paddingTop: 24, paddingBottom: 24 + insets.bottom }}>
         <View className="gap-6">
-          {/* Active DID */}
+          {/* Root identity — the one portable did:key (D1) */}
           <View className="gap-2">
-            <SettingsBlockSectionHeader title={t('dids.activeDid')} />
-            <View className="px-4">
+            <SettingsBlockSectionHeader title={t('dids.rootIdentity')} />
+            <View className="px-4 gap-2">
+              {rootDid.kind === 'loading' ? null : rootDid.did ? (
+                <DidCard did={rootDid.did} />
+              ) : (
+                <NoActiveDidCard label={t('dids.noRootIdentity')} />
+              )}
+              <ThemedText variant="caption" tone="tertiary" className="px-1">
+                {t('dids.rootIdentityHint')}
+              </ThemedText>
+            </View>
+          </View>
+
+          {/* Card signing key — hardware-backed, anchored to the root (A5b) */}
+          <View className="gap-2">
+            <SettingsBlockSectionHeader title={t('dids.cardSigningKey')} />
+            <View className="px-4 gap-2">
               {displayDid ? (
                 <DidCard did={displayDid} />
               ) : (
                 <NoActiveDidCard label={t('dids.noActiveDid')} />
               )}
+              <ThemedText variant="caption" tone="tertiary" className="px-1">
+                {t('dids.cardSigningKeyHint')}
+              </ThemedText>
             </View>
           </View>
 

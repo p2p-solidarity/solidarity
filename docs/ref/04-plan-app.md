@@ -94,15 +94,16 @@ seed 為本、passkey 用 largeBlob/PRF 當外殼,**不可讓 passkey-PRF 直接
 重大缺口 —— iCloud 只有 iOS、Android 掉手機沒抄 12 字 = 身份歸零 + 印出的 QR 全死,
 需盡快排期)**。
 
-**新增/改動任務(取代 A6.2 起的原順序):**
+**新增/改動任務(取代 A6.2 起的原順序)— 執行紀錄 2026-07-16(codex 實作 R1–R4,Claude 逐輪驗收 commit;S7 Claude 親做):**
 
-- [ ] **S1** atproto handle → DID resolver + `HandleResolver` seam(`packages/shared`;v1 = atproto impl,ENS/DNS/NIP-05 預留)
-- [ ] **S2** A6.2 PDS putRecord(`app.solidarity.profile`)+ 讀回驗證(D6)
-- [ ] **S3** `badges/atproto.ts` 雙向驗證(A6.3;`alsoKnownAs` 含 `at://handle` ↔ record 存在)
-- [ ] **S4** viewer 接 `@solidarity/shared`:fragment 解碼 + JWS 驗 + atproto getRecord + Bluesky 徽章渲染(D8;`airmeishi-web`)
-- [ ] **S5** onboarding 新高潮:綁 Bluesky → 真綠勾 → CompleteStep 顯示它(D5)
-- [ ] **S6** Me/Verify IA 調整(D9)+ 交換 QR 收斂成 fragment(D2)
-- [ ] **S7** 身份收斂:退舊 Spruce 第二根 + 舊 wire(D1);SpruceKit SDK 退場、留簽名殼(D3)
+- [x] **S1** atproto handle → DID resolver + `HandleResolver` seam(`390f863`;向量含 userinfo-host-injection、wrong-repo)
+- [x] **S2** A6.2 PDS putRecord + 讀回驗證(`28c7b68`;connect 流程「aka→簽→put」建構上不可倒序,identityMatchesSession 防 OAuth 後 handle 劫持)
+- [x] **S3** `badges/atproto.ts` 雙向驗證(`390f863`;stableJSON 精確比對防舊版 profile 頂替)
+- [ ] **S4** viewer 接 `@solidarity/shared`(D8;`airmeishi-web` — **唯一未動工項,web 軌**)
+- [x] **S5** onboarding connect 步 + Bluesky 精靈 + CompleteStep 真徽章(`8223774`;replacement 確認 pin session 身份;`clientMetadataUnavailable` 一等錯誤 — **client-metadata 部署到 solidarity.gg 仍 pending**)
+- [x] **S6** Me = WYSIWYG 分享頁 + QR 收斂 + IA 搬遷(`911e9d2`;/share/qr 經查是 OID4VP 出示請求 QR,不在 D2 範圍,保留)
+- [x] **S7a** SpruceKit SDK 退場(spec 13→8 方法、iOS SPM + Android Maven + config plugin + SPM pin 整包拔、nitrogen 重生成、prebuild + `-disableAutomaticPackageResolution` 驗證過;順修 prepare-ios-workspace.sh 的 stale 小寫 scheme 名)
+- [x] **S7b** 身份收斂 — **落地語意(D1 精煉):舊 SE 硬體鑰「退位身份、留任簽卡鑰」**。硬體鑰物理上不可由助記詞派生,故「一個 did」= root did(seed、可攜)是唯一對外身份;SE 鑰簽 VC/SD-JWT/ZK 並經 A5b `solidarity.cardKeyBinding.v1` 錨定至 root。settings/dids 改為「根身份(主)+ 簽卡金鑰(錨定,非身份)」兩區呈現。憑證不需重發、既有資料不需遷移。ZK 面板的恆 null `didDocumentJson` 死狀態屬凍結面,不動(最小接觸)。
 
 ---
 
