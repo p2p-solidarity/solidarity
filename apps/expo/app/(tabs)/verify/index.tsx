@@ -23,8 +23,8 @@
  *   only via existing developer settings screens (Settings › Advanced ›
  *   Developer Tools, and the standalone `/id` screen), not this tab.
  */
-import { router, useFocusEffect } from 'expo-router';
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { router } from 'expo-router';
+import { useEffect, useMemo } from 'react';
 import { ScrollView, Text, View } from 'react-native';
 import Animated, { FadeInDown } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -48,7 +48,6 @@ import {
   type IdentityCardEntity,
   type ProvableClaimEntity,
 } from '@/identity';
-import { hasNostrKey, hasNostrKeySync } from '@/nostr/userKey';
 
 export default function VerifyTab() {
   const { t } = useTranslation();
@@ -91,10 +90,6 @@ export default function VerifyTab() {
           </Animated.View>
 
           <Animated.View entering={FadeInDown.duration(360).delay(STAGGER_MS)}>
-            <BadgeBindingsSection onConnectNostr={() => router.push('/verify/nostr')} />
-          </Animated.View>
-
-          <Animated.View entering={FadeInDown.duration(360).delay(STAGGER_MS * 2)}>
             <VerifiedCredentialsSection
               items={verifiedCreds}
               onScanIdentity={() => router.push('/passport')}
@@ -103,18 +98,18 @@ export default function VerifyTab() {
             />
           </Animated.View>
 
-          <Animated.View entering={FadeInDown.duration(360).delay(STAGGER_MS * 3)}>
+          <Animated.View entering={FadeInDown.duration(360).delay(STAGGER_MS * 2)}>
             <SelectiveDisclosuresSection claims={disclosures} workContext={workContext} />
           </Animated.View>
 
-          <Animated.View entering={FadeInDown.duration(360).delay(STAGGER_MS * 4)}>
+          <Animated.View entering={FadeInDown.duration(360).delay(STAGGER_MS * 3)}>
             <ActionSection
               onAcquire={() => router.push('/passport')}
               onImportRaw={() => router.push('/credentials')}
             />
           </Animated.View>
 
-          <Animated.View entering={FadeInDown.duration(360).delay(STAGGER_MS * 5)}>
+          <Animated.View entering={FadeInDown.duration(360).delay(STAGGER_MS * 4)}>
             <OidcSection onOidc={() => router.push('/settings/oidc-request')} />
           </Animated.View>
         </View>
@@ -141,49 +136,6 @@ function ScanEntrySection({ onScan }: { onScan: () => void }) {
       <MeActionTile icon="qrcode.viewfinder" title={t('verifyTab.scan')} onPress={onScan} />
       <Text className="text-text3 text-[12px] px-1">{t('verifyTab.scanSubtitle')}</Text>
     </View>
-  );
-}
-
-/**
- * "我的徽章綁定管理(S/A/B/C 各平台精靈)" — 03-spec §5. Nostr (04-plan Phase
- * A4) is the first platform wired up; the row's status re-checks on every
- * focus (`useFocusEffect`, not just mount) so returning here right after
- * completing the wizard shows "Connected" immediately, no manual refresh.
- *
- * Initial render state comes from `hasNostrKeySync()` — a synchronous MMKV
- * mirror (`src/nostr/userKey.ts`) — instead of a fabricated `false`
- * default, so an already-connected user never sees a false "Not connected"
- * flash on tab focus while the async `hasNostrKey()` SecureStore read is
- * still in flight (CLAUDE.md nav rule 10). `useFocusEffect` still silently
- * re-verifies against the SecureStore source of truth on every focus, the
- * same as before this fix.
- */
-function BadgeBindingsSection({ onConnectNostr }: { readonly onConnectNostr: () => void }) {
-  const { t } = useTranslation();
-  const [nostrConnected, setNostrConnected] = useState(() => hasNostrKeySync());
-
-  useFocusEffect(
-    useCallback(() => {
-      let cancelled = false;
-      void hasNostrKey().then((has) => {
-        if (!cancelled) setNostrConnected(has);
-      });
-      return () => {
-        cancelled = true;
-      };
-    }, [])
-  );
-
-  return (
-    <SettingsBlockSection title={t('verifyTab.badgeBindings')}>
-      <SettingsBlockRow
-        icon="bolt.fill"
-        title={t('verifyTab.nostrRowTitle')}
-        trailingText={nostrConnected ? t('verifyTab.nostrConnected') : t('verifyTab.nostrNotConnected')}
-        onPress={onConnectNostr}
-        isLast
-      />
-    </SettingsBlockSection>
   );
 }
 

@@ -20,24 +20,19 @@ import { router, useLocalSearchParams } from 'expo-router';
 import type { SFSymbol } from 'expo-symbols';
 import { useEffect, useMemo, useState } from 'react';
 import { LinearGradient } from 'expo-linear-gradient';
-import { Pressable, ScrollView, Text, View } from 'react-native';
+import { ScrollView, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { IssuerBadge } from '@/components/credentials/IssuerBadge';
 import { PresentationProofQr } from '@/components/credentials/PresentationProofQr';
 import { PresentationSheet } from '@/components/credentials/PresentationSheet';
 import { hasPassportShowWitnessSafe } from '@/passport/showWitnessVault';
+import { PressableScale } from '@/components/common/PressableScale';
 import { SfIcon } from '@/components/icons/SfIcon';
-import { ThemedButton } from '@/components/themed';
+import { ON_DARK, ThemedButton, ThemedSurface, ThemedText } from '@/components/themed';
 import { Colors } from '@/constants/Colors';
-import {
-  useIssuerMetadataStore,
-} from '@/credentials/issuerStore';
-import {
-  useCredentialById,
-  useCredentialStore,
-  type StoredCredential,
-} from '@/credentials/store';
+import { useIssuerMetadataStore } from '@/credentials/issuerStore';
+import { useCredentialById, useCredentialStore, type StoredCredential } from '@/credentials/store';
 import {
   credentialTrustDisplayFor,
   type CredentialTrustDisplay,
@@ -50,10 +45,7 @@ import {
 } from '@/credentials/presentationProof';
 import { pushToast } from '@/feedback/toast';
 import { useTranslation } from '@/i18n';
-import {
-  useIdentityData,
-  type ProvableClaimEntity,
-} from '@/identity';
+import { useIdentityData, type ProvableClaimEntity } from '@/identity';
 import {
   filterPassportShowPresentationClaims,
   selectPassportShowPresentationClaims,
@@ -117,10 +109,7 @@ function proofIcon(metadataTags: readonly string[]): SFSymbol {
   return 'doc.text.fill';
 }
 
-function levelText(
-  trustDisplay: CredentialTrustDisplay,
-  t: (key: string) => string,
-): string {
+function levelText(trustDisplay: CredentialTrustDisplay, t: (key: string) => string): string {
   return t(trustDisplay.i18nKey);
 }
 
@@ -148,10 +137,9 @@ function levelAccent(tone: TrustDisplayTone): string {
  */
 function issuerTrustBadge(
   credential: StoredCredential,
-  t: (key: string) => string,
+  t: (key: string) => string
 ): { text: string; icon: SFSymbol } | null {
-  const isGovernment =
-    credential.issuerDid.startsWith('did:gov') && credential.trustLevel !== 'L1';
+  const isGovernment = credential.issuerDid.startsWith('did:gov') && credential.trustLevel !== 'L1';
   if (isGovernment) {
     return {
       text: t('credentialDetail.verifiedByPassport'),
@@ -181,53 +169,41 @@ interface MetadataRowProps {
   readonly position: RowPosition;
 }
 
-function MetadataRow({ label, value, position }: MetadataRowProps) {
-  const borderRadius =
-    position === 'first'
-      ? { borderTopLeftRadius: 8, borderTopRightRadius: 8 }
-      : position === 'last'
-        ? { borderBottomLeftRadius: 8, borderBottomRightRadius: 8 }
-        : {};
+function MetadataRow({ label, value, position: _position }: MetadataRowProps) {
   return (
-    <View
+    <ThemedSurface
+      variant="inset"
+      className="rounded-none"
       style={{
         height: 48,
         paddingHorizontal: 12,
         flexDirection: 'row',
         alignItems: 'center',
-        backgroundColor: Colors.mutedSurface,
-        ...borderRadius,
-      }}
-    >
-      <Text className="text-text2 text-[15px]">{label}</Text>
+      }}>
+      <ThemedText variant="bodyMedium" tone="secondary">
+        {label}
+      </ThemedText>
       <View className="flex-1" />
-      <Text
-        className="text-text1 text-[15px]"
+      <ThemedText
+        variant="bodyMedium"
         numberOfLines={1}
         ellipsizeMode="middle"
-        style={{ maxWidth: '60%' }}
-      >
+        style={{ maxWidth: '60%' }}>
         {value}
-      </Text>
-    </View>
+      </ThemedText>
+    </ThemedSurface>
   );
 }
 
 function SectionHeader({ title }: { readonly title: string }) {
   return (
     <View className="px-4">
-      <Text className="text-text1 text-[14px]">{title}</Text>
+      <ThemedText variant="label">{title}</ThemedText>
     </View>
   );
 }
 
-function LevelTag({
-  text,
-  accent,
-}: {
-  readonly text: string;
-  readonly accent: string;
-}) {
+function LevelTag({ text, accent }: { readonly text: string; readonly accent: string }) {
   return (
     <View
       style={{
@@ -238,13 +214,10 @@ function LevelTag({
         paddingVertical: 2,
         alignItems: 'center',
         alignSelf: 'stretch',
-      }}
-    >
-      <Text
-        style={{ color: accent, fontSize: 10, fontWeight: '500' }}
-      >
+      }}>
+      <ThemedText variant="caption" style={{ color: accent }}>
         {text.toUpperCase()}
-      </Text>
+      </ThemedText>
     </View>
   );
 }
@@ -256,34 +229,38 @@ interface ChipProps {
 
 function Chip({ icon, text }: ChipProps) {
   return (
-    <View
+    <ThemedSurface
+      variant="inset"
+      className="rounded-none"
       style={{
         flexDirection: 'row',
         alignItems: 'center',
         gap: 4,
-        backgroundColor: Colors.chipSurface,
-        borderRadius: 2,
         paddingHorizontal: 4,
         paddingVertical: 2,
-      }}
-    >
-      <View
-        style={{ width: 12, height: 12, alignItems: 'center', justifyContent: 'center' }}
-      >
+      }}>
+      <View style={{ width: 12, height: 12, alignItems: 'center', justifyContent: 'center' }}>
         <SfIcon name={icon} size={9} color={Colors.text2} />
       </View>
-      <Text className="text-text2 text-[10px]">{text}</Text>
-    </View>
+      <ThemedText variant="caption" tone="secondary">
+        {text}
+      </ThemedText>
+    </ThemedSurface>
   );
 }
 
 function claimIcon(claimType: string): SFSymbol {
   switch (claimType) {
-    case 'is_human': return 'faceid';
-    case 'age_over_18': return 'face.smiling';
-    case 'profile_card': return 'person.crop.rectangle.fill';
-    case 'field_name': return 'person.fill';
-    default: return 'checkmark.shield.fill';
+    case 'is_human':
+      return 'faceid';
+    case 'age_over_18':
+      return 'face.smiling';
+    case 'profile_card':
+      return 'person.crop.rectangle.fill';
+    case 'field_name':
+      return 'person.fill';
+    default:
+      return 'checkmark.shield.fill';
   }
 }
 
@@ -297,43 +274,29 @@ function ClaimRow({
   readonly onToggle: () => void;
 }) {
   return (
-    <Pressable
-      onPress={onToggle}
-      accessibilityRole="button"
-      accessibilityState={{ selected }}
-      style={{
-        flexDirection: 'row',
-        alignItems: 'center',
-        gap: 8,
-        paddingVertical: 10,
-      }}
-    >
-      <View style={{ width: 18, height: 18, alignItems: 'center', justifyContent: 'center' }}>
-        <SfIcon name={claimIcon(claim.claimType)} size={14} color={Colors.terminalGreen} />
-      </View>
-      <Text className="text-text1 text-[15px]" style={{ flex: 1 }}>
-        {claim.title}
-      </Text>
-      {/* Selective-disclosure checkbox (Figma 724:22852 / 724:22864):
-          18×18 rounded-2 box — terminalGreen filled + white check when
-          included, grey-bordered + hollow when excluded. */}
-      <View
-        style={{
-          width: 18,
-          height: 18,
-          borderRadius: 2,
-          alignItems: 'center',
-          justifyContent: 'center',
-          backgroundColor: selected ? Colors.terminalGreen : 'transparent',
-          borderWidth: selected ? 0 : 1,
-          borderColor: Colors.text3,
-        }}
-      >
-        {selected ? (
-          <SfIcon name="checkmark" size={11} weight="bold" color="#FFFFFF" />
-        ) : null}
-      </View>
-    </Pressable>
+    <PressableScale onPress={onToggle} accessibilityRole="button" accessibilityState={{ selected }}>
+      <ThemedSurface variant="inset" className="flex-row items-center gap-2 rounded-none px-3 py-3">
+        <View style={{ width: 18, height: 18, alignItems: 'center', justifyContent: 'center' }}>
+          <SfIcon name={claimIcon(claim.claimType)} size={14} color={Colors.terminalGreen} />
+        </View>
+        <ThemedText variant="bodyMedium" style={{ flex: 1 }}>
+          {claim.title}
+        </ThemedText>
+        <View
+          style={{
+            width: 18,
+            height: 18,
+            borderRadius: 2,
+            alignItems: 'center',
+            justifyContent: 'center',
+            backgroundColor: selected ? Colors.terminalGreen : 'transparent',
+            borderWidth: selected ? 0 : 1,
+            borderColor: Colors.text3,
+          }}>
+          {selected ? <SfIcon name="checkmark" size={11} weight="bold" color={ON_DARK} /> : null}
+        </View>
+      </ThemedSurface>
+    </PressableScale>
   );
 }
 
@@ -355,7 +318,7 @@ export default function CredentialDetailScreen() {
   const isWorkContext = context === 'work' && typeof groupId === 'string' && groupId.length > 0;
   const credential = useCredentialById(id);
   const manifestEntry = useCredentialStore((s) =>
-    id ? s.manifest.find((m) => m.id === id) : undefined,
+    id ? s.manifest.find((m) => m.id === id) : undefined
   );
   const remove = useCredentialStore((s) => s.remove);
   const loadDetail = useCredentialStore((s) => s.loadDetail);
@@ -390,7 +353,7 @@ export default function CredentialDetailScreen() {
       credential !== undefined &&
       credential.metadataTags.includes('passport-openac-v3') &&
       hasPassportShowWitnessSafe(credential.id),
-    [credential],
+    [credential]
   );
 
   const presentationClaimRows = useMemo(
@@ -398,20 +361,21 @@ export default function CredentialDetailScreen() {
       passportShowEligible
         ? filterPassportShowPresentationClaims(associatedClaims)
         : associatedClaims,
-    [associatedClaims, passportShowEligible],
+    [associatedClaims, passportShowEligible]
   );
 
   const initialClaimIdsForPresentation = useMemo(
-    () => initialPresentationClaimIds(
-      presentationClaimRows,
-      typeof claimId === 'string' ? claimId : undefined,
-    ),
-    [presentationClaimRows, claimId],
+    () =>
+      initialPresentationClaimIds(
+        presentationClaimRows,
+        typeof claimId === 'string' ? claimId : undefined
+      ),
+    [presentationClaimRows, claimId]
   );
 
   const selectedClaimIdsForPresentation = useMemo(
     () => selectedClaimIDs ?? initialClaimIdsForPresentation,
-    [initialClaimIdsForPresentation, selectedClaimIDs],
+    [initialClaimIdsForPresentation, selectedClaimIDs]
   );
 
   const selectedClaimsForPresentation = useMemo(
@@ -419,13 +383,10 @@ export default function CredentialDetailScreen() {
       passportShowEligible
         ? selectPassportShowPresentationClaims(
             presentationClaimRows,
-            selectedClaimIdsForPresentation,
+            selectedClaimIdsForPresentation
           )
-        : selectPresentationClaims(
-            presentationClaimRows,
-            selectedClaimIdsForPresentation,
-          ),
-    [passportShowEligible, presentationClaimRows, selectedClaimIdsForPresentation],
+        : selectPresentationClaims(presentationClaimRows, selectedClaimIdsForPresentation),
+    [passportShowEligible, presentationClaimRows, selectedClaimIdsForPresentation]
   );
 
   const presentationPages = useMemo(
@@ -436,7 +397,7 @@ export default function CredentialDetailScreen() {
             selectedClaims: selectedClaimsForPresentation,
           })
         : [],
-    [credential, passportShowEligible, selectedClaimsForPresentation],
+    [credential, passportShowEligible, selectedClaimsForPresentation]
   );
 
   const status = useMemo<string>(() => {
@@ -452,10 +413,10 @@ export default function CredentialDetailScreen() {
     // `loadDetail(id)` resolves, so we never show "not found" until we
     // also have no manifest hit.
     return (
-      <View className="flex-1 bg-pageBg items-center justify-center">
-        <Text className="text-text2 text-[15px]">
+      <View className="flex-1 items-center justify-center bg-pageBg">
+        <ThemedText variant="bodyMedium" tone="secondary">
           {manifestEntry ? t('credentialDetail.loading') : t('credentialDetail.notFound')}
-        </Text>
+        </ThemedText>
       </View>
     );
   }
@@ -463,8 +424,7 @@ export default function CredentialDetailScreen() {
   const trustDisplay = credentialTrustDisplayFor(credential);
   const accent = levelAccent(trustDisplay.tone);
   const trustBadge = issuerTrustBadge(credential, t);
-  const isExpired =
-    credential.expiresAt != null && credential.expiresAt.getTime() < Date.now();
+  const isExpired = credential.expiresAt != null && credential.expiresAt.getTime() < Date.now();
   const presentDisabled = selectedClaimsForPresentation.length === 0;
 
   const onPresent = () => {
@@ -503,35 +463,37 @@ export default function CredentialDetailScreen() {
       {/* Navigation bar */}
       <View style={{ paddingTop: insets.top }} className="bg-pageBg">
         <View className="h-11 flex-row items-center px-4">
-          <Pressable
-            onPress={() => { router.back(); }}
+          <PressableScale
+            onPress={() => {
+              router.back();
+            }}
             accessibilityRole="button"
             accessibilityLabel={t('credentialDetail.back')}
-            className="flex-row items-center gap-1 -ml-1 px-1 py-1 active:opacity-60"
-          >
+            className="-ml-1 flex-row items-center gap-1"
+            style={{ width: 44, height: 44, alignItems: 'center', justifyContent: 'center' }}>
             <SfIcon name="chevron.left" size={16} weight="semibold" color={Colors.text1} />
-          </Pressable>
+          </PressableScale>
           <View className="flex-1 items-center">
-            <Text className="text-text1 text-[17px] font-semibold">{t('credentialDetail.title')}</Text>
+            <ThemedText variant="titleMedium">{t('credentialDetail.title')}</ThemedText>
           </View>
           <View style={{ width: 24 }} />
         </View>
       </View>
 
       <ScrollView className="flex-1">
-        <View className="gap-8 pt-3 pb-6">
+        <View className="gap-8 pb-6 pt-3">
           {/* Work-context banner — only when launched from the Me "Work"
               action with a real group id. Signals the presentation is scoped
               to that group rather than the personal context. */}
           {isWorkContext ? (
-            <View
-              className="mx-4 flex-row items-center gap-2 rounded-lg bg-mutedSurface px-3 py-3"
-            >
+            <ThemedSurface
+              variant="inset"
+              className="mx-4 flex-row items-center gap-2 rounded-none px-3 py-3">
               <SfIcon name="briefcase" size={14} color={Colors.terminalGreen} />
-              <Text className="text-text2 text-[13px] flex-1">
+              <ThemedText variant="bodySmall" tone="secondary" style={{ flex: 1 }}>
                 {t('credentialDetail.workContextBanner')}
-              </Text>
-            </View>
+              </ThemedText>
+            </ThemedSurface>
           ) : null}
 
           {/* Hero */}
@@ -547,8 +509,7 @@ export default function CredentialDetailScreen() {
                 alignItems: 'center',
                 gap: 8,
                 borderRadius: 4,
-              }}
-            >
+              }}>
               <View
                 style={{
                   width: 56,
@@ -557,24 +518,14 @@ export default function CredentialDetailScreen() {
                   backgroundColor: Colors.warmCream,
                   alignItems: 'center',
                   justifyContent: 'center',
-                }}
-              >
-                <SfIcon
-                  name={credentialIcon(credential.type)}
-                  size={22}
-                  color={Colors.text1}
-                />
+                }}>
+                <SfIcon name={credentialIcon(credential.type)} size={22} color={Colors.text1} />
               </View>
 
               <View style={{ alignItems: 'center', gap: 16, alignSelf: 'stretch' }}>
-                <Text className="text-text1" style={{ fontSize: 24, fontWeight: '500' }}>
-                  {credential.title}
-                </Text>
+                <ThemedText variant="headlineMedium">{credential.title}</ThemedText>
 
-                <IssuerBadge
-                  issuerId={credential.issuerDid}
-                  fallbackName={credential.issuerDid}
-                />
+                <IssuerBadge issuerId={credential.issuerDid} fallbackName={credential.issuerDid} />
 
                 <View style={{ alignSelf: 'stretch', gap: 8 }}>
                   <LevelTag text={levelText(trustDisplay, t)} accent={accent} />
@@ -583,8 +534,7 @@ export default function CredentialDetailScreen() {
                       flexDirection: 'row',
                       gap: 16,
                       justifyContent: 'center',
-                    }}
-                  >
+                    }}>
                     {/* Issuer-trust badge (Figma "Verified" chip) — derived
                         from real issuer DID + trust level. Falls back to the
                         validity status only when no trust signal exists, and
@@ -628,7 +578,11 @@ export default function CredentialDetailScreen() {
               />
               <MetadataRow
                 label={t('credentialDetail.expires')}
-                value={credential.expiresAt ? formatDate(credential.expiresAt) : t('credentialDetail.expiresNone')}
+                value={
+                  credential.expiresAt
+                    ? formatDate(credential.expiresAt)
+                    : t('credentialDetail.expiresNone')
+                }
                 position="middle"
               />
               <MetadataRow
@@ -644,16 +598,16 @@ export default function CredentialDetailScreen() {
             <SectionHeader title={t('credentialDetail.disclosuresHeader')} />
             {presentationClaimRows.length === 0 ? (
               <View className="px-4">
-                <Text className="text-text3 text-[13px]">
+                <ThemedText variant="bodySmall" tone="tertiary">
                   {t('credentialDetail.noClaims')}
-                </Text>
+                </ThemedText>
               </View>
             ) : (
               <View className="px-4" style={{ gap: 16 }}>
                 {passportShowEligible ? (
-                  <Text className="text-text3 text-[13px]">
+                  <ThemedText variant="bodySmall" tone="tertiary">
                     {t('passportShow.inlineHint')}
-                  </Text>
+                  </ThemedText>
                 ) : (
                   <PresentationProofQr
                     selectedClaims={selectedClaimsForPresentation}
@@ -667,7 +621,9 @@ export default function CredentialDetailScreen() {
                       key={c.id}
                       claim={c}
                       selected={selectedClaimIdsForPresentation.has(c.id)}
-                      onToggle={() => { toggleClaim(c.id); }}
+                      onToggle={() => {
+                        toggleClaim(c.id);
+                      }}
                     />
                   ))}
                 </View>
@@ -678,10 +634,7 @@ export default function CredentialDetailScreen() {
       </ScrollView>
 
       {/* Present bar */}
-      <View
-        className="bg-pageBg px-4 pt-3"
-        style={{ paddingBottom: 12 + insets.bottom }}
-      >
+      <View className="bg-pageBg px-4 pt-3" style={{ paddingBottom: 12 + insets.bottom }}>
         <ThemedButton
           label={t('credentialDetail.presentProof')}
           fullWidth
@@ -689,19 +642,15 @@ export default function CredentialDetailScreen() {
           onPress={onPresent}
         />
         <View className="mt-2 items-center">
-          <Pressable
+          <PressableScale
             onPress={onRegenerate}
             accessibilityRole="button"
             accessibilityLabel={t('credentialDetail.regenerate')}
-            className="px-2 py-2 active:opacity-60"
-          >
-            <Text
-              className="text-text2"
-              style={{ fontSize: 12, fontWeight: '500' }}
-            >
+            className="px-2 py-2">
+            <ThemedText variant="caption" tone="secondary">
               {t('credentialDetail.regenerate')}
-            </Text>
-          </Pressable>
+            </ThemedText>
+          </PressableScale>
         </View>
       </View>
 
@@ -709,7 +658,9 @@ export default function CredentialDetailScreen() {
         visible={presenting}
         credential={credential}
         selectedClaimIds={selectedClaimIdsForPresentation}
-        onDismiss={() => { setPresenting(false); }}
+        onDismiss={() => {
+          setPresenting(false);
+        }}
         passportShowEligible={passportShowEligible}
       />
     </View>

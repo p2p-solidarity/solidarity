@@ -14,19 +14,12 @@
 import { router, useLocalSearchParams } from 'expo-router';
 import type { SFSymbol } from 'expo-symbols';
 import { useEffect, useMemo, useState } from 'react';
-import {
-  ActivityIndicator,
-  KeyboardAvoidingView,
-  Platform,
-  Pressable,
-  Text,
-  TextInput,
-  View,
-} from 'react-native';
+import { ActivityIndicator, KeyboardAvoidingView, Platform, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { SfIcon } from '@/components/icons/SfIcon';
-import { ThemedButton } from '@/components/themed';
+import { PressableScale } from '@/components/common/PressableScale';
+import { ThemedButton, ThemedSurface, ThemedText, ThemedTextInput } from '@/components/themed';
 import { Colors } from '@/constants/Colors';
 import { pushToast } from '@/feedback/toast';
 import { useTranslation } from '@/i18n';
@@ -109,10 +102,12 @@ function MonoText({
   readonly color: string;
   readonly weight?: '400' | '500' | '600' | '700';
 }) {
+  const variant =
+    size >= 18 ? 'titleLarge' : size >= 16 ? 'titleMedium' : size >= 14 ? 'bodySmall' : 'caption';
   return (
-    <Text style={{ fontFamily: MONO, fontSize: size, color, fontWeight: weight ?? '400' }}>
+    <ThemedText variant={variant} style={{ fontFamily: MONO, color, fontWeight: weight ?? '400' }}>
       {text}
-    </Text>
+    </ThemedText>
   );
 }
 
@@ -136,9 +131,12 @@ function CenteredStatus({
       <SfIcon name={icon} size={48} color={iconColor} />
       <MonoText text={title} size={20} color={Colors.text1} weight="700" />
       {subtitle ? (
-        <Text className="text-text2 text-[14px] text-center" style={{ paddingHorizontal: 16 }}>
+        <ThemedText
+          variant="bodySmall"
+          tone="secondary"
+          style={{ paddingHorizontal: 16, textAlign: 'center' }}>
           {subtitle}
-        </Text>
+        </ThemedText>
       ) : null}
     </View>
   );
@@ -151,9 +149,9 @@ function LoadingView() {
   return (
     <View className="flex-1 items-center justify-center gap-5">
       <ActivityIndicator size="large" color={Colors.terminalGreen} />
-      <Text style={{ fontFamily: MONO, fontSize: 14, color: Colors.text2 }}>
+      <ThemedText variant="bodySmall" tone="secondary" style={{ fontFamily: MONO }}>
         {t('receiveCred.parsing')}
-      </Text>
+      </ThemedText>
     </View>
   );
 }
@@ -170,43 +168,44 @@ function ReviewView({
   const { t } = useTranslation();
   return (
     <View className="flex-1 gap-4">
-      <View
+      <ThemedSurface
+        variant="inset"
+        className="rounded-none"
         style={{
-          backgroundColor: Colors.searchBg,
           borderWidth: 1,
           borderColor: Colors.divider,
           padding: 16,
           gap: 12,
-        }}
-      >
+        }}>
         <MonoText text={t('receiveCred.issuerLabel')} size={11} color={Colors.text2} weight="700" />
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
           <SfIcon name="building.2" size={16} color={Colors.terminalGreen} />
-          <Text
+          <ThemedText
+            variant="titleMedium"
             style={{
               fontFamily: MONO,
-              fontSize: 16,
               fontWeight: '600',
               color: Colors.terminalGreen,
               flex: 1,
             }}
-            numberOfLines={1}
-          >
+            numberOfLines={1}>
             {issuerDisplayName(offer)}
-          </Text>
+          </ThemedText>
         </View>
 
         <Divider />
-        <MonoText text={t('receiveCred.credentialsOfferedLabel')} size={11} color={Colors.text2} weight="700" />
+        <MonoText
+          text={t('receiveCred.credentialsOfferedLabel')}
+          size={11}
+          color={Colors.text2}
+          weight="700"
+        />
         {offer.credentialConfigurationIds.map((credType) => (
-          <View
-            key={credType}
-            style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}
-          >
+          <View key={credType} style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
             <SfIcon name="doc.badge.plus" size={14} color={Colors.text1} />
-            <Text className="text-text1 text-[14px] flex-1">
+            <ThemedText variant="bodySmall" style={{ flex: 1 }}>
               {credType.replace(/Credential/g, ' Credential')}
-            </Text>
+            </ThemedText>
           </View>
         ))}
 
@@ -224,19 +223,17 @@ function ReviewView({
             </View>
           </>
         ) : null}
-      </View>
+      </ThemedSurface>
 
       <View className="flex-1" />
 
       <ThemedButton label={t('receiveCred.acceptImport')} fullWidth onPress={onAccept} />
-      <Pressable
+      <ThemedButton
+        label={t('receiveCred.decline')}
+        variant="secondary"
+        fullWidth
         onPress={onDecline}
-        accessibilityRole="button"
-        accessibilityLabel={t('receiveCred.decline')}
-        className="self-center px-2 py-3 active:opacity-60"
-      >
-        <MonoText text={t('receiveCred.decline')} size={14} color={Colors.text2} weight="700" />
-      </Pressable>
+      />
     </View>
   );
 }
@@ -254,31 +251,15 @@ function PinEntryView({
   return (
     <View className="flex-1 items-center justify-center gap-5">
       <SfIcon name="lock.rectangle" size={48} color={Colors.terminalGreen} />
-      <MonoText
-        text={t('receiveCred.pinRequired')}
-        size={18}
-        color={Colors.text1}
-        weight="700"
-      />
-      <TextInput
-        value={userPin}
-        onChangeText={onChangePin}
-        placeholder={t('receiveCred.pinPlaceholder')}
-        placeholderTextColor={Colors.text3}
-        keyboardType="number-pad"
-        style={{
-          maxWidth: 200,
-          alignSelf: 'stretch',
-          borderWidth: 1,
-          borderColor: Colors.divider,
-          borderRadius: 8,
-          paddingHorizontal: 12,
-          paddingVertical: 10,
-          color: Colors.text1,
-          fontSize: 16,
-          textAlign: 'center',
-        }}
-      />
+      <MonoText text={t('receiveCred.pinRequired')} size={18} color={Colors.text1} weight="700" />
+      <View style={{ width: '100%', maxWidth: 200 }}>
+        <ThemedTextInput
+          value={userPin}
+          onChangeText={onChangePin}
+          placeholder={t('receiveCred.pinPlaceholder')}
+          keyboardType="number-pad"
+        />
+      </View>
       <View className="flex-1" />
       <ThemedButton
         label={t('receiveCred.submit')}
@@ -295,15 +276,13 @@ function FetchingView() {
   return (
     <View className="flex-1 items-center justify-center gap-5">
       <ActivityIndicator size="large" color={Colors.terminalGreen} />
-      <MonoText
-        text={t('receiveCred.fetching')}
-        size={18}
-        color={Colors.text1}
-        weight="700"
-      />
-      <Text className="text-text2 text-[13px] text-center" style={{ paddingHorizontal: 16 }}>
+      <MonoText text={t('receiveCred.fetching')} size={18} color={Colors.text1} weight="700" />
+      <ThemedText
+        variant="bodySmall"
+        tone="secondary"
+        style={{ paddingHorizontal: 16, textAlign: 'center' }}>
         {t('receiveCred.fetchingDetail')}
-      </Text>
+      </ThemedText>
     </View>
   );
 }
@@ -348,14 +327,12 @@ function ErrorView({
         subtitle={message}
       />
       <ThemedButton label={t('receiveCred.retry')} fullWidth onPress={onRetry} />
-      <Pressable
+      <ThemedButton
+        label={t('receiveCred.close')}
+        variant="secondary"
+        fullWidth
         onPress={onClose}
-        accessibilityRole="button"
-        accessibilityLabel={t('receiveCred.close')}
-        className="self-center px-2 py-3 active:opacity-60"
-      >
-        <MonoText text={t('receiveCred.close')} size={14} color={Colors.text2} weight="700" />
-      </Pressable>
+      />
     </View>
   );
 }
@@ -389,7 +366,9 @@ export default function ReceiveCredentialScreen() {
   useEffect(() => {
     setStep({ kind: 'loading' });
     const t = setTimeout(parseOffer, 150);
-    return () => { clearTimeout(t); };
+    return () => {
+      clearTimeout(t);
+    };
   }, [parseOffer]);
 
   const startIssuance = async (offer: ParsedOffer, pin?: string) => {
@@ -435,28 +414,26 @@ export default function ReceiveCredentialScreen() {
     }
   };
 
-  const onDismiss = () => { router.back(); };
+  const onDismiss = () => {
+    router.back();
+  };
 
   return (
     <View className="flex-1 bg-pageBg">
       <KeyboardAvoidingView
         style={{ flex: 1 }}
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-      >
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
         <View style={{ paddingTop: insets.top }} className="bg-pageBg">
           <View className="h-11 flex-row items-center px-4">
-            <Pressable
+            <PressableScale
               onPress={onDismiss}
               accessibilityRole="button"
               accessibilityLabel={t('receiveCred.close')}
-              className="px-1 py-1 active:opacity-60"
-            >
-              <Text className="text-text1 text-[17px]">{t('receiveCred.close')}</Text>
-            </Pressable>
+              className="px-1 py-1">
+              <ThemedText variant="bodyLarge">{t('receiveCred.close')}</ThemedText>
+            </PressableScale>
             <View className="flex-1 items-center">
-              <Text className="text-text1 text-[17px] font-semibold">
-                {t('receiveCred.title')}
-              </Text>
+              <ThemedText variant="titleMedium">{t('receiveCred.title')}</ThemedText>
             </View>
             <View style={{ width: 50 }} />
           </View>
@@ -467,7 +444,9 @@ export default function ReceiveCredentialScreen() {
           {step.kind === 'review' ? (
             <ReviewView
               offer={step.offer}
-              onAccept={() => { onAccept(step.offer); }}
+              onAccept={() => {
+                onAccept(step.offer);
+              }}
               onDecline={onDismiss}
             />
           ) : null}
@@ -475,7 +454,9 @@ export default function ReceiveCredentialScreen() {
             <PinEntryView
               userPin={userPin}
               onChangePin={setUserPin}
-              onSubmit={() => { void startIssuance(step.offer, userPin); }}
+              onSubmit={() => {
+                void startIssuance(step.offer, userPin);
+              }}
             />
           ) : null}
           {step.kind === 'fetching' ? <FetchingView /> : null}
@@ -483,11 +464,7 @@ export default function ReceiveCredentialScreen() {
             <SuccessView message={step.message} onDone={onDismiss} />
           ) : null}
           {step.kind === 'error' ? (
-            <ErrorView
-              message={step.message}
-              onRetry={parseOffer}
-              onClose={onDismiss}
-            />
+            <ErrorView message={step.message} onRetry={parseOffer} onClose={onDismiss} />
           ) : null}
         </View>
       </KeyboardAvoidingView>

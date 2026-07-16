@@ -8,7 +8,7 @@
  * pulls in `react-native`'s `Appearance`, which bun's test parser can't
  * load — same reasoning as `userKey.ts`'s lazy `expo-secure-store` import
  * and `profile/store.ts`'s doc on why it imports `rootKey.ts` directly
- * instead of the `@/identity` barrel). `BadgeRow` (VerifiedCard.tsx) is the
+ * instead of the `@/identity` barrel). `ProfileBadgeChips.tsx` is the
  * only consumer and owns the icon/color/copy choices for each `visual`.
  *
  * ── The honesty contract this module enforces (01-spec §7 / 03-spec §3)──
@@ -78,7 +78,7 @@ function visualForState(state: BadgeState): 'verified' | 'declared' | 'stale' {
 
 /**
  * Truncate an `npub1…` string to a display-friendly `npub1abcd…wxyz` form.
- * Shared by `VerifiedCard.tsx`'s evidence panel and `app/verify/nostr.tsx`'s
+ * Shared by `ProfileBadgeChips.tsx`'s evidence panel and `app/verify/nostr.tsx`'s
  * confirm-relays step so both surfaces render the same npub the same way.
  */
 export function truncateNpub(npub: string): string {

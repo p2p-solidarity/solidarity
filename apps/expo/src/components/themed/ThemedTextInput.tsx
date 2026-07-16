@@ -96,6 +96,10 @@ export interface ThemedTextInputProps {
   /** Called on blur — the seam for on-blur normalization (e.g. auto-prefix https). */
   readonly onBlur?: () => void;
   readonly returnKeyType?: ReturnKeyTypeOptions;
+  /** Override the kind default for narrow cases such as numeric PIN entry. */
+  readonly keyboardType?: KeyboardTypeOptions;
+  readonly autoCapitalize?: RNTextInputProps['autoCapitalize'];
+  readonly autoCorrect?: boolean;
   readonly onSubmitEditing?: () => void;
   readonly accessibilityLabel?: string;
   readonly testID?: string;
@@ -121,6 +125,9 @@ export function ThemedTextInput({
   showClear = false,
   onBlur,
   returnKeyType,
+  keyboardType,
+  autoCapitalize,
+  autoCorrect,
   onSubmitEditing,
   accessibilityLabel,
   testID,
@@ -190,9 +197,9 @@ export function ThemedTextInput({
           autoFocus={autoFocus}
           multiline={multiline}
           secureTextEntry={cfg.secret === true && !revealed}
-          keyboardType={cfg.keyboardType}
-          autoCapitalize={cfg.autoCapitalize}
-          autoCorrect={cfg.autoCorrect}
+          keyboardType={keyboardType ?? cfg.keyboardType}
+          autoCapitalize={autoCapitalize ?? cfg.autoCapitalize}
+          autoCorrect={autoCorrect ?? cfg.autoCorrect}
           autoComplete={cfg.autoComplete}
           textContentType={cfg.textContentType}
           returnKeyType={returnKeyType}
@@ -228,8 +235,7 @@ export function ThemedTextInput({
               bottom: 0,
               flexDirection: 'row',
               alignItems: 'center',
-            }}
-          >
+            }}>
             {trailing}
           </View>
         ) : null}
@@ -242,8 +248,7 @@ export function ThemedTextInput({
         <ThemedText
           variant="caption"
           tone="secondary"
-          style={hintTone === 'success' ? { color: Colors.terminalGreen } : undefined}
-        >
+          style={hintTone === 'success' ? { color: Colors.terminalGreen } : undefined}>
           {hint}
         </ThemedText>
       ) : null}
@@ -266,8 +271,12 @@ function TrailingButton({
       haptic="tap"
       accessibilityRole="button"
       accessibilityLabel={label}
-      style={{ width: TRAILING_SLOT, alignSelf: 'stretch', alignItems: 'center', justifyContent: 'center' }}
-    >
+      style={{
+        width: TRAILING_SLOT,
+        alignSelf: 'stretch',
+        alignItems: 'center',
+        justifyContent: 'center',
+      }}>
       <SfIcon name={icon} size={18} color={Colors.text3} />
     </PressableScale>
   );

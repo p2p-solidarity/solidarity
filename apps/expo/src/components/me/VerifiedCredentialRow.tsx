@@ -12,10 +12,11 @@
  * Source: solidarity/Views/MeViews/MeTabComponents.swift (VerifiedCredentialRow).
  */
 import type { SFSymbol } from 'expo-symbols';
-import { Text, View } from 'react-native';
+import { View } from 'react-native';
 
 import { PressableScale } from '@/components/common/PressableScale';
 import { SfIcon } from '@/components/icons/SfIcon';
+import { ThemedSurface, ThemedText } from '@/components/themed';
 import { Colors } from '@/constants/Colors';
 import {
   credentialTrustLabelForLevel,
@@ -47,52 +48,35 @@ export function VerifiedCredentialRow({
       haptic="tap"
       onPress={onPress}
       accessibilityRole="button"
-      className="mx-4 rounded-lg bg-mutedSurface p-3"
-    >
-      <View>
+      containerStyle={{ marginHorizontal: 16 }}>
+      <ThemedSurface variant="inset" className="rounded-none p-3">
         <View className="flex-row items-center gap-2 pb-3">
-          <View
-            style={{ width: 18, height: 18, alignItems: 'center', justifyContent: 'center' }}
-          >
+          <View style={{ width: 18, height: 18, alignItems: 'center', justifyContent: 'center' }}>
             <SfIcon name={icon} size={14} color={Colors.text1} />
           </View>
-          <Text
-            numberOfLines={1}
-            className="text-text1 text-[15px] flex-1"
-          >
+          <ThemedText variant="bodyMedium" numberOfLines={1} style={{ flex: 1 }}>
             {title}
-          </Text>
-          <View
-            style={{ width: 18, height: 18, alignItems: 'center', justifyContent: 'center' }}
-          >
-            <SfIcon
-              name="chevron.right"
-              size={12}
-              weight="semibold"
-              color={Colors.text3}
-            />
+          </ThemedText>
+          <View style={{ width: 18, height: 18, alignItems: 'center', justifyContent: 'center' }}>
+            <SfIcon name="chevron.right" size={12} weight="semibold" color={Colors.text3} />
           </View>
         </View>
 
-        <View
-          style={{ height: 0.5, backgroundColor: Colors.divider, marginBottom: 8 }}
-        />
+        <View style={{ height: 0.5, backgroundColor: Colors.divider, marginBottom: 8 }} />
 
         <View className="flex-row items-center gap-1 py-1">
-          <View
-            style={{ width: 12, height: 12, alignItems: 'center', justifyContent: 'center' }}
-          >
+          <View style={{ width: 12, height: 12, alignItems: 'center', justifyContent: 'center' }}>
             <SfIcon name="checkmark.seal.fill" size={11} color={levelColor} />
           </View>
-          <Text style={{ color: levelColor }} className="text-[11px]">
+          <ThemedText variant="caption" style={{ color: levelColor }}>
             {levelText}
-          </Text>
+          </ThemedText>
           <View className="flex-1" />
-          <Text className="text-text3 text-[11px]">
+          <ThemedText variant="caption" tone="tertiary">
             {capitalize(issuerType)}
-          </Text>
+          </ThemedText>
         </View>
-      </View>
+      </ThemedSurface>
     </PressableScale>
   );
 }

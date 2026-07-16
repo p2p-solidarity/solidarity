@@ -7,9 +7,10 @@
  * inactive => clear fill + secondary text. Spring animation on toggle.
  */
 import type { ReactNode } from 'react';
-import { Pressable, Text, View } from 'react-native';
+import { View } from 'react-native';
 
-import { Colors } from '@/constants/Colors';
+import { PressableScale } from '@/components/common/PressableScale';
+import { ThemedSurface, ThemedText } from '@/components/themed';
 
 export interface DidCapsuleProps {
   readonly title: string;
@@ -18,50 +19,28 @@ export interface DidCapsuleProps {
   readonly onPress: () => void;
 }
 
-export function DidCapsule({
-  title,
-  subtitle,
-  isActive,
-  onPress,
-}: DidCapsuleProps): ReactNode {
+export function DidCapsule({ title, subtitle, isActive, onPress }: DidCapsuleProps): ReactNode {
   return (
-    <Pressable
+    <PressableScale
       onPress={onPress}
       accessibilityRole="button"
-      accessibilityLabel={`${title} ${subtitle}`}
-      style={{
-        width: 120,
-        height: 50,
-        borderRadius: 25,
-        alignItems: 'center',
-        justifyContent: 'center',
-        backgroundColor: isActive ? Colors.cardBg : 'transparent',
-        shadowColor: '#000',
-        shadowOpacity: isActive ? 0.1 : 0,
-        shadowRadius: 2,
-        shadowOffset: { width: 0, height: 1 },
-      }}
-    >
-      <View style={{ alignItems: 'center' }}>
-        <Text
-          style={{
-            fontSize: 15,
-            fontWeight: '500',
-            color: isActive ? Colors.text1 : Colors.text2,
-          }}
-        >
-          {title}
-        </Text>
-        <Text
-          style={{
-            fontSize: 11,
-            color: isActive ? `${Colors.text1}CC` : `${Colors.text2}99`,
-            marginTop: 2,
-          }}
-        >
-          {subtitle}
-        </Text>
-      </View>
-    </Pressable>
+      accessibilityLabel={`${title} ${subtitle}`}>
+      <ThemedSurface
+        variant={isActive ? 'card' : 'outlined'}
+        className="items-center justify-center rounded-none"
+        style={{ width: 120, height: 50 }}>
+        <View style={{ alignItems: 'center' }}>
+          <ThemedText variant="label" tone={isActive ? 'primary' : 'secondary'}>
+            {title}
+          </ThemedText>
+          <ThemedText
+            variant="caption"
+            tone={isActive ? 'secondary' : 'tertiary'}
+            style={{ marginTop: 2 }}>
+            {subtitle}
+          </ThemedText>
+        </View>
+      </ThemedSurface>
+    </PressableScale>
   );
 }

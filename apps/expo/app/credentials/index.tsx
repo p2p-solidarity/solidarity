@@ -19,19 +19,19 @@ import type { SFSymbol } from 'expo-symbols';
 import { router } from 'expo-router';
 import * as Sharing from 'expo-sharing';
 import { useEffect, useState } from 'react';
-import { Pressable, ScrollView, Text, View } from 'react-native';
+import { ScrollView, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { IssuerBadge } from '@/components/credentials/IssuerBadge';
+import { PressableScale } from '@/components/common/PressableScale';
 import { SfIcon } from '@/components/icons/SfIcon';
 import { VerifiedCredentialRow } from '@/components/me';
+import { ThemedSurface, ThemedText } from '@/components/themed';
 import { Colors } from '@/constants/Colors';
 import { useCardStore } from '@/cards/cardManager';
 import { createDidKeyBusinessCardCredential } from '@/credentials/didKeyCredential';
 import type { CredentialManifestEntry } from '@/credentials/credentialManifest';
-import {
-  useIssuerMetadataStore,
-} from '@/credentials/issuerStore';
+import { useIssuerMetadataStore } from '@/credentials/issuerStore';
 import { useCredentialStore } from '@/credentials/store';
 import { credentialTrustDisplayFor } from '@/credentials/trustDisplay';
 import {
@@ -55,28 +55,31 @@ interface ActionRowProps {
 
 function ActionRow({ icon, title, onPress, disabled = false }: ActionRowProps) {
   return (
-    <Pressable
+    <PressableScale
       onPress={onPress}
       disabled={disabled}
       accessibilityRole="button"
-      accessibilityLabel={title}
-      className={`flex-row items-center gap-3 rounded-xl bg-mutedSurface px-[14px] py-[14px] active:opacity-80 ${disabled ? 'opacity-50' : ''}`}
-    >
-      <View
-        style={{ width: 20, height: 20, alignItems: 'center', justifyContent: 'center' }}
-      >
-        <SfIcon name={icon} size={14} color={Colors.text1} />
-      </View>
-      <Text className="text-text1 text-[15px] flex-1">{title}</Text>
-      <SfIcon name="chevron.right" size={12} weight="semibold" color={Colors.text3} />
-    </Pressable>
+      accessibilityLabel={title}>
+      <ThemedSurface
+        variant="inset"
+        className="flex-row items-center gap-3 rounded-none px-[14px] py-[14px]"
+        style={{ opacity: disabled ? 0.5 : 1 }}>
+        <View style={{ width: 20, height: 20, alignItems: 'center', justifyContent: 'center' }}>
+          <SfIcon name={icon} size={14} color={Colors.text1} />
+        </View>
+        <ThemedText variant="bodyMedium" style={{ flex: 1 }}>
+          {title}
+        </ThemedText>
+        <SfIcon name="chevron.right" size={12} weight="semibold" color={Colors.text3} />
+      </ThemedSurface>
+    </PressableScale>
   );
 }
 
 function SectionHeader({ title }: { readonly title: string }) {
   return (
     <View className="px-4">
-      <Text className="text-text1 text-[14px]">{title}</Text>
+      <ThemedText variant="label">{title}</ThemedText>
     </View>
   );
 }
@@ -84,7 +87,9 @@ function SectionHeader({ title }: { readonly title: string }) {
 function SectionFooter({ text }: { readonly text: string }) {
   return (
     <View className="px-4">
-      <Text className="text-text3 text-[12px]">{text}</Text>
+      <ThemedText variant="caption" tone="tertiary">
+        {text}
+      </ThemedText>
     </View>
   );
 }
@@ -140,7 +145,7 @@ export default function VCManagementScreen() {
       const cardState = useCardStore.getState();
       const first = cardState.manifest[0];
       const card = first
-        ? cardState.details.get(first.id) ?? await loadCardDetail(first.id)
+        ? (cardState.details.get(first.id) ?? (await loadCardDetail(first.id)))
         : null;
       if (!card) {
         appAlert({ title: t('vcManage.title'), message: t('vc.createDidKey.noCard') });
@@ -242,10 +247,7 @@ export default function VCManagementScreen() {
       await hydrate();
       const state = useCredentialStore.getState();
       const result = await importCredentialJwts(jwts, {
-        existingIds: [
-          ...state.manifest.map((entry) => entry.id),
-          ...state.details.keys(),
-        ],
+        existingIds: [...state.manifest.map((entry) => entry.id), ...state.details.keys()],
         addCredential: state.add,
       });
       if (result.imported === 0) {
@@ -263,21 +265,18 @@ export default function VCManagementScreen() {
   return (
     <View className="flex-1 bg-pageBg">
       {/* Navigation bar — chevron.left + inline title (Swift parity) */}
-      <View
-        style={{ paddingTop: insets.top }}
-        className="bg-pageBg"
-      >
+      <View style={{ paddingTop: insets.top }} className="bg-pageBg">
         <View className="h-11 flex-row items-center px-4">
-          <Pressable
+          <PressableScale
             onPress={onBack}
             accessibilityRole="button"
             accessibilityLabel={t('vcManage.back')}
-            className="flex-row items-center gap-1 -ml-1 px-1 py-1 active:opacity-60"
-          >
+            className="-ml-1 flex-row items-center gap-1"
+            style={{ width: 44, height: 44 }}>
             <SfIcon name="chevron.left" size={16} weight="semibold" color={Colors.text1} />
-          </Pressable>
+          </PressableScale>
           <View className="flex-1 items-center">
-            <Text className="text-text1 text-[17px] font-semibold">{t('vcManage.title')}</Text>
+            <ThemedText variant="titleMedium">{t('vcManage.title')}</ThemedText>
           </View>
           <View style={{ width: 24 }} />
         </View>
@@ -293,16 +292,42 @@ export default function VCManagementScreen() {
 
         <View className="gap-2">
           <SectionHeader title={t('vcManage.actionsHeader')} />
-          <View className="px-4 gap-2">
-            <ActionRow icon="key.fill" title={t('vcManage.createDidKey')} disabled={busy} onPress={() => { void onCreateDidKey(); }} />
-            <ActionRow icon="qrcode" title={t('vcManage.receiveCard')} disabled={busy} onPress={onReceiveOidc} />
-            <ActionRow icon="square.and.arrow.up" title={t('vcManage.exportVcs')} disabled={busy} onPress={() => { void onExport(); }} />
-            <ActionRow icon="square.and.arrow.down" title={t('vcManage.importVcs')} disabled={busy} onPress={() => { void onImport(); }} />
+          <View className="gap-2 px-4">
+            <ActionRow
+              icon="key.fill"
+              title={t('vcManage.createDidKey')}
+              disabled={busy}
+              onPress={() => {
+                void onCreateDidKey();
+              }}
+            />
+            <ActionRow
+              icon="qrcode"
+              title={t('vcManage.receiveCard')}
+              disabled={busy}
+              onPress={onReceiveOidc}
+            />
+            <ActionRow
+              icon="square.and.arrow.up"
+              title={t('vcManage.exportVcs')}
+              disabled={busy}
+              onPress={() => {
+                void onExport();
+              }}
+            />
+            <ActionRow
+              icon="square.and.arrow.down"
+              title={t('vcManage.importVcs')}
+              disabled={busy}
+              onPress={() => {
+                void onImport();
+              }}
+            />
           </View>
         </View>
 
         {manifest.length > 0 ? (
-          <View className="gap-2 mt-6">
+          <View className="mt-6 gap-2">
             <SectionHeader title={t('vcManage.storedHeader')} />
             <View className="gap-3">
               {manifest.map((item) => {
@@ -327,11 +352,7 @@ export default function VCManagementScreen() {
                     />
                     {issuerId ? (
                       <View className="px-4">
-                        <IssuerBadge
-                          issuerId={issuerId}
-                          fallbackName={issuerId}
-                          compact
-                        />
+                        <IssuerBadge issuerId={issuerId} fallbackName={issuerId} compact />
                       </View>
                     ) : null}
                   </View>
@@ -340,7 +361,7 @@ export default function VCManagementScreen() {
             </View>
           </View>
         ) : (
-          <View className="gap-2 mt-6">
+          <View className="mt-6 gap-2">
             <SectionHeader title={t('vcManage.storedHeader')} />
             <SectionFooter text={t('vcManage.storedEmpty')} />
           </View>

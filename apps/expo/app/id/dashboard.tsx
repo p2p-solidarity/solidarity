@@ -20,15 +20,14 @@
  */
 import type { SFSymbol } from 'expo-symbols';
 import { useState } from 'react';
-import { Pressable, ScrollView, Text, View } from 'react-native';
+import { ScrollView, View } from 'react-native';
 
+import { PressableScale } from '@/components/common/PressableScale';
 import { IDNavBar } from '@/components/id';
 import { GroupPanel } from '@/components/id/panels/GroupPanel';
-import {
-  EMPTY_PERSONAL_STATE,
-  PersonalPanel,
-} from '@/components/id/panels/PersonalPanel';
+import { EMPTY_PERSONAL_STATE, PersonalPanel } from '@/components/id/panels/PersonalPanel';
 import { SfIcon } from '@/components/icons/SfIcon';
+import { ThemedSurface, ThemedText } from '@/components/themed';
 import { Colors } from '@/constants/Colors';
 import { pushToast } from '@/feedback/toast';
 import { useTranslation } from '@/i18n';
@@ -63,22 +62,18 @@ export default function IdentityDashboard(): React.JSX.Element {
       <IDNavBar
         title={t('identityDashboard.title')}
         trailing={
-          <Pressable
+          <PressableScale
             accessibilityRole="button"
             accessibilityLabel={t('identityDashboard.refresh')}
             hitSlop={8}
-            className="active:opacity-60"
             onPress={onRefresh}
-          >
+            style={{ width: 44, height: 44, alignItems: 'center', justifyContent: 'center' }}>
             <SfIcon name="arrow.clockwise" size={18} color={Colors.text1} />
-          </Pressable>
+          </PressableScale>
         }
       />
 
-      <ScrollView
-        className="flex-1"
-        contentContainerStyle={{ padding: 16, paddingBottom: 40 }}
-      >
+      <ScrollView className="flex-1" contentContainerStyle={{ padding: 16, paddingBottom: 40 }}>
         <View className="gap-5">
           <IdentitySummary t={t} />
           <TabSwitcher selection={selection} onSelect={setSelection} t={t} />
@@ -97,26 +92,24 @@ export default function IdentityDashboard(): React.JSX.Element {
   );
 }
 
-function IdentitySummary({
-  t,
-}: {
-  readonly t: (key: string) => string;
-}): React.JSX.Element {
+function IdentitySummary({ t }: { readonly t: (key: string) => string }): React.JSX.Element {
   return (
-    <View
-      className="bg-cardBg rounded-2xl"
+    <ThemedSurface
+      variant="card"
+      className="rounded-none"
       style={{
         padding: 16,
         gap: 8,
         borderWidth: 1,
         borderColor: Colors.divider,
-      }}
-    >
+      }}>
       <View className="flex-row items-center" style={{ gap: 8 }}>
         <SfIcon name="clock" size={14} color={Colors.text2} />
-        <Text className="text-text2 text-[12px]">{t('identityDashboard.noEvents')}</Text>
+        <ThemedText variant="caption" tone="secondary">
+          {t('identityDashboard.noEvents')}
+        </ThemedText>
       </View>
-    </View>
+    </ThemedSurface>
   );
 }
 
@@ -134,41 +127,29 @@ function TabSwitcher({
       {SECTIONS.map((s) => {
         const isActive = s.id === selection;
         return (
-          <Pressable
+          <PressableScale
             key={s.id}
-            onPress={() => { onSelect(s.id); }}
-            accessibilityRole="button"
-            accessibilityLabel={t(s.titleKey)}
-            style={{
-              flex: 1,
-              borderRadius: 12,
-              paddingVertical: 8,
-              backgroundColor: isActive
-                ? `${Colors.accentRose}26`
-                : Colors.cardBg,
-              borderWidth: 1,
-              borderColor: isActive ? Colors.accentRose : Colors.divider,
-              alignItems: 'center',
-              justifyContent: 'center',
-              flexDirection: 'row',
-              gap: 6,
+            fill
+            onPress={() => {
+              onSelect(s.id);
             }}
-          >
-            <SfIcon
-              name={s.icon}
-              size={14}
-              color={isActive ? Colors.accentRose : Colors.text2}
-            />
-            <Text
+            accessibilityRole="button"
+            accessibilityLabel={t(s.titleKey)}>
+            <ThemedSurface
+              variant="card"
+              className="flex-row items-center justify-center gap-1.5 rounded-none py-2"
               style={{
-                color: isActive ? Colors.accentRose : Colors.text2,
-                fontSize: 14,
-                fontWeight: '600',
-              }}
-            >
-              {t(s.titleKey)}
-            </Text>
-          </Pressable>
+                backgroundColor: isActive ? `${Colors.accentRose}26` : Colors.cardBg,
+                borderColor: isActive ? Colors.accentRose : Colors.divider,
+              }}>
+              <SfIcon name={s.icon} size={14} color={isActive ? Colors.accentRose : Colors.text2} />
+              <ThemedText
+                variant="label"
+                style={{ color: isActive ? Colors.accentRose : Colors.text2 }}>
+                {t(s.titleKey)}
+              </ThemedText>
+            </ThemedSurface>
+          </PressableScale>
         );
       })}
     </View>

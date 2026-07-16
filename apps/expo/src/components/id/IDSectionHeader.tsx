@@ -11,7 +11,7 @@
  * the caller pick which one matches the source.
  */
 import type { ReactNode } from 'react';
-import { Text } from 'react-native';
+import { ThemedText } from '@/components/themed';
 
 const MONO_FONT = 'Menlo';
 
@@ -22,17 +22,10 @@ export interface IDSectionHeaderProps {
   readonly tone?: IDSectionHeaderTone;
 }
 
-export function IDSectionHeader({
-  title,
-  tone = 'tertiary',
-}: IDSectionHeaderProps): ReactNode {
-  const cls = tone === 'tertiary' ? 'text-text3' : 'text-text2';
+export function IDSectionHeader({ title, tone = 'tertiary' }: IDSectionHeaderProps): ReactNode {
   return (
-    <Text
-      className={`${cls} text-[12px] font-bold`}
-      style={{ fontFamily: MONO_FONT }}
-    >
+    <ThemedText variant="label" tone={tone} style={{ fontFamily: MONO_FONT }}>
       {title}
-    </Text>
+    </ThemedText>
   );
 }

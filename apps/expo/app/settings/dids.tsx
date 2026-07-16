@@ -17,12 +17,13 @@
  * cached-descriptor fallback. Falls back to "No active DID" until the seed
  * resolves or on keychain errors.
  */
-import { router, Stack } from 'expo-router';
+import { router, Stack, useLocalSearchParams } from 'expo-router';
 import { useEffect } from 'react';
-import { Platform, ScrollView, Text, View } from 'react-native';
+import { Platform, ScrollView, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { SfIcon } from '@/components/icons/SfIcon';
+import { ThemedSurface, ThemedText } from '@/components/themed';
 import {
   SettingsBackToolbar,
   SettingsBlockInfoRow,
@@ -37,28 +38,38 @@ import { useActiveDid, useIdentityCoordinator } from '@/identity';
 export default function DIDListSheet() {
   const insets = useSafeAreaInsets();
   const { t } = useTranslation();
+  const params = useLocalSearchParams<{ did?: string }>();
   const seedKeychain = useIdentityCoordinator((s) => s.seedFromKeychain);
   useEffect(() => {
     void seedKeychain();
   }, [seedKeychain]);
   const activeDid = useActiveDid();
+  const displayDid = activeDid ?? params.did ?? null;
 
   return (
     <View className="flex-1 bg-pageBg" style={{ paddingTop: insets.top }}>
       <Stack.Screen options={{ presentation: 'modal' }} />
-      <SettingsBackToolbar title={t('dids.close')} onPress={() => { router.back(); }} />
+      <SettingsBackToolbar
+        title={t('dids.close')}
+        onPress={() => {
+          router.back();
+        }}
+      />
       <SettingsScreenTitle title={t('dids.title')} />
 
       <ScrollView
         className="flex-1"
-        contentContainerStyle={{ paddingTop: 24, paddingBottom: 24 + insets.bottom }}
-      >
+        contentContainerStyle={{ paddingTop: 24, paddingBottom: 24 + insets.bottom }}>
         <View className="gap-6">
           {/* Active DID */}
           <View className="gap-2">
             <SettingsBlockSectionHeader title={t('dids.activeDid')} />
             <View className="px-4">
-              {activeDid ? <DidCard did={activeDid} /> : <NoActiveDidCard label={t('dids.noActiveDid')} />}
+              {displayDid ? (
+                <DidCard did={displayDid} />
+              ) : (
+                <NoActiveDidCard label={t('dids.noActiveDid')} />
+              )}
             </View>
           </View>
 
@@ -69,12 +80,13 @@ export default function DIDListSheet() {
               Platform.OS === 'ios'
                 ? t('dids.keyStorageFooter.ios')
                 : t('dids.keyStorageFooter.android')
-            }
-          >
+            }>
             <SettingsBlockInfoRow
               icon={Platform.OS === 'ios' ? 'key.icloud' : 'lock.shield'}
               title={t('dids.storage')}
-              value={Platform.OS === 'ios' ? t('dids.storageValue.ios') : t('dids.storageValue.android')}
+              value={
+                Platform.OS === 'ios' ? t('dids.storageValue.ios') : t('dids.storageValue.android')
+              }
             />
             <SettingsBlockInfoRow
               icon="arrow.triangle.2.circlepath"
@@ -91,47 +103,51 @@ export default function DIDListSheet() {
 function DidCard({ did }: { did: string }) {
   const method = did.startsWith('did:key') ? 'did:key' : 'did:web';
   return (
-    <View
-      className="bg-mutedSurface rounded-xl"
-      style={{ paddingHorizontal: 14, paddingVertical: 12 }}
-    >
+    <ThemedSurface
+      variant="inset"
+      className="rounded-none"
+      style={{ paddingHorizontal: 14, paddingVertical: 12 }}>
       <View className="flex-row items-center" style={{ marginBottom: 8 }}>
         <View
-          style={{ width: 20, height: 20, alignItems: 'center', justifyContent: 'center', marginRight: 12 }}
-        >
+          style={{
+            width: 20,
+            height: 20,
+            alignItems: 'center',
+            justifyContent: 'center',
+            marginRight: 12,
+          }}>
           <SfIcon name="key.horizontal" size={14} color={Colors.text1} />
         </View>
-        <Text
-          className="text-text2 text-[13px] font-semibold"
-          style={{ fontFamily: 'Menlo' }}
-        >
+        <ThemedText variant="label" tone="secondary" style={{ fontFamily: 'Menlo' }}>
           {method.toUpperCase()}
-        </Text>
+        </ThemedText>
       </View>
-      <Text
-        className="text-text1 text-[12px]"
-        style={{ fontFamily: 'Menlo' }}
-        numberOfLines={3}
-        selectable
-      >
+      <ThemedText variant="caption" style={{ fontFamily: 'Menlo' }} numberOfLines={3} selectable>
         {did}
-      </Text>
-    </View>
+      </ThemedText>
+    </ThemedSurface>
   );
 }
 
 function NoActiveDidCard({ label }: { label: string }) {
   return (
-    <View
-      className="bg-mutedSurface rounded-xl flex-row items-center"
-      style={{ paddingHorizontal: 14, paddingVertical: 14 }}
-    >
+    <ThemedSurface
+      variant="inset"
+      className="flex-row items-center rounded-none"
+      style={{ paddingHorizontal: 14, paddingVertical: 14 }}>
       <View
-        style={{ width: 20, height: 20, alignItems: 'center', justifyContent: 'center', marginRight: 12 }}
-      >
+        style={{
+          width: 20,
+          height: 20,
+          alignItems: 'center',
+          justifyContent: 'center',
+          marginRight: 12,
+        }}>
         <SfIcon name="circle.dashed" size={14} color={Colors.text2} />
       </View>
-      <Text className="text-text2 text-[15px] flex-1">{label}</Text>
-    </View>
+      <ThemedText variant="bodyMedium" tone="secondary" style={{ flex: 1 }}>
+        {label}
+      </ThemedText>
+    </ThemedSurface>
   );
 }

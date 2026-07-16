@@ -9,16 +9,11 @@
  */
 import * as Clipboard from 'expo-clipboard';
 import { useState } from 'react';
-import { ScrollView, Text, View } from 'react-native';
+import { ScrollView, View } from 'react-native';
 
-import {
-  IDBlockText,
-  IDLabeledRow,
-  IDSectionContainer,
-  IDSectionHeader,
-} from '@/components/id';
+import { IDBlockText, IDLabeledRow, IDSectionContainer, IDSectionHeader } from '@/components/id';
 import { SfIcon } from '@/components/icons/SfIcon';
-import { ThemedButton } from '@/components/themed';
+import { ThemedButton, ThemedText } from '@/components/themed';
 import { Colors } from '@/constants/Colors';
 import { pushToast } from '@/feedback/toast';
 
@@ -61,7 +56,9 @@ export function PersonalPanel({
     if (!state.jwkJson) return;
     await Clipboard.setStringAsync(state.jwkJson);
     setJwkCopied(true);
-    setTimeout(() => { setJwkCopied(false); }, 1200);
+    setTimeout(() => {
+      setJwkCopied(false);
+    }, 1200);
   };
 
   const onExportDid = async (): Promise<void> => {
@@ -87,9 +84,9 @@ export function PersonalPanel({
               tone="secondary"
             />
           ) : (
-            <Text className="text-text2 text-[14px]">
+            <ThemedText variant="bodySmall" tone="secondary">
               No commitment available. Refresh to derive your identity.
-            </Text>
+            </ThemedText>
           )}
         </IDSectionContainer>
       </View>
@@ -115,15 +112,16 @@ export function PersonalPanel({
                       color={Colors.accentRose}
                     />
                   }
-                  onPress={() => { void onCopyJwk(); }}
+                  onPress={() => {
+                    void onCopyJwk();
+                  }}
                 />
               </View>
             </>
           ) : (
-            <Text className="text-text2 text-[14px]">
-              No cached JWK yet. Import or refresh your identity to populate the
-              cache.
-            </Text>
+            <ThemedText variant="bodySmall" tone="secondary">
+              No cached JWK yet. Import or refresh your identity to populate the cache.
+            </ThemedText>
           )}
         </IDSectionContainer>
       </View>
@@ -138,20 +136,18 @@ export function PersonalPanel({
                 label="Export DID Document"
                 fullWidth
                 leadingIcon={
-                  <SfIcon
-                    name="square.and.arrow.up"
-                    size={14}
-                    color={Colors.accentRose}
-                  />
+                  <SfIcon name="square.and.arrow.up" size={14} color={Colors.accentRose} />
                 }
-                onPress={() => { void onExportDid(); }}
+                onPress={() => {
+                  void onExportDid();
+                }}
               />
               <IDLabeledRow label="Services" value={String(state.serviceCount)} />
             </>
           ) : (
-            <Text className="text-text2 text-[14px]">
+            <ThemedText variant="bodySmall" tone="secondary">
               No DID document cached yet.
-            </Text>
+            </ThemedText>
           )}
         </IDSectionContainer>
       </View>
@@ -161,29 +157,27 @@ export function PersonalPanel({
         <IDSectionContainer>
           {state.lastImportSummary ? (
             <View className="gap-1">
-              <Text className="text-text1 text-[15px] font-semibold">
-                {state.lastImportSummary}
-              </Text>
+              <ThemedText variant="bodyMedium">{state.lastImportSummary}</ThemedText>
               {state.lastImportKind ? (
-                <Text className="text-text2 text-[12px] capitalize">
+                <ThemedText variant="caption" tone="secondary" className="capitalize">
                   {state.lastImportKind}
-                </Text>
+                </ThemedText>
               ) : null}
               {state.lastImportTimestamp ? (
-                <Text className="text-text2 text-[11px]">
+                <ThemedText variant="caption" tone="secondary">
                   {state.lastImportTimestamp.toLocaleString()}
-                </Text>
+                </ThemedText>
               ) : null}
             </View>
           ) : (
-            <Text className="text-text2 text-[14px]">
+            <ThemedText variant="bodySmall" tone="secondary">
               No identity events yet.
-            </Text>
+            </ThemedText>
           )}
           {state.lastError ? (
-            <Text className="text-destructive text-[12px] mt-1">
+            <ThemedText variant="caption" tone="error" className="mt-1">
               {state.lastError}
-            </Text>
+            </ThemedText>
           ) : null}
         </IDSectionContainer>
       </View>
@@ -195,13 +189,7 @@ export function PersonalPanel({
             variant="secondary"
             label="Refresh Identity"
             fullWidth
-            leadingIcon={
-              <SfIcon
-                name="arrow.clockwise"
-                size={14}
-                color={Colors.accentRose}
-              />
-            }
+            leadingIcon={<SfIcon name="arrow.clockwise" size={14} color={Colors.accentRose} />}
             onPress={onRefresh}
           />
           <ThemedButton
@@ -209,9 +197,7 @@ export function PersonalPanel({
             label="Clear Error State"
             fullWidth
             disabled={state.lastError === null}
-            leadingIcon={
-              <SfIcon name="xmark.circle" size={14} color={Colors.accentRose} />
-            }
+            leadingIcon={<SfIcon name="xmark.circle" size={14} color={Colors.accentRose} />}
             onPress={onClearError}
           />
         </IDSectionContainer>

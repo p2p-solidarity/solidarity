@@ -9,11 +9,12 @@
  */
 import type { ReactNode } from 'react';
 import { router } from 'expo-router';
-import { Text, View } from 'react-native';
+import { View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { PressableScale } from '@/components/common/PressableScale';
 import { SfIcon } from '@/components/icons/SfIcon';
+import { ThemedText } from '@/components/themed';
 import { Colors } from '@/constants/Colors';
 
 export interface IDNavBarProps {
@@ -23,12 +24,7 @@ export interface IDNavBarProps {
   readonly trailing?: ReactNode;
 }
 
-export function IDNavBar({
-  title,
-  leadingLabel,
-  onLeading,
-  trailing,
-}: IDNavBarProps): ReactNode {
+export function IDNavBar({ title, leadingLabel, onLeading, trailing }: IDNavBarProps): ReactNode {
   const insets = useSafeAreaInsets();
   const handleLeading = (): void => {
     if (onLeading) {
@@ -47,25 +43,18 @@ export function IDNavBar({
           accessibilityLabel={leadingLabel ?? 'Back'}
           hitSlop={8}
           containerStyle={{ marginLeft: -4 }}
-          className="flex-row items-center px-1 py-1"
-        >
-          <SfIcon
-            name="chevron.left"
-            size={16}
-            weight="semibold"
-            color={Colors.text1}
-          />
+          className="flex-row items-center px-1 py-1">
+          <SfIcon name="chevron.left" size={16} weight="semibold" color={Colors.text1} />
           {leadingLabel ? (
-            <Text className="text-text1 text-[16px] ml-1">{leadingLabel}</Text>
+            <ThemedText variant="bodyMedium" className="ml-1">
+              {leadingLabel}
+            </ThemedText>
           ) : null}
         </PressableScale>
         <View className="flex-1 items-center">
-          <Text
-            numberOfLines={1}
-            className="text-text1 text-[17px] font-semibold"
-          >
+          <ThemedText variant="titleMedium" numberOfLines={1}>
             {title}
-          </Text>
+          </ThemedText>
         </View>
         <View
           style={{
@@ -74,8 +63,7 @@ export function IDNavBar({
             alignItems: 'center',
             justifyContent: 'flex-end',
             gap: 12,
-          }}
-        >
+          }}>
           {trailing}
         </View>
       </View>

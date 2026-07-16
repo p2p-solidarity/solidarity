@@ -17,19 +17,19 @@ import { router, useLocalSearchParams } from 'expo-router';
 import type { SFSymbol } from 'expo-symbols';
 import type { ReactNode } from 'react';
 import { useEffect, useMemo, useState } from 'react';
-import {
-  Platform,
-  Pressable,
-  ScrollView,
-  Text,
-  TextInput,
-  View,
-} from 'react-native';
+import { Platform, ScrollView, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { SfIcon } from '@/components/icons/SfIcon';
 import { useCardStore } from '@/cards/cardManager';
-import { ThemedButton } from '@/components/themed';
+import { PressableScale } from '@/components/common/PressableScale';
+import {
+  ON_DARK,
+  ThemedButton,
+  ThemedSurface,
+  ThemedText,
+  ThemedTextInput,
+} from '@/components/themed';
 import { Colors } from '@/constants/Colors';
 import { useCredentialStore } from '@/credentials/store';
 import { pushToast } from '@/feedback/toast';
@@ -54,7 +54,11 @@ function bindingKey(groupId: string): string {
 function loadBinding(groupId: string): GroupCardBindingSettings | null {
   const raw = getMmkv().getString(bindingKey(groupId));
   if (!raw) return null;
-  try { return JSON.parse(raw) as GroupCardBindingSettings; } catch { return null; }
+  try {
+    return JSON.parse(raw) as GroupCardBindingSettings;
+  } catch {
+    return null;
+  }
 }
 function saveBinding(groupId: string, settings: GroupCardBindingSettings): void {
   getMmkv().set(bindingKey(groupId), JSON.stringify(settings));
@@ -75,29 +79,36 @@ function thirtyDaysFromNow(): Date {
 function Section({ title, children }: { readonly title: string; readonly children: ReactNode }) {
   return (
     <View>
-      <Text
+      <ThemedText
+        variant="label"
+        tone="tertiary"
         style={{
           fontFamily: MONO,
-          fontSize: 12,
-          fontWeight: '700',
-          color: Colors.text3,
           marginBottom: 8,
-        }}
-      >
+        }}>
         {title}
-      </Text>
-      <View style={{ borderWidth: 1, borderColor: Colors.divider, overflow: 'hidden' }}>
+      </ThemedText>
+      <ThemedSurface
+        variant="inset"
+        className="overflow-hidden rounded-none"
+        style={{ borderWidth: 1, borderColor: Colors.divider }}>
         {children}
-      </View>
+      </ThemedSurface>
     </View>
   );
 }
 
 function SegmentedOption({
-  label, isSelected, onPress,
-}: { readonly label: string; readonly isSelected: boolean; readonly onPress: () => void }) {
+  label,
+  isSelected,
+  onPress,
+}: {
+  readonly label: string;
+  readonly isSelected: boolean;
+  readonly onPress: () => void;
+}) {
   return (
-    <Pressable
+    <PressableScale
       onPress={onPress}
       accessibilityRole="button"
       accessibilityLabel={label}
@@ -105,20 +116,17 @@ function SegmentedOption({
       style={{
         paddingHorizontal: 12,
         paddingVertical: 8,
-        borderRadius: 6,
         backgroundColor: isSelected ? Colors.text1 : 'transparent',
-      }}
-    >
-      <Text
+      }}>
+      <ThemedText
+        variant="bodySmall"
         style={{
           color: isSelected ? Colors.pageBg : Colors.text1,
-          fontSize: 14,
           fontWeight: isSelected ? '600' : '400',
-        }}
-      >
+        }}>
         {label}
-      </Text>
-    </Pressable>
+      </ThemedText>
+    </PressableScale>
   );
 }
 
@@ -128,47 +136,58 @@ function SegmentedRow({ children }: { readonly children: ReactNode }) {
       horizontal
       showsHorizontalScrollIndicator={false}
       style={{ backgroundColor: Colors.searchBg }}
-      contentContainerStyle={{ padding: 8, gap: 6 }}
-    >
+      contentContainerStyle={{ padding: 8, gap: 6 }}>
       {children}
     </ScrollView>
   );
 }
 
 function ToggleRow({
-  label, isOn, onChange,
-}: { readonly label: string; readonly isOn: boolean; readonly onChange: (on: boolean) => void }) {
+  label,
+  isOn,
+  onChange,
+}: {
+  readonly label: string;
+  readonly isOn: boolean;
+  readonly onChange: (on: boolean) => void;
+}) {
   return (
-    <Pressable
-      onPress={() => { onChange(!isOn); }}
+    <PressableScale
+      onPress={() => {
+        onChange(!isOn);
+      }}
       accessibilityRole="switch"
       accessibilityLabel={label}
       accessibilityState={{ checked: isOn }}
       style={{
-        backgroundColor: Colors.searchBg,
         padding: 16,
         flexDirection: 'row',
         alignItems: 'center',
         gap: 12,
-      }}
-    >
-      <Text className="text-text1 text-[14px] flex-1">{label}</Text>
+      }}>
+      <ThemedText variant="bodySmall" style={{ flex: 1 }}>
+        {label}
+      </ThemedText>
       <View
         style={{
-          width: 36, height: 22, borderRadius: 11,
+          width: 36,
+          height: 22,
+          borderRadius: 11,
           backgroundColor: isOn ? Colors.primaryBlue : Colors.divider,
-          padding: 2, justifyContent: 'center',
-        }}
-      >
+          padding: 2,
+          justifyContent: 'center',
+        }}>
         <View
           style={{
-            width: 18, height: 18, borderRadius: 9,
-            backgroundColor: '#FFFFFF',
+            width: 18,
+            height: 18,
+            borderRadius: 9,
+            backgroundColor: ON_DARK,
             alignSelf: isOn ? 'flex-end' : 'flex-start',
           }}
         />
       </View>
-    </Pressable>
+    </PressableScale>
   );
 }
 
@@ -185,15 +204,20 @@ function ResultRow({
     ? t('groupIssue.resultSent', { member: result.memberId })
     : t('groupIssue.resultFailed', { member: result.memberId, error: result.error });
   return (
-    <View
+    <ThemedSurface
+      variant="inset"
+      className="rounded-none"
       style={{
-        backgroundColor: Colors.searchBg, padding: 16,
-        flexDirection: 'row', alignItems: 'center', gap: 8,
-      }}
-    >
+        padding: 16,
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 8,
+      }}>
       <SfIcon name={icon} size={14} color={color} />
-      <Text style={{ color, fontSize: 14, flex: 1 }}>{label}</Text>
-    </View>
+      <ThemedText variant="bodySmall" style={{ color, flex: 1 }}>
+        {label}
+      </ThemedText>
+    </ThemedSurface>
   );
 }
 
@@ -218,7 +242,9 @@ export default function GroupVCIssuanceScreen() {
   const [isIssuing, setIsIssuing] = useState(false);
   const [results, setResults] = useState<readonly IssuanceResult[]>([]);
 
-  useEffect(() => { void hydrateCards(); }, [hydrateCards]);
+  useEffect(() => {
+    void hydrateCards();
+  }, [hydrateCards]);
 
   useEffect(() => {
     if (!groupId) return;
@@ -287,8 +313,10 @@ export default function GroupVCIssuanceScreen() {
 
   if (!group || !groupId) {
     return (
-      <View className="flex-1 bg-pageBg items-center justify-center">
-        <Text className="text-text2 text-[15px]">{t('groupIssue.notFound')}</Text>
+      <View className="flex-1 items-center justify-center bg-pageBg">
+        <ThemedText variant="bodyMedium" tone="secondary">
+          {t('groupIssue.notFound')}
+        </ThemedText>
       </View>
     );
   }
@@ -301,16 +329,17 @@ export default function GroupVCIssuanceScreen() {
         <View className="h-11 flex-row items-center px-4">
           <View style={{ width: 50 }} />
           <View className="flex-1 items-center">
-            <Text className="text-text1 text-[17px] font-semibold">{t('groupIssue.title')}</Text>
+            <ThemedText variant="titleMedium">{t('groupIssue.title')}</ThemedText>
           </View>
-          <Pressable
-            onPress={() => { router.back(); }}
+          <PressableScale
+            onPress={() => {
+              router.back();
+            }}
             accessibilityRole="button"
             accessibilityLabel={t('groupIssue.done')}
-            className="px-1 py-1 active:opacity-60"
-          >
-            <Text className="text-text1 text-[17px]">{t('groupIssue.done')}</Text>
-          </Pressable>
+            className="px-1 py-1">
+            <ThemedText variant="bodyLarge">{t('groupIssue.done')}</ThemedText>
+          </PressableScale>
         </View>
       </View>
 
@@ -320,7 +349,9 @@ export default function GroupVCIssuanceScreen() {
             <SegmentedOption
               label={t('groupIssue.cardNone')}
               isSelected={selectedCardId === undefined}
-              onPress={() => { setSelectedCardId(undefined); }}
+              onPress={() => {
+                setSelectedCardId(undefined);
+              }}
             />
             {cards.map((card) => (
               <SegmentedOption
@@ -340,15 +371,13 @@ export default function GroupVCIssuanceScreen() {
           <View style={{ gap: 1 }}>
             {selectedCard ? (
               <>
-                <View style={{ backgroundColor: Colors.searchBg, padding: 16 }}>
-                  <TextInput
+                <View style={{ padding: 16 }}>
+                  <ThemedTextInput
                     value={customName}
                     onChangeText={setCustomName}
                     placeholder={t('groupIssue.namePlaceholder')}
-                    placeholderTextColor={Colors.text3}
                     autoCapitalize="words"
                     autoCorrect={false}
-                    style={{ color: Colors.text1, fontSize: 14, paddingVertical: 0 }}
                   />
                 </View>
                 <ToggleRow
@@ -358,8 +387,10 @@ export default function GroupVCIssuanceScreen() {
                 />
               </>
             ) : (
-              <View style={{ backgroundColor: Colors.searchBg, padding: 16 }}>
-                <Text className="text-text2 text-[14px]">{t('groupIssue.selectCardFirst')}</Text>
+              <View style={{ padding: 16 }}>
+                <ThemedText variant="bodySmall" tone="secondary">
+                  {t('groupIssue.selectCardFirst')}
+                </ThemedText>
               </View>
             )}
           </View>
@@ -370,7 +401,9 @@ export default function GroupVCIssuanceScreen() {
             <ToggleRow
               label={t('groupIssue.sendToAll')}
               isOn={sendToAllMembers}
-              onChange={(on) => { if (on) setSelectedMemberIds([]); }}
+              onChange={(on) => {
+                if (on) setSelectedMemberIds([]);
+              }}
             />
             {!sendToAllMembers
               ? members.map((member) => (
@@ -378,7 +411,9 @@ export default function GroupVCIssuanceScreen() {
                     key={member.userRecordID}
                     label={member.userRecordID}
                     isOn={selectedMemberIds.includes(member.userRecordID)}
-                    onChange={(on) => { toggleMember(member.userRecordID, on); }}
+                    onChange={(on) => {
+                      toggleMember(member.userRecordID, on);
+                    }}
                   />
                 ))
               : null}
@@ -392,7 +427,9 @@ export default function GroupVCIssuanceScreen() {
                 key={method}
                 label={method}
                 isSelected={deliveryMethod === method}
-                onPress={() => { setDeliveryMethod(method); }}
+                onPress={() => {
+                  setDeliveryMethod(method);
+                }}
               />
             ))}
           </SegmentedRow>
@@ -403,7 +440,9 @@ export default function GroupVCIssuanceScreen() {
             <ToggleRow
               label={t('groupIssue.setExpiration')}
               isOn={expirationDate !== undefined}
-              onChange={(on) => { setExpirationDate(on ? thirtyDaysFromNow() : undefined); }}
+              onChange={(on) => {
+                setExpirationDate(on ? thirtyDaysFromNow() : undefined);
+              }}
             />
             {expirationDate ? (
               <View
@@ -413,12 +452,11 @@ export default function GroupVCIssuanceScreen() {
                   paddingVertical: 16,
                   flexDirection: 'row',
                   alignItems: 'center',
-                }}
-              >
-                <Text className="text-text1 text-[14px] flex-1">{t('groupIssue.expires')}</Text>
-                <Text className="text-text1 text-[14px]">
-                  {expirationDate.toLocaleDateString()}
-                </Text>
+                }}>
+                <ThemedText variant="bodySmall" style={{ flex: 1 }}>
+                  {t('groupIssue.expires')}
+                </ThemedText>
+                <ThemedText variant="bodySmall">{expirationDate.toLocaleDateString()}</ThemedText>
               </View>
             ) : null}
           </View>
@@ -429,7 +467,9 @@ export default function GroupVCIssuanceScreen() {
           fullWidth
           loading={isIssuing}
           disabled={issueDisabled}
-          onPress={() => { void runIssuance(); }}
+          onPress={() => {
+            void runIssuance();
+          }}
         />
 
         {results.length > 0 ? (
