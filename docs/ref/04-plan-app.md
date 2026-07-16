@@ -22,6 +22,90 @@
 
 ---
 
+## 方向決策 2026-07-16(grill 定案 — 本區覆蓋下方 phase 順序與相關 spec 條文)
+
+> 與使用者 grill 後定案。這些決策**改寫優先序**:先打穿一條主流垂直線,再鋪廣度。
+> 下方 A6–A12 的原始順序作廢,改依 **D6 v1 脊椎** 執行。對應 spec 條文改動見
+> `01-spec-verified-page.md` 頂部同日 amendment。決策依據見「完成階段真相」:
+> 十種徽章只有 Nostr 能端到端亮綠勾;viewer 目前是靜態 mock(徽章讀
+> `airmeishi-web/src/data/foundation`、驗證明文延到 web Phase V2–V3、且 web 未
+> depend `@solidarity/shared`),「無伺服器也能驗」的地基尚未接上線。
+
+**D1 — 單一 did:key 根身份(收斂)。** 舊 Spruce `master.v2` 第二根鑰匙 + 舊
+business-card 交換 QR wire 退場;新 seed 派生 did:key 為唯一身份。同一助記詞 = 同一
+did(§3 既有原則,現正式收斂,不再並存)。coexistence 決策 #3 = **收斂,不等 A10**。
+使用者第一性原則:did:key 是核心不退場;助記詞對用戶應**不可感知**;VC+VP 是給
+Nostr/profile/Pear 的**附加**價值。
+
+**D2 — 交換 QR 收斂成 profile fragment。** 互掃行為保留,但那顆 QR 的 payload 從舊
+wire 改為新 profile fragment(Verify 掃描器 A2.3 已能解)。兩顆 QR 塌成一顆。
+
+**D3 — SpruceKit SDK 退場、留簽名殼。** 砍 SPM `sprucekit-mobile` + Android Maven
+`com.spruceid.mobile.sdk` + `withSpruceIdSpmPackage.js` + 5 個死方法(`didKeyFromAlias`/
+`didDocumentJson`/`verifyJws`/`signCredentialJwt`/`verifyCredentialJwt`);留 8 個硬體
+簽名方法(住 `SpruceDidKeyStore.swift`,無 Spruce import)。= 原 A10.3,盤點見
+`notes-sprucekit-slim.md`。殼改名 `nitro-signing-key` 選配。**注意:nitro module 本體
+不可整包拔**(硬體簽名殼是 did:key 簽名的必要面),只拔 SDK。
+
+**D4 — ZK 定位澄清(非反轉)。** 原則不動:ZK(passport-zk == zkmopro/OpenAC)
+**仍 opt-in、永不進 hot path**。唯一改動:它是徽章庫**頂層 opt-in 徽章、保留在 App
+內、不移出不刪**。A10 由「移除 OpenAC 呼叫、circuits 移出」改為「**OpenAC 保留為
+opt-in 頂層;default passport 仍 SD-JWT(hot path)**」。zkmopro(Mopro mobile prover)
+是「讓 device 端出證變簡單」的方向,深設計(zkmopro 換不換 passport-noir、passport
+產 SD-JWT vs ZK attestation)另開 scoping。
+
+**D5 — onboarding 收在真綠勾(選項 1)。** 新路徑結尾帶**一枚真徽章**(脊椎定 Bluesky
+後即 Bluesky;純 did:key 用戶走 Nostr 免帳號 fallback)。Nostr(公開)× Pear(私密)
+串聯 = A+B:Nostr 在 onboarding 拿真綠勾 + 一頁「公開頁 vs 私密房」兩面模型;
+**Pear 天生兩方、不可 solo 假演**,第一次真實體驗獨立設計成 person-to-person 時刻。
+CompleteStep 的空 `[ SYSTEM READY ]`(零綠勾)作廢。
+
+**D6 — v1 脊椎 = Bluesky(凍結其他廣度)。** 先讓 **app OAuth → 寫 PDS record →
+viewer 真的 getRecord + 驗 JWS 渲染 → 可分享於人類可讀 handle** 這一條端到端打穿。
+一條線收掉 P1(viewer 由 mock 轉真)/ P2(主流徽章)/ P4(handle)/ D5(onboarding
+綠勾)。`_did` DNS 由「本版重點功能」**降為第二條**,給有網域的 power user。原
+A6.2–A6.4 升為主線;A7/A8/A9/A11 延後。
+
+**D7 — Handle resolver seam:`solidarity.gg/<handle>`。** viewer 路由走可插拔的
+`HandleResolver` 介面(定義住 `packages/shared`,app + web 共用);v1 只出
+`AtprotoHandleResolver`(`@alice.bsky.social` → did:plc → PDS getRecord),但介面設計成
+ENS(`alice.eth` → did:pkh,軟依賴一個 RPC,同 §8)、DNS(`_did` TXT)、NIP-05
+未來**註冊即接、不改 router**。Router:第一個 `matches()` 為真者勝,皆不中落回
+`#<fragment>`。
+
+**D8 — viewer 必須 import `@solidarity/shared`、吃同一組 conformance 向量。** 目前 web
+不 depend shared、徽章讀靜態 `data/foundation` = 「無伺服器也能驗」地基未接。web
+V2–V3 落地時必須用 app 端同一份純函式驗證(03 §3 一致性鐵律:單向宣稱不畫綠勾)。
+
+**D9 — IA:自己的徽章綁定歸 Me,不歸 Verify(建議,待使用者確認)。** Connect
+Bluesky/Nostr 精靈從 Verify(驗別人)移到 Me(你的頁);Verify 專責掃描與驗別人。
+降低「綠勾藏在錯分頁」的 P6。
+
+**D10 — v1 beachhead = ATProto/去中心社交早期用戶(2026-07-16 定案)。** 一句承諾:
+「你自己持有、任何人可驗、我們消失也活的身份頁 —— 你的 Bluesky handle + 你控制的
+一切。」這群人「verified = 你此刻控制這個帳號」是 feature 不是 under-sell(自帶
+handle、懂 did、在找可攜自持的身份頁)。onboarding/Me 全部文案以此語氣書寫。
+創作者防冒充(US-07)= phase-2 擴張(撞 A11 bio 徽章);可驗證名片語境退居輔助。
+產品北極星信號:早期用戶自發把頁貼進 Bluesky bio(spec §11)。
+
+**Parked(另開 scoping,不在本輪):** passkey(did→passkey→助記詞,Architecture A:
+seed 為本、passkey 用 largeBlob/PRF 當外殼,**不可讓 passkey-PRF 直接當身份**否則
+助記詞可攜性死);ZK 深架構(見 D4);**A12 金鑰救援 + Android 救援故事(P5,已知
+重大缺口 —— iCloud 只有 iOS、Android 掉手機沒抄 12 字 = 身份歸零 + 印出的 QR 全死,
+需盡快排期)**。
+
+**新增/改動任務(取代 A6.2 起的原順序):**
+
+- [ ] **S1** atproto handle → DID resolver + `HandleResolver` seam(`packages/shared`;v1 = atproto impl,ENS/DNS/NIP-05 預留)
+- [ ] **S2** A6.2 PDS putRecord(`app.solidarity.profile`)+ 讀回驗證(D6)
+- [ ] **S3** `badges/atproto.ts` 雙向驗證(A6.3;`alsoKnownAs` 含 `at://handle` ↔ record 存在)
+- [ ] **S4** viewer 接 `@solidarity/shared`:fragment 解碼 + JWS 驗 + atproto getRecord + Bluesky 徽章渲染(D8;`airmeishi-web`)
+- [ ] **S5** onboarding 新高潮:綁 Bluesky → 真綠勾 → CompleteStep 顯示它(D5)
+- [ ] **S6** Me/Verify IA 調整(D9)+ 交換 QR 收斂成 fragment(D2)
+- [ ] **S7** 身份收斂:退舊 Spruce 第二根 + 舊 wire(D1);SpruceKit SDK 退場、留簽名殼(D3)
+
+---
+
 ## Phase A0 — 拆除與畫面轉換
 
 **Spec:** 執行 01 §9 刪除清單 + 03 §5 畫面轉換。先刪後建:縮小 surface、砍 nitro 橋接面、讓後續 phase 在乾淨的 IA 上落地。此 phase 結束時 app 三 tab = People / Me / Verify,功能等同現狀(憑證區塊只是搬家,不加新功能)。

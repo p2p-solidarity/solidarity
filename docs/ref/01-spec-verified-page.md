@@ -5,6 +5,12 @@
 
 ---
 
+> **AMENDMENT 2026-07-16(grill 定案 — 覆蓋下列條文;完整決策 + 任務見 `04-plan-app.md` 頂部同日「方向決策」區)**
+> - **§3 身份**:單一 did:key 收斂 — 舊 Spruce 第二根 + 舊交換 QR wire 退場,新 seed did:key 為**唯一**根(同一助記詞 = 同一 did,不再並存)。助記詞對用戶應**不可感知**。備份 UX 未來方向 = did→passkey→助記詞(passkey 用 largeBlob/PRF 當**外殼**、seed 仍為本;passkey-PRF **不可**直接當身份否則可攜性死)—— 另開 scoping,本版仍走 iCloud(iOS)/ 助記詞。
+> - **§5 徽章庫**:ZK(OpenAC / zkmopro)由「凍結至 roadmap」改標「**opt-in 頂層徽章、保留在 App 內**」;原則(opt-in、永不 hot path)不變;default 護照仍 SD-JWT。
+> - **§6 `_did` DNS**:**不再是「本版重點功能」** — v1 脊椎改為 **Bluesky / atproto**(主流、自帶人類可讀 handle、OAuth 已半成)。`_did` DNS 降為**第二條**,給有網域的 power user。
+> - **§8 viewer**:新增 handle 路由 `solidarity.gg/<handle>`,走可插拔 `HandleResolver`(v1 = atproto;預留 ENS `.eth` / DNS / NIP-05,註冊即接不改 router)。viewer **必須** import `@solidarity/shared` 用同一組 conformance 向量驗證 —— 目前讀靜態 mock(`airmeishi-web/src/data/foundation`)、驗證延到 web V2–V3,「無伺服器也能驗」地基**尚未接上**,是 v1 脊椎的一部分。
+
 ## 1. 產品原則(不可違反)
 
 1. **No-server**:我們不儲存使用者資料、不營運帳號系統、不成為驗證流程的必經之路。公司消失,頁面與所有證明仍可被任何人驗證。
