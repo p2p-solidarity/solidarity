@@ -1,0 +1,261 @@
+{
+  "description": "ATProto badge bidirectional-binding conformance vectors for packages/shared/src/badges/atproto.ts. Direction 1 is a syntactically valid `at://<handle>` claim in the ProfileRecord. Direction 2 requires that handle to resolve to the same repo DID named by the returned AT URI, with `app.solidarity.profile/self` holding a compact JWS signed by profile.did over that exact profile. A copied victim record in an attacker's repository must never verify.",
+  "cases": [
+    {
+      "name": "both-directions-verified",
+      "reason": "The profile claims alice.example, DNS resolves it to the repository that returned the record, and the record contains the exact profile signed by profile.did.",
+      "profile": {
+        "v": 1,
+        "did": "did:key:zDnaeVuZeVRqvscGkiEoR9PFFra2xZUMp97ZPuGFK1VLU7iYN",
+        "displayName": "Alice",
+        "avatar": null,
+        "bio": "",
+        "links": [],
+        "alsoKnownAs": ["at://alice.example"],
+        "badges": [],
+        "supersededBy": null,
+        "updatedAt": "2026-07-16T00:00:00Z"
+      },
+      "dnsTxt": ["did=did:plc:ewvi7nxzyoun6zhxrhs64oiz"],
+      "wellKnown": null,
+      "record": {
+        "uri": "at://did:plc:ewvi7nxzyoun6zhxrhs64oiz/app.solidarity.profile/self",
+        "value": {
+          "jws": "eyJhbGciOiJFUzI1NiIsImtpZCI6ImRpZDprZXk6ekRuYWVWdVplVlJxdnNjR2tpRW9SOVBGRnJhMnhaVU1wOTdaUHVHRksxVkxVN2lZTiMwIn0.eyJhbHNvS25vd25BcyI6WyJhdDovL2FsaWNlLmV4YW1wbGUiXSwiYXZhdGFyIjpudWxsLCJiYWRnZXMiOltdLCJiaW8iOiIiLCJkaWQiOiJkaWQ6a2V5OnpEbmFlVnVaZVZScXZzY0draUVvUjlQRkZyYTJ4WlVNcDk3WlB1R0ZLMVZMVTdpWU4iLCJkaXNwbGF5TmFtZSI6IkFsaWNlIiwibGlua3MiOltdLCJzdXBlcnNlZGVkQnkiOm51bGwsInVwZGF0ZWRBdCI6IjIwMjYtMDctMTZUMDA6MDA6MDBaIiwidiI6MX0._EAc2y_dLoZniTNOK2m1zQnArzKzih-gTyv78f82xm9kIyWyJTpO50km9KeN-2GsCc1Em9k2lRSK4pSQSmfQrg"
+        }
+      },
+      "expected": {
+        "state": "verified",
+        "handle": "alice.example",
+        "repoDid": "did:plc:ewvi7nxzyoun6zhxrhs64oiz",
+        "recordUri": "at://did:plc:ewvi7nxzyoun6zhxrhs64oiz/app.solidarity.profile/self",
+        "direction1": true,
+        "direction2": true
+      }
+    },
+    {
+      "name": "one-way-also-known-as",
+      "reason": "The profile claims alice.example and the handle resolves, but its repository has no app.solidarity.profile/self record. This is an observed one-way declaration, never a green check.",
+      "profile": {
+        "v": 1,
+        "did": "did:key:zDnaeVuZeVRqvscGkiEoR9PFFra2xZUMp97ZPuGFK1VLU7iYN",
+        "displayName": "Alice",
+        "avatar": null,
+        "bio": "",
+        "links": [],
+        "alsoKnownAs": ["at://alice.example"],
+        "badges": [],
+        "supersededBy": null,
+        "updatedAt": "2026-07-16T00:00:00Z"
+      },
+      "dnsTxt": ["did=did:plc:ewvi7nxzyoun6zhxrhs64oiz"],
+      "wellKnown": null,
+      "recordError": "notFound",
+      "expected": {
+        "state": "declared",
+        "handle": "alice.example",
+        "repoDid": "did:plc:ewvi7nxzyoun6zhxrhs64oiz",
+        "recordUri": null,
+        "direction1": true,
+        "direction2": false
+      }
+    },
+    {
+      "name": "victim-record-copied-to-wrong-repo",
+      "reason": "An attacker copied the victim's validly signed profile into a different ATProto repository. A valid victim signature proves profile authorship, not repository ownership; the returned AT URI must name the DID resolved from the claimed handle.",
+      "profile": {
+        "v": 1,
+        "did": "did:key:zDnaeVuZeVRqvscGkiEoR9PFFra2xZUMp97ZPuGFK1VLU7iYN",
+        "displayName": "Alice",
+        "avatar": null,
+        "bio": "",
+        "links": [],
+        "alsoKnownAs": ["at://alice.example"],
+        "badges": [],
+        "supersededBy": null,
+        "updatedAt": "2026-07-16T00:00:00Z"
+      },
+      "dnsTxt": ["did=did:plc:ewvi7nxzyoun6zhxrhs64oiz"],
+      "wellKnown": null,
+      "record": {
+        "uri": "at://did:plc:aaaaaaaaaaaaaaaaaaaaaaaa/app.solidarity.profile/self",
+        "value": {
+          "jws": "eyJhbGciOiJFUzI1NiIsImtpZCI6ImRpZDprZXk6ekRuYWVWdVplVlJxdnNjR2tpRW9SOVBGRnJhMnhaVU1wOTdaUHVHRksxVkxVN2lZTiMwIn0.eyJhbHNvS25vd25BcyI6WyJhdDovL2FsaWNlLmV4YW1wbGUiXSwiYXZhdGFyIjpudWxsLCJiYWRnZXMiOltdLCJiaW8iOiIiLCJkaWQiOiJkaWQ6a2V5OnpEbmFlVnVaZVZScXZzY0draUVvUjlQRkZyYTJ4WlVNcDk3WlB1R0ZLMVZMVTdpWU4iLCJkaXNwbGF5TmFtZSI6IkFsaWNlIiwibGlua3MiOltdLCJzdXBlcnNlZGVkQnkiOm51bGwsInVwZGF0ZWRBdCI6IjIwMjYtMDctMTZUMDA6MDA6MDBaIiwidiI6MX0._EAc2y_dLoZniTNOK2m1zQnArzKzih-gTyv78f82xm9kIyWyJTpO50km9KeN-2GsCc1Em9k2lRSK4pSQSmfQrg"
+        }
+      },
+      "expected": {
+        "state": "declared",
+        "handle": "alice.example",
+        "repoDid": "did:plc:ewvi7nxzyoun6zhxrhs64oiz",
+        "recordUri": "at://did:plc:aaaaaaaaaaaaaaaaaaaaaaaa/app.solidarity.profile/self",
+        "direction1": true,
+        "direction2": false
+      }
+    },
+    {
+      "name": "malformed-record-jws",
+      "reason": "The record exists in the correct repository but its jws field is not a compact JWS. A fetched malformed record is an observed failed reverse binding, so it is declared rather than stale.",
+      "profile": {
+        "v": 1,
+        "did": "did:key:zDnaeVuZeVRqvscGkiEoR9PFFra2xZUMp97ZPuGFK1VLU7iYN",
+        "displayName": "Alice",
+        "avatar": null,
+        "bio": "",
+        "links": [],
+        "alsoKnownAs": ["at://alice.example"],
+        "badges": [],
+        "supersededBy": null,
+        "updatedAt": "2026-07-16T00:00:00Z"
+      },
+      "dnsTxt": ["did=did:plc:ewvi7nxzyoun6zhxrhs64oiz"],
+      "wellKnown": null,
+      "record": {
+        "uri": "at://did:plc:ewvi7nxzyoun6zhxrhs64oiz/app.solidarity.profile/self",
+        "value": { "jws": "not.a.compact.jws" }
+      },
+      "expected": {
+        "state": "declared",
+        "handle": "alice.example",
+        "repoDid": "did:plc:ewvi7nxzyoun6zhxrhs64oiz",
+        "recordUri": "at://did:plc:ewvi7nxzyoun6zhxrhs64oiz/app.solidarity.profile/self",
+        "direction1": true,
+        "direction2": false
+      }
+    },
+    {
+      "name": "record-io-unreachable",
+      "reason": "The handle resolves but the PDS cannot be reached. The reverse binding is unknown right now, so the badge is stale rather than declared or revoked.",
+      "profile": {
+        "v": 1,
+        "did": "did:key:zDnaeVuZeVRqvscGkiEoR9PFFra2xZUMp97ZPuGFK1VLU7iYN",
+        "displayName": "Alice",
+        "avatar": null,
+        "bio": "",
+        "links": [],
+        "alsoKnownAs": ["at://alice.example"],
+        "badges": [],
+        "supersededBy": null,
+        "updatedAt": "2026-07-16T00:00:00Z"
+      },
+      "dnsTxt": ["did=did:plc:ewvi7nxzyoun6zhxrhs64oiz"],
+      "wellKnown": null,
+      "recordError": "unreachable",
+      "expected": {
+        "state": "stale",
+        "handle": "alice.example",
+        "repoDid": "did:plc:ewvi7nxzyoun6zhxrhs64oiz",
+        "recordUri": null,
+        "direction1": true,
+        "direction2": null
+      }
+    },
+    {
+      "name": "record-signed-by-different-did",
+      "reason": "The record payload copies the victim profile exactly but its valid JWS is signed by a different did:key. Repository presence cannot substitute for proof that profile.did signed the record.",
+      "profile": {
+        "v": 1,
+        "did": "did:key:zDnaeVuZeVRqvscGkiEoR9PFFra2xZUMp97ZPuGFK1VLU7iYN",
+        "displayName": "Alice",
+        "avatar": null,
+        "bio": "",
+        "links": [],
+        "alsoKnownAs": ["at://alice.example"],
+        "badges": [],
+        "supersededBy": null,
+        "updatedAt": "2026-07-16T00:00:00Z"
+      },
+      "dnsTxt": ["did=did:plc:ewvi7nxzyoun6zhxrhs64oiz"],
+      "wellKnown": null,
+      "record": {
+        "uri": "at://did:plc:ewvi7nxzyoun6zhxrhs64oiz/app.solidarity.profile/self",
+        "value": {
+          "jws": "eyJhbGciOiJFUzI1NiIsImtpZCI6ImRpZDprZXk6ekRuYWVhUUhRcERXaXZpcDFTdWduRXdaYUY1SlVDbVN5UHJZZXdUb0xLWW12OEN5ViMwIn0.eyJhbHNvS25vd25BcyI6WyJhdDovL2FsaWNlLmV4YW1wbGUiXSwiYXZhdGFyIjpudWxsLCJiYWRnZXMiOltdLCJiaW8iOiIiLCJkaWQiOiJkaWQ6a2V5OnpEbmFlVnVaZVZScXZzY0draUVvUjlQRkZyYTJ4WlVNcDk3WlB1R0ZLMVZMVTdpWU4iLCJkaXNwbGF5TmFtZSI6IkFsaWNlIiwibGlua3MiOltdLCJzdXBlcnNlZGVkQnkiOm51bGwsInVwZGF0ZWRBdCI6IjIwMjYtMDctMTZUMDA6MDA6MDBaIiwidiI6MX0.jq59nyxqLUqIE0DWKUHasTCO87AQdHUMBMMkM5Ci6t87AbHoTEY7U_oZ-veeTtOVMXiXS5mzWwyVfmOs3qKmRg"
+        }
+      },
+      "expected": {
+        "state": "declared",
+        "handle": "alice.example",
+        "repoDid": "did:plc:ewvi7nxzyoun6zhxrhs64oiz",
+        "recordUri": "at://did:plc:ewvi7nxzyoun6zhxrhs64oiz/app.solidarity.profile/self",
+        "direction1": true,
+        "direction2": false
+      }
+    },
+    {
+      "name": "no-atproto-claim",
+      "reason": "A profile without an at:// entry has no ATProto badge to verify. The nullable handle is the authoritative render gate, matching the Nostr badge convention.",
+      "profile": {
+        "v": 1,
+        "did": "did:key:zDnaeVuZeVRqvscGkiEoR9PFFra2xZUMp97ZPuGFK1VLU7iYN",
+        "displayName": "Alice",
+        "avatar": null,
+        "bio": "",
+        "links": [],
+        "alsoKnownAs": ["dns:alice.example"],
+        "badges": [],
+        "supersededBy": null,
+        "updatedAt": "2026-07-16T00:00:00Z"
+      },
+      "ioMustNotBeCalled": true,
+      "expected": {
+        "state": "declared",
+        "handle": null,
+        "repoDid": null,
+        "recordUri": null,
+        "direction1": false,
+        "direction2": null
+      }
+    },
+    {
+      "name": "malformed-atproto-handle-claim",
+      "reason": "A userinfo-shaped at:// claim is syntactically invalid and must be rejected before DNS, HTTPS, or record IO.",
+      "profile": {
+        "v": 1,
+        "did": "did:key:zDnaeVuZeVRqvscGkiEoR9PFFra2xZUMp97ZPuGFK1VLU7iYN",
+        "displayName": "Alice",
+        "avatar": null,
+        "bio": "",
+        "links": [],
+        "alsoKnownAs": ["at://alice.example@attacker.test"],
+        "badges": [],
+        "supersededBy": null,
+        "updatedAt": "2026-07-16T00:00:00Z"
+      },
+      "ioMustNotBeCalled": true,
+      "expected": {
+        "state": "declared",
+        "handle": "alice.example@attacker.test",
+        "repoDid": null,
+        "recordUri": null,
+        "direction1": false,
+        "direction2": null
+      }
+    },
+    {
+      "name": "handle-resolution-io-unreachable",
+      "reason": "Neither DNS nor HTTPS resolution can be reached, so repository ownership is unknown right now and the badge is stale.",
+      "profile": {
+        "v": 1,
+        "did": "did:key:zDnaeVuZeVRqvscGkiEoR9PFFra2xZUMp97ZPuGFK1VLU7iYN",
+        "displayName": "Alice",
+        "avatar": null,
+        "bio": "",
+        "links": [],
+        "alsoKnownAs": ["at://alice.example"],
+        "badges": [],
+        "supersededBy": null,
+        "updatedAt": "2026-07-16T00:00:00Z"
+      },
+      "dnsError": "unreachable",
+      "wellKnownError": "unreachable",
+      "expected": {
+        "state": "stale",
+        "handle": "alice.example",
+        "repoDid": null,
+        "recordUri": null,
+        "direction1": true,
+        "direction2": null
+      }
+    }
+  ]
+}

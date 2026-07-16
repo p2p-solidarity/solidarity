@@ -29,6 +29,7 @@ export * from './challenge';
 export * from './crypto';
 export * from './derive';
 export * from './fragment';
+export * from './handles';
 export * from './identity';
 export * from './importer';
 export * from './jws';
