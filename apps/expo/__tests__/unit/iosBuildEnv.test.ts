@@ -331,12 +331,10 @@ end
     ]);
   });
 
-  // 1.3.3 S7: the canonical scheme casing is `Solidarity` (commit 2cf4b92
-  // renamed it; the Xcode Cloud workflow and the SPM seed/validate resolve
-  // both target `Solidarity`). normalize_xcode_cloud_scheme now REPAIRS a
-  // stale lowercase `solidarity.xcscheme` instead of creating one — these two
-  // tests pin both directions of that contract.
-  test('shared prepare script keeps the canonical Solidarity scheme casing', () => {
+  // Xcode Cloud's workflow archives the lowercase `solidarity` scheme. Expo
+  // prebuild regenerates `Solidarity.xcscheme`, so normalize_xcode_cloud_scheme
+  // repairs that casing before Xcode Cloud starts its archive action.
+  test('shared prepare script normalizes the Expo-generated scheme to Xcode Cloud casing', () => {
     const fixtureRoot = makeTempDir();
     const fixtureApp = join(fixtureRoot, 'apps', 'expo');
     const fakeBin = join(fixtureRoot, 'bin');
@@ -345,7 +343,7 @@ end
     const stderrPath = join(fixtureRoot, 'stderr.log');
     writeGeneratedScheme(fixtureApp);
     const schemeDir = join(fixtureApp, 'ios', 'Solidarity.xcodeproj', 'xcshareddata', 'xcschemes');
-    const canonicalScheme = join(schemeDir, 'Solidarity.xcscheme');
+    const workflowScheme = join(schemeDir, 'solidarity.xcscheme');
     createFakeToolchain(fakeBin, logPath);
 
     const result = Bun.spawnSync({
@@ -378,12 +376,12 @@ end
         stdout: readOptional(stdoutPath),
       })
     ).toBe(0);
-    expect(readdirSync(schemeDir)).toContain('Solidarity.xcscheme');
-    expect(readdirSync(schemeDir)).not.toContain('solidarity.xcscheme');
-    expect(readOptional(canonicalScheme)).toBe(generatedSchemeXml);
+    expect(readdirSync(schemeDir)).toContain('solidarity.xcscheme');
+    expect(readdirSync(schemeDir)).not.toContain('Solidarity.xcscheme');
+    expect(readOptional(workflowScheme)).toBe(generatedSchemeXml);
   });
 
-  test('shared prepare script repairs a stale lowercase scheme to canonical casing', () => {
+  test('shared prepare script keeps an existing lowercase Xcode Cloud scheme', () => {
     const fixtureRoot = makeTempDir();
     const fixtureApp = join(fixtureRoot, 'apps', 'expo');
     const fakeBin = join(fixtureRoot, 'bin');
@@ -391,12 +389,11 @@ end
     const stdoutPath = join(fixtureRoot, 'stdout.log');
     const stderrPath = join(fixtureRoot, 'stderr.log');
     const schemeDir = join(fixtureApp, 'ios', 'Solidarity.xcodeproj', 'xcshareddata', 'xcschemes');
-    const canonicalScheme = join(schemeDir, 'Solidarity.xcscheme');
-    // Pre-seed ONLY the stale lowercase scheme (the pre-2cf4b92 convention /
-    // a leftover from an old run); the fake prebuild is told NOT to write a
-    // scheme so the repair path is what produces the canonical file.
+    const workflowScheme = join(schemeDir, 'solidarity.xcscheme');
+    // Pre-seed ONLY the workflow's lowercase scheme; the fake prebuild is told
+    // NOT to write a scheme so this covers the no-op/keep path.
     mkdirSync(schemeDir, { recursive: true });
-    writeFileSync(join(schemeDir, 'solidarity.xcscheme'), generatedSchemeXml);
+    writeFileSync(workflowScheme, generatedSchemeXml);
     createFakeToolchain(fakeBin, logPath);
 
     const result = Bun.spawnSync({
@@ -430,9 +427,9 @@ end
         stdout: readOptional(stdoutPath),
       })
     ).toBe(0);
-    expect(readdirSync(schemeDir)).toContain('Solidarity.xcscheme');
-    expect(readdirSync(schemeDir)).not.toContain('solidarity.xcscheme');
-    expect(readOptional(canonicalScheme)).toBe(generatedSchemeXml);
+    expect(readdirSync(schemeDir)).toContain('solidarity.xcscheme');
+    expect(readdirSync(schemeDir)).not.toContain('Solidarity.xcscheme');
+    expect(readOptional(workflowScheme)).toBe(generatedSchemeXml);
   });
 
   test('Xcode Cloud post-clone hook delegates to the same clean prepare flow', () => {

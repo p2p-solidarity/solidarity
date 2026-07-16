@@ -73,35 +73,33 @@ ensure_command() {
 }
 
 normalize_xcode_cloud_scheme() {
-  # Canonical scheme name is `Solidarity` (renamed from lowercase in commit
-  # 2cf4b92; the Xcode Cloud workflow builds `Solidarity`, and the SPM
-  # seed/validate step below resolves `-scheme Solidarity`). This function
-  # used to do the OPPOSITE (force-lowercase for the pre-2cf4b92 workflow) —
-  # now it only repairs a stale lowercase `solidarity.xcscheme` left by old
-  # runs or case-insensitive-filesystem artifacts, so every later xcodebuild
-  # invocation finds the canonical casing. xcodebuild scheme matching is
-  # case-sensitive.
+  # Xcode Cloud's workflow is configured to archive the lowercase `solidarity`
+  # scheme. Expo regenerates the app target/scheme as `Solidarity`, but
+  # xcodebuild scheme matching is case-sensitive, so post-clone must normalize
+  # the generated shared scheme back to the workflow's casing before Xcode
+  # Cloud starts its archive action.
   local scheme_dir="$APP_DIR/ios/Solidarity.xcodeproj/xcshareddata/xcschemes"
-  local canonical_scheme="$scheme_dir/Solidarity.xcscheme"
-  local legacy_scheme="$scheme_dir/solidarity.xcscheme"
-  local temp_scheme="$scheme_dir/.Solidarity.xcscheme.tmp"
+  local workflow_scheme="$scheme_dir/solidarity.xcscheme"
+  local expo_scheme="$scheme_dir/Solidarity.xcscheme"
+  local temp_scheme="$scheme_dir/.solidarity.xcscheme.tmp"
 
-  if [[ ! -f "$canonical_scheme" && ! -f "$legacy_scheme" ]]; then
-    die "Expected Expo to generate $canonical_scheme"
+  if [[ ! -f "$workflow_scheme" && ! -f "$expo_scheme" ]]; then
+    die "Expected Expo to generate $expo_scheme"
   fi
 
-  if [[ -f "$legacy_scheme" ]]; then
+  if [[ -f "$expo_scheme" ]]; then
     rm -f "$temp_scheme"
-    if [[ "$legacy_scheme" -ef "$canonical_scheme" ]]; then
+    if [[ "$expo_scheme" -ef "$workflow_scheme" ]]; then
       # Case-insensitive FS: same file under either name — rename through a
-      # temp so the directory entry carries the canonical casing.
-      mv "$legacy_scheme" "$temp_scheme"
-      mv "$temp_scheme" "$canonical_scheme"
-    elif [[ -f "$canonical_scheme" ]]; then
-      # Distinct stale lowercase duplicate next to a fresh canonical scheme.
-      rm -f "$legacy_scheme"
+      # temp so the directory entry carries the Xcode Cloud workflow casing.
+      mv "$expo_scheme" "$temp_scheme"
+      mv "$temp_scheme" "$workflow_scheme"
+    elif [[ -f "$workflow_scheme" ]]; then
+      # Distinct Expo-generated uppercase duplicate next to the workflow
+      # scheme. Keep the workflow scheme to avoid two app schemes in Xcode.
+      rm -f "$expo_scheme"
     else
-      mv "$legacy_scheme" "$canonical_scheme"
+      mv "$expo_scheme" "$workflow_scheme"
     fi
   fi
 }
@@ -319,7 +317,7 @@ fi
 # Regenerate the checked-in pin after bumping SPM_VERSION in
 # plugins/withSpruceIdSpmPackage.js:
 #   (cd apps/expo/ios && xcodebuild -resolvePackageDependencies \
-#      -workspace Solidarity.xcworkspace -scheme Solidarity) \
+#      -workspace Solidarity.xcworkspace -scheme solidarity) \
 #   && cp apps/expo/ios/Solidarity.xcworkspace/xcshareddata/swiftpm/Package.resolved \
 #         apps/expo/scripts/ios-spm.Package.resolved
 # See apps/expo/CLAUDE.md (CI).
@@ -334,14 +332,14 @@ if [[ -d "$APP_DIR/ios/Solidarity.xcworkspace" ]]; then
   defaults write com.apple.dt.Xcode IDEDisableAutomaticPackageResolution -bool NO 2>/dev/null || true
   defaults write com.apple.dt.Xcode IDEPackageOnlyUseVersionsFromResolvedFile -bool NO 2>/dev/null || true
   if ( cd "$APP_DIR/ios" && xcodebuild -resolvePackageDependencies \
-         -workspace Solidarity.xcworkspace -scheme Solidarity \
+         -workspace Solidarity.xcworkspace -scheme solidarity \
          -disableAutomaticPackageResolution \
          -skipPackagePluginValidation ); then
     green "OK seeded Package.resolved satisfies the workspace"
   else
     red "x seeded Package.resolved is stale for this workspace — attempting a live resolve"
     ( cd "$APP_DIR/ios" && xcodebuild -resolvePackageDependencies \
-        -workspace Solidarity.xcworkspace -scheme Solidarity \
+        -workspace Solidarity.xcworkspace -scheme solidarity \
         -skipPackagePluginValidation ) \
       || die "Swift Package resolution failed and the checked-in pin is stale.
   Regenerate apps/expo/scripts/ios-spm.Package.resolved on a Mac with network
