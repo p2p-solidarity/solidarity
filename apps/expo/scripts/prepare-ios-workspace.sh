@@ -73,23 +73,35 @@ ensure_command() {
 }
 
 normalize_xcode_cloud_scheme() {
+  # Canonical scheme name is `Solidarity` (renamed from lowercase in commit
+  # 2cf4b92; the Xcode Cloud workflow builds `Solidarity`, and the SPM
+  # seed/validate step below resolves `-scheme Solidarity`). This function
+  # used to do the OPPOSITE (force-lowercase for the pre-2cf4b92 workflow) —
+  # now it only repairs a stale lowercase `solidarity.xcscheme` left by old
+  # runs or case-insensitive-filesystem artifacts, so every later xcodebuild
+  # invocation finds the canonical casing. xcodebuild scheme matching is
+  # case-sensitive.
   local scheme_dir="$APP_DIR/ios/Solidarity.xcodeproj/xcshareddata/xcschemes"
-  local expo_scheme="$scheme_dir/Solidarity.xcscheme"
-  local cloud_scheme="$scheme_dir/solidarity.xcscheme"
-  local temp_scheme="$scheme_dir/.solidarity.xcscheme.tmp"
+  local canonical_scheme="$scheme_dir/Solidarity.xcscheme"
+  local legacy_scheme="$scheme_dir/solidarity.xcscheme"
+  local temp_scheme="$scheme_dir/.Solidarity.xcscheme.tmp"
 
-  if [[ ! -f "$expo_scheme" && ! -f "$cloud_scheme" ]]; then
-    die "Expected Expo to generate $expo_scheme"
+  if [[ ! -f "$canonical_scheme" && ! -f "$legacy_scheme" ]]; then
+    die "Expected Expo to generate $canonical_scheme"
   fi
 
-  if [[ -f "$expo_scheme" ]]; then
+  if [[ -f "$legacy_scheme" ]]; then
     rm -f "$temp_scheme"
-    if [[ "$expo_scheme" -ef "$cloud_scheme" ]]; then
-      mv "$expo_scheme" "$temp_scheme"
-      mv "$temp_scheme" "$cloud_scheme"
+    if [[ "$legacy_scheme" -ef "$canonical_scheme" ]]; then
+      # Case-insensitive FS: same file under either name — rename through a
+      # temp so the directory entry carries the canonical casing.
+      mv "$legacy_scheme" "$temp_scheme"
+      mv "$temp_scheme" "$canonical_scheme"
+    elif [[ -f "$canonical_scheme" ]]; then
+      # Distinct stale lowercase duplicate next to a fresh canonical scheme.
+      rm -f "$legacy_scheme"
     else
-      rm -f "$cloud_scheme"
-      mv "$expo_scheme" "$cloud_scheme"
+      mv "$legacy_scheme" "$canonical_scheme"
     fi
   fi
 }

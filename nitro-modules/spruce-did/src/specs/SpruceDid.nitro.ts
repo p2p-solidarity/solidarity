@@ -78,7 +78,7 @@ export interface SpruceDid
    * or 'secp256k1' (Spruce KeyManager — same fallback). Unknown types throw.
    *
    * `requireBiometric=true` configures the key so every `signJws` /
-   * `signCredentialJwt` call prompts BiometricPrompt (Android) or
+   * `signRawP256` call prompts BiometricPrompt (Android) or
    * Face ID/Touch ID (iOS). Set to false for non-sensitive operations.
    */
   generateKey(

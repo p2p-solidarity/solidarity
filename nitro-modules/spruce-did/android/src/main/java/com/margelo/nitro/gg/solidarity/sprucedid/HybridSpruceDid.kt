@@ -362,16 +362,3 @@ class HybridSpruceDid : HybridSpruceDidSpec() {
   // SpruceDidCryptoHelpers.kt as `SpruceDidEcdsa`, `SpruceDidJwk`, and
   // `SpruceDidBase64`.
 }
-
-/**
- * Helper: `await()` adaptor so we can compose `Promise<T>` returned by other
- * HybridObject methods inside our coroutine bodies. The Nitro `Promise.async`
- * builder accepts a suspend block, but the value returned by another
- * HybridObject method is wrapped in a Nitro Promise, so we bridge with a
- * suspendable wrapper.
- */
-private suspend fun <T> Promise<T>.await(): T =
-  kotlinx.coroutines.suspendCancellableCoroutine { cont ->
-    this.then { v -> cont.resumeWith(Result.success(v)) }
-      .catch { e -> cont.resumeWith(Result.failure(e)) }
-  }

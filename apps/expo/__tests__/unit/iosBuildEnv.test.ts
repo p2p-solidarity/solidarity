@@ -56,7 +56,7 @@ function createFakeToolchain(binDir: string, logPath: string): void {
 set -euo pipefail
 command_name="$(basename "$0")"
 printf '%s\\t%s\\t%s\\n' "$command_name" "$PWD" "$*" >> "${logPath}"
-if [[ "$command_name" == "bunx" && "$*" == expo\\ prebuild* ]]; then
+if [[ "$command_name" == "bunx" && "$*" == expo\\ prebuild* && "\${AIRMEISHI_FAKE_PREBUILD_NO_SCHEME:-0}" != "1" ]]; then
   scheme_dir="$PWD/ios/Solidarity.xcodeproj/xcshareddata/xcschemes"
   mkdir -p "$scheme_dir"
   printf '${generatedSchemeXml.replace(/\n/g, '\\n')}' > "$scheme_dir/Solidarity.xcscheme"
@@ -331,7 +331,12 @@ end
     ]);
   });
 
-  test('shared prepare script exposes lowercase Xcode Cloud scheme alias', () => {
+  // 1.3.3 S7: the canonical scheme casing is `Solidarity` (commit 2cf4b92
+  // renamed it; the Xcode Cloud workflow and the SPM seed/validate resolve
+  // both target `Solidarity`). normalize_xcode_cloud_scheme now REPAIRS a
+  // stale lowercase `solidarity.xcscheme` instead of creating one — these two
+  // tests pin both directions of that contract.
+  test('shared prepare script keeps the canonical Solidarity scheme casing', () => {
     const fixtureRoot = makeTempDir();
     const fixtureApp = join(fixtureRoot, 'apps', 'expo');
     const fakeBin = join(fixtureRoot, 'bin');
@@ -340,7 +345,7 @@ end
     const stderrPath = join(fixtureRoot, 'stderr.log');
     writeGeneratedScheme(fixtureApp);
     const schemeDir = join(fixtureApp, 'ios', 'Solidarity.xcodeproj', 'xcshareddata', 'xcschemes');
-    const cloudScheme = join(schemeDir, 'solidarity.xcscheme');
+    const canonicalScheme = join(schemeDir, 'Solidarity.xcscheme');
     createFakeToolchain(fakeBin, logPath);
 
     const result = Bun.spawnSync({
@@ -373,9 +378,61 @@ end
         stdout: readOptional(stdoutPath),
       })
     ).toBe(0);
-    expect(readdirSync(schemeDir)).toContain('solidarity.xcscheme');
-    expect(readdirSync(schemeDir)).not.toContain('Solidarity.xcscheme');
-    expect(readOptional(cloudScheme)).toBe(generatedSchemeXml);
+    expect(readdirSync(schemeDir)).toContain('Solidarity.xcscheme');
+    expect(readdirSync(schemeDir)).not.toContain('solidarity.xcscheme');
+    expect(readOptional(canonicalScheme)).toBe(generatedSchemeXml);
+  });
+
+  test('shared prepare script repairs a stale lowercase scheme to canonical casing', () => {
+    const fixtureRoot = makeTempDir();
+    const fixtureApp = join(fixtureRoot, 'apps', 'expo');
+    const fakeBin = join(fixtureRoot, 'bin');
+    const logPath = join(fixtureRoot, 'commands.log');
+    const stdoutPath = join(fixtureRoot, 'stdout.log');
+    const stderrPath = join(fixtureRoot, 'stderr.log');
+    const schemeDir = join(fixtureApp, 'ios', 'Solidarity.xcodeproj', 'xcshareddata', 'xcschemes');
+    const canonicalScheme = join(schemeDir, 'Solidarity.xcscheme');
+    // Pre-seed ONLY the stale lowercase scheme (the pre-2cf4b92 convention /
+    // a leftover from an old run); the fake prebuild is told NOT to write a
+    // scheme so the repair path is what produces the canonical file.
+    mkdirSync(schemeDir, { recursive: true });
+    writeFileSync(join(schemeDir, 'solidarity.xcscheme'), generatedSchemeXml);
+    createFakeToolchain(fakeBin, logPath);
+
+    const result = Bun.spawnSync({
+      cmd: [
+        '/bin/bash',
+        '-c',
+        '/bin/bash "$1" >"$2" 2>"$3"',
+        'runner',
+        prepareScript,
+        stdoutPath,
+        stderrPath,
+      ],
+      env: {
+        ...process.env,
+        AIRMEISHI_BUN_INSTALL_ARGS: '--frozen-lockfile',
+        AIRMEISHI_EXPO_APP_DIR: fixtureApp,
+        AIRMEISHI_INSTALL_TOOLING: '0',
+        AIRMEISHI_SETUP_IOS_NATIVE_BINDINGS: '0',
+        AIRMEISHI_REPO_ROOT: fixtureRoot,
+        AIRMEISHI_FAKE_PREBUILD_NO_SCHEME: '1',
+        PATH: `${fakeBin}:${process.env['PATH'] ?? ''}`,
+      },
+      stdout: 'ignore',
+      stderr: 'ignore',
+    });
+
+    expect(
+      result.exitCode,
+      JSON.stringify({
+        stderr: readOptional(stderrPath),
+        stdout: readOptional(stdoutPath),
+      })
+    ).toBe(0);
+    expect(readdirSync(schemeDir)).toContain('Solidarity.xcscheme');
+    expect(readdirSync(schemeDir)).not.toContain('solidarity.xcscheme');
+    expect(readOptional(canonicalScheme)).toBe(generatedSchemeXml);
   });
 
   test('Xcode Cloud post-clone hook delegates to the same clean prepare flow', () => {
