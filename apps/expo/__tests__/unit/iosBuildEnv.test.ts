@@ -326,9 +326,103 @@ end
     expect(readCommandLog(logPath)).toEqual([
       `node\t${fixtureRoot}\t-e const [maj,min]=process.versions.node.split('.').map(Number); process.exit(maj > 20 || (maj === 20 && min >= 18) ? 0 : 1)`,
       `bun\t${fixtureRoot}\tinstall --frozen-lockfile`,
+      `node\t${fixtureRoot}\t-e require('lightningcss')`,
       `bunx\t${fixtureApp}\texpo prebuild --clean --platform ios --no-install`,
       `pod\t${join(fixtureApp, 'ios')}\tinstall`,
     ]);
+  });
+
+  // Xcode Cloud's Tahoe image installs x86_64 node (Intel-prefix Homebrew,
+  // Rosetta) but native arm64 bun, so bun never installs the lightningcss
+  // binding the Metro bundle phase's NODE_BINARY needs (Builds 153/154). The
+  // prepare script must detect the broken require and stage the platform
+  // package for node's arch from the npm registry.
+  test('shared prepare script stages the lightningcss binding when node arch differs from bun', () => {
+    const fixtureRoot = makeTempDir();
+    const fixtureApp = join(fixtureRoot, 'apps', 'expo');
+    const fakeBin = join(fixtureRoot, 'bin');
+    const logPath = join(fixtureRoot, 'commands.log');
+    const stdoutPath = join(fixtureRoot, 'stdout.log');
+    const stderrPath = join(fixtureRoot, 'stderr.log');
+    mkdirSync(join(fixtureApp, 'ios'), { recursive: true });
+    createFakeToolchain(fakeBin, logPath);
+
+    const lightningcssDir = join(fixtureRoot, 'node_modules', 'lightningcss');
+    mkdirSync(lightningcssDir, { recursive: true });
+    writeFileSync(
+      join(lightningcssDir, 'package.json'),
+      JSON.stringify({ name: 'lightningcss', version: '9.9.9' })
+    );
+
+    const stagedBinding = join(fixtureRoot, 'node_modules', 'lightningcss-fake-arch', 'binding.node');
+    // node succeeds at require('lightningcss') only once the platform package
+    // exists — mirrors the real resolution failure on Xcode Cloud.
+    writeExecutable(
+      join(fakeBin, 'node'),
+      `#!/usr/bin/env bash
+set -euo pipefail
+printf 'node\\t%s\\t%s\\n' "$PWD" "$*" >> "${logPath}"
+case "$*" in
+  *"require('lightningcss')"*) [[ -f "${stagedBinding}" ]] || exit 1 ;;
+  *"package.json').version"*) printf '9.9.9' ;;
+  *"process.platform + '-' + process.arch"*) printf 'fake-arch' ;;
+esac
+exit 0
+`
+    );
+    // npm pack drops the requested platform tarball (package/ root) into $PWD.
+    writeExecutable(
+      join(fakeBin, 'npm'),
+      `#!/usr/bin/env bash
+set -euo pipefail
+printf 'npm\\t%s\\t%s\\n' "$PWD" "$*" >> "${logPath}"
+mkdir -p package
+printf 'fake native binding' > package/binding.node
+printf '{"name":"lightningcss-fake-arch"}' > package/package.json
+tar -czf lightningcss-fake-arch-9.9.9.tgz package
+rm -rf package
+`
+    );
+
+    const result = Bun.spawnSync({
+      cmd: [
+        '/bin/bash',
+        '-c',
+        '/bin/bash "$1" >"$2" 2>"$3"',
+        'runner',
+        prepareScript,
+        stdoutPath,
+        stderrPath,
+      ],
+      env: {
+        ...process.env,
+        AIRMEISHI_BUN_INSTALL_ARGS: '--frozen-lockfile',
+        AIRMEISHI_EXPO_APP_DIR: fixtureApp,
+        AIRMEISHI_INSTALL_TOOLING: '0',
+        AIRMEISHI_SETUP_IOS_NATIVE_BINDINGS: '0',
+        AIRMEISHI_REPO_ROOT: fixtureRoot,
+        COMMAND_LOG: logPath,
+        PATH: `${fakeBin}:${process.env['PATH'] ?? ''}`,
+      },
+      stdout: 'ignore',
+      stderr: 'ignore',
+    });
+
+    expect(
+      result.exitCode,
+      JSON.stringify({
+        stderr: readOptional(stderrPath),
+        stdout: readOptional(stdoutPath),
+      })
+    ).toBe(0);
+    const commands = readCommandLog(logPath);
+    expect(commands.some((line) => line.includes('pack lightningcss-fake-arch@9.9.9'))).toBe(true);
+    expect(existsSync(stagedBinding)).toBe(true);
+    expect(readFileSync(stagedBinding, 'utf8')).toBe('fake native binding');
+    // The staged package must satisfy a fresh require probe before prebuild.
+    expect(
+      commands.filter((line) => line === `node\t${fixtureRoot}\t-e require('lightningcss')`).length
+    ).toBe(2);
   });
 
   // Xcode Cloud's workflow archives the lowercase `solidarity` scheme. Expo

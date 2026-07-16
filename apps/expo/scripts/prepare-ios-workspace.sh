@@ -257,6 +257,49 @@ stage_ios_native_bindings() {
   ensure_passport_openac_srs
 }
 
+# bun and node can disagree on CPU arch on Xcode Cloud's macOS Tahoe image:
+# `brew install node` comes from the image's Intel-prefix Homebrew
+# (/usr/local, x86_64 under Rosetta), while the oven-sh/bun formula detects
+# the physical Apple Silicon CPU and installs native arm64 bun. bun only
+# installs the lightningcss platform binding matching ITS arch, but the
+# "Bundle React Native code and images" archive phase runs Metro under
+# NODE_BINARY (= that x86_64 node), so the archive dies at the very end with
+# "Cannot find module '../lightningcss.darwin-x64.node'" (Builds 153/154).
+# Probe with the same `node` the build phase resolves and stage the missing
+# platform package from the npm registry when the archs diverge.
+ensure_lightningcss_node_binding() {
+  if node -e "require('lightningcss')" >/dev/null 2>&1; then
+    green "OK lightningcss native binding loads under $(command -v node)"
+    return 0
+  fi
+
+  # Direct path, not require('lightningcss/package.json'): the package's
+  # exports map blocks the subpath.
+  local version
+  version="$(node -p "require('$REPO_ROOT/node_modules/lightningcss/package.json').version" 2>/dev/null)" \
+    || die "lightningcss is not installed — run bun install first"
+
+  local pkg
+  pkg="lightningcss-$(node -p "process.platform + '-' + process.arch")"
+  step "Staging $pkg@$version (bun arch != node arch)"
+  ensure_command npm
+
+  local temp_dir
+  temp_dir="$(mktemp -d)"
+  ( cd "$temp_dir" && npm pack "$pkg@$version" --silent >/dev/null ) \
+    || die "Could not download $pkg@$version from the npm registry"
+
+  local dest="$REPO_ROOT/node_modules/$pkg"
+  rm -rf "$dest"
+  mkdir -p "$dest"
+  tar -xzf "$temp_dir"/lightningcss-*.tgz -C "$dest" --strip-components 1
+  rm -rf "$temp_dir"
+
+  node -e "require('lightningcss')" >/dev/null 2>&1 \
+    || die "lightningcss still cannot load a native binding under $(command -v node)"
+  green "OK staged $pkg@$version into node_modules"
+}
+
 cd "$REPO_ROOT"
 
 install_if_missing node node
@@ -283,6 +326,8 @@ if is_enabled "$RUN_BUN_INSTALL"; then
   fi
   bun install "${bun_args[@]}"
 fi
+
+ensure_lightningcss_node_binding
 
 if is_enabled "$SETUP_IOS_NATIVE_BINDINGS"; then
   stage_ios_native_bindings
