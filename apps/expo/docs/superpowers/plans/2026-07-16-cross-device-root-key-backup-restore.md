@@ -1,5 +1,38 @@
 # Cross-Device Root Identity and Backup Restore Implementation Plan
 
+> **Implementation status (2026-07-16):** Owner approved full scope incl. G1/G2.
+> Codex adversarial review (session `019f6a68`) verified the crypto and REFUTED
+> two of the reviewer's own concerns (the HKDF backup-key vectors are correct;
+> `zoo…wrong` is valid BIP-39, not invalid; removing delete-before-generate does
+> NOT reintroduce phantom-key resolution as long as the deterministic lookup
+> order is kept). It ADDED four findings, now folded in: (a) native
+> `getSynchronizableItem` used the nondeterministic `SynchronizableAny` lookup —
+> FIXED (pinned `synchronizable=true`); (b) iCloud auto-import DID-switch — moot
+> because `restoreRootKeyFromICloud` is local-wins (only imports into empty
+> local); (c) SOLB v2 header not AEAD-authenticated — documented as denial-only
+> (version selects a distinct key, so tampering can't yield plaintext); (d)
+> same-device read-back ≠ cross-device proof — kept mandatory in §9.
+>
+> **DONE + fully green** (typecheck + lint 0-err + 1342 unit + 104 parity):
+> Tasks **1–6** (the entire JS/TS layer). New: `packages/shared/src/derive.ts`
+> `deriveBackupKeyFromMnemonic`; `apps/expo/src/storage/jsonCrypto.ts`;
+> `rootKey.ts` `restoreRootKeyFromICloud`/`getPortableBackupKey`/`clearSyncedRootKey`;
+> discriminated `solbEnvelope.ts` v1/v2; portable `cloudProvider`/`backupManager`;
+> recover-before-restore in `SecureKeysStep`/`BackupStep`; stale-synced-phrase
+> cleanup in `identity-export`. Cross-device restore MECHANISM works end-to-end at
+> the data layer.
+>
+> **REMAINING** (native, cannot be unit-tested or device-verified in this env):
+> Task **7** signing-key delayed-sync race — see the analysis in §3.4/§10; the
+> clean fix is JS-side (gate fresh signing-key generation on the root-key
+> recovery signal) rather than the native delete removal alone, because on a
+> fresh device the synced key is genuinely absent at generation time and a
+> fresh syncable key would later collide with the arriving synced one. Task
+> **8** honest cloud target (needs Nitrogen regen + native build + Android
+> Kotlin). Task **9** docs + opus security review + 2-device acceptance.
+>
+> ---
+>
 > **Status:** Draft — `grill-me` / `grilling` in progress. Do not implement until every blocking grill decision is resolved in this file and the owner approves the plan.
 >
 > **Source:** Continuation of Claude session `4c91c43b-2381-461e-97f2-b4b4394ae631` (2026-07-16). The session completed diagnosis and added two uncommitted characterization tests, then hit its session limit while entering plan mode.

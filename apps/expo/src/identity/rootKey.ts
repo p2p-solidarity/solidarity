@@ -74,6 +74,7 @@ import type * as SecureStoreNS from 'expo-secure-store';
 
 import {
   HKDF_INFO_ROOT,
+  deriveBackupKeyFromMnemonic,
   deriveP256Scalar,
   didKeyFromPublicKey,
   err,
@@ -134,6 +135,14 @@ const ICLOUD_SYNC_ALIAS = 'gg.solidarity.rootkey.mnemonic.icloud.v1';
 
 export interface RootKeySyncStorage {
   readonly setSyncedMnemonic: (mnemonic: string) => Promise<void>;
+  /**
+   * Read the iCloud-Keychain-synced mnemonic written by `setSyncedMnemonic`,
+   * or `null` when none exists. This is the READ-BACK path that makes the
+   * iCloud backup actually restorable on a second device — its absence was
+   * the "write-only backup" gap (task A1.5 shipped only set/delete). Returns
+   * `null` (never throws) for "not found"; a genuine keychain error rejects.
+   */
+  readonly getSyncedMnemonic: () => Promise<string | null>;
   readonly deleteSyncedMnemonic: () => Promise<void>;
 }
 
@@ -146,6 +155,7 @@ export interface RootKeySyncStorage {
  */
 async function loadSecretsVault(): Promise<{
   readonly setSynchronizableItem: (alias: string, value: string) => Promise<void>;
+  readonly getSynchronizableItem: (alias: string) => Promise<string>;
   readonly deleteSynchronizableItem: (alias: string) => Promise<void>;
 }> {
   const { getSecretsVault } = await import('@solidarity/nitro-secrets-vault');
@@ -156,6 +166,17 @@ const defaultSyncStorage: RootKeySyncStorage = {
   setSyncedMnemonic: async (mnemonic) => {
     const vault = await loadSecretsVault();
     await vault.setSynchronizableItem(ICLOUD_SYNC_ALIAS, mnemonic);
+  },
+  getSyncedMnemonic: async () => {
+    const vault = await loadSecretsVault();
+    // Native returns "" for a missing item (never throws for not-found) — map
+    // that to null so callers get a clean "nothing synced" signal. The native
+    // read is pinned to `kSecAttrSynchronizable = true` (NOT
+    // `…SynchronizableAny`), so a stale non-synced leftover under the same
+    // alias can never be resolved in place of the real synced phrase — the
+    // deterministic-lookup rule the Spruce keystore fix established.
+    const value = await vault.getSynchronizableItem(ICLOUD_SYNC_ALIAS);
+    return value.length > 0 ? value : null;
   },
   deleteSyncedMnemonic: async () => {
     const vault = await loadSecretsVault();
@@ -391,6 +412,119 @@ export async function enableICloudBackup(): Promise<Result<void, RootKeyError>> 
     return err(toStorageError(e));
   }
   return ok(undefined);
+}
+
+/** Outcome of a fresh-device Root Identity recovery attempt. */
+export type RootKeyRecovery =
+  | { readonly kind: 'alreadyLocal'; readonly did: string }
+  | { readonly kind: 'restoredFromICloud'; readonly did: string }
+  | { readonly kind: 'notFound' };
+
+/**
+ * Fresh-device Root Identity recovery (fixes the write-only iCloud gap): read
+ * the mnemonic that `enableICloudBackup` synced into iCloud Keychain and
+ * hydrate the local copy so `getRootDid` / `getRootSigner` resolve the SAME
+ * identity the user backed up — instead of onboarding minting a new one and
+ * orphaning it.
+ *
+ * Invariants (each a security rule, not a nicety):
+ * - **Local wins.** A valid local Recovery Phrase is NEVER overwritten by the
+ *   synced value — returns `{kind:'alreadyLocal'}` without touching sync
+ *   storage. This is what stops a stale synced phrase from silently replacing
+ *   an active identity.
+ * - **Malformed synced phrase is an ERROR, never a fresh mint.** A synced
+ *   value that fails BIP-39 checksum returns `err({kind:'invalidMnemonic'})`;
+ *   it must never fall through to `createFromFreshMnemonic`. "Absence/badness
+ *   of a cloud key is not proof the user is new" (04-plan security invariant).
+ * - **Not-found is a clean signal, not an error** — `{kind:'notFound'}` so the
+ *   caller can offer Retry / Enter Phrase / explicit Start Fresh.
+ *
+ * The caller (onboarding) owns the user-facing decision to switch identity —
+ * this function only rehydrates a phrase the user already chose to back up; it
+ * never prompts, logs, or returns the plaintext mnemonic.
+ */
+export async function restoreRootKeyFromICloud(): Promise<Result<RootKeyRecovery, RootKeyError>> {
+  let local: string | null;
+  try {
+    local = await activeStorage.getMnemonic();
+  } catch (e) {
+    return err(toStorageError(e));
+  }
+  if (local) {
+    const localDid = deriveDidFromMnemonic(local);
+    if (!localDid.ok) return localDid;
+    return ok({ kind: 'alreadyLocal', did: localDid.value });
+  }
+
+  let synced: string | null;
+  try {
+    synced = await activeSyncStorage.getSyncedMnemonic();
+  } catch (e) {
+    return err(toStorageError(e));
+  }
+  if (!synced) return ok({ kind: 'notFound' });
+
+  const normalized = normalizeMnemonic(synced);
+  const syncedDid = deriveDidFromMnemonic(normalized);
+  // A malformed synced phrase surfaces as a typed error — it must NOT be
+  // swallowed into a fresh-identity path.
+  if (!syncedDid.ok) return syncedDid;
+  try {
+    await activeStorage.setMnemonic(normalized);
+  } catch (e) {
+    return err(toStorageError(e));
+  }
+  return ok({ kind: 'restoredFromICloud', did: syncedDid.value });
+}
+
+/**
+ * Derive the 32-byte **Portable Backup Key** from the locally-provisioned
+ * Recovery Phrase (see `@solidarity/shared`'s `deriveBackupKeyFromMnemonic` +
+ * `docs/adr/0001`). Used ONLY to encrypt/decrypt cross-device SOLB v2 Backup
+ * Archives — NOT the device-local Device Storage Key.
+ *
+ * No biometric prompt: automatic backups run in the background (People
+ * pull-to-refresh, pan gesture), so gating this on Face ID would either block
+ * the backup or pop an out-of-context prompt. Reading the mnemonic is already
+ * biometric-free by design (the Face ID gate lives only on sign/export
+ * ceremonies); this returns ONLY the derived key and never the mnemonic, so no
+ * new plaintext exposure is introduced. `notProvisioned` when no root key
+ * exists yet (a v2 backup requires a Root Identity — the caller must not fall
+ * back to a device-only key).
+ */
+export async function getPortableBackupKey(): Promise<Result<Uint8Array, RootKeyError>> {
+  let mnemonic: string | null;
+  try {
+    mnemonic = await activeStorage.getMnemonic();
+  } catch (e) {
+    return err(toStorageError(e));
+  }
+  if (!mnemonic) return err({ kind: 'notProvisioned' });
+  try {
+    return ok(deriveBackupKeyFromMnemonic(mnemonic));
+  } catch (e) {
+    return err({ kind: 'invalidMnemonic', message: e instanceof Error ? e.message : String(e) });
+  }
+}
+
+/**
+ * Clear ONLY the iCloud-Keychain-synced Recovery Phrase, leaving the local
+ * copy intact. Used when the user switches to a DIFFERENT Recovery Phrase
+ * (identity switch): the previously-synced phrase must not linger in iCloud
+ * Keychain, or another device would `restoreRootKeyFromICloud` the STALE
+ * identity. Returns a typed Result so the caller can surface a conflict rather
+ * than silently leaving `rootKeySyncChoice='icloud'` pointing at the old key
+ * (plan T6). Android's secrets-vault rejects synchronizable-item calls — that
+ * is reported as `storageFailed`, not swallowed, because the caller needs to
+ * know the old phrase could not be cleared.
+ */
+export async function clearSyncedRootKey(): Promise<Result<void, RootKeyError>> {
+  try {
+    await activeSyncStorage.deleteSyncedMnemonic();
+    return ok(undefined);
+  } catch (e) {
+    return err(toStorageError(e));
+  }
 }
 
 /**

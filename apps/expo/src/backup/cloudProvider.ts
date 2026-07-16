@@ -26,14 +26,14 @@
 import { Platform } from 'react-native';
 import { getCloudKit, type CloudKit } from '@solidarity/nitro-cloudkit';
 
-import { decryptJson, encryptJson } from '../storage/encryptionManager';
+import { encryptJsonWithKey } from '../storage/jsonCrypto';
 import {
   newBackupName,
   parseBackupTimestampMs,
   selectNewestBackup,
   sortBackupsByTimestamp,
 } from './backupPolicy';
-import { decodeSolb, encodeSolb } from './solbEnvelope';
+import { decodeSolb, encodeSolb, type SolbKeyScheme } from './solbEnvelope';
 
 export type ProviderKind = 'iCloud' | 'googleDrive';
 
@@ -169,28 +169,45 @@ async function rotateBackups(ck: CloudKit): Promise<void> {
   }
 }
 
-/** Upload an arbitrary serialisable value, encrypted with the master key. */
-export async function uploadBackup<T>(value: T): Promise<void> {
-  const ciphertextB64 = await encryptJson(value);
-  const fileB64 = encodeSolb(ciphertextB64);
+/**
+ * Upload an arbitrary serialisable value as a portable **SOLB v2** Backup
+ * Archive, encrypted with the caller-supplied Portable Backup Key (the
+ * Recovery-Phrase-derived key — see `docs/adr/0001`). The key is passed in by
+ * `backupManager` (which owns the identity concern); `cloudProvider` never
+ * resolves keys itself. NEW writes are ALWAYS v2 — a v1 device-key archive is
+ * never written again, because it can't be restored on another device.
+ */
+export async function uploadBackup<T>(value: T, key: Uint8Array): Promise<void> {
+  const ciphertextB64 = encryptJsonWithKey(key, value);
+  const fileB64 = encodeSolb(ciphertextB64, 2);
   const ck = await ensureInitialized();
   await ck.writeFileBackup(newBackupName(Date.now()), fileB64);
   await rotateBackups(ck);
 }
 
+/** The latest archive's key scheme + still-encrypted ciphertext. */
+export interface DownloadedArchive {
+  readonly keyScheme: SolbKeyScheme;
+  readonly ciphertextB64: string;
+}
+
 /**
- * Pull the latest backup (if any). Returns null only when no backup file
- * exists; a present-but-unreadable/undecryptable backup throws so the caller
- * can distinguish "nothing to restore" from a real failure.
+ * Pull + decode (NOT decrypt) the latest Backup Archive. Returns null only
+ * when no backup file exists; a present-but-unframeable file throws (bad
+ * magic / unknown version / legacy plaintext) so the caller can distinguish
+ * "nothing to restore" from a corrupt/unsupported file. Decryption is the
+ * caller's job (`backupManager`) because the KEY depends on `keyScheme`: v2 →
+ * Portable Backup Key, v1 → Device Storage Key. This keeps the "version selects
+ * exactly one key scheme, never trial-decrypt" rule (see `solbEnvelope.ts`).
  */
-export async function downloadBackup<T>(): Promise<T | null> {
+export async function downloadLatestArchive(): Promise<DownloadedArchive | null> {
   const ck = await ensureInitialized();
   const names = await sortedBackups(ck);
   const latest = selectNewestBackup(names);
   if (!latest) return null;
   const fileB64 = await ck.readFileBackup(latest);
-  const ciphertextB64 = decodeSolb(fileB64);
-  return await decryptJson<T>(ciphertextB64);
+  const decoded = decodeSolb(fileB64);
+  return { keyScheme: decoded.keyScheme, ciphertextB64: decoded.ciphertextB64 };
 }
 
 /** Returns the cloud-mtime so the UI can show "last backed up …". */

@@ -4,8 +4,6 @@ export {
   setProvider,
   setGoogleAccessToken,
   getActiveProvider,
-  uploadBackup,
-  downloadBackup,
   backupMtime,
 } from './cloudProvider';
 export {

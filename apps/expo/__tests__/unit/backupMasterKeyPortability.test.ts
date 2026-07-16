@@ -1,87 +1,81 @@
 /**
- * Backup DATA (SOLB) master-key portability — GAP demonstration
- * (diagnosis 2026-07-16).
+ * Backup Archive portability — behavioral test (fixed 2026-07-16).
  *
- * Reproduces the second half of "私鑰跨裝置沒辦法還原 / 資料無法還原": the
- * cards/contacts/credentials backup file is AES-GCM-sealed with the master
- * encryption key from `src/storage/secureMasterKey.ts`
- * (`gg.solidarity.master.v2`). That key is stored via `expo-secure-store`
- * with NO `kSecAttrSynchronizable`, so it is DEVICE-LOCAL — it does not travel
- * through iCloud Keychain and is not carried inside the backup itself
- * (chicken-and-egg: the key that would decrypt the file isn't in the file).
+ * Originally CHARACTERIZED the gap: a `.solbk` sealed with a device-local key
+ * could not be opened on another device. The fix seals cross-device SOLB v2
+ * archives with the Recovery-Phrase-derived **Portable Backup Key** (same
+ * phrase → same key on every device). This suite now asserts the DESIRED
+ * behavior against the REAL production helpers:
+ *   - `encryptJsonWithKey` / `decryptJsonWithKey` (src/storage/jsonCrypto.ts)
+ *   - `encodeSolb` / `decodeSolb` v2 (src/backup/solbEnvelope.ts)
+ *   - `deriveBackupKeyFromMnemonic` (@solidarity/shared)
  *
- * Consequence: on a second device (or any install where `getMasterKey()`
- * mints a fresh random key), `restoreFromBackup()` downloads the `.solbk`
- * file, `decodeSolb()` succeeds, but `aesGcmOpen()` fails the auth tag →
- * `DecryptError` → `BackupRestoreError('key-mismatch')`. The user's data is
- * intact in iCloud Drive but permanently unreadable on the new device.
- *
- * This test drives the REAL SOLB envelope (`encodeSolb`/`decodeSolb`) plus the
- * same shared AES-GCM primitives `encryptionManager` uses, so it characterises
- * the actual file path — only `getMasterKey()`'s device-local storage is
- * modelled by using two different keys. The existing
- * `icloudBackupRoundtrip.test.ts` only ever uses ONE fixed key, so this
- * cross-device failure mode is otherwise untested.
+ * `jsonCrypto.ts` imports only `@solidarity/shared`, so no expo-secure-store /
+ * native module is pulled in — this stays a pure in-process unit test.
  */
 import { describe, expect, it } from 'bun:test';
 
-import {
-  aesGcmOpen,
-  aesGcmSeal,
-  base64Decode,
-  base64Encode,
-  bytesToUtf8,
-  generateAesKey,
-  utf8ToBytes,
-} from '@solidarity/shared';
+import { deriveBackupKeyFromMnemonic } from '@solidarity/shared';
 
 import { decodeSolb, encodeSolb } from '../../src/backup/solbEnvelope';
+import {
+  DecryptError,
+  decryptJsonWithKey,
+  encryptJsonWithKey,
+} from '../../src/storage/jsonCrypto';
 
-/** Mirror of encryptionManager.encryptJson, with an explicit key (= per-device
- *  getMasterKey()). Produces the exact base64 the cloud provider frames. */
-function sealPayload(key: Uint8Array, value: unknown): string {
-  return base64Encode(aesGcmSeal(key, utf8ToBytes(JSON.stringify(value))));
-}
-
-/** Mirror of encryptionManager.decryptJson — throws on auth-tag failure. */
-function openPayload<T>(key: Uint8Array, ciphertextB64: string): T {
-  const plaintext = aesGcmOpen(key, base64Decode(ciphertextB64)); // throws on wrong key
-  return JSON.parse(bytesToUtf8(plaintext)) as T;
-}
+// Two independently-known-valid BIP-39 phrases (Trezor reference vectors).
+const PHRASE_A = 'legal winner thank year wave sausage worth useful legal winner thank yellow';
+const PHRASE_B = 'zoo zoo zoo zoo zoo zoo zoo zoo zoo zoo zoo wrong';
 
 const PAYLOAD = {
   schemaVersion: 3 as const,
   cards: [{ id: 'c1', name: 'Ada Lovelace' }],
   contacts: [{ id: 'p1', name: 'Alan Turing' }],
+  // A Set to exercise jsonReplacer round-tripping through the real helpers.
+  publicFields: new Set(['name', 'email']),
 };
 
-describe('SOLB backup is decryptable ONLY on the device that sealed it', () => {
-  it('same key (same device / reinstall where the keychain item survived) restores cleanly', () => {
-    const deviceKey = generateAesKey();
-    const solbFile = encodeSolb(sealPayload(deviceKey, PAYLOAD));
+/** Seal a payload into a v2 SOLB archive under the phrase's Portable Backup Key. */
+function sealV2Archive(phrase: string, value: unknown): string {
+  const key = deriveBackupKeyFromMnemonic(phrase);
+  return encodeSolb(encryptJsonWithKey(key, value), 2);
+}
 
-    // Restore on the same device: header strips, AES-GCM opens, JSON matches.
-    const restored = openPayload<typeof PAYLOAD>(deviceKey, decodeSolb(solbFile));
-    expect(restored).toEqual(PAYLOAD);
+describe('SOLB v2 archive is portable across devices via the Recovery Phrase', () => {
+  it('a device holding the SAME Recovery Phrase restores the archive (different Device Storage Keys are irrelevant)', () => {
+    const archive = sealV2Archive(PHRASE_A, PAYLOAD);
+
+    // Device B: independent device, no shared Device Storage Key — only the
+    // same Recovery Phrase. It derives the identical Portable Backup Key.
+    const decoded = decodeSolb(archive);
+    expect(decoded.version).toBe(2);
+    expect(decoded.keyScheme).toBe('recovery-phrase-hkdf-v1');
+
+    const keyB = deriveBackupKeyFromMnemonic(PHRASE_A);
+    const restored = decryptJsonWithKey<typeof PAYLOAD>(keyB, decoded.ciphertextB64);
+    expect(restored.cards).toEqual(PAYLOAD.cards);
+    expect(restored.contacts).toEqual(PAYLOAD.contacts);
+    // jsonReplacer serialised the Set as an array — the real helper's contract.
+    expect(restored.publicFields).toEqual(['name', 'email'] as unknown as Set<string>);
   });
 
-  it('a DIFFERENT device key (fresh install, no iCloud-synced master key) fails the auth tag', () => {
-    // Device A seals the backup with its local master key.
-    const deviceAKey = generateAesKey();
-    const solbFile = encodeSolb(sealPayload(deviceAKey, PAYLOAD));
+  it('a DIFFERENT Recovery Phrase fails the auth tag with a typed DecryptError (never leaks plaintext)', () => {
+    const archive = sealV2Archive(PHRASE_A, PAYLOAD);
+    const decoded = decodeSolb(archive);
+    const wrongKey = deriveBackupKeyFromMnemonic(PHRASE_B);
+    expect(() => decryptJsonWithKey(wrongKey, decoded.ciphertextB64)).toThrow(DecryptError);
+  });
 
-    // Device B: getMasterKey() has no synced/legacy key to recover, so it
-    // generated a fresh random key. The SOLB framing still parses …
-    const deviceBKey = generateAesKey();
-    const ciphertextB64 = decodeSolb(solbFile);
-    expect(ciphertextB64.length).toBeGreaterThan(0);
-
-    // … but the AES-GCM open fails — this is what surfaces as DecryptError →
-    // BackupRestoreError('key-mismatch') in restoreFromBackup(). The data is
-    // present but unreadable: the classic cross-device restore failure.
-    expect(() => openPayload(deviceBKey, ciphertextB64)).toThrow();
-
-    // Sanity: the two device keys really are independent (nothing synced them).
-    expect(base64Encode(deviceAKey)).not.toBe(base64Encode(deviceBKey));
+  it('each seal uses a fresh nonce — reusing one Portable Backup Key across archives is safe', () => {
+    const a = sealV2Archive(PHRASE_A, PAYLOAD);
+    const b = sealV2Archive(PHRASE_A, PAYLOAD);
+    // Same key + same payload, yet the ciphertexts differ (random 96-bit nonce).
+    expect(a).not.toBe(b);
+    // Both still decrypt to the same plaintext.
+    const keyA = deriveBackupKeyFromMnemonic(PHRASE_A);
+    expect(decryptJsonWithKey<typeof PAYLOAD>(keyA, decodeSolb(a).ciphertextB64).cards).toEqual(
+      decryptJsonWithKey<typeof PAYLOAD>(keyA, decodeSolb(b).ciphertextB64).cards
+    );
   });
 });

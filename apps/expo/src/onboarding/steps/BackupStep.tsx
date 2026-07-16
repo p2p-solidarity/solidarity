@@ -48,7 +48,13 @@ import { Colors } from '@/constants/Colors';
 import { showError } from '@/feedback/appAlert';
 import { haptic } from '@/feedback/haptics';
 import { useTranslation } from '@/i18n';
-import { createFromFreshMnemonic, enableICloudBackup, hasRootKey, revealMnemonicForExport } from '@/identity';
+import {
+  createFromFreshMnemonic,
+  enableICloudBackup,
+  hasRootKey,
+  restoreRootKeyFromICloud,
+  revealMnemonicForExport,
+} from '@/identity';
 import { usePreferences } from '@/settings/preferences';
 import { resolveIcloudAcceptOutcome, resolveMnemonicForCeremony } from './backupStepLogic';
 import { OnboardingScaffold } from './OnboardingScaffold';
@@ -103,6 +109,21 @@ export function BackupStep({ onBack, onDone }: BackupStepProps) {
       if (await hasRootKey()) {
         if (!cancelled) setPhase('question');
         return;
+      }
+      // Last-chance recovery before minting fresh: the iCloud-synced Recovery
+      // Phrase may have arrived since SecureKeysStep ran (Keychain sync is
+      // async). Never mint a new identity over a backed-up one. Local-wins in
+      // restoreRootKeyFromICloud guarantees this only imports when nothing is
+      // local, so it can't silently switch an existing identity.
+      if (Platform.OS === 'ios') {
+        const recovery = await restoreRootKeyFromICloud();
+        if (cancelled) return;
+        if (recovery.ok && recovery.value.kind !== 'notFound') {
+          // Recovered a backed-up identity → they already use iCloud backup.
+          setPref('rootKeySyncChoice', 'icloud');
+          onDone();
+          return;
+        }
       }
       const created = await createFromFreshMnemonic();
       if (cancelled) return;

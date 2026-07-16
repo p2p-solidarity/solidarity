@@ -28,6 +28,7 @@ import { confirmDialog } from '@/feedback/confirmDialog';
 import { pushToast } from '@/feedback/toast';
 import { useTranslation } from '@/i18n';
 import {
+  clearSyncedRootKey,
   deriveDidFromMnemonic,
   getRootDid,
   importFromMnemonic,
@@ -110,6 +111,13 @@ export default function IdentityExportSettings() {
         // A different identity is now active — the prior iCloud/mnemonic
         // backup consent described the OLD key, not this one.
         setPref('rootKeySyncChoice', 'undecided');
+        // Clear the OLD phrase from iCloud Keychain so another device can't
+        // restoreRootKeyFromICloud the stale identity. Surface a conflict if the
+        // clear fails rather than leaving a stale synced phrase behind (plan T6).
+        const cleared = await clearSyncedRootKey();
+        if (!cleared.ok) {
+          pushToast(t('identityExport.staleSyncWarning'), 'error');
+        }
       }
       setCurrentDid(r.value.did);
       setImportText('');

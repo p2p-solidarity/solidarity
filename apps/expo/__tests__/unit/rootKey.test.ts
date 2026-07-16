@@ -80,11 +80,17 @@ const syncStore = new Map<string, string>();
 let nextSyncWriteError: Error | null = null;
 let nextSyncDeleteError: Error | null = null;
 
+let nextSyncReadError: Error | null = null;
+
 const fakeSyncStorage = {
   setSyncedMnemonic: (mnemonic: string): Promise<void> => {
     if (nextSyncWriteError) return Promise.reject(nextSyncWriteError);
     syncStore.set('mnemonic', mnemonic);
     return Promise.resolve();
+  },
+  getSyncedMnemonic: (): Promise<string | null> => {
+    if (nextSyncReadError) return Promise.reject(nextSyncReadError);
+    return Promise.resolve(syncStore.get('mnemonic') ?? null);
   },
   deleteSyncedMnemonic: (): Promise<void> => {
     if (nextSyncDeleteError) return Promise.reject(nextSyncDeleteError);
@@ -98,6 +104,18 @@ interface RootKeyMod {
   readonly __setRootKeyBiometricGateForTesting: (gate: typeof fakeBiometricGate | null) => void;
   readonly __setRootKeySyncStorageForTesting: (storage: typeof fakeSyncStorage | null) => void;
   readonly enableICloudBackup: () => Promise<
+    | { readonly ok: true; readonly value: undefined }
+    | { readonly ok: false; readonly error: { readonly kind: string; readonly message?: string } }
+  >;
+  readonly restoreRootKeyFromICloud: () => Promise<
+    | { readonly ok: true; readonly value: { readonly kind: string; readonly did?: string } }
+    | { readonly ok: false; readonly error: { readonly kind: string; readonly message?: string } }
+  >;
+  readonly getPortableBackupKey: () => Promise<
+    | { readonly ok: true; readonly value: Uint8Array }
+    | { readonly ok: false; readonly error: { readonly kind: string; readonly message?: string } }
+  >;
+  readonly clearSyncedRootKey: () => Promise<
     | { readonly ok: true; readonly value: undefined }
     | { readonly ok: false; readonly error: { readonly kind: string; readonly message?: string } }
   >;
@@ -144,6 +162,7 @@ beforeEach(async () => {
   nextBiometricSuccess = true;
   nextSyncWriteError = null;
   nextSyncDeleteError = null;
+  nextSyncReadError = null;
   biometricCalls.length = 0;
   await mod.deleteRootKey();
 });
@@ -393,6 +412,139 @@ describe('deleteRootKey', () => {
     // unhandled rejection — that IS the "never throws" assertion.
     await mod.deleteRootKey();
     expect(await mod.hasRootKey()).toBe(false);
+  });
+});
+
+// ── 7b. restoreRootKeyFromICloud — fresh-device read-back (write-only fix) ─
+
+describe('restoreRootKeyFromICloud', () => {
+  it('rehydrates the synced mnemonic on a fresh device and returns the same did', async () => {
+    // Device A: provision + back up to iCloud.
+    const created = await mod.createFromFreshMnemonic();
+    expect(created.ok).toBe(true);
+    if (!created.ok) return;
+    await mod.enableICloudBackup();
+
+    // Simulate device B: local storage empty, shared sync store retained.
+    secureStore.clear();
+    expect(await mod.hasRootKey()).toBe(false);
+
+    const restored = await mod.restoreRootKeyFromICloud();
+    expect(restored.ok).toBe(true);
+    if (!restored.ok) return;
+    expect(restored.value.kind).toBe('restoredFromICloud');
+    expect(restored.value.did).toBe(created.value.did);
+
+    // Now resolvable locally — the identity survived the "device swap".
+    expect(await mod.hasRootKey()).toBe(true);
+    const did = await mod.getRootDid();
+    expect(did.ok).toBe(true);
+    if (did.ok) expect(did.value).toBe(created.value.did);
+  });
+
+  it('local wins: never overwrites an existing local phrase with the synced one', async () => {
+    const created = await mod.createFromFreshMnemonic();
+    expect(created.ok).toBe(true);
+    if (!created.ok) return;
+    // A DIFFERENT phrase sits in the synced store.
+    syncStore.set('mnemonic', 'legal winner thank year wave sausage worth useful legal winner thank yellow');
+
+    const restored = await mod.restoreRootKeyFromICloud();
+    expect(restored.ok).toBe(true);
+    if (!restored.ok) return;
+    expect(restored.value.kind).toBe('alreadyLocal');
+    if (created.ok) expect(restored.value.did).toBe(created.value.did);
+  });
+
+  it('returns notFound (not an error) when nothing is synced and nothing is local', async () => {
+    const restored = await mod.restoreRootKeyFromICloud();
+    expect(restored.ok).toBe(true);
+    if (!restored.ok) return;
+    expect(restored.value.kind).toBe('notFound');
+  });
+
+  it('a malformed synced phrase is a typed error, NEVER a silent fresh mint', async () => {
+    syncStore.set('mnemonic', 'not a valid bip39 phrase at all nope nope nope');
+    const restored = await mod.restoreRootKeyFromICloud();
+    expect(restored.ok).toBe(false);
+    if (restored.ok) return;
+    expect(restored.error.kind).toBe('invalidMnemonic');
+    // Must not have persisted anything locally.
+    expect(await mod.hasRootKey()).toBe(false);
+  });
+
+  it('surfaces a keychain read failure as a typed storage error (never a fresh mint)', async () => {
+    nextSyncReadError = new Error('synchronizable keychain read failed status=-25300');
+    const restored = await mod.restoreRootKeyFromICloud();
+    expect(restored.ok).toBe(false);
+    if (restored.ok) return;
+    expect(restored.error.kind).toBe('storageFailed');
+    expect(await mod.hasRootKey()).toBe(false);
+  });
+});
+
+// ── 7c. getPortableBackupKey — recovery-phrase-derived AES key ────────────
+
+describe('getPortableBackupKey', () => {
+  it('returns a deterministic 32-byte key for the provisioned phrase without a biometric prompt', async () => {
+    const created = await mod.createFromFreshMnemonic();
+    expect(created.ok).toBe(true);
+    if (!created.ok) return;
+
+    const a = await mod.getPortableBackupKey();
+    const b = await mod.getPortableBackupKey();
+    expect(a.ok).toBe(true);
+    expect(b.ok).toBe(true);
+    if (!a.ok || !b.ok) return;
+    expect(a.value.length).toBe(32);
+    expect(Buffer.from(a.value).toString('hex')).toBe(Buffer.from(b.value).toString('hex'));
+    // No Face ID prompt — background backups must not gate on biometrics.
+    expect(biometricCalls).not.toContain('sign');
+    expect(biometricCalls).not.toContain('export');
+  });
+
+  it('matches the shared derivation vector for a pinned phrase', async () => {
+    await mod.importFromMnemonic(
+      'legal winner thank year wave sausage worth useful legal winner thank yellow'
+    );
+    const key = await mod.getPortableBackupKey();
+    expect(key.ok).toBe(true);
+    if (!key.ok) return;
+    expect(Buffer.from(key.value).toString('hex')).toBe(
+      '0b3d69a14fcec6046218fe3c889f61206f64e6e0271aad1723e42cdad6653c70'
+    );
+  });
+
+  it('returns notProvisioned when no root key exists', async () => {
+    const key = await mod.getPortableBackupKey();
+    expect(key.ok).toBe(false);
+    if (key.ok) return;
+    expect(key.error.kind).toBe('notProvisioned');
+  });
+});
+
+// ── 7d. clearSyncedRootKey — identity-switch cleanup ──────────────────────
+
+describe('clearSyncedRootKey', () => {
+  it('removes ONLY the synced phrase, leaving the local copy intact', async () => {
+    const created = await mod.createFromFreshMnemonic();
+    expect(created.ok).toBe(true);
+    await mod.enableICloudBackup();
+    expect(syncStore.size).toBe(1);
+
+    const cleared = await mod.clearSyncedRootKey();
+    expect(cleared.ok).toBe(true);
+    expect(syncStore.size).toBe(0); // synced phrase gone …
+    expect(await mod.hasRootKey()).toBe(true); // … local identity untouched
+  });
+
+  it('returns a typed storageFailed (never swallows) when the delete fails', async () => {
+    await mod.createFromFreshMnemonic();
+    nextSyncDeleteError = new Error('unsupported on this platform');
+    const cleared = await mod.clearSyncedRootKey();
+    expect(cleared.ok).toBe(false);
+    if (cleared.ok) return;
+    expect(cleared.error.kind).toBe('storageFailed');
   });
 });
 

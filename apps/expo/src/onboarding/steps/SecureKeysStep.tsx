@@ -18,15 +18,16 @@
  * themed report sheet, never a native alert.
  */
 import { useState } from 'react';
-import { ActivityIndicator, View } from 'react-native';
+import { ActivityIndicator, Platform, View } from 'react-native';
 
-import { probeLatestBackup, restoreFromBackup } from '@/backup';
+import { BackupRestoreError, probeLatestBackup, restoreFromBackup } from '@/backup';
 import { ThemedButton, ThemedText } from '@/components/themed';
 import { Colors } from '@/constants/Colors';
 import { showError } from '@/feedback/appAlert';
 import { confirmDialog } from '@/feedback/confirmDialog';
 import { pushToast } from '@/feedback/toast';
 import { useTranslation } from '@/i18n';
+import { restoreRootKeyFromICloud } from '@/identity';
 import { ensureSigningKey } from '@/keychain';
 import { OnboardingScaffold } from './OnboardingScaffold';
 
@@ -67,11 +68,16 @@ export function SecureKeysStep({ onBack, onKeysGenerated }: SecureKeysStepProps)
         );
       }
     } catch (err) {
-      // Couldn't decrypt / read the backup — surface it, but still let the
-      // user into the app with freshly-provisioned keys.
+      // Couldn't decrypt / read the backup — surface the SPECIFIC reason but
+      // still let the user into the app. `root-key-unavailable` means the
+      // portable archive needs the Recovery Phrase (recover identity first).
+      const summary =
+        err instanceof BackupRestoreError && err.kind === 'root-key-unavailable'
+          ? t('backup.restore.rootKeyUnavailable')
+          : t('backup.restore.failedSummary');
       showError({
         context: 'Onboarding › Restore from iCloud',
-        summary: t('backup.restore.failedSummary'),
+        summary,
         title: t('backup.restoreFailed.title'),
         error: err,
       });
@@ -83,9 +89,29 @@ export function SecureKeysStep({ onBack, onKeysGenerated }: SecureKeysStepProps)
   const setupKeychain = async () => {
     setIsWorking(true);
     try {
-      // Provision the master signing key first so the restore step has a key
-      // to decrypt with, then offer to restore an existing iCloud backup.
+      // 1. Recover the portable Root Identity FIRST (iOS iCloud Keychain
+      //    read-back) so the Portable Backup Key exists BEFORE we try to
+      //    restore the archive — a v2 archive can't be decrypted otherwise.
+      //    `restoreRootKeyFromICloud` is local-wins (never overwrites an
+      //    existing local identity, so it can't silently switch identities —
+      //    the Codex DID-switch concern) and treats a malformed synced phrase
+      //    as an error, never a silent fresh mint. A genuinely new user gets
+      //    `notFound` and provisions fresh in the Backup step. iOS-only:
+      //    Android recovers via manual phrase entry (Settings › identity).
+      if (Platform.OS === 'ios') {
+        const recovery = await restoreRootKeyFromICloud();
+        if (!recovery.ok) {
+          // Surface but never block entry — the user can enter their phrase later.
+          showError({
+            context: 'Onboarding › Recover Identity',
+            summary: t('backup.recoverIdentityFailed'),
+            error: new Error(recovery.error.kind),
+          });
+        }
+      }
+      // 2. Provision the Signing Identity (idempotent — reused if it exists).
       await ensureSigningKey();
+      // 3. Offer to restore the Backup Archive (portable key now available).
       await maybeRestore();
       onKeysGenerated();
     } catch (err) {

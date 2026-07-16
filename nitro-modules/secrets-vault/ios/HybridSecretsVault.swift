@@ -210,11 +210,20 @@ final class HybridSecretsVault: HybridSecretsVaultSpec {
   func getSynchronizableItem(alias: String) throws -> Promise<String> {
     return Promise.async {
       guard !alias.isEmpty else { return "" }
+      // Pin `kSecAttrSynchronizable = true` (NOT `…SynchronizableAny`): the
+      // item is only ever written with `synchronizable = true` (see
+      // `setSynchronizableItem`), so a `SynchronizableAny` + `kSecMatchLimitOne`
+      // read could non-deterministically resolve a STALE non-synced leftover
+      // under the same (service, account) instead of the real synced value —
+      // the exact ambiguous-lookup class the Spruce keystore fix eliminated
+      // (see `nitro-modules/spruce-did/ios/SpruceDidKeyStore.swift`,
+      // `copyECPrivateKey`). The recovered value is persisted as the active
+      // Root Identity, so a wrong pick would silently switch identities.
       let query: [String: Any] = [
         kSecClass as String: kSecClassGenericPassword,
         kSecAttrService as String: Self.syncableItemService,
         kSecAttrAccount as String: alias,
-        kSecAttrSynchronizable as String: kSecAttrSynchronizableAny,
+        kSecAttrSynchronizable as String: true,
         kSecReturnData as String: true,
         kSecMatchLimit as String: kSecMatchLimitOne,
       ]

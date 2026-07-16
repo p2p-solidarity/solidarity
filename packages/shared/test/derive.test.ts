@@ -13,6 +13,7 @@ import { schnorr } from '@noble/curves/secp256k1.js';
 import {
   HKDF_INFO_NOSTR,
   HKDF_INFO_ROOT,
+  deriveBackupKeyFromMnemonic,
   deriveP256Scalar,
   deriveSecp256k1Scalar,
   generateMnemonic,
@@ -74,6 +75,34 @@ describe('deriveP256Scalar / deriveSecp256k1Scalar — determinism + separation'
   });
 });
 
+describe('deriveBackupKeyFromMnemonic — Portable Backup Key (SOLB v2)', () => {
+  test('is deterministic and returns a 32-byte AES key', () => {
+    const a = deriveBackupKeyFromMnemonic(FIXED_MNEMONIC_A);
+    const b = deriveBackupKeyFromMnemonic(FIXED_MNEMONIC_A);
+    expect(a.length).toBe(32);
+    expect(bytesToHex(a)).toBe(bytesToHex(b));
+  });
+
+  test('domain separation: the backup key shares no material with the root/nostr scalars from the same mnemonic', () => {
+    const backup = bytesToHex(deriveBackupKeyFromMnemonic(FIXED_MNEMONIC_A));
+    const root = bytesToHex(deriveP256Scalar(FIXED_MNEMONIC_A, HKDF_INFO_ROOT));
+    const nostr = bytesToHex(deriveSecp256k1Scalar(FIXED_MNEMONIC_A, HKDF_INFO_NOSTR));
+    expect(backup).not.toBe(root);
+    expect(backup).not.toBe(nostr);
+  });
+
+  test('different mnemonics derive different backup keys', () => {
+    const a = bytesToHex(deriveBackupKeyFromMnemonic(FIXED_MNEMONIC_A));
+    const b = bytesToHex(deriveBackupKeyFromMnemonic(FIXED_MNEMONIC_B));
+    expect(a).not.toBe(b);
+  });
+
+  test('validates the BIP-39 checksum before deriving (throws RangeError, never a usable key)', () => {
+    expect(() => deriveBackupKeyFromMnemonic(INVALID_CHECKSUM_MNEMONIC)).toThrow(RangeError);
+    expect(() => deriveBackupKeyFromMnemonic('not a real mnemonic at all just some words')).toThrow(RangeError);
+  });
+});
+
 describe('generateMnemonic', () => {
   test('produces a 24-word (256-bit) valid BIP-39 English mnemonic usable by deriveP256Scalar', () => {
     const m = generateMnemonic();
@@ -96,6 +125,10 @@ describe('derive.json conformance vectors — App/Web mnemonic portability', () 
       const k1Scalar = deriveSecp256k1Scalar(v.mnemonic, HKDF_INFO_NOSTR);
       const nostrPubkeyHex = bytesToHex(schnorr.getPublicKey(k1Scalar));
       expect(nostrPubkeyHex).toBe(v.nostrPubkeyHex);
+
+      // Portable Backup Key (SOLB v2) — frozen so the web viewer can replay the
+      // same phrase and derive the same archive key for cross-device restore.
+      expect(bytesToHex(deriveBackupKeyFromMnemonic(v.mnemonic))).toBe(v.backupKeyHex);
     });
   }
 

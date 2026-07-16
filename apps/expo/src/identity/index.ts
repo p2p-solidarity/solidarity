@@ -42,16 +42,20 @@ export {
 // directly from `./rootKey`; keep it that way rather than shipping test
 // seams through app code's import path.
 export {
+  clearSyncedRootKey,
   createFromFreshMnemonic,
   deleteRootKey,
   deriveDidFromMnemonic,
   enableICloudBackup,
+  getPortableBackupKey,
   getRootDid,
   getRootSigner,
   hasRootKey,
   importFromMnemonic,
+  restoreRootKeyFromICloud,
   revealMnemonicForExport,
   type BiometricGate,
   type RootKeyError,
+  type RootKeyRecovery,
   type RootKeyStorage,
 } from './rootKey';

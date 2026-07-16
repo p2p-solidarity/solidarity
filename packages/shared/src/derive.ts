@@ -44,6 +44,13 @@ import { deriveKey } from './crypto/hkdf';
 export const HKDF_INFO_ROOT = 'solidarity-root-v1';
 /** HKDF info label for the secp256k1 Nostr sandbox key. */
 export const HKDF_INFO_NOSTR = 'solidarity-nostr-v1';
+/**
+ * HKDF info label for the Portable Backup Key — the AES-256 key that protects
+ * cross-device Backup Archives (SOLB v2). Distinct from the two identity
+ * labels above so the backup key shares no key material with the root/nostr
+ * signing keys even though all three come from the same mnemonic + seed.
+ */
+export const HKDF_INFO_BACKUP = 'solidarity-backup-v1';
 
 const HKDF_SALT = utf8ToBytes('solidarity');
 /** OKM length before curve-order reduction — 384 bits, see module docstring. */
@@ -70,6 +77,31 @@ export function deriveP256Scalar(mnemonic: string, info: string): Uint8Array {
 /** Derive a secp256k1 private scalar (Nostr sandbox key) from `mnemonic`. */
 export function deriveSecp256k1Scalar(mnemonic: string, info: string): Uint8Array {
   return deriveScalar(mnemonic, info, secp256k1.Point.Fn.ORDER);
+}
+
+/**
+ * Derive the 32-byte **Portable Backup Key** from `mnemonic` — the
+ * Recovery-Phrase-derived AES-256 key used ONLY to encrypt cross-device
+ * Backup Archives (SOLB v2). It is deliberately SEPARATE from the device-local
+ * Device Storage Key (`apps/expo/src/storage/secureMasterKey.ts`), which
+ * protects MMKV + local records and never leaves the device (see
+ * `docs/adr/0001-derive-portable-backup-key-from-recovery-phrase.md`).
+ *
+ * Unlike `deriveP256Scalar` / `deriveSecp256k1Scalar` this is a raw symmetric
+ * key, so it does NOT reduce modulo a curve order — HKDF-SHA256 straight to 32
+ * bytes. Same seed + salt as the identity derivations with a DISTINCT info
+ * label (`HKDF_INFO_BACKUP`), and it validates the BIP-39 checksum first
+ * (throws `RangeError`), matching the scalar derivations' contract so a
+ * typo'd phrase can never silently produce a usable-looking key.
+ */
+export function deriveBackupKeyFromMnemonic(mnemonic: string): Uint8Array {
+  if (!validateMnemonic(mnemonic, wordlist)) {
+    throw new RangeError(
+      'deriveBackupKeyFromMnemonic: invalid BIP-39 mnemonic (unknown word or bad checksum)'
+    );
+  }
+  const seed = mnemonicToSeedSync(mnemonic);
+  return deriveKey(seed, HKDF_SALT, HKDF_INFO_BACKUP, SCALAR_BYTE_LENGTH);
 }
 
 /** Generate a fresh 24-word (256-bit) English BIP-39 mnemonic. */

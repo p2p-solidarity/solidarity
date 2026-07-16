@@ -107,10 +107,16 @@ export default function BackupSettings() {
       }
       router.back();
     } catch (err) {
-      const summary =
-        err instanceof BackupRestoreError && err.kind === 'key-mismatch'
-          ? t('backup.restore.keyMismatch')
-          : t('backup.restore.failedSummary');
+      // A "wrong key" failure (v2 under a different Recovery Phrase, or a v1
+      // device-key archive on a device that lacks that key) gets the plain
+      // "different key" message; everything else is the generic failure. T5
+      // adds per-kind copy (root-key-unavailable / unsupported-version).
+      const isWrongKey =
+        err instanceof BackupRestoreError &&
+        (err.kind === 'portable-key-mismatch' || err.kind === 'legacy-key-unavailable');
+      const summary = isWrongKey
+        ? t('backup.restore.keyMismatch')
+        : t('backup.restore.failedSummary');
       showError({ context: 'Backup › Restore', summary, error: err });
     }
   };
