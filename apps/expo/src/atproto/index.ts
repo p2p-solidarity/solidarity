@@ -43,3 +43,26 @@ export {
   type RefreshAtprotoSessionOpts,
   type StartAtprotoOAuthOpts,
 } from './oauth';
+export {
+  getProfileRecord,
+  putProfileRecord,
+  type GetProfileRecordOptions,
+  type PdsWriteError,
+  type PutProfileRecordOptions,
+} from './pds';
+export {
+  ATPROTO_IO_MAX_RESPONSE_BYTES,
+  ATPROTO_IO_TIMEOUT_MS,
+  atprotoBindingIO,
+  createAtprotoBindingIO,
+  type AtprotoBindingIoOptions,
+} from './bindingIo';
+export {
+  connectAtproto,
+  disconnectAtproto,
+  type AtprotoConnectDependencies,
+  type AtprotoConnectError,
+  type AtprotoConnectOptions,
+  type AtprotoConnectOutcome,
+  type AtprotoDisconnectDependencies,
+} from './connect';

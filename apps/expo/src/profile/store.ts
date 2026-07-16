@@ -98,6 +98,17 @@ export interface ProfileEditableFields {
   readonly links: readonly ProfileLink[];
 }
 
+/** Narrow service-level override for identity-binding flows. */
+export interface ProfileSaveOptions {
+  readonly alsoKnownAs?: readonly string[];
+}
+
+/** The exact pair persisted by a successful Face-ID-gated save. */
+export interface SavedProfile {
+  readonly record: ProfileRecord;
+  readonly jws: string;
+}
+
 interface PersistedProfile {
   readonly record: ProfileRecord;
   readonly jws: string;
@@ -174,7 +185,10 @@ interface ProfileState {
    * `err(reason)` without ever touching `getRootSigner()` (so without ever
    * prompting Face ID) when `fields` don't produce a valid `ProfileRecord`.
    */
-  readonly saveProfile: (fields: ProfileEditableFields) => Promise<Result<void, string>>;
+  readonly saveProfile: (
+    fields: ProfileEditableFields,
+    options?: ProfileSaveOptions
+  ) => Promise<Result<SavedProfile, string>>;
   /**
    * Publish the signed profile to Nostr (kind 30078) AND merge the
    * user's did:key into their kind-0 `alsoKnownAs` — the two directions
@@ -200,7 +214,7 @@ export const useProfileStore = create<ProfileState>((set, get) => ({
   jws: null,
   status: 'empty',
 
-  saveProfile: async (fields) => {
+  saveProfile: async (fields, options = {}) => {
     const didResult = await getRootDid();
     if (!didResult.ok) return err(rootKeyErrorMessage('profile save failed', didResult.error));
 
@@ -212,7 +226,10 @@ export const useProfileStore = create<ProfileState>((set, get) => ({
       avatar: previous?.avatar ?? null,
       bio: fields.bio,
       links: fields.links,
-      alsoKnownAs: previous?.alsoKnownAs ?? [],
+      alsoKnownAs:
+        options.alsoKnownAs !== undefined
+          ? [...options.alsoKnownAs]
+          : (previous?.alsoKnownAs ?? []),
       badges: previous?.badges ?? [],
       supersededBy: previous?.supersededBy ?? null,
       updatedAt: nextUpdatedAt(previous?.updatedAt ?? null),
@@ -233,7 +250,7 @@ export const useProfileStore = create<ProfileState>((set, get) => ({
 
     writePersisted({ record: validated.value, jws });
     set({ record: validated.value, jws, status: 'ready' });
-    return ok(undefined);
+    return ok({ record: validated.value, jws });
   },
 
   publishToNostr: async (confirmedRelays) => {

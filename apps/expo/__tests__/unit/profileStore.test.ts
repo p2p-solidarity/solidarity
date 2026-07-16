@@ -62,7 +62,10 @@ interface ProfileFieldsShape {
 }
 
 type SaveResult =
-  | { readonly ok: true; readonly value: undefined }
+  | {
+      readonly ok: true;
+      readonly value: { readonly record: ProfileRecord; readonly jws: string };
+    }
   | { readonly ok: false; readonly error: string };
 
 interface ProfileModuleSurface {
@@ -71,7 +74,10 @@ interface ProfileModuleSurface {
       readonly record: ProfileRecord | null;
       readonly jws: string | null;
       readonly status: 'empty' | 'ready';
-      readonly saveProfile: (fields: ProfileFieldsShape) => Promise<SaveResult>;
+      readonly saveProfile: (
+        fields: ProfileFieldsShape,
+        options?: { readonly alsoKnownAs?: readonly string[] }
+      ) => Promise<SaveResult>;
       readonly publishToNostr: (
         confirmedRelays: readonly string[]
       ) => Promise<
@@ -274,6 +280,33 @@ describe('saveProfile — signed, verifiable record', () => {
 });
 
 describe('saveProfile — append-only replacement semantics', () => {
+  it('applies an alsoKnownAs override before signing and returns that exact signed snapshot', async () => {
+    const created = await rootKeyMod.createFromFreshMnemonic();
+    expect(created.ok).toBe(true);
+    if (!created.ok) return;
+
+    const result = await mod.useProfileStore
+      .getState()
+      .saveProfile(
+        { displayName: 'Alice', bio: '', links: [] },
+        { alsoKnownAs: ['nostr:npub1alice', 'at://alice.example.social'] }
+      );
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.value.record.alsoKnownAs).toEqual([
+      'nostr:npub1alice',
+      'at://alice.example.social',
+    ]);
+    const stored = mod.useProfileStore.getState();
+    expect(stored.record).not.toBeNull();
+    expect(stored.jws).not.toBeNull();
+    if (!stored.record || !stored.jws) return;
+    expect(result.value).toEqual({ record: stored.record, jws: stored.jws });
+    const verified = verifyCompact(result.value.jws, created.value.did);
+    expect(verified).toEqual({ ok: true, value: result.value.record });
+  });
+
   it('updatedAt is strictly monotonic across successive saves', async () => {
     const created = await rootKeyMod.createFromFreshMnemonic();
     expect(created.ok).toBe(true);
