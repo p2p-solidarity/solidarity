@@ -10,9 +10,13 @@
 import { describe, expect, it } from 'bun:test';
 
 import {
+  composeLinkUrl,
+  displayLinkText,
   expandLinkPresetHandle,
   isHttpsLinkUrl,
+  linkInputModelFor,
   normalizeLinkUrl,
+  urlMatchesPreset,
 } from '../../src/profile/linkUrl';
 
 describe('normalizeLinkUrl', () => {
@@ -76,5 +80,58 @@ describe('expandLinkPresetHandle', () => {
     expect(expandLinkPresetHandle('instagram', 'kidney.dev')).toBe('kidney.dev');
     expect(expandLinkPresetHandle('instagram', 'kidney/path')).toBe('kidney/path');
     expect(expandLinkPresetHandle('website', 'kidney')).toBe('kidney');
+  });
+});
+
+describe('linkInputModelFor', () => {
+  it('derives the in-field prefix from the platform URL builders', () => {
+    expect(linkInputModelFor(null)).toEqual({ prefix: 'https://', handle: false });
+    expect(linkInputModelFor('website')).toEqual({ prefix: 'https://', handle: false });
+    expect(linkInputModelFor('instagram')).toEqual({ prefix: 'instagram.com/', handle: true });
+    expect(linkInputModelFor('telegram')).toEqual({ prefix: 't.me/', handle: true });
+    expect(linkInputModelFor('linkedin')).toEqual({ prefix: 'linkedin.com/in/', handle: true });
+    expect(linkInputModelFor('youtube')).toEqual({ prefix: 'youtube.com/@', handle: true });
+  });
+});
+
+describe('composeLinkUrl', () => {
+  it('treats anything without a scheme as the handle under a platform preset', () => {
+    expect(composeLinkUrl('instagram', '@kidney')).toBe('https://instagram.com/kidney');
+    // Dots and underscores are legal in real handles — no bare-handle guard here.
+    expect(composeLinkUrl('instagram', 'john.doe')).toBe('https://instagram.com/john.doe');
+    expect(composeLinkUrl('telegram', 'kidney_tg')).toBe('https://t.me/kidney_tg');
+  });
+
+  it('lets a pasted full URL replace the prefix mode outright', () => {
+    expect(composeLinkUrl('instagram', 'https://youtube.com/@kidney')).toBe(
+      'https://youtube.com/@kidney'
+    );
+    expect(composeLinkUrl('telegram', 'http://t.me/kidney')).toBe('https://t.me/kidney');
+  });
+
+  it('prefixes https:// for the generic mode and returns empty for blank input', () => {
+    expect(composeLinkUrl(null, 'example.com/a')).toBe('https://example.com/a');
+    expect(composeLinkUrl(null, '')).toBe('');
+    expect(composeLinkUrl('instagram', '@')).toBe('');
+  });
+});
+
+describe('displayLinkText + urlMatchesPreset', () => {
+  it('round-trips the composed URL back to the typed tail', () => {
+    expect(displayLinkText('instagram', 'https://instagram.com/john.doe')).toBe('john.doe');
+    expect(displayLinkText('telegram', 'https://t.me/kidney')).toBe('kidney');
+    expect(displayLinkText(null, 'https://example.com/a')).toBe('example.com/a');
+    expect(displayLinkText(null, '')).toBe('');
+  });
+
+  it('shows a legacy http tail under the generic https prefix', () => {
+    expect(displayLinkText(null, 'http://old.example.com')).toBe('old.example.com');
+  });
+
+  it('flags a pasted URL that left the platform so the row can drop the preset', () => {
+    expect(urlMatchesPreset('instagram', 'https://instagram.com/kidney')).toBe(true);
+    expect(urlMatchesPreset('instagram', 'https://youtube.com/@kidney')).toBe(false);
+    expect(urlMatchesPreset('instagram', '')).toBe(true);
+    expect(urlMatchesPreset(null, 'https://anything.example')).toBe(true);
   });
 });

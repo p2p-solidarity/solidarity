@@ -43,7 +43,11 @@ import {
 import { DEFAULT_RELAYS } from '@/nostr/publish';
 import { hasNostrKey, provisionFromRootMnemonic } from '@/nostr/userKey';
 import {
+  composeLinkUrl,
+  displayLinkText,
   expandLinkPresetHandle,
+  linkInputModelFor,
+  urlMatchesPreset,
   isHttpsLinkUrl,
   LINK_LABEL_PRESETS,
   normalizeLinkUrl,
@@ -199,8 +203,17 @@ export function PageStep({ onBack, onNext }: PageStepProps) {
           <LinkPresetChips
             selected={linkPreset}
             onSelect={(preset, label) => {
-              setLinkPreset(preset);
               setLinkLabel(label);
+              // Same rule as Me › Edit: a slash-free tail typed before the
+              // chip is the handle — recompose it under the new prefix; a
+              // real URL only latches when it already matches the platform.
+              const tail = displayLinkText(linkPreset, linkUrl);
+              if (tail.length === 0 || !tail.includes('/')) {
+                setLinkPreset(preset);
+                setLinkUrl(composeLinkUrl(preset, tail));
+              } else {
+                setLinkPreset(urlMatchesPreset(preset, linkUrl) ? preset : null);
+              }
             }}
           />
           <ThemedTextInput
@@ -213,12 +226,18 @@ export function PageStep({ onBack, onNext }: PageStepProps) {
           />
           <ThemedTextInput
             kind="url"
-            value={linkUrl}
-            onChangeText={setLinkUrl}
-            onBlur={() => {
-              if (preparedLinkUrl !== linkUrl) setLinkUrl(preparedLinkUrl);
+            value={displayLinkText(linkPreset, linkUrl)}
+            onChangeText={(v) => {
+              const composed = composeLinkUrl(linkPreset, v);
+              if (!urlMatchesPreset(linkPreset, composed)) setLinkPreset(null);
+              setLinkUrl(composed);
             }}
-            placeholder="https://…"
+            inlinePrefix={linkInputModelFor(linkPreset).prefix}
+            placeholder={
+              linkInputModelFor(linkPreset).handle
+                ? t('profileLink.handlePlaceholder')
+                : t('profileLink.urlPlaceholder')
+            }
             error={linkError}
             showClear
           />

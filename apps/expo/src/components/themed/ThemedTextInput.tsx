@@ -83,6 +83,9 @@ export interface ThemedTextInputProps {
   readonly placeholder?: string;
   /** Read-only format guidance rendered inside the field at the trailing edge. */
   readonly inlineSuffix?: string | null;
+  /** Read-only fixed part rendered inside the field at the leading edge —
+   * the user types only what follows it (e.g. `https://`, `t.me/`). */
+  readonly inlinePrefix?: string | null;
   /** Non-null → destructive border + this message under the field. Wins over `hint`. */
   readonly error?: string | null;
   /** Neutral/positive helper under the field (e.g. "✓ npub1…"). Hidden while `error` is set. */
@@ -119,6 +122,7 @@ export function ThemedTextInput({
   label,
   placeholder,
   inlineSuffix = null,
+  inlinePrefix = null,
   error = null,
   hint = null,
   hintTone = 'secondary',
@@ -140,6 +144,12 @@ export function ThemedTextInput({
   const cfg = KIND_CONFIG[kind];
   const [focused, setFocused] = useState(false);
   const [revealed, setRevealed] = useState(false);
+  // Measured on layout; until then an estimate keeps the caret from
+  // overlapping the prefix on the first frame.
+  const [prefixWidth, setPrefixWidth] = useState(0);
+  const effectivePrefixWidth = inlinePrefix
+    ? (prefixWidth > 0 ? prefixWidth : inlinePrefix.length * 8) + 4
+    : 0;
 
   const trailing: ReactNode[] = [];
   if (cfg.secret) {
@@ -221,6 +231,7 @@ export function ThemedTextInput({
           className="bg-searchBg text-text1"
           style={{
             paddingHorizontal: 14,
+            paddingLeft: 14 + effectivePrefixWidth,
             paddingRight:
               14 + trailingWidth + (inlineSuffix ? INLINE_SUFFIX_WIDTH : 0),
             paddingVertical: 12,
@@ -246,6 +257,27 @@ export function ThemedTextInput({
             }}>
             <ThemedText variant="bodySmall" tone="tertiary" numberOfLines={1}>
               {inlineSuffix}
+            </ThemedText>
+          </View>
+        ) : null}
+        {inlinePrefix ? (
+          <View
+            pointerEvents="none"
+            style={{
+              position: 'absolute',
+              left: 14,
+              top: 0,
+              bottom: 0,
+              justifyContent: 'center',
+            }}>
+            <ThemedText
+              variant="bodySmall"
+              tone="tertiary"
+              numberOfLines={1}
+              onLayout={(e) => {
+                setPrefixWidth(e.nativeEvent.layout.width);
+              }}>
+              {inlinePrefix}
             </ThemedText>
           </View>
         ) : null}

@@ -568,6 +568,8 @@
   "pageStep.skipHint": "You can create this later from Me.",
   "pageStep.saveFailed": "Couldn't create your page",
   "profileLink.httpsOnly": "Use a secure https:// link.",
+  "profileLink.handlePlaceholder": "@username",
+  "profileLink.urlPlaceholder": "example.com",
   "profileLink.preset.linkedin": "LinkedIn",
   "profileLink.preset.instagram": "Instagram",
   "profileLink.preset.telegram": "Telegram",

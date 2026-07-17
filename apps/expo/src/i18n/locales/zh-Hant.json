@@ -568,6 +568,8 @@
   "pageStep.skipHint": "之後可以在「我」分頁建立。",
   "pageStep.saveFailed": "無法建立你的頁面",
   "profileLink.httpsOnly": "請使用安全的 https:// 連結。",
+  "profileLink.handlePlaceholder": "@username",
+  "profileLink.urlPlaceholder": "example.com",
   "profileLink.preset.linkedin": "LinkedIn",
   "profileLink.preset.instagram": "Instagram",
   "profileLink.preset.telegram": "Telegram",

@@ -47,7 +47,11 @@ import {
 import { DEFAULT_RELAYS } from '@/nostr/publish';
 import { hasNostrKey, provisionFromRootMnemonic } from '@/nostr/userKey';
 import {
+  composeLinkUrl,
+  displayLinkText,
   expandLinkPresetHandle,
+  linkInputModelFor,
+  urlMatchesPreset,
   isHttpsLinkUrl,
   LINK_LABEL_PRESETS,
   normalizeLinkUrl,
@@ -167,9 +171,36 @@ export default function MeEditScreen() {
       )
     );
   };
+  /** Live in-field composition: the field shows only the tail after the
+   * inline prefix; the row always stores the full https URL. A pasted full
+   * URL replaces the prefix mode outright — if it's not the active
+   * platform's, the preset falls back to the generic https prefix. */
+  const changeLinkUrl = (id: string, value: string) => {
+    setLinks((prev) =>
+      prev.map((link) => {
+        if (link.id !== id) return link;
+        const composed = composeLinkUrl(link.preset, value);
+        return urlMatchesPreset(link.preset, composed)
+          ? { ...link, url: composed }
+          : { ...link, url: composed, preset: null };
+      })
+    );
+  };
   const selectLinkPreset = (id: string, preset: LinkLabelPreset, label: string) => {
     setLinks((prev) =>
-      prev.map((link) => (link.id === id ? { ...link, label, preset } : link))
+      prev.map((link) => {
+        if (link.id !== id) return link;
+        const tail = displayLinkText(link.preset, link.url);
+        // A slash-free tail is a handle/host the user typed before picking
+        // the platform — recompose it under the new prefix. A real URL tail
+        // stays put; the chip only latches when the URL already matches.
+        if (tail.length === 0 || !tail.includes('/')) {
+          return { ...link, label, preset, url: composeLinkUrl(preset, tail) };
+        }
+        return urlMatchesPreset(preset, link.url)
+          ? { ...link, label, preset }
+          : { ...link, label, preset: null };
+      })
     );
   };
 
@@ -329,6 +360,7 @@ export default function MeEditScreen() {
           onRemove={removeLink}
           onMove={moveLink}
           onChangeField={updateLink}
+          onChangeUrl={changeLinkUrl}
           onSelectPreset={selectLinkPreset}
           onImportLinktree={() => { setLinktreeSheetOpen(true); }}
         />
@@ -364,6 +396,7 @@ function LinksEditor({
   onRemove,
   onMove,
   onChangeField,
+  onChangeUrl,
   onSelectPreset,
   onImportLinktree,
 }: {
@@ -373,6 +406,7 @@ function LinksEditor({
   readonly onRemove: (id: string) => void;
   readonly onMove: (id: string, direction: -1 | 1) => void;
   readonly onChangeField: (id: string, field: 'label' | 'url', value: string) => void;
+  readonly onChangeUrl: (id: string, value: string) => void;
   readonly onSelectPreset: (id: string, preset: LinkLabelPreset, label: string) => void;
   readonly onImportLinktree: () => void;
 }) {
@@ -446,16 +480,18 @@ function LinksEditor({
 
           <ThemedTextInput
             kind="url"
-            value={link.url}
-            onChangeText={(v) => { onChangeField(link.id, 'url', v); }}
-            // Forgiving formatting: a user who typed `example.com` gets
-            // `https://example.com` on blur instead of a schema rejection
-            // (normalizeLinkUrl leaves any already-schemed input alone).
-            onBlur={() => {
-              const normalized = prepareLinkUrl(link.url, link.preset);
-              if (normalized !== link.url) onChangeField(link.id, 'url', normalized);
-            }}
-            placeholder="https://…"
+            value={displayLinkText(link.preset, link.url)}
+            onChangeText={(v) => { onChangeUrl(link.id, v); }}
+            // The fixed part of the address lives in the field as a
+            // read-only prefix (`https://`, `t.me/`, `instagram.com/` …) so
+            // the user types only the tail; a pasted full URL replaces the
+            // prefix mode entirely (composeLinkUrl).
+            inlinePrefix={linkInputModelFor(link.preset).prefix}
+            placeholder={
+              linkInputModelFor(link.preset).handle
+                ? t('profileLink.handlePlaceholder')
+                : t('profileLink.urlPlaceholder')
+            }
             accessibilityLabel="URL"
             error={errors[i]}
             showClear
