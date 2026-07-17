@@ -202,11 +202,10 @@ internal struct SpruceDidKeyStore {
 
   // MARK: - Lookup
 
-  /// Builds the EC private-key query for `alias`, scoped to a SPECIFIC
-  /// synchronizable class (never `kSecAttrSynchronizableAny`). Pinning the
-  /// class is what makes resolution deterministic — see `copyECPrivateKey`.
-  /// `MatchLimitAll` + attributes so the caller can order MULTIPLE items in
-  /// the same class deterministically (see `resolveECKey`).
+  /// Builds the EC private-key query for synced-key resolution, scoped to a
+  /// SPECIFIC synchronizable class (never `kSecAttrSynchronizableAny`).
+  /// `MatchLimitAll` + attributes let `resolveECKey` order MULTIPLE synced
+  /// items deterministically.
   private func ecPrivateKeyQuery(
     alias: String, synchronizable: Bool, context: LAContext?
   ) -> [String: Any] {
@@ -240,12 +239,34 @@ internal struct SpruceDidKeyStore {
   /// the SAME entry. Falls back to the non-synced class for legacy device-only
   /// SE aliases. Returns nil when neither class matches.
   private func copyECPrivateKey(alias: String, context: LAContext?) -> SecKey? {
-    for synchronizable in [true, false] {
-      if let winner = resolveECKey(alias: alias, synchronizable: synchronizable, context: context) {
-        return winner
-      }
+    if let synced = resolveECKey(alias: alias, synchronizable: true, context: context) {
+      return synced
     }
-    return nil
+    return copyLegacyECPrivateKey(alias: alias, context: context)
+  }
+
+  /// Legacy non-synced / Secure-Enclave lookup. Keep this ref-only and
+  /// `MatchLimitOne`: token-backed SE items have historically been stable on
+  /// this query shape, and the T7 multi-item convergence problem only exists
+  /// in the synchronizable software class.
+  private func copyLegacyECPrivateKey(alias: String, context: LAContext?) -> SecKey? {
+    var query: [String: Any] = [
+      kSecClass as String: kSecClassKey,
+      kSecAttrApplicationTag as String: keyTag(for: alias),
+      kSecAttrKeyClass as String: kSecAttrKeyClassPrivate,
+      kSecMatchLimit as String: kSecMatchLimitOne,
+      kSecReturnRef as String: true,
+      kSecAttrSynchronizable as String: false,
+    ]
+    if let context {
+      query[kSecUseAuthenticationContext as String] = context
+    }
+    var item: CFTypeRef?
+    guard SecItemCopyMatching(query as CFDictionary, &item) == errSecSuccess,
+      let ref = item,
+      CFGetTypeID(ref) == SecKeyGetTypeID()
+    else { return nil }
+    return ref as! SecKey  // swiftlint:disable:this force_cast
   }
 
   /// Resolve WITHIN one synchronizable class. Multiple items can share the
