@@ -9,7 +9,11 @@
  */
 import { describe, expect, it } from 'bun:test';
 
-import { normalizeLinkUrl } from '../../src/profile/linkUrl';
+import {
+  expandLinkPresetHandle,
+  isHttpsLinkUrl,
+  normalizeLinkUrl,
+} from '../../src/profile/linkUrl';
 
 describe('normalizeLinkUrl', () => {
   it('returns empty string for blank / whitespace-only input', () => {
@@ -26,10 +30,10 @@ describe('normalizeLinkUrl', () => {
     expect(normalizeLinkUrl('  example.com  ')).toBe('https://example.com');
   });
 
-  it('leaves an already-https/http URL unchanged (case-insensitive scheme)', () => {
+  it('keeps https URLs and upgrades http URLs (case-insensitive scheme)', () => {
     expect(normalizeLinkUrl('https://x.com')).toBe('https://x.com');
-    expect(normalizeLinkUrl('http://x.com')).toBe('http://x.com');
-    expect(normalizeLinkUrl('HTTP://x.com')).toBe('HTTP://x.com');
+    expect(normalizeLinkUrl('http://x.com')).toBe('https://x.com');
+    expect(normalizeLinkUrl('HTTP://x.com/path')).toBe('https://x.com/path');
   });
 
   it('does NOT rewrite a non-http scheme into https — leaves it to fail validation', () => {
@@ -37,5 +41,40 @@ describe('normalizeLinkUrl', () => {
     // save schema), never become `https://ftp://x`.
     expect(normalizeLinkUrl('ftp://x')).toBe('ftp://x');
     expect(normalizeLinkUrl('javascript:alert(1)//')).toBe('javascript:alert(1)//');
+  });
+});
+
+describe('isHttpsLinkUrl', () => {
+  it('accepts only valid https URLs', () => {
+    expect(isHttpsLinkUrl('https://kidney.dev')).toBe(true);
+    expect(isHttpsLinkUrl('http://kidney.dev')).toBe(false);
+    expect(isHttpsLinkUrl('javascript:alert(1)')).toBe(false);
+    expect(isHttpsLinkUrl('https://')).toBe(false);
+  });
+});
+
+describe('expandLinkPresetHandle', () => {
+  it('expands bare handles for every templated preset', () => {
+    expect(expandLinkPresetHandle('linkedin', 'kidney')).toBe(
+      'https://linkedin.com/in/kidney'
+    );
+    expect(expandLinkPresetHandle('instagram', '@kidney')).toBe(
+      'https://instagram.com/kidney'
+    );
+    expect(expandLinkPresetHandle('telegram', 'kidney')).toBe('https://t.me/kidney');
+    expect(expandLinkPresetHandle('x', 'kidney')).toBe('https://x.com/kidney');
+    expect(expandLinkPresetHandle('github', 'kidney')).toBe('https://github.com/kidney');
+    expect(expandLinkPresetHandle('youtube', '@kidney')).toBe(
+      'https://youtube.com/@kidney'
+    );
+  });
+
+  it('leaves full URLs, dotted input, invalid handles, and Website unchanged', () => {
+    expect(expandLinkPresetHandle('instagram', 'https://instagram.com/kidney')).toBe(
+      'https://instagram.com/kidney'
+    );
+    expect(expandLinkPresetHandle('instagram', 'kidney.dev')).toBe('kidney.dev');
+    expect(expandLinkPresetHandle('instagram', 'kidney/path')).toBe('kidney/path');
+    expect(expandLinkPresetHandle('website', 'kidney')).toBe('kidney');
   });
 });
