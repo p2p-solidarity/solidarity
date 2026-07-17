@@ -54,6 +54,7 @@ type PublishEventFn = (relayUrl: string, event: NostrEvent, timeoutMs?: number) 
   readonly accepted: boolean;
   readonly message: string;
   readonly elapsedMs: number;
+  readonly failure?: 'timeout' | 'transport';
 }>;
 
 type SubscribeEventsFn = (
@@ -241,6 +242,74 @@ describe('publishProfile', () => {
     expect(r.value.acceptedCount).toBe(1);
     expect(r.value.requiredCount).toBe(2);
     expect(r.value.results).toHaveLength(3);
+  });
+});
+
+// ── 1b. transport retry — a failed dial is not a rejection ───────────────
+
+describe('transport retry', () => {
+  /** Scripted per-relay outcome sequences; repeats the last entry when exhausted. */
+  function makeScriptedPublish(
+    script: Readonly<Record<string, readonly Awaited<ReturnType<PublishEventFn>>[]>>
+  ): { readonly fn: PublishEventFn; readonly calls: string[] } {
+    const calls: string[] = [];
+    const cursor = new Map<string, number>();
+    const fn: PublishEventFn = (relayUrl) => {
+      calls.push(relayUrl);
+      const seq = script[relayUrl] ?? [];
+      const i = cursor.get(relayUrl) ?? 0;
+      cursor.set(relayUrl, i + 1);
+      return Promise.resolve(seq[Math.min(i, seq.length - 1)] ?? { accepted: false, message: 'unscripted', elapsedMs: 1 });
+    };
+    return { fn, calls };
+  }
+
+  const transportFail = { accepted: false, message: 'websocket error', elapsedMs: 1, failure: 'transport' } as const;
+  const timeoutFail = { accepted: false, message: 'timeout after 8000ms', elapsedMs: 8000, failure: 'timeout' } as const;
+  const policyReject = { accepted: false, message: 'blocked: test policy', elapsedMs: 1 } as const;
+  const okAccept = { accepted: true, message: '', elapsedMs: 1 } as const;
+
+  it('retries a connection-level failure and counts the eventual OK as accepted', async () => {
+    await userKeyMod.provisionFromRootMnemonic();
+    const { fn, calls } = makeScriptedPublish({ a: [transportFail, okAccept], b: [okAccept], c: [okAccept] });
+    const r = await mod.publishProfile({ jws: 'j.w.s', relays: ['a', 'b', 'c'], publishEventFn: fn });
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.value.acceptedCount).toBe(3);
+    expect(r.value.success).toBe(true);
+    expect(calls.filter((c) => c === 'a')).toHaveLength(2);
+  });
+
+  it('never retries a relay policy refusal (an OK frame IS a verdict)', async () => {
+    await userKeyMod.provisionFromRootMnemonic();
+    const { fn, calls } = makeScriptedPublish({ a: [policyReject, okAccept], b: [okAccept], c: [okAccept] });
+    const r = await mod.publishProfile({ jws: 'j.w.s', relays: ['a', 'b', 'c'], publishEventFn: fn });
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(calls.filter((c) => c === 'a')).toHaveLength(1);
+    expect(r.value.results.find((x) => x.relay === 'a')?.message).toBe('blocked: test policy');
+  });
+
+  it('never retries a timeout (a down relay would just double the stall)', async () => {
+    await userKeyMod.provisionFromRootMnemonic();
+    const { fn, calls } = makeScriptedPublish({ a: [timeoutFail, okAccept], b: [okAccept], c: [okAccept] });
+    const r = await mod.publishProfile({ jws: 'j.w.s', relays: ['a', 'b', 'c'], publishEventFn: fn });
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(calls.filter((c) => c === 'a')).toHaveLength(1);
+    expect(r.value.results.find((x) => x.relay === 'a')?.accepted).toBe(false);
+  });
+
+  it('caps persistent transport failures at 2 retries (3 attempts) and keeps the last message', async () => {
+    await userKeyMod.provisionFromRootMnemonic();
+    const { fn, calls } = makeScriptedPublish({ a: [transportFail], b: [okAccept], c: [okAccept] });
+    const r = await mod.publishProfile({ jws: 'j.w.s', relays: ['a', 'b', 'c'], publishEventFn: fn });
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(calls.filter((c) => c === 'a')).toHaveLength(3);
+    expect(r.value.acceptedCount).toBe(2);
+    expect(r.value.success).toBe(true);
+    expect(r.value.results.find((x) => x.relay === 'a')?.message).toBe('websocket error');
   });
 });
 

@@ -29,8 +29,9 @@ import { hasRootKey } from '@/identity/rootKey';
 import {
   initialNostrConnectWizardState,
   isBiometricCancellation,
-  isNostrPublishOutcomeSuccessful,
+  isNostrPublishOutcomePartiallyAccepted,
   nostrConnectWizardReducer,
+  relayRejectionLines,
 } from '@/nostr/connectWizard';
 import { DEFAULT_RELAYS } from '@/nostr/publish';
 import {
@@ -118,7 +119,10 @@ export default function PublishPageScreen(): ReactNode {
       return;
     }
     dispatch({ type: 'publishingSucceeded', outcome: result.value });
-    if (!isNostrPublishOutcomeSuccessful(result.value)) {
+    // Partial acceptance (≥1 relay holding each copy) is an accepted outcome
+    // (04-plan S8f) — the outcome step renders the honest per-relay panel.
+    // Only zero acceptance of either copy raises the error sheet.
+    if (!isNostrPublishOutcomePartiallyAccepted(result.value)) {
       reportFailure('publish quorum was not met', result.value);
     }
   };
@@ -473,10 +477,13 @@ function GateScreen({
 }
 
 function publishFailureDetail(outcome: NostrPublishOutcome, t: TFn): string {
-  return t('nostrConnect.publishReportDetail', {
-    profileAccepted: outcome.profile.acceptedCount,
-    profileTotal: outcome.profile.results.length,
-    bindingAccepted: outcome.kind0.acceptedCount,
-    bindingTotal: outcome.kind0.results.length,
-  });
+  return [
+    t('nostrConnect.publishReportDetail', {
+      profileAccepted: outcome.profile.acceptedCount,
+      profileTotal: outcome.profile.results.length,
+      bindingAccepted: outcome.kind0.acceptedCount,
+      bindingTotal: outcome.kind0.results.length,
+    }),
+    ...relayRejectionLines(outcome),
+  ].join('\n');
 }

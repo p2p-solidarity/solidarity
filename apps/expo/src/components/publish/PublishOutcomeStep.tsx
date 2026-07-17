@@ -102,19 +102,30 @@ function RelayReportSection({
           })}
         </ThemedText>
         {report.results.map((result) => (
-          <View key={result.relay} style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-            <SfIcon
-              name={result.accepted ? 'checkmark.circle.fill' : 'xmark.circle'}
-              size={14}
-              color={result.accepted ? Colors.terminalGreen : Colors.destructive}
-            />
-            <ThemedText
-              variant="caption"
-              tone="secondary"
-              numberOfLines={1}
-              style={{ flex: 1, fontFamily: 'Menlo' }}>
-              {result.relay}
-            </ThemedText>
+          <View key={result.relay} style={{ gap: 2 }}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+              <SfIcon
+                name={result.accepted ? 'checkmark.circle.fill' : 'xmark.circle'}
+                size={14}
+                color={result.accepted ? Colors.terminalGreen : Colors.destructive}
+              />
+              <ThemedText
+                variant="caption"
+                tone="secondary"
+                numberOfLines={1}
+                style={{ flex: 1, fontFamily: 'Menlo' }}>
+                {result.relay}
+              </ThemedText>
+            </View>
+            {!result.accepted && result.message.length > 0 ? (
+              <ThemedText
+                variant="caption"
+                tone="tertiary"
+                numberOfLines={2}
+                style={{ marginLeft: 22, fontFamily: 'Menlo' }}>
+                {result.message}
+              </ThemedText>
+            ) : null}
           </View>
         ))}
       </View>

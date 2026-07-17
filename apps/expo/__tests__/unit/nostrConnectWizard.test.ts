@@ -8,9 +8,11 @@ import { describe, expect, it } from 'bun:test';
 import {
   initialNostrConnectWizardState,
   isBiometricCancellation,
+  isNostrPublishOutcomePartiallyAccepted,
   isNostrPublishOutcomeSuccessful,
   nostrConnectWizardReducer,
   publishWithNostrAutoSetup,
+  relayRejectionLines,
   type NostrConnectWizardAction,
   type NostrConnectWizardState,
 } from '@/nostr/connectWizard';
@@ -111,19 +113,50 @@ describe('advanced key import', () => {
 });
 
 describe('honest completion and recovery', () => {
-  it('never enters published when either existing quorum rule failed', () => {
+  it('sub-quorum with ≥1 relay holding each copy lands on the outcome step, not error (S8f)', () => {
     const publishing = dispatch(initialNostrConnectWizardState(), { type: 'startPublishing' });
-    const failedOutcome = {
+    const partialOutcome = {
       ...SUCCESSFUL_OUTCOME,
-      kind0: { ...SUCCESSFUL_OUTCOME.kind0, success: false },
+      kind0: {
+        ...SUCCESSFUL_OUTCOME.kind0,
+        results: [
+          { relay: 'wss://a.example', accepted: true, message: 'ok', elapsedMs: 1 },
+          { relay: 'wss://b.example', accepted: false, message: 'timeout after 8000ms', elapsedMs: 8000 },
+        ],
+        acceptedCount: 1,
+        success: false,
+      },
+    };
+    const partial = dispatch(publishing, {
+      type: 'publishingSucceeded',
+      outcome: partialOutcome,
+    });
+    expect(partial.status).toBe('published');
+    expect(partial.outcome).toEqual(partialOutcome);
+    expect(partial.errorMessage).toBeNull();
+  });
+
+  it('zero acceptances on either copy is still an error, never published', () => {
+    const publishing = dispatch(initialNostrConnectWizardState(), { type: 'startPublishing' });
+    const deadOutcome = {
+      ...SUCCESSFUL_OUTCOME,
+      kind0: {
+        ...SUCCESSFUL_OUTCOME.kind0,
+        results: [
+          { relay: 'wss://a.example', accepted: false, message: 'timeout after 8000ms', elapsedMs: 8000 },
+          { relay: 'wss://b.example', accepted: false, message: 'websocket error', elapsedMs: 1 },
+        ],
+        acceptedCount: 0,
+        success: false,
+      },
     };
     const failed = dispatch(publishing, {
       type: 'publishingSucceeded',
-      outcome: failedOutcome,
+      outcome: deadOutcome,
     });
     expect(failed.status).toBe('error');
     expect(failed.errorStage).toBe('publishing');
-    expect(failed.outcome).toEqual(failedOutcome);
+    expect(failed.outcome).toEqual(deadOutcome);
   });
 
   it('retries publishing without repeating provisioning or import', () => {
@@ -172,6 +205,57 @@ describe('publish outcome and cancellation helpers', () => {
       isBiometricCancellation('profile save failed: biometric authentication was denied')
     ).toBe(true);
     expect(isBiometricCancellation('network unavailable')).toBe(false);
+  });
+
+  it('partial acceptance needs ≥1 accepted relay on EACH copy — a page with no verification copy is not partial', () => {
+    expect(isNostrPublishOutcomePartiallyAccepted(SUCCESSFUL_OUTCOME)).toBe(true);
+    expect(
+      isNostrPublishOutcomePartiallyAccepted({
+        ...SUCCESSFUL_OUTCOME,
+        kind0: { ...SUCCESSFUL_OUTCOME.kind0, acceptedCount: 1, success: false },
+      })
+    ).toBe(true);
+    expect(
+      isNostrPublishOutcomePartiallyAccepted({
+        ...SUCCESSFUL_OUTCOME,
+        kind0: { ...SUCCESSFUL_OUTCOME.kind0, acceptedCount: 0, success: false },
+      })
+    ).toBe(false);
+    expect(
+      isNostrPublishOutcomePartiallyAccepted({
+        ...SUCCESSFUL_OUTCOME,
+        profile: { ...SUCCESSFUL_OUTCOME.profile, acceptedCount: 0, success: false },
+      })
+    ).toBe(false);
+  });
+
+  it('carries each rejected relay message into the failure trace, and nothing on full success', () => {
+    expect(relayRejectionLines(SUCCESSFUL_OUTCOME)).toEqual([]);
+
+    const partial = {
+      profile: {
+        ...SUCCESSFUL_OUTCOME.profile,
+        results: [
+          { relay: 'wss://a.example', accepted: true, message: 'ok', elapsedMs: 40 },
+          { relay: 'wss://b.example', accepted: false, message: 'rate-limited: slow down', elapsedMs: 90.4 },
+        ],
+        acceptedCount: 1,
+        success: false,
+      },
+      kind0: {
+        ...SUCCESSFUL_OUTCOME.kind0,
+        results: [
+          { relay: 'wss://a.example', accepted: false, message: '', elapsedMs: 8000 },
+          { relay: 'wss://b.example', accepted: true, message: 'ok', elapsedMs: 55 },
+        ],
+        acceptedCount: 1,
+        success: false,
+      },
+    };
+    expect(relayRejectionLines(partial)).toEqual([
+      'page wss://b.example: rate-limited: slow down (90ms)',
+      'verification wss://a.example: no response (8000ms)',
+    ]);
   });
 });
 

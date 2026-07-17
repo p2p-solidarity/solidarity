@@ -78,6 +78,14 @@ export interface PublishResult {
   readonly accepted: boolean;
   readonly message: string;
   readonly elapsedMs: number;
+  /**
+   * Absent when the relay answered with an OK frame (accepted or refused —
+   * a policy verdict either way). Set when we never got a verdict:
+   * `'transport'` = fast connection-level failure (WS error, closed before
+   * OK, send failed) — worth an immediate retry; `'timeout'` = the full wait
+   * elapsed — the relay is likely down, retrying just doubles the stall.
+   */
+  readonly failure?: 'timeout' | 'transport';
 }
 
 /**
@@ -103,14 +111,14 @@ export async function publishEvent(
       resolve(result);
     };
     const timer = setTimeout(() => {
-      finish({ accepted: false, message: `timeout after ${String(timeoutMs)}ms`, elapsedMs: performance.now() - started });
+      finish({ accepted: false, message: `timeout after ${String(timeoutMs)}ms`, elapsedMs: performance.now() - started, failure: 'timeout' });
     }, timeoutMs);
     ws.onopen = () => {
       try {
         ws.send(JSON.stringify(['EVENT', event]));
       } catch (err) {
         clearTimeout(timer);
-        finish({ accepted: false, message: err instanceof Error ? err.message : 'send failed', elapsedMs: performance.now() - started });
+        finish({ accepted: false, message: err instanceof Error ? err.message : 'send failed', elapsedMs: performance.now() - started, failure: 'transport' });
       }
     };
     ws.onmessage = (ev) => {
@@ -131,14 +139,14 @@ export async function publishEvent(
     };
     ws.onerror = () => {
       clearTimeout(timer);
-      finish({ accepted: false, message: 'websocket error', elapsedMs: performance.now() - started });
+      finish({ accepted: false, message: 'websocket error', elapsedMs: performance.now() - started, failure: 'transport' });
     };
     ws.onclose = (ev) => {
       // If we never got OK before close, surface that.
       const code = typeof ev.code === 'number' ? ev.code : 0;
       if (!settled) {
         clearTimeout(timer);
-        finish({ accepted: false, message: `closed (code ${String(code)})`, elapsedMs: performance.now() - started });
+        finish({ accepted: false, message: `closed (code ${String(code)})`, elapsedMs: performance.now() - started, failure: 'transport' });
       }
     };
   });

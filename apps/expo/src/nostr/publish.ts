@@ -84,7 +84,10 @@ export const KIND_METADATA = 0;
 export const DEFAULT_RELAYS: readonly string[] = [
   'wss://relay.damus.io',
   'wss://nos.lol',
-  'wss://relay.nostr.band',
+  // relay.nostr.band replaced 2026-07-17: the whole nostr.band host was
+  // unreachable (TCP timeout on every probe), so it always failed the
+  // quorum AND stalled every publish/fetch for the full timeout.
+  'wss://relay.primal.net',
 ];
 
 export type PublishEventFn = typeof publishEvent;
@@ -126,6 +129,31 @@ function requiredAcceptances(relayCount: number): number {
   return Math.floor(relayCount / 2) + 1;
 }
 
+/**
+ * Retry budget for connection-level failures (`failure: 'transport'`): the
+ * relay never gave a verdict, and measured flakiness (relay.damus.io behind
+ * Cloudflare errors ~25% of first connects in ~350ms, succeeding on the
+ * next attempt) means one failed dial must not count as a rejection.
+ * Policy refusals (an OK frame with `accepted: false`) and timeouts (relay
+ * down — another attempt just doubles the stall) are never retried.
+ */
+const TRANSPORT_RETRY_LIMIT = 2;
+const TRANSPORT_RETRY_DELAY_MS = 300;
+
+async function publishWithTransportRetry(
+  relay: string,
+  event: NostrEvent,
+  publishFn: PublishEventFn,
+  timeoutMs?: number
+): Promise<RelayPublishResult> {
+  let r = await publishFn(relay, event, timeoutMs);
+  for (let retry = 0; retry < TRANSPORT_RETRY_LIMIT && r.failure === 'transport'; retry++) {
+    await new Promise((resolve) => setTimeout(resolve, TRANSPORT_RETRY_DELAY_MS));
+    r = await publishFn(relay, event, timeoutMs);
+  }
+  return { relay, accepted: r.accepted, message: r.message, elapsedMs: r.elapsedMs };
+}
+
 async function publishToRelays(
   event: NostrEvent,
   relays: readonly string[],
@@ -133,10 +161,7 @@ async function publishToRelays(
   timeoutMs?: number
 ): Promise<PublishReport> {
   const results = await Promise.all(
-    relays.map(async (relay): Promise<RelayPublishResult> => {
-      const r = await publishFn(relay, event, timeoutMs);
-      return { relay, accepted: r.accepted, message: r.message, elapsedMs: r.elapsedMs };
-    })
+    relays.map(async (relay) => publishWithTransportRetry(relay, event, publishFn, timeoutMs))
   );
   const acceptedCount = results.filter((r) => r.accepted).length;
   const requiredCount = requiredAcceptances(relays.length);

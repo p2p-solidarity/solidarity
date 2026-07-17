@@ -9,6 +9,7 @@
  * quorum flags passed.
  */
 import type { NostrPublishOutcome } from '@/profile/store';
+import type { PublishReport } from '@/nostr/publish';
 import type { Result } from '@solidarity/shared';
 
 export type NostrConnectMethod = 'mnemonic' | 'nsec';
@@ -58,6 +59,36 @@ export type NostrConnectWizardAction =
 
 export function isNostrPublishOutcomeSuccessful(outcome: NostrPublishOutcome): boolean {
   return outcome.profile.success && outcome.kind0.success;
+}
+
+/**
+ * Partial acceptance (user decision 2026-07-17, 04-plan S8f): the page is
+ * genuinely live once at least one relay holds EACH copy — a verifier only
+ * needs to find one relay carrying both the pointer and the kind-0 binding.
+ * Both-copies is the floor, not either: a page copy with zero verification
+ * copies would render a page whose green check can never resolve.
+ * Full quorum stays the bar for the "published" success surface
+ * (`isNostrPublishOutcomeSuccessful`); this only decides error-vs-partial.
+ */
+export function isNostrPublishOutcomePartiallyAccepted(outcome: NostrPublishOutcome): boolean {
+  return outcome.profile.acceptedCount >= 1 && outcome.kind0.acceptedCount >= 1;
+}
+
+/**
+ * Per-relay failure lines for the error trace. Quorum counts alone ("1 of 3
+ * accepted") can't distinguish rate-limiting from a policy reject or a
+ * timeout — the relay's own OK/close message is the only evidence, so a
+ * quorum-failure report must carry it.
+ */
+export function relayRejectionLines(outcome: NostrPublishOutcome): readonly string[] {
+  const lines = (label: string, report: PublishReport): string[] =>
+    report.results
+      .filter((result) => !result.accepted)
+      .map(
+        (result) =>
+          `${label} ${result.relay}: ${result.message.length > 0 ? result.message : 'no response'} (${String(Math.round(result.elapsedMs))}ms)`
+      );
+  return [...lines('page', outcome.profile), ...lines('verification', outcome.kind0)];
 }
 
 /** Covers the tagged provisioning result and saveProfile's stable mapping. */
@@ -173,7 +204,10 @@ function publishingSucceeded(
   outcome: NostrPublishOutcome
 ): NostrConnectWizardState {
   if (state.status !== 'publishing') return state;
-  if (!isNostrPublishOutcomeSuccessful(outcome)) {
+  // Partial acceptance still lands on the outcome step (which renders the
+  // honest per-relay partial panel); only a copy with ZERO acceptances is
+  // an error — nothing usable reached any relay.
+  if (!isNostrPublishOutcomePartiallyAccepted(outcome)) {
     return {
       ...state,
       status: 'error',

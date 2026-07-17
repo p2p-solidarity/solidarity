@@ -37,8 +37,9 @@ import { haptic } from '@/feedback/haptics';
 import { useTranslation } from '@/i18n';
 import {
   isBiometricCancellation,
-  isNostrPublishOutcomeSuccessful,
+  isNostrPublishOutcomePartiallyAccepted,
   publishWithNostrAutoSetup,
+  relayRejectionLines,
 } from '@/nostr/connectWizard';
 import { DEFAULT_RELAYS } from '@/nostr/publish';
 import { hasNostrKey, provisionFromRootMnemonic } from '@/nostr/userKey';
@@ -126,7 +127,10 @@ export function PageStep({ onBack, onNext }: PageStepProps) {
           provision: provisionFromRootMnemonic,
           publish: async () => await publishToNostr(DEFAULT_RELAYS),
         });
-        if (!published.ok || !isNostrPublishOutcomeSuccessful(published.value)) {
+        // Partial acceptance (≥1 relay holding each copy) proceeds — 04-plan
+        // S8f: onboarding must not dead-end on a sub-quorum publish that is
+        // genuinely live. Zero acceptance of either copy still stops here.
+        if (!published.ok || !isNostrPublishOutcomePartiallyAccepted(published.value)) {
           if (!published.ok && isBiometricCancellation(published.error)) return;
           haptic('error');
           showError({
@@ -134,12 +138,15 @@ export function PageStep({ onBack, onNext }: PageStepProps) {
             summary: t('pageStep.publishFailed'),
             error: new Error(
               published.ok
-                ? t('nostrConnect.publishReportDetail', {
-                    profileAccepted: published.value.profile.acceptedCount,
-                    profileTotal: published.value.profile.results.length,
-                    bindingAccepted: published.value.kind0.acceptedCount,
-                    bindingTotal: published.value.kind0.results.length,
-                  })
+                ? [
+                    t('nostrConnect.publishReportDetail', {
+                      profileAccepted: published.value.profile.acceptedCount,
+                      profileTotal: published.value.profile.results.length,
+                      bindingAccepted: published.value.kind0.acceptedCount,
+                      bindingTotal: published.value.kind0.results.length,
+                    }),
+                    ...relayRejectionLines(published.value),
+                  ].join('\n')
                 : published.error,
             ),
           });
