@@ -4,13 +4,16 @@
  * state on frame one (no loading flash, survives restart, works offline)
  * while the live re-verify runs.
  *
- * HONESTY (spec §7): the cache only ever SEEDS the chip — every focus
- * still runs the real `verifyNostrBinding` / `verifyAtprotoBinding`, whose
- * completed result overwrites both the UI and this cache. A cached entry
- * whose claim no longer matches the current record is ignored by the
- * caller's existing claim-match guard (`ProfileBadgeChips`), and
- * `checkedAt` is surfaced in the evidence sheet ("Last checked …") so a
- * seeded state is never presented as a fresh check. A downgrade
+ * HONESTY (spec §7): the cache SEEDS the chip, and a result younger than
+ * `BADGE_REVERIFY_TTL_MS` is also TRUSTED — the live re-verify is skipped
+ * (user decision 2026-07-17: stop re-opening three relay sockets on every
+ * Me-tab focus). What keeps that honest: `checkedAt` is surfaced in the
+ * evidence sheet ("Last checked …"); the claim-match guard at the call
+ * site drops a cached entry whose npub/handle no longer matches the
+ * record; `shouldReverifyBadge` forces a live check when the record was
+ * re-signed after the cached check; and a successful publish INVALIDATES
+ * the nostr entry (`invalidateCachedNostrResult`) so a fresh binding is
+ * never masked by a pre-publish result for the TTL window. A downgrade
  * (verified → stale/declared) is cached just the same — last KNOWN state,
  * not last GOOD state.
  *
@@ -41,6 +44,36 @@ export interface CachedBadgeResult<T> {
 export interface BadgeStatusCacheStorage {
   readonly getString: (key: string) => string | null;
   readonly setString: (key: string, value: string) => void;
+  readonly removeKey: (key: string) => void;
+}
+
+/**
+ * How long a completed check keeps standing in for a live one. Binding
+ * state changes rarely (a kind-0 edit, a PDS record change) and the
+ * evidence sheet always shows WHEN it was checked, so 15 minutes trades
+ * no honesty for dropping the three-relay WebSocket fan-out on every
+ * tab focus.
+ */
+export const BADGE_REVERIFY_TTL_MS = 15 * 60_000;
+
+/**
+ * Whether the live verification must run despite a cached result.
+ * True when there is no completed check (`checkedAt === null`), the check
+ * is older than the TTL, or the record was re-signed AFTER the check (an
+ * unparseable `updatedAt` also re-verifies — fail toward checking, never
+ * toward trusting). Claim matching stays at the call site — the two
+ * platforms key their claims differently.
+ */
+export function shouldReverifyBadge(
+  checkedAt: number | null,
+  recordUpdatedAt: string,
+  nowMs: number
+): boolean {
+  if (checkedAt === null) return true;
+  if (nowMs - checkedAt >= BADGE_REVERIFY_TTL_MS) return true;
+  const updatedMs = Date.parse(recordUpdatedAt);
+  if (Number.isNaN(updatedMs)) return true;
+  return updatedMs > checkedAt;
 }
 
 let cachedGetMmkv: typeof GetMmkvFn | undefined;
@@ -71,6 +104,14 @@ const defaultStorage: BadgeStatusCacheStorage = {
       cachedGetMmkv().set(key, value);
     } catch {
       // Best effort — a lost cache write only costs one loading flash.
+    }
+  },
+  removeKey: (key) => {
+    if (!cachedGetMmkv) return;
+    try {
+      cachedGetMmkv().remove(key);
+    } catch {
+      // Best effort — a lost invalidation only costs one extra TTL wait.
     }
   },
 };
@@ -150,4 +191,14 @@ export function writeCachedAtprotoResult(
   checkedAt: number
 ): void {
   writeEntry(ATPROTO_KEY, result, checkedAt);
+}
+
+/** A publish just changed the kind-0 side — a pre-publish result must not
+ * stand in for a live check for the rest of its TTL. */
+export function invalidateCachedNostrResult(): void {
+  activeStorage.removeKey(NOSTR_KEY);
+}
+
+export function invalidateCachedAtprotoResult(): void {
+  activeStorage.removeKey(ATPROTO_KEY);
 }

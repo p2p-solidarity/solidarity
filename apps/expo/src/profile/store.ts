@@ -40,6 +40,7 @@ import { create } from 'zustand';
 // plain exports either way; importing them from the leaf module keeps this
 // store's test (`__tests__/unit/profileStore.test.ts`) import-safe without
 // any `mock.module` on `@/identity`.
+import { invalidateCachedNostrResult } from '@/badges/badgeStatusCache';
 import { getRootDid, getRootSigner, type RootKeyError } from '@/identity/rootKey';
 import { publishProfile, updateKind0AlsoKnownAs, type PublishReport } from '@/nostr/publish';
 import { getNostrPubkey, npubEncode } from '@/nostr/userKey';
@@ -255,6 +256,11 @@ export const useProfileStore = create<ProfileState>((set, get) => ({
 
     writePersisted({ record: validated.value, jws });
     set({ record: validated.value, jws, status: 'ready' });
+    // The record was re-signed — any published Nostr copy is now behind it,
+    // so the cached verification no longer describes this record. Clearing
+    // it makes the badge re-check honestly (typically → stale) instead of
+    // seeding the pre-edit state, which is the user's cue to republish.
+    invalidateCachedNostrResult();
     return ok({ record: validated.value, jws });
   },
 
@@ -313,6 +319,10 @@ export const useProfileStore = create<ProfileState>((set, get) => ({
 
     const kind0Report = await activeUpdateKind0AlsoKnownAs({ did: record.did, relays: confirmedRelays });
     if (!kind0Report.ok) return err(`publishToNostr: ${kind0Report.error}`);
+
+    // The kind-0 side just changed — a pre-publish cached verification must
+    // not stand in for a live check for the rest of its TTL window.
+    invalidateCachedNostrResult();
 
     return ok({ profile: profileReport.value, kind0: kind0Report.value });
   },

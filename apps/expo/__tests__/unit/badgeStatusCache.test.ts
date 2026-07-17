@@ -2,8 +2,11 @@ import { afterEach, describe, expect, it } from 'bun:test';
 
 import {
   __setBadgeStatusCacheStorageForTesting,
+  BADGE_REVERIFY_TTL_MS,
+  invalidateCachedNostrResult,
   readCachedAtprotoResult,
   readCachedNostrResult,
+  shouldReverifyBadge,
   writeCachedAtprotoResult,
   writeCachedNostrResult,
   type BadgeStatusCacheStorage,
@@ -21,6 +24,9 @@ function memoryStorage(): { storage: BadgeStatusCacheStorage; map: Map<string, s
       getString: (key) => map.get(key) ?? null,
       setString: (key, value) => {
         map.set(key, value);
+      },
+      removeKey: (key) => {
+        map.delete(key);
       },
     },
   };
@@ -91,5 +97,48 @@ describe('badgeStatusCache', () => {
     // must degrade to null, never a fabricated result.
     expect(readCachedNostrResult()).toBeNull();
     expect(readCachedAtprotoResult()).toBeNull();
+  });
+
+  it('invalidateCachedNostrResult clears only the nostr entry (post-publish)', () => {
+    const { storage } = memoryStorage();
+    __setBadgeStatusCacheStorageForTesting(storage);
+
+    writeCachedNostrResult(nostrResult, 1);
+    writeCachedAtprotoResult(atprotoResult, 1);
+    invalidateCachedNostrResult();
+
+    expect(readCachedNostrResult()).toBeNull();
+    expect(readCachedAtprotoResult()).not.toBeNull();
+  });
+});
+
+describe('shouldReverifyBadge', () => {
+  const RECORD_AT = '2026-07-17T10:00:00.000Z';
+  const RECORD_AT_MS = Date.parse(RECORD_AT);
+
+  it('trusts a fresh check made after the record was signed', () => {
+    const checkedAt = RECORD_AT_MS + 1_000;
+    expect(shouldReverifyBadge(checkedAt, RECORD_AT, checkedAt + 60_000)).toBe(false);
+  });
+
+  it('re-verifies with no completed check', () => {
+    expect(shouldReverifyBadge(null, RECORD_AT, RECORD_AT_MS)).toBe(true);
+  });
+
+  it('re-verifies once the TTL has elapsed', () => {
+    const checkedAt = RECORD_AT_MS + 1_000;
+    expect(shouldReverifyBadge(checkedAt, RECORD_AT, checkedAt + BADGE_REVERIFY_TTL_MS)).toBe(true);
+    expect(
+      shouldReverifyBadge(checkedAt, RECORD_AT, checkedAt + BADGE_REVERIFY_TTL_MS - 1)
+    ).toBe(false);
+  });
+
+  it('re-verifies when the record was re-signed AFTER the cached check', () => {
+    const checkedAt = RECORD_AT_MS - 1_000;
+    expect(shouldReverifyBadge(checkedAt, RECORD_AT, RECORD_AT_MS)).toBe(true);
+  });
+
+  it('fails toward checking on an unparseable updatedAt — never toward trusting', () => {
+    expect(shouldReverifyBadge(1_000, 'not-a-date', 2_000)).toBe(true);
   });
 });

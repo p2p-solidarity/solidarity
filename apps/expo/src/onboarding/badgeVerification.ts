@@ -20,16 +20,25 @@ export interface OnboardingBadgeVerificationDependencies {
 }
 
 const DEFAULT_DEPENDENCIES: OnboardingBadgeVerificationDependencies = {
+  // Completed onboarding checks also land in badgeStatusCache: the Me tab
+  // trusts a fresh cached result (shouldReverifyBadge TTL), so a check the
+  // user just watched here is not silently repeated on first tab focus.
   verifyAtproto: async (profile) => {
     const { atprotoBindingIO } = await import('@/atproto/bindingIo');
-    return await verifyAtprotoBinding(profile, atprotoBindingIO);
+    const result = await verifyAtprotoBinding(profile, atprotoBindingIO);
+    const { writeCachedAtprotoResult } = await import('@/badges/badgeStatusCache');
+    writeCachedAtprotoResult(result, Date.now());
+    return result;
   },
   verifyNostr: async (profile) => {
     const [{ makeKind0Fetcher }, { DEFAULT_RELAYS }] = await Promise.all([
       import('@/nostr/fetchKind0'),
       import('@/nostr/publish'),
     ]);
-    return await verifyNostrBinding(profile, makeKind0Fetcher(DEFAULT_RELAYS));
+    const result = await verifyNostrBinding(profile, makeKind0Fetcher(DEFAULT_RELAYS));
+    const { writeCachedNostrResult } = await import('@/badges/badgeStatusCache');
+    writeCachedNostrResult(result, Date.now());
+    return result;
   },
 };
 

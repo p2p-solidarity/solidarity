@@ -19,6 +19,7 @@ import { atprotoBindingIO } from '@/atproto/bindingIo';
 import {
   readCachedAtprotoResult,
   readCachedNostrResult,
+  shouldReverifyBadge,
   writeCachedAtprotoResult,
   writeCachedNostrResult,
 } from '@/badges/badgeStatusCache';
@@ -204,39 +205,59 @@ function useBindingBadgeViewModels(
   handleClaim: string | null,
 ): { readonly nostr: NostrBadgeViewModel; readonly bluesky: AtprotoBadgeViewModel } {
   // Seed from the persisted last-completed check so a revisit paints the
-  // previous known state on frame one instead of a loading flash; the
-  // claim-match guards below drop a cached result whose npub/handle no
-  // longer matches the record. Every focus still re-verifies live and
-  // overwrites both the state and the cache (badgeStatusCache doc).
+  // previous known state on frame one, and TRUST it while it is fresh
+  // (badgeStatusCache doc): a live re-verify runs only when
+  // shouldReverifyBadge says so — no cache, TTL expired, or the record was
+  // re-signed after the check. The claim-match guards below drop a cached
+  // result whose npub/handle no longer matches the record (and force a
+  // re-verify via the same guard in the focus effect).
   const [nostrResult, setNostrResult] = useState<VerifyNostrBindingResult | null>(
     () => readCachedNostrResult()?.result ?? null
   );
   const [atprotoResult, setAtprotoResult] = useState<VerifyAtprotoBindingResult | null>(
     () => readCachedAtprotoResult()?.result ?? null
   );
-  const [nostrChecking, setNostrChecking] = useState(npubClaim !== null);
-  const [atprotoChecking, setAtprotoChecking] = useState(handleClaim !== null);
+  const [nostrChecking, setNostrChecking] = useState(false);
+  const [atprotoChecking, setAtprotoChecking] = useState(false);
 
   useFocusEffect(
     useCallback(() => {
       let cancelled = false;
       if (npubClaim !== null) {
-        setNostrChecking(true);
-        void verifyNostrBinding(record, makeKind0Fetcher(DEFAULT_RELAYS)).then((next) => {
-          if (cancelled) return;
-          setNostrResult(next);
-          setNostrChecking(false);
-          writeCachedNostrResult(next, Date.now());
-        });
+        const cached = readCachedNostrResult();
+        const cacheStandsIn =
+          cached !== null &&
+          cached.result.npub === npubClaim &&
+          !shouldReverifyBadge(cached.checkedAt, record.updatedAt, Date.now());
+        if (cacheStandsIn) {
+          setNostrResult(cached.result);
+        } else {
+          setNostrChecking(true);
+          void verifyNostrBinding(record, makeKind0Fetcher(DEFAULT_RELAYS)).then((next) => {
+            if (cancelled) return;
+            setNostrResult(next);
+            setNostrChecking(false);
+            writeCachedNostrResult(next, Date.now());
+          });
+        }
       }
       if (handleClaim !== null) {
-        setAtprotoChecking(true);
-        void verifyAtprotoBinding(record, atprotoBindingIO).then((next) => {
-          if (cancelled) return;
-          setAtprotoResult(next);
-          setAtprotoChecking(false);
-          writeCachedAtprotoResult(next, Date.now());
-        });
+        const cached = readCachedAtprotoResult();
+        const cacheStandsIn =
+          cached !== null &&
+          cached.result.evidence.handleClaim === handleClaim &&
+          !shouldReverifyBadge(cached.checkedAt, record.updatedAt, Date.now());
+        if (cacheStandsIn) {
+          setAtprotoResult(cached.result);
+        } else {
+          setAtprotoChecking(true);
+          void verifyAtprotoBinding(record, atprotoBindingIO).then((next) => {
+            if (cancelled) return;
+            setAtprotoResult(next);
+            setAtprotoChecking(false);
+            writeCachedAtprotoResult(next, Date.now());
+          });
+        }
       }
       return () => {
         cancelled = true;
