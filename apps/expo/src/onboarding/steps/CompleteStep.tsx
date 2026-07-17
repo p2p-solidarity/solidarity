@@ -89,7 +89,9 @@ export function CompleteStep({
         ? t('completeStep.backupMnemonic')
         : t('completeStep.backupNotSet');
 
-  const pageDone = profileStatus === 'ready' && record !== null;
+  const pageDone =
+    profileStatus === 'ready' &&
+    record?.alsoKnownAs.some((alias) => alias.startsWith('nostr:npub')) === true;
   const displayName = record?.displayName.trim() ?? '';
   const pageDetail = pageDone
     ? displayName.length > 0

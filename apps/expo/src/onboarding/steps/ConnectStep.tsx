@@ -1,10 +1,8 @@
 import { router } from 'expo-router';
-import type { SFSymbol } from 'expo-symbols';
 import type { ReactNode } from 'react';
 import { ActivityIndicator, View } from 'react-native';
 
 import { BindingBadgeChip } from '@/components/badges/BindingBadgeChip';
-import { PressableScale } from '@/components/common/PressableScale';
 import { SfIcon } from '@/components/icons/SfIcon';
 import { ThemedButton, ThemedSurface, ThemedText } from '@/components/themed';
 import { Colors } from '@/constants/Colors';
@@ -50,14 +48,11 @@ export function ConnectStep({
   );
   const hasClaim = record !== null && claimedBadgeProviders(record).length > 0;
 
-  const openProvider = (provider: OnboardingBadgeProvider) => {
-    onSelectProvider(provider);
-    if (provider === 'bluesky') {
-      router.push('/verify/bluesky');
-    } else {
-      router.push('/verify/nostr');
-    }
+  const openPublish = () => {
+    onSelectProvider('nostr');
+    router.push('/verify/nostr');
   };
+  const hasPage = profileStatus === 'ready' && record !== null;
 
   return (
     <OnboardingScaffold
@@ -66,10 +61,12 @@ export function ConnectStep({
       subtitle={t('connectStep.subtitle')}
       footer={
         <ThemedButton
-          label={hasClaim ? t('onboarding.continue') : t('connectStep.skip')}
-          variant={hasClaim ? 'inverted' : 'secondary'}
+          label={
+            hasClaim || !hasPage ? t('onboarding.continue') : t('connectStep.publishPage')
+          }
+          variant={hasClaim ? 'inverted' : hasPage ? 'primary' : 'secondary'}
           fullWidth
-          onPress={onNext}
+          onPress={hasClaim || !hasPage ? onNext : openPublish}
         />
       }>
       <View style={{ flex: 1, justifyContent: 'center', gap: 16 }}>
@@ -85,27 +82,15 @@ export function ConnectStep({
         ) : hasClaim ? (
           <ExistingBindingState badge={badge} preferredProvider={preferredProvider} />
         ) : (
-          <View style={{ gap: 12 }}>
-            <ConnectOptionCard
-              primary
-              icon="checkmark.seal.fill"
-              title={t('connectStep.blueskyTitle')}
-              eyebrow={t('connectStep.recommended')}
-              detail={t('connectStep.blueskyDetail')}
-              onPress={() => {
-                openProvider('bluesky');
-              }}
-            />
-            <ConnectOptionCard
-              icon="bolt.fill"
-              title={t('connectStep.nostrTitle')}
-              eyebrow={t('connectStep.noAccount')}
-              detail={t('connectStep.nostrDetail')}
-              onPress={() => {
-                openProvider('nostr');
-              }}
-            />
-          </View>
+          <ThemedSurface variant="inset" className="rounded-none p-4">
+            <View style={{ gap: 10 }}>
+              <SfIcon name="checkmark.seal" size={22} color={Colors.primaryBlue} />
+              <ThemedText variant="titleMedium">{t('connectStep.publishTitle')}</ThemedText>
+              <ThemedText variant="bodySmall" tone="secondary">
+                {t('connectStep.publishMessage')}
+              </ThemedText>
+            </View>
+          </ThemedSurface>
         )}
       </View>
     </OnboardingScaffold>
@@ -158,64 +143,5 @@ function ExistingBindingState({
         )}
       </View>
     </ThemedSurface>
-  );
-}
-
-function ConnectOptionCard({
-  primary = false,
-  icon,
-  title,
-  eyebrow,
-  detail,
-  onPress,
-}: {
-  readonly primary?: boolean;
-  readonly icon: SFSymbol;
-  readonly title: string;
-  readonly eyebrow: string;
-  readonly detail: string;
-  readonly onPress: () => void;
-}): ReactNode {
-  return (
-    <PressableScale
-      haptic="tap"
-      onPress={onPress}
-      accessibilityRole="button"
-      accessibilityLabel={title}>
-      <ThemedSurface
-        variant="outlined"
-        className="rounded-none p-4"
-        style={{
-          minHeight: 112,
-          borderColor: primary ? Colors.primaryBlue : Colors.divider,
-          backgroundColor: primary ? Colors.featuredCardBg : Colors.cardBg,
-        }}>
-        <View style={{ flexDirection: 'row', alignItems: 'flex-start', gap: 12 }}>
-          <View
-            style={{
-              width: 36,
-              height: 36,
-              alignItems: 'center',
-              justifyContent: 'center',
-              borderWidth: 1,
-              borderColor: primary ? Colors.primaryBlue : Colors.divider,
-            }}>
-            <SfIcon name={icon} size={17} color={primary ? Colors.primaryBlue : Colors.text2} />
-          </View>
-          <View style={{ flex: 1, gap: 4 }}>
-            <ThemedText
-              variant="label"
-              style={{ color: primary ? Colors.primaryBlue : Colors.text2 }}>
-              {eyebrow}
-            </ThemedText>
-            <ThemedText variant="titleMedium">{title}</ThemedText>
-            <ThemedText variant="caption" tone="secondary">
-              {detail}
-            </ThemedText>
-          </View>
-          <SfIcon name="chevron.right" size={12} color={Colors.text3} />
-        </View>
-      </ThemedSurface>
-    </PressableScale>
   );
 }

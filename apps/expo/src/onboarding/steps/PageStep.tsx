@@ -26,27 +26,36 @@
  * the current record so re-running onboarding doesn't blank out an existing
  * page — mirrors `BackupStep`'s idempotent-on-replay handling.
  */
-import { useMemo, useState } from 'react';
-import { TextInput, View } from 'react-native';
+import { useMemo, useState, type ReactNode } from 'react';
+import { ScrollView, View } from 'react-native';
 
-import { ThemedButton, ThemedText } from '@/components/themed';
+import { PressableScale } from '@/components/common/PressableScale';
+import { ThemedButton, ThemedSurface, ThemedText, ThemedTextInput } from '@/components/themed';
 import { Colors } from '@/constants/Colors';
 import { showError } from '@/feedback/appAlert';
 import { haptic } from '@/feedback/haptics';
 import { useTranslation } from '@/i18n';
+import {
+  isBiometricCancellation,
+  isNostrPublishOutcomeSuccessful,
+  publishWithNostrAutoSetup,
+} from '@/nostr/connectWizard';
+import { DEFAULT_RELAYS } from '@/nostr/publish';
+import { hasNostrKey, provisionFromRootMnemonic } from '@/nostr/userKey';
+import {
+  expandLinkPresetHandle,
+  isHttpsLinkUrl,
+  LINK_LABEL_PRESETS,
+  normalizeLinkUrl,
+  type LinkLabelPreset,
+} from '@/profile/linkUrl';
 import { useProfileStore } from '@/profile/store';
-import { profileLinkSchema } from '@solidarity/shared';
 import { OnboardingScaffold } from './OnboardingScaffold';
-
-const linkUrlSchema = profileLinkSchema.shape.url;
 
 /** `null` = no error. An empty (never-touched) URL is not an error — the
  * link is simply omitted from the saved payload. */
-function validateLinkUrl(url: string): string | null {
-  if (url.trim().length === 0) return null;
-  const result = linkUrlSchema.safeParse(url);
-  if (result.success) return null;
-  return result.error.issues[0]?.message ?? 'invalid URL';
+function prepareLinkUrl(url: string, preset: LinkLabelPreset | null): string {
+  return normalizeLinkUrl(expandLinkPresetHandle(preset, url));
 }
 
 export interface PageStepProps {
@@ -58,14 +67,23 @@ export function PageStep({ onBack, onNext }: PageStepProps) {
   const { t } = useTranslation();
   const record = useProfileStore((s) => s.record);
   const saveProfile = useProfileStore((s) => s.saveProfile);
+  const publishToNostr = useProfileStore((s) => s.publishToNostr);
 
   const [displayName, setDisplayName] = useState(record?.displayName ?? '');
   const [bio, setBio] = useState(record?.bio ?? '');
   const [linkLabel, setLinkLabel] = useState(record?.links[0]?.label ?? '');
   const [linkUrl, setLinkUrl] = useState(record?.links[0]?.url ?? '');
+  const [linkPreset, setLinkPreset] = useState<LinkLabelPreset | null>(null);
   const [saving, setSaving] = useState(false);
 
-  const linkError = useMemo(() => validateLinkUrl(linkUrl), [linkUrl]);
+  const preparedLinkUrl = useMemo(
+    () => prepareLinkUrl(linkUrl, linkPreset),
+    [linkPreset, linkUrl]
+  );
+  const linkError =
+    preparedLinkUrl.length === 0 || isHttpsLinkUrl(preparedLinkUrl)
+      ? null
+      : t('profileLink.httpsOnly');
   const canCreate = displayName.trim().length > 0 && linkError === null;
 
   const handleCreate = async () => {
@@ -75,15 +93,50 @@ export function PageStep({ onBack, onNext }: PageStepProps) {
     }
     setSaving(true);
     try {
-      const trimmedUrl = linkUrl.trim();
-      const links = trimmedUrl.length > 0 ? [{ label: linkLabel.trim(), url: trimmedUrl }] : [];
-      const result = await saveProfile({ displayName: displayName.trim(), bio: bio.trim(), links });
-      if (!result.ok) {
+      const links =
+        preparedLinkUrl.length > 0
+          ? [{ label: linkLabel.trim(), url: preparedLinkUrl }]
+          : [];
+      const saved = await saveProfile({ displayName: displayName.trim(), bio: bio.trim(), links });
+      if (!saved.ok) {
+        if (isBiometricCancellation(saved.error)) return;
         haptic('error');
         showError({
           context: 'Onboarding › Page',
           summary: t('pageStep.saveFailed'),
-          error: new Error(result.error),
+          error: new Error(saved.error),
+        });
+        return;
+      }
+
+      const published = await publishWithNostrAutoSetup({
+        hasKey: hasNostrKey,
+        provision: provisionFromRootMnemonic,
+        publish: async () => await publishToNostr(DEFAULT_RELAYS),
+      });
+      if (!published.ok) {
+        if (isBiometricCancellation(published.error)) return;
+        haptic('error');
+        showError({
+          context: 'Onboarding › Page › Publish',
+          summary: t('pageStep.publishFailed'),
+          error: new Error(published.error),
+        });
+        return;
+      }
+      if (!isNostrPublishOutcomeSuccessful(published.value)) {
+        haptic('error');
+        showError({
+          context: 'Onboarding › Page › Publish',
+          summary: t('pageStep.publishFailed'),
+          error: new Error(
+            t('nostrConnect.publishReportDetail', {
+              profileAccepted: published.value.profile.acceptedCount,
+              profileTotal: published.value.profile.results.length,
+              bindingAccepted: published.value.kind0.acceptedCount,
+              bindingTotal: published.value.kind0.results.length,
+            })
+          ),
         });
         return;
       }
@@ -102,7 +155,7 @@ export function PageStep({ onBack, onNext }: PageStepProps) {
       footer={
         <View style={{ gap: 12 }}>
           <ThemedButton
-            label={t('pageStep.create')}
+            label={saving ? t('pageStep.savingAndPublishing') : t('pageStep.saveAndPublish')}
             variant="inverted"
             fullWidth
             loading={saving}
@@ -111,6 +164,9 @@ export function PageStep({ onBack, onNext }: PageStepProps) {
               void handleCreate();
             }}
           />
+          <ThemedText variant="caption" tone="secondary" style={{ textAlign: 'center' }}>
+            {t('pageStep.publishHint')}
+          </ThemedText>
           <ThemedButton
             label={t('pageStep.skip')}
             variant="dottedOutline"
@@ -140,42 +196,32 @@ export function PageStep({ onBack, onNext }: PageStepProps) {
         />
         <View style={{ gap: 8 }}>
           <ThemedText variant="label">{t('pageStep.link')}</ThemedText>
-          <TextInput
-            value={linkLabel}
-            onChangeText={setLinkLabel}
-            placeholder={t('pageStep.linkLabelPlaceholder')}
-            placeholderTextColor={Colors.text3}
-            className="bg-searchBg text-text1"
-            style={{
-              paddingHorizontal: 14,
-              paddingVertical: 14,
-              fontSize: 15,
-              borderWidth: 1,
-              borderColor: Colors.divider,
+          <LinkPresetChips
+            selected={linkPreset}
+            onSelect={(preset, label) => {
+              setLinkPreset(preset);
+              setLinkLabel(label);
             }}
           />
-          <TextInput
+          <ThemedTextInput
+            value={linkLabel}
+            onChangeText={(value) => {
+              setLinkLabel(value);
+              setLinkPreset(null);
+            }}
+            placeholder={t('pageStep.linkLabelPlaceholder')}
+          />
+          <ThemedTextInput
+            kind="url"
             value={linkUrl}
             onChangeText={setLinkUrl}
-            placeholder="https://…"
-            placeholderTextColor={Colors.text3}
-            autoCapitalize="none"
-            autoCorrect={false}
-            keyboardType="url"
-            className="bg-searchBg text-text1"
-            style={{
-              paddingHorizontal: 14,
-              paddingVertical: 14,
-              fontSize: 15,
-              borderWidth: 1,
-              borderColor: linkError ? Colors.destructive : Colors.divider,
+            onBlur={() => {
+              if (preparedLinkUrl !== linkUrl) setLinkUrl(preparedLinkUrl);
             }}
+            placeholder="https://…"
+            error={linkError}
+            showClear
           />
-          {linkError ? (
-            <ThemedText variant="caption" tone="error">
-              {linkError}
-            </ThemedText>
-          ) : null}
         </View>
       </View>
     </OnboardingScaffold>
@@ -198,23 +244,56 @@ function FieldBlock({
   return (
     <View style={{ gap: 8 }}>
       <ThemedText variant="label">{label}</ThemedText>
-      <TextInput
+      <ThemedTextInput
         value={value}
         onChangeText={onChangeText}
         placeholder={placeholder}
-        placeholderTextColor={Colors.text3}
         multiline={multiline}
-        className="bg-searchBg text-text1"
-        style={{
-          paddingHorizontal: 14,
-          paddingVertical: multiline ? 12 : 14,
-          fontSize: 15,
-          minHeight: multiline ? 88 : undefined,
-          textAlignVertical: multiline ? 'top' : 'center',
-          borderWidth: 1,
-          borderColor: Colors.divider,
-        }}
       />
     </View>
+  );
+}
+
+function LinkPresetChips({
+  selected,
+  onSelect,
+}: {
+  readonly selected: LinkLabelPreset | null;
+  readonly onSelect: (preset: LinkLabelPreset, label: string) => void;
+}): ReactNode {
+  const { t } = useTranslation();
+  return (
+    <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8 }}>
+      {LINK_LABEL_PRESETS.map((preset) => {
+        const label = t(`profileLink.preset.${preset}`);
+        const active = selected === preset;
+        return (
+          <PressableScale
+            key={preset}
+            haptic="tap"
+            onPress={() => {
+              onSelect(preset, label);
+            }}
+            accessibilityRole="button"
+            accessibilityState={{ selected: active }}
+            accessibilityLabel={label}>
+            <ThemedSurface
+              variant="outlined"
+              className="justify-center rounded-none px-3"
+              style={{
+                minHeight: 44,
+                borderColor: active ? Colors.primaryBlue : Colors.divider,
+                backgroundColor: active ? Colors.featuredCardBg : Colors.cardBg,
+              }}>
+              <ThemedText
+                variant="label"
+                style={active ? { color: Colors.primaryBlue } : undefined}>
+                {label}
+              </ThemedText>
+            </ThemedSurface>
+          </PressableScale>
+        );
+      })}
+    </ScrollView>
   );
 }

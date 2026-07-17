@@ -16,19 +16,22 @@ describe('S5 onboarding and Bluesky UI wiring', () => {
     expect(route).toContain('confirmBlueskyReplacement');
     expect(route).toContain('confirmDialog');
     expect(route).toContain('BindingBadgeChip');
+    expect(route).toContain('inlineSuffix=');
     expect(route).not.toContain('Alert.alert');
     expect(route).not.toMatch(/\bfetch\s*\(/u);
+    expect(en['blueskyConnect.handlePlaceholder']).toBe('alice');
+    expect(zhHant['blueskyConnect.handlePlaceholder']).toBe('alice');
   });
 
-  it('offers both real binding routes and carries verifier evidence into completion', () => {
+  it('keeps one default publish route and carries verifier evidence into completion', () => {
     const connect = source('../../src/onboarding/steps/ConnectStep.tsx');
     const scaffold = source('../../src/onboarding/steps/OnboardingScaffold.tsx');
     const flow = source('../../app/onboarding/index.tsx');
     const complete = source('../../src/onboarding/steps/CompleteStep.tsx');
     const meRows = source('../../src/components/me/IdentityCredentialRows.tsx');
 
-    expect(connect).toContain("router.push('/verify/bluesky')");
     expect(connect).toContain("router.push('/verify/nostr')");
+    expect(connect).not.toContain("router.push('/verify/bluesky')");
     expect(connect).toContain('useOnboardingBadgeVerification');
     expect(flow).toContain("case 'connect'");
     expect(flow).toContain("goTo('connect')");
