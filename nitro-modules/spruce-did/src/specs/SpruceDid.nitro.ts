@@ -111,6 +111,26 @@ export interface SpruceDid
   /** Tear down the key from the secure store. Returns true on success. */
   deleteKey(alias: string): Promise<boolean>;
 
+  /**
+   * JSON array of every iCloud-synchronizable P-256 item stored under
+   * `alias`: `[{"label":"<hex>","publicKeyHex":"<hex 04||X||Y>"}]`.
+   * More than one entry = two devices each minted a key before iCloud
+   * Keychain replication converged (both items sync everywhere — the
+   * application label, a hash of the public key, is part of a key item's
+   * primary key, so they never overwrite each other). The JS layer renders
+   * an explicit user-driven conflict resolver from this. Android has no
+   * synchronizable keystore class and always returns `"[]"`.
+   */
+  listSyncableP256Keys(alias: string): Promise<string>;
+
+  /**
+   * Delete ONE synchronizable P-256 item by its application-label hex —
+   * the user-approved loser of a sync conflict. Never called automatically;
+   * never touches the non-synced class or other labels. Returns true iff an
+   * item was actually deleted. Android always returns false.
+   */
+  deleteSyncableP256Key(alias: string, labelHex: string): Promise<boolean>;
+
   /** Public-key JWK (JSON string). Safe to publish; no private material exposed. */
   getPublicKeyJwk(alias: string): Promise<string>;
 

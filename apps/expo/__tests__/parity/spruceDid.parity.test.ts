@@ -168,6 +168,35 @@ class InMemorySpruceDidDriver implements SpruceDid {
     return this.keys.has(alias);
   }
 
+  // ── T7 syncable-item surface ─────────────────────────────────────────────
+  // Simulates the iCloud-synced keychain items `listSyncableP256Keys`
+  // enumerates natively. Seeded per test; `rawListOverride` lets a test feed
+  // malformed JSON to pin the JS layer's fail-closed parse.
+  private syncableItems = new Map<string, { labelHex: string; publicKeyHex: string }[]>();
+  rawListOverride: string | null = null;
+
+  seedSyncableItemsForTesting(
+    alias: string,
+    items: readonly { labelHex: string; publicKeyHex: string }[]
+  ): void {
+    this.syncableItems.set(alias, [...items]);
+  }
+
+  async listSyncableP256Keys(alias: string): Promise<string> {
+    if (this.rawListOverride !== null) return this.rawListOverride;
+    const items = this.syncableItems.get(alias) ?? [];
+    return JSON.stringify(
+      items.map((item) => ({ label: item.labelHex, publicKeyHex: item.publicKeyHex }))
+    );
+  }
+
+  async deleteSyncableP256Key(alias: string, labelHex: string): Promise<boolean> {
+    const items = this.syncableItems.get(alias) ?? [];
+    const next = items.filter((item) => item.labelHex !== labelHex);
+    this.syncableItems.set(alias, next);
+    return next.length !== items.length;
+  }
+
   async deleteKey(alias: string): Promise<boolean> {
     const existed = this.keys.delete(alias);
     if (existed) this.notify({ kind: 'keyDeleted', alias });
@@ -301,8 +330,11 @@ mock.module('@solidarity/nitro-spruce-did', () => ({
 const {
   didKeyForCurrentIdentity,
   ensureSigningKey,
+  hasExistingSigningKey,
+  listSyncableSigningKeys,
   publicRawP256ForCurrentIdentity,
   publicJwk,
+  resolveSigningKeyConflict,
   signOpenAcDeviceBindingDigest,
   signRawEs256,
   signJwt,
@@ -572,6 +604,76 @@ describe('SpruceID DID Nitro module — JS-side wiring', () => {
         publicKeyToJwk(driver.resolvedSignerPublicKey(ALIAS))
       ).slice(1);
       expect(publicKeyRaw).not.toEqual(signerRaw);
+    });
+  });
+
+  describe('T7 syncable-key conflict surface', () => {
+    const ALIAS = 'solidarity.master.v2';
+    const toHex = (bytes: Uint8Array): string =>
+      [...bytes].map((b) => b.toString(16).padStart(2, '0')).join('');
+
+    afterEach(() => {
+      driver.rawListOverride = null;
+      driver.seedSyncableItemsForTesting(ALIAS, []);
+    });
+
+    it('hasExistingSigningKey probes without minting', async () => {
+      expect(await hasExistingSigningKey()).toBe(false);
+      // The probe itself must not have created a key.
+      expect(driver.hasKey(ALIAS)).toBe(false);
+      await ensureSigningKey();
+      expect(await hasExistingSigningKey()).toBe(true);
+    });
+
+    it('lists synced candidates and marks the resolver’s current winner active', async () => {
+      await ensureSigningKey();
+      const jwk = await publicJwk();
+      const activeHex = `04${toHex(base64UrlDecode(jwk.x))}${toHex(base64UrlDecode(jwk.y))}`;
+      driver.seedSyncableItemsForTesting(ALIAS, [
+        { labelHex: 'aaaa01', publicKeyHex: activeHex },
+        { labelHex: 'bbbb02', publicKeyHex: '04deadbeef' },
+      ]);
+
+      const candidates = await listSyncableSigningKeys();
+
+      expect(candidates).toHaveLength(2);
+      expect(candidates.find((c) => c.labelHex === 'aaaa01')?.active).toBe(true);
+      expect(candidates.find((c) => c.labelHex === 'bbbb02')?.active).toBe(false);
+    });
+
+    it('resolveSigningKeyConflict keeps exactly the chosen key and deletes the rest', async () => {
+      await ensureSigningKey();
+      driver.seedSyncableItemsForTesting(ALIAS, [
+        { labelHex: 'aaaa01', publicKeyHex: '04aa' },
+        { labelHex: 'bbbb02', publicKeyHex: '04bb' },
+        { labelHex: 'cccc03', publicKeyHex: '04cc' },
+      ]);
+
+      const result = await resolveSigningKeyConflict('bbbb02');
+
+      expect(result.ok).toBe(true);
+      const remaining = await listSyncableSigningKeys();
+      expect(remaining.map((c) => c.labelHex)).toEqual(['bbbb02']);
+    });
+
+    it('refuses to resolve onto a label that does not exist — deletes nothing', async () => {
+      await ensureSigningKey();
+      driver.seedSyncableItemsForTesting(ALIAS, [
+        { labelHex: 'aaaa01', publicKeyHex: '04aa' },
+        { labelHex: 'bbbb02', publicKeyHex: '04bb' },
+      ]);
+
+      const result = await resolveSigningKeyConflict('ffff99');
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) expect(result.error).toBe('keepTargetMissing');
+      expect(await listSyncableSigningKeys()).toHaveLength(2);
+    });
+
+    it('fails closed to an empty list on malformed native JSON — never a phantom conflict', async () => {
+      await ensureSigningKey();
+      driver.rawListOverride = 'not json {';
+      expect(await listSyncableSigningKeys()).toEqual([]);
     });
   });
 });

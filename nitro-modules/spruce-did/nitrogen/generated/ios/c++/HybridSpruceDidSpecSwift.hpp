@@ -110,6 +110,22 @@ namespace margelo::nitro::solidarity::sprucedid {
       auto __value = std::move(__result.value());
       return __value;
     }
+    inline std::shared_ptr<Promise<std::string>> listSyncableP256Keys(const std::string& alias) override {
+      auto __result = _swiftPart.listSyncableP256Keys(alias);
+      if (__result.hasError()) [[unlikely]] {
+        std::rethrow_exception(__result.error());
+      }
+      auto __value = std::move(__result.value());
+      return __value;
+    }
+    inline std::shared_ptr<Promise<bool>> deleteSyncableP256Key(const std::string& alias, const std::string& labelHex) override {
+      auto __result = _swiftPart.deleteSyncableP256Key(alias, labelHex);
+      if (__result.hasError()) [[unlikely]] {
+        std::rethrow_exception(__result.error());
+      }
+      auto __value = std::move(__result.value());
+      return __value;
+    }
     inline std::shared_ptr<Promise<std::string>> getPublicKeyJwk(const std::string& alias) override {
       auto __result = _swiftPart.getPublicKeyJwk(alias);
       if (__result.hasError()) [[unlikely]] {

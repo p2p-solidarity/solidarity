@@ -28,8 +28,10 @@ import { confirmDialog } from '@/feedback/confirmDialog';
 import { pushToast } from '@/feedback/toast';
 import { useTranslation } from '@/i18n';
 import { restoreRootKeyFromICloud } from '@/identity';
-import { ensureSigningKey } from '@/keychain';
+import { ensureSigningKey, hasExistingSigningKey } from '@/keychain';
+import { CloudSyncPulse } from './CloudSyncPulse';
 import { OnboardingScaffold } from './OnboardingScaffold';
+import { waitForSyncedSigningKey } from './secureKeysStepLogic';
 
 export interface SecureKeysStepProps {
   readonly onBack: () => void;
@@ -40,6 +42,7 @@ export function SecureKeysStep({ onBack, onKeysGenerated }: SecureKeysStepProps)
   const { t } = useTranslation();
   const [isWorking, setIsWorking] = useState(false);
   const [statusLabel, setStatusLabel] = useState<string | null>(null);
+  const [waitingForSync, setWaitingForSync] = useState(false);
 
   const maybeRestore = async () => {
     // Probe needs no key (it only reads the backup file's mtime). A returning
@@ -98,6 +101,7 @@ export function SecureKeysStep({ onBack, onKeysGenerated }: SecureKeysStepProps)
       //    as an error, never a silent fresh mint. A genuinely new user gets
       //    `notFound` and provisions fresh in the Backup step. iOS-only:
       //    Android recovers via manual phrase entry (Settings › identity).
+      let recoveredFromICloud = false;
       if (Platform.OS === 'ios') {
         const recovery = await restoreRootKeyFromICloud();
         if (!recovery.ok) {
@@ -107,9 +111,28 @@ export function SecureKeysStep({ onBack, onKeysGenerated }: SecureKeysStepProps)
             summary: t('backup.recoverIdentityFailed'),
             error: new Error(recovery.error.kind),
           });
+        } else {
+          recoveredFromICloud = recovery.value.kind === 'restoredFromICloud';
         }
       }
-      // 2. Provision the Signing Identity (idempotent — reused if it exists).
+      // 2. T7 gate: a root identity recovered from iCloud proves this user's
+      //    signing key exists in iCloud Keychain — give replication a bounded
+      //    window before ensureSigningKey would mint a competitor key. The
+      //    ensure below still runs on every outcome: key existence at the end
+      //    of this step is a hard guarantee, the wait only shrinks the race.
+      if (recoveredFromICloud && !(await hasExistingSigningKey())) {
+        setWaitingForSync(true);
+        setStatusLabel(t('secureKeys.waitingForICloud'));
+        await waitForSyncedSigningKey({
+          attempts: 6,
+          intervalMs: 2500,
+          probe: hasExistingSigningKey,
+          sleep: (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
+        });
+        setWaitingForSync(false);
+        setStatusLabel(null);
+      }
+      //    Provision the Signing Identity (idempotent — reused if it exists).
       await ensureSigningKey();
       // 3. Offer to restore the Backup Archive (portable key now available).
       await maybeRestore();
@@ -131,7 +154,11 @@ export function SecureKeysStep({ onBack, onKeysGenerated }: SecureKeysStepProps)
 
       {isWorking ? (
         <View style={{ alignItems: 'center', gap: 12 }}>
-          <ActivityIndicator size="large" color={Colors.terminalGreen} />
+          {waitingForSync ? (
+            <CloudSyncPulse />
+          ) : (
+            <ActivityIndicator size="large" color={Colors.terminalGreen} />
+          )}
           {statusLabel ? (
             <ThemedText variant="bodyMedium" tone="secondary">
               {statusLabel}

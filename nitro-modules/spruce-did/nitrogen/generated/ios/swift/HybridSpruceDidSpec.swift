@@ -17,6 +17,8 @@ public protocol HybridSpruceDidSpec_protocol: HybridObject {
   func hasKey(alias: String) throws -> Bool
   func keyAuthMode(alias: String) throws -> Promise<String>
   func deleteKey(alias: String) throws -> Promise<Bool>
+  func listSyncableP256Keys(alias: String) throws -> Promise<String>
+  func deleteSyncableP256Key(alias: String, labelHex: String) throws -> Promise<Bool>
   func getPublicKeyJwk(alias: String) throws -> Promise<String>
   func signJws(alias: String, payload: ArrayBuffer) throws -> Promise<String>
   func signRawP256(alias: String, digest: ArrayBuffer) throws -> Promise<ArrayBuffer>

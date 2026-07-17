@@ -60,10 +60,13 @@ import {
   base64UrlDecode,
   base64UrlEncode,
   didKeyFromJwk,
+  err,
+  ok,
   publicKeyToJwk,
   publicKeyFromPrivate,
   sha256Bytes,
   type PublicKeyJWK,
+  type Result,
   utf8ToBytes,
 } from '@solidarity/shared';
 import { publicKeyJwkSchema } from '@solidarity/shared';
@@ -221,7 +224,7 @@ export async function ensureSigningKey(): Promise<SigningIdentity> {
     // "prior identity" record if they want to surface the rotation in UI.
     try {
       const legacyJwk = publicKeyToJwk(publicKeyFromPrivate(legacyBytes));
-      // eslint-disable-next-line no-console
+       
       console.warn(
         '[signingKey] legacy software-key detected; rotating to Secure Enclave. ' +
           `Old DID-key JWK x=${legacyJwk.x.slice(0, 6)}…`
@@ -438,4 +441,107 @@ export async function resetSigningKeyForTesting(): Promise<void> {
   await clearLegacyExpoBytes();
   cachedIdentity = null;
   cachedAuthMode = null;
+}
+
+// ── T7: iCloud-synced signing-key conflict surface ────────────────────────
+
+/**
+ * Non-minting existence probe. `ensureSigningKey` GENERATES on a miss —
+ * during the iCloud Keychain replication window that mints a competitor to
+ * the user's real key (T7), so the onboarding wait gate needs a probe that
+ * can never mint.
+ */
+export async function hasExistingSigningKey(): Promise<boolean> {
+  if (cachedIdentity) return true;
+  try {
+    return driver().hasKey(SIGNING_KEY_ALIAS);
+  } catch {
+    return false;
+  }
+}
+
+export interface SigningKeyCandidate {
+  readonly labelHex: string;
+  readonly publicKeyHex: string;
+  /** True for the key the deterministic native resolver currently signs with. */
+  readonly active: boolean;
+}
+
+function parseCandidateRows(raw: string): readonly { labelHex: string; publicKeyHex: string }[] {
+  try {
+    const parsed: unknown = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return [];
+    const rows: { labelHex: string; publicKeyHex: string }[] = [];
+    for (const entry of parsed) {
+      if (typeof entry !== 'object' || entry === null) continue;
+      const label = (entry as Record<string, unknown>)['label'];
+      const publicKeyHex = (entry as Record<string, unknown>)['publicKeyHex'];
+      if (typeof label === 'string' && typeof publicKeyHex === 'string') {
+        rows.push({ labelHex: label, publicKeyHex });
+      }
+    }
+    return rows;
+  } catch {
+    return [];
+  }
+}
+
+function hexFromBytes(bytes: Uint8Array): string {
+  return [...bytes].map((b) => b.toString(16).padStart(2, '0')).join('');
+}
+
+/** `04 || X || Y` hex of the resolver's current winner; null when no key. */
+async function activePublicKeyHex(): Promise<string | null> {
+  try {
+    if (!driver().hasKey(SIGNING_KEY_ALIAS)) return null;
+    const jwk = await readPublicJwk(SIGNING_KEY_ALIAS);
+    return `04${hexFromBytes(base64UrlDecode(jwk.x))}${hexFromBytes(base64UrlDecode(jwk.y))}`;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Every iCloud-synced signing-key item under the identity alias, with the
+ * resolver's current winner marked. Length > 1 = a T7 double-mint conflict
+ * (the settings resolver renders only then). Fail-closed `[]` on any driver
+ * or parse failure — a broken probe must never look like a conflict.
+ */
+export async function listSyncableSigningKeys(): Promise<readonly SigningKeyCandidate[]> {
+  try {
+    const rows = parseCandidateRows(await driver().listSyncableP256Keys(SIGNING_KEY_ALIAS));
+    if (rows.length === 0) return [];
+    const active = await activePublicKeyHex();
+    return rows.map((row) => ({ ...row, active: active !== null && row.publicKeyHex === active }));
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * Keep ONE candidate and delete every other synced item under the alias —
+ * the user-approved resolution of a T7 conflict. Face-ID-gated with the
+ * always-prompt 'delete' reason (grace window deliberately bypassed: this
+ * destroys key material). Never called automatically. Clears the process
+ * identity cache so the next signer resolves onto the kept key.
+ */
+export async function resolveSigningKeyConflict(
+  keepLabelHex: string
+): Promise<Result<void, string>> {
+  const allowed = await requireBiometric('delete');
+  if (!allowed) return err('biometricDenied');
+  const rows = parseCandidateRows(await driver().listSyncableP256Keys(SIGNING_KEY_ALIAS));
+  if (!rows.some((row) => row.labelHex === keepLabelHex)) {
+    return err('keepTargetMissing');
+  }
+  let failures = 0;
+  for (const row of rows) {
+    if (row.labelHex === keepLabelHex) continue;
+    const deleted = await driver()
+      .deleteSyncableP256Key(SIGNING_KEY_ALIAS, row.labelHex)
+      .catch(() => false);
+    if (!deleted) failures += 1;
+  }
+  cachedIdentity = null;
+  return failures > 0 ? err('deleteFailed') : ok(undefined);
 }

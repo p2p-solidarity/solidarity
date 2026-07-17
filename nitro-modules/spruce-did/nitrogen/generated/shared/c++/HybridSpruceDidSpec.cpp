@@ -18,6 +18,8 @@ namespace margelo::nitro::solidarity::sprucedid {
       prototype.registerHybridMethod("hasKey", &HybridSpruceDidSpec::hasKey);
       prototype.registerHybridMethod("keyAuthMode", &HybridSpruceDidSpec::keyAuthMode);
       prototype.registerHybridMethod("deleteKey", &HybridSpruceDidSpec::deleteKey);
+      prototype.registerHybridMethod("listSyncableP256Keys", &HybridSpruceDidSpec::listSyncableP256Keys);
+      prototype.registerHybridMethod("deleteSyncableP256Key", &HybridSpruceDidSpec::deleteSyncableP256Key);
       prototype.registerHybridMethod("getPublicKeyJwk", &HybridSpruceDidSpec::getPublicKeyJwk);
       prototype.registerHybridMethod("signJws", &HybridSpruceDidSpec::signJws);
       prototype.registerHybridMethod("signRawP256", &HybridSpruceDidSpec::signRawP256);

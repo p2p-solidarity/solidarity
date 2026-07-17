@@ -5,14 +5,18 @@ export {
 } from './biometric';
 export {
   ensureSigningKey,
+  hasExistingSigningKey,
+  listSyncableSigningKeys,
   publicJwk,
   publicRawP256ForCurrentIdentity,
+  resolveSigningKeyConflict,
   signJwt,
   signOpenAcDeviceBindingDigest,
   signRawEs256,
   didKeyForCurrentIdentity,
   resetSigningKeyForTesting,
   type SigningIdentity,
+  type SigningKeyCandidate,
 } from './signingKey';
 export {
   pairwisePrivateKey,

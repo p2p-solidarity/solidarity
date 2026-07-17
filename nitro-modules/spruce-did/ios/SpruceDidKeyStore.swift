@@ -110,7 +110,21 @@ internal struct SpruceDidKeyStore {
   /// the app's own default keychain access group when the user has iCloud
   /// Keychain enabled. iOS-only — Android has no iCloud Keychain.
   func generateSyncableP256Key(alias: String) throws {
-    _ = deleteKey(alias: alias)
+    // T7: clear only NON-synced leftovers (stale SE / software keys under the
+    // tag). The previous full `deleteKey` used `kSecAttrSynchronizableAny`,
+    // which destroyed the iCloud copy of the user's REAL identity key when it
+    // replicated in between the caller's `hasKey` probe and this call.
+    let staleQuery: [String: Any] = [
+      kSecClass as String: kSecClassKey,
+      kSecAttrApplicationTag as String: keyTag(for: alias),
+      kSecAttrSynchronizable as String: false,
+    ]
+    SecItemDelete(staleQuery as CFDictionary)
+
+    // Last-instant adopt: if a synced key replicated in since the caller's
+    // probe, use it — minting a competitor forks the identity until the
+    // deterministic resolver converges, and leaves an orphan item behind.
+    if resolveECKey(alias: alias, synchronizable: true, context: nil) != nil { return }
 
     let privateKeyAttributes: [String: Any] = [
       kSecAttrIsPermanent as String: true,
@@ -191,6 +205,8 @@ internal struct SpruceDidKeyStore {
   /// Builds the EC private-key query for `alias`, scoped to a SPECIFIC
   /// synchronizable class (never `kSecAttrSynchronizableAny`). Pinning the
   /// class is what makes resolution deterministic — see `copyECPrivateKey`.
+  /// `MatchLimitAll` + attributes so the caller can order MULTIPLE items in
+  /// the same class deterministically (see `resolveECKey`).
   private func ecPrivateKeyQuery(
     alias: String, synchronizable: Bool, context: LAContext?
   ) -> [String: Any] {
@@ -198,8 +214,9 @@ internal struct SpruceDidKeyStore {
       kSecClass as String: kSecClassKey,
       kSecAttrApplicationTag as String: keyTag(for: alias),
       kSecAttrKeyClass as String: kSecAttrKeyClassPrivate,
-      kSecMatchLimit as String: kSecMatchLimitOne,
+      kSecMatchLimit as String: kSecMatchLimitAll,
       kSecReturnRef as String: true,
+      kSecReturnAttributes as String: true,
       kSecAttrSynchronizable as String: synchronizable,
     ]
     if let context {
@@ -224,18 +241,49 @@ internal struct SpruceDidKeyStore {
   /// SE aliases. Returns nil when neither class matches.
   private func copyECPrivateKey(alias: String, context: LAContext?) -> SecKey? {
     for synchronizable in [true, false] {
-      let query = ecPrivateKeyQuery(
-        alias: alias, synchronizable: synchronizable, context: context)
-      var item: CFTypeRef?
-      let status = SecItemCopyMatching(query as CFDictionary, &item)
-      guard status == errSecSuccess, let candidate = item,
-        CFGetTypeID(candidate) == SecKeyGetTypeID()
+      if let winner = resolveECKey(alias: alias, synchronizable: synchronizable, context: context) {
+        return winner
+      }
+    }
+    return nil
+  }
+
+  /// Resolve WITHIN one synchronizable class. Multiple items can share the
+  /// tag inside the synced class — the T7 double-mint: two devices each
+  /// minted a syncable key before iCloud Keychain replication converged, and
+  /// because `kSecAttrApplicationLabel` (public-key hash) is part of a key
+  /// item's primary key, BOTH items sync to every device instead of one
+  /// overwriting the other. `MatchLimitOne` then returns an UNSPECIFIED item
+  /// per process — flip-flopping DIDs across launches and devices. Order by
+  /// ascending application label instead: the label is derived from the key
+  /// material itself and syncs verbatim, so every device sorts the same
+  /// candidate set identically and converges on the SAME key. (The losing
+  /// item is never deleted here — an explicit user-driven resolver in
+  /// settings owns that; see `listSyncableP256Keys`.)
+  private func resolveECKey(
+    alias: String, synchronizable: Bool, context: LAContext?
+  ) -> SecKey? {
+    let query = ecPrivateKeyQuery(
+      alias: alias, synchronizable: synchronizable, context: context)
+    var item: CFTypeRef?
+    let status = SecItemCopyMatching(query as CFDictionary, &item)
+    guard status == errSecSuccess, let entries = item as? [[String: Any]] else { return nil }
+    var best: (label: Data, key: SecKey)?
+    for entry in entries {
+      guard let refAny = entry[kSecValueRef as String],
+        CFGetTypeID(refAny as CFTypeRef) == SecKeyGetTypeID()
       else { continue }
       // The CFGetTypeID equality guard above makes this cast provably safe
       // (cannot crash) — matches the established pattern in this file.
-      return candidate as! SecKey  // swiftlint:disable:this force_cast
+      let key = refAny as! SecKey  // swiftlint:disable:this force_cast
+      let label = entry[kSecAttrApplicationLabel as String] as? Data ?? Data()
+      if let current = best {
+        if label.lexicographicallyPrecedes(current.label) { best = (label, key) }
+      } else {
+        best = (label, key)
+      }
     }
-    return nil
+    return best?.key
   }
 
   func hasKey(alias: String) -> Bool {
@@ -301,6 +349,67 @@ internal struct SpruceDidKeyStore {
       return try JwkUtils.ed25519JwkJsonString(rawPublic: pubBytes)
     }
     throw SpruceDidError.keyNotFound(alias)
+  }
+
+  // MARK: - Syncable-key conflict surface (T7)
+
+  /// JSON array of every synchronizable P-256 item under `alias`:
+  /// `[{"label":"<hex>","publicKeyHex":"<hex 04||X||Y>"}]`. More than one
+  /// entry = the T7 double-mint; the JS layer renders an explicit conflict
+  /// resolver from this. Values are hex-only, so the hand-built JSON needs
+  /// no escaping.
+  func listSyncableP256Keys(alias: String) -> String {
+    let query = ecPrivateKeyQuery(alias: alias, synchronizable: true, context: nil)
+    var item: CFTypeRef?
+    guard SecItemCopyMatching(query as CFDictionary, &item) == errSecSuccess,
+      let entries = item as? [[String: Any]]
+    else { return "[]" }
+    var rows: [String] = []
+    for entry in entries {
+      guard let refAny = entry[kSecValueRef as String],
+        CFGetTypeID(refAny as CFTypeRef) == SecKeyGetTypeID()
+      else { continue }
+      let key = refAny as! SecKey  // swiftlint:disable:this force_cast
+      guard let label = entry[kSecAttrApplicationLabel as String] as? Data,
+        let pub = SecKeyCopyPublicKey(key),
+        let pubData = SecKeyCopyExternalRepresentation(pub, nil) as Data?
+      else { continue }
+      rows.append(
+        "{\"label\":\"\(Self.hexString(label))\",\"publicKeyHex\":\"\(Self.hexString(pubData))\"}")
+    }
+    return "[" + rows.joined(separator: ",") + "]"
+  }
+
+  /// Delete ONE synchronizable P-256 item by its application-label hex — the
+  /// user-approved loser of a T7 conflict (settings resolver; never called
+  /// automatically). Scoped hard: never touches the non-synced class or any
+  /// other label. Returns true iff an item was actually deleted.
+  func deleteSyncableP256Key(alias: String, labelHex: String) -> Bool {
+    guard let label = Self.dataFromHex(labelHex), !label.isEmpty else { return false }
+    let query: [String: Any] = [
+      kSecClass as String: kSecClassKey,
+      kSecAttrApplicationTag as String: keyTag(for: alias),
+      kSecAttrSynchronizable as String: true,
+      kSecAttrApplicationLabel as String: label,
+    ]
+    return SecItemDelete(query as CFDictionary) == errSecSuccess
+  }
+
+  private static func hexString(_ data: Data) -> String {
+    data.map { String(format: "%02x", $0) }.joined()
+  }
+
+  private static func dataFromHex(_ hex: String) -> Data? {
+    let chars = Array(hex.lowercased())
+    guard chars.count % 2 == 0 else { return nil }
+    var bytes = Data(capacity: chars.count / 2)
+    var index = 0
+    while index < chars.count {
+      guard let byte = UInt8(String(chars[index...index + 1]), radix: 16) else { return nil }
+      bytes.append(byte)
+      index += 2
+    }
+    return bytes
   }
 
   // MARK: - Deletion

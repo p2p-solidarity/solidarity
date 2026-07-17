@@ -292,6 +292,13 @@ class HybridSpruceDid : HybridSpruceDidSpec() {
     ok
   }
 
+  // AndroidKeyStore has no synchronizable class — the iCloud double-mint
+  // conflict cannot exist here, so the surface is honestly empty (spec doc).
+  override fun listSyncableP256Keys(alias: String): Promise<String> = Promise.async { "[]" }
+
+  override fun deleteSyncableP256Key(alias: String, labelHex: String): Promise<Boolean> =
+    Promise.async { false }
+
   // MARK: - Public key JWK
 
   override fun getPublicKeyJwk(alias: String): Promise<String> = Promise.async {

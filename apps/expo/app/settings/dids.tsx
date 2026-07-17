@@ -23,7 +23,7 @@ import { Platform, ScrollView, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { SfIcon } from '@/components/icons/SfIcon';
-import { ThemedSurface, ThemedText } from '@/components/themed';
+import { ThemedButton, ThemedSurface, ThemedText } from '@/components/themed';
 import {
   SettingsBackToolbar,
   SettingsBlockInfoRow,
@@ -32,9 +32,17 @@ import {
   SettingsScreenTitle,
 } from '@/components/settings/SettingsBlocks';
 import { Colors } from '@/constants/Colors';
+import { confirmDialog } from '@/feedback/confirmDialog';
+import { showError } from '@/feedback/appAlert';
+import { pushToast } from '@/feedback/toast';
 import { useTranslation } from '@/i18n';
 import { useActiveDid, useIdentityCoordinator } from '@/identity';
 import { getRootDid } from '@/identity/rootKey';
+import {
+  listSyncableSigningKeys,
+  resolveSigningKeyConflict,
+  type SigningKeyCandidate,
+} from '@/keychain';
 
 type RootDidState =
   | { readonly kind: 'loading' }
@@ -62,6 +70,47 @@ export default function DIDListSheet() {
       cancelled = true;
     };
   }, []);
+
+  // T7 conflict surface: >1 synced signing-key item = two devices minted
+  // before iCloud replication converged. Rendered ONLY then (iOS-only —
+  // Android's list is always empty); resolution is an explicit user choice,
+  // never automatic.
+  const [keyConflicts, setKeyConflicts] = useState<readonly SigningKeyCandidate[]>([]);
+  const refreshIdentity = useIdentityCoordinator((s) => s.refreshIdentity);
+  useEffect(() => {
+    if (Platform.OS !== 'ios') return;
+    let cancelled = false;
+    void listSyncableSigningKeys().then((candidates) => {
+      if (!cancelled) setKeyConflicts(candidates);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const keepCandidate = async (candidate: SigningKeyCandidate) => {
+    const approved = await confirmDialog({
+      title: t('dids.keyConflict.confirmTitle'),
+      message: t('dids.keyConflict.confirmMessage'),
+      confirmLabel: t('dids.keyConflict.confirmDelete'),
+      cancelLabel: t('dids.close'),
+      destructive: true,
+    });
+    if (!approved) return;
+    const result = await resolveSigningKeyConflict(candidate.labelHex);
+    if (!result.ok) {
+      if (result.error === 'biometricDenied') return;
+      showError({
+        context: 'Settings › DIDs › Key conflict',
+        summary: t('dids.keyConflict.deleteFailed'),
+        error: new Error(result.error),
+      });
+      return;
+    }
+    pushToast(t('dids.keyConflict.resolved'), 'success');
+    setKeyConflicts(await listSyncableSigningKeys());
+    await refreshIdentity();
+  };
 
   return (
     <View className="flex-1 bg-pageBg" style={{ paddingTop: insets.top }}>
@@ -107,6 +156,53 @@ export default function DIDListSheet() {
               </ThemedText>
             </View>
           </View>
+
+          {/* T7 signing-key conflict — hidden unless a real conflict exists */}
+          {keyConflicts.length > 1 ? (
+            <View className="gap-2">
+              <SettingsBlockSectionHeader title={t('dids.keyConflict.title')} />
+              <View className="px-4 gap-2">
+                <ThemedText variant="caption" tone="secondary" className="px-1">
+                  {t('dids.keyConflict.hint')}
+                </ThemedText>
+                {keyConflicts.map((candidate) => (
+                  <ThemedSurface
+                    key={candidate.labelHex}
+                    variant="inset"
+                    className="rounded-none"
+                    style={{ paddingHorizontal: 14, paddingVertical: 12, gap: 8 }}>
+                    <View className="flex-row items-center" style={{ gap: 8 }}>
+                      <SfIcon
+                        name={candidate.active ? 'checkmark.seal.fill' : 'key.horizontal'}
+                        size={14}
+                        color={candidate.active ? Colors.terminalGreen : Colors.text2}
+                      />
+                      <ThemedText
+                        variant="caption"
+                        tone="secondary"
+                        style={{ flex: 1, fontFamily: 'Menlo' }}
+                        numberOfLines={1}>
+                        {candidate.labelHex.slice(0, 16)}
+                      </ThemedText>
+                      {candidate.active ? (
+                        <ThemedText variant="caption" tone="secondary">
+                          {t('dids.keyConflict.active')}
+                        </ThemedText>
+                      ) : null}
+                    </View>
+                    <ThemedButton
+                      label={t('dids.keyConflict.keep')}
+                      variant="secondary"
+                      fullWidth
+                      onPress={() => {
+                        void keepCandidate(candidate);
+                      }}
+                    />
+                  </ThemedSurface>
+                ))}
+              </View>
+            </View>
+          ) : null}
 
           {/* Key Storage — platform-specific labels */}
           <SettingsBlockSection

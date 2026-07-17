@@ -48,6 +48,14 @@ abstract class HybridSpruceDidSpec: HybridObject() {
   
   @DoNotStrip
   @Keep
+  abstract fun listSyncableP256Keys(alias: String): Promise<String>
+  
+  @DoNotStrip
+  @Keep
+  abstract fun deleteSyncableP256Key(alias: String, labelHex: String): Promise<Boolean>
+  
+  @DoNotStrip
+  @Keep
   abstract fun getPublicKeyJwk(alias: String): Promise<String>
   
   @DoNotStrip

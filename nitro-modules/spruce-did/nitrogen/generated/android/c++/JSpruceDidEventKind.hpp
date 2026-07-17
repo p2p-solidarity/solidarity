@@ -15,7 +15,7 @@ namespace margelo::nitro::solidarity::sprucedid {
   using namespace facebook;
 
   /**
-   * The C++ JNI bridge between the C++ enum "SpruceDidEventKind" and the Kotlin enum "SpruceDidEventKind".
+   * The C++ JNI bridge between the C++ enum "SpruceDidEventKind" and the the Kotlin enum "SpruceDidEventKind".
    */
   struct JSpruceDidEventKind final: public jni::JavaClass<JSpruceDidEventKind> {
   public:

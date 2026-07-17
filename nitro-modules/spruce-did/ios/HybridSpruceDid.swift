@@ -216,6 +216,20 @@ final class HybridSpruceDid: HybridSpruceDidSpec {
     }
   }
 
+  // MARK: - Syncable-key conflict surface (T7)
+
+  func listSyncableP256Keys(alias: String) throws -> Promise<String> {
+    return Promise.async { self.store.listSyncableP256Keys(alias: alias) }
+  }
+
+  func deleteSyncableP256Key(alias: String, labelHex: String) throws -> Promise<Bool> {
+    return Promise.async {
+      let ok = self.store.deleteSyncableP256Key(alias: alias, labelHex: labelHex)
+      if ok { self.emit(self.makeEvent(.keydeleted, alias: alias)) }
+      return ok
+    }
+  }
+
   // MARK: - Public key JWK
 
   func getPublicKeyJwk(alias: String) throws -> Promise<String> {

@@ -57,6 +57,8 @@ namespace margelo::nitro::solidarity::sprucedid {
       virtual bool hasKey(const std::string& alias) = 0;
       virtual std::shared_ptr<Promise<std::string>> keyAuthMode(const std::string& alias) = 0;
       virtual std::shared_ptr<Promise<bool>> deleteKey(const std::string& alias) = 0;
+      virtual std::shared_ptr<Promise<std::string>> listSyncableP256Keys(const std::string& alias) = 0;
+      virtual std::shared_ptr<Promise<bool>> deleteSyncableP256Key(const std::string& alias, const std::string& labelHex) = 0;
       virtual std::shared_ptr<Promise<std::string>> getPublicKeyJwk(const std::string& alias) = 0;
       virtual std::shared_ptr<Promise<std::string>> signJws(const std::string& alias, const std::shared_ptr<ArrayBuffer>& payload) = 0;
       virtual std::shared_ptr<Promise<std::shared_ptr<ArrayBuffer>>> signRawP256(const std::string& alias, const std::shared_ptr<ArrayBuffer>& digest) = 0;
