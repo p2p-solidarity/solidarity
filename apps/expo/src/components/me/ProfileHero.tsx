@@ -1,5 +1,6 @@
 import { Image } from 'expo-image';
-import { useEffect, useState, type ReactNode } from 'react';
+import { useFocusEffect } from 'expo-router';
+import { useCallback, useEffect, useState, type ReactNode } from 'react';
 import { View } from 'react-native';
 
 import { PressableScale } from '@/components/common/PressableScale';
@@ -8,6 +9,8 @@ import { ThemedSurface, ThemedText } from '@/components/themed';
 import { Colors } from '@/constants/Colors';
 import { SCALE } from '@/feedback/motion';
 import { useTranslation } from '@/i18n';
+import { resolveProfileAvatarSource } from '@/profile/avatar';
+import { readLocalAvatarUri } from '@/profile/localAvatar';
 import type { ProfileRecord } from '@solidarity/shared';
 
 import { profileIdentityLine } from './meProfileModel';
@@ -21,11 +24,22 @@ export interface ProfileHeroProps {
 export function ProfileHero({ record, onEdit, onOpenIdentity }: ProfileHeroProps): ReactNode {
   const { t } = useTranslation();
   const identity = profileIdentityLine(record);
+  const [localAvatar, setLocalAvatar] = useState(readLocalAvatarUri);
+
+  useFocusEffect(
+    useCallback(() => {
+      setLocalAvatar(readLocalAvatarUri());
+    }, [])
+  );
 
   return (
     <View className="gap-4 px-4">
       <View className="flex-row items-start gap-4">
-        <ProfileAvatar avatar={record.avatar} displayName={record.displayName} />
+        <ProfileAvatar
+          avatar={record.avatar}
+          localAvatar={localAvatar}
+          displayName={record.displayName}
+        />
 
         <View className="flex-1 gap-2 pt-1">
           <ThemedText variant="headlineMedium" numberOfLines={2}>
@@ -76,15 +90,17 @@ export function ProfileHero({ record, onEdit, onOpenIdentity }: ProfileHeroProps
   );
 }
 
-function ProfileAvatar({
+export function ProfileAvatar({
   avatar,
+  localAvatar = null,
   displayName,
 }: {
   readonly avatar: string | null;
+  readonly localAvatar?: string | null;
   readonly displayName: string;
 }): ReactNode {
   const [imageFailed, setImageFailed] = useState(false);
-  const imageUrl = safeAvatarUrl(avatar);
+  const imageUrl = resolveProfileAvatarSource(avatar, localAvatar);
 
   useEffect(() => {
     setImageFailed(false);
@@ -114,14 +130,4 @@ function ProfileAvatar({
       ) : null}
     </View>
   );
-}
-
-function safeAvatarUrl(value: string | null): string | null {
-  if (!value) return null;
-  try {
-    const url = new URL(value);
-    return url.protocol === 'https:' ? url.toString() : null;
-  } catch {
-    return null;
-  }
 }

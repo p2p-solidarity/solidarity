@@ -76,7 +76,10 @@ interface ProfileModuleSurface {
       readonly status: 'empty' | 'ready';
       readonly saveProfile: (
         fields: ProfileFieldsShape,
-        options?: { readonly alsoKnownAs?: readonly string[] }
+        options?: {
+          readonly alsoKnownAs?: readonly string[];
+          readonly avatar?: string | null;
+        }
       ) => Promise<SaveResult>;
       readonly publishToNostr: (
         confirmedRelays: readonly string[]
@@ -280,6 +283,46 @@ describe('saveProfile — signed, verifiable record', () => {
 });
 
 describe('saveProfile — append-only replacement semantics', () => {
+  it('applies an avatar override before signing and carries it forward on later saves', async () => {
+    const created = await rootKeyMod.createFromFreshMnemonic();
+    expect(created.ok).toBe(true);
+    if (!created.ok) return;
+
+    const first = await mod.useProfileStore
+      .getState()
+      .saveProfile(
+        { displayName: 'Alice', bio: '', links: [] },
+        { avatar: 'https://cdn.bsky.app/img/avatar/plain/did:plc:alice/example@jpeg' }
+      );
+
+    expect(first.ok).toBe(true);
+    if (!first.ok) return;
+    expect(first.value.record.avatar).toBe(
+      'https://cdn.bsky.app/img/avatar/plain/did:plc:alice/example@jpeg'
+    );
+    expect(verifyCompact(first.value.jws, created.value.did)).toEqual({
+      ok: true,
+      value: first.value.record,
+    });
+
+    const second = await mod.useProfileStore
+      .getState()
+      .saveProfile({ displayName: 'Alice Updated', bio: '', links: [] });
+    expect(second.ok).toBe(true);
+    if (!second.ok) return;
+    expect(second.value.record.avatar).toBe(first.value.record.avatar);
+
+    const removed = await mod.useProfileStore
+      .getState()
+      .saveProfile(
+        { displayName: 'Alice Updated', bio: '', links: [] },
+        { avatar: null }
+      );
+    expect(removed.ok).toBe(true);
+    if (!removed.ok) return;
+    expect(removed.value.record.avatar).toBeNull();
+  });
+
   it('applies an alsoKnownAs override before signing and returns that exact signed snapshot', async () => {
     const created = await rootKeyMod.createFromFreshMnemonic();
     expect(created.ok).toBe(true);

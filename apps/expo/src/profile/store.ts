@@ -16,11 +16,10 @@
  * NEVER mutates the currently-stored record in place. Every call builds a
  * BRAND NEW record object — fresh `updatedAt`, the root did resolved fresh
  * via `getRootDid()`, the editable fields (`displayName`/`bio`/`links`) from
- * the caller, and every other field (`avatar`/`alsoKnownAs`/`badges`/
- * `supersededBy`) carried forward from the PREVIOUS stored record (or a
- * real empty default — `null`/`[]` — on the very first save, never a
- * fabricated placeholder; avatar upload is out of scope for this task, see
- * CLAUDE.md rule 8) — then validates, signs, and REPLACES the stored
+ * the caller, narrow explicit overrides (`avatar`/`alsoKnownAs`) where a
+ * flow supplies them, and every other field carried forward from the
+ * PREVIOUS stored record (or a real `null`/`[]` default on the first save,
+ * never a fabricated placeholder) — then validates, signs, and REPLACES the stored
  * `(record, jws)` pair wholesale, both in memory and in MMKV.
  *
  * Validation happens strictly BEFORE signing: `parseProfile` runs on the
@@ -87,10 +86,8 @@ export function __setNostrPublishForTesting(
 export type ProfileStatus = 'empty' | 'ready';
 
 /**
- * The subset of Profile Record fields `app/me/edit.tsx` lets the user edit
- * today. Every other field (`avatar`/`alsoKnownAs`/`badges`/`supersededBy`)
- * is carried forward from the previously-stored record by `saveProfile` —
- * see the module doc's append-only note.
+ * The text/link subset supplied on every editor save. Avatar and binding
+ * changes use the narrow options below; remaining fields carry forward.
  */
 export interface ProfileEditableFields {
   readonly displayName: string;
@@ -98,9 +95,10 @@ export interface ProfileEditableFields {
   readonly links: readonly ProfileLink[];
 }
 
-/** Narrow service-level override for identity-binding flows. */
+/** Narrow service-level overrides for signed binding and avatar flows. */
 export interface ProfileSaveOptions {
   readonly alsoKnownAs?: readonly string[];
+  readonly avatar?: string | null;
 }
 
 /** The exact pair persisted by a successful Face-ID-gated save. */
@@ -153,6 +151,13 @@ function nextUpdatedAt(previous: string | null): string {
   const previousMs = Date.parse(previous);
   const nextMs = nowMs > previousMs ? nowMs : previousMs + 1;
   return new Date(nextMs).toISOString();
+}
+
+function avatarForSave(
+  previous: string | null,
+  override: string | null | undefined
+): string | null {
+  return override === undefined ? previous : override;
 }
 
 function rootKeyErrorMessage(prefix: string, e: RootKeyError): string {
@@ -223,7 +228,7 @@ export const useProfileStore = create<ProfileState>((set, get) => ({
       v: PROFILE_VERSION,
       did: didResult.value,
       displayName: fields.displayName,
-      avatar: previous?.avatar ?? null,
+      avatar: avatarForSave(previous?.avatar ?? null, options.avatar),
       bio: fields.bio,
       links: fields.links,
       alsoKnownAs:
