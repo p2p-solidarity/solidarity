@@ -12,7 +12,11 @@ import { describe, expect, it } from 'bun:test';
 import type { Result } from '@solidarity/shared';
 import type { RootKeyError } from '@/identity';
 
-import { resolveIcloudAcceptOutcome, resolveMnemonicForCeremony } from '../../src/onboarding/steps/backupStepLogic';
+import {
+  resolveIcloudAcceptOutcome,
+  resolveMnemonicForCeremony,
+  resolveRecoveryDecision,
+} from '../../src/onboarding/steps/backupStepLogic';
 
 function ok<T>(value: T): Result<T, RootKeyError> {
   return { ok: true, value };
@@ -100,5 +104,28 @@ describe('resolveIcloudAcceptOutcome', () => {
       kind: 'error',
       error: { kind: 'storageFailed', message: 'icloud keychain write rejected' },
     });
+  });
+});
+
+describe('resolveRecoveryDecision', () => {
+  it('recovered / already-local identity short-circuits to recovered with the did', () => {
+    expect(
+      resolveRecoveryDecision(ok({ kind: 'restoredFromICloud', did: 'did:key:zRestored' }))
+    ).toEqual({ kind: 'recovered', did: 'did:key:zRestored' });
+    expect(
+      resolveRecoveryDecision(ok({ kind: 'alreadyLocal', did: 'did:key:zLocal' }))
+    ).toEqual({ kind: 'recovered', did: 'did:key:zLocal' });
+  });
+
+  it('authoritative notFound (read worked, nothing synced) is the ONLY path that mints without asking', () => {
+    expect(resolveRecoveryDecision(ok({ kind: 'notFound' }))).toEqual({ kind: 'mintFresh' });
+  });
+
+  it('a failed or corrupt cloud read routes to askUser — never a silent fresh mint', () => {
+    const storage = { kind: 'storageFailed', message: 'keychain unavailable' } as const;
+    expect(resolveRecoveryDecision(err(storage))).toEqual({ kind: 'askUser', error: storage });
+
+    const corrupt = { kind: 'invalidMnemonic', message: 'bad checksum' } as const;
+    expect(resolveRecoveryDecision(err(corrupt))).toEqual({ kind: 'askUser', error: corrupt });
   });
 });

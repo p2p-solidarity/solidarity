@@ -46,6 +46,7 @@ import { ActivityIndicator, Platform, TextInput, View } from 'react-native';
 import { ThemedButton, ThemedText } from '@/components/themed';
 import { Colors } from '@/constants/Colors';
 import { showError } from '@/feedback/appAlert';
+import { confirmDialog } from '@/feedback/confirmDialog';
 import { haptic } from '@/feedback/haptics';
 import { useTranslation } from '@/i18n';
 import {
@@ -56,7 +57,11 @@ import {
   revealMnemonicForExport,
 } from '@/identity';
 import { usePreferences } from '@/settings/preferences';
-import { resolveIcloudAcceptOutcome, resolveMnemonicForCeremony } from './backupStepLogic';
+import {
+  resolveIcloudAcceptOutcome,
+  resolveMnemonicForCeremony,
+  resolveRecoveryDecision,
+} from './backupStepLogic';
 import { OnboardingScaffold } from './OnboardingScaffold';
 
 /** Android has no iCloud Keychain — the option is never offered there
@@ -115,14 +120,28 @@ export function BackupStep({ onBack, onDone }: BackupStepProps) {
       // async). Never mint a new identity over a backed-up one. Local-wins in
       // restoreRootKeyFromICloud guarantees this only imports when nothing is
       // local, so it can't silently switch an existing identity.
+      // A FAILED read (keychain error, corrupt synced phrase) must not fall
+      // through to a silent fresh mint either — the user chooses: retry, or
+      // explicitly create a new identity (user decision 2026-07-17).
       if (Platform.OS === 'ios') {
-        const recovery = await restoreRootKeyFromICloud();
-        if (cancelled) return;
-        if (recovery.ok && recovery.value.kind !== 'notFound') {
-          // Recovered a backed-up identity → they already use iCloud backup.
-          setPref('rootKeySyncChoice', 'icloud');
-          onDone();
-          return;
+        let mintApproved = false;
+        while (!mintApproved) {
+          const decision = resolveRecoveryDecision(await restoreRootKeyFromICloud());
+          if (cancelled) return;
+          if (decision.kind === 'recovered') {
+            // Recovered a backed-up identity → they already use iCloud backup.
+            setPref('rootKeySyncChoice', 'icloud');
+            onDone();
+            return;
+          }
+          if (decision.kind === 'mintFresh') break;
+          mintApproved = await confirmDialog({
+            title: t('backupStep.cloudReadFailed.title'),
+            message: t('backupStep.cloudReadFailed.message'),
+            confirmLabel: t('backupStep.cloudReadFailed.startFresh'),
+            cancelLabel: t('backupStep.cloudReadFailed.retry'),
+            destructive: true,
+          });
         }
       }
       const created = await createFromFreshMnemonic();

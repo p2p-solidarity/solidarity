@@ -16,7 +16,7 @@
  */
 import type { Result } from '@solidarity/shared';
 
-import type { RootKeyError } from '@/identity';
+import type { RootKeyError, RootKeyRecovery } from '@/identity';
 
 export type MnemonicCeremonyOutcome =
   | { readonly kind: 'ready'; readonly words: readonly string[] }
@@ -63,4 +63,26 @@ export async function resolveIcloudAcceptOutcome(
   const result = await enableFn();
   if (!result.ok) return { kind: 'error', error: result.error };
   return { kind: 'success' };
+}
+
+/** What BackupStep's provisioning effect must do with a recovery attempt. */
+export type RootKeyRecoveryDecision =
+  | { readonly kind: 'recovered'; readonly did: string }
+  | { readonly kind: 'mintFresh' }
+  | { readonly kind: 'askUser'; readonly error: RootKeyError };
+
+/**
+ * Route `restoreRootKeyFromICloud()`'s outcome. The security-relevant leg is
+ * the error one: a failed or corrupt cloud read maps to `askUser` — NEVER to
+ * `mintFresh` — because "absence/badness of a cloud key is not proof the user
+ * is new" (04-plan invariant). Only an authoritative `notFound` (the read
+ * worked and no synced phrase exists) may mint without asking; on `askUser`
+ * the component offers retry vs an EXPLICIT create-new-identity choice.
+ */
+export function resolveRecoveryDecision(
+  recovery: Result<RootKeyRecovery, RootKeyError>
+): RootKeyRecoveryDecision {
+  if (!recovery.ok) return { kind: 'askUser', error: recovery.error };
+  if (recovery.value.kind === 'notFound') return { kind: 'mintFresh' };
+  return { kind: 'recovered', did: recovery.value.did };
 }
