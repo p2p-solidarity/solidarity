@@ -119,6 +119,11 @@ export default function SettingsHub() {
               Notifications/Language live under Advanced; Developer only after dev unlock. */}
           <SettingsBlockSection title={t('settingsHub.preferences')}>
             <SettingsBlockRow
+              icon="antenna.radiowaves.left.and.right"
+              title={t('settingsHub.connectionsPublishing')}
+              onPress={() => { router.push('/settings/connections'); }}
+            />
+            <SettingsBlockRow
               icon="lock.shield"
               title={t('settingsHub.securityKeys')}
               onPress={() => { router.push('/settings/security'); }}

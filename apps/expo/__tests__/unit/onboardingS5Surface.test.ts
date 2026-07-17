@@ -17,21 +17,31 @@ describe('S5 onboarding and Bluesky UI wiring', () => {
     expect(route).toContain('confirmDialog');
     expect(route).toContain('BindingBadgeChip');
     expect(route).toContain('inlineSuffix=');
+    expect(route).toContain('shouldAutoRepublish(isAlreadyPublished, autoRepublishEnabled)');
+    expect(route).toContain('publishWithNostrAutoSetup');
     expect(route).not.toContain('Alert.alert');
     expect(route).not.toMatch(/\bfetch\s*\(/u);
     expect(en['blueskyConnect.handlePlaceholder']).toBe('alice');
     expect(zhHant['blueskyConnect.handlePlaceholder']).toBe('alice');
+    expect(en['blueskyConnect.autoRepublishFailed']).toContain('Republish it from Settings');
+    expect(zhHant['blueskyConnect.autoRepublishFailed']).toContain('請從設定重新發布');
   });
 
   it('keeps one default publish route and carries verifier evidence into completion', () => {
     const connect = source('../../src/onboarding/steps/ConnectStep.tsx');
+    const page = source('../../src/onboarding/steps/PageStep.tsx');
     const scaffold = source('../../src/onboarding/steps/OnboardingScaffold.tsx');
     const flow = source('../../app/onboarding/index.tsx');
     const complete = source('../../src/onboarding/steps/CompleteStep.tsx');
     const meRows = source('../../src/components/me/IdentityCredentialRows.tsx');
 
     expect(connect).toContain("router.push('/verify/nostr')");
+    expect(connect).toContain("t('connectStep.continuePrivate')");
+    expect(connect).toContain('onPress={onNext}');
     expect(connect).not.toContain("router.push('/verify/bluesky')");
+    expect(page).toContain('shouldAutoRepublish(isAlreadyPublished, autoRepublish)');
+    expect(page).toContain('if (willAutoRepublish)');
+    expect(page).toContain("'pageStep.publishHint' : 'pageStep.localHint'");
     expect(connect).toContain('useOnboardingBadgeVerification');
     expect(flow).toContain("case 'connect'");
     expect(flow).toContain("goTo('connect')");

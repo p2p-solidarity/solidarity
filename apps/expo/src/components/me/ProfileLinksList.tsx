@@ -4,9 +4,11 @@ import { PressableScale } from '@/components/common/PressableScale';
 import { SfIcon } from '@/components/icons/SfIcon';
 import { ThemedSurface, ThemedText } from '@/components/themed';
 import { Colors } from '@/constants/Colors';
+import { useThemeColors } from '@/constants/useThemeColors';
 import { appAlert } from '@/feedback/appAlert';
 import { SCALE } from '@/feedback/motion';
 import { useTranslation } from '@/i18n';
+import { linkIconNameFor } from '@/profile/linkPresentation';
 import type { ProfileLink } from '@solidarity/shared';
 
 export interface ProfileLinksListProps {
@@ -16,6 +18,7 @@ export interface ProfileLinksListProps {
 
 export function ProfileLinksList({ links, onEdit }: ProfileLinksListProps) {
   const { t } = useTranslation();
+  const c = useThemeColors();
 
   const openLink = (link: ProfileLink) => {
     void Linking.openURL(link.url).catch(() => {
@@ -38,7 +41,17 @@ export function ProfileLinksList({ links, onEdit }: ProfileLinksListProps) {
           <ThemedSurface
             variant="outlined"
             className="flex-row items-center gap-3 rounded-none px-4 py-4">
-            <SfIcon name="plus" size={14} color={Colors.text3} />
+            <View
+              style={{
+                width: 34,
+                height: 34,
+                borderRadius: 10,
+                alignItems: 'center',
+                justifyContent: 'center',
+                backgroundColor: c.searchBg,
+              }}>
+              <SfIcon name="link.badge.plus" size={16} color={Colors.primaryBlue} />
+            </View>
             <ThemedText variant="bodyMedium" tone="tertiary" style={{ flex: 1 }}>
               {t('mePage.addFirstLink')}
             </ThemedText>
@@ -69,7 +82,21 @@ export function ProfileLinksList({ links, onEdit }: ProfileLinksListProps) {
                   paddingHorizontal: 16,
                   paddingVertical: 12,
                 }}>
-                <SfIcon name="link" size={15} color={Colors.primaryBlue} />
+                <View
+                  style={{
+                    width: 36,
+                    height: 36,
+                    borderRadius: 10,
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    backgroundColor: c.searchBg,
+                  }}>
+                  <SfIcon
+                    name={linkIconNameFor(link.label, link.url)}
+                    size={16}
+                    color={Colors.primaryBlue}
+                  />
+                </View>
                 <View className="flex-1 gap-0.5">
                   {link.label.length > 0 ? (
                     <ThemedText variant="bodyMedium" numberOfLines={1}>

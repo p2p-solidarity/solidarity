@@ -4,13 +4,22 @@
  */
 import { router } from 'expo-router';
 import { useEffect, useReducer, useRef, useState, type ReactNode } from 'react';
-import { ActivityIndicator, ScrollView, View } from 'react-native';
+import { View } from 'react-native';
 import { KeyboardAwareScrollView } from 'react-native-keyboard-controller';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { truncateNpub } from '@/badges/nostrBadgeDisplay';
 import { PressableScale } from '@/components/common/PressableScale';
 import { SfIcon } from '@/components/icons/SfIcon';
+import { HttpsOwnershipCard } from '@/components/publish/HttpsOwnershipCard';
+import {
+  PublishingConstellation,
+  type PublishAnimationPhase,
+} from '@/components/publish/PublishingConstellation';
+import {
+  PublishOutcomeStep,
+  relayNodeStatuses,
+} from '@/components/publish/PublishOutcomeStep';
 import { SettingsBackToolbar, SettingsScreenTitle } from '@/components/settings/SettingsBlocks';
 import { ThemedButton, ThemedSurface, ThemedText, ThemedTextInput } from '@/components/themed';
 import { Colors } from '@/constants/Colors';
@@ -23,7 +32,7 @@ import {
   isNostrPublishOutcomeSuccessful,
   nostrConnectWizardReducer,
 } from '@/nostr/connectWizard';
-import { DEFAULT_RELAYS, type PublishReport } from '@/nostr/publish';
+import { DEFAULT_RELAYS } from '@/nostr/publish';
 import {
   decodeNsec,
   hasNostrKey,
@@ -32,6 +41,8 @@ import {
   provisionFromRootMnemonic,
 } from '@/nostr/userKey';
 import { useProfileStore, type NostrPublishOutcome } from '@/profile/store';
+import { verifyHttpsOwnership, type HttpsOwnershipEvidence } from '@/profile/httpsOwnership';
+import { buildProfileShareModel } from '@/components/me/meProfileModel';
 
 type TFn = ReturnType<typeof useTranslation>['t'];
 
@@ -39,6 +50,7 @@ export default function PublishPageScreen(): ReactNode {
   const insets = useSafeAreaInsets();
   const { t } = useTranslation();
   const record = useProfileStore((state) => state.record);
+  const jws = useProfileStore((state) => state.jws);
   const profileStatus = useProfileStore((state) => state.status);
   const publishToNostr = useProfileStore((state) => state.publishToNostr);
   const [rootKeyPresent, setRootKeyPresent] = useState(true);
@@ -48,6 +60,7 @@ export default function PublishPageScreen(): ReactNode {
     initialNostrConnectWizardState
   );
   const actionInFlight = useRef(false);
+  const [websiteEvidence, setWebsiteEvidence] = useState<readonly HttpsOwnershipEvidence[] | null>(null);
 
   // Root identity is the only async gate. First paint stays optimistic, as
   // on the existing Me editor, then resolves to the honest setup state.
@@ -60,6 +73,34 @@ export default function PublishPageScreen(): ReactNode {
       active = false;
     };
   }, []);
+
+  useEffect(() => {
+    let active = true;
+    if (!record || !jws || record.links.length === 0) {
+      setWebsiteEvidence([]);
+      return () => {
+        active = false;
+      };
+    }
+    const controller = new AbortController();
+    setWebsiteEvidence(null);
+    const shareModel = buildProfileShareModel(record, jws);
+    const profileUrls = [shareModel.offlineUrl, shareModel.shortUrl].filter(
+      (url): url is string => url !== null,
+    );
+    void verifyHttpsOwnership({
+      did: record.did,
+      links: record.links.map((link) => link.url),
+      profileUrls,
+      signal: controller.signal,
+    }).then((evidence) => {
+      if (active) setWebsiteEvidence(evidence);
+    });
+    return () => {
+      active = false;
+      controller.abort();
+    };
+  }, [jws, record]);
 
   const reportFailure = (error: string, outcome: NostrPublishOutcome | null = null) => {
     showError({
@@ -184,6 +225,7 @@ export default function PublishPageScreen(): ReactNode {
         {state.status === 'idle' && state.step === 'ready' ? (
           <ReadyStep
             alreadyPublished={alreadyPublished}
+            websiteEvidence={websiteEvidence}
             onPublish={() => {
               void publishDefault();
             }}
@@ -209,13 +251,13 @@ export default function PublishPageScreen(): ReactNode {
         ) : null}
 
         {state.status === 'provisioning' ? (
-          <BusyStep label={t('nostrConnect.provisioning')} />
+          <BusyStep phase="provisioning" label={t('nostrConnect.provisioning')} />
         ) : null}
         {state.status === 'publishing' ? (
-          <BusyStep label={t('nostrConnect.publishing')} />
+          <BusyStep phase="publishing" label={t('nostrConnect.publishing')} />
         ) : null}
         {state.status === 'published' && state.outcome ? (
-          <PublishedStep
+          <PublishOutcomeStep
             outcome={state.outcome}
             onDone={() => {
               router.back();
@@ -225,6 +267,7 @@ export default function PublishPageScreen(): ReactNode {
         {state.status === 'error' ? (
           <ErrorStep
             stage={state.errorStage}
+            outcome={state.outcome}
             onRetry={() => {
               dispatch({ type: 'retry' });
             }}
@@ -240,16 +283,19 @@ export default function PublishPageScreen(): ReactNode {
 
 function ReadyStep({
   alreadyPublished,
+  websiteEvidence,
   onPublish,
   onShowAdvanced,
 }: {
   readonly alreadyPublished: boolean;
+  readonly websiteEvidence: readonly HttpsOwnershipEvidence[] | null;
   readonly onPublish: () => void;
   readonly onShowAdvanced: () => void;
 }): ReactNode {
   const { t } = useTranslation();
   return (
     <View style={{ flex: 1, justifyContent: 'center', gap: 20 }}>
+      <PublishingConstellation phase="ready" />
       <ThemedSurface variant="inset" className="rounded-none p-4">
         <View style={{ gap: 10 }}>
           <SfIcon name="checkmark.seal" size={24} color={Colors.primaryBlue} />
@@ -259,6 +305,7 @@ function ReadyStep({
           </ThemedText>
         </View>
       </ThemedSurface>
+      <HttpsOwnershipCard evidence={websiteEvidence} />
       <ThemedButton
         label={t(alreadyPublished ? 'nostrConnect.publishAgain' : 'nostrConnect.publish')}
         variant="primary"
@@ -329,10 +376,16 @@ function PasteNsecStep({
   );
 }
 
-function BusyStep({ label }: { readonly label: string }): ReactNode {
+function BusyStep({
+  phase,
+  label,
+}: {
+  readonly phase: Extract<PublishAnimationPhase, 'provisioning' | 'publishing'>;
+  readonly label: string;
+}): ReactNode {
   return (
     <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', gap: 12 }}>
-      <ActivityIndicator size="small" color={Colors.text2} />
+      <PublishingConstellation phase={phase} />
       <ThemedText variant="bodyMedium" tone="secondary">
         {label}
       </ThemedText>
@@ -340,118 +393,24 @@ function BusyStep({ label }: { readonly label: string }): ReactNode {
   );
 }
 
-function PublishedStep({
-  outcome,
-  onDone,
-}: {
-  readonly outcome: NostrPublishOutcome;
-  readonly onDone: () => void;
-}): ReactNode {
-  const { t } = useTranslation();
-  const [showDetails, setShowDetails] = useState(false);
-  return (
-    <View style={{ flex: 1, justifyContent: 'center', gap: 20 }}>
-      <View style={{ alignItems: 'center', gap: 10 }}>
-        <SfIcon name="checkmark.seal.fill" size={36} color={Colors.terminalGreen} />
-        <ThemedText variant="titleLarge">{t('nostrConnect.publishedTitle')}</ThemedText>
-        <ThemedText variant="bodySmall" tone="secondary" style={{ textAlign: 'center' }}>
-          {t('nostrConnect.publishedMessage')}
-        </ThemedText>
-      </View>
-      <PressableScale
-        haptic="tap"
-        onPress={() => {
-          setShowDetails((visible) => !visible);
-        }}
-        accessibilityRole="button"
-        accessibilityState={{ expanded: showDetails }}
-        accessibilityLabel={t('nostrConnect.details')}
-        style={{ minHeight: 44, flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-        <SfIcon name={showDetails ? 'chevron.down' : 'chevron.right'} size={12} color={Colors.text3} />
-        <ThemedText variant="caption" tone="secondary">
-          {t(showDetails ? 'nostrConnect.hideDetails' : 'nostrConnect.details')}
-        </ThemedText>
-      </PressableScale>
-      {showDetails ? (
-        <ScrollView style={{ maxHeight: 260 }} nestedScrollEnabled>
-          <View style={{ gap: 16 }}>
-            <RelayReportSection
-              title={t('nostrConnect.profilePointerReport')}
-              report={outcome.profile}
-              t={t}
-            />
-            <RelayReportSection
-              title={t('nostrConnect.kind0Report')}
-              report={outcome.kind0}
-              t={t}
-            />
-          </View>
-        </ScrollView>
-      ) : null}
-      <ThemedButton
-        label={t('nostrConnect.done')}
-        variant="primary"
-        fullWidth
-        onPress={onDone}
-      />
-    </View>
-  );
-}
-
-function RelayReportSection({
-  title,
-  report,
-  t,
-}: {
-  readonly title: string;
-  readonly report: PublishReport;
-  readonly t: TFn;
-}): ReactNode {
-  return (
-    <ThemedSurface variant="inset" className="rounded-none p-3">
-      <View style={{ gap: 8 }}>
-        <ThemedText variant="label">{title}</ThemedText>
-        <ThemedText variant="caption" tone="secondary">
-          {t('nostrConnect.acceptedSummary', {
-            accepted: report.acceptedCount,
-            total: report.results.length,
-          })}
-        </ThemedText>
-        {report.results.map((result) => (
-          <View
-            key={result.relay}
-            style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-            <SfIcon
-              name={result.accepted ? 'checkmark.circle.fill' : 'xmark.circle'}
-              size={14}
-              color={result.accepted ? Colors.terminalGreen : Colors.destructive}
-            />
-            <ThemedText
-              variant="caption"
-              tone="secondary"
-              numberOfLines={1}
-              style={{ flex: 1, fontFamily: 'Menlo' }}>
-              {result.relay}
-            </ThemedText>
-          </View>
-        ))}
-      </View>
-    </ThemedSurface>
-  );
-}
-
 function ErrorStep({
   stage,
+  outcome,
   onRetry,
   onCancel,
 }: {
   readonly stage: 'provisioning' | 'publishing' | null;
+  readonly outcome: NostrPublishOutcome | null;
   readonly onRetry: () => void;
   readonly onCancel: () => void;
 }): ReactNode {
   const { t } = useTranslation();
   return (
     <View style={{ flex: 1, justifyContent: 'center', gap: 16 }}>
+      <PublishingConstellation
+        phase={outcome ? 'partial' : 'error'}
+        relayStatuses={outcome ? relayNodeStatuses(outcome) : undefined}
+      />
       <ThemedSurface variant="outlined" className="rounded-none p-4">
         <View style={{ gap: 8 }}>
           <ThemedText variant="titleMedium" tone="error">

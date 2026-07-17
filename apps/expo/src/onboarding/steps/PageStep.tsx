@@ -54,6 +54,8 @@ import {
   type LinkLabelPreset,
 } from '@/profile/linkUrl';
 import { useProfileStore } from '@/profile/store';
+import { shouldAutoRepublish } from '@/profile/publishingPolicy';
+import { usePreferences } from '@/settings/preferences';
 import { OnboardingScaffold } from './OnboardingScaffold';
 
 /** `null` = no error. An empty (never-touched) URL is not an error — the
@@ -72,6 +74,10 @@ export function PageStep({ onBack, onNext }: PageStepProps) {
   const record = useProfileStore((s) => s.record);
   const saveProfile = useProfileStore((s) => s.saveProfile);
   const publishToNostr = useProfileStore((s) => s.publishToNostr);
+  const autoRepublish = usePreferences((s) => s.nostrAutoRepublish);
+  const isAlreadyPublished =
+    record?.alsoKnownAs.some((alias) => alias.startsWith('nostr:npub')) === true;
+  const willAutoRepublish = shouldAutoRepublish(isAlreadyPublished, autoRepublish);
 
   const [displayName, setDisplayName] = useState(record?.displayName ?? '');
   const [bio, setBio] = useState(record?.bio ?? '');
@@ -79,6 +85,7 @@ export function PageStep({ onBack, onNext }: PageStepProps) {
   const [linkUrl, setLinkUrl] = useState(record?.links[0]?.url ?? '');
   const [linkPreset, setLinkPreset] = useState<LinkLabelPreset | null>(null);
   const [saving, setSaving] = useState(false);
+  const publishCopy = pageStepPublishCopy(willAutoRepublish, saving);
 
   const preparedLinkUrl = useMemo(
     () => prepareLinkUrl(linkUrl, linkPreset),
@@ -113,37 +120,33 @@ export function PageStep({ onBack, onNext }: PageStepProps) {
         return;
       }
 
-      const published = await publishWithNostrAutoSetup({
-        hasKey: hasNostrKey,
-        provision: provisionFromRootMnemonic,
-        publish: async () => await publishToNostr(DEFAULT_RELAYS),
-      });
-      if (!published.ok) {
-        if (isBiometricCancellation(published.error)) return;
-        haptic('error');
-        showError({
-          context: 'Onboarding › Page › Publish',
-          summary: t('pageStep.publishFailed'),
-          error: new Error(published.error),
+      if (willAutoRepublish) {
+        const published = await publishWithNostrAutoSetup({
+          hasKey: hasNostrKey,
+          provision: provisionFromRootMnemonic,
+          publish: async () => await publishToNostr(DEFAULT_RELAYS),
         });
-        return;
+        if (!published.ok || !isNostrPublishOutcomeSuccessful(published.value)) {
+          if (!published.ok && isBiometricCancellation(published.error)) return;
+          haptic('error');
+          showError({
+            context: 'Onboarding › Page › Republish',
+            summary: t('pageStep.publishFailed'),
+            error: new Error(
+              published.ok
+                ? t('nostrConnect.publishReportDetail', {
+                    profileAccepted: published.value.profile.acceptedCount,
+                    profileTotal: published.value.profile.results.length,
+                    bindingAccepted: published.value.kind0.acceptedCount,
+                    bindingTotal: published.value.kind0.results.length,
+                  })
+                : published.error,
+            ),
+          });
+          return;
+        }
       }
-      if (!isNostrPublishOutcomeSuccessful(published.value)) {
-        haptic('error');
-        showError({
-          context: 'Onboarding › Page › Publish',
-          summary: t('pageStep.publishFailed'),
-          error: new Error(
-            t('nostrConnect.publishReportDetail', {
-              profileAccepted: published.value.profile.acceptedCount,
-              profileTotal: published.value.profile.results.length,
-              bindingAccepted: published.value.kind0.acceptedCount,
-              bindingTotal: published.value.kind0.results.length,
-            })
-          ),
-        });
-        return;
-      }
+
       haptic('success');
       onNext();
     } finally {
@@ -159,7 +162,7 @@ export function PageStep({ onBack, onNext }: PageStepProps) {
       footer={
         <View style={{ gap: 12 }}>
           <ThemedButton
-            label={saving ? t('pageStep.savingAndPublishing') : t('pageStep.saveAndPublish')}
+            label={t(publishCopy.button)}
             variant="inverted"
             fullWidth
             loading={saving}
@@ -169,7 +172,7 @@ export function PageStep({ onBack, onNext }: PageStepProps) {
             }}
           />
           <ThemedText variant="caption" tone="secondary" style={{ textAlign: 'center' }}>
-            {t('pageStep.publishHint')}
+            {t(publishCopy.hint)}
           </ThemedText>
           <ThemedButton
             label={t('pageStep.skip')}
@@ -245,6 +248,30 @@ export function PageStep({ onBack, onNext }: PageStepProps) {
       </View>
     </OnboardingScaffold>
   );
+}
+
+function pageStepPublishCopy(
+  willAutoRepublish: boolean,
+  saving: boolean,
+): {
+  readonly button:
+    | 'pageStep.savingAndPublishing'
+    | 'pageStep.saving'
+    | 'pageStep.saveAndPublish'
+    | 'pageStep.create';
+  readonly hint: 'pageStep.publishHint' | 'pageStep.localHint';
+} {
+  const hint = willAutoRepublish ? 'pageStep.publishHint' : 'pageStep.localHint';
+  if (saving) {
+    return {
+      button: willAutoRepublish ? 'pageStep.savingAndPublishing' : 'pageStep.saving',
+      hint,
+    };
+  }
+  return {
+    button: willAutoRepublish ? 'pageStep.saveAndPublish' : 'pageStep.create',
+    hint,
+  };
 }
 
 function FieldBlock({

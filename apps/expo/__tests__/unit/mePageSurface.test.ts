@@ -24,6 +24,13 @@ describe('Me public-page surface', () => {
     expect(badges).toContain('verifyNostrBinding');
     expect(badges).toContain('verifyAtprotoBinding');
     expect(badges).toContain('atprotoBindingIO');
+    expect(badges).toContain('verifyHttpsOwnership');
+    expect(badges).toContain("credential.type.toLowerCase() === 'passport'");
+    expect(badges).toContain('credentialTrustDisplayFor');
+    expect(badges).toContain('credentialTrustDisplayFor(detail).level');
+    expect(badges).toContain(": 'L1'");
+    expect(badges).toContain(": 'L1'");
+    expect(links).toContain('linkIconNameFor');
     expect(badges).toContain("icon: 'checkmark.seal.fill', color: Colors.terminalGreen");
     expect(badges).toContain("icon: 'checkmark.seal', color: Colors.warning");
     expect(badges).toContain("icon: 'exclamationmark.triangle', color: Colors.text3");

@@ -58,6 +58,8 @@ import {
   type LinkLabelPreset,
 } from '@/profile/linkUrl';
 import { useProfileStore, type NostrPublishOutcome } from '@/profile/store';
+import { shouldAutoRepublish } from '@/profile/publishingPolicy';
+import { usePreferences } from '@/settings/preferences';
 import { uuid, type ProfileLink } from '@solidarity/shared';
 
 interface EditableLink {
@@ -110,6 +112,10 @@ export default function MeEditScreen() {
   const record = useProfileStore((s) => s.record);
   const saveProfile = useProfileStore((s) => s.saveProfile);
   const publishToNostr = useProfileStore((s) => s.publishToNostr);
+  const autoRepublish = usePreferences((s) => s.nostrAutoRepublish);
+  const isAlreadyPublished =
+    record?.alsoKnownAs.some((alias) => alias.startsWith('nostr:npub')) === true;
+  const willAutoRepublish = shouldAutoRepublish(isAlreadyPublished, autoRepublish);
 
   // Optimistic default — see `ProfileSummaryCard`'s doc for why (the common
   // case already has a provisioned root key; this flips to the honest
@@ -232,7 +238,7 @@ export default function MeEditScreen() {
         url: prepareLinkUrl(link.url, link.preset),
       }));
 
-  const saveAndPublish = async (
+  const commitProfile = async (
     avatarOverride?: string | null
   ): Promise<ProfileCommitResult> => {
     if (hasLinkErrors) {
@@ -259,29 +265,31 @@ export default function MeEditScreen() {
       return 'saveFailed';
     }
 
-    const published = await publishWithNostrAutoSetup({
-      hasKey: hasNostrKey,
-      provision: provisionFromRootMnemonic,
-      publish: async () => await publishToNostr(DEFAULT_RELAYS),
-    });
-    if (!published.ok) {
-      if (isBiometricCancellation(published.error)) return 'cancelled';
-      haptic('error');
-      showError({
-        context: 'Me › Edit › Publish',
-        summary: t('meEdit.publishFailed'),
-        error: new Error(published.error),
+    if (willAutoRepublish) {
+      const published = await publishWithNostrAutoSetup({
+        hasKey: hasNostrKey,
+        provision: provisionFromRootMnemonic,
+        publish: async () => await publishToNostr(DEFAULT_RELAYS),
       });
-      return 'publishFailed';
-    }
-    if (!isNostrPublishOutcomeSuccessful(published.value)) {
-      haptic('error');
-      showError({
-        context: 'Me › Edit › Publish',
-        summary: t('meEdit.publishFailed'),
-        error: new Error(publishFailureDetail(published.value, t)),
-      });
-      return 'publishFailed';
+      if (!published.ok) {
+        if (isBiometricCancellation(published.error)) return 'cancelled';
+        haptic('error');
+        showError({
+          context: 'Me › Edit › Publish',
+          summary: t('meEdit.publishFailed'),
+          error: new Error(published.error),
+        });
+        return 'publishFailed';
+      }
+      if (!isNostrPublishOutcomeSuccessful(published.value)) {
+        haptic('error');
+        showError({
+          context: 'Me › Edit › Publish',
+          summary: t('meEdit.publishFailed'),
+          error: new Error(publishFailureDetail(published.value, t)),
+        });
+        return 'publishFailed';
+      }
     }
 
     return 'success';
@@ -289,17 +297,18 @@ export default function MeEditScreen() {
 
   const avatarEditor = useAvatarEditor({
     record,
-    commitProfile: saveAndPublish,
+    commitProfile,
+    willPublish: willAutoRepublish,
   });
 
   const handleSave = async () => {
     setSaving(true);
     try {
-      const result = await saveAndPublish();
+      const result = await commitProfile();
       if (result !== 'success') return;
 
       haptic('success');
-      pushToast(t('meEdit.published'), 'success');
+      pushToast(t(willAutoRepublish ? 'meEdit.published' : 'meEdit.saved'), 'success');
       router.back();
     } finally {
       setSaving(false);
@@ -366,7 +375,11 @@ export default function MeEditScreen() {
         />
 
         <ThemedButton
-          label={saving ? t('meEdit.savingAndPublishing') : t('meEdit.saveAndPublish')}
+          label={
+            saving
+              ? t(willAutoRepublish ? 'meEdit.savingAndPublishing' : 'meEdit.saving')
+              : t(willAutoRepublish ? 'meEdit.saveAndPublish' : 'meEdit.save')
+          }
           variant="primary"
           fullWidth
           loading={saving}
@@ -374,7 +387,7 @@ export default function MeEditScreen() {
           onPress={() => { void handleSave(); }}
         />
         <ThemedText variant="caption" tone="secondary" style={{ textAlign: 'center' }}>
-          {t('meEdit.publishHint')}
+          {t(willAutoRepublish ? 'meEdit.publishHint' : 'meEdit.localSaveHint')}
         </ThemedText>
       </KeyboardAwareScrollView>
 

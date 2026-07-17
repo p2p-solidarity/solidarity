@@ -52,7 +52,7 @@ export function MeProfilePage({
       </Animated.View>
 
       <Animated.View entering={entrance(STAGGER_MS)}>
-        <ProfileBadgeChips record={record} onManageBindings={focusBindings} />
+        <ProfileBadgeChips record={record} jws={jws} onManageBindings={focusBindings} />
       </Animated.View>
 
       <Animated.View entering={entrance(STAGGER_MS * 2)}>

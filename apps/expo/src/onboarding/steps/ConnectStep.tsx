@@ -60,14 +60,32 @@ export function ConnectStep({
       title={t('connectStep.title')}
       subtitle={t('connectStep.subtitle')}
       footer={
-        <ThemedButton
-          label={
-            hasClaim || !hasPage ? t('onboarding.continue') : t('connectStep.publishPage')
-          }
-          variant={hasClaim ? 'inverted' : hasPage ? 'primary' : 'secondary'}
-          fullWidth
-          onPress={hasClaim || !hasPage ? onNext : openPublish}
-        />
+        hasClaim || !hasPage ? (
+          <ThemedButton
+            label={t('onboarding.continue')}
+            variant={hasClaim ? 'inverted' : 'secondary'}
+            fullWidth
+            onPress={onNext}
+          />
+        ) : (
+          <View style={{ gap: 10 }}>
+            <ThemedButton
+              label={t('connectStep.continuePrivate')}
+              variant="inverted"
+              fullWidth
+              onPress={onNext}
+            />
+            <ThemedButton
+              label={t('connectStep.publishPage')}
+              variant="secondary"
+              fullWidth
+              onPress={openPublish}
+            />
+            <ThemedText variant="caption" tone="secondary" style={{ textAlign: 'center' }}>
+              {t('connectStep.publishOptionalHint')}
+            </ThemedText>
+          </View>
+        )
       }>
       <View style={{ flex: 1, justifyContent: 'center', gap: 16 }}>
         {profileStatus !== 'ready' || record === null ? (

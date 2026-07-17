@@ -18,12 +18,26 @@ import { ThemedButton, ThemedSurface, ThemedText, ThemedTextInput } from '@/comp
 import { Colors } from '@/constants/Colors';
 import { confirmDialog } from '@/feedback/confirmDialog';
 import { useTranslation } from '@/i18n';
+import {
+  isNostrPublishOutcomeSuccessful,
+  publishWithNostrAutoSetup,
+} from '@/nostr/connectWizard';
+import { DEFAULT_RELAYS } from '@/nostr/publish';
+import { hasNostrKey, provisionFromRootMnemonic } from '@/nostr/userKey';
+import { shouldAutoRepublish } from '@/profile/publishingPolicy';
 import { useProfileStore } from '@/profile/store';
+import { usePreferences } from '@/settings/preferences';
+
+type AutoRepublishStatus = 'notRequested' | 'published' | 'failed';
 
 type ScreenState =
   | { readonly kind: 'input' }
   | { readonly kind: 'working' }
-  | { readonly kind: 'success'; readonly outcome: BlueskyConnectedOutcome }
+  | {
+      readonly kind: 'success';
+      readonly outcome: BlueskyConnectedOutcome;
+      readonly autoRepublish: AutoRepublishStatus;
+    }
   | { readonly kind: 'error'; readonly error: BlueskyWizardError };
 
 export default function BlueskyConnectScreen(): ReactNode {
@@ -31,12 +45,34 @@ export default function BlueskyConnectScreen(): ReactNode {
   const insets = useSafeAreaInsets();
   const record = useProfileStore((state) => state.record);
   const profileStatus = useProfileStore((state) => state.status);
+  const publishToNostr = useProfileStore((state) => state.publishToNostr);
+  const autoRepublishEnabled = usePreferences((state) => state.nostrAutoRepublish);
+  const isAlreadyPublished =
+    record?.alsoKnownAs.some((alias) => alias.startsWith('nostr:npub')) === true;
   const existingHandle =
     record?.alsoKnownAs.find((alias) => alias.startsWith('at://'))?.slice('at://'.length) ?? '';
   const [handle, setHandle] = useState(existingHandle);
   const [screen, setScreen] = useState<ScreenState>({ kind: 'input' });
   const handleWithoutAt = handle.trim().replace(/^@/u, '');
   const showStandardSuffix = !handleWithoutAt.includes('.');
+
+  const finishConnected = async (outcome: BlueskyConnectedOutcome) => {
+    if (!shouldAutoRepublish(isAlreadyPublished, autoRepublishEnabled)) {
+      setScreen({ kind: 'success', outcome, autoRepublish: 'notRequested' });
+      return;
+    }
+    const published = await publishWithNostrAutoSetup({
+      hasKey: hasNostrKey,
+      provision: provisionFromRootMnemonic,
+      publish: async () => await publishToNostr(DEFAULT_RELAYS),
+    });
+    setScreen({
+      kind: 'success',
+      outcome,
+      autoRepublish:
+        published.ok && isNostrPublishOutcomeSuccessful(published.value) ? 'published' : 'failed',
+    });
+  };
 
   const connect = async () => {
     setScreen({ kind: 'working' });
@@ -46,7 +82,7 @@ export default function BlueskyConnectScreen(): ReactNode {
       return;
     }
     if (initial.value.kind === 'connected') {
-      setScreen({ kind: 'success', outcome: initial.value });
+      await finishConnected(initial.value);
       return;
     }
 
@@ -70,7 +106,7 @@ export default function BlueskyConnectScreen(): ReactNode {
     if (!next.ok) {
       setScreen({ kind: 'error', error: next.error });
     } else if (next.value.kind === 'connected') {
-      setScreen({ kind: 'success', outcome: next.value });
+      await finishConnected(next.value);
     } else {
       setScreen({ kind: 'error', error: { kind: 'profileSaveFailed' } });
     }
@@ -147,7 +183,9 @@ export default function BlueskyConnectScreen(): ReactNode {
         ) : null}
 
         {screen.kind === 'working' ? <WorkingState /> : null}
-        {screen.kind === 'success' ? <SuccessState outcome={screen.outcome} /> : null}
+        {screen.kind === 'success' ? (
+          <SuccessState outcome={screen.outcome} autoRepublish={screen.autoRepublish} />
+        ) : null}
         {screen.kind === 'error' ? (
           <ErrorState
             errorKind={screen.error.kind}
@@ -173,7 +211,13 @@ function WorkingState(): ReactNode {
   );
 }
 
-function SuccessState({ outcome }: { readonly outcome: BlueskyConnectedOutcome }): ReactNode {
+function SuccessState({
+  outcome,
+  autoRepublish,
+}: {
+  readonly outcome: BlueskyConnectedOutcome;
+  readonly autoRepublish: AutoRepublishStatus;
+}): ReactNode {
   const { t } = useTranslation();
   const state = outcome.verification.state;
   const copyKey =
@@ -197,6 +241,11 @@ function SuccessState({ outcome }: { readonly outcome: BlueskyConnectedOutcome }
           <ThemedText variant="caption" tone="tertiary">
             @{outcome.handle}
           </ThemedText>
+          {autoRepublish === 'failed' ? (
+            <ThemedText variant="caption" tone="error">
+              {t('blueskyConnect.autoRepublishFailed')}
+            </ThemedText>
+          ) : null}
         </View>
       </ThemedSurface>
       <ThemedButton

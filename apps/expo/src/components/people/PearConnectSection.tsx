@@ -28,6 +28,7 @@
  * module doc point 1 for why "reachable" is scoped to an already-known
  * peer, not a stranger from a deep link (v1 has no anonymous responder).
  */
+import { router } from 'expo-router';
 import { useState, type ReactNode } from 'react';
 import { View } from 'react-native';
 
@@ -41,6 +42,7 @@ import { useTranslation } from '@/i18n';
 import { useProfileSnapshotStore } from '@/people/profileSnapshots';
 import { CARD_REQUEST_ERROR_I18N_SUFFIX, type CardRequestPhase } from '@/pear/cardRequestState';
 import { useCardRequestFlow } from '@/pear/useCardExchange';
+import { usePreferences } from '@/settings/preferences';
 
 export interface PearConnectSectionProps {
   readonly did: string;
@@ -63,7 +65,34 @@ function connectButtonLabel(phase: CardRequestPhase, t: (key: string) => string)
   }
 }
 
-export function PearConnectSection({ did }: PearConnectSectionProps): ReactNode {
+export function PearConnectSection(props: PearConnectSectionProps): ReactNode {
+  const pearEnabled = usePreferences((state) => state.pearExchangeEnabled);
+  return pearEnabled ? <EnabledPearConnectSection {...props} /> : <DisabledPearConnectSection />;
+}
+
+function DisabledPearConnectSection(): ReactNode {
+  const { t } = useTranslation();
+  return (
+    <View style={{ gap: 16 }}>
+      <ThemedText variant="titleMedium">{t('pearConnect.title')}</ThemedText>
+      <ThemedSurface variant="outlined" padded style={{ gap: 12 }}>
+        <ThemedText variant="bodyMedium" tone="secondary">
+          {t('pearExchange.disabledMessage')}
+        </ThemedText>
+        <ThemedButton
+          label={t('pearExchange.openSettings')}
+          variant="secondary"
+          fullWidth
+          onPress={() => {
+            router.push('/settings/connections');
+          }}
+        />
+      </ThemedSurface>
+    </View>
+  );
+}
+
+function EnabledPearConnectSection({ did }: PearConnectSectionProps): ReactNode {
   const { t } = useTranslation();
   const requestFlow = useCardRequestFlow(did);
   const upsert = useProfileSnapshotStore((s) => s.upsert);

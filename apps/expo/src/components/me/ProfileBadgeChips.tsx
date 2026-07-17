@@ -1,5 +1,6 @@
-import { useFocusEffect } from 'expo-router';
-import { useCallback, useMemo, useState, type ReactNode } from 'react';
+import type { SFSymbol } from 'expo-symbols';
+import { router, useFocusEffect } from 'expo-router';
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
 import { ActivityIndicator, ScrollView, View } from 'react-native';
 import Animated, { Easing, FadeIn, FadeOut } from 'react-native-reanimated';
 
@@ -15,14 +16,29 @@ import {
   type NostrBadgeVisual,
 } from '@/badges/nostrBadgeDisplay';
 import { atprotoBindingIO } from '@/atproto/bindingIo';
+import {
+  readCachedAtprotoResult,
+  readCachedNostrResult,
+  writeCachedAtprotoResult,
+  writeCachedNostrResult,
+} from '@/badges/badgeStatusCache';
 import { PressableScale } from '@/components/common/PressableScale';
 import { SfIcon } from '@/components/icons/SfIcon';
 import { ThemedSurface, ThemedText } from '@/components/themed';
 import { Colors } from '@/constants/Colors';
+import type { CredentialManifestEntry } from '@/credentials/credentialManifest';
+import { useCredentialStore, type StoredCredential, type TrustLevel } from '@/credentials/store';
+import {
+  credentialTrustDisplayFor,
+  credentialTrustSimpleI18nKeyForLevel,
+  credentialTrustToneForLevel,
+  type TrustDisplayTone,
+} from '@/credentials/trustDisplay';
 import { appAlert } from '@/feedback/appAlert';
 import { useTranslation } from '@/i18n';
 import { makeKind0Fetcher } from '@/nostr/fetchKind0';
 import { DEFAULT_RELAYS } from '@/nostr/publish';
+import { verifyHttpsOwnership, type HttpsOwnershipEvidence } from '@/profile/httpsOwnership';
 import {
   verifyAtprotoBinding,
   verifyNostrBinding,
@@ -30,6 +46,7 @@ import {
   type VerifyAtprotoBindingResult,
   type VerifyNostrBindingResult,
 } from '@solidarity/shared';
+import { buildProfileShareModel } from './meProfileModel';
 
 const BADGE_CROSSFADE_MS = 200;
 
@@ -38,11 +55,28 @@ type TFn = ReturnType<typeof useTranslation>['t'];
 
 export interface ProfileBadgeChipsProps {
   readonly record: ProfileRecord;
+  readonly jws: string;
   readonly onManageBindings: () => void;
 }
 
-export function ProfileBadgeChips({ record, onManageBindings }: ProfileBadgeChipsProps): ReactNode {
+export function ProfileBadgeChips({ record, jws, onManageBindings }: ProfileBadgeChipsProps): ReactNode {
   const { t } = useTranslation();
+  const manifest = useCredentialStore((state) => state.manifest);
+  const credentialDetails = useCredentialStore((state) => state.details);
+  const loadCredentialDetail = useCredentialStore((state) => state.loadDetail);
+  const passport = useMemo(
+    () => strongestPassportCredential(manifest, credentialDetails),
+    [credentialDetails, manifest],
+  );
+  useEffect(() => {
+    for (const credential of manifest) {
+      if (credential.type.toLowerCase() === 'passport' && !credentialDetails.has(credential.id)) {
+        void loadCredentialDetail(credential.id);
+      }
+    }
+  }, [credentialDetails, loadCredentialDetail, manifest]);
+  const shareModel = useMemo(() => buildProfileShareModel(record, jws), [jws, record]);
+  const website = useWebsiteOwnership(record, shareModel);
   const npubClaim = useMemo(
     () =>
       record.alsoKnownAs.find((value) => value.startsWith('nostr:npub'))?.slice('nostr:'.length) ??
@@ -54,53 +88,17 @@ export function ProfileBadgeChips({ record, onManageBindings }: ProfileBadgeChip
       record.alsoKnownAs.find((value) => value.startsWith('at://'))?.slice('at://'.length) ?? null,
     [record.alsoKnownAs]
   );
-
-  const [nostrResult, setNostrResult] = useState<VerifyNostrBindingResult | null>(null);
-  const [atprotoResult, setAtprotoResult] = useState<VerifyAtprotoBindingResult | null>(null);
-  const [nostrChecking, setNostrChecking] = useState(npubClaim !== null);
-  const [atprotoChecking, setAtprotoChecking] = useState(handleClaim !== null);
-
-  useFocusEffect(
-    useCallback(() => {
-      let cancelled = false;
-
-      if (npubClaim !== null) {
-        setNostrChecking(true);
-        void verifyNostrBinding(record, makeKind0Fetcher(DEFAULT_RELAYS)).then((next) => {
-          if (cancelled) return;
-          setNostrResult(next);
-          setNostrChecking(false);
-        });
-      }
-
-      if (handleClaim !== null) {
-        setAtprotoChecking(true);
-        void verifyAtprotoBinding(record, atprotoBindingIO).then((next) => {
-          if (cancelled) return;
-          setAtprotoResult(next);
-          setAtprotoChecking(false);
-        });
-      }
-
-      return () => {
-        cancelled = true;
-      };
-    }, [handleClaim, npubClaim, record.updatedAt])
-  );
-
-  const matchingNostrResult = nostrResult?.npub === npubClaim ? nostrResult : null;
-  const matchingAtprotoResult =
-    atprotoResult?.evidence.handleClaim === handleClaim ? atprotoResult : null;
-  const nostr = npubClaim
-    ? nostrBadgeViewModel(matchingNostrResult, nostrChecking || matchingNostrResult === null)
-    : nostrBadgeViewModel(null, false);
-  const bluesky = handleClaim
-    ? atprotoBadgeViewModel(
-        matchingAtprotoResult,
-        atprotoChecking || matchingAtprotoResult === null
-      )
-    : atprotoBadgeViewModel(null, false);
-  const hasBadge = nostr.visual !== 'hidden' || bluesky.visual !== 'hidden';
+  const { nostr, bluesky } = useBindingBadgeViewModels(record, npubClaim, handleClaim);
+  const websiteVisual = website.checking
+    ? 'loading'
+    : website.evidence && website.evidence.length > 0
+      ? 'verified'
+      : 'hidden';
+  const hasBadge =
+    nostr.visual !== 'hidden' ||
+    bluesky.visual !== 'hidden' ||
+    websiteVisual !== 'hidden' ||
+    passport !== null;
 
   if (!hasBadge) {
     return (
@@ -139,7 +137,7 @@ export function ProfileBadgeChips({ record, onManageBindings }: ProfileBadgeChip
               : () => {
                   appAlert({
                     title: t('badges.nostr.evidenceTitle'),
-                    message: nostrEvidenceMessage(nostr, t),
+                    message: nostrEvidenceMessage(nostr, t, readCachedNostrResult()?.checkedAt ?? null),
                   });
                 }
           }
@@ -155,25 +153,172 @@ export function ProfileBadgeChips({ record, onManageBindings }: ProfileBadgeChip
               : () => {
                   appAlert({
                     title: t('badges.atproto.evidenceTitle'),
-                    message: atprotoEvidenceMessage(bluesky, t),
+                    message: atprotoEvidenceMessage(bluesky, t, readCachedAtprotoResult()?.checkedAt ?? null),
                   });
                 }
           }
+        />
+      ) : null}
+      {websiteVisual !== 'hidden' ? (
+        <BadgeChip
+          visual={websiteVisual}
+          label={t(
+            websiteVisual === 'loading'
+              ? 'badges.website.checking'
+              : 'badges.website.verifiedLabel',
+          )}
+          onPress={
+            websiteVisual === 'loading'
+              ? undefined
+              : () => {
+                  appAlert({
+                    title: t('badges.website.evidenceTitle'),
+                    message: websiteEvidenceMessage(website.evidence ?? [], t),
+                  });
+                }
+          }
+        />
+      ) : null}
+      {passport ? (
+        <BadgeChip
+          visual={passport.displayLevel === 'L1' ? 'declared' : 'verified'}
+          label={`${t('badges.passport.title')} · ${t(
+            credentialTrustSimpleI18nKeyForLevel(passport.displayLevel),
+          )}`}
+          accent={{
+            icon: 'wallet.pass',
+            color: trustToneColor(credentialTrustToneForLevel(passport.displayLevel)),
+          }}
+          onPress={() => {
+            router.push({ pathname: '/credentials/[id]', params: { id: passport.id } });
+          }}
         />
       ) : null}
     </ScrollView>
   );
 }
 
+function useBindingBadgeViewModels(
+  record: ProfileRecord,
+  npubClaim: string | null,
+  handleClaim: string | null,
+): { readonly nostr: NostrBadgeViewModel; readonly bluesky: AtprotoBadgeViewModel } {
+  // Seed from the persisted last-completed check so a revisit paints the
+  // previous known state on frame one instead of a loading flash; the
+  // claim-match guards below drop a cached result whose npub/handle no
+  // longer matches the record. Every focus still re-verifies live and
+  // overwrites both the state and the cache (badgeStatusCache doc).
+  const [nostrResult, setNostrResult] = useState<VerifyNostrBindingResult | null>(
+    () => readCachedNostrResult()?.result ?? null
+  );
+  const [atprotoResult, setAtprotoResult] = useState<VerifyAtprotoBindingResult | null>(
+    () => readCachedAtprotoResult()?.result ?? null
+  );
+  const [nostrChecking, setNostrChecking] = useState(npubClaim !== null);
+  const [atprotoChecking, setAtprotoChecking] = useState(handleClaim !== null);
+
+  useFocusEffect(
+    useCallback(() => {
+      let cancelled = false;
+      if (npubClaim !== null) {
+        setNostrChecking(true);
+        void verifyNostrBinding(record, makeKind0Fetcher(DEFAULT_RELAYS)).then((next) => {
+          if (cancelled) return;
+          setNostrResult(next);
+          setNostrChecking(false);
+          writeCachedNostrResult(next, Date.now());
+        });
+      }
+      if (handleClaim !== null) {
+        setAtprotoChecking(true);
+        void verifyAtprotoBinding(record, atprotoBindingIO).then((next) => {
+          if (cancelled) return;
+          setAtprotoResult(next);
+          setAtprotoChecking(false);
+          writeCachedAtprotoResult(next, Date.now());
+        });
+      }
+      return () => {
+        cancelled = true;
+      };
+    }, [handleClaim, npubClaim, record, record.updatedAt]),
+  );
+
+  const matchingNostrResult = nostrResult?.npub === npubClaim ? nostrResult : null;
+  const matchingAtprotoResult =
+    atprotoResult?.evidence.handleClaim === handleClaim ? atprotoResult : null;
+  return {
+    nostr: npubClaim
+      ? nostrBadgeViewModel(matchingNostrResult, nostrChecking || matchingNostrResult === null)
+      : nostrBadgeViewModel(null, false),
+    bluesky: handleClaim
+      ? atprotoBadgeViewModel(
+          matchingAtprotoResult,
+          atprotoChecking || matchingAtprotoResult === null,
+        )
+      : atprotoBadgeViewModel(null, false),
+  };
+}
+
+function useWebsiteOwnership(
+  record: ProfileRecord,
+  shareModel: ReturnType<typeof buildProfileShareModel>,
+): {
+  readonly evidence: readonly HttpsOwnershipEvidence[] | null;
+  readonly checking: boolean;
+} {
+  const [evidence, setEvidence] = useState<readonly HttpsOwnershipEvidence[] | null>(null);
+  const [checking, setChecking] = useState(record.links.length > 0);
+
+  useFocusEffect(
+    useCallback(() => {
+      let cancelled = false;
+      const controller = new AbortController();
+      if (record.links.length === 0) {
+        setEvidence([]);
+        setChecking(false);
+        return () => {
+          cancelled = true;
+        };
+      }
+
+      setChecking(true);
+      setEvidence(null);
+      const profileUrls = [shareModel.offlineUrl, shareModel.shortUrl].filter(
+        (url): url is string => url !== null,
+      );
+      void verifyHttpsOwnership({
+        did: record.did,
+        links: record.links.map((link) => link.url),
+        profileUrls,
+        signal: controller.signal,
+      }).then((next) => {
+        if (cancelled) return;
+        setEvidence(next);
+        setChecking(false);
+      });
+      return () => {
+        cancelled = true;
+        controller.abort();
+      };
+    }, [record.did, record.links, record.updatedAt, shareModel.offlineUrl, shareModel.shortUrl]),
+  );
+
+  return { evidence, checking };
+}
+
 function BadgeChip({
   visual,
   label,
+  accent,
   onPress,
 }: {
   readonly visual: Exclude<BadgeVisual, 'hidden'>;
   readonly label: string;
+  readonly accent?: { readonly icon: SFSymbol; readonly color: string };
   readonly onPress?: () => void;
 }): ReactNode {
+  const style = visual === 'loading' ? null : (accent ?? badgeVisualStyle(visual));
   const content = (
     <ThemedSurface
       variant="inset"
@@ -184,19 +329,15 @@ function BadgeChip({
         entering={FadeIn.duration(BADGE_CROSSFADE_MS).easing(Easing.out(Easing.quad))}
         exiting={FadeOut.duration(BADGE_CROSSFADE_MS).easing(Easing.out(Easing.quad))}
         style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-        {visual === 'loading' ? (
-          <ActivityIndicator size="small" color={Colors.text3} />
+        {style ? (
+          <SfIcon name={style.icon} size={14} color={style.color} />
         ) : (
-          <SfIcon
-            name={badgeVisualStyle(visual).icon}
-            size={14}
-            color={badgeVisualStyle(visual).color}
-          />
+          <ActivityIndicator size="small" color={Colors.text3} />
         )}
         <ThemedText
           variant="label"
           tone={visual === 'loading' ? 'tertiary' : 'primary'}
-          style={visual === 'loading' ? undefined : { color: badgeVisualStyle(visual).color }}>
+          style={style ? { color: style.color } : undefined}>
           {label}
         </ThemedText>
       </Animated.View>
@@ -213,6 +354,56 @@ function BadgeChip({
       {content}
     </PressableScale>
   );
+}
+
+interface PassportBadgeModel extends CredentialManifestEntry {
+  readonly displayLevel: TrustLevel;
+}
+
+function strongestPassportCredential(
+  manifest: readonly CredentialManifestEntry[],
+  details: ReadonlyMap<string, StoredCredential>,
+): PassportBadgeModel | null {
+  const rank: Readonly<Record<TrustLevel, number>> = { L1: 1, L2: 2, L3: 3, 'L3+': 4 };
+  return (
+    manifest
+      .filter((credential) => credential.type.toLowerCase() === 'passport')
+      .map((credential) => {
+        const detail = details.get(credential.id);
+        const displayLevel: TrustLevel = detail
+          ? credentialTrustDisplayFor(detail).level
+          : 'L1';
+        return {
+          ...credential,
+          displayLevel,
+        };
+      })
+      .sort((a, b) => rank[b.displayLevel] - rank[a.displayLevel])[0] ?? null
+  );
+}
+
+function trustToneColor(tone: TrustDisplayTone): string {
+  switch (tone) {
+    case 'green':
+      return Colors.terminalGreen;
+    case 'blue':
+      return Colors.primaryBlue;
+    default:
+      return Colors.text3;
+  }
+}
+
+function websiteEvidenceMessage(evidence: readonly HttpsOwnershipEvidence[], t: TFn): string {
+  return evidence
+    .map((item) =>
+      t(
+        item.method === 'did-document'
+          ? 'badges.website.evidence.didDocument'
+          : 'badges.website.evidence.relMe',
+        { origin: item.origin },
+      ),
+    )
+    .join('\n');
 }
 
 function badgeVisualStyle(visual: Exclude<BadgeVisual, 'hidden' | 'loading'>): {
@@ -241,7 +432,7 @@ function badgeLabel(
   return t(`badges.${platform === 'nostr' ? 'nostr' : 'atproto'}.${suffix}`);
 }
 
-function nostrEvidenceMessage(vm: NostrBadgeViewModel, t: TFn): string {
+function nostrEvidenceMessage(vm: NostrBadgeViewModel, t: TFn, lastCheckedAt: number | null): string {
   const lines = [
     t(
       vm.visual === 'verified'
@@ -272,10 +463,17 @@ function nostrEvidenceMessage(vm: NostrBadgeViewModel, t: TFn): string {
       })
     );
   }
+  if (lastCheckedAt !== null) {
+    lines.push(t('badges.evidence.lastCheckedLine', { date: new Date(lastCheckedAt).toLocaleString() }));
+  }
   return lines.join('\n');
 }
 
-function atprotoEvidenceMessage(vm: AtprotoBadgeViewModel, t: TFn): string {
+function atprotoEvidenceMessage(
+  vm: AtprotoBadgeViewModel,
+  t: TFn,
+  lastCheckedAt: number | null
+): string {
   const lines = [
     t(
       vm.visual === 'verified'
@@ -299,5 +497,8 @@ function atprotoEvidenceMessage(vm: AtprotoBadgeViewModel, t: TFn): string {
         ? t('badges.atproto.evidence.direction2Missing')
         : t('badges.atproto.evidence.direction2Unknown')
   );
+  if (lastCheckedAt !== null) {
+    lines.push(t('badges.evidence.lastCheckedLine', { date: new Date(lastCheckedAt).toLocaleString() }));
+  }
   return lines.join('\n');
 }

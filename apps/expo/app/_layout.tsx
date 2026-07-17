@@ -56,6 +56,7 @@ import { useGroupStore } from '@/groups/store';
 import { useIdentityData } from '@/identity';
 import { installI18n } from '@/i18n';
 import { hydrateSensitiveActionPolicy } from '@/keychain';
+import { warmBadgeStatusCache } from '@/badges/badgeStatusCache';
 import { warmNostrKeyMirror } from '@/nostr/userKey';
 import { PearConsentOverlay, PearPresentConsentOverlay } from '@/pear/consent';
 import { hydrateProfileSnapshots } from '@/people/profileSnapshots';
@@ -175,6 +176,10 @@ export default function RootLayout() {
         // — see userKey.ts's module doc. Cheap: `@/storage/mmkv` is
         // already resident from `initMmkv()` above.
         await warmNostrKeyMirror();
+        // Same pattern for the persisted badge-verification cache, so the
+        // Me tab's chips can seed the last known state synchronously on
+        // first render (badgeStatusCache doc).
+        await warmBadgeStatusCache();
         // Sync, sub-millisecond: each store reads its plaintext manifest
         // from MMKV and seeds the zustand initial state. List/hero views
         // can render on the next frame without any decryption.

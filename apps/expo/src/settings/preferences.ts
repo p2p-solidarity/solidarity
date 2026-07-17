@@ -76,6 +76,10 @@ export interface Preferences {
   readonly shareAgeOver18: boolean;
   /** Active UI language tag (`en`, `zh-Hant`). Mirrors Swift LanguageSelectionView. */
   readonly language: string;
+  /** Re-publish later profile edits after the user has explicitly published once. */
+  readonly nostrAutoRepublish: boolean;
+  /** Allow user-initiated, on-demand Pear peer exchange in production UI. */
+  readonly pearExchangeEnabled: boolean;
   /**
    * Root-key (seed-derived did:key, `src/identity/rootKey.ts`) backup
    * consent — recorded at the onboarding `backup.tsx` step. `'icloud'` is
@@ -129,6 +133,8 @@ const DEFAULTS: Preferences = {
   // installI18n). Only a real selection ('en' | 'zh-Hant') persists and
   // overrides the device locale on relaunch.
   language: '',
+  nostrAutoRepublish: false,
+  pearExchangeEnabled: true,
   rootKeySyncChoice: 'undecided',
 };
 
@@ -161,7 +167,7 @@ export const usePreferences = create<PrefsState>((set) => ({
     set((s) => {
       const next = { ...s, [key]: value } as Preferences;
       writeSafe(next);
-      return { [key]: value } as Partial<PrefsState>;
+      return { [key]: value };
     });
   },
   reset: () => {

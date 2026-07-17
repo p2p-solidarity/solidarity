@@ -51,9 +51,11 @@ function blueskyHandle(record: ProfileRecord | null): string | null {
 export function useAvatarEditor({
   record,
   commitProfile,
+  willPublish,
 }: {
   readonly record: ProfileRecord | null;
   readonly commitProfile: (avatar: string | null) => Promise<ProfileCommitResult>;
+  readonly willPublish: boolean;
 }): AvatarEditorController {
   const { t } = useTranslation();
   const [sheetOpen, setSheetOpen] = useState(false);
@@ -146,7 +148,10 @@ export function useAvatarEditor({
       return;
     }
 
-    setPhase({ step: 'loading', message: t('meEdit.avatar.publishing') });
+    setPhase({
+      step: 'loading',
+      message: t(willPublish ? 'meEdit.avatar.publishing' : 'meEdit.avatar.savingProfile'),
+    });
     const committed = await commitProfile(fetched.value);
     if (committed === 'cancelled') {
       close();
@@ -158,14 +163,14 @@ export function useAvatarEditor({
         message:
           committed === 'invalidLinks'
             ? t('meEdit.avatar.fixLinksFirst')
-            : t('meEdit.avatar.publishFailed'),
+            : t(willPublish ? 'meEdit.avatar.publishFailed' : 'meEdit.avatar.saveFailed'),
       });
       return;
     }
 
     close();
     haptic('success');
-    pushToast(t('meEdit.avatar.published'), 'success');
+    pushToast(t(willPublish ? 'meEdit.avatar.published' : 'meEdit.avatar.saved'), 'success');
     router.back();
   };
 
@@ -184,7 +189,7 @@ export function useAvatarEditor({
           message:
             committed === 'invalidLinks'
               ? t('meEdit.avatar.fixLinksFirst')
-              : t('meEdit.avatar.publishFailed'),
+              : t(willPublish ? 'meEdit.avatar.publishFailed' : 'meEdit.avatar.saveFailed'),
         });
         return;
       }

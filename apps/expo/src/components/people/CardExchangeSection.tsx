@@ -20,6 +20,7 @@
  * ONLY display text `useReachableMode` ever shows on the consent sheet for
  * "who is asking to release your card", per CLAUDE.md rule 8.
  */
+import { router } from 'expo-router';
 import { useState, type ReactNode } from 'react';
 import { View } from 'react-native';
 
@@ -40,6 +41,7 @@ import {
   type ReachableStatus,
 } from '@/pear/useCardExchange';
 import { usePresentRequestFlow } from '@/pear/usePresentRequestFlow';
+import { usePreferences } from '@/settings/preferences';
 
 import { VerifiedProfileView } from '@/components/scan/VerifiedProfileView';
 
@@ -202,7 +204,36 @@ function reachableStatusLine(status: ReachableStatus, t: (key: string, opts?: Re
   }
 }
 
-export function CardExchangeSection({ did, verifiedDisplayName }: CardExchangeSectionProps): ReactNode {
+export function CardExchangeSection(props: CardExchangeSectionProps): ReactNode {
+  const pearEnabled = usePreferences((state) => state.pearExchangeEnabled);
+  return pearEnabled ? <EnabledCardExchangeSection {...props} /> : <DisabledPearExchange />;
+}
+
+function DisabledPearExchange(): ReactNode {
+  const { t } = useTranslation();
+  return (
+    <View style={{ gap: 12 }}>
+      <ThemedText variant="label" tone="tertiary">
+        {t('pearExchange.sectionTitle')}
+      </ThemedText>
+      <ThemedSurface variant="outlined" padded style={{ gap: 12 }}>
+        <ThemedText variant="bodySmall" tone="secondary">
+          {t('pearExchange.disabledMessage')}
+        </ThemedText>
+        <ThemedButton
+          label={t('pearExchange.openSettings')}
+          variant="secondary"
+          fullWidth
+          onPress={() => {
+            router.push('/settings/connections');
+          }}
+        />
+      </ThemedSurface>
+    </View>
+  );
+}
+
+function EnabledCardExchangeSection({ did, verifiedDisplayName }: CardExchangeSectionProps): ReactNode {
   const { t } = useTranslation();
   const peerLabel = formatPeerLabel(did, verifiedDisplayName);
   const requestFlow = useCardRequestFlow(did);

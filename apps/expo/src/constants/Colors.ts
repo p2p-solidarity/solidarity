@@ -167,6 +167,43 @@ const RAW = {
 
 type RawKey = keyof typeof RAW;
 
+type ThemeScheme = 'light' | 'dark';
+
+const ADAPTIVE_FOREGROUND_KEYS = [
+  'text1',
+  'text2',
+  'text3',
+  'pageBg',
+  'cardBg',
+  'invertedButtonBg',
+  'invertedButtonText',
+  'primaryBlue',
+] as const satisfies readonly RawKey[];
+
+/**
+ * Re-resolve a colour that was read before an Appearance change.
+ *
+ * NativeWind updates its CSS variables without forcing every parent React
+ * component to render again. An inline prop such as `color={Colors.text1}`
+ * can therefore still hold the old theme's literal. Theme-aware primitives
+ * use this helper to translate either side of an adaptive token pair into the
+ * value for the current render. The list is deliberately limited to colours
+ * used as interactive foregrounds: some surface and accent tokens share an
+ * identical hex, so treating every palette value as interchangeable would
+ * make the mapping ambiguous.
+ */
+export function resolveThemeColor(value: string, scheme: ThemeScheme): string {
+  for (const key of ADAPTIVE_FOREGROUND_KEYS) {
+    const darkKey = `${key}Dark` as RawKey;
+    const lightValue = RAW[key];
+    const darkValue = RAW[darkKey];
+    if (value === lightValue || value === darkValue) {
+      return scheme === 'dark' ? darkValue : lightValue;
+    }
+  }
+  return value;
+}
+
 function pick(key: string): string | undefined {
   if (!(key in RAW)) return undefined;
   const scheme = Appearance.getColorScheme();
@@ -182,6 +219,6 @@ export const Colors = new Proxy(RAW, {
     if (typeof key !== 'string') return undefined;
     return pick(key);
   },
-}) as typeof RAW;
+});
 
 export type ColorToken = RawKey;
