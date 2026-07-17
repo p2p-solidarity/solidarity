@@ -93,7 +93,9 @@ const DEFAULT_DEPENDENCIES: BlueskyWizardDependencies = {
 
 export function normalizeBlueskyHandle(input: string): string {
   const normalized = input.trim().toLowerCase();
-  return normalized.startsWith('@') ? normalized.slice(1) : normalized;
+  const withoutAt = normalized.startsWith('@') ? normalized.slice(1) : normalized;
+  if (withoutAt.length === 0 || withoutAt.includes('.')) return withoutAt;
+  return `${withoutAt}.bsky.social`;
 }
 
 /** Collapse potentially sensitive transport text into stable UI-safe kinds. */

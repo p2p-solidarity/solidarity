@@ -86,6 +86,16 @@ function dependencies(
   };
 }
 
+describe('normalizeBlueskyHandle', () => {
+  it('adds the standard suffix only to non-empty short handles', () => {
+    expect(normalizeBlueskyHandle('')).toBe('');
+    expect(normalizeBlueskyHandle('@alice')).toBe('alice.bsky.social');
+    expect(normalizeBlueskyHandle('alice')).toBe('alice.bsky.social');
+    expect(normalizeBlueskyHandle('ALICE')).toBe('alice.bsky.social');
+    expect(normalizeBlueskyHandle('Alice.Dev')).toBe('alice.dev');
+  });
+});
+
 describe('Bluesky connect wizard orchestration', () => {
   it('accepts one @ prefix, normalizes before OAuth, and forwards the injected browser seam', async () => {
     const events: string[] = [];

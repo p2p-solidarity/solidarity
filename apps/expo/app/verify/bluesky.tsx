@@ -35,6 +35,8 @@ export default function BlueskyConnectScreen(): ReactNode {
     record?.alsoKnownAs.find((alias) => alias.startsWith('at://'))?.slice('at://'.length) ?? '';
   const [handle, setHandle] = useState(existingHandle);
   const [screen, setScreen] = useState<ScreenState>({ kind: 'input' });
+  const handleWithoutAt = handle.trim().replace(/^@/u, '');
+  const showStandardSuffix = !handleWithoutAt.includes('.');
 
   const connect = async () => {
     setScreen({ kind: 'working' });
@@ -118,10 +120,12 @@ export default function BlueskyConnectScreen(): ReactNode {
             </ThemedSurface>
 
             <ThemedTextInput
+              kind="handle"
               value={handle}
               onChangeText={setHandle}
               label={t('blueskyConnect.handleLabel')}
               placeholder={t('blueskyConnect.handlePlaceholder')}
+              inlineSuffix={showStandardSuffix ? '.bsky.social' : null}
               autoCapitalize="none"
               autoCorrect={false}
               showClear

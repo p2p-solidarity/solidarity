@@ -81,6 +81,8 @@ export interface ThemedTextInputProps {
   readonly kind?: TextInputKind;
   readonly label?: string;
   readonly placeholder?: string;
+  /** Read-only format guidance rendered inside the field at the trailing edge. */
+  readonly inlineSuffix?: string | null;
   /** Non-null → destructive border + this message under the field. Wins over `hint`. */
   readonly error?: string | null;
   /** Neutral/positive helper under the field (e.g. "✓ npub1…"). Hidden while `error` is set. */
@@ -108,6 +110,7 @@ export interface ThemedTextInputProps {
 const MIN_HEIGHT = 48; // comfortably ≥44pt (rule 6)
 const MULTILINE_MIN_HEIGHT = 88;
 const TRAILING_SLOT = 44;
+const INLINE_SUFFIX_WIDTH = 96;
 
 export function ThemedTextInput({
   value,
@@ -115,6 +118,7 @@ export function ThemedTextInput({
   kind = 'text',
   label,
   placeholder,
+  inlineSuffix = null,
   error = null,
   hint = null,
   hintTone = 'secondary',
@@ -183,6 +187,7 @@ export function ThemedTextInput({
   }
 
   const borderColor = error ? Colors.destructive : focused ? Colors.primaryBlue : Colors.divider;
+  const trailingWidth = trailing.length * TRAILING_SLOT;
 
   return (
     <View style={{ gap: label ? 8 : 6 }}>
@@ -216,7 +221,8 @@ export function ThemedTextInput({
           className="bg-searchBg text-text1"
           style={{
             paddingHorizontal: 14,
-            paddingRight: trailing.length > 0 ? 14 + trailing.length * TRAILING_SLOT : 14,
+            paddingRight:
+              14 + trailingWidth + (inlineSuffix ? INLINE_SUFFIX_WIDTH : 0),
             paddingVertical: 12,
             minHeight: multiline ? MULTILINE_MIN_HEIGHT : MIN_HEIGHT,
             fontSize: 15,
@@ -226,6 +232,23 @@ export function ThemedTextInput({
             borderColor,
           }}
         />
+        {inlineSuffix ? (
+          <View
+            pointerEvents="none"
+            style={{
+              position: 'absolute',
+              right: 14 + trailingWidth,
+              width: INLINE_SUFFIX_WIDTH,
+              top: 0,
+              bottom: 0,
+              alignItems: 'flex-end',
+              justifyContent: 'center',
+            }}>
+            <ThemedText variant="bodySmall" tone="tertiary" numberOfLines={1}>
+              {inlineSuffix}
+            </ThemedText>
+          </View>
+        ) : null}
         {trailing.length > 0 ? (
           <View
             style={{
