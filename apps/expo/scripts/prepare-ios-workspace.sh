@@ -83,34 +83,10 @@ ensure_command() {
 
 normalize_xcode_cloud_scheme() {
   # Xcode Cloud's workflow is configured to archive the lowercase `solidarity`
-  # scheme. Expo regenerates the app target/scheme as `Solidarity`, but
-  # xcodebuild scheme matching is case-sensitive, so post-clone must normalize
-  # the generated shared scheme back to the workflow's casing before Xcode
-  # Cloud starts its archive action.
-  local scheme_dir="$APP_DIR/ios/Solidarity.xcodeproj/xcshareddata/xcschemes"
-  local workflow_scheme="$scheme_dir/solidarity.xcscheme"
-  local expo_scheme="$scheme_dir/Solidarity.xcscheme"
-  local temp_scheme="$scheme_dir/.solidarity.xcscheme.tmp"
-
-  if [[ ! -f "$workflow_scheme" && ! -f "$expo_scheme" ]]; then
-    die "Expected Expo to generate $expo_scheme"
-  fi
-
-  if [[ -f "$expo_scheme" ]]; then
-    rm -f "$temp_scheme"
-    if [[ "$expo_scheme" -ef "$workflow_scheme" ]]; then
-      # Case-insensitive FS: same file under either name — rename through a
-      # temp so the directory entry carries the Xcode Cloud workflow casing.
-      mv "$expo_scheme" "$temp_scheme"
-      mv "$temp_scheme" "$workflow_scheme"
-    elif [[ -f "$workflow_scheme" ]]; then
-      # Distinct Expo-generated uppercase duplicate next to the workflow
-      # scheme. Keep the workflow scheme to avoid two app schemes in Xcode.
-      rm -f "$expo_scheme"
-    else
-      mv "$expo_scheme" "$workflow_scheme"
-    fi
-  fi
+  # scheme; the logic lives in normalize-ios-scheme.sh so `bun run ios` (local
+  # dev) and this CI/archive path cannot drift.
+  AIRMEISHI_EXPO_APP_DIR="$APP_DIR" "$SCRIPT_DIR/normalize-ios-scheme.sh" \
+    || die "scheme normalization failed"
 }
 
 xcframework_has_static_module() {
