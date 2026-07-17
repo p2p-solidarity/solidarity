@@ -105,6 +105,14 @@ seed 為本、passkey 用 largeBlob/PRF 當外殼,**不可讓 passkey-PRF 直接
 - [x] **S7a** SpruceKit SDK 退場(spec 13→8 方法、iOS SPM + Android Maven + config plugin + SPM pin 整包拔、nitrogen 重生成、prebuild + `-disableAutomaticPackageResolution` 驗證過;順修 prepare-ios-workspace.sh 的 stale 小寫 scheme 名)
 - [x] **S7b** 身份收斂 — **落地語意(D1 精煉):舊 SE 硬體鑰「退位身份、留任簽卡鑰」**。硬體鑰物理上不可由助記詞派生,故「一個 did」= root did(seed、可攜)是唯一對外身份;SE 鑰簽 VC/SD-JWT/ZK 並經 A5b `solidarity.cardKeyBinding.v1` 錨定至 root。settings/dids 改為「根身份(主)+ 簽卡金鑰(錨定,非身份)」兩區呈現。憑證不需重發、既有資料不需遷移。ZK 面板的恆 null `didDocumentJson` 死狀態屬凍結面,不動(最小接觸)。
 
+**執行紀錄 2026-07-17(Linktree 化設定收斂 T1–T5;codex 實作 T1–T4 檔案、Claude 分 commit + 親做 T5 + 驗收):**
+
+- [x] **S8a** Link 編輯器 https-only + label 預設 chips(`e092552`;http→https 升級、危險 scheme 仍大聲失敗;`expandLinkPresetHandle` 把 bare @handle 展開成平台 URL;shared schema 不動 — 別人頁上的舊 http 連結照常渲染)
+- [x] **S8b** Bluesky handle 自動補 `.bsky.social`(`2f83e73`;無點才補、自訂網域不受影響;`ThemedTextInput` 新增 `inlineSuffix` 唯讀提示槽;OAuth 管線未動)
+- [x] **S8c** 自訂頭像(`7db015e`;相簿照片只進 app documents + 私有 MMKV 索引、**不進簽名 record**;Bluesky 頭像經 timeout/byte-bounded public AppView fetch(actor = OAuth session DID)走既有 Face-ID 簽名 saveProfile 的窄 `avatar` override;渲染優先序 https record.avatar → 本地檔 → 字首)
+- [x] **S8d** 一鍵「儲存並發布」+ Nostr 無感 provisioning(`5e7ef9d`;`publishWithNostrAutoSetup` 只在用戶點擊後、真的沒 key 時才 provision — `userKey.ts` custody 模型未動;published 需雙 quorum 旗標;per-relay 報告收進 Details;nsec 匯入留在進階;Face ID 取消靜默返回;i18n en+zh-Hant 全串在此 commit)
+- [x] **S8e** 身份/憑證區去術語化(`4da9382`;表面 = 人話 + seal、技術字串一 tap 內(evidence body / credentialDetail.levelL* / settings/dids);trust tone/level 邏輯未動 — fallback(白)永不像 ZK 層(綠/藍);Me 表面禁詞 grep(did:key/npub/nsec/relay/JWS/SD-JWT/ZK/DID/L1-3)en+zh 雙清)
+
 ---
 
 ## Phase A0 — 拆除與畫面轉換
