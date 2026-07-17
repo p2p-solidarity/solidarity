@@ -1,4 +1,5 @@
 import { router } from 'expo-router';
+import { safeBack } from '@/navigation/safeBack';
 import { useState, type ReactNode } from 'react';
 import { ActivityIndicator, View } from 'react-native';
 import { KeyboardAwareScrollView } from 'react-native-keyboard-controller';
@@ -128,7 +129,7 @@ export default function BlueskyConnectScreen(): ReactNode {
       <SettingsBackToolbar
         title={t('blueskyConnect.cancel')}
         onPress={() => {
-          router.back();
+          safeBack();
         }}
       />
       <SettingsScreenTitle title={t('blueskyConnect.title')} />
@@ -253,7 +254,7 @@ function SuccessState({
         variant="inverted"
         fullWidth
         onPress={() => {
-          router.back();
+          safeBack();
         }}
       />
     </View>
@@ -291,7 +292,7 @@ function ErrorState({
         variant="secondary"
         fullWidth
         onPress={() => {
-          router.back();
+          safeBack();
         }}
       />
     </View>
@@ -312,7 +313,7 @@ function GateScreen({
       <SettingsBackToolbar
         title={t('blueskyConnect.cancel')}
         onPress={() => {
-          router.back();
+          safeBack();
         }}
       />
       <SettingsScreenTitle title={t('blueskyConnect.title')} />

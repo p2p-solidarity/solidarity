@@ -18,7 +18,8 @@
  * (appends a `revoked` node referencing it).
  */
 import * as Clipboard from 'expo-clipboard';
-import { router, Stack } from 'expo-router';
+import { Stack } from 'expo-router';
+import { safeBack } from '@/navigation/safeBack';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Pressable, ScrollView, Text, TextInput, useWindowDimensions, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -281,7 +282,7 @@ export default function DagLab() {
     return (
       <View className="flex-1 bg-pageBg" style={{ paddingTop: insets.top }}>
         <Stack.Screen options={MODAL_SCREEN_OPTIONS} />
-        <SettingsBackToolbar title="Close" onPress={() => { router.back(); }} />
+        <SettingsBackToolbar title="Close" onPress={() => { safeBack(); }} />
         <SettingsScreenTitle title="DAG Lab" />
         <View className="px-4 pt-6">
           <Text className="text-text2 text-[13px]">
@@ -295,7 +296,7 @@ export default function DagLab() {
   return (
     <View className="flex-1 bg-pageBg" style={{ paddingTop: insets.top }}>
       <Stack.Screen options={MODAL_SCREEN_OPTIONS} />
-      <SettingsBackToolbar title="Close" onPress={() => { router.back(); }} />
+      <SettingsBackToolbar title="Close" onPress={() => { safeBack(); }} />
       <SettingsScreenTitle title="DAG Lab" />
 
       <ScrollView

@@ -8,7 +8,7 @@
  *   3. Effects (Enable Glow toggle)
  *   4. Animal Theme (navigates to AnimalPicker, footer = personality)
  */
-import { router } from 'expo-router';
+import { safeBack } from '@/navigation/safeBack';
 import { Pressable, ScrollView, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -87,7 +87,7 @@ export default function AppearanceSettings() {
 
   return (
     <View className="flex-1 bg-pageBg" style={{ paddingTop: insets.top }}>
-      <SettingsBackToolbar onPress={() => { router.back(); }} />
+      <SettingsBackToolbar onPress={() => { safeBack('/settings'); }} />
       <SettingsScreenTitle title={t('appearance.title')} />
 
       <ScrollView

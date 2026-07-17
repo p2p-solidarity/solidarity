@@ -3,7 +3,7 @@
  * Lets the user paste a name + optional email + optional phone and persist
  * a Contact straight to the zustand store.
  */
-import { router } from 'expo-router';
+import { safeBack } from '@/navigation/safeBack';
 import { useState } from 'react';
 import { ScrollView, TextInput, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -59,7 +59,7 @@ export default function ManualContactEntry() {
       },
     });
     pushToast(t('contactManual.saved', { name }), 'success');
-    router.back();
+    safeBack();
   };
 
   return (
@@ -72,7 +72,7 @@ export default function ManualContactEntry() {
           size="sm"
           label={t('contactManual.back')}
           onPress={() => {
-            router.back();
+            safeBack();
           }}
         />
       </View>

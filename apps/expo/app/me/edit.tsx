@@ -18,6 +18,7 @@
  * This screen never mints a key itself.
  */
 import { router } from 'expo-router';
+import { safeBack } from '@/navigation/safeBack';
 import { useEffect, useMemo, useState } from 'react';
 import { ScrollView, View } from 'react-native';
 import { KeyboardAwareScrollView } from 'react-native-keyboard-controller';
@@ -309,7 +310,7 @@ export default function MeEditScreen() {
 
       haptic('success');
       pushToast(t(willAutoRepublish ? 'meEdit.published' : 'meEdit.saved'), 'success');
-      router.back();
+      safeBack();
     } finally {
       setSaving(false);
     }
@@ -318,7 +319,7 @@ export default function MeEditScreen() {
   if (!rootKeyPresent) {
     return (
       <View className="flex-1 bg-pageBg" style={{ paddingTop: insets.top }}>
-        <SettingsBackToolbar title={t('meEdit.cancel')} onPress={() => { router.back(); }} />
+        <SettingsBackToolbar title={t('meEdit.cancel')} onPress={() => { safeBack(); }} />
         <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', gap: 16, paddingHorizontal: 32 }}>
           <ThemedText variant="bodyMedium" tone="secondary" style={{ textAlign: 'center' }}>
             {t('profileCard.needsIdentitySetup')}
@@ -335,7 +336,7 @@ export default function MeEditScreen() {
 
   return (
     <View className="flex-1 bg-pageBg" style={{ paddingTop: insets.top }}>
-      <SettingsBackToolbar title={t('meEdit.cancel')} onPress={() => { router.back(); }} />
+      <SettingsBackToolbar title={t('meEdit.cancel')} onPress={() => { safeBack(); }} />
       <SettingsScreenTitle title={t('meEdit.title')} />
 
       <KeyboardAwareScrollView

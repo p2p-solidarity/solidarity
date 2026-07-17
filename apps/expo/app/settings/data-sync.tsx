@@ -23,6 +23,7 @@
  * iteration alongside the contact-graph sync.
  */
 import { router } from 'expo-router';
+import { safeBack } from '@/navigation/safeBack';
 import { useEffect, useState } from 'react';
 import { ScrollView, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -120,7 +121,7 @@ export default function DataSyncSettings() {
 
   return (
     <View className="flex-1 bg-pageBg" style={{ paddingTop: insets.top }}>
-      <SettingsBackToolbar onPress={() => { router.back(); }} />
+      <SettingsBackToolbar onPress={() => { safeBack('/settings'); }} />
       <SettingsScreenTitle title={t('dataSync.title')} />
 
       <ScrollView

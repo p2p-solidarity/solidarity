@@ -17,7 +17,7 @@
  * Permission denial and zero-contacts both show informative empty states so
  * the user knows what to do next (open Settings, or add a contact manually).
  */
-import { router } from 'expo-router';
+import { safeBack } from '@/navigation/safeBack';
 import {
   useCallback,
   useEffect,
@@ -161,7 +161,7 @@ export default function ImportFromPhoneScreen(): ReactNode {
           'success',
           3000,
         );
-        router.back();
+        safeBack();
       } catch {
         pushToast(t('contactImport.importFailed'), 'error');
       } finally {
@@ -171,7 +171,7 @@ export default function ImportFromPhoneScreen(): ReactNode {
   };
 
   const onCancel = (): void => {
-    router.back();
+    safeBack();
   };
 
   return (

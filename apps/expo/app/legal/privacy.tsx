@@ -4,7 +4,7 @@
  * module at `src/legal/privacy.ts` so Metro bundles it as a string and
  * TypeScript keeps the import typed.
  */
-import { router } from 'expo-router';
+import { safeBack } from '@/navigation/safeBack';
 import type { ReactNode } from 'react';
 import { View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -20,7 +20,7 @@ export default function PrivacyPolicyPage(): ReactNode {
   const insets = useSafeAreaInsets();
   return (
     <View className="flex-1 bg-pageBg" style={{ paddingTop: insets.top }}>
-      <SettingsBackToolbar onPress={() => { router.back(); }} />
+      <SettingsBackToolbar onPress={() => { safeBack(); }} />
       <SettingsScreenTitle title="Privacy Policy" />
       <MarkdownDocument source={PRIVACY_POLICY_MARKDOWN} />
     </View>

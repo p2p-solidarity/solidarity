@@ -13,7 +13,8 @@
  * a 10s timeout terminates + surfaces an honest error if no reply ever
  * arrives, so `busy` can never stick on "Running…" forever.
  */
-import { router, Stack } from 'expo-router';
+import { Stack } from 'expo-router';
+import { safeBack } from '@/navigation/safeBack';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -101,7 +102,7 @@ export default function PearEcho() {
     return (
       <View className="flex-1 bg-pageBg" style={{ paddingTop: insets.top }}>
         <Stack.Screen options={MODAL_SCREEN_OPTIONS} />
-        <SettingsBackToolbar title="Close" onPress={() => { router.back(); }} />
+        <SettingsBackToolbar title="Close" onPress={() => { safeBack(); }} />
         <SettingsScreenTitle title="Pear Echo" />
         <View className="px-4 pt-6">
           <Text className="text-text2 text-[13px]">
@@ -124,7 +125,7 @@ export default function PearEcho() {
   return (
     <View className="flex-1 bg-pageBg" style={{ paddingTop: insets.top }}>
       <Stack.Screen options={MODAL_SCREEN_OPTIONS} />
-      <SettingsBackToolbar title="Close" onPress={() => { router.back(); }} />
+      <SettingsBackToolbar title="Close" onPress={() => { safeBack(); }} />
       <SettingsScreenTitle title="Pear Echo" />
       <View className="px-4 pt-4 gap-4">
         <Text className="text-text2 text-[13px]">

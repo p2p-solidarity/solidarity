@@ -16,7 +16,8 @@
  * Selective Disclosures are sourced from `useIdentityData.provableClaims`
  * filtered by this credential's id — mirrors Swift `associatedClaims`.
  */
-import { router, useLocalSearchParams } from 'expo-router';
+import { useLocalSearchParams } from 'expo-router';
+import { safeBack } from '@/navigation/safeBack';
 import type { SFSymbol } from 'expo-symbols';
 import { useEffect, useMemo, useState } from 'react';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -454,7 +455,7 @@ export default function CredentialDetailScreen() {
     void (async () => {
       await remove(credential.id);
       pushToast(t('credentialDetail.removedToast'), 'success');
-      router.back();
+      safeBack();
     })();
   };
 
@@ -465,7 +466,7 @@ export default function CredentialDetailScreen() {
         <View className="h-11 flex-row items-center px-4">
           <PressableScale
             onPress={() => {
-              router.back();
+              safeBack();
             }}
             accessibilityRole="button"
             accessibilityLabel={t('credentialDetail.back')}

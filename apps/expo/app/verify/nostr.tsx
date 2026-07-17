@@ -3,6 +3,7 @@
  * only after that tap. Existing-key import remains behind “Advanced options”.
  */
 import { router } from 'expo-router';
+import { safeBack } from '@/navigation/safeBack';
 import { useEffect, useReducer, useRef, useState, type ReactNode } from 'react';
 import { View } from 'react-native';
 import { KeyboardAwareScrollView } from 'react-native-keyboard-controller';
@@ -213,7 +214,7 @@ export default function PublishPageScreen(): ReactNode {
       <SettingsBackToolbar
         title={t('nostrConnect.cancel')}
         onPress={() => {
-          router.back();
+          safeBack();
         }}
       />
       <SettingsScreenTitle title={t('nostrConnect.title')} />
@@ -264,7 +265,7 @@ export default function PublishPageScreen(): ReactNode {
           <PublishOutcomeStep
             outcome={state.outcome}
             onDone={() => {
-              router.back();
+              safeBack();
             }}
           />
         ) : null}
@@ -276,7 +277,7 @@ export default function PublishPageScreen(): ReactNode {
               dispatch({ type: 'retry' });
             }}
             onCancel={() => {
-              router.back();
+              safeBack();
             }}
           />
         ) : null}
@@ -461,7 +462,7 @@ function GateScreen({
       <SettingsBackToolbar
         title={t('nostrConnect.cancel')}
         onPress={() => {
-          router.back();
+          safeBack();
         }}
       />
       <SettingsScreenTitle title={t('nostrConnect.title')} />

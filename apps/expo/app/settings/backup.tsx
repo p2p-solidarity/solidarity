@@ -8,7 +8,7 @@
  *      "Restore from Backup". Footer = "Last: …" timestamp if available.
  *   3. Status — iCloud connectivity row + footer explaining sync behaviour.
  */
-import { router } from 'expo-router';
+import { safeBack } from '@/navigation/safeBack';
 import { useEffect, useState } from 'react';
 import { ScrollView, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -125,7 +125,7 @@ export default function BackupSettings() {
         });
         return;
       }
-      router.back();
+      safeBack('/settings');
     } catch (err) {
       // A "wrong key" failure (v2 under a different Recovery Phrase, or a v1
       // device-key archive on a device that lacks that key): explain plainly,
@@ -164,7 +164,7 @@ export default function BackupSettings() {
 
   return (
     <View className="flex-1 bg-pageBg" style={{ paddingTop: insets.top }}>
-      <SettingsBackToolbar onPress={() => { router.back(); }} />
+      <SettingsBackToolbar onPress={() => { safeBack('/settings'); }} />
       <SettingsScreenTitle title="Backup" />
 
       <ScrollView

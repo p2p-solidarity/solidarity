@@ -14,7 +14,8 @@
  * the screen must never suggest otherwise. A missing snapshot (bad/stale
  * deep link) renders an honest not-found state rather than a blank screen.
  */
-import { router, useLocalSearchParams } from 'expo-router';
+import { useLocalSearchParams } from 'expo-router';
+import { safeBack } from '@/navigation/safeBack';
 import type { ReactNode } from 'react';
 import { Linking, ScrollView, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -37,7 +38,7 @@ export default function DeclaredPageDetailScreen(): ReactNode {
       <View className="flex-row items-center" style={{ paddingHorizontal: 16, height: 44 }}>
         <PressableScale
           haptic="tap"
-          onPress={() => { router.back(); }}
+          onPress={() => { safeBack(); }}
           accessibilityRole="button"
           style={{ width: 44, height: 44, alignItems: 'flex-start', justifyContent: 'center' }}
         >

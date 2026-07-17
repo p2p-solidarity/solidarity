@@ -15,6 +15,7 @@
  * `docs/ref/01-spec-verified-page.md` §9.
  */
 import { router } from 'expo-router';
+import { safeBack } from '@/navigation/safeBack';
 import { useCallback, useEffect, useState } from 'react';
 import { RefreshControl, ScrollView, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -81,7 +82,7 @@ export default function GroupManagementSettings() {
 
   return (
     <View className="flex-1 bg-pageBg" style={{ paddingTop: insets.top }}>
-      <SettingsBackToolbar onPress={() => { router.back(); }} />
+      <SettingsBackToolbar onPress={() => { safeBack('/settings'); }} />
       <SettingsScreenTitle title={t('settingsGroups.title')} />
 
       <ScrollView

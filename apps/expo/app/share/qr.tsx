@@ -8,7 +8,7 @@
  * Share button goes through expo-sharing. The payload is an OID4VP
  * authorisation request URL, matching Swift's OIDCService-backed QR flow.
  */
-import { router } from 'expo-router';
+import { safeBack } from '@/navigation/safeBack';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import QRCode from 'react-native-qrcode-svg';
@@ -110,7 +110,7 @@ export default function QrSharingScreen() {
         <Pressable
           accessibilityRole="button"
           accessibilityLabel={t('shareQr.done')}
-          onPress={() => { router.back(); }}
+          onPress={() => { safeBack(); }}
           style={styles.navAction}
         >
           <Text style={styles.navActionText}>{t('shareQr.done')}</Text>

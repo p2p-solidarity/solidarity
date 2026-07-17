@@ -13,7 +13,8 @@
  * `GroupCredentialService` — when that lands as `src/credentials/groupIssuance.ts`,
  * swap the body of `runIssuance` below.
  */
-import { router, useLocalSearchParams } from 'expo-router';
+import { useLocalSearchParams } from 'expo-router';
+import { safeBack } from '@/navigation/safeBack';
 import type { SFSymbol } from 'expo-symbols';
 import type { ReactNode } from 'react';
 import { useEffect, useMemo, useState } from 'react';
@@ -333,7 +334,7 @@ export default function GroupVCIssuanceScreen() {
           </View>
           <PressableScale
             onPress={() => {
-              router.back();
+              safeBack();
             }}
             accessibilityRole="button"
             accessibilityLabel={t('groupIssue.done')}

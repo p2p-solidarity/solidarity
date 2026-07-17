@@ -17,6 +17,7 @@ import * as DocumentPicker from 'expo-document-picker';
 import * as FileSystem from 'expo-file-system/legacy';
 import type { SFSymbol } from 'expo-symbols';
 import { router } from 'expo-router';
+import { safeBack } from '@/navigation/safeBack';
 import * as Sharing from 'expo-sharing';
 import { useEffect, useState } from 'react';
 import { ScrollView, View } from 'react-native';
@@ -134,7 +135,7 @@ export default function VCManagementScreen() {
   }, [hydrate, hydrateCards, hydrateIssuers]);
 
   const onBack = () => {
-    router.back();
+    safeBack();
   };
 
   const onCreateDidKey = async () => {

@@ -17,6 +17,7 @@
  *     in Wave 1.
  */
 import { router } from 'expo-router';
+import { safeBack } from '@/navigation/safeBack';
 import { useCallback, useRef, useState } from 'react';
 import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
 import Animated, {
@@ -111,7 +112,7 @@ export default function ScanScreen() {
         presentVerifiedPageResolving();
         void resolveProfileByNpub(verifiedPageForm.npub).then(presentVerifiedPageResult);
       }
-      router.back();
+      safeBack();
       return;
     }
 
@@ -123,7 +124,7 @@ export default function ScanScreen() {
       const outcome = await handleScannedPayload(payload);
       if (outcome.kind === 'card' && outcome.card) {
         presentReceivedCard(outcome.card, outcome.verificationStatus);
-        router.back();
+        safeBack();
         return;
       }
       if (outcome.kind === 'error') {
@@ -186,7 +187,7 @@ export default function ScanScreen() {
         style={{ height: 44, paddingTop: insets.top }}
       >
         <Pressable
-          onPress={() => { router.back(); }}
+          onPress={() => { safeBack(); }}
           accessibilityRole="button"
           style={{ width: 60, height: 44, justifyContent: 'center' }}
         >
@@ -305,7 +306,7 @@ function ScannedResultView({
       </View>
       <View className="gap-2" style={{ paddingBottom: insets.bottom }}>
         <ThemedButton label="Scan another" fullWidth onPress={onClear} />
-        <ThemedButton variant="secondary" label="Close" fullWidth onPress={() => { router.back(); }} />
+        <ThemedButton variant="secondary" label="Close" fullWidth onPress={() => { safeBack(); }} />
       </View>
     </View>
   );

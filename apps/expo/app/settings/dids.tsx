@@ -17,7 +17,8 @@
  * paints with the signing-key card from the coordinator cache, and the root
  * section resolves in with a REAL absent-state when no root exists.
  */
-import { router, Stack, useLocalSearchParams } from 'expo-router';
+import { Stack, useLocalSearchParams } from 'expo-router';
+import { safeBack } from '@/navigation/safeBack';
 import { useEffect, useState } from 'react';
 import { Platform, ScrollView, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -118,7 +119,7 @@ export default function DIDListSheet() {
       <SettingsBackToolbar
         title={t('dids.close')}
         onPress={() => {
-          router.back();
+          safeBack('/settings');
         }}
       />
       <SettingsScreenTitle title={t('dids.title')} />

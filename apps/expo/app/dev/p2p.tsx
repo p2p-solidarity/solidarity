@@ -20,7 +20,8 @@
  * is exercised by the mock peer round, which uses the exact same
  * `runSyncStep` the production transport will call.
  */
-import { router, Stack } from 'expo-router';
+import { Stack } from 'expo-router';
+import { safeBack } from '@/navigation/safeBack';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ScrollView, Text, TextInput, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -267,7 +268,7 @@ export default function P2PLab() {
     return (
       <View className="flex-1 bg-pageBg" style={{ paddingTop: insets.top }}>
         <Stack.Screen options={MODAL_SCREEN_OPTIONS} />
-        <SettingsBackToolbar title="Close" onPress={() => { router.back(); }} />
+        <SettingsBackToolbar title="Close" onPress={() => { safeBack(); }} />
         <SettingsScreenTitle title="P2P Lab" />
         <View className="px-4 pt-6">
           <Text className="text-text2 text-[13px]">
@@ -281,7 +282,7 @@ export default function P2PLab() {
   return (
     <View className="flex-1 bg-pageBg" style={{ paddingTop: insets.top }}>
       <Stack.Screen options={MODAL_SCREEN_OPTIONS} />
-      <SettingsBackToolbar title="Close" onPress={() => { router.back(); }} />
+      <SettingsBackToolbar title="Close" onPress={() => { safeBack(); }} />
       <SettingsScreenTitle title="P2P Lab" />
 
       <ScrollView

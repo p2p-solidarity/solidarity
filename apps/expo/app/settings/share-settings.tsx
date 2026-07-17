@@ -9,7 +9,7 @@
  * (Real Human + Age 18+) only renders when the corresponding provable
  * claims exist in `useIdentityData.provableClaims`.
  */
-import { router } from 'expo-router';
+import { safeBack } from '@/navigation/safeBack';
 import { Image } from 'expo-image';
 import { type ReactNode, useEffect, useMemo, useState } from 'react';
 import { ScrollView, View } from 'react-native';
@@ -167,7 +167,7 @@ export default function ShareSettings(): ReactNode {
       className="flex-1 bg-pageBg"
       style={{ paddingTop: insets.top }}
     >
-      <SettingsBackToolbar onPress={() => { router.back(); }} />
+      <SettingsBackToolbar onPress={() => { safeBack('/settings'); }} />
       <SettingsScreenTitle title={t('shareSettings.title')} />
       <ScrollView contentContainerStyle={{ padding: 16, gap: 20 }}>
         <QrPreview imageUri={qrImageUri} t={t} />

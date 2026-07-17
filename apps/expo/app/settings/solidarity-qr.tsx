@@ -13,7 +13,8 @@
  * Swift's default professional level. Field toggles mirror
  * ShareSettingsStore via `usePreferences`.
  */
-import { router, Stack } from 'expo-router';
+import { Stack } from 'expo-router';
+import { safeBack } from '@/navigation/safeBack';
 import { Image } from 'expo-image';
 import { useEffect, useState } from 'react';
 import { ActivityIndicator, ScrollView, Text, View } from 'react-native';
@@ -112,7 +113,7 @@ export default function SolidarityQrSettings() {
   return (
     <View className="flex-1 bg-pageBg" style={{ paddingTop: insets.top }}>
       <Stack.Screen options={{ presentation: 'modal' }} />
-      <SettingsBackToolbar title={t('solidarityQr.close')} onPress={() => { router.back(); }} />
+      <SettingsBackToolbar title={t('solidarityQr.close')} onPress={() => { safeBack('/settings'); }} />
       <SettingsScreenTitle title={t('solidarityQr.title')} />
 
       <ScrollView

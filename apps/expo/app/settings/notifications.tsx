@@ -10,7 +10,7 @@
  *      menu (15s / 30s / 1m / 5m).
  *   4. Reset — destructive "Reset to Defaults" row.
  */
-import { router } from 'expo-router';
+import { safeBack } from '@/navigation/safeBack';
 import { useState } from 'react';
 import { Linking, Modal, Pressable, ScrollView, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -71,7 +71,7 @@ export default function NotificationSettings() {
 
   return (
     <View className="flex-1 bg-pageBg" style={{ paddingTop: insets.top }}>
-      <SettingsBackToolbar onPress={() => { router.back(); }} />
+      <SettingsBackToolbar onPress={() => { safeBack('/settings'); }} />
       <SettingsScreenTitle title={t('notifications.title')} />
 
       <ScrollView

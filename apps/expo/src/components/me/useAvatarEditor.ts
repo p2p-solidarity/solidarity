@@ -1,5 +1,5 @@
 import * as ImagePicker from 'expo-image-picker';
-import { router } from 'expo-router';
+import { safeBack } from '@/navigation/safeBack';
 import { useState } from 'react';
 import { Linking } from 'react-native';
 
@@ -171,7 +171,7 @@ export function useAvatarEditor({
     close();
     haptic('success');
     pushToast(t(willPublish ? 'meEdit.avatar.published' : 'meEdit.avatar.saved'), 'success');
-    router.back();
+    safeBack();
   };
 
   const remove = async (): Promise<void> => {
@@ -204,7 +204,7 @@ export function useAvatarEditor({
     close();
     haptic('success');
     pushToast(t('meEdit.avatar.removed'), 'success');
-    if (hadRecordAvatar) router.back();
+    if (hadRecordAvatar) safeBack();
   };
 
   return {

@@ -16,7 +16,8 @@
  * local DAG. NIP-78 30078 is a HEAD pointer, not an immutable node;
  * the §3.3 sync protocol is what actually transfers DAG nodes.
  */
-import { router, Stack } from 'expo-router';
+import { Stack } from 'expo-router';
+import { safeBack } from '@/navigation/safeBack';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { ScrollView, Text, TextInput, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -230,7 +231,7 @@ export default function NostrBridgeLab() {
     return (
       <View className="flex-1 bg-pageBg" style={{ paddingTop: insets.top }}>
         <Stack.Screen options={MODAL_SCREEN_OPTIONS} />
-        <SettingsBackToolbar title="Close" onPress={() => { router.back(); }} />
+        <SettingsBackToolbar title="Close" onPress={() => { safeBack(); }} />
         <SettingsScreenTitle title="Nostr Bridge" />
         <View className="px-4 pt-6">
           <Text className="text-text2 text-[13px]">
@@ -244,7 +245,7 @@ export default function NostrBridgeLab() {
   return (
     <View className="flex-1 bg-pageBg" style={{ paddingTop: insets.top }}>
       <Stack.Screen options={MODAL_SCREEN_OPTIONS} />
-      <SettingsBackToolbar title="Close" onPress={() => { router.back(); }} />
+      <SettingsBackToolbar title="Close" onPress={() => { safeBack(); }} />
       <SettingsScreenTitle title="Nostr Bridge" />
 
       <ScrollView

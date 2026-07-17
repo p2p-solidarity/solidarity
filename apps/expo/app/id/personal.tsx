@@ -6,7 +6,7 @@
  * sections (defined in `@/components/id/panels/PersonalPanel`) so the
  * same UI also powers the dashboard's "Personal" tab.
  */
-import { router } from 'expo-router';
+import { safeBack } from '@/navigation/safeBack';
 import { useEffect } from 'react';
 import { ScrollView, View } from 'react-native';
 
@@ -46,7 +46,7 @@ export default function PersonalIdentity(): React.JSX.Element {
       <IDNavBar
         title={t('personalIdentity.title')}
         onLeading={() => {
-          router.back();
+          safeBack();
         }}
         trailing={
           <PressableScale

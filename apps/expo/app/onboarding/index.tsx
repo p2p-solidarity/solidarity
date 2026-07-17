@@ -28,6 +28,7 @@
  * /cards/edit.)
  */
 import { router, Stack, useLocalSearchParams } from 'expo-router';
+import { safeBack } from '@/navigation/safeBack';
 import { useCallback, useReducer } from 'react';
 import { View } from 'react-native';
 
@@ -159,7 +160,7 @@ export default function OnboardingFlow() {
         <PressableScale
           scaleTo={1}
           onPress={() => {
-            router.back();
+            safeBack();
           }}
           accessibilityRole="button"
           accessibilityLabel={t('onboardingFlow.close')}

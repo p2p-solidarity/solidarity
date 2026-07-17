@@ -17,7 +17,7 @@
  */
 import * as Clipboard from 'expo-clipboard';
 import { randomUUID } from 'expo-crypto';
-import { router } from 'expo-router';
+import { safeBack } from '@/navigation/safeBack';
 import { useState } from 'react';
 import { Pressable, ScrollView, Text, View } from 'react-native';
 import QRCode from 'react-native-qrcode-svg';
@@ -83,7 +83,7 @@ export default function OidcRequestSettings() {
 
   return (
     <View className="flex-1 bg-pageBg" style={{ paddingTop: insets.top }}>
-      <SettingsBackToolbar onPress={() => { router.back(); }} />
+      <SettingsBackToolbar onPress={() => { safeBack('/settings'); }} />
       <SettingsScreenTitle title={t('oidcRequest.title')} />
 
       <ScrollView

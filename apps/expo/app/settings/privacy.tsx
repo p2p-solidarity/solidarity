@@ -9,7 +9,7 @@
  * trick used by share-settings.tsx so the Wave 1 disclosure stack stays
  * the single source of truth.
  */
-import { router } from 'expo-router';
+import { safeBack } from '@/navigation/safeBack';
 import { View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -26,7 +26,7 @@ export default function PrivacySettings() {
   const { t } = useTranslation();
   return (
     <View className="flex-1 bg-pageBg" style={{ paddingTop: insets.top }}>
-      <SettingsBackToolbar onPress={() => { router.back(); }} />
+      <SettingsBackToolbar onPress={() => { safeBack('/settings'); }} />
       <SettingsScreenTitle title={t('privacySettings.title')} />
       <SelectiveDisclosureBody headerless />
     </View>

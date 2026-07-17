@@ -16,7 +16,7 @@
  * For the Settings stack we render the same component but allow the parent
  * (privacy.tsx) to skip the title via `headerless`.
  */
-import { router } from 'expo-router';
+import { safeBack } from '@/navigation/safeBack';
 import { useState } from 'react';
 import { Modal, Pressable, ScrollView, Switch, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -155,7 +155,7 @@ export default function SelectiveDisclosureBody({ headerless = false }: Disclosu
         <>
           <SettingsBackToolbar
             onPress={() => {
-              router.back();
+              safeBack('/settings');
             }}
           />
           <SettingsScreenTitle title={t('disclosure.title')} />

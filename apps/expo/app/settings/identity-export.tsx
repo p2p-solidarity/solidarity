@@ -11,7 +11,7 @@
  * current root, confirm before switching (same mnemonic re-import is a
  * silent no-op, matching rootKey.ts's idempotent `importFromMnemonic`).
  */
-import { router } from 'expo-router';
+import { safeBack } from '@/navigation/safeBack';
 import { useEffect, useState } from 'react';
 import { ScrollView, TextInput, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -132,7 +132,7 @@ export default function IdentityExportSettings() {
 
   return (
     <View className="flex-1 bg-pageBg" style={{ paddingTop: insets.top }}>
-      <SettingsBackToolbar onPress={() => { router.back(); }} />
+      <SettingsBackToolbar onPress={() => { safeBack('/settings'); }} />
       <SettingsScreenTitle title={t('identityExport.title')} />
 
       <ScrollView

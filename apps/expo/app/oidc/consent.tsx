@@ -7,7 +7,8 @@
  * via `submitAuthorizationResponse`. Errors are reported by toast and the
  * screen stays open so the user can retry.
  */
-import { router, useLocalSearchParams } from 'expo-router';
+import { useLocalSearchParams } from 'expo-router';
+import { safeBack } from '@/navigation/safeBack';
 import { useMemo, useState } from 'react';
 import { Linking, ScrollView, View } from 'react-native';
 
@@ -47,7 +48,7 @@ export default function OidcConsent() {
       <View className="flex-1 bg-pageBg items-center justify-center p-6">
         <ThemedText tone="secondary">Invalid OIDC request.</ThemedText>
         <View className="mt-3">
-          <ThemedButton variant="secondary" label="Back" onPress={() => { router.back(); }} />
+          <ThemedButton variant="secondary" label="Back" onPress={() => { safeBack(); }} />
         </View>
       </View>
     );
@@ -91,11 +92,11 @@ export default function OidcConsent() {
         // verifier-side post-redirect is optional; ignore opener errors
       }
     }
-    router.back();
+    safeBack();
   };
   const onDeny = () => {
     pushToast('Declined', 'warning');
-    router.back();
+    safeBack();
   };
 
   return (

@@ -8,7 +8,7 @@
  * trailing slot for toolbar buttons (refresh / qrcode / gearshape).
  */
 import type { ReactNode } from 'react';
-import { router } from 'expo-router';
+import { safeBack } from '@/navigation/safeBack';
 import { View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -31,7 +31,7 @@ export function IDNavBar({ title, leadingLabel, onLeading, trailing }: IDNavBarP
       onLeading();
       return;
     }
-    if (router.canGoBack()) router.back();
+    safeBack();
   };
 
   return (

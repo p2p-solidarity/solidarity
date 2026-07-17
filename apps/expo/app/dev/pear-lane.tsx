@@ -24,7 +24,8 @@
  * mid-run never leaks a live Bare worklet.
  */
 import { p256 } from '@noble/curves/nist.js';
-import { router, Stack } from 'expo-router';
+import { Stack } from 'expo-router';
+import { safeBack } from '@/navigation/safeBack';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Pressable, Text, TextInput, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -576,7 +577,7 @@ export default function PearLaneLab() {
     return (
       <View className="flex-1 bg-pageBg" style={{ paddingTop: insets.top }}>
         <Stack.Screen options={MODAL_SCREEN_OPTIONS} />
-        <SettingsBackToolbar title="Close" onPress={() => { router.back(); }} />
+        <SettingsBackToolbar title="Close" onPress={() => { safeBack(); }} />
         <SettingsScreenTitle title={t('developer.pearLane.title')} />
         <View className="px-4 pt-6">
           <Text className="text-text2 text-[13px]">
@@ -590,7 +591,7 @@ export default function PearLaneLab() {
   return (
     <View className="flex-1 bg-pageBg" style={{ paddingTop: insets.top }}>
       <Stack.Screen options={MODAL_SCREEN_OPTIONS} />
-      <SettingsBackToolbar title="Close" onPress={() => { router.back(); }} />
+      <SettingsBackToolbar title="Close" onPress={() => { safeBack(); }} />
       <SettingsScreenTitle title={t('developer.pearLane.title')} />
 
       <View className="px-4 pt-2">

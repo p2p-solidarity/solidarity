@@ -23,7 +23,8 @@
  * routing here, so this is only a fallback for a stale/mistyped snapshot
  * route.
  */
-import { router, useLocalSearchParams } from 'expo-router';
+import { useLocalSearchParams } from 'expo-router';
+import { safeBack } from '@/navigation/safeBack';
 import type { ReactNode } from 'react';
 import { ScrollView, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -50,7 +51,7 @@ export default function VerifiedProfileDetailScreen(): ReactNode {
       <View className="flex-row items-center" style={{ paddingHorizontal: 16, height: 44 }}>
         <PressableScale
           haptic="tap"
-          onPress={() => { router.back(); }}
+          onPress={() => { safeBack(); }}
           accessibilityRole="button"
           style={{ width: 44, height: 44, alignItems: 'flex-start', justifyContent: 'center' }}
         >

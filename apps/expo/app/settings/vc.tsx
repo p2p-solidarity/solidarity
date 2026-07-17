@@ -21,6 +21,7 @@
 import * as DocumentPicker from 'expo-document-picker';
 import * as FileSystem from 'expo-file-system/legacy';
 import { router } from 'expo-router';
+import { safeBack } from '@/navigation/safeBack';
 import * as Sharing from 'expo-sharing';
 import { useEffect, useState } from 'react';
 import { ScrollView, View } from 'react-native';
@@ -194,7 +195,7 @@ export default function VcSettings() {
 
   return (
     <View className="flex-1 bg-pageBg" style={{ paddingTop: insets.top }}>
-      <SettingsBackToolbar onPress={() => { router.back(); }} />
+      <SettingsBackToolbar onPress={() => { safeBack('/settings'); }} />
       <SettingsScreenTitle title={t('vc.title')} />
 
       <ScrollView

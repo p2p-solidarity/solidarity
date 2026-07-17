@@ -25,7 +25,8 @@
  * Mock chips + proofs are demoted to "selfIssued / white" trust level per
  * CLAUDE.md Sec rules — never present synthetic data as government-grade.
  */
-import { router, useLocalSearchParams } from 'expo-router';
+import { useLocalSearchParams } from 'expo-router';
+import { safeBack } from '@/navigation/safeBack';
 import { useEffect, useMemo, useReducer, useState } from 'react';
 import { Modal, Pressable, ScrollView, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -674,7 +675,7 @@ export default function PassportSetup() {
       // advances to the `complete` step. The listener runs synchronously, so
       // onboarding is already on `complete` before router.back() reveals it.
       if (fromOnboarding) notifyPassportOnboardingCompleted();
-      router.back();
+      safeBack();
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       reportPassportError({
@@ -691,7 +692,7 @@ export default function PassportSetup() {
 
   return (
     <View className="bg-pageBg flex-1" style={{ paddingTop: insets.top }}>
-      <NavBar onClose={() => { router.back(); }} />
+      <NavBar onClose={() => { safeBack(); }} />
       <CryptoCompilingOverlay
         visible={state.proofOverlayStage !== null}
         stage={state.proofOverlayStage ?? 'init'}

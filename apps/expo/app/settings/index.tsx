@@ -9,6 +9,7 @@
  */
 import Constants from 'expo-constants';
 import { router } from 'expo-router';
+import { safeBack } from '@/navigation/safeBack';
 import { useRef } from 'react';
 import { Platform, Pressable, ScrollView, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -68,7 +69,7 @@ export default function SettingsHub() {
         title={t('settingsHub.title')}
         leadingAction={{
           accessibilityLabel: 'Back',
-          onPress: () => { router.back(); },
+          onPress: () => { safeBack(); },
         }}
         trailingAction={{
           icon: 'qrcode.viewfinder',

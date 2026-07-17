@@ -20,7 +20,8 @@
  * Member kick/approve/reject only mutate the local zustand store; the
  * Admin Tools block is a labelled stub so the visual contract is preserved.
  */
-import { router, useLocalSearchParams } from 'expo-router';
+import { useLocalSearchParams } from 'expo-router';
+import { safeBack } from '@/navigation/safeBack';
 import { useCallback, useEffect, useState } from 'react';
 import {
   Pressable,
@@ -69,7 +70,7 @@ function NavBar({
     <View style={{ paddingTop: insets.top }} className="bg-pageBg">
       <View className="h-11 flex-row items-center px-4">
         <Pressable
-          onPress={() => { router.back(); }}
+          onPress={() => { safeBack(); }}
           accessibilityRole="button"
           accessibilityLabel={t('groupDetail.back')}
           hitSlop={8}

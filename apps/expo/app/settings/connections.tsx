@@ -1,4 +1,5 @@
 import { router, useFocusEffect } from 'expo-router';
+import { safeBack } from '@/navigation/safeBack';
 import { useCallback, useState } from 'react';
 import { ScrollView, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -71,7 +72,7 @@ export default function ConnectionsSettingsScreen() {
         leadingAction={{
           accessibilityLabel: t('settingsHub.title'),
           onPress: () => {
-            router.back();
+            safeBack('/settings');
           },
         }}
       />

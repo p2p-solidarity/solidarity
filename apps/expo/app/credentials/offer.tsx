@@ -12,6 +12,7 @@
  * the newly stored VC.
  */
 import { router, useLocalSearchParams } from 'expo-router';
+import { safeBack } from '@/navigation/safeBack';
 import type { SFSymbol } from 'expo-symbols';
 import { useEffect, useMemo, useState } from 'react';
 import { ActivityIndicator, KeyboardAvoidingView, Platform, View } from 'react-native';
@@ -415,7 +416,7 @@ export default function ReceiveCredentialScreen() {
   };
 
   const onDismiss = () => {
-    router.back();
+    safeBack();
   };
 
   return (
