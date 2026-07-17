@@ -55,7 +55,7 @@ export function ProfileHero({ record, onEdit, onOpenIdentity }: ProfileHeroProps
               variant="outlined"
               className="flex-row items-center gap-1 rounded-none px-2 py-1">
               <SfIcon
-                name={identity.kind === 'handle' ? 'at' : 'key'}
+                name={identity.kind === 'handle' ? 'at' : 'checkmark.seal'}
                 size={11}
                 color={Colors.text2}
               />
@@ -64,7 +64,7 @@ export function ProfileHero({ record, onEdit, onOpenIdentity }: ProfileHeroProps
                 tone="secondary"
                 numberOfLines={1}
                 ellipsizeMode="middle">
-                {identity.label}
+                {identity.kind === 'handle' ? identity.label : t('mePage.verifiedIdentity')}
               </ThemedText>
             </ThemedSurface>
           </PressableScale>

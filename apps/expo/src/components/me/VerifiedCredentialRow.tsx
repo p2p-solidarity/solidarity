@@ -5,10 +5,11 @@
  *   • Divider: 0.5pt
  *   • Bottom row: checkmark.seal.fill (11pt) + level text 11pt +
  *     issuerType.capitalized 11pt tertiary, right-aligned
- *   • Trust levels:
- *       L3+ → "Level 3+ - Passport ZK + AA" / Color.Theme.terminalGreen
- *       L3  → "Level 3 - Passport ZK (No AA)" / Color.Theme.primaryBlue
- *       L1  → "Level 1 - Fallback / Non-ZK" / textTertiary
+ *   • Trust levels: surface shows the SIMPLE label (credentialTrust.simple*
+ *     — "Verified", "Basic"); the technical tier strings live on the
+ *     credential detail screen (credentialDetail.levelL*). Tone colors keep
+ *     the tiers honest: L3+ terminalGreen, L3/L2 primaryBlue, L1 text3 —
+ *     a fallback must never look like a ZK tier.
  * Source: solidarity/Views/MeViews/MeTabComponents.swift (VerifiedCredentialRow).
  */
 import type { SFSymbol } from 'expo-symbols';
@@ -19,11 +20,12 @@ import { SfIcon } from '@/components/icons/SfIcon';
 import { ThemedSurface, ThemedText } from '@/components/themed';
 import { Colors } from '@/constants/Colors';
 import {
-  credentialTrustLabelForLevel,
+  credentialTrustSimpleI18nKeyForLevel,
   credentialTrustToneForLevel,
   type TrustDisplayTone,
 } from '@/credentials/trustDisplay';
 import type { TrustLevel as StoredTrustLevel } from '@/credentials/store';
+import { useTranslation } from '@/i18n';
 
 export interface VerifiedCredentialRowProps {
   readonly icon: SFSymbol;
@@ -40,7 +42,8 @@ export function VerifiedCredentialRow({
   issuerType,
   onPress,
 }: VerifiedCredentialRowProps) {
-  const levelText = credentialTrustLabelForLevel(trustLevel);
+  const { t } = useTranslation();
+  const levelText = t(credentialTrustSimpleI18nKeyForLevel(trustLevel));
   const levelColor = levelColorForTone(credentialTrustToneForLevel(trustLevel));
 
   return (

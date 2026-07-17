@@ -11,8 +11,6 @@ import { useTranslation } from '@/i18n';
 import { hasNostrKey, hasNostrKeySync } from '@/nostr/userKey';
 import type { ProfileRecord } from '@solidarity/shared';
 
-import { profileIdentityLine } from './meProfileModel';
-
 export interface IdentityCredentialRowsProps {
   readonly record: ProfileRecord;
   readonly onOpenBindings: () => void;
@@ -27,7 +25,6 @@ export function IdentityCredentialRows({
   const { t } = useTranslation();
   const [nostrKeyReady, setNostrKeyReady] = useState(() => hasNostrKeySync());
   const [bindingsExpanded, setBindingsExpanded] = useState(false);
-  const identity = profileIdentityLine(record);
   const blueskyHandle =
     record.alsoKnownAs.find((alias) => alias.startsWith('at://'))?.slice('at://'.length) ?? null;
   const nostrClaimed = record.alsoKnownAs.some((alias) => alias.startsWith('nostr:npub'));
@@ -51,9 +48,9 @@ export function IdentityCredentialRows({
       </ThemedText>
       <ThemedSurface variant="inset" className="overflow-hidden rounded-none">
         <InsetRow
-          icon="key.horizontal"
+          icon="checkmark.seal"
           title={t('mePage.identityAndBindings')}
-          subtitle={`${identity.label} · ${t('mePage.bindingsPortableHint')}`}
+          subtitle={t('mePage.bindingsPortableHint')}
           trailingIcon={bindingsExpanded ? 'chevron.up' : 'chevron.down'}
           onPress={() => {
             setBindingsExpanded((expanded) => !expanded);
@@ -76,7 +73,7 @@ export function IdentityCredentialRows({
             />
             <View style={{ height: 1, marginLeft: 48, backgroundColor: Colors.divider }} />
             <InsetRow
-              icon="bolt.fill"
+              icon="globe"
               title={t('mePage.nostrBinding')}
               subtitle={
                 nostrClaimed
