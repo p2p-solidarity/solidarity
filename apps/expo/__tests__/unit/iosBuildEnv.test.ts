@@ -16,9 +16,11 @@ const appDir = resolve(import.meta.dir, '../..');
 const repoRoot = resolve(appDir, '../..');
 const prepareScript = join(appDir, 'scripts', 'prepare-ios-workspace.sh');
 const stageOpenAcSrsScript = join(appDir, 'scripts', 'stage-openac-srs.sh');
+const normalizeSchemeScript = join(appDir, 'scripts', 'normalize-ios-scheme.sh');
 const cloudPostCloneScript = join(appDir, 'ci-scripts', 'ci_post_clone.sh');
 const prepareScriptSource = readFileSync(prepareScript, 'utf8');
 const stageOpenAcSrsScriptSource = readFileSync(stageOpenAcSrsScript, 'utf8');
+const normalizeSchemeScriptSource = readFileSync(normalizeSchemeScript, 'utf8');
 const require = createRequire(import.meta.url);
 const disableClangExplicitModulesPlugin = require(
   join(appDir, 'plugins', 'withDisableClangExplicitModules.js')
@@ -678,6 +680,9 @@ rm -rf "$work"
       mode: 0o755,
     });
     writeFileSync(join(fixtureScriptsDir, 'stage-openac-srs.sh'), stageOpenAcSrsScriptSource, {
+      mode: 0o755,
+    });
+    writeFileSync(join(fixtureScriptsDir, 'normalize-ios-scheme.sh'), normalizeSchemeScriptSource, {
       mode: 0o755,
     });
     createFakeToolchain(fakeBin, logPath);
