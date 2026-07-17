@@ -7,6 +7,7 @@ import Animated, {
   useAnimatedStyle,
   useReducedMotion,
   useSharedValue,
+  withDelay,
   withRepeat,
   withSequence,
   withSpring,
@@ -48,15 +49,18 @@ export function PublishingConstellation({
   const reduceMotion = useReducedMotion();
   const c = useThemeColors();
   const travel = useSharedValue(0);
+  const dotOpacity = useSharedValue(0);
   const pulse = useSharedValue(1);
   const reveal = useSharedValue(1);
   const busy = phase === 'provisioning' || phase === 'publishing';
 
   useEffect(() => {
     cancelAnimation(travel);
+    cancelAnimation(dotOpacity);
     cancelAnimation(pulse);
     cancelAnimation(reveal);
     travel.value = 0;
+    dotOpacity.value = 0;
     pulse.value = 1;
     reveal.value = 1;
 
@@ -69,23 +73,29 @@ export function PublishingConstellation({
         -1,
       );
     }
-    if (!reduceMotion && phase === 'publishing') {
-      travel.value = withRepeat(
-        withTiming(1, { duration: 1_150, easing: Easing.linear }),
-        -1,
-        false,
-      );
+    if (phase === 'publishing') {
+      dotOpacity.value = reduceMotion
+        ? 1
+        : withTiming(1, { duration: 180, easing: Easing.out(Easing.quad) });
+      if (!reduceMotion) {
+        travel.value = withRepeat(
+          withTiming(1, { duration: 1_150, easing: Easing.linear }),
+          -1,
+          false,
+        );
+      }
     }
     if (!reduceMotion && (phase === 'published' || phase === 'partial')) {
-      reveal.value = 0.94;
-      reveal.value = withSpring(1, { damping: 17, stiffness: 190, mass: 0.8 });
+      reveal.value = 0.9;
+      reveal.value = withSpring(1, { damping: 12, stiffness: 210, mass: 0.85 });
     }
     return () => {
       cancelAnimation(travel);
+      cancelAnimation(dotOpacity);
       cancelAnimation(pulse);
       cancelAnimation(reveal);
     };
-  }, [busy, phase, pulse, reduceMotion, reveal, travel]);
+  }, [busy, dotOpacity, phase, pulse, reduceMotion, reveal, travel]);
 
   const centerStyle = useAnimatedStyle(() => ({
     transform: [{ scale: pulse.value * reveal.value }],
@@ -100,26 +110,27 @@ export function PublishingConstellation({
         <ConnectionLine key={`line-${String(index)}`} from={CENTER} to={endpoint} color={c.divider} />
       ))}
 
-      {phase === 'publishing'
-        ? ENDPOINTS.map((endpoint, index) => (
-            <TravelDot
-              key={`dot-${String(index)}`}
-              progress={travel}
-              from={CENTER}
-              to={endpoint}
-              offset={index / ENDPOINTS.length}
-              reduceMotion={reduceMotion}
-              color={c.primaryBlue}
-            />
-          ))
-        : null}
+      {ENDPOINTS.map((endpoint, index) => (
+        <TravelDot
+          key={`dot-${String(index)}`}
+          progress={travel}
+          opacity={dotOpacity}
+          from={CENTER}
+          to={endpoint}
+          offset={index / ENDPOINTS.length}
+          reduceMotion={reduceMotion}
+          color={c.primaryBlue}
+        />
+      ))}
 
       {ENDPOINTS.map((endpoint, index) => (
         <RelayNode
           key={`node-${String(index)}`}
+          index={index}
           point={endpoint}
           status={relayStatuses[index] ?? 'pending'}
           active={phase === 'publishing'}
+          reduceMotion={reduceMotion}
           colors={c}
         />
       ))}
@@ -192,6 +203,7 @@ function ConnectionLine({
 
 function TravelDot({
   progress,
+  opacity,
   from,
   to,
   offset,
@@ -199,6 +211,7 @@ function TravelDot({
   color,
 }: {
   readonly progress: SharedValue<number>;
+  readonly opacity: SharedValue<number>;
   readonly from: { readonly x: number; readonly y: number };
   readonly to: { readonly x: number; readonly y: number };
   readonly offset: number;
@@ -208,7 +221,9 @@ function TravelDot({
   const style = useAnimatedStyle(() => {
     const position = reduceMotion ? 0.6 : (progress.value + offset) % 1;
     return {
-      opacity: reduceMotion ? 0.65 : interpolate(position, [0, 0.14, 0.82, 1], [0, 1, 1, 0]),
+      opacity:
+        opacity.value *
+        (reduceMotion ? 0.65 : interpolate(position, [0, 0.14, 0.82, 1], [0, 1, 1, 0])),
       transform: [
         { translateX: interpolate(position, [0, 1], [from.x - 4, to.x - 4]) },
         { translateY: interpolate(position, [0, 1], [from.y - 4, to.y - 4]) },
@@ -234,16 +249,40 @@ function TravelDot({
 }
 
 function RelayNode({
+  index,
   point,
   status,
   active,
+  reduceMotion,
   colors,
 }: {
+  readonly index: number;
   readonly point: { readonly x: number; readonly y: number };
   readonly status: RelayNodeStatus;
   readonly active: boolean;
+  readonly reduceMotion: boolean;
   readonly colors: ThemeColors;
 }): ReactNode {
+  const reveal = useSharedValue(1);
+
+  useEffect(() => {
+    cancelAnimation(reveal);
+    if (reduceMotion) {
+      reveal.value = 1;
+      return;
+    }
+    reveal.value = 0.86;
+    reveal.value = withDelay(
+      index * 45,
+      withSpring(1, { damping: 16, stiffness: 230, mass: 0.8 })
+    );
+  }, [active, index, reduceMotion, reveal, status]);
+
+  const nodeStyle = useAnimatedStyle(() => ({
+    opacity: 0.74 + reveal.value * 0.26,
+    transform: [{ scale: reveal.value }],
+  }));
+
   const color =
     status === 'accepted'
       ? colors.terminalGreen
@@ -253,20 +292,23 @@ function RelayNode({
           ? colors.primaryBlue
           : colors.text3;
   return (
-    <View
-      style={{
-        position: 'absolute',
-        left: point.x - 17,
-        top: point.y - 17,
-        width: 34,
-        height: 34,
-        borderRadius: 12,
-        alignItems: 'center',
-        justifyContent: 'center',
-        backgroundColor: colors.searchBg,
-        borderWidth: 1,
-        borderColor: color,
-      }}>
+    <Animated.View
+      style={[
+        {
+          position: 'absolute',
+          left: point.x - 17,
+          top: point.y - 17,
+          width: 34,
+          height: 34,
+          borderRadius: 12,
+          alignItems: 'center',
+          justifyContent: 'center',
+          backgroundColor: colors.searchBg,
+          borderWidth: 1,
+          borderColor: color,
+        },
+        nodeStyle,
+      ]}>
       <SfIcon
         name={
           status === 'accepted'
@@ -278,7 +320,7 @@ function RelayNode({
         size={14}
         color={color}
       />
-    </View>
+    </Animated.View>
   );
 }
 

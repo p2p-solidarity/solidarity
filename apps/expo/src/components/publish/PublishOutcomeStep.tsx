@@ -1,10 +1,12 @@
 import { useState, type ReactNode } from 'react';
 import { ScrollView, View } from 'react-native';
+import Animated, { Easing, FadeInDown, ReduceMotion } from 'react-native-reanimated';
 
 import { PressableScale } from '@/components/common/PressableScale';
 import { SfIcon } from '@/components/icons/SfIcon';
 import { ThemedButton, ThemedSurface, ThemedText } from '@/components/themed';
 import { Colors } from '@/constants/Colors';
+import { STAGGER_MS } from '@/feedback/motion';
 import { useTranslation } from '@/i18n';
 import { isNostrPublishOutcomeSuccessful } from '@/nostr/connectWizard';
 import { DEFAULT_RELAYS, type PublishReport } from '@/nostr/publish';
@@ -60,11 +62,13 @@ export function PublishOutcomeStep({
         <ScrollView style={{ maxHeight: 260 }} nestedScrollEnabled>
           <View style={{ gap: 16 }}>
             <RelayReportSection
+              sectionIndex={0}
               title={t('nostrConnect.profilePointerReport')}
               report={outcome.profile}
               t={t}
             />
             <RelayReportSection
+              sectionIndex={1}
               title={t('nostrConnect.kind0Report')}
               report={outcome.kind0}
               t={t}
@@ -83,53 +87,66 @@ export function PublishOutcomeStep({
 }
 
 function RelayReportSection({
+  sectionIndex,
   title,
   report,
   t,
 }: {
+  readonly sectionIndex: number;
   readonly title: string;
   readonly report: PublishReport;
   readonly t: TFn;
 }): ReactNode {
+  const entering = (delay: number) =>
+    FadeInDown.duration(220)
+      .delay(delay)
+      .easing(Easing.out(Easing.quad))
+      .reduceMotion(ReduceMotion.System);
+
   return (
-    <ThemedSurface variant="inset" className="rounded-none p-3">
-      <View style={{ gap: 8 }}>
-        <ThemedText variant="label">{title}</ThemedText>
-        <ThemedText variant="caption" tone="secondary">
-          {t('nostrConnect.acceptedSummary', {
-            accepted: report.acceptedCount,
-            total: report.results.length,
-          })}
-        </ThemedText>
-        {report.results.map((result) => (
-          <View key={result.relay} style={{ gap: 2 }}>
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-              <SfIcon
-                name={result.accepted ? 'checkmark.circle.fill' : 'xmark.circle'}
-                size={14}
-                color={result.accepted ? Colors.terminalGreen : Colors.destructive}
-              />
-              <ThemedText
-                variant="caption"
-                tone="secondary"
-                numberOfLines={1}
-                style={{ flex: 1, fontFamily: 'Menlo' }}>
-                {result.relay}
-              </ThemedText>
-            </View>
-            {!result.accepted && result.message.length > 0 ? (
-              <ThemedText
-                variant="caption"
-                tone="tertiary"
-                numberOfLines={2}
-                style={{ marginLeft: 22, fontFamily: 'Menlo' }}>
-                {result.message}
-              </ThemedText>
-            ) : null}
-          </View>
-        ))}
-      </View>
-    </ThemedSurface>
+    <Animated.View entering={entering(sectionIndex * STAGGER_MS)}>
+      <ThemedSurface variant="inset" className="rounded-none p-3">
+        <View style={{ gap: 8 }}>
+          <ThemedText variant="label">{title}</ThemedText>
+          <ThemedText variant="caption" tone="secondary">
+            {t('nostrConnect.acceptedSummary', {
+              accepted: report.acceptedCount,
+              total: report.results.length,
+            })}
+          </ThemedText>
+          {report.results.map((result, index) => (
+            <Animated.View
+              key={result.relay}
+              entering={entering((sectionIndex * report.results.length + index + 1) * STAGGER_MS)}
+              style={{ gap: 2 }}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                <SfIcon
+                  name={result.accepted ? 'checkmark.circle.fill' : 'xmark.circle'}
+                  size={14}
+                  color={result.accepted ? Colors.terminalGreen : Colors.destructive}
+                />
+                <ThemedText
+                  variant="caption"
+                  tone="secondary"
+                  numberOfLines={1}
+                  style={{ flex: 1, fontFamily: 'Menlo' }}>
+                  {result.relay}
+                </ThemedText>
+              </View>
+              {!result.accepted && result.message.length > 0 ? (
+                <ThemedText
+                  variant="caption"
+                  tone="tertiary"
+                  numberOfLines={2}
+                  style={{ marginLeft: 22, fontFamily: 'Menlo' }}>
+                  {result.message}
+                </ThemedText>
+              ) : null}
+            </Animated.View>
+          ))}
+        </View>
+      </ThemedSurface>
+    </Animated.View>
   );
 }
 

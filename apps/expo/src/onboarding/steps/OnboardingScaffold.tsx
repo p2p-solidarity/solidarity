@@ -18,12 +18,14 @@
  */
 import type { ReactNode } from 'react';
 import { ScrollView, View } from 'react-native';
+import Animated, { Easing, FadeInDown, ReduceMotion } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { PressableScale } from '@/components/common/PressableScale';
 import { SfIcon } from '@/components/icons/SfIcon';
 import { ThemedText } from '@/components/themed';
 import { Colors } from '@/constants/Colors';
+import { STAGGER_MS } from '@/feedback/motion';
 import { useTranslation } from '@/i18n';
 
 export interface OnboardingScaffoldProps {
@@ -43,6 +45,12 @@ export function OnboardingScaffold({
 }: OnboardingScaffoldProps) {
   const insets = useSafeAreaInsets();
   const { t } = useTranslation();
+  const entrance = (delay: number) =>
+    FadeInDown.duration(240)
+      .delay(delay)
+      .easing(Easing.out(Easing.quad))
+      .reduceMotion(ReduceMotion.System);
+
   return (
     <View className="flex-1 bg-pageBg">
       <ScrollView
@@ -53,7 +61,10 @@ export function OnboardingScaffold({
           flexGrow: 1,
           gap: 24,
         }}>
-        <View style={{ flexDirection: 'row' }}>
+        <Animated.View
+          key={`back-${title}`}
+          entering={entrance(0)}
+          style={{ flexDirection: 'row' }}>
           <PressableScale
             scaleTo={1}
             onPress={onBack}
@@ -66,18 +77,30 @@ export function OnboardingScaffold({
             }}>
             <SfIcon name="chevron.left" size={17} color={Colors.text1} />
           </PressableScale>
-        </View>
+        </Animated.View>
 
-        <View style={{ gap: 8 }}>
+        <Animated.View
+          key={`copy-${title}`}
+          entering={entrance(STAGGER_MS)}
+          style={{ gap: 8 }}>
           <ThemedText variant="headlineMedium">{title}</ThemedText>
           <ThemedText variant="bodySmall" tone="secondary">
             {subtitle}
           </ThemedText>
-        </View>
+        </Animated.View>
 
-        <View style={{ flex: 1 }}>{children}</View>
+        <Animated.View
+          key={`content-${title}`}
+          entering={entrance(STAGGER_MS * 2)}
+          style={{ flex: 1 }}>
+          {children}
+        </Animated.View>
 
-        {footer ? <View>{footer}</View> : null}
+        {footer ? (
+          <Animated.View key={`footer-${title}`} entering={entrance(STAGGER_MS * 3)}>
+            {footer}
+          </Animated.View>
+        ) : null}
       </ScrollView>
     </View>
   );

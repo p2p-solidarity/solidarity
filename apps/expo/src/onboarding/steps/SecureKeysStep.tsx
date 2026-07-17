@@ -17,10 +17,21 @@
  * and credentials instead of starting fresh. Errors are absorbed into the
  * themed report sheet, never a native alert.
  */
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { ActivityIndicator, Platform, View } from 'react-native';
+import Animated, {
+  Easing,
+  cancelAnimation,
+  useAnimatedStyle,
+  useReducedMotion,
+  useSharedValue,
+  withRepeat,
+  withSequence,
+  withTiming,
+} from 'react-native-reanimated';
 
 import { BackupRestoreError, probeLatestBackup, restoreFromBackup } from '@/backup';
+import { SfIcon } from '@/components/icons/SfIcon';
 import { ThemedButton, ThemedText } from '@/components/themed';
 import { Colors } from '@/constants/Colors';
 import { showError } from '@/feedback/appAlert';
@@ -157,7 +168,7 @@ export function SecureKeysStep({ onBack, onKeysGenerated }: SecureKeysStepProps)
           {waitingForSync ? (
             <CloudSyncPulse />
           ) : (
-            <ActivityIndicator size="large" color={Colors.terminalGreen} />
+            <SecureKeyPulse />
           )}
           {statusLabel ? (
             <ThemedText variant="bodyMedium" tone="secondary">
@@ -179,5 +190,69 @@ export function SecureKeysStep({ onBack, onKeysGenerated }: SecureKeysStepProps)
       {/* Reserve trailing space to match Swift's two Spacer() rows */}
       <ThemedText> </ThemedText>
     </OnboardingScaffold>
+  );
+}
+
+function SecureKeyPulse() {
+  const reduceMotion = useReducedMotion();
+  const phase = useSharedValue(0);
+
+  useEffect(() => {
+    if (reduceMotion) return;
+    phase.value = withRepeat(
+      withSequence(
+        withTiming(1, { duration: 620, easing: Easing.out(Easing.quad) }),
+        withTiming(0, { duration: 520, easing: Easing.inOut(Easing.quad) })
+      ),
+      -1
+    );
+    return () => {
+      cancelAnimation(phase);
+    };
+  }, [phase, reduceMotion]);
+
+  const ringStyle = useAnimatedStyle(() => ({
+    opacity: reduceMotion ? 0.28 : 0.18 + phase.value * 0.18,
+    transform: [{ scale: reduceMotion ? 1 : 0.82 + phase.value * 0.3 }],
+  }));
+  const keyStyle = useAnimatedStyle(() => ({
+    transform: [{ scale: reduceMotion ? 1 : 0.96 + phase.value * 0.06 }],
+  }));
+
+  return (
+    <View style={{ width: 74, height: 74, alignItems: 'center', justifyContent: 'center' }}>
+      <Animated.View
+        style={[
+          {
+            position: 'absolute',
+            width: 74,
+            height: 74,
+            borderRadius: 37,
+            borderWidth: 1,
+            borderColor: Colors.terminalGreen,
+          },
+          ringStyle,
+        ]}
+      />
+      <Animated.View
+        style={[
+          {
+            width: 52,
+            height: 52,
+            borderRadius: 18,
+            borderWidth: 1,
+            borderColor: Colors.divider,
+            backgroundColor: Colors.cardBg,
+            alignItems: 'center',
+            justifyContent: 'center',
+          },
+          keyStyle,
+        ]}>
+        <SfIcon name="key.fill" size={24} color={Colors.terminalGreen} />
+      </Animated.View>
+      <View style={{ position: 'absolute', right: 0, bottom: 0 }}>
+        <ActivityIndicator size="small" color={Colors.primaryBlue} />
+      </View>
+    </View>
   );
 }
