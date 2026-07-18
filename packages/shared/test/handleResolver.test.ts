@@ -1,6 +1,12 @@
 import { describe, expect, it } from 'bun:test';
 
-import { AtprotoHandleResolver, resolveHandle, type HandleResolver, type ResolverIO } from '../src';
+import {
+  AtprotoHandleResolver,
+  DEFAULT_HANDLE_RESOLVERS,
+  resolveHandle,
+  type HandleResolver,
+  type ResolverIO,
+} from '../src';
 import { err, ok } from '../src/types/result';
 import vectors from '../vectors/atproto-handle.json';
 
@@ -10,6 +16,20 @@ const unusedIo: ResolverIO = {
 };
 
 describe('resolveHandle', () => {
+  it('keeps deterministic registry priority: ENS reserved suffix, then ATProto, then explicit/hinted DNS', () => {
+    const matchingScheme = (handle: string): string | undefined =>
+      DEFAULT_HANDLE_RESOLVERS.find((resolver) => resolver.matches(handle))?.scheme;
+
+    expect(DEFAULT_HANDLE_RESOLVERS.map((resolver) => resolver.scheme)).toEqual([
+      'ens',
+      'atproto',
+      'dns',
+    ]);
+    expect(matchingScheme('vitalik.eth')).toBe('ens');
+    expect(matchingScheme('example.com')).toBe('atproto');
+    expect(matchingScheme('dns:example.com')).toBe('dns');
+  });
+
   it('uses the first matching resolver and does not evaluate later resolvers', async () => {
     const calls: string[] = [];
     const first: HandleResolver = {
@@ -67,6 +87,51 @@ describe('resolveHandle', () => {
     const result = await resolveHandle('alice.example', [broken], unusedIo);
 
     expect(result).toEqual({ ok: false, error: 'unsupportedHandle' });
+  });
+
+  it('uses a scheme hint to select an ambiguous syntactic resolver without probing another', async () => {
+    const calls: string[] = [];
+    const atproto: HandleResolver = {
+      scheme: 'atproto',
+      matches: () => true,
+      resolve: async () => {
+        calls.push('atproto');
+        return ok({ did: 'did:plc:atproto' });
+      },
+    };
+    const dns: HandleResolver = {
+      scheme: 'dns',
+      matches: () => true,
+      resolve: async () => {
+        calls.push('dns');
+        return ok({ did: 'did:key:dns' });
+      },
+    };
+
+    const result = await resolveHandle('example.com', [atproto, dns], unusedIo, {
+      schemeHint: 'dns',
+    });
+
+    expect(result).toEqual({ ok: true, value: { did: 'did:key:dns' } });
+    expect(calls).toEqual(['dns']);
+  });
+
+  it('applies the DNS scheme hint to the default registry for a bare domain', async () => {
+    const queries: string[] = [];
+    const io: ResolverIO = {
+      dnsTxt: async (name) => {
+        queries.push(name);
+        return ok(['did:example:alice']);
+      },
+      fetchText: async () => ok(null),
+    };
+
+    const result = await resolveHandle('example.com', DEFAULT_HANDLE_RESOLVERS, io, {
+      schemeHint: 'dns',
+    });
+
+    expect(result).toEqual({ ok: true, value: { did: 'did:example:alice', sources: [] } });
+    expect(queries).toEqual(['_did.example.com']);
   });
 });
 

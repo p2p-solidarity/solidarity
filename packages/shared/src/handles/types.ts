@@ -13,7 +13,17 @@ export type ResolverIoError = 'notFound' | 'unreachable' | 'insecureEndpoint';
 export interface ResolverIO {
   readonly fetchText: (url: string) => Promise<Result<string | null, ResolverIoError>>;
   readonly dnsTxt: (name: string) => Promise<Result<readonly string[], ResolverIoError>>;
+  /** Optional because ENS is a soft dependency for app/web consumers. */
+  readonly ethCall?: (to: string, data: string) => Promise<Result<string, ResolverIoError>>;
 }
+
+export interface NostrProfileSource {
+  readonly kind: 'nostr';
+  readonly npub: string;
+}
+
+/** Add future retrieval transports as new members without changing resolvers. */
+export type ProfileSource = NostrProfileSource;
 
 export type HandleResolutionError =
   | 'unsupportedHandle'
@@ -21,9 +31,20 @@ export type HandleResolutionError =
   | 'notFound'
   | 'unreachable'
   | 'insecureEndpoint'
-  | 'malformedDid';
+  | 'malformedDid'
+  | 'conflictingRecords';
 
-export type HandleResolutionResult = Result<{ readonly did: string }, HandleResolutionError>;
+export interface HandleResolutionValue {
+  readonly did: string;
+  readonly sources?: readonly ProfileSource[];
+}
+
+export type HandleResolutionResult = Result<HandleResolutionValue, HandleResolutionError>;
+
+export interface HandleResolutionOptions {
+  /** Select an otherwise-ambiguous syntactic resolver without network probing. */
+  readonly schemeHint?: HandleScheme;
+}
 
 export interface HandleResolver {
   readonly scheme: HandleScheme;

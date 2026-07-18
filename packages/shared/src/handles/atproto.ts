@@ -6,7 +6,7 @@ const HANDLE_LABEL_RE = /^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/u;
 const HANDLE_MAX_LENGTH = 253;
 const ATPROTO_DID_RE = /^did:(?:plc|web):[A-Za-z0-9._:%-]+$/u;
 
-function normalizeAtprotoHandle(handle: string): string {
+export function normalizeAtprotoHandle(handle: string): string {
   const trimmed = handle.trim().toLowerCase();
   return trimmed.startsWith('@') ? trimmed.slice(1) : trimmed;
 }

@@ -1,0 +1,81 @@
+{
+  "description": "DNS badge bidirectional-binding vectors. The forward direction is a fresh dns handle lookup. The reverse direction requires the fetched, JWS-verified profile's did to equal the resolved did and its alsoKnownAs to contain the normalized dns: handle. Missing forward records are revoked; unreachable lookups are stale; one-way or mismatched records are declared and never verified.",
+  "handle": "dns:Example.COM",
+  "resolvedDid": "did:key:zDnaeVuZeVRqvscGkiEoR9PFFra2xZUMp97ZPuGFK1VLU7iYN",
+  "cases": [
+    {
+      "name": "both-directions-verified",
+      "profileDid": "did:key:zDnaeVuZeVRqvscGkiEoR9PFFra2xZUMp97ZPuGFK1VLU7iYN",
+      "alsoKnownAs": ["dns:example.com"],
+      "resolution": {
+        "ok": true,
+        "did": "did:key:zDnaeVuZeVRqvscGkiEoR9PFFra2xZUMp97ZPuGFK1VLU7iYN"
+      },
+      "expected": {
+        "state": "verified",
+        "direction1": true,
+        "direction2": true,
+        "profileDidMatches": true,
+        "alsoKnownAsMatches": true
+      }
+    },
+    {
+      "name": "one-way-no-reverse-aka",
+      "profileDid": "did:key:zDnaeVuZeVRqvscGkiEoR9PFFra2xZUMp97ZPuGFK1VLU7iYN",
+      "alsoKnownAs": [],
+      "resolution": {
+        "ok": true,
+        "did": "did:key:zDnaeVuZeVRqvscGkiEoR9PFFra2xZUMp97ZPuGFK1VLU7iYN"
+      },
+      "expected": {
+        "state": "declared",
+        "direction1": true,
+        "direction2": false,
+        "profileDidMatches": true,
+        "alsoKnownAsMatches": false
+      }
+    },
+    {
+      "name": "record-did-does-not-match-resolved-did",
+      "profileDid": "did:key:zDnaeaQHQpDWivip1SugnEwZaF5JUCmSyPrYewToLKYmv8CyV",
+      "alsoKnownAs": ["dns:example.com"],
+      "resolution": {
+        "ok": true,
+        "did": "did:key:zDnaeVuZeVRqvscGkiEoR9PFFra2xZUMp97ZPuGFK1VLU7iYN"
+      },
+      "expected": {
+        "state": "declared",
+        "direction1": true,
+        "direction2": false,
+        "profileDidMatches": false,
+        "alsoKnownAsMatches": true
+      }
+    },
+    {
+      "name": "txt-removed-is-revoked",
+      "profileDid": "did:key:zDnaeVuZeVRqvscGkiEoR9PFFra2xZUMp97ZPuGFK1VLU7iYN",
+      "alsoKnownAs": ["dns:example.com"],
+      "resolution": { "ok": false, "error": "notFound" },
+      "expected": {
+        "state": "revoked",
+        "direction1": false,
+        "direction2": false,
+        "profileDidMatches": null,
+        "alsoKnownAsMatches": true
+      }
+    },
+    {
+      "name": "lookup-unreachable-is-stale",
+      "profileDid": "did:key:zDnaeVuZeVRqvscGkiEoR9PFFra2xZUMp97ZPuGFK1VLU7iYN",
+      "alsoKnownAs": ["dns:example.com"],
+      "resolution": { "ok": false, "error": "unreachable" },
+      "expected": {
+        "state": "stale",
+        "direction1": null,
+        "direction2": null,
+        "profileDidMatches": null,
+        "alsoKnownAsMatches": true
+      }
+    }
+  ]
+}

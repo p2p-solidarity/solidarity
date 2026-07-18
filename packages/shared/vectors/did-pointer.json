@@ -1,0 +1,82 @@
+{
+  "description": "Shared DNS/ENS DID retrieval-pointer grammar. A value is either a bare DID or semicolon-separated did=<did>;src=nostr:<npub> parameters. Readers are lenient about surrounding whitespace and DNS JSON quote wrappers, but reject unknown/duplicate parameters, malformed DIDs/sources, and conflicting parseable TXT records.",
+  "referenceNpub": "npub10elfcs4fr0l0r8af98jlmgdh9c8tcxjvz9qkw038js35mp4dma8qzvjptg",
+  "valid": [
+    {
+      "name": "bare-did-key",
+      "input": "did:key:zDnaeVuZeVRqvscGkiEoR9PFFra2xZUMp97ZPuGFK1VLU7iYN",
+      "expectedDid": "did:key:zDnaeVuZeVRqvscGkiEoR9PFFra2xZUMp97ZPuGFK1VLU7iYN",
+      "expectedSources": []
+    },
+    {
+      "name": "parameterized-with-nostr-source",
+      "input": "did=did:key:zDnaeVuZeVRqvscGkiEoR9PFFra2xZUMp97ZPuGFK1VLU7iYN;src=nostr:npub10elfcs4fr0l0r8af98jlmgdh9c8tcxjvz9qkw038js35mp4dma8qzvjptg",
+      "expectedDid": "did:key:zDnaeVuZeVRqvscGkiEoR9PFFra2xZUMp97ZPuGFK1VLU7iYN",
+      "expectedSources": [
+        {
+          "kind": "nostr",
+          "npub": "npub10elfcs4fr0l0r8af98jlmgdh9c8tcxjvz9qkw038js35mp4dma8qzvjptg"
+        }
+      ]
+    },
+    {
+      "name": "colon-bearing-did-pkh",
+      "input": "  did=did:pkh:eip155:1:0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045  ",
+      "expectedDid": "did:pkh:eip155:1:0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045",
+      "expectedSources": []
+    }
+  ],
+  "invalid": [
+    {
+      "name": "missing-did-parameter",
+      "input": "src=nostr:npub10elfcs4fr0l0r8af98jlmgdh9c8tcxjvz9qkw038js35mp4dma8qzvjptg"
+    },
+    {
+      "name": "empty-did-parameter",
+      "input": "did="
+    },
+    {
+      "name": "junk-parameter",
+      "input": "did=did:key:zDnaeVuZeVRqvscGkiEoR9PFFra2xZUMp97ZPuGFK1VLU7iYN;url=https://attacker.example"
+    },
+    {
+      "name": "duplicate-did-parameter",
+      "input": "did=did:key:zOne;did=did:key:zTwo"
+    },
+    {
+      "name": "malformed-source",
+      "input": "did=did:key:zDnaeVuZeVRqvscGkiEoR9PFFra2xZUMp97ZPuGFK1VLU7iYN;src=nostr:not-an-npub"
+    },
+    {
+      "name": "not-a-did",
+      "input": "https://attacker.example/profile"
+    }
+  ],
+  "recordSets": [
+    {
+      "name": "quoted-dns-json-value",
+      "records": ["\"did=did:key:zDnaeVuZeVRqvscGkiEoR9PFFra2xZUMp97ZPuGFK1VLU7iYN\""],
+      "expectedDid": "did:key:zDnaeVuZeVRqvscGkiEoR9PFFra2xZUMp97ZPuGFK1VLU7iYN"
+    },
+    {
+      "name": "first-parseable-wins-over-junk",
+      "records": [
+        "unrelated=record",
+        "did=did:key:zDnaeVuZeVRqvscGkiEoR9PFFra2xZUMp97ZPuGFK1VLU7iYN"
+      ],
+      "expectedDid": "did:key:zDnaeVuZeVRqvscGkiEoR9PFFra2xZUMp97ZPuGFK1VLU7iYN"
+    },
+    {
+      "name": "identical-duplicates-are-not-a-conflict",
+      "records": [
+        "did=did:key:zDnaeVuZeVRqvscGkiEoR9PFFra2xZUMp97ZPuGFK1VLU7iYN",
+        "did=did:key:zDnaeVuZeVRqvscGkiEoR9PFFra2xZUMp97ZPuGFK1VLU7iYN"
+      ],
+      "expectedDid": "did:key:zDnaeVuZeVRqvscGkiEoR9PFFra2xZUMp97ZPuGFK1VLU7iYN"
+    }
+  ],
+  "conflictingRecords": [
+    "did=did:key:zDnaeVuZeVRqvscGkiEoR9PFFra2xZUMp97ZPuGFK1VLU7iYN",
+    "did=did:key:zDnaeaQHQpDWivip1SugnEwZaF5JUCmSyPrYewToLKYmv8CyV"
+  ]
+}
