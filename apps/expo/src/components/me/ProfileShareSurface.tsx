@@ -13,6 +13,7 @@ import { SCALE } from '@/feedback/motion';
 import { useTranslation } from '@/i18n';
 import type { ProfileRecord } from '@solidarity/shared';
 
+import { preferredVerifiedHandleShareUrl } from './handleShareVerification';
 import { buildProfileShareModel, selectProfileShareUrl } from './meProfileModel';
 
 const QR_SIZE = 208;
@@ -85,9 +86,20 @@ function ProfileQrSheet({
   const { t } = useTranslation();
   const insets = useSafeAreaInsets();
   const model = useMemo(() => buildProfileShareModel(record, jws), [jws, record]);
-  const [preferShort, setPreferShort] = useState(true);
-  const activeUrl = selectProfileShareUrl(model, preferShort);
-  const usingShort = preferShort && model.shortUrl !== null;
+  // Cache-only read (S8h pattern) — never a live re-verify, so this is safe
+  // to recompute on every render the sheet opens.
+  const handleCandidate = useMemo(() => preferredVerifiedHandleShareUrl(record), [record]);
+  // Default selection is UNCHANGED by the handle option (§2.3 — the handle
+  // link is offered, never defaulted to): 'short' when a Nostr pointer
+  // exists, else 'offline', exactly as before this form existed.
+  const [selectedUrl, setSelectedUrl] = useState<'handle' | 'short' | 'offline'>(
+    model.shortUrl !== null ? 'short' : 'offline'
+  );
+  const usingHandle = selectedUrl === 'handle' && handleCandidate !== null;
+  const usingShort = selectedUrl === 'short' && model.shortUrl !== null;
+  const activeUrl = usingHandle
+    ? handleCandidate.url
+    : selectProfileShareUrl(model, usingShort);
   const [qrState, setQrState] = useState<QrState>({ kind: 'loading' });
   const [retryNonce, setRetryNonce] = useState(0);
 
@@ -146,6 +158,26 @@ function ProfileQrSheet({
               </PressableScale>
             </View>
 
+            {handleCandidate ? (
+              <ThemedButton
+                label={`@${handleCandidate.handle}`}
+                variant={usingHandle ? 'primary' : 'secondary'}
+                size="sm"
+                fullWidth
+                haptic="tap"
+                leadingIcon={
+                  <SfIcon
+                    name="checkmark.seal.fill"
+                    size={13}
+                    color={usingHandle ? Colors.pageBg : Colors.terminalGreen}
+                  />
+                }
+                onPress={() => {
+                  setSelectedUrl('handle');
+                }}
+              />
+            ) : null}
+
             {model.shortUrl ? (
               <View className="flex-row gap-2">
                 <View style={{ flex: 1 }}>
@@ -156,19 +188,19 @@ function ProfileQrSheet({
                     fullWidth
                     haptic="tap"
                     onPress={() => {
-                      setPreferShort(true);
+                      setSelectedUrl('short');
                     }}
                   />
                 </View>
                 <View style={{ flex: 1 }}>
                   <ThemedButton
                     label={t('profileCard.offlineLink')}
-                    variant={!usingShort ? 'primary' : 'secondary'}
+                    variant={selectedUrl === 'offline' ? 'primary' : 'secondary'}
                     size="sm"
                     fullWidth
                     haptic="tap"
                     onPress={() => {
-                      setPreferShort(false);
+                      setSelectedUrl('offline');
                     }}
                   />
                 </View>
@@ -176,7 +208,13 @@ function ProfileQrSheet({
             ) : null}
 
             <ThemedText variant="caption" tone="secondary" style={{ textAlign: 'center' }}>
-              {t(usingShort ? 'profileCard.shortLinkHint' : 'profileCard.offlineLinkHint')}
+              {t(
+                usingHandle
+                  ? 'profileCard.handleLinkHint'
+                  : usingShort
+                    ? 'profileCard.shortLinkHint'
+                    : 'profileCard.offlineLinkHint'
+              )}
             </ThemedText>
 
             <ThemedSurface
@@ -216,7 +254,7 @@ function ProfileQrSheet({
               </View>
             </ThemedSurface>
 
-            {!usingShort && model.oversize ? (
+            {selectedUrl === 'offline' && model.oversize ? (
               <ThemedText variant="caption" tone="tertiary" style={{ textAlign: 'center' }}>
                 {t('profileCard.oversizeWarning')}
               </ThemedText>

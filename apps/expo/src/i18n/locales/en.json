@@ -1069,6 +1069,7 @@
   "profileCard.offlineLink": "Full (offline)",
   "profileCard.shortLinkHint": "Short & quick to scan — opening it needs a network connection.",
   "profileCard.offlineLinkHint": "Longer, but verifies with no network (even in airplane mode).",
+  "profileCard.handleLinkHint": "Shortest — works only while your handle stays verified. If you ever unlink it, this link stops working.",
   "meEdit.title": "Edit Profile",
   "meEdit.cancel": "Cancel",
   "meEdit.displayName": "Display Name",

@@ -1069,6 +1069,7 @@
   "profileCard.offlineLink": "完整(離線)",
   "profileCard.shortLinkHint": "短、好掃 —— 開啟需要網路連線。",
   "profileCard.offlineLinkHint": "較長,但免網路也能驗證(飛航模式也行)。",
+  "profileCard.handleLinkHint": "最短 —— 只在你的 handle 保持已驗證時有效;之後若解除連結,這個連結就會失效。",
   "meEdit.title": "編輯個人頁面",
   "meEdit.cancel": "取消",
   "meEdit.displayName": "顯示名稱",
