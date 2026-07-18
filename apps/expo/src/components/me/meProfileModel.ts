@@ -1,7 +1,7 @@
 import { shortDid } from '@/components/id/shortDid';
 import { encodeFragment, isValidAtprotoHandle, type ProfileRecord } from '@solidarity/shared';
 
-const PROFILE_PAGE_URL = 'https://solidarity.gg/#';
+const PROFILE_PAGE_URL = 'https://app.solidarity.gg/#';
 
 export interface ProfileIdentityLine {
   readonly kind: 'handle' | 'did';

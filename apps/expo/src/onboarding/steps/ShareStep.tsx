@@ -28,7 +28,7 @@ import { OnboardingScaffold } from './OnboardingScaffold';
 
 /** Mirrors `ProfileSummaryCard`'s canonical viewer URL — display text only;
  * the fragment never leaves the device (01-spec §1/§8). */
-const FRAGMENT_BASE_URL = 'https://solidarity.gg/#';
+const FRAGMENT_BASE_URL = 'https://app.solidarity.gg/#';
 const QR_SIZE = 220;
 
 export interface ShareStepProps {

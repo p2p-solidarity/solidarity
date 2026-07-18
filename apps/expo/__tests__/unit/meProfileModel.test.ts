@@ -57,10 +57,10 @@ describe('profile share model', () => {
       'header.payload.signature'
     );
 
-    expect(model.shortUrl).toBe('https://solidarity.gg/#nostr:npub1alice');
-    expect(model.offlineUrl.startsWith('https://solidarity.gg/#')).toBe(true);
+    expect(model.shortUrl).toBe('https://app.solidarity.gg/#nostr:npub1alice');
+    expect(model.offlineUrl.startsWith('https://app.solidarity.gg/#')).toBe(true);
     expect(model.offlineUrl).not.toContain('SOLIDARITY::');
-    expect(selectProfileShareUrl(model, true)).toBe('https://solidarity.gg/#nostr:npub1alice');
+    expect(selectProfileShareUrl(model, true)).toBe('https://app.solidarity.gg/#nostr:npub1alice');
     expect(selectProfileShareUrl(model, false)).toBe(model.offlineUrl);
   });
 });
