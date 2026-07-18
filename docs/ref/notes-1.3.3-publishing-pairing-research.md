@@ -102,14 +102,23 @@ card.exchange.request(exchangeId、profile digest、size、updatedAt)
 
 ## 6. 交付順序(合併 codex 建議與進行中工作)
 
-1. ✅(進行中)`dns` + `ens` HandleResolver 讀取路徑(R4;codex 實作單 `task-mrqk21lv-fvay1r`)
-2. `@handle` 分享別名進 Me 分享 UI + viewer fail-closed 解析鏈(§2)
-3. `webSignRequest/Response` 型別 + 共用對抗向量(§4;先 schema 後 UI)
-4. App 端 per-action root 簽名(v1 只有 `profile.sign`)+ web 端 request/回收流
-5. Pear 相互導入(§5;先修 snapshot freshness 政策)
-6. 真 SD-JWT / 原子化憑證的攝入與驗證(修 §3 的兩個既有問題)
-7. NIP-78 公開揭露 record(§3;evidence 接上後)
-8. NIP-59 收件人加密非同步 — defer,獨立威脅模型審查後才排
+執行策略:平行 worktree(各自 base = 1.3.3 tip、非 isolation:worktree — 見 memory `worktree-isolation-base-gotcha`),Claude 逐一 review + cherry-pick 回 1.3.3。
+
+**Wave 0(已 commit,branch 1.3.3):**
+- ✅ **R4** `dns`+`ens` HandleResolver 讀取路徑(`6528cc0`/`76f6560`/`7bc7d64`)
+
+**Wave 1(平行進行中,4 worktrees):**
+- 🔄 **T2** `@handle` 分享別名進 Me 分享 UI(§2;只在 binding=verified 才給短連結,沿用 S8h 快取)— `wt/t2-share`
+- 🔄 **T3** `webSignRequest/Response.v1` 型別 + verify 原語 + 對抗向量(§4;packages/shared,additive)— `wt/t3-websign`
+- 🔄 **T5** Pear 相互導入 + snapshot freshness/conflict 政策(§5)— `wt/t5-pear`
+- 🔄 **T6** 真選擇性揭露:presentation 不洩全 VC + import 驗簽(§3;G6 安全路徑)— `wt/t6-vc`
+
+**Wave 2(Wave 1 merge 後):**
+- ⏳ **T4** App 端 per-action root 簽名(v1 只有 `profile.sign`)+ web request/回收流(依賴 T3 schema)
+- ⏳ **T7** 三態隱私分級(public/link-only/private + 雙 record schema;§3 + G4)— 專屬設計 pass,非 fire-and-forget
+- ⏳ viewer fail-closed `@handle` 解析鏈(web 軌;需先重打包 vendored `@solidarity/shared`)
+- ⏳ NIP-78 公開揭露 record(§3;真 SD-JWT evidence 接上後)
+- ⏳ NIP-59 收件人加密非同步 — defer,獨立威脅模型審查後才排
 
 ## 7. 明確不做(1.3.3)
 
