@@ -56,11 +56,26 @@ import {
   parseProfile,
   profileLinkSchema,
   sha256Bytes,
+  stableJSON,
   type ProfileLink,
   type ProfileRecord,
 } from '@solidarity/shared';
 
 const KEY = 'profileSnapshots:v1';
+
+/**
+ * A signed version of a peer's page seen at the SAME `record.updatedAt` as
+ * the stored primary but with DIFFERENT signed content (T5 freshness/conflict
+ * policy). Kept ALONGSIDE the primary — never silently overwriting it — so a
+ * genuine fork ("two devices both signed an edit at the same second") is
+ * surfaced, not lost. Empty in the overwhelmingly common case.
+ */
+export interface VerifiedConflict {
+  readonly record: ProfileRecord;
+  readonly jws: string;
+  /** ISO timestamp of when THIS DEVICE verified this conflicting version. */
+  readonly verifiedAt: string;
+}
 
 export interface VerifiedSnapshot {
   readonly kind: 'verified';
@@ -69,6 +84,15 @@ export interface VerifiedSnapshot {
   readonly jws: string;
   /** ISO timestamp of when THIS DEVICE last locally verified the page. */
   readonly verifiedAt: string;
+  /**
+   * Device-owned free-text annotation. Lives OUTSIDE the signed `record` on
+   * purpose (T5): an incoming/refreshed signed record neither carries nor
+   * clears it, so a note the user wrote survives every freshness merge. Null
+   * when unset — never fabricated.
+   */
+  readonly note: string | null;
+  /** Same-timestamp, different-content forks kept as conflict markers. */
+  readonly conflicts: readonly VerifiedConflict[];
 }
 
 export interface DeclaredSnapshot {
@@ -139,6 +163,106 @@ export function stableDeclaredId(sourceUrl: string): string {
   return bytesToHex(sha256Bytes(normalizeForHashing(sourceUrl))).slice(0, 24);
 }
 
+/**
+ * Result of merging a freshly-verified signed page into the store, keyed by
+ * its root DID (T5 — replaces the old unconditional overwrite). One tagged
+ * union, four outcomes, each carrying the resulting stored primary snapshot:
+ *
+ *   - `saved`          — brand-new DID, or the incoming record's signed
+ *     `updatedAt` is strictly newer than the stored one → the record + jws
+ *     were replaced and `verifiedAt` refreshed (device note preserved).
+ *   - `alreadyCurrent` — byte-identical signed content → only the local
+ *     `verifiedAt` was refreshed (we re-verified the exact same page).
+ *   - `keptNewer`      — the incoming record is OLDER than the stored one →
+ *     the local copy is kept UNCHANGED (its `verifiedAt` is NOT refreshed:
+ *     we did not re-verify the stored newer content, only an older claim).
+ *   - `conflict`       — same `updatedAt`, DIFFERENT signed content → the
+ *     stored primary is kept and the incoming version is recorded as a
+ *     `VerifiedConflict` marker; NEVER a silent overwrite.
+ *
+ * Used by BOTH the Verify-tab revisit-revalidate path and the T5 Pear mutual
+ * card import, so the exact same freshness/conflict semantics apply however a
+ * signed page arrives.
+ */
+export type SnapshotMergeOutcome =
+  | { readonly kind: 'saved'; readonly snapshot: VerifiedSnapshot }
+  | { readonly kind: 'alreadyCurrent'; readonly snapshot: VerifiedSnapshot }
+  | { readonly kind: 'keptNewer'; readonly snapshot: VerifiedSnapshot }
+  | { readonly kind: 'conflict'; readonly snapshot: VerifiedSnapshot };
+
+/** −1 / 0 / +1 comparing two ISO-8601 `updatedAt` strings by their parsed
+ *  instant. Falls back to a stable string compare only if either string is
+ *  unparseable (the schema guarantees valid ISO for stored records, so this
+ *  is defence-in-depth) — an equal/ambiguous result routes to the
+ *  fail-closed `conflict` branch rather than to a silent overwrite. */
+function compareUpdatedAt(a: string, b: string): number {
+  const ta = Date.parse(a);
+  const tb = Date.parse(b);
+  if (Number.isNaN(ta) || Number.isNaN(tb)) return a < b ? -1 : a > b ? 1 : 0;
+  return ta < tb ? -1 : ta > tb ? 1 : 0;
+}
+
+/**
+ * Pure freshness/conflict merge — no store, no I/O, no clock (the caller
+ * passes `nowIso`), so every branch is unit-testable in isolation. Given the
+ * currently-stored verified snapshot for a DID (or `undefined` if none), plus
+ * a freshly-verified `record`/`jws`, returns the outcome AND the snapshot to
+ * persist. The caller is responsible for actually writing `outcome.snapshot`.
+ */
+export function mergeVerifiedSnapshot(
+  existing: VerifiedSnapshot | undefined,
+  record: ProfileRecord,
+  jws: string,
+  nowIso: string
+): SnapshotMergeOutcome {
+  if (!existing) {
+    return {
+      kind: 'saved',
+      snapshot: { kind: 'verified', did: record.did, record, jws, verifiedAt: nowIso, note: null, conflicts: [] },
+    };
+  }
+
+  const incomingContent = stableJSON(record);
+  if (incomingContent === stableJSON(existing.record)) {
+    // Same signed content — we just re-verified the exact page. Refresh
+    // `verifiedAt` and adopt the fresh `jws` (ECDSA re-signs to a different
+    // signature over identical bytes), but keep the device note + conflicts.
+    return { kind: 'alreadyCurrent', snapshot: { ...existing, jws, verifiedAt: nowIso } };
+  }
+
+  const cmp = compareUpdatedAt(record.updatedAt, existing.record.updatedAt);
+  if (cmp > 0) {
+    // Strictly newer — replace record + jws, refresh verifiedAt, PRESERVE the
+    // device note, and drop the old conflicts (they were forks of the now
+    // superseded older `updatedAt`).
+    return {
+      kind: 'saved',
+      snapshot: {
+        kind: 'verified',
+        did: existing.did,
+        record,
+        jws,
+        verifiedAt: nowIso,
+        note: existing.note,
+        conflicts: [],
+      },
+    };
+  }
+  if (cmp < 0) {
+    // Older than what we hold — keep the local copy exactly as-is.
+    return { kind: 'keptNewer', snapshot: existing };
+  }
+
+  // Equal `updatedAt`, different content — a genuine fork. Keep the primary,
+  // record the incoming as a conflict marker (deduped by content so an
+  // idempotent retry doesn't append duplicates), and NEVER overwrite.
+  const alreadyRecorded = existing.conflicts.some((c) => stableJSON(c.record) === incomingContent);
+  const conflicts = alreadyRecorded
+    ? existing.conflicts
+    : [...existing.conflicts, { record, jws, verifiedAt: nowIso }];
+  return { kind: 'conflict', snapshot: { ...existing, conflicts } };
+}
+
 const declaredLinksSchema = z.array(profileLinkSchema);
 
 interface PersistedVerifiedEntry {
@@ -146,6 +270,8 @@ interface PersistedVerifiedEntry {
   readonly record: unknown;
   readonly jws: unknown;
   readonly verifiedAt: unknown;
+  readonly note?: unknown; // absent on pre-T5 entries — back-compat
+  readonly conflicts?: unknown; // absent on pre-T5 entries — back-compat
 }
 
 interface PersistedDeclaredEntry {
@@ -162,6 +288,63 @@ function isPersistedDeclared(entry: PersistedEntry): entry is PersistedDeclaredE
   return entry.kind === 'declared';
 }
 
+/** Re-validate a persisted `conflicts` array (T5) per-entry: each conflict's
+ *  `record` must still `parseProfile`, `jws`/`verifiedAt` must be non-empty
+ *  strings. Anything malformed is dropped, matching the whole-store
+ *  fail-closed-per-entry policy — a corrupt conflict never nukes its primary.
+ *  A pre-T5 entry has no `conflicts` field at all → an empty list. */
+function readPersistedConflicts(raw: unknown): readonly VerifiedConflict[] {
+  if (!Array.isArray(raw)) return [];
+  const out: VerifiedConflict[] = [];
+  for (const item of raw) {
+    if (item === null || typeof item !== 'object') continue;
+    const c = item as { readonly record?: unknown; readonly jws?: unknown; readonly verifiedAt?: unknown };
+    if (typeof c.jws !== 'string' || c.jws.length === 0) continue;
+    if (typeof c.verifiedAt !== 'string' || c.verifiedAt.length === 0) continue;
+    const parsed = parseProfile(c.record);
+    if (!parsed.ok) continue;
+    out.push({ record: parsed.value, jws: c.jws, verifiedAt: c.verifiedAt });
+  }
+  return out;
+}
+
+/** Hydrate one persisted DECLARED entry (or `null` if malformed). */
+function readPersistedDeclared(key: string, entry: PersistedDeclaredEntry): DeclaredSnapshot | null {
+  if (typeof entry.sourceUrl !== 'string' || entry.sourceUrl.length === 0) return null;
+  if (typeof entry.importedAt !== 'string' || entry.importedAt.length === 0) return null;
+  const linksResult = declaredLinksSchema.safeParse(entry.links);
+  if (!linksResult.success) return null;
+  return {
+    kind: 'declared',
+    id: key,
+    did: null,
+    sourceUrl: entry.sourceUrl,
+    title: typeof entry.title === 'string' ? entry.title : null,
+    links: linksResult.data,
+    importedAt: entry.importedAt,
+  };
+}
+
+/** Hydrate one persisted VERIFIED entry (or `null` if malformed). A pre-A2.4
+ *  entry with no `kind` and a pre-T5 entry with no `note`/`conflicts` both
+ *  flow through here unchanged (back-compat via optional fields). */
+function readPersistedVerified(entry: PersistedVerifiedEntry): VerifiedSnapshot | null {
+  if (typeof entry.jws !== 'string' || entry.jws.length === 0) return null;
+  if (typeof entry.verifiedAt !== 'string' || entry.verifiedAt.length === 0) return null;
+  const validated = parseProfile(entry.record);
+  if (!validated.ok) return null;
+  const note = typeof entry.note === 'string' && entry.note.trim().length > 0 ? entry.note : null;
+  return {
+    kind: 'verified',
+    did: validated.value.did,
+    record: validated.value,
+    jws: entry.jws,
+    verifiedAt: entry.verifiedAt,
+    note,
+    conflicts: readPersistedConflicts(entry.conflicts),
+  };
+}
+
 function readPersisted(): ReadonlyMap<string, ProfileSnapshot> {
   const out = new Map<string, ProfileSnapshot>();
   try {
@@ -175,38 +358,10 @@ function readPersisted(): ReadonlyMap<string, ProfileSnapshot> {
     for (const [key, rawEntry] of Object.entries(parsed)) {
       if (rawEntry === null || typeof rawEntry !== 'object') continue;
       const entry = rawEntry as PersistedEntry;
-
-      if (isPersistedDeclared(entry)) {
-        if (typeof entry.sourceUrl !== 'string' || entry.sourceUrl.length === 0) continue;
-        if (typeof entry.importedAt !== 'string' || entry.importedAt.length === 0) continue;
-        const linksResult = declaredLinksSchema.safeParse(entry.links);
-        if (!linksResult.success) continue;
-        const title = typeof entry.title === 'string' ? entry.title : null;
-        out.set(key, {
-          kind: 'declared',
-          id: key,
-          did: null,
-          sourceUrl: entry.sourceUrl,
-          title,
-          links: linksResult.data,
-          importedAt: entry.importedAt,
-        });
-        continue;
-      }
-
-      // No `kind`, or explicit `kind: 'verified'` — identical validation
-      // path either way, so a legacy (pre-A2.4) blob hydrates unchanged.
-      if (typeof entry.jws !== 'string' || entry.jws.length === 0) continue;
-      if (typeof entry.verifiedAt !== 'string' || entry.verifiedAt.length === 0) continue;
-      const validated = parseProfile(entry.record);
-      if (!validated.ok) continue;
-      out.set(key, {
-        kind: 'verified',
-        did: validated.value.did,
-        record: validated.value,
-        jws: entry.jws,
-        verifiedAt: entry.verifiedAt,
-      });
+      const snapshot = isPersistedDeclared(entry)
+        ? readPersistedDeclared(key, entry)
+        : readPersistedVerified(entry);
+      if (snapshot) out.set(key, snapshot);
     }
   } catch {
     // Corrupt MMKV blob — fail closed to an empty snapshot set.
@@ -220,7 +375,18 @@ function writePersisted(snapshots: ReadonlyMap<string, ProfileSnapshot>): void {
     for (const [key, snapshot] of snapshots) {
       plain[key] =
         snapshot.kind === 'verified'
-          ? { kind: 'verified', record: snapshot.record, jws: snapshot.jws, verifiedAt: snapshot.verifiedAt }
+          ? {
+              kind: 'verified',
+              record: snapshot.record,
+              jws: snapshot.jws,
+              verifiedAt: snapshot.verifiedAt,
+              note: snapshot.note,
+              conflicts: snapshot.conflicts.map((c) => ({
+                record: c.record,
+                jws: c.jws,
+                verifiedAt: c.verifiedAt,
+              })),
+            }
           : {
               kind: 'declared',
               sourceUrl: snapshot.sourceUrl,
@@ -239,10 +405,19 @@ function writePersisted(snapshots: ReadonlyMap<string, ProfileSnapshot>): void {
 
 interface ProfileSnapshotState {
   readonly snapshots: ReadonlyMap<string, ProfileSnapshot>;
-  /** Insert-or-replace by `record.did`. Always a fresh `verifiedAt` — this
-   * device just re-verified the page, even if the record content is
-   * unchanged from a previous scan. */
-  readonly upsert: (record: ProfileRecord, jws: string) => VerifiedSnapshot;
+  /**
+   * Merge a freshly-verified signed page into the store, keyed by
+   * `record.did`, applying the T5 freshness/conflict policy
+   * (`mergeVerifiedSnapshot`) instead of the old unconditional overwrite.
+   * Returns the tagged `SnapshotMergeOutcome` so a caller can HONESTLY report
+   * what happened (saved / already current / kept newer / conflict) — the
+   * distinction the Pear mutual-import receipt and the scan-result toast both
+   * depend on. Preserves any device note across updates.
+   */
+  readonly mergeVerified: (record: ProfileRecord, jws: string) => SnapshotMergeOutcome;
+  /** Set (or clear, with `null`/blank) the device-owned note for a saved
+   *  verified snapshot. No-op if the DID isn't a saved verified page. */
+  readonly setNote: (did: string, note: string | null) => void;
   /** Insert-or-replace by `stableDeclaredId(sourceUrl)` — re-pasting the
    * same link page updates the saved link list rather than duplicating. */
   readonly upsertDeclared: (
@@ -255,19 +430,28 @@ interface ProfileSnapshotState {
 export const useProfileSnapshotStore = create<ProfileSnapshotState>((set, get) => ({
   snapshots: new Map(),
 
-  upsert: (record, jws) => {
-    const snapshot: VerifiedSnapshot = {
-      kind: 'verified',
-      did: record.did,
-      record,
-      jws,
-      verifiedAt: new Date().toISOString(),
-    };
+  mergeVerified: (record, jws) => {
+    const current = get().snapshots.get(record.did);
+    const existing = current?.kind === 'verified' ? current : undefined;
+    const outcome = mergeVerifiedSnapshot(existing, record, jws, new Date().toISOString());
+    // `keptNewer` returns the existing snapshot reference unchanged, so this
+    // set is a harmless no-op there; every other outcome carries the mutated
+    // primary to persist.
     const next = new Map(get().snapshots);
-    next.set(record.did, snapshot);
+    next.set(record.did, outcome.snapshot);
     writePersisted(next);
     set({ snapshots: next });
-    return snapshot;
+    return outcome;
+  },
+
+  setNote: (did, note) => {
+    const current = get().snapshots.get(did);
+    if (current?.kind !== 'verified') return;
+    const trimmed = note?.trim() ?? '';
+    const next = new Map(get().snapshots);
+    next.set(did, { ...current, note: trimmed.length > 0 ? trimmed : null });
+    writePersisted(next);
+    set({ snapshots: next });
   },
 
   upsertDeclared: (sourceUrl, title, links) => {

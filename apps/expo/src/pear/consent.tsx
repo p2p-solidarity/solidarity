@@ -34,9 +34,16 @@ import type { ConsentDecision } from './cardRelease';
 import type { PresentableClaim } from './presentBuilder';
 import type { PresentConsentDecision } from './presentRelease';
 
+/** `'release'` — a one-way `card.request`: they get your card, you get
+ *  nothing back. `'exchange'` — a T5 MUTUAL swap: you BOTH share your public
+ *  page. The copy must be honest about which, so the user knows what leaves
+ *  the device. */
+type ConsentVariant = 'release' | 'exchange';
+
 interface ConsentRequest {
   readonly id: number;
   readonly peerLabel: string;
+  readonly variant: ConsentVariant;
   readonly resolve: (decision: ConsentDecision) => void;
 }
 
@@ -73,7 +80,19 @@ const useConsentStore = create<ConsentStore>((set, get) => ({
  */
 export function askCardConsent(peerLabel: string): Promise<ConsentDecision> {
   return new Promise((resolve) => {
-    useConsentStore.getState().push({ peerLabel, resolve });
+    useConsentStore.getState().push({ peerLabel, variant: 'release', resolve });
+  });
+}
+
+/**
+ * Show the consent sheet for an incoming T5 MUTUAL `card.exchange.request`
+ * from `peerLabel`. Same imperative-queue + dismiss-is-decline contract as
+ * `askCardConsent`, but the copy makes clear this is a two-way swap (both
+ * sides share their public page), not a one-way release.
+ */
+export function askExchangeConsent(peerLabel: string): Promise<ConsentDecision> {
+  return new Promise((resolve) => {
+    useConsentStore.getState().push({ peerLabel, variant: 'exchange', resolve });
   });
 }
 
@@ -108,10 +127,19 @@ export function PearConsentOverlay(): ReactNode {
           <Pressable onPress={absorbPress} style={styles.cardWrap}>
             <ThemedSurface variant="elevated" padded>
               <ThemedText variant="titleMedium" style={styles.title}>
-                {t('pearExchange.consent.title', { name: head.peerLabel })}
+                {t(
+                  head.variant === 'exchange'
+                    ? 'pearExchange.mutual.consent.title'
+                    : 'pearExchange.consent.title',
+                  { name: head.peerLabel }
+                )}
               </ThemedText>
               <ThemedText variant="bodyMedium" tone="secondary" style={styles.message}>
-                {t('pearExchange.consent.message')}
+                {t(
+                  head.variant === 'exchange'
+                    ? 'pearExchange.mutual.consent.message'
+                    : 'pearExchange.consent.message'
+                )}
               </ThemedText>
               <View style={styles.actions}>
                 <ThemedButton

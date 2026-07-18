@@ -435,6 +435,17 @@ export function createPearSession(ch: AuthenticatedChannel, opts: PearSessionOpt
       case 'present.decline':
         handlePresentDeclineFrame(frame);
         return;
+      case 'card.exchange.request':
+      case 'card.exchange.accept':
+      case 'card.exchange.decline':
+      case 'card.exchange.offer':
+      case 'card.exchange.receipt':
+        // T5 MUTUAL exchange frames — owned by `mutualExchange.ts`'s
+        // `createMutualExchange`, which rides the SAME AuthenticatedChannel.
+        // Ignore here so a co-mounted PearSession doesn't report them as
+        // unknown-type protocol errors (the mutual exchange symmetrically
+        // ignores this module's `card.*`/`present.*` frames).
+        return;
       default:
         reportProtocolError(frame, `unknown pear protocol message type: ${JSON.stringify(t)}`);
         return;

@@ -40,6 +40,7 @@ import { Colors } from '@/constants/Colors';
 import { pushToast } from '@/feedback/toast';
 import { useTranslation } from '@/i18n';
 import { useProfileSnapshotStore } from '@/people/profileSnapshots';
+import { snapshotMergeToast } from '@/people/snapshotMergeCopy';
 import { CARD_REQUEST_ERROR_I18N_SUFFIX, type CardRequestPhase } from '@/pear/cardRequestState';
 import { useCardRequestFlow } from '@/pear/useCardExchange';
 import { usePreferences } from '@/settings/preferences';
@@ -95,7 +96,7 @@ function DisabledPearConnectSection(): ReactNode {
 function EnabledPearConnectSection({ did }: PearConnectSectionProps): ReactNode {
   const { t } = useTranslation();
   const requestFlow = useCardRequestFlow(did);
-  const upsert = useProfileSnapshotStore((s) => s.upsert);
+  const mergeVerified = useProfileSnapshotStore((s) => s.mergeVerified);
   const [saving, setSaving] = useState(false);
 
   const phase = requestFlow.phase;
@@ -104,9 +105,10 @@ function EnabledPearConnectSection({ did }: PearConnectSectionProps): ReactNode 
   const onSave = (): void => {
     if (phase.kind !== 'received' || saving) return;
     setSaving(true);
-    upsert(phase.record, phase.cardJws);
+    const outcome = mergeVerified(phase.record, phase.cardJws);
     setSaving(false);
-    pushToast(t('verifiedPage.saved'), 'success');
+    const toast = snapshotMergeToast(outcome.kind);
+    pushToast(t(toast.i18nKey), toast.tone);
   };
 
   return (

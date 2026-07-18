@@ -29,6 +29,7 @@ import { confirmDialog } from '@/feedback/confirmDialog';
 import { pushToast } from '@/feedback/toast';
 import { useTranslation } from '@/i18n';
 import { useProfileSnapshot, useProfileSnapshotStore } from '@/people/profileSnapshots';
+import { snapshotMergeToast } from '@/people/snapshotMergeCopy';
 import { useVerifiedPageResult } from '@/scan/verifiedPageResult';
 import type { VerifiedPageErrorReason } from '@/scan/verifiedPageHandler';
 
@@ -39,7 +40,7 @@ export function VerifiedPageResultSheet(): ReactNode {
   const result = useVerifiedPageResult((s) => s.result);
   const resolving = useVerifiedPageResult((s) => s.resolving);
   const dismiss = useVerifiedPageResult((s) => s.dismiss);
-  const upsert = useProfileSnapshotStore((s) => s.upsert);
+  const mergeVerified = useProfileSnapshotStore((s) => s.mergeVerified);
   const existing = useProfileSnapshot(result?.kind === 'verified' ? result.record.did : undefined);
   const [saving, setSaving] = useState(false);
   const insets = useSafeAreaInsets();
@@ -58,9 +59,10 @@ export function VerifiedPageResultSheet(): ReactNode {
       if (!ok) return;
     }
     setSaving(true);
-    upsert(result.record, result.jws);
+    const outcome = mergeVerified(result.record, result.jws);
     setSaving(false);
-    pushToast(t('verifiedPage.saved'), 'success');
+    const toast = snapshotMergeToast(outcome.kind);
+    pushToast(t(toast.i18nKey), toast.tone);
     const did = result.record.did;
     dismiss();
     router.push({ pathname: '/people/profile/[did]', params: { did } });

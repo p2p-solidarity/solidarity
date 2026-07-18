@@ -31,6 +31,7 @@ import { Colors } from '@/constants/Colors';
 import { pushToast } from '@/feedback/toast';
 import { useTranslation } from '@/i18n';
 import { useProfileSnapshotStore } from '@/people/profileSnapshots';
+import { snapshotMergeToast } from '@/people/snapshotMergeCopy';
 import { formatPeerLabel } from '@/pear/cardRelease';
 import { CARD_REQUEST_ERROR_I18N_SUFFIX, type CardRequestPhase } from '@/pear/cardRequestState';
 import type { PresentRequestErrorKind, PresentRequestPhase } from '@/pear/presentRequestState';
@@ -40,6 +41,7 @@ import {
   type ReachableErrorKind,
   type ReachableStatus,
 } from '@/pear/useCardExchange';
+import { useMutualCardExchange, type MutualExchangePhase } from '@/pear/useMutualCardExchange';
 import { usePresentRequestFlow } from '@/pear/usePresentRequestFlow';
 import { usePreferences } from '@/settings/preferences';
 
@@ -110,6 +112,68 @@ function RequestStatusLine({ phase, t }: { readonly phase: CardRequestPhase; rea
     return (
       <ThemedText variant="caption" tone="error">
         {t(`pearExchange.request.error.${CARD_REQUEST_ERROR_I18N_SUFFIX[phase.error.kind]}`)}
+      </ThemedText>
+    );
+  }
+  return null;
+}
+
+function mutualButtonLabel(phase: MutualExchangePhase, t: (key: string) => string): string {
+  switch (phase.kind) {
+    case 'connecting':
+      return t('pearExchange.mutual.state.connecting');
+    case 'authenticating':
+      return t('pearExchange.mutual.state.authenticating');
+    case 'exchanging':
+      return t('pearExchange.mutual.state.exchanging');
+    case 'done':
+    case 'declined':
+    case 'error':
+      return t('pearExchange.mutual.retry');
+    case 'idle':
+      return t('pearExchange.mutual.button');
+  }
+}
+
+/** The two INDEPENDENT honesty axes of a completed exchange, never conflated
+ *  (research §5): what WE saved locally, and what the PEER told us they did —
+ *  including the distinct "no confirmation yet" (`unknown`) state that a
+ *  dropped/late receipt produces. */
+function MutualResultView({
+  phase,
+  t,
+}: {
+  readonly phase: Extract<MutualExchangePhase, { kind: 'done' }>;
+  readonly t: (key: string) => string;
+}): ReactNode {
+  const peerUnknown = phase.result.peerReceipt === 'unknown';
+  return (
+    <ThemedSurface variant="inset" padded style={{ gap: 6 }}>
+      <ThemedText variant="label" tone="secondary">
+        {t('pearExchange.mutual.result.title')}
+      </ThemedText>
+      <ThemedText variant="caption" tone="tertiary">
+        {t(`pearExchange.mutual.localSave.${phase.result.localSave}`)}
+      </ThemedText>
+      <ThemedText variant="caption" tone={peerUnknown ? 'secondary' : 'tertiary'}>
+        {t(`pearExchange.mutual.peer.${phase.result.peerReceipt}`)}
+      </ThemedText>
+    </ThemedSurface>
+  );
+}
+
+function MutualStatusLine({ phase, t }: { readonly phase: MutualExchangePhase; readonly t: (key: string) => string }): ReactNode {
+  if (phase.kind === 'declined') {
+    return (
+      <ThemedText variant="caption" tone="secondary">
+        {t('pearExchange.mutual.declinedMessage')}
+      </ThemedText>
+    );
+  }
+  if (phase.kind === 'error') {
+    return (
+      <ThemedText variant="caption" tone="error">
+        {t(`pearExchange.mutual.error.${CARD_REQUEST_ERROR_I18N_SUFFIX[phase.error.kind]}`)}
       </ThemedText>
     );
   }
@@ -238,12 +302,18 @@ function EnabledCardExchangeSection({ did, verifiedDisplayName }: CardExchangeSe
   const peerLabel = formatPeerLabel(did, verifiedDisplayName);
   const requestFlow = useCardRequestFlow(did);
   const presentFlow = usePresentRequestFlow(did, PRESENT_CLAIMS);
+  const exchangeFlow = useMutualCardExchange(did);
   const reachable = useReachableMode(did, peerLabel);
-  const upsert = useProfileSnapshotStore((s) => s.upsert);
+  const mergeVerified = useProfileSnapshotStore((s) => s.mergeVerified);
   const [saving, setSaving] = useState(false);
 
   const phase = requestFlow.phase;
   const requestBusy = phase.kind === 'connecting' || phase.kind === 'authenticating' || phase.kind === 'requesting';
+  const exchangePhase = exchangeFlow.phase;
+  const exchangeBusy =
+    exchangePhase.kind === 'connecting' ||
+    exchangePhase.kind === 'authenticating' ||
+    exchangePhase.kind === 'exchanging';
   const presentPhase = presentFlow.phase;
   const presentBusy =
     presentPhase.kind === 'connecting' ||
@@ -260,9 +330,10 @@ function EnabledCardExchangeSection({ did, verifiedDisplayName }: CardExchangeSe
     // that's ALREADY a saved `VerifiedSnapshot` (that's how the user
     // navigated here), so an update is always the intended outcome, not a
     // surprising side effect worth double-confirming.
-    upsert(phase.record, phase.cardJws);
+    const outcome = mergeVerified(phase.record, phase.cardJws);
     setSaving(false);
-    pushToast(t('verifiedPage.saved'), 'success');
+    const toast = snapshotMergeToast(outcome.kind);
+    pushToast(t(toast.i18nKey), toast.tone);
     requestFlow.reset();
   };
 
@@ -298,6 +369,25 @@ function EnabledCardExchangeSection({ did, verifiedDisplayName }: CardExchangeSe
             />
           </View>
         ) : null}
+      </ThemedSurface>
+
+      <ThemedSurface variant="outlined" padded style={{ gap: 12 }}>
+        <ThemedButton
+          label={mutualButtonLabel(exchangePhase, t)}
+          variant="secondary"
+          fullWidth
+          loading={exchangeBusy}
+          disabled={exchangeBusy}
+          leadingIcon={<SfIcon name="arrow.left.arrow.right.circle" size={16} color={Colors.text1} />}
+          onPress={() => {
+            exchangeFlow.start();
+          }}
+        />
+        <ThemedText variant="caption" tone="tertiary">
+          {t('pearExchange.mutual.subtitle', { name: peerLabel })}
+        </ThemedText>
+        <MutualStatusLine phase={exchangePhase} t={t} />
+        {exchangePhase.kind === 'done' ? <MutualResultView phase={exchangePhase} t={t} /> : null}
       </ThemedSurface>
 
       <ThemedSurface variant="outlined" padded style={{ gap: 12 }}>

@@ -30,13 +30,27 @@ interface DeclaredLink {
   readonly url: string;
 }
 
+interface VerifiedConflictShape {
+  readonly record: ProfileRecord;
+  readonly jws: string;
+  readonly verifiedAt: string;
+}
+
 interface VerifiedSnapshotShape {
   readonly kind: 'verified';
   readonly did: string;
   readonly record: ProfileRecord;
   readonly jws: string;
   readonly verifiedAt: string;
+  readonly note: string | null;
+  readonly conflicts: readonly VerifiedConflictShape[];
 }
+
+type MergeOutcomeShape =
+  | { readonly kind: 'saved'; readonly snapshot: VerifiedSnapshotShape }
+  | { readonly kind: 'alreadyCurrent'; readonly snapshot: VerifiedSnapshotShape }
+  | { readonly kind: 'keptNewer'; readonly snapshot: VerifiedSnapshotShape }
+  | { readonly kind: 'conflict'; readonly snapshot: VerifiedSnapshotShape };
 
 interface DeclaredSnapshotShape {
   readonly kind: 'declared';
@@ -54,7 +68,8 @@ interface ProfileSnapshotModuleSurface {
   readonly useProfileSnapshotStore: {
     getState: () => {
       readonly snapshots: ReadonlyMap<string, SnapshotShape>;
-      readonly upsert: (record: ProfileRecord, jws: string) => VerifiedSnapshotShape;
+      readonly mergeVerified: (record: ProfileRecord, jws: string) => MergeOutcomeShape;
+      readonly setNote: (did: string, note: string | null) => void;
       readonly upsertDeclared: (
         sourceUrl: string,
         title: string | null,
@@ -67,6 +82,12 @@ interface ProfileSnapshotModuleSurface {
   readonly getProfileSnapshot: (did: string) => VerifiedSnapshotShape | undefined;
   readonly getDeclaredSnapshot: (id: string) => DeclaredSnapshotShape | undefined;
   readonly stableDeclaredId: (sourceUrl: string) => string;
+  readonly mergeVerifiedSnapshot: (
+    existing: VerifiedSnapshotShape | undefined,
+    record: ProfileRecord,
+    jws: string,
+    nowIso: string
+  ) => MergeOutcomeShape;
   readonly sortedProfileSnapshots: (snapshots: ReadonlyMap<string, SnapshotShape>) => readonly SnapshotShape[];
 }
 
@@ -112,7 +133,7 @@ beforeEach(() => {
 
 describe('upsert — persists and round-trips through MMKV', () => {
   it('persists a snapshot readable back after hydrate (simulated app restart)', () => {
-    mod.useProfileSnapshotStore.getState().upsert(record({ displayName: 'Alice' }), 'a.b.c');
+    mod.useProfileSnapshotStore.getState().mergeVerified(record({ displayName: 'Alice' }), 'a.b.c');
     expect(mod.getProfileSnapshot('did:key:zAlice')).toBeDefined();
 
     mod.useProfileSnapshotStore.setState({ snapshots: new Map() });
@@ -124,20 +145,24 @@ describe('upsert — persists and round-trips through MMKV', () => {
     expect(restored?.did).toBe('did:key:zAlice');
   });
 
-  it('re-scanning the same did overwrites in place, not a second entry', () => {
-    mod.useProfileSnapshotStore.getState().upsert(record({ displayName: 'Alice' }), 'a.b.c');
-    mod.useProfileSnapshotStore.getState().upsert(record({ displayName: 'Alice V2' }), 'x.y.z');
+  it('re-scanning the same did with a NEWER record overwrites in place, not a second entry', () => {
+    mod.useProfileSnapshotStore.getState().mergeVerified(record({ displayName: 'Alice' }), 'a.b.c');
+    const outcome = mod.useProfileSnapshotStore
+      .getState()
+      .mergeVerified(record({ displayName: 'Alice V2', updatedAt: '2026-07-04T00:00:00Z' }), 'x.y.z');
 
+    expect(outcome.kind).toBe('saved');
     expect(mod.useProfileSnapshotStore.getState().snapshots.size).toBe(1);
-    const snap = mod.getProfileSnapshot('did:key:zAlice');
-    expect(snap).toBeDefined();
+    expect(mod.getProfileSnapshot('did:key:zAlice')?.record.displayName).toBe('Alice V2');
   });
 
-  it('refreshes verifiedAt on every upsert, even for unchanged content', async () => {
-    const first = mod.useProfileSnapshotStore.getState().upsert(record(), 'a.b.c');
+  it('refreshes verifiedAt on a re-scan of identical content (alreadyCurrent)', async () => {
+    const first = mod.useProfileSnapshotStore.getState().mergeVerified(record(), 'a.b.c');
+    expect(first.kind).toBe('saved');
     await new Promise((resolve) => setTimeout(resolve, 5));
-    const second = mod.useProfileSnapshotStore.getState().upsert(record(), 'a.b.c');
-    expect(Date.parse(second.verifiedAt)).toBeGreaterThanOrEqual(Date.parse(first.verifiedAt));
+    const second = mod.useProfileSnapshotStore.getState().mergeVerified(record(), 'a.b.c');
+    expect(second.kind).toBe('alreadyCurrent');
+    expect(Date.parse(second.snapshot.verifiedAt)).toBeGreaterThanOrEqual(Date.parse(first.snapshot.verifiedAt));
   });
 });
 
@@ -181,23 +206,23 @@ describe('sortedProfileSnapshots — newest verifiedAt first (People tab section
   });
 
   it('orders multiple snapshots by verifiedAt descending, independent of insertion order', async () => {
-    mod.useProfileSnapshotStore.getState().upsert(record({ did: 'did:key:zA', displayName: 'A' }), 'a.b.c');
+    mod.useProfileSnapshotStore.getState().mergeVerified(record({ did: 'did:key:zA', displayName: 'A' }), 'a.b.c');
     await new Promise((resolve) => setTimeout(resolve, 5));
-    mod.useProfileSnapshotStore.getState().upsert(record({ did: 'did:key:zB', displayName: 'B' }), 'a.b.c');
+    mod.useProfileSnapshotStore.getState().mergeVerified(record({ did: 'did:key:zB', displayName: 'B' }), 'a.b.c');
     await new Promise((resolve) => setTimeout(resolve, 5));
-    mod.useProfileSnapshotStore.getState().upsert(record({ did: 'did:key:zC', displayName: 'C' }), 'a.b.c');
+    mod.useProfileSnapshotStore.getState().mergeVerified(record({ did: 'did:key:zC', displayName: 'C' }), 'a.b.c');
 
     const sorted = mod.sortedProfileSnapshots(mod.useProfileSnapshotStore.getState().snapshots);
     expect(sorted.map((s) => s.did)).toEqual(['did:key:zC', 'did:key:zB', 'did:key:zA']);
   });
 
   it('re-scanning (upsert on an existing did) moves it back to the front', async () => {
-    mod.useProfileSnapshotStore.getState().upsert(record({ did: 'did:key:zA', displayName: 'A' }), 'a.b.c');
+    mod.useProfileSnapshotStore.getState().mergeVerified(record({ did: 'did:key:zA', displayName: 'A' }), 'a.b.c');
     await new Promise((resolve) => setTimeout(resolve, 5));
-    mod.useProfileSnapshotStore.getState().upsert(record({ did: 'did:key:zB', displayName: 'B' }), 'a.b.c');
+    mod.useProfileSnapshotStore.getState().mergeVerified(record({ did: 'did:key:zB', displayName: 'B' }), 'a.b.c');
     await new Promise((resolve) => setTimeout(resolve, 5));
     // Re-scan A — its verifiedAt refreshes even though the did already exists.
-    mod.useProfileSnapshotStore.getState().upsert(record({ did: 'did:key:zA', displayName: 'A' }), 'x.y.z');
+    mod.useProfileSnapshotStore.getState().mergeVerified(record({ did: 'did:key:zA', displayName: 'A' }), 'x.y.z');
 
     const sorted = mod.sortedProfileSnapshots(mod.useProfileSnapshotStore.getState().snapshots);
     expect(sorted.map((s) => s.did)).toEqual(['did:key:zA', 'did:key:zB']);
@@ -331,14 +356,14 @@ describe('sortedProfileSnapshots — mixed kinds: verified first, then declared 
     // ...then a verified entry is scanned LATER (newer verifiedAt). A naive
     // single-timestamp sort would still put verified first here, so this
     // alone doesn't prove the "kind" precedence — the next assertion does.
-    mod.useProfileSnapshotStore.getState().upsert(record({ did: 'did:key:zNewVerified', displayName: 'New Verified' }), 'a.b.c');
+    mod.useProfileSnapshotStore.getState().mergeVerified(record({ did: 'did:key:zNewVerified', displayName: 'New Verified' }), 'a.b.c');
 
     const sorted = mod.sortedProfileSnapshots(mod.useProfileSnapshotStore.getState().snapshots);
     expect(sorted.map((s) => s.kind)).toEqual(['verified', 'declared']);
   });
 
   it('an OLDER verified entry still sorts before a NEWER declared entry (kind beats recency)', async () => {
-    mod.useProfileSnapshotStore.getState().upsert(record({ did: 'did:key:zOldVerified', displayName: 'Old Verified' }), 'a.b.c');
+    mod.useProfileSnapshotStore.getState().mergeVerified(record({ did: 'did:key:zOldVerified', displayName: 'Old Verified' }), 'a.b.c');
     await new Promise((resolve) => setTimeout(resolve, 5));
     mod.useProfileSnapshotStore.getState().upsertDeclared('https://new-declared.example/', 'New Declared', []);
 
@@ -347,9 +372,9 @@ describe('sortedProfileSnapshots — mixed kinds: verified first, then declared 
   });
 
   it('within each kind, newest timestamp sorts first', async () => {
-    mod.useProfileSnapshotStore.getState().upsert(record({ did: 'did:key:zV1', displayName: 'V1' }), 'a.b.c');
+    mod.useProfileSnapshotStore.getState().mergeVerified(record({ did: 'did:key:zV1', displayName: 'V1' }), 'a.b.c');
     await new Promise((resolve) => setTimeout(resolve, 5));
-    mod.useProfileSnapshotStore.getState().upsert(record({ did: 'did:key:zV2', displayName: 'V2' }), 'a.b.c');
+    mod.useProfileSnapshotStore.getState().mergeVerified(record({ did: 'did:key:zV2', displayName: 'V2' }), 'a.b.c');
     await new Promise((resolve) => setTimeout(resolve, 5));
     mod.useProfileSnapshotStore.getState().upsertDeclared('https://d1.example/', 'D1', []);
     await new Promise((resolve) => setTimeout(resolve, 5));
@@ -360,5 +385,153 @@ describe('sortedProfileSnapshots — mixed kinds: verified first, then declared 
     const declaredIds = sorted.filter((s) => s.kind === 'declared').map((s) => s.sourceUrl);
     expect(verifiedDids).toEqual(['did:key:zV2', 'did:key:zV1']);
     expect(declaredIds).toEqual(['https://d2.example/', 'https://d1.example/']);
+  });
+});
+
+// ── T5 freshness/conflict merge policy ─────────────────────────────────────
+
+function verified(overrides: Partial<VerifiedSnapshotShape> = {}): VerifiedSnapshotShape {
+  return {
+    kind: 'verified',
+    did: 'did:key:zAlice',
+    record: record(),
+    jws: 'a.b.c',
+    verifiedAt: '2026-07-03T00:00:00Z',
+    note: null,
+    conflicts: [],
+    ...overrides,
+  };
+}
+
+const NOW = '2026-07-10T12:00:00Z';
+
+describe('mergeVerifiedSnapshot — pure freshness/conflict branches', () => {
+  it('no existing entry → saved, fresh verifiedAt, empty note/conflicts', () => {
+    const out = mod.mergeVerifiedSnapshot(undefined, record(), 'a.b.c', NOW);
+    expect(out.kind).toBe('saved');
+    expect(out.snapshot.verifiedAt).toBe(NOW);
+    expect(out.snapshot.note).toBeNull();
+    expect(out.snapshot.conflicts).toEqual([]);
+  });
+
+  it('byte-identical signed content → alreadyCurrent, only verifiedAt refreshed', () => {
+    const existing = verified({ verifiedAt: '2026-07-01T00:00:00Z' });
+    const out = mod.mergeVerifiedSnapshot(existing, record(), 'newsig.b.c', NOW);
+    expect(out.kind).toBe('alreadyCurrent');
+    expect(out.snapshot.verifiedAt).toBe(NOW);
+    // Same content → the record is unchanged; the fresh signature is adopted.
+    expect(out.snapshot.record.displayName).toBe('Alice');
+    expect(out.snapshot.jws).toBe('newsig.b.c');
+  });
+
+  it('strictly newer updatedAt → saved (replaces record + jws), verifiedAt refreshed', () => {
+    const existing = verified();
+    const newer = record({ displayName: 'Alice V2', updatedAt: '2026-07-05T00:00:00Z' });
+    const out = mod.mergeVerifiedSnapshot(existing, newer, 'x.y.z', NOW);
+    expect(out.kind).toBe('saved');
+    expect(out.snapshot.record.displayName).toBe('Alice V2');
+    expect(out.snapshot.jws).toBe('x.y.z');
+    expect(out.snapshot.verifiedAt).toBe(NOW);
+  });
+
+  it('older updatedAt → keptNewer, local copy UNCHANGED (verifiedAt not refreshed)', () => {
+    const existing = verified({
+      record: record({ displayName: 'Alice Current', updatedAt: '2026-07-05T00:00:00Z' }),
+      verifiedAt: '2026-07-05T09:00:00Z',
+    });
+    const older = record({ displayName: 'Alice Stale', updatedAt: '2026-07-01T00:00:00Z' });
+    const out = mod.mergeVerifiedSnapshot(existing, older, 'stale.jws.here', NOW);
+    expect(out.kind).toBe('keptNewer');
+    expect(out.snapshot.record.displayName).toBe('Alice Current');
+    expect(out.snapshot.verifiedAt).toBe('2026-07-05T09:00:00Z'); // NOT refreshed
+    expect(out.snapshot.jws).not.toBe('stale.jws.here');
+  });
+
+  it('equal updatedAt, different content → conflict; primary kept, incoming recorded, NO overwrite', () => {
+    const existing = verified({ record: record({ displayName: 'Alice A' }) });
+    const forked = record({ displayName: 'Alice B' }); // same default updatedAt, different name
+    const out = mod.mergeVerifiedSnapshot(existing, forked, 'fork.jws.here', NOW);
+    expect(out.kind).toBe('conflict');
+    // Primary is untouched...
+    expect(out.snapshot.record.displayName).toBe('Alice A');
+    // ...and the fork is preserved as a conflict marker, never silently lost.
+    expect(out.snapshot.conflicts).toHaveLength(1);
+    expect(out.snapshot.conflicts[0]?.record.displayName).toBe('Alice B');
+    expect(out.snapshot.conflicts[0]?.jws).toBe('fork.jws.here');
+  });
+
+  it('conflict is idempotent — recording the SAME fork twice does not duplicate it', () => {
+    const existing = verified({ record: record({ displayName: 'Alice A' }) });
+    const forked = record({ displayName: 'Alice B' });
+    const first = mod.mergeVerifiedSnapshot(existing, forked, 'fork.jws.here', NOW);
+    expect(first.kind).toBe('conflict');
+    const second = mod.mergeVerifiedSnapshot(first.snapshot, forked, 'fork.jws.here', NOW);
+    expect(second.kind).toBe('conflict');
+    expect(second.snapshot.conflicts).toHaveLength(1);
+  });
+
+  it('device note survives a newer save, an alreadyCurrent refresh, and a conflict', () => {
+    const noted = verified({ note: 'met at ETHGlobal' });
+    const saved = mod.mergeVerifiedSnapshot(
+      noted,
+      record({ displayName: 'Alice V2', updatedAt: '2026-07-05T00:00:00Z' }),
+      'x.y.z',
+      NOW
+    );
+    expect(saved.kind).toBe('saved');
+    expect(saved.snapshot.note).toBe('met at ETHGlobal');
+
+    const current = mod.mergeVerifiedSnapshot(noted, record(), 'a.b.c', NOW);
+    expect(current.snapshot.note).toBe('met at ETHGlobal');
+
+    const conflicted = mod.mergeVerifiedSnapshot(noted, record({ bio: 'forked bio' }), 'f.j.k', NOW);
+    expect(conflicted.kind).toBe('conflict');
+    expect(conflicted.snapshot.note).toBe('met at ETHGlobal');
+  });
+});
+
+describe('store.mergeVerified + setNote — persistence of conflicts and notes', () => {
+  it('a conflict persists both the primary and the fork across a hydrate', () => {
+    mod.useProfileSnapshotStore.getState().mergeVerified(record({ displayName: 'Primary' }), 'p.j.k');
+    const outcome = mod.useProfileSnapshotStore
+      .getState()
+      .mergeVerified(record({ displayName: 'Fork' }), 'f.j.k'); // same default updatedAt
+    expect(outcome.kind).toBe('conflict');
+
+    mod.useProfileSnapshotStore.setState({ snapshots: new Map() });
+    mod.hydrateProfileSnapshots();
+
+    const restored = mod.getProfileSnapshot('did:key:zAlice');
+    expect(restored?.record.displayName).toBe('Primary');
+    expect(restored?.conflicts).toHaveLength(1);
+    expect(restored?.conflicts[0]?.record.displayName).toBe('Fork');
+  });
+
+  it('setNote persists and survives a later merge; clearing sets it back to null', () => {
+    mod.useProfileSnapshotStore.getState().mergeVerified(record(), 'a.b.c');
+    mod.useProfileSnapshotStore.getState().setNote('did:key:zAlice', '  coffee soon  ');
+    expect(mod.getProfileSnapshot('did:key:zAlice')?.note).toBe('coffee soon'); // trimmed
+
+    // A newer signed record arrives — the note must NOT be clobbered.
+    mod.useProfileSnapshotStore
+      .getState()
+      .mergeVerified(record({ displayName: 'Alice V2', updatedAt: '2026-07-05T00:00:00Z' }), 'x.y.z');
+    expect(mod.getProfileSnapshot('did:key:zAlice')?.note).toBe('coffee soon');
+
+    // Round-trips through MMKV.
+    mod.useProfileSnapshotStore.setState({ snapshots: new Map() });
+    mod.hydrateProfileSnapshots();
+    expect(mod.getProfileSnapshot('did:key:zAlice')?.note).toBe('coffee soon');
+
+    // Clearing.
+    mod.useProfileSnapshotStore.getState().setNote('did:key:zAlice', '   ');
+    expect(mod.getProfileSnapshot('did:key:zAlice')?.note).toBeNull();
+  });
+
+  it('setNote is a no-op for a did that is not a saved verified page', () => {
+    expect(() => {
+      mod.useProfileSnapshotStore.getState().setNote('did:key:zNobody', 'ghost');
+    }).not.toThrow();
+    expect(mod.getProfileSnapshot('did:key:zNobody')).toBeUndefined();
   });
 });

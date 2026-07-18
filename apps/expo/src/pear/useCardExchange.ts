@@ -109,12 +109,14 @@ import {
   type CardRequestEvent,
   type CardRequestPhase,
 } from './cardRequestState';
-import { askCardConsent, askPresentConsent } from './consent';
+import { askCardConsent, askExchangeConsent, askPresentConsent } from './consent';
 import { authenticateChannel } from './handshake';
 import { ensureLane, releaseLane } from './laneManager';
 import { firstConnection, pearTopicFor, type PearChannel } from './lane';
 import { matchPresentableClaims } from './presentBuilder';
 import { makePresentRequestHandler } from './presentRelease';
+import { createMutualExchange, type ExchangeDecision, type MutualExchange } from './mutualExchange';
+import { buildOwnOffer, saveIncomingCard } from './mutualExchangeGlue';
 import { createPearSession, type PearSession } from './protocol';
 // A5.3 — `buildPearPresentation` is the RESPONDER-side VP-building glue;
 // it lives in `usePresentRequestFlow.ts` alongside the REQUESTER hook it
@@ -355,6 +357,9 @@ export interface ReachableMode {
 interface ConnAttempt {
   /** `null` while the handshake for this connId is still in flight. */
   session: PearSession | null;
+  /** T5 mutual-exchange responder, registered on the SAME authenticated
+   *  channel as `session` once the handshake succeeds. */
+  exchange: MutualExchange | null;
   unsubConnCtrl: (() => void) | null;
 }
 
@@ -410,6 +415,7 @@ export function useReachableMode(peerDid: string, peerLabel: string): ReachableM
       if (!attempt) return;
       attempt.unsubConnCtrl?.();
       attempt.session?.close();
+      attempt.exchange?.close();
       connectionsRef.current.delete(connId);
       recomputeStatus();
     },
@@ -422,6 +428,7 @@ export function useReachableMode(peerDid: string, peerLabel: string): ReachableM
     for (const attempt of connectionsRef.current.values()) {
       attempt.unsubConnCtrl?.();
       attempt.session?.close();
+      attempt.exchange?.close();
     }
     connectionsRef.current.clear();
     lastConnErrorRef.current = null;
@@ -467,7 +474,7 @@ export function useReachableMode(peerDid: string, peerLabel: string): ReachableM
       const handleConnectionOpen = (connId: number): void => {
         if (connectionsRef.current.has(connId)) return; // 'open' should only fire once per connId
         const conn = channel.connection(connId);
-        const attempt: ConnAttempt = { session: null, unsubConnCtrl: null };
+        const attempt: ConnAttempt = { session: null, exchange: null, unsubConnCtrl: null };
         connectionsRef.current.set(connId, attempt);
         recomputeStatus();
 
@@ -537,8 +544,32 @@ export function useReachableMode(peerDid: string, peerLabel: string): ReachableM
                 buildPresentation: (selectedClaimIds) => buildPearPresentation(selectedClaimIds, peerDid),
               })
             );
+            // T5 — a MUTUAL card exchange responder on the SAME authenticated
+            // channel. `decide` gates an incoming `card.exchange.request`
+            // behind the exchange-specific consent sheet AND Face ID (this is
+            // still "releasing our card", per CLAUDE.md's card-release gate),
+            // then offers our current public card. `saveIncoming` runs the
+            // Part-A `mergeVerified` policy on the peer's card. Face ID here
+            // gates handing over already-signed public material — not a new
+            // signature — exactly as the one-way `cardRelease.ts` gate does.
+            const exchange = createMutualExchange(authResult.value);
+            exchange.onExchangeRequest({
+              decide: async (): Promise<ExchangeDecision> => {
+                const decision = await askExchangeConsent(peerLabel);
+                if (decision === 'decline') return { accept: false };
+                const allowed = await requireBiometric('cardRelease');
+                if (!allowed) return { accept: false };
+                const offer = buildOwnOffer();
+                if (!offer) return { accept: false };
+                return { accept: true, offer };
+              },
+              saveIncoming: saveIncomingCard,
+            });
             const current = connectionsRef.current.get(connId);
-            if (current) current.session = session;
+            if (current) {
+              current.session = session;
+              current.exchange = exchange;
+            }
             recomputeStatus();
           });
         });
