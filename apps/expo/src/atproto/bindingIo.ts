@@ -1,8 +1,8 @@
 /**
  * React Native IO adapter for `@solidarity/shared`'s pure ATProto binding
- * verifier. DNS uses JSON DoH (Cloudflare, then Google only when the first
- * resolver is unreachable); HTTPS text reads are timeout- and byte-bounded;
- * record reads delegate to `pds.ts`'s DID-routed public XRPC transport.
+ * verifier. DNS uses cross-checked Cloudflare + Google JSON DoH; HTTPS text
+ * reads are timeout- and byte-bounded; record reads delegate to `pds.ts`'s
+ * DID-routed public XRPC transport.
  */
 import {
   err,
@@ -11,6 +11,10 @@ import {
   type ResolverIoError,
   type Result,
 } from '@solidarity/shared';
+
+import { queryDnsTxtCrossChecked } from '@/domains/doh';
+import { createEthCall } from '@/domains/ethereumRpc';
+import { readResponseTextBounded } from '@/domains/boundedText';
 
 import { getProfileRecord, type GetProfileRecordOptions } from './pds';
 
@@ -36,8 +40,19 @@ interface BoundedResponse {
   readonly text: string;
 }
 
-function utf8ByteLength(text: string): number {
-  return new TextEncoder().encode(text).length;
+function redirectFailure(response: Response, requestedUrl: string): ResolverIoError | null {
+  if (response.url.length > 0 && !isHttpsUrl(response.url)) return 'insecureEndpoint';
+  if (response.status < 300 || response.status >= 400) return null;
+
+  const location = response.headers.get('location');
+  if (location === null) return 'unreachable';
+  try {
+    return isHttpsUrl(new URL(location, requestedUrl).toString())
+      ? 'unreachable'
+      : 'insecureEndpoint';
+  } catch {
+    return 'unreachable';
+  }
 }
 
 async function fetchTextBounded(
@@ -46,7 +61,7 @@ async function fetchTextBounded(
   fetchImpl: typeof fetch,
   timeoutMs: number,
   maxResponseBytes: number
-): Promise<Result<BoundedResponse, 'unreachable'>> {
+): Promise<Result<BoundedResponse, ResolverIoError>> {
   const controller = new AbortController();
   const timeout = setTimeout(() => {
     controller.abort();
@@ -54,84 +69,27 @@ async function fetchTextBounded(
   try {
     let response: Response;
     try {
-      response = await fetchImpl(url, { ...init, signal: controller.signal });
+      response = await fetchImpl(url, {
+        ...init,
+        redirect: 'manual',
+        signal: controller.signal,
+      });
     } catch {
       return err('unreachable');
     }
 
-    const declaredLength = response.headers.get('content-length');
-    if (declaredLength !== null) {
-      const length = Number(declaredLength);
-      if (Number.isFinite(length) && length > maxResponseBytes) {
-        return err('unreachable');
-      }
-    }
+    const redirectError = redirectFailure(response, url);
+    // The fixed well-known endpoint is authoritative; do not silently
+    // follow even an HTTPS redirect to a different retrieval location.
+    if (redirectError !== null) return err(redirectError);
 
-    let text: string;
-    try {
-      text = await response.text();
-    } catch {
-      return err('unreachable');
-    }
-    if (utf8ByteLength(text) > maxResponseBytes) return err('unreachable');
-    return ok({ status: response.status, ok: response.ok, text });
+    const text = await readResponseTextBounded(response, maxResponseBytes, controller);
+    return text.ok
+      ? ok({ status: response.status, ok: response.ok, text: text.value })
+      : err('unreachable');
   } finally {
     clearTimeout(timeout);
   }
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value);
-}
-
-function parseDnsJson(text: string): Result<readonly string[], ResolverIoError> {
-  let value: unknown;
-  try {
-    value = JSON.parse(text);
-  } catch {
-    return err('unreachable');
-  }
-  if (!isRecord(value) || typeof value['Status'] !== 'number') {
-    return err('unreachable');
-  }
-  if (value['Status'] === 3) return err('notFound');
-  if (value['Status'] !== 0) return err('unreachable');
-
-  const answers = value['Answer'];
-  if (answers === undefined) return ok([]);
-  if (!Array.isArray(answers)) return err('unreachable');
-
-  const records: string[] = [];
-  for (const answer of answers) {
-    if (isRecord(answer) && answer['type'] === 16 && typeof answer['data'] === 'string') {
-      records.push(answer['data']);
-    }
-  }
-  return ok(records);
-}
-
-function dnsUrl(origin: string, pathname: string, name: string): string {
-  const url = new URL(pathname, origin);
-  url.searchParams.set('name', name);
-  url.searchParams.set('type', 'TXT');
-  return url.toString();
-}
-
-async function queryDnsTxt(
-  url: string,
-  fetchImpl: typeof fetch,
-  timeoutMs: number,
-  maxResponseBytes: number
-): Promise<Result<readonly string[], ResolverIoError>> {
-  const response = await fetchTextBounded(
-    url,
-    { headers: { accept: 'application/dns-json' } },
-    fetchImpl,
-    timeoutMs,
-    maxResponseBytes
-  );
-  if (!response.ok || !response.value.ok) return err('unreachable');
-  return parseDnsJson(response.value.text);
 }
 
 function isHttpsUrl(value: string): boolean {
@@ -151,16 +109,7 @@ export function createAtprotoBindingIO(options: AtprotoBindingIoOptions = {}): A
 
   return {
     dnsTxt: async (name) => {
-      try {
-        const cloudflare = dnsUrl('https://cloudflare-dns.com', '/dns-query', name);
-        const primary = await queryDnsTxt(cloudflare, fetchImpl, timeoutMs, maxResponseBytes);
-        if (primary.ok || primary.error !== 'unreachable') return primary;
-
-        const google = dnsUrl('https://dns.google', '/resolve', name);
-        return await queryDnsTxt(google, fetchImpl, timeoutMs, maxResponseBytes);
-      } catch {
-        return err('unreachable');
-      }
+      return queryDnsTxtCrossChecked(name, { fetchImpl, timeoutMs, maxResponseBytes });
     },
 
     fetchText: async (url) => {
@@ -173,6 +122,8 @@ export function createAtprotoBindingIO(options: AtprotoBindingIoOptions = {}): A
       if (response.value.status === 204) return ok(null);
       return ok(response.value.text);
     },
+
+    ethCall: createEthCall({ fetchImpl, timeoutMs, maxResponseBytes }),
 
     getRecord: (repoDid, _collection, _rkey) => readRecord(repoDid, { fetchImpl }),
   };

@@ -19,6 +19,7 @@ import {
 } from '@solidarity/shared';
 
 import {
+  classifyVerifiedPagePayload,
   parseVerifiedPagePayload,
   verifyFragment,
   type VerifiedPageResult,
@@ -207,5 +208,35 @@ describe('parseVerifiedPagePayload — old-format passthrough (not mine)', () =>
     expect(() => parseVerifiedPagePayload(null)).not.toThrow();
     // @ts-expect-error — same non-string-input guard, asserted on the return value.
     expect(parseVerifiedPagePayload(null)).toBeNull();
+  });
+});
+
+describe('classifyVerifiedPagePayload — handle reads', () => {
+  it('classifies explicit DNS, natural ENS, and bare/@ ATProto handles', () => {
+    expect(classifyVerifiedPagePayload('dns:Example.COM')).toEqual({
+      kind: 'handle',
+      handle: 'dns:Example.COM',
+    });
+    expect(classifyVerifiedPagePayload('Vitalik.ETH')).toEqual({
+      kind: 'handle',
+      handle: 'Vitalik.ETH',
+    });
+    expect(classifyVerifiedPagePayload('@alice.bsky.social')).toEqual({
+      kind: 'handle',
+      handle: '@alice.bsky.social',
+    });
+    expect(classifyVerifiedPagePayload('alice.example')).toEqual({
+      kind: 'handle',
+      handle: 'alice.example',
+    });
+  });
+
+  it('classifies product /@handle links but not the same path on a third-party host', () => {
+    expect(classifyVerifiedPagePayload('https://app.solidarity.gg/@dns:example.com')).toEqual({
+      kind: 'handle',
+      handle: 'dns:example.com',
+    });
+    expect(classifyVerifiedPagePayload('http://app.solidarity.gg/@dns:example.com')).toBeNull();
+    expect(classifyVerifiedPagePayload('https://example.com/@dns:example.com')).toBeNull();
   });
 });

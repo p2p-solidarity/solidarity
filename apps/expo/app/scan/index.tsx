@@ -47,6 +47,7 @@ import { SCALE } from '@/feedback/motion';
 import { pushToast } from '@/feedback/toast';
 import { PASSPORT_SHOW_LINK_SCOPE } from '@/passport/showPresentation';
 import { issuePassportShowChallenge } from '@/passport/showVerifier';
+import { resolveProfileByHandle } from '@/handles/resolveProfile';
 import { resolveProfileByNpub } from '@/nostr/resolveProfile';
 import { QrScanner } from '@/scan/QrScanner';
 import { handleScannedPayload } from '@/scan/envelopeHandler';
@@ -105,12 +106,15 @@ export default function ScanScreen() {
       if (verifiedPageForm.kind === 'fragment') {
         // Self-contained offline blob — verified locally in this tick.
         presentVerifiedPageResult(verifyFragment(verifiedPageForm.fragment));
-      } else {
+      } else if (verifiedPageForm.kind === 'pointer') {
         // `#nostr:<npub>` short pointer — open the loading state, then swap
         // in the resolved verdict once relays answer. resolveProfileByNpub
         // never throws (structured invalid on any failure).
         presentVerifiedPageResolving();
         void resolveProfileByNpub(verifiedPageForm.npub).then(presentVerifiedPageResult);
+      } else {
+        presentVerifiedPageResolving();
+        void resolveProfileByHandle(verifiedPageForm.handle).then(presentVerifiedPageResult);
       }
       safeBack();
       return;

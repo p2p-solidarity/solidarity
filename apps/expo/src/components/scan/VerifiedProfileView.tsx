@@ -5,29 +5,30 @@
  * screen (`app/people/profile/[did].tsx`, a persisted snapshot) so the two
  * never drift — same displayName/bio/links/badges layout either way.
  *
- * Every badge renders as `declared` — a dotted-outline chip labelled
- * 「離線,未即時查驗」 (offline, not live-checked). No badge verifiers exist
- * yet (A4+ adds them); rendering anything stronger here would be exactly
- * the fake-verified-state CLAUDE.md rule 8 forbids. The JWS signature
- * itself, by contrast, genuinely IS verified locally (S-level, works in
- * airplane mode per 01-spec §6/§8) — that's the one green "簽章有效"
- * indicator this view shows.
+ * Profile-record badges remain offline declarations on this snapshot.
+ * When the page arrived through a live handle read, `handleBinding` carries
+ * the fresh bidirectional gate verdict and is rendered separately: only an
+ * exact `verified` result gets a filled green seal; declared/stale/revoked
+ * remain visibly non-green.
  */
 import type { ReactNode } from 'react';
 import { Linking, View } from 'react-native';
 
 import { PressableScale } from '@/components/common/PressableScale';
+import { handleBadgeViewModel } from '@/badges/handleBadgeDisplay';
 import { SfIcon } from '@/components/icons/SfIcon';
-import { ThemedText } from '@/components/themed';
+import { ThemedSurface, ThemedText } from '@/components/themed';
 import { Colors } from '@/constants/Colors';
 import { useTranslation } from '@/i18n';
+import type { VerifiedHandleBinding } from '@/scan/verifiedPageHandler';
 import type { ProfileRecord } from '@solidarity/shared';
 
 export interface VerifiedProfileViewProps {
   readonly record: ProfileRecord;
+  readonly handleBinding?: VerifiedHandleBinding;
 }
 
-export function VerifiedProfileView({ record }: VerifiedProfileViewProps): ReactNode {
+export function VerifiedProfileView({ record, handleBinding }: VerifiedProfileViewProps): ReactNode {
   const { t } = useTranslation();
   return (
     <View style={{ gap: 16 }}>
@@ -44,6 +45,8 @@ export function VerifiedProfileView({ record }: VerifiedProfileViewProps): React
           {t('verifiedPage.signatureValid')}
         </ThemedText>
       </View>
+
+      {handleBinding ? <HandleBindingBadge binding={handleBinding} /> : null}
 
       {record.bio.length > 0 ? (
         <ThemedText variant="bodyMedium" tone="secondary">
@@ -103,5 +106,37 @@ export function VerifiedProfileView({ record }: VerifiedProfileViewProps): React
         )}
       </View>
     </View>
+  );
+}
+
+function HandleBindingBadge({ binding }: { readonly binding: VerifiedHandleBinding }): ReactNode {
+  const { t } = useTranslation();
+  const model = handleBadgeViewModel(binding.state);
+  const style = (() => {
+    switch (model.visual) {
+      case 'verified':
+        return { icon: 'checkmark.seal.fill' as const, color: Colors.terminalGreen };
+      case 'declared':
+        return { icon: 'checkmark.seal' as const, color: Colors.warning };
+      case 'stale':
+        return { icon: 'exclamationmark.triangle' as const, color: Colors.text3 };
+      case 'revoked':
+        return { icon: 'xmark.seal.fill' as const, color: Colors.destructive };
+    }
+  })();
+
+  return (
+    <ThemedSurface
+      variant="inset"
+      className="self-start rounded-none px-3 py-2"
+      style={{ borderWidth: 1, borderColor: Colors.divider }}
+    >
+      <View className="flex-row items-center" style={{ gap: 7 }}>
+        <SfIcon name={style.icon} size={15} color={style.color} />
+        <ThemedText variant="label" style={{ color: style.color }}>
+          {`${binding.scheme.toUpperCase()} · ${binding.handle} · ${t(model.labelKey)}`}
+        </ThemedText>
+      </View>
+    </ThemedSurface>
   );
 }

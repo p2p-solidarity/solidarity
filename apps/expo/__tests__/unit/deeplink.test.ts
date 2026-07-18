@@ -74,6 +74,34 @@ describe('parseDeepLink', () => {
     expect(parseDeepLink('https://solidarity.gg').kind).toBe('unknown');
   });
 
+  it('parses product /@handle links for ATProto, explicit DNS, and ENS reads', () => {
+    for (const [rawHandle, expectedHandle] of [
+      ['@alice.bsky.social', 'alice.bsky.social'],
+      ['@dns:example.com', 'dns:example.com'],
+      ['@vitalik.eth', 'vitalik.eth'],
+    ] as const) {
+      const route = parseDeepLink(`https://app.solidarity.gg/${rawHandle}`);
+      expect(route.kind).toBe('verifiedHandle');
+      if (route.kind === 'verifiedHandle') expect(route.handle).toBe(expectedHandle);
+    }
+  });
+
+  it('does not route /@handle on a trusted-but-non-product host', () => {
+    expect(parseDeepLink('https://github.com/@alice.example').kind).toBe('unknown');
+  });
+
+  it('does not let an /@handle path hide a Verified Page hash', () => {
+    const npub = 'npub10elfcs4fr0l0r8af98jlmgdh9c8tcxjvz9qkw038js35mp4dma8qzvjptg';
+    expect(parseDeepLink(`https://solidarity.gg/@alice.example#nostr:${npub}`)).toEqual({
+      kind: 'verifiedPointer',
+      npub,
+    });
+    expect(parseDeepLink('https://solidarity.gg/@alice.example#fragment_blob')).toEqual({
+      kind: 'verifiedProfile',
+      fragment: 'fragment_blob',
+    });
+  });
+
   it('parses a https://solidarity.gg/#nostr:<npub> short-pointer link', () => {
     const npub = 'npub10elfcs4fr0l0r8af98jlmgdh9c8tcxjvz9qkw038js35mp4dma8qzvjptg';
     const r = parseDeepLink(`https://solidarity.gg/#nostr:${npub}`);

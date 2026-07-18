@@ -4,6 +4,7 @@
  */
 import { router } from 'expo-router';
 
+import { resolveProfileByHandle } from '@/handles/resolveProfile';
 import { resolveProfileByNpub } from '@/nostr/resolveProfile';
 import { presentVerifiedPageResolving, presentVerifiedPageResult } from '@/scan/verifiedPageResult';
 import { verifyFragment } from '@/scan/verifiedPageHandler';
@@ -44,6 +45,10 @@ export function handleDeepLink(raw: string): DeepLinkRoute {
       // before resolution completes. `resolveProfileByNpub` never throws.
       presentVerifiedPageResolving();
       void resolveProfileByNpub(route.npub).then(presentVerifiedPageResult);
+      break;
+    case 'verifiedHandle':
+      presentVerifiedPageResolving();
+      void resolveProfileByHandle(route.handle).then(presentVerifiedPageResult);
       break;
     case 'pear':
       // Task A5.4 (US-20) — reuse the Verified Page detail route: it already

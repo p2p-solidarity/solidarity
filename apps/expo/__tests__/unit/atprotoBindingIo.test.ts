@@ -28,7 +28,26 @@ function urlOf(input: RequestInfo | URL): string {
 }
 
 describe('AtprotoBindingIO.dnsTxt', () => {
-  it('parses TXT answers from Cloudflare DoH using the DNS JSON accept header', async () => {
+  it('requires Cloudflare and Google to agree before exposing TXT records', async () => {
+    const urls: string[] = [];
+    const fetchImpl = ((input: RequestInfo | URL) => {
+      const url = urlOf(input);
+      urls.push(url);
+      const data = url.startsWith('https://cloudflare-dns.com/')
+        ? `"did=${DID}"`
+        : '"did=did:plc:different"';
+      return Promise.resolve(json({ Status: 0, Answer: [{ type: 16, data }] }));
+    }) as typeof fetch;
+    const io = createAtprotoBindingIO({ fetchImpl });
+
+    expect(await io.dnsTxt('_atproto.alice.example')).toEqual({
+      ok: false,
+      error: 'unreachable',
+    });
+    expect(urls).toHaveLength(2);
+  });
+
+  it('parses cross-checked TXT answers using the DNS JSON accept header', async () => {
     const captured: CapturedRequest[] = [];
     const fetchImpl = ((input: RequestInfo | URL, init?: RequestInit) => {
       captured.push({ url: urlOf(input), init });
@@ -47,15 +66,20 @@ describe('AtprotoBindingIO.dnsTxt', () => {
     const result = await io.dnsTxt('_atproto.alice.example');
 
     expect(result).toEqual({ ok: true, value: [`"did=${DID}"`] });
-    expect(captured).toHaveLength(1);
-    const url = new URL(captured[0]?.url ?? 'https://invalid.example');
-    expect(url.origin).toBe('https://cloudflare-dns.com');
-    expect(url.searchParams.get('name')).toBe('_atproto.alice.example');
-    expect(url.searchParams.get('type')).toBe('TXT');
-    expect(new Headers(captured[0]?.init?.headers).get('accept')).toBe('application/dns-json');
+    expect(captured).toHaveLength(2);
+    expect(captured.map((request) => new URL(request.url).origin).sort()).toEqual([
+      'https://cloudflare-dns.com',
+      'https://dns.google',
+    ]);
+    for (const request of captured) {
+      const url = new URL(request.url);
+      expect(url.searchParams.get('name')).toBe('_atproto.alice.example');
+      expect(url.searchParams.get('type')).toBe('TXT');
+      expect(new Headers(request.init?.headers).get('accept')).toBe('application/dns-json');
+    }
   });
 
-  it('maps NXDOMAIN to notFound without querying the fallback resolver', async () => {
+  it('maps independently confirmed NXDOMAIN to notFound', async () => {
     let calls = 0;
     const fetchImpl = (() => {
       calls += 1;
@@ -66,7 +90,7 @@ describe('AtprotoBindingIO.dnsTxt', () => {
     const result = await io.dnsTxt('_atproto.missing.example');
 
     expect(result).toEqual({ ok: false, error: 'notFound' });
-    expect(calls).toBe(1);
+    expect(calls).toBe(2);
   });
 
   it('maps a successful DNS response with no TXT answers to ok(empty)', async () => {
@@ -79,7 +103,7 @@ describe('AtprotoBindingIO.dnsTxt', () => {
     });
   });
 
-  it('falls back to Google DoH only when Cloudflare is unreachable', async () => {
+  it('reports unreachable when Cloudflare fails even if Google answers', async () => {
     const urls: string[] = [];
     const fetchImpl = ((input: RequestInfo | URL) => {
       const url = urlOf(input);
@@ -93,7 +117,7 @@ describe('AtprotoBindingIO.dnsTxt', () => {
 
     const result = await io.dnsTxt('_atproto.alice.example');
 
-    expect(result).toEqual({ ok: true, value: [`"did=${DID}"`] });
+    expect(result).toEqual({ ok: false, error: 'unreachable' });
     expect(urls).toHaveLength(2);
     expect(urls[1]).toStartWith('https://dns.google/resolve?');
   });
@@ -122,6 +146,26 @@ describe('AtprotoBindingIO.fetchText', () => {
       error: 'insecureEndpoint',
     });
     expect(called).toBe(false);
+  });
+
+  it('rejects an HTTPS endpoint that redirects to HTTP before following it', async () => {
+    let redirectMode: RequestRedirect | undefined;
+    const fetchImpl = ((_input: RequestInfo | URL, init?: RequestInit) => {
+      redirectMode = init?.redirect;
+      return Promise.resolve(
+        new Response(null, {
+          status: 302,
+          headers: { location: 'http://alice.example/.well-known/did' },
+        })
+      );
+    }) as typeof fetch;
+    const io = createAtprotoBindingIO({ fetchImpl });
+
+    expect(await io.fetchText('https://alice.example/.well-known/did')).toEqual({
+      ok: false,
+      error: 'insecureEndpoint',
+    });
+    expect(redirectMode).toBe('manual');
   });
 
   it('maps 404 to notFound', async () => {

@@ -20,7 +20,7 @@ import type { NostrEvent } from '@/dag/nostrAdapter';
 import type { SubscribeEventsFn } from '@/nostr/publish';
 import { hexToBytes, signCompact, type Signer } from '@solidarity/shared';
 
-import { resolveProfileByNpub } from '../../src/nostr/resolveProfile';
+import { fetchVerifiedProfileByNpub, resolveProfileByNpub } from '../../src/nostr/resolveProfile';
 
 const SUBJECT_PRIV = hexToBytes('0102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f20');
 const SUBJECT_DID = 'did:key:zDnaeVuZeVRqvscGkiEoR9PFFra2xZUMp97ZPuGFK1VLU7iYN';
@@ -69,6 +69,17 @@ function fakeSubscribe(eventsByRelay: Readonly<Record<string, readonly NostrEven
 }
 
 describe('resolveProfileByNpub', () => {
+  it('exposes signature-verified retrieval without requiring a Nostr badge reverse claim', async () => {
+    const ev = await pointerEvent([]);
+    const r = await fetchVerifiedProfileByNpub(NPUB, {
+      relays: ['a'],
+      subscribeEventsFn: fakeSubscribe({ a: [ev] }),
+    });
+
+    expect(r.kind).toBe('verified');
+    if (r.kind === 'verified') expect(r.record.did).toBe(SUBJECT_DID);
+  });
+
   it('resolves a published + reverse-bound profile to verified', async () => {
     const ev = await pointerEvent([`nostr:${NPUB}`]);
     const r = await resolveProfileByNpub(NPUB, { relays: ['a'], subscribeEventsFn: fakeSubscribe({ a: [ev] }) });

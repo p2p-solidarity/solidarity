@@ -3,7 +3,7 @@
  * it tests cleanly under Bun without dragging the Flow-typed RN runtime.
  * The handler (with `router.push` side effects) lives in ./handler.
  */
-import { resolveDidKey } from '@solidarity/shared';
+import { DEFAULT_HANDLE_RESOLVERS, matchHandleResolver, resolveDidKey } from '@solidarity/shared';
 
 import { isProductHost, isVerifiedDomain } from './domainVerification';
 
@@ -14,6 +14,7 @@ export type DeepLinkRoute =
   | { readonly kind: 'credentialOffer'; readonly query: string }
   | { readonly kind: 'verifiedProfile'; readonly fragment: string }
   | { readonly kind: 'verifiedPointer'; readonly npub: string }
+  | { readonly kind: 'verifiedHandle'; readonly handle: string }
   | { readonly kind: 'pear'; readonly did: string }
   | { readonly kind: 'unknown'; readonly raw: string };
 
@@ -63,6 +64,27 @@ export function isValidPearDid(did: string): boolean {
   }
 }
 
+function parseVerifiedHandleRoute(
+  productHost: boolean,
+  segments: readonly string[],
+  hash: string
+): DeepLinkRoute | null {
+  const segment = segments[0];
+  if (!productHost || hash.length > 0 || segments.length !== 1 || !segment?.startsWith('@')) {
+    return null;
+  }
+
+  let handle: string;
+  try {
+    handle = decodeURIComponent(segment.slice(1));
+  } catch {
+    return null;
+  }
+  return matchHandleResolver(handle, DEFAULT_HANDLE_RESOLVERS) === undefined
+    ? null
+    : { kind: 'verifiedHandle', handle };
+}
+
 /**
  * `https://<verified-domain>/...` routes only — split out of `parseDeepLink`
  * to keep that function's cyclomatic complexity under budget as this branch
@@ -99,6 +121,8 @@ function parseVerifiedDomainRoute(url: URL): DeepLinkRoute | null {
   ) {
     return { kind: 'pear', did: segments[1] };
   }
+  const handleRoute = parseVerifiedHandleRoute(productHost, segments, url.hash);
+  if (handleRoute !== null) return handleRoute;
   // Verified Page link (1.3.3 Task A2.3, US-11): `https://solidarity.gg/#<fragment>`
   // — the fragment never leaves the device over the network (01-spec §1/§8),
   // so this is just recognising the shape and handing the raw fragment blob

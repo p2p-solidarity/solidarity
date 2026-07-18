@@ -31,12 +31,18 @@
  * handler that might misinterpret the same bytes).
  */
 import {
+  DEFAULT_HANDLE_RESOLVERS,
   decodeFragment,
   decodeJwtUnsafe,
+  matchHandleResolver,
   parseProfile,
   verifyCompact,
+  type BadgeState,
+  type HandleScheme,
   type ProfileRecord,
 } from '@solidarity/shared';
+
+import { isProductHost } from '../deeplink/domainVerification';
 
 export type VerifiedPageErrorReason =
   | 'decodeFailed'
@@ -51,10 +57,27 @@ export type VerifiedPageErrorReason =
   /** Profile JWS verified, but its `alsoKnownAs` doesn't claim this npub back
    *  — the reverse binding is missing, so a relay may have substituted a
    *  different (validly-signed) profile for the npub the sharer pointed at. */
-  | 'bindingMismatch';
+  | 'bindingMismatch'
+  /** A handle resolved, but advertised no usable profile retrieval source. */
+  | 'profileSourceMissing'
+  /** The handle's authoritative record exists but is malformed/conflicting. */
+  | 'handleResolutionFailed'
+  /** A remote boundary attempted to downgrade an HTTPS-only read. */
+  | 'insecureEndpoint';
+
+export interface VerifiedHandleBinding {
+  readonly scheme: Exclude<HandleScheme, 'nip05'>;
+  readonly handle: string;
+  readonly state: BadgeState;
+}
 
 export type VerifiedPageResult =
-  | { readonly kind: 'verified'; readonly record: ProfileRecord; readonly jws: string }
+  | {
+      readonly kind: 'verified';
+      readonly record: ProfileRecord;
+      readonly jws: string;
+      readonly handleBinding?: VerifiedHandleBinding;
+    }
   | { readonly kind: 'invalid'; readonly reason: VerifiedPageErrorReason; readonly detail: string };
 
 /**
@@ -164,17 +187,20 @@ export function parseVerifiedPagePayload(payload: string): VerifiedPageResult | 
 }
 
 /**
- * The two Verified Page share forms a scanned QR / typed string can carry:
+ * The three Verified Page share/read forms a scanned QR / typed string can carry:
  *   - `fragment` — the self-contained offline blob (deflate+base64url of the
  *     profile JWS), verifiable locally in airplane mode;
  *   - `pointer` — the short `#nostr:<npub>` locator, which needs an async
  *     relay round-trip (`resolveProfile.ts`) to fetch + verify.
+ *   - `handle` — a supported ATProto/DNS/ENS handle, resolved through the
+ *     shared deterministic resolver registry before profile retrieval.
  * The scanner (`app/scan/index.tsx`) branches on this to pick the sync-local
  * vs. async-network path. `null` = not a Verified Page payload at all.
  */
 export type VerifiedPagePayload =
   | { readonly kind: 'fragment'; readonly fragment: string }
-  | { readonly kind: 'pointer'; readonly npub: string };
+  | { readonly kind: 'pointer'; readonly npub: string }
+  | { readonly kind: 'handle'; readonly handle: string };
 
 /** `npub1` + bech32 data. `resolveProfile.ts`'s `npubDecode` does the real
  *  checksum/length validation; this is just the cheap shape gate + a DoS
@@ -202,8 +228,42 @@ function extractInner(payload: string): string | null {
   }
 }
 
+function isSupportedHandle(handle: string): boolean {
+  return matchHandleResolver(handle, DEFAULT_HANDLE_RESOLVERS) !== undefined;
+}
+
+function extractHandleCandidate(payload: string): string | null {
+  const trimmed = payload.trim();
+  if (trimmed.length === 0) return null;
+  if (isSupportedHandle(trimmed)) return trimmed;
+
+  try {
+    const url = new URL(trimmed);
+    if (
+      url.protocol !== 'https:' ||
+      !isProductHost(url.host) ||
+      url.hash.length > 0
+    ) {
+      return null;
+    }
+    const segments = url.pathname.replace(/^\//u, '').split('/');
+    if (segments.length !== 1 || !segments[0]?.startsWith('@')) return null;
+    let handle: string;
+    try {
+      handle = decodeURIComponent(segments[0].slice(1));
+    } catch {
+      return null;
+    }
+    return isSupportedHandle(handle) ? handle : null;
+  } catch {
+    return isSupportedHandle(trimmed) ? trimmed : null;
+  }
+}
+
 export function classifyVerifiedPagePayload(payload: string): VerifiedPagePayload | null {
   if (typeof payload !== 'string') return null;
+  const handle = extractHandleCandidate(payload);
+  if (handle !== null) return { kind: 'handle', handle };
   const inner = extractInner(payload);
   if (inner === null || inner.length === 0) return null;
 

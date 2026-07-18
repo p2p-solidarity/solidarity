@@ -45,7 +45,12 @@ export interface ResolveProfileOptions {
   readonly subscribeEventsFn?: SubscribeEventsFn;
 }
 
-export async function resolveProfileByNpub(
+/**
+ * Fetch + JWS-verify a profile through an npub locator. This is the
+ * transport primitive reused by DNS/ENS `src=nostr:<npub>` pointers; it
+ * deliberately does not turn the locator itself into a Nostr badge claim.
+ */
+export async function fetchVerifiedProfileByNpub(
   npub: string,
   opts: ResolveProfileOptions = {}
 ): Promise<VerifiedPageResult> {
@@ -71,7 +76,14 @@ export async function resolveProfileByNpub(
       : { kind: 'invalid', reason: 'unreachable', detail: 'no relay answered before timeout' };
   }
 
-  const result = verifyProfileJws(event.content);
+  return verifyProfileJws(event.content);
+}
+
+export async function resolveProfileByNpub(
+  npub: string,
+  opts: ResolveProfileOptions = {}
+): Promise<VerifiedPageResult> {
+  const result = await fetchVerifiedProfileByNpub(npub, opts);
   if (result.kind !== 'verified') return result;
 
   // The reverse-binding gate (see module doc) — the profile must claim this

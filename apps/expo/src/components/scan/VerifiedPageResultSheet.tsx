@@ -79,9 +79,12 @@ export function VerifiedPageResultSheet(): ReactNode {
 
           <ScrollView contentContainerStyle={{ padding: 16, gap: 16 }}>
             {result.kind === 'verified' ? (
-              <VerifiedProfileView record={result.record} />
+              <VerifiedProfileView
+                record={result.record}
+                handleBinding={result.handleBinding}
+              />
             ) : (
-              <InvalidCard reason={result.reason} detail={result.detail} />
+              <InvalidCard reason={result.reason} />
             )}
           </ScrollView>
 
@@ -138,13 +141,8 @@ function ResolvingView({
   );
 }
 
-function InvalidCard({
-  reason,
-  detail,
-}: {
-  readonly reason: VerifiedPageErrorReason;
-  readonly detail: string;
-}): ReactNode {
+/** Raw Result diagnostics are test/caller data, not localized user-facing copy. */
+function InvalidCard({ reason }: { readonly reason: VerifiedPageErrorReason }): ReactNode {
   const { t } = useTranslation();
   return (
     <View className="gap-3 rounded-xl border border-divider p-4">
@@ -156,9 +154,6 @@ function InvalidCard({
       </View>
       <ThemedText variant="bodyMedium" tone="secondary">
         {t(`verifiedPage.reason.${reason}`)}
-      </ThemedText>
-      <ThemedText variant="caption" tone="tertiary" selectable>
-        {detail}
       </ThemedText>
     </View>
   );
