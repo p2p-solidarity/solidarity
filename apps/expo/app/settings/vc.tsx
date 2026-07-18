@@ -181,8 +181,16 @@ export default function VcSettings() {
         ],
         addCredential: state.add,
       });
+      if (result.rejected > 0) {
+        pushToast(t('vc.importRejected', { count: result.rejected }), 'warning');
+      }
+      if (result.unverified > 0) {
+        pushToast(t('vc.importUnverified', { count: result.unverified }), 'warning');
+      }
       if (result.imported === 0) {
-        appAlert({ title: t('vc.title'), message: t('vc.noneNewInFile') });
+        if (result.rejected === 0) {
+          appAlert({ title: t('vc.title'), message: t('vc.noneNewInFile') });
+        }
         return;
       }
       pushToast(t('vc.importSuccess', { count: result.imported }), 'success');

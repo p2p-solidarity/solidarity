@@ -35,6 +35,10 @@ import {
   type Signer,
 } from '@solidarity/shared';
 
+import {
+  classifyCredentialFormat,
+  selectSdJwtDisclosures,
+} from '@/credentials/selectiveDisclosure';
 import type { ProvableClaimEntity } from '@/identity';
 
 import { oidcError, type OidcError } from './errors';
@@ -61,6 +65,14 @@ type PresentationSigner = (
   payload: Record<string, unknown>,
 ) => Promise<string>;
 
+export interface PresentationCredentialDetail {
+  readonly id: string;
+  readonly rawJwt: string;
+  /** Import-verification + format tags. A credential tagged `unverified`
+   *  (issuer signature not checked on import) is never presentable. */
+  readonly metadataTags?: readonly string[];
+}
+
 export interface PresentationBuilderDeps {
   readonly publicJwk?: () => Promise<PublicKeyJWK>;
   readonly signJwt?: PresentationSigner;
@@ -68,8 +80,8 @@ export interface PresentationBuilderDeps {
     | readonly ProvableClaimEntity[]
     | Promise<readonly ProvableClaimEntity[]>;
   readonly getCredentials?: () =>
-    | ReadonlyMap<string, { readonly id: string; readonly rawJwt: string }>
-    | Promise<ReadonlyMap<string, { readonly id: string; readonly rawJwt: string }>>;
+    | ReadonlyMap<string, PresentationCredentialDetail>
+    | Promise<ReadonlyMap<string, PresentationCredentialDetail>>;
   readonly nowSeconds?: () => number;
 }
 
@@ -111,37 +123,138 @@ async function defaultProvableClaims(): Promise<readonly ProvableClaimEntity[]> 
 }
 
 async function defaultCredentialDetails(): Promise<
-  ReadonlyMap<string, { readonly id: string; readonly rawJwt: string }>
+  ReadonlyMap<string, PresentationCredentialDetail>
 > {
   const { useCredentialStore } = await import('@/credentials/store');
   return useCredentialStore.getState().details;
 }
 
-async function rawCredentialIdsFor(
+/**
+ * Resolve the selected claim ids to the ACTUAL wire artifacts to embed in the
+ * VP — never the raw credential when that would over-disclose. Mirrors the
+ * `presentationProof.ts` honesty rules so both presentation surfaces behave
+ * identically:
+ *
+ *   - ordinary JWT VC + a strict subset of its claims → FAIL CLOSED (a plain
+ *     JWT is atomic; embedding it verbatim leaks the unselected claims).
+ *   - ordinary JWT VC fully disclosed (all its presentable claims selected, or
+ *     the credential itself was selected directly) → embed as-is.
+ *   - real SD-JWT + subset → embed a REDACTED SD-JWT (selected disclosures
+ *     only); full → embed as-is.
+ *   - ZK proof / non-JWT credential → refuse (cannot form a verifiable OID4VP
+ *     `verifiableCredential` entry a verifier can parse).
+ *   - `unverified`-tagged credential → refuse (import signature never checked).
+ */
+interface SelectionIndex {
+  readonly presentableByCard: ReadonlyMap<string, readonly ProvableClaimEntity[]>;
+  readonly cardIds: ReadonlySet<string>;
+  readonly directCredentialIds: ReadonlySet<string>;
+  readonly selectedIds: ReadonlySet<string>;
+}
+
+/** Group presentable claims per card and split the selected ids into
+ *  claim-backed cards vs. directly-selected credential ids. */
+function indexSelection(
+  claims: readonly ProvableClaimEntity[],
   claimIds: readonly string[],
-  deps: PresentationBuilderDeps | undefined,
-): Promise<readonly string[]> {
-  if (claimIds.length === 0) return [];
-  const claims = await (deps?.getProvableClaims?.() ?? defaultProvableClaims());
-  const credentials = await (deps?.getCredentials?.() ?? defaultCredentialDetails());
+): SelectionIndex {
   const claimById = new Map<string, ProvableClaimEntity>(claims.map((c) => [c.id, c]));
+  const presentableByCard = new Map<string, ProvableClaimEntity[]>();
+  for (const claim of claims) {
+    if (!claim.isPresentable) continue;
+    const bucket = presentableByCard.get(claim.identityCardId) ?? [];
+    bucket.push(claim);
+    presentableByCard.set(claim.identityCardId, bucket);
+  }
   const cardIds = new Set<string>();
   const directCredentialIds = new Set<string>();
   for (const id of claimIds) {
     const claim = claimById.get(id);
-    if (claim) {
-      cardIds.add(claim.identityCardId);
-    } else {
-      directCredentialIds.add(id);
-    }
+    if (claim) cardIds.add(claim.identityCardId);
+    else directCredentialIds.add(id);
   }
+  return { presentableByCard, cardIds, directCredentialIds, selectedIds: new Set(claimIds) };
+}
+
+async function collectPresentedCredentials(
+  claimIds: readonly string[],
+  deps: PresentationBuilderDeps | undefined,
+): Promise<Result<readonly string[], OidcError>> {
+  if (claimIds.length === 0) return ok([]);
+  const claims = await (deps?.getProvableClaims?.() ?? defaultProvableClaims());
+  const credentials = await (deps?.getCredentials?.() ?? defaultCredentialDetails());
+  const index = indexSelection(claims, claimIds);
+
   const jwts: string[] = [];
-  for (const c of credentials.values()) {
-    if (cardIds.has(c.id) || directCredentialIds.has(c.id)) {
-      jwts.push(c.rawJwt);
-    }
+  for (const cred of credentials.values()) {
+    const isDirect = index.directCredentialIds.has(cred.id);
+    if (!isDirect && !index.cardIds.has(cred.id)) continue;
+    const cardClaims = index.presentableByCard.get(cred.id) ?? [];
+    const resolved = resolveEmbeddedCredential(cred, {
+      full: isDirect || isFullCardDisclosure(cardClaims, index.selectedIds),
+      selectedNames: cardClaims
+        .filter((c) => index.selectedIds.has(c.id))
+        .map((c) => c.claimType),
+    });
+    if (!resolved.ok) return resolved;
+    jwts.push(resolved.value);
   }
-  return jwts;
+  return ok(jwts);
+}
+
+/** Decide the exact wire artifact for ONE selected credential, honestly (see
+ *  `collectPresentedCredentials`). Returns the JWT/SD-JWT string to embed, or a
+ *  fail-closed `OidcError`. */
+function resolveEmbeddedCredential(
+  cred: PresentationCredentialDetail,
+  disclosure: { readonly full: boolean; readonly selectedNames: readonly string[] },
+): Result<string, OidcError> {
+  if ((cred.metadataTags ?? []).includes('unverified')) {
+    return err(
+      oidcError(
+        'invalidRequest',
+        'Refusing to present an unverified credential (issuer signature not checked on import)',
+      ),
+    );
+  }
+
+  const format = classifyCredentialFormat(cred.rawJwt);
+
+  if (format === 'jwt-vc') {
+    return disclosure.full
+      ? ok(cred.rawJwt)
+      : err(
+          oidcError(
+            'invalidRequest',
+            'Selective disclosure of an ordinary JWT credential is not supported — presenting it would leak the unselected claims',
+          ),
+        );
+  }
+
+  if (format === 'sd-jwt') {
+    if (disclosure.full) return ok(cred.rawJwt);
+    const redacted = selectSdJwtDisclosures(cred.rawJwt, new Set(disclosure.selectedNames));
+    return redacted.ok
+      ? ok(redacted.value)
+      : err(oidcError('invalidRequest', `SD-JWT disclosure failed: ${redacted.error.message}`));
+  }
+
+  return err(
+    oidcError(
+      'invalidRequest',
+      'Credential cannot be presented in an OID4VP presentation (not a verifiable JWT credential)',
+    ),
+  );
+}
+
+/** A full disclosure of an atomic credential: every presentable claim it backs
+ *  is selected. An unknown/empty presentable set can't prove "full" → false. */
+function isFullCardDisclosure(
+  cardClaims: readonly ProvableClaimEntity[],
+  selectedIds: ReadonlySet<string>,
+): boolean {
+  if (cardClaims.length === 0) return false;
+  return cardClaims.every((claim) => selectedIds.has(claim.id));
 }
 
 function buildPresentationSubmission(
@@ -185,10 +298,40 @@ function buildPresentationSubmission(
   };
 }
 
+/** Sign the Pear root→card binding when the caller supplies one; a plain
+ *  OID4VP flow has no binding and returns `undefined`. Fail-closed on signer
+ *  errors. */
+async function signCardKeyBinding(
+  input: PresentationBuilderInput,
+  cardDid: string,
+  audienceDid: string,
+  nonce: string,
+  now: number,
+): Promise<Result<string | undefined, OidcError>> {
+  if (!input.cardKeyBinding) return ok(undefined);
+  try {
+    const jws = await buildCardKeyBindingJws({
+      rootDid: input.cardKeyBinding.rootDid,
+      cardDid,
+      audienceDid,
+      nonce,
+      sign: input.cardKeyBinding.sign,
+      now,
+      lifetimeSeconds: VP_LIFETIME_SECONDS,
+    });
+    return ok(jws);
+  } catch (e) {
+    const m = e instanceof Error ? e.message : String(e);
+    return err(oidcError('cryptographicError', `Failed to sign card-key binding: ${m}`));
+  }
+}
+
 export async function buildVpToken(
   input: PresentationBuilderInput
 ): Promise<Result<BuiltPresentation, OidcError>> {
-  const vcJwts = await rawCredentialIdsFor(input.selectedClaimIds, input.deps);
+  const collected = await collectPresentedCredentials(input.selectedClaimIds, input.deps);
+  if (!collected.ok) return collected;
+  const vcJwts = collected.value;
   if (vcJwts.length === 0) {
     return err(oidcError('invalidRequest', 'No credentials selected for presentation'));
   }
@@ -211,23 +354,9 @@ export async function buildVpToken(
   const now = input.deps?.nowSeconds?.() ?? Math.floor(Date.now() / 1000);
   const audience = input.request.request.client_id;
   const nonce = input.request.request.nonce;
-  let cardKeyBindingJws: string | undefined;
-  if (input.cardKeyBinding) {
-    try {
-      cardKeyBindingJws = await buildCardKeyBindingJws({
-        rootDid: input.cardKeyBinding.rootDid,
-        cardDid: derivedDid,
-        audienceDid: audience,
-        nonce,
-        sign: input.cardKeyBinding.sign,
-        now,
-        lifetimeSeconds: VP_LIFETIME_SECONDS,
-      });
-    } catch (e) {
-      const m = e instanceof Error ? e.message : String(e);
-      return err(oidcError('cryptographicError', `Failed to sign card-key binding: ${m}`));
-    }
-  }
+  const binding = await signCardKeyBinding(input, derivedDid, audience, nonce, now);
+  if (!binding.ok) return binding;
+  const cardKeyBindingJws = binding.value;
 
   const payload: Record<string, unknown> = {
     iss: derivedDid,

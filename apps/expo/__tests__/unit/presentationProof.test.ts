@@ -1,6 +1,15 @@
 import { describe, expect, it } from 'bun:test';
 
-import { bytesToUtf8 } from '@solidarity/shared';
+import {
+  base64UrlEncode,
+  bytesToUtf8,
+  didKeyFromPublicKey,
+  publicKeyFromPrivate,
+  type Result,
+  sha256Bytes,
+  signJwtEs256,
+  utf8ToBytes,
+} from '@solidarity/shared';
 
 import { decompressQR } from '../../src/cards/qrCompression';
 import {
@@ -8,11 +17,56 @@ import {
   buildPresentationProofQrPages,
   initialPresentationClaimIds,
   isPresentationDisabled,
+  type PresentationCredential,
   selectPresentationClaims,
 } from '../../src/credentials/presentationProof';
+import type { DisclosureError } from '../../src/credentials/selectiveDisclosure';
 import type { StoredCredential } from '../../src/credentials/store';
 import type { ProvableClaimEntity } from '../../src/identity';
 import { buildPresentationQrPages } from '../../src/me/presentationQrPages';
+
+function expectOk<T>(result: Result<T, DisclosureError>): T {
+  if (!result.ok) {
+    throw new Error(`expected ok, got ${result.error.code}: ${result.error.message}`);
+  }
+  return result.value;
+}
+
+// ---- SD-JWT fixture helpers (RFC 9901 combined format) --------------------
+const ISSUER_PRIV = new Uint8Array(32).fill(0).map((_, i) => (i * 5 + 2) & 0xff);
+const ISSUER_DID = didKeyFromPublicKey(publicKeyFromPrivate(ISSUER_PRIV));
+const HOLDER_PRIV = new Uint8Array(32).fill(0).map((_, i) => (i * 3 + 1) & 0xff);
+const HOLDER_DID = didKeyFromPublicKey(publicKeyFromPrivate(HOLDER_PRIV));
+
+function makeDisclosure(salt: string, name: string, value: unknown): string {
+  return base64UrlEncode(utf8ToBytes(JSON.stringify([salt, name, value])));
+}
+function sdDigest(disclosure: string): string {
+  return base64UrlEncode(sha256Bytes(utf8ToBytes(disclosure)));
+}
+
+/** Build a signed SD-JWT whose `disclosable` claims are selectively
+ *  disclosable, returning the combined string + a name→disclosure map. */
+function buildSdJwtFixture(disclosable: Record<string, unknown>): {
+  readonly combined: string;
+  readonly byName: Record<string, string>;
+} {
+  const names = Object.keys(disclosable);
+  const disclosures = names.map((name, i) => makeDisclosure(`salt-${i}`, name, disclosable[name]));
+  const byName: Record<string, string> = {};
+  names.forEach((name, i) => (byName[name] = disclosures[i] as string));
+  const now = Math.floor(Date.now() / 1000);
+  const payload = {
+    iss: ISSUER_DID,
+    sub: HOLDER_DID,
+    iat: now,
+    exp: now + 3600,
+    _sd_alg: 'sha-256',
+    _sd: disclosures.map(sdDigest),
+  };
+  const issuerJwt = signJwtEs256({ alg: 'ES256', kid: `${ISSUER_DID}#0` }, payload, ISSUER_PRIV);
+  return { combined: `${issuerJwt}~${disclosures.join('~')}~`, byName };
+}
 
 type QrEngine = {
   create: (
@@ -114,11 +168,13 @@ describe('presentation proof helpers', () => {
   });
 
   it('builds a Swift-shaped proof payload from the raw credential and selected claims', () => {
-    const payload = buildPresentationProofPayload({
-      credential,
-      selectedClaims: [humanClaim],
-      nonce: 'fixed-nonce',
-    });
+    const payload = expectOk(
+      buildPresentationProofPayload({
+        credential,
+        selectedClaims: [humanClaim],
+        nonce: 'fixed-nonce',
+      }),
+    );
     const vp = decodePayload(payload);
 
     expect(vp['@context']).toEqual(['https://www.w3.org/2018/credentials/v1']);
@@ -134,16 +190,20 @@ describe('presentation proof helpers', () => {
   });
 
   it('changes the QR payload when SD claim selection changes', () => {
-    const allPayload = buildPresentationProofPayload({
-      credential,
-      selectedClaims: claims,
-      nonce: 'fixed-nonce',
-    });
-    const onePayload = buildPresentationProofPayload({
-      credential,
-      selectedClaims: [ageClaim],
-      nonce: 'fixed-nonce',
-    });
+    const allPayload = expectOk(
+      buildPresentationProofPayload({
+        credential,
+        selectedClaims: claims,
+        nonce: 'fixed-nonce',
+      }),
+    );
+    const onePayload = expectOk(
+      buildPresentationProofPayload({
+        credential,
+        selectedClaims: [ageClaim],
+        nonce: 'fixed-nonce',
+      }),
+    );
 
     expect(allPayload).not.toBe(onePayload);
     expect(decodePayload(allPayload)['selected_claims']).toEqual([
@@ -154,9 +214,11 @@ describe('presentation proof helpers', () => {
   });
 
   it('still emits chunkable QR pages for the live preview renderer', () => {
-    const pages = buildPresentationProofQrPages(
-      { credential, selectedClaims: claims, nonce: 'fixed-nonce' },
-      { maxBytesPerChunk: 512 },
+    const pages = expectOk(
+      buildPresentationProofQrPages(
+        { credential, selectedClaims: claims, nonce: 'fixed-nonce' },
+        { maxBytesPerChunk: 512 },
+      ),
     );
 
     expect(pages.length).toBeGreaterThan(0);
@@ -178,5 +240,180 @@ describe('presentation proof helpers', () => {
         engine.create(page.payload, { errorCorrectionLevel: 'M' });
       }).not.toThrow();
     }
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Adversarial: the "selective disclosure" that used to leak the whole VC.
+// ---------------------------------------------------------------------------
+
+const NOW = new Date('2026-06-09T00:00:00Z');
+
+function claim(
+  id: string,
+  identityCardId: string,
+  claimType: string,
+): ProvableClaimEntity {
+  return {
+    id,
+    identityCardId,
+    claimType,
+    title: claimType,
+    issuerType: 'issuer',
+    trustLevel: 'L1',
+    source: 'Card',
+    payload: '{}',
+    isPresentable: true,
+    createdAt: NOW,
+    updatedAt: NOW,
+  };
+}
+
+function signPlainVc(extraSubject: Record<string, unknown> = {}): string {
+  const now = Math.floor(Date.now() / 1000);
+  return signJwtEs256(
+    { alg: 'ES256', kid: `${ISSUER_DID}#0` },
+    {
+      iss: ISSUER_DID,
+      sub: HOLDER_DID,
+      iat: now,
+      exp: now + 3600,
+      vc: {
+        type: ['VerifiableCredential', 'BusinessCardCredential'],
+        credentialSubject: { id: HOLDER_DID, name: 'Ada Lovelace', email: 'ada@example.com', ...extraSubject },
+      },
+    },
+    ISSUER_PRIV,
+  );
+}
+
+describe('presentation proof — no full-VC leak on a subset', () => {
+  const nameClaim = claim('c-name', 'card-1', 'name');
+  const emailClaim = claim('c-email', 'card-1', 'email');
+  const allCardClaims = [nameClaim, emailClaim];
+
+  it('FAILS CLOSED when only a subset of an ordinary JWT credential is selected (never leaks the rest)', () => {
+    const plainCred: PresentationCredential = {
+      id: 'card-1',
+      holderDid: HOLDER_DID,
+      rawJwt: signPlainVc(),
+      metadataTags: ['jwt_vc_json', 'imported', 'did:key'],
+    };
+
+    const result = buildPresentationProofPayload({
+      credential: plainCred,
+      selectedClaims: [nameClaim], // subset of {name, email}
+      allClaims: allCardClaims,
+      nonce: 'n',
+    });
+
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.error.code).toBe('not-redactable');
+    // The whole point: there is NO payload at all, so the full VC (which
+    // carries the un-selected `email`) cannot possibly be on the wire.
+  });
+
+  it('discloses an ordinary JWT credential IN FULL only when every claim is selected, with no misleading selected_claims', () => {
+    const rawJwt = signPlainVc();
+    const plainCred: PresentationCredential = {
+      id: 'card-1',
+      holderDid: HOLDER_DID,
+      rawJwt,
+      metadataTags: ['jwt_vc_json', 'imported', 'did:key'],
+    };
+
+    const payload = expectOk(
+      buildPresentationProofPayload({
+        credential: plainCred,
+        selectedClaims: allCardClaims, // full disclosure
+        allClaims: allCardClaims,
+        nonce: 'n',
+      }),
+    );
+    const vp = decodePayload(payload);
+
+    expect(vp['disclosure']).toBe('full');
+    // Honest: a whole-credential disclosure is NOT dressed up as selective.
+    expect(vp['selected_claims']).toBeUndefined();
+    expect(vp['verifiableCredential']).toEqual([rawJwt]);
+  });
+
+  it('SD-JWT subset: emits only the selected disclosure — the non-selected one is ABSENT, and no full VC is embedded', () => {
+    const { combined, byName } = buildSdJwtFixture({
+      age_over_18: true,
+      nationality: 'JP',
+    });
+    const sdCred: PresentationCredential = {
+      id: 'sd-1',
+      holderDid: HOLDER_DID,
+      rawJwt: combined,
+      metadataTags: ['sd-jwt-fallback'],
+    };
+
+    const payload = expectOk(
+      buildPresentationProofPayload({
+        credential: sdCred,
+        selectedClaims: [claim('c-age', 'sd-1', 'age_over_18')],
+        allClaims: [
+          claim('c-age', 'sd-1', 'age_over_18'),
+          claim('c-nat', 'sd-1', 'nationality'),
+        ],
+        nonce: 'n',
+      }),
+    );
+    const vp = decodePayload(payload);
+
+    expect(vp['disclosure']).toBe('subset');
+    // No full credential dump alongside the disclosures.
+    expect(vp['verifiableCredential']).toBeUndefined();
+    const sdJwt = vp['sd_jwt'] as string;
+    // The selected disclosure is present; the withheld one is genuinely gone.
+    expect(sdJwt.includes(byName['age_over_18'] as string)).toBe(true);
+    expect(sdJwt.includes(byName['nationality'] as string)).toBe(false);
+  });
+
+  it('SD-JWT with an injected (unsigned) disclosure fails closed instead of presenting it', () => {
+    const { combined } = buildSdJwtFixture({ age_over_18: true });
+    const forged = makeDisclosure('evil-salt', 'is_admin', true);
+    const tampered = `${combined}${forged}~`;
+    const sdCred: PresentationCredential = {
+      id: 'sd-2',
+      holderDid: HOLDER_DID,
+      rawJwt: tampered,
+      metadataTags: ['sd-jwt-fallback'],
+    };
+
+    const result = buildPresentationProofPayload({
+      credential: sdCred,
+      selectedClaims: [claim('c-age', 'sd-2', 'age_over_18')],
+      allClaims: [claim('c-age', 'sd-2', 'age_over_18')],
+      nonce: 'n',
+    });
+
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.error.code).toBe('altered-disclosure');
+  });
+
+  it('refuses to present a credential that failed import verification (unverified tag)', () => {
+    const plainCred: PresentationCredential = {
+      id: 'card-1',
+      holderDid: HOLDER_DID,
+      rawJwt: signPlainVc(),
+      metadataTags: ['jwt_vc_json', 'imported', 'unverified'],
+    };
+
+    const result = buildPresentationProofPayload({
+      credential: plainCred,
+      selectedClaims: allCardClaims,
+      allClaims: allCardClaims,
+      nonce: 'n',
+    });
+
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.error.code).toBe('not-redactable');
+    expect(result.error.message).toContain('unverified');
   });
 });

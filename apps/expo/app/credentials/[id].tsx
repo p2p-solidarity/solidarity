@@ -41,9 +41,11 @@ import {
 } from '@/credentials/trustDisplay';
 import {
   buildPresentationProofQrPages,
+  disclosureErrorI18nKey,
   initialPresentationClaimIds,
   selectPresentationClaims,
 } from '@/credentials/presentationProof';
+import type { PresentationQRPage } from '@/me/presentationQrPages';
 import { pushToast } from '@/feedback/toast';
 import { useTranslation } from '@/i18n';
 import { useIdentityData, type ProvableClaimEntity } from '@/identity';
@@ -390,16 +392,22 @@ export default function CredentialDetailScreen() {
     [passportShowEligible, presentationClaimRows, selectedClaimIdsForPresentation]
   );
 
-  const presentationPages = useMemo(
-    () =>
-      credential && !passportShowEligible && selectedClaimsForPresentation.length > 0
-        ? buildPresentationProofQrPages({
-            credential,
-            selectedClaims: selectedClaimsForPresentation,
-          })
-        : [],
-    [credential, passportShowEligible, selectedClaimsForPresentation]
-  );
+  const presentation = useMemo<{
+    readonly pages: readonly PresentationQRPage[];
+    readonly error?: string;
+  }>(() => {
+    if (!credential || passportShowEligible || selectedClaimsForPresentation.length === 0) {
+      return { pages: [] };
+    }
+    const result = buildPresentationProofQrPages({
+      credential,
+      selectedClaims: selectedClaimsForPresentation,
+      allClaims: presentationClaimRows,
+    });
+    return result.ok
+      ? { pages: result.value }
+      : { pages: [], error: t(disclosureErrorI18nKey(result.error)) };
+  }, [credential, passportShowEligible, selectedClaimsForPresentation, presentationClaimRows, t]);
 
   const status = useMemo<string>(() => {
     if (!credential) return '';
@@ -612,8 +620,8 @@ export default function CredentialDetailScreen() {
                 ) : (
                   <PresentationProofQr
                     selectedClaims={selectedClaimsForPresentation}
-                    pages={presentationPages}
-                    emptyText={t('credentialDetail.noClaims')}
+                    pages={presentation.pages}
+                    emptyText={presentation.error ?? t('credentialDetail.noClaims')}
                   />
                 )}
                 <View style={{ gap: 8 }}>

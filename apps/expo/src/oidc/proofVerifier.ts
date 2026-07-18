@@ -16,6 +16,10 @@ import {
   type PublicKeyJWK,
   verifyJwtEs256,
 } from '@solidarity/shared';
+import {
+  parseSdJwt,
+  reconstructSdJwtClaims,
+} from '@/credentials/selectiveDisclosure';
 import { verifyCardKeyBindingJws } from './cardKeyBinding';
 
 export type TrustLevel = 'L1' | 'L2' | 'L3' | 'L3+';
@@ -88,22 +92,48 @@ export async function verifyVcJwt(
   jwt: string,
   opts: VerifyOptions = {}
 ): Promise<VerifiedVc> {
-  const { header, payload } = decodeJwtUnsafe<VcClaims>(jwt);
-  const iss = payload.iss ?? header.kid?.split('#')[0];
+  // An SD-JWT presents as `<issuer-jwt>~<disclosure>~...`. Verify the ISSUER
+  // segment's signature (the disclosures are unsigned by design — their
+  // digests are what the issuer signed), then reconstruct only the disclosed
+  // claims. `reconstructSdJwtClaims` fails closed on any disclosure the issuer
+  // never signed (an injected / altered disclosure), so a tampered
+  // presentation is rejected rather than silently trusted.
+  const isSdJwt = jwt.includes('~');
+  let issuerSegment = jwt;
+  let disclosures: readonly string[] = [];
+  if (isSdJwt) {
+    const parsed = parseSdJwt(jwt);
+    if (!parsed.ok) throw new Error(parsed.error.message);
+    issuerSegment = parsed.value.issuerJwt;
+    disclosures = parsed.value.disclosures;
+  }
+
+  const { header, payload: issuerPayload } = decodeJwtUnsafe<VcClaims>(issuerSegment);
+  const iss = issuerPayload.iss ?? header.kid?.split('#')[0];
   if (!iss) throw new Error('VC has no issuer (iss / kid)');
 
   const jwk = await resolveIssuerJwk(iss);
-  verifyJwtEs256<VcClaims>(jwt, jwk);
+  verifyJwtEs256<VcClaims>(issuerSegment, jwk);
+
+  let claims: VcClaims = issuerPayload;
+  if (isSdJwt) {
+    const reconstructed = reconstructSdJwtClaims(
+      issuerPayload as unknown as Record<string, unknown>,
+      disclosures,
+    );
+    if (!reconstructed.ok) throw new Error(reconstructed.error.message);
+    claims = reconstructed.value;
+  }
 
   const now = opts.now ?? Math.floor(Date.now() / 1000);
-  checkTime(payload, now);
-  checkAud(payload, opts.expectedAud);
+  checkTime(claims, now);
+  checkAud(claims, opts.expectedAud);
 
   return {
     issuerDid: iss,
-    holderDid: payload.sub ?? payload.vc?.credentialSubject?.id ?? null,
-    trustLevel: inferTrust(payload),
-    claims: payload as unknown as Record<string, unknown>,
+    holderDid: claims.sub ?? claims.vc?.credentialSubject?.id ?? null,
+    trustLevel: inferTrust(claims),
+    claims: claims as unknown as Record<string, unknown>,
   };
 }
 
