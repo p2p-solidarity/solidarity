@@ -22,6 +22,8 @@
  *                 parser
  *   fragment.ts   URL-fragment codec (deflate + base64url) for QR/offline
  *                 profile publication (01-spec §4.3)
+ *   webSign.ts    App<->Web per-action remote-signing envelopes
+ *                 (request/response) + fail-closed verify (notes-1.3.3 §4)
  */
 export * from './badges';
 export * from './canonical';
@@ -40,3 +42,4 @@ export * from './sakura';
 export * from './types';
 export * from './vault';
 export * from './vcf';
+export * from './webSign';
