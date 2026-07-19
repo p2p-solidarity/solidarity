@@ -113,10 +113,17 @@ card.exchange.request(exchangeId、profile digest、size、updatedAt)
 - ✅ **T6** 真選擇性揭露(`8a319dc` + opaque 硬化;RFC 9901 SD-JWT:依 bytes 分類、每筆 disclosure 重算 digest、注入 disclosure 拒收;plain JWT 子集 fail-closed;import 驗簽)— 對抗性 review 被 session limit 切斷,關鍵性質改由主線親驗:①plain-JWT 子集拒收 ②unverified import 不可出示 ③SD-JWT 只揭露選定 ④注入 disclosure 拒收。review 中發現並修:`presentationProof.ts` 最終分支對 `opaque` 會連 raw bytes 一起送(buildVpToken 早已 fail-closed 拒 opaque/zk;此處對齊)。誠實殘留:plain-JWT full 揭露未建模欄位、靜態 ZK proof 沿用原集合(真 SD-JWT 攝入為後續票)
 - ✅ **T5** Pear 相互導入 + snapshot merge 政策(`ea6bc43`;offer 對 Noise 認證的 `peerDid` 驗簽 + `record.did===peerDid`;merge = saved/alreadyCurrent/keptNewer/conflict,note 留 record 外;誠實三態 localSave×peerReceipt,掉 ack 不回滾)
 
-**Wave 2(Wave 1 merge 後):**
-- ⏳ **T4** App 端 per-action root 簽名(v1 只有 `profile.sign`)+ web request/回收流(依賴 T3 schema)
-- ⏳ **T7** 三態隱私分級(public/link-only/private + 雙 record schema;§3 + G4)— 專屬設計 pass,非 fire-and-forget
-- ⏳ viewer fail-closed `@handle` 解析鏈(web 軌;需先重打包 vendored `@solidarity/shared`)
+**Wave 2 app 端(已 merge 回 1.3.3,整合後全套綠:typecheck 0 / lint 0 / 1547 unit + 110 parity):**
+- ✅ **T4a** App 端 per-action root 簽名(`ddb8e69`;`websign/appSigner` 消費 T3 原語;approve 拒 `didMismatch`、adopt 前 `verifyCompact` 驗證;複用既有 Face-ID root signer + Nostr publish;deep-link + QR + 誠實 consent diff「網站簽名不證明 origin」)
+- ✅ **T7** 三態隱私分級(`d70abc8`;per-item visibility 只在本地;三份簽名投影 published(public→Nostr)/shared(public+link-only→QR)/full(Pear);shared schema 加 optional `scope`(absent=full,back-compat,壞值 fail-closed);T5 merge 改 key `(did,scope)` 讓 public 投影與 full 卡共存不衝突;發布前 preview)
+- ✅ **整合修** `525e525` adoptSignedProfile 重置 T7 投影(防 adopt 新 record 後 republish 舊 public 投影)
+- ✅ **web re-bundle** `@solidarity/shared` 重打包進 airmeishi-web/vendor(含 dns/ens resolver + webSign + scope);web typecheck 0
+
+**Wave 2 web 端(進行中 — 兩邊串聯的連接組織):**
+- 🔄 **Web-A** viewer `@handle` 解析鏈接 dns/ens(R4 web 完成;DoH + eth RPC 皆 CORS-open;fail-closed 雙向)
+- 🔄 **Web-B(T4b)** builder 簽 webSign request → QR → 消費 response(訂閱 Nostr / 掃 response QR 確認 app 已簽發)
+
+**後續(重置後或另排):**
 - ⏳ NIP-78 公開揭露 record(§3;真 SD-JWT evidence 接上後)
 - ⏳ NIP-59 收件人加密非同步 — defer,獨立威脅模型審查後才排
 
