@@ -129,7 +129,9 @@ card.exchange.request(exchangeId、profile digest、size、updatedAt)
 
 **NIP-78 公開揭露(§3 + G2 presence-only;codex 實作、Claude 親驗 commit):**
 - ✅ **app + shared**(`08b1a7f` shared / `84946e5` app)—`PublicDisclosureRecordV1` presence-only:evidence.value **型別上只有 `{claim}`**、builder 硬編不可夾帶、verify 有 `forbiddenEvidence` 閘逐鍵拒任何非-claim 欄位(護照號/DOB 塞不進);allowlist 只 `age_over_18`/`age_over_21`(nationality 排除);root 簽、30 天效期、strict schema、closed error union、不 throw。app 讀 `filterPassportPublicDisclosureClaims`(抽象 claim、非 PII)、Face-ID root 簽、opt-in、誠實文案「裝置自證、非政府驗證、非 ZK」en+zh。全套綠(1554 unit + 110 parity)。
-- 🔄 **web viewer** 驗證+渲染揭露徽章(`wt/web-disclosure`;anti-substitution:pointer pubkey 必等於頁面自己反向驗證的 npub;誠實 presence-only 標籤;連小收尾 viewer→builder handoff + response QR 掃描)
+- ✅ **web viewer** 驗證+渲染揭露徽章(`airmeishi-web@70e89ca`;anti-substitution 閘在**開 socket 前**就擋 —— pointer pubkey 必屬頁面自己簽名 `alsoKnownAs` 的 npub 集合(否則 invalid、零網路呼叫)、record JWS 對頁面自己 `did` 驗、claim 必等 badge.subject;誠實五態 verified/stale/revoked/invalid/declared 永不假綠;offline-fragment 零網路保證未破;95 test 綠。SECONDARY:viewer→builder handoff(`EditThisPageButton` 複用 `loadResolvedPage`)已做;response QR 相機掃描留 paste-only(brief 允許,不加重依賴))
+
+**→ NIP-78 公開揭露端到端完成**(app 發布 presence-only + web viewer 驗證渲染,兩 repo 全綠)。**本輪所有可派工作收尾**;剩 Parked 三項各需你的設計決策或硬體。
 
 **Parked(不派,有理由):**
 - ⏳ 真 EXTERNAL-issuer SD-JWT 攝入 + 完整 8-gate issuer 信任鏈(presence-only 之後另一張票)
