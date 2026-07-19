@@ -121,7 +121,9 @@ card.exchange.request(exchangeId、profile digest、size、updatedAt)
 
 **Wave 2 web 端(兩邊串聯的連接組織;airmeishi-web repo):**
 - ✅ **Web-A** viewer `@handle` 解析鏈接 dns/ens(`airmeishi-web@9747bd6`;browser ResolverIO = DoH 雙查交叉 + eth RPC(新增 `ethRpc` 進 connect-origin 白名單)+ https-only fetchText;`resolveByHandle` fail-closed 雙向徽章、atproto 原路不動;55 test 綠、verify n3 過)
-- 🔄 **Web-B(T4b)** builder 用臨時 session key 簽 webSign request → QR →(app T4a 掃簽發布)→ web 訂閱 Nostr / 貼 response 確認(root key 永不進瀏覽器)
+- ✅ **Web-B(T4b)** builder 用臨時 session key 簽 webSign request → QR →(app T4a 掃簽發布)→ web 訂閱 Nostr / 貼 response 確認(`airmeishi-web@dae31dc`;root key 永不進瀏覽器;WebCrypto 單雜湊 vs signCompact 預雜湊的坑 = 用 signProfile 組裝法產出 byte-identical、以真 `verifyWebSignRequest` round-trip 證明;77 test 綠、offline-fragment 零網路保證未破)
+
+**→ web↔app 簽名回路端到端完成**:`/edit` 載入既有頁 → 編輯 → 臨時鑰簽 request → QR → app 掃 → diff → Face ID → root 簽 → **本機儲存** → 發布 → web 確認。整條線兩 repo 全綠。
 
 > **踩雷記(memory `vendored-shared-stale-cache`)**:re-pack `@solidarity/shared` 同版號 → bun 服務舊快取 tgz;web verify 前必須 `rm -rf node_modules/@solidarity ~/.bun/install/cache/@solidarity && bun install --force`。
 
