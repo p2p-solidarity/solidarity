@@ -51,6 +51,8 @@ import {
   ok,
   parseProfile,
   signCompact,
+  stableJSON,
+  verifyCompact,
   type ProfileLink,
   type ProfileRecord,
   type Result,
@@ -196,6 +198,21 @@ interface ProfileState {
     options?: ProfileSaveOptions
   ) => Promise<Result<SavedProfile, string>>;
   /**
+   * Adopt an already-root-signed `(record, jws)` pair as the current profile
+   * WITHOUT re-signing — the persistence tail of the App↔Web webSign flow
+   * (research §4 / G3): `approveWebSignRequest` has already Face-ID-gated and
+   * root-signed the EXACT reviewed draft, so re-running `saveProfile` (which
+   * mints a fresh record + fresh `updatedAt` and prompts Face ID again) would
+   * both desync from the `responseJws` binding and double-prompt. This
+   * re-validates the record shape and verifies the `jws` really is a root
+   * signature over exactly that record (a defensive guard against a caller
+   * wiring mistake — never a trust decision) before replacing the stored
+   * pair, then invalidates the cached Nostr verification (a fresh record is
+   * now ahead of any published copy). Synchronous: no biometric prompt, since
+   * the signature already exists.
+   */
+  readonly adoptSignedProfile: (record: ProfileRecord, jws: string) => Result<SavedProfile, string>;
+  /**
    * Publish the signed profile to Nostr (kind 30078) AND merge the
    * user's did:key into their kind-0 `alsoKnownAs` — the two directions
    * of task A4.2's bidirectional binding (see `nostr/publish.ts`'s
@@ -260,6 +277,24 @@ export const useProfileStore = create<ProfileState>((set, get) => ({
     // so the cached verification no longer describes this record. Clearing
     // it makes the badge re-check honestly (typically → stale) instead of
     // seeding the pre-edit state, which is the user's cue to republish.
+    invalidateCachedNostrResult();
+    return ok({ record: validated.value, jws });
+  },
+
+  adoptSignedProfile: (record, jws) => {
+    const validated = parseProfile(record);
+    if (!validated.ok) return err(`adoptSignedProfile: ${validated.error}`);
+    // The pair MUST be internally consistent: `jws` a root signature over
+    // exactly this record. It always is when produced by
+    // `approveWebSignRequest`; this only fails on a caller wiring bug, never
+    // on a legitimate flow.
+    const verified = verifyCompact(jws, validated.value.did);
+    if (!verified.ok) return err(`adoptSignedProfile: ${verified.error}`);
+    if (stableJSON(verified.value) !== stableJSON(validated.value)) {
+      return err('adoptSignedProfile: signed payload differs from the record');
+    }
+    writePersisted({ record: validated.value, jws });
+    set({ record: validated.value, jws, status: 'ready' });
     invalidateCachedNostrResult();
     return ok({ record: validated.value, jws });
   },

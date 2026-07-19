@@ -5,6 +5,7 @@
  */
 import { DEFAULT_HANDLE_RESOLVERS, matchHandleResolver, resolveDidKey } from '@solidarity/shared';
 
+import { WEBSIGN_DEEPLINK_HOST, WEBSIGN_REQUEST_PARAM } from '../websign/transport';
 import { isProductHost, isVerifiedDomain } from './domainVerification';
 
 export type DeepLinkRoute =
@@ -16,6 +17,7 @@ export type DeepLinkRoute =
   | { readonly kind: 'verifiedPointer'; readonly npub: string }
   | { readonly kind: 'verifiedHandle'; readonly handle: string }
   | { readonly kind: 'pear'; readonly did: string }
+  | { readonly kind: 'webSign'; readonly request: string }
   | { readonly kind: 'unknown'; readonly raw: string };
 
 /** Cheap structural gate for the `#nostr:<npub>` short-pointer form — the
@@ -86,6 +88,19 @@ function parseVerifiedHandleRoute(
 }
 
 /**
+ * The `https://<product-host>/websign#req=<X>` fragment form of the App↔Web
+ * signing request (research §4). Split out to keep `parseVerifiedDomainRoute`
+ * under the cyclomatic-complexity budget. `null` = no usable `req` → the
+ * caller falls through to `unknown` (never to the Verified Page fragment
+ * branch, which the `/websign` path already excluded).
+ */
+function parseWebSignDomainRoute(hash: string): DeepLinkRoute | null {
+  if (hash.length <= 1) return null;
+  const req = new URLSearchParams(hash.slice(1)).get(WEBSIGN_REQUEST_PARAM);
+  return req !== null && req.length > 0 ? { kind: 'webSign', request: req } : null;
+}
+
+/**
  * `https://<verified-domain>/...` routes only — split out of `parseDeepLink`
  * to keep that function's cyclomatic complexity under budget as this branch
  * grows (card link, and now the Verified Page fragment link, 1.3.3 Task
@@ -120,6 +135,16 @@ function parseVerifiedDomainRoute(url: URL): DeepLinkRoute | null {
     isValidPearDid(segments[1])
   ) {
     return { kind: 'pear', did: segments[1] };
+  }
+  // `https://<product-host>/websign#req=<X>` (research §4) — the fragment form
+  // of the App↔Web signing request, so `req` never leaves the device over the
+  // network (01-spec §1/§8). Checked BEFORE the generic `#<fragment>` branch
+  // below (which would otherwise swallow `#req=…` as a Verified Page blob) and
+  // distinguished from it by the `/websign` path segment. Returns a sentinel
+  // for "recognised /websign path" so a missing `req` fails to `unknown`
+  // rather than falling through to the fragment branch.
+  if (productHost && segments.length === 1 && segments[0] === WEBSIGN_DEEPLINK_HOST) {
+    return parseWebSignDomainRoute(url.hash);
   }
   const handleRoute = parseVerifiedHandleRoute(productHost, segments, url.hash);
   if (handleRoute !== null) return handleRoute;
@@ -168,6 +193,15 @@ function parseCustomSchemeRoute(url: URL): DeepLinkRoute | null {
   // silently taking the first and ignoring the rest.
   if (url.host === 'pear' && segments.length === 1 && first && isValidPearDid(first)) {
     return { kind: 'pear', did: first };
+  }
+  // `solidarity://websign?req=<X>` (research §4, App↔Web per-action signing) —
+  // the same-device "deep link out" transport. `req` is the raw request
+  // compact JWS or its compressed fragment form; it is decoded + verified by
+  // the review flow, never trusted here. The web session signature does NOT
+  // prove origin — the app's human-reviewed diff is the security boundary.
+  if (url.host === WEBSIGN_DEEPLINK_HOST) {
+    const req = url.searchParams.get(WEBSIGN_REQUEST_PARAM);
+    return req !== null && req.length > 0 ? { kind: 'webSign', request: req } : null;
   }
   return null;
 }

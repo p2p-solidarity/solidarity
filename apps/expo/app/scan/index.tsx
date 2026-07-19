@@ -54,6 +54,8 @@ import { handleScannedPayload } from '@/scan/envelopeHandler';
 import { passportShowVerifierResult } from '@/scan/passportShowResult';
 import { classifyVerifiedPagePayload, verifyFragment } from '@/scan/verifiedPageHandler';
 import { presentVerifiedPageResolving, presentVerifiedPageResult } from '@/scan/verifiedPageResult';
+import { presentWebSignEntry } from '@/websign/pendingRequest';
+import { classifyWebSignScan } from '@/websign/transport';
 import { verifyVpToken } from '@/oidc';
 import { useTranslation } from '@/i18n';
 
@@ -94,6 +96,18 @@ export default function ScanScreen() {
     setProgress(null);
     setIsScanning(false);
     capturing.current = false;
+
+    // App↔Web per-action signing request (research §4, G3) — an explicit
+    // `solidarity://websign?req=` / `/websign#req=` wrapper only, tried BEFORE
+    // the envelope handler so a request JWS is never mis-parsed as a card
+    // credential. Routes to the consent review screen (verify + per-field diff
+    // + Face ID); the web session signature does NOT prove origin.
+    const webSignReq = classifyWebSignScan(payload);
+    if (webSignReq !== null) {
+      presentWebSignEntry(webSignReq);
+      router.push('/websign/review');
+      return;
+    }
 
     // Verified Page fragment QR (1.3.3 Task A2.3, US-11) — tried first as a
     // cheap, self-contained format sniff. Returns `null` for anything that

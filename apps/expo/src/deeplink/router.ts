@@ -8,6 +8,7 @@ import { resolveProfileByHandle } from '@/handles/resolveProfile';
 import { resolveProfileByNpub } from '@/nostr/resolveProfile';
 import { presentVerifiedPageResolving, presentVerifiedPageResult } from '@/scan/verifiedPageResult';
 import { verifyFragment } from '@/scan/verifiedPageHandler';
+import { presentWebSignEntry } from '@/websign/pendingRequest';
 
 import { parseDeepLink, type DeepLinkRoute } from './parser';
 
@@ -58,6 +59,14 @@ export function handleDeepLink(raw: string): DeepLinkRoute {
       // screen's doc). Same route either way — the screen itself decides
       // which to show based on whether it already knows this did.
       router.push({ pathname: '/people/profile/[did]', params: { did: route.did } });
+      break;
+    case 'webSign':
+      // App↔Web per-action signing (research §4, G3). Stage the request (or an
+      // honest decode error) and open the consent review screen. The review
+      // screen does the verify + per-field diff + Face-ID-gated root sign; the
+      // web session signature never proves origin, so the diff is the boundary.
+      presentWebSignEntry(route.request);
+      router.push('/websign/review');
       break;
     case 'unknown':
       break;

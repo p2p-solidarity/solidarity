@@ -227,4 +227,31 @@ describe('parseDeepLink', () => {
       expect(r.did).toBe(REAL_DID);
     }
   });
+
+  // ── webSign (App↔Web per-action signing, research §4 / T4a) ──────────────
+  it('parses a solidarity://websign?req=<X> deep link', () => {
+    const r = parseDeepLink('solidarity://websign?req=aaa.bbb.ccc');
+    expect(r.kind).toBe('webSign');
+    if (r.kind === 'webSign') {
+      expect(r.request).toBe('aaa.bbb.ccc');
+    }
+  });
+
+  it('parses a https://<product-host>/websign#req=<X> fragment deep link', () => {
+    const r = parseDeepLink('https://solidarity.gg/websign#req=BLOB_VALUE');
+    expect(r.kind).toBe('webSign');
+    if (r.kind === 'webSign') {
+      expect(r.request).toBe('BLOB_VALUE');
+    }
+  });
+
+  it('treats a websign wrapper with no req as unknown', () => {
+    expect(parseDeepLink('solidarity://websign').kind).toBe('unknown');
+    expect(parseDeepLink('https://solidarity.gg/websign').kind).toBe('unknown');
+  });
+
+  it('does not confuse a real Verified Page fragment link with a websign link', () => {
+    // No `/websign` path segment → still routes as a Verified Page fragment.
+    expect(parseDeepLink('https://solidarity.gg/#abc123').kind).toBe('verifiedProfile');
+  });
 });
