@@ -62,7 +62,12 @@ import {
   type SubscriptionHandle,
 } from '@/dag/nostrAdapter';
 
-import { err, ok, type Result } from '@solidarity/shared';
+import {
+  buildPublicDisclosureDTag,
+  err,
+  ok,
+  type Result,
+} from '@solidarity/shared';
 
 import { getNostrPubkey, signNostrEvent, type UnsignedNostrEvent } from './userKey';
 
@@ -182,6 +187,39 @@ export interface PublishProfileOptions {
   readonly publishEventFn?: PublishEventFn;
 }
 
+interface PublishNip78Options {
+  readonly jws: string;
+  readonly relays: readonly string[];
+  readonly timeoutMs?: number;
+  readonly createdAt?: number;
+  readonly publishEventFn?: PublishEventFn;
+}
+
+async function publishNip78Record(
+  opts: PublishNip78Options,
+  dTag: string,
+  errorPrefix: string
+): Promise<Result<PublishReport, string>> {
+  if (opts.relays.length === 0) return err(`${errorPrefix}: relays list is empty`);
+
+  const unsigned: UnsignedNostrEvent = {
+    kind: KIND_PROFILE_POINTER,
+    tags: [['d', dTag]],
+    content: opts.jws,
+    ...(opts.createdAt !== undefined ? { created_at: opts.createdAt } : {}),
+  };
+  const signed = await signNostrEvent(unsigned);
+  if (!signed.ok) return err(signed.error);
+
+  const report = await publishToRelays(
+    signed.value,
+    opts.relays,
+    opts.publishEventFn ?? publishEvent,
+    opts.timeoutMs
+  );
+  return ok(report);
+}
+
 /**
  * Build + sign a NIP-78 kind-30078 event (`tags: [['d', 'solidarity.
  * profile']]`, `content` = the profile JWS verbatim) and publish it to
@@ -189,19 +227,21 @@ export interface PublishProfileOptions {
  * see that constant's doc.
  */
 export async function publishProfile(opts: PublishProfileOptions): Promise<Result<PublishReport, string>> {
-  if (opts.relays.length === 0) return err('publishProfile: relays list is empty');
+  return publishNip78Record(opts, PROFILE_D_TAG, 'publishProfile');
+}
 
-  const unsigned: UnsignedNostrEvent = {
-    kind: KIND_PROFILE_POINTER,
-    tags: [['d', PROFILE_D_TAG]],
-    content: opts.jws,
-    ...(opts.createdAt !== undefined ? { created_at: opts.createdAt } : {}),
-  };
-  const signed = await signNostrEvent(unsigned);
-  if (!signed.ok) return err(signed.error);
+export interface PublishPublicDisclosureOptions extends PublishNip78Options {
+  /** Opaque slot mirrored inside the root-signed disclosure record. */
+  readonly slot: string;
+}
 
-  const report = await publishToRelays(signed.value, opts.relays, opts.publishEventFn ?? publishEvent, opts.timeoutMs);
-  return ok(report);
+/** Publish one presence-only disclosure to its own parameterized NIP-78 slot. */
+export async function publishPublicDisclosure(
+  opts: PublishPublicDisclosureOptions
+): Promise<Result<PublishReport, string>> {
+  const dTag = buildPublicDisclosureDTag(opts.slot);
+  if (!dTag.ok) return err(`publishPublicDisclosure: ${dTag.error.detail}`);
+  return publishNip78Record(opts, dTag.value, 'publishPublicDisclosure');
 }
 
 // ── Direction 2: merge did:key into kind-0 `alsoKnownAs` ──────────────────

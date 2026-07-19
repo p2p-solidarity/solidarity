@@ -77,6 +77,14 @@ interface PublishMod {
     readonly createdAt?: number;
     readonly publishEventFn?: PublishEventFn;
   }) => Promise<Res<PublishReport>>;
+  readonly publishPublicDisclosure: (opts: {
+    readonly jws: string;
+    readonly slot: string;
+    readonly relays: readonly string[];
+    readonly timeoutMs?: number;
+    readonly createdAt?: number;
+    readonly publishEventFn?: PublishEventFn;
+  }) => Promise<Res<PublishReport>>;
   readonly updateKind0AlsoKnownAs: (opts: {
     readonly did: string;
     readonly relays: readonly string[];
@@ -242,6 +250,32 @@ describe('publishProfile', () => {
     expect(r.value.acceptedCount).toBe(1);
     expect(r.value.requiredCount).toBe(2);
     expect(r.value.results).toHaveLength(3);
+  });
+});
+
+describe('publishPublicDisclosure', () => {
+  it('publishes the record JWS to its own parameterized NIP-78 d-tag', async () => {
+    await userKeyMod.provisionFromRootMnemonic();
+    const { fn } = makeFakePublish({ a: true, b: true, c: true });
+    const slot = '0198a6e4-0c3d-7a21-9657-54a6b6b20275';
+    const jws = 'public.disclosure.jws';
+
+    const result = await mod.publishPublicDisclosure({
+      jws,
+      slot,
+      relays: ['a', 'b', 'c'],
+      createdAt: 1_800_000_000,
+      publishEventFn: fn,
+    });
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.value.event.kind).toBe(30078);
+    expect(result.value.event.tags).toEqual([
+      ['d', `solidarity.disclosure.public.v1:${slot}`],
+    ]);
+    expect(result.value.event.content).toBe(jws);
+    expect(verifyNostrEvent(result.value.event)).toBe(true);
   });
 });
 

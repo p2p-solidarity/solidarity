@@ -90,6 +90,7 @@ interface ProfileModuleSurface {
         options?: {
           readonly alsoKnownAs?: readonly string[];
           readonly avatar?: string | null;
+          readonly badges?: ProfileRecord['badges'];
         }
       ) => Promise<SaveResult>;
       readonly publishToNostr: (
@@ -427,6 +428,35 @@ describe('saveProfile — append-only replacement semantics', () => {
     expect(r2?.alsoKnownAs).toEqual([]);
     expect(r2?.badges).toEqual([]);
     expect(r2?.supersededBy).toBeNull();
+  });
+
+  it('root-signs an explicit badge update into full, shared, and public projections', async () => {
+    const created = await rootKeyMod.createFromFreshMnemonic();
+    expect(created.ok).toBe(true);
+    if (!created.ok) return;
+    await mod.useProfileStore.getState().saveProfile({
+      displayName: 'Alice',
+      bio: '',
+      links: [],
+    });
+    const badge = {
+      type: 'solidarity.publicDisclosure.v1',
+      subject: 'age_over_18',
+      attestation:
+        'nostr:30078:abababababababababababababababababababababababababababababababab:solidarity.disclosure.public.v1:0198a6e4-0c3d-7a21-9657-54a6b6b20275',
+    };
+
+    const updated = await mod.useProfileStore.getState().saveProfile(
+      { displayName: 'Alice', bio: '', links: [] },
+      { badges: [badge] }
+    );
+
+    expect(updated.ok).toBe(true);
+    const state = mod.useProfileStore.getState();
+    expect(state.record?.badges).toEqual([badge]);
+    expect(state.shared?.record.badges).toEqual([badge]);
+    expect(state.published?.record.badges).toEqual([badge]);
+    expect(verifyCompact(state.published!.jws, created.value.did).ok).toBe(true);
   });
 });
 

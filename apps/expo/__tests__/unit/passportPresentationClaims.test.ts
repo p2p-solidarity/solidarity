@@ -2,6 +2,7 @@ import { describe, expect, it } from 'bun:test';
 
 import {
   buildPassportProvableClaims,
+  filterPassportPublicDisclosureClaims,
   selectPassportShowPresentationClaims,
 } from '../../src/passport/presentationClaims';
 import type { ProvableClaimEntity } from '../../src/identity/entities';
@@ -67,5 +68,21 @@ describe('passport presentation claims', () => {
     expect(
       selectPassportShowPresentationClaims(claims, selected).map((c) => c.claimType)
     ).toEqual(['age_over_18', 'nationality']);
+  });
+
+  it('offers only presentable passport-sourced age claims for public disclosure', () => {
+    const claims = [
+      claim('age18', 'age_over_18'),
+      claim('age21', 'age_over_21'),
+      claim('nationality', 'nationality'),
+      { ...claim('other-source', 'age_over_18'), source: 'Imported VC' },
+      { ...claim('not-presentable', 'age_over_18'), isPresentable: false },
+    ];
+
+    expect(
+      filterPassportPublicDisclosureClaims(claims).map((candidate) =>
+        candidate.claimType
+      )
+    ).toEqual(['age_over_18', 'age_over_21']);
   });
 });

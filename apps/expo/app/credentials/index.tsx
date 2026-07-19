@@ -24,6 +24,7 @@ import { ScrollView, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { IssuerBadge } from '@/components/credentials/IssuerBadge';
+import { PublicDisclosureAction } from '@/components/credentials/PublicDisclosureAction';
 import { PressableScale } from '@/components/common/PressableScale';
 import { SfIcon } from '@/components/icons/SfIcon';
 import { VerifiedCredentialRow } from '@/components/me';
@@ -333,6 +334,10 @@ export default function VCManagementScreen() {
               }}
             />
           </View>
+        </View>
+
+        <View className="mt-6 px-4">
+          <PublicDisclosureAction />
         </View>
 
         {manifest.length > 0 ? (

@@ -54,6 +54,7 @@ import {
   stableJSON,
   verifyCompact,
   type ProfileLink,
+  type ProfileBadge,
   type ProfileRecord,
   type ProfileScope,
   type Result,
@@ -126,6 +127,8 @@ export interface ProfileEditableFields {
 export interface ProfileSaveOptions {
   readonly alsoKnownAs?: readonly string[];
   readonly avatar?: string | null;
+  /** Narrow identity-level badge replacement (e.g. public disclosure refs). */
+  readonly badges?: readonly ProfileBadge[];
 }
 
 /** The exact pair persisted by a successful Face-ID-gated save. */
@@ -287,7 +290,7 @@ function buildCandidateRecord(
     links: fields.links,
     alsoKnownAs:
       options.alsoKnownAs !== undefined ? [...options.alsoKnownAs] : (previous?.alsoKnownAs ?? []),
-    badges: previous?.badges ?? [],
+    badges: options.badges !== undefined ? [...options.badges] : (previous?.badges ?? []),
     supersededBy: previous?.supersededBy ?? null,
     updatedAt: nextUpdatedAt(previous?.updatedAt ?? null),
   };
