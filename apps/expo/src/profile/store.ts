@@ -449,8 +449,20 @@ export const useProfileStore = create<ProfileState>((set, get) => ({
     if (stableJSON(verified.value) !== stableJSON(validated.value)) {
       return err('adoptSignedProfile: signed payload differs from the record');
     }
-    writePersisted({ record: validated.value, jws });
-    set({ record: validated.value, jws, status: 'ready' });
+    // The adopted record replaces the profile, so any previously-signed
+    // `shared`/`published` projections belong to the OLD record — null them so
+    // the next publish/share re-signs for THIS record (never republishes the
+    // prior public projection). The web-signed record carries no per-link
+    // visibility metadata → all links default public (empty `linkVisibility`).
+    writePersisted({ record: validated.value, jws, linkVisibility: [], shared: null, published: null });
+    set({
+      record: validated.value,
+      jws,
+      status: 'ready',
+      linkVisibility: [],
+      shared: null,
+      published: null,
+    });
     invalidateCachedNostrResult();
     return ok({ record: validated.value, jws });
   },
