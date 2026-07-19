@@ -119,9 +119,11 @@ card.exchange.request(exchangeId、profile digest、size、updatedAt)
 - ✅ **整合修** `525e525` adoptSignedProfile 重置 T7 投影(防 adopt 新 record 後 republish 舊 public 投影)
 - ✅ **web re-bundle** `@solidarity/shared` 重打包進 airmeishi-web/vendor(含 dns/ens resolver + webSign + scope);web typecheck 0
 
-**Wave 2 web 端(進行中 — 兩邊串聯的連接組織):**
-- 🔄 **Web-A** viewer `@handle` 解析鏈接 dns/ens(R4 web 完成;DoH + eth RPC 皆 CORS-open;fail-closed 雙向)
-- 🔄 **Web-B(T4b)** builder 簽 webSign request → QR → 消費 response(訂閱 Nostr / 掃 response QR 確認 app 已簽發)
+**Wave 2 web 端(兩邊串聯的連接組織;airmeishi-web repo):**
+- ✅ **Web-A** viewer `@handle` 解析鏈接 dns/ens(`airmeishi-web@9747bd6`;browser ResolverIO = DoH 雙查交叉 + eth RPC(新增 `ethRpc` 進 connect-origin 白名單)+ https-only fetchText;`resolveByHandle` fail-closed 雙向徽章、atproto 原路不動;55 test 綠、verify n3 過)
+- 🔄 **Web-B(T4b)** builder 用臨時 session key 簽 webSign request → QR →(app T4a 掃簽發布)→ web 訂閱 Nostr / 貼 response 確認(root key 永不進瀏覽器)
+
+> **踩雷記(memory `vendored-shared-stale-cache`)**:re-pack `@solidarity/shared` 同版號 → bun 服務舊快取 tgz;web verify 前必須 `rm -rf node_modules/@solidarity ~/.bun/install/cache/@solidarity && bun install --force`。
 
 **後續(重置後或另排):**
 - ⏳ NIP-78 公開揭露 record(§3;真 SD-JWT evidence 接上後)
