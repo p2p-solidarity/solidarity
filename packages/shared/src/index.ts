@@ -20,6 +20,8 @@
  *                 derivation (App<->Web portability)
  *   profile.ts    Profile Record schema (01-spec §3) + Result-returning
  *                 parser
+ *   publicDisclosure.ts  Presence-only, root-signed NIP-78 public claims
+ *                 + strict verification and badge-pointer helpers
  *   fragment.ts   URL-fragment codec (deflate + base64url) for QR/offline
  *                 profile publication (01-spec §4.3)
  *   webSign.ts    App<->Web per-action remote-signing envelopes
@@ -37,6 +39,7 @@ export * from './importer';
 export * from './jws';
 export * from './nostr';
 export * from './profile';
+export * from './publicDisclosure';
 export * from './qr';
 export * from './sakura';
 export * from './types';
