@@ -14,8 +14,15 @@ import { ProfileShareSurface } from './ProfileShareSurface';
 const ENTRANCE_DURATION_MS = 240;
 
 export interface MeProfilePageProps {
+  /** The FULL record — the owner's own view: every link, including private
+   *  ones. Used for the hero, badges, and the on-screen link list. */
   readonly record: ProfileRecord;
   readonly jws: string;
+  /** The SHARED projection (public + link-only links, T7) — what the QR /
+   *  URL-fragment share surface encodes so a private link never leaves in a
+   *  scanned code. Falls back to the full record for a pre-T7 profile. */
+  readonly shareRecord: ProfileRecord;
+  readonly shareJws: string;
   readonly bottomInset: number;
   readonly onEdit: () => void;
   readonly onOpenIdentity: () => void;
@@ -27,6 +34,8 @@ export interface MeProfilePageProps {
 export function MeProfilePage({
   record,
   jws,
+  shareRecord,
+  shareJws,
   bottomInset,
   onEdit,
   onOpenIdentity,
@@ -60,7 +69,11 @@ export function MeProfilePage({
       </Animated.View>
 
       <Animated.View entering={entrance(STAGGER_MS * 2)}>
-        <ProfileShareSurface record={record} jws={jws} onOpenShareSettings={onOpenShareSettings} />
+        <ProfileShareSurface
+          record={shareRecord}
+          jws={shareJws}
+          onOpenShareSettings={onOpenShareSettings}
+        />
       </Animated.View>
 
       <Animated.View

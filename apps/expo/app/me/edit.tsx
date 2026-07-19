@@ -58,6 +58,8 @@ import {
   normalizeLinkUrl,
   type LinkLabelPreset,
 } from '@/profile/linkUrl';
+import { LinkVisibilityControl, PublishPreviewSheet } from '@/components/me/PublishPreviewSheet';
+import { summarizeVisibility, type LinkVisibility, type VisibilitySummary } from '@/profile/projection';
 import { useProfileStore, type NostrPublishOutcome } from '@/profile/store';
 import { shouldAutoRepublish } from '@/profile/publishingPolicy';
 import { usePreferences } from '@/settings/preferences';
@@ -68,6 +70,8 @@ interface EditableLink {
   readonly label: string;
   readonly url: string;
   readonly preset: LinkLabelPreset | null;
+  /** T7 per-link privacy tier — LOCAL only, never in the signed record. */
+  readonly visibility: LinkVisibility;
 }
 
 type TFn = ReturnType<typeof useTranslation>['t'];
@@ -81,8 +85,8 @@ function publishFailureDetail(outcome: NostrPublishOutcome, t: TFn): string {
   });
 }
 
-function toEditableLink(link: ProfileLink): EditableLink {
-  return { id: uuid(), label: link.label, url: link.url, preset: presetForLabel(link.label) };
+function toEditableLink(link: ProfileLink, visibility: LinkVisibility): EditableLink {
+  return { id: uuid(), label: link.label, url: link.url, preset: presetForLabel(link.label), visibility };
 }
 
 /** `null` = no error. An empty (never-touched) URL is not an error — the
@@ -111,6 +115,7 @@ export default function MeEditScreen() {
   const insets = useSafeAreaInsets();
   const { t } = useTranslation();
   const record = useProfileStore((s) => s.record);
+  const storeLinkVisibility = useProfileStore((s) => s.linkVisibility);
   const saveProfile = useProfileStore((s) => s.saveProfile);
   const publishToNostr = useProfileStore((s) => s.publishToNostr);
   const autoRepublish = usePreferences((s) => s.nostrAutoRepublish);
@@ -134,9 +139,12 @@ export default function MeEditScreen() {
 
   const [displayName, setDisplayName] = useState(record?.displayName ?? '');
   const [bio, setBio] = useState(record?.bio ?? '');
-  const [links, setLinks] = useState<readonly EditableLink[]>(() => (record?.links ?? []).map(toEditableLink));
+  const [links, setLinks] = useState<readonly EditableLink[]>(() =>
+    (record?.links ?? []).map((link, i) => toEditableLink(link, storeLinkVisibility[i] ?? 'public'))
+  );
   const [saving, setSaving] = useState(false);
   const [linktreeSheetOpen, setLinktreeSheetOpen] = useState(false);
+  const [previewOpen, setPreviewOpen] = useState(false);
 
   const linkErrors = useMemo(
     () =>
@@ -150,7 +158,10 @@ export default function MeEditScreen() {
   const hasLinkErrors = linkErrors.some((e) => e !== null);
 
   const addLink = () => {
-    setLinks((prev) => [...prev, { id: uuid(), label: '', url: '', preset: null }]);
+    setLinks((prev) => [...prev, { id: uuid(), label: '', url: '', preset: null, visibility: 'public' }]);
+  };
+  const setLinkVisibility = (id: string, visibility: LinkVisibility) => {
+    setLinks((prev) => prev.map((link) => (link.id === id ? { ...link, visibility } : link)));
   };
   const removeLink = (id: string) => {
     setLinks((prev) => prev.filter((l) => l.id !== id));
@@ -219,11 +230,12 @@ export default function MeEditScreen() {
     const existingUrls = new Set(links.map((l) => l.url));
     const additions = result.links
       .filter((l) => !existingUrls.has(l.url))
-      .map((l) => ({
+      .map((l): EditableLink => ({
         id: uuid(),
         label: l.label,
         url: l.url,
         preset: presetForLabel(l.label),
+        visibility: 'public',
       }));
     if (additions.length === 0) return;
     setLinks((prev) => [...prev, ...additions]);
@@ -231,13 +243,18 @@ export default function MeEditScreen() {
     pushToast(t('meEdit.linktreeImportMerged', { count: additions.length }), 'success');
   };
 
-  const submittedLinks = (): ProfileLink[] =>
-    links
-      .filter((link) => !isBlankLink(link))
-      .map((link) => ({
+  /** Non-blank links plus their per-link visibility, kept parallel by index —
+   *  the shape `saveProfile` needs to persist tiers and build projections. */
+  const submitted = (): { links: ProfileLink[]; linkVisibility: LinkVisibility[] } => {
+    const kept = links.filter((link) => !isBlankLink(link));
+    return {
+      links: kept.map((link) => ({
         label: link.label.trim(),
         url: prepareLinkUrl(link.url, link.preset),
-      }));
+      })),
+      linkVisibility: kept.map((link) => link.visibility),
+    };
+  };
 
   const commitProfile = async (
     avatarOverride?: string | null
@@ -246,11 +263,13 @@ export default function MeEditScreen() {
       haptic('error');
       return 'invalidLinks';
     }
+    const { links: submittedLinks, linkVisibility } = submitted();
     const saved = await saveProfile(
       {
         displayName: displayName.trim(),
         bio: bio.trim(),
-        links: submittedLinks(),
+        links: submittedLinks,
+        linkVisibility,
       },
       avatarOverride === undefined ? undefined : { avatar: avatarOverride }
     );
@@ -302,7 +321,22 @@ export default function MeEditScreen() {
     willPublish: willAutoRepublish,
   });
 
-  const handleSave = async () => {
+  /** Live count of how each link projects (public / link-only / private) —
+   *  the honest source for the pre-publish preview. */
+  const visibilitySummary = useMemo<VisibilitySummary>(() => {
+    const { links: keptLinks, linkVisibility } = submitted();
+    return summarizeVisibility(keptLinks, linkVisibility);
+  }, [links]);
+
+  const publicLinkLabels = useMemo(
+    () =>
+      links
+        .filter((link) => !isBlankLink(link) && link.visibility === 'public')
+        .map((link) => (link.label.trim().length > 0 ? link.label.trim() : displayLinkText(link.preset, link.url))),
+    [links]
+  );
+
+  const runSave = async () => {
     setSaving(true);
     try {
       const result = await commitProfile();
@@ -314,6 +348,30 @@ export default function MeEditScreen() {
     } finally {
       setSaving(false);
     }
+  };
+
+  /** Save tap: show the pre-publish preview FIRST whenever anything will leave
+   *  this device differently than the on-screen list implies — i.e. when
+   *  publishing to Nostr, or when any link is hidden from the public projection
+   *  (link-only / private). An all-public, local-only save skips straight
+   *  through (nothing to disclose). */
+  const handleSave = () => {
+    if (hasLinkErrors) {
+      haptic('error');
+      return;
+    }
+    const hasHidden = visibilitySummary.linkOnly > 0 || visibilitySummary.private > 0;
+    if (willAutoRepublish || hasHidden) {
+      haptic('tap');
+      setPreviewOpen(true);
+      return;
+    }
+    void runSave();
+  };
+
+  const confirmFromPreview = () => {
+    setPreviewOpen(false);
+    void runSave();
   };
 
   if (!rootKeyPresent) {
@@ -372,6 +430,7 @@ export default function MeEditScreen() {
           onChangeField={updateLink}
           onChangeUrl={changeLinkUrl}
           onSelectPreset={selectLinkPreset}
+          onSetVisibility={setLinkVisibility}
           onImportLinktree={() => { setLinktreeSheetOpen(true); }}
         />
 
@@ -385,7 +444,7 @@ export default function MeEditScreen() {
           fullWidth
           loading={saving}
           disabled={hasLinkErrors}
-          onPress={() => { void handleSave(); }}
+          onPress={() => { handleSave(); }}
         />
         <ThemedText variant="caption" tone="secondary" style={{ textAlign: 'center' }}>
           {t(willAutoRepublish ? 'meEdit.publishHint' : 'meEdit.localSaveHint')}
@@ -398,6 +457,15 @@ export default function MeEditScreen() {
         confirmLabel={t('meEdit.linktreeImportConfirm')}
         onClose={() => { setLinktreeSheetOpen(false); }}
         onImport={mergeImportedLinks}
+      />
+
+      <PublishPreviewSheet
+        visible={previewOpen}
+        summary={visibilitySummary}
+        publicLabels={publicLinkLabels}
+        willPublish={willAutoRepublish}
+        onConfirm={confirmFromPreview}
+        onClose={() => { setPreviewOpen(false); }}
       />
     </View>
   );
@@ -412,6 +480,7 @@ function LinksEditor({
   onChangeField,
   onChangeUrl,
   onSelectPreset,
+  onSetVisibility,
   onImportLinktree,
 }: {
   readonly links: readonly EditableLink[];
@@ -422,6 +491,7 @@ function LinksEditor({
   readonly onChangeField: (id: string, field: 'label' | 'url', value: string) => void;
   readonly onChangeUrl: (id: string, value: string) => void;
   readonly onSelectPreset: (id: string, preset: LinkLabelPreset, label: string) => void;
+  readonly onSetVisibility: (id: string, visibility: LinkVisibility) => void;
   readonly onImportLinktree: () => void;
 }) {
   const { t } = useTranslation();
@@ -510,6 +580,13 @@ function LinksEditor({
             error={errors[i]}
             showClear
           />
+
+          <LinkVisibilityControl
+            selected={link.visibility}
+            onSelect={(visibility) => {
+              onSetVisibility(link.id, visibility);
+            }}
+          />
         </View>
       ))}
 
@@ -566,3 +643,5 @@ function LinkPresetChips({
     </ScrollView>
   );
 }
+
+/** i18n keys per visibility tier — literal so the catalog test resolves them. */

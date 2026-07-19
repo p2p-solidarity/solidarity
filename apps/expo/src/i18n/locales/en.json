@@ -1299,5 +1299,22 @@
   "websign.copied": "Response copied",
   "websign.done": "Done",
   "websign.errorTitle": "Can't verify this request",
-  "websign.errorBody": "The signing request is invalid, expired, or was tampered with. Nothing was signed."
+  "websign.errorBody": "The signing request is invalid, expired, or was tampered with. Nothing was signed.",
+  "meEdit.visibility.label": "Who can see this link",
+  "meEdit.visibility.public": "Public",
+  "meEdit.visibility.linkOnly": "Link only",
+  "meEdit.visibility.private": "Private",
+  "meEdit.visibility.publicHint": "Included everywhere — published to Nostr, shared by QR, and kept on your device.",
+  "meEdit.visibility.linkOnlyHint": "Only in the QR / share link you hand out — never published to Nostr.",
+  "meEdit.visibility.privateHint": "Stays on your device — never shared or published.",
+  "meEdit.preview.title": "Before you publish",
+  "meEdit.preview.subtitlePublish": "This is exactly what goes public on Nostr. Face ID signs each version separately.",
+  "meEdit.preview.subtitleShare": "This is exactly what your shared QR / link will carry.",
+  "meEdit.preview.nonePublic": "No links will be public.",
+  "meEdit.preview.publicCount": "{{count}} of {{total}} links will be public.",
+  "meEdit.preview.linkOnlyCount": "{{count}} shared by QR / link only.",
+  "meEdit.preview.privateCount": "{{count}} kept private on this device.",
+  "meEdit.preview.confirmPublish": "Publish",
+  "meEdit.preview.confirmSave": "Save",
+  "meEdit.preview.cancel": "Keep editing"
 }

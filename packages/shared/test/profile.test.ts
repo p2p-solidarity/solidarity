@@ -137,6 +137,25 @@ describe('parseProfile', () => {
     expect(result.ok).toBe(true);
   });
 
+  // ── T7: optional `scope` projection field ─────────────────────────────
+  test('accepts an absent scope (back-compat — absent means full)', () => {
+    const result = parseProfile(baseProfile());
+    expect(result.ok).toBe(true);
+    if (result.ok) expect(result.value.scope).toBeUndefined();
+  });
+
+  test.each(['public', 'shared', 'full'] as const)('accepts scope: %s', (scope) => {
+    const result = parseProfile(baseProfile({ scope }));
+    expect(result.ok).toBe(true);
+    if (result.ok) expect(result.value.scope).toBe(scope);
+  });
+
+  test('rejects an unknown scope value (fails closed, does not silently accept)', () => {
+    const result = parseProfile(baseProfile({ scope: 'secret' as unknown as 'full' }));
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.error).toContain('scope');
+  });
+
   test('never throws on garbage input', () => {
     expect(() => parseProfile(null)).not.toThrow();
     expect(() => parseProfile(undefined)).not.toThrow();

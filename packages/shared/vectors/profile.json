@@ -78,6 +78,57 @@
       "reason": "alsoKnownAs claims dns:unverified-claim.example but badges[] carries no corresponding entry — a one-way binding. This is schema-VALID: parseProfile only enforces shape, not badge verification. 01-spec §6 requires the reverse DNS record ('兩向都成立才畫綠勾') before a green check is shown, but that's a later badge-verification task's concern (05-spec §5/§6), not this schema. This vector exists specifically so a future change doesn't 'fix' parseProfile into silently doing cross-field badge verification."
     },
     {
+      "name": "scope-public-projection",
+      "profile": {
+        "v": 1,
+        "did": "did:key:zDnaeVuZeVRqvscGkiEoR9PFFra2xZUMp97ZPuGFK1VLU7iYN",
+        "displayName": "Alice",
+        "avatar": null,
+        "bio": "",
+        "links": [{ "label": "Website", "url": "https://example.com" }],
+        "alsoKnownAs": [],
+        "badges": [],
+        "supersededBy": null,
+        "scope": "public",
+        "updatedAt": "2026-07-03T00:00:00Z"
+      },
+      "reason": "T7: the OPTIONAL `scope` field with the `public` value must parse — this is the projection published to Nostr/PDS (only public-tier links). Signed by the same root did:key as the `shared`/`full` projections."
+    },
+    {
+      "name": "scope-shared-projection",
+      "profile": {
+        "v": 1,
+        "did": "did:key:zDnaeVuZeVRqvscGkiEoR9PFFra2xZUMp97ZPuGFK1VLU7iYN",
+        "displayName": "Alice",
+        "avatar": null,
+        "bio": "",
+        "links": [{ "label": "Website", "url": "https://example.com" }],
+        "alsoKnownAs": [],
+        "badges": [],
+        "supersededBy": null,
+        "scope": "shared",
+        "updatedAt": "2026-07-03T00:00:00Z"
+      },
+      "reason": "T7: the `shared` scope value (QR / URL-fragment projection: public + link-only links) must parse."
+    },
+    {
+      "name": "scope-full-projection",
+      "profile": {
+        "v": 1,
+        "did": "did:key:zDnaeVuZeVRqvscGkiEoR9PFFra2xZUMp97ZPuGFK1VLU7iYN",
+        "displayName": "Alice",
+        "avatar": null,
+        "bio": "",
+        "links": [{ "label": "Website", "url": "https://example.com" }],
+        "alsoKnownAs": [],
+        "badges": [],
+        "supersededBy": null,
+        "scope": "full",
+        "updatedAt": "2026-07-03T00:00:00Z"
+      },
+      "reason": "T7: the explicit `full` scope value must parse. `full` is also the meaning of an ABSENT `scope` (see the `minimal`/`full` vectors above, which omit it) — an explicit `full` and an absent `scope` are semantically identical, and both must parse."
+    },
+    {
       "name": "oversize-fragment-budget",
       "profile": {
         "v": 1,
@@ -369,6 +420,24 @@
       },
       "errorContains": "links.0.url",
       "reason": "a leading space defeats a naive scheme-prefix check in some URL parsers/sanitizers ('trim then allow' bypass); this schema rejects leading/trailing whitespace outright rather than silently trimming it"
+    },
+    {
+      "name": "scope-invalid-value",
+      "profile": {
+        "v": 1,
+        "did": "did:key:zDnaeVuZeVRqvscGkiEoR9PFFra2xZUMp97ZPuGFK1VLU7iYN",
+        "displayName": "Alice",
+        "avatar": null,
+        "bio": "",
+        "links": [],
+        "alsoKnownAs": [],
+        "badges": [],
+        "supersededBy": null,
+        "scope": "secret",
+        "updatedAt": "2026-07-03T00:00:00Z"
+      },
+      "errorContains": "scope",
+      "reason": "T7: `scope` is optional, but when present it must be one of public/shared/full — an unknown value ('secret') fails closed rather than being silently accepted (a projection whose scope a viewer can't interpret must not parse)."
     },
     {
       "name": "null-input",

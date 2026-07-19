@@ -36,9 +36,12 @@ interface VerifiedConflictShape {
   readonly verifiedAt: string;
 }
 
+type ProfileScopeShape = 'public' | 'shared' | 'full';
+
 interface VerifiedSnapshotShape {
   readonly kind: 'verified';
   readonly did: string;
+  readonly scope: ProfileScopeShape;
   readonly record: ProfileRecord;
   readonly jws: string;
   readonly verifiedAt: string;
@@ -394,6 +397,7 @@ function verified(overrides: Partial<VerifiedSnapshotShape> = {}): VerifiedSnaps
   return {
     kind: 'verified',
     did: 'did:key:zAlice',
+    scope: 'full',
     record: record(),
     jws: 'a.b.c',
     verifiedAt: '2026-07-03T00:00:00Z',
@@ -533,5 +537,67 @@ describe('store.mergeVerified + setNote — persistence of conflicts and notes',
       mod.useProfileSnapshotStore.getState().setNote('did:key:zNobody', 'ghost');
     }).not.toThrow();
     expect(mod.getProfileSnapshot('did:key:zNobody')).toBeUndefined();
+  });
+});
+
+// ── T7: per-(did, scope) keying so projections of one did coexist ───────────
+
+describe('mergeVerifiedSnapshot — stamps the incoming record scope', () => {
+  it('a public projection stamps scope:"public"; a scope-absent record stamps "full"', () => {
+    const pub = mod.mergeVerifiedSnapshot(undefined, record({ scope: 'public' }), 'p.j.k', NOW);
+    expect(pub.snapshot.scope).toBe('public');
+    const full = mod.mergeVerifiedSnapshot(undefined, record(), 'f.j.k', NOW);
+    expect(full.snapshot.scope).toBe('full');
+  });
+});
+
+describe('store.mergeVerified — public projection and full card for one did coexist', () => {
+  it('storing a public projection does NOT overwrite or conflict a full card for the same did', () => {
+    const store = mod.useProfileSnapshotStore.getState();
+    // Full card (scope absent) first...
+    const full = store.mergeVerified(record({ displayName: 'Alice Full' }), 'full.j.k');
+    expect(full.kind).toBe('saved');
+    // ...then a public projection for the SAME did, same updatedAt, DIFFERENT
+    // content (fewer links). Pre-T7 this would have been a `conflict`; now the
+    // two scopes occupy distinct slots and coexist.
+    const pub = store.mergeVerified(record({ displayName: 'Alice Public', scope: 'public' }), 'public.j.k');
+    expect(pub.kind).toBe('saved');
+    expect(pub.snapshot.scope).toBe('public');
+
+    // Two distinct entries persisted for one did.
+    expect(mod.useProfileSnapshotStore.getState().snapshots.size).toBe(2);
+
+    // getProfileSnapshot surfaces the RICHEST scope (full), untouched.
+    const surfaced = mod.getProfileSnapshot('did:key:zAlice');
+    expect(surfaced?.scope).toBe('full');
+    expect(surfaced?.record.displayName).toBe('Alice Full');
+
+    // Both round-trip through MMKV under their composite keys.
+    mod.useProfileSnapshotStore.setState({ snapshots: new Map() });
+    mod.hydrateProfileSnapshots();
+    expect(mod.useProfileSnapshotStore.getState().snapshots.size).toBe(2);
+    expect(mod.getProfileSnapshot('did:key:zAlice')?.scope).toBe('full');
+  });
+
+  it('equal-updatedAt different-content WITHIN one scope still conflicts (scope dimension is additive)', () => {
+    const store = mod.useProfileSnapshotStore.getState();
+    store.mergeVerified(record({ displayName: 'Public A', scope: 'public' }), 'a.j.k');
+    const forked = store.mergeVerified(record({ displayName: 'Public B', scope: 'public' }), 'b.j.k');
+    expect(forked.kind).toBe('conflict');
+    expect(forked.snapshot.conflicts).toHaveLength(1);
+    // The full card slot is untouched by a public-scope conflict.
+    expect(mod.useProfileSnapshotStore.getState().snapshots.size).toBe(1);
+  });
+
+  it('sortedProfileSnapshots shows ONE row per did — the richest scope — never a duplicate per projection', () => {
+    const store = mod.useProfileSnapshotStore.getState();
+    store.mergeVerified(record({ displayName: 'Public', scope: 'public' }), 'p.j.k');
+    store.mergeVerified(record({ displayName: 'Shared', scope: 'shared' }), 's.j.k');
+    store.mergeVerified(record({ displayName: 'Full' }), 'f.j.k');
+
+    const sorted = mod.sortedProfileSnapshots(mod.useProfileSnapshotStore.getState().snapshots);
+    const forDid = sorted.filter((s) => s.did === 'did:key:zAlice');
+    expect(forDid).toHaveLength(1);
+    expect((forDid[0] as VerifiedSnapshotShape).scope).toBe('full');
   });
 });

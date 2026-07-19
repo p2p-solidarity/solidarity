@@ -55,10 +55,18 @@ type NostrRes<T> =
   | { readonly ok: true; readonly value: T }
   | { readonly ok: false; readonly error: string };
 
+type LinkVisibilityShape = 'public' | 'link-only' | 'private';
+
 interface ProfileFieldsShape {
   readonly displayName: string;
   readonly bio: string;
   readonly links: readonly { readonly label: string; readonly url: string }[];
+  readonly linkVisibility?: readonly LinkVisibilityShape[];
+}
+
+interface SignedProjectionShape {
+  readonly record: ProfileRecord;
+  readonly jws: string;
 }
 
 type SaveResult =
@@ -74,6 +82,9 @@ interface ProfileModuleSurface {
       readonly record: ProfileRecord | null;
       readonly jws: string | null;
       readonly status: 'empty' | 'ready';
+      readonly linkVisibility: readonly LinkVisibilityShape[];
+      readonly shared: SignedProjectionShape | null;
+      readonly published: SignedProjectionShape | null;
       readonly saveProfile: (
         fields: ProfileFieldsShape,
         options?: {
@@ -562,7 +573,21 @@ describe('publishToNostr', () => {
     // Both directions were published with the caller-confirmed relays.
     expect(profileCalls).toHaveLength(1);
     expect(profileCalls[0]?.relays).toEqual(relays);
-    expect(profileCalls[0]?.jws).toBe(state.jws);
+    // T7: the PUBLIC projection (scope:'public') is published — NEVER the full
+    // record's jws. With no non-public links here the two differ only by the
+    // `scope` stamp, so the published jws is distinct from `state.jws`.
+    expect(profileCalls[0]?.jws).not.toBe(state.jws);
+    const publishedVerified = verifyCompact(profileCalls[0]!.jws, state.record.did);
+    expect(publishedVerified.ok).toBe(true);
+    if (publishedVerified.ok) {
+      const publishedRecord = publishedVerified.value as ProfileRecord;
+      expect(publishedRecord.scope).toBe('public');
+      // The npub binding is identity-level, so it is carried into the public
+      // projection too (only LINKS are filtered by visibility).
+      expect(publishedRecord.alsoKnownAs).toEqual(state.record.alsoKnownAs);
+    }
+    // The published jws is exactly the store's cached public projection.
+    expect(profileCalls[0]?.jws).toBe(state.published?.jws);
     expect(kind0Calls).toHaveLength(1);
     expect(kind0Calls[0]?.relays).toEqual(relays);
     expect(kind0Calls[0]?.did).toBe(state.record.did);
@@ -634,5 +659,105 @@ describe('publishToNostr', () => {
     expect(r.ok).toBe(false);
     if (r.ok) return;
     expect(r.error).toContain('updateKind0AlsoKnownAs');
+  });
+});
+
+// ── T7: three-tier link visibility → public / shared / full projections ─────
+
+describe('saveProfile — three-tier link projections', () => {
+  const LINKS = [
+    { label: 'Site', url: 'https://public.example' },
+    { label: 'Draft', url: 'https://linkonly.example' },
+    { label: 'Secret', url: 'https://private.example' },
+  ];
+
+  it('signs full (all links), shared (public+link-only), and public (public-only) projections', async () => {
+    const created = await rootKeyMod.createFromFreshMnemonic();
+    expect(created.ok).toBe(true);
+    if (!created.ok) return;
+
+    const saved = await mod.useProfileStore.getState().saveProfile({
+      displayName: 'Alice',
+      bio: '',
+      links: LINKS,
+      linkVisibility: ['public', 'link-only', 'private'],
+    });
+    expect(saved.ok).toBe(true);
+
+    const state = mod.useProfileStore.getState();
+    // Full record: source of truth, ALL links, scope absent (= full).
+    expect(state.record?.links.map((l) => l.url)).toEqual([
+      'https://public.example',
+      'https://linkonly.example',
+      'https://private.example',
+    ]);
+    expect(state.record?.scope).toBeUndefined();
+    // Visibility is LOCAL only — never in the signed wire record's links.
+    expect(state.linkVisibility).toEqual(['public', 'link-only', 'private']);
+
+    // Shared projection: public + link-only, scope:'shared', verifiable.
+    expect(state.shared?.record.scope).toBe('shared');
+    expect(state.shared?.record.links.map((l) => l.url)).toEqual([
+      'https://public.example',
+      'https://linkonly.example',
+    ]);
+    const sharedVerified = verifyCompact(state.shared!.jws, created.value.did);
+    expect(sharedVerified.ok).toBe(true);
+    if (sharedVerified.ok) expect(sharedVerified.value).toEqual(state.shared!.record);
+
+    // Public projection: public only, scope:'public', verifiable.
+    expect(state.published?.record.scope).toBe('public');
+    expect(state.published?.record.links.map((l) => l.url)).toEqual(['https://public.example']);
+    const publicVerified = verifyCompact(state.published!.jws, created.value.did);
+    expect(publicVerified.ok).toBe(true);
+  });
+
+  it('publishes the PUBLIC projection to Nostr — a private/link-only link never reaches a relay', async () => {
+    await rootKeyMod.createFromFreshMnemonic();
+    await mod.useProfileStore.getState().saveProfile({
+      displayName: 'Alice',
+      bio: '',
+      links: LINKS,
+      linkVisibility: ['public', 'link-only', 'private'],
+    });
+    await nostrUserKeyMod.provisionFromRootMnemonic();
+
+    const profileCalls: string[] = [];
+    mod.__setNostrPublishForTesting({
+      publishProfile: (opts) => {
+        profileCalls.push(opts.jws);
+        return Promise.resolve({ ok: true, value: fakeReport(30078, opts.jws) });
+      },
+      updateKind0AlsoKnownAs: (opts) =>
+        Promise.resolve({ ok: true, value: fakeReport(0, JSON.stringify({ alsoKnownAs: [opts.did] })) }),
+    });
+
+    const did = mod.useProfileStore.getState().record!.did;
+    const r = await mod.useProfileStore.getState().publishToNostr(['wss://a']);
+    expect(r.ok).toBe(true);
+
+    expect(profileCalls).toHaveLength(1);
+    const publishedVerified = verifyCompact(profileCalls[0]!, did);
+    expect(publishedVerified.ok).toBe(true);
+    if (publishedVerified.ok) {
+      const publishedRecord = publishedVerified.value as ProfileRecord;
+      expect(publishedRecord.scope).toBe('public');
+      // Only the public-tier link — the link-only and private ones are gone.
+      expect(publishedRecord.links.map((l) => l.url)).toEqual(['https://public.example']);
+    }
+  });
+
+  it('defaults every link to public when no visibility is supplied (back-compat)', async () => {
+    await rootKeyMod.createFromFreshMnemonic();
+    await mod.useProfileStore.getState().saveProfile({
+      displayName: 'Alice',
+      bio: '',
+      links: [{ label: 'Site', url: 'https://public.example' }],
+    });
+    const state = mod.useProfileStore.getState();
+    expect(state.linkVisibility).toEqual(['public']);
+    // Every projection keeps the (public) link.
+    expect(state.shared?.record.links).toHaveLength(1);
+    expect(state.published?.record.links).toHaveLength(1);
   });
 });

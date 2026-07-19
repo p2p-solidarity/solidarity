@@ -55,8 +55,17 @@ import {
   verifyCompact,
   type ProfileLink,
   type ProfileRecord,
+  type ProfileScope,
   type Result,
+  type Signer,
 } from '@solidarity/shared';
+
+import {
+  buildProjection,
+  normalizeLinkVisibility,
+  type LinkVisibility,
+  type LocalProfile,
+} from './projection';
 
 const KEY = 'profile:v1';
 
@@ -88,14 +97,29 @@ export function __setNostrPublishForTesting(
 
 export type ProfileStatus = 'empty' | 'ready';
 
+/** A signed projection of the local profile at one scope (T7). The `record`'s
+ *  `scope` matches the projection; `jws` is a compact JWS signed by the root
+ *  did:key over exactly that record. */
+export interface SignedProjection {
+  readonly record: ProfileRecord;
+  readonly jws: string;
+}
+
 /**
  * The text/link subset supplied on every editor save. Avatar and binding
  * changes use the narrow options below; remaining fields carry forward.
+ *
+ * `linkVisibility` (T7) is the per-link privacy tier, parallel to `links` by
+ * index and LOCAL only — it is stored in this store's MMKV blob, never in the
+ * signed wire record. Optional and back-compat: a caller that omits it (or a
+ * shorter array than `links`) leaves every unspecified link `'public'`, so
+ * every existing `saveProfile` caller keeps its prior all-public behaviour.
  */
 export interface ProfileEditableFields {
   readonly displayName: string;
   readonly bio: string;
   readonly links: readonly ProfileLink[];
+  readonly linkVisibility?: readonly LinkVisibility[];
 }
 
 /** Narrow service-level overrides for signed binding and avatar flows. */
@@ -111,22 +135,66 @@ export interface SavedProfile {
 }
 
 interface PersistedProfile {
+  /** The FULL source-of-truth record (all links, `scope` absent = full). */
   readonly record: ProfileRecord;
   readonly jws: string;
+  /** Per-link visibility, parallel to `record.links` (T7). */
+  readonly linkVisibility: readonly LinkVisibility[];
+  /** The pre-signed `shared` projection (public + link-only links) used by the
+   *  QR / URL-fragment share path, or null for a pre-T7 blob. */
+  readonly shared: SignedProjection | null;
+  /** The pre-signed `public` projection (public links only) published to
+   *  Nostr, or null for a pre-T7 blob. */
+  readonly published: SignedProjection | null;
+}
+
+/** Re-validate one persisted projection (T7) — its `record` must still
+ *  `parseProfile` and `jws` be a non-empty string, else drop it to null so the
+ *  share/publish path falls back to re-signing rather than trusting a
+ *  schema-drifted blob. */
+function readProjection(raw: unknown): SignedProjection | null {
+  if (raw === null || typeof raw !== 'object') return null;
+  const p = raw as { readonly record?: unknown; readonly jws?: unknown };
+  if (typeof p.jws !== 'string' || p.jws.length === 0) return null;
+  const validated = parseProfile(p.record);
+  return validated.ok ? { record: validated.value, jws: p.jws } : null;
 }
 
 function readPersisted(): PersistedProfile | null {
   try {
     const raw = getMmkv().getString(KEY);
     if (!raw) return null;
-    const parsed = JSON.parse(raw) as { record?: unknown; jws?: unknown };
+    const parsed = JSON.parse(raw) as {
+      record?: unknown;
+      jws?: unknown;
+      linkVisibility?: unknown;
+      shared?: unknown;
+      published?: unknown;
+    };
     if (typeof parsed.jws !== 'string' || parsed.jws.length === 0) return null;
     // Re-validate on read, not just on write — a hand-edited or
     // schema-drifted MMKV blob must fail closed to 'empty', never hand a
     // screen a record that only LOOKS like a ProfileRecord.
     const validated = parseProfile(parsed.record);
     if (!validated.ok) return null;
-    return { record: validated.value, jws: parsed.jws };
+    // Back-compat: a pre-T7 blob carries neither `linkVisibility` (→ every
+    // link defaults to 'public') nor the pre-signed projections (→ null; the
+    // share/publish paths re-derive + re-sign on demand). A pre-T7 blob has no
+    // private links anyway, so a null `shared` safely falls back to the full
+    // record without leaking anything.
+    const linkVisibility = Array.isArray(parsed.linkVisibility)
+      ? normalizeLinkVisibility(
+          validated.value.links,
+          parsed.linkVisibility.filter((v): v is LinkVisibility => typeof v === 'string')
+        )
+      : normalizeLinkVisibility(validated.value.links, undefined);
+    return {
+      record: validated.value,
+      jws: parsed.jws,
+      linkVisibility,
+      shared: readProjection(parsed.shared),
+      published: readProjection(parsed.published),
+    };
   } catch {
     return null;
   }
@@ -140,6 +208,44 @@ function writePersisted(p: PersistedProfile): void {
     // state the caller sets right after this still reflects the save for
     // the current session (matches preferences.ts's `writeSafe` policy).
   }
+}
+
+/**
+ * Build the `scope` projection of a local profile and sign it with the
+ * already-resolved root `Signer` (T7). Validates the projected record before
+ * signing (same "validate strictly before signing" discipline as
+ * `saveProfile`). Reuses the caller's ONE `getRootSigner()` result so signing
+ * all three projections stays inside a single biometric grace window — never
+ * a prompt per projection. The signer THROWS on biometric denial (see
+ * `rootKey.ts`'s `@warning`), so the `signCompact` call is wrapped.
+ */
+async function signProjection(
+  local: LocalProfile,
+  scope: ProfileScope,
+  signer: Signer
+): Promise<Result<SignedProjection, string>> {
+  const projected = parseProfile(buildProjection(local, scope));
+  if (!projected.ok) return err(projected.error);
+  try {
+    const jws = await signCompact(projected.value, projected.value.did, signer);
+    return ok({ record: projected.value, jws });
+  } catch (e) {
+    return err(`signing was denied or failed (${e instanceof Error ? e.message : String(e)})`);
+  }
+}
+
+/** Sign the two SHARE projections (`shared` for QR, `public` for Nostr) of a
+ *  local profile with the already-resolved root signer, in that order and one
+ *  grace window. Either failure short-circuits (never a half-signed pair). */
+async function signShareProjections(
+  local: LocalProfile,
+  signer: Signer
+): Promise<Result<{ readonly shared: SignedProjection; readonly published: SignedProjection }, string>> {
+  const sharedResult = await signProjection(local, 'shared', signer);
+  if (!sharedResult.ok) return err(sharedResult.error);
+  const publishedResult = await signProjection(local, 'public', signer);
+  if (!publishedResult.ok) return err(publishedResult.error);
+  return ok({ shared: sharedResult.value, published: publishedResult.value });
 }
 
 /**
@@ -161,6 +267,30 @@ function avatarForSave(
   override: string | null | undefined
 ): string | null {
   return override === undefined ? previous : override;
+}
+
+/** Assemble the FULL candidate record (all links, `scope` absent = full) from
+ *  the editable fields, narrow overrides, and the previous record's carried-
+ *  forward fields. Pure — validated + signed by the caller. */
+function buildCandidateRecord(
+  fields: ProfileEditableFields,
+  options: ProfileSaveOptions,
+  previous: ProfileRecord | null,
+  did: string
+): Record<string, unknown> {
+  return {
+    v: PROFILE_VERSION,
+    did,
+    displayName: fields.displayName,
+    avatar: avatarForSave(previous?.avatar ?? null, options.avatar),
+    bio: fields.bio,
+    links: fields.links,
+    alsoKnownAs:
+      options.alsoKnownAs !== undefined ? [...options.alsoKnownAs] : (previous?.alsoKnownAs ?? []),
+    badges: previous?.badges ?? [],
+    supersededBy: previous?.supersededBy ?? null,
+    updatedAt: nextUpdatedAt(previous?.updatedAt ?? null),
+  };
 }
 
 function rootKeyErrorMessage(prefix: string, e: RootKeyError): string {
@@ -185,13 +315,27 @@ export interface NostrPublishOutcome {
 }
 
 interface ProfileState {
+  /** The FULL source-of-truth record — every field, ALL links (`scope`
+   *  absent = full). This is the user's own view and the Pear/full exchange
+   *  card; the QR/Nostr share paths use the projections below instead. */
   readonly record: ProfileRecord | null;
   readonly jws: string | null;
   readonly status: ProfileStatus;
+  /** Per-link visibility tiers, parallel to `record.links` (T7 — LOCAL only). */
+  readonly linkVisibility: readonly LinkVisibility[];
+  /** Pre-signed `shared` projection (public + link-only links) for the QR /
+   *  URL-fragment share surface, or null before the first T7-era save. */
+  readonly shared: SignedProjection | null;
+  /** Pre-signed `public` projection (public links only) published to Nostr,
+   *  or null before the first T7-era save. */
+  readonly published: SignedProjection | null;
   /**
    * Validate → (Face-ID) sign → persist, in that order. Returns
    * `err(reason)` without ever touching `getRootSigner()` (so without ever
    * prompting Face ID) when `fields` don't produce a valid `ProfileRecord`.
+   * Signs THREE projections (full + shared + public) under one biometric
+   * grace window so the QR and Nostr share paths each have a pre-signed,
+   * link-filtered record ready without a further prompt.
    */
   readonly saveProfile: (
     fields: ProfileEditableFields,
@@ -236,27 +380,16 @@ export const useProfileStore = create<ProfileState>((set, get) => ({
   record: null,
   jws: null,
   status: 'empty',
+  linkVisibility: [],
+  shared: null,
+  published: null,
 
   saveProfile: async (fields, options = {}) => {
     const didResult = await getRootDid();
     if (!didResult.ok) return err(rootKeyErrorMessage('profile save failed', didResult.error));
 
     const previous = get().record;
-    const candidate = {
-      v: PROFILE_VERSION,
-      did: didResult.value,
-      displayName: fields.displayName,
-      avatar: avatarForSave(previous?.avatar ?? null, options.avatar),
-      bio: fields.bio,
-      links: fields.links,
-      alsoKnownAs:
-        options.alsoKnownAs !== undefined
-          ? [...options.alsoKnownAs]
-          : (previous?.alsoKnownAs ?? []),
-      badges: previous?.badges ?? [],
-      supersededBy: previous?.supersededBy ?? null,
-      updatedAt: nextUpdatedAt(previous?.updatedAt ?? null),
-    };
+    const candidate = buildCandidateRecord(fields, options, previous, didResult.value);
 
     const validated = parseProfile(candidate);
     if (!validated.ok) return err(validated.error);
@@ -264,6 +397,8 @@ export const useProfileStore = create<ProfileState>((set, get) => ({
     const signerResult = await getRootSigner();
     if (!signerResult.ok) return err(rootKeyErrorMessage('profile save failed', signerResult.error));
 
+    // The FULL record: source of truth, all links, `scope` left absent (= full)
+    // for back-compat with pre-T7 persisted blobs / vectors and the Pear card.
     let jws: string;
     try {
       jws = await signCompact(validated.value, validated.value.did, signerResult.value);
@@ -271,8 +406,29 @@ export const useProfileStore = create<ProfileState>((set, get) => ({
       return err(`profile save failed: signing was denied or failed (${e instanceof Error ? e.message : String(e)})`);
     }
 
-    writePersisted({ record: validated.value, jws });
-    set({ record: validated.value, jws, status: 'ready' });
+    // Pre-sign the shared (QR) and public (Nostr) projections in the SAME
+    // grace window so neither share path re-prompts Face ID later. Any denial
+    // here aborts BEFORE anything is persisted — never a partial save.
+    const linkVisibility = normalizeLinkVisibility(validated.value.links, fields.linkVisibility);
+    const local: LocalProfile = { record: validated.value, linkVisibility };
+    const projections = await signShareProjections(local, signerResult.value);
+    if (!projections.ok) return err(`profile save failed: ${projections.error}`);
+
+    writePersisted({
+      record: validated.value,
+      jws,
+      linkVisibility,
+      shared: projections.value.shared,
+      published: projections.value.published,
+    });
+    set({
+      record: validated.value,
+      jws,
+      linkVisibility,
+      shared: projections.value.shared,
+      published: projections.value.published,
+      status: 'ready',
+    });
     // The record was re-signed — any published Nostr copy is now behind it,
     // so the cached verification no longer describes this record. Clearing
     // it makes the badge re-check honestly (typically → stale) instead of
@@ -322,10 +478,15 @@ export const useProfileStore = create<ProfileState>((set, get) => ({
 
     let record = current.record;
     let jws = current.jws;
+    let linkVisibility = current.linkVisibility;
+    let published = current.published;
 
     // Only re-sign if the claim is actually missing — re-signing on every
     // publish would churn `updatedAt` for no reason once the binding is
-    // already established.
+    // already established. When it IS missing, the npub is merged into the
+    // FULL record's alsoKnownAs and ALL THREE projections are re-signed (the
+    // binding is identity-level, so the shared/public projections must
+    // advertise it too), inside one biometric grace window.
     if (!record.alsoKnownAs.includes(akaEntry)) {
       const candidate = {
         ...record,
@@ -344,12 +505,36 @@ export const useProfileStore = create<ProfileState>((set, get) => ({
         return err(`publishToNostr: signing was denied or failed (${e instanceof Error ? e.message : String(e)})`);
       }
       record = validated.value;
+      linkVisibility = normalizeLinkVisibility(record.links, linkVisibility);
+      const projections = await signShareProjections({ record, linkVisibility }, signerResult.value);
+      if (!projections.ok) return err(`publishToNostr: ${projections.error}`);
+      published = projections.value.published;
 
-      writePersisted({ record, jws });
-      set({ record, jws, status: 'ready' });
+      writePersisted({ record, jws, linkVisibility, shared: projections.value.shared, published });
+      set({ record, jws, linkVisibility, shared: projections.value.shared, published, status: 'ready' });
     }
 
-    const profileReport = await activePublishProfile({ jws, relays: confirmedRelays });
+    // A pre-T7 profile hydrated with no cached public projection: sign it now
+    // (one prompt) so we never publish the FULL record — which could carry
+    // private links — to a relay.
+    if (!published) {
+      const signerResult = await getRootSigner();
+      if (!signerResult.ok) return err(rootKeyErrorMessage('publishToNostr', signerResult.error));
+      const publishedResult = await signProjection(
+        { record, linkVisibility: normalizeLinkVisibility(record.links, linkVisibility) },
+        'public',
+        signerResult.value
+      );
+      if (!publishedResult.ok) return err(`publishToNostr: ${publishedResult.error}`);
+      published = publishedResult.value;
+      writePersisted({ record, jws, linkVisibility, shared: get().shared, published });
+      set({ published });
+    }
+
+    // Publish the PUBLIC projection (scope:'public' — public-tier links only),
+    // NEVER the full record: a link the user marked private/link-only must not
+    // reach a public relay.
+    const profileReport = await activePublishProfile({ jws: published.jws, relays: confirmedRelays });
     if (!profileReport.ok) return err(`publishToNostr: ${profileReport.error}`);
 
     const kind0Report = await activeUpdateKind0AlsoKnownAs({ did: record.did, relays: confirmedRelays });
@@ -373,6 +558,13 @@ export const useProfileStore = create<ProfileState>((set, get) => ({
 export function hydrateProfile(): void {
   const persisted = readPersisted();
   if (persisted) {
-    useProfileStore.setState({ record: persisted.record, jws: persisted.jws, status: 'ready' });
+    useProfileStore.setState({
+      record: persisted.record,
+      jws: persisted.jws,
+      linkVisibility: persisted.linkVisibility,
+      shared: persisted.shared,
+      published: persisted.published,
+      status: 'ready',
+    });
   }
 }

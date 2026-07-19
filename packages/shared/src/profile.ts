@@ -61,6 +61,24 @@ export const profileBadgeSchema = z
   .strict();
 export type ProfileBadge = z.infer<typeof profileBadgeSchema>;
 
+/**
+ * Publication scope of a signed Profile Record (T7, `notes-1.3.3-publishing-
+ * pairing-research.md` §3 / grill G4). Per-item `visibility` (public /
+ * link-only / private) is a LOCAL-only tag that never enters the wire record;
+ * what DOES travel is which of three PROJECTIONS this signed record is:
+ *   - `public` → published to Nostr/PDS: only `public`-tier items.
+ *   - `shared` → direct QR / URL-fragment share: `public` + `link-only` items.
+ *   - `full`   → Pear private exchange / local source of truth: all items.
+ * All three are signed by the SAME root did:key — they are projections, not
+ * different identities. The field is OPTIONAL and back-compat: an absent
+ * `scope` means `full` (every record written before T7, and every Pear/full
+ * record, omits it). The People-side snapshot store keys verified snapshots by
+ * `(did, scope)` so a `public` projection and a `full` card for one did coexist
+ * instead of being flagged a conflict (see `profileSnapshots.ts`).
+ */
+export const profileScopeSchema = z.enum(['public', 'shared', 'full']);
+export type ProfileScope = z.infer<typeof profileScopeSchema>;
+
 export const profileRecordSchema = z
   .object({
     v: z.literal(PROFILE_VERSION),
@@ -82,6 +100,13 @@ export const profileRecordSchema = z
     badges: z.array(profileBadgeSchema),
     /** Non-null once this DID has been superseded by a key rotation (01-spec §3). */
     supersededBy: z.string().nullable(),
+    /**
+     * Which projection this signed record is (T7 — see `profileScopeSchema`).
+     * OPTIONAL; absent = `full`. Kept strict-accepting: a record with no
+     * `scope` (every pre-T7 record, every Pear/full card) still parses, and a
+     * record with an unknown `scope` value fails closed.
+     */
+    scope: profileScopeSchema.optional(),
     updatedAt: z.iso.datetime(),
   })
   .strict();

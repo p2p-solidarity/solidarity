@@ -16,6 +16,13 @@ export default function MeTab() {
   const record = useProfileStore((state) => state.record);
   const jws = useProfileStore((state) => state.jws);
   const status = useProfileStore((state) => state.status);
+  // T7: the QR / URL-fragment share surface publishes the SHARED projection
+  // (public + link-only links), never the full record. Falls back to the full
+  // record for a pre-T7 profile that has no cached projection yet — safe, as
+  // such a profile has no private links.
+  const shared = useProfileStore((state) => state.shared);
+  const shareRecord = shared?.record ?? record;
+  const shareJws = shared?.jws ?? jws;
 
   return (
     <View className="flex-1 bg-pageBg" style={{ paddingTop: insets.top }}>
@@ -25,10 +32,12 @@ export default function MeTab() {
         }}
       />
 
-      {status === 'ready' && record && jws ? (
+      {status === 'ready' && record && jws && shareRecord && shareJws ? (
         <MeProfilePage
           record={record}
           jws={jws}
+          shareRecord={shareRecord}
+          shareJws={shareJws}
           bottomInset={insets.bottom}
           onEdit={() => {
             router.push('/me/edit');

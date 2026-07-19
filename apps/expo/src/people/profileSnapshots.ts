@@ -59,9 +59,40 @@ import {
   stableJSON,
   type ProfileLink,
   type ProfileRecord,
+  type ProfileScope,
 } from '@solidarity/shared';
 
 const KEY = 'profileSnapshots:v1';
+
+/**
+ * The projection scope a signed record represents (T7). An absent `record.
+ * scope` means `full` — every pre-T7 record and every Pear/full card omits it.
+ * Verified snapshots are keyed by `(did, scope)` so a `public` projection
+ * (fetched from Nostr) and a `full` card (Pear-exchanged) for the SAME did
+ * COEXIST instead of being flagged a `conflict`; the equal-`updatedAt`-
+ * different-content conflict rule only ever fires WITHIN one scope.
+ */
+export function scopeOf(record: ProfileRecord): ProfileScope {
+  return record.scope ?? 'full';
+}
+
+/** Richness order for choosing which scope to SURFACE when a did has more than
+ *  one stored projection: full (all links) > shared (public+link-only) >
+ *  public (public only). Higher = shown/preferred. */
+const SCOPE_RANK: Record<ProfileScope, number> = { full: 3, shared: 2, public: 1 };
+const SCOPE_BY_RANK: readonly ProfileScope[] = ['full', 'shared', 'public'];
+
+/**
+ * Composite Map key for a verified snapshot (T7): `<scope>:<did>`. Scope-
+ * prefixed so per-scope projections of one did land in distinct slots and
+ * coexist. A declared entry keeps its 24-hex `stableDeclaredId` key, which can
+ * never collide with a `<scope>:<did>` string. Legacy pre-T7 entries persisted
+ * under a bare `did` are re-keyed to `full:<did>` on hydrate (their record has
+ * no `scope` → `full`).
+ */
+export function verifiedKey(did: string, scope: ProfileScope): string {
+  return `${scope}:${did}`;
+}
 
 /**
  * A signed version of a peer's page seen at the SAME `record.updatedAt` as
@@ -80,6 +111,10 @@ export interface VerifiedConflict {
 export interface VerifiedSnapshot {
   readonly kind: 'verified';
   readonly did: string;
+  /** Which projection scope this snapshot holds (T7). Derived from the signed
+   *  `record.scope` (absent = 'full'); part of the `(did, scope)` store key so
+   *  a public projection and a full card for one did coexist. */
+  readonly scope: ProfileScope;
   readonly record: ProfileRecord;
   readonly jws: string;
   /** ISO timestamp of when THIS DEVICE last locally verified the page. */
@@ -215,10 +250,15 @@ export function mergeVerifiedSnapshot(
   jws: string,
   nowIso: string
 ): SnapshotMergeOutcome {
+  // T7: the merge is per-scope. The caller looks `existing` up by
+  // `(did, scope)`, so a public projection never lands here as the `existing`
+  // for a full card — they occupy different store slots. Every produced
+  // snapshot stamps the incoming record's scope.
+  const scope = scopeOf(record);
   if (!existing) {
     return {
       kind: 'saved',
-      snapshot: { kind: 'verified', did: record.did, record, jws, verifiedAt: nowIso, note: null, conflicts: [] },
+      snapshot: { kind: 'verified', did: record.did, scope, record, jws, verifiedAt: nowIso, note: null, conflicts: [] },
     };
   }
 
@@ -240,6 +280,7 @@ export function mergeVerifiedSnapshot(
       snapshot: {
         kind: 'verified',
         did: existing.did,
+        scope,
         record,
         jws,
         verifiedAt: nowIso,
@@ -337,6 +378,9 @@ function readPersistedVerified(entry: PersistedVerifiedEntry): VerifiedSnapshot 
   return {
     kind: 'verified',
     did: validated.value.did,
+    // Derived from the signed record — never persisted separately, so a pre-T7
+    // entry (no `record.scope`) hydrates as 'full' with no migration pass.
+    scope: scopeOf(validated.value),
     record: validated.value,
     jws: entry.jws,
     verifiedAt: entry.verifiedAt,
@@ -358,10 +402,18 @@ function readPersisted(): ReadonlyMap<string, ProfileSnapshot> {
     for (const [key, rawEntry] of Object.entries(parsed)) {
       if (rawEntry === null || typeof rawEntry !== 'object') continue;
       const entry = rawEntry as PersistedEntry;
-      const snapshot = isPersistedDeclared(entry)
-        ? readPersistedDeclared(key, entry)
-        : readPersistedVerified(entry);
-      if (snapshot) out.set(key, snapshot);
+      if (isPersistedDeclared(entry)) {
+        const declared = readPersistedDeclared(key, entry);
+        if (declared) out.set(key, declared);
+        continue;
+      }
+      // A verified entry is RE-KEYED to its `(did, scope)` composite key,
+      // derived from the parsed record — this migrates legacy pre-T7 entries
+      // (persisted under a bare `did`, scope absent → `full:<did>`) in place,
+      // with no separate migration pass, and is idempotent for entries already
+      // written under the composite key.
+      const verified = readPersistedVerified(entry);
+      if (verified) out.set(verifiedKey(verified.did, verified.scope), verified);
     }
   } catch {
     // Corrupt MMKV blob — fail closed to an empty snapshot set.
@@ -431,25 +483,33 @@ export const useProfileSnapshotStore = create<ProfileSnapshotState>((set, get) =
   snapshots: new Map(),
 
   mergeVerified: (record, jws) => {
-    const current = get().snapshots.get(record.did);
+    // T7: key by `(did, scope)` so a public projection and a full card for the
+    // same did land in distinct slots and coexist — the conflict rule only
+    // fires within one scope.
+    const key = verifiedKey(record.did, scopeOf(record));
+    const current = get().snapshots.get(key);
     const existing = current?.kind === 'verified' ? current : undefined;
     const outcome = mergeVerifiedSnapshot(existing, record, jws, new Date().toISOString());
     // `keptNewer` returns the existing snapshot reference unchanged, so this
     // set is a harmless no-op there; every other outcome carries the mutated
     // primary to persist.
     const next = new Map(get().snapshots);
-    next.set(record.did, outcome.snapshot);
+    next.set(key, outcome.snapshot);
     writePersisted(next);
     set({ snapshots: next });
     return outcome;
   },
 
   setNote: (did, note) => {
-    const current = get().snapshots.get(did);
+    // The note is a per-person annotation; attach it to the richest projection
+    // we hold for this did (the one `getProfileSnapshot` surfaces).
+    const key = bestVerifiedKeyForDid(get().snapshots, did);
+    if (!key) return;
+    const current = get().snapshots.get(key);
     if (current?.kind !== 'verified') return;
     const trimmed = note?.trim() ?? '';
     const next = new Map(get().snapshots);
-    next.set(did, { ...current, note: trimmed.length > 0 ? trimmed : null });
+    next.set(key, { ...current, note: trimmed.length > 0 ? trimmed : null });
     writePersisted(next);
     set({ snapshots: next });
   },
@@ -480,21 +540,43 @@ export function hydrateProfileSnapshots(): void {
   if (persisted.size > 0) useProfileSnapshotStore.setState({ snapshots: persisted });
 }
 
+/** The richest-scope verified snapshot stored for a did (full > shared >
+ *  public), or undefined if none. Probes the `(did, scope)` composite keys in
+ *  rank order and returns the first hit — a stable stored reference (never a
+ *  fresh object), so it's safe as a Zustand selector result. */
+function bestVerifiedForDid(
+  snapshots: ReadonlyMap<string, ProfileSnapshot>,
+  did: string
+): VerifiedSnapshot | undefined {
+  for (const scope of SCOPE_BY_RANK) {
+    const found = snapshots.get(verifiedKey(did, scope));
+    if (found?.kind === 'verified') return found;
+  }
+  return undefined;
+}
+
+/** The composite key of the richest-scope verified snapshot for a did. */
+function bestVerifiedKeyForDid(
+  snapshots: ReadonlyMap<string, ProfileSnapshot>,
+  did: string
+): string | undefined {
+  for (const scope of SCOPE_BY_RANK) {
+    const key = verifiedKey(did, scope);
+    if (snapshots.get(key)?.kind === 'verified') return key;
+  }
+  return undefined;
+}
+
 /** Verified-only lookup by did — used by the scan-result sheet (dup check)
- * and `/people/profile/[did]`. A declared entry is never returned here
- * even in the practically-impossible case its hash id collided with a did
- * string, since `kind` is checked explicitly. */
+ * and `/people/profile/[did]`. Returns the richest-scope projection stored for
+ * the did (T7: full > shared > public). A declared entry is never returned
+ * here since `kind` is checked explicitly. */
 export function getProfileSnapshot(did: string): VerifiedSnapshot | undefined {
-  const found = useProfileSnapshotStore.getState().snapshots.get(did);
-  return found?.kind === 'verified' ? found : undefined;
+  return bestVerifiedForDid(useProfileSnapshotStore.getState().snapshots, did);
 }
 
 export const useProfileSnapshot = (did: string | undefined): VerifiedSnapshot | undefined =>
-  useProfileSnapshotStore((s) => {
-    if (!did) return undefined;
-    const found = s.snapshots.get(did);
-    return found?.kind === 'verified' ? found : undefined;
-  });
+  useProfileSnapshotStore((s) => (did ? bestVerifiedForDid(s.snapshots, did) : undefined));
 
 /** Declared-only lookup by `stableDeclaredId(sourceUrl)` — used by
  * `/people/declared/[id]`. */
@@ -519,12 +601,22 @@ export const useDeclaredSnapshot = (id: string | undefined): DeclaredSnapshot | 
 export function sortedProfileSnapshots(
   snapshots: ReadonlyMap<string, ProfileSnapshot>,
 ): readonly ProfileSnapshot[] {
-  const verified: VerifiedSnapshot[] = [];
+  // T7: a did can now hold multiple projections (public/shared/full). The
+  // People list shows ONE row per person — the richest scope we hold — so
+  // per-scope projections never surface as duplicate rows.
+  const bestByDid = new Map<string, VerifiedSnapshot>();
   const declared: DeclaredSnapshot[] = [];
   for (const snapshot of snapshots.values()) {
-    if (snapshot.kind === 'verified') verified.push(snapshot);
-    else declared.push(snapshot);
+    if (snapshot.kind === 'verified') {
+      const prev = bestByDid.get(snapshot.did);
+      if (!prev || SCOPE_RANK[snapshot.scope] > SCOPE_RANK[prev.scope]) {
+        bestByDid.set(snapshot.did, snapshot);
+      }
+    } else {
+      declared.push(snapshot);
+    }
   }
+  const verified = [...bestByDid.values()];
   verified.sort((a, b) => (a.verifiedAt < b.verifiedAt ? 1 : a.verifiedAt > b.verifiedAt ? -1 : 0));
   declared.sort((a, b) => (a.importedAt < b.importedAt ? 1 : a.importedAt > b.importedAt ? -1 : 0));
   return [...verified, ...declared];

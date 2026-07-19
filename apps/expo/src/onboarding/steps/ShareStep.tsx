@@ -41,8 +41,12 @@ export function ShareStep({ onBack, onNext }: ShareStepProps) {
   const record = useProfileStore((s) => s.record);
   const jws = useProfileStore((s) => s.jws);
   const status = useProfileStore((s) => s.status);
+  // T7: share the SHARED projection (public + link-only), not the full record.
+  // Falls back to the full jws for a profile with no cached projection (safe —
+  // it then has no private links).
+  const shareJws = useProfileStore((s) => s.shared?.jws) ?? jws;
 
-  const fragment = useMemo(() => (jws ? encodeFragment(jws) : null), [jws]);
+  const fragment = useMemo(() => (shareJws ? encodeFragment(shareJws) : null), [shareJws]);
   const fragmentUrl = fragment ? `${FRAGMENT_BASE_URL}${fragment.fragment}` : null;
 
   const [qrImageUri, setQrImageUri] = useState<string | undefined>(undefined);

@@ -15,9 +15,12 @@ import { useProfileStore } from '@/profile/store';
 
 import type { CardExchangeOffer, MergeKind } from './mutualExchange';
 
-/** Our current signed public card as an exchange offer, or `null` if this
- *  device hasn't saved a profile yet (CLAUDE.md rule 8 — a decline, never a
- *  fabricated card). */
+/** Our current signed FULL card as an exchange offer, or `null` if this device
+ *  hasn't saved a profile yet (CLAUDE.md rule 8 — a decline, never a fabricated
+ *  card). Pear is a mutually-authenticated private exchange, so it carries the
+ *  full-scope record (all links, including private ones — T7's `scope: 'full'`,
+ *  here left absent = full) rather than the public/shared projection the Nostr
+ *  and QR paths use. */
 export function buildOwnOffer(): CardExchangeOffer | null {
   const { record, jws } = useProfileStore.getState();
   if (!record || !jws) return null;

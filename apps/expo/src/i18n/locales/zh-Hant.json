@@ -1299,5 +1299,22 @@
   "websign.copied": "已複製回應",
   "websign.done": "完成",
   "websign.errorTitle": "無法驗證此請求",
-  "websign.errorBody": "此簽名請求無效、已過期或遭篡改。未簽署任何內容。"
+  "websign.errorBody": "此簽名請求無效、已過期或遭篡改。未簽署任何內容。",
+  "meEdit.visibility.label": "誰能看到這個連結",
+  "meEdit.visibility.public": "公開",
+  "meEdit.visibility.linkOnly": "僅限連結",
+  "meEdit.visibility.private": "私密",
+  "meEdit.visibility.publicHint": "到處都收錄——發布到 Nostr、以 QR 分享、也留在本機。",
+  "meEdit.visibility.linkOnlyHint": "只出現在你給出的 QR／分享連結中，永不發布到 Nostr。",
+  "meEdit.visibility.privateHint": "只留在本機，永不分享或發布。",
+  "meEdit.preview.title": "發布前確認",
+  "meEdit.preview.subtitlePublish": "以下就是會公開到 Nostr 的內容。Face ID 會分別簽署每個版本。",
+  "meEdit.preview.subtitleShare": "以下就是你分享的 QR／連結會攜帶的內容。",
+  "meEdit.preview.nonePublic": "不會公開任何連結。",
+  "meEdit.preview.publicCount": "{{total}} 個連結中有 {{count}} 個會公開。",
+  "meEdit.preview.linkOnlyCount": "{{count}} 個僅以 QR／連結分享。",
+  "meEdit.preview.privateCount": "{{count}} 個僅保留在本機。",
+  "meEdit.preview.confirmPublish": "發布",
+  "meEdit.preview.confirmSave": "儲存",
+  "meEdit.preview.cancel": "繼續編輯"
 }
