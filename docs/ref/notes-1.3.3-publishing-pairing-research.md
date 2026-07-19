@@ -107,11 +107,11 @@ card.exchange.request(exchangeId、profile digest、size、updatedAt)
 **Wave 0(已 commit,branch 1.3.3):**
 - ✅ **R4** `dns`+`ens` HandleResolver 讀取路徑(`6528cc0`/`76f6560`/`7bc7d64`)
 
-**Wave 1(平行進行中,4 worktrees):**
-- 🔄 **T2** `@handle` 分享別名進 Me 分享 UI(§2;只在 binding=verified 才給短連結,沿用 S8h 快取)— `wt/t2-share`
-- 🔄 **T3** `webSignRequest/Response.v1` 型別 + verify 原語 + 對抗向量(§4;packages/shared,additive)— `wt/t3-websign`
-- 🔄 **T5** Pear 相互導入 + snapshot freshness/conflict 政策(§5)— `wt/t5-pear`
-- 🔄 **T6** 真選擇性揭露:presentation 不洩全 VC + import 驗簽(§3;G6 安全路徑)— `wt/t6-vc`
+**Wave 1(已全部 merge 回 1.3.3,整合後全套綠:typecheck 0 / lint 0 / 1509 unit + 110 parity):**
+- ✅ **T3** `webSignRequest/Response.v1` 型別 + verify 原語 + 24 對抗向量(`3ee540a`;fail-closed:簽章先於信任任何欄位、strict schema、digest 重算、response 反替換綁定)— review 過(修一個 app-tsconfig strict 存取)
+- ✅ **T2** `@handle` 分享別名(`af1b762`;只在 S8h 快取 verified+fresh 才給短連結;dns/ens 目前恆 unverified 誠實 fail-closed;dns 用 `@dns:<domain>` 顯式前綴)
+- ✅ **T6** 真選擇性揭露(`8a319dc` + opaque 硬化;RFC 9901 SD-JWT:依 bytes 分類、每筆 disclosure 重算 digest、注入 disclosure 拒收;plain JWT 子集 fail-closed;import 驗簽)— 對抗性 review 被 session limit 切斷,關鍵性質改由主線親驗:①plain-JWT 子集拒收 ②unverified import 不可出示 ③SD-JWT 只揭露選定 ④注入 disclosure 拒收。review 中發現並修:`presentationProof.ts` 最終分支對 `opaque` 會連 raw bytes 一起送(buildVpToken 早已 fail-closed 拒 opaque/zk;此處對齊)。誠實殘留:plain-JWT full 揭露未建模欄位、靜態 ZK proof 沿用原集合(真 SD-JWT 攝入為後續票)
+- ✅ **T5** Pear 相互導入 + snapshot merge 政策(`ea6bc43`;offer 對 Noise 認證的 `peerDid` 驗簽 + `record.did===peerDid`;merge = saved/alreadyCurrent/keptNewer/conflict,note 留 record 外;誠實三態 localSave×peerReceipt,掉 ack 不回滾)
 
 **Wave 2(Wave 1 merge 後):**
 - ⏳ **T4** App 端 per-action root 簽名(v1 只有 `profile.sign`)+ web request/回收流(依賴 T3 schema)

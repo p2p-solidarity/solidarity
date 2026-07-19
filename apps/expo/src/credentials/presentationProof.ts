@@ -150,13 +150,26 @@ export function buildPresentationProofJson(
     );
   }
 
-  // ZK proof / structured proof object: the proof itself is the disclosure.
-  return ok(
-    stableStringify({
-      ...base,
-      selected_claims: selectedClaims.map((claim) => claim.claimType),
-      verifiableCredential: [parseRawCredential(credential.rawJwt)],
-    }),
+  if (format === 'zk-proof') {
+    // The proof object itself IS the disclosure — it carries no raw claim
+    // fields to leak, so pairing it with `selected_claims` is honest.
+    return ok(
+      stableStringify({
+        ...base,
+        selected_claims: selectedClaims.map((claim) => claim.claimType),
+        verifiableCredential: [parseRawCredential(credential.rawJwt)],
+      }),
+    );
+  }
+
+  // 'opaque': an unstructured blob we cannot prove a subset of. Emitting its
+  // raw bytes beside a `selected_claims` label would imply a redaction we did
+  // not perform — refuse, matching `buildVpToken`'s fail-closed default.
+  return err(
+    disclosureError(
+      'not-redactable',
+      'Credential format is unrecognized and cannot be presented as selective evidence',
+    ),
   );
 }
 
