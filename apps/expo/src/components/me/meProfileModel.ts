@@ -56,6 +56,39 @@ export function selectProfileShareUrl(model: ProfileShareModel, preferShort: boo
   return preferShort && model.shortUrl ? model.shortUrl : model.offlineUrl;
 }
 
+export type ProfileShareUrlCandidate =
+  | {
+      readonly kind: 'handle';
+      readonly url: string;
+      readonly isVerified: boolean;
+    }
+  | {
+      readonly kind: 'short' | 'offline';
+      readonly url: string;
+    };
+
+export type ProfileShareUrlSelection =
+  | {
+      readonly kind: 'ready';
+      readonly candidate: ProfileShareUrlCandidate;
+    }
+  | { readonly kind: 'error' };
+
+export function pickBestShareUrl(
+  candidates: readonly ProfileShareUrlCandidate[]
+): ProfileShareUrlSelection {
+  const verifiedHandle = candidates.find(
+    (candidate) => candidate.kind === 'handle' && candidate.isVerified
+  );
+  if (verifiedHandle) return { kind: 'ready', candidate: verifiedHandle };
+
+  const short = candidates.find((candidate) => candidate.kind === 'short');
+  if (short) return { kind: 'ready', candidate: short };
+
+  const offline = candidates.find((candidate) => candidate.kind === 'offline');
+  return offline ? { kind: 'ready', candidate: offline } : { kind: 'error' };
+}
+
 /**
  * `@handle` share alias (`notes-1.3.3-publishing-pairing-research.md` §2,
  * grill decision 2026-07-19) — the shortest of the three share forms

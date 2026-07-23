@@ -1,0 +1,295 @@
+import { Image } from 'expo-image';
+import { useEffect, useState, type ReactNode } from 'react';
+import { ActivityIndicator, View } from 'react-native';
+
+import { PressableScale } from '@/components/common/PressableScale';
+import { SfIcon } from '@/components/icons/SfIcon';
+import { ThemedButton, ThemedSurface, ThemedText } from '@/components/themed';
+import { Colors } from '@/constants/Colors';
+import { useTranslation } from '@/i18n';
+
+import type {
+  HandleShareCandidate,
+  ProfileShareModel,
+  ProfileShareUrlCandidate,
+} from './meProfileModel';
+
+export const PROFILE_SHARE_QR_SIZE = 208;
+
+export type ProfileShareQrState =
+  | { readonly kind: 'loading'; readonly url: string | null }
+  | { readonly kind: 'ready'; readonly url: string; readonly uri: string }
+  | { readonly kind: 'error'; readonly url: string };
+
+export interface ReadyProfileShareModel {
+  readonly kind: 'ready';
+  readonly model: ProfileShareModel;
+  readonly candidates: readonly ProfileShareUrlCandidate[];
+  readonly selected: ProfileShareUrlCandidate;
+  readonly verifiedHandle: HandleShareCandidate | null;
+}
+
+export function ProfileShareReadyContent({
+  visible,
+  state,
+  qrState,
+  onCopy,
+  onShare,
+  onRetryQr,
+}: {
+  readonly visible: boolean;
+  readonly state: ReadyProfileShareModel;
+  readonly qrState: ProfileShareQrState;
+  readonly onCopy: (url: string) => void;
+  readonly onShare: (url: string) => void;
+  readonly onRetryQr: () => void;
+}): ReactNode {
+  const { t } = useTranslation();
+  const { selected } = state;
+  const otherCandidates = state.candidates.filter(
+    (candidate) => candidate.kind !== selected.kind
+  );
+
+  return (
+    <>
+      <CopyableUrlPill url={selected.url} onCopy={onCopy} />
+
+      <QrPreview url={selected.url} state={qrState} onRetry={onRetryQr} />
+
+      <View className="flex-row gap-2">
+        <View style={{ flex: 1 }}>
+          <ThemedButton
+            label={t('meShare.copyLink')}
+            variant="primary"
+            fullWidth
+            haptic={false}
+            leadingIcon={<SfIcon name="doc.on.doc" size={15} color={Colors.pageBg} />}
+            onPress={() => {
+              onCopy(selected.url);
+            }}
+          />
+        </View>
+        <View style={{ flex: 1 }}>
+          <ThemedButton
+            label={t('meShare.share')}
+            variant="secondary"
+            fullWidth
+            leadingIcon={<SfIcon name="square.and.arrow.up" size={15} color={Colors.text1} />}
+            onPress={() => {
+              onShare(selected.url);
+            }}
+          />
+        </View>
+      </View>
+
+      <ThemedText variant="caption" tone="tertiary" style={{ textAlign: 'center' }}>
+        {t('meShare.bioHint')}
+      </ThemedText>
+
+      {selected.kind === 'offline' && state.model.oversize ? (
+        <ThemedText variant="caption" tone="tertiary" style={{ textAlign: 'center' }}>
+          {t('profileCard.oversizeWarning')}
+        </ThemedText>
+      ) : null}
+
+      <OtherFormatsSection
+        visible={visible}
+        candidates={otherCandidates}
+        verifiedHandle={state.verifiedHandle}
+        onCopy={onCopy}
+      />
+    </>
+  );
+}
+
+function CopyableUrlPill({
+  url,
+  onCopy,
+}: {
+  readonly url: string;
+  readonly onCopy: (url: string) => void;
+}): ReactNode {
+  const { t } = useTranslation();
+  return (
+    <PressableScale
+      haptic={false}
+      onPress={() => {
+        onCopy(url);
+      }}
+      accessibilityRole="button"
+      accessibilityLabel={`${t('meShare.pageUrl')}: ${url}`}
+      accessibilityHint={t('meShare.copyUrlHint')}>
+      <ThemedSurface
+        variant="inset"
+        className="flex-row items-center gap-3 px-4 py-3"
+        style={{ minHeight: 72 }}>
+        <View className="flex-1 gap-1">
+          <ThemedText variant="label" tone="secondary">
+            {t('meShare.pageUrl')}
+          </ThemedText>
+          <ThemedText variant="bodyMedium" numberOfLines={2} ellipsizeMode="middle">
+            {url}
+          </ThemedText>
+        </View>
+        <SfIcon name="doc.on.doc" size={18} color={Colors.text1} />
+      </ThemedSurface>
+    </PressableScale>
+  );
+}
+
+function QrPreview({
+  url,
+  state,
+  onRetry,
+}: {
+  readonly url: string;
+  readonly state: ProfileShareQrState;
+  readonly onRetry: () => void;
+}): ReactNode {
+  const { t } = useTranslation();
+  const matchesUrl = state.url === url;
+  return (
+    <ThemedSurface
+      variant="card"
+      className="self-center rounded-none p-2"
+      style={{
+        width: PROFILE_SHARE_QR_SIZE + 16,
+        height: PROFILE_SHARE_QR_SIZE + 16,
+      }}>
+      <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
+        {matchesUrl && state.kind === 'ready' ? (
+          <Image
+            source={{ uri: state.uri }}
+            contentFit="contain"
+            accessibilityLabel={t('meShare.qrAccessibility')}
+            style={{ width: PROFILE_SHARE_QR_SIZE, height: PROFILE_SHARE_QR_SIZE }}
+          />
+        ) : matchesUrl && state.kind === 'error' ? (
+          <View className="items-center gap-3 px-4">
+            <ThemedText variant="bodySmall" tone="error" style={{ textAlign: 'center' }}>
+              {t('meShare.qrError')}
+            </ThemedText>
+            <ThemedButton
+              label={t('meShare.retry')}
+              variant="secondary"
+              onPress={onRetry}
+            />
+          </View>
+        ) : (
+          <View className="items-center gap-2">
+            <ActivityIndicator size="small" color={Colors.text3} />
+            <ThemedText variant="caption" tone="tertiary">
+              {t('profileCard.generatingQr')}
+            </ThemedText>
+          </View>
+        )}
+      </View>
+    </ThemedSurface>
+  );
+}
+
+function OtherFormatsSection({
+  visible,
+  candidates,
+  verifiedHandle,
+  onCopy,
+}: {
+  readonly visible: boolean;
+  readonly candidates: readonly ProfileShareUrlCandidate[];
+  readonly verifiedHandle: HandleShareCandidate | null;
+  readonly onCopy: (url: string) => void;
+}): ReactNode {
+  const { t } = useTranslation();
+  const [expanded, setExpanded] = useState(false);
+
+  useEffect(() => {
+    if (!visible) setExpanded(false);
+  }, [visible]);
+
+  if (candidates.length === 0) return null;
+
+  return (
+    <View className="gap-2">
+      <PressableScale
+        haptic="tap"
+        onPress={() => {
+          setExpanded((value) => !value);
+        }}
+        accessibilityRole="button"
+        accessibilityLabel={t('meShare.otherFormats')}
+        accessibilityState={{ expanded }}
+        style={{
+          minHeight: 44,
+          flexDirection: 'row',
+          alignItems: 'center',
+          gap: 10,
+          paddingHorizontal: 4,
+        }}>
+        <SfIcon name="link" size={14} color={Colors.text2} />
+        <ThemedText variant="bodySmall" tone="secondary" className="flex-1">
+          {t('meShare.otherFormats')}
+        </ThemedText>
+        <SfIcon
+          name={expanded ? 'chevron.up' : 'chevron.down'}
+          size={12}
+          color={Colors.text3}
+        />
+      </PressableScale>
+
+      {expanded ? (
+        <View className="gap-2">
+          {candidates.map((candidate) => (
+            <OtherFormatRow
+              key={`${candidate.kind}:${candidate.url}`}
+              candidate={candidate}
+              verifiedHandle={verifiedHandle}
+              onCopy={onCopy}
+            />
+          ))}
+        </View>
+      ) : null}
+    </View>
+  );
+}
+
+function OtherFormatRow({
+  candidate,
+  verifiedHandle,
+  onCopy,
+}: {
+  readonly candidate: ProfileShareUrlCandidate;
+  readonly verifiedHandle: HandleShareCandidate | null;
+  readonly onCopy: (url: string) => void;
+}): ReactNode {
+  const { t } = useTranslation();
+  const label =
+    candidate.kind === 'handle'
+      ? verifiedHandle?.url === candidate.url
+        ? `@${verifiedHandle.handle}`
+        : t('meShare.verifiedHandleFormat')
+      : candidate.kind === 'short'
+        ? t('meShare.shortFormat')
+        : t('meShare.offlineFormat');
+
+  return (
+    <ThemedSurface
+      variant="inset"
+      className="flex-row items-center gap-3 rounded-none px-3 py-2">
+      <View className="flex-1 gap-0.5">
+        <ThemedText variant="bodySmall">{label}</ThemedText>
+        <ThemedText variant="caption" tone="tertiary" numberOfLines={1} ellipsizeMode="middle">
+          {candidate.url}
+        </ThemedText>
+      </View>
+      <ThemedButton
+        label={t('meShare.copy')}
+        variant="secondary"
+        haptic={false}
+        accessibilityLabel={t('meShare.copyFormat', { format: label })}
+        onPress={() => {
+          onCopy(candidate.url);
+        }}
+      />
+    </ThemedSurface>
+  );
+}
