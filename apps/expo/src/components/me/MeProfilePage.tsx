@@ -25,6 +25,7 @@ export interface MeProfilePageProps {
   readonly shareJws: string;
   readonly bottomInset: number;
   readonly onEdit: () => void;
+  readonly onAddLink: () => void;
   readonly onOpenIdentity: () => void;
   readonly onOpenBindings: () => void;
   readonly onOpenCredentials: () => void;
@@ -38,6 +39,7 @@ export function MeProfilePage({
   shareJws,
   bottomInset,
   onEdit,
+  onAddLink,
   onOpenIdentity,
   onOpenBindings,
   onOpenCredentials,
@@ -57,15 +59,21 @@ export function MeProfilePage({
       className="flex-1"
       contentContainerStyle={{ paddingTop: 20, paddingBottom: bottomInset + 100, gap: 24 }}>
       <Animated.View entering={entrance(0)}>
-        <ProfileHero record={record} onEdit={onEdit} onOpenIdentity={onOpenIdentity} />
+        <ProfileHero
+          record={record}
+          shareRecord={shareRecord}
+          shareJws={shareJws}
+          onEdit={onEdit}
+          onOpenIdentity={onOpenIdentity}
+        />
       </Animated.View>
 
       <Animated.View entering={entrance(STAGGER_MS)}>
-        <ProfileBadgeChips record={record} jws={jws} onManageBindings={focusBindings} />
-      </Animated.View>
-
-      <Animated.View entering={entrance(STAGGER_MS * 2)}>
-        <ProfileLinksList links={record.links} onEdit={onEdit} />
+        <ProfileLinksList
+          links={record.links}
+          onEdit={onEdit}
+          onAddFirstLink={onAddLink}
+        />
       </Animated.View>
 
       <Animated.View entering={entrance(STAGGER_MS * 2)}>
@@ -74,6 +82,10 @@ export function MeProfilePage({
           jws={shareJws}
           onOpenShareSettings={onOpenShareSettings}
         />
+      </Animated.View>
+
+      <Animated.View entering={entrance(STAGGER_MS * 2)}>
+        <ProfileBadgeChips record={record} jws={jws} onManageBindings={focusBindings} />
       </Animated.View>
 
       <Animated.View

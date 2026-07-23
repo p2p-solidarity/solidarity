@@ -42,6 +42,9 @@ export default function MeTab() {
           onEdit={() => {
             router.push('/me/edit');
           }}
+          onAddLink={() => {
+            router.push({ pathname: '/me/edit', params: { add: '1' } });
+          }}
           onOpenIdentity={() => {
             router.push({ pathname: '/settings/dids', params: { did: record.did } });
           }}
