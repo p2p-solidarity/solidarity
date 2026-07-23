@@ -63,14 +63,17 @@ export function MeProfileGate({ onCreatePage, onSetUpIdentity }: MeProfileGatePr
           ) : (
             <>
               <ThemedText variant="titleLarge">
-                {t(state === 'createPage' ? 'mePage.createTitle' : 'mePage.identityTitle')}
-              </ThemedText>
-              <ThemedText variant="bodyMedium" tone="secondary">
-                {t(state === 'createPage' ? 'mePage.createMessage' : 'mePage.identityMessage')}
+                {t(
+                  state === 'createPage'
+                    ? 'meHome.createPagePromise'
+                    : 'meHome.needsIdentityPromise'
+                )}
               </ThemedText>
               <ThemedButton
                 label={t(
-                  state === 'createPage' ? 'profileCard.createPage' : 'profileCard.setUpIdentity'
+                  state === 'createPage'
+                    ? 'meHome.createPageCta'
+                    : 'meHome.needsIdentityCta'
                 )}
                 variant="primary"
                 fullWidth

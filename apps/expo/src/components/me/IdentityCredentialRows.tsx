@@ -24,7 +24,7 @@ export function IdentityCredentialRows({
 }: IdentityCredentialRowsProps): ReactNode {
   const { t } = useTranslation();
   const [nostrKeyReady, setNostrKeyReady] = useState(() => hasNostrKeySync());
-  const [bindingsExpanded, setBindingsExpanded] = useState(false);
+  const [expanded, setExpanded] = useState(false);
   const blueskyHandle =
     record.alsoKnownAs.find((alias) => alias.startsWith('at://'))?.slice('at://'.length) ?? null;
   const nostrClaimed = record.alsoKnownAs.some((alias) => alias.startsWith('nostr:npub'));
@@ -42,21 +42,19 @@ export function IdentityCredentialRows({
   );
 
   return (
-    <View className="gap-3 px-4">
-      <ThemedText variant="label" tone="tertiary">
-        {t('mePage.identityAndCredentials')}
-      </ThemedText>
+    <View className="px-4">
       <ThemedSurface variant="inset" className="overflow-hidden rounded-none">
         <InsetRow
           icon="checkmark.seal"
-          title={t('mePage.identityAndBindings')}
-          subtitle={t('mePage.bindingsPortableHint')}
-          trailingIcon={bindingsExpanded ? 'chevron.up' : 'chevron.down'}
+          title={t('meHome.identityCredentialsTitle')}
+          subtitle={t('meHome.identityCredentialsHint')}
+          trailingIcon={expanded ? 'chevron.up' : 'chevron.down'}
+          expanded={expanded}
           onPress={() => {
-            setBindingsExpanded((expanded) => !expanded);
+            setExpanded((current) => !current);
           }}
         />
-        {bindingsExpanded ? (
+        {expanded ? (
           <>
             <View style={{ height: 1, marginLeft: 48, backgroundColor: Colors.divider }} />
             <InsetRow
@@ -84,15 +82,15 @@ export function IdentityCredentialRows({
               }
               onPress={onOpenBindings}
             />
+            <View style={{ height: 1, marginLeft: 48, backgroundColor: Colors.divider }} />
+            <InsetRow
+              icon="checkmark.shield.fill"
+              title={t('mePage.credentials')}
+              subtitle={t('mePage.credentialsHint')}
+              onPress={onOpenCredentials}
+            />
           </>
         ) : null}
-        <View style={{ height: 1, marginLeft: 48, backgroundColor: Colors.divider }} />
-        <InsetRow
-          icon="checkmark.shield.fill"
-          title={t('mePage.credentials')}
-          subtitle={t('mePage.credentialsHint')}
-          onPress={onOpenCredentials}
-        />
       </ThemedSurface>
     </View>
   );
@@ -104,12 +102,14 @@ function InsetRow({
   subtitle,
   onPress,
   trailingIcon = 'chevron.right',
+  expanded,
 }: {
   readonly icon: SFSymbol;
   readonly title: string;
   readonly subtitle: string;
   readonly onPress: () => void;
   readonly trailingIcon?: SFSymbol;
+  readonly expanded?: boolean;
 }): ReactNode {
   return (
     <PressableScale
@@ -117,6 +117,7 @@ function InsetRow({
       onPress={onPress}
       accessibilityRole="button"
       accessibilityLabel={title}
+      accessibilityState={expanded === undefined ? undefined : { expanded }}
       style={{
         minHeight: 64,
         flexDirection: 'row',
