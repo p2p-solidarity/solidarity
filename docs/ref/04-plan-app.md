@@ -105,6 +105,14 @@ seed 為本、passkey 用 largeBlob/PRF 當外殼,**不可讓 passkey-PRF 直接
 - [x] **S7a** SpruceKit SDK 退場(spec 13→8 方法、iOS SPM + Android Maven + config plugin + SPM pin 整包拔、nitrogen 重生成、prebuild + `-disableAutomaticPackageResolution` 驗證過;順修 prepare-ios-workspace.sh 的 stale 小寫 scheme 名)
 - [x] **S7b** 身份收斂 — **落地語意(D1 精煉):舊 SE 硬體鑰「退位身份、留任簽卡鑰」**。硬體鑰物理上不可由助記詞派生,故「一個 did」= root did(seed、可攜)是唯一對外身份;SE 鑰簽 VC/SD-JWT/ZK 並經 A5b `solidarity.cardKeyBinding.v1` 錨定至 root。settings/dids 改為「根身份(主)+ 簽卡金鑰(錨定,非身份)」兩區呈現。憑證不需重發、既有資料不需遷移。ZK 面板的恆 null `didDocumentJson` 死狀態屬凍結面,不動(最小接觸)。
 
+**執行紀錄 2026-07-23(Me 鏈路 Linktree 化第二輪 W1–W3;三個 codex 平行實作(同一 working tree、owned-file 切分)、Claude 整合驗收 + 分 commit):**
+
+- [x] **W1** 填寫鏈路(`2e07f28`;AddLinkSheet:貼網址 2 步自動辨識平台 / 選平台打 @handle 3 步,新增路徑無 Label/可見度/組 URL;編輯器改精簡清單 edit.tsx 647→441 行;save 前先備妥 npub claim(`prepareNostrClaimForSave`,僅限 Save 動作內)→ 單次 Face ID、publish 不再重簽;PublishPreviewSheet 只在有隱藏連結時攔截)
+- [x] **W2** 分享 sheet(`dccbe97`;網址 pill 為主角一鍵複製、QR 與網址同源、系統分享;三選一格式選擇器降為「其他格式」摺疊列;`pickBestShareUrl` 已驗證 handle > npub 短連結 > 離線 fragment,未驗證 handle 雙重拒絕、handleShareVerification 未動)
+- [x] **W3** 首頁結構(`e7a2778`;hero 直接顯示可複製頁面網址(share-safe 投影 + 驗證把關)、身份+憑證合併單一收合區(路由不變)、空狀態單一承諾+單一 CTA)
+- [x] 整合接線(`555c0a8`;MeProfilePage 層級 hero→連結→分享→徽章→身份 footer;`?add=1` 空狀態直開 AddLinkSheet;i18n meShare.*/meHome.* en+zh-Hant 對齊;autoRepublishSubtitle 文案對齊「儲存即發布」新行為)
+- 另:三個唯讀 codex 審計(R1 onboarding 鏈、R2 導航圖、R3 填寫機制)平行進行中,產出將收斂為縮鏈路 backlog
+
 **執行紀錄 2026-07-17(Linktree 化設定收斂 T1–T5;codex 實作 T1–T4 檔案、Claude 分 commit + 親做 T5 + 驗收):**
 
 - [x] **S8a** Link 編輯器 https-only + label 預設 chips(`e092552`;http→https 升級、危險 scheme 仍大聲失敗;`expandLinkPresetHandle` 把 bare @handle 展開成平台 URL;shared schema 不動 — 別人頁上的舊 http 連結照常渲染)
