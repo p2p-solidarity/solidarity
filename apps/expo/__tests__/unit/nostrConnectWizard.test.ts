@@ -11,6 +11,7 @@ import {
   isNostrPublishOutcomePartiallyAccepted,
   isNostrPublishOutcomeSuccessful,
   nostrConnectWizardReducer,
+  prepareNostrClaimForSave,
   publishWithNostrAutoSetup,
   relayRejectionLines,
   type NostrConnectWizardAction,
@@ -256,6 +257,69 @@ describe('publish outcome and cancellation helpers', () => {
       'page wss://b.example: rate-limited: slow down (90ms)',
       'verification wss://a.example: no response (8000ms)',
     ]);
+  });
+});
+
+describe('prepareNostrClaimForSave', () => {
+  it('provisions a missing key and returns its npub claim before the profile is signed', async () => {
+    const calls: string[] = [];
+    const result = await prepareNostrClaimForSave(['at://alice.test'], {
+      hasKey: async () => {
+        calls.push('hasKey');
+        return false;
+      },
+      provision: async () => {
+        calls.push('provision');
+        return { ok: true, value: 'fresh-pubkey' };
+      },
+      getPubkey: async () => {
+        calls.push('getPubkey');
+        return { ok: false, error: 'should not read after provisioning' };
+      },
+      encodeNpub: (pubkey) => {
+        calls.push(`encode:${pubkey}`);
+        return { ok: true, value: 'npub1fresh' };
+      },
+    });
+
+    expect(result).toEqual({
+      ok: true,
+      value: ['at://alice.test', 'nostr:npub1fresh'],
+    });
+    expect(calls).toEqual(['hasKey', 'provision', 'encode:fresh-pubkey']);
+  });
+
+  it('reads an existing key without provisioning and does not duplicate its claim', async () => {
+    let provisionCalls = 0;
+    const result = await prepareNostrClaimForSave(
+      ['nostr:npub1existing', 'at://alice.test'],
+      {
+        hasKey: async () => true,
+        provision: async () => {
+          provisionCalls += 1;
+          return { ok: true, value: 'unused' };
+        },
+        getPubkey: async () => ({ ok: true, value: 'existing-pubkey' }),
+        encodeNpub: () => ({ ok: true, value: 'npub1existing' }),
+      }
+    );
+
+    expect(result).toEqual({
+      ok: true,
+      value: ['nostr:npub1existing', 'at://alice.test'],
+    });
+    expect(provisionCalls).toBe(0);
+  });
+
+  it('returns a tagged failure without fabricating a claim when setup fails', async () => {
+    const result = await prepareNostrClaimForSave([], {
+      hasKey: async () => false,
+      provision: async () => ({ ok: false, error: 'biometricDenied' }),
+      getPubkey: async () => ({ ok: false, error: 'notProvisioned' }),
+      encodeNpub: () => ({ ok: false, error: 'must not encode' }),
+    });
+
+    expect(result).toEqual({ ok: false, error: 'biometricDenied' });
   });
 });
 

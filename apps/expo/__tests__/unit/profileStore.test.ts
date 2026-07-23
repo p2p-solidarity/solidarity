@@ -135,6 +135,7 @@ interface NostrUserKeyModuleSurface {
     revealer: (() => Promise<NostrRes<string>>) | null
   ) => void;
   readonly provisionFromRootMnemonic: () => Promise<NostrRes<string>>;
+  readonly npubEncode: (pubkey: string) => NostrRes<string>;
   readonly deleteNostrKey: () => Promise<void>;
 }
 
@@ -652,6 +653,49 @@ describe('publishToNostr', () => {
     expect(biometricCalls).toEqual([]); // no Face ID prompt on the second call
     expect(profileCalls).toBe(2); // still republishes both directions
     expect(kind0Calls).toBe(2);
+  });
+
+  it('publishes a claim included in saveProfile without a publish-time biometric re-sign', async () => {
+    await rootKeyMod.createFromFreshMnemonic();
+    const provisioned = await nostrUserKeyMod.provisionFromRootMnemonic();
+    expect(provisioned.ok).toBe(true);
+    if (!provisioned.ok) return;
+    const npub = nostrUserKeyMod.npubEncode(provisioned.value);
+    expect(npub.ok).toBe(true);
+    if (!npub.ok) return;
+
+    const claim = `nostr:${npub.value}`;
+    const saved = await mod.useProfileStore.getState().saveProfile(
+      { displayName: 'Alice', bio: '', links: [] },
+      { alsoKnownAs: [claim] }
+    );
+    expect(saved.ok).toBe(true);
+    const jwsBeforePublish = mod.useProfileStore.getState().jws;
+    biometricCalls.length = 0;
+
+    let profileCalls = 0;
+    let kind0Calls = 0;
+    mod.__setNostrPublishForTesting({
+      publishProfile: (opts) => {
+        profileCalls += 1;
+        return Promise.resolve({ ok: true, value: fakeReport(30078, opts.jws) });
+      },
+      updateKind0AlsoKnownAs: (opts) => {
+        kind0Calls += 1;
+        return Promise.resolve({
+          ok: true,
+          value: fakeReport(0, JSON.stringify({ alsoKnownAs: [opts.did] })),
+        });
+      },
+    });
+
+    const published = await mod.useProfileStore.getState().publishToNostr(['wss://a']);
+    expect(published.ok).toBe(true);
+    expect(biometricCalls).toEqual([]);
+    expect(mod.useProfileStore.getState().jws).toBe(jwsBeforePublish);
+    expect(mod.useProfileStore.getState().record?.alsoKnownAs).toContain(claim);
+    expect(profileCalls).toBe(1);
+    expect(kind0Calls).toBe(1);
   });
 
   it('propagates a publishProfile failure without calling updateKind0AlsoKnownAs', async () => {

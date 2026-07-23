@@ -105,6 +105,39 @@ export interface NostrAutoSetupDependencies {
   readonly publish: () => Promise<Result<NostrPublishOutcome, string>>;
 }
 
+export interface NostrClaimPreparationDependencies {
+  readonly hasKey: () => Promise<boolean>;
+  readonly provision: () => Promise<Result<string, string>>;
+  readonly getPubkey: () => Promise<Result<string, string>>;
+  readonly encodeNpub: (pubkey: string) => Result<string, string>;
+}
+
+/**
+ * Resolve the device's Nostr identity and merge its public claim into the
+ * candidate profile fields before `saveProfile` signs any projection.
+ * Callers invoke this only from an explicit Save action.
+ */
+export async function prepareNostrClaimForSave(
+  alsoKnownAs: readonly string[],
+  dependencies: NostrClaimPreparationDependencies
+): Promise<Result<readonly string[], string>> {
+  try {
+    const pubkey = (await dependencies.hasKey())
+      ? await dependencies.getPubkey()
+      : await dependencies.provision();
+    if (!pubkey.ok) return pubkey;
+    const npub = dependencies.encodeNpub(pubkey.value);
+    if (!npub.ok) return npub;
+    const claim = `nostr:${npub.value}`;
+    return {
+      ok: true,
+      value: alsoKnownAs.includes(claim) ? alsoKnownAs : [...alsoKnownAs, claim],
+    };
+  } catch {
+    return { ok: false, error: 'publishing setup is unavailable' };
+  }
+}
+
 /**
  * User-tap-only orchestration shared by both page editors. It never runs on
  * mount, never changes the custody model, and provisions only after a real

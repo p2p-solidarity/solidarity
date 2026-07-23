@@ -14,9 +14,14 @@ import type { ProfileLink } from '@solidarity/shared';
 export interface ProfileLinksListProps {
   readonly links: readonly ProfileLink[];
   readonly onEdit: () => void;
+  readonly onAddFirstLink: () => void;
 }
 
-export function ProfileLinksList({ links, onEdit }: ProfileLinksListProps) {
+export function ProfileLinksList({
+  links,
+  onEdit,
+  onAddFirstLink,
+}: ProfileLinksListProps) {
   const { t } = useTranslation();
   const c = useThemeColors();
 
@@ -35,7 +40,7 @@ export function ProfileLinksList({ links, onEdit }: ProfileLinksListProps) {
       {links.length === 0 ? (
         <PressableScale
           haptic="tap"
-          onPress={onEdit}
+          onPress={onAddFirstLink}
           accessibilityRole="button"
           accessibilityLabel={t('mePage.addFirstLink')}>
           <ThemedSurface

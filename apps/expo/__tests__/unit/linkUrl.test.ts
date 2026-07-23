@@ -11,13 +11,116 @@ import { describe, expect, it } from 'bun:test';
 
 import {
   composeLinkUrl,
+  detectLinkFromUrl,
   displayLinkText,
   expandLinkPresetHandle,
   isHttpsLinkUrl,
   linkInputModelFor,
+  linkPresetForEditableUrl,
   normalizeLinkUrl,
   urlMatchesPreset,
 } from '../../src/profile/linkUrl';
+
+describe('detectLinkFromUrl', () => {
+  it('detects every handle-based preset from its canonical host', () => {
+    expect(detectLinkFromUrl('https://linkedin.com/in/kidney')).toEqual({
+      preset: 'linkedin',
+      label: 'LinkedIn',
+      url: 'https://linkedin.com/in/kidney',
+    });
+    expect(detectLinkFromUrl('https://instagram.com/kidney')).toEqual({
+      preset: 'instagram',
+      label: 'Instagram',
+      url: 'https://instagram.com/kidney',
+    });
+    expect(detectLinkFromUrl('https://t.me/kidney')).toEqual({
+      preset: 'telegram',
+      label: 'Telegram',
+      url: 'https://t.me/kidney',
+    });
+    expect(detectLinkFromUrl('https://x.com/kidney')).toEqual({
+      preset: 'x',
+      label: 'X',
+      url: 'https://x.com/kidney',
+    });
+    expect(detectLinkFromUrl('https://github.com/kidney')).toEqual({
+      preset: 'github',
+      label: 'GitHub',
+      url: 'https://github.com/kidney',
+    });
+    expect(detectLinkFromUrl('https://youtube.com/@kidney')).toEqual({
+      preset: 'youtube',
+      label: 'YouTube',
+      url: 'https://youtube.com/@kidney',
+    });
+  });
+
+  it('matches www-prefixed and legacy hosts while upgrading http to https', () => {
+    expect(detectLinkFromUrl('http://www.instagram.com/kidney')).toEqual({
+      preset: 'instagram',
+      label: 'Instagram',
+      url: 'https://www.instagram.com/kidney',
+    });
+    expect(detectLinkFromUrl('https://twitter.com/kidney')?.preset).toBe('x');
+    expect(detectLinkFromUrl('https://telegram.me/kidney')?.preset).toBe('telegram');
+    expect(detectLinkFromUrl('https://youtu.be/example')?.preset).toBe('youtube');
+  });
+
+  it('uses the hostname as the label for an unknown secure host', () => {
+    expect(detectLinkFromUrl('blog.example.com/about')).toEqual({
+      preset: null,
+      label: 'blog.example.com',
+      url: 'https://blog.example.com/about',
+    });
+    expect(detectLinkFromUrl('https://www.example.com')).toEqual({
+      preset: null,
+      label: 'example.com',
+      url: 'https://www.example.com',
+    });
+  });
+
+  it('rejects malformed input and dangerous or unsupported schemes', () => {
+    expect(detectLinkFromUrl('not a URL')).toBeNull();
+    expect(detectLinkFromUrl('javascript:alert(1)')).toBeNull();
+    expect(detectLinkFromUrl('data:text/html,hello')).toBeNull();
+    expect(detectLinkFromUrl('ftp://example.com/file')).toBeNull();
+    expect(detectLinkFromUrl('mailto:hello@example.com')).toBeNull();
+  });
+});
+
+describe('linkPresetForEditableUrl', () => {
+  it('keeps handle mode only for canonical platform profile URLs', () => {
+    expect(
+      linkPresetForEditableUrl('instagram', 'https://instagram.com/kidney')
+    ).toBe('instagram');
+    expect(
+      linkPresetForEditableUrl('linkedin', 'https://linkedin.com/in/kidney-dev')
+    ).toBe('linkedin');
+    expect(
+      linkPresetForEditableUrl('youtube', 'https://youtube.com/@kidney.dev')
+    ).toBe('youtube');
+  });
+
+  it('falls back to URL mode for aliases and non-handle platform URLs', () => {
+    expect(
+      linkPresetForEditableUrl('instagram', 'https://www.instagram.com/kidney')
+    ).toBeNull();
+    expect(linkPresetForEditableUrl('x', 'https://twitter.com/kidney')).toBeNull();
+    expect(
+      linkPresetForEditableUrl('youtube', 'https://youtube.com/watch?v=example')
+    ).toBeNull();
+    expect(
+      linkPresetForEditableUrl('instagram', 'https://instagram.com/kidney?hl=en')
+    ).toBeNull();
+  });
+
+  it('preserves generic presets without inventing handle mode', () => {
+    expect(
+      linkPresetForEditableUrl('website', 'https://example.com/about')
+    ).toBe('website');
+    expect(linkPresetForEditableUrl(null, 'https://example.com/about')).toBeNull();
+  });
+});
 
 describe('normalizeLinkUrl', () => {
   it('returns empty string for blank / whitespace-only input', () => {
@@ -124,8 +227,9 @@ describe('displayLinkText + urlMatchesPreset', () => {
     expect(displayLinkText(null, '')).toBe('');
   });
 
-  it('shows a legacy http tail under the generic https prefix', () => {
+  it('shows legacy http tails under their upgraded editable prefix', () => {
     expect(displayLinkText(null, 'http://old.example.com')).toBe('old.example.com');
+    expect(displayLinkText('instagram', 'http://instagram.com/kidney')).toBe('kidney');
   });
 
   it('flags a pasted URL that left the platform so the row can drop the preset', () => {

@@ -3,38 +3,36 @@
  * Edits `displayName` / `bio` / `links` plus the page photo. Library photos
  * stay device-only; a selected Bluesky photo is signed and published.
  *
- * Save flow: client-side per-row link validation (reusing
- * `@solidarity/shared`'s `profileLinkSchema` directly, not a re-implemented
- * regex) blocks Save while any row is invalid; the actual submit goes
- * through `useProfileStore().saveProfile()`, which re-validates via
- * `parseProfile` BEFORE ever calling the Face-ID-gated signer (see
- * `src/profile/store.ts`'s module doc) and returns a `Result<void, string>`
- * this screen surfaces via `showError` — never a native `Alert.alert`.
+ * Save flow: AddLinkSheet admits only secure, normalized URLs; the actual
+ * submit goes through `useProfileStore().saveProfile()`, which re-validates
+ * via `parseProfile` BEFORE ever calling the Face-ID-gated signer (see
+ * `src/profile/store.ts`'s module doc) and returns a tagged Result this screen
+ * surfaces via `showError` — never a native `Alert.alert`.
  *
  * No provisioned root key → an honest "需要先完成身份設定" state with a CTA
  * into the existing onboarding replay flow (`/onboarding?replay=1`, the
  * same route `settings/index.tsx`'s "Replay Onboarding" row uses — its
  * non-skippable `BackupStep` is what actually provisions the root key).
- * This screen never mints a key itself.
+ * An explicit Save may derive the separate Nostr key when auto-publish is on;
+ * mount and first paint never provision it.
  */
-import { router } from 'expo-router';
+import { router, useLocalSearchParams } from 'expo-router';
 import { safeBack } from '@/navigation/safeBack';
 import { useEffect, useMemo, useState } from 'react';
-import { ScrollView, View } from 'react-native';
+import { View } from 'react-native';
 import { KeyboardAwareScrollView } from 'react-native-keyboard-controller';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { PressableScale } from '@/components/common/PressableScale';
-import { SfIcon } from '@/components/icons/SfIcon';
 import { AvatarEditor } from '@/components/me/AvatarEditor';
+import { AddLinkSheet, type LinkSheetValue } from '@/components/me/AddLinkSheet';
+import { EditableLinksList } from '@/components/me/EditableLinksList';
 import {
   useAvatarEditor,
   type ProfileCommitResult,
 } from '@/components/me/useAvatarEditor';
 import { LinkPageImportSheet, type LinkPageImportResult } from '@/components/profile/LinkPageImportSheet';
 import { SettingsBackToolbar, SettingsScreenTitle } from '@/components/settings/SettingsBlocks';
-import { ThemedButton, ThemedSurface, ThemedText, ThemedTextInput } from '@/components/themed';
-import { Colors } from '@/constants/Colors';
+import { ThemedButton, ThemedText, ThemedTextInput } from '@/components/themed';
 import { showError } from '@/feedback/appAlert';
 import { haptic } from '@/feedback/haptics';
 import { pushToast } from '@/feedback/toast';
@@ -43,36 +41,35 @@ import { hasRootKey } from '@/identity/rootKey';
 import {
   isBiometricCancellation,
   isNostrPublishOutcomeSuccessful,
+  prepareNostrClaimForSave,
   publishWithNostrAutoSetup,
 } from '@/nostr/connectWizard';
 import { DEFAULT_RELAYS } from '@/nostr/publish';
-import { hasNostrKey, provisionFromRootMnemonic } from '@/nostr/userKey';
 import {
-  composeLinkUrl,
-  displayLinkText,
-  expandLinkPresetHandle,
-  linkInputModelFor,
-  urlMatchesPreset,
-  isHttpsLinkUrl,
-  LINK_LABEL_PRESETS,
+  getNostrPubkey,
+  hasNostrKey,
+  npubEncode,
+  provisionFromRootMnemonic,
+} from '@/nostr/userKey';
+import {
+  detectLinkFromUrl,
+  linkPresetForEditableUrl,
   normalizeLinkUrl,
-  type LinkLabelPreset,
 } from '@/profile/linkUrl';
-import { LinkVisibilityControl, PublishPreviewSheet } from '@/components/me/PublishPreviewSheet';
+import { PublishPreviewSheet } from '@/components/me/PublishPreviewSheet';
 import { summarizeVisibility, type LinkVisibility, type VisibilitySummary } from '@/profile/projection';
 import { useProfileStore, type NostrPublishOutcome } from '@/profile/store';
-import { shouldAutoRepublish } from '@/profile/publishingPolicy';
 import { usePreferences } from '@/settings/preferences';
 import { uuid, type ProfileLink } from '@solidarity/shared';
 
-interface EditableLink {
+interface EditableLink extends LinkSheetValue {
   readonly id: string;
-  readonly label: string;
-  readonly url: string;
-  readonly preset: LinkLabelPreset | null;
-  /** T7 per-link privacy tier — LOCAL only, never in the signed record. */
-  readonly visibility: LinkVisibility;
 }
+
+type LinkSheetTarget =
+  | { readonly kind: 'add' }
+  | { readonly kind: 'edit'; readonly id: string }
+  | null;
 
 type TFn = ReturnType<typeof useTranslation>['t'];
 
@@ -86,42 +83,29 @@ function publishFailureDetail(outcome: NostrPublishOutcome, t: TFn): string {
 }
 
 function toEditableLink(link: ProfileLink, visibility: LinkVisibility): EditableLink {
-  return { id: uuid(), label: link.label, url: link.url, preset: presetForLabel(link.label), visibility };
-}
-
-/** `null` = no error. An empty (never-touched) URL is not an error — the
- * whole row is simply dropped from the saved payload (see `handleSave`'s
- * `submittedLinks` filter below). */
-function validateLinkUrl(url: string, preset: LinkLabelPreset | null, error: string): string | null {
-  const prepared = prepareLinkUrl(url, preset);
-  if (prepared.length === 0) return null;
-  return isHttpsLinkUrl(prepared) ? null : error;
-}
-
-function isBlankLink(link: EditableLink): boolean {
-  return link.label.trim().length === 0 && link.url.trim().length === 0;
-}
-
-function prepareLinkUrl(url: string, preset: LinkLabelPreset | null): string {
-  return normalizeLinkUrl(expandLinkPresetHandle(preset, url));
-}
-
-function presetForLabel(label: string): LinkLabelPreset | null {
-  const normalized = label.trim().toLowerCase();
-  return LINK_LABEL_PRESETS.find((preset) => preset === normalized) ?? null;
+  const detectedPreset = detectLinkFromUrl(link.url)?.preset ?? null;
+  return {
+    id: uuid(),
+    label: link.label,
+    url: link.url,
+    preset: linkPresetForEditableUrl(detectedPreset, link.url),
+    visibility,
+  };
 }
 
 export default function MeEditScreen() {
   const insets = useSafeAreaInsets();
   const { t } = useTranslation();
+  const { add } = useLocalSearchParams<{ readonly add?: string }>();
   const record = useProfileStore((s) => s.record);
   const storeLinkVisibility = useProfileStore((s) => s.linkVisibility);
   const saveProfile = useProfileStore((s) => s.saveProfile);
   const publishToNostr = useProfileStore((s) => s.publishToNostr);
   const autoRepublish = usePreferences((s) => s.nostrAutoRepublish);
-  const isAlreadyPublished =
-    record?.alsoKnownAs.some((alias) => alias.startsWith('nostr:npub')) === true;
-  const willAutoRepublish = shouldAutoRepublish(isAlreadyPublished, autoRepublish);
+  // The preference is the user's explicit publishing opt-in. On a first
+  // publish, Save provisions the Nostr key and adds its claim before signing;
+  // subsequent saves follow the same silent republish path.
+  const willAutoRepublish = autoRepublish;
 
   // Optimistic default — see `ProfileSummaryCard`'s doc for why (the common
   // case already has a provisioned root key; this flips to the honest
@@ -145,23 +129,25 @@ export default function MeEditScreen() {
   const [saving, setSaving] = useState(false);
   const [linktreeSheetOpen, setLinktreeSheetOpen] = useState(false);
   const [previewOpen, setPreviewOpen] = useState(false);
-
-  const linkErrors = useMemo(
-    () =>
-      links.map((link) =>
-        isBlankLink(link)
-          ? null
-          : validateLinkUrl(link.url, link.preset, t('profileLink.httpsOnly'))
-      ),
-    [links, t]
+  const [linkSheetTarget, setLinkSheetTarget] = useState<LinkSheetTarget>(() =>
+    add === '1' ? { kind: 'add' } : null
   );
-  const hasLinkErrors = linkErrors.some((e) => e !== null);
+  const editingLink =
+    linkSheetTarget?.kind === 'edit'
+      ? (links.find((link) => link.id === linkSheetTarget.id) ?? null)
+      : null;
 
-  const addLink = () => {
-    setLinks((prev) => [...prev, { id: uuid(), label: '', url: '', preset: null, visibility: 'public' }]);
-  };
-  const setLinkVisibility = (id: string, visibility: LinkVisibility) => {
-    setLinks((prev) => prev.map((link) => (link.id === id ? { ...link, visibility } : link)));
+  const submitLinkSheet = (value: LinkSheetValue) => {
+    if (linkSheetTarget?.kind === 'edit') {
+      setLinks((prev) =>
+        prev.map((link) =>
+          link.id === linkSheetTarget.id ? { id: link.id, ...value } : link
+        )
+      );
+    } else {
+      setLinks((prev) => [...prev, { id: uuid(), ...value }]);
+    }
+    setLinkSheetTarget(null);
   };
   const removeLink = (id: string) => {
     setLinks((prev) => prev.filter((l) => l.id !== id));
@@ -180,47 +166,6 @@ export default function MeEditScreen() {
       return next;
     });
   };
-  const updateLink = (id: string, field: 'label' | 'url', value: string) => {
-    setLinks((prev) =>
-      prev.map((link) =>
-        link.id === id
-          ? { ...link, [field]: value, ...(field === 'label' ? { preset: null } : {}) }
-          : link
-      )
-    );
-  };
-  /** Live in-field composition: the field shows only the tail after the
-   * inline prefix; the row always stores the full https URL. A pasted full
-   * URL replaces the prefix mode outright — if it's not the active
-   * platform's, the preset falls back to the generic https prefix. */
-  const changeLinkUrl = (id: string, value: string) => {
-    setLinks((prev) =>
-      prev.map((link) => {
-        if (link.id !== id) return link;
-        const composed = composeLinkUrl(link.preset, value);
-        return urlMatchesPreset(link.preset, composed)
-          ? { ...link, url: composed }
-          : { ...link, url: composed, preset: null };
-      })
-    );
-  };
-  const selectLinkPreset = (id: string, preset: LinkLabelPreset, label: string) => {
-    setLinks((prev) =>
-      prev.map((link) => {
-        if (link.id !== id) return link;
-        const tail = displayLinkText(link.preset, link.url);
-        // A slash-free tail is a handle/host the user typed before picking
-        // the platform — recompose it under the new prefix. A real URL tail
-        // stays put; the chip only latches when the URL already matches.
-        if (tail.length === 0 || !tail.includes('/')) {
-          return { ...link, label, preset, url: composeLinkUrl(preset, tail) };
-        }
-        return urlMatchesPreset(preset, link.url)
-          ? { ...link, label, preset }
-          : { ...link, label, preset: null };
-      })
-    );
-  };
 
   /** Merges CHECKED imported links into the editable rows, deduped against
    * what's already here by url — never a silent overwrite, never a second
@@ -230,40 +175,59 @@ export default function MeEditScreen() {
     const existingUrls = new Set(links.map((l) => l.url));
     const additions = result.links
       .filter((l) => !existingUrls.has(l.url))
-      .map((l): EditableLink => ({
-        id: uuid(),
-        label: l.label,
-        url: l.url,
-        preset: presetForLabel(l.label),
-        visibility: 'public',
-      }));
+      .map((l): EditableLink => {
+        const detectedPreset = detectLinkFromUrl(l.url)?.preset ?? null;
+        return {
+          id: uuid(),
+          label: l.label,
+          url: l.url,
+          preset: linkPresetForEditableUrl(detectedPreset, l.url),
+          visibility: 'public',
+        };
+      });
     if (additions.length === 0) return;
     setLinks((prev) => [...prev, ...additions]);
     haptic('success');
     pushToast(t('meEdit.linktreeImportMerged', { count: additions.length }), 'success');
   };
 
-  /** Non-blank links plus their per-link visibility, kept parallel by index —
-   *  the shape `saveProfile` needs to persist tiers and build projections. */
+  /** Links plus their per-link visibility, kept parallel by index — the
+   * shape `saveProfile` persists while building the three signed projections. */
   const submitted = (): { links: ProfileLink[]; linkVisibility: LinkVisibility[] } => {
-    const kept = links.filter((link) => !isBlankLink(link));
     return {
-      links: kept.map((link) => ({
+      links: links.map((link) => ({
         label: link.label.trim(),
-        url: prepareLinkUrl(link.url, link.preset),
+        url: normalizeLinkUrl(link.url),
       })),
-      linkVisibility: kept.map((link) => link.visibility),
+      linkVisibility: links.map((link) => link.visibility),
     };
   };
 
   const commitProfile = async (
     avatarOverride?: string | null
   ): Promise<ProfileCommitResult> => {
-    if (hasLinkErrors) {
-      haptic('error');
-      return 'invalidLinks';
-    }
     const { links: submittedLinks, linkVisibility } = submitted();
+    let alsoKnownAs: readonly string[] | undefined;
+    if (willAutoRepublish) {
+      const preparedClaim = await prepareNostrClaimForSave(record?.alsoKnownAs ?? [], {
+        hasKey: hasNostrKey,
+        provision: provisionFromRootMnemonic,
+        getPubkey: getNostrPubkey,
+        encodeNpub: npubEncode,
+      });
+      if (!preparedClaim.ok) {
+        if (isBiometricCancellation(preparedClaim.error)) return 'cancelled';
+        haptic('error');
+        showError({
+          context: 'Me › Edit › Publish setup',
+          summary: t('meEdit.publishFailed'),
+          error: new Error(preparedClaim.error),
+        });
+        return 'publishFailed';
+      }
+      alsoKnownAs = preparedClaim.value;
+    }
+
     const saved = await saveProfile(
       {
         displayName: displayName.trim(),
@@ -271,7 +235,10 @@ export default function MeEditScreen() {
         links: submittedLinks,
         linkVisibility,
       },
-      avatarOverride === undefined ? undefined : { avatar: avatarOverride }
+      {
+        ...(alsoKnownAs === undefined ? {} : { alsoKnownAs }),
+        ...(avatarOverride === undefined ? {} : { avatar: avatarOverride }),
+      }
     );
 
     if (!saved.ok) {
@@ -331,8 +298,8 @@ export default function MeEditScreen() {
   const publicLinkLabels = useMemo(
     () =>
       links
-        .filter((link) => !isBlankLink(link) && link.visibility === 'public')
-        .map((link) => (link.label.trim().length > 0 ? link.label.trim() : displayLinkText(link.preset, link.url))),
+        .filter((link) => link.visibility === 'public')
+        .map((link) => link.label.trim()),
     [links]
   );
 
@@ -350,18 +317,12 @@ export default function MeEditScreen() {
     }
   };
 
-  /** Save tap: show the pre-publish preview FIRST whenever anything will leave
-   *  this device differently than the on-screen list implies — i.e. when
-   *  publishing to Nostr, or when any link is hidden from the public projection
-   *  (link-only / private). An all-public, local-only save skips straight
-   *  through (nothing to disclose). */
+  /** Save tap: preview only a real disclosure split. All-public saves publish
+   * silently after the one biometric gate; link-only/private links still need
+   * the existing explicit review before signing. */
   const handleSave = () => {
-    if (hasLinkErrors) {
-      haptic('error');
-      return;
-    }
     const hasHidden = visibilitySummary.linkOnly > 0 || visibilitySummary.private > 0;
-    if (willAutoRepublish || hasHidden) {
+    if (hasHidden) {
       haptic('tap');
       setPreviewOpen(true);
       return;
@@ -421,16 +382,16 @@ export default function MeEditScreen() {
           multiline
         />
 
-        <LinksEditor
+        <EditableLinksList
           links={links}
-          errors={linkErrors}
-          onAdd={addLink}
+          onAdd={() => {
+            setLinkSheetTarget({ kind: 'add' });
+          }}
+          onEdit={(id) => {
+            setLinkSheetTarget({ kind: 'edit', id });
+          }}
           onRemove={removeLink}
           onMove={moveLink}
-          onChangeField={updateLink}
-          onChangeUrl={changeLinkUrl}
-          onSelectPreset={selectLinkPreset}
-          onSetVisibility={setLinkVisibility}
           onImportLinktree={() => { setLinktreeSheetOpen(true); }}
         />
 
@@ -443,13 +404,21 @@ export default function MeEditScreen() {
           variant="primary"
           fullWidth
           loading={saving}
-          disabled={hasLinkErrors}
           onPress={() => { handleSave(); }}
         />
         <ThemedText variant="caption" tone="secondary" style={{ textAlign: 'center' }}>
           {t(willAutoRepublish ? 'meEdit.publishHint' : 'meEdit.localSaveHint')}
         </ThemedText>
       </KeyboardAwareScrollView>
+
+      <AddLinkSheet
+        visible={linkSheetTarget !== null}
+        initialLink={editingLink}
+        onSubmit={submitLinkSheet}
+        onClose={() => {
+          setLinkSheetTarget(null);
+        }}
+      />
 
       <LinkPageImportSheet
         visible={linktreeSheetOpen}
@@ -470,178 +439,3 @@ export default function MeEditScreen() {
     </View>
   );
 }
-
-function LinksEditor({
-  links,
-  errors,
-  onAdd,
-  onRemove,
-  onMove,
-  onChangeField,
-  onChangeUrl,
-  onSelectPreset,
-  onSetVisibility,
-  onImportLinktree,
-}: {
-  readonly links: readonly EditableLink[];
-  readonly errors: readonly (string | null)[];
-  readonly onAdd: () => void;
-  readonly onRemove: (id: string) => void;
-  readonly onMove: (id: string, direction: -1 | 1) => void;
-  readonly onChangeField: (id: string, field: 'label' | 'url', value: string) => void;
-  readonly onChangeUrl: (id: string, value: string) => void;
-  readonly onSelectPreset: (id: string, preset: LinkLabelPreset, label: string) => void;
-  readonly onSetVisibility: (id: string, visibility: LinkVisibility) => void;
-  readonly onImportLinktree: () => void;
-}) {
-  const { t } = useTranslation();
-  return (
-    <View style={{ gap: 12 }}>
-      <View className="flex-row items-center justify-between">
-        <ThemedText variant="label">{t('meEdit.links')}</ThemedText>
-        <PressableScale
-          haptic="tap"
-          onPress={onImportLinktree}
-          accessibilityRole="button"
-          className="flex-row items-center gap-1"
-        >
-          <SfIcon name="square.and.arrow.down" size={12} color={Colors.primaryBlue} />
-          <ThemedText variant="caption" style={{ color: Colors.primaryBlue }}>
-            {t('meEdit.importFromLinktree')}
-          </ThemedText>
-        </PressableScale>
-      </View>
-
-      {links.map((link, i) => (
-        <View key={link.id} style={{ gap: 8 }}>
-          <LinkPresetChips
-            selected={link.preset}
-            onSelect={(preset, label) => {
-              onSelectPreset(link.id, preset, label);
-            }}
-          />
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-            <View style={{ flex: 1 }}>
-              <ThemedTextInput
-                value={link.label}
-                onChangeText={(v) => { onChangeField(link.id, 'label', v); }}
-                placeholder={t('meEdit.linkLabelPlaceholder')}
-                accessibilityLabel={t('meEdit.linkLabelPlaceholder')}
-              />
-            </View>
-            <View style={{ flexDirection: 'row', gap: 2 }}>
-              <PressableScale
-                haptic="tap"
-                onPress={() => { onMove(link.id, -1); }}
-                disabled={i === 0}
-                accessibilityRole="button"
-                accessibilityLabel={t('meEdit.moveUp')}
-                style={{ opacity: i === 0 ? 0.3 : 1, padding: 6 }}
-              >
-                <SfIcon name="chevron.up" size={14} color={Colors.text2} />
-              </PressableScale>
-              <PressableScale
-                haptic="tap"
-                onPress={() => { onMove(link.id, 1); }}
-                disabled={i === links.length - 1}
-                accessibilityRole="button"
-                accessibilityLabel={t('meEdit.moveDown')}
-                style={{ opacity: i === links.length - 1 ? 0.3 : 1, padding: 6 }}
-              >
-                <SfIcon name="chevron.down" size={14} color={Colors.text2} />
-              </PressableScale>
-              <PressableScale
-                haptic="tap"
-                onPress={() => { onRemove(link.id); }}
-                accessibilityRole="button"
-                accessibilityLabel={t('meEdit.removeLink')}
-                style={{ padding: 6 }}
-              >
-                <SfIcon name="trash" size={14} color={Colors.destructive} />
-              </PressableScale>
-            </View>
-          </View>
-
-          <ThemedTextInput
-            kind="url"
-            value={displayLinkText(link.preset, link.url)}
-            onChangeText={(v) => { onChangeUrl(link.id, v); }}
-            // The fixed part of the address lives in the field as a
-            // read-only prefix (`https://`, `t.me/`, `instagram.com/` …) so
-            // the user types only the tail; a pasted full URL replaces the
-            // prefix mode entirely (composeLinkUrl).
-            inlinePrefix={linkInputModelFor(link.preset).prefix}
-            placeholder={
-              linkInputModelFor(link.preset).handle
-                ? t('profileLink.handlePlaceholder')
-                : t('profileLink.urlPlaceholder')
-            }
-            accessibilityLabel="URL"
-            error={errors[i]}
-            showClear
-          />
-
-          <LinkVisibilityControl
-            selected={link.visibility}
-            onSelect={(visibility) => {
-              onSetVisibility(link.id, visibility);
-            }}
-          />
-        </View>
-      ))}
-
-      <ThemedButton
-        label={t('meEdit.addLink')}
-        variant="secondary"
-        leadingIcon={<SfIcon name="plus" size={14} color={Colors.text1} />}
-        onPress={onAdd}
-      />
-    </View>
-  );
-}
-
-function LinkPresetChips({
-  selected,
-  onSelect,
-}: {
-  readonly selected: LinkLabelPreset | null;
-  readonly onSelect: (preset: LinkLabelPreset, label: string) => void;
-}): React.ReactNode {
-  const { t } = useTranslation();
-  return (
-    <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8 }}>
-      {LINK_LABEL_PRESETS.map((preset) => {
-        const label = t(`profileLink.preset.${preset}`);
-        const active = selected === preset;
-        return (
-          <PressableScale
-            key={preset}
-            haptic="tap"
-            onPress={() => {
-              onSelect(preset, label);
-            }}
-            accessibilityRole="button"
-            accessibilityState={{ selected: active }}
-            accessibilityLabel={label}>
-            <ThemedSurface
-              variant="outlined"
-              className="justify-center rounded-none px-3"
-              style={{
-                minHeight: 44,
-                borderColor: active ? Colors.primaryBlue : Colors.divider,
-                backgroundColor: active ? Colors.featuredCardBg : Colors.cardBg,
-              }}>
-              <ThemedText
-                variant="label"
-                style={active ? { color: Colors.primaryBlue } : undefined}>
-                {label}
-              </ThemedText>
-            </ThemedSurface>
-          </PressableScale>
-        );
-      })}
-    </ScrollView>
-  );
-}
-
-/** i18n keys per visibility tier — literal so the catalog test resolves them. */
