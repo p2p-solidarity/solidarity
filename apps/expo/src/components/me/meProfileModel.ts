@@ -104,6 +104,38 @@ export interface HandleShareCandidate {
   readonly url: string;
 }
 
+export interface ProfileShareUrlResolution {
+  readonly candidates: readonly ProfileShareUrlCandidate[];
+  readonly selection: ProfileShareUrlSelection;
+}
+
+/**
+ * Build every URL the share surface may honestly offer, then apply the
+ * single global precedence rule (verified handle → confirmed Nostr pointer
+ * → self-contained offline fragment). `nostrShortUrlReady` is deliberately
+ * supplied by the profile store's exact published-JWS marker; a retained
+ * `nostr:npub` claim alone does not prove that the current page is live.
+ */
+export function buildProfileShareUrlSelection(
+  model: ProfileShareModel,
+  verifiedHandle: HandleShareCandidate | null,
+  nostrShortUrlReady: boolean
+): ProfileShareUrlResolution {
+  const candidates: ProfileShareUrlCandidate[] = [];
+  if (verifiedHandle !== null) {
+    candidates.push({
+      kind: 'handle',
+      url: verifiedHandle.url,
+      isVerified: true,
+    });
+  }
+  if (nostrShortUrlReady && model.shortUrl !== null) {
+    candidates.push({ kind: 'short', url: model.shortUrl });
+  }
+  candidates.push({ kind: 'offline', url: model.offlineUrl });
+  return { candidates, selection: pickBestShareUrl(candidates) };
+}
+
 /** D6 (Bluesky-spine-first) / grill G5: atproto > ens > dns. Encodes the
  *  extraction order below — each scheme contributes at most one candidate
  *  (its first matching `alsoKnownAs` claim), in priority order already. */

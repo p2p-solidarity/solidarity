@@ -25,32 +25,32 @@ describe('detectLinkFromUrl', () => {
   it('detects every handle-based preset from its canonical host', () => {
     expect(detectLinkFromUrl('https://linkedin.com/in/kidney')).toEqual({
       preset: 'linkedin',
-      label: 'LinkedIn',
+      label: 'linkedin.com',
       url: 'https://linkedin.com/in/kidney',
     });
     expect(detectLinkFromUrl('https://instagram.com/kidney')).toEqual({
       preset: 'instagram',
-      label: 'Instagram',
+      label: 'instagram.com',
       url: 'https://instagram.com/kidney',
     });
     expect(detectLinkFromUrl('https://t.me/kidney')).toEqual({
       preset: 'telegram',
-      label: 'Telegram',
+      label: 't.me',
       url: 'https://t.me/kidney',
     });
     expect(detectLinkFromUrl('https://x.com/kidney')).toEqual({
       preset: 'x',
-      label: 'X',
+      label: 'x.com',
       url: 'https://x.com/kidney',
     });
     expect(detectLinkFromUrl('https://github.com/kidney')).toEqual({
       preset: 'github',
-      label: 'GitHub',
+      label: 'github.com',
       url: 'https://github.com/kidney',
     });
     expect(detectLinkFromUrl('https://youtube.com/@kidney')).toEqual({
       preset: 'youtube',
-      label: 'YouTube',
+      label: 'youtube.com',
       url: 'https://youtube.com/@kidney',
     });
   });
@@ -58,7 +58,7 @@ describe('detectLinkFromUrl', () => {
   it('matches www-prefixed and legacy hosts while upgrading http to https', () => {
     expect(detectLinkFromUrl('http://www.instagram.com/kidney')).toEqual({
       preset: 'instagram',
-      label: 'Instagram',
+      label: 'instagram.com',
       url: 'https://www.instagram.com/kidney',
     });
     expect(detectLinkFromUrl('https://twitter.com/kidney')?.preset).toBe('x');

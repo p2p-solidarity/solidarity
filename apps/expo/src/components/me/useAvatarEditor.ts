@@ -9,17 +9,14 @@ import { haptic } from '@/feedback/haptics';
 import { pushToast } from '@/feedback/toast';
 import { useTranslation } from '@/i18n';
 import { fetchBlueskyAvatar, type BlueskyAvatarError } from '@/profile/avatar';
-import {
-  persistLocalAvatar,
-  readLocalAvatarUri,
-  removeLocalAvatar,
-} from '@/profile/localAvatar';
+import { persistLocalAvatar, readLocalAvatarUri, removeLocalAvatar } from '@/profile/localAvatar';
 import type { ProfileRecord } from '@solidarity/shared';
 
 import type { AvatarPickerPhase } from './AvatarPickerSheet';
 
 export type ProfileCommitResult =
   | 'success'
+  | 'partialSuccess'
   | 'cancelled'
   | 'invalidLinks'
   | 'saveFailed'
@@ -52,13 +49,17 @@ export function useAvatarEditor({
   record,
   commitProfile,
   willPublish,
+  initiallyOpen = false,
+  returnToMeOnFinish = false,
 }: {
   readonly record: ProfileRecord | null;
   readonly commitProfile: (avatar: string | null) => Promise<ProfileCommitResult>;
   readonly willPublish: boolean;
+  readonly initiallyOpen?: boolean;
+  readonly returnToMeOnFinish?: boolean;
 }): AvatarEditorController {
   const { t } = useTranslation();
-  const [sheetOpen, setSheetOpen] = useState(false);
+  const [sheetOpen, setSheetOpen] = useState(initiallyOpen);
   const [phase, setPhase] = useState<AvatarPickerPhase>({ step: 'ready' });
   const [localAvatar, setLocalAvatar] = useState(readLocalAvatarUri);
   const handle = blueskyHandle(record);
@@ -66,6 +67,7 @@ export function useAvatarEditor({
   const close = () => {
     setSheetOpen(false);
     setPhase({ step: 'ready' });
+    if (returnToMeOnFinish) safeBack();
   };
 
   const errorMessage = (reason: BlueskyAvatarError): string => {
@@ -157,7 +159,7 @@ export function useAvatarEditor({
       close();
       return;
     }
-    if (committed !== 'success') {
+    if (committed !== 'success' && committed !== 'partialSuccess') {
       setPhase({
         step: 'error',
         message:
@@ -170,8 +172,16 @@ export function useAvatarEditor({
 
     close();
     haptic('success');
-    pushToast(t(willPublish ? 'meEdit.avatar.published' : 'meEdit.avatar.saved'), 'success');
-    safeBack();
+    pushToast(
+      t(
+        committed === 'partialSuccess'
+          ? 'meEdit.avatar.partiallyPublished'
+          : willPublish
+            ? 'meEdit.avatar.published'
+            : 'meEdit.avatar.saved'
+      ),
+      'success'
+    );
   };
 
   const remove = async (): Promise<void> => {
@@ -183,7 +193,7 @@ export function useAvatarEditor({
         close();
         return;
       }
-      if (committed !== 'success') {
+      if (committed !== 'success' && committed !== 'partialSuccess') {
         setPhase({
           step: 'error',
           message:
@@ -204,7 +214,6 @@ export function useAvatarEditor({
     close();
     haptic('success');
     pushToast(t('meEdit.avatar.removed'), 'success');
-    if (hadRecordAvatar) safeBack();
   };
 
   return {

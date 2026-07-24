@@ -1,7 +1,9 @@
 import { describe, expect, it } from 'bun:test';
 
 import {
+  buildProfileShareUrlSelection,
   pickBestShareUrl,
+  type ProfileShareModel,
   type ProfileShareUrlCandidate,
 } from '@/components/me/meProfileModel';
 
@@ -57,5 +59,20 @@ describe('pickBestShareUrl', () => {
 
   it('returns an error state when there is no real URL to share', () => {
     expect(pickBestShareUrl([])).toEqual({ kind: 'error' });
+  });
+});
+
+describe('buildProfileShareUrlSelection', () => {
+  const model: ProfileShareModel = {
+    offlineUrl: OFFLINE.url,
+    shortUrl: SHORT.url,
+    oversize: false,
+  };
+
+  it('withholds a stale or never-published npub pointer and falls back to the offline URL', () => {
+    expect(buildProfileShareUrlSelection(model, null, false)).toEqual({
+      candidates: [OFFLINE],
+      selection: { kind: 'ready', candidate: OFFLINE },
+    });
   });
 });

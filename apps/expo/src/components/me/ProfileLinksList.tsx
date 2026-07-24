@@ -17,11 +17,7 @@ export interface ProfileLinksListProps {
   readonly onAddFirstLink: () => void;
 }
 
-export function ProfileLinksList({
-  links,
-  onEdit,
-  onAddFirstLink,
-}: ProfileLinksListProps) {
+export function ProfileLinksList({ links, onEdit, onAddFirstLink }: ProfileLinksListProps) {
   const { t } = useTranslation();
   const c = useThemeColors();
 
@@ -131,6 +127,24 @@ export function ProfileLinksList({
           ))}
         </View>
       )}
+
+      {links.length > 0 ? (
+        <PressableScale
+          haptic="tap"
+          onPress={onAddFirstLink}
+          accessibilityRole="button"
+          accessibilityLabel={t('meHome.addLink')}>
+          <ThemedSurface
+            variant="inset"
+            className="flex-row items-center gap-2 rounded-none px-3"
+            style={{ minHeight: 44 }}>
+            <SfIcon name="plus" size={14} color={Colors.primaryBlue} />
+            <ThemedText variant="label" tone="accent">
+              {t('meHome.addLink')}
+            </ThemedText>
+          </ThemedSurface>
+        </PressableScale>
+      ) : null}
     </View>
   );
 }

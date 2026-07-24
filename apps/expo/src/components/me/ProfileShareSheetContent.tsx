@@ -35,6 +35,8 @@ export function ProfileShareReadyContent({
   qrState,
   onCopy,
   onShare,
+  onShareQr,
+  onSelectFormat,
   onRetryQr,
 }: {
   readonly visible: boolean;
@@ -42,13 +44,14 @@ export function ProfileShareReadyContent({
   readonly qrState: ProfileShareQrState;
   readonly onCopy: (url: string) => void;
   readonly onShare: (url: string) => void;
+  readonly onShareQr: (uri: string) => void;
+  readonly onSelectFormat: (candidate: ProfileShareUrlCandidate) => void;
   readonly onRetryQr: () => void;
 }): ReactNode {
   const { t } = useTranslation();
   const { selected } = state;
-  const otherCandidates = state.candidates.filter(
-    (candidate) => candidate.kind !== selected.kind
-  );
+  const otherCandidates = state.candidates.filter((candidate) => candidate.kind !== selected.kind);
+  const qrImageUri = qrState.kind === 'ready' && qrState.url === selected.url ? qrState.uri : null;
 
   return (
     <>
@@ -71,7 +74,7 @@ export function ProfileShareReadyContent({
         </View>
         <View style={{ flex: 1 }}>
           <ThemedButton
-            label={t('meShare.share')}
+            label={t('meShare.shareLink')}
             variant="secondary"
             fullWidth
             leadingIcon={<SfIcon name="square.and.arrow.up" size={15} color={Colors.text1} />}
@@ -81,6 +84,17 @@ export function ProfileShareReadyContent({
           />
         </View>
       </View>
+
+      <ThemedButton
+        label={t('meShare.shareQrImage')}
+        variant="secondary"
+        fullWidth
+        disabled={qrImageUri === null}
+        leadingIcon={<SfIcon name="photo" size={15} color={Colors.text1} />}
+        onPress={() => {
+          if (qrImageUri !== null) onShareQr(qrImageUri);
+        }}
+      />
 
       <ThemedText variant="caption" tone="tertiary" style={{ textAlign: 'center' }}>
         {t('meShare.bioHint')}
@@ -96,7 +110,7 @@ export function ProfileShareReadyContent({
         visible={visible}
         candidates={otherCandidates}
         verifiedHandle={state.verifiedHandle}
-        onCopy={onCopy}
+        onSelect={onSelectFormat}
       />
     </>
   );
@@ -169,11 +183,7 @@ function QrPreview({
             <ThemedText variant="bodySmall" tone="error" style={{ textAlign: 'center' }}>
               {t('meShare.qrError')}
             </ThemedText>
-            <ThemedButton
-              label={t('meShare.retry')}
-              variant="secondary"
-              onPress={onRetry}
-            />
+            <ThemedButton label={t('meShare.retry')} variant="secondary" onPress={onRetry} />
           </View>
         ) : (
           <View className="items-center gap-2">
@@ -192,12 +202,12 @@ function OtherFormatsSection({
   visible,
   candidates,
   verifiedHandle,
-  onCopy,
+  onSelect,
 }: {
   readonly visible: boolean;
   readonly candidates: readonly ProfileShareUrlCandidate[];
   readonly verifiedHandle: HandleShareCandidate | null;
-  readonly onCopy: (url: string) => void;
+  readonly onSelect: (candidate: ProfileShareUrlCandidate) => void;
 }): ReactNode {
   const { t } = useTranslation();
   const [expanded, setExpanded] = useState(false);
@@ -229,11 +239,7 @@ function OtherFormatsSection({
         <ThemedText variant="bodySmall" tone="secondary" className="flex-1">
           {t('meShare.otherFormats')}
         </ThemedText>
-        <SfIcon
-          name={expanded ? 'chevron.up' : 'chevron.down'}
-          size={12}
-          color={Colors.text3}
-        />
+        <SfIcon name={expanded ? 'chevron.up' : 'chevron.down'} size={12} color={Colors.text3} />
       </PressableScale>
 
       {expanded ? (
@@ -243,7 +249,7 @@ function OtherFormatsSection({
               key={`${candidate.kind}:${candidate.url}`}
               candidate={candidate}
               verifiedHandle={verifiedHandle}
-              onCopy={onCopy}
+              onSelect={onSelect}
             />
           ))}
         </View>
@@ -255,11 +261,11 @@ function OtherFormatsSection({
 function OtherFormatRow({
   candidate,
   verifiedHandle,
-  onCopy,
+  onSelect,
 }: {
   readonly candidate: ProfileShareUrlCandidate;
   readonly verifiedHandle: HandleShareCandidate | null;
-  readonly onCopy: (url: string) => void;
+  readonly onSelect: (candidate: ProfileShareUrlCandidate) => void;
 }): ReactNode {
   const { t } = useTranslation();
   const label =
@@ -272,9 +278,7 @@ function OtherFormatRow({
         : t('meShare.offlineFormat');
 
   return (
-    <ThemedSurface
-      variant="inset"
-      className="flex-row items-center gap-3 rounded-none px-3 py-2">
+    <ThemedSurface variant="inset" className="flex-row items-center gap-3 rounded-none px-3 py-2">
       <View className="flex-1 gap-0.5">
         <ThemedText variant="bodySmall">{label}</ThemedText>
         <ThemedText variant="caption" tone="tertiary" numberOfLines={1} ellipsizeMode="middle">
@@ -282,12 +286,11 @@ function OtherFormatRow({
         </ThemedText>
       </View>
       <ThemedButton
-        label={t('meShare.copy')}
+        label={t('meShare.use')}
         variant="secondary"
-        haptic={false}
-        accessibilityLabel={t('meShare.copyFormat', { format: label })}
+        accessibilityLabel={t('meShare.useFormat', { format: label })}
         onPress={() => {
-          onCopy(candidate.url);
+          onSelect(candidate);
         }}
       />
     </ThemedSurface>

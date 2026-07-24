@@ -21,8 +21,11 @@ export default function MeTab() {
   // record for a pre-T7 profile that has no cached projection yet — safe, as
   // such a profile has no private links.
   const shared = useProfileStore((state) => state.shared);
+  const published = useProfileStore((state) => state.published);
+  const nostrPublishedJws = useProfileStore((state) => state.nostrPublishedJws);
   const shareRecord = shared?.record ?? record;
   const shareJws = shared?.jws ?? jws;
+  const nostrShortUrlReady = published !== null && nostrPublishedJws === published.jws;
 
   return (
     <View className="flex-1 bg-pageBg" style={{ paddingTop: insets.top }}>
@@ -36,11 +39,16 @@ export default function MeTab() {
         <MeProfilePage
           record={record}
           jws={jws}
+          publicRecord={published?.record ?? record}
           shareRecord={shareRecord}
           shareJws={shareJws}
+          nostrShortUrlReady={nostrShortUrlReady}
           bottomInset={insets.bottom}
           onEdit={() => {
             router.push('/me/edit');
+          }}
+          onEditAvatar={() => {
+            router.push({ pathname: '/me/edit', params: { avatar: '1' } });
           }}
           onAddLink={() => {
             router.push({ pathname: '/me/edit', params: { add: '1' } });

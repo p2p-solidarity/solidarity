@@ -73,7 +73,9 @@ export function EditableLinksList({
               onEdit(link.id);
             }}
             accessibilityRole="button"
-            accessibilityLabel={t('meEdit.editLink', { label: link.label })}
+            accessibilityLabel={t('meEdit.editLink', {
+              label: link.label.trim() || linkSummary(link),
+            })}
             style={{
               minHeight: 68,
               flexDirection: 'row',

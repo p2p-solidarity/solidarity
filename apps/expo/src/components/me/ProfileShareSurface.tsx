@@ -1,13 +1,6 @@
 import * as Clipboard from 'expo-clipboard';
-import { useEffect, useState, type ReactNode } from 'react';
-import {
-  ActivityIndicator,
-  Modal,
-  ScrollView,
-  Share,
-  useWindowDimensions,
-  View,
-} from 'react-native';
+import { useEffect, useMemo, useState, type ReactNode } from 'react';
+import { Modal, ScrollView, Share, useWindowDimensions, View } from 'react-native';
 import Animated, { Easing, ZoomIn } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -22,35 +15,30 @@ import { pushToast } from '@/feedback/toast';
 import { useTranslation } from '@/i18n';
 import type { ProfileRecord } from '@solidarity/shared';
 
-import { preferredVerifiedHandleShareUrl } from './handleShareVerification';
-import {
-  buildProfileShareModel,
-  pickBestShareUrl,
-  type ProfileShareUrlCandidate,
-} from './meProfileModel';
 import {
   PROFILE_SHARE_QR_SIZE,
   ProfileShareReadyContent,
   type ProfileShareQrState,
   type ReadyProfileShareModel,
 } from './ProfileShareSheetContent';
+import { useProfileShareSelection } from './useProfileShareSelection';
+import type { ProfileShareUrlCandidate } from './meProfileModel';
 
 const QR_SHEET_DURATION_MS = 240;
 
-type ShareModelState =
-  | { readonly kind: 'loading' }
-  | ReadyProfileShareModel
-  | { readonly kind: 'error' };
+type ShareModelState = ReadyProfileShareModel | { readonly kind: 'error' };
 
 export interface ProfileShareSurfaceProps {
   readonly record: ProfileRecord;
   readonly jws: string;
+  readonly nostrShortUrlReady: boolean;
   readonly onOpenShareSettings: () => void;
 }
 
 export function ProfileShareSurface({
   record,
   jws,
+  nostrShortUrlReady,
   onOpenShareSettings,
 }: ProfileShareSurfaceProps): ReactNode {
   const { t } = useTranslation();
@@ -76,10 +64,8 @@ export function ProfileShareSurface({
         visible={sheetOpen}
         record={record}
         jws={jws}
-        onOpenShareSettings={() => {
-          setSheetOpen(false);
-          onOpenShareSettings();
-        }}
+        nostrShortUrlReady={nostrShortUrlReady}
+        onOpenShareSettings={onOpenShareSettings}
         onClose={() => {
           setSheetOpen(false);
         }}
@@ -92,68 +78,40 @@ function ProfileQrSheet({
   visible,
   record,
   jws,
+  nostrShortUrlReady,
   onOpenShareSettings,
   onClose,
 }: {
   readonly visible: boolean;
   readonly record: ProfileRecord;
   readonly jws: string;
+  readonly nostrShortUrlReady: boolean;
   readonly onOpenShareSettings: () => void;
   readonly onClose: () => void;
 }): ReactNode {
   const { t } = useTranslation();
   const insets = useSafeAreaInsets();
   const { height: windowHeight } = useWindowDimensions();
-  const [shareState, setShareState] = useState<ShareModelState>({ kind: 'loading' });
   const [shareRetryNonce, setShareRetryNonce] = useState(0);
+  const [selectedKind, setSelectedKind] = useState<ProfileShareUrlCandidate['kind'] | null>(null);
   const [qrState, setQrState] = useState<ProfileShareQrState>({
     kind: 'loading',
     url: null,
   });
   const [qrRetryNonce, setQrRetryNonce] = useState(0);
 
+  const baseShareState = useProfileShareSelection(record, jws, nostrShortUrlReady, shareRetryNonce);
+  const shareState = useMemo<ShareModelState>(() => {
+    if (baseShareState.kind === 'error') return baseShareState;
+    const selected =
+      baseShareState.candidates.find((candidate) => candidate.kind === selectedKind) ??
+      baseShareState.selected;
+    return { ...baseShareState, selected };
+  }, [baseShareState, selectedKind]);
+
   useEffect(() => {
-    if (!visible) {
-      setShareState({ kind: 'loading' });
-      return;
-    }
-
-    setShareState({ kind: 'loading' });
-    try {
-      const model = buildProfileShareModel(record, jws);
-      // This cache-only helper is the honesty boundary. It returns null for
-      // declared, stale, revoked, or otherwise unverified handles and never
-      // performs a live verification from the share sheet.
-      const verifiedHandle = preferredVerifiedHandleShareUrl(record);
-      const candidates: ProfileShareUrlCandidate[] = [];
-      if (verifiedHandle) {
-        candidates.push({
-          kind: 'handle',
-          url: verifiedHandle.url,
-          isVerified: true,
-        });
-      }
-      if (model.shortUrl) {
-        candidates.push({ kind: 'short', url: model.shortUrl });
-      }
-      candidates.push({ kind: 'offline', url: model.offlineUrl });
-
-      const selection = pickBestShareUrl(candidates);
-      if (selection.kind === 'error') {
-        setShareState({ kind: 'error' });
-        return;
-      }
-      setShareState({
-        kind: 'ready',
-        model,
-        candidates,
-        selected: selection.candidate,
-        verifiedHandle,
-      });
-    } catch {
-      setShareState({ kind: 'error' });
-    }
-  }, [jws, record, shareRetryNonce, visible]);
+    if (!visible) setSelectedKind(null);
+  }, [visible]);
 
   const activeUrl = shareState.kind === 'ready' ? shareState.selected.url : null;
 
@@ -195,6 +153,18 @@ function ProfileQrSheet({
         title: t('meShare.title'),
         message: url,
         url,
+      });
+    } catch {
+      haptic('error');
+      pushToast(t('meShare.shareError'), 'error');
+    }
+  };
+
+  const shareQrImage = async (uri: string): Promise<void> => {
+    try {
+      await Share.share({
+        title: t('meShare.shareQrImage'),
+        url: uri,
       });
     } catch {
       haptic('error');
@@ -258,20 +228,17 @@ function ProfileQrSheet({
                   onShare={(url) => {
                     void shareUrl(url);
                   }}
+                  onShareQr={(uri) => {
+                    void shareQrImage(uri);
+                  }}
+                  onSelectFormat={(candidate) => {
+                    setSelectedKind(candidate.kind);
+                  }}
                   onRetryQr={() => {
                     setQrState({ kind: 'loading', url: shareState.selected.url });
                     setQrRetryNonce((value) => value + 1);
                   }}
                 />
-              ) : shareState.kind === 'loading' ? (
-                <View
-                  className="items-center justify-center gap-3"
-                  style={{ minHeight: PROFILE_SHARE_QR_SIZE }}>
-                  <ActivityIndicator size="small" color={Colors.text3} />
-                  <ThemedText variant="bodySmall" tone="tertiary">
-                    {t('meShare.preparing')}
-                  </ThemedText>
-                </View>
               ) : (
                 <ThemedSurface variant="inset" className="items-center gap-4 rounded-none p-4">
                   <SfIcon name="exclamationmark.triangle" size={24} color={Colors.destructive} />
@@ -282,7 +249,6 @@ function ProfileQrSheet({
                     label={t('meShare.retry')}
                     variant="secondary"
                     onPress={() => {
-                      setShareState({ kind: 'loading' });
                       setShareRetryNonce((value) => value + 1);
                     }}
                   />

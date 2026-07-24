@@ -129,6 +129,7 @@ function AddLinkSheetContent({
       if (detected === null) return;
       onSubmit({
         ...detected,
+        label: detected.preset === null ? detected.label : t(`profileLink.preset.${detected.preset}`),
         preset: linkPresetForEditableUrl(detected.preset, detected.url),
         visibility: 'public',
       });

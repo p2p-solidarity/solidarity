@@ -1,7 +1,7 @@
 import { Image } from 'expo-image';
 import * as Clipboard from 'expo-clipboard';
 import { useFocusEffect } from 'expo-router';
-import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useState, type ReactNode } from 'react';
 import { View } from 'react-native';
 
 import { PressableScale } from '@/components/common/PressableScale';
@@ -16,18 +16,16 @@ import { resolveProfileAvatarSource } from '@/profile/avatar';
 import { readLocalAvatarUri } from '@/profile/localAvatar';
 import type { ProfileRecord } from '@solidarity/shared';
 
-import { preferredVerifiedHandleShareUrl } from './handleShareVerification';
-import {
-  buildProfileShareModel,
-  profileIdentityLine,
-  selectProfileShareUrl,
-} from './meProfileModel';
+import { profileIdentityLine } from './meProfileModel';
+import { useProfileShareSelection } from './useProfileShareSelection';
 
 export interface ProfileHeroProps {
   readonly record: ProfileRecord;
   readonly shareRecord: ProfileRecord;
   readonly shareJws: string;
+  readonly nostrShortUrlReady: boolean;
   readonly onEdit: () => void;
+  readonly onEditAvatar: () => void;
   readonly onOpenIdentity: () => void;
 }
 
@@ -35,18 +33,16 @@ export function ProfileHero({
   record,
   shareRecord,
   shareJws,
+  nostrShortUrlReady,
   onEdit,
+  onEditAvatar,
   onOpenIdentity,
 }: ProfileHeroProps): ReactNode {
   const { t } = useTranslation();
   const identity = profileIdentityLine(record);
   const [localAvatar, setLocalAvatar] = useState(readLocalAvatarUri);
-  const shareUrl = useMemo(() => {
-    if (shareJws.length === 0) return null;
-    const verifiedHandle = preferredVerifiedHandleShareUrl(shareRecord);
-    if (verifiedHandle !== null) return verifiedHandle.url;
-    return selectProfileShareUrl(buildProfileShareModel(shareRecord, shareJws), true);
-  }, [shareJws, shareRecord]);
+  const shareSelection = useProfileShareSelection(shareRecord, shareJws, nostrShortUrlReady);
+  const shareUrl = shareSelection.kind === 'ready' ? shareSelection.selected.url : null;
   const displayShareUrl = shareUrl?.replace(/^https?:\/\//u, '') ?? null;
 
   useFocusEffect(
@@ -70,11 +66,23 @@ export function ProfileHero({
   return (
     <View className="gap-4 px-4">
       <View className="flex-row items-start gap-4">
-        <ProfileAvatar
-          avatar={record.avatar}
-          localAvatar={localAvatar}
-          displayName={record.displayName}
-        />
+        <PressableScale
+          haptic="tap"
+          onPress={onEditAvatar}
+          accessibilityRole="button"
+          accessibilityLabel={t('meHome.editPhoto')}
+          style={{ width: 72, height: 72 }}>
+          <ProfileAvatar
+            avatar={record.avatar}
+            localAvatar={localAvatar}
+            displayName={record.displayName}
+          />
+          <ThemedSurface
+            variant="elevated"
+            className="absolute bottom-0 right-0 h-7 w-7 items-center justify-center rounded-full">
+            <SfIcon name="camera" size={12} color={Colors.text1} />
+          </ThemedSurface>
+        </PressableScale>
 
         <View className="flex-1 gap-1 pt-1">
           <ThemedText variant="headlineMedium" numberOfLines={2}>

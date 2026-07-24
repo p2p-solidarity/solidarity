@@ -45,16 +45,6 @@ export const LINK_LABEL_PRESETS = [
 
 export type LinkLabelPreset = (typeof LINK_LABEL_PRESETS)[number];
 
-const PRESET_LABELS: Readonly<Record<LinkLabelPreset, string>> = {
-  linkedin: 'LinkedIn',
-  instagram: 'Instagram',
-  telegram: 'Telegram',
-  x: 'X',
-  github: 'GitHub',
-  youtube: 'YouTube',
-  website: 'Website',
-};
-
 export interface DetectedLink {
   readonly preset: LinkLabelPreset | null;
   readonly label: string;
@@ -77,9 +67,10 @@ export function detectLinkFromUrl(raw: string): DetectedLink | null {
   if (!isHttpsLinkUrl(normalized)) return null;
   const hostname = new URL(normalized).hostname;
   const preset = linkPresetForHostname(hostname);
+  const label = hostname.toLowerCase().replace(/^www\./u, '');
   return {
     preset,
-    label: preset === null ? hostname.toLowerCase().replace(/^www\./u, '') : PRESET_LABELS[preset],
+    label,
     url: normalized,
   };
 }

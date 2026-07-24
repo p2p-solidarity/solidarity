@@ -18,13 +18,17 @@ export interface MeProfilePageProps {
    *  ones. Used for the hero, badges, and the on-screen link list. */
   readonly record: ProfileRecord;
   readonly jws: string;
+  /** The public projection stored by ATProto/Nostr binding backends. */
+  readonly publicRecord: ProfileRecord;
   /** The SHARED projection (public + link-only links, T7) — what the QR /
    *  URL-fragment share surface encodes so a private link never leaves in a
    *  scanned code. Falls back to the full record for a pre-T7 profile. */
   readonly shareRecord: ProfileRecord;
   readonly shareJws: string;
+  readonly nostrShortUrlReady: boolean;
   readonly bottomInset: number;
   readonly onEdit: () => void;
+  readonly onEditAvatar: () => void;
   readonly onAddLink: () => void;
   readonly onOpenIdentity: () => void;
   readonly onOpenBindings: () => void;
@@ -35,10 +39,13 @@ export interface MeProfilePageProps {
 export function MeProfilePage({
   record,
   jws,
+  publicRecord,
   shareRecord,
   shareJws,
+  nostrShortUrlReady,
   bottomInset,
   onEdit,
+  onEditAvatar,
   onAddLink,
   onOpenIdentity,
   onOpenBindings,
@@ -63,29 +70,33 @@ export function MeProfilePage({
           record={record}
           shareRecord={shareRecord}
           shareJws={shareJws}
+          nostrShortUrlReady={nostrShortUrlReady}
           onEdit={onEdit}
+          onEditAvatar={onEditAvatar}
           onOpenIdentity={onOpenIdentity}
         />
       </Animated.View>
 
       <Animated.View entering={entrance(STAGGER_MS)}>
-        <ProfileLinksList
-          links={record.links}
-          onEdit={onEdit}
-          onAddFirstLink={onAddLink}
-        />
+        <ProfileLinksList links={record.links} onEdit={onEdit} onAddFirstLink={onAddLink} />
       </Animated.View>
 
       <Animated.View entering={entrance(STAGGER_MS * 2)}>
         <ProfileShareSurface
           record={shareRecord}
           jws={shareJws}
+          nostrShortUrlReady={nostrShortUrlReady}
           onOpenShareSettings={onOpenShareSettings}
         />
       </Animated.View>
 
       <Animated.View entering={entrance(STAGGER_MS * 2)}>
-        <ProfileBadgeChips record={record} jws={jws} onManageBindings={focusBindings} />
+        <ProfileBadgeChips
+          record={record}
+          publicRecord={publicRecord}
+          jws={jws}
+          onManageBindings={focusBindings}
+        />
       </Animated.View>
 
       <Animated.View
