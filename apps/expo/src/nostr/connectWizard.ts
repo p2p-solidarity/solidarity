@@ -93,9 +93,11 @@ export function relayRejectionLines(outcome: NostrPublishOutcome): readonly stri
 
 /** Covers the tagged provisioning result and saveProfile's stable mapping. */
 export function isBiometricCancellation(message: string): boolean {
+  const normalized = message.toLowerCase();
   return (
     message === 'biometricDenied' ||
-    message.toLowerCase().includes('biometric authentication was denied')
+    normalized.includes('biometric authentication was denied') ||
+    normalized.includes('biometric authentication required')
   );
 }
 

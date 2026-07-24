@@ -85,6 +85,7 @@ interface ProfileModuleSurface {
       readonly linkVisibility: readonly LinkVisibilityShape[];
       readonly shared: SignedProjectionShape | null;
       readonly published: SignedProjectionShape | null;
+      readonly nostrPublishedJws: string | null;
       readonly saveProfile: (
         fields: ProfileFieldsShape,
         options?: {
@@ -101,7 +102,12 @@ interface ProfileModuleSurface {
       >;
     };
     setState: (
-      s: Partial<{ record: ProfileRecord | null; jws: string | null; status: 'empty' | 'ready' }>
+      s: Partial<{
+        record: ProfileRecord | null;
+        jws: string | null;
+        status: 'empty' | 'ready';
+        nostrPublishedJws: string | null;
+      }>
     ) => void;
   };
   readonly hydrateProfile: () => void;
@@ -212,7 +218,12 @@ beforeEach(async () => {
   nostrScalarStore.clear();
   nextBiometricSuccess = true;
   biometricCalls.length = 0;
-  mod.useProfileStore.setState({ record: null, jws: null, status: 'empty' });
+  mod.useProfileStore.setState({
+    record: null,
+    jws: null,
+    status: 'empty',
+    nostrPublishedJws: null,
+  });
   await rootKeyMod.deleteRootKey();
   await nostrUserKeyMod.deleteNostrKey();
   mod.__setNostrPublishForTesting(null);
@@ -619,9 +630,42 @@ describe('publishToNostr', () => {
     }
     // The published jws is exactly the store's cached public projection.
     expect(profileCalls[0]?.jws).toBe(state.published?.jws);
+    expect(state.published).not.toBeNull();
+    expect(state.nostrPublishedJws).toBe(state.published!.jws);
     expect(kind0Calls).toHaveLength(1);
     expect(kind0Calls[0]?.relays).toEqual(relays);
     expect(kind0Calls[0]?.did).toBe(state.record.did);
+  });
+
+  it('invalidates the published-version marker as soon as a newer profile is saved', async () => {
+    await rootKeyMod.createFromFreshMnemonic();
+    await mod.useProfileStore.getState().saveProfile({
+      displayName: 'Alice',
+      bio: '',
+      links: [],
+    });
+    await nostrUserKeyMod.provisionFromRootMnemonic();
+    mod.__setNostrPublishForTesting({
+      publishProfile: (opts) =>
+        Promise.resolve({ ok: true, value: fakeReport(30078, opts.jws) }),
+      updateKind0AlsoKnownAs: (opts) =>
+        Promise.resolve({
+          ok: true,
+          value: fakeReport(0, JSON.stringify({ alsoKnownAs: [opts.did] })),
+        }),
+    });
+
+    const published = await mod.useProfileStore.getState().publishToNostr(['wss://a']);
+    expect(published.ok).toBe(true);
+    expect(mod.useProfileStore.getState().nostrPublishedJws).not.toBeNull();
+
+    const edited = await mod.useProfileStore.getState().saveProfile({
+      displayName: 'Alice edited',
+      bio: '',
+      links: [],
+    });
+    expect(edited.ok).toBe(true);
+    expect(mod.useProfileStore.getState().nostrPublishedJws).toBeNull();
   });
 
   it('skips the re-sign on a second call once the nostr:npub… claim already exists, but still republishes', async () => {

@@ -11,7 +11,6 @@ import {
   err,
   isValidAtprotoHandle,
   ok,
-  verifyAtprotoBinding,
   type ProfileRecord,
   type Result,
   type VerifyAtprotoBindingResult,
@@ -86,8 +85,17 @@ const DEFAULT_DEPENDENCIES: BlueskyWizardDependencies = {
     return useProfileStore.getState().record;
   },
   verifyBinding: async (profile) => {
-    const { atprotoBindingIO } = await import('./bindingIo');
-    return await verifyAtprotoBinding(profile, atprotoBindingIO);
+    const [{ atprotoBindingIO }, { verifyAtprotoBindingDual }, { useProfileStore }] =
+      await Promise.all([
+        import('./bindingIo'),
+        import('@/badges/verifyAtprotoDual'),
+        import('@/profile/store'),
+      ]);
+    // The PDS may hold either the public projection (current connects) or a
+    // pre-projection full record — dual-compare so neither reads as a false
+    // "declared" right after a successful connect.
+    const published = useProfileStore.getState().published;
+    return await verifyAtprotoBindingDual(profile, published?.record ?? null, atprotoBindingIO);
   },
 };
 

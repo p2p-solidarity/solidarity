@@ -77,6 +77,32 @@ export function shouldReverifyBadge(
 }
 
 let cachedGetMmkv: typeof GetMmkvFn | undefined;
+let cacheRevision = 0;
+const cacheListeners = new Set<() => void>();
+
+function notifyCacheListeners(): void {
+  cacheRevision += 1;
+  for (const listener of cacheListeners) {
+    try {
+      listener();
+    } catch {
+      // One mounted consumer must never block cache persistence or peers.
+    }
+  }
+}
+
+/** React's external-store seam: mounted share surfaces update immediately
+ * when a background badge check writes or invalidates cached evidence. */
+export function subscribeBadgeStatusCache(listener: () => void): () => void {
+  cacheListeners.add(listener);
+  return () => {
+    cacheListeners.delete(listener);
+  };
+}
+
+export function getBadgeStatusCacheRevision(): number {
+  return cacheRevision;
+}
 
 /** Call exactly once from `app/_layout.tsx` after `initMmkv()`. A no-op
  * (never throws) when MMKV is unavailable — reads stay `null`. */
@@ -84,6 +110,7 @@ export async function warmBadgeStatusCache(): Promise<void> {
   try {
     const mod = await import('@/storage/mmkv');
     cachedGetMmkv = mod.getMmkv;
+    notifyCacheListeners();
   } catch {
     // Native module unavailable (web preview, tests) — cache stays cold.
   }
@@ -147,6 +174,7 @@ function readEntry<T>(key: string, resultGuard: (value: unknown) => boolean): Ca
 function writeEntry<T>(key: string, result: T, checkedAt: number): void {
   const entry: CachedBadgeResult<T> = { checkedAt, result };
   activeStorage.setString(key, JSON.stringify(entry));
+  notifyCacheListeners();
 }
 
 /** Shallow shape guards — the semantic claim-match guard lives at the
@@ -197,8 +225,10 @@ export function writeCachedAtprotoResult(
  * stand in for a live check for the rest of its TTL. */
 export function invalidateCachedNostrResult(): void {
   activeStorage.removeKey(NOSTR_KEY);
+  notifyCacheListeners();
 }
 
 export function invalidateCachedAtprotoResult(): void {
   activeStorage.removeKey(ATPROTO_KEY);
+  notifyCacheListeners();
 }

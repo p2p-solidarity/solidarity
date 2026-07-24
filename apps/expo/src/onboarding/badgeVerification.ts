@@ -1,6 +1,5 @@
 /** Truth selection shared by onboarding's Connect and Complete steps. */
 import {
-  verifyAtprotoBinding,
   verifyNostrBinding,
   type BadgeState,
   type ProfileRecord,
@@ -24,8 +23,21 @@ const DEFAULT_DEPENDENCIES: OnboardingBadgeVerificationDependencies = {
   // trusts a fresh cached result (shouldReverifyBadge TTL), so a check the
   // user just watched here is not silently repeated on first tab focus.
   verifyAtproto: async (profile) => {
-    const { atprotoBindingIO } = await import('@/atproto/bindingIo');
-    const result = await verifyAtprotoBinding(profile, atprotoBindingIO);
+    const [{ atprotoBindingIO }, { verifyAtprotoBindingDual }, { useProfileStore }] =
+      await Promise.all([
+        import('@/atproto/bindingIo'),
+        import('@/badges/verifyAtprotoDual'),
+        import('@/profile/store'),
+      ]);
+    // Dual-compare (public projection first, full-record fallback) so a
+    // pre-projection PDS copy never writes a false "declared" into the
+    // shared badge cache that Me would then trust for a full TTL.
+    const published = useProfileStore.getState().published;
+    const result = await verifyAtprotoBindingDual(
+      profile,
+      published?.record ?? null,
+      atprotoBindingIO
+    );
     const { writeCachedAtprotoResult } = await import('@/badges/badgeStatusCache');
     writeCachedAtprotoResult(result, Date.now());
     return result;

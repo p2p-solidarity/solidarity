@@ -56,7 +56,10 @@ function makeDependencies(
     },
     readProfile: () => {
       events.push('readProfile');
-      return Promise.resolve(currentProfile);
+      return Promise.resolve({
+        record: currentProfile,
+        linkVisibility: currentProfile.links.map(() => 'public' as const),
+      });
     },
     saveProfile: (_fields, options) => {
       const aliases = options.alsoKnownAs ?? [];
@@ -65,6 +68,14 @@ function makeDependencies(
         ok({
           record: { ...currentProfile, alsoKnownAs: [...aliases] },
           jws: 'newly-signed-profile-jws',
+          published: {
+            record: {
+              ...currentProfile,
+              alsoKnownAs: [...aliases],
+              scope: 'public',
+            },
+            jws: 'newly-signed-public-profile-jws',
+          },
         })
       );
     },
@@ -94,7 +105,7 @@ describe('connectAtproto', () => {
       `resolve:${HANDLE}`,
       'readProfile',
       `sign:nostr:npub1alice,at://${HANDLE}`,
-      'put:newly-signed-profile-jws',
+      'put:newly-signed-public-profile-jws',
     ]);
   });
 
@@ -129,7 +140,58 @@ describe('connectAtproto', () => {
 
     expect(result.ok).toBe(true);
     expect(events).toContain(`sign:at://${HANDLE},nostr:npub1alice`);
-    expect(events.at(-1)).toBe('put:newly-signed-profile-jws');
+    expect(events.at(-1)).toBe('put:newly-signed-public-profile-jws');
+  });
+
+  it('preserves link privacy and writes only the public projection to the PDS', async () => {
+    const current = {
+      ...profile(),
+      links: [
+        { label: 'Public', url: 'https://public.example' },
+        { label: 'Link only', url: 'https://link-only.example' },
+        { label: 'Private', url: 'https://private.example' },
+      ],
+    };
+    let savedVisibility: readonly string[] | undefined;
+    const writtenJws: string[] = [];
+    const dependencies: AtprotoConnectDependencies = {
+      resolveIdentity: () =>
+        Promise.resolve(ok({ did: REPO_DID, handle: HANDLE, pdsUrl: SESSION.pdsUrl })),
+      readProfile: () =>
+        Promise.resolve({
+          record: current,
+          linkVisibility: ['public', 'link-only', 'private'],
+        }),
+      saveProfile: (fields, options) => {
+        savedVisibility = fields.linkVisibility;
+        const aliases = options.alsoKnownAs ?? [];
+        return Promise.resolve(
+          ok({
+            record: { ...current, alsoKnownAs: [...aliases] },
+            jws: 'full-profile-jws',
+            published: {
+              record: {
+                ...current,
+                links: [current.links[0]!],
+                alsoKnownAs: [...aliases],
+                scope: 'public',
+              },
+              jws: 'public-profile-jws',
+            },
+          })
+        );
+      },
+      putProfileRecord: (_session, jws) => {
+        writtenJws.push(jws);
+        return Promise.resolve(ok(undefined));
+      },
+    };
+
+    const result = await connectAtproto(SESSION, {}, dependencies);
+
+    expect(result.ok).toBe(true);
+    expect(savedVisibility).toEqual(['public', 'link-only', 'private']);
+    expect(writtenJws).toEqual(['public-profile-jws']);
   });
 
   it('fails closed if post-OAuth identity resolution no longer matches the session DID', async () => {

@@ -205,6 +205,11 @@ describe('publish outcome and cancellation helpers', () => {
     expect(
       isBiometricCancellation('profile save failed: biometric authentication was denied')
     ).toBe(true);
+    expect(
+      isBiometricCancellation(
+        'profile save failed: signing was denied or failed (biometric authentication required)'
+      )
+    ).toBe(true);
     expect(isBiometricCancellation('network unavailable')).toBe(false);
   });
 

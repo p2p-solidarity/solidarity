@@ -4,9 +4,11 @@ import {
   __setBadgeStatusCacheStorageForTesting,
   BADGE_REVERIFY_TTL_MS,
   invalidateCachedNostrResult,
+  getBadgeStatusCacheRevision,
   readCachedAtprotoResult,
   readCachedNostrResult,
   shouldReverifyBadge,
+  subscribeBadgeStatusCache,
   writeCachedAtprotoResult,
   writeCachedNostrResult,
   type BadgeStatusCacheStorage,
@@ -109,6 +111,25 @@ describe('badgeStatusCache', () => {
 
     expect(readCachedNostrResult()).toBeNull();
     expect(readCachedAtprotoResult()).not.toBeNull();
+  });
+
+  it('notifies mounted consumers when a verification result changes or is invalidated', () => {
+    const { storage } = memoryStorage();
+    __setBadgeStatusCacheStorageForTesting(storage);
+    const seen: number[] = [];
+    const unsubscribe = subscribeBadgeStatusCache(() => {
+      seen.push(getBadgeStatusCacheRevision());
+    });
+
+    writeCachedAtprotoResult(atprotoResult, 1);
+    writeCachedNostrResult(nostrResult, 2);
+    invalidateCachedNostrResult();
+    unsubscribe();
+    writeCachedAtprotoResult(atprotoResult, 3);
+
+    expect(seen).toHaveLength(3);
+    expect(seen[0]).toBeLessThan(seen[1] ?? 0);
+    expect(seen[1]).toBeLessThan(seen[2] ?? 0);
   });
 });
 

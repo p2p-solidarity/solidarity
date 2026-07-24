@@ -2,15 +2,21 @@
  * Headless post-OAuth ATProto connect service.
  *
  * Correctness hinges on one transaction order: construct the new at://
- * claim, pass it through the existing Face-ID-gated profile save, then put
- * only the JWS returned by that save. This module never reads the previous
- * profile JWS, so publishing it by mistake is impossible by construction.
+ * claim, pass it through the existing Face-ID-gated profile save while
+ * preserving local link visibility, then put only that save's PUBLIC
+ * projection. This module never uploads the full source-of-truth JWS.
  * A different existing ATProto claim returns a confirmation variant before
  * either signing or writing; UI is deliberately out of scope here.
  */
 import { err, ok, type ProfileRecord, type Result } from '@solidarity/shared';
 
-import type { ProfileEditableFields, ProfileSaveOptions, SavedProfile } from '@/profile/store';
+import type {
+  ProfileEditableFields,
+  ProfileSaveOptions,
+  SavedProfile,
+  SignedProjection,
+} from '@/profile/store';
+import type { LinkVisibility } from '@/profile/projection';
 
 import { resolveAtprotoIdentity, type AtprotoIdentity } from './discovery';
 import { signOutAtproto } from './oauth';
@@ -43,13 +49,22 @@ export interface AtprotoConnectOptions {
   readonly confirmReplacement?: boolean;
 }
 
+export interface AtprotoProfileDraft {
+  readonly record: ProfileRecord;
+  readonly linkVisibility: readonly LinkVisibility[];
+}
+
+export interface SavedAtprotoProfile extends SavedProfile {
+  readonly published: SignedProjection;
+}
+
 export interface AtprotoConnectDependencies {
   readonly resolveIdentity: (handle: string) => Promise<Result<AtprotoIdentity, string>>;
-  readonly readProfile: () => Promise<ProfileRecord | null>;
+  readonly readProfile: () => Promise<AtprotoProfileDraft | null>;
   readonly saveProfile: (
     fields: ProfileEditableFields,
     options: ProfileSaveOptions
-  ) => Promise<Result<SavedProfile, string>>;
+  ) => Promise<Result<SavedAtprotoProfile, string>>;
   readonly putProfileRecord: (
     session: AtprotoSession,
     jws: string
@@ -64,11 +79,19 @@ const DEFAULT_DEPENDENCIES: AtprotoConnectDependencies = {
   resolveIdentity: resolveAtprotoIdentity,
   readProfile: async () => {
     const { useProfileStore } = await import('@/profile/store');
-    return useProfileStore.getState().record;
+    const state = useProfileStore.getState();
+    return state.record === null
+      ? null
+      : { record: state.record, linkVisibility: state.linkVisibility };
   },
   saveProfile: async (fields, options) => {
     const { useProfileStore } = await import('@/profile/store');
-    return useProfileStore.getState().saveProfile(fields, options);
+    const saved = await useProfileStore.getState().saveProfile(fields, options);
+    if (!saved.ok) return saved;
+    const published = useProfileStore.getState().published;
+    return published === null
+      ? err('profile save produced no public projection')
+      : ok({ ...saved.value, published });
   },
   putProfileRecord,
 };
@@ -97,19 +120,30 @@ function replaceAtprotoAlias(aliases: readonly string[], handle: string): readon
   return next;
 }
 
-function editableFields(profile: ProfileRecord): ProfileEditableFields {
+function editableFields(profile: AtprotoProfileDraft): ProfileEditableFields {
   return {
-    displayName: profile.displayName,
-    bio: profile.bio,
-    links: profile.links,
+    displayName: profile.record.displayName,
+    bio: profile.record.bio,
+    links: profile.record.links,
+    linkVisibility: profile.linkVisibility,
   };
 }
 
-function savedBindingMatches(saved: SavedProfile, expectedHandle: string): boolean {
-  const handles = saved.record.alsoKnownAs
+function recordBindingMatches(record: ProfileRecord, expectedHandle: string): boolean {
+  const handles = record.alsoKnownAs
     .map(atprotoHandle)
     .filter((handle): handle is string => handle !== null);
   return handles.length === 1 && handles[0] === expectedHandle;
+}
+
+function savedBindingMatches(saved: SavedAtprotoProfile, expectedHandle: string): boolean {
+  return (
+    recordBindingMatches(saved.record, expectedHandle) &&
+    recordBindingMatches(saved.published.record, expectedHandle) &&
+    saved.published.record.scope === 'public' &&
+    saved.published.record.did === saved.record.did &&
+    saved.published.record.updatedAt === saved.record.updatedAt
+  );
 }
 
 function identityMatchesSession(identity: AtprotoIdentity, session: AtprotoSession): boolean {
@@ -133,8 +167,9 @@ export async function connectAtproto(
       return err('sessionIdentityMismatch');
     }
 
-    const profile = await dependencies.readProfile();
-    if (!profile) return err('profileMissing');
+    const draft = await dependencies.readProfile();
+    if (!draft) return err('profileMissing');
+    const profile = draft.record;
 
     const existingHandles = profile.alsoKnownAs
       .map(atprotoHandle)
@@ -149,14 +184,14 @@ export async function connectAtproto(
     }
 
     const alsoKnownAs = replaceAtprotoAlias(profile.alsoKnownAs, identity.value.handle);
-    const saved = await dependencies.saveProfile(editableFields(profile), {
+    const saved = await dependencies.saveProfile(editableFields(draft), {
       alsoKnownAs,
     });
     if (!saved.ok || !savedBindingMatches(saved.value, identity.value.handle)) {
       return err('profileSaveFailed');
     }
 
-    const written = await dependencies.putProfileRecord(session, saved.value.jws);
+    const written = await dependencies.putProfileRecord(session, saved.value.published.jws);
     if (!written.ok) return err('recordWriteFailed');
 
     return ok({

@@ -149,6 +149,12 @@ interface PersistedProfile {
   /** The pre-signed `public` projection (public links only) published to
    *  Nostr, or null for a pre-T7 blob. */
   readonly published: SignedProjection | null;
+  /**
+   * The exact public-projection JWS for which at least one relay accepted
+   * BOTH the profile pointer and the kind-0 reverse binding. A later save
+   * clears this marker before any share UI can offer the Nostr short URL.
+   */
+  readonly nostrPublishedJws: string | null;
 }
 
 /** Re-validate one persisted projection (T7) — its `record` must still
@@ -173,6 +179,7 @@ function readPersisted(): PersistedProfile | null {
       linkVisibility?: unknown;
       shared?: unknown;
       published?: unknown;
+      nostrPublishedJws?: unknown;
     };
     if (typeof parsed.jws !== 'string' || parsed.jws.length === 0) return null;
     // Re-validate on read, not just on write — a hand-edited or
@@ -191,12 +198,18 @@ function readPersisted(): PersistedProfile | null {
           parsed.linkVisibility.filter((v): v is LinkVisibility => typeof v === 'string')
         )
       : normalizeLinkVisibility(validated.value.links, undefined);
+    const published = readProjection(parsed.published);
     return {
       record: validated.value,
       jws: parsed.jws,
       linkVisibility,
       shared: readProjection(parsed.shared),
-      published: readProjection(parsed.published),
+      published,
+      nostrPublishedJws:
+        typeof parsed.nostrPublishedJws === 'string' &&
+        published?.jws === parsed.nostrPublishedJws
+          ? parsed.nostrPublishedJws
+          : null,
     };
   } catch {
     return null;
@@ -309,6 +322,17 @@ function rootKeyErrorMessage(prefix: string, e: RootKeyError): string {
   }
 }
 
+function confirmedNostrPublishedJws(
+  currentMarker: string | null,
+  candidateJws: string,
+  profileReport: PublishReport,
+  kind0Report: PublishReport
+): string | null {
+  return profileReport.acceptedCount >= 1 && kind0Report.acceptedCount >= 1
+    ? candidateJws
+    : currentMarker;
+}
+
 /** Combined publish outcome — both bindings of task A4.2's bidirectional pair. */
 export interface NostrPublishOutcome {
   /** kind-30078 profile pointer (`content` = the profile JWS). */
@@ -332,6 +356,11 @@ interface ProfileState {
   /** Pre-signed `public` projection (public links only) published to Nostr,
    *  or null before the first T7-era save. */
   readonly published: SignedProjection | null;
+  /**
+   * The currently published public-projection JWS, or null when the local
+   * profile is newer than every honestly confirmed Nostr copy.
+   */
+  readonly nostrPublishedJws: string | null;
   /**
    * Validate → (Face-ID) sign → persist, in that order. Returns
    * `err(reason)` without ever touching `getRootSigner()` (so without ever
@@ -386,6 +415,7 @@ export const useProfileStore = create<ProfileState>((set, get) => ({
   linkVisibility: [],
   shared: null,
   published: null,
+  nostrPublishedJws: null,
 
   saveProfile: async (fields, options = {}) => {
     const didResult = await getRootDid();
@@ -423,6 +453,7 @@ export const useProfileStore = create<ProfileState>((set, get) => ({
       linkVisibility,
       shared: projections.value.shared,
       published: projections.value.published,
+      nostrPublishedJws: null,
     });
     set({
       record: validated.value,
@@ -430,6 +461,7 @@ export const useProfileStore = create<ProfileState>((set, get) => ({
       linkVisibility,
       shared: projections.value.shared,
       published: projections.value.published,
+      nostrPublishedJws: null,
       status: 'ready',
     });
     // The record was re-signed — any published Nostr copy is now behind it,
@@ -457,7 +489,14 @@ export const useProfileStore = create<ProfileState>((set, get) => ({
     // the next publish/share re-signs for THIS record (never republishes the
     // prior public projection). The web-signed record carries no per-link
     // visibility metadata → all links default public (empty `linkVisibility`).
-    writePersisted({ record: validated.value, jws, linkVisibility: [], shared: null, published: null });
+    writePersisted({
+      record: validated.value,
+      jws,
+      linkVisibility: [],
+      shared: null,
+      published: null,
+      nostrPublishedJws: null,
+    });
     set({
       record: validated.value,
       jws,
@@ -465,6 +504,7 @@ export const useProfileStore = create<ProfileState>((set, get) => ({
       linkVisibility: [],
       shared: null,
       published: null,
+      nostrPublishedJws: null,
     });
     invalidateCachedNostrResult();
     return ok({ record: validated.value, jws });
@@ -525,8 +565,23 @@ export const useProfileStore = create<ProfileState>((set, get) => ({
       if (!projections.ok) return err(`publishToNostr: ${projections.error}`);
       published = projections.value.published;
 
-      writePersisted({ record, jws, linkVisibility, shared: projections.value.shared, published });
-      set({ record, jws, linkVisibility, shared: projections.value.shared, published, status: 'ready' });
+      writePersisted({
+        record,
+        jws,
+        linkVisibility,
+        shared: projections.value.shared,
+        published,
+        nostrPublishedJws: null,
+      });
+      set({
+        record,
+        jws,
+        linkVisibility,
+        shared: projections.value.shared,
+        published,
+        nostrPublishedJws: null,
+        status: 'ready',
+      });
     }
 
     // A pre-T7 profile hydrated with no cached public projection: sign it now
@@ -542,8 +597,15 @@ export const useProfileStore = create<ProfileState>((set, get) => ({
       );
       if (!publishedResult.ok) return err(`publishToNostr: ${publishedResult.error}`);
       published = publishedResult.value;
-      writePersisted({ record, jws, linkVisibility, shared: get().shared, published });
-      set({ published });
+      writePersisted({
+        record,
+        jws,
+        linkVisibility,
+        shared: get().shared,
+        published,
+        nostrPublishedJws: null,
+      });
+      set({ published, nostrPublishedJws: null });
     }
 
     // Publish the PUBLIC projection (scope:'public' — public-tier links only),
@@ -558,6 +620,22 @@ export const useProfileStore = create<ProfileState>((set, get) => ({
     // The kind-0 side just changed — a pre-publish cached verification must
     // not stand in for a live check for the rest of its TTL window.
     invalidateCachedNostrResult();
+
+    const nostrPublishedJws = confirmedNostrPublishedJws(
+      get().nostrPublishedJws,
+      published.jws,
+      profileReport.value,
+      kind0Report.value
+    );
+    writePersisted({
+      record,
+      jws,
+      linkVisibility,
+      shared: get().shared,
+      published,
+      nostrPublishedJws,
+    });
+    set({ nostrPublishedJws });
 
     return ok({ profile: profileReport.value, kind0: kind0Report.value });
   },
@@ -579,6 +657,7 @@ export function hydrateProfile(): void {
       linkVisibility: persisted.linkVisibility,
       shared: persisted.shared,
       published: persisted.published,
+      nostrPublishedJws: persisted.nostrPublishedJws,
       status: 'ready',
     });
   }
