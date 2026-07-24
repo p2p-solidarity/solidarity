@@ -105,6 +105,10 @@ export function BackupStep({ onBack, onDone }: BackupStepProps) {
   const [revealingForCeremony, setRevealingForCeremony] = useState(false);
   // Only set while the real iCloud Keychain write is in flight.
   const [icloudSubmitting, setIcloudSubmitting] = useState(false);
+  // Retry re-runs the provisioning effect (its deps otherwise never change —
+  // a phase flip alone left the spinner stuck forever). Safe to re-run: the
+  // effect's hasRootKey() check keeps provisioning idempotent.
+  const [provisionNonce, setProvisionNonce] = useState(0);
 
   useEffect(() => {
     let cancelled = false;
@@ -162,7 +166,7 @@ export function BackupStep({ onBack, onDone }: BackupStepProps) {
     return () => {
       cancelled = true;
     };
-  }, [t]);
+  }, [provisionNonce, t]);
 
   const declineToMnemonic = async () => {
     setRevealingForCeremony(true);
@@ -253,6 +257,7 @@ export function BackupStep({ onBack, onDone }: BackupStepProps) {
             variant="secondary"
             onPress={() => {
               setPhase('loading');
+              setProvisionNonce((value) => value + 1);
             }}
           />
         </View>

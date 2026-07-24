@@ -63,6 +63,12 @@ export default function OnboardingFlow() {
 
   const handleFinish = () => {
     setPref('hasCompletedOnboarding', true);
+    // A replay was launched from somewhere specific (Me edit, Settings…) —
+    // finishing must return there, not eject the user to People.
+    if (isReplay) {
+      safeBack();
+      return;
+    }
     router.replace('/(tabs)/people');
   };
 

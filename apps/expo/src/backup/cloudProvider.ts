@@ -68,7 +68,7 @@ let lastDriveAuthStatus: DriveAuthStatus = 'authorized';
  * the subsequent Drive op surfaces its own 401, telling the user to connect
  * Google Drive. Never blocks the backup pipeline on an auth side-effect.
  */
-async function ensureDriveAuth(): Promise<DriveAuthStatus> {
+async function ensureDriveAuth(interactive: boolean): Promise<DriveAuthStatus> {
   if (driveAuthorized) return 'authorized';
   try {
     const { signInForDrive, refreshDriveAccessToken } = await import('./googleAuth');
@@ -76,7 +76,11 @@ async function ensureDriveAuth(): Promise<DriveAuthStatus> {
       setGoogleAccessToken(await refreshDriveAccessToken());
       return 'authorized';
     } catch {
-      // Not signed in yet (or token expired without a refresh) — prompt.
+      // Not signed in yet (or token expired without a refresh). Interactive
+      // sign-in is reserved for explicit user actions (backup/restore/picker)
+      // — a background PROBE must never open Google Sign-In on a fresh
+      // install (the app promises no-account setup).
+      if (!interactive) return 'needs-connection';
       const session = await signInForDrive();
       setGoogleAccessToken(session.accessToken);
       return 'authorized';
@@ -89,7 +93,7 @@ async function ensureDriveAuth(): Promise<DriveAuthStatus> {
   }
 }
 
-async function ensureInitialized(): Promise<CloudKit> {
+async function ensureInitialized(interactiveAuth = true): Promise<CloudKit> {
   const ck = getCloudKit();
   if (!initialized) {
     // Authenticate Drive BEFORE any file op when Drive is the active provider.
@@ -97,8 +101,10 @@ async function ensureInitialized(): Promise<CloudKit> {
     // access) — not a silent no-op — so the caller/UI can prompt the user to
     // connect Google. Done before initialize() so the token is present for any
     // Drive setup the native module performs.
+    let authStatus: DriveAuthStatus = 'authorized';
     if (activeProvider === 'googleDrive') {
-      lastDriveAuthStatus = await ensureDriveAuth();
+      authStatus = await ensureDriveAuth(interactiveAuth);
+      lastDriveAuthStatus = authStatus;
     }
     try {
       await ck.initialize(CONTAINER_ID);
@@ -107,7 +113,14 @@ async function ensureInitialized(): Promise<CloudKit> {
       // storage, and Android Drive ops surface their own errors on use.
       // Mirrors native, which never blocks backup on iCloud availability.
     }
-    initialized = true;
+    // A silent probe that could not auth must not latch: the next explicit
+    // (interactive-allowed) call re-runs Drive auth instead of inheriting a
+    // dead 401 session.
+    initialized = !(
+      activeProvider === 'googleDrive' &&
+      authStatus !== 'authorized' &&
+      !interactiveAuth
+    );
   }
   return ck;
 }
@@ -259,10 +272,12 @@ export async function downloadLatestArchive(): Promise<DownloadedArchive | null>
   return { keyScheme: decoded.keyScheme, ciphertextB64: decoded.ciphertextB64 };
 }
 
-/** Returns the cloud-mtime so the UI can show "last backed up …". */
+/** Returns the cloud-mtime so the UI can show "last backed up …".
+ * SILENT auth only: this backs status displays and the fresh-install probe
+ * (SecureKeysStep) — neither may open an interactive Google Sign-In. */
 export async function backupMtime(): Promise<Date | null> {
   try {
-    const ck = await ensureInitialized();
+    const ck = await ensureInitialized(false);
     const names = await sortedBackups(ck);
     const latest = selectNewestBackup(names);
     if (!latest) return null;

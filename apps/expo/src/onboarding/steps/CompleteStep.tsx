@@ -97,6 +97,12 @@ export function CompleteStep({
       : t('completeStep.pageCreated')
     : t('completeStep.pageSkipped');
 
+  // D5: the celebratory state is EARNED — page + backup + a verified badge.
+  // Anything less finishes honestly ("setup saved", secondary CTA) instead
+  // of celebrating an empty system. Rows above already show what's missing.
+  const fullyReady =
+    keysGenerated && backupDone && pageDone && badge.result?.result.state === 'verified';
+
   return (
     <View
       className="flex-1 bg-pageBg"
@@ -112,13 +118,13 @@ export function CompleteStep({
         <ThemedText
           variant="headlineLarge"
           style={{
-            color: Colors.terminalGreen,
+            color: fullyReady ? Colors.terminalGreen : Colors.text2,
             fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace',
-            ...(Platform.OS === 'ios'
+            ...(Platform.OS === 'ios' && fullyReady
               ? { textShadowColor: `${Colors.terminalGreen}80`, textShadowRadius: 10 }
               : {}),
           }}>
-          {t('completeStep.systemReady')}
+          {t(fullyReady ? 'completeStep.systemReady' : 'completeStep.almostReady')}
         </ThemedText>
       </View>
 
@@ -142,13 +148,20 @@ export function CompleteStep({
 
       <View style={{ flex: 1 }} />
 
-      <ThemedButton
-        label={t('completeStep.start')}
-        variant="inverted"
-        fullWidth
-        haptic={false}
-        onPress={handleFinish}
-      />
+      <View style={{ gap: 8 }}>
+        <ThemedButton
+          label={t(fullyReady ? 'completeStep.start' : 'completeStep.finishForNow')}
+          variant={fullyReady ? 'inverted' : 'secondary'}
+          fullWidth
+          haptic={false}
+          onPress={handleFinish}
+        />
+        {fullyReady ? null : (
+          <ThemedText variant="caption" tone="secondary" style={{ textAlign: 'center' }}>
+            {t('completeStep.finishHint')}
+          </ThemedText>
+        )}
+      </View>
     </View>
   );
 }

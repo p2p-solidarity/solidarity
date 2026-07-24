@@ -47,6 +47,10 @@ export function ConnectStep({
     onBadgeResult
   );
   const hasClaim = record !== null && claimedBadgeProviders(record).length > 0;
+  // A claim can be persisted before any relay confirmed the publication
+  // (store.ts marker semantics) — a claim alone must not hide the publish
+  // action, or a failed first publish becomes a dead end with only Continue.
+  const publishConfirmed = useProfileStore((state) => state.nostrPublishedJws) !== null;
 
   const openPublish = () => {
     onSelectProvider('nostr');
@@ -61,12 +65,22 @@ export function ConnectStep({
       subtitle={t('connectStep.subtitle')}
       footer={
         hasClaim || !hasPage ? (
-          <ThemedButton
-            label={t('onboarding.continue')}
-            variant={hasClaim ? 'inverted' : 'secondary'}
-            fullWidth
-            onPress={onNext}
-          />
+          <View style={{ gap: 10 }}>
+            <ThemedButton
+              label={t('onboarding.continue')}
+              variant={hasClaim ? 'inverted' : 'secondary'}
+              fullWidth
+              onPress={onNext}
+            />
+            {hasClaim && !publishConfirmed ? (
+              <ThemedButton
+                label={t('connectStep.publishAgain')}
+                variant="secondary"
+                fullWidth
+                onPress={openPublish}
+              />
+            ) : null}
+          </View>
         ) : (
           <View style={{ gap: 10 }}>
             <ThemedButton

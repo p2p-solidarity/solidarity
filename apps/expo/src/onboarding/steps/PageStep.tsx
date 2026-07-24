@@ -73,6 +73,7 @@ export interface PageStepProps {
 export function PageStep({ onBack, onNext }: PageStepProps) {
   const { t } = useTranslation();
   const record = useProfileStore((s) => s.record);
+  const storedLinkVisibility = useProfileStore((s) => s.linkVisibility);
   const saveProfile = useProfileStore((s) => s.saveProfile);
   const publishToNostr = useProfileStore((s) => s.publishToNostr);
   const autoRepublish = usePreferences((s) => s.nostrAutoRepublish);
@@ -105,11 +106,24 @@ export function PageStep({ onBack, onNext }: PageStepProps) {
     }
     setSaving(true);
     try {
+      // This mini-form edits only the FIRST link. On replay an existing page
+      // may hold more: links 2…N and their visibility tiers must survive —
+      // merge, never replace (a replacement here silently deleted them).
+      const existingLinks = record?.links ?? [];
       const links =
         preparedLinkUrl.length > 0
-          ? [{ label: linkLabel.trim(), url: preparedLinkUrl }]
-          : [];
-      const saved = await saveProfile({ displayName: displayName.trim(), bio: bio.trim(), links });
+          ? [{ label: linkLabel.trim(), url: preparedLinkUrl }, ...existingLinks.slice(1)]
+          : existingLinks;
+      const linkVisibility =
+        links === existingLinks
+          ? storedLinkVisibility
+          : links.map((_, index) => storedLinkVisibility[index] ?? 'public');
+      const saved = await saveProfile({
+        displayName: displayName.trim(),
+        bio: bio.trim(),
+        links,
+        linkVisibility,
+      });
       if (!saved.ok) {
         if (isBiometricCancellation(saved.error)) return;
         haptic('error');
