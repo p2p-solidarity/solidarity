@@ -105,6 +105,23 @@ seed 為本、passkey 用 largeBlob/PRF 當外殼,**不可讓 passkey-PRF 直接
 - [x] **S7a** SpruceKit SDK 退場(spec 13→8 方法、iOS SPM + Android Maven + config plugin + SPM pin 整包拔、nitrogen 重生成、prebuild + `-disableAutomaticPackageResolution` 驗證過;順修 prepare-ios-workspace.sh 的 stale 小寫 scheme 名)
 - [x] **S7b** 身份收斂 — **落地語意(D1 精煉):舊 SE 硬體鑰「退位身份、留任簽卡鑰」**。硬體鑰物理上不可由助記詞派生,故「一個 did」= root did(seed、可攜)是唯一對外身份;SE 鑰簽 VC/SD-JWT/ZK 並經 A5b `solidarity.cardKeyBinding.v1` 錨定至 root。settings/dids 改為「根身份(主)+ 簽卡金鑰(錨定,非身份)」兩區呈現。憑證不需重發、既有資料不需遷移。ZK 面板的恆 null `didDocumentJson` 死狀態屬凍結面,不動(最小接觸)。
 
+## 方向決策 2026-07-24(grilling 定案 — 覆蓋相關舊條文)
+
+> 與使用者 grill 後定案(Q1–Q5)。審計依據:R1(onboarding 鏈)/R2(導航圖)/R5(重複實作)報告,backlog 見 `notes-ux-audit-backlog-2026-07.md`。
+
+**G1 — D6 修訂:onboarding 維持 Nostr-first。** D6 的「v1 脊椎 = Bluesky」**僅指 viewer/handle 路由與徽章面**;onboarding connect 步驟正式定為 Nostr 免帳號路徑(現狀合法化),Bluesky 降為 Me 頁的後續綁定精靈。R1 發現的「ConnectStep 只接 Nostr、測試拒絕 Bluesky 路由」不再是缺陷。D10 灘頭堡敘事不變(頁面仍以貼進 Bluesky bio 為北極星)。
+**G2 — 單一揭露模型,舊名片欄位模型排入退場。** 連結三段可見度(projection.ts)為 Verified Page 唯一揭露模型;share-settings(舊名片欄位開關 + 已判退場的舊 QR wire)降級為 settings 內標明 legacy 的區塊並排刪除時程;新分享 sheet 不再導向它(過渡期 relabel 已上)。PII 面,執行時 size L + 人工安全審查。
+**G3 — iCloud 恢復補齊三選項。** 恢復失敗 modal = 重試 / 輸入助記詞(接既有匯入流程)/ 建立新身份(明確標毀滅性、二次確認、排最後)。只改 modal 層,不動 rootKey 內部。size L。
+**G4 — Me 曝光備份狀態。** 身份 footer 加備份狀態列(iCloud 已開 / 助記詞已抄 / 尚未備份⚠️)+ 一鍵直達既有備份頁。只做曝光與導向,不新增 custody 邏輯,Face ID 儀式不變。
+**G5 — codex 額度耗盡時的分工。** C1(onboarding 真 bug 批)由 Claude 主線程親自實作;R3(填寫審計)等額度恢復後重發。已知管線風險:Mac 睡眠殺 codex 行程、額度牆(已跑執行緒可續、新執行緒失敗)。
+
+**執行紀錄 2026-07-24(審計 R1/R2/R5 + 實作 C2/C3 落地;C2/C3 codex 平行、Claude 驗收 + 修 C2 迴歸 + 分 commit):**
+
+- [x] **C2+基礎層**(`382a52a`;connectAtproto 改上傳 public 投影(私密連結不再進 PDS)+ reconnect 保留 linkVisibility;**Claude 親修 C2 迴歸**:`verifyAtprotoBindingDual` 雙重比對(public 投影優先、完整 record 後備,jwt dual-verify 先例)接進 ProfileBadgeChips/blueskyWizard/onboarding badgeVerification,舊 PDS 副本不再假陰性/污染快取;`nostrPublishedJws` 誠實標記 — 只有 ≥1 relay 確認過的 record 才提供 npub 短連結,重簽即清;生物辨識分類器補認 'biometric authentication required')
+- [x] **C2 UI**(`6e23389`;stale 徽章證據 sheet 加 重試/重新發布/重連 Bluesky 動作(只複用既有驗證器與發布);常駐「+ 加連結」列(既有頁加連結 5 taps→1 tap 開 sheet);hero 頭像直接可點 + 返回契約統一;分享 QR 可以圖片分享;legacy 欄位列誠實 relabel)
+- [x] **C3 導航**(`ab18981`;People 首頁 + 選單加掃描;掃描存人改「存檔+toast+回原點」+ 顯式 View-in-People;「My QR」改名證明請求 QR;dev 死路由修正)
+- [ ] **C1** onboarding 真 bug 批(Claude 親做,進行中):Backup 重試失效、發布失敗死路、replay 踢人、D5 完成誠實閘門、Android 免互動探測;PageStep replay 毀連結(R5 #2 Critical 的最小修)
+
 **執行紀錄 2026-07-23(Me 鏈路 Linktree 化第二輪 W1–W3;三個 codex 平行實作(同一 working tree、owned-file 切分)、Claude 整合驗收 + 分 commit):**
 
 - [x] **W1** 填寫鏈路(`2e07f28`;AddLinkSheet:貼網址 2 步自動辨識平台 / 選平台打 @handle 3 步,新增路徑無 Label/可見度/組 URL;編輯器改精簡清單 edit.tsx 647→441 行;save 前先備妥 npub claim(`prepareNostrClaimForSave`,僅限 Save 動作內)→ 單次 Face ID、publish 不再重簽;PublishPreviewSheet 只在有隱藏連結時攔截)
