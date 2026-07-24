@@ -3,6 +3,7 @@
 > 來源:三份唯讀 codex 審計(R1/R2 完整報告在 2026-07-23 會話;R5 於 07-24)。
 > 已做掉的不列(C2/C3 + dual-verify,見 04-plan 執行紀錄)。R3(填寫機制)/R4(重複行為)審計尚未完成。
 > 標 🔒 = 安全敏感,執行時 size L + 人工審查;標 🗳 = 已在 07-24 grilling 定案(G1–G4)。
+> R4(重複行為)已於 07-24 完成 — 30 項發現,重點收錄於下;完整 30 項見當日會話紀錄。
 
 ## Critical(R5 排序)
 
@@ -25,3 +26,24 @@
 - R1:首次發布同意兩次 Publish 且不揭露三個目的地(publish API 要求)→ 收斂單次知情同意 🔒;Welcome 打字機動畫閘;PageStep 三個可延遲欄位(bio/link/preset)應砍到只剩名字;badge 驗證 Connect/Complete 重複打網路 + 無重試;分享 host 不一致(`app.solidarity.gg` vs `solidarity.gg`)→ 單一 viewer origin 常數 + 部署煙霧測試;onboarding 行話(DID keys/relays/wss///npub/nsec)
 - R2:`components/me/` 錯置元件搬 `components/verify|credentials`(6 個);孤兒路由群定奪(/cards、/contacts/manual、/credentials/issue、/id/*、/legal(頁面做好了但 settings 只彈 toast)、/settings/privacy、/settings/disclosure、/shoutouts/*、/vault/*);QR 分享後的 solidarity-qr 永久 spinner
 - R5:Me 匯入 dedupe 用 normalized URL key、「已加入」改「已加入草稿」;LinkPageImportSheet 批次可見度選項(若要);`/share/qr` 與 legacy QR 都自稱「Solidarity QR」的命名混淆
+
+## R4 重複行為審計(2026-07-24 完成;audited HEAD ab18981,C1 修復前)
+
+**Top pain(頻率×摩擦):**
+1. **Me 編輯器/AddLinkSheet 取消即丟草稿**(Cancel 無 dirty 守衛;R16)— M
+2. **發布任務與狀態散在多屏**(preferences 承諾 vs publishingPolicy 要求既有 claim vs Me 當首發同意;`/verify/nostr` 只看 npub claim 不看 `nostrPublishedJws` → 顯示過期狀態;R3/R4)— L/M
+3. **Bluesky 頭像發布 race**:`nostrKeyPresent` 非同步 false 起步 → 存了要重開再存(R5)— M
+4. **手動聯絡人表單存檔後不清空**、重開帶上一筆(R10)— M
+5. ~~onboarding replay 毀連結~~(已修 `477d7df`)
+6. **needs-identity 繞路無 returnTo 續作契約**(R2)— L
+7. **護照關閉即丟 MRZ/NFC/proof 全部進度**(R18;checkpoint 需加密+TTL)— L
+8. **冷啟動通知註冊無視關閉偏好**(每次啟動;R25)— M
+9. **website ownership 每次 focus 重抓**(R24;需 TTL cache)— M
+10. **proof presentation 舊狀態洩漏到下一次掃描**(step/submittedToken 不重置;R20)— L
+
+**🔒 安全項(需人工審查):**
+- **R29**:Pear 可達模式下,inbound 連線在 peer 驗證完成前就取得 signer → 未認證連線可觸發生物辨識提示。修法:本地 accept 先於簽名,不放寬 grace。L
+- **R30**:legacy native-ACL 鑰匙可能 double-prompt(native 內層 + JS 閘)— 需遷移/輪替到現行 key policy,絕不繞過 native ACL。L
+
+**其他值得撿的:**加 Bluesky link preset(驗完 handle 一鍵成頁面連結;R6)、名片編輯 late-hydration 蓋掉已輸入(R8)、OCR 抽完欄位編輯器不吃(R9)、群組發證雙實作+無視 delivery 預設(R12)、成功/失敗多重宣告收斂單一 outcome(R21)、badge TTL focus 空洞(blur 後放棄 cache 寫入、Connections 無視 cache;R22)、onboarding warm 結果仍打網路(R23)、相機權限拒絕後每次 mount 重問+無 Open Settings(R26)、replay 每次重問備份方式(R15)
+**Do-not-touch 清單已確認**:ALWAYS_PROMPT 三項、delete/cardRelease、公開揭露強制 fresh 生物辨識、秘密欄位不為省重打而持久化、WebSign 防重放清除、Pear session 拆除。

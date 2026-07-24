@@ -120,7 +120,7 @@ seed 為本、passkey 用 largeBlob/PRF 當外殼,**不可讓 passkey-PRF 直接
 - [x] **C2+基礎層**(`382a52a`;connectAtproto 改上傳 public 投影(私密連結不再進 PDS)+ reconnect 保留 linkVisibility;**Claude 親修 C2 迴歸**:`verifyAtprotoBindingDual` 雙重比對(public 投影優先、完整 record 後備,jwt dual-verify 先例)接進 ProfileBadgeChips/blueskyWizard/onboarding badgeVerification,舊 PDS 副本不再假陰性/污染快取;`nostrPublishedJws` 誠實標記 — 只有 ≥1 relay 確認過的 record 才提供 npub 短連結,重簽即清;生物辨識分類器補認 'biometric authentication required')
 - [x] **C2 UI**(`6e23389`;stale 徽章證據 sheet 加 重試/重新發布/重連 Bluesky 動作(只複用既有驗證器與發布);常駐「+ 加連結」列(既有頁加連結 5 taps→1 tap 開 sheet);hero 頭像直接可點 + 返回契約統一;分享 QR 可以圖片分享;legacy 欄位列誠實 relabel)
 - [x] **C3 導航**(`ab18981`;People 首頁 + 選單加掃描;掃描存人改「存檔+toast+回原點」+ 顯式 View-in-People;「My QR」改名證明請求 QR;dev 死路由修正)
-- [ ] **C1** onboarding 真 bug 批(Claude 親做,進行中):Backup 重試失效、發布失敗死路、replay 踢人、D5 完成誠實閘門、Android 免互動探測;PageStep replay 毀連結(R5 #2 Critical 的最小修)
+- [x] **C1** onboarding 真 bug 批(`477d7df`,Claude 親做):PageStep replay 改 merge(連結 2..N + 可見度存活)、Backup 重試 nonce(hasRootKey 冪等守衛)、Connect 在 claim 未經 relay 確認(`nostrPublishedJws`)時顯示重新發布、replay Finish safeBack 回呼叫端、CompleteStep 慶祝狀態需 page+backup+verified 徽章否則誠實「設定已保存」+文案 created≠published、Android 首裝探測改靜默 Drive 授權(互動登入只留明確備份/還原,失敗不 latch init)
 
 **執行紀錄 2026-07-23(Me 鏈路 Linktree 化第二輪 W1–W3;三個 codex 平行實作(同一 working tree、owned-file 切分)、Claude 整合驗收 + 分 commit):**
 
