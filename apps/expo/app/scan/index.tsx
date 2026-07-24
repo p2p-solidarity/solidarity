@@ -2,7 +2,7 @@
  * Scan screen — 1:1 port of Swift ScanTabView. Full-screen camera preview
  * with a dimmed-mask ScanWindowOverlay (centred square cut-out + four
  * green corner brackets), nav bar "Scan" inline + trailing `qrcode`
- * (open self-QR), and a footer SolidarityPlaceholderCard "Protocol
+ * (open proof-request QR), and a footer SolidarityPlaceholderCard "Protocol
  * Router" showing supported flows.
  *
  * Capture feedback: when a payload is decoded we play a short shutter-style
@@ -216,7 +216,7 @@ export default function ScanScreen() {
           haptic="tap"
           scaleTo={SCALE.icon}
           accessibilityRole="button"
-          accessibilityLabel="My QR"
+          accessibilityLabel={t('scan.proofRequestQr')}
           onPress={() => { router.push('/share/qr'); }}
           style={{ width: 60, height: 44, alignItems: 'flex-end', justifyContent: 'center' }}
         >

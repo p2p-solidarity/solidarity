@@ -45,7 +45,7 @@ export function VerifiedPageResultSheet(): ReactNode {
   const [saving, setSaving] = useState(false);
   const insets = useSafeAreaInsets();
 
-  const onSave = async (): Promise<void> => {
+  const onSave = async (viewInPeople: boolean): Promise<void> => {
     if (result?.kind !== 'verified' || saving) return;
     if (existing) {
       const ok = await confirmDialog({
@@ -65,7 +65,9 @@ export function VerifiedPageResultSheet(): ReactNode {
     pushToast(t(toast.i18nKey), toast.tone);
     const did = result.record.did;
     dismiss();
-    router.push({ pathname: '/people/profile/[did]', params: { did } });
+    if (viewInPeople) {
+      router.push({ pathname: '/people/profile/[did]', params: { did } });
+    }
   };
 
   return (
@@ -96,6 +98,7 @@ export function VerifiedPageResultSheet(): ReactNode {
                 paddingHorizontal: 16,
                 paddingBottom: insets.bottom + 12,
                 paddingTop: 12,
+                gap: 8,
               }}
             >
               <ThemedButton
@@ -104,7 +107,16 @@ export function VerifiedPageResultSheet(): ReactNode {
                 label={existing ? t('verifiedPage.updateInPeople') : t('verifiedPage.saveToPeople')}
                 leadingIcon={<SfIcon name="person.badge.plus" size={16} color={Colors.pageBg} />}
                 onPress={() => {
-                  void onSave();
+                  void onSave(false);
+                }}
+              />
+              <ThemedButton
+                fullWidth
+                variant="secondary"
+                loading={saving}
+                label={t('people.viewInPeople')}
+                onPress={() => {
+                  void onSave(true);
                 }}
               />
             </View>

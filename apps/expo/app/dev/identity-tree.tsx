@@ -230,7 +230,7 @@ export default function IdentityTreeLab() {
                 {`Groups I've joined (${String(groups.length)})`}
               </Text>
               <Pressable
-                onPress={() => { router.push('/groups'); }}
+                onPress={() => { router.push('/settings/groups'); }}
                 accessibilityRole="button"
               >
                 <Text className="text-text3 text-[12px]">Open list →</Text>

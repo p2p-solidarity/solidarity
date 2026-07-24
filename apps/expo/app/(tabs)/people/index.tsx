@@ -2,7 +2,7 @@
  * People tab — 1:1 port of solidarity/Views/PeopleViews/PeopleListView.swift.
  *
  *   • Title "People List" (semibold 18pt, left-aligned) + trailing "+" menu
- *     (Add Manually / Import from Phone / Import VCF File)
+ *     (Scan QR / Add Manually / Import from Phone / Import VCF File)
  *   • Search field (magnifyingglass + "Search" placeholder, 0.5pt
  *     textPrimary border) once contact list is non-empty
  *   • Empty state: PaperStackIllustration 214×214 +
@@ -165,6 +165,7 @@ export default function PeopleTab() {
         onImportPhone={() => router.push('/contacts/import-phone')}
         onImportVcf={() => router.push('/contacts/import-vcf')}
         onPasteLinkPage={() => { setLinkPageSheetOpen(true); }}
+        onScan={() => { router.push('/scan'); }}
         onEnterEditMode={() => { setEditMode(true); }}
         onExitEditMode={exitEditMode}
         onToggleSelectAll={() => {
@@ -443,6 +444,7 @@ function Header({
   onImportPhone,
   onImportVcf,
   onPasteLinkPage,
+  onScan,
   onEnterEditMode,
   onExitEditMode,
   onToggleSelectAll,
@@ -457,6 +459,7 @@ function Header({
   onImportPhone: () => void;
   onImportVcf: () => void;
   onPasteLinkPage: () => void;
+  onScan: () => void;
   onEnterEditMode: () => void;
   onExitEditMode: () => void;
   onToggleSelectAll: () => void;
@@ -524,8 +527,9 @@ function Header({
             haptic="tap"
             scaleTo={SCALE.icon}
             accessibilityRole="button"
+            accessibilityLabel={t('people.openAddMenu')}
             onPress={() => setMenuOpen(!menuOpen)}
-            style={{ width: 24, height: 24, alignItems: 'center', justifyContent: 'center' }}
+            style={{ width: 44, height: 44, alignItems: 'center', justifyContent: 'center' }}
           >
             <SfIcon name="plus" size={18} color={c.text1} />
           </PressableScale>
@@ -543,6 +547,11 @@ function Header({
             zIndex: 10,
           }}
         >
+          <MenuItem
+            icon="qrcode.viewfinder"
+            label={t('people.scanQr')}
+            onPress={() => { setMenuOpen(false); onScan(); }}
+          />
           <MenuItem
             icon="square.and.pencil"
             label={t('peopleList.addManually')}
@@ -590,6 +599,7 @@ function MenuItem({
       style={{
         borderBottomWidth: isLast ? 0 : 0.5,
         borderBottomColor: c.divider,
+        minHeight: 44,
         minWidth: 200,
       }}
     >
