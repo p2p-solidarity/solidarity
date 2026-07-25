@@ -1,7 +1,10 @@
 /**
  * Settings hub — 1:1 port of solidarity/Views/SettingsViews/SettingsView.swift.
  *
- * Five blocks: Account & Identity, QR Sharing, Preferences, Guide, About.
+ * Blocks: Account & Identity, Preferences, Legacy business card, Guide,
+ * About. (G2 retired the standalone "QR Sharing" / "Solidarity QR" entries —
+ * the legacy business-card QR + field toggles now live under one clearly
+ * legacy-labelled row so they don't read as governing the Verified Page.)
  * Each row is a SettingsBlockRow on a `mutedSurface` 12pt card, stacked
  * 8pt apart. Sections themselves are 24pt apart. About section is rendered
  * inline (no SettingsBlockSection wrapper, since the version row uses the
@@ -91,11 +94,6 @@ export default function SettingsHub() {
               onPress={() => { router.push('/settings/vc'); }}
             />
             <SettingsBlockRow
-              icon="qrcode"
-              title={t('settingsHub.solidarityQr')}
-              onPress={() => { router.push('/settings/solidarity-qr'); }}
-            />
-            <SettingsBlockRow
               icon="key.horizontal"
               title={t('settingsHub.viewDids')}
               onPress={() => { router.push('/settings/dids'); }}
@@ -104,15 +102,6 @@ export default function SettingsHub() {
               icon="arrow.up.arrow.down.square"
               title={t('settingsHub.identityExport')}
               onPress={() => { router.push('/settings/identity-export'); }}
-            />
-          </SettingsBlockSection>
-
-          {/* QR Sharing */}
-          <SettingsBlockSection title={t('settingsHub.qrSharing')}>
-            <SettingsBlockRow
-              icon="square.and.arrow.up"
-              title={t('settingsHub.shareSettings')}
-              onPress={() => { router.push('/settings/share-settings'); }}
             />
           </SettingsBlockSection>
 
@@ -146,6 +135,23 @@ export default function SettingsHub() {
                 onPress={() => { router.push('/settings/developer'); }}
               />
             ) : null}
+          </SettingsBlockSection>
+
+          {/* Legacy business card — G2 retirement. The old scan-to-exchange QR
+              and its field toggles are parked here under a clearly legacy label
+              so they don't read as governing the Verified Page. Both former
+              entry points (Solidarity QR + Share Settings) collapse into this
+              single row; the QR wire is built in one place now. */}
+          <SettingsBlockSection
+            title={t('legacyCard.section')}
+            footer={t('legacyCard.sectionFooter')}
+          >
+            <SettingsBlockRow
+              icon="qrcode"
+              title={t('legacyCard.qrAndFields')}
+              subtitle={t('legacyCard.rowSubtitle')}
+              onPress={() => { router.push('/settings/share-settings'); }}
+            />
           </SettingsBlockSection>
 
           {/* Guide — Figma 758:4610 renders Replay Onboarding in the rose accent

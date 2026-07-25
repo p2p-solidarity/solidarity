@@ -35,7 +35,10 @@ describe('Me public-page surface', () => {
     expect(share).toContain('setSelectedKind(candidate.kind)');
     expect(shareContent).toContain('onSelect(candidate)');
     expect(shareContent).toContain("t('meShare.useFormat'");
-    expect(share).toContain('ShareFieldsRow');
+    // G2: the legacy business-card "share fields" row was removed from the Me
+    // share sheet. The legacy field surface stays reachable only from Settings,
+    // whose entry point still routes to /settings/share-settings below.
+    expect(share).not.toContain('ShareFieldsRow');
     expect(route).toContain("router.push('/settings/share-settings')");
     expect(share).not.toContain('buildRuntimeSolidarityQrWire');
     expect(badges).toContain('verifyNostrBinding');

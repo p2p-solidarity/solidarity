@@ -32,6 +32,12 @@ export interface ProfileShareSurfaceProps {
   readonly record: ProfileRecord;
   readonly jws: string;
   readonly nostrShortUrlReady: boolean;
+  /**
+   * Retained for caller compatibility only. G2 retired the legacy
+   * business-card "share fields" row from this sheet — the legacy field
+   * surface now lives solely under Settings. The prop is intentionally not
+   * consumed here so callers (MeProfilePage) keep type-checking unchanged.
+   */
   readonly onOpenShareSettings: () => void;
 }
 
@@ -39,7 +45,6 @@ export function ProfileShareSurface({
   record,
   jws,
   nostrShortUrlReady,
-  onOpenShareSettings,
 }: ProfileShareSurfaceProps): ReactNode {
   const { t } = useTranslation();
   const [sheetOpen, setSheetOpen] = useState(false);
@@ -65,7 +70,6 @@ export function ProfileShareSurface({
         record={record}
         jws={jws}
         nostrShortUrlReady={nostrShortUrlReady}
-        onOpenShareSettings={onOpenShareSettings}
         onClose={() => {
           setSheetOpen(false);
         }}
@@ -79,14 +83,12 @@ function ProfileQrSheet({
   record,
   jws,
   nostrShortUrlReady,
-  onOpenShareSettings,
   onClose,
 }: {
   readonly visible: boolean;
   readonly record: ProfileRecord;
   readonly jws: string;
   readonly nostrShortUrlReady: boolean;
-  readonly onOpenShareSettings: () => void;
   readonly onClose: () => void;
 }): ReactNode {
   const { t } = useTranslation();
@@ -254,34 +256,10 @@ function ProfileQrSheet({
                   />
                 </ThemedSurface>
               )}
-
-              <ShareFieldsRow onPress={onOpenShareSettings} />
             </ScrollView>
           </ThemedSurface>
         </Animated.View>
       </View>
     </Modal>
-  );
-}
-
-function ShareFieldsRow({ onPress }: { readonly onPress: () => void }): ReactNode {
-  const { t } = useTranslation();
-  return (
-    <PressableScale
-      haptic="tap"
-      onPress={onPress}
-      accessibilityRole="button"
-      accessibilityLabel={t('mePage.shareFields')}>
-      <ThemedSurface
-        variant="inset"
-        className="flex-row items-center gap-3 rounded-none px-3"
-        style={{ minHeight: 44 }}>
-        <SfIcon name="slider.horizontal.3" size={14} color={Colors.text2} />
-        <ThemedText variant="bodySmall" tone="secondary" className="flex-1">
-          {t('mePage.shareFields')}
-        </ThemedText>
-        <SfIcon name="chevron.right" size={12} color={Colors.text3} />
-      </ThemedSurface>
-    </PressableScale>
   );
 }
