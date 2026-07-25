@@ -357,12 +357,17 @@ function useBindingBadgeViewModels(
         } else {
           setNostrChecking(true);
           void verifyNostrBinding(record, makeKind0Fetcher(DEFAULT_RELAYS)).then((next) => {
-            if (cancelled) return;
             const checkedAt = Date.now();
+            // Persist the completed check FIRST, unconditionally — a
+            // verification that lands after the component blurred must still
+            // seed the shared cache (R22). Only the setState UI updates are
+            // suppressed on blur, so the next visit reads a warm result
+            // instead of re-opening three relay sockets.
+            writeCachedNostrResult(next, checkedAt);
+            if (cancelled) return;
             setNostrResult(next);
             setNostrCheckedAt(checkedAt);
             setNostrChecking(false);
-            writeCachedNostrResult(next, checkedAt);
           });
         }
       }
@@ -378,12 +383,14 @@ function useBindingBadgeViewModels(
         } else {
           setAtprotoChecking(true);
           void verifyAtprotoBindingDual(record, publicRecord, atprotoBindingIO).then((next) => {
-            if (cancelled) return;
             const checkedAt = Date.now();
+            // Same as the nostr path: cache the completed result even after
+            // blur (R22); suppress only the UI updates.
+            writeCachedAtprotoResult(next, checkedAt);
+            if (cancelled) return;
             setAtprotoResult(next);
             setAtprotoCheckedAt(checkedAt);
             setAtprotoChecking(false);
-            writeCachedAtprotoResult(next, checkedAt);
           });
         }
       }
