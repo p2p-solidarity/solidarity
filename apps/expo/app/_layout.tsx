@@ -134,6 +134,10 @@ export default function RootLayout() {
   // so toggling Light/Dark/System in Appearance settings actually flips
   // every `bg-pageBg` / `text-text1` style without a relaunch.
   const appColorScheme = usePreferences((s) => s.appColorScheme);
+  // Opt-in gate for the Sakura push rail (R25). Reflects the persisted value
+  // once boot runs `hydratePreferences()` (before `ready` flips true), so the
+  // registration effect below reads the real preference, not the default.
+  const remoteNotificationsEnabled = usePreferences((s) => s.notificationsRemote);
   useEffect(() => {
     Appearance.setColorScheme(appColorScheme === 'system' ? 'unspecified' : appColorScheme);
   }, [appColorScheme]);
@@ -265,14 +269,11 @@ export default function RootLayout() {
     return () => { sub.remove(); };
   }, []);
 
-  // Sakura push rail — mirrors Swift AppDelegate.didFinishLaunchingWithOptions
-  // + didReceiveRemoteNotification. Registration is fire-and-forget per
-  // Rule 10 (never await on first paint); listeners trigger an inbox sync
-  // whenever the OS hands us a notification (foreground or interaction tap).
+  // Sakura push rail — inbox-sync listeners are always safe to attach: they
+  // only fire when the OS actually delivers a notification (none, if the user
+  // opted out), and they never touch permission. Mirrors Swift
+  // AppDelegate.didReceiveRemoteNotification.
   useEffect(() => {
-    // Permission denied / no token / relay down — Swift swallows the
-    // equivalent error too. The user can retry from Settings.
-    void registerForPushNotificationsAsync().catch(() => undefined);
     const received = Notifications.addNotificationReceivedListener(() => {
       // Inbox decrypt failures are not surfaced to the user; mirrors
       // Swift MessageService logging behaviour.
@@ -281,15 +282,27 @@ export default function RootLayout() {
     const response = Notifications.addNotificationResponseReceivedListener(() => {
       void syncOnce().catch(() => undefined);
     });
+    return () => {
+      received.remove();
+      response.remove();
+    };
+  }, []);
+
+  // Registration is opt-in gated (R25). We only register once boot has
+  // hydrated the persisted preference (`ready`) AND remote notifications are
+  // enabled. The automatic path NEVER prompts — it registers only if the OS
+  // already granted permission — so a user who never opted in never sees a
+  // system dialog on cold launch. Fire-and-forget per Rule 10.
+  useEffect(() => {
+    if (!ready || !remoteNotificationsEnabled) return;
+    void registerForPushNotificationsAsync().catch(() => undefined);
     const tokenChange = Notifications.addPushTokenListener(() => {
       void registerForPushNotificationsAsync().catch(() => undefined);
     });
     return () => {
-      received.remove();
-      response.remove();
       tokenChange.remove();
     };
-  }, []);
+  }, [ready, remoteNotificationsEnabled]);
 
   if (!ready) return null;
 

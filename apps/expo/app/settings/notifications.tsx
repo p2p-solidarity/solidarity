@@ -27,6 +27,10 @@ import {
 } from '@/components/settings/SettingsBlocks';
 import { Colors } from '@/constants/Colors';
 import { useTranslation } from '@/i18n';
+import {
+  registerForPushNotificationsAsync,
+  unregister,
+} from '@/sakura/pushRegistration';
 import { usePreferences } from '@/settings/preferences';
 
 const SYNC_INTERVAL_OPTIONS: readonly { labelKey: string; seconds: number }[] = [
@@ -58,8 +62,25 @@ export default function NotificationSettings() {
     void Linking.openSettings();
   };
 
+  // Toggling Remote Notifications is the explicit opt-in/opt-out action
+  // (R25): turning it ON is the ONE path allowed to raise the OS permission
+  // prompt and register with the relay; turning it OFF tears the registration
+  // down. No automatic cold-launch prompt happens without this.
+  const onRemoteToggle = (next: boolean) => {
+    setPref('notificationsRemote', next);
+    if (next) {
+      void registerForPushNotificationsAsync({ prompt: true }).catch(() => undefined);
+    } else {
+      void unregister().catch(() => undefined);
+    }
+  };
+
   const resetToDefaults = () => {
     setPref('notificationsInAppToast', DEFAULTS.enableInAppToast);
+    // Restore the preference only — reset is not a deliberate "enable
+    // notifications" action, so it must not raise a prompt. The root layout's
+    // opt-in effect reconciles a silent registration if the OS already
+    // granted permission.
     setPref('notificationsRemote', DEFAULTS.enableRemoteNotification);
     setPref('notificationsAutoSync', DEFAULTS.enableAutoSync);
     setPref('notificationsSyncIntervalSeconds', DEFAULTS.syncIntervalSeconds);
@@ -103,7 +124,7 @@ export default function NotificationSettings() {
               title={t('notifications.remote.title')}
               subtitle={t('notifications.remote.subtitle')}
               value={remote}
-              onValueChange={(v) => { setPref('notificationsRemote', v); }}
+              onValueChange={onRemoteToggle}
             />
             <SettingsBlockRow
               icon="gearshape"
