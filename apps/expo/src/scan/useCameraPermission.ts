@@ -14,6 +14,17 @@ import {
 
 export type CameraPermissionState = 'pending' | 'granted' | 'denied';
 
+/**
+ * Persists ACROSS scanner mounts (module scope, not `useState`): once we have
+ * auto-requested the OS permission exactly once and it did not result in a
+ * grant, we must NOT auto-request again on every subsequent scanner mount
+ * (R26 — the permission loop). The OS won't re-prompt after a denial anyway;
+ * recovery is via the denied state's "Open Settings" CTA, not another
+ * silent request. A later grant flips `hasPermission` true and we short-
+ * circuit to 'granted' regardless of this flag.
+ */
+let hasAutoRequested = false;
+
 export function useCameraPermission(): CameraPermissionState {
   const [state, setState] = useState<CameraPermissionState>('pending');
   const { hasPermission, requestPermission } = useVisionCameraPermission();
@@ -22,9 +33,19 @@ export function useCameraPermission(): CameraPermissionState {
     let cancelled = false;
     void (async () => {
       if (hasPermission) {
+        hasAutoRequested = true;
         if (!cancelled) setState('granted');
         return;
       }
+      // Already asked once this session and still no permission → it's a
+      // denial. Surface it WITHOUT re-requesting so the UI can offer
+      // "Open Settings" instead of silently re-triggering the permission
+      // machinery on every remount.
+      if (hasAutoRequested) {
+        if (!cancelled) setState('denied');
+        return;
+      }
+      hasAutoRequested = true;
       const granted = await requestPermission().catch(() => false);
       if (cancelled) return;
       setState(granted ? 'granted' : 'denied');
