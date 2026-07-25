@@ -9,6 +9,7 @@ import { ThemedSurface, ThemedText } from '@/components/themed';
 import { Colors } from '@/constants/Colors';
 import { useTranslation } from '@/i18n';
 import { hasNostrKey, hasNostrKeySync } from '@/nostr/userKey';
+import { usePreferences } from '@/settings/preferences';
 import type { ProfileRecord } from '@solidarity/shared';
 
 export interface IdentityCredentialRowsProps {
@@ -23,8 +24,30 @@ export function IdentityCredentialRows({
   onOpenCredentials,
 }: IdentityCredentialRowsProps): ReactNode {
   const { t } = useTranslation();
+  const rootKeySyncChoice = usePreferences((s) => s.rootKeySyncChoice);
   const [nostrKeyReady, setNostrKeyReady] = useState(() => hasNostrKeySync());
   const [expanded, setExpanded] = useState(false);
+  // Real backup state — the pref is always one of exactly three concrete
+  // values (no loading/error: it's a synchronous MMKV pref with a default).
+  const backupUnset = rootKeySyncChoice === 'undecided';
+  const backup: { readonly icon: SFSymbol; readonly title: string; readonly subtitle: string } =
+    rootKeySyncChoice === 'icloud'
+      ? {
+          icon: 'checkmark.icloud.fill',
+          title: t('meHome.backupStatus.icloudTitle'),
+          subtitle: t('meHome.backupStatus.icloudHint'),
+        }
+      : rootKeySyncChoice === 'mnemonicOnly'
+        ? {
+            icon: 'key.horizontal',
+            title: t('meHome.backupStatus.mnemonicTitle'),
+            subtitle: t('meHome.backupStatus.mnemonicHint'),
+          }
+        : {
+            icon: 'exclamationmark.triangle.fill',
+            title: t('meHome.backupStatus.noneTitle'),
+            subtitle: t('meHome.backupStatus.noneHint'),
+          };
   const blueskyHandle =
     record.alsoKnownAs.find((alias) => alias.startsWith('at://'))?.slice('at://'.length) ?? null;
   const nostrClaimed = record.alsoKnownAs.some((alias) => alias.startsWith('nostr:npub'));
@@ -56,6 +79,17 @@ export function IdentityCredentialRows({
         />
         {expanded ? (
           <>
+            <View style={{ height: 1, marginLeft: 48, backgroundColor: Colors.divider }} />
+            <InsetRow
+              icon={backup.icon}
+              iconColor={backupUnset ? Colors.warning : Colors.text1}
+              title={backup.title}
+              titleColor={backupUnset ? Colors.warning : undefined}
+              subtitle={backup.subtitle}
+              onPress={() => {
+                router.push('/settings/identity-export');
+              }}
+            />
             <View style={{ height: 1, marginLeft: 48, backgroundColor: Colors.divider }} />
             <InsetRow
               icon="checkmark.seal.fill"
@@ -98,14 +132,18 @@ export function IdentityCredentialRows({
 
 function InsetRow({
   icon,
+  iconColor = Colors.text1,
   title,
+  titleColor,
   subtitle,
   onPress,
   trailingIcon = 'chevron.right',
   expanded,
 }: {
   readonly icon: SFSymbol;
+  readonly iconColor?: string;
   readonly title: string;
+  readonly titleColor?: string;
   readonly subtitle: string;
   readonly onPress: () => void;
   readonly trailingIcon?: SFSymbol;
@@ -127,10 +165,12 @@ function InsetRow({
         paddingVertical: 10,
       }}>
       <View style={{ width: 20, height: 20, alignItems: 'center', justifyContent: 'center' }}>
-        <SfIcon name={icon} size={15} color={Colors.text1} />
+        <SfIcon name={icon} size={15} color={iconColor} />
       </View>
       <View className="flex-1 gap-0.5">
-        <ThemedText variant="bodyMedium">{title}</ThemedText>
+        <ThemedText variant="bodyMedium" style={titleColor ? { color: titleColor } : undefined}>
+          {title}
+        </ThemedText>
         <ThemedText variant="caption" tone="tertiary" numberOfLines={1}>
           {subtitle}
         </ThemedText>
