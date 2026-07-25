@@ -28,11 +28,11 @@ import { showError } from '@/feedback/appAlert';
 import { useTranslation } from '@/i18n';
 import { hasRootKey } from '@/identity/rootKey';
 import {
+  formatNostrPublishFailureDetail,
   initialNostrConnectWizardState,
   isBiometricCancellation,
   isNostrPublishOutcomePartiallyAccepted,
   nostrConnectWizardReducer,
-  relayRejectionLines,
 } from '@/nostr/connectWizard';
 import { DEFAULT_RELAYS } from '@/nostr/publish';
 import {
@@ -477,14 +477,9 @@ function GateScreen({
   );
 }
 
+/** Thin local alias — the trace itself is built once in `connectWizard` so
+ *  this screen, PageStep and every other publish surface render the exact
+ *  same localized quorum summary + per-relay rejection lines. */
 function publishFailureDetail(outcome: NostrPublishOutcome, t: TFn): string {
-  return [
-    t('nostrConnect.publishReportDetail', {
-      profileAccepted: outcome.profile.acceptedCount,
-      profileTotal: outcome.profile.results.length,
-      bindingAccepted: outcome.kind0.acceptedCount,
-      bindingTotal: outcome.kind0.results.length,
-    }),
-    ...relayRejectionLines(outcome),
-  ].join('\n');
+  return formatNostrPublishFailureDetail(outcome, t);
 }

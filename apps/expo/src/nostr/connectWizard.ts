@@ -8,6 +8,8 @@
  * as evidence, but an outcome earns `published` only when both existing
  * quorum flags passed.
  */
+import type { TFunction } from 'i18next';
+
 import type { NostrPublishOutcome } from '@/profile/store';
 import type { PublishReport } from '@/nostr/publish';
 import type { Result } from '@solidarity/shared';
@@ -75,20 +77,128 @@ export function isNostrPublishOutcomePartiallyAccepted(outcome: NostrPublishOutc
 }
 
 /**
- * Per-relay failure lines for the error trace. Quorum counts alone ("1 of 3
- * accepted") can't distinguish rate-limiting from a policy reject or a
- * timeout — the relay's own OK/close message is the only evidence, so a
- * quorum-failure report must carry it.
+ * i18n-coded per-relay rejection — a UI adapter formats it with the caller's
+ * `t`. Carrying KEYS (not baked English) is the whole point: this module is a
+ * pure state machine with no i18n import, and every surface must render the
+ * same rejection line in the user's language rather than five hardcoded copies.
  */
-export function relayRejectionLines(outcome: NostrPublishOutcome): readonly string[] {
-  const lines = (label: string, report: PublishReport): string[] =>
+export interface NostrRelayRejection {
+  /** i18n key for the copy this relay rejected: `publishOutcome.copy.page`
+   *  (30078 pointer) or `publishOutcome.copy.verification` (kind-0 binding). */
+  readonly copyKey: NostrRejectionCopyKey;
+  readonly relay: string;
+  /** The relay's own OK/close message, or `null` when it never responded — the
+   *  formatter substitutes the localized `publishOutcome.noResponse`. Quorum
+   *  counts alone ("1 of 3") can't tell rate-limiting from a policy reject or a
+   *  timeout; the relay's message is the only evidence, so it is carried here. */
+  readonly message: string | null;
+  readonly elapsedMs: number;
+}
+
+export type NostrRejectionCopyKey =
+  | 'publishOutcome.copy.page'
+  | 'publishOutcome.copy.verification';
+
+/**
+ * The single structured reading of ONE Nostr publish attempt that every
+ * surface shares (audit R5#3 / R4). `full` and `partial` are BOTH live —
+ * store semantics (04-plan S8f) are the decided truth: ≥1 relay holding each
+ * copy = live; `full` additionally means both quorums passed. `none` = a copy
+ * reached zero relays (never live). `cancelled` / `failed` cover the Result
+ * error paths before any outcome exists (biometric cancel vs. a real error).
+ */
+export type NostrPublishClassification =
+  | { readonly kind: 'full'; readonly outcome: NostrPublishOutcome }
+  | {
+      readonly kind: 'partial';
+      readonly outcome: NostrPublishOutcome;
+      readonly rejections: readonly NostrRelayRejection[];
+    }
+  | {
+      readonly kind: 'none';
+      readonly outcome: NostrPublishOutcome;
+      readonly rejections: readonly NostrRelayRejection[];
+    }
+  | { readonly kind: 'cancelled' }
+  | { readonly kind: 'failed'; readonly message: string };
+
+/** i18n-coded per-relay rejections for both copies of a publish outcome. */
+export function relayRejections(outcome: NostrPublishOutcome): readonly NostrRelayRejection[] {
+  const forCopy = (copyKey: NostrRejectionCopyKey, report: PublishReport): NostrRelayRejection[] =>
     report.results
       .filter((result) => !result.accepted)
-      .map(
-        (result) =>
-          `${label} ${result.relay}: ${result.message.length > 0 ? result.message : 'no response'} (${String(Math.round(result.elapsedMs))}ms)`
-      );
-  return [...lines('page', outcome.profile), ...lines('verification', outcome.kind0)];
+      .map((result) => ({
+        copyKey,
+        relay: result.relay,
+        message: result.message.length > 0 ? result.message : null,
+        elapsedMs: result.elapsedMs,
+      }));
+  return [
+    ...forCopy('publishOutcome.copy.page', outcome.profile),
+    ...forCopy('publishOutcome.copy.verification', outcome.kind0),
+  ];
+}
+
+/**
+ * Classify one publish attempt into the shared outcome union. This is the ONE
+ * place the full/partial/none decision and the biometric-cancel-vs-error split
+ * live; every surface adapts THIS rather than re-deriving quorum rules. Built
+ * on the existing predicates so the store's marker
+ * (`isNostrPublishOutcomePartiallyAccepted`) and the "published" success bar
+ * (`isNostrPublishOutcomeSuccessful`) stay the single sources of the thresholds.
+ */
+export function classifyNostrPublishOutcome(
+  result: Result<NostrPublishOutcome, string>
+): NostrPublishClassification {
+  if (!result.ok) {
+    return isBiometricCancellation(result.error)
+      ? { kind: 'cancelled' }
+      : { kind: 'failed', message: result.error };
+  }
+  const outcome = result.value;
+  if (isNostrPublishOutcomeSuccessful(outcome)) return { kind: 'full', outcome };
+  const rejections = relayRejections(outcome);
+  return isNostrPublishOutcomePartiallyAccepted(outcome)
+    ? { kind: 'partial', outcome, rejections }
+    : { kind: 'none', outcome, rejections };
+}
+
+/**
+ * The shared "accept as published" test: the page is genuinely live on ≥1 relay
+ * per copy. `bluesky` refresh and `websign` MUST use this (not full quorum) so
+ * a partial publish reads as live exactly like the store marks it.
+ */
+export function isNostrPublishClassificationLive(
+  classification: NostrPublishClassification
+): classification is Extract<NostrPublishClassification, { kind: 'full' | 'partial' }> {
+  return classification.kind === 'full' || classification.kind === 'partial';
+}
+
+/** Format one i18n-coded rejection into a display line via the caller's `t`. */
+export function formatNostrRelayRejection(rejection: NostrRelayRejection, t: TFunction): string {
+  return t('publishOutcome.relayRejectionLine', {
+    copy: t(rejection.copyKey),
+    relay: rejection.relay,
+    message: rejection.message ?? t('publishOutcome.noResponse'),
+    ms: Math.round(rejection.elapsedMs),
+  });
+}
+
+/**
+ * The multi-line failure trace every error-showing surface (verify/nostr,
+ * PageStep, me/edit, websign) renders for a sub-quorum publish: the quorum
+ * summary plus one localized line per rejecting relay.
+ */
+export function formatNostrPublishFailureDetail(outcome: NostrPublishOutcome, t: TFunction): string {
+  return [
+    t('nostrConnect.publishReportDetail', {
+      profileAccepted: outcome.profile.acceptedCount,
+      profileTotal: outcome.profile.results.length,
+      bindingAccepted: outcome.kind0.acceptedCount,
+      bindingTotal: outcome.kind0.results.length,
+    }),
+    ...relayRejections(outcome).map((rejection) => formatNostrRelayRejection(rejection, t)),
+  ].join('\n');
 }
 
 /** Covers the tagged provisioning result and saveProfile's stable mapping. */

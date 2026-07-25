@@ -5,7 +5,10 @@
  */
 import { describe, expect, it } from 'bun:test';
 
+import type { TFunction } from 'i18next';
+
 import {
+  formatNostrRelayRejection,
   initialNostrConnectWizardState,
   isBiometricCancellation,
   isNostrPublishOutcomePartiallyAccepted,
@@ -13,10 +16,29 @@ import {
   nostrConnectWizardReducer,
   prepareNostrClaimForSave,
   publishWithNostrAutoSetup,
-  relayRejectionLines,
+  relayRejections,
   type NostrConnectWizardAction,
   type NostrConnectWizardState,
 } from '@/nostr/connectWizard';
+
+/**
+ * Stand-in for i18next that reproduces the real en.json entries for the
+ * publish-outcome namespace, so the formatter test pins the ACTUAL rendered
+ * line rather than a placeholder. Keep in sync with
+ * `src/i18n/locales/en.json` `publishOutcome.*`.
+ */
+const EN_PUBLISH_OUTCOME: Record<string, string> = {
+  'publishOutcome.copy.page': 'page',
+  'publishOutcome.copy.verification': 'verification',
+  'publishOutcome.noResponse': 'no response',
+};
+
+const t = ((key: string, vars?: Record<string, unknown>): string => {
+  if (key === 'publishOutcome.relayRejectionLine') {
+    return `${String(vars?.['copy'])} ${String(vars?.['relay'])}: ${String(vars?.['message'])} (${String(vars?.['ms'])}ms)`;
+  }
+  return EN_PUBLISH_OUTCOME[key] ?? key;
+}) as unknown as TFunction;
 
 const SUCCESSFUL_OUTCOME = {
   profile: {
@@ -236,7 +258,7 @@ describe('publish outcome and cancellation helpers', () => {
   });
 
   it('carries each rejected relay message into the failure trace, and nothing on full success', () => {
-    expect(relayRejectionLines(SUCCESSFUL_OUTCOME)).toEqual([]);
+    expect(relayRejections(SUCCESSFUL_OUTCOME)).toEqual([]);
 
     const partial = {
       profile: {
@@ -258,7 +280,28 @@ describe('publish outcome and cancellation helpers', () => {
         success: false,
       },
     };
-    expect(relayRejectionLines(partial)).toEqual([
+    // The structured reading carries the relay's own evidence plus an i18n
+    // KEY for which copy failed — no baked English in the state machine.
+    expect(relayRejections(partial)).toEqual([
+      {
+        copyKey: 'publishOutcome.copy.page',
+        relay: 'wss://b.example',
+        message: 'rate-limited: slow down',
+        elapsedMs: 90.4,
+      },
+      {
+        // A relay that never answered carries `null`, so the formatter — not
+        // the state machine — decides how "no response" reads per locale.
+        copyKey: 'publishOutcome.copy.verification',
+        relay: 'wss://a.example',
+        message: null,
+        elapsedMs: 8000,
+      },
+    ]);
+
+    // …and rendering through the real en.json shapes reproduces exactly the
+    // lines the hardcoded formatter used to emit (no user-visible drift).
+    expect(relayRejections(partial).map((r) => formatNostrRelayRejection(r, t))).toEqual([
       'page wss://b.example: rate-limited: slow down (90ms)',
       'verification wss://a.example: no response (8000ms)',
     ]);

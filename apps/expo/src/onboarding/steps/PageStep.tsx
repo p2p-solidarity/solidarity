@@ -36,10 +36,10 @@ import { showError } from '@/feedback/appAlert';
 import { haptic } from '@/feedback/haptics';
 import { useTranslation } from '@/i18n';
 import {
+  formatNostrPublishFailureDetail,
   isBiometricCancellation,
   isNostrPublishOutcomePartiallyAccepted,
   publishWithNostrAutoSetup,
-  relayRejectionLines,
 } from '@/nostr/connectWizard';
 import { DEFAULT_RELAYS } from '@/nostr/publish';
 import { hasNostrKey, provisionFromRootMnemonic } from '@/nostr/userKey';
@@ -152,15 +152,7 @@ export function PageStep({ onBack, onNext }: PageStepProps) {
             summary: t('pageStep.publishFailed'),
             error: new Error(
               published.ok
-                ? [
-                    t('nostrConnect.publishReportDetail', {
-                      profileAccepted: published.value.profile.acceptedCount,
-                      profileTotal: published.value.profile.results.length,
-                      bindingAccepted: published.value.kind0.acceptedCount,
-                      bindingTotal: published.value.kind0.results.length,
-                    }),
-                    ...relayRejectionLines(published.value),
-                  ].join('\n')
+                ? formatNostrPublishFailureDetail(published.value, t)
                 : published.error,
             ),
           });
