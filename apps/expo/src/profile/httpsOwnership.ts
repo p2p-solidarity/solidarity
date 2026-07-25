@@ -166,7 +166,7 @@ async function fetchBounded(
   }
 }
 
-export async function verifyHttpsOwnership({
+async function performVerification({
   did,
   links,
   profileUrls,
@@ -207,4 +207,88 @@ export async function verifyHttpsOwnership({
   return (await Promise.all(checks)).filter(
     (item): item is HttpsOwnershipEvidence => item !== null,
   );
+}
+
+// ─── Module-level TTL + in-flight cache (R24) ────────────────────────────────
+//
+// Website ownership was re-fetched on every Me-tab focus AND every
+// /verify/nostr mount. A completed check is stable for a while (the proof is
+// an HTTPS DID document or a rel=me link that changes rarely), so we cache the
+// result keyed on (did, sorted links, sorted profile URLs) for the SAME 15-min
+// window `badgeStatusCache` uses, and coalesce concurrent probes for one key
+// into a single in-flight round-trip. Both call sites get the cache for free
+// without being edited.
+//
+// The cache applies ONLY to the default (production) fetch. A caller that
+// injects a custom `fetchImpl` — the unit tests, or any future direct
+// injection — bypasses the cache entirely so every call is observable and its
+// per-caller `signal` is honored verbatim.
+
+/** Same window as `badgeStatusCache`'s BADGE_REVERIFY_TTL_MS. */
+export const HTTPS_OWNERSHIP_TTL_MS = 15 * 60_000;
+
+interface OwnershipCacheEntry {
+  readonly value: readonly HttpsOwnershipEvidence[];
+  readonly expiresAt: number;
+}
+
+const resultCache = new Map<string, OwnershipCacheEntry>();
+const inFlightCache = new Map<string, Promise<readonly HttpsOwnershipEvidence[]>>();
+let nowFn: () => number = () => Date.now();
+
+/** Stable key: order-independent in both `links` and `profileUrls`, so the
+ * Me tab and /verify/nostr (which build the URL lists independently) collapse
+ * onto one cache entry. */
+export function httpsOwnershipCacheKey(
+  did: string,
+  links: readonly string[],
+  profileUrls: readonly string[],
+): string {
+  return JSON.stringify([did, [...links].sort(), [...profileUrls].sort()]);
+}
+
+export function verifyHttpsOwnership(
+  input: VerifyHttpsOwnershipInput,
+): Promise<readonly HttpsOwnershipEvidence[]> {
+  // Custom fetch (tests / direct injection) skips the shared cache.
+  if (input.fetchImpl !== undefined) return performVerification(input);
+
+  const key = httpsOwnershipCacheKey(input.did, input.links, input.profileUrls);
+  const now = nowFn();
+
+  const cached = resultCache.get(key);
+  if (cached && cached.expiresAt > now) return Promise.resolve(cached.value);
+
+  const existing = inFlightCache.get(key);
+  if (existing) return existing;
+
+  // The shared computation deliberately omits the per-caller AbortSignal: two
+  // screens dedupe onto one probe, so one screen unmounting must not abort the
+  // other's result. The per-fetch timeout still bounds it.
+  const run = performVerification({
+    did: input.did,
+    links: input.links,
+    profileUrls: input.profileUrls,
+    timeoutMs: input.timeoutMs,
+  })
+    .then((value) => {
+      resultCache.set(key, { value, expiresAt: nowFn() + HTTPS_OWNERSHIP_TTL_MS });
+      return value;
+    })
+    .finally(() => {
+      if (inFlightCache.get(key) === run) inFlightCache.delete(key);
+    });
+  inFlightCache.set(key, run);
+  return run;
+}
+
+/** Test-only: clear both cache layers between cases. */
+export function __resetHttpsOwnershipCacheForTesting(): void {
+  resultCache.clear();
+  inFlightCache.clear();
+}
+
+/** Test-only: inject a deterministic clock (pass `null` to restore Date.now). */
+export function __setHttpsOwnershipClockForTesting(fn: (() => number) | null): void {
+  nowFn = fn ?? (() => Date.now());
 }
