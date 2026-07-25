@@ -43,7 +43,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { ActivityIndicator, Platform, TextInput, View } from 'react-native';
 
-import { ThemedButton, ThemedText } from '@/components/themed';
+import { ThemedButton, ThemedText, ThemedTextInput } from '@/components/themed';
 import { Colors } from '@/constants/Colors';
 import { showError } from '@/feedback/appAlert';
 import { confirmDialog } from '@/feedback/confirmDialog';
@@ -51,8 +51,10 @@ import { haptic } from '@/feedback/haptics';
 import { useTranslation } from '@/i18n';
 import {
   createFromFreshMnemonic,
+  deriveDidFromMnemonic,
   enableICloudBackup,
   hasRootKey,
+  importFromMnemonic,
   restoreRootKeyFromICloud,
   revealMnemonicForExport,
 } from '@/identity';
@@ -60,6 +62,7 @@ import { usePreferences } from '@/settings/preferences';
 import {
   resolveIcloudAcceptOutcome,
   resolveMnemonicForCeremony,
+  resolvePhraseImportOutcome,
   resolveRecoveryDecision,
 } from './backupStepLogic';
 import { OnboardingScaffold } from './OnboardingScaffold';
@@ -73,7 +76,14 @@ export interface BackupStepProps {
   readonly onDone: () => void;
 }
 
-type Phase = 'loading' | 'error' | 'question' | 'reveal' | 'confirm';
+type Phase =
+  | 'loading'
+  | 'error'
+  | 'question'
+  | 'reveal'
+  | 'confirm'
+  | 'recoveryFailed'
+  | 'enterPhrase';
 
 const CONFIRM_WORD_COUNT = 3;
 
@@ -105,6 +115,11 @@ export function BackupStep({ onBack, onDone }: BackupStepProps) {
   const [revealingForCeremony, setRevealingForCeremony] = useState(false);
   // Only set while the real iCloud Keychain write is in flight.
   const [icloudSubmitting, setIcloudSubmitting] = useState(false);
+  // Recovery-failure "Enter recovery phrase" leg (in-memory only, cleared on
+  // success/leave — never logged or persisted outside the keychain import).
+  const [phraseInput, setPhraseInput] = useState('');
+  const [phraseError, setPhraseError] = useState(false);
+  const [phraseImporting, setPhraseImporting] = useState(false);
   // Retry re-runs the provisioning effect (its deps otherwise never change —
   // a phase flip alone left the spinner stuck forever). Safe to re-run: the
   // effect's hasRootKey() check keeps provisioning idempotent.
@@ -125,28 +140,24 @@ export function BackupStep({ onBack, onDone }: BackupStepProps) {
       // restoreRootKeyFromICloud guarantees this only imports when nothing is
       // local, so it can't silently switch an existing identity.
       // A FAILED read (keychain error, corrupt synced phrase) must not fall
-      // through to a silent fresh mint either — the user chooses: retry, or
-      // explicitly create a new identity (user decision 2026-07-17).
+      // through to a silent fresh mint either — the user chooses (user
+      // decision 2026-07-17, extended 2026-07-24 to the three options the
+      // rootKey.ts contract names: retry / enter phrase / start fresh). The
+      // 'recoveryFailed' phase renders those choices; never auto-mint here.
       if (Platform.OS === 'ios') {
-        let mintApproved = false;
-        while (!mintApproved) {
-          const decision = resolveRecoveryDecision(await restoreRootKeyFromICloud());
-          if (cancelled) return;
-          if (decision.kind === 'recovered') {
-            // Recovered a backed-up identity → they already use iCloud backup.
-            setPref('rootKeySyncChoice', 'icloud');
-            onDone();
-            return;
-          }
-          if (decision.kind === 'mintFresh') break;
-          mintApproved = await confirmDialog({
-            title: t('backupStep.cloudReadFailed.title'),
-            message: t('backupStep.cloudReadFailed.message'),
-            confirmLabel: t('backupStep.cloudReadFailed.startFresh'),
-            cancelLabel: t('backupStep.cloudReadFailed.retry'),
-            destructive: true,
-          });
+        const decision = resolveRecoveryDecision(await restoreRootKeyFromICloud());
+        if (cancelled) return;
+        if (decision.kind === 'recovered') {
+          // Recovered a backed-up identity → they already use iCloud backup.
+          setPref('rootKeySyncChoice', 'icloud');
+          onDone();
+          return;
         }
+        if (decision.kind === 'askUser') {
+          setPhase('recoveryFailed');
+          return;
+        }
+        // decision.kind === 'mintFresh' (authoritative notFound) → mint below.
       }
       const created = await createFromFreshMnemonic();
       if (cancelled) return;
@@ -214,6 +225,93 @@ export function BackupStep({ onBack, onDone }: BackupStepProps) {
       onDone();
     } finally {
       setIcloudSubmitting(false);
+    }
+  };
+
+  /** Re-run the provisioning effect — re-attempts the iCloud recovery read. */
+  const retryRecovery = () => {
+    setPhase('loading');
+    setProvisionNonce((value) => value + 1);
+  };
+
+  /**
+   * Mint a brand-new identity. Reached ONLY from the double-confirmed Start
+   * Fresh button below — never auto-invoked (mirrors the effect's fresh-mint
+   * tail). Biometric semantics unchanged: minting itself is not Face-ID-gated.
+   */
+  const mintFreshRootKey = async () => {
+    const created = await createFromFreshMnemonic();
+    if (!created.ok) {
+      showError({
+        context: 'Onboarding › Backup',
+        summary: t('backupStep.provisionFailed'),
+        error: new Error(created.error.kind),
+      });
+      setPhase('error');
+      return;
+    }
+    setMnemonicWords(created.value.mnemonic.split(' '));
+    setPhase('question');
+  };
+
+  /**
+   * Start Fresh — destructive and double-confirmed (this handler is the first
+   * deliberate act, `confirmDialog` the second). Kept LAST in the choice list.
+   */
+  const startFreshFromRecovery = async () => {
+    const confirmed = await confirmDialog({
+      title: t('backupStep.cloudReadFailed.title'),
+      message: t('backupStep.cloudReadFailed.message'),
+      confirmLabel: t('backupStep.cloudReadFailed.startFresh'),
+      cancelLabel: t('alert.cancel'),
+      destructive: true,
+    });
+    if (!confirmed) return;
+    setPhase('loading');
+    await mintFreshRootKey();
+  };
+
+  /** Leave the enter-phrase screen, wiping the in-memory phrase + error. */
+  const leaveEnterPhrase = (next: Phase) => {
+    setPhraseInput('');
+    setPhraseError(false);
+    setPhase(next);
+  };
+
+  /**
+   * Enter-recovery-phrase leg: reuse the EXISTING derive + import path. On
+   * success this is the same terminal effect as the `recovered` path — record
+   * the (mnemonic-only) backup choice and advance. A bad phrase shows an
+   * inline field error, never a silent no-op.
+   */
+  const submitPhrase = async () => {
+    setPhraseImporting(true);
+    try {
+      const outcome = await resolvePhraseImportOutcome(
+        phraseInput,
+        deriveDidFromMnemonic,
+        importFromMnemonic
+      );
+      if (outcome.kind === 'invalid') {
+        haptic('error');
+        setPhraseError(true);
+        return;
+      }
+      if (outcome.kind === 'error') {
+        showError({
+          context: 'Onboarding › Backup',
+          summary: t('backupStep.enterPhrase.importFailed'),
+          error: new Error(outcome.error.kind),
+        });
+        return;
+      }
+      haptic('success');
+      setPhraseInput('');
+      // Manually-entered phrase → the user holds it outside iCloud.
+      setPref('rootKeySyncChoice', 'mnemonicOnly');
+      onDone();
+    } finally {
+      setPhraseImporting(false);
     }
   };
 
@@ -305,6 +403,82 @@ export function BackupStep({ onBack, onDone }: BackupStepProps) {
           </ThemedText>
         ) : null}
         <View style={{ flex: 1 }} />
+      </OnboardingScaffold>
+    );
+  }
+
+  if (phase === 'recoveryFailed') {
+    return (
+      <OnboardingScaffold
+        onBack={onBack}
+        title={t('backupStep.cloudReadFailed.title')}
+        subtitle={t('backupStep.cloudReadFailed.message')}
+        footer={
+          <View style={{ gap: 12 }}>
+            <ThemedButton
+              label={t('backupStep.cloudReadFailed.retry')}
+              variant="inverted"
+              fullWidth
+              onPress={retryRecovery}
+            />
+            <ThemedButton
+              label={t('backupStep.cloudReadFailed.enterPhrase')}
+              variant="dottedOutline"
+              fullWidth
+              onPress={() => {
+                leaveEnterPhrase('enterPhrase');
+              }}
+            />
+            <ThemedButton
+              label={t('backupStep.cloudReadFailed.startFresh')}
+              variant="destructive"
+              fullWidth
+              onPress={() => {
+                void startFreshFromRecovery();
+              }}
+            />
+          </View>
+        }
+      >
+        <View style={{ flex: 1 }} />
+      </OnboardingScaffold>
+    );
+  }
+
+  if (phase === 'enterPhrase') {
+    return (
+      <OnboardingScaffold
+        onBack={() => {
+          leaveEnterPhrase('recoveryFailed');
+        }}
+        title={t('backupStep.enterPhrase.title')}
+        subtitle={t('backupStep.enterPhrase.message')}
+        footer={
+          <ThemedButton
+            label={t('backupStep.enterPhrase.action')}
+            variant="inverted"
+            fullWidth
+            loading={phraseImporting}
+            disabled={phraseInput.trim().length === 0}
+            onPress={() => {
+              void submitPhrase();
+            }}
+          />
+        }
+      >
+        <ThemedTextInput
+          kind="did"
+          multiline
+          autoFocus
+          value={phraseInput}
+          onChangeText={(text) => {
+            setPhraseError(false);
+            setPhraseInput(text);
+          }}
+          placeholder={t('backupStep.enterPhrase.placeholder')}
+          error={phraseError ? t('backupStep.enterPhrase.invalid') : null}
+          accessibilityLabel={t('backupStep.enterPhrase.title')}
+        />
       </OnboardingScaffold>
     );
   }

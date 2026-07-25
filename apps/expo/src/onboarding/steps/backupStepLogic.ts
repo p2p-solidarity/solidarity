@@ -65,6 +65,45 @@ export async function resolveIcloudAcceptOutcome(
   return { kind: 'success' };
 }
 
+export type PhraseImportOutcome =
+  | { readonly kind: 'invalid' }
+  | { readonly kind: 'imported'; readonly did: string }
+  | { readonly kind: 'error'; readonly error: RootKeyError };
+
+/**
+ * Resolve the recovery-failure "Enter recovery phrase" leg (the THIRD option
+ * offered when `restoreRootKeyFromICloud` fails — see `rootKey.ts`'s
+ * `restoreRootKeyFromICloud` doc: callers offer Retry / Enter Phrase / Start
+ * Fresh). Reuses the EXISTING derivation + import path (`deriveDidFromMnemonic`
+ * + `importFromMnemonic`) rather than reimplementing any crypto:
+ *
+ * - empty / BIP-39-invalid phrase → `invalid` (caller shows an inline field
+ *   error — a mistyped word must never be mistaken for a storage failure);
+ * - import (persist) failure → `error` (caller surfaces the real typed error);
+ * - persisted → `imported` (caller records `rootKeySyncChoice='mnemonicOnly'`
+ *   — the user holds the phrase outside iCloud — and advances via `onDone()`,
+ *   the same terminal effect as the `recovered` path).
+ *
+ * Pure decision only: never logs, persists, or returns the plaintext phrase
+ * beyond handing it to the injected functions (the same functions the export
+ * settings screen uses, which keep it on the existing keychain path).
+ */
+export async function resolvePhraseImportOutcome(
+  phrase: string,
+  deriveFn: (mnemonic: string) => Result<string, RootKeyError>,
+  importFn: (mnemonic: string) => Promise<Result<{ readonly did: string }, RootKeyError>>
+): Promise<PhraseImportOutcome> {
+  const trimmed = phrase.trim();
+  if (trimmed.length === 0) return { kind: 'invalid' };
+  // Validate BEFORE persisting so a bad phrase never reaches storage and is
+  // reported as a field error, not an import failure.
+  const derived = deriveFn(trimmed);
+  if (!derived.ok) return { kind: 'invalid' };
+  const imported = await importFn(trimmed);
+  if (!imported.ok) return { kind: 'error', error: imported.error };
+  return { kind: 'imported', did: imported.value.did };
+}
+
 /** What BackupStep's provisioning effect must do with a recovery attempt. */
 export type RootKeyRecoveryDecision =
   | { readonly kind: 'recovered'; readonly did: string }
