@@ -1273,6 +1273,7 @@
   "present.attestations": "Attestations",
   "present.publicPage": "Public Page",
   "present.cardSummary": "Public Page + {{count}} items",
+  "present.flipCard": "Flip Card",
   "present.cardOnly": "Card Only",
   "present.showCardQr": "Show Card QR",
   "present.createCard": "Create Card",

@@ -58,7 +58,10 @@ describe('Present product surface', () => {
     expect(product).toContain("router.push('/scan')");
     expect(product).not.toContain('buildRuntimeSolidarityQrWire');
     expect(product).not.toContain('generateQrPng');
-    const card = source('../../src/components/present/PresentCard.tsx');
+    const card = [
+      source('../../src/components/present/PresentCard.tsx'),
+      source('../../src/components/present/PresentCardVisual.tsx'),
+    ].join('\n');
     expect(card).toContain('LinearGradient');
     expect(card).toContain('animalImageSource');
     expect(card).toContain('const CARD_RADIUS = 20');
@@ -71,6 +74,12 @@ describe('Present product surface', () => {
     expect(card).toContain('shareFieldPreferencesFromFields');
     expect(card).toContain('sealedRoute: page?.url');
     expect(card).toContain('model.selectedCardOnlyCount');
+    expect(card).toContain('ANIMAL_GRADIENT_END');
+    expect(card).toContain('enableGlow');
+    expect(card).toContain('SensorType.ROTATION');
+    expect(card).toContain('useReducedMotion');
+    expect(card).toContain("backfaceVisibility: 'hidden'");
+    expect(card).toContain("t('present.flipCard')");
   });
 
   it('shows only presentable Passport attestations through the existing credential route', () => {
