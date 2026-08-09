@@ -30,12 +30,17 @@ describe('S5 onboarding and Bluesky UI wiring', () => {
   it('keeps verification on Page instead of adding a technical onboarding step', () => {
     const flow = source('../../app/onboarding/index.tsx');
     const ready = source('../../src/onboarding/steps/ReadyStep.tsx');
-    const meRows = source('../../src/components/me/IdentityCredentialRows.tsx');
+    const pageRoute = source('../../app/(tabs)/me/index.tsx');
 
     expect(flow).not.toContain("case 'connect'");
-    expect(flow).toContain("router.replace('/verify/bluesky')");
-    expect(meRows).toContain("router.push('/verify/bluesky')");
-    expect(meRows).toContain('onOpenBindings');
+    expect(flow).not.toContain("router.replace('/verify/bluesky')");
+    expect(flow).toContain('pathname: PRIMARY_TAB_HREFS.page');
+    expect(flow).toContain("addProof: '1'");
+    expect(pageRoute).toContain("params.addProof === '1'");
+    expect(pageRoute).toContain("router.setParams({ addProof: '0' })");
+    expect(pageRoute).toContain('openAddProof()');
+    expect(pageRoute).toContain("router.push('/passport')");
+    expect(pageRoute).not.toContain("router.push('/verify/nostr')");
     expect(`${flow}\n${ready}`).not.toMatch(/<Pressable(?:\s|>)/u);
   });
 

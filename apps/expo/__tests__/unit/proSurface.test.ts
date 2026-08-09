@@ -21,6 +21,7 @@ describe('simple Pro surface', () => {
   });
 
   it('keeps trust features free and lists the five v2 Pro benefits', () => {
+    const settings = source('../../app/settings/index.tsx');
     const pro = source('../../app/settings/pro.tsx');
 
     expect(pro).toContain('FREE_FEATURE_KEYS');
@@ -31,6 +32,13 @@ describe('simple Pro surface', () => {
     expect(pro).toContain("'pro.feature.leaveCard'");
     expect(pro).toContain("'pro.feature.control'");
     expect(pro).toContain("'pro.feature.dashboard'");
+    expect(settings).not.toContain("trailingText={t('pro.free')}");
+    expect(en['pro.free.domainIdentity']).toBe(
+      'Domain verification and using a domain as your username'
+    );
+    expect(zhHant['pro.free.domainIdentity']).toBe('網域驗證與以網域作為使用者名稱');
+    expect(en['pro.feature.domain']).toBe('Use your own domain as the page URL');
+    expect(zhHant['pro.feature.domain']).toBe('自有網域當頁面網址');
     expect(en['pro.price']).toBe('US$36 a year');
     expect(zhHant['pro.price']).toBe('US$36 / 年');
   });

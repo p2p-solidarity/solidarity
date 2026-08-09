@@ -26,8 +26,10 @@ import {
 export interface PeopleScreenState {
   readonly contacts: readonly ContactManifestEntry[];
   readonly loading: boolean;
+  readonly error: boolean;
   readonly refreshing: boolean;
   readonly refresh: () => void;
+  readonly retry: () => void;
 }
 
 export function usePeopleScreen(): PeopleScreenState {
@@ -39,17 +41,34 @@ export function usePeopleScreen(): PeopleScreenState {
   const hydrate = useContactStore((s) => s.hydrate);
   const detailsHydrated = useContactStore((s) => s.detailsHydrated);
   const [refreshing, setRefreshing] = useState(false);
+  const [loadError, setLoadError] = useState(false);
+
+  const hydrateContacts = useCallback(async (): Promise<boolean> => {
+    setLoadError(false);
+    try {
+      await hydrate();
+      return true;
+    } catch {
+      setLoadError(true);
+      return false;
+    }
+  }, [hydrate]);
 
   useEffect(() => {
     seedFromManifest();
-    void hydrate();
-  }, [seedFromManifest, hydrate]);
+    void hydrateContacts();
+  }, [seedFromManifest, hydrateContacts]);
+
+  const retry = useCallback(() => {
+    void hydrateContacts();
+  }, [hydrateContacts]);
 
   const refresh = useCallback(() => {
     setRefreshing(true);
     void (async () => {
       try {
-        await hydrate();
+        const hydrated = await hydrateContacts();
+        if (!hydrated) return;
         // Self-gates on backupEnabled + autoBackupOnPull + the shared cooldown,
         // and uses the user's chosen provider — no more unconditional backup.
         await requestBackup('pull');
@@ -57,12 +76,14 @@ export function usePeopleScreen(): PeopleScreenState {
         setRefreshing(false);
       }
     })();
-  }, [hydrate]);
+  }, [hydrateContacts]);
 
   return {
     contacts,
-    loading: !detailsHydrated && contacts.length === 0,
+    loading: !loadError && !detailsHydrated && contacts.length === 0,
+    error: loadError,
     refreshing,
     refresh,
+    retry,
   };
 }

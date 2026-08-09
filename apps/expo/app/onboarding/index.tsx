@@ -51,7 +51,10 @@ export default function OnboardingFlow(): ReactNode {
 
   const finishToFirstCheck = (): void => {
     markComplete();
-    router.replace('/verify/bluesky');
+    router.replace({
+      pathname: PRIMARY_TAB_HREFS.page,
+      params: { addProof: '1' },
+    });
   };
 
   const recoveredExistingAccount = (): void => {

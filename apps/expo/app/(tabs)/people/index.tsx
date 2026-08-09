@@ -7,7 +7,7 @@ import * as FileSystem from 'expo-file-system/legacy';
 import { router } from 'expo-router';
 import * as Sharing from 'expo-sharing';
 import { useMemo, useState } from 'react';
-import { ActivityIndicator, ScrollView, Text, View } from 'react-native';
+import { ActivityIndicator, ScrollView, View } from 'react-native';
 import Animated, { FadeIn } from 'react-native-reanimated';
 import { FlashList } from '@shopify/flash-list';
 import ReanimatedSwipeable, {
@@ -41,7 +41,7 @@ import { usePreferences } from '@/settings/preferences';
 
 export default function PeopleTab() {
   const { t } = useTranslation();
-  const { contacts, loading, refresh } = usePeopleScreen();
+  const { contacts, loading, error, refresh, retry } = usePeopleScreen();
   const removeContact = useContactStore((s) => s.remove);
   const loadDetail = useContactStore((s) => s.loadDetail);
   const upsertDeclared = useProfileSnapshotStore((s) => s.upsertDeclared);
@@ -263,7 +263,9 @@ export default function PeopleTab() {
         onClose={() => { setDeleteSheetOpen(false); }}
       />
 
-      {loading ? (
+      {error ? (
+        <ContactsLoadError onRetry={retry} />
+      ) : loading ? (
         <LoadingState />
       ) : contacts.length === 0 ? (
         <EmptyContactsContent
@@ -429,16 +431,12 @@ function SwipeDeleteAction({ onPress }: { readonly onPress: () => void }) {
       }}
     >
       <SfIcon name="trash" size={18} color={Colors.invertedButtonText} />
-      <Text
-        style={{
-          color: Colors.invertedButtonText,
-          fontSize: 12,
-          marginTop: 4,
-          fontWeight: '500',
-        }}
+      <ThemedText
+        variant="caption"
+        style={{ color: Colors.invertedButtonText, marginTop: 4 }}
       >
         {t('peopleList.delete')}
-      </Text>
+      </ThemedText>
     </PressableScale>
   );
 }
@@ -664,6 +662,24 @@ function LoadingState() {
   );
 }
 
+function ContactsLoadError({ onRetry }: { readonly onRetry: () => void }) {
+  const { t } = useTranslation();
+  return (
+    <View className="flex-1 items-center justify-center gap-3 px-8 py-10">
+      <SfIcon name="exclamationmark.triangle" size={36} color={Colors.warning} />
+      <ThemedText variant="titleMedium" style={{ textAlign: 'center' }}>
+        {t('peopleList.loadErrorTitle')}
+      </ThemedText>
+      <ThemedText variant="bodyMedium" tone="secondary" style={{ textAlign: 'center' }}>
+        {t('peopleList.loadErrorBody')}
+      </ThemedText>
+      <View className="w-full pt-3">
+        <ThemedButton fullWidth label={t('peopleList.tryAgain')} onPress={onRetry} />
+      </View>
+    </View>
+  );
+}
+
 function EmptySearchState({
   query,
   onAdd,
@@ -677,9 +693,9 @@ function EmptySearchState({
   return (
     <View className="flex-1 items-center justify-center gap-3 px-8 py-10">
       <SfIcon name="magnifyingglass" size={36} color={Colors.text3} />
-      <Text className="text-text2 text-center text-[14px]">
+      <ThemedText variant="bodySmall" tone="secondary" style={{ textAlign: 'center' }}>
         {t('peopleList.noResults', { query })}
-      </Text>
+      </ThemedText>
       <View className="w-full gap-2 pt-3">
         <ThemedButton fullWidth label={t('peopleList.add')} onPress={onAdd} />
         <ThemedButton

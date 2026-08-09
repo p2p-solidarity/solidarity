@@ -1,4 +1,5 @@
-import { router } from 'expo-router';
+import { router, useLocalSearchParams } from 'expo-router';
+import { useCallback, useEffect } from 'react';
 import { View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -7,6 +8,7 @@ import { useProfileStore } from '@/profile/store';
 
 export default function MeTab() {
   const insets = useSafeAreaInsets();
+  const params = useLocalSearchParams<{ addProof?: string }>();
   const record = useProfileStore((state) => state.record);
   const jws = useProfileStore((state) => state.jws);
   const status = useProfileStore((state) => state.status);
@@ -21,6 +23,16 @@ export default function MeTab() {
   const shareRecord = shared?.record ?? record;
   const shareJws = shared?.jws ?? jws;
   const nostrShortUrlReady = published !== null && nostrPublishedJws === published.jws;
+  const addProofRequested = params.addProof === '1';
+  const openAddProof = useCallback(() => {
+    router.push('/passport');
+  }, []);
+
+  useEffect(() => {
+    if (!addProofRequested || status !== 'ready') return;
+    router.setParams({ addProof: '0' });
+    openAddProof();
+  }, [addProofRequested, openAddProof, status]);
 
   return (
     <View className="flex-1 bg-pageBg" style={{ paddingTop: insets.top }}>
@@ -50,7 +62,7 @@ export default function MeTab() {
             router.push('/settings');
           }}
           onOpenBindings={() => {
-            router.push('/verify/nostr');
+            openAddProof();
           }}
         />
       ) : (

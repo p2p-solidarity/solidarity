@@ -55,4 +55,45 @@ describe('v2 product terminology boundary', () => {
     expect(data).not.toContain("router.push('/settings/vc')");
     expect(data).not.toContain('exportGraph.todo');
   });
+
+  it('keeps Page publication badges and saved-page rows human-facing', () => {
+    const badgeLabelKeys = [
+      'badges.nostr.checking',
+      'badges.nostr.verifiedLabel',
+      'badges.nostr.declaredLabel',
+      'badges.nostr.staleLabel',
+    ] as const;
+    const technicalDetailKeys = [
+      'badges.nostr.evidenceTitle',
+      'badges.nostr.evidence.verified',
+      'badges.nostr.evidence.declared',
+      'badges.nostr.evidence.stale',
+      'badges.nostr.evidence.npubLine',
+      'badges.nostr.evidence.direction1Held',
+      'badges.nostr.evidence.direction1Missing',
+      'badges.nostr.evidence.direction2Held',
+      'badges.nostr.evidence.direction2Missing',
+      'badges.nostr.evidence.direction2Unknown',
+      'badges.nostr.evidence.lastUpdatedLine',
+      'badges.website.evidence.didDocument',
+    ] as const;
+    const hardTerms = /DID|kind-0|npub|relays?|public key|中繼站|公鑰/iu;
+    const protocolTerms = /DID|Nostr|kind-0|npub|relays?|public key|中繼站|公鑰/iu;
+
+    for (const key of badgeLabelKeys) {
+      expect(en[key]).toContain('Nostr');
+      expect(zhHant[key]).toContain('Nostr');
+      expect(en[key]).not.toMatch(hardTerms);
+      expect(zhHant[key]).not.toMatch(hardTerms);
+    }
+    for (const key of technicalDetailKeys) {
+      expect(en[key]).not.toMatch(protocolTerms);
+      expect(zhHant[key]).not.toMatch(protocolTerms);
+    }
+
+    const badges = source('../../src/components/me/ProfileBadgeChips.tsx');
+    expect(badges).toMatch(/nostrUploaded\s+\? record\.alsoKnownAs/u);
+    const savedPages = source('../../src/components/people/VerifiedPagesSection.tsx');
+    expect(savedPages).not.toContain('shortDid');
+  });
 });

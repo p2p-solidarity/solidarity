@@ -76,6 +76,23 @@ describe('v2 Contacts surface', () => {
     );
     expect(noResults).toContain("t('peopleList.add')");
     expect(noResults).toContain("t('peopleList.importFromPhone')");
+    expect(noResults).toContain('<ThemedText');
+    expect(noResults).not.toMatch(/<Text(?:\s|>)/u);
+  });
+
+  it('turns a hydration rejection into an explicit retryable error state', () => {
+    const people = source('../../app/(tabs)/people/index.tsx');
+    const hook = source('../../src/people/usePeopleScreen.ts');
+
+    expect(hook).toContain('readonly error: boolean');
+    expect(hook).toContain('readonly retry: () => void');
+    expect(hook).toContain('setLoadError(true)');
+    expect(people).toContain('const { contacts, loading, error, refresh, retry } = usePeopleScreen()');
+    expect(people).toContain('error ? (');
+    expect(people).toContain('<ContactsLoadError onRetry={retry} />');
+    expect(people).toContain("t('peopleList.loadErrorTitle')");
+    expect(people).toContain("t('peopleList.loadErrorBody')");
+    expect(people).toContain("t('peopleList.tryAgain')");
   });
 
   it('hydrates selected encrypted details before one real vCard share', () => {

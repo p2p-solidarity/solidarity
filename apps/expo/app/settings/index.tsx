@@ -94,7 +94,6 @@ export default function SettingsHub() {
             <SettingsBlockRow
               icon="sparkles"
               title={t('settingsHub.plan')}
-              trailingText={t('pro.free')}
               onPress={() => { router.push('/settings/pro'); }}
             />
           </SettingsBlockSection>

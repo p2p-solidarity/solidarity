@@ -31,7 +31,6 @@ import type { ReactNode } from 'react';
 import { View } from 'react-native';
 
 import { PressableScale } from '@/components/common/PressableScale';
-import { shortDid } from '@/components/id';
 import { SfIcon } from '@/components/icons/SfIcon';
 import { ThemedText } from '@/components/themed';
 import { Colors } from '@/constants/Colors';
@@ -121,7 +120,7 @@ function VerifiedPageRow({
           {snapshot.record.displayName}
         </ThemedText>
         <ThemedText variant="caption" tone="tertiary" numberOfLines={1}>
-          {`${shortDid(snapshot.did)} · ${relativeAtLabel(snapshot.verifiedAt, t)}`}
+          {relativeAtLabel(snapshot.verifiedAt, t)}
         </ThemedText>
       </View>
       <SfIcon name="chevron.right" size={12} weight="semibold" color={Colors.text3} />
