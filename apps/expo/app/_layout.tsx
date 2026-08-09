@@ -127,6 +127,8 @@ export default function RootLayout() {
   const [ready, setReady] = useState(false);
   const receivedCard = useReceivedCard((s) => s.card);
   const receivedVerification = useReceivedCard((s) => s.verificationStatus);
+  const receivedSource = useReceivedCard((s) => s.source);
+  const receivedSealedRoute = useReceivedCard((s) => s.sealedRoute);
   const dismissReceived = useReceivedCard((s) => s.dismiss);
   const upsertContact = useContactStore((s) => s.upsert);
   // Swift ThemeManager.applyColorScheme → here we forward the user pref to
@@ -323,6 +325,8 @@ export default function RootLayout() {
             visible={receivedCard !== null}
             card={receivedCard}
             verificationStatus={receivedVerification}
+            source={receivedSource}
+            sealedRoute={receivedSealedRoute}
             onSave={async (contact) => {
               await upsertContact(contact);
               dismissReceived();

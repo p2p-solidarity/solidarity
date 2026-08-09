@@ -1,49 +1,43 @@
 /**
- * ReceivedCardSheet — 1:1 port of solidarity/Views/Common/ReceivedCardView.swift.
+ * ReceivedCardSheet — incoming Card preview and save ceremony.
  *
  * Bottom-sheet preview for an incoming BusinessCard handed to the app
  * by a deep link. Mirrors the Swift screen: SakuraIcon ring header,
  * card-detail block (avatar + name + title + company + verification +
  * email + phone) and two CTAs (Save to Contacts / Continue).
  *
- * Integration point — `apps/expo/src/deeplink/router.ts` currently
- * navigates to `/people/[id]` after persisting; for a true "card just
- * arrived, save?" flow we still need to:
- *   1. emit a `card-received` event from `handleDeepLink` (e.g. via
- *      `DeviceEventEmitter`) carrying the decoded BusinessCard payload,
- *   2. subscribe in `app/_layout.tsx` and mount this sheet with
- *      `visible / card / onSaved / onDismiss` props,
- *   3. call `useContactStore().upsert(...)` on save then route to the
- *      person detail page.
- * Touching the router lives outside this commit so the sheet ships
- * standalone and the wiring is one small follow-up patch.
+ * Scanner provenance, verification status, and the sealed reply route stay
+ * attached until the Contact is persisted from the app root.
  */
-import { useEffect, useState, type ReactNode } from 'react';
+import { useState, type ReactNode } from 'react';
 import { Modal, Pressable, ScrollView, Text, View } from 'react-native';
-import Animated, {
-  Easing,
-  cancelAnimation,
-  useAnimatedStyle,
-  useSharedValue,
-  withRepeat,
-  withTiming,
-} from 'react-native-reanimated';
+import Animated, { FadeIn } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { SakuraIcon } from '@/components/brand/SakuraIcon';
 import { PeerAvatar } from '@/components/cards/PeerAvatar';
+import { buildContactFromReceivedCard } from '@/cards/receivedCard';
 import { DecorativeBlobs } from '@/components/decor/DecorativeBlobs';
 import { SfIcon } from '@/components/icons/SfIcon';
 import { ThemedButton } from '@/components/themed/ThemedButton';
 import { Colors } from '@/constants/Colors';
+import { haptic } from '@/feedback/haptics';
 import { pushToast } from '@/feedback/toast';
+import { useTranslation } from '@/i18n';
 import { uuid } from '@solidarity/shared';
-import type { BusinessCard, Contact, VerificationStatus } from '@solidarity/shared';
+import type {
+  BusinessCard,
+  Contact,
+  ContactSource,
+  VerificationStatus,
+} from '@solidarity/shared';
 
 export interface ReceivedCardSheetProps {
   readonly visible: boolean;
   readonly card: BusinessCard | null;
-  readonly verificationStatus?: VerificationStatus;
+  readonly verificationStatus: VerificationStatus;
+  readonly source: ContactSource;
+  readonly sealedRoute?: string;
   readonly onSave: (contact: Contact) => void | Promise<void>;
   readonly onDismiss: () => void;
 }
@@ -51,7 +45,9 @@ export interface ReceivedCardSheetProps {
 export function ReceivedCardSheet({
   visible,
   card,
-  verificationStatus = 'Unverified',
+  verificationStatus,
+  source,
+  sealedRoute,
   onSave,
   onDismiss,
 }: ReceivedCardSheetProps): ReactNode {
@@ -66,6 +62,8 @@ export function ReceivedCardSheet({
         <ReceivedCardContent
           card={card}
           verificationStatus={verificationStatus}
+          source={source}
+          sealedRoute={sealedRoute}
           onSave={onSave}
           onDismiss={onDismiss}
         />
@@ -77,47 +75,45 @@ export function ReceivedCardSheet({
 function ReceivedCardContent({
   card,
   verificationStatus,
+  source,
+  sealedRoute,
   onSave,
   onDismiss,
 }: {
   readonly card: BusinessCard;
   readonly verificationStatus: VerificationStatus;
+  readonly source: ContactSource;
+  readonly sealedRoute?: string;
   readonly onSave: (contact: Contact) => void | Promise<void>;
   readonly onDismiss: () => void;
 }): ReactNode {
   const insets = useSafeAreaInsets();
+  const { t } = useTranslation();
   const [isSaved, setIsSaved] = useState(false);
-  const ringScale = useSharedValue(1);
-
-  useEffect(() => {
-    ringScale.value = withRepeat(
-      withTiming(1.1, { duration: 800, easing: Easing.inOut(Easing.ease) }),
-      -1,
-      true
-    );
-    return () => {
-      cancelAnimation(ringScale);
-    };
-  }, [ringScale]);
-
-  const ringStyle = useAnimatedStyle(() => ({
-    transform: [{ scale: ringScale.value }],
-  }));
+  const [saving, setSaving] = useState(false);
 
   const handleSave = async (): Promise<void> => {
-    if (isSaved) return;
-    const now = new Date();
-    const contact: Contact = {
+    if (isSaved || saving) return;
+    const contact = buildContactFromReceivedCard({
       id: uuid(),
-      businessCard: card,
-      receivedAt: now,
-      source: 'Proximity',
-      tags: [],
-      verificationStatus: 'Unverified',
-    };
-    await onSave(contact);
-    setIsSaved(true);
-    pushToast(`Saved ${card.name}`, 'success');
+      card,
+      receivedAt: new Date(),
+      source,
+      verificationStatus,
+      sealedRoute,
+    });
+    setSaving(true);
+    try {
+      await onSave(contact);
+      setIsSaved(true);
+      haptic('success');
+      pushToast(t('receivedCard.savedToast', { name: card.name }), 'success');
+    } catch {
+      haptic('error');
+      pushToast(t('receivedCard.saveFailed'), 'error');
+    } finally {
+      setSaving(false);
+    }
   };
 
   return (
@@ -150,17 +146,15 @@ function ReceivedCardContent({
             }}
           >
             <Animated.View
-              style={[
-                {
-                  position: 'absolute',
-                  width: 100,
-                  height: 100,
-                  borderRadius: 50,
-                  borderWidth: 4,
-                  borderColor: Colors.accentRose,
-                },
-                ringStyle,
-              ]}
+              entering={FadeIn.duration(220)}
+              style={{
+                position: 'absolute',
+                width: 100,
+                height: 100,
+                borderRadius: 50,
+                borderWidth: 4,
+                borderColor: Colors.accentRose,
+              }}
             />
             <SakuraIcon size={40} color={Colors.accentRose} animating />
           </View>
@@ -174,7 +168,7 @@ function ReceivedCardContent({
                 textAlign: 'center',
               }}
             >
-              Sakura Card Received
+              {t('receivedCard.title')}
             </Text>
             <Text
               style={{
@@ -185,8 +179,8 @@ function ReceivedCardContent({
               }}
             >
               {isSaved
-                ? 'Business card has been saved to your contacts'
-                : 'Tap save to add this card to your contacts'}
+                ? t('receivedCard.saved')
+                : t('receivedCard.saveHint')}
             </Text>
           </View>
         </View>
@@ -196,10 +190,11 @@ function ReceivedCardContent({
         <View style={{ rowGap: 12 }}>
           {isSaved ? null : (
             <ThemedButton
-              label="Save to Contacts"
+              label={t('receivedCard.save')}
               variant="primary"
               size="lg"
               fullWidth
+              loading={saving}
               leadingIcon={
                 <SfIcon name="square.and.arrow.down" size={18} color={Colors.cardBg} />
               }
@@ -209,7 +204,7 @@ function ReceivedCardContent({
             />
           )}
           <ThemedButton
-            label="Continue"
+            label={t('receivedCard.continue')}
             variant="secondary"
             size="lg"
             fullWidth
@@ -231,6 +226,7 @@ function CardDetailBlock({
   readonly card: BusinessCard;
   readonly verificationStatus: VerificationStatus;
 }): ReactNode {
+  const { t } = useTranslation();
   return (
     <View
       style={{
@@ -251,7 +247,7 @@ function CardDetailBlock({
             flex: 1,
           }}
         >
-          Card Details
+          {t('receivedCard.details')}
         </Text>
         <SakuraIcon size={24} color={Colors.accentRose} animating />
       </View>
@@ -298,11 +294,14 @@ function CardDetailBlock({
 }
 
 function VerificationChip({ status }: { readonly status: VerificationStatus }): ReactNode {
+  const { t } = useTranslation();
   const tint = verificationTint(status);
   return (
     <View style={{ flexDirection: 'row', alignItems: 'center', columnGap: 6 }}>
       <SfIcon name={verificationIcon(status)} size={12} color={tint} />
-      <Text style={{ fontSize: 12, color: Colors.text2 }}>{status}</Text>
+      <Text style={{ fontSize: 12, color: Colors.text2 }}>
+        {t(verificationStatusKey(status))}
+      </Text>
     </View>
   );
 }
@@ -354,6 +353,7 @@ function InitialAvatar({ name }: { readonly name: string }): ReactNode {
 }
 
 function Toolbar({ onDone }: { readonly onDone: () => void }): ReactNode {
+  const { t } = useTranslation();
   return (
     <View
       style={{
@@ -366,15 +366,29 @@ function Toolbar({ onDone }: { readonly onDone: () => void }): ReactNode {
     >
       <View style={{ width: 60 }} />
       <Text style={{ fontSize: 17, fontWeight: '600', color: Colors.text1 }}>
-        Sakura Received
+        {t('receivedCard.toolbar')}
       </Text>
       <Pressable accessibilityRole="button" onPress={onDone} hitSlop={8}>
         <Text style={{ fontSize: 16, color: Colors.text1, fontWeight: '600' }}>
-          Done
+          {t('peopleList.done')}
         </Text>
       </Pressable>
     </View>
   );
+}
+
+function verificationStatusKey(status: VerificationStatus): string {
+  switch (status) {
+    case 'Verified':
+      return 'receivedCard.status.verified';
+    case 'Pending':
+      return 'receivedCard.status.pending';
+    case 'Failed':
+      return 'receivedCard.status.failed';
+    case 'Unverified':
+    default:
+      return 'receivedCard.status.unverified';
+  }
 }
 
 function verificationIcon(

@@ -50,6 +50,7 @@ import { issuePassportShowChallenge } from '@/passport/showVerifier';
 import { resolveProfileByHandle } from '@/handles/resolveProfile';
 import { resolveProfileByNpub } from '@/nostr/resolveProfile';
 import { QrScanner } from '@/scan/QrScanner';
+import { credentialOfferRouteFromScan } from '@/scan/credentialOfferRoute';
 import { handleScannedPayload } from '@/scan/envelopeHandler';
 import { passportShowVerifierResult } from '@/scan/passportShowResult';
 import { classifyVerifiedPagePayload, verifyFragment } from '@/scan/verifiedPageHandler';
@@ -109,6 +110,15 @@ export default function ScanScreen() {
       return;
     }
 
+    // OID4VCI offers have their own issuance ceremony. Keep the scanned wire
+    // byte-for-byte in `q`: the offer screen accepts the full URI and parses
+    // its `credential_offer` payload there.
+    const credentialOfferRoute = credentialOfferRouteFromScan(payload);
+    if (credentialOfferRoute !== null) {
+      router.push(credentialOfferRoute);
+      return;
+    }
+
     // Verified Page fragment QR (1.3.3 Task A2.3, US-11) — tried first as a
     // cheap, self-contained format sniff. Returns `null` for anything that
     // isn't a verified-page payload at all (old exchange-QR wire formats,
@@ -141,12 +151,22 @@ export default function ScanScreen() {
     void (async () => {
       const outcome = await handleScannedPayload(payload);
       if (outcome.kind === 'card' && outcome.card) {
-        presentReceivedCard(outcome.card, outcome.verificationStatus);
+        if (outcome.verificationStatus === undefined) {
+          pushToast(t('scan.couldNotRead'), 'error');
+          setIsScanning(true);
+          return;
+        }
+        presentReceivedCard({
+          card: outcome.card,
+          verificationStatus: outcome.verificationStatus,
+          source: 'QR Code',
+          sealedRoute: outcome.sealedRoute,
+        });
         safeBack();
         return;
       }
       if (outcome.kind === 'error') {
-        pushToast(outcome.errorMessage ?? 'Scan failed', 'error');
+        pushToast(t('scan.couldNotRead'), 'error');
         setRoute(null);
         setIsScanning(true);
         return;
@@ -338,10 +358,7 @@ async function classifyPayload(payload: string): Promise<ScanRoute> {
     return { kind: 'raw', payload };
   }
 
-  const isOidc =
-    url.protocol === 'openid4vp:' ||
-    url.protocol === 'openid-vp:' ||
-    url.protocol === 'openid-credential-offer:';
+  const isOidc = url.protocol === 'openid4vp:' || url.protocol === 'openid-vp:';
   if (!isOidc) return { kind: 'raw', payload };
 
   const vpToken = url.searchParams.get('vp_token');

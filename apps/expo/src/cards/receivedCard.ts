@@ -1,28 +1,68 @@
 import { create } from 'zustand';
 
-import type { BusinessCard, VerificationStatus } from '@solidarity/shared';
+import type {
+  BusinessCard,
+  Contact,
+  ContactSource,
+  VerificationStatus,
+} from '@solidarity/shared';
+
+export interface ReceivedCardPresentation {
+  readonly card: BusinessCard;
+  readonly verificationStatus: VerificationStatus;
+  readonly source: ContactSource;
+  readonly sealedRoute?: string;
+}
 
 interface ReceivedCardState {
   readonly card: BusinessCard | null;
   readonly verificationStatus: VerificationStatus;
-  readonly present: (card: BusinessCard, verificationStatus?: VerificationStatus) => void;
+  readonly source: ContactSource;
+  readonly sealedRoute?: string;
+  readonly present: (presentation: ReceivedCardPresentation) => void;
   readonly dismiss: () => void;
 }
 
 export const useReceivedCard = create<ReceivedCardState>((set) => ({
   card: null,
   verificationStatus: 'Unverified',
-  present: (card, verificationStatus = 'Unverified') => {
-    set({ card, verificationStatus });
+  source: 'QR Code',
+  sealedRoute: undefined,
+  present: ({ card, verificationStatus, source, sealedRoute }) => {
+    set({ card, verificationStatus, source, sealedRoute });
   },
   dismiss: () => {
-    set({ card: null });
+    set({
+      card: null,
+      verificationStatus: 'Unverified',
+      source: 'QR Code',
+      sealedRoute: undefined,
+    });
   },
 }));
 
-export function presentReceivedCard(
-  card: BusinessCard,
-  verificationStatus: VerificationStatus = 'Unverified'
-): void {
-  useReceivedCard.getState().present(card, verificationStatus);
+export function presentReceivedCard(presentation: ReceivedCardPresentation): void {
+  useReceivedCard.getState().present(presentation);
+}
+
+export function buildContactFromReceivedCard({
+  id,
+  card,
+  receivedAt,
+  verificationStatus,
+  source,
+  sealedRoute,
+}: ReceivedCardPresentation & {
+  readonly id: string;
+  readonly receivedAt: Date;
+}): Contact {
+  return {
+    id,
+    businessCard: card,
+    receivedAt,
+    source,
+    tags: [],
+    verificationStatus,
+    ...(sealedRoute === undefined ? {} : { sealedRoute }),
+  };
 }
