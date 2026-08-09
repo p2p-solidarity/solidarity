@@ -50,6 +50,7 @@ describe('Present product surface', () => {
     expect(cardMode.indexOf('<CardOnlySection')).toBeGreaterThan(
       cardMode.indexOf('<PublicPageSection')
     );
+    expect(cardMode).toContain("model.cardState.kind === 'ready'");
     expect(publicPage).not.toContain('<Switch');
     expect(product).toContain('<Switch');
     expect(product).toContain("router.push('/settings/share-settings')");
@@ -64,6 +65,12 @@ describe('Present product surface', () => {
     expect(card).toContain('borderRadius: CARD_RADIUS');
     expect(card).toContain('generateQrPng');
     expect(card).toContain('displayProfileShareUrl');
+    expect(card).toContain('cardAccentHex');
+    expect(card).toContain('usePreferences');
+    expect(card).toContain('buildRuntimeSolidarityQrWire');
+    expect(card).toContain('shareFieldPreferencesFromFields');
+    expect(card).toContain('sealedRoute: page?.url');
+    expect(card).toContain('model.selectedCardOnlyCount');
   });
 
   it('shows only presentable Passport attestations through the existing credential route', () => {

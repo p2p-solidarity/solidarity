@@ -82,7 +82,13 @@ export function ProfileInlineQr({
   nostrShortUrlReady,
 }: ProfileShareSurfaceProps): ReactNode {
   const { t } = useTranslation();
-  const shareState = useProfileShareSelection(record, jws, nostrShortUrlReady);
+  const [inlineRetryNonce, setInlineRetryNonce] = useState(0);
+  const shareState = useProfileShareSelection(
+    record,
+    jws,
+    nostrShortUrlReady,
+    inlineRetryNonce,
+  );
   const selected = shareState.kind === 'ready' ? shareState.selected : null;
   const [imageUri, setImageUri] = useState<string | null>(null);
   const [failed, setFailed] = useState(false);
@@ -108,6 +114,23 @@ export function ProfileInlineQr({
     };
   }, [selected?.url]);
 
+  if (shareState.kind === 'error') {
+    return (
+      <ThemedSurface variant="outlined" className="items-center gap-3 rounded-2xl p-4">
+        <SfIcon name="exclamationmark.triangle" size={22} color={Colors.destructive} />
+        <ThemedText variant="bodySmall" tone="error" style={{ textAlign: 'center' }}>
+          {t('meShare.modelError')}
+        </ThemedText>
+        <ThemedButton
+          label={t('meShare.retry')}
+          variant="secondary"
+          onPress={() => {
+            setInlineRetryNonce((value) => value + 1);
+          }}
+        />
+      </ThemedSurface>
+    );
+  }
   if (selected === null) return null;
   const displayUrl = displayProfileShareUrl(selected);
 

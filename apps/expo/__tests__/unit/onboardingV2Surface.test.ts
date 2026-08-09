@@ -44,7 +44,12 @@ describe('v2 onboarding contract', () => {
 
   it('uses product language rather than protocol vocabulary', () => {
     expect(zhHant['ob.welcome.title']).toBe('建立你的可查驗身分');
-    expect(zhHant['ob.passkey.title']).toBe('建立通行密鑰');
+    expect(zhHant['ob.passkey.title']).toBe('保護你的帳號');
+    expect(zhHant['ob.passkey.btn']).toBe('設定安全存取');
+    expect(zhHant['ob.done.passkey']).toBe('帳號保護');
+    expect(en['ob.passkey.title']).toBe('Protect Your Account');
+    expect(en['ob.passkey.btn']).toBe('Set Up Secure Access');
+    expect(en['ob.done.passkey']).toBe('Account Protection');
     expect(zhHant['ob.links.title']).toBe('放上你的連結');
     expect(en['ob.done.title']).toBe('[ Ready ]');
 
@@ -56,6 +61,13 @@ describe('v2 onboarding contract', () => {
       '../../src/onboarding/steps/ReadyStep.tsx',
     ].map(source).join('\n');
     expect(files).not.toMatch(/\bDID\b|Nostr|public key|seed phrase/u);
+    for (const catalog of [en, zhHant]) {
+      const onboardingCopy = Object.entries(catalog)
+        .filter(([key]) => key.startsWith('ob.passkey.') || key === 'ob.done.passkey')
+        .map(([, value]) => value)
+        .join('\n');
+      expect(onboardingCopy).not.toMatch(/passkey|通行密鑰|passwordless|無密碼/iu);
+    }
   });
 });
 

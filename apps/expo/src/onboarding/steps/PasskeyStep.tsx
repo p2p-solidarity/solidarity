@@ -59,7 +59,7 @@ export function PasskeyStep({
     } catch (error) {
       haptic('error');
       showError({
-        context: 'Onboarding › Passkey',
+        context: 'Onboarding › Account Protection',
         summary: t('ob.passkey.failed'),
         error,
       });

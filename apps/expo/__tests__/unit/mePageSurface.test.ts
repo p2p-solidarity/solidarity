@@ -110,6 +110,9 @@ describe('Page surface', () => {
     expect(shareContent).toContain("t('meShare.useFormat'");
     expect([route, page, hero, links, badges].join('\n')).not.toContain('generateQrPng');
     expect(share).toContain('export function ProfileInlineQr');
+    expect(share).toContain("shareState.kind === 'error'");
+    expect(share).toContain('setInlineRetryNonce');
+    expect(share).toContain("t('meShare.modelError')");
 
     expect(motion).toContain('STAGGER_MS = 40');
     expect(page).toContain('const ENTRANCE_DURATION_MS = 240');

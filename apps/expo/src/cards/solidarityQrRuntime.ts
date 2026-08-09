@@ -16,6 +16,8 @@ import {
 
 export interface RuntimeSolidarityQrOptions {
   readonly proofClaims?: readonly string[];
+  /** Optional public page carried alongside the selected card snapshot. */
+  readonly sealedRoute?: string;
 }
 
 /**
@@ -51,6 +53,7 @@ export async function buildRuntimeSolidarityQrWire(
     sharingLevel: 'professional',
     shareFieldPreferences,
     proofClaims: runtimeOptions.proofClaims,
+    sealedRoute: runtimeOptions.sealedRoute,
   };
   const format = card.sharingPreferences.sharingFormat;
 

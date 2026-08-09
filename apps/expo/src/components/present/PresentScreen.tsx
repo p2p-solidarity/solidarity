@@ -253,17 +253,19 @@ function CardMode({
 }): ReactNode {
   return (
     <View className="gap-6">
-      {shareRecord !== null && shareJws !== null ? (
-        <PresentCardWithPageUrl
-          model={model}
-          ownerName={ownerName}
-          shareRecord={shareRecord}
-          shareJws={shareJws}
-          nostrShortUrlReady={nostrShortUrlReady}
-        />
-      ) : (
-        <PresentCard model={model} ownerName={ownerName} page={null} />
-      )}
+      {model.cardState.kind === 'ready' ? (
+        shareRecord !== null && shareJws !== null ? (
+          <PresentCardWithPageUrl
+            model={model}
+            ownerName={ownerName}
+            shareRecord={shareRecord}
+            shareJws={shareJws}
+            nostrShortUrlReady={nostrShortUrlReady}
+          />
+        ) : (
+          <PresentCard model={model} ownerName={ownerName} page={null} />
+        )
+      ) : null}
       <PublicPageSection model={model} />
       <CardOnlySection
         model={model}
