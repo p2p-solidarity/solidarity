@@ -7,12 +7,17 @@
  * consumer-facing `'pending' | 'granted' | 'denied'` contract and translate
  * at the edge so callers don't have to learn the camera library shape.
  */
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import {
   useCameraPermission as useVisionCameraPermission,
 } from 'react-native-vision-camera';
 
-export type CameraPermissionState = 'pending' | 'granted' | 'denied';
+export type CameraPermissionState = 'prompt' | 'pending' | 'granted' | 'denied';
+
+export interface CameraPermissionControl {
+  readonly state: CameraPermissionState;
+  readonly request: () => Promise<void>;
+}
 
 /**
  * Persists ACROSS scanner mounts (module scope, not `useState`): once we have
@@ -25,35 +30,39 @@ export type CameraPermissionState = 'pending' | 'granted' | 'denied';
  */
 let hasAutoRequested = false;
 
-export function useCameraPermission(): CameraPermissionState {
+export function useCameraPermissionControl(
+  autoRequest = false,
+): CameraPermissionControl {
   const [state, setState] = useState<CameraPermissionState>('pending');
   const { hasPermission, requestPermission } = useVisionCameraPermission();
 
-  useEffect(() => {
-    let cancelled = false;
-    void (async () => {
-      if (hasPermission) {
-        hasAutoRequested = true;
-        if (!cancelled) setState('granted');
-        return;
-      }
-      // Already asked once this session and still no permission → it's a
-      // denial. Surface it WITHOUT re-requesting so the UI can offer
-      // "Open Settings" instead of silently re-triggering the permission
-      // machinery on every remount.
-      if (hasAutoRequested) {
-        if (!cancelled) setState('denied');
-        return;
-      }
-      hasAutoRequested = true;
-      const granted = await requestPermission().catch(() => false);
-      if (cancelled) return;
-      setState(granted ? 'granted' : 'denied');
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [hasPermission, requestPermission]);
+  const request = useCallback(async (): Promise<void> => {
+    setState('pending');
+    hasAutoRequested = true;
+    const granted = await requestPermission().catch(() => false);
+    setState(granted ? 'granted' : 'denied');
+  }, [requestPermission]);
 
-  return state;
+  useEffect(() => {
+    if (hasPermission) {
+      hasAutoRequested = true;
+      setState('granted');
+      return;
+    }
+    if (hasAutoRequested) {
+      setState('denied');
+      return;
+    }
+    if (autoRequest) {
+      void request();
+      return;
+    }
+    setState('prompt');
+  }, [autoRequest, hasPermission, request]);
+
+  return { state, request };
+}
+
+export function useCameraPermission(): CameraPermissionState {
+  return useCameraPermissionControl(true).state;
 }

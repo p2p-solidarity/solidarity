@@ -2,8 +2,7 @@
  * Scan screen — 1:1 port of Swift ScanTabView. Full-screen camera preview
  * with a dimmed-mask ScanWindowOverlay (centred square cut-out + four
  * green corner brackets), nav bar "Scan" inline + trailing `qrcode`
- * (open proof-request QR), and a footer SolidarityPlaceholderCard "Protocol
- * Router" showing supported flows.
+ * (open proof-request QR), and concise human-facing scan guidance.
  *
  * Capture feedback: when a payload is decoded we play a short shutter-style
  * animation (corner brackets pulse + a brief white flash overlay) on the
@@ -17,6 +16,7 @@
  *     in Wave 1.
  */
 import { router } from 'expo-router';
+import type { TFunction } from 'i18next';
 import { safeBack } from '@/navigation/safeBack';
 import { useCallback, useRef, useState } from 'react';
 import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
@@ -38,8 +38,7 @@ import {
   VerifierResultSheet,
   type VerifierResult,
 } from '@/components/scan/VerifierResultSheet';
-import { SolidarityPlaceholderCard } from '@/components/passport/SolidarityPlaceholderCard';
-import { ThemedButton } from '@/components/themed';
+import { ThemedButton, ThemedSurface, ThemedText } from '@/components/themed';
 import { Colors } from '@/constants/Colors';
 import { presentReceivedCard } from '@/cards/receivedCard';
 import { haptic } from '@/feedback/haptics';
@@ -178,7 +177,7 @@ export default function ScanScreen() {
         });
         return;
       }
-      setRoute(await classifyPayload(payload));
+      setRoute(await classifyPayload(payload, t));
     })();
   }, [t]);
 
@@ -231,7 +230,7 @@ export default function ScanScreen() {
         >
           <Text className="text-text1 text-[15px]">{t('scan.close')}</Text>
         </Pressable>
-        <Text className="text-text1 text-[17px] font-semibold">Scan</Text>
+        <Text className="text-text1 text-[17px] font-semibold">{t('scan.title')}</Text>
         <PressableScale
           haptic="tap"
           scaleTo={SCALE.icon}
@@ -254,15 +253,20 @@ export default function ScanScreen() {
             className="rounded-xl bg-mutedSurface px-4 py-3 items-center"
           >
             <Text className="text-text2 text-[13px]">
-              {`Receiving ${String(progress.received)} / ${String(progress.total)}…`}
+              {t('scan.receiving', {
+                received: progress.received,
+                total: progress.total,
+              })}
             </Text>
           </View>
         ) : (
-          <SolidarityPlaceholderCard
-            screenID="SCAN-1"
-            title="Protocol Router"
-            subtitle="Supports OID4VP request, vp_token verify, credential offers, and SIOPv2."
-          />
+          <ThemedSurface variant="elevated" padded className="items-center gap-2">
+            <SfIcon name="qrcode.viewfinder" size={24} color={Colors.terminalGreen} />
+            <ThemedText variant="label">{t('scan.readyTitle')}</ThemedText>
+            <ThemedText variant="bodySmall" tone="secondary" style={{ textAlign: 'center' }}>
+              {t('scan.readyHint')}
+            </ThemedText>
+          </ThemedSurface>
         )}
         <ThemedButton
           variant="secondary"
@@ -281,7 +285,7 @@ export default function ScanScreen() {
         {isScanning ? (
           <View className="flex-row items-center justify-center gap-1.5">
             <ActivityIndicator size="small" />
-            <Text className="text-text2 text-[12px]">Scanning...</Text>
+            <Text className="text-text2 text-[12px]">{t('scan.scanning')}</Text>
           </View>
         ) : null}
       </View>
@@ -323,6 +327,7 @@ function ScannedResultView({
   result: string;
   onClear: () => void;
 }) {
+  const { t } = useTranslation();
   const insets = useSafeAreaInsets();
   return (
     <View
@@ -330,7 +335,7 @@ function ScannedResultView({
       style={{ paddingTop: insets.top + 16 }}
     >
       <View>
-        <Text className="text-text1 text-[24px] font-medium">Scanned</Text>
+        <Text className="text-text1 text-[24px] font-medium">{t('scan.resultTitle')}</Text>
         <View className="mt-4 rounded-xl bg-mutedSurface p-4">
           <Text
             selectable
@@ -343,14 +348,14 @@ function ScannedResultView({
         </View>
       </View>
       <View className="gap-2" style={{ paddingBottom: insets.bottom }}>
-        <ThemedButton label="Scan another" fullWidth onPress={onClear} />
-        <ThemedButton variant="secondary" label="Close" fullWidth onPress={() => { safeBack(); }} />
+        <ThemedButton label={t('scan.scanAnother')} fullWidth onPress={onClear} />
+        <ThemedButton variant="secondary" label={t('scan.close')} fullWidth onPress={() => { safeBack(); }} />
       </View>
     </View>
   );
 }
 
-async function classifyPayload(payload: string): Promise<ScanRoute> {
+async function classifyPayload(payload: string, t: TFunction): Promise<ScanRoute> {
   let url: URL;
   try {
     url = new URL(payload);
@@ -374,27 +379,30 @@ async function classifyPayload(payload: string): Promise<ScanRoute> {
         kind: 'verifier',
         result: {
           valid: true,
-          title: 'Presentation verified',
-          reason: `${String(vp.credentials.length)} credential(s) · ${url.host || url.protocol}`,
+          title: t('scan.proof.verifiedTitle'),
+          reason: t('scan.proof.verifiedSummary', {
+            count: vp.credentials.length,
+            source: url.host || url.protocol,
+          }),
           details: [
-            `Holder: ${vp.holderDid}`,
+            t('scan.proof.presentedBy', { value: vp.holderDid }),
             ...vp.credentials.map(
-              (c, i) => `VC ${String(i + 1)} issuer: ${c.issuerDid}`
+              (c, i) => t('scan.proof.issuedBy', {
+                index: i + 1,
+                value: c.issuerDid,
+              })
             ),
           ],
         },
       };
-    } catch (e) {
+    } catch {
       return {
         kind: 'verifier',
         result: {
           valid: false,
-          title: 'Verification failed',
-          reason:
-            e instanceof Error ? e.message : 'Presentation could not be verified',
-          details: [
-            'The presentation signature, expiry, or an embedded credential did not verify.',
-          ],
+          title: t('scan.proof.failedTitle'),
+          reason: t('scan.proof.failedReason'),
+          details: [t('scan.proof.failedBody')],
         },
       };
     }

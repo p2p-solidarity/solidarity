@@ -5,6 +5,7 @@ export type PrimaryTabIcon =
 
 export const PRIMARY_TAB_HREFS = {
   page: '/(tabs)/me',
+  present: '/(tabs)/verify',
 } as const;
 
 /**

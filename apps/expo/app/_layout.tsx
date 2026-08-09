@@ -32,7 +32,7 @@ import '../global.css';
 
 import { useEffect, useState } from 'react';
 import { Appearance } from 'react-native';
-import { Stack } from 'expo-router';
+import { router, Stack } from 'expo-router';
 import * as Linking from 'expo-linking';
 import * as Notifications from 'expo-notifications';
 import * as SplashScreen from 'expo-splash-screen';
@@ -67,6 +67,7 @@ import { hydratePreferences, usePreferences } from '@/settings/preferences';
 import { useShoutoutStore } from '@/shoutouts/store';
 import { initMmkv, ManifestStorage } from '@/storage';
 import { useVaultStore } from '@/vault/store';
+import { PRIMARY_TAB_HREFS } from '@/navigation/primaryTabs';
 
 import { CARDS_MANIFEST_SCOPE } from '@/cards/cardManifest';
 import { CONTACTS_MANIFEST_SCOPE } from '@/contacts/contactManifest';
@@ -329,7 +330,10 @@ export default function RootLayout() {
             sealedRoute={receivedSealedRoute}
             onSave={async (contact) => {
               await upsertContact(contact);
+            }}
+            onShowMine={() => {
               dismissReceived();
+              router.replace(PRIMARY_TAB_HREFS.present);
             }}
             onDismiss={dismissReceived}
           />

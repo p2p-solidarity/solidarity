@@ -4,7 +4,7 @@
  * Bottom-sheet preview for an incoming BusinessCard handed to the app
  * by a deep link. Mirrors the Swift screen: SakuraIcon ring header,
  * card-detail block (avatar + name + title + company + verification +
- * email + phone) and two CTAs (Save to Contacts / Continue).
+ * email + phone) and the v2 reciprocal-exchange CTAs.
  *
  * Scanner provenance, verification status, and the sealed reply route stay
  * attached until the Contact is persisted from the app root.
@@ -39,6 +39,7 @@ export interface ReceivedCardSheetProps {
   readonly source: ContactSource;
   readonly sealedRoute?: string;
   readonly onSave: (contact: Contact) => void | Promise<void>;
+  readonly onShowMine: () => void;
   readonly onDismiss: () => void;
 }
 
@@ -49,6 +50,7 @@ export function ReceivedCardSheet({
   source,
   sealedRoute,
   onSave,
+  onShowMine,
   onDismiss,
 }: ReceivedCardSheetProps): ReactNode {
   return (
@@ -65,6 +67,7 @@ export function ReceivedCardSheet({
           source={source}
           sealedRoute={sealedRoute}
           onSave={onSave}
+          onShowMine={onShowMine}
           onDismiss={onDismiss}
         />
       ) : null}
@@ -78,6 +81,7 @@ function ReceivedCardContent({
   source,
   sealedRoute,
   onSave,
+  onShowMine,
   onDismiss,
 }: {
   readonly card: BusinessCard;
@@ -85,6 +89,7 @@ function ReceivedCardContent({
   readonly source: ContactSource;
   readonly sealedRoute?: string;
   readonly onSave: (contact: Contact) => void | Promise<void>;
+  readonly onShowMine: () => void;
   readonly onDismiss: () => void;
 }): ReactNode {
   const insets = useSafeAreaInsets();
@@ -92,7 +97,7 @@ function ReceivedCardContent({
   const [isSaved, setIsSaved] = useState(false);
   const [saving, setSaving] = useState(false);
 
-  const handleSave = async (): Promise<void> => {
+  const handleSave = async (showMine: boolean): Promise<void> => {
     if (isSaved || saving) return;
     const contact = buildContactFromReceivedCard({
       id: uuid(),
@@ -108,6 +113,11 @@ function ReceivedCardContent({
       setIsSaved(true);
       haptic('success');
       pushToast(t('receivedCard.savedToast', { name: card.name }), 'success');
+      if (showMine) {
+        onShowMine();
+      } else {
+        onDismiss();
+      }
     } catch {
       haptic('error');
       pushToast(t('receivedCard.saveFailed'), 'error');
@@ -188,30 +198,32 @@ function ReceivedCardContent({
         <CardDetailBlock card={card} verificationStatus={verificationStatus} />
 
         <View style={{ rowGap: 12 }}>
-          {isSaved ? null : (
-            <ThemedButton
-              label={t('receivedCard.save')}
-              variant="primary"
-              size="lg"
-              fullWidth
-              loading={saving}
-              leadingIcon={
-                <SfIcon name="square.and.arrow.down" size={18} color={Colors.cardBg} />
-              }
-              onPress={() => {
-                void handleSave();
-              }}
-            />
-          )}
           <ThemedButton
-            label={t('receivedCard.continue')}
+            label={t('receivedCard.saveAndPresent')}
+            variant="primary"
+            size="lg"
+            fullWidth
+            loading={saving}
+            disabled={isSaved}
+            leadingIcon={
+              <SfIcon name="square.and.arrow.up" size={18} color={Colors.cardBg} />
+            }
+            onPress={() => {
+              void handleSave(true);
+            }}
+          />
+          <ThemedButton
+            label={t('receivedCard.justAdd')}
             variant="secondary"
             size="lg"
             fullWidth
+            disabled={isSaved || saving}
             leadingIcon={
-              <SfIcon name="checkmark.circle" size={18} color={Colors.text1} />
+              <SfIcon name="square.and.arrow.down" size={18} color={Colors.text1} />
             }
-            onPress={onDismiss}
+            onPress={() => {
+              void handleSave(false);
+            }}
           />
         </View>
       </ScrollView>

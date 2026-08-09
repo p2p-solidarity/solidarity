@@ -92,6 +92,7 @@ describe('received scanned card metadata', () => {
 
   it('wires scanner metadata into the received model and removes hardcoded save metadata', () => {
     const scan = readFileSync(new URL('../../app/scan/index.tsx', import.meta.url), 'utf8');
+    const layout = readFileSync(new URL('../../app/_layout.tsx', import.meta.url), 'utf8');
     const sheet = readFileSync(
       new URL('../../src/components/cards/ReceivedCardSheet.tsx', import.meta.url),
       'utf8',
@@ -105,6 +106,10 @@ describe('received scanned card metadata', () => {
     expect(sheet).not.toContain("verificationStatus: 'Unverified'");
     expect(sheet).not.toContain("verificationStatus = 'Unverified'");
     expect(sheet).toContain("t('receivedCard.saveFailed')");
+    expect(sheet).toContain("t('receivedCard.saveAndPresent')");
+    expect(sheet).toContain("t('receivedCard.justAdd')");
+    expect(sheet).toContain('onShowMine');
+    expect(layout).toContain('PRIMARY_TAB_HREFS.present');
     expect(sheet).toContain('verificationStatusKey(status)');
     expect(sheet).not.toContain('withRepeat');
   });
