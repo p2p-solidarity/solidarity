@@ -7,13 +7,9 @@
  * closes that gap, and A2.4 extends it to the unverified `kind: 'declared'`
  * branch of the same store.
  *
- * Renders nothing when there are no snapshots of either kind: the People
- * tab already owns its own contacts empty state (`EmptyState` in
- * `app/(tabs)/people/index.tsx`), so an empty section here would just be a
- * second, redundant "nothing here" message. The "貼上連結頁" import entry
- * point therefore lives in the tab's "+" menu (`Header` in
- * `app/(tabs)/people/index.tsx`), not here, so it's reachable even with
- * zero saved pages.
+ * Renders nothing when there are no snapshots of either kind. The Contacts
+ * screen owns its empty state and its Add Contact sheet, so an empty section
+ * here would only duplicate the same message.
  *
  * Reads `useSortedProfileSnapshots()`, which is backed by the in-memory
  * zustand store hydrated synchronously at boot (`hydrateProfileSnapshots()`
@@ -23,9 +19,9 @@
  *
  * Row visual language borrows from `TrustGraphContactRow` (round initial
  * avatar, name + secondary line, bottom divider between rows) rather than
- * inventing a new row shape, per the fast-follow's "don't restructure the
- * existing contacts list" scope — this section sits above it instead. A
- * declared row additionally carries a visible 「宣稱‧未驗證」 chip
+ * inventing a new row shape. The Contacts screen places this section after
+ * the real-contact list as the secondary Saved Pages footer. A declared row
+ * additionally carries a visible 「未驗證」 chip
  * (CLAUDE.md rule 8 — never let an unverified claim look verified) and its
  * OWN route (`/people/declared/[id]`, not `/people/profile/[did]` — a
  * declared entry has no did to key that route on).
@@ -55,9 +51,12 @@ export function VerifiedPagesSection(): ReactNode {
   if (snapshots.length === 0) return null;
 
   return (
-    <View className="px-4 pb-3" style={{ gap: 6 }}>
+    <View
+      className="pb-6 pt-5"
+      style={{ gap: 6, borderTopWidth: 0.5, borderTopColor: Colors.divider }}
+    >
       <ThemedText variant="label" tone="secondary">
-        {t('peopleList.verifiedPagesHeader')}
+        {t('peopleList.savedPagesHeader')}
       </ThemedText>
       <View>
         {snapshots.map((snapshot, index) => (
