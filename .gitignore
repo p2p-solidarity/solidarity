@@ -105,8 +105,16 @@ Packages
 # Spec documents
 spec.md
 
-.context
-.claude
+# Local AI-agent and workspace state
+.context/
+.claude/
+.codex/
+.agents/
+.superpowers/
+
+# macOS metadata
+.DS_Store
+**/.DS_Store
 
 # === Monorepo / Expo / RN (added 2026-05-24 for Expo migration) ===
 node_modules/
