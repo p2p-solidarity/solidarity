@@ -32,10 +32,12 @@ describe('Page surface', () => {
 
     const heroIndex = page.indexOf('<ProfileHero');
     const linksIndex = page.indexOf('<ProfileLinksList');
+    const sectionsIndex = page.indexOf('<ProfileSectionsList');
     const badgesIndex = page.indexOf('<ProfileBadgeChips');
     expect(heroIndex).toBeGreaterThan(-1);
     expect(linksIndex).toBeGreaterThan(heroIndex);
-    expect(badgesIndex).toBeGreaterThan(linksIndex);
+    expect(sectionsIndex).toBeGreaterThan(linksIndex);
+    expect(badgesIndex).toBeGreaterThan(sectionsIndex);
     expect(page).toContain('linkVisibility={linkVisibility}');
     expect(page).not.toContain('IdentityCredentialRows');
     expect(page).not.toContain('<ProfileShareSurface');
@@ -54,7 +56,8 @@ describe('Page surface', () => {
     expect(links).toContain('pageLinkSections(links, linkVisibility)');
     expect(links).toContain("t('mePage.publicPage')");
     expect(links).toContain("t('mePage.cardOnly')");
-    expect(links).toContain("t('mePage.hidden')");
+    expect(links).not.toContain("renderSection(t('mePage.hidden')");
+    expect(links).toContain("t('mePage.reviewHidden')");
     expect(links).toContain("t('mePage.noLinks')");
     expect(links).toContain('if (links.length === 0)');
     expect(links).toContain('accessibilityRole="header"');
@@ -65,10 +68,10 @@ describe('Page surface', () => {
 
     const publicHeadingIndex = links.indexOf("t('mePage.publicPage')");
     const cardOnlyHeadingIndex = links.indexOf("t('mePage.cardOnly')");
-    const hiddenHeadingIndex = links.indexOf("t('mePage.hidden')");
     expect(publicHeadingIndex).toBeGreaterThan(-1);
     expect(cardOnlyHeadingIndex).toBeGreaterThan(publicHeadingIndex);
-    expect(hiddenHeadingIndex).toBeGreaterThan(cardOnlyHeadingIndex);
+    expect(page).toContain('linkCount={record.links.length}');
+    expect(badges).toContain("t('mePage.addAttestation')");
 
     expect(badges).toContain('verifyAtprotoBindingDual(record, publicRecord');
     expect(badges).toContain('verifyNostrBinding');
@@ -111,7 +114,7 @@ describe('Page surface', () => {
     expect(motion).toContain('STAGGER_MS = 40');
     expect(page).toContain('const ENTRANCE_DURATION_MS = 240');
     expect(page).toContain('STAGGER_MS * 2');
-    expect(page).not.toContain('STAGGER_MS * 3');
+    expect(page).toContain('STAGGER_MS * 3');
     expect(share).toContain('const QR_SHEET_DURATION_MS = 240');
     expect(share).toContain('Easing.out');
     expect(share).toContain('scale: 0.97');

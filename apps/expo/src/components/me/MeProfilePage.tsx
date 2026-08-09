@@ -11,6 +11,7 @@ import type { ProfileRecord } from '@solidarity/shared';
 import { ProfileBadgeChips } from './ProfileBadgeChips';
 import { ProfileHero } from './ProfileHero';
 import { ProfileLinksList } from './ProfileLinksList';
+import { ProfileSectionsList } from './ProfileSectionsList';
 
 const ENTRANCE_DURATION_MS = 240;
 
@@ -82,6 +83,10 @@ export function MeProfilePage({
       </Animated.View>
 
       <Animated.View entering={entrance(STAGGER_MS * 2)}>
+        <ProfileSectionsList linkCount={record.links.length} />
+      </Animated.View>
+
+      <Animated.View entering={entrance(STAGGER_MS * 3)}>
         <ThemedText
           accessibilityRole="header"
           variant="label"

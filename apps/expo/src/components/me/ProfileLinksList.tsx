@@ -171,7 +171,28 @@ export function ProfileLinksList({
     <View className="gap-5 px-4">
       {renderSection(t('mePage.publicPage'), sections.publicLinks)}
       {renderSection(t('mePage.cardOnly'), sections.cardOnlyLinks)}
-      {renderSection(t('mePage.hidden'), sections.hiddenLinks)}
+      {sections.hiddenLinks.length > 0 ? (
+        <PressableScale
+          haptic="tap"
+          onPress={onEdit}
+          accessibilityRole="button"
+          accessibilityLabel={t('mePage.reviewHidden')}>
+          <ThemedSurface
+            variant="inset"
+            className="flex-row items-center gap-3 rounded-none px-3 py-2.5">
+            <SfIcon name="eye.slash" size={14} color={Colors.text3} />
+            <View className="flex-1 gap-0.5">
+              <ThemedText variant="bodySmall" tone="secondary">
+                {t('mePage.reviewHidden')}
+              </ThemedText>
+              <ThemedText variant="caption" tone="tertiary">
+                {t('mePage.hiddenCount', { count: sections.hiddenLinks.length })}
+              </ThemedText>
+            </View>
+            <SfIcon name="chevron.right" size={12} color={Colors.text3} />
+          </ThemedSurface>
+        </PressableScale>
+      ) : null}
       {addLinkAction}
     </View>
   );

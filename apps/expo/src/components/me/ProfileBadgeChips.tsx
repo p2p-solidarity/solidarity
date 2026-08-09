@@ -223,80 +223,88 @@ export function ProfileBadgeChips({
   };
 
   if (!hasBadge) {
-    return (
-      <View className="px-4">
-        <PressableScale
-          haptic="tap"
-          onPress={onManageBindings}
-          accessibilityRole="button"
-          accessibilityLabel={t('mePage.bindFirstBadge')}
-          containerStyle={{ alignSelf: 'flex-start' }}>
-          <ThemedSurface
-            variant="inset"
-            className="flex-row items-center gap-2 rounded-none px-3 py-2">
-            <SfIcon name="plus" size={12} color={Colors.text3} />
-            <ThemedText variant="label" tone="tertiary">
-              {t('mePage.bindFirstBadge')}
-            </ThemedText>
-          </ThemedSurface>
-        </PressableScale>
-      </View>
-    );
+    return <AddAttestationAction onPress={onManageBindings} />;
   }
 
   return (
-    <ScrollView
-      horizontal
-      showsHorizontalScrollIndicator={false}
-      contentContainerStyle={{ gap: 8, paddingHorizontal: 16 }}>
-      {nostr.visual !== 'hidden' ? (
-        <BadgeChip
-          visual={nostr.visual}
-          label={badgeLabel('nostr', nostr.visual, t)}
-          onPress={nostr.visual === 'loading' ? undefined : openNostrEvidence}
-        />
-      ) : null}
-      {bluesky.visual !== 'hidden' ? (
-        <BadgeChip
-          visual={bluesky.visual}
-          label={badgeLabel('bluesky', bluesky.visual, t)}
-          onPress={bluesky.visual === 'loading' ? undefined : openBlueskyEvidence}
-        />
-      ) : null}
-      {websiteVisual !== 'hidden' ? (
-        <BadgeChip
-          visual={websiteVisual}
-          label={t(
-            websiteVisual === 'loading' ? 'badges.website.checking' : 'badges.website.verifiedLabel'
-          )}
-          onPress={
-            websiteVisual === 'loading'
-              ? undefined
-              : () => {
-                  appAlert({
-                    title: t('badges.website.evidenceTitle'),
-                    message: websiteEvidenceMessage(website.evidence ?? [], t),
-                  });
-                }
-          }
-        />
-      ) : null}
-      {passport ? (
-        <BadgeChip
-          visual={passport.displayLevel === 'L1' ? 'declared' : 'verified'}
-          label={`${t('badges.passport.title')} · ${t(
-            credentialTrustSimpleI18nKeyForLevel(passport.displayLevel)
-          )}`}
-          accent={{
-            icon: 'wallet.pass',
-            color: trustToneColor(credentialTrustToneForLevel(passport.displayLevel)),
-          }}
-          onPress={() => {
-            router.push({ pathname: '/credentials/[id]', params: { id: passport.id } });
-          }}
-        />
-      ) : null}
-    </ScrollView>
+    <View className="gap-3">
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        contentContainerStyle={{ gap: 8, paddingHorizontal: 16 }}>
+        {nostr.visual !== 'hidden' ? (
+          <BadgeChip
+            visual={nostr.visual}
+            label={badgeLabel('nostr', nostr.visual, t)}
+            onPress={nostr.visual === 'loading' ? undefined : openNostrEvidence}
+          />
+        ) : null}
+        {bluesky.visual !== 'hidden' ? (
+          <BadgeChip
+            visual={bluesky.visual}
+            label={badgeLabel('bluesky', bluesky.visual, t)}
+            onPress={bluesky.visual === 'loading' ? undefined : openBlueskyEvidence}
+          />
+        ) : null}
+        {websiteVisual !== 'hidden' ? (
+          <BadgeChip
+            visual={websiteVisual}
+            label={t(
+              websiteVisual === 'loading' ? 'badges.website.checking' : 'badges.website.verifiedLabel'
+            )}
+            onPress={
+              websiteVisual === 'loading'
+                ? undefined
+                : () => {
+                    appAlert({
+                      title: t('badges.website.evidenceTitle'),
+                      message: websiteEvidenceMessage(website.evidence ?? [], t),
+                    });
+                  }
+            }
+          />
+        ) : null}
+        {passport ? (
+          <BadgeChip
+            visual={passport.displayLevel === 'L1' ? 'declared' : 'verified'}
+            label={`${t('badges.passport.title')} · ${t(
+              credentialTrustSimpleI18nKeyForLevel(passport.displayLevel)
+            )}`}
+            accent={{
+              icon: 'wallet.pass',
+              color: trustToneColor(credentialTrustToneForLevel(passport.displayLevel)),
+            }}
+            onPress={() => {
+              router.push({ pathname: '/credentials/[id]', params: { id: passport.id } });
+            }}
+          />
+        ) : null}
+      </ScrollView>
+      <AddAttestationAction onPress={onManageBindings} />
+    </View>
+  );
+}
+
+function AddAttestationAction({ onPress }: { readonly onPress: () => void }): ReactNode {
+  const { t } = useTranslation();
+  return (
+    <View className="px-4">
+      <PressableScale
+        haptic="tap"
+        onPress={onPress}
+        accessibilityRole="button"
+        accessibilityLabel={t('mePage.addAttestation')}
+        containerStyle={{ alignSelf: 'flex-start' }}>
+        <ThemedSurface
+          variant="inset"
+          className="flex-row items-center gap-2 rounded-none px-3 py-2">
+          <SfIcon name="plus" size={12} color={Colors.text3} />
+          <ThemedText variant="label" tone="tertiary">
+            {t('mePage.addAttestation')}
+          </ThemedText>
+        </ThemedSurface>
+      </PressableScale>
+    </View>
   );
 }
 
