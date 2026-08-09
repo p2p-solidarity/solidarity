@@ -89,6 +89,16 @@ export default function SettingsHub() {
             />
           </SettingsBlockSection>
 
+          {/* Plan — one honest entry for the free/Pro boundary and web management. */}
+          <SettingsBlockSection title={t('settingsHub.plan')}>
+            <SettingsBlockRow
+              icon="sparkles"
+              title={t('settingsHub.plan')}
+              trailingText={t('pro.free')}
+              onPress={() => { router.push('/settings/pro'); }}
+            />
+          </SettingsBlockSection>
+
           {/* Preferences — matches Swift v1.3.1: Security & Keys → Data & Sync → Advanced.
               Notifications/Language live under Advanced; Developer only after dev unlock. */}
           <SettingsBlockSection title={t('settingsHub.preferences')}>
