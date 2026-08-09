@@ -6,6 +6,7 @@ import {
 } from '@/badges/badgeStatusCache';
 import { useEffect, useMemo, useState, useSyncExternalStore } from 'react';
 import type { ProfileRecord } from '@solidarity/shared';
+import { usePreferences } from '@/settings/preferences';
 
 import { preferredVerifiedHandleShareUrl } from './handleShareVerification';
 import {
@@ -39,6 +40,7 @@ export function useProfileShareSelection(
   nostrShortUrlReady: boolean,
   retryNonce = 0
 ): ProfileShareSelectionState {
+  const publicPageUsername = usePreferences((state) => state.publicPageUsername);
   const cacheRevision = useSyncExternalStore(
     subscribeBadgeStatusCache,
     getBadgeStatusCacheRevision,
@@ -70,7 +72,7 @@ export function useProfileShareSelection(
   return useMemo(() => {
     if (jws.length === 0) return { kind: 'error' };
     try {
-      const model = buildProfileShareModel(record, jws);
+      const model = buildProfileShareModel(record, jws, publicPageUsername);
       const resolved = buildProfileShareUrlSelection(
         model,
         verifiedHandle,
@@ -92,6 +94,7 @@ export function useProfileShareSelection(
     expiryTick,
     jws,
     nostrShortUrlReady,
+    publicPageUsername,
     record,
     retryNonce,
     verifiedHandle,

@@ -39,8 +39,10 @@ export function initialPresentationClaimIds(
   claims: readonly ProvableClaimEntity[],
   preferredClaimId?: string,
 ): ReadonlySet<string> {
-  if (preferredClaimId && claims.some((claim) => claim.id === preferredClaimId)) {
-    return new Set([preferredClaimId]);
+  if (preferredClaimId !== undefined) {
+    return claims.some((claim) => claim.id === preferredClaimId)
+      ? new Set([preferredClaimId])
+      : new Set();
   }
   return new Set(claims.map((claim) => claim.id));
 }

@@ -160,6 +160,14 @@ describe('presentation proof helpers', () => {
     ]);
   });
 
+  it('fails closed when the requested claim is unavailable', () => {
+    const selected = initialPresentationClaimIds(claims, 'claim-not-available');
+
+    expect([...selected]).toEqual([]);
+    expect(isPresentationDisabled(selected)).toBe(true);
+    expect(selectPresentationClaims(claims, selected)).toEqual([]);
+  });
+
   it('treats an empty selection as no proof instead of silently falling back to all claims', () => {
     const selected = new Set<string>();
 

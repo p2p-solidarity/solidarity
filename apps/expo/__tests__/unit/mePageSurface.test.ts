@@ -8,8 +8,8 @@ function source(path: string): string {
   return readFileSync(new URL(path, import.meta.url), 'utf8');
 }
 
-describe('Me public-page surface', () => {
-  it('keeps one profile QR, both live badge verifiers, and the binding entry out of Verify', () => {
+describe('Page surface', () => {
+  it('composes the real v2 Page in Hero, link zones, Attestations order', () => {
     const route = source('../../app/(tabs)/me/index.tsx');
     const page = source('../../src/components/me/MeProfilePage.tsx');
     const share = source('../../src/components/me/ProfileShareSurface.tsx');
@@ -18,30 +18,63 @@ describe('Me public-page surface', () => {
     const hero = source('../../src/components/me/ProfileHero.tsx');
     const shareSelection = source('../../src/components/me/useProfileShareSelection.ts');
     const links = source('../../src/components/me/ProfileLinksList.tsx');
-    const identityRows = source('../../src/components/me/IdentityCredentialRows.tsx');
     const motion = source('../../src/feedback/motion.ts');
     const verify = source('../../app/(tabs)/verify/index.tsx');
 
     expect(route).not.toContain('buildRuntimeSolidarityQrWire');
-    expect(page).toContain('ProfileShareSurface');
+    expect(route).toContain('const linkVisibility = useProfileStore');
+    expect(route).toContain('linkVisibility={linkVisibility}');
     expect(route).toContain('nostrPublishedJws');
     expect(route).toContain('publicRecord={published?.record ?? record}');
+    expect(route).toContain("router.push('/settings/appearance')");
+    expect(route).toContain("router.push('/settings')");
+    expect(route).not.toContain('<MeNavBar');
+
+    const heroIndex = page.indexOf('<ProfileHero');
+    const linksIndex = page.indexOf('<ProfileLinksList');
+    const badgesIndex = page.indexOf('<ProfileBadgeChips');
+    expect(heroIndex).toBeGreaterThan(-1);
+    expect(linksIndex).toBeGreaterThan(heroIndex);
+    expect(badgesIndex).toBeGreaterThan(linksIndex);
+    expect(page).toContain('linkVisibility={linkVisibility}');
+    expect(page).not.toContain('IdentityCredentialRows');
+    expect(page).not.toContain('<ProfileShareSurface');
+
+    expect(hero).toContain('<ProfileShareSurface');
+    expect(share).toContain("t('mePage.share')");
+    expect(hero).toContain("t('mePage.appearance')");
+    expect(hero).toContain("t('mePage.settings')");
+    expect(hero).toContain('onPress={onEditAvatar}');
+    expect(hero).not.toContain('<SfIcon name="pencil"');
+    expect(hero).toContain('useWindowDimensions');
+    expect(hero).toContain('pageHeaderLayout(width, fontScale)');
+    expect(hero).toContain("layout === 'inline'");
+    expect(hero).toContain("layout === 'stacked'");
+
+    expect(links).toContain('pageLinkSections(links, linkVisibility)');
+    expect(links).toContain("t('mePage.publicPage')");
+    expect(links).toContain("t('mePage.cardOnly')");
+    expect(links).toContain("t('mePage.hidden')");
+    expect(links).toContain("t('mePage.noLinks')");
+    expect(links).toContain('if (links.length === 0)');
+    expect(links).toContain('accessibilityRole="header"');
+    expect(page).toContain('accessibilityRole="header"');
+    expect(hero).toContain('<ProfileInlineQr');
+    expect(links.match(/onPress=\{onAddFirstLink\}/gu)).toHaveLength(1);
+    expect(links).toContain('linkIconNameFor');
+
+    const publicHeadingIndex = links.indexOf("t('mePage.publicPage')");
+    const cardOnlyHeadingIndex = links.indexOf("t('mePage.cardOnly')");
+    const hiddenHeadingIndex = links.indexOf("t('mePage.hidden')");
+    expect(publicHeadingIndex).toBeGreaterThan(-1);
+    expect(cardOnlyHeadingIndex).toBeGreaterThan(publicHeadingIndex);
+    expect(hiddenHeadingIndex).toBeGreaterThan(cardOnlyHeadingIndex);
+
     expect(badges).toContain('verifyAtprotoBindingDual(record, publicRecord');
-    expect(hero).toContain('useProfileShareSelection');
-    expect(share).toContain('useProfileShareSelection');
-    expect(shareSelection).toContain('useSyncExternalStore');
-    expect(shareSelection).toContain('setTimeout');
-    expect(share).not.toContain("setShareState({ kind: 'loading' })");
-    expect(share).toContain('setSelectedKind(candidate.kind)');
-    expect(shareContent).toContain('onSelect(candidate)');
-    expect(shareContent).toContain("t('meShare.useFormat'");
-    // G2: the legacy business-card "share fields" row was removed from the Me
-    // share sheet. The legacy field surface stays reachable only from Settings,
-    // whose entry point still routes to /settings/share-settings below.
-    expect(share).not.toContain('ShareFieldsRow');
-    expect(route).toContain("router.push('/settings/share-settings')");
-    expect(share).not.toContain('buildRuntimeSolidarityQrWire');
     expect(badges).toContain('verifyNostrBinding');
+    expect(page).toContain('nostrUploaded={nostrShortUrlReady}');
+    expect(badges).toContain('readonly nostrUploaded: boolean');
+    expect(badges).toMatch(/nostrUploaded\s+\? record\.alsoKnownAs/u);
     expect(badges).toContain('verifyAtprotoBinding');
     expect(badges).toContain('badgeRecoveryActions');
     expect(badges).toContain('invalidateCachedNostrResult');
@@ -54,13 +87,26 @@ describe('Me public-page surface', () => {
     expect(badges).toContain('credentialTrustDisplayFor');
     expect(badges).toContain('credentialTrustDisplayFor(detail).level');
     expect(badges).toContain(": 'L1'");
-    expect(badges).toContain(": 'L1'");
-    expect(links).toContain('linkIconNameFor');
     expect(badges).toContain("icon: 'checkmark.seal.fill', color: Colors.terminalGreen");
     expect(badges).toContain("icon: 'checkmark.seal', color: Colors.warning");
     expect(badges).toContain("icon: 'exclamationmark.triangle', color: Colors.text3");
     expect(verify).not.toContain('BadgeBindingsSection');
     expect(verify).not.toContain("router.push('/verify/nostr')");
+
+    expect(share).toContain('generateQrPng');
+    expect(share).toContain('useProfileShareSelection');
+    expect(share).not.toContain('onOpenShareSettings');
+    expect(share).not.toContain("t('mePage.shareYourPage')");
+    expect(share).not.toContain('ShareFieldsRow');
+    expect(share).not.toContain('buildRuntimeSolidarityQrWire');
+    expect(share).not.toContain("setShareState({ kind: 'loading' })");
+    expect(share).toContain('setSelectedKind(candidate.kind)');
+    expect(shareSelection).toContain('useSyncExternalStore');
+    expect(shareSelection).toContain('setTimeout');
+    expect(shareContent).toContain('onSelect(candidate)');
+    expect(shareContent).toContain("t('meShare.useFormat'");
+    expect([route, page, hero, links, badges].join('\n')).not.toContain('generateQrPng');
+    expect(share).toContain('export function ProfileInlineQr');
 
     expect(motion).toContain('STAGGER_MS = 40');
     expect(page).toContain('const ENTRANCE_DURATION_MS = 240');
@@ -73,12 +119,29 @@ describe('Me public-page surface', () => {
     expect(shareContent).toContain("t('meShare.shareQrImage')");
     expect(badges).toContain('const BADGE_CROSSFADE_MS = 200');
 
-    const meSurfaceSource = [page, share, badges, hero, links, identityRows].join('\n');
-    expect(meSurfaceSource).not.toMatch(/#[0-9a-f]{3,8}\b/i);
+    const pageSurfaceSource = [page, share, badges, hero, links].join('\n');
+    expect(pageSurfaceSource).not.toMatch(/#[0-9a-f]{3,8}\b/iu);
   });
 
-  it('labels the retained legacy business-card controls honestly in both locales', () => {
-    expect(en['mePage.shareFields']).toBe('Business-card fields (legacy)');
-    expect(zhHant['mePage.shareFields']).toBe('名片分享欄位（舊版名片）');
+  it('uses the exact human-facing Page section and action labels', () => {
+    expect(zhHant['mePage.publicPage']).toBe('公開頁');
+    expect(zhHant['mePage.cardOnly']).toBe('名片才有');
+    expect(zhHant['mePage.hidden']).toBe('隱藏');
+    expect(zhHant['mePage.attestations']).toBe('證明');
+    expect(zhHant['mePage.share']).toBe('分享');
+    expect(zhHant['mePage.appearance']).toBe('外觀');
+    expect(zhHant['mePage.settings']).toBe('設定');
+    expect(en['mePage.publicPage']).toBe('Public Page');
+    expect(en['mePage.cardOnly']).toBe('Card Only');
+    expect(en['mePage.hidden']).toBe('Hidden');
+    expect(en['mePage.attestations']).toBe('Attestations');
+    expect(en['mePage.share']).toBe('Share');
+    expect(en['mePage.appearance']).toBe('Appearance');
+    expect(en['mePage.settings']).toBe('Settings');
+  });
+
+  it('uses the current human-facing Card Fields copy in both locales', () => {
+    expect(en['mePage.shareFields']).toBe('Card Fields');
+    expect(zhHant['mePage.shareFields']).toBe('名片欄位');
   });
 });

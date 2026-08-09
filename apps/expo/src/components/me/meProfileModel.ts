@@ -11,9 +11,11 @@ import {
   type HandleScheme,
   type ProfileRecord,
 } from '@solidarity/shared';
+import { validatePublicPageUsername } from '@/onboarding/publicPageUsername';
 
 const PROFILE_PAGE_ORIGIN = 'https://app.solidarity.gg';
 const PROFILE_PAGE_URL = `${PROFILE_PAGE_ORIGIN}/#`;
+const PUBLIC_PAGE_ORIGIN = 'https://creds.id';
 
 export interface ProfileIdentityLine {
   readonly kind: 'handle' | 'did';
@@ -38,15 +40,32 @@ export function profileIdentityLine(record: ProfileRecord): ProfileIdentityLine 
 
 export interface ProfileShareModel {
   readonly offlineUrl: string;
+  readonly usernameUrl: string | null;
+  readonly usernameDisplayUrl: string | null;
   readonly shortUrl: string | null;
   readonly oversize: boolean;
 }
 
-export function buildProfileShareModel(record: ProfileRecord, jws: string): ProfileShareModel {
+export function buildProfileShareModel(
+  record: ProfileRecord,
+  jws: string,
+  publicPageUsername = '',
+): ProfileShareModel {
   const fragment = encodeFragment(jws);
   const nostrClaim = record.alsoKnownAs.find((value) => value.startsWith('nostr:npub'));
+  const validUsername = validatePublicPageUsername(publicPageUsername).kind === 'valid'
+    ? publicPageUsername
+    : null;
   return {
     offlineUrl: `${PROFILE_PAGE_URL}${fragment.fragment}`,
+    // Keep the signed page in the hash so /name works offline before a
+    // resolver/backend exists. UI presents only the stable short path.
+    usernameUrl: validUsername
+      ? `${PUBLIC_PAGE_ORIGIN}/${validUsername}#${fragment.fragment}`
+      : null,
+    usernameDisplayUrl: validUsername
+      ? `${PUBLIC_PAGE_ORIGIN}/${validUsername}`
+      : null,
     shortUrl: nostrClaim ? `${PROFILE_PAGE_URL}${nostrClaim}` : null,
     oversize: fragment.oversize,
   };
@@ -57,6 +76,11 @@ export function selectProfileShareUrl(model: ProfileShareModel, preferShort: boo
 }
 
 export type ProfileShareUrlCandidate =
+  | {
+      readonly kind: 'username';
+      readonly url: string;
+      readonly displayUrl: string;
+    }
   | {
       readonly kind: 'handle';
       readonly url: string;
@@ -77,6 +101,9 @@ export type ProfileShareUrlSelection =
 export function pickBestShareUrl(
   candidates: readonly ProfileShareUrlCandidate[]
 ): ProfileShareUrlSelection {
+  const username = candidates.find((candidate) => candidate.kind === 'username');
+  if (username) return { kind: 'ready', candidate: username };
+
   const verifiedHandle = candidates.find(
     (candidate) => candidate.kind === 'handle' && candidate.isVerified
   );
@@ -87,6 +114,11 @@ export function pickBestShareUrl(
 
   const offline = candidates.find((candidate) => candidate.kind === 'offline');
   return offline ? { kind: 'ready', candidate: offline } : { kind: 'error' };
+}
+
+export function displayProfileShareUrl(candidate: ProfileShareUrlCandidate): string {
+  const url = candidate.kind === 'username' ? candidate.displayUrl : candidate.url;
+  return url.replace(/^https?:\/\//u, '');
 }
 
 /**
@@ -122,6 +154,13 @@ export function buildProfileShareUrlSelection(
   nostrShortUrlReady: boolean
 ): ProfileShareUrlResolution {
   const candidates: ProfileShareUrlCandidate[] = [];
+  if (model.usernameUrl !== null && model.usernameDisplayUrl !== null) {
+    candidates.push({
+      kind: 'username',
+      url: model.usernameUrl,
+      displayUrl: model.usernameDisplayUrl,
+    });
+  }
   if (verifiedHandle !== null) {
     candidates.push({
       kind: 'handle',

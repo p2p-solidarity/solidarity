@@ -2,7 +2,7 @@ import { Image } from 'expo-image';
 import * as Clipboard from 'expo-clipboard';
 import { useFocusEffect } from 'expo-router';
 import { useCallback, useEffect, useState, type ReactNode } from 'react';
-import { View } from 'react-native';
+import { useWindowDimensions, View } from 'react-native';
 
 import { PressableScale } from '@/components/common/PressableScale';
 import { SfIcon } from '@/components/icons/SfIcon';
@@ -16,17 +16,20 @@ import { resolveProfileAvatarSource } from '@/profile/avatar';
 import { readLocalAvatarUri } from '@/profile/localAvatar';
 import type { ProfileRecord } from '@solidarity/shared';
 
-import { profileIdentityLine } from './meProfileModel';
+import { pageHeaderLayout } from './pageHeaderLayout';
+import { ProfileShareSurface } from './ProfileShareSurface';
+import { ProfileInlineQr } from './ProfileShareSurface';
 import { useProfileShareSelection } from './useProfileShareSelection';
+import { displayProfileShareUrl } from './meProfileModel';
 
 export interface ProfileHeroProps {
   readonly record: ProfileRecord;
   readonly shareRecord: ProfileRecord;
   readonly shareJws: string;
   readonly nostrShortUrlReady: boolean;
-  readonly onEdit: () => void;
   readonly onEditAvatar: () => void;
-  readonly onOpenIdentity: () => void;
+  readonly onOpenAppearance: () => void;
+  readonly onOpenSettings: () => void;
 }
 
 export function ProfileHero({
@@ -34,16 +37,19 @@ export function ProfileHero({
   shareRecord,
   shareJws,
   nostrShortUrlReady,
-  onEdit,
   onEditAvatar,
-  onOpenIdentity,
+  onOpenAppearance,
+  onOpenSettings,
 }: ProfileHeroProps): ReactNode {
   const { t } = useTranslation();
-  const identity = profileIdentityLine(record);
+  const { width, fontScale } = useWindowDimensions();
+  const layout = pageHeaderLayout(width, fontScale);
   const [localAvatar, setLocalAvatar] = useState(readLocalAvatarUri);
   const shareSelection = useProfileShareSelection(shareRecord, shareJws, nostrShortUrlReady);
   const shareUrl = shareSelection.kind === 'ready' ? shareSelection.selected.url : null;
-  const displayShareUrl = shareUrl?.replace(/^https?:\/\//u, '') ?? null;
+  const displayShareUrl = shareSelection.kind === 'ready'
+    ? displayProfileShareUrl(shareSelection.selected)
+    : null;
 
   useFocusEffect(
     useCallback(() => {
@@ -64,8 +70,8 @@ export function ProfileHero({
   }, [shareUrl, t]);
 
   return (
-    <View className="gap-4 px-4">
-      <View className="flex-row items-start gap-4">
+    <View className="gap-2 px-4">
+      <View className="flex-row items-start gap-3">
         <PressableScale
           haptic="tap"
           onPress={onEditAvatar}
@@ -114,49 +120,102 @@ export function ProfileHero({
             </PressableScale>
           ) : null}
 
-          <PressableScale
-            haptic="tap"
-            onPress={onOpenIdentity}
-            accessibilityRole="button"
-            accessibilityLabel={t('mePage.openIdentity')}
-            containerStyle={{ alignSelf: 'flex-start' }}
-            style={{ minHeight: 44, justifyContent: 'center' }}>
-            <ThemedSurface
-              variant="inset"
-              className="flex-row items-center gap-1 rounded-none px-2 py-1">
-              <SfIcon
-                name={identity.kind === 'handle' ? 'at' : 'checkmark.seal'}
-                size={11}
-                color={Colors.text3}
-              />
-              <ThemedText
-                variant="caption"
-                tone="tertiary"
-                numberOfLines={1}
-                ellipsizeMode="middle">
-                {identity.kind === 'handle' ? identity.label : t('mePage.verifiedIdentity')}
-              </ThemedText>
-            </ThemedSurface>
-          </PressableScale>
+          {record.bio.length > 0 ? (
+            <ThemedText variant="bodyMedium" tone="secondary">
+              {record.bio}
+            </ThemedText>
+          ) : null}
         </View>
 
-        <PressableScale
-          haptic="tap"
-          scaleTo={SCALE.icon}
-          onPress={onEdit}
-          accessibilityRole="button"
-          accessibilityLabel={t('profileCard.edit')}
-          style={{ width: 44, height: 44, alignItems: 'center', justifyContent: 'center' }}>
-          <SfIcon name="pencil" size={17} color={Colors.text1} />
-        </PressableScale>
+        {layout === 'inline' ? (
+          <ProfileHeaderActions
+            shareRecord={shareRecord}
+            shareJws={shareJws}
+            nostrShortUrlReady={nostrShortUrlReady}
+            appearanceLabel={t('mePage.appearance')}
+            settingsLabel={t('mePage.settings')}
+            onOpenAppearance={onOpenAppearance}
+            onOpenSettings={onOpenSettings}
+          />
+        ) : null}
       </View>
 
-      {record.bio.length > 0 ? (
-        <ThemedText variant="bodyMedium" tone="secondary">
-          {record.bio}
-        </ThemedText>
+      {layout === 'stacked' ? (
+        <View className="flex-row justify-end">
+          <ProfileHeaderActions
+            shareRecord={shareRecord}
+            shareJws={shareJws}
+            nostrShortUrlReady={nostrShortUrlReady}
+            appearanceLabel={t('mePage.appearance')}
+            settingsLabel={t('mePage.settings')}
+            onOpenAppearance={onOpenAppearance}
+            onOpenSettings={onOpenSettings}
+          />
+        </View>
       ) : null}
+
+      <ProfileInlineQr
+        record={shareRecord}
+        jws={shareJws}
+        nostrShortUrlReady={nostrShortUrlReady}
+      />
     </View>
+  );
+}
+
+function ProfileHeaderActions({
+  shareRecord,
+  shareJws,
+  nostrShortUrlReady,
+  appearanceLabel,
+  settingsLabel,
+  onOpenAppearance,
+  onOpenSettings,
+}: {
+  readonly shareRecord: ProfileRecord;
+  readonly shareJws: string;
+  readonly nostrShortUrlReady: boolean;
+  readonly appearanceLabel: string;
+  readonly settingsLabel: string;
+  readonly onOpenAppearance: () => void;
+  readonly onOpenSettings: () => void;
+}): ReactNode {
+  return (
+    <View className="flex-row">
+      <ProfileShareSurface
+        record={shareRecord}
+        jws={shareJws}
+        nostrShortUrlReady={nostrShortUrlReady}
+      />
+      <ProfileHeaderAction
+        icon="paintbrush"
+        label={appearanceLabel}
+        onPress={onOpenAppearance}
+      />
+      <ProfileHeaderAction icon="gearshape" label={settingsLabel} onPress={onOpenSettings} />
+    </View>
+  );
+}
+
+function ProfileHeaderAction({
+  icon,
+  label,
+  onPress,
+}: {
+  readonly icon: 'paintbrush' | 'gearshape';
+  readonly label: string;
+  readonly onPress: () => void;
+}): ReactNode {
+  return (
+    <PressableScale
+      haptic="tap"
+      scaleTo={SCALE.icon}
+      onPress={onPress}
+      accessibilityRole="button"
+      accessibilityLabel={label}
+      style={{ width: 44, height: 44, alignItems: 'center', justifyContent: 'center' }}>
+      <SfIcon name={icon} size={17} color={Colors.text1} />
+    </PressableScale>
   );
 }
 

@@ -2,6 +2,7 @@ import { describe, expect, it } from 'bun:test';
 
 import {
   buildProfileShareUrlSelection,
+  displayProfileShareUrl,
   pickBestShareUrl,
   type ProfileShareModel,
   type ProfileShareUrlCandidate,
@@ -17,6 +18,20 @@ const SHORT: ProfileShareUrlCandidate = {
 };
 
 describe('pickBestShareUrl', () => {
+  it('prefers a self-contained /name page and keeps its long fragment out of display copy', () => {
+    const username: ProfileShareUrlCandidate = {
+      kind: 'username',
+      url: 'https://creds.id/alice#profile-data',
+      displayUrl: 'https://creds.id/alice',
+    };
+
+    expect(pickBestShareUrl([OFFLINE, SHORT, username])).toEqual({
+      kind: 'ready',
+      candidate: username,
+    });
+    expect(displayProfileShareUrl(username)).toBe('creds.id/alice');
+  });
+
   it('selects a currently verified handle ahead of the npub and offline formats', () => {
     const verifiedHandle: ProfileShareUrlCandidate = {
       kind: 'handle',
@@ -65,6 +80,8 @@ describe('pickBestShareUrl', () => {
 describe('buildProfileShareUrlSelection', () => {
   const model: ProfileShareModel = {
     offlineUrl: OFFLINE.url,
+    usernameUrl: null,
+    usernameDisplayUrl: null,
     shortUrl: SHORT.url,
     oversize: false,
   };
@@ -74,5 +91,22 @@ describe('buildProfileShareUrlSelection', () => {
       candidates: [OFFLINE],
       selection: { kind: 'ready', candidate: OFFLINE },
     });
+  });
+
+  it('offers /name first when onboarding has stored a valid username', () => {
+    const usernameModel: ProfileShareModel = {
+      ...model,
+      usernameUrl: 'https://creds.id/alice#offline',
+      usernameDisplayUrl: 'https://creds.id/alice',
+    };
+
+    const resolution = buildProfileShareUrlSelection(usernameModel, null, false);
+    const usernameCandidate: ProfileShareUrlCandidate = {
+      kind: 'username',
+      url: 'https://creds.id/alice#offline',
+      displayUrl: 'https://creds.id/alice',
+    };
+    expect(resolution.selection).toEqual({ kind: 'ready', candidate: usernameCandidate });
+    expect(resolution.candidates[0]).toEqual(usernameCandidate);
   });
 });

@@ -13,6 +13,7 @@ import type {
   ProfileShareModel,
   ProfileShareUrlCandidate,
 } from './meProfileModel';
+import { displayProfileShareUrl } from './meProfileModel';
 
 export const PROFILE_SHARE_QR_SIZE = 208;
 
@@ -55,7 +56,7 @@ export function ProfileShareReadyContent({
 
   return (
     <>
-      <CopyableUrlPill url={selected.url} onCopy={onCopy} />
+      <CopyableUrlPill candidate={selected} onCopy={onCopy} />
 
       <QrPreview url={selected.url} state={qrState} onRetry={onRetryQr} />
 
@@ -100,7 +101,7 @@ export function ProfileShareReadyContent({
         {t('meShare.bioHint')}
       </ThemedText>
 
-      {selected.kind === 'offline' && state.model.oversize ? (
+      {(selected.kind === 'offline' || selected.kind === 'username') && state.model.oversize ? (
         <ThemedText variant="caption" tone="tertiary" style={{ textAlign: 'center' }}>
           {t('profileCard.oversizeWarning')}
         </ThemedText>
@@ -117,21 +118,22 @@ export function ProfileShareReadyContent({
 }
 
 function CopyableUrlPill({
-  url,
+  candidate,
   onCopy,
 }: {
-  readonly url: string;
+  readonly candidate: ProfileShareUrlCandidate;
   readonly onCopy: (url: string) => void;
 }): ReactNode {
   const { t } = useTranslation();
+  const displayUrl = displayProfileShareUrl(candidate);
   return (
     <PressableScale
       haptic={false}
       onPress={() => {
-        onCopy(url);
+        onCopy(candidate.url);
       }}
       accessibilityRole="button"
-      accessibilityLabel={`${t('meShare.pageUrl')}: ${url}`}
+      accessibilityLabel={`${t('meShare.pageUrl')}: ${displayUrl}`}
       accessibilityHint={t('meShare.copyUrlHint')}>
       <ThemedSurface
         variant="inset"
@@ -142,7 +144,7 @@ function CopyableUrlPill({
             {t('meShare.pageUrl')}
           </ThemedText>
           <ThemedText variant="bodyMedium" numberOfLines={2} ellipsizeMode="middle">
-            {url}
+            {displayUrl}
           </ThemedText>
         </View>
         <SfIcon name="doc.on.doc" size={18} color={Colors.text1} />
@@ -269,7 +271,9 @@ function OtherFormatRow({
 }): ReactNode {
   const { t } = useTranslation();
   const label =
-    candidate.kind === 'handle'
+    candidate.kind === 'username'
+      ? t('meShare.usernameFormat')
+      : candidate.kind === 'handle'
       ? verifiedHandle?.url === candidate.url
         ? `@${verifiedHandle.handle}`
         : t('meShare.verifiedHandleFormat')
@@ -282,7 +286,7 @@ function OtherFormatRow({
       <View className="flex-1 gap-0.5">
         <ThemedText variant="bodySmall">{label}</ThemedText>
         <ThemedText variant="caption" tone="tertiary" numberOfLines={1} ellipsizeMode="middle">
-          {candidate.url}
+          {displayProfileShareUrl(candidate)}
         </ThemedText>
       </View>
       <ThemedButton

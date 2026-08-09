@@ -1,6 +1,7 @@
 import * as Clipboard from 'expo-clipboard';
+import { Image } from 'expo-image';
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
-import { Modal, ScrollView, Share, useWindowDimensions, View } from 'react-native';
+import { ActivityIndicator, Modal, ScrollView, Share, useWindowDimensions, View } from 'react-native';
 import Animated, { Easing, ZoomIn } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -23,6 +24,7 @@ import {
 } from './ProfileShareSheetContent';
 import { useProfileShareSelection } from './useProfileShareSelection';
 import type { ProfileShareUrlCandidate } from './meProfileModel';
+import { displayProfileShareUrl } from './meProfileModel';
 
 const QR_SHEET_DURATION_MS = 240;
 
@@ -32,13 +34,6 @@ export interface ProfileShareSurfaceProps {
   readonly record: ProfileRecord;
   readonly jws: string;
   readonly nostrShortUrlReady: boolean;
-  /**
-   * Retained for caller compatibility only. G2 retired the legacy
-   * business-card "share fields" row from this sheet — the legacy field
-   * surface now lives solely under Settings. The prop is intentionally not
-   * consumed here so callers (MeProfilePage) keep type-checking unchanged.
-   */
-  readonly onOpenShareSettings: () => void;
 }
 
 export function ProfileShareSurface({
@@ -50,20 +45,18 @@ export function ProfileShareSurface({
   const [sheetOpen, setSheetOpen] = useState(false);
 
   return (
-    <View className="gap-2 px-4">
-      <ThemedButton
-        label={t('mePage.shareYourPage')}
-        variant="primary"
-        fullWidth
-        haptic="success"
-        leadingIcon={<SfIcon name="qrcode" size={16} color={Colors.pageBg} />}
+    <>
+      <PressableScale
+        haptic="tap"
+        scaleTo={SCALE.icon}
         onPress={() => {
           setSheetOpen(true);
         }}
-      />
-      <ThemedText variant="caption" tone="tertiary" style={{ textAlign: 'center' }}>
-        {t('mePage.sharePromise')}
-      </ThemedText>
+        accessibilityRole="button"
+        accessibilityLabel={t('mePage.share')}
+        style={{ width: 44, height: 44, alignItems: 'center', justifyContent: 'center' }}>
+        <SfIcon name="square.and.arrow.up" size={17} color={Colors.text1} />
+      </PressableScale>
 
       <ProfileQrSheet
         visible={sheetOpen}
@@ -74,7 +67,107 @@ export function ProfileShareSurface({
           setSheetOpen(false);
         }}
       />
-    </View>
+    </>
+  );
+}
+
+const INLINE_QR_SIZE = 88;
+
+/** Always-visible Page QR. The larger share sheet remains available for
+ * format selection and exporting, while this preview makes the primary
+ * scan action visible without another tap. */
+export function ProfileInlineQr({
+  record,
+  jws,
+  nostrShortUrlReady,
+}: ProfileShareSurfaceProps): ReactNode {
+  const { t } = useTranslation();
+  const shareState = useProfileShareSelection(record, jws, nostrShortUrlReady);
+  const selected = shareState.kind === 'ready' ? shareState.selected : null;
+  const [imageUri, setImageUri] = useState<string | null>(null);
+  const [failed, setFailed] = useState(false);
+
+  useEffect(() => {
+    if (selected === null) {
+      setImageUri(null);
+      setFailed(false);
+      return;
+    }
+    let cancelled = false;
+    setFailed(false);
+    setImageUri(null);
+    void generateQrPng(selected.url, { size: INLINE_QR_SIZE })
+      .then((uri) => {
+        if (!cancelled) setImageUri(uri);
+      })
+      .catch(() => {
+        if (!cancelled) setFailed(true);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [selected?.url]);
+
+  if (selected === null) return null;
+  const displayUrl = displayProfileShareUrl(selected);
+
+  return (
+    <PressableScale
+      haptic="tap"
+      onPress={() => {
+        void Clipboard.setStringAsync(selected.url)
+          .then(() => {
+            haptic('success');
+            pushToast(t('meHome.pageUrlCopied'), 'success');
+          })
+          .catch(() => {
+            haptic('error');
+            pushToast(t('meShare.copyError'), 'error');
+          });
+      }}
+      accessibilityRole="button"
+      accessibilityLabel={t('meHome.copyPageUrl', { url: displayUrl })}
+      containerStyle={{ alignSelf: 'stretch' }}>
+      <ThemedSurface
+        variant="card"
+        className="flex-row items-center gap-4 rounded-2xl p-3">
+        <View
+          style={{
+            width: INLINE_QR_SIZE,
+            height: INLINE_QR_SIZE,
+            alignItems: 'center',
+            justifyContent: 'center',
+            backgroundColor: Colors.cardBg,
+            borderRadius: 12,
+          }}>
+          {imageUri ? (
+            <Image
+              source={{ uri: imageUri }}
+              contentFit="contain"
+              style={{ width: INLINE_QR_SIZE - 8, height: INLINE_QR_SIZE - 8 }}
+            />
+          ) : failed ? (
+            <SfIcon name="exclamationmark.triangle" size={20} color={Colors.destructive} />
+          ) : (
+            <ActivityIndicator color={Colors.primaryMauve} />
+          )}
+        </View>
+        <View className="flex-1 gap-2">
+          <ThemedText variant="label" numberOfLines={1}>
+            {displayUrl}
+          </ThemedText>
+          <ThemedText variant="bodySmall" tone="secondary">
+            {t('mePage.inlineQrHint')}
+          </ThemedText>
+          <View className="flex-row items-center gap-1">
+            <SfIcon name="doc.on.doc" size={13} color={Colors.primaryMauve} />
+            <ThemedText variant="caption" style={{ color: Colors.primaryMauve }}>
+              {t('mePage.copyLink')}
+            </ThemedText>
+          </View>
+        </View>
+      </ThemedSurface>
+    </PressableScale>
   );
 }
 

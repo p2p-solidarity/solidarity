@@ -1,15 +1,16 @@
-import { useRef, type ReactNode } from 'react';
+import type { ReactNode } from 'react';
 import { ScrollView } from 'react-native';
 import Animated, { FadeInDown } from 'react-native-reanimated';
 
+import { ThemedText } from '@/components/themed';
 import { STAGGER_MS } from '@/feedback/motion';
+import { useTranslation } from '@/i18n';
+import type { LinkVisibility } from '@/profile/projection';
 import type { ProfileRecord } from '@solidarity/shared';
 
-import { IdentityCredentialRows } from './IdentityCredentialRows';
 import { ProfileBadgeChips } from './ProfileBadgeChips';
 import { ProfileHero } from './ProfileHero';
 import { ProfileLinksList } from './ProfileLinksList';
-import { ProfileShareSurface } from './ProfileShareSurface';
 
 const ENTRANCE_DURATION_MS = 240;
 
@@ -18,6 +19,7 @@ export interface MeProfilePageProps {
    *  ones. Used for the hero, badges, and the on-screen link list. */
   readonly record: ProfileRecord;
   readonly jws: string;
+  readonly linkVisibility: readonly LinkVisibility[];
   /** The public projection stored by ATProto/Nostr binding backends. */
   readonly publicRecord: ProfileRecord;
   /** The SHARED projection (public + link-only links, T7) — what the QR /
@@ -30,15 +32,15 @@ export interface MeProfilePageProps {
   readonly onEdit: () => void;
   readonly onEditAvatar: () => void;
   readonly onAddLink: () => void;
-  readonly onOpenIdentity: () => void;
+  readonly onOpenAppearance: () => void;
+  readonly onOpenSettings: () => void;
   readonly onOpenBindings: () => void;
-  readonly onOpenCredentials: () => void;
-  readonly onOpenShareSettings: () => void;
 }
 
 export function MeProfilePage({
   record,
   jws,
+  linkVisibility,
   publicRecord,
   shareRecord,
   shareJws,
@@ -47,22 +49,15 @@ export function MeProfilePage({
   onEdit,
   onEditAvatar,
   onAddLink,
-  onOpenIdentity,
+  onOpenAppearance,
+  onOpenSettings,
   onOpenBindings,
-  onOpenCredentials,
-  onOpenShareSettings,
 }: MeProfilePageProps): ReactNode {
-  const scrollRef = useRef<ScrollView>(null);
-  const bindingsY = useRef(0);
+  const { t } = useTranslation();
   const entrance = (delay: number) => FadeInDown.duration(ENTRANCE_DURATION_MS).delay(delay);
-
-  const focusBindings = () => {
-    scrollRef.current?.scrollTo({ y: Math.max(0, bindingsY.current - 12), animated: false });
-  };
 
   return (
     <ScrollView
-      ref={scrollRef}
       className="flex-1"
       contentContainerStyle={{ paddingTop: 20, paddingBottom: bottomInset + 100, gap: 24 }}>
       <Animated.View entering={entrance(0)}>
@@ -71,43 +66,35 @@ export function MeProfilePage({
           shareRecord={shareRecord}
           shareJws={shareJws}
           nostrShortUrlReady={nostrShortUrlReady}
-          onEdit={onEdit}
           onEditAvatar={onEditAvatar}
-          onOpenIdentity={onOpenIdentity}
+          onOpenAppearance={onOpenAppearance}
+          onOpenSettings={onOpenSettings}
         />
       </Animated.View>
 
       <Animated.View entering={entrance(STAGGER_MS)}>
-        <ProfileLinksList links={record.links} onEdit={onEdit} onAddFirstLink={onAddLink} />
-      </Animated.View>
-
-      <Animated.View entering={entrance(STAGGER_MS * 2)}>
-        <ProfileShareSurface
-          record={shareRecord}
-          jws={shareJws}
-          nostrShortUrlReady={nostrShortUrlReady}
-          onOpenShareSettings={onOpenShareSettings}
+        <ProfileLinksList
+          links={record.links}
+          linkVisibility={linkVisibility}
+          onEdit={onEdit}
+          onAddFirstLink={onAddLink}
         />
       </Animated.View>
 
       <Animated.View entering={entrance(STAGGER_MS * 2)}>
+        <ThemedText
+          accessibilityRole="header"
+          variant="label"
+          tone="tertiary"
+          className="px-4 pb-3">
+          {t('mePage.attestations')}
+        </ThemedText>
         <ProfileBadgeChips
           record={record}
           publicRecord={publicRecord}
           jws={jws}
-          onManageBindings={focusBindings}
-        />
-      </Animated.View>
-
-      <Animated.View
-        entering={entrance(STAGGER_MS * 2)}
-        onLayout={(event) => {
-          bindingsY.current = event.nativeEvent.layout.y;
-        }}>
-        <IdentityCredentialRows
-          record={record}
-          onOpenBindings={onOpenBindings}
-          onOpenCredentials={onOpenCredentials}
+          nostrUploaded={nostrShortUrlReady}
+          onManageBindings={onOpenBindings}
         />
       </Animated.View>
     </ScrollView>

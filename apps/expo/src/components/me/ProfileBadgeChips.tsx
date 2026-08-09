@@ -67,6 +67,7 @@ export interface ProfileBadgeChipsProps {
   readonly record: ProfileRecord;
   readonly publicRecord: ProfileRecord;
   readonly jws: string;
+  readonly nostrUploaded: boolean;
   readonly onManageBindings: () => void;
 }
 
@@ -74,6 +75,7 @@ export function ProfileBadgeChips({
   record,
   publicRecord,
   jws,
+  nostrUploaded,
   onManageBindings,
 }: ProfileBadgeChipsProps): ReactNode {
   const { t } = useTranslation();
@@ -96,9 +98,11 @@ export function ProfileBadgeChips({
   const website = useWebsiteOwnership(record, shareModel);
   const npubClaim = useMemo(
     () =>
-      record.alsoKnownAs.find((value) => value.startsWith('nostr:npub'))?.slice('nostr:'.length) ??
-      null,
-    [record.alsoKnownAs]
+      nostrUploaded
+        ? record.alsoKnownAs.find((value) => value.startsWith('nostr:npub'))?.slice('nostr:'.length) ??
+          null
+        : null,
+    [nostrUploaded, record.alsoKnownAs]
   );
   const handleClaim = useMemo(
     () =>
