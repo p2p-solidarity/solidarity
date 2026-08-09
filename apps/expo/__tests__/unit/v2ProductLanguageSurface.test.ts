@@ -37,4 +37,38 @@ describe('v2 product language surfaces', () => {
     expect(rows).toContain("t('shareSettings.status.selfDeclared')");
     expect(rows).toContain("t('shareSettings.status.unverified')");
   });
+
+  it('keeps the normal Present attestation path free of protocol details', () => {
+    const attestations = source('../../src/components/present/PresentAttestations.tsx');
+    const detail = source('../../app/credentials/[id].tsx');
+    const result = source('../../src/scan/passportShowResult.ts');
+
+    expect(attestations).toContain("product: '1'");
+    expect(detail).toContain('isProductContext');
+    expect(detail).toContain('ProductCredentialMetadata');
+    expect(result).not.toContain('reason: result.reason');
+    expect(result).not.toContain('reason: `openac_show');
+
+    const keys = [
+      'credentialDetail.loading',
+      'credentialDetail.metadataHeader',
+      'credentialDetail.notFound',
+      'credentialDetail.regenerate',
+      'credentialDetail.removedToast',
+      'credentialDetail.title',
+      'passportShow.intro',
+      'passportShow.scanChallenge',
+      'passportShow.presentWithout',
+      'passportShow.timeBucketHint',
+      'passportShow.scanPrompt',
+      'passportShow.footerChallenge',
+      'passportShow.footerTimeBucket',
+      'passportShow.challengeHint',
+    ] as const;
+    const banned = /credential|zero-knowledge|\b(?:DID|VC|ZK)\b|nonce|challenge|憑證|零知識/iu;
+    for (const key of keys) {
+      expect(en[key]).not.toMatch(banned);
+      expect(zhHant[key]).not.toMatch(banned);
+    }
+  });
 });

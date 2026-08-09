@@ -65,7 +65,7 @@ export function PresentAttestationsMode({
               onPress={() => {
                 router.push({
                   pathname: '/credentials/[id]',
-                  params: { id: claim.identityCardId, claimId: claim.id },
+                  params: { id: claim.identityCardId, claimId: claim.id, product: '1' },
                 });
               }}>
               <ThemedSurface

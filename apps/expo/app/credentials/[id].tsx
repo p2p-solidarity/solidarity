@@ -19,7 +19,7 @@
 import { useLocalSearchParams } from 'expo-router';
 import { safeBack } from '@/navigation/safeBack';
 import type { SFSymbol } from 'expo-symbols';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { LinearGradient } from 'expo-linear-gradient';
 import { ScrollView, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -198,6 +198,42 @@ function MetadataRow({ label, value, position: _position }: MetadataRowProps) {
   );
 }
 
+function ProductCredentialMetadata({
+  credential,
+  t,
+}: {
+  readonly credential: StoredCredential;
+  readonly t: (key: string) => string;
+}): ReactNode {
+  return (
+    <View className="px-4">
+      <MetadataRow
+        label={t('credentialDetail.method')}
+        value={
+          credential.type === 'passport'
+            ? t('credentialDetail.methodPassport')
+            : t('credentialDetail.methodSigned')
+        }
+        position="first"
+      />
+      <MetadataRow
+        label={t('credentialDetail.checked')}
+        value={formatDate(credential.issuedAt)}
+        position="middle"
+      />
+      <MetadataRow
+        label={t('credentialDetail.expires')}
+        value={
+          credential.expiresAt
+            ? formatDate(credential.expiresAt)
+            : t('credentialDetail.expiresNone')
+        }
+        position="last"
+      />
+    </View>
+  );
+}
+
 function SectionHeader({ title }: { readonly title: string }) {
   return (
     <View className="px-4">
@@ -308,7 +344,7 @@ function ClaimRow({
 export default function CredentialDetailScreen() {
   const { t } = useTranslation();
   const insets = useSafeAreaInsets();
-  const { id, context, groupId, claimId } = useLocalSearchParams<{
+  const { id, context, groupId, claimId, product } = useLocalSearchParams<{
     id: string;
     /** Optional disclosure-row entry point. When present, start with only
      *  that claim selected so "Show" does not over-disclose. */
@@ -317,7 +353,9 @@ export default function CredentialDetailScreen() {
      *  presentation to the group identified by `groupId`. */
     context?: string;
     groupId?: string;
+    product?: string;
   }>();
+  const isProductContext = product === '1';
   const isWorkContext = context === 'work' && typeof groupId === 'string' && groupId.length > 0;
   const credential = useCredentialById(id);
   const manifestEntry = useCredentialStore((s) =>
@@ -534,7 +572,9 @@ export default function CredentialDetailScreen() {
               <View style={{ alignItems: 'center', gap: 16, alignSelf: 'stretch' }}>
                 <ThemedText variant="headlineMedium">{credential.title}</ThemedText>
 
-                <IssuerBadge issuerId={credential.issuerDid} fallbackName={credential.issuerDid} />
+                {isProductContext ? null : (
+                  <IssuerBadge issuerId={credential.issuerDid} fallbackName={credential.issuerDid} />
+                )}
 
                 <View style={{ alignSelf: 'stretch', gap: 8 }}>
                   <LevelTag text={levelText(trustDisplay, t)} accent={accent} />
@@ -556,10 +596,12 @@ export default function CredentialDetailScreen() {
                     {isExpired && trustBadge ? (
                       <Chip icon="exclamationmark.triangle" text={status} />
                     ) : null}
-                    <Chip
-                      icon={proofIcon(credential.metadataTags)}
-                      text={proofTagText(credential.metadataTags)}
-                    />
+                    {isProductContext ? null : (
+                      <Chip
+                        icon={proofIcon(credential.metadataTags)}
+                        text={proofTagText(credential.metadataTags)}
+                      />
+                    )}
                   </View>
                 </View>
               </View>
@@ -569,37 +611,41 @@ export default function CredentialDetailScreen() {
           {/* Metadata section */}
           <View className="gap-2">
             <SectionHeader title={t('credentialDetail.metadataHeader')} />
-            <View className="px-4">
-              <MetadataRow
-                label={t('credentialDetail.issuer')}
-                value={credential.issuerDid}
-                position="first"
-              />
-              <MetadataRow
-                label={t('credentialDetail.holder')}
-                value={shortDid(credential.holderDid)}
-                position="middle"
-              />
-              <MetadataRow
-                label={t('credentialDetail.issued')}
-                value={formatDate(credential.issuedAt)}
-                position="middle"
-              />
-              <MetadataRow
-                label={t('credentialDetail.expires')}
-                value={
-                  credential.expiresAt
-                    ? formatDate(credential.expiresAt)
-                    : t('credentialDetail.expiresNone')
-                }
-                position="middle"
-              />
-              <MetadataRow
-                label={t('credentialDetail.proof')}
-                value={proofTypeText(credential.metadataTags)}
-                position="last"
-              />
-            </View>
+            {isProductContext ? (
+              <ProductCredentialMetadata credential={credential} t={t} />
+            ) : (
+              <View className="px-4">
+                <MetadataRow
+                  label={t('credentialDetail.issuer')}
+                  value={credential.issuerDid}
+                  position="first"
+                />
+                <MetadataRow
+                  label={t('credentialDetail.holder')}
+                  value={shortDid(credential.holderDid)}
+                  position="middle"
+                />
+                <MetadataRow
+                  label={t('credentialDetail.issued')}
+                  value={formatDate(credential.issuedAt)}
+                  position="middle"
+                />
+                <MetadataRow
+                  label={t('credentialDetail.expires')}
+                  value={
+                    credential.expiresAt
+                      ? formatDate(credential.expiresAt)
+                      : t('credentialDetail.expiresNone')
+                  }
+                  position="middle"
+                />
+                <MetadataRow
+                  label={t('credentialDetail.proof')}
+                  value={proofTypeText(credential.metadataTags)}
+                  position="last"
+                />
+              </View>
+            )}
           </View>
 
           {/* Selective Disclosures section */}
