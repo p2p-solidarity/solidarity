@@ -1,13 +1,8 @@
 /**
  * Onboarding state-machine tests. Pure reducer — no React, no native modules.
  *
- * 1.3.3 Task A2.5 converged the onboarding flow onto the Verified Page
- * story (US-01): welcome → secureKeys → backup → page → connect → share → complete.
- * The legacy Swift-parity steps (profileSetup/avatarSetup — a name+animal
- * form that fed a now-superseded BusinessCard — plus importContacts and
- * scanPassport) were dropped from the DEFAULT sequence; those features stay
- * reachable from their normal surfaces (People tab import, Settings/Me →
- * /passport) — see src/onboarding/state.ts's module doc.
+ * v2 uses the exact five-dot product sequence from v2.html:
+ * welcome → username → passkey → links → complete.
  */
 import { describe, expect, it } from 'bun:test';
 
@@ -22,20 +17,28 @@ describe('onboardingReducer', () => {
     expect(initialOnboardingState.step).toBe('welcome');
   });
 
-  it('the default sequence is exactly welcome → secureKeys → backup → page → connect → share → complete', () => {
+  it('the default sequence is exactly welcome → username → passkey → links → complete', () => {
     expect(ONBOARDING_STEPS).toEqual([
       'welcome',
+      'username',
+      'passkey',
+      'links',
+      'complete',
+    ]);
+  });
+
+  it('drops every technical or legacy step from the product sequence', () => {
+    for (const legacy of [
       'secureKeys',
       'backup',
       'page',
       'connect',
       'share',
-      'complete',
-    ]);
-  });
-
-  it('drops every legacy step not in the US-01 sequence', () => {
-    for (const legacy of ['profileSetup', 'avatarSetup', 'importContacts', 'scanPassport']) {
+      'profileSetup',
+      'avatarSetup',
+      'importContacts',
+      'scanPassport',
+    ]) {
       expect(ONBOARDING_STEPS).not.toContain(legacy);
     }
   });
@@ -53,12 +56,12 @@ describe('onboardingReducer', () => {
     expect(s.step).toBe('welcome');
   });
 
-  it('back retreats one step at a time (e.g. share → connect → page)', () => {
-    let s = onboardingReducer(initialOnboardingState, { type: 'goTo', step: 'share' });
+  it('back retreats one step at a time (e.g. links → passkey → username)', () => {
+    let s = onboardingReducer(initialOnboardingState, { type: 'goTo', step: 'links' });
     s = onboardingReducer(s, { type: 'back' });
-    expect(s.step).toBe('connect');
+    expect(s.step).toBe('passkey');
     s = onboardingReducer(s, { type: 'back' });
-    expect(s.step).toBe('page');
+    expect(s.step).toBe('username');
   });
 
   it('next is a no-op on the last step', () => {
@@ -71,8 +74,8 @@ describe('onboardingReducer', () => {
   });
 
   it('goTo jumps to an arbitrary step', () => {
-    const s = onboardingReducer(initialOnboardingState, { type: 'goTo', step: 'page' });
-    expect(s.step).toBe('page');
+    const s = onboardingReducer(initialOnboardingState, { type: 'goTo', step: 'links' });
+    expect(s.step).toBe('links');
   });
 
   it('tracks keysGenerated', () => {
@@ -81,31 +84,4 @@ describe('onboardingReducer', () => {
     expect(s.keysGenerated).toBe(true);
   });
 
-  it('threads the chosen provider and real verifier result without reducing it to a boolean', () => {
-    const selected = onboardingReducer(initialOnboardingState, {
-      type: 'setBadgeProvider',
-      value: 'bluesky',
-    });
-    expect(selected.badgeProvider).toBe('bluesky');
-
-    const verification = {
-      provider: 'bluesky' as const,
-      result: {
-        state: 'declared' as const,
-        handle: 'alice.bsky.social',
-        evidence: {
-          handleClaim: 'alice.bsky.social',
-          repoDid: 'did:plc:alice',
-          recordUri: null,
-          direction1: true,
-          direction2: false,
-          reason: 'one-way',
-        },
-      },
-    };
-    const checked = onboardingReducer(selected, { type: 'setBadgeResult', value: verification });
-
-    expect(checked.badgeResult).toEqual(verification);
-    expect(checked.badgeResult?.result.state).toBe('declared');
-  });
 });

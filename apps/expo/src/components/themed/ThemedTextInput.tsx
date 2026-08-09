@@ -105,6 +105,7 @@ export interface ThemedTextInputProps {
   readonly keyboardType?: KeyboardTypeOptions;
   readonly autoCapitalize?: RNTextInputProps['autoCapitalize'];
   readonly autoCorrect?: boolean;
+  readonly maxLength?: number;
   readonly onSubmitEditing?: () => void;
   readonly accessibilityLabel?: string;
   readonly testID?: string;
@@ -136,6 +137,7 @@ export function ThemedTextInput({
   keyboardType,
   autoCapitalize,
   autoCorrect,
+  maxLength,
   onSubmitEditing,
   accessibilityLabel,
   testID,
@@ -215,6 +217,7 @@ export function ThemedTextInput({
           keyboardType={keyboardType ?? cfg.keyboardType}
           autoCapitalize={autoCapitalize ?? cfg.autoCapitalize}
           autoCorrect={autoCorrect ?? cfg.autoCorrect}
+          maxLength={maxLength}
           autoComplete={cfg.autoComplete}
           textContentType={cfg.textContentType}
           returnKeyType={returnKeyType}

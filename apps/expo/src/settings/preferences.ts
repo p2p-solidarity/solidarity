@@ -34,6 +34,8 @@ export type AnimalCharacter = 'dog' | 'horse' | 'pig' | 'sheep' | 'dove';
 
 export interface Preferences {
   readonly hasCompletedOnboarding: boolean;
+  /** Local v2 username used for the short `/name` public-page presentation. */
+  readonly publicPageUsername: string;
   readonly biometricSensitiveOps: boolean;
   readonly backupProvider: ProviderKind;
   readonly autoBackupOnPull: boolean;
@@ -103,6 +105,7 @@ const DEFAULT_BIOMETRIC_POLICY: Readonly<Record<SensitiveActionKey, boolean>> = 
 
 const DEFAULTS: Preferences = {
   hasCompletedOnboarding: false,
+  publicPageUsername: '',
   biometricSensitiveOps: true,
   backupProvider: 'iCloud',
   autoBackupOnPull: true,

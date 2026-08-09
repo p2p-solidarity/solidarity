@@ -27,33 +27,16 @@ describe('S5 onboarding and Bluesky UI wiring', () => {
     expect(zhHant['blueskyConnect.autoRepublishFailed']).toContain('請從設定重新發布');
   });
 
-  it('keeps one default publish route and carries verifier evidence into completion', () => {
-    const connect = source('../../src/onboarding/steps/ConnectStep.tsx');
-    const page = source('../../src/onboarding/steps/PageStep.tsx');
-    const scaffold = source('../../src/onboarding/steps/OnboardingScaffold.tsx');
+  it('keeps verification on Page instead of adding a technical onboarding step', () => {
     const flow = source('../../app/onboarding/index.tsx');
-    const complete = source('../../src/onboarding/steps/CompleteStep.tsx');
+    const ready = source('../../src/onboarding/steps/ReadyStep.tsx');
     const meRows = source('../../src/components/me/IdentityCredentialRows.tsx');
 
-    expect(connect).toContain("router.push('/verify/nostr')");
-    expect(connect).toContain("t('connectStep.continuePrivate')");
-    expect(connect).toContain('onPress={onNext}');
-    expect(connect).not.toContain("router.push('/verify/bluesky')");
-    expect(page).toContain('shouldAutoRepublish(isAlreadyPublished, autoRepublish)');
-    expect(page).toContain('if (willAutoRepublish)');
-    expect(page).toContain("'pageStep.publishHint' : 'pageStep.localHint'");
-    expect(connect).toContain('useOnboardingBadgeVerification');
-    expect(flow).toContain("case 'connect'");
-    expect(flow).toContain("goTo('connect')");
-    expect(flow).toContain('setBadgeResult');
-    expect(complete).toContain('useOnboardingBadgeVerification');
-    expect(complete).toContain('badgeResult');
-    expect(complete).toContain('duration: 300');
-    expect(complete).toContain('scale.value = 0.95');
-    expect(complete).toContain('useReducedMotion');
+    expect(flow).not.toContain("case 'connect'");
+    expect(flow).toContain("router.replace('/verify/bluesky')");
     expect(meRows).toContain("router.push('/verify/bluesky')");
     expect(meRows).toContain('onOpenBindings');
-    expect(`${flow}\n${connect}\n${scaffold}`).not.toMatch(/<Pressable(?:\s|>)/u);
+    expect(`${flow}\n${ready}`).not.toMatch(/<Pressable(?:\s|>)/u);
   });
 
   it('uses the self-owned Share copy in both locales', () => {
