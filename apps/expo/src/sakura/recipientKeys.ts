@@ -202,16 +202,23 @@ export async function signSendRequest(input: {
   return base64Encode(sigBytes);
 }
 
+/** Permanently delete both long-term Sakura recipient private keys. */
+export async function deleteRecipientKeys(): Promise<void> {
+  cached = null;
+  const results = await Promise.allSettled(
+    [ENC_PRIV_ALIAS, SIG_PRIV_ALIAS].map((alias) =>
+      SecureStore.deleteItemAsync(alias, SECURE_OPTS),
+    ),
+  );
+  if (results.some((result) => result.status === 'rejected')) {
+    throw new Error('Recipient key deletion was incomplete');
+  }
+}
+
 /**
  * Test-only — drops the in-memory cache + persisted aliases so subsequent
  * `loadOrCreateRecipientKeys` calls re-provision fresh keys.
  */
 export async function resetRecipientKeysForTesting(): Promise<void> {
-  cached = null;
-  await SecureStore.deleteItemAsync(ENC_PRIV_ALIAS, SECURE_OPTS).catch(
-    () => undefined
-  );
-  await SecureStore.deleteItemAsync(SIG_PRIV_ALIAS, SECURE_OPTS).catch(
-    () => undefined
-  );
+  await deleteRecipientKeys();
 }

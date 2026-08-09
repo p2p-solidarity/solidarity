@@ -1,10 +1,8 @@
 /**
  * Settings hub — 1:1 port of solidarity/Views/SettingsViews/SettingsView.swift.
  *
- * Blocks: Account & Identity, Preferences, Legacy business card, Guide,
- * About. (G2 retired the standalone "QR Sharing" / "Solidarity QR" entries —
- * the legacy business-card QR + field toggles now live under one clearly
- * legacy-labelled row so they don't read as governing the Verified Page.)
+ * Blocks: Account, Preferences, Card, Guide, About. Protocol inspectors and
+ * credential tools live exclusively inside Developer Options.
  * Each row is a SettingsBlockRow on a `mutedSurface` 12pt card, stacked
  * 8pt apart. Sections themselves are 24pt apart. About section is rendered
  * inline (no SettingsBlockSection wrapper, since the version row uses the
@@ -28,9 +26,8 @@ import { Colors } from '@/constants/Colors';
 import { haptic } from '@/feedback/haptics';
 import { pushToast } from '@/feedback/toast';
 import { useTranslation } from '@/i18n';
+import { advanceDeveloperUnlock } from '@/settings/developerUnlock';
 import { usePreferences } from '@/settings/preferences';
-
-const DEV_TAP_THRESHOLD = 7;
 
 export default function SettingsHub() {
   const insets = useSafeAreaInsets();
@@ -41,28 +38,25 @@ export default function SettingsHub() {
 
   const version = Constants.expoConfig?.version ?? 'Unknown';
 
-  // Mirrors Swift DeveloperModeManager.registerVersionTap — 5/6 taps show a
-  // "N taps away" hint, the 7th flips developerMode on with success toast
-  // + haptic. The counter lives in a ref (component-local, not persisted).
+  // The counter is deliberately component-local; only the enabled preference
+  // persists. Taps one and two stay silent so this remains a hidden entry.
   const onVersionTap = () => {
-    if (developerMode) return;
-    tapCountRef.current += 1;
-    const count = tapCountRef.current;
-    if (count >= DEV_TAP_THRESHOLD) {
-      tapCountRef.current = 0;
+    const transition = advanceDeveloperUnlock(tapCountRef.current, developerMode);
+    tapCountRef.current = transition.nextTapCount;
+
+    if (transition.effect.kind === 'enabled') {
       setPref('developerMode', true);
       haptic('success');
+      pushToast(t('settingsHub.devUnlock.enabled'), 'success', 3000);
+    } else if (transition.effect.kind === 'countdown') {
+      const countdownKey = transition.effect.remaining === 1
+        ? 'settingsHub.devUnlock.remainingOne'
+        : 'settingsHub.devUnlock.remainingMany';
       pushToast(
-        t('settingsHub.devUnlock.enabled'),
-        'success',
-        3000
+        t(countdownKey, { count: transition.effect.remaining }),
+        'info',
+        1500,
       );
-    } else if (count >= 5) {
-      const remaining = DEV_TAP_THRESHOLD - count;
-      const message = remaining === 1
-        ? t('settingsHub.devUnlock.almostOne')
-        : t('settingsHub.devUnlock.almostMany', { count: remaining });
-      pushToast(message, 'info', 1500);
     }
   };
 
@@ -74,11 +68,6 @@ export default function SettingsHub() {
           accessibilityLabel: 'Back',
           onPress: () => { safeBack(); },
         }}
-        trailingAction={{
-          icon: 'qrcode.viewfinder',
-          accessibilityLabel: t('idView.scan'),
-          onPress: () => { router.push('/scan'); },
-        }}
       />
 
       <ScrollView
@@ -86,22 +75,17 @@ export default function SettingsHub() {
         contentContainerStyle={{ paddingTop: 24, paddingBottom: 60 + insets.bottom }}
       >
         <View className="gap-6">
-          {/* Account & Identity */}
+          {/* Account */}
           <SettingsBlockSection title={t('settingsHub.accountIdentity')}>
             <SettingsBlockRow
               icon="person.text.rectangle"
               title={t('settingsHub.identityProfile')}
-              onPress={() => { router.push('/settings/vc'); }}
-            />
-            <SettingsBlockRow
-              icon="key.horizontal"
-              title={t('settingsHub.viewDids')}
-              onPress={() => { router.push('/settings/dids'); }}
+              onPress={() => { router.push('/me/edit'); }}
             />
             <SettingsBlockRow
               icon="arrow.up.arrow.down.square"
               title={t('settingsHub.identityExport')}
-              onPress={() => { router.push('/settings/identity-export'); }}
+              onPress={() => { router.push('/settings/backup'); }}
             />
           </SettingsBlockSection>
 
@@ -128,20 +112,9 @@ export default function SettingsHub() {
               title={t('settingsHub.advanced')}
               onPress={() => { router.push('/settings/advanced'); }}
             />
-            {developerMode ? (
-              <SettingsBlockRow
-                icon="hammer"
-                title={t('settingsHub.developer')}
-                onPress={() => { router.push('/settings/developer'); }}
-              />
-            ) : null}
           </SettingsBlockSection>
 
-          {/* Legacy business card — G2 retirement. The old scan-to-exchange QR
-              and its field toggles are parked here under a clearly legacy label
-              so they don't read as governing the Verified Page. Both former
-              entry points (Solidarity QR + Share Settings) collapse into this
-              single row; the QR wire is built in one place now. */}
+          {/* Card sharing keeps the existing working QR path secondary. */}
           <SettingsBlockSection
             title={t('legacyCard.section')}
             footer={t('legacyCard.sectionFooter')}

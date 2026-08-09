@@ -435,12 +435,55 @@ export function wrapRawSigningInputForSpruce(payload: Uint8Array): Uint8Array {
   return sha256Bytes(payload);
 }
 
-/** Test-only — wipes the active alias plus all legacy aliases. */
-export async function resetSigningKeyForTesting(): Promise<void> {
-  await driver().deleteKey(SIGNING_KEY_ALIAS).catch(() => false);
-  await clearLegacyExpoBytes();
+/**
+ * Permanently delete the active signing key and every legacy copy.
+ *
+ * Teardown is intentionally all-attempting: a native driver failure must not
+ * prevent cleanup of legacy SecureStore aliases. Any failed deletion is then
+ * surfaced so the caller cannot report a complete wipe.
+ */
+export async function deleteSigningKey(): Promise<void> {
+  let syncableRows: readonly { labelHex: string; publicKeyHex: string }[] = [];
+  let syncableListFailed = false;
+  try {
+    syncableRows = parseCandidateRows(
+      await driver().listSyncableP256Keys(SIGNING_KEY_ALIAS),
+    );
+  } catch {
+    syncableListFailed = true;
+  }
+
+  const syncableResults = await Promise.allSettled(
+    syncableRows.map((row) =>
+      driver().deleteSyncableP256Key(SIGNING_KEY_ALIAS, row.labelHex),
+    ),
+  );
+  const operations: readonly (() => Promise<unknown>)[] = [
+    () => driver().deleteKey(SIGNING_KEY_ALIAS),
+    ...[LEGACY_EXPO_ALIAS, LEGACY_SWIFT_V0_ALIAS].map(
+      (alias) => () => SecureStore.deleteItemAsync(alias, SECURE_OPTS_LEGACY),
+    ),
+  ];
+  const results = await Promise.allSettled(
+    operations.map((operation) => Promise.resolve().then(operation)),
+  );
   cachedIdentity = null;
   cachedAuthMode = null;
+  const syncableDeleteFailed = syncableResults.some(
+    (result) => result.status === 'rejected' || result.value === false,
+  );
+  if (
+    syncableListFailed ||
+    syncableDeleteFailed ||
+    results.some((result) => result.status === 'rejected')
+  ) {
+    throw new Error('Signing key deletion was incomplete');
+  }
+}
+
+/** Test-only — wipes the active alias plus all legacy aliases. */
+export async function resetSigningKeyForTesting(): Promise<void> {
+  await deleteSigningKey();
 }
 
 // ── T7: iCloud-synced signing-key conflict surface ────────────────────────

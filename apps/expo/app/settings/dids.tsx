@@ -52,7 +52,8 @@ type RootDidState =
 export default function DIDListSheet() {
   const insets = useSafeAreaInsets();
   const { t } = useTranslation();
-  const params = useLocalSearchParams<{ did?: string }>();
+  const params = useLocalSearchParams<{ did?: string; readOnly?: string }>();
+  const readOnly = params.readOnly === '1';
   const seedKeychain = useIdentityCoordinator((s) => s.seedFromKeychain);
   useEffect(() => {
     void seedKeychain();
@@ -79,7 +80,7 @@ export default function DIDListSheet() {
   const [keyConflicts, setKeyConflicts] = useState<readonly SigningKeyCandidate[]>([]);
   const refreshIdentity = useIdentityCoordinator((s) => s.refreshIdentity);
   useEffect(() => {
-    if (Platform.OS !== 'ios') return;
+    if (readOnly || Platform.OS !== 'ios') return;
     let cancelled = false;
     void listSyncableSigningKeys().then((candidates) => {
       if (!cancelled) setKeyConflicts(candidates);
@@ -87,7 +88,7 @@ export default function DIDListSheet() {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [readOnly]);
 
   const keepCandidate = async (candidate: SigningKeyCandidate) => {
     const approved = await confirmDialog({
@@ -119,7 +120,7 @@ export default function DIDListSheet() {
       <SettingsBackToolbar
         title={t('dids.close')}
         onPress={() => {
-          safeBack('/settings');
+          safeBack(readOnly ? '/settings/developer' : '/settings');
         }}
       />
       <SettingsScreenTitle title={t('dids.title')} />
@@ -159,7 +160,7 @@ export default function DIDListSheet() {
           </View>
 
           {/* T7 signing-key conflict — hidden unless a real conflict exists */}
-          {keyConflicts.length > 1 ? (
+          {!readOnly && keyConflicts.length > 1 ? (
             <View className="gap-2">
               <SettingsBlockSectionHeader title={t('dids.keyConflict.title')} />
               <View className="px-4 gap-2">

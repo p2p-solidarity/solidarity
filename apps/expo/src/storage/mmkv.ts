@@ -62,3 +62,19 @@ export function getMmkv(): MMKV {
   }
   return existing;
 }
+
+/**
+ * Provision a fresh master key and move the live, already-cleared MMKV store
+ * onto it. This is intentionally narrow: calling it while any records remain
+ * would silently rotate data outside the normal migration path.
+ */
+export async function rekeyEmptyMmkv(): Promise<void> {
+  const existing = getMmkv();
+  if (existing.getAllKeys().length > 0) {
+    throw new Error('Refusing to rekey a non-empty MMKV store');
+  }
+
+  const freshMasterKey = await getMasterKey();
+  const config = createMmkvConfig(freshMasterKey);
+  existing.encrypt(config.encryptionKey, config.encryptionType);
+}

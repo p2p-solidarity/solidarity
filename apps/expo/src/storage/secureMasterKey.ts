@@ -168,9 +168,34 @@ export function evictMasterKeyCache(): void {
   cachedKey = null;
 }
 
-/** Test-only escape hatch (mirrors Swift's `local-escape-hatch` debug code). */
-export async function resetMasterKeyForTesting(): Promise<void> {
+/**
+ * Permanently delete the active encryption key and Swift-era Keychain copies.
+ * `deleteItemAsync` queries by service/account without decoding the stored
+ * bytes, so it can remove legacy raw AES values that SecureStore cannot read.
+ */
+export async function deleteMasterKey(): Promise<void> {
   cachedKey = null;
   pending = null;
-  await SecureStore.deleteItemAsync(MASTER_KEY_ALIAS_V2, SECURE_OPTS);
+  const operations: Promise<void>[] = [
+    SecureStore.deleteItemAsync(MASTER_KEY_ALIAS_V2, SECURE_OPTS),
+  ];
+  for (const service of LEGACY_IOS_KEY_SERVICES) {
+    for (const account of LEGACY_IOS_KEY_ACCOUNTS) {
+      operations.push(
+        SecureStore.deleteItemAsync(account, {
+          ...SECURE_OPTS,
+          keychainService: service,
+        }),
+      );
+    }
+  }
+  const results = await Promise.allSettled(operations);
+  if (results.some((result) => result.status === 'rejected')) {
+    throw new Error('Master encryption key deletion was incomplete');
+  }
+}
+
+/** Test-only escape hatch (mirrors Swift's `local-escape-hatch` debug code). */
+export async function resetMasterKeyForTesting(): Promise<void> {
+  await deleteMasterKey();
 }

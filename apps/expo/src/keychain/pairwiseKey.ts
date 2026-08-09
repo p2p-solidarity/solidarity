@@ -138,8 +138,20 @@ export async function pairwisePublicJwk(domain: string): Promise<PublicKeyJWK> {
   return publicKeyToJwk(publicKeyFromPrivate(priv));
 }
 
+/** Permanently delete the pairwise seed and its legacy recovery source. */
+export async function deletePairwiseSeed(): Promise<void> {
+  cachedSeed = null;
+  const results = await Promise.allSettled(
+    [PAIRWISE_SEED_ALIAS, LEGACY_MASTER_ALIAS].map((alias) =>
+      SecureStore.deleteItemAsync(alias, SECURE_OPTS),
+    ),
+  );
+  if (results.some((result) => result.status === 'rejected')) {
+    throw new Error('Pairwise seed deletion was incomplete');
+  }
+}
+
 /** Test-only — clears the cached seed so subsequent calls re-read SecureStore. */
 export async function resetPairwiseSeedForTesting(): Promise<void> {
-  cachedSeed = null;
-  await SecureStore.deleteItemAsync(PAIRWISE_SEED_ALIAS, SECURE_OPTS).catch(() => {});
+  await deletePairwiseSeed();
 }

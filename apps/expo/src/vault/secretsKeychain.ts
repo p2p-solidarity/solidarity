@@ -451,22 +451,26 @@ export async function rotateRootSecret(
   };
 }
 
-/** Test-only — wipes the stored secret + in-memory cache. */
-export async function resetRootSecretForTesting(): Promise<void> {
-  await SecureStore.deleteItemAsync(ROOT_SECRET_ALIAS, SECURE_OPTS_BIOMETRIC).catch(
-    () => undefined
+/** Permanently delete the vault root secret and both wrapping-key versions. */
+export async function deleteRootSecret(): Promise<void> {
+  const operations: readonly (() => Promise<unknown>)[] = [
+    () => SecureStore.deleteItemAsync(ROOT_SECRET_ALIAS, SECURE_OPTS_BIOMETRIC),
+    () => SecureStore.deleteItemAsync(ROOT_SECRET_ALIAS, SECURE_OPTS_NO_BIOMETRIC),
+    ...[WRAPPING_KEY_ALIAS, WRAPPING_KEY_ALIAS_V2].map(
+      (alias) => () => vaultDriver().deleteKey(alias),
+    ),
+  ];
+  const results = await Promise.allSettled(
+    operations.map((operation) => Promise.resolve().then(operation)),
   );
-  await SecureStore.deleteItemAsync(ROOT_SECRET_ALIAS, SECURE_OPTS_NO_BIOMETRIC).catch(
-    () => undefined
-  );
-  for (const alias of [WRAPPING_KEY_ALIAS, WRAPPING_KEY_ALIAS_V2]) {
-    try {
-      await vaultDriver().deleteKey(alias);
-    } catch {
-      // Wrapping-key teardown is best-effort; the next
-      // `getOrCreateRootSecret` call will re-provision if needed.
-    }
-  }
   cachedSecret = null;
   hardwareAvailability = null;
+  if (results.some((result) => result.status === 'rejected')) {
+    throw new Error('Vault secret deletion was incomplete');
+  }
+}
+
+/** Test-only — wipes the stored secret + in-memory cache. */
+export async function resetRootSecretForTesting(): Promise<void> {
+  await deleteRootSecret();
 }

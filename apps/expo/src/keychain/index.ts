@@ -14,6 +14,7 @@ export {
   signOpenAcDeviceBindingDigest,
   signRawEs256,
   didKeyForCurrentIdentity,
+  deleteSigningKey,
   resetSigningKeyForTesting,
   type SigningIdentity,
   type SigningKeyCandidate,
@@ -21,6 +22,7 @@ export {
 export {
   pairwisePrivateKey,
   pairwisePublicJwk,
+  deletePairwiseSeed,
   resetPairwiseSeedForTesting,
 } from './pairwiseKey';
 export {
