@@ -53,6 +53,16 @@ import {
 } from '@solidarity/nitro-secrets-vault';
 
 import { requireBiometric } from '@/keychain/biometric';
+import {
+  deletionFailed,
+  deletionSucceeded,
+  type LocalDeletionResult,
+} from '@/storage/deletionResult';
+import {
+  canCommitLocalData,
+  captureLocalDataEpoch,
+  type LocalDataEpoch,
+} from '@/settings/localDataWipeBarrier';
 import * as FileSystem from 'expo-file-system/legacy';
 
 import type { VaultItem } from './store';
@@ -114,6 +124,32 @@ export type RootSecretResult =
 
 let cachedSecret: Uint8Array | null = null;
 
+// SecureStore and native wrapping-key operations are asynchronous. Keep every
+// provisioning/rotation operation observable so the destructive wipe can
+// invalidate it, wait for its final epoch check, and only then delete the
+// root secret and wrapping keys.
+const activeRootSecretOperations = new Set<Promise<unknown>>();
+
+function trackRootSecretOperation<T>(operation: Promise<T>): Promise<T> {
+  activeRootSecretOperations.add(operation);
+  const remove = (): void => {
+    activeRootSecretOperations.delete(operation);
+  };
+  operation.then(remove, remove);
+  return operation;
+}
+
+/** Wait for vault-root reads/provisioning/rotation that began before a wipe. */
+export async function quiesceRootSecretOperations(): Promise<void> {
+  while (activeRootSecretOperations.size > 0) {
+    await Promise.allSettled([...activeRootSecretOperations]);
+  }
+}
+
+function localDataWipeError(): Error {
+  return new Error('Vault root-secret operation was invalidated by a local data wipe');
+}
+
 function opts(mode: AccessMode): SecureStore.SecureStoreOptions {
   return mode === 'biometric' ? SECURE_OPTS_BIOMETRIC : SECURE_OPTS_NO_BIOMETRIC;
 }
@@ -128,6 +164,23 @@ function vaultDriver(): SecretsVault {
     .__SECRETS_VAULT_TEST_DRIVER__;
   if (override) return override;
   return getSecretsVault();
+}
+
+/**
+ * A stale root-secret writer may have created a SecureStore item or wrapping
+ * key just after its epoch was invalidated. This is deliberately best-effort:
+ * production follows it with `deleteRootSecret()`, which reports a failed
+ * authoritative deletion instead of claiming the wipe succeeded.
+ */
+async function deleteStaleRootSecret(): Promise<void> {
+  await Promise.allSettled([
+    SecureStore.deleteItemAsync(ROOT_SECRET_ALIAS, SECURE_OPTS_BIOMETRIC),
+    SecureStore.deleteItemAsync(ROOT_SECRET_ALIAS, SECURE_OPTS_NO_BIOMETRIC),
+    vaultDriver().deleteKey(WRAPPING_KEY_ALIAS),
+    vaultDriver().deleteKey(WRAPPING_KEY_ALIAS_V2),
+  ]);
+  cachedSecret = null;
+  hardwareAvailability = null;
 }
 
 /**
@@ -194,14 +247,20 @@ async function readEnvelope(
 
 async function writeEnvelope(
   env: EncodedRootSecret,
-  _mode: AccessMode
+  _mode: AccessMode,
+  writeEpoch: LocalDataEpoch,
 ): Promise<void> {
+  if (!canCommitLocalData(writeEpoch)) throw localDataWipeError();
   const serialised = env.kind === 'v0.raw' ? env.rootB64 : JSON.stringify(env);
   // Always stored WITHOUT an item-level auth ACL (phase 4): the envelope is
   // ciphertext under the hardware wrapping key, and the JS 'exchange' gate
   // is the user-facing prompt. The old `requireAuthentication: true` write
   // made even silent-mode reads trigger a native keychain prompt.
   await SecureStore.setItemAsync(ROOT_SECRET_ALIAS, serialised, SECURE_OPTS_NO_BIOMETRIC);
+  if (!canCommitLocalData(writeEpoch)) {
+    await deleteStaleRootSecret();
+    throw localDataWipeError();
+  }
 }
 
 /**
@@ -210,7 +269,11 @@ async function writeEnvelope(
  * the hardware driver throws — but emits a console.warn so the
  * downgrade is observable.
  */
-async function wrapRoot(bytes: Uint8Array): Promise<EncodedRootSecret> {
+async function wrapRoot(
+  bytes: Uint8Array,
+  writeEpoch: LocalDataEpoch,
+): Promise<EncodedRootSecret> {
+  if (!canCommitLocalData(writeEpoch)) throw localDataWipeError();
   if (!hardwareAvailable()) {
     console.warn(
       '[secretsKeychain] hardware-backed wrapping unavailable; storing plain root in secure-store'
@@ -220,11 +283,23 @@ async function wrapRoot(bytes: Uint8Array): Promise<EncodedRootSecret> {
   try {
     const driver = vaultDriver();
     await driver.ensureWrappingKey(WRAPPING_KEY_ALIAS_V2, false);
+    if (!canCommitLocalData(writeEpoch)) {
+      await deleteStaleRootSecret();
+      throw localDataWipeError();
+    }
     const buf = new ArrayBuffer(bytes.length);
     new Uint8Array(buf).set(bytes);
     const wrapped = await driver.wrap(WRAPPING_KEY_ALIAS_V2, buf);
+    if (!canCommitLocalData(writeEpoch)) {
+      await deleteStaleRootSecret();
+      throw localDataWipeError();
+    }
     return encodeWrapped(wrapped);
   } catch (e) {
+    if (!canCommitLocalData(writeEpoch)) {
+      await deleteStaleRootSecret();
+      throw localDataWipeError();
+    }
     console.warn(
       '[secretsKeychain] hardware wrap failed; falling back to plain root',
       e
@@ -264,9 +339,21 @@ async function unwrapRoot(env: EncodedRootSecret): Promise<Uint8Array | null> {
  * identical to every other Face ID-gated path (matches CLAUDE.md Sec
  * rules).
  */
-export async function getOrCreateRootSecret(
+export function getOrCreateRootSecret(
   mode: AccessMode = 'biometric'
 ): Promise<RootSecretResult> {
+  return trackRootSecretOperation(
+    getOrCreateRootSecretAtEpoch(mode, captureLocalDataEpoch()),
+  );
+}
+
+async function getOrCreateRootSecretAtEpoch(
+  mode: AccessMode,
+  writeEpoch: LocalDataEpoch,
+): Promise<RootSecretResult> {
+  if (!canCommitLocalData(writeEpoch)) {
+    return { kind: 'err', reason: 'storageFailed' };
+  }
   if (cachedSecret && mode === 'silent') {
     return { kind: 'ok', bytes: cachedSecret };
   }
@@ -284,20 +371,32 @@ export async function getOrCreateRootSecret(
     // of the user's policy preferences.
     const allowed = await requireBiometric('exchange');
     if (!allowed) return { kind: 'err', reason: 'biometricDenied' };
+    if (!canCommitLocalData(writeEpoch)) {
+      return { kind: 'err', reason: 'storageFailed' };
+    }
   }
 
   try {
     const stored = await readEnvelope(mode);
     const restored = stored ? await unwrapRoot(stored) : null;
+    if (!canCommitLocalData(writeEpoch)) {
+      return { kind: 'err', reason: 'storageFailed' };
+    }
     if (restored?.length === 32 && stored) {
-      await maybeUpgradeToHardware(stored, restored, mode);
-      await maybeMigrateWrappingKeyToV2(stored, restored, mode);
+      await maybeUpgradeToHardware(stored, restored, mode, writeEpoch);
+      await maybeMigrateWrappingKeyToV2(stored, restored, mode, writeEpoch);
+      if (!canCommitLocalData(writeEpoch)) {
+        return { kind: 'err', reason: 'storageFailed' };
+      }
       cachedSecret = restored;
       return { kind: 'ok', bytes: restored };
     }
     const fresh = generateAesKey();
-    const envelope = await wrapRoot(fresh);
-    await writeEnvelope(envelope, mode);
+    const envelope = await wrapRoot(fresh, writeEpoch);
+    await writeEnvelope(envelope, mode, writeEpoch);
+    if (!canCommitLocalData(writeEpoch)) {
+      return { kind: 'err', reason: 'storageFailed' };
+    }
     cachedSecret = fresh;
     return { kind: 'ok', bytes: fresh };
   } catch {
@@ -315,8 +414,10 @@ export async function getOrCreateRootSecret(
 async function maybeMigrateWrappingKeyToV2(
   stored: EncodedRootSecret,
   bytes: Uint8Array,
-  mode: AccessMode
+  mode: AccessMode,
+  writeEpoch: LocalDataEpoch,
 ): Promise<void> {
+  if (!canCommitLocalData(writeEpoch)) throw localDataWipeError();
   if (
     mode !== 'biometric' ||
     stored.kind !== 'v1.hw' ||
@@ -327,17 +428,29 @@ async function maybeMigrateWrappingKeyToV2(
   try {
     const driver = vaultDriver();
     await driver.ensureWrappingKey(WRAPPING_KEY_ALIAS_V2, false);
+    if (!canCommitLocalData(writeEpoch)) {
+      await deleteStaleRootSecret();
+      throw localDataWipeError();
+    }
     const buf = new ArrayBuffer(bytes.length);
     new Uint8Array(buf).set(bytes);
     const wrapped = await driver.wrap(WRAPPING_KEY_ALIAS_V2, buf);
+    if (!canCommitLocalData(writeEpoch)) {
+      await deleteStaleRootSecret();
+      throw localDataWipeError();
+    }
     // Delete-then-write so the new item is created without the old
     // item-level auth ACL (SecItemUpdate cannot swap kSecAttrAccessControl).
     await SecureStore.deleteItemAsync(ROOT_SECRET_ALIAS, SECURE_OPTS_NO_BIOMETRIC).catch(
       () => undefined
     );
-    await writeEnvelope(encodeWrapped(wrapped), mode);
+    await writeEnvelope(encodeWrapped(wrapped), mode, writeEpoch);
     await driver.deleteKey(WRAPPING_KEY_ALIAS).catch(() => undefined);
   } catch (e) {
+    if (!canCommitLocalData(writeEpoch)) {
+      await deleteStaleRootSecret();
+      throw localDataWipeError();
+    }
     console.warn(
       '[secretsKeychain] wrapping-key v2 migration failed; keeping v1 envelope',
       e
@@ -354,12 +467,18 @@ async function maybeMigrateWrappingKeyToV2(
 async function maybeUpgradeToHardware(
   stored: EncodedRootSecret,
   bytes: Uint8Array,
-  mode: AccessMode
+  mode: AccessMode,
+  writeEpoch: LocalDataEpoch,
 ): Promise<void> {
+  if (!canCommitLocalData(writeEpoch)) throw localDataWipeError();
   if (stored.kind !== 'v0.raw' || !hardwareAvailable()) return;
-  const upgraded = await wrapRoot(bytes);
+  const upgraded = await wrapRoot(bytes, writeEpoch);
   if (upgraded.kind !== 'v1.hw') return;
-  await writeEnvelope(upgraded, mode).catch(() => undefined);
+  try {
+    await writeEnvelope(upgraded, mode, writeEpoch);
+  } catch {
+    if (!canCommitLocalData(writeEpoch)) throw localDataWipeError();
+  }
 }
 
 /** Clear the in-memory copy. Triggers a fresh prompt on next access. */
@@ -389,10 +508,28 @@ export interface RotationResult {
  * surface a retry. The new key is only persisted if at least one item
  * was successfully re-sealed (or if there are no items).
  */
-export async function rotateRootSecret(
+export function rotateRootSecret(
   items: readonly VaultItem[],
   onProgress?: (p: RotationProgress) => void
 ): Promise<RotationResult> {
+  return trackRootSecretOperation(
+    rotateRootSecretAtEpoch(items, onProgress, captureLocalDataEpoch()),
+  );
+}
+
+async function rotateRootSecretAtEpoch(
+  items: readonly VaultItem[],
+  onProgress: ((p: RotationProgress) => void) | undefined,
+  writeEpoch: LocalDataEpoch,
+): Promise<RotationResult> {
+  if (!canCommitLocalData(writeEpoch)) {
+    return {
+      kind: 'err',
+      resealedItemIds: [],
+      failedItemIds: items.map((item) => item.id),
+      reason: 'storageFailed',
+    };
+  }
   const current = await getOrCreateRootSecret('biometric');
   if (current.kind === 'err') {
     return {
@@ -408,11 +545,27 @@ export async function rotateRootSecret(
   const failed: string[] = [];
 
   for (const [index, item] of items.entries()) {
+    if (!canCommitLocalData(writeEpoch)) {
+      return {
+        kind: 'err',
+        resealedItemIds: resealed,
+        failedItemIds: [...failed, ...items.slice(index).map((rest) => rest.id)],
+        reason: 'storageFailed',
+      };
+    }
     onProgress?.({ processed: index, total: items.length, currentItemId: item.id });
     try {
       const sealedB64 = await FileSystem.readAsStringAsync(item.encryptedPath, {
         encoding: FileSystem.EncodingType.Base64,
       });
+      if (!canCommitLocalData(writeEpoch)) {
+        return {
+          kind: 'err',
+          resealedItemIds: resealed,
+          failedItemIds: [...failed, ...items.slice(index).map((rest) => rest.id)],
+          reason: 'storageFailed',
+        };
+      }
       const plaintext = aesGcmOpen(current.bytes, base64Decode(sealedB64));
       const resealedBytes = aesGcmSeal(next, plaintext);
       await FileSystem.writeAsStringAsync(
@@ -420,6 +573,14 @@ export async function rotateRootSecret(
         base64Encode(resealedBytes),
         { encoding: FileSystem.EncodingType.Base64 }
       );
+      if (!canCommitLocalData(writeEpoch)) {
+        return {
+          kind: 'err',
+          resealedItemIds: resealed,
+          failedItemIds: [...failed, ...items.slice(index).map((rest) => rest.id)],
+          reason: 'storageFailed',
+        };
+      }
       resealed.push(item.id);
     } catch {
       failed.push(item.id);
@@ -427,13 +588,30 @@ export async function rotateRootSecret(
   }
   onProgress?.({ processed: items.length, total: items.length });
 
+  if (!canCommitLocalData(writeEpoch)) {
+    return {
+      kind: 'err',
+      resealedItemIds: resealed,
+      failedItemIds: failed,
+      reason: 'storageFailed',
+    };
+  }
+
   if (items.length > 0 && resealed.length === 0) {
     return { kind: 'err', resealedItemIds: [], failedItemIds: failed, reason: 'storageFailed' };
   }
 
   try {
-    const envelope = await wrapRoot(next);
-    await writeEnvelope(envelope, 'biometric');
+    const envelope = await wrapRoot(next, writeEpoch);
+    await writeEnvelope(envelope, 'biometric', writeEpoch);
+    if (!canCommitLocalData(writeEpoch)) {
+      return {
+        kind: 'err',
+        resealedItemIds: resealed,
+        failedItemIds: failed,
+        reason: 'storageFailed',
+      };
+    }
     cachedSecret = next;
   } catch {
     return {
@@ -452,7 +630,8 @@ export async function rotateRootSecret(
 }
 
 /** Permanently delete the vault root secret and both wrapping-key versions. */
-export async function deleteRootSecret(): Promise<void> {
+export async function deleteRootSecret(): Promise<LocalDeletionResult> {
+  await quiesceRootSecretOperations();
   const operations: readonly (() => Promise<unknown>)[] = [
     () => SecureStore.deleteItemAsync(ROOT_SECRET_ALIAS, SECURE_OPTS_BIOMETRIC),
     () => SecureStore.deleteItemAsync(ROOT_SECRET_ALIAS, SECURE_OPTS_NO_BIOMETRIC),
@@ -466,8 +645,9 @@ export async function deleteRootSecret(): Promise<void> {
   cachedSecret = null;
   hardwareAvailability = null;
   if (results.some((result) => result.status === 'rejected')) {
-    throw new Error('Vault secret deletion was incomplete');
+    return deletionFailed();
   }
+  return deletionSucceeded();
 }
 
 /** Test-only — wipes the stored secret + in-memory cache. */

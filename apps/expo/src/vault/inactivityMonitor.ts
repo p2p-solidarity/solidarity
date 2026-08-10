@@ -23,6 +23,10 @@
 import { AppState, type NativeEventSubscription } from 'react-native';
 
 import { getMmkv } from '@/storage/mmkv';
+import {
+  canCommitLocalData,
+  captureLocalDataEpoch,
+} from '@/settings/localDataWipeBarrier';
 
 const LAST_ACTIVITY_KEY = 'vault.inactivity.lastActivity';
 /** Swift InactivityMonitorService.minimumCheckInterval = 3600s = 1h. */
@@ -70,6 +74,7 @@ export function readLastActivity(): number | null {
 
 /** Write the current timestamp + reset the idle countdown. */
 export function recordActivity(): void {
+  if (!canCommitLocalData(captureLocalDataEpoch())) return;
   const now = state.now();
   getMmkv().set(LAST_ACTIVITY_KEY, String(now));
   resetIdleTimer();

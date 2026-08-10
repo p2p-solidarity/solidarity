@@ -44,4 +44,8 @@ describe('secureMasterKey', () => {
   it('repairs a previously-minted v2 key when the raw Swift legacy key is still present', async () => {
     await runScenario('repair-bad-v2');
   });
+
+  it('waits for an in-flight acquisition before deleting and blocks new acquisition during deletion', async () => {
+    await runScenario('pending-delete');
+  });
 });

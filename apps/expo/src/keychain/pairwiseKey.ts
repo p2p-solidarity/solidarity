@@ -39,6 +39,17 @@ import {
   utf8ToBytes,
 } from '@solidarity/shared';
 
+import {
+  deletionFailed,
+  deletionSucceeded,
+  type LocalDeletionResult,
+} from '@/storage/deletionResult';
+import {
+  canCommitLocalData,
+  captureLocalDataEpoch,
+  type LocalDataEpoch,
+} from '@/settings/localDataWipeBarrier';
+
 const PAIRWISE_INFO_PREFIX = 'solidarity.pairwise.v1:';
 const PAIRWISE_SALT = utf8ToBytes('gg.solidarity.pairwise.salt.v1');
 const PAIRWISE_SEED_ALIAS = 'solidarity.pairwise.seed.v2';
@@ -52,6 +63,37 @@ const SECURE_OPTS: SecureStore.SecureStoreOptions = {
 };
 
 let cachedSeed: Uint8Array | null = null;
+
+const activeSeedOperations = new Set<Promise<unknown>>();
+
+function trackSeedOperation<T>(operation: Promise<T>): Promise<T> {
+  activeSeedOperations.add(operation);
+  const remove = (): void => {
+    activeSeedOperations.delete(operation);
+  };
+  operation.then(remove, remove);
+  return operation;
+}
+
+/** Wait for pairwise-seed provisioning that started before a local wipe. */
+export async function quiescePairwiseSeedOperations(): Promise<void> {
+  while (activeSeedOperations.size > 0) {
+    await Promise.allSettled([...activeSeedOperations]);
+  }
+}
+
+function localDataWipeError(): Error {
+  return new Error('Pairwise seed provisioning was invalidated by a local data wipe');
+}
+
+async function deleteStoredAliases(): Promise<void> {
+  await Promise.allSettled(
+    [PAIRWISE_SEED_ALIAS, LEGACY_MASTER_ALIAS].map((alias) =>
+      SecureStore.deleteItemAsync(alias, SECURE_OPTS),
+    ),
+  );
+  cachedSeed = null;
+}
 
 /**
  * Cryptographically-secure random bytes for the pairwise seed.
@@ -69,13 +111,23 @@ function cryptoRandomBytes(n: number): Uint8Array {
  * legacy `@noble/curves` raw-key alias if present so existing pairwise
  * derivations remain stable.
  */
-async function ensurePairwiseSeed(): Promise<Uint8Array> {
+function ensurePairwiseSeed(): Promise<Uint8Array> {
+  return trackSeedOperation(
+    ensurePairwiseSeedAtEpoch(captureLocalDataEpoch()),
+  );
+}
+
+async function ensurePairwiseSeedAtEpoch(
+  writeEpoch: LocalDataEpoch,
+): Promise<Uint8Array> {
+  if (!canCommitLocalData(writeEpoch)) throw localDataWipeError();
   if (cachedSeed) return cachedSeed;
 
   // Try the modern alias first.
   const stored = await SecureStore.getItemAsync(PAIRWISE_SEED_ALIAS, SECURE_OPTS).catch(
     () => null
   );
+  if (!canCommitLocalData(writeEpoch)) throw localDataWipeError();
   if (stored) {
     cachedSeed = base64Decode(stored);
     return cachedSeed;
@@ -89,6 +141,7 @@ async function ensurePairwiseSeed(): Promise<Uint8Array> {
   const legacy = await SecureStore.getItemAsync(LEGACY_MASTER_ALIAS, SECURE_OPTS).catch(
     () => null
   );
+  if (!canCommitLocalData(writeEpoch)) throw localDataWipeError();
   if (legacy) {
     const bytes = base64Decode(legacy);
     await SecureStore.setItemAsync(
@@ -96,6 +149,10 @@ async function ensurePairwiseSeed(): Promise<Uint8Array> {
       base64Encode(bytes),
       SECURE_OPTS
     );
+    if (!canCommitLocalData(writeEpoch)) {
+      await deleteStoredAliases();
+      throw localDataWipeError();
+    }
     cachedSeed = bytes;
     return cachedSeed;
   }
@@ -107,6 +164,10 @@ async function ensurePairwiseSeed(): Promise<Uint8Array> {
     base64Encode(fresh),
     SECURE_OPTS
   );
+  if (!canCommitLocalData(writeEpoch)) {
+    await deleteStoredAliases();
+    throw localDataWipeError();
+  }
   cachedSeed = fresh;
   return cachedSeed;
 }
@@ -139,7 +200,8 @@ export async function pairwisePublicJwk(domain: string): Promise<PublicKeyJWK> {
 }
 
 /** Permanently delete the pairwise seed and its legacy recovery source. */
-export async function deletePairwiseSeed(): Promise<void> {
+export async function deletePairwiseSeed(): Promise<LocalDeletionResult> {
+  await quiescePairwiseSeedOperations();
   cachedSeed = null;
   const results = await Promise.allSettled(
     [PAIRWISE_SEED_ALIAS, LEGACY_MASTER_ALIAS].map((alias) =>
@@ -147,8 +209,9 @@ export async function deletePairwiseSeed(): Promise<void> {
     ),
   );
   if (results.some((result) => result.status === 'rejected')) {
-    throw new Error('Pairwise seed deletion was incomplete');
+    return deletionFailed();
   }
+  return deletionSucceeded();
 }
 
 /** Test-only — clears the cached seed so subsequent calls re-read SecureStore. */

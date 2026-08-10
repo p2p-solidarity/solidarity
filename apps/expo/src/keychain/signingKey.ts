@@ -75,6 +75,17 @@ import {
   type SpruceDid,
 } from '@solidarity/nitro-spruce-did';
 
+import {
+  deletionFailed,
+  deletionSucceeded,
+  type LocalDeletionResult,
+} from '@/storage/deletionResult';
+import {
+  canCommitLocalData,
+  captureLocalDataEpoch,
+  type LocalDataEpoch,
+} from '@/settings/localDataWipeBarrier';
+
 import { isBiometricAvailable, requireBiometric } from './biometric';
 import { shouldRequireNativeBiometricBinding } from './signingKeyPolicy';
 
@@ -113,6 +124,51 @@ export interface SigningIdentity {
 }
 
 let cachedIdentity: SigningIdentity | null = null;
+
+// A key generation can outlive the screen that initiated it: native keychain
+// creation and the public-JWK read are both asynchronous. The production wipe
+// advances the local-data epoch, waits for these operations, and only then
+// performs its authoritative deletion. That ordering prevents a pre-wipe
+// `generateKey` completion from recreating the identity after deletion.
+const activeSigningKeyOperations = new Set<Promise<unknown>>();
+
+function trackSigningKeyOperation<T>(operation: Promise<T>): Promise<T> {
+  activeSigningKeyOperations.add(operation);
+  const remove = (): void => {
+    activeSigningKeyOperations.delete(operation);
+  };
+  operation.then(remove, remove);
+  return operation;
+}
+
+/** Wait for pre-wipe signing-key reads/provisioning to reach an epoch checkpoint. */
+export async function quiesceSigningKeyOperations(): Promise<void> {
+  while (activeSigningKeyOperations.size > 0) {
+    await Promise.allSettled([...activeSigningKeyOperations]);
+  }
+}
+
+function localDataWipeError(): Error {
+  return new Error('Signing key provisioning was invalidated by a local data wipe');
+}
+
+/**
+ * Best-effort cleanup for a native key that finished generating after its
+ * operation became stale. The ordered wipe retries the same aliases through
+ * `deleteSigningKey()` and reports any failure there, so this helper must not
+ * turn a cancelled caller into a success path.
+ */
+async function deleteStaleSigningKey(): Promise<void> {
+  const d = driver();
+  await Promise.allSettled([
+    d.deleteKey(SIGNING_KEY_ALIAS),
+    ...[LEGACY_EXPO_ALIAS, LEGACY_SWIFT_V0_ALIAS].map((alias) =>
+      SecureStore.deleteItemAsync(alias, SECURE_OPTS_LEGACY),
+    ),
+  ]);
+  cachedIdentity = null;
+  cachedAuthMode = null;
+}
 
 /**
  * How the active key is biometric-gated — resolved once per process from
@@ -197,7 +253,16 @@ async function readPublicJwk(alias: string): Promise<PublicKeyJWK> {
  * generates a hardware-backed key in the enclave; subsequent calls return
  * the cached identity record.
  */
-export async function ensureSigningKey(): Promise<SigningIdentity> {
+export function ensureSigningKey(): Promise<SigningIdentity> {
+  return trackSigningKeyOperation(
+    ensureSigningKeyAtEpoch(captureLocalDataEpoch()),
+  );
+}
+
+async function ensureSigningKeyAtEpoch(
+  writeEpoch: LocalDataEpoch,
+): Promise<SigningIdentity> {
+  if (!canCommitLocalData(writeEpoch)) throw localDataWipeError();
   if (cachedIdentity) return cachedIdentity;
 
   const d = driver();
@@ -205,6 +270,7 @@ export async function ensureSigningKey(): Promise<SigningIdentity> {
   // 1. Happy path — already provisioned in SpruceID.
   if (d.hasKey(SIGNING_KEY_ALIAS)) {
     const publicJwkValue = await readPublicJwk(SIGNING_KEY_ALIAS);
+    if (!canCommitLocalData(writeEpoch)) throw localDataWipeError();
     cachedIdentity = { alias: SIGNING_KEY_ALIAS, publicJwk: publicJwkValue };
     return cachedIdentity;
   }
@@ -219,6 +285,7 @@ export async function ensureSigningKey(): Promise<SigningIdentity> {
   //    iOS Secure Enclave bypass mode, swap this branch for an actual
   //    bytes-to-keychain import + emit a "migrationSucceeded" event.
   const legacyBytes = await readLegacyExpoBytes();
+  if (!canCommitLocalData(writeEpoch)) throw localDataWipeError();
   if (legacyBytes) {
     // Derive the legacy public key so the caller can persist it as a
     // "prior identity" record if they want to surface the rotation in UI.
@@ -233,6 +300,7 @@ export async function ensureSigningKey(): Promise<SigningIdentity> {
       // Legacy bytes corrupted — ignore, proceed with fresh generation.
     }
     await clearLegacyExpoBytes();
+    if (!canCommitLocalData(writeEpoch)) throw localDataWipeError();
   }
 
   // 3. Provision a fresh identity key.
@@ -257,8 +325,17 @@ export async function ensureSigningKey(): Promise<SigningIdentity> {
   const requireNativeBiometric = shouldRequireNativeBiometricBinding(
     await isBiometricAvailable().catch(() => false)
   );
+  if (!canCommitLocalData(writeEpoch)) throw localDataWipeError();
   await d.generateKey(SIGNING_KEY_ALIAS, 'p256-syncable', requireNativeBiometric);
+  if (!canCommitLocalData(writeEpoch)) {
+    await deleteStaleSigningKey();
+    throw localDataWipeError();
+  }
   const publicJwkValue = await readPublicJwk(SIGNING_KEY_ALIAS);
+  if (!canCommitLocalData(writeEpoch)) {
+    await deleteStaleSigningKey();
+    throw localDataWipeError();
+  }
   cachedIdentity = { alias: SIGNING_KEY_ALIAS, publicJwk: publicJwkValue };
   return cachedIdentity;
 }
@@ -442,22 +519,13 @@ export function wrapRawSigningInputForSpruce(payload: Uint8Array): Uint8Array {
  * prevent cleanup of legacy SecureStore aliases. Any failed deletion is then
  * surfaced so the caller cannot report a complete wipe.
  */
-export async function deleteSigningKey(): Promise<void> {
-  let syncableRows: readonly { labelHex: string; publicKeyHex: string }[] = [];
-  let syncableListFailed = false;
-  try {
-    syncableRows = parseCandidateRows(
-      await driver().listSyncableP256Keys(SIGNING_KEY_ALIAS),
-    );
-  } catch {
-    syncableListFailed = true;
-  }
-
-  const syncableResults = await Promise.allSettled(
-    syncableRows.map((row) =>
-      driver().deleteSyncableP256Key(SIGNING_KEY_ALIAS, row.labelHex),
-    ),
-  );
+export async function deleteSigningKey(): Promise<LocalDeletionResult> {
+  await quiesceSigningKeyOperations();
+  // The native deleteKey contract already deletes every EC item for this
+  // alias (`kSecAttrSynchronizableAny` on iOS), including T7 duplicates.
+  // Deleting enumerated syncable rows first would make this authoritative
+  // call fulfill with false after a successful pre-delete and incorrectly
+  // report every normal iOS wipe as incomplete.
   const operations: readonly (() => Promise<unknown>)[] = [
     () => driver().deleteKey(SIGNING_KEY_ALIAS),
     ...[LEGACY_EXPO_ALIAS, LEGACY_SWIFT_V0_ALIAS].map(
@@ -469,16 +537,18 @@ export async function deleteSigningKey(): Promise<void> {
   );
   cachedIdentity = null;
   cachedAuthMode = null;
-  const syncableDeleteFailed = syncableResults.some(
-    (result) => result.status === 'rejected' || result.value === false,
+  const [activeResult, ...legacyResults] = results;
+  const activeDeleteFailed =
+    activeResult === undefined ||
+    activeResult.status === 'rejected' ||
+    activeResult.value !== true;
+  const legacyDeleteFailed = legacyResults.some(
+    (result) => result.status === 'rejected',
   );
-  if (
-    syncableListFailed ||
-    syncableDeleteFailed ||
-    results.some((result) => result.status === 'rejected')
-  ) {
-    throw new Error('Signing key deletion was incomplete');
+  if (activeDeleteFailed || legacyDeleteFailed) {
+    return deletionFailed();
   }
+  return deletionSucceeded();
 }
 
 /** Test-only — wipes the active alias plus all legacy aliases. */

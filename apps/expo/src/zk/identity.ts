@@ -17,6 +17,11 @@
  *    `AppBranding.currentSemaphoreIdentityTag`).
  */
 import { loadSemaphoreNative } from './nativeBridge';
+import {
+  deletionFailed,
+  deletionSucceeded,
+  type LocalDeletionResult,
+} from '@/storage/deletionResult';
 
 const KEYCHAIN_ALIAS = 'com.kidneyweakx.solidarity.semaphore.identity';
 
@@ -70,6 +75,18 @@ export async function deleteIdentity(): Promise<void> {
   const native = await loadSemaphoreNative();
   if (!native) return;
   await native.deleteIdentity();
+}
+
+/** Strict production-wipe variant: unavailable native storage is failure. */
+export async function deleteIdentityForLocalWipe(): Promise<LocalDeletionResult> {
+  try {
+    const native = await loadSemaphoreNative();
+    if (!native) return deletionFailed();
+    await native.deleteIdentity();
+    return deletionSucceeded();
+  } catch {
+    return deletionFailed();
+  }
 }
 
 /**

@@ -21,6 +21,12 @@ import * as SecureStore from 'expo-secure-store';
 import { generateAesKey } from '@solidarity/shared';
 import { base64Decode, base64Encode } from '@solidarity/shared';
 
+import {
+  deletionFailed,
+  deletionSucceeded,
+  type LocalDeletionResult,
+} from './deletionResult';
+
 const MASTER_KEY_ALIAS_V2 = 'gg.solidarity.master.v2';
 
 // LEGACY iOS master encryption key — the EXACT Keychain coordinates the Swift
@@ -124,6 +130,7 @@ function bytesEqual(a: Uint8Array, b: Uint8Array): boolean {
 // or resetMasterKeyForTesting().
 let cachedKey: Uint8Array | null = null;
 let pending: Promise<Uint8Array> | null = null;
+let deletionPending: Promise<LocalDeletionResult> | null = null;
 
 /**
  * Get the active master key. Reconciles a Swift-era legacy key into the v2
@@ -131,6 +138,9 @@ let pending: Promise<Uint8Array> | null = null;
  * cache; concurrent first-callers coalesce on a single SecureStore read.
  */
 export async function getMasterKey(): Promise<Uint8Array> {
+  if (deletionPending) {
+    throw new Error('Master key deletion is in progress');
+  }
   if (cachedKey) return cachedKey;
   if (pending) return pending;
   pending = (async () => {
@@ -173,9 +183,15 @@ export function evictMasterKeyCache(): void {
  * `deleteItemAsync` queries by service/account without decoding the stored
  * bytes, so it can remove legacy raw AES values that SecureStore cannot read.
  */
-export async function deleteMasterKey(): Promise<void> {
+async function performMasterKeyDeletion(): Promise<LocalDeletionResult> {
+  const inFlightAcquisition = pending;
+  if (inFlightAcquisition) {
+    // Let an already-issued Keychain write settle before deletion. Clearing
+    // `pending` cannot cancel its Promise and would let it recreate the alias
+    // after the wipe had reported success.
+    await inFlightAcquisition.catch(() => undefined);
+  }
   cachedKey = null;
-  pending = null;
   const operations: Promise<void>[] = [
     SecureStore.deleteItemAsync(MASTER_KEY_ALIAS_V2, SECURE_OPTS),
   ];
@@ -191,8 +207,20 @@ export async function deleteMasterKey(): Promise<void> {
   }
   const results = await Promise.allSettled(operations);
   if (results.some((result) => result.status === 'rejected')) {
-    throw new Error('Master encryption key deletion was incomplete');
+    return deletionFailed();
   }
+  return deletionSucceeded();
+}
+
+export function deleteMasterKey(): Promise<LocalDeletionResult> {
+  if (deletionPending) return deletionPending;
+  const operation = performMasterKeyDeletion();
+  deletionPending = operation;
+  const clear = (): void => {
+    if (deletionPending === operation) deletionPending = null;
+  };
+  operation.then(clear, clear);
+  return operation;
 }
 
 /** Test-only escape hatch (mirrors Swift's `local-escape-hatch` debug code). */

@@ -36,6 +36,11 @@
 import { afterEach, beforeAll, beforeEach, describe, expect, it, mock } from 'bun:test';
 
 import { aesGcmOpen, aesGcmSeal, base64Decode, base64Encode } from '@solidarity/shared';
+import {
+  __resetLocalDataWipeBarrierForTesting,
+  beginLocalDataWipe,
+  completeLocalDataWipe,
+} from '../../src/settings/localDataWipeBarrier';
 
 // ── Fake Nitro driver ──────────────────────────────────────────────────────
 
@@ -120,6 +125,9 @@ const fakeSecretsVault = {
 
 const secureStore = new Map<string, string>();
 let nextBiometricSuccess = true;
+let envelopeWriteGate: Promise<void> | null = null;
+let releaseEnvelopeWrite: (() => void) | null = null;
+let envelopeWriteStarted: (() => void) | null = null;
 
 void mock.module('@solidarity/nitro-secrets-vault', () => ({
   getSecretsVault: () => fakeSecretsVault,
@@ -131,6 +139,12 @@ void mock.module('expo-secure-store', () => ({
   getItemAsync: (alias: string): Promise<string | null> =>
     Promise.resolve(secureStore.get(alias) ?? null),
   setItemAsync: (alias: string, value: string): Promise<void> => {
+    if (alias === ROOT_ALIAS) {
+      envelopeWriteStarted?.();
+      return (envelopeWriteGate ?? Promise.resolve()).then(() => {
+        secureStore.set(alias, value);
+      });
+    }
     secureStore.set(alias, value);
     return Promise.resolve();
   },
@@ -192,6 +206,7 @@ interface SecretsKeychainMod {
     | { readonly kind: 'err'; readonly reason: 'biometricDenied' | 'storageFailed' }
   >;
   readonly evictCachedRootSecret: () => void;
+  readonly quiesceRootSecretOperations: () => Promise<void>;
   readonly resetRootSecretForTesting: () => Promise<void>;
 }
 
@@ -217,12 +232,17 @@ beforeEach(async () => {
   nitro.failWrap = false;
   nitro.failUnwrap = false;
   nextBiometricSuccess = true;
+  envelopeWriteGate = null;
+  releaseEnvelopeWrite = null;
+  envelopeWriteStarted = null;
+  __resetLocalDataWipeBarrierForTesting();
   await mod.resetRootSecretForTesting();
   mod.evictCachedRootSecret();
 });
 
 afterEach(() => {
   mod.evictCachedRootSecret();
+  __resetLocalDataWipeBarrierForTesting();
 });
 
 // ── 1. Hardware-backed path: provision + round trip ───────────────────────
@@ -323,6 +343,38 @@ describe('hardware-backed root secret (Secure Enclave / StrongBox)', () => {
     expect(nitro.deleteCalls).toContain(WRAP_ALIAS);
     expect(nitro.deleteCalls).toContain(WRAP_ALIAS_V2);
     expect(secureStore.get(ROOT_ALIAS)).toBeUndefined();
+  });
+
+  it('does not recreate the root envelope when a gated SecureStore write finishes during wipe', async () => {
+    let markWriteStarted!: () => void;
+    const writeStarted = new Promise<void>((resolve) => {
+      markWriteStarted = resolve;
+    });
+    let releaseWrite!: () => void;
+    envelopeWriteGate = new Promise<void>((resolve) => {
+      releaseWrite = resolve;
+    });
+    envelopeWriteStarted = markWriteStarted;
+
+    const provisioning = mod.getOrCreateRootSecret('biometric');
+    await writeStarted;
+    beginLocalDataWipe();
+
+    let quiesced = false;
+    const quiesce = mod.quiesceRootSecretOperations().then(() => {
+      quiesced = true;
+    });
+    await Promise.resolve();
+    expect(quiesced).toBe(false);
+
+    releaseWrite();
+    const result = await provisioning;
+    await quiesce;
+
+    expect(result).toEqual({ kind: 'err', reason: 'storageFailed' });
+    expect(secureStore.get(ROOT_ALIAS)).toBeUndefined();
+    expect(nitro.deleteCalls).toContain(WRAP_ALIAS_V2);
+    completeLocalDataWipe();
   });
 });
 

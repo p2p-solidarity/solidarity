@@ -17,8 +17,10 @@ export const WIPE_SECRET_TARGETS = [
 ] as const;
 
 export const WIPE_TARGETS = [
+  'quiesce',
   'appData',
   ...WIPE_SECRET_TARGETS,
+  'finalPersistentData',
   'masterEncryptionKey',
   'freshEncryptionKey',
   'preferences',
@@ -26,8 +28,15 @@ export const WIPE_TARGETS = [
 
 export type WipeTarget = (typeof WIPE_TARGETS)[number];
 
+export type WipeOperationResult =
+  | { readonly ok: true }
+  | { readonly ok: false };
+
 export type WipeEverythingDependencies = Readonly<
-  Record<WipeTarget, () => void | Promise<void>>
+  Record<
+    WipeTarget,
+    () => WipeOperationResult | Promise<WipeOperationResult>
+  >
 >;
 
 export type WipeEverythingResult =
@@ -42,8 +51,8 @@ export async function wipeEverything(
 ): Promise<WipeEverythingResult> {
   const runTarget = async (target: WipeTarget): Promise<boolean> => {
     try {
-      await dependencies[target]();
-      return true;
+      const result = await dependencies[target]();
+      return result.ok;
     } catch {
       return false;
     }
@@ -51,6 +60,10 @@ export async function wipeEverything(
 
   // Do not orphan encrypted records behind a deleted key. The data store has
   // to be empty before any identity/key deletion starts.
+  if (!(await runTarget('quiesce'))) {
+    return { kind: 'incomplete', failedTargets: ['quiesce'] };
+  }
+
   if (!(await runTarget('appData'))) {
     return { kind: 'incomplete', failedTargets: ['appData'] };
   }
@@ -69,6 +82,14 @@ export async function wipeEverything(
     .map((result) => result.target);
   if (failedSecrets.length > 0) {
     return { kind: 'incomplete', failedTargets: failedSecrets };
+  }
+
+  // Some secret stores keep an MMKV presence mirror (for example Nostr).
+  // Their production deletion APIs may write an explicit `false` after the
+  // first app-data clear. Scrub those markers before deleting the master key,
+  // or rekeyEmptyMmkv would correctly reject the non-empty live store.
+  if (!(await runTarget('finalPersistentData'))) {
+    return { kind: 'incomplete', failedTargets: ['finalPersistentData'] };
   }
 
   if (!(await runTarget('masterEncryptionKey'))) {

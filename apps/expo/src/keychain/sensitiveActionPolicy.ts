@@ -28,6 +28,10 @@ import { useMemo } from 'react';
 import { create } from 'zustand';
 
 import { getMmkv } from '@/storage/mmkv';
+import {
+  canCommitLocalData,
+  captureLocalDataEpoch,
+} from '@/settings/localDataWipeBarrier';
 
 const MMKV_KEY = 'gg.solidarity.biometric.policy.v1';
 
@@ -107,6 +111,8 @@ interface PolicyState {
   readonly setPolicy: (action: SensitiveAction, entry: SensitiveActionEntry) => void;
   readonly togglePolicy: (action: SensitiveAction) => void;
   readonly resetToDefaults: () => void;
+  /** Restore fail-closed defaults after the local store is wiped. */
+  readonly resetForLocalWipe: () => void;
 }
 
 function readSafe(): SensitiveActionPolicy {
@@ -144,6 +150,7 @@ export const useSensitiveActionPolicy = create<PolicyState>((set, get) => ({
   policy: DEFAULT_POLICY,
   hydrated: false,
   setPolicy: (action, entry) => {
+    if (!canCommitLocalData(captureLocalDataEpoch())) return;
     set((s) => {
       const next: SensitiveActionPolicy = { ...s.policy, [action]: entry };
       writeSafe(next);
@@ -155,8 +162,12 @@ export const useSensitiveActionPolicy = create<PolicyState>((set, get) => ({
     get().setPolicy(action, { ...current, enabled: !current.enabled });
   },
   resetToDefaults: () => {
+    if (!canCommitLocalData(captureLocalDataEpoch())) return;
     writeSafe(DEFAULT_POLICY);
     set({ policy: DEFAULT_POLICY });
+  },
+  resetForLocalWipe: () => {
+    set({ policy: buildDefaultPolicy(), hydrated: true });
   },
 }));
 
@@ -166,6 +177,7 @@ export const useSensitiveActionPolicy = create<PolicyState>((set, get) => ({
  * times — idempotent.
  */
 export function hydrateSensitiveActionPolicy(): void {
+  if (!canCommitLocalData(captureLocalDataEpoch())) return;
   const persisted = readSafe();
   useSensitiveActionPolicy.setState({ policy: persisted, hydrated: true });
 }

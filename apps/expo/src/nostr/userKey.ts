@@ -70,6 +70,11 @@ import type { NostrEvent } from '@/dag/nostrAdapter';
 // also pulls in React Native's Flow-syntax entry point. See
 // `warmNostrKeyMirror` below for the runtime (lazy, cached) load.
 import type { getMmkv as GetMmkvFn } from '@/storage/mmkv';
+import {
+  canCommitLocalData,
+  captureLocalDataEpoch,
+  type LocalDataEpoch,
+} from '@/settings/localDataWipeBarrier';
 
 import { HKDF_INFO_NOSTR, deriveSecp256k1Scalar, err, ok, type Result } from '@solidarity/shared';
 
@@ -116,6 +121,29 @@ const defaultStorage: NostrKeyStorage = {
 };
 
 let activeStorage: NostrKeyStorage = defaultStorage;
+
+// Provisioning writes a secret to SecureStore after async work (Face ID or
+// NIP-19 validation). Keep those operations observable to the production
+// wipe coordinator: it invalidates their epoch first, waits for them here,
+// then performs the authoritative delete. Without that ordering, a write
+// that finishes after deletion could recreate the key on disk.
+const activeKeyWrites = new Set<Promise<unknown>>();
+
+function trackKeyWrite<T>(operation: Promise<T>): Promise<T> {
+  activeKeyWrites.add(operation);
+  void operation.then(
+    () => activeKeyWrites.delete(operation),
+    () => activeKeyWrites.delete(operation),
+  );
+  return operation;
+}
+
+/** Wait for any provisioning/import operation that began before a local wipe. */
+export async function quiesceNostrKeyOperations(): Promise<void> {
+  while (activeKeyWrites.size > 0) {
+    await Promise.allSettled([...activeKeyWrites]);
+  }
+}
 
 /** Test-only override. Pass `null` to restore the real SecureStore-backed implementation. */
 export function __setNostrKeyStorageForTesting(storage: NostrKeyStorage | null): void {
@@ -246,9 +274,19 @@ function storageErrorMessage(e: unknown): string {
  * scalar. Caller (A4.4 wizard) is responsible for consenting the user
  * before invoking this — see module doc.
  */
-export async function provisionFromRootMnemonic(): Promise<Result<string, string>> {
+export function provisionFromRootMnemonic(): Promise<Result<string, string>> {
+  return trackKeyWrite(provisionFromRootMnemonicAtEpoch(captureLocalDataEpoch()));
+}
+
+async function provisionFromRootMnemonicAtEpoch(
+  writeEpoch: LocalDataEpoch,
+): Promise<Result<string, string>> {
+  if (!canCommitLocalData(writeEpoch)) return err('localDataWipeInProgress');
+
   const revealed = await activeMnemonicRevealer();
   if (!revealed.ok) return revealed;
+
+  if (!canCommitLocalData(writeEpoch)) return err('localDataWipeInProgress');
 
   let scalar: Uint8Array;
   try {
@@ -266,13 +304,36 @@ export async function provisionFromRootMnemonic(): Promise<Result<string, string
     return err('derivedScalarOutOfRange: scalar out of range for secp256k1');
   }
 
+  if (!canCommitLocalData(writeEpoch)) return err('localDataWipeInProgress');
+
   try {
     await activeStorage.setScalarHex(hexEncode(scalar));
   } catch (e) {
     return err(storageErrorMessage(e));
   }
+
+  if (!canCommitLocalData(writeEpoch)) {
+    await deleteStaleScalar();
+    return err('localDataWipeInProgress');
+  }
   activeMirrorStorage.setHasKey(true);
   return ok(pubkeyHex);
+}
+
+/**
+ * A stale writer may have completed its SecureStore mutation just after the
+ * wipe barrier advanced. Best-effort cleanup is followed by the wipe's
+ * authoritative `deleteNostrKey()` step, whose failure is fail-closed.
+ */
+async function deleteStaleScalar(): Promise<void> {
+  try {
+    await activeStorage.deleteScalarHex();
+  } catch {
+    // The ordered wipe retries this deletion and fails closed if it cannot
+    // remove the secret. Do not surface a storage error that could reveal
+    // implementation details from an operation already cancelled by wipe.
+  }
+  activeMirrorStorage.setHasKey(false);
 }
 
 /**
@@ -323,7 +384,16 @@ export function decodeNsec(nsec: string): Result<string, string> {
  * text (which echoes the raw input) back to the caller — see module doc.
  * Never throws; every failure is `err('invalidNsec: …')`.
  */
-export async function importNsec(nsec: string): Promise<Result<string, string>> {
+export function importNsec(nsec: string): Promise<Result<string, string>> {
+  return trackKeyWrite(importNsecAtEpoch(nsec, captureLocalDataEpoch()));
+}
+
+async function importNsecAtEpoch(
+  nsec: string,
+  writeEpoch: LocalDataEpoch,
+): Promise<Result<string, string>> {
+  if (!canCommitLocalData(writeEpoch)) return err('localDataWipeInProgress');
+
   const scalarResult = nsecToScalar(nsec);
   if (!scalarResult.ok) return scalarResult;
   const scalar = scalarResult.value;
@@ -335,10 +405,17 @@ export async function importNsec(nsec: string): Promise<Result<string, string>> 
     return err('invalidNsec: scalar out of range for secp256k1');
   }
 
+  if (!canCommitLocalData(writeEpoch)) return err('localDataWipeInProgress');
+
   try {
     await activeStorage.setScalarHex(hexEncode(scalar));
   } catch (e) {
     return err(storageErrorMessage(e));
+  }
+
+  if (!canCommitLocalData(writeEpoch)) {
+    await deleteStaleScalar();
+    return err('localDataWipeInProgress');
   }
   activeMirrorStorage.setHasKey(true);
   return ok(pubkeyHex);

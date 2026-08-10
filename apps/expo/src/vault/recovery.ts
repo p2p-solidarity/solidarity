@@ -26,6 +26,12 @@ import {
 
 import { getMmkv } from '@/storage/mmkv';
 import { decryptJson, encryptJson } from '@/storage/encryptionManager';
+import {
+  canCommitLocalData,
+  captureLocalDataEpoch,
+  trackLocalDataOperation,
+  type LocalDataEpoch,
+} from '@/settings/localDataWipeBarrier';
 
 import { parseShardPayloadBytes } from './shardDistribution';
 import {
@@ -50,7 +56,13 @@ interface PendingRecovery {
 }
 
 export interface AddShardResult {
-  readonly kind: 'ok' | 'duplicate' | 'authFailed' | 'bindingMismatch' | 'decodeFailed';
+  readonly kind:
+    | 'ok'
+    | 'duplicate'
+    | 'authFailed'
+    | 'bindingMismatch'
+    | 'decodeFailed'
+    | 'storageFailed';
   readonly vaultId: string;
   readonly collected: number;
   readonly threshold: number;
@@ -76,8 +88,15 @@ async function loadRecovery(vaultId: string): Promise<PendingRecovery | null> {
   return raw ? await decryptJson<PendingRecovery>(raw) : null;
 }
 
-async function saveRecovery(rec: PendingRecovery): Promise<void> {
-  getMmkv().set(recoveryKey(rec.vaultId), await encryptJson(rec));
+async function saveRecovery(
+  rec: PendingRecovery,
+  writeEpoch: LocalDataEpoch,
+): Promise<boolean> {
+  if (!canCommitLocalData(writeEpoch)) return false;
+  const encrypted = await encryptJson(rec);
+  if (!canCommitLocalData(writeEpoch)) return false;
+  getMmkv().set(recoveryKey(rec.vaultId), encrypted);
+  return true;
 }
 
 function base64ToBytes(b64: string): Uint8Array {
@@ -102,10 +121,33 @@ function bytesToBase64(b: Uint8Array): string {
  * holds. Right now we surface the same single-root-key model as Swift
  * (`InactivityMonitorService.getItemEncryptionKey`).
  */
-export async function addReceivedShard(
+export function addReceivedShard(
   envelope: WrappedShardEnvelope,
   wrapKey: Uint8Array
 ): Promise<AddShardResult> {
+  return trackLocalDataOperation(
+    addReceivedShardAtEpoch(envelope, wrapKey, captureLocalDataEpoch()),
+  );
+}
+
+function storageFailure(
+  envelope: WrappedShardEnvelope,
+): AddShardResult {
+  return {
+    kind: 'storageFailed',
+    vaultId: envelope.vaultId,
+    threshold: envelope.threshold,
+    collected: 0,
+    ready: false,
+  };
+}
+
+async function addReceivedShardAtEpoch(
+  envelope: WrappedShardEnvelope,
+  wrapKey: Uint8Array,
+  writeEpoch: LocalDataEpoch,
+): Promise<AddShardResult> {
+  if (!canCommitLocalData(writeEpoch)) return storageFailure(envelope);
   const baseResult = {
     vaultId: envelope.vaultId,
     threshold: envelope.threshold,
@@ -146,6 +188,7 @@ export async function addReceivedShard(
     threshold: envelope.threshold,
     shards: [] as PendingShard[],
   };
+  if (!canCommitLocalData(writeEpoch)) return storageFailure(envelope);
 
   if (existing.shards.some((s) => s.shardIndex === parsed.index)) {
     return {
@@ -168,7 +211,7 @@ export async function addReceivedShard(
       },
     ],
   };
-  await saveRecovery(next);
+  if (!(await saveRecovery(next, writeEpoch))) return storageFailure(envelope);
 
   return {
     ...baseResult,

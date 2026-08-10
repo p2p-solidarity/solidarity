@@ -25,6 +25,11 @@ import { create } from 'zustand';
 import { ManifestStorage } from '@/storage';
 import { decryptJson, encryptJson } from '@/storage/encryptionManager';
 import { getMmkv } from '@/storage/mmkv';
+import {
+  canCommitLocalData,
+  captureLocalDataEpoch,
+  type LocalDataEpoch,
+} from '@/settings/localDataWipeBarrier';
 
 import {
   VAULT_MANIFEST_SCOPE,
@@ -70,9 +75,18 @@ export interface VaultItem {
 }
 
 const PREFIX = 'vault:';
+let localWipeGeneration = 0;
 
-async function setEncrypted<T>(key: string, value: T): Promise<void> {
-  getMmkv().set(key, await encryptJson(value));
+async function setEncrypted<T>(
+  key: string,
+  value: T,
+  writeEpoch: LocalDataEpoch,
+): Promise<boolean> {
+  if (!canCommitLocalData(writeEpoch)) return false;
+  const encrypted = await encryptJson(value);
+  if (!canCommitLocalData(writeEpoch)) return false;
+  getMmkv().set(key, encrypted);
+  return true;
 }
 async function getEncrypted<T>(key: string): Promise<T | null> {
   const raw = getMmkv().getString(key);
@@ -138,6 +152,8 @@ interface VaultStoreState {
   readonly prefetchVaultCiphertext: (itemId: string) => Promise<string | null>;
   /** Cross-platform mirror of Swift's per-item sync state. */
   readonly cloudCiphertextStatus: (itemId: string) => CloudCiphertextStatus;
+  /** Drop every live reference after the encrypted local store is wiped. */
+  readonly resetForLocalWipe: () => void;
 }
 
 function rehydrateDates(v: VaultItem): VaultItem {
@@ -162,11 +178,15 @@ export const useVaultStore = create<VaultStoreState>((set, get) => ({
   lastSyncedManifest: null,
 
   seedFromManifest: () => {
+    if (!canCommitLocalData(captureLocalDataEpoch())) return;
     const seed = ManifestStorage.get<VaultManifestEntry>(VAULT_MANIFEST_SCOPE);
     if (seed) set({ manifest: seed });
   },
 
   hydrate: async () => {
+    const generation = localWipeGeneration;
+    const writeEpoch = captureLocalDataEpoch();
+    if (!canCommitLocalData(writeEpoch)) return;
     if (get().hydrated) return;
     const out: VaultItem[] = [];
     for (const k of listKeys()) {
@@ -175,6 +195,7 @@ export const useVaultStore = create<VaultStoreState>((set, get) => ({
       // the rest of the vault still renders.
       try {
         const v = await getEncrypted<VaultItem>(k);
+        if (generation !== localWipeGeneration || !canCommitLocalData(writeEpoch)) return;
         if (!v) continue;
         out.push(rehydrateDates(v));
       } catch {
@@ -185,6 +206,7 @@ export const useVaultStore = create<VaultStoreState>((set, get) => ({
     const details = new Map<string, VaultItem>();
     for (const it of out) details.set(it.id, it);
     const manifest = out.map(toVaultManifest);
+    if (generation !== localWipeGeneration || !canCommitLocalData(writeEpoch)) return;
     ManifestStorage.set(VAULT_MANIFEST_SCOPE, manifest);
     set({ items: out, details, manifest, hydrated: true });
 
@@ -197,11 +219,14 @@ export const useVaultStore = create<VaultStoreState>((set, get) => ({
         import('./shardDistribution'),
         import('./recovery'),
       ]);
+      if (generation !== localWipeGeneration || !canCommitLocalData(writeEpoch)) return;
       const distributedShards = await loadAllDistributionRecords();
+      if (generation !== localWipeGeneration || !canCommitLocalData(writeEpoch)) return;
       const recoveryIds = new Set(distributedShards.map((r) => r.vaultId));
       const recoveries: RecoverySnapshot[] = [];
       for (const id of recoveryIds) {
         const snap = await inspectRecovery(id);
+        if (generation !== localWipeGeneration || !canCommitLocalData(writeEpoch)) return;
         if (snap) recoveries.push(snap);
       }
       set({ distributedShards, pendingRecovery: recoveries });
@@ -211,10 +236,14 @@ export const useVaultStore = create<VaultStoreState>((set, get) => ({
   },
 
   loadDetail: async (id) => {
+    const generation = localWipeGeneration;
+    const writeEpoch = captureLocalDataEpoch();
+    if (!canCommitLocalData(writeEpoch)) return null;
     const cached = get().details.get(id);
     if (cached) return cached;
     try {
       const v = await getEncrypted<VaultItem>(`${PREFIX}${id}`);
+      if (generation !== localWipeGeneration || !canCommitLocalData(writeEpoch)) return null;
       if (!v) return null;
       const item = rehydrateDates(v);
       set((s) => {
@@ -229,7 +258,11 @@ export const useVaultStore = create<VaultStoreState>((set, get) => ({
   },
 
   upsert: async (item) => {
-    await setEncrypted(`${PREFIX}${item.id}`, item);
+    const generation = localWipeGeneration;
+    const writeEpoch = captureLocalDataEpoch();
+    if (!canCommitLocalData(writeEpoch)) return;
+    if (!(await setEncrypted(`${PREFIX}${item.id}`, item, writeEpoch))) return;
+    if (generation !== localWipeGeneration || !canCommitLocalData(writeEpoch)) return;
     set((s) => {
       const nextItems = [item, ...s.items.filter((i) => i.id !== item.id)];
       const entry = toVaultManifest(item);
@@ -245,6 +278,7 @@ export const useVaultStore = create<VaultStoreState>((set, get) => ({
   },
 
   remove: async (id) => {
+    if (!canCommitLocalData(captureLocalDataEpoch())) return;
     getMmkv().remove(`${PREFIX}${id}`);
     set((s) => {
       const nextManifest = s.manifest.filter((m) => m.id !== id);
@@ -260,19 +294,59 @@ export const useVaultStore = create<VaultStoreState>((set, get) => ({
   },
 
   distributeShards: async (args) => {
+    const generation = localWipeGeneration;
+    const writeEpoch = captureLocalDataEpoch();
+    if (!canCommitLocalData(writeEpoch)) {
+      return { kind: 'err', reason: 'storageFailed' };
+    }
     const dist = await import('./shardDistribution');
     const result = await dist.distributeRecoveryShards(args);
+    if (generation !== localWipeGeneration || !canCommitLocalData(writeEpoch)) {
+      return { kind: 'err', reason: 'storageFailed' };
+    }
     if (result.kind === 'ok') {
       const all = await dist.loadAllDistributionRecords();
+      if (generation !== localWipeGeneration || !canCommitLocalData(writeEpoch)) {
+        return { kind: 'err', reason: 'storageFailed' };
+      }
       set({ distributedShards: all });
     }
     return result;
   },
 
   addRecoveredShard: async (envelope, wrapKey) => {
+    const generation = localWipeGeneration;
+    const writeEpoch = captureLocalDataEpoch();
+    if (!canCommitLocalData(writeEpoch)) {
+      return {
+        kind: 'storageFailed',
+        vaultId: envelope.vaultId,
+        threshold: envelope.threshold,
+        collected: 0,
+        ready: false,
+      };
+    }
     const rec = await import('./recovery');
     const res = await rec.addReceivedShard(envelope, wrapKey);
+    if (generation !== localWipeGeneration || !canCommitLocalData(writeEpoch)) {
+      return {
+        kind: 'storageFailed',
+        vaultId: envelope.vaultId,
+        threshold: envelope.threshold,
+        collected: 0,
+        ready: false,
+      };
+    }
     const snap = await rec.inspectRecovery(envelope.vaultId);
+    if (generation !== localWipeGeneration || !canCommitLocalData(writeEpoch)) {
+      return {
+        kind: 'storageFailed',
+        vaultId: envelope.vaultId,
+        threshold: envelope.threshold,
+        collected: 0,
+        ready: false,
+      };
+    }
     if (snap) {
       set((s) => {
         const others = s.pendingRecovery.filter(
@@ -285,8 +359,12 @@ export const useVaultStore = create<VaultStoreState>((set, get) => ({
   },
 
   unlockWithBiometric: async () => {
+    const generation = localWipeGeneration;
+    const writeEpoch = captureLocalDataEpoch();
+    if (!canCommitLocalData(writeEpoch)) return false;
     const { getOrCreateRootSecret } = await import('./secretsKeychain');
     const r = await getOrCreateRootSecret('biometric');
+    if (generation !== localWipeGeneration || !canCommitLocalData(writeEpoch)) return false;
     const unlocked = r.kind === 'ok';
     set({ isLocked: !unlocked });
     return unlocked;
@@ -300,9 +378,12 @@ export const useVaultStore = create<VaultStoreState>((set, get) => ({
   },
 
   syncCloud: async () => {
+    const generation = localWipeGeneration;
+    const writeEpoch = captureLocalDataEpoch();
+    if (!canCommitLocalData(writeEpoch)) return { kind: 'err', reason: 'cloudUnavailable' };
     const { syncVaultMetadata } = await import('./cloudSync');
     const res = await syncVaultMetadata(get().items);
-    if (res.kind === 'ok') {
+    if (res.kind === 'ok' && generation === localWipeGeneration && canCommitLocalData(writeEpoch)) {
       set({
         lastSyncedAt: res.merged.lastSync,
         lastSyncedManifest: res.merged,
@@ -312,9 +393,12 @@ export const useVaultStore = create<VaultStoreState>((set, get) => ({
   },
 
   pullCloud: async (options) => {
+    const generation = localWipeGeneration;
+    const writeEpoch = captureLocalDataEpoch();
+    if (!canCommitLocalData(writeEpoch)) return { kind: 'err', reason: 'cloudUnavailable' };
     const { pullVaultMetadata } = await import('./cloudSync');
     const res = await pullVaultMetadata(get().items, options ?? {});
-    if (res.kind === 'ok') {
+    if (res.kind === 'ok' && generation === localWipeGeneration && canCommitLocalData(writeEpoch)) {
       set({
         lastSyncedAt: res.merged.lastSync,
         lastSyncedManifest: res.merged,
@@ -324,12 +408,16 @@ export const useVaultStore = create<VaultStoreState>((set, get) => ({
   },
 
   prefetchVaultCiphertext: async (itemId) => {
+    const generation = localWipeGeneration;
+    const writeEpoch = captureLocalDataEpoch();
+    if (!canCommitLocalData(writeEpoch)) return null;
     const manifest = get().lastSyncedManifest;
     const entry = manifest?.items[itemId];
     if (!entry?.remoteRef) return null;
     const { downloadVaultItemCiphertext } = await import('./cloudSync');
     try {
       const localPath = await downloadVaultItemCiphertext(itemId, entry.remoteRef);
+      if (generation !== localWipeGeneration || !canCommitLocalData(writeEpoch)) return null;
       // If we know about this item locally and its encryptedPath drifted
       // (fresh-device case), update the metadata so subsequent reads hit
       // the new file. Otherwise leave the store alone — the metadata
@@ -365,6 +453,21 @@ export const useVaultStore = create<VaultStoreState>((set, get) => ({
       return 'in-sync';
     }
     return 'in-sync';
+  },
+
+  resetForLocalWipe: () => {
+    localWipeGeneration += 1;
+    set({
+      manifest: [],
+      details: new Map(),
+      items: [],
+      hydrated: true,
+      distributedShards: [],
+      pendingRecovery: [],
+      lastSyncedAt: null,
+      isLocked: true,
+      lastSyncedManifest: null,
+    });
   },
 }));
 

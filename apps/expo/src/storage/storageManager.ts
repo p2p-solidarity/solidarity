@@ -19,12 +19,20 @@ import {
 
 import { decryptJson, encryptJson } from './encryptionManager';
 import { getMmkv } from './mmkv';
+import {
+  canCommitLocalData,
+  captureLocalDataEpoch,
+} from '@/settings/localDataWipeBarrier';
 
 const CARDS_PREFIX = 'cards:';
 const CONTACTS_PREFIX = 'contacts:';
 
 async function setEncrypted<T>(key: string, value: T): Promise<void> {
-  getMmkv().set(key, await encryptJson(value));
+  const writeEpoch = captureLocalDataEpoch();
+  if (!canCommitLocalData(writeEpoch)) return;
+  const encrypted = await encryptJson(value);
+  if (!canCommitLocalData(writeEpoch)) return;
+  getMmkv().set(key, encrypted);
 }
 
 async function getEncrypted<T>(key: string): Promise<T | null> {

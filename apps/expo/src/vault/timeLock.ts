@@ -25,6 +25,12 @@ import { z } from 'zod';
 
 import { decryptJson, encryptJson } from '@/storage/encryptionManager';
 import { getMmkv } from '@/storage/mmkv';
+import {
+  canCommitLocalData,
+  captureLocalDataEpoch,
+  trackLocalDataOperation,
+  type LocalDataEpoch,
+} from '@/settings/localDataWipeBarrier';
 
 export const TIME_LOCK_STATUSES = [
   'locked',
@@ -155,16 +161,29 @@ function lockKey(itemId: string): string {
 }
 
 /** Persist (or clear) a per-item time-lock config. */
-export async function applyTimeLock(
+export function applyTimeLock(
   itemId: string,
   config: TimeLockConfig | null
 ): Promise<void> {
+  return trackLocalDataOperation(
+    applyTimeLockAtEpoch(itemId, config, captureLocalDataEpoch()),
+  );
+}
+
+async function applyTimeLockAtEpoch(
+  itemId: string,
+  config: TimeLockConfig | null,
+  writeEpoch: LocalDataEpoch,
+): Promise<void> {
+  if (!canCommitLocalData(writeEpoch)) return;
   if (config === null) {
     getMmkv().remove(lockKey(itemId));
     return;
   }
   const parsed = timeLockConfigSchema.parse(config);
-  getMmkv().set(lockKey(itemId), await encryptJson(parsed));
+  const encrypted = await encryptJson(parsed);
+  if (!canCommitLocalData(writeEpoch)) return;
+  getMmkv().set(lockKey(itemId), encrypted);
 }
 
 /** Read a per-item config; `null` if no lock is set. */

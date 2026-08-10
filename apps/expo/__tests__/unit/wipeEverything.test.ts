@@ -17,7 +17,9 @@ function dependencies(
       target,
       async () => {
         calls.push(target);
-        if (target === failingTarget) throw new Error('private failure detail');
+        return target === failingTarget
+          ? { ok: false as const, error: { kind: 'storageFailed' as const } }
+          : { ok: true as const, value: undefined };
       },
     ]),
   ) as unknown as WipeEverythingDependencies;
@@ -30,11 +32,12 @@ describe('wipeEverything', () => {
     const result = await wipeEverything(dependencies(calls));
 
     expect(result).toEqual({ kind: 'ok' });
-    expect(calls[0]).toBe('appData');
-    expect(new Set(calls.slice(1, 1 + WIPE_SECRET_TARGETS.length))).toEqual(
+    expect(calls.slice(0, 2)).toEqual(['quiesce', 'appData']);
+    expect(new Set(calls.slice(2, 2 + WIPE_SECRET_TARGETS.length))).toEqual(
       new Set(WIPE_SECRET_TARGETS),
     );
-    expect(calls.slice(-3)).toEqual([
+    expect(calls.slice(-4)).toEqual([
+      'finalPersistentData',
       'masterEncryptionKey',
       'freshEncryptionKey',
       'preferences',
@@ -49,13 +52,32 @@ describe('wipeEverything', () => {
     );
 
     expect(calls).toContain('appData');
-    expect(new Set(calls.slice(1))).toEqual(new Set(WIPE_SECRET_TARGETS));
+    expect(new Set(calls.slice(2))).toEqual(new Set(WIPE_SECRET_TARGETS));
     expect(calls).not.toContain('masterEncryptionKey');
+    expect(calls).not.toContain('finalPersistentData');
     expect(calls).not.toContain('freshEncryptionKey');
     expect(calls).not.toContain('preferences');
     expect(result).toEqual({
       kind: 'incomplete',
       failedTargets: ['nostrKey'],
+    });
+    expect(JSON.stringify(result)).not.toContain('storageFailed');
+  });
+
+  it('fails closed when a dependency unexpectedly throws', async () => {
+    const calls: string[] = [];
+    const deps = dependencies(calls);
+
+    const result = await wipeEverything({
+      ...deps,
+      signingKey: () => {
+        throw new Error('private failure detail');
+      },
+    });
+
+    expect(result).toEqual({
+      kind: 'incomplete',
+      failedTargets: ['signingKey'],
     });
     expect(JSON.stringify(result)).not.toContain('private failure detail');
   });
@@ -65,8 +87,20 @@ describe('wipeEverything', () => {
 
     const result = await wipeEverything(dependencies(calls, 'appData'));
 
-    expect(calls).toEqual(['appData']);
+    expect(calls).toEqual(['quiesce', 'appData']);
     expect(result).toEqual({ kind: 'incomplete', failedTargets: ['appData'] });
+  });
+
+  it('does not touch app data when background work cannot be quiesced', async () => {
+    const calls: string[] = [];
+
+    const result = await wipeEverything(dependencies(calls, 'quiesce'));
+
+    expect(calls).toEqual(['quiesce']);
+    expect(result).toEqual({
+      kind: 'incomplete',
+      failedTargets: ['quiesce'],
+    });
   });
 
   it('does not write defaults until the blank store has a fresh encryption key', async () => {
@@ -87,6 +121,25 @@ describe('wipeEverything', () => {
     });
   });
 
+  it('scrubs markers written by secret deletion before deleting the master key', async () => {
+    const calls: string[] = [];
+
+    const result = await wipeEverything(
+      dependencies(calls, 'finalPersistentData'),
+    );
+
+    expect(calls.slice(-2)).toEqual([
+      'atprotoSession',
+      'finalPersistentData',
+    ]);
+    expect(calls).not.toContain('masterEncryptionKey');
+    expect(calls).not.toContain('freshEncryptionKey');
+    expect(result).toEqual({
+      kind: 'incomplete',
+      failedTargets: ['finalPersistentData'],
+    });
+  });
+
   it('wires every target to a production deletion path without test resets', () => {
     const production = readFileSync(
       new URL('../../src/settings/productionWipe.ts', import.meta.url),
@@ -96,12 +149,19 @@ describe('wipeEverything', () => {
       new URL('../../app/settings/developer.tsx', import.meta.url),
       'utf8',
     );
+    const rootLayout = readFileSync(
+      new URL('../../app/_layout.tsx', import.meta.url),
+      'utf8',
+    );
 
     for (const operation of [
-      'clearAllData',
+      'clearProductionAppData',
+      'deleteProductionFiles',
+      'deleteCacheDatabaseForLocalWipe',
+      'deleteVaultDirectory',
       'deleteSigningKey',
       'deletePairwiseSeed',
-      'deleteRootKey',
+      'deleteRootKeyForLocalWipe',
       'deleteMasterKey',
       'deleteRootSecret',
       'deleteRecipientKeys',
@@ -109,13 +169,64 @@ describe('wipeEverything', () => {
       'deleteNostrKey',
       'signOutAtproto',
       'rekeyEmptyMmkv',
+      'beginLocalDataWipe',
+      'quiesceRecipientKeyOperations',
+      'quiesceNostrKeyOperations',
+      'quiesceRootKeyOperations',
+      'quiesceSigningKeyOperations',
+      'quiescePairwiseSeedOperations',
+      'quiesceRootSecretOperations',
+      'quiesceLocalDataOperations',
+      'stopForegroundPolling',
+      'stopLaneManager',
+      'unregister',
     ]) {
       expect(production).toContain(operation);
     }
+    for (const store of [
+      'useCardStore',
+      'useContactStore',
+      'useRecentUpdatesStore',
+      'useLeaveCardStore',
+      'useCredentialStore',
+      'useIssuerMetadataStore',
+      'useGroupStore',
+      'useVaultStore',
+      'useShoutoutStore',
+      'useProfileStore',
+      'useProfileSnapshotStore',
+      'useIdentityData',
+      'useIdentityCoordinator',
+      'useIssuerTrustAnchorStore',
+      'useSharingSettings',
+      'useZkIdentity',
+      'usePageDesignStore',
+    ]) {
+      expect(production).toContain(
+        `${store}.getState().resetForLocalWipe()`,
+      );
+    }
+    for (const transientReset of [
+      'useReceivedCard.getState().dismiss()',
+      'useVerifiedPageResult.getState().dismiss()',
+      'useWebSignPending.getState().clear()',
+      'useSealedRouteStore.getState().clear()',
+      'invalidateCachedNostrResult()',
+      'invalidateCachedAtprotoResult()',
+    ]) {
+      expect(production).toContain(transientReset);
+    }
     expect(production).toContain('resetPreferences');
+    expect(production).toContain('getAllKeys().length === 0');
+    expect(production).toContain('await preparePageDesign()');
+    expect(rootLayout).toContain('hasCompletedOnboarding');
+    expect(rootLayout).toContain(
+      'if (!ready || !hasCompletedOnboarding || !remoteNotificationsEnabled)',
+    );
     expect(developer).toContain('wipeLocalDevice()');
     expect(developer).toContain("router.replace('/onboarding')");
     expect(developer).not.toContain('resetSigningKeyForTesting');
     expect(developer).not.toContain('ensureSigningKey');
+    expect(production).not.toContain('ForTesting');
   });
 });

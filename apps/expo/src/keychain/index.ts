@@ -15,6 +15,7 @@ export {
   signRawEs256,
   didKeyForCurrentIdentity,
   deleteSigningKey,
+  quiesceSigningKeyOperations,
   resetSigningKeyForTesting,
   type SigningIdentity,
   type SigningKeyCandidate,
@@ -23,6 +24,7 @@ export {
   pairwisePrivateKey,
   pairwisePublicJwk,
   deletePairwiseSeed,
+  quiescePairwiseSeedOperations,
   resetPairwiseSeedForTesting,
 } from './pairwiseKey';
 export {
