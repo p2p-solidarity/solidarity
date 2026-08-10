@@ -27,7 +27,7 @@
  */
 import { useLocalSearchParams } from 'expo-router';
 import { safeBack } from '@/navigation/safeBack';
-import { useEffect, useMemo, useReducer, useState } from 'react';
+import { useCallback, useEffect, useMemo, useReducer, useState } from 'react';
 import { Modal, Pressable, ScrollView, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -39,8 +39,9 @@ import {
   ProofStep,
 } from '@/components/passport/PassportSteps';
 import { SolidarityPlaceholderCard } from '@/components/passport/SolidarityPlaceholderCard';
-import { showError } from '@/feedback/appAlert';
+import { appAlert, showError } from '@/feedback/appAlert';
 import { pushToast } from '@/feedback/toast';
+import { useTranslation } from '@/i18n';
 import {
   MRZCameraStep,
   type PassportMRZDraft as MrzScannedDraft,
@@ -262,6 +263,7 @@ export default function PassportSetup() {
   const params = useLocalSearchParams<{ manual?: string; from?: string }>();
   const fromOnboarding = params.from === 'onboarding';
   const insets = useSafeAreaInsets();
+  const { t } = useTranslation();
   const activeDid = useActiveDid();
   const [state, dispatch] = useReducer(passportPipelineReducer, initialPassportPipelineState);
   const [showManualInput, setShowManualInput] = useState(params.manual === '1');
@@ -285,6 +287,10 @@ export default function PassportSetup() {
       }),
     [nitro.nfc, developerMode, simulateNfc]
   );
+  const onProofOverlayDone = useCallback(() => {
+    dispatch({ type: 'setProofOverlayStage', stage: null });
+  }, [dispatch]);
+
   useEffect(() => {
     if (state.errorMessage) {
       pushToast(state.errorMessage, 'error');
@@ -295,7 +301,10 @@ export default function PassportSetup() {
   const onValidateMrz = () => {
     const err = validateMrzDraft(state.draft);
     if (err) {
-      dispatch({ type: 'setError', message: err.message });
+      dispatch({
+        type: 'setError',
+        message: developerMode ? err.message : t('passportSetup.error.details'),
+      });
       return;
     }
     dispatch({ type: 'gotoStep', step: 'nfc' });
@@ -304,9 +313,11 @@ export default function PassportSetup() {
   const onReadNfc = async () => {
     if (nfcStrategy.kind === 'unavailable') {
       reportPassportError({
+        developerMode,
+        title: t('passportSetup.error.title'),
         context: 'Passport › NFC Read',
         phase: 'nfc-read',
-        summary: nfcStrategy.message,
+        summary: developerMode ? nfcStrategy.message : t('passportSetup.error.nfcUnavailable'),
         error: nfcStrategy.message,
       });
       return;
@@ -394,9 +405,13 @@ export default function PassportSetup() {
         message: 'Passport NFC read failed.',
       });
       reportPassportError({
+        developerMode,
+        title: t('passportSetup.error.title'),
         context: 'Passport › NFC Read',
         phase: 'nfc-read',
-        summary: 'Could not read the passport NFC chip.',
+        summary: developerMode
+          ? 'Could not read the passport NFC chip.'
+          : t('passportSetup.error.nfcRead'),
         error: err,
         chip: diagnosticResult,
       });
@@ -413,7 +428,9 @@ export default function PassportSetup() {
       const duplicate = await findSavedPassportDuplicate(passportFingerprint);
       if (duplicate) {
         pushToast(
-          'This passport credential is already saved. Delete the existing passport before scanning it again.',
+          developerMode
+            ? 'This passport credential is already saved. Delete the existing passport before scanning it again.'
+            : t('passportSetup.error.alreadySaved'),
           'warning'
         );
         return;
@@ -482,9 +499,16 @@ export default function PassportSetup() {
         dispatch({ type: 'setProofOverlayStage', stage: null });
         dispatch({
           type: 'setProofProgress',
-          message: 'OpenAC v3 unavailable — using SD-JWT fallback…',
+          message: developerMode
+            ? 'OpenAC v3 unavailable — using SD-JWT fallback…'
+            : t('passportSetup.proof.unavailable'),
         });
-        pushToast('OpenAC v3 unavailable — using SD-JWT fallback.', 'info');
+        pushToast(
+          developerMode
+            ? 'OpenAC v3 unavailable — using SD-JWT fallback.'
+            : t('passportSetup.proof.unavailable'),
+          'info'
+        );
         await new Promise<void>((r) => setTimeout(r, 600));
         proof = {
           proofType: 'sd-jwt-fallback',
@@ -500,9 +524,11 @@ export default function PassportSetup() {
     } catch (err) {
       dispatch({ type: 'setProofOverlayStage', stage: null });
       reportPassportError({
+        developerMode,
+        title: t('passportSetup.error.title'),
         context: 'Passport › Generate Proof',
         phase: 'proof-generation',
-        summary: friendlyProofError(err),
+        summary: developerMode ? friendlyProofError(err) : t('passportSetup.error.privateCheck'),
         error: err,
         chip: proofChip,
         code: classifyPassportProofError(err),
@@ -523,7 +549,10 @@ export default function PassportSetup() {
     // saw zero credentials and zero disclosures even after a
     // successful end-to-end ZK passport scan.
     if (!state.draft || !state.chip || !state.proof) {
-      pushToast('Passport flow not complete', 'warning');
+      pushToast(
+        developerMode ? 'Passport flow not complete' : t('passportSetup.error.details'),
+        'warning'
+      );
       return;
     }
     // CLAUDE.md Sec rule: Face ID is required for passport save. Prepare no
@@ -531,7 +560,12 @@ export default function PassportSetup() {
     // single enrollment prompt.
     const authorized = await requireBiometric('passportSave');
     if (!authorized) {
-      pushToast('Face ID is required to save your passport credential.', 'warning');
+      pushToast(
+        developerMode
+          ? 'Face ID is required to save your passport credential.'
+          : t('passportSetup.error.faceId'),
+        'warning'
+      );
       return;
     }
     dispatch({ type: 'setLoading', value: true });
@@ -545,7 +579,9 @@ export default function PassportSetup() {
       const duplicate = await findSavedPassportDuplicate(passportFingerprint);
       if (duplicate) {
         pushToast(
-          'This passport credential is already saved. Delete the existing passport before scanning it again.',
+          developerMode
+            ? 'This passport credential is already saved. Delete the existing passport before scanning it again.'
+            : t('passportSetup.error.alreadySaved'),
           'warning'
         );
         return;
@@ -574,7 +610,9 @@ export default function PassportSetup() {
       }
       if (holderDid == null || holderDid.length === 0) {
         pushToast(
-          'Identity key not ready — wait for iCloud Keychain sync, then retry.',
+          developerMode
+            ? 'Identity key not ready — wait for iCloud Keychain sync, then retry.'
+            : t('passportSetup.error.identityUnavailable'),
           'error'
         );
         return;
@@ -665,10 +703,10 @@ export default function PassportSetup() {
       }
 
       pushToast(
-        chip.isSimulated
+        developerMode && chip.isSimulated
           ? 'Mock passport credential issued (demo only)'
-          : 'Passport credential issued',
-        'success',
+          : proof.generationFailed ? t('passportSetup.savedUnverified') : t('passportSetup.saved'),
+        proof.generationFailed ? 'warning' : 'success',
       );
       // Mirror Swift's `onCompleted(proof)` closure: when this flow was launched
       // from onboarding, signal completion so the wizard sets passportScanned and
@@ -677,11 +715,15 @@ export default function PassportSetup() {
       if (fromOnboarding) notifyPassportOnboardingCompleted();
       safeBack();
     } catch (err) {
-      const message = err instanceof Error ? err.message : String(err);
+      const technicalSummary = (err instanceof Error ? err.message : String(err)).split('\n')[0];
       reportPassportError({
+        developerMode,
+        title: t('passportSetup.error.title'),
         context: 'Passport › Save Credential',
         phase: 'persist',
-        summary: message.split('\n')[0] ?? 'Failed to save passport credential',
+        summary: developerMode
+          ? technicalSummary ?? 'Failed to save passport credential'
+          : t('passportSetup.error.save'),
         error: err,
         chip: state.chip,
       });
@@ -695,17 +737,22 @@ export default function PassportSetup() {
       <NavBar onClose={() => { safeBack(); }} />
       <CryptoCompilingOverlay
         visible={state.proofOverlayStage !== null}
+        developerMode={developerMode}
         stage={state.proofOverlayStage ?? 'init'}
-        statusText={state.proofProgressMessage}
-        onDone={() => {
-          dispatch({ type: 'setProofOverlayStage', stage: null });
-        }}
+        statusText={
+          developerMode
+            ? state.proofProgressMessage
+            : state.proofOverlayStage === 'done'
+              ? t('passportSetup.proof.ready')
+              : t('passportSetup.proof.preparing')
+        }
+        onDone={onProofOverlayDone}
       />
       <ScrollView contentContainerStyle={{ padding: 16, paddingBottom: 80 }}>
         <SolidarityPlaceholderCard
           screenID={meta.id}
-          title={meta.title}
-          subtitle={meta.subtitle}
+          title={t(meta.title)}
+          subtitle={t(meta.subtitle)}
         />
 
         <View className="h-4" />
@@ -715,6 +762,7 @@ export default function PassportSetup() {
             showManualInput={showManualInput}
             setShowManualInput={setShowManualInput}
             draft={state.draft}
+            developerMode={developerMode}
             patch={(patch) => { dispatch({ type: 'patchDraft', patch }); }}
             onContinue={onValidateMrz}
             onScanPressed={() => { setShowCamera(true); }}
@@ -728,6 +776,7 @@ export default function PassportSetup() {
             progressPercent={state.nfcProgressPercent}
             progressPhase={state.nfcProgressPhase}
             chip={state.chip}
+            developerMode={developerMode}
             onRead={() => { void onReadNfc(); }}
           />
         ) : null}
@@ -738,12 +787,18 @@ export default function PassportSetup() {
             progress={state.proofProgressMessage}
             proof={state.proof}
             disabled={state.chip === null}
+            developerMode={developerMode}
             onGenerate={() => { void onGenerateProof(); }}
           />
         ) : null}
 
         {state.step === 'persist' ? (
-          <PersistStep proof={state.proof} busy={state.isLoading} onSave={() => { void onPersist(); }} />
+          <PersistStep
+            proof={state.proof}
+            busy={state.isLoading}
+            developerMode={developerMode}
+            onSave={() => { void onPersist(); }}
+          />
         ) : null}
       </ScrollView>
 
@@ -754,6 +809,7 @@ export default function PassportSetup() {
         onRequestClose={() => { setShowCamera(false); }}
       >
         <MRZCameraStep
+          developerMode={developerMode}
           onScanned={(scanned) => {
             applyScannedDraft(scanned, dispatch);
             setShowCamera(false);
@@ -842,6 +898,8 @@ async function tryGenerateOpenAcV3Proof(
 }
 
 function reportPassportError(args: {
+  readonly developerMode: boolean;
+  readonly title: string;
   readonly context: string;
   readonly phase: PassportErrorPhase;
   readonly summary: string;
@@ -849,6 +907,11 @@ function reportPassportError(args: {
   readonly chip?: PassportReadResult | PassportChipSnapshot | null;
   readonly code?: string;
 }): void {
+  if (!args.developerMode) {
+    appAlert({ title: args.title, message: args.summary });
+    return;
+  }
+
   showError({
     context: args.context,
     summary: args.summary,

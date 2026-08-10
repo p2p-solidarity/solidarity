@@ -32,6 +32,12 @@ import * as Notifications from 'expo-notifications';
 
 import type { SealResponse } from '@solidarity/shared';
 
+import {
+  canCommitLocalData,
+  captureLocalDataEpoch,
+  type LocalDataEpoch,
+} from '@/settings/localDataWipeBarrier';
+
 import { sealToken } from './client';
 import {
   hydrateSealedRoute,
@@ -132,6 +138,8 @@ let inFlightAuto: Promise<PushRegistration | null> | null = null;
 export function registerForPushNotificationsAsync(
   options: RegisterPushOptions = {}
 ): Promise<PushRegistration | null> {
+  const operationEpoch = captureLocalDataEpoch();
+  if (!canCommitLocalData(operationEpoch)) return Promise.resolve(null);
   const prompt = options.prompt === true;
 
   // Single-flight the automatic path only. An explicit prompt request must
@@ -139,7 +147,7 @@ export function registerForPushNotificationsAsync(
   // runs fresh.
   if (!prompt && inFlightAuto) return inFlightAuto;
 
-  const run = doRegister(prompt);
+  const run = doRegister(prompt, operationEpoch);
   if (!prompt) {
     inFlightAuto = run;
     // Settled-either-way cleanup via `then(onOk, onErr)`, NOT `.finally()`:
@@ -155,21 +163,28 @@ export function registerForPushNotificationsAsync(
   return run;
 }
 
-async function doRegister(prompt: boolean): Promise<PushRegistration | null> {
+async function doRegister(
+  prompt: boolean,
+  operationEpoch: LocalDataEpoch,
+): Promise<PushRegistration | null> {
   // Pull the latest persisted snapshot into the store so the freshness check
   // below has accurate data on the very first call after boot.
   hydrateSealedRoute();
+  if (!canCommitLocalData(operationEpoch)) return null;
 
   // Check the EXISTING permission before ever requesting. If it is not
   // already granted, only an explicit opt-in (`prompt`) may raise the OS
   // dialog; the automatic path bails silently so nobody is surprised.
   if (!(await hasDeliveryPermission())) {
+    if (!canCommitLocalData(operationEpoch)) return null;
     if (!prompt) return null;
     const granted = await requestPermission();
+    if (!canCommitLocalData(operationEpoch)) return null;
     if (!granted) return null;
   }
 
   const token = await fetchDeviceToken();
+  if (!canCommitLocalData(operationEpoch)) return null;
   if (!token) return null;
 
   const snapshot = useSealedRouteStore.getState();
@@ -183,6 +198,7 @@ async function doRegister(prompt: boolean): Promise<PushRegistration | null> {
   }
 
   const sealed = await sealToken(token);
+  if (!canCommitLocalData(operationEpoch)) return null;
   useSealedRouteStore.getState().persist(token, sealed);
   return { token, sealed };
 }

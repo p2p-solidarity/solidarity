@@ -9,6 +9,7 @@ import { PressableScale } from '@/components/common/PressableScale';
 import { SfIcon } from '@/components/icons/SfIcon';
 import { PresentAttestationsMode as AttestationsMode } from '@/components/present/PresentAttestations';
 import { PresentCard, PresentCardWithPageUrl } from '@/components/present/PresentCard';
+import type { PublicPageShareSource } from '@/components/me/meProfileModel';
 import {
   ThemedButton,
   ThemedSurface,
@@ -53,6 +54,9 @@ export function PresentScreen(): ReactNode {
   const nostrPublishedJws = useProfileStore((state) => state.nostrPublishedJws);
   const shareRecord = shared?.record ?? record;
   const shareJws = shared?.jws ?? jws;
+  const publicPage: PublicPageShareSource | null = published
+    ? { record: published.record, jws: published.jws }
+    : null;
   const nostrShortUrlReady = published !== null && nostrPublishedJws === published.jws;
   const trimmedOwnerName = record?.displayName.trim();
 
@@ -144,6 +148,7 @@ export function PresentScreen(): ReactNode {
             }
             shareRecord={shareRecord}
             shareJws={shareJws}
+            publicPage={publicPage}
             nostrShortUrlReady={nostrShortUrlReady}
             onRetry={() => { setCardRetryNonce((value) => value + 1); }}
             onSetPreference={(key, value) => { preferences.set(key, value); }}
@@ -236,6 +241,7 @@ function CardMode({
   ownerName,
   shareRecord,
   shareJws,
+  publicPage,
   nostrShortUrlReady,
   onRetry,
   onSetPreference,
@@ -244,6 +250,7 @@ function CardMode({
   readonly ownerName: string | null;
   readonly shareRecord: ProfileRecord | null;
   readonly shareJws: string | null;
+  readonly publicPage: PublicPageShareSource | null;
   readonly nostrShortUrlReady: boolean;
   readonly onRetry: () => void;
   readonly onSetPreference: (
@@ -260,6 +267,7 @@ function CardMode({
             ownerName={ownerName}
             shareRecord={shareRecord}
             shareJws={shareJws}
+            publicPage={publicPage}
             nostrShortUrlReady={nostrShortUrlReady}
           />
         ) : (

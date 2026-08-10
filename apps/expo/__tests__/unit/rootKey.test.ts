@@ -47,6 +47,11 @@ import {
 } from '@solidarity/shared';
 
 import derivedVectors from '../../../../packages/shared/vectors/derive.json';
+import {
+  __resetLocalDataWipeBarrierForTesting,
+  beginLocalDataWipe,
+  completeLocalDataWipe,
+} from '../../src/settings/localDataWipeBarrier';
 
 // ── In-memory storage + biometric gate, injected via rootKey.ts's own DI
 //    hooks (no global `mock.module` — see the isolation note above) ───────
@@ -54,12 +59,16 @@ import derivedVectors from '../../../../packages/shared/vectors/derive.json';
 const secureStore = new Map<string, string>();
 let nextBiometricSuccess = true;
 const biometricCalls: string[] = [];
+let mnemonicWriteGate: Promise<void> | null = null;
+let releaseMnemonicWrite: (() => void) | null = null;
+let mnemonicWriteStarted: (() => void) | null = null;
 
 const fakeStorage = {
   getMnemonic: (): Promise<string | null> => Promise.resolve(secureStore.get('mnemonic') ?? null),
-  setMnemonic: (mnemonic: string): Promise<void> => {
+  setMnemonic: async (mnemonic: string): Promise<void> => {
+    mnemonicWriteStarted?.();
+    await (mnemonicWriteGate ?? Promise.resolve());
     secureStore.set('mnemonic', mnemonic);
-    return Promise.resolve();
   },
   deleteMnemonic: (): Promise<void> => {
     secureStore.delete('mnemonic');
@@ -79,14 +88,17 @@ const fakeBiometricGate = (reason: 'sign' | 'export'): Promise<boolean> => {
 const syncStore = new Map<string, string>();
 let nextSyncWriteError: Error | null = null;
 let nextSyncDeleteError: Error | null = null;
-
 let nextSyncReadError: Error | null = null;
+let syncedWriteGate: Promise<void> | null = null;
+let releaseSyncedWrite: (() => void) | null = null;
+let syncedWriteStarted: (() => void) | null = null;
 
 const fakeSyncStorage = {
-  setSyncedMnemonic: (mnemonic: string): Promise<void> => {
+  setSyncedMnemonic: async (mnemonic: string): Promise<void> => {
     if (nextSyncWriteError) return Promise.reject(nextSyncWriteError);
+    syncedWriteStarted?.();
+    await (syncedWriteGate ?? Promise.resolve());
     syncStore.set('mnemonic', mnemonic);
-    return Promise.resolve();
   },
   getSyncedMnemonic: (): Promise<string | null> => {
     if (nextSyncReadError) return Promise.reject(nextSyncReadError);
@@ -143,7 +155,12 @@ interface RootKeyMod {
     | { readonly ok: false; readonly error: { readonly kind: string } }
   >;
   readonly hasRootKey: () => Promise<boolean>;
+  readonly quiesceRootKeyOperations: () => Promise<void>;
   readonly deleteRootKey: () => Promise<void>;
+  readonly deleteRootKeyForLocalWipe: () => Promise<
+    | { readonly ok: true; readonly value: undefined }
+    | { readonly ok: false; readonly error: { readonly kind: string } }
+  >;
 }
 
 let mod: RootKeyMod;
@@ -163,11 +180,19 @@ beforeEach(async () => {
   nextSyncWriteError = null;
   nextSyncDeleteError = null;
   nextSyncReadError = null;
+  mnemonicWriteGate = null;
+  releaseMnemonicWrite = null;
+  mnemonicWriteStarted = null;
+  syncedWriteGate = null;
+  releaseSyncedWrite = null;
+  syncedWriteStarted = null;
+  __resetLocalDataWipeBarrierForTesting();
   biometricCalls.length = 0;
   await mod.deleteRootKey();
 });
 
 afterEach(async () => {
+  __resetLocalDataWipeBarrierForTesting();
   await mod.deleteRootKey();
 });
 
@@ -316,6 +341,32 @@ describe('importFromMnemonic — idempotent re-import', () => {
     expect(switched.value.did).toBe(b.did);
     expect(switched.value.did).not.toBe(a.did);
   });
+
+  it('does not recreate a root mnemonic when an in-flight import finishes after local wipe begins', async () => {
+    mnemonicWriteGate = new Promise<void>((resolve) => {
+      releaseMnemonicWrite = resolve;
+    });
+    const writeStarted = new Promise<void>((resolve) => {
+      mnemonicWriteStarted = resolve;
+    });
+
+    const importing = mod.importFromMnemonic(derivedVectors.valid[0]!.mnemonic);
+    await writeStarted;
+    beginLocalDataWipe();
+    let quiesced = false;
+    const quiescing = mod.quiesceRootKeyOperations().then(() => {
+      quiesced = true;
+    });
+    await Promise.resolve();
+    expect(quiesced).toBe(false);
+    releaseMnemonicWrite?.();
+
+    const result = await importing;
+    await quiescing;
+    expect(result.ok).toBe(false);
+    expect(secureStore.size).toBe(0);
+    completeLocalDataWipe();
+  });
 });
 
 // ── 5. Export ceremony — Face ID gate ───────────────────────────────────────
@@ -387,6 +438,26 @@ describe('enableICloudBackup', () => {
     expect(stillLocal.ok).toBe(true);
     if (stillLocal.ok) expect(stillLocal.value).toBe(created.value.did);
   });
+
+  it('does not recreate the synchronizable mnemonic when backup finishes after local wipe begins', async () => {
+    await mod.createFromFreshMnemonic();
+    syncedWriteGate = new Promise<void>((resolve) => {
+      releaseSyncedWrite = resolve;
+    });
+    const writeStarted = new Promise<void>((resolve) => {
+      syncedWriteStarted = resolve;
+    });
+
+    const backingUp = mod.enableICloudBackup();
+    await writeStarted;
+    beginLocalDataWipe();
+    releaseSyncedWrite?.();
+
+    const result = await backingUp;
+    expect(result.ok).toBe(false);
+    expect(syncStore.size).toBe(0);
+    completeLocalDataWipe();
+  });
 });
 
 // ── 7. deleteRootKey — best-effort cleans the synchronizable item too ─────
@@ -412,6 +483,17 @@ describe('deleteRootKey', () => {
     // unhandled rejection — that IS the "never throws" assertion.
     await mod.deleteRootKey();
     expect(await mod.hasRootKey()).toBe(false);
+  });
+
+  it('fails closed for a production wipe when synchronizable-key deletion fails', async () => {
+    await mod.createFromFreshMnemonic();
+    nextSyncDeleteError = new Error('private sync deletion failure');
+
+    const result = await mod.deleteRootKeyForLocalWipe();
+
+    expect(result).toEqual({ ok: false, error: { kind: 'storageFailed' } });
+    expect(JSON.stringify(result)).not.toContain('private sync deletion failure');
+    nextSyncDeleteError = null;
   });
 });
 

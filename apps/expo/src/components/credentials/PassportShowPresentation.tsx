@@ -28,6 +28,7 @@ export interface PassportShowPresentationProps {
   readonly credentialTitle: string;
   readonly holderDid: string;
   readonly selectedClaims: readonly ProvableClaimEntity[];
+  readonly showClaimDetails?: boolean;
 }
 
 export function PassportShowPresentation({
@@ -35,6 +36,7 @@ export function PassportShowPresentation({
   credentialTitle,
   holderDid,
   selectedClaims,
+  showClaimDetails = true,
 }: PassportShowPresentationProps): ReactNode {
   const { t } = useTranslation();
   // Start the witness decrypt + nitro lazy-load while the user is still
@@ -94,6 +96,7 @@ export function PassportShowPresentation({
           selectedClaims={selectedClaims}
           pages={flow.state.pages}
           showTitle
+          showClaimDetails={showClaimDetails}
           footerText={
             flow.state.freshness === 'challenge'
               ? t('passportShow.footerChallenge')

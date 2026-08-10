@@ -13,7 +13,7 @@
  * `GroupCredentialService` — when that lands as `src/credentials/groupIssuance.ts`,
  * swap the body of `runIssuance` below.
  */
-import { useLocalSearchParams } from 'expo-router';
+import { Redirect, useLocalSearchParams } from 'expo-router';
 import { safeBack } from '@/navigation/safeBack';
 import type { SFSymbol } from 'expo-symbols';
 import type { ReactNode } from 'react';
@@ -36,6 +36,7 @@ import { useCredentialStore } from '@/credentials/store';
 import { pushToast } from '@/feedback/toast';
 import { useTranslation } from '@/i18n';
 import { useGroup, useGroupMembers } from '@/groups/store';
+import { usePreferences } from '@/settings/preferences';
 import { getMmkv } from '@/storage/mmkv';
 import type { CardManifestEntry } from '@/cards/cardManifest';
 
@@ -224,7 +225,14 @@ function ResultRow({
 
 // MARK: - Screen
 
-export default function GroupVCIssuanceScreen() {
+export default function GroupVCIssuanceRoute() {
+  const developerMode = usePreferences((state) => state.developerMode);
+  if (!developerMode) return <Redirect href="/settings/advanced" />;
+
+  return <GroupVCIssuanceScreen />;
+}
+
+function GroupVCIssuanceScreen() {
   const { t } = useTranslation();
   const insets = useSafeAreaInsets();
   const { groupId } = useLocalSearchParams<{ groupId?: string }>();

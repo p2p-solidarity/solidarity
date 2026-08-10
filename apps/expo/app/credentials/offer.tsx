@@ -11,7 +11,7 @@
  * step routes to `/credentials/[id]` so the user can immediately review
  * the newly stored VC.
  */
-import { router, useLocalSearchParams } from 'expo-router';
+import { Redirect, router, useLocalSearchParams } from 'expo-router';
 import { safeBack } from '@/navigation/safeBack';
 import type { SFSymbol } from 'expo-symbols';
 import { useEffect, useMemo, useState } from 'react';
@@ -31,6 +31,7 @@ import {
   requestCredential,
   type CredentialOffer,
 } from '@/oidc/credentialIssuance';
+import { usePreferences } from '@/settings/preferences';
 
 const MONO = Platform.OS === 'ios' ? 'Menlo' : 'monospace';
 
@@ -340,7 +341,14 @@ function ErrorView({
 
 // MARK: - Screen
 
-export default function ReceiveCredentialScreen() {
+export default function ReceiveCredentialRoute() {
+  const developerMode = usePreferences((state) => state.developerMode);
+  if (!developerMode) return <Redirect href="/settings/advanced" />;
+
+  return <ReceiveCredentialScreen />;
+}
+
+function ReceiveCredentialScreen() {
   const { t } = useTranslation();
   const insets = useSafeAreaInsets();
   const { q } = useLocalSearchParams<{ q?: string }>();

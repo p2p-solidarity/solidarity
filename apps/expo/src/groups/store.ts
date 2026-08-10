@@ -39,6 +39,11 @@ import { useShallow } from 'zustand/shallow';
 import { decryptJson, encryptJson } from '@/storage/encryptionManager';
 import { ManifestStorage } from '@/storage/manifestStorage';
 import { getMmkv } from '@/storage/mmkv';
+import {
+  canCommitLocalData,
+  captureLocalDataEpoch,
+  type LocalDataEpoch,
+} from '@/settings/localDataWipeBarrier';
 
 import {
   GROUPS_MANIFEST_SCOPE,
@@ -75,9 +80,18 @@ export interface GroupMember {
 
 const GROUP_PREFIX = 'group:';
 const MEMBER_PREFIX = 'member:';
+let localWipeGeneration = 0;
 
-async function setEncrypted<T>(key: string, value: T): Promise<void> {
-  getMmkv().set(key, await encryptJson(value));
+async function setEncrypted<T>(
+  key: string,
+  value: T,
+  writeEpoch: LocalDataEpoch,
+): Promise<boolean> {
+  if (!canCommitLocalData(writeEpoch)) return false;
+  const encrypted = await encryptJson(value);
+  if (!canCommitLocalData(writeEpoch)) return false;
+  getMmkv().set(key, encrypted);
+  return true;
 }
 
 async function getEncrypted<T>(key: string): Promise<T | null> {
@@ -105,6 +119,8 @@ interface GroupStoreState {
   readonly upsertGroup: (g: GroupModel) => Promise<void>;
   readonly deleteGroup: (id: string) => Promise<void>;
   readonly upsertMember: (m: GroupMember) => Promise<void>;
+  /** Drop every live reference after the encrypted local store is wiped. */
+  readonly resetForLocalWipe: () => void;
 }
 
 export const useGroupStore = create<GroupStoreState>((set, get) => ({
@@ -114,11 +130,15 @@ export const useGroupStore = create<GroupStoreState>((set, get) => ({
   hydrated: false,
 
   seedFromManifest: () => {
+    if (!canCommitLocalData(captureLocalDataEpoch())) return;
     const seed = ManifestStorage.get<GroupManifestEntry>(GROUPS_MANIFEST_SCOPE);
     if (seed) set({ manifest: seed });
   },
 
   hydrate: async () => {
+    const generation = localWipeGeneration;
+    const writeEpoch = captureLocalDataEpoch();
+    if (!canCommitLocalData(writeEpoch)) return;
     if (get().hydrated) return;
     const groups = new Map<string, GroupModel>();
     const members = new Map<string, GroupMember[]>();
@@ -126,6 +146,7 @@ export const useGroupStore = create<GroupStoreState>((set, get) => ({
     for (const k of listKeys(GROUP_PREFIX)) {
       try {
         const g = await getEncrypted<GroupModel>(k);
+        if (generation !== localWipeGeneration || !canCommitLocalData(writeEpoch)) return;
         if (g) groups.set(g.id, g);
       } catch {
         // Skip the bad row; it'll be re-synced from cloud or rewritten on
@@ -135,6 +156,7 @@ export const useGroupStore = create<GroupStoreState>((set, get) => ({
     for (const k of listKeys(MEMBER_PREFIX)) {
       try {
         const m = await getEncrypted<GroupMember>(k);
+        if (generation !== localWipeGeneration || !canCommitLocalData(writeEpoch)) return;
         if (!m) continue;
         const bucket = members.get(m.groupID) ?? [];
         bucket.push(m);
@@ -143,16 +165,21 @@ export const useGroupStore = create<GroupStoreState>((set, get) => ({
         // Same tolerance as above — drop bad rows silently.
       }
     }
+    if (generation !== localWipeGeneration || !canCommitLocalData(writeEpoch)) return;
     const manifest = Array.from(groups.values()).map(toGroupManifest);
     ManifestStorage.set(GROUPS_MANIFEST_SCOPE, manifest);
     set({ manifest, groups, members, hydrated: true });
   },
 
   loadDetail: async (id) => {
+    const generation = localWipeGeneration;
+    const writeEpoch = captureLocalDataEpoch();
+    if (!canCommitLocalData(writeEpoch)) return null;
     const cached = get().groups.get(id);
     if (cached) return cached;
     try {
       const g = await getEncrypted<GroupModel>(`${GROUP_PREFIX}${id}`);
+      if (generation !== localWipeGeneration || !canCommitLocalData(writeEpoch)) return null;
       if (!g) return null;
       set((s) => {
         const next = new Map(s.groups);
@@ -166,7 +193,11 @@ export const useGroupStore = create<GroupStoreState>((set, get) => ({
   },
 
   upsertGroup: async (g) => {
-    await setEncrypted(`${GROUP_PREFIX}${g.id}`, g);
+    const generation = localWipeGeneration;
+    const writeEpoch = captureLocalDataEpoch();
+    if (!canCommitLocalData(writeEpoch)) return;
+    if (!(await setEncrypted(`${GROUP_PREFIX}${g.id}`, g, writeEpoch))) return;
+    if (generation !== localWipeGeneration || !canCommitLocalData(writeEpoch)) return;
     set((s) => {
       const nextGroups = new Map(s.groups);
       nextGroups.set(g.id, g);
@@ -181,6 +212,7 @@ export const useGroupStore = create<GroupStoreState>((set, get) => ({
   },
 
   deleteGroup: async (id) => {
+    if (!canCommitLocalData(captureLocalDataEpoch())) return;
     getMmkv().remove(`${GROUP_PREFIX}${id}`);
     set((s) => {
       const nextGroups = new Map(s.groups);
@@ -192,13 +224,22 @@ export const useGroupStore = create<GroupStoreState>((set, get) => ({
   },
 
   upsertMember: async (m) => {
-    await setEncrypted(`${MEMBER_PREFIX}${m.id}`, m);
+    const generation = localWipeGeneration;
+    const writeEpoch = captureLocalDataEpoch();
+    if (!canCommitLocalData(writeEpoch)) return;
+    if (!(await setEncrypted(`${MEMBER_PREFIX}${m.id}`, m, writeEpoch))) return;
+    if (generation !== localWipeGeneration || !canCommitLocalData(writeEpoch)) return;
     set((s) => {
       const next = new Map(s.members);
       const bucket = (next.get(m.groupID) ?? []).filter((x) => x.id !== m.id);
       next.set(m.groupID, [...bucket, m]);
       return { members: next };
     });
+  },
+
+  resetForLocalWipe: () => {
+    localWipeGeneration += 1;
+    set({ manifest: [], groups: new Map(), members: new Map(), hydrated: true });
   },
 }));
 

@@ -53,6 +53,7 @@ import {
   filterPassportShowPresentationClaims,
   selectPassportShowPresentationClaims,
 } from '@/passport/presentationClaims';
+import { usePreferences } from '@/settings/preferences';
 
 // MARK: - Helpers (Swift parity)
 
@@ -355,7 +356,8 @@ export default function CredentialDetailScreen() {
     groupId?: string;
     product?: string;
   }>();
-  const isProductContext = product === '1';
+  const developerMode = usePreferences((state) => state.developerMode);
+  const isProductContext = !developerMode || product === '1';
   const isWorkContext = context === 'work' && typeof groupId === 'string' && groupId.length > 0;
   const credential = useCredentialById(id);
   const manifestEntry = useCredentialStore((s) =>
@@ -668,6 +670,7 @@ export default function CredentialDetailScreen() {
                     selectedClaims={selectedClaimsForPresentation}
                     pages={presentation.pages}
                     emptyText={presentation.error ?? t('credentialDetail.noClaims')}
+                    showClaimDetails={!isProductContext}
                   />
                 )}
                 <View style={{ gap: 8 }}>
@@ -717,6 +720,7 @@ export default function CredentialDetailScreen() {
           setPresenting(false);
         }}
         passportShowEligible={passportShowEligible}
+        productMode={isProductContext}
       />
     </View>
   );

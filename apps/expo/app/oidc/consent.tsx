@@ -7,7 +7,7 @@
  * via `submitAuthorizationResponse`. Errors are reported by toast and the
  * screen stays open so the user can retry.
  */
-import { useLocalSearchParams } from 'expo-router';
+import { Redirect, useLocalSearchParams } from 'expo-router';
 import { safeBack } from '@/navigation/safeBack';
 import { useMemo, useState } from 'react';
 import { Linking, ScrollView, View } from 'react-native';
@@ -18,6 +18,7 @@ import { useActiveDid } from '@/identity';
 import { parseOidcRequest } from '@/oidc/parseAuthRequest';
 import { buildVpToken } from '@/oidc/presenter';
 import { submitAuthorizationResponse } from '@/oidc/submitResponse';
+import { usePreferences } from '@/settings/preferences';
 import { riskLevel, type OIDCScope } from '@solidarity/shared';
 
 const RISK_BADGE: Readonly<Record<'low' | 'medium' | 'high', string>> = {
@@ -30,7 +31,14 @@ function urlFromQuery(q: string): string {
   return `openid4vp://?${q}`;
 }
 
-export default function OidcConsent() {
+export default function OidcConsentRoute() {
+  const developerMode = usePreferences((state) => state.developerMode);
+  if (!developerMode) return <Redirect href="/settings/advanced" />;
+
+  return <OidcConsent />;
+}
+
+function OidcConsent() {
   const { q } = useLocalSearchParams<{ q: string }>();
   const activeDid = useActiveDid();
   const [submitting, setSubmitting] = useState(false);

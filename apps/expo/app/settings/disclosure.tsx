@@ -24,8 +24,8 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { SfIcon } from '@/components/icons/SfIcon';
 import { SettingsBackToolbar, SettingsScreenTitle } from '@/components/settings/SettingsBlocks';
 import { Colors } from '@/constants/Colors';
-import { haptic } from '@/feedback/haptics';
 import { useTranslation } from '@/i18n';
+import { usePreferences } from '@/settings/preferences';
 import type { BusinessCardField, SharingLevel } from '@solidarity/shared';
 import type { SFSymbol } from 'expo-symbols';
 
@@ -103,6 +103,7 @@ interface DisclosureBodyProps {
 export default function SelectiveDisclosureBody({ headerless = false }: DisclosureBodyProps) {
   const insets = useSafeAreaInsets();
   const { t } = useTranslation();
+  const developerMode = usePreferences((state) => state.developerMode);
 
   // Local UI state mirrors Swift @State (these are not yet persisted —
   // Swift wires them to a @Binding<SharingPreferences>; that store binding
@@ -110,9 +111,7 @@ export default function SelectiveDisclosureBody({ headerless = false }: Disclosu
   const [useZK, setUseZK] = useState(true);
   const [allowForwarding, setAllowForwarding] = useState(true);
   const [expirationDays, setExpirationDays] = useState(30);
-  const [showDevToggle, setShowDevToggle] = useState(false);
   const [selectedLevel, setSelectedLevel] = useState<SharingLevel>('public');
-  const [tapCount, setTapCount] = useState(0);
   const [expirationOpen, setExpirationOpen] = useState(false);
 
   const [matrix, setMatrix] = useState<Record<SharingLevel, Set<BusinessCardField>>>({
@@ -120,20 +119,6 @@ export default function SelectiveDisclosureBody({ headerless = false }: Disclosu
     professional: new Set(DEFAULT_FIELDS.professional),
     personal: new Set(DEFAULT_FIELDS.personal),
   });
-
-  const onZkTap = () => {
-    const next = tapCount + 1;
-    if (next >= 3) {
-      setShowDevToggle((v) => !v);
-      setTapCount(0);
-      haptic('warning');
-    } else {
-      setTapCount(next);
-      setTimeout(() => {
-        setTapCount(0);
-      }, 500);
-    }
-  };
 
   const toggleField = (level: SharingLevel, field: BusinessCardField) => {
     setMatrix((prev) => {
@@ -169,60 +154,54 @@ export default function SelectiveDisclosureBody({ headerless = false }: Disclosu
         <View
           className="mx-4 overflow-hidden rounded-xl bg-cardBg"
           style={{ borderWidth: 1, borderColor: Colors.divider }}>
-          {/* Zero-Knowledge Privacy row */}
-          <Pressable
-            onPress={onZkTap}
-            accessibilityRole="button"
-            accessibilityLabel={t('disclosure.zkPrivacy')}
-            className="flex-row items-center active:opacity-90"
-            style={{ padding: 16, opacity: useZK ? 1 : showDevToggle ? 1 : 0.8 }}>
-            <View
-              className="items-center justify-center rounded-lg"
-              style={{
-                width: 30,
-                height: 30,
-                marginRight: 12,
-                backgroundColor: useZK ? 'rgba(128,0,255,0.1)' : 'rgba(255,0,0,0.1)',
-              }}>
-              <SfIcon
-                name={useZK ? 'eye.slash.fill' : 'exclamationmark.triangle.fill'}
-                size={20}
-                color={useZK ? Colors.primaryMauve : Colors.destructive}
-              />
-            </View>
-            <View className="flex-1">
-              <Text className="text-[17px] text-text1">{t('disclosure.zkPrivacy')}</Text>
-              <Text
-                className="text-[12px]"
-                style={{
-                  marginTop: 2,
-                  color: useZK ? Colors.text2 : Colors.destructive,
-                }}>
-                {useZK ? t('disclosure.active') : t('disclosure.disabledUnsafe')}
-              </Text>
-            </View>
-            {showDevToggle ? (
-              <Switch
-                value={useZK}
-                onValueChange={setUseZK}
-                trackColor={{ false: Colors.divider, true: Colors.primaryBlue }}
-                thumbColor={Colors.cardBg}
-                ios_backgroundColor={Colors.divider}
-              />
-            ) : (
-              <Text className="text-[15px] font-semibold text-text2">
-                {useZK ? t('common.on').toUpperCase() : t('common.off').toUpperCase()}
-              </Text>
-            )}
-          </Pressable>
+          {developerMode ? (
+            <>
+              {/* The low-level privacy switch is diagnostic-only and follows the
+                  app-wide five-tap Developer Mode gate. */}
+              <View className="flex-row items-center" style={{ padding: 16 }}>
+                <View
+                  className="items-center justify-center rounded-lg"
+                  style={{
+                    width: 30,
+                    height: 30,
+                    marginRight: 12,
+                    backgroundColor: useZK ? 'rgba(128,0,255,0.1)' : 'rgba(255,0,0,0.1)',
+                  }}>
+                  <SfIcon
+                    name={useZK ? 'eye.slash.fill' : 'exclamationmark.triangle.fill'}
+                    size={20}
+                    color={useZK ? Colors.primaryMauve : Colors.destructive}
+                  />
+                </View>
+                <View className="flex-1">
+                  <Text className="text-[17px] text-text1">{t('disclosure.zkPrivacy')}</Text>
+                  <Text
+                    className="text-[12px]"
+                    style={{
+                      marginTop: 2,
+                      color: useZK ? Colors.text2 : Colors.destructive,
+                    }}>
+                    {useZK ? t('disclosure.active') : t('disclosure.disabledUnsafe')}
+                  </Text>
+                </View>
+                <Switch
+                  value={useZK}
+                  onValueChange={setUseZK}
+                  trackColor={{ false: Colors.divider, true: Colors.primaryBlue }}
+                  thumbColor={Colors.cardBg}
+                  ios_backgroundColor={Colors.divider}
+                />
+              </View>
 
-          <View
-            style={{
-              height: 1,
-              marginLeft: 50,
-              backgroundColor: Colors.divider,
-            }}
-          />
+              <View
+                style={{
+                  height: 1,
+                  marginLeft: 50,
+                  backgroundColor: Colors.divider,
+                }}
+              />
+            </>
+          ) : null}
 
           {/* Allow Forwarding row */}
           <View className="flex-row items-center" style={{ padding: 16 }}>

@@ -4,9 +4,9 @@
  * continue to come from the contact and saved-page stores.
  */
 import * as FileSystem from 'expo-file-system/legacy';
-import { router } from 'expo-router';
+import { router, useLocalSearchParams } from 'expo-router';
 import * as Sharing from 'expo-sharing';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { ActivityIndicator, ScrollView, View } from 'react-native';
 import Animated, { FadeIn } from 'react-native-reanimated';
 import { FlashList } from '@shopify/flash-list';
@@ -21,6 +21,7 @@ import { PressableScale } from '@/components/common/PressableScale';
 import { SfIcon } from '@/components/icons/SfIcon';
 import { PaperStackIllustration } from '@/components/decor/PaperStackIllustration';
 import { ContactsAddSheet } from '@/components/people/ContactsAddSheet';
+import { ContactsActivitySections } from '@/components/people/ContactsActivitySections';
 import { DeleteContactsSheet } from '@/components/people/DeleteContactsSheet';
 import { ManualContactEntrySheet } from '@/components/people/ManualContactEntrySheet';
 import { PeopleSearchField } from '@/components/people/PeopleSearchField';
@@ -47,6 +48,7 @@ export default function PeopleTab() {
   const upsertDeclared = useProfileSnapshotStore((s) => s.upsertDeclared);
   const autoEnabled = usePreferences((s) => s.autoBackupOnPull);
   const insets = useSafeAreaInsets();
+  const { edit } = useLocalSearchParams<{ edit?: string }>();
 
   const [searchQuery, setSearchQuery] = useState('');
   const [addSheetOpen, setAddSheetOpen] = useState(false);
@@ -70,6 +72,10 @@ export default function PeopleTab() {
     () => orderedContacts.filter((contact) => selectedIds.has(contact.id)),
     [orderedContacts, selectedIds],
   );
+
+  useEffect(() => {
+    if (edit === '1' && orderedContacts.length > 0) setEditMode(true);
+  }, [edit, orderedContacts.length]);
 
   const exitEditMode = () => {
     setEditMode(false);
@@ -271,6 +277,7 @@ export default function PeopleTab() {
         <EmptyContactsContent
           onImportPhone={() => { router.push('/contacts/import-phone'); }}
           onAdd={() => { setAddSheetOpen(true); }}
+          activity={editMode ? null : <ContactsActivitySections onContactAdded={refresh} />}
         />
       ) : (
         <>
@@ -279,6 +286,7 @@ export default function PeopleTab() {
           <View className="px-4 pb-3">
             <PeopleSearchField value={searchQuery} onChangeText={setSearchQuery} />
           </View>
+          {editMode ? null : <ContactsActivitySections onContactAdded={refresh} />}
           {filtered.length === 0 ? (
             <ScrollView contentContainerStyle={{ flexGrow: 1 }}>
               <EmptySearchState
@@ -596,12 +604,15 @@ function HeaderAction({
 function EmptyContactsContent({
   onImportPhone,
   onAdd,
+  activity,
 }: {
   readonly onImportPhone: () => void;
   readonly onAdd: () => void;
+  readonly activity: ReactNode;
 }) {
   return (
     <ScrollView contentContainerStyle={{ flexGrow: 1 }}>
+      {activity}
       <EmptyState onImportPhone={onImportPhone} onAdd={onAdd} />
       <View className="px-4">
         <VerifiedPagesSection />

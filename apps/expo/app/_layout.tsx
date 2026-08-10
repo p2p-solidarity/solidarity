@@ -52,6 +52,8 @@ import { handleDeepLink } from '@/deeplink/router';
 import { AppAlertOverlay } from '@/feedback/appAlert';
 import { ConfirmDialogOverlay } from '@/feedback/confirmDialog';
 import { ToastOverlay } from '@/feedback/toast';
+import { prepareLeaveCards } from '@/contacts/leaveCardInbox';
+import { prepareRecentUpdates } from '@/contacts/recentUpdates';
 import { useGroupStore } from '@/groups/store';
 import { useIdentityData } from '@/identity';
 import { installI18n } from '@/i18n';
@@ -141,6 +143,7 @@ export default function RootLayout() {
   // once boot runs `hydratePreferences()` (before `ready` flips true), so the
   // registration effect below reads the real preference, not the default.
   const remoteNotificationsEnabled = usePreferences((s) => s.notificationsRemote);
+  const hasCompletedOnboarding = usePreferences((s) => s.hasCompletedOnboarding);
   useEffect(() => {
     Appearance.setColorScheme(appColorScheme === 'system' ? 'unspecified' : appColorScheme);
   }, [appColorScheme]);
@@ -187,6 +190,7 @@ export default function RootLayout() {
         // Me tab's chips can seed the last known state synchronously on
         // first render (badgeStatusCache doc).
         await warmBadgeStatusCache();
+        await Promise.all([prepareRecentUpdates(), prepareLeaveCards()]);
         // Sync, sub-millisecond: each store reads its plaintext manifest
         // from MMKV and seeds the zustand initial state. List/hero views
         // can render on the next frame without any decryption.
@@ -280,10 +284,14 @@ export default function RootLayout() {
     const received = Notifications.addNotificationReceivedListener(() => {
       // Inbox decrypt failures are not surfaced to the user; mirrors
       // Swift MessageService logging behaviour.
-      void syncOnce().catch(() => undefined);
+      if (usePreferences.getState().hasCompletedOnboarding) {
+        void syncOnce().catch(() => undefined);
+      }
     });
     const response = Notifications.addNotificationResponseReceivedListener(() => {
-      void syncOnce().catch(() => undefined);
+      if (usePreferences.getState().hasCompletedOnboarding) {
+        void syncOnce().catch(() => undefined);
+      }
     });
     return () => {
       received.remove();
@@ -297,7 +305,7 @@ export default function RootLayout() {
   // already granted permission — so a user who never opted in never sees a
   // system dialog on cold launch. Fire-and-forget per Rule 10.
   useEffect(() => {
-    if (!ready || !remoteNotificationsEnabled) return;
+    if (!ready || !hasCompletedOnboarding || !remoteNotificationsEnabled) return;
     void registerForPushNotificationsAsync().catch(() => undefined);
     const tokenChange = Notifications.addPushTokenListener(() => {
       void registerForPushNotificationsAsync().catch(() => undefined);
@@ -305,7 +313,7 @@ export default function RootLayout() {
     return () => {
       tokenChange.remove();
     };
-  }, [ready, remoteNotificationsEnabled]);
+  }, [hasCompletedOnboarding, ready, remoteNotificationsEnabled]);
 
   if (!ready) return null;
 

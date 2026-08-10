@@ -21,6 +21,10 @@
  */
 import { decryptJson, encryptJson } from '@/storage/encryptionManager';
 import { getMmkv } from '@/storage/mmkv';
+import {
+  canCommitLocalData,
+  type LocalDataEpoch,
+} from '@/settings/localDataWipeBarrier';
 
 const KEY_PREFIX = 'sakura:inbox:';
 
@@ -39,9 +43,14 @@ function keyFor(id: string): string {
   return `${KEY_PREFIX}${id}`;
 }
 
-async function writeEntry(entry: CachedInboxMessage): Promise<void> {
+async function writeEntry(
+  entry: CachedInboxMessage,
+  operationEpoch: LocalDataEpoch,
+): Promise<void> {
   try {
-    getMmkv().set(keyFor(entry.messageId), await encryptJson(entry));
+    const encrypted = await encryptJson(entry);
+    if (!canCommitLocalData(operationEpoch)) return;
+    getMmkv().set(keyFor(entry.messageId), encrypted);
   } catch {
     // MMKV unavailable — keep going so the rest of the sync isn't blocked.
   }
@@ -73,10 +82,11 @@ function listMessageIds(): readonly string[] {
  * the same `messageId` overwrites previous fields (including `acked`).
  */
 export async function upsert(
-  msgs: readonly CachedInboxMessage[]
+  msgs: readonly CachedInboxMessage[],
+  operationEpoch: LocalDataEpoch,
 ): Promise<void> {
   for (const m of msgs) {
-    await writeEntry(m);
+    await writeEntry(m, operationEpoch);
   }
 }
 
@@ -84,11 +94,14 @@ export async function upsert(
  * Mark a batch of message ids as acknowledged. Missing ids are silently
  * skipped — they may have been wiped between sync + ack.
  */
-export async function markAcked(ids: readonly string[]): Promise<void> {
+export async function markAcked(
+  ids: readonly string[],
+  operationEpoch: LocalDataEpoch,
+): Promise<void> {
   for (const id of ids) {
     const existing = await readEntry(id);
     if (!existing) continue;
-    await writeEntry({ ...existing, acked: true });
+    await writeEntry({ ...existing, acked: true }, operationEpoch);
   }
 }
 

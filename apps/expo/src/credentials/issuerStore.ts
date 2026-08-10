@@ -32,6 +32,11 @@ import { base64Encode } from '@solidarity/shared';
 import { decryptJson, encryptJson } from '@/storage/encryptionManager';
 import { ManifestStorage } from '@/storage/manifestStorage';
 import { getMmkv } from '@/storage/mmkv';
+import {
+  canCommitLocalData,
+  captureLocalDataEpoch,
+  type LocalDataEpoch,
+} from '@/settings/localDataWipeBarrier';
 
 import {
   ISSUERS_MANIFEST_SCOPE,
@@ -42,6 +47,7 @@ import {
 const STORAGE_KEY = 'gg.solidarity.credentials.issuers.v1';
 const MAX_LOGO_BYTES = 100 * 1024;
 const FETCH_TIMEOUT_MS = 8_000;
+let localWipeGeneration = 0;
 
 export interface IssuerMetadata {
   readonly id: string;
@@ -101,6 +107,8 @@ interface IssuerMetadataState {
   readonly upsert: (m: IssuerMetadata) => Promise<void>;
   readonly remove: (id: string) => Promise<void>;
   readonly clearStale: (maxAgeMs: number, now?: Date) => Promise<readonly string[]>;
+  /** Drop every live reference after the encrypted local store is wiped. */
+  readonly resetForLocalWipe: () => void;
 }
 
 function manifestFromEntries(
@@ -110,14 +118,19 @@ function manifestFromEntries(
 }
 
 async function persistEntries(
-  entries: Readonly<Record<string, IssuerMetadata>>
+  entries: Readonly<Record<string, IssuerMetadata>>,
+  generation = localWipeGeneration,
+  writeEpoch: LocalDataEpoch = captureLocalDataEpoch(),
 ): Promise<void> {
+  if (!canCommitLocalData(writeEpoch)) return;
   const persisted: PersistedShape = {
     entries: Object.fromEntries(
       Object.entries(entries).map(([k, v]) => [k, serialize(v)])
     ),
   };
-  getMmkv().set(STORAGE_KEY, await encryptJson(persisted));
+  const encrypted = await encryptJson(persisted);
+  if (generation !== localWipeGeneration || !canCommitLocalData(writeEpoch)) return;
+  getMmkv().set(STORAGE_KEY, encrypted);
   ManifestStorage.set(ISSUERS_MANIFEST_SCOPE, manifestFromEntries(entries));
 }
 
@@ -127,6 +140,7 @@ export const useIssuerMetadataStore = create<IssuerMetadataState>((set, get) => 
   hydrated: false,
 
   seedFromManifest: () => {
+    if (!canCommitLocalData(captureLocalDataEpoch())) return;
     const seed = ManifestStorage.get<IssuerManifestEntry>(
       ISSUERS_MANIFEST_SCOPE,
     );
@@ -134,14 +148,19 @@ export const useIssuerMetadataStore = create<IssuerMetadataState>((set, get) => 
   },
 
   hydrate: async () => {
+    const generation = localWipeGeneration;
+    const writeEpoch = captureLocalDataEpoch();
+    if (!canCommitLocalData(writeEpoch)) return;
     if (get().hydrated) return;
     const raw = getMmkv().getString(STORAGE_KEY);
     if (!raw) {
+      if (generation !== localWipeGeneration || !canCommitLocalData(writeEpoch)) return;
       set({ hydrated: true });
       return;
     }
     try {
       const decoded = await decryptJson<PersistedShape>(raw);
+      if (generation !== localWipeGeneration || !canCommitLocalData(writeEpoch)) return;
       const entries: Record<string, IssuerMetadata> = {};
       for (const [k, v] of Object.entries(decoded.entries)) {
         // Tolerant load: a single corrupt entry must not blank the whole
@@ -156,6 +175,7 @@ export const useIssuerMetadataStore = create<IssuerMetadataState>((set, get) => 
       ManifestStorage.set(ISSUERS_MANIFEST_SCOPE, manifest);
       set({ manifest, entries, hydrated: true });
     } catch {
+      if (generation !== localWipeGeneration) return;
       // Corrupt blob (key rotated, tampered, schema bump) — wipe and start
       // clean. The metadata is purely a cache; nothing depends on
       // historical entries surviving a decrypt failure.
@@ -166,14 +186,20 @@ export const useIssuerMetadataStore = create<IssuerMetadataState>((set, get) => 
   },
 
   upsert: async (m) => {
+    const generation = localWipeGeneration;
+    const writeEpoch = captureLocalDataEpoch();
+    if (!canCommitLocalData(writeEpoch)) return;
     const normalized: IssuerMetadata = { ...m, id: normalizeId(m.id) };
     const nextEntries = { ...get().entries, [normalized.id]: normalized };
     const nextManifest = manifestFromEntries(nextEntries);
     set({ manifest: nextManifest, entries: nextEntries });
-    await persistEntries(nextEntries);
+    await persistEntries(nextEntries, generation, writeEpoch);
   },
 
   remove: async (id) => {
+    const generation = localWipeGeneration;
+    const writeEpoch = captureLocalDataEpoch();
+    if (!canCommitLocalData(writeEpoch)) return;
     const key = normalizeId(id);
     const current = get().entries;
     if (!(key in current)) return;
@@ -183,10 +209,13 @@ export const useIssuerMetadataStore = create<IssuerMetadataState>((set, get) => 
     }
     const nextManifest = manifestFromEntries(next);
     set({ manifest: nextManifest, entries: next });
-    await persistEntries(next);
+    await persistEntries(next, generation, writeEpoch);
   },
 
   clearStale: async (maxAgeMs, now = new Date()) => {
+    const generation = localWipeGeneration;
+    const writeEpoch = captureLocalDataEpoch();
+    if (!canCommitLocalData(writeEpoch)) return [];
     const evicted: string[] = [];
     const current = get().entries;
     const next: Record<string, IssuerMetadata> = {};
@@ -200,8 +229,13 @@ export const useIssuerMetadataStore = create<IssuerMetadataState>((set, get) => 
     if (evicted.length === 0) return [];
     const nextManifest = manifestFromEntries(next);
     set({ manifest: nextManifest, entries: next });
-    await persistEntries(next);
+    await persistEntries(next, generation, writeEpoch);
     return evicted;
+  },
+
+  resetForLocalWipe: () => {
+    localWipeGeneration += 1;
+    set({ manifest: [], entries: {}, hydrated: true });
   },
 }));
 
@@ -301,11 +335,13 @@ export async function fetchAndCacheIssuer(
   opts: FetchAndCacheOpts = {}
 ): Promise<IssuerMetadata | undefined> {
   if (!isHttpsUrl(issuerUrl)) return undefined;
+  const generation = localWipeGeneration;
   const fetchImpl = opts.fetchImpl ?? fetch;
   const metadataUrl = `${issuerUrl.replace(/\/$/, '')}/.well-known/openid-credential-issuer`;
   const display = await fetchIssuerDisplay(metadataUrl, fetchImpl);
   const description = display?.description?.trim();
   const logoFields = await resolveLogoFields(display, fetchImpl);
+  if (generation !== localWipeGeneration) return undefined;
 
   const metadata: IssuerMetadata = {
     id: normalizeId(issuerUrl),

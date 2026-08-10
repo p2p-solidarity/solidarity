@@ -8,6 +8,8 @@ import { resolveProfileByHandle } from '@/handles/resolveProfile';
 import { resolveProfileByNpub } from '@/nostr/resolveProfile';
 import { presentVerifiedPageResolving, presentVerifiedPageResult } from '@/scan/verifiedPageResult';
 import { verifyFragment } from '@/scan/verifiedPageHandler';
+import { isDeveloperOnlyDeepLinkKind } from '@/scan/technicalFlowGate';
+import { usePreferences } from '@/settings/preferences';
 import { presentWebSignEntry } from '@/websign/pendingRequest';
 
 import { parseDeepLink, type DeepLinkRoute } from './parser';
@@ -18,6 +20,13 @@ export { parseDeepLink };
 /** Side-effecting handler — call from a `useLinking()` listener. */
 export function handleDeepLink(raw: string): DeepLinkRoute {
   const route = parseDeepLink(raw);
+  const developerMode = usePreferences.getState().developerMode;
+  if (!developerMode && isDeveloperOnlyDeepLinkKind(route.kind)) {
+    // Keep the parsed result available to callers for logging, but never let
+    // a regular-user deep link mount a protocol consent/issuance/signing UI.
+    return route;
+  }
+
   switch (route.kind) {
     case 'card':
       router.push({ pathname: '/people/[id]', params: { id: route.cardId } });

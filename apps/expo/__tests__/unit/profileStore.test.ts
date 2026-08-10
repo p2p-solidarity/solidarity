@@ -41,7 +41,13 @@
  */
 import { beforeAll, beforeEach, describe, expect, it, mock, setSystemTime } from 'bun:test';
 
-import { verifyCompact, type ProfileRecord } from '@solidarity/shared';
+import { decodeFragment, parseProfile, verifyCompact, type ProfileRecord } from '@solidarity/shared';
+
+import {
+  __resetLocalDataWipeBarrierForTesting,
+  beginLocalDataWipe,
+} from '../../src/settings/localDataWipeBarrier';
+import { buildProfileShareModel } from '../../src/components/me/meProfileModel';
 
 interface PublishReportShape {
   readonly event: { readonly kind: number; readonly content: string };
@@ -92,6 +98,7 @@ interface ProfileModuleSurface {
           readonly alsoKnownAs?: readonly string[];
           readonly avatar?: string | null;
           readonly badges?: ProfileRecord['badges'];
+          readonly page?: ProfileRecord['page'];
         }
       ) => Promise<SaveResult>;
       readonly publishToNostr: (
@@ -100,6 +107,7 @@ interface ProfileModuleSurface {
         | { readonly ok: true; readonly value: { readonly profile: PublishReportShape; readonly kind0: PublishReportShape } }
         | { readonly ok: false; readonly error: string }
       >;
+      readonly resetForLocalWipe: () => void;
     };
     setState: (
       s: Partial<{
@@ -148,6 +156,7 @@ interface NostrUserKeyModuleSurface {
 const kv = new Map<string, string>();
 const secureStore = new Map<string, string>();
 const nostrScalarStore = new Map<string, string>();
+let failProfileWrites = false;
 let nextBiometricSuccess = true;
 const biometricCalls: string[] = [];
 // A fixed, independently-valid BIP-39 mnemonic (Trezor test-vector "abandon
@@ -166,6 +175,7 @@ beforeAll(async () => {
     getMmkv: () => ({
       getString: (k: string): string | undefined => kv.get(k),
       set: (k: string, v: string): void => {
+        if (failProfileWrites) throw new Error('disk full');
         kv.set(k, v);
       },
       remove: (k: string): void => {
@@ -213,7 +223,9 @@ beforeAll(async () => {
 });
 
 beforeEach(async () => {
+  __resetLocalDataWipeBarrierForTesting();
   kv.clear();
+  failProfileWrites = false;
   secureStore.clear();
   nostrScalarStore.clear();
   nextBiometricSuccess = true;
@@ -230,6 +242,23 @@ beforeEach(async () => {
 });
 
 describe('saveProfile — signed, verifiable record', () => {
+  it('rejects a new save while the production local-data wipe is quiescing writers', async () => {
+    await rootKeyMod.createFromFreshMnemonic();
+    beginLocalDataWipe();
+
+    const result = await mod.useProfileStore.getState().saveProfile({
+      displayName: 'Alice',
+      bio: '',
+      links: [],
+    });
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.error).toBe('profile save cancelled by local wipe');
+    expect(biometricCalls).toEqual([]);
+    expect(kv.has('profile:v1')).toBe(false);
+    expect(mod.useProfileStore.getState().record).toBeNull();
+  });
+
   it('constructs a valid signed record verifiable by verifyCompact, and persists it to MMKV', async () => {
     const created = await rootKeyMod.createFromFreshMnemonic();
     expect(created.ok).toBe(true);
@@ -262,6 +291,21 @@ describe('saveProfile — signed, verifiable record', () => {
     const persisted = JSON.parse(raw) as { record: ProfileRecord; jws: string };
     expect(persisted.record.displayName).toBe('Alice');
     expect(persisted.jws).toBe(state.jws);
+  });
+
+  it('fails the save instead of reporting an unpublished Page/Profile as durable when MMKV rejects the write', async () => {
+    await rootKeyMod.createFromFreshMnemonic();
+    failProfileWrites = true;
+
+    const result = await mod.useProfileStore.getState().saveProfile({
+      displayName: 'Alice',
+      bio: '',
+      links: [],
+    });
+
+    expect(result).toEqual({ ok: false, error: 'profile save failed: local storage could not be updated' });
+    expect(mod.useProfileStore.getState().status).toBe('empty');
+    expect(kv.has('profile:v1')).toBe(false);
   });
 
   it('invalid fields (non-http link URL) return err before signing — no Face ID prompt, nothing persisted', async () => {
@@ -470,6 +514,62 @@ describe('saveProfile — append-only replacement semantics', () => {
     expect(state.published?.record.badges).toEqual([badge]);
     expect(verifyCompact(state.published!.jws, created.value.did).ok).toBe(true);
   });
+
+  it('root-signs a public Page layout into full, shared, and public projections', async () => {
+    const created = await rootKeyMod.createFromFreshMnemonic();
+    expect(created.ok).toBe(true);
+    if (!created.ok) return;
+    const page: NonNullable<ProfileRecord['page']> = {
+      blocks: [
+        {
+          id: 'links',
+          type: 'links',
+          title: 'Links',
+          items: [],
+          style: 'list',
+          visible: true,
+          order: 0,
+        },
+        {
+          id: 'portfolio-1',
+          type: 'portfolio',
+          title: 'Selected work',
+          items: [{ id: 'work-1', title: 'Cover', url: 'https://example.com/cover' }],
+          style: 'grid',
+          visible: true,
+          order: 1,
+        },
+      ],
+      appearance: {
+        template: 'mint',
+        font: 'serif',
+        background: 'mint',
+        customBackground: null,
+        showBrand: true,
+        footerText: '',
+      },
+    };
+
+    const saved = await mod.useProfileStore.getState().saveProfile(
+      { displayName: 'Alice', bio: '', links: [] },
+      { page }
+    );
+
+    expect(saved.ok).toBe(true);
+    const state = mod.useProfileStore.getState();
+    expect(state.record?.page).toEqual(page);
+    expect(state.shared?.record.page).toEqual(page);
+    expect(state.published?.record.page).toEqual(page);
+    expect(verifyCompact(state.shared!.jws, created.value.did).ok).toBe(true);
+
+    const carried = await mod.useProfileStore.getState().saveProfile({
+      displayName: 'Alice updated',
+      bio: '',
+      links: [],
+    });
+    expect(carried.ok).toBe(true);
+    expect(mod.useProfileStore.getState().record?.page).toEqual(page);
+  });
 });
 
 describe('hydrateProfile — MMKV round-trip', () => {
@@ -491,6 +591,18 @@ describe('hydrateProfile — MMKV round-trip', () => {
   it('leaves status empty when nothing has ever been saved', () => {
     mod.hydrateProfile();
     expect(mod.useProfileStore.getState().status).toBe('empty');
+  });
+
+  it('does not revive a persisted profile while a local wipe is active', async () => {
+    await rootKeyMod.createFromFreshMnemonic();
+    await mod.useProfileStore.getState().saveProfile({ displayName: 'Carol', bio: 'hi', links: [] });
+    mod.useProfileStore.setState({ record: null, jws: null, status: 'empty' });
+
+    beginLocalDataWipe();
+    mod.hydrateProfile();
+
+    expect(mod.useProfileStore.getState().status).toBe('empty');
+    expect(mod.useProfileStore.getState().record).toBeNull();
   });
 
   it('fails closed to empty on a corrupt persisted blob', () => {
@@ -778,6 +890,56 @@ describe('publishToNostr', () => {
     if (r.ok) return;
     expect(r.error).toContain('updateKind0AlsoKnownAs');
   });
+
+  it('drops a relay completion that arrives after the profile was locally wiped', async () => {
+    await rootKeyMod.createFromFreshMnemonic();
+    const provisioned = await nostrUserKeyMod.provisionFromRootMnemonic();
+    expect(provisioned.ok).toBe(true);
+    if (!provisioned.ok) return;
+    const npub = nostrUserKeyMod.npubEncode(provisioned.value);
+    expect(npub.ok).toBe(true);
+    if (!npub.ok) return;
+    await mod.useProfileStore.getState().saveProfile(
+      { displayName: 'Alice', bio: '', links: [] },
+      { alsoKnownAs: [`nostr:${npub.value}`] },
+    );
+
+    let releasePublish!: (result: NostrRes<PublishReportShape>) => void;
+    const publishResponse = new Promise<NostrRes<PublishReportShape>>(
+      (resolve) => {
+        releasePublish = resolve;
+      },
+    );
+    let publishStarted!: () => void;
+    const didStart = new Promise<void>((resolve) => {
+      publishStarted = resolve;
+    });
+    let kind0Calls = 0;
+    mod.__setNostrPublishForTesting({
+      publishProfile: () => {
+        publishStarted();
+        return publishResponse;
+      },
+      updateKind0AlsoKnownAs: () => {
+        kind0Calls += 1;
+        return Promise.resolve({ ok: true, value: fakeReport(0, '{}') });
+      },
+    });
+
+    const publishing = mod.useProfileStore
+      .getState()
+      .publishToNostr(['wss://a']);
+    await didStart;
+    mod.useProfileStore.getState().resetForLocalWipe();
+    kv.clear();
+    releasePublish({ ok: true, value: fakeReport(30078, 'old-profile') });
+
+    const result = await publishing;
+    expect(result.ok).toBe(false);
+    expect(kind0Calls).toBe(0);
+    expect(kv.has('profile:v1')).toBe(false);
+    expect(mod.useProfileStore.getState().record).toBeNull();
+  });
 });
 
 // ── T7: three-tier link visibility → public / shared / full projections ─────
@@ -828,6 +990,61 @@ describe('saveProfile — three-tier link projections', () => {
     expect(state.published?.record.links.map((l) => l.url)).toEqual(['https://public.example']);
     const publicVerified = verifyCompact(state.published!.jws, created.value.did);
     expect(publicVerified.ok).toBe(true);
+  });
+
+  it('uses the public projection for /name while preserving the broader shared QR projection', async () => {
+    const created = await rootKeyMod.createFromFreshMnemonic();
+    expect(created.ok).toBe(true);
+    if (!created.ok) return;
+
+    const saved = await mod.useProfileStore.getState().saveProfile({
+      displayName: 'Alice',
+      bio: '',
+      links: LINKS,
+      linkVisibility: ['public', 'link-only', 'private'],
+    });
+    expect(saved.ok).toBe(true);
+
+    const state = mod.useProfileStore.getState();
+    expect(state.shared).not.toBeNull();
+    expect(state.published).not.toBeNull();
+    if (!state.shared || !state.published) return;
+
+    const model = buildProfileShareModel(
+      state.shared.record,
+      state.shared.jws,
+      'alice',
+      { record: state.published.record, jws: state.published.jws },
+    );
+    expect(model.usernameUrl).not.toBeNull();
+    if (!model.usernameUrl) return;
+
+    const publicFragment = decodeFragment(new URL(model.usernameUrl).hash.slice(1));
+    expect(publicFragment.ok).toBe(true);
+    if (!publicFragment.ok) return;
+    const publicVerified = verifyCompact(publicFragment.value, created.value.did);
+    expect(publicVerified.ok).toBe(true);
+    if (!publicVerified.ok) return;
+    const publicParsed = parseProfile(publicVerified.value);
+    expect(publicParsed.ok).toBe(true);
+    if (!publicParsed.ok) return;
+    expect(publicParsed.value.scope).toBe('public');
+    expect(publicParsed.value.links.map((link) => link.url)).toEqual(['https://public.example']);
+
+    const sharedFragment = decodeFragment(new URL(model.offlineUrl).hash.slice(1));
+    expect(sharedFragment.ok).toBe(true);
+    if (!sharedFragment.ok) return;
+    const sharedVerified = verifyCompact(sharedFragment.value, created.value.did);
+    expect(sharedVerified.ok).toBe(true);
+    if (!sharedVerified.ok) return;
+    const sharedParsed = parseProfile(sharedVerified.value);
+    expect(sharedParsed.ok).toBe(true);
+    if (!sharedParsed.ok) return;
+    expect(sharedParsed.value.scope).toBe('shared');
+    expect(sharedParsed.value.links.map((link) => link.url)).toEqual([
+      'https://public.example',
+      'https://linkonly.example',
+    ]);
   });
 
   it('publishes the PUBLIC projection to Nostr — a private/link-only link never reaches a relay', async () => {

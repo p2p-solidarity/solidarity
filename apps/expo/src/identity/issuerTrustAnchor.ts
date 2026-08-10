@@ -17,6 +17,10 @@ import { create } from 'zustand';
 
 import { decryptJson, encryptJson } from '@/storage/encryptionManager';
 import { getMmkv } from '@/storage/mmkv';
+import {
+  canCommitLocalData,
+  captureLocalDataEpoch,
+} from '@/settings/localDataWipeBarrier';
 
 import type { PublicKeyJWK } from '@solidarity/shared';
 
@@ -32,6 +36,7 @@ export interface TrustAnchor {
 }
 
 const KEY_PREFIX = 'trust-anchor:';
+let localWipeGeneration = 0;
 
 interface SerializedAnchor extends Omit<TrustAnchor, 'addedAt'> {
   readonly addedAt: string;
@@ -57,6 +62,8 @@ interface IssuerTrustAnchorState {
   readonly remove: (did: string) => Promise<void>;
   readonly isTrusted: (did: string) => boolean;
   readonly lookup: (did: string, keyId?: string) => TrustAnchor | undefined;
+  /** Drop every live trust anchor after the encrypted local store is wiped. */
+  readonly resetForLocalWipe: () => void;
 }
 
 export const useIssuerTrustAnchorStore = create<IssuerTrustAnchorState>((set, get) => ({
@@ -64,6 +71,9 @@ export const useIssuerTrustAnchorStore = create<IssuerTrustAnchorState>((set, ge
   hydrated: false,
 
   hydrate: async () => {
+    const generation = localWipeGeneration;
+    const writeEpoch = captureLocalDataEpoch();
+    if (!canCommitLocalData(writeEpoch)) return;
     if (get().hydrated) return;
     const out: TrustAnchor[] = [];
     for (const k of getMmkv().getAllKeys()) {
@@ -72,19 +82,26 @@ export const useIssuerTrustAnchorStore = create<IssuerTrustAnchorState>((set, ge
       if (!raw) continue;
       try {
         const decoded = await decryptJson<SerializedAnchor>(raw);
+        if (generation !== localWipeGeneration || !canCommitLocalData(writeEpoch)) return;
         out.push(deserialize(decoded));
       } catch {
         // Skip corrupt entries — they'll be replaced on next add.
       }
     }
+    if (generation !== localWipeGeneration || !canCommitLocalData(writeEpoch)) return;
     out.sort((a, b) => b.addedAt.getTime() - a.addedAt.getTime());
     set({ trusted: out, hydrated: true });
   },
 
   add: async (anchor) => {
+    const generation = localWipeGeneration;
+    const writeEpoch = captureLocalDataEpoch();
+    if (!canCommitLocalData(writeEpoch)) return;
     const normalized = normalizeDid(anchor.did);
     const next: TrustAnchor = { ...anchor, did: anchor.did, addedAt: anchor.addedAt };
-    getMmkv().set(`${KEY_PREFIX}${normalized}`, await encryptJson(serialize(next)));
+    const encrypted = await encryptJson(serialize(next));
+    if (generation !== localWipeGeneration || !canCommitLocalData(writeEpoch)) return;
+    getMmkv().set(`${KEY_PREFIX}${normalized}`, encrypted);
     set((s) => ({
       trusted: [
         next,
@@ -94,6 +111,7 @@ export const useIssuerTrustAnchorStore = create<IssuerTrustAnchorState>((set, ge
   },
 
   remove: async (did) => {
+    if (!canCommitLocalData(captureLocalDataEpoch())) return;
     const normalized = normalizeDid(did);
     getMmkv().remove(`${KEY_PREFIX}${normalized}`);
     set((s) => ({
@@ -116,6 +134,11 @@ export const useIssuerTrustAnchorStore = create<IssuerTrustAnchorState>((set, ge
     const suffix = keyId.split('#').pop();
     if (!suffix) return matches[0];
     return matches.find((m) => m.keyId?.split('#').pop() === suffix) ?? matches[0];
+  },
+
+  resetForLocalWipe: () => {
+    localWipeGeneration += 1;
+    set({ trusted: [], hydrated: true });
   },
 }));
 

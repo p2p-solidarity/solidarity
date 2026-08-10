@@ -86,4 +86,11 @@ describe('public page username', () => {
   it('uses /name without an @ or long identifier', () => {
     expect(publicPagePath('gimmy26')).toBe('creds.id/gimmy26');
   });
+
+  it('registers creds.id as an app-link host for the primary /name page', () => {
+    const appConfig = source('../../app.json');
+
+    expect(appConfig).toContain('"applinks:creds.id"');
+    expect(appConfig).toContain('"host": "creds.id"');
+  });
 });

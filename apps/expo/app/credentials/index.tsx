@@ -16,7 +16,7 @@
 import * as DocumentPicker from 'expo-document-picker';
 import * as FileSystem from 'expo-file-system/legacy';
 import type { SFSymbol } from 'expo-symbols';
-import { router } from 'expo-router';
+import { Redirect, router } from 'expo-router';
 import { safeBack } from '@/navigation/safeBack';
 import * as Sharing from 'expo-sharing';
 import { useEffect, useState } from 'react';
@@ -110,7 +110,14 @@ function iconFor(item: CredentialManifestEntry): SFSymbol {
   }
 }
 
-export default function VCManagementScreen() {
+export default function VCManagementRoute() {
+  const developerMode = usePreferences((state) => state.developerMode);
+  if (!developerMode) return <Redirect href="/settings/advanced" />;
+
+  return <VCManagementScreen />;
+}
+
+function VCManagementScreen() {
   const { t } = useTranslation();
   const insets = useSafeAreaInsets();
   const manifest = useCredentialStore((s) => s.manifest);

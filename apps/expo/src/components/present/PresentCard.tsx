@@ -6,6 +6,7 @@ import { shareFieldPreferencesFromFields } from '@/cards/solidarityQrPayload';
 import { buildRuntimeSolidarityQrWire } from '@/cards/solidarityQrRuntime';
 import {
   displayProfileShareUrl,
+  type PublicPageShareSource,
   type ProfileShareUrlCandidate,
 } from '@/components/me/meProfileModel';
 import { useProfileShareSelection } from '@/components/me/useProfileShareSelection';
@@ -89,18 +90,22 @@ export function PresentCardWithPageUrl({
   ownerName,
   shareRecord,
   shareJws,
+  publicPage = null,
   nostrShortUrlReady,
 }: {
   readonly model: PresentModel;
   readonly ownerName: string | null;
   readonly shareRecord: ProfileRecord;
   readonly shareJws: string;
+  readonly publicPage?: PublicPageShareSource | null;
   readonly nostrShortUrlReady: boolean;
 }): ReactNode {
   const shareSelection = useProfileShareSelection(
     shareRecord,
     shareJws,
     nostrShortUrlReady,
+    0,
+    publicPage,
   );
   const page = shareSelection.kind === 'ready' ? shareSelection.selected : null;
   return <PresentCard model={model} ownerName={ownerName} page={page} />;

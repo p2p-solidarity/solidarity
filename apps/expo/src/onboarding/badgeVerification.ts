@@ -23,12 +23,19 @@ const DEFAULT_DEPENDENCIES: OnboardingBadgeVerificationDependencies = {
   // trusts a fresh cached result (shouldReverifyBadge TTL), so a check the
   // user just watched here is not silently repeated on first tab focus.
   verifyAtproto: async (profile) => {
-    const [{ atprotoBindingIO }, { verifyAtprotoBindingDual }, { useProfileStore }] =
+    const [
+      { atprotoBindingIO },
+      { verifyAtprotoBindingDual },
+      { useProfileStore },
+      { captureBadgeStatusCacheEpoch },
+    ] =
       await Promise.all([
         import('@/atproto/bindingIo'),
         import('@/badges/verifyAtprotoDual'),
         import('@/profile/store'),
+        import('@/badges/badgeStatusCache'),
       ]);
+    const verificationEpoch = captureBadgeStatusCacheEpoch();
     // Dual-compare (public projection first, full-record fallback) so a
     // pre-projection PDS copy never writes a false "declared" into the
     // shared badge cache that Me would then trust for a full TTL.
@@ -39,17 +46,23 @@ const DEFAULT_DEPENDENCIES: OnboardingBadgeVerificationDependencies = {
       atprotoBindingIO
     );
     const { writeCachedAtprotoResult } = await import('@/badges/badgeStatusCache');
-    writeCachedAtprotoResult(result, Date.now());
+    writeCachedAtprotoResult(result, Date.now(), verificationEpoch);
     return result;
   },
   verifyNostr: async (profile) => {
-    const [{ makeKind0Fetcher }, { DEFAULT_RELAYS }] = await Promise.all([
+    const [
+      { makeKind0Fetcher },
+      { DEFAULT_RELAYS },
+      { captureBadgeStatusCacheEpoch },
+    ] = await Promise.all([
       import('@/nostr/fetchKind0'),
       import('@/nostr/publish'),
+      import('@/badges/badgeStatusCache'),
     ]);
+    const verificationEpoch = captureBadgeStatusCacheEpoch();
     const result = await verifyNostrBinding(profile, makeKind0Fetcher(DEFAULT_RELAYS));
     const { writeCachedNostrResult } = await import('@/badges/badgeStatusCache');
-    writeCachedNostrResult(result, Date.now());
+    writeCachedNostrResult(result, Date.now(), verificationEpoch);
     return result;
   },
 };

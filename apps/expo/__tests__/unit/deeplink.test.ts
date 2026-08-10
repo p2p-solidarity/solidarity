@@ -69,6 +69,17 @@ describe('parseDeepLink', () => {
     }
   });
 
+  it('parses the primary creds.id /name Verified Page link', () => {
+    const r = parseDeepLink('https://creds.id/alice#eyJhbGciOiJFUzI1NiJ9');
+    expect(r).toEqual({ kind: 'verifiedProfile', fragment: 'eyJhbGciOiJFUzI1NiJ9' });
+  });
+
+  it('keeps creds.id to public-page routing rather than granting card or private-connect actions', () => {
+    expect(parseDeepLink('https://creds.id/c/f47ac10b-58cc-4372-a567-0e02b2c3d479').kind).toBe(
+      'unknown'
+    );
+  });
+
   it('treats a verified-domain https link with no hash as unknown, not verifiedProfile', () => {
     expect(parseDeepLink('https://solidarity.gg/').kind).toBe('unknown');
     expect(parseDeepLink('https://solidarity.gg').kind).toBe('unknown');

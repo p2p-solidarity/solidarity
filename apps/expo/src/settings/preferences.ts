@@ -12,6 +12,10 @@
 import { create } from 'zustand';
 
 import { getMmkv } from '@/storage/mmkv';
+import {
+  canCommitLocalData,
+  captureLocalDataEpoch,
+} from '@/settings/localDataWipeBarrier';
 import type { ProviderKind } from '@/backup';
 
 const KEY = 'prefs:v1';
@@ -167,6 +171,7 @@ interface PrefsState extends Preferences {
 export const usePreferences = create<PrefsState>((set) => ({
   ...DEFAULTS,
   set: (key, value) => {
+    if (!canCommitLocalData(captureLocalDataEpoch())) return;
     set((s) => {
       const next = { ...s, [key]: value } as Preferences;
       writeSafe(next);
@@ -184,5 +189,6 @@ export const usePreferences = create<PrefsState>((set) => ({
  * root layout, after `initMmkv()` resolves.
  */
 export function hydratePreferences(): void {
+  if (!canCommitLocalData(captureLocalDataEpoch())) return;
   usePreferences.setState(readSafe());
 }

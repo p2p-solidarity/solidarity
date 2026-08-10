@@ -3,6 +3,7 @@ import { afterEach, describe, expect, it } from 'bun:test';
 import {
   __setBadgeStatusCacheStorageForTesting,
   BADGE_REVERIFY_TTL_MS,
+  captureBadgeStatusCacheEpoch,
   invalidateCachedNostrResult,
   getBadgeStatusCacheRevision,
   readCachedAtprotoResult,
@@ -13,6 +14,11 @@ import {
   writeCachedNostrResult,
   type BadgeStatusCacheStorage,
 } from '../../src/badges/badgeStatusCache';
+import {
+  __resetLocalDataWipeBarrierForTesting,
+  beginLocalDataWipe,
+  completeLocalDataWipe,
+} from '../../src/settings/localDataWipeBarrier';
 import type {
   VerifyAtprotoBindingResult,
   VerifyNostrBindingResult,
@@ -47,6 +53,7 @@ const atprotoResult = {
 
 afterEach(() => {
   __setBadgeStatusCacheStorageForTesting(null);
+  __resetLocalDataWipeBarrierForTesting();
 });
 
 describe('badgeStatusCache', () => {
@@ -130,6 +137,19 @@ describe('badgeStatusCache', () => {
     expect(seen).toHaveLength(3);
     expect(seen[0]).toBeLessThan(seen[1] ?? 0);
     expect(seen[1]).toBeLessThan(seen[2] ?? 0);
+  });
+
+  it('drops a verification that completes after a local-data wipe began', () => {
+    const { storage } = memoryStorage();
+    __setBadgeStatusCacheStorageForTesting(storage);
+    const verificationEpoch = captureBadgeStatusCacheEpoch();
+
+    beginLocalDataWipe();
+    invalidateCachedNostrResult();
+    completeLocalDataWipe();
+    writeCachedNostrResult(nostrResult, 2, verificationEpoch);
+
+    expect(readCachedNostrResult()).toBeNull();
   });
 });
 

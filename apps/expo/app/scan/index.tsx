@@ -12,13 +12,13 @@
  * Decoded payload is routed by `classifyPayload`:
  *   - `openid4vp://present?…` and similar request URLs → ProofPresentationFlowSheet
  *   - `openid4vp://verify?…` (vp_token in the URL) → VerifierResultSheet
- *   - anything else falls back to the raw "Scanned" diagnostic view used
- *     in Wave 1.
+ *   - unrecognised payloads resume scanning with a concise error; their raw
+ *     diagnostic view is available only in Developer Mode.
  */
 import { router } from 'expo-router';
 import type { TFunction } from 'i18next';
 import { safeBack } from '@/navigation/safeBack';
-import { useCallback, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
 import Animated, {
   useAnimatedStyle,
@@ -58,16 +58,19 @@ import { presentWebSignEntry } from '@/websign/pendingRequest';
 import { classifyWebSignScan } from '@/websign/transport';
 import { verifyVpToken } from '@/oidc';
 import { useTranslation } from '@/i18n';
+import { usePreferences } from '@/settings/preferences';
+import { isDeveloperOnlyScanPayload } from '@/scan/technicalFlowGate';
 
 const SCAN_WINDOW_SIZE = 260;
 
 type ScanRoute =
   | { kind: 'proof'; payload: string }
-  | { kind: 'verifier'; result: VerifierResult }
+  | { kind: 'verifier'; result: VerifierResult; developerOnly?: boolean }
   | { kind: 'raw'; payload: string };
 
 export default function ScanScreen() {
   const { t } = useTranslation();
+  const developerMode = usePreferences((state) => state.developerMode);
   const insets = useSafeAreaInsets();
   const [route, setRoute] = useState<ScanRoute | null>(null);
   const [progress, setProgress] = useState<{ received: number; total: number } | null>(null);
@@ -92,10 +95,31 @@ export default function ScanScreen() {
     capturing.current = false;
   }, []);
 
+  // `finalize` keeps normal users out of the raw route, but keep this guard
+  // at the state boundary too. A future scanner path must not turn an
+  // unrecognised URL, token, or arbitrary text into a visible diagnostic.
+  useEffect(() => {
+    if (!developerMode && route?.kind === 'raw') {
+      pushToast(t('scan.couldNotRead'), 'error');
+      reset();
+    }
+  }, [developerMode, reset, route?.kind, t]);
+
   const finalize = useCallback((payload: string) => {
     setProgress(null);
     setIsScanning(false);
     capturing.current = false;
+
+    // Protocol QR codes launch proof, issuance, or web-sign ceremonies. They
+    // are a Developer Options surface, not part of the ordinary Scan flow.
+    // Treat them exactly like every other unreadable QR for regular users so
+    // no pairwise identifier, signed token, or proof sheet can be mounted.
+    if (!developerMode && isDeveloperOnlyScanPayload(payload)) {
+      pushToast(t('scan.couldNotRead'), 'error');
+      setRoute(null);
+      setIsScanning(true);
+      return;
+    }
 
     // App↔Web per-action signing request (research §4, G3) — an explicit
     // `solidarity://websign?req=` / `/websign#req=` wrapper only, tried BEFORE
@@ -177,9 +201,16 @@ export default function ScanScreen() {
         });
         return;
       }
-      setRoute(await classifyPayload(payload, t));
+      const classifiedRoute = await classifyPayload(payload, t);
+      if (!developerMode && classifiedRoute.kind === 'raw') {
+        pushToast(t('scan.couldNotRead'), 'error');
+        setRoute(null);
+        setIsScanning(true);
+        return;
+      }
+      setRoute(classifiedRoute);
     })();
-  }, [t]);
+  }, [developerMode, t]);
 
   const onResult = useCallback(
     (payload: string) => {
@@ -207,7 +238,7 @@ export default function ScanScreen() {
     setProgress({ received, total });
   }, []);
 
-  if (route?.kind === 'raw') {
+  if (developerMode && route?.kind === 'raw') {
     return <ScannedResultView result={route.payload} onClear={reset} />;
   }
 
@@ -231,16 +262,20 @@ export default function ScanScreen() {
           <Text className="text-text1 text-[15px]">{t('scan.close')}</Text>
         </Pressable>
         <Text className="text-text1 text-[17px] font-semibold">{t('scan.title')}</Text>
-        <PressableScale
-          haptic="tap"
-          scaleTo={SCALE.icon}
-          accessibilityRole="button"
-          accessibilityLabel={t('scan.proofRequestQr')}
-          onPress={() => { router.push('/share/qr'); }}
-          style={{ width: 60, height: 44, alignItems: 'flex-end', justifyContent: 'center' }}
-        >
-          <SfIcon name="qrcode" size={20} color={Colors.text1} />
-        </PressableScale>
+        {developerMode ? (
+          <PressableScale
+            haptic="tap"
+            scaleTo={SCALE.icon}
+            accessibilityRole="button"
+            accessibilityLabel={t('scan.proofRequestQr')}
+            onPress={() => { router.push('/share/qr'); }}
+            style={{ width: 60, height: 44, alignItems: 'flex-end', justifyContent: 'center' }}
+          >
+            <SfIcon name="qrcode" size={20} color={Colors.text1} />
+          </PressableScale>
+        ) : (
+          <View style={{ width: 60, height: 44 }} />
+        )}
       </View>
 
       <View style={{ flex: 1 }} />
@@ -290,14 +325,18 @@ export default function ScanScreen() {
         ) : null}
       </View>
 
-      <ProofPresentationFlowSheet
-        visible={route?.kind === 'proof'}
-        requestPayload={route?.kind === 'proof' ? route.payload : ''}
-        onClose={reset}
-      />
+      {developerMode ? (
+        <ProofPresentationFlowSheet
+          visible={route?.kind === 'proof'}
+          requestPayload={route?.kind === 'proof' ? route.payload : ''}
+          onClose={reset}
+        />
+      ) : null}
 
       <VerifierResultSheet
-        visible={route?.kind === 'verifier'}
+        visible={
+          route?.kind === 'verifier' && (developerMode || !route.developerOnly)
+        }
         result={route?.kind === 'verifier' ? route.result : null}
         onClose={reset}
       />
@@ -394,6 +433,7 @@ async function classifyPayload(payload: string, t: TFunction): Promise<ScanRoute
             ),
           ],
         },
+        developerOnly: true,
       };
     } catch {
       return {
@@ -404,6 +444,7 @@ async function classifyPayload(payload: string, t: TFunction): Promise<ScanRoute
           reason: t('scan.proof.failedReason'),
           details: [t('scan.proof.failedBody')],
         },
+        developerOnly: true,
       };
     }
   }

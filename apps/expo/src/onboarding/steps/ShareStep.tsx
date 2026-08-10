@@ -48,21 +48,30 @@ export function ShareStep({ onBack, onNext }: ShareStepProps) {
 
   const fragment = useMemo(() => (shareJws ? encodeFragment(shareJws) : null), [shareJws]);
   const fragmentUrl = fragment ? `${FRAGMENT_BASE_URL}${fragment.fragment}` : null;
+  const qrBlockedBySize = fragment?.oversize === true;
 
   const [qrImageUri, setQrImageUri] = useState<string | undefined>(undefined);
+  const [qrFailed, setQrFailed] = useState(false);
   useEffect(() => {
-    if (!fragmentUrl) {
+    if (!fragmentUrl || qrBlockedBySize) {
       setQrImageUri(undefined);
+      setQrFailed(false);
       return;
     }
     let cancelled = false;
-    void generateQrPng(fragmentUrl, { size: QR_SIZE }).then((uri) => {
-      if (!cancelled) setQrImageUri(uri);
-    });
+    setQrImageUri(undefined);
+    setQrFailed(false);
+    void generateQrPng(fragmentUrl, { size: QR_SIZE })
+      .then((uri) => {
+        if (!cancelled) setQrImageUri(uri);
+      })
+      .catch(() => {
+        if (!cancelled) setQrFailed(true);
+      });
     return () => {
       cancelled = true;
     };
-  }, [fragmentUrl]);
+  }, [fragmentUrl, qrBlockedBySize]);
 
   const copyLink = async () => {
     if (!fragmentUrl) return;
@@ -125,6 +134,14 @@ export function ShareStep({ onBack, onNext }: ShareStepProps) {
               contentFit="contain"
               style={{ width: QR_SIZE - 16, height: QR_SIZE - 16 }}
             />
+          ) : qrBlockedBySize ? (
+            <ThemedText variant="caption" tone="error" style={{ paddingHorizontal: 20, textAlign: 'center' }}>
+              {t('meShare.qrTooLarge')}
+            </ThemedText>
+          ) : qrFailed ? (
+            <ThemedText variant="caption" tone="error" style={{ paddingHorizontal: 20, textAlign: 'center' }}>
+              {t('meShare.qrError')}
+            </ThemedText>
           ) : (
             <ThemedText variant="caption" tone="secondary">
               {t('profileCard.generatingQr')}
@@ -148,12 +165,6 @@ export function ShareStep({ onBack, onNext }: ShareStepProps) {
             void copyLink();
           }}
         />
-
-        {fragment?.oversize ? (
-          <ThemedText variant="caption" tone="secondary" style={{ textAlign: 'center' }}>
-            {t('profileCard.oversizeWarning')}
-          </ThemedText>
-        ) : null}
       </View>
     </OnboardingScaffold>
   );

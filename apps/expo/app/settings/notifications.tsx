@@ -25,6 +25,7 @@ import {
   SettingsBlockToggleRow,
   SettingsScreenTitle,
 } from '@/components/settings/SettingsBlocks';
+import { useRecentUpdatesStore } from '@/contacts/recentUpdates';
 import { Colors } from '@/constants/Colors';
 import { useTranslation } from '@/i18n';
 import {
@@ -55,6 +56,8 @@ export default function NotificationSettings() {
   const autoSync = usePreferences((s) => s.notificationsAutoSync);
   const intervalSeconds = usePreferences((s) => s.notificationsSyncIntervalSeconds);
   const setPref = usePreferences((s) => s.set);
+  const recentUpdatesEnabled = useRecentUpdatesStore((s) => s.enabled);
+  const setRecentUpdatesEnabled = useRecentUpdatesStore((s) => s.setEnabled);
 
   const [pickerOpen, setPickerOpen] = useState(false);
 
@@ -84,6 +87,7 @@ export default function NotificationSettings() {
     setPref('notificationsRemote', DEFAULTS.enableRemoteNotification);
     setPref('notificationsAutoSync', DEFAULTS.enableAutoSync);
     setPref('notificationsSyncIntervalSeconds', DEFAULTS.syncIntervalSeconds);
+    setRecentUpdatesEnabled(true);
   };
 
   const currentIntervalKey =
@@ -111,6 +115,19 @@ export default function NotificationSettings() {
               subtitle={t('notifications.inApp.toastSubtitle')}
               value={inAppToast}
               onValueChange={(v) => { setPref('notificationsInAppToast', v); }}
+            />
+          </SettingsBlockSection>
+
+          <SettingsBlockSection
+            title={t('notifications.contactUpdates.header')}
+            footer={t('notifications.contactUpdates.footer')}
+          >
+            <SettingsBlockToggleRow
+              icon="person.2.fill"
+              title={t('notifications.contactUpdates.title')}
+              subtitle={t('notifications.contactUpdates.subtitle')}
+              value={recentUpdatesEnabled}
+              onValueChange={setRecentUpdatesEnabled}
             />
           </SettingsBlockSection>
 

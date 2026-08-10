@@ -17,7 +17,7 @@
  * paints with the signing-key card from the coordinator cache, and the root
  * section resolves in with a REAL absent-state when no root exists.
  */
-import { Stack, useLocalSearchParams } from 'expo-router';
+import { Redirect, Stack, useLocalSearchParams } from 'expo-router';
 import { safeBack } from '@/navigation/safeBack';
 import { useEffect, useState } from 'react';
 import { Platform, ScrollView, View } from 'react-native';
@@ -44,12 +44,20 @@ import {
   resolveSigningKeyConflict,
   type SigningKeyCandidate,
 } from '@/keychain';
+import { usePreferences } from '@/settings/preferences';
 
 type RootDidState =
   | { readonly kind: 'loading' }
   | { readonly kind: 'resolved'; readonly did: string | null };
 
-export default function DIDListSheet() {
+export default function DIDListRoute() {
+  const developerMode = usePreferences((state) => state.developerMode);
+  if (!developerMode) return <Redirect href="/settings/advanced" />;
+
+  return <DIDListSheet />;
+}
+
+function DIDListSheet() {
   const insets = useSafeAreaInsets();
   const { t } = useTranslation();
   const params = useLocalSearchParams<{ did?: string; readOnly?: string }>();

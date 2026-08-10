@@ -56,6 +56,27 @@ describe('v2 product terminology boundary', () => {
     expect(data).not.toContain('exportGraph.todo');
   });
 
+  it('keeps technical publishing deep links and Contacts peer controls behind Developer Options', () => {
+    const connections = source('../../app/settings/connections.tsx');
+    const nostr = source('../../app/verify/nostr.tsx');
+    const cardExchange = source('../../src/components/people/CardExchangeSection.tsx');
+    const pearConnect = source('../../src/components/people/PearConnectSection.tsx');
+
+    for (const route of [connections, nostr]) {
+      expect(route).toContain(
+        "const developerMode = usePreferences((state) => state.developerMode)"
+      );
+      expect(route).toContain('if (!developerMode) return <Redirect href="/settings/advanced" />;');
+    }
+
+    for (const section of [cardExchange, pearConnect]) {
+      expect(section).toContain(
+        "const developerMode = usePreferences((state) => state.developerMode)"
+      );
+      expect(section).toContain('if (!developerMode) return null;');
+    }
+  });
+
   it('keeps Page publication badges and saved-page rows human-facing', () => {
     const badgeLabelKeys = [
       'badges.nostr.checking',

@@ -25,6 +25,11 @@ import {
   type SealResponse,
 } from '@solidarity/shared';
 import { ed25519 } from '@noble/curves/ed25519.js';
+import {
+  __resetLocalDataWipeBarrierForTesting,
+  beginLocalDataWipe,
+  completeLocalDataWipe,
+} from '../../src/settings/localDataWipeBarrier';
 
 // ── Environment ──────────────────────────────────────────────────────────────
 
@@ -147,6 +152,8 @@ interface CapturedRequest {
 
 const requests: CapturedRequest[] = [];
 let sealCallCount = 0;
+let sealResponseGate: Promise<void> | null = null;
+let releaseSealResponse: (() => void) | null = null;
 let syncResponseQueue: InboxMessage[][] = [];
 let ackResponse: { ok: boolean } = { ok: true };
 
@@ -183,7 +190,8 @@ function installFetchMock(): void {
     requests.push({ url, method, body: parsedBody });
 
     if (url.endsWith('/v1/seal')) {
-      return Promise.resolve(jsonResponse(buildFakeSealResponse()));
+      const response = jsonResponse(buildFakeSealResponse());
+      return (sealResponseGate ?? Promise.resolve()).then(() => response);
     }
     if (url.includes('/v1/inbox')) {
       const batch = syncResponseQueue.shift() ?? [];
@@ -275,6 +283,8 @@ beforeAll(async () => {
 beforeEach(async () => {
   requests.length = 0;
   sealCallCount = 0;
+  sealResponseGate = null;
+  releaseSealResponse = null;
   syncResponseQueue = [];
   ackResponse = { ok: true };
   nextPermissionResult = { granted: true };
@@ -286,6 +296,7 @@ beforeEach(async () => {
   tokenListeners.length = 0;
   mmkv.clear();
   secureKv.clear();
+  __resetLocalDataWipeBarrierForTesting();
   // Re-install our fetch mock in case a sibling test file (parallel-loaded
   // by bun) swapped `globalThis.fetch` between tests. Without this guard the
   // first test in the file may see another suite's fetch and timeout.
@@ -374,6 +385,24 @@ describe('registerForPushNotificationsAsync — token → seal → persist', () 
     const again = await pushMod.registerForPushNotificationsAsync();
     expect(again).not.toBeNull();
     expect(requests.filter((r) => r.url.endsWith('/v1/seal')).length).toBe(0);
+  });
+
+  it('drops a sealed route whose relay response lands after a local wipe begins', async () => {
+    sealResponseGate = new Promise<void>((resolve) => {
+      releaseSealResponse = resolve;
+    });
+    const registration = pushMod.registerForPushNotificationsAsync();
+    while (!requests.some((request) => request.url.endsWith('/v1/seal'))) {
+      await Promise.resolve();
+    }
+
+    beginLocalDataWipe();
+    releaseSealResponse?.();
+
+    expect(await registration).toBeNull();
+    expect(mmkv.has('gg.solidarity.sakura.route.v1')).toBe(false);
+    expect(routeMod.useSealedRouteStore.getState().sealedRoute).toBeUndefined();
+    completeLocalDataWipe();
   });
 });
 
@@ -472,6 +501,15 @@ describe('syncOnce — decrypt + ack against a real sealBlob fixture', () => {
     expect(opened.length).toBe(0);
     // No ack call when there is no pending ack debt either.
     expect(requests.filter((r) => r.url.endsWith('/v1/ack')).length).toBe(0);
+  });
+
+  it('does not provision recipient keys or contact the relay while a wipe is active', async () => {
+    beginLocalDataWipe();
+
+    expect(await inboxMod.syncOnce()).toEqual([]);
+    expect(secureKv.size).toBe(0);
+    expect(requests).toEqual([]);
+    completeLocalDataWipe();
   });
 });
 

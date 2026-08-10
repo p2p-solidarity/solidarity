@@ -22,6 +22,10 @@
 import { create } from 'zustand';
 
 import { getMmkv } from '@/storage/mmkv';
+import {
+  canCommitLocalData,
+  captureLocalDataEpoch,
+} from '@/settings/localDataWipeBarrier';
 import type { GroupCredentialContext, SharingPreferences } from '@solidarity/shared';
 
 import { defaultSharingPreferencesForLevel } from './defaults';
@@ -161,6 +165,8 @@ interface State {
     audience: AudienceTier,
     groupContext?: GroupCredentialContext | null
   ) => ResolvedCard;
+  /** Drop all live overrides after the local store is wiped. */
+  readonly resetForLocalWipe: () => void;
 }
 
 /**
@@ -193,12 +199,18 @@ function readSafe(): PersistedShape | null {
   }
 }
 
-function writeSafe(p: PersistedShape): void {
+function writeSafe(
+  p: PersistedShape,
+  writeEpoch = captureLocalDataEpoch(),
+): boolean {
+  if (!canCommitLocalData(writeEpoch)) return false;
   try {
     getMmkv().set(STORAGE_KEY, JSON.stringify(p));
+    return true;
   } catch {
     // MMKV not ready / disk full — UI state stays correct; persistence
     // retries on the next mutation. Matches `preferences.ts`.
+    return false;
   }
 }
 
@@ -251,36 +263,40 @@ export const useSharingSettings = create<State>((set, get) => ({
   perGroupPolicies: {},
 
   setGlobalDefaults: (prefs) => {
+    const writeEpoch = captureLocalDataEpoch();
     set((s) => {
       const next = { ...s, globalDefaults: prefs };
-      writeSafe(snapshotToPersisted(next));
+      if (!writeSafe(snapshotToPersisted(next), writeEpoch)) return {};
       return { globalDefaults: prefs };
     });
   },
 
   setCardOverride: (cardId, prefs) => {
+    const writeEpoch = captureLocalDataEpoch();
     set((s) => {
       const nextMap = withMapEntry(s.perCardOverrides, cardId, prefs);
       const next = { ...s, perCardOverrides: nextMap };
-      writeSafe(snapshotToPersisted(next));
+      if (!writeSafe(snapshotToPersisted(next), writeEpoch)) return {};
       return { perCardOverrides: nextMap };
     });
   },
 
   setGroupOverride: (groupId, prefs) => {
+    const writeEpoch = captureLocalDataEpoch();
     set((s) => {
       const nextMap = withMapEntry(s.perGroupOverrides, groupId, prefs);
       const next = { ...s, perGroupOverrides: nextMap };
-      writeSafe(snapshotToPersisted(next));
+      if (!writeSafe(snapshotToPersisted(next), writeEpoch)) return {};
       return { perGroupOverrides: nextMap };
     });
   },
 
   setGroupPolicy: (groupId, policy) => {
+    const writeEpoch = captureLocalDataEpoch();
     set((s) => {
       const nextMap = withMapEntry(s.perGroupPolicies, groupId, policy);
       const next = { ...s, perGroupPolicies: nextMap };
-      writeSafe(snapshotToPersisted(next));
+      if (!writeSafe(snapshotToPersisted(next), writeEpoch)) return {};
       return { perGroupPolicies: nextMap };
     });
   },
@@ -307,6 +323,15 @@ export const useSharingSettings = create<State>((set, get) => ({
       groupPolicy: explicitPolicy,
     });
   },
+
+  resetForLocalWipe: () => {
+    set({
+      globalDefaults: DEFAULT_GLOBAL,
+      perCardOverrides: {},
+      perGroupOverrides: {},
+      perGroupPolicies: {},
+    });
+  },
 }));
 
 /**
@@ -315,6 +340,7 @@ export const useSharingSettings = create<State>((set, get) => ({
  * `settings/preferences.ts`.
  */
 export function hydrateSharingSettings(): void {
+  if (!canCommitLocalData(captureLocalDataEpoch())) return;
   const persisted = readSafe();
   if (!persisted) return;
   useSharingSettings.setState(persistedToState(persisted));

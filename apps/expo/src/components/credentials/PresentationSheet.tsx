@@ -30,6 +30,8 @@ export interface PresentationSheetProps {
    * enrollment envelope. Decided by the caller (metadata tag + vault check).
    */
   readonly passportShowEligible?: boolean;
+  /** Product flows keep proof mechanics usable without exposing claim diagnostics. */
+  readonly productMode?: boolean;
 }
 
 export function PresentationSheet({
@@ -38,6 +40,7 @@ export function PresentationSheet({
   selectedClaimIds,
   onDismiss,
   passportShowEligible = false,
+  productMode = false,
 }: PresentationSheetProps): ReactNode {
   return (
     <Modal
@@ -51,6 +54,7 @@ export function PresentationSheet({
         selectedClaimIds={selectedClaimIds}
         onDismiss={onDismiss}
         passportShowEligible={passportShowEligible}
+        productMode={productMode}
       />
     </Modal>
   );
@@ -61,11 +65,13 @@ function PresentationBody({
   selectedClaimIds,
   onDismiss,
   passportShowEligible,
+  productMode,
 }: {
   readonly credential: PresentationCredential & { readonly title: string };
   readonly selectedClaimIds: ReadonlySet<string>;
   readonly onDismiss: () => void;
   readonly passportShowEligible: boolean;
+  readonly productMode: boolean;
 }): ReactNode {
   const insets = useSafeAreaInsets();
   const { t } = useTranslation();
@@ -132,6 +138,7 @@ function PresentationBody({
             credentialTitle={credential.title}
             holderDid={credential.holderDid}
             selectedClaims={selectedClaims}
+            showClaimDetails={!productMode}
           />
         ) : (
           <PresentationProofQr
@@ -139,6 +146,7 @@ function PresentationBody({
             selectedClaims={selectedClaims}
             pages={proof.pages}
             showTitle
+            showClaimDetails={!productMode}
             {...(proof.error ? { emptyText: proof.error } : {})}
           />
         )}

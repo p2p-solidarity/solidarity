@@ -13,7 +13,7 @@
  * 1:1 Swift port; only the fake 0.8s/3.5s/5s timeline was removed.
  */
 import { useEffect, useRef, useState } from 'react';
-import { ScrollView, Text, View } from 'react-native';
+import { ActivityIndicator, ScrollView, Text, View } from 'react-native';
 import Animated, {
   Easing,
   useAnimatedStyle,
@@ -24,12 +24,15 @@ import Animated, {
 } from 'react-native-reanimated';
 
 import { Colors } from '@/constants/Colors';
+import { SfIcon } from '@/components/icons/SfIcon';
 import { haptic } from '@/feedback/haptics';
 
 type Stage = 'init' | 'proving' | 'done';
 
 interface CryptoCompilingOverlayProps {
   readonly visible: boolean;
+  /** Normal mode uses the calm product surface; Developer Mode keeps terminal diagnostics. */
+  readonly developerMode?: boolean;
   /** Real pipeline stage — drives phases 1:1; no internal timeline. */
   readonly stage: Stage;
   /** Real progress text from the proof runner (e.g. "Generating dsc_chain proof…"). */
@@ -57,6 +60,7 @@ const STATUS_COLOR: Readonly<Record<Stage, string>> = {
 
 export function CryptoCompilingOverlay({
   visible,
+  developerMode = false,
   stage,
   statusText,
   onDone,
@@ -98,7 +102,7 @@ export function CryptoCompilingOverlay({
 
   // Decorative hash scroll ONLY while a circuit is actually proving.
   useEffect(() => {
-    if (!visible || stage !== 'proving') return;
+    if (!visible || !developerMode || stage !== 'proving') return;
     const id = setInterval(() => {
       setHashes((prev) => {
         const next = [...prev, randomHash()];
@@ -108,13 +112,13 @@ export function CryptoCompilingOverlay({
       if (Math.random() < 0.25) haptic('tap');
     }, 50);
     return () => clearInterval(id);
-  }, [visible, stage]);
+  }, [visible, developerMode, stage]);
 
   useEffect(() => {
-    if (stage === 'proving') {
+    if (developerMode && stage === 'proving') {
       scrollRef.current?.scrollToEnd({ animated: true });
     }
-  }, [hashes, stage]);
+  }, [hashes, developerMode, stage]);
 
   const cursorStyle = useAnimatedStyle(() => ({
     opacity: cursorOpacity.value,
@@ -141,79 +145,99 @@ export function CryptoCompilingOverlay({
         zIndex: 100,
       }}
     >
-      <View style={{ gap: 32, alignItems: 'center' }}>
-        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-          <Text
-            style={{
-              fontFamily: 'Menlo',
-              fontSize: 24,
-              fontWeight: '700',
-              color: STATUS_COLOR[stage],
-            }}
-          >
-            {stage === 'done' ? 'Proof Accepted.' : statusText}
-          </Text>
-          {stage !== 'done' ? (
-            <Animated.View
+      {developerMode ? (
+        <View style={{ gap: 32, alignItems: 'center' }}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+            <Text
+              style={{
+                fontFamily: 'Menlo',
+                fontSize: 24,
+                fontWeight: '700',
+                color: STATUS_COLOR[stage],
+              }}
+            >
+              {stage === 'done' ? 'Proof Accepted.' : statusText}
+            </Text>
+            {stage !== 'done' ? (
+              <Animated.View
+                style={[
+                  {
+                    width: 12,
+                    height: 24,
+                    backgroundColor: Colors.primaryBlue,
+                  },
+                  cursorStyle,
+                ]}
+              />
+            ) : null}
+          </View>
+
+          {stage === 'proving' ? (
+            <View
+              style={{
+                height: 200,
+                width: '100%',
+                backgroundColor: '#000',
+                borderWidth: 1,
+                borderColor: Colors.divider,
+              }}
+            >
+              <ScrollView ref={scrollRef} contentContainerStyle={{ padding: 16 }}>
+                {hashes.map((h, i) => (
+                  <Text
+                    key={`${String(i)}-${h.slice(0, 6)}`}
+                    numberOfLines={1}
+                    style={{
+                      fontFamily: 'Menlo',
+                      fontSize: 14,
+                      color: Colors.text3,
+                    }}
+                  >
+                    {h}
+                  </Text>
+                ))}
+              </ScrollView>
+            </View>
+          ) : null}
+
+          {stage === 'done' ? (
+            <Animated.Text
               style={[
                 {
-                  width: 12,
-                  height: 24,
-                  backgroundColor: Colors.primaryBlue,
+                  fontFamily: 'Menlo',
+                  fontSize: 48,
+                  fontWeight: '900',
+                  color: Colors.terminalGreen,
+                  textShadowColor: 'rgba(76,175,81,0.6)',
+                  textShadowOffset: { width: 0, height: 0 },
+                  textShadowRadius: 10,
                 },
-                cursorStyle,
+                verifiedStyle,
               ]}
-            />
+            >
+              [ VERIFIED ]
+            </Animated.Text>
           ) : null}
         </View>
-
-        {stage === 'proving' ? (
-          <View
+      ) : (
+        <View style={{ alignItems: 'center', gap: 16 }}>
+          {stage === 'done' ? (
+            <SfIcon name="checkmark.circle.fill" size={44} color={Colors.terminalGreen} />
+          ) : (
+            <ActivityIndicator color={Colors.primaryBlue} size="large" />
+          )}
+          <Text
             style={{
-              height: 200,
-              width: '100%',
-              backgroundColor: '#000',
-              borderWidth: 1,
-              borderColor: Colors.divider,
+              color: stage === 'done' ? Colors.terminalGreen : Colors.text1,
+              fontSize: 18,
+              fontWeight: '600',
+              textAlign: 'center',
             }}
           >
-            <ScrollView ref={scrollRef} contentContainerStyle={{ padding: 16 }}>
-              {hashes.map((h, i) => (
-                <Text
-                  key={`${String(i)}-${h.slice(0, 6)}`}
-                  numberOfLines={1}
-                  style={{
-                    fontFamily: 'Menlo',
-                    fontSize: 14,
-                    color: Colors.text3,
-                  }}
-                >
-                  {h}
-                </Text>
-              ))}
-            </ScrollView>
-          </View>
-        ) : null}
-
-        {stage === 'done' ? (
-          <Animated.Text
-            style={[
-              {
-                fontFamily: 'Menlo',
-                fontSize: 48,
-                fontWeight: '900',
-                color: Colors.terminalGreen,
-                textShadowColor: 'rgba(76,175,81,0.6)',
-                textShadowOffset: { width: 0, height: 0 },
-                textShadowRadius: 10,
-              },
-              verifiedStyle,
-            ]}
-          >
-            [ VERIFIED ]
-          </Animated.Text>
-        ) : null}
-      </View>
+            {statusText}
+          </Text>
+        </View>
+      )}
     </View>
   );
 }

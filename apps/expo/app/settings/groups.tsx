@@ -14,7 +14,7 @@
  * invite-link join flow it powered) has been removed; see
  * `docs/ref/01-spec-verified-page.md` §9.
  */
-import { router } from 'expo-router';
+import { Redirect, router } from 'expo-router';
 import { safeBack } from '@/navigation/safeBack';
 import { useCallback, useEffect, useState } from 'react';
 import { RefreshControl, ScrollView, Text, View } from 'react-native';
@@ -36,8 +36,16 @@ import {
   type GroupModel,
 } from '@/groups/store';
 import { useTranslation } from '@/i18n';
+import { usePreferences } from '@/settings/preferences';
 
-export default function GroupManagementSettings() {
+export default function GroupManagementSettingsRoute() {
+  const developerMode = usePreferences((state) => state.developerMode);
+  if (!developerMode) return <Redirect href="/settings/advanced" />;
+
+  return <GroupManagementSettings />;
+}
+
+function GroupManagementSettings() {
   const insets = useSafeAreaInsets();
   const { t } = useTranslation();
   // Seed the manifest synchronously so the section headers + counts render

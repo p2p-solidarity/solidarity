@@ -5,6 +5,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { MeProfileGate, MeProfilePage } from '@/components/me';
 import { useProfileStore } from '@/profile/store';
+import { preparePageDesign, usePageDesignStore } from '@/page/pageDesignStore';
 
 export default function MeTab() {
   const insets = useSafeAreaInsets();
@@ -24,6 +25,8 @@ export default function MeTab() {
   const shareJws = shared?.jws ?? jws;
   const nostrShortUrlReady = published !== null && nostrPublishedJws === published.jws;
   const addProofRequested = params.addProof === '1';
+  const pageDesignStatus = usePageDesignStore((state) => state.status);
+  const adoptPublishedPage = usePageDesignStore((state) => state.adoptPublishedPage);
   const openAddProof = useCallback(() => {
     router.push('/passport');
   }, []);
@@ -34,6 +37,16 @@ export default function MeTab() {
     openAddProof();
   }, [addProofRequested, openAddProof, status]);
 
+  useEffect(() => {
+    if (pageDesignStatus !== 'loading') return;
+    void preparePageDesign();
+  }, [pageDesignStatus]);
+
+  useEffect(() => {
+    if (pageDesignStatus !== 'ready' || !record) return;
+    adoptPublishedPage(record.page);
+  }, [adoptPublishedPage, pageDesignStatus, record]);
+
   return (
     <View className="flex-1 bg-pageBg" style={{ paddingTop: insets.top }}>
       {status === 'ready' && record && jws && shareRecord && shareJws ? (
@@ -42,6 +55,7 @@ export default function MeTab() {
           jws={jws}
           linkVisibility={linkVisibility}
           publicRecord={published?.record ?? record}
+          publicPage={published ? { record: published.record, jws: published.jws } : null}
           shareRecord={shareRecord}
           shareJws={shareJws}
           nostrShortUrlReady={nostrShortUrlReady}
@@ -54,9 +68,6 @@ export default function MeTab() {
           }}
           onAddLink={() => {
             router.push({ pathname: '/me/edit', params: { add: '1' } });
-          }}
-          onOpenAppearance={() => {
-            router.push('/settings/appearance');
           }}
           onOpenSettings={() => {
             router.push('/settings');

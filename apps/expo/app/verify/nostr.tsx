@@ -2,7 +2,7 @@
  * Advanced publish route. The default surface has one action and provisions
  * only after that tap. Existing-key import remains behind “Advanced options”.
  */
-import { router } from 'expo-router';
+import { Redirect, router } from 'expo-router';
 import { safeBack } from '@/navigation/safeBack';
 import { useEffect, useReducer, useRef, useState, type ReactNode } from 'react';
 import { View } from 'react-native';
@@ -44,11 +44,19 @@ import {
 } from '@/nostr/userKey';
 import { useProfileStore, type NostrPublishOutcome } from '@/profile/store';
 import { verifyHttpsOwnership, type HttpsOwnershipEvidence } from '@/profile/httpsOwnership';
+import { usePreferences } from '@/settings/preferences';
 import { buildProfileShareModel } from '@/components/me/meProfileModel';
 
 type TFn = ReturnType<typeof useTranslation>['t'];
 
-export default function PublishPageScreen(): ReactNode {
+export default function PublishPageRoute(): ReactNode {
+  const developerMode = usePreferences((state) => state.developerMode);
+  if (!developerMode) return <Redirect href="/settings/advanced" />;
+
+  return <PublishPageScreen />;
+}
+
+function PublishPageScreen(): ReactNode {
   const insets = useSafeAreaInsets();
   const { t } = useTranslation();
   const record = useProfileStore((state) => state.record);

@@ -16,6 +16,7 @@ import { PressableScale } from '@/components/common/PressableScale';
 import { SfIcon } from '@/components/icons/SfIcon';
 import { ThemedButton } from '@/components/themed';
 import { Colors } from '@/constants/Colors';
+import { useTranslation } from '@/i18n';
 import type { PassportMRZDraft } from '@/passport/pipeline';
 
 /** Convert raw digit input → display `YYYY/MM/DD` (truncates >8 digits). */
@@ -46,6 +47,7 @@ export function PassportMrzStep({
   showManualInput,
   setShowManualInput,
   draft,
+  developerMode,
   patch,
   onContinue,
   onScanPressed,
@@ -53,10 +55,12 @@ export function PassportMrzStep({
   readonly showManualInput: boolean;
   readonly setShowManualInput: (v: boolean) => void;
   readonly draft: PassportMRZDraft;
+  readonly developerMode: boolean;
   readonly patch: (p: Partial<PassportMRZDraft>) => void;
   readonly onContinue: () => void;
   readonly onScanPressed: () => void;
 }) {
+  const { t } = useTranslation();
   if (!showManualInput) {
     return (
       <View className="gap-6">
@@ -68,18 +72,19 @@ export function PassportMrzStep({
           </View>
           <View className="items-center gap-2">
             <Text className="text-text1 text-center text-[16px] font-medium">
-              Scan your passport
+              {t('passportSetup.details.scanTitle')}
             </Text>
             <Text className="text-text2 px-8 text-center text-[14px]" style={{ lineHeight: 22 }}>
-              Position the photo page in the frame to read the MRZ — or enter the
-              details by hand.
+              {developerMode
+                ? 'Position the photo page in the frame to read the MRZ — or enter the details by hand.'
+                : t('passportSetup.details.scanHint')}
             </Text>
           </View>
         </View>
 
         <View className="bg-mutedSurface gap-3 rounded-xl p-3.5">
           <ThemedButton
-            label="Scan Passport"
+            label={t('passportSetup.details.scan')}
             fullWidth
             leadingIcon={
               <SfIcon
@@ -103,7 +108,9 @@ export function PassportMrzStep({
               borderColor: Colors.text1,
             }}
           >
-            <Text className="text-text1 text-[15px]">Manual Input</Text>
+            <Text className="text-text1 text-[15px]">
+              {t('passportSetup.details.manual')}
+            </Text>
           </PressableScale>
         </View>
       </View>
@@ -113,20 +120,20 @@ export function PassportMrzStep({
   return (
     <View className="bg-mutedSurface gap-2.5 rounded-xl p-3.5">
       <Field
-        label="Passport Number"
+        label={t('passportSetup.details.passportNumber')}
         value={draft.passportNumber}
         onChangeText={(v) => { patch({ passportNumber: v.toUpperCase() }); }}
         autoCapitalize="characters"
       />
       <Field
-        label="Nationality (3 letters)"
+        label={t('passportSetup.details.nationality')}
         value={draft.nationalityCode}
         onChangeText={(v) => { patch({ nationalityCode: v.toUpperCase() }); }}
         autoCapitalize="characters"
         maxLength={3}
       />
       <Field
-        label="Date of Birth (YYYY/MM/DD)"
+        label={t('passportSetup.details.birthDate')}
         value={fromMrzYyMmDd(draft.dateOfBirth)}
         onChangeText={(v) => {
           const display = formatYyyyMmDd(v);
@@ -137,7 +144,7 @@ export function PassportMrzStep({
         maxLength={10}
       />
       <Field
-        label="Expiry Date (YYYY/MM/DD)"
+        label={t('passportSetup.details.expiryDate')}
         value={fromMrzYyMmDd(draft.expiryDate)}
         onChangeText={(v) => {
           const display = formatYyyyMmDd(v);
@@ -148,7 +155,11 @@ export function PassportMrzStep({
         maxLength={10}
       />
       <View className="pt-2">
-        <ThemedButton label="Continue to NFC" fullWidth onPress={onContinue} />
+        <ThemedButton
+          label={developerMode ? 'Continue to NFC' : t('passportSetup.details.continue')}
+          fullWidth
+          onPress={onContinue}
+        />
       </View>
       <PressableScale
         haptic="tap"
@@ -156,7 +167,7 @@ export function PassportMrzStep({
         accessibilityRole="button"
         containerStyle={{ alignSelf: 'center' }}
       >
-        <Text className="text-text2 text-[12px]">Back to Scan</Text>
+        <Text className="text-text2 text-[12px]">{t('passportSetup.details.backToScan')}</Text>
       </PressableScale>
     </View>
   );

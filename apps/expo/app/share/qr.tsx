@@ -8,6 +8,7 @@
  * Share button goes through expo-sharing. The payload is an OID4VP
  * authorisation request URL, matching Swift's OIDCService-backed QR flow.
  */
+import { Redirect } from 'expo-router';
 import { safeBack } from '@/navigation/safeBack';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
@@ -26,10 +27,18 @@ import { pushToast } from '@/feedback/toast';
 import { useTranslation } from '@/i18n';
 import { didKeyForCurrentIdentity } from '@/keychain/signingKey';
 import { buildOid4VpRequestUrl } from '@/oidc/requestQr';
+import { usePreferences } from '@/settings/preferences';
 
 const COUNTDOWN_SECONDS = 45;
 
-export default function QrSharingScreen() {
+export default function QrSharingRoute() {
+  const developerMode = usePreferences((state) => state.developerMode);
+  if (!developerMode) return <Redirect href="/scan" />;
+
+  return <QrSharingScreen />;
+}
+
+function QrSharingScreen() {
   const { t } = useTranslation();
   const insets = useSafeAreaInsets();
   const myCard = useMyCard();

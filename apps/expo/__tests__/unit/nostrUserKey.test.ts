@@ -43,6 +43,11 @@ import { bech32 } from '@scure/base';
 
 import derivedVectors from '../../../../packages/shared/vectors/derive.json';
 import { verifyNostrEvent } from '@/dag/nostrAdapter';
+import {
+  __resetLocalDataWipeBarrierForTesting,
+  beginLocalDataWipe,
+  completeLocalDataWipe,
+} from '../../src/settings/localDataWipeBarrier';
 
 type Res<T> =
   | { readonly ok: true; readonly value: T }
@@ -76,6 +81,7 @@ interface UserKeyMod {
   }) => Promise<Res<NostrEventLike>>;
   readonly hasNostrKey: () => Promise<boolean>;
   readonly hasNostrKeySync: () => boolean;
+  readonly quiesceNostrKeyOperations: () => Promise<void>;
   readonly deleteNostrKey: () => Promise<void>;
   readonly npubEncode: (pubkeyHex: string) => Res<string>;
   readonly npubDecode: (npub: string) => Res<string>;
@@ -85,12 +91,16 @@ interface UserKeyMod {
 //    DI hooks (no global `mock.module` — see isolation note above). ──────
 
 const scalarStore = new Map<string, string>();
+let scalarWriteGate: Promise<void> | null = null;
+let releaseScalarWrite: (() => void) | null = null;
+let scalarWriteStarted: (() => void) | null = null;
 
 const fakeStorage = {
   getScalarHex: (): Promise<string | null> => Promise.resolve(scalarStore.get('scalar') ?? null),
-  setScalarHex: (hex: string): Promise<void> => {
+  setScalarHex: async (hex: string): Promise<void> => {
+    scalarWriteStarted?.();
+    await (scalarWriteGate ?? Promise.resolve());
     scalarStore.set('scalar', hex);
-    return Promise.resolve();
   },
   deleteScalarHex: (): Promise<void> => {
     scalarStore.delete('scalar');
@@ -132,11 +142,16 @@ beforeEach(async () => {
   scalarStore.clear();
   revealCalls = 0;
   mirrorHasKey = false;
+  scalarWriteGate = null;
+  releaseScalarWrite = null;
+  scalarWriteStarted = null;
   nextRevealResult = { ok: false, error: 'notProvisioned' };
+  __resetLocalDataWipeBarrierForTesting();
   await mod.deleteNostrKey();
 });
 
 afterEach(async () => {
+  __resetLocalDataWipeBarrierForTesting();
   await mod.deleteNostrKey();
 });
 
@@ -222,6 +237,34 @@ describe('provisionFromRootMnemonic', () => {
     if (first.ok && second.ok) expect(first.value).toBe(second.value);
     expect(scalarStore.size).toBe(1);
   });
+
+  it('removes a key write that completes after a local wipe begins', async () => {
+    nextRevealResult = { ok: true, value: derivedVectors.valid[0]!.mnemonic };
+    scalarWriteGate = new Promise<void>((resolve) => {
+      releaseScalarWrite = resolve;
+    });
+    const writeStarted = new Promise<void>((resolve) => {
+      scalarWriteStarted = resolve;
+    });
+
+    const provisioning = mod.provisionFromRootMnemonic();
+    await writeStarted;
+    beginLocalDataWipe();
+    let quiesced = false;
+    const quiescing = mod.quiesceNostrKeyOperations().then(() => {
+      quiesced = true;
+    });
+    await Promise.resolve();
+    expect(quiesced).toBe(false);
+    releaseScalarWrite?.();
+
+    const result = await provisioning;
+    await quiescing;
+    expect(result.ok).toBe(false);
+    expect(scalarStore.size).toBe(0);
+    expect(mod.hasNostrKeySync()).toBe(false);
+    completeLocalDataWipe();
+  });
 });
 
 // ── 3. App<->Web portability — derive.json vectors ──────────────────────
@@ -271,6 +314,26 @@ describe('importNsec', () => {
     const resolved = await mod.getNostrPubkey();
     expect(resolved.ok).toBe(true);
     if (resolved.ok) expect(resolved.value).toBe(REFERENCE_PUBKEY_HEX);
+  });
+
+  it('does not recreate an imported key when its write finishes after a local wipe begins', async () => {
+    scalarWriteGate = new Promise<void>((resolve) => {
+      releaseScalarWrite = resolve;
+    });
+    const writeStarted = new Promise<void>((resolve) => {
+      scalarWriteStarted = resolve;
+    });
+
+    const importing = mod.importNsec(REFERENCE_NSEC);
+    await writeStarted;
+    beginLocalDataWipe();
+    releaseScalarWrite?.();
+
+    const result = await importing;
+    expect(result.ok).toBe(false);
+    expect(scalarStore.size).toBe(0);
+    expect(mod.hasNostrKeySync()).toBe(false);
+    completeLocalDataWipe();
   });
 
   it('rejects a wrong-hrp bech32 string (e.g. npub) without echoing the input', async () => {

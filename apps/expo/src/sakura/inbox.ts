@@ -25,6 +25,12 @@ import {
 } from '@solidarity/shared';
 import { ed25519 } from '@noble/curves/ed25519.js';
 
+import {
+  canCommitLocalData,
+  captureLocalDataEpoch,
+  type LocalDataEpoch,
+} from '@/settings/localDataWipeBarrier';
+
 import { ackMessages, syncInbox } from './client';
 import {
   pendingAck,
@@ -101,15 +107,18 @@ function signAckPayload(ids: readonly string[], sigPriv: Uint8Array): string {
 
 async function ackBatch(
   ids: readonly string[],
-  secrets: RecipientSecrets
+  secrets: RecipientSecrets,
+  operationEpoch: LocalDataEpoch,
 ): Promise<void> {
   if (ids.length === 0) return;
+  if (!canCommitLocalData(operationEpoch)) return;
   await ackMessages({
     message_ids: [...ids],
     pubkey: secrets.signingPubBase64,
     sig: signAckPayload(ids, secrets.sigPriv),
   });
-  await markAcked(ids);
+  if (!canCommitLocalData(operationEpoch)) return;
+  await markAcked(ids, operationEpoch);
 }
 
 /**
@@ -120,13 +129,17 @@ async function ackBatch(
  * doesn't redeliver them indefinitely.
  */
 export async function syncOnce(): Promise<readonly DecryptedMessage[]> {
+  const operationEpoch = captureLocalDataEpoch();
+  if (!canCommitLocalData(operationEpoch)) return [];
   return withSecrets(async (secrets) => {
+    if (!canCommitLocalData(operationEpoch)) return [];
     const messages = await syncInbox(secrets.encryptionPubBase64);
+    if (!canCommitLocalData(operationEpoch)) return [];
     if (messages.length === 0) {
       // Even with zero new mail there may be leftover ack debt from a prior
       // run that died after upsert but before ack — flush it now.
       const debt = await pendingAck();
-      await ackBatch(debt, secrets);
+      await ackBatch(debt, secrets, operationEpoch);
       return [];
     }
 
@@ -146,8 +159,10 @@ export async function syncOnce(): Promise<readonly DecryptedMessage[]> {
       ackIds.push(opened.messageId);
     }
 
-    await upsert(cacheEntries);
-    await ackBatch(ackIds, secrets);
+    await upsert(cacheEntries, operationEpoch);
+    if (!canCommitLocalData(operationEpoch)) return [];
+    await ackBatch(ackIds, secrets, operationEpoch);
+    if (!canCommitLocalData(operationEpoch)) return [];
     return decrypted;
   });
 }

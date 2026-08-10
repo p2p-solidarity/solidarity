@@ -1,4 +1,4 @@
-import { router, useFocusEffect } from 'expo-router';
+import { Redirect, router, useFocusEffect } from 'expo-router';
 import { safeBack } from '@/navigation/safeBack';
 import { useCallback, useState } from 'react';
 import { ScrollView, View } from 'react-native';
@@ -19,7 +19,14 @@ import { useProfileStore } from '@/profile/store';
 import { usePreferences } from '@/settings/preferences';
 import { verifyNostrBinding, type VerifyNostrBindingResult } from '@solidarity/shared';
 
-export default function ConnectionsSettingsScreen() {
+export default function ConnectionsSettingsRoute() {
+  const developerMode = usePreferences((state) => state.developerMode);
+  if (!developerMode) return <Redirect href="/settings/advanced" />;
+
+  return <ConnectionsSettingsScreen />;
+}
+
+function ConnectionsSettingsScreen() {
   const insets = useSafeAreaInsets();
   const { t } = useTranslation();
   const record = useProfileStore((state) => state.record);

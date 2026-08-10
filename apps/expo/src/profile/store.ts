@@ -44,6 +44,7 @@ import { invalidateCachedNostrResult } from '@/badges/badgeStatusCache';
 import { getRootDid, getRootSigner, type RootKeyError } from '@/identity/rootKey';
 import { publishProfile, updateKind0AlsoKnownAs, type PublishReport } from '@/nostr/publish';
 import { getNostrPubkey, npubEncode } from '@/nostr/userKey';
+import { canCommitLocalData, captureLocalDataEpoch } from '@/settings/localDataWipeBarrier';
 import { getMmkv } from '@/storage/mmkv';
 import {
   PROFILE_VERSION,
@@ -55,6 +56,7 @@ import {
   verifyCompact,
   type ProfileLink,
   type ProfileBadge,
+  type PublicPageDesign,
   type ProfileRecord,
   type ProfileScope,
   type Result,
@@ -87,6 +89,17 @@ type UpdateKind0Fn = typeof updateKind0AlsoKnownAs;
 
 let activePublishProfile: PublishProfileFn = publishProfile;
 let activeUpdateKind0AlsoKnownAs: UpdateKind0Fn = updateKind0AlsoKnownAs;
+let localWipeGeneration = 0;
+
+/**
+ * A profile operation is valid only while both its store generation and the
+ * process-wide deletion epoch still match. The generation protects direct
+ * store resets; the epoch also rejects work that starts while the destructive
+ * wipe coordinator is already quiescing the rest of the device.
+ */
+function canContinueProfileOperation(generation: number, localDataEpoch: number): boolean {
+  return generation === localWipeGeneration && canCommitLocalData(localDataEpoch);
+}
 
 /** Test-only override. Pass `null` to restore the real relay-backed implementations. */
 export function __setNostrPublishForTesting(
@@ -129,6 +142,8 @@ export interface ProfileSaveOptions {
   readonly avatar?: string | null;
   /** Narrow identity-level badge replacement (e.g. public disclosure refs). */
   readonly badges?: readonly ProfileBadge[];
+  /** Signed Page layout. Local editor state never enters this value. */
+  readonly page?: PublicPageDesign;
 }
 
 /** The exact pair persisted by a successful Face-ID-gated save. */
@@ -216,14 +231,22 @@ function readPersisted(): PersistedProfile | null {
   }
 }
 
-function writePersisted(p: PersistedProfile): void {
+type PersistWriteResult = 'ok' | 'cancelledByWipe' | 'storageFailure';
+
+function writePersisted(p: PersistedProfile, localDataEpoch: number): PersistWriteResult {
+  if (!canCommitLocalData(localDataEpoch)) return 'cancelledByWipe';
   try {
     getMmkv().set(KEY, JSON.stringify(p));
   } catch {
-    // MMKV not ready / disk full — fail closed on the write; the in-memory
-    // state the caller sets right after this still reflects the save for
-    // the current session (matches preferences.ts's `writeSafe` policy).
+    // A profile JWS is also the sharing/publication source of truth. Unlike
+    // cosmetic preferences, it must not look published for one session and
+    // disappear after restart, so callers fail the whole operation.
+    return 'storageFailure';
   }
+  // A wipe may have begun while the synchronous storage adapter was doing
+  // its work. Never repopulate the live store in that case; the wipe owns the
+  // durable state and will scrub any write that raced it.
+  return canCommitLocalData(localDataEpoch) ? 'ok' : 'cancelledByWipe';
 }
 
 /**
@@ -294,6 +317,7 @@ function buildCandidateRecord(
   previous: ProfileRecord | null,
   did: string
 ): Record<string, unknown> {
+  const page = options.page ?? previous?.page;
   return {
     v: PROFILE_VERSION,
     did,
@@ -304,6 +328,7 @@ function buildCandidateRecord(
     alsoKnownAs:
       options.alsoKnownAs !== undefined ? [...options.alsoKnownAs] : (previous?.alsoKnownAs ?? []),
     badges: options.badges !== undefined ? [...options.badges] : (previous?.badges ?? []),
+    ...(page ? { page } : {}),
     supersededBy: previous?.supersededBy ?? null,
     updatedAt: nextUpdatedAt(previous?.updatedAt ?? null),
   };
@@ -373,6 +398,9 @@ interface ProfileState {
     fields: ProfileEditableFields,
     options?: ProfileSaveOptions
   ) => Promise<Result<SavedProfile, string>>;
+  /** Save only the signed public Page projection while carrying all editable
+   * profile fields and their existing privacy tiers forward. */
+  readonly savePageDesign: (page: PublicPageDesign) => Promise<Result<SavedProfile, string>>;
   /**
    * Adopt an already-root-signed `(record, jws)` pair as the current profile
    * WITHOUT re-signing — the persistence tail of the App↔Web webSign flow
@@ -406,6 +434,8 @@ interface ProfileState {
    * npub claim) must never reach a relay.
    */
   readonly publishToNostr: (confirmedRelays: readonly string[]) => Promise<Result<NostrPublishOutcome, string>>;
+  /** Drop every live profile reference after the local store is wiped. */
+  readonly resetForLocalWipe: () => void;
 }
 
 export const useProfileStore = create<ProfileState>((set, get) => ({
@@ -418,7 +448,15 @@ export const useProfileStore = create<ProfileState>((set, get) => ({
   nostrPublishedJws: null,
 
   saveProfile: async (fields, options = {}) => {
+    const generation = localWipeGeneration;
+    const localDataEpoch = captureLocalDataEpoch();
+    if (!canContinueProfileOperation(generation, localDataEpoch)) {
+      return err('profile save cancelled by local wipe');
+    }
     const didResult = await getRootDid();
+    if (!canContinueProfileOperation(generation, localDataEpoch)) {
+      return err('profile save cancelled by local wipe');
+    }
     if (!didResult.ok) return err(rootKeyErrorMessage('profile save failed', didResult.error));
 
     const previous = get().record;
@@ -428,6 +466,9 @@ export const useProfileStore = create<ProfileState>((set, get) => ({
     if (!validated.ok) return err(validated.error);
 
     const signerResult = await getRootSigner();
+    if (!canContinueProfileOperation(generation, localDataEpoch)) {
+      return err('profile save cancelled by local wipe');
+    }
     if (!signerResult.ok) return err(rootKeyErrorMessage('profile save failed', signerResult.error));
 
     // The FULL record: source of truth, all links, `scope` left absent (= full)
@@ -438,6 +479,9 @@ export const useProfileStore = create<ProfileState>((set, get) => ({
     } catch (e) {
       return err(`profile save failed: signing was denied or failed (${e instanceof Error ? e.message : String(e)})`);
     }
+    if (!canContinueProfileOperation(generation, localDataEpoch)) {
+      return err('profile save cancelled by local wipe');
+    }
 
     // Pre-sign the shared (QR) and public (Nostr) projections in the SAME
     // grace window so neither share path re-prompts Face ID later. Any denial
@@ -446,15 +490,24 @@ export const useProfileStore = create<ProfileState>((set, get) => ({
     const local: LocalProfile = { record: validated.value, linkVisibility };
     const projections = await signShareProjections(local, signerResult.value);
     if (!projections.ok) return err(`profile save failed: ${projections.error}`);
+    if (!canContinueProfileOperation(generation, localDataEpoch)) {
+      return err('profile save cancelled by local wipe');
+    }
 
-    writePersisted({
+    const persisted = writePersisted({
       record: validated.value,
       jws,
       linkVisibility,
       shared: projections.value.shared,
       published: projections.value.published,
       nostrPublishedJws: null,
-    });
+    }, localDataEpoch);
+    if (persisted === 'storageFailure') {
+      return err('profile save failed: local storage could not be updated');
+    }
+    if (persisted !== 'ok' || !canContinueProfileOperation(generation, localDataEpoch)) {
+      return err('profile save cancelled by local wipe');
+    }
     set({
       record: validated.value,
       jws,
@@ -472,7 +525,29 @@ export const useProfileStore = create<ProfileState>((set, get) => ({
     return ok({ record: validated.value, jws });
   },
 
+  savePageDesign: async (page) => {
+    const localDataEpoch = captureLocalDataEpoch();
+    if (!canCommitLocalData(localDataEpoch)) {
+      return err('page save cancelled by local wipe');
+    }
+    const current = get();
+    if (!current.record) return err('page save failed: no profile has been saved yet');
+    return get().saveProfile(
+      {
+        displayName: current.record.displayName,
+        bio: current.record.bio,
+        links: current.record.links,
+        linkVisibility: current.linkVisibility,
+      },
+      { page }
+    );
+  },
+
   adoptSignedProfile: (record, jws) => {
+    const localDataEpoch = captureLocalDataEpoch();
+    if (!canCommitLocalData(localDataEpoch)) {
+      return err('adoptSignedProfile: cancelled by local wipe');
+    }
     const validated = parseProfile(record);
     if (!validated.ok) return err(`adoptSignedProfile: ${validated.error}`);
     // The pair MUST be internally consistent: `jws` a root signature over
@@ -489,14 +564,20 @@ export const useProfileStore = create<ProfileState>((set, get) => ({
     // the next publish/share re-signs for THIS record (never republishes the
     // prior public projection). The web-signed record carries no per-link
     // visibility metadata → all links default public (empty `linkVisibility`).
-    writePersisted({
+    const persisted = writePersisted({
       record: validated.value,
       jws,
       linkVisibility: [],
       shared: null,
       published: null,
       nostrPublishedJws: null,
-    });
+    }, localDataEpoch);
+    if (persisted === 'storageFailure') {
+      return err('adoptSignedProfile: local storage could not be updated');
+    }
+    if (persisted !== 'ok' || !canCommitLocalData(localDataEpoch)) {
+      return err('adoptSignedProfile: cancelled by local wipe');
+    }
     set({
       record: validated.value,
       jws,
@@ -511,6 +592,11 @@ export const useProfileStore = create<ProfileState>((set, get) => ({
   },
 
   publishToNostr: async (confirmedRelays) => {
+    const generation = localWipeGeneration;
+    const localDataEpoch = captureLocalDataEpoch();
+    if (!canContinueProfileOperation(generation, localDataEpoch)) {
+      return err('publishToNostr: cancelled by local wipe');
+    }
     if (confirmedRelays.length === 0) return err('publishToNostr: relays list is empty');
 
     const current = get();
@@ -519,6 +605,9 @@ export const useProfileStore = create<ProfileState>((set, get) => ({
     }
 
     const pubkeyResult = await getNostrPubkey();
+    if (!canContinueProfileOperation(generation, localDataEpoch)) {
+      return err('publishToNostr: cancelled by local wipe');
+    }
     if (!pubkeyResult.ok) {
       return err(
         pubkeyResult.error === 'notProvisioned'
@@ -552,6 +641,9 @@ export const useProfileStore = create<ProfileState>((set, get) => ({
       if (!validated.ok) return err(`publishToNostr: ${validated.error}`);
 
       const signerResult = await getRootSigner();
+      if (!canContinueProfileOperation(generation, localDataEpoch)) {
+        return err('publishToNostr: cancelled by local wipe');
+      }
       if (!signerResult.ok) return err(rootKeyErrorMessage('publishToNostr', signerResult.error));
 
       try {
@@ -559,20 +651,32 @@ export const useProfileStore = create<ProfileState>((set, get) => ({
       } catch (e) {
         return err(`publishToNostr: signing was denied or failed (${e instanceof Error ? e.message : String(e)})`);
       }
+      if (!canContinueProfileOperation(generation, localDataEpoch)) {
+        return err('publishToNostr: cancelled by local wipe');
+      }
       record = validated.value;
       linkVisibility = normalizeLinkVisibility(record.links, linkVisibility);
       const projections = await signShareProjections({ record, linkVisibility }, signerResult.value);
       if (!projections.ok) return err(`publishToNostr: ${projections.error}`);
+      if (!canContinueProfileOperation(generation, localDataEpoch)) {
+        return err('publishToNostr: cancelled by local wipe');
+      }
       published = projections.value.published;
 
-      writePersisted({
+      const persisted = writePersisted({
         record,
         jws,
         linkVisibility,
         shared: projections.value.shared,
         published,
         nostrPublishedJws: null,
-      });
+      }, localDataEpoch);
+      if (persisted === 'storageFailure') {
+        return err('publishToNostr: local storage could not be updated');
+      }
+      if (persisted !== 'ok' || !canContinueProfileOperation(generation, localDataEpoch)) {
+        return err('publishToNostr: cancelled by local wipe');
+      }
       set({
         record,
         jws,
@@ -589,6 +693,9 @@ export const useProfileStore = create<ProfileState>((set, get) => ({
     // private links — to a relay.
     if (!published) {
       const signerResult = await getRootSigner();
+      if (!canContinueProfileOperation(generation, localDataEpoch)) {
+        return err('publishToNostr: cancelled by local wipe');
+      }
       if (!signerResult.ok) return err(rootKeyErrorMessage('publishToNostr', signerResult.error));
       const publishedResult = await signProjection(
         { record, linkVisibility: normalizeLinkVisibility(record.links, linkVisibility) },
@@ -596,25 +703,43 @@ export const useProfileStore = create<ProfileState>((set, get) => ({
         signerResult.value
       );
       if (!publishedResult.ok) return err(`publishToNostr: ${publishedResult.error}`);
+      if (!canContinueProfileOperation(generation, localDataEpoch)) {
+        return err('publishToNostr: cancelled by local wipe');
+      }
       published = publishedResult.value;
-      writePersisted({
+      const persisted = writePersisted({
         record,
         jws,
         linkVisibility,
         shared: get().shared,
         published,
         nostrPublishedJws: null,
-      });
+      }, localDataEpoch);
+      if (persisted === 'storageFailure') {
+        return err('publishToNostr: local storage could not be updated');
+      }
+      if (persisted !== 'ok' || !canContinueProfileOperation(generation, localDataEpoch)) {
+        return err('publishToNostr: cancelled by local wipe');
+      }
       set({ published, nostrPublishedJws: null });
     }
 
     // Publish the PUBLIC projection (scope:'public' — public-tier links only),
     // NEVER the full record: a link the user marked private/link-only must not
     // reach a public relay.
+    if (!canContinueProfileOperation(generation, localDataEpoch)) {
+      return err('publishToNostr: cancelled by local wipe');
+    }
     const profileReport = await activePublishProfile({ jws: published.jws, relays: confirmedRelays });
+    if (!canContinueProfileOperation(generation, localDataEpoch)) {
+      return err('publishToNostr: cancelled by local wipe');
+    }
     if (!profileReport.ok) return err(`publishToNostr: ${profileReport.error}`);
 
     const kind0Report = await activeUpdateKind0AlsoKnownAs({ did: record.did, relays: confirmedRelays });
+    if (!canContinueProfileOperation(generation, localDataEpoch)) {
+      return err('publishToNostr: cancelled by local wipe');
+    }
     if (!kind0Report.ok) return err(`publishToNostr: ${kind0Report.error}`);
 
     // The kind-0 side just changed — a pre-publish cached verification must
@@ -627,17 +752,36 @@ export const useProfileStore = create<ProfileState>((set, get) => ({
       profileReport.value,
       kind0Report.value
     );
-    writePersisted({
+    const persisted = writePersisted({
       record,
       jws,
       linkVisibility,
       shared: get().shared,
       published,
       nostrPublishedJws,
-    });
+    }, localDataEpoch);
+    if (persisted === 'storageFailure') {
+      return err('publishToNostr: local storage could not be updated');
+    }
+    if (persisted !== 'ok' || !canContinueProfileOperation(generation, localDataEpoch)) {
+      return err('publishToNostr: cancelled by local wipe');
+    }
     set({ nostrPublishedJws });
 
     return ok({ profile: profileReport.value, kind0: kind0Report.value });
+  },
+
+  resetForLocalWipe: () => {
+    localWipeGeneration += 1;
+    set({
+      record: null,
+      jws: null,
+      status: 'empty',
+      linkVisibility: [],
+      shared: null,
+      published: null,
+      nostrPublishedJws: null,
+    });
   },
 }));
 
@@ -649,8 +793,10 @@ export const useProfileStore = create<ProfileState>((set, get) => ({
  * fails validation.
  */
 export function hydrateProfile(): void {
+  const localDataEpoch = captureLocalDataEpoch();
+  if (!canCommitLocalData(localDataEpoch)) return;
   const persisted = readPersisted();
-  if (persisted) {
+  if (persisted && canCommitLocalData(localDataEpoch)) {
     useProfileStore.setState({
       record: persisted.record,
       jws: persisted.jws,

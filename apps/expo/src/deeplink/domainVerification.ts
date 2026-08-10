@@ -17,6 +17,7 @@ const TRUSTED_HOSTS: ReadonlySet<string> = new Set<string>([
   // Solidarity / AirMeishi product hosts (mirrors AppBranding).
   'solidarity.gg',
   'airmeishi.app',
+  'creds.id',
   // Swift `DomainVerificationManager.isTrustedDomain` allowlist.
   'apple.com',
   'google.com',

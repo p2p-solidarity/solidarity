@@ -31,6 +31,11 @@ import type {
 
 // Type-only — runtime handle arrives via warmBadgeStatusCache (see doc).
 import type { getMmkv as GetMmkvFn } from '@/storage/mmkv';
+import {
+  canCommitLocalData,
+  captureLocalDataEpoch,
+  type LocalDataEpoch,
+} from '@/settings/localDataWipeBarrier';
 
 const NOSTR_KEY = 'badges:nostr:lastResult:v1';
 const ATPROTO_KEY = 'badges:atproto:lastResult:v1';
@@ -171,7 +176,13 @@ function readEntry<T>(key: string, resultGuard: (value: unknown) => boolean): Ca
   }
 }
 
-function writeEntry<T>(key: string, result: T, checkedAt: number): void {
+function writeEntry<T>(
+  key: string,
+  result: T,
+  checkedAt: number,
+  verificationEpoch: LocalDataEpoch,
+): void {
+  if (!canCommitLocalData(verificationEpoch)) return;
   const entry: CachedBadgeResult<T> = { checkedAt, result };
   activeStorage.setString(key, JSON.stringify(entry));
   notifyCacheListeners();
@@ -205,9 +216,10 @@ export function readCachedNostrResult(): CachedBadgeResult<VerifyNostrBindingRes
 
 export function writeCachedNostrResult(
   result: VerifyNostrBindingResult,
-  checkedAt: number
+  checkedAt: number,
+  verificationEpoch: LocalDataEpoch = captureLocalDataEpoch(),
 ): void {
-  writeEntry(NOSTR_KEY, result, checkedAt);
+  writeEntry(NOSTR_KEY, result, checkedAt, verificationEpoch);
 }
 
 export function readCachedAtprotoResult(): CachedBadgeResult<VerifyAtprotoBindingResult> | null {
@@ -216,9 +228,15 @@ export function readCachedAtprotoResult(): CachedBadgeResult<VerifyAtprotoBindin
 
 export function writeCachedAtprotoResult(
   result: VerifyAtprotoBindingResult,
-  checkedAt: number
+  checkedAt: number,
+  verificationEpoch: LocalDataEpoch = captureLocalDataEpoch(),
 ): void {
-  writeEntry(ATPROTO_KEY, result, checkedAt);
+  writeEntry(ATPROTO_KEY, result, checkedAt, verificationEpoch);
+}
+
+/** Capture before starting a live verification; pass it back on completion. */
+export function captureBadgeStatusCacheEpoch(): LocalDataEpoch {
+  return captureLocalDataEpoch();
 }
 
 /** A publish just changed the kind-0 side — a pre-publish result must not

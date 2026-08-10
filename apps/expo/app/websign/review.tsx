@@ -18,6 +18,7 @@
  * `ready` (diff shown) — never a fabricated placeholder (CLAUDE.md Rule 8).
  */
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
+import { Redirect } from 'expo-router';
 import { ScrollView, View } from 'react-native';
 import * as Clipboard from 'expo-clipboard';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -49,6 +50,7 @@ import {
   type WebSignReview,
 } from '@/websign/appSigner';
 import { useWebSignPending } from '@/websign/pendingRequest';
+import { usePreferences } from '@/settings/preferences';
 import { WEB_SIGN_MAX_AGE_SECONDS, type ProfileLink } from '@solidarity/shared';
 
 type ReviewState =
@@ -62,7 +64,14 @@ interface SignedResult {
   readonly responseJws: string;
 }
 
-export default function WebSignReviewScreen(): ReactNode {
+export default function WebSignReviewRoute(): ReactNode {
+  const developerMode = usePreferences((state) => state.developerMode);
+  if (!developerMode) return <Redirect href="/settings/advanced" />;
+
+  return <WebSignReviewScreen />;
+}
+
+function WebSignReviewScreen(): ReactNode {
   const insets = useSafeAreaInsets();
   const { t } = useTranslation();
 

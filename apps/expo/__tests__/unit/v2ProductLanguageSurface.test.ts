@@ -71,4 +71,51 @@ describe('v2 product language surfaces', () => {
       expect(zhHant[key]).not.toMatch(banned);
     }
   });
+
+  it('keeps credential detail and presentation QR details product-safe outside Developer Mode', () => {
+    const detail = source('../../app/credentials/[id].tsx');
+    const sheet = source('../../src/components/credentials/PresentationSheet.tsx');
+    const passportPresentation = source(
+      '../../src/components/credentials/PassportShowPresentation.tsx'
+    );
+    const proofQr = source('../../src/components/credentials/PresentationProofQr.tsx');
+    const badges = source('../../src/components/me/ProfileBadgeChips.tsx');
+
+    expect(detail).toContain(
+      'const developerMode = usePreferences((state) => state.developerMode);'
+    );
+    expect(detail).toContain("const isProductContext = !developerMode || product === '1';");
+    expect(detail).toContain('showClaimDetails={!isProductContext}');
+    expect(detail).toContain('productMode={isProductContext}');
+
+    expect(sheet).toContain('readonly productMode?: boolean;');
+    expect(sheet).toContain('productMode = false,');
+    expect(sheet).toContain('showClaimDetails={!productMode}');
+    expect(passportPresentation).toContain('readonly showClaimDetails?: boolean;');
+    expect(passportPresentation).toContain('showClaimDetails={showClaimDetails}');
+    expect(proofQr).toContain('readonly showClaimDetails?: boolean;');
+    expect(proofQr).toContain('showClaimDetails = true,');
+    expect(proofQr).toContain('{showClaimDetails ? (');
+    expect(proofQr).toContain('{showClaimDetails && selectedClaims.length > 0 ?');
+    expect(proofQr).toContain('{showClaimDetails && footerText ?');
+
+    expect(badges).toContain("params: { id: passport.id, product: '1' }");
+  });
+
+  it('gives every public Page link a nonempty accessible name', () => {
+    const pagePreview = source('../../src/components/me/PageLivePreview.tsx');
+
+    expect(pagePreview).toContain('accessibilityLabel={item.title.trim() || url}');
+  });
+
+  it('labels the presentation QR as a localized product-safe image', () => {
+    const proofQr = source('../../src/components/credentials/PresentationProofQr.tsx');
+
+    expect(proofQr).toContain("import { useTranslation } from '@/i18n';");
+    expect(proofQr).toContain('const { t } = useTranslation();');
+    expect(proofQr).toContain('accessibilityRole="image"');
+    expect(proofQr).toContain("accessibilityLabel={t('present.verificationQr')}");
+    expect(en['present.verificationQr']).toBe('Verification QR');
+    expect(zhHant['present.verificationQr']).toBe('驗證 QR');
+  });
 });

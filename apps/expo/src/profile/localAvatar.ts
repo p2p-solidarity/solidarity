@@ -1,6 +1,12 @@
 import * as FileSystem from 'expo-file-system/legacy';
 
 import { getMmkv } from '@/storage/mmkv';
+import {
+  canCommitLocalData,
+  captureLocalDataEpoch,
+  trackLocalDataOperation,
+  type LocalDataEpoch,
+} from '@/settings/localDataWipeBarrier';
 import { err, ok, type Result, uuid } from '@solidarity/shared';
 
 const LOCAL_AVATAR_KEY = 'profile:local-avatar:v1';
@@ -23,19 +29,37 @@ export function readLocalAvatarUri(): string | null {
 }
 
 /** Copy a picker-owned temporary asset into app documents, then update MMKV. */
-export async function persistLocalAvatar(
+export function persistLocalAvatar(
   sourceUri: string
 ): Promise<Result<string, 'unavailable'>> {
-  if (!LOCAL_AVATAR_DIR || sourceUri.length === 0) return err('unavailable');
+  return trackLocalDataOperation(
+    persistLocalAvatarAtEpoch(sourceUri, captureLocalDataEpoch()),
+  );
+}
+
+async function persistLocalAvatarAtEpoch(
+  sourceUri: string,
+  writeEpoch: LocalDataEpoch,
+): Promise<Result<string, 'unavailable'>> {
+  if (
+    !LOCAL_AVATAR_DIR ||
+    sourceUri.length === 0 ||
+    !canCommitLocalData(writeEpoch)
+  ) {
+    return err('unavailable');
+  }
   const destination = `${LOCAL_AVATAR_DIR}avatar-${uuid()}`;
   const previous = readLocalAvatarUri();
 
   try {
     const directory = await FileSystem.getInfoAsync(LOCAL_AVATAR_DIR);
+    if (!canCommitLocalData(writeEpoch)) return err('unavailable');
     if (!directory.exists) {
       await FileSystem.makeDirectoryAsync(LOCAL_AVATAR_DIR, { intermediates: true });
+      if (!canCommitLocalData(writeEpoch)) return err('unavailable');
     }
     await FileSystem.copyAsync({ from: sourceUri, to: destination });
+    if (!canCommitLocalData(writeEpoch)) return err('unavailable');
     getMmkv().set(LOCAL_AVATAR_KEY, destination);
     if (previous && previous !== destination) {
       await FileSystem.deleteAsync(previous, { idempotent: true }).catch(() => undefined);

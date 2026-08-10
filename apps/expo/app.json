@@ -21,7 +21,8 @@
       "bundleIdentifier": "kidneyweakx.airmeishi",
       "supportsTablet": true,
       "associatedDomains": [
-        "applinks:solidarity.gg"
+        "applinks:solidarity.gg",
+        "applinks:creds.id"
       ],
       "entitlements": {
         "com.apple.developer.icloud-container-identifiers": [
@@ -86,6 +87,10 @@
             {
               "scheme": "https",
               "host": "solidarity.gg"
+            },
+            {
+              "scheme": "https",
+              "host": "creds.id"
             }
           ],
           "category": [

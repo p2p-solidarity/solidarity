@@ -73,6 +73,17 @@ import { p256 } from '@noble/curves/nist.js';
 import type * as SecureStoreNS from 'expo-secure-store';
 
 import {
+  canCommitLocalData,
+  captureLocalDataEpoch,
+  type LocalDataEpoch,
+} from '@/settings/localDataWipeBarrier';
+import {
+  deletionFailed,
+  deletionSucceeded,
+  type LocalDeletionResult,
+} from '@/storage/deletionResult';
+
+import {
   HKDF_INFO_ROOT,
   deriveBackupKeyFromMnemonic,
   deriveP256Scalar,
@@ -196,6 +207,28 @@ export function __setRootKeyStorageForTesting(storage: RootKeyStorage | null): v
 
 let activeSyncStorage: RootKeySyncStorage = defaultSyncStorage;
 
+// Root-key creation/import/recovery can each persist a mnemonic after an
+// await. The wipe coordinator invalidates their epoch and waits for this set
+// before it deletes the authoritative stores, preventing a late completion
+// from recreating a recovery phrase after wipe.
+const activeRootKeyOperations = new Set<Promise<unknown>>();
+
+function trackRootKeyOperation<T>(operation: Promise<T>): Promise<T> {
+  activeRootKeyOperations.add(operation);
+  void operation.then(
+    () => activeRootKeyOperations.delete(operation),
+    () => activeRootKeyOperations.delete(operation),
+  );
+  return operation;
+}
+
+/** Wait for recovery-phrase writes that began before a local-data wipe. */
+export async function quiesceRootKeyOperations(): Promise<void> {
+  while (activeRootKeyOperations.size > 0) {
+    await Promise.allSettled([...activeRootKeyOperations]);
+  }
+}
+
 /**
  * Test-only override — inject an in-memory sync-storage mock. Pass `null`
  * to restore the default secrets-vault-backed implementation.
@@ -230,6 +263,50 @@ function toStorageError(e: unknown): RootKeyError {
   return { kind: 'storageFailed', message: e instanceof Error ? e.message : String(e) };
 }
 
+function localDataWipeError(): RootKeyError {
+  return { kind: 'storageFailed', message: 'Local data wipe is in progress.' };
+}
+
+async function removeStaleLocalMnemonic(): Promise<void> {
+  try {
+    await activeStorage.deleteMnemonic();
+  } catch {
+    // The production wipe retries the authoritative delete after it has
+    // quiesced all tracked root-key operations, and fails closed on error.
+  }
+}
+
+async function removeStaleSyncedMnemonic(): Promise<void> {
+  try {
+    await activeSyncStorage.deleteSyncedMnemonic();
+  } catch {
+    // See removeStaleLocalMnemonic: cleanup is best-effort here because the
+    // ordered production wipe performs the fail-closed authoritative retry.
+  }
+}
+
+async function persistLocalMnemonicForEpoch(
+  mnemonic: string,
+  writeEpoch: LocalDataEpoch,
+): Promise<boolean> {
+  if (!canCommitLocalData(writeEpoch)) return false;
+  await activeStorage.setMnemonic(mnemonic);
+  if (canCommitLocalData(writeEpoch)) return true;
+  await removeStaleLocalMnemonic();
+  return false;
+}
+
+async function persistSyncedMnemonicForEpoch(
+  mnemonic: string,
+  writeEpoch: LocalDataEpoch,
+): Promise<boolean> {
+  if (!canCommitLocalData(writeEpoch)) return false;
+  await activeSyncStorage.setSyncedMnemonic(mnemonic);
+  if (canCommitLocalData(writeEpoch)) return true;
+  await removeStaleSyncedMnemonic();
+  return false;
+}
+
 function normalizeMnemonic(raw: string): string {
   return raw.trim().toLowerCase().replace(/\s+/g, ' ');
 }
@@ -255,14 +332,24 @@ export function deriveDidFromMnemonic(mnemonic: string): Result<string, RootKeyE
  * mnemonic (for the backup ceremony / consent screen — caller must not log
  * or persist it elsewhere) and the resulting did:key.
  */
-export async function createFromFreshMnemonic(): Promise<
+export function createFromFreshMnemonic(): Promise<
   Result<{ readonly mnemonic: string; readonly did: string }, RootKeyError>
 > {
+  return trackRootKeyOperation(createFromFreshMnemonicAtEpoch(captureLocalDataEpoch()));
+}
+
+async function createFromFreshMnemonicAtEpoch(
+  writeEpoch: LocalDataEpoch,
+): Promise<Result<{ readonly mnemonic: string; readonly did: string }, RootKeyError>> {
+  if (!canCommitLocalData(writeEpoch)) return err(localDataWipeError());
+
   const mnemonic = generateMnemonic();
   const didResult = deriveDidFromMnemonic(mnemonic);
   if (!didResult.ok) return didResult;
   try {
-    await activeStorage.setMnemonic(mnemonic);
+    if (!(await persistLocalMnemonicForEpoch(mnemonic, writeEpoch))) {
+      return err(localDataWipeError());
+    }
   } catch (e) {
     return err(toStorageError(e));
   }
@@ -274,14 +361,25 @@ export async function createFromFreshMnemonic(): Promise<
  * it as the active root. Idempotent — importing the same mnemonic twice
  * yields the same did and simply re-persists the identical value.
  */
-export async function importFromMnemonic(
+export function importFromMnemonic(
   mnemonic: string
 ): Promise<Result<{ readonly did: string }, RootKeyError>> {
+  return trackRootKeyOperation(importFromMnemonicAtEpoch(mnemonic, captureLocalDataEpoch()));
+}
+
+async function importFromMnemonicAtEpoch(
+  mnemonic: string,
+  writeEpoch: LocalDataEpoch,
+): Promise<Result<{ readonly did: string }, RootKeyError>> {
+  if (!canCommitLocalData(writeEpoch)) return err(localDataWipeError());
+
   const normalized = normalizeMnemonic(mnemonic);
   const didResult = deriveDidFromMnemonic(normalized);
   if (!didResult.ok) return didResult;
   try {
-    await activeStorage.setMnemonic(normalized);
+    if (!(await persistLocalMnemonicForEpoch(normalized, writeEpoch))) {
+      return err(localDataWipeError());
+    }
   } catch (e) {
     return err(toStorageError(e));
   }
@@ -398,7 +496,15 @@ export async function revealMnemonicForExport(): Promise<Result<string, RootKeyE
  * and is the exact bug task A1.5 exists to fix (see rootKey.ts's module
  * doc).
  */
-export async function enableICloudBackup(): Promise<Result<void, RootKeyError>> {
+export function enableICloudBackup(): Promise<Result<void, RootKeyError>> {
+  return trackRootKeyOperation(enableICloudBackupAtEpoch(captureLocalDataEpoch()));
+}
+
+async function enableICloudBackupAtEpoch(
+  writeEpoch: LocalDataEpoch,
+): Promise<Result<void, RootKeyError>> {
+  if (!canCommitLocalData(writeEpoch)) return err(localDataWipeError());
+
   let mnemonic: string | null;
   try {
     mnemonic = await activeStorage.getMnemonic();
@@ -406,8 +512,11 @@ export async function enableICloudBackup(): Promise<Result<void, RootKeyError>> 
     return err(toStorageError(e));
   }
   if (!mnemonic) return err({ kind: 'notProvisioned' });
+  if (!canCommitLocalData(writeEpoch)) return err(localDataWipeError());
   try {
-    await activeSyncStorage.setSyncedMnemonic(mnemonic);
+    if (!(await persistSyncedMnemonicForEpoch(mnemonic, writeEpoch))) {
+      return err(localDataWipeError());
+    }
   } catch (e) {
     return err(toStorageError(e));
   }
@@ -443,13 +552,22 @@ export type RootKeyRecovery =
  * this function only rehydrates a phrase the user already chose to back up; it
  * never prompts, logs, or returns the plaintext mnemonic.
  */
-export async function restoreRootKeyFromICloud(): Promise<Result<RootKeyRecovery, RootKeyError>> {
+export function restoreRootKeyFromICloud(): Promise<Result<RootKeyRecovery, RootKeyError>> {
+  return trackRootKeyOperation(restoreRootKeyFromICloudAtEpoch(captureLocalDataEpoch()));
+}
+
+async function restoreRootKeyFromICloudAtEpoch(
+  writeEpoch: LocalDataEpoch,
+): Promise<Result<RootKeyRecovery, RootKeyError>> {
+  if (!canCommitLocalData(writeEpoch)) return err(localDataWipeError());
+
   let local: string | null;
   try {
     local = await activeStorage.getMnemonic();
   } catch (e) {
     return err(toStorageError(e));
   }
+  if (!canCommitLocalData(writeEpoch)) return err(localDataWipeError());
   if (local) {
     const localDid = deriveDidFromMnemonic(local);
     if (!localDid.ok) return localDid;
@@ -462,6 +580,7 @@ export async function restoreRootKeyFromICloud(): Promise<Result<RootKeyRecovery
   } catch (e) {
     return err(toStorageError(e));
   }
+  if (!canCommitLocalData(writeEpoch)) return err(localDataWipeError());
   if (!synced) return ok({ kind: 'notFound' });
 
   const normalized = normalizeMnemonic(synced);
@@ -470,7 +589,9 @@ export async function restoreRootKeyFromICloud(): Promise<Result<RootKeyRecovery
   // swallowed into a fresh-identity path.
   if (!syncedDid.ok) return syncedDid;
   try {
-    await activeStorage.setMnemonic(normalized);
+    if (!(await persistLocalMnemonicForEpoch(normalized, writeEpoch))) {
+      return err(localDataWipeError());
+    }
   } catch (e) {
     return err(toStorageError(e));
   }
@@ -542,4 +663,21 @@ export async function deleteRootKey(): Promise<void> {
   } catch {
     // best-effort — see doc above.
   }
+}
+
+/**
+ * Production-wipe deletion. Unlike the general reset helper above, a wipe
+ * must not report completion while either the local or synchronizable
+ * recovery phrase remains. Both targets are attempted so a retry can make
+ * progress even if only one backend was temporarily unavailable.
+ */
+export async function deleteRootKeyForLocalWipe(): Promise<LocalDeletionResult> {
+  await quiesceRootKeyOperations();
+  const results = await Promise.allSettled([
+    activeStorage.deleteMnemonic(),
+    activeSyncStorage.deleteSyncedMnemonic(),
+  ]);
+  return results.some((result) => result.status === 'rejected')
+    ? deletionFailed()
+    : deletionSucceeded();
 }

@@ -39,6 +39,7 @@ import {
 } from '@/components/scan/PassportSketch';
 import { ThemedButton } from '@/components/themed';
 import { Colors } from '@/constants/Colors';
+import { useTranslation } from '@/i18n';
 import { useCameraPermission } from '@/scan/useCameraPermission';
 
 export interface PassportMRZDraft {
@@ -54,6 +55,8 @@ export interface MRZCameraStepProps {
   readonly onScanned: (draft: PassportMRZDraft) => void;
   readonly onCancel: () => void;
   readonly onSwitchToManual: () => void;
+  /** Defaults to product-safe copy for onboarding and other existing callers. */
+  readonly developerMode?: boolean;
 }
 
 /**
@@ -127,7 +130,26 @@ interface PhaseCopy {
   readonly secondary?: string;
 }
 
+/** Product-facing translation keys for the normal scan flow. */
 const PHASE_COPY: Record<ScanPhase, PhaseCopy> = {
+  idle: {
+    primary: 'passportSetup.camera.align',
+    secondary: 'passportSetup.camera.photoPage',
+  },
+  detecting: {
+    primary: 'passportSetup.camera.reading',
+  },
+  struggling: {
+    primary: 'passportSetup.camera.unclear',
+    secondary: 'passportSetup.camera.recovery',
+  },
+  confirmed: {
+    primary: 'passportSetup.camera.confirmed',
+  },
+};
+
+/** Raw scanner diagnostics remain available only under the global Developer Mode. */
+const DEVELOPER_PHASE_COPY: Record<ScanPhase, PhaseCopy> = {
   idle: {
     primary: 'Align passport MRZ here',
     secondary: 'Photo page facing the camera',
@@ -155,7 +177,9 @@ export function MRZCameraStep({
   onScanned,
   onCancel,
   onSwitchToManual,
+  developerMode = false,
 }: MRZCameraStepProps): ReactNode {
+  const { t } = useTranslation();
   const permission = useCameraPermission();
   const device = useCameraDevice('back');
   const [draft, setDraft] = useState<PassportMRZDraft | null>(null);
@@ -519,10 +543,20 @@ export function MRZCameraStep({
     return (
       <View style={styles.permissionScreen}>
         <Text style={styles.permissionText}>
-          {permission === 'pending' ? 'Requesting camera…' : 'Camera permission required.'}
+          {developerMode
+            ? permission === 'pending'
+              ? 'Requesting camera…'
+              : 'Camera permission required.'
+            : permission === 'pending'
+              ? t('passportSetup.camera.permissionRequesting')
+              : t('passportSetup.camera.permissionRequired')}
         </Text>
         <View style={{ marginTop: 16 }}>
-          <ThemedButton label="Enter Manually" variant="inverted" onPress={onSwitchToManual} />
+          <ThemedButton
+            label={developerMode ? 'Enter Manually' : t('passportSetup.camera.enterManual')}
+            variant="inverted"
+            onPress={onSwitchToManual}
+          />
         </View>
       </View>
     );
@@ -531,9 +565,15 @@ export function MRZCameraStep({
   if (!device) {
     return (
       <View style={styles.permissionScreen}>
-        <Text style={styles.permissionText}>No camera available.</Text>
+        <Text style={styles.permissionText}>
+          {developerMode ? 'No camera available.' : t('passportSetup.camera.noCamera')}
+        </Text>
         <View style={{ marginTop: 16 }}>
-          <ThemedButton label="Enter Manually" variant="inverted" onPress={onSwitchToManual} />
+          <ThemedButton
+            label={developerMode ? 'Enter Manually' : t('passportSetup.camera.enterManual')}
+            variant="inverted"
+            onPress={onSwitchToManual}
+          />
         </View>
       </View>
     );
@@ -549,26 +589,53 @@ export function MRZCameraStep({
         constraints={cameraConstraints}
       />
 
-      <NavBar onCancel={onCancel} onSwitchToManual={onSwitchToManual} />
+      <NavBar
+        developerMode={developerMode}
+        onCancel={onCancel}
+        onSwitchToManual={onSwitchToManual}
+      />
 
       <View style={styles.overlayContainer}>
         <PassportSketch state={PHASE_TO_SKETCH_STATE[phase]} />
-        {draft === null ? <ScanStatus phase={phase} /> : null}
+        {draft === null ? <ScanStatus phase={phase} developerMode={developerMode} /> : null}
       </View>
 
       <View style={styles.footer}>
         {draft ? (
-          <ConfirmationCard draft={draft} onRescan={handleRescan} onUseThis={handleUseThis} />
+          <ConfirmationCard
+            developerMode={developerMode}
+            draft={draft}
+            onRescan={handleRescan}
+            onUseThis={handleUseThis}
+          />
         ) : (
-          <InstructionFooter onSwitchToManual={onSwitchToManual} />
+          <InstructionFooter
+            developerMode={developerMode}
+            onSwitchToManual={onSwitchToManual}
+          />
         )}
       </View>
     </View>
   );
 }
 
-function ScanStatus({ phase }: { phase: ScanPhase }) {
-  const copy = PHASE_COPY[phase];
+function ScanStatus({
+  phase,
+  developerMode,
+}: {
+  phase: ScanPhase;
+  developerMode: boolean;
+}) {
+  const { t } = useTranslation();
+  const configuredCopy = developerMode ? DEVELOPER_PHASE_COPY[phase] : PHASE_COPY[phase];
+  const copy = developerMode
+    ? configuredCopy
+    : {
+        primary: t(configuredCopy.primary),
+        ...(configuredCopy.secondary
+          ? { secondary: t(configuredCopy.secondary) }
+          : {}),
+      };
   const tone: 'warning' | 'normal' = phase === 'struggling' ? 'warning' : 'normal';
   return (
     <View style={styles.statusGroup} pointerEvents="none">
@@ -595,38 +662,60 @@ function ScanStatus({ phase }: { phase: ScanPhase }) {
 }
 
 function NavBar({
+  developerMode,
   onCancel,
   onSwitchToManual,
 }: {
+  developerMode: boolean;
   onCancel: () => void;
   onSwitchToManual: () => void;
 }) {
+  const { t } = useTranslation();
   return (
     <View style={styles.navBar}>
       <Pressable onPress={onCancel} accessibilityRole="button" style={styles.navBarButton}>
-        <Text style={styles.navBarText}>Cancel</Text>
+        <Text style={styles.navBarText}>
+          {developerMode ? 'Cancel' : t('passportSetup.camera.cancel')}
+        </Text>
       </Pressable>
-      <Text style={styles.navBarTitle}>Scan Passport</Text>
+      <Text style={styles.navBarTitle}>
+        {developerMode ? 'Scan Passport' : t('passportSetup.camera.title')}
+      </Text>
       <Pressable
         onPress={onSwitchToManual}
         accessibilityRole="button"
-        accessibilityLabel="Enter passport MRZ manually"
+        accessibilityLabel={
+          developerMode
+            ? 'Enter passport MRZ manually'
+            : t('passportSetup.camera.manualA11y')
+        }
         style={[styles.navBarButton, { alignItems: 'flex-end' }]}
       >
-        <Text style={styles.navBarText}>Manual</Text>
+        <Text style={styles.navBarText}>
+          {developerMode ? 'Manual' : t('passportSetup.camera.manual')}
+        </Text>
       </Pressable>
     </View>
   );
 }
 
-function InstructionFooter({ onSwitchToManual }: { onSwitchToManual: () => void }) {
+function InstructionFooter({
+  developerMode,
+  onSwitchToManual,
+}: {
+  developerMode: boolean;
+  onSwitchToManual: () => void;
+}) {
+  const { t } = useTranslation();
   return (
     <View style={{ gap: 12, alignItems: 'center' }}>
       <Text style={styles.instructionLabel}>
-        Or type the MRZ from the passport's photo page.
+        {developerMode
+          ? "Or type the MRZ from the passport's photo page."
+          : t('passportSetup.camera.footer')}
       </Text>
       <ThemedButton
-        label="Enter Manually"
+        label={developerMode ? 'Enter Manually' : t('passportSetup.camera.enterManual')}
         variant="inverted"
         onPress={onSwitchToManual}
       />
@@ -635,34 +724,61 @@ function InstructionFooter({ onSwitchToManual }: { onSwitchToManual: () => void 
 }
 
 function ConfirmationCard({
+  developerMode,
   draft,
   onRescan,
   onUseThis,
 }: {
+  developerMode: boolean;
   draft: PassportMRZDraft;
   onRescan: () => void;
   onUseThis: () => void;
 }) {
+  const { t } = useTranslation();
   return (
     <View style={styles.confirmationCard}>
       <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
         <SfIcon name="checkmark.seal.fill" size={18} color={Colors.terminalGreen} />
-        <Text style={styles.confirmationTitle}>MRZ Detected</Text>
+        <Text style={styles.confirmationTitle}>
+          {developerMode ? 'MRZ Detected' : t('passportSetup.camera.confirmed')}
+        </Text>
       </View>
 
       <View style={{ gap: 6 }}>
-        <InfoRow label="Passport" value={draft.passportNumber} />
-        <InfoRow label="Nationality" value={draft.nationalityCode} />
-        <InfoRow label="Date of Birth" value={formatYyMmDd(draft.dateOfBirth)} />
-        <InfoRow label="Expiry" value={formatYyMmDd(draft.expiryDate)} />
+        <InfoRow
+          label={developerMode ? 'Passport' : t('passportSetup.details.passportNumber')}
+          value={draft.passportNumber}
+        />
+        <InfoRow
+          label={developerMode ? 'Nationality' : t('passportSetup.camera.nationality')}
+          value={draft.nationalityCode}
+        />
+        <InfoRow
+          label={developerMode ? 'Date of Birth' : t('passportSetup.camera.birthDate')}
+          value={formatYyMmDd(draft.dateOfBirth)}
+        />
+        <InfoRow
+          label={developerMode ? 'Expiry' : t('passportSetup.camera.expiry')}
+          value={formatYyMmDd(draft.expiryDate)}
+        />
       </View>
 
       <View style={{ flexDirection: 'row', gap: 12, paddingTop: 4 }}>
         <View style={{ flex: 1 }}>
-          <ThemedButton label="Rescan" variant="secondary" fullWidth onPress={onRescan} />
+          <ThemedButton
+            label={developerMode ? 'Rescan' : t('passportSetup.camera.rescan')}
+            variant="secondary"
+            fullWidth
+            onPress={onRescan}
+          />
         </View>
         <View style={{ flex: 1 }}>
-          <ThemedButton label="Use This" variant="primary" fullWidth onPress={onUseThis} />
+          <ThemedButton
+            label={developerMode ? 'Use This' : t('passportSetup.camera.useThis')}
+            variant="primary"
+            fullWidth
+            onPress={onUseThis}
+          />
         </View>
       </View>
     </View>

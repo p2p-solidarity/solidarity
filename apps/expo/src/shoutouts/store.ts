@@ -39,6 +39,10 @@ import { create } from 'zustand';
 import { decryptJson, encryptJson } from '@/storage/encryptionManager';
 import { getMmkv } from '@/storage/mmkv';
 import { ManifestStorage } from '@/storage/manifestStorage';
+import {
+  canCommitLocalData,
+  captureLocalDataEpoch,
+} from '@/settings/localDataWipeBarrier';
 
 import {
   aggregateByAuthor,
@@ -75,6 +79,7 @@ export interface Shoutout {
 }
 
 const KEY_PREFIX = 'shoutout:';
+let localWipeGeneration = 0;
 
 interface ShoutoutStoreState {
   /** Frame-1-safe non-sensitive list, newest-first. */
@@ -97,6 +102,8 @@ interface ShoutoutStoreState {
   readonly loadDetail: (id: string) => Promise<Shoutout | null>;
   readonly add: (s: Shoutout) => Promise<void>;
   readonly remove: (id: string) => Promise<void>;
+  /** Drop every live reference after the encrypted local store is wiped. */
+  readonly resetForLocalWipe: () => void;
 }
 
 function sortNewestFirst(records: readonly Shoutout[]): readonly Shoutout[] {
@@ -115,11 +122,15 @@ export const useShoutoutStore = create<ShoutoutStoreState>((set, get) => ({
   hydrated: false,
 
   seedFromManifest: () => {
+    if (!canCommitLocalData(captureLocalDataEpoch())) return;
     const seed = ManifestStorage.get<ShoutoutManifestEntry>(SHOUTOUTS_MANIFEST_SCOPE);
     if (seed) set({ manifest: seed });
   },
 
   hydrate: async () => {
+    const generation = localWipeGeneration;
+    const writeEpoch = captureLocalDataEpoch();
+    if (!canCommitLocalData(writeEpoch)) return;
     if (get().detailsHydrated) return;
     const details = new Map<string, Shoutout>();
     for (const k of getMmkv().getAllKeys()) {
@@ -128,6 +139,7 @@ export const useShoutoutStore = create<ShoutoutStoreState>((set, get) => ({
       if (!raw) continue;
       try {
         const item = await decryptJson<Shoutout>(raw);
+        if (generation !== localWipeGeneration || !canCommitLocalData(writeEpoch)) return;
         // JSON round-trip strips the Date prototype; rebuild it so sort
         // + downstream `.getTime()` keep working. Same pattern as Swift
         // ShoutoutStore which keeps Date objects through Codable.
@@ -142,6 +154,7 @@ export const useShoutoutStore = create<ShoutoutStoreState>((set, get) => ({
     }
     const items = detailsToItems(details);
     const manifest = items.map(toShoutoutManifest);
+    if (generation !== localWipeGeneration || !canCommitLocalData(writeEpoch)) return;
     ManifestStorage.set(SHOUTOUTS_MANIFEST_SCOPE, manifest);
     set({
       details,
@@ -153,12 +166,16 @@ export const useShoutoutStore = create<ShoutoutStoreState>((set, get) => ({
   },
 
   loadDetail: async (id) => {
+    const generation = localWipeGeneration;
+    const writeEpoch = captureLocalDataEpoch();
+    if (!canCommitLocalData(writeEpoch)) return null;
     const cached = get().details.get(id);
     if (cached) return cached;
     const raw = getMmkv().getString(`${KEY_PREFIX}${id}`);
     if (!raw) return null;
     try {
       const decoded = await decryptJson<Shoutout>(raw);
+      if (generation !== localWipeGeneration || !canCommitLocalData(writeEpoch)) return null;
       const item: Shoutout = { ...decoded, createdAt: new Date(decoded.createdAt) };
       set((s) => {
         const nextDetails = new Map(s.details);
@@ -172,7 +189,12 @@ export const useShoutoutStore = create<ShoutoutStoreState>((set, get) => ({
   },
 
   add: async (s) => {
-    getMmkv().set(`${KEY_PREFIX}${s.id}`, await encryptJson(s));
+    const generation = localWipeGeneration;
+    const writeEpoch = captureLocalDataEpoch();
+    if (!canCommitLocalData(writeEpoch)) return;
+    const encrypted = await encryptJson(s);
+    if (generation !== localWipeGeneration || !canCommitLocalData(writeEpoch)) return;
+    getMmkv().set(`${KEY_PREFIX}${s.id}`, encrypted);
     set((state) => {
       const nextDetails = new Map(state.details);
       nextDetails.set(s.id, s);
@@ -188,6 +210,7 @@ export const useShoutoutStore = create<ShoutoutStoreState>((set, get) => ({
   },
 
   remove: async (id) => {
+    if (!canCommitLocalData(captureLocalDataEpoch())) return;
     getMmkv().remove(`${KEY_PREFIX}${id}`);
     set((state) => {
       const nextDetails = new Map(state.details);
@@ -202,6 +225,17 @@ export const useShoutoutStore = create<ShoutoutStoreState>((set, get) => ({
         items: nextItems,
         manifest: nextManifest,
       };
+    });
+  },
+
+  resetForLocalWipe: () => {
+    localWipeGeneration += 1;
+    set({
+      manifest: [],
+      details: new Map(),
+      detailsHydrated: true,
+      items: [],
+      hydrated: true,
     });
   },
 }));
