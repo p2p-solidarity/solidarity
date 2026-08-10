@@ -20,12 +20,13 @@ import { pageHeaderLayout } from './pageHeaderLayout';
 import { ProfileShareSurface } from './ProfileShareSurface';
 import { ProfileInlineQr } from './ProfileShareSurface';
 import { useProfileShareSelection } from './useProfileShareSelection';
-import { displayProfileShareUrl } from './meProfileModel';
+import { displayProfileShareUrl, type PublicPageShareSource } from './meProfileModel';
 
 export interface ProfileHeroProps {
   readonly record: ProfileRecord;
   readonly shareRecord: ProfileRecord;
   readonly shareJws: string;
+  readonly publicPage: PublicPageShareSource | null;
   readonly nostrShortUrlReady: boolean;
   readonly onEditAvatar: () => void;
   readonly onOpenAppearance: () => void;
@@ -36,6 +37,7 @@ export function ProfileHero({
   record,
   shareRecord,
   shareJws,
+  publicPage,
   nostrShortUrlReady,
   onEditAvatar,
   onOpenAppearance,
@@ -45,7 +47,13 @@ export function ProfileHero({
   const { width, fontScale } = useWindowDimensions();
   const layout = pageHeaderLayout(width, fontScale);
   const [localAvatar, setLocalAvatar] = useState(readLocalAvatarUri);
-  const shareSelection = useProfileShareSelection(shareRecord, shareJws, nostrShortUrlReady);
+  const shareSelection = useProfileShareSelection(
+    shareRecord,
+    shareJws,
+    nostrShortUrlReady,
+    0,
+    publicPage,
+  );
   const shareUrl = shareSelection.kind === 'ready' ? shareSelection.selected.url : null;
   const displayShareUrl = shareSelection.kind === 'ready'
     ? displayProfileShareUrl(shareSelection.selected)
@@ -131,6 +139,7 @@ export function ProfileHero({
           <ProfileHeaderActions
             shareRecord={shareRecord}
             shareJws={shareJws}
+            publicPage={publicPage}
             nostrShortUrlReady={nostrShortUrlReady}
             appearanceLabel={t('mePage.appearance')}
             settingsLabel={t('mePage.settings')}
@@ -145,6 +154,7 @@ export function ProfileHero({
           <ProfileHeaderActions
             shareRecord={shareRecord}
             shareJws={shareJws}
+            publicPage={publicPage}
             nostrShortUrlReady={nostrShortUrlReady}
             appearanceLabel={t('mePage.appearance')}
             settingsLabel={t('mePage.settings')}
@@ -157,6 +167,7 @@ export function ProfileHero({
       <ProfileInlineQr
         record={shareRecord}
         jws={shareJws}
+        publicPage={publicPage}
         nostrShortUrlReady={nostrShortUrlReady}
       />
     </View>
@@ -166,6 +177,7 @@ export function ProfileHero({
 function ProfileHeaderActions({
   shareRecord,
   shareJws,
+  publicPage,
   nostrShortUrlReady,
   appearanceLabel,
   settingsLabel,
@@ -174,6 +186,7 @@ function ProfileHeaderActions({
 }: {
   readonly shareRecord: ProfileRecord;
   readonly shareJws: string;
+  readonly publicPage: PublicPageShareSource | null;
   readonly nostrShortUrlReady: boolean;
   readonly appearanceLabel: string;
   readonly settingsLabel: string;
@@ -185,6 +198,7 @@ function ProfileHeaderActions({
       <ProfileShareSurface
         record={shareRecord}
         jws={shareJws}
+        publicPage={publicPage}
         nostrShortUrlReady={nostrShortUrlReady}
       />
       <ProfileHeaderAction

@@ -1,17 +1,22 @@
-import type { ReactNode } from 'react';
-import { ScrollView } from 'react-native';
+import { useState, type ReactNode } from 'react';
+import { ScrollView, View } from 'react-native';
 import Animated, { FadeInDown } from 'react-native-reanimated';
 
 import { ThemedText } from '@/components/themed';
 import { STAGGER_MS } from '@/feedback/motion';
 import { useTranslation } from '@/i18n';
+import { usePageDesignStore } from '@/page/pageDesignStore';
 import type { LinkVisibility } from '@/profile/projection';
 import type { ProfileRecord } from '@solidarity/shared';
+import type { PublicPageShareSource } from './meProfileModel';
 
 import { ProfileBadgeChips } from './ProfileBadgeChips';
 import { ProfileHero } from './ProfileHero';
 import { ProfileLinksList } from './ProfileLinksList';
 import { ProfileSectionsList } from './ProfileSectionsList';
+import { PageAppearanceSheet } from './PageAppearanceSheet';
+import { PageLapsedCheckAlert } from './PageLapsedCheckAlert';
+import { PageLivePreview } from './PageLivePreview';
 
 const ENTRANCE_DURATION_MS = 240;
 
@@ -23,6 +28,8 @@ export interface MeProfilePageProps {
   readonly linkVisibility: readonly LinkVisibility[];
   /** The public projection stored by ATProto/Nostr binding backends. */
   readonly publicRecord: ProfileRecord;
+  /** Separately signed public projection used for the public `/name` link. */
+  readonly publicPage: PublicPageShareSource | null;
   /** The SHARED projection (public + link-only links, T7) — what the QR /
    *  URL-fragment share surface encodes so a private link never leaves in a
    *  scanned code. Falls back to the full record for a pre-T7 profile. */
@@ -33,7 +40,6 @@ export interface MeProfilePageProps {
   readonly onEdit: () => void;
   readonly onEditAvatar: () => void;
   readonly onAddLink: () => void;
-  readonly onOpenAppearance: () => void;
   readonly onOpenSettings: () => void;
   readonly onOpenBindings: () => void;
 }
@@ -43,6 +49,7 @@ export function MeProfilePage({
   jws,
   linkVisibility,
   publicRecord,
+  publicPage,
   shareRecord,
   shareJws,
   nostrShortUrlReady,
@@ -50,11 +57,13 @@ export function MeProfilePage({
   onEdit,
   onEditAvatar,
   onAddLink,
-  onOpenAppearance,
   onOpenSettings,
   onOpenBindings,
 }: MeProfilePageProps): ReactNode {
   const { t } = useTranslation();
+  const [appearanceOpen, setAppearanceOpen] = useState(false);
+  const pageDesignStatus = usePageDesignStore((state) => state.status);
+  const pageDesign = usePageDesignStore((state) => state.design);
   const entrance = (delay: number) => FadeInDown.duration(ENTRANCE_DURATION_MS).delay(delay);
 
   return (
@@ -66,12 +75,15 @@ export function MeProfilePage({
           record={record}
           shareRecord={shareRecord}
           shareJws={shareJws}
+          publicPage={publicPage}
           nostrShortUrlReady={nostrShortUrlReady}
           onEditAvatar={onEditAvatar}
-          onOpenAppearance={onOpenAppearance}
+          onOpenAppearance={() => { setAppearanceOpen(true); }}
           onOpenSettings={onOpenSettings}
         />
       </Animated.View>
+
+      <PageLapsedCheckAlert record={record} nostrUploaded={nostrShortUrlReady} />
 
       <Animated.View entering={entrance(STAGGER_MS)}>
         <ProfileLinksList
@@ -84,6 +96,18 @@ export function MeProfilePage({
 
       <Animated.View entering={entrance(STAGGER_MS * 2)}>
         <ProfileSectionsList linkCount={record.links.length} />
+        {pageDesignStatus === 'ready' ? (
+          <View className="mt-5 gap-3 px-4">
+            <ThemedText accessibilityRole="header" variant="label" tone="tertiary">
+              {t('pageDesign.preview')}
+            </ThemedText>
+            <PageLivePreview
+              record={publicRecord}
+              blocks={pageDesign.blocks}
+              appearance={pageDesign.appearance}
+            />
+          </View>
+        ) : null}
       </Animated.View>
 
       <Animated.View entering={entrance(STAGGER_MS * 3)}>
@@ -102,6 +126,12 @@ export function MeProfilePage({
           onManageBindings={onOpenBindings}
         />
       </Animated.View>
+
+      <PageAppearanceSheet
+        visible={appearanceOpen}
+        record={publicRecord}
+        onClose={() => { setAppearanceOpen(false); }}
+      />
     </ScrollView>
   );
 }

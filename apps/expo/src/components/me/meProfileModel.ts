@@ -46,24 +46,40 @@ export interface ProfileShareModel {
   readonly oversize: boolean;
 }
 
+/**
+ * A separately signed `scope:'public'` projection. `/name` is a public
+ * destination, so it must never reuse the broader QR projection that may
+ * legitimately contain link-only fields.
+ */
+export interface PublicPageShareSource {
+  readonly record: ProfileRecord;
+  readonly jws: string;
+}
+
 export function buildProfileShareModel(
   record: ProfileRecord,
   jws: string,
   publicPageUsername = '',
+  publicPage: PublicPageShareSource | null = null,
 ): ProfileShareModel {
   const fragment = encodeFragment(jws);
+  const publicFragment =
+    publicPage?.record.scope === 'public' && publicPage.jws.length > 0
+      ? encodeFragment(publicPage.jws)
+      : null;
   const nostrClaim = record.alsoKnownAs.find((value) => value.startsWith('nostr:npub'));
   const validUsername = validatePublicPageUsername(publicPageUsername).kind === 'valid'
     ? publicPageUsername
     : null;
   return {
     offlineUrl: `${PROFILE_PAGE_URL}${fragment.fragment}`,
-    // Keep the signed page in the hash so /name works offline before a
-    // resolver/backend exists. UI presents only the stable short path.
-    usernameUrl: validUsername
-      ? `${PUBLIC_PAGE_ORIGIN}/${validUsername}#${fragment.fragment}`
+    // Keep the signed public page in the hash so /name works offline before
+    // a resolver/backend exists. This deliberately uses ONLY `scope:public`;
+    // the QR fragment may additionally contain link-only fields.
+    usernameUrl: validUsername && publicFragment !== null && !publicFragment.oversize
+      ? `${PUBLIC_PAGE_ORIGIN}/${validUsername}#${publicFragment.fragment}`
       : null,
-    usernameDisplayUrl: validUsername
+    usernameDisplayUrl: validUsername && publicFragment !== null && !publicFragment.oversize
       ? `${PUBLIC_PAGE_ORIGIN}/${validUsername}`
       : null,
     shortUrl: nostrClaim ? `${PROFILE_PAGE_URL}${nostrClaim}` : null,

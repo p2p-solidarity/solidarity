@@ -9,7 +9,7 @@ import {
   verifiedHandleShareCandidates,
   type HandleShareCandidate,
 } from '@/components/me/meProfileModel';
-import type { ProfileRecord } from '@solidarity/shared';
+import { encodeFragment, type ProfileRecord } from '@solidarity/shared';
 
 const PROFILE: ProfileRecord = {
   v: 1,
@@ -66,6 +66,39 @@ describe('profile share model', () => {
     expect(model.offlineUrl).not.toContain('SOLIDARITY::');
     expect(selectProfileShareUrl(model, true)).toBe('https://app.solidarity.gg/#nostr:npub1alice');
     expect(selectProfileShareUrl(model, false)).toBe(model.offlineUrl);
+  });
+
+  it('builds /name from the signed public projection, never the broader QR projection', () => {
+    const sharedJws = 'header.shared.signature';
+    const publicJws = 'header.public.signature';
+    const shared = {
+      ...PROFILE,
+      scope: 'shared' as const,
+      links: [
+        { label: 'Public', url: 'https://public.example' },
+        { label: 'Card only', url: 'https://card-only.example' },
+      ],
+    };
+    const publicProjection = {
+      ...PROFILE,
+      scope: 'public' as const,
+      links: [{ label: 'Public', url: 'https://public.example' }],
+    };
+
+    const model = buildProfileShareModel(shared, sharedJws, 'alice', {
+      record: publicProjection,
+      jws: publicJws,
+    });
+
+    expect(model.usernameUrl).toBe(`https://creds.id/alice#${encodeFragment(publicJws).fragment}`);
+    expect(model.usernameUrl).not.toContain(encodeFragment(sharedJws).fragment);
+  });
+
+  it('withholds /name until there is a separately signed public projection', () => {
+    const model = buildProfileShareModel(PROFILE, 'header.payload.signature', 'alice');
+
+    expect(model.usernameUrl).toBeNull();
+    expect(model.usernameDisplayUrl).toBeNull();
   });
 });
 

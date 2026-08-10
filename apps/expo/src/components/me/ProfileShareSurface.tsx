@@ -22,9 +22,13 @@ import {
   type ProfileShareQrState,
   type ReadyProfileShareModel,
 } from './ProfileShareSheetContent';
+import { profileShareQrIsOversize } from './profileShareQr';
 import { useProfileShareSelection } from './useProfileShareSelection';
-import type { ProfileShareUrlCandidate } from './meProfileModel';
-import { displayProfileShareUrl } from './meProfileModel';
+import {
+  displayProfileShareUrl,
+  type ProfileShareUrlCandidate,
+  type PublicPageShareSource,
+} from './meProfileModel';
 
 const QR_SHEET_DURATION_MS = 240;
 
@@ -33,12 +37,15 @@ type ShareModelState = ReadyProfileShareModel | { readonly kind: 'error' };
 export interface ProfileShareSurfaceProps {
   readonly record: ProfileRecord;
   readonly jws: string;
+  /** Separately signed public projection used exclusively for `/name`. */
+  readonly publicPage?: PublicPageShareSource | null;
   readonly nostrShortUrlReady: boolean;
 }
 
 export function ProfileShareSurface({
   record,
   jws,
+  publicPage = null,
   nostrShortUrlReady,
 }: ProfileShareSurfaceProps): ReactNode {
   const { t } = useTranslation();
@@ -62,6 +69,7 @@ export function ProfileShareSurface({
         visible={sheetOpen}
         record={record}
         jws={jws}
+        publicPage={publicPage}
         nostrShortUrlReady={nostrShortUrlReady}
         onClose={() => {
           setSheetOpen(false);
@@ -79,6 +87,7 @@ const INLINE_QR_SIZE = 88;
 export function ProfileInlineQr({
   record,
   jws,
+  publicPage = null,
   nostrShortUrlReady,
 }: ProfileShareSurfaceProps): ReactNode {
   const { t } = useTranslation();
@@ -88,13 +97,17 @@ export function ProfileInlineQr({
     jws,
     nostrShortUrlReady,
     inlineRetryNonce,
+    publicPage,
   );
   const selected = shareState.kind === 'ready' ? shareState.selected : null;
+  const qrBlockedBySize =
+    shareState.kind === 'ready' &&
+    profileShareQrIsOversize(shareState.selected, shareState.model);
   const [imageUri, setImageUri] = useState<string | null>(null);
   const [failed, setFailed] = useState(false);
 
   useEffect(() => {
-    if (selected === null) {
+    if (selected === null || qrBlockedBySize) {
       setImageUri(null);
       setFailed(false);
       return;
@@ -112,7 +125,7 @@ export function ProfileInlineQr({
     return () => {
       cancelled = true;
     };
-  }, [selected?.url]);
+  }, [qrBlockedBySize, selected?.url]);
 
   if (shareState.kind === 'error') {
     return (
@@ -163,13 +176,13 @@ export function ProfileInlineQr({
             backgroundColor: Colors.cardBg,
             borderRadius: 12,
           }}>
-          {imageUri ? (
+          {!qrBlockedBySize && imageUri ? (
             <Image
               source={{ uri: imageUri }}
               contentFit="contain"
               style={{ width: INLINE_QR_SIZE - 8, height: INLINE_QR_SIZE - 8 }}
             />
-          ) : failed ? (
+          ) : qrBlockedBySize || failed ? (
             <SfIcon name="exclamationmark.triangle" size={20} color={Colors.destructive} />
           ) : (
             <ActivityIndicator color={Colors.primaryMauve} />
@@ -179,8 +192,12 @@ export function ProfileInlineQr({
           <ThemedText variant="label" numberOfLines={1}>
             {displayUrl}
           </ThemedText>
-          <ThemedText variant="bodySmall" tone="secondary">
-            {t('mePage.inlineQrHint')}
+          <ThemedText variant="bodySmall" tone={qrBlockedBySize || failed ? 'error' : 'secondary'}>
+            {qrBlockedBySize
+              ? t('meShare.qrTooLarge')
+              : failed
+                ? t('meShare.qrError')
+                : t('mePage.inlineQrHint')}
           </ThemedText>
           <View className="flex-row items-center gap-1">
             <SfIcon name="doc.on.doc" size={13} color={Colors.primaryMauve} />
@@ -198,12 +215,14 @@ function ProfileQrSheet({
   visible,
   record,
   jws,
+  publicPage,
   nostrShortUrlReady,
   onClose,
 }: {
   readonly visible: boolean;
   readonly record: ProfileRecord;
   readonly jws: string;
+  readonly publicPage: PublicPageShareSource | null;
   readonly nostrShortUrlReady: boolean;
   readonly onClose: () => void;
 }): ReactNode {
@@ -218,7 +237,13 @@ function ProfileQrSheet({
   });
   const [qrRetryNonce, setQrRetryNonce] = useState(0);
 
-  const baseShareState = useProfileShareSelection(record, jws, nostrShortUrlReady, shareRetryNonce);
+  const baseShareState = useProfileShareSelection(
+    record,
+    jws,
+    nostrShortUrlReady,
+    shareRetryNonce,
+    publicPage,
+  );
   const shareState = useMemo<ShareModelState>(() => {
     if (baseShareState.kind === 'error') return baseShareState;
     const selected =
@@ -232,10 +257,17 @@ function ProfileQrSheet({
   }, [visible]);
 
   const activeUrl = shareState.kind === 'ready' ? shareState.selected.url : null;
+  const qrBlockedBySize =
+    shareState.kind === 'ready' &&
+    profileShareQrIsOversize(shareState.selected, shareState.model);
 
   useEffect(() => {
     if (!visible || activeUrl === null) {
       setQrState({ kind: 'loading', url: activeUrl });
+      return;
+    }
+    if (qrBlockedBySize) {
+      setQrState({ kind: 'oversize', url: activeUrl });
       return;
     }
 
@@ -252,7 +284,7 @@ function ProfileQrSheet({
     return () => {
       cancelled = true;
     };
-  }, [activeUrl, qrRetryNonce, visible]);
+  }, [activeUrl, qrBlockedBySize, qrRetryNonce, visible]);
 
   const copyUrl = async (url: string): Promise<void> => {
     try {

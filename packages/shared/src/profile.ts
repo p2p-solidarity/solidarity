@@ -39,7 +39,13 @@ export const PROFILE_VERSION = 1;
  * `url.startsWith('http')`-style checks.
  */
 const LINK_URL_SCHEME_RE = /^https?:\/\//i;
-const isRenderableLinkUrl = (url: string): boolean => url === url.trim() && LINK_URL_SCHEME_RE.test(url);
+/**
+ * Shared navigation boundary for signed profile/Page links. Rendering layers
+ * must still call this before handing a locally edited URL to `Linking`,
+ * because a draft has not been through `parseProfile` yet.
+ */
+export const isRenderableLinkUrl = (url: string): boolean =>
+  url === url.trim() && LINK_URL_SCHEME_RE.test(url);
 
 export const profileLinkSchema = z
   .object({
@@ -60,6 +66,123 @@ export const profileBadgeSchema = z
   })
   .strict();
 export type ProfileBadge = z.infer<typeof profileBadgeSchema>;
+
+/**
+ * Public Page layout — the styling and content order that travels with a
+ * signed Profile Record. It deliberately excludes local UI state (dismissed
+ * reminders, editor state, and draft-only values): a QR recipient must see
+ * precisely the layout its owner signed, while device-local controls stay on
+ * the device.
+ *
+ * These bounds are intentionally conservative. A Page still shares the
+ * profile's QR/fragment budget, so an unbounded collection of cards or text
+ * would turn a cosmetic setting into an unscannable payload.
+ */
+export const publicPageBlockTypeSchema = z.enum([
+  'links',
+  'text',
+  'portfolio',
+  'featured',
+  'video',
+  'shop',
+  'leave-card',
+  'booking',
+]);
+export type PublicPageBlockType = z.infer<typeof publicPageBlockTypeSchema>;
+
+const PUBLIC_PAGE_STYLES: Readonly<Record<PublicPageBlockType, readonly string[]>> = {
+  links: ['list'],
+  text: ['plain', 'card'],
+  portfolio: ['grid', 'list', 'carousel'],
+  featured: ['large-card', 'list'],
+  video: ['embed', 'thumbnail'],
+  shop: ['list', 'grid'],
+  'leave-card': ['card', 'button'],
+  booking: ['slots', 'button'],
+};
+
+export const publicPageBlockItemSchema = z
+  .object({
+    id: z.string().min(1).max(64),
+    title: z.string().min(1).max(160),
+    url: z.string().refine(isRenderableLinkUrl, {
+      message: 'must be an http:// or https:// URL with no leading/trailing whitespace',
+    }).optional(),
+    media: z.string().refine(isRenderableLinkUrl, {
+      message: 'must be an http:// or https:// URL with no leading/trailing whitespace',
+    }).optional(),
+    price: z.string().max(64).optional(),
+  })
+  .strict();
+export type PublicPageBlockItem = z.infer<typeof publicPageBlockItemSchema>;
+
+export const publicPageBlockSchema = z
+  .object({
+    id: z.string().min(1).max(64),
+    type: publicPageBlockTypeSchema,
+    title: z.string().min(1).max(120),
+    items: z.array(publicPageBlockItemSchema).max(24),
+    style: z.string().min(1).max(32),
+    visible: z.boolean(),
+    order: z.int().min(0).max(31),
+  })
+  .strict()
+  .superRefine((block, ctx) => {
+    if (!PUBLIC_PAGE_STYLES[block.type].includes(block.style)) {
+      ctx.addIssue({
+        code: 'custom',
+        message: `style is not supported for ${block.type}`,
+        path: ['style'],
+      });
+    }
+  });
+export type PublicPageBlock = z.infer<typeof publicPageBlockSchema>;
+
+export const publicPageAppearanceSchema = z
+  .object({
+    template: z.enum(['cream', 'ink', 'journal', 'gradient', 'night', 'mint', 'sun', 'minimal']),
+    font: z.enum(['sans', 'serif', 'rounded', 'mincho', 'mono']),
+    background: z.enum(['cream', 'white', 'mint', 'rose', 'ink']),
+    customBackground: z.string().regex(/^#[0-9A-Fa-f]{6}$/).nullable(),
+    showBrand: z.boolean(),
+    footerText: z.string().max(40),
+  })
+  .strict();
+export type PublicPageAppearance = z.infer<typeof publicPageAppearanceSchema>;
+
+export const publicPageDesignSchema = z
+  .object({
+    blocks: z.array(publicPageBlockSchema).min(1).max(16),
+    appearance: publicPageAppearanceSchema,
+  })
+  .strict()
+  .superRefine((page, ctx) => {
+    const links = page.blocks.filter((block) => block.type === 'links');
+    const ids = new Set(page.blocks.map((block) => block.id));
+    const itemIds = new Set<string>();
+    if (links.length !== 1 || page.blocks[0]?.type !== 'links') {
+      ctx.addIssue({ code: 'custom', message: 'Page must have exactly one leading Links block', path: ['blocks'] });
+    }
+    if (links[0] && (!links[0].visible || links[0].order !== 0)) {
+      ctx.addIssue({ code: 'custom', message: 'Links block must stay visible at order 0', path: ['blocks', 0] });
+    }
+    if (ids.size !== page.blocks.length) {
+      ctx.addIssue({ code: 'custom', message: 'Page block ids must be unique', path: ['blocks'] });
+    }
+    for (const [index, block] of page.blocks.entries()) {
+      if (block.order !== index) {
+        ctx.addIssue({ code: 'custom', message: 'Page block order must be canonical', path: ['blocks', index, 'order'] });
+      }
+      for (const item of block.items) {
+        if (itemIds.has(item.id)) {
+          ctx.addIssue({ code: 'custom', message: 'Page item ids must be unique', path: ['blocks', index, 'items'] });
+          break;
+        }
+        itemIds.add(item.id);
+      }
+    }
+  });
+export type PublicPageDesign = z.infer<typeof publicPageDesignSchema>;
 
 /**
  * Publication scope of a signed Profile Record (T7, `notes-1.3.3-publishing-
@@ -98,6 +221,9 @@ export const profileRecordSchema = z
     links: z.array(profileLinkSchema),
     alsoKnownAs: z.array(z.string()),
     badges: z.array(profileBadgeSchema),
+    /** Optional for backward compatibility; when present it is signed Page
+     * content, not a local draft. */
+    page: publicPageDesignSchema.optional(),
     /** Non-null once this DID has been superseded by a key rotation (01-spec §3). */
     supersededBy: z.string().nullable(),
     /**

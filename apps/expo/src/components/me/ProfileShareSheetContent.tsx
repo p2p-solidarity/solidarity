@@ -14,13 +14,15 @@ import type {
   ProfileShareUrlCandidate,
 } from './meProfileModel';
 import { displayProfileShareUrl } from './meProfileModel';
+import { profileShareQrIsOversize } from './profileShareQr';
 
 export const PROFILE_SHARE_QR_SIZE = 208;
 
 export type ProfileShareQrState =
   | { readonly kind: 'loading'; readonly url: string | null }
   | { readonly kind: 'ready'; readonly url: string; readonly uri: string }
-  | { readonly kind: 'error'; readonly url: string };
+  | { readonly kind: 'error'; readonly url: string }
+  | { readonly kind: 'oversize'; readonly url: string };
 
 export interface ReadyProfileShareModel {
   readonly kind: 'ready';
@@ -52,13 +54,20 @@ export function ProfileShareReadyContent({
   const { t } = useTranslation();
   const { selected } = state;
   const otherCandidates = state.candidates.filter((candidate) => candidate.kind !== selected.kind);
-  const qrImageUri = qrState.kind === 'ready' && qrState.url === selected.url ? qrState.uri : null;
+  const qrBlockedBySize = profileShareQrIsOversize(selected, state.model);
+  const visibleQrState: ProfileShareQrState = qrBlockedBySize
+    ? { kind: 'oversize', url: selected.url }
+    : qrState;
+  const qrImageUri =
+    !qrBlockedBySize && qrState.kind === 'ready' && qrState.url === selected.url
+      ? qrState.uri
+      : null;
 
   return (
     <>
       <CopyableUrlPill candidate={selected} onCopy={onCopy} />
 
-      <QrPreview url={selected.url} state={qrState} onRetry={onRetryQr} />
+      <QrPreview url={selected.url} state={visibleQrState} onRetry={onRetryQr} />
 
       <View className="flex-row gap-2">
         <View style={{ flex: 1 }}>
@@ -100,12 +109,6 @@ export function ProfileShareReadyContent({
       <ThemedText variant="caption" tone="tertiary" style={{ textAlign: 'center' }}>
         {t('meShare.bioHint')}
       </ThemedText>
-
-      {(selected.kind === 'offline' || selected.kind === 'username') && state.model.oversize ? (
-        <ThemedText variant="caption" tone="tertiary" style={{ textAlign: 'center' }}>
-          {t('profileCard.oversizeWarning')}
-        </ThemedText>
-      ) : null}
 
       <OtherFormatsSection
         visible={visible}
@@ -186,6 +189,13 @@ function QrPreview({
               {t('meShare.qrError')}
             </ThemedText>
             <ThemedButton label={t('meShare.retry')} variant="secondary" onPress={onRetry} />
+          </View>
+        ) : matchesUrl && state.kind === 'oversize' ? (
+          <View className="items-center gap-3 px-4">
+            <SfIcon name="exclamationmark.triangle" size={22} color={Colors.destructive} />
+            <ThemedText variant="bodySmall" tone="error" style={{ textAlign: 'center' }}>
+              {t('meShare.qrTooLarge')}
+            </ThemedText>
           </View>
         ) : (
           <View className="items-center gap-2">

@@ -17,6 +17,7 @@ import {
 import { atprotoBindingIO } from '@/atproto/bindingIo';
 import { verifyAtprotoBindingDual } from '@/badges/verifyAtprotoDual';
 import {
+  captureBadgeStatusCacheEpoch,
   invalidateCachedAtprotoResult,
   invalidateCachedNostrResult,
   readCachedAtprotoResult,
@@ -275,7 +276,10 @@ export function ProfileBadgeChips({
               color: trustToneColor(credentialTrustToneForLevel(passport.displayLevel)),
             }}
             onPress={() => {
-              router.push({ pathname: '/credentials/[id]', params: { id: passport.id } });
+              router.push({
+                pathname: '/credentials/[id]',
+                params: { id: passport.id, product: '1' },
+              });
             }}
           />
         ) : null}
@@ -368,6 +372,7 @@ function useBindingBadgeViewModels(
           setNostrCheckedAt(cached.checkedAt);
         } else {
           setNostrChecking(true);
+          const verificationEpoch = captureBadgeStatusCacheEpoch();
           void verifyNostrBinding(record, makeKind0Fetcher(DEFAULT_RELAYS)).then((next) => {
             const checkedAt = Date.now();
             // Persist the completed check FIRST, unconditionally — a
@@ -375,7 +380,7 @@ function useBindingBadgeViewModels(
             // seed the shared cache (R22). Only the setState UI updates are
             // suppressed on blur, so the next visit reads a warm result
             // instead of re-opening three relay sockets.
-            writeCachedNostrResult(next, checkedAt);
+            writeCachedNostrResult(next, checkedAt, verificationEpoch);
             if (cancelled) return;
             setNostrResult(next);
             setNostrCheckedAt(checkedAt);
@@ -394,11 +399,12 @@ function useBindingBadgeViewModels(
           setAtprotoCheckedAt(cached.checkedAt);
         } else {
           setAtprotoChecking(true);
+          const verificationEpoch = captureBadgeStatusCacheEpoch();
           void verifyAtprotoBindingDual(record, publicRecord, atprotoBindingIO).then((next) => {
             const checkedAt = Date.now();
             // Same as the nostr path: cache the completed result even after
             // blur (R22); suppress only the UI updates.
-            writeCachedAtprotoResult(next, checkedAt);
+            writeCachedAtprotoResult(next, checkedAt, verificationEpoch);
             if (cancelled) return;
             setAtprotoResult(next);
             setAtprotoCheckedAt(checkedAt);

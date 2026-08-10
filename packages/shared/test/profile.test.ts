@@ -51,6 +51,107 @@ describe('parseProfile', () => {
     expect(result.ok).toBe(true);
   });
 
+  test('accepts a bounded, signed public Page layout alongside the profile', () => {
+    const result = parseProfile(baseProfile({
+      page: {
+        blocks: [
+          {
+            id: 'links',
+            type: 'links',
+            title: 'Links',
+            items: [],
+            style: 'list',
+            visible: true,
+            order: 0,
+          },
+          {
+            id: 'portfolio-1',
+            type: 'portfolio',
+            title: 'Selected work',
+            items: [{ id: 'work-1', title: 'Book cover', url: 'https://example.com/work' }],
+            style: 'grid',
+            visible: true,
+            order: 1,
+          },
+        ],
+        appearance: {
+          template: 'mint',
+          font: 'serif',
+          background: 'mint',
+          customBackground: null,
+          showBrand: true,
+          footerText: '',
+        },
+      },
+    }));
+
+    expect(result.ok).toBe(true);
+    if (result.ok) expect(result.value.page?.blocks[1]?.title).toBe('Selected work');
+  });
+
+  test('rejects malformed public Page layouts before they can be signed or rendered', () => {
+    const invalidLink = parseProfile(baseProfile({
+      page: {
+        blocks: [
+          {
+            id: 'links',
+            type: 'links',
+            title: 'Links',
+            items: [{ id: 'bad', title: 'Bad', url: 'javascript:alert(1)' }],
+            style: 'list',
+            visible: true,
+            order: 0,
+          },
+        ],
+        appearance: {
+          template: 'cream',
+          font: 'sans',
+          background: 'cream',
+          customBackground: null,
+          showBrand: true,
+          footerText: '',
+        },
+      },
+    }));
+    const duplicateLinks = parseProfile(baseProfile({
+      page: {
+        blocks: [
+          {
+            id: 'links',
+            type: 'links',
+            title: 'Links',
+            items: [],
+            style: 'list',
+            visible: true,
+            order: 0,
+          },
+          {
+            id: 'links-2',
+            type: 'links',
+            title: 'More links',
+            items: [],
+            style: 'list',
+            visible: true,
+            order: 1,
+          },
+        ],
+        appearance: {
+          template: 'cream',
+          font: 'sans',
+          background: 'cream',
+          customBackground: null,
+          showBrand: true,
+          footerText: '',
+        },
+      },
+    }));
+
+    expect(invalidLink.ok).toBe(false);
+    if (!invalidLink.ok) expect(invalidLink.error).toContain('page.blocks.0.items.0.url');
+    expect(duplicateLinks.ok).toBe(false);
+    if (!duplicateLinks.ok) expect(duplicateLinks.error).toContain('page');
+  });
+
   test('rejects wrong literal v', () => {
     const result = parseProfile(baseProfile({ v: 2 as unknown as 1 }));
     expect(result.ok).toBe(false);

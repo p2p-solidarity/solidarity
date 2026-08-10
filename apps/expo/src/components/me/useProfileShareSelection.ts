@@ -13,6 +13,7 @@ import {
   buildProfileShareModel,
   buildProfileShareUrlSelection,
   type HandleShareCandidate,
+  type PublicPageShareSource,
   type ProfileShareModel,
   type ProfileShareUrlCandidate,
 } from './meProfileModel';
@@ -38,7 +39,8 @@ export function useProfileShareSelection(
   record: ProfileRecord,
   jws: string,
   nostrShortUrlReady: boolean,
-  retryNonce = 0
+  retryNonce = 0,
+  publicPage: PublicPageShareSource | null = null,
 ): ProfileShareSelectionState {
   const publicPageUsername = usePreferences((state) => state.publicPageUsername);
   const cacheRevision = useSyncExternalStore(
@@ -72,7 +74,7 @@ export function useProfileShareSelection(
   return useMemo(() => {
     if (jws.length === 0) return { kind: 'error' };
     try {
-      const model = buildProfileShareModel(record, jws, publicPageUsername);
+      const model = buildProfileShareModel(record, jws, publicPageUsername, publicPage);
       const resolved = buildProfileShareUrlSelection(
         model,
         verifiedHandle,
@@ -95,6 +97,7 @@ export function useProfileShareSelection(
     jws,
     nostrShortUrlReady,
     publicPageUsername,
+    publicPage,
     record,
     retryNonce,
     verifiedHandle,

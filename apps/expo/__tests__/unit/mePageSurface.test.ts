@@ -26,7 +26,8 @@ describe('Page surface', () => {
     expect(route).toContain('linkVisibility={linkVisibility}');
     expect(route).toContain('nostrPublishedJws');
     expect(route).toContain('publicRecord={published?.record ?? record}');
-    expect(route).toContain("router.push('/settings/appearance')");
+    expect(route).not.toContain("router.push('/settings/appearance')");
+    expect(page).toContain('<PageAppearanceSheet');
     expect(route).toContain("router.push('/settings')");
     expect(route).not.toContain('<MeNavBar');
 
