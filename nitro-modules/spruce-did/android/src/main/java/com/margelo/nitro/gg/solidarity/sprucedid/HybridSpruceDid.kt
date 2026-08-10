@@ -282,10 +282,13 @@ class HybridSpruceDid : HybridSpruceDidSpec() {
   }
 
   override fun deleteKey(alias: String): Promise<Boolean> = Promise.async {
-    val ok = runCatching {
+    // Do not rely on a provider-specific missing-alias behaviour: absence is
+    // already the desired state, while either the probe or deletion itself
+    // must still reject on a real Keystore failure.
+    if (keyStore.containsAlias(keystoreAlias(alias))) {
       keyStore.deleteEntry(keystoreAlias(alias))
-      true
-    }.getOrDefault(false)
+    }
+    val ok = true
     if (ok) {
       emit(makeEvent(kind = SpruceDidEventKind.KEYDELETED, alias = alias))
     }

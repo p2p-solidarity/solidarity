@@ -116,10 +116,12 @@ class HybridSemaphore : HybridSemaphoreSpec() {
   }
 
   override fun deleteIdentity(): Promise<Unit> = Promise.async {
-    securePrefs().edit()
+    val deleted = securePrefs().edit()
       .remove(DEFAULT_IDENTITY_ALIAS)
       .remove(LEGACY_IDENTITY_ALIAS)
-      .apply()
+      .remove(NULLIFIER_STORE_KEY)
+      .commit()
+    check(deleted) { "Failed to delete Semaphore identity" }
     cacheLock.withLock {
       cachedPrivateKey = null
       cachedCommitment = ""

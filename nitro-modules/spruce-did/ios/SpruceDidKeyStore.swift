@@ -34,7 +34,7 @@ internal struct SpruceDidKeyStore {
   /// to a software key on the simulator (which doesn't emulate SE). Returns
   /// `true` if the key landed in Secure Enclave, `false` for simulator path.
   func generateP256Key(alias: String, requireBiometric: Bool) throws -> Bool {
-    _ = deleteKey(alias: alias)
+    _ = try deleteKey(alias: alias)
 
     let flags: SecAccessControlCreateFlags = requireBiometric
       ? [.privateKeyUsage, .userPresence]
@@ -435,11 +435,10 @@ internal struct SpruceDidKeyStore {
 
   // MARK: - Deletion
 
-  /// Deletes both EC and ed25519 entries for the alias. Returns true iff
-  /// at least one entry was actually present.
+  /// Deletes both EC and ed25519 entries for the alias. Absence is already
+  /// success; every other Keychain status is surfaced to the Promise caller.
   @discardableResult
-  func deleteKey(alias: String) -> Bool {
-    var anySuccess = false
+  func deleteKey(alias: String) throws -> Bool {
     let ecQuery: [String: Any] = [
       kSecClass as String: kSecClassKey,
       kSecAttrApplicationTag as String: keyTag(for: alias),
@@ -447,15 +446,29 @@ internal struct SpruceDidKeyStore {
       // so regenerating a syncable key is idempotent.
       kSecAttrSynchronizable as String: kSecAttrSynchronizableAny,
     ]
-    if SecItemDelete(ecQuery as CFDictionary) == errSecSuccess { anySuccess = true }
+    let ecStatus = SecItemDelete(ecQuery as CFDictionary)
+    switch ecStatus {
+    case errSecSuccess, errSecItemNotFound:
+      break
+    default:
+      throw SpruceDidError.keychainFailure(
+        ecStatus, "EC key delete failed status=\(ecStatus)")
+    }
 
     let genQuery: [String: Any] = [
       kSecClass as String: kSecClassGenericPassword,
       kSecAttrService as String: keychainService,
       kSecAttrAccount as String: alias,
     ]
-    if SecItemDelete(genQuery as CFDictionary) == errSecSuccess { anySuccess = true }
-    return anySuccess
+    let genericStatus = SecItemDelete(genQuery as CFDictionary)
+    switch genericStatus {
+    case errSecSuccess, errSecItemNotFound:
+      break
+    default:
+      throw SpruceDidError.keychainFailure(
+        genericStatus, "generic key delete failed status=\(genericStatus)")
+    }
+    return true
   }
 
   // MARK: - Misc

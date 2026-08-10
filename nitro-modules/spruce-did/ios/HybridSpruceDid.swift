@@ -210,7 +210,7 @@ final class HybridSpruceDid: HybridSpruceDidSpec {
 
   func deleteKey(alias: String) throws -> Promise<Bool> {
     return Promise.async {
-      let ok = self.store.deleteKey(alias: alias)
+      let ok = try self.store.deleteKey(alias: alias)
       if ok { self.emit(self.makeEvent(.keydeleted, alias: alias)) }
       return ok
     }

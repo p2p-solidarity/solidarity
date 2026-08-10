@@ -108,7 +108,7 @@ export interface SpruceDid
    */
   keyAuthMode(alias: string): Promise<string>;
 
-  /** Tear down the key from the secure store. Returns true on success. */
+  /** Tear down the key. Already absent is success; storage failures reject. */
   deleteKey(alias: string): Promise<boolean>;
 
   /**

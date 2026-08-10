@@ -90,8 +90,9 @@ final class HybridSemaphore: HybridSemaphoreSpec {
 
   func deleteIdentity() throws -> Promise<Void> {
     return Promise.async {
-      Self.deleteKeychain(alias: Self.defaultIdentityAlias)
-      Self.deleteKeychain(alias: Self.legacyIdentityAlias)
+      try Self.deleteKeychain(alias: Self.defaultIdentityAlias)
+      try Self.deleteKeychain(alias: Self.legacyIdentityAlias)
+      try Self.deleteKeychain(alias: Self.nullifierStoreAlias)
       self.cacheQueue.sync {
         self.cachedIdentity = nil
         self.cachedPrivateKey = nil
@@ -245,12 +246,15 @@ final class HybridSemaphore: HybridSemaphoreSpec {
     return data
   }
 
-  private static func deleteKeychain(alias: String) {
+  private static func deleteKeychain(alias: String) throws {
     let query: [String: Any] = [
       kSecClass as String: kSecClassGenericPassword,
       kSecAttrAccount as String: alias,
     ]
-    SecItemDelete(query as CFDictionary)
+    let status = SecItemDelete(query as CFDictionary)
+    guard status == errSecSuccess || status == errSecItemNotFound else {
+      throw HybridError.keychainDeleteFailed(status)
+    }
   }
 
   // MARK: - Private — Nullifier store (Keychain-backed)
@@ -300,6 +304,7 @@ private enum HybridError: Swift.Error, LocalizedError {
   case invalidSeed(Int)
   case insufficientGroupContext
   case keychainWriteFailed
+  case keychainDeleteFailed(OSStatus)
 
   var errorDescription: String? {
     switch self {
@@ -311,6 +316,8 @@ private enum HybridError: Swift.Error, LocalizedError {
       return "Proof requires at least 2 distinct member commitments."
     case .keychainWriteFailed:
       return "Failed to persist identity to the iOS Keychain."
+    case .keychainDeleteFailed(let status):
+      return "Failed to delete identity from the iOS Keychain (status=\(status))."
     }
   }
 }

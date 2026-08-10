@@ -23,6 +23,11 @@
  *   cd apps/expo && bun test __tests__/parity/spruceDid.parity.test.ts
  */
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
+import {
+  __resetLocalDataWipeBarrierForTesting,
+  beginLocalDataWipe,
+  completeLocalDataWipe,
+} from '../../src/settings/localDataWipeBarrier';
 
 import {
   base64UrlDecode,
@@ -45,6 +50,9 @@ import type {
 
 /** Local alias for the HybridObject interface so `equals(other)` typechecks. */
 type HybridLike = SpruceDid;
+
+let generateKeyGate: Promise<void> | null = null;
+let generateKeyStarted: (() => void) | null = null;
 
 // In-memory test driver. Implements the surface @/keychain/signingKey.ts
 // actually uses (generateKey, hasKey, getPublicKeyJwk, deleteKey, signJws).
@@ -146,6 +154,8 @@ class InMemorySpruceDidDriver implements SpruceDid {
     if (!isP256) {
       throw new Error(`unsupported keyType in test driver: ${keyType}`);
     }
+    generateKeyStarted?.();
+    await (generateKeyGate ?? Promise.resolve());
     // Drop any prior entry so generateKey is idempotent.
     this.keys.delete(alias);
     const kp = generateP256KeyPair();
@@ -174,6 +184,7 @@ class InMemorySpruceDidDriver implements SpruceDid {
   // malformed JSON to pin the JS layer's fail-closed parse.
   private syncableItems = new Map<string, { labelHex: string; publicKeyHex: string }[]>();
   rawListOverride: string | null = null;
+  deleteKeyResultOverride: boolean | null = null;
 
   seedSyncableItemsForTesting(
     alias: string,
@@ -198,9 +209,13 @@ class InMemorySpruceDidDriver implements SpruceDid {
   }
 
   async deleteKey(alias: string): Promise<boolean> {
-    const existed = this.keys.delete(alias);
+    if (this.deleteKeyResultOverride !== null) return this.deleteKeyResultOverride;
+    const hadSyncableItems = (this.syncableItems.get(alias)?.length ?? 0) > 0;
+    const existed = this.keys.delete(alias) || hadSyncableItems;
+    this.syncableItems.delete(alias);
     if (existed) this.notify({ kind: 'keyDeleted', alias });
-    return existed;
+    // Native contract is idempotent: absent is already the desired state.
+    return true;
   }
 
   async getPublicKeyJwk(alias: string): Promise<string> {
@@ -338,6 +353,8 @@ const {
   signOpenAcDeviceBindingDigest,
   signRawEs256,
   signJwt,
+  deleteSigningKey,
+  quiesceSigningKeyOperations,
   resetSigningKeyForTesting,
 } =
   await import('@/keychain/signingKey');
@@ -345,13 +362,21 @@ const { resetBiometricGrace } = await import('@/keychain/biometric');
 
 describe('SpruceID DID Nitro module — JS-side wiring', () => {
   beforeEach(async () => {
+    driver.deleteKeyResultOverride = null;
     sharedSecureStore.clear();
     authCalls.length = 0;
+    generateKeyGate = null;
+    generateKeyStarted = null;
+    __resetLocalDataWipeBarrierForTesting();
     resetBiometricGrace();
     await resetSigningKeyForTesting();
   });
 
   afterEach(async () => {
+    driver.deleteKeyResultOverride = null;
+    generateKeyGate = null;
+    generateKeyStarted = null;
+    __resetLocalDataWipeBarrierForTesting();
     resetBiometricGrace();
     await resetSigningKeyForTesting();
   });
@@ -364,6 +389,36 @@ describe('SpruceID DID Nitro module — JS-side wiring', () => {
     // Same public JWK across calls (same key, no rotation).
     expect(second.publicJwk.x).toBe(first.publicJwk.x);
     expect(second.publicJwk.y).toBe(first.publicJwk.y);
+  });
+
+  it('does not recreate a native key when generation finishes during a local wipe', async () => {
+    let markGenerateStarted!: () => void;
+    const generatedStarted = new Promise<void>((resolve) => {
+      markGenerateStarted = resolve;
+    });
+    let releaseGenerate!: () => void;
+    generateKeyGate = new Promise<void>((resolve) => {
+      releaseGenerate = resolve;
+    });
+    generateKeyStarted = markGenerateStarted;
+
+    const provisioning = ensureSigningKey();
+    await generatedStarted;
+    beginLocalDataWipe();
+
+    let quiesced = false;
+    const quiesce = quiesceSigningKeyOperations().then(() => {
+      quiesced = true;
+    });
+    await Promise.resolve();
+    expect(quiesced).toBe(false);
+
+    releaseGenerate();
+    await expect(provisioning).rejects.toThrow(/local data wipe/i);
+    await quiesce;
+
+    expect(driver.hasKey('solidarity.master.v2')).toBe(false);
+    completeLocalDataWipe();
   });
 
   it('publicJwk() returns a P-256 / ES256 JWK that passes the Zod schema', async () => {
@@ -532,6 +587,45 @@ describe('SpruceID DID Nitro module — JS-side wiring', () => {
     expect(driver.hasKey('solidarity.master.v2')).toBe(true);
     await resetSigningKeyForTesting();
     expect(driver.hasKey('solidarity.master.v2')).toBe(false);
+  });
+
+  it('fails closed when the native key deletion fulfills with false', async () => {
+    await ensureSigningKey();
+    driver.deleteKeyResultOverride = false;
+
+    const result = await deleteSigningKey();
+
+    expect(result).toEqual({
+      ok: false,
+      error: { kind: 'storageFailed' },
+    });
+    expect(driver.hasKey('solidarity.master.v2')).toBe(true);
+  });
+
+  it('treats an already-absent native deletion as idempotent success', async () => {
+    expect(driver.hasKey('solidarity.master.v2')).toBe(false);
+
+    const result = await deleteSigningKey();
+
+    expect(result).toEqual({ ok: true, value: undefined });
+  });
+
+  it('accepts one authoritative native delete for syncable alias duplicates', async () => {
+    driver.seedSyncableItemsForTesting('solidarity.master.v2', [
+      {
+        labelHex: '11'.repeat(20),
+        publicKeyHex: '04' + '22'.repeat(64),
+      },
+      {
+        labelHex: '33'.repeat(20),
+        publicKeyHex: '04' + '44'.repeat(64),
+      },
+    ]);
+
+    const result = await deleteSigningKey();
+
+    expect(result).toEqual({ ok: true, value: undefined });
+    expect(await driver.listSyncableP256Keys('solidarity.master.v2')).toBe('[]');
   });
 
   // The OpenAC device binding (and the ZK proof that consumes it) is only safe

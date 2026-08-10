@@ -234,7 +234,12 @@ class HybridSecretsVault : HybridSecretsVaultSpec() {
   // MARK: - deleteKey
 
   override fun deleteKey(keyAlias: String): Promise<Unit> = Promise.async {
-    runCatching { keyStore.deleteEntry(keystoreAlias(keyAlias)) }
+    // Do not rely on a provider-specific missing-alias behaviour: absence is
+    // already the desired state, while either operation must reject on a real
+    // Keystore failure so JS cannot report a completed local wipe.
+    if (keyStore.containsAlias(keystoreAlias(keyAlias))) {
+      keyStore.deleteEntry(keystoreAlias(keyAlias))
+    }
     Unit
   }
 
@@ -252,10 +257,11 @@ class HybridSecretsVault : HybridSecretsVaultSpec() {
   // Android has no iCloud Keychain equivalent, and the onboarding UI never
   // offers the iCloud backup option on this platform (see
   // apps/expo/src/onboarding/steps/BackupStep.tsx / src/identity/rootKey.ts).
-  // These three methods exist only to satisfy the shared TS HybridObject
-  // spec: every call REJECTS with a clear "not supported" error rather than
-  // silently no-opping, so a caller that somehow reaches this path on
-  // Android fails loudly instead of recording a false sync success.
+  // These methods exist only to satisfy the shared TS HybridObject spec.
+  // Create/read reject rather than fabricating iCloud state. Delete is the
+  // one idempotent exception: no synchronizable item can exist on Android,
+  // so reporting an absent delete as success lets a strict device wipe clear
+  // the rest of its real stores instead of failing forever on this platform.
 
   override fun setSynchronizableItem(alias: String, value: String): Promise<Unit> = Promise.async {
     throw UnsupportedOperationException("iCloud Keychain sync is not supported on Android")
@@ -266,7 +272,7 @@ class HybridSecretsVault : HybridSecretsVaultSpec() {
   }
 
   override fun deleteSynchronizableItem(alias: String): Promise<Unit> = Promise.async {
-    throw UnsupportedOperationException("iCloud Keychain sync is not supported on Android")
+    Unit
   }
 
   // MARK: - Internal
