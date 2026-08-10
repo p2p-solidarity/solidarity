@@ -34,17 +34,57 @@ describe('v2 Contacts surface', () => {
     );
   });
 
-  it('orders search, real contacts, Saved Pages, then the selection action bar', () => {
+  it('orders search, real pending activity, real updates, contacts, then Saved Pages', () => {
     const people = source('../../app/(tabs)/people/index.tsx');
+    const activity = source('../../src/components/people/ContactsActivitySections.tsx');
+    const snapshots = source('../../src/people/profileSnapshots.ts');
+    const notifications = source('../../app/settings/notifications.tsx');
+    const normalContent = people.slice(
+      people.indexOf('<PeopleSearchField'),
+      people.indexOf('<BatchActionBar'),
+    );
 
     expect(people).toContain('<PeopleSearchField');
+    expect(people).toContain("import { ContactsActivitySections } from '@/components/people/ContactsActivitySections'");
+    expect(normalContent).toContain('<ContactsActivitySections');
     expect(people).toContain('<FlashList');
     expect(people).toContain(
       'ListFooterComponent={editMode ? null : <VerifiedPagesSection />}',
     );
     expect(people).toContain('<EmptyContactsContent');
     expect(people).toContain('<BatchActionBar');
-    expect(people).not.toMatch(/LeaveCards|RecentUpdates|peopleList\.inbox|peopleList\.feed/u);
+    expect(normalContent.indexOf('<PeopleSearchField')).toBeLessThan(
+      normalContent.indexOf('<ContactsActivitySections'),
+    );
+    expect(normalContent.indexOf('<ContactsActivitySections')).toBeLessThan(
+      normalContent.indexOf('<FlashList'),
+    );
+    expect(normalContent.indexOf('<FlashList')).toBeLessThan(
+      normalContent.indexOf('ListFooterComponent={editMode ? null : <VerifiedPagesSection />}'),
+    );
+
+    // Neither v2 activity surface may invent content before its persisted
+    // source has successfully hydrated.
+    expect(activity).toContain("pendingStatus === 'ready' && pending.length > 0");
+    expect(activity).toContain("updatesStatus === 'ready' && enabled && updates.length > 0");
+    expect(activity).toContain('contactFromLeaveCard');
+    expect(activity).toContain('accept');
+    expect(activity).toContain('skip');
+    expect(activity).toContain('block');
+    expect(activity).not.toContain('receiverNotConnected');
+
+    // A feed item is created only by a newly saved, already-known profile
+    // snapshot — not by a first scan, a stale result, or the screen itself.
+    expect(snapshots).toContain("if (existing && outcome.kind === 'saved')");
+    expect(snapshots).toContain('recordMerge(existing.record, record)');
+    expect(activity).not.toContain('recordMerge(');
+
+    // Closing the feed is reversible through the notifications setting; reset
+    // returns it to the product default (enabled).
+    expect(notifications).toContain("from '@/contacts/recentUpdates'");
+    expect(notifications).toContain('const recentUpdatesEnabled = useRecentUpdatesStore');
+    expect(notifications).toContain("title={t('notifications.contactUpdates.title')}");
+    expect(notifications).toContain('setRecentUpdatesEnabled(true)');
   });
 
   it('keeps Add Contact first in the empty state and orders add-sheet actions by priority', () => {
@@ -142,6 +182,11 @@ describe('v2 Contacts surface', () => {
       'peopleList.importFromPhone': ['Import from Address Book', '從通訊錄匯入'],
       'peopleList.importVcfFile': ['Import VCF File', '匯入 VCF 檔案'],
       'peopleList.pasteLinkPage': ['Paste Link Page', '貼上連結頁'],
+      'peopleList.pendingCount': ['{{count}} Cards Pending', '{{count}} 張留卡待確認'],
+      'peopleList.recentUpdates': ['Recent Updates', '最近更新'],
+      'peopleList.turnOffRecentUpdates': ['Turn Off Recent Updates', '關閉最近更新'],
+      'peopleList.noCardsPending': ['No Cards Pending', '沒有待確認的留卡'],
+      'notifications.contactUpdates.title': ['Show Recent Updates', '顯示「最近更新」'],
       'peopleList.savedPagesHeader': ['Saved Pages', '已儲存頁面'],
     } as const;
 

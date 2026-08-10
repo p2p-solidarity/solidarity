@@ -37,6 +37,10 @@ import { useShallow } from 'zustand/shallow';
 
 import { ManifestStorage } from '@/storage';
 import {
+  canCommitLocalData,
+  captureLocalDataEpoch,
+} from '@/settings/localDataWipeBarrier';
+import {
   deleteContact as removeFromStorage,
   loadAllContacts,
   loadContact,
@@ -50,6 +54,8 @@ import {
   type ContactManifestEntry,
 } from './contactManifest';
 
+let localWipeGeneration = 0;
+
 interface ContactStoreState {
   readonly manifest: readonly ContactManifestEntry[];
   readonly details: ReadonlyMap<string, Contact>;
@@ -62,6 +68,8 @@ interface ContactStoreState {
   readonly loadDetail: (id: string) => Promise<Contact | null>;
   readonly upsert: (contact: Contact) => Promise<void>;
   readonly remove: (id: string) => Promise<void>;
+  /** Drop every live reference after the encrypted local store is wiped. */
+  readonly resetForLocalWipe: () => void;
 }
 
 export const useContactStore = create<ContactStoreState>((set, get) => ({
@@ -70,16 +78,21 @@ export const useContactStore = create<ContactStoreState>((set, get) => ({
   detailsHydrated: false,
 
   seedFromManifest: () => {
+    if (!canCommitLocalData(captureLocalDataEpoch())) return;
     const seed = ManifestStorage.get<ContactManifestEntry>(CONTACTS_MANIFEST_SCOPE);
     if (seed) set({ manifest: seed });
   },
 
   hydrate: async () => {
+    const generation = localWipeGeneration;
+    const writeEpoch = captureLocalDataEpoch();
+    if (!canCommitLocalData(writeEpoch)) return;
     if (get().detailsHydrated) return;
     // `loadAllContacts` is tolerant — corrupt rows are skipped by the
     // underlying `loadAllEncrypted` helper, so a single bad blob can't
     // wedge the whole list.
     const list = await loadAllContacts();
+    if (generation !== localWipeGeneration || !canCommitLocalData(writeEpoch)) return;
     const details = new Map<string, Contact>();
     for (const c of list) details.set(c.id, c);
     const manifest = list.map(toContactManifest);
@@ -88,9 +101,13 @@ export const useContactStore = create<ContactStoreState>((set, get) => ({
   },
 
   loadDetail: async (id) => {
+    const generation = localWipeGeneration;
+    const writeEpoch = captureLocalDataEpoch();
+    if (!canCommitLocalData(writeEpoch)) return null;
     const cached = get().details.get(id);
     if (cached) return cached;
     const contact = await loadContact(id);
+    if (generation !== localWipeGeneration || !canCommitLocalData(writeEpoch)) return null;
     if (!contact) return null;
     set((s) => {
       const next = new Map(s.details);
@@ -101,7 +118,11 @@ export const useContactStore = create<ContactStoreState>((set, get) => ({
   },
 
   upsert: async (contact) => {
+    const generation = localWipeGeneration;
+    const writeEpoch = captureLocalDataEpoch();
+    if (!canCommitLocalData(writeEpoch)) return;
     await persistContact(contact);
+    if (generation !== localWipeGeneration || !canCommitLocalData(writeEpoch)) return;
     set((s) => {
       const entry = toContactManifest(contact);
       const idx = s.manifest.findIndex((m) => m.id === entry.id);
@@ -116,6 +137,7 @@ export const useContactStore = create<ContactStoreState>((set, get) => ({
   },
 
   remove: async (id) => {
+    if (!canCommitLocalData(captureLocalDataEpoch())) return;
     removeFromStorage(id);
     set((s) => {
       const nextManifest = s.manifest.filter((m) => m.id !== id);
@@ -124,6 +146,11 @@ export const useContactStore = create<ContactStoreState>((set, get) => ({
       nextDetails.delete(id);
       return { manifest: nextManifest, details: nextDetails };
     });
+  },
+
+  resetForLocalWipe: () => {
+    localWipeGeneration += 1;
+    set({ manifest: [], details: new Map(), detailsHydrated: true });
   },
 }));
 

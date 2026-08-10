@@ -12,8 +12,17 @@ import type { ProfileRecord } from '@solidarity/shared';
 
 import { useProfileSnapshotStore } from '@/people/profileSnapshots';
 import { useProfileStore } from '@/profile/store';
+import {
+  canCommitLocalData,
+  captureLocalDataEpoch,
+  type LocalDataEpoch,
+} from '@/settings/localDataWipeBarrier';
 
-import type { CardExchangeOffer, MergeKind } from './mutualExchange';
+import type {
+  CardExchangeOffer,
+  MergeKind,
+  SaveIncoming,
+} from './mutualExchange';
 
 /** Our current signed FULL card as an exchange offer, or `null` if this device
  *  hasn't saved a profile yet (CLAUDE.md rule 8 — a decline, never a fabricated
@@ -31,4 +40,18 @@ export function buildOwnOffer(): CardExchangeOffer | null {
  *  just the outcome kind for the exchange receipt. */
 export function saveIncomingCard(record: ProfileRecord, jws: string): MergeKind {
   return useProfileSnapshotStore.getState().mergeVerified(record, jws).kind;
+}
+
+/**
+ * Bind the save callback to the epoch in which an exchange starts. A lane
+ * closed by a local wipe may still have a queued frame callback; that stale
+ * callback must report failure and never resurrect the peer card afterward.
+ */
+export function createIncomingCardSaver(
+  exchangeEpoch: LocalDataEpoch = captureLocalDataEpoch(),
+): SaveIncoming {
+  return (record, jws) => {
+    if (!canCommitLocalData(exchangeEpoch)) return 'failed';
+    return saveIncomingCard(record, jws);
+  };
 }

@@ -270,6 +270,8 @@ function reachableStatusLine(status: ReachableStatus, t: (key: string, opts?: Re
 
 export function CardExchangeSection(props: CardExchangeSectionProps): ReactNode {
   const pearEnabled = usePreferences((state) => state.pearExchangeEnabled);
+  const developerMode = usePreferences((state) => state.developerMode);
+  if (!developerMode) return null;
   return pearEnabled ? <EnabledCardExchangeSection {...props} /> : <DisabledPearExchange />;
 }
 

@@ -30,7 +30,7 @@ import { getRootDid, getRootSigner, type RootKeyError } from '@/identity/rootKey
 import { authenticateChannel } from './handshake';
 import { ensureLane, releaseLane } from './laneManager';
 import { firstConnection, pearTopicFor, type PearChannel } from './lane';
-import { buildOwnOffer, saveIncomingCard } from './mutualExchangeGlue';
+import { buildOwnOffer, createIncomingCardSaver } from './mutualExchangeGlue';
 import { createMutualExchange, type MutualExchange, type MutualExchangeResult } from './mutualExchange';
 import type { CardRequestError } from './cardRequestState';
 
@@ -104,6 +104,7 @@ export function useMutualCardExchange(peerDid: string): MutualExchangeFlow {
 
   const start = useCallback(() => {
     teardown();
+    const saveIncoming = createIncomingCardSaver();
 
     // No signed profile on this device → nothing honest to offer; fail before
     // opening a channel rather than dialing and then declining silently.
@@ -190,7 +191,7 @@ export function useMutualCardExchange(peerDid: string): MutualExchangeFlow {
             setPhase({ kind: 'exchanging' });
 
             void exchange
-              .startExchange({ exchangeId: exchangeIdRef.current, offer, saveIncoming: saveIncomingCard })
+              .startExchange({ exchangeId: exchangeIdRef.current, offer, saveIncoming })
               .then((result) => {
                 if (!mountedRef.current) return;
                 if (!result.ok) {

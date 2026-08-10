@@ -50,6 +50,11 @@ import { create } from 'zustand';
 import { useShallow } from 'zustand/shallow';
 import { z } from 'zod';
 
+import { useRecentUpdatesStore } from '@/contacts/recentUpdates';
+import {
+  canCommitLocalData,
+  captureLocalDataEpoch,
+} from '@/settings/localDataWipeBarrier';
 import { getMmkv } from '@/storage/mmkv';
 import {
   bytesToHex,
@@ -421,7 +426,11 @@ function readPersisted(): ReadonlyMap<string, ProfileSnapshot> {
   return out;
 }
 
-function writePersisted(snapshots: ReadonlyMap<string, ProfileSnapshot>): void {
+function writePersisted(
+  snapshots: ReadonlyMap<string, ProfileSnapshot>,
+  writeEpoch = captureLocalDataEpoch(),
+): boolean {
+  if (!canCommitLocalData(writeEpoch)) return false;
   try {
     const plain: Record<string, unknown> = {};
     for (const [key, snapshot] of snapshots) {
@@ -447,11 +456,14 @@ function writePersisted(snapshots: ReadonlyMap<string, ProfileSnapshot>): void {
               importedAt: snapshot.importedAt,
             };
     }
+    if (!canCommitLocalData(writeEpoch)) return false;
     getMmkv().set(KEY, JSON.stringify(plain));
+    return true;
   } catch {
     // MMKV not ready / disk full — in-memory state (set right after this
     // call) still reflects the save for the current session, matching
     // profile/store.ts's writePersisted policy.
+    return false;
   }
 }
 
@@ -477,12 +489,15 @@ interface ProfileSnapshotState {
     title: string | null,
     links: readonly ProfileLink[]
   ) => DeclaredSnapshot;
+  /** Drop every live snapshot reference after the local store is wiped. */
+  readonly resetForLocalWipe: () => void;
 }
 
 export const useProfileSnapshotStore = create<ProfileSnapshotState>((set, get) => ({
   snapshots: new Map(),
 
   mergeVerified: (record, jws) => {
+    const writeEpoch = captureLocalDataEpoch();
     // T7: key by `(did, scope)` so a public projection and a full card for the
     // same did land in distinct slots and coexist — the conflict rule only
     // fires within one scope.
@@ -490,17 +505,22 @@ export const useProfileSnapshotStore = create<ProfileSnapshotState>((set, get) =
     const current = get().snapshots.get(key);
     const existing = current?.kind === 'verified' ? current : undefined;
     const outcome = mergeVerifiedSnapshot(existing, record, jws, new Date().toISOString());
+    if (existing && outcome.kind === 'saved') {
+      if (canCommitLocalData(writeEpoch)) {
+        useRecentUpdatesStore.getState().recordMerge(existing.record, record);
+      }
+    }
     // `keptNewer` returns the existing snapshot reference unchanged, so this
     // set is a harmless no-op there; every other outcome carries the mutated
     // primary to persist.
     const next = new Map(get().snapshots);
     next.set(key, outcome.snapshot);
-    writePersisted(next);
-    set({ snapshots: next });
+    if (writePersisted(next, writeEpoch)) set({ snapshots: next });
     return outcome;
   },
 
   setNote: (did, note) => {
+    const writeEpoch = captureLocalDataEpoch();
     // The note is a per-person annotation; attach it to the richest projection
     // we hold for this did (the one `getProfileSnapshot` surfaces).
     const key = bestVerifiedKeyForDid(get().snapshots, did);
@@ -510,11 +530,11 @@ export const useProfileSnapshotStore = create<ProfileSnapshotState>((set, get) =
     const trimmed = note?.trim() ?? '';
     const next = new Map(get().snapshots);
     next.set(key, { ...current, note: trimmed.length > 0 ? trimmed : null });
-    writePersisted(next);
-    set({ snapshots: next });
+    if (writePersisted(next, writeEpoch)) set({ snapshots: next });
   },
 
   upsertDeclared: (sourceUrl, title, links) => {
+    const writeEpoch = captureLocalDataEpoch();
     const id = stableDeclaredId(sourceUrl);
     const snapshot: DeclaredSnapshot = {
       kind: 'declared',
@@ -527,15 +547,19 @@ export const useProfileSnapshotStore = create<ProfileSnapshotState>((set, get) =
     };
     const next = new Map(get().snapshots);
     next.set(id, snapshot);
-    writePersisted(next);
-    set({ snapshots: next });
+    if (writePersisted(next, writeEpoch)) set({ snapshots: next });
     return snapshot;
+  },
+
+  resetForLocalWipe: () => {
+    set({ snapshots: new Map() });
   },
 }));
 
 /** Swap in the persisted snapshot set from MMKV. Call once from the root
  * layout after `initMmkv()` resolves — mirrors `hydrateProfile()`. */
 export function hydrateProfileSnapshots(): void {
+  if (!canCommitLocalData(captureLocalDataEpoch())) return;
   const persisted = readPersisted();
   if (persisted.size > 0) useProfileSnapshotStore.setState({ snapshots: persisted });
 }

@@ -107,7 +107,10 @@ const SAVE_STATUSES: ReadonlySet<string> = new Set<IncomingSaveStatus>([
 
 /** Verify-passed incoming card → local merge, returning the merge kind. The
  *  ONLY hook that touches persistent state; the module never calls the store. */
-export type SaveIncoming = (record: ProfileRecord, jws: string) => MergeKind;
+export type SaveIncoming = (
+  record: ProfileRecord,
+  jws: string,
+) => IncomingSaveStatus;
 
 /** Our own card to offer: the compact JWS plus its parsed record (the module
  *  derives digest / size / updatedAt / version from these, so the caller can't

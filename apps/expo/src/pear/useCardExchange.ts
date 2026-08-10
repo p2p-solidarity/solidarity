@@ -116,7 +116,7 @@ import { firstConnection, pearTopicFor, type PearChannel } from './lane';
 import { matchPresentableClaims } from './presentBuilder';
 import { makePresentRequestHandler } from './presentRelease';
 import { createMutualExchange, type ExchangeDecision, type MutualExchange } from './mutualExchange';
-import { buildOwnOffer, saveIncomingCard } from './mutualExchangeGlue';
+import { buildOwnOffer, createIncomingCardSaver } from './mutualExchangeGlue';
 import { createPearSession, type PearSession } from './protocol';
 // A5.3 — `buildPearPresentation` is the RESPONDER-side VP-building glue;
 // it lives in `usePresentRequestFlow.ts` alongside the REQUESTER hook it
@@ -450,6 +450,7 @@ export function useReachableMode(peerDid: string, peerLabel: string): ReachableM
 
   const start = useCallback(() => {
     teardown();
+    const saveIncoming = createIncomingCardSaver();
     setStatus({ kind: 'listening' });
 
     void getRootDid().then((didResult) => {
@@ -563,7 +564,7 @@ export function useReachableMode(peerDid: string, peerLabel: string): ReachableM
                 if (!offer) return { accept: false };
                 return { accept: true, offer };
               },
-              saveIncoming: saveIncomingCard,
+              saveIncoming,
             });
             const current = connectionsRef.current.get(connId);
             if (current) {

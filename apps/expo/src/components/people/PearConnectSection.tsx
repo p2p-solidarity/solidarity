@@ -68,6 +68,8 @@ function connectButtonLabel(phase: CardRequestPhase, t: (key: string) => string)
 
 export function PearConnectSection(props: PearConnectSectionProps): ReactNode {
   const pearEnabled = usePreferences((state) => state.pearExchangeEnabled);
+  const developerMode = usePreferences((state) => state.developerMode);
+  if (!developerMode) return null;
   return pearEnabled ? <EnabledPearConnectSection {...props} /> : <DisabledPearConnectSection />;
 }
 
