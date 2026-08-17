@@ -130,6 +130,13 @@ const RAW = {
   /** Feature accent purple. */
   featureAccent: '#5856D6',
 
+  /** v1.3.0 per-animal card gradient accents. */
+  cardDog: '#FFD54F',
+  cardHorse: '#5C6BC0',
+  cardPig: '#F06292',
+  cardSheep: '#66BB6A',
+  cardDove: '#26C6DA',
+
   /** Decorative — dusty mauve overlay. Mirrors Swift Color.Theme.dustyMauve #A6678D. */
   dustyMauve: '#A6678D',
   /** Decorative — peach centre for blobs / radial gradients. */
@@ -142,6 +149,20 @@ const RAW = {
 
   /** Warning amber — `Color.Theme.warning` (orange in Swift). */
   warning: '#FF9500',
+
+  /** Public Page template palette. These are separate from the app theme:
+   * choosing a visitor-facing template must never replace the owner's app UI. */
+  pageMint: '#E9F6EF',
+  pageRose: '#F6EAEA',
+  pageInk: '#26221C',
+  pageNight: '#0F1420',
+  pageLightText: '#F5F0E4',
+  pageGradientStart: '#6E3D5F',
+  pageGradientEnd: '#E7A17A',
+  pageSunStart: '#FFE9C7',
+  pageSunEnd: '#FFD3A0',
+  pagePreviewGlass: 'rgba(255,255,255,0.42)',
+  pagePreviewBorder: 'rgba(255,255,255,0.58)',
 
   /** Overlay backdrop for popups — `Color.Theme.overlayBg`. */
   overlayBg: 'rgba(41,26,46,0.45)',
@@ -167,6 +188,43 @@ const RAW = {
 
 type RawKey = keyof typeof RAW;
 
+type ThemeScheme = 'light' | 'dark';
+
+const ADAPTIVE_FOREGROUND_KEYS = [
+  'text1',
+  'text2',
+  'text3',
+  'pageBg',
+  'cardBg',
+  'invertedButtonBg',
+  'invertedButtonText',
+  'primaryBlue',
+] as const satisfies readonly RawKey[];
+
+/**
+ * Re-resolve a colour that was read before an Appearance change.
+ *
+ * NativeWind updates its CSS variables without forcing every parent React
+ * component to render again. An inline prop such as `color={Colors.text1}`
+ * can therefore still hold the old theme's literal. Theme-aware primitives
+ * use this helper to translate either side of an adaptive token pair into the
+ * value for the current render. The list is deliberately limited to colours
+ * used as interactive foregrounds: some surface and accent tokens share an
+ * identical hex, so treating every palette value as interchangeable would
+ * make the mapping ambiguous.
+ */
+export function resolveThemeColor(value: string, scheme: ThemeScheme): string {
+  for (const key of ADAPTIVE_FOREGROUND_KEYS) {
+    const darkKey = `${key}Dark` as RawKey;
+    const lightValue = RAW[key];
+    const darkValue = RAW[darkKey];
+    if (value === lightValue || value === darkValue) {
+      return scheme === 'dark' ? darkValue : lightValue;
+    }
+  }
+  return value;
+}
+
 function pick(key: string): string | undefined {
   if (!(key in RAW)) return undefined;
   const scheme = Appearance.getColorScheme();
@@ -182,6 +240,6 @@ export const Colors = new Proxy(RAW, {
     if (typeof key !== 'string') return undefined;
     return pick(key);
   },
-}) as typeof RAW;
+});
 
 export type ColorToken = RawKey;

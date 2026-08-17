@@ -17,6 +17,11 @@ import { create } from 'zustand';
 import { decryptJson, encryptJson } from '@/storage/encryptionManager';
 import { getMmkv } from '@/storage/mmkv';
 import {
+  canCommitLocalData,
+  captureLocalDataEpoch,
+  type LocalDataEpoch,
+} from '@/settings/localDataWipeBarrier';
+import {
   useCredentialStore,
   type StoredCredential,
 } from '@/credentials/store';
@@ -28,6 +33,7 @@ import type {
 
 const CARD_PREFIX = 'idcard:';
 const CLAIM_PREFIX = 'provable:';
+let localWipeGeneration = 0;
 
 interface SerializedCard
   extends Omit<IdentityCardEntity, 'issuedAt' | 'expiresAt' | 'createdAt' | 'updatedAt'> {
@@ -82,11 +88,32 @@ function deserializeClaim(s: SerializedClaim): ProvableClaimEntity {
   };
 }
 
-async function writeCard(card: IdentityCardEntity): Promise<void> {
-  getMmkv().set(`${CARD_PREFIX}${card.id}`, await encryptJson(serializeCard(card)));
+async function writeCard(
+  card: IdentityCardEntity,
+  generation?: number,
+  writeEpoch: LocalDataEpoch = captureLocalDataEpoch(),
+): Promise<boolean> {
+  if (!canCommitLocalData(writeEpoch)) return false;
+  const encrypted = await encryptJson(serializeCard(card));
+  if (
+    (generation !== undefined && generation !== localWipeGeneration) ||
+    !canCommitLocalData(writeEpoch)
+  ) {
+    return false;
+  }
+  getMmkv().set(`${CARD_PREFIX}${card.id}`, encrypted);
+  return true;
 }
-async function writeClaim(claim: ProvableClaimEntity): Promise<void> {
-  getMmkv().set(`${CLAIM_PREFIX}${claim.id}`, await encryptJson(serializeClaim(claim)));
+async function writeClaim(
+  claim: ProvableClaimEntity,
+  generation = localWipeGeneration,
+  writeEpoch: LocalDataEpoch = captureLocalDataEpoch(),
+): Promise<boolean> {
+  if (!canCommitLocalData(writeEpoch)) return false;
+  const encrypted = await encryptJson(serializeClaim(claim));
+  if (generation !== localWipeGeneration || !canCommitLocalData(writeEpoch)) return false;
+  getMmkv().set(`${CLAIM_PREFIX}${claim.id}`, encrypted);
+  return true;
 }
 
 interface IdentityDataState {
@@ -101,6 +128,8 @@ interface IdentityDataState {
   readonly markClaimPresented: (id: string) => void;
   readonly removePassportCredentials: () => Promise<void>;
   readonly clearAllIdentityData: () => Promise<void>;
+  /** Drop every live reference after the encrypted local store is wiped. */
+  readonly resetForLocalWipe: () => void;
 }
 
 function deriveIssuerType(issuerDid: string): string {
@@ -134,6 +163,9 @@ export const useIdentityData = create<IdentityDataState>((set, get) => ({
   hydrated: false,
 
   hydrate: async () => {
+    const generation = localWipeGeneration;
+    const writeEpoch = captureLocalDataEpoch();
+    if (!canCommitLocalData(writeEpoch)) return;
     if (get().hydrated) return;
     const cards: IdentityCardEntity[] = [];
     const claims: ProvableClaimEntity[] = [];
@@ -142,22 +174,25 @@ export const useIdentityData = create<IdentityDataState>((set, get) => ({
         const raw = getMmkv().getString(k);
         if (!raw) continue;
         const v = await decryptJson<SerializedCard>(raw);
+        if (generation !== localWipeGeneration || !canCommitLocalData(writeEpoch)) return;
         cards.push(deserializeCard(v));
       } else if (k.startsWith(CLAIM_PREFIX)) {
         const raw = getMmkv().getString(k);
         if (!raw) continue;
         const v = await decryptJson<SerializedClaim>(raw);
+        if (generation !== localWipeGeneration || !canCommitLocalData(writeEpoch)) return;
         claims.push(deserializeClaim(v));
       }
     }
 
     await useCredentialStore.getState().hydrate();
+    if (generation !== localWipeGeneration || !canCommitLocalData(writeEpoch)) return;
     const seen = new Set(cards.map((c) => c.id));
     for (const item of useCredentialStore.getState().details.values()) {
       if (seen.has(item.id)) continue;
       const mirrored = cardFromStoredCredential(item);
       cards.push(mirrored);
-      await writeCard(mirrored);
+      if (!(await writeCard(mirrored, generation, writeEpoch))) return;
     }
 
     cards.sort((a, b) => b.updatedAt.getTime() - a.updatedAt.getTime());
@@ -166,47 +201,62 @@ export const useIdentityData = create<IdentityDataState>((set, get) => ({
   },
 
   upsertIdentityCard: async (card) => {
-    await writeCard(card);
+    const generation = localWipeGeneration;
+    const writeEpoch = captureLocalDataEpoch();
+    if (!(await writeCard(card, generation, writeEpoch))) return;
+    if (generation !== localWipeGeneration || !canCommitLocalData(writeEpoch)) return;
     set((s) => ({
       identityCards: [card, ...s.identityCards.filter((c) => c.id !== card.id)],
     }));
   },
 
   removeIdentityCard: (id) => {
+    if (!canCommitLocalData(captureLocalDataEpoch())) return Promise.resolve();
     getMmkv().remove(`${CARD_PREFIX}${id}`);
     set((s) => ({ identityCards: s.identityCards.filter((c) => c.id !== id) }));
     return Promise.resolve();
   },
 
   upsertProvableClaim: async (claim) => {
-    await writeClaim(claim);
+    const generation = localWipeGeneration;
+    const writeEpoch = captureLocalDataEpoch();
+    if (!(await writeClaim(claim, generation, writeEpoch))) return;
+    if (generation !== localWipeGeneration || !canCommitLocalData(writeEpoch)) return;
     set((s) => ({
       provableClaims: [claim, ...s.provableClaims.filter((c) => c.id !== claim.id)],
     }));
   },
 
   removeProvableClaim: (id) => {
+    if (!canCommitLocalData(captureLocalDataEpoch())) return Promise.resolve();
     getMmkv().remove(`${CLAIM_PREFIX}${id}`);
     set((s) => ({ provableClaims: s.provableClaims.filter((c) => c.id !== id) }));
     return Promise.resolve();
   },
 
   markClaimPresented: (id) => {
+    const generation = localWipeGeneration;
+    const writeEpoch = captureLocalDataEpoch();
+    if (!canCommitLocalData(writeEpoch)) return;
     const claim = get().provableClaims.find((c) => c.id === id);
     if (!claim) return;
     const now = new Date();
     const next: ProvableClaimEntity = { ...claim, lastPresentedAt: now, updatedAt: now };
-    void writeClaim(next);
+    void writeClaim(next, generation, writeEpoch);
     set((s) => ({
       provableClaims: s.provableClaims.map((c) => (c.id === id ? next : c)),
     }));
   },
 
   removePassportCredentials: async () => {
+    const generation = localWipeGeneration;
+    const writeEpoch = captureLocalDataEpoch();
+    if (!canCommitLocalData(writeEpoch)) return;
     if (!get().hydrated) {
       await get().hydrate();
     }
     await useCredentialStore.getState().hydrate();
+    if (generation !== localWipeGeneration || !canCommitLocalData(writeEpoch)) return;
     const credentialPassportIds = new Set<string>();
     for (const entry of useCredentialStore.getState().manifest) {
       if (entry.type === 'passport') credentialPassportIds.add(entry.id);
@@ -221,6 +271,7 @@ export const useIdentityData = create<IdentityDataState>((set, get) => ({
       ]
     );
     for (const id of passportCardIds) {
+      if (generation !== localWipeGeneration || !canCommitLocalData(writeEpoch)) return;
       getMmkv().remove(`${CARD_PREFIX}${id}`);
       await useCredentialStore.getState().remove(id);
     }
@@ -231,6 +282,7 @@ export const useIdentityData = create<IdentityDataState>((set, get) => ({
         droppedClaimIds.push(c.id);
       }
     }
+    if (generation !== localWipeGeneration || !canCommitLocalData(writeEpoch)) return;
     const dropped = new Set(droppedClaimIds);
     set((s) => ({
       identityCards: s.identityCards.filter((c) => !passportCardIds.has(c.id)),
@@ -239,13 +291,19 @@ export const useIdentityData = create<IdentityDataState>((set, get) => ({
   },
 
   clearAllIdentityData: () => {
+    if (!canCommitLocalData(captureLocalDataEpoch())) return Promise.resolve();
     for (const k of getMmkv().getAllKeys()) {
       if (k.startsWith(CARD_PREFIX) || k.startsWith(CLAIM_PREFIX)) {
         getMmkv().remove(k);
       }
     }
-    set({ identityCards: [], provableClaims: [] });
+    get().resetForLocalWipe();
     return Promise.resolve();
+  },
+
+  resetForLocalWipe: () => {
+    localWipeGeneration += 1;
+    set({ identityCards: [], provableClaims: [], hydrated: true });
   },
 }));
 

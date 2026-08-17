@@ -21,8 +21,6 @@ internal enum SpruceDidError: Error, LocalizedError {
   case keyNotFound(String)
   case signFailed(String)
   case verifyFailed(String)
-  case spruceSdkUnavailable
-  case spruceSdkError(String)
   case invalidInput(String)
 
   var errorDescription: String? {
@@ -35,9 +33,6 @@ internal enum SpruceDidError: Error, LocalizedError {
     case .keyNotFound(let alias): return "No key found for alias=\(alias)"
     case .signFailed(let m): return "Sign failed: \(m)"
     case .verifyFailed(let m): return "Verify failed: \(m)"
-    case .spruceSdkUnavailable:
-      return "SpruceIDMobileSdk not linked — add the SPM package to the host app"
-    case .spruceSdkError(let m): return "SpruceID SDK error: \(m)"
     case .invalidInput(let m): return "Invalid input: \(m)"
     }
   }

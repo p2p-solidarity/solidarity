@@ -33,8 +33,9 @@ import Animated, {
   withSpring,
 } from 'react-native-reanimated';
 
-import { Colors } from '@/constants/Colors';
+import { useThemeColors, type ThemeColors } from '@/constants/useThemeColors';
 import { haptic as fireHaptic, type HapticKind } from '@/feedback/haptics';
+import { ON_DARK, ON_LIGHT } from './contrast';
 
 export type ButtonVariant =
   | 'primary'
@@ -68,44 +69,6 @@ interface VariantStyle {
   readonly weight: '400' | '500';
 }
 
-const VARIANT_CONFIG: Readonly<Record<ButtonVariant, VariantStyle>> = {
-  primary: {
-    bg: Colors.text1,                         // textPrimary
-    fg: Colors.pageBg,                        // cream/ink-inverse
-    borderColor: `${Colors.text1}4D`,         // textPrimary @ 30%
-    borderWidth: 1,
-    weight: '500',
-  },
-  inverted: {
-    bg: '#FFFFFF',                            // pure white per Swift
-    fg: '#000000',                            // pure black per Swift
-    borderWidth: 0,                           // NO border
-    weight: '500',
-  },
-  secondary: {
-    bg: Colors.cardBg,                        // cardSurface
-    fg: Colors.text1,                         // textPrimary
-    borderColor: Colors.divider,
-    borderWidth: 1,
-    weight: '400',                            // regular
-  },
-  dottedOutline: {
-    bg: 'transparent',
-    fg: Colors.primaryBlue,
-    borderColor: Colors.primaryBlue,
-    borderWidth: 1,
-    dashed: true,
-    weight: '400',
-  },
-  destructive: {
-    bg: 'transparent',
-    fg: Colors.destructive,
-    borderColor: Colors.destructive,
-    borderWidth: 1,
-    weight: '500',
-  },
-};
-
 const DEFAULT_HAPTIC: Readonly<Record<ButtonVariant, HapticKind>> = {
   primary: 'success',
   inverted: 'tap',
@@ -138,7 +101,9 @@ export function ThemedButton({
   onPress,
   ...rest
 }: ThemedButtonProps): ReactNode {
-  const cfg = VARIANT_CONFIG[variant];
+  const theme = useThemeColors();
+  const cfg = variantConfig(variant, theme);
+  const unavailable = disabled === true || loading;
   const scale = useSharedValue(1);
   const animStyle = useAnimatedStyle(() => ({ transform: [{ scale: scale.value }] }));
 
@@ -166,14 +131,14 @@ export function ThemedButton({
     justifyContent: 'center' as const,
     flexDirection: 'row' as const,
     alignSelf: fullWidth ? ('stretch' as const) : ('flex-start' as const),
-    opacity: disabled || loading ? 0.5 : 1,
+    opacity: unavailable ? 0.5 : 1,
   };
 
   return (
     <Animated.View style={[animStyle, fullWidth ? styles.fullWidth : undefined]}>
       <Pressable
         style={containerStyle}
-        disabled={disabled || loading}
+        disabled={unavailable}
         accessibilityRole="button"
         accessibilityLabel={label}
         onPress={handlePress}
@@ -192,6 +157,51 @@ export function ThemedButton({
       </Pressable>
     </Animated.View>
   );
+}
+
+function variantConfig(variant: ButtonVariant, theme: ThemeColors): VariantStyle {
+  switch (variant) {
+    case 'primary':
+      return {
+        bg: theme.text1,
+        fg: theme.pageBg,
+        borderColor: `${theme.text1}4D`,
+        borderWidth: 1,
+        weight: '500',
+      };
+    case 'inverted':
+      return {
+        bg: ON_DARK,
+        fg: ON_LIGHT,
+        borderWidth: 0,
+        weight: '500',
+      };
+    case 'secondary':
+      return {
+        bg: theme.cardBg,
+        fg: theme.text1,
+        borderColor: theme.divider,
+        borderWidth: 1,
+        weight: '400',
+      };
+    case 'dottedOutline':
+      return {
+        bg: 'transparent',
+        fg: theme.primaryBlue,
+        borderColor: theme.primaryBlue,
+        borderWidth: 1,
+        dashed: true,
+        weight: '400',
+      };
+    case 'destructive':
+      return {
+        bg: 'transparent',
+        fg: theme.destructive,
+        borderColor: theme.destructive,
+        borderWidth: 1,
+        weight: '500',
+      };
+  }
 }
 
 const styles = StyleSheet.create({

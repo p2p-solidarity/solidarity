@@ -113,6 +113,7 @@ void mock.module('@/storage/mmkv', () => ({
 void mock.module('@/storage/secureMasterKey', () => ({
   getMasterKey: (): Promise<Uint8Array> => Promise.resolve(FIXED_MASTER_KEY),
   resetMasterKeyForTesting: (): Promise<undefined> => Promise.resolve(undefined),
+  evictMasterKeyCache: (): undefined => undefined,
 }));
 
 void mock.module('expo-secure-store', () => ({
@@ -201,6 +202,8 @@ void mock.module('expo-file-system/legacy', () => ({
 }));
 
 void mock.module('react-native', () => ({
+  ...((globalThis as unknown as { __AIRMEISHI_RN_MOCK__: Record<string, unknown> })
+    .__AIRMEISHI_RN_MOCK__),
   Platform: { OS: 'ios' },
   AppState: {
     addEventListener: () => ({ remove: (): undefined => undefined }),

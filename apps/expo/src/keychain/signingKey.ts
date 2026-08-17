@@ -60,10 +60,13 @@ import {
   base64UrlDecode,
   base64UrlEncode,
   didKeyFromJwk,
+  err,
+  ok,
   publicKeyToJwk,
   publicKeyFromPrivate,
   sha256Bytes,
   type PublicKeyJWK,
+  type Result,
   utf8ToBytes,
 } from '@solidarity/shared';
 import { publicKeyJwkSchema } from '@solidarity/shared';
@@ -71,6 +74,17 @@ import {
   getSpruceDid,
   type SpruceDid,
 } from '@solidarity/nitro-spruce-did';
+
+import {
+  deletionFailed,
+  deletionSucceeded,
+  type LocalDeletionResult,
+} from '@/storage/deletionResult';
+import {
+  canCommitLocalData,
+  captureLocalDataEpoch,
+  type LocalDataEpoch,
+} from '@/settings/localDataWipeBarrier';
 
 import { isBiometricAvailable, requireBiometric } from './biometric';
 import { shouldRequireNativeBiometricBinding } from './signingKeyPolicy';
@@ -110,6 +124,51 @@ export interface SigningIdentity {
 }
 
 let cachedIdentity: SigningIdentity | null = null;
+
+// A key generation can outlive the screen that initiated it: native keychain
+// creation and the public-JWK read are both asynchronous. The production wipe
+// advances the local-data epoch, waits for these operations, and only then
+// performs its authoritative deletion. That ordering prevents a pre-wipe
+// `generateKey` completion from recreating the identity after deletion.
+const activeSigningKeyOperations = new Set<Promise<unknown>>();
+
+function trackSigningKeyOperation<T>(operation: Promise<T>): Promise<T> {
+  activeSigningKeyOperations.add(operation);
+  const remove = (): void => {
+    activeSigningKeyOperations.delete(operation);
+  };
+  operation.then(remove, remove);
+  return operation;
+}
+
+/** Wait for pre-wipe signing-key reads/provisioning to reach an epoch checkpoint. */
+export async function quiesceSigningKeyOperations(): Promise<void> {
+  while (activeSigningKeyOperations.size > 0) {
+    await Promise.allSettled([...activeSigningKeyOperations]);
+  }
+}
+
+function localDataWipeError(): Error {
+  return new Error('Signing key provisioning was invalidated by a local data wipe');
+}
+
+/**
+ * Best-effort cleanup for a native key that finished generating after its
+ * operation became stale. The ordered wipe retries the same aliases through
+ * `deleteSigningKey()` and reports any failure there, so this helper must not
+ * turn a cancelled caller into a success path.
+ */
+async function deleteStaleSigningKey(): Promise<void> {
+  const d = driver();
+  await Promise.allSettled([
+    d.deleteKey(SIGNING_KEY_ALIAS),
+    ...[LEGACY_EXPO_ALIAS, LEGACY_SWIFT_V0_ALIAS].map((alias) =>
+      SecureStore.deleteItemAsync(alias, SECURE_OPTS_LEGACY),
+    ),
+  ]);
+  cachedIdentity = null;
+  cachedAuthMode = null;
+}
 
 /**
  * How the active key is biometric-gated — resolved once per process from
@@ -194,7 +253,16 @@ async function readPublicJwk(alias: string): Promise<PublicKeyJWK> {
  * generates a hardware-backed key in the enclave; subsequent calls return
  * the cached identity record.
  */
-export async function ensureSigningKey(): Promise<SigningIdentity> {
+export function ensureSigningKey(): Promise<SigningIdentity> {
+  return trackSigningKeyOperation(
+    ensureSigningKeyAtEpoch(captureLocalDataEpoch()),
+  );
+}
+
+async function ensureSigningKeyAtEpoch(
+  writeEpoch: LocalDataEpoch,
+): Promise<SigningIdentity> {
+  if (!canCommitLocalData(writeEpoch)) throw localDataWipeError();
   if (cachedIdentity) return cachedIdentity;
 
   const d = driver();
@@ -202,6 +270,7 @@ export async function ensureSigningKey(): Promise<SigningIdentity> {
   // 1. Happy path — already provisioned in SpruceID.
   if (d.hasKey(SIGNING_KEY_ALIAS)) {
     const publicJwkValue = await readPublicJwk(SIGNING_KEY_ALIAS);
+    if (!canCommitLocalData(writeEpoch)) throw localDataWipeError();
     cachedIdentity = { alias: SIGNING_KEY_ALIAS, publicJwk: publicJwkValue };
     return cachedIdentity;
   }
@@ -216,12 +285,13 @@ export async function ensureSigningKey(): Promise<SigningIdentity> {
   //    iOS Secure Enclave bypass mode, swap this branch for an actual
   //    bytes-to-keychain import + emit a "migrationSucceeded" event.
   const legacyBytes = await readLegacyExpoBytes();
+  if (!canCommitLocalData(writeEpoch)) throw localDataWipeError();
   if (legacyBytes) {
     // Derive the legacy public key so the caller can persist it as a
     // "prior identity" record if they want to surface the rotation in UI.
     try {
       const legacyJwk = publicKeyToJwk(publicKeyFromPrivate(legacyBytes));
-      // eslint-disable-next-line no-console
+       
       console.warn(
         '[signingKey] legacy software-key detected; rotating to Secure Enclave. ' +
           `Old DID-key JWK x=${legacyJwk.x.slice(0, 6)}…`
@@ -230,6 +300,7 @@ export async function ensureSigningKey(): Promise<SigningIdentity> {
       // Legacy bytes corrupted — ignore, proceed with fresh generation.
     }
     await clearLegacyExpoBytes();
+    if (!canCommitLocalData(writeEpoch)) throw localDataWipeError();
   }
 
   // 3. Provision a fresh identity key.
@@ -254,8 +325,17 @@ export async function ensureSigningKey(): Promise<SigningIdentity> {
   const requireNativeBiometric = shouldRequireNativeBiometricBinding(
     await isBiometricAvailable().catch(() => false)
   );
+  if (!canCommitLocalData(writeEpoch)) throw localDataWipeError();
   await d.generateKey(SIGNING_KEY_ALIAS, 'p256-syncable', requireNativeBiometric);
+  if (!canCommitLocalData(writeEpoch)) {
+    await deleteStaleSigningKey();
+    throw localDataWipeError();
+  }
   const publicJwkValue = await readPublicJwk(SIGNING_KEY_ALIAS);
+  if (!canCommitLocalData(writeEpoch)) {
+    await deleteStaleSigningKey();
+    throw localDataWipeError();
+  }
   cachedIdentity = { alias: SIGNING_KEY_ALIAS, publicJwk: publicJwkValue };
   return cachedIdentity;
 }
@@ -432,10 +512,149 @@ export function wrapRawSigningInputForSpruce(payload: Uint8Array): Uint8Array {
   return sha256Bytes(payload);
 }
 
-/** Test-only — wipes the active alias plus all legacy aliases. */
-export async function resetSigningKeyForTesting(): Promise<void> {
-  await driver().deleteKey(SIGNING_KEY_ALIAS).catch(() => false);
-  await clearLegacyExpoBytes();
+/**
+ * Permanently delete the active signing key and every legacy copy.
+ *
+ * Teardown is intentionally all-attempting: a native driver failure must not
+ * prevent cleanup of legacy SecureStore aliases. Any failed deletion is then
+ * surfaced so the caller cannot report a complete wipe.
+ */
+export async function deleteSigningKey(): Promise<LocalDeletionResult> {
+  await quiesceSigningKeyOperations();
+  // The native deleteKey contract already deletes every EC item for this
+  // alias (`kSecAttrSynchronizableAny` on iOS), including T7 duplicates.
+  // Deleting enumerated syncable rows first would make this authoritative
+  // call fulfill with false after a successful pre-delete and incorrectly
+  // report every normal iOS wipe as incomplete.
+  const operations: readonly (() => Promise<unknown>)[] = [
+    () => driver().deleteKey(SIGNING_KEY_ALIAS),
+    ...[LEGACY_EXPO_ALIAS, LEGACY_SWIFT_V0_ALIAS].map(
+      (alias) => () => SecureStore.deleteItemAsync(alias, SECURE_OPTS_LEGACY),
+    ),
+  ];
+  const results = await Promise.allSettled(
+    operations.map((operation) => Promise.resolve().then(operation)),
+  );
   cachedIdentity = null;
   cachedAuthMode = null;
+  const [activeResult, ...legacyResults] = results;
+  const activeDeleteFailed =
+    activeResult === undefined ||
+    activeResult.status === 'rejected' ||
+    activeResult.value !== true;
+  const legacyDeleteFailed = legacyResults.some(
+    (result) => result.status === 'rejected',
+  );
+  if (activeDeleteFailed || legacyDeleteFailed) {
+    return deletionFailed();
+  }
+  return deletionSucceeded();
+}
+
+/** Test-only — wipes the active alias plus all legacy aliases. */
+export async function resetSigningKeyForTesting(): Promise<void> {
+  await deleteSigningKey();
+}
+
+// ── T7: iCloud-synced signing-key conflict surface ────────────────────────
+
+/**
+ * Non-minting existence probe. `ensureSigningKey` GENERATES on a miss —
+ * during the iCloud Keychain replication window that mints a competitor to
+ * the user's real key (T7), so the onboarding wait gate needs a probe that
+ * can never mint.
+ */
+export async function hasExistingSigningKey(): Promise<boolean> {
+  if (cachedIdentity) return true;
+  try {
+    return driver().hasKey(SIGNING_KEY_ALIAS);
+  } catch {
+    return false;
+  }
+}
+
+export interface SigningKeyCandidate {
+  readonly labelHex: string;
+  readonly publicKeyHex: string;
+  /** True for the key the deterministic native resolver currently signs with. */
+  readonly active: boolean;
+}
+
+function parseCandidateRows(raw: string): readonly { labelHex: string; publicKeyHex: string }[] {
+  try {
+    const parsed: unknown = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return [];
+    const rows: { labelHex: string; publicKeyHex: string }[] = [];
+    for (const entry of parsed) {
+      if (typeof entry !== 'object' || entry === null) continue;
+      const label = (entry as Record<string, unknown>)['label'];
+      const publicKeyHex = (entry as Record<string, unknown>)['publicKeyHex'];
+      if (typeof label === 'string' && typeof publicKeyHex === 'string') {
+        rows.push({ labelHex: label, publicKeyHex });
+      }
+    }
+    return rows;
+  } catch {
+    return [];
+  }
+}
+
+function hexFromBytes(bytes: Uint8Array): string {
+  return [...bytes].map((b) => b.toString(16).padStart(2, '0')).join('');
+}
+
+/** `04 || X || Y` hex of the resolver's current winner; null when no key. */
+async function activePublicKeyHex(): Promise<string | null> {
+  try {
+    if (!driver().hasKey(SIGNING_KEY_ALIAS)) return null;
+    const jwk = await readPublicJwk(SIGNING_KEY_ALIAS);
+    return `04${hexFromBytes(base64UrlDecode(jwk.x))}${hexFromBytes(base64UrlDecode(jwk.y))}`;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Every iCloud-synced signing-key item under the identity alias, with the
+ * resolver's current winner marked. Length > 1 = a T7 double-mint conflict
+ * (the settings resolver renders only then). Fail-closed `[]` on any driver
+ * or parse failure — a broken probe must never look like a conflict.
+ */
+export async function listSyncableSigningKeys(): Promise<readonly SigningKeyCandidate[]> {
+  try {
+    const rows = parseCandidateRows(await driver().listSyncableP256Keys(SIGNING_KEY_ALIAS));
+    if (rows.length === 0) return [];
+    const active = await activePublicKeyHex();
+    return rows.map((row) => ({ ...row, active: active !== null && row.publicKeyHex === active }));
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * Keep ONE candidate and delete every other synced item under the alias —
+ * the user-approved resolution of a T7 conflict. Face-ID-gated with the
+ * always-prompt 'delete' reason (grace window deliberately bypassed: this
+ * destroys key material). Never called automatically. Clears the process
+ * identity cache so the next signer resolves onto the kept key.
+ */
+export async function resolveSigningKeyConflict(
+  keepLabelHex: string
+): Promise<Result<void, string>> {
+  const allowed = await requireBiometric('delete');
+  if (!allowed) return err('biometricDenied');
+  const rows = parseCandidateRows(await driver().listSyncableP256Keys(SIGNING_KEY_ALIAS));
+  if (!rows.some((row) => row.labelHex === keepLabelHex)) {
+    return err('keepTargetMissing');
+  }
+  let failures = 0;
+  for (const row of rows) {
+    if (row.labelHex === keepLabelHex) continue;
+    const deleted = await driver()
+      .deleteSyncableP256Key(SIGNING_KEY_ALIAS, row.labelHex)
+      .catch(() => false);
+    if (!deleted) failures += 1;
+  }
+  cachedIdentity = null;
+  return failures > 0 ? err('deleteFailed') : ok(undefined);
 }

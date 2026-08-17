@@ -1,0 +1,43 @@
+{
+  "description": "did:key (P-256) conformance vectors for packages/shared/src/identity/didKey.ts. valid[] entries round-trip privateKeyHex -> uncompressed/compressed pubkey -> did:key:z... -> resolveDidKey back to the same pubkey. invalid[] entries must be rejected by resolveDidKey. Consumed by packages/shared/test/didKey.vectors.test.ts; intended to be replayed by the web viewer against its own did:key implementation (03-spec §3).",
+  "valid": [
+    {
+      "name": "swift-parity-fixed-seed",
+      "source": "apps/expo/__tests__/parity/identityDeep.parity.test.ts (FixtureExporter.test_exportEs256JwtSignature seed) — independently verified against Swift P256.Signing.PublicKey / DIDKeyResolver.swift",
+      "privateKeyHex": "1111111122222222333333334444444455555555666666667777777788888888",
+      "publicKeyUncompressedHex": "0494267928183d2f99767ab569f66d9e1107a97f14e7b857e77a6a14636ac9060069d891070432ef16849e58fe7e3059f92429a25fd4d92676c369854e657c616a",
+      "publicKeyCompressedHex": "0294267928183d2f99767ab569f66d9e1107a97f14e7b857e77a6a14636ac90600",
+      "did": "did:key:zDnaeaQHQpDWivip1SugnEwZaF5JUCmSyPrYewToLKYmv8CyV"
+    },
+    {
+      "name": "self-consistency-odd-y-parity",
+      "source": "generated with this package's own didKey.ts/keyPair.ts to exercise the 0x03-prefix (odd Y) compression branch not hit by the swift-parity-fixed-seed vector above (which is 0x02/even Y); not independently cross-checked against Swift",
+      "privateKeyHex": "040b121920272e353c434a51585f666d747b828990979ea5acb3bac1c8cfd6dd",
+      "publicKeyUncompressedHex": "04f67d7bf6bf927748d1718cab99551270a12a83cb0cdbb22417af8973753563b1e761ae2b5c36bf07260fa9624d8e89764d8cf2fe3add1aad5d280324b2e1a6fd",
+      "publicKeyCompressedHex": "03f67d7bf6bf927748d1718cab99551270a12a83cb0cdbb22417af8973753563b1",
+      "did": "did:key:zDnaezFUgwEFbHpuc7b3NUj8xQpbkEm3439RYBuRKTNmRhxGG"
+    }
+  ],
+  "invalid": [
+    {
+      "name": "missing-did-key-prefix",
+      "did": "not-a-did",
+      "reason": "missing the 'did:key:' prefix"
+    },
+    {
+      "name": "missing-multibase-z-prefix",
+      "did": "did:key:nope",
+      "reason": "missing the multibase 'z' (base58btc) prefix"
+    },
+    {
+      "name": "wrong-multicodec-prefix",
+      "did": "did:key:zabc",
+      "reason": "decodes to a non-P-256 multicodec prefix"
+    },
+    {
+      "name": "invalid-base58-characters",
+      "did": "did:key:z0OIl1",
+      "reason": "'0', 'O', 'I', 'l' are not valid base58btc characters"
+    }
+  ]
+}

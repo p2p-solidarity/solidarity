@@ -5,24 +5,27 @@
  *   • Divider: 0.5pt
  *   • Bottom row: checkmark.seal.fill (11pt) + level text 11pt +
  *     issuerType.capitalized 11pt tertiary, right-aligned
- *   • Trust levels:
- *       L3+ → "Level 3+ - Passport ZK + AA" / Color.Theme.terminalGreen
- *       L3  → "Level 3 - Passport ZK (No AA)" / Color.Theme.primaryBlue
- *       L1  → "Level 1 - Fallback / Non-ZK" / textTertiary
+ *   • Trust levels: surface shows the SIMPLE label (credentialTrust.simple*
+ *     — "Verified", "Basic"); the technical tier strings live on the
+ *     credential detail screen (credentialDetail.levelL*). Tone colors keep
+ *     the tiers honest: L3+ terminalGreen, L3/L2 primaryBlue, L1 text3 —
+ *     a fallback must never look like a ZK tier.
  * Source: solidarity/Views/MeViews/MeTabComponents.swift (VerifiedCredentialRow).
  */
 import type { SFSymbol } from 'expo-symbols';
-import { Text, View } from 'react-native';
+import { View } from 'react-native';
 
 import { PressableScale } from '@/components/common/PressableScale';
 import { SfIcon } from '@/components/icons/SfIcon';
+import { ThemedSurface, ThemedText } from '@/components/themed';
 import { Colors } from '@/constants/Colors';
 import {
-  credentialTrustLabelForLevel,
+  credentialTrustSimpleI18nKeyForLevel,
   credentialTrustToneForLevel,
   type TrustDisplayTone,
 } from '@/credentials/trustDisplay';
 import type { TrustLevel as StoredTrustLevel } from '@/credentials/store';
+import { useTranslation } from '@/i18n';
 
 export interface VerifiedCredentialRowProps {
   readonly icon: SFSymbol;
@@ -39,7 +42,8 @@ export function VerifiedCredentialRow({
   issuerType,
   onPress,
 }: VerifiedCredentialRowProps) {
-  const levelText = credentialTrustLabelForLevel(trustLevel);
+  const { t } = useTranslation();
+  const levelText = t(credentialTrustSimpleI18nKeyForLevel(trustLevel));
   const levelColor = levelColorForTone(credentialTrustToneForLevel(trustLevel));
 
   return (
@@ -47,52 +51,35 @@ export function VerifiedCredentialRow({
       haptic="tap"
       onPress={onPress}
       accessibilityRole="button"
-      className="mx-4 rounded-lg bg-mutedSurface p-3"
-    >
-      <View>
+      containerStyle={{ marginHorizontal: 16 }}>
+      <ThemedSurface variant="inset" className="rounded-none p-3">
         <View className="flex-row items-center gap-2 pb-3">
-          <View
-            style={{ width: 18, height: 18, alignItems: 'center', justifyContent: 'center' }}
-          >
+          <View style={{ width: 18, height: 18, alignItems: 'center', justifyContent: 'center' }}>
             <SfIcon name={icon} size={14} color={Colors.text1} />
           </View>
-          <Text
-            numberOfLines={1}
-            className="text-text1 text-[15px] flex-1"
-          >
+          <ThemedText variant="bodyMedium" numberOfLines={1} style={{ flex: 1 }}>
             {title}
-          </Text>
-          <View
-            style={{ width: 18, height: 18, alignItems: 'center', justifyContent: 'center' }}
-          >
-            <SfIcon
-              name="chevron.right"
-              size={12}
-              weight="semibold"
-              color={Colors.text3}
-            />
+          </ThemedText>
+          <View style={{ width: 18, height: 18, alignItems: 'center', justifyContent: 'center' }}>
+            <SfIcon name="chevron.right" size={12} weight="semibold" color={Colors.text3} />
           </View>
         </View>
 
-        <View
-          style={{ height: 0.5, backgroundColor: Colors.divider, marginBottom: 8 }}
-        />
+        <View style={{ height: 0.5, backgroundColor: Colors.divider, marginBottom: 8 }} />
 
         <View className="flex-row items-center gap-1 py-1">
-          <View
-            style={{ width: 12, height: 12, alignItems: 'center', justifyContent: 'center' }}
-          >
+          <View style={{ width: 12, height: 12, alignItems: 'center', justifyContent: 'center' }}>
             <SfIcon name="checkmark.seal.fill" size={11} color={levelColor} />
           </View>
-          <Text style={{ color: levelColor }} className="text-[11px]">
+          <ThemedText variant="caption" style={{ color: levelColor }}>
             {levelText}
-          </Text>
+          </ThemedText>
           <View className="flex-1" />
-          <Text className="text-text3 text-[11px]">
+          <ThemedText variant="caption" tone="tertiary">
             {capitalize(issuerType)}
-          </Text>
+          </ThemedText>
         </View>
-      </View>
+      </ThemedSurface>
     </PressableScale>
   );
 }

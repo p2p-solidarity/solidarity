@@ -7,11 +7,22 @@
  * TS port under test: apps/expo/src/keychain/biometric.ts
  *
  * Policy (2026-06-13, owner-approved AGGRESSIVE tiering — see
- * docs/superpowers/plans/2026-06-13-faceid-single-gate-phase4.md):
- *   - ONE shared 5-minute grace bucket covers the non-destructive family
- *     (sign / export / present / exchange / passportSave): a single
- *     successful authorization silences the whole family for the window.
- *   - 'delete' ALWAYS prompts and never arms the bucket.
+ * docs/superpowers/plans/2026-06-13-faceid-single-gate-phase4.md; amended
+ * for the Pear connection-scoping security fix, task A5.2, across two
+ * rounds):
+ *   - ONE shared 5-minute grace bucket covers the same-device,
+ *     same-session family (sign / export / present / passportSave /
+ *     exchange): a single successful authorization silences the whole
+ *     family for the window.
+ *   - 'delete' and 'cardRelease' ALWAYS prompt and never arm the bucket.
+ *     'cardRelease' releases a signed credential to a REMOTE peer over
+ *     Pear — riding a grace window armed by an unrelated `sign` would let a
+ *     `card.request` release the card with no live Face ID at all.
+ *   - Round 1 mistakenly moved the existing 'exchange' reason into
+ *     ALWAYS_PROMPT, which also stripped grace from `vault/secretsKeychain.ts`'s
+ *     unrelated local root-secret unwrap (same reason string, different
+ *     call site). Round 2 introduces the dedicated 'cardRelease' reason for
+ *     the Pear path and returns 'exchange' to the graced family.
  *   - `armBiometricGrace()` / `hasBiometricGrace()` expose the bucket so
  *     `biometricGatekeeper.requireSensitiveAction` shares it.
  *
@@ -78,6 +89,7 @@ describe('requireBiometric: invokes expo-local-authentication with a prompt', ()
     'delete',
     'exchange',
     'passportSave',
+    'cardRelease',
   ];
 
   for (const reason of reasons) {
@@ -148,6 +160,27 @@ describe('requireBiometric: session grace', () => {
     expect(authCalls.length).toBe(1);
   });
 
+  it('cardRelease still prompts every time, even inside an armed window (card-release fresh-prompt fix)', async () => {
+    await bio.requireBiometric('sign'); // opens the grace window (e.g. the handshake challenge-response)
+    authCalls.length = 0;
+    expect(await bio.requireBiometric('cardRelease')).toBe(true);
+    // Releasing a card to a remote peer must always re-auth, even though a
+    // 'sign' moments earlier (the mutual handshake) armed the shared grace
+    // bucket — see the module-doc policy note above.
+    expect(authCalls.length).toBe(1);
+  });
+
+  it('a second exchange within the grace window does NOT re-prompt (vault unlock keeps its grace)', async () => {
+    await bio.requireBiometric('sign'); // opens the grace window
+    authCalls.length = 0;
+    // 'exchange' rejoined the graced family in round 2 of the A5.2 fix —
+    // vault root-secret unwrap (`vault/secretsKeychain.ts`) must not
+    // live-prompt on every unlock just because an unrelated Pear card
+    // release also used to share this reason string.
+    expect(await bio.requireBiometric('exchange')).toBe(true);
+    expect(authCalls.length).toBe(0);
+  });
+
   it('a failed auth does NOT open a grace window', async () => {
     nextAuthResult = { success: false };
     expect(await bio.requireBiometric('sign')).toBe(false);
@@ -170,15 +203,23 @@ describe('requireBiometric: session grace', () => {
 // ── Shared grace bucket: one prompt covers the whole non-destructive family ─
 
 describe('requireBiometric: shared grace bucket (aggressive policy)', () => {
-  it('a successful sign silences export/present/exchange/passportSave within the window', async () => {
+  it('a successful sign silences export/present/passportSave/exchange within the window', async () => {
     nextAuthResult = { success: true };
     expect(await bio.requireBiometric('sign')).toBe(true);
     expect(authCalls.length).toBe(1);
-    for (const reason of ['export', 'present', 'exchange', 'passportSave'] as const) {
+    for (const reason of ['export', 'present', 'passportSave', 'exchange'] as const) {
       expect(await bio.requireBiometric(reason)).toBe(true);
     }
     // Still only the one original prompt — the bucket covered all of them.
     expect(authCalls.length).toBe(1);
+  });
+
+  it('a successful sign does NOT silence cardRelease — card release always re-prompts', async () => {
+    nextAuthResult = { success: true };
+    expect(await bio.requireBiometric('sign')).toBe(true);
+    expect(authCalls.length).toBe(1);
+    expect(await bio.requireBiometric('cardRelease')).toBe(true);
+    expect(authCalls.length).toBe(2);
   });
 
   it('a successful export arms the bucket for a later sign', async () => {
@@ -195,6 +236,22 @@ describe('requireBiometric: shared grace bucket (aggressive policy)', () => {
     authCalls.length = 0;
     await bio.requireBiometric('sign');
     expect(authCalls.length).toBe(1);
+  });
+
+  it('cardRelease success does NOT arm the bucket', async () => {
+    nextAuthResult = { success: true };
+    await bio.requireBiometric('cardRelease');
+    authCalls.length = 0;
+    await bio.requireBiometric('sign');
+    expect(authCalls.length).toBe(1);
+  });
+
+  it('exchange success DOES arm the bucket (rejoined the graced family)', async () => {
+    nextAuthResult = { success: true };
+    await bio.requireBiometric('exchange');
+    authCalls.length = 0;
+    await bio.requireBiometric('sign');
+    expect(authCalls.length).toBe(0);
   });
 
   it('armBiometricGrace()/hasBiometricGrace() expose the bucket to the gatekeeper', async () => {

@@ -1,10 +1,12 @@
 import type { SFSymbol } from 'expo-symbols';
+import type { TFunction } from 'i18next';
 import { type ReactNode } from 'react';
 import { Pressable, View } from 'react-native';
 
 import { SfIcon } from '@/components/icons/SfIcon';
 import { ThemedText } from '@/components/themed';
 import { Colors } from '@/constants/Colors';
+import { useTranslation } from '@/i18n';
 import type { BusinessCardField } from '@solidarity/shared';
 
 export type VcStatus = 'verified' | 'selfAttested' | 'unverified';
@@ -23,11 +25,15 @@ export const STATUS_COLOR: Readonly<Record<VcStatus, string>> = {
   unverified: Colors.text3,
 };
 
-export function vcStatusLabel(status: VcStatus, excludedFromVc: boolean): string {
-  if (excludedFromVc) return 'Shared but not in VC';
-  if (status === 'verified') return 'VC: verified';
-  if (status === 'selfAttested') return 'VC: self-attested';
-  return 'Not in VC';
+export function vcStatusLabel(
+  status: VcStatus,
+  excludedFromVc: boolean,
+  t: TFunction,
+): string {
+  if (excludedFromVc) return t('shareSettings.status.sharedUnverified');
+  if (status === 'verified') return t('shareSettings.status.verified');
+  if (status === 'selfAttested') return t('shareSettings.status.selfDeclared');
+  return t('shareSettings.status.unverified');
 }
 
 export function FieldRow({
@@ -41,13 +47,14 @@ export function FieldRow({
   readonly verifiedFields: ReadonlySet<BusinessCardField>;
   readonly onToggle: () => void;
 }): ReactNode {
+  const { t } = useTranslation();
   const status: VcStatus = descriptor.excludedFromVc
     ? 'unverified'
     : verifiedFields.has(descriptor.key)
       ? 'verified'
       : 'selfAttested';
   const statusColor = STATUS_COLOR[status];
-  const statusLabel = vcStatusLabel(status, descriptor.excludedFromVc ?? false);
+  const statusLabel = vcStatusLabel(status, descriptor.excludedFromVc ?? false, t);
 
   return (
     <Pressable

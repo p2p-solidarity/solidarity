@@ -9,10 +9,10 @@
  * (Real Human + Age 18+) only renders when the corresponding provable
  * claims exist in `useIdentityData.provableClaims`.
  */
-import { router } from 'expo-router';
+import { safeBack } from '@/navigation/safeBack';
 import { Image } from 'expo-image';
 import { type ReactNode, useEffect, useMemo, useState } from 'react';
-import { ScrollView, View } from 'react-native';
+import { ActivityIndicator, ScrollView, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { SfIcon } from '@/components/icons/SfIcon';
@@ -26,7 +26,7 @@ import {
   LegendItem,
   ProofRow,
 } from '@/components/settings/ShareSettingsRows';
-import { ThemedText } from '@/components/themed';
+import { ThemedButton, ThemedText } from '@/components/themed';
 import { Colors } from '@/constants/Colors';
 import { useCardStore, useMyCardDetail } from '@/cards/cardManager';
 import { generateQrPng } from '@/cards/qrCodeManager';
@@ -55,12 +55,11 @@ const FIELD_ROWS: readonly (Omit<FieldDescriptor, 'label'> & { labelKey: string 
   { key: 'company', icon: 'building.2', labelKey: 'shareSettings.field.company' },
   { key: 'email', icon: 'envelope', labelKey: 'shareSettings.field.email' },
   { key: 'phone', icon: 'phone', labelKey: 'shareSettings.field.phone' },
-  {
-    key: 'profileImage',
-    icon: 'person.crop.circle',
-    labelKey: 'shareSettings.field.profileImage',
-    excludedFromVc: true,
-  },
+  // NOTE: `profileImage` has no row here. The legacy QR wire drops it
+  // unconditionally (src/cards/solidarityQrTypes.ts `resolveSelectedFields`),
+  // so a toggle would change nothing — G2 removed the dead control. The
+  // `shareProfileImage` pref + FIELD_PREF_KEY entry stay for type/wire
+  // compatibility; they are simply no longer reachable from this UI.
   { key: 'socialNetworks', icon: 'link', labelKey: 'shareSettings.field.socialNetworks' },
   { key: 'skills', icon: 'star', labelKey: 'shareSettings.field.skills', excludedFromVc: true },
 ];
@@ -91,6 +90,19 @@ const FIELD_PREF_KEY: Readonly<Record<ShareFieldKey, ShareFieldPrefKey>> = {
   skills: 'shareSkills',
 };
 
+/**
+ * Canonical legacy business-card QR preview state. The old QR is retained
+ * while a new one signs (`loading` carries `lastUri`), and a failed build
+ * resolves to `error` with a retry — never an eternal spinner. This screen
+ * is the single source of truth for the legacy wire; `solidarity-qr`
+ * redirects here (G2 dedupe).
+ */
+type QrPreviewState =
+  | { readonly kind: 'empty' }
+  | { readonly kind: 'loading'; readonly lastUri: string | null }
+  | { readonly kind: 'ready'; readonly uri: string }
+  | { readonly kind: 'error' };
+
 export default function ShareSettings(): ReactNode {
   const insets = useSafeAreaInsets();
   const { t } = useTranslation();
@@ -99,7 +111,8 @@ export default function ShareSettings(): ReactNode {
   useEffect(() => { void hydrateCards(); }, [hydrateCards]);
   const prefs = usePreferences();
   const enforceMandatory = usePreferences((s) => s.set);
-  const [qrImageUri, setQrImageUri] = useState<string | null>(null);
+  const [qr, setQr] = useState<QrPreviewState>({ kind: 'empty' });
+  const [retryNonce, setRetryNonce] = useState(0);
 
   const hydrateIdentity = useIdentityData((s) => s.hydrate);
   const seedKeychain = useIdentityCoordinator((s) => s.seedFromKeychain);
@@ -131,14 +144,24 @@ export default function ShareSettings(): ReactNode {
 
   useEffect(() => {
     if (!myCard) {
-      setQrImageUri(null);
+      setQr({ kind: 'empty' });
       return;
     }
 
     let cancelled = false;
+    // Keep the last good QR on screen while the next one signs (no spinner
+    // flash per tap); only fall back to a spinner on the very first build.
+    setQr((prev) => ({
+      kind: 'loading',
+      lastUri:
+        prev.kind === 'ready'
+          ? prev.uri
+          : prev.kind === 'loading'
+            ? prev.lastUri
+            : null,
+    }));
     // Debounce: toggling several fields in a row coalesces into one signed
-    // rebuild instead of one Face ID sign per toggle. The previous QR stays
-    // on screen until the new one resolves — no spinner flash per tap.
+    // rebuild instead of one Face ID sign per toggle.
     const handle = setTimeout(() => {
       void buildRuntimeSolidarityQrWire(
         myCard,
@@ -148,11 +171,13 @@ export default function ShareSettings(): ReactNode {
         .then((next) =>
           generateQrPng(next.wire, { size: 220, startingLevel: next.startingLevel })
         )
-        .then((next) => {
-          if (!cancelled) setQrImageUri(next);
+        .then((uri) => {
+          if (!cancelled) setQr({ kind: 'ready', uri });
         })
         .catch(() => {
-          if (!cancelled) setQrImageUri(null);
+          // Fail-visible, not fail-silent: surface an error+retry so a failed
+          // sign never leaves the preview stuck spinning forever.
+          if (!cancelled) setQr({ kind: 'error' });
         });
     }, 350);
 
@@ -160,17 +185,21 @@ export default function ShareSettings(): ReactNode {
       cancelled = true;
       clearTimeout(handle);
     };
-  }, [enabled, myCard, selectedProofClaims]);
+  }, [enabled, myCard, selectedProofClaims, retryNonce]);
 
   return (
     <View
       className="flex-1 bg-pageBg"
       style={{ paddingTop: insets.top }}
     >
-      <SettingsBackToolbar onPress={() => { router.back(); }} />
-      <SettingsScreenTitle title={t('shareSettings.title')} />
+      <SettingsBackToolbar onPress={() => { safeBack('/settings'); }} />
+      <SettingsScreenTitle title={t('legacyCard.title')} />
       <ScrollView contentContainerStyle={{ padding: 16, gap: 20 }}>
-        <QrPreview imageUri={qrImageUri} t={t} />
+        <QrPreview
+          state={qr}
+          onRetry={() => { setRetryNonce((value) => value + 1); }}
+          t={t}
+        />
         <FieldToggles prefs={prefs} verifiedFields={verifiedFields} t={t} />
         {hasHumanClaim || hasAgeClaim ? (
           <ProofToggles
@@ -189,15 +218,28 @@ export default function ShareSettings(): ReactNode {
 }
 
 function QrPreview({
-  imageUri,
+  state,
+  onRetry,
   t,
 }: {
-  readonly imageUri: string | null;
+  readonly state: QrPreviewState;
+  readonly onRetry: () => void;
   readonly t: (key: string) => string;
 }): ReactNode {
   // Figma 726:23661 — the QR sits directly inside a searchBg-grey rounded
   // card (no white inner box, no border, no "QR PREVIEW" caption). The QR's
   // own white module background supplies the scannable quiet-zone.
+  //
+  // Three explicit states (Rule 8): a `ready`/`loading` QR renders the image,
+  // a first build shows a spinner, a failed build shows error + retry, and
+  // no-card shows the create-a-card hint. Never an eternal spinner.
+  const visibleUri =
+    state.kind === 'ready'
+      ? state.uri
+      : state.kind === 'loading'
+        ? state.lastUri
+        : null;
+
   return (
     <View
       style={{
@@ -209,15 +251,33 @@ function QrPreview({
         justifyContent: 'center',
       }}
     >
-      {imageUri ? (
+      {visibleUri ? (
         <Image
-          source={{ uri: imageUri }}
+          source={{ uri: visibleUri }}
           contentFit="contain"
           style={{
             width: 220,
             height: 220,
           }}
         />
+      ) : state.kind === 'loading' ? (
+        <ActivityIndicator color={Colors.accentRose} />
+      ) : state.kind === 'error' ? (
+        <View style={{ alignItems: 'center', gap: 12 }}>
+          <SfIcon name="exclamationmark.triangle" size={32} color={Colors.destructive} />
+          <ThemedText
+            variant="caption"
+            tone="error"
+            style={{ textAlign: 'center' }}
+          >
+            {t('legacyCard.qrError')}
+          </ThemedText>
+          <ThemedButton
+            label={t('legacyCard.retry')}
+            variant="secondary"
+            onPress={onRetry}
+          />
+        </View>
       ) : (
         <View style={{ alignItems: 'center', gap: 8 }}>
           <SfIcon name="qrcode" size={40} color={Colors.text3} />

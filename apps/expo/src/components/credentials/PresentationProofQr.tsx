@@ -10,6 +10,7 @@ import {
   type TrustDisplayTone,
 } from '@/credentials/trustDisplay';
 import type { ProvableClaimEntity } from '@/identity/entities';
+import { useTranslation } from '@/i18n';
 import type { PresentationQRPage } from '@/me/presentationQrPages';
 
 const AUTO_ADVANCE_MS = 1200;
@@ -22,6 +23,8 @@ export interface PresentationProofQrProps {
   readonly emptyText?: string;
   readonly footerText?: string | null;
   readonly qrSize?: number;
+  /** Product flows keep the QR usable while hiding raw claim diagnostics. */
+  readonly showClaimDetails?: boolean;
 }
 
 export function PresentationProofQr({
@@ -32,7 +35,9 @@ export function PresentationProofQr({
   emptyText = 'No claims to present.',
   footerText = 'Present this QR to a verifier.\nOnly selected disclosures are included.',
   qrSize = 260,
+  showClaimDetails = true,
 }: PresentationProofQrProps): ReactNode {
+  const { t } = useTranslation();
   const pagesKey = useMemo(
     () => pages.map((page) => page.payload).join('|'),
     [pages],
@@ -75,21 +80,23 @@ export function PresentationProofQr({
               {credentialTitle}
             </ThemedText>
           ) : null}
-          <ThemedText
-            variant="caption"
-            tabularNums
-            style={{
-              color: Colors.terminalGreen,
-              fontWeight: '500',
-              textAlign: 'center',
-            }}
-          >
-            {`${selectedClaims.length} claim(s) selected`}
-          </ThemedText>
+          {showClaimDetails ? (
+            <ThemedText
+              variant="caption"
+              tabularNums
+              style={{
+                color: Colors.terminalGreen,
+                fontWeight: '500',
+                textAlign: 'center',
+              }}
+            >
+              {`${selectedClaims.length} claim(s) selected`}
+            </ThemedText>
+          ) : null}
         </View>
       ) : null}
 
-      {selectedClaims.length > 0 ? (
+      {showClaimDetails && selectedClaims.length > 0 ? (
         <View
           style={{
             flexDirection: 'row',
@@ -107,6 +114,9 @@ export function PresentationProofQr({
       <View style={{ alignItems: 'center', gap: 14 }}>
         {current ? (
           <View
+            accessible
+            accessibilityRole="image"
+            accessibilityLabel={t('present.verificationQr')}
             style={{
               backgroundColor: '#FFFFFF',
               padding: 16,
@@ -145,7 +155,7 @@ export function PresentationProofQr({
         ) : null}
       </View>
 
-      {footerText ? (
+      {showClaimDetails && footerText ? (
         <ThemedText
           variant="caption"
           tone="secondary"

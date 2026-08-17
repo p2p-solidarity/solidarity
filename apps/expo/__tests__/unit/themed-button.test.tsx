@@ -8,7 +8,7 @@
 import { describe, expect, it } from 'bun:test';
 
 import { readableTextOn, ON_DARK, ON_LIGHT } from '../../src/components/themed/contrast';
-import { Colors } from '../../src/constants/Colors';
+import { Colors, resolveThemeColor } from '../../src/constants/Colors';
 
 describe('ThemedButton contrast policy', () => {
   it('primary variant gets white text on accentRose (≥ 3:1)', () => {
@@ -46,5 +46,18 @@ describe('Colors token table', () => {
     for (const name of required) {
       expect(Colors[name]).toBeDefined();
     }
+  });
+
+  it('re-resolves a stale adaptive colour when the theme changes', () => {
+    expect(resolveThemeColor(Colors.text1Dark, 'light')).toBe('#2F2F30');
+    expect(resolveThemeColor('#2F2F30', 'dark')).toBe('#F0E8F0');
+    expect(resolveThemeColor(Colors.pageBgDark, 'light')).toBe('#FBF9F2');
+    expect(resolveThemeColor('#FBF9F2', 'dark')).toBe('#060417');
+    expect(resolveThemeColor(Colors.primaryBlueDark, 'light')).toBe('#83537D');
+    expect(resolveThemeColor('#83537D', 'light')).toBe('#83537D');
+  });
+
+  it('leaves non-theme colours unchanged', () => {
+    expect(resolveThemeColor('#123456', 'dark')).toBe('#123456');
   });
 });

@@ -9,6 +9,7 @@ export {
   loadOrCreateIdentity,
   currentIdentity,
   deleteIdentity,
+  deleteIdentityForLocalWipe,
   exportPrivateKey,
   importPrivateKey,
   identityFromSeed,
@@ -40,7 +41,11 @@ export {
   type ZkIdentityState,
 } from './coordinator';
 
-export { loadSemaphoreNative, __setSemaphoreNativeForTesting } from './nativeBridge';
+export {
+  loadSemaphoreNative,
+  __setSemaphoreNativeForTesting,
+  __setSemaphoreNativeUnavailableForTesting,
+} from './nativeBridge';
 
 export {
   canonicalCommitments as canonicalCommitmentsRaw,

@@ -17,12 +17,16 @@
  *   {footer}
  */
 import type { ReactNode } from 'react';
-import { Pressable, ScrollView, View } from 'react-native';
+import { ScrollView, View } from 'react-native';
+import Animated, { Easing, FadeInDown, ReduceMotion } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { PressableScale } from '@/components/common/PressableScale';
 import { SfIcon } from '@/components/icons/SfIcon';
 import { ThemedText } from '@/components/themed';
 import { Colors } from '@/constants/Colors';
+import { STAGGER_MS } from '@/feedback/motion';
+import { useTranslation } from '@/i18n';
 
 export interface OnboardingScaffoldProps {
   readonly title: string;
@@ -40,8 +44,15 @@ export function OnboardingScaffold({
   footer,
 }: OnboardingScaffoldProps) {
   const insets = useSafeAreaInsets();
+  const { t } = useTranslation();
+  const entrance = (delay: number) =>
+    FadeInDown.duration(240)
+      .delay(delay)
+      .easing(Easing.out(Easing.quad))
+      .reduceMotion(ReduceMotion.System);
+
   return (
-    <View className="bg-pageBg flex-1">
+    <View className="flex-1 bg-pageBg">
       <ScrollView
         contentContainerStyle={{
           paddingHorizontal: 24,
@@ -49,33 +60,47 @@ export function OnboardingScaffold({
           paddingBottom: insets.bottom + 24,
           flexGrow: 1,
           gap: 24,
-        }}
-      >
-        <View style={{ flexDirection: 'row' }}>
-          <Pressable
+        }}>
+        <Animated.View
+          key={`back-${title}`}
+          entering={entrance(0)}
+          style={{ flexDirection: 'row' }}>
+          <PressableScale
+            scaleTo={1}
             onPress={onBack}
             accessibilityRole="button"
-            accessibilityLabel="Back"
+            accessibilityLabel={t('onboarding.back')}
             style={{
               padding: 12,
               borderWidth: 1,
               borderColor: Colors.divider,
-            }}
-          >
+            }}>
             <SfIcon name="chevron.left" size={17} color={Colors.text1} />
-          </Pressable>
-        </View>
+          </PressableScale>
+        </Animated.View>
 
-        <View style={{ gap: 8 }}>
+        <Animated.View
+          key={`copy-${title}`}
+          entering={entrance(STAGGER_MS)}
+          style={{ gap: 8 }}>
           <ThemedText variant="headlineMedium">{title}</ThemedText>
           <ThemedText variant="bodySmall" tone="secondary">
             {subtitle}
           </ThemedText>
-        </View>
+        </Animated.View>
 
-        <View style={{ flex: 1 }}>{children}</View>
+        <Animated.View
+          key={`content-${title}`}
+          entering={entrance(STAGGER_MS * 2)}
+          style={{ flex: 1 }}>
+          {children}
+        </Animated.View>
 
-        {footer ? <View>{footer}</View> : null}
+        {footer ? (
+          <Animated.View key={`footer-${title}`} entering={entrance(STAGGER_MS * 3)}>
+            {footer}
+          </Animated.View>
+        ) : null}
       </ScrollView>
     </View>
   );

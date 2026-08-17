@@ -10,7 +10,7 @@
  *      menu (15s / 30s / 1m / 5m).
  *   4. Reset — destructive "Reset to Defaults" row.
  */
-import { router } from 'expo-router';
+import { safeBack } from '@/navigation/safeBack';
 import { useState } from 'react';
 import { Linking, Modal, Pressable, ScrollView, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -25,8 +25,13 @@ import {
   SettingsBlockToggleRow,
   SettingsScreenTitle,
 } from '@/components/settings/SettingsBlocks';
+import { useRecentUpdatesStore } from '@/contacts/recentUpdates';
 import { Colors } from '@/constants/Colors';
 import { useTranslation } from '@/i18n';
+import {
+  registerForPushNotificationsAsync,
+  unregister,
+} from '@/sakura/pushRegistration';
 import { usePreferences } from '@/settings/preferences';
 
 const SYNC_INTERVAL_OPTIONS: readonly { labelKey: string; seconds: number }[] = [
@@ -51,6 +56,8 @@ export default function NotificationSettings() {
   const autoSync = usePreferences((s) => s.notificationsAutoSync);
   const intervalSeconds = usePreferences((s) => s.notificationsSyncIntervalSeconds);
   const setPref = usePreferences((s) => s.set);
+  const recentUpdatesEnabled = useRecentUpdatesStore((s) => s.enabled);
+  const setRecentUpdatesEnabled = useRecentUpdatesStore((s) => s.setEnabled);
 
   const [pickerOpen, setPickerOpen] = useState(false);
 
@@ -58,11 +65,29 @@ export default function NotificationSettings() {
     void Linking.openSettings();
   };
 
+  // Toggling Remote Notifications is the explicit opt-in/opt-out action
+  // (R25): turning it ON is the ONE path allowed to raise the OS permission
+  // prompt and register with the relay; turning it OFF tears the registration
+  // down. No automatic cold-launch prompt happens without this.
+  const onRemoteToggle = (next: boolean) => {
+    setPref('notificationsRemote', next);
+    if (next) {
+      void registerForPushNotificationsAsync({ prompt: true }).catch(() => undefined);
+    } else {
+      void unregister().catch(() => undefined);
+    }
+  };
+
   const resetToDefaults = () => {
     setPref('notificationsInAppToast', DEFAULTS.enableInAppToast);
+    // Restore the preference only — reset is not a deliberate "enable
+    // notifications" action, so it must not raise a prompt. The root layout's
+    // opt-in effect reconciles a silent registration if the OS already
+    // granted permission.
     setPref('notificationsRemote', DEFAULTS.enableRemoteNotification);
     setPref('notificationsAutoSync', DEFAULTS.enableAutoSync);
     setPref('notificationsSyncIntervalSeconds', DEFAULTS.syncIntervalSeconds);
+    setRecentUpdatesEnabled(true);
   };
 
   const currentIntervalKey =
@@ -71,7 +96,7 @@ export default function NotificationSettings() {
 
   return (
     <View className="flex-1 bg-pageBg" style={{ paddingTop: insets.top }}>
-      <SettingsBackToolbar onPress={() => { router.back(); }} />
+      <SettingsBackToolbar onPress={() => { safeBack('/settings'); }} />
       <SettingsScreenTitle title={t('notifications.title')} />
 
       <ScrollView
@@ -93,6 +118,19 @@ export default function NotificationSettings() {
             />
           </SettingsBlockSection>
 
+          <SettingsBlockSection
+            title={t('notifications.contactUpdates.header')}
+            footer={t('notifications.contactUpdates.footer')}
+          >
+            <SettingsBlockToggleRow
+              icon="person.2.fill"
+              title={t('notifications.contactUpdates.title')}
+              subtitle={t('notifications.contactUpdates.subtitle')}
+              value={recentUpdatesEnabled}
+              onValueChange={setRecentUpdatesEnabled}
+            />
+          </SettingsBlockSection>
+
           {/* Remote Notifications */}
           <SettingsBlockSection
             title={t('notifications.remote.header')}
@@ -103,7 +141,7 @@ export default function NotificationSettings() {
               title={t('notifications.remote.title')}
               subtitle={t('notifications.remote.subtitle')}
               value={remote}
-              onValueChange={(v) => { setPref('notificationsRemote', v); }}
+              onValueChange={onRemoteToggle}
             />
             <SettingsBlockRow
               icon="gearshape"

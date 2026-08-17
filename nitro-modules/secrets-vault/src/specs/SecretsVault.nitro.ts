@@ -25,6 +25,17 @@
  *
  * Nested object types are extracted to top-level interfaces because
  * Nitrogen rejects anonymous inline structs (it can't codegen the C++).
+ *
+ * `set/get/deleteSynchronizableItem` (task A1.5) are a SEPARATE capability
+ * from the wrap/unwrap surface above: a plain iCloud-Keychain-synchronizable
+ * string item, with no Secure Enclave / StrongBox involvement at all. Used
+ * by `apps/expo/src/identity/rootKey.ts` to back up the root-key mnemonic
+ * via the platform's own end-to-end-encrypted iCloud Keychain sync. Ported
+ * from the working precedent in
+ * `nitro-modules/spruce-did/ios/SpruceDidKeyStore.swift:112`
+ * (`generateSyncableP256Key`) rather than depending on that module, which is
+ * scheduled for deletion. iOS-only — see each method's doc for the Android
+ * behavior.
  */
 import type { HybridObject } from 'react-native-nitro-modules';
 
@@ -73,4 +84,37 @@ export interface SecretsVault
     service: string,
     account: string
   ): Promise<ArrayBuffer>;
+
+  /**
+   * iOS-only: write `value` into an iCloud-Keychain-SYNCHRONIZABLE generic-
+   * password item (`kSecAttrSynchronizable = true`,
+   * `kSecAttrAccessibleWhenUnlocked` — deliberately NOT `…ThisDeviceOnly`,
+   * which would opt the item out of sync). Carries NO biometry access
+   * control — synchronizable items cannot be biometric-bound (the ACL is
+   * device-specific); any Face ID gate belongs one layer up at the JS call
+   * site, same pattern as the existing synchronizable signing key (see
+   * `nitro-modules/spruce-did/ios/SpruceDidKeyStore.swift:112`,
+   * `generateSyncableP256Key`). Overwrites any existing value under `alias`.
+   *
+   * Android has no iCloud Keychain equivalent: this REJECTS unconditionally
+   * on Android (the app never offers the iCloud backup option on that
+   * platform — see `apps/expo/src/onboarding/steps/BackupStep.tsx`).
+   */
+  setSynchronizableItem(alias: string, value: string): Promise<void>;
+
+  /**
+   * iOS-only: read the synchronizable item written by
+   * `setSynchronizableItem`. Returns an EMPTY STRING when the item is
+   * missing (mirrors `readRawKeychainGenericPassword`'s empty-buffer
+   * convention) — never throws for "not found". Android REJECTS
+   * unconditionally (see `setSynchronizableItem`).
+   */
+  getSynchronizableItem(alias: string): Promise<string>;
+
+  /**
+   * iOS-only: delete the synchronizable item under `alias`. A no-op
+   * (resolves) when the item does not exist. Android REJECTS
+   * unconditionally (see `setSynchronizableItem`).
+   */
+  deleteSynchronizableItem(alias: string): Promise<void>;
 }

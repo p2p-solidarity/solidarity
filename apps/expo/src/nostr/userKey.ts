@@ -1,0 +1,576 @@
+/**
+ * userKey.ts — production Nostr identity (secp256k1), 04-plan Phase A4
+ * task A4.1. Publishes/signs the profile-record projection onto Nostr
+ * relays (A4.2+); completely separate from the sandbox dev-key
+ * (`src/dag/devKey.ts`, MMKV `dev:secp256k1:v1`, never linked to any
+ * production identity) — different storage, different namespace, never
+ * cross-read.
+ *
+ * ── Two provisioning paths ──────────────────────────────────────────────
+ *
+ * (a) `provisionFromRootMnemonic()` — derive from the user's root
+ *     mnemonic (`src/identity/rootKey.ts`) via `@solidarity/shared`'s
+ *     `deriveSecp256k1Scalar(mnemonic, HKDF_INFO_NOSTR)`. Same mnemonic
+ *     ⇒ same npub on the Expo app AND the future web viewer — this is
+ *     the App<->Web portability contract (`packages/shared/vectors
+ *     /derive.json`'s `nostrPubkeyHex` field pins the exact vector).
+ * (b) `importNsec(nsec)` — bech32-decode an externally-generated NIP-19
+ *     `nsec1…` string into its 32-byte scalar. Validated (hrp === 'nsec',
+ *     32-byte payload, in-range for secp256k1) but the raw string is
+ *     NEVER logged and never echoed back in an error message — the
+ *     bech32 decoder's own errors interpolate the offending input
+ *     (`Invalid checksum in ${str}`), so every decode failure is
+ *     collapsed to a fixed `'invalidNsec: …'` reason instead of
+ *     forwarding the library's message verbatim.
+ *
+ * ── Custody model — READ BEFORE CHANGING `getNostrPubkey`/`signNostrEvent`
+ *
+ * The root mnemonic is only retrievable through `revealMnemonicForExport
+ * ()` (Face-ID gated — see `identity/rootKey.ts`'s doc). Re-deriving the
+ * Nostr scalar from the mnemonic on every sign/publish call would mean
+ * re-prompting Face ID every time the app wants to publish a profile
+ * pointer or kind-0 event — unacceptable UX for what is a comparatively
+ * low-stakes "publish" key (unlike the root did:key signer, Nostr event
+ * signing is not gated in CLAUDE.md's Face-ID list). So provisioning
+ * gates ONCE: `provisionFromRootMnemonic()` reveals the mnemonic exactly
+ * one time, derives the scalar, and persists ONLY the derived scalar
+ * (never the mnemonic) into this module's own `expo-secure-store` alias
+ * (`WHEN_UNLOCKED_THIS_DEVICE_ONLY`, no biometry ACL — same rationale as
+ * `rootKey.ts`: Face ID gating belongs at the call-site layer, not a
+ * Keychain ACL). Every subsequent `getNostrPubkey()` / `signNostrEvent()`
+ * call reads the persisted scalar directly — no re-derivation, no repeat
+ * Face-ID prompt.
+ *
+ * `getNostrPubkey()` deliberately does NOT lazily provision on a miss —
+ * it returns `err('notProvisioned')` so the UI can show an explicit
+ * consent step (04-plan task A4.4's binding wizard) before either
+ * provisioning path runs. `provisionFromRootMnemonic()` / `importNsec()`
+ * are the only two ways a key gets written, and both are meant to be
+ * invoked from a screen the user has already consented on.
+ *
+ * ── NIP-01 signing — no duplicated serialization ────────────────────────
+ *
+ * `signNostrEvent` computes the event id via `dag/node.ts`'s
+ * `computeNip01EventId` — the SAME implementation `dag/nostrAdapter.ts`'s
+ * `verifyNostrEvent`/`buildHeadPointerEvent` use, so an event this module
+ * signs is bit-for-bit verifiable by `verifyNostrEvent` (pinned by this
+ * task's TDD suite).
+ */
+import { bech32 } from '@scure/base';
+import { schnorr } from '@noble/curves/secp256k1.js';
+// Type-only — avoids pulling `expo-secure-store` (and, transitively,
+// React Native's Flow-syntax entry point, which bun's test parser can't
+// load) in at module-load time. See `loadSecureStore` below, same
+// reasoning as `identity/rootKey.ts`.
+import type * as SecureStoreNS from 'expo-secure-store';
+
+import { computeNip01EventId, hexDecode, hexEncode, type Nip01UnsignedEvent } from '@/dag/node';
+import type { NostrEvent } from '@/dag/nostrAdapter';
+// Type-only, same reasoning as SecureStoreNS above — `react-native-mmkv`
+// also pulls in React Native's Flow-syntax entry point. See
+// `warmNostrKeyMirror` below for the runtime (lazy, cached) load.
+import type { getMmkv as GetMmkvFn } from '@/storage/mmkv';
+import {
+  canCommitLocalData,
+  captureLocalDataEpoch,
+  type LocalDataEpoch,
+} from '@/settings/localDataWipeBarrier';
+
+import { HKDF_INFO_NOSTR, deriveSecp256k1Scalar, err, ok, type Result } from '@solidarity/shared';
+
+const SCALAR_ALIAS = 'gg.solidarity.nostrkey.scalar.v1';
+const NSEC_HRP = 'nsec';
+const NPUB_HRP = 'npub';
+const SCALAR_BYTE_LENGTH = 32;
+const HAS_KEY_MIRROR_KEY = 'nostr:hasKey:v1';
+
+// ── Storage — own alias, own namespace (never shares state with
+//    `identity/rootKey.ts`'s mnemonic alias or `dag/devKey.ts`'s MMKV
+//    key) ───────────────────────────────────────────────────────────────
+
+export interface NostrKeyStorage {
+  readonly getScalarHex: () => Promise<string | null>;
+  readonly setScalarHex: (hex: string) => Promise<void>;
+  readonly deleteScalarHex: () => Promise<void>;
+}
+
+async function loadSecureStore(): Promise<typeof SecureStoreNS> {
+  return import('expo-secure-store');
+}
+
+function secureOpts(SecureStore: typeof SecureStoreNS): SecureStoreNS.SecureStoreOptions {
+  return {
+    keychainAccessible: SecureStore.WHEN_UNLOCKED_THIS_DEVICE_ONLY,
+    requireAuthentication: false,
+  };
+}
+
+const defaultStorage: NostrKeyStorage = {
+  getScalarHex: async () => {
+    const SecureStore = await loadSecureStore();
+    return SecureStore.getItemAsync(SCALAR_ALIAS, secureOpts(SecureStore));
+  },
+  setScalarHex: async (hex) => {
+    const SecureStore = await loadSecureStore();
+    await SecureStore.setItemAsync(SCALAR_ALIAS, hex, secureOpts(SecureStore));
+  },
+  deleteScalarHex: async () => {
+    const SecureStore = await loadSecureStore();
+    await SecureStore.deleteItemAsync(SCALAR_ALIAS, secureOpts(SecureStore));
+  },
+};
+
+let activeStorage: NostrKeyStorage = defaultStorage;
+
+// Provisioning writes a secret to SecureStore after async work (Face ID or
+// NIP-19 validation). Keep those operations observable to the production
+// wipe coordinator: it invalidates their epoch first, waits for them here,
+// then performs the authoritative delete. Without that ordering, a write
+// that finishes after deletion could recreate the key on disk.
+const activeKeyWrites = new Set<Promise<unknown>>();
+
+function trackKeyWrite<T>(operation: Promise<T>): Promise<T> {
+  activeKeyWrites.add(operation);
+  void operation.then(
+    () => activeKeyWrites.delete(operation),
+    () => activeKeyWrites.delete(operation),
+  );
+  return operation;
+}
+
+/** Wait for any provisioning/import operation that began before a local wipe. */
+export async function quiesceNostrKeyOperations(): Promise<void> {
+  while (activeKeyWrites.size > 0) {
+    await Promise.allSettled([...activeKeyWrites]);
+  }
+}
+
+/** Test-only override. Pass `null` to restore the real SecureStore-backed implementation. */
+export function __setNostrKeyStorageForTesting(storage: NostrKeyStorage | null): void {
+  activeStorage = storage ?? defaultStorage;
+}
+
+// ── Sync mirror — an MMKV boolean written alongside every SecureStore
+//    write above, so a caller that only needs "is a key provisioned?" can
+//    read it on the render path instead of awaiting `hasNostrKey()`. This
+//    is the same seed-from-sync-cache pattern `settings/preferences.ts`
+//    uses for MMKV-backed state. SecureStore (`activeStorage` above) stays
+//    the source of truth; this mirror can only be trusted to say "no key
+//    yet", which is exactly the direction `BadgeBindingsSection`
+//    (app/(tabs)/verify/index.tsx) needs to avoid flashing a wrong
+//    definite state for an already-connected user.
+//
+//    `getMmkv` is genuinely synchronous (see `storage/mmkv.ts`), but this
+//    module can't statically `import { getMmkv } from '@/storage/mmkv'` —
+//    that pulls real `react-native-mmkv` in at MODULE-LOAD time, and
+//    (unlike `loadSecureStore` below, which every caller already awaits)
+//    `hasNostrKeySync()` must stay callable with zero `await`s. So the app
+//    root (`app/_layout.tsx`) calls `warmNostrKeyMirror()` ONCE, right
+//    after its own `await initMmkv()` — by the time any screen mounts,
+//    `cachedGetMmkv` is already warm and every `hasNostrKeySync()` call
+//    after that is a plain synchronous MMKV read. Until warmed (or on any
+//    storage error), reads/writes are safe no-ops that degrade to `false`
+//    — never a fabricated `true`. ─────────────────────────────────────────
+
+export interface NostrKeyMirrorStorage {
+  readonly getHasKey: () => boolean;
+  readonly setHasKey: (value: boolean) => void;
+}
+
+let cachedGetMmkv: typeof GetMmkvFn | undefined;
+
+/**
+ * Warm the sync-mirror's MMKV reference. Call exactly once, from
+ * `app/_layout.tsx`, right after `await initMmkv()` resolves. A no-op
+ * (never throws) if `react-native-mmkv` is unavailable (web preview,
+ * tests) — the mirror simply stays cold and `hasNostrKeySync()` degrades
+ * to `false`.
+ */
+export async function warmNostrKeyMirror(): Promise<void> {
+  try {
+    const mod = await import('@/storage/mmkv');
+    cachedGetMmkv = mod.getMmkv;
+  } catch {
+    // Native module unavailable — mirror stays cold, degrades to `false`.
+  }
+}
+
+const defaultMirrorStorage: NostrKeyMirrorStorage = {
+  getHasKey: () => {
+    if (!cachedGetMmkv) return false;
+    try {
+      return cachedGetMmkv().getBoolean(HAS_KEY_MIRROR_KEY) ?? false;
+    } catch {
+      return false;
+    }
+  },
+  setHasKey: (value) => {
+    if (!cachedGetMmkv) return;
+    try {
+      cachedGetMmkv().set(HAS_KEY_MIRROR_KEY, value);
+    } catch {
+      // MMKV write failed — best effort. `hasNostrKeySync()` may lag one
+      // write behind; the async `hasNostrKey()` path is unaffected.
+    }
+  },
+};
+
+let activeMirrorStorage: NostrKeyMirrorStorage = defaultMirrorStorage;
+
+/** Test-only override. Pass `null` to restore the real MMKV-backed implementation. */
+export function __setNostrKeyMirrorStorageForTesting(storage: NostrKeyMirrorStorage | null): void {
+  activeMirrorStorage = storage ?? defaultMirrorStorage;
+}
+
+/**
+ * Synchronous mirror of `hasNostrKey()` — call this on the render path
+ * (e.g. `useState(() => hasNostrKeySync())`) instead of seeding from a
+ * fabricated default and correcting later. Written to `true` by
+ * `provisionFromRootMnemonic()`/`importNsec()` on success, and to `false`
+ * by `deleteNostrKey()` — see each function below. Any read error
+ * (including from an injected `NostrKeyMirrorStorage`) degrades to
+ * `false`, never a fabricated `true`.
+ */
+export function hasNostrKeySync(): boolean {
+  try {
+    return activeMirrorStorage.getHasKey();
+  } catch {
+    return false;
+  }
+}
+
+// ── Root-mnemonic reveal seam — lazy-loaded so importing this module
+//    never eagerly pulls in `identity/rootKey.ts` (and, transitively,
+//    Face-ID / SecureStore natives) at module-load time. Tests inject a
+//    fake revealer instead of mocking `identity/rootKey.ts` globally. ───
+
+export type MnemonicRevealer = () => Promise<Result<string, string>>;
+
+async function defaultMnemonicRevealer(): Promise<Result<string, string>> {
+  const { revealMnemonicForExport } = await import('@/identity/rootKey');
+  const revealed = await revealMnemonicForExport();
+  if (!revealed.ok) return err(revealed.error.kind);
+  return ok(revealed.value);
+}
+
+let activeMnemonicRevealer: MnemonicRevealer = defaultMnemonicRevealer;
+
+/** Test-only override. Pass `null` to restore the real (Face-ID-gated) revealer. */
+export function __setNostrMnemonicRevealerForTesting(revealer: MnemonicRevealer | null): void {
+  activeMnemonicRevealer = revealer ?? defaultMnemonicRevealer;
+}
+
+function storageErrorMessage(e: unknown): string {
+  return e instanceof Error ? e.message : String(e);
+}
+
+// ── Provisioning ─────────────────────────────────────────────────────────
+
+/**
+ * Path (a): derive from the root mnemonic. Triggers exactly ONE Face-ID
+ * gate (via `revealMnemonicForExport`), then persists only the derived
+ * scalar — never the mnemonic itself. Idempotent: re-running with the
+ * same root mnemonic re-derives and overwrites with the identical
+ * scalar. Caller (A4.4 wizard) is responsible for consenting the user
+ * before invoking this — see module doc.
+ */
+export function provisionFromRootMnemonic(): Promise<Result<string, string>> {
+  return trackKeyWrite(provisionFromRootMnemonicAtEpoch(captureLocalDataEpoch()));
+}
+
+async function provisionFromRootMnemonicAtEpoch(
+  writeEpoch: LocalDataEpoch,
+): Promise<Result<string, string>> {
+  if (!canCommitLocalData(writeEpoch)) return err('localDataWipeInProgress');
+
+  const revealed = await activeMnemonicRevealer();
+  if (!revealed.ok) return revealed;
+
+  if (!canCommitLocalData(writeEpoch)) return err('localDataWipeInProgress');
+
+  let scalar: Uint8Array;
+  try {
+    scalar = deriveSecp256k1Scalar(revealed.value, HKDF_INFO_NOSTR);
+  } catch (e) {
+    return err(storageErrorMessage(e));
+  }
+
+  let pubkeyHex: string;
+  try {
+    pubkeyHex = hexEncode(schnorr.getPublicKey(scalar));
+  } catch {
+    // Fixed, content-free reason — same discipline as `importNsec`'s
+    // equivalent branch below; never forward the underlying error text.
+    return err('derivedScalarOutOfRange: scalar out of range for secp256k1');
+  }
+
+  if (!canCommitLocalData(writeEpoch)) return err('localDataWipeInProgress');
+
+  try {
+    await activeStorage.setScalarHex(hexEncode(scalar));
+  } catch (e) {
+    return err(storageErrorMessage(e));
+  }
+
+  if (!canCommitLocalData(writeEpoch)) {
+    await deleteStaleScalar();
+    return err('localDataWipeInProgress');
+  }
+  activeMirrorStorage.setHasKey(true);
+  return ok(pubkeyHex);
+}
+
+/**
+ * A stale writer may have completed its SecureStore mutation just after the
+ * wipe barrier advanced. Best-effort cleanup is followed by the wipe's
+ * authoritative `deleteNostrKey()` step, whose failure is fail-closed.
+ */
+async function deleteStaleScalar(): Promise<void> {
+  try {
+    await activeStorage.deleteScalarHex();
+  } catch {
+    // The ordered wipe retries this deletion and fails closed if it cannot
+    // remove the secret. Do not surface a storage error that could reveal
+    // implementation details from an operation already cancelled by wipe.
+  }
+  activeMirrorStorage.setHasKey(false);
+}
+
+/**
+ * Pure NIP-19 `nsec1…` → 32-byte scalar decode + validation. PRIVATE: the
+ * raw scalar must never leave this module (`decodeNsec` returns only the
+ * derived pubkey; `importNsec` persists it internally). Same secret-echo
+ * discipline as everywhere else here — the bech32 decoder's own errors
+ * interpolate the raw input, so every failure collapses to a fixed,
+ * content-free `'invalidNsec: …'` reason.
+ */
+function nsecToScalar(nsec: string): Result<Uint8Array, string> {
+  try {
+    const decoded = bech32.decodeToBytes(nsec);
+    if (decoded.prefix.toLowerCase() !== NSEC_HRP) {
+      return err('invalidNsec: wrong hrp (expected nsec)');
+    }
+    if (decoded.bytes.length !== SCALAR_BYTE_LENGTH) {
+      return err('invalidNsec: payload must be 32 bytes');
+    }
+    return ok(decoded.bytes);
+  } catch {
+    return err('invalidNsec: malformed bech32');
+  }
+}
+
+/**
+ * Pure `nsec1…` → x-only pubkey hex, WITHOUT persisting anything (unlike
+ * `importNsec`). Lets the Connect-Nostr wizard (`app/verify/nostr.tsx`) show
+ * a live "✓ npub1…" preview as the user pastes, and enable "Connect" only
+ * once the string is a valid key — instead of committing first and only
+ * then surfacing an error. Never throws; every failure is the same fixed
+ * `'invalidNsec: …'` reason `importNsec` uses, never echoing the input.
+ */
+export function decodeNsec(nsec: string): Result<string, string> {
+  const scalar = nsecToScalar(nsec);
+  if (!scalar.ok) return scalar;
+  try {
+    return ok(hexEncode(schnorr.getPublicKey(scalar.value)));
+  } catch {
+    return err('invalidNsec: scalar out of range for secp256k1');
+  }
+}
+
+/**
+ * Path (b): import an externally-generated NIP-19 `nsec1…` string.
+ * Decodes + validates (hrp, length, in-range scalar) via the shared
+ * `nsecToScalar` without ever forwarding the bech32 decoder's own error
+ * text (which echoes the raw input) back to the caller — see module doc.
+ * Never throws; every failure is `err('invalidNsec: …')`.
+ */
+export function importNsec(nsec: string): Promise<Result<string, string>> {
+  return trackKeyWrite(importNsecAtEpoch(nsec, captureLocalDataEpoch()));
+}
+
+async function importNsecAtEpoch(
+  nsec: string,
+  writeEpoch: LocalDataEpoch,
+): Promise<Result<string, string>> {
+  if (!canCommitLocalData(writeEpoch)) return err('localDataWipeInProgress');
+
+  const scalarResult = nsecToScalar(nsec);
+  if (!scalarResult.ok) return scalarResult;
+  const scalar = scalarResult.value;
+
+  let pubkeyHex: string;
+  try {
+    pubkeyHex = hexEncode(schnorr.getPublicKey(scalar));
+  } catch {
+    return err('invalidNsec: scalar out of range for secp256k1');
+  }
+
+  if (!canCommitLocalData(writeEpoch)) return err('localDataWipeInProgress');
+
+  try {
+    await activeStorage.setScalarHex(hexEncode(scalar));
+  } catch (e) {
+    return err(storageErrorMessage(e));
+  }
+
+  if (!canCommitLocalData(writeEpoch)) {
+    await deleteStaleScalar();
+    return err('localDataWipeInProgress');
+  }
+  activeMirrorStorage.setHasKey(true);
+  return ok(pubkeyHex);
+}
+
+/** Whether a production Nostr key has been provisioned on this device. */
+export async function hasNostrKey(): Promise<boolean> {
+  try {
+    return (await activeStorage.getScalarHex()) !== null;
+  } catch {
+    return false;
+  }
+}
+
+/** Delete the persisted key. Used by tests and a future rotate/reset flow. */
+export async function deleteNostrKey(): Promise<void> {
+  await activeStorage.deleteScalarHex();
+  activeMirrorStorage.setHasKey(false);
+}
+
+// ── NIP-19 bech32 — npub ENCODE only ────────────────────────────────────
+//
+// `importNsec` (above) already decodes `nsec1…`; this is the encode-only
+// counterpart for the public side, deferred by task A4.1 to A4.2 because
+// nothing needed it until `profile.alsoKnownAs`'s `nostr:npub…` entry
+// (`publish.ts`, this task). No `npubDecode` — no call site needs it yet
+// (subscribe/publish filters use the raw hex pubkey `getNostrPubkey()`
+// already returns); add it if/when a screen needs to accept a pasted
+// `npub1…` string.
+
+/**
+ * Bech32-DECODE a NIP-19 `npub1…` string back to its x-only pubkey hex (64
+ * lowercase hex chars) — the inverse of `npubEncode`. Added for the
+ * `#nostr:<npub>` short-pointer share URL (viewer/app resolves the profile
+ * by fetching the pubkey's kind-30078 event). Never throws; malformed input
+ * (wrong hrp / length / checksum) is `err(...)`. An npub is public, so —
+ * unlike `importNsec`/`decodeNsec` — echoing the input in an error would be
+ * harmless, but the reasons stay fixed for consistency.
+ */
+export function npubDecode(npub: string): Result<string, string> {
+  try {
+    const decoded = bech32.decodeToBytes(npub);
+    if (decoded.prefix.toLowerCase() !== NPUB_HRP) {
+      return err('npubDecode: wrong hrp (expected npub)');
+    }
+    if (decoded.bytes.length !== SCALAR_BYTE_LENGTH) {
+      return err('npubDecode: payload must be 32 bytes');
+    }
+    return ok(hexEncode(decoded.bytes));
+  } catch {
+    return err('npubDecode: malformed bech32');
+  }
+}
+
+/**
+ * Bech32-encode an x-only pubkey hex (64 lowercase hex chars, as returned
+ * by `getNostrPubkey()`) into its NIP-19 `npub1…` form. Never throws —
+ * malformed input (wrong length / non-hex) is `err(...)`.
+ */
+export function npubEncode(pubkeyHex: string): Result<string, string> {
+  let bytes: Uint8Array;
+  try {
+    bytes = hexDecode(pubkeyHex);
+  } catch {
+    return err('npubEncode: pubkeyHex is not valid hex');
+  }
+  if (bytes.length !== SCALAR_BYTE_LENGTH) {
+    return err('npubEncode: pubkey must be 32 bytes');
+  }
+  try {
+    return ok(bech32.encodeFromBytes(NPUB_HRP, bytes));
+  } catch (e) {
+    return err(storageErrorMessage(e));
+  }
+}
+
+// ── Read + sign ──────────────────────────────────────────────────────────
+
+async function loadScalar(): Promise<Result<Uint8Array, string>> {
+  let scalarHex: string | null;
+  try {
+    scalarHex = await activeStorage.getScalarHex();
+  } catch (e) {
+    return err(storageErrorMessage(e));
+  }
+  if (!scalarHex) return err('notProvisioned');
+  try {
+    return ok(hexDecode(scalarHex));
+  } catch {
+    // `hexDecode`'s own RangeError interpolates the offending substring
+    // of `scalarHex` — i.e. a fragment of the secret scalar itself — into
+    // its message (see `dag/node.ts`). Never forward it: collapse to a
+    // fixed reason, same rationale as `importNsec`'s bech32-decode-failure
+    // handling above (never echo secret bytes back to the caller/logs).
+    return err('corruptedScalar');
+  }
+}
+
+/**
+ * Resolve the currently-provisioned Nostr pubkey (x-only, 64-char lowercase
+ * hex — NOT npub-encoded). Returns `err('notProvisioned')` rather than
+ * lazily provisioning — see module doc for the consent-gate rationale.
+ */
+export async function getNostrPubkey(): Promise<Result<string, string>> {
+  const scalarResult = await loadScalar();
+  if (!scalarResult.ok) return scalarResult;
+  try {
+    return ok(hexEncode(schnorr.getPublicKey(scalarResult.value)));
+  } catch (e) {
+    return err(storageErrorMessage(e));
+  }
+}
+
+/** A caller-assembled Nostr event, missing only `pubkey`/`id`/`sig`. */
+export interface UnsignedNostrEvent {
+  readonly kind: number;
+  readonly tags: readonly (readonly string[])[];
+  readonly content: string;
+  /** Unix seconds. Defaults to `Math.floor(Date.now() / 1000)`. */
+  readonly created_at?: number;
+}
+
+/**
+ * Sign a Nostr event (BIP-340 schnorr per NIP-01) with the provisioned
+ * key. Returns `err('notProvisioned')` if no key exists yet — never
+ * auto-provisions (see module doc).
+ */
+export async function signNostrEvent(unsigned: UnsignedNostrEvent): Promise<Result<NostrEvent, string>> {
+  const scalarResult = await loadScalar();
+  if (!scalarResult.ok) return scalarResult;
+  const scalar = scalarResult.value;
+
+  let pubkey: string;
+  try {
+    pubkey = hexEncode(schnorr.getPublicKey(scalar));
+  } catch (e) {
+    return err(storageErrorMessage(e));
+  }
+
+  const created_at = unsigned.created_at ?? Math.floor(Date.now() / 1000);
+  const event: Nip01UnsignedEvent = {
+    pubkey,
+    created_at,
+    kind: unsigned.kind,
+    tags: unsigned.tags,
+    content: unsigned.content,
+  };
+  const id = computeNip01EventId(event);
+
+  let sig: string;
+  try {
+    sig = hexEncode(schnorr.sign(hexDecode(id), scalar));
+  } catch (e) {
+    return err(storageErrorMessage(e));
+  }
+
+  return ok({ ...event, id, sig });
+}

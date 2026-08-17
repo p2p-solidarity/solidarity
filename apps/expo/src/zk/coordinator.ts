@@ -23,6 +23,8 @@ import {
   loadOrCreateIdentity,
 } from './identity';
 
+let localWipeGeneration = 0;
+
 export interface ZkIdentityState {
   readonly commitment: string | null;
   readonly proofsSupported: boolean;
@@ -33,6 +35,8 @@ export interface ZkIdentityState {
   readonly createIdentity: () => Promise<void>;
   readonly deleteIdentity: () => Promise<void>;
   readonly clearError: () => void;
+  /** Drop every live identity reference after native key deletion. */
+  readonly resetForLocalWipe: () => void;
 }
 
 export const useZkIdentity = create<ZkIdentityState>((set, get) => ({
@@ -43,15 +47,18 @@ export const useZkIdentity = create<ZkIdentityState>((set, get) => ({
   hydrated: false,
 
   seedFromNative: async () => {
+    const generation = localWipeGeneration;
     if (get().hydrated) return;
     try {
       const snap = await currentIdentity();
+      if (generation !== localWipeGeneration) return;
       set({
         commitment: snap.commitment,
         proofsSupported: snap.proofsSupported,
         hydrated: true,
       });
     } catch (error) {
+      if (generation !== localWipeGeneration) return;
       set({
         lastError: error instanceof Error ? error.message : String(error),
         hydrated: true,
@@ -60,10 +67,12 @@ export const useZkIdentity = create<ZkIdentityState>((set, get) => ({
   },
 
   createIdentity: async () => {
+    const generation = localWipeGeneration;
     if (get().isWorking) return;
     set({ isWorking: true, lastError: null });
     try {
       const snap = await loadOrCreateIdentity();
+      if (generation !== localWipeGeneration) return;
       set({
         commitment: snap.commitment,
         proofsSupported: snap.proofsSupported,
@@ -71,6 +80,7 @@ export const useZkIdentity = create<ZkIdentityState>((set, get) => ({
         hydrated: true,
       });
     } catch (error) {
+      if (generation !== localWipeGeneration) return;
       set({
         isWorking: false,
         lastError: error instanceof Error ? error.message : String(error),
@@ -79,12 +89,15 @@ export const useZkIdentity = create<ZkIdentityState>((set, get) => ({
   },
 
   deleteIdentity: async () => {
+    const generation = localWipeGeneration;
     if (get().isWorking) return;
     set({ isWorking: true, lastError: null });
     try {
       await nativeDeleteIdentity();
+      if (generation !== localWipeGeneration) return;
       set({ commitment: null, isWorking: false });
     } catch (error) {
+      if (generation !== localWipeGeneration) return;
       set({
         isWorking: false,
         lastError: error instanceof Error ? error.message : String(error),
@@ -94,6 +107,16 @@ export const useZkIdentity = create<ZkIdentityState>((set, get) => ({
   },
 
   clearError: () => { set({ lastError: null }); },
+  resetForLocalWipe: () => {
+    localWipeGeneration += 1;
+    set({
+      commitment: null,
+      proofsSupported: false,
+      isWorking: false,
+      lastError: null,
+      hydrated: true,
+    });
+  },
 }));
 
 // ── Selectors / React hooks ─────────────────────────────────────────────

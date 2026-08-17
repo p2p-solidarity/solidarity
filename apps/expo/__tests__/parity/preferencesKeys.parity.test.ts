@@ -105,4 +105,9 @@ describe('Preferences defaults parity: Swift @AppStorage ↔ usePreferences', ()
     // iCloud, so the iOS default must match.
     expect(defaults.backupProvider).toBe('iCloud');
   });
+
+  it('keeps public publishing opt-in while private Pear exchange stays available', () => {
+    expect(defaults.nostrAutoRepublish).toBe(false);
+    expect(defaults.pearExchangeEnabled).toBe(true);
+  });
 });

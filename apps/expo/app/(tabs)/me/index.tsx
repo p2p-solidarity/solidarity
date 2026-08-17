@@ -1,411 +1,91 @@
-/**
- * Me tab — 1:1 port of solidarity/Views/MeViews/MeTabView.swift.
- *
- * Layout (top → bottom):
- *   1. NavigationStack — nav title "Me" (inline) + trailing gearshape
- *   2. ProfileHeaderCard (avatar 56pt + name 24pt + DID pill + Edit)
- *   3. "Verified Credentials" section
- *        empty:  3 MeActionTile (Scan Identity / Manual Input / Import JSON)
- *        filled: VerifiedCredentialRow per credential
- *   4. "Selective Disclosures" section
- *        empty:  "No derivations available."
- *        filled: DisclosureRowView per claim
- *   5. "Action" section: tiles (Acquire New Proof / Import Raw Credential)
- *   6. "Developer" section (dev-mode only): ZK Identity / OIDC Request
- *      Scanner / Group Management
- *
- * All copy matches Swift verbatim. SF Symbols rendered via expo-symbols.
- */
-import { Image as ExpoImage } from 'expo-image';
-import { router } from 'expo-router';
-import type { SFSymbol } from 'expo-symbols';
-import { useEffect, useMemo } from 'react';
-import { ScrollView, Text, View } from 'react-native';
-import Animated, { FadeInDown } from 'react-native-reanimated';
+import { router, useLocalSearchParams } from 'expo-router';
+import { useCallback, useEffect } from 'react';
+import { View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { animalImageSource } from '@/cards/animals';
-import { useCardStore, useMyCard, useMyCardDetail } from '@/cards/cardManager';
-import { PressableScale } from '@/components/common/PressableScale';
-import { SfIcon } from '@/components/icons/SfIcon';
-import {
-  DisclosureRowView,
-  MeActionTile,
-  MeSectionHeader,
-  ProfileHeaderCard,
-  SettingsBlockRow,
-  SettingsBlockSection,
-  VerifiedCredentialRow,
-} from '@/components/me';
-import { Colors } from '@/constants/Colors';
-import { credentialTrustDisplayFor } from '@/credentials/trustDisplay';
-import { useThemeColors } from '@/constants/useThemeColors';
-import { useTranslation } from '@/i18n';
-import { SCALE, STAGGER_MS } from '@/feedback/motion';
-import {
-  useActiveDid,
-  useDisplayClaims,
-  useIdentityCoordinator,
-  useIdentityData,
-  type IdentityCardEntity,
-  type ProvableClaimEntity,
-} from '@/identity';
-import { usePreferences } from '@/settings/preferences';
+import { MeProfileGate, MeProfilePage } from '@/components/me';
+import { useProfileStore } from '@/profile/store';
+import { preparePageDesign, usePageDesignStore } from '@/page/pageDesignStore';
 
 export default function MeTab() {
-  const { t } = useTranslation();
-  const card = useMyCard();
-  const identityCards = useIdentityData((s) => s.identityCards);
-  const hydrateCards = useCardStore((s) => s.hydrate);
-  const hydrateIdentity = useIdentityData((s) => s.hydrate);
-  const seedKeychain = useIdentityCoordinator((s) => s.seedFromKeychain);
-  const developerMode = usePreferences((s) => s.developerMode);
   const insets = useSafeAreaInsets();
+  const params = useLocalSearchParams<{ addProof?: string }>();
+  const record = useProfileStore((state) => state.record);
+  const jws = useProfileStore((state) => state.jws);
+  const status = useProfileStore((state) => state.status);
+  const linkVisibility = useProfileStore((state) => state.linkVisibility);
+  // T7: the QR / URL-fragment share surface publishes the SHARED projection
+  // (public + link-only links), never the full record. Falls back to the full
+  // record for a pre-T7 profile that has no cached projection yet — safe, as
+  // such a profile has no private links.
+  const shared = useProfileStore((state) => state.shared);
+  const published = useProfileStore((state) => state.published);
+  const nostrPublishedJws = useProfileStore((state) => state.nostrPublishedJws);
+  const shareRecord = shared?.record ?? record;
+  const shareJws = shared?.jws ?? jws;
+  const nostrShortUrlReady = published !== null && nostrPublishedJws === published.jws;
+  const addProofRequested = params.addProof === '1';
+  const pageDesignStatus = usePageDesignStore((state) => state.status);
+  const adoptPublishedPage = usePageDesignStore((state) => state.adoptPublishedPage);
+  const openAddProof = useCallback(() => {
+    router.push('/passport');
+  }, []);
 
   useEffect(() => {
-    void hydrateCards();
-    void hydrateIdentity();
-    void seedKeychain();
-  }, [hydrateCards, hydrateIdentity, seedKeychain]);
+    if (!addProofRequested || status !== 'ready') return;
+    router.setParams({ addProof: '0' });
+    openAddProof();
+  }, [addProofRequested, openAddProof, status]);
 
-  const displayName = card?.name ?? t('meTab.fallbackName');
-  const activeDid = useActiveDid();
-  const displayDid = activeDid ?? t('meTab.initializingDid');
+  useEffect(() => {
+    if (pageDesignStatus !== 'loading') return;
+    void preparePageDesign();
+  }, [pageDesignStatus]);
 
-  // Work / group presentation context — REAL only. Derived from the user's
-  // primary business card's `groupContext` (Swift parity:
-  // BusinessCard.groupContext = .group(info)). When the card belongs to a
-  // group, claims backed by that card gain a "Work" action that presents
-  // them scoped to the group; otherwise the button is never rendered (no
-  // no-op placeholder — CLAUDE.md rule 8).
-  const cardDetail = useMyCardDetail();
-  const workContext = useMemo(() => {
-    const ctx = cardDetail?.groupContext;
-    if (ctx?.type === 'group') {
-      return { groupId: ctx.info.groupId, groupName: ctx.info.groupName };
-    }
-    return null;
-  }, [cardDetail?.groupContext]);
-
-  // Swift filters out type === "business_card" — mirror that. Memoised so
-  // the derived array keeps a stable reference between renders when the
-  // upstream `identityCards` slice hasn't changed.
-  const verifiedCreds = useMemo(
-    () => identityCards.filter((c) => c.type !== 'business_card'),
-    [identityCards]
-  );
-  const disclosures = useDisplayClaims();
+  useEffect(() => {
+    if (pageDesignStatus !== 'ready' || !record) return;
+    adoptPublishedPage(record.page);
+  }, [adoptPublishedPage, pageDesignStatus, record]);
 
   return (
     <View className="flex-1 bg-pageBg" style={{ paddingTop: insets.top }}>
-      <NavBar onSettings={() => router.push('/settings')} />
-
-      <ScrollView contentContainerStyle={{ paddingTop: 12, paddingBottom: 100 }}>
-        <View className="gap-8">
-          {/* Sections assemble top-down on first paint — a subtle staggered
-              drop-in. Tabs stay mounted (rule 10) so it plays once, not on
-              every re-focus. */}
-          <Animated.View entering={FadeInDown.duration(360)}>
-            <ProfileHeaderCard
-              name={displayName}
-              did={shortDid(displayDid)}
-              avatar={
-                card?.animal ? (
-                  <ExpoImage
-                    source={animalImageSource(card.animal)}
-                    style={{ width: 56, height: 56 }}
-                    contentFit="cover"
-                    cachePolicy="memory-disk"
-                    recyclingKey={`animal-${card.animal}-me-header`}
-                    transition={0}
-                  />
-                ) : (
-                  <InitialAvatar name={displayName} />
-                )
-              }
-              onEdit={() => router.push(card ? { pathname: '/cards/edit', params: { id: card.id } } : '/cards/edit')}
-            />
-          </Animated.View>
-
-          <Animated.View entering={FadeInDown.duration(360).delay(STAGGER_MS)}>
-            <VerifiedCredentialsSection
-              items={verifiedCreds}
-              onScanIdentity={() => router.push('/passport')}
-              onManualInput={() => router.push({ pathname: '/passport', params: { manual: '1' } })}
-              onImportJson={() => router.push('/credentials')}
-            />
-          </Animated.View>
-
-          <Animated.View entering={FadeInDown.duration(360).delay(STAGGER_MS * 2)}>
-            <SelectiveDisclosuresSection claims={disclosures} workContext={workContext} />
-          </Animated.View>
-
-          <Animated.View entering={FadeInDown.duration(360).delay(STAGGER_MS * 3)}>
-            <ActionSection
-              onAcquire={() => router.push('/passport')}
-              onImportRaw={() => router.push('/credentials')}
-            />
-          </Animated.View>
-
-          {developerMode ? (
-            <Animated.View entering={FadeInDown.duration(360).delay(STAGGER_MS * 4)}>
-              <DeveloperSection
-                onZk={() => router.push('/id/zk-settings')}
-                onOidc={() => router.push('/settings/oidc-request')}
-                onGroups={() => router.push('/settings/groups')}
-              />
-            </Animated.View>
-          ) : null}
-        </View>
-      </ScrollView>
-    </View>
-  );
-}
-
-function NavBar({ onSettings }: { onSettings: () => void }) {
-  const c = useThemeColors();
-  const { t } = useTranslation();
-  return (
-    <View
-      className="flex-row items-center justify-between px-4"
-      style={{ height: 44 }}
-    >
-      <View style={{ width: 44 }} />
-      <Text className="text-text1 text-[17px] font-semibold">{t('tab.me')}</Text>
-      <PressableScale
-        haptic="tap"
-        scaleTo={SCALE.icon}
-        onPress={onSettings}
-        accessibilityRole="button"
-        accessibilityLabel={t('meTab.settings')}
-        style={{ width: 44, height: 44, alignItems: 'flex-end', justifyContent: 'center' }}
-      >
-        <SfIcon name="gearshape" size={18} color={c.text1} />
-      </PressableScale>
-    </View>
-  );
-}
-
-function VerifiedCredentialsSection({
-  items,
-  onScanIdentity,
-  onManualInput,
-  onImportJson,
-}: {
-  readonly items: readonly IdentityCardEntity[];
-  readonly onScanIdentity: () => void;
-  readonly onManualInput: () => void;
-  readonly onImportJson: () => void;
-}) {
-  const { t } = useTranslation();
-  return (
-    <View className="gap-2">
-      <MeSectionHeader title={t('meTab.verifiedCredentials')} />
-      {items.length === 0 ? (
-        <View className="px-4 gap-2">
-          <View className="flex-row gap-2">
-            <MeActionTile icon="viewfinder" title={t('meTab.scanIdentity')} onPress={onScanIdentity} />
-            <MeActionTile icon="keyboard" title={t('meTab.manualInput')} onPress={onManualInput} />
-          </View>
-          <MeActionTile
-            icon="square.and.arrow.up"
-            title={t('meTab.importJson')}
-            onPress={onImportJson}
-          />
-        </View>
-      ) : (
-        <View className="gap-2">
-          {items.map((c) => (
-            <VerifiedCredentialRow
-              key={c.id}
-              icon={credentialIcon(c.type)}
-              title={c.title}
-              trustLevel={credentialTrustDisplayFor(c).level}
-              issuerType={c.issuerDid.startsWith('did:') ? (c.issuerDid.split(':')[1] ?? 'unknown') : 'unknown'}
-              onPress={() => router.push({ pathname: '/credentials/[id]', params: { id: c.id } })}
-            />
-          ))}
-        </View>
-      )}
-    </View>
-  );
-}
-
-function SelectiveDisclosuresSection({
-  claims,
-  workContext,
-}: {
-  readonly claims: readonly ProvableClaimEntity[];
-  /** Real work/group context derived from the user's card; null when none. */
-  readonly workContext: { readonly groupId: string; readonly groupName: string } | null;
-}) {
-  const { t } = useTranslation();
-  return (
-    <View className="gap-2">
-      <MeSectionHeader title={t('meTab.selectiveDisclosures')} />
-      {claims.length === 0 ? (
-        <View className="px-4">
-          <Text className="text-text3 text-[13px]">
-            {t('meTab.noDerivations')}
-          </Text>
-        </View>
-      ) : (
-        <View className="gap-2">
-          {claims.map((c) => {
-            // The "Work" action only exists for the business card itself
-            // (the `profile_card` claim), and only when the card carries a
-            // real group context. Passport claims (age/human/name) have no
-            // work scope, so they never get the button.
-            const canPresentInWork =
-              workContext !== null && c.claimType === 'profile_card';
-            return (
-              <DisclosureRowView
-                key={c.id}
-                icon={claimIcon(c.claimType)}
-                title={c.title}
-                source={`Src:${capitalize(c.source)}`}
-                actionTitle={t('meTab.show')}
-                onPresent={() => {
-                  router.push({
-                    pathname: '/credentials/[id]',
-                    params: { id: c.identityCardId, claimId: c.id },
-                  });
-                }}
-                work={
-                  canPresentInWork
-                    ? {
-                        title: t('meTab.work'),
-                        accessibilityLabel: t('meTab.workAccessibility', {
-                          group: workContext.groupName,
-                        }),
-                        onPress: () => {
-                          router.push({
-                            pathname: '/credentials/[id]',
-                            params: {
-                              id: c.identityCardId,
-                              claimId: c.id,
-                              context: 'work',
-                              groupId: workContext.groupId,
-                            },
-                          });
-                        },
-                      }
-                    : undefined
-                }
-              />
-            );
-          })}
-        </View>
-      )}
-    </View>
-  );
-}
-
-function claimIcon(claimType: string): SFSymbol {
-  switch (claimType) {
-    case 'is_human': return 'faceid';
-    case 'age_over_18': return 'face.smiling';
-    case 'profile_card': return 'person.crop.rectangle.fill';
-    case 'field_name': return 'person.fill';
-    default: return 'checkmark.shield.fill';
-  }
-}
-
-function capitalize(s: string): string {
-  if (s.length === 0) return s;
-  return s.charAt(0).toUpperCase() + s.slice(1);
-}
-
-function ActionSection({
-  onAcquire,
-  onImportRaw,
-}: {
-  onAcquire: () => void;
-  onImportRaw: () => void;
-}) {
-  const { t } = useTranslation();
-  return (
-    <View className="gap-2">
-      <MeSectionHeader title={t('meTab.action')} />
-      <View className="px-4 flex-row gap-2">
-        <MeActionTile icon="plus" title={t('meTab.acquireNewProof')} onPress={onAcquire} />
-        <MeActionTile
-          icon="square.and.arrow.up"
-          title={t('meTab.importRawCredential')}
-          onPress={onImportRaw}
+      {status === 'ready' && record && jws && shareRecord && shareJws ? (
+        <MeProfilePage
+          record={record}
+          jws={jws}
+          linkVisibility={linkVisibility}
+          publicRecord={published?.record ?? record}
+          publicPage={published ? { record: published.record, jws: published.jws } : null}
+          shareRecord={shareRecord}
+          shareJws={shareJws}
+          nostrShortUrlReady={nostrShortUrlReady}
+          bottomInset={insets.bottom}
+          onEdit={() => {
+            router.push('/me/edit');
+          }}
+          onEditAvatar={() => {
+            router.push({ pathname: '/me/edit', params: { avatar: '1' } });
+          }}
+          onAddLink={() => {
+            router.push({ pathname: '/me/edit', params: { add: '1' } });
+          }}
+          onOpenSettings={() => {
+            router.push('/settings');
+          }}
+          onOpenBindings={() => {
+            openAddProof();
+          }}
         />
-      </View>
+      ) : (
+        <MeProfileGate
+          onCreatePage={() => {
+            router.push('/me/edit');
+          }}
+          onSetUpIdentity={() => {
+            router.push('/onboarding?replay=1');
+          }}
+        />
+      )}
     </View>
   );
-}
-
-function DeveloperSection({
-  onZk,
-  onOidc,
-  onGroups,
-}: {
-  onZk: () => void;
-  onOidc: () => void;
-  onGroups: () => void;
-}) {
-  const { t } = useTranslation();
-  return (
-    <SettingsBlockSection title={t('meTab.developer')}>
-      <SettingsBlockRow
-        icon="shield"
-        title={t('meTab.zkIdentity')}
-        trailingText={t('meTab.notInitialized')}
-        onPress={onZk}
-      />
-      <SettingsBlockRow
-        icon="qrcode"
-        title={t('meTab.oidcRequestScanner')}
-        onPress={onOidc}
-      />
-      <SettingsBlockRow
-        icon="person.2"
-        title={t('meTab.groupManagement')}
-        trailingText={t('meTab.zeroGroups')}
-        onPress={onGroups}
-        isLast
-      />
-    </SettingsBlockSection>
-  );
-}
-
-function InitialAvatar({ name }: { name: string }) {
-  const initial = (name.trim().charAt(0) || '?').toUpperCase();
-  return (
-    <View
-      style={{
-        flex: 1,
-        alignItems: 'center',
-        justifyContent: 'center',
-        backgroundColor: `${Colors.primaryBlue}2E`,
-      }}
-    >
-      <Text
-        style={{ color: Colors.primaryBlue }}
-        className="text-[22px] font-bold"
-      >
-        {initial}
-      </Text>
-    </View>
-  );
-}
-
-function shortDid(did: string): string {
-  if (did.length <= 22) return did;
-  return `${did.slice(0, 12)}...${did.slice(-8)}`;
-}
-
-function credentialIcon(type: string): SFSymbol {
-  switch (type) {
-    case 'passport': return 'doc.text.fill';
-    case 'student': return 'graduationcap.fill';
-    case 'social_graph':
-    case 'socialGraph':
-      return 'person.2.fill';
-    default: return 'checkmark.shield.fill';
-  }
 }

@@ -282,15 +282,25 @@ class HybridSpruceDid : HybridSpruceDidSpec() {
   }
 
   override fun deleteKey(alias: String): Promise<Boolean> = Promise.async {
-    val ok = runCatching {
+    // Do not rely on a provider-specific missing-alias behaviour: absence is
+    // already the desired state, while either the probe or deletion itself
+    // must still reject on a real Keystore failure.
+    if (keyStore.containsAlias(keystoreAlias(alias))) {
       keyStore.deleteEntry(keystoreAlias(alias))
-      true
-    }.getOrDefault(false)
+    }
+    val ok = true
     if (ok) {
       emit(makeEvent(kind = SpruceDidEventKind.KEYDELETED, alias = alias))
     }
     ok
   }
+
+  // AndroidKeyStore has no synchronizable class — the iCloud double-mint
+  // conflict cannot exist here, so the surface is honestly empty (spec doc).
+  override fun listSyncableP256Keys(alias: String): Promise<String> = Promise.async { "[]" }
+
+  override fun deleteSyncableP256Key(alias: String, labelHex: String): Promise<Boolean> =
+    Promise.async { false }
 
   // MARK: - Public key JWK
 
@@ -309,18 +319,9 @@ class HybridSpruceDid : HybridSpruceDidSpec() {
    */
   private fun p256JwkJson(pub: ECPublicKey): String = SpruceDidJwk.p256JwkJson(pub)
 
-  // MARK: - DID derivation
-
-  override fun didKeyFromAlias(alias: String): Promise<String> = Promise.async {
-    val jwkJson = getPublicKeyJwk(alias).await()
-    SpruceSdkBridge.didFromJwk(jwkJson)
-  }
-
-  override fun didDocumentJson(did: String): Promise<String> = Promise.async {
-    SpruceSdkBridge.resolveDid(did)
-  }
-
-  // MARK: - Sign / Verify JWS
+  // MARK: - Sign JWS
+  // DID derivation and JWS/VC verification are pure TS in packages/shared —
+  // the SpruceID SDK wrapper methods were removed in 1.3.3 S7a (zero callers).
 
   override fun signJws(alias: String, payload: ArrayBuffer): Promise<String> = Promise.async {
     val payloadBytes = payload.toByteArray()
@@ -356,45 +357,6 @@ class HybridSpruceDid : HybridSpruceDidSpec() {
     ArrayBuffer.copy(SpruceDidEcdsa.derToRaw(derSig))
   }
 
-  override fun verifyJws(jws: String, did: String): Promise<Boolean> = Promise.async {
-    val parts = jws.split(".")
-    if (parts.size != 3) throw IllegalArgumentException("malformed JWS")
-    val (h, p, sigB64) = Triple(parts[0], parts[1], parts[2])
-    val rawSig = SpruceDidBase64.urlDecode(sigB64)
-    val derSig = SpruceDidEcdsa.rawToDer(rawSig)
-
-    val jwkJson = SpruceSdkBridge.jwkFromDid(did)
-    val pub = SpruceDidJwk.ecPublicKeyFromJwkJson(jwkJson)
-    val verifier = Signature.getInstance("SHA256withECDSA")
-    verifier.initVerify(pub)
-    verifier.update("$h.$p".toByteArray(Charsets.UTF_8))
-    verifier.verify(derSig)
-  }
-
-  // MARK: - VC sign / verify
-
-  override fun signCredentialJwt(alias: String, claimsJson: String): Promise<String> = Promise.async {
-    val claimsBytes = claimsJson.toByteArray(Charsets.UTF_8)
-    val arrayBuf = ArrayBuffer.copy(claimsBytes)
-    signJws(alias, arrayBuf).await()
-  }
-
-  override fun verifyCredentialJwt(jwt: String): Promise<String> = Promise.async {
-    val parts = jwt.split(".")
-    if (parts.size != 3) throw IllegalArgumentException("malformed VC-JWT")
-    val payloadBytes = SpruceDidBase64.urlDecode(parts[1])
-    val payloadJson = String(payloadBytes, Charsets.UTF_8)
-
-    // Pull issuer DID from `iss` claim.
-    val issMatch = Regex(""""iss"\s*:\s*"([^"]+)"""").find(payloadJson)
-    val iss = issMatch?.groupValues?.getOrNull(1)
-      ?: throw IllegalStateException("VC-JWT missing iss claim")
-
-    val ok = verifyJws(jwt, iss).await()
-    if (!ok) throw IllegalStateException("VC-JWT signature invalid")
-    payloadJson
-  }
-
   // MARK: - Listener registration
 
   override fun addEventListener(handler: (SpruceDidEvent) -> Unit): () -> Unit {
@@ -407,19 +369,6 @@ class HybridSpruceDid : HybridSpruceDidSpec() {
   }
 
   // ECDSA DER ↔ raw + JWK + Base64URL helpers live in
-  // SpruceDidCryptoHelpers.kt as `SpruceDidEcdsa`, `SpruceDidJwk`,
-  // `SpruceDidBase64`, and `SpruceSdkBridge`.
+  // SpruceDidCryptoHelpers.kt as `SpruceDidEcdsa`, `SpruceDidJwk`, and
+  // `SpruceDidBase64`.
 }
-
-/**
- * Helper: `await()` adaptor so we can compose `Promise<T>` returned by other
- * HybridObject methods inside our coroutine bodies. The Nitro `Promise.async`
- * builder accepts a suspend block, but the value returned by another
- * HybridObject method is wrapped in a Nitro Promise, so we bridge with a
- * suspendable wrapper.
- */
-private suspend fun <T> Promise<T>.await(): T =
-  kotlinx.coroutines.suspendCancellableCoroutine { cont ->
-    this.then { v -> cont.resumeWith(Result.success(v)) }
-      .catch { e -> cont.resumeWith(Result.failure(e)) }
-  }

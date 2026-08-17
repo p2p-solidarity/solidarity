@@ -33,6 +33,12 @@ import {
   type BusinessCard,
   type SharingLevel,
 } from '@solidarity/shared';
+import {
+  canCommitLocalData,
+  captureLocalDataEpoch,
+  trackLocalDataOperation,
+  type LocalDataEpoch,
+} from '@/settings/localDataWipeBarrier';
 
 import {
   ANIMAL_ICON_PNG,
@@ -421,18 +427,37 @@ function safeBase64ToBytes(b64: string): Uint8Array | undefined {
   }
 }
 
-async function persistPkpass(
+function persistPkpass(
   cardId: string,
   bytes: Uint8Array
 ): Promise<string> {
+  return trackLocalDataOperation(
+    persistPkpassAtEpoch(cardId, bytes, captureLocalDataEpoch()),
+  );
+}
+
+async function persistPkpassAtEpoch(
+  cardId: string,
+  bytes: Uint8Array,
+  writeEpoch: LocalDataEpoch,
+): Promise<string> {
+  if (!canCommitLocalData(writeEpoch)) {
+    throw new Error('Wallet pass write was invalidated by a local data wipe.');
+  }
   const docDir = FileSystem.documentDirectory ?? FileSystem.cacheDirectory;
   if (!docDir) {
     throw new Error('No writable directory available for pkpass output.');
   }
   const walletDir = `${docDir}wallet/`;
   const info = await FileSystem.getInfoAsync(walletDir);
+  if (!canCommitLocalData(writeEpoch)) {
+    throw new Error('Wallet pass write was invalidated by a local data wipe.');
+  }
   if (!info.exists) {
     await FileSystem.makeDirectoryAsync(walletDir, { intermediates: true });
+    if (!canCommitLocalData(writeEpoch)) {
+      throw new Error('Wallet pass write was invalidated by a local data wipe.');
+    }
   }
   const fileUri = `${walletDir}${cardId}.pkpass`;
   // expo-file-system writes the raw decoded bytes when given a standard
@@ -442,5 +467,8 @@ async function persistPkpass(
   await FileSystem.writeAsStringAsync(fileUri, base64Encode(bytes), {
     encoding: FileSystem.EncodingType.Base64,
   });
+  if (!canCommitLocalData(writeEpoch)) {
+    throw new Error('Wallet pass write was invalidated by a local data wipe.');
+  }
   return fileUri;
 }

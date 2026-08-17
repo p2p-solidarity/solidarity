@@ -252,23 +252,23 @@ export const PASSPORT_STEP_META: Readonly<
 > = {
   mrz: {
     id: 'PASS-1',
-    title: 'Capture MRZ',
-    subtitle: 'Input passport fields before secure chip read.',
+    title: 'passportSetup.step.details.title',
+    subtitle: 'passportSetup.step.details.subtitle',
   },
   nfc: {
     id: 'PASS-2',
-    title: 'Read NFC Chip',
-    subtitle: 'Read signed passport data from NFC chip.',
+    title: 'passportSetup.step.read.title',
+    subtitle: 'passportSetup.step.read.subtitle',
   },
   proof: {
     id: 'PASS-3',
-    title: 'Generate ZK Proof',
-    subtitle: 'Attempt ZK generation with fallback to SD-JWT.',
+    title: 'passportSetup.step.check.title',
+    subtitle: 'passportSetup.step.check.subtitle',
   },
   persist: {
     id: 'PASS-4',
-    title: 'Persist Credential',
-    subtitle: 'Save identity card and provable claims.',
+    title: 'passportSetup.step.save.title',
+    subtitle: 'passportSetup.step.save.subtitle',
   },
 };
 

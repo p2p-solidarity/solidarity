@@ -12,7 +12,8 @@
  * so the hero paints on frame 1 even before the MMKV-backed contact store
  * resolves. The rest of the card fills in once `useContact(id)` returns.
  */
-import { router, useLocalSearchParams } from 'expo-router';
+import { useLocalSearchParams } from 'expo-router';
+import { safeBack } from '@/navigation/safeBack';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useMemo, useState, type ReactNode } from 'react';
 import {
@@ -78,13 +79,13 @@ export default function PersonDetailScreen(): ReactNode {
   const onDelete = (): void => {
     if (!contact) return;
     void remove(contact.id);
-    router.back();
+    safeBack();
   };
 
   return (
     <View className="flex-1 bg-pageBg" style={{ paddingTop: insets.top }}>
       <TopBar
-        onBack={() => { router.back(); }}
+        onBack={() => { safeBack(); }}
         onShare={onShare}
         onMore={() => { setShowingMoreSheet(true); }}
       />

@@ -27,6 +27,10 @@ import { create } from 'zustand';
 
 import { ManifestStorage } from '@/storage';
 import {
+  canCommitLocalData,
+  captureLocalDataEpoch,
+} from '@/settings/localDataWipeBarrier';
+import {
   deleteBusinessCard as removeFromStorage,
   loadAllBusinessCards,
   loadBusinessCard,
@@ -44,6 +48,8 @@ import {
   type CardManifestEntry,
 } from './cardManifest';
 
+let localWipeGeneration = 0;
+
 interface CardStoreState {
   readonly manifest: readonly CardManifestEntry[];
   readonly details: ReadonlyMap<string, BusinessCard>;
@@ -58,6 +64,8 @@ interface CardStoreState {
     card: BusinessCard,
   ) => Promise<{ ok: true } | { ok: false; error: CardError }>;
   readonly remove: (id: string) => Promise<void>;
+  /** Drop every live reference after the encrypted local store is wiped. */
+  readonly resetForLocalWipe: () => void;
 }
 
 export const useCardStore = create<CardStoreState>((set, get) => ({
@@ -66,13 +74,18 @@ export const useCardStore = create<CardStoreState>((set, get) => ({
   detailsHydrated: false,
 
   seedFromManifest: () => {
+    if (!canCommitLocalData(captureLocalDataEpoch())) return;
     const seed = ManifestStorage.get<CardManifestEntry>(CARDS_MANIFEST_SCOPE);
     if (seed) set({ manifest: seed });
   },
 
   hydrate: async () => {
+    const generation = localWipeGeneration;
+    const writeEpoch = captureLocalDataEpoch();
+    if (!canCommitLocalData(writeEpoch)) return;
     if (get().detailsHydrated) return;
     const list = await loadAllBusinessCards();
+    if (generation !== localWipeGeneration || !canCommitLocalData(writeEpoch)) return;
     const details = new Map<string, BusinessCard>();
     for (const c of list) details.set(c.id, c);
     const manifest = list.map(toCardManifest);
@@ -81,9 +94,13 @@ export const useCardStore = create<CardStoreState>((set, get) => ({
   },
 
   loadDetail: async (id) => {
+    const generation = localWipeGeneration;
+    const writeEpoch = captureLocalDataEpoch();
+    if (!canCommitLocalData(writeEpoch)) return null;
     const cached = get().details.get(id);
     if (cached) return cached;
     const card = await loadBusinessCard(id);
+    if (generation !== localWipeGeneration || !canCommitLocalData(writeEpoch)) return null;
     if (!card) return null;
     set((s) => {
       const next = new Map(s.details);
@@ -94,6 +111,11 @@ export const useCardStore = create<CardStoreState>((set, get) => ({
   },
 
   upsert: async (card) => {
+    const generation = localWipeGeneration;
+    const writeEpoch = captureLocalDataEpoch();
+    if (!canCommitLocalData(writeEpoch)) {
+      return { ok: false, error: { type: 'storageError', message: 'Local data wipe is in progress.' } };
+    }
     const validation = businessCardSchema.safeParse(card);
     if (!validation.success) {
       return {
@@ -102,6 +124,9 @@ export const useCardStore = create<CardStoreState>((set, get) => ({
       };
     }
     await saveBusinessCard(validation.data);
+    if (generation !== localWipeGeneration || !canCommitLocalData(writeEpoch)) {
+      return { ok: false, error: { type: 'storageError', message: 'Local data wipe is in progress.' } };
+    }
     set((s) => {
       const entry = toCardManifest(validation.data);
       const idx = s.manifest.findIndex((m) => m.id === entry.id);
@@ -117,6 +142,7 @@ export const useCardStore = create<CardStoreState>((set, get) => ({
   },
 
   remove: async (id) => {
+    if (!canCommitLocalData(captureLocalDataEpoch())) return;
     // TODO(biometric-gate): gate this deletion with
     //   const gate = await requireSensitiveAction(
     //     'deleteZKIdentity',
@@ -131,6 +157,11 @@ export const useCardStore = create<CardStoreState>((set, get) => ({
       nextDetails.delete(id);
       return { manifest: nextManifest, details: nextDetails };
     });
+  },
+
+  resetForLocalWipe: () => {
+    localWipeGeneration += 1;
+    set({ manifest: [], details: new Map(), detailsHydrated: true });
   },
 }));
 

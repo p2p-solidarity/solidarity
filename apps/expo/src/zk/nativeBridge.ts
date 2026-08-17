@@ -3,8 +3,6 @@
  *
  * Keeps the TS layer importable on platforms where the native module isn't
  * registered yet (Expo Go, web preview, bun test without the JSI bridge).
- * Mirrors the pattern used in `src/matching/session.ts` for the proximity
- * native module.
  *
  * Consumers should treat a `null` return value as "native unavailable" and
  * keep the UI interactive (the ID screens have empty-state visuals for
@@ -15,8 +13,10 @@ import type { Semaphore } from '@solidarity/nitro-semaphore';
 
 let cached: Semaphore | null = null;
 let loadFailed = false;
+let forceUnavailableForTesting = false;
 
 export async function loadSemaphoreNative(): Promise<Semaphore | null> {
+  if (forceUnavailableForTesting) return null;
   if (cached) return cached;
   if (loadFailed) return null;
   try {
@@ -41,5 +41,13 @@ export async function loadSemaphoreNative(): Promise<Semaphore | null> {
  */
 export function __setSemaphoreNativeForTesting(impl: Semaphore | null): void {
   cached = impl;
+  loadFailed = false;
+  forceUnavailableForTesting = false;
+}
+
+/** Test-only loader failure seam. */
+export function __setSemaphoreNativeUnavailableForTesting(value: boolean): void {
+  forceUnavailableForTesting = value;
+  if (value) cached = null;
   loadFailed = false;
 }

@@ -14,6 +14,7 @@
  * (tabs)/me/index.tsx per scope rules.
  */
 import { router, Stack } from 'expo-router';
+import { safeBack } from '@/navigation/safeBack';
 import { useEffect, useState, type ReactNode } from 'react';
 import { ActivityIndicator, Pressable, ScrollView, Share, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -126,7 +127,7 @@ function Header({
         accessibilityRole="button"
         accessibilityLabel={t('cardsList.back')}
         onPress={() => {
-          router.back();
+          safeBack();
         }}
         hitSlop={8}>
         <SfIcon name="chevron.left" size={24} color={Colors.text1} />

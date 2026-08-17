@@ -1,0 +1,62 @@
+{
+  "description": "Compact JWS (ES256, did:key) conformance vectors for packages/shared/src/jws.ts. testKey.privateKeyHex is TEST-ONLY — never used for anything but generating these fixtures. Signatures are single-hash RFC 7515 ES256 (@noble/curves p256.sign/verify called with { prehash: false } over sha256(signingInput) — the library's prehash:true default would double-hash and is NOT RFC 7515 ES256). valid[] entries must verifyCompact(jws, testKey.did) -> ok(payload). invalid[] entries must verifyCompact(jws, did) -> err(...) for the stated reason. Consumed by packages/shared/test/jws.test.ts; intended to be replayed by the web viewer against its own implementation (03-spec §3).",
+  "testKey": {
+    "privateKeyHex": "0102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f20",
+    "note": "TEST-ONLY private key scalar. Never used in production.",
+    "did": "did:key:zDnaeVuZeVRqvscGkiEoR9PFFra2xZUMp97ZPuGFK1VLU7iYN"
+  },
+  "valid": [
+    {
+      "name": "simple-object-payload",
+      "payload": {
+        "hello": "world",
+        "n": 1
+      },
+      "jws": "eyJhbGciOiJFUzI1NiIsImtpZCI6ImRpZDprZXk6ekRuYWVWdVplVlJxdnNjR2tpRW9SOVBGRnJhMnhaVU1wOTdaUHVHRksxVkxVN2lZTiMwIn0.eyJoZWxsbyI6IndvcmxkIiwibiI6MX0.3F-X9Wpv9w8PfLXARbZX08NeQ6l--tV7hg4ZmsJ9u6Fn79TXF6GfMqxhuGRGOEldDlBVF8QvZBJhvmryw3e4NQ"
+    },
+    {
+      "name": "nested-unicode-payload",
+      "payload": {
+        "sub": "did:key:zExample",
+        "claims": {
+          "name": "花子",
+          "age": 30
+        },
+        "iat": 1751000000
+      },
+      "jws": "eyJhbGciOiJFUzI1NiIsImtpZCI6ImRpZDprZXk6ekRuYWVWdVplVlJxdnNjR2tpRW9SOVBGRnJhMnhaVU1wOTdaUHVHRksxVkxVN2lZTiMwIn0.eyJjbGFpbXMiOnsiYWdlIjozMCwibmFtZSI6IuiKseWtkCJ9LCJpYXQiOjE3NTEwMDAwMDAsInN1YiI6ImRpZDprZXk6ekV4YW1wbGUifQ.HBcLjwUl0RceD7YkhxEUn8rAo-QV6FiHi1FThyIhY-dKCx2Z0O9WUBM1xKqw8EmLkWM1gytTTBEnARKbvjc4Ig"
+    }
+  ],
+  "invalid": [
+    {
+      "name": "bad-signature",
+      "did": "did:key:zDnaeVuZeVRqvscGkiEoR9PFFra2xZUMp97ZPuGFK1VLU7iYN",
+      "jws": "eyJhbGciOiJFUzI1NiIsImtpZCI6ImRpZDprZXk6ekRuYWVWdVplVlJxdnNjR2tpRW9SOVBGRnJhMnhaVU1wOTdaUHVHRksxVkxVN2lZTiMwIn0.eyJhY3Rpb24iOiJleGNoYW5nZSJ9.oOZforOOYDVQbj28-5w0gzbTZfPm5w85ktw0_z9yL1gjzVp3QezDO9VVUxCf5aC-pf_P0Um_HqQfpodOT43taw",
+      "reason": "signature byte corrupted after signing (originally signed { action: 'exchange' })"
+    },
+    {
+      "name": "tampered-payload",
+      "did": "did:key:zDnaeVuZeVRqvscGkiEoR9PFFra2xZUMp97ZPuGFK1VLU7iYN",
+      "jws": "eyJhbGciOiJFUzI1NiIsImtpZCI6ImRpZDprZXk6ekRuYWVWdVplVlJxdnNjR2tpRW9SOVBGRnJhMnhaVU1wOTdaUHVHRksxVkxVN2lZTiMwIn0.eyJhbW91bnQiOjk5OTk5OX0.I6zUXb30RaTWXNOBtmpJS54Qnq2n1VHd6R38jg9_Mz5f30uRUwR2MREo4dqWRHn4AhDl-2LTsT6TMv7Ty_dQzw",
+      "reason": "payload segment replaced with { amount: 999999 } after signing { amount: 1 }; signature no longer matches"
+    },
+    {
+      "name": "kid-did-mismatch",
+      "did": "did:key:zDnaeaQHQpDWivip1SugnEwZaF5JUCmSyPrYewToLKYmv8CyV",
+      "jws": "eyJhbGciOiJFUzI1NiIsImtpZCI6ImRpZDprZXk6ekRuYWVWdVplVlJxdnNjR2tpRW9SOVBGRnJhMnhaVU1wOTdaUHVHRksxVkxVN2lZTiMwIn0.eyJzY29wZSI6InByb2ZpbGUifQ.jXxvSLjjxJLDrrZgIWjuXfaC7xf0jSmyZEF8UT2Fh4MAwY96OoCmVCWxyf1BN371ncO9J6EULG09GdLUhKyKsg",
+      "reason": "JWS is validly signed by testKey but its kid says testKey.did; verifying it against an unrelated did (the identityDeep parity fixture DID) must fail the kid/did check"
+    },
+    {
+      "name": "extra-header-key",
+      "did": "did:key:zDnaeVuZeVRqvscGkiEoR9PFFra2xZUMp97ZPuGFK1VLU7iYN",
+      "jws": "eyJhbGciOiJFUzI1NiIsImtpZCI6ImRpZDprZXk6ekRuYWVWdVplVlJxdnNjR2tpRW9SOVBGRnJhMnhaVU1wOTdaUHVHRksxVkxVN2lZTiMwIiwiY3JpdCI6WyJiNjQiXX0.eyJzY29wZSI6InByb2ZpbGUifQ.McnxuD4dLQtkUGwgZQIOyeJcd8WsL9PX0vCSvz3nxlwIz4S8P4XdeM9dWKJdgA4ZBLIPlKr6VF1dDlulB4Azdw",
+      "reason": "header is { alg: 'ES256', kid: testKey.did+'#0', crit: ['b64'] } — validly signed over this exact (non-conformant) signing input; verifyCompact must reject any header that isn't exactly {alg, kid} per RFC 7515 §4.1.11, not silently ignore the extra `crit` member"
+    },
+    {
+      "name": "kid-wrong-fragment",
+      "did": "did:key:zDnaeVuZeVRqvscGkiEoR9PFFra2xZUMp97ZPuGFK1VLU7iYN",
+      "jws": "eyJhbGciOiJFUzI1NiIsImtpZCI6ImRpZDprZXk6ekRuYWVWdVplVlJxdnNjR2tpRW9SOVBGRnJhMnhaVU1wOTdaUHVHRksxVkxVN2lZTiMxIn0.eyJzY29wZSI6InByb2ZpbGUifQ.bHGd-6X2uZXplOjb1xK5JXfYrAElK8O9yAjSj4DaJCgcWU5WDNRJ64oKhcKHo5by7fJ8iIzGLzPRQs3D_xahQA",
+      "reason": "kid is testKey.did+'#1' instead of the only valid '#0' fragment (a did:key document has exactly one verification method); validly signed over this exact signing input, so this exercises the kid-exactness check specifically, not signature verification"
+    }
+  ]
+}

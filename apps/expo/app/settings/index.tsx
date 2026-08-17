@@ -1,16 +1,13 @@
 /**
- * Settings hub — 1:1 port of solidarity/Views/SettingsViews/SettingsView.swift.
- *
- * Five blocks: Account & Identity, QR Sharing, Preferences, Guide, About.
- * Each row is a SettingsBlockRow on a `mutedSurface` 12pt card, stacked
- * 8pt apart. Sections themselves are 24pt apart. About section is rendered
- * inline (no SettingsBlockSection wrapper, since the version row uses the
- * Info-row variant + 14pt header + 12pt spacing).
+ * v2 Settings hub. Section and row order follows solidarity-spec/v2.html;
+ * protocol inspectors and credential tools remain behind the five-tap
+ * Developer Options entry.
  */
 import Constants from 'expo-constants';
 import { router } from 'expo-router';
+import { safeBack } from '@/navigation/safeBack';
 import { useRef } from 'react';
-import { Platform, Pressable, ScrollView, View } from 'react-native';
+import { Pressable, ScrollView, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import {
@@ -20,45 +17,43 @@ import {
   SettingsBlockSectionHeader,
   SettingsScreenTitle,
 } from '@/components/settings/SettingsBlocks';
-import { Colors } from '@/constants/Colors';
 import { haptic } from '@/feedback/haptics';
 import { pushToast } from '@/feedback/toast';
 import { useTranslation } from '@/i18n';
+import { publicPagePath } from '@/onboarding/publicPageUsername';
+import { advanceDeveloperUnlock } from '@/settings/developerUnlock';
 import { usePreferences } from '@/settings/preferences';
-
-const DEV_TAP_THRESHOLD = 7;
 
 export default function SettingsHub() {
   const insets = useSafeAreaInsets();
   const { t } = useTranslation();
   const developerMode = usePreferences((s) => s.developerMode);
+  const publicPageUsername = usePreferences((s) => s.publicPageUsername);
+  const backupEnabled = usePreferences((s) => s.backupEnabled);
   const setPref = usePreferences((s) => s.set);
   const tapCountRef = useRef(0);
 
   const version = Constants.expoConfig?.version ?? 'Unknown';
 
-  // Mirrors Swift DeveloperModeManager.registerVersionTap — 5/6 taps show a
-  // "N taps away" hint, the 7th flips developerMode on with success toast
-  // + haptic. The counter lives in a ref (component-local, not persisted).
+  // The counter is deliberately component-local; only the enabled preference
+  // persists. Taps one and two stay silent so this remains a hidden entry.
   const onVersionTap = () => {
-    if (developerMode) return;
-    tapCountRef.current += 1;
-    const count = tapCountRef.current;
-    if (count >= DEV_TAP_THRESHOLD) {
-      tapCountRef.current = 0;
+    const transition = advanceDeveloperUnlock(tapCountRef.current, developerMode);
+    tapCountRef.current = transition.nextTapCount;
+
+    if (transition.effect.kind === 'enabled') {
       setPref('developerMode', true);
       haptic('success');
+      pushToast(t('settingsHub.devUnlock.enabled'), 'success', 3000);
+    } else if (transition.effect.kind === 'countdown') {
+      const countdownKey = transition.effect.remaining === 1
+        ? 'settingsHub.devUnlock.remainingOne'
+        : 'settingsHub.devUnlock.remainingMany';
       pushToast(
-        t('settingsHub.devUnlock.enabled'),
-        'success',
-        3000
+        t(countdownKey, { count: transition.effect.remaining }),
+        'info',
+        1500,
       );
-    } else if (count >= 5) {
-      const remaining = DEV_TAP_THRESHOLD - count;
-      const message = remaining === 1
-        ? t('settingsHub.devUnlock.almostOne')
-        : t('settingsHub.devUnlock.almostMany', { count: remaining });
-      pushToast(message, 'info', 1500);
     }
   };
 
@@ -68,12 +63,7 @@ export default function SettingsHub() {
         title={t('settingsHub.title')}
         leadingAction={{
           accessibilityLabel: 'Back',
-          onPress: () => { router.back(); },
-        }}
-        trailingAction={{
-          icon: 'qrcode.viewfinder',
-          accessibilityLabel: t('idView.scan'),
-          onPress: () => { router.push('/scan'); },
+          onPress: () => { safeBack(); },
         }}
       />
 
@@ -82,77 +72,101 @@ export default function SettingsHub() {
         contentContainerStyle={{ paddingTop: 24, paddingBottom: 60 + insets.bottom }}
       >
         <View className="gap-6">
-          {/* Account & Identity */}
+          {/* Account */}
           <SettingsBlockSection title={t('settingsHub.accountIdentity')}>
             <SettingsBlockRow
               icon="person.text.rectangle"
               title={t('settingsHub.identityProfile')}
-              onPress={() => { router.push('/settings/vc'); }}
+              onPress={() => { router.push('/me/edit'); }}
             />
-            <SettingsBlockRow
-              icon="qrcode"
-              title={t('settingsHub.solidarityQr')}
-              onPress={() => { router.push('/settings/solidarity-qr'); }}
-            />
-            <SettingsBlockRow
-              icon="key.horizontal"
-              title={t('settingsHub.viewDids')}
-              onPress={() => { router.push('/settings/dids'); }}
-            />
-          </SettingsBlockSection>
-
-          {/* QR Sharing */}
-          <SettingsBlockSection title={t('settingsHub.qrSharing')}>
-            <SettingsBlockRow
-              icon="square.and.arrow.up"
-              title={t('settingsHub.shareSettings')}
-              onPress={() => { router.push('/settings/share-settings'); }}
-            />
-          </SettingsBlockSection>
-
-          {/* Preferences — matches Swift v1.3.1: Security & Keys → Data & Sync → Advanced.
-              Notifications/Language live under Advanced; Developer only after dev unlock. */}
-          <SettingsBlockSection title={t('settingsHub.preferences')}>
             <SettingsBlockRow
               icon="lock.shield"
-              title={t('settingsHub.securityKeys')}
+              title={t('settingsHub.accountProtection')}
               onPress={() => { router.push('/settings/security'); }}
             />
             <SettingsBlockRow
-              icon={Platform.OS === 'ios' ? 'icloud' : 'arrow.counterclockwise.icloud'}
-              title={t('settingsHub.dataSync')}
+              icon="at"
+              title={t('settingsHub.myUsername')}
+              trailingText={publicPageUsername ? publicPagePath(publicPageUsername) : undefined}
+              onPress={() => { router.push('/settings/username'); }}
+            />
+            <SettingsBlockRow
+              icon="icloud"
+              title={t('settingsHub.identityExport')}
+              onPress={() => { router.push('/settings/backup'); }}
+            />
+          </SettingsBlockSection>
+
+          <SettingsBlockSection title={t('settingsHub.plan')}>
+            <SettingsBlockRow
+              icon="sparkles"
+              title={t('settingsHub.plan')}
+              onPress={() => { router.push('/settings/pro'); }}
+            />
+          </SettingsBlockSection>
+
+          <SettingsBlockSection title={t('settingsHub.preferences')}>
+            <SettingsBlockRow
+              icon="paintbrush"
+              title={t('settingsHub.appearance')}
+              onPress={() => { router.push('/settings/appearance'); }}
+            />
+            <SettingsBlockRow
+              icon="globe"
+              title={t('settingsHub.language')}
+              onPress={() => { router.push('/settings/language'); }}
+            />
+            <SettingsBlockRow
+              icon="bell"
+              title={t('settingsHub.notifications')}
+              onPress={() => { router.push('/settings/notifications'); }}
+            />
+          </SettingsBlockSection>
+
+          <SettingsBlockSection title={t('settingsHub.data')}>
+            <SettingsBlockRow
+              icon="square.and.arrow.up"
+              title={t('settingsHub.exportContacts')}
+              subtitle={t('settingsHub.exportContactsSubtitle')}
+              onPress={() => {
+                router.push({ pathname: '/(tabs)/people', params: { edit: '1' } });
+              }}
+            />
+            <SettingsBlockRow
+              icon="square.and.arrow.down"
+              title={t('settingsHub.importContacts')}
+              onPress={() => { router.push('/contacts/import-vcf'); }}
+            />
+            <SettingsBlockRow
+              icon="icloud"
+              title={t('settingsHub.cloudBackup')}
+              trailingText={backupEnabled ? t('common.on') : t('common.off')}
               onPress={() => { router.push('/settings/data-sync'); }}
             />
+          </SettingsBlockSection>
+
+          <SettingsBlockSection title={t('settingsHub.advancedSection')}>
             <SettingsBlockRow
               icon="slider.horizontal.3"
               title={t('settingsHub.advanced')}
+              subtitle={t('settingsHub.advancedSubtitle')}
               onPress={() => { router.push('/settings/advanced'); }}
             />
-            {developerMode ? (
-              <SettingsBlockRow
-                icon="hammer"
-                title={t('settingsHub.developer')}
-                onPress={() => { router.push('/settings/developer'); }}
-              />
-            ) : null}
           </SettingsBlockSection>
 
-          {/* Guide — Figma 758:4610 renders Replay Onboarding in the rose accent
-              (icon + title), the one accented row in the hub. */}
-          <SettingsBlockSection title={t('settingsHub.guide')}>
-            <SettingsBlockRow
-              icon="arrow.counterclockwise"
-              title={t('settingsHub.replayOnboarding')}
-              iconColor={Colors.accentRose}
-              titleColor={Colors.accentRose}
-              onPress={() => { router.push('/onboarding?replay=1'); }}
-            />
-          </SettingsBlockSection>
-
-          {/* About — Swift renders this inline with 12pt spacing (not 8) */}
           <View className="gap-3">
             <SettingsBlockSectionHeader title={t('settingsHub.about')} />
-            <View className="px-4">
+            <View className="px-4 gap-2">
+              <SettingsBlockRow
+                icon="arrow.counterclockwise"
+                title={t('settingsHub.replayOnboarding')}
+                onPress={() => { router.push('/onboarding?replay=1'); }}
+              />
+              <SettingsBlockRow
+                icon="hand.raised"
+                title={t('settingsHub.privacy')}
+                onPress={() => { router.push('/settings/privacy'); }}
+              />
               <Pressable
                 onPress={onVersionTap}
                 accessibilityRole="button"

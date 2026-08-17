@@ -6,12 +6,12 @@
  * count + chevron.right. Used inside the dev-mode badge section.
  */
 import type { ReactNode } from 'react';
-import { Text, View } from 'react-native';
+import { View } from 'react-native';
 
 import { PressableScale } from '@/components/common/PressableScale';
 import { SfIcon } from '@/components/icons/SfIcon';
 import { Colors } from '@/constants/Colors';
-import { ON_DARK } from '@/components/themed';
+import { ON_DARK, ThemedSurface, ThemedText } from '@/components/themed';
 
 export interface BadgeGroupRowProps {
   readonly name: string;
@@ -27,77 +27,59 @@ export function BadgeGroupRow({
   onPress,
 }: BadgeGroupRowProps): ReactNode {
   return (
-    <PressableScale
-      onPress={onPress}
-      accessibilityRole="button"
-      accessibilityLabel={name}
-      style={{
-        flexDirection: 'row',
-        alignItems: 'center',
-        gap: 16,
-        padding: 12,
-        borderRadius: 12,
-        backgroundColor: Colors.cardBg,
-        borderWidth: 1,
-        borderColor: Colors.divider,
-      }}
-    >
-      <View
+    <PressableScale onPress={onPress} accessibilityRole="button" accessibilityLabel={name}>
+      <ThemedSurface
+        variant="card"
+        className="rounded-none"
         style={{
-          width: 44,
-          height: 44,
-          borderRadius: 22,
-          backgroundColor: `${Colors.accentRose}26`,
+          flexDirection: 'row',
           alignItems: 'center',
-          justifyContent: 'center',
-        }}
-      >
-        <SfIcon name="person.3.fill" size={18} color={Colors.accentRose} />
-      </View>
-
-      <View style={{ flex: 1 }}>
+          gap: 16,
+          padding: 12,
+        }}>
         <View
           style={{
-            flexDirection: 'row',
+            width: 44,
+            height: 44,
+            borderRadius: 22,
+            backgroundColor: `${Colors.accentRose}26`,
             alignItems: 'center',
-            gap: 6,
-          }}
-        >
-          <Text className="text-text1 text-[15px] font-medium" numberOfLines={1}>
-            {name}
-          </Text>
-          {providerLabel ? (
-            <View
-              style={{
-                paddingHorizontal: 6,
-                paddingVertical: 2,
-                borderRadius: 8,
-                backgroundColor: `${Colors.primaryBlue}CC`,
-              }}
-            >
-              <Text
-                style={{
-                  fontSize: 10,
-                  fontWeight: '700',
-                  color: ON_DARK,
-                }}
-              >
-                {providerLabel}
-              </Text>
-            </View>
-          ) : null}
+            justifyContent: 'center',
+          }}>
+          <SfIcon name="person.3.fill" size={18} color={Colors.accentRose} />
         </View>
-        <Text className="text-text2 text-[12px] mt-0.5">
-          {`${String(memberCount)} ${memberCount === 1 ? 'member' : 'members'}`}
-        </Text>
-      </View>
 
-      <SfIcon
-        name="chevron.right"
-        size={12}
-        weight="semibold"
-        color={Colors.text3}
-      />
+        <View style={{ flex: 1 }}>
+          <View
+            style={{
+              flexDirection: 'row',
+              alignItems: 'center',
+              gap: 6,
+            }}>
+            <ThemedText variant="bodyMedium" numberOfLines={1}>
+              {name}
+            </ThemedText>
+            {providerLabel ? (
+              <View
+                style={{
+                  paddingHorizontal: 6,
+                  paddingVertical: 2,
+                  borderRadius: 8,
+                  backgroundColor: `${Colors.primaryBlue}CC`,
+                }}>
+                <ThemedText variant="caption" style={{ color: ON_DARK }}>
+                  {providerLabel}
+                </ThemedText>
+              </View>
+            ) : null}
+          </View>
+          <ThemedText variant="caption" tone="secondary" className="mt-0.5">
+            {`${String(memberCount)} ${memberCount === 1 ? 'member' : 'members'}`}
+          </ThemedText>
+        </View>
+
+        <SfIcon name="chevron.right" size={12} weight="semibold" color={Colors.text3} />
+      </ThemedSurface>
     </PressableScale>
   );
 }

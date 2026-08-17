@@ -17,6 +17,7 @@ const TRUSTED_HOSTS: ReadonlySet<string> = new Set<string>([
   // Solidarity / AirMeishi product hosts (mirrors AppBranding).
   'solidarity.gg',
   'airmeishi.app',
+  'creds.id',
   // Swift `DomainVerificationManager.isTrustedDomain` allowlist.
   'apple.com',
   'google.com',
@@ -38,6 +39,32 @@ export function isVerifiedDomain(host: string): boolean {
   if (!host) return false;
   const lower = host.toLowerCase();
   for (const root of TRUSTED_HOSTS) {
+    if (matchesWildcard(lower, root)) return true;
+  }
+  return false;
+}
+
+/**
+ * Solidarity/AirMeishi-owned hosts — a strict SUBSET of `TRUSTED_HOSTS`
+ * above. `TRUSTED_HOSTS`/`isVerifiedDomain` also allowlists third-party
+ * identity providers (apple.com, google.com, microsoft.com, github.com,
+ * linkedin.com) trusted for a DIFFERENT purpose (OIDC/domain
+ * verification) — those hosts must NOT be able to trigger an in-app
+ * routing side effect (Pear connect, card connect) just because a path
+ * happens to match `/pear/<did>` or `/c/<uuid>`. `parseVerifiedDomainRoute`
+ * (`./parser.ts`) gates those two routes on `isProductHost`, not
+ * `isVerifiedDomain`. See Task A5.4 code-review Finding 1.
+ */
+const PRODUCT_HOSTS: ReadonlySet<string> = new Set<string>(['solidarity.gg', 'airmeishi.app']);
+
+/**
+ * Returns true when `host` is rooted at a Solidarity/AirMeishi-owned host
+ * (subdomains accepted, same matching semantics as `isVerifiedDomain`).
+ */
+export function isProductHost(host: string): boolean {
+  if (!host) return false;
+  const lower = host.toLowerCase();
+  for (const root of PRODUCT_HOSTS) {
     if (matchesWildcard(lower, root)) return true;
   }
   return false;

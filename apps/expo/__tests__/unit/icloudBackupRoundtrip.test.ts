@@ -25,10 +25,12 @@
  *   apps/expo/src/backup/backupManager.ts      — performBackupNow / restore
  *   apps/expo/src/backup/gestureAutoBackup.ts  — pull-down pan to trigger
  *
- * NOTE on the magic header: the Expo port now PRESERVES the "SOLB" + 0x01
- * prefix (encodeSolb/decodeSolb) so each `backup_<ts>.solbk` file is
- * byte-compatible with the SwiftUI app's format and a Swift build can read
- * ours. The serialised JSON field NAMES match Swift Codable verbatim.
+ * NOTE on the magic header: new writes are SOLB v2 (`0x02`,
+ * recovery-phrase-hkdf key scheme) — a portable, cross-device archive. The
+ * reader stays v1-COMPATIBLE (`0x01`, device-storage key) so existing Swift /
+ * pre-upgrade `.solbk` files still restore on the original device, but writes
+ * are no longer byte-identical to the SwiftUI format. The serialised JSON field
+ * NAMES still match Swift Codable verbatim.
  *
  * We mock the @solidarity/nitro-cloudkit file API here (writeFileBackup /
  * readFileBackup / listFileBackups) with an in-memory file store.
@@ -51,11 +53,29 @@ import {
   uuid,
 } from '@solidarity/shared';
 
+import {
+  DecryptError,
+  decryptJsonWithKey,
+  encryptJsonWithKey,
+} from '../../src/storage/jsonCrypto';
+import { encodeSolb } from '../../src/backup/solbEnvelope';
+
 // ─── Module surface types (imported lazily after mocks install) ─────────────
 
+interface DownloadedArchive {
+  readonly keyScheme: 'device-storage-v1' | 'recovery-phrase-hkdf-v1';
+  readonly ciphertextB64: string;
+}
+interface BackupArchiveInfo {
+  readonly name: string;
+  readonly timestampMs: number;
+  readonly version: 1 | 2 | null;
+}
 interface CloudProviderSurface {
-  readonly uploadBackup: <T>(value: T) => Promise<void>;
-  readonly downloadBackup: <T>() => Promise<T | null>;
+  readonly uploadBackup: <T>(value: T, key: Uint8Array) => Promise<void>;
+  readonly downloadLatestArchive: () => Promise<DownloadedArchive | null>;
+  readonly downloadArchive: (name: string) => Promise<DownloadedArchive>;
+  readonly listBackupArchives: () => Promise<readonly BackupArchiveInfo[]>;
   readonly backupMtime: () => Promise<Date | null>;
   readonly setProvider: (kind: 'iCloud' | 'googleDrive') => void;
   readonly getActiveProvider: () => 'iCloud' | 'googleDrive';
@@ -128,6 +148,11 @@ const FakeCloudKit = {
 // ─── Mock setup ────────────────────────────────────────────────────────────
 
 const FIXED_MASTER_KEY = new Uint8Array(32).fill(0xa1);
+// Two independent Portable Backup Keys standing in for two devices that hold
+// DIFFERENT Recovery Phrases (device A vs a wrong phrase). Same key on two
+// devices ⇒ same phrase ⇒ restore works; different key ⇒ auth-tag failure.
+const PORTABLE_KEY_A = new Uint8Array(32).fill(0x11);
+const PORTABLE_KEY_B = new Uint8Array(32).fill(0x22);
 
 let cloud: CloudProviderSurface;
 
@@ -136,25 +161,29 @@ beforeAll(async () => {
     getCloudKit: () => FakeCloudKit,
   }));
   await mock.module('react-native', () => ({
+    ...((globalThis as unknown as { __AIRMEISHI_RN_MOCK__: Record<string, unknown> })
+      .__AIRMEISHI_RN_MOCK__),
     Platform: { OS: 'ios', select: <T,>(o: { ios?: T; android?: T; default?: T }) =>
       o.ios ?? o.default },
   }));
   await mock.module('@/storage/secureMasterKey', () => ({
     getMasterKey: async () => FIXED_MASTER_KEY,
     resetMasterKeyForTesting: async () => undefined,
+    evictMasterKeyCache: () => undefined,
   }));
-  // Install a REAL AES-GCM encryption manager (overrides any plaintext stub
-  // installed by sibling tests via mock.module). cloudProvider uses encryptJson
-  // / decryptJson; we need the stored bytes to be actual ciphertext so the
-  // confidentiality assertions hold.
-  class DecryptError extends Error {
+  // Install a REAL AES-GCM encryption manager for the Device Storage Key path
+  // (backupManager's v1 legacy decrypt + any sibling that imports it). The
+  // portable v2 path uses jsonCrypto's explicit-key helpers directly (real, not
+  // mocked). `MockDecryptError` matches the real class's `.name` so
+  // backupManager's duck-type (`err.name === 'DecryptError'`) still classifies.
+  class MockDecryptError extends Error {
     constructor(message = 'decrypt-failed', options?: { cause?: unknown }) {
       super(message, options);
       this.name = 'DecryptError';
     }
   }
   await mock.module('@/storage/encryptionManager', () => ({
-    DecryptError,
+    DecryptError: MockDecryptError,
     encryptJson: async (value: unknown) => {
       const sealed = aesGcmSeal(FIXED_MASTER_KEY, utf8ToBytes(JSON.stringify(value)));
       return base64Encode(sealed);
@@ -165,7 +194,7 @@ beforeAll(async () => {
       try {
         opened = aesGcmOpen(FIXED_MASTER_KEY, sealed);
       } catch (cause) {
-        throw new DecryptError('decrypt-failed', { cause });
+        throw new MockDecryptError('decrypt-failed', { cause });
       }
       return JSON.parse(bytesToUtf8(opened)) as T;
     },
@@ -300,74 +329,129 @@ function makeFullPayload(): SwiftCompatibleBackupData {
 
 // ─── Tests ──────────────────────────────────────────────────────────────────
 
-describe('iCloud backup round trip — encrypted blob via react-native-cloud-storage', () => {
-  it('uploads + downloads a full payload byte-equal', async () => {
-    const payload = makeFullPayload();
-    await cloud.uploadBackup(payload);
+describe('iCloud backup round trip — portable SOLB v2 archive across devices', () => {
+  it('writes a v2 portable archive that is ciphertext (never plaintext) on disk', async () => {
+    await cloud.uploadBackup(makeFullPayload(), PORTABLE_KEY_A);
 
-    // Storage now holds something — that something must be ciphertext (not
-    // plaintext) so the cloud provider can never see the payload bytes.
     const stored = Array.from(fakeFiles.values())[0]?.content ?? '';
     expect(stored.length).toBeGreaterThan(0);
     expect(stored).not.toContain('Ada Lovelace');
     expect(stored).not.toContain('Aurora');
 
-    const downloaded = await cloud.downloadBackup<SwiftCompatibleBackupData>();
-    expect(downloaded).not.toBeNull();
-    expect(downloaded?.version).toBe(3);
-    expect(downloaded?.businessCards.length).toBe(1);
-    expect(downloaded?.contacts.length).toBe(1);
-    expect(downloaded?.groups?.length).toBe(1);
+    const archive = await cloud.downloadLatestArchive();
+    expect(archive).not.toBeNull();
+    // The reader pins the key scheme; new writes are always v2 (portable).
+    expect(archive?.keyScheme).toBe('recovery-phrase-hkdf-v1');
   });
 
-  it('round-trips through a wipe (simulating fresh install + restore)', async () => {
+  it('device B with the SAME Portable Backup Key restores the full payload', async () => {
     const payload = makeFullPayload();
-    await cloud.uploadBackup(payload);
+    await cloud.uploadBackup(payload, PORTABLE_KEY_A);
 
-    // Wipe local storage but NOT cloud storage (matches "fresh install" UX).
-    // The cloud file persists; the local KV is empty.
-    const restored = await cloud.downloadBackup<SwiftCompatibleBackupData>();
-    expect(restored).not.toBeNull();
-
-    // Deep-equal on JSON-comparable fields.
-    expect(JSON.stringify(restored?.businessCards)).toBe(JSON.stringify(payload.businessCards));
-    expect(JSON.stringify(restored?.contacts)).toBe(JSON.stringify(payload.contacts));
-    expect(JSON.stringify(restored?.groups)).toBe(JSON.stringify(payload.groups));
-    expect(JSON.stringify(restored?.identityKeyWrapper))
-      .toBe(JSON.stringify(payload.identityKeyWrapper));
+    // Device B: fresh install, different Device Storage Key — but the same
+    // Recovery Phrase ⇒ the same Portable Backup Key derived independently.
+    const archive = await cloud.downloadLatestArchive();
+    expect(archive).not.toBeNull();
+    const restored = decryptJsonWithKey<SwiftCompatibleBackupData>(
+      PORTABLE_KEY_A,
+      archive!.ciphertextB64
+    );
+    expect(JSON.stringify(restored.businessCards)).toBe(JSON.stringify(payload.businessCards));
+    expect(JSON.stringify(restored.contacts)).toBe(JSON.stringify(payload.contacts));
+    expect(JSON.stringify(restored.groups)).toBe(JSON.stringify(payload.groups));
+    expect(JSON.stringify(restored.identityKeyWrapper)).toBe(
+      JSON.stringify(payload.identityKeyWrapper)
+    );
   });
 
-  it('downloadBackup() returns null when no file exists (fresh device)', async () => {
-    const result = await cloud.downloadBackup<SwiftCompatibleBackupData>();
-    expect(result).toBeNull();
+  it('device B with a DIFFERENT Recovery Phrase fails the auth tag (typed DecryptError, no plaintext)', async () => {
+    await cloud.uploadBackup(makeFullPayload(), PORTABLE_KEY_A);
+    const archive = await cloud.downloadLatestArchive();
+    expect(archive).not.toBeNull();
+    expect(() => decryptJsonWithKey(PORTABLE_KEY_B, archive!.ciphertextB64)).toThrow(DecryptError);
+  });
+
+  it('downloadLatestArchive() returns null when no file exists (fresh device)', async () => {
+    expect(await cloud.downloadLatestArchive()).toBeNull();
+  });
+
+  it('picks the NEWEST archive when several exist', async () => {
+    const older = makeFullPayload();
+    await cloud.uploadBackup(older, PORTABLE_KEY_A);
+    const newer = { ...makeFullPayload(), timestamp: '2026-06-01T00:00:00Z' };
+    await cloud.uploadBackup(newer, PORTABLE_KEY_A);
+
+    const archive = await cloud.downloadLatestArchive();
+    const restored = decryptJsonWithKey<SwiftCompatibleBackupData>(
+      PORTABLE_KEY_A,
+      archive!.ciphertextB64
+    );
+    expect(restored.timestamp).toBe('2026-06-01T00:00:00Z');
   });
 
   it('backupMtime() reports the cloud-side timestamp after upload', async () => {
-    const before = await cloud.backupMtime();
-    expect(before).toBeNull();
-    await cloud.uploadBackup(makeFullPayload());
+    expect(await cloud.backupMtime()).toBeNull();
+    await cloud.uploadBackup(makeFullPayload(), PORTABLE_KEY_A);
     const after = await cloud.backupMtime();
-    expect(after).not.toBeNull();
     expect(after).toBeInstanceOf(Date);
   });
 
+  it('listBackupArchives returns dated rows newest-first with the format version', async () => {
+    await cloud.uploadBackup(makeFullPayload(), PORTABLE_KEY_A);
+    await new Promise((r) => setTimeout(r, 2)); // distinct ms filenames
+    await cloud.uploadBackup(makeFullPayload(), PORTABLE_KEY_A);
+
+    // Inject a legacy v1 (device-key) archive + a corrupt file alongside.
+    fakeFiles.set('iCloud:backup_1500000000000.solbk', {
+      content: encodeSolb(encryptJsonWithKey(FIXED_MASTER_KEY, makeFullPayload()), 1),
+      modifiedTime: 1_500_000_000_000,
+    });
+    fakeFiles.set('iCloud:backup_1400000000000.solbk', {
+      content: 'bm90LWEtc29sYi1maWxl', // "not-a-solb-file" — header decode fails
+      modifiedTime: 1_400_000_000_000,
+    });
+
+    const list = await cloud.listBackupArchives();
+    expect(list.length).toBe(4);
+    // Newest first.
+    const stamps = list.map((a) => a.timestampMs);
+    expect([...stamps].sort((x, y) => y - x)).toEqual(stamps);
+    // The two fresh uploads are portable v2.
+    expect(list[0]?.version).toBe(2);
+    expect(list[1]?.version).toBe(2);
+    // The injected legacy + corrupt files are classified, not hidden.
+    expect(list.find((a) => a.name === 'backup_1500000000000.solbk')?.version).toBe(1);
+    expect(list.find((a) => a.name === 'backup_1400000000000.solbk')?.version).toBeNull();
+  });
+
+  it('downloadArchive(name) restores a SPECIFIC older archive (explicit choice, no silent fallback)', async () => {
+    const older = { ...makeFullPayload(), timestamp: '2026-05-01T00:00:00Z' };
+    await cloud.uploadBackup(older, PORTABLE_KEY_A);
+    await new Promise((r) => setTimeout(r, 2));
+    await cloud.uploadBackup({ ...makeFullPayload(), timestamp: '2026-06-01T00:00:00Z' }, PORTABLE_KEY_A);
+
+    const list = await cloud.listBackupArchives();
+    const oldest = list[list.length - 1]!;
+    const archive = await cloud.downloadArchive(oldest.name);
+    const restored = decryptJsonWithKey<SwiftCompatibleBackupData>(
+      PORTABLE_KEY_A,
+      archive.ciphertextB64
+    );
+    expect(restored.timestamp).toBe('2026-05-01T00:00:00Z');
+  });
+
   it('Google Drive provider isolates files from iCloud (cross-provider safety)', async () => {
-    // Upload to iCloud.
     cloud.setProvider('iCloud');
     activeProvider = 'iCloud';
-    await cloud.uploadBackup(makeFullPayload());
+    await cloud.uploadBackup(makeFullPayload(), PORTABLE_KEY_A);
 
-    // Switch to Drive and try to download — must return null (different provider).
     cloud.setProvider('googleDrive');
     activeProvider = 'googleDrive';
-    const drive = await cloud.downloadBackup<SwiftCompatibleBackupData>();
-    expect(drive).toBeNull();
+    expect(await cloud.downloadLatestArchive()).toBeNull();
 
-    // Switch back; iCloud blob still present.
     cloud.setProvider('iCloud');
     activeProvider = 'iCloud';
-    const ic = await cloud.downloadBackup<SwiftCompatibleBackupData>();
-    expect(ic).not.toBeNull();
+    expect(await cloud.downloadLatestArchive()).not.toBeNull();
   });
 });
 
@@ -473,6 +557,17 @@ describe('iCloud backup — gesture-triggered (pull-down pan)', () => {
     }));
     gestureMod = await import('../../src/backup/gestureAutoBackup');
 
+    // requestBackup now resolves the Portable Backup Key before writing, so a
+    // gesture backup needs a provisioned Recovery Phrase. Inject one via
+    // rootKey's DI hook (reset in afterAll so it can't leak into other suites).
+    const rootKey = await import('@/identity/rootKey');
+    rootKey.__setRootKeyStorageForTesting({
+      getMnemonic: async () =>
+        'legal winner thank year wave sausage worth useful legal winner thank yellow',
+      setMnemonic: async () => undefined,
+      deleteMnemonic: async () => undefined,
+    });
+
     // Enable backup AFTER importing gestureAutoBackup so backupManager's
     // usePreferences binding (same '@/settings/preferences' singleton) is
     // already established — otherwise requestBackup('gesture') self-gates on
@@ -486,7 +581,7 @@ describe('iCloud backup — gesture-triggered (pull-down pan)', () => {
     });
   });
 
-  afterAll(() => {
+  afterAll(async () => {
     // usePreferences is a process-global singleton; reset the enabled flag so
     // this suite doesn't bleed backupEnabled:true into later tests
     // (e.g. preferencesKeys.parity asserts the Swift default stays false).
@@ -495,6 +590,9 @@ describe('iCloud backup — gesture-triggered (pull-down pan)', () => {
       autoBackupOnPull: true,
       backupProvider: 'iCloud',
     });
+    // Reset the rootKey storage DI so the injected phrase can't leak.
+    const rootKey = await import('@/identity/rootKey');
+    rootKey.__setRootKeyStorageForTesting(null);
   });
 
   it('triggers backup when translationY exceeds the 80px threshold', async () => {

@@ -139,6 +139,11 @@ beforeAll(async () => {
     publicJwk: async () => ({ kty: 'EC', crv: 'P-256', alg: 'ES256', x: '', y: '' }),
     signJwt: async () => 'signed.jwt.fake',
     resetSigningKeyForTesting: async () => undefined,
+    // T7 conflict surface — mocks stay export-complete (A5.3 lesson: a
+    // partial module mock poisons real-import files in the same run).
+    hasExistingSigningKey: async () => false,
+    listSyncableSigningKeys: async () => [],
+    resolveSigningKeyConflict: async () => ({ ok: false, error: 'test: unavailable' }),
   }));
 
   // Reach for the module under test AFTER the mocks land so its imports

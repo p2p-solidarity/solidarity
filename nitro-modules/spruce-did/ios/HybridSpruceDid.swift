@@ -17,12 +17,11 @@
 //                 brings their own implementation. Marked unsupported so the
 //                 caller knows to choose a different DID method.
 //
-//  DID derivation + JWS / VC sign + verify are routed through the SpruceID
-//  Mobile SDK (`SpruceIDMobileSdkRs`) so the wire format matches whatever
-//  did:key / VC-JWT shape the SpruceID resolver emits — the same library the
-//  legacy Swift app and the Spruce verifier infra speak. The SpruceID SDK is
-//  added as a Swift Package by the consuming app (config plugin in
-//  apps/expo/plugins/withSpruceIdSpmPackage.js — see podspec for details).
+//  DID derivation + JWS/VC verification are pure TS in packages/shared
+//  (didKeyFromJwk / resolveDidKey / verifyJwtEs256) — this module is only
+//  the hardware signing shell. The SpruceID Mobile SDK dependency and its 5
+//  wrapper methods were removed in 1.3.3 S7a (they had zero production
+//  callers — inventory: docs/ref/notes-sprucekit-slim.md).
 //
 //  All Apple @objc / NSObject delegate protocols are routed through proxies
 //  (LAContextProxy pattern) so the NitroSpec subclass doesn't need to
@@ -34,10 +33,6 @@ import Foundation
 import LocalAuthentication
 import NitroModules
 import Security
-
-#if canImport(SpruceIDMobileSdkRs)
-  import SpruceIDMobileSdkRs
-#endif
 
 // MARK: - HybridSpruceDid
 //
@@ -215,7 +210,21 @@ final class HybridSpruceDid: HybridSpruceDidSpec {
 
   func deleteKey(alias: String) throws -> Promise<Bool> {
     return Promise.async {
-      let ok = self.store.deleteKey(alias: alias)
+      let ok = try self.store.deleteKey(alias: alias)
+      if ok { self.emit(self.makeEvent(.keydeleted, alias: alias)) }
+      return ok
+    }
+  }
+
+  // MARK: - Syncable-key conflict surface (T7)
+
+  func listSyncableP256Keys(alias: String) throws -> Promise<String> {
+    return Promise.async { self.store.listSyncableP256Keys(alias: alias) }
+  }
+
+  func deleteSyncableP256Key(alias: String, labelHex: String) throws -> Promise<Bool> {
+    return Promise.async {
+      let ok = self.store.deleteSyncableP256Key(alias: alias, labelHex: labelHex)
       if ok { self.emit(self.makeEvent(.keydeleted, alias: alias)) }
       return ok
     }
@@ -227,43 +236,7 @@ final class HybridSpruceDid: HybridSpruceDidSpec {
     return Promise.async { try self.store.publicKeyJwk(alias: alias) }
   }
 
-  // MARK: - DID derivation
-
-  func didKeyFromAlias(alias: String) throws -> Promise<String> {
-    return Promise.async {
-      let jwkString = try self.store.publicKeyJwk(alias: alias)
-      #if canImport(SpruceIDMobileSdkRs)
-        // Spruce SDK exposes `DidMethodUtils(method: .key)` whose
-        // `didFromJwk(jwk:)` returns the canonical did:key string. This is the
-        // exact API the legacy KeychainService uses.
-        let utils = DidMethodUtils(method: .key)
-        do {
-          return try utils.didFromJwk(jwk: jwkString)
-        } catch {
-          throw SpruceDidError.spruceSdkError(error.localizedDescription)
-        }
-      #else
-        throw SpruceDidError.spruceSdkUnavailable
-      #endif
-    }
-  }
-
-  func didDocumentJson(did: String) throws -> Promise<String> {
-    return Promise.async {
-      // SpruceID 0.15.x removed the standalone `DidResolver`; DID-document
-      // resolution now lives behind `AnyDidMethod`. This method is currently
-      // unused by the app (the JS `didDocumentJson` state is never populated
-      // from native — see apps/expo/src/zk/coordinator.ts), so rather than
-      // ship an unverified resolver we surface a clear, machine-readable error
-      // and keep the live did:key flow (`didKeyFromAlias`) intact.
-      // TODO(spruce-0.15): reimplement via `AnyDidMethod` + real-device
-      // verification when a caller actually needs DID-document resolution.
-      throw SpruceDidError.spruceSdkError(
-        "didDocumentJson unsupported on SpruceID 0.15.x (DidResolver removed): \(did)")
-    }
-  }
-
-  // MARK: - Sign / Verify JWS
+  // MARK: - Sign JWS
 
   func signJws(alias: String, payload: ArrayBuffer) throws -> Promise<String> {
     // A Nitro `ArrayBuffer` handed in from JS is NON-OWNING: its backing store
@@ -345,71 +318,6 @@ final class HybridSpruceDid: HybridSpruceDidSpec {
     }
   }
 
-  func verifyJws(jws: String, did: String) throws -> Promise<Bool> {
-    return Promise.async {
-      // SpruceID 0.15.x removed `DidMethodUtils.jwkFromDid` and the standalone
-      // `DidResolver`, so the original DID→JWK verification path no longer
-      // compiles. This method is currently unused by the app (no JS caller),
-      // so we throw a clear error instead of returning an unverified result —
-      // shipping an untested signature check would be worse than a loud
-      // failure. TODO(spruce-0.15): recover the did:key JWK via a local
-      // multicodec decoder (did:key embeds the key) or `AnyDidMethod`, then
-      // verify with CryptoKit P-256 as the prior implementation did.
-      _ = jws
-      throw SpruceDidError.verifyFailed(
-        "verifyJws by DID is unsupported on SpruceID 0.15.x (jwkFromDid/DidResolver removed): \(did)")
-    }
-  }
-
-  // MARK: - VC sign / verify
-
-  func signCredentialJwt(alias: String, claimsJson: String) throws -> Promise<String> {
-    return Promise.async {
-      guard let payload = claimsJson.data(using: .utf8) else {
-        throw SpruceDidError.invalidInput("claimsJson is not valid UTF-8")
-      }
-      // VC-JWT is structurally identical to a regular JWS — same compact
-      // serialisation, just with a `vc` claim inside the payload. We can
-      // reuse signJws and let the caller embed the required claims.
-      return try await self.signJwsBytes(alias: alias, payload: payload)
-    }
-  }
-
-  func verifyCredentialJwt(jwt: String) throws -> Promise<String> {
-    return Promise.async {
-      let parts = jwt.split(separator: ".")
-      guard parts.count == 3,
-        let payloadData = Base64Url.decode(String(parts[1]))
-      else {
-        throw SpruceDidError.verifyFailed("malformed VC-JWT")
-      }
-      let payloadJson = String(data: payloadData, encoding: .utf8) ?? "{}"
-      // Pull issuer DID out of the payload's `iss` claim.
-      let claims = (try? JSONSerialization.jsonObject(with: payloadData) as? [String: Any]) ?? [:]
-      guard let iss = claims["iss"] as? String else {
-        throw SpruceDidError.verifyFailed("VC-JWT missing iss claim")
-      }
-      let ok = try await self.verifyJwsString(jws: jwt, did: iss)
-      guard ok else { throw SpruceDidError.verifyFailed("VC-JWT signature invalid") }
-      return payloadJson
-    }
-  }
-
-  // MARK: - Internal helpers (sign/verify reuse)
-
-  private func signJwsBytes(alias: String, payload: Data) async throws -> String {
-    let arrayBuf: ArrayBuffer
-    do { arrayBuf = try ArrayBuffer.copy(data: payload) }
-    catch { throw SpruceDidError.signFailed(error.localizedDescription) }
-    let promise = try signJws(alias: alias, payload: arrayBuf)
-    return try await promise.await()
-  }
-
-  private func verifyJwsString(jws: String, did: String) async throws -> Bool {
-    let promise = try verifyJws(jws: jws, did: did)
-    return try await promise.await()
-  }
-
   // MARK: - Listener registration
 
   func addEventListener(handler: @escaping (SpruceDidEvent) -> Void) -> () -> Void {
@@ -428,9 +336,3 @@ final class HybridSpruceDid: HybridSpruceDidSpec {
     return Data(bytes: buffer.data, count: count)
   }
 }
-
-// MARK: - Promise composition note
-//
-// Nitro's `Promise<T>` already exposes `await()` (see NitroModules/Promise.swift),
-// so signCredentialJwt / verifyCredentialJwt compose by `try await
-// otherPromise.await()` — no local extension needed.

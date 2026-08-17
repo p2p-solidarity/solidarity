@@ -7,6 +7,7 @@
  * state when there are no encrypted blobs.
  */
 import { router } from 'expo-router';
+import { safeBack } from '@/navigation/safeBack';
 import { useEffect, type ReactNode } from 'react';
 import { Pressable, ScrollView, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -109,7 +110,7 @@ export default function VaultHub() {
 
   return (
     <View className="flex-1 bg-pageBg" style={{ paddingTop: insets.top }}>
-      <SettingsBackToolbar title={t('vault.back')} onPress={() => { router.back(); }} />
+      <SettingsBackToolbar title={t('vault.back')} onPress={() => { safeBack(); }} />
       <SettingsScreenTitle title={t('vault.title')} />
 
       <ScrollView

@@ -29,14 +29,17 @@ import {
 import { getMmkv } from '@/storage/mmkv';
 import { decryptJson, encryptJson } from '@/storage/encryptionManager';
 import {
+  canCommitLocalData,
+  captureLocalDataEpoch,
+  trackLocalDataOperation,
+  type LocalDataEpoch,
+} from '@/settings/localDataWipeBarrier';
+import {
   buildSealedSendRequest,
   sendMessage as sakuraSendMessage,
 } from '@/sakura/client';
 
-import {
-  getOrCreateRootSecret,
-  type RootSecretResult,
-} from './secretsKeychain';
+import type { RootSecretResult } from './secretsKeychain';
 import {
   encodeEnvelope,
   wrapShard,
@@ -100,6 +103,11 @@ export type DistributionResult =
         | 'sendFailed';
     };
 
+async function getBiometricRootSecret(): Promise<RootSecretResult> {
+  const { getOrCreateRootSecret } = await import('./secretsKeychain');
+  return getOrCreateRootSecret('biometric');
+}
+
 function recordKey(vaultId: string, contactId: string): string {
   // Normalise casing so callers using either lowercase or uppercase UUIDs
   // hit the same MMKV row — matches the case-normalisation in
@@ -107,8 +115,15 @@ function recordKey(vaultId: string, contactId: string): string {
   return `${DISTRIBUTION_PREFIX}${vaultId.toUpperCase()}:${contactId.toUpperCase()}`;
 }
 
-async function persistRecord(rec: DistributionRecord): Promise<void> {
-  getMmkv().set(recordKey(rec.vaultId, rec.contactId), await encryptJson(rec));
+async function persistRecord(
+  rec: DistributionRecord,
+  writeEpoch: LocalDataEpoch,
+): Promise<boolean> {
+  if (!canCommitLocalData(writeEpoch)) return false;
+  const encrypted = await encryptJson(rec);
+  if (!canCommitLocalData(writeEpoch)) return false;
+  getMmkv().set(recordKey(rec.vaultId, rec.contactId), encrypted);
+  return true;
 }
 
 async function loadRecord(
@@ -175,15 +190,30 @@ async function sendShard(
  * Split + wrap + ship. Returns the per-recipient envelopes so the caller
  * can persist them (or display QR codes) in addition to the Sakura send.
  */
-export async function distributeRecoveryShards(
+export function distributeRecoveryShards(
   args: DistributionArgs
 ): Promise<DistributionResult> {
+  return trackLocalDataOperation(
+    distributeRecoveryShardsAtEpoch(args, captureLocalDataEpoch()),
+  );
+}
+
+async function distributeRecoveryShardsAtEpoch(
+  args: DistributionArgs,
+  writeEpoch: LocalDataEpoch,
+): Promise<DistributionResult> {
+  if (!canCommitLocalData(writeEpoch)) {
+    return { kind: 'err', reason: 'storageFailed' };
+  }
   const { vaultId, threshold, recipients } = args;
   if (threshold < 2 || recipients.length < threshold || recipients.length > 255) {
     return { kind: 'err', reason: 'invalidThreshold' };
   }
 
-  const root: RootSecretResult = await getOrCreateRootSecret('biometric');
+  const root = await getBiometricRootSecret();
+  if (!canCommitLocalData(writeEpoch)) {
+    return { kind: 'err', reason: 'storageFailed' };
+  }
   if (root.kind === 'err') {
     return { kind: 'err', reason: root.reason };
   }
@@ -194,6 +224,9 @@ export async function distributeRecoveryShards(
   const records: DistributionRecord[] = [];
 
   for (let i = 0; i < recipients.length; i += 1) {
+    if (!canCommitLocalData(writeEpoch)) {
+      return { kind: 'err', reason: 'storageFailed' };
+    }
     const recipient = recipients[i];
     const share = shares[i];
     if (!recipient || !share) {
@@ -225,6 +258,9 @@ export async function distributeRecoveryShards(
         distributedAt,
         args.sendOverride
       );
+      if (!canCommitLocalData(writeEpoch)) {
+        return { kind: 'err', reason: 'storageFailed' };
+      }
     } catch {
       return { kind: 'err', reason: 'sendFailed' };
     }
@@ -241,7 +277,9 @@ export async function distributeRecoveryShards(
       revoked: false,
     };
     try {
-      await persistRecord(record);
+      if (!(await persistRecord(record, writeEpoch))) {
+        return { kind: 'err', reason: 'storageFailed' };
+      }
     } catch {
       return { kind: 'err', reason: 'storageFailed' };
     }
@@ -261,9 +299,14 @@ export interface RevokeArgs {
 
 export type RevokeResult =
   | { readonly kind: 'ok' }
-  | { readonly kind: 'err'; readonly reason: 'notFound' | 'sendFailed' };
+  | {
+      readonly kind: 'err';
+      readonly reason: 'notFound' | 'sendFailed' | 'storageFailed';
+    };
 
 export async function revokeShard(args: RevokeArgs): Promise<RevokeResult> {
+  const writeEpoch = captureLocalDataEpoch();
+  if (!canCommitLocalData(writeEpoch)) return { kind: 'err', reason: 'storageFailed' };
   const { vaultId, contactId, recipient } = args;
   const existing = await loadRecord(vaultId, contactId);
   if (!existing) return { kind: 'err', reason: 'notFound' };
@@ -287,13 +330,18 @@ export async function revokeShard(args: RevokeArgs): Promise<RevokeResult> {
       } else {
         await sakuraSendMessage(req);
       }
+      if (!canCommitLocalData(writeEpoch)) {
+        return { kind: 'err', reason: 'storageFailed' };
+      }
     } catch {
       return { kind: 'err', reason: 'sendFailed' };
     }
   }
 
   const updated: DistributionRecord = { ...existing, revoked: true };
-  await persistRecord(updated);
+  if (!(await persistRecord(updated, writeEpoch))) {
+    return { kind: 'err', reason: 'storageFailed' };
+  }
   return { kind: 'ok' };
 }
 

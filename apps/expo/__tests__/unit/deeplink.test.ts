@@ -60,4 +60,209 @@ describe('parseDeepLink', () => {
     expect(parseDeepLink('not a url').kind).toBe('unknown');
     expect(parseDeepLink('https://example.com/foo').kind).toBe('unknown');
   });
+
+  it('parses a https://solidarity.gg/#<fragment> Verified Page link', () => {
+    const r = parseDeepLink('https://solidarity.gg/#eyJhbGciOiJFUzI1NiJ9');
+    expect(r.kind).toBe('verifiedProfile');
+    if (r.kind === 'verifiedProfile') {
+      expect(r.fragment).toBe('eyJhbGciOiJFUzI1NiJ9');
+    }
+  });
+
+  it('parses the primary creds.id /name Verified Page link', () => {
+    const r = parseDeepLink('https://creds.id/alice#eyJhbGciOiJFUzI1NiJ9');
+    expect(r).toEqual({ kind: 'verifiedProfile', fragment: 'eyJhbGciOiJFUzI1NiJ9' });
+  });
+
+  it('keeps creds.id to public-page routing rather than granting card or private-connect actions', () => {
+    expect(parseDeepLink('https://creds.id/c/f47ac10b-58cc-4372-a567-0e02b2c3d479').kind).toBe(
+      'unknown'
+    );
+  });
+
+  it('treats a verified-domain https link with no hash as unknown, not verifiedProfile', () => {
+    expect(parseDeepLink('https://solidarity.gg/').kind).toBe('unknown');
+    expect(parseDeepLink('https://solidarity.gg').kind).toBe('unknown');
+  });
+
+  it('parses product /@handle links for ATProto, explicit DNS, and ENS reads', () => {
+    for (const [rawHandle, expectedHandle] of [
+      ['@alice.bsky.social', 'alice.bsky.social'],
+      ['@dns:example.com', 'dns:example.com'],
+      ['@vitalik.eth', 'vitalik.eth'],
+    ] as const) {
+      const route = parseDeepLink(`https://app.solidarity.gg/${rawHandle}`);
+      expect(route.kind).toBe('verifiedHandle');
+      if (route.kind === 'verifiedHandle') expect(route.handle).toBe(expectedHandle);
+    }
+  });
+
+  it('does not route /@handle on a trusted-but-non-product host', () => {
+    expect(parseDeepLink('https://github.com/@alice.example').kind).toBe('unknown');
+  });
+
+  it('does not let an /@handle path hide a Verified Page hash', () => {
+    const npub = 'npub10elfcs4fr0l0r8af98jlmgdh9c8tcxjvz9qkw038js35mp4dma8qzvjptg';
+    expect(parseDeepLink(`https://solidarity.gg/@alice.example#nostr:${npub}`)).toEqual({
+      kind: 'verifiedPointer',
+      npub,
+    });
+    expect(parseDeepLink('https://solidarity.gg/@alice.example#fragment_blob')).toEqual({
+      kind: 'verifiedProfile',
+      fragment: 'fragment_blob',
+    });
+  });
+
+  it('parses a https://solidarity.gg/#nostr:<npub> short-pointer link', () => {
+    const npub = 'npub10elfcs4fr0l0r8af98jlmgdh9c8tcxjvz9qkw038js35mp4dma8qzvjptg';
+    const r = parseDeepLink(`https://solidarity.gg/#nostr:${npub}`);
+    expect(r.kind).toBe('verifiedPointer');
+    if (r.kind === 'verifiedPointer') expect(r.npub).toBe(npub);
+  });
+
+  it('does not misread a #nostr: prefix with a non-npub tail as a fragment — falls to unknown', () => {
+    expect(parseDeepLink('https://solidarity.gg/#nostr:not-an-npub').kind).toBe('unknown');
+    expect(parseDeepLink('https://solidarity.gg/#nostr:').kind).toBe('unknown');
+    // An overlong tail (DoS guard) is also rejected.
+    expect(parseDeepLink(`https://solidarity.gg/#nostr:npub1${'q'.repeat(200)}`).kind).toBe('unknown');
+  });
+
+  it('still prefers the /c/<uuid> card route over a Verified Page fragment on the same host', () => {
+    const r = parseDeepLink('https://solidarity.gg/c/f47ac10b-58cc-4372-a567-0e02b2c3d479#ignored');
+    expect(r.kind).toBe('card');
+  });
+
+  // Task A5.4 — `solidarity://pear/<did>` into the Pear requester flow. A
+  // real did:key so `isValidPearDid`'s `resolveDidKey` round-trip actually
+  // succeeds (base58 + P-256 multicodec check), not just a plausible-looking
+  // string.
+  const REAL_DID = 'did:key:zDnaeuchQNqLi4x1P85fs3QsiMPahCH2snwHU4SaV6MQnan2Q';
+
+  it('parses a solidarity://pear/<did> link', () => {
+    const r = parseDeepLink(`solidarity://pear/${REAL_DID}`);
+    expect(r.kind).toBe('pear');
+    if (r.kind === 'pear') {
+      expect(r.did).toBe(REAL_DID);
+    }
+  });
+
+  it('parses a https://solidarity.gg/pear/<did> universal link', () => {
+    const r = parseDeepLink(`https://solidarity.gg/pear/${REAL_DID}`);
+    expect(r.kind).toBe('pear');
+    if (r.kind === 'pear') {
+      expect(r.did).toBe(REAL_DID);
+    }
+  });
+
+  it('rejects a pear link with no did, never throwing', () => {
+    expect(() => parseDeepLink('solidarity://pear/')).not.toThrow();
+    expect(parseDeepLink('solidarity://pear/').kind).toBe('unknown');
+    expect(parseDeepLink('solidarity://pear').kind).toBe('unknown');
+  });
+
+  it('rejects a pear link with a malformed did, never throwing', () => {
+    expect(() => parseDeepLink('solidarity://pear/not-a-did')).not.toThrow();
+    expect(parseDeepLink('solidarity://pear/not-a-did').kind).toBe('unknown');
+    expect(parseDeepLink('solidarity://pear/did:key:zNotBase58!!!').kind).toBe('unknown');
+  });
+
+  it('rejects a pear link with path traversal / extra segments, never throwing', () => {
+    expect(parseDeepLink(`solidarity://pear/${REAL_DID}/extra`).kind).toBe('unknown');
+    expect(parseDeepLink('solidarity://pear/../../etc/passwd').kind).toBe('unknown');
+    expect(() => parseDeepLink(`solidarity://pear/${REAL_DID}/../../etc`)).not.toThrow();
+  });
+
+  it('rejects hostile injection-shaped input in the pear path, never throwing', () => {
+    expect(() =>
+      parseDeepLink('solidarity://pear/%3Cscript%3Ealert(1)%3C%2Fscript%3E')
+    ).not.toThrow();
+    expect(parseDeepLink('solidarity://pear/%3Cscript%3Ealert(1)%3C%2Fscript%3E').kind).toBe(
+      'unknown'
+    );
+  });
+
+  it('rejects a https pear link with a malformed did or extra segments', () => {
+    expect(parseDeepLink('https://solidarity.gg/pear/not-a-did').kind).toBe('unknown');
+    expect(parseDeepLink(`https://solidarity.gg/pear/${REAL_DID}/extra`).kind).toBe('unknown');
+    expect(parseDeepLink('https://solidarity.gg/pear/').kind).toBe('unknown');
+  });
+
+  // Code-review Finding 1 (Task A5.4 follow-up): `isVerifiedDomain`/
+  // `TRUSTED_HOSTS` also allowlists third-party identity hosts
+  // (apple.com/google.com/microsoft.com/github.com/linkedin.com) for a
+  // DIFFERENT purpose (OIDC/domain verification). The `pear` and `card`
+  // universal-link routes must only fire on OUR OWN product hosts
+  // (solidarity.gg / airmeishi.app) — not on every host that list trusts
+  // for something else entirely.
+  it('does NOT route a pear link on a trusted-but-non-product host (github.com)', () => {
+    expect(parseDeepLink(`https://github.com/pear/${REAL_DID}`).kind).toBe('unknown');
+  });
+
+  it('does NOT route a card link on a trusted-but-non-product host (github.com)', () => {
+    expect(parseDeepLink('https://github.com/c/f47ac10b-58cc-4372-a567-0e02b2c3d479').kind).toBe(
+      'unknown'
+    );
+  });
+
+  it('does NOT route pear/card links on the other allowlisted identity hosts', () => {
+    for (const host of ['apple.com', 'google.com', 'microsoft.com', 'linkedin.com']) {
+      expect(parseDeepLink(`https://${host}/pear/${REAL_DID}`).kind).toBe('unknown');
+      expect(
+        parseDeepLink(`https://${host}/c/f47ac10b-58cc-4372-a567-0e02b2c3d479`).kind
+      ).toBe('unknown');
+    }
+  });
+
+  it('still routes pear/card links on both product hosts', () => {
+    for (const host of ['solidarity.gg', 'airmeishi.app']) {
+      expect(parseDeepLink(`https://${host}/pear/${REAL_DID}`).kind).toBe('pear');
+      expect(
+        parseDeepLink(`https://${host}/c/f47ac10b-58cc-4372-a567-0e02b2c3d479`).kind
+      ).toBe('card');
+    }
+  });
+
+  // Finding 2 (minor, pinned): unpinned edge cases named in review.
+  it('rejects an absurdly-long did string without crashing or hanging', () => {
+    const huge = `did:key:z${'1'.repeat(100_000)}`;
+    expect(() => parseDeepLink(`solidarity://pear/${huge}`)).not.toThrow();
+    expect(parseDeepLink(`solidarity://pear/${huge}`).kind).toBe('unknown');
+    expect(() => parseDeepLink(`https://solidarity.gg/pear/${huge}`)).not.toThrow();
+    expect(parseDeepLink(`https://solidarity.gg/pear/${huge}`).kind).toBe('unknown');
+  });
+
+  it('extracts the did cleanly from a solidarity://pear/<did>?query link, ignoring the query string', () => {
+    const r = parseDeepLink(`solidarity://pear/${REAL_DID}?evil=1&other=2`);
+    expect(r.kind).toBe('pear');
+    if (r.kind === 'pear') {
+      expect(r.did).toBe(REAL_DID);
+    }
+  });
+
+  // ── webSign (App↔Web per-action signing, research §4 / T4a) ──────────────
+  it('parses a solidarity://websign?req=<X> deep link', () => {
+    const r = parseDeepLink('solidarity://websign?req=aaa.bbb.ccc');
+    expect(r.kind).toBe('webSign');
+    if (r.kind === 'webSign') {
+      expect(r.request).toBe('aaa.bbb.ccc');
+    }
+  });
+
+  it('parses a https://<product-host>/websign#req=<X> fragment deep link', () => {
+    const r = parseDeepLink('https://solidarity.gg/websign#req=BLOB_VALUE');
+    expect(r.kind).toBe('webSign');
+    if (r.kind === 'webSign') {
+      expect(r.request).toBe('BLOB_VALUE');
+    }
+  });
+
+  it('treats a websign wrapper with no req as unknown', () => {
+    expect(parseDeepLink('solidarity://websign').kind).toBe('unknown');
+    expect(parseDeepLink('https://solidarity.gg/websign').kind).toBe('unknown');
+  });
+
+  it('does not confuse a real Verified Page fragment link with a websign link', () => {
+    // No `/websign` path segment → still routes as a Verified Page fragment.
+    expect(parseDeepLink('https://solidarity.gg/#abc123').kind).toBe('verifiedProfile');
+  });
 });

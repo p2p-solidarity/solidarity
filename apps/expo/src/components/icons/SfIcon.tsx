@@ -16,7 +16,9 @@
  * 2–4pt smaller than their iOS counterparts.
  */
 import { SymbolView, type SFSymbol, type AndroidSymbol } from 'expo-symbols';
-import { Platform, type ColorValue } from 'react-native';
+import { Platform, useColorScheme, type ColorValue } from 'react-native';
+
+import { resolveThemeColor } from '@/constants/Colors';
 
 const ANDROID_GLYPH_RATIO = 1.2;
 
@@ -37,14 +39,16 @@ export function SfIcon({
   color,
   weight = 'regular',
 }: SfIconProps) {
+  const scheme = useColorScheme() === 'dark' ? 'dark' : 'light';
   const android = SF_TO_MATERIAL[name] ?? FALLBACK_MATERIAL;
   const resolvedSize =
     Platform.OS === 'android' ? Math.round(size * ANDROID_GLYPH_RATIO) : size;
+  const resolvedColor = typeof color === 'string' ? resolveThemeColor(color, scheme) : color;
   return (
     <SymbolView
       name={{ ios: name, android }}
       size={resolvedSize}
-      tintColor={color}
+      tintColor={resolvedColor}
       weight={weight}
       resizeMode="scaleAspectFit"
     />
@@ -63,15 +67,19 @@ const SF_TO_MATERIAL: Partial<Record<SFSymbol, AndroidSymbol>> = {
   'arrow.counterclockwise.icloud': 'cloud_sync',
   'arrow.triangle.2.circlepath': 'sync',
   'arrow.up.forward.app': 'open_in_new',
+  'arrow.up.right': 'open_in_new',
   'arrowshape.turn.up.right': 'reply',
+  at: 'alternate_email',
   bell: 'notifications',
   'bell.badge.fill': 'notifications_active',
   'bolt.fill': 'bolt',
   briefcase: 'work',
+  'briefcase.fill': 'work',
   'building.2': 'apartment',
   calendar: 'calendar_today',
   'calendar.badge.checkmark': 'event_available',
   camera: 'photo_camera',
+  'camera.fill': 'photo_camera',
   'camera.viewfinder': 'qr_code_scanner',
   'chart.bar': 'bar_chart',
   checkmark: 'check',
@@ -93,6 +101,7 @@ const SF_TO_MATERIAL: Partial<Record<SFSymbol, AndroidSymbol>> = {
   'clock.fill': 'schedule',
   'crown.fill': 'workspace_premium',
   'doc.badge.plus': 'note_add',
+  'doc.on.clipboard': 'content_paste',
   'doc.on.doc': 'content_copy',
   'doc.text': 'description',
   'doc.text.fill': 'description',
@@ -104,6 +113,7 @@ const SF_TO_MATERIAL: Partial<Record<SFSymbol, AndroidSymbol>> = {
   'exclamationmark.triangle': 'warning',
   'exclamationmark.triangle.fill': 'warning',
   eye: 'visibility',
+  'eye.slash': 'visibility_off',
   'face.smiling': 'mood',
   faceid: 'face',
   gearshape: 'settings',
@@ -159,6 +169,7 @@ const SF_TO_MATERIAL: Partial<Record<SFSymbol, AndroidSymbol>> = {
   photo: 'image',
   plus: 'add',
   'plus.circle.fill': 'add_circle',
+  'play.rectangle.fill': 'smart_display',
   qrcode: 'qr_code',
   'qrcode.viewfinder': 'qr_code_scanner',
   safari: 'public',

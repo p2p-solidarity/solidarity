@@ -18,14 +18,11 @@ namespace margelo::nitro::solidarity::sprucedid {
       prototype.registerHybridMethod("hasKey", &HybridSpruceDidSpec::hasKey);
       prototype.registerHybridMethod("keyAuthMode", &HybridSpruceDidSpec::keyAuthMode);
       prototype.registerHybridMethod("deleteKey", &HybridSpruceDidSpec::deleteKey);
+      prototype.registerHybridMethod("listSyncableP256Keys", &HybridSpruceDidSpec::listSyncableP256Keys);
+      prototype.registerHybridMethod("deleteSyncableP256Key", &HybridSpruceDidSpec::deleteSyncableP256Key);
       prototype.registerHybridMethod("getPublicKeyJwk", &HybridSpruceDidSpec::getPublicKeyJwk);
-      prototype.registerHybridMethod("didKeyFromAlias", &HybridSpruceDidSpec::didKeyFromAlias);
-      prototype.registerHybridMethod("didDocumentJson", &HybridSpruceDidSpec::didDocumentJson);
       prototype.registerHybridMethod("signJws", &HybridSpruceDidSpec::signJws);
       prototype.registerHybridMethod("signRawP256", &HybridSpruceDidSpec::signRawP256);
-      prototype.registerHybridMethod("verifyJws", &HybridSpruceDidSpec::verifyJws);
-      prototype.registerHybridMethod("signCredentialJwt", &HybridSpruceDidSpec::signCredentialJwt);
-      prototype.registerHybridMethod("verifyCredentialJwt", &HybridSpruceDidSpec::verifyCredentialJwt);
       prototype.registerHybridMethod("addEventListener", &HybridSpruceDidSpec::addEventListener);
     });
   }

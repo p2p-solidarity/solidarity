@@ -37,6 +37,8 @@ beforeAll(async () => {
   // file that bun can't parse — stub the surface our chart component
   // touches so the structural test can render the React element tree.
   await mock.module('react-native', () => ({
+    ...((globalThis as unknown as { __AIRMEISHI_RN_MOCK__: Record<string, unknown> })
+      .__AIRMEISHI_RN_MOCK__),
     View: 'View',
     Text: 'Text',
     Pressable: 'Pressable',

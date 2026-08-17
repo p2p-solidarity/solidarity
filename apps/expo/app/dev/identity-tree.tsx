@@ -17,6 +17,7 @@
  * exchanges) and the sandbox secp256k1 dev-key (only signs DAG nodes).
  */
 import { router, Stack } from 'expo-router';
+import { safeBack } from '@/navigation/safeBack';
 import { useEffect, useMemo, useState } from 'react';
 import { Pressable, ScrollView, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -85,7 +86,7 @@ export default function IdentityTreeLab() {
     return (
       <View className="flex-1 bg-pageBg" style={{ paddingTop: insets.top }}>
         <Stack.Screen options={MODAL_SCREEN_OPTIONS} />
-        <SettingsBackToolbar title="Close" onPress={() => { router.back(); }} />
+        <SettingsBackToolbar title="Close" onPress={() => { safeBack(); }} />
         <SettingsScreenTitle title="Identity Tree" />
         <View className="px-4 pt-6">
           <Text className="text-text2 text-[13px]">
@@ -99,7 +100,7 @@ export default function IdentityTreeLab() {
   return (
     <View className="flex-1 bg-pageBg" style={{ paddingTop: insets.top }}>
       <Stack.Screen options={MODAL_SCREEN_OPTIONS} />
-      <SettingsBackToolbar title="Close" onPress={() => { router.back(); }} />
+      <SettingsBackToolbar title="Close" onPress={() => { safeBack(); }} />
       <SettingsScreenTitle title="Identity Tree" />
 
       <ScrollView
@@ -229,7 +230,7 @@ export default function IdentityTreeLab() {
                 {`Groups I've joined (${String(groups.length)})`}
               </Text>
               <Pressable
-                onPress={() => { router.push('/groups'); }}
+                onPress={() => { router.push('/settings/groups'); }}
                 accessibilityRole="button"
               >
                 <Text className="text-text3 text-[12px]">Open list →</Text>

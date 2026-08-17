@@ -40,4 +40,4 @@ export const TIMING: Readonly<Record<'fast' | 'base', WithTimingConfig>> = {
 };
 
 /** Per-item stagger step (ms) for list / section entrance animations. */
-export const STAGGER_MS = 55;
+export const STAGGER_MS = 40;

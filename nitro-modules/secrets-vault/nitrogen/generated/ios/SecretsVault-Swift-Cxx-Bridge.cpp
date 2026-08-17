@@ -54,6 +54,14 @@ namespace margelo::nitro::solidarity::secretsvault::bridge::swift {
     };
   }
   
+  // pragma MARK: std::function<void(const std::string& /* result */)>
+  Func_void_std__string create_Func_void_std__string(void* NON_NULL swiftClosureWrapper) noexcept {
+    auto swiftClosure = SecretsVault::Func_void_std__string::fromUnsafe(swiftClosureWrapper);
+    return [swiftClosure = std::move(swiftClosure)](const std::string& result) mutable -> void {
+      swiftClosure.call(result);
+    };
+  }
+  
   // pragma MARK: std::shared_ptr<HybridSecretsVaultSpec>
   std::shared_ptr<HybridSecretsVaultSpec> create_std__shared_ptr_HybridSecretsVaultSpec_(void* NON_NULL swiftUnsafePointer) noexcept {
     SecretsVault::HybridSecretsVaultSpec_cxx swiftPart = SecretsVault::HybridSecretsVaultSpec_cxx::fromUnsafe(swiftUnsafePointer);

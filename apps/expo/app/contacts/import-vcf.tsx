@@ -4,7 +4,7 @@
  */
 import * as DocumentPicker from 'expo-document-picker';
 import * as FileSystem from 'expo-file-system/legacy';
-import { router } from 'expo-router';
+import { safeBack } from '@/navigation/safeBack';
 import { useState } from 'react';
 import { ScrollView, View } from 'react-native';
 
@@ -45,7 +45,7 @@ export default function ImportVcf() {
   return (
     <ScrollView className="flex-1 bg-pageBg">
       <View className="px-4 pt-6">
-        <ThemedButton variant="secondary" size="sm" label={t('contactVcf.back')} onPress={() => { router.back(); }} />
+        <ThemedButton variant="secondary" size="sm" label={t('contactVcf.back')} onPress={() => { safeBack(); }} />
       </View>
       <View className="px-4 py-4">
         <ThemedText variant="headlineLarge">{t('contactVcf.title')}</ThemedText>

@@ -1,7 +1,9 @@
 import { useMemo, type ReactNode } from 'react';
 import { Modal, ScrollView, View } from 'react-native';
+import { useTranslation } from 'react-i18next';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import type { PresentationQRPage } from '@/me/presentationQrPages';
 import { PressableScale } from '@/components/common/PressableScale';
 import { PassportShowPresentation } from '@/components/credentials/PassportShowPresentation';
 import { PresentationProofQr } from '@/components/credentials/PresentationProofQr';
@@ -11,6 +13,7 @@ import { Colors } from '@/constants/Colors';
 import { useIdentityData, type ProvableClaimEntity } from '@/identity';
 import {
   buildPresentationProofQrPages,
+  disclosureErrorI18nKey,
   selectPresentationClaims,
   type PresentationCredential,
 } from '@/credentials/presentationProof';
@@ -27,6 +30,8 @@ export interface PresentationSheetProps {
    * enrollment envelope. Decided by the caller (metadata tag + vault check).
    */
   readonly passportShowEligible?: boolean;
+  /** Product flows keep proof mechanics usable without exposing claim diagnostics. */
+  readonly productMode?: boolean;
 }
 
 export function PresentationSheet({
@@ -35,6 +40,7 @@ export function PresentationSheet({
   selectedClaimIds,
   onDismiss,
   passportShowEligible = false,
+  productMode = false,
 }: PresentationSheetProps): ReactNode {
   return (
     <Modal
@@ -48,6 +54,7 @@ export function PresentationSheet({
         selectedClaimIds={selectedClaimIds}
         onDismiss={onDismiss}
         passportShowEligible={passportShowEligible}
+        productMode={productMode}
       />
     </Modal>
   );
@@ -58,32 +65,44 @@ function PresentationBody({
   selectedClaimIds,
   onDismiss,
   passportShowEligible,
+  productMode,
 }: {
   readonly credential: PresentationCredential & { readonly title: string };
   readonly selectedClaimIds: ReadonlySet<string>;
   readonly onDismiss: () => void;
   readonly passportShowEligible: boolean;
+  readonly productMode: boolean;
 }): ReactNode {
   const insets = useSafeAreaInsets();
+  const { t } = useTranslation();
   const provableClaims = useIdentityData((s) => s.provableClaims);
 
-  const selectedClaims: readonly ProvableClaimEntity[] = useMemo(
-    () => {
-      const claims = provableClaims.filter((c) => c.identityCardId === credential.id);
-      return passportShowEligible
-        ? selectPassportShowPresentationClaims(claims, selectedClaimIds)
-        : selectPresentationClaims(claims, selectedClaimIds);
-    },
-    [provableClaims, credential.id, selectedClaimIds, passportShowEligible],
+  const allClaims: readonly ProvableClaimEntity[] = useMemo(
+    () => provableClaims.filter((c) => c.identityCardId === credential.id),
+    [provableClaims, credential.id],
   );
 
-  const pages = useMemo(
+  const selectedClaims: readonly ProvableClaimEntity[] = useMemo(
     () =>
-      !passportShowEligible && selectedClaims.length > 0
-        ? buildPresentationProofQrPages({ credential, selectedClaims })
-        : [],
-    [credential, selectedClaims, passportShowEligible],
+      passportShowEligible
+        ? selectPassportShowPresentationClaims(allClaims, selectedClaimIds)
+        : selectPresentationClaims(allClaims, selectedClaimIds),
+    [allClaims, selectedClaimIds, passportShowEligible],
   );
+
+  const proof = useMemo<
+    { readonly pages: readonly PresentationQRPage[]; readonly error?: string }
+  >(() => {
+    if (passportShowEligible || selectedClaims.length === 0) return { pages: [] };
+    const result = buildPresentationProofQrPages({
+      credential,
+      selectedClaims,
+      allClaims,
+    });
+    return result.ok
+      ? { pages: result.value }
+      : { pages: [], error: t(disclosureErrorI18nKey(result.error)) };
+  }, [credential, selectedClaims, allClaims, passportShowEligible, t]);
 
   return (
     <View className="flex-1 bg-pageBg" style={{ paddingTop: insets.top }}>
@@ -119,13 +138,16 @@ function PresentationBody({
             credentialTitle={credential.title}
             holderDid={credential.holderDid}
             selectedClaims={selectedClaims}
+            showClaimDetails={!productMode}
           />
         ) : (
           <PresentationProofQr
             credentialTitle={credential.title}
             selectedClaims={selectedClaims}
-            pages={pages}
+            pages={proof.pages}
             showTitle
+            showClaimDetails={!productMode}
+            {...(proof.error ? { emptyText: proof.error } : {})}
           />
         )}
       </ScrollView>

@@ -2,11 +2,13 @@
  * QR code facade — TS port of solidarity/Services/Card/QRCodeManager.swift.
  *
  * Two responsibilities, matching the Swift surface:
- *   - generate : turn an arbitrary string into a renderable image source
+ *   - generate : turn a QR-encodable string into a renderable image source
  *                (data: URL carrying an SVG). The Swift version returns
  *                a UIImage; on RN a data URL is the closest cross-
  *                platform equivalent — drop it into `<Image source={{ uri }} />`
- *                or write it out with `expo-file-system`.
+ *                or write it out with `expo-file-system`. Inputs that do not
+ *                fit a real QR code reject explicitly; a text SVG is never a
+ *                valid substitute for a scannable QR.
  *   - parse    : classify an arbitrary scanned string into the same
  *                buckets `QRCodeScanService.handleScannedString` routes
  *                into (card / vp / group / oidc / unknown).
@@ -16,9 +18,7 @@
  * underlying `qrcode` core (already a transitive dep), so we don't pull
  * a new package in.
  */
-import { decodeJwtUnsafe } from '@solidarity/shared';
-
-import { base64Encode, utf8ToBytes } from '@solidarity/shared';
+import { base64Encode, decodeJwtUnsafe, utf8ToBytes } from '@solidarity/shared';
 
 export type QrPayloadKind = 'card' | 'vp' | 'group' | 'oidc' | 'unknown';
 
@@ -91,46 +91,32 @@ export async function generateQrPng(value: string, opts: GenerateOptions = {}): 
   const size = opts.size ?? 256;
   const startingLevel = opts.startingLevel ?? 'H';
   const mod = loadQrModule();
-  if (mod) {
-    const startIndex = Math.max(0, CASCADE_LEVELS.indexOf(startingLevel));
-    let lastError: unknown = null;
-    for (let i = startIndex; i < CASCADE_LEVELS.length; i += 1) {
-      const level = CASCADE_LEVELS[i];
-      try {
-        const svg = await mod.toString(value, {
-          type: 'svg',
-          width: size,
-          margin: 1,
-          errorCorrectionLevel: level,
-        });
-        return `data:image/svg+xml;base64,${base64Encode(utf8ToBytes(svg))}`;
-      } catch (err) {
-        lastError = err;
-        // Try the next (lower) correction level. `qrcode` throws
-        // 'The amount of data is too big to be stored in a QR Code'
-        // when the payload exceeds the chosen level's capacity.
-      }
-    }
-    // Engine present but every level rejected the payload — fall through
-    // to the safety-net SVG below so the caller still renders *something*
-    // rather than propagating the throw.
-    void lastError;
+  if (!mod) {
+    throw new Error('QR generation failed: QR encoder is unavailable on this device.');
   }
 
-  // Fallback — never expected in production builds (the engine is a
-  // transitive dep of `react-native-qrcode-svg`). Keep the surface
-  // contract intact so the caller can still render *something*.
-  const fallbackSvg = `<svg xmlns="http://www.w3.org/2000/svg" width="${size}" height="${size}"><rect width="${size}" height="${size}" fill="#FFFFFF"/><text x="8" y="20" font-size="10">${escapeXml(value)}</text></svg>`;
-  return `data:image/svg+xml;base64,${base64Encode(utf8ToBytes(fallbackSvg))}`;
-}
+  const startIndex = Math.max(0, CASCADE_LEVELS.indexOf(startingLevel));
+  let lastError: unknown = null;
+  for (let i = startIndex; i < CASCADE_LEVELS.length; i += 1) {
+    const level = CASCADE_LEVELS[i];
+    try {
+      const svg = await mod.toString(value, {
+        type: 'svg',
+        width: size,
+        margin: 1,
+        errorCorrectionLevel: level,
+      });
+      return `data:image/svg+xml;base64,${base64Encode(utf8ToBytes(svg))}`;
+    } catch (err) {
+      lastError = err;
+      // Try the next (lower) correction level. `qrcode` throws
+      // 'The amount of data is too big to be stored in a QR Code'
+      // when the payload exceeds the chosen level's capacity.
+    }
+  }
 
-function escapeXml(input: string): string {
-  return input
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&apos;');
+  const detail = lastError instanceof Error ? ` (${lastError.message})` : '';
+  throw new Error(`QR generation failed: payload could not fit in a QR code.${detail}`);
 }
 
 function isJwt(text: string): boolean {

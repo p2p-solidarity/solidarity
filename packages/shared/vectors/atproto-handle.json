@@ -1,0 +1,47 @@
+{
+  "description": "ATProto handle-to-DID resolution conformance vectors for packages/shared/src/handles/atproto.ts. Resolution is DNS TXT `_atproto.<handle>` first, then an HTTPS well-known fallback. IO is injected; invalid handles must be rejected before either boundary is reached.",
+  "valid": [
+    {
+      "name": "dns-txt-did-plc",
+      "handle": "alice.bsky.social",
+      "normalizedHandle": "alice.bsky.social",
+      "dnsTxt": ["did=did:plc:ewvi7nxzyoun6zhxrhs64oiz"],
+      "wellKnown": null,
+      "expectedDid": "did:plc:ewvi7nxzyoun6zhxrhs64oiz"
+    },
+    {
+      "name": "https-well-known-fallback",
+      "handle": "@Alice.Example",
+      "normalizedHandle": "alice.example",
+      "dnsTxt": [],
+      "wellKnown": "did:web:alice.example",
+      "expectedDid": "did:web:alice.example"
+    }
+  ],
+  "invalid": [
+    {
+      "name": "http-endpoint-rejected",
+      "handle": "alice.example",
+      "dnsTxt": ["did=http://attacker.example/profile"],
+      "wellKnown": null,
+      "expectedError": "malformedDid",
+      "reason": "The DNS value is an HTTP endpoint, not an allowed did:plc/did:web identifier. It must fail closed and must never be treated as a fetch target."
+    },
+    {
+      "name": "userinfo-host-injection",
+      "handle": "alice.example@attacker.test",
+      "dnsTxt": [],
+      "wellKnown": null,
+      "expectedError": "invalidHandle",
+      "reason": "An at-sign inside the hostname could become URL userinfo if interpolated before validation. Reject it before any DNS or HTTPS IO."
+    },
+    {
+      "name": "all-numeric-tld",
+      "handle": "alice.123",
+      "dnsTxt": [],
+      "wellKnown": null,
+      "expectedError": "invalidHandle",
+      "reason": "ATProto handles follow the domain grammar but additionally forbid an all-numeric final label."
+    }
+  ]
+}

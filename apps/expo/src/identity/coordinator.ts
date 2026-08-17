@@ -19,6 +19,8 @@ import { create } from 'zustand';
 
 import { didKeyForCurrentIdentity, ensureSigningKey } from '@/keychain/signingKey';
 
+let localWipeGeneration = 0;
+
 export interface DIDDescriptor {
   readonly did: string;
 }
@@ -35,6 +37,8 @@ interface IdentityCoordinatorState {
   readonly seedFromKeychain: () => Promise<void>;
   readonly refreshIdentity: () => Promise<void>;
   readonly clearError: () => void;
+  /** Drop every live identity reference after local key deletion. */
+  readonly resetForLocalWipe: () => void;
 }
 
 async function deriveActiveDid(): Promise<string> {
@@ -49,16 +53,19 @@ export const useIdentityCoordinator = create<IdentityCoordinatorState>((set, get
   hydrated: false,
 
   seedFromKeychain: async () => {
+    const generation = localWipeGeneration;
     if (get().hydrated || get().isLoading) return;
     set({ isLoading: true, lastError: null });
     try {
       const did = await deriveActiveDid();
+      if (generation !== localWipeGeneration) return;
       set({
         profile: { activeDID: { did } },
         isLoading: false,
         hydrated: true,
       });
     } catch (error) {
+      if (generation !== localWipeGeneration) return;
       set({
         isLoading: false,
         hydrated: true,
@@ -68,16 +75,19 @@ export const useIdentityCoordinator = create<IdentityCoordinatorState>((set, get
   },
 
   refreshIdentity: async () => {
+    const generation = localWipeGeneration;
     if (get().isLoading) return;
     set({ isLoading: true, lastError: null });
     try {
       const did = await deriveActiveDid();
+      if (generation !== localWipeGeneration) return;
       set({
         profile: { activeDID: { did } },
         isLoading: false,
         hydrated: true,
       });
     } catch (error) {
+      if (generation !== localWipeGeneration) return;
       set({
         isLoading: false,
         lastError: error instanceof Error ? error.message : String(error),
@@ -86,6 +96,15 @@ export const useIdentityCoordinator = create<IdentityCoordinatorState>((set, get
   },
 
   clearError: () => { set({ lastError: null }); },
+  resetForLocalWipe: () => {
+    localWipeGeneration += 1;
+    set({
+      profile: { activeDID: null },
+      isLoading: false,
+      lastError: null,
+      hydrated: true,
+    });
+  },
 }));
 
 /** Selector — cached active DID string, null until keychain resolves. */

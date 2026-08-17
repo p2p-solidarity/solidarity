@@ -26,14 +26,14 @@
 import { Platform } from 'react-native';
 import { getCloudKit, type CloudKit } from '@solidarity/nitro-cloudkit';
 
-import { decryptJson, encryptJson } from '../storage/encryptionManager';
+import { encryptJsonWithKey } from '../storage/jsonCrypto';
 import {
   newBackupName,
   parseBackupTimestampMs,
   selectNewestBackup,
   sortBackupsByTimestamp,
 } from './backupPolicy';
-import { decodeSolb, encodeSolb } from './solbEnvelope';
+import { decodeSolb, encodeSolb, type SolbKeyScheme } from './solbEnvelope';
 
 export type ProviderKind = 'iCloud' | 'googleDrive';
 
@@ -68,7 +68,7 @@ let lastDriveAuthStatus: DriveAuthStatus = 'authorized';
  * the subsequent Drive op surfaces its own 401, telling the user to connect
  * Google Drive. Never blocks the backup pipeline on an auth side-effect.
  */
-async function ensureDriveAuth(): Promise<DriveAuthStatus> {
+async function ensureDriveAuth(interactive: boolean): Promise<DriveAuthStatus> {
   if (driveAuthorized) return 'authorized';
   try {
     const { signInForDrive, refreshDriveAccessToken } = await import('./googleAuth');
@@ -76,7 +76,11 @@ async function ensureDriveAuth(): Promise<DriveAuthStatus> {
       setGoogleAccessToken(await refreshDriveAccessToken());
       return 'authorized';
     } catch {
-      // Not signed in yet (or token expired without a refresh) — prompt.
+      // Not signed in yet (or token expired without a refresh). Interactive
+      // sign-in is reserved for explicit user actions (backup/restore/picker)
+      // — a background PROBE must never open Google Sign-In on a fresh
+      // install (the app promises no-account setup).
+      if (!interactive) return 'needs-connection';
       const session = await signInForDrive();
       setGoogleAccessToken(session.accessToken);
       return 'authorized';
@@ -89,7 +93,7 @@ async function ensureDriveAuth(): Promise<DriveAuthStatus> {
   }
 }
 
-async function ensureInitialized(): Promise<CloudKit> {
+async function ensureInitialized(interactiveAuth = true): Promise<CloudKit> {
   const ck = getCloudKit();
   if (!initialized) {
     // Authenticate Drive BEFORE any file op when Drive is the active provider.
@@ -97,8 +101,10 @@ async function ensureInitialized(): Promise<CloudKit> {
     // access) — not a silent no-op — so the caller/UI can prompt the user to
     // connect Google. Done before initialize() so the token is present for any
     // Drive setup the native module performs.
+    let authStatus: DriveAuthStatus = 'authorized';
     if (activeProvider === 'googleDrive') {
-      lastDriveAuthStatus = await ensureDriveAuth();
+      authStatus = await ensureDriveAuth(interactiveAuth);
+      lastDriveAuthStatus = authStatus;
     }
     try {
       await ck.initialize(CONTAINER_ID);
@@ -107,7 +113,14 @@ async function ensureInitialized(): Promise<CloudKit> {
       // storage, and Android Drive ops surface their own errors on use.
       // Mirrors native, which never blocks backup on iCloud availability.
     }
-    initialized = true;
+    // A silent probe that could not auth must not latch: the next explicit
+    // (interactive-allowed) call re-runs Drive auth instead of inheriting a
+    // dead 401 session.
+    initialized = !(
+      activeProvider === 'googleDrive' &&
+      authStatus !== 'authorized' &&
+      !interactiveAuth
+    );
   }
   return ck;
 }
@@ -169,34 +182,102 @@ async function rotateBackups(ck: CloudKit): Promise<void> {
   }
 }
 
-/** Upload an arbitrary serialisable value, encrypted with the master key. */
-export async function uploadBackup<T>(value: T): Promise<void> {
-  const ciphertextB64 = await encryptJson(value);
-  const fileB64 = encodeSolb(ciphertextB64);
+/**
+ * Upload an arbitrary serialisable value as a portable **SOLB v2** Backup
+ * Archive, encrypted with the caller-supplied Portable Backup Key (the
+ * Recovery-Phrase-derived key — see `docs/adr/0001`). The key is passed in by
+ * `backupManager` (which owns the identity concern); `cloudProvider` never
+ * resolves keys itself. NEW writes are ALWAYS v2 — a v1 device-key archive is
+ * never written again, because it can't be restored on another device.
+ */
+export async function uploadBackup<T>(value: T, key: Uint8Array): Promise<void> {
+  const ciphertextB64 = encryptJsonWithKey(key, value);
+  const fileB64 = encodeSolb(ciphertextB64, 2);
   const ck = await ensureInitialized();
   await ck.writeFileBackup(newBackupName(Date.now()), fileB64);
   await rotateBackups(ck);
 }
 
+/** The latest archive's key scheme + still-encrypted ciphertext. */
+export interface DownloadedArchive {
+  readonly keyScheme: SolbKeyScheme;
+  readonly ciphertextB64: string;
+}
+
+/** One row in the user-facing archive picker (plan G6: dated explicit choice). */
+export interface BackupArchiveInfo {
+  readonly name: string;
+  /** Parsed from the filename — when the archive was created. */
+  readonly timestampMs: number;
+  /**
+   * 2 = portable (recovery-phrase key), 1 = legacy (device key, original
+   * device only), null = header unreadable (corrupt / unknown format).
+   */
+  readonly version: 1 | 2 | null;
+}
+
 /**
- * Pull the latest backup (if any). Returns null only when no backup file
- * exists; a present-but-unreadable/undecryptable backup throws so the caller
- * can distinguish "nothing to restore" from a real failure.
+ * List every archive on the active provider, NEWEST FIRST, with its creation
+ * date and format version so the UI can label rows (dated explicit choice —
+ * never a silent fallback to an older file, plan G6). Reads each file's 5-byte
+ * SOLB header to classify it; MAX_BACKUPS caps this at 5 small files. A file
+ * whose header fails to decode is listed as `version: null` rather than
+ * hidden, so the user can see it exists even though it can't be restored.
  */
-export async function downloadBackup<T>(): Promise<T | null> {
+export async function listBackupArchives(): Promise<readonly BackupArchiveInfo[]> {
+  const ck = await ensureInitialized();
+  const names = await sortedBackups(ck); // oldest → newest
+  const out: BackupArchiveInfo[] = [];
+  for (const name of [...names].reverse()) {
+    const timestampMs = parseBackupTimestampMs(name);
+    if (timestampMs === null) continue;
+    let version: 1 | 2 | null = null;
+    try {
+      version = decodeSolb(await ck.readFileBackup(name)).version;
+    } catch {
+      version = null;
+    }
+    out.push({ name, timestampMs, version });
+  }
+  return out;
+}
+
+/**
+ * Pull + decode (NOT decrypt) a SPECIFIC archive by filename — the picker's
+ * restore path. Same contract as `downloadLatestArchive`; throws when the file
+ * is missing or unframeable.
+ */
+export async function downloadArchive(name: string): Promise<DownloadedArchive> {
+  const ck = await ensureInitialized();
+  const decoded = decodeSolb(await ck.readFileBackup(name));
+  return { keyScheme: decoded.keyScheme, ciphertextB64: decoded.ciphertextB64 };
+}
+
+/**
+ * Pull + decode (NOT decrypt) the latest Backup Archive. Returns null only
+ * when no backup file exists; a present-but-unframeable file throws (bad
+ * magic / unknown version / legacy plaintext) so the caller can distinguish
+ * "nothing to restore" from a corrupt/unsupported file. Decryption is the
+ * caller's job (`backupManager`) because the KEY depends on `keyScheme`: v2 →
+ * Portable Backup Key, v1 → Device Storage Key. This keeps the "version selects
+ * exactly one key scheme, never trial-decrypt" rule (see `solbEnvelope.ts`).
+ */
+export async function downloadLatestArchive(): Promise<DownloadedArchive | null> {
   const ck = await ensureInitialized();
   const names = await sortedBackups(ck);
   const latest = selectNewestBackup(names);
   if (!latest) return null;
   const fileB64 = await ck.readFileBackup(latest);
-  const ciphertextB64 = decodeSolb(fileB64);
-  return await decryptJson<T>(ciphertextB64);
+  const decoded = decodeSolb(fileB64);
+  return { keyScheme: decoded.keyScheme, ciphertextB64: decoded.ciphertextB64 };
 }
 
-/** Returns the cloud-mtime so the UI can show "last backed up …". */
+/** Returns the cloud-mtime so the UI can show "last backed up …".
+ * SILENT auth only: this backs status displays and the fresh-install probe
+ * (SecureKeysStep) — neither may open an interactive Google Sign-In. */
 export async function backupMtime(): Promise<Date | null> {
   try {
-    const ck = await ensureInitialized();
+    const ck = await ensureInitialized(false);
     const names = await sortedBackups(ck);
     const latest = selectNewestBackup(names);
     if (!latest) return null;

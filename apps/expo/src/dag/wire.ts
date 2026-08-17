@@ -1,19 +1,67 @@
 /**
- * DAG wire layer — frameKind multiplex on top of `src/proximity/wire.ts`
- * so the existing BLE L2CAP transport carries HEADS / WANT / NODE / SDP
- * / ICE messages alongside the established card-exchange traffic.
+ * DAG wire layer — frameKind multiplex on top of a length-prefixed byte
+ * framing so a BLE L2CAP / WebRTC transport can carry HEADS / WANT / NODE
+ * / SDP / ICE messages.
  *
  * Spec: docs/dev-sandbox-identity-graph.md §5.1.
  *
- * Layout (after proximity/wire strips the outer length prefix):
+ * Layout (after the outer length prefix is stripped):
  *   [uint8 frameKind] [frameKind-specific body]
  *
- * frameKind 0x10–0x7F reserved for sandbox DAG traffic. 0x80–0xFF stays
- * with the existing card-exchange path — sandbox decoders deliberately
- * reject unknown kinds so a regression in either protocol is caught at
- * the wire boundary rather than at the application layer.
+ * frameKind 0x10–0x7F reserved for sandbox DAG traffic. 0x80–0xFF is left
+ * for any other framed payload sharing the same wire — sandbox decoders
+ * deliberately reject unknown kinds so a regression in either protocol is
+ * caught at the wire boundary rather than at the application layer.
  */
-import { drainFrames as proxDrainFrames, frameMessage as proxFrameMessage } from '@/proximity/wire';
+
+/**
+ * Maximum payload size per frame. Formerly shared with the (now-removed)
+ * proximity BLE transport, which used a uint16 length-field cap.
+ */
+const MAX_FRAME_PAYLOAD_BYTES = 0xffff;
+
+/**
+ * Encode `payload` as `[uint16-be length][payload]`. Throws if the
+ * payload exceeds 65535 bytes — callers must split large messages
+ * themselves.
+ */
+export function frameMessage(payload: Uint8Array): Uint8Array {
+  if (payload.length > MAX_FRAME_PAYLOAD_BYTES) {
+    throw new RangeError(
+      `Frame exceeds max payload (${String(payload.length)} > ${String(MAX_FRAME_PAYLOAD_BYTES)})`
+    );
+  }
+  const out = new Uint8Array(2 + payload.length);
+  out[0] = (payload.length >>> 8) & 0xff;
+  out[1] = payload.length & 0xff;
+  out.set(payload, 2);
+  return out;
+}
+
+/**
+ * Pull as many complete frames out of `buffer` as possible. Returns the
+ * extracted payloads in order and the unread remainder.
+ *
+ * The reassembly contract assumes both sides agree on framing — a
+ * length prefix declaring more bytes than the remaining buffer
+ * indicates a partial inbound flush, which the caller should retain
+ * until more bytes arrive.
+ */
+function drainFrames(
+  buffer: Uint8Array
+): { readonly frames: readonly Uint8Array[]; readonly rest: Uint8Array } {
+  const frames: Uint8Array[] = [];
+  let offset = 0;
+  while (offset + 2 <= buffer.length) {
+    const hi = buffer[offset] ?? 0;
+    const lo = buffer[offset + 1] ?? 0;
+    const len = (hi << 8) | lo;
+    if (offset + 2 + len > buffer.length) break;
+    frames.push(buffer.slice(offset + 2, offset + 2 + len));
+    offset += 2 + len;
+  }
+  return { frames, rest: offset === 0 ? buffer : buffer.slice(offset) };
+}
 
 export const FRAME_KIND_HEADS = 0x10;
 export const FRAME_KIND_WANT = 0x11;
@@ -46,7 +94,7 @@ export function encodeDagFrame(frame: DagFrame): Uint8Array {
   const payload = new Uint8Array(1 + frame.body.length);
   payload[0] = frame.kind;
   payload.set(frame.body, 1);
-  return proxFrameMessage(payload);
+  return frameMessage(payload);
 }
 
 /**
@@ -78,7 +126,7 @@ export function drainDagFrames(buffer: Uint8Array): {
   readonly otherPayloads: readonly Uint8Array[];
   readonly rest: Uint8Array;
 } {
-  const { frames, rest } = proxDrainFrames(buffer);
+  const { frames, rest } = drainFrames(buffer);
   const dag: DagFrame[] = [];
   const other: Uint8Array[] = [];
   for (const payload of frames) {

@@ -6,10 +6,11 @@
  * sections (defined in `@/components/id/panels/PersonalPanel`) so the
  * same UI also powers the dashboard's "Personal" tab.
  */
-import { router } from 'expo-router';
+import { safeBack } from '@/navigation/safeBack';
 import { useEffect } from 'react';
-import { Pressable, ScrollView, View } from 'react-native';
+import { ScrollView, View } from 'react-native';
 
+import { PressableScale } from '@/components/common/PressableScale';
 import { IDNavBar } from '@/components/id';
 import { PersonalPanel } from '@/components/id/panels/PersonalPanel';
 import { SfIcon } from '@/components/icons/SfIcon';
@@ -44,29 +45,23 @@ export default function PersonalIdentity(): React.JSX.Element {
     <View className="flex-1 bg-pageBg">
       <IDNavBar
         title={t('personalIdentity.title')}
-        onLeading={() => { router.back(); }}
+        onLeading={() => {
+          safeBack();
+        }}
         trailing={
-          <Pressable
+          <PressableScale
             onPress={onRefresh}
             accessibilityRole="button"
             accessibilityLabel={t('personalIdentity.refresh')}
             hitSlop={8}
-            className="active:opacity-60"
-          >
+            style={{ width: 44, height: 44, alignItems: 'center', justifyContent: 'center' }}>
             <SfIcon name="arrow.clockwise" size={18} color={Colors.text1} />
-          </Pressable>
+          </PressableScale>
         }
       />
 
-      <ScrollView
-        className="flex-1"
-        contentContainerStyle={{ padding: 16, paddingBottom: 40 }}
-      >
-        <PersonalPanel
-          state={state}
-          onRefresh={onRefresh}
-          onClearError={onClearError}
-        />
+      <ScrollView className="flex-1" contentContainerStyle={{ padding: 16, paddingBottom: 40 }}>
+        <PersonalPanel state={state} onRefresh={onRefresh} onClearError={onClearError} />
       </ScrollView>
     </View>
   );

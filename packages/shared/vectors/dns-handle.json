@@ -1,0 +1,44 @@
+{
+  "description": "DNS handle-resolution conformance vectors. Domains resolve through _did TXT first and an HTTPS-only /.well-known/did fallback. DNS and ENS/ATProto ambiguity is resolved by registry order or an explicit dns: prefix, never by network-probing fallback.",
+  "referenceDid": "did:key:zDnaeVuZeVRqvscGkiEoR9PFFra2xZUMp97ZPuGFK1VLU7iYN",
+  "referenceNpub": "npub10elfcs4fr0l0r8af98jlmgdh9c8tcxjvz9qkw038js35mp4dma8qzvjptg",
+  "cases": [
+    {
+      "name": "explicit-prefix-txt-pointer",
+      "handle": "dns:Example.COM",
+      "dnsTxt": [
+        "did=did:key:zDnaeVuZeVRqvscGkiEoR9PFFra2xZUMp97ZPuGFK1VLU7iYN;src=nostr:npub10elfcs4fr0l0r8af98jlmgdh9c8tcxjvz9qkw038js35mp4dma8qzvjptg"
+      ],
+      "expectedDid": "did:key:zDnaeVuZeVRqvscGkiEoR9PFFra2xZUMp97ZPuGFK1VLU7iYN",
+      "expectedSources": [
+        {
+          "kind": "nostr",
+          "npub": "npub10elfcs4fr0l0r8af98jlmgdh9c8tcxjvz9qkw038js35mp4dma8qzvjptg"
+        }
+      ]
+    },
+    {
+      "name": "bare-domain-txt-bare-did",
+      "handle": "example.com",
+      "dnsTxt": ["did:key:zDnaeVuZeVRqvscGkiEoR9PFFra2xZUMp97ZPuGFK1VLU7iYN"],
+      "expectedDid": "did:key:zDnaeVuZeVRqvscGkiEoR9PFFra2xZUMp97ZPuGFK1VLU7iYN",
+      "expectedSources": []
+    },
+    {
+      "name": "well-known-after-nxdomain",
+      "handle": "dns:example.com",
+      "dnsError": "notFound",
+      "wellKnown": "  did=did:key:zDnaeVuZeVRqvscGkiEoR9PFFra2xZUMp97ZPuGFK1VLU7iYN  ",
+      "expectedDid": "did:key:zDnaeVuZeVRqvscGkiEoR9PFFra2xZUMp97ZPuGFK1VLU7iYN",
+      "expectedSources": []
+    },
+    {
+      "name": "well-known-after-dns-unreachable",
+      "handle": "dns:example.com",
+      "dnsError": "unreachable",
+      "wellKnown": "did:key:zDnaeVuZeVRqvscGkiEoR9PFFra2xZUMp97ZPuGFK1VLU7iYN",
+      "expectedDid": "did:key:zDnaeVuZeVRqvscGkiEoR9PFFra2xZUMp97ZPuGFK1VLU7iYN",
+      "expectedSources": []
+    }
+  ]
+}

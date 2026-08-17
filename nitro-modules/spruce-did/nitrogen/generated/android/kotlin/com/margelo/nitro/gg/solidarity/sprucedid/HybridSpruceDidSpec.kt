@@ -48,15 +48,15 @@ abstract class HybridSpruceDidSpec: HybridObject() {
   
   @DoNotStrip
   @Keep
+  abstract fun listSyncableP256Keys(alias: String): Promise<String>
+  
+  @DoNotStrip
+  @Keep
+  abstract fun deleteSyncableP256Key(alias: String, labelHex: String): Promise<Boolean>
+  
+  @DoNotStrip
+  @Keep
   abstract fun getPublicKeyJwk(alias: String): Promise<String>
-  
-  @DoNotStrip
-  @Keep
-  abstract fun didKeyFromAlias(alias: String): Promise<String>
-  
-  @DoNotStrip
-  @Keep
-  abstract fun didDocumentJson(did: String): Promise<String>
   
   @DoNotStrip
   @Keep
@@ -65,18 +65,6 @@ abstract class HybridSpruceDidSpec: HybridObject() {
   @DoNotStrip
   @Keep
   abstract fun signRawP256(alias: String, digest: ArrayBuffer): Promise<ArrayBuffer>
-  
-  @DoNotStrip
-  @Keep
-  abstract fun verifyJws(jws: String, did: String): Promise<Boolean>
-  
-  @DoNotStrip
-  @Keep
-  abstract fun signCredentialJwt(alias: String, claimsJson: String): Promise<String>
-  
-  @DoNotStrip
-  @Keep
-  abstract fun verifyCredentialJwt(jwt: String): Promise<String>
   
   abstract fun addEventListener(handler: (event: SpruceDidEvent) -> Unit): () -> Unit
   

@@ -120,9 +120,21 @@ function ManualContactEntryContent({
     };
 
     void (async () => {
+      // `upsert` throws on a persistence failure, so everything below runs
+      // ONLY after a successful save — including the draft reset (R10). A
+      // cancelled draft is intentionally preserved: `onClose` alone never
+      // clears these fields, so dismiss-and-reopen keeps the in-progress
+      // contact, while save-and-reopen starts fresh.
       await upsert(contact);
       pushToast(`Saved ${trimmedName}`, 'success');
       onSaved?.(contact);
+      setName('');
+      setTitle('');
+      setCompany('');
+      setEmail('');
+      setPhone('');
+      setNotes('');
+      setValidationMessage(undefined);
       onClose();
     })();
   };

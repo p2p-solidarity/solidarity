@@ -25,6 +25,11 @@ import {
   type SealResponse,
 } from '@solidarity/shared';
 import { ed25519 } from '@noble/curves/ed25519.js';
+import {
+  __resetLocalDataWipeBarrierForTesting,
+  beginLocalDataWipe,
+  completeLocalDataWipe,
+} from '../../src/settings/localDataWipeBarrier';
 
 // ── Environment ──────────────────────────────────────────────────────────────
 
@@ -38,7 +43,17 @@ interface PermissionsRequestMock {
   ios?: { status: number };
 }
 
+/** What a permission PROMPT would return (`requestPermissionsAsync`). */
 let nextPermissionResult: PermissionsRequestMock = { granted: true };
+/**
+ * The permission the OS ALREADY holds (`getPermissionsAsync`) — read by the
+ * automatic path, which must never prompt (R25). Kept separate from
+ * `nextPermissionResult` precisely so a test can express "not yet granted,
+ * and no dialog was raised".
+ */
+let nextPermissionStatus: PermissionsRequestMock = { granted: true };
+/** How many times a prompt was actually raised. */
+let promptCount = 0;
 const FAKE_TOKEN = 'apns-token-fixed-for-test';
 let nextDeviceToken: string | null = FAKE_TOKEN;
 const tokenListeners: ((tok: { type: string; data: string }) => void)[] = [];
@@ -47,7 +62,11 @@ const responseListeners: ((event: unknown) => void)[] = [];
 
 const notificationsMock = {
   IosAuthorizationStatus: { PROVISIONAL: 3 },
-  requestPermissionsAsync: () => Promise.resolve(nextPermissionResult),
+  getPermissionsAsync: () => Promise.resolve(nextPermissionStatus),
+  requestPermissionsAsync: () => {
+    promptCount += 1;
+    return Promise.resolve(nextPermissionResult);
+  },
   getDevicePushTokenAsync: () =>
     nextDeviceToken
       ? Promise.resolve({ type: 'ios', data: nextDeviceToken })
@@ -133,6 +152,8 @@ interface CapturedRequest {
 
 const requests: CapturedRequest[] = [];
 let sealCallCount = 0;
+let sealResponseGate: Promise<void> | null = null;
+let releaseSealResponse: (() => void) | null = null;
 let syncResponseQueue: InboxMessage[][] = [];
 let ackResponse: { ok: boolean } = { ok: true };
 
@@ -169,7 +190,8 @@ function installFetchMock(): void {
     requests.push({ url, method, body: parsedBody });
 
     if (url.endsWith('/v1/seal')) {
-      return Promise.resolve(jsonResponse(buildFakeSealResponse()));
+      const response = jsonResponse(buildFakeSealResponse());
+      return (sealResponseGate ?? Promise.resolve()).then(() => response);
     }
     if (url.includes('/v1/inbox')) {
       const batch = syncResponseQueue.shift() ?? [];
@@ -192,7 +214,9 @@ function restoreFetch(): void {
 // ── Test module typing ──────────────────────────────────────────────────────
 
 interface PushModule {
-  readonly registerForPushNotificationsAsync: () => Promise<{
+  readonly registerForPushNotificationsAsync: (options?: {
+    readonly prompt?: boolean;
+  }) => Promise<{
     token: string;
     sealed: SealResponse;
   } | null>;
@@ -259,15 +283,20 @@ beforeAll(async () => {
 beforeEach(async () => {
   requests.length = 0;
   sealCallCount = 0;
+  sealResponseGate = null;
+  releaseSealResponse = null;
   syncResponseQueue = [];
   ackResponse = { ok: true };
   nextPermissionResult = { granted: true };
+  nextPermissionStatus = { granted: true };
+  promptCount = 0;
   nextDeviceToken = FAKE_TOKEN;
   notificationListeners.length = 0;
   responseListeners.length = 0;
   tokenListeners.length = 0;
   mmkv.clear();
   secureKv.clear();
+  __resetLocalDataWipeBarrierForTesting();
   // Re-install our fetch mock in case a sibling test file (parallel-loaded
   // by bun) swapped `globalThis.fetch` between tests. Without this guard the
   // first test in the file may see another suite's fetch and timeout.
@@ -303,11 +332,43 @@ describe('registerForPushNotificationsAsync — token → seal → persist', () 
     expect(mmkv.has('gg.solidarity.sakura.route.v1')).toBe(true);
   });
 
-  it('returns null when permission is denied (Swift parity: skip silently)', async () => {
-    nextPermissionResult = { granted: false };
+  it('bails silently — and NEVER prompts — when the OS has not granted yet (R25)', async () => {
+    // The automatic (cold-launch) path reads the EXISTING status only. A user
+    // who never opted in must not meet a surprise system dialog on launch.
+    nextPermissionStatus = { granted: false };
     const result = await pushMod.registerForPushNotificationsAsync();
     expect(result).toBeNull();
+    expect(promptCount).toBe(0);
     expect(requests.filter((r) => r.url.endsWith('/v1/seal')).length).toBe(0);
+  });
+
+  it('explicit opt-in may prompt, and registers once the user grants', async () => {
+    nextPermissionStatus = { granted: false };
+    nextPermissionResult = { granted: true };
+    const result = await pushMod.registerForPushNotificationsAsync({ prompt: true });
+    expect(promptCount).toBe(1);
+    expect(result?.token).toBe(FAKE_TOKEN);
+    expect(requests.filter((r) => r.url.endsWith('/v1/seal')).length).toBe(1);
+  });
+
+  it('explicit opt-in that the user declines registers nothing', async () => {
+    nextPermissionStatus = { granted: false };
+    nextPermissionResult = { granted: false };
+    const result = await pushMod.registerForPushNotificationsAsync({ prompt: true });
+    expect(promptCount).toBe(1);
+    expect(result).toBeNull();
+    expect(requests.filter((r) => r.url.endsWith('/v1/seal')).length).toBe(0);
+  });
+
+  it('coalesces concurrent automatic calls into one relay round-trip', async () => {
+    // Cold launch racing the push-token listener must not double-seal.
+    const [a, b] = await Promise.all([
+      pushMod.registerForPushNotificationsAsync(),
+      pushMod.registerForPushNotificationsAsync(),
+    ]);
+    expect(a?.token).toBe(FAKE_TOKEN);
+    expect(b?.token).toBe(FAKE_TOKEN);
+    expect(requests.filter((r) => r.url.endsWith('/v1/seal')).length).toBe(1);
   });
 
   it('returns null when no device token is available (simulator path)', async () => {
@@ -324,6 +385,24 @@ describe('registerForPushNotificationsAsync — token → seal → persist', () 
     const again = await pushMod.registerForPushNotificationsAsync();
     expect(again).not.toBeNull();
     expect(requests.filter((r) => r.url.endsWith('/v1/seal')).length).toBe(0);
+  });
+
+  it('drops a sealed route whose relay response lands after a local wipe begins', async () => {
+    sealResponseGate = new Promise<void>((resolve) => {
+      releaseSealResponse = resolve;
+    });
+    const registration = pushMod.registerForPushNotificationsAsync();
+    while (!requests.some((request) => request.url.endsWith('/v1/seal'))) {
+      await Promise.resolve();
+    }
+
+    beginLocalDataWipe();
+    releaseSealResponse?.();
+
+    expect(await registration).toBeNull();
+    expect(mmkv.has('gg.solidarity.sakura.route.v1')).toBe(false);
+    expect(routeMod.useSealedRouteStore.getState().sealedRoute).toBeUndefined();
+    completeLocalDataWipe();
   });
 });
 
@@ -422,6 +501,15 @@ describe('syncOnce — decrypt + ack against a real sealBlob fixture', () => {
     expect(opened.length).toBe(0);
     // No ack call when there is no pending ack debt either.
     expect(requests.filter((r) => r.url.endsWith('/v1/ack')).length).toBe(0);
+  });
+
+  it('does not provision recipient keys or contact the relay while a wipe is active', async () => {
+    beginLocalDataWipe();
+
+    expect(await inboxMod.syncOnce()).toEqual([]);
+    expect(secureKv.size).toBe(0);
+    expect(requests).toEqual([]);
+    completeLocalDataWipe();
   });
 });
 

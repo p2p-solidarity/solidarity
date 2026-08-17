@@ -16,11 +16,11 @@
  * relay is intentionally NOT persisted across app restarts.
  */
 import { schnorr } from '@noble/curves/secp256k1.js';
-import { sha256 } from '@noble/hashes/sha2.js';
 
 import {
   KIND_DAG_HEAD,
   type DagNode,
+  computeNip01EventId,
   hexDecode,
   hexEncode,
   nostrTagsFor,
@@ -69,8 +69,7 @@ export function buildHeadPointerEvent(
     ...heads.map((h) => ['e', h] as const),
   ];
   const content = stableJSON({ v: 1, head_count: heads.length });
-  const serialized = JSON.stringify([0, pubkeyHex, createdAt, kind, tags, content]);
-  const id = hexEncode(sha256(new TextEncoder().encode(serialized)));
+  const id = computeNip01EventId({ pubkey: pubkeyHex, created_at: createdAt, kind, tags, content });
   const sig = hexEncode(schnorr.sign(hexDecode(id), privkey));
   return { id, pubkey: pubkeyHex, created_at: createdAt, kind, tags, content, sig };
 }
@@ -79,6 +78,14 @@ export interface PublishResult {
   readonly accepted: boolean;
   readonly message: string;
   readonly elapsedMs: number;
+  /**
+   * Absent when the relay answered with an OK frame (accepted or refused —
+   * a policy verdict either way). Set when we never got a verdict:
+   * `'transport'` = fast connection-level failure (WS error, closed before
+   * OK, send failed) — worth an immediate retry; `'timeout'` = the full wait
+   * elapsed — the relay is likely down, retrying just doubles the stall.
+   */
+  readonly failure?: 'timeout' | 'transport';
 }
 
 /**
@@ -104,14 +111,14 @@ export async function publishEvent(
       resolve(result);
     };
     const timer = setTimeout(() => {
-      finish({ accepted: false, message: `timeout after ${String(timeoutMs)}ms`, elapsedMs: performance.now() - started });
+      finish({ accepted: false, message: `timeout after ${String(timeoutMs)}ms`, elapsedMs: performance.now() - started, failure: 'timeout' });
     }, timeoutMs);
     ws.onopen = () => {
       try {
         ws.send(JSON.stringify(['EVENT', event]));
       } catch (err) {
         clearTimeout(timer);
-        finish({ accepted: false, message: err instanceof Error ? err.message : 'send failed', elapsedMs: performance.now() - started });
+        finish({ accepted: false, message: err instanceof Error ? err.message : 'send failed', elapsedMs: performance.now() - started, failure: 'transport' });
       }
     };
     ws.onmessage = (ev) => {
@@ -132,14 +139,14 @@ export async function publishEvent(
     };
     ws.onerror = () => {
       clearTimeout(timer);
-      finish({ accepted: false, message: 'websocket error', elapsedMs: performance.now() - started });
+      finish({ accepted: false, message: 'websocket error', elapsedMs: performance.now() - started, failure: 'transport' });
     };
     ws.onclose = (ev) => {
       // If we never got OK before close, surface that.
       const code = typeof ev.code === 'number' ? ev.code : 0;
       if (!settled) {
         clearTimeout(timer);
-        finish({ accepted: false, message: `closed (code ${String(code)})`, elapsedMs: performance.now() - started });
+        finish({ accepted: false, message: `closed (code ${String(code)})`, elapsedMs: performance.now() - started, failure: 'transport' });
       }
     };
   });
@@ -234,15 +241,7 @@ export function subscribeEvents(
 /** Verify a received Nostr event's id + signature (BIP-340 schnorr over NIP-01 serialization). */
 export function verifyNostrEvent(event: NostrEvent): boolean {
   try {
-    const serialized = JSON.stringify([
-      0,
-      event.pubkey,
-      event.created_at,
-      event.kind,
-      event.tags,
-      event.content,
-    ]);
-    const id = hexEncode(sha256(new TextEncoder().encode(serialized)));
+    const id = computeNip01EventId(event);
     if (id !== event.id) return false;
     return schnorr.verify(hexDecode(event.sig), hexDecode(event.id), hexDecode(event.pubkey));
   } catch {

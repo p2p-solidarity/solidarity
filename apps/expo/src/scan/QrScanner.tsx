@@ -7,11 +7,12 @@
  */
 import type { ReactNode } from 'react';
 import { useCallback, useMemo, useRef, useState } from 'react';
-import { StyleSheet, View } from 'react-native';
+import { Linking, StyleSheet, View } from 'react-native';
 import { CameraView, type BarcodeScanningResult } from 'expo-camera';
 
-import { ThemedSurface, ThemedText } from '@/components/themed';
-import { useCameraPermission } from './useCameraPermission';
+import { ThemedButton, ThemedSurface, ThemedText } from '@/components/themed';
+import { useTranslation } from '@/i18n';
+import { useCameraPermissionControl } from './useCameraPermission';
 import {
   isChunkFrame,
   QrChunkError,
@@ -26,7 +27,8 @@ export interface QrScannerProps {
 }
 
 export function QrScanner({ onResult, onProgress }: QrScannerProps): ReactNode {
-  const permission = useCameraPermission();
+  const { t } = useTranslation();
+  const permission = useCameraPermissionControl();
   const reassembler = useMemo(() => new QrChunkReassembler(), []);
   const lastValue = useRef<string | null>(null);
   const [mountError, setMountError] = useState<string | null>(null);
@@ -81,21 +83,56 @@ export function QrScanner({ onResult, onProgress }: QrScannerProps): ReactNode {
     [handleValue]
   );
 
-  if (permission === 'pending') {
+  if (permission.state === 'prompt') {
     return (
-      <View style={styles.fill} className="items-center justify-center bg-pageBg">
-        <ThemedText tone="secondary">Requesting camera…</ThemedText>
+      <View style={styles.fill} className="items-center justify-center bg-pageBg p-6">
+        <ThemedSurface variant="card" padded className="gap-3">
+          <ThemedText variant="titleMedium">{t('scan.permission.preTitle')}</ThemedText>
+          <ThemedText variant="bodySmall" tone="secondary">
+            {t('scan.permission.preBody')}
+          </ThemedText>
+          <ThemedText variant="caption" tone="tertiary">
+            {t('scan.permission.privacy')}
+          </ThemedText>
+          <View className="mt-1 self-start">
+            <ThemedButton
+              variant="primary"
+              size="sm"
+              label={t('scan.permission.allow')}
+              onPress={() => {
+                void permission.request();
+              }}
+            />
+          </View>
+        </ThemedSurface>
       </View>
     );
   }
-  if (permission === 'denied') {
+  if (permission.state === 'pending') {
+    return (
+      <View style={styles.fill} className="items-center justify-center bg-pageBg">
+        <ThemedText tone="secondary">{t('scan.permission.requesting')}</ThemedText>
+      </View>
+    );
+  }
+  if (permission.state === 'denied') {
     return (
       <View style={styles.fill} className="items-center justify-center bg-pageBg p-6">
         <ThemedSurface variant="outlined" padded>
-          <ThemedText variant="titleMedium">Camera permission required</ThemedText>
+          <ThemedText variant="titleMedium">{t('scan.permission.deniedTitle')}</ThemedText>
           <ThemedText variant="bodySmall" tone="tertiary" className="mt-2">
-            Enable Camera in Settings to scan QR codes.
+            {t('scan.permission.deniedBody')}
           </ThemedText>
+          <View className="mt-4 self-start">
+            <ThemedButton
+              variant="primary"
+              size="sm"
+              label={t('scan.permission.openSettings')}
+              onPress={() => {
+                void Linking.openSettings();
+              }}
+            />
+          </View>
         </ThemedSurface>
       </View>
     );

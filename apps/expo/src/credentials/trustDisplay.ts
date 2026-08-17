@@ -86,6 +86,34 @@ export function credentialTrustLabelForLevel(level: TrustLevel): string {
   }
 }
 
+export type CredentialTrustSimpleI18nKey =
+  | 'credentialTrust.simpleL1'
+  | 'credentialTrust.simpleL2'
+  | 'credentialTrust.simpleL3'
+  | 'credentialTrust.simpleL3Plus';
+
+/**
+ * Surface label for list rows: plain words only ("Verified", "Basic").
+ * The technical tier strings (credentialTrustLabelForLevel /
+ * credentialDetail.levelL*) stay on the credential DETAIL screen — the
+ * tone colors below keep the tiers visually distinct on the surface, so a
+ * fallback (white/L1) can never pass for a ZK tier (green/blue).
+ */
+export function credentialTrustSimpleI18nKeyForLevel(
+  level: TrustLevel
+): CredentialTrustSimpleI18nKey {
+  switch (level) {
+    case 'L3+':
+      return 'credentialTrust.simpleL3Plus';
+    case 'L3':
+      return 'credentialTrust.simpleL3';
+    case 'L2':
+      return 'credentialTrust.simpleL2';
+    default:
+      return 'credentialTrust.simpleL1';
+  }
+}
+
 export function credentialTrustI18nKeyForLevel(
   level: TrustLevel
 ): CredentialTrustDisplay['i18nKey'] {

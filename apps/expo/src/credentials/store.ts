@@ -37,6 +37,11 @@ import { deletePassportShowWitness } from '@/passport/showWitnessVault';
 import { decryptJson, encryptJson } from '@/storage/encryptionManager';
 import { ManifestStorage } from '@/storage/manifestStorage';
 import { getMmkv } from '@/storage/mmkv';
+import {
+  canCommitLocalData,
+  captureLocalDataEpoch,
+  type LocalDataEpoch,
+} from '@/settings/localDataWipeBarrier';
 
 import {
   CREDENTIALS_MANIFEST_SCOPE,
@@ -60,6 +65,7 @@ export interface StoredCredential {
 }
 
 const PREFIX = 'vc:';
+let localWipeGeneration = 0;
 
 interface SerializedStoredCredential
   extends Omit<StoredCredential, 'issuedAt' | 'expiresAt'> {
@@ -85,8 +91,16 @@ function deserialize(s: SerializedStoredCredential): StoredCredential {
   };
 }
 
-async function setEncrypted(key: string, value: StoredCredential): Promise<void> {
-  getMmkv().set(key, await encryptJson(serialize(value)));
+async function setEncrypted(
+  key: string,
+  value: StoredCredential,
+  writeEpoch: LocalDataEpoch,
+): Promise<boolean> {
+  if (!canCommitLocalData(writeEpoch)) return false;
+  const encrypted = await encryptJson(serialize(value));
+  if (!canCommitLocalData(writeEpoch)) return false;
+  getMmkv().set(key, encrypted);
+  return true;
 }
 
 async function getEncrypted(key: string): Promise<StoredCredential | null> {
@@ -111,6 +125,8 @@ interface CredentialStoreState {
   readonly loadDetail: (id: string) => Promise<StoredCredential | null>;
   readonly add: (v: StoredCredential) => Promise<void>;
   readonly remove: (id: string) => Promise<void>;
+  /** Drop every live reference after the encrypted local store is wiped. */
+  readonly resetForLocalWipe: () => void;
 }
 
 export const useCredentialStore = create<CredentialStoreState>((set, get) => ({
@@ -119,6 +135,7 @@ export const useCredentialStore = create<CredentialStoreState>((set, get) => ({
   detailsHydrated: false,
 
   seedFromManifest: () => {
+    if (!canCommitLocalData(captureLocalDataEpoch())) return;
     const seed = ManifestStorage.get<CredentialManifestEntry>(
       CREDENTIALS_MANIFEST_SCOPE,
     );
@@ -126,12 +143,16 @@ export const useCredentialStore = create<CredentialStoreState>((set, get) => ({
   },
 
   hydrate: async () => {
+    const generation = localWipeGeneration;
+    const writeEpoch = captureLocalDataEpoch();
+    if (!canCommitLocalData(writeEpoch)) return;
     if (get().detailsHydrated) return;
     const out: StoredCredential[] = [];
     for (const k of getMmkv().getAllKeys()) {
       if (!k.startsWith(PREFIX)) continue;
       try {
         const v = await getEncrypted(k);
+        if (generation !== localWipeGeneration || !canCommitLocalData(writeEpoch)) return;
         if (v) out.push(v);
       } catch {
         // Tolerant load: skip corrupt / schema-incompatible records. A
@@ -142,11 +163,15 @@ export const useCredentialStore = create<CredentialStoreState>((set, get) => ({
     const details = new Map<string, StoredCredential>();
     for (const c of out) details.set(c.id, c);
     const manifest = out.map(toCredentialManifest);
+    if (generation !== localWipeGeneration || !canCommitLocalData(writeEpoch)) return;
     ManifestStorage.set(CREDENTIALS_MANIFEST_SCOPE, manifest);
     set({ manifest, details, detailsHydrated: true });
   },
 
   loadDetail: async (id) => {
+    const generation = localWipeGeneration;
+    const writeEpoch = captureLocalDataEpoch();
+    if (!canCommitLocalData(writeEpoch)) return null;
     const cached = get().details.get(id);
     if (cached) return cached;
     let credential: StoredCredential | null;
@@ -155,6 +180,7 @@ export const useCredentialStore = create<CredentialStoreState>((set, get) => ({
     } catch {
       return null;
     }
+    if (generation !== localWipeGeneration || !canCommitLocalData(writeEpoch)) return null;
     if (!credential) return null;
     set((s) => {
       const next = new Map(s.details);
@@ -165,7 +191,11 @@ export const useCredentialStore = create<CredentialStoreState>((set, get) => ({
   },
 
   add: async (v) => {
-    await setEncrypted(`${PREFIX}${v.id}`, v);
+    const generation = localWipeGeneration;
+    const writeEpoch = captureLocalDataEpoch();
+    if (!canCommitLocalData(writeEpoch)) return;
+    if (!(await setEncrypted(`${PREFIX}${v.id}`, v, writeEpoch))) return;
+    if (generation !== localWipeGeneration || !canCommitLocalData(writeEpoch)) return;
     set((s) => {
       const entry = toCredentialManifest(v);
       const idx = s.manifest.findIndex((m) => m.id === entry.id);
@@ -186,6 +216,7 @@ export const useCredentialStore = create<CredentialStoreState>((set, get) => ({
   },
 
   remove: async (id) => {
+    if (!canCommitLocalData(captureLocalDataEpoch())) return;
     getMmkv().remove(`${PREFIX}${id}`);
     // Passport credentials keep their show-witness bundle (commitment
     // opening) in the vault keyed by the same id — drop it with the
@@ -199,6 +230,12 @@ export const useCredentialStore = create<CredentialStoreState>((set, get) => ({
       nextDetails.delete(id);
       return { manifest: nextManifest, details: nextDetails };
     });
+  },
+
+  resetForLocalWipe: () => {
+    localWipeGeneration += 1;
+    clearPassportShowPrefetch();
+    set({ manifest: [], details: new Map(), detailsHydrated: true });
   },
 }));
 

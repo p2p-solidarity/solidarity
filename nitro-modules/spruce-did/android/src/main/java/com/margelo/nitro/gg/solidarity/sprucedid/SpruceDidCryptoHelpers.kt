@@ -142,52 +142,7 @@ internal object SpruceDidEcdsa {
   }
 }
 
-/**
- * Reflective access to the Spruce Android SDK. Reflection (rather than a
- * direct compile-time import of `com.spruceid.mobile.sdk.rs.DidMethodUtils`)
- * keeps the build configuration the only place that pins the SDK version,
- * and degrades to a clear error message on a missing class rather than a
- * NoClassDefFoundError at link time.
- */
-internal object SpruceSdkBridge {
-  fun didFromJwk(jwkJson: String): String {
-    return invoke("didFromJwk", jwkJson) as String
-  }
-
-  fun jwkFromDid(did: String): String {
-    return invoke("jwkFromDid", did) as String
-  }
-
-  fun resolveDid(did: String): String {
-    return try {
-      val resolverCls = Class.forName("com.spruceid.mobile.sdk.rs.DidResolver")
-      val resolver = resolverCls.getDeclaredConstructor().newInstance()
-      val resolveMethod = resolverCls.getDeclaredMethod("resolve", String::class.java)
-      val result = resolveMethod.invoke(resolver, did)
-      result?.toString() ?: "{}"
-    } catch (e: ClassNotFoundException) {
-      throw IllegalStateException("Spruce DidResolver missing — check SDK version", e)
-    } catch (e: Exception) {
-      throw IllegalStateException("DID resolution failed: ${e.message}", e)
-    }
-  }
-
-  private fun invoke(methodName: String, arg: String): Any? {
-    return try {
-      val cls = Class.forName("com.spruceid.mobile.sdk.rs.DidMethodUtils")
-      val ctor = cls.getDeclaredConstructor(Class.forName("com.spruceid.mobile.sdk.rs.DidMethod"))
-      val didMethod = Class.forName("com.spruceid.mobile.sdk.rs.DidMethod")
-        .getField("KEY").get(null)
-      val instance = ctor.newInstance(didMethod)
-      val method = cls.getDeclaredMethod(methodName, String::class.java)
-      method.invoke(instance, arg)
-    } catch (e: ClassNotFoundException) {
-      throw IllegalStateException(
-        "SpruceID Android SDK not on classpath; expected " +
-          "com.spruceid.mobile.sdk.rs.DidMethodUtils", e
-      )
-    } catch (e: Exception) {
-      throw IllegalStateException("Spruce SDK call failed: ${e.message}", e)
-    }
-  }
-}
+// SpruceSdkBridge (reflective access to com.spruceid.mobile.sdk.rs.*) was
+// removed in 1.3.3 S7a together with its 5 caller methods and the Maven
+// dependency — DID derivation + JWS/VC verification are pure TS in
+// packages/shared. Inventory: docs/ref/notes-sprucekit-slim.md.

@@ -2,15 +2,6 @@
   "originHash" : "f359c4cfc8749396fdbdf9c2b3196f65bd44ced5a24f17b7874f272bee41de1e",
   "pins" : [
     {
-      "identity" : "sprucekit-mobile",
-      "kind" : "remoteSourceControl",
-      "location" : "https://github.com/spruceid/sprucekit-mobile",
-      "state" : {
-        "revision" : "80a2ef8247de455bbc9db9bcbf131079dc953972",
-        "version" : "0.17.3"
-      }
-    },
-    {
       "identity" : "swift-algorithms",
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/apple/swift-algorithms",

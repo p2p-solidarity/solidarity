@@ -22,7 +22,8 @@
  */
 import * as Sharing from 'expo-sharing';
 import * as Clipboard from 'expo-clipboard';
-import { router, useLocalSearchParams } from 'expo-router';
+import { useLocalSearchParams } from 'expo-router';
+import { safeBack } from '@/navigation/safeBack';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Pressable, ScrollView, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -164,7 +165,7 @@ export default function WalletPassScreen() {
         <Header
           title="Wallet Pass"
           onDone={() => {
-            router.back();
+            safeBack();
           }}
         />
         <View
@@ -191,7 +192,7 @@ export default function WalletPassScreen() {
       <Header
         title="Wallet Pass"
         onDone={() => {
-          router.back();
+          safeBack();
         }}
       />
 
@@ -278,7 +279,7 @@ export default function WalletPassScreen() {
 
           <Pressable
             onPress={() => {
-              router.back();
+              safeBack();
             }}
             accessibilityRole="button"
             accessibilityLabel="Cancel"

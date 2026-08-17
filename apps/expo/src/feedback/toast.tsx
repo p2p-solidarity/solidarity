@@ -5,7 +5,7 @@
  * down on enter / up on exit. Each toast auto-dismisses after `ms`
  * (default 3000). Slide + fade transitions are Reanimated 4 worklets to
  * keep animation off the JS thread when many toasts fire in quick
- * succession (proximity exchange flow).
+ * succession.
  *
  * Identical consecutive messages are deduped: re-pushing the same
  * (message, tone) within the live window resets its timer instead of

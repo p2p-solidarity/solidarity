@@ -20,7 +20,8 @@
  */
 import * as DocumentPicker from 'expo-document-picker';
 import * as FileSystem from 'expo-file-system/legacy';
-import { router } from 'expo-router';
+import { Redirect, router } from 'expo-router';
+import { safeBack } from '@/navigation/safeBack';
 import * as Sharing from 'expo-sharing';
 import { useEffect, useState } from 'react';
 import { ScrollView, View } from 'react-native';
@@ -47,7 +48,14 @@ import { useTranslation } from '@/i18n';
 import { requireBiometric } from '@/keychain';
 import { usePreferences } from '@/settings/preferences';
 
-export default function VcSettings() {
+export default function VcSettingsRoute() {
+  const developerMode = usePreferences((state) => state.developerMode);
+  if (!developerMode) return <Redirect href="/settings/advanced" />;
+
+  return <VcSettings />;
+}
+
+function VcSettings() {
   const insets = useSafeAreaInsets();
   const { t } = useTranslation();
   const hydrate = useCredentialStore((s) => s.hydrate);
@@ -180,8 +188,16 @@ export default function VcSettings() {
         ],
         addCredential: state.add,
       });
+      if (result.rejected > 0) {
+        pushToast(t('vc.importRejected', { count: result.rejected }), 'warning');
+      }
+      if (result.unverified > 0) {
+        pushToast(t('vc.importUnverified', { count: result.unverified }), 'warning');
+      }
       if (result.imported === 0) {
-        appAlert({ title: t('vc.title'), message: t('vc.noneNewInFile') });
+        if (result.rejected === 0) {
+          appAlert({ title: t('vc.title'), message: t('vc.noneNewInFile') });
+        }
         return;
       }
       pushToast(t('vc.importSuccess', { count: result.imported }), 'success');
@@ -194,7 +210,7 @@ export default function VcSettings() {
 
   return (
     <View className="flex-1 bg-pageBg" style={{ paddingTop: insets.top }}>
-      <SettingsBackToolbar onPress={() => { router.back(); }} />
+      <SettingsBackToolbar onPress={() => { safeBack('/settings'); }} />
       <SettingsScreenTitle title={t('vc.title')} />
 
       <ScrollView

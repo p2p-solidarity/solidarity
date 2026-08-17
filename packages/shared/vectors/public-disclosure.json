@@ -1,0 +1,106 @@
+{
+  "description": "Presence-only PublicDisclosureRecordV1 conformance and adversarial vectors. Verification pins the expected root DID, strict record/evidence shapes, the two-claim allowlist, and a 30-day lifetime. No vector evidence.value contains anything except claim except the explicitly invalid forbidden-identifiers attack.",
+  "testKeys": {
+    "root": {
+      "privateKeyHex": "0102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f20",
+      "did": "did:key:zDnaeVuZeVRqvscGkiEoR9PFFra2xZUMp97ZPuGFK1VLU7iYN"
+    },
+    "attacker": {
+      "privateKeyHex": "1f1e1d1c1b1a191817161514131211100f0e0d0c0b0a09080706050403020100",
+      "did": "did:key:zDnaeagKWt45K6WCE6Dm3pAWvUzt7HgPtvAL1YNpBGX3YJ8eL"
+    }
+  },
+  "timestamps": {
+    "issuedAt": 1751000000,
+    "expiresAt": 1753592000,
+    "nowMs": 1751000100000
+  },
+  "pointer": {
+    "pubkeyHex": "abababababababababababababababababababababababababababababababab",
+    "slot": "0198a6e4-0c3d-7a21-9657-54a6b6b20275",
+    "dTag": "solidarity.disclosure.public.v1:0198a6e4-0c3d-7a21-9657-54a6b6b20275",
+    "attestation": "nostr:30078:abababababababababababababababababababababababababababababababab:solidarity.disclosure.public.v1:0198a6e4-0c3d-7a21-9657-54a6b6b20275"
+  },
+  "valid": [
+    {
+      "name": "root-signed-age-over-18-presence",
+      "jws": "eyJhbGciOiJFUzI1NiIsImtpZCI6ImRpZDprZXk6ekRuYWVWdVplVlJxdnNjR2tpRW9SOVBGRnJhMnhaVU1wOTdaUHVHRksxVkxVN2lZTiMwIn0.eyJjbGFpbSI6ImFnZV9vdmVyXzE4IiwiZXZpZGVuY2UiOnsiZm9ybWF0IjoicHJlc2VuY2UiLCJ2YWx1ZSI6eyJjbGFpbSI6ImFnZV9vdmVyXzE4In19LCJleHBpcmVzQXQiOjE3NTM1OTIwMDAsImlzc3VlZEF0IjoxNzUxMDAwMDAwLCJzbG90IjoiMDE5OGE2ZTQtMGMzZC03YTIxLTk2NTctNTRhNmI2YjIwMjc1Iiwic3ViamVjdCI6ImRpZDprZXk6ekRuYWVWdVplVlJxdnNjR2tpRW9SOVBGRnJhMnhaVU1wOTdaUHVHRksxVkxVN2lZTiIsInR5cCI6InNvbGlkYXJpdHkucHVibGljRGlzY2xvc3VyZS52MSIsInYiOjF9.6JxjhqXp2ZyEAmLOJfIZICw5XVlDcIxTVc5fZ8PwAs1RovQNU45-hO4ugp8X0s_LD9dvy_eHJKWd7NDnc3x5UQ",
+      "opts": { "nowMs": 1751000100000 },
+      "claim": "age_over_18"
+    },
+    {
+      "name": "root-signed-age-over-21-presence",
+      "jws": "eyJhbGciOiJFUzI1NiIsImtpZCI6ImRpZDprZXk6ekRuYWVWdVplVlJxdnNjR2tpRW9SOVBGRnJhMnhaVU1wOTdaUHVHRksxVkxVN2lZTiMwIn0.eyJjbGFpbSI6ImFnZV9vdmVyXzIxIiwiZXZpZGVuY2UiOnsiZm9ybWF0IjoicHJlc2VuY2UiLCJ2YWx1ZSI6eyJjbGFpbSI6ImFnZV9vdmVyXzIxIn19LCJleHBpcmVzQXQiOjE3NTM1OTIwMDAsImlzc3VlZEF0IjoxNzUxMDAwMDAwLCJzbG90IjoiMDE5OGE2ZTQtMGMzZC03YTIxLTk2NTctNTRhNmI2YjIwMjc2Iiwic3ViamVjdCI6ImRpZDprZXk6ekRuYWVWdVplVlJxdnNjR2tpRW9SOVBGRnJhMnhaVU1wOTdaUHVHRksxVkxVN2lZTiIsInR5cCI6InNvbGlkYXJpdHkucHVibGljRGlzY2xvc3VyZS52MSIsInYiOjF9.mcpfHovK7cbzrz57uONNK_n4MxGGfiqEwHEQxVDs8DIugHfoeb1Y6bMMB1U8trwQy_lA-trhHxEOwC9h7DDdVg",
+      "opts": { "nowMs": 1751000100000 },
+      "claim": "age_over_21"
+    }
+  ],
+  "invalid": [
+    {
+      "name": "signed-by-non-root",
+      "jws": "eyJhbGciOiJFUzI1NiIsImtpZCI6ImRpZDprZXk6ekRuYWVhZ0tXdDQ1SzZXQ0U2RG0zcEFXdlV6dDdIZ1B0dkFMMVlOcEJHWDNZSjhlTCMwIn0.eyJjbGFpbSI6ImFnZV9vdmVyXzE4IiwiZXZpZGVuY2UiOnsiZm9ybWF0IjoicHJlc2VuY2UiLCJ2YWx1ZSI6eyJjbGFpbSI6ImFnZV9vdmVyXzE4In19LCJleHBpcmVzQXQiOjE3NTM1OTIwMDAsImlzc3VlZEF0IjoxNzUxMDAwMDAwLCJzbG90IjoiMDE5OGE2ZTQtMGMzZC03YTIxLTk2NTctNTRhNmI2YjIwMjc1Iiwic3ViamVjdCI6ImRpZDprZXk6ekRuYWVWdVplVlJxdnNjR2tpRW9SOVBGRnJhMnhaVU1wOTdaUHVHRksxVkxVN2lZTiIsInR5cCI6InNvbGlkYXJpdHkucHVibGljRGlzY2xvc3VyZS52MSIsInYiOjF9.pmO9jl4gvs5cY9WY8JUlaIVzA2Z1WVTRvFTkkh6GfJAPIC3XKW_ksABn-WFhYlCB10UGWf18aiSbgD5MkDkKeA",
+      "opts": { "nowMs": 1751000100000 },
+      "errorKind": "signatureInvalid"
+    },
+    {
+      "name": "unknown-top-level-field",
+      "jws": "eyJhbGciOiJFUzI1NiIsImtpZCI6ImRpZDprZXk6ekRuYWVWdVplVlJxdnNjR2tpRW9SOVBGRnJhMnhaVU1wOTdaUHVHRksxVkxVN2lZTiMwIn0.eyJjbGFpbSI6ImFnZV9vdmVyXzE4IiwiZGVidWciOnRydWUsImV2aWRlbmNlIjp7ImZvcm1hdCI6InByZXNlbmNlIiwidmFsdWUiOnsiY2xhaW0iOiJhZ2Vfb3Zlcl8xOCJ9fSwiZXhwaXJlc0F0IjoxNzUzNTkyMDAwLCJpc3N1ZWRBdCI6MTc1MTAwMDAwMCwic2xvdCI6IjAxOThhNmU0LTBjM2QtN2EyMS05NjU3LTU0YTZiNmIyMDI3NSIsInN1YmplY3QiOiJkaWQ6a2V5OnpEbmFlVnVaZVZScXZzY0draUVvUjlQRkZyYTJ4WlVNcDk3WlB1R0ZLMVZMVTdpWU4iLCJ0eXAiOiJzb2xpZGFyaXR5LnB1YmxpY0Rpc2Nsb3N1cmUudjEiLCJ2IjoxfQ.LPFHd5-Emn7s-EiH4SUpvGkGSYlQBqVPf0cWdut1AJMtiLe2XAlI6GeRIeJo4YW_ErjOb1hJtjBUNCYlNSs-pw",
+      "opts": { "nowMs": 1751000100000 },
+      "errorKind": "schemaInvalid"
+    },
+    {
+      "name": "wrong-record-typ",
+      "jws": "eyJhbGciOiJFUzI1NiIsImtpZCI6ImRpZDprZXk6ekRuYWVWdVplVlJxdnNjR2tpRW9SOVBGRnJhMnhaVU1wOTdaUHVHRksxVkxVN2lZTiMwIn0.eyJjbGFpbSI6ImFnZV9vdmVyXzE4IiwiZXZpZGVuY2UiOnsiZm9ybWF0IjoicHJlc2VuY2UiLCJ2YWx1ZSI6eyJjbGFpbSI6ImFnZV9vdmVyXzE4In19LCJleHBpcmVzQXQiOjE3NTM1OTIwMDAsImlzc3VlZEF0IjoxNzUxMDAwMDAwLCJzbG90IjoiMDE5OGE2ZTQtMGMzZC03YTIxLTk2NTctNTRhNmI2YjIwMjc1Iiwic3ViamVjdCI6ImRpZDprZXk6ekRuYWVWdVplVlJxdnNjR2tpRW9SOVBGRnJhMnhaVU1wOTdaUHVHRksxVkxVN2lZTiIsInR5cCI6InNvbGlkYXJpdHkucHVibGljRGlzY2xvc3VyZS52MiIsInYiOjF9.flKdYRbhn9Dpj53O4pbZQElyX6Nsrr013rQMzwWCjRlhXvIrYP1JJfVJbg5YoTKDpZ5wX46FgAJZCleSYV5LNA",
+      "opts": { "nowMs": 1751000100000 },
+      "errorKind": "schemaInvalid"
+    },
+    {
+      "name": "wrong-record-version",
+      "jws": "eyJhbGciOiJFUzI1NiIsImtpZCI6ImRpZDprZXk6ekRuYWVWdVplVlJxdnNjR2tpRW9SOVBGRnJhMnhaVU1wOTdaUHVHRksxVkxVN2lZTiMwIn0.eyJjbGFpbSI6ImFnZV9vdmVyXzE4IiwiZXZpZGVuY2UiOnsiZm9ybWF0IjoicHJlc2VuY2UiLCJ2YWx1ZSI6eyJjbGFpbSI6ImFnZV9vdmVyXzE4In19LCJleHBpcmVzQXQiOjE3NTM1OTIwMDAsImlzc3VlZEF0IjoxNzUxMDAwMDAwLCJzbG90IjoiMDE5OGE2ZTQtMGMzZC03YTIxLTk2NTctNTRhNmI2YjIwMjc1Iiwic3ViamVjdCI6ImRpZDprZXk6ekRuYWVWdVplVlJxdnNjR2tpRW9SOVBGRnJhMnhaVU1wOTdaUHVHRksxVkxVN2lZTiIsInR5cCI6InNvbGlkYXJpdHkucHVibGljRGlzY2xvc3VyZS52MSIsInYiOjJ9.pYMB2WOjle1XjFnSYblk9xw-EklCx4Sp_J5BrWDc1vBe6eF0CVuk656ItI_i_TqiVrdoyj-LhzsW02JaDl__gg",
+      "opts": { "nowMs": 1751000100000 },
+      "errorKind": "schemaInvalid"
+    },
+    {
+      "name": "claim-not-in-allowlist",
+      "jws": "eyJhbGciOiJFUzI1NiIsImtpZCI6ImRpZDprZXk6ekRuYWVWdVplVlJxdnNjR2tpRW9SOVBGRnJhMnhaVU1wOTdaUHVHRksxVkxVN2lZTiMwIn0.eyJjbGFpbSI6ImFnZV9vdmVyXzY1IiwiZXZpZGVuY2UiOnsiZm9ybWF0IjoicHJlc2VuY2UiLCJ2YWx1ZSI6eyJjbGFpbSI6ImFnZV9vdmVyXzY1In19LCJleHBpcmVzQXQiOjE3NTM1OTIwMDAsImlzc3VlZEF0IjoxNzUxMDAwMDAwLCJzbG90IjoiMDE5OGE2ZTQtMGMzZC03YTIxLTk2NTctNTRhNmI2YjIwMjc1Iiwic3ViamVjdCI6ImRpZDprZXk6ekRuYWVWdVplVlJxdnNjR2tpRW9SOVBGRnJhMnhaVU1wOTdaUHVHRksxVkxVN2lZTiIsInR5cCI6InNvbGlkYXJpdHkucHVibGljRGlzY2xvc3VyZS52MSIsInYiOjF9.u2yUi6cPUBBr7IrGlbPPGpdI_AlPFL3DC8U2YiKRDC8W9JiipoFs8rsruvszjpzWBDGIQjwV5QazwedS-EC27g",
+      "opts": { "nowMs": 1751000100000 },
+      "errorKind": "claimNotAllowed"
+    },
+    {
+      "name": "expired",
+      "jws": "eyJhbGciOiJFUzI1NiIsImtpZCI6ImRpZDprZXk6ekRuYWVWdVplVlJxdnNjR2tpRW9SOVBGRnJhMnhaVU1wOTdaUHVHRksxVkxVN2lZTiMwIn0.eyJjbGFpbSI6ImFnZV9vdmVyXzE4IiwiZXZpZGVuY2UiOnsiZm9ybWF0IjoicHJlc2VuY2UiLCJ2YWx1ZSI6eyJjbGFpbSI6ImFnZV9vdmVyXzE4In19LCJleHBpcmVzQXQiOjE3NTM1OTIwMDAsImlzc3VlZEF0IjoxNzUxMDAwMDAwLCJzbG90IjoiMDE5OGE2ZTQtMGMzZC03YTIxLTk2NTctNTRhNmI2YjIwMjc1Iiwic3ViamVjdCI6ImRpZDprZXk6ekRuYWVWdVplVlJxdnNjR2tpRW9SOVBGRnJhMnhaVU1wOTdaUHVHRksxVkxVN2lZTiIsInR5cCI6InNvbGlkYXJpdHkucHVibGljRGlzY2xvc3VyZS52MSIsInYiOjF9.6JxjhqXp2ZyEAmLOJfIZICw5XVlDcIxTVc5fZ8PwAs1RovQNU45-hO4ugp8X0s_LD9dvy_eHJKWd7NDnc3x5UQ",
+      "opts": { "nowMs": 1753592001000 },
+      "errorKind": "expiryInvalid"
+    },
+    {
+      "name": "lifetime-over-30-days",
+      "jws": "eyJhbGciOiJFUzI1NiIsImtpZCI6ImRpZDprZXk6ekRuYWVWdVplVlJxdnNjR2tpRW9SOVBGRnJhMnhaVU1wOTdaUHVHRksxVkxVN2lZTiMwIn0.eyJjbGFpbSI6ImFnZV9vdmVyXzE4IiwiZXZpZGVuY2UiOnsiZm9ybWF0IjoicHJlc2VuY2UiLCJ2YWx1ZSI6eyJjbGFpbSI6ImFnZV9vdmVyXzE4In19LCJleHBpcmVzQXQiOjE3NTM1OTIwMDEsImlzc3VlZEF0IjoxNzUxMDAwMDAwLCJzbG90IjoiMDE5OGE2ZTQtMGMzZC03YTIxLTk2NTctNTRhNmI2YjIwMjc1Iiwic3ViamVjdCI6ImRpZDprZXk6ekRuYWVWdVplVlJxdnNjR2tpRW9SOVBGRnJhMnhaVU1wOTdaUHVHRksxVkxVN2lZTiIsInR5cCI6InNvbGlkYXJpdHkucHVibGljRGlzY2xvc3VyZS52MSIsInYiOjF9.2nhskRaeF9KlvcHn1rJUkV848gmROdA4RksqPWm03clUT4eTtwQBCBVfVbI3uZLOxTTrb2pLMDYYLgWiHBcE6w",
+      "opts": { "nowMs": 1751000100000 },
+      "errorKind": "expiryInvalid"
+    },
+    {
+      "name": "evidence-carries-forbidden-identifiers",
+      "jws": "eyJhbGciOiJFUzI1NiIsImtpZCI6ImRpZDprZXk6ekRuYWVWdVplVlJxdnNjR2tpRW9SOVBGRnJhMnhaVU1wOTdaUHVHRksxVkxVN2lZTiMwIn0.eyJjbGFpbSI6ImFnZV9vdmVyXzE4IiwiZXZpZGVuY2UiOnsiZm9ybWF0IjoicHJlc2VuY2UiLCJ2YWx1ZSI6eyJjbGFpbSI6ImFnZV9vdmVyXzE4IiwiY3JlZGVudGlhbElkIjoic3RhYmxlLWNyZWRlbnRpYWwtaWQiLCJkYXRlT2ZCaXJ0aCI6IjE5OTAtMDEtMDEiLCJtcnoiOiJQPEVYQU1QTEUiLCJuYW1lIjoiQWxpY2UgRXhhbXBsZSIsInBhc3Nwb3J0TnVtYmVyIjoiUDEyMzQ1NjciLCJwYXNzcG9ydFNkSnd0IjoiaXNzdWVyfmRpc2Nsb3N1cmV-In19LCJleHBpcmVzQXQiOjE3NTM1OTIwMDAsImlzc3VlZEF0IjoxNzUxMDAwMDAwLCJzbG90IjoiMDE5OGE2ZTQtMGMzZC03YTIxLTk2NTctNTRhNmI2YjIwMjc1Iiwic3ViamVjdCI6ImRpZDprZXk6ekRuYWVWdVplVlJxdnNjR2tpRW9SOVBGRnJhMnhaVU1wOTdaUHVHRksxVkxVN2lZTiIsInR5cCI6InNvbGlkYXJpdHkucHVibGljRGlzY2xvc3VyZS52MSIsInYiOjF9.EpLE6ZIj_6AsrR97dgui5wqiZyCIKrvJSyraF6gEPsJIJCQQ8RET4bY_SxdnNOuSNZ_D7iwnuADA4hp22DJvnw",
+      "opts": { "nowMs": 1751000100000 },
+      "errorKind": "forbiddenEvidence"
+    },
+    {
+      "name": "evidence-claim-mismatch",
+      "jws": "eyJhbGciOiJFUzI1NiIsImtpZCI6ImRpZDprZXk6ekRuYWVWdVplVlJxdnNjR2tpRW9SOVBGRnJhMnhaVU1wOTdaUHVHRksxVkxVN2lZTiMwIn0.eyJjbGFpbSI6ImFnZV9vdmVyXzE4IiwiZXZpZGVuY2UiOnsiZm9ybWF0IjoicHJlc2VuY2UiLCJ2YWx1ZSI6eyJjbGFpbSI6ImFnZV9vdmVyXzIxIn19LCJleHBpcmVzQXQiOjE3NTM1OTIwMDAsImlzc3VlZEF0IjoxNzUxMDAwMDAwLCJzbG90IjoiMDE5OGE2ZTQtMGMzZC03YTIxLTk2NTctNTRhNmI2YjIwMjc1Iiwic3ViamVjdCI6ImRpZDprZXk6ekRuYWVWdVplVlJxdnNjR2tpRW9SOVBGRnJhMnhaVU1wOTdaUHVHRksxVkxVN2lZTiIsInR5cCI6InNvbGlkYXJpdHkucHVibGljRGlzY2xvc3VyZS52MSIsInYiOjF9.BvUxyAb4sgPfjD7ar2Urlc82m4t0xhn9wX6IuDG8G6xQ9q7Pk7iplK6qjo8AnBR-r247Tp7f89O0dYodbh_uow",
+      "opts": { "nowMs": 1751000100000 },
+      "errorKind": "evidenceInvalid"
+    },
+    {
+      "name": "payload-subject-is-not-expected-root",
+      "jws": "eyJhbGciOiJFUzI1NiIsImtpZCI6ImRpZDprZXk6ekRuYWVWdVplVlJxdnNjR2tpRW9SOVBGRnJhMnhaVU1wOTdaUHVHRksxVkxVN2lZTiMwIn0.eyJjbGFpbSI6ImFnZV9vdmVyXzE4IiwiZXZpZGVuY2UiOnsiZm9ybWF0IjoicHJlc2VuY2UiLCJ2YWx1ZSI6eyJjbGFpbSI6ImFnZV9vdmVyXzE4In19LCJleHBpcmVzQXQiOjE3NTM1OTIwMDAsImlzc3VlZEF0IjoxNzUxMDAwMDAwLCJzbG90IjoiMDE5OGE2ZTQtMGMzZC03YTIxLTk2NTctNTRhNmI2YjIwMjc1Iiwic3ViamVjdCI6ImRpZDprZXk6ekRuYWVhZ0tXdDQ1SzZXQ0U2RG0zcEFXdlV6dDdIZ1B0dkFMMVlOcEJHWDNZSjhlTCIsInR5cCI6InNvbGlkYXJpdHkucHVibGljRGlzY2xvc3VyZS52MSIsInYiOjF9.ahx5Ub_F885yeFvkROgsWbiUxHKo0rwZ8TaVB1uBg3BK_xK0_4VIB29hWvre3A5oXYFawiLY2b8VQotyBy7lAw",
+      "opts": { "nowMs": 1751000100000 },
+      "errorKind": "subjectMismatch"
+    },
+    {
+      "name": "tampered-payload-after-signing",
+      "jws": "eyJhbGciOiJFUzI1NiIsImtpZCI6ImRpZDprZXk6ekRuYWVWdVplVlJxdnNjR2tpRW9SOVBGRnJhMnhaVU1wOTdaUHVHRksxVkxVN2lZTiMwIn0.eyJjbGFpbSI6ImFnZV9vdmVyXzIxIiwiZXZpZGVuY2UiOnsiZm9ybWF0IjoicHJlc2VuY2UiLCJ2YWx1ZSI6eyJjbGFpbSI6ImFnZV9vdmVyXzIxIn19LCJleHBpcmVzQXQiOjE3NTM1OTIwMDAsImlzc3VlZEF0IjoxNzUxMDAwMDAwLCJzbG90IjoiMDE5OGE2ZTQtMGMzZC03YTIxLTk2NTctNTRhNmI2YjIwMjc1Iiwic3ViamVjdCI6ImRpZDprZXk6ekRuYWVWdVplVlJxdnNjR2tpRW9SOVBGRnJhMnhaVU1wOTdaUHVHRksxVkxVN2lZTiIsInR5cCI6InNvbGlkYXJpdHkucHVibGljRGlzY2xvc3VyZS52MSIsInYiOjF9.6JxjhqXp2ZyEAmLOJfIZICw5XVlDcIxTVc5fZ8PwAs1RovQNU45-hO4ugp8X0s_LD9dvy_eHJKWd7NDnc3x5UQ",
+      "opts": { "nowMs": 1751000100000 },
+      "errorKind": "signatureInvalid"
+    }
+  ]
+}

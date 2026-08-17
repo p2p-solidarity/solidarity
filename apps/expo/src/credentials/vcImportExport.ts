@@ -1,8 +1,11 @@
 import {
   decodeJwtUnsafe,
+  resolveDidKey,
   uuid,
+  verifyJwtEs256,
 } from '@solidarity/shared';
 
+import { parseSdJwt } from './selectiveDisclosure';
 import type { StoredCredential, TrustLevel } from './store';
 
 export const VC_EXPORT_FILENAME = 'solidarity_vcs.json';
@@ -21,6 +24,65 @@ export interface ImportCredentialJwtsOptions {
 export interface ImportCredentialJwtsResult {
   readonly imported: number;
   readonly skipped: number;
+  /** Dropped: malformed, or a did:key issuer whose signature FAILED to verify
+   *  (adversarial). Never enters the store. */
+  readonly rejected: number;
+  /** Imported but tagged `unverified`: issuer method unsupported / no issuer,
+   *  so the signature could not be checked. Not presentable as evidence. */
+  readonly unverified: number;
+}
+
+/**
+ * Import trust decision, made BEFORE a credential can enter the store:
+ *   - `verified`          — did:key issuer, signature checks out → trusted.
+ *   - `unverified-issuer` — no issuer, or an issuer DID method we cannot
+ *                           resolve/verify → import as clearly-unverified.
+ *   - `invalid`           — malformed, or a did:key whose signature FAILED →
+ *                           reject outright (a forged signature is adversarial).
+ */
+export type VcVerificationStatus = 'verified' | 'unverified-issuer' | 'invalid';
+
+/**
+ * Verify an imported credential's issuer signature. did:key issuers are
+ * verified locally (no network); other methods are honestly reported as
+ * unverifiable rather than assumed valid. SD-JWTs are checked on their issuer
+ * segment (the disclosures are unsigned by design). Fail-closed: a signature
+ * mismatch is `invalid`, never `verified`.
+ */
+export function verifyImportedCredential(rawJwt: string): VcVerificationStatus {
+  let issuerSegment = rawJwt;
+  if (rawJwt.includes('~')) {
+    const parsed = parseSdJwt(rawJwt);
+    if (!parsed.ok) return 'invalid';
+    issuerSegment = parsed.value.issuerJwt;
+  }
+
+  let header: { readonly kid?: string };
+  let payload: DecodedCredentialJwt;
+  try {
+    ({ header, payload } = decodeJwtUnsafe<DecodedCredentialJwt>(issuerSegment));
+  } catch {
+    return 'invalid';
+  }
+
+  const iss =
+    nonEmptyString(payload.iss) ??
+    nonEmptyString(header.kid?.split('#')[0]);
+  if (!iss?.startsWith('did:key:')) return 'unverified-issuer';
+
+  let jwk;
+  try {
+    jwk = resolveDidKey(iss);
+  } catch {
+    // A did:key that will not decode is not a supported issuer we can trust.
+    return 'unverified-issuer';
+  }
+  try {
+    verifyJwtEs256(issuerSegment, jwk);
+    return 'verified';
+  } catch {
+    return 'invalid';
+  }
 }
 
 interface DecodedCredentialJwt {
@@ -51,9 +113,13 @@ export function parseVcExportText(text: string): readonly string[] {
 
 export function storedCredentialFromJwt(
   rawJwt: string,
-  now: Date = new Date()
+  now: Date = new Date(),
+  status: VcVerificationStatus = 'verified'
 ): StoredCredential {
-  const { payload } = decodeJwtUnsafe<DecodedCredentialJwt>(rawJwt);
+  const issuerSegment = rawJwt.includes('~')
+    ? sdJwtIssuerSegment(rawJwt) ?? rawJwt
+    : rawJwt;
+  const { payload } = decodeJwtUnsafe<DecodedCredentialJwt>(issuerSegment);
   const vcTypes = credentialTypes(payload.vc?.type);
   const subject = pickRecord(payload.vc?.credentialSubject);
   const issuerDid = nonEmptyString(payload.iss) ?? 'unknown';
@@ -64,6 +130,7 @@ export function storedCredentialFromJwt(
   const issuedAtSec = payload.iat ?? payload.nbf;
   const id = credentialId(payload.jti);
   const type = credentialStoreType(vcTypes);
+  const verified = status === 'verified';
 
   return {
     id,
@@ -71,11 +138,16 @@ export function storedCredentialFromJwt(
     title: credentialTitle(type, subject),
     issuerDid,
     holderDid,
-    trustLevel: trustLevelFor(type, issuerDid),
+    // An unverified import must never carry a real trust level — it has not
+    // been cryptographically checked, so it floors at L1 and is tagged so the
+    // presentation path can refuse it.
+    trustLevel: verified ? trustLevelFor(type, issuerDid) : 'L1',
     rawJwt,
     issuedAt: new Date((issuedAtSec ?? Math.round(now.getTime() / 1000)) * 1000),
     ...(payload.exp ? { expiresAt: new Date(payload.exp * 1000) } : {}),
-    metadataTags: metadataTagsFor(issuerDid),
+    metadataTags: verified
+      ? metadataTagsFor(issuerDid)
+      : [...metadataTagsFor(issuerDid), 'unverified'],
   };
 }
 
@@ -86,9 +158,17 @@ export async function importCredentialJwts(
   const seen = new Set(options.existingIds ?? []);
   let imported = 0;
   let skipped = 0;
+  let rejected = 0;
+  let unverified = 0;
 
   for (const jwt of jwts) {
-    const credential = storedCredentialFromJwt(jwt, options.now);
+    const status = verifyImportedCredential(jwt);
+    if (status === 'invalid') {
+      // Forged / malformed signature — never enters the store.
+      rejected += 1;
+      continue;
+    }
+    const credential = storedCredentialFromJwt(jwt, options.now, status);
     if (seen.has(credential.id)) {
       skipped += 1;
       continue;
@@ -96,9 +176,15 @@ export async function importCredentialJwts(
     await options.addCredential(credential);
     seen.add(credential.id);
     imported += 1;
+    if (status === 'unverified-issuer') unverified += 1;
   }
 
-  return { imported, skipped };
+  return { imported, skipped, rejected, unverified };
+}
+
+function sdJwtIssuerSegment(combined: string): string | null {
+  const parsed = parseSdJwt(combined);
+  return parsed.ok ? parsed.value.issuerJwt : null;
 }
 
 function isVcExportWrapper(value: unknown): value is VcExportWrapper {

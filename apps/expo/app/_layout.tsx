@@ -10,6 +10,8 @@
  * Boot order (Path A — manifest-first, sub-50 ms cold launch):
  *   1. install crypto polyfill (top-of-file import)
  *   2. await initMmkv()                  — Keychain hop + MMKV open
+ *   2b. await warmNostrKeyMirror()       — resident already; warms the
+ *                                          userKey.ts sync-mirror cache
  *   3. sync seed all feature manifests   — zero await, frame-1 ready
  *      (cards, contacts, groups, vault, shoutouts, credentials, issuers)
  *   4. await installI18n + preferences   — cheap, on-the-spot
@@ -30,7 +32,7 @@ import '../global.css';
 
 import { useEffect, useState } from 'react';
 import { Appearance } from 'react-native';
-import { Stack } from 'expo-router';
+import { router, Stack } from 'expo-router';
 import * as Linking from 'expo-linking';
 import * as Notifications from 'expo-notifications';
 import * as SplashScreen from 'expo-splash-screen';
@@ -42,6 +44,7 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { useCardStore } from '@/cards/cardManager';
 import { useReceivedCard } from '@/cards/receivedCard';
 import { ReceivedCardSheet } from '@/components/cards/ReceivedCardSheet';
+import { VerifiedPageResultSheet } from '@/components/scan/VerifiedPageResultSheet';
 import { useContactStore } from '@/contacts/repository';
 import { useCredentialStore } from '@/credentials/store';
 import { useIssuerMetadataStore } from '@/credentials/issuerStore';
@@ -49,16 +52,24 @@ import { handleDeepLink } from '@/deeplink/router';
 import { AppAlertOverlay } from '@/feedback/appAlert';
 import { ConfirmDialogOverlay } from '@/feedback/confirmDialog';
 import { ToastOverlay } from '@/feedback/toast';
+import { prepareLeaveCards } from '@/contacts/leaveCardInbox';
+import { prepareRecentUpdates } from '@/contacts/recentUpdates';
 import { useGroupStore } from '@/groups/store';
 import { useIdentityData } from '@/identity';
 import { installI18n } from '@/i18n';
 import { hydrateSensitiveActionPolicy } from '@/keychain';
+import { warmBadgeStatusCache } from '@/badges/badgeStatusCache';
+import { warmNostrKeyMirror } from '@/nostr/userKey';
+import { PearConsentOverlay, PearPresentConsentOverlay } from '@/pear/consent';
+import { hydrateProfileSnapshots } from '@/people/profileSnapshots';
+import { hydrateProfile } from '@/profile/store';
 import { syncOnce } from '@/sakura/inbox';
 import { registerForPushNotificationsAsync } from '@/sakura/pushRegistration';
 import { hydratePreferences, usePreferences } from '@/settings/preferences';
 import { useShoutoutStore } from '@/shoutouts/store';
 import { initMmkv, ManifestStorage } from '@/storage';
 import { useVaultStore } from '@/vault/store';
+import { PRIMARY_TAB_HREFS } from '@/navigation/primaryTabs';
 
 import { CARDS_MANIFEST_SCOPE } from '@/cards/cardManifest';
 import { CONTACTS_MANIFEST_SCOPE } from '@/contacts/contactManifest';
@@ -117,9 +128,10 @@ function warnBoot(message: string, error?: unknown): void {
 
 export default function RootLayout() {
   const [ready, setReady] = useState(false);
-  const hydrateContacts = useContactStore((s) => s.hydrate);
   const receivedCard = useReceivedCard((s) => s.card);
   const receivedVerification = useReceivedCard((s) => s.verificationStatus);
+  const receivedSource = useReceivedCard((s) => s.source);
+  const receivedSealedRoute = useReceivedCard((s) => s.sealedRoute);
   const dismissReceived = useReceivedCard((s) => s.dismiss);
   const upsertContact = useContactStore((s) => s.upsert);
   // Swift ThemeManager.applyColorScheme → here we forward the user pref to
@@ -127,6 +139,11 @@ export default function RootLayout() {
   // so toggling Light/Dark/System in Appearance settings actually flips
   // every `bg-pageBg` / `text-text1` style without a relaunch.
   const appColorScheme = usePreferences((s) => s.appColorScheme);
+  // Opt-in gate for the Sakura push rail (R25). Reflects the persisted value
+  // once boot runs `hydratePreferences()` (before `ready` flips true), so the
+  // registration effect below reads the real preference, not the default.
+  const remoteNotificationsEnabled = usePreferences((s) => s.notificationsRemote);
+  const hasCompletedOnboarding = usePreferences((s) => s.hasCompletedOnboarding);
   useEffect(() => {
     Appearance.setColorScheme(appColorScheme === 'system' ? 'unspecified' : appColorScheme);
   }, [appColorScheme]);
@@ -163,6 +180,17 @@ export default function RootLayout() {
         logBoot('mmkv:start');
         await initMmkv();
         logBoot('mmkv:done');
+        // Warm the Nostr sync mirror's MMKV reference NOW so every later
+        // `hasNostrKeySync()` call (e.g. the Verify tab's badge-bindings
+        // row) is a real synchronous read instead of a cold-cache `false`
+        // — see userKey.ts's module doc. Cheap: `@/storage/mmkv` is
+        // already resident from `initMmkv()` above.
+        await warmNostrKeyMirror();
+        // Same pattern for the persisted badge-verification cache, so the
+        // Me tab's chips can seed the last known state synchronously on
+        // first render (badgeStatusCache doc).
+        await warmBadgeStatusCache();
+        await Promise.all([prepareRecentUpdates(), prepareLeaveCards()]);
         // Sync, sub-millisecond: each store reads its plaintext manifest
         // from MMKV and seeds the zustand initial state. List/hero views
         // can render on the next frame without any decryption.
@@ -177,6 +205,8 @@ export default function RootLayout() {
 
         hydratePreferences();
         hydrateSensitiveActionPolicy();
+        hydrateProfile();
+        hydrateProfileSnapshots();
         logBoot('preferences:done');
 
         // First-boot migration: if any manifest is missing, block splash
@@ -246,31 +276,44 @@ export default function RootLayout() {
     return () => { sub.remove(); };
   }, []);
 
-  // Sakura push rail — mirrors Swift AppDelegate.didFinishLaunchingWithOptions
-  // + didReceiveRemoteNotification. Registration is fire-and-forget per
-  // Rule 10 (never await on first paint); listeners trigger an inbox sync
-  // whenever the OS hands us a notification (foreground or interaction tap).
+  // Sakura push rail — inbox-sync listeners are always safe to attach: they
+  // only fire when the OS actually delivers a notification (none, if the user
+  // opted out), and they never touch permission. Mirrors Swift
+  // AppDelegate.didReceiveRemoteNotification.
   useEffect(() => {
-    // Permission denied / no token / relay down — Swift swallows the
-    // equivalent error too. The user can retry from Settings.
-    void registerForPushNotificationsAsync().catch(() => undefined);
     const received = Notifications.addNotificationReceivedListener(() => {
       // Inbox decrypt failures are not surfaced to the user; mirrors
       // Swift MessageService logging behaviour.
-      void syncOnce().catch(() => undefined);
+      if (usePreferences.getState().hasCompletedOnboarding) {
+        void syncOnce().catch(() => undefined);
+      }
     });
     const response = Notifications.addNotificationResponseReceivedListener(() => {
-      void syncOnce().catch(() => undefined);
-    });
-    const tokenChange = Notifications.addPushTokenListener(() => {
-      void registerForPushNotificationsAsync().catch(() => undefined);
+      if (usePreferences.getState().hasCompletedOnboarding) {
+        void syncOnce().catch(() => undefined);
+      }
     });
     return () => {
       received.remove();
       response.remove();
-      tokenChange.remove();
     };
   }, []);
+
+  // Registration is opt-in gated (R25). We only register once boot has
+  // hydrated the persisted preference (`ready`) AND remote notifications are
+  // enabled. The automatic path NEVER prompts — it registers only if the OS
+  // already granted permission — so a user who never opted in never sees a
+  // system dialog on cold launch. Fire-and-forget per Rule 10.
+  useEffect(() => {
+    if (!ready || !hasCompletedOnboarding || !remoteNotificationsEnabled) return;
+    void registerForPushNotificationsAsync().catch(() => undefined);
+    const tokenChange = Notifications.addPushTokenListener(() => {
+      void registerForPushNotificationsAsync().catch(() => undefined);
+    });
+    return () => {
+      tokenChange.remove();
+    };
+  }, [hasCompletedOnboarding, ready, remoteNotificationsEnabled]);
 
   if (!ready) return null;
 
@@ -285,16 +328,24 @@ export default function RootLayout() {
           <ToastOverlay />
           <ConfirmDialogOverlay />
           <AppAlertOverlay />
+          <PearConsentOverlay />
+          <PearPresentConsentOverlay />
           <ReceivedCardSheet
             visible={receivedCard !== null}
             card={receivedCard}
             verificationStatus={receivedVerification}
+            source={receivedSource}
+            sealedRoute={receivedSealedRoute}
             onSave={async (contact) => {
               await upsertContact(contact);
+            }}
+            onShowMine={() => {
               dismissReceived();
+              router.replace(PRIMARY_TAB_HREFS.present);
             }}
             onDismiss={dismissReceived}
           />
+          <VerifiedPageResultSheet />
         </SafeAreaProvider>
       </KeyboardProvider>
     </GestureHandlerRootView>

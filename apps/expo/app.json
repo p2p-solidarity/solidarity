@@ -9,7 +9,7 @@
       "airmeishi",
       "openid-credential-offer"
     ],
-    "version": "1.3.2",
+    "version": "1.3.3",
     "orientation": "portrait",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
@@ -21,7 +21,8 @@
       "bundleIdentifier": "kidneyweakx.airmeishi",
       "supportsTablet": true,
       "associatedDomains": [
-        "applinks:solidarity.gg"
+        "applinks:solidarity.gg",
+        "applinks:creds.id"
       ],
       "entitlements": {
         "com.apple.developer.icloud-container-identifiers": [
@@ -45,16 +46,9 @@
       "infoPlist": {
         "NSCameraUsageDescription": "Solidarity uses the camera to scan QR codes and passport MRZ.",
         "NSContactsUsageDescription": "Solidarity can save business card information to your Contacts.",
-        "NSLocalNetworkUsageDescription": "Solidarity discovers nearby devices for proximity sharing.",
-        "NSNearbyInteractionUsageDescription": "Solidarity uses Nearby Interaction to measure distance and direction of nearby devices.",
-        "NSBluetoothAlwaysUsageDescription": "Solidarity uses Bluetooth to discover and connect with nearby devices for business card sharing and proximity matching.",
         "NFCReaderUsageDescription": "Solidarity reads your passport's NFC chip to verify identity.",
         "NSFaceIDUsageDescription": "Solidarity uses Face ID to protect identity keys and authorize sensitive actions.",
         "NSPhotoLibraryUsageDescription": "Solidarity saves QR codes and business card images to your Photo Library.",
-        "NSBonjourServices": [
-          "_say-share._tcp.",
-          "_airmeishi-share._tcp."
-        ],
         "UIApplicationSupportsIndirectInputEvents": true,
         "UIBackgroundModes": [
           "remote-notification",
@@ -76,11 +70,6 @@
         "android.permission.WRITE_CONTACTS",
         "android.permission.USE_BIOMETRIC",
         "android.permission.NFC",
-        "android.permission.UWB_RANGING",
-        "android.permission.BLUETOOTH_SCAN",
-        "android.permission.BLUETOOTH_ADVERTISE",
-        "android.permission.BLUETOOTH_CONNECT",
-        "android.permission.ACCESS_FINE_LOCATION",
         "android.permission.INTERNET",
         "android.permission.POST_NOTIFICATIONS"
       ],
@@ -98,6 +87,10 @@
             {
               "scheme": "https",
               "host": "solidarity.gg"
+            },
+            {
+              "scheme": "https",
+              "host": "creds.id"
             }
           ],
           "category": [
@@ -150,7 +143,7 @@
             "useFrameworks": "static"
           },
           "android": {
-            "minSdkVersion": 26,
+            "minSdkVersion": 29,
             "compileSdkVersion": 36,
             "targetSdkVersion": 36
           }
@@ -162,13 +155,12 @@
       "./plugins/withRustXcframeworkSearchPath.js",
       "./plugins/withDisableClangExplicitModules.js",
       "./plugins/withNfcReader.js",
-      "./plugins/withSpruceIdSpmPackage.js",
       "./plugins/withPassportOpenAcSrsPhase.js",
       "./plugins/withIosBuildNumber.js",
       "./plugins/withAndroidReleaseSigning.js",
       "expo-sqlite"
     ],
-    "runtimeVersion": "1.3.2",
+    "runtimeVersion": "1.3.3",
     "updates": {
       "enabled": false
     },

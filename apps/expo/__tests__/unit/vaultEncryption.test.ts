@@ -117,6 +117,7 @@ beforeAll(async () => {
   await mock.module('@/storage/secureMasterKey', () => ({
     getMasterKey: async () => FIXED_MASTER_KEY,
     resetMasterKeyForTesting: async () => undefined,
+    evictMasterKeyCache: () => undefined,
   }));
   storageMod = (await import('../../src/vault/storage')) as unknown as StorageModuleSurface;
 });
@@ -160,6 +161,7 @@ describe('Vault layer 2: writeVaultBlob / readVaultBlob', () => {
     await mock.module('@/storage/secureMasterKey', () => ({
       getMasterKey: async () => new Uint8Array(32).fill(0xff),
       resetMasterKeyForTesting: async () => undefined,
+      evictMasterKeyCache: () => undefined,
     }));
     const fresh = (await import('../../src/vault/storage')) as unknown as StorageModuleSurface;
     await expect(fresh.readVaultBlob(meta.encryptedPath)).rejects.toBeDefined();
@@ -167,6 +169,7 @@ describe('Vault layer 2: writeVaultBlob / readVaultBlob', () => {
     await mock.module('@/storage/secureMasterKey', () => ({
       getMasterKey: async () => FIXED_MASTER_KEY,
       resetMasterKeyForTesting: async () => undefined,
+      evictMasterKeyCache: () => undefined,
     }));
   });
 
@@ -208,9 +211,10 @@ beforeAll(async () => {
     initMmkv: async () => undefined,
   }));
   await mock.module('@/storage/encryptionManager', () => ({
-    encryptJson: async (v: unknown) => JSON.stringify(v),
+    encryptJson: async (v: unknown) => Buffer.from(JSON.stringify(v)).toString('base64'),
     decryptJson: async <T,>(s: string): Promise<T> => {
-      const parsed = JSON.parse(s) as Record<string, unknown>;
+      const raw = s.startsWith('{') ? s : Buffer.from(s, 'base64').toString('utf8');
+      const parsed = JSON.parse(raw) as Record<string, unknown>;
       // Rebuild Date prototypes the way Swift Codable does for VaultItem.
       if (typeof parsed['createdAt'] === 'string') {
         (parsed as { createdAt: Date }).createdAt = new Date(parsed['createdAt']);

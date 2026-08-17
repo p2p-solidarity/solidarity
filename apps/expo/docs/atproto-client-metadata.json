@@ -1,0 +1,20 @@
+{
+  "client_id": "https://solidarity.gg/oauth/client-metadata.json",
+  "client_name": "Solidarity",
+  "client_uri": "https://solidarity.gg",
+  "redirect_uris": [
+    "solidarity:/oauth/atproto/callback",
+    "https://solidarity.gg/oauth/atproto/callback"
+  ],
+  "scope": "atproto transition:generic",
+  "grant_types": [
+    "authorization_code",
+    "refresh_token"
+  ],
+  "response_types": [
+    "code"
+  ],
+  "token_endpoint_auth_method": "none",
+  "application_type": "native",
+  "dpop_bound_access_tokens": true
+}

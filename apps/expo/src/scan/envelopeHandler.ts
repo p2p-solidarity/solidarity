@@ -26,18 +26,14 @@ import {
   type VerificationStatus,
 } from '@solidarity/shared';
 
+import { decompressQR } from '@/cards/qrCompression';
 import { parseEnvelopeFromWire, decryptZKPayload } from '@/cards/qrEnvelope';
 import type {
   QRCodeEnvelopePayload,
   QRPlaintextPayload,
   QRSharingPayload,
 } from '@/cards/solidarityQrPayload';
-import {
-  handlePassportShowScan,
-  type PassportShowScanResult,
-} from '@/scan/showPresentationHandler';
-import { verifySelectiveDisclosureProof } from '@/zk/proofManager';
-import { verifyGroupProof } from '@/zk';
+import type { PassportShowScanResult } from '@/scan/showPresentationHandler';
 
 export interface ScanOutcome {
   readonly kind:
@@ -57,6 +53,7 @@ export interface ScanOutcome {
 }
 
 const SUPPORTED_PROOF_CLAIMS = new Set(['is_human', 'age_over_18']);
+const PASSPORT_SHOW_PRESENTATION_SCHEMA = 'gg.solidarity.passport.show-presentation.v1';
 
 export async function handleScannedPayload(payload: string): Promise<ScanOutcome> {
   if (typeof payload !== 'string' || payload.length === 0) {
@@ -83,7 +80,7 @@ export async function handleScannedPayload(payload: string): Promise<ScanOutcome
   }
 
   // Passport show presentation (passport_show_v1) — fresh-proof ZK route.
-  const passportShow = await handlePassportShowScan(payload);
+  const passportShow = await maybeHandlePassportShowScan(payload);
   if (passportShow !== null) {
     return { kind: 'passport-show', passportShow };
   }
@@ -101,6 +98,22 @@ export async function handleScannedPayload(payload: string): Promise<ScanOutcome
     default:
       return { kind: 'unknown' };
   }
+}
+
+async function maybeHandlePassportShowScan(
+  payload: string
+): Promise<PassportShowScanResult | null> {
+  if (!looksLikePassportShowPayload(payload)) return null;
+  const { handlePassportShowScan } = await import('@/scan/showPresentationHandler');
+  return handlePassportShowScan(payload);
+}
+
+function looksLikePassportShowPayload(payload: string): boolean {
+  if (payload.startsWith('{')) return payload.includes(PASSPORT_SHOW_PRESENTATION_SCHEMA);
+  if (!payload.startsWith('sce1:')) return false;
+  const decompressed = decompressQR(payload);
+  if (!decompressed) return false;
+  return new TextDecoder().decode(decompressed).includes(PASSPORT_SHOW_PRESENTATION_SCHEMA);
 }
 
 function handlePlaintext(envelope: QRCodeEnvelopePayload): ScanOutcome {
@@ -202,6 +215,7 @@ async function verifyZkProofs(payload: QRSharingPayload): Promise<ZkProofResult>
 
   if (payload.sdProof !== undefined) {
     try {
+      const { verifySelectiveDisclosureProof } = await import('@/zk/proofManager');
       const outcome = await verifySelectiveDisclosureProof(
         payload.sdProof,
         payload.businessCard.cardId
@@ -214,6 +228,7 @@ async function verifyZkProofs(payload: QRSharingPayload): Promise<ZkProofResult>
 
   if (payload.issuerProof !== undefined) {
     try {
+      const { verifyGroupProof } = await import('@/zk/groupManager');
       const proofObject = safeJsonParse(payload.issuerProof) as
         | Parameters<typeof verifyGroupProof>[0]
         | null;

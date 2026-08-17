@@ -12,6 +12,10 @@
 import { create } from 'zustand';
 
 import { getMmkv } from '@/storage/mmkv';
+import {
+  canCommitLocalData,
+  captureLocalDataEpoch,
+} from '@/settings/localDataWipeBarrier';
 import type { ProviderKind } from '@/backup';
 
 const KEY = 'prefs:v1';
@@ -32,19 +36,10 @@ export type AppColorScheme = 'system' | 'light' | 'dark';
 /** Mirrors Swift AnimalCharacter. */
 export type AnimalCharacter = 'dog' | 'horse' | 'pig' | 'sheep' | 'dove';
 
-/**
- * Proximity matching transport (developer setting).
- *   - `auto`      best available — BLE everywhere today; will also try the
- *                 legacy MultipeerConnectivity path once that lands.
- *   - `ble`       force the cross-platform BLE/L2CAP path (iOS ↔ Android).
- *   - `multipeer` legacy MultipeerConnectivity to reach the old Swift iOS app.
- *                 Native transport not ported yet — selecting it currently
- *                 falls back to BLE (surfaced as "pending" in the dev UI).
- */
-export type ProximityTransport = 'auto' | 'ble' | 'multipeer';
-
 export interface Preferences {
   readonly hasCompletedOnboarding: boolean;
+  /** Local v2 username used for the short `/name` public-page presentation. */
+  readonly publicPageUsername: string;
   readonly biometricSensitiveOps: boolean;
   readonly backupProvider: ProviderKind;
   readonly autoBackupOnPull: boolean;
@@ -73,8 +68,6 @@ export interface Preferences {
   readonly notificationsSyncIntervalSeconds: number;
   /** Mirrors Swift DeveloperModeManager.simulateNFC. */
   readonly simulateNfc: boolean;
-  /** Proximity matching transport selector (developer setting). */
-  readonly proximityTransport: ProximityTransport;
   /** Share-field toggles — mirror Swift ShareSettingsView @AppStorage keys. */
   readonly shareTitle: boolean;
   readonly shareCompany: boolean;
@@ -89,6 +82,19 @@ export interface Preferences {
   readonly shareAgeOver18: boolean;
   /** Active UI language tag (`en`, `zh-Hant`). Mirrors Swift LanguageSelectionView. */
   readonly language: string;
+  /** Re-publish later profile edits after the user has explicitly published once. */
+  readonly nostrAutoRepublish: boolean;
+  /** Allow user-initiated, on-demand Pear peer exchange in production UI. */
+  readonly pearExchangeEnabled: boolean;
+  /**
+   * Root-key (seed-derived did:key, `src/identity/rootKey.ts`) backup
+   * consent — recorded at the onboarding `backup.tsx` step. `'icloud'` is
+   * the recommended one-tap path; `'mnemonicOnly'` means the user completed
+   * the write-it-down ceremony instead. This is an INTENT flag, not proof
+   * that iCloud sync is active — see rootKey.ts's module doc for the
+   * current storage-capability ceiling.
+   */
+  readonly rootKeySyncChoice: 'undecided' | 'icloud' | 'mnemonicOnly';
 }
 
 const DEFAULT_BIOMETRIC_POLICY: Readonly<Record<SensitiveActionKey, boolean>> = {
@@ -103,6 +109,7 @@ const DEFAULT_BIOMETRIC_POLICY: Readonly<Record<SensitiveActionKey, boolean>> = 
 
 const DEFAULTS: Preferences = {
   hasCompletedOnboarding: false,
+  publicPageUsername: '',
   biometricSensitiveOps: true,
   backupProvider: 'iCloud',
   autoBackupOnPull: true,
@@ -120,7 +127,6 @@ const DEFAULTS: Preferences = {
   notificationsAutoSync: true,
   notificationsSyncIntervalSeconds: 30,
   simulateNfc: false,
-  proximityTransport: 'auto',
   shareTitle: false,
   shareCompany: false,
   shareEmail: false,
@@ -134,6 +140,9 @@ const DEFAULTS: Preferences = {
   // installI18n). Only a real selection ('en' | 'zh-Hant') persists and
   // overrides the device locale on relaunch.
   language: '',
+  nostrAutoRepublish: false,
+  pearExchangeEnabled: true,
+  rootKeySyncChoice: 'undecided',
 };
 
 function readSafe(): Preferences {
@@ -162,10 +171,11 @@ interface PrefsState extends Preferences {
 export const usePreferences = create<PrefsState>((set) => ({
   ...DEFAULTS,
   set: (key, value) => {
+    if (!canCommitLocalData(captureLocalDataEpoch())) return;
     set((s) => {
       const next = { ...s, [key]: value } as Preferences;
       writeSafe(next);
-      return { [key]: value } as Partial<PrefsState>;
+      return { [key]: value };
     });
   },
   reset: () => {
@@ -179,5 +189,6 @@ export const usePreferences = create<PrefsState>((set) => ({
  * root layout, after `initMmkv()` resolves.
  */
 export function hydratePreferences(): void {
+  if (!canCommitLocalData(captureLocalDataEpoch())) return;
   usePreferences.setState(readSafe());
 }

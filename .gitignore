@@ -105,8 +105,16 @@ Packages
 # Spec documents
 spec.md
 
-.context
-.claude
+# Local AI-agent and workspace state
+.context/
+.claude/
+.codex/
+.agents/
+.superpowers/
+
+# macOS metadata
+.DS_Store
+**/.DS_Store
 
 # === Monorepo / Expo / RN (added 2026-05-24 for Expo migration) ===
 node_modules/
@@ -117,6 +125,13 @@ dist/
 build/
 *.tsbuildinfo
 .eslintcache
+
+# Exception: the checked-in `bare-pack` worklet bundle is a committed
+# artifact, not disposable build output — regenerate via
+# `bun run pear:pack` (apps/expo/scripts/pack-pear-worklet.mjs) whenever
+# apps/expo/pear/worklet/index.js changes; see that file's header.
+!apps/expo/pear/worklet/dist/
+!apps/expo/pear/worklet/dist/**
 
 # Expo
 .expo/
@@ -231,3 +246,4 @@ system_logs.logarchive/
 # Python bytecode cache from scripts/ (generate_masterlist + its tests).
 __pycache__/
 *.pyc
+.alma-snapshots

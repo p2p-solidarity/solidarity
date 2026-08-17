@@ -43,6 +43,12 @@ import {
 } from '@solidarity/shared';
 import { ed25519, x25519 } from '@noble/curves/ed25519.js';
 
+import {
+  canCommitLocalData,
+  captureLocalDataEpoch,
+  type LocalDataEpoch,
+} from '@/settings/localDataWipeBarrier';
+
 const ENC_PRIV_ALIAS = 'gg.solidarity.sakura.enc.v1';
 const SIG_PRIV_ALIAS = 'gg.solidarity.sakura.sig.ed25519.v1';
 
@@ -77,6 +83,7 @@ interface CachedSecrets {
 }
 
 let cached: CachedSecrets | null = null;
+const activeLoads = new Set<Promise<RecipientKeyPair>>();
 
 async function readBytes(alias: string): Promise<Uint8Array | null> {
   const stored = await SecureStore.getItemAsync(alias, SECURE_OPTS).catch(() => null);
@@ -102,11 +109,32 @@ function buildPair(encPriv: Uint8Array, sigPriv: Uint8Array): RecipientKeyPair {
   };
 }
 
-async function provisionFreshKeys(): Promise<{ encPriv: Uint8Array; sigPriv: Uint8Array }> {
+async function deleteStoredAliases(): Promise<void> {
+  const results = await Promise.allSettled(
+    [ENC_PRIV_ALIAS, SIG_PRIV_ALIAS].map((alias) =>
+      SecureStore.deleteItemAsync(alias, SECURE_OPTS),
+    ),
+  );
+  if (results.some((result) => result.status === 'rejected')) {
+    throw new Error('Recipient key deletion was incomplete');
+  }
+}
+
+async function provisionFreshKeys(
+  operationEpoch: LocalDataEpoch,
+): Promise<{ encPriv: Uint8Array; sigPriv: Uint8Array }> {
   const enc = generateRecipientKeyPair();
   const sigPriv = ed25519.utils.randomSecretKey();
   await writeBytes(ENC_PRIV_ALIAS, enc.privateKey);
+  if (!canCommitLocalData(operationEpoch)) {
+    await deleteStoredAliases();
+    throw new Error('Recipient key provisioning was invalidated');
+  }
   await writeBytes(SIG_PRIV_ALIAS, sigPriv);
+  if (!canCommitLocalData(operationEpoch)) {
+    await deleteStoredAliases();
+    throw new Error('Recipient key provisioning was invalidated');
+  }
   return { encPriv: enc.privateKey, sigPriv };
 }
 
@@ -116,11 +144,19 @@ async function provisionFreshKeys(): Promise<{ encPriv: Uint8Array; sigPriv: Uin
  * cached pair without prompting biometric again (the cache lives for the
  * lifetime of the JS context, mirroring `SecureKeyManager.shared`).
  */
-export async function loadOrCreateRecipientKeys(): Promise<RecipientKeyPair> {
+async function loadOrCreateRecipientKeysAtEpoch(
+  operationEpoch: LocalDataEpoch,
+): Promise<RecipientKeyPair> {
+  if (!canCommitLocalData(operationEpoch)) {
+    throw new Error('Recipient key provisioning is suspended');
+  }
   if (cached) return cached.pair;
 
   const encPrivStored = await readBytes(ENC_PRIV_ALIAS);
   const sigPrivStored = await readBytes(SIG_PRIV_ALIAS);
+  if (!canCommitLocalData(operationEpoch)) {
+    throw new Error('Recipient key provisioning was invalidated');
+  }
 
   let encPriv: Uint8Array;
   let sigPriv: Uint8Array;
@@ -133,14 +169,34 @@ export async function loadOrCreateRecipientKeys(): Promise<RecipientKeyPair> {
   } else {
     // Either alias missing — treat as fresh install (or post-wipe). We
     // re-provision both halves together so the pair is always consistent.
-    const fresh = await provisionFreshKeys();
+    const fresh = await provisionFreshKeys(operationEpoch);
     encPriv = fresh.encPriv;
     sigPriv = fresh.sigPriv;
   }
 
   const pair = buildPair(encPriv, sigPriv);
+  if (!canCommitLocalData(operationEpoch)) {
+    throw new Error('Recipient key provisioning was invalidated');
+  }
   cached = { encPriv, sigPriv, pair };
   return pair;
+}
+
+export function loadOrCreateRecipientKeys(): Promise<RecipientKeyPair> {
+  const operation = loadOrCreateRecipientKeysAtEpoch(captureLocalDataEpoch());
+  activeLoads.add(operation);
+  const remove = (): void => {
+    activeLoads.delete(operation);
+  };
+  operation.then(remove, remove);
+  return operation;
+}
+
+/** Wait until every pre-wipe provision/read has reached an epoch checkpoint. */
+export async function quiesceRecipientKeyOperations(): Promise<void> {
+  while (activeLoads.size > 0) {
+    await Promise.allSettled([...activeLoads]);
+  }
 }
 
 /**
@@ -202,16 +258,16 @@ export async function signSendRequest(input: {
   return base64Encode(sigBytes);
 }
 
+/** Permanently delete both long-term Sakura recipient private keys. */
+export async function deleteRecipientKeys(): Promise<void> {
+  cached = null;
+  await deleteStoredAliases();
+}
+
 /**
  * Test-only — drops the in-memory cache + persisted aliases so subsequent
  * `loadOrCreateRecipientKeys` calls re-provision fresh keys.
  */
 export async function resetRecipientKeysForTesting(): Promise<void> {
-  cached = null;
-  await SecureStore.deleteItemAsync(ENC_PRIV_ALIAS, SECURE_OPTS).catch(
-    () => undefined
-  );
-  await SecureStore.deleteItemAsync(SIG_PRIV_ALIAS, SECURE_OPTS).catch(
-    () => undefined
-  );
+  await deleteRecipientKeys();
 }

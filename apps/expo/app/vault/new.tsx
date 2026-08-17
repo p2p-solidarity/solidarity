@@ -8,7 +8,7 @@
  */
 import * as DocumentPicker from 'expo-document-picker';
 import * as FileSystem from 'expo-file-system/legacy';
-import { router } from 'expo-router';
+import { safeBack } from '@/navigation/safeBack';
 import { useState, type ReactNode } from 'react';
 import { ScrollView, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -90,7 +90,7 @@ export default function VaultNew() {
         tags: [],
       });
       pushToast(t('vault.encryptedToast', { name, size: written.size.toFixed(0) }), 'success');
-      router.back();
+      safeBack();
     } catch (err) {
       pushToast(t('vault.uploadFailed', { message: (err as Error).message }), 'error');
     } finally {
@@ -100,7 +100,7 @@ export default function VaultNew() {
 
   return (
     <View className="flex-1 bg-pageBg" style={{ paddingTop: insets.top }}>
-      <SettingsBackToolbar title={t('vault.title')} onPress={() => { router.back(); }} />
+      <SettingsBackToolbar title={t('vault.title')} onPress={() => { safeBack(); }} />
       <SettingsScreenTitle title={t('vault.addToVault')} />
 
       <ScrollView
@@ -153,7 +153,7 @@ export default function VaultNew() {
             variant="secondary"
             label={t('vaultNew.cancel')}
             fullWidth
-            onPress={() => { router.back(); }}
+            onPress={() => { safeBack(); }}
           />
         </View>
       </ScrollView>

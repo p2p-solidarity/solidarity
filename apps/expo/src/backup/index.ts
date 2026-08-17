@@ -1,11 +1,11 @@
 export {
   DEFAULT_PROVIDER,
   type ProviderKind,
+  type BackupArchiveInfo,
+  listBackupArchives,
   setProvider,
   setGoogleAccessToken,
   getActiveProvider,
-  uploadBackup,
-  downloadBackup,
   backupMtime,
 } from './cloudProvider';
 export {

@@ -14,24 +14,21 @@
  *                         monospaced, selectable, secondary tone.
  */
 import type { ReactNode } from 'react';
-import { Text, View } from 'react-native';
+import { View } from 'react-native';
 
+import { ThemedSurface, ThemedText } from '@/components/themed';
 import { Colors } from '@/constants/Colors';
 
 const MONO_FONT = 'Menlo';
 
-export function IDSectionContainer({
-  children,
-}: {
-  readonly children: ReactNode;
-}): ReactNode {
+export function IDSectionContainer({ children }: { readonly children: ReactNode }): ReactNode {
   return (
-    <View
-      className="bg-searchBg p-4"
-      style={{ borderWidth: 1, borderColor: Colors.divider, gap: 8 }}
-    >
+    <ThemedSurface
+      variant="inset"
+      className="rounded-none p-4"
+      style={{ borderWidth: 1, borderColor: Colors.divider, gap: 8 }}>
       {children}
-    </View>
+    </ThemedSurface>
   );
 }
 
@@ -50,8 +47,6 @@ export function IDLabeledRow({
   selectable = false,
   tone = 'primary',
 }: IDLabeledRowProps): ReactNode {
-  const labelCls = tone === 'secondary' ? 'text-text2' : 'text-text1';
-  const valueCls = tone === 'secondary' ? 'text-text2' : 'text-text1';
   return (
     <View
       style={{
@@ -60,18 +55,20 @@ export function IDLabeledRow({
         justifyContent: 'space-between',
         gap: 12,
         paddingVertical: 2,
-      }}
-    >
-      <Text className={`${labelCls} text-[15px]`}>{label}</Text>
-      <Text
+      }}>
+      <ThemedText variant="bodyMedium" tone={tone}>
+        {label}
+      </ThemedText>
+      <ThemedText
+        variant="bodySmall"
+        tone={tone}
         selectable={selectable}
         numberOfLines={1}
         ellipsizeMode="middle"
         style={mono ? { fontFamily: MONO_FONT } : undefined}
-        className={`${valueCls} text-[13px] flex-1 text-right`}
-      >
+        className="flex-1 text-right">
         {value}
-      </Text>
+      </ThemedText>
     </View>
   );
 }
@@ -81,18 +78,15 @@ export interface IDBlockTextProps {
   readonly maxLines?: number;
 }
 
-export function IDBlockText({
-  value,
-  maxLines,
-}: IDBlockTextProps): ReactNode {
+export function IDBlockText({ value, maxLines }: IDBlockTextProps): ReactNode {
   return (
-    <Text
+    <ThemedText
+      variant="caption"
+      tone="secondary"
       selectable
       numberOfLines={maxLines}
-      style={{ fontFamily: MONO_FONT }}
-      className="text-text2 text-[12px]"
-    >
+      style={{ fontFamily: MONO_FONT }}>
       {value}
-    </Text>
+    </ThemedText>
   );
 }

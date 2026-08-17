@@ -19,6 +19,9 @@ public protocol HybridSecretsVaultSpec_protocol: HybridObject {
   func unwrap(wrapped: WrappedSecret) throws -> Promise<ArrayBuffer>
   func deleteKey(keyAlias: String) throws -> Promise<Void>
   func readRawKeychainGenericPassword(service: String, account: String) throws -> Promise<ArrayBuffer>
+  func setSynchronizableItem(alias: String, value: String) throws -> Promise<Void>
+  func getSynchronizableItem(alias: String) throws -> Promise<String>
+  func deleteSynchronizableItem(alias: String) throws -> Promise<Void>
 }
 
 public extension HybridSecretsVaultSpec_protocol {

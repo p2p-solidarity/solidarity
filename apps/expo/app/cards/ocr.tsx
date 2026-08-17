@@ -23,6 +23,7 @@
  */
 import * as ImagePicker from 'expo-image-picker';
 import { router, useLocalSearchParams } from 'expo-router';
+import { safeBack } from '@/navigation/safeBack';
 import { useCallback, useState } from 'react';
 import { Image, Linking, Pressable, ScrollView, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -189,7 +190,7 @@ export default function OcrScannerScreen() {
       <Header
         title="Scan Business Card"
         onCancel={() => {
-          router.back();
+          safeBack();
         }}
         trailing={
           extraction.kind === 'ready' ? (

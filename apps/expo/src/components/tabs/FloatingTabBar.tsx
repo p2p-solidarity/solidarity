@@ -9,15 +9,8 @@
  *   • active foreground = text1, inactive = text3
  *   • soft impact haptic on switch (skipped when re-tapping current tab)
  *
- * To wire: import in `apps/expo/app/(tabs)/_layout.tsx` and pass to Tabs:
- *
- *   import type { BottomTabBarProps } from '@react-navigation/bottom-tabs';
- *   import { FloatingTabBar } from '@/components/tabs/FloatingTabBar';
- *   …
- *   <Tabs tabBar={(p: BottomTabBarProps) => <FloatingTabBar {...p} />}>
- *
- * Not wired here — _layout currently uses the default Tabs bar so
- * dropping in this component is a single follow-up commit.
+ * The v2 tab order and fallback presentation come from `primaryTabs` so the
+ * custom bar cannot drift from the Expo Router layout.
  */
 import { type ReactNode, useEffect } from 'react';
 import { Pressable, Text, View } from 'react-native';
@@ -34,6 +27,7 @@ import { SfIcon } from '@/components/icons/SfIcon';
 import { useThemeColors } from '@/constants/useThemeColors';
 import { haptic } from '@/feedback/haptics';
 import { SPRING } from '@/feedback/motion';
+import { primaryTabForRoute, type PrimaryTabIcon } from '@/navigation/primaryTabs';
 
 interface TabRoute {
   readonly key: string;
@@ -64,18 +58,6 @@ export interface FloatingTabBarProps {
   readonly descriptors: TabDescriptors;
   readonly navigation: TabNavigationLike;
 }
-
-const TAB_ICONS: Readonly<Record<string, 'person.2' | 'dot.radiowaves.left.and.right' | 'person.crop.circle'>> = {
-  'people/index': 'person.2',
-  'share/index': 'dot.radiowaves.left.and.right',
-  'me/index': 'person.crop.circle',
-};
-
-const TAB_LABELS: Readonly<Record<string, string>> = {
-  'people/index': 'People',
-  'share/index': 'Share',
-  'me/index': 'Me',
-};
 
 export function FloatingTabBar({
   state,
@@ -114,11 +96,12 @@ export function FloatingTabBar({
       >
         {state.routes.map((route, index) => {
           const isSelected = state.index === index;
+          const tab = primaryTabForRoute(route.name);
           const label =
             descriptors[route.key]?.options.title ??
-            TAB_LABELS[route.name] ??
+            tab?.fallbackLabel ??
             route.name;
-          const icon = TAB_ICONS[route.name];
+          const icon = tab?.icon;
 
           const onPress = (): void => {
             if (isSelected) return;
@@ -152,7 +135,7 @@ export function FloatingTabBar({
 
 interface FlatTabButtonProps {
   readonly label: string;
-  readonly icon?: 'person.2' | 'dot.radiowaves.left.and.right' | 'person.crop.circle';
+  readonly icon?: PrimaryTabIcon;
   readonly isSelected: boolean;
   readonly onPress: () => void;
   readonly activeColor: string;

@@ -23,7 +23,7 @@
 import * as Clipboard from 'expo-clipboard';
 import { router } from 'expo-router';
 import { useEffect, useState } from 'react';
-import { Pressable, ScrollView, Text, View } from 'react-native';
+import { ScrollView, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import {
@@ -33,15 +33,13 @@ import {
   shortDid,
   type RippleButtonState,
 } from '@/components/id';
+import { PressableScale } from '@/components/common/PressableScale';
 import { SfIcon } from '@/components/icons/SfIcon';
+import { ThemedSurface, ThemedText } from '@/components/themed';
 import { Colors } from '@/constants/Colors';
 import { haptic } from '@/feedback/haptics';
 import { pushToast } from '@/feedback/toast';
-import {
-  useGroupManifest,
-  useGroupStore,
-  type GroupManifestEntry,
-} from '@/groups/store';
+import { useGroupManifest, useGroupStore, type GroupManifestEntry } from '@/groups/store';
 import { useTranslation } from '@/i18n';
 import { usePreferences } from '@/settings/preferences';
 import { useIdentitySnapshot, useZkIdentity } from '@/zk';
@@ -79,12 +77,16 @@ export default function IDViewScreen(): React.JSX.Element {
       // Mirror Swift createIdentity() — real call into the Nitro module.
       setIsWorkingLocal(true);
       void createIdentity()
-        .then(() => { haptic('success'); })
+        .then(() => {
+          haptic('success');
+        })
         .catch((error: unknown) => {
           const message = error instanceof Error ? error.message : String(error);
           pushToast(`${t('idView.identityCreationFailed')}: ${message}`, 'warning');
         })
-        .finally(() => { setIsWorkingLocal(false); });
+        .finally(() => {
+          setIsWorkingLocal(false);
+        });
     } else {
       // TODO(android): IdentityCoordinator.refreshIdentity() — full refresh
       // sweep (DID metadata, group root pulls) lands in a follow-up iteration;
@@ -128,10 +130,7 @@ export default function IDViewScreen(): React.JSX.Element {
     <View className="flex-1 bg-pageBg" style={{ paddingTop: insets.top }}>
       <NavBar onZk={onZkSettings} onOidc={onOidc} onRefresh={onRefresh} t={t} />
 
-      <ScrollView
-        className="flex-1"
-        contentContainerStyle={{ paddingBottom: 40 }}
-      >
+      <ScrollView className="flex-1" contentContainerStyle={{ paddingBottom: 40 }}>
         <View>
           {/* 1. The Mask */}
           <View style={{ paddingTop: 20, paddingBottom: 40 }}>
@@ -139,7 +138,9 @@ export default function IDViewScreen(): React.JSX.Element {
               did={did}
               isDidKeyActive={isDidKeyActive}
               onSwitch={onSwitchDid}
-              onCopyDid={() => { void onCopyDid(); }}
+              onCopyDid={() => {
+                void onCopyDid();
+              }}
               t={t}
             />
           </View>
@@ -161,7 +162,9 @@ export default function IDViewScreen(): React.JSX.Element {
           {developerMode ? (
             <BadgeSection
               groups={groups}
-              onAdd={() => { router.push('/groups/new'); }}
+              onAdd={() => {
+                router.push('/groups/new');
+              }}
               onSelectGroup={(g) => {
                 router.push({ pathname: '/groups/[id]', params: { id: g.id } });
               }}
@@ -186,11 +189,8 @@ function NavBar({
   readonly t: (key: string) => string;
 }): React.JSX.Element {
   return (
-    <View
-      className="flex-row items-center justify-between px-4"
-      style={{ height: 44 }}
-    >
-      <Pressable
+    <View className="flex-row items-center justify-between px-4" style={{ height: 44 }}>
+      <PressableScale
         onPress={onZk}
         accessibilityRole="button"
         accessibilityLabel={t('idView.zkSettings')}
@@ -199,36 +199,29 @@ function NavBar({
           height: 44,
           alignItems: 'flex-start',
           justifyContent: 'center',
-        }}
-        className="active:opacity-60"
-      >
+        }}>
         <SfIcon name="gearshape" size={18} color={Colors.text1} />
-      </Pressable>
+      </PressableScale>
 
-      <Text className="text-text1 text-[17px] font-semibold">{t('idView.title')}</Text>
+      <ThemedText variant="titleMedium">{t('idView.title')}</ThemedText>
 
-      <View
-        className="flex-row items-center"
-        style={{ gap: 12, height: 44 }}
-      >
-        <Pressable
+      <View className="flex-row items-center" style={{ gap: 12, height: 44 }}>
+        <PressableScale
           onPress={onOidc}
           accessibilityRole="button"
           accessibilityLabel={t('idView.scan')}
           hitSlop={8}
-          className="active:opacity-60"
-        >
+          style={{ width: 44, height: 44, alignItems: 'center', justifyContent: 'center' }}>
           <SfIcon name="qrcode" size={18} color={Colors.text1} />
-        </Pressable>
-        <Pressable
+        </PressableScale>
+        <PressableScale
           onPress={onRefresh}
           accessibilityRole="button"
           accessibilityLabel={t('idView.refresh')}
           hitSlop={8}
-          className="active:opacity-60"
-        >
+          style={{ width: 44, height: 44, alignItems: 'center', justifyContent: 'center' }}>
           <SfIcon name="arrow.clockwise" size={18} color={Colors.text1} />
-        </Pressable>
+        </PressableScale>
       </View>
     </View>
   );
@@ -249,53 +242,29 @@ function MaskSection({
 }): React.JSX.Element {
   return (
     <View style={{ alignItems: 'center', gap: 12 }}>
-      <View
-        style={{
-          flexDirection: 'row',
-          backgroundColor: Colors.cardBg,
-          borderRadius: 30,
-          padding: 4,
-          shadowColor: '#000',
-          shadowOpacity: 0.05,
-          shadowRadius: 5,
-          shadowOffset: { width: 0, height: 2 },
-          borderWidth: 1,
-          borderColor: Colors.divider,
-        }}
-      >
+      <ThemedSurface variant="card" className="flex-row rounded-none p-1">
         <DidCapsule
           title={t('idView.anonymous')}
           subtitle="did:key"
           isActive={isDidKeyActive}
           onPress={onSwitch}
         />
-      </View>
+      </ThemedSurface>
 
       {did ? (
-        <Pressable
+        <PressableScale
           onPress={onCopyDid}
           accessibilityRole="button"
-          accessibilityLabel={`${t('idView.copyDid')} ${did}`}
-          style={{
-            flexDirection: 'row',
-            alignItems: 'center',
-            gap: 6,
-            paddingHorizontal: 10,
-            paddingVertical: 4,
-            borderRadius: 999,
-            backgroundColor: Colors.cardBg,
-            borderWidth: 1,
-            borderColor: Colors.divider,
-          }}
-          className="active:opacity-60"
-        >
-          <Text
-            style={{ fontFamily: 'Menlo', color: Colors.text2, fontSize: 11 }}
-          >
-            {shortDid(did)}
-          </Text>
-          <SfIcon name="doc.on.doc" size={10} color={`${Colors.text2}B3`} />
-        </Pressable>
+          accessibilityLabel={`${t('idView.copyDid')} ${did}`}>
+          <ThemedSurface
+            variant="outlined"
+            className="flex-row items-center gap-1.5 rounded-none px-2.5 py-1">
+            <ThemedText variant="caption" tone="secondary" style={{ fontFamily: 'Menlo' }}>
+              {shortDid(did)}
+            </ThemedText>
+            <SfIcon name="doc.on.doc" size={10} color={Colors.text2} />
+          </ThemedSurface>
+        </PressableScale>
       ) : null}
     </View>
   );
@@ -319,33 +288,25 @@ function BadgeSection({
           flexDirection: 'row',
           alignItems: 'center',
           justifyContent: 'space-between',
-        }}
-      >
-        <Text
-          className="text-text2 text-[17px] font-semibold"
-          style={{ paddingLeft: 24 }}
-        >
+        }}>
+        <ThemedText variant="titleMedium" tone="secondary" style={{ paddingLeft: 24 }}>
           {t('idView.groups')}
-        </Text>
-        <Pressable
+        </ThemedText>
+        <PressableScale
           onPress={onAdd}
           accessibilityRole="button"
           accessibilityLabel={t('idView.createGroup')}
           hitSlop={8}
-          style={{ paddingRight: 24 }}
-          className="active:opacity-60"
-        >
-          <SfIcon
-            name="plus.circle.fill"
-            size={22}
-            color={Colors.accentRose}
-          />
-        </Pressable>
+          style={{ paddingRight: 24 }}>
+          <SfIcon name="plus.circle.fill" size={22} color={Colors.accentRose} />
+        </PressableScale>
       </View>
 
       {groups.length === 0 ? (
         <View style={{ paddingVertical: 20, alignItems: 'center' }}>
-          <Text className="text-text2 text-[15px]">{t('idView.noGroups')}</Text>
+          <ThemedText variant="bodyMedium" tone="secondary">
+            {t('idView.noGroups')}
+          </ThemedText>
         </View>
       ) : (
         <View style={{ paddingHorizontal: 20, gap: 12 }}>
@@ -357,7 +318,9 @@ function BadgeSection({
               // `isSynced` is intentionally not in the manifest — the
               // CloudKit pill only renders after `hydrate()` warms the full
               // record (which happens for the detail screen anyway).
-              onPress={() => { onSelectGroup(g); }}
+              onPress={() => {
+                onSelectGroup(g);
+              }}
             />
           ))}
         </View>

@@ -1,5 +1,9 @@
 import type { TrustLevel } from '@/credentials/store';
 import type { ProvableClaimEntity } from '@/identity/entities';
+import {
+  isPublicDisclosureClaim,
+  type PublicDisclosureClaim,
+} from '@solidarity/shared';
 
 export const PASSPORT_SHOW_CLAIM_TYPES = [
   'age_over_18',
@@ -7,6 +11,10 @@ export const PASSPORT_SHOW_CLAIM_TYPES = [
 ] as const;
 
 export type PassportShowClaimType = (typeof PASSPORT_SHOW_CLAIM_TYPES)[number];
+
+export type PassportPublicDisclosureClaimEntity = ProvableClaimEntity & {
+  readonly claimType: PublicDisclosureClaim;
+};
 
 const PASSPORT_SHOW_CLAIM_TYPE_SET = new Set<string>(PASSPORT_SHOW_CLAIM_TYPES);
 
@@ -20,6 +28,43 @@ export function filterPassportShowPresentationClaims(
   claims: readonly ProvableClaimEntity[]
 ): readonly ProvableClaimEntity[] {
   return claims.filter((claim) => isPassportShowClaimType(claim.claimType));
+}
+
+/**
+ * Claims the Present surface can safely route into the existing credential
+ * presentation flow. Orphaned/non-presentable claims are excluded. A
+ * credential using the fresh passport-show circuit is further limited to the
+ * claim types that circuit can actually disclose.
+ */
+export function filterAvailablePassportPresentationClaims(
+  claims: readonly ProvableClaimEntity[],
+  availableCredentialIds: ReadonlySet<string>,
+  passportShowCredentialIds: ReadonlySet<string>,
+): readonly ProvableClaimEntity[] {
+  return claims.filter(
+    (claim) =>
+      claim.source === 'Passport' &&
+      claim.isPresentable &&
+      availableCredentialIds.has(claim.identityCardId) &&
+      (!passportShowCredentialIds.has(claim.identityCardId) ||
+        isPassportShowClaimType(claim.claimType)),
+  );
+}
+
+/**
+ * Presence-only public candidates. This deliberately inspects claim metadata
+ * only: never `payload` (which can contain passport-derived details), and
+ * never the source credential's raw SD-JWT.
+ */
+export function filterPassportPublicDisclosureClaims(
+  claims: readonly ProvableClaimEntity[]
+): readonly PassportPublicDisclosureClaimEntity[] {
+  return claims.filter(
+    (claim): claim is PassportPublicDisclosureClaimEntity =>
+      claim.source === 'Passport' &&
+      claim.isPresentable &&
+      isPublicDisclosureClaim(claim.claimType)
+  );
 }
 
 export function selectPassportShowPresentationClaims(

@@ -23,6 +23,7 @@
  * iteration alongside the contact-graph sync.
  */
 import { router } from 'expo-router';
+import { safeBack } from '@/navigation/safeBack';
 import { useEffect, useState } from 'react';
 import { ScrollView, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -38,7 +39,6 @@ import {
 import { useCredentialStore } from '@/credentials/store';
 import { appAlert, showError } from '@/feedback/appAlert';
 import { confirmDialog } from '@/feedback/confirmDialog';
-import { pushToast } from '@/feedback/toast';
 import { useTranslation } from '@/i18n';
 import {
   ensureSigningKey,
@@ -100,27 +100,9 @@ export default function DataSyncSettings() {
     }
   };
 
-  const onExportGraph = async () => {
-    try {
-      if (policy.exportGraph) {
-        const ok = await requireBiometric('export');
-        if (!ok) return;
-      }
-      // TODO(android): wire SocialGraphExportService analogue and
-      // expo-sharing.shareAsync(uri) once the JSON exporter ships.
-      pushToast(t('dataSync.exportGraph.todo'), 'info');
-    } catch (err) {
-      showError({
-        context: 'Data & Sync › Export Graph',
-        summary: t('dataSync.exportGraph.failed'),
-        error: err,
-      });
-    }
-  };
-
   return (
     <View className="flex-1 bg-pageBg" style={{ paddingTop: insets.top }}>
-      <SettingsBackToolbar onPress={() => { router.back(); }} />
+      <SettingsBackToolbar onPress={() => { safeBack('/settings'); }} />
       <SettingsScreenTitle title={t('dataSync.title')} />
 
       <ScrollView
@@ -154,21 +136,6 @@ export default function DataSyncSettings() {
               />
             </SettingsBlockSection>
           ) : null}
-
-          {/* Import / Export */}
-          <SettingsBlockSection title={t('dataSync.section.importExport')}>
-            <SettingsBlockRow
-              icon="square.and.arrow.down"
-              title={t('dataSync.importVc')}
-              onPress={() => { router.push('/settings/vc'); }}
-            />
-            <SettingsBlockRow
-              icon="square.and.arrow.up"
-              title={t('dataSync.exportGraph')}
-              showsChevron={false}
-              onPress={() => { void onExportGraph(); }}
-            />
-          </SettingsBlockSection>
         </View>
       </ScrollView>
     </View>

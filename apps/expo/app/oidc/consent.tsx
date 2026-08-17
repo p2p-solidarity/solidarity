@@ -7,17 +7,18 @@
  * via `submitAuthorizationResponse`. Errors are reported by toast and the
  * screen stays open so the user can retry.
  */
-import { router, useLocalSearchParams } from 'expo-router';
+import { Redirect, useLocalSearchParams } from 'expo-router';
+import { safeBack } from '@/navigation/safeBack';
 import { useMemo, useState } from 'react';
 import { Linking, ScrollView, View } from 'react-native';
 
 import { ThemedButton, ThemedSurface, ThemedText } from '@/components/themed';
 import { pushToast } from '@/feedback/toast';
-import { useTranslation } from '@/i18n';
 import { useActiveDid } from '@/identity';
 import { parseOidcRequest } from '@/oidc/parseAuthRequest';
 import { buildVpToken } from '@/oidc/presenter';
 import { submitAuthorizationResponse } from '@/oidc/submitResponse';
+import { usePreferences } from '@/settings/preferences';
 import { riskLevel, type OIDCScope } from '@solidarity/shared';
 
 const RISK_BADGE: Readonly<Record<'low' | 'medium' | 'high', string>> = {
@@ -30,7 +31,14 @@ function urlFromQuery(q: string): string {
   return `openid4vp://?${q}`;
 }
 
-export default function OidcConsent() {
+export default function OidcConsentRoute() {
+  const developerMode = usePreferences((state) => state.developerMode);
+  if (!developerMode) return <Redirect href="/settings/advanced" />;
+
+  return <OidcConsent />;
+}
+
+function OidcConsent() {
   const { q } = useLocalSearchParams<{ q: string }>();
   const activeDid = useActiveDid();
   const [submitting, setSubmitting] = useState(false);
@@ -48,7 +56,7 @@ export default function OidcConsent() {
       <View className="flex-1 bg-pageBg items-center justify-center p-6">
         <ThemedText tone="secondary">Invalid OIDC request.</ThemedText>
         <View className="mt-3">
-          <ThemedButton variant="secondary" label="Back" onPress={() => { router.back(); }} />
+          <ThemedButton variant="secondary" label="Back" onPress={() => { safeBack(); }} />
         </View>
       </View>
     );
@@ -92,11 +100,11 @@ export default function OidcConsent() {
         // verifier-side post-redirect is optional; ignore opener errors
       }
     }
-    router.back();
+    safeBack();
   };
   const onDeny = () => {
     pushToast('Declined', 'warning');
-    router.back();
+    safeBack();
   };
 
   return (

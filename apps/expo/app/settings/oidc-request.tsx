@@ -17,7 +17,8 @@
  */
 import * as Clipboard from 'expo-clipboard';
 import { randomUUID } from 'expo-crypto';
-import { router } from 'expo-router';
+import { Redirect } from 'expo-router';
+import { safeBack } from '@/navigation/safeBack';
 import { useState } from 'react';
 import { Pressable, ScrollView, Text, View } from 'react-native';
 import QRCode from 'react-native-qrcode-svg';
@@ -35,6 +36,7 @@ import { pushToast } from '@/feedback/toast';
 import { useTranslation } from '@/i18n';
 import { didKeyForCurrentIdentity } from '@/keychain/signingKey';
 import { buildOid4VpRequestUrl } from '@/oidc/requestQr';
+import { usePreferences } from '@/settings/preferences';
 
 const MONO_FONT = 'Menlo';
 
@@ -47,7 +49,14 @@ function randomNonce(): string {
   return randomUUID();
 }
 
-export default function OidcRequestSettings() {
+export default function OidcRequestSettingsRoute() {
+  const developerMode = usePreferences((state) => state.developerMode);
+  if (!developerMode) return <Redirect href="/settings/advanced" />;
+
+  return <OidcRequestSettings />;
+}
+
+function OidcRequestSettings() {
   const insets = useSafeAreaInsets();
   const { t } = useTranslation();
   const [request, setRequest] = useState<GeneratedRequest | null>(null);
@@ -83,7 +92,7 @@ export default function OidcRequestSettings() {
 
   return (
     <View className="flex-1 bg-pageBg" style={{ paddingTop: insets.top }}>
-      <SettingsBackToolbar onPress={() => { router.back(); }} />
+      <SettingsBackToolbar onPress={() => { safeBack('/settings'); }} />
       <SettingsScreenTitle title={t('oidcRequest.title')} />
 
       <ScrollView

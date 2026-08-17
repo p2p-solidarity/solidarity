@@ -17,6 +17,7 @@
  * `@/shoutouts/ui` so this file stays under 500 LOC.
  */
 import { router, useLocalSearchParams } from 'expo-router';
+import { safeBack } from '@/navigation/safeBack';
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { ScrollView, Share, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -120,7 +121,7 @@ export default function ShoutoutDetail(): ReactNode {
       if (!ok) return;
       await removeContact(contact.id);
       pushToast(`Deleted ${displayName}`, 'success');
-      router.back();
+      safeBack();
     })();
   };
 
@@ -130,7 +131,7 @@ export default function ShoutoutDetail(): ReactNode {
         <DecorativeBlobs />
       </View>
 
-      <SettingsBackToolbar title="Close" onPress={() => { router.back(); }} />
+      <SettingsBackToolbar title="Close" onPress={() => { safeBack(); }} />
       <SettingsScreenTitle title="Sakura Profile" />
 
       <ScrollView

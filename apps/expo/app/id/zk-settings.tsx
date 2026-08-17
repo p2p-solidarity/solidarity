@@ -17,11 +17,12 @@
  * the credentials store metadata (none today → "Not initialized" state).
  */
 import { useEffect, useState } from 'react';
-import { ScrollView, Text, View } from 'react-native';
+import { ScrollView, View } from 'react-native';
 
 import { IDNavBar } from '@/components/id';
 import { shortCommitment } from '@/components/id/shortDid';
 import { SfIcon } from '@/components/icons/SfIcon';
+import { ThemedSurface, ThemedText } from '@/components/themed';
 import {
   SettingsBlockDangerRow,
   SettingsBlockInfoRow,
@@ -34,11 +35,7 @@ import { confirmDialog } from '@/feedback/confirmDialog';
 import { pushToast } from '@/feedback/toast';
 import { useTranslation } from '@/i18n';
 import { requireBiometric } from '@/keychain/biometric';
-import {
-  useProofsSupported,
-  useZkIdentity,
-  useZkIdentityCommitment,
-} from '@/zk';
+import { useProofsSupported, useZkIdentity, useZkIdentityCommitment } from '@/zk';
 
 export default function ZkSettings(): React.JSX.Element {
   const commitment = useZkIdentityCommitment();
@@ -97,20 +94,13 @@ export default function ZkSettings(): React.JSX.Element {
     <View className="flex-1 bg-pageBg">
       <IDNavBar title="ZK Settings" leadingLabel="Settings" />
 
-      <ScrollView
-        className="flex-1"
-        contentContainerStyle={{ paddingVertical: 24 }}
-      >
+      <ScrollView className="flex-1" contentContainerStyle={{ paddingVertical: 24 }}>
         <View className="gap-6">
           <SettingsBlockSection title="Identity Status">
             {commitment ? (
               <CommitmentRow commitment={commitment} />
             ) : (
-              <SettingsBlockInfoRow
-                icon="circle.dashed"
-                title="Identity"
-                value="Not initialized"
-              />
+              <SettingsBlockInfoRow icon="circle.dashed" title="Identity" value="Not initialized" />
             )}
 
             <SettingsBlockInfoRow
@@ -128,21 +118,20 @@ export default function ZkSettings(): React.JSX.Element {
                 subtitle={isWorking ? 'Working…' : 'Generate a Semaphore commitment'}
                 showsChevron={false}
                 disabled={isWorking}
-                onPress={() => { void performCreate(); }}
+                onPress={() => {
+                  void performCreate();
+                }}
               />
             ) : null}
             <View
               style={{
                 opacity: commitment === null || isDeleting ? 0.5 : 1,
-              }}
-            >
+              }}>
               <SettingsBlockDangerRow
                 icon="trash"
                 title="Delete Identity"
                 subtitle={commitment === null ? 'No identity to delete' : undefined}
-                onPress={
-                  commitment === null || isDeleting ? undefined : confirmDelete
-                }
+                onPress={commitment === null || isDeleting ? undefined : confirmDelete}
               />
             </View>
           </SettingsBlockSection>
@@ -154,27 +143,27 @@ export default function ZkSettings(): React.JSX.Element {
 
 function CommitmentRow({ commitment }: { readonly commitment: string }): React.JSX.Element {
   return (
-    <View
-      className="bg-mutedSurface rounded-xl"
-      style={{ paddingHorizontal: 14, paddingVertical: 12 }}
-    >
+    <ThemedSurface
+      variant="inset"
+      className="rounded-none"
+      style={{ paddingHorizontal: 14, paddingVertical: 12 }}>
       <View className="flex-row items-center" style={{ gap: 12, marginBottom: 8 }}>
-        <View
-          style={{ width: 20, height: 20, alignItems: 'center', justifyContent: 'center' }}
-        >
+        <View style={{ width: 20, height: 20, alignItems: 'center', justifyContent: 'center' }}>
           <SfIcon name="shield.checkered" size={14} color={Colors.text1} />
         </View>
-        <Text className="text-text1 text-[15px] flex-1">Commitment</Text>
+        <ThemedText variant="bodyMedium" style={{ flex: 1 }}>
+          Commitment
+        </ThemedText>
       </View>
-      <Text
+      <ThemedText
+        variant="caption"
+        tone="secondary"
         selectable
         numberOfLines={2}
         ellipsizeMode="middle"
-        style={{ fontFamily: 'Menlo' }}
-        className="text-text2 text-[11px]"
-      >
+        style={{ fontFamily: 'Menlo' }}>
         {shortCommitment(commitment)}
-      </Text>
-    </View>
+      </ThemedText>
+    </ThemedSurface>
   );
 }

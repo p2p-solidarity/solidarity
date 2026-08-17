@@ -11,8 +11,7 @@
  *
  * This module is pure logic over the wire layer + store. The
  * transport itself (BLE L2CAP / WebRTC DataChannel) lives in
- * src/dag/webrtc.ts and the matching/proximity glue; this file is the
- * portable protocol brain.
+ * src/dag/webrtc.ts; this file is the portable protocol brain.
  *
  * Note on parent-walk: a single HEADS round can only ask for the
  * terminal ids the peer advertised. To reach common ancestors the

@@ -21,6 +21,12 @@
 import * as FileSystem from 'expo-file-system/legacy';
 
 import { bytesToHex, sha256Bytes, utf8ToBytes } from '@solidarity/shared';
+import {
+  canCommitLocalData,
+  captureLocalDataEpoch,
+  trackLocalDataOperation,
+  type LocalDataEpoch,
+} from '@/settings/localDataWipeBarrier';
 
 const IMAGE_CACHE_DIR = `${FileSystem.documentDirectory ?? ''}images/`;
 
@@ -36,46 +42,70 @@ function cacheKey(source: ImageSource): string {
   return bytesToHex(sha256Bytes(utf8ToBytes(seed)));
 }
 
-async function ensureDir(): Promise<void> {
+async function ensureDir(writeEpoch: LocalDataEpoch): Promise<boolean> {
+  if (!canCommitLocalData(writeEpoch)) return false;
   const info = await FileSystem.getInfoAsync(IMAGE_CACHE_DIR);
+  if (!canCommitLocalData(writeEpoch)) return false;
   if (!info.exists) {
     await FileSystem.makeDirectoryAsync(IMAGE_CACHE_DIR, { intermediates: true });
+    if (!canCommitLocalData(writeEpoch)) return false;
   }
+  return true;
 }
 
 function fileForKey(key: string): string {
   return `${IMAGE_CACHE_DIR}${key}`;
 }
 
-async function writeBase64(key: string, base64: string): Promise<string> {
-  await ensureDir();
+async function writeBase64(
+  key: string,
+  base64: string,
+  writeEpoch: LocalDataEpoch,
+): Promise<string | undefined> {
+  if (!(await ensureDir(writeEpoch))) return undefined;
   const path = fileForKey(key);
   await FileSystem.writeAsStringAsync(path, base64, {
     encoding: FileSystem.EncodingType.Base64,
   });
-  return path;
+  return canCommitLocalData(writeEpoch) ? path : undefined;
 }
 
-async function downloadToCache(uri: string, key: string): Promise<string | undefined> {
-  await ensureDir();
+async function downloadToCache(
+  uri: string,
+  key: string,
+  writeEpoch: LocalDataEpoch,
+): Promise<string | undefined> {
+  if (!(await ensureDir(writeEpoch))) return undefined;
   const path = fileForKey(key);
   const existing = await FileSystem.getInfoAsync(path);
+  if (!canCommitLocalData(writeEpoch)) return undefined;
   if (existing.exists) return path;
   try {
     const result = await FileSystem.downloadAsync(uri, path);
-    return result.uri;
+    return canCommitLocalData(writeEpoch) ? result.uri : undefined;
   } catch {
     return undefined;
   }
 }
 
-export async function resolveImage(source: ImageSource): Promise<string | undefined> {
+export function resolveImage(source: ImageSource): Promise<string | undefined> {
+  return trackLocalDataOperation(
+    resolveImageAtEpoch(source, captureLocalDataEpoch()),
+  );
+}
+
+async function resolveImageAtEpoch(
+  source: ImageSource,
+  writeEpoch: LocalDataEpoch,
+): Promise<string | undefined> {
+  if (!canCommitLocalData(writeEpoch)) return undefined;
   const key = cacheKey(source);
   const cached = memoryCache.get(key);
   if (cached) return cached;
 
   if (source.base64) {
-    const path = await writeBase64(key, source.base64);
+    const path = await writeBase64(key, source.base64, writeEpoch);
+    if (!path || !canCommitLocalData(writeEpoch)) return undefined;
     memoryCache.set(key, path);
     return path;
   }
@@ -87,7 +117,8 @@ export async function resolveImage(source: ImageSource): Promise<string | undefi
     const commaIdx = uri.indexOf(',');
     const base64 = commaIdx >= 0 ? uri.slice(commaIdx + 1) : '';
     if (!base64) return undefined;
-    const path = await writeBase64(key, base64);
+    const path = await writeBase64(key, base64, writeEpoch);
+    if (!path || !canCommitLocalData(writeEpoch)) return undefined;
     memoryCache.set(key, path);
     return path;
   }
@@ -98,8 +129,8 @@ export async function resolveImage(source: ImageSource): Promise<string | undefi
   }
 
   if (uri.startsWith('http://') || uri.startsWith('https://')) {
-    const downloaded = await downloadToCache(uri, key);
-    if (downloaded) memoryCache.set(key, downloaded);
+    const downloaded = await downloadToCache(uri, key, writeEpoch);
+    if (downloaded && canCommitLocalData(writeEpoch)) memoryCache.set(key, downloaded);
     return downloaded;
   }
 
@@ -108,8 +139,13 @@ export async function resolveImage(source: ImageSource): Promise<string | undefi
   return uri;
 }
 
-export function clearCache(): void {
+/** Drop live image URIs without starting any filesystem work. */
+export function clearImageMemoryCache(): void {
   memoryCache.clear();
+}
+
+export function clearCache(): void {
+  clearImageMemoryCache();
   FileSystem.deleteAsync(IMAGE_CACHE_DIR, { idempotent: true }).catch(() => {
     // Disk clear is best-effort — a leftover dir just gets re-used next launch.
   });

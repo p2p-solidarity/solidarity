@@ -2,6 +2,7 @@ import { describe, expect, it } from 'bun:test';
 
 import {
   credentialTrustDisplayFor,
+  credentialTrustSimpleI18nKeyForLevel,
   passportTrustLevelFromProof,
 } from '../../src/credentials/trustDisplay';
 
@@ -113,5 +114,16 @@ describe('credential trust display mapping', () => {
       tone: 'blue',
       label: 'Level 2 - Verified',
     });
+  });
+
+  it('maps every tier to a simple surface label key, keeping fallback distinct', () => {
+    expect(credentialTrustSimpleI18nKeyForLevel('L3+')).toBe('credentialTrust.simpleL3Plus');
+    expect(credentialTrustSimpleI18nKeyForLevel('L3')).toBe('credentialTrust.simpleL3');
+    expect(credentialTrustSimpleI18nKeyForLevel('L2')).toBe('credentialTrust.simpleL2');
+    expect(credentialTrustSimpleI18nKeyForLevel('L1')).toBe('credentialTrust.simpleL1');
+    // The technical tier labels stay reachable for the detail screen.
+    expect(
+      credentialTrustDisplayFor({ type: 'passport', trustLevel: 'L3+', metadataTags: [] }).label
+    ).toBe('Level 3+ - Passport ZK + AA');
   });
 });

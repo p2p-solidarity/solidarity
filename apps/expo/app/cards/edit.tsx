@@ -9,7 +9,8 @@
  * Header: chevron.left + "Cancel" leading, centred title that flips between
  * "Edit Identity Card" and "Create Identity Card" — verbatim Swift copy.
  */
-import { router, useLocalSearchParams } from 'expo-router';
+import { useLocalSearchParams } from 'expo-router';
+import { safeBack } from '@/navigation/safeBack';
 import { useCallback, useEffect, useState } from 'react';
 import {
   Pressable,
@@ -80,7 +81,7 @@ export default function EditCardScreen() {
       }
       haptic('success');
       pushToast(isEditing ? 'Card saved' : 'Card created', 'success');
-      router.back();
+      safeBack();
     },
     [animal, groupContext, isEditing, upsert, t]
   );
@@ -90,7 +91,7 @@ export default function EditCardScreen() {
     await remove(targetCard.id);
     haptic('warning');
     pushToast('Card deleted', 'info');
-    router.back();
+    safeBack();
   }, [remove, targetCard]);
 
   return (
@@ -98,7 +99,7 @@ export default function EditCardScreen() {
       <Header
         title={isEditing ? 'Edit Identity Card' : 'Create Identity Card'}
         onCancel={() => {
-          router.back();
+          safeBack();
         }}
       />
 

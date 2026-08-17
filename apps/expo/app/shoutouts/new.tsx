@@ -13,7 +13,8 @@
  * (sakura client) can take over once signing-key + sealed routes
  * populate. Until then, the message is stored as an outgoing item.
  */
-import { router, useLocalSearchParams } from 'expo-router';
+import { useLocalSearchParams } from 'expo-router';
+import { safeBack } from '@/navigation/safeBack';
 import { useState, type ReactNode } from 'react';
 import {
   Pressable,
@@ -85,7 +86,7 @@ export default function ShoutoutCompose(): ReactNode {
         `Payload encrypted and enqueued for ${recipient.businessCard.name}.`,
         'success'
       );
-      router.back();
+      safeBack();
     } catch (err) {
       haptic('error');
       pushToast(`Protocol failure: ${(err as Error).message}`, 'error');
@@ -101,7 +102,7 @@ export default function ShoutoutCompose(): ReactNode {
 
   return (
     <View className="flex-1 bg-pageBg" style={{ paddingTop: insets.top }}>
-      <SettingsBackToolbar title="Close" onPress={() => { router.back(); }} />
+      <SettingsBackToolbar title="Close" onPress={() => { safeBack(); }} />
       <SettingsScreenTitle title="P2P Message" />
 
       <ScrollView

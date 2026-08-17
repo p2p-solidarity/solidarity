@@ -25,10 +25,8 @@ export function passportShowVerifierResult(
     return {
       valid: false,
       title: t('passportShow.resultInvalid'),
-      reason: result.reason,
-      details: [
-        'The show proof, vk pin, freshness nonce, or public inputs did not verify.',
-      ],
+      reason: t('passportShow.resultInvalidReason'),
+      details: [t('passportShow.resultInvalidBody')],
     };
   }
 
@@ -52,7 +50,10 @@ export function passportShowVerifierResult(
       result.freshnessMode === 'challenge'
         ? t('passportShow.resultValid')
         : t('passportShow.resultValidTimeBucket'),
-    reason: `openac_show · ${result.freshnessMode}`,
+    reason:
+      result.freshnessMode === 'challenge'
+        ? t('passportShow.resultCheckedForScan')
+        : t('passportShow.resultCheckedForWindow'),
     details,
   };
 }

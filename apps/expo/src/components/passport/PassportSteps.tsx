@@ -48,6 +48,7 @@ export function NfcStep({
   progressPercent,
   progressPhase,
   chip,
+  developerMode,
   onRead,
 }: {
   readonly busy: boolean;
@@ -68,27 +69,44 @@ export function NfcStep({
     | 'done'
     | 'error';
   readonly chip: PassportChipSnapshot | null;
+  readonly developerMode: boolean;
   readonly onRead: () => void;
 }) {
+  const { t } = useTranslation();
+  const status = chip
+    ? developerMode
+      ? 'Chip read successfully.'
+      : t('passportSetup.nfc.readComplete')
+    : busy
+      ? developerMode
+        ? 'Hold steady — reading chip…'
+        : t('passportSetup.nfc.reading')
+      : developerMode
+        ? 'Bring your passport close to the device to read NFC chip data.'
+        : t('passportSetup.nfc.ready');
   return (
     <View className="bg-mutedSurface gap-3 rounded-xl p-3.5">
       <NfcVisual busy={busy} success={chip !== null} />
-      <Text className="text-text2 px-6 text-center text-[15px]">
-        {chip
-          ? 'Chip read successfully.'
-          : busy
-          ? 'Hold steady — reading chip…'
-          : 'Bring your passport close to the device to read NFC chip data.'}
-      </Text>
+      <Text className="text-text2 px-6 text-center text-[15px]">{status}</Text>
       {busy ? (
         <View className="items-center gap-2">
           <NfcProgressBar percent={progressPercent} phase={progressPhase} />
-          <Text className="text-text3 text-[12px]">{progress}</Text>
+          <Text className="text-text3 text-[12px]">
+            {developerMode ? progress : t('passportSetup.nfc.reading')}
+          </Text>
         </View>
       ) : null}
-      {chip ? <ChipSnapshotCard chip={chip} /> : null}
+      {chip ? <ChipSnapshotCard chip={chip} developerMode={developerMode} /> : null}
       <ThemedButton
-        label={chip ? 'Chip Read ✓' : 'Read NFC Chip'}
+        label={
+          developerMode
+            ? chip
+              ? 'Chip Read ✓'
+              : 'Read NFC Chip'
+            : chip
+              ? t('passportSetup.nfc.complete')
+              : t('passportSetup.nfc.read')
+        }
         fullWidth
         disabled={busy || chip !== null}
         onPress={onRead}
@@ -278,7 +296,30 @@ const nfcStyles = StyleSheet.create({
   phoneSlot: { marginTop: 4 },
 });
 
-function ChipSnapshotCard({ chip }: { chip: PassportChipSnapshot }) {
+function ChipSnapshotCard({
+  chip,
+  developerMode,
+}: {
+  readonly chip: PassportChipSnapshot;
+  readonly developerMode: boolean;
+}) {
+  const { t } = useTranslation();
+  if (!developerMode) {
+    return (
+      <View className="rounded-xl p-3" style={{ backgroundColor: Colors.mutedSurface, gap: 4 }}>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+          <SfIcon name="checkmark.circle.fill" size={14} color={Colors.terminalGreen} />
+          <Text style={{ color: Colors.terminalGreen, fontSize: 12, fontWeight: '600' }}>
+            {t('passportSetup.nfc.readComplete')}
+          </Text>
+        </View>
+        <Text className="text-text3" style={{ fontSize: 12 }}>
+          {t('passportSetup.nfc.readyToContinue')}
+        </Text>
+      </View>
+    );
+  }
+
   return (
     <View className="rounded-xl p-3" style={{ backgroundColor: Colors.mutedSurface, gap: 8 }}>
       {chip.isSimulated ? (
@@ -354,12 +395,14 @@ export function ProofStep({
   progress,
   proof,
   disabled,
+  developerMode,
   onGenerate,
 }: {
   readonly busy: boolean;
   readonly progress: string;
   readonly proof: PassportProofResult | null;
   readonly disabled: boolean;
+  readonly developerMode: boolean;
   readonly onGenerate: () => void;
 }) {
   const { t } = useTranslation();
@@ -389,11 +432,12 @@ export function ProofStep({
         </View>
         <View className="items-center gap-2">
           <Text className="text-text1 text-center text-[16px] font-medium">
-            Create Privacy Proof
+            {developerMode ? 'Create Privacy Proof' : t('passportSetup.proof.title')}
           </Text>
           <Text className="text-text2 px-8 text-center text-[14px]" style={{ lineHeight: 22 }}>
-            Securely generate a proof from your passport to verify your identity — without sharing
-            raw data.
+            {developerMode
+              ? 'Securely generate a proof from your passport to verify your identity — without sharing raw data.'
+              : t('passportSetup.proof.subtitle')}
           </Text>
         </View>
       </View>
@@ -421,15 +465,17 @@ export function ProofStep({
         {busy ? (
           <View className="items-center gap-2">
             <ActivityIndicator color={Colors.terminalGreen} />
-            <Text className="text-text3 text-[12px]">{progress}</Text>
+            <Text className="text-text3 text-[12px]">
+              {developerMode ? progress : t('passportSetup.proof.preparing')}
+            </Text>
           </View>
         ) : null}
 
-        {proof ? <ProofResultCard proof={proof} /> : null}
+        {proof ? <ProofResultCard proof={proof} developerMode={developerMode} /> : null}
 
         <View className="px-4">
           <ThemedButton
-            label="Generate Proof"
+            label={developerMode ? 'Generate Proof' : t('passportSetup.proof.button')}
             fullWidth
             disabled={busy || disabled}
             onPress={onGenerate}
@@ -440,7 +486,46 @@ export function ProofStep({
   );
 }
 
-function ProofResultCard({ proof }: { proof: PassportProofResult }) {
+function ProofResultCard({
+  proof,
+  developerMode,
+}: {
+  readonly proof: PassportProofResult;
+  readonly developerMode: boolean;
+}) {
+  const { t } = useTranslation();
+  if (!developerMode) {
+    const unavailable = proof.generationFailed;
+    return (
+      <View
+        className="mx-4 rounded-xl p-3"
+        style={{ backgroundColor: Colors.mutedSurface, gap: 4 }}
+      >
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+          <SfIcon
+            name={unavailable ? 'exclamationmark.triangle.fill' : 'checkmark.seal.fill'}
+            size={14}
+            color={unavailable ? Colors.warning : Colors.terminalGreen}
+          />
+          <Text
+            style={{
+              color: unavailable ? Colors.warning : Colors.terminalGreen,
+              fontSize: 12,
+              fontWeight: '600',
+            }}
+          >
+            {unavailable ? t('passportSetup.proof.unavailable') : t('passportSetup.proof.ready')}
+          </Text>
+        </View>
+        <Text className="text-text3" style={{ fontSize: 12 }}>
+          {unavailable
+            ? t('passportSetup.proof.unavailableBody')
+            : t('passportSetup.proof.readyBody')}
+        </Text>
+      </View>
+    );
+  }
+
   const failed = proof.generationFailed;
   const storedTrustLevel = passportTrustLevelFromProof(proof.trustLevel);
   const trustDisplay = credentialTrustDisplayFor({
@@ -584,19 +669,33 @@ function DisclosureRow({
 export function PersistStep({
   proof,
   busy,
+  developerMode,
   onSave,
 }: {
   readonly proof: PassportProofResult | null;
   readonly busy: boolean;
+  readonly developerMode: boolean;
   readonly onSave: () => void;
 }) {
+  const { t } = useTranslation();
+  const fallback = proof?.generationFailed === true;
   return (
     <View className="bg-mutedSurface gap-3 rounded-xl p-3.5">
       <Text className="text-text2 text-center text-[15px]">
-        Credential is ready. Save it to your identity wallet.
+        {developerMode
+          ? 'Credential is ready. Save it to your identity wallet.'
+          : fallback
+            ? t('passportSetup.persist.fallback')
+            : t('passportSetup.persist.ready')}
       </Text>
       <ThemedButton
-        label="Save Passport Credential"
+        label={
+          developerMode
+            ? 'Save Passport Credential'
+            : fallback
+              ? t('passportSetup.persist.saveFallback')
+              : t('passportSetup.persist.save')
+        }
         fullWidth
         disabled={proof === null || busy}
         onPress={onSave}

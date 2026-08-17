@@ -20,3 +20,8 @@ export {
   type TextTone,
   type TextVariant,
 } from './ThemedText';
+export {
+  ThemedTextInput,
+  type ThemedTextInputProps,
+  type TextInputKind,
+} from './ThemedTextInput';

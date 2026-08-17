@@ -1,6 +1,6 @@
 {
   "name": "solidarity-monorepo",
-  "version": "1.3.1",
+  "version": "1.3.3",
   "private": true,
   "description": "Solidarity (AirMeishi) — SwiftUI legacy + Expo/RN target + Nitro modules. See docs/migration/00-MIGRATION_PLAN.md",
   "workspaces": [
@@ -15,9 +15,9 @@
     "format": "prettier --write \"**/*.{ts,tsx,js,jsx,json,md}\"",
     "format:check": "prettier --check \"**/*.{ts,tsx,js,jsx,json,md}\"",
     "typecheck": "cd apps/expo && bun run typecheck",
-    "test": "bun test",
-    "test:unit": "SKIP_INTEGRATION=1 bun test __tests__/unit",
-    "test:parity": "bun test __tests__/parity",
+    "test": "bun run test:unit && bun run test:parity",
+    "test:unit": "cd apps/expo && SKIP_INTEGRATION=1 bun test --preload ./test-setup.ts --max-concurrency=1 __tests__/unit",
+    "test:parity": "cd apps/expo && bun test --preload ./test-setup.ts --max-concurrency=1 __tests__/parity",
     "expo:ios": "cd apps/expo && bun run ios",
     "expo:android": "cd apps/expo && bun run android",
     "expo:start": "cd apps/expo && bun run start",
@@ -43,7 +43,11 @@
   },
   "dependencies": {
     "expo": "~56.0.4",
+    "hyperswarm": "^4.17.0",
     "react": "19.2.3",
     "react-native": "0.85.3"
+  },
+  "overrides": {
+    "lightningcss": "1.32.0"
   }
 }

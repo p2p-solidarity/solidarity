@@ -18,7 +18,13 @@ import {
 
 export interface ParsedOidcRequest {
   readonly request: OIDCAuthRequest;
-  readonly source: 'queryparams' | 'request_jwt';
+  /** `'pear'` — synthesised by `pear/presentBuilder.ts` (A5.3) for a
+   *  presentation request that arrived over an authenticated Pear channel,
+   *  not from an actual OIDC wire request. Kept distinct from
+   *  `'queryparams'`/`'request_jwt'` so nothing downstream can mistake a
+   *  Pear-originated request for one that was actually parsed off a URL or
+   *  a JWT-secured request object. */
+  readonly source: 'queryparams' | 'request_jwt' | 'pear';
 }
 
 /** Pull queryparams off a URL string and coerce into the Zod schema. */

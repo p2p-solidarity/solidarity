@@ -1,0 +1,220 @@
+{
+  "description": "Nostr badge bidirectional-binding conformance vectors for packages/shared/src/badges/nostr.ts's verifyNostrBinding (04-plan Phase A4 task A4.3). Direction 1 = profile.alsoKnownAs carries `nostr:npub1…`; Direction 2 = the user's kind-0 (metadata) event content has `alsoKnownAs: string[]` containing profile.did (see apps/expo/src/nostr/publish.ts's module doc for why this is a JSON content field, not a NIP-39 `i` tag). Each case's `kind0` field is exactly what a NostrKind0Fetcher implementation would resolve for that scenario — `null` means 'fetch could not complete' (network/relay unreachable), an object means 'fetch succeeded, here is the parsed content'. Both App and the future web viewer (05-plan V3) replay this exact file against their own IO-injected fetchKind0 wrapper; the single-direction-no-green-check rule (01-spec §7 / 03-spec §3) is the reason this file exists — every case's `expected.state` must never be 'verified' unless BOTH directions actually hold. `npub`/pubkeyHex reuse the exact reference vector apps/expo/__tests__/unit/nostrUserKey.test.ts's npubEncode suite and packages/shared/test/npub.test.ts already pin (REFERENCE_PUBKEY_HEX/REFERENCE_NPUB), so all three suites can never silently drift apart. `did`/`altDid` reuse the same did:key values already established by packages/shared/vectors/profile.json and didkey.json. Consumed by packages/shared/test/nostrBinding.vectors.test.ts.",
+  "referenceNpub": "npub10elfcs4fr0l0r8af98jlmgdh9c8tcxjvz9qkw038js35mp4dma8qzvjptg",
+  "referencePubkeyHex": "7e7e9c42a91bfef19fa929e5fda1b72e0ebc1a4c1141673e2794234d86addf4e",
+  "cases": [
+    {
+      "name": "both-directions-verified",
+      "reason": "profile claims the npub AND the fetched kind-0's content.alsoKnownAs contains profile.did — this is the only shape that may render a green check.",
+      "profile": {
+        "v": 1,
+        "did": "did:key:zDnaeVuZeVRqvscGkiEoR9PFFra2xZUMp97ZPuGFK1VLU7iYN",
+        "displayName": "Alice",
+        "avatar": null,
+        "bio": "",
+        "links": [],
+        "alsoKnownAs": ["nostr:npub10elfcs4fr0l0r8af98jlmgdh9c8tcxjvz9qkw038js35mp4dma8qzvjptg"],
+        "badges": [],
+        "supersededBy": null,
+        "updatedAt": "2026-07-03T00:00:00Z"
+      },
+      "kind0": {
+        "contentJson": {
+          "name": "alice",
+          "alsoKnownAs": ["did:key:zDnaeVuZeVRqvscGkiEoR9PFFra2xZUMp97ZPuGFK1VLU7iYN"]
+        },
+        "created_at": 1751500000
+      },
+      "expected": {
+        "state": "verified",
+        "npub": "npub10elfcs4fr0l0r8af98jlmgdh9c8tcxjvz9qkw038js35mp4dma8qzvjptg",
+        "direction1": true,
+        "direction2": true,
+        "kind0CreatedAt": 1751500000
+      }
+    },
+    {
+      "name": "profile-claims-npub-but-kind0-missing-did",
+      "reason": "profile claims the npub (Direction 1 holds) but the fetched kind-0 event's content has no alsoKnownAs entry for profile.did at all — a one-way claim actively caught mid-flight, not a network failure. Must be `declared`, never `verified`.",
+      "profile": {
+        "v": 1,
+        "did": "did:key:zDnaeVuZeVRqvscGkiEoR9PFFra2xZUMp97ZPuGFK1VLU7iYN",
+        "displayName": "Alice",
+        "avatar": null,
+        "bio": "",
+        "links": [],
+        "alsoKnownAs": ["nostr:npub10elfcs4fr0l0r8af98jlmgdh9c8tcxjvz9qkw038js35mp4dma8qzvjptg"],
+        "badges": [],
+        "supersededBy": null,
+        "updatedAt": "2026-07-03T00:00:00Z"
+      },
+      "kind0": {
+        "contentJson": { "name": "alice", "about": "no alsoKnownAs field at all" },
+        "created_at": 1751500000
+      },
+      "expected": {
+        "state": "declared",
+        "npub": "npub10elfcs4fr0l0r8af98jlmgdh9c8tcxjvz9qkw038js35mp4dma8qzvjptg",
+        "direction1": true,
+        "direction2": false,
+        "kind0CreatedAt": 1751500000
+      }
+    },
+    {
+      "name": "did-mismatch",
+      "reason": "kind-0 DOES have an alsoKnownAs array, but it names a DIFFERENT did:key than profile.did — same category as the missing-did case (Direction 2 does not hold), proves the check is exact-match, not merely field-presence.",
+      "profile": {
+        "v": 1,
+        "did": "did:key:zDnaeVuZeVRqvscGkiEoR9PFFra2xZUMp97ZPuGFK1VLU7iYN",
+        "displayName": "Alice",
+        "avatar": null,
+        "bio": "",
+        "links": [],
+        "alsoKnownAs": ["nostr:npub10elfcs4fr0l0r8af98jlmgdh9c8tcxjvz9qkw038js35mp4dma8qzvjptg"],
+        "badges": [],
+        "supersededBy": null,
+        "updatedAt": "2026-07-03T00:00:00Z"
+      },
+      "kind0": {
+        "contentJson": {
+          "name": "alice",
+          "alsoKnownAs": ["did:key:zDnaezFUgwEFbHpuc7b3NUj8xQpbkEm3439RYBuRKTNmRhxGG"]
+        },
+        "created_at": 1751500000
+      },
+      "expected": {
+        "state": "declared",
+        "npub": "npub10elfcs4fr0l0r8af98jlmgdh9c8tcxjvz9qkw038js35mp4dma8qzvjptg",
+        "direction1": true,
+        "direction2": false,
+        "kind0CreatedAt": 1751500000
+      }
+    },
+    {
+      "name": "kind0-content-not-an-object",
+      "reason": "the kind-0 fetch SUCCEEDS (this is NOT a network/relay failure — kind0CreatedAt is populated), but the resolved content JSON is a scalar (here, the string \"garbage\") rather than an object, so there is no alsoKnownAs field to read at all. Because the fetch itself completed, this is an affirmatively-observed non-reciprocation, not an unknown — must be `declared`, never `stale`.",
+      "profile": {
+        "v": 1,
+        "did": "did:key:zDnaeVuZeVRqvscGkiEoR9PFFra2xZUMp97ZPuGFK1VLU7iYN",
+        "displayName": "Alice",
+        "avatar": null,
+        "bio": "",
+        "links": [],
+        "alsoKnownAs": ["nostr:npub10elfcs4fr0l0r8af98jlmgdh9c8tcxjvz9qkw038js35mp4dma8qzvjptg"],
+        "badges": [],
+        "supersededBy": null,
+        "updatedAt": "2026-07-03T00:00:00Z"
+      },
+      "kind0": {
+        "contentJson": "garbage",
+        "created_at": 1751500000
+      },
+      "expected": {
+        "state": "declared",
+        "npub": "npub10elfcs4fr0l0r8af98jlmgdh9c8tcxjvz9qkw038js35mp4dma8qzvjptg",
+        "direction1": true,
+        "direction2": false,
+        "kind0CreatedAt": 1751500000
+      }
+    },
+    {
+      "name": "kind0-content-field-null",
+      "reason": "the kind-0 fetch SUCCEEDS (distinct from `kind0-fetch-null`, where the whole event resolution failed) but the event's own content field happens to be JSON `null` rather than an object or a missing field. Same honesty rule as the string case above: fetch completed, so this is `declared`, not `stale` — a fetched-but-empty content field is not a network failure.",
+      "profile": {
+        "v": 1,
+        "did": "did:key:zDnaeVuZeVRqvscGkiEoR9PFFra2xZUMp97ZPuGFK1VLU7iYN",
+        "displayName": "Alice",
+        "avatar": null,
+        "bio": "",
+        "links": [],
+        "alsoKnownAs": ["nostr:npub10elfcs4fr0l0r8af98jlmgdh9c8tcxjvz9qkw038js35mp4dma8qzvjptg"],
+        "badges": [],
+        "supersededBy": null,
+        "updatedAt": "2026-07-03T00:00:00Z"
+      },
+      "kind0": {
+        "contentJson": null,
+        "created_at": 1751500000
+      },
+      "expected": {
+        "state": "declared",
+        "npub": "npub10elfcs4fr0l0r8af98jlmgdh9c8tcxjvz9qkw038js35mp4dma8qzvjptg",
+        "direction1": true,
+        "direction2": false,
+        "kind0CreatedAt": 1751500000
+      }
+    },
+    {
+      "name": "kind0-fetch-null",
+      "reason": "profile claims the npub, but the kind-0 fetch could not complete at all (relay unreachable/timeout) — we genuinely do not know whether Direction 2 holds right now. Must be `stale`, distinct from the `declared` cases above where we DID see a kind-0 that doesn't reciprocate.",
+      "profile": {
+        "v": 1,
+        "did": "did:key:zDnaeVuZeVRqvscGkiEoR9PFFra2xZUMp97ZPuGFK1VLU7iYN",
+        "displayName": "Alice",
+        "avatar": null,
+        "bio": "",
+        "links": [],
+        "alsoKnownAs": ["nostr:npub10elfcs4fr0l0r8af98jlmgdh9c8tcxjvz9qkw038js35mp4dma8qzvjptg"],
+        "badges": [],
+        "supersededBy": null,
+        "updatedAt": "2026-07-03T00:00:00Z"
+      },
+      "kind0": null,
+      "expected": {
+        "state": "stale",
+        "npub": "npub10elfcs4fr0l0r8af98jlmgdh9c8tcxjvz9qkw038js35mp4dma8qzvjptg",
+        "direction1": true,
+        "direction2": null,
+        "kind0CreatedAt": null
+      }
+    },
+    {
+      "name": "no-npub-in-profile",
+      "reason": "profile.alsoKnownAs has no nostr:npub… entry at all — no Nostr binding was ever claimed, so this is not-a-badge rather than an unconfirmed one-way claim. `npub` is the authoritative 'is there even a claim' signal here: it is null, and callers MUST gate rendering on `npub !== null`, not on `state` alone. `state` is still populated (as `declared`, the closest of the four fixed enum values — see badges/nostr.ts's module doc) purely so the return type stays non-nullable; it is not meaningful on its own for this case.",
+      "profile": {
+        "v": 1,
+        "did": "did:key:zDnaeVuZeVRqvscGkiEoR9PFFra2xZUMp97ZPuGFK1VLU7iYN",
+        "displayName": "Alice",
+        "avatar": null,
+        "bio": "",
+        "links": [],
+        "alsoKnownAs": ["dns:example.com", "at://alice.bsky.social"],
+        "badges": [],
+        "supersededBy": null,
+        "updatedAt": "2026-07-03T00:00:00Z"
+      },
+      "kind0Unreachable": "fetchKind0 must never be called for this case — no pubkey to fetch",
+      "expected": {
+        "state": "declared",
+        "npub": null,
+        "direction1": false,
+        "direction2": null,
+        "kind0CreatedAt": null
+      }
+    },
+    {
+      "name": "malformed-npub-in-profile",
+      "reason": "profile.alsoKnownAs carries a nostr:npub1… entry, but it is not valid bech32 (corrupted checksum — last character flipped from 'g' to 'q' vs. the reference npub). Direction 1 cannot even be confirmed, so fetchKind0 is never called; honest result is `declared`, not `stale` (there is no possible 'was verified before' history for a claim that was never validly formed) and not a thrown error (never throws).",
+      "profile": {
+        "v": 1,
+        "did": "did:key:zDnaeVuZeVRqvscGkiEoR9PFFra2xZUMp97ZPuGFK1VLU7iYN",
+        "displayName": "Alice",
+        "avatar": null,
+        "bio": "",
+        "links": [],
+        "alsoKnownAs": ["nostr:npub10elfcs4fr0l0r8af98jlmgdh9c8tcxjvz9qkw038js35mp4dma8qzvjptq"],
+        "badges": [],
+        "supersededBy": null,
+        "updatedAt": "2026-07-03T00:00:00Z"
+      },
+      "kind0Unreachable": "fetchKind0 must never be called for this case — npub does not decode to a pubkey",
+      "expected": {
+        "state": "declared",
+        "npub": "npub10elfcs4fr0l0r8af98jlmgdh9c8tcxjvz9qkw038js35mp4dma8qzvjptq",
+        "direction1": false,
+        "direction2": null,
+        "kind0CreatedAt": null
+      }
+    }
+  ]
+}

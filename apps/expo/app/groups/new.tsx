@@ -18,6 +18,7 @@
  */
 import { randomUUID } from 'expo-crypto';
 import { router } from 'expo-router';
+import { safeBack } from '@/navigation/safeBack';
 import { useState } from 'react';
 import {
   ActivityIndicator,
@@ -166,7 +167,7 @@ export default function CreateGroup(): React.JSX.Element {
 
   return (
     <View className="flex-1 bg-pageBg">
-      <NavBar title={t('groupNew.title')} onCancel={() => { router.back(); }} />
+      <NavBar title={t('groupNew.title')} onCancel={() => { safeBack(); }} />
 
       <ScrollView
         className="flex-1"

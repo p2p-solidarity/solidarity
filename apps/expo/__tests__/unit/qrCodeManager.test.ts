@@ -4,28 +4,14 @@
  *
  * The `qrcode` engine throws when a payload exceeds the chosen
  * error-correction level's capacity. `generateQrPng` catches that and
- * steps down one level, only falling through to the safety-net SVG when
- * every level has rejected the payload (or the engine itself isn't loaded).
+ * steps down one level, then reports a clear failure when every level has
+ * rejected the payload (or the engine itself isn't loaded). A text SVG is
+ * not a QR code and must never be returned as a successful result.
  */
 import { describe, expect, it } from 'bun:test';
 import { readFileSync } from 'node:fs';
 
 import { generateQrPng } from '@/cards/qrCodeManager';
-import { base64Encode, utf8ToBytes } from '@solidarity/shared';
-
-// The fallback rectangle the manager emits when the qrcode engine isn't
-// available. We rebuild it from the same template so the test stays in
-// lockstep with the implementation without re-encoding the constant by hand.
-function fallbackDataUrlFor(value: string, size = 256): string {
-  const escaped = value
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&apos;');
-  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${size}" height="${size}"><rect width="${size}" height="${size}" fill="#FFFFFF"/><text x="8" y="20" font-size="10">${escaped}</text></svg>`;
-  return `data:image/svg+xml;base64,${base64Encode(utf8ToBytes(svg))}`;
-}
 
 async function engineAvailable(): Promise<boolean> {
   try {
@@ -51,40 +37,30 @@ describe('generateQrPng — cascading error-correction levels', () => {
     expect(source).not.toMatch(/import\(\s*[^'"`]/u);
   });
 
-  it('emits a real SVG (not the fallback rectangle) for short payloads', async () => {
+  it('emits a real SVG for short payloads', async () => {
     if (!(await engineAvailable())) {
-      // Without the engine the only output is the fallback rectangle, so
-      // there is nothing to differentiate. Skip with a clear name.
+      // This runtime cannot prove the successful engine path; the following
+      // capacity test still proves the failure path remains honest.
       return;
     }
     const url = await generateQrPng('hello solidarity');
     expect(url.startsWith('data:image/svg+xml;base64,')).toBe(true);
-    expect(url).not.toBe(fallbackDataUrlFor('hello solidarity'));
 
-    // Decode and confirm it looks like a real QR SVG (contains the
-    // engine's path/rect grid, not the fallback's <text> element).
+    // Decode and confirm it looks like a real QR SVG, never a text-shaped
+    // placeholder that scanners cannot read.
     const b64 = url.slice('data:image/svg+xml;base64,'.length);
     const svg = Buffer.from(b64, 'base64').toString('utf8');
     expect(svg.includes('<svg')).toBe(true);
     expect(svg.includes('<text')).toBe(false);
   });
 
-  it('cascade fallback runs without throwing for a huge payload', async () => {
-    if (!(await engineAvailable())) {
-      // Engine missing — the cascade isn't exercised. Skip with a clear
-      // name so the report is honest about what was checked.
-      return;
-    }
+  it('rejects a payload that exceeds every QR capacity instead of returning a text SVG', async () => {
     // ~10kB of high-entropy data — exceeds even level-L capacity (~2.9kB
-    // binary at version 40), so every level will throw. We just want to
-    // confirm `generateQrPng` doesn't propagate; it should return either
-    // a real SVG (if it fits somewhere) or the fallback URL.
+    // binary at version 40), so every level must reject it. This must be an
+    // explicit error: a rendered text fallback would look like a QR but be
+    // impossible to scan.
     const huge = 'x'.repeat(10_000);
-    let url = '';
-    await (async () => {
-      url = await generateQrPng(huge);
-    })();
-    expect(url.startsWith('data:image/svg+xml;base64,')).toBe(true);
+    await expect(generateQrPng(huge)).rejects.toThrow('QR');
   });
 
   it('respects startingLevel option without throwing', async () => {

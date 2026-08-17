@@ -23,7 +23,8 @@
  * button surfaces a synthesised results array + a "lands next iteration"
  * toast so the visual contract is preserved.
  */
-import { router, useLocalSearchParams } from 'expo-router';
+import { useLocalSearchParams } from 'expo-router';
+import { safeBack } from '@/navigation/safeBack';
 import { useEffect, useState } from 'react';
 import {
   ActivityIndicator,
@@ -188,7 +189,7 @@ export default function GroupVCIssuanceScreen(): React.JSX.Element {
         leadingLabel={group?.name ?? t('groupIssue.fallbackGroup')}
         trailing={
           <Pressable
-            onPress={() => { router.back(); }}
+            onPress={() => { safeBack(); }}
             accessibilityRole="button"
             accessibilityLabel={t('groupIssue.done')}
             hitSlop={8}

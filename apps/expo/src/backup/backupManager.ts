@@ -23,13 +23,18 @@ import {
   saveContact,
 } from '../storage/storageManager';
 import {
-  downloadBackup,
+  downloadArchive,
+  downloadLatestArchive,
   prepareProvider,
   setProvider,
   uploadBackup,
   type ProviderKind,
 } from './cloudProvider';
+import { decryptJson } from '../storage/encryptionManager';
+import { decryptJsonWithKey } from '../storage/jsonCrypto';
+import { getPortableBackupKey } from '../identity/rootKey';
 import { shouldRunBackup, type BackupReason } from './backupPolicy';
+import { normalizeRestoredPayload } from './normalizeBackupPayload';
 import { usePreferences } from '@/settings/preferences';
 import type { BusinessCard, Contact } from '@solidarity/shared';
 import type { IdentityCardEntity, ProvableClaimEntity } from '../identity/entities';
@@ -95,7 +100,17 @@ async function gatherIdentity(): Promise<IdentitySnapshot> {
   }
 }
 
-export async function performBackupNow(provider: ProviderKind): Promise<BackupPayload> {
+/**
+ * Snapshot every local record and upload it as a portable SOLB v2 archive
+ * sealed with `portableKey` (the Recovery-Phrase-derived Portable Backup Key
+ * resolved by the caller). NEVER falls back to the device-local key — a v1
+ * archive can't be restored on another device, so writing one under the guise
+ * of "backed up" would be dishonest (see `docs/adr/0001` + plan §4.3).
+ */
+export async function performBackupNow(
+  provider: ProviderKind,
+  portableKey: Uint8Array
+): Promise<BackupPayload> {
   const [cards, contacts, identity] = await Promise.all([
     loadAllBusinessCards(),
     loadAllContacts(),
@@ -111,7 +126,7 @@ export async function performBackupNow(provider: ProviderKind): Promise<BackupPa
     provableClaims: identity.provableClaims,
     storedCredentials: identity.storedCredentials,
   };
-  await uploadBackup(payload);
+  await uploadBackup(payload, portableKey);
   return payload;
 }
 
@@ -157,7 +172,14 @@ export async function requestBackup(reason: BackupReason): Promise<BackupRequest
   if (prefs.backupProvider === 'googleDrive' && driveStatus === 'needs-connection') {
     return { ran: false, skipReason: 'needs-connection' };
   }
-  const payload = await performBackupNow(prefs.backupProvider);
+  // Resolve the Portable Backup Key BEFORE writing. No Recovery Phrase yet
+  // (onboarding not finished) → skip honestly rather than write a device-only
+  // v1 archive that no other device could ever restore.
+  const keyRes = await getPortableBackupKey();
+  if (!keyRes.ok) {
+    return { ran: false, skipReason: 'root-key-unavailable' };
+  }
+  const payload = await performBackupNow(prefs.backupProvider, keyRes.value);
   lastBackupAtMs = Date.now();
   return { ran: true, payload };
 }
@@ -226,14 +248,27 @@ async function restoreIdentity(payload: BackupPayload): Promise<IdentityRestoreC
 }
 
 /**
- * A restore that found a backup file but couldn't use it. `key-mismatch` means
- * the file decrypts with a DIFFERENT master key (the classic in-place
- * SwiftUI→Expo upgrade case) — surfaced so the UI can say so plainly instead
- * of looking like flaky iCloud. `unreadable` is any other download/IO failure.
+ * A restore that found a backup file but couldn't use it. Each kind maps to a
+ * distinct, actionable UI message (plan §6):
+ *   - `root-key-unavailable`   — a v2 archive exists but there is no local
+ *     Recovery Phrase to derive its Portable Backup Key (recover the Root
+ *     Identity first).
+ *   - `portable-key-mismatch`  — v2 archive failed the auth tag under the
+ *     active Recovery Phrase (wrong identity / corrupt archive).
+ *   - `legacy-key-unavailable` — a v1 device-key archive can't be opened on
+ *     this device (the original Device Storage Key is gone — the classic
+ *     cross-device / post-wipe case).
+ *   - `unsupported-version`    — the archive version byte is unknown.
+ *   - `unreadable`             — any other download / framing / I/O failure.
  */
 export class BackupRestoreError extends Error {
   constructor(
-    readonly kind: 'key-mismatch' | 'unreadable',
+    readonly kind:
+      | 'root-key-unavailable'
+      | 'portable-key-mismatch'
+      | 'legacy-key-unavailable'
+      | 'unsupported-version'
+      | 'unreadable',
     options?: { cause?: unknown },
   ) {
     super(kind, options);
@@ -241,23 +276,60 @@ export class BackupRestoreError extends Error {
   }
 }
 
-export async function restoreFromBackup(): Promise<RestoreResult | null> {
+/**
+ * Restore from the newest archive, or — when `archiveName` is given — from a
+ * SPECIFIC archive the user picked in the dated backup list (plan G6: explicit
+ * choice, never a silent fallback to an older file).
+ */
+export async function restoreFromBackup(archiveName?: string): Promise<RestoreResult | null> {
   // null = nothing to restore (no file). A present-but-unusable backup throws
   // a typed BackupRestoreError so the caller can show the right message.
-  let payload: BackupPayload | null;
+  let archive: Awaited<ReturnType<typeof downloadLatestArchive>>;
   try {
-    payload = await downloadBackup<BackupPayload>();
+    archive = archiveName ? await downloadArchive(archiveName) : await downloadLatestArchive();
   } catch (err) {
-    // Duck-type by name rather than `instanceof DecryptError` so backupManager
-    // doesn't statically depend on encryptionManager's export — tests that mock
-    // encryptionManager without DecryptError must still be able to link this.
-    const isDecryptError = err instanceof Error && err.name === 'DecryptError';
+    // Framing failures from decodeSolb: unknown version fails closed as its own
+    // kind; anything else (bad magic, legacy plaintext, IO) is unreadable.
+    const msg = err instanceof Error ? err.message : '';
     throw new BackupRestoreError(
-      isDecryptError ? 'key-mismatch' : 'unreadable',
+      msg.includes('Unsupported backup version') ? 'unsupported-version' : 'unreadable',
       { cause: err },
     );
   }
-  if (!payload) return null;
+  if (!archive) return null;
+
+  let payload: BackupPayload;
+  try {
+    let raw: unknown;
+    if (archive.keyScheme === 'recovery-phrase-hkdf-v1') {
+      // v2 portable archive → Recovery-Phrase-derived Portable Backup Key.
+      const keyRes = await getPortableBackupKey();
+      if (!keyRes.ok) throw new BackupRestoreError('root-key-unavailable', { cause: keyRes.error });
+      raw = decryptJsonWithKey(keyRes.value, archive.ciphertextB64);
+    } else {
+      // v1 legacy archive → device-local Device Storage Key (same-device only).
+      raw = await decryptJson(archive.ciphertextB64);
+    }
+    const normalized = normalizeRestoredPayload(raw);
+    if (!normalized) {
+      throw new BackupRestoreError('unreadable', {
+        cause: new Error('backup payload is not an object'),
+      });
+    }
+    payload = normalized;
+  } catch (err) {
+    if (err instanceof BackupRestoreError) throw err;
+    // Duck-type by name rather than `instanceof DecryptError` so tests that mock
+    // the crypto layer without the class still link. A tag failure maps to the
+    // scheme-specific "wrong key" kind; anything else is unreadable.
+    const isDecryptError = err instanceof Error && err.name === 'DecryptError';
+    const kind = !isDecryptError
+      ? ('unreadable' as const)
+      : archive.keyScheme === 'recovery-phrase-hkdf-v1'
+        ? ('portable-key-mismatch' as const)
+        : ('legacy-key-unavailable' as const);
+    throw new BackupRestoreError(kind, { cause: err });
+  }
 
   for (const card of payload.cards) await saveBusinessCard(card);
   for (const contact of payload.contacts) await saveContact(contact);

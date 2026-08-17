@@ -1,0 +1,461 @@
+{
+  "description": "Profile Record (01-spec §3) conformance vectors for packages/shared/src/profile.ts. valid[] entries must parseProfile(profile) -> ok. invalid[] entries must parseProfile(profile) -> err(reason) whose message contains `errorContains` (a `path: message` string joined from every zod issue — `errorContains` is the field path, kept independent of zod's exact wording). `testKeys.subject` reuses the same TEST-ONLY key as vectors/challenge.json and vectors/jws.json so a `did` value here can be signed with the same fixtures in profile/fragment round-trip tests. The `one-way-also-known-as` and `oversize-fragment-budget` vectors are both schema-VALID by design — see profile.ts's module docstring for why alsoKnownAs is not cross-checked against badges, and fragment.test.ts for how oversize-fragment-budget is consumed jointly with vectors/fragment.json to prove encodeFragment's oversize flag trips end-to-end. Consumed by packages/shared/test/profile.test.ts and test/fragment.test.ts; intended to be replayed by the web viewer against its own implementation (03-spec §3).",
+  "testKeys": {
+    "subject": {
+      "privateKeyHex": "0102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f20",
+      "note": "TEST-ONLY private key scalar (same as vectors/jws.json testKey / vectors/challenge.json testKeys.subject). Never used in production.",
+      "did": "did:key:zDnaeVuZeVRqvscGkiEoR9PFFra2xZUMp97ZPuGFK1VLU7iYN"
+    }
+  },
+  "valid": [
+    {
+      "name": "minimal",
+      "profile": {
+        "v": 1,
+        "did": "did:key:zDnaeVuZeVRqvscGkiEoR9PFFra2xZUMp97ZPuGFK1VLU7iYN",
+        "displayName": "Alice",
+        "avatar": null,
+        "bio": "",
+        "links": [],
+        "alsoKnownAs": [],
+        "badges": [],
+        "supersededBy": null,
+        "updatedAt": "2026-07-03T00:00:00Z"
+      }
+    },
+    {
+      "name": "full",
+      "profile": {
+        "v": 1,
+        "did": "did:key:zDnaeVuZeVRqvscGkiEoR9PFFra2xZUMp97ZPuGFK1VLU7iYN",
+        "displayName": "Alice Chen",
+        "avatar": "https://example.com/avatar.png",
+        "bio": "Building solidarity — a no-server verified page.",
+        "links": [
+          { "label": "Website", "url": "https://example.com" },
+          { "label": "GitHub", "url": "https://github.com/alice" },
+          { "label": "Old Blog (plain http)", "url": "http://example.net/blog" }
+        ],
+        "alsoKnownAs": ["dns:example.com", "at://alice.bsky.social", "nostr:npub1exampleexampleexampleexampleexampleexampleexampleexamp"],
+        "badges": [
+          { "type": "dns", "subject": "example.com", "attestation": "inline:_did.example.com TXT did=did:key:zDnaeVuZeVRqvscGkiEoR9PFFra2xZUMp97ZPuGFK1VLU7iYN" },
+          { "type": "atproto", "subject": "alice.bsky.social", "attestation": "ref:at://alice.bsky.social/app.solidarity.profile/self" }
+        ],
+        "supersededBy": null,
+        "updatedAt": "2026-07-03T00:00:00Z"
+      }
+    },
+    {
+      "name": "superseded",
+      "profile": {
+        "v": 1,
+        "did": "did:key:zDnaeVuZeVRqvscGkiEoR9PFFra2xZUMp97ZPuGFK1VLU7iYN",
+        "displayName": "Alice (old key)",
+        "avatar": null,
+        "bio": "This DID was rotated.",
+        "links": [],
+        "alsoKnownAs": [],
+        "badges": [],
+        "supersededBy": "did:key:zDnaeaQHQpDWivip1SugnEwZaF5JUCmSyPrYewToLKYmv8CyV",
+        "updatedAt": "2026-07-03T00:00:00Z"
+      },
+      "reason": "supersededBy non-null is schema-valid — the app/viewer greys out this page and redirects to the new DID (01-spec §3), but the record itself must still parse so the redirect UI can read it"
+    },
+    {
+      "name": "one-way-also-known-as",
+      "profile": {
+        "v": 1,
+        "did": "did:key:zDnaeVuZeVRqvscGkiEoR9PFFra2xZUMp97ZPuGFK1VLU7iYN",
+        "displayName": "Alice",
+        "avatar": null,
+        "bio": "",
+        "links": [],
+        "alsoKnownAs": ["dns:unverified-claim.example"],
+        "badges": [],
+        "supersededBy": null,
+        "updatedAt": "2026-07-03T00:00:00Z"
+      },
+      "reason": "alsoKnownAs claims dns:unverified-claim.example but badges[] carries no corresponding entry — a one-way binding. This is schema-VALID: parseProfile only enforces shape, not badge verification. 01-spec §6 requires the reverse DNS record ('兩向都成立才畫綠勾') before a green check is shown, but that's a later badge-verification task's concern (05-spec §5/§6), not this schema. This vector exists specifically so a future change doesn't 'fix' parseProfile into silently doing cross-field badge verification."
+    },
+    {
+      "name": "scope-public-projection",
+      "profile": {
+        "v": 1,
+        "did": "did:key:zDnaeVuZeVRqvscGkiEoR9PFFra2xZUMp97ZPuGFK1VLU7iYN",
+        "displayName": "Alice",
+        "avatar": null,
+        "bio": "",
+        "links": [{ "label": "Website", "url": "https://example.com" }],
+        "alsoKnownAs": [],
+        "badges": [],
+        "supersededBy": null,
+        "scope": "public",
+        "updatedAt": "2026-07-03T00:00:00Z"
+      },
+      "reason": "T7: the OPTIONAL `scope` field with the `public` value must parse — this is the projection published to Nostr/PDS (only public-tier links). Signed by the same root did:key as the `shared`/`full` projections."
+    },
+    {
+      "name": "scope-shared-projection",
+      "profile": {
+        "v": 1,
+        "did": "did:key:zDnaeVuZeVRqvscGkiEoR9PFFra2xZUMp97ZPuGFK1VLU7iYN",
+        "displayName": "Alice",
+        "avatar": null,
+        "bio": "",
+        "links": [{ "label": "Website", "url": "https://example.com" }],
+        "alsoKnownAs": [],
+        "badges": [],
+        "supersededBy": null,
+        "scope": "shared",
+        "updatedAt": "2026-07-03T00:00:00Z"
+      },
+      "reason": "T7: the `shared` scope value (QR / URL-fragment projection: public + link-only links) must parse."
+    },
+    {
+      "name": "scope-full-projection",
+      "profile": {
+        "v": 1,
+        "did": "did:key:zDnaeVuZeVRqvscGkiEoR9PFFra2xZUMp97ZPuGFK1VLU7iYN",
+        "displayName": "Alice",
+        "avatar": null,
+        "bio": "",
+        "links": [{ "label": "Website", "url": "https://example.com" }],
+        "alsoKnownAs": [],
+        "badges": [],
+        "supersededBy": null,
+        "scope": "full",
+        "updatedAt": "2026-07-03T00:00:00Z"
+      },
+      "reason": "T7: the explicit `full` scope value must parse. `full` is also the meaning of an ABSENT `scope` (see the `minimal`/`full` vectors above, which omit it) — an explicit `full` and an absent `scope` are semantically identical, and both must parse."
+    },
+    {
+      "name": "oversize-fragment-budget",
+      "profile": {
+        "v": 1,
+        "did": "did:key:zDnaeVuZeVRqvscGkiEoR9PFFra2xZUMp97ZPuGFK1VLU7iYN",
+        "displayName": "Oversize Test Profile",
+        "avatar": "https://example.com/avatar.png",
+        "bio": "80f42b886c59f26a09259bb73875c3b5eb6d2cde36aab0f9263aaefbe3c7fffc408126df0ccade71c55d4918f70a58d84cf074572be862ff32b0fc14022df2d46a563c17202ab49978a8b2c126a32fdfeac8bdd7014beb53b05e1ac3bfdeb3b98da44b8ee5725f71a4f11292c16ba0e0fd87ac614721319af9923813a602b55c3bde2aa8a5c52d2ab705c6628c82e9079bfe6596b36a32cf12d04e84ee15cfae84009bfe131d9d1c00ac80be18883e6b96ca0b3056258b5814085bd0a2a509daaefa57ed2e0b6c154d227c4f9b8693470cacc43a6cc9be10b0cefca38c7b9f95afc8b2ef2f39b16d582e00874fceb85d49741d03946f09b83039fbf30a36c2ad02cac2ceceb96c521298bf17f2b36b1b7724620b2233ace4",
+        "links": [
+          { "label": "Link 0", "url": "https://example.com/u/f363ec708b7b5297e519f567" },
+          { "label": "Link 1", "url": "https://example.com/u/a788ab0777efc87c4f1d9c47" },
+          { "label": "Link 2", "url": "https://example.com/u/1c75bc1921cde2242b73f166" },
+          { "label": "Link 3", "url": "https://example.com/u/b63fb13196bf817f8c464f5a" },
+          { "label": "Link 4", "url": "https://example.com/u/160a6ebfc7739c885a11b55d" },
+          { "label": "Link 5", "url": "https://example.com/u/c2544ad5922c8960769266af" },
+          { "label": "Link 6", "url": "https://example.com/u/5f870a66084a8ae350edb1e4" },
+          { "label": "Link 7", "url": "https://example.com/u/a09b0b6414aae57dec608ca4" },
+          { "label": "Link 8", "url": "https://example.com/u/8f38bf98cc95b59dab6263fb" },
+          { "label": "Link 9", "url": "https://example.com/u/7e9deb1bb1e234d662be8e3f" },
+          { "label": "Link 10", "url": "https://example.com/u/85f223f0958b5395316009d8" },
+          { "label": "Link 11", "url": "https://example.com/u/eaf2bcfda487cc3e834fa0f4" }
+        ],
+        "alsoKnownAs": ["dns:example.com", "at://alice.bsky.social", "nostr:npub1exampleexampleexampleexampleexampleexampleexampleexamp"],
+        "badges": [
+          { "type": "dns", "subject": "sub0.example.com", "attestation": "inline:a618ee80dd26a68439b97b12fe81f8a629a25e678b48f2d18dc24699e1a2fcb3" },
+          { "type": "dns", "subject": "sub1.example.com", "attestation": "inline:1e92cd83cebec7c810bd99481fe9a3159c1312ab52b65f79b624849078d5b2d4" },
+          { "type": "dns", "subject": "sub2.example.com", "attestation": "inline:89b0faf73635ed3e62a0bfbe06fadd25064036a190676e0759c481225a4bccd3" },
+          { "type": "dns", "subject": "sub3.example.com", "attestation": "inline:9e77230a4ccc9b8a8f45d6a259349e6eb465532845e386854a8ccb410b5f5793" },
+          { "type": "dns", "subject": "sub4.example.com", "attestation": "inline:f236ddf4a0aaa283709a14a10b18a5a2729ea7de5ae3d8dfd7cdf339aa927b9f" },
+          { "type": "dns", "subject": "sub5.example.com", "attestation": "inline:565b776df6719cf76619d74e096dd8f46f33512c70dfdb36a6450ae01011b8da" }
+        ],
+        "supersededBy": null,
+        "updatedAt": "2026-07-03T00:00:00Z"
+      },
+      "reason": "schema-VALID and structurally realistic (high-entropy bio/attestation hex so DEFLATE can't compress it away) — JSON.stringify(profile).length is 2607 bytes (>2.5KB pre-compression). Signed as a compact JWS and run through encodeFragment in fragment.test.ts: the resulting fragment is 2367 bytes, > FRAGMENT_SIZE_BUDGET_BYTES (2048), so this vector proves encodeFragment's oversize flag actually trips for a realistic large profile — not just a synthetic byte-length check."
+    }
+  ],
+  "invalid": [
+    {
+      "name": "wrong-literal-v",
+      "profile": {
+        "v": 2,
+        "did": "did:key:zDnaeVuZeVRqvscGkiEoR9PFFra2xZUMp97ZPuGFK1VLU7iYN",
+        "displayName": "Alice",
+        "avatar": null,
+        "bio": "",
+        "links": [],
+        "alsoKnownAs": [],
+        "badges": [],
+        "supersededBy": null,
+        "updatedAt": "2026-07-03T00:00:00Z"
+      },
+      "errorContains": "v:",
+      "reason": "v must be the literal 1 — a v:2 payload from a future schema revision must not silently parse under the v1 schema"
+    },
+    {
+      "name": "missing-did",
+      "profile": {
+        "v": 1,
+        "displayName": "Alice",
+        "avatar": null,
+        "bio": "",
+        "links": [],
+        "alsoKnownAs": [],
+        "badges": [],
+        "supersededBy": null,
+        "updatedAt": "2026-07-03T00:00:00Z"
+      },
+      "errorContains": "did:",
+      "reason": "did is required — a Profile Record with no DID has no identity to bind the JWS signature to"
+    },
+    {
+      "name": "empty-did",
+      "profile": {
+        "v": 1,
+        "did": "",
+        "displayName": "Alice",
+        "avatar": null,
+        "bio": "",
+        "links": [],
+        "alsoKnownAs": [],
+        "badges": [],
+        "supersededBy": null,
+        "updatedAt": "2026-07-03T00:00:00Z"
+      },
+      "errorContains": "did:",
+      "reason": "empty-string did must be rejected, not treated as a valid-but-useless identity"
+    },
+    {
+      "name": "extra-key-recoveryKey",
+      "profile": {
+        "v": 1,
+        "did": "did:key:zDnaeVuZeVRqvscGkiEoR9PFFra2xZUMp97ZPuGFK1VLU7iYN",
+        "displayName": "Alice",
+        "avatar": null,
+        "bio": "",
+        "links": [],
+        "alsoKnownAs": [],
+        "badges": [],
+        "supersededBy": null,
+        "updatedAt": "2026-07-03T00:00:00Z",
+        "recoveryKey": "should-not-exist"
+      },
+      "errorContains": "Unrecognized key",
+      "reason": "an earlier spec draft carried a recoveryKey field; 01-spec §3 (current) does not — this proves the schema's .strict() rejects a payload that smuggles it back in rather than silently accepting/ignoring it"
+    },
+    {
+      "name": "bad-updatedAt-not-a-date",
+      "profile": {
+        "v": 1,
+        "did": "did:key:zDnaeVuZeVRqvscGkiEoR9PFFra2xZUMp97ZPuGFK1VLU7iYN",
+        "displayName": "Alice",
+        "avatar": null,
+        "bio": "",
+        "links": [],
+        "alsoKnownAs": [],
+        "badges": [],
+        "supersededBy": null,
+        "updatedAt": "not-a-date"
+      },
+      "errorContains": "updatedAt:",
+      "reason": "updatedAt must be a well-formed ISO8601 datetime"
+    },
+    {
+      "name": "bad-updatedAt-missing-Z",
+      "profile": {
+        "v": 1,
+        "did": "did:key:zDnaeVuZeVRqvscGkiEoR9PFFra2xZUMp97ZPuGFK1VLU7iYN",
+        "displayName": "Alice",
+        "avatar": null,
+        "bio": "",
+        "links": [],
+        "alsoKnownAs": [],
+        "badges": [],
+        "supersededBy": null,
+        "updatedAt": "2026-07-03T00:00:00"
+      },
+      "errorContains": "updatedAt:",
+      "reason": "01-spec §3's example is Zulu-suffixed ('2026-07-03T00:00:00Z') — a timezone-less local datetime string must not silently parse as if it were UTC"
+    },
+    {
+      "name": "link-missing-url",
+      "profile": {
+        "v": 1,
+        "did": "did:key:zDnaeVuZeVRqvscGkiEoR9PFFra2xZUMp97ZPuGFK1VLU7iYN",
+        "displayName": "Alice",
+        "avatar": null,
+        "bio": "",
+        "links": [{ "label": "no url" }],
+        "alsoKnownAs": [],
+        "badges": [],
+        "supersededBy": null,
+        "updatedAt": "2026-07-03T00:00:00Z"
+      },
+      "errorContains": "links.0.url",
+      "reason": "each links[] entry requires both label and url"
+    },
+    {
+      "name": "badge-missing-attestation",
+      "profile": {
+        "v": 1,
+        "did": "did:key:zDnaeVuZeVRqvscGkiEoR9PFFra2xZUMp97ZPuGFK1VLU7iYN",
+        "displayName": "Alice",
+        "avatar": null,
+        "bio": "",
+        "links": [],
+        "alsoKnownAs": [],
+        "badges": [{ "type": "dns", "subject": "example.com" }],
+        "supersededBy": null,
+        "updatedAt": "2026-07-03T00:00:00Z"
+      },
+      "errorContains": "badges.0.attestation",
+      "reason": "each badges[] entry requires type, subject, and attestation"
+    },
+    {
+      "name": "avatar-wrong-type",
+      "profile": {
+        "v": 1,
+        "did": "did:key:zDnaeVuZeVRqvscGkiEoR9PFFra2xZUMp97ZPuGFK1VLU7iYN",
+        "displayName": "Alice",
+        "avatar": 42,
+        "bio": "",
+        "links": [],
+        "alsoKnownAs": [],
+        "badges": [],
+        "supersededBy": null,
+        "updatedAt": "2026-07-03T00:00:00Z"
+      },
+      "errorContains": "avatar:",
+      "reason": "avatar must be a url string, a blob-hash string, or null — never a number"
+    },
+    {
+      "name": "supersededBy-wrong-type",
+      "profile": {
+        "v": 1,
+        "did": "did:key:zDnaeVuZeVRqvscGkiEoR9PFFra2xZUMp97ZPuGFK1VLU7iYN",
+        "displayName": "Alice",
+        "avatar": null,
+        "bio": "",
+        "links": [],
+        "alsoKnownAs": [],
+        "badges": [],
+        "supersededBy": 42,
+        "updatedAt": "2026-07-03T00:00:00Z"
+      },
+      "errorContains": "supersededBy:",
+      "reason": "supersededBy must be a DID string or null"
+    },
+    {
+      "name": "alsoKnownAs-non-string-entry",
+      "profile": {
+        "v": 1,
+        "did": "did:key:zDnaeVuZeVRqvscGkiEoR9PFFra2xZUMp97ZPuGFK1VLU7iYN",
+        "displayName": "Alice",
+        "avatar": null,
+        "bio": "",
+        "links": [],
+        "alsoKnownAs": [123],
+        "badges": [],
+        "supersededBy": null,
+        "updatedAt": "2026-07-03T00:00:00Z"
+      },
+      "errorContains": "alsoKnownAs.0",
+      "reason": "alsoKnownAs entries must be strings"
+    },
+    {
+      "name": "links-not-an-array",
+      "profile": {
+        "v": 1,
+        "did": "did:key:zDnaeVuZeVRqvscGkiEoR9PFFra2xZUMp97ZPuGFK1VLU7iYN",
+        "displayName": "Alice",
+        "avatar": null,
+        "bio": "",
+        "links": "not-an-array",
+        "alsoKnownAs": [],
+        "badges": [],
+        "supersededBy": null,
+        "updatedAt": "2026-07-03T00:00:00Z"
+      },
+      "errorContains": "links:",
+      "reason": "links must be an array, not a bare string"
+    },
+    {
+      "name": "link-url-javascript-scheme",
+      "profile": {
+        "v": 1,
+        "did": "did:key:zDnaeVuZeVRqvscGkiEoR9PFFra2xZUMp97ZPuGFK1VLU7iYN",
+        "displayName": "Alice",
+        "avatar": null,
+        "bio": "",
+        "links": [{ "label": "evil", "url": "javascript:alert(1)" }],
+        "alsoKnownAs": [],
+        "badges": [],
+        "supersededBy": null,
+        "updatedAt": "2026-07-03T00:00:00Z"
+      },
+      "errorContains": "links.0.url",
+      "reason": "the viewer renders links[].url as a clickable <a href> anchor; a javascript: URI must never pass schema validation or it becomes an XSS vector at render time"
+    },
+    {
+      "name": "link-url-data-scheme",
+      "profile": {
+        "v": 1,
+        "did": "did:key:zDnaeVuZeVRqvscGkiEoR9PFFra2xZUMp97ZPuGFK1VLU7iYN",
+        "displayName": "Alice",
+        "avatar": null,
+        "bio": "",
+        "links": [{ "label": "evil", "url": "data:text/html,<script>alert(1)</script>" }],
+        "alsoKnownAs": [],
+        "badges": [],
+        "supersededBy": null,
+        "updatedAt": "2026-07-03T00:00:00Z"
+      },
+      "errorContains": "links.0.url",
+      "reason": "data: URIs can carry an inline HTML/script payload; only http(s) is a renderable-as-anchor scheme for this viewer"
+    },
+    {
+      "name": "link-url-whitespace-prefixed",
+      "profile": {
+        "v": 1,
+        "did": "did:key:zDnaeVuZeVRqvscGkiEoR9PFFra2xZUMp97ZPuGFK1VLU7iYN",
+        "displayName": "Alice",
+        "avatar": null,
+        "bio": "",
+        "links": [{ "label": "sneaky", "url": " https://example.com" }],
+        "alsoKnownAs": [],
+        "badges": [],
+        "supersededBy": null,
+        "updatedAt": "2026-07-03T00:00:00Z"
+      },
+      "errorContains": "links.0.url",
+      "reason": "a leading space defeats a naive scheme-prefix check in some URL parsers/sanitizers ('trim then allow' bypass); this schema rejects leading/trailing whitespace outright rather than silently trimming it"
+    },
+    {
+      "name": "scope-invalid-value",
+      "profile": {
+        "v": 1,
+        "did": "did:key:zDnaeVuZeVRqvscGkiEoR9PFFra2xZUMp97ZPuGFK1VLU7iYN",
+        "displayName": "Alice",
+        "avatar": null,
+        "bio": "",
+        "links": [],
+        "alsoKnownAs": [],
+        "badges": [],
+        "supersededBy": null,
+        "scope": "secret",
+        "updatedAt": "2026-07-03T00:00:00Z"
+      },
+      "errorContains": "scope",
+      "reason": "T7: `scope` is optional, but when present it must be one of public/shared/full — an unknown value ('secret') fails closed rather than being silently accepted (a projection whose scope a viewer can't interpret must not parse)."
+    },
+    {
+      "name": "null-input",
+      "profile": null,
+      "errorContains": "(root):",
+      "reason": "top-level null must be rejected, not thrown"
+    },
+    {
+      "name": "array-input",
+      "profile": [],
+      "errorContains": "(root):",
+      "reason": "a JSON array at the top level is not a Profile Record"
+    },
+    {
+      "name": "string-input",
+      "profile": "not an object",
+      "errorContains": "(root):",
+      "reason": "a bare string at the top level is not a Profile Record"
+    }
+  ]
+}

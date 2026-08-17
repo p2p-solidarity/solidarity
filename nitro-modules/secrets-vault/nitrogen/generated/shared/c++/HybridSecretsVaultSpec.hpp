@@ -61,6 +61,9 @@ namespace margelo::nitro::solidarity::secretsvault {
       virtual std::shared_ptr<Promise<std::shared_ptr<ArrayBuffer>>> unwrap(const WrappedSecret& wrapped) = 0;
       virtual std::shared_ptr<Promise<void>> deleteKey(const std::string& keyAlias) = 0;
       virtual std::shared_ptr<Promise<std::shared_ptr<ArrayBuffer>>> readRawKeychainGenericPassword(const std::string& service, const std::string& account) = 0;
+      virtual std::shared_ptr<Promise<void>> setSynchronizableItem(const std::string& alias, const std::string& value) = 0;
+      virtual std::shared_ptr<Promise<std::string>> getSynchronizableItem(const std::string& alias) = 0;
+      virtual std::shared_ptr<Promise<void>> deleteSynchronizableItem(const std::string& alias) = 0;
 
     protected:
       // Hybrid Setup

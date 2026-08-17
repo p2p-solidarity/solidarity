@@ -1,17 +1,33 @@
 import { describe, expect, it, mock } from 'bun:test';
 
 await mock.module('react-native', () => ({
+  ...((globalThis as unknown as { __AIRMEISHI_RN_MOCK__: Record<string, unknown> })
+    .__AIRMEISHI_RN_MOCK__),
   Appearance: { getColorScheme: () => 'light' },
+  FlatList: 'FlatList',
   Platform: { OS: 'ios' },
   Pressable: 'Pressable',
+  StyleSheet: {
+    create: <T extends object>(styles: T): T => styles,
+    flatten: (style: unknown): unknown => style,
+  },
   Switch: 'Switch',
   Text: 'Text',
+  TurboModuleRegistry: {
+    get: () => null,
+    getEnforcing: () => ({}),
+  },
   View: 'View',
+  findNodeHandle: () => null,
   useColorScheme: () => 'light',
 }));
 
 await mock.module('@/components/icons/SfIcon', () => ({
   SfIcon: 'SfIcon',
+}));
+
+await mock.module('@/components/common/PressableScale', () => ({
+  PressableScale: 'PressableScale',
 }));
 
 const { SettingsScreenTitle } = await import('../../src/components/settings/SettingsBlocks');

@@ -46,6 +46,12 @@ import {
 } from '@solidarity/shared';
 
 import { decryptJson, encryptJson } from '@/storage/encryptionManager';
+import {
+  canCommitLocalData,
+  captureLocalDataEpoch,
+  trackLocalDataOperation,
+  type LocalDataEpoch,
+} from '@/settings/localDataWipeBarrier';
 
 import type { VaultItem } from './store';
 
@@ -340,15 +346,36 @@ export async function uploadVaultItemCiphertext(
  * bytes — a mismatch throws so the caller can fall back / retry rather
  * than write a tampered blob to disk.
  */
-export async function downloadVaultItemCiphertext(
+export function downloadVaultItemCiphertext(
   itemId: string,
   _remoteRef: string
 ): Promise<string> {
+  return trackLocalDataOperation(
+    downloadVaultItemCiphertextAtEpoch(
+      itemId,
+      _remoteRef,
+      captureLocalDataEpoch(),
+    ),
+  );
+}
+
+function localDataWipeError(): Error {
+  return new Error('Vault ciphertext download was invalidated by a local data wipe');
+}
+
+async function downloadVaultItemCiphertextAtEpoch(
+  itemId: string,
+  _remoteRef: string,
+  writeEpoch: LocalDataEpoch,
+): Promise<string> {
+  if (!canCommitLocalData(writeEpoch)) throw localDataWipeError();
   const ck = await ensureInitialized();
+  if (!canCommitLocalData(writeEpoch)) throw localDataWipeError();
   // `_remoteRef` and `cipherRecordId(itemId)` are equivalent today; we
   // accept both so callers can pass the manifest value verbatim and we
   // can evolve the ref scheme later without breaking the API.
   const record = await ck.fetchRecord(cipherRecordId(itemId));
+  if (!canCommitLocalData(writeEpoch)) throw localDataWipeError();
   const payload = JSON.parse(record.fields) as CipherRecordPayload;
   const sealed = base64Decode(payload.cipherB64);
   const actualSha = bytesToHex(sha256Bytes(sealed));
@@ -359,13 +386,16 @@ export async function downloadVaultItemCiphertext(
   }
   const vaultDir = `${FileSystem.documentDirectory ?? ''}vault/`;
   const dirInfo = await FileSystem.getInfoAsync(vaultDir);
+  if (!canCommitLocalData(writeEpoch)) throw localDataWipeError();
   if (!dirInfo.exists) {
     await FileSystem.makeDirectoryAsync(vaultDir, { intermediates: true });
+    if (!canCommitLocalData(writeEpoch)) throw localDataWipeError();
   }
   const localPath = `${vaultDir}${itemId}.enc`;
   await FileSystem.writeAsStringAsync(localPath, base64Encode(sealed), {
     encoding: FileSystem.EncodingType.Base64,
   });
+  if (!canCommitLocalData(writeEpoch)) throw localDataWipeError();
   return localPath;
 }
 

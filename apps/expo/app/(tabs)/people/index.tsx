@@ -1,25 +1,18 @@
 /**
- * People tab — 1:1 port of solidarity/Views/PeopleViews/PeopleListView.swift.
- *
- *   • Title "People List" (semibold 18pt, left-aligned) + trailing "+" menu
- *     (Radar Exchange [dev-mode] / Add Manually / Import from Phone /
- *     Import VCF File)
- *   • Search field (magnifyingglass + "Search" placeholder, 0.5pt
- *     textPrimary border) once contact list is non-empty
- *   • Empty state: PaperStackIllustration 214×214 +
- *     "Your contact list is empty" + 2 buttons (Import from Phone / Add
- *     Manually), no card border
- *   • Empty-search state: magnifyingglass + "No results for \"<query>\""
- *   • TrustGraphContactRow per contact, tap → /people/[id], long-press →
- *     Delete dialog: "Delete <name>?" / "This contact will be permanently
- *     removed."
+ * Contacts tab — v2 bio-link surface using the app's existing visual system.
+ * The source order mirrors solidarity-spec/v2.html while all rendered rows
+ * continue to come from the contact and saved-page stores.
  */
-import { router } from 'expo-router';
-import { useMemo, useState } from 'react';
-import { Pressable, ScrollView, Text, View } from 'react-native';
+import * as FileSystem from 'expo-file-system/legacy';
+import { router, useLocalSearchParams } from 'expo-router';
+import * as Sharing from 'expo-sharing';
+import { useEffect, useMemo, useState, type ReactNode } from 'react';
+import { ActivityIndicator, ScrollView, View } from 'react-native';
 import Animated, { FadeIn } from 'react-native-reanimated';
 import { FlashList } from '@shopify/flash-list';
-import ReanimatedSwipeable from 'react-native-gesture-handler/ReanimatedSwipeable';
+import ReanimatedSwipeable, {
+  SwipeDirection,
+} from 'react-native-gesture-handler/ReanimatedSwipeable';
 import { GestureDetector } from 'react-native-gesture-handler';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -27,38 +20,62 @@ import { makeGestureAutoBackup } from '@/backup';
 import { PressableScale } from '@/components/common/PressableScale';
 import { SfIcon } from '@/components/icons/SfIcon';
 import { PaperStackIllustration } from '@/components/decor/PaperStackIllustration';
+import { ContactsAddSheet } from '@/components/people/ContactsAddSheet';
+import { ContactsActivitySections } from '@/components/people/ContactsActivitySections';
+import { DeleteContactsSheet } from '@/components/people/DeleteContactsSheet';
 import { ManualContactEntrySheet } from '@/components/people/ManualContactEntrySheet';
 import { PeopleSearchField } from '@/components/people/PeopleSearchField';
 import { TrustGraphContactRow } from '@/components/people/TrustGraphContactRow';
+import { VerifiedPagesSection } from '@/components/people/VerifiedPagesSection';
+import { LinkPageImportSheet, type LinkPageImportResult } from '@/components/profile/LinkPageImportSheet';
+import { ThemedButton, ThemedSurface, ThemedText } from '@/components/themed';
 import { Colors } from '@/constants/Colors';
-import { useThemeColors } from '@/constants/useThemeColors';
 import { useTranslation } from '@/i18n';
 import { useContactStore, type ContactManifestEntry } from '@/contacts/repository';
+import { prepareContactVCardBundle } from '@/contacts/vCardBundle';
 import { confirmDialog } from '@/feedback/confirmDialog';
 import { haptic } from '@/feedback/haptics';
-import { SCALE } from '@/feedback/motion';
 import { pushToast } from '@/feedback/toast';
+import { useProfileSnapshotStore } from '@/people/profileSnapshots';
 import { usePeopleScreen } from '@/people/usePeopleScreen';
 import { usePreferences } from '@/settings/preferences';
 
 export default function PeopleTab() {
   const { t } = useTranslation();
-  const { contacts, refresh } = usePeopleScreen();
+  const { contacts, loading, error, refresh, retry } = usePeopleScreen();
   const removeContact = useContactStore((s) => s.remove);
+  const loadDetail = useContactStore((s) => s.loadDetail);
+  const upsertDeclared = useProfileSnapshotStore((s) => s.upsertDeclared);
   const autoEnabled = usePreferences((s) => s.autoBackupOnPull);
-  const developerMode = usePreferences((s) => s.developerMode);
   const insets = useSafeAreaInsets();
+  const { edit } = useLocalSearchParams<{ edit?: string }>();
 
   const [searchQuery, setSearchQuery] = useState('');
-  const [menuOpen, setMenuOpen] = useState(false);
+  const [addSheetOpen, setAddSheetOpen] = useState(false);
   const [manualSheetOpen, setManualSheetOpen] = useState(false);
+  const [linkPageSheetOpen, setLinkPageSheetOpen] = useState(false);
+  const [deleteSheetOpen, setDeleteSheetOpen] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const [exporting, setExporting] = useState(false);
   const [editMode, setEditMode] = useState(false);
   const [selectedIds, setSelectedIds] = useState<ReadonlySet<string>>(() => new Set());
 
-  const filtered = useMemo(
-    () => filterContacts(contacts, searchQuery),
-    [contacts, searchQuery],
+  const orderedContacts = useMemo(
+    () => filterContacts(contacts, ''),
+    [contacts],
   );
+  const filtered = useMemo(
+    () => filterContacts(orderedContacts, searchQuery),
+    [orderedContacts, searchQuery],
+  );
+  const selectedContacts = useMemo(
+    () => orderedContacts.filter((contact) => selectedIds.has(contact.id)),
+    [orderedContacts, selectedIds],
+  );
+
+  useEffect(() => {
+    if (edit === '1' && orderedContacts.length > 0) setEditMode(true);
+  }, [edit, orderedContacts.length]);
 
   const exitEditMode = () => {
     setEditMode(false);
@@ -106,39 +123,80 @@ export default function PeopleTab() {
         destructive: true,
       });
       if (!ok) return;
-      await removeContact(c.id);
-      haptic('success');
-      refresh();
+      try {
+        await removeContact(c.id);
+        haptic('success');
+        refresh();
+      } catch {
+        haptic('error');
+        pushToast(t('peopleList.deleteFailed'), 'error');
+      }
     })();
   };
 
-  const onBatchDelete = () => {
-    const ids = Array.from(selectedIds);
-    if (ids.length === 0) return;
+  const onBatchDelete = (): void => {
+    if (selectedContacts.length === 0) return;
+    setDeleteSheetOpen(true);
+  };
+
+  const confirmBatchDelete = (): void => {
+    const ids = selectedContacts.map((contact) => contact.id);
+    if (deleting || ids.length === 0) return;
+    setDeleting(true);
     void (async () => {
-      const ok = await confirmDialog({
-        title: ids.length === 1
-          ? t('peopleList.deleteContactTitle')
-          : t('peopleList.deleteCountTitle', { count: ids.length }),
-        message: t('peopleList.deleteManyMessage'),
-        confirmLabel: t('peopleList.delete'),
-        destructive: true,
-      });
-      if (!ok) return;
-      for (const id of ids) {
-        await removeContact(id);
+      try {
+        for (const id of ids) {
+          await removeContact(id);
+        }
+        haptic('success');
+        pushToast(
+          ids.length === 1
+            ? t('peopleList.contactDeleted')
+            : t('peopleList.deletedCount', { count: ids.length }),
+          'success',
+          2000,
+        );
+        setDeleteSheetOpen(false);
+        exitEditMode();
+        refresh();
+      } catch {
+        pushToast(t('peopleList.deleteFailed'), 'error');
+      } finally {
+        setDeleting(false);
       }
-      // Confirm the batch landed with a success impact (the "震動" on delete).
-      haptic('success');
-      pushToast(
-        ids.length === 1
-          ? t('peopleList.contactDeleted')
-          : t('peopleList.deletedCount', { count: ids.length }),
-        'success',
-        2000,
-      );
-      exitEditMode();
-      refresh();
+    })();
+  };
+
+  const onExportVCard = (): void => {
+    if (exporting || selectedIds.size === 0) return;
+    const ids = orderedContacts
+      .filter((contact) => selectedIds.has(contact.id))
+      .map((contact) => contact.id);
+    setExporting(true);
+    void (async () => {
+      try {
+        const bundle = await prepareContactVCardBundle(ids, loadDetail);
+        const cacheDirectory = FileSystem.cacheDirectory;
+        if (!cacheDirectory) throw new Error('Cache directory unavailable');
+        const fileUri = `${cacheDirectory}solidarity-contacts.vcf`;
+        await FileSystem.writeAsStringAsync(fileUri, bundle, {
+          encoding: FileSystem.EncodingType.UTF8,
+        });
+        if (!(await Sharing.isAvailableAsync())) {
+          throw new Error('System sharing unavailable');
+        }
+        await Sharing.shareAsync(fileUri, {
+          mimeType: 'text/vcard',
+          UTI: 'public.vcard',
+          dialogTitle: t('peopleList.exportVCard'),
+        });
+        pushToast(t('peopleList.exported', { count: ids.length }), 'success', 2000);
+        exitEditMode();
+      } catch {
+        pushToast(t('peopleList.exportFailed'), 'error');
+      } finally {
+        setExporting(false);
+      }
     })();
   };
 
@@ -153,27 +211,35 @@ export default function PeopleTab() {
 
   const body = (
     <View className="flex-1">
-      <Header
+      <ContactsHeader
         editMode={editMode}
-        selectedCount={selectedIds.size}
-        totalVisible={filtered.length}
-        allSelected={filtered.length > 0 && filtered.every((c) => selectedIds.has(c.id))}
-        onAddManually={() => { setManualSheetOpen(true); }}
-        onImportPhone={() => router.push('/contacts/import-phone')}
-        onImportVcf={() => router.push('/contacts/import-vcf')}
-        onRadarExchange={() => router.push('/(tabs)/share')}
+        hasContacts={orderedContacts.length > 0}
+        allSelected={
+          orderedContacts.length > 0 &&
+          orderedContacts.every((contact) => selectedIds.has(contact.id))
+        }
+        onAdd={() => { setAddSheetOpen(true); }}
         onEnterEditMode={() => { setEditMode(true); }}
         onExitEditMode={exitEditMode}
         onToggleSelectAll={() => {
           setSelectedIds((prev) => {
-            const allSelected = filtered.length > 0 && filtered.every((c) => prev.has(c.id));
+            const allSelected =
+              orderedContacts.length > 0 &&
+              orderedContacts.every((contact) => prev.has(contact.id));
             if (allSelected) return new Set();
-            return new Set(filtered.map((c) => c.id));
+            return new Set(orderedContacts.map((contact) => contact.id));
           });
         }}
-        developerMode={developerMode}
-        menuOpen={menuOpen}
-        setMenuOpen={setMenuOpen}
+      />
+
+      <ContactsAddSheet
+        visible={addSheetOpen}
+        onClose={() => { setAddSheetOpen(false); }}
+        onScan={() => { router.push('/scan'); }}
+        onEnterManually={() => { setManualSheetOpen(true); }}
+        onImportPhone={() => { router.push('/contacts/import-phone'); }}
+        onImportVcf={() => { router.push('/contacts/import-vcf'); }}
+        onImportPage={() => { setLinkPageSheetOpen(true); }}
       />
 
       <ManualContactEntrySheet
@@ -182,10 +248,36 @@ export default function PeopleTab() {
         onSaved={() => { refresh(); }}
       />
 
-      {contacts.length === 0 ? (
-        <EmptyState
-          onImportPhone={() => router.push('/contacts/import-phone')}
-          onAddManually={() => { setManualSheetOpen(true); }}
+      <LinkPageImportSheet
+        visible={linkPageSheetOpen}
+        title={t('peopleList.pasteLinkPage')}
+        confirmLabel={t('peopleList.declaredImportConfirm')}
+        onClose={() => { setLinkPageSheetOpen(false); }}
+        onImport={(result: LinkPageImportResult) => {
+          const snapshot = upsertDeclared(result.sourceUrl, result.title, result.links);
+          haptic('success');
+          pushToast(t('peopleList.declaredSaved'), 'success');
+          router.push({ pathname: '/people/declared/[id]', params: { id: snapshot.id } });
+        }}
+      />
+
+      <DeleteContactsSheet
+        visible={deleteSheetOpen}
+        contacts={selectedContacts}
+        deleting={deleting}
+        onConfirm={confirmBatchDelete}
+        onClose={() => { setDeleteSheetOpen(false); }}
+      />
+
+      {error ? (
+        <ContactsLoadError onRetry={retry} />
+      ) : loading ? (
+        <LoadingState />
+      ) : contacts.length === 0 ? (
+        <EmptyContactsContent
+          onImportPhone={() => { router.push('/contacts/import-phone'); }}
+          onAdd={() => { setAddSheetOpen(true); }}
+          activity={editMode ? null : <ContactsActivitySections onContactAdded={refresh} />}
         />
       ) : (
         <>
@@ -194,24 +286,40 @@ export default function PeopleTab() {
           <View className="px-4 pb-3">
             <PeopleSearchField value={searchQuery} onChangeText={setSearchQuery} />
           </View>
+          {editMode ? null : <ContactsActivitySections onContactAdded={refresh} />}
           {filtered.length === 0 ? (
-            <EmptySearchState query={searchQuery} />
+            <ScrollView contentContainerStyle={{ flexGrow: 1 }}>
+              <EmptySearchState
+                query={searchQuery}
+                onAdd={() => { setAddSheetOpen(true); }}
+                onImportPhone={() => { router.push('/contacts/import-phone'); }}
+              />
+              {editMode ? null : (
+                <View className="px-4">
+                  <VerifiedPagesSection />
+                </View>
+              )}
+            </ScrollView>
           ) : (
             <Animated.View entering={FadeIn.duration(280)} style={{ flex: 1 }}>
               <FlashList
-                data={filtered as ContactManifestEntry[]}
+                data={filtered}
                 keyExtractor={(item) => item.id}
-                contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: editMode ? 100 : 90 }}
+                contentContainerStyle={{
+                  paddingHorizontal: 16,
+                  paddingBottom: editMode ? 100 : 16,
+                }}
                 keyboardShouldPersistTaps="handled"
                 extraData={{ editMode, selectedIds }}
+                ListFooterComponent={editMode ? null : <VerifiedPagesSection />}
                 renderItem={({ item }) => (
                   <PeopleRow
                     contact={item}
                     editMode={editMode}
                     selected={selectedIds.has(item.id)}
-                    onPress={() => onSelectContact(item)}
-                    onLongPress={() => onLongPressContact(item)}
-                    onSwipeDelete={() => onDeleteContact(item)}
+                    onPress={() => { onSelectContact(item); }}
+                    onLongPress={() => { onLongPressContact(item); }}
+                    onSwipeDelete={() => { onDeleteContact(item); }}
                   />
                 )}
               />
@@ -220,8 +328,9 @@ export default function PeopleTab() {
           {editMode ? (
             <BatchActionBar
               count={selectedIds.size}
-              onCancel={exitEditMode}
               onDelete={onBatchDelete}
+              onExport={onExportVCard}
+              exporting={exporting}
             />
           ) : null}
         </>
@@ -306,7 +415,7 @@ function PeopleRow({
         <SwipeDeleteAction onPress={onSwipeDelete} />
       )}
       onSwipeableOpen={(direction) => {
-        if (direction === 'right') haptic('warning');
+        if (direction === SwipeDirection.RIGHT) haptic('warning');
       }}
     >
       {inner}
@@ -317,7 +426,8 @@ function PeopleRow({
 function SwipeDeleteAction({ onPress }: { readonly onPress: () => void }) {
   const { t } = useTranslation();
   return (
-    <Pressable
+    <PressableScale
+      haptic="warning"
       onPress={onPress}
       accessibilityRole="button"
       accessibilityLabel={t('peopleList.deleteContactA11y')}
@@ -329,28 +439,26 @@ function SwipeDeleteAction({ onPress }: { readonly onPress: () => void }) {
       }}
     >
       <SfIcon name="trash" size={18} color={Colors.invertedButtonText} />
-      <Text
-        style={{
-          color: Colors.invertedButtonText,
-          fontSize: 12,
-          marginTop: 4,
-          fontWeight: '500',
-        }}
+      <ThemedText
+        variant="caption"
+        style={{ color: Colors.invertedButtonText, marginTop: 4 }}
       >
         {t('peopleList.delete')}
-      </Text>
-    </Pressable>
+      </ThemedText>
+    </PressableScale>
   );
 }
 
 function BatchActionBar({
   count,
-  onCancel,
   onDelete,
+  onExport,
+  exporting,
 }: {
   readonly count: number;
-  readonly onCancel: () => void;
   readonly onDelete: () => void;
+  readonly onExport: () => void;
+  readonly exporting: boolean;
 }) {
   const { t } = useTranslation();
   return (
@@ -360,295 +468,254 @@ function BatchActionBar({
         left: 16,
         right: 16,
         bottom: 16,
-        flexDirection: 'row',
-        gap: 12,
-        padding: 12,
-        backgroundColor: Colors.cardBg,
-        borderRadius: 12,
-        borderWidth: 0.5,
-        borderColor: Colors.divider,
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 4 },
-        shadowOpacity: 0.12,
-        shadowRadius: 12,
-        elevation: 6,
       }}
     >
-      <PressableScale
-        fill
-        haptic="tap"
-        onPress={onCancel}
-        accessibilityRole="button"
-        accessibilityLabel={t('peopleList.cancelSelectionA11y')}
-        style={{
-          height: 44,
-          alignItems: 'center',
-          justifyContent: 'center',
-        }}
+      <ThemedSurface
+        variant="elevated"
+        className="flex-row items-center p-3"
+        style={{ gap: 8 }}
       >
-        <Text className="text-text1 text-[15px]">{t('peopleList.cancel')}</Text>
-      </PressableScale>
-      <PressableScale
-        fill
-        haptic="warning"
-        onPress={onDelete}
-        disabled={count === 0}
-        accessibilityRole="button"
-        accessibilityLabel={t('peopleList.deleteSelectedA11y')}
-        style={{
-          height: 44,
-          alignItems: 'center',
-          justifyContent: 'center',
-          backgroundColor: count === 0 ? `${Colors.destructive}55` : Colors.destructive,
-          borderRadius: 8,
-        }}
-      >
-        <Text
-          style={{
-            color: Colors.invertedButtonText,
-            fontSize: 15,
-            fontWeight: '500',
-          }}
+        <ThemedText
+          variant="bodySmall"
+          tabularNums
+          numberOfLines={1}
+          style={{ flex: 1 }}
         >
-          {count === 0 ? t('peopleList.delete') : t('peopleList.deleteCount', { count })}
-        </Text>
-      </PressableScale>
+          {t('peopleList.countSelected', { count })}
+        </ThemedText>
+        <ThemedButton
+          size="sm"
+          variant="destructive"
+          label={t('peopleList.delete')}
+          disabled={count === 0 || exporting}
+          onPress={onDelete}
+        />
+        <ThemedButton
+          size="sm"
+          label={t('peopleList.exportVCard')}
+          loading={exporting}
+          disabled={count === 0}
+          onPress={onExport}
+        />
+      </ThemedSurface>
     </View>
   );
 }
 
-function Header({
+function ContactsHeader({
   editMode,
-  selectedCount,
-  totalVisible,
+  hasContacts,
   allSelected,
-  onAddManually,
-  onImportPhone,
-  onImportVcf,
-  onRadarExchange,
+  onAdd,
   onEnterEditMode,
   onExitEditMode,
   onToggleSelectAll,
-  developerMode,
-  menuOpen,
-  setMenuOpen,
 }: {
-  editMode: boolean;
-  selectedCount: number;
-  totalVisible: number;
-  allSelected: boolean;
-  onAddManually: () => void;
-  onImportPhone: () => void;
-  onImportVcf: () => void;
-  onRadarExchange: () => void;
-  onEnterEditMode: () => void;
-  onExitEditMode: () => void;
-  onToggleSelectAll: () => void;
-  developerMode: boolean;
-  menuOpen: boolean;
-  setMenuOpen: (v: boolean) => void;
+  readonly editMode: boolean;
+  readonly hasContacts: boolean;
+  readonly allSelected: boolean;
+  readonly onAdd: () => void;
+  readonly onEnterEditMode: () => void;
+  readonly onExitEditMode: () => void;
+  readonly onToggleSelectAll: () => void;
 }) {
-  const c = useThemeColors();
   const { t } = useTranslation();
 
-  if (editMode) {
+  if (!editMode) {
     return (
-      <View className="px-4" style={{ height: 56 }}>
-        <View className="flex-1 flex-row items-center justify-between">
-          <Pressable
-            accessibilityRole="button"
-            onPress={onToggleSelectAll}
-            disabled={totalVisible === 0}
-            hitSlop={8}
-            className="active:opacity-60"
-          >
-            <Text
-              className="text-text1 text-[15px]"
-              style={{ opacity: totalVisible === 0 ? 0.4 : 1 }}
-            >
-              {allSelected ? t('peopleList.deselectAll') : t('peopleList.selectAll')}
-            </Text>
-          </Pressable>
-          <Text className="text-text1 text-[15px] font-semibold">
-            {selectedCount > 0
-              ? selectedCount === 1
-                ? t('peopleList.oneSelected')
-                : t('peopleList.countSelected', { count: selectedCount })
-              : t('peopleList.selectContacts')}
-          </Text>
-          <Pressable
-            accessibilityRole="button"
-            onPress={onExitEditMode}
-            hitSlop={8}
-            className="active:opacity-60"
-          >
-            <Text className="text-text1 text-[15px] font-medium">{t('peopleList.done')}</Text>
-          </Pressable>
-        </View>
+      <View className="flex-row items-center px-4" style={{ height: 56 }}>
+        <HeaderAction
+          label={t('peopleList.select')}
+          onPress={onEnterEditMode}
+          disabled={!hasContacts}
+          align="left"
+        />
+        <ThemedText
+          variant="titleMedium"
+          accessibilityRole="header"
+          numberOfLines={1}
+          style={{ flex: 1, textAlign: 'center' }}
+        >
+          {t('peopleList.title')}
+        </ThemedText>
+        <HeaderAction label={t('peopleList.add')} onPress={onAdd} align="right" />
       </View>
     );
   }
 
   return (
-    <View className="px-4" style={{ height: 56 }}>
-      <View className="flex-1 flex-row items-center justify-between">
-        <Text className="text-text1 text-[18px] font-semibold">{t('peopleList.title')}</Text>
-        <View className="flex-row items-center" style={{ columnGap: 16 }}>
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel={t('peopleList.editContactsA11y')}
-            onPress={onEnterEditMode}
-            disabled={totalVisible === 0}
-            hitSlop={8}
-            style={{ opacity: totalVisible === 0 ? 0.4 : 1 }}
-            className="active:opacity-60"
-          >
-            <Text className="text-text1 text-[14px]">{t('peopleList.edit')}</Text>
-          </Pressable>
-          <PressableScale
-            haptic="tap"
-            scaleTo={SCALE.icon}
-            accessibilityRole="button"
-            onPress={() => setMenuOpen(!menuOpen)}
-            style={{ width: 24, height: 24, alignItems: 'center', justifyContent: 'center' }}
-          >
-            <SfIcon name="plus" size={18} color={c.text1} />
-          </PressableScale>
-        </View>
-      </View>
-      {menuOpen ? (
-        <View
-          className="absolute right-4 top-12 rounded-lg bg-cardBg"
-          style={{
-            shadowColor: '#000',
-            shadowOffset: { width: 0, height: 4 },
-            shadowOpacity: 0.12,
-            shadowRadius: 12,
-            elevation: 6,
-            zIndex: 10,
-          }}
-        >
-          {developerMode ? (
-            <MenuItem
-              icon="antenna.radiowaves.left.and.right"
-              label={t('peopleList.radarExchange')}
-              onPress={() => { setMenuOpen(false); onRadarExchange(); }}
-            />
-          ) : null}
-          <MenuItem
-            icon="square.and.pencil"
-            label={t('peopleList.addManually')}
-            onPress={() => { setMenuOpen(false); onAddManually(); }}
-          />
-          <MenuItem
-            icon="person.crop.circle.badge.plus"
-            label={t('peopleList.importFromPhone')}
-            onPress={() => { setMenuOpen(false); onImportPhone(); }}
-          />
-          <MenuItem
-            icon="doc.badge.plus"
-            label={t('peopleList.importVcfFile')}
-            onPress={() => { setMenuOpen(false); onImportVcf(); }}
-            isLast
-          />
-        </View>
-      ) : null}
+    <View className="flex-row items-center px-4" style={{ height: 56 }}>
+      <HeaderAction
+        label={t('peopleList.done')}
+        onPress={onExitEditMode}
+        align="left"
+      />
+      <ThemedText
+        variant="titleMedium"
+        accessibilityRole="header"
+        numberOfLines={1}
+        style={{ flex: 1, textAlign: 'center' }}
+      >
+        {t('peopleList.title')}
+      </ThemedText>
+      <HeaderAction
+        label={allSelected ? t('peopleList.deselectAll') : t('peopleList.selectAll')}
+        onPress={onToggleSelectAll}
+        disabled={!hasContacts}
+        align="right"
+      />
     </View>
   );
 }
 
-function MenuItem({
-  icon,
+function HeaderAction({
   label,
   onPress,
-  isLast = false,
+  disabled = false,
+  align,
 }: {
-  icon: import('expo-symbols').SFSymbol;
-  label: string;
-  onPress: () => void;
-  isLast?: boolean;
+  readonly label: string;
+  readonly onPress: () => void;
+  readonly disabled?: boolean;
+  readonly align: 'left' | 'right';
 }) {
-  const c = useThemeColors();
   return (
     <PressableScale
       haptic="tap"
       onPress={onPress}
-      className="flex-row items-center gap-3 px-4 py-3"
+      disabled={disabled}
+      accessibilityRole="button"
+      accessibilityLabel={label}
       style={{
-        borderBottomWidth: isLast ? 0 : 0.5,
-        borderBottomColor: c.divider,
-        minWidth: 200,
+        width: 96,
+        minHeight: 44,
+        justifyContent: 'center',
+        alignItems: align === 'left' ? 'flex-start' : 'flex-end',
+        opacity: disabled ? 0.4 : 1,
       }}
     >
-      <SfIcon name={icon} size={16} color={c.text1} />
-      <Text className="text-text1 text-[15px]">{label}</Text>
+      <ThemedText variant="bodyMedium" numberOfLines={1}>
+        {label}
+      </ThemedText>
     </PressableScale>
   );
 }
 
-function EmptyState({
+function EmptyContactsContent({
   onImportPhone,
-  onAddManually,
+  onAdd,
+  activity,
 }: {
-  onImportPhone: () => void;
-  onAddManually: () => void;
+  readonly onImportPhone: () => void;
+  readonly onAdd: () => void;
+  readonly activity: ReactNode;
 }) {
-  const c = useThemeColors();
-  const { t } = useTranslation();
   return (
-    <ScrollView
-      contentContainerStyle={{ flexGrow: 1, alignItems: 'center', justifyContent: 'center' }}
-    >
-      <View
-        style={{ width: 214, height: 214, alignItems: 'center', justifyContent: 'center' }}
-      >
-        <PaperStackIllustration size={214} />
-      </View>
-      <Text className="text-text2 text-[14px] text-center pb-8">
-        {t('peopleList.emptyTitle')}
-      </Text>
-      <View className="gap-2 py-4 items-center">
-        <PressableScale
-          haptic="tap"
-          onPress={onImportPhone}
-          accessibilityRole="button"
-          className="rounded-sm2"
-          style={{
-            width: 200,
-            height: 44,
-            backgroundColor: c.invertedButtonBg,
-            alignItems: 'center',
-            justifyContent: 'center',
-          }}
-        >
-          <Text style={{ color: c.invertedButtonText }} className="text-[15px]">
-            {t('peopleList.importFromPhone')}
-          </Text>
-        </PressableScale>
-        <PressableScale
-          haptic="tap"
-          onPress={onAddManually}
-          accessibilityRole="button"
-          style={{
-            width: 200,
-            height: 44,
-            alignItems: 'center',
-            justifyContent: 'center',
-          }}
-        >
-          <Text className="text-text1 text-[15px]">{t('peopleList.addManually')}</Text>
-        </PressableScale>
+    <ScrollView contentContainerStyle={{ flexGrow: 1 }}>
+      {activity}
+      <EmptyState onImportPhone={onImportPhone} onAdd={onAdd} />
+      <View className="px-4">
+        <VerifiedPagesSection />
       </View>
     </ScrollView>
   );
 }
 
-function EmptySearchState({ query }: { query: string }) {
+function EmptyState({
+  onImportPhone,
+  onAdd,
+}: {
+  readonly onImportPhone: () => void;
+  readonly onAdd: () => void;
+}) {
   const { t } = useTranslation();
   return (
-    <View className="flex-1 items-center justify-center gap-3">
+    <View
+      style={{
+        flex: 1,
+        minHeight: 420,
+        alignItems: 'center',
+        justifyContent: 'center',
+        paddingHorizontal: 32,
+        paddingVertical: 32,
+        gap: 14,
+      }}
+    >
+      <View
+        style={{ width: 180, height: 180, alignItems: 'center', justifyContent: 'center' }}
+      >
+        <PaperStackIllustration size={180} />
+      </View>
+      <ThemedText variant="titleLarge" style={{ textAlign: 'center' }}>
+        {t('peopleList.emptyTitle')}
+      </ThemedText>
+      <ThemedText variant="bodyMedium" tone="secondary" style={{ textAlign: 'center' }}>
+        {t('peopleList.emptyBody')}
+      </ThemedText>
+      <View style={{ alignSelf: 'stretch', gap: 10, paddingTop: 10 }}>
+        <ThemedButton fullWidth label={t('peopleList.add')} onPress={onAdd} />
+        <ThemedButton
+          fullWidth
+          variant="secondary"
+          label={t('peopleList.importFromPhone')}
+          onPress={onImportPhone}
+        />
+      </View>
+    </View>
+  );
+}
+
+function LoadingState() {
+  return (
+    <View className="flex-1 items-center justify-center">
+      <ActivityIndicator color={Colors.text2} />
+    </View>
+  );
+}
+
+function ContactsLoadError({ onRetry }: { readonly onRetry: () => void }) {
+  const { t } = useTranslation();
+  return (
+    <View className="flex-1 items-center justify-center gap-3 px-8 py-10">
+      <SfIcon name="exclamationmark.triangle" size={36} color={Colors.warning} />
+      <ThemedText variant="titleMedium" style={{ textAlign: 'center' }}>
+        {t('peopleList.loadErrorTitle')}
+      </ThemedText>
+      <ThemedText variant="bodyMedium" tone="secondary" style={{ textAlign: 'center' }}>
+        {t('peopleList.loadErrorBody')}
+      </ThemedText>
+      <View className="w-full pt-3">
+        <ThemedButton fullWidth label={t('peopleList.tryAgain')} onPress={onRetry} />
+      </View>
+    </View>
+  );
+}
+
+function EmptySearchState({
+  query,
+  onAdd,
+  onImportPhone,
+}: {
+  readonly query: string;
+  readonly onAdd: () => void;
+  readonly onImportPhone: () => void;
+}) {
+  const { t } = useTranslation();
+  return (
+    <View className="flex-1 items-center justify-center gap-3 px-8 py-10">
       <SfIcon name="magnifyingglass" size={36} color={Colors.text3} />
-      <Text className="text-text2 text-[14px]">{t('peopleList.noResults', { query })}</Text>
+      <ThemedText variant="bodySmall" tone="secondary" style={{ textAlign: 'center' }}>
+        {t('peopleList.noResults', { query })}
+      </ThemedText>
+      <View className="w-full gap-2 pt-3">
+        <ThemedButton fullWidth label={t('peopleList.add')} onPress={onAdd} />
+        <ThemedButton
+          fullWidth
+          variant="secondary"
+          label={t('peopleList.importFromPhone')}
+          onPress={onImportPhone}
+        />
+      </View>
     </View>
   );
 }
