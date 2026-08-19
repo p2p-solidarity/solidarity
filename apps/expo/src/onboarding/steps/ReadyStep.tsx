@@ -1,12 +1,15 @@
 import { Platform, Switch, View } from 'react-native';
-import type { ReactNode } from 'react';
+import { useState, type ReactNode } from 'react';
 
+import { ReadyFeatureArt } from '@/components/decor/CredsFeatureArt';
 import { SfIcon } from '@/components/icons/SfIcon';
 import { ThemedButton, ThemedSurface, ThemedText } from '@/components/themed';
 import { Colors } from '@/constants/Colors';
 import { useTranslation } from '@/i18n';
 import { publicPagePath } from '@/onboarding/publicPageUsername';
 import { usePreferences } from '@/settings/preferences';
+import { registerForPushNotificationsAsync, unregister } from '@/sakura/pushRegistration';
+import { haptic } from '@/feedback/haptics';
 
 import { V2OnboardingScaffold } from './V2OnboardingScaffold';
 
@@ -23,14 +26,40 @@ export function ReadyStep({
 }): ReactNode {
   const { t } = useTranslation();
   const username = usePreferences((state) => state.publicPageUsername);
+  const registeredUsername = usePreferences((state) => state.publicPageRegisteredUsername);
+  const bindingReady = usePreferences((state) => state.publicPageBindingReady);
   const notificationsEnabled = usePreferences((state) => state.notificationsEnabled);
+  const notificationsRemote = usePreferences((state) => state.notificationsRemote);
   const setPref = usePreferences((state) => state.set);
+  const [notificationBusy, setNotificationBusy] = useState(false);
+
+  const updateNotifications = async (next: boolean): Promise<void> => {
+    if (notificationBusy) return;
+    setNotificationBusy(true);
+    try {
+      if (next) {
+        const registration = await registerForPushNotificationsAsync({ prompt: true });
+        if (!registration) {
+          haptic('error');
+          return;
+        }
+        setPref('notificationsEnabled', true);
+        setPref('notificationsRemote', true);
+      } else {
+        await unregister();
+        setPref('notificationsEnabled', false);
+        setPref('notificationsRemote', false);
+      }
+    } finally {
+      setNotificationBusy(false);
+    }
+  };
 
   return (
     <V2OnboardingScaffold
       stepIndex={4}
-      title={t('ob.done.title')}
-      subtitle={t('ob.done.sub')}
+      title={undefined}
+      subtitle={undefined}
       onBack={onBack}
       footer={
         <View style={{ gap: 10 }}>
@@ -48,8 +77,13 @@ export function ReadyStep({
           />
         </View>
       }>
-      <View style={{ gap: 14, paddingTop: 8 }}>
-        <ThemedSurface variant="card" padded className="gap-3 rounded-none">
+      <View style={{ flex: 1, gap: 14, paddingTop: 8 }}>
+        <View className="flex-1 items-center justify-center gap-3">
+          {/* Mock ob step 4: the w-feature-6 sparkle art above 「一切就緒」. */}
+          <ReadyFeatureArt size={140} />
+          <ThemedText variant="headlineMedium">{t('ob.done.title')}</ThemedText>
+        </View>
+        <ThemedSurface variant="card" padded className="gap-3 rounded-xl">
           <View className="flex-row items-center justify-between gap-4">
             <View className="flex-1 gap-1">
               <ThemedText variant="label">{t('ob.done.notify')}</ThemedText>
@@ -58,14 +92,15 @@ export function ReadyStep({
               </ThemedText>
             </View>
             <Switch
-              value={notificationsEnabled}
-              onValueChange={(value) => { setPref('notificationsEnabled', value); }}
+              value={notificationsEnabled && notificationsRemote}
+              disabled={notificationBusy}
+              onValueChange={(value) => { void updateNotifications(value); }}
               accessibilityLabel={t('ob.done.notify')}
             />
           </View>
         </ThemedSurface>
 
-        <ThemedSurface variant="outlined" padded className="gap-4 rounded-none">
+        <ThemedSurface variant="outlined" padded className="gap-4 rounded-xl">
           <ReadyRow
             done={keysGenerated}
             title={t('ob.done.passkey')}
@@ -76,9 +111,13 @@ export function ReadyStep({
             )}
           />
           <ReadyRow
-            done={username.length > 0}
+            done={bindingReady && registeredUsername.length > 0}
             title={t('ob.done.page')}
-            detail={publicPagePath(username)}
+            detail={
+              bindingReady && registeredUsername.length > 0
+                ? publicPagePath(registeredUsername)
+                : `${publicPagePath(username)} · ${t('ob.done.page.pending')}`
+            }
           />
           <ReadyRow
             done={false}
