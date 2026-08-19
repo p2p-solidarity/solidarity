@@ -63,8 +63,10 @@ describe('Present product surface', () => {
       source('../../src/components/present/PresentCardVisual.tsx'),
     ].join('\n');
     expect(card).toContain('LinearGradient');
-    expect(card).toContain('animalImageSource');
-    expect(card).toContain('const CARD_RADIUS = 20');
+    // `.metal` geometry from the creds-design mock: credit-card proportions
+    // and an 18pt corner, not a fixed-height panel.
+    expect(card).toContain('const CARD_RADIUS = 18');
+    expect(card).toContain('const CARD_ASPECT_RATIO = 1.586');
     expect(card).toContain('borderRadius: CARD_RADIUS');
     expect(card).toContain('generateQrPng');
     expect(card).toContain('displayProfileShareUrl');
@@ -74,7 +76,9 @@ describe('Present product surface', () => {
     expect(card).toContain('shareFieldPreferencesFromFields');
     expect(card).toContain('sealedRoute: page?.url');
     expect(card).toContain('model.selectedCardOnlyCount');
-    expect(card).toContain('ANIMAL_GRADIENT_END');
+    expect(card).toContain('CREDS.ID');
+    expect(card).toContain('CardMetalColors.frontStops');
+    expect(card).toContain('CardMetalColors.backStops');
     expect(card).toContain('enableGlow');
     expect(card).toContain('SensorType.ROTATION');
     expect(card).toContain('useReducedMotion');
@@ -90,8 +94,12 @@ describe('Present product surface', () => {
     expect(product).toContain('filterAvailablePassportPresentationClaims');
     expect(product).toContain('hasPassportShowWitnessSafe');
     expect(attestations).toContain("pathname: '/credentials/[id]'");
-    expect(attestations).toContain('claimId: claim.id');
+    expect(attestations).toContain('claimId: selectedClaim.id');
     expect(attestations).toContain("router.push('/passport')");
+    // One claim opens one proof, so the chips are a radio group, not
+    // checkboxes — the role now matches what the selection actually does.
+    expect(attestations).toContain('accessibilityRole="radio"');
+    expect(attestations).toContain("t('present.openProof')");
   });
 
   it('preserves the former Verify tools behind exactly one gated developer link', () => {

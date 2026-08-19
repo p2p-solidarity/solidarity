@@ -27,16 +27,15 @@ function resolveCardAccent(value: string): string {
   return value.startsWith('#') && value.length === 7 ? value : Colors.primaryMauve;
 }
 
+/**
+ * What the card face prints, and the key identifying what the QR encodes.
+ *
+ * The mock's steel face carries only the name and the page address — every
+ * optional field the user switched on travels INSIDE the QR, so a glance at
+ * someone's card never leaks a field they only meant to hand over on scan.
+ */
 function selectedCardContent(model: PresentModel, ownerName: string | null) {
-  const shownFields = new Map(
-    model.cardOnlyFields
-      .filter((field) => field.selected)
-      .map((field) => [field.field, field.values] as const),
-  );
   return {
-    company: shownFields.get('company')?.[0] ?? null,
-    title: shownFields.get('title')?.[0] ?? null,
-    skills: shownFields.get('skills')?.slice(0, 3) ?? [],
     name: ownerName ?? model.mandatoryName ?? null,
     selectedFieldKey: model.cardOnlyFields
       .filter((field) => field.selected)
@@ -123,13 +122,8 @@ export function PresentCard({
   const { t } = useTranslation();
   const cardAccentHex = usePreferences((state) => state.cardAccentHex);
   const enableGlow = usePreferences((state) => state.enableGlow);
-  const selectedAnimal = usePreferences((state) => state.selectedAnimal);
   const card = model.cardState.kind === 'ready' ? model.cardState.card : null;
-  const animal = card?.animal;
-  const { company, title, skills, name, selectedFieldKey } = selectedCardContent(
-    model,
-    ownerName,
-  );
+  const { name, selectedFieldKey } = selectedCardContent(model, ownerName);
   const displayUrl = page ? displayProfileShareUrl(page) : null;
   const resolvedAccent = resolveCardAccent(cardAccentHex);
   const qrState = useCardQr(card, page, selectedFieldKey);
@@ -138,14 +132,9 @@ export function PresentCard({
     <PresentCardVisual
       resolvedAccent={resolvedAccent}
       enableGlow={enableGlow}
-      selectedAnimal={selectedAnimal}
-      animal={animal}
       name={name}
-      company={company}
-      title={title}
-      skills={skills}
-      category={company ?? title ?? t('present.card')}
       summary={t('present.cardSummary', { count: model.selectedCardOnlyCount })}
+      scanHint={t('present.scanToExchange')}
       displayUrl={displayUrl ?? t('present.noPublicLinks')}
       qrState={qrState}
       flipLabel={t('present.flipCard')}
