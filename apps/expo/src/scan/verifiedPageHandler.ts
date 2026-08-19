@@ -66,9 +66,11 @@ export type VerifiedPageErrorReason =
   | 'insecureEndpoint';
 
 export interface VerifiedHandleBinding {
-  readonly scheme: Exclude<HandleScheme, 'nip05'>;
+  readonly scheme: HandleScheme;
   readonly handle: string;
   readonly state: BadgeState;
+  readonly rebindGeneration?: number;
+  readonly reboundAt?: number | null;
 }
 
 export type VerifiedPageResult =
@@ -192,7 +194,7 @@ export function parseVerifiedPagePayload(payload: string): VerifiedPageResult | 
  *     profile JWS), verifiable locally in airplane mode;
  *   - `pointer` — the short `#nostr:<npub>` locator, which needs an async
  *     relay round-trip (`resolveProfile.ts`) to fetch + verify.
- *   - `handle` — a supported ATProto/DNS/ENS handle, resolved through the
+ *   - `handle` — a supported Solidarity/ATProto/DNS/ENS handle, resolved through the
  *     shared deterministic resolver registry before profile retrieval.
  * The scanner (`app/scan/index.tsx`) branches on this to pick the sync-local
  * vs. async-network path. `null` = not a Verified Page payload at all.

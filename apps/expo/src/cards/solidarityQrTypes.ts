@@ -42,6 +42,13 @@ export interface SolidarityQrSigner {
     header: { readonly alg: 'ES256'; readonly typ?: string; readonly kid?: string },
     payload: Readonly<Record<string, unknown>>
   ) => Promise<string>;
+  /**
+   * Raw-message ES256 signer for the CRD1 COSE_Sign1 wire: returns the
+   * 64-byte r||s ECDSA-P256 signature over SHA-256(message) — exactly one
+   * hash, computed by the implementation (`signRawEs256` shape). Optional:
+   * absent → the runtime falls back to the legacy bare-JWT wire.
+   */
+  readonly signRaw?: (message: Uint8Array) => Promise<Uint8Array>;
 }
 
 export interface BusinessCardSnapshotPayload {

@@ -9,7 +9,8 @@ import {
   verifiedHandleShareCandidates,
   type HandleShareCandidate,
 } from '@/components/me/meProfileModel';
-import { encodeFragment, type ProfileRecord } from '@solidarity/shared';
+import type { ProfileRecord } from '@solidarity/shared';
+
 
 const PROFILE: ProfileRecord = {
   v: 1,
@@ -68,7 +69,7 @@ describe('profile share model', () => {
     expect(selectProfileShareUrl(model, false)).toBe(model.offlineUrl);
   });
 
-  it('builds /name from the signed public projection, never the broader QR projection', () => {
+  it('builds a fragment-free official short URL', () => {
     const sharedJws = 'header.shared.signature';
     const publicJws = 'header.public.signature';
     const shared = {
@@ -90,15 +91,15 @@ describe('profile share model', () => {
       jws: publicJws,
     });
 
-    expect(model.usernameUrl).toBe(`https://creds.id/alice#${encodeFragment(publicJws).fragment}`);
-    expect(model.usernameUrl).not.toContain(encodeFragment(sharedJws).fragment);
+    expect(model.usernameUrl).toBe('https://app.solidarity.gg/@alice');
+    expect(model.usernameUrl).not.toContain('#');
   });
 
-  it('withholds /name until there is a separately signed public projection', () => {
+  it('does not attach a local projection to the official short URL', () => {
     const model = buildProfileShareModel(PROFILE, 'header.payload.signature', 'alice');
 
-    expect(model.usernameUrl).toBeNull();
-    expect(model.usernameDisplayUrl).toBeNull();
+    expect(model.usernameUrl).toBe('https://app.solidarity.gg/@alice');
+    expect(model.usernameDisplayUrl).toBe('https://app.solidarity.gg/@alice');
   });
 });
 
@@ -192,9 +193,9 @@ describe('verified handle share gate', () => {
 
     const preferred = preferredVerifiedHandleShareCandidate(CANDIDATE_RECORD, isVerified);
     expect(preferred?.scheme).toBe('dns');
-    expect(verifiedHandleShareCandidates(CANDIDATE_RECORD, isVerified).map((c) => c.scheme)).toEqual([
-      'dns',
-    ]);
+    expect(
+      verifiedHandleShareCandidates(CANDIDATE_RECORD, isVerified).map((c) => c.scheme)
+    ).toEqual(['dns']);
   });
 
   it('offers the top-priority candidate first when multiple are verified', () => {

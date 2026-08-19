@@ -992,7 +992,7 @@ describe('saveProfile — three-tier link projections', () => {
     expect(publicVerified.ok).toBe(true);
   });
 
-  it('uses the public projection for /name while preserving the broader shared QR projection', async () => {
+  it('uses a fragment-free short name while preserving the broader shared QR projection as offline backup', async () => {
     const created = await rootKeyMod.createFromFreshMnemonic();
     expect(created.ok).toBe(true);
     if (!created.ok) return;
@@ -1019,17 +1019,8 @@ describe('saveProfile — three-tier link projections', () => {
     expect(model.usernameUrl).not.toBeNull();
     if (!model.usernameUrl) return;
 
-    const publicFragment = decodeFragment(new URL(model.usernameUrl).hash.slice(1));
-    expect(publicFragment.ok).toBe(true);
-    if (!publicFragment.ok) return;
-    const publicVerified = verifyCompact(publicFragment.value, created.value.did);
-    expect(publicVerified.ok).toBe(true);
-    if (!publicVerified.ok) return;
-    const publicParsed = parseProfile(publicVerified.value);
-    expect(publicParsed.ok).toBe(true);
-    if (!publicParsed.ok) return;
-    expect(publicParsed.value.scope).toBe('public');
-    expect(publicParsed.value.links.map((link) => link.url)).toEqual(['https://public.example']);
+    expect(model.usernameUrl).toBe('https://app.solidarity.gg/@alice');
+    expect(new URL(model.usernameUrl).hash).toBe('');
 
     const sharedFragment = decodeFragment(new URL(model.offlineUrl).hash.slice(1));
     expect(sharedFragment.ok).toBe(true);

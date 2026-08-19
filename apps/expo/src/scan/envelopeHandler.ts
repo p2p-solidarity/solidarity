@@ -27,6 +27,8 @@ import {
 } from '@solidarity/shared';
 
 import { decompressQR } from '@/cards/qrCompression';
+import { verifyCrd1Wire } from '@/cards/crd1Envelope';
+import { EVIDENCE_PACK_TYP } from '@/cards/evidencePack';
 import { parseEnvelopeFromWire, decryptZKPayload } from '@/cards/qrEnvelope';
 import type {
   QRCodeEnvelopePayload,
@@ -77,6 +79,13 @@ export async function handleScannedPayload(payload: string): Promise<ScanOutcome
   // vCard — no parser exists yet; fall through to raw routing.
   if (payload.startsWith('BEGIN:VCARD')) {
     return { kind: 'unknown' };
+  }
+
+  // CRD1 evidence pack / card share — COSE_Sign1 wire, verified in full
+  // (signature, iss↔kid binding, 30-day window, embedded-key holder binding)
+  // before anything is rebuilt from it.
+  if (payload.startsWith('CRD1:')) {
+    return handleCrd1(payload);
   }
 
   // Passport show presentation (passport_show_v1) — fresh-proof ZK route.
@@ -156,6 +165,80 @@ async function handleZkProof(envelope: QRCodeEnvelopePayload): Promise<ScanOutco
     card,
     verificationStatus,
     sealedRoute: payload.sealedRoute,
+  };
+}
+
+/**
+ * CRD1 wires come in two flavours sharing one verified envelope:
+ *   - a card share: the SAME VC claims object the legacy JWT carried —
+ *     rebuilt via `rebuildCardFromJwtPayload`, status Verified (the COSE
+ *     signature + holder binding were already enforced by `verifyCrd1Wire`);
+ *   - an evidence pack (`typ: gg.solidarity.evidence-pack.v1`): profile
+ *     claims — rendered as a minimal contact card carrying the pack's links.
+ * Anything failing verification is an error outcome, never an unverified card.
+ */
+function handleCrd1(wire: string): ScanOutcome {
+  const verified = verifyCrd1Wire(wire);
+  if (!verified.ok) {
+    return { kind: 'error', errorMessage: `Invalid evidence pack (${verified.error})` };
+  }
+  const { claims, did } = verified.value;
+
+  if (claims['typ'] === EVIDENCE_PACK_TYP) {
+    const card = rebuildCardFromEvidencePack(claims, did);
+    if (!card) return { kind: 'error', errorMessage: 'Missing evidence-pack subject' };
+    return { kind: 'card', card, verificationStatus: 'Verified' };
+  }
+
+  const card = rebuildCardFromJwtPayload(claims, typeof claims['sub'] === 'string' ? claims['sub'] : did);
+  if (!card) return { kind: 'error', errorMessage: 'Missing credential subject' };
+  return { kind: 'card', card, verificationStatus: 'Verified' };
+}
+
+function rebuildCardFromEvidencePack(
+  claims: Readonly<Record<string, unknown>>,
+  did: string
+): BusinessCard | null {
+  const name = pickString(claims['name']);
+  if (!name) return null;
+  const rows = pickArray(claims['claims']) ?? [];
+  const socialNetworks: SocialNetwork[] = rows
+    .map((row) => pickRecord(row))
+    .filter((row): row is Readonly<Record<string, unknown>> => Boolean(row))
+    .map((row) => ({
+      id: uuid(),
+      platform: 'Website',
+      username: pickString(row['label']) ?? pickString(row['value']) ?? '',
+      url: pickString(row['value']),
+    }));
+  const now = new Date();
+  void did;
+  return {
+    id: uuid(),
+    name,
+    title: undefined,
+    company: undefined,
+    email: undefined,
+    phone: undefined,
+    profileImage: undefined,
+    animal: undefined,
+    socialNetworks,
+    skills: [],
+    categories: [],
+    sharingPreferences: {
+      publicFields: new Set(),
+      professionalFields: new Set(),
+      personalFields: new Set(),
+      allowForwarding: true,
+      expirationDate: undefined,
+      useZK: false,
+      sharingFormat: 'didSigned',
+    },
+    groupContext: undefined,
+    verifiedFields: undefined,
+    nameType: 'display_name',
+    createdAt: now,
+    updatedAt: now,
   };
 }
 

@@ -87,6 +87,7 @@ interface PublishMod {
   }) => Promise<Res<PublishReport>>;
   readonly updateKind0AlsoKnownAs: (opts: {
     readonly did: string;
+    readonly nip05?: string;
     readonly relays: readonly string[];
     readonly timeoutMs?: number;
     readonly fetchTimeoutMs?: number;
@@ -433,6 +434,36 @@ describe('updateKind0AlsoKnownAs', () => {
     expect(content.name).toBe('Alice');
     expect(content.about).toBe('hi');
     expect(content.alsoKnownAs.sort()).toEqual(['at://alice.bsky.social', DID].sort());
+  });
+
+  it('sets the requested NIP-05 identifier while preserving all existing metadata', async () => {
+    await userKeyMod.provisionFromRootMnemonic();
+    const existing = await userKeyMod.signNostrEvent({
+      kind: 0,
+      tags: [],
+      content: JSON.stringify({ name: 'Alice', nip05: 'old@solidarity.gg' }),
+      created_at: 1_000,
+    });
+    expect(existing.ok).toBe(true);
+    if (!existing.ok) return;
+    const { fn: subFn } = makeFakeSubscribe({ a: [existing.value] });
+    const { fn: pubFn } = makeFakePublish({ a: true });
+
+    const result = await mod.updateKind0AlsoKnownAs({
+      did: DID,
+      nip05: 'alice@solidarity.gg',
+      relays: ['a'],
+      subscribeEventsFn: subFn,
+      publishEventFn: pubFn,
+    });
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(JSON.parse(result.value.event.content)).toEqual({
+      name: 'Alice',
+      nip05: 'alice@solidarity.gg',
+      alsoKnownAs: [DID],
+    });
   });
 
   it('picks the newest kind-0 across relays by created_at', async () => {

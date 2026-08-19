@@ -53,10 +53,27 @@ export async function buildDidSignedEnvelope(
   };
 }
 
-export async function buildDidSignedJwt(
+/**
+ * The unsigned claims assembly shared by BOTH wire formats: the legacy bare
+ * VC-JWT and the CRD1 COSE_Sign1 evidence-pack framing. One claims builder,
+ * two signatures — the payload a scanner reconstructs is identical either way.
+ */
+export interface DidSignedClaimsResult {
+  readonly payload: Record<string, unknown>;
+  readonly issuedAt: number;
+  readonly shareId: string;
+  readonly createdAt: string;
+  readonly expirationDate?: string;
+  readonly issuerDid: string;
+  readonly holderDid: string;
+  readonly sharingLevel: NonNullable<SolidarityQrPayloadOptions['sharingLevel']>;
+  readonly selectedFields: readonly BusinessCardField[];
+}
+
+export function buildDidSignedClaims(
   card: BusinessCard,
   options: SolidarityQrPayloadOptions
-): Promise<DidSignedResult> {
+): DidSignedClaimsResult {
   const signer = options.signer;
   if (!signer) throw new Error('No signer available for didSigned payload');
 
@@ -82,9 +99,9 @@ export async function buildDidSignedJwt(
     attestedFields: vcEligibleFields,
   });
 
-  const jwt = await signer.signJwt({ alg: 'ES256' }, payload);
   return {
-    jwt,
+    payload,
+    issuedAt,
     shareId: options.shareId ?? uuid(),
     createdAt: formatSwiftIso8601(now),
     expirationDate: options.expirationDate
@@ -94,6 +111,27 @@ export async function buildDidSignedJwt(
     holderDid,
     sharingLevel,
     selectedFields,
+  };
+}
+
+export async function buildDidSignedJwt(
+  card: BusinessCard,
+  options: SolidarityQrPayloadOptions
+): Promise<DidSignedResult> {
+  const signer = options.signer;
+  if (!signer) throw new Error('No signer available for didSigned payload');
+
+  const claims = buildDidSignedClaims(card, options);
+  const jwt = await signer.signJwt({ alg: 'ES256' }, claims.payload);
+  return {
+    jwt,
+    shareId: claims.shareId,
+    createdAt: claims.createdAt,
+    expirationDate: claims.expirationDate,
+    issuerDid: claims.issuerDid,
+    holderDid: claims.holderDid,
+    sharingLevel: claims.sharingLevel,
+    selectedFields: claims.selectedFields,
   };
 }
 

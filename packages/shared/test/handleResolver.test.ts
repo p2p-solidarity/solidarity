@@ -3,6 +3,7 @@ import { describe, expect, it } from 'bun:test';
 import {
   AtprotoHandleResolver,
   DEFAULT_HANDLE_RESOLVERS,
+  Nip05HandleResolver,
   resolveHandle,
   type HandleResolver,
   type ResolverIO,
@@ -16,7 +17,7 @@ const unusedIo: ResolverIO = {
 };
 
 describe('resolveHandle', () => {
-  it('keeps deterministic registry priority: ENS reserved suffix, then ATProto, then explicit/hinted DNS', () => {
+  it('keeps deterministic registry priority: ENS reserved suffix, then ATProto, explicit/hinted DNS, then dotless NIP-05 names', () => {
     const matchingScheme = (handle: string): string | undefined =>
       DEFAULT_HANDLE_RESOLVERS.find((resolver) => resolver.matches(handle))?.scheme;
 
@@ -24,10 +25,12 @@ describe('resolveHandle', () => {
       'ens',
       'atproto',
       'dns',
+      'nip05',
     ]);
     expect(matchingScheme('vitalik.eth')).toBe('ens');
     expect(matchingScheme('example.com')).toBe('atproto');
     expect(matchingScheme('dns:example.com')).toBe('dns');
+    expect(matchingScheme('alice')).toBe('nip05');
   });
 
   it('uses the first matching resolver and does not evaluate later resolvers', async () => {
@@ -132,6 +135,89 @@ describe('resolveHandle', () => {
 
     expect(result).toEqual({ ok: true, value: { did: 'did:example:alice', sources: [] } });
     expect(queries).toEqual(['_did.example.com']);
+  });
+});
+
+describe('Nip05HandleResolver', () => {
+  it('resolves an active Solidarity name to its exact Nostr profile source', async () => {
+    const pubkey = '7e7e9c42a91bfef19fa929e5fda1b72e0ebc1a4c1141673e2794234d86addf4e';
+    const npub = 'npub10elfcs4fr0l0r8af98jlmgdh9c8tcxjvz9qkw038js35mp4dma8qzvjptg';
+    const calls: string[] = [];
+    const io: ResolverIO = {
+      dnsTxt: async () => ok([]),
+      fetchText: async (url) => {
+        calls.push(url);
+        if (url.includes('/.well-known/nostr.json')) {
+          return ok(JSON.stringify({
+            names: { alice: pubkey },
+            relays: { [pubkey]: ['wss://relay.example'] },
+          }));
+        }
+        return ok(JSON.stringify({
+          name: 'alice',
+          status: 'active',
+          redirectTo: null,
+          redirectUntil: null,
+          rebindGeneration: 0,
+          reboundAt: null,
+        }));
+      },
+    };
+
+    const result = await new Nip05HandleResolver().resolve('Alice', io);
+
+    expect(result).toEqual({
+      ok: true,
+      value: {
+        kind: 'nip05',
+        status: 'active',
+        name: 'alice',
+        identifier: 'alice@solidarity.gg',
+        pubkey,
+        npub,
+        relays: ['wss://relay.example'],
+        sources: [{ kind: 'nostr', npub }],
+        rebindGeneration: 0,
+        reboundAt: null,
+      },
+    });
+    expect(calls.sort()).toEqual([
+      'https://solidarity.gg/.well-known/nostr.json?name=alice',
+      'https://solidarity.gg/id/history?name=alice',
+    ]);
+  });
+
+  it('returns a live old-name redirect without trusting a stale directory entry', async () => {
+    const io: ResolverIO = {
+      dnsTxt: async () => ok([]),
+      fetchText: async (url) =>
+        url.includes('/.well-known/nostr.json')
+          ? ok(JSON.stringify({ names: { alice: '00'.repeat(32) } }))
+          : ok(JSON.stringify({
+              name: 'alice',
+              status: 'redirected',
+              redirectTo: 'alice2',
+              redirectUntil: 2_000_000_000,
+              rebindGeneration: 0,
+              reboundAt: null,
+            })),
+    };
+
+    const result = await new Nip05HandleResolver().resolve('alice', io);
+
+    expect(result).toEqual({
+      ok: true,
+      value: {
+        kind: 'nip05',
+        status: 'redirected',
+        name: 'alice',
+        identifier: 'alice@solidarity.gg',
+        redirectTo: 'alice2',
+        redirectUntil: 2_000_000_000,
+        rebindGeneration: 0,
+        reboundAt: null,
+      },
+    });
   });
 });
 

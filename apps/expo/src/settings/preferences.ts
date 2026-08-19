@@ -38,8 +38,24 @@ export type AnimalCharacter = 'dog' | 'horse' | 'pig' | 'sheep' | 'dove';
 
 export interface Preferences {
   readonly hasCompletedOnboarding: boolean;
-  /** Local v2 username used for the short `/name` public-page presentation. */
+  /** Locally selected name, even while the network-backed page is unpublished. */
   readonly publicPageUsername: string;
+  /** Name most recently confirmed by the authenticated directory endpoint. */
+  readonly publicPageRegisteredUsername: string;
+  /** True only after directory registration and kind-0 reverse publication both completed. */
+  readonly publicPageBindingReady: boolean;
+  readonly publicPagePublishError:
+    | ''
+    | 'name_taken'
+    | 'rename_too_soon'
+    | 'profile_publish_failed'
+    | 'directory_unreachable'
+    | 'kind0_publish_failed'
+    | 'rate_limited'
+    | 'invalid_auth'
+    | 'invalid_request'
+    | 'server_error';
+  readonly publicPageRetryAt: number | null;
   readonly biometricSensitiveOps: boolean;
   readonly backupProvider: ProviderKind;
   readonly autoBackupOnPull: boolean;
@@ -110,6 +126,10 @@ const DEFAULT_BIOMETRIC_POLICY: Readonly<Record<SensitiveActionKey, boolean>> = 
 const DEFAULTS: Preferences = {
   hasCompletedOnboarding: false,
   publicPageUsername: '',
+  publicPageRegisteredUsername: '',
+  publicPageBindingReady: false,
+  publicPagePublishError: '',
+  publicPageRetryAt: null,
   biometricSensitiveOps: true,
   backupProvider: 'iCloud',
   autoBackupOnPull: true,

@@ -34,9 +34,47 @@ export type HandleResolutionError =
   | 'malformedDid'
   | 'conflictingRecords';
 
-export interface HandleResolutionValue {
+export interface DidHandleResolutionValue {
+  /** Optional for backward compatibility with the original DID-only resolver shape. */
+  readonly kind?: 'did';
   readonly did: string;
   readonly sources?: readonly ProfileSource[];
+}
+
+export interface ActiveNip05HandleResolutionValue {
+  readonly kind: 'nip05';
+  readonly status: 'active';
+  readonly name: string;
+  readonly identifier: string;
+  readonly pubkey: string;
+  readonly npub: string;
+  readonly relays: readonly string[];
+  readonly sources: readonly [NostrProfileSource];
+  readonly rebindGeneration: number;
+  readonly reboundAt: number | null;
+}
+
+export interface RedirectedNip05HandleResolutionValue {
+  readonly kind: 'nip05';
+  readonly status: 'redirected';
+  readonly name: string;
+  readonly identifier: string;
+  readonly redirectTo: string;
+  readonly redirectUntil: number;
+  readonly rebindGeneration: number;
+  readonly reboundAt: number | null;
+}
+
+export type Nip05HandleResolutionValue =
+  | ActiveNip05HandleResolutionValue
+  | RedirectedNip05HandleResolutionValue;
+
+export type HandleResolutionValue = DidHandleResolutionValue | Nip05HandleResolutionValue;
+
+export function isNip05HandleResolutionValue(
+  value: HandleResolutionValue
+): value is Nip05HandleResolutionValue {
+  return value.kind === 'nip05';
 }
 
 export type HandleResolutionResult = Result<HandleResolutionValue, HandleResolutionError>;

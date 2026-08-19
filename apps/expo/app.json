@@ -22,6 +22,7 @@
       "supportsTablet": true,
       "associatedDomains": [
         "applinks:solidarity.gg",
+        "applinks:app.solidarity.gg",
         "applinks:creds.id"
       ],
       "entitlements": {
@@ -87,6 +88,10 @@
             {
               "scheme": "https",
               "host": "solidarity.gg"
+            },
+            {
+              "scheme": "https",
+              "host": "app.solidarity.gg"
             },
             {
               "scheme": "https",

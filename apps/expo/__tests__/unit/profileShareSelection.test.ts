@@ -18,18 +18,18 @@ const SHORT: ProfileShareUrlCandidate = {
 };
 
 describe('pickBestShareUrl', () => {
-  it('prefers a self-contained /name page and keeps its long fragment out of display copy', () => {
+  it('prefers the official short name and contains no long fragment', () => {
     const username: ProfileShareUrlCandidate = {
       kind: 'username',
-      url: 'https://creds.id/alice#profile-data',
-      displayUrl: 'https://creds.id/alice',
+      url: 'https://app.solidarity.gg/@alice',
+      displayUrl: 'https://app.solidarity.gg/@alice',
     };
 
     expect(pickBestShareUrl([OFFLINE, SHORT, username])).toEqual({
       kind: 'ready',
       candidate: username,
     });
-    expect(displayProfileShareUrl(username)).toBe('creds.id/alice');
+    expect(displayProfileShareUrl(username)).toBe('app.solidarity.gg/@alice');
   });
 
   it('selects a currently verified handle ahead of the npub and offline formats', () => {
@@ -65,10 +65,10 @@ describe('pickBestShareUrl', () => {
     });
   });
 
-  it('uses the offline fragment only when no shorter format is available', () => {
+  it('keeps the offline fragment behind an unpublished state when no short format is ready', () => {
     expect(pickBestShareUrl([OFFLINE])).toEqual({
-      kind: 'ready',
-      candidate: OFFLINE,
+      kind: 'unpublished',
+      offline: OFFLINE,
     });
   });
 
@@ -86,25 +86,25 @@ describe('buildProfileShareUrlSelection', () => {
     oversize: false,
   };
 
-  it('withholds a stale or never-published npub pointer and falls back to the offline URL', () => {
+  it('withholds a stale or never-published npub pointer without recommending the offline URL', () => {
     expect(buildProfileShareUrlSelection(model, null, false)).toEqual({
       candidates: [OFFLINE],
-      selection: { kind: 'ready', candidate: OFFLINE },
+      selection: { kind: 'unpublished', offline: OFFLINE },
     });
   });
 
   it('offers /name first when onboarding has stored a valid username', () => {
     const usernameModel: ProfileShareModel = {
       ...model,
-      usernameUrl: 'https://creds.id/alice#offline',
-      usernameDisplayUrl: 'https://creds.id/alice',
+      usernameUrl: 'https://app.solidarity.gg/@alice',
+      usernameDisplayUrl: 'https://app.solidarity.gg/@alice',
     };
 
     const resolution = buildProfileShareUrlSelection(usernameModel, null, false);
     const usernameCandidate: ProfileShareUrlCandidate = {
       kind: 'username',
-      url: 'https://creds.id/alice#offline',
-      displayUrl: 'https://creds.id/alice',
+      url: 'https://app.solidarity.gg/@alice',
+      displayUrl: 'https://app.solidarity.gg/@alice',
     };
     expect(resolution.selection).toEqual({ kind: 'ready', candidate: usernameCandidate });
     expect(resolution.candidates[0]).toEqual(usernameCandidate);

@@ -154,6 +154,12 @@ export function parseQrPayload(text: string): ParsedQrPayload {
     return { kind: 'card', raw: text };
   }
 
+  // CRD1 evidence pack / card share — verified + rebuilt by the envelope
+  // handler; classified here so scanner UIs route it as a card.
+  if (text.startsWith('CRD1:')) {
+    return { kind: 'card', raw: text };
+  }
+
   if (text.startsWith('SOLIDARITY_VC::') || text.startsWith('AIRMEISHI_VC::')) {
     return { kind: 'vp', raw: text };
   }

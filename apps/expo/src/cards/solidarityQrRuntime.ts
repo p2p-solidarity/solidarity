@@ -1,5 +1,6 @@
 import type { BusinessCard } from '@solidarity/shared';
 
+import { buildCrd1CardWire } from '@/cards/crd1Envelope';
 import { encodeEnvelopeToWire, type EnvelopeWireResult } from '@/cards/qrEnvelope';
 import {
   buildDidSignedEnvelope,
@@ -12,6 +13,7 @@ import {
   didKeyForCurrentIdentity,
   publicJwk,
   signJwt,
+  signRawEs256,
 } from '@/keychain/signingKey';
 
 export interface RuntimeSolidarityQrOptions {
@@ -63,10 +65,19 @@ export async function buildRuntimeSolidarityQrWire(
         didKeyForCurrentIdentity(),
         publicJwk(),
       ]);
-      const envelope = await buildDidSignedEnvelope(card, {
-        ...options,
-        signer: { issuerDid, publicKeyJwk: jwk, signJwt },
-      });
+      const signer = {
+        issuerDid,
+        publicKeyJwk: jwk,
+        signJwt,
+        signRaw: async (message: Uint8Array) => (await signRawEs256(message)).signature,
+      };
+      // Preferred wire: CRD1 (CBOR→COSE_Sign1→zlib→Base45, EC-Q). Returns
+      // null when the pack would exceed QR capacity — then the legacy bare
+      // VC-JWT wire (below) keeps the share working, and every deployed
+      // scanner keeps parsing both.
+      const crd1 = await buildCrd1CardWire(card, { ...options, signer });
+      if (crd1) return crd1;
+      const envelope = await buildDidSignedEnvelope(card, { ...options, signer });
       if (envelope) return encodeEnvelopeToWire(envelope);
     } catch {
       // fall through to plaintext

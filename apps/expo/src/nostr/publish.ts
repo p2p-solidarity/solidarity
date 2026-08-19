@@ -400,6 +400,8 @@ export async function fetchLatestProfilePointer(
 export interface UpdateKind0Options {
   /** The user's did:key (e.g. `ProfileRecord.did`) to bind into kind-0. */
   readonly did: string;
+  /** Optional standard NIP-05 reverse claim. Omit to preserve the existing value. */
+  readonly nip05?: string;
   /** Caller-confirmed relay list, used both to fetch the existing kind-0 and to republish it. Must be non-empty. */
   readonly relays: readonly string[];
   readonly timeoutMs?: number;
@@ -424,6 +426,9 @@ export interface UpdateKind0Options {
  */
 export async function updateKind0AlsoKnownAs(opts: UpdateKind0Options): Promise<Result<PublishReport, string>> {
   if (opts.relays.length === 0) return err('updateKind0AlsoKnownAs: relays list is empty');
+  if (opts.nip05 !== undefined && !/^[a-z0-9]{3,30}@solidarity\.gg$/u.test(opts.nip05)) {
+    return err('updateKind0AlsoKnownAs: invalid NIP-05 identifier');
+  }
 
   const pubkeyResult = await getNostrPubkey();
   if (!pubkeyResult.ok) return err(pubkeyResult.error);
@@ -452,7 +457,11 @@ export async function updateKind0AlsoKnownAs(opts: UpdateKind0Options): Promise<
     : [];
   const akaSet = new Set(existingAka);
   akaSet.add(opts.did);
-  const mergedContent: Record<string, unknown> = { ...baseContent, alsoKnownAs: [...akaSet] };
+  const mergedContent: Record<string, unknown> = {
+    ...baseContent,
+    ...(opts.nip05 === undefined ? {} : { nip05: opts.nip05 }),
+    alsoKnownAs: [...akaSet],
+  };
 
   const unsigned: UnsignedNostrEvent = {
     kind: KIND_METADATA,
