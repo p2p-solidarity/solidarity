@@ -4,7 +4,7 @@ import { Modal, ScrollView, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { PressableScale } from '@/components/common/PressableScale';
-import { ThemedButton, ThemedSurface, ThemedText } from '@/components/themed';
+import { ThemedButton, ThemedText } from '@/components/themed';
 import { Colors } from '@/constants/Colors';
 import { contactFromLeaveCard, useLeaveCardStore } from '@/contacts/leaveCardInbox';
 import { useContactStore } from '@/contacts/repository';
@@ -43,8 +43,8 @@ export function ContactsActivitySections({ onContactAdded }: { readonly onContac
                 alignItems: 'center',
                 gap: 10,
                 paddingHorizontal: 14,
-                borderRadius: 16,
-                borderWidth: 1,
+                borderRadius: 0,
+                borderWidth: 0.5,
                 borderColor: Colors.primaryMauve,
                 backgroundColor: Colors.chipSurface,
               }}>
@@ -57,7 +57,15 @@ export function ContactsActivitySections({ onContactAdded }: { readonly onContac
           ) : null}
 
           {hasRecentUpdates ? (
-            <ThemedSurface variant="card" className="overflow-hidden">
+            <View
+              style={{
+                overflow: 'hidden',
+                borderRadius: 0,
+                borderWidth: 0.5,
+                borderColor: Colors.divider,
+                backgroundColor: Colors.cardBg,
+              }}
+            >
               <View className="flex-row items-center">
                 <PressableScale
                   fill
@@ -80,7 +88,7 @@ export function ContactsActivitySections({ onContactAdded }: { readonly onContac
                 </PressableScale>
               </View>
               {expanded ? (
-                <View style={{ borderTopWidth: 1, borderTopColor: Colors.divider }}>
+                <View style={{ borderTopWidth: 0.5, borderTopColor: Colors.divider }}>
                   {updates.map((event) => (
                     <PressableScale
                       key={event.id}
@@ -102,7 +110,7 @@ export function ContactsActivitySections({ onContactAdded }: { readonly onContac
                   ))}
                 </View>
               ) : null}
-            </ThemedSurface>
+            </View>
           ) : null}
         </View>
       ) : null}
@@ -170,14 +178,21 @@ function PendingLeaveCardsSheet({
           </View>
 
           {pending.length === 0 ? (
-            <ThemedSurface variant="outlined" padded className="items-center gap-2 py-8">
+            <View
+              className="items-center gap-2 py-8"
+              style={{ borderRadius: 0, borderWidth: 0.5, borderColor: Colors.divider }}
+            >
               <ThemedText variant="titleMedium">{t('peopleList.noCardsPending')}</ThemedText>
               <ThemedText variant="bodySmall" tone="secondary" style={{ textAlign: 'center' }}>
                 {t('peopleList.noCardsPendingBody')}
               </ThemedText>
-            </ThemedSurface>
+            </View>
           ) : pending.map((card) => (
-            <ThemedSurface key={card.id} padded className="gap-3">
+            <View
+              key={card.id}
+              className="gap-3 p-4"
+              style={{ borderRadius: 0, borderWidth: 0.5, borderColor: Colors.divider }}
+            >
               <View className="gap-1">
                 <ThemedText variant="bodyMedium">{card.name}</ThemedText>
                 <ThemedText variant="bodySmall" tone="secondary">{card.contact}</ThemedText>
@@ -205,7 +220,7 @@ function PendingLeaveCardsSheet({
                   onPress={() => { block(card.id); }}
                 />
               </View>
-            </ThemedSurface>
+            </View>
           ))}
         </ScrollView>
       </View>

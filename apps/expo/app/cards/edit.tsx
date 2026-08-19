@@ -24,7 +24,7 @@ import { useCardStore } from '@/cards/cardManager';
 import { AnimalSelectorGrid, BusinessCardForm } from '@/components/cards';
 import { SfIcon } from '@/components/icons/SfIcon';
 import { PressableScale } from '@/components/common/PressableScale';
-import { appAlert } from '@/feedback/appAlert';
+import { appAlert, showError } from '@/feedback/appAlert';
 import { Colors } from '@/constants/Colors';
 import { haptic } from '@/feedback/haptics';
 import { pushToast } from '@/feedback/toast';
@@ -88,11 +88,20 @@ export default function EditCardScreen() {
 
   const handleDelete = useCallback(async () => {
     if (!targetCard) return;
-    await remove(targetCard.id);
-    haptic('warning');
-    pushToast('Card deleted', 'info');
-    safeBack();
-  }, [remove, targetCard]);
+    try {
+      await remove(targetCard.id);
+      haptic('warning');
+      pushToast(t('cardsList.deleted'), 'info');
+      safeBack();
+    } catch (error) {
+      haptic('error');
+      showError({
+        context: 'Cards › Delete Card',
+        summary: t('cardsList.deleteFailed'),
+        error,
+      });
+    }
+  }, [remove, targetCard, t]);
 
   return (
     <View className="flex-1 bg-pageBg" style={{ paddingTop: insets.top }}>

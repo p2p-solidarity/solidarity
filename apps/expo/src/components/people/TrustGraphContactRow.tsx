@@ -10,7 +10,7 @@
  * intentionally dropped here — notes stay encrypted-only and only surface
  * on the detail screen.
  */
-import { Pressable, Text, View } from 'react-native';
+import { Pressable, View } from 'react-native';
 import Animated, {
   useAnimatedStyle,
   useSharedValue,
@@ -18,13 +18,12 @@ import Animated, {
 } from 'react-native-reanimated';
 
 import { SfIcon } from '@/components/icons/SfIcon';
+import { ThemedText } from '@/components/themed';
 import { Colors } from '@/constants/Colors';
 import type { ContactManifestEntry } from '@/contacts/repository';
 import { haptic } from '@/feedback/haptics';
 import { SCALE, SPRING } from '@/feedback/motion';
 import { useTranslation } from '@/i18n';
-
-import { RadarTickIcon } from './RadarTickIcon';
 
 export interface TrustGraphContactRowProps {
   contact: ContactManifestEntry;
@@ -68,8 +67,8 @@ export function TrustGraphContactRow({
         }}
         accessibilityRole="button"
       >
-        <View className="flex-col">
-          <View className="flex-row items-start gap-4 p-3">
+        <View className="flex-col" style={{ borderRadius: 0 }}>
+          <View className="flex-row items-center gap-3 px-4 py-3">
             <View
               className="overflow-hidden rounded-full bg-searchBg"
               style={{ width: 38, height: 38, borderWidth: 0.5, borderColor: Colors.searchBg }}
@@ -82,9 +81,9 @@ export function TrustGraphContactRow({
                   backgroundColor: Colors.searchBg,
                 }}
               >
-                <Text className="text-text2 text-[14px] font-medium">
+                <ThemedText variant="bodySmall" tone="secondary">
                   {initial(contact.name)}
-                </Text>
+                </ThemedText>
               </View>
               {isVerified ? (
                 <View
@@ -109,46 +108,35 @@ export function TrustGraphContactRow({
               ) : null}
             </View>
 
-            <View className="flex-1 gap-2">
-              <View className="flex-row items-start gap-3">
-                <View className="flex-1 gap-0.5">
-                  <Text
+            <View className="flex-1 gap-0.5">
+              <View className="flex-row items-center gap-3">
+                <View className="flex-1">
+                  <ThemedText
+                    variant="bodyMedium"
                     numberOfLines={1}
-                    className="text-text1 text-[16px] font-medium"
                   >
                     {contact.name}
-                  </Text>
+                  </ThemedText>
                   {subtitle ? (
-                    <Text
+                    <ThemedText
+                      variant="bodySmall"
+                      tone="secondary"
                       numberOfLines={1}
-                      ellipsizeMode="tail"
-                      className="text-text2 text-[14px]"
                     >
                       {subtitle}
-                    </Text>
+                    </ThemedText>
                   ) : null}
                 </View>
-
-                <View className="flex-row items-center gap-1">
-                  <RadarTickIcon size={16} />
-                  <Text className="text-text2 text-[10px]">
-                    {formatIsoDate(contact.receivedAt)}
-                  </Text>
-                </View>
+                <SfIcon name="chevron.right" size={12} color={Colors.text3} />
               </View>
-
-              {tag ? (
-                <View className="flex-row gap-1.5">
-                  <View className="rounded-sm2 bg-searchBg px-1 py-0.5 self-start">
-                    <Text className="text-text2 text-[10px]">{tag}</Text>
-                  </View>
-                </View>
-              ) : null}
+              <ThemedText variant="caption" tone="secondary" numberOfLines={1}>
+                {tag ?? sourceLabel(contact.source, t)} · {formatIsoDate(contact.receivedAt)}
+              </ThemedText>
             </View>
           </View>
 
           <View
-            style={{ height: 1, backgroundColor: Colors.searchBg, marginHorizontal: 0 }}
+            style={{ borderBottomWidth: 0.5, borderBottomColor: Colors.divider, marginLeft: 67 }}
           />
         </View>
       </Pressable>
@@ -179,7 +167,7 @@ function subtitleText(c: ContactManifestEntry): string | undefined {
  * `contact.source`, never hardcoded per row.
  */
 function contextTag(
-  c: ContactManifestEntry,
+  c: Pick<ContactManifestEntry, 'source' | 'tags'>,
   t: (key: string) => string,
 ): string | undefined {
   const customTag = c.tags
@@ -204,6 +192,10 @@ function contextTag(
     default:
       return undefined;
   }
+}
+
+function sourceLabel(source: ContactManifestEntry['source'], t: (key: string) => string): string {
+  return contextTag({ source, tags: [] }, t) ?? source;
 }
 
 function formatIsoDate(iso: string): string {

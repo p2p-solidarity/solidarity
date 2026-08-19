@@ -16,17 +16,21 @@
 import { router, Stack } from 'expo-router';
 import { safeBack } from '@/navigation/safeBack';
 import { useEffect, useState, type ReactNode } from 'react';
-import { ActivityIndicator, Pressable, ScrollView, Share, View } from 'react-native';
+import { ActivityIndicator, Pressable, ScrollView, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import type { CardManifestEntry } from '@/cards/cardManifest';
 import { useCardStore } from '@/cards/cardManager';
+import { shareVCard } from '@/cards/shareVCard';
+import { toVCard } from '@/cards/vCard';
 import { BusinessCardActionsSheet, BusinessCardRow } from '@/components/cards';
 import { PaperStackIllustration } from '@/components/decor/PaperStackIllustration';
 import { SfIcon } from '@/components/icons/SfIcon';
 import { ThemedButton, ThemedText } from '@/components/themed';
 import { Colors } from '@/constants/Colors';
+import { showError } from '@/feedback/appAlert';
 import { haptic } from '@/feedback/haptics';
+import { pushToast } from '@/feedback/toast';
 import { useTranslation } from '@/i18n';
 
 export default function CardsIndexScreen(): ReactNode {
@@ -35,6 +39,7 @@ export default function CardsIndexScreen(): ReactNode {
   const hydrate = useCardStore((s) => s.hydrate);
   const manifest = useCardStore((s) => s.manifest);
   const detailsHydrated = useCardStore((s) => s.detailsHydrated);
+  const loadDetail = useCardStore((s) => s.loadDetail);
   const remove = useCardStore((s) => s.remove);
 
   const [actionsCard, setActionsCard] = useState<CardManifestEntry | undefined>();
@@ -56,14 +61,23 @@ export default function CardsIndexScreen(): ReactNode {
     router.push({ pathname: '/cards/wallet-pass', params: { id: card.id } });
   };
 
-  const onShare = (card: CardManifestEntry): void => {
-    void Share.share({ message: t('cardsList.shareMessage', { name: card.name }) }).catch(
-      () => undefined
-    );
+  const onShare = async (card: CardManifestEntry): Promise<void> => {
+    try {
+      const detail = await loadDetail(card.id);
+      if (!detail) throw new Error(`Card detail unavailable: ${card.id}`);
+      await shareVCard(toVCard(detail), t('personDetail.share'));
+    } catch (error) {
+      showError({
+        context: 'Cards › Share Card',
+        summary: t('cardsList.shareFailed'),
+        error,
+      });
+    }
   };
 
-  const onDelete = (card: CardManifestEntry): void => {
-    void remove(card.id);
+  const onDelete = async (card: CardManifestEntry): Promise<void> => {
+    await remove(card.id);
+    pushToast(t('cardsList.deleted'), 'success', 2000);
   };
 
   // Rule 10: when the manifest is already populated (warm start) we paint

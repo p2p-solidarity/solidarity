@@ -3,10 +3,9 @@
  * solidarity/Views/PeopleViews/PersonDetailView.swift.
  *
  * Centred hero (avatar + name + note line + verified/unverified chip +
- * optional context tag + optional declared-claims row) with an edit pencil
- * at the top-right of the hero card. Below the hero sit the "sakura"
- * exchange messages (when present) and the contact-info rows. Tap the
- * pencil or top-bar share icon to surface the More / Share sheets.
+ * optional context tag + optional declared-claims row). Below the hero sit
+ * the "sakura" exchange messages (when present) and the contact-info rows.
+ * The top-bar share icon exports the complete contact as a vCard.
  *
  * Per aniseekr-expo rule 10: the list route passes `name` via route params
  * so the hero paints on frame 1 even before the MMKV-backed contact store
@@ -20,7 +19,6 @@ import {
   Image,
   Pressable,
   ScrollView,
-  Share,
   Text,
   View,
   type LayoutChangeEvent,
@@ -42,6 +40,10 @@ import {
 } from '@/components/people/personDetailSupport';
 import { Colors } from '@/constants/Colors';
 import { useContact, useContactStore } from '@/contacts/repository';
+import { shareContactVCard } from '@/contacts/shareContactVCard';
+import { showError } from '@/feedback/appAlert';
+import { haptic } from '@/feedback/haptics';
+import { pushToast } from '@/feedback/toast';
 import { useTranslation } from '@/i18n';
 import type { Animal, Contact } from '@solidarity/shared';
 
@@ -53,18 +55,31 @@ export default function PersonDetailScreen(): ReactNode {
   const contact = useContact(id);
   const upsert = useContactStore((s) => s.upsert);
   const remove = useContactStore((s) => s.remove);
+  const loadDetail = useContactStore((s) => s.loadDetail);
   const insets = useSafeAreaInsets();
 
   const [showingMoreSheet, setShowingMoreSheet] = useState(false);
   const [showingEditSheet, setShowingEditSheet] = useState(false);
+  const [sharing, setSharing] = useState(false);
   const displayName = contact?.businessCard.name ?? name ?? t('personDetail.fallbackName');
 
   const onShare = (): void => {
-    void Share.share({ message: t('personDetail.shareMessage', { name: displayName }) }).catch(
-      () => {
-        // Swallow — share sheet cancellation isn't an error worth surfacing.
-      },
-    );
+    if (!contact || sharing) return;
+    const target = contact;
+    setSharing(true);
+    void (async () => {
+      try {
+        await shareContactVCard([target.id], loadDetail, t('personDetail.share'));
+      } catch (error) {
+        showError({
+          context: 'People › Share Contact',
+          summary: t('personDetail.shareFailed'),
+          error,
+        });
+      } finally {
+        setSharing(false);
+      }
+    })();
   };
 
   const onSaveNote = (note: string): void => {
@@ -78,8 +93,22 @@ export default function PersonDetailScreen(): ReactNode {
 
   const onDelete = (): void => {
     if (!contact) return;
-    void remove(contact.id);
-    safeBack();
+    const target = contact;
+    void (async () => {
+      try {
+        await remove(target.id);
+        haptic('success');
+        pushToast(t('peopleList.contactDeleted'), 'success', 2000);
+        safeBack();
+      } catch (error) {
+        haptic('error');
+        showError({
+          context: 'People › Delete Contact',
+          summary: t('peopleList.deleteFailed'),
+          error,
+        });
+      }
+    })();
   };
 
   return (
@@ -87,6 +116,7 @@ export default function PersonDetailScreen(): ReactNode {
       <TopBar
         onBack={() => { safeBack(); }}
         onShare={onShare}
+        sharing={sharing || !contact}
         onMore={() => { setShowingMoreSheet(true); }}
       />
 
@@ -131,10 +161,12 @@ export default function PersonDetailScreen(): ReactNode {
 function TopBar({
   onBack,
   onShare,
+  sharing,
   onMore,
 }: {
   readonly onBack: () => void;
   readonly onShare: () => void;
+  readonly sharing: boolean;
   readonly onMore: () => void;
 }): ReactNode {
   const { t } = useTranslation();
@@ -156,8 +188,15 @@ function TopBar({
           accessibilityRole="button"
           accessibilityLabel={t('personDetail.share')}
           onPress={onShare}
+          disabled={sharing}
           hitSlop={8}
-          style={{ width: 22, height: 22, alignItems: 'center', justifyContent: 'center' }}
+          style={{
+            width: 22,
+            height: 22,
+            alignItems: 'center',
+            justifyContent: 'center',
+            opacity: sharing ? 0.45 : 1,
+          }}
         >
           <SfIcon name="square.and.arrow.up" size={22} color={Colors.text1} />
         </Pressable>
@@ -198,7 +237,6 @@ function HeroCard({
   const trimmedNote = contact?.notes?.trim();
   const note = trimmedNote && trimmedNote.length > 0 ? trimmedNote : undefined;
   const firstTag = contact?.tags.find((t) => t.trim().length > 0);
-  const hasNote = note !== undefined;
   const declaredClaims = readDeclaredProofClaims(contact);
 
   return (
@@ -253,42 +291,7 @@ function HeroCard({
           </View>
         </View>
       </View>
-
-      <HeroEditButton hasNote={hasNote} onPress={onEditNote} />
     </View>
-  );
-}
-
-function HeroEditButton({
-  hasNote,
-  onPress,
-}: {
-  readonly hasNote: boolean;
-  readonly onPress: () => void;
-}): ReactNode {
-  const { t } = useTranslation();
-  return (
-    <Pressable
-      accessibilityRole="button"
-      accessibilityLabel={hasNote ? t('personDetail.editNote') : t('personDetail.addNote')}
-      onPress={onPress}
-      hitSlop={8}
-      style={{
-        position: 'absolute',
-        top: 10,
-        right: 10,
-        width: 32,
-        height: 32,
-        borderRadius: 16,
-        backgroundColor: 'rgba(255,255,255,0.45)',
-        borderWidth: 0.5,
-        borderColor: 'rgba(255,255,255,0.6)',
-        alignItems: 'center',
-        justifyContent: 'center',
-      }}
-    >
-      <SfIcon name="square.and.pencil" size={14} color={Colors.text1} />
-    </Pressable>
   );
 }
 

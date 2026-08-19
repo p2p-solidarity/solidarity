@@ -50,7 +50,7 @@ import { usePreferences } from '@/settings/preferences';
 
 export default function VcSettingsRoute() {
   const developerMode = usePreferences((state) => state.developerMode);
-  if (!developerMode) return <Redirect href="/settings/advanced" />;
+  if (!developerMode) return <Redirect href="/settings" />;
 
   return <VcSettings />;
 }
@@ -239,7 +239,7 @@ function VcSettings() {
             <SettingsBlockRow
               icon="qrcode"
               title={t('vc.receiveOidc')}
-              onPress={() => { router.push('/settings/oidc-request'); }}
+              onPress={() => { router.push('/scan'); }}
             />
             <SettingsBlockRow
               icon="square.and.arrow.up"

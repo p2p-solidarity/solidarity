@@ -85,7 +85,7 @@ export default function DeveloperSettings() {
   if (!developerMode) {
     return (
       <View className="flex-1 bg-pageBg" style={{ paddingTop: insets.top }}>
-        <SettingsBackToolbar onPress={() => { safeBack('/settings/advanced'); }} />
+        <SettingsBackToolbar onPress={() => { safeBack('/settings'); }} />
         <SettingsScreenTitle title={t('developer.title')} />
         <ThemedText variant="caption" tone="secondary" className="px-4 pt-6">
           {t('developer.locked')}
@@ -96,7 +96,7 @@ export default function DeveloperSettings() {
 
   return (
     <View className="flex-1 bg-pageBg" style={{ paddingTop: insets.top }}>
-      <SettingsBackToolbar onPress={() => { safeBack('/settings/advanced'); }} />
+      <SettingsBackToolbar onPress={() => { safeBack('/settings'); }} />
       <SettingsScreenTitle title={t('developer.title')} />
 
       <ScrollView

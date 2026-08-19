@@ -17,8 +17,10 @@ import { PressableScale } from '@/components/common/PressableScale';
 import { SfIcon } from '@/components/icons/SfIcon';
 import { ThemedText } from '@/components/themed';
 import { Colors } from '@/constants/Colors';
+import { showError } from '@/feedback/appAlert';
 import { confirmDialog } from '@/feedback/confirmDialog';
 import { haptic } from '@/feedback/haptics';
+import { useTranslation } from '@/i18n';
 import type { CardManifestEntry } from '@/cards/cardManifest';
 
 export interface BusinessCardActionsSheetProps {
@@ -27,8 +29,8 @@ export interface BusinessCardActionsSheetProps {
   readonly onClose: () => void;
   readonly onEdit: (card: CardManifestEntry) => void;
   readonly onWalletPass: (card: CardManifestEntry) => void;
-  readonly onShare: (card: CardManifestEntry) => void;
-  readonly onDelete: (card: CardManifestEntry) => void;
+  readonly onShare: (card: CardManifestEntry) => Promise<void>;
+  readonly onDelete: (card: CardManifestEntry) => Promise<void>;
 }
 
 export function BusinessCardActionsSheet({
@@ -44,7 +46,7 @@ export function BusinessCardActionsSheet({
     <Modal
       visible={visible}
       transparent
-      animationType="fade"
+      animationType="none"
       onRequestClose={onClose}
     >
       <Pressable
@@ -82,23 +84,33 @@ function SheetBody({
   readonly onClose: () => void;
   readonly onEdit: (card: CardManifestEntry) => void;
   readonly onWalletPass: (card: CardManifestEntry) => void;
-  readonly onShare: (card: CardManifestEntry) => void;
-  readonly onDelete: (card: CardManifestEntry) => void;
+  readonly onShare: (card: CardManifestEntry) => Promise<void>;
+  readonly onDelete: (card: CardManifestEntry) => Promise<void>;
 }): ReactNode {
   const insets = useSafeAreaInsets();
+  const { t } = useTranslation();
 
   const handleDeletePress = (): void => {
     void (async () => {
-      const ok = await confirmDialog({
-        title: `Delete ${card.name}?`,
-        message: 'This card will be permanently removed.',
-        confirmLabel: 'Delete',
-        destructive: true,
-      });
-      if (!ok) return;
-      haptic('warning');
-      onDelete(card);
-      onClose();
+      try {
+        const ok = await confirmDialog({
+          title: t('cardsList.deleteTitle', { name: card.name }),
+          message: t('cardsList.deleteMessage'),
+          confirmLabel: t('cardsList.delete'),
+          destructive: true,
+        });
+        if (!ok) return;
+        await onDelete(card);
+        haptic('success');
+        onClose();
+      } catch (error) {
+        haptic('error');
+        showError({
+          context: 'Cards › Delete Card',
+          summary: t('cardsList.deleteFailed'),
+          error,
+        });
+      }
     })();
   };
 
@@ -106,6 +118,14 @@ function SheetBody({
     haptic('selection');
     run();
     onClose();
+  };
+
+  const handleSharePress = (): void => {
+    haptic('selection');
+    onClose();
+    requestAnimationFrame(() => {
+      void onShare(card);
+    });
   };
 
   return (
@@ -133,7 +153,7 @@ function SheetBody({
 
       <ActionRow icon="square.and.pencil" label="Edit" onPress={wrap(() => { onEdit(card); })} />
       <ActionRow icon="wallet.pass" label="Wallet Pass" onPress={wrap(() => { onWalletPass(card); })} />
-      <ActionRow icon="square.and.arrow.up" label="Share" onPress={wrap(() => { onShare(card); })} />
+      <ActionRow icon="square.and.arrow.up" label={t('personDetail.share')} onPress={handleSharePress} />
       <ActionRow
         icon="trash"
         label="Delete"

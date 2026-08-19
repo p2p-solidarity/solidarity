@@ -3,9 +3,7 @@
  * The source order mirrors solidarity-spec/v2.html while all rendered rows
  * continue to come from the contact and saved-page stores.
  */
-import * as FileSystem from 'expo-file-system/legacy';
 import { router, useLocalSearchParams } from 'expo-router';
-import * as Sharing from 'expo-sharing';
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { ActivityIndicator, ScrollView, View } from 'react-native';
 import Animated, { FadeIn } from 'react-native-reanimated';
@@ -26,13 +24,12 @@ import { DeleteContactsSheet } from '@/components/people/DeleteContactsSheet';
 import { ManualContactEntrySheet } from '@/components/people/ManualContactEntrySheet';
 import { PeopleSearchField } from '@/components/people/PeopleSearchField';
 import { TrustGraphContactRow } from '@/components/people/TrustGraphContactRow';
-import { VerifiedPagesSection } from '@/components/people/VerifiedPagesSection';
 import { LinkPageImportSheet, type LinkPageImportResult } from '@/components/profile/LinkPageImportSheet';
 import { ThemedButton, ThemedSurface, ThemedText } from '@/components/themed';
 import { Colors } from '@/constants/Colors';
 import { useTranslation } from '@/i18n';
 import { useContactStore, type ContactManifestEntry } from '@/contacts/repository';
-import { prepareContactVCardBundle } from '@/contacts/vCardBundle';
+import { shareContactVCard } from '@/contacts/shareContactVCard';
 import { confirmDialog } from '@/feedback/confirmDialog';
 import { haptic } from '@/feedback/haptics';
 import { pushToast } from '@/feedback/toast';
@@ -175,21 +172,7 @@ export default function PeopleTab() {
     setExporting(true);
     void (async () => {
       try {
-        const bundle = await prepareContactVCardBundle(ids, loadDetail);
-        const cacheDirectory = FileSystem.cacheDirectory;
-        if (!cacheDirectory) throw new Error('Cache directory unavailable');
-        const fileUri = `${cacheDirectory}solidarity-contacts.vcf`;
-        await FileSystem.writeAsStringAsync(fileUri, bundle, {
-          encoding: FileSystem.EncodingType.UTF8,
-        });
-        if (!(await Sharing.isAvailableAsync())) {
-          throw new Error('System sharing unavailable');
-        }
-        await Sharing.shareAsync(fileUri, {
-          mimeType: 'text/vcard',
-          UTI: 'public.vcard',
-          dialogTitle: t('peopleList.exportVCard'),
-        });
+        await shareContactVCard(ids, loadDetail, t('peopleList.exportVCard'));
         pushToast(t('peopleList.exported', { count: ids.length }), 'success', 2000);
         exitEditMode();
       } catch {
@@ -294,11 +277,6 @@ export default function PeopleTab() {
                 onAdd={() => { setAddSheetOpen(true); }}
                 onImportPhone={() => { router.push('/contacts/import-phone'); }}
               />
-              {editMode ? null : (
-                <View className="px-4">
-                  <VerifiedPagesSection />
-                </View>
-              )}
             </ScrollView>
           ) : (
             <Animated.View entering={FadeIn.duration(280)} style={{ flex: 1 }}>
@@ -311,7 +289,6 @@ export default function PeopleTab() {
                 }}
                 keyboardShouldPersistTaps="handled"
                 extraData={{ editMode, selectedIds }}
-                ListFooterComponent={editMode ? null : <VerifiedPagesSection />}
                 renderItem={({ item }) => (
                   <PeopleRow
                     contact={item}
@@ -471,9 +448,9 @@ function BatchActionBar({
       }}
     >
       <ThemedSurface
-        variant="elevated"
+        variant="card"
         className="flex-row items-center p-3"
-        style={{ gap: 8 }}
+        style={{ gap: 8, borderRadius: 0, borderWidth: 0.5 }}
       >
         <ThemedText
           variant="bodySmall"
@@ -538,7 +515,12 @@ function ContactsHeader({
         >
           {t('peopleList.title')}
         </ThemedText>
-        <HeaderAction label={t('peopleList.add')} onPress={onAdd} align="right" />
+        <HeaderAction
+          label={t('peopleList.add')}
+          onPress={onAdd}
+          align="right"
+          icon="plus"
+        />
       </View>
     );
   }
@@ -573,11 +555,13 @@ function HeaderAction({
   onPress,
   disabled = false,
   align,
+  icon,
 }: {
   readonly label: string;
   readonly onPress: () => void;
   readonly disabled?: boolean;
   readonly align: 'left' | 'right';
+  readonly icon?: 'plus';
 }) {
   return (
     <PressableScale
@@ -594,9 +578,13 @@ function HeaderAction({
         opacity: disabled ? 0.4 : 1,
       }}
     >
-      <ThemedText variant="bodyMedium" numberOfLines={1}>
-        {label}
-      </ThemedText>
+      {icon === 'plus' ? (
+        <SfIcon name="plus" size={20} color={Colors.primaryMauve} />
+      ) : (
+        <ThemedText variant="bodyMedium" numberOfLines={1}>
+          {label}
+        </ThemedText>
+      )}
     </PressableScale>
   );
 }
@@ -614,9 +602,6 @@ function EmptyContactsContent({
     <ScrollView contentContainerStyle={{ flexGrow: 1 }}>
       {activity}
       <EmptyState onImportPhone={onImportPhone} onAdd={onAdd} />
-      <View className="px-4">
-        <VerifiedPagesSection />
-      </View>
     </ScrollView>
   );
 }

@@ -27,7 +27,7 @@ function expectDeveloperRouteGate(relativePath: string): void {
   expect(route).toContain('Redirect');
   expect(route).toContain('usePreferences');
   expect(route).toContain('const developerMode = usePreferences((state) => state.developerMode);');
-  expect(route).toContain('if (!developerMode) return <Redirect href="/settings/advanced" />;');
+  expect(route).toContain('if (!developerMode) return <Redirect href="/settings" />;');
 }
 
 describe('technical direct-route gate', () => {
@@ -45,7 +45,7 @@ describe('technical direct-route gate', () => {
       '../../app/settings/privacy.tsx',
       '../../app/passport/index.tsx',
     ]) {
-      expect(source(route)).not.toContain('<Redirect href="/settings/advanced" />');
+      expect(source(route)).not.toContain('if (!developerMode) return <Redirect href="/settings" />;');
     }
   });
 });

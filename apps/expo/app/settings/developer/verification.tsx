@@ -6,7 +6,7 @@ import { usePreferences } from '@/settings/preferences';
 
 export default function DeveloperVerificationRoute() {
   const developerMode = usePreferences((state) => state.developerMode);
-  if (!developerMode) return <Redirect href="/settings/advanced" />;
+  if (!developerMode) return <Redirect href="/settings" />;
 
   return (
     <VerificationToolsScreen

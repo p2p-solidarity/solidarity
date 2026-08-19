@@ -46,9 +46,12 @@ import {
   selectPresentationClaims,
 } from '@/credentials/presentationProof';
 import type { PresentationQRPage } from '@/me/presentationQrPages';
+import { showError } from '@/feedback/appAlert';
+import { confirmDialog } from '@/feedback/confirmDialog';
 import { pushToast } from '@/feedback/toast';
 import { useTranslation } from '@/i18n';
 import { useIdentityData, type ProvableClaimEntity } from '@/identity';
+import { requireSensitiveAction } from '@/keychain/biometricGatekeeper';
 import {
   filterPassportShowPresentationClaims,
   selectPassportShowPresentationClaims,
@@ -477,17 +480,28 @@ export default function CredentialDetailScreen() {
   const presentDisabled = selectedClaimsForPresentation.length === 0;
 
   const onPresent = () => {
-    // TODO(biometric-gate): wrap in
-    //   const gate = await requireSensitiveAction(
-    //     'presentProof', 'Authenticate to present a proof.'
-    //   );
-    //   if (!gate.success) { pushToast(...); return; }
-    // so enlarging the already-visible proof QR obeys the SensitiveAction
-    // policy. See `src/keychain/biometricGatekeeper.ts`.
-    for (const claimID of selectedClaimsForPresentation.map((claim) => claim.id)) {
-      markPresented(claimID);
-    }
-    setPresenting(true);
+    void (async () => {
+      try {
+        const gate = await requireSensitiveAction(
+          'presentProof',
+          t('security.prompt.presentProof'),
+        );
+        if (!gate.success) {
+          pushToast(t(`security.biometric.${gate.reason}`), 'warning');
+          return;
+        }
+        for (const claimID of selectedClaimsForPresentation.map((claim) => claim.id)) {
+          markPresented(claimID);
+        }
+        setPresenting(true);
+      } catch (error) {
+        showError({
+          context: 'Attestations › Present Proof',
+          summary: t('credentialDetail.presentFailed'),
+          error,
+        });
+      }
+    })();
   };
 
   const toggleClaim = (claimID: string) => {
@@ -501,9 +515,24 @@ export default function CredentialDetailScreen() {
 
   const onRegenerate = () => {
     void (async () => {
-      await remove(credential.id);
-      pushToast(t('credentialDetail.removedToast'), 'success');
-      safeBack();
+      const approved = await confirmDialog({
+        title: t('credentialDetail.removeConfirmTitle'),
+        message: t('credentialDetail.removeConfirmMessage'),
+        confirmLabel: t('credentialDetail.removeConfirmAction'),
+        destructive: true,
+      });
+      if (!approved) return;
+      try {
+        await remove(credential.id);
+        pushToast(t('credentialDetail.removedToast'), 'success');
+        safeBack();
+      } catch (error) {
+        showError({
+          context: 'Attestations › Remove',
+          summary: t('credentialDetail.removeFailed'),
+          error,
+        });
+      }
     })();
   };
 

@@ -1,8 +1,8 @@
 /**
  * Scan screen — 1:1 port of Swift ScanTabView. Full-screen camera preview
  * with a dimmed-mask ScanWindowOverlay (centred square cut-out + four
- * green corner brackets), nav bar "Scan" inline + trailing `qrcode`
- * (open proof-request QR), and concise human-facing scan guidance.
+ * green corner brackets), nav bar "Scan" inline, and concise human-facing
+ * scan guidance.
  *
  * Capture feedback: when a payload is decoded we play a short shutter-style
  * animation (corner brackets pulse + a brief white flash overlay) on the
@@ -29,7 +29,6 @@ import Animated, {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { scheduleOnRN } from 'react-native-worklets';
 
-import { PressableScale } from '@/components/common/PressableScale';
 import { SfIcon } from '@/components/icons/SfIcon';
 import { PassportShowChallengeSheet } from '@/components/scan/PassportShowChallengeSheet';
 import { ProofPresentationFlowSheet } from '@/components/scan/ProofPresentationFlowSheet';
@@ -42,7 +41,6 @@ import { ThemedButton, ThemedSurface, ThemedText } from '@/components/themed';
 import { Colors } from '@/constants/Colors';
 import { presentReceivedCard } from '@/cards/receivedCard';
 import { haptic } from '@/feedback/haptics';
-import { SCALE } from '@/feedback/motion';
 import { pushToast } from '@/feedback/toast';
 import { PASSPORT_SHOW_LINK_SCOPE } from '@/passport/showPresentation';
 import { issuePassportShowChallenge } from '@/passport/showVerifier';
@@ -262,20 +260,7 @@ export default function ScanScreen() {
           <Text className="text-text1 text-[15px]">{t('scan.close')}</Text>
         </Pressable>
         <Text className="text-text1 text-[17px] font-semibold">{t('scan.title')}</Text>
-        {developerMode ? (
-          <PressableScale
-            haptic="tap"
-            scaleTo={SCALE.icon}
-            accessibilityRole="button"
-            accessibilityLabel={t('scan.proofRequestQr')}
-            onPress={() => { router.push('/share/qr'); }}
-            style={{ width: 60, height: 44, alignItems: 'flex-end', justifyContent: 'center' }}
-          >
-            <SfIcon name="qrcode" size={20} color={Colors.text1} />
-          </PressableScale>
-        ) : (
-          <View style={{ width: 60, height: 44 }} />
-        )}
+        <View style={{ width: 60, height: 44 }} />
       </View>
 
       <View style={{ flex: 1 }} />

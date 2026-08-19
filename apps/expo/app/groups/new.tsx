@@ -39,6 +39,7 @@ import {
   CURRENT_USER_RECORD_ID,
   useGroupStore,
 } from '@/groups/store';
+import { useIdentitySnapshot } from '@/zk';
 
 const MONO_FONT = 'Menlo';
 
@@ -93,7 +94,7 @@ function GroupTypeSegment({
         className="flex-1 items-center justify-center rounded-md py-2"
         style={{
           backgroundColor: !value ? Colors.cardBg : 'transparent',
-          shadowColor: !value ? '#000' : 'transparent',
+          shadowColor: !value ? Colors.overlayBg : 'transparent',
           shadowOpacity: !value ? 0.08 : 0,
           shadowRadius: 2,
           shadowOffset: { width: 0, height: 1 },
@@ -111,7 +112,7 @@ function GroupTypeSegment({
         className="flex-1 items-center justify-center rounded-md py-2"
         style={{
           backgroundColor: value ? Colors.cardBg : 'transparent',
-          shadowColor: value ? '#000' : 'transparent',
+          shadowColor: value ? Colors.overlayBg : 'transparent',
           shadowOpacity: value ? 0.08 : 0,
           shadowRadius: 2,
           shadowOffset: { width: 0, height: 1 },
@@ -129,6 +130,9 @@ function GroupTypeSegment({
 
 export default function CreateGroup(): React.JSX.Element {
   const upsertGroup = useGroupStore((s) => s.upsertGroup);
+  const upsertMember = useGroupStore((s) => s.upsertMember);
+  const deleteGroup = useGroupStore((s) => s.deleteGroup);
+  const { commitment } = useIdentitySnapshot();
   const insets = useSafeAreaInsets();
   const { t } = useTranslation();
   const [groupName, setGroupName] = useState('');
@@ -156,6 +160,21 @@ export default function CreateGroup(): React.JSX.Element {
         isSynced: false,
         credentialIssuers: [],
       });
+      try {
+        await upsertMember({
+          id: randomUUID(),
+          groupID: id,
+          userRecordID: CURRENT_USER_RECORD_ID,
+          role: 'owner',
+          status: 'active',
+          merkleIndex: 0,
+          joinedAt: new Date(),
+          commitment: commitment ?? undefined,
+        });
+      } catch (error) {
+        await deleteGroup(id);
+        throw error;
+      }
       pushToast(t('groupNew.created', { name: trimmed }), 'success');
       router.replace({ pathname: '/groups/[id]', params: { id } });
     } catch (e) {

@@ -11,19 +11,24 @@ const source = (relativePath: string): string =>
   readFileSync(new URL(relativePath, import.meta.url), 'utf8');
 
 describe('v2 Developer Options surface', () => {
-  it('keeps one gated Advanced entry and cannot enable itself from a deep link', () => {
+  it('keeps one gated Settings entry and cannot enable itself from a deep link', () => {
+    const settings = source('../../app/settings/index.tsx');
     const advanced = source('../../app/settings/advanced.tsx');
     const developer = source('../../app/settings/developer.tsx');
     const verificationRoute = source('../../app/settings/developer/verification.tsx');
 
-    expect(advanced.match(/router\.push\('\/settings\/developer'\)/gu)).toHaveLength(1);
+    expect(settings.match(/router\.push\('\/settings\/developer'\)/gu)).toHaveLength(1);
+    expect(settings).toMatch(
+      /\{developerMode \? \([\s\S]*?router\.push\('\/settings\/developer'\)[\s\S]*?\) : null\}/u
+    );
+    expect(advanced).not.toContain("router.push('/settings/developer')");
     expect(developer).toContain('if (!developerMode)');
     expect(developer).not.toContain("setPref('developerMode', v)");
     expect(verificationRoute).toContain(
       'const developerMode = usePreferences((state) => state.developerMode)'
     );
     expect(verificationRoute).toContain('if (!developerMode)');
-    expect(verificationRoute).toContain('<Redirect href="/settings/advanced" />');
+    expect(verificationRoute).toContain('<Redirect href="/settings" />');
   });
 
   it('resets every local record, restores preferences, and returns to onboarding', () => {
@@ -46,11 +51,15 @@ describe('v2 Developer Options surface', () => {
     expect(resetAction).not.toContain("startsWith('contact:')");
   });
 
-  it('does not reveal the hidden developer unlock gesture in Advanced', () => {
+  it('keeps Reset Options focused and does not duplicate top-level preferences', () => {
     const advanced = source('../../app/settings/advanced.tsx');
 
     expect(advanced).not.toContain('advanced.devModeHint');
     expect(advanced).not.toMatch(/<Text(?:\s|>)/u);
+    expect(advanced).not.toContain("t('advanced.section.interface')");
+    expect(advanced).not.toContain("router.push('/settings/appearance')");
+    expect(advanced).not.toContain("router.push('/settings/language')");
+    expect(advanced).not.toContain("router.push('/settings/notifications')");
   });
 
   it('follows the six product-pipeline groups and exposes only real tools', () => {

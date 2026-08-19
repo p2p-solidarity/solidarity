@@ -34,7 +34,7 @@ describe('v2 Contacts surface', () => {
     );
   });
 
-  it('orders search, real pending activity, real updates, contacts, then Saved Pages', () => {
+  it('orders search, real pending activity, recent updates, then contacts', () => {
     const people = source('../../app/(tabs)/people/index.tsx');
     const activity = source('../../src/components/people/ContactsActivitySections.tsx');
     const snapshots = source('../../src/people/profileSnapshots.ts');
@@ -48,9 +48,6 @@ describe('v2 Contacts surface', () => {
     expect(people).toContain("import { ContactsActivitySections } from '@/components/people/ContactsActivitySections'");
     expect(normalContent).toContain('<ContactsActivitySections');
     expect(people).toContain('<FlashList');
-    expect(people).toContain(
-      'ListFooterComponent={editMode ? null : <VerifiedPagesSection />}',
-    );
     expect(people).toContain('<EmptyContactsContent');
     expect(people).toContain('<BatchActionBar');
     expect(normalContent.indexOf('<PeopleSearchField')).toBeLessThan(
@@ -58,9 +55,6 @@ describe('v2 Contacts surface', () => {
     );
     expect(normalContent.indexOf('<ContactsActivitySections')).toBeLessThan(
       normalContent.indexOf('<FlashList'),
-    );
-    expect(normalContent.indexOf('<FlashList')).toBeLessThan(
-      normalContent.indexOf('ListFooterComponent={editMode ? null : <VerifiedPagesSection />}'),
     );
 
     // Neither v2 activity surface may invent content before its persisted
@@ -85,6 +79,18 @@ describe('v2 Contacts surface', () => {
     expect(notifications).toContain('const recentUpdatesEnabled = useRecentUpdatesStore');
     expect(notifications).toContain("title={t('notifications.contactUpdates.title')}");
     expect(notifications).toContain('setRecentUpdatesEnabled(true)');
+  });
+
+  it('uses the mock’s square contact rows and compact pending/update treatments', () => {
+    const row = source('../../src/components/people/TrustGraphContactRow.tsx');
+    const activity = source('../../src/components/people/ContactsActivitySections.tsx');
+    const search = source('../../src/components/people/PeopleSearchField.tsx');
+
+    expect(row).toContain('borderBottomWidth: 0.5');
+    expect(row).toContain('borderRadius: 0');
+    expect(activity).toContain('borderRadius: 0');
+    expect(activity).toContain('borderWidth: 0.5');
+    expect(search).toContain('borderRadius: 12');
   });
 
   it('keeps Add Contact first in the empty state and orders add-sheet actions by priority', () => {
@@ -137,17 +143,20 @@ describe('v2 Contacts surface', () => {
 
   it('hydrates selected encrypted details before one real vCard share', () => {
     const people = source('../../app/(tabs)/people/index.tsx');
+    const share = source('../../src/contacts/shareContactVCard.ts');
+    const vCardShare = source('../../src/cards/shareVCard.ts');
 
-    expect(people).toContain("from '@/contacts/vCardBundle'");
+    expect(people).toContain("from '@/contacts/shareContactVCard'");
     expect(people).toContain('orderedContacts.filter');
-    expect(people).toContain('prepareContactVCardBundle(ids, loadDetail)');
-    expect(people).toContain('FileSystem.writeAsStringAsync');
-    expect(people).toContain('FileSystem.EncodingType.UTF8');
-    expect(people).toContain('Sharing.isAvailableAsync()');
-    expect(people).toContain('Sharing.shareAsync');
-    expect(people).toContain("mimeType: 'text/vcard'");
-    expect(people).toContain("UTI: 'public.vcard'");
-    expect(people).toContain('.vcf`');
+    expect(people).toContain('shareContactVCard(ids, loadDetail');
+    expect(share).toContain('prepareContactVCardBundle(contactIds, loadDetail)');
+    expect(vCardShare).toContain('FileSystem.writeAsStringAsync');
+    expect(vCardShare).toContain('FileSystem.EncodingType.UTF8');
+    expect(vCardShare).toContain('Sharing.isAvailableAsync()');
+    expect(vCardShare).toContain('Sharing.shareAsync');
+    expect(vCardShare).toContain("mimeType: 'text/vcard'");
+    expect(vCardShare).toContain("UTI: 'public.vcard'");
+    expect(vCardShare).toContain("'solidarity-contacts.vcf'");
     expect(people).not.toContain('toVCard(');
   });
 
@@ -187,7 +196,6 @@ describe('v2 Contacts surface', () => {
       'peopleList.turnOffRecentUpdates': ['Turn Off Recent Updates', '關閉最近更新'],
       'peopleList.noCardsPending': ['No Cards Pending', '沒有待確認的留卡'],
       'notifications.contactUpdates.title': ['Show Recent Updates', '顯示「最近更新」'],
-      'peopleList.savedPagesHeader': ['Saved Pages', '已儲存頁面'],
     } as const;
 
     for (const [key, [english, chinese]] of Object.entries(expected)) {

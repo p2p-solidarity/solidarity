@@ -1,11 +1,11 @@
 import type { ReactNode } from 'react';
-import { Modal, ScrollView, View } from 'react-native';
+import { Modal, Pressable, ScrollView, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import type { SFSymbol } from 'expo-symbols';
 
 import { PressableScale } from '@/components/common/PressableScale';
 import { SfIcon } from '@/components/icons/SfIcon';
-import { ThemedButton, ThemedSurface, ThemedText } from '@/components/themed';
+import { ThemedButton, ThemedText } from '@/components/themed';
 import { Colors } from '@/constants/Colors';
 import { useTranslation } from '@/i18n';
 
@@ -39,23 +39,29 @@ export function ContactsAddSheet({
   return (
     <Modal
       visible={visible}
-      animationType="slide"
-      presentationStyle="pageSheet"
+      animationType="fade"
+      transparent
       onRequestClose={onClose}
     >
-      <View
-        style={{
-          flex: 1,
-          backgroundColor: Colors.pageBg,
-          paddingTop: insets.top,
-        }}
-      >
-        <View className="items-center px-4 pb-5 pt-2">
-          <ThemedText variant="titleLarge">{t('peopleList.add')}</ThemedText>
-        </View>
+      <View className="flex-1 justify-end" style={{ backgroundColor: 'transparent' }}>
+        <Pressable className="flex-1" onPress={onClose} accessibilityRole="button" accessibilityLabel={t('common.close')} />
+        <View
+          style={{
+            maxHeight: '82%',
+            borderTopLeftRadius: 16,
+            borderTopRightRadius: 16,
+            backgroundColor: Colors.cardBg,
+            paddingTop: 8,
+            paddingBottom: Math.max(insets.bottom, 16),
+          }}
+        >
+          <View className="items-center gap-3 px-4 pb-4">
+            <View style={{ width: 36, height: 4, borderRadius: 2, backgroundColor: Colors.divider }} />
+            <ThemedText variant="titleMedium">{t('peopleList.add')}</ThemedText>
+          </View>
 
-        <ScrollView contentContainerStyle={{ paddingHorizontal: 16, gap: 16 }}>
-          <ThemedSurface variant="card">
+          <ScrollView contentContainerStyle={{ paddingHorizontal: 16, gap: 12 }}>
+            <View style={{ borderRadius: 0, borderWidth: 0.5, borderColor: Colors.divider }}>
             <ContactsActionRow
               icon="qrcode.viewfinder"
               label={t('peopleList.scanTheirQr')}
@@ -67,9 +73,9 @@ export function ContactsAddSheet({
               onPress={() => { choose(onEnterManually); }}
               isLast
             />
-          </ThemedSurface>
+            </View>
 
-          <ThemedSurface variant="inset">
+          <View style={{ borderRadius: 12, backgroundColor: Colors.searchBg }}>
             <ContactsActionRow
               icon="person.crop.circle.badge.plus"
               label={t('peopleList.importFromPhone')}
@@ -89,22 +95,17 @@ export function ContactsAddSheet({
               secondary
               isLast
             />
-          </ThemedSurface>
-        </ScrollView>
+          </View>
+          </ScrollView>
 
-        <View
-          style={{
-            paddingHorizontal: 16,
-            paddingTop: 12,
-            paddingBottom: Math.max(insets.bottom, 12),
-          }}
-        >
-          <ThemedButton
-            fullWidth
-            variant="secondary"
-            label={t('peopleList.close')}
-            onPress={onClose}
-          />
+          <View className="px-4 pt-3">
+            <ThemedButton
+              fullWidth
+              variant="secondary"
+              label={t('peopleList.close')}
+              onPress={onClose}
+            />
+          </View>
         </View>
       </View>
     </Modal>

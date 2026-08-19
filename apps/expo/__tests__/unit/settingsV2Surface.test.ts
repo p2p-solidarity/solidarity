@@ -9,9 +9,18 @@ function source(path: string): string {
 }
 
 describe('v2 settings surface', () => {
-  it('keeps the HTML section order and routes every product row to a real screen', () => {
+  it('uses the Page-tab square list treatment for settings rows and dividers', () => {
+    const blocks = source('../../src/components/settings/SettingsBlocks.tsx');
+
+    expect(blocks).toContain('rounded-none');
+    expect(blocks).toContain('borderBottomWidth: 0.5');
+    expect(blocks).not.toContain('rounded-xl');
+  });
+
+  it('puts the public page first and routes every product row to a real screen', () => {
     const settings = source('../../app/settings/index.tsx');
     const sections = [
+      'settingsHub.publicPage',
       'settingsHub.accountIdentity',
       'settingsHub.plan',
       'settingsHub.preferences',
@@ -27,6 +36,9 @@ describe('v2 settings surface', () => {
     expect(settings).toContain("router.push('/me/edit')");
     expect(settings).toContain("router.push('/settings/security')");
     expect(settings).toContain("router.push('/settings/username')");
+    expect(settings.indexOf("router.push('/settings/username')")).toBeLessThan(
+      settings.indexOf("router.push('/me/edit')")
+    );
     expect(settings).toContain("router.push('/settings/backup')");
     expect(settings).toContain("router.push('/settings/pro')");
     expect(settings).toContain("router.push('/settings/appearance')");
@@ -37,32 +49,39 @@ describe('v2 settings surface', () => {
     expect(settings).toContain("router.push('/contacts/import-vcf')");
     expect(settings).toContain("router.push('/settings/data-sync')");
     expect(settings).toContain("router.push('/settings/advanced')");
+    expect(settings).toContain("router.push('/settings/developer')");
     expect(settings).toContain("router.push('/settings/privacy')");
 
     expect(settings).not.toContain('legacyCard.section');
     expect(settings).not.toContain('settingsHub.guide');
   });
 
-  it('manages a short /name locally without pretending to reserve it remotely', () => {
+  it('checks and publishes the short name instead of treating a local preference as reserved', () => {
     const username = source('../../app/settings/username.tsx');
 
     expect(username).toContain('normalizePublicPageUsernameInput');
     expect(username).toContain('validatePublicPageUsername');
     expect(username).toContain('publicPagePath');
-    expect(username).toContain("preferences.publicPageUsername");
+    expect(username).toContain('preferences.publicPageUsername');
     expect(username).toContain("setPreference('publicPageUsername'");
     expect(username).toContain("t('settingsUsername.serviceNote')");
-    expect(username).not.toContain('availability');
-    expect(username).not.toContain('reserved successfully');
-    expect(username).not.toContain('creds.id/@');
+    expect(username).toContain('useNameAvailability');
+    expect(username).toContain('publishChosenPageName');
+    expect(username).toContain('app.solidarity.gg/@');
   });
 
   it('uses plain product language in both supported locales', () => {
+    expect(en['settingsHub.publicPage']).toBe('Public Page');
+    expect(zhHant['settingsHub.publicPage']).toBe('公開頁面');
     expect(en['settingsHub.myUsername']).toBe('Username');
     expect(zhHant['settingsHub.myUsername']).toBe('我的名稱');
+    expect(en['settingsHub.advanced']).toBe('Reset Options');
+    expect(zhHant['settingsHub.advanced']).toBe('重設選項');
     expect(en['settingsHub.accountProtection']).toBe('Account Protection');
     expect(zhHant['settingsHub.accountProtection']).toBe('帳號保護');
-    expect(en['settingsUsername.serviceNote']).toContain('creds.id service');
-    expect(zhHant['settingsUsername.serviceNote']).toContain('creds.id 服務');
+    // Plain product language: the service note names the creds.id service,
+    // not protocol vocabulary (Nostr/relay stays out of settings copy).
+    expect(en['settingsUsername.serviceNote']).toContain('creds.id');
+    expect(zhHant['settingsUsername.serviceNote']).toContain('creds.id');
   });
 });

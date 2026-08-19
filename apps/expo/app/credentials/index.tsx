@@ -112,7 +112,7 @@ function iconFor(item: CredentialManifestEntry): SFSymbol {
 
 export default function VCManagementRoute() {
   const developerMode = usePreferences((state) => state.developerMode);
-  if (!developerMode) return <Redirect href="/settings/advanced" />;
+  if (!developerMode) return <Redirect href="/settings" />;
 
   return <VCManagementScreen />;
 }
@@ -184,7 +184,7 @@ function VCManagementScreen() {
   };
 
   const onReceiveOidc = () => {
-    router.push('/settings/oidc-request');
+    router.push('/scan');
   };
 
   const onExport = async () => {

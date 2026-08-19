@@ -1,12 +1,7 @@
 /**
- * Advanced settings — 1:1 port of
- * solidarity/Views/SettingsViews/AdvancedSettingsView.swift.
- *
- * Sections (top → bottom):
- *   1. Interface — Appearance link.
- *   2. Developer Tools (dev mode only) — the single Developer Options entry.
- *   3. Danger Zone — product-facing reset actions. Developer-only wipe and
- *      mode controls live inside the gated Developer Options screen.
+ * Reset Options contains only destructive, product-facing reset actions.
+ * Top-level preferences and Developer Options both live on the Settings hub,
+ * so this screen does not duplicate either navigation surface.
  *
  * Destructive actions require biometric authentication when the matching
  * `biometricPolicy.rotateMasterKey` flag is on (mirrors Swift
@@ -24,8 +19,6 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
   SettingsBackToolbar,
   SettingsBlockDangerRow,
-  SettingsBlockRow,
-  SettingsBlockSection,
   SettingsBlockSectionHeader,
   SettingsScreenTitle,
 } from '@/components/settings/SettingsBlocks';
@@ -40,10 +33,9 @@ import { clearAllData } from '@/storage';
 import { getMmkv } from '@/storage/mmkv';
 import { clearAll as clearPassportAnchors } from '@/zk/passportAnchorStore';
 
-export default function AdvancedSettings() {
+export default function ResetOptions() {
   const insets = useSafeAreaInsets();
   const { t } = useTranslation();
-  const developerMode = usePreferences((s) => s.developerMode);
   const policy = usePreferences((s) => s.biometricPolicy);
   const resetPrefs = usePreferences((s) => s.reset);
   const removePassportCredentials = useIdentityData((s) => s.removePassportCredentials);
@@ -82,7 +74,7 @@ export default function AdvancedSettings() {
       pushToast(t('advanced.resetAppData.done'), 'success');
       router.replace('/onboarding');
     } catch (err) {
-      showError({ context: 'Advanced › Reset App Data', summary: t('advanced.resetAppData.failed'), error: err });
+      showError({ context: 'Reset Options › Reset App Data', summary: t('advanced.resetAppData.failed'), error: err });
     } finally {
       setBusy(false);
     }
@@ -102,7 +94,7 @@ export default function AdvancedSettings() {
       appAlert({ title: t('advanced.settingsTitle'), message: t('advanced.resetPassport.done') });
     } catch (err) {
       showError({
-        context: 'Advanced › Reset Passport Credential',
+        context: 'Reset Options › Reset Passport Credential',
         summary: t('advanced.resetAppData.failed'),
         error: err,
       });
@@ -121,37 +113,6 @@ export default function AdvancedSettings() {
         contentContainerStyle={{ paddingTop: 24, paddingBottom: 24 + insets.bottom }}
       >
         <View className="gap-6">
-          {/* Interface */}
-          <SettingsBlockSection title={t('advanced.section.interface')}>
-            <SettingsBlockRow
-              icon="paintbrush"
-              title={t('advanced.appearance')}
-              onPress={() => { router.push('/settings/appearance'); }}
-            />
-            <SettingsBlockRow
-              icon="globe"
-              title={t('advanced.language')}
-              onPress={() => { router.push('/settings/language'); }}
-            />
-            <SettingsBlockRow
-              icon="bell"
-              title={t('advanced.notifications')}
-              onPress={() => { router.push('/settings/notifications'); }}
-            />
-          </SettingsBlockSection>
-
-          {/* One hidden entry point for every technical/developer surface. */}
-          {developerMode ? (
-            <SettingsBlockSection title={t('advanced.section.devTools')}>
-              <SettingsBlockRow
-                icon="hammer"
-                title={t('advanced.developerOptions')}
-                onPress={() => { router.push('/settings/developer'); }}
-              />
-            </SettingsBlockSection>
-          ) : null}
-
-          {/* Danger Zone */}
           <View className="gap-3">
             <SettingsBlockSectionHeader title={t('advanced.section.dangerZone')} />
             <View className="px-4 gap-2">

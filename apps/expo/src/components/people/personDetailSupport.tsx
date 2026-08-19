@@ -18,6 +18,8 @@ import Svg, { Path } from 'react-native-svg';
 import { PressableScale } from '@/components/common/PressableScale';
 import { SfIcon } from '@/components/icons/SfIcon';
 import { Colors } from '@/constants/Colors';
+import { appAlert } from '@/feedback/appAlert';
+import { useTranslation } from '@/i18n';
 import type { Contact, ContactSource, VerificationStatus } from '@solidarity/shared';
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -58,10 +60,14 @@ export function PersonDetailContactRowView({
 }: {
   readonly row: PersonDetailContactRow;
 }): ReactNode {
+  const { t } = useTranslation();
   const onPress = (): void => {
     if (row.url) {
       void Linking.openURL(row.url).catch(() => {
-        // Swallow — invalid scheme or no handler installed; not fatal.
+        appAlert({
+          title: t('mePage.linkErrorTitle'),
+          message: t('mePage.linkErrorMessage'),
+        });
       });
     }
   };

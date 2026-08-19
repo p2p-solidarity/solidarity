@@ -30,7 +30,9 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { Colors } from '@/constants/Colors';
 import { useContactStore } from '@/contacts/repository';
+import { showError } from '@/feedback/appAlert';
 import { pushToast } from '@/feedback/toast';
+import { useTranslation } from '@/i18n';
 import type { Contact } from '@solidarity/shared';
 
 export interface EditContactSheetProps {
@@ -74,6 +76,7 @@ function EditContactSheetContent({
   readonly onClose: () => void;
   readonly onSaved?: (next: Contact) => void;
 }): ReactNode {
+  const { t } = useTranslation();
   const insets = useSafeAreaInsets();
   const upsert = useContactStore((s) => s.upsert);
 
@@ -86,13 +89,15 @@ function EditContactSheetContent({
   const [tags, setTags] = useState(contact.tags.join(', '));
   const [notes, setNotes] = useState(contact.notes ?? '');
   const [validationMessage, setValidationMessage] = useState<string | undefined>();
+  const [saving, setSaving] = useState(false);
 
   const trimmedName = name.trim();
   const canSave = trimmedName.length > 0;
 
   const onSave = (): void => {
+    if (saving) return;
     if (trimmedName.length === 0) {
-      setValidationMessage('Name is required.');
+      setValidationMessage(t('personDetail.nameRequired'));
       return;
     }
     const next: Contact = {
@@ -114,10 +119,21 @@ function EditContactSheetContent({
     };
 
     void (async () => {
-      await upsert(next);
-      pushToast('Contact updated', 'success', 2000);
-      onSaved?.(next);
-      onClose();
+      setSaving(true);
+      try {
+        await upsert(next);
+        pushToast(t('personDetail.contactUpdated'), 'success', 2000);
+        onSaved?.(next);
+        onClose();
+      } catch (error) {
+        showError({
+          context: 'People › Edit Contact',
+          summary: t('personDetail.updateFailed'),
+          error,
+        });
+      } finally {
+        setSaving(false);
+      }
     })();
   };
 
@@ -127,7 +143,12 @@ function EditContactSheetContent({
       style={{ flex: 1, backgroundColor: Colors.pageBg }}
     >
       <View style={{ paddingTop: insets.top }}>
-        <Toolbar onCancel={onClose} onSave={onSave} canSave={canSave} />
+        <Toolbar
+          onCancel={onClose}
+          onSave={onSave}
+          canSave={canSave && !saving}
+          saving={saving}
+        />
       </View>
 
       <ScrollView
@@ -210,17 +231,24 @@ function Toolbar({
   onCancel,
   onSave,
   canSave,
+  saving,
 }: {
   readonly onCancel: () => void;
   readonly onSave: () => void;
   readonly canSave: boolean;
+  readonly saving: boolean;
 }): ReactNode {
   return (
     <View
       className="flex-row items-center justify-between"
       style={{ paddingHorizontal: 16, height: 44 }}
     >
-      <Pressable accessibilityRole="button" onPress={onCancel} hitSlop={8}>
+      <Pressable
+        accessibilityRole="button"
+        onPress={onCancel}
+        disabled={saving}
+        hitSlop={8}
+      >
         <Text className="text-text1" style={{ fontSize: 16 }}>
           Cancel
         </Text>
@@ -243,7 +271,7 @@ function Toolbar({
             fontWeight: '600',
           }}
         >
-          Save
+          {saving ? 'Saving…' : 'Save'}
         </Text>
       </Pressable>
     </View>
