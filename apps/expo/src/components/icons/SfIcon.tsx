@@ -148,6 +148,8 @@ const SF_TO_MATERIAL: Partial<Record<SFSymbol, AndroidSymbol>> = {
   'mappin.and.ellipse': 'location_on',
   number: 'tag',
   paintbrush: 'brush',
+  // creds-design `#i-contrast` — the appearance/theme control.
+  'circle.lefthalf.filled': 'contrast',
   'paperplane.fill': 'send',
   pawprint: 'pets',
   'pencil.circle.fill': 'edit',

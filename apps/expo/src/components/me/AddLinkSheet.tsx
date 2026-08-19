@@ -4,6 +4,7 @@ import { Modal, ScrollView, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { PressableScale } from '@/components/common/PressableScale';
+import { BrandIcon } from '@/components/icons/BrandIcon';
 import { SfIcon } from '@/components/icons/SfIcon';
 import { ThemedButton, ThemedSurface, ThemedText, ThemedTextInput } from '@/components/themed';
 import { Colors } from '@/constants/Colors';
@@ -21,7 +22,7 @@ import {
   normalizeLinkUrl,
   type LinkLabelPreset,
 } from '@/profile/linkUrl';
-import { linkIconNameFor } from '@/profile/linkPresentation';
+import { brandIconForLink } from '@/profile/linkPresentation';
 import type { LinkVisibility } from '@/profile/projection';
 
 import { LinkVisibilityControl } from './PublishPreviewSheet';
@@ -342,8 +343,8 @@ function PlatformRow({
         variant="outlined"
         className="min-h-14 flex-row items-center gap-3 rounded-none px-4 py-3">
         <View className="w-7 items-center">
-          <SfIcon
-            name={linkIconNameFor(preset, '')}
+          <BrandIcon
+            name={brandIconForLink(preset, '')}
             size={18}
             color={Colors.primaryBlue}
           />

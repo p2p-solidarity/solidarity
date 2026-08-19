@@ -28,7 +28,7 @@ import {
 } from '@/badges/badgeStatusCache';
 import { PressableScale } from '@/components/common/PressableScale';
 import { SfIcon } from '@/components/icons/SfIcon';
-import { ThemedSurface, ThemedText } from '@/components/themed';
+import { ThemedButton, ThemedSurface, ThemedText } from '@/components/themed';
 import { Colors } from '@/constants/Colors';
 import type { CredentialManifestEntry } from '@/credentials/credentialManifest';
 import { useCredentialStore, type StoredCredential, type TrustLevel } from '@/credentials/store';
@@ -56,6 +56,7 @@ import {
   type VerifyAtprotoBindingResult,
   type VerifyNostrBindingResult,
 } from '@solidarity/shared';
+import { PageEmptyState } from './PageEmptyState';
 import { buildProfileShareModel } from './meProfileModel';
 import { badgeRecoveryActions } from './badgeRecoveryActions';
 
@@ -227,6 +228,28 @@ export function ProfileBadgeChips({
     return <AddAttestationAction onPress={onManageBindings} />;
   }
 
+  // Every chip hidden means the section has nothing to show at all — the mock
+  // gives that its own `.empty-state` panel (`#esBadges`) rather than leaving
+  // an empty rail above the add action.
+  if (!anyBadgeVisible([nostr.visual, bluesky.visual, websiteVisual], passport !== null)) {
+    return (
+      <View className="gap-3 px-4">
+        <PageEmptyState
+          art="attestation"
+          title={t('mePage.noAttestations')}
+          message={t('mePage.noAttestationsHint')}
+          action={
+            <ThemedButton
+              label={t('mePage.addAttestation')}
+              fullWidth
+              onPress={onManageBindings}
+            />
+          }
+        />
+      </View>
+    );
+  }
+
   return (
     <View className="gap-3">
       <ScrollView
@@ -287,6 +310,11 @@ export function ProfileBadgeChips({
       <AddAttestationAction onPress={onManageBindings} />
     </View>
   );
+}
+
+/** True when at least one chip would render. */
+function anyBadgeVisible(visuals: readonly string[], hasPassport: boolean): boolean {
+  return hasPassport || visuals.some((visual) => visual !== 'hidden');
 }
 
 function AddAttestationAction({ onPress }: { readonly onPress: () => void }): ReactNode {

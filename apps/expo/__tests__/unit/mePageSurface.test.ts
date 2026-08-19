@@ -61,11 +61,18 @@ describe('Page surface', () => {
     expect(links).toContain("t('mePage.reviewHidden')");
     expect(links).toContain("t('mePage.noLinks')");
     expect(links).toContain('if (links.length === 0)');
-    expect(links).toContain('accessibilityRole="header"');
-    expect(page).toContain('accessibilityRole="header"');
-    expect(hero).toContain('<ProfileInlineQr');
+    expect(links).toContain('<PageSectionLabel');
+    expect(source('../../src/components/me/PageSectionLabel.tsx'))
+      .toContain('accessibilityRole="header"');
+    expect(page).toContain('<PageSectionLabel');
+    // The QR belongs to the share sheet, never inline on the Page tab
+    // (mock §`#s-page`: the header's ↗ opens `#sh-share`, which holds the QR).
+    expect(hero).not.toContain('ProfileInlineQr');
     expect(links.match(/onPress=\{onAddFirstLink\}/gu)).toHaveLength(1);
-    expect(links).toContain('linkIconNameFor');
+    // Rows name their actual platform (the mock's brand sprite), never a
+    // borrowed stand-in symbol.
+    expect(links).toContain('brandIconForLink');
+    expect(links).toContain('<BrandIcon');
 
     const publicHeadingIndex = links.indexOf("t('mePage.publicPage')");
     const cardOnlyHeadingIndex = links.indexOf("t('mePage.cardOnly')");
@@ -110,9 +117,11 @@ describe('Page surface', () => {
     expect(shareContent).toContain('onSelect(candidate)');
     expect(shareContent).toContain("t('meShare.useFormat'");
     expect([route, page, hero, links, badges].join('\n')).not.toContain('generateQrPng');
-    expect(share).toContain('export function ProfileInlineQr');
-    expect(share).toContain("shareState.kind === 'error'");
-    expect(share).toContain('setInlineRetryNonce');
+    expect(share).not.toContain('export function ProfileInlineQr');
+    // Same honesty states, now owned by the share sheet rather than an
+    // inline QR: an unresolvable share model shows an error with a retry.
+    expect(share).toContain("baseShareState.kind === 'error'");
+    expect(share).toContain('setShareRetryNonce');
     expect(share).toContain("t('meShare.modelError')");
 
     expect(motion).toContain('STAGGER_MS = 40');

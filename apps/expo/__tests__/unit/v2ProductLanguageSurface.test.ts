@@ -103,7 +103,7 @@ describe('v2 product language surfaces', () => {
   });
 
   it('gives every public Page link a nonempty accessible name', () => {
-    const pagePreview = source('../../src/components/me/PageLivePreview.tsx');
+    const pagePreview = source('../../src/components/me/PagePreviewItems.tsx');
 
     expect(pagePreview).toContain('accessibilityLabel={item.title.trim() || url}');
   });

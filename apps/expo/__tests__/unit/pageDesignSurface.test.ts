@@ -15,7 +15,8 @@ describe('v2 Page design surface', () => {
 
     expect(route).not.toContain("router.push('/settings/appearance')");
     expect(page).toContain('<PageAppearanceSheet');
-    expect(appearance).toContain('presentationStyle="pageSheet"');
+    expect(appearance).toContain('transparent');
+    expect(appearance).toContain('rounded-t-2xl');
     expect(appearance).toContain('<PageLivePreview');
     expect(appearance).toContain('PAGE_TEMPLATE_IDS.map');
     expect(appearance).toContain('PAGE_FONT_IDS.map');
@@ -65,6 +66,7 @@ describe('v2 Page design surface', () => {
 
   it('makes every section style visibly distinct in the real-data preview', () => {
     const preview = source('../../src/components/me/PageLivePreview.tsx');
+    const items = source('../../src/components/me/PagePreviewItems.tsx');
 
     for (const style of [
       'plain',
@@ -79,7 +81,7 @@ describe('v2 Page design surface', () => {
     ]) {
       expect(preview).toContain(`case '${style}'`);
     }
-    expect(preview).toContain('item.price');
+    expect(items).toContain('item.price');
     expect(preview).toContain('<PreviewBlockItems');
   });
 
@@ -117,19 +119,26 @@ describe('v2 Page design surface', () => {
     expect(store).toContain('savePageDesign: async (page)');
     expect(sections).toContain('savePageDesign(toPublicPageDesign(design))');
     expect(sections).toContain('pageDesign.publishChanges');
-    expect(page).toContain('<PageLivePreview');
+    // The preview folds into the Sections group — collapsed by default, so
+    // the Page tab stays a list until you ask what it looks like.
+    expect(sections).toContain('<PageLivePreview');
+    expect(sections).toContain('<PagePreviewDisclosure');
+    expect(sections).toContain('useState(false)');
+    expect(page).not.toContain('<PageLivePreview');
     expect(verified).toContain('record.page');
   });
 
   it('renders a signed Page as a full interactive visitor surface, not a compact editor sample', () => {
     const preview = source('../../src/components/me/PageLivePreview.tsx');
+    const items = source('../../src/components/me/PagePreviewItems.tsx');
     const verified = source('../../src/components/scan/VerifiedProfileView.tsx');
 
     expect(preview).toContain("variant === 'public' ? items : items.slice(0, 3)");
     expect(preview).toContain('<ScrollView horizontal');
-    expect(preview).toContain('accessibilityRole="link"');
-    expect(preview).toContain('isRenderableLinkUrl(item.url)');
-    expect(preview).toContain('item.media');
+    // `ItemPressable` is the single navigation boundary for every row style.
+    expect(items).toContain('accessibilityRole="link"');
+    expect(items).toContain('isRenderableLinkUrl(item.url)');
+    expect(items).toContain('item.media');
     expect(verified).toContain('variant="public"');
     expect(verified).not.toContain('{record.did}');
   });

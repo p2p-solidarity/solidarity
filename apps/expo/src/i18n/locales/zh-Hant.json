@@ -1539,6 +1539,7 @@
   "present.publicPage": "公開頁",
   "present.cardSummary": "公開頁 + {{count}} 項",
   "present.flipCard": "翻面",
+  "present.scanToExchange": "掃描交換",
   "present.cardOnly": "名片才有",
   "present.showCardQr": "顯示名片 QR",
   "present.verificationQr": "驗證 QR",

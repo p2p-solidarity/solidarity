@@ -1,17 +1,31 @@
+/**
+ * ProfileLinksList — the Page tab's field list, ported from the mock's
+ * `#fieldList` / `#cardFields` (`creds-design/verified-linkinbio-mock-v3.html`
+ * §`#s-page`): a `.proof-sec` section label above 64pt `.field` rows, each a
+ * 40pt round icon tile, the label, and the URL in mono.
+ *
+ * Row tap opens the editor, matching the mock ("任一欄位 → 編輯"); long-press
+ * still opens the link itself, so nothing the previous layout could do was
+ * lost. The mock's per-row `.st` verification pill is deliberately absent: a
+ * signed `ProfileLink` has no per-link check result to render (Rule 8).
+ */
 import { Linking, View } from 'react-native';
 
 import { PressableScale } from '@/components/common/PressableScale';
+import { BrandIcon } from '@/components/icons/BrandIcon';
 import { SfIcon } from '@/components/icons/SfIcon';
-import { ThemedSurface, ThemedText } from '@/components/themed';
+import { ThemedButton, ThemedText } from '@/components/themed';
 import { Colors } from '@/constants/Colors';
 import { useThemeColors } from '@/constants/useThemeColors';
 import { appAlert } from '@/feedback/appAlert';
-import { SCALE } from '@/feedback/motion';
 import { useTranslation } from '@/i18n';
-import { linkIconNameFor } from '@/profile/linkPresentation';
+import { brandIconForLink } from '@/profile/linkPresentation';
 import type { LinkVisibility } from '@/profile/projection';
 import type { ProfileLink } from '@solidarity/shared';
 
+import { PageEmptyState } from './PageEmptyState';
+import { PageSectionLabel } from './PageSectionLabel';
+import { ROW_GAP, fieldRowStyle, iconTileStyle } from './pageRowStyles';
 import { pageLinkSections, type PageLinkEntry } from './pageLinkSections';
 
 export interface ProfileLinksListProps {
@@ -19,6 +33,9 @@ export interface ProfileLinksListProps {
   readonly linkVisibility: readonly LinkVisibility[];
   readonly onEdit: () => void;
   readonly onAddFirstLink: () => void;
+  /** Opens the "bring links from somewhere else" importer — the mock's second
+   *  empty-state action. Omitted callers simply don't render it. */
+  readonly onImportLinks?: () => void;
 }
 
 export function ProfileLinksList({
@@ -26,6 +43,7 @@ export function ProfileLinksList({
   linkVisibility,
   onEdit,
   onAddFirstLink,
+  onImportLinks,
 }: ProfileLinksListProps) {
   const { t } = useTranslation();
   const c = useThemeColors();
@@ -41,70 +59,43 @@ export function ProfileLinksList({
     if (entries.length === 0) return null;
 
     return (
-      <View className="gap-2">
+      <View style={{ gap: ROW_GAP }}>
         {entries.map(({ link, sourceIndex }) => (
-          <ThemedSurface
+          <PressableScale
             key={`${String(sourceIndex)}-${link.label}-${link.url}`}
-            variant="card"
-            className="flex-row items-center rounded-none">
-            <PressableScale
-              fill
-              haptic="tap"
-              onPress={() => {
-                openLink(link);
-              }}
-              onLongPress={onEdit}
-              accessibilityRole="link"
-              accessibilityLabel={link.label.length > 0 ? link.label : link.url}
-              style={{
-                minHeight: 64,
-                flexDirection: 'row',
-                alignItems: 'center',
-                gap: 12,
-                paddingHorizontal: 16,
-                paddingVertical: 12,
-              }}>
-              <View
-                style={{
-                  width: 36,
-                  height: 36,
-                  borderRadius: 10,
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  backgroundColor: c.searchBg,
-                }}>
-                <SfIcon
-                  name={linkIconNameFor(link.label, link.url)}
-                  size={16}
-                  color={Colors.primaryBlue}
-                />
-              </View>
-              <View className="flex-1 gap-0.5">
-                {link.label.length > 0 ? (
-                  <ThemedText variant="bodyMedium" numberOfLines={1}>
-                    {link.label}
-                  </ThemedText>
-                ) : null}
-                <ThemedText
-                  variant="caption"
-                  tone="tertiary"
-                  numberOfLines={1}
-                  ellipsizeMode="middle">
-                  {link.url}
+            haptic="tap"
+            onPress={onEdit}
+            onLongPress={() => {
+              openLink(link);
+            }}
+            accessibilityRole="button"
+            accessibilityLabel={link.label.length > 0 ? link.label : link.url}
+            accessibilityHint={t('mePage.editLinkHint')}
+            style={fieldRowStyle(c.mutedSurface)}>
+            <View style={iconTileStyle(c.chipSurface)}>
+              <BrandIcon
+                name={brandIconForLink(link.label, link.url)}
+                size={22}
+                color={Colors.primaryBlue}
+              />
+            </View>
+            <View className="flex-1" style={{ gap: 1 }}>
+              {link.label.length > 0 ? (
+                <ThemedText variant="bodyMedium" numberOfLines={1}>
+                  {link.label}
                 </ThemedText>
-              </View>
-              <SfIcon name="arrow.up.right" size={12} color={Colors.text3} />
-            </PressableScale>
-            <PressableScale
-              haptic="tap"
-              scaleTo={SCALE.icon}
-              onPress={onEdit}
-              accessibilityRole="button"
-              accessibilityLabel={t('profileCard.edit')}
-              style={{ width: 44, height: 64, alignItems: 'center', justifyContent: 'center' }}>
-              <SfIcon name="pencil" size={14} color={Colors.text2} />
-            </PressableScale>
-          </ThemedSurface>
+              ) : null}
+              <ThemedText
+                variant="caption"
+                tone="tertiary"
+                numberOfLines={1}
+                ellipsizeMode="middle"
+                style={{ fontFamily: 'Menlo' }}>
+                {link.url}
+              </ThemedText>
+            </View>
+            <SfIcon name="chevron.right" size={13} color={Colors.text3} />
+          </PressableScale>
         ))}
       </View>
     );
@@ -114,55 +105,33 @@ export function ProfileLinksList({
     if (entries.length === 0) return null;
 
     return (
-      <View className="gap-3">
-        <ThemedText accessibilityRole="header" variant="label" tone="tertiary">
-          {title}
-        </ThemedText>
+      <View style={{ gap: 8 }}>
+        <PageSectionLabel title={title} />
         {renderLinkRows(entries)}
       </View>
     );
   };
 
+  // The mock words this entry point twice — `＋ 新增第一個連結` on the empty
+  // page, `＋ 新增` once there is a list — but it stays ONE action.
   const addLinkAction = (
-    <PressableScale
-      haptic="tap"
+    <AddLinkButton
+      label={links.length === 0 ? t('mePage.addFirstLink') : t('meHome.addLink')}
       onPress={onAddFirstLink}
-      accessibilityRole="button"
-      accessibilityLabel={t('meHome.addLink')}>
-      <ThemedSurface
-        variant="inset"
-        className="flex-row items-center gap-2 rounded-none px-3"
-        style={{ minHeight: 44 }}>
-        <SfIcon name="plus" size={14} color={Colors.primaryBlue} />
-        <ThemedText variant="label" tone="accent">
-          {t('meHome.addLink')}
-        </ThemedText>
-      </ThemedSurface>
-    </PressableScale>
+    />
   );
 
   if (links.length === 0) {
     return (
-      <View className="gap-5 px-4">
-        <ThemedSurface
-          variant="outlined"
-          className="flex-row items-center gap-3 rounded-none px-4 py-4">
-          <View
-            style={{
-              width: 34,
-              height: 34,
-              borderRadius: 10,
-              alignItems: 'center',
-              justifyContent: 'center',
-              backgroundColor: c.searchBg,
-            }}>
-            <SfIcon name="link" size={16} color={Colors.primaryBlue} />
-          </View>
-          <ThemedText variant="bodyMedium" tone="tertiary" style={{ flex: 1 }}>
-            {t('mePage.noLinks')}
-          </ThemedText>
-        </ThemedSurface>
-        {addLinkAction}
+      <View className="gap-3 px-4">
+        <PageEmptyState
+          title={t('mePage.noLinks')}
+          message={t('mePage.noLinksHint')}
+          action={addLinkAction}
+          {...(onImportLinks
+            ? { secondaryAction: { label: t('mePage.importLinks'), onPress: onImportLinks } }
+            : {})}
+        />
       </View>
     );
   }
@@ -176,24 +145,29 @@ export function ProfileLinksList({
           haptic="tap"
           onPress={onEdit}
           accessibilityRole="button"
-          accessibilityLabel={t('mePage.reviewHidden')}>
-          <ThemedSurface
-            variant="inset"
-            className="flex-row items-center gap-3 rounded-none px-3 py-2.5">
-            <SfIcon name="eye.slash" size={14} color={Colors.text3} />
-            <View className="flex-1 gap-0.5">
-              <ThemedText variant="bodySmall" tone="secondary">
-                {t('mePage.reviewHidden')}
-              </ThemedText>
-              <ThemedText variant="caption" tone="tertiary">
-                {t('mePage.hiddenCount', { count: sections.hiddenLinks.length })}
-              </ThemedText>
-            </View>
-            <SfIcon name="chevron.right" size={12} color={Colors.text3} />
-          </ThemedSurface>
+          accessibilityLabel={t('mePage.reviewHidden')}
+          style={{ ...fieldRowStyle(c.mutedSurface), minHeight: 52 }}>
+          <SfIcon name="eye.slash" size={16} color={Colors.text3} />
+          <View className="flex-1" style={{ gap: 1 }}>
+            <ThemedText variant="bodyMedium">{t('mePage.reviewHidden')}</ThemedText>
+            <ThemedText variant="caption" tone="tertiary">
+              {t('mePage.hiddenCount', { count: sections.hiddenLinks.length })}
+            </ThemedText>
+          </View>
+          <SfIcon name="chevron.right" size={13} color={Colors.text3} />
         </PressableScale>
       ) : null}
       {addLinkAction}
     </View>
   );
+}
+
+function AddLinkButton({
+  label,
+  onPress,
+}: {
+  readonly label: string;
+  readonly onPress: () => void;
+}) {
+  return <ThemedButton label={label} fullWidth onPress={onPress} />;
 }
