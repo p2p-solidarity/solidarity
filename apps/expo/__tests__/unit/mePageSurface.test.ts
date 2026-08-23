@@ -18,6 +18,7 @@ describe('Page surface', () => {
     const hero = source('../../src/components/me/ProfileHero.tsx');
     const shareSelection = source('../../src/components/me/useProfileShareSelection.ts');
     const links = source('../../src/components/me/ProfileLinksList.tsx');
+    const alert = source('../../src/components/me/PageLapsedCheckAlert.tsx');
     const motion = source('../../src/feedback/motion.ts');
     const verify = source('../../app/(tabs)/verify/index.tsx');
 
@@ -86,21 +87,30 @@ describe('Page surface', () => {
     expect(page).toContain('nostrUploaded={nostrShortUrlReady}');
     expect(badges).toContain('readonly nostrUploaded: boolean');
     expect(badges).toMatch(/nostrUploaded\s+\? record\.alsoKnownAs/u);
-    expect(badges).toContain('verifyAtprotoBinding');
-    expect(badges).toContain('badgeRecoveryActions');
-    expect(badges).toContain('invalidateCachedNostrResult');
-    expect(badges).toContain('invalidateCachedAtprotoResult');
-    expect(badges).toContain('publishToNostr(DEFAULT_RELAYS)');
-    expect(badges).toContain("router.push('/verify/bluesky')");
     expect(badges).toContain('atprotoBindingIO');
-    expect(badges).toContain('verifyHttpsOwnership');
-    expect(badges).toContain("credential.type.toLowerCase() === 'passport'");
-    expect(badges).toContain('credentialTrustDisplayFor');
-    expect(badges).toContain('credentialTrustDisplayFor(detail).level');
-    expect(badges).toContain(": 'L1'");
-    expect(badges).toContain("icon: 'checkmark.seal.fill', color: Colors.terminalGreen");
-    expect(badges).toContain("icon: 'checkmark.seal', color: Colors.warning");
-    expect(badges).toContain("icon: 'exclamationmark.triangle', color: Colors.text3");
+
+    // v3 mock: the proof section lists REAL presentable claims and nothing
+    // else — loading / error-with-retry / empty / rows, never a plausible
+    // placeholder (Rule 8).
+    expect(badges).toContain('useDisplayClaims()');
+    expect(badges).toContain("t('mePage.loadingProofs')");
+    expect(badges).toContain("t('mePage.proofLoadError')");
+    expect(badges).toContain("t('mePage.noAttestations')");
+    expect(badges).toContain('PUBLIC_DISCLOSURE_BADGE_TYPE');
+    // The Page tab is a product surface: opening a credential from here stays
+    // in product context even for a Developer Mode user, so protocol wording
+    // cannot leak in sideways.
+    expect(badges).toContain("product: '1'");
+
+    // Binding status moved OUT of this section and onto the matching field
+    // row, which reads the same completed-verification cache...
+    expect(links).toContain('readCachedAtprotoResult');
+    expect(links).toContain('readCachedNostrResult');
+    // ...and the repair flow the section used to own now hangs off the lapsed
+    // alert, so a failed check is never a dead end.
+    expect(alert).toContain("t('pageDesign.fixLapsed')");
+    expect(alert).toContain("'/verify/nostr'");
+    expect(alert).toContain("'/verify/bluesky'");
     expect(verify).not.toContain('BadgeBindingsSection');
     expect(verify).not.toContain("router.push('/verify/nostr')");
 
@@ -133,7 +143,6 @@ describe('Page surface', () => {
     expect(share).toContain('scale: 0.97');
     expect(share).toContain('shareQrImage');
     expect(shareContent).toContain("t('meShare.shareQrImage')");
-    expect(badges).toContain('const BADGE_CROSSFADE_MS = 200');
 
     const pageSurfaceSource = [page, share, badges, hero, links].join('\n');
     expect(pageSurfaceSource).not.toMatch(/#[0-9a-f]{3,8}\b/iu);

@@ -207,7 +207,8 @@ export function subscribeEvents(
           typeof candidate.kind === 'number' &&
           typeof candidate.content === 'string' &&
           typeof candidate.sig === 'string' &&
-          Array.isArray(candidate.tags)
+          Array.isArray(candidate.tags) &&
+          verifyNostrEvent(candidate as NostrEvent)
         ) {
           onEvent(candidate as NostrEvent);
         }

@@ -1,8 +1,16 @@
-import { useState, type ReactNode } from 'react';
+import { useMemo, useState, type ReactNode } from 'react';
 import { router } from 'expo-router';
 import { ActivityIndicator, Modal, ScrollView, Switch, View } from 'react-native';
-import Animated, { FadeIn } from 'react-native-reanimated';
+import { Gesture, GestureDetector } from 'react-native-gesture-handler';
+import Animated, {
+  FadeIn,
+  useAnimatedStyle,
+  useSharedValue,
+  withSpring,
+} from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import Svg, { Circle } from 'react-native-svg';
+import { scheduleOnRN } from 'react-native-worklets';
 
 import { PressableScale } from '@/components/common/PressableScale';
 import { SfIcon } from '@/components/icons/SfIcon';
@@ -11,6 +19,7 @@ import { Colors } from '@/constants/Colors';
 import { useThemeColors } from '@/constants/useThemeColors';
 import { useTranslation } from '@/i18n';
 import { haptic } from '@/feedback/haptics';
+import { SPRING } from '@/feedback/motion';
 import { pushToast } from '@/feedback/toast';
 import {
   PAGE_BLOCK_CATALOG,
@@ -31,7 +40,13 @@ import { preparePageDesign, usePageDesignStore } from '@/page/pageDesignStore';
 
 import { PageLivePreview } from './PageLivePreview';
 import { PageSectionLabel } from './PageSectionLabel';
-import { blockRowStyle, fieldRowStyle, iconTileStyle } from './pageRowStyles';
+import {
+  ROW_GAP,
+  blockRowStyle,
+  dragDestinationIndex,
+  fieldRowStyle,
+  iconTileStyle,
+} from './pageRowStyles';
 import { useProfileStore } from '@/profile/store';
 import { uuid, type ProfileRecord } from '@solidarity/shared';
 
@@ -46,6 +61,7 @@ export interface ProfileSectionsListProps {
 
 /** Reveal duration for the folded preview — same 240ms as the page entrance. */
 const PREVIEW_REVEAL_MS = 240;
+const BLOCK_ROW_STRIDE = 56 + ROW_GAP;
 
 export function ProfileSectionsList({
   linkCount,
@@ -71,6 +87,17 @@ export function ProfileSectionsList({
     toPublicPageDesign(design),
     publishedDesign,
   );
+  const movableBlocks = blocks.filter((block) => block.type !== 'links');
+
+  const moveBlockTo = (block: PageBlock, sourceIndex: number, destinationIndex: number): void => {
+    if (sourceIndex === destinationIndex) return;
+    const direction = destinationIndex < sourceIndex ? 'up' : 'down';
+    const distance = Math.abs(destinationIndex - sourceIndex);
+    for (let step = 0; step < distance; step += 1) {
+      if (direction === 'up') moveBlock(block.id, 'up');
+      else moveBlock(block.id, 'down');
+    }
+  };
 
   const publishPageChanges = (): void => {
     if (publishing || !record || status !== 'ready') return;
@@ -128,16 +155,15 @@ export function ProfileSectionsList({
             <ThemedText variant="caption" tone="tertiary">{t('pageDesign.alwaysOn')}</ThemedText>
           </View>
 
-          {blocks.filter((block) => block.type !== 'links').map((block, index, movable) => (
+          {movableBlocks.map((block, index) => (
             <BlockRow
               key={block.id}
               block={block}
-              canMoveUp={index > 0}
-              canMoveDown={index < movable.length - 1}
+              index={index}
+              itemCount={movableBlocks.length}
               onEdit={() => { setEditing(block); }}
               onVisibleChange={(visible) => { setBlockVisible(block.id, visible); }}
-              onMoveUp={() => { moveBlock(block.id, 'up'); }}
-              onMoveDown={() => { moveBlock(block.id, 'down'); }}
+              onMove={(destination) => { moveBlockTo(block, index, destination); }}
               onProPress={openProSettings}
             />
           ))}
@@ -239,21 +265,19 @@ function PagePreviewDisclosure({
 
 function BlockRow({
   block,
-  canMoveUp,
-  canMoveDown,
+  index,
+  itemCount,
   onEdit,
   onVisibleChange,
-  onMoveUp,
-  onMoveDown,
+  onMove,
   onProPress,
 }: {
   readonly block: PageBlock;
-  readonly canMoveUp: boolean;
-  readonly canMoveDown: boolean;
+  readonly index: number;
+  readonly itemCount: number;
   readonly onEdit: () => void;
   readonly onVisibleChange: (visible: boolean) => void;
-  readonly onMoveUp: () => void;
-  readonly onMoveDown: () => void;
+  readonly onMove: (destination: number) => void;
   readonly onProPress: () => void;
 }): ReactNode {
   const { t } = useTranslation();
@@ -261,21 +285,13 @@ function BlockRow({
   const catalog = PAGE_BLOCK_CATALOG.find((entry) => entry.type === block.type);
   if (!catalog) return null;
   return (
-    <View style={blockRowStyle(c.mutedSurface)}>
-      <View style={{ flexDirection: 'row' }}>
-        <ReorderButton
-          label={t('pageDesign.moveUp')}
-          symbol="↑"
-          disabled={!canMoveUp}
-          onPress={catalog.pro ? onProPress : onMoveUp}
-        />
-        <ReorderButton
-          label={t('pageDesign.moveDown')}
-          symbol="↓"
-          disabled={!canMoveDown}
-          onPress={catalog.pro ? onProPress : onMoveDown}
-        />
-      </View>
+    <View style={{ ...blockRowStyle(c.mutedSurface), gap: 0, padding: 0 }}>
+      <BlockReorderHandle
+        label={t('mePage.reorderSection', { title: block.title })}
+        index={index}
+        itemCount={itemCount}
+        onMove={catalog.pro ? () => { onProPress(); } : onMove}
+      />
       <PressableScale
         fill
         onPress={catalog.pro ? onProPress : onEdit}
@@ -302,26 +318,82 @@ function BlockRow({
   );
 }
 
-function ReorderButton({
+function BlockReorderHandle({
   label,
-  symbol,
-  disabled,
-  onPress,
+  index,
+  itemCount,
+  onMove,
 }: {
   readonly label: string;
-  readonly symbol: string;
-  readonly disabled: boolean;
-  readonly onPress: () => void;
+  readonly index: number;
+  readonly itemCount: number;
+  readonly onMove: (destination: number) => void;
 }): ReactNode {
+  const translationY = useSharedValue(0);
+  const lift = useSharedValue(1);
+  const animatedStyle = useAnimatedStyle(() => ({
+    zIndex: lift.value > 1 ? 2 : 0,
+    transform: [
+      { translateY: translationY.value },
+      { scale: lift.value },
+    ],
+  }));
+  const pan = useMemo(
+    () => Gesture.Pan()
+      .activateAfterLongPress(120)
+      .onStart(() => {
+        lift.value = withSpring(1.05, SPRING.zoom);
+      })
+      .onUpdate((event) => {
+        translationY.value = event.translationY;
+      })
+      .onEnd((event) => {
+        const destination = dragDestinationIndex(
+          index,
+          event.translationY,
+          itemCount,
+          BLOCK_ROW_STRIDE,
+        );
+        if (destination !== index) scheduleOnRN(onMove, destination);
+      })
+      .onFinalize(() => {
+        translationY.value = withSpring(0, SPRING.gentle);
+        lift.value = withSpring(1, SPRING.press);
+      }),
+    [index, itemCount, lift, onMove, translationY],
+  );
+
   return (
-    <PressableScale
-      disabled={disabled}
-      onPress={onPress}
-      accessibilityRole="button"
-      accessibilityLabel={label}
-      style={{ width: 44, height: 44, alignItems: 'center', justifyContent: 'center', opacity: disabled ? 0.25 : 1 }}>
-      <ThemedText variant="titleMedium">{symbol}</ThemedText>
-    </PressableScale>
+    <GestureDetector gesture={pan}>
+      <Animated.View
+        accessible
+        accessibilityRole="adjustable"
+        accessibilityLabel={label}
+        accessibilityActions={[
+          { name: 'decrement', label },
+          { name: 'increment', label },
+        ]}
+        onAccessibilityAction={(event) => {
+          if (event.nativeEvent.actionName === 'decrement' && index > 0) onMove(index - 1);
+          if (event.nativeEvent.actionName === 'increment' && index < itemCount - 1) onMove(index + 1);
+        }}
+        style={[
+          { width: 44, height: 56, alignItems: 'center', justifyContent: 'center' },
+          animatedStyle,
+        ]}>
+        <Svg width={18} height={24} viewBox="0 0 18 24" fill="none">
+          {[6, 12, 18].flatMap((cy) => [6, 12].map((cx) => (
+            <Circle
+              key={`${String(cx)}-${String(cy)}`}
+              cx={cx}
+              cy={cy}
+              r={1.4}
+              fill={Colors.text3}
+            />
+          )))}
+        </Svg>
+      </Animated.View>
+    </GestureDetector>
   );
 }
 

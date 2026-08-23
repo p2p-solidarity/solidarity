@@ -96,6 +96,11 @@ export const DEFAULT_RELAYS: readonly string[] = [
 ];
 
 export type PublishEventFn = typeof publishEvent;
+/**
+ * Test-only trusted seam for post-transport events. Production callers use
+ * `subscribeEvents`, which verifies NIP-01 ids and signatures before invoking
+ * callbacks; `fetchLatestEvent` still rechecks cheap kind/author constraints.
+ */
 export type SubscribeEventsFn = typeof subscribeEvents;
 
 /** One relay's outcome for a publish attempt. */
@@ -333,6 +338,8 @@ export async function fetchLatestEvent(
           relay,
           filter,
           (event) => {
+            if (filter.kinds !== undefined && !filter.kinds.includes(event.kind)) return;
+            if (filter.authors !== undefined && !filter.authors.includes(event.pubkey)) return;
             if (!latest || event.created_at > latest.created_at) latest = event;
           },
           () => {

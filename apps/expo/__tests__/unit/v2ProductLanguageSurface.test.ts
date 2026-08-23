@@ -101,7 +101,9 @@ describe('v2 product language surfaces', () => {
     expect(proofQr).toContain('{showClaimDetails && selectedClaims.length > 0 ?');
     expect(proofQr).toContain('{showClaimDetails && footerText ?');
 
-    expect(badges).toContain("params: { id: passport.id, product: '1' }");
+    expect(badges).toContain(
+      "params: { id: claim.identityCardId, claimId: claim.id, product: '1' }"
+    );
   });
 
   it('gives every public Page link a nonempty accessible name', () => {

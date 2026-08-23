@@ -7,13 +7,39 @@ export const NIP05_DOMAIN = 'solidarity.gg';
 const NAME_RE = /^[a-z0-9]{3,30}$/u;
 const PUBKEY_RE = /^[0-9a-f]{64}$/u;
 
-interface HistoryRecord {
+interface HistoryRecordBase {
   readonly name: string;
-  readonly status: 'active' | 'redirected' | 'released';
-  readonly redirectTo: string | null;
-  readonly redirectUntil: number | null;
   readonly rebindGeneration: number;
   readonly reboundAt: number | null;
+}
+
+type HistoryRecord =
+  | (HistoryRecordBase & {
+      readonly status: 'active' | 'released';
+      readonly redirectTo: null;
+      readonly redirectUntil: null;
+    })
+  | (HistoryRecordBase & {
+      readonly status: 'redirected';
+      readonly redirectTo: string;
+      readonly redirectUntil: number;
+    });
+
+/**
+ * Has a redirect window closed?
+ *
+ * The `/id/history` record's `redirectUntil` is epoch SECONDS by convention
+ * (the same unit Nostr's `created_at` uses), but that unit is the server's
+ * contract, not something this package can see. A millisecond-valued record
+ * compared as seconds reads as ~54,000 years in the future and would never
+ * expire — the exact silent failure this check exists to prevent — so
+ * normalise first. `1e11` seconds is the year 5138, well past any real
+ * redirect window, while `1e11` milliseconds is 1973: no plausible value of
+ * either unit is ambiguous.
+ */
+function redirectExpired(redirectUntil: number): boolean {
+  const seconds = redirectUntil > 1e11 ? Math.floor(redirectUntil / 1000) : redirectUntil;
+  return seconds <= Math.floor(Date.now() / 1000);
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -59,24 +85,23 @@ function parseHistory(text: string, expectedName: string): HistoryRecord | null 
   ) {
     return null;
   }
-  if (
-    value['status'] === 'redirected' &&
-    (typeof redirectTo !== 'string' || !NAME_RE.test(redirectTo) || typeof redirectUntil !== 'number')
-  ) {
-    return null;
-  }
-  if (value['status'] !== 'redirected' && (redirectTo !== null || redirectUntil !== null)) {
-    return null;
-  }
-
-  return {
+  const base: HistoryRecordBase = {
     name: expectedName,
-    status: value['status'],
-    redirectTo,
-    redirectUntil,
     rebindGeneration: value['rebindGeneration'],
     reboundAt: value['reboundAt'],
   };
+  if (value['status'] === 'redirected') {
+    if (
+      typeof redirectTo !== 'string' ||
+      !NAME_RE.test(redirectTo) ||
+      typeof redirectUntil !== 'number'
+    ) {
+      return null;
+    }
+    return { ...base, status: 'redirected', redirectTo, redirectUntil };
+  }
+  if (redirectTo !== null || redirectUntil !== null) return null;
+  return { ...base, status: value['status'], redirectTo: null, redirectUntil: null };
 }
 
 function parseDirectory(
@@ -138,13 +163,14 @@ export class Nip05HandleResolver implements HandleResolver {
       if (history === null) return err('conflictingRecords');
 
       if (history.status === 'redirected') {
+        if (redirectExpired(history.redirectUntil)) return err('notFound');
         return ok({
           kind: 'nip05',
           status: 'redirected',
           name,
           identifier: `${name}@${NIP05_DOMAIN}`,
-          redirectTo: history.redirectTo!,
-          redirectUntil: history.redirectUntil!,
+          redirectTo: history.redirectTo,
+          redirectUntil: history.redirectUntil,
           rebindGeneration: history.rebindGeneration,
           reboundAt: history.reboundAt,
         });
