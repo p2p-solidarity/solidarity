@@ -1,7 +1,7 @@
 import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useEffect, useState, type ReactNode } from 'react';
-import { ActivityIndicator, Pressable, View } from 'react-native';
+import { ActivityIndicator, View } from 'react-native';
 import Animated, {
   SensorType,
   clamp,
@@ -14,8 +14,9 @@ import Animated, {
   withTiming,
 } from 'react-native-reanimated';
 
+import { PressableScale } from '@/components/common/PressableScale';
 import { SfIcon } from '@/components/icons/SfIcon';
-import { ThemedText } from '@/components/themed';
+import { ThemedButton, ThemedText } from '@/components/themed';
 import { CardMetalColors, Colors } from '@/constants/Colors';
 
 /** `.metal` — credit-card proportions and the mock's 18pt corner. */
@@ -162,6 +163,8 @@ interface PresentCardVisualProps {
   readonly scanHint: string;
   readonly qrState: CardQrState;
   readonly flipLabel: string;
+  readonly physicalCardLabel: string;
+  readonly onOpenPhysicalCard: () => void;
 }
 
 export function PresentCardVisual(props: PresentCardVisualProps): ReactNode {
@@ -183,7 +186,8 @@ export function PresentCardVisual(props: PresentCardVisualProps): ReactNode {
   return (
     <View style={{ gap: 12 }}>
       <Animated.View style={tiltStyle}>
-        <Pressable
+        <PressableScale
+          haptic="tap"
           accessibilityRole="button"
           accessibilityLabel={props.flipLabel}
           accessibilityState={{ expanded: isFlipped }}
@@ -269,24 +273,29 @@ export function PresentCardVisual(props: PresentCardVisualProps): ReactNode {
               </ThemedText>
             </LinearGradient>
           </Animated.View>
-        </Pressable>
+        </PressableScale>
       </Animated.View>
 
-      {/* `.card-acts` — the mock's quiet underlined flip control. Without it
-          the only way to discover the back is to guess that the card taps. */}
-      <Pressable
-        accessibilityRole="button"
-        accessibilityLabel={props.flipLabel}
-        hitSlop={{ top: 14, bottom: 14, left: 12, right: 12 }}
-        onPress={toggleFlip}
-        style={{ alignSelf: 'center' }}>
-        <ThemedText
-          variant="caption"
-          tone="secondary"
-          style={{ textDecorationLine: 'underline' }}>
-          {props.flipLabel}
-        </ThemedText>
-      </Pressable>
+      {/* `.card-acts` — two equal, quiet actions below the object. Keeping
+          these in ThemedButton preserves the app-wide hit target and haptics. */}
+      <View className="flex-row" style={{ gap: 8 }}>
+        <View style={{ flex: 1 }}>
+          <ThemedButton
+            fullWidth
+            variant="secondary"
+            label={props.flipLabel}
+            onPress={toggleFlip}
+          />
+        </View>
+        <View style={{ flex: 1 }}>
+          <ThemedButton
+            fullWidth
+            variant="secondary"
+            label={props.physicalCardLabel}
+            onPress={props.onOpenPhysicalCard}
+          />
+        </View>
+      </View>
     </View>
   );
 }

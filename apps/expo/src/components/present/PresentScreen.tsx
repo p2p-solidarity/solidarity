@@ -10,7 +10,11 @@ import { PageHeaderAction } from '@/components/me/PageHeaderAction';
 import { PageSectionLabel } from '@/components/me/PageSectionLabel';
 import { ROW_RADIUS, blockRowStyle } from '@/components/me/pageRowStyles';
 import { PresentAttestationsMode as AttestationsMode } from '@/components/present/PresentAttestations';
-import { PresentCard, PresentCardWithPageUrl } from '@/components/present/PresentCard';
+import {
+  PresentCard,
+  PresentCardPresetControls,
+  PresentCardWithPageUrl,
+} from '@/components/present/PresentCard';
 import type { PublicPageShareSource } from '@/components/me/meProfileModel';
 import {
   ThemedButton,
@@ -154,11 +158,11 @@ export function PresentScreen(): ReactNode {
             publicPage={publicPage}
             nostrShortUrlReady={nostrShortUrlReady}
             onRetry={() => { setCardRetryNonce((value) => value + 1); }}
-            onSetPreference={(key, value) => { preferences.set(key, value); }}
           />
         ) : (
           <AttestationsMode
             claims={passportClaims}
+            credentials={credentialDetails}
             state={attestationsState}
             onRetry={() => { setIdentityRetryNonce((value) => value + 1); }}
           />
@@ -253,7 +257,6 @@ function CardMode({
   publicPage,
   nostrShortUrlReady,
   onRetry,
-  onSetPreference,
 }: {
   readonly model: PresentModel;
   readonly ownerName: string | null;
@@ -262,10 +265,6 @@ function CardMode({
   readonly publicPage: PublicPageShareSource | null;
   readonly nostrShortUrlReady: boolean;
   readonly onRetry: () => void;
-  readonly onSetPreference: (
-    key: PresentCardOnlyField['preferenceKey'],
-    value: boolean
-  ) => void;
 }): ReactNode {
   return (
     <View className="gap-5">
@@ -287,7 +286,6 @@ function CardMode({
       <CardOnlySection
         model={model}
         onRetry={onRetry}
-        onSetPreference={onSetPreference}
       />
     </View>
   );
@@ -377,16 +375,13 @@ function PublicLinkGroup({
 function CardOnlySection({
   model,
   onRetry,
-  onSetPreference,
 }: {
   readonly model: PresentModel;
   readonly onRetry: () => void;
-  readonly onSetPreference: (
-    key: PresentCardOnlyField['preferenceKey'],
-    value: boolean
-  ) => void;
 }): ReactNode {
   const { t } = useTranslation();
+  const setPreference = usePreferences((state) => state.set);
+
   return (
     <View className="gap-3">
       <PageSectionLabel title={t('present.cardOnly')} />
@@ -437,7 +432,9 @@ function CardOnlySection({
             <CardFieldToggle
               key={field.field}
               field={field}
-              onValueChange={(value) => { onSetPreference(field.preferenceKey, value); }}
+              onValueChange={(value) => {
+                setPreference(field.preferenceKey, value);
+              }}
             />
           ))}
           {model.cardOnlyFields.length === 0 ? (
@@ -447,12 +444,7 @@ function CardOnlySection({
               </ThemedText>
             </ThemedSurface>
           ) : null}
-          <ThemedButton
-            label={t('present.showCardQr')}
-            variant="secondary"
-            fullWidth
-            onPress={() => { router.push('/settings/share-settings'); }}
-          />
+          <PresentCardPresetControls model={model} />
         </>
       ) : null}
     </View>

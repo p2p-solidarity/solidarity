@@ -43,7 +43,9 @@ describe('v2 product language surfaces', () => {
     const detail = source('../../app/credentials/[id].tsx');
     const result = source('../../src/scan/passportShowResult.ts');
 
-    expect(attestations).toContain("product: '1'");
+    // The Present tab now generates the proof inline instead of routing to the
+    // credential screen, so it carries product context on the sheet itself.
+    expect(attestations).toContain('productMode');
     expect(detail).toContain('isProductContext');
     expect(detail).toContain('ProductCredentialMetadata');
     expect(result).not.toContain('reason: result.reason');
