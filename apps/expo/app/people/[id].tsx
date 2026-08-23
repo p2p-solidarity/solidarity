@@ -1,43 +1,27 @@
-/**
- * PersonDetailView — 1:1 port of
- * solidarity/Views/PeopleViews/PersonDetailView.swift.
- *
- * Centred hero (avatar + name + note line + verified/unverified chip +
- * optional context tag + optional declared-claims row). Below the hero sit
- * the "sakura" exchange messages (when present) and the contact-info rows.
- * The top-bar share icon exports the complete contact as a vCard.
- *
- * Per aniseekr-expo rule 10: the list route passes `name` via route params
- * so the hero paints on frame 1 even before the MMKV-backed contact store
- * resolves. The rest of the card fills in once `useContact(id)` returns.
- */
 import { useLocalSearchParams } from 'expo-router';
-import { safeBack } from '@/navigation/safeBack';
 import { LinearGradient } from 'expo-linear-gradient';
-import { useMemo, useState, type ReactNode } from 'react';
-import {
-  Image,
-  Pressable,
-  ScrollView,
-  Text,
-  View,
-  type LayoutChangeEvent,
-} from 'react-native';
+import { useEffect, useMemo, useRef, useState, type ReactNode, type RefObject } from 'react';
+import { Image, ScrollView, TextInput, View, type LayoutChangeEvent } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { animalImageSource } from '@/cards/animals';
+import { PressableScale } from '@/components/common/PressableScale';
 import { MauvePetalMotif } from '@/components/decor/MauvePetalMotif';
 import { SfIcon } from '@/components/icons/SfIcon';
+import {
+  contactSourceDescription,
+  contactSourceTag,
+} from '@/components/people/ContactRow';
 import { EditContactSheet } from '@/components/people/EditContactSheet';
-import { PersonDetailEphemeralSection } from '@/components/people/PersonDetailEphemeralSection';
 import { PersonDetailMoreSheet } from '@/components/people/PersonDetailMoreSheet';
 import {
   ContextTag,
-  DeclaredClaimChip,
   PersonDetailContactRowView,
   StatusTag,
   buildContactRows,
+  formatIsoDate,
 } from '@/components/people/personDetailSupport';
+import { ThemedButton, ThemedSurface, ThemedText } from '@/components/themed';
 import { Colors } from '@/constants/Colors';
 import { useContact, useContactStore } from '@/contacts/repository';
 import { shareContactVCard } from '@/contacts/shareContactVCard';
@@ -45,23 +29,27 @@ import { showError } from '@/feedback/appAlert';
 import { haptic } from '@/feedback/haptics';
 import { pushToast } from '@/feedback/toast';
 import { useTranslation } from '@/i18n';
+import { safeBack } from '@/navigation/safeBack';
 import type { Animal, Contact } from '@solidarity/shared';
 
-const HERO_HORIZONTAL_PADDING = 16;
+const HORIZONTAL_PADDING = 16;
 
 export default function PersonDetailScreen(): ReactNode {
   const { t } = useTranslation();
   const { id, name } = useLocalSearchParams<{ id: string; name?: string }>();
   const contact = useContact(id);
-  const upsert = useContactStore((s) => s.upsert);
-  const remove = useContactStore((s) => s.remove);
-  const loadDetail = useContactStore((s) => s.loadDetail);
+  const upsert = useContactStore((state) => state.upsert);
+  const remove = useContactStore((state) => state.remove);
+  const loadDetail = useContactStore((state) => state.loadDetail);
   const insets = useSafeAreaInsets();
+  const noteInputRef = useRef<TextInput>(null);
 
-  const [showingMoreSheet, setShowingMoreSheet] = useState(false);
-  const [showingEditSheet, setShowingEditSheet] = useState(false);
+  const [moreSheetOpen, setMoreSheetOpen] = useState(false);
+  const [editSheetOpen, setEditSheetOpen] = useState(false);
   const [sharing, setSharing] = useState(false);
   const displayName = contact?.businessCard.name ?? name ?? t('personDetail.fallbackName');
+  const source = contact ? contactSourceDescription(contact, t) : undefined;
+  const sourceTag = contact ? contactSourceTag(contact, t) : undefined;
 
   const onShare = (): void => {
     if (!contact || sharing) return;
@@ -72,7 +60,7 @@ export default function PersonDetailScreen(): ReactNode {
         await shareContactVCard([target.id], loadDetail, t('personDetail.share'));
       } catch (error) {
         showError({
-          context: 'People › Share Contact',
+          context: 'Contacts › Share Contact',
           summary: t('personDetail.shareFailed'),
           error,
         });
@@ -85,10 +73,20 @@ export default function PersonDetailScreen(): ReactNode {
   const onSaveNote = (note: string): void => {
     if (!contact) return;
     const trimmed = note.trim();
-    void upsert({
-      ...contact,
-      notes: trimmed.length > 0 ? trimmed : undefined,
-    });
+    void (async () => {
+      try {
+        await upsert({
+          ...contact,
+          notes: trimmed.length > 0 ? trimmed : undefined,
+        });
+      } catch (error) {
+        showError({
+          context: 'Contacts › Edit Note',
+          summary: t('personDetail.updateFailed'),
+          error,
+        });
+      }
+    })();
   };
 
   const onDelete = (): void => {
@@ -103,7 +101,7 @@ export default function PersonDetailScreen(): ReactNode {
       } catch (error) {
         haptic('error');
         showError({
-          context: 'People › Delete Contact',
+          context: 'Contacts › Delete Contact',
           summary: t('peopleList.deleteFailed'),
           error,
         });
@@ -114,184 +112,184 @@ export default function PersonDetailScreen(): ReactNode {
   return (
     <View className="flex-1 bg-pageBg" style={{ paddingTop: insets.top }}>
       <TopBar
-        onBack={() => { safeBack(); }}
+        onBack={safeBack}
         onShare={onShare}
-        sharing={sharing || !contact}
-        onMore={() => { setShowingMoreSheet(true); }}
+        shareDisabled={!contact || sharing}
+        onMore={() => { setMoreSheetOpen(true); }}
+        moreDisabled={!contact}
       />
 
-      <ScrollView contentContainerStyle={{ paddingTop: 12, paddingBottom: 32, rowGap: 24 }}>
+      <ScrollView
+        contentInsetAdjustmentBehavior="automatic"
+        keyboardShouldPersistTaps="handled"
+        contentContainerStyle={{ paddingTop: 8, paddingBottom: 32, gap: 16 }}
+      >
         <HeroCard
           contact={contact}
           displayName={displayName}
-          onEditNote={() => { setShowingMoreSheet(true); }}
+          sourceTag={sourceTag}
+          onEditNote={() => { noteInputRef.current?.focus(); }}
         />
-        {contact ? <PersonDetailEphemeralSection contact={contact} /> : null}
-        {contact ? <ContactInfoSection contact={contact} /> : null}
+        {contact ? <ContactMethodsSection contact={contact} /> : null}
+        {contact && source ? <ContactMetadataSection contact={contact} source={source} /> : null}
+        {contact ? (
+          <NotesSection
+            contact={contact}
+            inputRef={noteInputRef}
+            onSave={onSaveNote}
+          />
+        ) : null}
+        {contact ? (
+          <View style={{ paddingHorizontal: HORIZONTAL_PADDING }}>
+            <ThemedButton
+              fullWidth
+              variant="secondary"
+              label={t('personDetail.exportVCard')}
+              leadingIcon={<SfIcon name="square.and.arrow.up" size={15} color={Colors.text1} />}
+              loading={sharing}
+              onPress={onShare}
+            />
+          </View>
+        ) : null}
       </ScrollView>
 
       {contact ? (
         <PersonDetailMoreSheet
-          visible={showingMoreSheet}
+          key={`${contact.id}:${contact.notes ?? ''}`}
+          visible={moreSheetOpen}
           contact={contact}
           onSave={onSaveNote}
           onDelete={onDelete}
-          onEditContact={() => { setShowingEditSheet(true); }}
-          onClose={() => { setShowingMoreSheet(false); }}
+          onEditContact={() => { setEditSheetOpen(true); }}
+          onClose={() => { setMoreSheetOpen(false); }}
         />
       ) : null}
 
       {contact ? (
         <EditContactSheet
-          visible={showingEditSheet}
+          visible={editSheetOpen}
           contact={contact}
-          onClose={() => { setShowingEditSheet(false); }}
+          onClose={() => { setEditSheetOpen(false); }}
         />
       ) : null}
     </View>
   );
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Top bar — chevron.left back + share + ellipsis.circle (more) icons.
-// 56pt tall, 16pt horiz pad. Ellipsis opens PersonDetailMoreSheet (note +
-// destructive delete row).
-// ─────────────────────────────────────────────────────────────────────────────
-
 function TopBar({
   onBack,
   onShare,
-  sharing,
+  shareDisabled,
   onMore,
+  moreDisabled,
 }: {
   readonly onBack: () => void;
   readonly onShare: () => void;
-  readonly sharing: boolean;
+  readonly shareDisabled: boolean;
   readonly onMore: () => void;
+  readonly moreDisabled: boolean;
 }): ReactNode {
   const { t } = useTranslation();
   return (
-    <View
-      className="flex-row items-center justify-between"
-      style={{ height: 56, paddingHorizontal: 16 }}
-    >
-      <Pressable
-        accessibilityRole="button"
-        accessibilityLabel={t('personDetail.back')}
-        onPress={onBack}
-        hitSlop={8}
-      >
-        <SfIcon name="chevron.left" size={24} color={Colors.text1} />
-      </Pressable>
-      <View className="flex-row items-center" style={{ columnGap: 16 }}>
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel={t('personDetail.share')}
+    <View className="flex-row items-center justify-between px-3" style={{ height: 56 }}>
+      <IconAction label={t('personDetail.back')} onPress={onBack} icon="chevron.left" />
+      <View className="flex-row items-center gap-1">
+        <IconAction
+          label={t('personDetail.share')}
           onPress={onShare}
-          disabled={sharing}
-          hitSlop={8}
-          style={{
-            width: 22,
-            height: 22,
-            alignItems: 'center',
-            justifyContent: 'center',
-            opacity: sharing ? 0.45 : 1,
-          }}
-        >
-          <SfIcon name="square.and.arrow.up" size={22} color={Colors.text1} />
-        </Pressable>
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel={t('personDetail.more')}
+          icon="square.and.arrow.up"
+          disabled={shareDisabled}
+        />
+        <IconAction
+          label={t('personDetail.more')}
           onPress={onMore}
-          hitSlop={8}
-          style={{ width: 24, height: 24, alignItems: 'center', justifyContent: 'center' }}
-        >
-          <SfIcon name="ellipsis.circle" size={22} color={Colors.text1} />
-        </Pressable>
+          icon="ellipsis.circle"
+          disabled={moreDisabled}
+        />
       </View>
     </View>
   );
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Hero card — gradient + MauvePetalMotif watermark + avatar + name + chips.
-// 4pt corner radius (matches Swift PersonDetailView heroCard).
-// ─────────────────────────────────────────────────────────────────────────────
+function IconAction({
+  label,
+  onPress,
+  icon,
+  disabled = false,
+}: {
+  readonly label: string;
+  readonly onPress: () => void;
+  readonly icon: 'chevron.left' | 'square.and.arrow.up' | 'ellipsis.circle';
+  readonly disabled?: boolean;
+}): ReactNode {
+  return (
+    <PressableScale
+      onPress={onPress}
+      disabled={disabled}
+      accessibilityRole="button"
+      accessibilityLabel={label}
+      style={{ width: 44, height: 44, alignItems: 'center', justifyContent: 'center', opacity: disabled ? 0.4 : 1 }}
+    >
+      <SfIcon name={icon} size={icon === 'chevron.left' ? 24 : 22} color={Colors.text1} />
+    </PressableScale>
+  );
+}
 
 function HeroCard({
   contact,
   displayName,
+  sourceTag,
   onEditNote,
 }: {
   readonly contact: Contact | undefined;
   readonly displayName: string;
+  readonly sourceTag: string | undefined;
   readonly onEditNote: () => void;
 }): ReactNode {
-  const [cardWidth, setCardWidth] = useState<number>(0);
-  const onLayout = (e: LayoutChangeEvent): void => {
-    const w = e.nativeEvent.layout.width;
-    if (Math.abs(w - cardWidth) > 0.5) setCardWidth(w);
+  const [cardWidth, setCardWidth] = useState(0);
+  const note = contact?.notes?.trim();
+  const onLayout = (event: LayoutChangeEvent): void => {
+    const width = event.nativeEvent.layout.width;
+    if (Math.abs(width - cardWidth) > 0.5) setCardWidth(width);
   };
 
-  const trimmedNote = contact?.notes?.trim();
-  const note = trimmedNote && trimmedNote.length > 0 ? trimmedNote : undefined;
-  const firstTag = contact?.tags.find((t) => t.trim().length > 0);
-  const declaredClaims = readDeclaredProofClaims(contact);
-
   return (
-    <View
+    <ThemedSurface
+      variant="card"
       onLayout={onLayout}
-      style={{ marginHorizontal: HERO_HORIZONTAL_PADDING, borderRadius: 4, overflow: 'hidden' }}
+      style={{ marginHorizontal: HORIZONTAL_PADDING, overflow: 'hidden' }}
     >
-      {/* Background gradient (Figma 766:5241 — 17.3°, mauve @ 0.36 → peach @ 0.68). */}
       <LinearGradient
         colors={[Colors.heroGradientStart, Colors.heroGradientEnd]}
         locations={[0.36, 0.68]}
         start={{ x: 0.35, y: 0.98 }}
         end={{ x: 0.65, y: 0.02 }}
-        style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }}
+        style={{ position: 'absolute', inset: 0 }}
       />
-
-      {/* Mauve horseshoe watermark — only renders once cardWidth is known. */}
       {cardWidth > 0 ? (
-        <View pointerEvents="none" style={{ position: 'absolute', top: 0, left: 0 }}>
-          <MauvePetalMotif cardWidth={cardWidth} cardHeight={260} />
+        <View pointerEvents="none" style={{ position: 'absolute', inset: 0 }}>
+          <MauvePetalMotif cardWidth={cardWidth} cardHeight={230} />
         </View>
       ) : null}
 
-      <View style={{ paddingHorizontal: 12, paddingTop: 16, paddingBottom: 24, rowGap: 16 }}>
-        <View style={{ alignItems: 'center', rowGap: 16 }}>
-          <AvatarCircle name={displayName} animal={contact?.businessCard.animal} />
-          <View style={{ alignItems: 'center', rowGap: 8, alignSelf: 'stretch' }}>
-            <Text
-              numberOfLines={2}
-              className="text-text1"
-              style={{ fontSize: 24, fontWeight: '500', textAlign: 'center' }}
-            >
-              {displayName}
-            </Text>
-
-            <HeroNoteLine note={note} onEditNote={onEditNote} />
-
-            {contact ? (
-              <View className="flex-row items-center" style={{ columnGap: 16 }}>
-                <StatusTag contact={contact} />
-                {firstTag ? <ContextTag label={firstTag} /> : null}
-              </View>
-            ) : null}
-
-            {declaredClaims.length > 0 ? (
-              <View className="flex-row" style={{ columnGap: 8 }}>
-                {declaredClaims.map((claim) => (
-                  <DeclaredClaimChip key={claim} claimType={claim} />
-                ))}
-              </View>
-            ) : null}
+      <View className="items-center px-4 py-5" style={{ gap: 12 }}>
+        <AvatarCircle
+          name={displayName}
+          profileImage={contact?.businessCard.profileImage}
+          animal={contact?.businessCard.animal}
+        />
+        <ThemedText variant="headlineMedium" numberOfLines={2} style={{ textAlign: 'center' }}>
+          {displayName}
+        </ThemedText>
+        <HeroNoteLine note={note} onEditNote={onEditNote} />
+        {contact ? (
+          <View className="flex-row flex-wrap items-center justify-center gap-2">
+            <StatusTag contact={contact} />
+            {sourceTag ? <ContextTag label={sourceTag} /> : null}
           </View>
-        </View>
+        ) : null}
       </View>
-    </View>
+    </ThemedSurface>
   );
 }
 
@@ -304,63 +302,35 @@ function HeroNoteLine({
 }): ReactNode {
   const { t } = useTranslation();
   return (
-    <Pressable
+    <PressableScale
       onPress={onEditNote}
       accessibilityRole="button"
-      accessibilityLabel={note ? t('personDetail.editNote') : t('personDetail.addNote')}
-      style={{ alignSelf: 'stretch' }}
+      accessibilityLabel={t('personDetail.editNote')}
+      className="flex-row items-center justify-center gap-1.5 px-3"
+      style={{ minHeight: 44, alignSelf: 'stretch' }}
     >
-      {note ? (
-        <Text
-          numberOfLines={1}
-          className="text-text2"
-          style={{ fontSize: 14, textAlign: 'center' }}
-        >
-          {note}
-        </Text>
-      ) : (
-        <View
-          className="flex-row items-center justify-center"
-          style={{ columnGap: 4 }}
-        >
-          <Text
-            style={{
-              fontSize: 12,
-              fontFamily: 'Menlo',
-              fontWeight: '500',
-              color: Colors.primaryBlue,
-            }}
-          >
-            {'//'}
-          </Text>
-          <Text
-            style={{
-              fontSize: 12,
-              fontFamily: 'Menlo',
-              color: Colors.text3,
-            }}
-          >
-            {t('personDetail.tapToAddNote')}
-          </Text>
-        </View>
-      )}
-    </Pressable>
+      <SfIcon name="square.and.pencil" size={13} color={Colors.text2} />
+      <ThemedText variant="bodySmall" tone="secondary" numberOfLines={1}>
+        {note && note.length > 0 ? note : t('personDetail.tapToAddNote')}
+      </ThemedText>
+    </PressableScale>
   );
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Avatar circle — 88pt warm cream disc. Renders animal PNG (Swift parity:
-// ImageProvider.animalImage(for:)) when the contact has an animal set,
-// otherwise falls back to the initial glyph.
-// ─────────────────────────────────────────────────────────────────────────────
-
 function AvatarCircle({
   name,
+  profileImage,
   animal,
 }: {
   readonly name: string;
+  readonly profileImage: string | undefined;
   readonly animal: Animal | undefined;
 }): ReactNode {
+  const source = profileImage
+    ? { uri: `data:image/png;base64,${profileImage}` }
+    : animal
+      ? animalImageSource(animal)
+      : undefined;
   return (
     <View
       style={{
@@ -375,56 +345,161 @@ function AvatarCircle({
         overflow: 'hidden',
       }}
     >
-      {animal ? (
-        <Image source={animalImageSource(animal)} style={{ width: 88, height: 88 }} resizeMode="cover" />
+      {source ? (
+        <Image source={source} style={{ width: 88, height: 88 }} resizeMode="cover" />
       ) : (
-        <Text className="text-text2" style={{ fontSize: 32, fontWeight: '500' }}>
+        <ThemedText variant="headlineLarge" tone="secondary">
           {initialOf(name)}
-        </Text>
+        </ThemedText>
       )}
     </View>
   );
 }
 
-function initialOf(name: string): string {
-  const trimmed = name.trim();
-  if (trimmed.length === 0) return '?';
-  return trimmed.charAt(0).toUpperCase();
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Contact info — phone / email rows (Swift: phone, email, web link). The
-// web-link row depends on `graphCredentialRef` which the TS schema doesn't
-// surface yet, so it's omitted until the field lands cross-platform.
-// ─────────────────────────────────────────────────────────────────────────────
-
-function ContactInfoSection({ contact }: { readonly contact: Contact }): ReactNode {
-  const { t } = useTranslation();
+function ContactMethodsSection({ contact }: { readonly contact: Contact }): ReactNode {
   const rows = useMemo(() => buildContactRows(contact), [contact]);
   if (rows.length === 0) return null;
   return (
-    <View style={{ paddingHorizontal: 16, rowGap: 10 }}>
-      <Text className="text-text1" style={{ fontSize: 14 }}>
-        {t('personDetail.contactInfo')}
-      </Text>
-      <View style={{ rowGap: 8 }}>
-        {rows.map((row) => (
-          <PersonDetailContactRowView key={row.id} row={row} />
-        ))}
+    <ThemedSurface
+      variant="card"
+      style={{ marginHorizontal: HORIZONTAL_PADDING, overflow: 'hidden' }}
+    >
+      {rows.map((row, index) => (
+        <PersonDetailContactRowView
+          key={row.id}
+          row={row}
+          divided={index < rows.length - 1}
+        />
+      ))}
+    </ThemedSurface>
+  );
+}
+
+function ContactMetadataSection({
+  contact,
+  source,
+}: {
+  readonly contact: Contact;
+  readonly source: string;
+}): ReactNode {
+  const { t } = useTranslation();
+  return (
+    <ThemedSurface
+      variant="card"
+      style={{ marginHorizontal: HORIZONTAL_PADDING, overflow: 'hidden' }}
+    >
+      <FactRow
+        icon="person.text.rectangle"
+        label={t('personDetail.source')}
+        value={source}
+        divided
+      />
+      <FactRow
+        icon="arrow.clockwise"
+        label={t('personDetail.updated')}
+        value={formatIsoDate(contact.businessCard.updatedAt)}
+      />
+    </ThemedSurface>
+  );
+}
+
+function FactRow({
+  icon,
+  label,
+  value,
+  divided = false,
+}: {
+  readonly icon: 'person.text.rectangle' | 'arrow.clockwise';
+  readonly label: string;
+  readonly value: string;
+  readonly divided?: boolean;
+}): ReactNode {
+  return (
+    <View className="flex-row items-center gap-3 px-4" style={{ minHeight: 62 }}>
+      <View style={{ width: 24, alignItems: 'center' }}>
+        <SfIcon name={icon} size={18} color={Colors.text1} />
       </View>
+      <View style={{ flex: 1, minWidth: 0, paddingVertical: 9, gap: 1 }}>
+        <ThemedText variant="bodySmall" tone="secondary">
+          {label}
+        </ThemedText>
+        <ThemedText variant="bodyMedium" numberOfLines={1} selectable>
+          {value}
+        </ThemedText>
+      </View>
+      {divided ? <Divider /> : null}
     </View>
   );
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Declared-proof claims accessor — TS Contact doesn't carry `declaredProofClaims`
-// directly today, so read defensively (forwards-compatible if a future
-// schema add lands without breaking the existing wire format).
-// ─────────────────────────────────────────────────────────────────────────────
+function NotesSection({
+  contact,
+  inputRef,
+  onSave,
+}: {
+  readonly contact: Contact;
+  readonly inputRef: RefObject<TextInput | null>;
+  readonly onSave: (note: string) => void;
+}): ReactNode {
+  const { t } = useTranslation();
+  const [draft, setDraft] = useState(contact.notes ?? '');
 
-function readDeclaredProofClaims(contact: Contact | undefined): readonly string[] {
-  if (!contact) return [];
-  const raw = (contact as unknown as { declaredProofClaims?: unknown }).declaredProofClaims;
-  if (!Array.isArray(raw)) return [];
-  return raw.filter((v): v is string => typeof v === 'string');
+  useEffect(() => {
+    setDraft(contact.notes ?? '');
+  }, [contact.id, contact.notes]);
+
+  const saveIfChanged = (): void => {
+    if (draft.trim() !== (contact.notes ?? '').trim()) onSave(draft);
+  };
+
+  return (
+    <ThemedSurface
+      variant="card"
+      className="flex-row items-start gap-3 px-4 py-3"
+      style={{ marginHorizontal: HORIZONTAL_PADDING }}
+    >
+      <View style={{ width: 24, height: 44, alignItems: 'center', justifyContent: 'center' }}>
+        <SfIcon name="square.and.pencil" size={18} color={Colors.text1} />
+      </View>
+      <View style={{ flex: 1, minWidth: 0, gap: 2 }}>
+        <ThemedText variant="bodySmall" tone="secondary">
+          {t('personDetail.noteLabel')}
+        </ThemedText>
+        <TextInput
+          ref={inputRef}
+          value={draft}
+          onChangeText={setDraft}
+          onBlur={saveIfChanged}
+          onSubmitEditing={saveIfChanged}
+          multiline
+          placeholder={t('personDetail.notePlaceholder')}
+          placeholderTextColor={Colors.text3}
+          accessibilityLabel={t('personDetail.noteLabel')}
+          className="text-text1"
+          style={{ minHeight: 60, padding: 0, fontSize: 15, lineHeight: 22, textAlignVertical: 'top' }}
+        />
+      </View>
+    </ThemedSurface>
+  );
+}
+
+function Divider(): ReactNode {
+  return (
+    <View
+      pointerEvents="none"
+      style={{
+        position: 'absolute',
+        left: 52,
+        right: 0,
+        bottom: 0,
+        borderBottomWidth: 0.5,
+        borderBottomColor: Colors.divider,
+      }}
+    />
+  );
+}
+
+function initialOf(name: string): string {
+  const trimmed = name.trim();
+  return trimmed.length > 0 ? trimmed.charAt(0).toUpperCase() : '?';
 }

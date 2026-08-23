@@ -8,6 +8,7 @@ import { describe, expect, it } from 'bun:test';
 import { p256 } from '@noble/curves/nist.js';
 import {
   didKeyFromPublicKey,
+  encodeCrd1,
   hexToBytes,
   publicKeyFromPrivate,
   publicKeyToJwk,
@@ -137,6 +138,40 @@ describe('CRD1 card wire', () => {
     expect(outcome.kind).toBe('error');
   });
 
+  it('rejects a present but malformed embedded subject key', async () => {
+    const now = Math.floor(Date.now() / 1000);
+    const encoded = await encodeCrd1(
+      {
+        iss: TEST_DID,
+        sub: TEST_DID,
+        iat: now,
+        exp: now + 60,
+        vc: {
+          credentialSubject: {
+            subject_core: {
+              publicKeyJwk: {
+                ...publicKeyToJwk(TEST_PUB),
+                kty: 'RSA',
+              },
+            },
+            // A valid duplicate must not turn the malformed preferred key
+            // into an apparently absent holder-binding claim.
+            publicKeyJwk: publicKeyToJwk(TEST_PUB),
+          },
+        },
+      },
+      TEST_DID,
+      signRaw
+    );
+    if (!encoded.ok) throw new Error('expected wire');
+
+    const verified = verifyCrd1Wire(encoded.wire);
+    expect(verified).toEqual({ ok: false, error: 'embedded subject key is malformed' });
+
+    const outcome = await handleScannedPayload(encoded.wire);
+    expect(outcome.kind).toBe('error');
+  });
+
   it('rejects a tampered wire at scan time', async () => {
     const wire = await buildCrd1CardWire(card(), { signer });
     if (!wire) throw new Error('expected wire');
@@ -224,7 +259,9 @@ describe('evidence pack', () => {
 
     const outcome = await handleScannedPayload(signed.wire);
     expect(outcome.kind).toBe('card');
-    expect(outcome.verificationStatus).toBe('Verified');
+    // The pack signature authenticates the issuer, but declared rows remain
+    // declarations and must not produce the app's green verified seal.
+    expect(outcome.verificationStatus).toBe('Unverified');
     expect(outcome.card?.name).toBe('Gimmy');
     expect(outcome.card?.socialNetworks.some((s) => s.url === 'https://gimmy.blog')).toBe(true);
   });
@@ -239,5 +276,26 @@ describe('evidence pack', () => {
     expect(verifiedRows.every((row) => row.method !== undefined && row.checkedAt !== undefined)).toBe(true);
     const declaredRows = claims.claims.filter((row) => row.status === 'declared');
     expect(declaredRows.every((row) => row.method === undefined && row.checkedAt === undefined)).toBe(true);
+  });
+
+  it('uses Verified only for a non-empty pack whose claim rows are all verified', async () => {
+    const verifiedOnlySource: EvidencePackSource = {
+      ...source,
+      record: { ...source.record, links: [] },
+      atproto: null,
+    };
+    const verifiedRows = buildEvidencePackRows(verifiedOnlySource);
+    expect(verifiedRows.length).toBe(1);
+    expect(verifiedRows.every((row) => row.status === 'verified')).toBe(true);
+
+    const verifiedPack = await signEvidencePack(verifiedOnlySource, verifiedRows, signRaw);
+    if (!verifiedPack.ok) throw new Error('expected verified-only pack');
+    const verifiedOutcome = await handleScannedPayload(verifiedPack.wire);
+    expect(verifiedOutcome.verificationStatus).toBe('Verified');
+
+    const emptyPack = await signEvidencePack(verifiedOnlySource, [], signRaw);
+    if (!emptyPack.ok) throw new Error('expected empty pack');
+    const emptyOutcome = await handleScannedPayload(emptyPack.wire);
+    expect(emptyOutcome.verificationStatus).toBe('Unverified');
   });
 });

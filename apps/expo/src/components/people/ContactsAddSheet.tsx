@@ -5,7 +5,7 @@ import type { SFSymbol } from 'expo-symbols';
 
 import { PressableScale } from '@/components/common/PressableScale';
 import { SfIcon } from '@/components/icons/SfIcon';
-import { ThemedButton, ThemedText } from '@/components/themed';
+import { ThemedButton, ThemedSurface, ThemedText } from '@/components/themed';
 import { Colors } from '@/constants/Colors';
 import { useTranslation } from '@/i18n';
 
@@ -43,14 +43,16 @@ export function ContactsAddSheet({
       transparent
       onRequestClose={onClose}
     >
-      <View className="flex-1 justify-end" style={{ backgroundColor: 'transparent' }}>
+      <View className="flex-1 justify-end" style={{ backgroundColor: Colors.overlayBg }}>
         <Pressable className="flex-1" onPress={onClose} accessibilityRole="button" accessibilityLabel={t('common.close')} />
-        <View
+        <ThemedSurface
+          variant="elevated"
           style={{
             maxHeight: '82%',
             borderTopLeftRadius: 16,
             borderTopRightRadius: 16,
-            backgroundColor: Colors.cardBg,
+            borderBottomLeftRadius: 0,
+            borderBottomRightRadius: 0,
             paddingTop: 8,
             paddingBottom: Math.max(insets.bottom, 16),
           }}
@@ -61,41 +63,43 @@ export function ContactsAddSheet({
           </View>
 
           <ScrollView contentContainerStyle={{ paddingHorizontal: 16, gap: 12 }}>
-            <View style={{ borderRadius: 0, borderWidth: 0.5, borderColor: Colors.divider }}>
-            <ContactsActionRow
-              icon="qrcode.viewfinder"
-              label={t('peopleList.scanTheirQr')}
-              onPress={() => { choose(onScan); }}
-            />
-            <ContactsActionRow
-              icon="square.and.pencil"
-              label={t('peopleList.enterByHand')}
-              onPress={() => { choose(onEnterManually); }}
-              isLast
-            />
-            </View>
+            <ThemedSurface variant="card">
+              <ContactsActionRow
+                icon="qrcode.viewfinder"
+                label={t('peopleList.scanTheirQr')}
+                onPress={() => { choose(onScan); }}
+              />
+              <ContactsActionRow
+                icon="square.and.pencil"
+                label={t('peopleList.enterByHand')}
+                onPress={() => { choose(onEnterManually); }}
+                isLast
+              />
+            </ThemedSurface>
 
-          <View style={{ borderRadius: 12, backgroundColor: Colors.searchBg }}>
-            <ContactsActionRow
-              icon="person.crop.circle.badge.plus"
-              label={t('peopleList.importFromPhone')}
-              onPress={() => { choose(onImportPhone); }}
-              secondary
-            />
-            <ContactsActionRow
-              icon="doc.badge.plus"
-              label={t('peopleList.importVcfFile')}
-              onPress={() => { choose(onImportVcf); }}
-              secondary
-            />
-            <ContactsActionRow
-              icon="link"
-              label={t('peopleList.pasteLinkPage')}
-              onPress={() => { choose(onImportPage); }}
-              secondary
-              isLast
-            />
-          </View>
+            <View style={{ height: 0.5, backgroundColor: Colors.divider }} />
+
+            <ThemedSurface variant="inset">
+              <ContactsActionRow
+                icon="person.crop.circle.badge.plus"
+                label={t('peopleList.importFromPhone')}
+                onPress={() => { choose(onImportPhone); }}
+                secondary
+              />
+              <ContactsActionRow
+                icon="doc.badge.plus"
+                label={t('peopleList.importVcfFile')}
+                onPress={() => { choose(onImportVcf); }}
+                secondary
+              />
+              <ContactsActionRow
+                icon="link"
+                label={t('peopleList.pasteLinkPage')}
+                onPress={() => { choose(onImportPage); }}
+                secondary
+                isLast
+              />
+            </ThemedSurface>
           </ScrollView>
 
           <View className="px-4 pt-3">
@@ -106,7 +110,7 @@ export function ContactsAddSheet({
               onPress={onClose}
             />
           </View>
-        </View>
+        </ThemedSurface>
       </View>
     </Modal>
   );

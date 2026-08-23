@@ -1,8 +1,4 @@
-/**
- * Contacts tab — v2 bio-link surface using the app's existing visual system.
- * The source order mirrors solidarity-spec/v2.html while all rendered rows
- * continue to come from the contact and saved-page stores.
- */
+/** Contacts tab — creds mock v3, backed only by persisted contact data. */
 import { router, useLocalSearchParams } from 'expo-router';
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { ActivityIndicator, ScrollView, View } from 'react-native';
@@ -20,6 +16,11 @@ import { SfIcon } from '@/components/icons/SfIcon';
 import { PaperStackIllustration } from '@/components/decor/PaperStackIllustration';
 import { ContactsAddSheet } from '@/components/people/ContactsAddSheet';
 import { ContactsActivitySections } from '@/components/people/ContactsActivitySections';
+import {
+  ContactSectionHeader,
+  flattenContactSections,
+  groupContactsByInitial,
+} from '@/components/people/ContactsList';
 import { DeleteContactsSheet } from '@/components/people/DeleteContactsSheet';
 import { ManualContactEntrySheet } from '@/components/people/ManualContactEntrySheet';
 import { PeopleSearchField } from '@/components/people/PeopleSearchField';
@@ -57,13 +58,23 @@ export default function PeopleTab() {
   const [editMode, setEditMode] = useState(false);
   const [selectedIds, setSelectedIds] = useState<ReadonlySet<string>>(() => new Set());
 
+  const contactSections = useMemo(() => groupContactsByInitial(contacts, ''), [contacts]);
   const orderedContacts = useMemo(
-    () => filterContacts(contacts, ''),
-    [contacts],
+    () => contactSections.flatMap((section) => section.contacts),
+    [contactSections],
   );
-  const filtered = useMemo(
-    () => filterContacts(orderedContacts, searchQuery),
-    [orderedContacts, searchQuery],
+  const filteredSections = useMemo(
+    () => groupContactsByInitial(contacts, searchQuery),
+    [contacts, searchQuery],
+  );
+  const filteredCount = useMemo(
+    () => filteredSections.reduce((count, section) => count + section.contacts.length, 0),
+    [filteredSections],
+  );
+  const searching = searchQuery.trim().length > 0;
+  const filteredListItems = useMemo(
+    () => flattenContactSections(filteredSections, !searching),
+    [filteredSections, searching],
   );
   const selectedContacts = useMemo(
     () => orderedContacts.filter((contact) => selectedIds.has(contact.id)),
@@ -100,9 +111,7 @@ export default function PeopleTab() {
   };
 
   const onLongPressContact = (c: ContactManifestEntry) => {
-    // The long-press 'heavy' haptic + zoom lift fire inside
-    // TrustGraphContactRow (coupled to the animation); this handler just
-    // arms select mode so the two can't drift out of sync.
+    // The row owns the long-press haptic; this handler owns selection state.
     if (!editMode) {
       setEditMode(true);
       setSelectedIds(new Set([c.id]));
@@ -266,37 +275,42 @@ export default function PeopleTab() {
         <>
           {/* Search bar stays mounted whenever there is data so the input
               doesn't flicker in/out as users type past their last match. */}
-          <View className="px-4 pb-3">
-            <PeopleSearchField value={searchQuery} onChangeText={setSearchQuery} />
-          </View>
-          {editMode ? null : <ContactsActivitySections onContactAdded={refresh} />}
-          {filtered.length === 0 ? (
-            <ScrollView contentContainerStyle={{ flexGrow: 1 }}>
+          {!editMode ? (
+            <View className="px-4 pb-3">
+              <PeopleSearchField value={searchQuery} onChangeText={setSearchQuery} />
+            </View>
+          ) : null}
+          {!editMode && !searching ? <ContactsActivitySections onContactAdded={refresh} /> : null}
+          {filteredCount === 0 ? (
+            <View style={{ flex: 1, paddingHorizontal: 16 }}>
               <EmptySearchState
                 query={searchQuery}
                 onAdd={() => { setAddSheetOpen(true); }}
                 onImportPhone={() => { router.push('/contacts/import-phone'); }}
               />
-            </ScrollView>
+            </View>
           ) : (
             <Animated.View entering={FadeIn.duration(280)} style={{ flex: 1 }}>
               <FlashList
-                data={filtered}
-                keyExtractor={(item) => item.id}
+                data={filteredListItems}
+                keyExtractor={(item) => item.key}
+                getItemType={(item) => item.kind}
                 contentContainerStyle={{
                   paddingHorizontal: 16,
                   paddingBottom: editMode ? 100 : 16,
                 }}
                 keyboardShouldPersistTaps="handled"
                 extraData={{ editMode, selectedIds }}
-                renderItem={({ item }) => (
+                renderItem={({ item }) => item.kind === 'header' ? (
+                  <ContactSectionHeader title={item.title} />
+                ) : (
                   <PeopleRow
-                    contact={item}
+                    contact={item.contact}
                     editMode={editMode}
-                    selected={selectedIds.has(item.id)}
-                    onPress={() => { onSelectContact(item); }}
-                    onLongPress={() => { onLongPressContact(item); }}
-                    onSwipeDelete={() => { onDeleteContact(item); }}
+                    selected={selectedIds.has(item.contact.id)}
+                    onPress={() => { onSelectContact(item.contact); }}
+                    onLongPress={() => { onLongPressContact(item.contact); }}
+                    onSwipeDelete={() => { onDeleteContact(item.contact); }}
                   />
                 )}
               />
@@ -327,9 +341,7 @@ export default function PeopleTab() {
 }
 
 /**
- * PeopleRow — wraps the existing TrustGraphContactRow with:
- *   - a leading selection circle when edit mode is active
- *   - ReanimatedSwipeable revealing a destructive "Delete" action on swipe
+ * PeopleRow — adds swipe-to-delete around the v3 selection-aware row.
  *
  * Swipe is disabled while edit mode is active so the gesture doesn't fight
  * the multi-select tap target. Long-press still enters edit mode.
@@ -350,35 +362,13 @@ function PeopleRow({
   readonly onSwipeDelete: () => void;
 }) {
   const inner = (
-    <View className="flex-row items-center bg-pageBg">
-      {editMode ? (
-        <View style={{ paddingLeft: 4, paddingRight: 8 }}>
-          <View
-            style={{
-              width: 22,
-              height: 22,
-              borderRadius: 11,
-              borderWidth: 1.5,
-              borderColor: selected ? Colors.destructive : Colors.text3,
-              backgroundColor: selected ? Colors.destructive : 'transparent',
-              alignItems: 'center',
-              justifyContent: 'center',
-            }}
-          >
-            {selected ? (
-              <SfIcon name="checkmark" size={12} color={Colors.invertedButtonText} />
-            ) : null}
-          </View>
-        </View>
-      ) : null}
-      <View style={{ flex: 1 }}>
-        <TrustGraphContactRow
-          contact={contact}
-          onPress={onPress}
-          onLongPress={onLongPress}
-        />
-      </View>
-    </View>
+    <TrustGraphContactRow
+      contact={contact}
+      selectionMode={editMode}
+      selected={selected}
+      onPress={onPress}
+      onLongPress={onLongPress}
+    />
   );
 
   if (editMode) return inner;
@@ -448,9 +438,9 @@ function BatchActionBar({
       }}
     >
       <ThemedSurface
-        variant="card"
+        variant="elevated"
         className="flex-row items-center p-3"
-        style={{ gap: 8, borderRadius: 0, borderWidth: 0.5 }}
+        style={{ gap: 8 }}
       >
         <ThemedText
           variant="bodySmall"
@@ -461,14 +451,14 @@ function BatchActionBar({
           {t('peopleList.countSelected', { count })}
         </ThemedText>
         <ThemedButton
-          size="sm"
+          size="md"
           variant="destructive"
           label={t('peopleList.delete')}
           disabled={count === 0 || exporting}
           onPress={onDelete}
         />
         <ThemedButton
-          size="sm"
+          size="md"
           label={t('peopleList.exportVCard')}
           loading={exporting}
           disabled={count === 0}
@@ -579,7 +569,7 @@ function HeaderAction({
       }}
     >
       {icon === 'plus' ? (
-        <SfIcon name="plus" size={20} color={Colors.primaryMauve} />
+        <SfIcon name="plus" size={20} color={Colors.primaryBlue} />
       ) : (
         <ThemedText variant="bodyMedium" numberOfLines={1}>
           {label}
@@ -638,7 +628,12 @@ function EmptyState({
         {t('peopleList.emptyBody')}
       </ThemedText>
       <View style={{ alignSelf: 'stretch', gap: 10, paddingTop: 10 }}>
-        <ThemedButton fullWidth label={t('peopleList.add')} onPress={onAdd} />
+        <ThemedButton
+          fullWidth
+          label={t('peopleList.add')}
+          leadingIcon={<SfIcon name="plus" size={15} color={Colors.invertedButtonText} />}
+          onPress={onAdd}
+        />
         <ThemedButton
           fullWidth
           variant="secondary"
@@ -687,13 +682,24 @@ function EmptySearchState({
 }) {
   const { t } = useTranslation();
   return (
-    <View className="flex-1 items-center justify-center gap-3 px-8 py-10">
-      <SfIcon name="magnifyingglass" size={36} color={Colors.text3} />
-      <ThemedText variant="bodySmall" tone="secondary" style={{ textAlign: 'center' }}>
+    <ThemedSurface
+      variant="outlined"
+      style={{ borderStyle: 'dashed', paddingHorizontal: 16, paddingVertical: 22, gap: 8 }}
+    >
+      <ThemedText variant="titleMedium">
         {t('peopleList.noResults', { query })}
       </ThemedText>
-      <View className="w-full gap-2 pt-3">
-        <ThemedButton fullWidth label={t('peopleList.add')} onPress={onAdd} />
+      <ThemedText variant="bodySmall" tone="secondary">
+        {t('peopleList.noResultsBody')}
+      </ThemedText>
+      <View className="w-full gap-2 pt-2">
+        <ThemedButton
+          fullWidth
+          variant="secondary"
+          label={t('peopleList.add')}
+          leadingIcon={<SfIcon name="plus" size={15} color={Colors.text1} />}
+          onPress={onAdd}
+        />
         <ThemedButton
           fullWidth
           variant="secondary"
@@ -701,26 +707,6 @@ function EmptySearchState({
           onPress={onImportPhone}
         />
       </View>
-    </View>
+    </ThemedSurface>
   );
-}
-
-function filterContacts(
-  contacts: readonly ContactManifestEntry[],
-  query: string,
-): readonly ContactManifestEntry[] {
-  const trimmed = query.trim();
-  // Manifest `receivedAt` is an ISO string; lexicographic compare matches
-  // chronological order so we skip an unnecessary `new Date()` per row.
-  const sorted = [...contacts].sort((a, b) =>
-    a.receivedAt < b.receivedAt ? 1 : a.receivedAt > b.receivedAt ? -1 : 0,
-  );
-  if (trimmed.length === 0) return sorted;
-  const q = trimmed.toLowerCase();
-  return sorted.filter((c) => {
-    const name = c.name.toLowerCase();
-    const company = (c.company ?? '').toLowerCase();
-    const title = (c.title ?? '').toLowerCase();
-    return name.includes(q) || company.includes(q) || title.includes(q);
-  });
 }

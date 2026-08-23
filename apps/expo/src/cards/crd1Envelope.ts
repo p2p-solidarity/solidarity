@@ -99,10 +99,13 @@ export function verifyCrd1Wire(wire: string, now?: Date): Result<Crd1VerifiedWir
   const { claims, did } = decoded.value;
 
   const embedded = extractSubjectJwk(claims);
-  if (embedded) {
+  if (embedded.kind === 'malformed') {
+    return err('embedded subject key is malformed');
+  }
+  if (embedded.kind === 'ok') {
     let embeddedDid: string;
     try {
-      embeddedDid = didKeyFromJwk(embedded);
+      embeddedDid = didKeyFromJwk(embedded.jwk);
     } catch {
       return err('embedded subject key is malformed');
     }
@@ -113,21 +116,35 @@ export function verifyCrd1Wire(wire: string, now?: Date): Result<Crd1VerifiedWir
   return ok(decoded.value);
 }
 
-function extractSubjectJwk(claims: Crd1Claims): PublicKeyJWK | null {
+type ExtractedSubjectJwk =
+  | { readonly kind: 'absent' }
+  | { readonly kind: 'malformed' }
+  | { readonly kind: 'ok'; readonly jwk: PublicKeyJWK };
+
+function extractSubjectJwk(claims: Crd1Claims): ExtractedSubjectJwk {
   const vc = pickRecord(claims['vc']);
   const subject = pickRecord(vc?.['credentialSubject']);
-  if (!subject) return null;
-  const fromCore = pickRecord(pickRecord(subject['subject_core'])?.['publicKeyJwk']);
-  const raw = fromCore ?? pickRecord(subject['publicKeyJwk']);
-  if (!raw) return null;
+  if (!subject) return { kind: 'absent' };
+
+  const core = pickRecord(subject['subject_core']);
+  const hasCoreKey = core !== undefined && hasOwn(core, 'publicKeyJwk');
+  const hasSubjectKey = hasOwn(subject, 'publicKeyJwk');
+  if (!hasCoreKey && !hasSubjectKey) return { kind: 'absent' };
+
+  const raw = pickRecord(hasCoreKey ? core['publicKeyJwk'] : subject['publicKeyJwk']);
+  if (!raw) return { kind: 'malformed' };
   const kty = raw['kty'];
   const crv = raw['crv'];
   const x = raw['x'];
   const y = raw['y'];
   if (kty !== 'EC' || crv !== 'P-256' || typeof x !== 'string' || typeof y !== 'string') {
-    return null;
+    return { kind: 'malformed' };
   }
-  return { kty: 'EC', crv: 'P-256', alg: 'ES256', x, y };
+  return { kind: 'ok', jwk: { kty: 'EC', crv: 'P-256', alg: 'ES256', x, y } };
+}
+
+function hasOwn(record: Readonly<Record<string, unknown>>, key: string): boolean {
+  return Object.prototype.hasOwnProperty.call(record, key);
 }
 
 function pickRecord(value: unknown): Readonly<Record<string, unknown>> | undefined {

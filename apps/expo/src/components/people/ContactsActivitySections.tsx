@@ -4,7 +4,8 @@ import { Modal, ScrollView, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { PressableScale } from '@/components/common/PressableScale';
-import { ThemedButton, ThemedText } from '@/components/themed';
+import { SfIcon } from '@/components/icons/SfIcon';
+import { ThemedButton, ThemedSurface, ThemedText } from '@/components/themed';
 import { Colors } from '@/constants/Colors';
 import { contactFromLeaveCard, useLeaveCardStore } from '@/contacts/leaveCardInbox';
 import { useContactStore } from '@/contacts/repository';
@@ -33,38 +34,45 @@ export function ContactsActivitySections({ onContactAdded }: { readonly onContac
       {hasPending || hasRecentUpdates ? (
         <View className="gap-3 px-4 pb-3">
           {hasPending ? (
-            <PressableScale
-              onPress={() => { setInboxOpen(true); }}
-              accessibilityRole="button"
-              accessibilityLabel={t('peopleList.pendingReview')}
+            <ThemedSurface
+              variant="card"
               style={{
-                minHeight: 52,
-                flexDirection: 'row',
-                alignItems: 'center',
-                gap: 10,
-                paddingHorizontal: 14,
                 borderRadius: 0,
                 borderWidth: 0.5,
-                borderColor: Colors.primaryMauve,
+                borderColor: Colors.primaryBlue,
                 backgroundColor: Colors.chipSurface,
-              }}>
-              <ThemedText variant="titleMedium">↙</ThemedText>
-              <ThemedText variant="bodyMedium" style={{ flex: 1 }}>
-                {t('peopleList.pendingCount', { count: pending.length })}
-              </ThemedText>
-              <ThemedText variant="bodyMedium" tone="secondary">{t('peopleList.review')} ›</ThemedText>
-            </PressableScale>
+              }}
+            >
+              <PressableScale
+                onPress={() => { setInboxOpen(true); }}
+                accessibilityRole="button"
+                accessibilityLabel={t('peopleList.pendingReview')}
+                style={{
+                  minHeight: 52,
+                  flexDirection: 'row',
+                  alignItems: 'center',
+                  gap: 10,
+                  paddingHorizontal: 14,
+                }}
+              >
+                <SfIcon name="square.and.arrow.down" size={18} color={Colors.primaryBlue} />
+                <ThemedText variant="bodyMedium" tabularNums style={{ flex: 1 }}>
+                  {t('peopleList.pendingCount', { count: pending.length })}
+                </ThemedText>
+                <View className="flex-row items-center gap-1">
+                  <ThemedText variant="bodySmall" tone="secondary">
+                    {t('peopleList.review')}
+                  </ThemedText>
+                  <SfIcon name="chevron.right" size={12} color={Colors.text2} />
+                </View>
+              </PressableScale>
+            </ThemedSurface>
           ) : null}
 
           {hasRecentUpdates ? (
-            <View
-              style={{
-                overflow: 'hidden',
-                borderRadius: 0,
-                borderWidth: 0.5,
-                borderColor: Colors.divider,
-                backgroundColor: Colors.cardBg,
-              }}
+            <ThemedSurface
+              variant="card"
+              style={{ overflow: 'hidden', borderRadius: 0, borderWidth: 0.5 }}
             >
               <View className="flex-row items-center">
                 <PressableScale
@@ -76,15 +84,21 @@ export function ContactsActivitySections({ onContactAdded }: { readonly onContac
                   <ThemedText variant="bodyMedium" style={{ flex: 1 }}>
                     {t('peopleList.recentUpdates')}
                   </ThemedText>
-                  <ThemedText variant="caption" tone="tertiary">{updates.length}</ThemedText>
-                  <ThemedText variant="bodyMedium" tone="tertiary">{expanded ? '⌃' : '⌄'}</ThemedText>
+                  <ThemedText variant="caption" tone="tertiary" tabularNums>
+                    {updates.length}
+                  </ThemedText>
+                  <SfIcon
+                    name={expanded ? 'chevron.up' : 'chevron.down'}
+                    size={12}
+                    color={Colors.text3}
+                  />
                 </PressableScale>
                 <PressableScale
                   onPress={() => { setEnabled(false); }}
                   accessibilityRole="button"
                   accessibilityLabel={t('peopleList.turnOffRecentUpdates')}
                   style={{ width: 44, height: 44, alignItems: 'center', justifyContent: 'center' }}>
-                  <ThemedText variant="titleMedium" tone="tertiary">×</ThemedText>
+                  <SfIcon name="xmark" size={14} color={Colors.text3} />
                 </PressableScale>
               </View>
               {expanded ? (
@@ -110,7 +124,7 @@ export function ContactsActivitySections({ onContactAdded }: { readonly onContac
                   ))}
                 </View>
               ) : null}
-            </View>
+            </ThemedSurface>
           ) : null}
         </View>
       ) : null}
@@ -174,24 +188,22 @@ function PendingLeaveCardsSheet({
         <ScrollView contentContainerStyle={{ padding: 16, paddingBottom: insets.bottom + 24, gap: 14 }}>
           <View className="flex-row items-center justify-between">
             <ThemedText variant="titleLarge">{t('peopleList.pendingTitle')}</ThemedText>
-            <ThemedButton label={t('common.close')} size="sm" variant="secondary" onPress={onClose} />
+            <ThemedButton label={t('common.close')} size="md" variant="secondary" onPress={onClose} />
           </View>
 
           {pending.length === 0 ? (
-            <View
-              className="items-center gap-2 py-8"
-              style={{ borderRadius: 0, borderWidth: 0.5, borderColor: Colors.divider }}
-            >
+            <ThemedSurface variant="outlined" className="items-center gap-2 py-8">
+              <SfIcon name="square.and.arrow.down" size={28} color={Colors.text3} />
               <ThemedText variant="titleMedium">{t('peopleList.noCardsPending')}</ThemedText>
               <ThemedText variant="bodySmall" tone="secondary" style={{ textAlign: 'center' }}>
                 {t('peopleList.noCardsPendingBody')}
               </ThemedText>
-            </View>
+            </ThemedSurface>
           ) : pending.map((card) => (
-            <View
+            <ThemedSurface
               key={card.id}
+              variant="card"
               className="gap-3 p-4"
-              style={{ borderRadius: 0, borderWidth: 0.5, borderColor: Colors.divider }}
             >
               <View className="gap-1">
                 <ThemedText variant="bodyMedium">{card.name}</ThemedText>
@@ -201,26 +213,26 @@ function PendingLeaveCardsSheet({
               <View className="flex-row flex-wrap gap-2">
                 <ThemedButton
                   label={t('peopleList.pendingAdd')}
-                  size="sm"
+                  size="md"
                   loading={savingId === card.id}
                   onPress={() => { addCard(card.id); }}
                 />
                 <ThemedButton
                   label={t('peopleList.pendingSkip')}
-                  size="sm"
+                  size="md"
                   variant="secondary"
                   disabled={savingId !== null}
                   onPress={() => { skip(card.id); }}
                 />
                 <ThemedButton
                   label={t('peopleList.pendingBlock')}
-                  size="sm"
+                  size="md"
                   variant="destructive"
                   disabled={savingId !== null}
                   onPress={() => { block(card.id); }}
                 />
               </View>
-            </View>
+            </ThemedSurface>
           ))}
         </ScrollView>
       </View>

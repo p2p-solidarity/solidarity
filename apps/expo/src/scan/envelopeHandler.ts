@@ -174,8 +174,10 @@ async function handleZkProof(envelope: QRCodeEnvelopePayload): Promise<ScanOutco
  *     rebuilt via `rebuildCardFromJwtPayload`, status Verified (the COSE
  *     signature + holder binding were already enforced by `verifyCrd1Wire`);
  *   - an evidence pack (`typ: gg.solidarity.evidence-pack.v1`): profile
- *     claims — rendered as a minimal contact card carrying the pack's links.
- * Anything failing verification is an error outcome, never an unverified card.
+ *     claims — rendered as a minimal contact card carrying the pack's links;
+ *     its one card-level seal is Verified only for a non-empty set of entirely
+ *     verified rows, otherwise Unverified so declared rows stay declarations.
+ * Envelope verification failures are error outcomes, never unverified cards.
  */
 function handleCrd1(wire: string): ScanOutcome {
   const verified = verifyCrd1Wire(wire);
@@ -187,12 +189,26 @@ function handleCrd1(wire: string): ScanOutcome {
   if (claims['typ'] === EVIDENCE_PACK_TYP) {
     const card = rebuildCardFromEvidencePack(claims, did);
     if (!card) return { kind: 'error', errorMessage: 'Missing evidence-pack subject' };
-    return { kind: 'card', card, verificationStatus: 'Verified' };
+    return {
+      kind: 'card',
+      card,
+      verificationStatus: evidencePackVerificationStatus(claims),
+    };
   }
 
   const card = rebuildCardFromJwtPayload(claims, typeof claims['sub'] === 'string' ? claims['sub'] : did);
   if (!card) return { kind: 'error', errorMessage: 'Missing credential subject' };
   return { kind: 'card', card, verificationStatus: 'Verified' };
+}
+
+function evidencePackVerificationStatus(
+  claims: Readonly<Record<string, unknown>>
+): VerificationStatus {
+  const rows = pickArray(claims['claims']);
+  if (!rows || rows.length === 0) return 'Unverified';
+  return rows.every((row) => pickRecord(row)?.['status'] === 'verified')
+    ? 'Verified'
+    : 'Unverified';
 }
 
 function rebuildCardFromEvidencePack(
