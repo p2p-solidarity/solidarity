@@ -85,13 +85,17 @@ export function ProfileBadgeChips({
     () => claims.filter((claim) => claim.claimType !== 'profile_card'),
     [claims],
   );
-  const publicSubjects = useMemo(
-    () => new Set(
-      record.badges
-        .filter((badge) => badge.type === PUBLIC_DISCLOSURE_BADGE_TYPE)
-        .map((badge) => badge.subject),
-    ),
-    [record.badges],
+  // What THIS device holds versus what a visitor actually resolves. Saving
+  // re-signs the local record; the published projection only changes when the
+  // owner publishes. Reading both keeps the row from claiming a visibility the
+  // outside world has not seen yet.
+  const localSubjects = useMemo(
+    () => disclosureSubjects(record),
+    [record],
+  );
+  const visitorSubjects = useMemo(
+    () => disclosureSubjects(publicRecord),
+    [publicRecord],
   );
 
   const hideClaimFromPage = (claim: ProvableClaimEntity): void => {
@@ -191,7 +195,11 @@ export function ProfileBadgeChips({
     <View className="gap-3 px-4">
       {displayableClaims.map((claim) => {
         const presentation = claimPresentation(claim, t);
-        const isPublic = publicSubjects.has(claim.claimType);
+        const shownLocally = localSubjects.has(claim.claimType);
+        const shownToVisitors = visitorSubjects.has(claim.claimType);
+        const visibility: ProofVisibility = shownLocally === shownToVisitors
+          ? (shownLocally ? 'public' : 'hidden')
+          : 'pending';
         const saving = savingClaimId === claim.id;
         return (
           <PressableScale
@@ -202,7 +210,7 @@ export function ProfileBadgeChips({
             accessibilityRole="button"
             accessibilityLabel={t('mePage.proofVisibilityLabel', {
               claim: presentation.label,
-              status: t(isPublic ? 'mePage.public' : 'mePage.hidden'),
+              status: t(visibilityLabelKey(visibility)),
             })}
             style={fieldRowStyle(c.mutedSurface)}>
             <View style={iconTileStyle(c.chipSurface)}>
@@ -213,13 +221,13 @@ export function ProfileBadgeChips({
                 {presentation.label}
               </ThemedText>
               <ThemedText variant="caption" tone="tertiary" numberOfLines={1}>
-                {t(isPublic ? 'mePage.shownOnPage' : 'mePage.notShownOnPage')}
+                {t(visibilitySubtitleKey(visibility, shownLocally))}
               </ThemedText>
             </View>
             {saving ? (
               <ActivityIndicator color={Colors.primaryBlue} />
             ) : (
-              <ProofVisibilityPill isPublic={isPublic} />
+              <ProofVisibilityPill visibility={visibility} />
             )}
           </PressableScale>
         );
@@ -298,16 +306,52 @@ function claimPresentation(
   }
 }
 
-function ProofVisibilityPill({ isPublic }: { readonly isPublic: boolean }): ReactNode {
+/** `public` and `hidden` are what a visitor resolves; `pending` means this
+ *  device changed it and the published page has not caught up yet. */
+type ProofVisibility = 'public' | 'hidden' | 'pending';
+
+function disclosureSubjects(record: ProfileRecord): ReadonlySet<string> {
+  return new Set(
+    record.badges
+      .filter((badge) => badge.type === PUBLIC_DISCLOSURE_BADGE_TYPE)
+      .map((badge) => badge.subject),
+  );
+}
+
+function visibilityLabelKey(visibility: ProofVisibility): string {
+  if (visibility === 'pending') return 'mePage.pendingPublish';
+  return visibility === 'public' ? 'mePage.public' : 'mePage.hidden';
+}
+
+function visibilitySubtitleKey(
+  visibility: ProofVisibility,
+  shownLocally: boolean,
+): string {
+  if (visibility !== 'pending') {
+    return visibility === 'public' ? 'mePage.shownOnPage' : 'mePage.notShownOnPage';
+  }
+  // Say what the visitor sees RIGHT NOW, not what the owner intended.
+  return shownLocally ? 'mePage.proofPendingShown' : 'mePage.proofPendingHidden';
+}
+
+function ProofVisibilityPill({
+  visibility,
+}: {
+  readonly visibility: ProofVisibility;
+}): ReactNode {
   const { t } = useTranslation();
-  const color = isPublic ? Colors.primaryBlue : Colors.text3;
+  const color = visibility === 'public'
+    ? Colors.primaryBlue
+    : visibility === 'pending'
+      ? Colors.warning
+      : Colors.text3;
   return (
     <ThemedSurface
       variant="inset"
       className="px-2 py-1"
       style={{ borderWidth: 1, borderColor: color }}>
       <ThemedText variant="caption" style={{ color }}>
-        {t(isPublic ? 'mePage.public' : 'mePage.hidden')}
+        {t(visibilityLabelKey(visibility))}
       </ThemedText>
     </ThemedSurface>
   );

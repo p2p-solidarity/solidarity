@@ -7,6 +7,8 @@
  */
 import type { ViewStyle } from 'react-native';
 
+import { normalizeAtprotoHandle } from '@solidarity/shared';
+
 /** `.field` / `.blk` bottom margin — grouping by space, not by lines. */
 export const ROW_GAP = 8;
 /** `--radiusCard` for app rows. The public page uses its own per-template radius. */
@@ -99,4 +101,47 @@ export function iconTileStyle(surface: string): ViewStyle {
     justifyContent: 'center',
     backgroundColor: surface,
   };
+}
+
+/**
+ * Hosts that render a Nostr profile AT a bare npub. A cached binding proves
+ * "this npub is mine"; it says nothing about an unrelated page that merely
+ * carries the npub somewhere in its path. Matching any segment on any host
+ * would hand a green tick to `example.com/notes/npub1…`.
+ */
+const NOSTR_PROFILE_HOSTS: ReadonlySet<string> = new Set([
+  'njump.me',
+  'primal.net',
+  'snort.social',
+  'iris.to',
+  'nostrudel.ninja',
+  'coracle.social',
+  'nostr.band',
+]);
+
+/** Does this URL identify `npub` as a profile, rather than just mention it? */
+export function isNostrProfileUrlForNpub(
+  url: URL,
+  hostname: string,
+  path: readonly string[],
+  npub: string
+): boolean {
+  if (url.protocol === 'nostr:') return url.pathname === npub;
+  return NOSTR_PROFILE_HOSTS.has(hostname) && path[path.length - 1] === npub;
+}
+
+/**
+ * Does the record STILL claim this ATProto handle? A cached check describes
+ * the handle it ran against; once the record stops claiming it, the result
+ * describes nothing the page asserts any more.
+ */
+export function recordClaimsAtprotoHandle(
+  alsoKnownAs: readonly string[],
+  handle: string
+): boolean {
+  const wanted = normalizeAtprotoHandle(handle);
+  return alsoKnownAs.some(
+    (claim) => claim.startsWith('at://') &&
+      normalizeAtprotoHandle(claim.slice('at://'.length)) === wanted
+  );
 }

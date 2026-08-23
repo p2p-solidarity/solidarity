@@ -26,6 +26,7 @@ import {
   getBadgeStatusCacheRevision,
   readCachedAtprotoResult,
   readCachedNostrResult,
+  shouldReverifyBadge,
   subscribeBadgeStatusCache,
 } from '@/badges/badgeStatusCache';
 import { PressableScale } from '@/components/common/PressableScale';
@@ -55,6 +56,8 @@ import {
   dragDestinationIndex,
   fieldRowStyle,
   iconTileStyle,
+  isNostrProfileUrlForNpub,
+  recordClaimsAtprotoHandle,
   reorderByIndex,
   verificationPillForStates,
   type RowVerificationPill,
@@ -149,7 +152,9 @@ export function ProfileLinksList({
     return (
       <View style={{ gap: ROW_GAP }}>
         {entries.map(({ link, sourceIndex }, sectionIndex) => {
-          const status = linkVerificationPill(link, websiteEvidence);
+          const status = record === null
+              ? null
+              : linkVerificationPill(link, websiteEvidence, record);
           return (
             <View
               key={`${String(sourceIndex)}-${link.label}-${link.url}`}
@@ -302,13 +307,33 @@ function useWebsiteLinkEvidence(
   return evidence;
 }
 
+/**
+ * The pill a field row may show. `null` — say nothing — is the honest default.
+ *
+ * A pill is drawn only when a cached check ① is still fresh for THIS revision
+ * of the record, ② describes an identity the record STILL claims, and ③ maps
+ * to a URL that actually identifies that identity. A superseded, expired, or
+ * merely coincidental match renders nothing rather than a plausible-looking
+ * verdict (Rule 8): the pill is the page's whole trust claim, so it must never
+ * outlive the evidence behind it.
+ */
 function linkVerificationPill(
   link: ProfileLink,
   websiteEvidence: readonly HttpsOwnershipEvidence[],
+  record: ProfileRecord,
+  nowMs: number = Date.now(),
 ): RowVerificationPill | null {
   const states: string[] = [];
-  const atproto = readCachedAtprotoResult()?.result;
-  const nostr = readCachedNostrResult()?.result;
+  const atprotoEntry = readCachedAtprotoResult();
+  const nostrEntry = readCachedNostrResult();
+  const atproto = atprotoEntry !== null &&
+    !shouldReverifyBadge(atprotoEntry.checkedAt, record.updatedAt, nowMs)
+    ? atprotoEntry.result
+    : undefined;
+  const nostr = nostrEntry !== null &&
+    !shouldReverifyBadge(nostrEntry.checkedAt, record.updatedAt, nowMs)
+    ? nostrEntry.result
+    : undefined;
   try {
     const url = new URL(link.url);
     const hostname = url.hostname.toLowerCase().replace(/^www\./u, '');
@@ -321,13 +346,17 @@ function linkVerificationPill(
       atproto !== undefined &&
       atprotoHandle !== null &&
       atprotoHandle !== undefined &&
-      normalizeAtprotoHandle(path[1]) === normalizeAtprotoHandle(atprotoHandle)
+      normalizeAtprotoHandle(path[1]) === normalizeAtprotoHandle(atprotoHandle) &&
+      recordClaimsAtprotoHandle(record.alsoKnownAs, atprotoHandle)
     ) {
       states.push(atproto.state);
     }
+    const npub = nostr?.npub ?? null;
     if (
-      nostr?.npub &&
-      path.some((segment) => segment === nostr.npub)
+      nostr !== undefined &&
+      npub !== null &&
+      record.alsoKnownAs.includes(`nostr:${npub}`) &&
+      isNostrProfileUrlForNpub(url, hostname, path, npub)
     ) {
       states.push(nostr.state);
     }

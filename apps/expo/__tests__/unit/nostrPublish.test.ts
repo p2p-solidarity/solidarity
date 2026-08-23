@@ -67,6 +67,13 @@ type SubscribeEventsFn = (
 
 interface PublishMod {
   readonly DEFAULT_RELAYS: readonly string[];
+  readonly eventMatchesFilter: (event: NostrEvent, filter: NostrFilter) => boolean;
+  readonly fetchLatestProfilePointer: (
+    relays: readonly string[],
+    pubkeyHex: string,
+    subscribeFn: SubscribeEventsFn,
+    timeoutMs: number
+  ) => Promise<{ readonly event: NostrEvent | null; readonly confirmed: boolean }>;
   readonly PROFILE_D_TAG: string;
   readonly KIND_PROFILE_POINTER: number;
   readonly KIND_METADATA: number;
@@ -592,5 +599,83 @@ describe('DEFAULT_RELAYS', () => {
     for (const defaultRelay of mod.DEFAULT_RELAYS) {
       expect(calls).not.toContain(defaultRelay);
     }
+  });
+});
+
+// ── eventMatchesFilter — a signed event is not automatically the event we
+//    asked for. Signature validity rules out forgery, not substitution across
+//    the SAME author's other parameterized records. ─────────────────────────
+
+describe('eventMatchesFilter', () => {
+  const base: NostrEvent = {
+    id: 'a'.repeat(64),
+    pubkey: 'b'.repeat(64),
+    created_at: 1_700_000_000,
+    kind: 30078,
+    tags: [['d', 'solidarity.profile']],
+    content: '',
+    sig: 'c'.repeat(128),
+  };
+
+  it('accepts an event that satisfies every requested constraint', () => {
+    expect(
+      mod.eventMatchesFilter(base, {
+        kinds: [30078],
+        authors: [base.pubkey],
+        '#d': ['solidarity.profile'],
+      })
+    ).toBe(true);
+  });
+
+  it('rejects the same author\'s other parameterized record', () => {
+    const otherSlot: NostrEvent = { ...base, tags: [['d', 'solidarity.disclosure.age']] };
+    expect(
+      mod.eventMatchesFilter(otherSlot, {
+        kinds: [30078],
+        authors: [base.pubkey],
+        '#d': ['solidarity.profile'],
+      })
+    ).toBe(false);
+  });
+
+  it('rejects an event carrying no d tag at all', () => {
+    expect(
+      mod.eventMatchesFilter({ ...base, tags: [] }, { '#d': ['solidarity.profile'] })
+    ).toBe(false);
+  });
+
+  it('still enforces kind and author', () => {
+    expect(mod.eventMatchesFilter(base, { kinds: [30000] })).toBe(false);
+    expect(mod.eventMatchesFilter(base, { authors: ['d'.repeat(64)] })).toBe(false);
+  });
+});
+
+describe('fetchLatestProfilePointer', () => {
+  it('ignores a newer wrong-d-tag event from the same author', async () => {
+    const pubkey = 'b'.repeat(64);
+    const wanted: NostrEvent = {
+      id: 'a'.repeat(64),
+      pubkey,
+      created_at: 1_700_000_000,
+      kind: mod.KIND_PROFILE_POINTER,
+      tags: [['d', mod.PROFILE_D_TAG]],
+      content: 'the real pointer',
+      sig: 'c'.repeat(128),
+    };
+    // A relay answering with the author's newer record from a DIFFERENT slot:
+    // validly signed, still not the record we asked for.
+    const substituted: NostrEvent = {
+      ...wanted,
+      id: 'e'.repeat(64),
+      created_at: wanted.created_at + 600,
+      tags: [['d', 'solidarity.disclosure.age']],
+      content: 'a different parameterized record',
+    };
+    const relay = 'wss://relay.test';
+    const { fn } = makeFakeSubscribe({ [relay]: [wanted, substituted] });
+
+    const result = await mod.fetchLatestProfilePointer([relay], pubkey, fn, 500);
+
+    expect(result.event?.content).toBe('the real pointer');
   });
 });

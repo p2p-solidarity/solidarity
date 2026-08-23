@@ -304,6 +304,30 @@ export interface Kind0FetchResult {
  * both delegate here so every path resolves "the newest matching event"
  * identically instead of re-implementing the WS fan-out.
  */
+/**
+ * Does this event actually answer the REQ we sent?
+ *
+ * A relay is untrusted input: `subscribeEvents` proves an event was signed by
+ * the key it names, not that it is the record we asked for. Without the tag
+ * check a relay can answer a `#d=solidarity.profile` request with the SAME
+ * author's newer kind-30078 event from a different parameterized slot, and it
+ * would be taken as the profile pointer — signature validity does not rule out
+ * substitution across an author's own records.
+ */
+export function eventMatchesFilter(event: NostrEvent, filter: NostrFilter): boolean {
+  if (filter.kinds !== undefined && !filter.kinds.includes(event.kind)) return false;
+  if (filter.authors !== undefined && !filter.authors.includes(event.pubkey)) return false;
+  for (const [key, wanted] of Object.entries(filter)) {
+    if (!key.startsWith('#') || !Array.isArray(wanted)) continue;
+    const tagName = key.slice(1);
+    const present = event.tags.some(
+      (tag) => tag[0] === tagName && tag[1] !== undefined && wanted.includes(tag[1])
+    );
+    if (!present) return false;
+  }
+  return true;
+}
+
 export async function fetchLatestEvent(
   relays: readonly string[],
   filter: NostrFilter,
@@ -338,8 +362,7 @@ export async function fetchLatestEvent(
           relay,
           filter,
           (event) => {
-            if (filter.kinds !== undefined && !filter.kinds.includes(event.kind)) return;
-            if (filter.authors !== undefined && !filter.authors.includes(event.pubkey)) return;
+            if (!eventMatchesFilter(event, filter)) return;
             if (!latest || event.created_at > latest.created_at) latest = event;
           },
           () => {

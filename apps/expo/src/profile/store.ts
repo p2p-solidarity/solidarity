@@ -40,7 +40,10 @@ import { create } from 'zustand';
 // plain exports either way; importing them from the leaf module keeps this
 // store's test (`__tests__/unit/profileStore.test.ts`) import-safe without
 // any `mock.module` on `@/identity`.
-import { invalidateCachedNostrResult } from '@/badges/badgeStatusCache';
+import {
+  invalidateCachedAtprotoResult,
+  invalidateCachedNostrResult,
+} from '@/badges/badgeStatusCache';
 import { getRootDid, getRootSigner, type RootKeyError } from '@/identity/rootKey';
 import { publishProfile, updateKind0AlsoKnownAs, type PublishReport } from '@/nostr/publish';
 import { getNostrPubkey, npubEncode } from '@/nostr/userKey';
@@ -517,11 +520,14 @@ export const useProfileStore = create<ProfileState>((set, get) => ({
       nostrPublishedJws: null,
       status: 'ready',
     });
-    // The record was re-signed — any published Nostr copy is now behind it,
-    // so the cached verification no longer describes this record. Clearing
-    // it makes the badge re-check honestly (typically → stale) instead of
-    // seeding the pre-edit state, which is the user's cue to republish.
+    // The record was re-signed — any published copy is now behind it, so the
+    // cached verifications no longer describe this record. Clearing them makes
+    // the checks re-run honestly (typically → stale) instead of seeding the
+    // pre-edit state, which is the user's cue to republish. Both bindings are
+    // cleared: an ATProto result left standing would keep painting a green
+    // pill for a handle this record may no longer claim.
     invalidateCachedNostrResult();
+    invalidateCachedAtprotoResult();
     return ok({ record: validated.value, jws });
   },
 

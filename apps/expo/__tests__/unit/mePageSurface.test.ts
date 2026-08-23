@@ -102,10 +102,26 @@ describe('Page surface', () => {
     // cannot leak in sideways.
     expect(badges).toContain("product: '1'");
 
+    // Visibility is stated from the VISITOR's side: the row compares the local
+    // record against the published projection and says "pending publish" while
+    // the two disagree, instead of reporting an intent the outside world has
+    // not seen (the app publishes on an explicit step, see PublishPreviewSheet).
+    expect(badges).toContain('disclosureSubjects(publicRecord)');
+    expect(badges).toContain("'pending'");
+    expect(badges).toContain("'mePage.pendingPublish'");
+    expect(badges).toContain('mePage.proofPendingHidden');
+    expect(badges).toContain('mePage.proofPendingShown');
+
     // Binding status moved OUT of this section and onto the matching field
     // row, which reads the same completed-verification cache...
     expect(links).toContain('readCachedAtprotoResult');
     expect(links).toContain('readCachedNostrResult');
+    // ...and only while that check is still fresh for THIS record revision and
+    // still describes an identity the record claims.
+    expect(links).toContain('shouldReverifyBadge(atprotoEntry.checkedAt, record.updatedAt, nowMs)');
+    expect(links).toContain('shouldReverifyBadge(nostrEntry.checkedAt, record.updatedAt, nowMs)');
+    expect(links).toContain('recordClaimsAtprotoHandle(record.alsoKnownAs, atprotoHandle)');
+    expect(links).toContain('isNostrProfileUrlForNpub(url, hostname, path, npub)');
     // ...and the repair flow the section used to own now hangs off the lapsed
     // alert, so a failed check is never a dead end.
     expect(alert).toContain("t('pageDesign.fixLapsed')");
