@@ -7,7 +7,7 @@
  * Master-key fixture pattern lifted from qrEnvelopeWire.test.ts so the real
  * AES-GCM seal is exercised end-to-end without an Expo runtime.
  */
-import { beforeAll, describe, expect, it, mock } from 'bun:test';
+import { afterAll, beforeAll, describe, expect, it, mock } from 'bun:test';
 
 import type * as SolidarityQrPayloadModule from '../../src/cards/solidarityQrPayload';
 import type * as QrEnvelopeModule from '../../src/cards/qrEnvelope';
@@ -287,3 +287,151 @@ function signTestVcJwt(args: {
   const jwt = signJwtEs256({ alg: 'ES256' }, payload, privateKey);
   return { jwt, publicKeyJwk: jwk };
 }
+
+// ── issuerProof wire: anonymity + shape + envelope binding ─────────────────
+//
+// Guards two hard-won properties:
+//   1. Anonymity (lists-anonymity audit 2026-08-18 §5): the sender's
+//      Semaphore commitment must NEVER appear in the shared payload — a
+//      commitment beside a roster identifies the presenter. The audit asks
+//      for a test holding this line, not just a code comment.
+//   2. Wire shape + binding: the wire carries the FULL SemaphoreProof
+//      envelope; the scanner accepts it (and the legacy inner-JSON shape)
+//      and only lets a proof verify when its scope/signal bind to THIS
+//      envelope's scope/shareId.
+
+describe('handleScannedPayload — zkProof envelope with issuerProof', () => {
+  // Must equal buildShareScopeInline(selectedFields) for makeCard() at the
+  // 'professional' level (this file's professionalFields, minus profileImage,
+  // plus the always-present 'name', sorted).
+  const PROOF_SCOPE = 'fields:company,email,name,phone,title';
+  const INNER_PROOF_JSON = JSON.stringify({
+    merkle_tree_depth: 16,
+    merkle_tree_root: '222',
+    nullifier: '111',
+    message: 'inner-message',
+    scope: 'inner-scope',
+    points: [],
+  });
+  const receivedProofs: { proofJson?: unknown }[] = [];
+
+  function fullProofJson(overrides: Record<string, unknown> = {}): string {
+    return JSON.stringify({
+      nullifier: '111',
+      merkleRoot: '222',
+      scope: PROOF_SCOPE,
+      signal: SHARE_ID,
+      proofJson: INNER_PROOF_JSON,
+      merkleTreeDepth: 16,
+      ...overrides,
+    });
+  }
+
+  async function setIssuerProofMock(proofWire: string | null): Promise<void> {
+    await mock.module('@/zk/issuerProof', () => ({
+      generateIssuerProof: async () =>
+        proofWire === null ? null : { proof: proofWire },
+      buildShareScope: (selected: readonly string[]) => {
+        const set = new Set<string>(selected);
+        set.add('name');
+        return `fields:${[...set].sort().join(',')}`;
+      },
+    }));
+  }
+
+  async function buildIssuerEnvelopeWire(proofWire: string): Promise<string> {
+    await setIssuerProofMock(proofWire);
+    const envelope = await payloadMod.buildZKEnvelope(makeCard(), {
+      now: NOW,
+      shareId: SHARE_ID,
+      sharingLevel: 'professional',
+    });
+    return envelopeMod.encodeEnvelopeToWire(envelope).wire;
+  }
+
+  beforeAll(async () => {
+    // Export-complete mock (A5.3 lesson: partial module mocks poison
+    // real-import files later in the same run).
+    await mock.module('@/zk/groupManager', () => ({
+      canonicalCommitments: (commitments: readonly string[]) => {
+        const set = new Set<string>();
+        for (const c of commitments) {
+          const t = c.trim();
+          if (t.length > 0) set.add(t);
+        }
+        return [...set].sort();
+      },
+      recomputeRoot: async () => null,
+      leafIndex: () => null,
+      generateGroupProof: async () => {
+        throw new Error('test: generateGroupProof not used by scanner');
+      },
+      verifyGroupProof: async (proof: { proofJson?: unknown }) => {
+        receivedProofs.push(proof);
+        return typeof proof.proofJson === 'string' && proof.proofJson.length > 0;
+      },
+    }));
+  });
+
+  afterAll(async () => {
+    // Restore the file-level null mock so later suites see the same state.
+    await setIssuerProofMock(null);
+  });
+
+  it('never puts the sender commitment into the shared payload', async () => {
+    await setIssuerProofMock(fullProofJson());
+    const envelope = await payloadMod.buildZKEnvelope(makeCard(), {
+      now: NOW,
+      shareId: SHARE_ID,
+      sharingLevel: 'professional',
+    });
+    const decrypted = (await envelopeMod.decryptZKPayload(
+      envelope as Parameters<typeof envelopeMod.decryptZKPayload>[0]
+    )) as Record<string, unknown> | null;
+    expect(decrypted).not.toBeNull();
+    expect(typeof decrypted?.['issuerProof']).toBe('string');
+    expect(Object.keys(decrypted ?? {})).not.toContain('issuerCommitment');
+    expect(JSON.stringify(decrypted)).not.toContain('issuerCommitment');
+  });
+
+  it('verifies a full-envelope proof bound to this envelope', async () => {
+    const wire = await buildIssuerEnvelopeWire(fullProofJson());
+    receivedProofs.length = 0;
+    const outcome = await handlerMod.handleScannedPayload(wire);
+    expect(outcome.kind).toBe('card');
+    expect(outcome.verificationStatus).toBe('Verified');
+    expect(receivedProofs.length).toBe(1);
+    expect(receivedProofs[0]?.proofJson).toBe(INNER_PROOF_JSON);
+  });
+
+  it('fails a proof whose signal does not bind to the shareId', async () => {
+    const wire = await buildIssuerEnvelopeWire(
+      fullProofJson({ signal: 'some-other-share-id-entirely-here' })
+    );
+    receivedProofs.length = 0;
+    const outcome = await handlerMod.handleScannedPayload(wire);
+    expect(outcome.kind).toBe('card');
+    expect(outcome.verificationStatus).toBe('Failed');
+    // Unbound proof must never even reach the verifier.
+    expect(receivedProofs.length).toBe(0);
+  });
+
+  it('fails a proof whose scope does not bind to the envelope scope', async () => {
+    const wire = await buildIssuerEnvelopeWire(
+      fullProofJson({ scope: 'fields:name' })
+    );
+    const outcome = await handlerMod.handleScannedPayload(wire);
+    expect(outcome.verificationStatus).toBe('Failed');
+  });
+
+  it('accepts the legacy inner-JSON wire by wrapping it back into the envelope shape', async () => {
+    const wire = await buildIssuerEnvelopeWire(INNER_PROOF_JSON);
+    receivedProofs.length = 0;
+    const outcome = await handlerMod.handleScannedPayload(wire);
+    expect(outcome.kind).toBe('card');
+    expect(outcome.verificationStatus).toBe('Verified');
+    expect(receivedProofs.length).toBe(1);
+    // The wrapper hands the RAW wire string to the native verifier.
+    expect(receivedProofs[0]?.proofJson).toBe(INNER_PROOF_JSON);
+  });
+});

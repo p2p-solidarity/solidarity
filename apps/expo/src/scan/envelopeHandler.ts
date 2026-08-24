@@ -328,16 +328,123 @@ async function verifyZkProofs(payload: QRSharingPayload): Promise<ZkProofResult>
   if (payload.issuerProof !== undefined) {
     try {
       const { verifyGroupProof } = await import('@/zk/groupManager');
-      const proofObject = safeJsonParse(payload.issuerProof) as
-        | Parameters<typeof verifyGroupProof>[0]
-        | null;
-      if (proofObject) issuerValid = await verifyGroupProof(proofObject);
+      const normalised = normaliseIssuerProofWire(payload.issuerProof);
+      if (normalised && issuerProofBoundToEnvelope(normalised, payload)) {
+        issuerValid = await verifyGroupProof(
+          normalised.proof,
+          normalised.proof.merkleTreeDepth
+        );
+      }
     } catch {
       // Treat verifier exceptions as unverified.
     }
   }
 
   return { ...result, sdValid, issuerValid };
+}
+
+/**
+ * Two issuerProof wire generations exist. Current emitters
+ * (`zk/issuerProof.ts`) serialise the FULL `SemaphoreProof` envelope
+ * (same convention as `vault/zkAgeVerification.ts`); pre-2026-08-24
+ * emitters put only the inner Rust proof JSON
+ * (`{merkle_tree_depth, merkle_tree_root, nullifier, message, scope,
+ * points}`) on the wire — a shape `verifyGroupProof` can never accept
+ * (both native impls read `proof.proofJson`), so those wires always
+ * scanned as `Failed`. Normalise both into the envelope shape: pass the
+ * full envelope through, or wrap a legacy inner JSON back up with the
+ * raw wire string as its `proofJson`.
+ */
+interface NormalisedIssuerProof {
+  readonly proof: {
+    readonly nullifier: string;
+    readonly merkleRoot: string;
+    readonly scope: string;
+    readonly signal: string;
+    readonly proofJson: string;
+    readonly merkleTreeDepth: number;
+  };
+  readonly legacyInnerShape: boolean;
+}
+
+function normaliseIssuerProofWire(raw: string): NormalisedIssuerProof | null {
+  const parsed = safeJsonParse(raw);
+  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return null;
+  const obj = parsed as Record<string, unknown>;
+
+  if (typeof obj['proofJson'] === 'string') {
+    return {
+      proof: {
+        nullifier: asWireString(obj['nullifier']),
+        merkleRoot: asWireString(obj['merkleRoot']),
+        scope: asWireString(obj['scope']),
+        signal: asWireString(obj['signal']),
+        proofJson: obj['proofJson'],
+        merkleTreeDepth: asWireDepth(obj['merkleTreeDepth']),
+      },
+      legacyInnerShape: false,
+    };
+  }
+
+  return {
+    proof: {
+      nullifier: asWireString(obj['nullifier']),
+      merkleRoot: asWireString(obj['merkle_tree_root']),
+      scope: asWireString(obj['scope']),
+      signal: asWireString(obj['message']),
+      proofJson: raw,
+      merkleTreeDepth: asWireDepth(obj['merkle_tree_depth']),
+    },
+    legacyInnerShape: true,
+  };
+}
+
+/**
+ * Bind the proof to THIS envelope: its scope must be the envelope's field
+ * scope and its signal must be the shareId (that is what
+ * `zk/issuerProof.ts` signs). Without this, any internally-valid
+ * Semaphore proof — e.g. one minted over an attacker's own throwaway
+ * two-member group, for an arbitrary signal — would light up `is_human`
+ * on an unrelated card. The native layer clamps scope/signal to 32 UTF-8
+ * bytes at generation, so accept either the exact value or its clamp.
+ * Legacy inner-shape wires are exempt from the strict check (their inner
+ * scope/message encoding varies across binding versions); they remain
+ * confined to the same-master-key escrow model.
+ */
+function issuerProofBoundToEnvelope(
+  normalised: NormalisedIssuerProof,
+  payload: QRSharingPayload
+): boolean {
+  if (normalised.legacyInnerShape) return true;
+  return (
+    wireValueMatches(normalised.proof.scope, payload.scope) &&
+    wireValueMatches(normalised.proof.signal, payload.shareId)
+  );
+}
+
+function wireValueMatches(proofValue: string, expected: string | undefined): boolean {
+  if (expected === undefined || expected.length === 0) return false;
+  return proofValue === expected || proofValue === clampUtf8Bytes(expected, 32);
+}
+
+function clampUtf8Bytes(value: string, maxBytes: number): string {
+  const bytes = new TextEncoder().encode(value);
+  if (bytes.length <= maxBytes) return value;
+  // Non-fatal decode of a mid-codepoint cut yields trailing U+FFFD — strip it
+  // so the clamp matches what the native side stores for multi-byte tails.
+  return new TextDecoder().decode(bytes.slice(0, maxBytes)).replace(/�+$/u, '');
+}
+
+function asWireString(value: unknown): string {
+  if (typeof value === 'string') return value;
+  if (typeof value === 'number' && Number.isFinite(value)) return String(value);
+  return '';
+}
+
+function asWireDepth(value: unknown): number {
+  return typeof value === 'number' && Number.isFinite(value) && value >= 1 && value <= 32
+    ? value
+    : 16;
 }
 
 function resolveZkVerificationStatus(

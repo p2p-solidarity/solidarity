@@ -122,6 +122,13 @@ export interface QRSharingPayload {
   readonly createdAt: string;
   readonly maxUses?: number;
   readonly currentUses?: number;
+  /**
+   * NEVER emitted (parse-only legacy field). Old wires attached the sender's
+   * Semaphore identity commitment, which — combined with a group roster —
+   * identifies the presenter and defeats the membership proof's anonymity
+   * (lists-anonymity audit 2026-08-18 §5). Verification only ever consumed
+   * `issuerProof`; the commitment is ignored on receipt too.
+   */
   readonly issuerCommitment?: string;
   readonly issuerProof?: string;
   readonly sdProof?: SelectiveDisclosureProof;
