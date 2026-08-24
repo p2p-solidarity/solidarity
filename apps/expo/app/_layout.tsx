@@ -44,6 +44,7 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { useCardStore } from '@/cards/cardManager';
 import { useReceivedCard } from '@/cards/receivedCard';
 import { ReceivedCardSheet } from '@/components/cards/ReceivedCardSheet';
+import { LaunchSplash } from '@/components/brand/LaunchSplash';
 import { VerifiedPageResultSheet } from '@/components/scan/VerifiedPageResultSheet';
 import { useContactStore } from '@/contacts/repository';
 import { useCredentialStore } from '@/credentials/store';
@@ -128,6 +129,7 @@ function warnBoot(message: string, error?: unknown): void {
 
 export default function RootLayout() {
   const [ready, setReady] = useState(false);
+  const [splashFinished, setSplashFinished] = useState(false);
   const receivedCard = useReceivedCard((s) => s.card);
   const receivedVerification = useReceivedCard((s) => s.verificationStatus);
   const receivedSource = useReceivedCard((s) => s.source);
@@ -152,16 +154,11 @@ export default function RootLayout() {
     let cancelled = false;
     let shown = false;
 
-    const showApp = async (reason: string) => {
+    const showApp = (reason: string): void => {
       if (cancelled || shown) return;
       shown = true;
       logBoot(`show-app:${reason}`);
       setReady(true);
-      try {
-        await SplashScreen.hideAsync();
-      } catch (error) {
-        warnBoot('splash-hide-failed', error);
-      }
     };
 
     const hydrateDetailsInBackground = () => {
@@ -242,10 +239,10 @@ export default function RootLayout() {
           logBoot('deeplink:initial', initial);
           handleDeepLink(initial);
         }
-        await showApp('boot-complete');
+        showApp('boot-complete');
       } catch (error) {
         warnBoot('boot-failed-before-first-paint', error);
-        await showApp('boot-error');
+        showApp('boot-error');
       } finally {
         // Background bulk-decrypt for the steady-state path (manifests
         // already exist). Idempotent — each store's `hydrate()` checks
@@ -256,7 +253,7 @@ export default function RootLayout() {
     };
 
     const timeout = setTimeout(() => {
-      void showApp(`timeout-${BOOT_TIMEOUT_MS}ms`);
+      showApp(`timeout-${BOOT_TIMEOUT_MS}ms`);
     }, BOOT_TIMEOUT_MS);
 
     void boot().finally(() => {
@@ -348,6 +345,16 @@ export default function RootLayout() {
           <VerifiedPageResultSheet />
         </SafeAreaProvider>
       </KeyboardProvider>
+      {!splashFinished ? (
+        <LaunchSplash
+          onFinished={() => {
+            setSplashFinished(true);
+          }}
+          onHideError={(error) => {
+            warnBoot('splash-hide-failed', error);
+          }}
+        />
+      ) : null}
     </GestureHandlerRootView>
   );
 }

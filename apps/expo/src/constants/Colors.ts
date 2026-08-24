@@ -28,6 +28,11 @@
 import { Appearance } from 'react-native';
 
 const RAW = {
+  /** Launch splash stays black in either system appearance. */
+  splashBg: '#000000',
+  /** Launch mark stays white in either system appearance. */
+  splashMark: '#FFFFFF',
+
   /** Page background — Palette.cream (#fbf9f2) light / #060417 dark. */
   pageBg: '#FBF9F2',
   pageBgDark: '#060417',

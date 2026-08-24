@@ -124,13 +124,6 @@
             "backgroundColor": "#000000",
             "image": "./assets/splash-icon.png"
           },
-          "ios": {
-            "enableFullScreenImage_legacy": true,
-            "image": "./assets/splash.png",
-            "tabletImage": "./assets/splash.png",
-            "resizeMode": "cover",
-            "backgroundColor": "#000000"
-          },
           "android": {
             "image": "./assets/splash-icon.png",
             "backgroundColor": "#000000"
