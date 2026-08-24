@@ -29,6 +29,10 @@ import {
 import { decompressQR } from '@/cards/qrCompression';
 import { verifyCrd1Wire } from '@/cards/crd1Envelope';
 import { EVIDENCE_PACK_TYP } from '@/cards/evidencePack';
+import {
+  parseNostrPointerClaim,
+  type NostrPointerClaim,
+} from '@/cards/nostrPointerClaim';
 import { parseEnvelopeFromWire, decryptZKPayload } from '@/cards/qrEnvelope';
 import type {
   QRCodeEnvelopePayload,
@@ -52,6 +56,13 @@ export interface ScanOutcome {
   readonly oidcPayload?: string;
   readonly errorMessage?: string;
   readonly passportShow?: PassportShowScanResult;
+  /**
+   * Sender's Nostr subscription pointer, present ONLY when it arrived
+   * inside cryptographically verified claims (CRD1 / signature-valid JWT /
+   * evidence-pack verified binding row). See cards/nostrPointerClaim.ts for
+   * the trust rules; consumed by people/cardSubscriptionBootstrap.ts.
+   */
+  readonly nostrPointer?: NostrPointerClaim;
 }
 
 const SUPPORTED_PROOF_CLAIMS = new Set(['is_human', 'age_over_18']);
@@ -189,16 +200,52 @@ function handleCrd1(wire: string): ScanOutcome {
   if (claims['typ'] === EVIDENCE_PACK_TYP) {
     const card = rebuildCardFromEvidencePack(claims, did);
     if (!card) return { kind: 'error', errorMessage: 'Missing evidence-pack subject' };
+    const pointer = evidencePackNostrPointer(claims);
     return {
       kind: 'card',
       card,
       verificationStatus: evidencePackVerificationStatus(claims),
+      ...(pointer ? { nostrPointer: pointer } : {}),
     };
   }
 
   const card = rebuildCardFromJwtPayload(claims, typeof claims['sub'] === 'string' ? claims['sub'] : did);
   if (!card) return { kind: 'error', errorMessage: 'Missing credential subject' };
-  return { kind: 'card', card, verificationStatus: 'Verified' };
+  // The COSE envelope is already verified — the pointer claim (if any) is
+  // covered by the same signature.
+  const pointer = parseNostrPointerClaim(claims);
+  return {
+    kind: 'card',
+    card,
+    verificationStatus: 'Verified',
+    ...(pointer ? { nostrPointer: pointer } : {}),
+  };
+}
+
+/**
+ * An evidence pack's own subscription credential: a `verified` nostr binding
+ * row (the pack signer's live-checked npub). Rows shipped as `declared` are
+ * claims, not credentials — never a pointer. Relays: none carried by the
+ * pack; the resolver falls back to DEFAULT_RELAYS.
+ */
+function evidencePackNostrPointer(
+  claims: Readonly<Record<string, unknown>>
+): NostrPointerClaim | null {
+  const rows = pickArray(claims['claims']);
+  if (!rows) return null;
+  for (const row of rows) {
+    const record = pickRecord(row);
+    if (!record) continue;
+    if (record['kind'] !== 'binding' || record['label'] !== 'nostr') continue;
+    if (record['status'] !== 'verified') continue;
+    const value = record['value'];
+    if (typeof value !== 'string') continue;
+    const candidate = parseNostrPointerClaim({
+      vc: { credentialSubject: { subscription: { nostr: { npub: value, relays: [] } } } },
+    });
+    if (candidate) return candidate;
+  }
+  return null;
 }
 
 function evidencePackVerificationStatus(
@@ -283,7 +330,17 @@ function handleDidSigned(envelope: QRCodeEnvelopePayload): ScanOutcome {
 
   const card = rebuildCardFromJwtPayload(decoded.payload, signed.holderDid);
   if (!card) return { kind: 'error', errorMessage: 'Missing credential subject' };
-  return { kind: 'card', card, verificationStatus };
+  // The pointer claim is trusted ONLY under a verified signature — an
+  // Unverified/Failed JWT's pointer is attacker-editable text, never a
+  // subscription credential.
+  const pointer =
+    verificationStatus === 'Verified' ? parseNostrPointerClaim(decoded.payload) : null;
+  return {
+    kind: 'card',
+    card,
+    verificationStatus,
+    ...(pointer ? { nostrPointer: pointer } : {}),
+  };
 }
 
 // ─── Verification helpers ──────────────────────────────────────────────────
@@ -291,7 +348,13 @@ function handleDidSigned(envelope: QRCodeEnvelopePayload): ScanOutcome {
 interface ZkProofResult {
   readonly sdValid: boolean;
   readonly sdPresent: boolean;
-  readonly issuerValid: boolean;
+  /** SNARK verified AND the proof's scope/signal bind to this envelope. */
+  readonly issuerCryptoValid: boolean;
+  /** The proof's merkleRoot matches a group THIS device holds (05-spec
+   *  §6-8): crypto validity alone proves membership in SOME group — an
+   *  attacker's own throwaway group included — so `is_human` requires both.
+   *  Unknown root = cannot check = Unverified, never Failed. */
+  readonly issuerRootKnown: boolean;
   readonly issuerPresent: boolean;
 }
 
@@ -303,14 +366,16 @@ async function verifyZkProofs(payload: QRSharingPayload): Promise<ZkProofResult>
   const result: ZkProofResult = {
     sdValid: false,
     sdPresent: payload.sdProof !== undefined,
-    issuerValid: false,
+    issuerCryptoValid: false,
+    issuerRootKnown: false,
     issuerPresent: payload.issuerProof !== undefined,
   };
 
   if (!result.sdPresent && !result.issuerPresent) return result;
 
   let sdValid = false;
-  let issuerValid = false;
+  let issuerCryptoValid = false;
+  let issuerRootKnown = false;
 
   if (payload.sdProof !== undefined) {
     try {
@@ -329,18 +394,32 @@ async function verifyZkProofs(payload: QRSharingPayload): Promise<ZkProofResult>
     try {
       const { verifyGroupProof } = await import('@/zk/groupManager');
       const normalised = normaliseIssuerProofWire(payload.issuerProof);
-      if (normalised && issuerProofBoundToEnvelope(normalised, payload)) {
-        issuerValid = await verifyGroupProof(
+      if (normalised) {
+        issuerCryptoValid = await verifyGroupProof(
           normalised.proof,
           normalised.proof.merkleTreeDepth
         );
+        if (issuerCryptoValid) {
+          // Root provenance (05-spec §6-8): membership only means something
+          // when the root names a group this device recognises. CRITICALLY,
+          // the root is read from the AUTHENTICATED inner proofJson (the only
+          // bytes verifyGroupProof/native actually verify), NOT the outer
+          // wire struct — an attacker mints a valid SNARK over their own
+          // throwaway group and could set any outer merkleRoot, so trusting
+          // the outer field would defeat the whole check.
+          const innerRoot = innerProofRoot(normalised.proof.proofJson);
+          if (innerRoot !== null) {
+            const { isKnownGroupRoot } = await import('@/zk/issuerProof');
+            issuerRootKnown = await isKnownGroupRoot(innerRoot);
+          }
+        }
       }
     } catch {
       // Treat verifier exceptions as unverified.
     }
   }
 
-  return { ...result, sdValid, issuerValid };
+  return { ...result, sdValid, issuerCryptoValid, issuerRootKnown };
 }
 
 /**
@@ -400,39 +479,30 @@ function normaliseIssuerProofWire(raw: string): NormalisedIssuerProof | null {
 }
 
 /**
- * Bind the proof to THIS envelope: its scope must be the envelope's field
- * scope and its signal must be the shareId (that is what
- * `zk/issuerProof.ts` signs). Without this, any internally-valid
- * Semaphore proof — e.g. one minted over an attacker's own throwaway
- * two-member group, for an arbitrary signal — would light up `is_human`
- * on an unrelated card. The native layer clamps scope/signal to 32 UTF-8
- * bytes at generation, so accept either the exact value or its clamp.
- * Legacy inner-shape wires are exempt from the strict check (their inner
- * scope/message encoding varies across binding versions); they remain
- * confined to the same-master-key escrow model.
+ * The Merkle root the SNARK actually committed to — parsed out of the
+ * verified inner `proofJson` (`merkle_tree_root`). This is the only root
+ * value the native verifier reads, so it is the only one safe to feed the
+ * provenance check. Returns null when the inner blob can't be parsed.
+ *
+ * NOTE on envelope binding: a previous version also compared the wire's
+ * outer `scope`/`signal` strings against the envelope. That check was
+ * unsound — those outer fields are unauthenticated, and the SNARK commits
+ * to scope/message as field-element HASHES the native layer computes, which
+ * TS cannot recompute from the strings today. The trust decision therefore
+ * rests solely on inner-root provenance (a proof over a group this device
+ * holds); a sound per-share anti-replay binding needs a native
+ * string→field-element helper and is deferred with the frozen Semaphore
+ * lane. In the current model the zkProof envelope is AES-GCM escrow-scoped
+ * (only the sender's own devices can decrypt it), so no third party reaches
+ * this path at all.
  */
-function issuerProofBoundToEnvelope(
-  normalised: NormalisedIssuerProof,
-  payload: QRSharingPayload
-): boolean {
-  if (normalised.legacyInnerShape) return true;
-  return (
-    wireValueMatches(normalised.proof.scope, payload.scope) &&
-    wireValueMatches(normalised.proof.signal, payload.shareId)
-  );
-}
-
-function wireValueMatches(proofValue: string, expected: string | undefined): boolean {
-  if (expected === undefined || expected.length === 0) return false;
-  return proofValue === expected || proofValue === clampUtf8Bytes(expected, 32);
-}
-
-function clampUtf8Bytes(value: string, maxBytes: number): string {
-  const bytes = new TextEncoder().encode(value);
-  if (bytes.length <= maxBytes) return value;
-  // Non-fatal decode of a mid-codepoint cut yields trailing U+FFFD — strip it
-  // so the clamp matches what the native side stores for multi-byte tails.
-  return new TextDecoder().decode(bytes.slice(0, maxBytes)).replace(/�+$/u, '');
+function innerProofRoot(proofJson: string): string | null {
+  const parsed = safeJsonParse(proofJson);
+  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return null;
+  const root = (parsed as Record<string, unknown>)['merkle_tree_root'];
+  if (typeof root === 'string' && root.length > 0) return root;
+  if (typeof root === 'number' && Number.isFinite(root)) return String(root);
+  return null;
 }
 
 function asWireString(value: unknown): string {
@@ -451,18 +521,31 @@ function resolveZkVerificationStatus(
   payload: QRSharingPayload,
   proofs: ZkProofResult
 ): VerificationStatus {
-  // Match Swift evaluateSharingPayload: any present proof that fails → Failed.
+  // Match Swift evaluateSharingPayload: any present proof that FAILS
+  // cryptographically (bad SNARK, broken envelope binding) → Failed.
   if (proofs.sdPresent && !proofs.sdValid) return 'Failed';
-  if (proofs.issuerPresent && !proofs.issuerValid) return 'Failed';
+  if (proofs.issuerPresent && !proofs.issuerCryptoValid) return 'Failed';
+
+  // A crypto-valid proof whose root names NO group this device holds is
+  // honoured as nothing: not a lie (the sender may be in a real group we
+  // simply don't know), so never Failed — but it cannot upgrade anything
+  // either (05-spec §6-8).
+  const issuerTrusted = proofs.issuerCryptoValid && proofs.issuerRootKnown;
 
   const claims = payload.proofClaims;
   if (claims && claims.length > 0) {
     if (claims.some((claim) => !SUPPORTED_PROOF_CLAIMS.has(claim))) return 'Failed';
-    if (claims.includes('is_human') && !proofs.issuerValid) return 'Failed';
+    // Evaluate ALL provable-lie conditions (a claim with no backing proof at
+    // all) BEFORE any downgrade-to-Unverified, so one unmet claim can't mask
+    // another's outright failure.
+    if (claims.includes('is_human') && !proofs.issuerPresent) return 'Failed';
     if (claims.includes('age_over_18') && !proofs.sdValid) return 'Failed';
+    // is_human backed by a crypto-valid proof but over an UNKNOWN root:
+    // cannot check (root provenance missing), not a lie — Unverified.
+    if (claims.includes('is_human') && !issuerTrusted) return 'Unverified';
   }
 
-  if (proofs.sdValid || proofs.issuerValid) return 'Verified';
+  if (proofs.sdValid || issuerTrusted) return 'Verified';
   return 'Unverified';
 }
 
