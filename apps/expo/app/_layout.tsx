@@ -31,7 +31,7 @@ import 'react-native-gesture-handler';
 import '../global.css';
 
 import { useEffect, useState } from 'react';
-import { Appearance } from 'react-native';
+import { Appearance, AppState } from 'react-native';
 import { router, Stack } from 'expo-router';
 import * as Linking from 'expo-linking';
 import * as Notifications from 'expo-notifications';
@@ -62,6 +62,7 @@ import { hydrateSensitiveActionPolicy } from '@/keychain';
 import { warmBadgeStatusCache } from '@/badges/badgeStatusCache';
 import { warmNostrKeyMirror } from '@/nostr/userKey';
 import { PearConsentOverlay, PearPresentConsentOverlay } from '@/pear/consent';
+import { maybeRefreshVerifiedContacts } from '@/people/contactAutoRefresh';
 import { hydrateProfileSnapshots } from '@/people/profileSnapshots';
 import { hydrateProfile } from '@/profile/store';
 import { syncOnce } from '@/sakura/inbox';
@@ -272,6 +273,24 @@ export default function RootLayout() {
     });
     return () => { sub.remove(); };
   }, []);
+
+  // Contact auto-update (CREDS §3.3 訂閱憑據 lane, v1 — 05-spec §3): on boot
+  // and every return to foreground, run one THROTTLED sweep that re-resolves
+  // saved Verified Pages through their claimed `nostr:<npub>` HEAD (kind
+  // 30078) and merges real changes into 「最近更新」. Device-side only — no
+  // server, no push. The sweep itself is fire-and-forget and silent.
+  useEffect(() => {
+    if (!ready || !hasCompletedOnboarding) return;
+    maybeRefreshVerifiedContacts();
+    const sub = AppState.addEventListener('change', (state) => {
+      if (state === 'active' && usePreferences.getState().hasCompletedOnboarding) {
+        maybeRefreshVerifiedContacts();
+      }
+    });
+    return () => {
+      sub.remove();
+    };
+  }, [hasCompletedOnboarding, ready]);
 
   // Sakura push rail — inbox-sync listeners are always safe to attach: they
   // only fire when the OS actually delivers a notification (none, if the user
