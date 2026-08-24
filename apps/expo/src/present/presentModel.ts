@@ -3,6 +3,7 @@ import {
   enabledFieldsFromSharePreferences,
   type ShareFieldPreferences,
 } from '@/cards/solidarityQrTypes';
+import type { Preferences } from '@/settings/preferences';
 import type { BusinessCard, BusinessCardField, ProfileLink } from '@solidarity/shared';
 
 export type PresentCardState =
@@ -46,6 +47,19 @@ export type PresentCardPreferenceKey = Exclude<
 export interface PresentCardPreset {
   readonly name: string;
   readonly preferenceKeys: readonly PresentCardPreferenceKey[];
+}
+
+const NO_PRESETS: readonly PresentCardPreset[] = [];
+
+/**
+ * The persisted key is deliberately optional while the Present package owns
+ * its preferences augmentation. A shared fallback keeps zustand's snapshot
+ * referentially stable before the first preset is saved.
+ */
+export function selectPresentCardPresets(
+  state: Preferences
+): readonly PresentCardPreset[] {
+  return state.presentCardPresets ?? NO_PRESETS;
 }
 
 export type PhysicalCardMaterial = 'steel' | 'blackTitanium' | 'brass';

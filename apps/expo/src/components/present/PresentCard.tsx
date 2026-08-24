@@ -24,6 +24,7 @@ import { pushToast } from '@/feedback/toast';
 import { useTranslation } from '@/i18n';
 import {
   PRESENT_CARD_PREFERENCE_KEYS,
+  selectPresentCardPresets,
   type PresentCardPreset,
   type PresentModel,
 } from '@/present/presentModel';
@@ -69,14 +70,14 @@ function useCardQr(
     let cancelled = false;
     setQrState({ kind: 'loading' });
     const selectedFields = ['name', ...selectedFieldKey.split('|').filter(Boolean)];
-    const qrSource = card === null
-      ? Promise.resolve({ wire: page?.url ?? '', startingLevel: 'M' as const })
-      : buildRuntimeSolidarityQrWire(
-          card,
-          shareFieldPreferencesFromFields(selectedFields),
-          { sealedRoute: page?.url },
-        );
-    void qrSource
+    void Promise.resolve()
+      .then(() => card === null
+        ? { wire: page?.url ?? '', startingLevel: 'M' as const }
+        : buildRuntimeSolidarityQrWire(
+            card,
+            shareFieldPreferencesFromFields(selectedFields),
+            { sealedRoute: page?.url },
+          ))
       .then(({ wire, startingLevel }) =>
         generateQrPng(wire, { size: CARD_QR_SIZE, startingLevel })
       )
@@ -172,9 +173,7 @@ export function PresentCardPresetControls({
 }): ReactNode {
   const { t } = useTranslation();
   const insets = useSafeAreaInsets();
-  const savedPresets = usePreferences(
-    (state) => state.presentCardPresets ?? []
-  );
+  const savedPresets = usePreferences(selectPresentCardPresets);
   const setPreference = usePreferences((state) => state.set);
   const [sheetOpen, setSheetOpen] = useState(false);
   const [nameInput, setNameInput] = useState('');

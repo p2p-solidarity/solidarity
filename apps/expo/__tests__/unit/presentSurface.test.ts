@@ -88,6 +88,15 @@ describe('Present product surface', () => {
     expect(card).toContain("t('present.flipCard')");
   });
 
+  it('does not allocate fallback collections from a preferences selector during render', () => {
+    const card = source('../../src/components/present/PresentCard.tsx');
+
+    expect(card).not.toMatch(
+      /usePreferences\(\s*\([^)]*\)\s*=>[\s\S]*?\?\?\s*(?:\[\]|\{\})/u
+    );
+    expect(card).toContain('usePreferences(selectPresentCardPresets)');
+  });
+
   it('shows only presentable Passport attestations through the existing credential route', () => {
     const product = source('../../src/components/present/PresentScreen.tsx');
     const attestations = source('../../src/components/present/PresentAttestations.tsx');
