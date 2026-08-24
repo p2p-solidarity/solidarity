@@ -207,6 +207,7 @@ export default function ScanScreen() {
           verificationStatus: outcome.verificationStatus,
           source: 'QR Code',
           sealedRoute: outcome.sealedRoute,
+          nostrPointer: outcome.nostrPointer,
         });
         safeBack();
         return;

@@ -97,6 +97,7 @@ export function buildDidSignedClaims(
     snapshot,
     publicKeyJwk: signer.publicKeyJwk,
     attestedFields: vcEligibleFields,
+    nostrPointer: options.nostrPointer,
   });
 
   return {
@@ -144,6 +145,7 @@ function buildBusinessCardCredentialPayload(args: {
   readonly snapshot: BusinessCardSnapshotPayload;
   readonly publicKeyJwk: PublicKeyJWK;
   readonly attestedFields: readonly BusinessCardField[];
+  readonly nostrPointer?: { readonly npub: string; readonly relays: readonly string[] };
 }): Record<string, unknown> {
   const fieldStatuses = buildSelfAttestedStatuses(args.attestedFields);
   const subject = buildCredentialSubject({
@@ -151,6 +153,7 @@ function buildBusinessCardCredentialPayload(args: {
     snapshot: args.snapshot,
     publicKeyJwk: args.publicKeyJwk,
     fieldStatuses,
+    nostrPointer: args.nostrPointer,
   });
 
   return pruneUndefined({
@@ -178,6 +181,7 @@ function buildCredentialSubject(args: {
   readonly snapshot: BusinessCardSnapshotPayload;
   readonly publicKeyJwk: PublicKeyJWK;
   readonly fieldStatuses: Record<string, string>;
+  readonly nostrPointer?: { readonly npub: string; readonly relays: readonly string[] };
 }): Record<string, unknown> {
   const { snapshot } = args;
   const worksFor = snapshot.company
@@ -219,6 +223,12 @@ function buildCredentialSubject(args: {
       businessCardId: snapshot.cardId,
       publicKeyJwk: args.publicKeyJwk,
     },
+    // CREDS §3.3 subscription pointer (05-spec §3 v1.1) — present only when
+    // the sender's Nostr binding is verified at emit time. Unknown to old
+    // scanners, which ignore it (additive, both wires).
+    subscription: args.nostrPointer
+      ? { nostr: { npub: args.nostrPointer.npub, relays: [...args.nostrPointer.relays] } }
+      : undefined,
     verified_contact_claims: verifiedContactClaims,
     credential_meta: pruneUndefined({
       schemaVersion: 2,

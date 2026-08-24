@@ -32,6 +32,16 @@ export interface SolidarityQrPayloadOptions {
   readonly expirationDate?: Date;
   readonly sealedRoute?: string;
   readonly signer?: SolidarityQrSigner;
+  /**
+   * Sender's verified Nostr subscription pointer (CREDS §3.3, 05-spec §3
+   * v1.1) — attached to the SIGNED claims only (CRD1 / didSigned JWT), and
+   * only when the sender's Nostr binding is currently verified. See
+   * `cards/nostrPointerClaim.ts` for the emit/receive trust rules.
+   */
+  readonly nostrPointer?: {
+    readonly npub: string;
+    readonly relays: readonly string[];
+  };
 }
 
 export interface SolidarityQrSigner {
