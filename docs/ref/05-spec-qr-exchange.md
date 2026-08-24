@@ -12,7 +12,7 @@
 
 | # | 格式 | 識別方式 | 編碼鏈 | 簽章／加密 | 容量／效期 | 發射端 | 接收端 | 狀態 |
 |---|---|---|---|---|---|---|---|---|
-| 1 | **CRD1 名片 wire** | `CRD1:` 前綴 | claims→CBOR→COSE_Sign1(tag 18)→zlib→Base45 | ES256 單簽（名片簽名 did:key，`signRaw` 64B r‖s） | 2,420 字元硬限 · exp 夾 30 天 · EC-Q | `buildCrd1CardWire`（`cards/crd1Envelope.ts:46`），`solidarityQrRuntime.ts:74-84` 優先嘗試 | `envelopeHandler.ts:87-89` → `verifyCrd1Wire`（含 holder-binding fail-closed） | **現行首選** |
+| 1 | **CRD1 名片 wire** | `CRD1:` 前綴 | claims→CBOR→COSE_Sign1(tag 18)→zlib→Base45 | ES256 單簽（名片簽名 did:key，`signRaw` 64B r‖s） | 2,420 字元硬限 · exp 夾 30 天 · EC-Q | `buildCrd1CardWire`（`cards/crd1Envelope.ts:46`），`solidarityQrRuntime.ts` 優先嘗試；08-25 起 claims 可帶 `subscription.nostr` 訂閱指標（§3 v1.1，僅綁定 verified 時） | `envelopeHandler.ts` → `verifyCrd1Wire`（含 holder-binding fail-closed）；指標經簽章覆蓋才萃取 | **現行首選** |
 | 2 | **CRD1 證據包** | `CRD1:` ＋ claims `typ === 'gg.solidarity.evidence-pack.v1'` | 同上 | ES256 單簽（**root** did:key，`identity/rootKey`） | 同上；UI 即時字數表（`estimateCrd1` 不觸發生物辨識） | `app/me/evidence-pack.tsx` → `signEvidencePack` | `envelopeHandler.ts:182-202` 以 `typ` 分流 → `rebuildCardFromEvidencePack` | **現行** |
 | 3 | legacy didSigned（裸 VC-JWT） | `eyJ` 開頭＋三段 | base64url JWT（無外包裝） | ES256 JWT | 無硬限；QR 級聯自 L 起 | `solidarityQrRuntime.ts` 在 CRD1 回傳 null 時後備 | `qrEnvelope.ts:75` 合成 v2 envelope → `handleDidSigned` | 永久後備（同一個 claims builder，掃出同一張卡） |
 | 4 | legacy zkProof envelope | `sce1:`（raw-DEFLATE）或裸 JSON | JSON envelope(version:2) 內嵌 `encryptedPayload` | AES-GCM **同發送者主鑰**（收方須持同鑰＝同帳號多裝置模型，不是收件人加密） | 預設 24h 效期 | `buildZKEnvelope`（`solidarityQrPayload.ts`）；**新卡預設格式**（`sharing/defaults.ts:86`） | `handleZkProof` → 解密＋lazy 驗 `sdProof`／`issuerProof`（08-24 起：issuerProof 收發兩代 wire 都吃、且 scope/signal 須綁定本 envelope，見 §7） | legacy（Swift parity；§3.3 落地後應讓位） |
@@ -57,7 +57,15 @@
 **已落地（2026-08-25 · v1）——公開 HEAD 自動更新 lane**：
 1. `people/contactAutoRefresh.ts`：已存的 VerifiedSnapshot 只要簽名 record 的 `alsoKnownAs` 含 `nostr:<npub>`，那就是它自帶的訂閱憑據。App 開啟／回前景時跑**一次節流掃描**（每 6h 至多一次、每次至多 30 人、開始前先蓋時間戳防 relay 轟炸），逐一走**與掃描器同一條**驗證管線（`resolveProfileByNpub`：JWS＋反向 npub 綁定）與**同一套**新鮮度合併（`mergeVerified`），真的變新才進「最近更新」。裝置端產生、無伺服器無推播（mock F8 v1 誠實面）。掛載點：`_layout.tsx` AppState hook（onboarding 完成後才啟用）。
 2. 安全規則（測試釘住，`contactAutoRefresh.test.ts`）：**掃描永不新增／替換人**——解析回來的 record.did 必須等於已存 did，否則丟棄（npub 持有者發布別人的有效簽名 record 也不能讓背景掃描存進新身分）；失敗逐人靜默（離線是常態），不標 stale。
-3. 仍待做（依裁決後排程）：CRD1 名片 claims 加選填 `nostr:{npub, relays[]}`（僅綁定 verified 時放）讓**名片流**的聯絡人也可訂閱——目前 v1 只涵蓋 Verified Page 流（憑據已在 record 裡）；relay 提示欄位（現用 `DEFAULT_RELAYS`）；NIP-44 限定欄位（可選 lane，需 shared 新增原語）。
+3. **v1.1（2026-08-25 · 同日第二輪）——名片流訂閱＋NIP-44 原語＋root 出處**：
+   - **簽名名片 claims 的訂閱指標**：`vc.credentialSubject.subscription.nostr = { npub, relays[] }`——只上**簽名 wire**（CRD1＋legacy didSigned JWT；未簽名的 plaintext／zkProof 永不攜帶，否則改封包者可改訂閱目標）；發射端只在自己的 Nostr 綁定**當下為 verified** 時放（`cards/nostrPointerClaim.ts`，讀 badge-status cache），relay 提示＝`DEFAULT_RELAYS` 前 3。舊掃描器忽略未知欄位，加法相容。證據包另路：其 `verified` 的 nostr binding 列本身就是指標，掃描端同樣萃取。
+   - **接收信任邊界（v1，2026-08-25 審查後強化，測試釘住）**：指標只證明「名片簽署者聲稱此 npub」——今天沒有任何東西把名片簽名鑰綁到頁面 root did（A5b 的 `cardKeyBinding` JWS 綁 aud＋nonce＋300 秒，靜態 QR 用不了），攻擊者名片可聲稱**第三人**的真 npub。因此 bootstrap（`people/cardSubscriptionBootstrap.ts`，存卡成功後 fire-and-forget）規則：
+     - **先離線閘、後連線**：先在已存的 Verified Page 裡找「自己的簽名 record 已宣告 `nostr:<npub>`」的那一張；**找不到 → `skippedNewDid`，完全不連任何 relay**（否則惡意 QR 會把每次存卡變成對攻擊者選定 pubkey 的 relay 往返＝讀取回執＋IP 洩漏）。學新綁定仍是明確動作（掃他的頁／開他的 handle），等 v2 root 簽名 attestation。
+     - **relay 提示 v1 一律不撥號**：提示是攻擊者控制的主機，連上去本身就是攻擊；且今天沒有任何發射端產生非預設提示。解析只走 `DEFAULT_RELAYS`。提示欄位保留作 forward-compat。
+     - **只 refresh 命中的同一格**：解析回來的 record 必須 did **與** scope 都等於命中的那張快照，才 `mergeVerified`——保證 `mergeVerifiedSnapshot` 以既有快照為新鮮度基準（真 T5），永不走「建新 slot」的無條件覆寫分支（否則一個 scope-rank 較高的新 slot 會蓋掉並隱藏使用者原本較新的較低 scope 快照）。did 或 scope 不符 → `mismatch`，不動。
+   - **v2 設計（未做）——`solidarity.cardKeyAttestation.v1`**：root 鑰簽的長效 JWS `{typ, rootDid, cardDid, iat}`（無 aud/nonce），鑄一次快取、隨簽名 claims 攜帶；接收端以解析回來的 record.did 驗簽＋要求 `cardDid` === 名片簽名 did——成立後「新 did 靜默訂閱」才安全。鑄造時機掛在本來就要 Face ID 的簽名動作上。
+   - **NIP-44 v2 原語已落地 shared**（`packages/shared/src/crypto/nip44.ts`）：conversation key（secp256k1 ECDH x → HKDF-extract salt `nip44-v2`）→ per-message HKDF-expand(76) → padding（官方表）→ ChaCha20 → HMAC-SHA256（constant-time 比對）→ base64 `v2‖nonce‖ct‖mac`；**釘官方測試向量**（`vectors/nip44.json`，conversation-key／padding 表／encrypt-decrypt／invalid 全組）。尚無消費者——限定欄位的每收件人發布（事件 kind／gift-wrap 與否）是下一個設計決定，該決定前不接線。
+   - **仍待做**：限定欄位 per-recipient 發布設計＋接線；v2 attestation；per-contact relay 提示持久化（等有非預設 relay 的真實需求）。
 
 ---
 
@@ -99,7 +107,7 @@
 5. **`maxUses`／`currentUses`**（`solidarityQrTypes.ts:123-124`）：無任何 builder 填值的殭屍欄位。
 6. **webSign 回應 QR 未過 `compressForQR`**（`websign/review.tsx:108-111`）：sqc1 家族唯一不壓縮的成員（dev-mode，低優先）。
 7. **`buildOid4VpRequestUrl`**：刻意死（兩條路由改 redirect、測試釘住不得回歸）——不是缺陷，保持。
-8. **issuerProof 的 root 出處未驗**（潛在，記錄在案）：掃描端只驗 SNARK 內部有效＋（08-24 起）scope/signal 綁定本 envelope，仍**不**檢查 `merkleRoot` 屬於任何已知／可信群組——攻擊者可用自造兩人群組產生形式有效的證明。今天被同主鑰 escrow 模型擋住（第三方造不出能解密的 envelope）；zkProof envelope 若脫離 escrow（§3.3 落地）前必須補 root 出處檢查。legacy inner-shape wire 亦豁免綁定檢查（inner 編碼跨版本不穩），同樣只被 escrow 保護。
+8. **issuerProof root 出處**：~~未驗~~ **已補並修正（2026-08-25 兩輪）**——掃描端以 `zk/issuerProof.isKnownGroupRoot`（本機群組 canonical root 逐一重算比對）判定出處。**關鍵修正（審查發現）**：root 必須取自**已驗證的內層 `proofJson.merkle_tree_root`**，不是外層 wire 欄位——原本讀外層 `merkleRoot` 是無效檢查（native 只驗 `proof.proofJson`，攻擊者對自造群組出有效 SNARK 再把外層 root 設成受害者認得的值就繞過；測試 `does NOT trust a spoofed outer merkleRoot` 釘住）。同理 08-24 的 scope/signal「envelope 綁定」也讀外層，對 crafted wire 是 no-op，**已移除**——字串↔field-element 的健全綁定需要 native hash helper，隨凍結的 Semaphore lane 延後；當前信任僅靠內層 root 出處，而 zkProof envelope 仍是同主鑰 escrow（第三方到不了這條路）。語意三分（測試釘住）：密碼學失敗 → `Failed`；宣稱 `is_human` 卻無任何 issuer proof → `Failed`（說謊，非查不了；所有 `Failed` 條件在任何降級為 `Unverified` 之前先評估，含 `age_over_18` 無 sd proof）；密碼學有效但內層 root 不在本機任何群組 → `Unverified`（查不了，同帳號第二台沒同步群組時落此，誠實）；密碼學有效＋內層 root 已知 → `Verified`／`is_human` 點亮。已知殘留：群組 store 在 boot 背景 hydrate，掃描早於 hydrate 完成時合法證明會暫報 `Unverified`（fail-safe，永不誤判 Verified）。
 
 ---
 
