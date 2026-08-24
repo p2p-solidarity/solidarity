@@ -234,7 +234,7 @@ function isSupportedHandle(handle: string): boolean {
   return matchHandleResolver(handle, DEFAULT_HANDLE_RESOLVERS) !== undefined;
 }
 
-function extractHandleCandidate(payload: string): string | null {
+function extractHandleCandidate(payload: string, devProductHosts: boolean): string | null {
   const trimmed = payload.trim();
   if (trimmed.length === 0) return null;
   if (isSupportedHandle(trimmed)) return trimmed;
@@ -243,7 +243,7 @@ function extractHandleCandidate(payload: string): string | null {
     const url = new URL(trimmed);
     if (
       url.protocol !== 'https:' ||
-      !isProductHost(url.host) ||
+      !isProductHost(url.host, devProductHosts) ||
       url.hash.length > 0
     ) {
       return null;
@@ -262,9 +262,18 @@ function extractHandleCandidate(payload: string): string | null {
   }
 }
 
-export function classifyVerifiedPagePayload(payload: string): VerifiedPagePayload | null {
+export interface ClassifyVerifiedPageOptions {
+  /** Thread `developerMode` here: dev mode admits `creds.id` as a product
+   *  host for the `/@handle` URL form (05-spec §8-B ruling). */
+  readonly devProductHosts?: boolean;
+}
+
+export function classifyVerifiedPagePayload(
+  payload: string,
+  options: ClassifyVerifiedPageOptions = {}
+): VerifiedPagePayload | null {
   if (typeof payload !== 'string') return null;
-  const handle = extractHandleCandidate(payload);
+  const handle = extractHandleCandidate(payload, options.devProductHosts ?? false);
   if (handle !== null) return { kind: 'handle', handle };
   const inner = extractInner(payload);
   if (inner === null || inner.length === 0) return null;

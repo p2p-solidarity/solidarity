@@ -58,14 +58,31 @@ export function isVerifiedDomain(host: string): boolean {
 const PRODUCT_HOSTS: ReadonlySet<string> = new Set<string>(['solidarity.gg', 'airmeishi.app']);
 
 /**
+ * Hosts that count as product hosts ONLY in developer mode (2026-08-25
+ * ruling, 05-spec §8-B): `creds.id` is the future product domain, gated
+ * behind dev mode so the whole link surface (`/@handle`, `#fragment`,
+ * `/websign`, `/c`, `/pear`) can be exercised end-to-end before launch while
+ * `app.solidarity.gg` stays the default production origin. Regular users
+ * keep the A5.4 posture: no non-product host triggers a routing side effect.
+ */
+const DEV_PRODUCT_HOSTS: ReadonlySet<string> = new Set<string>(['creds.id']);
+
+/**
  * Returns true when `host` is rooted at a Solidarity/AirMeishi-owned host
  * (subdomains accepted, same matching semantics as `isVerifiedDomain`).
+ * Pass `includeDevHosts` (callers thread `developerMode` from preferences)
+ * to additionally accept `DEV_PRODUCT_HOSTS`.
  */
-export function isProductHost(host: string): boolean {
+export function isProductHost(host: string, includeDevHosts = false): boolean {
   if (!host) return false;
   const lower = host.toLowerCase();
   for (const root of PRODUCT_HOSTS) {
     if (matchesWildcard(lower, root)) return true;
+  }
+  if (includeDevHosts) {
+    for (const root of DEV_PRODUCT_HOSTS) {
+      if (matchesWildcard(lower, root)) return true;
+    }
   }
   return false;
 }

@@ -266,3 +266,34 @@ describe('parseDeepLink', () => {
     expect(parseDeepLink('https://solidarity.gg/#abc123').kind).toBe('verifiedProfile');
   });
 });
+
+describe('creds.id dev-mode product host (05-spec §8-B ruling, 2026-08-25)', () => {
+  const CREDS_HANDLE_URL = 'https://creds.id/@alice.bsky.social';
+  const CREDS_FRAGMENT_URL = 'https://creds.id/#nostr:npub1qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqql6verd';
+
+  it('does NOT treat creds.id as a product host by default', () => {
+    // creds.id is in TRUSTED_HOSTS (associated domains are registered), so
+    // the URL reaches parseVerifiedDomainRoute — but without dev mode the
+    // productHost-gated routes must not fire. The fragment branch is NOT
+    // productHost-gated (self-verifying blob), so only the handle form is
+    // the discriminating case.
+    expect(parseDeepLink(CREDS_HANDLE_URL).kind).toBe('unknown');
+  });
+
+  it('treats creds.id as a product host when devProductHosts is set', () => {
+    const r = parseDeepLink(CREDS_HANDLE_URL, { devProductHosts: true });
+    expect(r.kind).toBe('verifiedHandle');
+    if (r.kind === 'verifiedHandle') expect(r.handle).toBe('alice.bsky.social');
+  });
+
+  it('routes a creds.id pointer fragment regardless of dev mode (self-verifying form)', () => {
+    expect(parseDeepLink(CREDS_FRAGMENT_URL).kind).toBe('verifiedPointer');
+  });
+
+  it('never admits third-party TRUSTED_HOSTS even with devProductHosts on', () => {
+    expect(parseDeepLink('https://github.com/@alice.bsky.social', { devProductHosts: true }).kind).toBe('unknown');
+    expect(
+      parseDeepLink('https://github.com/c/f47ac10b-58cc-4372-a567-0e02b2c3d479', { devProductHosts: true }).kind
+    ).toBe('unknown');
+  });
+});
