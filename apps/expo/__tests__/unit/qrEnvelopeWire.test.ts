@@ -98,6 +98,7 @@ beforeAll(async () => {
   // without hitting the Semaphore Nitro bridge.
   await mock.module('@/zk/issuerProof', () => ({
     generateIssuerProof: async () => null,
+    isKnownGroupRoot: async () => false,
     buildShareScope: (selected: readonly string[]) => {
       const set = new Set<string>(selected);
       set.add('name');
