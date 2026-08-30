@@ -7,8 +7,9 @@
  * `biometricPolicy.rotateMasterKey` flag is on (mirrors Swift
  * `BiometricGatekeeper.authorizeIfRequired(.rotateMasterKey)`).
  *
- * Reset App Data clears the complete MMKV store, restores preference defaults,
- * and deliberately preserves recovery/signing keys held outside MMKV.
+ * Reset App Data clears the complete MMKV store and the in-memory store
+ * mirrors hydrated from it, restores preference defaults, and deliberately
+ * preserves recovery/signing keys held outside MMKV.
  */
 import { router } from 'expo-router';
 import { safeBack } from '@/navigation/safeBack';
@@ -29,7 +30,7 @@ import { useTranslation } from '@/i18n';
 import { useIdentityData } from '@/identity';
 import { requireBiometric } from '@/keychain';
 import { usePreferences } from '@/settings/preferences';
-import { clearAllData } from '@/storage';
+import { resetAppDataKeepingKeys } from '@/settings/productionWipe';
 import { getMmkv } from '@/storage/mmkv';
 import { clearAll as clearPassportAnchors } from '@/zk/passportAnchorStore';
 
@@ -37,7 +38,6 @@ export default function ResetOptions() {
   const insets = useSafeAreaInsets();
   const { t } = useTranslation();
   const policy = usePreferences((s) => s.biometricPolicy);
-  const resetPrefs = usePreferences((s) => s.reset);
   const removePassportCredentials = useIdentityData((s) => s.removePassportCredentials);
 
   const [busy, setBusy] = useState(false);
@@ -67,10 +67,7 @@ export default function ResetOptions() {
         setBusy(false);
         return;
       }
-      // Clears cards, contacts, manifests, credentials, and every other MMKV
-      // record. Keychain-backed recovery/signing keys are intentionally kept.
-      clearAllData();
-      resetPrefs();
+      await resetAppDataKeepingKeys();
       pushToast(t('advanced.resetAppData.done'), 'success');
       router.replace('/onboarding');
     } catch (err) {

@@ -38,17 +38,35 @@ describe('v2 Developer Options surface', () => {
       advanced.indexOf('const onResetPassport')
     );
 
-    expect(resetAction).toContain('clearAllData();');
-    expect(resetAction).toContain('resetPrefs();');
+    expect(resetAction).toContain('await resetAppDataKeepingKeys();');
     expect(resetAction).toContain("router.replace('/onboarding');");
-    expect(resetAction.indexOf('clearAllData();')).toBeLessThan(
-      resetAction.indexOf('resetPrefs();')
-    );
-    expect(resetAction.indexOf('resetPrefs();')).toBeLessThan(
+    expect(resetAction.indexOf('await resetAppDataKeepingKeys();')).toBeLessThan(
       resetAction.indexOf("router.replace('/onboarding');")
     );
     expect(resetAction).not.toContain('getAllKeys()');
     expect(resetAction).not.toContain("startsWith('contact:')");
+  });
+
+  it('reset helper clears durable records before memory mirrors, then rehydrates', () => {
+    const wipe = source('../../src/settings/productionWipe.ts');
+    const resetHelper = wipe.slice(
+      wipe.indexOf('export async function resetAppDataKeepingKeys'),
+      wipe.indexOf('export async function wipeLocalDevice')
+    );
+
+    const steps = [
+      'clearAllData();',
+      'clearMemoryCaches();',
+      'resetPreferencesAndPolicies();',
+      'await preparePageDesign();',
+    ] as const;
+    const positions = steps.map((step) => resetHelper.indexOf(step));
+
+    expect(positions.every((position) => position >= 0)).toBe(true);
+    expect(positions).toEqual([...positions].sort((a, b) => a - b));
+    // Keys stay: the reset variant must never reach into keychain deletion.
+    expect(resetHelper).not.toContain('deleteSigningKey');
+    expect(resetHelper).not.toContain('deleteMasterKey');
   });
 
   it('keeps Reset Options focused and does not duplicate top-level preferences', () => {

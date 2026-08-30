@@ -105,6 +105,22 @@ xcframework_has_static_module() {
   done
 }
 
+# Staged (downloaded) xcframeworks carry a `.airmeishi-ref` stamp naming the
+# pin they came from, so a pin bump invalidates them. Locally built copies
+# have no stamp; whether that counts as valid is the caller's decision —
+# see the two ensure_* functions.
+xcframework_stamp_matches() {
+  local root="$1"
+  local expected="$2"
+
+  [[ -f "$root/.airmeishi-ref" ]] || return 1
+  [[ "$(cat "$root/.airmeishi-ref")" == "$expected" ]]
+}
+
+write_xcframework_stamp() {
+  printf '%s\n' "$2" > "$1/.airmeishi-ref"
+}
+
 download_zip() {
   local url="$1"
   local output="$2"
@@ -164,9 +180,16 @@ stage_xcframework_from_zip() {
 ensure_passport_mopro_xcframework() {
   local xcf="$PASSPORT_NOIR_DIR/mopro-binding/MoproiOSBindings/MoproBindings.xcframework"
 
+  # An unstamped copy is a local passport-noir build — the primary dev flow —
+  # and is left alone. Only a previously *downloaded* copy (stamped) is
+  # restaged when the pin moves.
   if xcframework_has_static_module "$xcf" passport_zk_mopro passport_zk_moproFFI.h libpassport_zk_mopro.a; then
-    green "OK Passport MoproBindings.xcframework already present"
-    return 0
+    if [[ ! -f "$xcf/.airmeishi-ref" ]] \
+      || xcframework_stamp_matches "$xcf" "$PASSPORT_MOPRO_VERSION"; then
+      green "OK Passport MoproBindings.xcframework already present"
+      return 0
+    fi
+    step "Passport MoproBindings pin changed -> restaging $PASSPORT_MOPRO_VERSION"
   fi
 
   stage_xcframework_from_zip \
@@ -179,13 +202,23 @@ ensure_passport_mopro_xcframework() {
 
   xcframework_has_static_module "$xcf" passport_zk_mopro passport_zk_moproFFI.h libpassport_zk_mopro.a \
     || die "Passport MoproBindings.xcframework is incomplete at $xcf"
+  write_xcframework_stamp "$xcf" "$PASSPORT_MOPRO_VERSION"
 }
 
 ensure_semaphore_bindings_xcframework() {
   local xcf="$REPO_ROOT/nitro-modules/attest/semaphore/mopro/SemaphoreBindings.xcframework"
 
-  if xcframework_has_static_module "$xcf" semaphore_bindings semaphore_bindingsFFI.h libsemaphore_bindings.a; then
-    green "OK SemaphoreBindings.xcframework already present"
+  # Unlike passport, an unstamped copy here is treated as STALE and restaged.
+  # The committed mopro.swift is generated from the SEMAPHORE_SWIFT_REF pin
+  # (byte-identical to that archive's wrapper), while the vendored rust crate
+  # still pins uniffi 0.28 — a local build-ios.sh artifact therefore CANNOT
+  # match the committed bindings and dies at runtime with a SIGTRAP in
+  # uniffiEnsureSemaphoreBindingsInitialized (seen 2026-08-30: a pre-pin
+  # v26 leftover survived the old presence-only check for months). If the
+  # crate ever catches up, sync mopro/ios/mopro.swift and stamp the build.
+  if xcframework_has_static_module "$xcf" semaphore_bindings semaphore_bindingsFFI.h libsemaphore_bindings.a \
+    && xcframework_stamp_matches "$xcf" "$SEMAPHORE_SWIFT_REF"; then
+    green "OK SemaphoreBindings.xcframework already present (pin $SEMAPHORE_SWIFT_REF)"
     return 0
   fi
 
@@ -199,6 +232,7 @@ ensure_semaphore_bindings_xcframework() {
 
   xcframework_has_static_module "$xcf" semaphore_bindings semaphore_bindingsFFI.h libsemaphore_bindings.a \
     || die "SemaphoreBindings.xcframework is incomplete at $xcf"
+  write_xcframework_stamp "$xcf" "$SEMAPHORE_SWIFT_REF"
 }
 
 # Stage the OpenAC v3 merged SRS proving key. Local passport-noir build
