@@ -378,7 +378,9 @@ if is_enabled "$RUN_BUN_INSTALL"; then
     # shellcheck disable=SC2206
     bun_args=($BUN_INSTALL_ARGS)
   fi
-  bun install "${bun_args[@]}"
+  # bash 3.2 (macOS default) + `set -u` treats an empty-array expansion as
+  # unbound; the `+` guard keeps this runnable outside CI's newer bash.
+  bun install ${bun_args[@]+"${bun_args[@]}"}
 fi
 
 ensure_bundle_node_deps
