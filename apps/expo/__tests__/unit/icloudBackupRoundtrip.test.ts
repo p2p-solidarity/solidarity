@@ -19,7 +19,7 @@
  *
  * Expo port:
  *   apps/expo/src/backup/cloudProvider.ts      — file-based facade over the
- *                                                  @solidarity/nitro-cloudkit
+ *                                                  @solidarity/nitro-keystone
  *                                                  file API (iCloud OR Drive)
  *   apps/expo/src/backup/solbEnvelope.ts       — SOLB magic + version framing
  *   apps/expo/src/backup/backupManager.ts      — performBackupNow / restore
@@ -32,7 +32,7 @@
  * are no longer byte-identical to the SwiftUI format. The serialised JSON field
  * NAMES still match Swift Codable verbatim.
  *
- * We mock the @solidarity/nitro-cloudkit file API here (writeFileBackup /
+ * We mock the @solidarity/nitro-keystone file API here (writeFileBackup /
  * readFileBackup / listFileBackups) with an in-memory file store.
  *
  * Run:
@@ -81,7 +81,7 @@ interface CloudProviderSurface {
   readonly getActiveProvider: () => 'iCloud' | 'googleDrive';
 }
 
-// ─── Fake @solidarity/nitro-cloudkit (Nitro module) ────────────────────────
+// ─── Fake @solidarity/nitro-keystone (Nitro module) ────────────────────────
 //
 // The real CloudKit surface stores one record per recordId + recordType.
 // Our test fake stores records in a Map keyed by `<activeProvider>:<recordId>`
@@ -157,7 +157,7 @@ const PORTABLE_KEY_B = new Uint8Array(32).fill(0x22);
 let cloud: CloudProviderSurface;
 
 beforeAll(async () => {
-  await mock.module('@solidarity/nitro-cloudkit', () => ({
+  await mock.module('@solidarity/nitro-keystone', () => ({
     getCloudKit: () => FakeCloudKit,
   }));
   await mock.module('react-native', () => ({

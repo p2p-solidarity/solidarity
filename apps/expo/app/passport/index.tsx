@@ -117,8 +117,8 @@ import { useActiveDid, useIdentityData } from '@/identity';
 import type {
   getNfcPassport,
   PassportReadResult,
-} from '@solidarity/nitro-nfc-passport';
-import type { getPassportZk } from '@solidarity/nitro-passport-zk';
+} from '@solidarity/nitro-attest';
+import type { getPassportZk } from '@solidarity/nitro-attest';
 import { sha256Bytes, uuid } from '@solidarity/shared';
 import { loadPassportNitroModules } from '@/passport/nitroModules';
 

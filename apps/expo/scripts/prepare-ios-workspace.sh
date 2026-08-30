@@ -182,7 +182,7 @@ ensure_passport_mopro_xcframework() {
 }
 
 ensure_semaphore_bindings_xcframework() {
-  local xcf="$REPO_ROOT/nitro-modules/semaphore/mopro/SemaphoreBindings.xcframework"
+  local xcf="$REPO_ROOT/nitro-modules/attest/semaphore/mopro/SemaphoreBindings.xcframework"
 
   if xcframework_has_static_module "$xcf" semaphore_bindings semaphore_bindingsFFI.h libsemaphore_bindings.a; then
     green "OK SemaphoreBindings.xcframework already present"

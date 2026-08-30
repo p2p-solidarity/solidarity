@@ -34,14 +34,8 @@
         "@react-native-google-signin/google-signin": "^16.1.2",
         "@scure/base": "^2.0.0",
         "@shopify/flash-list": "2.0.2",
-        "@solidarity/nitro-airdrop": "workspace:*",
-        "@solidarity/nitro-cloudkit": "workspace:*",
-        "@solidarity/nitro-mrz-ocr": "workspace:*",
-        "@solidarity/nitro-nfc-passport": "workspace:*",
-        "@solidarity/nitro-passport-zk": "workspace:*",
-        "@solidarity/nitro-secrets-vault": "workspace:*",
-        "@solidarity/nitro-semaphore": "workspace:*",
-        "@solidarity/nitro-spruce-did": "workspace:*",
+        "@solidarity/nitro-attest": "workspace:*",
+        "@solidarity/nitro-keystone": "workspace:*",
         "@solidarity/shared": "workspace:*",
         "b4a": "^1.6.7",
         "expo": "~56.0.4",
@@ -112,80 +106,19 @@
         "tailwindcss": "^3.4.17",
       },
     },
-    "nitro-modules/airdrop": {
-      "name": "@solidarity/nitro-airdrop",
+    "nitro-modules/attest": {
+      "name": "@solidarity/nitro-attest",
       "version": "0.1.0",
       "devDependencies": {
         "react-native-nitro-modules": "^0.35.7",
-      },
-      "peerDependencies": {
-        "react-native-nitro-modules": "*",
-      },
-    },
-    "nitro-modules/cloudkit": {
-      "name": "@solidarity/nitro-cloudkit",
-      "version": "0.1.0",
-      "devDependencies": {
-        "react-native-nitro-modules": "^0.35.7",
-      },
-      "peerDependencies": {
-        "react-native-nitro-modules": "*",
-      },
-    },
-    "nitro-modules/mrz-ocr": {
-      "name": "@solidarity/nitro-mrz-ocr",
-      "version": "0.1.0",
-      "devDependencies": {
-        "react-native-nitro-modules": "^0.35.7",
-        "react-native-vision-camera": "^5.0.10",
       },
       "peerDependencies": {
         "react-native-nitro-modules": "*",
         "react-native-vision-camera": "*",
       },
     },
-    "nitro-modules/nfc-passport": {
-      "name": "@solidarity/nitro-nfc-passport",
-      "version": "0.1.0",
-      "devDependencies": {
-        "react-native-nitro-modules": "^0.35.7",
-      },
-      "peerDependencies": {
-        "react-native-nitro-modules": "*",
-      },
-    },
-    "nitro-modules/passport-zk": {
-      "name": "@solidarity/nitro-passport-zk",
-      "version": "0.1.0",
-      "devDependencies": {
-        "react-native-nitro-modules": "^0.35.7",
-      },
-      "peerDependencies": {
-        "react-native-nitro-modules": "*",
-      },
-    },
-    "nitro-modules/secrets-vault": {
-      "name": "@solidarity/nitro-secrets-vault",
-      "version": "0.1.0",
-      "devDependencies": {
-        "react-native-nitro-modules": "^0.35.7",
-      },
-      "peerDependencies": {
-        "react-native-nitro-modules": "*",
-      },
-    },
-    "nitro-modules/semaphore": {
-      "name": "@solidarity/nitro-semaphore",
-      "version": "0.1.0",
-      "devDependencies": {
-        "react-native-nitro-modules": "^0.35.7",
-      },
-      "peerDependencies": {
-        "react-native-nitro-modules": "*",
-      },
-    },
-    "nitro-modules/spruce-did": {
-      "name": "@solidarity/nitro-spruce-did",
+    "nitro-modules/keystone": {
+      "name": "@solidarity/nitro-keystone",
       "version": "0.1.0",
       "devDependencies": {
         "react-native-nitro-modules": "^0.35.7",
@@ -674,21 +607,9 @@
 
     "@solidarity/expo": ["@solidarity/expo@workspace:apps/expo"],
 
-    "@solidarity/nitro-airdrop": ["@solidarity/nitro-airdrop@workspace:nitro-modules/airdrop"],
+    "@solidarity/nitro-attest": ["@solidarity/nitro-attest@workspace:nitro-modules/attest"],
 
-    "@solidarity/nitro-cloudkit": ["@solidarity/nitro-cloudkit@workspace:nitro-modules/cloudkit"],
-
-    "@solidarity/nitro-mrz-ocr": ["@solidarity/nitro-mrz-ocr@workspace:nitro-modules/mrz-ocr"],
-
-    "@solidarity/nitro-nfc-passport": ["@solidarity/nitro-nfc-passport@workspace:nitro-modules/nfc-passport"],
-
-    "@solidarity/nitro-passport-zk": ["@solidarity/nitro-passport-zk@workspace:nitro-modules/passport-zk"],
-
-    "@solidarity/nitro-secrets-vault": ["@solidarity/nitro-secrets-vault@workspace:nitro-modules/secrets-vault"],
-
-    "@solidarity/nitro-semaphore": ["@solidarity/nitro-semaphore@workspace:nitro-modules/semaphore"],
-
-    "@solidarity/nitro-spruce-did": ["@solidarity/nitro-spruce-did@workspace:nitro-modules/spruce-did"],
+    "@solidarity/nitro-keystone": ["@solidarity/nitro-keystone@workspace:nitro-modules/keystone"],
 
     "@solidarity/parity-fixtures": ["@solidarity/parity-fixtures@workspace:packages/parity-fixtures"],
 

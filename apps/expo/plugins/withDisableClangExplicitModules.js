@@ -5,7 +5,7 @@
  *     every pod target and the main app.
  *
  * Why: OpenSSL-Universal 3.3.x (pulled via NFCPassportReader 2.3.0,
- * required by nitro-modules/nfc-passport) ships headers that import C++
+ * required by nitro-modules/attest (nfc-passport lane)) ships headers that import C++
  * sub-modules inside `extern "C" { … }`. Xcode 26's Clang strict mode
  * promotes that to a hard error when building the implicit OpenSSL
  * module, breaking the archive with:

@@ -1,6 +1,6 @@
 /**
  * Identity signing key — backed by the SpruceID Nitro module
- * (`@solidarity/nitro-spruce-did`) which generates and stores P-256 keys in
+ * (`@solidarity/nitro-keystone`) which generates and stores P-256 keys in
  * Secure Enclave (iOS) / StrongBox (Android). Replaces the prior
  * `@noble/curves` random keypair generation, which on React Native fell back
  * to a non-CSPRNG entropy source and never gave us hardware-backed forensics.
@@ -73,7 +73,7 @@ import { publicKeyJwkSchema } from '@solidarity/shared';
 import {
   getSpruceDid,
   type SpruceDid,
-} from '@solidarity/nitro-spruce-did';
+} from '@solidarity/nitro-keystone';
 
 import {
   deletionFailed,

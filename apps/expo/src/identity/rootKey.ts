@@ -10,12 +10,12 @@
  *
  * `apps/expo/src/keychain/signingKey.ts` already provisions a DIFFERENT
  * did:key (`ensureSigningKey()` / `didKeyForCurrentIdentity()`), backed by
- * the SpruceID Nitro module (`@solidarity/nitro-spruce-did`). That key is:
+ * the SpruceID Nitro module (`@solidarity/nitro-keystone`). That key is:
  *   - randomly generated natively (not derivable from a mnemonic — the
  *     private material never leaves the platform Keychain/Keystore),
  *   - ALREADY stored as an iCloud-Keychain-synchronizable item on iOS
  *     (`kSecAttrSynchronizable = true`, no biometry ACL — see
- *     `nitro-modules/spruce-did/ios/SpruceDidKeyStore.swift:119`),
+ *     `nitro-modules/keystone/ios/SpruceDidKeyStore.swift:119`),
  *   - the identity every existing screen reads today (`dids.tsx`,
  *     `useIdentityCoordinator`, card/credential signing, challenge
  *     responses, …).
@@ -40,7 +40,7 @@
  *
  * `enableICloudBackup()` (below) is a SEPARATE, ADDITIVE write: it copies
  * the already-persisted mnemonic into an iCloud-Keychain-SYNCHRONIZABLE
- * item via `@solidarity/nitro-secrets-vault`'s `setSynchronizableItem`
+ * item via `@solidarity/nitro-keystone`'s `setSynchronizableItem`
  * (iOS: `kSecAttrSynchronizable=true`, `kSecAttrAccessibleWhenUnlocked`, no
  * biometry ACL — see that module's doc; task A1.5). It does NOT replace or
  * gate the local copy — the local copy is the durable source of truth this
@@ -159,7 +159,7 @@ export interface RootKeySyncStorage {
 
 /**
  * Lazy-loaded for the same reason as `loadSecureStore` above: importing
- * `@solidarity/nitro-secrets-vault` eagerly would pull in
+ * `@solidarity/nitro-keystone` eagerly would pull in
  * `react-native-nitro-modules`' native binding at module-load time, which
  * has no counterpart in the bun test runtime. Every real call site resolves
  * it on first use; tests inject `__setRootKeySyncStorageForTesting` instead.
@@ -169,7 +169,7 @@ async function loadSecretsVault(): Promise<{
   readonly getSynchronizableItem: (alias: string) => Promise<string>;
   readonly deleteSynchronizableItem: (alias: string) => Promise<void>;
 }> {
-  const { getSecretsVault } = await import('@solidarity/nitro-secrets-vault');
+  const { getSecretsVault } = await import('@solidarity/nitro-keystone');
   return getSecretsVault();
 }
 

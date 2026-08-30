@@ -10,7 +10,7 @@
  * production schema"), so every TestFlight/App Store backup failed.
  *
  * This module restores the native design: backups are files written via the
- * `@solidarity/nitro-cloudkit` file API (iOS ubiquity container / Android
+ * `@solidarity/nitro-keystone` file API (iOS ubiquity container / Android
  * Drive folder). No CloudKit schema is involved, so the production-schema
  * error class is gone. The public surface is unchanged so existing consumers
  * (backupManager, gestureAutoBackup, settings/backup) compile without edits.
@@ -24,7 +24,7 @@
  * upload — the cloud provider only ever sees ciphertext.
  */
 import { Platform } from 'react-native';
-import { getCloudKit, type CloudKit } from '@solidarity/nitro-cloudkit';
+import { getCloudKit, type CloudKit } from '@solidarity/nitro-keystone';
 
 import { encryptJsonWithKey } from '../storage/jsonCrypto';
 import {

@@ -1,0 +1,43 @@
+{
+  "$schema": "https://nitro.margelo.com/schemas/nitro.schema.json",
+  "cxxNamespace": ["solidarity", "keystone"],
+  "ios": {
+    "iosModuleName": "Keystone"
+  },
+  "android": {
+    "androidNamespace": ["gg", "solidarity", "keystone"],
+    "androidCxxLibName": "Keystone"
+  },
+  "autolinking": {
+    "SecretsVault": {
+      "ios": {
+        "language": "swift",
+        "implementationClassName": "HybridSecretsVault"
+      },
+      "android": {
+        "language": "kotlin",
+        "implementationClassName": "HybridSecretsVault"
+      }
+    },
+    "SpruceDid": {
+      "ios": {
+        "language": "swift",
+        "implementationClassName": "HybridSpruceDid"
+      },
+      "android": {
+        "language": "kotlin",
+        "implementationClassName": "HybridSpruceDid"
+      }
+    },
+    "CloudKit": {
+      "ios": {
+        "language": "swift",
+        "implementationClassName": "HybridCloudKit"
+      },
+      "android": {
+        "language": "kotlin",
+        "implementationClassName": "HybridCloudKit"
+      }
+    }
+  }
+}

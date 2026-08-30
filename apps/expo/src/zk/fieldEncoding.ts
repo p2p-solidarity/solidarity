@@ -16,8 +16,8 @@
  *
  * KEEP IN SYNC checklist (any change here needs equal changes in):
  *   - solidarity/Services/ZK/SemaphoreIdentityManager.swift:402-453
- *   - nitro-modules/semaphore/ios/SemaphoreShim.swift
- *   - nitro-modules/semaphore/android/src/main/java/gg/solidarity/semaphore/
+ *   - nitro-modules/attest/ios/SemaphoreShim.swift
+ *   - nitro-modules/attest/android/src/main/java/com/margelo/nitro/gg/solidarity/attest/
  *     HybridSemaphore.kt (decimalStringToLittleEndian32 + clampToMax32Bytes)
  */
 

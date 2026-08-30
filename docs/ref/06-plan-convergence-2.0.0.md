@@ -62,6 +62,18 @@
 - 步驟：搬 dag 2 檔→刪 dag 沙盒；砍 sakura＋shoutouts（含 push rail，改 4 個 call site）；刪 vault `cloudSync.ts`、defer 分片群；砍 airdrop/offline；vault 核心接一個入口（或連入口都併入「17 路由」批次——待定）。
 - 每砍一塊跑 `typecheck && lint && test`，並確認 Nostr 命脈、backup、Pear、Q2 不回歸。
 
+### B1a. §2/§3B 勘誤（2026-08-30）
+- §2 記 vault `cloudSync.ts`「零 caller、死碼」**不成立**——`vault/store.ts:384-437` 有 3 個 lazy import（sync/pull/download）＋ 2 個測試套件在用。刪它＝重工 vault store 的 sync 路徑（產品行為變更），獨立成一刀，不併入 nitro 收斂 commit。
+
+### B2. Nitro 收斂 8→2（已執行 2026-08-30，本節為記錄）
+- **動機**：8 個自家 nitro 包維護面過大（nitrogen codegen×8、podspec/gradle×8、CI 觸點、ArrayBuffer 稽核面）。收斂為 2 包，維護面聚攏；binary size 不變（同樣 native code）。
+- **`@solidarity/nitro-keystone`**（pod `Keystone`）＝ secrets-vault ＋ spruce-did ＋ cloudkit。裝置信任基座：SE wrap、P-256 簽名鑰＋ES256 JWS、iCloud Drive／Drive 備份。
+- **`@solidarity/nitro-attest`**（pod `Attest`）＝ mrz-ocr ＋ nfc-passport ＋ passport-zk ＋ semaphore。attestation 生命週期：採證（MRZ/NFC）→出證（Noir、Semaphore）→驗證。semaphore 維持凍結，純搬遷。
+- **不變量（被驗證過）**：Keychain service 名／AndroidKeyStore alias 前綴（`gg.solidarity.secretsvault`、`gg.solidarity.sprucedid.` 等）是**存量用戶金鑰的定址**，隨檔搬但字串不動——改了＝全用戶金鑰孤兒化。HybridObject 名（`SecretsVault`／`PassportZk`…）不變，JS `createHybridObject` 呼叫全相容。
+- **搬遷面**：兩包 nitro.json 各聚 3／4 個 HybridObject；Kotlin 重新 package 到 `…gg.solidarity.{keystone,attest}`（uniffi.mopro／uniffi.semaphore_bindings 不動）；semaphore rust／mopro 保持相對佈局搬到 `attest/semaphore/{rust,mopro}`，`build-android.sh` 輸出路徑改指 attest 包根；plugins（withMoproBindingsPod／withSemaphoreBindingsPod／withRustXcframeworkSearchPath／withPassportOpenAcSrsPhase）、`scripts/{prepare-ios-workspace,stage-openac-srs}.sh`、`.gitignore` 路徑同步。
+- **同 commit 併刀**：砍 airdrop（module＋wrapper＋test，§2 已裁、零 caller 驗證過）。
+- **後續（獨立刀）**：cloudSync 刪除（見 B1a 勘誤）；cloudkit native 面瘦身（等 cloudSync 裁決後只留 file API）。
+
 ### C. creds-design 補注＋刪除
 - **刪/標移除**：透明日誌、creds.id 副署（§3.5）。**標 defer**：清單(§2)。
 - **補注**：passport-OIDC×VC 憑證皮夾願景（整套保留、二層 now、present 整合、社群驗證→發證 roadmap）；北極星；「airmeishi code 比 creds-design 豐富、以 code 為準」。

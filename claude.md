@@ -17,12 +17,12 @@
 
 ## Security — hard rules (current TS terms)
 
-- Sensitive paths: `apps/expo/src/{passport,keychain,identity,vault}` and `nitro-modules/{nfc-passport,passport-zk,semaphore,secrets-vault,spruce-did}`. Any change here is size **L** in flow — never S.
+- Sensitive paths: `apps/expo/src/{passport,keychain,identity,vault}` and `nitro-modules/{attest,keystone}` (attest = mrz-ocr+nfc-passport+passport-zk+semaphore merged; keystone = secrets-vault+spruce-did+cloudkit merged). Any change here is size **L** in flow — never S.
 - Never read, print, or commit: `apps/expo/secrets/`, any `.env*`, `apps/expo/infra/terraform/terraform.tfstate*` / `terraform.tfvars`.
 - Security-path errors use tagged unions (e.g. `BiometricResult`) — never throw raw, never swallow, never log PII.
 - Face ID gates: `ALWAYS_PROMPT_ACTIONS` (rotateMasterKey, revealRecoveryBundle, deleteZKIdentity) deliberately bypass the biometric grace window (`apps/expo/src/keychain/sensitiveActionPolicy.ts`). Adding a grace period there is a security regression, not an optimization.
 - Nitro `ArrayBuffer` args are non-owning: touching `buffer.data`/`.size` inside `Promise.async` is an uncatchable native crash. Copy the bytes synchronously first. Treat every new HybridObject method with an ArrayBuffer param as suspect.
-- ZK honesty: the Android libc++ ABI bug can downgrade real ZK proofs to SD-JWT fallback (`trustLevel: 'white'`, see `nitro-modules/passport-zk/KNOWN_ISSUES.md`). Never present a fallback as a real ZK attestation.
+- ZK honesty: the Android libc++ ABI bug can downgrade real ZK proofs to SD-JWT fallback (`trustLevel: 'white'`, see `nitro-modules/attest/KNOWN_ISSUES.md`). Never present a fallback as a real ZK attestation.
 - Threat-model defaults (each from a real caught bug in `progress.md`): P2P transports scoped per-connection not per-topic; VC/VP must verify holder binding; OAuth discovery is https-only with host validation; no manual pre-hash before ES256 signing (the lib hashes).
 
 ## Traps (verified 2026-07-05)

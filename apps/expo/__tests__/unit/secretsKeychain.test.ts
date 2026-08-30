@@ -6,7 +6,7 @@
  *     - loads the AES-256 vault key out of Keychain
  *     - the SwiftUI app stores the key as raw bytes; the Expo client
  *       upgrades that to "wrapped by a Secure Enclave / StrongBox key"
- *       via `@solidarity/nitro-secrets-vault`.
+ *       via `@solidarity/nitro-keystone`.
  *
  * TS port under test:
  *   apps/expo/src/vault/secretsKeychain.ts
@@ -129,7 +129,7 @@ let envelopeWriteGate: Promise<void> | null = null;
 let releaseEnvelopeWrite: (() => void) | null = null;
 let envelopeWriteStarted: (() => void) | null = null;
 
-void mock.module('@solidarity/nitro-secrets-vault', () => ({
+void mock.module('@solidarity/nitro-keystone', () => ({
   getSecretsVault: () => fakeSecretsVault,
 }));
 

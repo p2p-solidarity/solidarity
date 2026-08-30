@@ -6,7 +6,7 @@
  * leaves the device storage. As of v1.3.x the at-rest representation is
  * upgraded from "raw 32 bytes in expo-secure-store" to "ECIES / AES-GCM
  * blob wrapped by a hardware-backed key" via
- * `@solidarity/nitro-secrets-vault`:
+ * `@solidarity/nitro-keystone`:
  *
  *   iOS    : Secure Enclave P-256 KeyAgreement key + HPKE-style ECIES.
  *            The wrapped blob lives in expo-secure-store (still
@@ -50,7 +50,7 @@ import {
   getSecretsVault,
   type SecretsVault,
   type WrappedSecret,
-} from '@solidarity/nitro-secrets-vault';
+} from '@solidarity/nitro-keystone';
 
 import { requireBiometric } from '@/keychain/biometric';
 import {
