@@ -74,10 +74,11 @@ describe('parseDeepLink', () => {
     expect(r).toEqual({ kind: 'verifiedProfile', fragment: 'eyJhbGciOiJFUzI1NiJ9' });
   });
 
-  it('keeps creds.id to public-page routing rather than granting card or private-connect actions', () => {
-    expect(parseDeepLink('https://creds.id/c/f47ac10b-58cc-4372-a567-0e02b2c3d479').kind).toBe(
-      'unknown'
-    );
+  it('grants creds.id the full product-host link surface, /c card links included (2026-08-30 switch)', () => {
+    expect(parseDeepLink('https://creds.id/c/f47ac10b-58cc-4372-a567-0e02b2c3d479')).toEqual({
+      kind: 'card',
+      cardId: 'f47ac10b-58cc-4372-a567-0e02b2c3d479',
+    });
   });
 
   it('treats a verified-domain https link with no hash as unknown, not verifiedProfile', () => {
@@ -267,26 +268,23 @@ describe('parseDeepLink', () => {
   });
 });
 
-describe('creds.id dev-mode product host (05-spec §8-B ruling, 2026-08-25)', () => {
+describe('creds.id production product host (05-spec §8-B, switched 2026-08-30)', () => {
   const CREDS_HANDLE_URL = 'https://creds.id/@alice.bsky.social';
   const CREDS_FRAGMENT_URL = 'https://creds.id/#nostr:npub1qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqql6verd';
 
-  it('does NOT treat creds.id as a product host by default', () => {
-    // creds.id is in TRUSTED_HOSTS (associated domains are registered), so
-    // the URL reaches parseVerifiedDomainRoute — but without dev mode the
-    // productHost-gated routes must not fire. The fragment branch is NOT
-    // productHost-gated (self-verifying blob), so only the handle form is
-    // the discriminating case.
-    expect(parseDeepLink(CREDS_HANDLE_URL).kind).toBe('unknown');
-  });
-
-  it('treats creds.id as a product host when devProductHosts is set', () => {
-    const r = parseDeepLink(CREDS_HANDLE_URL, { devProductHosts: true });
+  it('treats creds.id as a product host WITHOUT dev mode (production default)', () => {
+    const r = parseDeepLink(CREDS_HANDLE_URL);
     expect(r.kind).toBe('verifiedHandle');
     if (r.kind === 'verifiedHandle') expect(r.handle).toBe('alice.bsky.social');
   });
 
-  it('routes a creds.id pointer fragment regardless of dev mode (self-verifying form)', () => {
+  it('keeps the legacy app.solidarity.gg handle links routing (pre-switch shares)', () => {
+    const r = parseDeepLink('https://app.solidarity.gg/@alice.bsky.social');
+    expect(r.kind).toBe('verifiedHandle');
+    if (r.kind === 'verifiedHandle') expect(r.handle).toBe('alice.bsky.social');
+  });
+
+  it('routes a creds.id pointer fragment (self-verifying form)', () => {
     expect(parseDeepLink(CREDS_FRAGMENT_URL).kind).toBe('verifiedPointer');
   });
 

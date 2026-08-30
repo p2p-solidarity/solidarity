@@ -130,7 +130,7 @@
 
 **已裁決（2026-08-25，使用者）**：
 - **A · 私密欄位通道**：**Pear lane 留任**；NIP-44 為**可選的後續 lane**（不擋工）。§3.3 公開訂閱層據此落地（§3）。`pear/*` 與 Android 原生因此**不砍**（convergence §5.3 的 QR 面就此收斂；Android 對等支援的整體去留仍是另一題）。
-- **B · creds.id**：**dev mode 先行**——`creds.id` 在 developerMode 下計入 product host（`domainVerification.ts` `DEV_PRODUCT_HOSTS`，deep link＋掃描 `/@handle` 兩個閘都吃這個旗標；一般使用者維持 A5.4 姿態），**預設 origin 維持 `app.solidarity.gg`**（`PROFILE_PAGE_ORIGIN` 不動）。`/c/<code>` 的 registry 問題與路徑同名衝突順延到 creds.id 正式啟用時再裁。
+- **B · creds.id**：~~dev mode 先行~~ → **已正式啟用（2026-08-30，使用者：域名已連結）**——`creds.id` 進 `PRODUCT_HOSTS`（一般使用者直接生效），**預設 origin 切為 `https://creds.id`**（`PROFILE_PAGE_ORIGIN`／`publicPagePath`／onboarding `FRAGMENT_BASE_URL`）。`DEV_PRODUCT_HOSTS` 清空但機制保留給下一個 pre-launch 域名；solidarity.gg 系 host 續留 `PRODUCT_HOSTS`＋app.json，讓切換前分享出去的連結繼續有效。`/c/<code>` 的 registry 問題與路徑同名衝突仍未裁。
 
 - **C · 分級字母（2026-08-25 裁決，授權代決）**：**採 creds T1（A=公開可複驗／B=一次性授權／C=國家 PKI）為唯一分級**，1.3.3 §5 的 S/A/B/C 字母作廢（映射：1.3.3 S＋C → creds A；1.3.3 A → creds C；B 不變）。理由：驗證卡文案（CREDS.md §3.1 逐級的「驗證卡那一行」）建立在 T1 上，且程式碼裡沒有任何地方用到舊字母——純文件層改動。`01-spec-verified-page.md` §5 已加修訂註記；徽章內容（協定／驗證方式）不變。
 - **D · 掃描器吃自家 deep link QR（2026-08-25 裁決，授權代決）**：**吃**——印出來的自家連結掃描時必須和 tap 行為一致。已落地：`app/scan/index.tsx` finalize 在 Verified Page 分類之後、envelope 管線之前，把 `parseDeepLink` 認出的 **card／groupInvite／pear 三種**（僅此三種——webSign／offer／OID4VP 保留各自的掃描儀式，routing `oidc` 會繞過 dev 驗證結果 sheet）交給 `handleDeepLink`（同一套 dev-only 閘）。§6-4 就此關閉；失敗文案的 creds 措辭（「這不是 creds.id 的 QR」）等產品命名定案後再改。

@@ -1019,7 +1019,7 @@ describe('saveProfile — three-tier link projections', () => {
     expect(model.usernameUrl).not.toBeNull();
     if (!model.usernameUrl) return;
 
-    expect(model.usernameUrl).toBe('https://app.solidarity.gg/@alice');
+    expect(model.usernameUrl).toBe('https://creds.id/@alice');
     expect(new URL(model.usernameUrl).hash).toBe('');
 
     const sharedFragment = decodeFragment(new URL(model.offlineUrl).hash.slice(1));

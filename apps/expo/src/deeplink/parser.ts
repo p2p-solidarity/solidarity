@@ -117,7 +117,7 @@ function parseVerifiedDomainRoute(url: URL, devProductHosts: boolean): DeepLinkR
   // the `card`/`pear` branches below additionally require `isProductHost`.
   // Code-review Finding 1, Task A5.4 follow-up. `devProductHosts`
   // (= developerMode, threaded by the caller) additionally admits
-  // `creds.id` — 2026-08-25 ruling, 05-spec §8-B.
+  // `DEV_PRODUCT_HOSTS` — empty since creds.id went production 2026-08-30.
   const productHost = isProductHost(url.host, devProductHosts);
   if (productHost && segments[0] === 'c' && segments[1] && UUID_RE.test(segments[1])) {
     return { kind: 'card', cardId: segments[1] };
@@ -210,9 +210,10 @@ function parseCustomSchemeRoute(url: URL): DeepLinkRoute | null {
 
 export interface ParseDeepLinkOptions {
   /**
-   * Thread `usePreferences.getState().developerMode` here: in dev mode the
-   * future product domain (`creds.id`) counts as a product host so its whole
-   * link surface can be exercised before launch (05-spec §8-B ruling). The
+   * Thread `usePreferences.getState().developerMode` here: in dev mode any
+   * `DEV_PRODUCT_HOSTS` entry (a pre-launch product domain) counts as a
+   * product host so its link surface can be exercised before launch
+   * (05-spec §8-B mechanism; empty since creds.id went production). The
    * parser stays pure — it never reads the preferences store itself.
    */
   readonly devProductHosts?: boolean;

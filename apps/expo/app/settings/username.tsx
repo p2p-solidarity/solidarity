@@ -119,7 +119,7 @@ export default function UsernameSettings(): ReactNode {
             <ThemedText variant="label">{t('settingsUsername.pageAddress')}</ThemedText>
             <ThemedTextInput
               value={username}
-              inlinePrefix="app.solidarity.gg/@"
+              inlinePrefix="creds.id/@"
               kind="handle"
               maxLength={30}
               placeholder="name"

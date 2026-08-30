@@ -13,7 +13,7 @@ import {
 } from '@solidarity/shared';
 import { validatePublicPageUsername } from '@/onboarding/publicPageUsername';
 
-const PROFILE_PAGE_ORIGIN = 'https://app.solidarity.gg';
+const PROFILE_PAGE_ORIGIN = 'https://creds.id';
 const PROFILE_PAGE_URL = `${PROFILE_PAGE_ORIGIN}/#`;
 
 export interface ProfileIdentityLine {

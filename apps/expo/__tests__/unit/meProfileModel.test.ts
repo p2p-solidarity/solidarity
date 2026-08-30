@@ -62,10 +62,10 @@ describe('profile share model', () => {
       'header.payload.signature'
     );
 
-    expect(model.shortUrl).toBe('https://app.solidarity.gg/#nostr:npub1alice');
-    expect(model.offlineUrl.startsWith('https://app.solidarity.gg/#')).toBe(true);
+    expect(model.shortUrl).toBe('https://creds.id/#nostr:npub1alice');
+    expect(model.offlineUrl.startsWith('https://creds.id/#')).toBe(true);
     expect(model.offlineUrl).not.toContain('SOLIDARITY::');
-    expect(selectProfileShareUrl(model, true)).toBe('https://app.solidarity.gg/#nostr:npub1alice');
+    expect(selectProfileShareUrl(model, true)).toBe('https://creds.id/#nostr:npub1alice');
     expect(selectProfileShareUrl(model, false)).toBe(model.offlineUrl);
   });
 
@@ -91,15 +91,15 @@ describe('profile share model', () => {
       jws: publicJws,
     });
 
-    expect(model.usernameUrl).toBe('https://app.solidarity.gg/@alice');
+    expect(model.usernameUrl).toBe('https://creds.id/@alice');
     expect(model.usernameUrl).not.toContain('#');
   });
 
   it('does not attach a local projection to the official short URL', () => {
     const model = buildProfileShareModel(PROFILE, 'header.payload.signature', 'alice');
 
-    expect(model.usernameUrl).toBe('https://app.solidarity.gg/@alice');
-    expect(model.usernameDisplayUrl).toBe('https://app.solidarity.gg/@alice');
+    expect(model.usernameUrl).toBe('https://creds.id/@alice');
+    expect(model.usernameDisplayUrl).toBe('https://creds.id/@alice');
   });
 });
 
@@ -113,7 +113,7 @@ describe('handleShareCandidates', () => {
       {
         scheme: 'atproto',
         handle: 'alice.bsky.social',
-        url: 'https://app.solidarity.gg/@alice.bsky.social',
+        url: 'https://creds.id/@alice.bsky.social',
       },
     ]);
   });
@@ -121,7 +121,7 @@ describe('handleShareCandidates', () => {
   it('derives a bare @handle URL for an ens claim (.eth is an unambiguous suffix)', () => {
     const candidates = handleShareCandidates({ ...PROFILE, alsoKnownAs: ['ens:alice.eth'] });
     expect(candidates).toEqual([
-      { scheme: 'ens', handle: 'alice.eth', url: 'https://app.solidarity.gg/@alice.eth' },
+      { scheme: 'ens', handle: 'alice.eth', url: 'https://creds.id/@alice.eth' },
     ]);
   });
 
@@ -131,7 +131,7 @@ describe('handleShareCandidates', () => {
       {
         scheme: 'dns',
         handle: 'example.com',
-        url: 'https://app.solidarity.gg/@dns:example.com',
+        url: 'https://creds.id/@dns:example.com',
       },
     ]);
     // The raw `:` is a valid RFC 3986 pchar and needs no percent-encoding —

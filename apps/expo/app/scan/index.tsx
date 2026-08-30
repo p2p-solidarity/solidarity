@@ -148,8 +148,8 @@ export default function ScanScreen() {
     // unaffected. A non-null result (verified OR a structured invalid
     // reason) routes into VerifiedPageResultSheet, mounted in `_layout.tsx`.
     const verifiedPageForm = classifyVerifiedPagePayload(payload, {
-      // Dev mode admits creds.id as a product host for the /@handle URL
-      // form (05-spec §8-B ruling — creds.id is dev-gated pre-launch).
+      // Dev mode admits DEV_PRODUCT_HOSTS for the /@handle URL form
+      // (05-spec §8-B mechanism for pre-launch domains).
       devProductHosts: developerMode,
     });
     if (verifiedPageForm !== null) {

@@ -67,7 +67,7 @@ describe('v2 settings surface', () => {
     expect(username).toContain("t('settingsUsername.serviceNote')");
     expect(username).toContain('useNameAvailability');
     expect(username).toContain('publishChosenPageName');
-    expect(username).toContain('app.solidarity.gg/@');
+    expect(username).toContain('creds.id/@');
   });
 
   it('uses plain product language in both supported locales', () => {

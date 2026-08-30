@@ -55,17 +55,23 @@ export function isVerifiedDomain(host: string): boolean {
  * (`./parser.ts`) gates those two routes on `isProductHost`, not
  * `isVerifiedDomain`. See Task A5.4 code-review Finding 1.
  */
-const PRODUCT_HOSTS: ReadonlySet<string> = new Set<string>(['solidarity.gg', 'airmeishi.app']);
+const PRODUCT_HOSTS: ReadonlySet<string> = new Set<string>([
+  // `creds.id` is the product domain and default share origin (2026-08-30,
+  // supersedes the 05-spec §8-B dev-mode gate). The solidarity.gg hosts stay
+  // so links shared before the switch keep routing.
+  'creds.id',
+  'solidarity.gg',
+  'airmeishi.app',
+]);
 
 /**
- * Hosts that count as product hosts ONLY in developer mode (2026-08-25
- * ruling, 05-spec §8-B): `creds.id` is the future product domain, gated
- * behind dev mode so the whole link surface (`/@handle`, `#fragment`,
- * `/websign`, `/c`, `/pear`) can be exercised end-to-end before launch while
- * `app.solidarity.gg` stays the default production origin. Regular users
- * keep the A5.4 posture: no non-product host triggers a routing side effect.
+ * Hosts that count as product hosts ONLY in developer mode (05-spec §8-B
+ * mechanism). Empty since `creds.id` went production on 2026-08-30; kept so
+ * the next pre-launch domain can be exercised end-to-end behind dev mode
+ * while regular users keep the A5.4 posture (no non-product host triggers a
+ * routing side effect).
  */
-const DEV_PRODUCT_HOSTS: ReadonlySet<string> = new Set<string>(['creds.id']);
+const DEV_PRODUCT_HOSTS: ReadonlySet<string> = new Set<string>([]);
 
 /**
  * Returns true when `host` is rooted at a Solidarity/AirMeishi-owned host

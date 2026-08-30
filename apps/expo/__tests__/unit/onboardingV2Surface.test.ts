@@ -82,12 +82,16 @@ describe('public page username', () => {
   });
 
   it('uses the official short @name path without a long identifier', () => {
-    expect(publicPagePath('gimmy26')).toBe('app.solidarity.gg/@gimmy26');
+    expect(publicPagePath('gimmy26')).toBe('creds.id/@gimmy26');
   });
 
-  it('registers app.solidarity.gg as an app-link host for the primary @name page', () => {
+  it('registers creds.id as an app-link host, keeping the legacy hosts routable', () => {
     const appConfig = source('../../app.json');
 
+    expect(appConfig).toContain('"applinks:creds.id"');
+    expect(appConfig).toContain('"host": "creds.id"');
+    // Links shared before the 2026-08-30 domain switch must keep opening
+    // the app (05-spec §8-B).
     expect(appConfig).toContain('"applinks:app.solidarity.gg"');
     expect(appConfig).toContain('"host": "app.solidarity.gg"');
   });

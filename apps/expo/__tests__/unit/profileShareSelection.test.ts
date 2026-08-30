@@ -10,32 +10,32 @@ import {
 
 const OFFLINE: ProfileShareUrlCandidate = {
   kind: 'offline',
-  url: 'https://app.solidarity.gg/#offline',
+  url: 'https://creds.id/#offline',
 };
 const SHORT: ProfileShareUrlCandidate = {
   kind: 'short',
-  url: 'https://app.solidarity.gg/#nostr:npub1alice',
+  url: 'https://creds.id/#nostr:npub1alice',
 };
 
 describe('pickBestShareUrl', () => {
   it('prefers the official short name and contains no long fragment', () => {
     const username: ProfileShareUrlCandidate = {
       kind: 'username',
-      url: 'https://app.solidarity.gg/@alice',
-      displayUrl: 'https://app.solidarity.gg/@alice',
+      url: 'https://creds.id/@alice',
+      displayUrl: 'https://creds.id/@alice',
     };
 
     expect(pickBestShareUrl([OFFLINE, SHORT, username])).toEqual({
       kind: 'ready',
       candidate: username,
     });
-    expect(displayProfileShareUrl(username)).toBe('app.solidarity.gg/@alice');
+    expect(displayProfileShareUrl(username)).toBe('creds.id/@alice');
   });
 
   it('selects a currently verified handle ahead of the npub and offline formats', () => {
     const verifiedHandle: ProfileShareUrlCandidate = {
       kind: 'handle',
-      url: 'https://app.solidarity.gg/@alice.example',
+      url: 'https://creds.id/@alice.example',
       isVerified: true,
     };
 
@@ -48,7 +48,7 @@ describe('pickBestShareUrl', () => {
   it('skips an unverified handle instead of offering a link that may not resolve', () => {
     const unverifiedHandle: ProfileShareUrlCandidate = {
       kind: 'handle',
-      url: 'https://app.solidarity.gg/@alice.example',
+      url: 'https://creds.id/@alice.example',
       isVerified: false,
     };
 
@@ -96,15 +96,15 @@ describe('buildProfileShareUrlSelection', () => {
   it('offers /name first when onboarding has stored a valid username', () => {
     const usernameModel: ProfileShareModel = {
       ...model,
-      usernameUrl: 'https://app.solidarity.gg/@alice',
-      usernameDisplayUrl: 'https://app.solidarity.gg/@alice',
+      usernameUrl: 'https://creds.id/@alice',
+      usernameDisplayUrl: 'https://creds.id/@alice',
     };
 
     const resolution = buildProfileShareUrlSelection(usernameModel, null, false);
     const usernameCandidate: ProfileShareUrlCandidate = {
       kind: 'username',
-      url: 'https://app.solidarity.gg/@alice',
-      displayUrl: 'https://app.solidarity.gg/@alice',
+      url: 'https://creds.id/@alice',
+      displayUrl: 'https://creds.id/@alice',
     };
     expect(resolution.selection).toEqual({ kind: 'ready', candidate: usernameCandidate });
     expect(resolution.candidates[0]).toEqual(usernameCandidate);

@@ -1577,7 +1577,7 @@
   "present.publicPage": "Public Page",
   "present.cardSummary": "Public Page + {{count}} items",
   "present.flipCard": "Flip Card",
-  "present.orderPhysicalCard": "Order Physical Card",
+  "present.orderPhysicalCard": "Physical Card",
   "present.physicalCard.title": "Order a Physical Card",
   "present.physicalCard.material": "Material",
   "present.physicalCard.material.steel": "Stainless Steel",

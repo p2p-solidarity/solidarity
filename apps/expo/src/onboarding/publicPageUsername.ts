@@ -77,7 +77,7 @@ export function validatePublicPageUsername(
 }
 
 export function publicPagePath(username: string): string {
-  return `app.solidarity.gg/@${username}`;
+  return `creds.id/@${username}`;
 }
 
 export function publicPageUrl(username: string): string {

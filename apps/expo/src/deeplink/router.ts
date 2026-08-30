@@ -20,8 +20,8 @@ export { parseDeepLink };
 /** Side-effecting handler — call from a `useLinking()` listener. */
 export function handleDeepLink(raw: string): DeepLinkRoute {
   const developerMode = usePreferences.getState().developerMode;
-  // Dev mode also admits `creds.id` as a product host (05-spec §8-B ruling)
-  // so the future domain's link surface is testable before launch.
+  // Dev mode also admits `DEV_PRODUCT_HOSTS` (05-spec §8-B mechanism) so a
+  // pre-launch domain's link surface stays testable before launch.
   const route = parseDeepLink(raw, { devProductHosts: developerMode });
   if (!developerMode && isDeveloperOnlyDeepLinkKind(route.kind)) {
     // Keep the parsed result available to callers for logging, but never let

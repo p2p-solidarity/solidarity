@@ -263,8 +263,9 @@ function extractHandleCandidate(payload: string, devProductHosts: boolean): stri
 }
 
 export interface ClassifyVerifiedPageOptions {
-  /** Thread `developerMode` here: dev mode admits `creds.id` as a product
-   *  host for the `/@handle` URL form (05-spec §8-B ruling). */
+  /** Thread `developerMode` here: dev mode admits `DEV_PRODUCT_HOSTS` (a
+   *  pre-launch product domain) for the `/@handle` URL form (05-spec §8-B
+   *  mechanism). */
   readonly devProductHosts?: boolean;
 }
 
