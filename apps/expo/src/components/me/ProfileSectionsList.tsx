@@ -1,16 +1,8 @@
-import { useMemo, useState, type ReactNode } from 'react';
+import { useState, type ReactNode } from 'react';
 import { router } from 'expo-router';
 import { ActivityIndicator, Modal, ScrollView, Switch, View } from 'react-native';
-import { Gesture, GestureDetector } from 'react-native-gesture-handler';
-import Animated, {
-  FadeIn,
-  useAnimatedStyle,
-  useSharedValue,
-  withSpring,
-} from 'react-native-reanimated';
+import Animated, { FadeIn } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import Svg, { Circle } from 'react-native-svg';
-import { scheduleOnRN } from 'react-native-worklets';
 
 import { PressableScale } from '@/components/common/PressableScale';
 import { SfIcon } from '@/components/icons/SfIcon';
@@ -19,7 +11,6 @@ import { Colors } from '@/constants/Colors';
 import { useThemeColors } from '@/constants/useThemeColors';
 import { useTranslation } from '@/i18n';
 import { haptic } from '@/feedback/haptics';
-import { SPRING } from '@/feedback/motion';
 import { pushToast } from '@/feedback/toast';
 import {
   PAGE_BLOCK_CATALOG,
@@ -41,12 +32,21 @@ import { preparePageDesign, usePageDesignStore } from '@/page/pageDesignStore';
 import { PageLivePreview } from './PageLivePreview';
 import { PageSectionLabel } from './PageSectionLabel';
 import {
+  BLOCK_ROW_HEIGHT,
+  BLOCK_ROW_STRIDE,
+  ICON_TILE_GLYPH,
   ROW_GAP,
   blockRowStyle,
-  dragDestinationIndex,
   fieldRowStyle,
   iconTileStyle,
 } from './pageRowStyles';
+import {
+  DraggableRow,
+  RowDragHandle,
+  resetRowDrag,
+  useRowDragController,
+  type RowDragController,
+} from './rowDrag';
 import { useProfileStore } from '@/profile/store';
 import { uuid, type ProfileRecord } from '@solidarity/shared';
 
@@ -61,7 +61,6 @@ export interface ProfileSectionsListProps {
 
 /** Reveal duration for the folded preview — same 240ms as the page entrance. */
 const PREVIEW_REVEAL_MS = 240;
-const BLOCK_ROW_STRIDE = 56 + ROW_GAP;
 
 export function ProfileSectionsList({
   linkCount,
@@ -82,6 +81,7 @@ export function ProfileSectionsList({
   const [editing, setEditing] = useState<PageBlock | null>(null);
   const [publishing, setPublishing] = useState(false);
   const [previewOpen, setPreviewOpen] = useState(false);
+  const drag = useRowDragController();
   const publishedDesign = record?.page ?? toPublicPageDesign(createInitialPageDesign());
   const pageHasChanges = status === 'ready' && record !== null && !publicPageDesignEquals(
     toPublicPageDesign(design),
@@ -144,7 +144,7 @@ export function ProfileSectionsList({
               switched off, so the mock gives it no controls at all. */}
           <View style={fieldRowStyle(c.mutedSurface)}>
             <View style={iconTileStyle(c.chipSurface)}>
-              <SfIcon name="link" size={22} color={Colors.primaryBlue} />
+              <SfIcon name="link" size={ICON_TILE_GLYPH} color={Colors.primaryBlue} />
             </View>
             <View className="flex-1" style={{ gap: 1 }}>
               <ThemedText variant="bodyMedium">{t('mePage.links')}</ThemedText>
@@ -155,18 +155,28 @@ export function ProfileSectionsList({
             <ThemedText variant="caption" tone="tertiary">{t('pageDesign.alwaysOn')}</ThemedText>
           </View>
 
-          {movableBlocks.map((block, index) => (
-            <BlockRow
-              key={block.id}
-              block={block}
-              index={index}
-              itemCount={movableBlocks.length}
-              onEdit={() => { setEditing(block); }}
-              onVisibleChange={(visible) => { setBlockVisible(block.id, visible); }}
-              onMove={(destination) => { moveBlockTo(block, index, destination); }}
-              onProPress={openProSettings}
-            />
-          ))}
+          {/* One tight group: the drag stride reads row travel as
+              height + ROW_GAP, so the rows must be spaced by exactly that. */}
+          <View style={{ gap: ROW_GAP }}>
+            {movableBlocks.map((block, index) => (
+              <BlockRow
+                key={`${String(index)}-${block.id}`}
+                block={block}
+                controller={drag}
+                index={index}
+                itemCount={movableBlocks.length}
+                onEdit={() => { setEditing(block); }}
+                onVisibleChange={(visible) => { setBlockVisible(block.id, visible); }}
+                onMove={(destination) => {
+                  moveBlockTo(block, index, destination);
+                  // Same-task reset: the committed order and the identity
+                  // transforms must reach the UI on the same frame.
+                  resetRowDrag(drag);
+                }}
+                onProPress={openProSettings}
+              />
+            ))}
+          </View>
 
           <ThemedButton
             label={t('pageDesign.addSection')}
@@ -265,6 +275,7 @@ function PagePreviewDisclosure({
 
 function BlockRow({
   block,
+  controller,
   index,
   itemCount,
   onEdit,
@@ -273,6 +284,7 @@ function BlockRow({
   onProPress,
 }: {
   readonly block: PageBlock;
+  readonly controller: RowDragController;
   readonly index: number;
   readonly itemCount: number;
   readonly onEdit: () => void;
@@ -285,11 +297,25 @@ function BlockRow({
   const catalog = PAGE_BLOCK_CATALOG.find((entry) => entry.type === block.type);
   if (!catalog) return null;
   return (
-    <View style={{ ...blockRowStyle(c.mutedSurface), gap: 0, padding: 0 }}>
-      <BlockReorderHandle
+    <DraggableRow
+      controller={controller}
+      index={index}
+      stride={BLOCK_ROW_STRIDE}
+      style={{
+        ...blockRowStyle(c.mutedSurface),
+        gap: 8,
+        paddingVertical: 0,
+        paddingLeft: 0,
+        paddingRight: 12,
+      }}>
+      <RowDragHandle
+        controller={controller}
         label={t('mePage.reorderSection', { title: block.title })}
         index={index}
         itemCount={itemCount}
+        stride={BLOCK_ROW_STRIDE}
+        height={BLOCK_ROW_HEIGHT}
+        disabled={catalog.pro}
         onMove={catalog.pro ? () => { onProPress(); } : onMove}
       />
       <PressableScale
@@ -298,102 +324,23 @@ function BlockRow({
         accessibilityRole="button"
         accessibilityLabel={t('pageDesign.editSection', { title: block.title })}
         accessibilityHint={catalog.pro ? t('pageDesign.proControl') : undefined}
-        className="flex-row items-center gap-2 py-2">
+        className="flex-row items-center gap-2 py-1">
         <View className="flex-1 gap-0.5">
           <ThemedText variant="bodyMedium">{block.title}</ThemedText>
           <ThemedText variant="caption" tone="tertiary">
             {t('pageDesign.itemCount', { count: block.items.length })}{catalog.pro ? ' · PRO' : ''}
           </ThemedText>
         </View>
-        <SfIcon name="chevron.right" size={13} color={Colors.text3} />
       </PressableScale>
       <Switch
         value={block.visible}
+        style={{ alignSelf: 'center' }}
         accessibilityLabel={t('pageDesign.sectionVisible', { title: block.title })}
         accessibilityHint={catalog.pro ? t('pageDesign.proControl') : undefined}
         onValueChange={catalog.pro ? onProPress : onVisibleChange}
         trackColor={{ true: Colors.primaryBlue }}
       />
-    </View>
-  );
-}
-
-function BlockReorderHandle({
-  label,
-  index,
-  itemCount,
-  onMove,
-}: {
-  readonly label: string;
-  readonly index: number;
-  readonly itemCount: number;
-  readonly onMove: (destination: number) => void;
-}): ReactNode {
-  const translationY = useSharedValue(0);
-  const lift = useSharedValue(1);
-  const animatedStyle = useAnimatedStyle(() => ({
-    zIndex: lift.value > 1 ? 2 : 0,
-    transform: [
-      { translateY: translationY.value },
-      { scale: lift.value },
-    ],
-  }));
-  const pan = useMemo(
-    () => Gesture.Pan()
-      .activateAfterLongPress(120)
-      .onStart(() => {
-        lift.value = withSpring(1.05, SPRING.zoom);
-      })
-      .onUpdate((event) => {
-        translationY.value = event.translationY;
-      })
-      .onEnd((event) => {
-        const destination = dragDestinationIndex(
-          index,
-          event.translationY,
-          itemCount,
-          BLOCK_ROW_STRIDE,
-        );
-        if (destination !== index) scheduleOnRN(onMove, destination);
-      })
-      .onFinalize(() => {
-        translationY.value = withSpring(0, SPRING.gentle);
-        lift.value = withSpring(1, SPRING.press);
-      }),
-    [index, itemCount, lift, onMove, translationY],
-  );
-
-  return (
-    <GestureDetector gesture={pan}>
-      <Animated.View
-        accessible
-        accessibilityRole="adjustable"
-        accessibilityLabel={label}
-        accessibilityActions={[
-          { name: 'decrement', label },
-          { name: 'increment', label },
-        ]}
-        onAccessibilityAction={(event) => {
-          if (event.nativeEvent.actionName === 'decrement' && index > 0) onMove(index - 1);
-          if (event.nativeEvent.actionName === 'increment' && index < itemCount - 1) onMove(index + 1);
-        }}
-        style={[
-          { width: 44, height: 56, alignItems: 'center', justifyContent: 'center' },
-          animatedStyle,
-        ]}>
-        <Svg width={18} height={24} viewBox="0 0 18 24" fill="none">
-          {[6, 12, 18].flatMap((cy) => [6, 12].map((cx) => (
-            <Circle
-              key={`${String(cx)}-${String(cy)}`}
-              cx={cx}
-              cy={cy}
-              r={1.4}
-              fill={Colors.text3}
-            />
-          )))}
-        </Svg>
-      </Animated.View>
-    </GestureDetector>
+    </DraggableRow>
   );
 }
 

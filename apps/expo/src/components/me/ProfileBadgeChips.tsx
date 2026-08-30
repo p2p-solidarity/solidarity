@@ -43,7 +43,7 @@ import {
 } from '@solidarity/shared';
 
 import { PageEmptyState } from './PageEmptyState';
-import { fieldRowStyle, iconTileStyle } from './pageRowStyles';
+import { ICON_TILE_GLYPH, fieldRowStyle, iconTileStyle } from './pageRowStyles';
 
 export interface ProfileBadgeChipsProps {
   readonly record: ProfileRecord;
@@ -214,7 +214,7 @@ export function ProfileBadgeChips({
             })}
             style={fieldRowStyle(c.mutedSurface)}>
             <View style={iconTileStyle(c.chipSurface)}>
-              <SfIcon name={presentation.icon} size={21} color={Colors.primaryBlue} />
+              <SfIcon name={presentation.icon} size={ICON_TILE_GLYPH} color={Colors.primaryBlue} />
             </View>
             <View className="flex-1" style={{ gap: 1 }}>
               <ThemedText variant="bodyMedium" numberOfLines={1}>

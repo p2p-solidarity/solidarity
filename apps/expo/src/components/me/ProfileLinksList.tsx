@@ -13,14 +13,6 @@ import {
   type ReactNode,
 } from 'react';
 import { Linking, View } from 'react-native';
-import { Gesture, GestureDetector } from 'react-native-gesture-handler';
-import Animated, {
-  useAnimatedStyle,
-  useSharedValue,
-  withSpring,
-} from 'react-native-reanimated';
-import Svg, { Circle } from 'react-native-svg';
-import { scheduleOnRN } from 'react-native-worklets';
 
 import {
   getBadgeStatusCacheRevision,
@@ -36,7 +28,6 @@ import { ThemedButton, ThemedSurface, ThemedText } from '@/components/themed';
 import { Colors } from '@/constants/Colors';
 import { useThemeColors } from '@/constants/useThemeColors';
 import { appAlert } from '@/feedback/appAlert';
-import { SPRING } from '@/feedback/motion';
 import { pushToast } from '@/feedback/toast';
 import { useTranslation } from '@/i18n';
 import { verifyHttpsOwnership, type HttpsOwnershipEvidence } from '@/profile/httpsOwnership';
@@ -52,8 +43,10 @@ import {
 import { PageEmptyState } from './PageEmptyState';
 import { PageSectionLabel } from './PageSectionLabel';
 import {
+  FIELD_ROW_HEIGHT,
+  FIELD_ROW_STRIDE,
+  ICON_TILE_GLYPH,
   ROW_GAP,
-  dragDestinationIndex,
   fieldRowStyle,
   iconTileStyle,
   isNostrProfileUrlForNpub,
@@ -64,8 +57,12 @@ import {
 } from './pageRowStyles';
 import { pageLinkSections, type PageLinkEntry } from './pageLinkSections';
 import { buildProfileShareModel } from './meProfileModel';
-
-const FIELD_ROW_STRIDE = 64 + ROW_GAP;
+import {
+  DraggableRow,
+  RowDragHandle,
+  resetRowDrag,
+  useRowDragController,
+} from './rowDrag';
 
 export interface ProfileLinksListProps {
   readonly links: readonly ProfileLink[];
@@ -147,85 +144,8 @@ export function ProfileLinksList({
       });
   }, [linkVisibility, links, orderedLinks, orderedVisibility, record, reordering, saveProfile, t]);
 
-  const renderLinkRows = (entries: readonly PageLinkEntry[]): ReactNode => {
-    if (entries.length === 0) return null;
-    return (
-      <View style={{ gap: ROW_GAP }}>
-        {entries.map(({ link, sourceIndex }, sectionIndex) => {
-          const status = record === null
-              ? null
-              : linkVerificationPill(link, websiteEvidence, record);
-          return (
-            <View
-              key={`${String(sourceIndex)}-${link.label}-${link.url}`}
-              style={{ ...fieldRowStyle(c.mutedSurface), gap: 0, padding: 0 }}>
-              <ReorderHandle
-                label={t('mePage.reorderLink', { label: link.label || link.url })}
-                index={sectionIndex}
-                itemCount={entries.length}
-                disabled={reordering}
-                onMove={(destination) => {
-                  const target = entries[destination];
-                  if (target) persistReorder(sourceIndex, target.sourceIndex);
-                }}
-              />
-              <PressableScale
-                fill
-                haptic="tap"
-                onPress={onEdit}
-                onLongPress={() => { openLink(link); }}
-                accessibilityRole="button"
-                accessibilityLabel={link.label.length > 0 ? link.label : link.url}
-                accessibilityHint={t('mePage.editLinkHint')}
-                style={{
-                  minHeight: 64,
-                  flexDirection: 'row',
-                  alignItems: 'center',
-                  gap: 12,
-                  paddingVertical: 12,
-                  paddingRight: 16,
-                }}>
-                <View style={iconTileStyle(c.chipSurface)}>
-                  <BrandIcon
-                    name={brandIconForLink(link.label, link.url)}
-                    size={22}
-                    color={Colors.primaryBlue}
-                  />
-                </View>
-                <View className="flex-1" style={{ gap: 1 }}>
-                  {link.label.length > 0 ? (
-                    <ThemedText variant="bodyMedium" numberOfLines={1}>
-                      {link.label}
-                    </ThemedText>
-                  ) : null}
-                  <ThemedText
-                    variant="caption"
-                    tone="tertiary"
-                    numberOfLines={1}
-                    ellipsizeMode="middle"
-                    style={{ fontFamily: 'Menlo' }}>
-                    {link.url}
-                  </ThemedText>
-                </View>
-                {status ? <VerificationPill status={status} /> : null}
-                <SfIcon name="chevron.right" size={13} color={Colors.text3} />
-              </PressableScale>
-            </View>
-          );
-        })}
-      </View>
-    );
-  };
-
-  const renderSection = (title: string, entries: readonly PageLinkEntry[]): ReactNode => {
-    if (entries.length === 0) return null;
-    return (
-      <View style={{ gap: 8 }}>
-        <PageSectionLabel title={title} />
-        {renderLinkRows(entries)}
-      </View>
-    );
-  };
+  const pillFor = (link: ProfileLink): RowVerificationPill | null =>
+    record === null ? null : linkVerificationPill(link, websiteEvidence, record);
 
   const addLinkAction = (
     <AddLinkButton
@@ -251,8 +171,24 @@ export function ProfileLinksList({
 
   return (
     <View className="gap-5 px-4">
-      {renderSection(t('mePage.publicPage'), sections.publicLinks)}
-      {renderSection(t('mePage.cardOnly'), sections.cardOnlyLinks)}
+      <LinkRowsSection
+        title={t('mePage.publicPage')}
+        entries={sections.publicLinks}
+        disabled={reordering}
+        pillFor={pillFor}
+        onEdit={onEdit}
+        onOpenLink={openLink}
+        onReorder={persistReorder}
+      />
+      <LinkRowsSection
+        title={t('mePage.cardOnly')}
+        entries={sections.cardOnlyLinks}
+        disabled={reordering}
+        pillFor={pillFor}
+        onEdit={onEdit}
+        onOpenLink={openLink}
+        onReorder={persistReorder}
+      />
       {sections.hiddenLinks.length > 0 ? (
         <PressableScale
           haptic="tap"
@@ -271,6 +207,113 @@ export function ProfileLinksList({
         </PressableScale>
       ) : null}
       {addLinkAction}
+    </View>
+  );
+}
+
+/** One contiguous reorderable run of link rows. Each section owns its drag
+ * controller — section indices restart at 0, so sharing one across sections
+ * would alias rows between them. */
+function LinkRowsSection({
+  title,
+  entries,
+  disabled,
+  pillFor,
+  onEdit,
+  onOpenLink,
+  onReorder,
+}: {
+  readonly title: string;
+  readonly entries: readonly PageLinkEntry[];
+  readonly disabled: boolean;
+  readonly pillFor: (link: ProfileLink) => RowVerificationPill | null;
+  readonly onEdit: () => void;
+  readonly onOpenLink: (link: ProfileLink) => void;
+  readonly onReorder: (sourceIndex: number, destinationIndex: number) => void;
+}): ReactNode {
+  const { t } = useTranslation();
+  const c = useThemeColors();
+  const drag = useRowDragController();
+  if (entries.length === 0) return null;
+  return (
+    <View style={{ gap: 8 }}>
+      <PageSectionLabel title={title} />
+      <View style={{ gap: ROW_GAP }}>
+        {entries.map(({ link, sourceIndex }, sectionIndex) => {
+          const status = pillFor(link);
+          return (
+            <DraggableRow
+              key={`${String(sourceIndex)}-${link.label}-${link.url}`}
+              controller={drag}
+              index={sectionIndex}
+              stride={FIELD_ROW_STRIDE}
+              style={{
+                ...fieldRowStyle(c.mutedSurface),
+                gap: 0,
+                paddingVertical: 0,
+                paddingHorizontal: 0,
+              }}>
+              <RowDragHandle
+                controller={drag}
+                label={t('mePage.reorderLink', { label: link.label || link.url })}
+                index={sectionIndex}
+                itemCount={entries.length}
+                stride={FIELD_ROW_STRIDE}
+                height={FIELD_ROW_HEIGHT}
+                disabled={disabled}
+                onMove={(destination) => {
+                  const target = entries[destination];
+                  if (target) onReorder(sourceIndex, target.sourceIndex);
+                  // Same-task reset: the committed order and the identity
+                  // transforms must reach the UI on the same frame.
+                  resetRowDrag(drag);
+                }}
+              />
+              <PressableScale
+                fill
+                haptic="tap"
+                onPress={onEdit}
+                onLongPress={() => { onOpenLink(link); }}
+                accessibilityRole="button"
+                accessibilityLabel={link.label.length > 0 ? link.label : link.url}
+                accessibilityHint={t('mePage.editLinkHint')}
+                style={{
+                  minHeight: FIELD_ROW_HEIGHT,
+                  flexDirection: 'row',
+                  alignItems: 'center',
+                  gap: 10,
+                  paddingVertical: 8,
+                  paddingRight: 12,
+                }}>
+                <View style={iconTileStyle(c.chipSurface)}>
+                  <BrandIcon
+                    name={brandIconForLink(link.label, link.url)}
+                    size={ICON_TILE_GLYPH}
+                    color={Colors.primaryBlue}
+                  />
+                </View>
+                <View className="flex-1" style={{ gap: 1 }}>
+                  {link.label.length > 0 ? (
+                    <ThemedText variant="bodyMedium" numberOfLines={1}>
+                      {link.label}
+                    </ThemedText>
+                  ) : null}
+                  <ThemedText
+                    variant="caption"
+                    tone="tertiary"
+                    numberOfLines={1}
+                    ellipsizeMode="middle"
+                    style={{ fontFamily: 'Menlo' }}>
+                    {link.url}
+                  </ThemedText>
+                </View>
+                {status ? <VerificationPill status={status} /> : null}
+                <SfIcon name="chevron.right" size={13} color={Colors.text3} />
+              </PressableScale>
+            </DraggableRow>
+          );
+        })}
+      </View>
     </View>
   );
 }
@@ -383,94 +426,6 @@ function VerificationPill({ status }: { readonly status: RowVerificationPill }):
         {t(verified ? 'mePage.verified' : 'mePage.needsRecheck')}
       </ThemedText>
     </ThemedSurface>
-  );
-}
-
-function ReorderHandle({
-  label,
-  index,
-  itemCount,
-  disabled,
-  onMove,
-}: {
-  readonly label: string;
-  readonly index: number;
-  readonly itemCount: number;
-  readonly disabled: boolean;
-  readonly onMove: (destination: number) => void;
-}): ReactNode {
-  const translationY = useSharedValue(0);
-  const lift = useSharedValue(1);
-  const animatedStyle = useAnimatedStyle(() => ({
-    zIndex: lift.value > 1 ? 2 : 0,
-    transform: [
-      { translateY: translationY.value },
-      { scale: lift.value },
-    ],
-  }));
-  const pan = useMemo(
-    () => Gesture.Pan()
-      .enabled(!disabled)
-      .activateAfterLongPress(120)
-      .onStart(() => {
-        lift.value = withSpring(1.05, SPRING.zoom);
-      })
-      .onUpdate((event) => {
-        translationY.value = event.translationY;
-      })
-      .onEnd((event) => {
-        const destination = dragDestinationIndex(
-          index,
-          event.translationY,
-          itemCount,
-          FIELD_ROW_STRIDE,
-        );
-        if (destination !== index) scheduleOnRN(onMove, destination);
-      })
-      .onFinalize(() => {
-        translationY.value = withSpring(0, SPRING.gentle);
-        lift.value = withSpring(1, SPRING.press);
-      }),
-    [disabled, index, itemCount, lift, onMove, translationY],
-  );
-
-  return (
-    <GestureDetector gesture={pan}>
-      <Animated.View
-        accessible
-        accessibilityRole="adjustable"
-        accessibilityLabel={label}
-        accessibilityActions={[
-          { name: 'decrement', label },
-          { name: 'increment', label },
-        ]}
-        onAccessibilityAction={(event) => {
-          if (event.nativeEvent.actionName === 'decrement' && index > 0) onMove(index - 1);
-          if (event.nativeEvent.actionName === 'increment' && index < itemCount - 1) onMove(index + 1);
-        }}
-        style={[
-          {
-            width: 44,
-            height: 64,
-            alignItems: 'center',
-            justifyContent: 'center',
-            opacity: disabled ? 0.4 : 1,
-          },
-          animatedStyle,
-        ]}>
-        <GripIcon color={Colors.text3} />
-      </Animated.View>
-    </GestureDetector>
-  );
-}
-
-function GripIcon({ color }: { readonly color: string }): ReactNode {
-  return (
-    <Svg width={18} height={24} viewBox="0 0 18 24" fill="none">
-      {[6, 12, 18].flatMap((cy) => [6, 12].map((cx) => (
-        <Circle key={`${String(cx)}-${String(cy)}`} cx={cx} cy={cy} r={1.4} fill={color} />
-      )))}
-    </Svg>
   );
 }
 

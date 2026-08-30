@@ -1,29 +1,39 @@
 /**
- * Shared row metrics for the Page tab, taken verbatim from the mock
- * (`creds-design/verified-linkinbio-mock-v3.html` §`#s-page`, including its
- * late P13/P19 overrides): `.field` and `.blk` are borderless rows on
- * `mutedSurface` at r=2, separated by 8pt of space rather than a rule, and
- * `.f-ico` is a 40pt circle on the brand-tinted chip surface.
+ * Shared row metrics for the Page tab. The shapes come from the mock
+ * (`creds-design/verified-linkinbio-mock-v3.html` §`#s-page`: borderless rows
+ * on `mutedSurface` at r=2, grouped by space, round brand-tinted icon tile),
+ * but the densities deliberately run tighter than the mock's 64/56/40pt —
+ * compacted 2026-08-30 on a direct product call, so don't "restore" them.
  */
 import type { ViewStyle } from 'react-native';
 
 import { normalizeAtprotoHandle } from '@solidarity/shared';
 
 /** `.field` / `.blk` bottom margin — grouping by space, not by lines. */
-export const ROW_GAP = 8;
+export const ROW_GAP = 6;
 /** `--radiusCard` for app rows. The public page uses its own per-template radius. */
 export const ROW_RADIUS = 2;
-/** `.f-ico` — 40pt circle (Figma 737:2837), 22pt glyph. */
-export const ICON_TILE_SIZE = 40;
+/** `.f-ico` — round icon tile and the glyph it frames. */
+export const ICON_TILE_SIZE = 34;
+export const ICON_TILE_GLYPH = 18;
+/** Row heights. The drag strides below must stay derived from these — the
+ * reorder math reads a row's travel as height + gap, so a height edited
+ * without its stride desyncs the drop slot from what the finger sees. */
+export const FIELD_ROW_HEIGHT = 54;
+export const BLOCK_ROW_HEIGHT = 48;
+export const FIELD_ROW_STRIDE = FIELD_ROW_HEIGHT + ROW_GAP;
+export const BLOCK_ROW_STRIDE = BLOCK_ROW_HEIGHT + ROW_GAP;
 
 /** Resolve the row reached by a vertical drag. Rounding makes the hand-off
- * happen after crossing half a row; clamping keeps edge drags deterministic. */
+ * happen after crossing half a row; clamping keeps edge drags deterministic.
+ * Runs inside `Gesture.Pan().onEnd` on the UI runtime — must stay a worklet. */
 export function dragDestinationIndex(
   sourceIndex: number,
   translationY: number,
   itemCount: number,
   rowStride: number,
 ): number {
+  'worklet';
   if (itemCount <= 0 || rowStride <= 0) return sourceIndex;
   const destination = sourceIndex + Math.round(translationY / rowStride);
   return Math.max(0, Math.min(itemCount - 1, destination));
@@ -63,15 +73,15 @@ export function verificationPillForStates(
   return states.includes('stale') ? 'needsRecheck' : null;
 }
 
-/** `.field` — 64pt row, 12pt gutter between icon / text / trailing glyph. */
+/** `.field` — link/field row, 10pt gutter between icon / text / trailing glyph. */
 export function fieldRowStyle(surface: string): ViewStyle {
   return {
-    minHeight: 64,
+    minHeight: FIELD_ROW_HEIGHT,
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 12,
-    paddingVertical: 12,
-    paddingHorizontal: 16,
+    gap: 10,
+    paddingVertical: 8,
+    paddingHorizontal: 12,
     borderRadius: ROW_RADIUS,
     backgroundColor: surface,
   };
@@ -80,12 +90,12 @@ export function fieldRowStyle(surface: string): ViewStyle {
 /** `.blk` — the same surface at block-row density. */
 export function blockRowStyle(surface: string): ViewStyle {
   return {
-    minHeight: 56,
+    minHeight: BLOCK_ROW_HEIGHT,
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
-    paddingVertical: 12,
-    paddingHorizontal: 12,
+    paddingVertical: 8,
+    paddingHorizontal: 10,
     borderRadius: ROW_RADIUS,
     backgroundColor: surface,
   };
