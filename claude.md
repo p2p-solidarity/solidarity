@@ -5,9 +5,9 @@
 ## Where truth lives (read in this order)
 
 1. `apps/expo/CLAUDE.md` — the coding rulebook. Mandatory before editing anything under `apps/expo/`.
-2. `docs/ref/01-spec-verified-page.md` + `docs/ref/03-app-web-mechanisms.md` — current product spec (v1.3.3 "Verified Page", 3 tabs: People/Me/Verify). §6 of 03 is the authoritative kept/evolved/frozen/deleted table.
-3. `docs/ref/04-plan-app.md` + `.superpowers/sdd/progress.md` — live task plan and review ledger (records real security bugs already caught — read before touching security code).
-4. **STALE — do not trust**: `README.md`, `spec.md`, `architecture.png`, `docs/migration/*` describe the deleted SwiftUI app and pre-pivot architecture (MultipeerConnectivity and CloudKit group sync are deleted; Semaphore/ZK groups frozen).
+2. `docs/ref/06-plan-convergence-2.0.0.md` — the **only live plan** (2.0.0 north star, Q1–Q6 decisions, old-feature keep/cut, execution plan). `.superpowers/sdd/progress.md` — review ledger (records real security bugs already caught — read before touching security code).
+3. `docs/ref/01–05` — spec reference, not plans: 01+03 = 1.3.3 "Verified Page" product spec (§6 of 03 is the kept/evolved/frozen/deleted table); 05 = QR/exchange wire SSOT (06 defers to it). 04 is the superseded 1.3.3 plan — history only.
+4. **STALE — do not trust**: `README.md`, `spec.md`, `architecture.png` describe the deleted SwiftUI app and pre-pivot architecture (MultipeerConnectivity and CloudKit group sync are deleted; Semaphore/ZK groups frozen). Deleted pre-2.0.0 plans/specs are distilled in `docs/ref/notes-archive-pre-2.0.0.md`.
 
 ## Workflow — every coding task
 

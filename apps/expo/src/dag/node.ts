@@ -1,7 +1,7 @@
 /**
  * DAG node schema, canonical id, schnorr sign / verify.
  *
- * Spec: docs/dev-sandbox-identity-graph.md §6.
+ * Spec: docs/ref/notes-dev-sandbox-identity-graph.md §6.
  *
  * Canonical id follows NIP-01 exactly so the resulting `id` and `sig`
  * are bit-identical to what nostr-tools would produce for the same

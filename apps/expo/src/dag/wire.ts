@@ -3,7 +3,7 @@
  * framing so a BLE L2CAP / WebRTC transport can carry HEADS / WANT / NODE
  * / SDP / ICE messages.
  *
- * Spec: docs/dev-sandbox-identity-graph.md §5.1.
+ * Spec: docs/ref/notes-dev-sandbox-identity-graph.md §5.1.
  *
  * Layout (after the outer length prefix is stripped):
  *   [uint8 frameKind] [frameKind-specific body]

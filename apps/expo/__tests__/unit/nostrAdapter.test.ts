@@ -1,6 +1,6 @@
 /**
  * Nostr adapter — projection + HEAD pointer event + verification tests.
- * Spec: docs/dev-sandbox-identity-graph.md §3.4 + §6.2.
+ * Spec: docs/ref/notes-dev-sandbox-identity-graph.md §3.4 + §6.2.
  *
  * Publish/subscribe paths use WebSocket which the Bun harness can't
  * stub easily — those are covered by the Lab UI's round-trip test.

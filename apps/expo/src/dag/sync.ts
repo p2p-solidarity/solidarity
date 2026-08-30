@@ -6,7 +6,7 @@
  *   Step 3  NODE stream    : each side answers WANT by streaming nodes
  *   Step 4  verify + merge : the receiver `appendNode`s, store rejects bad sigs
  *
- * Spec: docs/dev-sandbox-identity-graph.md §3.3 (sync protocol),
+ * Spec: docs/ref/notes-dev-sandbox-identity-graph.md §3.3 (sync protocol),
  * §5.1 (frame multiplex), §6.4 (revocations propagate like any node).
  *
  * This module is pure logic over the wire layer + store. The

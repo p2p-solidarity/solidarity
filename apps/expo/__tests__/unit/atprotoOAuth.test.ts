@@ -11,13 +11,13 @@
  * an in-memory `AtprotoSessionStorage`, so this suite never hits real
  * Bluesky infra.
  *
- * Also pins the `apps/expo/docs/atproto-client-metadata.json` hand-off doc
+ * Also pins the `apps/expo/src/atproto/client-metadata.json` hand-off doc
  * against `clientMetadata.ts`'s `CLIENT_METADATA_DOCUMENT` constant so the
  * two can't silently drift apart.
  */
 import { beforeEach, describe, expect, it } from 'bun:test';
 
-import clientMetadataDoc from '../../docs/atproto-client-metadata.json';
+import clientMetadataDoc from '../../src/atproto/client-metadata.json';
 import {
   ATPROTO_CLIENT_ID,
   ATPROTO_REDIRECT_URI,
@@ -37,9 +37,9 @@ import {
   type AtprotoBrowserLauncher,
 } from '@/atproto/oauth';
 
-// ── docs/atproto-client-metadata.json must match the app's own expectation ─
+// ── src/atproto/client-metadata.json must match the app's own expectation ──
 
-describe('docs/atproto-client-metadata.json', () => {
+describe('src/atproto/client-metadata.json', () => {
   it('matches clientMetadata.ts CLIENT_METADATA_DOCUMENT exactly', () => {
     // `CLIENT_METADATA_DOCUMENT`'s array fields are `readonly` (`as const`);
     // round-trip through JSON to compare structurally against the parsed
