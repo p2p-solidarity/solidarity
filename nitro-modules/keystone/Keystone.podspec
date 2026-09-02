@@ -20,9 +20,11 @@ Pod::Spec.new do |s|
 
   # Apple frameworks. Security exposes SecAccessControl / Keychain helpers;
   # CryptoKit ships the SecureEnclave + HKDF + AES-GCM primitives;
-  # LocalAuthentication gates the biometric paths; CloudKit backs the
+  # LocalAuthentication gates the biometric paths; CryptoTokenKit names the
+  # Secure-Enclave token error codes the sign-recovery policy classifies
+  # (SpruceDidSignFailure); CloudKit backs the
   # iCloud Drive ubiquity-container file backup.
-  s.frameworks = ['CryptoKit', 'Security', 'Foundation', 'LocalAuthentication', 'CloudKit']
+  s.frameworks = ['CryptoKit', 'CryptoTokenKit', 'Security', 'Foundation', 'LocalAuthentication', 'CloudKit']
 
   s.pod_target_xcconfig = {
     'DEFINES_MODULE' => 'YES',

@@ -9,14 +9,17 @@
 //
 
 import CryptoKit
+import CryptoTokenKit
 import Foundation
+import LocalAuthentication
+import Security
 
 // MARK: - Error type
 
 internal enum SpruceDidError: Error, LocalizedError {
   case unsupportedKeyType(String)
   case keychainFailure(OSStatus, String)
-  case biometricCancelled
+  case biometricCancelled(String)
   case biometricFailed(String)
   case keyNotFound(String)
   case signFailed(String)
@@ -28,7 +31,11 @@ internal enum SpruceDidError: Error, LocalizedError {
     case .unsupportedKeyType(let t): return "Unsupported keyType: \(t)"
     case .keychainFailure(let status, let msg):
       return "Keychain error (status=\(status)): \(msg)"
-    case .biometricCancelled: return "Biometric prompt cancelled"
+    // Carries the attempt label + `domain:code` chain (never key material):
+    // nothing subscribes to the cancel EVENT, so the thrown error is the only
+    // place a js-gated software key that unexpectedly prompted (a phantom
+    // Secure-Enclave key under the tag) can ever surface.
+    case .biometricCancelled(let m): return "Biometric prompt cancelled (\(m))"
     case .biometricFailed(let m): return "Biometric failed: \(m)"
     case .keyNotFound(let alias): return "No key found for alias=\(alias)"
     case .signFailed(let m): return "Sign failed: \(m)"
@@ -177,5 +184,95 @@ internal enum JwsFraming {
     let payloadB64 = Base64Url.encode(payload)
     let sigB64 = Base64Url.encode(rawSignature)
     return "\(headerB64).\(payloadB64).\(sigB64)"
+  }
+}
+
+// MARK: - Sign-failure classification (Fix D)
+
+/// Coarse cause of a failed native sign — just enough to drive the recovery
+/// policy in `HybridSpruceDid.signSerially`.
+internal enum SpruceDidSignFailureKind {
+  /// The prompt was dismissed: by the user, or by the system (app sent to
+  /// the background mid-prompt, another prompt raced it). Never retried.
+  case cancelled
+  /// The authentication carried by the attached LAContext was rejected
+  /// WITHOUT a usable prompt: the Secure-Enclave token reports
+  /// `authenticationFailed` (CryptoTokenKit -5) or `authenticationNeeded`
+  /// (-9), the keychain reports `errSecAuthFailed`, or LocalAuthentication
+  /// reports the context itself invalid / non-interactive. A stale
+  /// process-lifetime LAContext produces exactly this: once its credential
+  /// is gone (an earlier evaluation cancelled, the context invalidated, or
+  /// coreauthd dropped it) every later sign fails -5 with NO Face ID sheet
+  /// until the context is replaced. Recoverable by ONE retry with a fresh
+  /// context — never more, so a genuinely broken ACL costs one extra prompt,
+  /// not a loop.
+  case authRejected
+  /// Anything else (algorithm unsupported, keychain I/O, …). Surfaced as-is.
+  case other
+}
+
+internal enum SpruceDidSignFailure {
+  /// Walks the error and its `NSUnderlyingErrorKey` chain: any cancel wins
+  /// (a cancelled prompt must never be re-prompted), otherwise any
+  /// auth-rejection code anywhere in the chain marks it recoverable.
+  static func classify(_ error: CFError?) -> SpruceDidSignFailureKind {
+    guard let error else { return .other }
+    var sawAuthRejected = false
+    for nsError in errorChain(error as Error as NSError) {
+      switch kind(of: nsError) {
+      case .cancelled: return .cancelled
+      case .authRejected: sawAuthRejected = true
+      case .other: break
+      }
+    }
+    return sawAuthRejected ? .authRejected : .other
+  }
+
+  /// Human-readable message plus the `domain:code` chain — codes only, so
+  /// the string is safe to surface and never carries key material or PII.
+  static func message(_ error: CFError?) -> String {
+    guard let error else { return "unknown" }
+    let nsError = error as Error as NSError
+    let codes = errorChain(nsError).map { "\($0.domain):\($0.code)" }
+      .joined(separator: " <- ")
+    return "\(nsError.localizedDescription) [\(codes)]"
+  }
+
+  private static func kind(of error: NSError) -> SpruceDidSignFailureKind {
+    switch (error.domain, error.code) {
+    case (TKErrorDomain, TKError.canceledByUser.rawValue):
+      return .cancelled
+    case (TKErrorDomain, TKError.authenticationFailed.rawValue),
+      (TKErrorDomain, TKError.authenticationNeeded.rawValue):
+      return .authRejected
+    case (LAErrorDomain, LAError.userCancel.rawValue),
+      (LAErrorDomain, LAError.systemCancel.rawValue),
+      (LAErrorDomain, LAError.appCancel.rawValue):
+      return .cancelled
+    case (LAErrorDomain, LAError.invalidContext.rawValue),
+      (LAErrorDomain, LAError.notInteractive.rawValue):
+      return .authRejected
+    case (NSOSStatusErrorDomain, Int(errSecUserCanceled)):
+      return .cancelled
+    case (NSOSStatusErrorDomain, Int(errSecAuthFailed)),
+      (NSOSStatusErrorDomain, Int(errSecInteractionNotAllowed)):
+      return .authRejected
+    default:
+      // Legacy heuristic kept as the last resort for domains not listed.
+      return error.localizedDescription.lowercased().contains("cancel")
+        ? .cancelled : .other
+    }
+  }
+
+  /// The error followed by every underlying error beneath it. Bounded so a
+  /// malformed self-referencing chain can never spin.
+  private static func errorChain(_ root: NSError) -> [NSError] {
+    var chain: [NSError] = []
+    var current: NSError? = root
+    while let error = current, chain.count < 8 {
+      chain.append(error)
+      current = error.userInfo[NSUnderlyingErrorKey] as? NSError
+    }
+    return chain
   }
 }
