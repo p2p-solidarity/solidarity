@@ -23,11 +23,11 @@ import { useState } from 'react';
 import {
   ActivityIndicator,
   Pressable,
-  ScrollView,
   Text,
   TextInput,
   View,
 } from 'react-native';
+import { KeyboardAwareScrollView } from 'react-native-keyboard-controller';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { ThemedButton } from '@/components/themed';
@@ -188,10 +188,11 @@ export default function CreateGroup(): React.JSX.Element {
     <View className="flex-1 bg-pageBg">
       <NavBar title={t('groupNew.title')} onCancel={() => { safeBack(); }} />
 
-      <ScrollView
-        className="flex-1"
+      <KeyboardAwareScrollView
+        style={{ flex: 1 }}
         contentContainerStyle={{ padding: 16, paddingBottom: insets.bottom + 32 }}
         keyboardShouldPersistTaps="handled"
+        bottomOffset={16}
       >
         <View className="gap-4">
           {/* Group Info Section */}
@@ -259,7 +260,7 @@ export default function CreateGroup(): React.JSX.Element {
             </View>
           ) : null}
         </View>
-      </ScrollView>
+      </KeyboardAwareScrollView>
     </View>
   );
 }

@@ -14,10 +14,10 @@ import { safeBack } from '@/navigation/safeBack';
 import { useCallback, useEffect, useState } from 'react';
 import {
   Pressable,
-  ScrollView,
   Text,
   View,
 } from 'react-native';
+import { KeyboardAwareScrollView } from 'react-native-keyboard-controller';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { useCardStore } from '@/cards/cardManager';
@@ -112,12 +112,13 @@ export default function EditCardScreen() {
         }}
       />
 
-      <ScrollView
+      <KeyboardAwareScrollView
         contentContainerStyle={{
           paddingTop: 24,
           paddingBottom: insets.bottom + 48,
         }}
         keyboardShouldPersistTaps="handled"
+        bottomOffset={16}
       >
         <View style={{ gap: 24 }}>
           <AnimalBlock
@@ -142,7 +143,7 @@ export default function EditCardScreen() {
             onDelete={isEditing ? handleDelete : undefined}
           />
         </View>
-      </ScrollView>
+      </KeyboardAwareScrollView>
     </View>
   );
 }

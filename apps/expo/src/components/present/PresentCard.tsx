@@ -1,11 +1,13 @@
 import { useEffect, useState, type ReactNode } from 'react';
-import { Modal, View } from 'react-native';
+import { View } from 'react-native';
+import { KeyboardAvoidingView } from 'react-native-keyboard-controller';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import type { ProfileRecord } from '@solidarity/shared';
 
 import { generateQrPng } from '@/cards/qrCodeManager';
 import { shareFieldPreferencesFromFields } from '@/cards/solidarityQrPayload';
 import { buildRuntimeSolidarityQrWire } from '@/cards/solidarityQrRuntime';
+import { ModalSheet } from '@/components/common/ModalSheet';
 import {
   displayProfileShareUrl,
   type PublicPageShareSource,
@@ -234,48 +236,45 @@ export function PresentCardPresetControls({
           setSheetOpen(true);
         }}
       />
-      <Modal
-        visible={sheetOpen}
-        animationType="slide"
-        presentationStyle="pageSheet"
-        onRequestClose={closeSheet}
-      >
-        <View
-          className="flex-1 bg-pageBg px-4"
-          style={{
-            paddingTop: insets.top + 16,
-            paddingBottom: Math.max(insets.bottom, 16),
-            gap: 18,
-          }}
-        >
-          <ThemedText accessibilityRole="header" variant="titleLarge">
-            {t('present.presetNameTitle')}
-          </ThemedText>
-          <ThemedTextInput
-            autoFocus
-            value={nameInput}
-            onChangeText={setNameInput}
-            label={t('present.presetNameLabel')}
-            placeholder={t('present.presetNamePlaceholder')}
-            returnKeyType="done"
-            onSubmitEditing={savePreset}
-          />
-          <View style={{ marginTop: 'auto', gap: 10 }}>
-            <ThemedButton
-              fullWidth
-              disabled={nameInput.trim().length === 0}
-              label={t('present.save')}
-              onPress={savePreset}
+      <ModalSheet visible={sheetOpen} onRequestClose={closeSheet}>
+        <KeyboardAvoidingView behavior="padding" automaticOffset style={{ flex: 1 }}>
+          <View
+            className="flex-1 bg-pageBg px-4"
+            style={{
+              paddingTop: insets.top + 16,
+              paddingBottom: Math.max(insets.bottom, 16),
+              gap: 18,
+            }}
+          >
+            <ThemedText accessibilityRole="header" variant="titleLarge">
+              {t('present.presetNameTitle')}
+            </ThemedText>
+            <ThemedTextInput
+              autoFocus
+              value={nameInput}
+              onChangeText={setNameInput}
+              label={t('present.presetNameLabel')}
+              placeholder={t('present.presetNamePlaceholder')}
+              returnKeyType="done"
+              onSubmitEditing={savePreset}
             />
-            <ThemedButton
-              fullWidth
-              variant="secondary"
-              label={t('present.cancel')}
-              onPress={closeSheet}
-            />
+            <View style={{ marginTop: 'auto', gap: 10 }}>
+              <ThemedButton
+                fullWidth
+                disabled={nameInput.trim().length === 0}
+                label={t('present.save')}
+                onPress={savePreset}
+              />
+              <ThemedButton
+                fullWidth
+                variant="secondary"
+                label={t('present.cancel')}
+                onPress={closeSheet}
+              />
+            </View>
           </View>
-        </View>
-      </Modal>
+        </KeyboardAvoidingView>
+      </ModalSheet>
     </>
   );
 }

@@ -1,9 +1,11 @@
 import { useState, type ReactNode } from 'react';
 import { router } from 'expo-router';
-import { ActivityIndicator, Modal, ScrollView, Switch, View } from 'react-native';
+import { ActivityIndicator, ScrollView, Switch, View } from 'react-native';
+import { KeyboardAwareScrollView } from 'react-native-keyboard-controller';
 import Animated, { FadeIn } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { ModalSheet } from '@/components/common/ModalSheet';
 import { PressableScale } from '@/components/common/PressableScale';
 import { SfIcon } from '@/components/icons/SfIcon';
 import { ThemedButton, ThemedSurface, ThemedText, ThemedTextInput } from '@/components/themed';
@@ -357,9 +359,9 @@ function PageBlockPickerSheet({
   const insets = useSafeAreaInsets();
   const addBlock = usePageDesignStore((state) => state.addBlock);
   return (
-    <Modal visible={visible} animationType="slide" presentationStyle="pageSheet" onRequestClose={onClose}>
-      <View className="flex-1 bg-pageBg" style={{ paddingTop: insets.top, paddingBottom: insets.bottom + 16 }}>
-        <ScrollView contentContainerStyle={{ padding: 16, gap: 12 }}>
+    <ModalSheet visible={visible} onRequestClose={onClose}>
+      <View className="flex-1 bg-pageBg" style={{ paddingTop: insets.top }}>
+        <ScrollView contentContainerStyle={{ padding: 16, paddingBottom: insets.bottom + 24, gap: 12 }}>
           <ThemedText variant="titleLarge">{t('pageDesign.addSection')}</ThemedText>
           {PAGE_BLOCK_CATALOG.filter((entry) => entry.type !== 'links').map((entry) => (
               <PressableScale
@@ -388,7 +390,7 @@ function PageBlockPickerSheet({
           <ThemedButton label={t('common.close')} variant="secondary" fullWidth onPress={onClose} />
         </ScrollView>
       </View>
-    </Modal>
+    </ModalSheet>
   );
 }
 
@@ -427,9 +429,12 @@ function PageBlockEditorContent({ block, onClose }: { readonly block: PageBlock;
     onClose();
   };
   return (
-    <Modal visible animationType="slide" presentationStyle="pageSheet" onRequestClose={onClose}>
+    <ModalSheet visible onRequestClose={onClose}>
       <View className="flex-1 bg-pageBg" style={{ paddingTop: insets.top }}>
-        <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={{ padding: 16, paddingBottom: insets.bottom + 24, gap: 18 }}>
+        <KeyboardAwareScrollView
+          keyboardShouldPersistTaps="handled"
+          bottomOffset={16}
+          contentContainerStyle={{ padding: 16, paddingBottom: insets.bottom + 24, gap: 18 }}>
           <ThemedText variant="titleLarge">{t('pageDesign.editSectionTitle')}</ThemedText>
           <ThemedTextInput
             label={t('pageDesign.sectionTitle')}
@@ -522,9 +527,9 @@ function PageBlockEditorContent({ block, onClose }: { readonly block: PageBlock;
             onPress={() => { removeBlock(block.id); onClose(); }}
           />
           <ThemedButton label={t('common.cancel')} variant="secondary" fullWidth onPress={onClose} />
-        </ScrollView>
+        </KeyboardAwareScrollView>
       </View>
-    </Modal>
+    </ModalSheet>
   );
 }
 

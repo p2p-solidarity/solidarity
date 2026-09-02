@@ -28,7 +28,8 @@
 import { useLocalSearchParams } from 'expo-router';
 import { safeBack } from '@/navigation/safeBack';
 import { useCallback, useEffect, useMemo, useReducer, useState } from 'react';
-import { Modal, Pressable, ScrollView, Text, View } from 'react-native';
+import { Modal, Pressable, Text, View } from 'react-native';
+import { KeyboardAwareScrollView } from 'react-native-keyboard-controller';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { CryptoCompilingOverlay } from '@/components/common/CryptoCompilingOverlay';
@@ -748,7 +749,10 @@ export default function PassportSetup() {
         }
         onDone={onProofOverlayDone}
       />
-      <ScrollView contentContainerStyle={{ padding: 16, paddingBottom: 80 }}>
+      <KeyboardAwareScrollView
+        keyboardShouldPersistTaps="handled"
+        bottomOffset={16}
+        contentContainerStyle={{ padding: 16, paddingBottom: 80 }}>
         <SolidarityPlaceholderCard
           screenID={meta.id}
           title={t(meta.title)}
@@ -800,7 +804,7 @@ export default function PassportSetup() {
             onSave={() => { void onPersist(); }}
           />
         ) : null}
-      </ScrollView>
+      </KeyboardAwareScrollView>
 
       <Modal
         visible={showCamera}

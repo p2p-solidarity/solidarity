@@ -1,7 +1,8 @@
 import { useLocalSearchParams } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useEffect, useMemo, useRef, useState, type ReactNode, type RefObject } from 'react';
-import { Image, ScrollView, TextInput, View, type LayoutChangeEvent } from 'react-native';
+import { Image, TextInput, View, type LayoutChangeEvent } from 'react-native';
+import { KeyboardAwareScrollView } from 'react-native-keyboard-controller';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { animalImageSource } from '@/cards/animals';
@@ -119,9 +120,10 @@ export default function PersonDetailScreen(): ReactNode {
         moreDisabled={!contact}
       />
 
-      <ScrollView
+      <KeyboardAwareScrollView
         contentInsetAdjustmentBehavior="automatic"
         keyboardShouldPersistTaps="handled"
+        bottomOffset={16}
         contentContainerStyle={{ paddingTop: 8, paddingBottom: 32, gap: 16 }}
       >
         <HeroCard
@@ -151,7 +153,7 @@ export default function PersonDetailScreen(): ReactNode {
             />
           </View>
         ) : null}
-      </ScrollView>
+      </KeyboardAwareScrollView>
 
       {contact ? (
         <PersonDetailMoreSheet

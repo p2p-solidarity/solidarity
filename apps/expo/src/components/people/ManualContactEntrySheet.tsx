@@ -14,19 +14,17 @@
  */
 import { useState, type ReactNode } from 'react';
 import {
-  KeyboardAvoidingView,
-  Modal,
-  Platform,
   Pressable,
-  ScrollView,
   Text,
   TextInput,
   View,
   type KeyboardTypeOptions,
   type TextInputProps,
 } from 'react-native';
+import { KeyboardAwareScrollView } from 'react-native-keyboard-controller';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { ModalSheet } from '@/components/common/ModalSheet';
 import { Colors } from '@/constants/Colors';
 import { useContactStore } from '@/contacts/repository';
 import { showError } from '@/feedback/appAlert';
@@ -47,13 +45,9 @@ export function ManualContactEntrySheet({
   onSaved,
 }: ManualContactEntrySheetProps): ReactNode {
   return (
-    <Modal
-      visible={visible}
-      animationType="slide"
-      presentationStyle="formSheet"
-      onRequestClose={onClose}>
+    <ModalSheet visible={visible} presentationStyle="formSheet" onRequestClose={onClose}>
       <ManualContactEntryContent onClose={onClose} onSaved={onSaved} />
-    </Modal>
+    </ModalSheet>
   );
 }
 
@@ -153,9 +147,7 @@ function ManualContactEntryContent({
   };
 
   return (
-    <KeyboardAvoidingView
-      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-      style={{ flex: 1, backgroundColor: Colors.pageBg }}>
+    <View style={{ flex: 1, backgroundColor: Colors.pageBg }}>
       <View style={{ paddingTop: insets.top }}>
         <Toolbar
           onCancel={onClose}
@@ -165,9 +157,10 @@ function ManualContactEntryContent({
         />
       </View>
 
-      <ScrollView
+      <KeyboardAwareScrollView
         keyboardShouldPersistTaps="handled"
-        contentContainerStyle={{ paddingHorizontal: 16, paddingTop: 16, paddingBottom: 32 }}>
+        bottomOffset={16}
+        contentContainerStyle={{ paddingHorizontal: 16, paddingTop: 16, paddingBottom: insets.bottom + 32 }}>
         <View style={{ rowGap: 20 }}>
           <FieldRow
             label="Name"
@@ -226,8 +219,8 @@ function ManualContactEntryContent({
             </Text>
           ) : null}
         </View>
-      </ScrollView>
-    </KeyboardAvoidingView>
+      </KeyboardAwareScrollView>
+    </View>
   );
 }
 
