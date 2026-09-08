@@ -1,16 +1,20 @@
+import { requestCloudSync, useCloudSyncStatus, readSyncConflicts, chooseSyncConflict } from '@/backup/cloudSync';
 /**
- * Backup — 1:1 port of solidarity/Views/SettingsViews/BackupSettingsView.swift.
+ * Backup settings.
  *
- * Three sections:
- *   1. iCloud Backup — Enable toggle. When ON, also shows Auto-backup toggle
- *      with subtitle "Automatically backup when cards change".
- *   2. Actions — "Back Up Now" (shows "Working…" while running) and
- *      "Restore from Backup". Footer = "Last: …" timestamp if available.
- *   3. Status — iCloud connectivity row + footer explaining sync behaviour.
+ * Two tabs, because the screen answers two unrelated questions and used to
+ * stack both as one long scroll:
+ *   - **Backup**  — how backing up behaves: on/off, the automatic schedule
+ *     and its interval, device sync, manual actions, iCloud status.
+ *   - **History** — which dated archives exist and restoring a specific one.
+ *
+ * Only `MAX_RETAINED_BACKUPS` archives are kept, so History is short by
+ * construction; the interval control on the Backup tab is what decides how
+ * much time those few slots actually span.
  */
 import { safeBack } from '@/navigation/safeBack';
-import { useEffect, useState } from 'react';
-import { ScrollView, View } from 'react-native';
+import { useCallback, useEffect, useState } from 'react';
+import { ScrollView, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import {
@@ -18,14 +22,19 @@ import {
   SettingsBlockInfoRow,
   SettingsBlockRow,
   SettingsBlockSection,
+  SettingsBlockSectionHeader,
   SettingsBlockToggleRow,
   SettingsScreenTitle,
+  SettingsSegmented,
 } from '@/components/settings/SettingsBlocks';
 import {
+  AUTO_BACKUP_INTERVAL_CHOICES,
   backupMtime,
   BackupRestoreError,
   listBackupArchives,
+  MAX_RETAINED_BACKUPS,
   requestBackup,
+  resolveAutoBackupIntervalHours,
   restoreFromBackup,
   type BackupArchiveInfo,
 } from '@/backup';
@@ -35,14 +44,20 @@ import { pushToast } from '@/feedback/toast';
 import { useTranslation } from '@/i18n';
 import { usePreferences } from '@/settings/preferences';
 
+type BackupTab = 'backup' | 'history';
+
 export default function BackupSettings() {
   const insets = useSafeAreaInsets();
   const { t } = useTranslation();
   const provider = usePreferences((s) => s.backupProvider);
   const backupEnabled = usePreferences((s) => s.backupEnabled);
   const autoBackup = usePreferences((s) => s.autoBackupOnPull);
+  const intervalHours = usePreferences((s) => s.autoBackupIntervalHours);
+  const sync = useCloudSyncStatus();
+  const [conflicts, setConflicts] = useState<ReturnType<typeof readSyncConflicts>>({ revision: '', choices: [] });
   const setPref = usePreferences((s) => s.set);
 
+  const [tab, setTab] = useState<BackupTab>('backup');
   const [lastBackup, setLastBackup] = useState<Date | null>(null);
   const [isBackingUp, setIsBackingUp] = useState(false);
   const [iCloudAvailable, setICloudAvailable] = useState(true);
@@ -52,14 +67,14 @@ export default function BackupSettings() {
     'loading'
   );
 
-  const reloadArchives = async () => {
+  const reloadArchives = useCallback(async () => {
     setArchives('loading');
     try {
       setArchives(await listBackupArchives());
     } catch {
       setArchives('error');
     }
-  };
+  }, []);
 
   useEffect(() => {
     void backupMtime()
@@ -71,8 +86,13 @@ export default function BackupSettings() {
         setLastBackup(null);
         setICloudAvailable(false);
       });
-    void reloadArchives();
   }, [provider]);
+
+  // The automatic schedule writes archives while this screen is open, so the
+  // list is re-read on entry to History rather than cached from mount.
+  useEffect(() => {
+    if (tab === 'history') void reloadArchives();
+  }, [tab, provider, reloadArchives]);
 
   const onBackupNow = async () => {
     setIsBackingUp(true);
@@ -80,9 +100,19 @@ export default function BackupSettings() {
     try {
       const result = await requestBackup('manual');
       if (!result.ran) {
-        if (result.skipReason === 'needs-connection') {
-          pushToast(t('backup.drive.needsConnection'), 'info', 3000);
-        }
+        // The user pressed a button and already saw "Encrypting…" — every
+        // reason a manual run can decline has to be said out loud, or the
+        // screen implies a backup that never happened. Manual bypasses the
+        // schedule gates, so only these three can reach here.
+        const skipMessage =
+          result.skipReason === 'needs-connection'
+            ? t('backup.drive.needsConnection')
+            : result.skipReason === 'empty'
+              ? t('backup.skipped.empty')
+              : result.skipReason === 'root-key-unavailable'
+                ? t('backup.skipped.rootKeyUnavailable')
+                : t('backup.skipped.unknown');
+        pushToast(skipMessage, 'info', 3500);
         return;
       }
       if (result.payload) setLastBackup(new Date(result.payload.exportedAt));
@@ -152,112 +182,207 @@ export default function BackupSettings() {
     }
   };
 
-  const actionsFooter = lastBackup
-    ? `Last: ${lastBackup.toLocaleString()}`
+  useEffect(() => {
+    try { setConflicts(readSyncConflicts()); } catch { setConflicts({ revision: '', choices: [] }); }
+  }, [sync.status, sync.conflicts]);
+
+  const syncNow = async () => {
+    try { await requestCloudSync(); }
+    catch (error) { showError({ context: 'Cloud sync', summary: t('backup.sync.failed'), error }); }
+  };
+  const resolveConflict = async (key: string, index: number, summary: string) => {
+    const accepted = await confirmDialog({ title: t('backup.sync.choose'),
+      message: t('backup.sync.chooseMessage', { summary }), confirmLabel: t('backup.sync.choose') });
+    if (!accepted) return;
+    try { await chooseSyncConflict(conflicts.revision, key, index); setConflicts(readSyncConflicts()); }
+    catch (error) { showError({ context: 'Cloud sync conflict', summary: t('backup.sync.failed'), error }); }
+  };
+
+  const selectedInterval = resolveAutoBackupIntervalHours(intervalHours);
+  const intervalOptions = AUTO_BACKUP_INTERVAL_CHOICES.map((hours) => ({
+    value: String(hours),
+    label: t(`backup.auto.every.${hours}`),
+  }));
+
+  const lastBackupText = lastBackup
+    ? t('backup.lastBackup', { date: lastBackup.toLocaleString() })
     : undefined;
-
-  const statusFooter = iCloudAvailable
-    ? 'Backups are stored in your iCloud Drive and synced across all your devices.'
-    : 'Sign in to iCloud in Settings to sync backups across devices. Local backups are still available.';
-
   const backupDisabled = !backupEnabled || isBackingUp;
 
   return (
     <View className="flex-1 bg-pageBg" style={{ paddingTop: insets.top }}>
       <SettingsBackToolbar onPress={() => { safeBack('/settings'); }} />
-      <SettingsScreenTitle title="Backup" />
+      <SettingsScreenTitle title={t('backup.title')} />
+
+      <View className="px-4" style={{ paddingTop: 12 }}>
+        <SettingsSegmented
+          role="tab"
+          value={tab}
+          onChange={setTab}
+          options={[
+            { value: 'backup', label: t('backup.tabs.backup') },
+            { value: 'history', label: t('backup.tabs.history') },
+          ]}
+        />
+      </View>
 
       <ScrollView
         className="flex-1"
         contentContainerStyle={{ paddingTop: 24, paddingBottom: 24 + insets.bottom }}
       >
-        <View className="gap-6">
-          {/* iCloud Backup */}
-          <SettingsBlockSection title="iCloud Backup">
-            <SettingsBlockToggleRow
-              icon="icloud"
-              title="Enable iCloud Backup"
-              value={backupEnabled}
-              onValueChange={(v) => { setPref('backupEnabled', v); }}
-            />
-            {backupEnabled ? (
+        {tab === 'backup' ? (
+          <View className="gap-6">
+            {/* iCloud Backup */}
+            <SettingsBlockSection title={t('backup.section.icloud')}>
               <SettingsBlockToggleRow
-                icon="arrow.triangle.2.circlepath"
-                title="Auto-backup"
-                subtitle="Automatically backup when cards change"
-                value={autoBackup}
-                onValueChange={(v) => { setPref('autoBackupOnPull', v); }}
+                icon="icloud"
+                title={t('backup.sync.enable')}
+                value={backupEnabled}
+                onValueChange={(v) => { setPref('backupEnabled', v); }}
               />
+              {backupEnabled ? (
+                <SettingsBlockToggleRow
+                  icon="arrow.triangle.2.circlepath"
+                  title={t('backup.auto.title')}
+                  subtitle={t('backup.auto.subtitle')}
+                  value={autoBackup}
+                  onValueChange={(v) => { setPref('autoBackupOnPull', v); }}
+                />
+              ) : null}
+            </SettingsBlockSection>
+
+            {/* Automatic backup interval — the control that decides how much
+                time the retained archives actually cover. */}
+            {backupEnabled && autoBackup ? (
+              <View className="gap-2">
+                <SettingsBlockSectionHeader title={t('backup.auto.intervalHeader')} />
+                <View className="px-4">
+                  <SettingsSegmented
+                    value={String(selectedInterval)}
+                    options={intervalOptions}
+                    onChange={(value) => {
+                      setPref('autoBackupIntervalHours', Number(value));
+                    }}
+                  />
+                </View>
+                <Text className="px-4 text-[12px] text-text3">
+                  {t('backup.auto.intervalFooter', { kept: MAX_RETAINED_BACKUPS })}
+                </Text>
+              </View>
             ) : null}
-          </SettingsBlockSection>
 
-          {/* Actions */}
-          <SettingsBlockSection title="Actions" footer={actionsFooter}>
-            <SettingsBlockRow
-              icon="icloud.and.arrow.up"
-              title="Back Up Now"
-              trailingText={isBackingUp ? 'Working…' : undefined}
-              showsChevron={false}
-              disabled={backupDisabled}
-              onPress={() => { void onBackupNow(); }}
-            />
-            <SettingsBlockRow
-              icon="arrow.counterclockwise.icloud"
-              title="Restore from Backup"
-              showsChevron={false}
-              onPress={() => { void onRestore(); }}
-            />
-          </SettingsBlockSection>
-
-          {/* Archives — dated explicit choice (plan G6). 3-state: loading /
-              error / list (empty list = honest "none" footer, no placeholder). */}
-          <SettingsBlockSection
-            title={t('backup.archives.title')}
-            footer={
-              archives === 'loading'
-                ? undefined
-                : archives === 'error'
-                  ? t('backup.archives.loadError')
-                  : archives.length === 0
-                    ? t('backup.archives.none')
-                    : t('backup.archives.footer')
-            }
-          >
-            {Array.isArray(archives)
-              ? archives.map((a) => {
-                  const date = new Date(a.timestampMs).toLocaleString();
+            <SettingsBlockSection title={t('backup.sync.title')} footer={t('backup.sync.footer')}>
+              <SettingsBlockRow icon="arrow.triangle.2.circlepath" title={t('backup.sync.now')}
+                showsChevron={false} disabled={!backupEnabled || sync.status === 'syncing'}
+                onPress={() => { void syncNow(); }} />
+              <SettingsBlockInfoRow icon="icloud" title={t(`backup.sync.${sync.status}`)}
+                value={sync.lastCheckedAt ? new Date(sync.lastCheckedAt).toLocaleTimeString() : ''} />
+            </SettingsBlockSection>
+            {conflicts.choices.length > 0 ? (
+              <SettingsBlockSection title={t('backup.sync.conflicts')} footer={t('backup.sync.conflictsFooter')}>
+                {conflicts.choices.map((choice) => {
+                  // One label for both the row and the confirm dialog. Passing
+                  // the raw token to the dialog put the untranslated internal
+                  // enum ("deleted" / "avatar") inside an irreversible
+                  // destructive prompt, one line under its localized title.
+                  const label =
+                    choice.summary === 'deleted'
+                      ? t('backup.sync.deleted')
+                      : choice.summary === 'avatar'
+                        ? t('backup.sync.avatar')
+                        : choice.summary;
                   return (
-                    <SettingsBlockRow
-                      key={a.name}
-                      icon={a.version === 2 ? 'icloud' : 'doc.text'}
-                      title={date}
-                      subtitle={
-                        a.version === 2
-                          ? t('backup.archives.portable')
-                          : a.version === 1
-                            ? t('backup.archives.legacy')
-                            : t('backup.archives.unknown')
-                      }
-                      showsChevron={false}
-                      disabled={a.version === null}
-                      onPress={() => {
-                        void onRestore(a.name, date);
-                      }}
-                    />
+                    <SettingsBlockRow key={`${choice.key}:${choice.index}`} icon="doc.text"
+                      title={label}
+                      subtitle={`${choice.key} · ${choice.digest}`}
+                      onPress={() => { void resolveConflict(choice.key, choice.index, label); }} />
                   );
-                })
-              : null}
-          </SettingsBlockSection>
+                })}
+              </SettingsBlockSection>
+            ) : null}
 
-          {/* Status */}
-          <SettingsBlockSection title="Status" footer={statusFooter}>
-            <SettingsBlockInfoRow
-              icon={iCloudAvailable ? 'checkmark.icloud.fill' : 'externaldrive.fill'}
-              title={iCloudAvailable ? 'iCloud connected' : 'iCloud unavailable'}
-              value=""
-            />
-          </SettingsBlockSection>
-        </View>
+            {/* Actions */}
+            <SettingsBlockSection title={t('backup.section.actions')} footer={lastBackupText}>
+              <SettingsBlockRow
+                icon="icloud.and.arrow.up"
+                title={t('backup.now')}
+                trailingText={isBackingUp ? t('backup.working') : undefined}
+                showsChevron={false}
+                disabled={backupDisabled}
+                onPress={() => { void onBackupNow(); }}
+              />
+              <SettingsBlockRow
+                icon="arrow.counterclockwise.icloud"
+                title={t('backup.restoreLatest')}
+                showsChevron={false}
+                onPress={() => { void onRestore(); }}
+              />
+            </SettingsBlockSection>
+
+            {/* Status — its own footer, not a second copy of the sync
+                paragraph: when iCloud is unavailable this is the only place
+                that tells the user what to actually do about it. */}
+            <SettingsBlockSection
+              title={t('backup.section.status')}
+              footer={
+                iCloudAvailable
+                  ? t('backup.status.connectedFooter')
+                  : t('backup.status.unavailableFooter')
+              }>
+              <SettingsBlockInfoRow
+                icon={iCloudAvailable ? 'checkmark.icloud.fill' : 'externaldrive.fill'}
+                title={iCloudAvailable ? t('backup.status.connected') : t('backup.status.unavailable')}
+                value=""
+              />
+            </SettingsBlockSection>
+          </View>
+        ) : (
+          /* History — dated explicit choice (plan G6). 3-state: loading /
+             error / list (empty list = honest "none" footer, no placeholder). */
+          <View className="gap-6">
+            <SettingsBlockSection
+              title={t('backup.archives.title')}
+              footer={
+                archives === 'loading'
+                  ? undefined
+                  : archives === 'error'
+                    ? t('backup.archives.loadError')
+                    : archives.length === 0
+                      ? t('backup.archives.none')
+                      : t('backup.archives.footer', { kept: MAX_RETAINED_BACKUPS })
+              }
+            >
+              {typeof archives !== 'string'
+                ? archives.map((a) => {
+                    const date = new Date(a.timestampMs).toLocaleString();
+                    return (
+                      <SettingsBlockRow
+                        key={a.name}
+                        icon={a.version === 2 ? 'icloud' : 'doc.text'}
+                        title={date}
+                        subtitle={
+                          a.version === 2
+                            ? t('backup.archives.portable')
+                            : a.version === 1
+                              ? t('backup.archives.legacy')
+                              : t('backup.archives.unknown')
+                        }
+                        showsChevron={false}
+                        disabled={a.version === null}
+                        onPress={() => {
+                          void onRestore(a.name, date);
+                        }}
+                      />
+                    );
+                  })
+                : null}
+            </SettingsBlockSection>
+
+            {lastBackupText ? (
+              <Text className="px-4 text-[12px] text-text3">{lastBackupText}</Text>
+            ) : null}
+          </View>
+        )}
       </ScrollView>
     </View>
   );

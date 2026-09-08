@@ -27,6 +27,12 @@
  * data the moment each store's `details` map populates.
  */
 import 'react-native-get-random-values';
+
+// Below the polyfill on purpose: both modules pull in @solidarity/shared and
+// @noble/*, which the header above requires to evaluate AFTER crypto exists.
+import { startAutoBackup } from '@/backup/autoBackupScheduler';
+import { startCloudSync } from '@/backup/cloudSync';
+import { recoverPortableCommit } from '@/backup/portableStorage';
 import 'react-native-gesture-handler';
 import '../global.css';
 
@@ -148,6 +154,7 @@ export default function RootLayout() {
   // registration effect below reads the real preference, not the default.
   const remoteNotificationsEnabled = usePreferences((s) => s.notificationsRemote);
   const hasCompletedOnboarding = usePreferences((s) => s.hasCompletedOnboarding);
+  const backupEnabled = usePreferences((s) => s.backupEnabled);
   useEffect(() => {
     Appearance.setColorScheme(appColorScheme === 'system' ? 'unspecified' : appColorScheme);
   }, [appColorScheme]);
@@ -179,6 +186,9 @@ export default function RootLayout() {
         logBoot('mmkv:start');
         await initMmkv();
         logBoot('mmkv:done');
+        // Recover before any cache or manifest can seed process memory from
+        // a half-applied portable-data snapshot.
+        recoverPortableCommit();
         // Warm the Nostr sync mirror's MMKV reference NOW so every later
         // `hasNostrKeySync()` call (e.g. the Verify tab's badge-bindings
         // row) is a real synchronous read instead of a cold-cache `false`
@@ -274,6 +284,24 @@ export default function RootLayout() {
     });
     return () => { sub.remove(); };
   }, []);
+
+  useEffect(() => {
+    if (!ready || !hasCompletedOnboarding || !backupEnabled) return;
+    // Sync and the dated-archive schedule share one foreground lifetime: both
+    // are foreground-only, and starting them together keeps a single place
+    // where cloud work can begin.
+    const start = () => {
+      const stopSync = startCloudSync();
+      const stopBackup = startAutoBackup();
+      return () => { stopSync(); stopBackup(); };
+    };
+    let stop = AppState.currentState === 'active' ? start() : undefined;
+    const sub = AppState.addEventListener('change', (state) => {
+      stop?.();
+      stop = state === 'active' ? start() : undefined;
+    });
+    return () => { stop?.(); sub.remove(); };
+  }, [ready, hasCompletedOnboarding, backupEnabled]);
 
   // Contact auto-update (CREDS §3.3 訂閱憑據 lane, v1 — 05-spec §3): on boot
   // and every return to foreground, run one THROTTLED sweep that re-resolves

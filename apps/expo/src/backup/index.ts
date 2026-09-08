@@ -27,3 +27,9 @@ export {
   type RestoreResult,
 } from './backupManager';
 export { makeGestureAutoBackup } from './gestureAutoBackup';
+export { startAutoBackup } from './autoBackupScheduler';
+export {
+  AUTO_BACKUP_INTERVAL_CHOICES,
+  MAX_RETAINED_BACKUPS,
+  resolveAutoBackupIntervalHours,
+} from './backupPolicy';

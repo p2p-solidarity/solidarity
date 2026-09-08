@@ -1,3 +1,4 @@
+import { getMmkv } from '@/storage/mmkv';
 import { Image } from 'expo-image';
 import * as Clipboard from 'expo-clipboard';
 import { useFocusEffect } from 'expo-router';
@@ -65,6 +66,10 @@ export function ProfileHero({
   useFocusEffect(
     useCallback(() => {
       setLocalAvatar(readLocalAvatarUri());
+      const subscription = getMmkv().addOnValueChangedListener((key) => {
+        if (key === 'profile:local-avatar:v1') setLocalAvatar(readLocalAvatarUri());
+      });
+      return () => { subscription.remove(); };
     }, [])
   );
 

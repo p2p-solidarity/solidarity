@@ -71,8 +71,15 @@ function deserializeCard(s: SerializedCard): IdentityCardEntity {
 }
 
 function serializeClaim(c: ProvableClaimEntity): SerializedClaim {
+  // Scrub a device-local field an earlier build on this branch derived and
+  // persisted. Whether THIS device can present a claim is answered at the
+  // presentation chokepoint, never by hiding portable evidence — but rows
+  // written before that may still carry it at runtime (the type no longer
+  // has it), and one phone's witness state must never reach another.
+  const portable: Record<string, unknown> = { ...c };
+  Reflect.deleteProperty(portable, 'isPresentableOnDevice');
   return {
-    ...c,
+    ...(portable as Omit<ProvableClaimEntity, 'lastPresentedAt' | 'createdAt' | 'updatedAt'>),
     lastPresentedAt: c.lastPresentedAt ? c.lastPresentedAt.toISOString() : undefined,
     createdAt: c.createdAt.toISOString(),
     updatedAt: c.updatedAt.toISOString(),

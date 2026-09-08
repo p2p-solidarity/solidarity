@@ -579,6 +579,11 @@ describe('iCloud backup — gesture-triggered (pull-down pan)', () => {
       autoBackupOnPull: true,
       backupProvider: 'iCloud',
     });
+    // A device with NOTHING to back up now skips instead of writing an empty
+    // archive that would rotate away the archives still holding real data, so
+    // give this one a single portable record. `set` (not `setState`) is what
+    // persists to `prefs:v1`, which is where the snapshot reads it from.
+    usePreferences.getState().set('shareEmail', true);
   });
 
   afterAll(async () => {
@@ -589,6 +594,7 @@ describe('iCloud backup — gesture-triggered (pull-down pan)', () => {
       backupEnabled: false,
       autoBackupOnPull: true,
       backupProvider: 'iCloud',
+      shareEmail: false,
     });
     // Reset the rootKey storage DI so the injected phrase can't leak.
     const rootKey = await import('@/identity/rootKey');

@@ -29,6 +29,68 @@ export function SettingsBlockSectionHeader({ title }: { title: string }) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// Segmented control — mutually exclusive choice, matching the Appearance
+// screen's colour-mode control so settings only ever teach one such shape.
+// Used both for in-screen tabs and for small option sets (backup interval).
+// ─────────────────────────────────────────────────────────────────────────────
+
+export interface SettingsSegmentedOption<T extends string> {
+  readonly value: T;
+  readonly label: string;
+}
+
+export function SettingsSegmented<T extends string>({
+  value,
+  options,
+  onChange,
+  role = 'button',
+}: {
+  value: T;
+  options: readonly SettingsSegmentedOption<T>[];
+  onChange: (value: T) => void;
+  /** `'tab'` when the segments swap the screen's content, so VoiceOver
+   *  announces them as tabs rather than as plain buttons. */
+  role?: 'button' | 'tab';
+}) {
+  const c = useThemeColors();
+  return (
+    <View
+      className="flex-row bg-mutedSurface"
+      accessibilityRole={role === 'tab' ? 'tablist' : undefined}
+      style={{ borderRadius: 12, padding: 4 }}>
+      {options.map((option) => {
+        const selected = option.value === value;
+        return (
+          <PressableScale
+            key={option.value}
+            fill
+            accessibilityRole={role}
+            accessibilityState={{ selected }}
+            accessibilityLabel={option.label}
+            onPress={() => { onChange(option.value); }}
+            style={{
+              minHeight: 44,
+              alignItems: 'center',
+              justifyContent: 'center',
+              borderRadius: 8,
+              backgroundColor: selected ? c.cardBg : 'transparent',
+            }}>
+            <Text
+              className="text-[13px]"
+              style={{
+                color: selected ? c.text1 : c.text2,
+                fontWeight: selected ? '600' : '400',
+              }}>
+              {option.label}
+            </Text>
+          </PressableScale>
+        );
+      })}
+    </View>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // Section container — header + continuous rows + optional footer
 // ─────────────────────────────────────────────────────────────────────────────
 
