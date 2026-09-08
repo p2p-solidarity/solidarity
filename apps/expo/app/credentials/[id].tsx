@@ -487,7 +487,7 @@ export default function CredentialDetailScreen() {
           t('security.prompt.presentProof'),
         );
         if (!gate.success) {
-          pushToast(t(`security.biometric.${gate.reason}`), 'warning');
+          pushToast(t(`security.error.${gate.reason}`), 'warning');
           return;
         }
         for (const claimID of selectedClaimsForPresentation.map((claim) => claim.id)) {

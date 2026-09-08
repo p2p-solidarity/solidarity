@@ -3,9 +3,9 @@
  * Top-level preferences and Developer Options both live on the Settings hub,
  * so this screen does not duplicate either navigation surface.
  *
- * Destructive actions require biometric authentication when the matching
- * `biometricPolicy.rotateMasterKey` flag is on (mirrors Swift
- * `BiometricGatekeeper.authorizeIfRequired(.rotateMasterKey)`).
+ * Destructive actions always require biometric authentication:
+ * `rotateMasterKey` is one of the RED_LINE_ACTIONS no Face ID mode can
+ * disarm (`src/keychain/sensitiveActionPolicy.ts`).
  *
  * Reset App Data clears the complete MMKV store and the in-memory store
  * mirrors hydrated from it, restores preference defaults, and deliberately
@@ -28,8 +28,7 @@ import { confirmDialog } from '@/feedback/confirmDialog';
 import { pushToast } from '@/feedback/toast';
 import { useTranslation } from '@/i18n';
 import { useIdentityData } from '@/identity';
-import { requireBiometric } from '@/keychain';
-import { usePreferences } from '@/settings/preferences';
+import { requireSensitiveAction } from '@/keychain';
 import { resetAppDataKeepingKeys } from '@/settings/productionWipe';
 import { getMmkv } from '@/storage/mmkv';
 import { clearAll as clearPassportAnchors } from '@/zk/passportAnchorStore';
@@ -37,14 +36,17 @@ import { clearAll as clearPassportAnchors } from '@/zk/passportAnchorStore';
 export default function ResetOptions() {
   const insets = useSafeAreaInsets();
   const { t } = useTranslation();
-  const policy = usePreferences((s) => s.biometricPolicy);
   const removePassportCredentials = useIdentityData((s) => s.removePassportCredentials);
 
   const [busy, setBusy] = useState(false);
 
+  // rotateMasterKey is gated unconditionally — see RED_LINE_ACTIONS.
   const requireRotateAuth = async (): Promise<boolean> => {
-    if (!policy.rotateMasterKey) return true;
-    return requireBiometric('delete');
+    const gate = await requireSensitiveAction(
+      'rotateMasterKey',
+      t('security.prompt.resetAppData')
+    );
+    return gate.success;
   };
 
   const onResetAppData = async () => {

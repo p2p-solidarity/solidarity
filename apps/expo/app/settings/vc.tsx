@@ -45,7 +45,7 @@ import {
 import { appAlert, showError } from '@/feedback/appAlert';
 import { pushToast } from '@/feedback/toast';
 import { useTranslation } from '@/i18n';
-import { requireBiometric } from '@/keychain';
+import { requireSensitiveAction } from '@/keychain';
 import { usePreferences } from '@/settings/preferences';
 
 export default function VcSettingsRoute() {
@@ -61,7 +61,6 @@ function VcSettings() {
   const hydrate = useCredentialStore((s) => s.hydrate);
   const hydrateCards = useCardStore((s) => s.hydrate);
   const loadCardDetail = useCardStore((s) => s.loadDetail);
-  const policy = usePreferences((s) => s.biometricPolicy);
   const shareTitle = usePreferences((s) => s.shareTitle);
   const shareCompany = usePreferences((s) => s.shareCompany);
   const shareEmail = usePreferences((s) => s.shareEmail);
@@ -123,12 +122,13 @@ function VcSettings() {
         appAlert({ title: t('vc.title'), message: t('vc.noneToExport') });
         return;
       }
-      if (policy.exportGraph) {
-        const ok = await requireBiometric('export');
-        if (!ok) {
-          setBusy(false);
-          return;
-        }
+      const gate = await requireSensitiveAction(
+        'exportGraph',
+        t('security.prompt.exportGraph')
+      );
+      if (!gate.success) {
+        setBusy(false);
+        return;
       }
       const text = buildVcExportText(fresh.map((c) => c.rawJwt));
       const cache = FileSystem.cacheDirectory ?? '';

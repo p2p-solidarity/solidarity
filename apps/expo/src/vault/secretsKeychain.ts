@@ -52,7 +52,6 @@ import {
   type WrappedSecret,
 } from '@solidarity/nitro-keystone';
 
-import { requireBiometric } from '@/keychain/biometric';
 import {
   deletionFailed,
   deletionSucceeded,
@@ -335,7 +334,7 @@ async function unwrapRoot(env: EncodedRootSecret): Promise<Uint8Array | null> {
 /**
  * Read the root secret with the requested access mode. Generates a fresh
  * 32-byte key on first call. The biometric mode goes through
- * `requireBiometric('exchange')` first so the failure surface is
+ * `requireSensitiveAction('exportGraph')` first so the failure surface is
  * identical to every other Face ID-gated path (matches CLAUDE.md Sec
  * rules).
  */
@@ -359,18 +358,22 @@ async function getOrCreateRootSecretAtEpoch(
   }
 
   if (mode === 'biometric') {
-    // TODO(biometric-gate): swap for
-    //   const gate = await requireSensitiveAction(
-    //     action /* 'exportGraph' | 'rotateMasterKey' | 'revealRecoveryBundle' */,
-    //     promptFor(action)
-    //   );
-    //   if (!gate.success) return { kind: 'err', reason: 'biometricDenied' };
-    // so the unlock obeys the per-action policy in
-    // `useSensitiveActionPolicy`. Pass `action` as an extra arg, defaulting
-    // to `'exportGraph'`. Today this always demands biometric regardless
-    // of the user's policy preferences.
-    const allowed = await requireBiometric('exchange');
-    if (!allowed) return { kind: 'err', reason: 'biometricDenied' };
+    // Vault unlock is ACCESS-LEVEL (`exportGraph`), so it follows the user's
+    // Face ID mode: `redLineOnly` unlocks without a prompt, `everyTime` prompts
+    // on every call. Migrated off the policy-blind `requireBiometric('exchange')`
+    // on 2026-09-08.
+    // Lazy import: a static one would pull `sensitiveActionPolicy` ->
+    // `@/storage/mmkv` -> Nitro into every consumer of this module, including
+    // tests with no native runtime. Mirrors `rootKey.ts`'s gate loader.
+    const { requireSensitiveAction } = await import('@/keychain/biometricGatekeeper');
+    // English literal on purpose: `@/i18n` pulls expo-localization ->
+    // expo-modules-core, which needs a RN runtime this module must not require.
+    // The old `requireBiometric('exchange')` prompt was hardcoded English too.
+    const gate = await requireSensitiveAction(
+      'exportGraph',
+      'Authenticate to unlock your vault.'
+    );
+    if (!gate.success) return { kind: 'err', reason: 'biometricDenied' };
     if (!canCommitLocalData(writeEpoch)) {
       return { kind: 'err', reason: 'storageFailed' };
     }

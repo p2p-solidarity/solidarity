@@ -77,6 +77,32 @@ const ALWAYS_PROMPT: ReadonlySet<BiometricReason> = new Set(['delete', 'cardRele
 let graceUntil = 0;
 let promptInFlight: Promise<boolean> | null = null;
 
+/**
+ * Master switch for the grace window, driven by the user's gate mode
+ * (`sensitiveActionPolicy.ts`). `'everyTime'` sets this false.
+ *
+ * It lives HERE rather than in the gatekeeper because the grace bucket is
+ * shared by both gates: `requireBiometric` (this module, used by the vault,
+ * passport, signing and Pear paths) and `requireSensitiveAction`. Gating only
+ * the latter would leave "ask every time" silently untrue on most of the app.
+ */
+let graceEnabled = true;
+
+/**
+ * Enable/disable the shared grace window. Disabling also drops any window
+ * already open, so switching to "ask every time" takes effect immediately
+ * instead of after the current five minutes elapse.
+ */
+export function setBiometricGraceEnabled(enabled: boolean): void {
+  graceEnabled = enabled;
+  if (!enabled) graceUntil = 0;
+}
+
+/** Whether the grace window is allowed at all under the current gate mode. */
+export function isBiometricGraceEnabled(): boolean {
+  return graceEnabled;
+}
+
 /** Drop any active grace so the next sensitive action re-prompts. */
 export function resetBiometricGrace(): void {
   graceUntil = 0;
@@ -85,12 +111,13 @@ export function resetBiometricGrace(): void {
 
 /** Open the shared grace window (called after any equivalent gate succeeds). */
 export function armBiometricGrace(): void {
+  if (!graceEnabled) return;
   graceUntil = Date.now() + GRACE_MS;
 }
 
 /** Whether the shared grace window is currently open. */
 export function hasBiometricGrace(): boolean {
-  return Date.now() < graceUntil;
+  return graceEnabled && Date.now() < graceUntil;
 }
 
 /**
@@ -102,6 +129,8 @@ export async function requireBiometric(reason: BiometricReason): Promise<boolean
     return authenticate(reason);
   }
   if (hasBiometricGrace()) return true;
+  // In-flight coalescing is a concurrency guard (two signers racing must not
+  // stack two OS sheets), NOT a grace window — it stays on in every mode.
   if (promptInFlight) return promptInFlight;
   promptInFlight = authenticate(reason).finally(() => {
     promptInFlight = null;

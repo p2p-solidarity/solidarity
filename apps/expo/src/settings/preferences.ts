@@ -20,7 +20,16 @@ import type { ProviderKind } from '@/backup';
 
 const KEY = 'prefs:v1';
 
-/** Per-action biometric requirement flags (mirrors Swift SensitiveAction). */
+/**
+ * Per-action biometric requirement flags (mirrors Swift SensitiveAction).
+ *
+ * DEAD SHAPE — retained only so persisted preference blobs keep round-tripping.
+ * The live biometric gate is `src/keychain/sensitiveActionPolicy.ts`: one
+ * user-chosen `BiometricGateMode` plus `RED_LINE_ACTIONS` no mode disarms.
+ * Do not reintroduce reads of `biometricPolicy`; call
+ * `requireSensitiveAction(action, prompt)` instead, which consults the real
+ * policy itself.
+ */
 export type SensitiveActionKey =
   | 'issueCredential'
   | 'presentProof'
@@ -56,6 +65,10 @@ export interface Preferences {
     | 'invalid_request'
     | 'server_error';
   readonly publicPageRetryAt: number | null;
+  /**
+   * @deprecated Dormant — never read as behaviour. The biometric gate lives in
+   * `src/keychain/sensitiveActionPolicy.ts` (`mode`).
+   */
   readonly biometricSensitiveOps: boolean;
   readonly backupProvider: ProviderKind;
   readonly autoBackupOnPull: boolean;
@@ -70,7 +83,11 @@ export interface Preferences {
   readonly enableGlow: boolean;
   /** Mirrors Swift ThemeManager.selectedAnimal (null = none). */
   readonly selectedAnimal: AnimalCharacter | null;
-  /** Per-action Face ID requirement flags (Swift SensitiveActionPolicyStore). */
+  /**
+   * Per-action Face ID requirement flags (Swift SensitiveActionPolicyStore).
+   *
+   * @deprecated No longer written or read as a gate — see `SensitiveActionKey`.
+   */
   readonly biometricPolicy: Readonly<Record<SensitiveActionKey, boolean>>;
   /** Mirrors Swift BackupSettings.enabled. */
   readonly backupEnabled: boolean;

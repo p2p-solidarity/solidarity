@@ -1,6 +1,8 @@
 export {
   isBiometricAvailable,
+  isBiometricGraceEnabled,
   requireBiometric,
+  setBiometricGraceEnabled,
   type BiometricReason,
 } from './biometric';
 export {
@@ -28,14 +30,16 @@ export {
   resetPairwiseSeedForTesting,
 } from './pairwiseKey';
 export {
+  BIOMETRIC_GATE_MODES,
+  OPTIONAL_ACTIONS,
+  RED_LINE_ACTIONS,
   SENSITIVE_ACTIONS,
   getSensitivePolicyFor,
   getSensitivePolicySnapshot,
   hydrateSensitiveActionPolicy,
   resetSensitiveActionPolicyForTesting,
   useSensitiveActionPolicy,
-  useSensitivePolicy,
-  type BiometricMode,
+  type BiometricGateMode,
   type SensitiveAction,
   type SensitiveActionEntry,
   type SensitiveActionPolicy,

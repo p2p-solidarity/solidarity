@@ -1,26 +1,33 @@
 /**
- * Security & Keys — 1:1 port of
- * solidarity/Views/SettingsViews/SecuritySettingsView.swift.
+ * Security — one mode picker, one destructive action.
  *
  * Sections:
  *   1. Biometric Authentication header + subtitle (matches the
  *      `NSFaceIDUsageDescription` plist string).
- *   2. Key Rotation — destructive "Rotate DID Master Key" row + footer.
- *   3. Biometric Requirements — per-action toggle + segmented "biometric only
- *      vs biometric or passcode" control (mirrors the Swift LAPolicy split).
- *   4. Reset to defaults footer button.
+ *   2. Face ID Protection — the three `BiometricGateMode` rows, plus a footer
+ *      naming the red line no mode disarms.
+ *   3. Sign-in Access — destructive "Replace Secure Sign-in" row + footer.
  *
- * Storage: the per-action policy lives in `useSensitiveActionPolicy`
- * (MMKV-backed, see `src/keychain/sensitiveActionPolicy.ts`). The legacy
- * `usePreferences.biometricPolicy` map is still kept in sync for parity
- * tests + screens that haven't migrated yet — `setRequirement` updates
- * both so a single source of truth remains visible to callers.
+ * This screen used to render 7 per-action toggles and 7 two-way "biometric
+ * only / biometric or passcode" segmented controls (a 1:1 port of Swift's
+ * `SecuritySettingsView`). Users have no basis for deciding "should exporting
+ * contacts need Face ID but presenting a proof not?", so the app decides —
+ * and offers the one axis people actually reason about: how often to ask.
  *
- * Rule 8 (3-state UI): while the policy is hydrating we render a tiny
- * skeleton list so we never flash "biometric off" defaults to the user.
+ * COPY HONESTY: every `requireBiometric` call site in the app was migrated onto
+ * `requireSensitiveAction` alongside this screen, so a mode now governs the
+ * whole app rather than the handful of screens that happened to consult the
+ * policy. The two deliberate exceptions are documented in
+ * `src/keychain/sensitiveActionPolicy.ts`. Do not add copy here describing a
+ * guarantee without checking the call site actually routes through the gate —
+ * an earlier version claimed a recovery-data floor that did not exist.
+ *
+ * Rule 8 (3-state UI): while the mode is hydrating we render a skeleton row so
+ * we never flash the wrong selection and let the user "confirm" a value that
+ * was never theirs.
  */
 import { safeBack } from '@/navigation/safeBack';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Pressable, ScrollView, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -30,91 +37,111 @@ import {
   SettingsBackToolbar,
   SettingsBlockDangerRow,
   SettingsBlockSection,
-  SettingsBlockToggleRow,
   SettingsScreenTitle,
 } from '@/components/settings/SettingsBlocks';
 import { Colors } from '@/constants/Colors';
+import { useThemeColors } from '@/constants/useThemeColors';
 import { useTranslation } from '@/i18n';
 import {
-  SENSITIVE_ACTIONS,
+  BIOMETRIC_GATE_MODES,
   ensureSigningKey,
+  hydrateSensitiveActionPolicy,
   requireSensitiveAction,
   resetSigningKeyForTesting,
   useSensitiveActionPolicy,
-  type BiometricMode,
-  type SensitiveAction,
-  type SensitiveActionEntry,
+  type BiometricGateMode,
 } from '@/keychain';
-import {
-  usePreferences,
-  type SensitiveActionKey,
-} from '@/settings/preferences';
 
-const MODES: readonly BiometricMode[] = ['biometricOnly', 'biometricOrPasscode'];
+type ModeIcon = 'faceid' | 'clock.fill' | 'exclamationmark.shield.fill';
+
+/** `BIOMETRIC_GATE_MODES` is ordered strongest → weakest; icons follow it. */
+const MODE_ICON: Readonly<Record<BiometricGateMode, ModeIcon>> = {
+  everyTime: 'faceid',
+  balanced: 'clock.fill',
+  redLineOnly: 'exclamationmark.shield.fill',
+};
 
 export default function SecuritySettings() {
   const insets = useSafeAreaInsets();
   const { t } = useTranslation();
 
-  const policy = useSensitiveActionPolicy((s) => s.policy);
+  const mode = useSensitiveActionPolicy((s) => s.mode);
   const hydrated = useSensitiveActionPolicy((s) => s.hydrated);
-  const setPolicy = useSensitiveActionPolicy((s) => s.setPolicy);
-  const togglePolicy = useSensitiveActionPolicy((s) => s.togglePolicy);
-  const resetToDefaults = useSensitiveActionPolicy((s) => s.resetToDefaults);
-
-  const setPref = usePreferences((s) => s.set);
-  const legacyPolicy = usePreferences((s) => s.biometricPolicy);
+  const setMode = useSensitiveActionPolicy((s) => s.setMode);
 
   const [rotating, setRotating] = useState(false);
+  const [gating, setGating] = useState(false);
+
+  // Boot calls `hydrateSensitiveActionPolicy()` from the middle of a try block
+  // (`app/_layout.tsx`); if anything before it throws, the catch still paints
+  // the app and this store stays unhydrated for the whole session. Retry on
+  // mount so the picker can never be stuck behind its loading row.
+  useEffect(() => {
+    if (!hydrated) hydrateSensitiveActionPolicy();
+  }, [hydrated]);
 
   /**
-   * Keep the legacy `usePreferences.biometricPolicy` map in lockstep with
-   * the dedicated policy store so older call sites (and the parity test)
-   * continue to see a consistent value. The two stores intentionally have
-   * the same key set — `SensitiveActionKey` is a structural alias for
-   * `SensitiveAction`.
+   * Weakening the mode is itself a sensitive action: without this, anyone
+   * holding the already-unlocked phone drops to `redLineOnly` in one tap and
+   * then exports at leisure. Strengthening needs no proof — that direction only
+   * ever adds protection.
+   *
+   * `rotateMasterKey` is the action key because it carries the semantics we
+   * need (red line, never rides the grace window); the user-visible copy is the
+   * `reason` argument, which describes what is actually happening.
    */
-  const writeLegacyEnabled = (action: SensitiveAction, enabled: boolean): void => {
-    // SensitiveAction values mirror SensitiveActionKey 1:1 — no cast needed.
-    const next: Record<SensitiveActionKey, boolean> = { ...legacyPolicy, [action]: enabled };
-    setPref('biometricPolicy', next);
-  };
-
-  const onToggle = (action: SensitiveAction): void => {
-    togglePolicy(action);
-    const current = policy[action];
-    writeLegacyEnabled(action, !current.enabled);
-  };
-
-  const onSetMode = (action: SensitiveAction, mode: BiometricMode): void => {
-    const current = policy[action];
-    setPolicy(action, { ...current, mode });
-  };
-
-  const onReset = (): void => {
-    resetToDefaults();
-    for (const action of SENSITIVE_ACTIONS) {
-      writeLegacyEnabled(action, true);
+  const onSelectMode = (next: BiometricGateMode): void => {
+    if (next === mode || gating) return;
+    const weakening =
+      BIOMETRIC_GATE_MODES.indexOf(next) > BIOMETRIC_GATE_MODES.indexOf(mode);
+    if (!weakening) {
+      setMode(next);
+      return;
     }
+    setGating(true);
+    void (async () => {
+      try {
+        const gate = await requireSensitiveAction(
+          'rotateMasterKey',
+          t('security.prompt.weakenGate')
+        );
+        if (!gate.success) {
+          appAlert({
+            title: t('security.alertTitle'),
+            message: t(`security.error.${gate.reason}`),
+          });
+          return;
+        }
+        setMode(next);
+      } catch (err) {
+        showError({
+          context: 'Security › Change Face ID mode',
+          summary: t('security.alertTitle'),
+          error: err,
+        });
+      } finally {
+        setGating(false);
+      }
+    })();
   };
 
   const rotateMasterKey = async (): Promise<void> => {
     if (rotating) return;
     setRotating(true);
     try {
-      if (policy.rotateMasterKey.enabled) {
-        const result = await requireSensitiveAction(
-          'rotateMasterKey',
-          t('security.prompt.rotateMasterKey')
-        );
-        if (!result.success) {
-          appAlert({
-            title: t('security.alertTitle'),
-            message: t(`security.error.${result.reason}`),
-          });
-          setRotating(false);
-          return;
-        }
+      // `rotateMasterKey` is a RED LINE action — the gate runs in every mode,
+      // so there is no policy pre-check here on purpose.
+      const result = await requireSensitiveAction(
+        'rotateMasterKey',
+        t('security.prompt.rotateMasterKey')
+      );
+      if (!result.success) {
+        appAlert({
+          title: t('security.alertTitle'),
+          message: t(`security.error.${result.reason}`),
+        });
+        setRotating(false);
+        return;
       }
       await resetSigningKeyForTesting();
       await ensureSigningKey();
@@ -148,6 +175,28 @@ export default function SecuritySettings() {
           </View>
 
           <SettingsBlockSection
+            title={t('security.section.protection')}
+            footer={t('security.gate.footer')}
+          >
+            {hydrated ? (
+              BIOMETRIC_GATE_MODES.map((option, index) => (
+                <ModeRow
+                  key={option}
+                  icon={MODE_ICON[option]}
+                  title={t(`security.mode.${option}.title`)}
+                  subtitle={t(`security.mode.${option}.subtitle`)}
+                  selected={option === mode}
+                  disabled={gating}
+                  isLast={index === BIOMETRIC_GATE_MODES.length - 1}
+                  onPress={() => { onSelectMode(option); }}
+                />
+              ))
+            ) : (
+              <GateSkeleton label={t('security.gate.loading')} />
+            )}
+          </SettingsBlockSection>
+
+          <SettingsBlockSection
             title={t('security.section.keyRotation')}
             footer={t('security.section.keyRotationFooter')}
           >
@@ -157,158 +206,91 @@ export default function SecuritySettings() {
               onPress={() => { void rotateMasterKey(); }}
             />
           </SettingsBlockSection>
-
-          <SettingsBlockSection title={t('security.section.requirements')}>
-            {!hydrated
-              ? renderSkeleton()
-              : SENSITIVE_ACTIONS.map((action) => (
-                  <PolicyRow
-                    key={action}
-                    action={action}
-                    entry={policy[action]}
-                    label={t(faceIdLabelKey(action))}
-                    onToggle={() => { onToggle(action); }}
-                    onSetMode={(mode) => { onSetMode(action, mode); }}
-                  />
-                ))}
-          </SettingsBlockSection>
-
-          <View className="px-4">
-            <Pressable
-              onPress={onReset}
-              accessibilityRole="button"
-              accessibilityLabel={t('security.resetDefaults')}
-              className="rounded-xl bg-mutedSurface active:opacity-80"
-              style={{ paddingHorizontal: 14, paddingVertical: 14, alignItems: 'center' }}
-            >
-              <Text className="text-text1 text-[15px]">{t('security.resetDefaults')}</Text>
-            </Pressable>
-          </View>
         </View>
       </ScrollView>
     </View>
   );
 }
 
-interface PolicyRowProps {
-  readonly action: SensitiveAction;
-  readonly entry: SensitiveActionEntry;
-  readonly label: string;
-  readonly onToggle: () => void;
-  readonly onSetMode: (mode: BiometricMode) => void;
-}
-
-function PolicyRow({ entry, label, onToggle, onSetMode }: PolicyRowProps) {
-  const { t } = useTranslation();
-  return (
-    <View className="gap-2">
-      <SettingsBlockToggleRow
-        icon="faceid"
-        title={label}
-        value={entry.enabled}
-        onValueChange={onToggle}
-      />
-      {entry.enabled ? (
-        <View
-          className="flex-row gap-2"
-          style={{ paddingHorizontal: 14, paddingVertical: 8 }}
-        >
-          {MODES.map((mode) => (
-            <ModeChip
-              key={mode}
-              label={t(`security.mode.${mode}`)}
-              selected={entry.mode === mode}
-              onPress={() => { onSetMode(mode); }}
-            />
-          ))}
-        </View>
-      ) : null}
-    </View>
-  );
-}
-
-function ModeChip({
-  label,
-  selected,
-  onPress,
-}: {
-  readonly label: string;
+interface ModeRowProps {
+  readonly icon: ModeIcon;
+  readonly title: string;
+  readonly subtitle: string;
   readonly selected: boolean;
+  readonly disabled: boolean;
+  readonly isLast: boolean;
   readonly onPress: () => void;
-}) {
+}
+
+/**
+ * A single-select row. Checkmark rather than a radio dot, so the chosen mode
+ * reads at a glance and the block matches the rest of Settings.
+ */
+function ModeRow({ icon, title, subtitle, selected, disabled, isLast, onPress }: ModeRowProps) {
+  const c = useThemeColors();
   return (
     <Pressable
       onPress={onPress}
-      accessibilityRole="button"
-      accessibilityState={{ selected }}
-      accessibilityLabel={label}
-      className="rounded-md active:opacity-80"
+      disabled={disabled}
+      accessibilityRole="radio"
+      accessibilityState={{ selected, disabled }}
+      accessibilityLabel={title}
+      accessibilityHint={subtitle}
+      className="flex-row items-center bg-cardBg active:opacity-80"
       style={{
-        paddingHorizontal: 10,
-        paddingVertical: 6,
-        borderWidth: 0.5,
-        borderColor: selected ? Colors.primaryBlue : Colors.divider,
-        backgroundColor: selected ? Colors.chipSurface : 'transparent',
+        paddingHorizontal: 14,
+        paddingVertical: 12,
+        minHeight: 44,
+        opacity: disabled ? 0.5 : 1,
+        borderBottomWidth: isLast ? 0 : 0.5,
+        borderBottomColor: c.divider,
       }}
     >
-      <Text
-        className="text-[12px]"
-        style={{ color: selected ? Colors.text1 : Colors.text2 }}
+      <View
+        style={{
+          width: 20,
+          height: 20,
+          alignItems: 'center',
+          justifyContent: 'center',
+          marginRight: 12,
+        }}
       >
-        {label}
-      </Text>
+        <SfIcon name={icon} size={14} color={selected ? Colors.primaryBlue : c.text2} />
+      </View>
+      <View className="flex-1">
+        <Text className="text-[15px] text-text1">{title}</Text>
+        <Text className="text-[12px] text-text3" style={{ marginTop: 2 }}>
+          {subtitle}
+        </Text>
+      </View>
+      {selected ? <SfIcon name="checkmark" size={14} color={Colors.primaryBlue} /> : null}
     </Pressable>
   );
 }
 
-function renderSkeleton() {
+/**
+ * Loading state for the picker. Deliberately shows no selection at all rather
+ * than a plausible-looking one on a guessed row (Rule 8).
+ */
+function GateSkeleton({ label }: { readonly label: string }) {
   return (
-    <View className="gap-2" accessibilityLabel="Loading biometric policy">
-      {SENSITIVE_ACTIONS.map((action) => (
-        <View
-          key={action}
-          className="rounded-xl bg-mutedSurface flex-row items-center"
-          style={{
-            paddingHorizontal: 14,
-            paddingVertical: 12,
-            opacity: 0.5,
-            minHeight: 44,
-          }}
-        >
-          <View
-            style={{
-              width: 20,
-              height: 20,
-              alignItems: 'center',
-              justifyContent: 'center',
-              marginRight: 12,
-            }}
-          >
-            <SfIcon name="faceid" size={14} color={Colors.text3} />
-          </View>
-          <View style={{ height: 12, width: 160, backgroundColor: Colors.divider, borderRadius: 4 }} />
-        </View>
-      ))}
+    <View
+      className="flex-row items-center bg-cardBg"
+      accessibilityLabel={label}
+      style={{ paddingHorizontal: 14, paddingVertical: 12, minHeight: 44, opacity: 0.5 }}
+    >
+      <View
+        style={{
+          width: 20,
+          height: 20,
+          alignItems: 'center',
+          justifyContent: 'center',
+          marginRight: 12,
+        }}
+      >
+        <SfIcon name="faceid" size={14} color={Colors.text3} />
+      </View>
+      <View style={{ height: 12, width: 160, backgroundColor: Colors.divider, borderRadius: 4 }} />
     </View>
   );
-}
-
-/** Mirrors `faceIdLabel(for:)` switch in `SecuritySettingsView.swift`. */
-function faceIdLabelKey(action: SensitiveAction): string {
-  switch (action) {
-    case 'issueCredential':
-      return 'security.label.issueCredential';
-    case 'presentProof':
-      return 'security.label.presentProof';
-    case 'exportGraph':
-      return 'security.label.exportGraph';
-    case 'rotateMasterKey':
-      return 'security.label.rotateMasterKey';
-    case 'revealRecoveryBundle':
-      return 'security.label.revealRecoveryBundle';
-    case 'registerTrustAnchor':
-      return 'security.label.registerTrustAnchor';
-    case 'deleteZKIdentity':
-      return 'security.label.deleteZKIdentity';
-  }
 }

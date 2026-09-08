@@ -108,7 +108,7 @@ import {
 import {
   didKeyForCurrentIdentity,
   publicRawP256ForCurrentIdentity,
-  requireBiometric,
+  requireSensitiveAction,
   signOpenAcDeviceBindingDigest,
 } from '@/keychain';
 import { usePreferences } from '@/settings/preferences';
@@ -559,7 +559,11 @@ export default function PassportSetup() {
     // CLAUDE.md Sec rule: Face ID is required for passport save. Prepare no
     // longer signs (openac_show left the enrollment run), so this is the
     // single enrollment prompt.
-    const authorized = await requireBiometric('passportSave');
+    const gate = await requireSensitiveAction(
+      'issueCredential',
+      t('security.prompt.issueCredential')
+    );
+    const authorized = gate.success;
     if (!authorized) {
       pushToast(
         developerMode

@@ -154,9 +154,30 @@ void mock.module('expo-secure-store', () => ({
   },
 }));
 
-void mock.module('@/keychain/biometric', () => ({
-  requireBiometric: (): Promise<boolean> => Promise.resolve(nextBiometricSuccess),
-  isBiometricAvailable: (): Promise<boolean> => Promise.resolve(true),
+// The vault unlock gate moved from the policy-blind `requireBiometric` onto
+// `requireSensitiveAction('exportGraph', …)`, so the user's gate mode governs
+// it. We run the REAL gatekeeper here and control it from underneath, rather
+// than mocking `@/keychain/biometricGatekeeper` — `mock.module` is
+// process-global in bun, so mocking a shared module poisons every other suite
+// in the same run (it silently broke the whole sensitiveActionPolicy suite).
+//
+// The real `biometric` module is used as-is. Stubbing it with `mock.module`
+// leaked into the sensitiveActionPolicy suite's grace assertions, because bun
+// registers module mocks process-wide. Its shared five-minute window is reset
+// per test in `beforeEach` instead, so a prior success cannot silence a later
+// denial.
+
+// `sensitiveActionPolicy` statically imports the MMKV store; the real one
+// boots Nitro, which has no native runtime here. The gate only ever reads the
+// in-memory default (`balanced`), so an empty store is enough.
+void mock.module('@/storage/mmkv', () => ({
+  getMmkv: () => ({
+    getString: (): string | undefined => undefined,
+    set: (): undefined => undefined,
+    remove: (): boolean => true,
+    getAllKeys: (): readonly string[] => [],
+  }),
+  initMmkv: (): Promise<undefined> => Promise.resolve(undefined),
 }));
 
 void mock.module('expo-file-system/legacy', () => ({
@@ -232,6 +253,9 @@ beforeEach(async () => {
   nitro.failWrap = false;
   nitro.failUnwrap = false;
   nextBiometricSuccess = true;
+  // Real shared grace bucket: without this, the first successful unlock would
+  // silence every later gate in this file, including the denial cases.
+  (await import('../../src/keychain/biometric')).resetBiometricGrace();
   envelopeWriteGate = null;
   releaseEnvelopeWrite = null;
   envelopeWriteStarted = null;

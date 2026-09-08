@@ -154,7 +154,10 @@ describe('unfinished action honesty', () => {
     expect(credential).toContain('await requireSensitiveAction(');
     expect(credential).toContain("'presentProof'");
     expect(credential).toContain("t('security.prompt.presentProof')");
-    expect(credential).toContain("t(`security.biometric.${gate.reason}`)");
+    // `security.error.*` — the keys that actually exist in the locale files.
+    // This used to read `security.biometric.*`, a namespace no locale defines,
+    // so a failed gate toasted the raw key string at the user.
+    expect(credential).toContain("t(`security.error.${gate.reason}`)");
     expect(credential).not.toContain('TODO(biometric-gate): wrap in');
   });
 });

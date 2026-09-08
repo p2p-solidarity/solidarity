@@ -12,7 +12,7 @@ import { showError } from '@/feedback/appAlert';
 import { haptic } from '@/feedback/haptics';
 import { useTranslation } from '@/i18n';
 import { importFromMnemonic, restoreRootKeyFromICloud } from '@/identity';
-import { ensureSigningKey, hasExistingSigningKey, requireBiometric } from '@/keychain';
+import { ensureSigningKey, hasExistingSigningKey, requireSensitiveAction } from '@/keychain';
 
 export function ExistingAccountSheet({
   visible,
@@ -55,7 +55,11 @@ export function ExistingAccountSheet({
 
   const signInOnDevice = async (): Promise<void> => {
     if (!(await hasExistingSigningKey())) throw new Error('No synced sign-in key');
-    if (!(await requireBiometric('sign'))) return;
+    const gate = await requireSensitiveAction(
+      'presentProof',
+      t('security.prompt.presentProof')
+    );
+    if (!gate.success) return;
     finish();
   };
 
