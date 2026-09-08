@@ -173,12 +173,9 @@ export const useCardStore = create<CardStoreState>((set, get) => ({
 
   remove: (id) => {
     if (!canCommitLocalData(captureLocalDataEpoch())) return Promise.resolve();
-    // TODO(biometric-gate): gate this deletion with
-    //   const gate = await requireSensitiveAction(
-    //     'deleteZKIdentity',
-    //     'Authorize deleting your business card'
-    //   );
-    //   if (!gate.success) return { ok: false, error: 'biometricDenied' };
+    // Face ID for a user-initiated delete is the SCREEN's job
+    // (`app/cards/edit.tsx` → `requireSensitiveAction`). This store stays
+    // policy-free so restore and sync can reconcile records without a prompt.
     cardMutationGeneration += 1;
     removeFromStorage(id);
     set((s) => {

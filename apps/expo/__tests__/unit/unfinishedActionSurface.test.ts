@@ -160,4 +160,25 @@ describe('unfinished action honesty', () => {
     expect(credential).toContain("t(`security.error.${gate.reason}`)");
     expect(credential).not.toContain('TODO(biometric-gate): wrap in');
   });
+
+  it('gates EVERY card-deletion surface behind one shared Face ID gate — not the store', () => {
+    const gate = source('../../src/cards/deleteCardGate.ts');
+    const edit = source('../../app/cards/edit.tsx');
+    const list = source('../../app/cards/index.tsx');
+    const sheet = source('../../src/components/cards/BusinessCardActionsSheet.tsx');
+    const store = source('../../src/cards/cardManager.ts');
+
+    expect(gate).toContain("requireSensitiveAction('exportGraph', t('security.prompt.deleteCard'))");
+    expect(gate).toContain("t(`security.error.${gate.reason}`)");
+    // Both surfaces that can delete a card pass the same gate; the first cut
+    // gated only the edit screen and left the list's long-press sheet open.
+    expect(edit).toContain('await authorizeCardDeletion(t)');
+    expect(list).toContain('await authorizeCardDeletion(t)');
+    // A refused gate must not read as success in the sheet.
+    expect(sheet).toContain('if (!(await onDelete(card))) return;');
+    // The store stays policy-free: restore and sync reconcile records through
+    // it and must never raise a Face ID sheet of their own.
+    expect(store).not.toContain('TODO(biometric-gate)');
+    expect(store).not.toContain('requireSensitiveAction(');
+  });
 });

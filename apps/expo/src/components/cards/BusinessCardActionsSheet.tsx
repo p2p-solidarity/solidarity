@@ -30,7 +30,9 @@ export interface BusinessCardActionsSheetProps {
   readonly onEdit: (card: CardManifestEntry) => void;
   readonly onWalletPass: (card: CardManifestEntry) => void;
   readonly onShare: (card: CardManifestEntry) => Promise<void>;
-  readonly onDelete: (card: CardManifestEntry) => Promise<void>;
+  /** Resolves false when the deletion was refused (e.g. Face ID) — the
+   *  sheet then stays open with no success feedback. */
+  readonly onDelete: (card: CardManifestEntry) => Promise<boolean>;
 }
 
 export function BusinessCardActionsSheet({
@@ -85,7 +87,7 @@ function SheetBody({
   readonly onEdit: (card: CardManifestEntry) => void;
   readonly onWalletPass: (card: CardManifestEntry) => void;
   readonly onShare: (card: CardManifestEntry) => Promise<void>;
-  readonly onDelete: (card: CardManifestEntry) => Promise<void>;
+  readonly onDelete: (card: CardManifestEntry) => Promise<boolean>;
 }): ReactNode {
   const insets = useSafeAreaInsets();
   const { t } = useTranslation();
@@ -100,7 +102,7 @@ function SheetBody({
           destructive: true,
         });
         if (!ok) return;
-        await onDelete(card);
+        if (!(await onDelete(card))) return;
         haptic('success');
         onClose();
       } catch (error) {

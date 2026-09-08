@@ -21,6 +21,7 @@ import { KeyboardAwareScrollView } from 'react-native-keyboard-controller';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { useCardStore } from '@/cards/cardManager';
+import { authorizeCardDeletion } from '@/cards/deleteCardGate';
 import { AnimalSelectorGrid, BusinessCardForm } from '@/components/cards';
 import { SfIcon } from '@/components/icons/SfIcon';
 import { PressableScale } from '@/components/common/PressableScale';
@@ -89,6 +90,9 @@ export default function EditCardScreen() {
   const handleDelete = useCallback(async () => {
     if (!targetCard) return;
     try {
+      // Confirmed by the form already; Face ID is the shared gate every
+      // deletion surface passes (see deleteCardGate.ts for the tier choice).
+      if (!(await authorizeCardDeletion(t))) return;
       await remove(targetCard.id);
       haptic('warning');
       pushToast(t('cardsList.deleted'), 'info');

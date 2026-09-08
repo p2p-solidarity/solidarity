@@ -84,6 +84,9 @@ const LEGACY_V1_KEY = 'gg.solidarity.biometric.policy.v1';
  *   presentCredential   → presentProof
  *   deleteVault         → deleteZKIdentity
  *   exportData          → exportGraph
+ *   deleteCard          → exportGraph   (access-level: a card is recoverable from
+ *                                        a dated archive — NOT deleteZKIdentity,
+ *                                        which is a red line)
  *   rotateKeys          → rotateMasterKey
  *   shardDistribute     → revealRecoveryBundle
  */

@@ -21,6 +21,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import type { CardManifestEntry } from '@/cards/cardManifest';
 import { useCardStore } from '@/cards/cardManager';
+import { authorizeCardDeletion } from '@/cards/deleteCardGate';
 import { shareVCard } from '@/cards/shareVCard';
 import { toVCard } from '@/cards/vCard';
 import { BusinessCardActionsSheet, BusinessCardRow } from '@/components/cards';
@@ -75,9 +76,13 @@ export default function CardsIndexScreen(): ReactNode {
     }
   };
 
-  const onDelete = async (card: CardManifestEntry): Promise<void> => {
+  const onDelete = async (card: CardManifestEntry): Promise<boolean> => {
+    // The sheet has confirmed; Face ID is the shared gate every deletion
+    // surface passes (deleteCardGate.ts). False = refused, nothing deleted.
+    if (!(await authorizeCardDeletion(t))) return false;
     await remove(card.id);
     pushToast(t('cardsList.deleted'), 'success', 2000);
+    return true;
   };
 
   // Rule 10: when the manifest is already populated (warm start) we paint

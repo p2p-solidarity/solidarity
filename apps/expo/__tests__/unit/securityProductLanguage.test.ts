@@ -26,6 +26,7 @@ const PRODUCT_SECURITY_KEYS = [
   'security.prompt.revealRecoveryBundle',
   'security.prompt.registerTrustAnchor',
   'security.prompt.deleteZKIdentity',
+  'security.prompt.deleteCard',
 ] as const;
 
 describe('product security language', () => {
