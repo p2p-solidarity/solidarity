@@ -11,6 +11,10 @@
 namespace margelo::nitro::solidarity::keystone { struct CloudKitRecord; }
 // Forward declaration of `CloudKitShareInvite` to properly resolve imports.
 namespace margelo::nitro::solidarity::keystone { struct CloudKitShareInvite; }
+// Forward declaration of `FileBackupDownloadState` to properly resolve imports.
+namespace margelo::nitro::solidarity::keystone { struct FileBackupDownloadState; }
+// Forward declaration of `FileBackupDownloadStatus` to properly resolve imports.
+namespace margelo::nitro::solidarity::keystone { enum class FileBackupDownloadStatus; }
 // Forward declaration of `CloudKitEvent` to properly resolve imports.
 namespace margelo::nitro::solidarity::keystone { struct CloudKitEvent; }
 // Forward declaration of `CloudKitEventKind` to properly resolve imports.
@@ -31,6 +35,10 @@ namespace margelo::nitro::solidarity::keystone { enum class CloudKitEventKind; }
 #include <functional>
 #include "JFunc_void.hpp"
 #include <NitroModules/JNICallable.hpp>
+#include "FileBackupDownloadState.hpp"
+#include "JFileBackupDownloadState.hpp"
+#include "FileBackupDownloadStatus.hpp"
+#include "JFileBackupDownloadStatus.hpp"
 #include "CloudKitEvent.hpp"
 #include "JFunc_void_CloudKitEvent.hpp"
 #include "JCloudKitEvent.hpp"
@@ -347,6 +355,37 @@ namespace margelo::nitro::solidarity::keystone {
       __result->cthis()->addOnResolvedListener([=](const jni::alias_ref<jni::JObject>& __boxedResult) {
         auto __result = jni::static_ref_cast<jni::JDouble>(__boxedResult);
         __promise->resolve(__result->value());
+      });
+      __result->cthis()->addOnRejectedListener([=](const jni::alias_ref<jni::JThrowable>& __throwable) {
+        jni::JniException __jniError(__throwable);
+        __promise->reject(std::make_exception_ptr(__jniError));
+      });
+      return __promise;
+    }();
+  }
+  std::shared_ptr<Promise<FileBackupDownloadState>> JHybridCloudKitSpec::getFileBackupDownloadState(const std::string& filename) {
+    static const auto method = _javaPart->javaClassStatic()->getMethod<jni::local_ref<JPromise::javaobject>(jni::alias_ref<jni::JString> /* filename */)>("getFileBackupDownloadState");
+    auto __result = method(_javaPart, jni::make_jstring(filename));
+    return [&]() {
+      auto __promise = Promise<FileBackupDownloadState>::create();
+      __result->cthis()->addOnResolvedListener([=](const jni::alias_ref<jni::JObject>& __boxedResult) {
+        auto __result = jni::static_ref_cast<JFileBackupDownloadState>(__boxedResult);
+        __promise->resolve(__result->toCpp());
+      });
+      __result->cthis()->addOnRejectedListener([=](const jni::alias_ref<jni::JThrowable>& __throwable) {
+        jni::JniException __jniError(__throwable);
+        __promise->reject(std::make_exception_ptr(__jniError));
+      });
+      return __promise;
+    }();
+  }
+  std::shared_ptr<Promise<void>> JHybridCloudKitSpec::startFileBackupDownload(const std::string& filename) {
+    static const auto method = _javaPart->javaClassStatic()->getMethod<jni::local_ref<JPromise::javaobject>(jni::alias_ref<jni::JString> /* filename */)>("startFileBackupDownload");
+    auto __result = method(_javaPart, jni::make_jstring(filename));
+    return [&]() {
+      auto __promise = Promise<void>::create();
+      __result->cthis()->addOnResolvedListener([=](const jni::alias_ref<jni::JObject>& /* unit */) {
+        __promise->resolve();
       });
       __result->cthis()->addOnRejectedListener([=](const jni::alias_ref<jni::JThrowable>& __throwable) {
         jni::JniException __jniError(__throwable);

@@ -69,6 +69,16 @@ Rejected: freezing the timestamp when content is unchanged. It drives a user-vis
 
 Consequence, accepted: during total quiescence the value another device sees can lag that device's own latest check, because only a real content change republishes the record. Each device's own sweep keeps its own view fresh, so this is visible only on a device that has never swept the page itself.
 
+## Decision — an undelivered iCloud file is "downloading", never "unreadable" (2026-09-08)
+
+iCloud evicts cold documents; a listed archive or a peer's sync revision can exist in the cloud with none of its bytes on this device. Native `readFileBackup` keeps failing FAST on such a file (`icloud_download_pending`) — a sync pass must never block a native executor on an offline download — but the TS side no longer treats that as corruption:
+
+- Two spec methods carry the transfer state: `getFileBackupDownloadState` (iOS: URL resource values on the fast path, a bounded one-shot `NSMetadataQuery` for percent / in-flight / last error otherwise; Drive: exists → `current`) and `startFileBackupDownload` (idempotent `startDownloadingUbiquitousItem`).
+- The wait lives in a pure poller (`backup/archiveDownload.ts`) OUTSIDE the cloud-data lock: the lock is bounded at two minutes and a large archive on a slow link can take longer. Only the restore that follows takes the lock. A platform error counts only once it persists across two polls, because Spotlight keeps the last error of an earlier offline attempt on the item.
+- History lists a cold archive as "in iCloud — tap to download and restore" (tappable, no header read, no transfer started by merely opening the list); a tap shows live percent, then continues as a normal restore. "Restore from Backup" on an undelivered latest archive shows the transfer on its row and retries once. Sync reports a peer revision still on its way as `pending` ("waiting for iCloud download"), never as an error of this device; the foreground poll retries.
+
+Accepted: progress is only as good as Spotlight's `NSMetadataUbiquitousItemPercentDownloadedKey` (absent → "Downloading…" without a number); a stalled query falls back to a percent-less state rather than blocking. Two-device validation of eviction behaviour remains a device test — bun can only prove the state machine.
+
 ## Accepted limitations (reviewed 2026-09-08, not defects)
 
 - **Conflict retention lasts until the record is next edited.** Concurrent versions are kept and offered for explicit choice, but an ordinary local edit to that record supersedes both and the losing version is gone. This is multi-value-register semantics; a durable conflict archive would be a separate design.

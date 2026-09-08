@@ -105,6 +105,14 @@ abstract class HybridCloudKitSpec: HybridObject() {
   @DoNotStrip
   @Keep
   abstract fun getFileBackupMtime(filename: String): Promise<Double>
+  
+  @DoNotStrip
+  @Keep
+  abstract fun getFileBackupDownloadState(filename: String): Promise<FileBackupDownloadState>
+  
+  @DoNotStrip
+  @Keep
+  abstract fun startFileBackupDownload(filename: String): Promise<Unit>
 
   // Default implementation of `HybridObject.toString()`
   override fun toString(): String {

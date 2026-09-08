@@ -41,6 +41,8 @@ export type {
   CloudKitShareInvite,
   CloudKitEvent,
   CloudKitEventKind,
+  FileBackupDownloadState,
+  FileBackupDownloadStatus,
 } from './specs/CloudKit.nitro';
 
 let cachedSecretsVault: SecretsVault | null = null;

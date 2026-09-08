@@ -67,6 +67,32 @@ export interface CloudKitEvent {
   readonly errorCode?: string;
 }
 
+export type FileBackupDownloadStatus =
+  /** Fully local and up to date — `readFileBackup` will succeed. */
+  | 'current'
+  /** iCloud is transferring it right now. */
+  | 'downloading'
+  /** Known to iCloud but not on this device yet; nothing in flight. */
+  | 'notDownloaded'
+  /** Local-only storage (iCloud unavailable) — there is nothing to fetch. */
+  | 'local'
+  /** No such file on this provider. */
+  | 'missing';
+
+/**
+ * Transfer state of one backup file. `readFileBackup` deliberately fails fast
+ * on a file that is not fully local (a sync pass must never block a native
+ * executor on an offline download); this is what lets JS turn that failure
+ * into "downloading, 42%" and poll instead of calling the archive unreadable.
+ */
+export interface FileBackupDownloadState {
+  readonly status: FileBackupDownloadStatus;
+  /** 0–100 while transferring, when the platform reports it. */
+  readonly percentDownloaded?: number;
+  /** The platform's last transfer error for this file, when any. */
+  readonly errorMessage?: string;
+}
+
 export interface CloudKit
   extends HybridObject<{ ios: 'swift'; android: 'kotlin' }> {
   // ── Container lifecycle ────────────────────────────────────────────────
@@ -140,4 +166,17 @@ export interface CloudKit
   deleteFileBackup(filename: string): Promise<void>;
   /** File modification time in epoch ms; 0 when unknown or missing. */
   getFileBackupMtime(filename: string): Promise<number>;
+  /**
+   * Whether `filename` can be read right now and, when it cannot, how far the
+   * platform has got with fetching it. iOS reads iCloud's per-item transfer
+   * state; Drive has no local copy to wait for, so an existing file is always
+   * `current`.
+   */
+  getFileBackupDownloadState(filename: string): Promise<FileBackupDownloadState>;
+  /**
+   * Ask the platform to fetch `filename` onto this device (idempotent — a
+   * transfer already in flight is left alone). No-op where nothing needs
+   * fetching (local-only storage, Drive).
+   */
+  startFileBackupDownload(filename: string): Promise<void>;
 }

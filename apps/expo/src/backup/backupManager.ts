@@ -41,6 +41,7 @@ import {
   readAutoBackupState,
   writeAutoBackupState,
 } from './autoBackupState';
+import { ArchiveDownloadPendingError } from './archiveDownload';
 import { normalizeRestoredPayload } from './normalizeBackupPayload';
 import { usePreferences } from '@/settings/preferences';
 import { uuid, type BusinessCard, type Contact } from '@solidarity/shared';
@@ -217,20 +218,29 @@ async function requestBackupUnlocked(reason: BackupReason): Promise<BackupReques
  *     this device (the original Device Storage Key is gone — the classic
  *     cross-device / post-wipe case).
  *   - `unsupported-version`    — the archive version byte is unknown.
+ *   - `download-pending`       — the archive exists but iCloud has not
+ *     delivered its bytes to this device yet (`archiveName` says which; the
+ *     read already asked for the transfer — bring it down with
+ *     `ensureArchiveDownloaded`, then retry).
  *   - `unreadable`             — any other download / framing / I/O failure.
  */
 export class BackupRestoreError extends Error {
+  /** Set for `download-pending`: the archive the transfer concerns. */
+  readonly archiveName: string | undefined;
+
   constructor(
     readonly kind:
       | 'root-key-unavailable'
       | 'portable-key-mismatch'
       | 'legacy-key-unavailable'
       | 'unsupported-version'
+      | 'download-pending'
       | 'unreadable',
-    options?: { cause?: unknown },
+    options?: { cause?: unknown; archiveName?: string },
   ) {
-    super(kind, options);
+    super(kind, options?.cause === undefined ? undefined : { cause: options.cause });
     this.name = 'BackupRestoreError';
+    this.archiveName = options?.archiveName;
   }
 }
 
@@ -326,6 +336,11 @@ async function restoreFromBackupUnlocked(archiveName?: string): Promise<RestoreR
   try {
     archive = archiveName ? await downloadArchive(archiveName) : await downloadLatestArchive();
   } catch (err) {
+    // Not on this device yet is not "unreadable": name the archive so the UI
+    // can show the transfer and retry once it lands.
+    if (err instanceof ArchiveDownloadPendingError) {
+      throw new BackupRestoreError('download-pending', { cause: err, archiveName: err.archiveName });
+    }
     // Framing failures from decodeSolb: unknown version fails closed as its own
     // kind; anything else (bad magic, legacy plaintext, IO) is unreadable.
     const msg = err instanceof Error ? err.message : '';

@@ -31,6 +31,8 @@ public protocol HybridCloudKitSpec_protocol: HybridObject {
   func listFileBackups() throws -> Promise<[String]>
   func deleteFileBackup(filename: String) throws -> Promise<Void>
   func getFileBackupMtime(filename: String) throws -> Promise<Double>
+  func getFileBackupDownloadState(filename: String) throws -> Promise<FileBackupDownloadState>
+  func startFileBackupDownload(filename: String) throws -> Promise<Void>
 }
 
 public extension HybridCloudKitSpec_protocol {

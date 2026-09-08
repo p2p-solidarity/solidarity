@@ -1,7 +1,10 @@
 export {
   DEFAULT_PROVIDER,
   type ProviderKind,
+  type ArchiveAvailability,
   type BackupArchiveInfo,
+  type EnsureArchiveDownloadedOptions,
+  ensureArchiveDownloaded,
   listBackupArchives,
   setProvider,
   setGoogleAccessToken,
@@ -33,3 +36,8 @@ export {
   MAX_RETAINED_BACKUPS,
   resolveAutoBackupIntervalHours,
 } from './backupPolicy';
+export {
+  ArchiveDownloadError,
+  isDownloadPendingError,
+  type ArchiveDownloadProgress,
+} from './archiveDownload';

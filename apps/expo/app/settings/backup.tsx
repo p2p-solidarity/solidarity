@@ -13,7 +13,7 @@ import { requestCloudSync, useCloudSyncStatus, readSyncConflicts, chooseSyncConf
  * much time those few slots actually span.
  */
 import { safeBack } from '@/navigation/safeBack';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { ScrollView, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -28,9 +28,12 @@ import {
   SettingsSegmented,
 } from '@/components/settings/SettingsBlocks';
 import {
+  ArchiveDownloadError,
   AUTO_BACKUP_INTERVAL_CHOICES,
   backupMtime,
   BackupRestoreError,
+  ensureArchiveDownloaded,
+  isDownloadPendingError,
   listBackupArchives,
   MAX_RETAINED_BACKUPS,
   requestBackup,
@@ -66,6 +69,12 @@ export default function BackupSettings() {
   const [archives, setArchives] = useState<'loading' | 'error' | readonly BackupArchiveInfo[]>(
     'loading'
   );
+  // One iCloud transfer at a time: which archive, and how far. Lock-free on
+  // purpose (archiveDownload.ts) so the row can keep updating for as long as
+  // iCloud needs; the restore that follows takes the cloud-data lock as usual.
+  const [download, setDownload] = useState<{ name: string; percent: number | null } | null>(null);
+  const downloadAbort = useRef<AbortController | null>(null);
+  useEffect(() => () => { downloadAbort.current?.abort(); }, []);
 
   const reloadArchives = useCallback(async () => {
     setArchives('loading');
@@ -145,7 +154,43 @@ export default function BackupSettings() {
     await performRestoreNow(archiveName);
   };
 
-  const performRestoreNow = async (archiveName?: string) => {
+  /**
+   * Bring `name` onto this device, mirroring iCloud's progress into the UI.
+   * Resolves true once the archive is readable; false after saying why not.
+   */
+  const downloadArchive = async (name: string): Promise<boolean> => {
+    const controller = new AbortController();
+    downloadAbort.current = controller;
+    setDownload({ name, percent: null });
+    try {
+      await ensureArchiveDownloaded(name, {
+        signal: controller.signal,
+        onProgress: (progress) => { setDownload({ name, percent: progress.percent }); },
+      });
+      return true;
+    } catch (error) {
+      // Leaving the screen aborts the wait; iCloud keeps transferring, and
+      // the row reports the real state next time. Nothing to tell the user.
+      if (error instanceof ArchiveDownloadError && error.kind === 'aborted') return false;
+      showError({ context: 'Backup › Download', summary: t('backup.restore.downloadFailed'), error });
+      return false;
+    } finally {
+      if (downloadAbort.current === controller) downloadAbort.current = null;
+      setDownload(null);
+    }
+  };
+
+  /** History row for an archive that is not on this device yet. */
+  const onDownloadAndRestore = async (name: string, date: string) => {
+    if (download) return;
+    if (!(await downloadArchive(name)) || downloadAbort.current !== null) return;
+    // Its header is readable now: refresh the row's format label, then carry
+    // on exactly as a tap on a local archive would.
+    void reloadArchives();
+    await onRestore(name, date);
+  };
+
+  const performRestoreNow = async (archiveName?: string, afterDownload = false) => {
     try {
       const r = await restoreFromBackup(archiveName);
       if (!r) {
@@ -157,6 +202,17 @@ export default function BackupSettings() {
       }
       safeBack('/settings');
     } catch (err) {
+      // The archive exists but iCloud has not delivered it here yet. The read
+      // already asked for it; show the transfer, then retry once — the user
+      // has confirmed already, so no second dialog.
+      if (err instanceof BackupRestoreError && err.kind === 'download-pending' && err.archiveName) {
+        if (afterDownload) {
+          showError({ context: 'Backup › Restore', summary: t('backup.restore.downloadFailed'), error: err });
+          return;
+        }
+        if (await downloadArchive(err.archiveName)) await performRestoreNow(err.archiveName, true);
+        return;
+      }
       // A "wrong key" failure (v2 under a different Recovery Phrase, or a v1
       // device-key archive on a device that lacks that key): explain plainly,
       // then offer to keep the CURRENT data and create a fresh portable backup
@@ -188,7 +244,15 @@ export default function BackupSettings() {
 
   const syncNow = async () => {
     try { await requestCloudSync(); }
-    catch (error) { showError({ context: 'Cloud sync', summary: t('backup.sync.failed'), error }); }
+    catch (error) {
+      // Another device's revision is still on its way from iCloud — not an
+      // error of this device, and the foreground poll retries by itself.
+      if (isDownloadPendingError(error)) {
+        pushToast(t('backup.sync.downloadingToast'), 'info', 3500);
+        return;
+      }
+      showError({ context: 'Cloud sync', summary: t('backup.sync.failed'), error });
+    }
   };
   const resolveConflict = async (key: string, index: number, summary: string) => {
     const accepted = await confirmDialog({ title: t('backup.sync.choose'),
@@ -208,6 +272,11 @@ export default function BackupSettings() {
     ? t('backup.lastBackup', { date: lastBackup.toLocaleString() })
     : undefined;
   const backupDisabled = !backupEnabled || isBackingUp;
+  const downloadTrailing = download
+    ? download.percent === null
+      ? t('backup.download.trailing')
+      : t('backup.download.trailingPercent', { percent: download.percent })
+    : undefined;
 
   return (
     <View className="flex-1 bg-pageBg" style={{ paddingTop: insets.top }}>
@@ -275,7 +344,10 @@ export default function BackupSettings() {
               <SettingsBlockRow icon="arrow.triangle.2.circlepath" title={t('backup.sync.now')}
                 showsChevron={false} disabled={!backupEnabled || sync.status === 'syncing'}
                 onPress={() => { void syncNow(); }} />
-              <SettingsBlockInfoRow icon="icloud" title={t(`backup.sync.${sync.status}`)}
+              <SettingsBlockInfoRow icon="icloud"
+                title={sync.detail === 'icloud-download'
+                  ? t('backup.sync.downloading')
+                  : t(`backup.sync.${sync.status}`)}
                 value={sync.lastCheckedAt ? new Date(sync.lastCheckedAt).toLocaleTimeString() : ''} />
             </SettingsBlockSection>
             {conflicts.choices.length > 0 ? (
@@ -314,8 +386,13 @@ export default function BackupSettings() {
               <SettingsBlockRow
                 icon="arrow.counterclockwise.icloud"
                 title={t('backup.restoreLatest')}
+                subtitle={download ? t('backup.download.cancelHint') : undefined}
+                trailingText={downloadTrailing}
                 showsChevron={false}
-                onPress={() => { void onRestore(); }}
+                onPress={() => {
+                  if (download) { downloadAbort.current?.abort(); return; }
+                  void onRestore();
+                }}
               />
             </SettingsBlockSection>
 
@@ -353,28 +430,16 @@ export default function BackupSettings() {
               }
             >
               {typeof archives !== 'string'
-                ? archives.map((a) => {
-                    const date = new Date(a.timestampMs).toLocaleString();
-                    return (
-                      <SettingsBlockRow
-                        key={a.name}
-                        icon={a.version === 2 ? 'icloud' : 'doc.text'}
-                        title={date}
-                        subtitle={
-                          a.version === 2
-                            ? t('backup.archives.portable')
-                            : a.version === 1
-                              ? t('backup.archives.legacy')
-                              : t('backup.archives.unknown')
-                        }
-                        showsChevron={false}
-                        disabled={a.version === null}
-                        onPress={() => {
-                          void onRestore(a.name, date);
-                        }}
-                      />
-                    );
-                  })
+                ? archives.map((a) => (
+                    <ArchiveHistoryRow
+                      key={a.name}
+                      archive={a}
+                      download={download}
+                      onRestore={onRestore}
+                      onDownload={onDownloadAndRestore}
+                      onCancel={() => { downloadAbort.current?.abort(); }}
+                    />
+                  ))
                 : null}
             </SettingsBlockSection>
 
@@ -385,5 +450,62 @@ export default function BackupSettings() {
         )}
       </ScrollView>
     </View>
+  );
+}
+
+/**
+ * One dated archive. The row this screen is downloading shows live progress
+ * and a cancel — whichever way the transfer started (a tap on a cold row, or
+ * "Restore from Backup" discovering the latest archive is not here yet, in
+ * which case the row was listed as ready). A cold row is tappable; only a
+ * row whose header was read and found unreadable stays disabled.
+ */
+function ArchiveHistoryRow({
+  archive,
+  download,
+  onRestore,
+  onDownload,
+  onCancel,
+}: {
+  readonly archive: BackupArchiveInfo;
+  readonly download: { readonly name: string; readonly percent: number | null } | null;
+  readonly onRestore: (name: string, date: string) => Promise<void>;
+  readonly onDownload: (name: string, date: string) => Promise<void>;
+  readonly onCancel: () => void;
+}) {
+  const { t } = useTranslation();
+  const date = new Date(archive.timestampMs).toLocaleString();
+  const live = download?.name === archive.name;
+  const onDevice = archive.availability === 'ready';
+  // A transfer iCloud is running on its own (a sync pass asked for the file)
+  // shows what the listing saw; tapping it attaches this screen's progress.
+  const transferring = live || archive.availability === 'downloading';
+  const percent = live ? download.percent : archive.percent;
+  const subtitle = transferring
+    ? percent === null
+      ? t('backup.archives.downloading')
+      : t('backup.archives.downloadingPercent', { percent })
+    : onDevice
+      ? archive.version === 2
+        ? t('backup.archives.portable')
+        : archive.version === 1
+          ? t('backup.archives.legacy')
+          : t('backup.archives.unknown')
+      : t('backup.archives.cloudOnly');
+  const unreadable = onDevice && archive.version === null;
+  const otherRowBusy = download !== null && !live;
+  return (
+    <SettingsBlockRow
+      icon={transferring || !onDevice ? 'icloud.and.arrow.down' : archive.version === 2 ? 'icloud' : 'doc.text'}
+      title={date}
+      subtitle={subtitle}
+      trailingText={live ? t('backup.download.cancel') : undefined}
+      showsChevron={false}
+      disabled={otherRowBusy || (unreadable && !live)}
+      onPress={() => {
+        if (live) { onCancel(); return; }
+        void (onDevice ? onRestore(archive.name, date) : onDownload(archive.name, date));
+      }}
+    />
   );
 }

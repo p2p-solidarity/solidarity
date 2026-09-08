@@ -20,6 +20,10 @@ namespace margelo::nitro::solidarity::keystone { struct CloudKitRecord; }
 namespace margelo::nitro::solidarity::keystone { struct CloudKitShareInvite; }
 // Forward declaration of `EnsureWrappingKeyResult` to properly resolve imports.
 namespace margelo::nitro::solidarity::keystone { struct EnsureWrappingKeyResult; }
+// Forward declaration of `FileBackupDownloadState` to properly resolve imports.
+namespace margelo::nitro::solidarity::keystone { struct FileBackupDownloadState; }
+// Forward declaration of `FileBackupDownloadStatus` to properly resolve imports.
+namespace margelo::nitro::solidarity::keystone { enum class FileBackupDownloadStatus; }
 // Forward declaration of `HybridCloudKitSpec` to properly resolve imports.
 namespace margelo::nitro::solidarity::keystone { class HybridCloudKitSpec; }
 // Forward declaration of `HybridSecretsVaultSpec` to properly resolve imports.
@@ -47,6 +51,8 @@ namespace Keystone { class HybridSpruceDidSpec_cxx; }
 #include "CloudKitRecord.hpp"
 #include "CloudKitShareInvite.hpp"
 #include "EnsureWrappingKeyResult.hpp"
+#include "FileBackupDownloadState.hpp"
+#include "FileBackupDownloadStatus.hpp"
 #include "HybridCloudKitSpec.hpp"
 #include "HybridSecretsVaultSpec.hpp"
 #include "HybridSpruceDidSpec.hpp"
@@ -439,6 +445,55 @@ namespace margelo::nitro::solidarity::keystone::bridge::swift {
     return Func_void_double_Wrapper(std::move(value));
   }
   
+  // pragma MARK: std::optional<double>
+  /**
+   * Specialized version of `std::optional<double>`.
+   */
+  using std__optional_double_ = std::optional<double>;
+  inline std::optional<double> create_std__optional_double_(const double& value) noexcept {
+    return std::optional<double>(value);
+  }
+  inline bool has_value_std__optional_double_(const std::optional<double>& optional) noexcept {
+    return optional.has_value();
+  }
+  inline double get_std__optional_double_(const std::optional<double>& optional) noexcept {
+    return optional.value();
+  }
+  
+  // pragma MARK: std::shared_ptr<Promise<FileBackupDownloadState>>
+  /**
+   * Specialized version of `std::shared_ptr<Promise<FileBackupDownloadState>>`.
+   */
+  using std__shared_ptr_Promise_FileBackupDownloadState__ = std::shared_ptr<Promise<FileBackupDownloadState>>;
+  inline std::shared_ptr<Promise<FileBackupDownloadState>> create_std__shared_ptr_Promise_FileBackupDownloadState__() noexcept {
+    return Promise<FileBackupDownloadState>::create();
+  }
+  inline PromiseHolder<FileBackupDownloadState> wrap_std__shared_ptr_Promise_FileBackupDownloadState__(std::shared_ptr<Promise<FileBackupDownloadState>> promise) noexcept {
+    return PromiseHolder<FileBackupDownloadState>(std::move(promise));
+  }
+  
+  // pragma MARK: std::function<void(const FileBackupDownloadState& /* result */)>
+  /**
+   * Specialized version of `std::function<void(const FileBackupDownloadState&)>`.
+   */
+  using Func_void_FileBackupDownloadState = std::function<void(const FileBackupDownloadState& /* result */)>;
+  /**
+   * Wrapper class for a `std::function<void(const FileBackupDownloadState& / * result * /)>`, this can be used from Swift.
+   */
+  class Func_void_FileBackupDownloadState_Wrapper final {
+  public:
+    explicit Func_void_FileBackupDownloadState_Wrapper(std::function<void(const FileBackupDownloadState& /* result */)>&& func): _function(std::make_unique<std::function<void(const FileBackupDownloadState& /* result */)>>(std::move(func))) {}
+    inline void call(FileBackupDownloadState result) const noexcept {
+      _function->operator()(result);
+    }
+  private:
+    std::unique_ptr<std::function<void(const FileBackupDownloadState& /* result */)>> _function;
+  } SWIFT_NONCOPYABLE;
+  Func_void_FileBackupDownloadState create_Func_void_FileBackupDownloadState(void* NON_NULL swiftClosureWrapper) noexcept;
+  inline Func_void_FileBackupDownloadState_Wrapper wrap_Func_void_FileBackupDownloadState(Func_void_FileBackupDownloadState value) noexcept {
+    return Func_void_FileBackupDownloadState_Wrapper(std::move(value));
+  }
+  
   // pragma MARK: std::shared_ptr<HybridCloudKitSpec>
   /**
    * Specialized version of `std::shared_ptr<HybridCloudKitSpec>`.
@@ -548,6 +603,15 @@ namespace margelo::nitro::solidarity::keystone::bridge::swift {
   }
   inline Result_std__shared_ptr_Promise_double___ create_Result_std__shared_ptr_Promise_double___(const std::exception_ptr& error) noexcept {
     return Result<std::shared_ptr<Promise<double>>>::withError(error);
+  }
+  
+  // pragma MARK: Result<std::shared_ptr<Promise<FileBackupDownloadState>>>
+  using Result_std__shared_ptr_Promise_FileBackupDownloadState___ = Result<std::shared_ptr<Promise<FileBackupDownloadState>>>;
+  inline Result_std__shared_ptr_Promise_FileBackupDownloadState___ create_Result_std__shared_ptr_Promise_FileBackupDownloadState___(const std::shared_ptr<Promise<FileBackupDownloadState>>& value) noexcept {
+    return Result<std::shared_ptr<Promise<FileBackupDownloadState>>>::withValue(value);
+  }
+  inline Result_std__shared_ptr_Promise_FileBackupDownloadState___ create_Result_std__shared_ptr_Promise_FileBackupDownloadState___(const std::exception_ptr& error) noexcept {
+    return Result<std::shared_ptr<Promise<FileBackupDownloadState>>>::withError(error);
   }
   
   // pragma MARK: std::shared_ptr<Promise<EnsureWrappingKeyResult>>

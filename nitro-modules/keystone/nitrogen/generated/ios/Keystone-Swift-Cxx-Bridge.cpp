@@ -96,6 +96,14 @@ namespace margelo::nitro::solidarity::keystone::bridge::swift {
     };
   }
   
+  // pragma MARK: std::function<void(const FileBackupDownloadState& /* result */)>
+  Func_void_FileBackupDownloadState create_Func_void_FileBackupDownloadState(void* NON_NULL swiftClosureWrapper) noexcept {
+    auto swiftClosure = Keystone::Func_void_FileBackupDownloadState::fromUnsafe(swiftClosureWrapper);
+    return [swiftClosure = std::move(swiftClosure)](const FileBackupDownloadState& result) mutable -> void {
+      swiftClosure.call(result);
+    };
+  }
+  
   // pragma MARK: std::shared_ptr<HybridCloudKitSpec>
   std::shared_ptr<HybridCloudKitSpec> create_std__shared_ptr_HybridCloudKitSpec_(void* NON_NULL swiftUnsafePointer) noexcept {
     Keystone::HybridCloudKitSpec_cxx swiftPart = Keystone::HybridCloudKitSpec_cxx::fromUnsafe(swiftUnsafePointer);

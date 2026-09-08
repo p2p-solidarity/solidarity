@@ -72,6 +72,8 @@ namespace margelo::nitro::solidarity::keystone {
     std::shared_ptr<Promise<std::vector<std::string>>> listFileBackups() override;
     std::shared_ptr<Promise<void>> deleteFileBackup(const std::string& filename) override;
     std::shared_ptr<Promise<double>> getFileBackupMtime(const std::string& filename) override;
+    std::shared_ptr<Promise<FileBackupDownloadState>> getFileBackupDownloadState(const std::string& filename) override;
+    std::shared_ptr<Promise<void>> startFileBackupDownload(const std::string& filename) override;
 
   private:
     jni::global_ref<JHybridCloudKitSpec::JavaPart> _javaPart;

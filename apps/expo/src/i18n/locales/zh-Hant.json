@@ -153,6 +153,9 @@
   "backup.archives.portable": "可攜 — 使用復原助記詞即可還原",
   "backup.archives.legacy": "舊版 — 僅能在建立它的裝置開啟",
   "backup.archives.unknown": "無法辨識的格式",
+  "backup.archives.cloudOnly": "存放在 iCloud，點一下即可下載並還原",
+  "backup.archives.downloading": "正在從 iCloud 下載…",
+  "backup.archives.downloadingPercent": "正在從 iCloud 下載… {{percent}}%",
   "backup.archives.restoreThis.title": "還原這份備份？",
   "backup.archives.restoreThis.message": "建立於 {{date}}。要匯入這個版本嗎？相同的項目會採用備份中的版本；在同步開啟的情況下，該版本也會取代其他裝置上這些項目的內容。備份裡沒有的資料會保留。",
   "backup.restore.keyFailedCreateNew.title": "建立新備份？",
@@ -2063,5 +2066,12 @@
   "backup.status.unavailableFooter": "請到「設定」登入 iCloud，備份才能跨裝置同步。本機備份仍可繼續使用。",
   "backup.skipped.empty": "目前還沒有可以備份的資料。先建立名片或加入聯絡人吧。",
   "backup.skipped.rootKeyUnavailable": "請先設定復原詞，備份才能在任何裝置上還原。",
-  "backup.skipped.unknown": "目前無法備份。沒有任何資料被更動，請稍後再試一次。"
+  "backup.skipped.unknown": "目前無法備份。沒有任何資料被更動，請稍後再試一次。",
+  "backup.download.trailing": "下載中…",
+  "backup.download.trailingPercent": "下載中… {{percent}}%",
+  "backup.download.cancel": "取消",
+  "backup.download.cancelHint": "點一下取消下載",
+  "backup.restore.downloadFailed": "iCloud 無法下載這份備份。請確認網路連線後再試一次。",
+  "backup.sync.downloading": "等待 iCloud 下載…",
+  "backup.sync.downloadingToast": "其他裝置的變更仍在從 iCloud 下載，同步會自動重試。"
 }

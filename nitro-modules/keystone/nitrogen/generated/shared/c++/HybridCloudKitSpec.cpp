@@ -32,6 +32,8 @@ namespace margelo::nitro::solidarity::keystone {
       prototype.registerHybridMethod("listFileBackups", &HybridCloudKitSpec::listFileBackups);
       prototype.registerHybridMethod("deleteFileBackup", &HybridCloudKitSpec::deleteFileBackup);
       prototype.registerHybridMethod("getFileBackupMtime", &HybridCloudKitSpec::getFileBackupMtime);
+      prototype.registerHybridMethod("getFileBackupDownloadState", &HybridCloudKitSpec::getFileBackupDownloadState);
+      prototype.registerHybridMethod("startFileBackupDownload", &HybridCloudKitSpec::startFileBackupDownload);
     });
   }
 

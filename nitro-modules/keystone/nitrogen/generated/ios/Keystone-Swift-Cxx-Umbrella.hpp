@@ -18,6 +18,10 @@ namespace margelo::nitro::solidarity::keystone { struct CloudKitRecord; }
 namespace margelo::nitro::solidarity::keystone { struct CloudKitShareInvite; }
 // Forward declaration of `EnsureWrappingKeyResult` to properly resolve imports.
 namespace margelo::nitro::solidarity::keystone { struct EnsureWrappingKeyResult; }
+// Forward declaration of `FileBackupDownloadState` to properly resolve imports.
+namespace margelo::nitro::solidarity::keystone { struct FileBackupDownloadState; }
+// Forward declaration of `FileBackupDownloadStatus` to properly resolve imports.
+namespace margelo::nitro::solidarity::keystone { enum class FileBackupDownloadStatus; }
 // Forward declaration of `HybridCloudKitSpec` to properly resolve imports.
 namespace margelo::nitro::solidarity::keystone { class HybridCloudKitSpec; }
 // Forward declaration of `HybridSecretsVaultSpec` to properly resolve imports.
@@ -37,6 +41,8 @@ namespace margelo::nitro::solidarity::keystone { struct WrappedSecret; }
 #include "CloudKitRecord.hpp"
 #include "CloudKitShareInvite.hpp"
 #include "EnsureWrappingKeyResult.hpp"
+#include "FileBackupDownloadState.hpp"
+#include "FileBackupDownloadStatus.hpp"
 #include "HybridCloudKitSpec.hpp"
 #include "HybridSecretsVaultSpec.hpp"
 #include "HybridSpruceDidSpec.hpp"

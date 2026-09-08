@@ -22,6 +22,10 @@ namespace NitroModules { class ArrayBufferHolder; }
 namespace margelo::nitro::solidarity::keystone { struct CloudKitEvent; }
 // Forward declaration of `CloudKitEventKind` to properly resolve imports.
 namespace margelo::nitro::solidarity::keystone { enum class CloudKitEventKind; }
+// Forward declaration of `FileBackupDownloadState` to properly resolve imports.
+namespace margelo::nitro::solidarity::keystone { struct FileBackupDownloadState; }
+// Forward declaration of `FileBackupDownloadStatus` to properly resolve imports.
+namespace margelo::nitro::solidarity::keystone { enum class FileBackupDownloadStatus; }
 
 #include <NitroModules/Promise.hpp>
 #include <string>
@@ -34,6 +38,8 @@ namespace margelo::nitro::solidarity::keystone { enum class CloudKitEventKind; }
 #include <functional>
 #include "CloudKitEvent.hpp"
 #include "CloudKitEventKind.hpp"
+#include "FileBackupDownloadState.hpp"
+#include "FileBackupDownloadStatus.hpp"
 
 #include "Keystone-Swift-Cxx-Umbrella.hpp"
 
@@ -221,6 +227,22 @@ namespace margelo::nitro::solidarity::keystone {
     }
     inline std::shared_ptr<Promise<double>> getFileBackupMtime(const std::string& filename) override {
       auto __result = _swiftPart.getFileBackupMtime(filename);
+      if (__result.hasError()) [[unlikely]] {
+        std::rethrow_exception(__result.error());
+      }
+      auto __value = std::move(__result.value());
+      return __value;
+    }
+    inline std::shared_ptr<Promise<FileBackupDownloadState>> getFileBackupDownloadState(const std::string& filename) override {
+      auto __result = _swiftPart.getFileBackupDownloadState(filename);
+      if (__result.hasError()) [[unlikely]] {
+        std::rethrow_exception(__result.error());
+      }
+      auto __value = std::move(__result.value());
+      return __value;
+    }
+    inline std::shared_ptr<Promise<void>> startFileBackupDownload(const std::string& filename) override {
+      auto __result = _swiftPart.startFileBackupDownload(filename);
       if (__result.hasError()) [[unlikely]] {
         std::rethrow_exception(__result.error());
       }

@@ -28,6 +28,14 @@ import { getCloudKit, type CloudKit } from '@solidarity/nitro-keystone';
 
 import { encryptJsonWithKey } from '../storage/jsonCrypto';
 import {
+  ArchiveDownloadPendingError,
+  awaitArchiveDownload,
+  isDownloadPendingError,
+  normalizePercent,
+  type ArchiveDownloadProgress,
+  type ArchiveDownloadState,
+} from './archiveDownload';
+import {
   MAX_RETAINED_BACKUPS,
   newBackupName,
   nextBackupNameMs,
@@ -166,6 +174,20 @@ export async function prepareProvider(interactive = true): Promise<DriveAuthStat
 }
 
 /**
+ * Read one file, turning the platform's fail-fast "still downloading" refusal
+ * into a typed error that names the archive, so a caller can bring it onto
+ * the device (`ensureArchiveDownloaded`) instead of reporting it unreadable.
+ */
+async function readArchiveFile(ck: CloudKit, name: string): Promise<string> {
+  try {
+    return await ck.readFileBackup(name);
+  } catch (error) {
+    if (isDownloadPendingError(error)) throw new ArchiveDownloadPendingError(name, { cause: error });
+    throw error;
+  }
+}
+
+/**
  * Backup filenames, oldest first → newest last. Chronological by parsed
  * timestamp (NOT a lexical filename sort, which mis-ordered across digit-count
  * boundaries and Swift decimal vs expo integer timestamps). Non-backup /
@@ -226,6 +248,13 @@ export interface DownloadedArchive {
   readonly ciphertextB64: string;
 }
 
+/**
+ * Whether an archive's bytes are on this device. iCloud evicts documents it
+ * considers cold, so a listed archive can be `cloud-only` (nothing fetched
+ * yet) or `downloading`; Drive and local storage are always `ready`.
+ */
+export type ArchiveAvailability = 'ready' | 'downloading' | 'cloud-only';
+
 /** One row in the user-facing archive picker (plan G6: dated explicit choice). */
 export interface BackupArchiveInfo {
   readonly name: string;
@@ -233,9 +262,13 @@ export interface BackupArchiveInfo {
   readonly timestampMs: number;
   /**
    * 2 = portable (recovery-phrase key), 1 = legacy (device key, original
-   * device only), null = header unreadable (corrupt / unknown format).
+   * device only), null = header unreadable (corrupt / unknown format) — or
+   * not readable YET, when `availability` is not `ready`.
    */
   readonly version: 1 | 2 | null;
+  readonly availability: ArchiveAvailability;
+  /** Whole percent while `downloading`, when iCloud reports one. */
+  readonly percent: number | null;
 }
 
 /**
@@ -250,19 +283,72 @@ export interface BackupArchiveInfo {
 export async function listBackupArchives(): Promise<readonly BackupArchiveInfo[]> {
   const ck = await ensureInitialized();
   const names = await sortedBackups(ck); // oldest → newest
-  const out: BackupArchiveInfo[] = [];
-  for (const name of [...names].reverse()) {
-    const timestampMs = parseBackupTimestampMs(name);
-    if (timestampMs === null) continue;
-    let version: 1 | 2 | null = null;
-    try {
-      version = decodeSolb(await ck.readFileBackup(name)).version;
-    } catch {
-      version = null;
-    }
-    out.push({ name, timestampMs, version });
+  // Rows are independent, and a cold row's probe is a bounded Spotlight query
+  // — serialising three of them would keep History on its spinner for ~10 s.
+  const rows = await Promise.all([...names].reverse().map((name) => describeArchive(ck, name)));
+  return rows.filter((row): row is BackupArchiveInfo => row !== null);
+}
+
+async function describeArchive(ck: CloudKit, name: string): Promise<BackupArchiveInfo | null> {
+  const timestampMs = parseBackupTimestampMs(name);
+  if (timestampMs === null) return null;
+  // Ask before reading: a header read on an evicted archive would fail (and
+  // quietly kick off a download for every cold row) — the row is honest about
+  // being in iCloud instead, and the user's tap starts the transfer. A probe
+  // that fails (a Drive blip, a stalled query) degrades THIS row to the
+  // header read below, never the whole list.
+  let state: ArchiveDownloadState = { status: 'current' };
+  try {
+    state = await ck.getFileBackupDownloadState(name);
+  } catch {
+    // fall through to the header read
   }
-  return out;
+  if (state.status === 'downloading' || state.status === 'notDownloaded' || state.status === 'missing') {
+    // `missing` is kept, not dropped: the listing just proved the name exists,
+    // so a probe that cannot see it (a Spotlight-only name whose bounded query
+    // stalled) means "not here yet". A file that is genuinely gone fails
+    // honestly at the tap instead of vanishing from History without a word.
+    return {
+      name,
+      timestampMs,
+      version: null,
+      availability: state.status === 'downloading' ? 'downloading' : 'cloud-only',
+      percent: normalizePercent(state.percentDownloaded),
+    };
+  }
+  let version: 1 | 2 | null = null;
+  try {
+    version = decodeSolb(await readArchiveFile(ck, name)).version;
+  } catch {
+    version = null;
+  }
+  return { name, timestampMs, version, availability: 'ready', percent: null };
+}
+
+export interface EnsureArchiveDownloadedOptions {
+  readonly onProgress?: (progress: ArchiveDownloadProgress) => void;
+  readonly signal?: AbortSignal;
+  /** Test seam — production polls once a second. */
+  readonly pollMs?: number;
+}
+
+/**
+ * Wait until `name` is readable on this device, driving iCloud's transfer and
+ * mirroring its progress. Runs OUTSIDE the cloud-data lock on purpose (see
+ * `archiveDownload.ts`): only the restore that follows takes the lock.
+ */
+export async function ensureArchiveDownloaded(
+  name: string,
+  options: EnsureArchiveDownloadedOptions = {},
+): Promise<void> {
+  const ck = await ensureInitialized();
+  await awaitArchiveDownload({
+    name,
+    getState: (file) => ck.getFileBackupDownloadState(file),
+    start: (file) => ck.startFileBackupDownload(file),
+    sleep: (ms) => new Promise<void>((resolve) => setTimeout(resolve, ms)),
+    ...options,
+  });
 }
 
 /**
@@ -272,7 +358,7 @@ export async function listBackupArchives(): Promise<readonly BackupArchiveInfo[]
  */
 export async function downloadArchive(name: string): Promise<DownloadedArchive> {
   const ck = await ensureInitialized();
-  const decoded = decodeSolb(await ck.readFileBackup(name));
+  const decoded = decodeSolb(await readArchiveFile(ck, name));
   return { keyScheme: decoded.keyScheme, ciphertextB64: decoded.ciphertextB64 };
 }
 
@@ -290,7 +376,7 @@ export async function downloadLatestArchive(): Promise<DownloadedArchive | null>
   const names = await sortedBackups(ck);
   const latest = selectNewestBackup(names);
   if (!latest) return null;
-  const fileB64 = await ck.readFileBackup(latest);
+  const fileB64 = await readArchiveFile(ck, latest);
   const decoded = decodeSolb(fileB64);
   return { keyScheme: decoded.keyScheme, ciphertextB64: decoded.ciphertextB64 };
 }

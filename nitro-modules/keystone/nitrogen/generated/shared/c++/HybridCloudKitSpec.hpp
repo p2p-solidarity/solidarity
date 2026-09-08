@@ -19,6 +19,8 @@ namespace margelo::nitro::solidarity::keystone { struct CloudKitRecord; }
 namespace margelo::nitro::solidarity::keystone { struct CloudKitShareInvite; }
 // Forward declaration of `CloudKitEvent` to properly resolve imports.
 namespace margelo::nitro::solidarity::keystone { struct CloudKitEvent; }
+// Forward declaration of `FileBackupDownloadState` to properly resolve imports.
+namespace margelo::nitro::solidarity::keystone { struct FileBackupDownloadState; }
 
 #include <NitroModules/Promise.hpp>
 #include <string>
@@ -27,6 +29,7 @@ namespace margelo::nitro::solidarity::keystone { struct CloudKitEvent; }
 #include "CloudKitShareInvite.hpp"
 #include <functional>
 #include "CloudKitEvent.hpp"
+#include "FileBackupDownloadState.hpp"
 
 namespace margelo::nitro::solidarity::keystone {
 
@@ -77,6 +80,8 @@ namespace margelo::nitro::solidarity::keystone {
       virtual std::shared_ptr<Promise<std::vector<std::string>>> listFileBackups() = 0;
       virtual std::shared_ptr<Promise<void>> deleteFileBackup(const std::string& filename) = 0;
       virtual std::shared_ptr<Promise<double>> getFileBackupMtime(const std::string& filename) = 0;
+      virtual std::shared_ptr<Promise<FileBackupDownloadState>> getFileBackupDownloadState(const std::string& filename) = 0;
+      virtual std::shared_ptr<Promise<void>> startFileBackupDownload(const std::string& filename) = 0;
 
     protected:
       // Hybrid Setup

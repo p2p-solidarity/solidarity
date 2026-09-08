@@ -6,6 +6,7 @@ import { usePreferences } from '../settings/preferences';
 import { canCommitLocalData, captureLocalDataEpoch, trackLocalDataOperation } from '../settings/localDataWipeBarrier';
 import { getMmkv } from '../storage/mmkv';
 import { decryptJsonWithKey, encryptJsonWithKey } from '../storage/jsonCrypto';
+import { isDownloadPendingError } from './archiveDownload';
 import { openSyncFiles, setProvider } from './cloudProvider';
 import { isObservationOnlyChange, isPortableRecordKey, validatePortableRecord } from './portableData';
 import { applyingPortableData, applyPortableData, gatherPortableData, isPortableStorageKey, SYNC_STATE_KEY } from './portableStorage';
@@ -13,8 +14,13 @@ import { conflictingRecords, materialize, parseSyncDocument, partitionSnapshot, 
 import { newSyncState, parseSyncState, synchronize, type SyncState } from './syncEngine';
 
 export const useCloudSyncStatus = create<{
-  status: 'idle' | 'syncing' | 'pending' | 'error'; lastCheckedAt: number | null; conflicts: number;
-}>(() => ({ status: 'idle', lastCheckedAt: null, conflicts: 0 }));
+  status: 'idle' | 'syncing' | 'pending' | 'error';
+  lastCheckedAt: number | null;
+  conflicts: number;
+  /** Why a pass is `pending` when it is not this device's doing: a peer's
+   *  revision that iCloud has not delivered here yet. */
+  detail: 'icloud-download' | null;
+}>(() => ({ status: 'idle', lastCheckedAt: null, conflicts: 0, detail: null }));
 let inFlight: Promise<void> | null = null;
 /** Shared single flight for manual, foreground and data-change triggers. */
 export function requestCloudSync(): Promise<void> {
@@ -73,7 +79,7 @@ async function runSync(): Promise<void> {
     if (!canCommitLocalData(epoch) || localStateChanged.value || !usePreferences.getState().backupEnabled ||
       provider !== usePreferences.getState().backupProvider) throw new Error('sync-local-state-changed');
   };
-  useCloudSyncStatus.setState({ status: 'syncing' });
+  useCloudSyncStatus.setState({ status: 'syncing', detail: null });
   try {
     const did = await getRootDid(), key = await getPortableBackupKey();
     if (!did.ok || !key.ok) throw new Error('sync-identity-unavailable');
@@ -154,10 +160,18 @@ async function runSync(): Promise<void> {
       },
       assertCurrent,
     });
-    useCloudSyncStatus.setState({ status: 'idle', lastCheckedAt: Date.now(),
+    useCloudSyncStatus.setState({ status: 'idle', lastCheckedAt: Date.now(), detail: null,
       conflicts: conflictingRecords(document).filter((record) => isPortableRecordKey(record.key)).length });
   } catch (error) {
-    useCloudSyncStatus.setState({ status: localStateChanged.value || !canCommitLocalData(epoch) ? 'pending' : 'error' });
+    // A peer's revision that iCloud has not delivered yet is not a failure of
+    // this device: the native read already asked for the transfer, and the
+    // foreground poll retries. Say "waiting for iCloud", not "error".
+    const waitingForDownload = isDownloadPendingError(error);
+    const interrupted = localStateChanged.value || !canCommitLocalData(epoch);
+    useCloudSyncStatus.setState({
+      status: interrupted || waitingForDownload ? 'pending' : 'error',
+      detail: waitingForDownload ? 'icloud-download' : null,
+    });
     throw error;
   } finally { subscription.remove(); }
 }
@@ -169,7 +183,7 @@ export function startCloudSync(): () => void {
   const run = () => { void requestCloudSync().catch(() => undefined); };
   const subscription = getMmkv().addOnValueChangedListener((key) => {
     if (applyingPortableData || !isPortableStorageKey(key)) return;
-    useCloudSyncStatus.setState({ status: 'pending' });
+    useCloudSyncStatus.setState({ status: 'pending', detail: null });
     clearTimeout(timer);
     timer = setTimeout(run, 1500);
   });
@@ -254,7 +268,7 @@ export async function chooseSyncConflict(revision: string, key: string, index: n
       const resolved = resolveSyncConflict(doc, state.device, key, index);
       await trackLocalDataOperation(applyPortableData({ version: 1, identity: did.value, records: materialize(resolved) }, before,
         { state: JSON.stringify({ ...state, document: resolved, unpublished: true }), replace: true, assertCurrent }));
-      useCloudSyncStatus.setState({ status: 'pending', conflicts: conflictingRecords(resolved).length });
+      useCloudSyncStatus.setState({ status: 'pending', detail: null, conflicts: conflictingRecords(resolved).length });
     } finally { sub.remove(); }
   });
   await requestCloudSync();

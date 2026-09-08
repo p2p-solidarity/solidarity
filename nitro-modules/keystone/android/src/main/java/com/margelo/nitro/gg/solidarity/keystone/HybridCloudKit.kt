@@ -369,6 +369,29 @@ class HybridCloudKit : HybridCloudKitSpec() {
     return@async file.modifiedTime.toDouble()
   }
 
+  override fun getFileBackupDownloadState(filename: String): Promise<FileBackupDownloadState> = Promise.async {
+    // Drive keeps no local copy to wait for: `readFileBackup` streams the file
+    // on demand, so an existing file is always `current` and there is never a
+    // transfer whose progress could be reported. Only iOS knows `downloading`.
+    val folder = ensureBackupFolder()
+    val exists = drive.listFiles(backupQuery(folder, filename)).isNotEmpty()
+    return@async FileBackupDownloadState(
+      status = if (exists) FileBackupDownloadStatus.CURRENT else FileBackupDownloadStatus.MISSING,
+      percentDownloaded = if (exists) 100.0 else null,
+      errorMessage = null,
+    )
+  }
+
+  override fun startFileBackupDownload(filename: String): Promise<Unit> = Promise.async {
+    // Nothing to prefetch on Drive (see getFileBackupDownloadState). Only
+    // check the name refers to a real file, so a typo fails here rather than
+    // on the read that follows.
+    val folder = ensureBackupFolder()
+    if (drive.listFiles(backupQuery(folder, filename)).isEmpty()) {
+      throw IllegalArgumentException("Backup not found: $filename")
+    }
+  }
+
   // MARK: - Internals
 
   private fun ensureRootFolder(): String {
