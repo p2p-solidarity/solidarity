@@ -103,7 +103,15 @@ describe('Present product surface', () => {
 
     expect(product).toContain('useDisplayClaims()');
     expect(product).toContain('filterAvailablePassportPresentationClaims');
-    expect(product).toContain('hasPassportShowWitnessSafe');
+    // Narrowing to the openac_show disclosure set is a property of the
+    // credential's circuit, NOT of this device. Reading the device-local
+    // witness here made the gate fail OPEN: a witness-less device (restore, or
+    // a swallowed enrollment save) skipped the narrowing and offered all four
+    // claims it could not prove. Whether this device can present is decided in
+    // PresentAttestations instead.
+    expect(product).not.toContain('hasPassportShowWitnessSafe');
+    expect(attestations).toContain('hasPassportShowWitnessSafe');
+    expect(attestations).toContain('needsRescanOnThisDevice');
     expect(attestations).toContain("router.push('/passport')");
     // v3 mock: several claims go out in ONE presentation, so the chips are
     // checkboxes and the count follows the selection.
@@ -117,6 +125,15 @@ describe('Present product surface', () => {
     expect(attestations).toContain('passportShowEligible={passportShowEligible}');
     // Claims from different credentials cannot be merged into one proof.
     expect(attestations).toContain('groupClaimsByCredential');
+
+    // The ZK-honesty guarantee itself (an openac-v3 enrollment envelope is
+    // refused as evidence of its claims) is asserted behaviourally against the
+    // single chokepoint in presentationProof.test.ts — not by grepping source
+    // here, which an inverted or unused guard would still pass. This only
+    // pins the user-facing half: the witness-less device must SAY so rather
+    // than silently offering nothing.
+    expect(attestations).toContain('CannotPresentHereContent');
+    expect(attestations).toContain("t('present.rescanRequiredBody')");
   });
 
   it('preserves the former Verify tools behind exactly one gated developer link', () => {

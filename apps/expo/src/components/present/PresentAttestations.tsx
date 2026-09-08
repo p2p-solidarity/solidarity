@@ -37,6 +37,23 @@ export function PresentAttestationsMode({
     () => groupClaimsByCredential(claims, credentials),
     [claims, credentials]
   );
+  // A witness-less passport can have every one of its claims dropped by the
+  // claim-level device gate before reaching us, which resolves to `empty`.
+  // Rendering "you have no attestations" there would be false — the user does
+  // hold one; this device just cannot prove it. Say the true thing instead.
+  // Both halves matter: tag WITHOUT witness. Testing the tag alone would also
+  // fire when the emptiness has some other cause (a second legacy passport
+  // gated out, a claim that failed to restore, a stale holder DID) and would
+  // then state a reason that is false.
+  const holdsUnpresentableOpenAcV3 = useMemo(
+    () =>
+      Array.from(credentials.values()).some(
+        (credential) =>
+          credential.metadataTags.includes('passport-openac-v3') &&
+          !hasPassportShowWitnessSafe(credential.id)
+      ),
+    [credentials]
+  );
 
   return (
     <View className="gap-3">
@@ -57,19 +74,23 @@ export function PresentAttestationsMode({
         </ThemedSurface>
       ) : null}
       {state === 'empty' ? (
-        <ThemedSurface variant="outlined" padded className="gap-4 rounded-none">
-          <ThemedText variant="bodyMedium" tone="tertiary">
-            {t('present.noAttestations')}
-          </ThemedText>
-          <ThemedButton
-            label={t('present.addAttestation')}
-            variant="secondary"
-            fullWidth
-            onPress={() => {
-              router.push('/passport');
-            }}
-          />
-        </ThemedSurface>
+        holdsUnpresentableOpenAcV3 ? (
+          <CannotPresentHerePanel />
+        ) : (
+          <ThemedSurface variant="outlined" padded className="gap-4 rounded-none">
+            <ThemedText variant="bodyMedium" tone="tertiary">
+              {t('present.noAttestations')}
+            </ThemedText>
+            <ThemedButton
+              label={t('present.addAttestation')}
+              variant="secondary"
+              fullWidth
+              onPress={() => {
+                router.push('/passport');
+              }}
+            />
+          </ThemedSurface>
+        )
       ) : null}
       {state === 'ready'
         ? groups.map((group) => (
@@ -100,9 +121,15 @@ function CredentialPresentation({
     field_name: t('present.claim.name'),
     nationality: t('present.claim.nationality'),
   };
+  // The credential is portable; the show-witness deliberately is not (it holds
+  // the commitment opening). So an OpenAC-v3 credential can legitimately be
+  // here with no way to prove itself FROM THIS DEVICE — fail closed and say
+  // so, rather than falling through to a legacy envelope that proves none of
+  // these claims.
+  const isOpenAcV3 = credential.metadataTags.includes('passport-openac-v3');
   const passportShowEligible =
-    credential.metadataTags.includes('passport-openac-v3') &&
-    hasPassportShowWitnessSafe(credential.id);
+    isOpenAcV3 && hasPassportShowWitnessSafe(credential.id);
+  const needsRescanOnThisDevice = isOpenAcV3 && !passportShowEligible;
 
   return (
     <View className="gap-3">
@@ -111,10 +138,16 @@ function CredentialPresentation({
       <View className="flex-row flex-wrap" style={{ gap: 8 }}>
         {claims.map((claim) => {
           const selected = selectedClaimIds.has(claim.id);
-          return (
+          const label = labels[claim.claimType] ?? claim.title;
+          // Nothing can be presented from here, so the chips are a read-only
+          // summary of what the proof covers — offering a checkbox that leads
+          // nowhere would be a dead affordance.
+          return needsRescanOnThisDevice ? (
+            <ReadOnlyClaimChip key={claim.id} label={label} />
+          ) : (
             <ClaimChip
               key={claim.id}
-              label={labels[claim.claimType] ?? claim.title}
+              label={label}
               selected={selected}
               onPress={() => {
                 setSelectedClaimIds((current) => {
@@ -135,18 +168,24 @@ function CredentialPresentation({
         className="items-center gap-3"
         style={{ borderColor: colors.divider }}
       >
-        <SfIcon name="qrcode" size={42} color={Colors.text2} />
-        <ThemedText variant="label" tabularNums>
-          {t('present.presentCount', { count: selectedClaimIds.size })}
-        </ThemedText>
-        <ThemedButton
-          fullWidth
-          disabled={selectedClaimIds.size === 0}
-          label={t('present.prepareProofQr')}
-          onPress={() => {
-            setPresenting(true);
-          }}
-        />
+        {needsRescanOnThisDevice ? (
+          <CannotPresentHereContent />
+        ) : (
+          <>
+            <SfIcon name="qrcode" size={42} color={Colors.text2} />
+            <ThemedText variant="label" tabularNums>
+              {t('present.presentCount', { count: selectedClaimIds.size })}
+            </ThemedText>
+            <ThemedButton
+              fullWidth
+              disabled={selectedClaimIds.size === 0}
+              label={t('present.prepareProofQr')}
+              onPress={() => {
+                setPresenting(true);
+              }}
+            />
+          </>
+        )}
       </ThemedSurface>
 
       <PresentationSheet
@@ -200,6 +239,74 @@ function IdentityProofCard({
   );
 }
 
+/** The panel's contents, shared by the per-credential branch and the
+ *  all-claims-filtered-out `empty` branch — the same true statement either
+ *  way: the proof is real, this device just holds no key material for it. */
+function CannotPresentHereContent(): ReactNode {
+  const { t } = useTranslation();
+  return (
+    <>
+      <SfIcon name="exclamationmark.triangle" size={28} color={Colors.warning} />
+      <ThemedText variant="label">{t('present.rescanRequired')}</ThemedText>
+      <ThemedText
+        variant="bodySmall"
+        tone="tertiary"
+        style={{ textAlign: 'center' }}
+      >
+        {t('present.rescanRequiredBody')}
+      </ThemedText>
+      <ThemedButton
+        fullWidth
+        variant="secondary"
+        label={t('present.rescanAction')}
+        onPress={() => {
+          router.push('/passport');
+        }}
+      />
+    </>
+  );
+}
+
+function CannotPresentHerePanel(): ReactNode {
+  const colors = useThemeColors();
+  return (
+    <ThemedSurface
+      variant="outlined"
+      padded
+      className="items-center gap-3"
+      style={{ borderColor: colors.divider }}
+    >
+      <CannotPresentHereContent />
+    </ThemedSurface>
+  );
+}
+
+function chipStyle(selected: boolean, dividerColor: string, cardBg: string) {
+  return {
+    minHeight: 44,
+    justifyContent: 'center' as const,
+    paddingHorizontal: 16,
+    borderWidth: 1.5,
+    borderRadius: ROW_RADIUS,
+    borderColor: selected ? Colors.terminalGreen : dividerColor,
+    backgroundColor: selected ? Colors.terminalGreenBg : cardBg,
+  };
+}
+
+/** Read-only variant: a plain View, not a disabled Pressable. A disabled
+ *  Pressable is announced as "dimmed", which reads as a control that could be
+ *  switched back on — but nothing here is presentable, so it is a label. */
+function ReadOnlyClaimChip({ label }: { readonly label: string }): ReactNode {
+  const colors = useThemeColors();
+  return (
+    <View accessible accessibilityRole="text" style={chipStyle(false, colors.divider, colors.cardBg)}>
+      <ThemedText variant="bodySmall" style={{ color: colors.text2 }}>
+        {label}
+      </ThemedText>
+    </View>
+  );
+}
+
 function ClaimChip({
   label,
   selected,
@@ -217,15 +324,7 @@ function ClaimChip({
       accessibilityLabel={label}
       accessibilityState={{ checked: selected }}
       onPress={onPress}
-      style={{
-        minHeight: 44,
-        justifyContent: 'center',
-        paddingHorizontal: 16,
-        borderWidth: 1.5,
-        borderRadius: ROW_RADIUS,
-        borderColor: selected ? Colors.terminalGreen : colors.divider,
-        backgroundColor: selected ? Colors.terminalGreenBg : colors.cardBg,
-      }}
+      style={chipStyle(selected, colors.divider, colors.cardBg)}
     >
       <ThemedText
         variant="bodySmall"

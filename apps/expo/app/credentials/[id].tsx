@@ -402,12 +402,18 @@ export default function CredentialDetailScreen() {
     [credential]
   );
 
+  // Narrow on the TAG alone, never on the device witness: `openac_show` can
+  // only ever disclose age/nationality, so a witness-less device must not be
+  // shown the wider set it cannot prove (the gate used to fail OPEN here).
+  const isOpenAcV3Credential =
+    credential?.metadataTags.includes('passport-openac-v3') ?? false;
+
   const presentationClaimRows = useMemo(
     () =>
-      passportShowEligible
+      isOpenAcV3Credential
         ? filterPassportShowPresentationClaims(associatedClaims)
         : associatedClaims,
-    [associatedClaims, passportShowEligible]
+    [associatedClaims, isOpenAcV3Credential]
   );
 
   const initialClaimIdsForPresentation = useMemo(
@@ -477,7 +483,14 @@ export default function CredentialDetailScreen() {
   const accent = levelAccent(trustDisplay.tone);
   const trustBadge = issuerTrustBadge(credential, t);
   const isExpired = credential.expiresAt != null && credential.expiresAt.getTime() < Date.now();
-  const presentDisabled = selectedClaimsForPresentation.length === 0;
+  // An openac-v3 credential without this device's show-witness cannot produce
+  // an honest presentation (buildPresentationProofJson refuses it). Disable the
+  // CTA rather than letting it consume a Face ID prompt and stamp
+  // `lastPresentedAt` for a presentation that provably never happens.
+  const cannotPresentWithoutWitness =
+    credential.metadataTags.includes('passport-openac-v3') && !passportShowEligible;
+  const presentDisabled =
+    selectedClaimsForPresentation.length === 0 || cannotPresentWithoutWitness;
 
   const onPresent = () => {
     void (async () => {

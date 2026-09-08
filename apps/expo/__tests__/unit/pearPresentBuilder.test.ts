@@ -33,7 +33,11 @@ function claim(
   };
 }
 
-function credential(id: string, metadataTags: readonly string[] = []): StoredCredential {
+function credential(
+  id: string,
+  metadataTags: readonly string[] = [],
+  rawJwt = 'a.b.c'
+): StoredCredential {
   return {
     id,
     type: 'test',
@@ -41,13 +45,28 @@ function credential(id: string, metadataTags: readonly string[] = []): StoredCre
     issuerDid: 'did:key:zIssuer',
     holderDid: 'did:key:zHolder',
     trustLevel: 'L1',
-    rawJwt: 'a.b.c',
+    rawJwt,
     issuedAt: new Date('2026-01-01T00:00:00.000Z'),
     metadataTags,
   };
 }
 
 describe('matchPresentableClaims', () => {
+  it('excludes a ZK-proof-backed passport this mechanism cannot present', () => {
+    // An openac-v3 passport is tagged `passport-openac-v3`/`passport-noir` and
+    // NEVER `mopro-noir`/`semaphore-zk`, so a proof-type tag cannot recognise
+    // it — but its rawJwt is a JSON proof blob, and `buildVpToken` wraps rawJwt
+    // verbatim. Offering it produces a consent option that always fails
+    // downstream ("not a verifiable JWT credential"), which is exactly the
+    // dead-end this filter documents itself as preventing.
+    const c = claim('1', 'age_over_18');
+    const creds = new Map([[
+      c.identityCardId,
+      credential(c.identityCardId, ['passport-openac-v3', 'passport-noir'], '{"proof":"0xdeadbeef"}'),
+    ]]);
+    expect(matchPresentableClaims(['age_over_18'], [c], creds)).toEqual([]);
+  });
+
   it('matches a presentable claim whose claimType was requested and whose credential is sd-jwt-fallback', () => {
     const c = claim('1', 'age_over_18');
     const creds = new Map([[c.identityCardId, credential(c.identityCardId)]]);

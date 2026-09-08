@@ -27,7 +27,6 @@ import { useCredentialStore } from '@/credentials/store';
 import { useTranslation } from '@/i18n';
 import { useDisplayClaims, useIdentityData } from '@/identity';
 import { filterAvailablePassportPresentationClaims } from '@/passport/presentationClaims';
-import { hasPassportShowWitnessSafe } from '@/passport/showWitnessVault';
 import {
   buildPresentModel,
   resolvePresentAttestationsState,
@@ -75,13 +74,18 @@ export function PresentScreen(): ReactNode {
     () => new Set(credentialDetails.keys()),
     [credentialDetails]
   );
+  // Narrowing is a property of the CREDENTIAL's circuit, not of this device:
+  // `openac_show` can only ever disclose age/nationality, wherever it is
+  // presented from. Gating this on the local witness made a witness-less
+  // device (a restore, or a swallowed enrollment save) render the full
+  // four-claim set and offer disclosures it cannot prove — the gate failed
+  // OPEN. Whether this device can actually present is a separate question,
+  // answered by `passportShowEligible` in PresentAttestations.
   const passportShowCredentialIds = useMemo(
     () => new Set(
       Array.from(credentialDetails.values())
-        .filter(
-          (credential) =>
-            credential.metadataTags.includes('passport-openac-v3') &&
-            hasPassportShowWitnessSafe(credential.id)
+        .filter((credential) =>
+          credential.metadataTags.includes('passport-openac-v3')
         )
         .map((credential) => credential.id)
     ),
