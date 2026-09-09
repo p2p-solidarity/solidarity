@@ -17,7 +17,7 @@ describe('NIP-05 app client', () => {
     });
 
     expect(result).toEqual({ status: 'available', name: 'alice' });
-    expect(requests).toEqual(['https://solidarity.gg/id/availability?name=alice']);
+    expect(requests).toEqual(['https://creds.id/id/availability?name=alice']);
   });
 
   it('signs the exact registration body as a NIP-98 request', async () => {
@@ -43,7 +43,7 @@ describe('NIP-05 app client', () => {
         return Promise.resolve(new Response(JSON.stringify({
           name: 'alice',
           pubkey: '22'.repeat(32),
-          identifier: 'alice@solidarity.gg',
+          identifier: 'alice@creds.id',
         }), { status: 200 }));
       },
     });
@@ -52,13 +52,13 @@ describe('NIP-05 app client', () => {
       ok: true,
       name: 'alice',
       pubkey: '22'.repeat(32),
-      identifier: 'alice@solidarity.gg',
+      identifier: 'alice@creds.id',
     });
     expect(unsignedEvent).toMatchObject({
       kind: 27_235,
       content: '',
       tags: [
-        ['u', 'https://solidarity.gg/id/register'],
+        ['u', 'https://creds.id/id/register'],
         ['method', 'POST'],
         ['payload', 'bc07e1e6d7a98f679717f1198d08418eb3bc917b73153785ae4e505383b247e7'],
       ],

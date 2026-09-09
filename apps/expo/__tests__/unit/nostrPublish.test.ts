@@ -448,7 +448,7 @@ describe('updateKind0AlsoKnownAs', () => {
     const existing = await userKeyMod.signNostrEvent({
       kind: 0,
       tags: [],
-      content: JSON.stringify({ name: 'Alice', nip05: 'old@solidarity.gg' }),
+      content: JSON.stringify({ name: 'Alice', nip05: 'old@creds.id' }),
       created_at: 1_000,
     });
     expect(existing.ok).toBe(true);
@@ -458,7 +458,7 @@ describe('updateKind0AlsoKnownAs', () => {
 
     const result = await mod.updateKind0AlsoKnownAs({
       did: DID,
-      nip05: 'alice@solidarity.gg',
+      nip05: 'alice@creds.id',
       relays: ['a'],
       subscribeEventsFn: subFn,
       publishEventFn: pubFn,
@@ -468,7 +468,7 @@ describe('updateKind0AlsoKnownAs', () => {
     if (!result.ok) return;
     expect(JSON.parse(result.value.event.content)).toEqual({
       name: 'Alice',
-      nip05: 'alice@solidarity.gg',
+      nip05: 'alice@creds.id',
       alsoKnownAs: [DID],
     });
   });

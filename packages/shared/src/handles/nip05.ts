@@ -3,7 +3,7 @@ import { err, ok } from '../types/result';
 
 import type { HandleResolutionResult, HandleResolver, ResolverIO } from './types';
 
-export const NIP05_DOMAIN = 'solidarity.gg';
+export const NIP05_DOMAIN = 'creds.id';
 const NAME_RE = /^[a-z0-9]{3,30}$/u;
 const PUBKEY_RE = /^[0-9a-f]{64}$/u;
 

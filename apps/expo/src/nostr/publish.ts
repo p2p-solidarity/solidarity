@@ -65,6 +65,7 @@ import {
 import {
   buildPublicDisclosureDTag,
   err,
+  isNip05Identifier,
   ok,
   type Result,
 } from '@solidarity/shared';
@@ -456,7 +457,7 @@ export interface UpdateKind0Options {
  */
 export async function updateKind0AlsoKnownAs(opts: UpdateKind0Options): Promise<Result<PublishReport, string>> {
   if (opts.relays.length === 0) return err('updateKind0AlsoKnownAs: relays list is empty');
-  if (opts.nip05 !== undefined && !/^[a-z0-9]{3,30}@solidarity\.gg$/u.test(opts.nip05)) {
+  if (opts.nip05 !== undefined && !isNip05Identifier(opts.nip05)) {
     return err('updateKind0AlsoKnownAs: invalid NIP-05 identifier');
   }
 

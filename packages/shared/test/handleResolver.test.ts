@@ -191,7 +191,7 @@ describe('Nip05HandleResolver', () => {
         kind: 'nip05',
         status: 'active',
         name: 'alice',
-        identifier: 'alice@solidarity.gg',
+        identifier: 'alice@creds.id',
         pubkey,
         npub,
         relays: ['wss://relay.example'],
@@ -201,8 +201,8 @@ describe('Nip05HandleResolver', () => {
       },
     });
     expect(calls.sort()).toEqual([
-      'https://solidarity.gg/.well-known/nostr.json?name=alice',
-      'https://solidarity.gg/id/history?name=alice',
+      'https://creds.id/.well-known/nostr.json?name=alice',
+      'https://creds.id/id/history?name=alice',
     ]);
   });
 
@@ -220,7 +220,7 @@ describe('Nip05HandleResolver', () => {
           kind: 'nip05',
           status: 'redirected',
           name: 'alice',
-          identifier: 'alice@solidarity.gg',
+          identifier: 'alice@creds.id',
           redirectTo: 'alice2',
           redirectUntil: REDIRECT_UNTIL,
           rebindGeneration: 0,

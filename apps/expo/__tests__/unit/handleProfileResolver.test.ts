@@ -79,7 +79,7 @@ describe('resolveProfileByHandle', () => {
       io,
       fetchNostrProfile: async () => fetched,
       fetchKind0: async () => ({
-        contentJson: { nip05: 'alice@solidarity.gg', alsoKnownAs: [SUBJECT_DID] },
+        contentJson: { nip05: 'alice@creds.id', alsoKnownAs: [SUBJECT_DID] },
         created_at: 1_776_038_400,
       }),
     });

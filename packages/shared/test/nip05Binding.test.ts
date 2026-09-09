@@ -27,7 +27,7 @@ const resolution: ActiveNip05HandleResolutionValue = {
   kind: 'nip05',
   status: 'active',
   name: 'alice',
-  identifier: 'alice@solidarity.gg',
+  identifier: 'alice@creds.id',
   pubkey: PUBKEY,
   npub: NPUB,
   relays: ['wss://relay.example'],
@@ -39,7 +39,7 @@ const resolution: ActiveNip05HandleResolutionValue = {
 describe('verifyNip05Binding', () => {
   it('verifies only when the signed profile and Nostr kind-0 both claim the resolved identity', async () => {
     const result = await verifyNip05Binding(profile, resolution, async (pubkey) => ({
-      contentJson: { nip05: 'alice@solidarity.gg', alsoKnownAs: [DID] },
+      contentJson: { nip05: 'alice@creds.id', alsoKnownAs: [DID] },
       created_at: 1_776_038_400,
     }));
 

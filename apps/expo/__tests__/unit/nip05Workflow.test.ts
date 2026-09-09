@@ -26,7 +26,7 @@ describe('publishPublicPageName', () => {
             ok: true,
             name: 'alice',
             pubkey: '11'.repeat(32),
-            identifier: 'alice@solidarity.gg',
+            identifier: 'alice@creds.id',
           };
         },
         updateKind0: async (options) => {
@@ -36,7 +36,7 @@ describe('publishPublicPageName', () => {
       }
     );
 
-    expect(result).toEqual({ status: 'ready', name: 'alice', identifier: 'alice@solidarity.gg' });
-    expect(calls).toEqual(['profile', 'directory', 'kind0:alice@solidarity.gg']);
+    expect(result).toEqual({ status: 'ready', name: 'alice', identifier: 'alice@creds.id' });
+    expect(calls).toEqual(['profile', 'directory', 'kind0:alice@creds.id']);
   });
 });
