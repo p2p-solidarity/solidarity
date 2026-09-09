@@ -4,10 +4,12 @@ import { readFileSync } from 'node:fs';
 const source = (relativePath: string): string =>
   readFileSync(new URL(relativePath, import.meta.url), 'utf8');
 
+// `app/websign/review.tsx` is deliberately NOT here (07-plan P3, 2026-09-09):
+// the App↔Web signing review is part of the Page flow for every user; its
+// per-field diff + Face ID prompt is the boundary, not Developer Options.
 const developerOnlyRoutes = [
   '../../app/oidc/consent.tsx',
   '../../app/credentials/offer.tsx',
-  '../../app/websign/review.tsx',
   '../../app/credentials/index.tsx',
   '../../app/credentials/issue.tsx',
   '../../app/settings/dids.tsx',
@@ -44,6 +46,7 @@ describe('technical direct-route gate', () => {
       '../../app/credentials/[id].tsx',
       '../../app/settings/privacy.tsx',
       '../../app/passport/index.tsx',
+      '../../app/websign/review.tsx',
     ]) {
       expect(source(route)).not.toContain('if (!developerMode) return <Redirect href="/settings" />;');
     }

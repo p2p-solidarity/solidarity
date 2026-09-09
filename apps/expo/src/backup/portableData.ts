@@ -127,10 +127,11 @@ const storedProfileSchema = z.object({
   published: signedSchema.nullable().optional(),
 }).loose();
 
-/** `adoptSignedProfile` persists `linkVisibility: []` beside a record with
- * links, and only `readPersisted` normalises it. Reading the raw blob without
- * the same normalisation emits a length mismatch that `validateProfileRecord`
- * rejects — which would brick backup, sync and restore for that account. */
+/** Builds before 2.0.0's webSign merge persisted `linkVisibility: []` beside a
+ * record with links (the old `adoptSignedProfile` path), and only
+ * `readPersisted` normalises it. Reading the raw blob without the same
+ * normalisation emits a length mismatch that `validateProfileRecord` rejects —
+ * which would brick backup, sync and restore for that account. */
 export function serializePortableProfile(raw: unknown): string {
   const profile = storedProfileSchema.parse(raw);
   return stableJSON({

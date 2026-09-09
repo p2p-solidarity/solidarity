@@ -15,6 +15,7 @@ import { ProfileBadgeChips } from './ProfileBadgeChips';
 import { ProfileHero } from './ProfileHero';
 import { ProfileLinksList } from './ProfileLinksList';
 import { ProfileSectionsList } from './ProfileSectionsList';
+import { EditOnWebCard } from './EditOnWebCard';
 import { PageAppearanceSheet } from './PageAppearanceSheet';
 import { PageLapsedCheckAlert } from './PageLapsedCheckAlert';
 
@@ -118,6 +119,12 @@ export function MeProfilePage({
       </Animated.View>
 
       <Animated.View entering={entrance(STAGGER_MS * 3)}>
+        <EditOnWebCard
+          url={shareSelection.kind === 'ready' ? shareSelection.selected.url : null}
+        />
+      </Animated.View>
+
+      <Animated.View entering={entrance(STAGGER_MS * 4)}>
         <View className="px-4 pb-3">
           <PageSectionLabel title={t('mePage.attestations')} />
         </View>

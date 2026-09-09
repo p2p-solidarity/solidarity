@@ -99,6 +99,7 @@ interface ProfileModuleSurface {
           readonly avatar?: string | null;
           readonly badges?: ProfileRecord['badges'];
           readonly page?: ProfileRecord['page'];
+          readonly updatedAt?: string;
         }
       ) => Promise<SaveResult>;
       readonly publishToNostr: (
@@ -439,6 +440,42 @@ describe('saveProfile — append-only replacement semantics', () => {
     expect(secondRecord.displayName).toBe('Two');
     expect(secondRecord.did).toBe(firstRecord.did);
     expect(Date.parse(secondRecord.updatedAt)).toBeGreaterThan(Date.parse(firstRecord.updatedAt));
+  });
+
+  it('adopts a caller-supplied updatedAt only when it advances past the previous record', async () => {
+    const created = await rootKeyMod.createFromFreshMnemonic();
+    expect(created.ok).toBe(true);
+    if (!created.ok) return;
+
+    const first = await mod.useProfileStore.getState().saveProfile({ displayName: 'One', bio: '', links: [] });
+    expect(first.ok).toBe(true);
+    if (!first.ok) return;
+
+    // The webSign path carries the reviewed draft's own stamp so the published
+    // projection stays byte-identical to what the website confirms against.
+    const newer = new Date(Date.parse(first.value.record.updatedAt) + 60_000).toISOString();
+    const adopted = await mod.useProfileStore
+      .getState()
+      .saveProfile({ displayName: 'Two', bio: '', links: [] }, { updatedAt: newer });
+    expect(adopted.ok).toBe(true);
+    if (!adopted.ok) return;
+    expect(adopted.value.record.updatedAt).toBe(newer);
+
+    // A stamp at or before the previous record never moves the clock backwards.
+    const stale = await mod.useProfileStore
+      .getState()
+      .saveProfile({ displayName: 'Three', bio: '', links: [] }, { updatedAt: first.value.record.updatedAt });
+    expect(stale.ok).toBe(true);
+    if (!stale.ok) return;
+    expect(Date.parse(stale.value.record.updatedAt)).toBeGreaterThan(Date.parse(newer));
+
+    // Garbage is ignored, not signed.
+    const garbage = await mod.useProfileStore
+      .getState()
+      .saveProfile({ displayName: 'Four', bio: '', links: [] }, { updatedAt: 'not-a-date' });
+    expect(garbage.ok).toBe(true);
+    if (!garbage.ok) return;
+    expect(Date.parse(garbage.value.record.updatedAt)).toBeGreaterThan(Date.parse(stale.value.record.updatedAt));
   });
 
   it('updatedAt still strictly advances when the system clock skews backward between saves', async () => {
