@@ -16,9 +16,11 @@
  */
 import type { ReactNode } from 'react';
 import { useMemo } from 'react';
-import { Modal, Pressable, ScrollView, Text, TextInput, View } from 'react-native';
+import { Pressable, Text, TextInput, View } from 'react-native';
+import { KeyboardAwareScrollView } from 'react-native-keyboard-controller';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { ModalSheet } from '@/components/common/ModalSheet';
 import { PressableScale } from '@/components/common/PressableScale';
 import { SfIcon } from '@/components/icons/SfIcon';
 import { ThemedButton } from '@/components/themed';
@@ -107,12 +109,7 @@ export function ShoutoutFiltersSheet({
   };
 
   return (
-    <Modal
-      visible={visible}
-      animationType="slide"
-      presentationStyle="pageSheet"
-      onRequestClose={onClose}
-    >
+    <ModalSheet visible={visible} onRequestClose={onClose}>
       <View className="flex-1 bg-pageBg" style={{ paddingTop: insets.top }}>
         <View
           className="flex-row items-center"
@@ -137,7 +134,9 @@ export function ShoutoutFiltersSheet({
           </Pressable>
         </View>
 
-        <ScrollView
+        <KeyboardAwareScrollView
+          keyboardShouldPersistTaps="handled"
+          bottomOffset={16}
           contentContainerStyle={{
             paddingHorizontal: 16,
             paddingBottom: 24 + insets.bottom,
@@ -240,9 +239,9 @@ export function ShoutoutFiltersSheet({
             label="Clear All Filters"
             onPress={clearAll}
           />
-        </ScrollView>
+        </KeyboardAwareScrollView>
       </View>
-    </Modal>
+    </ModalSheet>
   );
 }
 

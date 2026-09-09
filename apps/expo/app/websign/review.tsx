@@ -4,21 +4,25 @@
  * surface) asks the app — the ONLY holder of the root key — to root-sign a
  * Profile Record. This screen:
  *   1. verifies the request (shared fail-closed boundary) and renders a
- *      per-field DIFF of what the draft changes vs the current local record;
+ *      per-field DIFF of what the draft changes vs the PROJECTION of the local
+ *      record the website could see (a request built from the published page
+ *      only ever saw the public links — `appSigner.ts`), including the signed
+ *      Page layout;
  *   2. states honestly that the app CANNOT verify which website sent the
  *      request — the human-reviewed diff is the only security boundary (the
  *      web session signature proves payload integrity, not origin);
  *   3. gates approval on Face ID (the existing `getRootSigner()` signer), then
  *      root-signs the exact reviewed draft + the bound response envelope;
  *   4. offers both response channels (G3, action-selected): publish to Nostr
- *      via the existing publish path (web confirms by subscribing to 30078),
- *      and a response QR / copyable string for the offline / no-camera path.
+ *      via the existing save + publish path (the draft is folded over the
+ *      links the website could not see, re-signed inside the same biometric
+ *      grace window, and the web confirms by subscribing to 30078), and a
+ *      response QR / copyable string for the offline / no-camera path.
  *
  * Data-driven states are exactly `error` (bad/expired/tampered request) or
  * `ready` (diff shown) — never a fabricated placeholder (CLAUDE.md Rule 8).
  */
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
-import { Redirect } from 'expo-router';
 import { ScrollView, View } from 'react-native';
 import * as Clipboard from 'expo-clipboard';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -47,10 +51,11 @@ import {
   approveWebSignRequest,
   reviewWebSignRequest,
   type WebSignDiff,
+  type WebSignPageDiff,
+  type WebSignPageItemRef,
   type WebSignReview,
 } from '@/websign/appSigner';
 import { useWebSignPending } from '@/websign/pendingRequest';
-import { usePreferences } from '@/settings/preferences';
 import { WEB_SIGN_MAX_AGE_SECONDS, type ProfileLink } from '@solidarity/shared';
 
 type ReviewState =
@@ -64,25 +69,26 @@ interface SignedResult {
   readonly responseJws: string;
 }
 
-export default function WebSignReviewRoute(): ReactNode {
-  const developerMode = usePreferences((state) => state.developerMode);
-  if (!developerMode) return <Redirect href="/settings/advanced" />;
-
-  return <WebSignReviewScreen />;
-}
-
-function WebSignReviewScreen(): ReactNode {
+/**
+ * Reachable by every user (07-plan P3): the scanner and the deep-link router
+ * hand a wrapped request here without a developer toggle. What protects the
+ * root key is this screen — the diff and the Face ID prompt — not who can
+ * open it.
+ */
+export default function WebSignReviewScreen(): ReactNode {
   const insets = useSafeAreaInsets();
   const { t } = useTranslation();
 
   // Snapshot the handoff + current record once on mount. Everything the diff
-  // needs is captured here; nothing reactive can wipe it mid-flow.
+  // and the merge need is captured here; nothing reactive can wipe it mid-flow.
   const [entry] = useState(() => {
     const pending = useWebSignPending.getState();
+    const profile = useProfileStore.getState();
     return {
       requestJws: pending.requestJws,
       decodeError: pending.decodeError,
-      currentRecord: useProfileStore.getState().record,
+      currentRecord: profile.record,
+      currentLinkVisibility: profile.linkVisibility,
     };
   });
 
@@ -97,6 +103,7 @@ function WebSignReviewScreen(): ReactNode {
     if (entry.requestJws === null) return { kind: 'error', detail: 'no pending request' };
     const reviewed = reviewWebSignRequest(entry.requestJws, {
       currentRecord: entry.currentRecord,
+      currentLinkVisibility: entry.currentLinkVisibility,
     });
     if (!reviewed.ok) return { kind: 'error', detail: reviewed.error.detail };
     return { kind: 'ready', review: reviewed.value };
@@ -159,18 +166,41 @@ function WebSignReviewScreen(): ReactNode {
     if (state.kind !== 'ready' || signed === null) return;
     setPhase('publishing');
 
-    // Adopt the exact signed draft as the current profile (no re-sign, no
-    // second Face ID prompt), then reuse the EXISTING publish path verbatim.
-    const adopted = useProfileStore
-      .getState()
-      .adoptSignedProfile(state.review.request.draft, signed.profileJws);
-    if (!adopted.ok) {
+    // Fold the approved draft into the FULL local profile: the draft's fields
+    // verbatim, its links with their existing tiers, and every link the
+    // website could not see kept unchanged (`review.merge`). `saveProfile`
+    // re-signs the full record and both share projections inside the
+    // biometric grace window the approval just opened, and carries the
+    // draft's own `updatedAt` so the published projection stays
+    // byte-identical to the record the website confirms against.
+    const { draft } = state.review.request;
+    const { merge } = state.review;
+    const saved = await useProfileStore.getState().saveProfile(
+      {
+        displayName: draft.displayName,
+        bio: draft.bio,
+        links: merge.links,
+        linkVisibility: merge.linkVisibility,
+      },
+      {
+        avatar: draft.avatar,
+        alsoKnownAs: draft.alsoKnownAs,
+        badges: draft.badges,
+        ...(draft.page ? { page: draft.page } : {}),
+        updatedAt: draft.updatedAt,
+      }
+    );
+    if (!saved.ok) {
       setPhase('signed');
+      if (isBiometricCancellation(saved.error)) {
+        haptic('warning');
+        return;
+      }
       haptic('error');
       showError({
         context: 'WebSign › Publish',
         summary: t('websign.publishFailed'),
-        error: new Error(adopted.error),
+        error: new Error(saved.error),
       });
       return;
     }
@@ -231,7 +261,7 @@ function WebSignReviewScreen(): ReactNode {
         ) : (
           <>
             <SecurityBanner review={state.review} />
-            <DiffPanel diff={state.review.diff} />
+            <DiffPanel diff={state.review.diff} preservedCount={state.review.merge.preserved.length} />
 
             {signed === null ? (
               <View style={{ gap: 10 }}>
@@ -312,7 +342,13 @@ function SecurityBanner({ review }: { readonly review: WebSignReview }): ReactNo
   );
 }
 
-function DiffPanel({ diff }: { readonly diff: WebSignDiff }): ReactNode {
+function DiffPanel({
+  diff,
+  preservedCount,
+}: {
+  readonly diff: WebSignDiff;
+  readonly preservedCount: number;
+}): ReactNode {
   const { t } = useTranslation();
   const empty = t('websign.emptyValue');
   return (
@@ -370,12 +406,23 @@ function DiffPanel({ diff }: { readonly diff: WebSignDiff }): ReactNode {
         removed={diff.badges.removed.map((b) => `${b.type} · ${b.subject}`)}
         changed={[]}
       />
+      <PageDiffSection page={diff.page} />
+
+      {preservedCount > 0 ? (
+        <ThemedText variant="caption" tone="secondary">
+          {t('websign.preservedLinks', { n: preservedCount })}
+        </ThemedText>
+      ) : null}
     </ThemedSurface>
   );
 }
 
 function linkText(link: ProfileLink): string {
   return `${link.label} · ${link.url}`;
+}
+
+function pageItemText(item: WebSignPageItemRef): string {
+  return item.url === null ? item.title : `${item.title} · ${item.url}`;
 }
 
 function FieldChangeRow({
@@ -433,6 +480,33 @@ function ListDiffSection({
       ))}
       {removed.map((value, i) => (
         <DiffLine key={`r-${String(i)}`} tag={t('websign.removed')} value={value} color={Colors.destructive} strike />
+      ))}
+    </View>
+  );
+}
+
+/**
+ * The signed Page layout is part of what a visitor sees, so a request that
+ * injects, drops, or restyles block items must be consented to like any other
+ * field. Item adds/removes are listed; a layout-only change (order, style,
+ * appearance) is named as such rather than hidden.
+ */
+function PageDiffSection({ page }: { readonly page: WebSignPageDiff }): ReactNode {
+  const { t } = useTranslation();
+  if (!page.changed) return null;
+  return (
+    <View style={{ gap: 4 }}>
+      <ThemedText variant="caption" tone="tertiary">{t('websign.field.page')}</ThemedText>
+      {page.added.length === 0 && page.removed.length === 0 ? (
+        <ThemedText variant="bodySmall" tone="secondary">
+          {t('websign.pageLayoutChanged')}
+        </ThemedText>
+      ) : null}
+      {page.added.map((item, i) => (
+        <DiffLine key={`pa-${String(i)}`} tag={t('websign.added')} value={pageItemText(item)} color={Colors.terminalGreen} />
+      ))}
+      {page.removed.map((item, i) => (
+        <DiffLine key={`pr-${String(i)}`} tag={t('websign.removed')} value={pageItemText(item)} color={Colors.destructive} strike />
       ))}
     </View>
   );

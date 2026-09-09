@@ -9,9 +9,11 @@
  *      `bindingMismatch`).
  * Plus the reachability honesty split (`notFound` vs `unreachable`).
  *
- * Relay IO is injected (`subscribeEventsFn`) — no real WebSocket. The signed
- * profile fixture reuses packages/shared's own test key, same as
- * verifiedPageHandler.test.ts, so a JWS built here is cross-checkable.
+ * Relay IO is injected (`subscribeEventsFn`) — no real WebSocket. That trusted
+ * post-transport seam intentionally uses placeholder event id/signature bytes,
+ * while still matching the requested npub author. The signed profile fixture
+ * reuses packages/shared's own test key, same as verifiedPageHandler.test.ts,
+ * so a JWS built here is cross-checkable.
  */
 import { describe, expect, it } from 'bun:test';
 import { p256 } from '@noble/curves/nist.js';
@@ -28,6 +30,7 @@ const subjectSigner: Signer = async (digest) => p256.sign(digest, SUBJECT_PRIV, 
 
 // A real NIP-19 npub (nostr-tools reference vector) — `npubDecode` accepts it.
 const NPUB = 'npub10elfcs4fr0l0r8af98jlmgdh9c8tcxjvz9qkw038js35mp4dma8qzvjptg';
+const NOSTR_PUBKEY = '7e7e9c42a91bfef19fa929e5fda1b72e0ebc1a4c1141673e2794234d86addf4e';
 
 function profile(alsoKnownAs: readonly string[]): object {
   return {
@@ -48,7 +51,7 @@ async function pointerEvent(alsoKnownAs: readonly string[]): Promise<NostrEvent>
   const jws = await signCompact(profile(alsoKnownAs), SUBJECT_DID, subjectSigner);
   return {
     id: '00'.repeat(32),
-    pubkey: 'ab'.repeat(32),
+    pubkey: NOSTR_PUBKEY,
     created_at: 1_700_000_000,
     kind: 30078,
     tags: [['d', 'solidarity.profile']],

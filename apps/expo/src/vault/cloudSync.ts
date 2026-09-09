@@ -36,7 +36,7 @@
 import * as FileSystem from 'expo-file-system/legacy';
 import { Platform } from 'react-native';
 
-import { getCloudKit, type CloudKit } from '@solidarity/nitro-cloudkit';
+import { getCloudKit, type CloudKit } from '@solidarity/nitro-keystone';
 
 import {
   base64Decode,

@@ -10,7 +10,7 @@
  * production schema"), so every TestFlight/App Store backup failed.
  *
  * This module restores the native design: backups are files written via the
- * `@solidarity/nitro-cloudkit` file API (iOS ubiquity container / Android
+ * `@solidarity/nitro-keystone` file API (iOS ubiquity container / Android
  * Drive folder). No CloudKit schema is involved, so the production-schema
  * error class is gone. The public surface is unchanged so existing consumers
  * (backupManager, gestureAutoBackup, settings/backup) compile without edits.
@@ -18,19 +18,30 @@
  * Layout (mirrors Swift):
  *   AirMeishiBackup/backup_<unixSeconds>.solbk
  *     bytes = "SOLB" || 0x01 || AES-GCM(encryptJson(payload))
- *   newest 5 retained; older rotated out.
+ *   newest `MAX_RETAINED_BACKUPS` retained; older rotated out.
  *
  * The payload still goes through `encryptionManager.encryptJson` before
  * upload — the cloud provider only ever sees ciphertext.
  */
 import { Platform } from 'react-native';
-import { getCloudKit, type CloudKit } from '@solidarity/nitro-cloudkit';
+import { getCloudKit, type CloudKit } from '@solidarity/nitro-keystone';
 
 import { encryptJsonWithKey } from '../storage/jsonCrypto';
 import {
+  ArchiveDownloadPendingError,
+  awaitArchiveDownload,
+  isDownloadPendingError,
+  normalizePercent,
+  type ArchiveDownloadProgress,
+  type ArchiveDownloadState,
+} from './archiveDownload';
+import {
+  MAX_RETAINED_BACKUPS,
   newBackupName,
+  nextBackupNameMs,
   parseBackupTimestampMs,
   selectNewestBackup,
+  selectStaleBackups,
   sortBackupsByTimestamp,
 } from './backupPolicy';
 import { decodeSolb, encodeSolb, type SolbKeyScheme } from './solbEnvelope';
@@ -41,8 +52,6 @@ export const DEFAULT_PROVIDER: ProviderKind =
   Platform.OS === 'ios' ? 'iCloud' : 'googleDrive';
 
 const CONTAINER_ID = 'iCloud.kidneyweakx.airmeishi';
-/** Mirror Swift BackupManager.maxBackupCount. */
-const MAX_BACKUPS = 5;
 
 let activeProvider: ProviderKind = DEFAULT_PROVIDER;
 let initialized = false;
@@ -127,6 +136,10 @@ async function ensureInitialized(interactiveAuth = true): Promise<CloudKit> {
 
 /** Switch the active provider. */
 export function setProvider(kind: ProviderKind): void {
+  // Called on every sync tick, so only an actual switch may re-initialise:
+  // clearing the flag unconditionally re-ran initialize()/Drive auth every
+  // pass and reset it underneath a concurrent backup.
+  if (kind === activeProvider) return;
   activeProvider = kind;
   // Re-initialise on next call so the Drive token vs iCloud account context
   // pick up the switch cleanly.
@@ -148,10 +161,30 @@ export function getActiveProvider(): ProviderKind {
  * Ensure the active provider is initialised (and Drive authed on Android),
  * returning the Drive auth status so a caller can prompt the user to connect
  * Google Drive BEFORE attempting a backup that would otherwise 401.
+ *
+ * `interactive` must be false for anything the user did not just ask for.
+ * The scheduled backup runs with no user gesture behind it, and an
+ * interactive Drive auth there would pop a Google Sign-In sheet over whatever
+ * the user was doing — breaking the app's no-account promise. A silent probe
+ * reports 'needs-connection' instead, which the caller skips on.
  */
-export async function prepareProvider(): Promise<DriveAuthStatus> {
-  await ensureInitialized();
+export async function prepareProvider(interactive = true): Promise<DriveAuthStatus> {
+  await ensureInitialized(interactive);
   return lastDriveAuthStatus;
+}
+
+/**
+ * Read one file, turning the platform's fail-fast "still downloading" refusal
+ * into a typed error that names the archive, so a caller can bring it onto
+ * the device (`ensureArchiveDownloaded`) instead of reporting it unreadable.
+ */
+async function readArchiveFile(ck: CloudKit, name: string): Promise<string> {
+  try {
+    return await ck.readFileBackup(name);
+  } catch (error) {
+    if (isDownloadPendingError(error)) throw new ArchiveDownloadPendingError(name, { cause: error });
+    throw error;
+  }
 }
 
 /**
@@ -167,19 +200,30 @@ async function sortedBackups(ck: CloudKit): Promise<readonly string[]> {
   return sortBackupsByTimestamp(names);
 }
 
-/** Keep only the newest MAX_BACKUPS. Best-effort — never fails a backup. */
+/**
+ * Keep only the newest `MAX_RETAINED_BACKUPS` archives, oldest deleted first,
+ * regardless of format — a legacy v1 file only opens on the device that wrote
+ * it and is always superseded by the newer portable archives that outrank it.
+ * Best-effort: a delete failure must never surface as a backup failure, since
+ * the new archive is already safely uploaded by this point.
+ */
 async function rotateBackups(ck: CloudKit): Promise<void> {
   try {
-    const names = await sortedBackups(ck);
-    if (names.length <= MAX_BACKUPS) return;
-    const stale = names.slice(0, names.length - MAX_BACKUPS);
-    for (const name of stale) {
+    for (const name of selectStaleBackups(await sortedBackups(ck), MAX_RETAINED_BACKUPS)) {
       await ck.deleteFileBackup(name);
     }
   } catch {
     // Rotation is housekeeping; a failure here must not surface as a
     // backup failure to the user.
   }
+}
+
+/** High-water mark behind `nextBackupNameMs` — see its doc for why two
+ *  archives may never share a millisecond. */
+let lastArchiveNameMs = 0;
+function nextArchiveName(nowMs: number): string {
+  lastArchiveNameMs = nextBackupNameMs(nowMs, lastArchiveNameMs);
+  return newBackupName(lastArchiveNameMs);
 }
 
 /**
@@ -194,7 +238,7 @@ export async function uploadBackup<T>(value: T, key: Uint8Array): Promise<void> 
   const ciphertextB64 = encryptJsonWithKey(key, value);
   const fileB64 = encodeSolb(ciphertextB64, 2);
   const ck = await ensureInitialized();
-  await ck.writeFileBackup(newBackupName(Date.now()), fileB64);
+  await ck.writeFileBackup(nextArchiveName(Date.now()), fileB64);
   await rotateBackups(ck);
 }
 
@@ -204,6 +248,13 @@ export interface DownloadedArchive {
   readonly ciphertextB64: string;
 }
 
+/**
+ * Whether an archive's bytes are on this device. iCloud evicts documents it
+ * considers cold, so a listed archive can be `cloud-only` (nothing fetched
+ * yet) or `downloading`; Drive and local storage are always `ready`.
+ */
+export type ArchiveAvailability = 'ready' | 'downloading' | 'cloud-only';
+
 /** One row in the user-facing archive picker (plan G6: dated explicit choice). */
 export interface BackupArchiveInfo {
   readonly name: string;
@@ -211,35 +262,93 @@ export interface BackupArchiveInfo {
   readonly timestampMs: number;
   /**
    * 2 = portable (recovery-phrase key), 1 = legacy (device key, original
-   * device only), null = header unreadable (corrupt / unknown format).
+   * device only), null = header unreadable (corrupt / unknown format) — or
+   * not readable YET, when `availability` is not `ready`.
    */
   readonly version: 1 | 2 | null;
+  readonly availability: ArchiveAvailability;
+  /** Whole percent while `downloading`, when iCloud reports one. */
+  readonly percent: number | null;
 }
 
 /**
  * List every archive on the active provider, NEWEST FIRST, with its creation
  * date and format version so the UI can label rows (dated explicit choice —
  * never a silent fallback to an older file, plan G6). Reads each file's 5-byte
- * SOLB header to classify it; MAX_BACKUPS caps this at 5 small files. A file
+ * SOLB header to classify it; retention caps this at a handful of small
+ * files. A file
  * whose header fails to decode is listed as `version: null` rather than
  * hidden, so the user can see it exists even though it can't be restored.
  */
 export async function listBackupArchives(): Promise<readonly BackupArchiveInfo[]> {
   const ck = await ensureInitialized();
   const names = await sortedBackups(ck); // oldest → newest
-  const out: BackupArchiveInfo[] = [];
-  for (const name of [...names].reverse()) {
-    const timestampMs = parseBackupTimestampMs(name);
-    if (timestampMs === null) continue;
-    let version: 1 | 2 | null = null;
-    try {
-      version = decodeSolb(await ck.readFileBackup(name)).version;
-    } catch {
-      version = null;
-    }
-    out.push({ name, timestampMs, version });
+  // Rows are independent, and a cold row's probe is a bounded Spotlight query
+  // — serialising three of them would keep History on its spinner for ~10 s.
+  const rows = await Promise.all([...names].reverse().map((name) => describeArchive(ck, name)));
+  return rows.filter((row): row is BackupArchiveInfo => row !== null);
+}
+
+async function describeArchive(ck: CloudKit, name: string): Promise<BackupArchiveInfo | null> {
+  const timestampMs = parseBackupTimestampMs(name);
+  if (timestampMs === null) return null;
+  // Ask before reading: a header read on an evicted archive would fail (and
+  // quietly kick off a download for every cold row) — the row is honest about
+  // being in iCloud instead, and the user's tap starts the transfer. A probe
+  // that fails (a Drive blip, a stalled query) degrades THIS row to the
+  // header read below, never the whole list.
+  let state: ArchiveDownloadState = { status: 'current' };
+  try {
+    state = await ck.getFileBackupDownloadState(name);
+  } catch {
+    // fall through to the header read
   }
-  return out;
+  if (state.status === 'downloading' || state.status === 'notDownloaded' || state.status === 'missing') {
+    // `missing` is kept, not dropped: the listing just proved the name exists,
+    // so a probe that cannot see it (a Spotlight-only name whose bounded query
+    // stalled) means "not here yet". A file that is genuinely gone fails
+    // honestly at the tap instead of vanishing from History without a word.
+    return {
+      name,
+      timestampMs,
+      version: null,
+      availability: state.status === 'downloading' ? 'downloading' : 'cloud-only',
+      percent: normalizePercent(state.percentDownloaded),
+    };
+  }
+  let version: 1 | 2 | null = null;
+  try {
+    version = decodeSolb(await readArchiveFile(ck, name)).version;
+  } catch {
+    version = null;
+  }
+  return { name, timestampMs, version, availability: 'ready', percent: null };
+}
+
+export interface EnsureArchiveDownloadedOptions {
+  readonly onProgress?: (progress: ArchiveDownloadProgress) => void;
+  readonly signal?: AbortSignal;
+  /** Test seam — production polls once a second. */
+  readonly pollMs?: number;
+}
+
+/**
+ * Wait until `name` is readable on this device, driving iCloud's transfer and
+ * mirroring its progress. Runs OUTSIDE the cloud-data lock on purpose (see
+ * `archiveDownload.ts`): only the restore that follows takes the lock.
+ */
+export async function ensureArchiveDownloaded(
+  name: string,
+  options: EnsureArchiveDownloadedOptions = {},
+): Promise<void> {
+  const ck = await ensureInitialized();
+  await awaitArchiveDownload({
+    name,
+    getState: (file) => ck.getFileBackupDownloadState(file),
+    start: (file) => ck.startFileBackupDownload(file),
+    sleep: (ms) => new Promise<void>((resolve) => setTimeout(resolve, ms)),
+    ...options,
+  });
 }
 
 /**
@@ -249,7 +358,7 @@ export async function listBackupArchives(): Promise<readonly BackupArchiveInfo[]
  */
 export async function downloadArchive(name: string): Promise<DownloadedArchive> {
   const ck = await ensureInitialized();
-  const decoded = decodeSolb(await ck.readFileBackup(name));
+  const decoded = decodeSolb(await readArchiveFile(ck, name));
   return { keyScheme: decoded.keyScheme, ciphertextB64: decoded.ciphertextB64 };
 }
 
@@ -267,7 +376,7 @@ export async function downloadLatestArchive(): Promise<DownloadedArchive | null>
   const names = await sortedBackups(ck);
   const latest = selectNewestBackup(names);
   if (!latest) return null;
-  const fileB64 = await ck.readFileBackup(latest);
+  const fileB64 = await readArchiveFile(ck, latest);
   const decoded = decodeSolb(fileB64);
   return { keyScheme: decoded.keyScheme, ciphertextB64: decoded.ciphertextB64 };
 }
@@ -287,4 +396,33 @@ export async function backupMtime(): Promise<Date | null> {
   } catch {
     return null;
   }
+}
+
+/** Sync revisions are deliberately outside dated backup retention. Native iOS
+ * requires actual iCloud for these names; it must never fall back to local. */
+export async function openSyncFiles(namespace: string) {
+  if (!/^[0-9a-f]{64}$/u.test(namespace)) throw new Error('invalid-sync-namespace');
+  const ck = await ensureInitialized(false);
+  const prefix = `sync_${namespace}_`;
+  // iOS `listFileBackups` falls back to the LOCAL directory when iCloud is
+  // unavailable and returns an empty list without error — which would let a
+  // signed-out device report a completed sync it never performed. Any
+  // `sync_`-prefixed path throws `icloud_unavailable` natively, so this is the
+  // local-only reachability check the listing itself cannot give us. Drive
+  // surfaces its own auth/network errors on use, so it needs no extra call.
+  if (activeProvider === 'iCloud') await ck.getFileBackupMtime(`${prefix}probe.solsync`);
+  return {
+    list: async () => (await ck.listFileBackups()).filter((name) =>
+      name.startsWith(prefix) && /^sync_[0-9a-f]{64}_[a-zA-Z0-9-]+\.solsync$/u.test(name)),
+    read: async (name: string) => {
+      if (!name.startsWith(prefix) || !/^sync_[0-9a-f]{64}_[a-zA-Z0-9-]+\.solsync$/u.test(name)) throw new Error('invalid-sync-filename');
+      const decoded = decodeSolb(await ck.readFileBackup(name));
+      if (decoded.version !== 2) throw new Error('unsupported-sync-version');
+      return decoded.ciphertextB64;
+    },
+    write: async (id: string, ciphertext: string) => {
+      if (!/^[a-zA-Z0-9-]+$/u.test(id)) throw new Error('invalid-sync-revision');
+      await ck.writeFileBackup(`${prefix}${id}.solsync`, encodeSolb(ciphertext, 2));
+    },
+  };
 }

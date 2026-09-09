@@ -1,68 +1,49 @@
+/**
+ * Public-Page proof controls. Binding checks still refresh their shared cache
+ * here, but their visual status now belongs to the matching field row. This
+ * section renders only real presentable claims from IdentityDataStore.
+ */
 import type { SFSymbol } from 'expo-symbols';
 import { router, useFocusEffect } from 'expo-router';
-import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
-import { ActivityIndicator, ScrollView, View } from 'react-native';
-import Animated, { Easing, FadeIn, FadeOut } from 'react-native-reanimated';
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useState,
+  type ReactNode,
+} from 'react';
+import { ActivityIndicator, View } from 'react-native';
 
-import {
-  atprotoBadgeViewModel,
-  type AtprotoBadgeViewModel,
-  type AtprotoBadgeVisual,
-} from '@/badges/atprotoBadgeDisplay';
-import {
-  nostrBadgeViewModel,
-  type NostrBadgeViewModel,
-  type NostrBadgeVisual,
-} from '@/badges/nostrBadgeDisplay';
 import { atprotoBindingIO } from '@/atproto/bindingIo';
-import { verifyAtprotoBindingDual } from '@/badges/verifyAtprotoDual';
 import {
   captureBadgeStatusCacheEpoch,
-  invalidateCachedAtprotoResult,
-  invalidateCachedNostrResult,
   readCachedAtprotoResult,
   readCachedNostrResult,
   shouldReverifyBadge,
   writeCachedAtprotoResult,
   writeCachedNostrResult,
 } from '@/badges/badgeStatusCache';
+import { verifyAtprotoBindingDual } from '@/badges/verifyAtprotoDual';
 import { PressableScale } from '@/components/common/PressableScale';
 import { SfIcon } from '@/components/icons/SfIcon';
-import { ThemedSurface, ThemedText } from '@/components/themed';
+import { ThemedButton, ThemedSurface, ThemedText } from '@/components/themed';
 import { Colors } from '@/constants/Colors';
-import type { CredentialManifestEntry } from '@/credentials/credentialManifest';
-import { useCredentialStore, type StoredCredential, type TrustLevel } from '@/credentials/store';
-import {
-  credentialTrustDisplayFor,
-  credentialTrustSimpleI18nKeyForLevel,
-  credentialTrustToneForLevel,
-  type TrustDisplayTone,
-} from '@/credentials/trustDisplay';
-import { appAlert, showError, type AppAlertButton } from '@/feedback/appAlert';
+import { useThemeColors } from '@/constants/useThemeColors';
 import { haptic } from '@/feedback/haptics';
 import { pushToast } from '@/feedback/toast';
 import { useTranslation } from '@/i18n';
-import {
-  isBiometricCancellation,
-  isNostrPublishOutcomePartiallyAccepted,
-} from '@/nostr/connectWizard';
+import { useDisplayClaims, useIdentityData, type ProvableClaimEntity } from '@/identity';
 import { makeKind0Fetcher } from '@/nostr/fetchKind0';
 import { DEFAULT_RELAYS } from '@/nostr/publish';
-import { verifyHttpsOwnership, type HttpsOwnershipEvidence } from '@/profile/httpsOwnership';
 import { useProfileStore } from '@/profile/store';
 import {
+  PUBLIC_DISCLOSURE_BADGE_TYPE,
   verifyNostrBinding,
   type ProfileRecord,
-  type VerifyAtprotoBindingResult,
-  type VerifyNostrBindingResult,
 } from '@solidarity/shared';
-import { buildProfileShareModel } from './meProfileModel';
-import { badgeRecoveryActions } from './badgeRecoveryActions';
 
-const BADGE_CROSSFADE_MS = 200;
-
-type BadgeVisual = AtprotoBadgeVisual | NostrBadgeVisual;
-type TFn = ReturnType<typeof useTranslation>['t'];
+import { PageEmptyState } from './PageEmptyState';
+import { ICON_TILE_GLYPH, fieldRowStyle, iconTileStyle } from './pageRowStyles';
 
 export interface ProfileBadgeChipsProps {
   readonly record: ProfileRecord;
@@ -75,624 +56,324 @@ export interface ProfileBadgeChipsProps {
 export function ProfileBadgeChips({
   record,
   publicRecord,
-  jws,
   nostrUploaded,
   onManageBindings,
 }: ProfileBadgeChipsProps): ReactNode {
   const { t } = useTranslation();
-  const manifest = useCredentialStore((state) => state.manifest);
-  const credentialDetails = useCredentialStore((state) => state.details);
-  const loadCredentialDetail = useCredentialStore((state) => state.loadDetail);
-  const publishToNostr = useProfileStore((state) => state.publishToNostr);
-  const passport = useMemo(
-    () => strongestPassportCredential(manifest, credentialDetails),
-    [credentialDetails, manifest]
-  );
+  const c = useThemeColors();
+  const claims = useDisplayClaims();
+  const hydrated = useIdentityData((state) => state.hydrated);
+  const hydrate = useIdentityData((state) => state.hydrate);
+  const linkVisibility = useProfileStore((state) => state.linkVisibility);
+  const saveProfile = useProfileStore((state) => state.saveProfile);
+  const [loadError, setLoadError] = useState(false);
+  const [savingClaimId, setSavingClaimId] = useState<string | null>(null);
+
+  useRefreshBindingCaches(record, publicRecord, nostrUploaded);
+
   useEffect(() => {
-    for (const credential of manifest) {
-      if (credential.type.toLowerCase() === 'passport' && !credentialDetails.has(credential.id)) {
-        void loadCredentialDetail(credential.id);
-      }
-    }
-  }, [credentialDetails, loadCredentialDetail, manifest]);
-  const shareModel = useMemo(() => buildProfileShareModel(record, jws), [jws, record]);
-  const website = useWebsiteOwnership(record, shareModel);
-  const npubClaim = useMemo(
-    () =>
-      nostrUploaded
-        ? record.alsoKnownAs.find((value) => value.startsWith('nostr:npub'))?.slice('nostr:'.length) ??
-          null
-        : null,
-    [nostrUploaded, record.alsoKnownAs]
-  );
-  const handleClaim = useMemo(
-    () =>
-      record.alsoKnownAs.find((value) => value.startsWith('at://'))?.slice('at://'.length) ?? null,
-    [record.alsoKnownAs]
-  );
-  const {
-    nostr,
-    bluesky,
-    nostrCheckedAt,
-    atprotoCheckedAt,
-    retryNostrVerification,
-    retryAtprotoVerification,
-  } = useBindingBadgeViewModels(record, publicRecord, npubClaim, handleClaim);
-  const websiteVisual = website.checking
-    ? 'loading'
-    : website.evidence && website.evidence.length > 0
-      ? 'verified'
-      : 'hidden';
-  const hasBadge =
-    nostr.visual !== 'hidden' ||
-    bluesky.visual !== 'hidden' ||
-    websiteVisual !== 'hidden' ||
-    passport !== null;
+    if (hydrated) return;
+    let active = true;
+    setLoadError(false);
+    void hydrate().catch(() => {
+      if (active) setLoadError(true);
+    });
+    return () => { active = false; };
+  }, [hydrate, hydrated]);
 
-  const republishNostr = async (): Promise<void> => {
-    const published = await publishToNostr(DEFAULT_RELAYS);
-    if (!published.ok) {
-      if (isBiometricCancellation(published.error)) return;
-      haptic('error');
-      showError({
-        context: 'Me › Badge recovery › Republish',
-        summary: t('meHome.badge.republishFailed'),
-        error: new Error(published.error),
+  const displayableClaims = useMemo(
+    () => claims.filter((claim) => claim.claimType !== 'profile_card'),
+    [claims],
+  );
+  // What THIS device holds versus what a visitor actually resolves. Saving
+  // re-signs the local record; the published projection only changes when the
+  // owner publishes. Reading both keeps the row from claiming a visibility the
+  // outside world has not seen yet.
+  const localSubjects = useMemo(
+    () => disclosureSubjects(record),
+    [record],
+  );
+  const visitorSubjects = useMemo(
+    () => disclosureSubjects(publicRecord),
+    [publicRecord],
+  );
+
+  const hideClaimFromPage = (claim: ProvableClaimEntity): void => {
+    if (savingClaimId !== null) return;
+    const badges = record.badges.filter(
+      (badge) => !(
+        badge.type === PUBLIC_DISCLOSURE_BADGE_TYPE &&
+        badge.subject === claim.claimType
+      ),
+    );
+    if (badges.length === record.badges.length) {
+      // There is no real public disclosure to toggle on locally. Open the
+      // backing credential instead of inventing a public badge reference.
+      // `product: '1'` keeps the credential screen in product context even for
+      // a developer-mode user: this is a product surface, so the protocol
+      // vocabulary (VC / ZK / nonce / challenge) must stay behind Developer
+      // Mode's own entry points, never leak in from the Page tab.
+      router.push({
+        pathname: '/credentials/[id]',
+        params: { id: claim.identityCardId, claimId: claim.id, product: '1' },
       });
       return;
     }
-    if (!isNostrPublishOutcomePartiallyAccepted(published.value)) {
-      haptic('error');
-      showError({
-        context: 'Me › Badge recovery › Republish',
-        summary: t('meHome.badge.republishFailed'),
-        error: new Error('No complete page-and-verification copy was accepted.'),
+    setSavingClaimId(claim.id);
+    void saveProfile({
+      displayName: record.displayName,
+      bio: record.bio,
+      links: record.links,
+      linkVisibility,
+    }, { badges })
+      .then((result) => {
+        if (result.ok) {
+          haptic('success');
+          return;
+        }
+        pushToast(t('mePage.proofVisibilityError'), 'error');
+      })
+      .catch(() => {
+        pushToast(t('mePage.proofVisibilityError'), 'error');
+      })
+      .finally(() => {
+        setSavingClaimId(null);
       });
-      return;
-    }
-    haptic('success');
-    pushToast(t('meHome.badge.republished'), 'success');
-    retryNostrVerification();
   };
 
-  const openNostrEvidence = (): void => {
-    if (nostr.visual === 'hidden' || nostr.visual === 'loading') return;
-    const actions = badgeRecoveryActions({
-      platform: 'nostr',
-      visual: nostr.visual,
-      direction1: nostr.direction1,
-      direction2: nostr.direction2,
-    });
-    const buttons: AppAlertButton[] = [];
-    if (actions.includes('retry')) {
-      buttons.push({
-        label: t('meHome.badge.retryVerification'),
-        onPress: retryNostrVerification,
-      });
-    }
-    if (actions.includes('republish')) {
-      buttons.push({
-        label: t('meHome.badge.republish'),
-        onPress: () => {
-          void republishNostr();
-        },
-      });
-    }
-    buttons.push({
-      label: t(actions.length > 0 ? 'alert.cancel' : 'alert.ok'),
-      style: 'cancel',
-    });
-    appAlert({
-      title: t('meHome.badge.nostr.title'),
-      message: nostrEvidenceMessage(nostr, t, nostrCheckedAt),
-      buttons,
-    });
-  };
+  if (!hydrated) {
+    return (
+      <View className="px-4">
+        <ThemedSurface variant="inset" padded className="items-center gap-2">
+          {loadError ? (
+            <>
+              <ThemedText variant="bodyMedium" tone="error">
+                {t('mePage.proofLoadError')}
+              </ThemedText>
+              <ThemedButton
+                label={t('mePage.retry')}
+                variant="secondary"
+                onPress={() => {
+                  setLoadError(false);
+                  void hydrate().catch(() => { setLoadError(true); });
+                }}
+              />
+            </>
+          ) : (
+            <>
+              <ActivityIndicator color={Colors.primaryBlue} />
+              <ThemedText variant="caption" tone="secondary">
+                {t('mePage.loadingProofs')}
+              </ThemedText>
+            </>
+          )}
+        </ThemedSurface>
+      </View>
+    );
+  }
 
-  const openBlueskyEvidence = (): void => {
-    if (bluesky.visual === 'hidden' || bluesky.visual === 'loading') return;
-    const actions = badgeRecoveryActions({
-      platform: 'bluesky',
-      visual: bluesky.visual,
-      direction1: bluesky.direction1,
-      direction2: bluesky.direction2,
-    });
-    const buttons: AppAlertButton[] = [];
-    if (actions.includes('retry')) {
-      buttons.push({
-        label: t('meHome.badge.retryVerification'),
-        onPress: retryAtprotoVerification,
-      });
-    }
-    if (actions.includes('reconnectBluesky')) {
-      buttons.push({
-        label: t('meHome.badge.reconnectBluesky'),
-        onPress: () => {
-          router.push('/verify/bluesky');
-        },
-      });
-    }
-    buttons.push({
-      label: t(actions.length > 0 ? 'alert.cancel' : 'alert.ok'),
-      style: 'cancel',
-    });
-    appAlert({
-      title: t('meHome.badge.bluesky.title'),
-      message: atprotoEvidenceMessage(bluesky, t, atprotoCheckedAt),
-      buttons,
-    });
-  };
-
-  if (!hasBadge) {
-    return <AddAttestationAction onPress={onManageBindings} />;
+  if (displayableClaims.length === 0) {
+    return (
+      <View className="gap-3 px-4">
+        <PageEmptyState
+          art="attestation"
+          title={t('mePage.noAttestations')}
+          message={t('mePage.noAttestationsHint')}
+          action={
+            <ThemedButton
+              label={t('mePage.createProof')}
+              fullWidth
+              onPress={onManageBindings}
+            />
+          }
+        />
+      </View>
+    );
   }
 
   return (
-    <View className="gap-3">
-      <ScrollView
-        horizontal
-        showsHorizontalScrollIndicator={false}
-        contentContainerStyle={{ gap: 8, paddingHorizontal: 16 }}>
-        {nostr.visual !== 'hidden' ? (
-          <BadgeChip
-            visual={nostr.visual}
-            label={badgeLabel('nostr', nostr.visual, t)}
-            onPress={nostr.visual === 'loading' ? undefined : openNostrEvidence}
-          />
-        ) : null}
-        {bluesky.visual !== 'hidden' ? (
-          <BadgeChip
-            visual={bluesky.visual}
-            label={badgeLabel('bluesky', bluesky.visual, t)}
-            onPress={bluesky.visual === 'loading' ? undefined : openBlueskyEvidence}
-          />
-        ) : null}
-        {websiteVisual !== 'hidden' ? (
-          <BadgeChip
-            visual={websiteVisual}
-            label={t(
-              websiteVisual === 'loading' ? 'badges.website.checking' : 'badges.website.verifiedLabel'
+    <View className="gap-3 px-4">
+      {displayableClaims.map((claim) => {
+        const presentation = claimPresentation(claim, t);
+        const shownLocally = localSubjects.has(claim.claimType);
+        const shownToVisitors = visitorSubjects.has(claim.claimType);
+        const visibility: ProofVisibility = shownLocally === shownToVisitors
+          ? (shownLocally ? 'public' : 'hidden')
+          : 'pending';
+        const saving = savingClaimId === claim.id;
+        return (
+          <PressableScale
+            key={claim.id}
+            haptic="tap"
+            disabled={savingClaimId !== null}
+            onPress={() => { hideClaimFromPage(claim); }}
+            accessibilityRole="button"
+            accessibilityLabel={t('mePage.proofVisibilityLabel', {
+              claim: presentation.label,
+              status: t(visibilityLabelKey(visibility)),
+            })}
+            style={fieldRowStyle(c.mutedSurface)}>
+            <View style={iconTileStyle(c.chipSurface)}>
+              <SfIcon name={presentation.icon} size={ICON_TILE_GLYPH} color={Colors.primaryBlue} />
+            </View>
+            <View className="flex-1" style={{ gap: 1 }}>
+              <ThemedText variant="bodyMedium" numberOfLines={1}>
+                {presentation.label}
+              </ThemedText>
+              <ThemedText variant="caption" tone="tertiary" numberOfLines={1}>
+                {t(visibilitySubtitleKey(visibility, shownLocally))}
+              </ThemedText>
+            </View>
+            {saving ? (
+              <ActivityIndicator color={Colors.primaryBlue} />
+            ) : (
+              <ProofVisibilityPill visibility={visibility} />
             )}
-            onPress={
-              websiteVisual === 'loading'
-                ? undefined
-                : () => {
-                    appAlert({
-                      title: t('badges.website.evidenceTitle'),
-                      message: websiteEvidenceMessage(website.evidence ?? [], t),
-                    });
-                  }
-            }
-          />
-        ) : null}
-        {passport ? (
-          <BadgeChip
-            visual={passport.displayLevel === 'L1' ? 'declared' : 'verified'}
-            label={`${t('badges.passport.title')} · ${t(
-              credentialTrustSimpleI18nKeyForLevel(passport.displayLevel)
-            )}`}
-            accent={{
-              icon: 'wallet.pass',
-              color: trustToneColor(credentialTrustToneForLevel(passport.displayLevel)),
-            }}
-            onPress={() => {
-              router.push({
-                pathname: '/credentials/[id]',
-                params: { id: passport.id, product: '1' },
-              });
-            }}
-          />
-        ) : null}
-      </ScrollView>
+          </PressableScale>
+        );
+      })}
       <AddAttestationAction onPress={onManageBindings} />
     </View>
+  );
+}
+
+function useRefreshBindingCaches(
+  record: ProfileRecord,
+  publicRecord: ProfileRecord,
+  nostrUploaded: boolean,
+): void {
+  const npubClaim = useMemo(
+    () => nostrUploaded
+      ? record.alsoKnownAs.find((value) => value.startsWith('nostr:npub'))
+          ?.slice('nostr:'.length) ?? null
+      : null,
+    [nostrUploaded, record.alsoKnownAs],
+  );
+  const handleClaim = useMemo(
+    () => record.alsoKnownAs.find((value) => value.startsWith('at://'))
+      ?.slice('at://'.length) ?? null,
+    [record.alsoKnownAs],
+  );
+
+  useFocusEffect(useCallback(() => {
+    if (npubClaim !== null) {
+      const cached = readCachedNostrResult();
+      const current = cached !== null &&
+        cached.result.npub === npubClaim &&
+        !shouldReverifyBadge(cached.checkedAt, record.updatedAt, Date.now());
+      if (!current) {
+        const verificationEpoch = captureBadgeStatusCacheEpoch();
+        void verifyNostrBinding(record, makeKind0Fetcher(DEFAULT_RELAYS)).then((result) => {
+          writeCachedNostrResult(result, Date.now(), verificationEpoch);
+        });
+      }
+    }
+    if (handleClaim !== null) {
+      const cached = readCachedAtprotoResult();
+      const current = cached !== null &&
+        cached.result.evidence.handleClaim === handleClaim &&
+        !shouldReverifyBadge(cached.checkedAt, publicRecord.updatedAt, Date.now());
+      if (!current) {
+        const verificationEpoch = captureBadgeStatusCacheEpoch();
+        void verifyAtprotoBindingDual(record, publicRecord, atprotoBindingIO).then((result) => {
+          writeCachedAtprotoResult(result, Date.now(), verificationEpoch);
+        });
+      }
+    }
+  }, [handleClaim, npubClaim, publicRecord, record]));
+}
+
+type Translation = ReturnType<typeof useTranslation>['t'];
+
+function claimPresentation(
+  claim: ProvableClaimEntity,
+  t: Translation,
+): { readonly label: string; readonly icon: SFSymbol } {
+  switch (claim.claimType) {
+    case 'is_human':
+      return { label: t('mePage.claimHuman'), icon: 'face.smiling' };
+    case 'age_over_18':
+      return { label: t('mePage.claimAdult'), icon: 'calendar' };
+    case 'field_name':
+      return {
+        label: claim.sourceField === 'name' ? t('mePage.claimName') : claim.title,
+        icon: 'person',
+      };
+    case 'nationality':
+      return { label: t('mePage.claimNationality'), icon: 'globe' };
+    default:
+      return { label: claim.title, icon: 'building.2' };
+  }
+}
+
+/** `public` and `hidden` are what a visitor resolves; `pending` means this
+ *  device changed it and the published page has not caught up yet. */
+type ProofVisibility = 'public' | 'hidden' | 'pending';
+
+function disclosureSubjects(record: ProfileRecord): ReadonlySet<string> {
+  return new Set(
+    record.badges
+      .filter((badge) => badge.type === PUBLIC_DISCLOSURE_BADGE_TYPE)
+      .map((badge) => badge.subject),
+  );
+}
+
+function visibilityLabelKey(visibility: ProofVisibility): string {
+  if (visibility === 'pending') return 'mePage.pendingPublish';
+  return visibility === 'public' ? 'mePage.public' : 'mePage.hidden';
+}
+
+function visibilitySubtitleKey(
+  visibility: ProofVisibility,
+  shownLocally: boolean,
+): string {
+  if (visibility !== 'pending') {
+    return visibility === 'public' ? 'mePage.shownOnPage' : 'mePage.notShownOnPage';
+  }
+  // Say what the visitor sees RIGHT NOW, not what the owner intended.
+  return shownLocally ? 'mePage.proofPendingShown' : 'mePage.proofPendingHidden';
+}
+
+function ProofVisibilityPill({
+  visibility,
+}: {
+  readonly visibility: ProofVisibility;
+}): ReactNode {
+  const { t } = useTranslation();
+  const color = visibility === 'public'
+    ? Colors.primaryBlue
+    : visibility === 'pending'
+      ? Colors.warning
+      : Colors.text3;
+  return (
+    <ThemedSurface
+      variant="inset"
+      className="px-2 py-1"
+      style={{ borderWidth: 1, borderColor: color }}>
+      <ThemedText variant="caption" style={{ color }}>
+        {t(visibilityLabelKey(visibility))}
+      </ThemedText>
+    </ThemedSurface>
   );
 }
 
 function AddAttestationAction({ onPress }: { readonly onPress: () => void }): ReactNode {
   const { t } = useTranslation();
   return (
-    <View className="px-4">
-      <PressableScale
-        haptic="tap"
-        onPress={onPress}
-        accessibilityRole="button"
-        accessibilityLabel={t('mePage.addAttestation')}
-        containerStyle={{ alignSelf: 'flex-start' }}>
-        <ThemedSurface
-          variant="inset"
-          className="flex-row items-center gap-2 rounded-none px-3 py-2">
-          <SfIcon name="plus" size={12} color={Colors.text3} />
-          <ThemedText variant="label" tone="tertiary">
-            {t('mePage.addAttestation')}
-          </ThemedText>
-        </ThemedSurface>
-      </PressableScale>
-    </View>
-  );
-}
-
-function useBindingBadgeViewModels(
-  record: ProfileRecord,
-  publicRecord: ProfileRecord,
-  npubClaim: string | null,
-  handleClaim: string | null
-): {
-  readonly nostr: NostrBadgeViewModel;
-  readonly bluesky: AtprotoBadgeViewModel;
-  readonly nostrCheckedAt: number | null;
-  readonly atprotoCheckedAt: number | null;
-  readonly retryNostrVerification: () => void;
-  readonly retryAtprotoVerification: () => void;
-} {
-  // Seed from the persisted last-completed check so a revisit paints the
-  // previous known state on frame one, and TRUST it while it is fresh
-  // (badgeStatusCache doc): a live re-verify runs only when
-  // shouldReverifyBadge says so — no cache, TTL expired, or the record was
-  // re-signed after the check. The claim-match guards below drop a cached
-  // result whose npub/handle no longer matches the record (and force a
-  // re-verify via the same guard in the focus effect).
-  const [nostrResult, setNostrResult] = useState<VerifyNostrBindingResult | null>(
-    () => readCachedNostrResult()?.result ?? null
-  );
-  const [atprotoResult, setAtprotoResult] = useState<VerifyAtprotoBindingResult | null>(
-    () => readCachedAtprotoResult()?.result ?? null
-  );
-  const [nostrCheckedAt, setNostrCheckedAt] = useState<number | null>(
-    () => readCachedNostrResult()?.checkedAt ?? null
-  );
-  const [atprotoCheckedAt, setAtprotoCheckedAt] = useState<number | null>(
-    () => readCachedAtprotoResult()?.checkedAt ?? null
-  );
-  const [nostrChecking, setNostrChecking] = useState(false);
-  const [atprotoChecking, setAtprotoChecking] = useState(false);
-  const [nostrRetryNonce, setNostrRetryNonce] = useState(0);
-  const [atprotoRetryNonce, setAtprotoRetryNonce] = useState(0);
-
-  const retryNostrVerification = useCallback(() => {
-    invalidateCachedNostrResult();
-    setNostrRetryNonce((value) => value + 1);
-  }, []);
-  const retryAtprotoVerification = useCallback(() => {
-    invalidateCachedAtprotoResult();
-    setAtprotoRetryNonce((value) => value + 1);
-  }, []);
-
-  useFocusEffect(
-    useCallback(() => {
-      let cancelled = false;
-      if (npubClaim !== null) {
-        const cached = readCachedNostrResult();
-        const cacheStandsIn =
-          cached !== null &&
-          cached.result.npub === npubClaim &&
-          !shouldReverifyBadge(cached.checkedAt, record.updatedAt, Date.now());
-        if (cacheStandsIn) {
-          setNostrResult(cached.result);
-          setNostrCheckedAt(cached.checkedAt);
-        } else {
-          setNostrChecking(true);
-          const verificationEpoch = captureBadgeStatusCacheEpoch();
-          void verifyNostrBinding(record, makeKind0Fetcher(DEFAULT_RELAYS)).then((next) => {
-            const checkedAt = Date.now();
-            // Persist the completed check FIRST, unconditionally — a
-            // verification that lands after the component blurred must still
-            // seed the shared cache (R22). Only the setState UI updates are
-            // suppressed on blur, so the next visit reads a warm result
-            // instead of re-opening three relay sockets.
-            writeCachedNostrResult(next, checkedAt, verificationEpoch);
-            if (cancelled) return;
-            setNostrResult(next);
-            setNostrCheckedAt(checkedAt);
-            setNostrChecking(false);
-          });
-        }
-      }
-      if (handleClaim !== null) {
-        const cached = readCachedAtprotoResult();
-        const cacheStandsIn =
-          cached !== null &&
-          cached.result.evidence.handleClaim === handleClaim &&
-          !shouldReverifyBadge(cached.checkedAt, publicRecord.updatedAt, Date.now());
-        if (cacheStandsIn) {
-          setAtprotoResult(cached.result);
-          setAtprotoCheckedAt(cached.checkedAt);
-        } else {
-          setAtprotoChecking(true);
-          const verificationEpoch = captureBadgeStatusCacheEpoch();
-          void verifyAtprotoBindingDual(record, publicRecord, atprotoBindingIO).then((next) => {
-            const checkedAt = Date.now();
-            // Same as the nostr path: cache the completed result even after
-            // blur (R22); suppress only the UI updates.
-            writeCachedAtprotoResult(next, checkedAt, verificationEpoch);
-            if (cancelled) return;
-            setAtprotoResult(next);
-            setAtprotoCheckedAt(checkedAt);
-            setAtprotoChecking(false);
-          });
-        }
-      }
-      return () => {
-        cancelled = true;
-      };
-    }, [
-      atprotoRetryNonce,
-      handleClaim,
-      nostrRetryNonce,
-      npubClaim,
-      publicRecord,
-      record,
-      record.updatedAt,
-    ])
-  );
-
-  const matchingNostrResult = nostrResult?.npub === npubClaim ? nostrResult : null;
-  const matchingAtprotoResult =
-    atprotoResult?.evidence.handleClaim === handleClaim ? atprotoResult : null;
-  return {
-    nostr: npubClaim
-      ? nostrBadgeViewModel(matchingNostrResult, nostrChecking || matchingNostrResult === null)
-      : nostrBadgeViewModel(null, false),
-    bluesky: handleClaim
-      ? atprotoBadgeViewModel(
-          matchingAtprotoResult,
-          atprotoChecking || matchingAtprotoResult === null
-        )
-      : atprotoBadgeViewModel(null, false),
-    nostrCheckedAt,
-    atprotoCheckedAt,
-    retryNostrVerification,
-    retryAtprotoVerification,
-  };
-}
-
-function useWebsiteOwnership(
-  record: ProfileRecord,
-  shareModel: ReturnType<typeof buildProfileShareModel>
-): {
-  readonly evidence: readonly HttpsOwnershipEvidence[] | null;
-  readonly checking: boolean;
-} {
-  const [evidence, setEvidence] = useState<readonly HttpsOwnershipEvidence[] | null>(null);
-  const [checking, setChecking] = useState(record.links.length > 0);
-
-  useFocusEffect(
-    useCallback(() => {
-      let cancelled = false;
-      const controller = new AbortController();
-      if (record.links.length === 0) {
-        setEvidence([]);
-        setChecking(false);
-        return () => {
-          cancelled = true;
-        };
-      }
-
-      setChecking(true);
-      setEvidence(null);
-      const profileUrls = [shareModel.offlineUrl, shareModel.shortUrl].filter(
-        (url): url is string => url !== null
-      );
-      void verifyHttpsOwnership({
-        did: record.did,
-        links: record.links.map((link) => link.url),
-        profileUrls,
-        signal: controller.signal,
-      }).then((next) => {
-        if (cancelled) return;
-        setEvidence(next);
-        setChecking(false);
-      });
-      return () => {
-        cancelled = true;
-        controller.abort();
-      };
-    }, [record.did, record.links, record.updatedAt, shareModel.offlineUrl, shareModel.shortUrl])
-  );
-
-  return { evidence, checking };
-}
-
-function BadgeChip({
-  visual,
-  label,
-  accent,
-  onPress,
-}: {
-  readonly visual: Exclude<BadgeVisual, 'hidden'>;
-  readonly label: string;
-  readonly accent?: { readonly icon: SFSymbol; readonly color: string };
-  readonly onPress?: () => void;
-}): ReactNode {
-  const style = visual === 'loading' ? null : (accent ?? badgeVisualStyle(visual));
-  const content = (
-    <ThemedSurface
-      variant="inset"
-      className="rounded-none px-3 py-2"
-      style={{ borderWidth: 1, borderColor: Colors.divider }}>
-      <Animated.View
-        key={visual}
-        entering={FadeIn.duration(BADGE_CROSSFADE_MS).easing(Easing.out(Easing.quad))}
-        exiting={FadeOut.duration(BADGE_CROSSFADE_MS).easing(Easing.out(Easing.quad))}
-        style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-        {style ? (
-          <SfIcon name={style.icon} size={14} color={style.color} />
-        ) : (
-          <ActivityIndicator size="small" color={Colors.text3} />
-        )}
-        <ThemedText
-          variant="label"
-          tone={visual === 'loading' ? 'tertiary' : 'primary'}
-          style={style ? { color: style.color } : undefined}>
-          {label}
-        </ThemedText>
-      </Animated.View>
-    </ThemedSurface>
-  );
-
-  if (!onPress) return content;
-  return (
     <PressableScale
       haptic="tap"
       onPress={onPress}
       accessibilityRole="button"
-      accessibilityLabel={label}>
-      {content}
+      accessibilityLabel={t('mePage.addAttestation')}
+      containerStyle={{ alignSelf: 'flex-start' }}>
+      <ThemedSurface
+        variant="inset"
+        className="min-h-11 flex-row items-center gap-2 rounded-none px-3 py-2">
+        <SfIcon name="plus" size={12} color={Colors.text3} />
+        <ThemedText variant="label" tone="tertiary">
+          {t('mePage.addAttestation')}
+        </ThemedText>
+      </ThemedSurface>
     </PressableScale>
   );
-}
-
-interface PassportBadgeModel extends CredentialManifestEntry {
-  readonly displayLevel: TrustLevel;
-}
-
-function strongestPassportCredential(
-  manifest: readonly CredentialManifestEntry[],
-  details: ReadonlyMap<string, StoredCredential>
-): PassportBadgeModel | null {
-  const rank: Readonly<Record<TrustLevel, number>> = { L1: 1, L2: 2, L3: 3, 'L3+': 4 };
-  return (
-    manifest
-      .filter((credential) => credential.type.toLowerCase() === 'passport')
-      .map((credential) => {
-        const detail = details.get(credential.id);
-        const displayLevel: TrustLevel = detail ? credentialTrustDisplayFor(detail).level : 'L1';
-        return {
-          ...credential,
-          displayLevel,
-        };
-      })
-      .sort((a, b) => rank[b.displayLevel] - rank[a.displayLevel])[0] ?? null
-  );
-}
-
-function trustToneColor(tone: TrustDisplayTone): string {
-  switch (tone) {
-    case 'green':
-      return Colors.terminalGreen;
-    case 'blue':
-      return Colors.primaryBlue;
-    default:
-      return Colors.text3;
-  }
-}
-
-function websiteEvidenceMessage(evidence: readonly HttpsOwnershipEvidence[], t: TFn): string {
-  return evidence
-    .map((item) =>
-      t(
-        item.method === 'did-document'
-          ? 'badges.website.evidence.didDocument'
-          : 'badges.website.evidence.relMe',
-        { origin: item.origin }
-      )
-    )
-    .join('\n');
-}
-
-function badgeVisualStyle(visual: Exclude<BadgeVisual, 'hidden' | 'loading'>): {
-  readonly icon: 'checkmark.seal.fill' | 'checkmark.seal' | 'exclamationmark.triangle';
-  readonly color: string;
-} {
-  switch (visual) {
-    case 'verified':
-      return { icon: 'checkmark.seal.fill', color: Colors.terminalGreen };
-    case 'stale':
-      return { icon: 'exclamationmark.triangle', color: Colors.text3 };
-    case 'declared':
-      return { icon: 'checkmark.seal', color: Colors.warning };
-  }
-}
-
-function badgeLabel(
-  platform: 'nostr' | 'bluesky',
-  visual: Exclude<BadgeVisual, 'hidden'>,
-  t: TFn
-): string {
-  if (visual === 'loading')
-    return t(`badges.${platform === 'nostr' ? 'nostr' : 'atproto'}.checking`);
-  const suffix =
-    visual === 'verified' ? 'verifiedLabel' : visual === 'stale' ? 'staleLabel' : 'declaredLabel';
-  return t(`badges.${platform === 'nostr' ? 'nostr' : 'atproto'}.${suffix}`);
-}
-
-function nostrEvidenceMessage(
-  vm: NostrBadgeViewModel,
-  t: TFn,
-  lastCheckedAt: number | null
-): string {
-  const lines = [
-    t(
-      vm.visual === 'verified'
-        ? 'meHome.badge.nostr.status.verified'
-        : vm.visual === 'stale'
-          ? 'meHome.badge.nostr.status.stale'
-          : 'meHome.badge.nostr.status.declared'
-    ),
-  ];
-
-  lines.push(
-    vm.direction1
-      ? t('meHome.badge.nostr.pageClaim.confirmed')
-      : t('meHome.badge.nostr.pageClaim.missing')
-  );
-  lines.push(
-    vm.direction2 === true
-      ? t('meHome.badge.nostr.accountClaim.confirmed')
-      : vm.direction2 === false
-        ? t('meHome.badge.nostr.accountClaim.missing')
-        : t('meHome.badge.nostr.accountClaim.unknown')
-  );
-  if (vm.kind0CreatedAt !== null) {
-    lines.push(
-      t('meHome.badge.nostr.lastUpdated', {
-        date: new Date(vm.kind0CreatedAt * 1000).toLocaleString(),
-      })
-    );
-  }
-  if (lastCheckedAt !== null) {
-    lines.push(
-      t('meHome.badge.lastChecked', {
-        date: new Date(lastCheckedAt).toLocaleString(),
-      })
-    );
-  }
-  return lines.join('\n');
-}
-
-function atprotoEvidenceMessage(
-  vm: AtprotoBadgeViewModel,
-  t: TFn,
-  lastCheckedAt: number | null
-): string {
-  const lines = [
-    t(
-      vm.visual === 'verified'
-        ? 'meHome.badge.bluesky.status.verified'
-        : vm.visual === 'stale'
-          ? 'meHome.badge.bluesky.status.stale'
-          : 'meHome.badge.bluesky.status.declared'
-    ),
-  ];
-  if (vm.handle) lines.push(t('meHome.badge.bluesky.handle', { handle: vm.handle }));
-  lines.push(
-    vm.direction1
-      ? t('meHome.badge.bluesky.pageClaim.confirmed')
-      : t('meHome.badge.bluesky.pageClaim.missing')
-  );
-  lines.push(
-    vm.direction2 === true
-      ? t('meHome.badge.bluesky.accountCopy.confirmed')
-      : vm.direction2 === false
-        ? t('meHome.badge.bluesky.accountCopy.missing')
-        : t('meHome.badge.bluesky.accountCopy.unknown')
-  );
-  if (lastCheckedAt !== null) {
-    lines.push(
-      t('meHome.badge.lastChecked', {
-        date: new Date(lastCheckedAt).toLocaleString(),
-      })
-    );
-  }
-  return lines.join('\n');
 }

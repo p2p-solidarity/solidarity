@@ -81,10 +81,12 @@ export interface GroupMember {
 const GROUP_PREFIX = 'group:';
 const MEMBER_PREFIX = 'member:';
 let localWipeGeneration = 0;
+let groupMutationGeneration = 0;
+let groupHydrationPromise: Promise<void> | null = null;
 
-async function setEncrypted<T>(
+async function setEncrypted(
   key: string,
-  value: T,
+  value: unknown,
   writeEpoch: LocalDataEpoch,
 ): Promise<boolean> {
   if (!canCommitLocalData(writeEpoch)) return false;
@@ -135,51 +137,74 @@ export const useGroupStore = create<GroupStoreState>((set, get) => ({
     if (seed) set({ manifest: seed });
   },
 
-  hydrate: async () => {
+  hydrate: () => {
     const generation = localWipeGeneration;
     const writeEpoch = captureLocalDataEpoch();
-    if (!canCommitLocalData(writeEpoch)) return;
-    if (get().hydrated) return;
-    const groups = new Map<string, GroupModel>();
-    const members = new Map<string, GroupMember[]>();
-    // Tolerant load — a single corrupt record must not wipe the whole list.
-    for (const k of listKeys(GROUP_PREFIX)) {
-      try {
-        const g = await getEncrypted<GroupModel>(k);
+    if (!canCommitLocalData(writeEpoch) || get().hydrated) return Promise.resolve();
+    if (groupHydrationPromise) return groupHydrationPromise;
+
+    const hydrateLatest = async (): Promise<void> => {
+      while (generation === localWipeGeneration && canCommitLocalData(writeEpoch)) {
+        const mutationGeneration = groupMutationGeneration;
+        const groups = new Map<string, GroupModel>();
+        const members = new Map<string, GroupMember[]>();
+        // Tolerant load — a single corrupt record must not wipe the whole list.
+        for (const k of listKeys(GROUP_PREFIX)) {
+          try {
+            const g = await getEncrypted<GroupModel>(k);
+            if (generation !== localWipeGeneration || !canCommitLocalData(writeEpoch)) return;
+            if (g) groups.set(g.id, g);
+          } catch {
+            // Skip the bad row; it'll be rewritten on the next mutation.
+          }
+        }
+        for (const k of listKeys(MEMBER_PREFIX)) {
+          try {
+            const m = await getEncrypted<GroupMember>(k);
+            if (generation !== localWipeGeneration || !canCommitLocalData(writeEpoch)) return;
+            if (!m) continue;
+            const bucket = members.get(m.groupID) ?? [];
+            bucket.push(m);
+            members.set(m.groupID, bucket);
+          } catch {
+            // Same tolerance as above — drop bad rows silently.
+          }
+        }
         if (generation !== localWipeGeneration || !canCommitLocalData(writeEpoch)) return;
-        if (g) groups.set(g.id, g);
-      } catch {
-        // Skip the bad row; it'll be re-synced from cloud or rewritten on
-        // the next user mutation.
+        if (mutationGeneration !== groupMutationGeneration) continue;
+        const manifest = Array.from(groups.values()).map(toGroupManifest);
+        ManifestStorage.set(GROUPS_MANIFEST_SCOPE, manifest);
+        set({ manifest, groups, members, hydrated: true });
+        return;
       }
-    }
-    for (const k of listKeys(MEMBER_PREFIX)) {
-      try {
-        const m = await getEncrypted<GroupMember>(k);
-        if (generation !== localWipeGeneration || !canCommitLocalData(writeEpoch)) return;
-        if (!m) continue;
-        const bucket = members.get(m.groupID) ?? [];
-        bucket.push(m);
-        members.set(m.groupID, bucket);
-      } catch {
-        // Same tolerance as above — drop bad rows silently.
-      }
-    }
-    if (generation !== localWipeGeneration || !canCommitLocalData(writeEpoch)) return;
-    const manifest = Array.from(groups.values()).map(toGroupManifest);
-    ManifestStorage.set(GROUPS_MANIFEST_SCOPE, manifest);
-    set({ manifest, groups, members, hydrated: true });
+    };
+
+    const pending = hydrateLatest();
+    groupHydrationPromise = pending;
+    void pending.then(
+      () => {
+        if (groupHydrationPromise === pending) groupHydrationPromise = null;
+      },
+      () => {
+        if (groupHydrationPromise === pending) groupHydrationPromise = null;
+      },
+    );
+    return pending;
   },
 
   loadDetail: async (id) => {
     const generation = localWipeGeneration;
     const writeEpoch = captureLocalDataEpoch();
     if (!canCommitLocalData(writeEpoch)) return null;
+    const mutationGeneration = groupMutationGeneration;
     const cached = get().groups.get(id);
     if (cached) return cached;
     try {
       const g = await getEncrypted<GroupModel>(`${GROUP_PREFIX}${id}`);
       if (generation !== localWipeGeneration || !canCommitLocalData(writeEpoch)) return null;
+      if (mutationGeneration !== groupMutationGeneration) {
+        return get().groups.get(id) ?? null;
+      }
       if (!g) return null;
       set((s) => {
         const next = new Map(s.groups);
@@ -196,6 +221,7 @@ export const useGroupStore = create<GroupStoreState>((set, get) => ({
     const generation = localWipeGeneration;
     const writeEpoch = captureLocalDataEpoch();
     if (!canCommitLocalData(writeEpoch)) return;
+    groupMutationGeneration += 1;
     if (!(await setEncrypted(`${GROUP_PREFIX}${g.id}`, g, writeEpoch))) return;
     if (generation !== localWipeGeneration || !canCommitLocalData(writeEpoch)) return;
     set((s) => {
@@ -213,13 +239,28 @@ export const useGroupStore = create<GroupStoreState>((set, get) => ({
 
   deleteGroup: async (id) => {
     if (!canCommitLocalData(captureLocalDataEpoch())) return;
+    groupMutationGeneration += 1;
     getMmkv().remove(`${GROUP_PREFIX}${id}`);
+
+    // Member keys are indexed by member id, so inspect each encrypted row
+    // before deleting the bucket. This also covers a frame-1 delete that
+    // happens before bulk group hydration has populated `members`.
+    for (const key of listKeys(MEMBER_PREFIX)) {
+      try {
+        const member = await getEncrypted<GroupMember>(key);
+        if (member?.groupID === id) getMmkv().remove(key);
+      } catch {
+        // A corrupt unrelated member must not prevent deleting the group.
+      }
+    }
     set((s) => {
       const nextGroups = new Map(s.groups);
       nextGroups.delete(id);
+      const nextMembers = new Map(s.members);
+      nextMembers.delete(id);
       const nextManifest = s.manifest.filter((m) => m.id !== id);
       ManifestStorage.set(GROUPS_MANIFEST_SCOPE, nextManifest);
-      return { groups: nextGroups, manifest: nextManifest };
+      return { groups: nextGroups, members: nextMembers, manifest: nextManifest };
     });
   },
 
@@ -227,6 +268,7 @@ export const useGroupStore = create<GroupStoreState>((set, get) => ({
     const generation = localWipeGeneration;
     const writeEpoch = captureLocalDataEpoch();
     if (!canCommitLocalData(writeEpoch)) return;
+    groupMutationGeneration += 1;
     if (!(await setEncrypted(`${MEMBER_PREFIX}${m.id}`, m, writeEpoch))) return;
     if (generation !== localWipeGeneration || !canCommitLocalData(writeEpoch)) return;
     set((s) => {

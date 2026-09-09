@@ -10,12 +10,12 @@
  *
  * `apps/expo/src/keychain/signingKey.ts` already provisions a DIFFERENT
  * did:key (`ensureSigningKey()` / `didKeyForCurrentIdentity()`), backed by
- * the SpruceID Nitro module (`@solidarity/nitro-spruce-did`). That key is:
+ * the SpruceID Nitro module (`@solidarity/nitro-keystone`). That key is:
  *   - randomly generated natively (not derivable from a mnemonic — the
  *     private material never leaves the platform Keychain/Keystore),
  *   - ALREADY stored as an iCloud-Keychain-synchronizable item on iOS
  *     (`kSecAttrSynchronizable = true`, no biometry ACL — see
- *     `nitro-modules/spruce-did/ios/SpruceDidKeyStore.swift:119`),
+ *     `nitro-modules/keystone/ios/SpruceDidKeyStore.swift:119`),
  *   - the identity every existing screen reads today (`dids.tsx`,
  *     `useIdentityCoordinator`, card/credential signing, challenge
  *     responses, …).
@@ -40,7 +40,7 @@
  *
  * `enableICloudBackup()` (below) is a SEPARATE, ADDITIVE write: it copies
  * the already-persisted mnemonic into an iCloud-Keychain-SYNCHRONIZABLE
- * item via `@solidarity/nitro-secrets-vault`'s `setSynchronizableItem`
+ * item via `@solidarity/nitro-keystone`'s `setSynchronizableItem`
  * (iOS: `kSecAttrSynchronizable=true`, `kSecAttrAccessibleWhenUnlocked`, no
  * biometry ACL — see that module's doc; task A1.5). It does NOT replace or
  * gate the local copy — the local copy is the durable source of truth this
@@ -51,7 +51,7 @@
  * `enableICloudBackup()` resolves `ok(...)` — never on intent alone.
  *
  * Face ID gating happens at the SIGNING/EXPORT CALL layer
- * (`requireBiometric('sign'|'export')`), never via a Keychain ACL — this is
+ * (`requireSensitiveAction('presentProof'|'revealRecoveryBundle')`), never via a Keychain ACL — this is
  * required regardless of the sync gap (a synchronizable item can't carry a
  * biometry access-control instance either), so the design does not change
  * once real sync lands.
@@ -159,7 +159,7 @@ export interface RootKeySyncStorage {
 
 /**
  * Lazy-loaded for the same reason as `loadSecureStore` above: importing
- * `@solidarity/nitro-secrets-vault` eagerly would pull in
+ * `@solidarity/nitro-keystone` eagerly would pull in
  * `react-native-nitro-modules`' native binding at module-load time, which
  * has no counterpart in the bun test runtime. Every real call site resolves
  * it on first use; tests inject `__setRootKeySyncStorageForTesting` instead.
@@ -169,7 +169,7 @@ async function loadSecretsVault(): Promise<{
   readonly getSynchronizableItem: (alias: string) => Promise<string>;
   readonly deleteSynchronizableItem: (alias: string) => Promise<void>;
 }> {
-  const { getSecretsVault } = await import('@solidarity/nitro-secrets-vault');
+  const { getSecretsVault } = await import('@solidarity/nitro-keystone');
   return getSecretsVault();
 }
 
@@ -245,11 +245,42 @@ export function __setRootKeySyncStorageForTesting(storage: RootKeySyncStorage | 
  * needing a global `mock.module` (which would otherwise leak into every
  * other test file in the same `bun test` process — see the module doc).
  */
-export type BiometricGate = (reason: 'sign' | 'export') => Promise<boolean>;
+/**
+ * The two gate points in this module, named by SensitiveAction so the user's
+ * gate mode governs them:
+ *   - `presentProof`        — signing with the root key (access-level).
+ *   - `revealRecoveryBundle` — revealing the mnemonic. RED LINE: it hands over
+ *     the master secret, so it authenticates in every mode.
+ * These used to share the generic `'export'` reason with VC export, which made
+ * it impossible to treat the two differently.
+ */
+export type RootKeyGateAction = 'presentProof' | 'revealRecoveryBundle';
+export type BiometricGate = (action: RootKeyGateAction) => Promise<boolean>;
 
-async function defaultBiometricGate(reason: 'sign' | 'export'): Promise<boolean> {
-  const { requireBiometric } = await import('@/keychain/biometric');
-  return requireBiometric(reason);
+const ROOT_KEY_PROMPTS: Readonly<Record<RootKeyGateAction, readonly [string, string]>> = {
+  presentProof: ['security.prompt.presentProof', 'Authenticate to sign with your identity key.'],
+  revealRecoveryBundle: [
+    'security.prompt.revealRecoveryBundle',
+    'Authenticate to open recovery data.',
+  ],
+};
+
+async function rootKeyPrompt(action: RootKeyGateAction): Promise<string> {
+  const [key, fallback] = ROOT_KEY_PROMPTS[action];
+  try {
+    const { translate } = await import('@/i18n');
+    return translate(key, fallback);
+  } catch {
+    // `@/i18n` pulls expo-localization -> expo-modules-core. A prompt string is
+    // never worth failing the recovery ceremony over — fall back to English.
+    return fallback;
+  }
+}
+
+async function defaultBiometricGate(action: RootKeyGateAction): Promise<boolean> {
+  const { requireSensitiveAction } = await import('@/keychain/biometricGatekeeper');
+  const gate = await requireSensitiveAction(action, await rootKeyPrompt(action));
+  return gate.success;
 }
 
 let activeBiometricGate: BiometricGate = defaultBiometricGate;
@@ -443,7 +474,7 @@ export async function getRootSigner(): Promise<Result<Signer, RootKeyError>> {
   }
 
   const signer: Signer = async (digest: Uint8Array): Promise<Uint8Array> => {
-    const allowed = await activeBiometricGate('sign');
+    const allowed = await activeBiometricGate('presentProof');
     if (!allowed) throw new Error('biometric authentication required');
     // `{ prehash: false }` — `digest` is already the single-SHA-256 RFC 7515
     // signing-input digest computed by `signCompact`; @noble/curves'
@@ -462,7 +493,9 @@ export async function getRootSigner(): Promise<Result<Signer, RootKeyError>> {
  * own SecureStore-backed storage.
  */
 export async function revealMnemonicForExport(): Promise<Result<string, RootKeyError>> {
-  const allowed = await activeBiometricGate('export');
+  // RED LINE: the mnemonic IS the master secret, so this authenticates in
+  // every gate mode, including `redLineOnly`.
+  const allowed = await activeBiometricGate('revealRecoveryBundle');
   if (!allowed) return err({ kind: 'biometricDenied' });
   let mnemonic: string | null;
   try {

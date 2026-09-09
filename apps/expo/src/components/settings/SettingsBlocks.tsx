@@ -3,9 +3,9 @@
  * solidarity/Views/Common/SettingsBlockComponents.swift so all six settings
  * screens look identical to Swift.
  *
- * Each row is its own 12pt rounded card on `mutedSurface`, stacked with
- * 8pt spacing. Section header is 14pt textPrimary, footer 12pt textTertiary,
- * both horiz pad 16. Rows are also horiz pad 16 (8pt outer = 16+0 = inner).
+ * Settings are a square, continuous list: card background, 0.5pt hairlines,
+ * and no floating cards. That keeps the low-frequency routes visually aligned
+ * with the Page tab without changing the routes or actions they expose.
  */
 import type { SFSymbol } from 'expo-symbols';
 import type { ReactNode } from 'react';
@@ -23,13 +23,75 @@ import { useThemeColors } from '@/constants/useThemeColors';
 export function SettingsBlockSectionHeader({ title }: { title: string }) {
   return (
     <View className="px-4">
-      <Text className="text-text1 text-[14px]">{title}</Text>
+      <Text className="text-[14px] text-text1">{title}</Text>
     </View>
   );
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Section container — header + 8pt-spaced rows + optional footer
+// Segmented control — mutually exclusive choice, matching the Appearance
+// screen's colour-mode control so settings only ever teach one such shape.
+// Used both for in-screen tabs and for small option sets (backup interval).
+// ─────────────────────────────────────────────────────────────────────────────
+
+export interface SettingsSegmentedOption<T extends string> {
+  readonly value: T;
+  readonly label: string;
+}
+
+export function SettingsSegmented<T extends string>({
+  value,
+  options,
+  onChange,
+  role = 'button',
+}: {
+  value: T;
+  options: readonly SettingsSegmentedOption<T>[];
+  onChange: (value: T) => void;
+  /** `'tab'` when the segments swap the screen's content, so VoiceOver
+   *  announces them as tabs rather than as plain buttons. */
+  role?: 'button' | 'tab';
+}) {
+  const c = useThemeColors();
+  return (
+    <View
+      className="flex-row bg-mutedSurface"
+      accessibilityRole={role === 'tab' ? 'tablist' : undefined}
+      style={{ borderRadius: 12, padding: 4 }}>
+      {options.map((option) => {
+        const selected = option.value === value;
+        return (
+          <PressableScale
+            key={option.value}
+            fill
+            accessibilityRole={role}
+            accessibilityState={{ selected }}
+            accessibilityLabel={option.label}
+            onPress={() => { onChange(option.value); }}
+            style={{
+              minHeight: 44,
+              alignItems: 'center',
+              justifyContent: 'center',
+              borderRadius: 8,
+              backgroundColor: selected ? c.cardBg : 'transparent',
+            }}>
+            <Text
+              className="text-[13px]"
+              style={{
+                color: selected ? c.text1 : c.text2,
+                fontWeight: selected ? '600' : '400',
+              }}>
+              {option.label}
+            </Text>
+          </PressableScale>
+        );
+      })}
+    </View>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Section container — header + continuous rows + optional footer
 // ─────────────────────────────────────────────────────────────────────────────
 
 export function SettingsBlockSection({
@@ -44,10 +106,10 @@ export function SettingsBlockSection({
   return (
     <View className="gap-2">
       <SettingsBlockSectionHeader title={title} />
-      <View className="px-4 gap-2">{children}</View>
-      {footer ? (
-        <Text className="px-4 text-text3 text-[12px]">{footer}</Text>
-      ) : null}
+      <View className="mx-4 overflow-hidden rounded-none border border-divider bg-cardBg">
+        {children}
+      </View>
+      {footer ? <Text className="px-4 text-[12px] text-text3">{footer}</Text> : null}
     </View>
   );
 }
@@ -84,12 +146,21 @@ export function SettingsBlockRow({
   const resolvedTitle = titleColor ?? c.text1;
   const content = (
     <View
-      className="bg-mutedSurface rounded-xl flex-row items-center"
-      style={{ paddingHorizontal: 14, paddingVertical: 14, opacity: disabled ? 0.5 : 1 }}
-    >
+      className="flex-row items-center rounded-none border-b border-divider bg-cardBg"
+      style={{
+        paddingHorizontal: 14,
+        paddingVertical: 14,
+        opacity: disabled ? 0.5 : 1,
+        borderBottomWidth: 0.5,
+      }}>
       <View
-        style={{ width: 20, height: 20, alignItems: 'center', justifyContent: 'center', marginRight: 12 }}
-      >
+        style={{
+          width: 20,
+          height: 20,
+          alignItems: 'center',
+          justifyContent: 'center',
+          marginRight: 12,
+        }}>
         <SfIcon name={icon} size={14} color={resolvedIcon} />
       </View>
 
@@ -98,17 +169,14 @@ export function SettingsBlockRow({
           {title}
         </Text>
         {subtitle ? (
-          <Text className="text-text3 text-[12px]" style={{ marginTop: 2 }}>
+          <Text className="text-[12px] text-text3" style={{ marginTop: 2 }}>
             {subtitle}
           </Text>
         ) : null}
       </View>
 
       {trailingText ? (
-        <Text
-          className="text-text2 text-[13px]"
-          style={{ marginLeft: 12 }}
-        >
+        <Text className="text-[13px] text-text2" style={{ marginLeft: 12 }}>
           {trailingText}
         </Text>
       ) : null}
@@ -125,11 +193,7 @@ export function SettingsBlockRow({
     return content;
   }
   return (
-    <PressableScale
-      onPress={onPress}
-      accessibilityRole="button"
-      accessibilityLabel={title}
-    >
+    <PressableScale onPress={onPress} accessibilityRole="button" accessibilityLabel={title}>
       {content}
     </PressableScale>
   );
@@ -152,18 +216,22 @@ export function SettingsBlockDangerRow({
 }) {
   const content = (
     <View
-      className="bg-mutedSurface rounded-xl flex-row items-center"
-      style={{ paddingHorizontal: 14, paddingVertical: 14 }}
-    >
+      className="flex-row items-center rounded-none border-b border-divider bg-cardBg"
+      style={{ paddingHorizontal: 14, paddingVertical: 14, borderBottomWidth: 0.5 }}>
       <View
-        style={{ width: 20, height: 20, alignItems: 'center', justifyContent: 'center', marginRight: 12 }}
-      >
+        style={{
+          width: 20,
+          height: 20,
+          alignItems: 'center',
+          justifyContent: 'center',
+          marginRight: 12,
+        }}>
         <SfIcon name={icon} size={14} color={Colors.destructive} />
       </View>
       <View className="flex-1">
-        <Text className="text-destructive text-[15px]">{title}</Text>
+        <Text className="text-[15px] text-destructive">{title}</Text>
         {subtitle ? (
-          <Text className="text-text3 text-[12px]" style={{ marginTop: 2 }}>
+          <Text className="text-[12px] text-text3" style={{ marginTop: 2 }}>
             {subtitle}
           </Text>
         ) : null}
@@ -173,11 +241,7 @@ export function SettingsBlockDangerRow({
 
   if (!onPress) return content;
   return (
-    <PressableScale
-      onPress={onPress}
-      accessibilityRole="button"
-      accessibilityLabel={title}
-    >
+    <PressableScale onPress={onPress} accessibilityRole="button" accessibilityLabel={title}>
       {content}
     </PressableScale>
   );
@@ -194,6 +258,7 @@ export function SettingsBlockToggleRow({
   iconColor,
   value,
   onValueChange,
+  disabled = false,
 }: {
   icon: SFSymbol;
   title: string;
@@ -201,22 +266,32 @@ export function SettingsBlockToggleRow({
   iconColor?: string;
   value: boolean;
   onValueChange: (next: boolean) => void;
+  disabled?: boolean;
 }) {
   const c = useThemeColors();
   return (
     <View
-      className="bg-mutedSurface rounded-xl flex-row items-center"
-      style={{ paddingHorizontal: 14, paddingVertical: 12 }}
-    >
+      className="flex-row items-center rounded-none border-b border-divider bg-cardBg"
+      style={{
+        paddingHorizontal: 14,
+        paddingVertical: 12,
+        opacity: disabled ? 0.5 : 1,
+        borderBottomWidth: 0.5,
+      }}>
       <View
-        style={{ width: 20, height: 20, alignItems: 'center', justifyContent: 'center', marginRight: 12 }}
-      >
+        style={{
+          width: 20,
+          height: 20,
+          alignItems: 'center',
+          justifyContent: 'center',
+          marginRight: 12,
+        }}>
         <SfIcon name={icon} size={14} color={iconColor ?? c.text1} />
       </View>
       <View className="flex-1">
-        <Text className="text-text1 text-[15px]">{title}</Text>
+        <Text className="text-[15px] text-text1">{title}</Text>
         {subtitle ? (
-          <Text className="text-text3 text-[12px]" style={{ marginTop: 2 }}>
+          <Text className="text-[12px] text-text3" style={{ marginTop: 2 }}>
             {subtitle}
           </Text>
         ) : null}
@@ -224,6 +299,7 @@ export function SettingsBlockToggleRow({
       <Switch
         value={value}
         onValueChange={onValueChange}
+        disabled={disabled}
         trackColor={{ false: c.divider, true: Colors.primaryBlue }}
         thumbColor={c.cardBg}
         ios_backgroundColor={c.divider}
@@ -250,16 +326,20 @@ export function SettingsBlockInfoRow({
   const c = useThemeColors();
   return (
     <View
-      className="bg-mutedSurface rounded-xl flex-row items-center"
-      style={{ paddingHorizontal: 14, paddingVertical: 14 }}
-    >
+      className="flex-row items-center rounded-none border-b border-divider bg-cardBg"
+      style={{ paddingHorizontal: 14, paddingVertical: 14, borderBottomWidth: 0.5 }}>
       <View
-        style={{ width: 20, height: 20, alignItems: 'center', justifyContent: 'center', marginRight: 12 }}
-      >
+        style={{
+          width: 20,
+          height: 20,
+          alignItems: 'center',
+          justifyContent: 'center',
+          marginRight: 12,
+        }}>
         <SfIcon name={icon} size={14} color={iconColor ?? c.text1} />
       </View>
-      <Text className="text-text1 text-[15px] flex-1">{title}</Text>
-      <Text className="text-text2 text-[13px]">{value}</Text>
+      <Text className="flex-1 text-[15px] text-text1">{title}</Text>
+      <Text className="text-[13px] text-text2">{value}</Text>
     </View>
   );
 }
@@ -277,19 +357,15 @@ export function SettingsBackToolbar({
 }) {
   const c = useThemeColors();
   return (
-    <View
-      className="flex-row items-center"
-      style={{ paddingHorizontal: 12, paddingVertical: 10 }}
-    >
+    <View className="flex-row items-center" style={{ paddingHorizontal: 12, paddingVertical: 10 }}>
       <PressableScale
         onPress={onPress}
         accessibilityRole="button"
         accessibilityLabel="Back"
         className="flex-row items-center"
-        style={{ paddingHorizontal: 4, paddingVertical: 8 }}
-      >
+        style={{ paddingHorizontal: 4, paddingVertical: 8 }}>
         <SfIcon name="chevron.left" size={16} weight="semibold" color={c.text1} />
-        <Text className="text-text1 text-[16px]" style={{ marginLeft: 4 }}>
+        <Text className="text-[16px] text-text1" style={{ marginLeft: 4 }}>
           {title}
         </Text>
       </PressableScale>
@@ -334,24 +410,26 @@ export function SettingsScreenTitle({
         paddingVertical: 4,
         paddingBottom: 12,
         minHeight: hasNavAction ? 44 : undefined,
-      }}
-    >
+      }}>
       {leadingAction ? (
         <Pressable
           onPress={leadingAction.onPress}
           accessibilityRole="button"
           accessibilityLabel={leadingAction.accessibilityLabel}
           className="absolute items-center justify-center active:opacity-80"
-          style={{ left: 8, top: 0, bottom: 0, width: 44 }}
-        >
-          <SfIcon name={leadingAction.icon ?? 'chevron.left'} size={22} weight="semibold" color={c.text1} />
+          style={{ left: 8, top: 0, bottom: 0, width: 44 }}>
+          <SfIcon
+            name={leadingAction.icon ?? 'chevron.left'}
+            size={22}
+            weight="semibold"
+            color={c.text1}
+          />
         </Pressable>
       ) : null}
       <Text
-        className="text-text1 text-[17px] font-semibold"
+        className="text-[17px] font-semibold text-text1"
         numberOfLines={1}
-        style={{ maxWidth: '100%' }}
-      >
+        style={{ maxWidth: '100%' }}>
         {title}
       </Text>
       {trailingAction ? (
@@ -360,8 +438,7 @@ export function SettingsScreenTitle({
           accessibilityRole="button"
           accessibilityLabel={trailingAction.accessibilityLabel}
           className="absolute items-center justify-center active:opacity-80"
-          style={{ right: 8, top: 0, bottom: 0, width: 44 }}
-        >
+          style={{ right: 8, top: 0, bottom: 0, width: 44 }}>
           <SfIcon name={trailingAction.icon} size={22} color={c.text1} />
         </Pressable>
       ) : null}

@@ -22,7 +22,7 @@ bun run lint                                                 # 0 errors (cosmeti
 a `BareKit` TurboModule + a vendored `BareKit.xcframework` / Bare Android
 runtime. Expo Go only bundles Expo's own module set, so **Expo Go cannot run
 this app** — it never could, given the existing Nitro modules
-(`nitro-nfc-passport`, `nitro-passport-zk`, `nitro-spruce-did`, …), but
+(`nitro-attest`, `nitro-keystone`, …), but
 bare-kit makes it explicit. Always build a **dev client**:
 
 ```bash
@@ -205,7 +205,7 @@ call site (e.g. don't mount the native view when its module is unavailable).
 
 ### Self-identifying crashes — `MrzInstallCrashDiagnostics`
 
-`nitro-modules/mrz-ocr/ios/MrzVisionGuard.mm` installs a process-wide
+`nitro-modules/attest/ios/MrzVisionGuard.mm` installs a process-wide
 `std::set_terminate` handler **at app launch** (`+load` → `dispatch_async(main)`
 so it wraps RN/Hermes' handlers). On any uncaught exception it writes the
 demangled type + message into:

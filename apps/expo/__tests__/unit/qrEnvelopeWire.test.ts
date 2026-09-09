@@ -74,7 +74,7 @@ beforeAll(async () => {
   }));
   // Stub `@/keychain/signingKey` + `@/zk/proofManager` so the dynamic
   // imports buildZKEnvelope does at runtime succeed (the real chain pulls
-  // in `@solidarity/nitro-spruce-did` → `react-native`, which Bun can't
+  // in `@solidarity/nitro-keystone` → `react-native`, which Bun can't
   // parse). We deliberately return a NO-OP signer + a proofManager whose
   // generators always throw — the envelope-build path then swallows the
   // error and emits an envelope with no proofs, which is exactly what
@@ -98,6 +98,7 @@ beforeAll(async () => {
   // without hitting the Semaphore Nitro bridge.
   await mock.module('@/zk/issuerProof', () => ({
     generateIssuerProof: async () => null,
+    isKnownGroupRoot: async () => false,
     buildShareScope: (selected: readonly string[]) => {
       const set = new Set<string>(selected);
       set.add('name');

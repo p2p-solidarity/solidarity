@@ -71,7 +71,10 @@ export function usePeopleScreen(): PeopleScreenState {
         if (!hydrated) return;
         // Self-gates on backupEnabled + autoBackupOnPull + the shared cooldown,
         // and uses the user's chosen provider — no more unconditional backup.
-        await requestBackup('pull');
+        // Opportunistic: since the portable payload landed this can reject for
+        // local-data reasons, and pull-to-refresh must not fail with it. An
+        // explicit backup in Settings → Backup reports the real error.
+        await requestBackup('pull').catch(() => undefined);
       } finally {
         setRefreshing(false);
       }

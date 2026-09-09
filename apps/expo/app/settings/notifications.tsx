@@ -27,6 +27,8 @@ import {
 } from '@/components/settings/SettingsBlocks';
 import { useRecentUpdatesStore } from '@/contacts/recentUpdates';
 import { Colors } from '@/constants/Colors';
+import { showError } from '@/feedback/appAlert';
+import { pushToast } from '@/feedback/toast';
 import { useTranslation } from '@/i18n';
 import {
   registerForPushNotificationsAsync,
@@ -60,21 +62,49 @@ export default function NotificationSettings() {
   const setRecentUpdatesEnabled = useRecentUpdatesStore((s) => s.setEnabled);
 
   const [pickerOpen, setPickerOpen] = useState(false);
+  const [remoteBusy, setRemoteBusy] = useState(false);
 
-  const openSystemSettings = () => {
-    void Linking.openSettings();
+  const openSystemSettings = async () => {
+    try {
+      await Linking.openSettings();
+    } catch (error) {
+      showError({
+        context: 'Notifications › System Settings',
+        summary: t('notifications.systemSettings.openFailed'),
+        error,
+      });
+    }
   };
 
   // Toggling Remote Notifications is the explicit opt-in/opt-out action
   // (R25): turning it ON is the ONE path allowed to raise the OS permission
   // prompt and register with the relay; turning it OFF tears the registration
   // down. No automatic cold-launch prompt happens without this.
-  const onRemoteToggle = (next: boolean) => {
-    setPref('notificationsRemote', next);
-    if (next) {
-      void registerForPushNotificationsAsync({ prompt: true }).catch(() => undefined);
-    } else {
-      void unregister().catch(() => undefined);
+  const onRemoteToggle = async (next: boolean) => {
+    if (remoteBusy || next === remote) return;
+    setRemoteBusy(true);
+    try {
+      if (next) {
+        const registration = await registerForPushNotificationsAsync({ prompt: true });
+        if (!registration) {
+          setPref('notificationsRemote', false);
+          pushToast(t('notifications.remote.permissionNeeded'), 'warning');
+          return;
+        }
+        setPref('notificationsRemote', true);
+        return;
+      }
+
+      await unregister();
+      setPref('notificationsRemote', false);
+    } catch (error) {
+      showError({
+        context: 'Notifications › Remote Notifications',
+        summary: t('notifications.remote.updateFailed'),
+        error,
+      });
+    } finally {
+      setRemoteBusy(false);
     }
   };
 
@@ -141,14 +171,15 @@ export default function NotificationSettings() {
               title={t('notifications.remote.title')}
               subtitle={t('notifications.remote.subtitle')}
               value={remote}
-              onValueChange={onRemoteToggle}
+              onValueChange={(next) => { void onRemoteToggle(next); }}
+              disabled={remoteBusy}
             />
             <SettingsBlockRow
               icon="gearshape"
               title={t('notifications.systemSettings.title')}
               trailingText={t('notifications.systemSettings.open')}
               showsChevron={false}
-              onPress={openSystemSettings}
+              onPress={() => { void openSystemSettings(); }}
             />
           </SettingsBlockSection>
 

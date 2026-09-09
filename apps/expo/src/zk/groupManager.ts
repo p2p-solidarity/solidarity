@@ -12,7 +12,7 @@
  * re-implements Swift's exact `decimalStringToLittleEndian32` so the
  * resulting roots match the legacy SwiftUI app.
  */
-import type { SemaphoreProof } from '@solidarity/nitro-semaphore';
+import type { SemaphoreProof } from '@solidarity/nitro-attest';
 
 import { loadSemaphoreNative } from './nativeBridge';
 

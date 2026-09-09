@@ -189,7 +189,7 @@ end
 
   test('iOS project bundles the single merged OpenAC SRS resource', () => {
     expect(xcodeProject).toContain(
-      'nitro-modules/passport-zk/android/src/main/assets/passport.srs.bin'
+      'nitro-modules/attest/android/src/main/assets/passport.srs.bin'
     );
     expect(xcodeProject).toContain(
       '${TARGET_BUILD_DIR}/${UNLOCALIZED_RESOURCES_FOLDER_PATH}/passport.srs.bin'
@@ -236,7 +236,7 @@ end
     const assetsDir = join(
       fixtureRoot,
       'nitro-modules',
-      'passport-zk',
+      'attest',
       'android',
       'src',
       'main',
@@ -736,7 +736,7 @@ rm -rf "$work"
     const passportAssetsDir = join(
       fixtureRoot,
       'nitro-modules',
-      'passport-zk',
+      'attest',
       'android',
       'src',
       'main',
@@ -807,6 +807,7 @@ rm -rf "$work"
         join(
           fixtureRoot,
           'nitro-modules',
+          'attest',
           'semaphore',
           'mopro',
           'SemaphoreBindings.xcframework',
@@ -850,7 +851,7 @@ rm -rf "$work"
     const passportAssetsDir = join(
       fixtureRoot,
       'nitro-modules',
-      'passport-zk',
+      'attest',
       'android',
       'src',
       'main',

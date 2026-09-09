@@ -7,9 +7,9 @@ function repoSource(path: string): string {
 
 describe('native secure-storage deletion contracts', () => {
   it('makes signing-key deletion idempotent while surfacing unexpected Keychain/Keystore errors', () => {
-    const ios = repoSource('nitro-modules/spruce-did/ios/SpruceDidKeyStore.swift');
+    const ios = repoSource('nitro-modules/keystone/ios/SpruceDidKeyStore.swift');
     const android = repoSource(
-      'nitro-modules/spruce-did/android/src/main/java/com/margelo/nitro/gg/solidarity/sprucedid/HybridSpruceDid.kt',
+      'nitro-modules/keystone/android/src/main/java/com/margelo/nitro/gg/solidarity/keystone/HybridSpruceDid.kt',
     );
 
     expect(ios).toContain('case errSecSuccess, errSecItemNotFound');
@@ -24,7 +24,7 @@ describe('native secure-storage deletion contracts', () => {
 
   it('does not swallow Android vault wrapping-key deletion failures', () => {
     const android = repoSource(
-      'nitro-modules/secrets-vault/android/src/main/java/com/margelo/nitro/gg/solidarity/secretsvault/HybridSecretsVault.kt',
+      'nitro-modules/keystone/android/src/main/java/com/margelo/nitro/gg/solidarity/keystone/HybridSecretsVault.kt',
     );
 
     expect(android).toContain('keyStore.deleteEntry(keystoreAlias(keyAlias))');

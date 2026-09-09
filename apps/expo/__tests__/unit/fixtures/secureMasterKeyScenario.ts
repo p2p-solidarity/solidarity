@@ -44,7 +44,7 @@ function assert(condition: boolean, message: string): void {
   }
 }
 
-await mock.module('@solidarity/nitro-secrets-vault', () => ({
+await mock.module('@solidarity/nitro-keystone', () => ({
   getSecretsVault: () => ({
     readRawKeychainGenericPassword: (
       service: string,

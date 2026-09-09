@@ -17,6 +17,7 @@ import { View } from 'react-native';
 
 import { ThemedButton } from '@/components/themed';
 import { confirmDialog } from '@/feedback/confirmDialog';
+import { useTranslation } from '@/i18n';
 import { uuid, type BusinessCard, type SharingPreferences } from '@solidarity/shared';
 
 import {
@@ -50,6 +51,7 @@ export function BusinessCardForm({
   onSave,
   onDelete,
 }: BusinessCardFormProps) {
+  const { t } = useTranslation();
   const isEditing = initialCard !== undefined && !forceCreate;
   const state = useBusinessCardFormState(initialCard);
   const trimmedName = state.name.trim();
@@ -62,10 +64,13 @@ export function BusinessCardForm({
   const handleDelete = () => {
     if (!onDelete) return;
     void (async () => {
+      // Same copy as the list's sheet: a deleted card leaves every synced
+      // device but can come back from a backup — "cannot be undone" was not
+      // true, and the string was hardcoded English.
       const ok = await confirmDialog({
-        title: 'Delete this card?',
-        message: 'This action cannot be undone.',
-        confirmLabel: 'Delete',
+        title: t('cardEdit.deleteTitle'),
+        message: t('cardsList.deleteMessage'),
+        confirmLabel: t('cardsList.delete'),
         destructive: true,
       });
       if (!ok) return;

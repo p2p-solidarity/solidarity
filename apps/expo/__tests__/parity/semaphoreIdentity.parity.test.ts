@@ -23,8 +23,8 @@
  *
  * KEEP IN SYNC: any change to `apps/expo/src/zk/fieldEncoding.ts` MUST
  *   be matched in `solidarity/Services/ZK/SemaphoreIdentityManager.swift`
- *   AND in `nitro-modules/semaphore/ios/SemaphoreShim.swift` AND in
- *   `nitro-modules/semaphore/android/.../HybridSemaphore.kt`.
+ *   AND in `nitro-modules/attest/ios/SemaphoreShim.swift` AND in
+ *   `nitro-modules/attest/android/.../HybridSemaphore.kt`.
  */
 import { describe, expect, it } from 'bun:test';
 

@@ -1,7 +1,7 @@
 /**
  * DAG store — append-only persisted node + HEAD set tracking.
  *
- * Spec: docs/dev-sandbox-identity-graph.md §3.2 (storage layout),
+ * Spec: docs/ref/notes-dev-sandbox-identity-graph.md §3.2 (storage layout),
  * §6 (schema), §6.4 (revocation semantics — revocations are append-only
  * too; projections filter them out at replay time, see `replay.ts`).
  *

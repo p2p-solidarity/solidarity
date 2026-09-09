@@ -38,6 +38,7 @@ export * from './identity';
 export * from './importer';
 export * from './jws';
 export * from './nostr';
+export * from './nip05';
 export * from './profile';
 export * from './publicDisclosure';
 export * from './qr';

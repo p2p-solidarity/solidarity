@@ -65,6 +65,22 @@ export function verifyResolvedHandleBinding(
     };
   }
 
+  if (!('did' in resolution.value)) {
+    return {
+      state: 'declared',
+      handle: normalizedHandle,
+      evidence: {
+        expectedAlsoKnownAs,
+        resolvedDid: null,
+        direction1: false,
+        direction2: false,
+        profileDidMatches: null,
+        alsoKnownAsMatches,
+        reason: 'the selected DID resolver returned a different handle-record kind',
+      },
+    };
+  }
+
   const profileDidMatches = profile.did === resolution.value.did;
   const direction2 = profileDidMatches && alsoKnownAsMatches;
   return {

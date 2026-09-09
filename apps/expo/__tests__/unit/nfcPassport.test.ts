@@ -15,9 +15,11 @@
  *      `configurationError` via `runPassportPipelineSafe` (matches the
  *      Swift CardError mapping).
  */
-import { beforeAll, describe, expect, it, mock } from 'bun:test';
+import { beforeAll, describe, expect, it } from 'bun:test';
 
-import type { PassportMRZ, PassportReadResult } from '@solidarity/nitro-nfc-passport';
+import type { NfcPassport, PassportMRZ, PassportReadResult } from '@solidarity/nitro-attest';
+
+import { setAttestMockLanes } from './fixtures/nitroAttestMock';
 
 const VALID_MRZ: PassportMRZ = {
   // L898902C3 + check digit 6 — published ICAO 9303 specimen.
@@ -47,20 +49,21 @@ function fakeRead(mrz: PassportMRZ): PassportReadResult {
   };
 }
 
-beforeAll(async () => {
-  await mock.module('@solidarity/nitro-nfc-passport', () => ({
-    getNfcPassport: () => ({
-      isAvailable: () => true,
-      read: async (mrz: PassportMRZ) => fakeRead(mrz),
-      cancel: () => undefined,
-    }),
-  }));
+beforeAll(() => {
+  setAttestMockLanes({
+    nfcPassport: () =>
+      ({
+        isAvailable: () => true,
+        read: async (mrz: PassportMRZ) => fakeRead(mrz),
+        cancel: () => undefined,
+      }) as unknown as NfcPassport,
+  });
 });
 
 describe('nfcPassport — pipeline integration with mocked Nitro module', () => {
   it('runs the orchestrator and emits steps in order', async () => {
     const { runPassportPipeline } = await import('../../src/passport/pipeline');
-    const nitro = (await import('@solidarity/nitro-nfc-passport')) as {
+    const nitro = (await import('@solidarity/nitro-attest')) as {
       getNfcPassport: () => {
         read: (mrz: PassportMRZ) => Promise<PassportReadResult>;
       };

@@ -1,9 +1,12 @@
 import type { ReactNode } from 'react';
 import { useState } from 'react';
-import { Modal, ScrollView, View } from 'react-native';
+import { View } from 'react-native';
+import { KeyboardAwareScrollView } from 'react-native-keyboard-controller';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { ModalSheet } from '@/components/common/ModalSheet';
 import { PressableScale } from '@/components/common/PressableScale';
+import { BrandIcon } from '@/components/icons/BrandIcon';
 import { SfIcon } from '@/components/icons/SfIcon';
 import { ThemedButton, ThemedSurface, ThemedText, ThemedTextInput } from '@/components/themed';
 import { Colors } from '@/constants/Colors';
@@ -21,7 +24,7 @@ import {
   normalizeLinkUrl,
   type LinkLabelPreset,
 } from '@/profile/linkUrl';
-import { linkIconNameFor } from '@/profile/linkPresentation';
+import { brandIconForLink } from '@/profile/linkPresentation';
 import type { LinkVisibility } from '@/profile/projection';
 
 import { LinkVisibilityControl } from './PublishPreviewSheet';
@@ -86,11 +89,7 @@ export function AddLinkSheet({
   onClose,
 }: AddLinkSheetProps): ReactNode {
   return (
-    <Modal
-      visible={visible}
-      animationType="slide"
-      presentationStyle="pageSheet"
-      onRequestClose={onClose}>
+    <ModalSheet visible={visible} onRequestClose={onClose}>
       {visible ? (
         <AddLinkSheetContent
           initialLink={initialLink}
@@ -98,7 +97,7 @@ export function AddLinkSheet({
           onClose={onClose}
         />
       ) : null}
-    </Modal>
+    </ModalSheet>
   );
 }
 
@@ -166,9 +165,7 @@ function AddLinkSheetContent({
   };
 
   return (
-    <View
-      className="flex-1 bg-pageBg"
-      style={{ paddingTop: insets.top, paddingBottom: insets.bottom + 12 }}>
+    <View className="flex-1 bg-pageBg" style={{ paddingTop: insets.top }}>
       <SheetHeader
         editing={editing}
         canGoBack={state.step === 'details'}
@@ -176,9 +173,10 @@ function AddLinkSheetContent({
         onClose={onClose}
       />
 
-      <ScrollView
+      <KeyboardAwareScrollView
         keyboardShouldPersistTaps="handled"
-        contentContainerStyle={{ padding: 16, gap: 20 }}>
+        bottomOffset={16}
+        contentContainerStyle={{ padding: 16, paddingBottom: insets.bottom + 24, gap: 20 }}>
         {state.step === 'paste' ? (
           <>
             <ThemedTextInput
@@ -276,7 +274,7 @@ function AddLinkSheetContent({
             />
           </>
         )}
-      </ScrollView>
+      </KeyboardAwareScrollView>
     </View>
   );
 }
@@ -342,8 +340,8 @@ function PlatformRow({
         variant="outlined"
         className="min-h-14 flex-row items-center gap-3 rounded-none px-4 py-3">
         <View className="w-7 items-center">
-          <SfIcon
-            name={linkIconNameFor(preset, '')}
+          <BrandIcon
+            name={brandIconForLink(preset, '')}
             size={18}
             color={Colors.primaryBlue}
           />

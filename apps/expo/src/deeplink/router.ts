@@ -19,8 +19,10 @@ export { parseDeepLink };
 
 /** Side-effecting handler — call from a `useLinking()` listener. */
 export function handleDeepLink(raw: string): DeepLinkRoute {
-  const route = parseDeepLink(raw);
   const developerMode = usePreferences.getState().developerMode;
+  // Dev mode also admits `DEV_PRODUCT_HOSTS` (05-spec §8-B mechanism) so a
+  // pre-launch domain's link surface stays testable before launch.
+  const route = parseDeepLink(raw, { devProductHosts: developerMode });
   if (!developerMode && isDeveloperOnlyDeepLinkKind(route.kind)) {
     // Keep the parsed result available to callers for logging, but never let
     // a regular-user deep link mount a protocol consent/issuance/signing UI.

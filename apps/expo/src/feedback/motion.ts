@@ -32,6 +32,9 @@ export const SCALE = {
   icon: 0.9,
   /** Long-press "zoom / lift" target (scales up, not down). */
   longPress: 1.05,
+  /** Whole-row drag "carry" — subtler than `longPress` so a full-width row
+   * lifts without spilling past the list gutters. */
+  rowLift: 1.02,
 } as const;
 
 export const TIMING: Readonly<Record<'fast' | 'base', WithTimingConfig>> = {

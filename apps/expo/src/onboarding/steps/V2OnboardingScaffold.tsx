@@ -1,5 +1,6 @@
 import type { ReactNode } from 'react';
-import { ScrollView, View } from 'react-native';
+import { View } from 'react-native';
+import { KeyboardAwareScrollView } from 'react-native-keyboard-controller';
 import Animated, { Easing, FadeIn, ReduceMotion } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -48,8 +49,9 @@ export function V2OnboardingScaffold({
         ))}
       </View>
 
-      <ScrollView
+      <KeyboardAwareScrollView
         keyboardShouldPersistTaps="handled"
+        bottomOffset={16}
         contentContainerStyle={{
           flexGrow: 1,
           paddingHorizontal: 24,
@@ -89,7 +91,7 @@ export function V2OnboardingScaffold({
           <View style={{ flex: 1 }}>{children}</View>
           {footer ? <View>{footer}</View> : null}
         </Animated.View>
-      </ScrollView>
+      </KeyboardAwareScrollView>
     </View>
   );
 }

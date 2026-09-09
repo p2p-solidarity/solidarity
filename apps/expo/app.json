@@ -9,7 +9,7 @@
       "airmeishi",
       "openid-credential-offer"
     ],
-    "version": "1.3.3",
+    "version": "2.0.0",
     "orientation": "portrait",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
@@ -22,6 +22,7 @@
       "supportsTablet": true,
       "associatedDomains": [
         "applinks:solidarity.gg",
+        "applinks:app.solidarity.gg",
         "applinks:creds.id"
       ],
       "entitlements": {
@@ -90,6 +91,10 @@
             },
             {
               "scheme": "https",
+              "host": "app.solidarity.gg"
+            },
+            {
+              "scheme": "https",
               "host": "creds.id"
             }
           ],
@@ -118,13 +123,6 @@
           "dark": {
             "backgroundColor": "#000000",
             "image": "./assets/splash-icon.png"
-          },
-          "ios": {
-            "enableFullScreenImage_legacy": true,
-            "image": "./assets/splash.png",
-            "tabletImage": "./assets/splash.png",
-            "resizeMode": "cover",
-            "backgroundColor": "#000000"
           },
           "android": {
             "image": "./assets/splash-icon.png",
@@ -160,7 +158,7 @@
       "./plugins/withAndroidReleaseSigning.js",
       "expo-sqlite"
     ],
-    "runtimeVersion": "1.3.3",
+    "runtimeVersion": "2.0.0",
     "updates": {
       "enabled": false
     },

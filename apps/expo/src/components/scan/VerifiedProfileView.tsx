@@ -19,6 +19,7 @@ import { SfIcon } from '@/components/icons/SfIcon';
 import { PageLivePreview } from '@/components/me/PageLivePreview';
 import { ThemedSurface, ThemedText } from '@/components/themed';
 import { Colors } from '@/constants/Colors';
+import { appAlert } from '@/feedback/appAlert';
 import { useTranslation } from '@/i18n';
 import type { VerifiedHandleBinding } from '@/scan/verifiedPageHandler';
 import type { ProfileRecord } from '@solidarity/shared';
@@ -51,6 +52,7 @@ export function VerifiedProfileView({ record, handleBinding }: VerifiedProfileVi
             blocks={record.page.blocks}
             appearance={record.page.appearance}
             variant="public"
+            handle={handleBinding?.handle ?? null}
           />
         </View>
       ) : (
@@ -75,7 +77,12 @@ export function VerifiedProfileView({ record, handleBinding }: VerifiedProfileVi
                   key={`${link.label}-${link.url}`}
                   haptic="tap"
                   onPress={() => {
-                    void Linking.openURL(link.url).catch(() => undefined);
+                    void Linking.openURL(link.url).catch(() => {
+                      appAlert({
+                        title: t('mePage.linkErrorTitle'),
+                        message: t('mePage.linkErrorMessage'),
+                      });
+                    });
                   }}
                   accessibilityRole="link"
                   accessibilityLabel={link.label || link.url}

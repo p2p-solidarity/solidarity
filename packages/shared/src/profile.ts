@@ -90,7 +90,12 @@ export const publicPageBlockTypeSchema = z.enum([
 ]);
 export type PublicPageBlockType = z.infer<typeof publicPageBlockTypeSchema>;
 
-const PUBLIC_PAGE_STYLES: Readonly<Record<PublicPageBlockType, readonly string[]>> = {
+/**
+ * The styles each block type may carry — the ONE list the schema enforces and
+ * every editor (app Page tab, web builder) offers, so a draft built anywhere
+ * validates everywhere.
+ */
+export const PUBLIC_PAGE_STYLES: Readonly<Record<PublicPageBlockType, readonly string[]>> = {
   links: ['list'],
   text: ['plain', 'card'],
   portfolio: ['grid', 'list', 'carousel'],

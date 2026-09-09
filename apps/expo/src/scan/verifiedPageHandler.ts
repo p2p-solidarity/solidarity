@@ -66,9 +66,11 @@ export type VerifiedPageErrorReason =
   | 'insecureEndpoint';
 
 export interface VerifiedHandleBinding {
-  readonly scheme: Exclude<HandleScheme, 'nip05'>;
+  readonly scheme: HandleScheme;
   readonly handle: string;
   readonly state: BadgeState;
+  readonly rebindGeneration?: number;
+  readonly reboundAt?: number | null;
 }
 
 export type VerifiedPageResult =
@@ -192,7 +194,7 @@ export function parseVerifiedPagePayload(payload: string): VerifiedPageResult | 
  *     profile JWS), verifiable locally in airplane mode;
  *   - `pointer` — the short `#nostr:<npub>` locator, which needs an async
  *     relay round-trip (`resolveProfile.ts`) to fetch + verify.
- *   - `handle` — a supported ATProto/DNS/ENS handle, resolved through the
+ *   - `handle` — a supported Solidarity/ATProto/DNS/ENS handle, resolved through the
  *     shared deterministic resolver registry before profile retrieval.
  * The scanner (`app/scan/index.tsx`) branches on this to pick the sync-local
  * vs. async-network path. `null` = not a Verified Page payload at all.
@@ -232,7 +234,7 @@ function isSupportedHandle(handle: string): boolean {
   return matchHandleResolver(handle, DEFAULT_HANDLE_RESOLVERS) !== undefined;
 }
 
-function extractHandleCandidate(payload: string): string | null {
+function extractHandleCandidate(payload: string, devProductHosts: boolean): string | null {
   const trimmed = payload.trim();
   if (trimmed.length === 0) return null;
   if (isSupportedHandle(trimmed)) return trimmed;
@@ -241,7 +243,7 @@ function extractHandleCandidate(payload: string): string | null {
     const url = new URL(trimmed);
     if (
       url.protocol !== 'https:' ||
-      !isProductHost(url.host) ||
+      !isProductHost(url.host, devProductHosts) ||
       url.hash.length > 0
     ) {
       return null;
@@ -260,9 +262,19 @@ function extractHandleCandidate(payload: string): string | null {
   }
 }
 
-export function classifyVerifiedPagePayload(payload: string): VerifiedPagePayload | null {
+export interface ClassifyVerifiedPageOptions {
+  /** Thread `developerMode` here: dev mode admits `DEV_PRODUCT_HOSTS` (a
+   *  pre-launch product domain) for the `/@handle` URL form (05-spec §8-B
+   *  mechanism). */
+  readonly devProductHosts?: boolean;
+}
+
+export function classifyVerifiedPagePayload(
+  payload: string,
+  options: ClassifyVerifiedPageOptions = {}
+): VerifiedPagePayload | null {
   if (typeof payload !== 'string') return null;
-  const handle = extractHandleCandidate(payload);
+  const handle = extractHandleCandidate(payload, options.devProductHosts ?? false);
   if (handle !== null) return { kind: 'handle', handle };
   const inner = extractInner(payload);
   if (inner === null || inner.length === 0) return null;

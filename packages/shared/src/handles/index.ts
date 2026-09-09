@@ -3,6 +3,7 @@ import { err } from '../types/result';
 import { AtprotoHandleResolver } from './atproto';
 import { DnsHandleResolver } from './dns';
 import { EnsHandleResolver } from './ens';
+import { Nip05HandleResolver } from './nip05';
 import type {
   HandleResolutionOptions,
   HandleResolutionResult,
@@ -15,6 +16,7 @@ export * from './atproto';
 export * from './didPointer';
 export * from './dns';
 export * from './ens';
+export * from './nip05';
 
 /**
  * D7 remains syntactic, deterministic first-match-wins — no resolver is
@@ -27,6 +29,7 @@ export const DEFAULT_HANDLE_RESOLVERS: readonly HandleResolver[] = [
   new EnsHandleResolver(),
   new AtprotoHandleResolver(),
   new DnsHandleResolver(),
+  new Nip05HandleResolver(),
 ];
 
 export function matchHandleResolver(

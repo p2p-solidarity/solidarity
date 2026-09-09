@@ -27,11 +27,17 @@
  * data the moment each store's `details` map populates.
  */
 import 'react-native-get-random-values';
+
+// Below the polyfill on purpose: both modules pull in @solidarity/shared and
+// @noble/*, which the header above requires to evaluate AFTER crypto exists.
+import { startAutoBackup } from '@/backup/autoBackupScheduler';
+import { startCloudSync } from '@/backup/cloudSync';
+import { recoverPortableCommit } from '@/backup/portableStorage';
 import 'react-native-gesture-handler';
 import '../global.css';
 
 import { useEffect, useState } from 'react';
-import { Appearance } from 'react-native';
+import { Appearance, AppState } from 'react-native';
 import { router, Stack } from 'expo-router';
 import * as Linking from 'expo-linking';
 import * as Notifications from 'expo-notifications';
@@ -44,6 +50,7 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { useCardStore } from '@/cards/cardManager';
 import { useReceivedCard } from '@/cards/receivedCard';
 import { ReceivedCardSheet } from '@/components/cards/ReceivedCardSheet';
+import { LaunchSplash } from '@/components/brand/LaunchSplash';
 import { VerifiedPageResultSheet } from '@/components/scan/VerifiedPageResultSheet';
 import { useContactStore } from '@/contacts/repository';
 import { useCredentialStore } from '@/credentials/store';
@@ -61,6 +68,7 @@ import { hydrateSensitiveActionPolicy } from '@/keychain';
 import { warmBadgeStatusCache } from '@/badges/badgeStatusCache';
 import { warmNostrKeyMirror } from '@/nostr/userKey';
 import { PearConsentOverlay, PearPresentConsentOverlay } from '@/pear/consent';
+import { maybeRefreshVerifiedContacts } from '@/people/contactAutoRefresh';
 import { hydrateProfileSnapshots } from '@/people/profileSnapshots';
 import { hydrateProfile } from '@/profile/store';
 import { syncOnce } from '@/sakura/inbox';
@@ -128,10 +136,12 @@ function warnBoot(message: string, error?: unknown): void {
 
 export default function RootLayout() {
   const [ready, setReady] = useState(false);
+  const [splashFinished, setSplashFinished] = useState(false);
   const receivedCard = useReceivedCard((s) => s.card);
   const receivedVerification = useReceivedCard((s) => s.verificationStatus);
   const receivedSource = useReceivedCard((s) => s.source);
   const receivedSealedRoute = useReceivedCard((s) => s.sealedRoute);
+  const receivedNostrPointer = useReceivedCard((s) => s.nostrPointer);
   const dismissReceived = useReceivedCard((s) => s.dismiss);
   const upsertContact = useContactStore((s) => s.upsert);
   // Swift ThemeManager.applyColorScheme → here we forward the user pref to
@@ -144,6 +154,7 @@ export default function RootLayout() {
   // registration effect below reads the real preference, not the default.
   const remoteNotificationsEnabled = usePreferences((s) => s.notificationsRemote);
   const hasCompletedOnboarding = usePreferences((s) => s.hasCompletedOnboarding);
+  const backupEnabled = usePreferences((s) => s.backupEnabled);
   useEffect(() => {
     Appearance.setColorScheme(appColorScheme === 'system' ? 'unspecified' : appColorScheme);
   }, [appColorScheme]);
@@ -152,16 +163,11 @@ export default function RootLayout() {
     let cancelled = false;
     let shown = false;
 
-    const showApp = async (reason: string) => {
+    const showApp = (reason: string): void => {
       if (cancelled || shown) return;
       shown = true;
       logBoot(`show-app:${reason}`);
       setReady(true);
-      try {
-        await SplashScreen.hideAsync();
-      } catch (error) {
-        warnBoot('splash-hide-failed', error);
-      }
     };
 
     const hydrateDetailsInBackground = () => {
@@ -180,6 +186,9 @@ export default function RootLayout() {
         logBoot('mmkv:start');
         await initMmkv();
         logBoot('mmkv:done');
+        // Recover before any cache or manifest can seed process memory from
+        // a half-applied portable-data snapshot.
+        recoverPortableCommit();
         // Warm the Nostr sync mirror's MMKV reference NOW so every later
         // `hasNostrKeySync()` call (e.g. the Verify tab's badge-bindings
         // row) is a real synchronous read instead of a cold-cache `false`
@@ -242,10 +251,10 @@ export default function RootLayout() {
           logBoot('deeplink:initial', initial);
           handleDeepLink(initial);
         }
-        await showApp('boot-complete');
+        showApp('boot-complete');
       } catch (error) {
         warnBoot('boot-failed-before-first-paint', error);
-        await showApp('boot-error');
+        showApp('boot-error');
       } finally {
         // Background bulk-decrypt for the steady-state path (manifests
         // already exist). Idempotent — each store's `hydrate()` checks
@@ -256,7 +265,7 @@ export default function RootLayout() {
     };
 
     const timeout = setTimeout(() => {
-      void showApp(`timeout-${BOOT_TIMEOUT_MS}ms`);
+      showApp(`timeout-${BOOT_TIMEOUT_MS}ms`);
     }, BOOT_TIMEOUT_MS);
 
     void boot().finally(() => {
@@ -275,6 +284,42 @@ export default function RootLayout() {
     });
     return () => { sub.remove(); };
   }, []);
+
+  useEffect(() => {
+    if (!ready || !hasCompletedOnboarding || !backupEnabled) return;
+    // Sync and the dated-archive schedule share one foreground lifetime: both
+    // are foreground-only, and starting them together keeps a single place
+    // where cloud work can begin.
+    const start = () => {
+      const stopSync = startCloudSync();
+      const stopBackup = startAutoBackup();
+      return () => { stopSync(); stopBackup(); };
+    };
+    let stop = AppState.currentState === 'active' ? start() : undefined;
+    const sub = AppState.addEventListener('change', (state) => {
+      stop?.();
+      stop = state === 'active' ? start() : undefined;
+    });
+    return () => { stop?.(); sub.remove(); };
+  }, [ready, hasCompletedOnboarding, backupEnabled]);
+
+  // Contact auto-update (CREDS §3.3 訂閱憑據 lane, v1 — 05-spec §3): on boot
+  // and every return to foreground, run one THROTTLED sweep that re-resolves
+  // saved Verified Pages through their claimed `nostr:<npub>` HEAD (kind
+  // 30078) and merges real changes into 「最近更新」. Device-side only — no
+  // server, no push. The sweep itself is fire-and-forget and silent.
+  useEffect(() => {
+    if (!ready || !hasCompletedOnboarding) return;
+    maybeRefreshVerifiedContacts();
+    const sub = AppState.addEventListener('change', (state) => {
+      if (state === 'active' && usePreferences.getState().hasCompletedOnboarding) {
+        maybeRefreshVerifiedContacts();
+      }
+    });
+    return () => {
+      sub.remove();
+    };
+  }, [hasCompletedOnboarding, ready]);
 
   // Sakura push rail — inbox-sync listeners are always safe to attach: they
   // only fire when the OS actually delivers a notification (none, if the user
@@ -336,6 +381,7 @@ export default function RootLayout() {
             verificationStatus={receivedVerification}
             source={receivedSource}
             sealedRoute={receivedSealedRoute}
+            nostrPointer={receivedNostrPointer}
             onSave={async (contact) => {
               await upsertContact(contact);
             }}
@@ -348,6 +394,16 @@ export default function RootLayout() {
           <VerifiedPageResultSheet />
         </SafeAreaProvider>
       </KeyboardProvider>
+      {!splashFinished ? (
+        <LaunchSplash
+          onFinished={() => {
+            setSplashFinished(true);
+          }}
+          onHideError={(error) => {
+            warnBoot('splash-hide-failed', error);
+          }}
+        />
+      ) : null}
     </GestureHandlerRootView>
   );
 }

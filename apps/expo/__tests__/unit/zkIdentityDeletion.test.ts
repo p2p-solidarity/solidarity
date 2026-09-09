@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it } from 'bun:test';
 import { readFileSync } from 'node:fs';
 
-import type { Semaphore } from '@solidarity/nitro-semaphore';
+import type { Semaphore } from '@solidarity/nitro-attest';
 
 import { deleteIdentityForLocalWipe } from '../../src/zk/identity';
 import {
@@ -40,12 +40,12 @@ describe('deleteIdentityForLocalWipe', () => {
 
   it('requires strict idempotent native deletion contracts on both platforms', () => {
     const ios = readFileSync(
-      new URL('../../../../nitro-modules/semaphore/ios/HybridSemaphore.swift', import.meta.url),
+      new URL('../../../../nitro-modules/attest/ios/HybridSemaphore.swift', import.meta.url),
       'utf8',
     );
     const android = readFileSync(
       new URL(
-        '../../../../nitro-modules/semaphore/android/src/main/java/com/margelo/nitro/gg/solidarity/semaphore/HybridSemaphore.kt',
+        '../../../../nitro-modules/attest/android/src/main/java/com/margelo/nitro/gg/solidarity/attest/HybridSemaphore.kt',
         import.meta.url,
       ),
       'utf8',

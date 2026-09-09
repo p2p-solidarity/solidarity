@@ -20,7 +20,16 @@ import type { ProviderKind } from '@/backup';
 
 const KEY = 'prefs:v1';
 
-/** Per-action biometric requirement flags (mirrors Swift SensitiveAction). */
+/**
+ * Per-action biometric requirement flags (mirrors Swift SensitiveAction).
+ *
+ * DEAD SHAPE — retained only so persisted preference blobs keep round-tripping.
+ * The live biometric gate is `src/keychain/sensitiveActionPolicy.ts`: one
+ * user-chosen `BiometricGateMode` plus `RED_LINE_ACTIONS` no mode disarms.
+ * Do not reintroduce reads of `biometricPolicy`; call
+ * `requireSensitiveAction(action, prompt)` instead, which consults the real
+ * policy itself.
+ */
 export type SensitiveActionKey =
   | 'issueCredential'
   | 'presentProof'
@@ -38,11 +47,40 @@ export type AnimalCharacter = 'dog' | 'horse' | 'pig' | 'sheep' | 'dove';
 
 export interface Preferences {
   readonly hasCompletedOnboarding: boolean;
-  /** Local v2 username used for the short `/name` public-page presentation. */
+  /** Locally selected name, even while the network-backed page is unpublished. */
   readonly publicPageUsername: string;
+  /** Name most recently confirmed by the authenticated directory endpoint. */
+  readonly publicPageRegisteredUsername: string;
+  /** True only after directory registration and kind-0 reverse publication both completed. */
+  readonly publicPageBindingReady: boolean;
+  readonly publicPagePublishError:
+    | ''
+    | 'name_taken'
+    | 'rename_too_soon'
+    | 'profile_publish_failed'
+    | 'directory_unreachable'
+    | 'kind0_publish_failed'
+    | 'rate_limited'
+    | 'invalid_auth'
+    | 'invalid_request'
+    | 'server_error';
+  readonly publicPageRetryAt: number | null;
+  /**
+   * @deprecated Dormant — never read as behaviour. The biometric gate lives in
+   * `src/keychain/sensitiveActionPolicy.ts` (`mode`).
+   */
   readonly biometricSensitiveOps: boolean;
   readonly backupProvider: ProviderKind;
+  /**
+   * Master switch for AUTOMATIC backups. Keeps its Swift-parity name
+   * (`BackupManager.Settings.autoBackup`) but now governs every non-manual
+   * trigger — the scheduled interval and the People pull/gesture — not just
+   * pull-to-refresh.
+   */
   readonly autoBackupOnPull: boolean;
+  /** Minimum gap between automatic backups. One of
+   *  `AUTO_BACKUP_INTERVAL_CHOICES`; 6h is the floor. */
+  readonly autoBackupIntervalHours: number;
   readonly notificationsEnabled: boolean;
   readonly developerMode: boolean;
   readonly themeMode: 'auto' | 'light' | 'dark';
@@ -54,7 +92,11 @@ export interface Preferences {
   readonly enableGlow: boolean;
   /** Mirrors Swift ThemeManager.selectedAnimal (null = none). */
   readonly selectedAnimal: AnimalCharacter | null;
-  /** Per-action Face ID requirement flags (Swift SensitiveActionPolicyStore). */
+  /**
+   * Per-action Face ID requirement flags (Swift SensitiveActionPolicyStore).
+   *
+   * @deprecated No longer written or read as a gate — see `SensitiveActionKey`.
+   */
   readonly biometricPolicy: Readonly<Record<SensitiveActionKey, boolean>>;
   /** Mirrors Swift BackupSettings.enabled. */
   readonly backupEnabled: boolean;
@@ -110,9 +152,14 @@ const DEFAULT_BIOMETRIC_POLICY: Readonly<Record<SensitiveActionKey, boolean>> = 
 const DEFAULTS: Preferences = {
   hasCompletedOnboarding: false,
   publicPageUsername: '',
+  publicPageRegisteredUsername: '',
+  publicPageBindingReady: false,
+  publicPagePublishError: '',
+  publicPageRetryAt: null,
   biometricSensitiveOps: true,
   backupProvider: 'iCloud',
   autoBackupOnPull: true,
+  autoBackupIntervalHours: 6,
   notificationsEnabled: true,
   developerMode: false,
   themeMode: 'auto',

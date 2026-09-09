@@ -28,6 +28,11 @@
 import { Appearance } from 'react-native';
 
 const RAW = {
+  /** Launch splash stays black in either system appearance. */
+  splashBg: '#000000',
+  /** Launch mark stays white in either system appearance. */
+  splashMark: '#FFFFFF',
+
   /** Page background — Palette.cream (#fbf9f2) light / #060417 dark. */
   pageBg: '#FBF9F2',
   pageBgDark: '#060417',
@@ -127,6 +132,10 @@ const RAW = {
   destructive: '#CD556A',
   /** Terminal green — success / verified. */
   terminalGreen: '#4CAF51',
+  /** 16% green tint for "this is included / verified" fills. Same formula the
+   *  creds-design mock uses for `--terminalGreenBg`; pair it with
+   *  `terminalGreenText`, which is the contrast-safe foreground. */
+  terminalGreenBg: 'rgba(76,175,81,0.16)',
   /** Feature accent purple. */
   featureAccent: '#5856D6',
 
@@ -149,6 +158,24 @@ const RAW = {
 
   /** Warning amber — `Color.Theme.warning` (orange in Swift). */
   warning: '#FF9500',
+
+  /** creds v3 derived accessibility layer — text/glyph foregrounds that must
+   * hit WCAG 4.5:1 on the light surfaces (`pageBg` / `cardBg` / 16% tints).
+   * Values from creds-design port spec §3.2 (+§10.5 M2 for dark destructive).
+   * Fill/tint backgrounds keep the native tokens above; ONLY the foreground
+   * text/icon uses these. */
+  terminalGreenText: '#2F6B45',
+  terminalGreenTextDark: '#4CAF51',
+  warningText: '#9C5B00',
+  warningTextDark: '#FF9500',
+  destructiveText: '#B7364D',
+  destructiveTextDark: '#D2677A',
+  accentRoseText: '#AA568A',
+  accentRoseTextDark: '#BF80A7',
+  /** text3 fails 4.5:1 on light surfaces; use this where tertiary text carries
+   * meaning (not mere decoration). Dark mode keeps text3Dark. */
+  text3Strong: '#747181',
+  text3StrongDark: '#808080',
 
   /** Public Page template palette. These are separate from the app theme:
    * choosing a visitor-facing template must never replace the owner's app UI. */
@@ -184,6 +211,64 @@ const RAW = {
   scanDim: 'rgba(0,0,0,0.55)',
   /** Shutter-flash overlay for the screenshot-style capture animation. */
   scanFlash: 'rgba(255,255,255,0.55)',
+} as const;
+
+/**
+ * Fixed light palette for the visitor-facing Verified Page.
+ *
+ * A Page's colours are the TEMPLATE ITS OWNER CHOSE, not the reader's app
+ * theme — so unlike every other surface these must NOT follow `Appearance`.
+ * The creds-design mock resets exactly these tokens back to light inside
+ * `#pubFrame` for the same reason ("app 的深淺是你的閱讀偏好，公開頁的深淺
+ * 是你替訪客選的模板，兩件事不能混").
+ */
+export const PageTemplateColors = {
+  cardBg: RAW.cardBg,
+  divider: RAW.divider,
+  searchBg: RAW.searchBg,
+  text1: RAW.text1,
+  text2: RAW.text2,
+  primaryBlue: RAW.primaryBlue,
+  warmCream: RAW.warmCream,
+  invertedButtonBg: RAW.invertedButtonBg,
+  invertedButtonText: RAW.invertedButtonText,
+  heroGradientStart: RAW.heroGradientStart,
+  heroGradientEnd: RAW.heroGradientEnd,
+  pageMint: RAW.pageMint,
+  pageRose: RAW.pageRose,
+  pageInk: RAW.pageInk,
+  pageNight: RAW.pageNight,
+  pageLightText: RAW.pageLightText,
+  pageGradientStart: RAW.pageGradientStart,
+  pageGradientEnd: RAW.pageGradientEnd,
+  pageSunStart: RAW.pageSunStart,
+  pageSunEnd: RAW.pageSunEnd,
+  pagePreviewGlass: RAW.pagePreviewGlass,
+  pagePreviewBorder: RAW.pagePreviewBorder,
+} as const;
+
+/**
+ * The metal card's own palette — a 1:1 port of the creds-design mock's
+ * `.metal` faces (`#s-show`). Brushed steel is brushed steel in either theme,
+ * so like `PageTemplateColors` these deliberately do NOT follow `Appearance`.
+ *
+ * `frontStops`/`backStops` are the mock's CSS gradient stops in order, with
+ * `frontLocations`/`backLocations` carrying their percentages.
+ */
+export const CardMetalColors = {
+  frontStops: ['#3A3F46', '#6E757E', '#9AA2AB', '#5C636C', '#40454C', '#7C838C', '#A8AFB8', '#565C64', '#383D44'],
+  frontLocations: [0, 0.16, 0.27, 0.38, 0.52, 0.66, 0.74, 0.86, 1],
+  backStops: ['#33383F', '#5A616A', '#868D96', '#4A5058', '#2E333A'],
+  backLocations: [0, 0.3, 0.5, 0.72, 1],
+  /** `.etch` — engraved text on steel. */
+  etch: '#EDEFF2',
+  /** `.etch`'s lower text-shadow; RN supports a single shadow, so this is it. */
+  etchShadow: 'rgba(0,0,0,0.55)',
+  /** `.metal .face` hairline. */
+  faceBorder: 'rgba(255,255,255,0.28)',
+  /** `.m-qr` plate and the ink of the code printed on it. */
+  qrPlate: 'rgba(236,238,241,0.94)',
+  qrInk: '#14161A',
 } as const;
 
 type RawKey = keyof typeof RAW;

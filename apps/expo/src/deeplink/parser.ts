@@ -107,7 +107,7 @@ function parseWebSignDomainRoute(hash: string): DeepLinkRoute | null {
  * A2.3 US-11). `null` means "recognised host, but no known route" — falls
  * through to `unknown` at the call site.
  */
-function parseVerifiedDomainRoute(url: URL): DeepLinkRoute | null {
+function parseVerifiedDomainRoute(url: URL, devProductHosts: boolean): DeepLinkRoute | null {
   const segments = url.pathname.replace(/^\//u, '').split('/');
   // `isVerifiedDomain` (the gate the caller already applied to reach this
   // function) also allowlists third-party identity hosts — apple.com,
@@ -115,8 +115,10 @@ function parseVerifiedDomainRoute(url: URL): DeepLinkRoute | null {
   // DIFFERENT purpose (OIDC/domain verification). An in-app routing side
   // effect (card connect, Pear connect) must only fire on hosts WE own, so
   // the `card`/`pear` branches below additionally require `isProductHost`.
-  // Code-review Finding 1, Task A5.4 follow-up.
-  const productHost = isProductHost(url.host);
+  // Code-review Finding 1, Task A5.4 follow-up. `devProductHosts`
+  // (= developerMode, threaded by the caller) additionally admits
+  // `DEV_PRODUCT_HOSTS` — empty since creds.id went production 2026-08-30.
+  const productHost = isProductHost(url.host, devProductHosts);
   if (productHost && segments[0] === 'c' && segments[1] && UUID_RE.test(segments[1])) {
     return { kind: 'card', cardId: segments[1] };
   }
@@ -206,7 +208,18 @@ function parseCustomSchemeRoute(url: URL): DeepLinkRoute | null {
   return null;
 }
 
-export function parseDeepLink(raw: string): DeepLinkRoute {
+export interface ParseDeepLinkOptions {
+  /**
+   * Thread `usePreferences.getState().developerMode` here: in dev mode any
+   * `DEV_PRODUCT_HOSTS` entry (a pre-launch product domain) counts as a
+   * product host so its link surface can be exercised before launch
+   * (05-spec §8-B mechanism; empty since creds.id went production). The
+   * parser stays pure — it never reads the preferences store itself.
+   */
+  readonly devProductHosts?: boolean;
+}
+
+export function parseDeepLink(raw: string, options: ParseDeepLinkOptions = {}): DeepLinkRoute {
   let url: URL;
   try {
     url = new URL(raw);
@@ -237,7 +250,7 @@ export function parseDeepLink(raw: string): DeepLinkRoute {
   }
 
   if (url.protocol === 'https:' && isVerifiedDomain(url.host)) {
-    const route = parseVerifiedDomainRoute(url);
+    const route = parseVerifiedDomainRoute(url, options.devProductHosts ?? false);
     if (route !== null) return route;
   }
 

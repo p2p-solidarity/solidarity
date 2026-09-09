@@ -1,8 +1,9 @@
-import { describe, expect, it } from 'bun:test';
+import { describe, expect, it, setSystemTime } from 'bun:test';
 
 import {
   AtprotoHandleResolver,
   DEFAULT_HANDLE_RESOLVERS,
+  Nip05HandleResolver,
   resolveHandle,
   type HandleResolver,
   type ResolverIO,
@@ -15,8 +16,27 @@ const unusedIo: ResolverIO = {
   fetchText: async () => ok(null),
 };
 
+const REDIRECT_UNTIL = 2_000_000_000;
+
+function nip05RedirectIo(redirectUntil: number): ResolverIO {
+  return {
+    dnsTxt: async () => ok([]),
+    fetchText: async (url) =>
+      url.includes('/.well-known/nostr.json')
+        ? ok(JSON.stringify({ names: { alice: '00'.repeat(32) } }))
+        : ok(JSON.stringify({
+            name: 'alice',
+            status: 'redirected',
+            redirectTo: 'alice2',
+            redirectUntil,
+            rebindGeneration: 0,
+            reboundAt: null,
+          })),
+  };
+}
+
 describe('resolveHandle', () => {
-  it('keeps deterministic registry priority: ENS reserved suffix, then ATProto, then explicit/hinted DNS', () => {
+  it('keeps deterministic registry priority: ENS reserved suffix, then ATProto, explicit/hinted DNS, then dotless NIP-05 names', () => {
     const matchingScheme = (handle: string): string | undefined =>
       DEFAULT_HANDLE_RESOLVERS.find((resolver) => resolver.matches(handle))?.scheme;
 
@@ -24,10 +44,12 @@ describe('resolveHandle', () => {
       'ens',
       'atproto',
       'dns',
+      'nip05',
     ]);
     expect(matchingScheme('vitalik.eth')).toBe('ens');
     expect(matchingScheme('example.com')).toBe('atproto');
     expect(matchingScheme('dns:example.com')).toBe('dns');
+    expect(matchingScheme('alice')).toBe('nip05');
   });
 
   it('uses the first matching resolver and does not evaluate later resolvers', async () => {
@@ -132,6 +154,113 @@ describe('resolveHandle', () => {
 
     expect(result).toEqual({ ok: true, value: { did: 'did:example:alice', sources: [] } });
     expect(queries).toEqual(['_did.example.com']);
+  });
+});
+
+describe('Nip05HandleResolver', () => {
+  it('resolves an active Solidarity name to its exact Nostr profile source', async () => {
+    const pubkey = '7e7e9c42a91bfef19fa929e5fda1b72e0ebc1a4c1141673e2794234d86addf4e';
+    const npub = 'npub10elfcs4fr0l0r8af98jlmgdh9c8tcxjvz9qkw038js35mp4dma8qzvjptg';
+    const calls: string[] = [];
+    const io: ResolverIO = {
+      dnsTxt: async () => ok([]),
+      fetchText: async (url) => {
+        calls.push(url);
+        if (url.includes('/.well-known/nostr.json')) {
+          return ok(JSON.stringify({
+            names: { alice: pubkey },
+            relays: { [pubkey]: ['wss://relay.example'] },
+          }));
+        }
+        return ok(JSON.stringify({
+          name: 'alice',
+          status: 'active',
+          redirectTo: null,
+          redirectUntil: null,
+          rebindGeneration: 0,
+          reboundAt: null,
+        }));
+      },
+    };
+
+    const result = await new Nip05HandleResolver().resolve('Alice', io);
+
+    expect(result).toEqual({
+      ok: true,
+      value: {
+        kind: 'nip05',
+        status: 'active',
+        name: 'alice',
+        identifier: 'alice@creds.id',
+        pubkey,
+        npub,
+        relays: ['wss://relay.example'],
+        sources: [{ kind: 'nostr', npub }],
+        rebindGeneration: 0,
+        reboundAt: null,
+      },
+    });
+    expect(calls.sort()).toEqual([
+      'https://creds.id/.well-known/nostr.json?name=alice',
+      'https://creds.id/id/history?name=alice',
+    ]);
+  });
+
+  it('returns a redirect one second before expiry without trusting a stale directory entry', async () => {
+    setSystemTime(new Date((REDIRECT_UNTIL - 1) * 1000));
+    try {
+      const result = await new Nip05HandleResolver().resolve(
+        'alice',
+        nip05RedirectIo(REDIRECT_UNTIL)
+      );
+
+      expect(result).toEqual({
+        ok: true,
+        value: {
+          kind: 'nip05',
+          status: 'redirected',
+          name: 'alice',
+          identifier: 'alice@creds.id',
+          redirectTo: 'alice2',
+          redirectUntil: REDIRECT_UNTIL,
+          rebindGeneration: 0,
+          reboundAt: null,
+        },
+      });
+    } finally {
+      setSystemTime();
+    }
+  });
+
+  it('expires a millisecond-valued redirect instead of trusting it forever', async () => {
+    // The server's unit is its own contract; a ms record read as seconds would
+    // sit ~54,000 years in the future and never expire.
+    const untilMs = REDIRECT_UNTIL * 1000;
+    setSystemTime(new Date((REDIRECT_UNTIL + 1) * 1000));
+    try {
+      const result = await new Nip05HandleResolver().resolve(
+        'alice',
+        nip05RedirectIo(untilMs)
+      );
+
+      expect(result).toEqual({ ok: false, error: 'notFound' });
+    } finally {
+      setSystemTime();
+    }
+  });
+
+  it('treats a redirect expiring exactly now like a released name', async () => {
+    setSystemTime(new Date(REDIRECT_UNTIL * 1000));
+    try {
+      const result = await new Nip05HandleResolver().resolve(
+        'alice',
+        nip05RedirectIo(REDIRECT_UNTIL)
+      );
+
+      expect(result).toEqual({ ok: false, error: 'notFound' });
+    } finally {
+      setSystemTime();
+    }
   });
 });
 

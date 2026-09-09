@@ -5,9 +5,9 @@
 ## Where truth lives (read in this order)
 
 1. `apps/expo/CLAUDE.md` — the coding rulebook. Mandatory before editing anything under `apps/expo/`.
-2. `docs/ref/01-spec-verified-page.md` + `docs/ref/03-app-web-mechanisms.md` — current product spec (v1.3.3 "Verified Page", 3 tabs: People/Me/Verify). §6 of 03 is the authoritative kept/evolved/frozen/deleted table.
-3. `docs/ref/04-plan-app.md` + `.superpowers/sdd/progress.md` — live task plan and review ledger (records real security bugs already caught — read before touching security code).
-4. **STALE — do not trust**: `README.md`, `spec.md`, `architecture.png`, `docs/migration/*` describe the deleted SwiftUI app and pre-pivot architecture (MultipeerConnectivity and CloudKit group sync are deleted; Semaphore/ZK groups frozen).
+2. `docs/ref/06-plan-convergence-2.0.0.md` — the live **batch** plan (2.0.0 north star, Q1–Q6 decisions, old-feature keep/cut, execution plan) and `docs/ref/07-plan-web-standalone.md` — the live **web-standalone** plan (P1–P3 decisions: passkey = PRF shell around the seed, builder only on creds.id, websign ungated into the Page flow; phases 1–3). `.superpowers/sdd/progress.md` — review ledger (records real security bugs already caught — read before touching security code).
+3. `docs/ref/01–05` — spec reference, not plans: 01+03 = 1.3.3 "Verified Page" product spec (§6 of 03 is the kept/evolved/frozen/deleted table); 05 = QR/exchange wire SSOT (06 defers to it). 04 is the superseded 1.3.3 plan — history only.
+4. **STALE — do not trust**: `README.md`, `spec.md`, `architecture.png` describe the deleted SwiftUI app and pre-pivot architecture (MultipeerConnectivity and CloudKit group sync are deleted; Semaphore/ZK groups frozen). Deleted pre-2.0.0 plans/specs are distilled in `docs/ref/notes-archive-pre-2.0.0.md`.
 
 ## Workflow — every coding task
 
@@ -17,12 +17,12 @@
 
 ## Security — hard rules (current TS terms)
 
-- Sensitive paths: `apps/expo/src/{passport,keychain,identity,vault}` and `nitro-modules/{nfc-passport,passport-zk,semaphore,secrets-vault,spruce-did}`. Any change here is size **L** in flow — never S.
+- Sensitive paths: `apps/expo/src/{passport,keychain,identity,vault}` and `nitro-modules/{attest,keystone}` (attest = mrz-ocr+nfc-passport+passport-zk+semaphore merged; keystone = secrets-vault+spruce-did+cloudkit merged). Any change here is size **L** in flow — never S.
 - Never read, print, or commit: `apps/expo/secrets/`, any `.env*`, `apps/expo/infra/terraform/terraform.tfstate*` / `terraform.tfvars`.
 - Security-path errors use tagged unions (e.g. `BiometricResult`) — never throw raw, never swallow, never log PII.
 - Face ID gates: `ALWAYS_PROMPT_ACTIONS` (rotateMasterKey, revealRecoveryBundle, deleteZKIdentity) deliberately bypass the biometric grace window (`apps/expo/src/keychain/sensitiveActionPolicy.ts`). Adding a grace period there is a security regression, not an optimization.
 - Nitro `ArrayBuffer` args are non-owning: touching `buffer.data`/`.size` inside `Promise.async` is an uncatchable native crash. Copy the bytes synchronously first. Treat every new HybridObject method with an ArrayBuffer param as suspect.
-- ZK honesty: the Android libc++ ABI bug can downgrade real ZK proofs to SD-JWT fallback (`trustLevel: 'white'`, see `nitro-modules/passport-zk/KNOWN_ISSUES.md`). Never present a fallback as a real ZK attestation.
+- ZK honesty: the Android libc++ ABI bug can downgrade real ZK proofs to SD-JWT fallback (`trustLevel: 'white'`, see `nitro-modules/attest/KNOWN_ISSUES.md`). Never present a fallback as a real ZK attestation.
 - Threat-model defaults (each from a real caught bug in `progress.md`): P2P transports scoped per-connection not per-topic; VC/VP must verify holder binding; OAuth discovery is https-only with host validation; no manual pre-hash before ES256 signing (the lib hashes).
 
 ## Traps (verified 2026-07-05)

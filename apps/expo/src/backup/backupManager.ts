@@ -1,10 +1,13 @@
+import { withCloudDataLock } from './cloudDataLock';
+import { getMmkv } from '../storage/mmkv';
+import { captureLocalDataEpoch, canCommitLocalData, trackLocalDataOperation } from '../settings/localDataWipeBarrier';
 /**
  * BackupManager — mirrors Swift Services/Backup/BackupManager.swift.
  *
  * Bundles every locally-persisted record into a single encrypted, SOLB-framed
  * blob and writes it as a `backup_<ts>.solbk` file via the active cloud
  * provider (iCloud Drive Documents on iOS, Drive on Android). Restore is the
- * inverse: download → decrypt → upsert into the feature stores.
+ * inverse: download → decrypt → validate every record → journaled apply.
  *
  * Payload parity with Swift `BackupData` v3:
  *   businessCards + contacts + identityCards + provableClaims + storedCredentials
@@ -12,17 +15,12 @@
  * The "SOLB" magic header is preserved (see `solbEnvelope.ts`) so the file is
  * byte-compatible with the SwiftUI app's `.solbk` files.
  *
- * Identity / credential data is gathered and restored through the feature
- * stores via dynamic import + defensive guards: a context without native MMKV
- * (unit tests) degrades to "cards + contacts only" rather than throwing.
+ * Current and legacy payloads share the same validated portable-data commit
+ * path. A storage failure aborts honestly; restore never skips a bad record
+ * and then reports the archive as complete.
  */
 import {
-  loadAllBusinessCards,
-  loadAllContacts,
-  saveBusinessCard,
-  saveContact,
-} from '../storage/storageManager';
-import {
+  backupMtime,
   downloadArchive,
   downloadLatestArchive,
   prepareProvider,
@@ -32,18 +30,30 @@ import {
 } from './cloudProvider';
 import { decryptJson } from '../storage/encryptionManager';
 import { decryptJsonWithKey } from '../storage/jsonCrypto';
-import { getPortableBackupKey } from '../identity/rootKey';
-import { shouldRunBackup, type BackupReason } from './backupPolicy';
+import { getRootDid, getPortableBackupKey } from '../identity/rootKey';
+import {
+  resolveAutoBackupIntervalHours,
+  shouldRunBackup,
+  type BackupReason,
+} from './backupPolicy';
+import {
+  portableDataDigest,
+  readAutoBackupState,
+  writeAutoBackupState,
+} from './autoBackupState';
+import { ArchiveDownloadPendingError } from './archiveDownload';
 import { normalizeRestoredPayload } from './normalizeBackupPayload';
 import { usePreferences } from '@/settings/preferences';
-import type { BusinessCard, Contact } from '@solidarity/shared';
+import { uuid, type BusinessCard, type Contact } from '@solidarity/shared';
 import type { IdentityCardEntity, ProvableClaimEntity } from '../identity/entities';
 import type { StoredCredential } from '../credentials/store';
+import type { PortableData } from './portableData';
 
 export type { BackupReason } from './backupPolicy';
 
 export interface BackupPayload {
-  readonly schemaVersion: 3;
+  readonly schemaVersion: 3 | 4;
+  readonly portableData?: PortableData;
   readonly exportedAt: string;
   readonly provider: ProviderKind;
   readonly cards: readonly BusinessCard[];
@@ -63,43 +73,6 @@ export interface RestoreResult {
   readonly exportedAt: string;
 }
 
-interface IdentitySnapshot {
-  readonly identityCards: readonly IdentityCardEntity[];
-  readonly provableClaims: readonly ProvableClaimEntity[];
-  readonly storedCredentials: readonly StoredCredential[];
-}
-
-const EMPTY_IDENTITY: IdentitySnapshot = {
-  identityCards: [],
-  provableClaims: [],
-  storedCredentials: [],
-};
-
-/** Snapshot identity cards / claims / credentials from their feature stores. */
-async function gatherIdentity(): Promise<IdentitySnapshot> {
-  try {
-    const [{ useIdentityData }, { useCredentialStore }] = await Promise.all([
-      import('../identity/dataStore'),
-      import('../credentials/store'),
-    ]);
-    // hydrate() pulls credentials + cards + claims into memory. Idempotent;
-    // throws only where native MMKV is absent (unit tests) — then we fall
-    // back to whatever the in-memory state already holds.
-    try {
-      await useIdentityData.getState().hydrate();
-    } catch {
-      /* use in-memory state */
-    }
-    return {
-      identityCards: useIdentityData.getState().identityCards,
-      provableClaims: useIdentityData.getState().provableClaims,
-      storedCredentials: Array.from(useCredentialStore.getState().details.values()),
-    };
-  } catch {
-    return EMPTY_IDENTITY;
-  }
-}
-
 /**
  * Snapshot every local record and upload it as a portable SOLB v2 archive
  * sealed with `portableKey` (the Recovery-Phrase-derived Portable Backup Key
@@ -109,22 +82,28 @@ async function gatherIdentity(): Promise<IdentitySnapshot> {
  */
 export async function performBackupNow(
   provider: ProviderKind,
-  portableKey: Uint8Array
+  portableKey: Uint8Array,
+  gathered?: PortableData,
 ): Promise<BackupPayload> {
-  const [cards, contacts, identity] = await Promise.all([
-    loadAllBusinessCards(),
-    loadAllContacts(),
-    gatherIdentity(),
-  ]);
+  // `gathered` lets the caller reuse a snapshot it already took to decide
+  // whether anything changed, instead of reading every record twice.
+  let portableData = gathered;
+  if (!portableData) {
+    const did = await getRootDid();
+    if (!did.ok) throw new Error('backup-identity-unavailable');
+    const { gatherPortableData } = await import('./portableStorage');
+    portableData = await gatherPortableData(did.value);
+  }
+  const list = (prefix: string): readonly unknown[] => Object.entries(portableData.records)
+    .filter(([key]) => key.startsWith(prefix))
+    .map(([, value]) => JSON.parse(value) as unknown);
   const payload: BackupPayload = {
-    schemaVersion: 3,
-    exportedAt: new Date().toISOString(),
-    provider,
-    cards,
-    contacts,
-    identityCards: identity.identityCards,
-    provableClaims: identity.provableClaims,
-    storedCredentials: identity.storedCredentials,
+    schemaVersion: 4, exportedAt: new Date().toISOString(), provider, portableData,
+    cards: list('cards:') as readonly BusinessCard[],
+    contacts: list('contacts:') as readonly Contact[],
+    identityCards: list('idcard:') as readonly IdentityCardEntity[],
+    provableClaims: list('provable:') as readonly ProvableClaimEntity[],
+    storedCredentials: list('vc:') as readonly StoredCredential[],
   };
   await uploadBackup(payload, portableKey);
   return payload;
@@ -143,32 +122,43 @@ export interface BackupRequestOutcome {
 
 /**
  * THE single coordinated backup entrypoint. Every trigger — manual button,
- * People pull-to-refresh, pan gesture — routes through here so the prefs
- * (enabled / pull / provider), provider selection, and the cooldown are all
- * applied in ONE place. Returns without backing up (`ran: false`) when the
- * policy says skip; only throws for a genuine upload error, never for a skip.
+ * the scheduled automatic run, People pull-to-refresh, pan gesture — routes
+ * through here so the prefs (enabled / automatic / interval / provider),
+ * provider selection, the cooldown and the content check are all applied in
+ * ONE place. Returns without backing up (`ran: false`) when the policy says
+ * skip; only throws for a genuine upload error, never for a skip.
+ *
+ * Skip reasons an automatic caller should simply ignore: `disabled`,
+ * `auto-disabled`, `cooldown`, `interval`, `unchanged`, `root-key-unavailable`.
  *
  * This replaces the old footgun where `usePeopleScreen.refresh()` called
  * `performBackupNow(DEFAULT_PROVIDER)` unconditionally on every pull —
  * ignoring `backupEnabled`/`autoBackupOnPull`, racing the rotation, and using
  * a different provider than the gesture path.
  */
-export async function requestBackup(reason: BackupReason): Promise<BackupRequestOutcome> {
+export function requestBackup(reason: BackupReason): Promise<BackupRequestOutcome> {
+  return trackLocalDataOperation(withCloudDataLock(() => requestBackupUnlocked(reason)));
+}
+async function requestBackupUnlocked(reason: BackupReason): Promise<BackupRequestOutcome> {
   const prefs = usePreferences.getState();
+  const autoState = readAutoBackupState();
   const decision = shouldRunBackup({
     reason,
     backupEnabled: prefs.backupEnabled,
-    autoBackupOnPull: prefs.autoBackupOnPull,
+    autoBackupEnabled: prefs.autoBackupOnPull,
     lastRunAtMs: lastBackupAtMs,
+    lastArchiveAtMs: autoState.lastArchiveAtMs,
     nowMs: Date.now(),
     cooldownMs: BACKUP_COOLDOWN_MS,
+    minIntervalMs:
+      resolveAutoBackupIntervalHours(prefs.autoBackupIntervalHours) * 3_600_000,
   });
   if (!decision.run) return { ran: false, skipReason: decision.skipReason };
   // Make the provider preference actually take effect (it was never applied).
   setProvider(prefs.backupProvider);
   // On Android Drive, detect a missing Google connection up front and prompt,
   // rather than letting the upload 401 with an opaque error.
-  const driveStatus = await prepareProvider();
+  const driveStatus = await prepareProvider(reason === 'manual');
   if (prefs.backupProvider === 'googleDrive' && driveStatus === 'needs-connection') {
     return { ran: false, skipReason: 'needs-connection' };
   }
@@ -179,72 +169,41 @@ export async function requestBackup(reason: BackupReason): Promise<BackupRequest
   if (!keyRes.ok) {
     return { ran: false, skipReason: 'root-key-unavailable' };
   }
-  const payload = await performBackupNow(prefs.backupProvider, keyRes.value);
-  lastBackupAtMs = Date.now();
-  return { ran: true, payload };
-}
-
-interface IdentityRestoreCounts {
-  readonly identityCardsRestored: number;
-  readonly claimsRestored: number;
-  readonly credentialsRestored: number;
-}
-
-/** Restore identity cards / claims / credentials, best-effort per record. */
-async function restoreIdentity(payload: BackupPayload): Promise<IdentityRestoreCounts> {
-  let credentialsRestored = 0;
-  let identityCardsRestored = 0;
-  let claimsRestored = 0;
-  try {
-    const [{ useIdentityData }, { useCredentialStore }] = await Promise.all([
-      import('../identity/dataStore'),
-      import('../credentials/store'),
-    ]);
-
-    for (const c of payload.storedCredentials ?? []) {
-      try {
-        await useCredentialStore.getState().add({
-          ...c,
-          issuedAt: new Date(c.issuedAt),
-          expiresAt: c.expiresAt ? new Date(c.expiresAt) : undefined,
-        });
-        credentialsRestored += 1;
-      } catch {
-        /* skip a single bad credential */
-      }
-    }
-    for (const card of payload.identityCards ?? []) {
-      try {
-        await useIdentityData.getState().upsertIdentityCard({
-          ...card,
-          issuedAt: new Date(card.issuedAt),
-          expiresAt: card.expiresAt ? new Date(card.expiresAt) : undefined,
-          createdAt: new Date(card.createdAt),
-          updatedAt: new Date(card.updatedAt),
-        });
-        identityCardsRestored += 1;
-      } catch {
-        /* skip */
-      }
-    }
-    for (const claim of payload.provableClaims ?? []) {
-      try {
-        await useIdentityData.getState().upsertProvableClaim({
-          ...claim,
-          lastPresentedAt: claim.lastPresentedAt ? new Date(claim.lastPresentedAt) : undefined,
-          createdAt: new Date(claim.createdAt),
-          updatedAt: new Date(claim.updatedAt),
-        });
-        claimsRestored += 1;
-      } catch {
-        /* skip */
-      }
-    }
-  } catch {
-    // identity / credential stores unavailable in this context — cards +
-    // contacts are still restored by the caller.
+  // Snapshot once, then decide. Three retained archives are a scarce
+  // resource: an automatic run that wrote an identical snapshot every
+  // interval would evict the user's real restore points in favour of three
+  // copies of the same data. A manual press always writes — the user asked
+  // for a backup and must get a file, unchanged or not.
+  const did = await getRootDid();
+  if (!did.ok) throw new Error('backup-identity-unavailable');
+  const { gatherPortableData } = await import('./portableStorage');
+  const portableData = await gatherPortableData(did.value);
+  // A device that has been wiped, or that has not finished restoring, gathers
+  // nothing. Retention is a scarce resource, so writing that empty archive
+  // would rotate away the very files that still hold the user's data — the
+  // safety net destroying itself. Nothing to back up is a skip, not a write.
+  if (Object.keys(portableData.records).length === 0) {
+    return { ran: false, skipReason: 'empty' };
   }
-  return { credentialsRestored, identityCardsRestored, claimsRestored };
+  const digest = portableDataDigest(portableData);
+  if (reason !== 'manual' && autoState.digest !== null && digest === autoState.digest) {
+    // "We already archived this content" is only a reason to skip while that
+    // archive still EXISTS. The marker records content and time, not which
+    // container it landed in, so an Apple-ID switch, an iCloud sign-out or a
+    // user deleting AirMeishiBackup would otherwise leave the schedule
+    // permanently inert with zero archives in the cloud and the toggle still
+    // on. `backupMtime` answers null on any error too, so an unreadable
+    // provider fails OPEN — one redundant archive, never a silent gap.
+    if (await backupMtime()) return { ran: false, skipReason: 'unchanged' };
+  }
+  // Stamp the cooldown BEFORE the upload. A backup that fails (offline,
+  // iCloud signed out) previously left the guard unset, so the change-driven
+  // trigger would retry on every debounce tick for as long as it kept
+  // failing. Only a SUCCESSFUL write advances the archive schedule.
+  lastBackupAtMs = Date.now();
+  const payload = await performBackupNow(prefs.backupProvider, keyRes.value, portableData);
+  writeAutoBackupState({ lastArchiveAtMs: Date.now(), digest });
+  return { ran: true, payload };
 }
 
 /**
@@ -259,21 +218,107 @@ async function restoreIdentity(payload: BackupPayload): Promise<IdentityRestoreC
  *     this device (the original Device Storage Key is gone — the classic
  *     cross-device / post-wipe case).
  *   - `unsupported-version`    — the archive version byte is unknown.
+ *   - `download-pending`       — the archive exists but iCloud has not
+ *     delivered its bytes to this device yet (`archiveName` says which; the
+ *     read already asked for the transfer — bring it down with
+ *     `ensureArchiveDownloaded`, then retry).
  *   - `unreadable`             — any other download / framing / I/O failure.
  */
 export class BackupRestoreError extends Error {
+  /** Set for `download-pending`: the archive the transfer concerns. */
+  readonly archiveName: string | undefined;
+
   constructor(
     readonly kind:
       | 'root-key-unavailable'
       | 'portable-key-mismatch'
       | 'legacy-key-unavailable'
       | 'unsupported-version'
+      | 'download-pending'
       | 'unreadable',
-    options?: { cause?: unknown },
+    options?: { cause?: unknown; archiveName?: string },
   ) {
-    super(kind, options);
+    super(kind, options?.cause === undefined ? undefined : { cause: options.cause });
     this.name = 'BackupRestoreError';
+    this.archiveName = options?.archiveName;
   }
+}
+
+/** Sync state carrying the restored keys for adoption, or null when this
+ * device has sync state we cannot read — compounding an unreadable state with
+ * a freshly minted device identity would make the restore concurrent with its
+ * own history instead of authoritative over it. */
+async function pendingAdoptState(identity: string, keys: readonly string[]): Promise<string | null> {
+  const { SYNC_STATE_KEY } = await import('./portableStorage');
+  const { newSyncState, parseSyncState } = await import('./syncEngine');
+  const raw = getMmkv().getString(SYNC_STATE_KEY);
+  let current;
+  if (raw === undefined) {
+    current = newSyncState(identity, uuid());
+  } else {
+    try {
+      current = parseSyncState(JSON.parse(raw) as unknown, identity);
+    } catch {
+      return null;
+    }
+  }
+  return JSON.stringify({ ...current, adopt: [...new Set([...(current.adopt ?? []), ...keys])] });
+}
+
+async function restorePortablePayload(payload: BackupPayload): Promise<RestoreResult> {
+  // Namespace import, not a destructure: `applyingPortableData` is a `let`
+  // whose value changes during the apply, and destructuring would freeze it at
+  // `false` — making the apply's own writes look like concurrent local edits.
+  const portableStorage = await import('./portableStorage');
+  const { applyPortableData, gatherPortableData, isPortableStorageKey } = portableStorage;
+  const { legacyPortableRecords, validatePortableData } = await import('./portableData');
+  const did = await getRootDid();
+  if (!did.ok) throw new BackupRestoreError('root-key-unavailable');
+  const data = validatePortableData(
+    payload.portableData ?? legacyPortableRecords(payload, did.value),
+    did.value,
+  );
+  const epoch = captureLocalDataEpoch();
+  const localStateChanged = { value: false };
+  const subscription = getMmkv().addOnValueChangedListener((key) => {
+    if (!portableStorage.applyingPortableData && isPortableStorageKey(key)) localStateChanged.value = true;
+  });
+  try {
+    const before = await gatherPortableData(did.value);
+    const current = await getRootDid();
+    if (!current.ok || current.value !== did.value) {
+      throw new BackupRestoreError('portable-key-mismatch');
+    }
+    // The restored records are the user's explicit choice, so the next sync
+    // must author them ON TOP of whatever the other device holds instead of
+    // racing it. Writing the marker inside the SAME journaled commit as the
+    // data means a crash can never leave one without the other.
+    const adoptState = await pendingAdoptState(did.value, Object.keys(data.records));
+    await trackLocalDataOperation(applyPortableData(data, before.records, {
+      replace: false,
+      ...(adoptState === null ? {} : { state: adoptState }),
+      assertCurrent: () => {
+        if (localStateChanged.value || !canCommitLocalData(epoch)) {
+          throw new Error('restore-local-data-changed');
+        }
+      },
+    }));
+  } finally {
+    subscription.remove();
+  }
+  // Report what was applied. A v4 archive restores `data.records`; the v3
+  // top-level arrays are a parallel copy, so counting those could claim
+  // records that never reached storage.
+  const restored = (prefix: string): number =>
+    Object.keys(data.records).filter((key) => key.startsWith(prefix)).length;
+  return {
+    cardsRestored: restored('cards:'),
+    contactsRestored: restored('contacts:'),
+    identityCardsRestored: restored('idcard:'),
+    claimsRestored: restored('provable:'),
+    credentialsRestored: restored('vc:'),
+    exportedAt: payload.exportedAt,
+  };
 }
 
 /**
@@ -281,13 +326,21 @@ export class BackupRestoreError extends Error {
  * SPECIFIC archive the user picked in the dated backup list (plan G6: explicit
  * choice, never a silent fallback to an older file).
  */
-export async function restoreFromBackup(archiveName?: string): Promise<RestoreResult | null> {
+export function restoreFromBackup(archiveName?: string): Promise<RestoreResult | null> {
+  return trackLocalDataOperation(withCloudDataLock(() => restoreFromBackupUnlocked(archiveName)));
+}
+async function restoreFromBackupUnlocked(archiveName?: string): Promise<RestoreResult | null> {
   // null = nothing to restore (no file). A present-but-unusable backup throws
   // a typed BackupRestoreError so the caller can show the right message.
   let archive: Awaited<ReturnType<typeof downloadLatestArchive>>;
   try {
     archive = archiveName ? await downloadArchive(archiveName) : await downloadLatestArchive();
   } catch (err) {
+    // Not on this device yet is not "unreadable": name the archive so the UI
+    // can show the transfer and retry once it lands.
+    if (err instanceof ArchiveDownloadPendingError) {
+      throw new BackupRestoreError('download-pending', { cause: err, archiveName: err.archiveName });
+    }
     // Framing failures from decodeSolb: unknown version fails closed as its own
     // kind; anything else (bad magic, legacy plaintext, IO) is unreadable.
     const msg = err instanceof Error ? err.message : '';
@@ -331,19 +384,7 @@ export async function restoreFromBackup(archiveName?: string): Promise<RestoreRe
     throw new BackupRestoreError(kind, { cause: err });
   }
 
-  for (const card of payload.cards) await saveBusinessCard(card);
-  for (const contact of payload.contacts) await saveContact(contact);
-
-  const identity = await restoreIdentity(payload);
-
-  return {
-    cardsRestored: payload.cards.length,
-    contactsRestored: payload.contacts.length,
-    identityCardsRestored: identity.identityCardsRestored,
-    claimsRestored: identity.claimsRestored,
-    credentialsRestored: identity.credentialsRestored,
-    exportedAt: payload.exportedAt,
-  };
+  return restorePortablePayload(payload);
 }
 
 /**

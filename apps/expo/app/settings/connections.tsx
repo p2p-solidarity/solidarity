@@ -21,7 +21,7 @@ import { verifyNostrBinding, type VerifyNostrBindingResult } from '@solidarity/s
 
 export default function ConnectionsSettingsRoute() {
   const developerMode = usePreferences((state) => state.developerMode);
-  if (!developerMode) return <Redirect href="/settings/advanced" />;
+  if (!developerMode) return <Redirect href="/settings" />;
 
   return <ConnectionsSettingsScreen />;
 }

@@ -123,6 +123,15 @@ export function IdentityCredentialRows({
               subtitle={t('mePage.credentialsHint')}
               onPress={onOpenCredentials}
             />
+            <View style={{ height: 1, marginLeft: 48, backgroundColor: Colors.divider }} />
+            <InsetRow
+              icon="qrcode"
+              title={t('evidencePack.entryTitle')}
+              subtitle={t('evidencePack.entryHint')}
+              onPress={() => {
+                router.push('/me/evidence-pack');
+              }}
+            />
           </>
         ) : null}
       </ThemedSurface>

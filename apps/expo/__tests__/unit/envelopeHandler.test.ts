@@ -7,7 +7,7 @@
  * Master-key fixture pattern lifted from qrEnvelopeWire.test.ts so the real
  * AES-GCM seal is exercised end-to-end without an Expo runtime.
  */
-import { beforeAll, describe, expect, it, mock } from 'bun:test';
+import { afterAll, beforeAll, describe, expect, it, mock } from 'bun:test';
 
 import type * as SolidarityQrPayloadModule from '../../src/cards/solidarityQrPayload';
 import type * as QrEnvelopeModule from '../../src/cards/qrEnvelope';
@@ -61,6 +61,7 @@ beforeAll(async () => {
   }));
   await mock.module('@/zk/issuerProof', () => ({
     generateIssuerProof: async () => null,
+    isKnownGroupRoot: async () => false,
     buildShareScope: (selected: readonly string[]) => {
       const set = new Set<string>(selected);
       set.add('name');
@@ -255,6 +256,7 @@ function signTestVcJwt(args: {
   readonly sub: string;
   readonly cardId: string;
   readonly name: string;
+  readonly subscription?: Record<string, unknown>;
 }): { readonly jwt: string; readonly publicKeyJwk: PublicKeyJWK } {
   const { privateKey, publicKey } = generateP256KeyPair();
   const jwk = publicKeyToJwk(publicKey);
@@ -278,6 +280,7 @@ function signTestVcJwt(args: {
           businessCardId: args.cardId,
           publicKeyJwk: jwk,
         },
+        ...(args.subscription ? { subscription: args.subscription } : {}),
         name: args.name,
         businessCardId: args.cardId,
         publicKeyJwk: jwk,
@@ -287,3 +290,375 @@ function signTestVcJwt(args: {
   const jwt = signJwtEs256({ alg: 'ES256' }, payload, privateKey);
   return { jwt, publicKeyJwk: jwk };
 }
+
+// ── issuerProof wire: anonymity + shape + envelope binding ─────────────────
+//
+// Guards two hard-won properties:
+//   1. Anonymity (lists-anonymity audit 2026-08-18 §5): the sender's
+//      Semaphore commitment must NEVER appear in the shared payload — a
+//      commitment beside a roster identifies the presenter. The audit asks
+//      for a test holding this line, not just a code comment.
+//   2. Wire shape + binding: the wire carries the FULL SemaphoreProof
+//      envelope; the scanner accepts it (and the legacy inner-JSON shape)
+//      and only lets a proof verify when its scope/signal bind to THIS
+//      envelope's scope/shareId.
+
+describe('handleScannedPayload — zkProof envelope with issuerProof', () => {
+  // Must equal buildShareScopeInline(selectedFields) for makeCard() at the
+  // 'professional' level (this file's professionalFields, minus profileImage,
+  // plus the always-present 'name', sorted).
+  const PROOF_SCOPE = 'fields:company,email,name,phone,title';
+  const INNER_PROOF_JSON = JSON.stringify({
+    merkle_tree_depth: 16,
+    merkle_tree_root: '222',
+    nullifier: '111',
+    message: 'inner-message',
+    scope: 'inner-scope',
+    points: [],
+  });
+  const receivedProofs: { proofJson?: unknown }[] = [];
+
+  function fullProofJson(overrides: Record<string, unknown> = {}): string {
+    return JSON.stringify({
+      nullifier: '111',
+      merkleRoot: '222',
+      scope: PROOF_SCOPE,
+      signal: SHARE_ID,
+      proofJson: INNER_PROOF_JSON,
+      merkleTreeDepth: 16,
+      ...overrides,
+    });
+  }
+
+  async function setIssuerProofMock(proofWire: string | null): Promise<void> {
+    await mock.module('@/zk/issuerProof', () => ({
+      generateIssuerProof: async () =>
+        proofWire === null ? null : { proof: proofWire },
+      // Provenance oracle for these tests: only merkleRoot '222' names a
+      // group "this device" holds (05-spec §6-8).
+      isKnownGroupRoot: async (root: string) => root === '222',
+      buildShareScope: (selected: readonly string[]) => {
+        const set = new Set<string>(selected);
+        set.add('name');
+        return `fields:${[...set].sort().join(',')}`;
+      },
+    }));
+  }
+
+  async function buildIssuerEnvelopeWire(proofWire: string): Promise<string> {
+    await setIssuerProofMock(proofWire);
+    const envelope = await payloadMod.buildZKEnvelope(makeCard(), {
+      now: NOW,
+      shareId: SHARE_ID,
+      sharingLevel: 'professional',
+    });
+    return envelopeMod.encodeEnvelopeToWire(envelope).wire;
+  }
+
+  beforeAll(async () => {
+    // Export-complete mock (A5.3 lesson: partial module mocks poison
+    // real-import files later in the same run).
+    await mock.module('@/zk/groupManager', () => ({
+      canonicalCommitments: (commitments: readonly string[]) => {
+        const set = new Set<string>();
+        for (const c of commitments) {
+          const t = c.trim();
+          if (t.length > 0) set.add(t);
+        }
+        return [...set].sort();
+      },
+      recomputeRoot: async () => null,
+      leafIndex: () => null,
+      generateGroupProof: async () => {
+        throw new Error('test: generateGroupProof not used by scanner');
+      },
+      verifyGroupProof: async (proof: { proofJson?: unknown }) => {
+        receivedProofs.push(proof);
+        return typeof proof.proofJson === 'string' && proof.proofJson.length > 0;
+      },
+    }));
+  });
+
+  afterAll(async () => {
+    // Restore the file-level null mock so later suites see the same state.
+    await setIssuerProofMock(null);
+  });
+
+  it('never puts the sender commitment into the shared payload', async () => {
+    await setIssuerProofMock(fullProofJson());
+    const envelope = await payloadMod.buildZKEnvelope(makeCard(), {
+      now: NOW,
+      shareId: SHARE_ID,
+      sharingLevel: 'professional',
+    });
+    const decrypted = (await envelopeMod.decryptZKPayload(
+      envelope as Parameters<typeof envelopeMod.decryptZKPayload>[0]
+    )) as Record<string, unknown> | null;
+    expect(decrypted).not.toBeNull();
+    expect(typeof decrypted?.['issuerProof']).toBe('string');
+    expect(Object.keys(decrypted ?? {})).not.toContain('issuerCommitment');
+    expect(JSON.stringify(decrypted)).not.toContain('issuerCommitment');
+  });
+
+  it('verifies a full-envelope proof whose INNER root this device holds', async () => {
+    const wire = await buildIssuerEnvelopeWire(fullProofJson());
+    receivedProofs.length = 0;
+    const outcome = await handlerMod.handleScannedPayload(wire);
+    expect(outcome.kind).toBe('card');
+    expect(outcome.verificationStatus).toBe('Verified');
+    expect(receivedProofs.length).toBe(1);
+    expect(receivedProofs[0]?.proofJson).toBe(INNER_PROOF_JSON);
+  });
+
+  it('does NOT trust a spoofed outer merkleRoot — provenance reads the verified inner root', async () => {
+    // The wire's outer merkleRoot claims a group we hold ('222'), but the
+    // SNARK actually committed to a root we do NOT hold ('999'). This is the
+    // exact forgery the §6-8 check exists to stop: a valid proof over an
+    // attacker's own group dressed up with a known outer root.
+    const forgedInner = JSON.stringify({
+      merkle_tree_depth: 16,
+      merkle_tree_root: '999',
+      nullifier: '111',
+      message: 'inner-message',
+      scope: 'inner-scope',
+      points: [],
+    });
+    const wire = await buildIssuerEnvelopeWire(
+      fullProofJson({ merkleRoot: '222', proofJson: forgedInner })
+    );
+    const outcome = await handlerMod.handleScannedPayload(wire);
+    expect(outcome.kind).toBe('card');
+    // Crypto-valid but the real (inner) root is unknown → cannot check.
+    expect(outcome.verificationStatus).toBe('Unverified');
+  });
+
+  it('accepts the legacy inner-JSON wire (root read from the same JSON)', async () => {
+    const wire = await buildIssuerEnvelopeWire(INNER_PROOF_JSON);
+    receivedProofs.length = 0;
+    const outcome = await handlerMod.handleScannedPayload(wire);
+    expect(outcome.kind).toBe('card');
+    expect(outcome.verificationStatus).toBe('Verified');
+    expect(receivedProofs.length).toBe(1);
+    // The wrapper hands the RAW wire string to the native verifier.
+    expect(receivedProofs[0]?.proofJson).toBe(INNER_PROOF_JSON);
+  });
+});
+
+// ── issuerProof root provenance (05-spec §6-8, 2026-08-25) ─────────────────
+
+describe('handleScannedPayload — issuerProof root provenance', () => {
+  // Provenance now reads the INNER root (the only bytes the SNARK commits
+  // to), so these vary `merkle_tree_root` inside proofJson, NOT the outer
+  // wire field. isKnownGroupRoot('222')=true in scanWithIssuer's mock.
+  function innerJson(merkleTreeRoot: string): string {
+    return JSON.stringify({
+      merkle_tree_depth: 16,
+      merkle_tree_root: merkleTreeRoot,
+      nullifier: '111',
+      message: 'inner-message',
+      scope: 'inner-scope',
+      points: [],
+    });
+  }
+
+  function proofJson(innerRoot: string): string {
+    return JSON.stringify({
+      nullifier: '111',
+      // Outer merkleRoot deliberately says '222' (a known root) in every
+      // case — it must NOT influence the decision; only the inner does.
+      merkleRoot: '222',
+      scope: 'fields:company,email,name,phone,title',
+      signal: SHARE_ID,
+      proofJson: innerJson(innerRoot),
+      merkleTreeDepth: 16,
+    });
+  }
+
+  async function scanWithIssuer(
+    proofWire: string | null,
+    proofClaims?: readonly string[]
+  ): Promise<ReturnType<typeof handlerMod.handleScannedPayload>> {
+    await mock.module('@/zk/issuerProof', () => ({
+      generateIssuerProof: async () => (proofWire === null ? null : { proof: proofWire }),
+      isKnownGroupRoot: async (root: string) => root === '222',
+      buildShareScope: (selected: readonly string[]) => {
+        const set = new Set<string>(selected);
+        set.add('name');
+        return `fields:${[...set].sort().join(',')}`;
+      },
+    }));
+    const envelope = await payloadMod.buildZKEnvelope(makeCard(), {
+      now: NOW,
+      shareId: SHARE_ID,
+      sharingLevel: 'professional',
+      ...(proofClaims ? { proofClaims } : {}),
+    });
+    const { wire } = envelopeMod.encodeEnvelopeToWire(envelope);
+    return handlerMod.handleScannedPayload(wire);
+  }
+
+  it('crypto-valid proof with an UNKNOWN inner root is Unverified — cannot check is not a lie', async () => {
+    const outcome = await scanWithIssuer(proofJson('999'));
+    expect(outcome.kind).toBe('card');
+    expect(outcome.verificationStatus).toBe('Unverified');
+  });
+
+  it('crypto-valid proof with a KNOWN inner root is Verified', async () => {
+    const outcome = await scanWithIssuer(proofJson('222'));
+    expect(outcome.verificationStatus).toBe('Verified');
+  });
+
+  it('an is_human claim over an unknown inner root is Unverified, never granted', async () => {
+    const outcome = await scanWithIssuer(proofJson('999'), ['is_human']);
+    expect(outcome.verificationStatus).toBe('Unverified');
+  });
+
+  it('an is_human claim over a known inner root is Verified', async () => {
+    const outcome = await scanWithIssuer(proofJson('222'), ['is_human']);
+    expect(outcome.verificationStatus).toBe('Verified');
+  });
+
+  // Our own emitter's `filteredProofClaims` strips claims with no backing
+  // proof, so these malicious combinations can only arrive hand-crafted.
+  // Forge the encrypted zkProof payload directly to exercise the
+  // receive-side guard for exactly that adversary. Seal through the real
+  // `encryptJson` (not the literal FIXED_MASTER_KEY) so the ciphertext is
+  // always decryptable by `decryptJson` regardless of which master-key mock
+  // is active across the full run (many suites mock getMasterKey).
+  async function forgeZkEnvelope(sharingPayload: Record<string, unknown>): Promise<string> {
+    const { encryptJson } = await import('@/storage/encryptionManager');
+    const ciphertext = await encryptJson(sharingPayload);
+    return JSON.stringify({
+      version: 2,
+      format: 'zkProof',
+      sharingLevel: 'professional',
+      selectedFields: ['name'],
+      shareId: SHARE_ID,
+      encryptedPayload: ciphertext,
+    });
+  }
+
+  function baseSharingPayload(extra: Record<string, unknown>): Record<string, unknown> {
+    return {
+      businessCard: {
+        cardId: CARD_ID,
+        name: 'Mallory',
+        nameType: 'display_name',
+        emails: [],
+        phones: [],
+        skills: [],
+        socialProfiles: [],
+        categories: [],
+        updatedAt: '2026-05-24T00:00:00Z',
+      },
+      sharingLevel: 'professional',
+      selectedFields: ['name'],
+      scope: 'fields:name',
+      expirationDate: '2030-01-01T00:00:00Z',
+      shareId: SHARE_ID,
+      createdAt: '2026-05-24T00:00:00Z',
+      format: 'zkProof',
+      ...extra,
+    };
+  }
+
+  it('an is_human claim with NO issuer proof at all is Failed (a lie, not cannot-check)', async () => {
+    await mock.module('@/zk/issuerProof', () => ({
+      generateIssuerProof: async () => null,
+      isKnownGroupRoot: async () => false,
+      buildShareScope: () => 'fields:name',
+    }));
+    const wire = await forgeZkEnvelope(baseSharingPayload({ proofClaims: ['is_human'] }));
+    const outcome = await handlerMod.handleScannedPayload(wire);
+    expect(outcome.kind).toBe('card');
+    expect(outcome.verificationStatus).toBe('Failed');
+  });
+
+  it('evaluates age_over_18 failure before downgrading is_human to Unverified', async () => {
+    await mock.module('@/zk/issuerProof', () => ({
+      generateIssuerProof: async () => null,
+      isKnownGroupRoot: async (root: string) => root === '222',
+      buildShareScope: () => 'fields:name',
+    }));
+    // is_human backed by a crypto-valid proof over an UNKNOWN inner root
+    // (would be Unverified alone) PLUS age_over_18 with no sd proof (an
+    // outright Failed). The unambiguous Failed must win.
+    const wire = await forgeZkEnvelope(
+      baseSharingPayload({ proofClaims: ['is_human', 'age_over_18'], issuerProof: proofJson('999') })
+    );
+    const outcome = await handlerMod.handleScannedPayload(wire);
+    expect(outcome.verificationStatus).toBe('Failed');
+  });
+});
+
+// ── nostr subscription pointer in signed card claims (05-spec §3 v1.1) ─────
+
+describe('handleScannedPayload — nostr subscription pointer', () => {
+  const NPUB = 'npub1qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqql6verd';
+
+  it('surfaces the pointer from a signature-valid JWT, sanitizing relays', async () => {
+    const { jwt } = signTestVcJwt({
+      iss: DID,
+      sub: DID,
+      cardId: CARD_ID,
+      name: 'Ada Lovelace',
+      subscription: {
+        nostr: {
+          npub: NPUB,
+          relays: [
+            'wss://relay.damus.io',
+            'https://not-wss.example',
+            'wss://relay.damus.io',
+            'ftp://nope',
+            'wss://nos.lol',
+          ],
+        },
+      },
+    });
+    const outcome = await handlerMod.handleScannedPayload(jwt);
+    expect(outcome.kind).toBe('card');
+    expect(outcome.verificationStatus).toBe('Verified');
+    expect(outcome.nostrPointer).toEqual({
+      npub: NPUB,
+      relays: ['wss://relay.damus.io', 'wss://nos.lol'],
+    });
+  });
+
+  it('never surfaces a pointer from an unverifiable JWT', async () => {
+    // Build a signed JWT, then break the signature by swapping one payload
+    // byte-equivalent: easiest honest path — sign, then tamper the sub in a
+    // re-encoded copy is complex; instead craft a JWT with NO embedded key
+    // (extractPublicKeyJwk finds nothing → Unverified).
+    const { jwt } = signTestVcJwt({
+      iss: DID,
+      sub: DID,
+      cardId: CARD_ID,
+      name: 'Ada Lovelace',
+      subscription: { nostr: { npub: NPUB, relays: [] } },
+    });
+    // Strip the embedded jwk by rebuilding the payload without it.
+    const [h, p] = jwt.split('.');
+    const decoded = JSON.parse(Buffer.from(p!, 'base64url').toString()) as Record<string, unknown>;
+    const vc = decoded['vc'] as { credentialSubject: Record<string, unknown> };
+    delete vc.credentialSubject['publicKeyJwk'];
+    delete (vc.credentialSubject['subject_core'] as Record<string, unknown>)['publicKeyJwk'];
+    const tampered = `${h}.${Buffer.from(JSON.stringify(decoded)).toString('base64url')}.sig`;
+    const outcome = await handlerMod.handleScannedPayload(tampered);
+    expect(outcome.kind).toBe('card');
+    expect(outcome.verificationStatus).toBe('Unverified');
+    expect(outcome.nostrPointer).toBeUndefined();
+  });
+
+  it('rejects a malformed npub in the claim', async () => {
+    const { jwt } = signTestVcJwt({
+      iss: DID,
+      sub: DID,
+      cardId: CARD_ID,
+      name: 'Ada Lovelace',
+      subscription: { nostr: { npub: 'npub1UPPERCASE-INVALID', relays: [] } },
+    });
+    const outcome = await handlerMod.handleScannedPayload(jwt);
+    expect(outcome.verificationStatus).toBe('Verified');
+    expect(outcome.nostrPointer).toBeUndefined();
+  });
+});

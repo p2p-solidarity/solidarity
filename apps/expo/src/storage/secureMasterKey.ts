@@ -68,7 +68,7 @@ async function readKey(alias: string): Promise<Uint8Array | null> {
 
 async function readRawLegacyKey(service: string, account: string): Promise<Uint8Array | null> {
   try {
-    const { getSecretsVault } = await import('@solidarity/nitro-secrets-vault');
+    const { getSecretsVault } = await import('@solidarity/nitro-keystone');
     const raw = await getSecretsVault().readRawKeychainGenericPassword(service, account);
     if (!raw) return null;
     const bytes = new Uint8Array(raw);

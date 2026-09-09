@@ -18,11 +18,11 @@ import { safeBack } from '@/navigation/safeBack';
 import { useState, type ReactNode } from 'react';
 import {
   Pressable,
-  ScrollView,
   Text,
   TextInput,
   View,
 } from 'react-native';
+import { KeyboardAwareScrollView } from 'react-native-keyboard-controller';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { SfIcon } from '@/components/icons/SfIcon';
@@ -105,8 +105,10 @@ export default function ShoutoutCompose(): ReactNode {
       <SettingsBackToolbar title="Close" onPress={() => { safeBack(); }} />
       <SettingsScreenTitle title="P2P Message" />
 
-      <ScrollView
-        className="flex-1"
+      <KeyboardAwareScrollView
+        style={{ flex: 1 }}
+        keyboardShouldPersistTaps="handled"
+        bottomOffset={16}
         contentContainerStyle={{ padding: 24, paddingBottom: 60 + insets.bottom, gap: 24 }}
       >
         <View
@@ -288,7 +290,7 @@ export default function ShoutoutCompose(): ReactNode {
             onPress={() => void onTransmit()}
           />
         </View>
-      </ScrollView>
+      </KeyboardAwareScrollView>
 
       <ShoutoutUserPicker
         visible={showingPicker}

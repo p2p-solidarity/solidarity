@@ -13,7 +13,11 @@ import { PressableScale } from '@/components/common/PressableScale';
 import { ThemedButton, ThemedSurface, ThemedText } from '@/components/themed';
 import { Colors } from '@/constants/Colors';
 import { useTranslation } from '@/i18n';
-import { LINK_VISIBILITIES, type LinkVisibility, type VisibilitySummary } from '@/profile/projection';
+import {
+  LINK_VISIBILITIES,
+  type LinkVisibility,
+  type VisibilitySummary,
+} from '@/profile/projection';
 
 /** i18n keys per visibility tier — literal so the catalog test resolves them. */
 const VISIBILITY_LABEL_KEYS: Record<LinkVisibility, string> = {
@@ -51,7 +55,9 @@ export function LinkVisibilityControl({
             <PressableScale
               key={visibility}
               haptic="tap"
-              onPress={() => { onSelect(visibility); }}
+              onPress={() => {
+                onSelect(visibility);
+              }}
               accessibilityRole="button"
               accessibilityState={{ selected: active }}
               accessibilityLabel={label}
@@ -116,7 +122,7 @@ export function PublishPreviewSheet({
             .withInitialValues({ opacity: 0, transform: [{ scale: 0.97 }] })}>
           <ThemedSurface
             variant="elevated"
-            className="gap-4 rounded-none px-4 pt-5"
+            className="gap-4 rounded-t-2xl px-4 pt-5"
             style={{ paddingBottom: Math.max(insets.bottom, 16) }}>
             <View className="gap-1">
               <ThemedText variant="titleLarge">{t('meEdit.preview.title')}</ThemedText>
@@ -129,7 +135,10 @@ export function PublishPreviewSheet({
               <ThemedText variant="bodyMedium">
                 {summary.public === 0
                   ? t('meEdit.preview.nonePublic')
-                  : t('meEdit.preview.publicCount', { count: summary.public, total: summary.total })}
+                  : t('meEdit.preview.publicCount', {
+                      count: summary.public,
+                      total: summary.total,
+                    })}
               </ThemedText>
               {publicLabels.length > 0 ? (
                 <ThemedText variant="caption" tone="secondary">
@@ -149,7 +158,9 @@ export function PublishPreviewSheet({
             </ThemedSurface>
 
             <ThemedButton
-              label={t(willPublish ? 'meEdit.preview.confirmPublish' : 'meEdit.preview.confirmSave')}
+              label={t(
+                willPublish ? 'meEdit.preview.confirmPublish' : 'meEdit.preview.confirmSave'
+              )}
               variant="primary"
               fullWidth
               haptic="success"
