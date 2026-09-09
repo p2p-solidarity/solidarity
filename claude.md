@@ -5,7 +5,7 @@
 ## Where truth lives (read in this order)
 
 1. `apps/expo/CLAUDE.md` — the coding rulebook. Mandatory before editing anything under `apps/expo/`.
-2. `docs/ref/06-plan-convergence-2.0.0.md` — the **only live plan** (2.0.0 north star, Q1–Q6 decisions, old-feature keep/cut, execution plan). `.superpowers/sdd/progress.md` — review ledger (records real security bugs already caught — read before touching security code).
+2. `docs/ref/06-plan-convergence-2.0.0.md` — the live **batch** plan (2.0.0 north star, Q1–Q6 decisions, old-feature keep/cut, execution plan) and `docs/ref/07-plan-web-standalone.md` — the live **web-standalone** plan (P1–P3 decisions: passkey = PRF shell around the seed, builder only on creds.id, websign ungated into the Page flow; phases 1–3). `.superpowers/sdd/progress.md` — review ledger (records real security bugs already caught — read before touching security code).
 3. `docs/ref/01–05` — spec reference, not plans: 01+03 = 1.3.3 "Verified Page" product spec (§6 of 03 is the kept/evolved/frozen/deleted table); 05 = QR/exchange wire SSOT (06 defers to it). 04 is the superseded 1.3.3 plan — history only.
 4. **STALE — do not trust**: `README.md`, `spec.md`, `architecture.png` describe the deleted SwiftUI app and pre-pivot architecture (MultipeerConnectivity and CloudKit group sync are deleted; Semaphore/ZK groups frozen). Deleted pre-2.0.0 plans/specs are distilled in `docs/ref/notes-archive-pre-2.0.0.md`.
 

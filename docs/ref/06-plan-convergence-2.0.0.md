@@ -41,7 +41,7 @@
 | **sakura ＋ shoutouts** | **砍（含 push rail）** | Shoutouts 收件匣＝違反「不做收件匣」。依賴盤點（grep 已核）：leave-a-card **不依賴** sakura（顧慮解除）；`pushRegistration` 被 onboarding/boot/notifications 用著，但**唯一用途是喚醒 app 收 Shoutouts**，CREDS §18 通知是裝置端自產、v1 不經伺服器 push（mock F8：真 APNs 選配未來）→ **push rail 一起砍**。動到 `app/_layout.tsx:68-69`、`onboarding/steps/ReadyStep.tsx:11`、`app/settings/notifications.tsx:36`、`settings/productionWipe.ts:42-45`。 |
 | **dag** | **砍沙盒、搬 2 檔** | 生產命脈靠 `dag/nostrAdapter.ts`＋`dag/node.ts`（`nostr/publish:63`、`fetchKind0:19`、`resolveProfile:28`、`userKey:67-68` → Q2＋整條 §3.3）。**刀口＝把 `nostrAdapter`＋`node` 搬進 `src/nostr/`，刪其餘 8 檔沙盒**（`devKey/instance/replay/store/storeMmkv/sync/webrtc/wire`）＋`components/sandbox/DagGraph3D`＋dev 路由。 |
 | **wallet-pass** | **先留（休眠）** | map 建議 CUT（`/cards` 本身也無入口、`solidarity://contact` round-trip 斷），但你裁「先留」——現在看不出合理性但需要。當休眠碼；入口問題落「17 無入口路由這次不裁」。 |
-| **websign** | **留（dev-gated）** | 核心（app.solidarity.gg 真 builder 用手機 root 簽名靠它，跟 Q6 憑證/發證同線），creds 只是沒提。triple-gated developerMode（`scan/index.tsx:116`）。 |
+| **websign** | **留；2026-09-09 解除 dev gate（07-plan P3）** | 核心（creds.id 真 builder 用手機 root 簽名靠它，跟 Q6 憑證/發證同線），creds 只是沒提。原裁「triple-gated developerMode」被 `07-plan-web-standalone.md` P3 推翻：進 Page 流程，安全邊界是 review 畫面的逐欄 diff＋Face ID，不是開發者開關。 |
 | **airdrop / offline/manager.ts** | **砍** | 零 caller（airdrop：QR-only 交換裁決；offline：自承未接線）。 |
 | **17 無入口路由** | **這次不裁** | 子系統去留照裁，但「哪條路由補入口/刪」整批延後（含 `/vault`、`/cards` 之後要不要開入口）。 |
 | **groups/zk/semaphore（清單引擎）** | **凍結** | Lists defer 已定，不刪。 |

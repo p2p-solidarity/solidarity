@@ -50,7 +50,7 @@
 | 名片限定欄位以 **NIP-44** 加密給收件人 | **可選 lane（2026-08-25 裁決）**——Pear lane 留任私密通道；全 repo 目前零 NIP-44 | 唯一近親是 Sakura 的 X25519 ECIES（不同曲線、不同子系統）與 zkProof 的同鑰 AES-GCM（同帳號模型，不是收件人加密） |
 | 交換單向 QR、換手再掃 | ✅ 形狀已符 | §2 |
 
-**基座已就緒的部分**（做 §3.3 時直接沿用）：Nostr publish key（`nostr/userKey.ts`，root mnemonic HKDF 派生或 nsec 匯入）、relay 集（`DEFAULT_RELAYS = damus/nos.lol/primal`，app 與 web **逐字元一致**）、kind 0 `alsoKnownAs` 合併（不覆寫他人欄位）、NIP-05 註冊（`solidarity.gg/id/*`，NIP-98 簽頭）、事件驗證信任邊界（`dag/nostrAdapter.verifyNostrEvent`）。
+**基座已就緒的部分**（做 §3.3 時直接沿用）：Nostr publish key（`nostr/userKey.ts`，root mnemonic HKDF 派生或 nsec 匯入）、relay 集（`DEFAULT_RELAYS = damus/nos.lol/primal`，app 與 web **逐字元一致**）、kind 0 `alsoKnownAs` 合併（不覆寫他人欄位）、NIP-05 註冊（`creds.id/id/*`，NIP-98 簽頭；**2026-09-09 目錄上線**：獨立 worker `solidarity-id` 掛在 creds.id，識別字 `name@creds.id`，`NIP05_DOMAIN`／`NIP05_SERVICE_ORIGIN` 同步改 creds.id）、事件驗證信任邊界（`dag/nostrAdapter.verifyNostrEvent`）。
 
 **裁決（2026-08-25，使用者）**：**Pear lane 留任私密欄位／完整名片通道；NIP-44 改為「可選的後續 lane」**（不是必要路徑、不擋任何工）。§3.3 的公開面訂閱層因此解鎖。
 
@@ -86,11 +86,11 @@
 
 ## 5. Web 表面（airmeishi-web）
 
-**現況**：真 SPA（Vite＋React＋TanStack Router），**不是** static mock。三條路由：`/`（landing＋`#fragment`／`#nostr:npub`／`#did:key`）、`/edit`（builder＋webSign）、`/$handle`（`/@handle` viewer）。解析鏈與 app 同源：NIP-78 HEAD＋反向綁定、atproto 雙向、dns/ens/nip05 反替換檢查、presence-only disclosure badge —— 全部無假綠。web 產生的 QR 只有 webSign request（裸 JWS）與 `/@handle` 分享連結；**web 沒有任何掃描（相機）能力**，回應通道是 Nostr 輪詢或貼上。
+**現況**：真 SPA（Vite＋React＋TanStack Router），**不是** static mock。三條路由：`/`（landing＋`#fragment`／`#nostr:npub`／`#did:key`）、`/edit`（builder＋webSign）、`/$handle`（`/@handle` viewer）。解析鏈與 app 同源：NIP-78 HEAD＋反向綁定、atproto 雙向、dns/ens/nip05 反替換檢查、presence-only disclosure badge —— 全部無假綠。web 產生的 QR 只有 webSign request 與 `/@handle` 分享連結；webSign request **自 2026-09-09 起包成 `https://<product-host>/websign#req=<encodeFragment(jws)>`**（非 product host 退回 `solidarity://websign?req=`），因為 app 的 `classifyWebSignScan` 刻意不收裸 JWS（避免與名片 JWT 相撞）；**web 沒有任何掃描（相機）能力**，回應通道是 Nostr 輪詢或貼上。
 
 **creds 設計要求但完全不存在的 web 路由**：`/p/<id>`（匿名證明驗證頁，核心）、`/list/<id>`（語意錨點）、`/poll/<id>`（瀏覽器投票）、`/join/<code>`（mock 有、CREDS.md §2.2 表漏列）、`/c/<code>`（金屬卡解析）。前三條屬清單線（引擎凍結中）；`/c/<code>` 見 §8-B。
 
-**vendored shared 同步規則（本輪已修的 drift 根因）**：web 以 `vendor/solidarity-shared-1.3.3.tgz` 建置（CF Pages 只 clone web repo）。2026-08-24 的 `d08de91`「vendor 刷新」打包自 08-19 之前的舊 checkout —— **整個 CRD1 codec（crd1/base45/cbor.ts）缺失**＋`handles/nip05.ts` 少了 `redirectExpired()` 安全修正。已於本日以 `2.0.0` HEAD 重打包並強制清快取重裝（106 tests 全綠）。規則：
+**vendored shared 同步規則（本輪已修的 drift 根因）**：web 以 `vendor/solidarity-shared-<version>.tgz` 建置（CF Pages 只 clone web repo；2026-09-09 起為 `solidarity-shared-2.0.0.tgz`，換版號＝換檔名，自然繞開下述快取陷阱）。2026-08-24 的 `d08de91`「vendor 刷新」打包自 08-19 之前的舊 checkout —— **整個 CRD1 codec（crd1/base45/cbor.ts）缺失**＋`handles/nip05.ts` 少了 `redirectExpired()` 安全修正。已於本日以 `2.0.0` HEAD 重打包並強制清快取重裝（106 tests 全綠）。規則：
 1. 每次 `packages/shared` 變更後照 `vendor/README.md` 重打包；
 2. **同版本重打包必須 `rm -rf node_modules && bun pm cache rm` 再裝**（bun 以版本鍵快取 tgz，檔案變了快取不變）；
 3. 驗收：`tar -tzf` 比對 `src/` 檔案清單＋跑 web 測試。長期解是打包時把 git SHA 寫進 tgz 檔名或 CI 比對 shasum。
