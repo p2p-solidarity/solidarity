@@ -9,6 +9,7 @@
 
 // Include C++ implementation defined types
 #include "HybridCloudKitSpecSwift.hpp"
+#include "HybridPasskeyPrfSpecSwift.hpp"
 #include "HybridSecretsVaultSpecSwift.hpp"
 #include "HybridSpruceDidSpecSwift.hpp"
 #include "Keystone-Swift-Cxx-Umbrella.hpp"
@@ -117,6 +118,30 @@ namespace margelo::nitro::solidarity::keystone::bridge::swift {
     }
     #endif
     Keystone::HybridCloudKitSpec_cxx& swiftPart = swiftWrapper->getSwiftPart();
+    return swiftPart.toUnsafe();
+  }
+  
+  // pragma MARK: std::function<void(const PasskeyPrfResult& /* result */)>
+  Func_void_PasskeyPrfResult create_Func_void_PasskeyPrfResult(void* NON_NULL swiftClosureWrapper) noexcept {
+    auto swiftClosure = Keystone::Func_void_PasskeyPrfResult::fromUnsafe(swiftClosureWrapper);
+    return [swiftClosure = std::move(swiftClosure)](const PasskeyPrfResult& result) mutable -> void {
+      swiftClosure.call(result);
+    };
+  }
+  
+  // pragma MARK: std::shared_ptr<HybridPasskeyPrfSpec>
+  std::shared_ptr<HybridPasskeyPrfSpec> create_std__shared_ptr_HybridPasskeyPrfSpec_(void* NON_NULL swiftUnsafePointer) noexcept {
+    Keystone::HybridPasskeyPrfSpec_cxx swiftPart = Keystone::HybridPasskeyPrfSpec_cxx::fromUnsafe(swiftUnsafePointer);
+    return std::make_shared<margelo::nitro::solidarity::keystone::HybridPasskeyPrfSpecSwift>(swiftPart);
+  }
+  void* NON_NULL get_std__shared_ptr_HybridPasskeyPrfSpec_(std__shared_ptr_HybridPasskeyPrfSpec_ cppType) {
+    std::shared_ptr<margelo::nitro::solidarity::keystone::HybridPasskeyPrfSpecSwift> swiftWrapper = std::dynamic_pointer_cast<margelo::nitro::solidarity::keystone::HybridPasskeyPrfSpecSwift>(cppType);
+    #ifdef NITRO_DEBUG
+    if (swiftWrapper == nullptr) [[unlikely]] {
+      throw std::runtime_error("Class \"HybridPasskeyPrfSpec\" is not implemented in Swift!");
+    }
+    #endif
+    Keystone::HybridPasskeyPrfSpec_cxx& swiftPart = swiftWrapper->getSwiftPart();
     return swiftPart.toUnsafe();
   }
   

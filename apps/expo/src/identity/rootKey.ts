@@ -508,6 +508,26 @@ export async function revealMnemonicForExport(): Promise<Result<string, RootKeyE
 }
 
 /**
+ * Internal passkey-enrolment read. Unlike export, this does not show or hand
+ * the phrase to UI: the caller immediately seals it with a PRF output from a
+ * system passkey ceremony that requires user verification. Keep this out of
+ * the production identity barrel so ordinary feature code cannot treat it as
+ * a general-purpose secret accessor.
+ */
+export async function readMnemonicForPasskeyConnection(): Promise<
+  Result<string, RootKeyError>
+> {
+  let mnemonic: string | null;
+  try {
+    mnemonic = await activeStorage.getMnemonic();
+  } catch (e) {
+    return err(toStorageError(e));
+  }
+  if (!mnemonic) return err({ kind: 'notProvisioned' });
+  return ok(mnemonic);
+}
+
+/**
  * iCloud Keychain backup (task A1.5): copy the ALREADY-PROVISIONED local
  * mnemonic into a synchronizable Keychain item via `secrets-vault`'s
  * `setSynchronizableItem` (iOS: `kSecAttrSynchronizable=true`,

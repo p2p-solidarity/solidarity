@@ -20,6 +20,7 @@
 import { NitroModules } from 'react-native-nitro-modules';
 
 import type { CloudKit } from './specs/CloudKit.nitro';
+import type { PasskeyPrf } from './specs/PasskeyPrf.nitro';
 import type { SecretsVault } from './specs/SecretsVault.nitro';
 import type { SpruceDid } from './specs/SpruceDid.nitro';
 
@@ -45,6 +46,8 @@ export type {
   FileBackupDownloadStatus,
 } from './specs/CloudKit.nitro';
 
+export type { PasskeyPrf, PasskeyPrfResult } from './specs/PasskeyPrf.nitro';
+
 let cachedSecretsVault: SecretsVault | null = null;
 
 export function getSecretsVault(): SecretsVault {
@@ -67,4 +70,12 @@ export function getCloudKit(): CloudKit {
   if (cachedCloudKit) return cachedCloudKit;
   cachedCloudKit = NitroModules.createHybridObject<CloudKit>('CloudKit');
   return cachedCloudKit;
+}
+
+let cachedPasskeyPrf: PasskeyPrf | null = null;
+
+export function getPasskeyPrf(): PasskeyPrf {
+  if (cachedPasskeyPrf) return cachedPasskeyPrf;
+  cachedPasskeyPrf = NitroModules.createHybridObject<PasskeyPrf>('PasskeyPrf');
+  return cachedPasskeyPrf;
 }

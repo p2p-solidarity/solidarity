@@ -6,6 +6,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { MeProfileGate, MeProfilePage } from '@/components/me';
 import { useProfileStore } from '@/profile/store';
 import { preparePageDesign, usePageDesignStore } from '@/page/pageDesignStore';
+import { RootVaultConnectPrompt } from '@/components/me/RootVaultConnectPrompt';
 
 export default function MeTab() {
   const insets = useSafeAreaInsets();
@@ -49,6 +50,7 @@ export default function MeTab() {
 
   return (
     <View className="flex-1 bg-pageBg" style={{ paddingTop: insets.top }}>
+      <RootVaultConnectPrompt />
       {status === 'ready' && record && jws && shareRecord && shareJws ? (
         <MeProfilePage
           record={record}

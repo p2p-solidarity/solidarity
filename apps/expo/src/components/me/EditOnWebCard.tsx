@@ -1,47 +1,80 @@
-/**
- * EditOnWebCard — the Page tab's hand-off to the desktop editor (07-plan
- * 階段 2). Nothing new on the wire: the SAME share link the owner already
- * hands out opens the public viewer, whose「Edit this page」loads the signed
- * page into `creds.id/edit`; the edited draft comes back as a webSign QR the
- * scanner already understands (`websign/transport.ts`) and the review screen
- * root-signs after a per-field diff.
- *
- * States are exactly `ready` (a share URL exists) and `unavailable` (nothing
- * published or shareable yet) — never a placeholder link (Rule 8).
- */
-import * as Clipboard from 'expo-clipboard';
-import type { ReactNode } from 'react';
-import { Share, View } from 'react-native';
+import { useEffect, useState, type ReactNode } from 'react';
+import { Linking, View } from 'react-native';
 
 import { SfIcon } from '@/components/icons/SfIcon';
 import { ThemedButton, ThemedSurface, ThemedText } from '@/components/themed';
 import { Colors } from '@/constants/Colors';
+import { appAlert } from '@/feedback/appAlert';
 import { haptic } from '@/feedback/haptics';
-import { pushToast } from '@/feedback/toast';
 import { useTranslation } from '@/i18n';
+import {
+  connectStoredRootIdentityWithNativePasskey,
+  getStoredRootVaultIdentityBinding,
+} from '@/identity/rootVaultSync';
+import {
+  getRootVaultSyncState,
+  setRootVaultSyncState,
+} from '@/identity/rootVaultSyncState';
+
+const WEB_EDITOR_URL = 'https://creds.id/edit';
 
 export interface EditOnWebCardProps {
-  /** The owner's current share URL (fragment, short pointer, or `/@name`), or null while none exists. */
+  /** Kept so the Page model still controls whether public content exists. */
   readonly url: string | null;
 }
 
+/** One button: connect once if needed, then open the browser editor. */
 export function EditOnWebCard({ url }: EditOnWebCardProps): ReactNode {
   const { t } = useTranslation();
+  const [state, setState] = useState<'unknown' | 'connected' | 'deferred'>('unknown');
+  const [working, setWorking] = useState(false);
 
-  const onCopy = async (): Promise<void> => {
-    if (url === null) return;
-    await Clipboard.setStringAsync(url);
-    haptic('success');
-    pushToast(t('mePage.editOnWeb.copied'), 'success');
+  useEffect(() => {
+    let active = true;
+    void getStoredRootVaultIdentityBinding().then((binding) => {
+      if (active) setState(getRootVaultSyncState(binding ?? undefined));
+    });
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  const connect = async (openAfter: boolean): Promise<void> => {
+    if (working) return;
+    setWorking(true);
+    try {
+      const connected = await connectStoredRootIdentityWithNativePasskey();
+      if (!connected.ok) {
+        if (connected.error.kind !== 'cancelled') {
+          appAlert({
+            title: t('rootVault.failed.title'),
+            message: t('rootVault.failed.body'),
+          });
+        }
+        return;
+      }
+      setRootVaultSyncState('connected', connected.value);
+      setState('connected');
+      haptic('success');
+      if (openAfter) await Linking.openURL(WEB_EDITOR_URL);
+    } catch {
+      appAlert({
+        title: t('rootVault.failed.title'),
+        message: t('rootVault.failed.body'),
+      });
+    } finally {
+      setWorking(false);
+    }
   };
 
-  const onShare = async (): Promise<void> => {
-    if (url === null) return;
-    try {
-      await Share.share({ message: url, url });
-    } catch {
-      haptic('warning');
+  const open = async (): Promise<void> => {
+    if (working) return;
+    const binding = await getStoredRootVaultIdentityBinding();
+    if (getRootVaultSyncState(binding ?? undefined) !== 'connected') {
+      await connect(true);
+      return;
     }
+    await Linking.openURL(WEB_EDITOR_URL);
   };
 
   return (
@@ -52,31 +85,47 @@ export function EditOnWebCard({ url }: EditOnWebCardProps): ReactNode {
           <ThemedText variant="label">{t('mePage.editOnWeb.title')}</ThemedText>
         </View>
         <ThemedText variant="bodySmall" tone="secondary">
-          {url === null ? t('mePage.editOnWeb.unavailable') : t('mePage.editOnWeb.body')}
+          {state === 'connected'
+            ? t('mePage.editOnWeb.connectedBody')
+            : t('mePage.editOnWeb.connectBody')}
         </ThemedText>
         {url === null ? null : (
-          <>
-            <ThemedText variant="caption" tone="tertiary" selectable numberOfLines={1}>
-              {url}
-            </ThemedText>
-            <View style={{ flexDirection: 'row', gap: 8 }}>
-              <ThemedButton
-                label={t('mePage.editOnWeb.copy')}
-                variant="secondary"
-                size="md"
-                leadingIcon={<SfIcon name="doc.on.doc" size={14} color={Colors.text1} />}
-                onPress={() => { void onCopy(); }}
-              />
-              <ThemedButton
-                label={t('mePage.editOnWeb.share')}
-                variant="secondary"
-                size="md"
-                leadingIcon={<SfIcon name="square.and.arrow.up" size={14} color={Colors.text1} />}
-                onPress={() => { void onShare(); }}
-              />
-            </View>
-          </>
+          <ThemedText variant="caption" tone="tertiary" numberOfLines={1}>
+            {t('mePage.editOnWeb.publicReady')}
+          </ThemedText>
         )}
+        <ThemedButton
+          label={
+            working
+              ? t('mePage.editOnWeb.connecting')
+              : state === 'connected'
+                ? t('mePage.editOnWeb.open')
+                : t('mePage.editOnWeb.connect')
+          }
+          fullWidth
+          loading={working}
+          leadingIcon={
+            <SfIcon
+              name={state === 'connected' ? 'arrow.up.right' : 'faceid'}
+              size={15}
+              color={Colors.pageBg}
+            />
+          }
+          onPress={() => {
+            void open();
+          }}
+        />
+        {state === 'connected' ? (
+          <ThemedButton
+            label={t('mePage.editOnWeb.reconnect')}
+            variant="secondary"
+            fullWidth
+            disabled={working}
+            onPress={() => {
+              void connect(false);
+            }}
+          />
+        ) : null}
       </ThemedSurface>
     </View>
   );

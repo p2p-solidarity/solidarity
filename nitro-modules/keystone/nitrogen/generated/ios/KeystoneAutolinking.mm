@@ -13,6 +13,7 @@
 #include "HybridSecretsVaultSpecSwift.hpp"
 #include "HybridSpruceDidSpecSwift.hpp"
 #include "HybridCloudKitSpecSwift.hpp"
+#include "HybridPasskeyPrfSpecSwift.hpp"
 
 @interface KeystoneAutolinking : NSObject
 @end
@@ -41,6 +42,13 @@
     "CloudKit",
     []() -> std::shared_ptr<HybridObject> {
       std::shared_ptr<HybridCloudKitSpec> hybridObject = Keystone::KeystoneAutolinking::createCloudKit();
+      return hybridObject;
+    }
+  );
+  HybridObjectRegistry::registerHybridObjectConstructor(
+    "PasskeyPrf",
+    []() -> std::shared_ptr<HybridObject> {
+      std::shared_ptr<HybridPasskeyPrfSpec> hybridObject = Keystone::KeystoneAutolinking::createPasskeyPrf();
       return hybridObject;
     }
   );

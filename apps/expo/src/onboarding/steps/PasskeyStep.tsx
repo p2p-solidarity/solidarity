@@ -4,7 +4,7 @@ import { useState, type ReactNode } from 'react';
 import { SfIcon } from '@/components/icons/SfIcon';
 import { ThemedButton, ThemedSurface, ThemedText } from '@/components/themed';
 import { Colors } from '@/constants/Colors';
-import { showError } from '@/feedback/appAlert';
+import { appAlert, showError } from '@/feedback/appAlert';
 import { haptic } from '@/feedback/haptics';
 import { useTranslation } from '@/i18n';
 import {
@@ -13,6 +13,9 @@ import {
   hasRootKey,
   restoreRootKeyFromICloud,
 } from '@/identity';
+import { readMnemonicForPasskeyConnection } from '@/identity/rootKey';
+import { connectRootIdentityWithNativePasskey } from '@/identity/rootVaultSync';
+import { setRootVaultSyncState } from '@/identity/rootVaultSyncState';
 import { ensureSigningKey } from '@/keychain';
 import { usePreferences } from '@/settings/preferences';
 
@@ -54,6 +57,25 @@ export function PasskeyStep({
       }
 
       await ensureSigningKey();
+
+      const mnemonic = await readMnemonicForPasskeyConnection();
+      if (!mnemonic.ok) throw new Error(mnemonic.error.kind);
+      const connected = await connectRootIdentityWithNativePasskey({
+        mnemonic: mnemonic.value,
+        userName: 'Solidarity',
+      });
+      if (!connected.ok) {
+        setRootVaultSyncState('deferred');
+        if (connected.error.kind !== 'cancelled') {
+          appAlert({
+            title: t('ob.passkey.failed'),
+            message: t('ob.passkey.connectLater'),
+          });
+        }
+        onCreated();
+        return;
+      }
+      setRootVaultSyncState('connected', connected.value);
       haptic('success');
       onCreated();
     } catch (error) {

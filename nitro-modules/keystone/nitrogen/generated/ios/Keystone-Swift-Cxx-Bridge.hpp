@@ -26,10 +26,14 @@ namespace margelo::nitro::solidarity::keystone { struct FileBackupDownloadState;
 namespace margelo::nitro::solidarity::keystone { enum class FileBackupDownloadStatus; }
 // Forward declaration of `HybridCloudKitSpec` to properly resolve imports.
 namespace margelo::nitro::solidarity::keystone { class HybridCloudKitSpec; }
+// Forward declaration of `HybridPasskeyPrfSpec` to properly resolve imports.
+namespace margelo::nitro::solidarity::keystone { class HybridPasskeyPrfSpec; }
 // Forward declaration of `HybridSecretsVaultSpec` to properly resolve imports.
 namespace margelo::nitro::solidarity::keystone { class HybridSecretsVaultSpec; }
 // Forward declaration of `HybridSpruceDidSpec` to properly resolve imports.
 namespace margelo::nitro::solidarity::keystone { class HybridSpruceDidSpec; }
+// Forward declaration of `PasskeyPrfResult` to properly resolve imports.
+namespace margelo::nitro::solidarity::keystone { struct PasskeyPrfResult; }
 // Forward declaration of `SpruceDidEventKind` to properly resolve imports.
 namespace margelo::nitro::solidarity::keystone { enum class SpruceDidEventKind; }
 // Forward declaration of `SpruceDidEvent` to properly resolve imports.
@@ -40,6 +44,8 @@ namespace margelo::nitro::solidarity::keystone { struct WrappedSecret; }
 // Forward declarations of Swift defined types
 // Forward declaration of `HybridCloudKitSpec_cxx` to properly resolve imports.
 namespace Keystone { class HybridCloudKitSpec_cxx; }
+// Forward declaration of `HybridPasskeyPrfSpec_cxx` to properly resolve imports.
+namespace Keystone { class HybridPasskeyPrfSpec_cxx; }
 // Forward declaration of `HybridSecretsVaultSpec_cxx` to properly resolve imports.
 namespace Keystone { class HybridSecretsVaultSpec_cxx; }
 // Forward declaration of `HybridSpruceDidSpec_cxx` to properly resolve imports.
@@ -54,8 +60,10 @@ namespace Keystone { class HybridSpruceDidSpec_cxx; }
 #include "FileBackupDownloadState.hpp"
 #include "FileBackupDownloadStatus.hpp"
 #include "HybridCloudKitSpec.hpp"
+#include "HybridPasskeyPrfSpec.hpp"
 #include "HybridSecretsVaultSpec.hpp"
 #include "HybridSpruceDidSpec.hpp"
+#include "PasskeyPrfResult.hpp"
 #include "SpruceDidEvent.hpp"
 #include "SpruceDidEventKind.hpp"
 #include "WrappedSecret.hpp"
@@ -612,6 +620,61 @@ namespace margelo::nitro::solidarity::keystone::bridge::swift {
   }
   inline Result_std__shared_ptr_Promise_FileBackupDownloadState___ create_Result_std__shared_ptr_Promise_FileBackupDownloadState___(const std::exception_ptr& error) noexcept {
     return Result<std::shared_ptr<Promise<FileBackupDownloadState>>>::withError(error);
+  }
+  
+  // pragma MARK: std::shared_ptr<Promise<PasskeyPrfResult>>
+  /**
+   * Specialized version of `std::shared_ptr<Promise<PasskeyPrfResult>>`.
+   */
+  using std__shared_ptr_Promise_PasskeyPrfResult__ = std::shared_ptr<Promise<PasskeyPrfResult>>;
+  inline std::shared_ptr<Promise<PasskeyPrfResult>> create_std__shared_ptr_Promise_PasskeyPrfResult__() noexcept {
+    return Promise<PasskeyPrfResult>::create();
+  }
+  inline PromiseHolder<PasskeyPrfResult> wrap_std__shared_ptr_Promise_PasskeyPrfResult__(std::shared_ptr<Promise<PasskeyPrfResult>> promise) noexcept {
+    return PromiseHolder<PasskeyPrfResult>(std::move(promise));
+  }
+  
+  // pragma MARK: std::function<void(const PasskeyPrfResult& /* result */)>
+  /**
+   * Specialized version of `std::function<void(const PasskeyPrfResult&)>`.
+   */
+  using Func_void_PasskeyPrfResult = std::function<void(const PasskeyPrfResult& /* result */)>;
+  /**
+   * Wrapper class for a `std::function<void(const PasskeyPrfResult& / * result * /)>`, this can be used from Swift.
+   */
+  class Func_void_PasskeyPrfResult_Wrapper final {
+  public:
+    explicit Func_void_PasskeyPrfResult_Wrapper(std::function<void(const PasskeyPrfResult& /* result */)>&& func): _function(std::make_unique<std::function<void(const PasskeyPrfResult& /* result */)>>(std::move(func))) {}
+    inline void call(PasskeyPrfResult result) const noexcept {
+      _function->operator()(result);
+    }
+  private:
+    std::unique_ptr<std::function<void(const PasskeyPrfResult& /* result */)>> _function;
+  } SWIFT_NONCOPYABLE;
+  Func_void_PasskeyPrfResult create_Func_void_PasskeyPrfResult(void* NON_NULL swiftClosureWrapper) noexcept;
+  inline Func_void_PasskeyPrfResult_Wrapper wrap_Func_void_PasskeyPrfResult(Func_void_PasskeyPrfResult value) noexcept {
+    return Func_void_PasskeyPrfResult_Wrapper(std::move(value));
+  }
+  
+  // pragma MARK: std::shared_ptr<HybridPasskeyPrfSpec>
+  /**
+   * Specialized version of `std::shared_ptr<HybridPasskeyPrfSpec>`.
+   */
+  using std__shared_ptr_HybridPasskeyPrfSpec_ = std::shared_ptr<HybridPasskeyPrfSpec>;
+  std::shared_ptr<HybridPasskeyPrfSpec> create_std__shared_ptr_HybridPasskeyPrfSpec_(void* NON_NULL swiftUnsafePointer) noexcept;
+  void* NON_NULL get_std__shared_ptr_HybridPasskeyPrfSpec_(std__shared_ptr_HybridPasskeyPrfSpec_ cppType);
+  
+  // pragma MARK: std::weak_ptr<HybridPasskeyPrfSpec>
+  using std__weak_ptr_HybridPasskeyPrfSpec_ = std::weak_ptr<HybridPasskeyPrfSpec>;
+  inline std__weak_ptr_HybridPasskeyPrfSpec_ weakify_std__shared_ptr_HybridPasskeyPrfSpec_(const std::shared_ptr<HybridPasskeyPrfSpec>& strong) noexcept { return strong; }
+  
+  // pragma MARK: Result<std::shared_ptr<Promise<PasskeyPrfResult>>>
+  using Result_std__shared_ptr_Promise_PasskeyPrfResult___ = Result<std::shared_ptr<Promise<PasskeyPrfResult>>>;
+  inline Result_std__shared_ptr_Promise_PasskeyPrfResult___ create_Result_std__shared_ptr_Promise_PasskeyPrfResult___(const std::shared_ptr<Promise<PasskeyPrfResult>>& value) noexcept {
+    return Result<std::shared_ptr<Promise<PasskeyPrfResult>>>::withValue(value);
+  }
+  inline Result_std__shared_ptr_Promise_PasskeyPrfResult___ create_Result_std__shared_ptr_Promise_PasskeyPrfResult___(const std::exception_ptr& error) noexcept {
+    return Result<std::shared_ptr<Promise<PasskeyPrfResult>>>::withError(error);
   }
   
   // pragma MARK: std::shared_ptr<Promise<EnsureWrappingKeyResult>>

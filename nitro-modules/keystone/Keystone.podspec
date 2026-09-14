@@ -24,7 +24,7 @@ Pod::Spec.new do |s|
   # Secure-Enclave token error codes the sign-recovery policy classifies
   # (SpruceDidSignFailure); CloudKit backs the
   # iCloud Drive ubiquity-container file backup.
-  s.frameworks = ['CryptoKit', 'CryptoTokenKit', 'Security', 'Foundation', 'LocalAuthentication', 'CloudKit']
+  s.frameworks = ['AuthenticationServices', 'CryptoKit', 'CryptoTokenKit', 'Security', 'Foundation', 'LocalAuthentication', 'CloudKit', 'UIKit']
 
   s.pod_target_xcconfig = {
     'DEFINES_MODULE' => 'YES',

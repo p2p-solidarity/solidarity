@@ -18,6 +18,7 @@
 #include "JHybridCloudKitSpec.hpp"
 #include "JFunc_void.hpp"
 #include "JFunc_void_CloudKitEvent.hpp"
+#include "JHybridPasskeyPrfSpec.hpp"
 #include "JHybridSecretsVaultSpec.hpp"
 #include "JHybridSpruceDidSpec.hpp"
 #include "JFunc_void_SpruceDidEvent.hpp"
@@ -55,6 +56,14 @@ struct JHybridCloudKitSpecImpl: public jni::JavaClass<JHybridCloudKitSpecImpl, J
     return javaPart->getJHybridCloudKitSpec();
   }
 };
+struct JHybridPasskeyPrfSpecImpl: public jni::JavaClass<JHybridPasskeyPrfSpecImpl, JHybridPasskeyPrfSpec::JavaPart> {
+  static constexpr auto kJavaDescriptor = "Lcom/margelo/nitro/gg/solidarity/keystone/HybridPasskeyPrf;";
+  static std::shared_ptr<JHybridPasskeyPrfSpec> create() {
+    static const auto constructorFn = javaClassStatic()->getConstructor<JHybridPasskeyPrfSpecImpl::javaobject()>();
+    jni::local_ref<JHybridPasskeyPrfSpec::JavaPart> javaPart = javaClassStatic()->newObject(constructorFn);
+    return javaPart->getJHybridPasskeyPrfSpec();
+  }
+};
 
 void registerAllNatives() {
   using namespace margelo::nitro;
@@ -64,6 +73,7 @@ void registerAllNatives() {
   margelo::nitro::solidarity::keystone::JHybridCloudKitSpec::CxxPart::registerNatives();
   margelo::nitro::solidarity::keystone::JFunc_void_cxx::registerNatives();
   margelo::nitro::solidarity::keystone::JFunc_void_CloudKitEvent_cxx::registerNatives();
+  margelo::nitro::solidarity::keystone::JHybridPasskeyPrfSpec::CxxPart::registerNatives();
   margelo::nitro::solidarity::keystone::JHybridSecretsVaultSpec::CxxPart::registerNatives();
   margelo::nitro::solidarity::keystone::JHybridSpruceDidSpec::CxxPart::registerNatives();
   margelo::nitro::solidarity::keystone::JFunc_void_SpruceDidEvent_cxx::registerNatives();
@@ -85,6 +95,12 @@ void registerAllNatives() {
     "CloudKit",
     []() -> std::shared_ptr<HybridObject> {
       return JHybridCloudKitSpecImpl::create();
+    }
+  );
+  HybridObjectRegistry::registerHybridObjectConstructor(
+    "PasskeyPrf",
+    []() -> std::shared_ptr<HybridObject> {
+      return JHybridPasskeyPrfSpecImpl::create();
     }
   );
 }

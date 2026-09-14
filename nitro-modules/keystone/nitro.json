@@ -38,6 +38,16 @@
         "language": "kotlin",
         "implementationClassName": "HybridCloudKit"
       }
+    },
+    "PasskeyPrf": {
+      "ios": {
+        "language": "swift",
+        "implementationClassName": "HybridPasskeyPrf"
+      },
+      "android": {
+        "language": "kotlin",
+        "implementationClassName": "HybridPasskeyPrf"
+      }
     }
   }
 }

@@ -156,6 +156,10 @@ dependencies {
   // (SpruceDid biometric gate).
   implementation "androidx.biometric:biometric:1.2.0-alpha05"
 
+  // Credential Manager provides passkeys and the WebAuthn PRF extension.
+  implementation "androidx.credentials:credentials:1.6.0"
+  implementation "androidx.credentials:credentials-play-services-auth:1.6.0"
+
   // OkHttp for the CloudKit Drive REST calls. React Native already pulls
   // OkHttp 4.x transitively; pinning to the same major keeps the classpath
   // unified.

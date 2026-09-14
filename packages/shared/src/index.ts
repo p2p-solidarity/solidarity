@@ -42,6 +42,7 @@ export * from './nip05';
 export * from './profile';
 export * from './publicDisclosure';
 export * from './qr';
+export * from './rootVault';
 export * from './sakura';
 export * from './types';
 export * from './vault';

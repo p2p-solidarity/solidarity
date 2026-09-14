@@ -47,4 +47,16 @@ public final class KeystoneAutolinking {
   public static func isCloudKitRecyclable() -> Bool {
     return HybridCloudKit.self is any RecyclableView.Type
   }
+  
+  public static func createPasskeyPrf() -> bridge.std__shared_ptr_HybridPasskeyPrfSpec_ {
+    let hybridObject = HybridPasskeyPrf()
+    return { () -> bridge.std__shared_ptr_HybridPasskeyPrfSpec_ in
+      let __cxxWrapped = hybridObject.getCxxWrapper()
+      return __cxxWrapped.getCxxPart()
+    }()
+  }
+  
+  public static func isPasskeyPrfRecyclable() -> Bool {
+    return HybridPasskeyPrf.self is any RecyclableView.Type
+  }
 }

@@ -23,7 +23,8 @@
       "associatedDomains": [
         "applinks:solidarity.gg",
         "applinks:app.solidarity.gg",
-        "applinks:creds.id"
+        "applinks:creds.id",
+        "webcredentials:creds.id"
       ],
       "entitlements": {
         "com.apple.developer.icloud-container-identifiers": [

@@ -34,10 +34,12 @@ target_sources(
   ../nitrogen/generated/android/KeystoneOnLoad.cpp
   # Shared Nitrogen C++ sources
   ../nitrogen/generated/shared/c++/HybridCloudKitSpec.cpp
+  ../nitrogen/generated/shared/c++/HybridPasskeyPrfSpec.cpp
   ../nitrogen/generated/shared/c++/HybridSecretsVaultSpec.cpp
   ../nitrogen/generated/shared/c++/HybridSpruceDidSpec.cpp
   # Android-specific Nitrogen C++ sources
   ../nitrogen/generated/android/c++/JHybridCloudKitSpec.cpp
+  ../nitrogen/generated/android/c++/JHybridPasskeyPrfSpec.cpp
   ../nitrogen/generated/android/c++/JHybridSecretsVaultSpec.cpp
   ../nitrogen/generated/android/c++/JHybridSpruceDidSpec.cpp
 )

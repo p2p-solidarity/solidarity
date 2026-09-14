@@ -24,10 +24,14 @@ namespace margelo::nitro::solidarity::keystone { struct FileBackupDownloadState;
 namespace margelo::nitro::solidarity::keystone { enum class FileBackupDownloadStatus; }
 // Forward declaration of `HybridCloudKitSpec` to properly resolve imports.
 namespace margelo::nitro::solidarity::keystone { class HybridCloudKitSpec; }
+// Forward declaration of `HybridPasskeyPrfSpec` to properly resolve imports.
+namespace margelo::nitro::solidarity::keystone { class HybridPasskeyPrfSpec; }
 // Forward declaration of `HybridSecretsVaultSpec` to properly resolve imports.
 namespace margelo::nitro::solidarity::keystone { class HybridSecretsVaultSpec; }
 // Forward declaration of `HybridSpruceDidSpec` to properly resolve imports.
 namespace margelo::nitro::solidarity::keystone { class HybridSpruceDidSpec; }
+// Forward declaration of `PasskeyPrfResult` to properly resolve imports.
+namespace margelo::nitro::solidarity::keystone { struct PasskeyPrfResult; }
 // Forward declaration of `SpruceDidEventKind` to properly resolve imports.
 namespace margelo::nitro::solidarity::keystone { enum class SpruceDidEventKind; }
 // Forward declaration of `SpruceDidEvent` to properly resolve imports.
@@ -44,8 +48,10 @@ namespace margelo::nitro::solidarity::keystone { struct WrappedSecret; }
 #include "FileBackupDownloadState.hpp"
 #include "FileBackupDownloadStatus.hpp"
 #include "HybridCloudKitSpec.hpp"
+#include "HybridPasskeyPrfSpec.hpp"
 #include "HybridSecretsVaultSpec.hpp"
 #include "HybridSpruceDidSpec.hpp"
+#include "PasskeyPrfResult.hpp"
 #include "SpruceDidEvent.hpp"
 #include "SpruceDidEventKind.hpp"
 #include "WrappedSecret.hpp"
@@ -71,6 +77,8 @@ namespace margelo::nitro::solidarity::keystone { struct WrappedSecret; }
 // Forward declarations of Swift defined types
 // Forward declaration of `HybridCloudKitSpec_cxx` to properly resolve imports.
 namespace Keystone { class HybridCloudKitSpec_cxx; }
+// Forward declaration of `HybridPasskeyPrfSpec_cxx` to properly resolve imports.
+namespace Keystone { class HybridPasskeyPrfSpec_cxx; }
 // Forward declaration of `HybridSecretsVaultSpec_cxx` to properly resolve imports.
 namespace Keystone { class HybridSecretsVaultSpec_cxx; }
 // Forward declaration of `HybridSpruceDidSpec_cxx` to properly resolve imports.
