@@ -153,6 +153,7 @@
       "./plugins/withSemaphoreBindingsPod.js",
       "./plugins/withRustXcframeworkSearchPath.js",
       "./plugins/withDisableClangExplicitModules.js",
+      "./plugins/withIosDeploymentTarget.js",
       "./plugins/withNfcReader.js",
       "./plugins/withPassportOpenAcSrsPhase.js",
       "./plugins/withIosBuildNumber.js",

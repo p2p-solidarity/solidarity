@@ -18,12 +18,18 @@ const prepareScript = join(appDir, 'scripts', 'prepare-ios-workspace.sh');
 const stageOpenAcSrsScript = join(appDir, 'scripts', 'stage-openac-srs.sh');
 const normalizeSchemeScript = join(appDir, 'scripts', 'normalize-ios-scheme.sh');
 const cloudPostCloneScript = join(appDir, 'ci-scripts', 'ci_post_clone.sh');
+const appConfig = JSON.parse(readFileSync(join(appDir, 'app.json'), 'utf8')) as {
+  readonly expo: { readonly plugins: readonly (string | readonly unknown[])[] };
+};
 const prepareScriptSource = readFileSync(prepareScript, 'utf8');
 const stageOpenAcSrsScriptSource = readFileSync(stageOpenAcSrsScript, 'utf8');
 const normalizeSchemeScriptSource = readFileSync(normalizeSchemeScript, 'utf8');
 const require = createRequire(import.meta.url);
 const disableClangExplicitModulesPlugin = require(
   join(appDir, 'plugins', 'withDisableClangExplicitModules.js')
+);
+const iosDeploymentTargetPlugin = require(
+  join(appDir, 'plugins', 'withIosDeploymentTarget.js')
 );
 const generatedSchemeXml = readFileSync(
   join(appDir, 'ios', 'Solidarity.xcodeproj', 'xcshareddata', 'xcschemes', 'solidarity.xcscheme'),
@@ -185,6 +191,38 @@ end
     expect(patched).toContain('Regexp.last_match(1)');
     expect(patched).not.toContain('OTHER_CFLAGS = #{react_native_post_install(');
     expect(patched).not.toContain('OTHER_SWIFT_FLAGS = #{react_native_post_install(');
+  });
+
+  test('deployment-target plugin raises every older Pod target to the app minimum', () => {
+    const podfile = `platform :ios, podfile_properties['ios.deploymentTarget'] || '16.4'
+target 'Solidarity' do
+  post_install do |installer|
+    react_native_post_install(
+      installer,
+      config[:reactNativePath],
+      :mac_catalyst_enabled => false,
+    )
+  end
+end
+`;
+
+    const patched = iosDeploymentTargetPlugin._internal.patchPodfile(podfile);
+
+    expect(patched).toContain('# [withIosDeploymentTarget] BEGIN');
+    expect(patched).toContain("podfile_properties['ios.deploymentTarget'] || '17.0'");
+    expect(patched).toContain("build_settings['IPHONEOS_DEPLOYMENT_TARGET']");
+    expect(patched).toContain('Gem::Version.new(current_target) >= minimum_ios');
+    expect(iosDeploymentTargetPlugin._internal.patchPodfile(patched)).toBe(patched);
+    expect(appConfig.expo.plugins).toContain('./plugins/withIosDeploymentTarget.js');
+
+    const deploymentThenModules = disableClangExplicitModulesPlugin._internal.patchPodfile(patched);
+    const modulesThenDeployment = iosDeploymentTargetPlugin._internal.patchPodfile(
+      disableClangExplicitModulesPlugin._internal.patchPodfile(podfile)
+    );
+    for (const combined of [deploymentThenModules, modulesThenDeployment]) {
+      expect(combined).toContain('# [withIosDeploymentTarget] BEGIN');
+      expect(combined).toContain('# [withDisableClangExplicitModules] BEGIN');
+    }
   });
 
   test('iOS project bundles the single merged OpenAC SRS resource', () => {
