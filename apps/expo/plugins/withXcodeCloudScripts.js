@@ -1,6 +1,6 @@
 /**
- * Expo config plugin — re-creates apps/expo/ios/ci_scripts/ci_post_clone.sh
- * after `expo prebuild` wipes the ios/ directory.
+ * Expo config plugin — re-creates Xcode Cloud lifecycle hooks under
+ * apps/expo/ios/ci_scripts after `expo prebuild` wipes the ios/ directory.
  *
  * `@expo/config-plugins` is declared as a direct devDependency of apps/expo
  * (see ./package.json) because bun's symlink-hoisted layout doesn't expose
@@ -11,25 +11,35 @@ const path = require('node:path');
 
 const { withDangerousMod } = require('@expo/config-plugins');
 
+function copyScripts(projectRoot) {
+  const sourceDir = path.join(projectRoot, 'ci-scripts');
+  const destDir = path.join(projectRoot, 'ios', 'ci_scripts');
+  if (!fs.existsSync(sourceDir)) {
+    console.warn(`[withXcodeCloudScripts] missing source directory: ${sourceDir}`);
+    return;
+  }
+
+  const scripts = fs
+    .readdirSync(sourceDir)
+    .filter((name) => name.startsWith('ci_') && name.endsWith('.sh'));
+  fs.mkdirSync(destDir, { recursive: true });
+  for (const script of scripts) {
+    const sourcePath = path.join(sourceDir, script);
+    const destPath = path.join(destDir, script);
+    fs.copyFileSync(sourcePath, destPath);
+    fs.chmodSync(destPath, 0o755);
+    console.log(`[withXcodeCloudScripts] copied ${sourcePath} → ${destPath}`);
+  }
+}
+
 const withXcodeCloudScripts = (config) =>
   withDangerousMod(config, [
     'ios',
     async (cfg) => {
-      const projectRoot = cfg.modRequest.projectRoot;
-      const sourcePath = path.join(projectRoot, 'ci-scripts', 'ci_post_clone.sh');
-      const destDir = path.join(projectRoot, 'ios', 'ci_scripts');
-      const destPath = path.join(destDir, 'ci_post_clone.sh');
-
-      if (!fs.existsSync(sourcePath)) {
-        console.warn(`[withXcodeCloudScripts] missing source: ${sourcePath}`);
-        return cfg;
-      }
-      fs.mkdirSync(destDir, { recursive: true });
-      fs.copyFileSync(sourcePath, destPath);
-      fs.chmodSync(destPath, 0o755);
-      console.log(`[withXcodeCloudScripts] copied ${sourcePath} → ${destPath}`);
+      copyScripts(cfg.modRequest.projectRoot);
       return cfg;
     },
   ]);
 
 module.exports = withXcodeCloudScripts;
+module.exports._internal = { copyScripts };

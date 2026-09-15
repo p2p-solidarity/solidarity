@@ -6,6 +6,7 @@ import {
   readdirSync,
   readFileSync,
   rmSync,
+  statSync,
   writeFileSync,
 } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -18,6 +19,7 @@ const prepareScript = join(appDir, 'scripts', 'prepare-ios-workspace.sh');
 const stageOpenAcSrsScript = join(appDir, 'scripts', 'stage-openac-srs.sh');
 const normalizeSchemeScript = join(appDir, 'scripts', 'normalize-ios-scheme.sh');
 const cloudPostCloneScript = join(appDir, 'ci-scripts', 'ci_post_clone.sh');
+const cloudPreXcodebuildScript = join(appDir, 'ci-scripts', 'ci_pre_xcodebuild.sh');
 const appConfig = JSON.parse(readFileSync(join(appDir, 'app.json'), 'utf8')) as {
   readonly expo: { readonly plugins: readonly (string | readonly unknown[])[] };
 };
@@ -31,6 +33,7 @@ const disableClangExplicitModulesPlugin = require(
 const iosDeploymentTargetPlugin = require(
   join(appDir, 'plugins', 'withIosDeploymentTarget.js')
 );
+const xcodeCloudScriptsPlugin = require(join(appDir, 'plugins', 'withXcodeCloudScripts.js'));
 const generatedSchemeXml = readFileSync(
   join(appDir, 'ios', 'Solidarity.xcodeproj', 'xcshareddata', 'xcschemes', 'solidarity.xcscheme'),
   'utf8'
@@ -761,6 +764,86 @@ rm -rf "$work"
     );
     expect(commands).toContain(`pod\t${join(fixtureApp, 'ios')}\tinstall`);
   }, 10_000);
+
+  test('Xcode Cloud pre-build hook installs and verifies the Metal toolchain', () => {
+    const fixtureRoot = makeTempDir();
+    const fakeBin = join(fixtureRoot, 'bin');
+    const logPath = join(fixtureRoot, 'commands.log');
+    const metalState = join(fixtureRoot, 'metal-installed');
+    const stdoutPath = join(fixtureRoot, 'stdout.log');
+    const stderrPath = join(fixtureRoot, 'stderr.log');
+    mkdirSync(fakeBin, { recursive: true });
+    writeExecutable(
+      join(fakeBin, 'xcodebuild'),
+      `#!/usr/bin/env bash
+set -euo pipefail
+printf 'xcodebuild\t%s\n' "$*" >> "${logPath}"
+if [[ "$*" == "-downloadComponent metalToolchain" ]]; then
+  touch "${metalState}"
+  exit 0
+fi
+exit 2
+`
+    );
+    writeExecutable(
+      join(fakeBin, 'xcrun'),
+      `#!/usr/bin/env bash
+set -euo pipefail
+printf 'xcrun\t%s\n' "$*" >> "${logPath}"
+[[ -f "${metalState}" ]] || exit 72
+[[ "$*" == "--sdk iphoneos metal --version" ]] || exit 2
+printf 'Apple metal test toolchain\n'
+`
+    );
+
+    const result = Bun.spawnSync({
+      cmd: [
+        '/bin/bash',
+        '-c',
+        '/bin/bash "$1" >"$2" 2>"$3"',
+        'runner',
+        cloudPreXcodebuildScript,
+        stdoutPath,
+        stderrPath,
+      ],
+      env: {
+        ...process.env,
+        PATH: `${fakeBin}:${process.env['PATH'] ?? ''}`,
+      },
+      stdout: 'ignore',
+      stderr: 'ignore',
+    });
+
+    expect(
+      result.exitCode,
+      JSON.stringify({
+        commands: readOptional(logPath),
+        stderr: readOptional(stderrPath),
+        stdout: readOptional(stdoutPath),
+      })
+    ).toBe(0);
+    expect(readCommandLog(logPath)).toEqual([
+      'xcodebuild\t-downloadComponent metalToolchain',
+      'xcrun\t--sdk iphoneos metal --version',
+    ]);
+  });
+
+  test('Xcode Cloud config plugin copies every lifecycle hook as executable', () => {
+    const fixtureApp = makeTempDir();
+    const sourceDir = join(fixtureApp, 'ci-scripts');
+    mkdirSync(sourceDir, { recursive: true });
+    writeFileSync(join(sourceDir, 'ci_post_clone.sh'), '#!/bin/bash\necho post\n');
+    writeFileSync(join(sourceDir, 'ci_pre_xcodebuild.sh'), '#!/bin/bash\necho pre\n');
+
+    xcodeCloudScriptsPlugin._internal.copyScripts(fixtureApp);
+
+    for (const scriptName of ['ci_post_clone.sh', 'ci_pre_xcodebuild.sh']) {
+      const source = join(sourceDir, scriptName);
+      const generated = join(fixtureApp, 'ios', 'ci_scripts', scriptName);
+      expect(readFileSync(generated, 'utf8')).toBe(readFileSync(source, 'utf8'));
+      expect(statSync(generated).mode & 0o111).not.toBe(0);
+    }
+  });
 
   test('shared prepare script stages native iOS binding xcframeworks before pod install', () => {
     const fixtureRoot = makeTempDir();

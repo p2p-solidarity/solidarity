@@ -170,9 +170,10 @@ for now because it's shorter; migrate when there's time.
 
 iOS releases ship via **Xcode Cloud** (Apple Developer 25 h/month free,
 auto cert mgmt). The `withXcodeCloudScripts` config plugin
-(`apps/expo/plugins/`) re-creates `ios/ci_scripts/ci_post_clone.sh`
-after every `expo prebuild --clean` from the persistent source at
-`ci-scripts/ci_post_clone.sh`.
+(`apps/expo/plugins/`) re-creates every `ios/ci_scripts/ci_*.sh` hook
+after `expo prebuild --clean` from the persistent sources in `ci-scripts/`.
+The pre-Xcodebuild hook installs and verifies the optional Metal Toolchain
+before archiving because Xcode Cloud workers do not mount it reliably.
 
 Android builds via **EAS Build** or `expo prebuild --platform android`
 + `./gradlew bundleRelease`.
