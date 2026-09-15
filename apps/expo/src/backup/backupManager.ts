@@ -32,7 +32,7 @@ import { decryptJson } from '../storage/encryptionManager';
 import { decryptJsonWithKey } from '../storage/jsonCrypto';
 import { getRootDid, getPortableBackupKey } from '../identity/rootKey';
 import {
-  resolveAutoBackupIntervalHours,
+  AUTO_BACKUP_MIN_INTERVAL_HOURS,
   shouldRunBackup,
   type BackupReason,
 } from './backupPolicy';
@@ -123,18 +123,18 @@ export interface BackupRequestOutcome {
 /**
  * THE single coordinated backup entrypoint. Every trigger — manual button,
  * the scheduled automatic run, People pull-to-refresh, pan gesture — routes
- * through here so the prefs (enabled / automatic / interval / provider),
- * provider selection, the cooldown and the content check are all applied in
- * ONE place. Returns without backing up (`ran: false`) when the policy says
- * skip; only throws for a genuine upload error, never for a skip.
+ * through here so the prefs (enabled / provider), provider selection, the
+ * fixed interval, the cooldown and the content check are all applied in ONE
+ * place. Returns without backing up (`ran: false`) when the policy says skip;
+ * only throws for a genuine upload error, never for a skip.
  *
  * Skip reasons an automatic caller should simply ignore: `disabled`,
- * `auto-disabled`, `cooldown`, `interval`, `unchanged`, `root-key-unavailable`.
+ * `cooldown`, `interval`, `unchanged`, `root-key-unavailable`.
  *
  * This replaces the old footgun where `usePeopleScreen.refresh()` called
  * `performBackupNow(DEFAULT_PROVIDER)` unconditionally on every pull —
- * ignoring `backupEnabled`/`autoBackupOnPull`, racing the rotation, and using
- * a different provider than the gesture path.
+ * ignoring `backupEnabled`, racing the rotation, and using a different
+ * provider than the gesture path.
  */
 export function requestBackup(reason: BackupReason): Promise<BackupRequestOutcome> {
   return trackLocalDataOperation(withCloudDataLock(() => requestBackupUnlocked(reason)));
@@ -145,13 +145,11 @@ async function requestBackupUnlocked(reason: BackupReason): Promise<BackupReques
   const decision = shouldRunBackup({
     reason,
     backupEnabled: prefs.backupEnabled,
-    autoBackupEnabled: prefs.autoBackupOnPull,
     lastRunAtMs: lastBackupAtMs,
     lastArchiveAtMs: autoState.lastArchiveAtMs,
     nowMs: Date.now(),
     cooldownMs: BACKUP_COOLDOWN_MS,
-    minIntervalMs:
-      resolveAutoBackupIntervalHours(prefs.autoBackupIntervalHours) * 3_600_000,
+    minIntervalMs: AUTO_BACKUP_MIN_INTERVAL_HOURS * 3_600_000,
   });
   if (!decision.run) return { ran: false, skipReason: decision.skipReason };
   // Make the provider preference actually take effect (it was never applied).

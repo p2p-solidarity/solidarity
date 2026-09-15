@@ -44,7 +44,7 @@ export default function PeopleTab() {
   const removeContact = useContactStore((s) => s.remove);
   const loadDetail = useContactStore((s) => s.loadDetail);
   const upsertDeclared = useProfileSnapshotStore((s) => s.upsertDeclared);
-  const autoEnabled = usePreferences((s) => s.autoBackupOnPull);
+  const backupEnabled = usePreferences((s) => s.backupEnabled);
   const insets = useSafeAreaInsets();
   const { edit } = useLocalSearchParams<{ edit?: string }>();
 
@@ -331,7 +331,7 @@ export default function PeopleTab() {
 
   return (
     <View className="flex-1 bg-pageBg" style={{ paddingTop: insets.top }}>
-      {autoEnabled ? (
+      {backupEnabled ? (
         <GestureDetector gesture={backupGesture}>{body}</GestureDetector>
       ) : (
         body

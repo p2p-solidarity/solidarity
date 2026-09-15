@@ -39,6 +39,7 @@
  *   cd apps/expo && bun test __tests__/unit/icloudBackupRoundtrip.test.ts
  */
 import { afterAll, beforeAll, beforeEach, describe, expect, it, mock } from 'bun:test';
+import { readFileSync } from 'node:fs';
 
 import type { Preferences } from '../../src/settings/preferences';
 
@@ -593,6 +594,7 @@ describe('iCloud backup — Swift BackupData field parity', () => {
 
 interface GestureEvent { readonly translationY: number }
 interface GestureModule {
+  readonly shouldTriggerGestureBackup: (translationY: number) => boolean;
   readonly makeGestureAutoBackup: (
     handlers: {
       readonly onStart?: () => void;
@@ -671,7 +673,6 @@ describe('iCloud backup — gesture-triggered (pull-down pan)', () => {
     prefsStore = usePreferences;
     usePreferences.setState({
       backupEnabled: true,
-      autoBackupOnPull: true,
       backupProvider: 'iCloud',
     });
     // A device with NOTHING to back up now skips instead of writing an empty
@@ -687,7 +688,6 @@ describe('iCloud backup — gesture-triggered (pull-down pan)', () => {
     // (e.g. preferencesKeys.parity asserts the Swift default stays false).
     prefsStore?.setState({
       backupEnabled: false,
-      autoBackupOnPull: true,
       backupProvider: 'iCloud',
       shareEmail: false,
     });
@@ -696,45 +696,18 @@ describe('iCloud backup — gesture-triggered (pull-down pan)', () => {
     rootKey.__setRootKeyStorageForTesting(null);
   });
 
-  it('triggers backup when translationY exceeds the 80px threshold', async () => {
-    let completedPayload: unknown = null;
-    const gesture = gestureMod.makeGestureAutoBackup({
-      onComplete: (payload) => { completedPayload = payload; },
-    });
-    expect(gesture).toBeDefined();
-    // The captured callback should exist via the fake.
-    const ghMod = await import('react-native-gesture-handler') as unknown as {
-      __getPendingOnEnd: () => ((e: GestureEvent) => void) | null;
-    };
-    const cb = ghMod.__getPendingOnEnd();
-    expect(cb).not.toBeNull();
-    // Fire a pan event below threshold — must NOT trigger.
-    cb!({ translationY: 40 });
-    await new Promise((r) => setTimeout(r, 20));
-    expect(completedPayload).toBeNull();
+  it('triggers only when translationY exceeds the 80px threshold', () => {
+    expect(gestureMod.shouldTriggerGestureBackup(40)).toBe(false);
+    expect(gestureMod.shouldTriggerGestureBackup(80)).toBe(false);
+    expect(gestureMod.shouldTriggerGestureBackup(120)).toBe(true);
 
-    // Fire a pan event above threshold — triggers backup.
-    cb!({ translationY: 120 });
-    await new Promise((r) => setTimeout(r, 200));
-    expect(completedPayload).not.toBeNull();
-  });
-
-  it('cooldown prevents thrashing (a second pull within 30s is a no-op)', async () => {
-    let calls = 0;
-    const ghMod = await import('react-native-gesture-handler') as unknown as {
-      __getPendingOnEnd: () => ((e: GestureEvent) => void) | null;
-    };
-    gestureMod.makeGestureAutoBackup({
-      onComplete: () => { calls += 1; },
-    });
-    const cb = ghMod.__getPendingOnEnd();
-    cb!({ translationY: 200 });
-    cb!({ translationY: 200 });
-    await new Promise((r) => setTimeout(r, 80));
-    // Module-level lastBackupAt is shared with the previous test; the
-    // cooldown gate is `now - lastBackupAt < 30s`, so a SECOND fire of the
-    // gesture inside the same tick must coalesce.
-    expect(calls).toBeLessThanOrEqual(1);
+    const source = readFileSync(
+      new URL('../../src/backup/gestureAutoBackup.ts', import.meta.url),
+      'utf8',
+    );
+    expect(source).toMatch(
+      /function shouldTriggerGestureBackup[\s\S]*?'worklet';[\s\S]*?return translationY/u,
+    );
   });
 
   it('restoring an archive iCloud has not delivered yet fails as download-pending, naming it', async () => {

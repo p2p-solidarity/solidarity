@@ -18,16 +18,25 @@ const DOWNLOAD_COPY = [
   'backup.archives.cloudOnly',
   'backup.archives.downloading',
   'backup.archives.downloadingPercent',
-  'backup.download.trailing',
-  'backup.download.trailingPercent',
   'backup.download.cancel',
-  'backup.download.cancelHint',
   'backup.restore.downloadFailed',
   'backup.sync.downloading',
-  'backup.sync.downloadingToast',
 ] as const;
 
 describe('iCloud download state surface', () => {
+  it('keeps backup and sync behind one switch with History on the same screen', () => {
+    const screen = source('../../app/settings/backup.tsx');
+
+    expect(screen.match(/<SettingsBlockToggleRow/gu)).toHaveLength(1);
+    expect(screen).toContain("setPref('backupEnabled', v)");
+    expect(screen).toContain("t('backup.history.title')");
+    expect(screen).not.toContain('SettingsSegmented');
+    expect(screen).not.toContain('autoBackupOnPull');
+    expect(screen).not.toContain('autoBackupIntervalHours');
+    expect(screen).not.toContain('requestCloudSync');
+    expect(screen).not.toContain("t('backup.restoreLatest')");
+  });
+
   it('the Backup screen downloads with progress instead of calling an undelivered archive unreadable', () => {
     const screen = source('../../app/settings/backup.tsx');
 
@@ -36,7 +45,6 @@ describe('iCloud download state surface', () => {
     expect(screen).toContain("t('backup.archives.cloudOnly')");
     expect(screen).toContain("t('backup.archives.downloadingPercent', { percent })");
     expect(screen).toContain("t('backup.sync.downloading')");
-    expect(screen).toContain('isDownloadPendingError(error)');
     // A cold row is tappable (the tap starts the transfer), the live row can
     // cancel, and leaving the screen aborts the wait (the transfer continues).
     expect(screen).toContain('onDownload(archive.name, date)');

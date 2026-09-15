@@ -107,27 +107,19 @@ export function nextBackupNameMs(nowMs: number, lastIssuedMs: number): number {
 export type BackupReason = 'manual' | 'auto' | 'pull' | 'gesture' | 'onboarding';
 
 /**
- * Selectable gaps between automatic backups, in hours. The user asked for a
- * visible, adjustable schedule with a 6-hour floor (2026-09-08); anything
- * shorter cannot coexist with `MAX_RETAINED_BACKUPS` = 3.
+ * Minimum gap between automatic backups, in hours. Fixed, not a preference:
+ * the adjustable 6h/12h/daily/weekly schedule (2026-09-08) was cut on
+ * 2026-09-10 so the Backup screen is one switch. Six hours is the floor that
+ * can coexist with `MAX_RETAINED_BACKUPS` = 3, and the content digest in
+ * `autoBackupState` already means an archive is written only when something
+ * changed — a shorter gap would buy nothing but churn.
  */
-export const AUTO_BACKUP_INTERVAL_CHOICES: readonly number[] = [6, 12, 24, 168];
 export const AUTO_BACKUP_MIN_INTERVAL_HOURS = 6;
-
-/** Clamp a persisted/user value onto a supported choice. A preference read
- *  from disk is untrusted input: an out-of-range or corrupt number must not
- *  become a 0ms interval that backs up on every single change. */
-export function resolveAutoBackupIntervalHours(hours: unknown): number {
-  return typeof hours === 'number' && AUTO_BACKUP_INTERVAL_CHOICES.includes(hours)
-    ? hours
-    : AUTO_BACKUP_MIN_INTERVAL_HOURS;
-}
 
 export interface BackupPolicyInput {
   readonly reason: BackupReason;
+  /** The one switch: on means archives, the automatic schedule and sync. */
   readonly backupEnabled: boolean;
-  /** Master switch for every non-manual trigger (pref `autoBackupOnPull`). */
-  readonly autoBackupEnabled: boolean;
   readonly lastRunAtMs: number | null;
   /** When the newest archive was actually written — survives app restarts,
    *  unlike `lastRunAtMs`, so a relaunch cannot reset the schedule. */
@@ -139,14 +131,14 @@ export interface BackupPolicyInput {
 
 export interface BackupDecision {
   readonly run: boolean;
-  readonly skipReason?: 'disabled' | 'auto-disabled' | 'cooldown' | 'interval';
+  readonly skipReason?: 'disabled' | 'cooldown' | 'interval';
 }
 
 /**
  * Single source of truth for "should this trigger back up now?". Manual
  * backups always run (the user pressed the button); every automatic trigger
- * respects `backupEnabled`, the automatic-backup switch, the short anti-churn
- * cooldown, AND the user's chosen minimum interval.
+ * respects `backupEnabled` (there is no separate automatic switch — on means
+ * automatic), the short anti-churn cooldown, AND the fixed minimum interval.
  *
  * The interval gate is what makes a 3-archive history worth keeping: without
  * it the pull / gesture / change triggers would rotate the oldest restore
@@ -155,7 +147,6 @@ export interface BackupDecision {
 export function shouldRunBackup(input: BackupPolicyInput): BackupDecision {
   if (input.reason === 'manual') return { run: true };
   if (!input.backupEnabled) return { run: false, skipReason: 'disabled' };
-  if (!input.autoBackupEnabled) return { run: false, skipReason: 'auto-disabled' };
   if (
     input.lastRunAtMs !== null &&
     input.nowMs - input.lastRunAtMs < input.cooldownMs

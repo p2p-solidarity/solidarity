@@ -1,6 +1,9 @@
-# iCloud complete data sync — proposed plan
+# iCloud complete data sync — implementation record
 
-Status: draft; identity/enrollment semantics await user confirmation. This is a scoped proposal for the reported sync issue, not a replacement for the 2.0.0 north star.
+Status: implemented. Automated tests cover the reconciliation, identity binding,
+download and recovery seams; real two-device iCloud delivery remains a device
+validation item. This record is scoped to the reported sync issue and does not
+replace the 2.0.0 north star.
 
 ## Confirmed causes
 
@@ -14,7 +17,9 @@ Two devices using the same recovered app identity converge after both can access
 
 - Include profile fields, link privacy, Page drafts/blocks/order/visibility/appearance, avatar assets, contacts/cards, portable credentials/claims, and an explicit allowlist of account/share preferences.
 - Inventory every persisted production data store before implementation and record inclusion/exclusion. Device security policy, authentication sessions, biometric configuration, and device-bound keys remain device-owned. Verify remote username/publication state rather than copying a successful-status flag.
-- Synchronize changes in both directions on foreground, explicit refresh and debounced local changes while enabled. Report pending/error state honestly; cloud write success is not proof that the other device has received data.
+- Synchronize changes in both directions on foreground, a 30-second poll and
+  debounced local changes while enabled. Report pending/error state honestly;
+  cloud write success is not proof that the other device has received data.
 - Distinct record edits combine; concurrent edits of the same logical record have a deterministic winner and retain a recoverable conflicting version. Keep profile signature, privacy metadata and signed projections coherent. Do not merge signed fields into an invalid signature or automatically publish private data.
 - Persist deletion markers so deleted records do not return from an offline device. Missing fields in legacy archives mean unavailable, never a deletion.
 - Keep dated restore explicit and separate from ongoing synchronization. Import old archives compatibly; do not claim old archives contain omitted profile/avatar data. Define old snapshot rollback as new sync changes, only after an explicit user choice.
@@ -37,9 +42,12 @@ Two devices using the same recovered app identity converge after both can access
 - Restore an old cards/contacts-only archive without erasing a newer profile. Local wipe during synchronization cannot resurrect data.
 - TDD for reconciliation/schema/identity binding and recovery seams. Run root `bun run typecheck && bun run lint && bun run test`; two-device iCloud validation is separately required for delivery behavior that mocks cannot prove.
 
-## Pending decision
+## Decision — same identity is required for enrollment (2026-09-08)
 
-Recommended: synchronization requires the same app identity (same recovery phrase); first joining preserves distinct contacts on both devices and reconciles them, with profile conflicts handled explicitly. It must not silently replace B's identity just because A's archive is visible in iCloud.
+Synchronization requires the same app identity (same recovery phrase); first
+joining preserves distinct contacts on both devices and reconciles them, with
+profile conflicts handled explicitly. It never silently replaces B's identity
+just because A's archive is visible in iCloud.
 
 ## Recorded data inventory (2026-09-08)
 
@@ -88,3 +96,12 @@ Accepted: progress is only as good as Spotlight's `NSMetadataUbiquitousItemPerce
 - **A local wipe does not delete cloud revisions.** Re-enabling backup on a wiped device re-adopts whatever is still in iCloud. Which of "recovery" or "the erase should propagate" is correct is a product decision this plan does not settle.
 - **Local sync state that fails to parse stops sync** rather than silently re-enrolling: re-enrolment makes the device's own data concurrent with its history, which can let a stale value win. Clock counters are now capped so a device can never overflow its own state into that condition.
 - **Two different app identities under one Apple account still share the five-file archive rotation** (sync revisions are namespaced per identity and do not mix).
+
+## Decision — the Backup screen is one switch (2026-09-10)
+
+The screen had grown to two toggles, a four-way interval picker, "Sync now", "Restore from Backup" and a status section, split across two tabs. The user asked for fewer choices with History kept, so:
+
+- `backupEnabled` is the only switch: on means encrypted archives, the automatic schedule AND device sync. The separate automatic-backup toggle is gone (`autoBackupOnPull` stays persisted but dormant, for the Swift-default parity test) and the interval is fixed at the 6-hour floor (`AUTO_BACKUP_MIN_INTERVAL_HOURS`; the `autoBackupIntervalHours` preference is deleted). The content digest already limits archives to real changes, so a fixed gap loses nothing a user could see.
+- "Sync now" is gone: sync runs on foreground, on a debounced local change and on a 30 s poll while the app is open. Its status row and the conflict chooser stay — a sync that cannot finish must remain visible, and a conflict choice is irreversible.
+- Restore lives only in History: a dated row, tap to restore, cold rows download first with progress and a cancel. The "Restore from Backup" latest-archive row is gone; onboarding still restores the newest archive through `restoreFromBackup()`.
+- History is a section under the switch rather than a second tab; with at most three retained archives the whole screen fits one scroll.

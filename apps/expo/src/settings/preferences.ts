@@ -72,15 +72,12 @@ export interface Preferences {
   readonly biometricSensitiveOps: boolean;
   readonly backupProvider: ProviderKind;
   /**
-   * Master switch for AUTOMATIC backups. Keeps its Swift-parity name
-   * (`BackupManager.Settings.autoBackup`) but now governs every non-manual
-   * trigger — the scheduled interval and the People pull/gesture — not just
-   * pull-to-refresh.
+   * @deprecated Dormant — not read as behaviour since 2026-09-10. The Backup
+   * screen has one switch: `backupEnabled` on means automatic backups run
+   * (`src/backup/backupPolicy.ts`). Kept so persisted blobs and the Swift
+   * default parity (`BackupManager.Settings.autoBackup`) keep round-tripping.
    */
   readonly autoBackupOnPull: boolean;
-  /** Minimum gap between automatic backups. One of
-   *  `AUTO_BACKUP_INTERVAL_CHOICES`; 6h is the floor. */
-  readonly autoBackupIntervalHours: number;
   readonly notificationsEnabled: boolean;
   readonly developerMode: boolean;
   readonly themeMode: 'auto' | 'light' | 'dark';
@@ -159,7 +156,6 @@ const DEFAULTS: Preferences = {
   biometricSensitiveOps: true,
   backupProvider: 'iCloud',
   autoBackupOnPull: true,
-  autoBackupIntervalHours: 6,
   notificationsEnabled: true,
   developerMode: false,
   themeMode: 'auto',

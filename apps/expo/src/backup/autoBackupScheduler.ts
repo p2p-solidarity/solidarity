@@ -4,7 +4,8 @@
  * Before this, "automatic" backup existed only as a People-tab pull gesture
  * (`gestureAutoBackup`) — so in practice a user who never pulled that list
  * had no backups but the ones they pressed the button for. This module makes
- * the schedule real and, together with the interval preference, visible.
+ * the schedule real. The Backup screen now exposes one switch; while it is
+ * on, this scheduler uses the fixed interval owned by `backupPolicy.ts`.
  *
  * When it wakes up:
  *   - once when the app becomes active,
@@ -12,7 +13,7 @@
  *   - and a slow poll, so an app left open across the interval still backs up.
  *
  * Every wake-up only ASKS: `requestBackup('auto')` owns the decision, so the
- * enabled switch, the user's chosen interval and the "nothing changed" check
+ * enabled switch, the fixed interval and the "nothing changed" check
  * cannot drift between triggers. Skips are the normal case and stay silent —
  * a toast on every quiet tick would be noise, not information.
  *

@@ -12,13 +12,11 @@
  */
 import { describe, expect, it } from 'bun:test';
 import {
-  AUTO_BACKUP_INTERVAL_CHOICES,
   AUTO_BACKUP_MIN_INTERVAL_HOURS,
   MAX_RETAINED_BACKUPS,
   newBackupName,
   nextBackupNameMs,
   parseBackupTimestampMs,
-  resolveAutoBackupIntervalHours,
   selectNewestBackup,
   selectStaleBackups,
   shouldRunBackup,
@@ -114,12 +112,11 @@ describe('nextBackupNameMs', () => {
 
 const base = {
   backupEnabled: true,
-  autoBackupEnabled: true,
   lastRunAtMs: null as number | null,
   lastArchiveAtMs: null as number | null,
   nowMs: 1_000_000,
   cooldownMs: 30_000,
-  minIntervalMs: 6 * 3_600_000,
+  minIntervalMs: AUTO_BACKUP_MIN_INTERVAL_HOURS * 3_600_000,
 };
 
 describe('shouldRunBackup', () => {
@@ -137,12 +134,11 @@ describe('shouldRunBackup', () => {
       skipReason: 'disabled',
     });
   });
-  it('every non-manual trigger skips when automatic backup is off', () => {
+  it('backup on means automatic — there is no separate switch to leave off', () => {
+    // The Backup screen is one toggle (2026-09-10): with it on, the schedule,
+    // the People pull and the pan gesture all run without any further opt-in.
     for (const reason of ['auto', 'pull', 'gesture'] as const) {
-      expect(shouldRunBackup({ ...base, reason, autoBackupEnabled: false })).toEqual({
-        run: false,
-        skipReason: 'auto-disabled',
-      });
+      expect(shouldRunBackup({ ...base, reason })).toEqual({ run: true });
     }
   });
   it('skips inside the cooldown window', () => {
@@ -159,7 +155,7 @@ describe('shouldRunBackup', () => {
   // The interval gate is what makes a MAX_RETAINED_BACKUPS-deep history worth
   // keeping: without it, repeated pulls/gestures rotate every restore point
   // out within minutes.
-  it('skips an automatic run inside the chosen interval', () => {
+  it('skips an automatic run inside the fixed interval', () => {
     const now = 100 * 3_600_000;
     expect(
       shouldRunBackup({
@@ -203,21 +199,13 @@ describe('shouldRunBackup', () => {
   });
 });
 
-describe('resolveAutoBackupIntervalHours', () => {
-  it('accepts every offered choice unchanged', () => {
-    for (const hours of AUTO_BACKUP_INTERVAL_CHOICES) {
-      expect(resolveAutoBackupIntervalHours(hours)).toBe(hours);
-    }
-  });
-  it('falls back to the 6h floor for corrupt or out-of-range values', () => {
-    // A persisted preference is untrusted input: a 0 must never become a
-    // zero-length interval that backs up on every single change.
-    for (const bad of [0, -1, 0.5, 3, NaN, null, undefined, '6', {}]) {
-      expect(resolveAutoBackupIntervalHours(bad)).toBe(AUTO_BACKUP_MIN_INTERVAL_HOURS);
-    }
-  });
-  it('never offers anything shorter than the floor', () => {
-    expect(Math.min(...AUTO_BACKUP_INTERVAL_CHOICES)).toBe(AUTO_BACKUP_MIN_INTERVAL_HOURS);
+describe('AUTO_BACKUP_MIN_INTERVAL_HOURS', () => {
+  it('is the fixed 6h floor that keeps a 3-archive history from churning', () => {
+    // No interval preference exists any more; the constant IS the schedule.
+    // Anything shorter would let a busy day rotate all retained restore
+    // points out within hours.
+    expect(AUTO_BACKUP_MIN_INTERVAL_HOURS).toBe(6);
+    expect(MAX_RETAINED_BACKUPS).toBe(3);
   });
 });
 
