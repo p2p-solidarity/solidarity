@@ -47,12 +47,14 @@ describe('v2 onboarding contract', () => {
   it('uses the mock product copy and keeps protocol vocabulary out of every step', () => {
     expect(zhHant['ob.welcome.title']).toBe('建立你的可查驗身分');
     expect(zhHant['ob.handle.title']).toBe('選擇使用者名稱');
-    expect(zhHant['ob.passkey.title']).toBe('建立通行密鑰');
-    expect(zhHant['ob.passkey.btn']).toBe('用 Face ID 建立');
-    expect(zhHant['ob.done.passkey']).toBe('通行密鑰');
-    expect(en['ob.passkey.title']).toBe('Create Passkey');
-    expect(en['ob.passkey.btn']).toBe('Create with Face ID');
-    expect(en['ob.done.passkey']).toBe('Passkey');
+    expect(zhHant['ob.passkey.title']).toBe('在電腦上繼續編輯');
+    expect(zhHant['ob.passkey.btn']).toBe('連接 Passkey');
+    expect(zhHant['ob.passkey.later']).toBe('稍後再說');
+    expect(zhHant['ob.done.passkey']).toBe('身分保護');
+    expect(en['ob.passkey.title']).toBe('Keep editing on the Web');
+    expect(en['ob.passkey.btn']).toBe('Connect Passkey');
+    expect(en['ob.passkey.later']).toBe('Not Now');
+    expect(en['ob.done.passkey']).toBe('Identity protection');
     expect(zhHant['ob.links.title']).toBe('放上你的連結');
     expect(en['ob.done.title']).toBe('Ready');
 
@@ -66,6 +68,8 @@ describe('v2 onboarding contract', () => {
     expect(files).not.toMatch(/\bDID\b|Nostr|public key|seed phrase/u);
     expect(files).toContain("registerForPushNotificationsAsync({ prompt: true })");
     expect(files).toContain("onTaken");
+    expect(files).toContain("setRootVaultSyncState('deferred')");
+    expect(files).toContain("t('ob.passkey.later')");
   });
 });
 
