@@ -11,6 +11,7 @@ import {
 } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
+import { execFileSync, spawnSync } from 'node:child_process';
 import { createRequire } from 'node:module';
 
 const appDir = resolve(import.meta.dir, '../..');
@@ -30,7 +31,7 @@ const precompiledResizerLibrary = join(
   'VisionCameraResizer',
   'default.metallib'
 );
-const jsiSetterPointerPluginPath = join(appDir, 'plugins', 'withExpoModulesJsiSetterPointer.js');
+const jsiPatchesPluginPath = join(appDir, 'plugins', 'withExpoModulesJsiPatches.js');
 const appConfig = JSON.parse(readFileSync(join(appDir, 'app.json'), 'utf8')) as {
   readonly expo: { readonly plugins: readonly (string | readonly unknown[])[] };
 };
@@ -822,55 +823,117 @@ rm -rf "$work"
     );
   });
 
-  test('expo-modules-jsi host-object setter pointer is typed before the nil check (expo/expo#46736)', () => {
-    expect(existsSync(jsiSetterPointerPluginPath), jsiSetterPointerPluginPath).toBe(true);
-    if (!existsSync(jsiSetterPointerPluginPath)) return;
+  test('expo-modules-jsi patches: setter pointer typed before the nil check (expo/expo#46736)', () => {
+    expect(existsSync(jsiPatchesPluginPath), jsiPatchesPluginPath).toBe(true);
+    if (!existsSync(jsiPatchesPluginPath)) return;
 
-    const fixtureApp = makeTempDir();
-    const packageRoot = join(fixtureApp, 'node_modules', 'expo-modules-jsi');
-    const runtimeDir = join(packageRoot, 'apple', 'Sources', 'ExpoModulesJSI', 'Runtime');
-    mkdirSync(runtimeDir, { recursive: true });
+    const plugin = require(jsiPatchesPluginPath);
+    const patch = plugin._internal.PATCHES.find((p: { name: string }) => p.name === 'setter-pointer');
+    const original = [
+      '    let context = Unmanaged.passRetained(HostObjectContext(runtime: self, get, set, getPropertyNames, dealloc)).toOpaque()',
+      '    let callbacks = expo.HostObjectCallbacks(context, getter, set == nil ? nil : setter, propertyNamesGetter, deallocate)',
+      '    let hostObject = expo.HostObject.makeObject(pointee, consume callbacks)',
+      '',
+    ].join('\n');
+
+    const first = plugin._internal.patchSource(patch, original);
+    expect(first.status).toBe('patched');
+    expect(first.source).toContain(
+      'let setterPointer: (@convention(c) (UnsafeMutableRawPointer, UnsafePointer<CChar>, UnsafeMutableRawPointer) -> Void)? = setter'
+    );
+    expect(first.source).toContain('set == nil ? nil : setterPointer,');
+    expect(first.source).not.toContain('set == nil ? nil : setter,');
+    expect(plugin._internal.patchSource(patch, first.source).status).toBe('already-patched');
+    expect(() => plugin._internal.patchSource(patch, 'let callbacks = somethingElse()')).toThrow(
+      /changed shape/
+    );
+  });
+
+  test('expo-modules-jsi patches: nested xcodebuild output cannot fail the xcframework phase', () => {
+    expect(existsSync(jsiPatchesPluginPath), jsiPatchesPluginPath).toBe(true);
+    if (!existsSync(jsiPatchesPluginPath)) return;
+
+    const plugin = require(jsiPatchesPluginPath);
+    const patch = plugin._internal.PATCHES.find(
+      (p: { name: string }) => p.name === 'nested-xcodebuild-output'
+    );
+    const original = [
+      '  log "Building framework slice for ${platform}..."',
+      '',
+      '  (cd "$PACKAGE_DIR" && env -i PATH="$PATH" HOME="$HOME" PODS_ROOT="$PODS_ROOT" RN_ROOT="$RN_ROOT" \\',
+      '    xcodebuild \\',
+      '    build \\',
+      '    -quiet \\',
+      '    SWIFT_COMPILATION_MODE=wholemodule \\',
+      '  )',
+      '',
+      '  local product_path="${BUILD_PRODUCTS_PATH}/${build_dir_name}"',
+      '',
+    ].join('\n');
+
+    const first = plugin._internal.patchSource(patch, original);
+    expect(first.status).toBe('patched');
+    expect(first.source).toContain('if ! (cd "$PACKAGE_DIR" && env -i PATH="$PATH"');
+    expect(first.source).toContain(') > "$nested_xcodebuild_log" 2>&1; then');
+    expect(first.source).toContain('log "error: nested xcodebuild failed for ${platform}"');
+    expect(first.source).toContain("sed -E 's/^((.*: )?)error: /\\1warning: /'");
+    expect(plugin._internal.patchSource(patch, first.source).status).toBe('already-patched');
+
+    // The rewritten block must still be valid bash, and the sed replay must turn
+    // the spurious nested error line into a warning while leaving other lines alone.
+    const fixtureDir = makeTempDir();
+    const script = join(fixtureDir, 'patched.sh');
+    writeFileSync(script, `#!/usr/bin/env bash\nset -euo pipefail\nlog() { echo "$1"; }\nbuild_slice() {\n  local platform="$1"\n${first.source}}\n`);
+    expect(execFileSync('bash', ['-n', script]).toString()).toBe('');
+    const nestedLog = join(fixtureDir, 'nested.log');
     writeFileSync(
-      join(runtimeDir, 'JavaScriptRuntime.swift'),
+      nestedLog,
       [
-        '    let context = Unmanaged.passRetained(HostObjectContext(runtime: self, get, set, getPropertyNames, dealloc)).toOpaque()',
-        '    let callbacks = expo.HostObjectCallbacks(context, getter, set == nil ? nil : setter, propertyNamesGetter, deallocate)',
-        '    let hostObject = expo.HostObject.makeObject(pointee, consume callbacks)',
+        'error: the following command failed with exit code 0 but produced no further output',
+        'SwiftCompile normal arm64 (in target \'ExpoModulesJSI\' from project \'ExpoModulesJSI\')',
+        '/x/JavaScriptRuntime.swift:70:27: warning: cannot infer ownership',
+        '/x/Foo.swift:1:2: error: real diagnostic',
         '',
       ].join('\n')
     );
-    const plugin = require(jsiSetterPointerPluginPath);
-
-    expect(plugin._internal.patchInstalledPackage(fixtureApp, packageRoot)).toBe('patched');
-    expect(plugin._internal.patchInstalledPackage(fixtureApp, packageRoot)).toBe('already-patched');
-
-    const patched = readFileSync(join(runtimeDir, 'JavaScriptRuntime.swift'), 'utf8');
-    expect(patched).toContain(
-      'let setterPointer: (@convention(c) (UnsafeMutableRawPointer, UnsafePointer<CChar>, UnsafeMutableRawPointer) -> Void)? = setter'
+    // Under `bun test`, spawnSync/execFileSync report status 1 with empty output
+    // for any child that writes to stdout (even `/bin/echo hi`), so the sed replay
+    // is redirected to a file through the shell and asserted from disk.
+    const replayLog = join(fixtureDir, 'replay.log');
+    spawnSync('/bin/sh', [
+      '-c',
+      `/usr/bin/sed -E 's/^((.*: )?)error: /\\1warning: /' "$1" > "$2"`,
+      'sh',
+      nestedLog,
+      replayLog,
+    ]);
+    const replay = readFileSync(replayLog, 'utf8');
+    expect(replay).toBe(
+      [
+        'warning: the following command failed with exit code 0 but produced no further output',
+        'SwiftCompile normal arm64 (in target \'ExpoModulesJSI\' from project \'ExpoModulesJSI\')',
+        '/x/JavaScriptRuntime.swift:70:27: warning: cannot infer ownership',
+        '/x/Foo.swift:1:2: warning: real diagnostic',
+        '',
+      ].join('\n')
     );
-    expect(patched).toContain('set == nil ? nil : setterPointer,');
-    expect(patched).not.toContain('set == nil ? nil : setter,');
-    expect(() => plugin._internal.patchSource('let callbacks = somethingElse()')).toThrow(
-      /changed shape/
-    );
+  });
 
-    // The installed package must still be one of the two known shapes so an
-    // expo-modules-jsi upgrade that moves the call site fails here, not on Xcode Cloud.
-    const installed = readFileSync(
-      join(
-        repoRoot,
-        'node_modules',
-        'expo-modules-jsi',
-        'apple',
-        'Sources',
-        'ExpoModulesJSI',
-        'Runtime',
-        'JavaScriptRuntime.swift'
-      ),
-      'utf8'
-    );
-    expect(['patched', 'already-patched']).toContain(plugin._internal.patchSource(installed).status);
-    expect(appConfig.expo.plugins).toContain('./plugins/withExpoModulesJsiSetterPointer.js');
+  test('expo-modules-jsi patches apply to the installed package and are registered', () => {
+    expect(existsSync(jsiPatchesPluginPath), jsiPatchesPluginPath).toBe(true);
+    if (!existsSync(jsiPatchesPluginPath)) return;
+
+    const plugin = require(jsiPatchesPluginPath);
+    const packageRoot = join(repoRoot, 'node_modules', 'expo-modules-jsi');
+    // Every patch must still find its anchor (or its marker) in the installed
+    // package so an expo-modules-jsi upgrade fails here, not on Xcode Cloud.
+    for (const patch of plugin._internal.PATCHES) {
+      const installed = readFileSync(join(packageRoot, ...patch.file), 'utf8');
+      expect(['patched', 'already-patched'], patch.name).toContain(
+        plugin._internal.patchSource(patch, installed).status
+      );
+    }
+    expect(appConfig.expo.plugins).toContain('./plugins/withExpoModulesJsiPatches.js');
   });
 
   test('shared prepare script stages native iOS binding xcframeworks before pod install', () => {

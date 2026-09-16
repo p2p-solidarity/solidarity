@@ -176,12 +176,18 @@ after every `expo prebuild --clean` from the persistent source at
 stages a pinned `default.metallib` so Archive never depends on Xcode Cloud's
 unreliable optional Metal Toolchain; regenerate it with
 `scripts/build-vision-camera-resizer-metallib.sh` after shader updates.
-`withExpoModulesJsiSetterPointer` backports expo/expo#46736 onto the installed
-`expo-modules-jsi` at prebuild (Xcode Cloud's Xcode 27 Swift rejects the untyped
-`set == nil ? nil : setter` C-function-pointer ternary; local Xcode 27.0 does not)
-— delete it once `expo-modules-jsi` >= 56.0.13 is installed. Never add a
-`ci_pre_xcodebuild.sh` that runs `xcodebuild -downloadComponent metalToolchain`:
-on Xcode Cloud it exits 70 ("Failed fetching catalog for assetType").
+`withExpoModulesJsiPatches` rewrites two files of the installed
+`expo-modules-jsi` (56.0.7) at prebuild so Xcode 27 can archive it: the
+expo/expo#46736 setter-pointer backport in `JavaScriptRuntime.swift`, and a
+wrapper around the nested `xcodebuild -quiet` in `scripts/build-xcframework.sh`
+whose spurious "error: … exited with code 0" line otherwise fails the phase with
+"Command PhaseScriptExecution emitted errors but did not return a nonzero exit
+code". Each patch is anchor-checked and idempotent; drop a patch once the
+installed package carries the fix. The pod caches its xcframework in
+`node_modules/expo-modules-jsi/apple/{Products,.DerivedData}` — a local
+"BUILD SUCCEEDED" proves nothing about its Swift unless those are cleared first.
+Never add a `ci_pre_xcodebuild.sh` that runs `xcodebuild -downloadComponent
+metalToolchain`: on Xcode Cloud it exits 70 ("Failed fetching catalog for assetType").
 
 Android builds via **EAS Build** or `expo prebuild --platform android`
 + `./gradlew bundleRelease`.
