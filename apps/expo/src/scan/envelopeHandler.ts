@@ -260,7 +260,7 @@ function evidencePackVerificationStatus(
 
 function rebuildCardFromEvidencePack(
   claims: Readonly<Record<string, unknown>>,
-  did: string
+  _did: string
 ): BusinessCard | null {
   const name = pickString(claims['name']);
   if (!name) return null;
@@ -275,7 +275,6 @@ function rebuildCardFromEvidencePack(
       url: pickString(row['value']),
     }));
   const now = new Date();
-  void did;
   return {
     id: uuid(),
     name,
@@ -616,7 +615,7 @@ function rebuildCardFromBusinessCardSnapshot(
 
 function rebuildCardFromJwtPayload(
   payload: Readonly<Record<string, unknown>>,
-  holderDidHint: string | undefined
+  _holderDidHint: string | undefined // Reserved for future linkage to credential id.
 ): BusinessCard | null {
   const vc = pickRecord(payload['vc']) ?? pickRecord(payload['payload'])?.['vc'] as
     | Readonly<Record<string, unknown>>
@@ -663,7 +662,6 @@ function rebuildCardFromJwtPayload(
   const nameType: BusinessCard['nameType'] =
     nameTypeRaw === 'verified_legal_name' ? 'verified_legal_name' : 'display_name';
 
-  void holderDidHint; // Reserved for future linkage to credential id.
   return {
     id: cardId,
     name,

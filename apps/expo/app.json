@@ -160,7 +160,11 @@
       "./plugins/withPassportOpenAcSrsPhase.js",
       "./plugins/withIosBuildNumber.js",
       "./plugins/withAndroidReleaseSigning.js",
-      "expo-sqlite"
+      "expo-sqlite",
+      "expo-asset",
+      "expo-image",
+      "expo-sharing",
+      "expo-web-browser"
     ],
     "runtimeVersion": "2.0.0",
     "updates": {

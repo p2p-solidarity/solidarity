@@ -823,32 +823,6 @@ rm -rf "$work"
     );
   });
 
-  test('expo-modules-jsi patches: setter pointer typed before the nil check (expo/expo#46736)', () => {
-    expect(existsSync(jsiPatchesPluginPath), jsiPatchesPluginPath).toBe(true);
-    if (!existsSync(jsiPatchesPluginPath)) return;
-
-    const plugin = require(jsiPatchesPluginPath);
-    const patch = plugin._internal.PATCHES.find((p: { name: string }) => p.name === 'setter-pointer');
-    const original = [
-      '    let context = Unmanaged.passRetained(HostObjectContext(runtime: self, get, set, getPropertyNames, dealloc)).toOpaque()',
-      '    let callbacks = expo.HostObjectCallbacks(context, getter, set == nil ? nil : setter, propertyNamesGetter, deallocate)',
-      '    let hostObject = expo.HostObject.makeObject(pointee, consume callbacks)',
-      '',
-    ].join('\n');
-
-    const first = plugin._internal.patchSource(patch, original);
-    expect(first.status).toBe('patched');
-    expect(first.source).toContain(
-      'let setterPointer: (@convention(c) (UnsafeMutableRawPointer, UnsafePointer<CChar>, UnsafeMutableRawPointer) -> Void)? = setter'
-    );
-    expect(first.source).toContain('set == nil ? nil : setterPointer,');
-    expect(first.source).not.toContain('set == nil ? nil : setter,');
-    expect(plugin._internal.patchSource(patch, first.source).status).toBe('already-patched');
-    expect(() => plugin._internal.patchSource(patch, 'let callbacks = somethingElse()')).toThrow(
-      /changed shape/
-    );
-  });
-
   test('expo-modules-jsi patches: nested xcodebuild output cannot fail the xcframework phase', () => {
     expect(existsSync(jsiPatchesPluginPath), jsiPatchesPluginPath).toBe(true);
     if (!existsSync(jsiPatchesPluginPath)) return;
@@ -860,7 +834,7 @@ rm -rf "$work"
     const original = [
       '  log "Building framework slice for ${platform}..."',
       '',
-      '  (cd "$PACKAGE_DIR" && env -i PATH="$PATH" HOME="$HOME" PODS_ROOT="$PODS_ROOT" RN_ROOT="$RN_ROOT" \\',
+      '  (cd "$PACKAGE_DIR" && env -i "${env_args[@]}" \\',
       '    xcodebuild \\',
       '    build \\',
       '    -quiet \\',
@@ -873,7 +847,7 @@ rm -rf "$work"
 
     const first = plugin._internal.patchSource(patch, original);
     expect(first.status).toBe('patched');
-    expect(first.source).toContain('if ! (cd "$PACKAGE_DIR" && env -i PATH="$PATH"');
+    expect(first.source).toContain('if ! (cd "$PACKAGE_DIR" && env -i "${env_args[@]}"');
     expect(first.source).toContain(') > "$nested_xcodebuild_log" 2>&1; then');
     expect(first.source).toContain('log "error: nested xcodebuild failed for ${platform}"');
     expect(first.source).toContain("sed -E 's/^((.*: )?)error: /\\1warning: /'");

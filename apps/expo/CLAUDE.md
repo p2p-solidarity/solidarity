@@ -176,14 +176,15 @@ after every `expo prebuild --clean` from the persistent source at
 stages a pinned `default.metallib` so Archive never depends on Xcode Cloud's
 unreliable optional Metal Toolchain; regenerate it with
 `scripts/build-vision-camera-resizer-metallib.sh` after shader updates.
-`withExpoModulesJsiPatches` rewrites two files of the installed
-`expo-modules-jsi` (56.0.7) at prebuild so Xcode 27 can archive it: the
-expo/expo#46736 setter-pointer backport in `JavaScriptRuntime.swift`, and a
-wrapper around the nested `xcodebuild -quiet` in `scripts/build-xcframework.sh`
-whose spurious "error: … exited with code 0" line otherwise fails the phase with
-"Command PhaseScriptExecution emitted errors but did not return a nonzero exit
-code". Each patch is anchor-checked and idempotent; drop a patch once the
-installed package carries the fix. The pod caches its xcframework in
+`withExpoModulesJsiPatches` rewrites `scripts/build-xcframework.sh` of the
+installed `expo-modules-jsi` (56.0.13) at prebuild so Xcode 27 can archive it:
+it wraps the nested `xcodebuild -quiet` whose spurious "error: … exited with
+code 0" line otherwise fails the phase with "Command PhaseScriptExecution
+emitted errors but did not return a nonzero exit code" (archive-only; plain
+build tolerates it). The patch is anchor-checked and idempotent; drop it once
+upstream stops emitting `error:` lines from that phase. `expo install --check`
+must stay clean; `react-native-get-random-values` 2.0.0 is deliberately kept
+via `expo.install.exclude` (Expo's table pins 1.11). The pod caches its xcframework in
 `node_modules/expo-modules-jsi/apple/{Products,.DerivedData}` — a local
 "BUILD SUCCEEDED" proves nothing about its Swift unless those are cleared first.
 Never add a `ci_pre_xcodebuild.sh` that runs `xcodebuild -downloadComponent
