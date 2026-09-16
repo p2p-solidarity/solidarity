@@ -176,6 +176,12 @@ after every `expo prebuild --clean` from the persistent source at
 stages a pinned `default.metallib` so Archive never depends on Xcode Cloud's
 unreliable optional Metal Toolchain; regenerate it with
 `scripts/build-vision-camera-resizer-metallib.sh` after shader updates.
+`withExpoModulesJsiSetterPointer` backports expo/expo#46736 onto the installed
+`expo-modules-jsi` at prebuild (Xcode Cloud's Xcode 27 Swift rejects the untyped
+`set == nil ? nil : setter` C-function-pointer ternary; local Xcode 27.0 does not)
+— delete it once `expo-modules-jsi` >= 56.0.13 is installed. Never add a
+`ci_pre_xcodebuild.sh` that runs `xcodebuild -downloadComponent metalToolchain`:
+on Xcode Cloud it exits 70 ("Failed fetching catalog for assetType").
 
 Android builds via **EAS Build** or `expo prebuild --platform android`
 + `./gradlew bundleRelease`.

@@ -150,6 +150,7 @@
       ],
       "./plugins/withXcodeCloudScripts.js",
       "./plugins/withPrecompiledVisionCameraResizerMetal.js",
+      "./plugins/withExpoModulesJsiSetterPointer.js",
       "./plugins/withMoproBindingsPod.js",
       "./plugins/withSemaphoreBindingsPod.js",
       "./plugins/withRustXcframeworkSearchPath.js",

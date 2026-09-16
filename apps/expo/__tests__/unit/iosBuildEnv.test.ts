@@ -30,6 +30,7 @@ const precompiledResizerLibrary = join(
   'VisionCameraResizer',
   'default.metallib'
 );
+const jsiSetterPointerPluginPath = join(appDir, 'plugins', 'withExpoModulesJsiSetterPointer.js');
 const appConfig = JSON.parse(readFileSync(join(appDir, 'app.json'), 'utf8')) as {
   readonly expo: { readonly plugins: readonly (string | readonly unknown[])[] };
 };
@@ -819,6 +820,57 @@ rm -rf "$work"
     expect(appConfig.expo.plugins).toContain(
       './plugins/withPrecompiledVisionCameraResizerMetal.js'
     );
+  });
+
+  test('expo-modules-jsi host-object setter pointer is typed before the nil check (expo/expo#46736)', () => {
+    expect(existsSync(jsiSetterPointerPluginPath), jsiSetterPointerPluginPath).toBe(true);
+    if (!existsSync(jsiSetterPointerPluginPath)) return;
+
+    const fixtureApp = makeTempDir();
+    const packageRoot = join(fixtureApp, 'node_modules', 'expo-modules-jsi');
+    const runtimeDir = join(packageRoot, 'apple', 'Sources', 'ExpoModulesJSI', 'Runtime');
+    mkdirSync(runtimeDir, { recursive: true });
+    writeFileSync(
+      join(runtimeDir, 'JavaScriptRuntime.swift'),
+      [
+        '    let context = Unmanaged.passRetained(HostObjectContext(runtime: self, get, set, getPropertyNames, dealloc)).toOpaque()',
+        '    let callbacks = expo.HostObjectCallbacks(context, getter, set == nil ? nil : setter, propertyNamesGetter, deallocate)',
+        '    let hostObject = expo.HostObject.makeObject(pointee, consume callbacks)',
+        '',
+      ].join('\n')
+    );
+    const plugin = require(jsiSetterPointerPluginPath);
+
+    expect(plugin._internal.patchInstalledPackage(fixtureApp, packageRoot)).toBe('patched');
+    expect(plugin._internal.patchInstalledPackage(fixtureApp, packageRoot)).toBe('already-patched');
+
+    const patched = readFileSync(join(runtimeDir, 'JavaScriptRuntime.swift'), 'utf8');
+    expect(patched).toContain(
+      'let setterPointer: (@convention(c) (UnsafeMutableRawPointer, UnsafePointer<CChar>, UnsafeMutableRawPointer) -> Void)? = setter'
+    );
+    expect(patched).toContain('set == nil ? nil : setterPointer,');
+    expect(patched).not.toContain('set == nil ? nil : setter,');
+    expect(() => plugin._internal.patchSource('let callbacks = somethingElse()')).toThrow(
+      /changed shape/
+    );
+
+    // The installed package must still be one of the two known shapes so an
+    // expo-modules-jsi upgrade that moves the call site fails here, not on Xcode Cloud.
+    const installed = readFileSync(
+      join(
+        repoRoot,
+        'node_modules',
+        'expo-modules-jsi',
+        'apple',
+        'Sources',
+        'ExpoModulesJSI',
+        'Runtime',
+        'JavaScriptRuntime.swift'
+      ),
+      'utf8'
+    );
+    expect(['patched', 'already-patched']).toContain(plugin._internal.patchSource(installed).status);
+    expect(appConfig.expo.plugins).toContain('./plugins/withExpoModulesJsiSetterPointer.js');
   });
 
   test('shared prepare script stages native iOS binding xcframeworks before pod install', () => {
