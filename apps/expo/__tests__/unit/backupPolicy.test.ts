@@ -12,9 +12,13 @@
  */
 import { describe, expect, it } from 'bun:test';
 import {
+  AUTO_BACKUP_MIN_INTERVAL_HOURS,
+  MAX_RETAINED_BACKUPS,
   newBackupName,
+  nextBackupNameMs,
   parseBackupTimestampMs,
   selectNewestBackup,
+  selectStaleBackups,
   shouldRunBackup,
   sortBackupsByTimestamp,
 } from '../../src/backup/backupPolicy';
@@ -67,17 +71,62 @@ describe('newBackupName', () => {
   });
 });
 
+describe('nextBackupNameMs', () => {
+  // Regression (reported by the cloud-sync session, 2026-09-08): five manual
+  // backups with no gap produced only THREE files — the native writer replaces
+  // a same-named file, so pairs landing in one millisecond overwrote each
+  // other. With only MAX_RETAINED_BACKUPS kept, each collision costs a third
+  // of the user's history.
+  it('never issues the same millisecond twice, even with a frozen clock', () => {
+    const frozen = 1_700_000_000_000;
+    const issued: number[] = [];
+    let last = 0;
+    for (let i = 0; i < 5; i += 1) {
+      last = nextBackupNameMs(frozen, last);
+      issued.push(last);
+    }
+    expect(issued).toEqual([
+      frozen, frozen + 1, frozen + 2, frozen + 3, frozen + 4,
+    ]);
+    expect(new Set(issued.map(newBackupName)).size).toBe(5);
+  });
+
+  it('follows the real clock once it has moved past the mark', () => {
+    expect(nextBackupNameMs(1_700_000_010_000, 1_700_000_000_003)).toBe(1_700_000_010_000);
+  });
+
+  it('keeps names strictly increasing when the clock jumps backwards', () => {
+    // A corrected clock must never re-issue a name that already exists, or the
+    // new archive would silently replace an older, still-wanted one.
+    const last = 1_700_000_000_010;
+    const next = nextBackupNameMs(1_600_000_000_000, last);
+    expect(next).toBe(last + 1);
+    expect(next).toBeGreaterThan(last);
+  });
+
+  it('emits names that still round-trip through the parser', () => {
+    const ms = nextBackupNameMs(1_700_000_000_000, 1_700_000_000_000);
+    expect(parseBackupTimestampMs(newBackupName(ms))).toBe(ms);
+  });
+});
+
 const base = {
   backupEnabled: true,
-  autoBackupOnPull: true,
   lastRunAtMs: null as number | null,
+  lastArchiveAtMs: null as number | null,
   nowMs: 1_000_000,
   cooldownMs: 30_000,
+  minIntervalMs: AUTO_BACKUP_MIN_INTERVAL_HOURS * 3_600_000,
 };
 
 describe('shouldRunBackup', () => {
   it('manual always runs, even when disabled', () => {
     expect(shouldRunBackup({ ...base, reason: 'manual', backupEnabled: false }).run).toBe(true);
+  });
+  it('manual ignores the interval — the user pressed the button', () => {
+    expect(
+      shouldRunBackup({ ...base, reason: 'manual', lastArchiveAtMs: base.nowMs - 1_000 }).run,
+    ).toBe(true);
   });
   it('auto trigger skips when backup disabled', () => {
     expect(shouldRunBackup({ ...base, reason: 'pull', backupEnabled: false })).toEqual({
@@ -85,20 +134,109 @@ describe('shouldRunBackup', () => {
       skipReason: 'disabled',
     });
   });
-  it('pull skips when autoBackupOnPull is off', () => {
-    expect(shouldRunBackup({ ...base, reason: 'pull', autoBackupOnPull: false })).toEqual({
-      run: false,
-      skipReason: 'pull-disabled',
-    });
+  it('backup on means automatic — there is no separate switch to leave off', () => {
+    // The Backup screen is one toggle (2026-09-10): with it on, the schedule,
+    // the People pull and the pan gesture all run without any further opt-in.
+    for (const reason of ['auto', 'pull', 'gesture'] as const) {
+      expect(shouldRunBackup({ ...base, reason })).toEqual({ run: true });
+    }
   });
   it('skips inside the cooldown window', () => {
     expect(
       shouldRunBackup({ ...base, reason: 'gesture', lastRunAtMs: 990_000, nowMs: 1_000_000 }),
     ).toEqual({ run: false, skipReason: 'cooldown' });
   });
-  it('runs once the cooldown has elapsed', () => {
+  it('runs once the cooldown has elapsed and no archive exists yet', () => {
     expect(
       shouldRunBackup({ ...base, reason: 'gesture', lastRunAtMs: 900_000, nowMs: 1_000_000 }).run,
     ).toBe(true);
+  });
+
+  // The interval gate is what makes a MAX_RETAINED_BACKUPS-deep history worth
+  // keeping: without it, repeated pulls/gestures rotate every restore point
+  // out within minutes.
+  it('skips an automatic run inside the fixed interval', () => {
+    const now = 100 * 3_600_000;
+    expect(
+      shouldRunBackup({
+        ...base,
+        reason: 'auto',
+        nowMs: now,
+        lastArchiveAtMs: now - 5 * 3_600_000,
+      }),
+    ).toEqual({ run: false, skipReason: 'interval' });
+  });
+  it('runs an automatic backup once the interval has elapsed', () => {
+    const now = 100 * 3_600_000;
+    expect(
+      shouldRunBackup({
+        ...base,
+        reason: 'auto',
+        nowMs: now,
+        lastArchiveAtMs: now - 6 * 3_600_000,
+      }).run,
+    ).toBe(true);
+  });
+  it('applies the interval to pull and gesture too, so they cannot churn history', () => {
+    const now = 100 * 3_600_000;
+    for (const reason of ['pull', 'gesture'] as const) {
+      expect(
+        shouldRunBackup({ ...base, reason, nowMs: now, lastArchiveAtMs: now - 60_000 }).skipReason,
+      ).toBe('interval');
+    }
+  });
+  it('recovers from a future-dated stamp instead of stalling for the skew', () => {
+    // Written while the device clock was ahead, then the clock corrected. If
+    // this counted as "too soon", automatic backup would go silent for the
+    // whole length of the skew with the toggle still on. Running repairs the
+    // stamp; the cost is at most one extra archive.
+    const now = 100 * 3_600_000;
+    for (const skewMs of [1_000, 3_600_000, 60 * 24 * 3_600_000]) {
+      expect(
+        shouldRunBackup({ ...base, reason: 'auto', nowMs: now, lastArchiveAtMs: now + skewMs }).run,
+      ).toBe(true);
+    }
+  });
+});
+
+describe('AUTO_BACKUP_MIN_INTERVAL_HOURS', () => {
+  it('is the fixed 6h floor that keeps a 3-archive history from churning', () => {
+    // No interval preference exists any more; the constant IS the schedule.
+    // Anything shorter would let a busy day rotate all retained restore
+    // points out within hours.
+    expect(AUTO_BACKUP_MIN_INTERVAL_HOURS).toBe(6);
+    expect(MAX_RETAINED_BACKUPS).toBe(3);
+  });
+});
+
+describe('selectStaleBackups', () => {
+  // Rotation PERMANENTLY deletes cloud files — an off-by-one here destroys
+  // the user's oldest restore point.
+  const names = [
+    'backup_1700000004000.solbk',
+    'backup_1700000001000.solbk',
+    'backup_1700000003000.solbk',
+    'backup_1700000002000.solbk',
+  ];
+  it('keeps the newest N and returns the rest oldest-first', () => {
+    expect(selectStaleBackups(names, 3)).toEqual(['backup_1700000001000.solbk']);
+  });
+  it('deletes nothing while at or below the cap', () => {
+    expect(selectStaleBackups(names.slice(0, 3), 3)).toEqual([]);
+    expect(selectStaleBackups(names.slice(0, 2), 3)).toEqual([]);
+    expect(selectStaleBackups([], 3)).toEqual([]);
+  });
+  it('drops legacy Swift-named archives by age, not by format', () => {
+    // A v1 file only opens on the device that wrote it and is superseded by
+    // any newer portable archive, so it rotates out like anything else.
+    expect(
+      selectStaleBackups(
+        ['backup_1700000000.123456.solbk', 'backup_1700000009000.solbk'],
+        1,
+      ),
+    ).toEqual(['backup_1700000000.123456.solbk']);
+  });
+  it('retains three archives by default', () => {
+    expect(MAX_RETAINED_BACKUPS).toBe(3);
   });
 });

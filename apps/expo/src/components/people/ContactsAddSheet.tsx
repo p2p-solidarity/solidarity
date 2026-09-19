@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react';
-import { Modal, ScrollView, View } from 'react-native';
+import { Modal, Pressable, ScrollView, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import type { SFSymbol } from 'expo-symbols';
 
@@ -39,73 +39,78 @@ export function ContactsAddSheet({
   return (
     <Modal
       visible={visible}
-      animationType="slide"
-      presentationStyle="pageSheet"
+      animationType="fade"
+      transparent
       onRequestClose={onClose}
     >
-      <View
-        style={{
-          flex: 1,
-          backgroundColor: Colors.pageBg,
-          paddingTop: insets.top,
-        }}
-      >
-        <View className="items-center px-4 pb-5 pt-2">
-          <ThemedText variant="titleLarge">{t('peopleList.add')}</ThemedText>
-        </View>
-
-        <ScrollView contentContainerStyle={{ paddingHorizontal: 16, gap: 16 }}>
-          <ThemedSurface variant="card">
-            <ContactsActionRow
-              icon="qrcode.viewfinder"
-              label={t('peopleList.scanTheirQr')}
-              onPress={() => { choose(onScan); }}
-            />
-            <ContactsActionRow
-              icon="square.and.pencil"
-              label={t('peopleList.enterByHand')}
-              onPress={() => { choose(onEnterManually); }}
-              isLast
-            />
-          </ThemedSurface>
-
-          <ThemedSurface variant="inset">
-            <ContactsActionRow
-              icon="person.crop.circle.badge.plus"
-              label={t('peopleList.importFromPhone')}
-              onPress={() => { choose(onImportPhone); }}
-              secondary
-            />
-            <ContactsActionRow
-              icon="doc.badge.plus"
-              label={t('peopleList.importVcfFile')}
-              onPress={() => { choose(onImportVcf); }}
-              secondary
-            />
-            <ContactsActionRow
-              icon="link"
-              label={t('peopleList.pasteLinkPage')}
-              onPress={() => { choose(onImportPage); }}
-              secondary
-              isLast
-            />
-          </ThemedSurface>
-        </ScrollView>
-
-        <View
+      <View className="flex-1 justify-end" style={{ backgroundColor: Colors.overlayBg }}>
+        <Pressable className="flex-1" onPress={onClose} accessibilityRole="button" accessibilityLabel={t('common.close')} />
+        <ThemedSurface
+          variant="elevated"
           style={{
-            paddingHorizontal: 16,
-            paddingTop: 12,
-            paddingBottom: Math.max(insets.bottom, 12),
+            maxHeight: '82%',
+            borderTopLeftRadius: 16,
+            borderTopRightRadius: 16,
+            borderBottomLeftRadius: 0,
+            borderBottomRightRadius: 0,
+            paddingTop: 8,
+            paddingBottom: Math.max(insets.bottom, 16),
           }}
         >
-          <ThemedButton
-            fullWidth
-            variant="secondary"
-            label={t('peopleList.close')}
-            onPress={onClose}
-          />
-        </View>
+          <View className="items-center gap-3 px-4 pb-4">
+            <View style={{ width: 36, height: 4, borderRadius: 2, backgroundColor: Colors.divider }} />
+            <ThemedText variant="titleMedium">{t('peopleList.add')}</ThemedText>
+          </View>
+
+          <ScrollView contentContainerStyle={{ paddingHorizontal: 16, gap: 12 }}>
+            <ThemedSurface variant="card">
+              <ContactsActionRow
+                icon="qrcode.viewfinder"
+                label={t('peopleList.scanTheirQr')}
+                onPress={() => { choose(onScan); }}
+              />
+              <ContactsActionRow
+                icon="square.and.pencil"
+                label={t('peopleList.enterByHand')}
+                onPress={() => { choose(onEnterManually); }}
+                isLast
+              />
+            </ThemedSurface>
+
+            <View style={{ height: 0.5, backgroundColor: Colors.divider }} />
+
+            <ThemedSurface variant="inset">
+              <ContactsActionRow
+                icon="person.crop.circle.badge.plus"
+                label={t('peopleList.importFromPhone')}
+                onPress={() => { choose(onImportPhone); }}
+                secondary
+              />
+              <ContactsActionRow
+                icon="doc.badge.plus"
+                label={t('peopleList.importVcfFile')}
+                onPress={() => { choose(onImportVcf); }}
+                secondary
+              />
+              <ContactsActionRow
+                icon="link"
+                label={t('peopleList.pasteLinkPage')}
+                onPress={() => { choose(onImportPage); }}
+                secondary
+                isLast
+              />
+            </ThemedSurface>
+          </ScrollView>
+
+          <View className="px-4 pt-3">
+            <ThemedButton
+              fullWidth
+              variant="secondary"
+              label={t('peopleList.close')}
+              onPress={onClose}
+            />
+          </View>
+        </ThemedSurface>
       </View>
     </Modal>
   );

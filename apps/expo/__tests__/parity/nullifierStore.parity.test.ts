@@ -18,7 +18,7 @@
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 import type { HybridObject } from 'react-native-nitro-modules';
 
-import type { Semaphore, SemaphoreProof } from '@solidarity/nitro-semaphore';
+import type { Semaphore, SemaphoreProof } from '@solidarity/nitro-attest';
 
 import { hasNullifier, recordNullifier } from '../../src/zk';
 import { __setSemaphoreNativeForTesting } from '../../src/zk/nativeBridge';

@@ -24,6 +24,7 @@ import { PressableScale } from '@/components/common/PressableScale';
 import { SfIcon } from '@/components/icons/SfIcon';
 import { ThemedText } from '@/components/themed';
 import { Colors } from '@/constants/Colors';
+import { appAlert } from '@/feedback/appAlert';
 import { useTranslation } from '@/i18n';
 import { useDeclaredSnapshot } from '@/people/profileSnapshots';
 
@@ -32,6 +33,14 @@ export default function DeclaredPageDetailScreen(): ReactNode {
   const { id } = useLocalSearchParams<{ id: string }>();
   const snapshot = useDeclaredSnapshot(id);
   const insets = useSafeAreaInsets();
+  const openUrl = (url: string): void => {
+    void Linking.openURL(url).catch(() => {
+      appAlert({
+        title: t('mePage.linkErrorTitle'),
+        message: t('mePage.linkErrorMessage'),
+      });
+    });
+  };
 
   return (
     <View className="flex-1 bg-pageBg" style={{ paddingTop: insets.top }}>
@@ -54,7 +63,7 @@ export default function DeclaredPageDetailScreen(): ReactNode {
             </ThemedText>
             <PressableScale
               haptic="tap"
-              onPress={() => { void Linking.openURL(snapshot.sourceUrl).catch(() => undefined); }}
+              onPress={() => { openUrl(snapshot.sourceUrl); }}
               accessibilityRole="link"
             >
               <ThemedText variant="caption" tone="tertiary" selectable>
@@ -84,7 +93,7 @@ export default function DeclaredPageDetailScreen(): ReactNode {
                 <PressableScale
                   key={`${link.label}-${link.url}`}
                   haptic="tap"
-                  onPress={() => { void Linking.openURL(link.url).catch(() => undefined); }}
+                  onPress={() => { openUrl(link.url); }}
                   accessibilityRole="link"
                   style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}
                 >

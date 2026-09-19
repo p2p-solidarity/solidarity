@@ -1,7 +1,7 @@
 /**
  * DAG replay — pure projection from the node list to a state snapshot.
  *
- * Spec: docs/dev-sandbox-identity-graph.md §6.3 (LWW conflict
+ * Spec: docs/ref/notes-dev-sandbox-identity-graph.md §6.3 (LWW conflict
  * resolution), §6.4 (revocation), §13.3 (full-replay rule + perf gate).
  *
  * Strategy: one pass to collect revoked-id set, then sort nodes by

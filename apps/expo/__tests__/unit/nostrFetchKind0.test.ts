@@ -97,6 +97,24 @@ describe('fetchKind0FromRelays', () => {
     expect(calls.sort()).toEqual(['a', 'b']);
   });
 
+  it('rejects an event whose kind does not match the requested filter', async () => {
+    const wrongKind = { ...fakeEvent(PUBKEY, { name: 'forged' }, 300), kind: 1 };
+    const { fn } = makeFakeSubscribe({ a: [wrongKind] });
+
+    const r = await fetchKind0FromRelays(PUBKEY, ['a'], { subscribeEventsFn: fn });
+
+    expect(r).toBeNull();
+  });
+
+  it('rejects an event whose author does not match the requested filter', async () => {
+    const wrongAuthor = fakeEvent('f'.repeat(64), { name: 'forged' }, 300);
+    const { fn } = makeFakeSubscribe({ a: [wrongAuthor] });
+
+    const r = await fetchKind0FromRelays(PUBKEY, ['a'], { subscribeEventsFn: fn });
+
+    expect(r).toBeNull();
+  });
+
   it('malformed JSON content resolves an empty-object contentJson, not a thrown error', async () => {
     const malformed: NostrEvent = { ...fakeEvent(PUBKEY, {}, 300), content: 'not json{' };
     const { fn } = makeFakeSubscribe({ a: [malformed] });

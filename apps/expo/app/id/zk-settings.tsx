@@ -34,7 +34,7 @@ import { showError } from '@/feedback/appAlert';
 import { confirmDialog } from '@/feedback/confirmDialog';
 import { pushToast } from '@/feedback/toast';
 import { useTranslation } from '@/i18n';
-import { requireBiometric } from '@/keychain/biometric';
+import { requireSensitiveAction } from '@/keychain/biometricGatekeeper';
 import { useProofsSupported, useZkIdentity, useZkIdentityCommitment } from '@/zk';
 
 export default function ZkSettings(): React.JSX.Element {
@@ -63,8 +63,13 @@ export default function ZkSettings(): React.JSX.Element {
   const performDelete = async (): Promise<void> => {
     setIsDeleting(true);
     try {
-      const ok = await requireBiometric('delete');
-      if (!ok) {
+      // RED LINE: deleting the ZK identity is irreversible, so this
+      // authenticates in every gate mode.
+      const gate = await requireSensitiveAction(
+        'deleteZKIdentity',
+        t('security.prompt.deleteZKIdentity')
+      );
+      if (!gate.success) {
         pushToast('Biometric authentication required', 'warning');
         return;
       }

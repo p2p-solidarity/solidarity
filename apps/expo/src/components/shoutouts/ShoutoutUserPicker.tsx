@@ -17,7 +17,6 @@
  */
 import { useMemo, useState, type ReactNode } from 'react';
 import {
-  Modal,
   Pressable,
   ScrollView,
   Text,
@@ -27,6 +26,7 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { SakuraIcon } from '@/components/brand/SakuraIcon';
+import { ModalSheet } from '@/components/common/ModalSheet';
 import { SfIcon } from '@/components/icons/SfIcon';
 import { ThemedButton } from '@/components/themed';
 import { Colors } from '@/constants/Colors';
@@ -102,12 +102,7 @@ export function ShoutoutUserPicker({
   };
 
   return (
-    <Modal
-      visible={visible}
-      animationType="slide"
-      presentationStyle="pageSheet"
-      onRequestClose={onCancel}
-    >
+    <ModalSheet visible={visible} onRequestClose={onCancel}>
       <View className="flex-1 bg-pageBg" style={{ paddingTop: insets.top }}>
         <View
           className="flex-row items-center"
@@ -216,7 +211,7 @@ export function ShoutoutUserPicker({
           </View>
         ) : null}
       </View>
-    </Modal>
+    </ModalSheet>
   );
 }
 

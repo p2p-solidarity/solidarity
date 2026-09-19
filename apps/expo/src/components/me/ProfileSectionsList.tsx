@@ -1,8 +1,11 @@
 import { useState, type ReactNode } from 'react';
 import { router } from 'expo-router';
-import { ActivityIndicator, Modal, ScrollView, Switch, View } from 'react-native';
+import { ActivityIndicator, ScrollView, Switch, View } from 'react-native';
+import { KeyboardAwareScrollView } from 'react-native-keyboard-controller';
+import Animated, { FadeIn } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { ModalSheet } from '@/components/common/ModalSheet';
 import { PressableScale } from '@/components/common/PressableScale';
 import { SfIcon } from '@/components/icons/SfIcon';
 import { ThemedButton, ThemedSurface, ThemedText, ThemedTextInput } from '@/components/themed';
@@ -21,15 +24,51 @@ import {
   createInitialPageDesign,
   publicPageDesignEquals,
   toPublicPageDesign,
+  type PageAppearance,
   type PageBlock,
   type PageBlockItem,
   type PageBlockType,
 } from '@/page/pageDesign';
 import { preparePageDesign, usePageDesignStore } from '@/page/pageDesignStore';
-import { useProfileStore } from '@/profile/store';
-import { uuid } from '@solidarity/shared';
 
-export function ProfileSectionsList({ linkCount }: { readonly linkCount: number }): ReactNode {
+import { PageLivePreview } from './PageLivePreview';
+import { PageSectionLabel } from './PageSectionLabel';
+import {
+  BLOCK_ROW_HEIGHT,
+  BLOCK_ROW_STRIDE,
+  ICON_TILE_GLYPH,
+  ROW_GAP,
+  blockRowStyle,
+  fieldRowStyle,
+  iconTileStyle,
+} from './pageRowStyles';
+import {
+  DraggableRow,
+  RowDragHandle,
+  resetRowDrag,
+  useRowDragController,
+  type RowDragController,
+} from './rowDrag';
+import { useProfileStore } from '@/profile/store';
+import { uuid, type ProfileRecord } from '@solidarity/shared';
+
+export interface ProfileSectionsListProps {
+  readonly linkCount: number;
+  /** The public projection the preview paints — the same record a visitor
+   *  would resolve, not the owner's full one. */
+  readonly previewRecord: ProfileRecord;
+  /** Real page address for the preview's handle line, when one exists. */
+  readonly previewHandle: string | null;
+}
+
+/** Reveal duration for the folded preview — same 240ms as the page entrance. */
+const PREVIEW_REVEAL_MS = 240;
+
+export function ProfileSectionsList({
+  linkCount,
+  previewRecord,
+  previewHandle,
+}: ProfileSectionsListProps): ReactNode {
   const { t } = useTranslation();
   const c = useThemeColors();
   const status = usePageDesignStore((state) => state.status);
@@ -43,11 +82,24 @@ export function ProfileSectionsList({ linkCount }: { readonly linkCount: number 
   const [pickerOpen, setPickerOpen] = useState(false);
   const [editing, setEditing] = useState<PageBlock | null>(null);
   const [publishing, setPublishing] = useState(false);
+  const [previewOpen, setPreviewOpen] = useState(false);
+  const drag = useRowDragController();
   const publishedDesign = record?.page ?? toPublicPageDesign(createInitialPageDesign());
   const pageHasChanges = status === 'ready' && record !== null && !publicPageDesignEquals(
     toPublicPageDesign(design),
     publishedDesign,
   );
+  const movableBlocks = blocks.filter((block) => block.type !== 'links');
+
+  const moveBlockTo = (block: PageBlock, sourceIndex: number, destinationIndex: number): void => {
+    if (sourceIndex === destinationIndex) return;
+    const direction = destinationIndex < sourceIndex ? 'up' : 'down';
+    const distance = Math.abs(destinationIndex - sourceIndex);
+    for (let step = 0; step < distance; step += 1) {
+      if (direction === 'up') moveBlock(block.id, 'up');
+      else moveBlock(block.id, 'down');
+    }
+  };
 
   const publishPageChanges = (): void => {
     if (publishing || !record || status !== 'ready') return;
@@ -71,9 +123,7 @@ export function ProfileSectionsList({ linkCount }: { readonly linkCount: number 
 
   return (
     <View className="gap-3 px-4">
-      <ThemedText accessibilityRole="header" variant="label" tone="tertiary">
-        {t('mePage.sections')}
-      </ThemedText>
+      <PageSectionLabel title={t('mePage.sections')} />
 
       {status === 'loading' ? (
         <ThemedSurface padded className="items-center gap-2">
@@ -92,40 +142,43 @@ export function ProfileSectionsList({ linkCount }: { readonly linkCount: number 
         </ThemedSurface>
       ) : (
         <>
-          <ThemedSurface variant="card" className="flex-row items-center gap-3 px-4 py-3">
-            <View
-              style={{
-                width: 36,
-                height: 36,
-                borderRadius: 10,
-                alignItems: 'center',
-                justifyContent: 'center',
-                backgroundColor: c.searchBg,
-              }}>
-              <SfIcon name="link" size={16} color={Colors.primaryBlue} />
+          {/* The links block always sits first and cannot be reordered or
+              switched off, so the mock gives it no controls at all. */}
+          <View style={fieldRowStyle(c.mutedSurface)}>
+            <View style={iconTileStyle(c.chipSurface)}>
+              <SfIcon name="link" size={ICON_TILE_GLYPH} color={Colors.primaryBlue} />
             </View>
-            <View className="flex-1 gap-0.5">
+            <View className="flex-1" style={{ gap: 1 }}>
               <ThemedText variant="bodyMedium">{t('mePage.links')}</ThemedText>
               <ThemedText variant="caption" tone="tertiary">
                 {t('mePage.linkCount', { count: linkCount })}
               </ThemedText>
             </View>
             <ThemedText variant="caption" tone="tertiary">{t('pageDesign.alwaysOn')}</ThemedText>
-          </ThemedSurface>
+          </View>
 
-          {blocks.filter((block) => block.type !== 'links').map((block, index, movable) => (
-            <BlockRow
-              key={block.id}
-              block={block}
-              canMoveUp={index > 0}
-              canMoveDown={index < movable.length - 1}
-              onEdit={() => { setEditing(block); }}
-              onVisibleChange={(visible) => { setBlockVisible(block.id, visible); }}
-              onMoveUp={() => { moveBlock(block.id, 'up'); }}
-              onMoveDown={() => { moveBlock(block.id, 'down'); }}
-              onProPress={openProSettings}
-            />
-          ))}
+          {/* One tight group: the drag stride reads row travel as
+              height + ROW_GAP, so the rows must be spaced by exactly that. */}
+          <View style={{ gap: ROW_GAP }}>
+            {movableBlocks.map((block, index) => (
+              <BlockRow
+                key={`${String(index)}-${block.id}`}
+                block={block}
+                controller={drag}
+                index={index}
+                itemCount={movableBlocks.length}
+                onEdit={() => { setEditing(block); }}
+                onVisibleChange={(visible) => { setBlockVisible(block.id, visible); }}
+                onMove={(destination) => {
+                  moveBlockTo(block, index, destination);
+                  // Same-task reset: the committed order and the identity
+                  // transforms must reach the UI on the same frame.
+                  resetRowDrag(drag);
+                }}
+                onProPress={openProSettings}
+              />
+            ))}
+          </View>
 
           <ThemedButton
             label={t('pageDesign.addSection')}
@@ -133,6 +186,19 @@ export function ProfileSectionsList({ linkCount }: { readonly linkCount: number 
             fullWidth
             disabled={blocks.length >= MAX_PAGE_BLOCK_COUNT}
             onPress={() => { setPickerOpen(true); }}
+          />
+
+          {/* The preview lives here, folded away. Blocks are the only thing on
+              this page whose effect you cannot read off the row itself, so
+              the "what does it look like" answer belongs with them — and
+              stays collapsed so the tab remains a list. */}
+          <PagePreviewDisclosure
+            open={previewOpen}
+            record={previewRecord}
+            handle={previewHandle}
+            appearance={design.appearance}
+            blocks={blocks}
+            onToggle={() => { setPreviewOpen((current) => !current); }}
           />
 
           {pageHasChanges ? (
@@ -164,90 +230,119 @@ export function ProfileSectionsList({ linkCount }: { readonly linkCount: number 
   );
 }
 
+function PagePreviewDisclosure({
+  open,
+  record,
+  handle,
+  appearance,
+  blocks,
+  onToggle,
+}: {
+  readonly open: boolean;
+  readonly record: ProfileRecord;
+  readonly handle: string | null;
+  readonly appearance: PageAppearance;
+  readonly blocks: readonly PageBlock[];
+  readonly onToggle: () => void;
+}): ReactNode {
+  const { t } = useTranslation();
+  const c = useThemeColors();
+  return (
+    <View style={{ gap: open ? 12 : 0 }}>
+      <PressableScale
+        haptic="tap"
+        onPress={onToggle}
+        accessibilityRole="button"
+        accessibilityState={{ expanded: open }}
+        accessibilityLabel={t('pageDesign.preview')}
+        style={blockRowStyle(c.mutedSurface)}>
+        <ThemedText variant="bodyMedium" style={{ flex: 1 }}>
+          {t('pageDesign.preview')}
+        </ThemedText>
+        <SfIcon name={open ? 'chevron.down' : 'chevron.right'} size={13} color={Colors.text3} />
+      </PressableScale>
+      {open ? (
+        <Animated.View entering={FadeIn.duration(PREVIEW_REVEAL_MS)}>
+          <PageLivePreview
+            record={record}
+            blocks={blocks}
+            appearance={appearance}
+            handle={handle}
+          />
+        </Animated.View>
+      ) : null}
+    </View>
+  );
+}
+
 function BlockRow({
   block,
-  canMoveUp,
-  canMoveDown,
+  controller,
+  index,
+  itemCount,
   onEdit,
   onVisibleChange,
-  onMoveUp,
-  onMoveDown,
+  onMove,
   onProPress,
 }: {
   readonly block: PageBlock;
-  readonly canMoveUp: boolean;
-  readonly canMoveDown: boolean;
+  readonly controller: RowDragController;
+  readonly index: number;
+  readonly itemCount: number;
   readonly onEdit: () => void;
   readonly onVisibleChange: (visible: boolean) => void;
-  readonly onMoveUp: () => void;
-  readonly onMoveDown: () => void;
+  readonly onMove: (destination: number) => void;
   readonly onProPress: () => void;
 }): ReactNode {
   const { t } = useTranslation();
+  const c = useThemeColors();
   const catalog = PAGE_BLOCK_CATALOG.find((entry) => entry.type === block.type);
   if (!catalog) return null;
   return (
-    <ThemedSurface variant="card" className="flex-row items-center gap-2 px-3 py-2">
-      <View style={{ flexDirection: 'row' }}>
-        <ReorderButton
-          label={t('pageDesign.moveUp')}
-          symbol="↑"
-          disabled={!canMoveUp}
-          onPress={catalog.pro ? onProPress : onMoveUp}
-        />
-        <ReorderButton
-          label={t('pageDesign.moveDown')}
-          symbol="↓"
-          disabled={!canMoveDown}
-          onPress={catalog.pro ? onProPress : onMoveDown}
-        />
-      </View>
+    <DraggableRow
+      controller={controller}
+      index={index}
+      stride={BLOCK_ROW_STRIDE}
+      style={{
+        ...blockRowStyle(c.mutedSurface),
+        gap: 8,
+        paddingVertical: 0,
+        paddingLeft: 0,
+        paddingRight: 12,
+      }}>
+      <RowDragHandle
+        controller={controller}
+        label={t('mePage.reorderSection', { title: block.title })}
+        index={index}
+        itemCount={itemCount}
+        stride={BLOCK_ROW_STRIDE}
+        height={BLOCK_ROW_HEIGHT}
+        disabled={catalog.pro}
+        onMove={catalog.pro ? () => { onProPress(); } : onMove}
+      />
       <PressableScale
         fill
         onPress={catalog.pro ? onProPress : onEdit}
         accessibilityRole="button"
         accessibilityLabel={t('pageDesign.editSection', { title: block.title })}
         accessibilityHint={catalog.pro ? t('pageDesign.proControl') : undefined}
-        className="flex-row items-center gap-2 py-2">
+        className="flex-row items-center gap-2 py-1">
         <View className="flex-1 gap-0.5">
           <ThemedText variant="bodyMedium">{block.title}</ThemedText>
           <ThemedText variant="caption" tone="tertiary">
             {t('pageDesign.itemCount', { count: block.items.length })}{catalog.pro ? ' · PRO' : ''}
           </ThemedText>
         </View>
-        <ThemedText variant="titleMedium" tone="tertiary">›</ThemedText>
       </PressableScale>
       <Switch
         value={block.visible}
+        style={{ alignSelf: 'center' }}
         accessibilityLabel={t('pageDesign.sectionVisible', { title: block.title })}
         accessibilityHint={catalog.pro ? t('pageDesign.proControl') : undefined}
         onValueChange={catalog.pro ? onProPress : onVisibleChange}
         trackColor={{ true: Colors.primaryBlue }}
       />
-    </ThemedSurface>
-  );
-}
-
-function ReorderButton({
-  label,
-  symbol,
-  disabled,
-  onPress,
-}: {
-  readonly label: string;
-  readonly symbol: string;
-  readonly disabled: boolean;
-  readonly onPress: () => void;
-}): ReactNode {
-  return (
-    <PressableScale
-      disabled={disabled}
-      onPress={onPress}
-      accessibilityRole="button"
-      accessibilityLabel={label}
-      style={{ width: 44, height: 44, alignItems: 'center', justifyContent: 'center', opacity: disabled ? 0.25 : 1 }}>
-      <ThemedText variant="titleMedium">{symbol}</ThemedText>
-    </PressableScale>
+    </DraggableRow>
   );
 }
 
@@ -264,9 +359,9 @@ function PageBlockPickerSheet({
   const insets = useSafeAreaInsets();
   const addBlock = usePageDesignStore((state) => state.addBlock);
   return (
-    <Modal visible={visible} animationType="slide" presentationStyle="pageSheet" onRequestClose={onClose}>
-      <View className="flex-1 bg-pageBg" style={{ paddingTop: insets.top, paddingBottom: insets.bottom + 16 }}>
-        <ScrollView contentContainerStyle={{ padding: 16, gap: 12 }}>
+    <ModalSheet visible={visible} onRequestClose={onClose}>
+      <View className="flex-1 bg-pageBg" style={{ paddingTop: insets.top }}>
+        <ScrollView contentContainerStyle={{ padding: 16, paddingBottom: insets.bottom + 24, gap: 12 }}>
           <ThemedText variant="titleLarge">{t('pageDesign.addSection')}</ThemedText>
           {PAGE_BLOCK_CATALOG.filter((entry) => entry.type !== 'links').map((entry) => (
               <PressableScale
@@ -295,7 +390,7 @@ function PageBlockPickerSheet({
           <ThemedButton label={t('common.close')} variant="secondary" fullWidth onPress={onClose} />
         </ScrollView>
       </View>
-    </Modal>
+    </ModalSheet>
   );
 }
 
@@ -334,9 +429,12 @@ function PageBlockEditorContent({ block, onClose }: { readonly block: PageBlock;
     onClose();
   };
   return (
-    <Modal visible animationType="slide" presentationStyle="pageSheet" onRequestClose={onClose}>
+    <ModalSheet visible onRequestClose={onClose}>
       <View className="flex-1 bg-pageBg" style={{ paddingTop: insets.top }}>
-        <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={{ padding: 16, paddingBottom: insets.bottom + 24, gap: 18 }}>
+        <KeyboardAwareScrollView
+          keyboardShouldPersistTaps="handled"
+          bottomOffset={16}
+          contentContainerStyle={{ padding: 16, paddingBottom: insets.bottom + 24, gap: 18 }}>
           <ThemedText variant="titleLarge">{t('pageDesign.editSectionTitle')}</ThemedText>
           <ThemedTextInput
             label={t('pageDesign.sectionTitle')}
@@ -429,9 +527,9 @@ function PageBlockEditorContent({ block, onClose }: { readonly block: PageBlock;
             onPress={() => { removeBlock(block.id); onClose(); }}
           />
           <ThemedButton label={t('common.cancel')} variant="secondary" fullWidth onPress={onClose} />
-        </ScrollView>
+        </KeyboardAwareScrollView>
       </View>
-    </Modal>
+    </ModalSheet>
   );
 }
 

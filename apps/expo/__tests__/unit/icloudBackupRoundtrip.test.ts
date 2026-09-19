@@ -19,7 +19,7 @@
  *
  * Expo port:
  *   apps/expo/src/backup/cloudProvider.ts      — file-based facade over the
- *                                                  @solidarity/nitro-cloudkit
+ *                                                  @solidarity/nitro-keystone
  *                                                  file API (iCloud OR Drive)
  *   apps/expo/src/backup/solbEnvelope.ts       — SOLB magic + version framing
  *   apps/expo/src/backup/backupManager.ts      — performBackupNow / restore
@@ -32,13 +32,14 @@
  * are no longer byte-identical to the SwiftUI format. The serialised JSON field
  * NAMES still match Swift Codable verbatim.
  *
- * We mock the @solidarity/nitro-cloudkit file API here (writeFileBackup /
+ * We mock the @solidarity/nitro-keystone file API here (writeFileBackup /
  * readFileBackup / listFileBackups) with an in-memory file store.
  *
  * Run:
  *   cd apps/expo && bun test __tests__/unit/icloudBackupRoundtrip.test.ts
  */
 import { afterAll, beforeAll, beforeEach, describe, expect, it, mock } from 'bun:test';
+import { readFileSync } from 'node:fs';
 
 import type { Preferences } from '../../src/settings/preferences';
 
@@ -59,6 +60,7 @@ import {
   encryptJsonWithKey,
 } from '../../src/storage/jsonCrypto';
 import { encodeSolb } from '../../src/backup/solbEnvelope';
+import { ArchiveDownloadPendingError } from '../../src/backup/archiveDownload';
 
 // ─── Module surface types (imported lazily after mocks install) ─────────────
 
@@ -70,9 +72,18 @@ interface BackupArchiveInfo {
   readonly name: string;
   readonly timestampMs: number;
   readonly version: 1 | 2 | null;
+  readonly availability: 'ready' | 'downloading' | 'cloud-only';
+  readonly percent: number | null;
 }
 interface CloudProviderSurface {
   readonly uploadBackup: <T>(value: T, key: Uint8Array) => Promise<void>;
+  readonly ensureArchiveDownloaded: (
+    name: string,
+    options?: {
+      readonly pollMs?: number;
+      readonly onProgress?: (progress: { readonly percent: number | null }) => void;
+    },
+  ) => Promise<void>;
   readonly downloadLatestArchive: () => Promise<DownloadedArchive | null>;
   readonly downloadArchive: (name: string) => Promise<DownloadedArchive>;
   readonly listBackupArchives: () => Promise<readonly BackupArchiveInfo[]>;
@@ -81,7 +92,7 @@ interface CloudProviderSurface {
   readonly getActiveProvider: () => 'iCloud' | 'googleDrive';
 }
 
-// ─── Fake @solidarity/nitro-cloudkit (Nitro module) ────────────────────────
+// ─── Fake @solidarity/nitro-keystone (Nitro module) ────────────────────────
 //
 // The real CloudKit surface stores one record per recordId + recordType.
 // Our test fake stores records in a Map keyed by `<activeProvider>:<recordId>`
@@ -102,6 +113,13 @@ interface FakeFile {
 const fakeFiles = new Map<string, FakeFile>();
 let activeProvider: 'iCloud' | 'googleDrive' = 'iCloud';
 let fakeClock = 1_700_000_000_000;
+// iCloud eviction: a file that exists in the cloud but whose bytes are not on
+// this device. `readFileBackup` fails fast on it (the real native contract);
+// `startFileBackupDownload` begins a two-poll "transfer" (50% → current).
+const evicted = new Set<string>();
+const downloadPolls = new Map<string, number>();
+const reads: string[] = [];
+const starts: string[] = [];
 
 function fileKey(filename: string): string {
   return `${activeProvider}:${filename}`;
@@ -128,9 +146,28 @@ const FakeCloudKit = {
     fakeFiles.set(fileKey(filename), { content, modifiedTime: fakeClock });
   },
   readFileBackup: async (filename: string): Promise<string> => {
+    reads.push(filename);
     const f = fakeFiles.get(fileKey(filename));
     if (!f) throw new Error(`fake-cloudkit: missing ${filename}`);
+    if (evicted.has(filename)) throw new Error('iCloud file is still downloading');
     return f.content;
+  },
+  getFileBackupDownloadState: async (filename: string) => {
+    if (!fakeFiles.has(fileKey(filename))) return { status: 'missing' as const };
+    if (!evicted.has(filename)) return { status: 'current' as const, percentDownloaded: 100 };
+    const polls = downloadPolls.get(filename);
+    if (polls === undefined) return { status: 'notDownloaded' as const };
+    if (polls === 0) {
+      downloadPolls.set(filename, 1);
+      return { status: 'downloading' as const, percentDownloaded: 50 };
+    }
+    evicted.delete(filename);
+    downloadPolls.delete(filename);
+    return { status: 'current' as const, percentDownloaded: 100 };
+  },
+  startFileBackupDownload: async (filename: string) => {
+    starts.push(filename);
+    if (evicted.has(filename)) downloadPolls.set(filename, 0);
   },
   listFileBackups: async (): Promise<string[]> => {
     const prefix = `${activeProvider}:`;
@@ -157,7 +194,7 @@ const PORTABLE_KEY_B = new Uint8Array(32).fill(0x22);
 let cloud: CloudProviderSurface;
 
 beforeAll(async () => {
-  await mock.module('@solidarity/nitro-cloudkit', () => ({
+  await mock.module('@solidarity/nitro-keystone', () => ({
     getCloudKit: () => FakeCloudKit,
   }));
   await mock.module('react-native', () => ({
@@ -205,6 +242,10 @@ beforeAll(async () => {
 
 beforeEach(() => {
   fakeFiles.clear();
+  evicted.clear();
+  downloadPolls.clear();
+  reads.length = 0;
+  starts.length = 0;
   activeProvider = 'iCloud';
 });
 
@@ -440,6 +481,61 @@ describe('iCloud backup round trip — portable SOLB v2 archive across devices',
     expect(restored.timestamp).toBe('2026-05-01T00:00:00Z');
   });
 
+  it('lists an archive iCloud has not delivered yet as cloud-only, without reading its header', async () => {
+    await cloud.uploadBackup(makeFullPayload(), PORTABLE_KEY_A);
+    await new Promise((r) => setTimeout(r, 2));
+    await cloud.uploadBackup(makeFullPayload(), PORTABLE_KEY_A);
+    const [newest, older] = (await cloud.listBackupArchives()).map((a) => a.name);
+    if (!newest || !older) throw new Error('expected two archives');
+    evicted.add(older);
+    reads.length = 0;
+
+    const list = await cloud.listBackupArchives();
+    expect(list.find((a) => a.name === newest)).toMatchObject({ availability: 'ready', version: 2 });
+    // Cold row is listed honestly — not as "Unrecognized format" — and tappable.
+    expect(list.find((a) => a.name === older)).toMatchObject({
+      availability: 'cloud-only',
+      version: null,
+      percent: null,
+    });
+    // Listing must neither read nor start a transfer for a cold row: that is
+    // the user's tap, not a side effect of opening History.
+    expect(reads).not.toContain(older);
+    expect(starts).toEqual([]);
+  });
+
+  it('reading an undelivered archive fails as pending and names the archive', async () => {
+    await cloud.uploadBackup(makeFullPayload(), PORTABLE_KEY_A);
+    const [only] = await cloud.listBackupArchives();
+    if (!only) throw new Error('expected an archive');
+    evicted.add(only.name);
+
+    const specific = await cloud.downloadArchive(only.name).catch((e: unknown) => e);
+    expect(specific).toBeInstanceOf(ArchiveDownloadPendingError);
+    expect((specific as ArchiveDownloadPendingError).archiveName).toBe(only.name);
+    const latest = await cloud.downloadLatestArchive().catch((e: unknown) => e);
+    expect(latest).toBeInstanceOf(ArchiveDownloadPendingError);
+    expect((latest as ArchiveDownloadPendingError).archiveName).toBe(only.name);
+  });
+
+  it('ensureArchiveDownloaded drives the transfer, reports progress, and leaves the archive readable', async () => {
+    await cloud.uploadBackup(makeFullPayload(), PORTABLE_KEY_A);
+    const [only] = await cloud.listBackupArchives();
+    if (!only) throw new Error('expected an archive');
+    evicted.add(only.name);
+
+    const progress: (number | null)[] = [];
+    await cloud.ensureArchiveDownloaded(only.name, {
+      pollMs: 5,
+      onProgress: (p) => { progress.push(p.percent); },
+    });
+    expect(starts).toEqual([only.name]);
+    expect(progress).toEqual([null, 50]);
+    const archive = await cloud.downloadArchive(only.name);
+    expect(archive.keyScheme).toBe('recovery-phrase-hkdf-v1');
+    expect((await cloud.listBackupArchives())[0]).toMatchObject({ availability: 'ready', version: 2 });
+  });
+
   it('Google Drive provider isolates files from iCloud (cross-provider safety)', async () => {
     cloud.setProvider('iCloud');
     activeProvider = 'iCloud';
@@ -498,6 +594,7 @@ describe('iCloud backup — Swift BackupData field parity', () => {
 
 interface GestureEvent { readonly translationY: number }
 interface GestureModule {
+  readonly shouldTriggerGestureBackup: (translationY: number) => boolean;
   readonly makeGestureAutoBackup: (
     handlers: {
       readonly onStart?: () => void;
@@ -576,9 +673,13 @@ describe('iCloud backup — gesture-triggered (pull-down pan)', () => {
     prefsStore = usePreferences;
     usePreferences.setState({
       backupEnabled: true,
-      autoBackupOnPull: true,
       backupProvider: 'iCloud',
     });
+    // A device with NOTHING to back up now skips instead of writing an empty
+    // archive that would rotate away the archives still holding real data, so
+    // give this one a single portable record. `set` (not `setState`) is what
+    // persists to `prefs:v1`, which is where the snapshot reads it from.
+    usePreferences.getState().set('shareEmail', true);
   });
 
   afterAll(async () => {
@@ -587,53 +688,45 @@ describe('iCloud backup — gesture-triggered (pull-down pan)', () => {
     // (e.g. preferencesKeys.parity asserts the Swift default stays false).
     prefsStore?.setState({
       backupEnabled: false,
-      autoBackupOnPull: true,
       backupProvider: 'iCloud',
+      shareEmail: false,
     });
     // Reset the rootKey storage DI so the injected phrase can't leak.
     const rootKey = await import('@/identity/rootKey');
     rootKey.__setRootKeyStorageForTesting(null);
   });
 
-  it('triggers backup when translationY exceeds the 80px threshold', async () => {
-    let completedPayload: unknown = null;
-    const gesture = gestureMod.makeGestureAutoBackup({
-      onComplete: (payload) => { completedPayload = payload; },
-    });
-    expect(gesture).toBeDefined();
-    // The captured callback should exist via the fake.
-    const ghMod = await import('react-native-gesture-handler') as unknown as {
-      __getPendingOnEnd: () => ((e: GestureEvent) => void) | null;
-    };
-    const cb = ghMod.__getPendingOnEnd();
-    expect(cb).not.toBeNull();
-    // Fire a pan event below threshold — must NOT trigger.
-    cb!({ translationY: 40 });
-    await new Promise((r) => setTimeout(r, 20));
-    expect(completedPayload).toBeNull();
+  it('triggers only when translationY exceeds the 80px threshold', () => {
+    expect(gestureMod.shouldTriggerGestureBackup(40)).toBe(false);
+    expect(gestureMod.shouldTriggerGestureBackup(80)).toBe(false);
+    expect(gestureMod.shouldTriggerGestureBackup(120)).toBe(true);
 
-    // Fire a pan event above threshold — triggers backup.
-    cb!({ translationY: 120 });
-    await new Promise((r) => setTimeout(r, 200));
-    expect(completedPayload).not.toBeNull();
+    const source = readFileSync(
+      new URL('../../src/backup/gestureAutoBackup.ts', import.meta.url),
+      'utf8',
+    );
+    expect(source).toMatch(
+      /function shouldTriggerGestureBackup[\s\S]*?'worklet';[\s\S]*?return translationY/u,
+    );
   });
 
-  it('cooldown prevents thrashing (a second pull within 30s is a no-op)', async () => {
-    let calls = 0;
-    const ghMod = await import('react-native-gesture-handler') as unknown as {
-      __getPendingOnEnd: () => ((e: GestureEvent) => void) | null;
-    };
-    gestureMod.makeGestureAutoBackup({
-      onComplete: () => { calls += 1; },
+  it('restoring an archive iCloud has not delivered yet fails as download-pending, naming it', async () => {
+    const manager = await import('../../src/backup/backupManager');
+    const name = 'backup_1700000005000.solbk';
+    fakeFiles.set(`iCloud:${name}`, {
+      content: encodeSolb(encryptJsonWithKey(PORTABLE_KEY_A, makeFullPayload()), 2),
+      modifiedTime: 1_700_000_005_000,
     });
-    const cb = ghMod.__getPendingOnEnd();
-    cb!({ translationY: 200 });
-    cb!({ translationY: 200 });
-    await new Promise((r) => setTimeout(r, 80));
-    // Module-level lastBackupAt is shared with the previous test; the
-    // cooldown gate is `now - lastBackupAt < 30s`, so a SECOND fire of the
-    // gesture inside the same tick must coalesce.
-    expect(calls).toBeLessThanOrEqual(1);
+    evicted.add(name);
+
+    for (const attempt of [manager.restoreFromBackup(name), manager.restoreFromBackup()]) {
+      const failure = await attempt.catch((e: unknown) => e);
+      expect(failure).toBeInstanceOf(manager.BackupRestoreError);
+      const typed = failure as { readonly kind: string; readonly archiveName?: string };
+      // Not "unreadable": the UI can show the transfer and retry once it lands.
+      expect(typed.kind).toBe('download-pending');
+      expect(typed.archiveName).toBe(name);
+    }
   });
 });
 

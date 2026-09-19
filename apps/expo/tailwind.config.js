@@ -42,6 +42,15 @@ module.exports = {
         terminalGreen: 'var(--color-terminalGreen, #4CAF51)',
         featureAccent: 'var(--color-featureAccent, #5856D6)',
 
+        // creds v3 derived accessibility layer — foreground-only variants
+        // that reach 4.5:1 on light surfaces (port spec §3.2 / §10.5 M2).
+        // Backgrounds/tints keep the native accents above.
+        terminalGreenText: 'var(--color-terminalGreenText, #2F6B45)',
+        warningText: 'var(--color-warningText, #9C5B00)',
+        destructiveText: 'var(--color-destructiveText, #B7364D)',
+        accentRoseText: 'var(--color-accentRoseText, #AA568A)',
+        text3Strong: 'var(--color-text3Strong, #747181)',
+
         // Decorative — map to Color.Theme.dustyMauve/blobCenter
         dustyMauve: 'var(--color-dustyMauve, #B89BB1)',
         blobCenter: 'var(--color-blobCenter, #FFE4D6)',

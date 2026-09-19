@@ -13,7 +13,7 @@
  * custom bar cannot drift from the Expo Router layout.
  */
 import { type ReactNode, useEffect } from 'react';
-import { Pressable, Text, View } from 'react-native';
+import { Pressable, View } from 'react-native';
 import Animated, {
   useAnimatedStyle,
   useSharedValue,
@@ -22,8 +22,9 @@ import Animated, {
   withTiming,
 } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import Svg, { Path } from 'react-native-svg';
 
-import { SfIcon } from '@/components/icons/SfIcon';
+import { ThemedText } from '@/components/themed';
 import { useThemeColors } from '@/constants/useThemeColors';
 import { haptic } from '@/feedback/haptics';
 import { SPRING } from '@/feedback/motion';
@@ -185,9 +186,59 @@ function FlatTabButton({
       <Animated.View
         style={[{ height: 24, alignItems: 'center', justifyContent: 'center' }, iconAnim]}
       >
-        {icon ? <SfIcon name={icon} size={20} color={tint} /> : null}
+        {icon ? <PrimaryTabGlyph name={icon} size={22} color={tint} /> : null}
       </Animated.View>
-      <Text style={{ fontSize: 11, fontWeight: '500', color: tint }}>{label}</Text>
+      <ThemedText variant="caption" style={{ color: tint, fontSize: 11, lineHeight: 14 }}>
+        {label}
+      </ThemedText>
     </Pressable>
   );
 }
+
+/** Exact Figma paths from creds-design/design/figma/icons. Keeping these
+ * local to the tab renderer preserves the shared icon system's name→glyph
+ * boundary without falling back to SF Symbols on either platform. */
+function PrimaryTabGlyph({
+  name,
+  size,
+  color,
+}: {
+  readonly name: PrimaryTabIcon;
+  readonly size: number;
+  readonly color: string;
+}): ReactNode {
+  const glyph = TAB_GLYPHS[name];
+  return (
+    <Svg width={size} height={size} viewBox={glyph.viewBox} fill="none">
+      <Path
+        d={glyph.d}
+        stroke={color}
+        strokeWidth={glyph.strokeWidth}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </Svg>
+  );
+}
+
+const TAB_GLYPHS: Readonly<Record<PrimaryTabIcon, {
+  readonly viewBox: string;
+  readonly strokeWidth: number;
+  readonly d: string;
+}>> = {
+  'tab-page': {
+    viewBox: '0 0 24 24',
+    strokeWidth: 1.5,
+    d: 'M5.3163 19.4384C5.92462 18.0052 7.34492 17 9 17H15C16.6551 17 18.0754 18.0052 18.6837 19.4384M16 9.5C16 11.7091 14.2091 13.5 12 13.5C9.79086 13.5 8 11.7091 8 9.5C8 7.29086 9.79086 5.5 12 5.5C14.2091 5.5 16 7.29086 16 9.5ZM22 12C22 17.5228 17.5228 22 12 22C6.47715 22 2 17.5228 2 12C2 6.47715 6.47715 2 12 2C17.5228 2 22 6.47715 22 12Z',
+  },
+  'tab-present': {
+    viewBox: '0 0 22 22',
+    strokeWidth: 1.5,
+    d: 'M19.25 13.75V14.85C19.25 16.3901 19.25 17.1602 18.9503 17.7485C18.6866 18.2659 18.2659 18.6866 17.7485 18.9503C17.1602 19.25 16.3901 19.25 14.85 19.25H7.15C5.60986 19.25 4.83978 19.25 4.25153 18.9503C3.73408 18.6866 3.31338 18.2659 3.04973 17.7485C2.75 17.1602 2.75 16.3901 2.75 14.85V13.75M6.41667 7.33333L11 2.75L15.5833 7.33333M11 2.75V13.75',
+  },
+  'tab-contacts': {
+    viewBox: '0 0 24 24',
+    strokeWidth: 1.5,
+    d: 'M18 15.8369C19.4559 16.5683 20.7041 17.742 21.6152 19.2096C21.7956 19.5003 21.8858 19.6456 21.917 19.8468C21.9804 20.2558 21.7008 20.7585 21.3199 20.9204C21.1325 21 20.9216 21 20.5 21M16 11.5322C17.4817 10.7959 18.5 9.26686 18.5 7.5C18.5 5.73314 17.4817 4.20411 16 3.46776M14 7.5C14 9.98528 11.9852 12 9.49996 12C7.01468 12 4.99996 9.98528 4.99996 7.5C4.99996 5.01472 7.01468 3 9.49996 3C11.9852 3 14 5.01472 14 7.5ZM2.55919 18.9383C4.1535 16.5446 6.66933 15 9.49996 15C12.3306 15 14.8464 16.5446 16.4407 18.9383C16.79 19.4628 16.9646 19.725 16.9445 20.0599C16.9289 20.3207 16.7579 20.64 16.5495 20.7976C16.2819 21 15.9138 21 15.1776 21H3.82232C3.08613 21 2.71804 21 2.4504 20.7976C2.24201 20.64 2.07105 20.3207 2.05539 20.0599C2.03529 19.725 2.20992 19.4628 2.55919 18.9383Z',
+  },
+};

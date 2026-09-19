@@ -72,7 +72,7 @@ describe('@handle share URL round-trip', () => {
 
   it('dns: parseDeepLink decodes the dns: prefix back exactly (no percent-encoding lost)', () => {
     const candidate = candidateFor('dns:example.com');
-    expect(candidate.url).toBe('https://app.solidarity.gg/@dns:example.com');
+    expect(candidate.url).toBe('https://creds.id/@dns:example.com');
     expect(parseDeepLink(candidate.url)).toEqual({
       kind: 'verifiedHandle',
       handle: 'dns:example.com',

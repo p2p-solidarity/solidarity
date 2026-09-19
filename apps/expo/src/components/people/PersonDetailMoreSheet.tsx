@@ -15,16 +15,15 @@
  */
 import { useState, type ReactNode } from 'react';
 import {
-  KeyboardAvoidingView,
-  Modal,
-  Platform,
   Pressable,
   Text,
   TextInput,
   View,
 } from 'react-native';
+import { KeyboardAvoidingView } from 'react-native-keyboard-controller';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { ModalSheet } from '@/components/common/ModalSheet';
 import { PressableScale } from '@/components/common/PressableScale';
 import { SfIcon } from '@/components/icons/SfIcon';
 import { Colors } from '@/constants/Colors';
@@ -55,12 +54,7 @@ export function PersonDetailMoreSheet({
   onClose,
 }: PersonDetailMoreSheetProps): ReactNode {
   return (
-    <Modal
-      visible={visible}
-      animationType="slide"
-      presentationStyle="formSheet"
-      onRequestClose={onClose}
-    >
+    <ModalSheet visible={visible} presentationStyle="formSheet" onRequestClose={onClose}>
       <PersonDetailMoreSheetContent
         contact={contact}
         onSave={onSave}
@@ -68,7 +62,7 @@ export function PersonDetailMoreSheet({
         onEditContact={onEditContact}
         onClose={onClose}
       />
-    </Modal>
+    </ModalSheet>
   );
 }
 
@@ -118,7 +112,8 @@ function PersonDetailMoreSheetContent({
 
   return (
     <KeyboardAvoidingView
-      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+      behavior="padding"
+      automaticOffset
       style={{ flex: 1, backgroundColor: Colors.pageBg }}
     >
       <View style={{ paddingTop: insets.top }}>

@@ -151,7 +151,16 @@ export function ThemedButton({
         ) : (
           <>
             {leadingIcon ? <View style={styles.icon}>{leadingIcon}</View> : null}
-            <Text style={{ color: cfg.fg, fontSize: 16, fontWeight: cfg.weight }}>{label}</Text>
+            {/* CTA labels are single-line: a long locale string (e.g. English in
+                a half-width row) shrinks slightly instead of wrapping, which
+                would give side-by-side buttons unequal heights. */}
+            <Text
+              numberOfLines={1}
+              adjustsFontSizeToFit
+              minimumFontScale={0.85}
+              style={{ color: cfg.fg, fontSize: 16, fontWeight: cfg.weight }}>
+              {label}
+            </Text>
           </>
         )}
       </Pressable>

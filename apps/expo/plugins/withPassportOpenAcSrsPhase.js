@@ -3,7 +3,7 @@
  * build phase into the generated Xcode project.
  *
  * PassportZK.podspec bundles the merged OpenAC v3 SRS
- * (nitro-modules/passport-zk/android/src/main/assets/passport.srs.bin) as a
+ * (nitro-modules/attest/android/src/main/assets/passport.srs.bin) as a
  * pod resource, but the file is gitignored — this phase re-runs
  * scripts/stage-openac-srs.sh before "[CP] Copy Pods Resources" so local
  * Xcode builds always copy a current SRS. Without this plugin every
@@ -23,7 +23,7 @@ const SHELL_SCRIPT =
   'set -euo pipefail\\nAPP_DIR="${SRCROOT}/.."\\nAIRMEISHI_EXPO_APP_DIR="$APP_DIR" "$APP_DIR/scripts/stage-openac-srs.sh"\\n';
 const INPUT_PATHS = ['"${SRCROOT}/../scripts/stage-openac-srs.sh"'];
 const OUTPUT_PATHS = [
-  '"${PODS_ROOT}/../../../../nitro-modules/passport-zk/android/src/main/assets/passport.srs.bin"',
+  '"${PODS_ROOT}/../../../../nitro-modules/attest/android/src/main/assets/passport.srs.bin"',
 ];
 
 function hasPhase(project) {

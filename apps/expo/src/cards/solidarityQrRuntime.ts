@@ -1,5 +1,7 @@
 import type { BusinessCard } from '@solidarity/shared';
 
+import { buildCrd1CardWire } from '@/cards/crd1Envelope';
+import { buildNostrPointerClaimFromCache } from '@/cards/nostrPointerClaim';
 import { encodeEnvelopeToWire, type EnvelopeWireResult } from '@/cards/qrEnvelope';
 import {
   buildDidSignedEnvelope,
@@ -12,6 +14,7 @@ import {
   didKeyForCurrentIdentity,
   publicJwk,
   signJwt,
+  signRawEs256,
 } from '@/keychain/signingKey';
 
 export interface RuntimeSolidarityQrOptions {
@@ -63,10 +66,36 @@ export async function buildRuntimeSolidarityQrWire(
         didKeyForCurrentIdentity(),
         publicJwk(),
       ]);
-      const envelope = await buildDidSignedEnvelope(card, {
+      const signer = {
+        issuerDid,
+        publicKeyJwk: jwk,
+        signJwt,
+        signRaw: async (message: Uint8Array) => (await signRawEs256(message)).signature,
+      };
+      // §3.3 subscription pointer — only rides the signed wires, and only
+      // when the sender's Nostr binding is verified, still matches the
+      // profile's current npub claim, AND is within the badge reverify TTL
+      // (buildNostrPointerClaimFromCache); null otherwise (the card simply
+      // ships without one). Note: the pointer is threaded into the SIGNED
+      // credentialSubject regardless of the card's selective-disclosure field
+      // set — a didSigned card already carries the holder's did:key +
+      // publicKeyJwk (a stable global identifier), so a signed share is
+      // inherently identity-bound; the npub adds Nostr cross-linkability at
+      // the same disclosure tier, not a new one. Privacy-minimal shares use
+      // the plaintext/zkProof formats, which never carry a pointer.
+      const nostrPointer = await buildNostrPointerClaimFromCache();
+      const signedOptions = {
         ...options,
-        signer: { issuerDid, publicKeyJwk: jwk, signJwt },
-      });
+        signer,
+        ...(nostrPointer ? { nostrPointer } : {}),
+      };
+      // Preferred wire: CRD1 (CBOR→COSE_Sign1→zlib→Base45, EC-Q). Returns
+      // null when the pack would exceed QR capacity — then the legacy bare
+      // VC-JWT wire (below) keeps the share working, and every deployed
+      // scanner keeps parsing both.
+      const crd1 = await buildCrd1CardWire(card, signedOptions);
+      if (crd1) return crd1;
+      const envelope = await buildDidSignedEnvelope(card, signedOptions);
       if (envelope) return encodeEnvelopeToWire(envelope);
     } catch {
       // fall through to plaintext

@@ -343,7 +343,7 @@ function ErrorView({
 
 export default function ReceiveCredentialRoute() {
   const developerMode = usePreferences((state) => state.developerMode);
-  if (!developerMode) return <Redirect href="/settings/advanced" />;
+  if (!developerMode) return <Redirect href="/settings" />;
 
   return <ReceiveCredentialScreen />;
 }

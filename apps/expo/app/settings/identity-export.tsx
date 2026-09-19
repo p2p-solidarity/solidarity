@@ -13,7 +13,8 @@
  */
 import { safeBack } from '@/navigation/safeBack';
 import { useEffect, useState } from 'react';
-import { ScrollView, TextInput, View } from 'react-native';
+import { TextInput, View } from 'react-native';
+import { KeyboardAwareScrollView } from 'react-native-keyboard-controller';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import {
@@ -135,8 +136,10 @@ export default function IdentityExportSettings() {
       <SettingsBackToolbar onPress={() => { safeBack('/settings'); }} />
       <SettingsScreenTitle title={t('identityExport.title')} />
 
-      <ScrollView
-        className="flex-1"
+      <KeyboardAwareScrollView
+        style={{ flex: 1 }}
+        keyboardShouldPersistTaps="handled"
+        bottomOffset={16}
         contentContainerStyle={{ paddingTop: 24, paddingBottom: 24 + insets.bottom }}
       >
         <View className="gap-6">
@@ -238,7 +241,7 @@ export default function IdentityExportSettings() {
             </View>
           </SettingsBlockSection>
         </View>
-      </ScrollView>
+      </KeyboardAwareScrollView>
     </View>
   );
 }

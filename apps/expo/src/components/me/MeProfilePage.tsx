@@ -2,21 +2,22 @@ import { useState, type ReactNode } from 'react';
 import { ScrollView, View } from 'react-native';
 import Animated, { FadeInDown } from 'react-native-reanimated';
 
-import { ThemedText } from '@/components/themed';
 import { STAGGER_MS } from '@/feedback/motion';
 import { useTranslation } from '@/i18n';
-import { usePageDesignStore } from '@/page/pageDesignStore';
 import type { LinkVisibility } from '@/profile/projection';
 import type { ProfileRecord } from '@solidarity/shared';
 import type { PublicPageShareSource } from './meProfileModel';
 
+import { displayProfileShareUrl } from './meProfileModel';
+import { useProfileShareSelection } from './useProfileShareSelection';
+import { PageSectionLabel } from './PageSectionLabel';
 import { ProfileBadgeChips } from './ProfileBadgeChips';
 import { ProfileHero } from './ProfileHero';
 import { ProfileLinksList } from './ProfileLinksList';
 import { ProfileSectionsList } from './ProfileSectionsList';
+import { EditOnWebCard } from './EditOnWebCard';
 import { PageAppearanceSheet } from './PageAppearanceSheet';
 import { PageLapsedCheckAlert } from './PageLapsedCheckAlert';
-import { PageLivePreview } from './PageLivePreview';
 
 const ENTRANCE_DURATION_MS = 240;
 
@@ -40,6 +41,7 @@ export interface MeProfilePageProps {
   readonly onEdit: () => void;
   readonly onEditAvatar: () => void;
   readonly onAddLink: () => void;
+  readonly onImportLinks: () => void;
   readonly onOpenSettings: () => void;
   readonly onOpenBindings: () => void;
 }
@@ -57,13 +59,24 @@ export function MeProfilePage({
   onEdit,
   onEditAvatar,
   onAddLink,
+  onImportLinks,
   onOpenSettings,
   onOpenBindings,
 }: MeProfilePageProps): ReactNode {
   const { t } = useTranslation();
   const [appearanceOpen, setAppearanceOpen] = useState(false);
-  const pageDesignStatus = usePageDesignStore((state) => state.status);
-  const pageDesign = usePageDesignStore((state) => state.design);
+  // The preview's `.pub-handle` line shows the page's REAL address, or
+  // nothing at all while one is still unpublished.
+  const shareSelection = useProfileShareSelection(
+    shareRecord,
+    shareJws,
+    nostrShortUrlReady,
+    0,
+    publicPage,
+  );
+  const pageHandle = shareSelection.kind === 'ready'
+    ? displayProfileShareUrl(shareSelection.selected)
+    : null;
   const entrance = (delay: number) => FadeInDown.duration(ENTRANCE_DURATION_MS).delay(delay);
 
   return (
@@ -78,7 +91,9 @@ export function MeProfilePage({
           publicPage={publicPage}
           nostrShortUrlReady={nostrShortUrlReady}
           onEditAvatar={onEditAvatar}
-          onOpenAppearance={() => { setAppearanceOpen(true); }}
+          onOpenAppearance={() => {
+            setAppearanceOpen(true);
+          }}
           onOpenSettings={onOpenSettings}
         />
       </Animated.View>
@@ -91,33 +106,28 @@ export function MeProfilePage({
           linkVisibility={linkVisibility}
           onEdit={onEdit}
           onAddFirstLink={onAddLink}
+          onImportLinks={onImportLinks}
         />
       </Animated.View>
 
       <Animated.View entering={entrance(STAGGER_MS * 2)}>
-        <ProfileSectionsList linkCount={record.links.length} />
-        {pageDesignStatus === 'ready' ? (
-          <View className="mt-5 gap-3 px-4">
-            <ThemedText accessibilityRole="header" variant="label" tone="tertiary">
-              {t('pageDesign.preview')}
-            </ThemedText>
-            <PageLivePreview
-              record={publicRecord}
-              blocks={pageDesign.blocks}
-              appearance={pageDesign.appearance}
-            />
-          </View>
-        ) : null}
+        <ProfileSectionsList
+          linkCount={record.links.length}
+          previewRecord={publicRecord}
+          previewHandle={pageHandle}
+        />
       </Animated.View>
 
       <Animated.View entering={entrance(STAGGER_MS * 3)}>
-        <ThemedText
-          accessibilityRole="header"
-          variant="label"
-          tone="tertiary"
-          className="px-4 pb-3">
-          {t('mePage.attestations')}
-        </ThemedText>
+        <EditOnWebCard
+          url={shareSelection.kind === 'ready' ? shareSelection.selected.url : null}
+        />
+      </Animated.View>
+
+      <Animated.View entering={entrance(STAGGER_MS * 4)}>
+        <View className="px-4 pb-3">
+          <PageSectionLabel title={t('mePage.attestations')} />
+        </View>
         <ProfileBadgeChips
           record={record}
           publicRecord={publicRecord}
@@ -130,7 +140,10 @@ export function MeProfilePage({
       <PageAppearanceSheet
         visible={appearanceOpen}
         record={publicRecord}
-        onClose={() => { setAppearanceOpen(false); }}
+        handle={pageHandle}
+        onClose={() => {
+          setAppearanceOpen(false);
+        }}
       />
     </ScrollView>
   );

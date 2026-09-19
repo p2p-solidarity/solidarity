@@ -1,6 +1,6 @@
 /**
  * Identity signing key — backed by the SpruceID Nitro module
- * (`@solidarity/nitro-spruce-did`) which generates and stores P-256 keys in
+ * (`@solidarity/nitro-keystone`) which generates and stores P-256 keys in
  * Secure Enclave (iOS) / StrongBox (Android). Replaces the prior
  * `@noble/curves` random keypair generation, which on React Native fell back
  * to a non-CSPRNG entropy source and never gave us hardware-backed forensics.
@@ -73,7 +73,7 @@ import { publicKeyJwkSchema } from '@solidarity/shared';
 import {
   getSpruceDid,
   type SpruceDid,
-} from '@solidarity/nitro-spruce-did';
+} from '@solidarity/nitro-keystone';
 
 import {
   deletionFailed,
@@ -86,7 +86,8 @@ import {
   type LocalDataEpoch,
 } from '@/settings/localDataWipeBarrier';
 
-import { isBiometricAvailable, requireBiometric } from './biometric';
+import { isBiometricAvailable } from './biometric';
+import { requireSensitiveAction } from './biometricGatekeeper';
 import { shouldRequireNativeBiometricBinding } from './signingKeyPolicy';
 
 /**
@@ -313,7 +314,7 @@ async function ensureSigningKeyAtEpoch(
   //                cannot do this — its private bytes never leave hardware, so
   //                it can be neither backed up nor synced, and restore always
   //                orphaned the user's credentials. Biometric gating moves to
-  //                the JS layer (`requireBiometric('sign')` in signJwt /
+  //                the JS layer (`gateSign()` in signJwt /
   //                signRawEs256), since syncable items can't carry a biometric
   //                keychain ACL.
   //      Android — no iCloud Keychain; maps to the normal hardware-backed
@@ -347,6 +348,24 @@ export async function publicJwk(): Promise<PublicKeyJWK> {
 }
 
 /**
+ * Signing is ACCESS-LEVEL: it follows the user's gate mode, so `redLineOnly`
+ * signs without a prompt while `everyTime` prompts on every call (the shared
+ * grace bucket is switched off in that mode). Previously this called
+ * `requireBiometric('sign')`, which consulted no policy at all — the single
+ * biggest reason the Security screen's switch used to be a partial no-op.
+ */
+async function gateSign(): Promise<boolean> {
+  // English literal on purpose — see `secretsKeychain.ts`: `@/i18n` pulls
+  // expo-modules-core into the signing path. Matches the old hardcoded
+  // `PROMPT_BY_REASON.sign` string exactly, so no copy regression.
+  const gate = await requireSensitiveAction(
+    'presentProof',
+    'Authorize signing with your identity key'
+  );
+  return gate.success;
+}
+
+/**
  * Sign a JWT with the active signing key, biometric-gated. The header /
  * payload are serialised here (so the caller doesn't have to worry about
  * canonical JSON), but the actual b64url + signature is produced inside
@@ -365,7 +384,7 @@ export async function signJwt(
   // prompts inside the sign itself — the JS prompt would be a second
   // Face ID sheet for the same intent. JS gates only 'js-gated' keys.
   if ((await resolveKeyAuthMode(driver(), id.alias)) === 'js-gated') {
-    const allowed = await requireBiometric('sign');
+    const allowed = await gateSign();
     if (!allowed) throw new Error('biometric authentication required');
   }
   // SpruceID's `signJws` always uses an ES256 / JWT header — so we hand it
@@ -407,7 +426,7 @@ export async function didKeyForCurrentIdentity(): Promise<string> {
  * raw 64-byte `r || s`, matching Swift CryptoKit-style raw signatures
  * without routing through a JWS wrapper.
  *
- * Biometric gate: same as `signJwt` — `requireBiometric('sign')` runs first.
+ * Biometric gate: same as `signJwt` — `gateSign()` runs first.
  */
 export async function signRawEs256(payload: Uint8Array): Promise<{
   readonly signature: Uint8Array;
@@ -448,7 +467,7 @@ async function signDigestWithCurrentKey(
   // prompt inside the sign itself (single-layer gate, phase 4).
   const id = await ensureSigningKey();
   if ((await resolveKeyAuthMode(driver(), id.alias)) === 'js-gated') {
-    const allowed = await requireBiometric('sign');
+    const allowed = await gateSign();
     if (!allowed) throw new Error('biometric authentication required');
   }
   const buf = new ArrayBuffer(digest.length);
@@ -641,8 +660,12 @@ export async function listSyncableSigningKeys(): Promise<readonly SigningKeyCand
 export async function resolveSigningKeyConflict(
   keepLabelHex: string
 ): Promise<Result<void, string>> {
-  const allowed = await requireBiometric('delete');
-  if (!allowed) return err('biometricDenied');
+  // RED LINE: this destroys key material, so it authenticates in every mode.
+  const gate = await requireSensitiveAction(
+    'rotateMasterKey',
+    'Authorize deleting protected items'
+  );
+  if (!gate.success) return err('biometricDenied');
   const rows = parseCandidateRows(await driver().listSyncableP256Keys(SIGNING_KEY_ALIAS));
   if (!rows.some((row) => row.labelHex === keepLabelHex)) {
     return err('keepTargetMissing');

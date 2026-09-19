@@ -4,8 +4,8 @@
  * Drives the same surface the live `app/passport/index.tsx` screen uses
  * (getNfcPassport + getPassportZk + runPassportPipeline) but with the
  * Nitro modules stubbed out to deterministic seeds. The native
- * `@solidarity/nitro-passport-zk` HybridObject is replaced via
- * `mock.module` so:
+ * `@solidarity/nitro-attest` HybridObject is replaced via the shared
+ * `nitroAttestMock` fixture (single mock.module registration) so:
  *
  *   - `generateNoirProof(circuitPath, srsPath, inputsJson)` returns a
  *     deterministic ArrayBuffer derived from `sha256(inputsJson || seed)`.
@@ -31,7 +31,7 @@
  *
  * Run: cd apps/expo && bun test __tests__/unit/zkPassportE2E.test.ts
  */
-import { beforeAll, describe, expect, it, mock } from 'bun:test';
+import { beforeAll, describe, expect, it } from 'bun:test';
 
 import {
   bytesToHex,
@@ -42,11 +42,11 @@ import {
 import type {
   PassportMRZ,
   PassportReadResult,
-} from '@solidarity/nitro-nfc-passport';
+} from '@solidarity/nitro-attest';
 import type {
   NitroNoirProof,
   PassportZk,
-} from '@solidarity/nitro-passport-zk';
+} from '@solidarity/nitro-attest';
 
 import {
   arrayBufferToBase64,
@@ -59,9 +59,10 @@ import {
   PASSPORT_OPENAC_V3_CIRCUITS,
   PASSPORT_V3_PROOF_TYPE,
 } from '../../src/passport/openacV3';
+import { setAttestMockLanes } from './fixtures/nitroAttestMock';
 
 // ---------------------------------------------------------------------------
-// Deterministic mock for @solidarity/nitro-passport-zk.
+// Deterministic mock for @solidarity/nitro-attest.
 //
 // The real Nitro bridge wraps mopro-binding which calls into the Barretenberg
 // proving backend (foreign C++ code, fresh randomness per proof). For unit
@@ -106,36 +107,32 @@ function fromArrayBuffer(buffer: ArrayBuffer): Uint8Array {
 // so multiple circuits coexist without colliding.
 const issuedProofs = new Map<string, { inputsJson: string; proof: Uint8Array }>();
 
-beforeAll(async () => {
-  await mock.module('@solidarity/nitro-passport-zk', () => {
-    const stub: PassportZk = {
-      generateNoirProof: (circuitPath: string, _srsPath: string | undefined, inputsJson: string): Promise<NitroNoirProof> => {
-        const proof = expectedProofBytes(inputsJson, circuitPath);
-        const vkKey = bytesToHex(STUB_VK_BYTES);
-        issuedProofs.set(vkKey, { inputsJson, proof });
-        return Promise.resolve({
-          proof: toArrayBuffer(proof),
-          vk: toArrayBuffer(STUB_VK_BYTES),
-        });
-      },
-      getNoirVerificationKey: (_circuitPath: string, _srsPath: string | undefined): Promise<ArrayBuffer> =>
-        Promise.resolve(toArrayBuffer(STUB_VK_BYTES)),
-      verifyNoirProof: (proof: ArrayBuffer, vk: ArrayBuffer): Promise<boolean> => {
-        const vkKey = bytesToHex(fromArrayBuffer(vk));
-        const issued = issuedProofs.get(vkKey);
-        if (!issued) return Promise.resolve(false);
-        const submitted = fromArrayBuffer(proof);
-        if (submitted.length !== issued.proof.length) return Promise.resolve(false);
-        for (let i = 0; i < submitted.length; i += 1) {
-          if (submitted[i] !== issued.proof[i]) return Promise.resolve(false);
-        }
-        return Promise.resolve(true);
-      },
-    } as PassportZk;
-    return {
-      getPassportZk: () => stub,
-    };
-  });
+beforeAll(() => {
+  const stub: PassportZk = {
+    generateNoirProof: (circuitPath: string, _srsPath: string | undefined, inputsJson: string): Promise<NitroNoirProof> => {
+      const proof = expectedProofBytes(inputsJson, circuitPath);
+      const vkKey = bytesToHex(STUB_VK_BYTES);
+      issuedProofs.set(vkKey, { inputsJson, proof });
+      return Promise.resolve({
+        proof: toArrayBuffer(proof),
+        vk: toArrayBuffer(STUB_VK_BYTES),
+      });
+    },
+    getNoirVerificationKey: (_circuitPath: string, _srsPath: string | undefined): Promise<ArrayBuffer> =>
+      Promise.resolve(toArrayBuffer(STUB_VK_BYTES)),
+    verifyNoirProof: (proof: ArrayBuffer, vk: ArrayBuffer): Promise<boolean> => {
+      const vkKey = bytesToHex(fromArrayBuffer(vk));
+      const issued = issuedProofs.get(vkKey);
+      if (!issued) return Promise.resolve(false);
+      const submitted = fromArrayBuffer(proof);
+      if (submitted.length !== issued.proof.length) return Promise.resolve(false);
+      for (let i = 0; i < submitted.length; i += 1) {
+        if (submitted[i] !== issued.proof[i]) return Promise.resolve(false);
+      }
+      return Promise.resolve(true);
+    },
+  } as PassportZk;
+  setAttestMockLanes({ passportZk: () => stub });
 });
 
 // ---------------------------------------------------------------------------
@@ -183,7 +180,7 @@ const FIXTURE_NFC_DUMP: PassportReadResult = {
 
 describe('ZK passport pipeline — MRZ → NFC → proof → verify', () => {
   it('generates a deterministic proof that verifies against the same public inputs', async () => {
-    const { getPassportZk } = await import('@solidarity/nitro-passport-zk');
+    const { getPassportZk } = await import('@solidarity/nitro-attest');
     const zk = getPassportZk();
 
     // Stub-only witness payload. The real passport-noir 0.3.0 adapter
@@ -213,7 +210,7 @@ describe('ZK passport pipeline — MRZ → NFC → proof → verify', () => {
   });
 
   it('detects a single-byte tamper of the proof bytes', async () => {
-    const { getPassportZk } = await import('@solidarity/nitro-passport-zk');
+    const { getPassportZk } = await import('@solidarity/nitro-attest');
     const zk = getPassportZk();
     const inputsJson = JSON.stringify({ mrz_data: ['1', '2', '3'] });
     const proof = await zk.generateNoirProof('passport_adapter', 'passport_adapter', inputsJson);
@@ -228,7 +225,7 @@ describe('ZK passport pipeline — MRZ → NFC → proof → verify', () => {
   });
 
   it('detects a single-byte tamper of the MRZ-derived public input', async () => {
-    const { getPassportZk } = await import('@solidarity/nitro-passport-zk');
+    const { getPassportZk } = await import('@solidarity/nitro-attest');
     const zk = getPassportZk();
 
     const originalInputs = JSON.stringify({ mrz_data: ['85', '60'], age_threshold: ['18'] });
@@ -254,7 +251,7 @@ describe('ZK passport pipeline — MRZ → NFC → proof → verify', () => {
   });
 
   it('runs the full pipeline end-to-end via runPassportPipeline + nitro ZK', async () => {
-    const { getPassportZk } = await import('@solidarity/nitro-passport-zk');
+    const { getPassportZk } = await import('@solidarity/nitro-attest');
     const zk = getPassportZk();
 
     const steps: PassportStep[] = [];
@@ -311,7 +308,7 @@ describe('ZK passport pipeline — MRZ → NFC → proof → verify', () => {
 
 // ---------------------------------------------------------------------------
 // TODO(parity): once the Android cdylib lands and Swift FixtureExporter
-// dumps a real proof envelope, swap the stubbed `mock.module` block above
+// dumps a real proof envelope, swap the stubbed lane in `beforeAll` above
 // for a real `getPassportZk()` call gated by `process.env.SOLIDARITY_E2E_NATIVE`
 // and assert envelope-key equality with the parity fixture.
 // ---------------------------------------------------------------------------

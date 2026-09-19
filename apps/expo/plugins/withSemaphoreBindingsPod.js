@@ -18,7 +18,7 @@ const path = require('node:path');
 const { withDangerousMod } = require('@expo/config-plugins');
 
 const POD_LINE =
-  "  pod 'SemaphoreBindings', :path => '../../../nitro-modules/semaphore/mopro'";
+  "  pod 'SemaphoreBindings', :path => '../../../nitro-modules/attest/semaphore/mopro'";
 
 const withSemaphoreBindingsPod = (config) =>
   withDangerousMod(config, [
@@ -40,7 +40,7 @@ const withSemaphoreBindingsPod = (config) =>
       }
       const patched = original.replace(
         anchor,
-        `${anchor}\n\n  # Sibling pod to Semaphore — see plugins/withSemaphoreBindingsPod.js\n${POD_LINE}`
+        `${anchor}\n\n  # Sibling pod to Attest — see plugins/withSemaphoreBindingsPod.js\n${POD_LINE}`
       );
       fs.writeFileSync(podfilePath, patched);
       console.log(

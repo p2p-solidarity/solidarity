@@ -47,7 +47,13 @@ export type DisclosureErrorCode =
   /** A present disclosure's digest is not one the issuer signed — tampered. */
   | 'altered-disclosure'
   /** The credential could not be parsed into any known format. */
-  | 'malformed';
+  | 'malformed'
+  /** An OpenAC-v3 passport whose stored envelope proves none of its claims: a
+   *  fresh `openac_show` proof is the only honest disclosure, and that needs
+   *  the device-local show-witness this device does not hold. Distinct from
+   *  `not-redactable` because the remedy is different — re-scan here, rather
+   *  than "present all of it or nothing" (which would be the over-claim). */
+  | 'device-witness-missing';
 
 export interface DisclosureError {
   readonly code: DisclosureErrorCode;

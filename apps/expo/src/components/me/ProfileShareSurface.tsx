@@ -1,7 +1,7 @@
 import * as Clipboard from 'expo-clipboard';
-import { Image } from 'expo-image';
+import { router } from 'expo-router';
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
-import { ActivityIndicator, Modal, ScrollView, Share, useWindowDimensions, View } from 'react-native';
+import { Modal, ScrollView, Share, useWindowDimensions, View } from 'react-native';
 import Animated, { Easing, ZoomIn } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -18,21 +18,22 @@ import type { ProfileRecord } from '@solidarity/shared';
 
 import {
   PROFILE_SHARE_QR_SIZE,
+  OtherFormatsSection,
   ProfileShareReadyContent,
   type ProfileShareQrState,
   type ReadyProfileShareModel,
 } from './ProfileShareSheetContent';
+import { PageHeaderAction } from './PageHeaderAction';
 import { profileShareQrIsOversize } from './profileShareQr';
-import { useProfileShareSelection } from './useProfileShareSelection';
 import {
-  displayProfileShareUrl,
-  type ProfileShareUrlCandidate,
-  type PublicPageShareSource,
-} from './meProfileModel';
+  useProfileShareSelection,
+  type ProfileShareSelectionState,
+} from './useProfileShareSelection';
+import type { ProfileShareUrlCandidate, PublicPageShareSource } from './meProfileModel';
 
 const QR_SHEET_DURATION_MS = 240;
 
-type ShareModelState = ReadyProfileShareModel | { readonly kind: 'error' };
+type ShareModelState = ReadyProfileShareModel | Exclude<ProfileShareSelectionState, { readonly kind: 'ready' }>;
 
 export interface ProfileShareSurfaceProps {
   readonly record: ProfileRecord;
@@ -53,17 +54,13 @@ export function ProfileShareSurface({
 
   return (
     <>
-      <PressableScale
-        haptic="tap"
-        scaleTo={SCALE.icon}
+      <PageHeaderAction
+        icon="arrow.up.right"
+        label={t('mePage.share')}
         onPress={() => {
           setSheetOpen(true);
         }}
-        accessibilityRole="button"
-        accessibilityLabel={t('mePage.share')}
-        style={{ width: 44, height: 44, alignItems: 'center', justifyContent: 'center' }}>
-        <SfIcon name="square.and.arrow.up" size={17} color={Colors.text1} />
-      </PressableScale>
+      />
 
       <ProfileQrSheet
         visible={sheetOpen}
@@ -79,137 +76,6 @@ export function ProfileShareSurface({
   );
 }
 
-const INLINE_QR_SIZE = 88;
-
-/** Always-visible Page QR. The larger share sheet remains available for
- * format selection and exporting, while this preview makes the primary
- * scan action visible without another tap. */
-export function ProfileInlineQr({
-  record,
-  jws,
-  publicPage = null,
-  nostrShortUrlReady,
-}: ProfileShareSurfaceProps): ReactNode {
-  const { t } = useTranslation();
-  const [inlineRetryNonce, setInlineRetryNonce] = useState(0);
-  const shareState = useProfileShareSelection(
-    record,
-    jws,
-    nostrShortUrlReady,
-    inlineRetryNonce,
-    publicPage,
-  );
-  const selected = shareState.kind === 'ready' ? shareState.selected : null;
-  const qrBlockedBySize =
-    shareState.kind === 'ready' &&
-    profileShareQrIsOversize(shareState.selected, shareState.model);
-  const [imageUri, setImageUri] = useState<string | null>(null);
-  const [failed, setFailed] = useState(false);
-
-  useEffect(() => {
-    if (selected === null || qrBlockedBySize) {
-      setImageUri(null);
-      setFailed(false);
-      return;
-    }
-    let cancelled = false;
-    setFailed(false);
-    setImageUri(null);
-    void generateQrPng(selected.url, { size: INLINE_QR_SIZE })
-      .then((uri) => {
-        if (!cancelled) setImageUri(uri);
-      })
-      .catch(() => {
-        if (!cancelled) setFailed(true);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [qrBlockedBySize, selected?.url]);
-
-  if (shareState.kind === 'error') {
-    return (
-      <ThemedSurface variant="outlined" className="items-center gap-3 rounded-2xl p-4">
-        <SfIcon name="exclamationmark.triangle" size={22} color={Colors.destructive} />
-        <ThemedText variant="bodySmall" tone="error" style={{ textAlign: 'center' }}>
-          {t('meShare.modelError')}
-        </ThemedText>
-        <ThemedButton
-          label={t('meShare.retry')}
-          variant="secondary"
-          onPress={() => {
-            setInlineRetryNonce((value) => value + 1);
-          }}
-        />
-      </ThemedSurface>
-    );
-  }
-  if (selected === null) return null;
-  const displayUrl = displayProfileShareUrl(selected);
-
-  return (
-    <PressableScale
-      haptic="tap"
-      onPress={() => {
-        void Clipboard.setStringAsync(selected.url)
-          .then(() => {
-            haptic('success');
-            pushToast(t('meHome.pageUrlCopied'), 'success');
-          })
-          .catch(() => {
-            haptic('error');
-            pushToast(t('meShare.copyError'), 'error');
-          });
-      }}
-      accessibilityRole="button"
-      accessibilityLabel={t('meHome.copyPageUrl', { url: displayUrl })}
-      containerStyle={{ alignSelf: 'stretch' }}>
-      <ThemedSurface
-        variant="card"
-        className="flex-row items-center gap-4 rounded-2xl p-3">
-        <View
-          style={{
-            width: INLINE_QR_SIZE,
-            height: INLINE_QR_SIZE,
-            alignItems: 'center',
-            justifyContent: 'center',
-            backgroundColor: Colors.cardBg,
-            borderRadius: 12,
-          }}>
-          {!qrBlockedBySize && imageUri ? (
-            <Image
-              source={{ uri: imageUri }}
-              contentFit="contain"
-              style={{ width: INLINE_QR_SIZE - 8, height: INLINE_QR_SIZE - 8 }}
-            />
-          ) : qrBlockedBySize || failed ? (
-            <SfIcon name="exclamationmark.triangle" size={20} color={Colors.destructive} />
-          ) : (
-            <ActivityIndicator color={Colors.primaryMauve} />
-          )}
-        </View>
-        <View className="flex-1 gap-2">
-          <ThemedText variant="label" numberOfLines={1}>
-            {displayUrl}
-          </ThemedText>
-          <ThemedText variant="bodySmall" tone={qrBlockedBySize || failed ? 'error' : 'secondary'}>
-            {qrBlockedBySize
-              ? t('meShare.qrTooLarge')
-              : failed
-                ? t('meShare.qrError')
-                : t('mePage.inlineQrHint')}
-          </ThemedText>
-          <View className="flex-row items-center gap-1">
-            <SfIcon name="doc.on.doc" size={13} color={Colors.primaryMauve} />
-            <ThemedText variant="caption" style={{ color: Colors.primaryMauve }}>
-              {t('mePage.copyLink')}
-            </ThemedText>
-          </View>
-        </View>
-      </ThemedSurface>
-    </PressableScale>
-  );
-}
 
 function ProfileQrSheet({
   visible,
@@ -246,6 +112,20 @@ function ProfileQrSheet({
   );
   const shareState = useMemo<ShareModelState>(() => {
     if (baseShareState.kind === 'error') return baseShareState;
+    if (baseShareState.kind === 'unpublished') {
+      const selected = baseShareState.candidates.find(
+        (candidate) => candidate.kind === selectedKind
+      );
+      return selected === undefined
+        ? baseShareState
+        : {
+            kind: 'ready',
+            model: baseShareState.model,
+            candidates: baseShareState.candidates,
+            selected,
+            verifiedHandle: baseShareState.verifiedHandle,
+          };
+    }
     const selected =
       baseShareState.candidates.find((candidate) => candidate.kind === selectedKind) ??
       baseShareState.selected;
@@ -389,6 +269,33 @@ function ProfileQrSheet({
                     setQrRetryNonce((value) => value + 1);
                   }}
                 />
+              ) : shareState.kind === 'unpublished' ? (
+                <ThemedSurface variant="inset" className="gap-4 rounded-none p-4">
+                  <View className="flex-row items-center gap-2">
+                    <SfIcon name="icloud" size={22} color={Colors.warning} />
+                    <ThemedText variant="label">{t('meShare.unpublishedTitle')}</ThemedText>
+                  </View>
+                  <ThemedText variant="bodySmall" tone="secondary">
+                    {t('meShare.unpublishedBody')}
+                  </ThemedText>
+                  <ThemedButton
+                    label={t('meShare.publishName')}
+                    variant="primary"
+                    fullWidth
+                    onPress={() => {
+                      onClose();
+                      router.push('/settings/username');
+                    }}
+                  />
+                  <OtherFormatsSection
+                    visible={visible}
+                    candidates={shareState.candidates}
+                    verifiedHandle={shareState.verifiedHandle}
+                    onSelect={(candidate) => {
+                      setSelectedKind(candidate.kind);
+                    }}
+                  />
+                </ThemedSurface>
               ) : (
                 <ThemedSurface variant="inset" className="items-center gap-4 rounded-none p-4">
                   <SfIcon name="exclamationmark.triangle" size={24} color={Colors.destructive} />

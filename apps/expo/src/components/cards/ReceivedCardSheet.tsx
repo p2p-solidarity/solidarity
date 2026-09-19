@@ -17,6 +17,8 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { SakuraIcon } from '@/components/brand/SakuraIcon';
 import { PeerAvatar } from '@/components/cards/PeerAvatar';
 import { buildContactFromReceivedCard } from '@/cards/receivedCard';
+import type { NostrPointerClaim } from '@/cards/nostrPointerClaim';
+import { maybeBootstrapCardSubscription } from '@/people/cardSubscriptionBootstrap';
 import { DecorativeBlobs } from '@/components/decor/DecorativeBlobs';
 import { SfIcon } from '@/components/icons/SfIcon';
 import { ThemedButton } from '@/components/themed/ThemedButton';
@@ -38,6 +40,10 @@ export interface ReceivedCardSheetProps {
   readonly verificationStatus: VerificationStatus;
   readonly source: ContactSource;
   readonly sealedRoute?: string;
+  /** Sender's verified subscription pointer — after a successful save it
+   *  kicks the silent-refresh bootstrap (existing dids only; see
+   *  people/cardSubscriptionBootstrap.ts). */
+  readonly nostrPointer?: NostrPointerClaim;
   readonly onSave: (contact: Contact) => void | Promise<void>;
   readonly onShowMine: () => void;
   readonly onDismiss: () => void;
@@ -49,6 +55,7 @@ export function ReceivedCardSheet({
   verificationStatus,
   source,
   sealedRoute,
+  nostrPointer,
   onSave,
   onShowMine,
   onDismiss,
@@ -66,6 +73,7 @@ export function ReceivedCardSheet({
           verificationStatus={verificationStatus}
           source={source}
           sealedRoute={sealedRoute}
+          nostrPointer={nostrPointer}
           onSave={onSave}
           onShowMine={onShowMine}
           onDismiss={onDismiss}
@@ -80,6 +88,7 @@ function ReceivedCardContent({
   verificationStatus,
   source,
   sealedRoute,
+  nostrPointer,
   onSave,
   onShowMine,
   onDismiss,
@@ -88,6 +97,7 @@ function ReceivedCardContent({
   readonly verificationStatus: VerificationStatus;
   readonly source: ContactSource;
   readonly sealedRoute?: string;
+  readonly nostrPointer?: NostrPointerClaim;
   readonly onSave: (contact: Contact) => void | Promise<void>;
   readonly onShowMine: () => void;
   readonly onDismiss: () => void;
@@ -111,6 +121,10 @@ function ReceivedCardContent({
     try {
       await onSave(contact);
       setIsSaved(true);
+      // §3.3 card-wire bootstrap: silent refresh of an ALREADY-saved
+      // verified page through the sender's attested npub. Fire-and-forget;
+      // never creates a person, never blocks or fails the save.
+      maybeBootstrapCardSubscription(nostrPointer);
       haptic('success');
       pushToast(t('receivedCard.savedToast', { name: card.name }), 'success');
       if (showMine) {

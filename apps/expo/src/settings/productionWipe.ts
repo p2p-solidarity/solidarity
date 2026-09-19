@@ -181,6 +181,21 @@ function scrubAndVerifyPersistentData(): LocalDeletionResult {
   }
 }
 
+/**
+ * Reset App Data (Settings → Reset Options): clears every durable MMKV record
+ * and the in-memory store mirrors hydrated from them, then rehydrates the Page
+ * store so it cannot stay stuck at `loading`. Keychain-backed recovery/signing
+ * keys are deliberately preserved — that is what separates this from
+ * `wipeLocalDevice`. Ordering mirrors the wipe path: durable records first,
+ * memory second, so a racing store write-back cannot resurrect cleared data.
+ */
+export async function resetAppDataKeepingKeys(): Promise<void> {
+  clearAllData();
+  clearMemoryCaches();
+  resetPreferencesAndPolicies();
+  await preparePageDesign();
+}
+
 /** Assemble the real local stores behind the ordered wipe coordinator. */
 export async function wipeLocalDevice(): Promise<WipeEverythingResult> {
   const result = await wipeEverything({

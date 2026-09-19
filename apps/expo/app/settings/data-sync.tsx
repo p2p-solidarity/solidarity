@@ -42,7 +42,7 @@ import { confirmDialog } from '@/feedback/confirmDialog';
 import { useTranslation } from '@/i18n';
 import {
   ensureSigningKey,
-  requireBiometric,
+  requireSensitiveAction,
   resetSigningKeyForTesting,
 } from '@/keychain';
 import { usePreferences } from '@/settings/preferences';
@@ -52,7 +52,6 @@ export default function DataSyncSettings() {
   const { t } = useTranslation();
   const developerMode = usePreferences((s) => s.developerMode);
   const backupEnabled = usePreferences((s) => s.backupEnabled);
-  const policy = usePreferences((s) => s.biometricPolicy);
   const credentials = useCredentialStore((s) => s.manifest);
   const hydrateCreds = useCredentialStore((s) => s.hydrate);
   const [busy, setBusy] = useState(false);
@@ -76,12 +75,14 @@ export default function DataSyncSettings() {
     if (busy) return;
     setBusy(true);
     try {
-      if (policy.rotateMasterKey) {
-        const ok = await requireBiometric('delete');
-        if (!ok) {
-          setBusy(false);
-          return;
-        }
+      // rotateMasterKey is gated unconditionally — see RED_LINE_ACTIONS.
+      const gate = await requireSensitiveAction(
+        'rotateMasterKey',
+        t('security.prompt.rotateMasterKey')
+      );
+      if (!gate.success) {
+        setBusy(false);
+        return;
       }
       await resetSigningKeyForTesting();
       await ensureSigningKey();

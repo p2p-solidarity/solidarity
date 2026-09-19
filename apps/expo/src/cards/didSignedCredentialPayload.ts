@@ -53,10 +53,27 @@ export async function buildDidSignedEnvelope(
   };
 }
 
-export async function buildDidSignedJwt(
+/**
+ * The unsigned claims assembly shared by BOTH wire formats: the legacy bare
+ * VC-JWT and the CRD1 COSE_Sign1 evidence-pack framing. One claims builder,
+ * two signatures — the payload a scanner reconstructs is identical either way.
+ */
+export interface DidSignedClaimsResult {
+  readonly payload: Record<string, unknown>;
+  readonly issuedAt: number;
+  readonly shareId: string;
+  readonly createdAt: string;
+  readonly expirationDate?: string;
+  readonly issuerDid: string;
+  readonly holderDid: string;
+  readonly sharingLevel: NonNullable<SolidarityQrPayloadOptions['sharingLevel']>;
+  readonly selectedFields: readonly BusinessCardField[];
+}
+
+export function buildDidSignedClaims(
   card: BusinessCard,
   options: SolidarityQrPayloadOptions
-): Promise<DidSignedResult> {
+): DidSignedClaimsResult {
   const signer = options.signer;
   if (!signer) throw new Error('No signer available for didSigned payload');
 
@@ -80,11 +97,12 @@ export async function buildDidSignedJwt(
     snapshot,
     publicKeyJwk: signer.publicKeyJwk,
     attestedFields: vcEligibleFields,
+    nostrPointer: options.nostrPointer,
   });
 
-  const jwt = await signer.signJwt({ alg: 'ES256' }, payload);
   return {
-    jwt,
+    payload,
+    issuedAt,
     shareId: options.shareId ?? uuid(),
     createdAt: formatSwiftIso8601(now),
     expirationDate: options.expirationDate
@@ -97,6 +115,27 @@ export async function buildDidSignedJwt(
   };
 }
 
+export async function buildDidSignedJwt(
+  card: BusinessCard,
+  options: SolidarityQrPayloadOptions
+): Promise<DidSignedResult> {
+  const signer = options.signer;
+  if (!signer) throw new Error('No signer available for didSigned payload');
+
+  const claims = buildDidSignedClaims(card, options);
+  const jwt = await signer.signJwt({ alg: 'ES256' }, claims.payload);
+  return {
+    jwt,
+    shareId: claims.shareId,
+    createdAt: claims.createdAt,
+    expirationDate: claims.expirationDate,
+    issuerDid: claims.issuerDid,
+    holderDid: claims.holderDid,
+    sharingLevel: claims.sharingLevel,
+    selectedFields: claims.selectedFields,
+  };
+}
+
 function buildBusinessCardCredentialPayload(args: {
   readonly credentialId: string;
   readonly issuerDid: string;
@@ -106,6 +145,7 @@ function buildBusinessCardCredentialPayload(args: {
   readonly snapshot: BusinessCardSnapshotPayload;
   readonly publicKeyJwk: PublicKeyJWK;
   readonly attestedFields: readonly BusinessCardField[];
+  readonly nostrPointer?: { readonly npub: string; readonly relays: readonly string[] };
 }): Record<string, unknown> {
   const fieldStatuses = buildSelfAttestedStatuses(args.attestedFields);
   const subject = buildCredentialSubject({
@@ -113,6 +153,7 @@ function buildBusinessCardCredentialPayload(args: {
     snapshot: args.snapshot,
     publicKeyJwk: args.publicKeyJwk,
     fieldStatuses,
+    nostrPointer: args.nostrPointer,
   });
 
   return pruneUndefined({
@@ -140,6 +181,7 @@ function buildCredentialSubject(args: {
   readonly snapshot: BusinessCardSnapshotPayload;
   readonly publicKeyJwk: PublicKeyJWK;
   readonly fieldStatuses: Record<string, string>;
+  readonly nostrPointer?: { readonly npub: string; readonly relays: readonly string[] };
 }): Record<string, unknown> {
   const { snapshot } = args;
   const worksFor = snapshot.company
@@ -181,6 +223,12 @@ function buildCredentialSubject(args: {
       businessCardId: snapshot.cardId,
       publicKeyJwk: args.publicKeyJwk,
     },
+    // CREDS §3.3 subscription pointer (05-spec §3 v1.1) — present only when
+    // the sender's Nostr binding is verified at emit time. Unknown to old
+    // scanners, which ignore it (additive, both wires).
+    subscription: args.nostrPointer
+      ? { nostr: { npub: args.nostrPointer.npub, relays: [...args.nostrPointer.relays] } }
+      : undefined,
     verified_contact_claims: verifiedContactClaims,
     credential_meta: pruneUndefined({
       schemaVersion: 2,

@@ -22,7 +22,7 @@
  */
 import type { ReactNode } from 'react';
 import { useEffect, useState } from 'react';
-import { Modal, Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import Animated, {
   useAnimatedStyle,
   useSharedValue,
@@ -31,6 +31,7 @@ import Animated, {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { create } from 'zustand';
 
+import { WindowOverlay } from '@/components/common/WindowOverlay';
 import { SfIcon } from '@/components/icons/SfIcon';
 import { ThemedButton, ThemedSurface, ThemedText } from '@/components/themed';
 import type { ButtonVariant } from '@/components/themed';
@@ -290,19 +291,16 @@ export function AppAlertOverlay(): ReactNode {
   };
 
   return (
-    <Modal
-      transparent
+    <WindowOverlay
       visible={head !== undefined}
-      animationType="fade"
       onRequestClose={close}
-      statusBarTranslucent
     >
       {head?.kind === 'error' ? (
         <ErrorSheet key={head.id} req={head} onDone={close} />
       ) : head?.kind === 'info' ? (
         <InfoCard key={head.id} req={head} onDone={close} />
       ) : null}
-    </Modal>
+    </WindowOverlay>
   );
 }
 

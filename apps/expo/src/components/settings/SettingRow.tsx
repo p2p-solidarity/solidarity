@@ -24,12 +24,12 @@ export function SettingRow({
 }: SettingRowProps): ReactNode {
   return (
     <Pressable
-      className="bg-cardBg flex-row items-center justify-between border-b border-divider px-4 py-3"
+      className="flex-row items-center justify-between border-b border-divider bg-cardBg px-4 py-3"
+      style={{ borderBottomWidth: 0.5, minHeight: 52 }}
       onPress={onPress}
       disabled={!onPress}
       accessibilityRole={onPress ? 'button' : undefined}
-      accessibilityLabel={label}
-    >
+      accessibilityLabel={label}>
       <ThemedText variant="bodyLarge" tone={destructive ? 'error' : 'primary'}>
         {label}
       </ThemedText>

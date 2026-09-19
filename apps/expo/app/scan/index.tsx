@@ -1,8 +1,8 @@
 /**
  * Scan screen — 1:1 port of Swift ScanTabView. Full-screen camera preview
  * with a dimmed-mask ScanWindowOverlay (centred square cut-out + four
- * green corner brackets), nav bar "Scan" inline + trailing `qrcode`
- * (open proof-request QR), and concise human-facing scan guidance.
+ * green corner brackets), nav bar "Scan" inline, and concise human-facing
+ * scan guidance.
  *
  * Capture feedback: when a payload is decoded we play a short shutter-style
  * animation (corner brackets pulse + a brief white flash overlay) on the
@@ -29,7 +29,6 @@ import Animated, {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { scheduleOnRN } from 'react-native-worklets';
 
-import { PressableScale } from '@/components/common/PressableScale';
 import { SfIcon } from '@/components/icons/SfIcon';
 import { PassportShowChallengeSheet } from '@/components/scan/PassportShowChallengeSheet';
 import { ProofPresentationFlowSheet } from '@/components/scan/ProofPresentationFlowSheet';
@@ -41,8 +40,8 @@ import {
 import { ThemedButton, ThemedSurface, ThemedText } from '@/components/themed';
 import { Colors } from '@/constants/Colors';
 import { presentReceivedCard } from '@/cards/receivedCard';
+import { handleDeepLink, parseDeepLink } from '@/deeplink/router';
 import { haptic } from '@/feedback/haptics';
-import { SCALE } from '@/feedback/motion';
 import { pushToast } from '@/feedback/toast';
 import { PASSPORT_SHOW_LINK_SCOPE } from '@/passport/showPresentation';
 import { issuePassportShowChallenge } from '@/passport/showVerifier';
@@ -148,7 +147,11 @@ export default function ScanScreen() {
     // OIDC URLs, ...), so every existing format below is completely
     // unaffected. A non-null result (verified OR a structured invalid
     // reason) routes into VerifiedPageResultSheet, mounted in `_layout.tsx`.
-    const verifiedPageForm = classifyVerifiedPagePayload(payload);
+    const verifiedPageForm = classifyVerifiedPagePayload(payload, {
+      // Dev mode admits DEV_PRODUCT_HOSTS for the /@handle URL form
+      // (05-spec §8-B mechanism for pre-launch domains).
+      devProductHosts: developerMode,
+    });
     if (verifiedPageForm !== null) {
       if (verifiedPageForm.kind === 'fragment') {
         // Self-contained offline blob — verified locally in this tick.
@@ -167,10 +170,30 @@ export default function ScanScreen() {
       return;
     }
 
+    // Our OWN deep links, printed as QR (05-spec §8-D ruling, 2026-08-25):
+    // a scanned `solidarity://card|group|pear/…` or
+    // `https://<product-host>/c|pear/…` must route exactly like tapping it —
+    // not die as 「無法讀取」. `parseDeepLink` is pure; ONLY the three kinds
+    // that were previously dead in the scanner are handed to the deeplink
+    // router (webSign / offers / OID4VP keep their dedicated scan ceremonies
+    // above and below — routing `oidc` here would bypass the dev verifier
+    // sheet). Placed AFTER the Verified Page classifier so fragment/pointer/
+    // handle URLs keep their existing scan presentation.
+    const deepLinkRoute = parseDeepLink(payload, { devProductHosts: developerMode });
+    if (
+      deepLinkRoute.kind === 'card' ||
+      deepLinkRoute.kind === 'groupInvite' ||
+      deepLinkRoute.kind === 'pear'
+    ) {
+      handleDeepLink(payload);
+      safeBack();
+      return;
+    }
+
     // Try the envelope pipeline next — plaintext / zkProof / didSigned
     // payloads route into the ReceivedCardSheet mounted in `_layout.tsx`.
-    // Everything else (OIDC URLs, deep links, raw JWTs that aren't cards)
-    // falls through to the legacy `classifyPayload` router.
+    // Everything else (OIDC URLs, raw JWTs that aren't cards) falls through
+    // to the legacy `classifyPayload` router.
     void (async () => {
       const outcome = await handleScannedPayload(payload);
       if (outcome.kind === 'card' && outcome.card) {
@@ -184,6 +207,7 @@ export default function ScanScreen() {
           verificationStatus: outcome.verificationStatus,
           source: 'QR Code',
           sealedRoute: outcome.sealedRoute,
+          nostrPointer: outcome.nostrPointer,
         });
         safeBack();
         return;
@@ -262,20 +286,7 @@ export default function ScanScreen() {
           <Text className="text-text1 text-[15px]">{t('scan.close')}</Text>
         </Pressable>
         <Text className="text-text1 text-[17px] font-semibold">{t('scan.title')}</Text>
-        {developerMode ? (
-          <PressableScale
-            haptic="tap"
-            scaleTo={SCALE.icon}
-            accessibilityRole="button"
-            accessibilityLabel={t('scan.proofRequestQr')}
-            onPress={() => { router.push('/share/qr'); }}
-            style={{ width: 60, height: 44, alignItems: 'flex-end', justifyContent: 'center' }}
-          >
-            <SfIcon name="qrcode" size={20} color={Colors.text1} />
-          </PressableScale>
-        ) : (
-          <View style={{ width: 60, height: 44 }} />
-        )}
+        <View style={{ width: 60, height: 44 }} />
       </View>
 
       <View style={{ flex: 1 }} />

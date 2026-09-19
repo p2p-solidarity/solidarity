@@ -66,7 +66,7 @@ describe('v2 product terminology boundary', () => {
       expect(route).toContain(
         "const developerMode = usePreferences((state) => state.developerMode)"
       );
-      expect(route).toContain('if (!developerMode) return <Redirect href="/settings/advanced" />;');
+      expect(route).toContain('if (!developerMode) return <Redirect href="/settings" />;');
     }
 
     for (const section of [cardExchange, pearConnect]) {

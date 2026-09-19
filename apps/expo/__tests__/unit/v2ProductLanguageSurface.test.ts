@@ -43,7 +43,9 @@ describe('v2 product language surfaces', () => {
     const detail = source('../../app/credentials/[id].tsx');
     const result = source('../../src/scan/passportShowResult.ts');
 
-    expect(attestations).toContain("product: '1'");
+    // The Present tab now generates the proof inline instead of routing to the
+    // credential screen, so it carries product context on the sheet itself.
+    expect(attestations).toContain('productMode');
     expect(detail).toContain('isProductContext');
     expect(detail).toContain('ProductCredentialMetadata');
     expect(result).not.toContain('reason: result.reason');
@@ -99,11 +101,13 @@ describe('v2 product language surfaces', () => {
     expect(proofQr).toContain('{showClaimDetails && selectedClaims.length > 0 ?');
     expect(proofQr).toContain('{showClaimDetails && footerText ?');
 
-    expect(badges).toContain("params: { id: passport.id, product: '1' }");
+    expect(badges).toContain(
+      "params: { id: claim.identityCardId, claimId: claim.id, product: '1' }"
+    );
   });
 
   it('gives every public Page link a nonempty accessible name', () => {
-    const pagePreview = source('../../src/components/me/PageLivePreview.tsx');
+    const pagePreview = source('../../src/components/me/PagePreviewItems.tsx');
 
     expect(pagePreview).toContain('accessibilityLabel={item.title.trim() || url}');
   });

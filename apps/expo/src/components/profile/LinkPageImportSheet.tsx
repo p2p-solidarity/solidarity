@@ -26,9 +26,11 @@
  * should mean, unlike a contact-entry draft worth preserving.
  */
 import { useState, type ReactNode } from 'react';
-import { Modal, ScrollView, TextInput, View } from 'react-native';
+import { TextInput, View } from 'react-native';
+import { KeyboardAwareScrollView, KeyboardStickyView } from 'react-native-keyboard-controller';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { ModalSheet } from '@/components/common/ModalSheet';
 import { PressableScale } from '@/components/common/PressableScale';
 import { SfIcon } from '@/components/icons/SfIcon';
 import { ThemedButton, ThemedText } from '@/components/themed';
@@ -77,7 +79,7 @@ export function LinkPageImportSheet({
   onImport,
 }: LinkPageImportSheetProps): ReactNode {
   return (
-    <Modal visible={visible} animationType="slide" presentationStyle="pageSheet" onRequestClose={onClose}>
+    <ModalSheet visible={visible} onRequestClose={onClose}>
       {visible ? (
         <LinkPageImportSheetContent
           sheetTitle={title}
@@ -86,7 +88,7 @@ export function LinkPageImportSheet({
           onImport={onImport}
         />
       ) : null}
-    </Modal>
+    </ModalSheet>
   );
 }
 
@@ -147,7 +149,10 @@ function LinkPageImportSheetContent({
     <View style={{ flex: 1, backgroundColor: Colors.pageBg, paddingTop: insets.top }}>
       <Toolbar title={sheetTitle} onCancel={onClose} />
 
-      <ScrollView contentContainerStyle={{ padding: 16, gap: 16 }} keyboardShouldPersistTaps="handled">
+      <KeyboardAwareScrollView
+        keyboardShouldPersistTaps="handled"
+        bottomOffset={16}
+        contentContainerStyle={{ padding: 16, gap: 16 }}>
         {phase.step !== 'preview' ? (
           <View style={{ gap: 8 }}>
             <ThemedText variant="label">{t('linkPageImport.urlLabel')}</ThemedText>
@@ -208,9 +213,11 @@ function LinkPageImportSheetContent({
             </View>
           </View>
         ) : null}
-      </ScrollView>
+      </KeyboardAwareScrollView>
 
-      <View style={{ paddingHorizontal: 16, paddingBottom: insets.bottom + 12, paddingTop: 12 }}>
+      <KeyboardStickyView
+        offset={{ closed: 0, opened: insets.bottom }}
+        style={{ paddingHorizontal: 16, paddingBottom: insets.bottom + 12, paddingTop: 12 }}>
         {phase.step === 'preview' ? (
           <ThemedButton
             fullWidth
@@ -227,7 +234,7 @@ function LinkPageImportSheetContent({
             onPress={runFetch}
           />
         )}
-      </View>
+      </KeyboardStickyView>
     </View>
   );
 }

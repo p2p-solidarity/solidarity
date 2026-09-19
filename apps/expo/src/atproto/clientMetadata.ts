@@ -18,7 +18,7 @@
  * The web surface (`solidarity.gg`) is a SEPARATE repo (`solidarity-web`,
  * per project decision — NOT `apps/web` in this monorepo), so this app
  * cannot deploy that file itself. This task also writes the identical
- * document to `apps/expo/docs/atproto-client-metadata.json` as the
+ * document to `apps/expo/src/atproto/client-metadata.json` as the
  * hand-off spec for whoever wires up `solidarity-web`'s static hosting.
  * Until that file is live at the URL above with `Content-Type:
  * application/json` and HTTP 200, `startAtprotoOAuth()` will reach the PAR
@@ -82,7 +82,7 @@ export const ATPROTO_SCOPE = 'atproto transition:generic';
 
 /**
  * The exact JSON that must be served at `ATPROTO_CLIENT_ID` (also mirrored
- * to `apps/expo/docs/atproto-client-metadata.json`). Field order/shape
+ * to `apps/expo/src/atproto/client-metadata.json`). Field order/shape
  * follows https://atproto.com/specs/oauth "Client ID Metadata Document".
  */
 export const CLIENT_METADATA_DOCUMENT = {

@@ -3,19 +3,53 @@ const MIN_USERNAME_LENGTH = 3;
 const MAX_USERNAME_LENGTH = 30;
 
 const RESERVED_USERNAMES = new Set([
+  '_',
   'admin',
+  'administrator',
   'api',
   'app',
+  'airmeishi',
+  'abuse',
   'billing',
+  'bot',
+  'creds',
+  'credsid',
+  'dev',
+  'ftp',
   'help',
+  'helpdesk',
+  'id',
+  'legal',
   'login',
+  'mail',
+  'mod',
+  'moderator',
+  'nostr',
+  'ns1',
+  'ns2',
+  'null',
+  'official',
+  'pay',
+  'payment',
+  'postmaster',
   'privacy',
+  'root',
   'security',
   'settings',
   'signup',
+  'smtp',
+  'solidarity',
+  'staff',
+  'staging',
   'support',
+  'system',
+  'team',
   'terms',
+  'test',
+  'undefined',
   'verify',
+  'verification',
+  'verified',
   'www',
 ]);
 
@@ -43,5 +77,9 @@ export function validatePublicPageUsername(
 }
 
 export function publicPagePath(username: string): string {
-  return `creds.id/${username}`;
+  return `creds.id/@${username}`;
+}
+
+export function publicPageUrl(username: string): string {
+  return `https://${publicPagePath(username)}`;
 }

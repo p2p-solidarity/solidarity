@@ -9,21 +9,29 @@
  *   2. Find a group whose canonicalised member set CONTAINS the local
  *      identity's commitment AND has ≥2 distinct members.
  *   3. Call `generateGroupProof({ commitments, scope, signal: shareId })`.
- *   4. Return the raw proof JSON string + the local commitment.
+ *   4. Return the FULL `SemaphoreProof` envelope serialised as JSON — the
+ *      shape `verifyGroupProof` consumes (native reads `proof.proofJson`)
+ *      and the same wire convention `vault/zkAgeVerification.ts` uses.
+ *      Earlier versions put only the inner `proofJson` on the wire, which
+ *      the scanner could never verify (it JSON.parses the wire and hands
+ *      the object to `verifyGroupProof`, which needs the envelope shape).
+ *      And ONLY the proof: the local commitment is deliberately not
+ *      returned — a commitment beside a membership proof lets anyone
+ *      holding the roster identify the presenter (lists-anonymity audit
+ *      2026-08-18 §5); the Swift original's `commitment` output existed
+ *      only to feed the payload field that audit removed.
  *
  * Returns null when the user is not a member of any group with enough
  * peers — `buildZKEnvelope` continues without an issuerProof. Errors from
  * the native bridge are also swallowed (best-effort proof; QR generation
  * never blocks on Semaphore being available).
  */
-import { generateGroupProof, canonicalCommitments } from './groupManager';
+import { generateGroupProof, canonicalCommitments, recomputeRoot } from './groupManager';
 import { loadOrCreateIdentity, currentIdentity } from './identity';
 
 import { useGroupStore } from '@/groups/store';
 
 export interface IssuerProofResult {
-  /** Local Semaphore identity commitment (decimal-string field element). */
-  readonly commitment: string;
   /** The raw Semaphore proof JSON (Swift `issuerProof: String?`). */
   readonly proof: string;
 }
@@ -91,10 +99,40 @@ export async function generateIssuerProof(
       scope: args.scope,
       signal: args.message,
     });
-    return { commitment: identity.commitment, proof: proof.proofJson };
+    return { proof: JSON.stringify(proof) };
   } catch {
     return null;
   }
+}
+
+/**
+ * Root provenance for a RECEIVED issuer proof (05-spec §6-8, landed
+ * 2026-08-25): does `root` equal the canonical Merkle root of a group THIS
+ * device holds? A Semaphore proof is only "membership in a group the
+ * receiver recognises" when the root is recognisable — an internally-valid
+ * SNARK over an attacker's own two-member throwaway group must not light
+ * up `is_human`. Returns false (never throws) when the native module is
+ * unavailable or no stored group matches: the scan layer treats an
+ * unknown root as "cannot check" (Unverified), never as Failed.
+ */
+export async function isKnownGroupRoot(root: string): Promise<boolean> {
+  const trimmed = root.trim();
+  if (trimmed.length === 0) return false;
+  try {
+    const state = useGroupStore.getState();
+    for (const group of state.groups.values()) {
+      const bucket = state.members.get(group.id) ?? [];
+      const commitments = bucket
+        .map((m) => m.commitment?.trim() ?? '')
+        .filter((c) => c.length > 0);
+      if (canonicalCommitments(commitments).length < 2) continue;
+      const computed = await recomputeRoot(commitments);
+      if (computed !== null && computed === trimmed) return true;
+    }
+  } catch {
+    // Group store / native bridge unavailable — provenance simply unknown.
+  }
+  return false;
 }
 
 /**

@@ -3,7 +3,7 @@
  * react-native-webrtc that carries the three-step sync protocol once
  * BLE handed off the SDP/ICE.
  *
- * Spec: docs/dev-sandbox-identity-graph.md §5.2 + §13.1.
+ * Spec: docs/ref/notes-dev-sandbox-identity-graph.md §5.2 + §13.1.
  *
  * Design constraints:
  *   - `iceServers: []` by default (LAN-direct only, no STUN/TURN).

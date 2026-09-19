@@ -17,6 +17,8 @@ import { displayProfileShareUrl } from './meProfileModel';
 import { profileShareQrIsOversize } from './profileShareQr';
 
 export const PROFILE_SHARE_QR_SIZE = 208;
+/** `.qr` padding from the mock. */
+const QR_PLATE_PADDING = 20;
 
 export type ProfileShareQrState =
   | { readonly kind: 'loading'; readonly url: string | null }
@@ -170,10 +172,12 @@ function QrPreview({
   return (
     <ThemedSurface
       variant="card"
-      className="self-center rounded-none p-2"
+      className="self-center rounded-none"
       style={{
-        width: PROFILE_SHARE_QR_SIZE + 16,
-        height: PROFILE_SHARE_QR_SIZE + 16,
+        // `.qr` — square-cornered card on a 20pt inset (creds-design mock).
+        padding: QR_PLATE_PADDING,
+        width: PROFILE_SHARE_QR_SIZE + QR_PLATE_PADDING * 2,
+        height: PROFILE_SHARE_QR_SIZE + QR_PLATE_PADDING * 2,
       }}>
       <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
         {matchesUrl && state.kind === 'ready' ? (
@@ -210,7 +214,7 @@ function QrPreview({
   );
 }
 
-function OtherFormatsSection({
+export function OtherFormatsSection({
   visible,
   candidates,
   verifiedHandle,

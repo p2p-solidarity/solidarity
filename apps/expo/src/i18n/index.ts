@@ -36,4 +36,23 @@ export async function installI18n(preferred?: string): Promise<void> {
   });
 }
 
+/**
+ * Non-hook translate, for modules that run outside React (keychain gates,
+ * root-key ceremonies, background tasks). Falls back to the key itself if i18n
+ * has not booted yet, which is what i18next does inside components too.
+ */
+export function translate(key: string, fallback?: string): string {
+  // Defensive: low-level callers (keychain gates, root-key ceremonies) sit deep
+  // in the import graph, where touching `i18n` can throw before this module is
+  // fully evaluated — a real TDZ crash observed under bun's module mocks, and a
+  // circular-import hazard in production too. A prompt string is never worth
+  // taking down the signing or vault path, so fall back to English instead.
+  try {
+    if (!i18n.isInitialized) return fallback ?? key;
+    return i18n.t(key, { defaultValue: fallback ?? key });
+  } catch {
+    return fallback ?? key;
+  }
+}
+
 export { useTranslation } from 'react-i18next';

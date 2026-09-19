@@ -26,7 +26,7 @@ import { appAlert, showError } from '@/feedback/appAlert';
 import { confirmDialog } from '@/feedback/confirmDialog';
 import { pushToast } from '@/feedback/toast';
 import { useTranslation } from '@/i18n';
-import { requireBiometric } from '@/keychain';
+import { requireSensitiveAction } from '@/keychain';
 import { safeBack } from '@/navigation/safeBack';
 import { usePreferences } from '@/settings/preferences';
 import { wipeLocalDevice } from '@/settings/productionWipe';
@@ -36,7 +36,6 @@ export default function DeveloperSettings() {
   const { t } = useTranslation();
   const developerMode = usePreferences((state) => state.developerMode);
   const simulateNfc = usePreferences((state) => state.simulateNfc);
-  const policy = usePreferences((state) => state.biometricPolicy);
   const setPref = usePreferences((state) => state.set);
   const [busy, setBusy] = useState(false);
 
@@ -51,10 +50,12 @@ export default function DeveloperSettings() {
 
     setBusy(true);
     try {
-      if (policy.rotateMasterKey) {
-        const authorized = await requireBiometric('delete');
-        if (!authorized) return;
-      }
+      // rotateMasterKey is gated unconditionally — see RED_LINE_ACTIONS.
+      const gate = await requireSensitiveAction(
+        'rotateMasterKey',
+        t('security.prompt.wipeEverything')
+      );
+      if (!gate.success) return;
 
       const result = await wipeLocalDevice();
       if (result.kind === 'incomplete') {
@@ -85,7 +86,7 @@ export default function DeveloperSettings() {
   if (!developerMode) {
     return (
       <View className="flex-1 bg-pageBg" style={{ paddingTop: insets.top }}>
-        <SettingsBackToolbar onPress={() => { safeBack('/settings/advanced'); }} />
+        <SettingsBackToolbar onPress={() => { safeBack('/settings'); }} />
         <SettingsScreenTitle title={t('developer.title')} />
         <ThemedText variant="caption" tone="secondary" className="px-4 pt-6">
           {t('developer.locked')}
@@ -96,7 +97,7 @@ export default function DeveloperSettings() {
 
   return (
     <View className="flex-1 bg-pageBg" style={{ paddingTop: insets.top }}>
-      <SettingsBackToolbar onPress={() => { safeBack('/settings/advanced'); }} />
+      <SettingsBackToolbar onPress={() => { safeBack('/settings'); }} />
       <SettingsScreenTitle title={t('developer.title')} />
 
       <ScrollView

@@ -9,8 +9,7 @@
 import * as Clipboard from 'expo-clipboard';
 import type { ReactNode } from 'react';
 import { useEffect, useState } from 'react';
-import { Pressable, Text, View } from 'react-native';
-import QRCode from 'react-native-qrcode-svg';
+import { Text, View } from 'react-native';
 
 import { SfIcon } from '@/components/icons/SfIcon';
 import { ThemedButton } from '@/components/themed';
@@ -245,77 +244,6 @@ function collectMemberCommitments(
     }
   }
   return out;
-}
-
-/* ------------------------------------------------------------------ */
-/* Invite Members                                                     */
-/* ------------------------------------------------------------------ */
-
-export function InviteSection({
-  group,
-}: {
-  readonly group: GroupModel;
-}): ReactNode {
-  // TODO(android): generate the real invite link via the backup-provider
-  // share token. For now we synthesise a deep link so the QR + copy flow
-  // still work locally.
-  const link = `solidarity://groups/join?gid=${group.id}`;
-  const [showQr, setShowQr] = useState(false);
-
-  return (
-    <View className="gap-4 rounded-xl bg-searchBg p-4" style={{ borderWidth: 1, borderColor: Colors.divider }}>
-      <View className="flex-row items-center">
-        <SectionHeader title="Invite Members" />
-        <View className="flex-1" />
-      </View>
-
-      <View className="flex-row items-center gap-2">
-        <Text
-          numberOfLines={1}
-          ellipsizeMode="middle"
-          className="text-text1 text-[15px] flex-1 p-2 bg-searchBg rounded-lg"
-          style={{ fontFamily: MONO_FONT }}
-        >
-          {link}
-        </Text>
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel="Copy invite link"
-          hitSlop={8}
-          onPress={() => {
-            void Clipboard.setStringAsync(link);
-            pushToast('Copied to clipboard', 'success');
-          }}
-          className="p-2 rounded-full"
-          style={{ backgroundColor: `${Colors.primaryBlue}1A` }}
-        >
-          <SfIcon name="doc.on.doc" size={12} color={Colors.primaryBlue} />
-        </Pressable>
-      </View>
-
-      <ThemedButton
-        variant="secondary"
-        label={showQr ? 'Hide QR Code' : 'Show QR Code'}
-        fullWidth
-        leadingIcon={<SfIcon name="qrcode" size={14} color={Colors.accentRose} />}
-        onPress={() => { setShowQr((v) => !v); }}
-      />
-
-      {showQr ? (
-        <View
-          className="items-center justify-center p-4 self-center bg-cardBg"
-          style={{ borderRadius: 12 }}
-        >
-          <QRCode
-            value={link}
-            size={180}
-            backgroundColor="#FFFFFF"
-            color="#000000"
-          />
-        </View>
-      ) : null}
-    </View>
-  );
 }
 
 /* ------------------------------------------------------------------ */
