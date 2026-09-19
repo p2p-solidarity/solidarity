@@ -47,7 +47,7 @@
 1. **Shared（TDD）**：root-vault KDF、locator、seal/open、strict payload parser與跨 runtime vectors。
 2. **Opaque service（TDD）**：D1 schema、create-only/read handlers、大小與 shape 限制、idempotency、no-store、rate limit；掛到 creds.id 的既有 `solidarity-id` Worker。
 3. **Web（TDD + 一個 UI behavior check）**：把本機 IndexedDB vault 改成遠端 opaque store；discoverable passkey 解鎖；15 分鐘 session；移除 IdentityPanel 的建立／助記詞／金鑰管理 UI，只留 passkey 與後備 webSign。
-4. **App native + orchestration（TDD on JS boundary）**：Keystone 新增 WebAuthn PRF create；iOS AuthenticationServices、Android Credential Manager 1.6；root seed 只在 JS 記憶體短暫 seal 後上傳；onboarding 與既有用戶 Page 首次提示接線。
+4. **App native + orchestration（TDD on JS boundary）**：Keystone 新增 WebAuthn PRF create；iOS AuthenticationServices、Android Credential Manager 1.6；root seed 只在 JS 記憶體短暫 seal 後上傳；onboarding 的略過／連接選擇，以及 Page 的主動連接按鈕；Page 首訪不自動提示。
 5. **驗證與安全審**：root `bun run typecheck && bun run lint && bun run test`；web `bun run typecheck && bun run lint && bun test && bun run verify`；backend typecheck/tests；iOS/Android native compile；最後依 `code-review` 做 Standards／Spec 雙軸審查。
 
 ## 4. 驗收
