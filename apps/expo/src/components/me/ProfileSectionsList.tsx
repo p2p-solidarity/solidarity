@@ -30,6 +30,7 @@ import {
   type PageBlockType,
 } from '@/page/pageDesign';
 import { preparePageDesign, usePageDesignStore } from '@/page/pageDesignStore';
+import { useProGate } from '@/pro/useProGate';
 
 import { PageLivePreview } from './PageLivePreview';
 import { PageSectionLabel } from './PageSectionLabel';
@@ -296,7 +297,12 @@ function BlockRow({
 }): ReactNode {
   const { t } = useTranslation();
   const c = useThemeColors();
+  const { locked } = useProGate();
   const catalog = PAGE_BLOCK_CATALOG.find((entry) => entry.type === block.type);
+  // Locked only when the catalog requires Pro AND this user is not entitled.
+  // A lapsed subscriber's existing block stays here and stays published — the
+  // controls go read-only, the content is never touched.
+  const proLocked = locked(catalog?.pro ?? false);
   if (!catalog) return null;
   return (
     <DraggableRow
@@ -317,20 +323,20 @@ function BlockRow({
         itemCount={itemCount}
         stride={BLOCK_ROW_STRIDE}
         height={BLOCK_ROW_HEIGHT}
-        disabled={catalog.pro}
-        onMove={catalog.pro ? () => { onProPress(); } : onMove}
+        disabled={proLocked}
+        onMove={proLocked ? () => { onProPress(); } : onMove}
       />
       <PressableScale
         fill
-        onPress={catalog.pro ? onProPress : onEdit}
+        onPress={proLocked ? onProPress : onEdit}
         accessibilityRole="button"
         accessibilityLabel={t('pageDesign.editSection', { title: block.title })}
-        accessibilityHint={catalog.pro ? t('pageDesign.proControl') : undefined}
+        accessibilityHint={proLocked ? t('pageDesign.proControl') : undefined}
         className="flex-row items-center gap-2 py-1">
         <View className="flex-1 gap-0.5">
           <ThemedText variant="bodyMedium">{block.title}</ThemedText>
           <ThemedText variant="caption" tone="tertiary">
-            {t('pageDesign.itemCount', { count: block.items.length })}{catalog.pro ? ' · PRO' : ''}
+            {t('pageDesign.itemCount', { count: block.items.length })}{proLocked ? ' · PRO' : ''}
           </ThemedText>
         </View>
       </PressableScale>
@@ -338,8 +344,8 @@ function BlockRow({
         value={block.visible}
         style={{ alignSelf: 'center' }}
         accessibilityLabel={t('pageDesign.sectionVisible', { title: block.title })}
-        accessibilityHint={catalog.pro ? t('pageDesign.proControl') : undefined}
-        onValueChange={catalog.pro ? onProPress : onVisibleChange}
+        accessibilityHint={proLocked ? t('pageDesign.proControl') : undefined}
+        onValueChange={proLocked ? onProPress : onVisibleChange}
         trackColor={{ true: Colors.primaryBlue }}
       />
     </DraggableRow>
@@ -358,16 +364,19 @@ function PageBlockPickerSheet({
   const { t } = useTranslation();
   const insets = useSafeAreaInsets();
   const addBlock = usePageDesignStore((state) => state.addBlock);
+  const { locked } = useProGate();
   return (
     <ModalSheet visible={visible} onRequestClose={onClose}>
       <View className="flex-1 bg-pageBg" style={{ paddingTop: insets.top }}>
         <ScrollView contentContainerStyle={{ padding: 16, paddingBottom: insets.bottom + 24, gap: 12 }}>
           <ThemedText variant="titleLarge">{t('pageDesign.addSection')}</ThemedText>
-          {PAGE_BLOCK_CATALOG.filter((entry) => entry.type !== 'links').map((entry) => (
+          {PAGE_BLOCK_CATALOG.filter((entry) => entry.type !== 'links').map((entry) => {
+            const entryLocked = locked(entry.pro);
+            return (
               <PressableScale
                 key={entry.type}
                 onPress={() => {
-                  if (entry.pro) {
+                  if (entryLocked) {
                     onClose();
                     onOpenPro();
                     return;
@@ -376,17 +385,18 @@ function PageBlockPickerSheet({
                   onClose();
                 }}
                 accessibilityRole="button"
-                accessibilityHint={entry.pro ? t('pageDesign.proControl') : undefined}
+                accessibilityHint={entryLocked ? t('pageDesign.proControl') : undefined}
                 className="min-h-14 flex-row items-center gap-3 rounded-2xl border border-divider bg-cardBg px-4 py-3">
                 <ThemedText variant="titleMedium">{blockSymbol(entry.type)}</ThemedText>
                 <View className="flex-1">
                   <ThemedText variant="bodyMedium">{t(`pageDesign.block.${entry.type}`)}</ThemedText>
                   <ThemedText variant="caption" tone="tertiary">
-                    {entry.pro ? 'PRO' : t('pageDesign.basicSection')}
+                    {entryLocked ? 'PRO' : t('pageDesign.basicSection')}
                   </ThemedText>
                 </View>
               </PressableScale>
-            ))}
+            );
+          })}
           <ThemedButton label={t('common.close')} variant="secondary" fullWidth onPress={onClose} />
         </ScrollView>
       </View>

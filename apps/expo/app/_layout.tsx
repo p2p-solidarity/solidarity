@@ -70,6 +70,8 @@ import { warmNostrKeyMirror } from '@/nostr/userKey';
 import { PearConsentOverlay, PearPresentConsentOverlay } from '@/pear/consent';
 import { maybeRefreshVerifiedContacts } from '@/people/contactAutoRefresh';
 import { hydrateProfileSnapshots } from '@/people/profileSnapshots';
+import { prepareProEntitlement } from '@/pro/entitlementStore';
+import { initProPurchases } from '@/pro/purchases';
 import { hydrateProfile } from '@/profile/store';
 import { syncOnce } from '@/sakura/inbox';
 import { registerForPushNotificationsAsync } from '@/sakura/pushRegistration';
@@ -216,6 +218,16 @@ export default function RootLayout() {
         hydrateSensitiveActionPolicy();
         hydrateProfile();
         hydrateProfileSnapshots();
+        // Awaited, not fired-and-forgotten: every Pro gate reads this store
+        // synchronously, so a late hydration would flash "locked" at someone
+        // who has already paid. It is one MMKV read behind an already-warm
+        // handle — the same warm-before-first-read pattern as the Nostr mirror.
+        await prepareProEntitlement();
+        // Deliberately NOT awaited: talking to the store is a network call, and
+        // the cached record above is already authoritative enough to paint. A
+        // renewal, refund, or purchase made on another device lands whenever
+        // this resolves.
+        void initProPurchases();
         logBoot('preferences:done');
 
         // First-boot migration: if any manifest is missing, block splash

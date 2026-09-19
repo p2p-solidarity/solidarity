@@ -85,7 +85,7 @@ describe('v2 Page design surface', () => {
     expect(preview).toContain('<PreviewBlockItems');
   });
 
-  it('fails closed for Pro Page controls until an entitlement source exists', () => {
+  it('locks Pro Page controls only for users without an entitlement', () => {
     const sections = source('../../src/components/me/ProfileSectionsList.tsx');
     const appearance = source('../../src/components/me/PageAppearanceSheet.tsx');
     const customColor = appearance.slice(
@@ -93,18 +93,20 @@ describe('v2 Page design surface', () => {
       appearance.indexOf('function ControlSection'),
     );
 
+    // Locked users still get a doorway to the paywall…
     expect(sections).toContain("router.push('/settings/pro')");
-    expect(sections).toContain('if (entry.pro) {');
+    expect(sections).toContain('if (entryLocked) {');
     expect(sections).toContain('onProPress');
-    expect(appearance).toContain("router.push('/settings/pro')");
-    expect(appearance).toContain('if (index > 1) {');
-    expect(appearance).toContain('onOpenPro');
+    expect(appearance).toContain('openUpgrade');
+    expect(appearance).toContain('if (index > 1 && proLocked) {');
     expect(appearance).toContain('editable={false}');
-    expect(appearance).not.toContain('setAppearance({ showBrand })');
-    expect(appearance).not.toContain('setAppearance({ footerText:');
-    expect(customColor).not.toContain('onValidColor');
-    expect(en['pageDesign.proControl']).toBe('Pro feature. View plan details; this app will not change your plan.');
-    expect(zhHant['pageDesign.proControl']).toBe('Pro 功能。可查看方案內容，App 內不會變更方案。');
+    // …and entitled users get the real controls.
+    expect(appearance).toContain('setAppearance({ showBrand })');
+    expect(appearance).toContain('setAppearance({ footerText })');
+    expect(customColor).toContain('locked={locked}');
+    expect(customColor).toContain('onChangeText');
+    expect(en['pageDesign.proControl']).toBe('Pro feature. Tap to see the plan.');
+    expect(zhHant['pageDesign.proControl']).toBe('Pro 功能，點一下查看方案。');
   });
 
   it('publishes Page controls into the signed profile and renders them beyond the editor sheet', () => {
