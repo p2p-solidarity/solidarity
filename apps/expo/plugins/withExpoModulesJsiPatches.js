@@ -18,7 +18,10 @@
  * are not fatal), on failure it prints everything and exits 1.
  *
  * (The former setter-pointer patch, a backport of expo/expo#46736, was retired
- * when expo-modules-jsi moved to 56.0.13, which ships that fix.)
+ * when expo-modules-jsi moved to 56.0.13, which ships that fix. The second
+ * anchor of this patch moved to the `CLANG_COVERAGE_MAPPING=NO` line when
+ * expo-modules-jsi 57.1.0 appended the two CLANG coverage settings; upstream
+ * 57.1.0 still replays the nested output verbatim, so the patch stays.)
  *
  * Drop a patch (and its case in __tests__/unit/iosBuildEnv.test.ts) once the
  * installed expo-modules-jsi carries the fix; the marker check makes an applied
@@ -53,9 +56,9 @@ const PATCHES = [
         ].join('\n'),
       ],
       [
-        '    SWIFT_COMPILATION_MODE=wholemodule \\\n  )\n',
+        '    CLANG_COVERAGE_MAPPING=NO \\\n  )\n',
         [
-          '    SWIFT_COMPILATION_MODE=wholemodule \\',
+          '    CLANG_COVERAGE_MAPPING=NO \\',
           '  ) > "$nested_xcodebuild_log" 2>&1; then',
           '    cat "$nested_xcodebuild_log"',
           '    rm -f "$nested_xcodebuild_log"',

@@ -10,7 +10,12 @@
  * surface presses the same way. Reach for `SPRING.gentle` on entrances /
  * larger travel and `SPRING.zoom` for the long-press lift.
  */
-import type { WithSpringConfig, WithTimingConfig } from 'react-native-reanimated';
+import { Easing, withTiming } from 'react-native-reanimated';
+import type {
+  EntryExitAnimationFunction,
+  WithSpringConfig,
+  WithTimingConfig,
+} from 'react-native-reanimated';
 
 /** Spring presets. `press` is over-damped → crisp, zero overshoot. */
 export const SPRING: Readonly<Record<'press' | 'gentle' | 'zoom', WithSpringConfig>> = {
@@ -44,3 +49,25 @@ export const TIMING: Readonly<Record<'fast' | 'base', WithTimingConfig>> = {
 
 /** Per-item stagger step (ms) for list / section entrance animations. */
 export const STAGGER_MS = 40;
+
+/**
+ * Sheet entrance: fade in while settling from a slight zoom, both on one
+ * ease-out curve. Reanimated's `ZoomIn` only animates `transform`, so a fade
+ * has to be a custom entering animation — passing `opacity: 0` through
+ * `ZoomIn.withInitialValues` never animated it, and Reanimated 4.5 rejects the
+ * key at the type level. The returned function is a worklet (it runs on the UI
+ * runtime), so it only touches the captured timing config — keep it that way.
+ */
+export function zoomFadeIn(durationMs: number): EntryExitAnimationFunction {
+  const config: WithTimingConfig = { duration: durationMs, easing: Easing.out(Easing.cubic) };
+  return function zoomFadeInEntering() {
+    'worklet';
+    return {
+      initialValues: { opacity: 0, transform: [{ scale: 0.97 }] },
+      animations: {
+        opacity: withTiming(1, config),
+        transform: [{ scale: withTiming(1, config) }],
+      },
+    };
+  };
+}

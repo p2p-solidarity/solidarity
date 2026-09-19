@@ -155,8 +155,9 @@ describe('Page surface', () => {
     expect(page).toContain('STAGGER_MS * 2');
     expect(page).toContain('STAGGER_MS * 3');
     expect(share).toContain('const QR_SHEET_DURATION_MS = 240');
-    expect(share).toContain('Easing.out');
-    expect(share).toContain('scale: 0.97');
+    expect(share).toContain('zoomFadeIn(QR_SHEET_DURATION_MS)');
+    expect(motion).toContain('Easing.out(Easing.cubic)');
+    expect(motion).toContain('scale: 0.97');
     expect(share).toContain('shareQrImage');
     expect(shareContent).toContain("t('meShare.shareQrImage')");
 

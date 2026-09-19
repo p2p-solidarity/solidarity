@@ -139,7 +139,8 @@
         {
           "ios": {
             "deploymentTarget": "17.0",
-            "useFrameworks": "static"
+            "useFrameworks": "static",
+          "enableSceneSupport": true
           },
           "android": {
             "minSdkVersion": 29,
@@ -164,7 +165,9 @@
       "expo-asset",
       "expo-image",
       "expo-sharing",
-      "expo-web-browser"
+      "expo-web-browser",
+      "expo-iap",
+      "expo-status-bar"
     ],
     "runtimeVersion": "2.0.0",
     "updates": {

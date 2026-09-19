@@ -177,7 +177,7 @@ stages a pinned `default.metallib` so Archive never depends on Xcode Cloud's
 unreliable optional Metal Toolchain; regenerate it with
 `scripts/build-vision-camera-resizer-metallib.sh` after shader updates.
 `withExpoModulesJsiPatches` rewrites `scripts/build-xcframework.sh` of the
-installed `expo-modules-jsi` (56.0.13) at prebuild so Xcode 27 can archive it:
+installed `expo-modules-jsi` (57.1.0) at prebuild so Xcode 27 can archive it:
 it wraps the nested `xcodebuild -quiet` whose spurious "error: … exited with
 code 0" line otherwise fails the phase with "Command PhaseScriptExecution
 emitted errors but did not return a nonzero exit code" (archive-only; plain

@@ -2,7 +2,7 @@ import * as Clipboard from 'expo-clipboard';
 import { router } from 'expo-router';
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { Modal, ScrollView, Share, useWindowDimensions, View } from 'react-native';
-import Animated, { Easing, ZoomIn } from 'react-native-reanimated';
+import Animated from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { generateQrPng } from '@/cards/qrCodeManager';
@@ -11,7 +11,7 @@ import { SfIcon } from '@/components/icons/SfIcon';
 import { ThemedButton, ThemedSurface, ThemedText } from '@/components/themed';
 import { Colors } from '@/constants/Colors';
 import { haptic } from '@/feedback/haptics';
-import { SCALE } from '@/feedback/motion';
+import { SCALE, zoomFadeIn } from '@/feedback/motion';
 import { pushToast } from '@/feedback/toast';
 import { useTranslation } from '@/i18n';
 import type { ProfileRecord } from '@solidarity/shared';
@@ -216,9 +216,7 @@ function ProfileQrSheet({
           backgroundColor: Colors.overlayBg,
         }}>
         <Animated.View
-          entering={ZoomIn.duration(QR_SHEET_DURATION_MS)
-            .easing(Easing.out(Easing.cubic))
-            .withInitialValues({ opacity: 0, transform: [{ scale: 0.97 }] })}>
+          entering={zoomFadeIn(QR_SHEET_DURATION_MS)}>
           <ThemedSurface
             variant="elevated"
             className="rounded-none px-4 pt-5"

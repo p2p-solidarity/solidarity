@@ -839,6 +839,8 @@ rm -rf "$work"
       '    build \\',
       '    -quiet \\',
       '    SWIFT_COMPILATION_MODE=wholemodule \\',
+      '    CLANG_ENABLE_CODE_COVERAGE=NO \\',
+      '    CLANG_COVERAGE_MAPPING=NO \\',
       '  )',
       '',
       '  local product_path="${BUILD_PRODUCTS_PATH}/${build_dir_name}"',

@@ -6,12 +6,13 @@
  * components driven by the editor's local state.
  */
 import { Modal, View } from 'react-native';
-import Animated, { Easing, ZoomIn } from 'react-native-reanimated';
+import Animated from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { PressableScale } from '@/components/common/PressableScale';
 import { ThemedButton, ThemedSurface, ThemedText } from '@/components/themed';
 import { Colors } from '@/constants/Colors';
+import { zoomFadeIn } from '@/feedback/motion';
 import { useTranslation } from '@/i18n';
 import {
   LINK_VISIBILITIES,
@@ -117,9 +118,7 @@ export function PublishPreviewSheet({
       onRequestClose={onClose}>
       <View style={{ flex: 1, justifyContent: 'flex-end', backgroundColor: Colors.overlayBg }}>
         <Animated.View
-          entering={ZoomIn.duration(240)
-            .easing(Easing.out(Easing.cubic))
-            .withInitialValues({ opacity: 0, transform: [{ scale: 0.97 }] })}>
+          entering={zoomFadeIn(240)}>
           <ThemedSurface
             variant="elevated"
             className="gap-4 rounded-t-2xl px-4 pt-5"
