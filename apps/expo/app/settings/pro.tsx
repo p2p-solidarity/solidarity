@@ -8,6 +8,7 @@ import { PressableScale } from '@/components/common/PressableScale';
 import { SfIcon } from '@/components/icons/SfIcon';
 import {
   SettingsBackToolbar,
+  SettingsEnter,
   SettingsScreenTitle,
 } from '@/components/settings/SettingsBlocks';
 import { ThemedButton, ThemedSurface, ThemedText } from '@/components/themed';
@@ -143,49 +144,51 @@ export default function ProSettingsScreen() {
         className="flex-1"
         contentContainerStyle={{ paddingHorizontal: 16, paddingTop: 12, paddingBottom: insets.bottom + 40 }}>
         <View className="gap-4">
-          <LinearGradient
-            colors={[Colors.heroGradientStart, Colors.heroGradientEnd]}
-            start={{ x: 0, y: 0 }}
-            end={{ x: 1, y: 1 }}
-            style={{ borderRadius: 20, overflow: 'hidden', padding: 18 }}>
-            <View className="flex-row items-center justify-between gap-3">
-              <View className="gap-1">
-                <ThemedText variant="titleLarge">
-                  {isPro ? t('pro.active') : t('pro.planName')}
-                </ThemedText>
-                {/* Apple requires the amount actually billed to be the most
-                    prominent price on the screen — no per-month breakdown
-                    competes with it here. */}
-                {renewalLine ? (
-                  <ThemedText variant="titleMedium" tone="secondary">
-                    {renewalLine}
+          <SettingsEnter index={0}>
+            <LinearGradient
+              colors={[Colors.heroGradientStart, Colors.heroGradientEnd]}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 1 }}
+              style={{ borderRadius: 20, overflow: 'hidden', padding: 18 }}>
+              <View className="flex-row items-center justify-between gap-3">
+                <View className="gap-1">
+                  <ThemedText variant="titleLarge">
+                    {isPro ? t('pro.active') : t('pro.planName')}
                   </ThemedText>
-                ) : displayPrice ? (
-                  <ThemedText variant="titleMedium" tone="secondary">
-                    {t('pro.pricePerYear', { price: displayPrice })}
-                  </ThemedText>
-                ) : price.kind === 'loading' ? (
-                  <ActivityIndicator size="small" color={Colors.text3} style={{ alignSelf: 'flex-start' }} />
-                ) : (
-                  <ThemedText variant="bodySmall" tone="secondary">
-                    {t('pro.priceUnavailable')}
-                  </ThemedText>
-                )}
+                  {/* Apple requires the amount actually billed to be the most
+                      prominent price on the screen — no per-month breakdown
+                      competes with it here. */}
+                  {renewalLine ? (
+                    <ThemedText variant="titleMedium" tone="secondary">
+                      {renewalLine}
+                    </ThemedText>
+                  ) : displayPrice ? (
+                    <ThemedText variant="titleMedium" tone="secondary">
+                      {t('pro.pricePerYear', { price: displayPrice })}
+                    </ThemedText>
+                  ) : price.kind === 'loading' ? (
+                    <ActivityIndicator size="small" color={Colors.text3} style={{ alignSelf: 'flex-start' }} />
+                  ) : (
+                    <ThemedText variant="bodySmall" tone="secondary">
+                      {t('pro.priceUnavailable')}
+                    </ThemedText>
+                  )}
+                </View>
+                <View
+                  className="items-center justify-center rounded-full"
+                  style={{ width: 44, height: 44, backgroundColor: Colors.cardSurface }}>
+                  <SfIcon
+                    name={isPro ? 'checkmark.seal.fill' : 'sparkles'}
+                    size={19}
+                    color={Colors.primaryMauve}
+                  />
+                </View>
               </View>
-              <View
-                className="items-center justify-center rounded-full"
-                style={{ width: 44, height: 44, backgroundColor: Colors.cardSurface }}>
-                <SfIcon
-                  name={isPro ? 'checkmark.seal.fill' : 'sparkles'}
-                  size={19}
-                  color={Colors.primaryMauve}
-                />
-              </View>
-            </View>
-            <ThemedText variant="bodySmall" tone="secondary" className="pt-4">
-              {t('pro.promise')}
-            </ThemedText>
-          </LinearGradient>
+              <ThemedText variant="bodySmall" tone="secondary" className="pt-4">
+                {t('pro.promise')}
+              </ThemedText>
+            </LinearGradient>
+          </SettingsEnter>
 
           {status === 'grace' ? (
             <ThemedSurface variant="inset" className="flex-row items-start gap-2.5 rounded-xl px-4 py-3">
@@ -196,13 +199,17 @@ export default function ProSettingsScreen() {
             </ThemedSurface>
           ) : null}
 
-          <PlanCard title={t('pro.free')} featureKeys={FREE_FEATURE_KEYS} />
-          <PlanCard
-            title={t('pro.planName')}
-            price={displayPrice ? t('pro.pricePerYear', { price: displayPrice }) : null}
-            featureKeys={PRO_FEATURE_KEYS}
-            featured
-          />
+          <SettingsEnter index={1}>
+            <PlanCard title={t('pro.free')} featureKeys={FREE_FEATURE_KEYS} />
+          </SettingsEnter>
+          <SettingsEnter index={2}>
+            <PlanCard
+              title={t('pro.planName')}
+              price={displayPrice ? t('pro.pricePerYear', { price: displayPrice }) : null}
+              featureKeys={PRO_FEATURE_KEYS}
+              featured
+            />
+          </SettingsEnter>
 
           {isPro ? (
             <ThemedButton
@@ -241,7 +248,9 @@ export default function ProSettingsScreen() {
 
           {/* The renewal terms need the real billed amount, so they appear once
               the store has told us what it is — which is also the only state in
-              which Subscribe can be pressed. */}
+              which Subscribe can be pressed. App Store auto-renew disclosure:
+              shortened in the declutter pass, but it stays ON SCREEN next to
+              the button — never behind an ⓘ. */}
           {displayPrice ? (
             <ThemedText variant="caption" tone="tertiary" style={{ textAlign: 'center' }}>
               {t('pro.autoRenew', { price: displayPrice })}

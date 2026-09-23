@@ -1,6 +1,7 @@
 import { useMemo, useState, type ReactNode } from 'react';
 import { ActivityIndicator, View } from 'react-native';
 
+import { InfoButton } from '@/components/common/InfoSheet';
 import { PressableScale } from '@/components/common/PressableScale';
 import { ThemedButton, ThemedText, ThemedTextInput } from '@/components/themed';
 import { Colors } from '@/constants/Colors';
@@ -155,12 +156,17 @@ export function UsernameStep({
           </ThemedText>
         ) : null}
 
-        <ThemedText variant="caption" tone="tertiary">
-          {t('ob.handle.preview', { path: publicPagePath(username || 'name') })}
-        </ThemedText>
-        <ThemedText variant="caption" tone="tertiary">
-          {t('ob.handle.publicDirectory')}
-        </ThemedText>
+        {/* The address is the state; what publishing adds to the directory is
+            context behind the ⓘ (nothing is published on this step). */}
+        <View className="flex-row items-center gap-1.5">
+          <ThemedText variant="caption" tone="tertiary" style={{ flexShrink: 1 }}>
+            {t('ob.handle.preview', { path: publicPagePath(username || 'name') })}
+          </ThemedText>
+          <InfoButton
+            title={t('ob.handle.publicDirectoryTitle')}
+            body={t('ob.handle.publicDirectory')}
+          />
+        </View>
       </View>
     </V2OnboardingScaffold>
   );

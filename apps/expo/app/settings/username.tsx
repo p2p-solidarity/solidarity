@@ -3,8 +3,10 @@ import { ActivityIndicator, View } from 'react-native';
 import { KeyboardAwareScrollView } from 'react-native-keyboard-controller';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { InfoButton } from '@/components/common/InfoSheet';
 import {
   SettingsBackToolbar,
+  SettingsEnter,
   SettingsScreenTitle,
 } from '@/components/settings/SettingsBlocks';
 import { ThemedButton, ThemedSurface, ThemedText, ThemedTextInput } from '@/components/themed';
@@ -118,65 +120,69 @@ export default function UsernameSettings(): ReactNode {
         bottomOffset={16}
         contentContainerStyle={{ paddingHorizontal: 16, paddingTop: 16, paddingBottom: insets.bottom + 40 }}>
         <View className="gap-4">
-          <ThemedSurface variant="card" padded className="gap-4 rounded-2xl">
-            <ThemedText variant="label">{t('settingsUsername.pageAddress')}</ThemedText>
-            <ThemedTextInput
-              value={username}
-              inlinePrefix="creds.id/@"
-              kind="handle"
-              maxLength={30}
-              placeholder="name"
-              showClear
-              onChangeText={(value) => {
-                setUsername(normalizePublicPageUsernameInput(value));
-              }}
-              error={validation.kind === 'valid' || validation.kind === 'empty' ? null : validationMessage}
-            />
+          <SettingsEnter index={0}>
+            <ThemedSurface variant="card" padded className="gap-4 rounded-2xl">
+              {/* Where the name is stored and what needs the creds.id service
+                  is context, not a step — it sits behind the ⓘ. */}
+              <View className="flex-row items-center gap-1.5">
+                <ThemedText variant="label">{t('settingsUsername.pageAddress')}</ThemedText>
+                <InfoButton
+                  title={t('settingsUsername.pageAddress')}
+                  body={t('settingsUsername.serviceNote')}
+                />
+              </View>
+              <ThemedTextInput
+                value={username}
+                inlinePrefix="creds.id/@"
+                kind="handle"
+                maxLength={30}
+                placeholder="name"
+                showClear
+                onChangeText={(value) => {
+                  setUsername(normalizePublicPageUsernameInput(value));
+                }}
+                error={validation.kind === 'valid' || validation.kind === 'empty' ? null : validationMessage}
+              />
 
-            {checking ? (
-              <View className="flex-row items-center gap-2">
-                <ActivityIndicator size="small" color={Colors.text3} />
-                <ThemedText variant="bodySmall" tone="secondary">{t('ob.handle.checking')}</ThemedText>
-              </View>
-            ) : availability?.status === 'available' ? (
-              <View className="flex-row items-center gap-2">
-                <ThemedText variant="label" style={{ color: Colors.terminalGreen }}>✓</ThemedText>
-                <ThemedText variant="bodySmall" tone="secondary">{t('ob.handle.available', { h: username })}</ThemedText>
-              </View>
-            ) : availability?.status === 'unavailable' ? (
-              <View className="gap-2">
-                <ThemedText variant="bodySmall" tone="error">{t('ob.handle.unavailable')}</ThemedText>
-                <View className="flex-row flex-wrap gap-2">
-                  {suggestions.map((suggestion) => (
-                    <PressableScale
-                      key={suggestion}
-                      haptic="tap"
-                      onPress={() => { setUsername(suggestion); }}
-                      accessibilityRole="button"
-                      accessibilityLabel={`@${suggestion}`}>
-                      <View className="rounded-full px-3 py-2" style={{ backgroundColor: Colors.searchBg }}>
-                        <ThemedText variant="label">@{suggestion}</ThemedText>
-                      </View>
-                    </PressableScale>
-                  ))}
+              {checking ? (
+                <View className="flex-row items-center gap-2">
+                  <ActivityIndicator size="small" color={Colors.text3} />
+                  <ThemedText variant="bodySmall" tone="secondary">{t('ob.handle.checking')}</ThemedText>
                 </View>
-              </View>
-            ) : availability?.status === 'unreachable' ? (
-              <ThemedText variant="bodySmall" style={{ color: Colors.warning }}>
-                {t('ob.handle.offline')}
+              ) : availability?.status === 'available' ? (
+                <View className="flex-row items-center gap-2">
+                  <ThemedText variant="label" style={{ color: Colors.terminalGreen }}>✓</ThemedText>
+                  <ThemedText variant="bodySmall" tone="secondary">{t('ob.handle.available', { h: username })}</ThemedText>
+                </View>
+              ) : availability?.status === 'unavailable' ? (
+                <View className="gap-2">
+                  <ThemedText variant="bodySmall" tone="error">@{username} {t('ob.handle.unavailable')}</ThemedText>
+                  <View className="flex-row flex-wrap gap-2">
+                    {suggestions.map((suggestion) => (
+                      <PressableScale
+                        key={suggestion}
+                        haptic="tap"
+                        onPress={() => { setUsername(suggestion); }}
+                        accessibilityRole="button"
+                        accessibilityLabel={`@${suggestion}`}>
+                        <View className="rounded-full px-3 py-2" style={{ backgroundColor: Colors.searchBg }}>
+                          <ThemedText variant="label">@{suggestion}</ThemedText>
+                        </View>
+                      </PressableScale>
+                    ))}
+                  </View>
+                </View>
+              ) : availability?.status === 'unreachable' ? (
+                <ThemedText variant="bodySmall" style={{ color: Colors.warning }}>
+                  {t('ob.handle.offline')}
+                </ThemedText>
+              ) : null}
+
+              <ThemedText variant="caption" tone="tertiary">
+                {t('settingsUsername.preview', { path: publicPagePath(username || 'name') })}
               </ThemedText>
-            ) : null}
-
-            <ThemedText variant="caption" tone="tertiary">
-              {t('settingsUsername.preview', { path: publicPagePath(username || 'name') })}
-            </ThemedText>
-          </ThemedSurface>
-
-          <ThemedSurface variant="inset" padded className="rounded-2xl">
-            <ThemedText variant="bodySmall" tone="secondary">
-              {t('settingsUsername.serviceNote')}
-            </ThemedText>
-          </ThemedSurface>
+            </ThemedSurface>
+          </SettingsEnter>
 
           <ThemedButton
             label={t('settingsUsername.save')}

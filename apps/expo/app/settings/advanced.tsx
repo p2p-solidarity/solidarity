@@ -21,6 +21,7 @@ import {
   SettingsBackToolbar,
   SettingsBlockDangerRow,
   SettingsBlockSectionHeader,
+  SettingsEnter,
   SettingsScreenTitle,
 } from '@/components/settings/SettingsBlocks';
 import { appAlert, showError } from '@/feedback/appAlert';
@@ -112,7 +113,7 @@ export default function ResetOptions() {
         contentContainerStyle={{ paddingTop: 24, paddingBottom: 24 + insets.bottom }}
       >
         <View className="gap-6">
-          <View className="gap-3">
+          <SettingsEnter index={0} style={{ gap: 12 }}>
             <SettingsBlockSectionHeader title={t('advanced.section.dangerZone')} />
             <View className="px-4 gap-2">
               <SettingsBlockDangerRow
@@ -128,7 +129,7 @@ export default function ResetOptions() {
                 onPress={() => { void onResetPassport(); }}
               />
             </View>
-          </View>
+          </SettingsEnter>
         </View>
       </ScrollView>
     </View>

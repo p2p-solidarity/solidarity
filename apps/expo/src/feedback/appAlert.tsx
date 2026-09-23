@@ -24,19 +24,23 @@ import type { ReactNode } from 'react';
 import { useEffect, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import Animated, {
+  FadeIn,
   useAnimatedStyle,
+  useReducedMotion,
   useSharedValue,
   withTiming,
 } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { create } from 'zustand';
 
+import { PressableScale } from '@/components/common/PressableScale';
 import { WindowOverlay } from '@/components/common/WindowOverlay';
 import { SfIcon } from '@/components/icons/SfIcon';
 import { ThemedButton, ThemedSurface, ThemedText } from '@/components/themed';
 import type { ButtonVariant } from '@/components/themed';
 import { Colors } from '@/constants/Colors';
 import { haptic } from '@/feedback/haptics';
+import { DURATION, EASE_OUT, TIMING, zoomFadeIn } from '@/feedback/motion';
 import { pushToast } from '@/feedback/toast';
 import { useTranslation } from '@/i18n';
 import {
@@ -141,37 +145,51 @@ function variantFor(style: AlertButtonStyle | undefined, index: number): ButtonV
   return index === 0 ? 'primary' : 'secondary';
 }
 
+/** Sheet travel on entrance — dropped under Reduce Motion (fade stays). */
+const SHEET_RISE_PX = 24;
+
 function InfoCard({ req, onDone }: { readonly req: AlertRequest; readonly onDone: () => void }): ReactNode {
   const { t } = useTranslation();
+  const reduceMotion = useReducedMotion();
   const buttons: readonly AppAlertButton[] = req.buttons.length > 0
     ? req.buttons
     : [{ label: t('alert.ok'), style: 'default' }];
   return (
     <View style={styles.centerRoot}>
       <Pressable style={StyleSheet.absoluteFill} onPress={onDone} accessibilityLabel="Dismiss" />
-      <Pressable onPress={absorbPress} style={styles.cardWrap}>
-        <ThemedSurface variant="elevated" padded>
-          <ThemedText variant="titleMedium" style={styles.title}>
-            {req.title}
-          </ThemedText>
-          {req.message ? (
-            <ThemedText variant="bodyMedium" tone="secondary" style={styles.message}>
-              {req.message}
+      {/* Dialog arrives from 0.97 + opacity (never from scale 0); Reduce
+          Motion keeps only the fade. */}
+      <Animated.View
+        style={styles.cardWrap}
+        entering={
+          reduceMotion
+            ? FadeIn.duration(DURATION.enter).easing(EASE_OUT)
+            : zoomFadeIn(DURATION.enter)
+        }>
+        <Pressable onPress={absorbPress}>
+          <ThemedSurface variant="elevated" padded>
+            <ThemedText variant="titleMedium" style={styles.title}>
+              {req.title}
             </ThemedText>
-          ) : null}
-          <View style={styles.infoActions}>
-            {buttons.map((b, i) => (
-              <ThemedButton
-                key={`${b.label}-${String(i)}`}
-                label={b.label}
-                variant={variantFor(b.style, i)}
-                fullWidth
-                onPress={() => { b.onPress?.(); onDone(); }}
-              />
-            ))}
-          </View>
-        </ThemedSurface>
-      </Pressable>
+            {req.message ? (
+              <ThemedText variant="bodyMedium" tone="secondary" style={styles.message}>
+                {req.message}
+              </ThemedText>
+            ) : null}
+            <View style={styles.infoActions}>
+              {buttons.map((b, i) => (
+                <ThemedButton
+                  key={`${b.label}-${String(i)}`}
+                  label={b.label}
+                  variant={variantFor(b.style, i)}
+                  fullWidth
+                  onPress={() => { b.onPress?.(); onDone(); }}
+                />
+              ))}
+            </View>
+          </ThemedSurface>
+        </Pressable>
+      </Animated.View>
     </View>
   );
 }
@@ -181,13 +199,14 @@ function ErrorSheet({ req, onDone }: { readonly req: ErrorRequest; readonly onDo
   const insets = useSafeAreaInsets();
   const [showDetail, setShowDetail] = useState(false);
   const [sending, setSending] = useState(false);
-  const translateY = useSharedValue(40);
+  const reduceMotion = useReducedMotion();
+  const translateY = useSharedValue(reduceMotion ? 0 : SHEET_RISE_PX);
   const opacity = useSharedValue(0);
 
   useEffect(() => {
     haptic('warning');
-    translateY.value = withTiming(0, { duration: 220 });
-    opacity.value = withTiming(1, { duration: 220 });
+    translateY.value = withTiming(0, TIMING.enter);
+    opacity.value = withTiming(1, TIMING.enter);
   }, [opacity, translateY]);
 
   const animStyle = useAnimatedStyle(() => ({
@@ -231,9 +250,12 @@ function ErrorSheet({ req, onDone }: { readonly req: ErrorRequest; readonly onDo
             </View>
           </View>
 
-          <Pressable
+          <PressableScale
             onPress={() => { setShowDetail((v) => !v); }}
+            haptic="selection"
             accessibilityRole="button"
+            accessibilityState={{ expanded: showDetail }}
+            containerStyle={styles.detailToggleWrap}
             style={styles.detailToggle}
           >
             <SfIcon
@@ -244,7 +266,7 @@ function ErrorSheet({ req, onDone }: { readonly req: ErrorRequest; readonly onDo
             <ThemedText variant="caption" tone="secondary">
               {showDetail ? t('error.report.hideDetails') : t('error.report.showDetails')}
             </ThemedText>
-          </Pressable>
+          </PressableScale>
 
           {showDetail ? (
             <ThemedSurface variant="inset" style={styles.detailBox}>
@@ -345,11 +367,14 @@ const styles = StyleSheet.create({
   sheetSummary: {
     lineHeight: 20,
   },
+  detailToggleWrap: {
+    alignSelf: 'flex-start',
+  },
   detailToggle: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
-    paddingVertical: 6,
+    minHeight: 44,
   },
   detailBox: {
     marginTop: 4,

@@ -43,6 +43,8 @@
 import { useEffect, useMemo, useState } from 'react';
 import { ActivityIndicator, Platform, TextInput, View } from 'react-native';
 
+import { InfoButton } from '@/components/common/InfoSheet';
+import { SfIcon } from '@/components/icons/SfIcon';
 import { ThemedButton, ThemedText, ThemedTextInput } from '@/components/themed';
 import { Colors } from '@/constants/Colors';
 import { showError } from '@/feedback/appAlert';
@@ -398,9 +400,16 @@ export function BackupStep({ onBack, onDone }: BackupStepProps) {
       >
         <View style={{ flex: 1 }} />
         {SUPPORTS_ICLOUD_BACKUP ? (
-          <ThemedText variant="bodySmall" tone="secondary">
-            {t('backupStep.icloudExplainer')}
-          </ThemedText>
+          // One line of why; the Keychain-sync setup path is behind the ⓘ.
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+            <ThemedText variant="bodySmall" tone="secondary" style={{ flexShrink: 1 }}>
+              {t('backupStep.icloudExplainer')}
+            </ThemedText>
+            <InfoButton
+              title={t('backupStep.icloudInfoTitle')}
+              body={t('backupStep.icloudInfo')}
+            />
+          </View>
         ) : null}
         <View style={{ flex: 1 }} />
       </OnboardingScaffold>
@@ -503,15 +512,20 @@ export function BackupStep({ onBack, onDone }: BackupStepProps) {
         }
       >
         <View style={{ gap: 16 }}>
+          {/* Shown WITH the secret, never behind an ⓘ. */}
           <View
             style={{
+              flexDirection: 'row',
+              alignItems: 'center',
+              gap: 8,
               borderWidth: 1,
               borderColor: `${Colors.destructive}66`,
               backgroundColor: `${Colors.destructive}14`,
               padding: 12,
             }}
           >
-            <ThemedText variant="caption" tone="error">
+            <SfIcon name="exclamationmark.triangle.fill" size={14} color={Colors.destructive} />
+            <ThemedText variant="caption" tone="error" style={{ flex: 1 }}>
               {t('backupStep.screenshotWarning')}
             </ThemedText>
           </View>

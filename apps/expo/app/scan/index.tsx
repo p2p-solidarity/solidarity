@@ -30,6 +30,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { scheduleOnRN } from 'react-native-worklets';
 
 import { SfIcon } from '@/components/icons/SfIcon';
+import { EASE_OUT } from '@/feedback/motion';
 import { PassportShowChallengeSheet } from '@/components/scan/PassportShowChallengeSheet';
 import { ProofPresentationFlowSheet } from '@/components/scan/ProofPresentationFlowSheet';
 import { ScanWindowOverlay } from '@/components/scan/ScanWindowOverlay';
@@ -243,9 +244,11 @@ export default function ScanScreen() {
       // Tactile "got it" the instant a code resolves — fires with the bracket
       // pulse + shutter flash so the capture lands on three senses at once.
       haptic('success');
+      // An occasional "got it" may carry a little delight, but stays a pulse:
+      // a small lift on the app's ease-out curve, back before the flash ends.
       bracketScale.value = withSequence(
-        withTiming(1.18, { duration: 140 }),
-        withTiming(1, { duration: 120 }),
+        withTiming(1.1, { duration: 140, easing: EASE_OUT }),
+        withTiming(1, { duration: 120, easing: EASE_OUT }),
       );
       flashOpacity.value = withSequence(
         withTiming(1, { duration: 80 }),

@@ -2,11 +2,11 @@
  * Security — one mode picker, one destructive action.
  *
  * Sections:
- *   1. Biometric Authentication header + subtitle (matches the
- *      `NSFaceIDUsageDescription` plist string).
- *   2. Face ID Protection — the three `BiometricGateMode` rows, plus a footer
- *      naming the red line no mode disarms.
- *   3. Sign-in Access — destructive "Replace Secure Sign-in" row + footer.
+ *   1. Face ID Protection — the three `BiometricGateMode` rows. One short
+ *      footer says some actions always ask; the ⓘ in the header names them
+ *      (the red line no mode disarms, plus the card-release consent).
+ *   2. Sign-in Access — destructive "Replace Secure Sign-in" row + a one-line
+ *      warning that stays visible, because it matters before the tap.
  *
  * This screen used to render 7 per-action toggles and 7 two-way "biometric
  * only / biometric or passcode" segmented controls (a 1:1 port of Swift's
@@ -28,9 +28,11 @@
  */
 import { safeBack } from '@/navigation/safeBack';
 import { useEffect, useState } from 'react';
-import { Pressable, ScrollView, Text, View } from 'react-native';
+import { ScrollView, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { InfoButton } from '@/components/common/InfoSheet';
+import { PressableScale } from '@/components/common/PressableScale';
 import { SfIcon } from '@/components/icons/SfIcon';
 import { appAlert, showError } from '@/feedback/appAlert';
 import {
@@ -167,16 +169,13 @@ export default function SecuritySettings() {
         contentContainerStyle={{ paddingTop: 12, paddingBottom: 24 + insets.bottom }}
       >
         <View className="gap-6">
-          <View className="gap-1 px-4">
-            <Text className="text-text1 text-[17px] font-semibold">
-              {t('security.header')}
-            </Text>
-            <Text className="text-text3 text-[13px]">{t('security.subtitle')}</Text>
-          </View>
-
           <SettingsBlockSection
+            index={0}
             title={t('security.section.protection')}
             footer={t('security.gate.footer')}
+            accessory={
+              <InfoButton title={t('security.gate.infoTitle')} body={t('security.gate.info')} />
+            }
           >
             {hydrated ? (
               BIOMETRIC_GATE_MODES.map((option, index) => (
@@ -197,6 +196,7 @@ export default function SecuritySettings() {
           </SettingsBlockSection>
 
           <SettingsBlockSection
+            index={1}
             title={t('security.section.keyRotation')}
             footer={t('security.section.keyRotationFooter')}
           >
@@ -229,14 +229,15 @@ interface ModeRowProps {
 function ModeRow({ icon, title, subtitle, selected, disabled, isLast, onPress }: ModeRowProps) {
   const c = useThemeColors();
   return (
-    <Pressable
+    <PressableScale
+      haptic="selection"
       onPress={onPress}
       disabled={disabled}
       accessibilityRole="radio"
       accessibilityState={{ selected, disabled }}
       accessibilityLabel={title}
       accessibilityHint={subtitle}
-      className="flex-row items-center bg-cardBg active:opacity-80"
+      className="flex-row items-center bg-cardBg"
       style={{
         paddingHorizontal: 14,
         paddingVertical: 12,
@@ -264,7 +265,7 @@ function ModeRow({ icon, title, subtitle, selected, disabled, isLast, onPress }:
         </Text>
       </View>
       {selected ? <SfIcon name="checkmark" size={14} color={Colors.primaryBlue} /> : null}
-    </Pressable>
+    </PressableScale>
   );
 }
 

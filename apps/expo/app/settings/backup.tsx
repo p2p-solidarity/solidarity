@@ -18,6 +18,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { ScrollView, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { InfoButton } from '@/components/common/InfoSheet';
 import {
   SettingsBackToolbar,
   SettingsBlockInfoRow,
@@ -238,18 +239,14 @@ export default function BackupSettings() {
     catch (error) { showError({ context: 'Cloud sync conflict', summary: t('backup.sync.failed'), error }); }
   };
 
-  // One footer under the switch: what "on" does, then the one status line
-  // that matters — when iCloud is unavailable this is the only place that
-  // tells the user what to do about it; otherwise the last backup time.
-  const lastBackupText = lastBackup
-    ? t('backup.lastBackup', { date: lastBackup.toLocaleString() })
-    : undefined;
-  const cloudFooter = [
-    t('backup.section.icloudFooter'),
-    iCloudAvailable ? lastBackupText : t('backup.status.unavailableFooter'),
-  ]
-    .filter((line): line is string => typeof line === 'string')
-    .join('\n');
+  // The footer under the switch is state, not explanation: when iCloud is
+  // unavailable it is the only place that says what to do about it;
+  // otherwise the last backup time. What "on" does sits behind the ⓘ.
+  const cloudFooter = !iCloudAvailable
+    ? t('backup.status.unavailableFooter')
+    : lastBackup
+      ? t('backup.lastBackup', { date: lastBackup.toLocaleString() })
+      : undefined;
 
   return (
     <View className="flex-1 bg-pageBg" style={{ paddingTop: insets.top }}>
@@ -261,7 +258,14 @@ export default function BackupSettings() {
         contentContainerStyle={{ paddingTop: 12, paddingBottom: 24 + insets.bottom }}
       >
         <View className="gap-6">
-          <SettingsBlockSection title={t('backup.section.icloud')} footer={cloudFooter}>
+          <SettingsBlockSection
+            index={0}
+            title={t('backup.section.icloud')}
+            footer={cloudFooter}
+            accessory={
+              <InfoButton title={t('backup.section.icloud')} body={t('backup.section.icloudInfo')} />
+            }
+          >
             <SettingsBlockToggleRow
               icon="icloud"
               title={t('backup.sync.enable')}
@@ -290,7 +294,11 @@ export default function BackupSettings() {
           </SettingsBlockSection>
 
           {conflicts.choices.length > 0 ? (
-            <SettingsBlockSection title={t('backup.sync.conflicts')} footer={t('backup.sync.conflictsFooter')}>
+            <SettingsBlockSection
+              index={1}
+              title={t('backup.sync.conflicts')}
+              footer={t('backup.sync.conflictsFooter')}
+            >
               {conflicts.choices.map((choice) => {
                 // One label for both the row and the confirm dialog. Passing
                 // the raw token to the dialog put the untranslated internal
@@ -313,9 +321,18 @@ export default function BackupSettings() {
           ) : null}
 
           {/* History — dated explicit choice (plan G6). 3-state: loading /
-              error / list (empty list = honest "none" footer, no placeholder). */}
+              error / list (empty list = honest "none" footer, no placeholder).
+              Retention + portable/legacy meaning live behind the ⓘ; each row's
+              subtitle already says which kind it is. */}
           <SettingsBlockSection
+            index={2}
             title={t('backup.history.title')}
+            accessory={
+              <InfoButton
+                title={t('backup.history.title')}
+                body={t('backup.archives.info', { kept: MAX_RETAINED_BACKUPS })}
+              />
+            }
             footer={
               archives === 'loading'
                 ? undefined
@@ -323,7 +340,7 @@ export default function BackupSettings() {
                   ? t('backup.archives.loadError')
                   : archives.length === 0
                     ? t('backup.archives.none')
-                    : t('backup.archives.footer', { kept: MAX_RETAINED_BACKUPS })
+                    : t('backup.archives.footer')
             }
           >
             {archives === 'loading' ? (

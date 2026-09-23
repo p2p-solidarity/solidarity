@@ -45,7 +45,14 @@ function InfoSheetContent({
   return (
     <View className="flex-1 bg-pageBg">
       <ScrollView
-        contentContainerStyle={{ padding: 24, paddingBottom: insets.bottom + 24, gap: 16 }}>
+        contentContainerStyle={{
+          padding: 24,
+          // iOS sheets report top 0; Android modals fill the window, so the
+          // status bar inset has to be cleared here.
+          paddingTop: insets.top + 24,
+          paddingBottom: insets.bottom + 24,
+          gap: 16,
+        }}>
         <ThemedText variant="titleLarge" accessibilityRole="header">
           {title}
         </ThemedText>

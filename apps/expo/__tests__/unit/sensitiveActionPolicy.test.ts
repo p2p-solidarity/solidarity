@@ -571,8 +571,6 @@ describe('policy snapshot stability', () => {
 describe('i18n: security copy present in en + zh-Hant', () => {
   const SCREEN_KEYS = [
     'security.title',
-    'security.header',
-    'security.subtitle',
     'security.section.protection',
     'security.mode.everyTime.title',
     'security.mode.everyTime.subtitle',
@@ -581,6 +579,8 @@ describe('i18n: security copy present in en + zh-Hant', () => {
     'security.mode.redLineOnly.title',
     'security.mode.redLineOnly.subtitle',
     'security.gate.footer',
+    'security.gate.infoTitle',
+    'security.gate.info',
     'security.gate.loading',
     'security.section.keyRotation',
     'security.section.keyRotationFooter',
@@ -634,6 +634,10 @@ describe('i18n: security copy present in en + zh-Hant', () => {
       'security.gate.title',
       'security.gate.subtitle',
       'security.prompt.disableGate',
+      // The header block restated the section title; removed in the
+      // declutter pass (the ⓘ on Face ID Protection carries the detail).
+      'security.header',
+      'security.subtitle',
     ]) {
       expect(en[dead]).toBeUndefined();
     }

@@ -2,26 +2,32 @@
  * Notifications — 1:1 port of
  * solidarity/Views/SettingsViews/NotificationSettingsView.swift.
  *
- * Four sections:
- *   1. In-App Notifications — In-App Toast toggle + footer.
- *   2. Remote Notifications — Remote Notifications toggle, System Notification
+ * Sections:
+ *   1. In-App Notifications — In-App Toast toggle.
+ *   2. Contact Updates — Recent Updates toggle; the "never changes your
+ *      contacts" reassurance sits behind the header ⓘ.
+ *   3. Remote Notifications — Remote Notifications toggle, System Notification
  *      Settings row that opens the iOS Settings.app deep-link.
- *   3. Sync Settings — Auto-Sync toggle. When ON, also shows the Sync Interval
+ *   4. Sync Settings — Auto-Sync toggle. When ON, also shows the Sync Interval
  *      menu (15s / 30s / 1m / 5m).
- *   4. Reset — destructive "Reset to Defaults" row.
+ *   5. Reset — destructive "Reset to Defaults" row.
+ *
+ * Each toggle's subtitle is the section's one line of explanation; the old
+ * footers repeated it and were dropped in the declutter pass.
  */
 import { safeBack } from '@/navigation/safeBack';
 import { useState } from 'react';
 import { Linking, Modal, Pressable, ScrollView, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { InfoButton } from '@/components/common/InfoSheet';
+import { PressableScale } from '@/components/common/PressableScale';
 import { SfIcon } from '@/components/icons/SfIcon';
 import {
   SettingsBackToolbar,
   SettingsBlockDangerRow,
   SettingsBlockRow,
   SettingsBlockSection,
-  SettingsBlockSectionHeader,
   SettingsBlockToggleRow,
   SettingsScreenTitle,
 } from '@/components/settings/SettingsBlocks';
@@ -135,10 +141,7 @@ export default function NotificationSettings() {
       >
         <View className="gap-6">
           {/* In-App Notifications */}
-          <SettingsBlockSection
-            title={t('notifications.inApp.header')}
-            footer={t('notifications.inApp.footer')}
-          >
+          <SettingsBlockSection index={0} title={t('notifications.inApp.header')}>
             <SettingsBlockToggleRow
               icon="bell.badge.fill"
               title={t('notifications.inApp.toastTitle')}
@@ -149,8 +152,14 @@ export default function NotificationSettings() {
           </SettingsBlockSection>
 
           <SettingsBlockSection
+            index={1}
             title={t('notifications.contactUpdates.header')}
-            footer={t('notifications.contactUpdates.footer')}
+            accessory={
+              <InfoButton
+                title={t('notifications.contactUpdates.header')}
+                body={t('notifications.contactUpdates.info')}
+              />
+            }
           >
             <SettingsBlockToggleRow
               icon="person.2.fill"
@@ -162,10 +171,7 @@ export default function NotificationSettings() {
           </SettingsBlockSection>
 
           {/* Remote Notifications */}
-          <SettingsBlockSection
-            title={t('notifications.remote.header')}
-            footer={t('notifications.remote.footer')}
-          >
+          <SettingsBlockSection index={2} title={t('notifications.remote.header')}>
             <SettingsBlockToggleRow
               icon="iphone.radiowaves.left.and.right"
               title={t('notifications.remote.title')}
@@ -183,45 +189,31 @@ export default function NotificationSettings() {
             />
           </SettingsBlockSection>
 
-          {/* Sync Settings */}
-          <View className="gap-2">
-            <SettingsBlockSectionHeader title={t('notifications.sync.header')} />
-            <View className="px-4 gap-2">
-              <SettingsBlockToggleRow
-                icon="arrow.triangle.2.circlepath"
-                title={t('notifications.autoSync.title')}
-                subtitle={t('notifications.autoSync.subtitle')}
-                value={autoSync}
-                onValueChange={(v) => { setPref('notificationsAutoSync', v); }}
+          {/* Sync Settings — same square block as every other section. */}
+          <SettingsBlockSection
+            index={3}
+            title={t('notifications.sync.header')}
+            footer={t('notifications.sync.footer')}
+          >
+            <SettingsBlockToggleRow
+              icon="arrow.triangle.2.circlepath"
+              title={t('notifications.autoSync.title')}
+              subtitle={t('notifications.autoSync.subtitle')}
+              value={autoSync}
+              onValueChange={(v) => { setPref('notificationsAutoSync', v); }}
+            />
+            {autoSync ? (
+              <SettingsBlockRow
+                icon="timer"
+                title={t('notifications.syncInterval.title')}
+                trailingText={currentIntervalLabel}
+                onPress={() => { setPickerOpen(true); }}
               />
-              {autoSync ? (
-                <Pressable
-                  onPress={() => { setPickerOpen(true); }}
-                  accessibilityRole="button"
-                  accessibilityLabel={t('notifications.syncInterval.title')}
-                  className="bg-mutedSurface rounded-xl flex-row items-center active:opacity-80"
-                  style={{ paddingHorizontal: 14, paddingVertical: 14 }}
-                >
-                  <View
-                    style={{ width: 20, height: 20, alignItems: 'center', justifyContent: 'center', marginRight: 12 }}
-                  >
-                    <SfIcon name="timer" size={14} color={Colors.text1} />
-                  </View>
-                  <Text className="text-text1 text-[15px] flex-1">{t('notifications.syncInterval.title')}</Text>
-                  <Text className="text-text2 text-[13px]" style={{ marginRight: 6 }}>
-                    {currentIntervalLabel}
-                  </Text>
-                  <SfIcon name="chevron.up.chevron.down" size={11} color={Colors.text3} />
-                </Pressable>
-              ) : null}
-            </View>
-            <Text className="px-4 text-text3 text-[12px]">
-              {t('notifications.sync.footer')}
-            </Text>
-          </View>
+            ) : null}
+          </SettingsBlockSection>
 
           {/* Reset */}
-          <SettingsBlockSection title={t('notifications.reset.header')}>
+          <SettingsBlockSection index={4} title={t('notifications.reset.header')}>
             <SettingsBlockDangerRow
               icon="arrow.counterclockwise"
               title={t('notifications.reset.title')}
@@ -256,15 +248,17 @@ export default function NotificationSettings() {
             {SYNC_INTERVAL_OPTIONS.map((opt) => {
               const active = opt.seconds === intervalSeconds;
               return (
-                <Pressable
+                <PressableScale
                   key={opt.seconds}
+                  haptic="selection"
                   onPress={() => {
                     setPref('notificationsSyncIntervalSeconds', opt.seconds);
                     setPickerOpen(false);
                   }}
                   accessibilityRole="button"
-                  className="flex-row items-center active:opacity-80"
-                  style={{ paddingHorizontal: 16, paddingVertical: 12 }}
+                  accessibilityState={{ selected: active }}
+                  className="flex-row items-center"
+                  style={{ paddingHorizontal: 16, paddingVertical: 12, minHeight: 44 }}
                 >
                   <Text
                     className="text-text1 text-[15px] flex-1"
@@ -275,7 +269,7 @@ export default function NotificationSettings() {
                   {active ? (
                     <SfIcon name="checkmark" size={14} weight="semibold" color={Colors.primaryBlue} />
                   ) : null}
-                </Pressable>
+                </PressableScale>
               );
             })}
           </View>

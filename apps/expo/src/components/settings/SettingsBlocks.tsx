@@ -6,24 +6,61 @@
  * Settings are a square, continuous list: card background, 0.5pt hairlines,
  * and no floating cards. That keeps the low-frequency routes visually aligned
  * with the Page tab without changing the routes or actions they expose.
+ *
+ * Copy budget: a section gets at most ONE short footer line. Anything longer
+ * goes behind an ⓘ passed as the header `accessory` (`InfoButton`), unless
+ * the user needs it to act safely — then it stays on screen, shortened.
  */
 import type { SFSymbol } from 'expo-symbols';
 import type { ReactNode } from 'react';
-import { Pressable, Switch, Text, View } from 'react-native';
+import { Switch, Text, View, type StyleProp, type ViewStyle } from 'react-native';
+import Animated, { useReducedMotion } from 'react-native-reanimated';
 
 import { PressableScale } from '@/components/common/PressableScale';
 import { SfIcon } from '@/components/icons/SfIcon';
 import { Colors } from '@/constants/Colors';
 import { useThemeColors } from '@/constants/useThemeColors';
+import { fadeUpIn, SCALE } from '@/feedback/motion';
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Section header (14pt regular textPrimary, horiz pad 16)
+// Entrance — sections fade up in a 40 ms cascade the first time they mount.
+// Reanimated `entering` only runs on mount, so a re-render never replays it.
+// Reduced motion keeps the fade and drops the rise.
 // ─────────────────────────────────────────────────────────────────────────────
 
-export function SettingsBlockSectionHeader({ title }: { title: string }) {
+export function SettingsEnter({
+  index,
+  style,
+  children,
+}: {
+  index: number;
+  style?: StyleProp<ViewStyle>;
+  children: ReactNode;
+}) {
+  const reduceMotion = useReducedMotion();
   return (
-    <View className="px-4">
+    <Animated.View entering={fadeUpIn(index, reduceMotion)} style={style}>
+      {children}
+    </Animated.View>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Section header (14pt regular textPrimary, horiz pad 16) + optional ⓘ
+// ─────────────────────────────────────────────────────────────────────────────
+
+export function SettingsBlockSectionHeader({
+  title,
+  accessory,
+}: {
+  title: string;
+  /** Trailing control beside the title — typically an `InfoButton`. */
+  accessory?: ReactNode;
+}) {
+  return (
+    <View className="flex-row items-center px-4" style={{ gap: 6 }}>
       <Text className="text-[14px] text-text1">{title}</Text>
+      {accessory}
     </View>
   );
 }
@@ -35,20 +72,32 @@ export function SettingsBlockSectionHeader({ title }: { title: string }) {
 export function SettingsBlockSection({
   title,
   footer,
+  accessory,
+  index,
   children,
 }: {
   title: string;
+  /** One short line. Longer context belongs in `accessory` (an ⓘ). */
   footer?: string;
+  accessory?: ReactNode;
+  /** Position in the screen's entrance cascade; omit for no entrance. */
+  index?: number;
   children: ReactNode;
 }) {
-  return (
-    <View className="gap-2">
-      <SettingsBlockSectionHeader title={title} />
+  const body = (
+    <>
+      <SettingsBlockSectionHeader title={title} accessory={accessory} />
       <View className="mx-4 overflow-hidden rounded-none border border-divider bg-cardBg">
         {children}
       </View>
       {footer ? <Text className="px-4 text-[12px] text-text3">{footer}</Text> : null}
-    </View>
+    </>
+  );
+  if (index === undefined) return <View className="gap-2">{body}</View>;
+  return (
+    <SettingsEnter index={index} style={{ gap: 8 }}>
+      {body}
+    </SettingsEnter>
   );
 }
 
@@ -350,19 +399,20 @@ export function SettingsScreenTitle({
         minHeight: hasNavAction ? 44 : undefined,
       }}>
       {leadingAction ? (
-        <Pressable
+        <PressableScale
           onPress={leadingAction.onPress}
+          scaleTo={SCALE.icon}
           accessibilityRole="button"
           accessibilityLabel={leadingAction.accessibilityLabel}
-          className="absolute items-center justify-center active:opacity-80"
-          style={{ left: 8, top: 0, bottom: 0, width: 44 }}>
+          containerStyle={{ position: 'absolute', left: 8, top: 0, bottom: 0, width: 44 }}
+          style={NAV_ACTION_HIT}>
           <SfIcon
             name={leadingAction.icon ?? 'chevron.left'}
             size={22}
             weight="semibold"
             color={c.text1}
           />
-        </Pressable>
+        </PressableScale>
       ) : null}
       <Text
         className="text-[17px] font-semibold text-text1"
@@ -371,15 +421,19 @@ export function SettingsScreenTitle({
         {title}
       </Text>
       {trailingAction ? (
-        <Pressable
+        <PressableScale
           onPress={trailingAction.onPress}
+          scaleTo={SCALE.icon}
           accessibilityRole="button"
           accessibilityLabel={trailingAction.accessibilityLabel}
-          className="absolute items-center justify-center active:opacity-80"
-          style={{ right: 8, top: 0, bottom: 0, width: 44 }}>
+          containerStyle={{ position: 'absolute', right: 8, top: 0, bottom: 0, width: 44 }}
+          style={NAV_ACTION_HIT}>
           <SfIcon name={trailingAction.icon} size={22} color={c.text1} />
-        </Pressable>
+        </PressableScale>
       ) : null}
     </View>
   );
 }
+
+/** Fills the pinned 44pt column so the whole column is the touch target. */
+const NAV_ACTION_HIT: ViewStyle = { flex: 1, alignItems: 'center', justifyContent: 'center' };

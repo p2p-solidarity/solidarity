@@ -17,16 +17,17 @@
 import i18n from 'i18next';
 import { safeBack } from '@/navigation/safeBack';
 import type { ReactNode } from 'react';
-import { Pressable, ScrollView, Text, View } from 'react-native';
+import { ScrollView, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { PressableScale } from '@/components/common/PressableScale';
 import { SfIcon } from '@/components/icons/SfIcon';
 import {
   SettingsBackToolbar,
+  SettingsEnter,
   SettingsScreenTitle,
 } from '@/components/settings/SettingsBlocks';
 import { Colors } from '@/constants/Colors';
-import { haptic } from '@/feedback/haptics';
 import { useTranslation } from '@/i18n';
 import { usePreferences } from '@/settings/preferences';
 
@@ -58,7 +59,6 @@ export default function LanguageSettings(): ReactNode {
   const set = usePreferences((s) => s.set);
 
   const onSelect = (code: string) => {
-    haptic('selection');
     set('language', code);
     void i18n.changeLanguage(code);
   };
@@ -75,7 +75,7 @@ export default function LanguageSettings(): ReactNode {
           gap: 24,
         }}
       >
-        <View style={{ alignItems: 'center', gap: 12, paddingTop: 8 }}>
+        <SettingsEnter index={0} style={{ alignItems: 'center', gap: 12, paddingTop: 8 }}>
           <SfIcon name="globe" size={42} color={Colors.primaryBlue} />
           <Text
             className="text-text1"
@@ -89,9 +89,9 @@ export default function LanguageSettings(): ReactNode {
           >
             {t('language.selectSubtitle')}
           </Text>
-        </View>
+        </SettingsEnter>
 
-        <View style={{ gap: 12 }}>
+        <SettingsEnter index={1} style={{ gap: 12 }}>
           {LANGUAGES.map((lang) => (
             <LanguageRow
               key={lang.code}
@@ -101,7 +101,7 @@ export default function LanguageSettings(): ReactNode {
               onPress={() => { onSelect(lang.code); }}
             />
           ))}
-        </View>
+        </SettingsEnter>
       </ScrollView>
     </View>
   );
@@ -119,12 +119,12 @@ function LanguageRow({
   readonly onPress: () => void;
 }): ReactNode {
   return (
-    <Pressable
+    <PressableScale
       onPress={onPress}
+      haptic="selection"
       accessibilityRole="button"
       accessibilityLabel={displayName}
       accessibilityState={{ selected: isSelected }}
-      className="active:opacity-80"
     >
       <View
         className="flex-row items-center"
@@ -176,6 +176,6 @@ function LanguageRow({
           />
         ) : null}
       </View>
-    </Pressable>
+    </PressableScale>
   );
 }

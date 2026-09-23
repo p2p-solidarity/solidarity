@@ -12,10 +12,11 @@
  * The v2 tab order and fallback presentation come from `primaryTabs` so the
  * custom bar cannot drift from the Expo Router layout.
  */
-import { type ReactNode, useEffect } from 'react';
+import { type ReactNode, useEffect, useRef } from 'react';
 import { Pressable, View } from 'react-native';
 import Animated, {
   useAnimatedStyle,
+  useReducedMotion,
   useSharedValue,
   withSequence,
   withSpring,
@@ -27,7 +28,7 @@ import Svg, { Path } from 'react-native-svg';
 import { ThemedText } from '@/components/themed';
 import { useThemeColors } from '@/constants/useThemeColors';
 import { haptic } from '@/feedback/haptics';
-import { SPRING } from '@/feedback/motion';
+import { DURATION, EASE_OUT, SCALE, SPRING, TIMING } from '@/feedback/motion';
 import { primaryTabForRoute, type PrimaryTabIcon } from '@/navigation/primaryTabs';
 
 interface TabRoute {
@@ -152,21 +153,27 @@ function FlatTabButton({
   inactiveColor,
 }: FlatTabButtonProps): ReactNode {
   const tint = isSelected ? activeColor : inactiveColor;
+  const reduceMotion = useReducedMotion();
 
-  // The icon shrinks under the finger and "pops" the moment its tab becomes
-  // active (overdamped settle → crisp, no wobble), so switching tabs reads as
-  // a deliberate selection rather than an instant cut.
+  // The icon dips under the finger (inside the 0.95–0.98 press band) and
+  // lifts a hair the moment its tab becomes active, then settles with the
+  // over-damped press spring — no wobble. Tabs are switched dozens of times a
+  // day, so the lift is barely there (1.04, not a pop) and it skips first
+  // mount: only a real switch animates. Reduce Motion drops both.
   const iconScale = useSharedValue(1);
   const iconAnim = useAnimatedStyle(() => ({ transform: [{ scale: iconScale.value }] }));
+  const wasSelected = useRef(isSelected);
 
   useEffect(() => {
-    if (isSelected) {
+    const becameSelected = isSelected && !wasSelected.current;
+    wasSelected.current = isSelected;
+    if (becameSelected && !reduceMotion) {
       iconScale.value = withSequence(
-        withTiming(1.18, { duration: 130 }),
+        withTiming(TAB_SELECT_LIFT, { duration: DURATION.press, easing: EASE_OUT }),
         withSpring(1, SPRING.press),
       );
     }
-  }, [isSelected, iconScale]);
+  }, [isSelected, iconScale, reduceMotion]);
 
   return (
     <Pressable
@@ -175,10 +182,10 @@ function FlatTabButton({
       accessibilityLabel={label}
       onPress={onPress}
       onPressIn={() => {
-        iconScale.value = withTiming(0.86, { duration: 90 });
+        if (!reduceMotion) iconScale.value = withTiming(SCALE.icon, TIMING.fast);
       }}
       onPressOut={() => {
-        iconScale.value = withSpring(1, SPRING.press);
+        if (!reduceMotion) iconScale.value = withSpring(1, SPRING.press);
       }}
       style={{ flex: 1, alignItems: 'center', rowGap: 3 }}
       hitSlop={8}
@@ -194,6 +201,9 @@ function FlatTabButton({
     </Pressable>
   );
 }
+
+/** Selection lift: felt, not seen. Anything above ~1.04 reads as a pop. */
+const TAB_SELECT_LIFT = 1.04;
 
 /** Exact Figma paths from creds-design/design/figma/icons. Keeping these
  * local to the tab renderer preserves the shared icon system's name→glyph

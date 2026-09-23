@@ -110,7 +110,6 @@ export function PasskeyStep({
     <V2OnboardingScaffold
       stepIndex={2}
       title={t('ob.passkey.title')}
-      subtitle={t('ob.passkey.sub')}
       onBack={onBack}
       footer={
         <View style={{ gap: 10 }}>
@@ -134,19 +133,51 @@ export function PasskeyStep({
           />
         </View>
       }>
-      <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', gap: 18 }}>
-        <ThemedSurface
-          variant="elevated"
-          className="h-32 w-32 items-center justify-center rounded-full">
-          <SfIcon name="faceid" size={64} color={Colors.primaryMauve} />
-        </ThemedSurface>
-        <ThemedText variant="label" tone="secondary">
-          {t('ob.passkey.cap')}
-        </ThemedText>
+      {/* Picture, not paragraph: this phone → a passkey → your computer. The
+          title says what it is and "Not Now" says it is optional; the one
+          caption is where the recovery copy lives, because that happens
+          whichever button is pressed. */}
+      <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', gap: 24 }}>
+        <PhoneToComputerGlyph />
         <ThemedText variant="caption" tone="tertiary" style={{ textAlign: 'center' }}>
           {t(Platform.OS === 'ios' ? 'ob.passkey.backup.ios' : 'ob.passkey.backup.device')}
         </ThemedText>
       </View>
     </V2OnboardingScaffold>
+  );
+}
+
+/** Decorative: phone ··· key ··· computer. Hidden from screen readers — the
+ *  title carries the meaning. */
+function PhoneToComputerGlyph(): ReactNode {
+  const dots = (
+    <View style={{ flexDirection: 'row', gap: 4 }}>
+      {[0, 1, 2].map((i) => (
+        <View
+          key={i}
+          style={{ width: 4, height: 4, borderRadius: 2, backgroundColor: Colors.text3 }}
+        />
+      ))}
+    </View>
+  );
+  return (
+    <View
+      accessibilityElementsHidden
+      importantForAccessibility="no-hide-descendants"
+      style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+      <ThemedSurface
+        variant="elevated"
+        className="h-20 w-20 items-center justify-center rounded-full">
+        <SfIcon name="iphone" size={34} color={Colors.text2} />
+      </ThemedSurface>
+      {dots}
+      <SfIcon name="key.fill" size={18} color={Colors.primaryMauve} />
+      {dots}
+      <ThemedSurface
+        variant="elevated"
+        className="h-28 w-28 items-center justify-center rounded-full">
+        <SfIcon name="desktopcomputer" size={52} color={Colors.primaryMauve} />
+      </ThemedSurface>
+    </View>
   );
 }

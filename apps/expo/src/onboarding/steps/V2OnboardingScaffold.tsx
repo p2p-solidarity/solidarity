@@ -1,13 +1,14 @@
 import type { ReactNode } from 'react';
 import { View } from 'react-native';
 import { KeyboardAwareScrollView } from 'react-native-keyboard-controller';
-import Animated, { Easing, FadeIn, ReduceMotion } from 'react-native-reanimated';
+import Animated, { FadeIn, ReduceMotion } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { PressableScale } from '@/components/common/PressableScale';
 import { SfIcon } from '@/components/icons/SfIcon';
 import { ThemedText } from '@/components/themed';
 import { Colors } from '@/constants/Colors';
+import { DURATION, EASE_OUT } from '@/feedback/motion';
 import { useTranslation } from '@/i18n';
 import { ONBOARDING_STEP_COUNT } from '@/onboarding/state';
 
@@ -72,10 +73,11 @@ export function V2OnboardingScaffold({
           <View style={{ height: 44 }} />
         )}
 
+        {/* A pure fade has no movement, so it stays on under Reduce Motion. */}
         <Animated.View
-          entering={FadeIn.duration(220)
-            .easing(Easing.out(Easing.cubic))
-            .reduceMotion(ReduceMotion.System)}
+          entering={FadeIn.duration(DURATION.enter)
+            .easing(EASE_OUT)
+            .reduceMotion(ReduceMotion.Never)}
           style={{ flex: 1, gap: 24 }}>
           {title || subtitle ? (
             <View style={{ gap: 8 }}>

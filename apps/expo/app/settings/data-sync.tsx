@@ -112,7 +112,7 @@ export default function DataSyncSettings() {
       >
         <View className="gap-6">
           {/* Sync & Backup */}
-          <SettingsBlockSection title={t('dataSync.section.syncBackup')}>
+          <SettingsBlockSection index={0} title={t('dataSync.section.syncBackup')}>
             <SettingsBlockRow
               icon="icloud"
               title={t('dataSync.icloudBackup')}
@@ -128,7 +128,7 @@ export default function DataSyncSettings() {
 
           {/* Identity Key Recovery (dev only) */}
           {developerMode ? (
-            <SettingsBlockSection title={t('dataSync.section.keyRecovery')}>
+            <SettingsBlockSection index={1} title={t('dataSync.section.keyRecovery')}>
               <SettingsBlockDangerRow
                 icon="key.slash"
                 title={t('dataSync.resetKeys.row')}

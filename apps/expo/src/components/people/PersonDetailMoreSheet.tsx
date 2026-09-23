@@ -15,7 +15,6 @@
  */
 import { useState, type ReactNode } from 'react';
 import {
-  Pressable,
   Text,
   TextInput,
   View,
@@ -28,6 +27,7 @@ import { PressableScale } from '@/components/common/PressableScale';
 import { SfIcon } from '@/components/icons/SfIcon';
 import { Colors } from '@/constants/Colors';
 import { confirmDialog } from '@/feedback/confirmDialog';
+import { SCALE } from '@/feedback/motion';
 import { useTranslation } from '@/i18n';
 import type { Contact } from '@solidarity/shared';
 
@@ -149,20 +149,23 @@ function TopBar({
       className="flex-row items-center justify-between"
       style={{ paddingHorizontal: 16, height: 56 }}
     >
-      <Pressable
+      <PressableScale
         accessibilityRole="button"
         accessibilityLabel={t('personDetail.back')}
         onPress={onClose}
-        hitSlop={8}
+        scaleTo={SCALE.icon}
+        hitSlop={10}
       >
         <SfIcon name="chevron.left" size={24} color={Colors.text1} />
-      </Pressable>
+      </PressableScale>
 
-      <Pressable
+      {/* The pill stays compact as drawn; hitSlop pads it to 44pt tall. */}
+      <PressableScale
         accessibilityRole="button"
         accessibilityLabel={t('peopleList.done')}
         onPress={onDone}
-        className="rounded-sm2 active:opacity-80"
+        hitSlop={{ top: 11, bottom: 11 }}
+        className="rounded-sm2"
         style={{
           backgroundColor: Colors.invertedButtonBg,
           paddingHorizontal: 16,
@@ -178,7 +181,7 @@ function TopBar({
         >
           {t('peopleList.done')}
         </Text>
-      </Pressable>
+      </PressableScale>
     </View>
   );
 }
