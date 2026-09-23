@@ -10,7 +10,7 @@
  * surface presses the same way. Reach for `SPRING.gentle` on entrances /
  * larger travel and `SPRING.zoom` for the long-press lift.
  */
-import { Easing, withTiming } from 'react-native-reanimated';
+import { Easing, withDelay, withTiming } from 'react-native-reanimated';
 import type {
   EntryExitAnimationFunction,
   WithSpringConfig,
@@ -33,8 +33,9 @@ export const SCALE = {
   press: 0.97,
   /** Tile / card touch-down — a touch more travel than a row. */
   tile: 0.96,
-  /** Icon-only button touch-down — small target reads better with more travel. */
-  icon: 0.9,
+  /** Icon-only button touch-down. Kept inside the 0.95–0.98 press band: a
+   * deeper dip on a small target reads as a flinch, not a press. */
+  icon: 0.95,
   /** Long-press "zoom / lift" target (scales up, not down). */
   longPress: 1.05,
   /** Whole-row drag "carry" — subtler than `longPress` so a full-width row
@@ -42,13 +43,63 @@ export const SCALE = {
   rowLift: 1.02,
 } as const;
 
-export const TIMING: Readonly<Record<'fast' | 'base', WithTimingConfig>> = {
-  fast: { duration: 140 },
-  base: { duration: 240 },
+/**
+ * The app's one ease-out curve (Emil Kowalski's strong ease-out): movement
+ * starts at full speed so the UI answers the finger at once, then settles.
+ * Never use ease-in on UI — it delays the exact frame the user is watching.
+ */
+export const EASE_OUT = Easing.bezier(0.23, 1, 0.32, 1);
+
+/**
+ * Durations (ms). UI motion stays under 300 ms, and a surface leaves faster
+ * than it arrives: the user is deciding on the way in, the system is
+ * responding on the way out.
+ */
+export const DURATION = {
+  /** Press / state feedback. */
+  press: 140,
+  /** Sheets, rows and sections arriving. */
+  enter: 240,
+  /** The same surfaces leaving. */
+  exit: 160,
+} as const;
+
+export const TIMING: Readonly<Record<'fast' | 'base' | 'enter' | 'exit', WithTimingConfig>> = {
+  fast: { duration: DURATION.press, easing: EASE_OUT },
+  base: { duration: DURATION.enter, easing: EASE_OUT },
+  enter: { duration: DURATION.enter, easing: EASE_OUT },
+  exit: { duration: DURATION.exit, easing: EASE_OUT },
 };
 
 /** Per-item stagger step (ms) for list / section entrance animations. */
 export const STAGGER_MS = 40;
+
+/** How far a row / section rises on its way in. Small on purpose: the eye
+ * reads the fade; the travel only says "this just arrived". */
+const ENTER_RISE_PX = 8;
+
+/**
+ * List / section entrance: fade in while rising a few points, on `EASE_OUT`,
+ * delayed `index × STAGGER_MS` so a stack cascades instead of popping in as a
+ * block. With `reduceMotion` the rise is dropped and only the fade remains —
+ * reduced motion means gentler, not none. Pass `useReducedMotion()` from the
+ * caller. Worklet: it only touches the captured timing config.
+ */
+export function fadeUpIn(index: number, reduceMotion = false): EntryExitAnimationFunction {
+  const config: WithTimingConfig = { duration: DURATION.enter, easing: EASE_OUT };
+  const delay = Math.max(0, index) * STAGGER_MS;
+  const rise = reduceMotion ? 0 : ENTER_RISE_PX;
+  return function fadeUpInEntering() {
+    'worklet';
+    return {
+      initialValues: { opacity: 0, transform: [{ translateY: rise }] },
+      animations: {
+        opacity: withDelay(delay, withTiming(1, config)),
+        transform: [{ translateY: withDelay(delay, withTiming(0, config)) }],
+      },
+    };
+  };
+}
 
 /**
  * Sheet entrance: fade in while settling from a slight zoom, both on one

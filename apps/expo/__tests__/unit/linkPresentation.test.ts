@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'bun:test';
 
 import { BRAND_GLYPHS } from '../../src/components/icons/brandGlyphs';
-import { brandIconForLink } from '../../src/profile/linkPresentation';
+import { brandIconForHost, brandIconForLink } from '../../src/profile/linkPresentation';
 
 describe('brandIconForLink', () => {
   it('names the actual platform rather than borrowing a generic symbol', () => {
@@ -42,6 +42,34 @@ describe('brandIconForLink', () => {
     ] as const;
     for (const [label, url] of samples) {
       expect(BRAND_GLYPHS[brandIconForLink(label, url)]).toBeDefined();
+    }
+  });
+});
+
+describe('brandIconForHost', () => {
+  it('names the newer platforms and their subdomains from the host', () => {
+    expect(brandIconForHost('https://www.reddit.com/u/alice')).toBe('reddit');
+    expect(brandIconForHost('https://old.reddit.com/u/alice')).toBe('reddit');
+    expect(brandIconForHost('https://twitch.tv/alice')).toBe('twitch');
+    expect(brandIconForHost('https://alice.medium.com')).toBe('medium');
+    expect(brandIconForHost('https://pin.it/abc')).toBe('pinterest');
+    expect(brandIconForHost('https://warpcast.com/alice')).toBe('farcaster');
+    expect(brandIconForHost('https://alice.bsky.social')).toBe('bluesky');
+    expect(brandIconForHost('https://mastodon.social/@alice')).toBe('mastodon');
+  });
+
+  it('never lets a label borrow a brand the host does not have', () => {
+    // The same spoof brandIconForLink would dress up as 𝕏 or GitHub.
+    expect(brandIconForLink('X', 'https://evil.example/me')).toBe('globe');
+    expect(brandIconForHost('https://evil.example/me')).toBe('globe');
+    expect(brandIconForHost('https://x.com.evil.example/alice')).toBe('globe');
+    expect(brandIconForHost('https://notgithub.com/alice')).toBe('globe');
+    expect(brandIconForHost('not a URL')).toBe('link');
+  });
+
+  it('only ever names a glyph the sprite actually carries', () => {
+    for (const url of ['https://reddit.com/r/x', 'https://evil.example', 'nope']) {
+      expect(BRAND_GLYPHS[brandIconForHost(url)]).toBeDefined();
     }
   });
 });

@@ -8,9 +8,10 @@
  * editor knowing how to build one, so the host table here is the wider of the
  * two on purpose.
  *
- * Resolution order: hostname first (a link's URL is what it actually points
- * at), then the label (a draft row may have no usable URL yet), then a plain
- * globe for any other reachable site, and `link` when there is no URL at all.
+ * Resolution order: a parseable URL is named by its hostname only (a link's
+ * URL is what it actually points at; the label never overrides it), falling
+ * back to a plain globe. Only a draft row with no usable URL yet consults the
+ * label, and ends at `link`.
  */
 import type { BrandIconName } from '@/components/icons/brandGlyphs';
 
@@ -40,6 +41,19 @@ const HOST_BRANDS: Readonly<Record<string, BrandIconName>> = {
   'whatsapp.com': 'whatsapp',
   'linktr.ee': 'linktree',
   'substack.com': 'substack',
+  'bsky.social': 'bluesky',
+  'mastodon.social': 'mastodon',
+  'mastodon.online': 'mastodon',
+  'mstdn.jp': 'mastodon',
+  'fosstodon.org': 'mastodon',
+  'reddit.com': 'reddit',
+  'redd.it': 'reddit',
+  'twitch.tv': 'twitch',
+  'medium.com': 'medium',
+  'pinterest.com': 'pinterest',
+  'pin.it': 'pinterest',
+  'farcaster.xyz': 'farcaster',
+  'warpcast.com': 'farcaster',
 };
 
 /** Hosts whose subdomains carry the same brand (`alice.substack.com`). */
@@ -51,6 +65,10 @@ const HOST_SUFFIX_BRANDS: readonly (readonly [string, BrandIconName])[] = [
   ['.tiktok.com', 'tiktok'],
   ['.substack.com', 'substack'],
   ['.facebook.com', 'facebook'],
+  ['.bsky.social', 'bluesky'],
+  ['.reddit.com', 'reddit'],
+  ['.medium.com', 'medium'],
+  ['.pinterest.com', 'pinterest'],
 ];
 
 /** Labels a user may type by hand, or an editor preset name. */
@@ -74,6 +92,11 @@ const LABEL_BRANDS: Readonly<Record<string, BrandIconName>> = {
   substack: 'substack',
   whatsapp: 'whatsapp',
   linktree: 'linktree',
+  reddit: 'reddit',
+  twitch: 'twitch',
+  medium: 'medium',
+  pinterest: 'pinterest',
+  farcaster: 'farcaster',
   website: 'globe',
 };
 
@@ -87,12 +110,26 @@ function brandForHostname(hostname: string): BrandIconName | null {
 
 export function brandIconForLink(label: string, url: string): BrandIconName {
   try {
-    const brand = brandForHostname(new URL(url).hostname);
-    if (brand) return brand;
-    // A real site we have no mark for is still a site, not a bare link.
-    return LABEL_BRANDS[label.trim().toLowerCase()] ?? 'globe';
+    // A parseable URL is named by its host alone: a row labelled "X" that
+    // points at `evil.tld` must not borrow the 𝕏 mark. A real site we have
+    // no mark for is still a site, not a bare link.
+    return brandForHostname(new URL(url).hostname) ?? 'globe';
   } catch {
     // Draft rows may not carry a complete URL yet; the label can still name it.
     return LABEL_BRANDS[label.trim().toLowerCase()] ?? 'link';
+  }
+}
+
+/**
+ * Host-only brand for a link someone else published (a scanned page, a saved
+ * person, the public viewer). Unlike `brandIconForLink` the label never picks
+ * the mark: a row labelled "X" that points at `evil.tld` must show a globe and
+ * its real host, not the 𝕏 logo with the destination hidden.
+ */
+export function brandIconForHost(url: string): BrandIconName {
+  try {
+    return brandForHostname(new URL(url).hostname) ?? 'globe';
+  } catch {
+    return 'link';
   }
 }
