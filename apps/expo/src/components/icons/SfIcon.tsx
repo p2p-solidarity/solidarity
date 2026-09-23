@@ -111,6 +111,7 @@ const SF_TO_MATERIAL: Partial<Record<SFSymbol, AndroidSymbol>> = {
   'ellipsis.circle': 'more_horiz',
   envelope: 'mail',
   'envelope.fill': 'mail',
+  'exclamationmark.shield.fill': 'gpp_maybe',
   'exclamationmark.triangle': 'warning',
   'exclamationmark.triangle.fill': 'warning',
   eye: 'visibility',
