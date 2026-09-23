@@ -47,11 +47,11 @@ describe('v2 onboarding contract', () => {
   it('uses the mock product copy and keeps protocol vocabulary out of every step', () => {
     expect(zhHant['ob.welcome.title']).toBe('建立你的可查驗身分');
     expect(zhHant['ob.handle.title']).toBe('選擇使用者名稱');
-    expect(zhHant['ob.passkey.title']).toBe('在電腦上繼續編輯');
+    expect(zhHant['ob.passkey.title']).toBe('在電腦上編輯');
     expect(zhHant['ob.passkey.btn']).toBe('連接 Passkey');
     expect(zhHant['ob.passkey.later']).toBe('稍後再說');
     expect(zhHant['ob.done.passkey']).toBe('身分保護');
-    expect(en['ob.passkey.title']).toBe('Keep editing on the Web');
+    expect(en['ob.passkey.title']).toBe('Edit on your computer');
     expect(en['ob.passkey.btn']).toBe('Connect Passkey');
     expect(en['ob.passkey.later']).toBe('Not Now');
     expect(en['ob.done.passkey']).toBe('Identity protection');

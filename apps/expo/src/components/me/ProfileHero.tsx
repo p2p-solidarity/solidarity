@@ -1,16 +1,13 @@
 import { getMmkv } from '@/storage/mmkv';
 import { Image } from 'expo-image';
-import * as Clipboard from 'expo-clipboard';
 import { useFocusEffect } from 'expo-router';
 import { useCallback, useEffect, useState, type ReactNode } from 'react';
 import { useWindowDimensions, View } from 'react-native';
 
+import { CopyableAddress } from '@/components/common/CopyableAddress';
 import { PressableScale } from '@/components/common/PressableScale';
-import { SfIcon } from '@/components/icons/SfIcon';
 import { ThemedText } from '@/components/themed';
 import { Colors } from '@/constants/Colors';
-import { haptic } from '@/feedback/haptics';
-import { pushToast } from '@/feedback/toast';
 import { useTranslation } from '@/i18n';
 import { resolveProfileAvatarSource } from '@/profile/avatar';
 import { readLocalAvatarUri } from '@/profile/localAvatar';
@@ -73,18 +70,6 @@ export function ProfileHero({
     }, [])
   );
 
-  const copyShareUrl = useCallback(async (): Promise<void> => {
-    if (shareUrl === null) return;
-    try {
-      await Clipboard.setStringAsync(shareUrl);
-      haptic('success');
-      pushToast(t('meHome.pageUrlCopied'), 'success');
-    } catch {
-      haptic('error');
-      pushToast(t('meHome.pageUrlCopyFailed'), 'error');
-    }
-  }, [shareUrl, t]);
-
   return (
     <View className="gap-3 px-4">
       {/* `.me-top` — 56pt avatar, name, mono page address, and the three
@@ -109,26 +94,14 @@ export function ProfileHero({
           </ThemedText>
 
           {shareUrl !== null && displayShareUrl !== null ? (
-            <PressableScale
-              haptic={false}
-              onPress={() => {
-                void copyShareUrl();
-              }}
-              accessibilityRole="button"
+            <CopyableAddress
+              compact
+              address={shareUrl}
+              displayAddress={displayShareUrl}
               accessibilityLabel={t('meHome.copyPageUrl', { url: displayShareUrl })}
-              hitSlop={{ top: 12, bottom: 12, left: 8, right: 8 }}
-              containerStyle={{ alignSelf: 'flex-start', maxWidth: '100%' }}
-              style={{ flexDirection: 'row', alignItems: 'center', gap: 5 }}>
-              <ThemedText
-                variant="caption"
-                tone="secondary"
-                numberOfLines={1}
-                ellipsizeMode="middle"
-                style={{ fontFamily: 'Menlo', flexShrink: 1 }}>
-                {displayShareUrl}
-              </ThemedText>
-              <SfIcon name="doc.on.doc" size={11} color={Colors.text2} />
-            </PressableScale>
+              copiedMessage={t('meHome.pageUrlCopied')}
+              failedMessage={t('meHome.pageUrlCopyFailed')}
+            />
           ) : null}
         </View>
 

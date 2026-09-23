@@ -81,6 +81,11 @@ export default function SettingsHub() {
                 : t('settingsHub.usernamePrompt')}
               onPress={() => { router.push('/settings/username'); }}
             />
+            <SettingsBlockRow
+              icon="globe"
+              title={t('webEditing.title')}
+              onPress={() => { router.push('/settings/web-editing'); }}
+            />
           </SettingsBlockSection>
 
           {/* Account */}

@@ -1,7 +1,12 @@
+import { router } from 'expo-router';
 import { useState, type ReactNode } from 'react';
 import { ScrollView, View } from 'react-native';
 import Animated, { FadeInDown } from 'react-native-reanimated';
 
+import { PressableScale } from '@/components/common/PressableScale';
+import { SfIcon } from '@/components/icons/SfIcon';
+import { ThemedText } from '@/components/themed';
+import { useThemeColors } from '@/constants/useThemeColors';
 import { STAGGER_MS } from '@/feedback/motion';
 import { useTranslation } from '@/i18n';
 import type { LinkVisibility } from '@/profile/projection';
@@ -10,12 +15,12 @@ import type { PublicPageShareSource } from './meProfileModel';
 
 import { displayProfileShareUrl } from './meProfileModel';
 import { useProfileShareSelection } from './useProfileShareSelection';
+import { blockRowStyle } from './pageRowStyles';
 import { PageSectionLabel } from './PageSectionLabel';
 import { ProfileBadgeChips } from './ProfileBadgeChips';
 import { ProfileHero } from './ProfileHero';
 import { ProfileLinksList } from './ProfileLinksList';
 import { ProfileSectionsList } from './ProfileSectionsList';
-import { EditOnWebCard } from './EditOnWebCard';
 import { PageAppearanceSheet } from './PageAppearanceSheet';
 import { PageLapsedCheckAlert } from './PageLapsedCheckAlert';
 
@@ -64,6 +69,7 @@ export function MeProfilePage({
   onOpenBindings,
 }: MeProfilePageProps): ReactNode {
   const { t } = useTranslation();
+  const colors = useThemeColors();
   const [appearanceOpen, setAppearanceOpen] = useState(false);
   // The preview's `.pub-handle` line shows the page's REAL address, or
   // nothing at all while one is still unpublished.
@@ -119,12 +125,6 @@ export function MeProfilePage({
       </Animated.View>
 
       <Animated.View entering={entrance(STAGGER_MS * 3)}>
-        <EditOnWebCard
-          url={shareSelection.kind === 'ready' ? shareSelection.selected.url : null}
-        />
-      </Animated.View>
-
-      <Animated.View entering={entrance(STAGGER_MS * 4)}>
         <View className="px-4 pb-3">
           <PageSectionLabel title={t('mePage.attestations')} />
         </View>
@@ -135,6 +135,19 @@ export function MeProfilePage({
           nostrUploaded={nostrShortUrlReady}
           onManageBindings={onOpenBindings}
         />
+      </Animated.View>
+
+      <Animated.View entering={entrance(STAGGER_MS * 4)} className="px-4">
+        <PressableScale
+          onPress={() => { router.push('/settings/web-editing'); }}
+          accessibilityRole="button"
+          accessibilityLabel={t('webEditing.title')}
+          style={blockRowStyle(colors.mutedSurface)}>
+          <ThemedText variant="bodyMedium" style={{ flex: 1 }}>
+            {t('webEditing.title')}
+          </ThemedText>
+          <SfIcon name="chevron.right" size={13} color={colors.text3} />
+        </PressableScale>
       </Animated.View>
 
       <PageAppearanceSheet
