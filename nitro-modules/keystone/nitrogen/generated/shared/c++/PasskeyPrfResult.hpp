@@ -31,6 +31,7 @@
 
 
 #include <string>
+#include <optional>
 
 namespace margelo::nitro::solidarity::keystone {
 
@@ -41,10 +42,12 @@ namespace margelo::nitro::solidarity::keystone {
   public:
     std::string credentialId     SWIFT_PRIVATE;
     std::string prfOutput     SWIFT_PRIVATE;
+    std::optional<std::string> attachment     SWIFT_PRIVATE;
+    std::optional<std::string> attestationObject     SWIFT_PRIVATE;
 
   public:
     PasskeyPrfResult() = default;
-    explicit PasskeyPrfResult(std::string credentialId, std::string prfOutput): credentialId(credentialId), prfOutput(prfOutput) {}
+    explicit PasskeyPrfResult(std::string credentialId, std::string prfOutput, std::optional<std::string> attachment, std::optional<std::string> attestationObject): credentialId(credentialId), prfOutput(prfOutput), attachment(attachment), attestationObject(attestationObject) {}
 
   public:
     friend bool operator==(const PasskeyPrfResult& lhs, const PasskeyPrfResult& rhs) = default;
@@ -61,13 +64,17 @@ namespace margelo::nitro {
       jsi::Object obj = arg.asObject(runtime);
       return margelo::nitro::solidarity::keystone::PasskeyPrfResult(
         JSIConverter<std::string>::fromJSI(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "credentialId"))),
-        JSIConverter<std::string>::fromJSI(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "prfOutput")))
+        JSIConverter<std::string>::fromJSI(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "prfOutput"))),
+        JSIConverter<std::optional<std::string>>::fromJSI(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "attachment"))),
+        JSIConverter<std::optional<std::string>>::fromJSI(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "attestationObject")))
       );
     }
     static inline jsi::Value toJSI(jsi::Runtime& runtime, const margelo::nitro::solidarity::keystone::PasskeyPrfResult& arg) {
       jsi::Object obj(runtime);
       obj.setProperty(runtime, PropNameIDCache::get(runtime, "credentialId"), JSIConverter<std::string>::toJSI(runtime, arg.credentialId));
       obj.setProperty(runtime, PropNameIDCache::get(runtime, "prfOutput"), JSIConverter<std::string>::toJSI(runtime, arg.prfOutput));
+      obj.setProperty(runtime, PropNameIDCache::get(runtime, "attachment"), JSIConverter<std::optional<std::string>>::toJSI(runtime, arg.attachment));
+      obj.setProperty(runtime, PropNameIDCache::get(runtime, "attestationObject"), JSIConverter<std::optional<std::string>>::toJSI(runtime, arg.attestationObject));
       return obj;
     }
     static inline bool canConvert(jsi::Runtime& runtime, const jsi::Value& value) {
@@ -80,6 +87,8 @@ namespace margelo::nitro {
       }
       if (!JSIConverter<std::string>::canConvert(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "credentialId")))) return false;
       if (!JSIConverter<std::string>::canConvert(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "prfOutput")))) return false;
+      if (!JSIConverter<std::optional<std::string>>::canConvert(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "attachment")))) return false;
+      if (!JSIConverter<std::optional<std::string>>::canConvert(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "attestationObject")))) return false;
       return true;
     }
   };

@@ -10,6 +10,7 @@
 #include <fbjni/fbjni.h>
 #include "PasskeyPrfResult.hpp"
 
+#include <optional>
 #include <string>
 
 namespace margelo::nitro::solidarity::keystone {
@@ -35,9 +36,15 @@ namespace margelo::nitro::solidarity::keystone {
       jni::local_ref<jni::JString> credentialId = this->getFieldValue(fieldCredentialId);
       static const auto fieldPrfOutput = clazz->getField<jni::JString>("prfOutput");
       jni::local_ref<jni::JString> prfOutput = this->getFieldValue(fieldPrfOutput);
+      static const auto fieldAttachment = clazz->getField<jni::JString>("attachment");
+      jni::local_ref<jni::JString> attachment = this->getFieldValue(fieldAttachment);
+      static const auto fieldAttestationObject = clazz->getField<jni::JString>("attestationObject");
+      jni::local_ref<jni::JString> attestationObject = this->getFieldValue(fieldAttestationObject);
       return PasskeyPrfResult(
         credentialId->toStdString(),
-        prfOutput->toStdString()
+        prfOutput->toStdString(),
+        attachment != nullptr ? std::make_optional(attachment->toStdString()) : std::nullopt,
+        attestationObject != nullptr ? std::make_optional(attestationObject->toStdString()) : std::nullopt
       );
     }
 
@@ -47,13 +54,15 @@ namespace margelo::nitro::solidarity::keystone {
      */
     [[maybe_unused]]
     static jni::local_ref<JPasskeyPrfResult::javaobject> fromCpp(const PasskeyPrfResult& value) {
-      using JSignature = JPasskeyPrfResult(jni::alias_ref<jni::JString>, jni::alias_ref<jni::JString>);
+      using JSignature = JPasskeyPrfResult(jni::alias_ref<jni::JString>, jni::alias_ref<jni::JString>, jni::alias_ref<jni::JString>, jni::alias_ref<jni::JString>);
       static const auto clazz = javaClassStatic();
       static const auto create = clazz->getStaticMethod<JSignature>("fromCpp");
       return create(
         clazz,
         jni::make_jstring(value.credentialId),
-        jni::make_jstring(value.prfOutput)
+        jni::make_jstring(value.prfOutput),
+        value.attachment.has_value() ? jni::make_jstring(value.attachment.value()) : nullptr,
+        value.attestationObject.has_value() ? jni::make_jstring(value.attestationObject.value()) : nullptr
       );
     }
   };

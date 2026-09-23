@@ -13,6 +13,10 @@ import {
   type RootVaultRecordV1,
 } from '@solidarity/shared';
 
+import { passkeyAaguid } from './passkeyAaguid';
+import { getPasskeyRegistry, type PasskeyRow } from './passkeyRegistry';
+import type { PendingRootVaultUpload } from './rootVaultSyncState';
+
 export const ROOT_VAULT_RP_ID = 'creds.id';
 export const ROOT_VAULT_ORIGIN = 'https://creds.id';
 
@@ -21,11 +25,14 @@ export interface PasskeyPrfCreateInput {
   readonly userName: string;
   readonly userId: string;
   readonly prfInput: string;
+  readonly excludeCredentialIds: string[];
 }
 
 export interface PasskeyPrfCreateResult {
   readonly credentialId: string;
   readonly prfOutput: string;
+  readonly attachment?: string;
+  readonly attestationObject?: string;
 }
 
 export interface PasskeyPrfClient {
@@ -42,7 +49,7 @@ export interface RootVaultUploadClient {
 }
 
 export interface RootVaultPendingStore {
-  set(locator: string, record: RootVaultRecordV1): void;
+  set(locator: string, record: RootVaultRecordV1, row?: PasskeyRow): void;
   clear(): void;
 }
 
@@ -53,6 +60,9 @@ export type RootVaultSyncError =
   | { readonly kind: 'invalidCredential' }
   | { readonly kind: 'invalidMnemonic' }
   | { readonly kind: 'alreadyConnected' }
+  | { readonly kind: 'alreadyRegistered' }
+  | { readonly kind: 'storageFailed' }
+  | { readonly kind: 'busy' }
   | { readonly kind: 'networkFailed' };
 
 function classifyNativeError(error: unknown): RootVaultSyncError {
@@ -60,6 +70,7 @@ function classifyNativeError(error: unknown): RootVaultSyncError {
   if (message.includes('cancelled') || message.includes('canceled')) {
     return { kind: 'cancelled' };
   }
+  if (message.includes('already_registered')) return { kind: 'alreadyRegistered' };
   if (message.includes('unsupported')) return { kind: 'unsupported' };
   if (message.includes('no_prf')) return { kind: 'noPrf' };
   return { kind: 'invalidCredential' };
@@ -73,6 +84,13 @@ export async function connectRootIdentityToPasskey(input: {
   readonly userId?: Uint8Array;
   readonly nostrScalar?: Uint8Array;
   readonly pending?: RootVaultPendingStore;
+  readonly excludeCredentialIds?: string[];
+  readonly registration?: {
+    readonly binding: string;
+    readonly device: string;
+    readonly platform: string;
+    readonly registry: ReturnType<typeof getPasskeyRegistry>;
+  };
 }): Promise<Result<void, RootVaultSyncError>> {
   let created: PasskeyPrfCreateResult;
   try {
@@ -82,6 +100,7 @@ export async function connectRootIdentityToPasskey(input: {
       userName: input.userName,
       userId: base64UrlEncode(userId),
       prfInput: base64UrlEncode(rootVaultPrfInput()),
+      excludeCredentialIds: input.excludeCredentialIds ?? [],
     });
   } catch (error) {
     return { ok: false, error: classifyNativeError(error) };
@@ -97,6 +116,19 @@ export async function connectRootIdentityToPasskey(input: {
   }
 
   try {
+    const locator = rootVaultLocator(credentialId);
+    const row: PasskeyRow | undefined = input.registration ? {
+      binding: input.registration.binding,
+      credentialId: base64UrlEncode(credentialId), locator,
+      createdAt: new Date().toISOString(),
+      device: input.registration.device, platform: input.registration.platform,
+      attachment: created.attachment === 'platform' || created.attachment === 'cross-platform' ? created.attachment : null,
+      aaguid: passkeyAaguid(created.attestationObject), status: 'pending',
+    } : undefined;
+    if (row && input.registration) {
+      const saved = input.registration.registry.save(row);
+      if (!saved.ok) return saved;
+    }
     const sealed = sealRootVault(
       input.mnemonic,
       credentialId,
@@ -113,16 +145,22 @@ export async function connectRootIdentityToPasskey(input: {
       }
       return { ok: false, error: { kind: 'invalidCredential' } };
     }
-    const locator = rootVaultLocator(credentialId);
     try {
-      input.pending?.set(locator, sealed.value);
+      input.pending?.set(locator, sealed.value, row);
     } catch {
-      // Upload can still complete; a failed local cache must not strand an
-      // otherwise valid passkey before the network is attempted.
+      return { ok: false, error: { kind: 'storageFailed' } };
     }
     const uploaded = await input.upload.put(locator, sealed.value);
-    if (uploaded.ok) input.pending?.clear();
+    if (uploaded.ok) {
+      if (row && input.registration) {
+        const saved = input.registration.registry.save({ ...row, status: 'synced' });
+        if (!saved.ok) return saved;
+      }
+      input.pending?.clear();
+    }
     return uploaded;
+  } catch {
+    return { ok: false, error: { kind: 'networkFailed' } };
   } finally {
     credentialId.fill(0);
     prfOutput.fill(0);
@@ -142,6 +180,7 @@ async function nativePasskey(): Promise<PasskeyPrfClient> {
         input.userName,
         input.userId,
         input.prfInput,
+        input.excludeCredentialIds,
       ),
   };
 }
@@ -175,7 +214,25 @@ export function createRootVaultUploadClient(
   };
 }
 
+let connecting = false;
 export async function connectRootIdentityWithNativePasskey(input: {
+  readonly mnemonic: string;
+  readonly userName: string;
+  readonly retryOnly?: boolean;
+}): Promise<Result<string, RootVaultSyncError>> {
+  if (connecting) return { ok: false, error: { kind: 'busy' } };
+  connecting = true;
+  try {
+    return await connectNative(input);
+  } catch {
+    return { ok: false, error: { kind: 'invalidCredential' } };
+  } finally {
+    connecting = false;
+  }
+}
+
+async function connectNative(input: {
+  readonly retryOnly?: boolean;
   readonly mnemonic: string;
   readonly userName: string;
 }): Promise<Result<string, RootVaultSyncError>> {
@@ -208,18 +265,32 @@ export async function connectRootIdentityWithNativePasskey(input: {
 
     const upload = createRootVaultUploadClient();
     const state = await import('./rootVaultSyncState');
-    const pending = state.getPendingRootVaultUpload();
+    const registry = getPasskeyRegistry();
+    const excluded = registry.excludeCredentialIds(binding);
+    if (!excluded.ok) return excluded;
+    const pendingResult = state.readPendingRootVaultUpload();
+    // An unreadable pending record can never be retried. Drop it rather than
+    // refuse every future connect; a row it belonged to stays "pending" and
+    // can be hidden from the list.
+    if (!pendingResult.ok) state.clearPendingRootVaultUpload();
+    const pending = pendingResult.ok ? pendingResult.value : null;
     if (pending !== null) {
       if (pending.binding !== binding) {
         state.clearPendingRootVaultUpload();
       } else {
-        const retried = await upload.put(pending.locator, pending.record);
+        const retried = await retryPasskeyUpload(pending, upload, registry);
         if (!retried.ok) return retried;
+        state.setRootVaultSyncState('connected', binding);
         state.clearPendingRootVaultUpload();
         return { ok: true, value: binding };
       }
     }
 
+    if (input.retryOnly) return { ok: false, error: { kind: 'storageFailed' } };
+    const { Platform } = await import('react-native');
+    const device = Platform.OS === 'ios'
+      ? (Platform.constants.interfaceIdiom === 'pad' ? 'iPad' : 'iPhone')
+      : Platform.OS === 'android' ? Platform.constants.Model : Platform.OS;
     let passkey: PasskeyPrfClient;
     try {
       passkey = await nativePasskey();
@@ -232,13 +303,17 @@ export async function connectRootIdentityWithNativePasskey(input: {
       nostrScalar: nostrScalar.value ?? undefined,
       passkey,
       upload,
+      excludeCredentialIds: excluded.value,
+      registration: { binding, device, platform: Platform.OS, registry },
       pending: {
-        set: (locator, record) => {
-          state.setPendingRootVaultUpload({ binding, locator, record });
+        set: (locator, record, row) => {
+          state.setPendingRootVaultUpload({ binding, locator, record, row });
+          state.rememberRootVaultBinding(binding);
         },
         clear: state.clearPendingRootVaultUpload,
       },
     });
+    if (connected.ok) state.setRootVaultSyncState('connected', binding);
     return connected.ok ? { ok: true, value: binding } : connected;
   } finally {
     nostrScalar.value?.fill(0);
@@ -277,7 +352,7 @@ export async function getStoredRootVaultIdentityBinding(): Promise<string | null
   }
 }
 
-export async function connectStoredRootIdentityWithNativePasskey(): Promise<
+export async function connectStoredRootIdentityWithNativePasskey(retryOnly = false): Promise<
   Result<string, RootVaultSyncError>
 > {
   const { readMnemonicForPasskeyConnection } = await import('./rootKey');
@@ -294,5 +369,26 @@ export async function connectStoredRootIdentityWithNativePasskey(): Promise<
   return connectRootIdentityWithNativePasskey({
     mnemonic: mnemonic.value,
     userName: 'Solidarity',
+    retryOnly,
   });
+}
+
+
+/** Retry the exact ciphertext; no credential creation or new sealing on this path. */
+export async function retryPasskeyUpload(
+  pending: PendingRootVaultUpload,
+  upload: RootVaultUploadClient,
+  registry: ReturnType<typeof getPasskeyRegistry>,
+): Promise<Result<void, RootVaultSyncError>> {
+  try {
+    if (pending.row) {
+      const saved = registry.save({ ...pending.row, status: 'pending' });
+      if (!saved.ok) return saved;
+    }
+    const uploaded = await upload.put(pending.locator, pending.record);
+    if (!uploaded.ok) return uploaded;
+    return pending.row ? registry.save({ ...pending.row, status: 'synced' }) : uploaded;
+  } catch {
+    return { ok: false, error: { kind: 'networkFailed' } };
+  }
 }

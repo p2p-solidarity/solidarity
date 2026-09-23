@@ -8,6 +8,7 @@ import UIKit
 private enum PasskeyPrfNativeError: LocalizedError {
   case unsupported
   case cancelled
+  case alreadyRegistered
   case invalidInput
   case noPresentationAnchor
   case noPrf
@@ -16,6 +17,7 @@ private enum PasskeyPrfNativeError: LocalizedError {
   var errorDescription: String? {
     switch self {
     case .unsupported: return "passkey_prf_unsupported"
+    case .alreadyRegistered: return "passkey_prf_already_registered"
     case .cancelled: return "passkey_prf_cancelled"
     case .invalidInput: return "passkey_prf_invalid_input"
     case .noPresentationAnchor: return "passkey_prf_no_presentation_anchor"
@@ -32,19 +34,25 @@ private final class PasskeyRegistrationCoordinator: NSObject,
 {
   private let anchor: ASPresentationAnchor
   private var controller: ASAuthorizationController?
-  private var continuation: CheckedContinuation<(Data, Data), Error>?
+  private var continuation: CheckedContinuation<(Data, Data, String?, Data?), Error>?
 
   init(anchor: ASPresentationAnchor) {
     self.anchor = anchor
   }
 
   func perform(
-    rpId: String, userName: String, userId: Data, prfInput: Data
-  ) async throws -> (Data, Data) {
+    rpId: String, userName: String, userId: Data, prfInput: Data, excludeCredentialIds: [Data]
+  ) async throws -> (Data, Data, String?, Data?) {
     let provider = ASAuthorizationPlatformPublicKeyCredentialProvider(
       relyingPartyIdentifier: rpId)
     let request = provider.createCredentialRegistrationRequest(
       challenge: try Self.randomBytes(count: 32), name: userName, userID: userId)
+    // Declared by ASAuthorizationWebBrowserPlatformPublicKeyCredentialRegistrationRequest.
+    if #available(iOS 17.4, *) {
+      request.excludedCredentials = excludeCredentialIds.map {
+        ASAuthorizationPlatformPublicKeyCredentialDescriptor(credentialID: $0)
+      }
+    }
     request.userVerificationPreference = .required
     request.prf = .inputValues(.init(saltInput1: prfInput))
 
@@ -80,7 +88,13 @@ private final class PasskeyRegistrationCoordinator: NSObject,
       finish(.failure(PasskeyPrfNativeError.invalidCredential))
       return
     }
-    finish(.success((credential.credentialID, output)))
+    let attachment: String?
+    switch credential.attachment {
+    case .platform: attachment = "platform"
+    case .crossPlatform: attachment = "cross-platform"
+    @unknown default: attachment = nil
+    }
+    finish(.success((credential.credentialID, output, attachment, credential.rawAttestationObject)))
   }
 
   func authorizationController(
@@ -91,12 +105,25 @@ private final class PasskeyRegistrationCoordinator: NSObject,
       nsError.code == ASAuthorizationError.canceled.rawValue
     {
       finish(.failure(PasskeyPrfNativeError.cancelled))
+    } else if Self.isMatchedExcludedCredential(nsError) {
+      finish(.failure(PasskeyPrfNativeError.alreadyRegistered))
     } else {
-      finish(.failure(error))
+      finish(.failure(PasskeyPrfNativeError.invalidCredential))
     }
   }
 
-  private func finish(_ result: Result<(Data, Data), Error>) {
+  /// The provider refused because a credential from `excludedCredentials`
+  /// already lives there. The error code only exists on iOS 18+, and the
+  /// deployment target is lower, so the comparison needs the guard.
+  private static func isMatchedExcludedCredential(_ error: NSError) -> Bool {
+    guard error.domain == ASAuthorizationError.errorDomain else { return false }
+    if #available(iOS 18.0, *) {
+      return error.code == ASAuthorizationError.matchedExcludedCredential.rawValue
+    }
+    return false
+  }
+
+  private func finish(_ result: Result<(Data, Data, String?, Data?), Error>) {
     let continuation = self.continuation
     self.continuation = nil
     self.controller = nil
@@ -119,7 +146,7 @@ final class HybridPasskeyPrf: HybridPasskeyPrfSpec {
   }
 
   func createCredential(
-    rpId: String, userName: String, userId: String, prfInput: String
+    rpId: String, userName: String, userId: String, prfInput: String, excludeCredentialIds: [String]
   ) throws -> Promise<PasskeyPrfResult> {
     return Promise.async {
       guard #available(iOS 18.0, *) else {
@@ -131,15 +158,21 @@ final class HybridPasskeyPrf: HybridPasskeyPrfSpec {
       else {
         throw PasskeyPrfNativeError.invalidInput
       }
+      let excluded = try excludeCredentialIds.map { value -> Data in
+        guard let data = Self.decodeBase64Url(value), !data.isEmpty else {
+          throw PasskeyPrfNativeError.invalidInput
+        }
+        return data
+      }
       return try await Self.register(
-        rpId: rpId, userName: userName, userId: userIdData, prfInput: prfInputData)
+        rpId: rpId, userName: userName, userId: userIdData, prfInput: prfInputData, excludeCredentialIds: excluded)
     }
   }
 
   @available(iOS 18.0, *)
   @MainActor
   private static func register(
-    rpId: String, userName: String, userId: Data, prfInput: Data
+    rpId: String, userName: String, userId: Data, prfInput: Data, excludeCredentialIds: [Data]
   ) async throws -> PasskeyPrfResult {
     guard let anchor = UIApplication.shared.connectedScenes
       .compactMap({ $0 as? UIWindowScene })
@@ -149,11 +182,13 @@ final class HybridPasskeyPrf: HybridPasskeyPrfSpec {
       throw PasskeyPrfNativeError.noPresentationAnchor
     }
     let coordinator = PasskeyRegistrationCoordinator(anchor: anchor)
-    let (credentialId, prfOutput) = try await coordinator.perform(
-      rpId: rpId, userName: userName, userId: userId, prfInput: prfInput)
+    let (credentialId, prfOutput, attachment, attestationObject) = try await coordinator.perform(
+      rpId: rpId, userName: userName, userId: userId, prfInput: prfInput, excludeCredentialIds: excludeCredentialIds)
     return PasskeyPrfResult(
       credentialId: encodeBase64Url(credentialId),
-      prfOutput: encodeBase64Url(prfOutput))
+      prfOutput: encodeBase64Url(prfOutput),
+      attachment: attachment,
+      attestationObject: attestationObject.map(encodeBase64Url))
   }
 
   private static func decodeBase64Url(_ value: String) -> Data? {

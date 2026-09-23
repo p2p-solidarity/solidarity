@@ -23,7 +23,13 @@ data class PasskeyPrfResult(
   val credentialId: String,
   @DoNotStrip
   @Keep
-  val prfOutput: String
+  val prfOutput: String,
+  @DoNotStrip
+  @Keep
+  val attachment: String?,
+  @DoNotStrip
+  @Keep
+  val attestationObject: String?
 ) {
   /* primary constructor */
 
@@ -32,12 +38,16 @@ data class PasskeyPrfResult(
     if (other !is PasskeyPrfResult) return false
     return Objects.deepEquals(this.credentialId, other.credentialId)
       && Objects.deepEquals(this.prfOutput, other.prfOutput)
+      && Objects.deepEquals(this.attachment, other.attachment)
+      && Objects.deepEquals(this.attestationObject, other.attestationObject)
   }
 
   override fun hashCode(): Int {
     return arrayOf<Any?>(
       credentialId,
-      prfOutput
+      prfOutput,
+      attachment,
+      attestationObject
     ).contentDeepHashCode()
   }
 
@@ -49,8 +59,8 @@ data class PasskeyPrfResult(
     @Keep
     @Suppress("unused")
     @JvmStatic
-    private fun fromCpp(credentialId: String, prfOutput: String): PasskeyPrfResult {
-      return PasskeyPrfResult(credentialId, prfOutput)
+    private fun fromCpp(credentialId: String, prfOutput: String, attachment: String?, attestationObject: String?): PasskeyPrfResult {
+      return PasskeyPrfResult(credentialId, prfOutput, attachment, attestationObject)
     }
   }
 }

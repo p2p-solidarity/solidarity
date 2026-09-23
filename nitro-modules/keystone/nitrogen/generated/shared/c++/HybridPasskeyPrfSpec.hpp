@@ -19,6 +19,7 @@ namespace margelo::nitro::solidarity::keystone { struct PasskeyPrfResult; }
 #include "PasskeyPrfResult.hpp"
 #include <NitroModules/Promise.hpp>
 #include <string>
+#include <vector>
 
 namespace margelo::nitro::solidarity::keystone {
 
@@ -52,7 +53,7 @@ namespace margelo::nitro::solidarity::keystone {
     public:
       // Methods
       virtual bool isSupported() = 0;
-      virtual std::shared_ptr<Promise<PasskeyPrfResult>> createCredential(const std::string& rpId, const std::string& userName, const std::string& userId, const std::string& prfInput) = 0;
+      virtual std::shared_ptr<Promise<PasskeyPrfResult>> createCredential(const std::string& rpId, const std::string& userName, const std::string& userId, const std::string& prfInput, const std::vector<std::string>& excludeCredentialIds) = 0;
 
     protected:
       // Hybrid Setup

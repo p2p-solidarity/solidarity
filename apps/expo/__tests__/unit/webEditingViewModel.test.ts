@@ -12,7 +12,7 @@ describe('web editing actions', () => {
   it('offers exactly one primary action for each ready connection', () => {
     const disconnected = webEditingViewModel({ kind: 'ready', connection: 'notConnected', busy: null });
     expect(disconnected.copyKey).toBe('webEditing.connectBody');
-    expect(disconnected.primary).toEqual({ action: 'connect', labelKey: 'webEditing.connect', disabled: false });
+    expect(disconnected.primary).toEqual({ action: 'add', labelKey: 'passkeys.add', disabled: false });
     const connected = webEditingViewModel({ kind: 'ready', connection: 'connected', busy: null });
     expect(connected.copyKey).toBe('webEditing.connectedBody');
     expect(connected.primary).toEqual({ action: 'open', labelKey: 'webEditing.open', disabled: false });
@@ -20,7 +20,7 @@ describe('web editing actions', () => {
 
   it('disables the primary action throughout connect, reconnect, and open', () => {
     for (const connection of ['connected', 'notConnected'] as const) {
-      for (const busy of ['connect', 'reconnect', 'open'] as const) {
+      for (const busy of ['add', 'open'] as const) {
         const view = webEditingViewModel({ kind: 'ready', connection, busy });
         expect(view.primary?.disabled).toBe(true);
         expect(view.primary?.labelKey).toBe(busy === 'open' ? 'webEditing.opening' : 'webEditing.connecting');
@@ -31,8 +31,7 @@ describe('web editing actions', () => {
   it('offers only Retry for errors, with operation-specific copy and recovery', () => {
     const cases = [
       ['load', 'refresh', 'webEditing.checkFailed', null],
-      ['connect', 'connect', 'rootVault.failed.body', 'notConnected'],
-      ['reconnect', 'reconnect', 'rootVault.failed.body', 'connected'],
+      ['add', 'add', 'passkeys.addFailed', 'notConnected'],
       ['open', 'open', 'webEditing.openFailed', 'connected'],
     ] as const;
     for (const [operation, action, copyKey, previous] of cases) {

@@ -1,5 +1,5 @@
 export type Connection = 'connected' | 'notConnected';
-export type Operation = 'connect' | 'reconnect' | 'open';
+export type Operation = 'add' | 'open';
 export type WebEditingState =
   | { kind: 'loading' }
   | { kind: 'ready'; connection: Connection; busy: Operation | null }
@@ -24,8 +24,8 @@ export function webEditingViewModel(state: WebEditingState): WebEditingViewModel
     const load = state.operation === 'load';
     const open = state.operation === 'open';
     return {
-      copyKey: load ? 'webEditing.checkFailed' : open ? 'webEditing.openFailed' : 'rootVault.failed.body',
-      statusKey: load ? 'webEditing.unavailable' : open ? null : 'rootVault.failed.title',
+      copyKey: load ? 'webEditing.checkFailed' : open ? 'webEditing.openFailed' : 'passkeys.addFailed',
+      statusKey: load ? 'webEditing.unavailable' : open ? null : 'webEditing.unavailable',
       primary: {
         action: state.operation === 'load' ? 'refresh' : state.operation,
         labelKey: 'webEditing.retry',
@@ -38,12 +38,12 @@ export function webEditingViewModel(state: WebEditingState): WebEditingViewModel
     copyKey: connected ? 'webEditing.connectedBody' : 'webEditing.connectBody',
     statusKey: connected ? 'webEditing.connected' : 'webEditing.notConnected',
     primary: {
-      action: connected ? 'open' : 'connect',
+      action: connected ? 'open' : 'add',
       labelKey: state.busy === 'open'
         ? 'webEditing.opening'
         : state.busy !== null
           ? 'webEditing.connecting'
-          : connected ? 'webEditing.open' : 'webEditing.connect',
+          : connected ? 'webEditing.open' : 'passkeys.add',
       disabled: state.busy !== null,
     },
   };

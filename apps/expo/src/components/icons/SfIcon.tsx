@@ -102,6 +102,7 @@ const SF_TO_MATERIAL: Partial<Record<SFSymbol, AndroidSymbol>> = {
   'crown.fill': 'workspace_premium',
   'doc.badge.plus': 'note_add',
   'doc.on.clipboard': 'content_paste',
+  desktopcomputer: 'desktop_windows',
   'doc.on.doc': 'content_copy',
   'doc.text': 'description',
   'doc.text.fill': 'description',

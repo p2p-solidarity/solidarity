@@ -5,6 +5,9 @@ export interface PasskeyPrfResult {
   readonly credentialId: string;
   /** 32-byte WebAuthn PRF `first` result, base64url without padding. */
   readonly prfOutput: string;
+  /** Best-effort display metadata; never persist the attestation object. */
+  readonly attachment?: string;
+  readonly attestationObject?: string;
 }
 
 /** Native passkey creation with required user verification and PRF evaluation. */
@@ -16,5 +19,6 @@ export interface PasskeyPrf
     userName: string,
     userId: string,
     prfInput: string,
+    excludeCredentialIds: string[],
   ): Promise<PasskeyPrfResult>;
 }

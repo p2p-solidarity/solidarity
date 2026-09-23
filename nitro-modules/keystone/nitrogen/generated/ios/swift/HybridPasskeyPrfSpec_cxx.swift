@@ -137,9 +137,9 @@ open class HybridPasskeyPrfSpec_cxx {
   }
   
   @inline(__always)
-  public final func createCredential(rpId: std.string, userName: std.string, userId: std.string, prfInput: std.string) -> bridge.Result_std__shared_ptr_Promise_PasskeyPrfResult___ {
+  public final func createCredential(rpId: std.string, userName: std.string, userId: std.string, prfInput: std.string, excludeCredentialIds: bridge.std__vector_std__string_) -> bridge.Result_std__shared_ptr_Promise_PasskeyPrfResult___ {
     do {
-      let __result = try self.__implementation.createCredential(rpId: String(rpId), userName: String(userName), userId: String(userId), prfInput: String(prfInput))
+      let __result = try self.__implementation.createCredential(rpId: String(rpId), userName: String(userName), userId: String(userId), prfInput: String(prfInput), excludeCredentialIds: excludeCredentialIds.map({ __item in String(__item) }))
       let __resultCpp = { () -> bridge.std__shared_ptr_Promise_PasskeyPrfResult__ in
         let __promise = bridge.create_std__shared_ptr_Promise_PasskeyPrfResult__()
         let __promiseHolder = bridge.wrap_std__shared_ptr_Promise_PasskeyPrfResult__(__promise)

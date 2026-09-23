@@ -14,7 +14,7 @@ public protocol HybridPasskeyPrfSpec_protocol: HybridObject {
 
   // Methods
   func isSupported() throws -> Bool
-  func createCredential(rpId: String, userName: String, userId: String, prfInput: String) throws -> Promise<PasskeyPrfResult>
+  func createCredential(rpId: String, userName: String, userId: String, prfInput: String, excludeCredentialIds: [String]) throws -> Promise<PasskeyPrfResult>
 }
 
 public extension HybridPasskeyPrfSpec_protocol {

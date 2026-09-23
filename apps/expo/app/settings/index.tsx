@@ -4,9 +4,9 @@
  * remain behind the five-tap Developer Options unlock.
  */
 import Constants from 'expo-constants';
-import { router } from 'expo-router';
+import { router, useFocusEffect } from 'expo-router';
 import { safeBack } from '@/navigation/safeBack';
-import { useRef } from 'react';
+import { useCallback, useRef, useState } from 'react';
 import { Pressable, ScrollView, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -17,6 +17,7 @@ import {
   SettingsBlockSectionHeader,
   SettingsScreenTitle,
 } from '@/components/settings/SettingsBlocks';
+import { readPasskeyCount } from '@/identity/passkeyRegistry';
 import { haptic } from '@/feedback/haptics';
 import { pushToast } from '@/feedback/toast';
 import { useTranslation } from '@/i18n';
@@ -32,6 +33,8 @@ export default function SettingsHub() {
   const backupEnabled = usePreferences((s) => s.backupEnabled);
   const setPref = usePreferences((s) => s.set);
   const tapCountRef = useRef(0);
+  const [passkeyCount, setPasskeyCount] = useState<ReturnType<typeof readPasskeyCount> | null>(null);
+  useFocusEffect(useCallback(() => { setPasskeyCount(readPasskeyCount()); }, []));
 
   const version = Constants.expoConfig?.version ?? 'Unknown';
 
@@ -81,11 +84,6 @@ export default function SettingsHub() {
                 : t('settingsHub.usernamePrompt')}
               onPress={() => { router.push('/settings/username'); }}
             />
-            <SettingsBlockRow
-              icon="globe"
-              title={t('webEditing.title')}
-              onPress={() => { router.push('/settings/web-editing'); }}
-            />
           </SettingsBlockSection>
 
           {/* Account */}
@@ -94,6 +92,13 @@ export default function SettingsHub() {
               icon="person.text.rectangle"
               title={t('settingsHub.identityProfile')}
               onPress={() => { router.push('/me/edit'); }}
+            />
+            <SettingsBlockRow
+              icon="key.fill"
+              title={t('settingsHub.passkeys')}
+              trailingText={passkeyCount === null ? t('settingsHub.passkeysLoading') : passkeyCount.ok
+                ? t('settingsHub.passkeysCount', { count: passkeyCount.value }) : t('settingsHub.passkeysUnavailable')}
+              onPress={() => { router.push('/settings/passkeys'); }}
             />
             <SettingsBlockRow
               icon="lock.shield"

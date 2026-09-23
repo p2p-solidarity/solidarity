@@ -1,5 +1,6 @@
 import { getMmkv } from '@/storage/mmkv';
-import type { RootVaultRecordV1 } from '@solidarity/shared';
+import { isPasskeyRow, type PasskeyRow, type RegistryError } from './passkeyRegistry';
+import type { Result, RootVaultRecordV1 } from '@solidarity/shared';
 
 export type RootVaultSyncState = 'unknown' | 'connected' | 'deferred';
 
@@ -8,7 +9,7 @@ const PENDING_KEY = 'identity.rootVaultSync.pending.v1';
 
 interface StoredState {
   readonly v: 2;
-  readonly status: 'connected' | 'deferred';
+  readonly status: 'connected' | 'deferred' | 'unknown';
   readonly binding?: string;
 }
 
@@ -16,6 +17,7 @@ export interface PendingRootVaultUpload {
   readonly binding: string;
   readonly locator: string;
   readonly record: RootVaultRecordV1;
+  readonly row?: PasskeyRow;
 }
 
 export function getRootVaultSyncState(binding?: string): RootVaultSyncState {
@@ -53,24 +55,27 @@ export function setRootVaultSyncState(
   }
 }
 
-export function getPendingRootVaultUpload(): PendingRootVaultUpload | null {
+/** Keep the cheap hub binding current even when a new upload is pending. */
+export function rememberRootVaultBinding(binding: string): void {
+  const status = getRootVaultSyncState(binding);
+  getMmkv().set(STORAGE_KEY, JSON.stringify({ v: 2, status, binding }));
+}
+
+export function readPendingRootVaultUpload(): Result<PendingRootVaultUpload | null, RegistryError> {
   try {
     const raw = getMmkv().getString(PENDING_KEY);
-    if (!raw) return null;
+    if (raw === undefined) return { ok: true, value: null };
     const value = JSON.parse(raw) as PendingRootVaultUpload;
     if (
-      typeof value.binding !== 'string' ||
+      !value || typeof value.binding !== 'string' ||
       typeof value.locator !== 'string' ||
-      typeof value.record !== 'object' ||
-      value.record === null ||
-      value.record.v !== 1 ||
-      typeof value.record.ciphertext !== 'string'
-    ) {
-      return null;
-    }
-    return value;
+      typeof value.record !== 'object' || value.record === null ||
+      value.record.v !== 1 || typeof value.record.ciphertext !== 'string' ||
+      (value.row !== undefined && (!isPasskeyRow(value.row) || value.row.binding !== value.binding || value.row.locator !== value.locator))
+    ) return { ok: false, error: { kind: 'storageFailed' } };
+    return { ok: true, value };
   } catch {
-    return null;
+    return { ok: false, error: { kind: 'storageFailed' } };
   }
 }
 

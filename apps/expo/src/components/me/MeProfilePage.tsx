@@ -139,10 +139,11 @@ export function MeProfilePage({
 
       <Animated.View entering={entrance(STAGGER_MS * 4)} className="px-4">
         <PressableScale
-          onPress={() => { router.push('/settings/web-editing'); }}
+          onPress={() => { router.push('/settings/passkeys'); }}
           accessibilityRole="button"
           accessibilityLabel={t('webEditing.title')}
           style={blockRowStyle(colors.mutedSurface)}>
+          <SfIcon name="desktopcomputer" size={18} color={colors.text2} />
           <ThemedText variant="bodyMedium" style={{ flex: 1 }}>
             {t('webEditing.title')}
           </ThemedText>

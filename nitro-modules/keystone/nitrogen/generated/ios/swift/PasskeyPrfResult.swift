@@ -18,8 +18,20 @@ public extension PasskeyPrfResult {
   /**
    * Create a new instance of `PasskeyPrfResult`.
    */
-  init(credentialId: String, prfOutput: String) {
-    self.init(std.string(credentialId), std.string(prfOutput))
+  init(credentialId: String, prfOutput: String, attachment: String?, attestationObject: String?) {
+    self.init(std.string(credentialId), std.string(prfOutput), { () -> bridge.std__optional_std__string_ in
+      if let __unwrappedValue = attachment {
+        return bridge.create_std__optional_std__string_(std.string(__unwrappedValue))
+      } else {
+        return .init()
+      }
+    }(), { () -> bridge.std__optional_std__string_ in
+      if let __unwrappedValue = attestationObject {
+        return bridge.create_std__optional_std__string_(std.string(__unwrappedValue))
+      } else {
+        return .init()
+      }
+    }())
   }
 
   @inline(__always)
@@ -30,5 +42,29 @@ public extension PasskeyPrfResult {
   @inline(__always)
   var prfOutput: String {
     return String(self.__prfOutput)
+  }
+  
+  @inline(__always)
+  var attachment: String? {
+    return { () -> String? in
+      if bridge.has_value_std__optional_std__string_(self.__attachment) {
+        let __unwrapped = bridge.get_std__optional_std__string_(self.__attachment)
+        return String(__unwrapped)
+      } else {
+        return nil
+      }
+    }()
+  }
+  
+  @inline(__always)
+  var attestationObject: String? {
+    return { () -> String? in
+      if bridge.has_value_std__optional_std__string_(self.__attestationObject) {
+        let __unwrapped = bridge.get_std__optional_std__string_(self.__attestationObject)
+        return String(__unwrapped)
+      } else {
+        return nil
+      }
+    }()
   }
 }

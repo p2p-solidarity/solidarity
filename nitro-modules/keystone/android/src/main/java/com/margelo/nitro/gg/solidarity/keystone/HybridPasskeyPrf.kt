@@ -6,6 +6,8 @@ import androidx.credentials.CreatePublicKeyCredentialResponse
 import androidx.credentials.CredentialManager
 import androidx.credentials.exceptions.CreateCredentialCancellationException
 import androidx.credentials.exceptions.CreateCredentialUnsupportedException
+import androidx.credentials.exceptions.domerrors.InvalidStateError
+import androidx.credentials.exceptions.publickeycredential.CreatePublicKeyCredentialDomException
 import com.margelo.nitro.NitroModules
 import com.margelo.nitro.core.Promise
 import java.security.SecureRandom
@@ -20,6 +22,7 @@ class HybridPasskeyPrf : HybridPasskeyPrfSpec() {
     userName: String,
     userId: String,
     prfInput: String,
+    excludeCredentialIds: Array<String>,
   ): Promise<PasskeyPrfResult> = Promise.async {
     if (rpId.isBlank() || userName.isBlank()) {
       throw IllegalArgumentException("passkey_prf_invalid_input")
@@ -39,18 +42,29 @@ class HybridPasskeyPrf : HybridPasskeyPrfSpec() {
       credentialManager.createCredential(
         activity,
         CreatePublicKeyCredentialRequest(
-          requestJson = registrationJson(rpId, userName, userId, prfInput),
+          requestJson = registrationJson(rpId, userName, userId, prfInput, excludeCredentialIds),
         ),
       )
     } catch (_: CreateCredentialCancellationException) {
       throw IllegalStateException("passkey_prf_cancelled")
+    } catch (error: CreatePublicKeyCredentialDomException) {
+      throw IllegalStateException(
+        if (error.domError is InvalidStateError) "passkey_prf_already_registered"
+        else "passkey_prf_invalid_credential",
+      )
     } catch (_: CreateCredentialUnsupportedException) {
       throw IllegalStateException("passkey_prf_unsupported")
+    } catch (_: Exception) {
+      throw IllegalStateException("passkey_prf_invalid_credential")
     }
 
     val publicKey = response as? CreatePublicKeyCredentialResponse
       ?: throw IllegalStateException("passkey_prf_invalid_credential")
-    val json = JSONObject(publicKey.registrationResponseJson)
+    val json = try {
+      JSONObject(publicKey.registrationResponseJson)
+    } catch (_: Exception) {
+      throw IllegalStateException("passkey_prf_invalid_credential")
+    }
     val credentialId = json.optString("rawId").ifBlank { json.optString("id") }
     val prfOutput = json.optJSONObject("clientExtensionResults")
       ?.optJSONObject("prf")
@@ -60,7 +74,15 @@ class HybridPasskeyPrf : HybridPasskeyPrfSpec() {
     if (decodeBase64Url(credentialId).isEmpty() || decodeBase64Url(prfOutput).size != 32) {
       throw IllegalStateException("passkey_prf_no_prf")
     }
-    PasskeyPrfResult(credentialId = credentialId, prfOutput = prfOutput)
+    PasskeyPrfResult(
+      credentialId = credentialId,
+      prfOutput = prfOutput,
+      attachment = json.optString("authenticatorAttachment").takeIf {
+        it == "platform" || it == "cross-platform"
+      },
+      attestationObject = json.optJSONObject("response")?.optString("attestationObject")
+        ?.takeIf { it.isNotBlank() },
+    )
   }
 
   private fun registrationJson(
@@ -68,6 +90,7 @@ class HybridPasskeyPrf : HybridPasskeyPrfSpec() {
     userName: String,
     userId: String,
     prfInput: String,
+    excludeCredentialIds: Array<String>,
   ): String {
     val challenge = ByteArray(32).also(SecureRandom()::nextBytes)
     return JSONObject()
@@ -93,6 +116,11 @@ class HybridPasskeyPrf : HybridPasskeyPrfSpec() {
           .put("requireResidentKey", true)
           .put("userVerification", "required"),
       )
+      .put("excludeCredentials", JSONArray().also { excluded ->
+        excludeCredentialIds.forEach { id ->
+          excluded.put(JSONObject().put("type", "public-key").put("id", id))
+        }
+      })
       .put("attestation", "none")
       .put(
         "extensions",

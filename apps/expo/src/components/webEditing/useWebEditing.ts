@@ -2,6 +2,8 @@ import { useFocusEffect } from 'expo-router';
 import { useCallback, useRef, useState } from 'react';
 import { AppState, Linking } from 'react-native';
 
+import { pushToast } from '@/feedback/toast';
+import { useTranslation } from '@/i18n';
 import { haptic } from '@/feedback/haptics';
 import {
   connectStoredRootIdentityWithNativePasskey,
@@ -17,10 +19,11 @@ export const WEB_EDITOR_URL = 'https://creds.id/edit';
 export function useWebEditing(): {
   state: WebEditingState;
   refresh: () => Promise<void>;
-  connect: () => Promise<void>;
-  reconnect: () => Promise<void>;
+  binding: string | null;
+  addPasskey: (retryOnly?: boolean) => Promise<void>;
   openEditor: () => Promise<void>;
 } {
+  const { t } = useTranslation();
   const [state, setState] = useState<WebEditingState>({ kind: 'loading' });
   const current = useRef(state);
   const focused = useRef(false);
@@ -98,13 +101,13 @@ export function useWebEditing(): {
     if (isCurrent()) publish({ kind: 'ready', connection: 'connected', busy: null });
   }, [publish]);
 
-  const run = useCallback(async (operation: Operation): Promise<void> => {
+  const run = useCallback(async (operation: Operation, retryOnly = false): Promise<void> => {
     if (!focused.current || operating.current) return;
     const before = current.current;
     const previous = before.kind === 'ready'
       ? before.connection
       : before.kind === 'error' && before.operation === operation ? before.previous : null;
-    if (previous === null || (operation === 'connect' ? previous !== 'notConnected' : previous !== 'connected')) return;
+    if (previous === null || (operation === 'open' && previous !== 'connected')) return;
 
     // Ref guard closes the interval before React commits the disabled control.
     operating.current = true;
@@ -117,7 +120,7 @@ export function useWebEditing(): {
         return;
       }
 
-      const result = await connectStoredRootIdentityWithNativePasskey();
+      const result = await connectStoredRootIdentityWithNativePasskey(retryOnly);
       // A successful sync belongs to its returned binding even if the user left.
       if (result.ok) setRootVaultSyncState('connected', result.value);
       if (!isCurrent()) return;
@@ -128,7 +131,8 @@ export function useWebEditing(): {
       } else if (result.error.kind === 'cancelled') {
         publish({ kind: 'ready', connection: previous, busy: null });
       } else {
-        publish({ kind: 'error', operation, previous });
+        publish({ kind: 'ready', connection: previous, busy: null });
+        pushToast(t(result.error.kind === 'alreadyRegistered' ? 'passkeys.alreadyRegistered' : 'passkeys.addFailed'), 'info');
       }
     } catch {
       if (isCurrent()) publish({ kind: 'error', operation, previous });
@@ -137,13 +141,13 @@ export function useWebEditing(): {
       // If focus returned while an older operation was finishing, load afresh.
       if (!isCurrent()) void refresh();
     }
-  }, [openCheckedEditor, publish, refresh]);
+  }, [openCheckedEditor, publish, refresh, t]);
 
   return {
     state,
     refresh,
-    connect: () => run('connect'),
-    reconnect: () => run('reconnect'),
+    binding: binding.current,
+    addPasskey: (retryOnly = false) => run('add', retryOnly),
     openEditor: () => run('open'),
   };
 }

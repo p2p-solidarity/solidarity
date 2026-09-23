@@ -55,7 +55,7 @@ namespace margelo::nitro::solidarity::keystone {
   public:
     // Methods
     bool isSupported() override;
-    std::shared_ptr<Promise<PasskeyPrfResult>> createCredential(const std::string& rpId, const std::string& userName, const std::string& userId, const std::string& prfInput) override;
+    std::shared_ptr<Promise<PasskeyPrfResult>> createCredential(const std::string& rpId, const std::string& userName, const std::string& userId, const std::string& prfInput, const std::vector<std::string>& excludeCredentialIds) override;
 
   private:
     jni::global_ref<JHybridPasskeyPrfSpec::JavaPart> _javaPart;

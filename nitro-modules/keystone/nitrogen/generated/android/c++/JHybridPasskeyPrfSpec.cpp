@@ -15,6 +15,8 @@ namespace margelo::nitro::solidarity::keystone { struct PasskeyPrfResult; }
 #include <NitroModules/JPromise.hpp>
 #include "JPasskeyPrfResult.hpp"
 #include <string>
+#include <optional>
+#include <vector>
 
 namespace margelo::nitro::solidarity::keystone {
 
@@ -54,9 +56,18 @@ namespace margelo::nitro::solidarity::keystone {
     auto __result = method(_javaPart);
     return static_cast<bool>(__result);
   }
-  std::shared_ptr<Promise<PasskeyPrfResult>> JHybridPasskeyPrfSpec::createCredential(const std::string& rpId, const std::string& userName, const std::string& userId, const std::string& prfInput) {
-    static const auto method = _javaPart->javaClassStatic()->getMethod<jni::local_ref<JPromise::javaobject>(jni::alias_ref<jni::JString> /* rpId */, jni::alias_ref<jni::JString> /* userName */, jni::alias_ref<jni::JString> /* userId */, jni::alias_ref<jni::JString> /* prfInput */)>("createCredential");
-    auto __result = method(_javaPart, jni::make_jstring(rpId), jni::make_jstring(userName), jni::make_jstring(userId), jni::make_jstring(prfInput));
+  std::shared_ptr<Promise<PasskeyPrfResult>> JHybridPasskeyPrfSpec::createCredential(const std::string& rpId, const std::string& userName, const std::string& userId, const std::string& prfInput, const std::vector<std::string>& excludeCredentialIds) {
+    static const auto method = _javaPart->javaClassStatic()->getMethod<jni::local_ref<JPromise::javaobject>(jni::alias_ref<jni::JString> /* rpId */, jni::alias_ref<jni::JString> /* userName */, jni::alias_ref<jni::JString> /* userId */, jni::alias_ref<jni::JString> /* prfInput */, jni::alias_ref<jni::JArrayClass<jni::JString>> /* excludeCredentialIds */)>("createCredential");
+    auto __result = method(_javaPart, jni::make_jstring(rpId), jni::make_jstring(userName), jni::make_jstring(userId), jni::make_jstring(prfInput), [&](auto&& __input) {
+      size_t __size = __input.size();
+      jni::local_ref<jni::JArrayClass<jni::JString>> __array = jni::JArrayClass<jni::JString>::newArray(__size);
+      for (size_t __i = 0; __i < __size; __i++) {
+        const auto& __element = __input[__i];
+        auto __elementJni = jni::make_jstring(__element);
+        __array->setElement(__i, *__elementJni);
+      }
+      return __array;
+    }(excludeCredentialIds));
     return [&]() {
       auto __promise = Promise<PasskeyPrfResult>::create();
       __result->cthis()->addOnResolvedListener([=](const jni::alias_ref<jni::JObject>& __boxedResult) {

@@ -35,7 +35,7 @@ abstract class HybridPasskeyPrfSpec: HybridObject() {
   
   @DoNotStrip
   @Keep
-  abstract fun createCredential(rpId: String, userName: String, userId: String, prfInput: String): Promise<PasskeyPrfResult>
+  abstract fun createCredential(rpId: String, userName: String, userId: String, prfInput: String, excludeCredentialIds: Array<String>): Promise<PasskeyPrfResult>
 
   // Default implementation of `HybridObject.toString()`
   override fun toString(): String {

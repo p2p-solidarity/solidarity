@@ -18,6 +18,8 @@ namespace margelo::nitro::solidarity::keystone { struct PasskeyPrfResult; }
 #include "PasskeyPrfResult.hpp"
 #include <NitroModules/Promise.hpp>
 #include <string>
+#include <optional>
+#include <vector>
 
 #include "Keystone-Swift-Cxx-Umbrella.hpp"
 
@@ -77,8 +79,8 @@ namespace margelo::nitro::solidarity::keystone {
       auto __value = std::move(__result.value());
       return __value;
     }
-    inline std::shared_ptr<Promise<PasskeyPrfResult>> createCredential(const std::string& rpId, const std::string& userName, const std::string& userId, const std::string& prfInput) override {
-      auto __result = _swiftPart.createCredential(rpId, userName, userId, prfInput);
+    inline std::shared_ptr<Promise<PasskeyPrfResult>> createCredential(const std::string& rpId, const std::string& userName, const std::string& userId, const std::string& prfInput, const std::vector<std::string>& excludeCredentialIds) override {
+      auto __result = _swiftPart.createCredential(rpId, userName, userId, prfInput, excludeCredentialIds);
       if (__result.hasError()) [[unlikely]] {
         std::rethrow_exception(__result.error());
       }
