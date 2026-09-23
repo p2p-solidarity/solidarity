@@ -72,7 +72,7 @@ describe('Page surface', () => {
     expect(links.match(/onPress=\{onAddFirstLink\}/gu)).toHaveLength(1);
     // Rows name their actual platform (the mock's brand sprite), never a
     // borrowed stand-in symbol.
-    expect(links).toContain('brandIconForLink');
+    expect(links).toContain('linkDisplay(link.label, link.url).brand');
     expect(links).toContain('<BrandIcon');
 
     const publicHeadingIndex = links.indexOf("t('mePage.publicPage')");

@@ -1,3 +1,5 @@
+import Animated, { useReducedMotion } from 'react-native-reanimated';
+import { fadeUpIn } from '@/feedback/motion';
 import { router } from 'expo-router';
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { ActivityIndicator, ScrollView, StyleSheet, Switch, View } from 'react-native';
@@ -34,7 +36,7 @@ import {
   type PresentCardOnlyField,
   type PresentModel,
 } from '@/present/presentModel';
-import { brandIconForLink } from '@/profile/linkPresentation';
+import { linkDisplay, linkSecondaryLabel } from '@/profile/linkPresentation';
 import { useProfileStore } from '@/profile/store';
 import { usePreferences } from '@/settings/preferences';
 type PresentMode = 'card' | 'attestations';
@@ -325,10 +327,12 @@ function PublicLinkGroup({
   readonly links: PresentModel['publicLinks'];
 }): ReactNode {
   const colors = useThemeColors();
+  const reduceMotion = useReducedMotion();
   return (
     <View style={{ borderRadius: ROW_RADIUS, overflow: 'hidden', backgroundColor: colors.mutedSurface }}>
       {links.map(({ link, sourceIndex }, index) => (
-        <View
+        <Animated.View
+          entering={fadeUpIn(index, reduceMotion)}
           key={`${String(sourceIndex)}-${link.label}-${link.url}`}
           style={{
             flexDirection: 'row',
@@ -351,26 +355,22 @@ function PublicLinkGroup({
             }}
           >
             <BrandIcon
-              name={brandIconForLink(link.label, link.url)}
+              name={linkDisplay(link.label, link.url).brand}
               size={15}
               color={Colors.primaryBlue}
             />
           </View>
-          {link.label.trim().length > 0 ? (
-            <ThemedText variant="label" numberOfLines={1}>
-              {link.label}
+          <View style={{ flex: 1, gap: 1 }}>
+            <ThemedText variant="bodyMedium" numberOfLines={1} ellipsizeMode="middle">
+              {linkDisplay(link.label, link.url).text}
             </ThemedText>
-          ) : null}
-          <ThemedText
-            variant="caption"
-            tone="secondary"
-            numberOfLines={1}
-            ellipsizeMode="middle"
-            style={{ marginLeft: 'auto', maxWidth: '52%', fontFamily: 'Menlo' }}
-          >
-            {link.url}
-          </ThemedText>
-        </View>
+            {linkSecondaryLabel(link.label, link.url) ? (
+              <ThemedText variant="caption" tone="tertiary" numberOfLines={1}>
+                {linkSecondaryLabel(link.label, link.url)}
+              </ThemedText>
+            ) : null}
+          </View>
+        </Animated.View>
       ))}
     </View>
   );

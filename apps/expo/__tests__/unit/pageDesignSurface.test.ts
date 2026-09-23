@@ -161,7 +161,7 @@ describe('v2 Page design surface', () => {
     expect(legacyBranch).toContain('{record.displayName}');
     expect(legacyBranch).toContain('record.bio.length > 0');
     expect(legacyBranch).toContain('record.links.length > 0');
-    expect(legacyBranch).toContain('accessibilityLabel={link.label || link.url}');
+    expect(legacyBranch).toContain('accessibilityLabel={linkDisplay(link.label, link.url).text}');
   });
 
   it('keeps raw attestation and proof identifiers off the verified visitor Page', () => {

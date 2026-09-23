@@ -1891,6 +1891,7 @@
   "peopleList.declaredBadge": "Not Verified",
   "peopleList.declaredImportConfirm": "Save as Not Verified",
   "peopleList.declaredSaved": "Saved as Not Verified",
+  "links.yourPageLink": "Your page link",
   "linkPageImport.urlLabel": "Link page URL",
   "linkPageImport.urlPlaceholder": "https://linktr.ee/username",
   "linkPageImport.fetch": "Fetch",

@@ -1,3 +1,4 @@
+import { linkDisplay, middleEllipsis } from '@/profile/linkPresentation';
 import { shortDid } from '@/components/id/shortDid';
 import {
   DEFAULT_HANDLE_RESOLVERS,
@@ -129,7 +130,16 @@ export function pickBestShareUrl(
 
 export function displayProfileShareUrl(candidate: ProfileShareUrlCandidate): string {
   const url = candidate.kind === 'username' ? candidate.displayUrl : candidate.url;
-  return url.replace(/^https?:\/\//u, '');
+  try {
+    const parsed = new URL(url);
+    if (parsed.hash) {
+      return middleEllipsis(`${parsed.hostname.replace(/^www\./u, '')}/…${parsed.hash.slice(1).slice(-4)}`, 32);
+    }
+  } catch {
+    // Malformed legacy candidates still must not expose a fragment token.
+    return middleEllipsis(url.split('#')[0] ?? '', 32);
+  }
+  return middleEllipsis(linkDisplay('', url).text, 32);
 }
 
 /**

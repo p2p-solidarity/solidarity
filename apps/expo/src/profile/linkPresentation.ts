@@ -13,6 +13,7 @@
  * back to a plain globe. Only a draft row with no usable URL yet consults the
  * label, and ends at `link`.
  */
+import { displayLinkText, linkPresetForEditableUrl, linkPresetForHostname } from './linkUrl';
 import type { BrandIconName } from '@/components/icons/brandGlyphs';
 
 /** Exact hosts, matched after stripping `www.`. */
@@ -132,4 +133,76 @@ export function brandIconForHost(url: string): BrandIconName {
   } catch {
     return 'link';
   }
+}
+
+/** A single host reader for imported and saved pages. */
+export function hostnameOf(url: string): string {
+  try {
+    return new URL(url).hostname;
+  } catch {
+    return url.trim();
+  }
+}
+
+/** Display only: callers retain the original URL for navigation and copy. */
+export function linkDisplay(_label: string, url: string): { brand: BrandIconName; text: string } {
+  try {
+    const parsed = new URL(url);
+    if (!parsed.hostname || !['https:', 'http:'].includes(parsed.protocol)) {
+      return { brand: 'link', text: url.trim() };
+    }
+    const host = parsed.hostname.toLowerCase().replace(/^www\./u, '');
+    const path = parsed.pathname.replace(/\/+$/u, '');
+    const handle = profileHandle(parsed, host, path);
+    const address = `${host}${parsed.port ? `:${parsed.port}` : ''}`;
+    const text = handle === null
+      ? `${address}${middleEllipsis(path, Math.max(16, 64 - address.length))}`
+      : middleEllipsis(`@${handle}`, 64);
+    return { brand: brandIconForHost(url), text };
+  } catch {
+    return { brand: 'link', text: url.trim() };
+  }
+}
+
+/** Only canonical profile shapes lose their host/path in favour of a handle. */
+function profileHandle(parsed: URL, host: string, path: string): string | null {
+  if (parsed.port || parsed.username || parsed.password) return null;
+  const canonicalHost = host === 'twitter.com' ? 'x.com' : host;
+  const cleanUrl = `https://${canonicalHost}${path}`;
+  const preset = linkPresetForEditableUrl(linkPresetForHostname(host), cleanUrl);
+  if (preset) {
+    const handle = displayLinkText(preset, cleanUrl);
+    if (handle.startsWith('@') || RESERVED_PROFILE_PATHS[preset]?.includes(handle.toLowerCase())) return null;
+    return handle;
+  }
+  if (host === 'threads.net' || host === 'threads.com') {
+    return /^\/@([a-zA-Z0-9._-]+)$/u.exec(path)?.[1] ?? null;
+  }
+  if (host === 'bsky.app') {
+    return /^\/profile\/([a-zA-Z0-9.-]+\.[a-zA-Z0-9.-]+)$/u.exec(path)?.[1] ?? null;
+  }
+  return null;
+}
+
+const RESERVED_PROFILE_PATHS: Readonly<Record<string, readonly string[]>> = {
+  x: ['home', 'explore', 'search', 'settings', 'messages', 'notifications', 'i', 'intent', 'share'],
+  github: ['settings', 'explore', 'marketplace', 'login', 'join', 'search', 'features', 'topics', 'orgs'],
+  instagram: ['explore', 'accounts', 'direct', 'reels', 'stories', 'p', 'reel'],
+  telegram: ['share', 'proxy', 'socks', 'login'],
+};
+
+export function middleEllipsis(value: string, maxLength: number): string {
+  if (value.length <= maxLength) return value;
+  const head = Math.ceil((maxLength - 1) / 2);
+  return `${value.slice(0, head)}…${value.slice(-(maxLength - head - 1))}`;
+}
+
+/** A custom caption adds context; a platform name or repeated address does not. */
+export function linkSecondaryLabel(label: string, url: string): string | null {
+  const trimmed = label.trim();
+  const display = linkDisplay(label, url);
+  if (!trimmed || trimmed === url.trim() || trimmed === display.text ||
+    trimmed === hostnameOf(url) ||
+    LABEL_BRANDS[trimmed.toLowerCase()] === display.brand) return null;
+  return trimmed;
 }

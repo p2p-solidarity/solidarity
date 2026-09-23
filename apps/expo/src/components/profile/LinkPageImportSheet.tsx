@@ -25,6 +25,10 @@
  * always-mounted one) — a fresh URL input is what "open the sheet again"
  * should mean, unlike a contact-entry draft worth preserving.
  */
+import { BrandIcon } from '@/components/icons/BrandIcon';
+import { linkDisplay, linkSecondaryLabel } from '@/profile/linkPresentation';
+import Animated, { useReducedMotion } from 'react-native-reanimated';
+import { fadeUpIn } from '@/feedback/motion';
 import { useState, type ReactNode } from 'react';
 import { TextInput, View } from 'react-native';
 import { KeyboardAwareScrollView, KeyboardStickyView } from 'react-native-keyboard-controller';
@@ -63,12 +67,12 @@ type Phase =
   | { readonly step: 'input' }
   | { readonly step: 'loading' }
   | {
-      readonly step: 'preview';
-      readonly sourceUrl: string;
-      readonly title: string | null;
-      readonly links: readonly LinkPageLink[];
-      readonly checked: ReadonlySet<string>;
-    }
+    readonly step: 'preview';
+    readonly sourceUrl: string;
+    readonly title: string | null;
+    readonly links: readonly LinkPageLink[];
+    readonly checked: ReadonlySet<string>;
+  }
   | { readonly step: 'error'; readonly reason: LinkPageImportErrorReason };
 
 export function LinkPageImportSheet({
@@ -202,10 +206,11 @@ function LinkPageImportSheetContent({
               {t('linkPageImport.selectedCount', { count: phase.checked.size, total: phase.links.length })}
             </ThemedText>
             <View style={{ gap: 8 }}>
-              {phase.links.map((link) => (
+              {phase.links.map((link, index) => (
                 <ChecklistRow
                   key={link.url}
                   link={link}
+                  index={index}
                   checked={phase.checked.has(link.url)}
                   onToggle={() => { toggleChecked(link.url); }}
                 />
@@ -241,51 +246,59 @@ function LinkPageImportSheetContent({
 
 function ChecklistRow({
   link,
+  index,
   checked,
   onToggle,
 }: {
   readonly link: LinkPageLink;
+  readonly index: number;
   readonly checked: boolean;
   readonly onToggle: () => void;
 }): ReactNode {
   const { t } = useTranslation();
+  const reduceMotion = useReducedMotion();
   return (
-    <PressableScale
-      haptic="tap"
-      onPress={onToggle}
-      accessibilityRole="checkbox"
-      accessibilityState={{ checked }}
-      accessibilityLabel={link.label.length > 0 ? link.label : link.url}
-      className="flex-row items-center gap-3 rounded-lg border border-divider p-3"
-    >
-      <View
-        style={{
-          width: 20,
-          height: 20,
-          borderRadius: 4,
-          borderWidth: 1.5,
-          borderColor: checked ? Colors.accentRose : Colors.text3,
-          backgroundColor: checked ? Colors.accentRose : 'transparent',
-          alignItems: 'center',
-          justifyContent: 'center',
-        }}
+    <Animated.View entering={fadeUpIn(index, reduceMotion)}>
+      <PressableScale
+        haptic="tap"
+        onPress={onToggle}
+        accessibilityRole="checkbox"
+        accessibilityState={{ checked }}
+        accessibilityLabel={linkDisplay(link.label, link.url).text}
+        className="flex-row items-center gap-3 rounded-lg border border-divider p-3"
       >
-        {checked ? <SfIcon name="checkmark" size={12} color={Colors.invertedButtonText} /> : null}
-      </View>
-      <View style={{ flex: 1, gap: 2 }}>
-        <ThemedText variant="bodyMedium" numberOfLines={1}>
-          {link.label.length > 0 ? link.label : link.url}
-        </ThemedText>
-        <ThemedText variant="caption" tone="tertiary" numberOfLines={1}>
-          {link.url}
-        </ThemedText>
-      </View>
-      <View className="rounded-full border border-divider px-2 py-0.5" style={{ borderStyle: 'dashed' }}>
-        <ThemedText variant="caption" tone="tertiary">
-          {t('linkPageImport.claimedChip')}
-        </ThemedText>
-      </View>
-    </PressableScale>
+        <View
+          style={{
+            width: 20,
+            height: 20,
+            borderRadius: 4,
+            borderWidth: 1.5,
+            borderColor: checked ? Colors.accentRose : Colors.text3,
+            backgroundColor: checked ? Colors.accentRose : 'transparent',
+            alignItems: 'center',
+            justifyContent: 'center',
+          }}
+        >
+          {checked ? <SfIcon name="checkmark" size={12} color={Colors.invertedButtonText} /> : null}
+        </View>
+        <BrandIcon name={linkDisplay(link.label, link.url).brand} size={20} color={Colors.text2} />
+        <View style={{ flex: 1, gap: 1 }}>
+          <ThemedText variant="bodyMedium" numberOfLines={1} ellipsizeMode="middle">
+            {linkDisplay(link.label, link.url).text}
+          </ThemedText>
+          {linkSecondaryLabel(link.label, link.url) ? (
+            <ThemedText variant="caption" tone="tertiary" numberOfLines={1}>
+              {linkSecondaryLabel(link.label, link.url)}
+            </ThemedText>
+          ) : null}
+        </View>
+        <View className="rounded-full border border-divider px-2 py-0.5" style={{ borderStyle: 'dashed' }}>
+          <ThemedText variant="caption" tone="tertiary">
+            {t('linkPageImport.claimedChip')}
+          </ThemedText>
+        </View>
+      </PressableScale>
+    </Animated.View>
   );
 }
 

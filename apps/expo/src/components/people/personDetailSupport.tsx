@@ -1,3 +1,8 @@
+import { BrandIcon } from '@/components/icons/BrandIcon';
+import type { BrandIconName } from '@/components/icons/brandGlyphs';
+import { linkDisplay, linkSecondaryLabel } from '@/profile/linkPresentation';
+import Animated, { useReducedMotion } from 'react-native-reanimated';
+import { fadeUpIn } from '@/feedback/motion';
 import type { SFSymbol } from 'expo-symbols';
 import type { ReactNode } from 'react';
 import { Linking, View } from 'react-native';
@@ -9,11 +14,13 @@ import { ThemedSurface, ThemedText } from '@/components/themed';
 import { Colors } from '@/constants/Colors';
 import { appAlert } from '@/feedback/appAlert';
 import { useTranslation } from '@/i18n';
-import type { Contact, SocialPlatform } from '@solidarity/shared';
+import type { Contact } from '@solidarity/shared';
 
 export interface PersonDetailContactRow {
   readonly id: string;
-  readonly icon: SFSymbol;
+  readonly icon?: SFSymbol;
+  readonly brand?: BrandIconName;
+  readonly index?: number;
   readonly labelKey?: 'personDetail.phone' | 'personDetail.email';
   readonly label?: string;
   readonly value: string;
@@ -50,13 +57,13 @@ export function buildContactRows(contact: Contact): readonly PersonDetailContact
     if (!url || !isHttpUrl(url)) continue;
     rows.push({
       id: `social:${network.id}`,
-      icon: socialIcon(network.platform),
-      label: network.platform,
-      value: url,
+      brand: linkDisplay(network.platform, url).brand,
+      label: linkSecondaryLabel(network.platform, url) ?? '',
+      value: linkDisplay(network.platform, url).text,
       url,
     });
   }
-  return rows;
+  return rows.map((row, index) => ({ ...row, index }));
 }
 
 export function PersonDetailContactRowView({
@@ -67,6 +74,7 @@ export function PersonDetailContactRowView({
   readonly divided?: boolean;
 }): ReactNode {
   const { t } = useTranslation();
+  const reduceMotion = useReducedMotion();
   const label = row.labelKey ? t(row.labelKey) : row.label ?? '';
 
   const open = (): void => {
@@ -79,27 +87,30 @@ export function PersonDetailContactRowView({
   };
 
   return (
-    <PressableScale
-      onPress={open}
-      accessibilityRole="link"
-      accessibilityLabel={`${label}, ${row.value}`}
-      className="flex-row items-center gap-3 px-4"
-      style={{ minHeight: 62 }}
-    >
-      <View style={{ width: 24, alignItems: 'center' }}>
-        <SfIcon name={row.icon} size={18} color={Colors.text1} />
-      </View>
-      <View style={{ flex: 1, minWidth: 0, paddingVertical: 9, gap: 1 }}>
-        <ThemedText variant="bodySmall" tone="secondary" numberOfLines={1}>
-          {label}
-        </ThemedText>
-        <ThemedText variant="bodyMedium" numberOfLines={1} selectable>
-          {row.value}
-        </ThemedText>
-      </View>
-      <SfIcon name="arrow.up.right" size={13} color={Colors.text3} />
-      {divided ? <RowDivider /> : null}
-    </PressableScale>
+    <Animated.View entering={fadeUpIn(row.index ?? 0, reduceMotion)}>
+      <PressableScale
+        onPress={open}
+        accessibilityRole="link"
+        accessibilityLabel={`${label}, ${row.value}`}
+        className="flex-row items-center gap-3 px-4"
+        style={{ minHeight: 62 }}
+      >
+        <View style={{ width: 24, alignItems: 'center' }}>
+          {row.brand ? <BrandIcon name={row.brand} size={20} color={Colors.text1} /> :
+            <SfIcon name={row.icon ?? 'link'} size={18} color={Colors.text1} />}
+        </View>
+        <View style={{ flex: 1, minWidth: 0, paddingVertical: 9, gap: 1 }}>
+          {label ? (
+            <ThemedText variant="bodySmall" tone="secondary" numberOfLines={1}>{label}</ThemedText>
+          ) : null}
+          <ThemedText variant="bodyMedium" numberOfLines={1} selectable>
+            {row.value}
+          </ThemedText>
+        </View>
+        <SfIcon name="arrow.up.right" size={13} color={Colors.text3} />
+        {divided ? <RowDivider /> : null}
+      </PressableScale>
+    </Animated.View>
   );
 }
 
@@ -180,24 +191,6 @@ function isHttpUrl(raw: string): boolean {
     return protocol === 'http:' || protocol === 'https:';
   } catch {
     return false;
-  }
-}
-
-function socialIcon(platform: SocialPlatform): SFSymbol {
-  switch (platform) {
-    case 'Website':
-      return 'globe';
-    case 'Instagram':
-      return 'camera';
-    case 'LinkedIn':
-      return 'person.text.rectangle';
-    case 'Twitter':
-      return 'at';
-    case 'Facebook':
-      return 'person.crop.circle';
-    case 'GitHub':
-    case 'Other':
-      return 'link';
   }
 }
 

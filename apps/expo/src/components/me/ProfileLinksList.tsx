@@ -3,6 +3,8 @@
  * directly from a 44pt drag handle, and earns a status pill only from matching
  * completed verification evidence.
  */
+import Animated, { useReducedMotion } from 'react-native-reanimated';
+import { fadeUpIn } from '@/feedback/motion';
 import { useFocusEffect } from 'expo-router';
 import {
   useCallback,
@@ -31,7 +33,7 @@ import { appAlert } from '@/feedback/appAlert';
 import { pushToast } from '@/feedback/toast';
 import { useTranslation } from '@/i18n';
 import { verifyHttpsOwnership, type HttpsOwnershipEvidence } from '@/profile/httpsOwnership';
-import { brandIconForLink } from '@/profile/linkPresentation';
+import { linkDisplay, linkSecondaryLabel } from '@/profile/linkPresentation';
 import { visibilityAt, type LinkVisibility } from '@/profile/projection';
 import { useProfileStore } from '@/profile/store';
 import {
@@ -234,6 +236,7 @@ function LinkRowsSection({
   const { t } = useTranslation();
   const c = useThemeColors();
   const drag = useRowDragController();
+  const reduceMotion = useReducedMotion();
   if (entries.length === 0) return null;
   return (
     <View style={{ gap: 8 }}>
@@ -253,63 +256,60 @@ function LinkRowsSection({
                 paddingVertical: 0,
                 paddingHorizontal: 0,
               }}>
-              <RowDragHandle
-                controller={drag}
-                label={t('mePage.reorderLink', { label: link.label || link.url })}
-                index={sectionIndex}
-                itemCount={entries.length}
-                stride={FIELD_ROW_STRIDE}
-                height={FIELD_ROW_HEIGHT}
-                disabled={disabled}
-                onMove={(destination) => {
-                  const target = entries[destination];
-                  if (target) onReorder(sourceIndex, target.sourceIndex);
-                  // Same-task reset: the committed order and the identity
-                  // transforms must reach the UI on the same frame.
-                  resetRowDrag(drag);
-                }}
-              />
-              <PressableScale
-                fill
-                haptic="tap"
-                onPress={onEdit}
-                onLongPress={() => { onOpenLink(link); }}
-                accessibilityRole="button"
-                accessibilityLabel={link.label.length > 0 ? link.label : link.url}
-                accessibilityHint={t('mePage.editLinkHint')}
-                style={{
-                  minHeight: FIELD_ROW_HEIGHT,
-                  flexDirection: 'row',
-                  alignItems: 'center',
-                  gap: 10,
-                  paddingVertical: 8,
-                  paddingRight: 12,
-                }}>
-                <View style={iconTileStyle(c.chipSurface)}>
-                  <BrandIcon
-                    name={brandIconForLink(link.label, link.url)}
-                    size={ICON_TILE_GLYPH}
-                    color={Colors.primaryBlue}
-                  />
-                </View>
-                <View className="flex-1" style={{ gap: 1 }}>
-                  {link.label.length > 0 ? (
-                    <ThemedText variant="bodyMedium" numberOfLines={1}>
-                      {link.label}
+              <Animated.View entering={fadeUpIn(sectionIndex, reduceMotion)} style={{ flex: 1, flexDirection: 'row', alignItems: 'center' }}>
+                <RowDragHandle
+                  controller={drag}
+                  label={t('mePage.reorderLink', { label: linkDisplay(link.label, link.url).text })}
+                  index={sectionIndex}
+                  itemCount={entries.length}
+                  stride={FIELD_ROW_STRIDE}
+                  height={FIELD_ROW_HEIGHT}
+                  disabled={disabled}
+                  onMove={(destination) => {
+                    const target = entries[destination];
+                    if (target) onReorder(sourceIndex, target.sourceIndex);
+                    // Same-task reset: the committed order and the identity
+                    // transforms must reach the UI on the same frame.
+                    resetRowDrag(drag);
+                  }}
+                />
+                <PressableScale
+                  fill
+                  haptic="tap"
+                  onPress={onEdit}
+                  onLongPress={() => { onOpenLink(link); }}
+                  accessibilityRole="button"
+                  accessibilityLabel={linkDisplay(link.label, link.url).text}
+                  accessibilityHint={t('mePage.editLinkHint')}
+                  style={{
+                    minHeight: FIELD_ROW_HEIGHT,
+                    flexDirection: 'row',
+                    alignItems: 'center',
+                    gap: 10,
+                    paddingVertical: 8,
+                    paddingRight: 12,
+                  }}>
+                  <View style={iconTileStyle(c.chipSurface)}>
+                    <BrandIcon
+                      name={linkDisplay(link.label, link.url).brand}
+                      size={ICON_TILE_GLYPH}
+                      color={Colors.primaryBlue}
+                    />
+                  </View>
+                  <View style={{ flex: 1, gap: 1 }}>
+                    <ThemedText variant="bodyMedium" numberOfLines={1} ellipsizeMode="middle">
+                      {linkDisplay(link.label, link.url).text}
                     </ThemedText>
-                  ) : null}
-                  <ThemedText
-                    variant="caption"
-                    tone="tertiary"
-                    numberOfLines={1}
-                    ellipsizeMode="middle"
-                    style={{ fontFamily: 'Menlo' }}>
-                    {link.url}
-                  </ThemedText>
-                </View>
-                {status ? <VerificationPill status={status} /> : null}
-                <SfIcon name="chevron.right" size={13} color={Colors.text3} />
-              </PressableScale>
+                    {linkSecondaryLabel(link.label, link.url) ? (
+                      <ThemedText variant="caption" tone="tertiary" numberOfLines={1}>
+                        {linkSecondaryLabel(link.label, link.url)}
+                      </ThemedText>
+                    ) : null}
+                  </View>
+                  {status ? <VerificationPill status={status} /> : null}
+                  <SfIcon name="chevron.right" size={13} color={Colors.text3} />
+                </PressableScale>
+              </Animated.View>
             </DraggableRow>
           );
         })}

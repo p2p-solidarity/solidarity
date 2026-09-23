@@ -109,7 +109,7 @@ describe('v2 product language surfaces', () => {
   it('gives every public Page link a nonempty accessible name', () => {
     const pagePreview = source('../../src/components/me/PagePreviewItems.tsx');
 
-    expect(pagePreview).toContain('accessibilityLabel={item.title.trim() || url}');
+    expect(pagePreview).toContain('accessibilityLabel={item.title.trim() || linkDisplay(item.title, url).text}');
   });
 
   it('labels the presentation QR as a localized product-safe image', () => {

@@ -1891,6 +1891,7 @@
   "peopleList.declaredBadge": "未驗證",
   "peopleList.declaredImportConfirm": "儲存為未驗證頁面",
   "peopleList.declaredSaved": "已儲存為未驗證頁面",
+  "links.yourPageLink": "你的頁面連結",
   "linkPageImport.urlLabel": "連結頁網址",
   "linkPageImport.urlPlaceholder": "https://linktr.ee/username",
   "linkPageImport.fetch": "讀取",

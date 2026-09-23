@@ -7,6 +7,8 @@
  * opens URLs, and only after `isRenderableLinkUrl` re-checks a locally edited
  * draft that has not been through `parseProfile`.
  */
+import Animated, { useReducedMotion } from 'react-native-reanimated';
+import { fadeUpIn } from '@/feedback/motion';
 import { Image } from 'expo-image';
 import type { ReactNode } from 'react';
 import { Linking, View } from 'react-native';
@@ -18,7 +20,7 @@ import { ThemedText } from '@/components/themed';
 import { PageTemplateColors } from '@/constants/Colors';
 import { appAlert } from '@/feedback/appAlert';
 import { useTranslation } from '@/i18n';
-import { brandIconForLink } from '@/profile/linkPresentation';
+import { linkDisplay, linkSecondaryLabel } from '@/profile/linkPresentation';
 import { isRenderableLinkUrl } from '@solidarity/shared';
 
 import {
@@ -56,7 +58,7 @@ export function ItemPressable({
     <PressableScale
       haptic="tap"
       accessibilityRole="link"
-      accessibilityLabel={item.title.trim() || url}
+      accessibilityLabel={item.title.trim() || linkDisplay(item.title, url).text}
       fill={fill}
       style={fill ? { flex: 1 } : undefined}
       onPress={() => {
@@ -140,10 +142,12 @@ export function LinkCard({
 }: BlockRenderProps & { readonly item: PreviewItem }): ReactNode {
   const { palette, metrics, textColor, fontFamily, variant } = render;
   const mediaUrl = item.media && isRenderableLinkUrl(item.media) ? item.media : null;
-  const displayUrl = item.url ? item.url.replace(/^https?:\/\//u, '') : null;
+  const reduceMotion = useReducedMotion();
+  const displayUrl = item.url ? linkDisplay(item.title, item.url).text : null;
+  const caption = item.url ? linkSecondaryLabel(item.title, item.url) : null;
   return (
     <ItemPressable item={item} variant={variant}>
-      <View style={previewCardStyle(palette, metrics)}>
+      <Animated.View entering={fadeUpIn(0, reduceMotion)} style={[previewCardStyle(palette, metrics), { minHeight: 44 }]}>
         <View
           style={{
             width: metrics.linkIcon,
@@ -163,26 +167,29 @@ export function LinkCard({
             />
           ) : (
             <BrandIcon
-              name={brandIconForLink(item.title, item.url ?? '')}
+              name={linkDisplay(item.title, item.url ?? '').brand}
               size={metrics.linkIcon >= 44 ? 22 : 18}
               color={palette.iconTint}
             />
           )}
         </View>
         <View style={{ flex: 1, gap: 1 }}>
-          <ThemedText variant="bodyLarge" numberOfLines={1} style={{ color: textColor, fontFamily }}>
-            {item.title}
-          </ThemedText>
-          {displayUrl ? (
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+            {mediaUrl ? <BrandIcon name={linkDisplay(item.title, item.url ?? '').brand} size={18} color={palette.iconTint} /> : null}
+            <ThemedText variant="bodyLarge" numberOfLines={1} style={{ color: textColor, fontFamily, flexShrink: 1 }}>
+              {displayUrl ?? item.title}
+            </ThemedText>
+          </View>
+          {caption ? (
             <ThemedText
               variant="caption"
               numberOfLines={1}
-              style={{ color: palette.subtle, opacity: palette.subtleOpacity, fontFamily: 'Menlo' }}>
-              {displayUrl}
+              style={{ color: palette.subtle, opacity: palette.subtleOpacity, fontFamily }}>
+              {caption}
             </ThemedText>
           ) : null}
         </View>
-      </View>
+      </Animated.View>
     </ItemPressable>
   );
 }

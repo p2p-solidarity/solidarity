@@ -6,6 +6,8 @@ import { useWindowDimensions, View } from 'react-native';
 
 import { CopyableAddress } from '@/components/common/CopyableAddress';
 import { PressableScale } from '@/components/common/PressableScale';
+import { BrandIcon } from '@/components/icons/BrandIcon';
+import { brandIconForHost } from '@/profile/linkPresentation';
 import { ThemedText } from '@/components/themed';
 import { Colors } from '@/constants/Colors';
 import { useTranslation } from '@/i18n';
@@ -94,14 +96,16 @@ export function ProfileHero({
           </ThemedText>
 
           {shareUrl !== null && displayShareUrl !== null ? (
-            <CopyableAddress
-              compact
-              address={shareUrl}
-              displayAddress={displayShareUrl}
-              accessibilityLabel={t('meHome.copyPageUrl', { url: displayShareUrl })}
-              copiedMessage={t('meHome.pageUrlCopied')}
-              failedMessage={t('meHome.pageUrlCopyFailed')}
-            />
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+              <BrandIcon name={brandIconForHost(shareUrl)} size={16} color={Colors.text2} />
+              <CopyableAddress
+                address={shareUrl}
+                displayAddress={displayShareUrl}
+                accessibilityLabel={t('meHome.copyPageUrl', { url: displayShareUrl })}
+                copiedMessage={t('meHome.pageUrlCopied')}
+                failedMessage={t('meHome.pageUrlCopyFailed')}
+              />
+            </View>
           ) : null}
         </View>
 
