@@ -1,6 +1,6 @@
 /**
  * DAG replay — LWW + revocation + perf gate.
- * Spec: docs/dev-sandbox-identity-graph.md §6.3, §6.4, §13.3.
+ * Spec: docs/ref/notes-dev-sandbox-identity-graph.md §6.3, §6.4, §13.3.
  */
 import { describe, expect, test } from 'bun:test';
 

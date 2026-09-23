@@ -95,7 +95,7 @@ void mock.module('react-native', () => ({
   Platform: { OS: 'ios' },
 }));
 
-void mock.module('@solidarity/nitro-cloudkit', () => ({
+void mock.module('@solidarity/nitro-keystone', () => ({
   getCloudKit: () => ({
     initialize: (): Promise<undefined> => Promise.resolve(undefined),
     saveRecord: (rec: CloudKitRecord): Promise<CloudKitRecord> => {

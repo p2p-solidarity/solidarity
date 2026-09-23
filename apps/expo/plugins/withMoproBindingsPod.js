@@ -14,7 +14,7 @@ const path = require('node:path');
 const { withDangerousMod } = require('@expo/config-plugins');
 
 const POD_LINE =
-  "  pod 'MoproBindings', :path => '../../../nitro-modules/passport-zk/mopro'";
+  "  pod 'MoproBindings', :path => '../../../nitro-modules/attest/mopro'";
 
 const withMoproBindingsPod = (config) =>
   withDangerousMod(config, [
@@ -36,7 +36,7 @@ const withMoproBindingsPod = (config) =>
       }
       const patched = original.replace(
         anchor,
-        `${anchor}\n\n  # Sibling pod to PassportZK — see plugins/withMoproBindingsPod.js\n${POD_LINE}`
+        `${anchor}\n\n  # Sibling pod to Attest — see plugins/withMoproBindingsPod.js\n${POD_LINE}`
       );
       fs.writeFileSync(podfilePath, patched);
       console.log(`[withMoproBindingsPod] injected MoproBindings pod into Podfile`);

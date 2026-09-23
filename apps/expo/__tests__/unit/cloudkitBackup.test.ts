@@ -40,7 +40,7 @@
  * surface is fully mocked here.
  *
  * TODO(nitro): replace the stubbed `nitro-cloudkit` module with the real
- * native bridge once nitro-modules/cloudkit lands (see
+ * native bridge once nitro-modules/keystone (cloudkit lane) lands (see
  * docs/migration/12-icloud-bridge.md). The fake's surface is the minimum
  * the real bridge must expose: writeRecord / readLatestRecord / exists /
  * latestRecordTimestamp.
@@ -78,7 +78,7 @@ const FIXED_MASTER_KEY = new Uint8Array(32).fill(0xb1);
 
 // ── Stubbed nitro CloudKit module ───────────────────────────────────────────
 //
-// Surface mirrors what a `@solidarity/nitro-cloudkit` HybridObject would
+// Surface mirrors what a `@solidarity/nitro-keystone` HybridObject would
 // expose. Records are stored in-memory under their recordName.
 //
 // TODO(nitro-cloudkit): replace this fake with the real module surface. The

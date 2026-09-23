@@ -55,6 +55,8 @@ import {
 } from './contactManifest';
 
 let localWipeGeneration = 0;
+let contactMutationGeneration = 0;
+let contactHydrationPromise: Promise<void> | null = null;
 
 interface ContactStoreState {
   readonly manifest: readonly ContactManifestEntry[];
@@ -83,31 +85,62 @@ export const useContactStore = create<ContactStoreState>((set, get) => ({
     if (seed) set({ manifest: seed });
   },
 
-  hydrate: async () => {
+  hydrate: () => {
     const generation = localWipeGeneration;
     const writeEpoch = captureLocalDataEpoch();
-    if (!canCommitLocalData(writeEpoch)) return;
-    if (get().detailsHydrated) return;
-    // `loadAllContacts` is tolerant — corrupt rows are skipped by the
-    // underlying `loadAllEncrypted` helper, so a single bad blob can't
-    // wedge the whole list.
-    const list = await loadAllContacts();
-    if (generation !== localWipeGeneration || !canCommitLocalData(writeEpoch)) return;
-    const details = new Map<string, Contact>();
-    for (const c of list) details.set(c.id, c);
-    const manifest = list.map(toContactManifest);
-    ManifestStorage.set(CONTACTS_MANIFEST_SCOPE, manifest);
-    set({ manifest, details, detailsHydrated: true });
+    if (!canCommitLocalData(writeEpoch) || get().detailsHydrated) {
+      return Promise.resolve();
+    }
+    if (contactHydrationPromise) return contactHydrationPromise;
+
+    const hydrateLatest = async (): Promise<void> => {
+      // A delete/upsert can land while an encrypted row is being decrypted.
+      // In that case the loaded array is stale, so read the current storage
+      // snapshot again instead of resurrecting the deleted/old record in the
+      // manifest. Concurrent callers share this one retrying promise.
+      while (generation === localWipeGeneration && canCommitLocalData(writeEpoch)) {
+        const mutationGeneration = contactMutationGeneration;
+        // `loadAllContacts` is tolerant — corrupt rows are skipped by the
+        // underlying `loadAllEncrypted` helper, so a single bad blob can't
+        // wedge the whole list.
+        const list = await loadAllContacts();
+        if (generation !== localWipeGeneration || !canCommitLocalData(writeEpoch)) return;
+        if (mutationGeneration !== contactMutationGeneration) continue;
+
+        const details = new Map<string, Contact>();
+        for (const c of list) details.set(c.id, c);
+        const manifest = list.map(toContactManifest);
+        ManifestStorage.set(CONTACTS_MANIFEST_SCOPE, manifest);
+        set({ manifest, details, detailsHydrated: true });
+        return;
+      }
+    };
+
+    const pending = hydrateLatest();
+    contactHydrationPromise = pending;
+    void pending.then(
+      () => {
+        if (contactHydrationPromise === pending) contactHydrationPromise = null;
+      },
+      () => {
+        if (contactHydrationPromise === pending) contactHydrationPromise = null;
+      },
+    );
+    return pending;
   },
 
   loadDetail: async (id) => {
     const generation = localWipeGeneration;
     const writeEpoch = captureLocalDataEpoch();
     if (!canCommitLocalData(writeEpoch)) return null;
+    const mutationGeneration = contactMutationGeneration;
     const cached = get().details.get(id);
     if (cached) return cached;
     const contact = await loadContact(id);
     if (generation !== localWipeGeneration || !canCommitLocalData(writeEpoch)) return null;
+    if (mutationGeneration !== contactMutationGeneration) {
+      return get().details.get(id) ?? null;
+    }
     if (!contact) return null;
     set((s) => {
       const next = new Map(s.details);
@@ -121,6 +154,7 @@ export const useContactStore = create<ContactStoreState>((set, get) => ({
     const generation = localWipeGeneration;
     const writeEpoch = captureLocalDataEpoch();
     if (!canCommitLocalData(writeEpoch)) return;
+    contactMutationGeneration += 1;
     await persistContact(contact);
     if (generation !== localWipeGeneration || !canCommitLocalData(writeEpoch)) return;
     set((s) => {
@@ -136,8 +170,9 @@ export const useContactStore = create<ContactStoreState>((set, get) => ({
     });
   },
 
-  remove: async (id) => {
-    if (!canCommitLocalData(captureLocalDataEpoch())) return;
+  remove: (id) => {
+    if (!canCommitLocalData(captureLocalDataEpoch())) return Promise.resolve();
+    contactMutationGeneration += 1;
     removeFromStorage(id);
     set((s) => {
       const nextManifest = s.manifest.filter((m) => m.id !== id);
@@ -146,6 +181,7 @@ export const useContactStore = create<ContactStoreState>((set, get) => ({
       nextDetails.delete(id);
       return { manifest: nextManifest, details: nextDetails };
     });
+    return Promise.resolve();
   },
 
   resetForLocalWipe: () => {

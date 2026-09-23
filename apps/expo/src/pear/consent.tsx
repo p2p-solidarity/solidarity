@@ -22,9 +22,10 @@
  * checked) or the short did, never anything claimed over the channel.
  */
 import { useEffect, useState, type ReactNode } from 'react';
-import { Modal, Pressable, StyleSheet, View } from 'react-native';
+import { Pressable, StyleSheet, View } from 'react-native';
 import { create } from 'zustand';
 
+import { WindowOverlay } from '@/components/common/WindowOverlay';
 import { SfIcon } from '@/components/icons/SfIcon';
 import { ThemedButton, ThemedSurface, ThemedText } from '@/components/themed';
 import { Colors } from '@/constants/Colors';
@@ -110,12 +111,9 @@ export function PearConsentOverlay(): ReactNode {
   };
 
   return (
-    <Modal
-      transparent
+    <WindowOverlay
       visible={head !== undefined}
-      animationType="fade"
       onRequestClose={onDecline}
-      statusBarTranslucent
     >
       {head ? (
         <View style={styles.root}>
@@ -159,7 +157,7 @@ export function PearConsentOverlay(): ReactNode {
           </Pressable>
         </View>
       ) : null}
-    </Modal>
+    </WindowOverlay>
   );
 }
 
@@ -281,12 +279,9 @@ export function PearPresentConsentOverlay(): ReactNode {
   };
 
   return (
-    <Modal
-      transparent
+    <WindowOverlay
       visible={head !== undefined}
-      animationType="fade"
       onRequestClose={onDecline}
-      statusBarTranslucent
     >
       {head ? (
         <View style={styles.root}>
@@ -355,6 +350,6 @@ export function PearPresentConsentOverlay(): ReactNode {
           </Pressable>
         </View>
       ) : null}
-    </Modal>
+    </WindowOverlay>
   );
 }

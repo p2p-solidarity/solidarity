@@ -92,7 +92,7 @@ function capitalize(s: string): string {
 function levelColorForTone(tone: TrustDisplayTone): string {
   switch (tone) {
     case 'green':
-      return Colors.terminalGreen;
+      return Colors.terminalGreenText;
     case 'blue':
       return Colors.primaryBlue;
     default:

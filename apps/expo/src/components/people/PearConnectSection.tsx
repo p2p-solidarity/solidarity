@@ -32,6 +32,7 @@ import { router } from 'expo-router';
 import { useState, type ReactNode } from 'react';
 import { View } from 'react-native';
 
+import { InfoButton } from '@/components/common/InfoSheet';
 import { SfIcon } from '@/components/icons/SfIcon';
 import { shortDid } from '@/components/id/shortDid';
 import { VerifiedProfileView } from '@/components/scan/VerifiedProfileView';
@@ -115,10 +116,24 @@ function EnabledPearConnectSection({ did }: PearConnectSectionProps): ReactNode 
 
   return (
     <View style={{ gap: 16 }}>
-      <ThemedText variant="titleMedium">{t('pearConnect.title')}</ThemedText>
-      <ThemedText variant="bodyMedium" tone="secondary">
-        {t('pearConnect.subtitle', { did: shortDid(did) })}
-      </ThemedText>
+      <View style={{ gap: 6 }}>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+          <ThemedText variant="titleMedium" style={{ flex: 1 }}>
+            {t('pearConnect.title')}
+          </ThemedText>
+          <InfoButton title={t('pearConnect.title')} body={t('pearConnect.info')} />
+        </View>
+        {/* State, not a paragraph: who this claims to be, and that it is
+            unproven until the handshake says otherwise. Allowed to wrap —
+            "unverified" must never be ellipsized away; `shortDid` already
+            keeps the did itself short. */}
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+          <SfIcon name="shield" size={14} color={Colors.text3} />
+          <ThemedText variant="bodySmall" tone="secondary" style={{ flex: 1 }}>
+            {t('pearConnect.subtitle', { did: shortDid(did) })}
+          </ThemedText>
+        </View>
+      </View>
 
       <ThemedSurface variant="outlined" padded style={{ gap: 12 }}>
         <ThemedButton

@@ -1,12 +1,12 @@
 /**
- * v2 Settings hub. Section and row order follows solidarity-spec/v2.html;
- * protocol inspectors and credential tools remain behind the five-tap
- * Developer Options entry.
+ * v2 Settings hub. The public page is deliberately first because its username
+ * is the account's shareable address. Protocol inspectors and credential tools
+ * remain behind the five-tap Developer Options unlock.
  */
 import Constants from 'expo-constants';
-import { router } from 'expo-router';
+import { router, useFocusEffect } from 'expo-router';
 import { safeBack } from '@/navigation/safeBack';
-import { useRef } from 'react';
+import { useCallback, useRef, useState } from 'react';
 import { Pressable, ScrollView, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -17,6 +17,7 @@ import {
   SettingsBlockSectionHeader,
   SettingsScreenTitle,
 } from '@/components/settings/SettingsBlocks';
+import { readPasskeyCount } from '@/identity/passkeyRegistry';
 import { haptic } from '@/feedback/haptics';
 import { pushToast } from '@/feedback/toast';
 import { useTranslation } from '@/i18n';
@@ -32,6 +33,8 @@ export default function SettingsHub() {
   const backupEnabled = usePreferences((s) => s.backupEnabled);
   const setPref = usePreferences((s) => s.set);
   const tapCountRef = useRef(0);
+  const [passkeyCount, setPasskeyCount] = useState<ReturnType<typeof readPasskeyCount> | null>(null);
+  useFocusEffect(useCallback(() => { setPasskeyCount(readPasskeyCount()); }, []));
 
   const version = Constants.expoConfig?.version ?? 'Unknown';
 
@@ -72,6 +75,17 @@ export default function SettingsHub() {
         contentContainerStyle={{ paddingTop: 24, paddingBottom: 60 + insets.bottom }}
       >
         <View className="gap-6">
+          <SettingsBlockSection title={t('settingsHub.publicPage')}>
+            <SettingsBlockRow
+              icon="at"
+              title={t('settingsHub.myUsername')}
+              subtitle={publicPageUsername
+                ? publicPagePath(publicPageUsername)
+                : t('settingsHub.usernamePrompt')}
+              onPress={() => { router.push('/settings/username'); }}
+            />
+          </SettingsBlockSection>
+
           {/* Account */}
           <SettingsBlockSection title={t('settingsHub.accountIdentity')}>
             <SettingsBlockRow
@@ -80,15 +94,16 @@ export default function SettingsHub() {
               onPress={() => { router.push('/me/edit'); }}
             />
             <SettingsBlockRow
+              icon="key.fill"
+              title={t('settingsHub.passkeys')}
+              trailingText={passkeyCount === null ? t('settingsHub.passkeysLoading') : passkeyCount.ok
+                ? t('settingsHub.passkeysCount', { count: passkeyCount.value }) : t('settingsHub.passkeysUnavailable')}
+              onPress={() => { router.push('/settings/passkeys'); }}
+            />
+            <SettingsBlockRow
               icon="lock.shield"
               title={t('settingsHub.accountProtection')}
               onPress={() => { router.push('/settings/security'); }}
-            />
-            <SettingsBlockRow
-              icon="at"
-              title={t('settingsHub.myUsername')}
-              trailingText={publicPageUsername ? publicPagePath(publicPageUsername) : undefined}
-              onPress={() => { router.push('/settings/username'); }}
             />
             <SettingsBlockRow
               icon="icloud"
@@ -146,8 +161,16 @@ export default function SettingsHub() {
           </SettingsBlockSection>
 
           <SettingsBlockSection title={t('settingsHub.advancedSection')}>
+            {developerMode ? (
+              <SettingsBlockRow
+                icon="hammer"
+                title={t('developer.title')}
+                subtitle={t('settingsHub.developerSubtitle')}
+                onPress={() => { router.push('/settings/developer'); }}
+              />
+            ) : null}
             <SettingsBlockRow
-              icon="slider.horizontal.3"
+              icon="arrow.counterclockwise"
               title={t('settingsHub.advanced')}
               subtitle={t('settingsHub.advancedSubtitle')}
               onPress={() => { router.push('/settings/advanced'); }}

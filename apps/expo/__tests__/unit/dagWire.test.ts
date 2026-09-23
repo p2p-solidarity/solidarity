@@ -1,6 +1,6 @@
 /**
  * DAG wire frameKind multiplex — round-trip + drain + dispatch tests.
- * Spec: docs/dev-sandbox-identity-graph.md §5.1.
+ * Spec: docs/ref/notes-dev-sandbox-identity-graph.md §5.1.
  */
 import { describe, expect, test } from 'bun:test';
 

@@ -14,17 +14,18 @@ import { safeBack } from '@/navigation/safeBack';
 import { useCallback, useEffect, useState } from 'react';
 import {
   Pressable,
-  ScrollView,
   Text,
   View,
 } from 'react-native';
+import { KeyboardAwareScrollView } from 'react-native-keyboard-controller';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { useCardStore } from '@/cards/cardManager';
+import { authorizeCardDeletion } from '@/cards/deleteCardGate';
 import { AnimalSelectorGrid, BusinessCardForm } from '@/components/cards';
 import { SfIcon } from '@/components/icons/SfIcon';
 import { PressableScale } from '@/components/common/PressableScale';
-import { appAlert } from '@/feedback/appAlert';
+import { appAlert, showError } from '@/feedback/appAlert';
 import { Colors } from '@/constants/Colors';
 import { haptic } from '@/feedback/haptics';
 import { pushToast } from '@/feedback/toast';
@@ -88,11 +89,23 @@ export default function EditCardScreen() {
 
   const handleDelete = useCallback(async () => {
     if (!targetCard) return;
-    await remove(targetCard.id);
-    haptic('warning');
-    pushToast('Card deleted', 'info');
-    safeBack();
-  }, [remove, targetCard]);
+    try {
+      // Confirmed by the form already; Face ID is the shared gate every
+      // deletion surface passes (see deleteCardGate.ts for the tier choice).
+      if (!(await authorizeCardDeletion(t))) return;
+      await remove(targetCard.id);
+      haptic('warning');
+      pushToast(t('cardsList.deleted'), 'info');
+      safeBack();
+    } catch (error) {
+      haptic('error');
+      showError({
+        context: 'Cards › Delete Card',
+        summary: t('cardsList.deleteFailed'),
+        error,
+      });
+    }
+  }, [remove, targetCard, t]);
 
   return (
     <View className="flex-1 bg-pageBg" style={{ paddingTop: insets.top }}>
@@ -103,12 +116,13 @@ export default function EditCardScreen() {
         }}
       />
 
-      <ScrollView
+      <KeyboardAwareScrollView
         contentContainerStyle={{
           paddingTop: 24,
           paddingBottom: insets.bottom + 48,
         }}
         keyboardShouldPersistTaps="handled"
+        bottomOffset={16}
       >
         <View style={{ gap: 24 }}>
           <AnimalBlock
@@ -133,7 +147,7 @@ export default function EditCardScreen() {
             onDelete={isEditing ? handleDelete : undefined}
           />
         </View>
-      </ScrollView>
+      </KeyboardAwareScrollView>
     </View>
   );
 }

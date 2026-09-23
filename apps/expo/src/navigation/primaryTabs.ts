@@ -1,7 +1,7 @@
 export type PrimaryTabIcon =
-  | 'person.crop.circle'
-  | 'square.and.arrow.up'
-  | 'person.2';
+  | 'tab-page'
+  | 'tab-present'
+  | 'tab-contacts';
 
 export const PRIMARY_TAB_HREFS = {
   page: '/(tabs)/me',
@@ -17,19 +17,19 @@ export const PRIMARY_TABS = [
     route: 'me/index',
     titleKey: 'tab.page',
     fallbackLabel: 'Page',
-    icon: 'person.crop.circle',
+    icon: 'tab-page',
   },
   {
     route: 'verify/index',
     titleKey: 'tab.present',
     fallbackLabel: 'Present',
-    icon: 'square.and.arrow.up',
+    icon: 'tab-present',
   },
   {
     route: 'people/index',
     titleKey: 'tab.contacts',
     fallbackLabel: 'Contacts',
-    icon: 'person.2',
+    icon: 'tab-contacts',
   },
 ] as const satisfies readonly {
   readonly route: string;

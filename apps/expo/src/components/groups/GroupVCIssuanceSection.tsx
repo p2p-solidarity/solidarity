@@ -4,42 +4,29 @@
  *
  * Sits inside the GroupDetailView "Admin Tools" stack:
  *   • Header "Issue Group Credential" (12pt mono bold text2)
- *   • If `canIssue` (owner OR in credentialIssuers): Primary "Issue New
- *     Group VC" button (doc.badge.plus) + optional summary line from the
- *     most-recent issuance.
- *   • Otherwise: lock.fill icon + "Only credential issuers can issue
- *     Group VCs" hint.
- *   • Tapping the button pushes /groups/[id]/issue-vc.
+ * Group issuance remains visible as a disabled developer capability until
+ * the signing and delivery services exist. It must never fabricate a VC.
  */
 import type { ReactNode } from 'react';
-import { router } from 'expo-router';
-import { useState } from 'react';
 import { Text, View } from 'react-native';
 
 import { SectionHeader } from './GroupDetailSections';
 import { SfIcon } from '@/components/icons/SfIcon';
 import { ThemedButton } from '@/components/themed';
 import { Colors } from '@/constants/Colors';
-import {
-  canIssueCredentials as canIssue,
-  type GroupModel,
-} from '@/groups/store';
+import { useTranslation } from '@/i18n';
+import type { GroupModel } from '@/groups/store';
 
 const MONO_FONT = 'Menlo';
 
 export interface GroupVCIssuanceSectionProps {
   readonly group: GroupModel;
-  /** Optional summary surfaced from a prior issuance (parent owns state). */
-  readonly lastIssuanceSummary?: string | null;
 }
 
 export function GroupVCIssuanceSection({
-  group,
-  lastIssuanceSummary,
+  group: _group,
 }: GroupVCIssuanceSectionProps): ReactNode {
-  const [internalSummary] = useState<string | null>(null);
-  const summary = lastIssuanceSummary ?? internalSummary;
-  const allowed = canIssue(group);
+  const { t } = useTranslation();
 
   return (
     <View
@@ -48,39 +35,19 @@ export function GroupVCIssuanceSection({
     >
       <SectionHeader title="Issue Group Credential" />
 
-      {allowed ? (
-        <>
-          <ThemedButton
-            variant="primary"
-            label="Issue New Group VC"
-            fullWidth
-            leadingIcon={
-              <SfIcon name="doc.badge.plus" size={14} color={Colors.text1} />
-            }
-            onPress={() => {
-              router.push({
-                pathname: '/groups/[id]/issue-vc',
-                params: { id: group.id },
-              });
-            }}
-          />
-          {summary ? (
-            <Text
-              style={{ fontFamily: MONO_FONT }}
-              className="text-text3 text-[12px]"
-            >
-              {summary}
-            </Text>
-          ) : null}
-        </>
-      ) : (
-        <View className="flex-row items-center" style={{ gap: 8 }}>
-          <SfIcon name="lock.fill" size={14} color={Colors.text3} />
-          <Text className="text-text2 text-[14px] flex-1">
-            Only credential issuers can issue Group VCs
-          </Text>
-        </View>
-      )}
+      <ThemedButton
+        variant="secondary"
+        label={t('groupIssue.unavailableButton')}
+        fullWidth
+        disabled
+        leadingIcon={<SfIcon name="lock.fill" size={14} color={Colors.text3} />}
+      />
+      <Text
+        style={{ fontFamily: MONO_FONT }}
+        className="text-text3 text-[12px]"
+      >
+        {t('groupIssue.unavailableReason')}
+      </Text>
     </View>
   );
 }

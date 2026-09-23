@@ -68,6 +68,12 @@ Sharing tab 移除;MultipeerConnectivity P2P 交換流程刪除。加聯絡人 =
 
 ## 5. 徽章庫(S / A / B / C)
 
+> **2026-08-25 修訂**:本節的 S/A/B/C 分級字母**作廢**,對外與新文件一律改用 creds T1 分級
+> (`creds-design/CREDS.md` §3.1:**A**=證據在公開網路、訪客可自行複驗/**B**=一次性授權、
+> 事後不可重現/**C**=國家 PKI、信任錨為 CSCA)。映射:本表 S 與 C(公開表面)→ creds **A**;
+> 本表 A(政府硬體)→ creds **C**;B 不變。驗證卡文案以 creds T1 的措辭為準。
+> 下表的徽章內容(協定/驗證方式)仍有效,只有字母換掉。裁決紀錄:`05-spec-qr-exchange.md` §8-C。
+
 | 級 | 徽章 | 綁定協定 | 驗證方式 |
 |---|---|---|---|
 | **S** 純密碼學(可離線) | Bluesky/atproto | atproto OAuth + 簽名 record,`alsoKnownAs` 雙向 | 驗 DID doc 鏈 + record 簽章 |

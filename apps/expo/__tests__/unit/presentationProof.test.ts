@@ -15,6 +15,7 @@ import { decompressQR } from '../../src/cards/qrCompression';
 import {
   buildPresentationProofPayload,
   buildPresentationProofQrPages,
+  disclosureErrorI18nKey,
   initialPresentationClaimIds,
   isPresentationDisabled,
   type PresentationCredential,
@@ -423,5 +424,57 @@ describe('presentation proof — no full-VC leak on a subset', () => {
     if (result.ok) return;
     expect(result.error.code).toBe('not-redactable');
     expect(result.error.message).toContain('unverified');
+  });
+
+  // ZK honesty (CLAUDE.md): "Never present a fallback as a real ZK
+  // attestation." An openac-v3 enrollment envelope holds only dsc_chain +
+  // passport_adapter — `openac_show` is filtered out of enrollment proving
+  // (passport/openacV3.ts) — so it proves NONE of the four claims. Pairing it
+  // with `selected_claims` over-claims. Only a fresh openac_show proof, which
+  // needs the device-local show-witness, is an honest disclosure.
+  it('refuses to present an openac-v3 enrollment envelope as evidence of its claims', () => {
+    const openAcV3Cred: PresentationCredential = {
+      id: 'passport-card',
+      holderDid: HOLDER_DID,
+      rawJwt: '{"proof":"dsc-chain+passport-adapter","publicSignals":["a"]}',
+      metadataTags: ['passport-openac-v3', 'passport-noir'],
+    };
+
+    const result = buildPresentationProofPayload({
+      credential: openAcV3Cred,
+      selectedClaims: allCardClaims,
+      allClaims: allCardClaims,
+      nonce: 'n',
+    });
+
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.error.code).toBe('device-witness-missing');
+    expect(result.error.message).toContain('openac_show');
+    // The remedy shown to the user must NOT be "present all of it, or nothing"
+    // (`disclosureNotRedactable`) — that is the over-claim this refusal stops.
+    expect(disclosureErrorI18nKey(result.error)).toBe('present.rescanRequiredBody');
+  });
+
+  // The refusal must not depend on WHICH claims were selected: an empty or
+  // single-claim selection is just as unprovable from this envelope.
+  it('refuses the openac-v3 envelope regardless of how few claims are selected', () => {
+    const openAcV3Cred: PresentationCredential = {
+      id: 'passport-card',
+      holderDid: HOLDER_DID,
+      rawJwt: '{"proof":"dsc-chain+passport-adapter","publicSignals":["a"]}',
+      metadataTags: ['passport-openac-v3'],
+    };
+
+    const result = buildPresentationProofPayload({
+      credential: openAcV3Cred,
+      selectedClaims: allCardClaims.slice(0, 1),
+      allClaims: allCardClaims,
+      nonce: 'n',
+    });
+
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.error.code).toBe('device-witness-missing');
   });
 });

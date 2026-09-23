@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  AndroidManifest.xml
+  @solidarity/nitro-keystone (Android)
+
+  Minimal — only declares the package. The wrap/unwrap surface uses
+  AndroidKeyStore + the system biometric prompt; runtime biometric
+  permissions (USE_BIOMETRIC) must be declared by the consuming app
+  (already in apps/expo/app.json).
+-->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android" />

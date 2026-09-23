@@ -7,27 +7,33 @@
  *     Sakura palette + SF Symbol.
  *   • initials / relativeDate — string helpers used by gallery, detail,
  *     compose.
- *   • AvatarRing — animated double-ring avatar (Sakura profile hero).
+ *   • AvatarRing — double-ring avatar (Sakura profile hero) that breathes
+ *     once on arrival (≤ 300 ms, ease-out) instead of looping forever.
  *   • SectionCard — themed mx-4 card used by the detail Information/Tags/
  *     Message-History sections.
  *   • InfoRow / MessageBullet — list rows inside the detail sections.
+ *   • GridCard / ListRow — gallery tiles and rows for the Shoutouts hub
+ *     (moved here to keep app/shoutouts/index.tsx under the LOC ceiling).
  */
 import type { SFSymbol } from 'expo-symbols';
 import { useEffect, type ReactNode } from 'react';
 import { Text, View } from 'react-native';
 import Animated, {
-  Easing,
   cancelAnimation,
   useAnimatedStyle,
+  useReducedMotion,
   useSharedValue,
-  withRepeat,
+  withSequence,
   withTiming,
 } from 'react-native-reanimated';
 
+import { PressableScale } from '@/components/common/PressableScale';
 import { SfIcon } from '@/components/icons/SfIcon';
 import { Colors } from '@/constants/Colors';
+import { EASE_OUT, SCALE } from '@/feedback/motion';
+import { useTranslation } from '@/i18n';
 import type { Shoutout } from '@/shoutouts/store';
-import type { VerificationStatus } from '@solidarity/shared';
+import type { Contact, VerificationStatus } from '@solidarity/shared';
 
 export function verificationColor(status: VerificationStatus): string {
   switch (status) {
@@ -83,20 +89,23 @@ export function AvatarRing({
   readonly status: VerificationStatus;
   readonly animating: boolean;
 }): ReactNode {
-  const ring = useSharedValue(animating ? 1 : 0);
-  const inner = useSharedValue(animating ? 1 : 0);
+  const ring = useSharedValue(0);
+  const inner = useSharedValue(0);
+  const reduceMotion = useReducedMotion();
 
+  // One breath when the hero arrives: out and back in 280 ms (ring) / 240 ms
+  // (inner), both on the app's ease-out. The old 800/600 ms infinite loop
+  // kept the hero moving for as long as the screen was open. Reduce Motion
+  // skips it (it is pure scale).
   useEffect(() => {
-    if (animating) {
-      ring.value = withRepeat(
-        withTiming(1, { duration: 800, easing: Easing.inOut(Easing.ease) }),
-        -1,
-        true
+    if (animating && !reduceMotion) {
+      ring.value = withSequence(
+        withTiming(1, { duration: 140, easing: EASE_OUT }),
+        withTiming(0, { duration: 140, easing: EASE_OUT })
       );
-      inner.value = withRepeat(
-        withTiming(1, { duration: 600, easing: Easing.inOut(Easing.ease) }),
-        -1,
-        true
+      inner.value = withSequence(
+        withTiming(1, { duration: 120, easing: EASE_OUT }),
+        withTiming(0, { duration: 120, easing: EASE_OUT })
       );
     } else {
       cancelAnimation(ring);
@@ -108,13 +117,13 @@ export function AvatarRing({
       cancelAnimation(ring);
       cancelAnimation(inner);
     };
-  }, [animating, ring, inner]);
+  }, [animating, reduceMotion, ring, inner]);
 
   const ringStyle = useAnimatedStyle(() => ({
-    transform: [{ scale: 1 + ring.value * 0.1 }],
+    transform: [{ scale: 1 + ring.value * 0.06 }],
   }));
   const innerStyle = useAnimatedStyle(() => ({
-    transform: [{ scale: 1 + inner.value * 0.05 }],
+    transform: [{ scale: 1 + inner.value * 0.03 }],
   }));
 
   return (
@@ -222,5 +231,146 @@ export function MessageBullet({ message }: { readonly message: Shoutout }): Reac
         </Text>
       </View>
     </View>
+  );
+}
+
+export function GridCard({
+  contact,
+  onPress,
+}: {
+  readonly contact: Contact;
+  readonly onPress: () => void;
+}): ReactNode {
+  const { t } = useTranslation();
+  const { businessCard: card } = contact;
+  const subtitle = [card.title, card.company].filter(Boolean).join(' · ');
+  return (
+    <PressableScale
+      onPress={onPress}
+      haptic={false}
+      scaleTo={SCALE.tile}
+      accessibilityRole="button"
+      accessibilityLabel={t('shoutouts.openCard', { name: card.name })}
+      containerStyle={{ flex: 1, minWidth: '47%' }}
+      style={{ height: 180 }}
+      className="bg-cardBg rounded-lg border border-divider p-3"
+    >
+      <View className="flex-row items-center justify-between">
+        <View
+          className="bg-text1 items-center justify-center"
+          style={{ width: 32, height: 32, borderRadius: 16 }}
+        >
+          <Text className="text-cardBg" style={{ fontSize: 12, fontWeight: '700' }}>
+            {initials(card.name)}
+          </Text>
+        </View>
+        <Text className="text-text3" style={{ fontSize: 10 }}>
+          {relativeDate(contact.lastInteraction ?? contact.receivedAt)}
+        </Text>
+      </View>
+      <View style={{ marginTop: 8 }}>
+        <Text
+          className="text-text1"
+          numberOfLines={1}
+          style={{ fontSize: 16, fontWeight: '500' }}
+        >
+          {card.name}
+        </Text>
+        {subtitle ? (
+          <Text
+            className="text-text2"
+            numberOfLines={1}
+            style={{ fontSize: 14, marginTop: 4 }}
+          >
+            {subtitle}
+          </Text>
+        ) : null}
+      </View>
+      <View style={{ flex: 1 }} />
+      <View className="flex-row items-center">
+        <SfIcon
+          name={verificationIcon(contact.verificationStatus)}
+          size={12}
+          color={verificationColor(contact.verificationStatus)}
+        />
+        <Text className="text-text3" style={{ fontSize: 10, marginLeft: 4 }}>
+          {contact.verificationStatus}
+        </Text>
+      </View>
+    </PressableScale>
+  );
+}
+
+export function ListRow({
+  contact,
+  onPress,
+}: {
+  readonly contact: Contact;
+  readonly onPress: () => void;
+}): ReactNode {
+  const { t } = useTranslation();
+  const { businessCard: card } = contact;
+  const subtitle = [card.title, card.company].filter(Boolean).join(' · ');
+  return (
+    <PressableScale
+      onPress={onPress}
+      haptic={false}
+      accessibilityRole="button"
+      accessibilityLabel={t('shoutouts.openCard', { name: card.name })}
+    >
+      <View style={{ height: 0.5, backgroundColor: Colors.divider }} />
+      <View className="flex-row" style={{ paddingVertical: 12 }}>
+        <View
+          className="bg-text1 items-center justify-center"
+          style={{ width: 32, height: 32, borderRadius: 16, marginRight: 6 }}
+        >
+          <Text className="text-cardBg" style={{ fontSize: 12, fontWeight: '700' }}>
+            {initials(card.name)}
+          </Text>
+        </View>
+        <View className="flex-1">
+          <View className="flex-row items-start justify-between">
+            <View className="flex-1" style={{ marginRight: 8 }}>
+              <Text
+                className="text-text1"
+                numberOfLines={1}
+                style={{ fontSize: 16, fontWeight: '500' }}
+              >
+                {card.name}
+              </Text>
+              {subtitle ? (
+                <Text
+                  className="text-text2"
+                  numberOfLines={1}
+                  style={{ fontSize: 14, marginTop: 2 }}
+                >
+                  {subtitle}
+                </Text>
+              ) : null}
+            </View>
+            <View className="items-end">
+              <Text className="text-text3" style={{ fontSize: 10 }}>
+                {relativeDate(contact.lastInteraction ?? contact.receivedAt)}
+              </Text>
+              <SfIcon
+                name={verificationIcon(contact.verificationStatus)}
+                size={10}
+                color={verificationColor(contact.verificationStatus)}
+              />
+            </View>
+          </View>
+          <View
+            style={{
+              height: 0.5,
+              backgroundColor: Colors.divider,
+              marginVertical: 8,
+            }}
+          />
+          <Text className="text-text3" numberOfLines={1} style={{ fontSize: 11 }}>
+            {(card.company?.length ?? 0) > 0 ? card.company : contact.verificationStatus}
+          </Text>
+        </View>
+      </View>
+    </PressableScale>
   );
 }

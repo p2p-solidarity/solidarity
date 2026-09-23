@@ -31,6 +31,12 @@
   --color-blobCenter: #FFE4D6;
   --color-radarRing: rgba(191,128,167,0.3);
   --color-radarGlow: rgba(191,128,167,0.15);
+  /* creds v3 derived accessibility foregrounds — port spec §3.2. */
+  --color-terminalGreenText: #2F6B45;
+  --color-warningText: #9C5B00;
+  --color-destructiveText: #B7364D;
+  --color-accentRoseText: #AA568A;
+  --color-text3Strong: #747181;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -53,5 +59,12 @@
     --color-blobCenter: #2A1F26;
     /* primaryBlue dark — Swift ThemeManager.swift:396 (#C088A0). */
     --color-primaryBlue: #C088A0;
+    /* Dark mode keeps the native accents as foregrounds (≥4.9:1 on #060417),
+     * except destructive text — port spec §10.5 M2. */
+    --color-terminalGreenText: #4CAF51;
+    --color-warningText: #FF9500;
+    --color-destructiveText: #D2677A;
+    --color-accentRoseText: #BF80A7;
+    --color-text3Strong: #808080;
   }
 }

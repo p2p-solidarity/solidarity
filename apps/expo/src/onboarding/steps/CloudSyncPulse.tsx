@@ -7,6 +7,7 @@ import { useEffect, type ReactNode } from 'react';
 import Animated, {
   Easing,
   useAnimatedStyle,
+  useReducedMotion,
   useSharedValue,
   withRepeat,
   withTiming,
@@ -17,6 +18,9 @@ import { Colors } from '@/constants/Colors';
 
 export function CloudSyncPulse(): ReactNode {
   const phase = useSharedValue(0);
+  // Reduce Motion: keep the breathing opacity (the "still waiting" signal),
+  // drop the scale.
+  const reduceMotion = useReducedMotion();
 
   useEffect(() => {
     phase.value = withRepeat(
@@ -28,7 +32,7 @@ export function CloudSyncPulse(): ReactNode {
 
   const pulseStyle = useAnimatedStyle(() => ({
     opacity: 0.45 + phase.value * 0.55,
-    transform: [{ scale: 0.92 + phase.value * 0.12 }],
+    transform: [{ scale: reduceMotion ? 1 : 0.95 + phase.value * 0.08 }],
   }));
 
   return (

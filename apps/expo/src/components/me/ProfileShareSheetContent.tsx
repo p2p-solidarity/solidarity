@@ -1,3 +1,7 @@
+import { BrandIcon } from '@/components/icons/BrandIcon';
+import { brandIconForHost } from '@/profile/linkPresentation';
+import Animated, { useReducedMotion } from 'react-native-reanimated';
+import { fadeUpIn } from '@/feedback/motion';
 import { Image } from 'expo-image';
 import { useEffect, useState, type ReactNode } from 'react';
 import { ActivityIndicator, View } from 'react-native';
@@ -17,6 +21,8 @@ import { displayProfileShareUrl } from './meProfileModel';
 import { profileShareQrIsOversize } from './profileShareQr';
 
 export const PROFILE_SHARE_QR_SIZE = 208;
+/** `.qr` padding from the mock. */
+const QR_PLATE_PADDING = 20;
 
 export type ProfileShareQrState =
   | { readonly kind: 'loading'; readonly url: string | null }
@@ -106,10 +112,6 @@ export function ProfileShareReadyContent({
         }}
       />
 
-      <ThemedText variant="caption" tone="tertiary" style={{ textAlign: 'center' }}>
-        {t('meShare.bioHint')}
-      </ThemedText>
-
       <OtherFormatsSection
         visible={visible}
         candidates={otherCandidates}
@@ -128,7 +130,7 @@ function CopyableUrlPill({
   readonly onCopy: (url: string) => void;
 }): ReactNode {
   const { t } = useTranslation();
-  const displayUrl = displayProfileShareUrl(candidate);
+  const displayUrl = candidate.kind === 'offline' ? t('meShare.offlineFormat') : displayProfileShareUrl(candidate);
   return (
     <PressableScale
       haptic={false}
@@ -142,6 +144,7 @@ function CopyableUrlPill({
         variant="inset"
         className="flex-row items-center gap-3 px-4 py-3"
         style={{ minHeight: 72 }}>
+        <BrandIcon name={brandIconForHost(candidate.url)} size={20} color={Colors.text2} />
         <View className="flex-1 gap-1">
           <ThemedText variant="label" tone="secondary">
             {t('meShare.pageUrl')}
@@ -170,10 +173,12 @@ function QrPreview({
   return (
     <ThemedSurface
       variant="card"
-      className="self-center rounded-none p-2"
+      className="self-center rounded-none"
       style={{
-        width: PROFILE_SHARE_QR_SIZE + 16,
-        height: PROFILE_SHARE_QR_SIZE + 16,
+        // `.qr` — square-cornered card on a 20pt inset (creds-design mock).
+        padding: QR_PLATE_PADDING,
+        width: PROFILE_SHARE_QR_SIZE + QR_PLATE_PADDING * 2,
+        height: PROFILE_SHARE_QR_SIZE + QR_PLATE_PADDING * 2,
       }}>
       <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
         {matchesUrl && state.kind === 'ready' ? (
@@ -210,7 +215,7 @@ function QrPreview({
   );
 }
 
-function OtherFormatsSection({
+export function OtherFormatsSection({
   visible,
   candidates,
   verifiedHandle,
@@ -256,10 +261,11 @@ function OtherFormatsSection({
 
       {expanded ? (
         <View className="gap-2">
-          {candidates.map((candidate) => (
+          {candidates.map((candidate, index) => (
             <OtherFormatRow
               key={`${candidate.kind}:${candidate.url}`}
               candidate={candidate}
+              index={index}
               verifiedHandle={verifiedHandle}
               onSelect={onSelect}
             />
@@ -272,41 +278,47 @@ function OtherFormatsSection({
 
 function OtherFormatRow({
   candidate,
+  index,
   verifiedHandle,
   onSelect,
 }: {
   readonly candidate: ProfileShareUrlCandidate;
+  readonly index: number;
   readonly verifiedHandle: HandleShareCandidate | null;
   readonly onSelect: (candidate: ProfileShareUrlCandidate) => void;
 }): ReactNode {
   const { t } = useTranslation();
+  const reduceMotion = useReducedMotion();
   const label =
     candidate.kind === 'username'
       ? t('meShare.usernameFormat')
       : candidate.kind === 'handle'
-      ? verifiedHandle?.url === candidate.url
-        ? `@${verifiedHandle.handle}`
-        : t('meShare.verifiedHandleFormat')
-      : candidate.kind === 'short'
-        ? t('meShare.shortFormat')
-        : t('meShare.offlineFormat');
+        ? verifiedHandle?.url === candidate.url
+          ? `@${verifiedHandle.handle}`
+          : t('meShare.verifiedHandleFormat')
+        : candidate.kind === 'short'
+          ? t('meShare.shortFormat')
+          : t('meShare.offlineFormat');
 
   return (
-    <ThemedSurface variant="inset" className="flex-row items-center gap-3 rounded-none px-3 py-2">
-      <View className="flex-1 gap-0.5">
-        <ThemedText variant="bodySmall">{label}</ThemedText>
-        <ThemedText variant="caption" tone="tertiary" numberOfLines={1} ellipsizeMode="middle">
-          {displayProfileShareUrl(candidate)}
-        </ThemedText>
-      </View>
-      <ThemedButton
-        label={t('meShare.use')}
-        variant="secondary"
-        accessibilityLabel={t('meShare.useFormat', { format: label })}
-        onPress={() => {
-          onSelect(candidate);
-        }}
-      />
-    </ThemedSurface>
+    <Animated.View entering={fadeUpIn(index, reduceMotion)}>
+      <ThemedSurface variant="inset" className="flex-row items-center gap-3 rounded-none px-3 py-2">
+        <BrandIcon name={brandIconForHost(candidate.url)} size={20} color={Colors.text2} />
+        <View className="flex-1 gap-0.5">
+          <ThemedText variant="bodySmall">{label}</ThemedText>
+          {candidate.kind !== 'offline' ? <ThemedText variant="caption" tone="tertiary" numberOfLines={1} ellipsizeMode="middle">
+            {displayProfileShareUrl(candidate)}
+          </ThemedText> : null}
+        </View>
+        <ThemedButton
+          label={t('meShare.use')}
+          variant="secondary"
+          accessibilityLabel={t('meShare.useFormat', { format: label })}
+          onPress={() => {
+            onSelect(candidate);
+          }}
+        />
+      </ThemedSurface>
+    </Animated.View>
   );
 }

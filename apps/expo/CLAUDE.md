@@ -22,7 +22,7 @@ bun run lint                                                 # 0 errors (cosmeti
 a `BareKit` TurboModule + a vendored `BareKit.xcframework` / Bare Android
 runtime. Expo Go only bundles Expo's own module set, so **Expo Go cannot run
 this app** — it never could, given the existing Nitro modules
-(`nitro-nfc-passport`, `nitro-passport-zk`, `nitro-spruce-did`, …), but
+(`nitro-attest`, `nitro-keystone`, …), but
 bare-kit makes it explicit. Always build a **dev client**:
 
 ```bash
@@ -172,7 +172,23 @@ iOS releases ship via **Xcode Cloud** (Apple Developer 25 h/month free,
 auto cert mgmt). The `withXcodeCloudScripts` config plugin
 (`apps/expo/plugins/`) re-creates `ios/ci_scripts/ci_post_clone.sh`
 after every `expo prebuild --clean` from the persistent source at
-`ci-scripts/ci_post_clone.sh`.
+`ci-scripts/ci_post_clone.sh`. `withPrecompiledVisionCameraResizerMetal`
+stages a pinned `default.metallib` so Archive never depends on Xcode Cloud's
+unreliable optional Metal Toolchain; regenerate it with
+`scripts/build-vision-camera-resizer-metallib.sh` after shader updates.
+`withExpoModulesJsiPatches` rewrites `scripts/build-xcframework.sh` of the
+installed `expo-modules-jsi` (57.1.0) at prebuild so Xcode 27 can archive it:
+it wraps the nested `xcodebuild -quiet` whose spurious "error: … exited with
+code 0" line otherwise fails the phase with "Command PhaseScriptExecution
+emitted errors but did not return a nonzero exit code" (archive-only; plain
+build tolerates it). The patch is anchor-checked and idempotent; drop it once
+upstream stops emitting `error:` lines from that phase. `expo install --check`
+must stay clean; `react-native-get-random-values` 2.0.0 is deliberately kept
+via `expo.install.exclude` (Expo's table pins 1.11). The pod caches its xcframework in
+`node_modules/expo-modules-jsi/apple/{Products,.DerivedData}` — a local
+"BUILD SUCCEEDED" proves nothing about its Swift unless those are cleared first.
+Never add a `ci_pre_xcodebuild.sh` that runs `xcodebuild -downloadComponent
+metalToolchain`: on Xcode Cloud it exits 70 ("Failed fetching catalog for assetType").
 
 Android builds via **EAS Build** or `expo prebuild --platform android`
 + `./gradlew bundleRelease`.
@@ -205,7 +221,7 @@ call site (e.g. don't mount the native view when its module is unavailable).
 
 ### Self-identifying crashes — `MrzInstallCrashDiagnostics`
 
-`nitro-modules/mrz-ocr/ios/MrzVisionGuard.mm` installs a process-wide
+`nitro-modules/attest/ios/MrzVisionGuard.mm` installs a process-wide
 `std::set_terminate` handler **at app launch** (`+load` → `dispatch_async(main)`
 so it wraps RN/Hermes' handlers). On any uncaught exception it writes the
 demangled type + message into:

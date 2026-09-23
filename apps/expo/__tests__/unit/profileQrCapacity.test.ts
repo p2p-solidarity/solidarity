@@ -23,8 +23,8 @@ describe('profile share QR capacity', () => {
       profileShareQrIsOversize(
         {
           kind: 'username',
-          url: 'https://creds.id/kidney#public-fragment',
-          displayUrl: 'https://creds.id/kidney',
+          url: 'https://app.solidarity.gg/@kidney',
+          displayUrl: 'https://app.solidarity.gg/@kidney',
         },
         oversized,
       ),

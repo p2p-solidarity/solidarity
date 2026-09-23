@@ -1,7 +1,7 @@
 /**
  * mrzOcr — pure-JS MRZ recognition + N-frame consensus.
  *
- * Sits between the `@solidarity/nitro-mrz-ocr` Nitro plugin (which only
+ * Sits between the `@solidarity/nitro-attest` Nitro plugin (which only
  * returns raw OCR'd lines) and the onboarding screen (which wants a
  * validated, draft-shaped `PassportMRZDraft`).
  *

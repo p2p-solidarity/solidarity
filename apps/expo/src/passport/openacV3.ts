@@ -1,4 +1,4 @@
-import type { PassportReadResult } from '@solidarity/nitro-nfc-passport';
+import type { PassportReadResult } from '@solidarity/nitro-attest';
 import { base64Encode } from '@solidarity/shared';
 
 export const PASSPORT_NOIR_VERSION = '0.3.0' as const;

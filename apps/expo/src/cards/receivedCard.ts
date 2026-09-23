@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 
+import type { NostrPointerClaim } from '@/cards/nostrPointerClaim';
 import type {
   BusinessCard,
   Contact,
@@ -12,6 +13,9 @@ export interface ReceivedCardPresentation {
   readonly verificationStatus: VerificationStatus;
   readonly source: ContactSource;
   readonly sealedRoute?: string;
+  /** Sender's verified subscription pointer (signed wires only) — consumed
+   *  by the save path's `maybeBootstrapCardSubscription`. */
+  readonly nostrPointer?: NostrPointerClaim;
 }
 
 interface ReceivedCardState {
@@ -19,6 +23,7 @@ interface ReceivedCardState {
   readonly verificationStatus: VerificationStatus;
   readonly source: ContactSource;
   readonly sealedRoute?: string;
+  readonly nostrPointer?: NostrPointerClaim;
   readonly present: (presentation: ReceivedCardPresentation) => void;
   readonly dismiss: () => void;
 }
@@ -28,8 +33,9 @@ export const useReceivedCard = create<ReceivedCardState>((set) => ({
   verificationStatus: 'Unverified',
   source: 'QR Code',
   sealedRoute: undefined,
-  present: ({ card, verificationStatus, source, sealedRoute }) => {
-    set({ card, verificationStatus, source, sealedRoute });
+  nostrPointer: undefined,
+  present: ({ card, verificationStatus, source, sealedRoute, nostrPointer }) => {
+    set({ card, verificationStatus, source, sealedRoute, nostrPointer });
   },
   dismiss: () => {
     set({
@@ -37,6 +43,7 @@ export const useReceivedCard = create<ReceivedCardState>((set) => ({
       verificationStatus: 'Unverified',
       source: 'QR Code',
       sealedRoute: undefined,
+      nostrPointer: undefined,
     });
   },
 }));

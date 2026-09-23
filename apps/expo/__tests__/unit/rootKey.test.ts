@@ -271,7 +271,7 @@ describe('getRootSigner — Phase A1 conformance contract', () => {
     nextBiometricSuccess = false;
     const digest = new Uint8Array(32).fill(7);
     await expect(signerResult.value(digest)).rejects.toThrow();
-    expect(biometricCalls).toContain('sign');
+    expect(biometricCalls).toContain('presentProof');
   });
 });
 
@@ -379,7 +379,7 @@ describe('revealMnemonicForExport', () => {
     expect(r.ok).toBe(false);
     if (r.ok) return;
     expect(r.error.kind).toBe('biometricDenied');
-    expect(biometricCalls).toContain('export');
+    expect(biometricCalls).toContain('revealRecoveryBundle');
   });
 
   it('returns the exact persisted mnemonic when biometric succeeds', async () => {
@@ -581,8 +581,8 @@ describe('getPortableBackupKey', () => {
     expect(a.value.length).toBe(32);
     expect(Buffer.from(a.value).toString('hex')).toBe(Buffer.from(b.value).toString('hex'));
     // No Face ID prompt — background backups must not gate on biometrics.
-    expect(biometricCalls).not.toContain('sign');
-    expect(biometricCalls).not.toContain('export');
+    expect(biometricCalls).not.toContain('presentProof');
+    expect(biometricCalls).not.toContain('revealRecoveryBundle');
   });
 
   it('matches the shared derivation vector for a pinned phrase', async () => {

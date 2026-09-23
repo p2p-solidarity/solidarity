@@ -18,6 +18,7 @@ describe('Page surface', () => {
     const hero = source('../../src/components/me/ProfileHero.tsx');
     const shareSelection = source('../../src/components/me/useProfileShareSelection.ts');
     const links = source('../../src/components/me/ProfileLinksList.tsx');
+    const alert = source('../../src/components/me/PageLapsedCheckAlert.tsx');
     const motion = source('../../src/feedback/motion.ts');
     const verify = source('../../app/(tabs)/verify/index.tsx');
 
@@ -61,39 +62,91 @@ describe('Page surface', () => {
     expect(links).toContain("t('mePage.reviewHidden')");
     expect(links).toContain("t('mePage.noLinks')");
     expect(links).toContain('if (links.length === 0)');
-    expect(links).toContain('accessibilityRole="header"');
-    expect(page).toContain('accessibilityRole="header"');
-    expect(hero).toContain('<ProfileInlineQr');
-    expect(links.match(/onPress=\{onAddFirstLink\}/gu)).toHaveLength(1);
-    expect(links).toContain('linkIconNameFor');
+    expect(links).toContain('<PageSectionLabel');
+    expect(source('../../src/components/me/PageSectionLabel.tsx'))
+      .toContain('accessibilityRole="header"');
+    expect(page).toContain('<PageSectionLabel');
+    // The QR belongs to the share sheet, never inline on the Page tab
+    // (mock §`#s-page`: the header's ↗ opens `#sh-share`, which holds the QR).
+    expect(hero).not.toContain('ProfileInlineQr');
+    // One add button for the whole tab: it sits where the links group ends
+    // (empty state or under the last row) and opens the shared add sheet.
+    expect(links.match(/onPress=\{onAdd\}/gu)).toHaveLength(1);
+    // Rows name their actual platform (the mock's brand sprite), never a
+    // borrowed stand-in symbol.
+    expect(links).toContain('linkDisplay(link.label, link.url).brand');
+    expect(links).toContain('<BrandIcon');
 
     const publicHeadingIndex = links.indexOf("t('mePage.publicPage')");
     const cardOnlyHeadingIndex = links.indexOf("t('mePage.cardOnly')");
     expect(publicHeadingIndex).toBeGreaterThan(-1);
     expect(cardOnlyHeadingIndex).toBeGreaterThan(publicHeadingIndex);
     expect(page).toContain('linkCount={record.links.length}');
-    expect(badges).toContain("t('mePage.addAttestation')");
+    // Links, sections and attestations no longer carry their own add
+    // buttons; all three start from the single "＋ 新增" sheet.
+    const addSheet = source('../../src/components/me/PageAddSheet.tsx');
+    const sections = source('../../src/components/me/ProfileSectionsList.tsx');
+    expect(badges).not.toContain('AddAttestationAction');
+    // …except the empty state, which keeps its own reminder to create one.
+    expect(badges).toContain("t('mePage.createProof')");
+    expect(page).toContain('onCreateProof={onOpenBindings}');
+    expect(sections).not.toContain('setPickerOpen');
+    expect(page).toContain('<PageAddSheet');
+    expect(page).toContain('onAddProof={onOpenBindings}');
+    expect(addSheet).toContain("t('mePage.links')");
+    expect(addSheet).toContain("t('mePage.sections')");
+    expect(addSheet).toContain("t('mePage.attestations')");
+    expect(addSheet).toContain('close(onAddLink)');
+    expect(addSheet).toContain('close(onImportLinks)');
+    expect(addSheet).toContain('close(onAddProof)');
+    expect(en['mePage.add']).toBe('Add');
+    expect(zhHant['mePage.add']).toBe('新增');
 
     expect(badges).toContain('verifyAtprotoBindingDual(record, publicRecord');
     expect(badges).toContain('verifyNostrBinding');
     expect(page).toContain('nostrUploaded={nostrShortUrlReady}');
     expect(badges).toContain('readonly nostrUploaded: boolean');
     expect(badges).toMatch(/nostrUploaded\s+\? record\.alsoKnownAs/u);
-    expect(badges).toContain('verifyAtprotoBinding');
-    expect(badges).toContain('badgeRecoveryActions');
-    expect(badges).toContain('invalidateCachedNostrResult');
-    expect(badges).toContain('invalidateCachedAtprotoResult');
-    expect(badges).toContain('publishToNostr(DEFAULT_RELAYS)');
-    expect(badges).toContain("router.push('/verify/bluesky')");
     expect(badges).toContain('atprotoBindingIO');
-    expect(badges).toContain('verifyHttpsOwnership');
-    expect(badges).toContain("credential.type.toLowerCase() === 'passport'");
-    expect(badges).toContain('credentialTrustDisplayFor');
-    expect(badges).toContain('credentialTrustDisplayFor(detail).level');
-    expect(badges).toContain(": 'L1'");
-    expect(badges).toContain("icon: 'checkmark.seal.fill', color: Colors.terminalGreen");
-    expect(badges).toContain("icon: 'checkmark.seal', color: Colors.warning");
-    expect(badges).toContain("icon: 'exclamationmark.triangle', color: Colors.text3");
+
+    // v3 mock: the proof section lists REAL presentable claims and nothing
+    // else — loading / error-with-retry / empty / rows, never a plausible
+    // placeholder (Rule 8).
+    expect(badges).toContain('useDisplayClaims()');
+    expect(badges).toContain("t('mePage.loadingProofs')");
+    expect(badges).toContain("t('mePage.proofLoadError')");
+    expect(badges).toContain("t('mePage.noAttestations')");
+    expect(badges).toContain('PUBLIC_DISCLOSURE_BADGE_TYPE');
+    // The Page tab is a product surface: opening a credential from here stays
+    // in product context even for a Developer Mode user, so protocol wording
+    // cannot leak in sideways.
+    expect(badges).toContain("product: '1'");
+
+    // Visibility is stated from the VISITOR's side: the row compares the local
+    // record against the published projection and says "pending publish" while
+    // the two disagree, instead of reporting an intent the outside world has
+    // not seen (the app publishes on an explicit step, see PublishPreviewSheet).
+    expect(badges).toContain('disclosureSubjects(publicRecord)');
+    expect(badges).toContain("'pending'");
+    expect(badges).toContain("'mePage.pendingPublish'");
+    expect(badges).toContain('mePage.proofPendingHidden');
+    expect(badges).toContain('mePage.proofPendingShown');
+
+    // Binding status moved OUT of this section and onto the matching field
+    // row, which reads the same completed-verification cache...
+    expect(links).toContain('readCachedAtprotoResult');
+    expect(links).toContain('readCachedNostrResult');
+    // ...and only while that check is still fresh for THIS record revision and
+    // still describes an identity the record claims.
+    expect(links).toContain('shouldReverifyBadge(atprotoEntry.checkedAt, record.updatedAt, nowMs)');
+    expect(links).toContain('shouldReverifyBadge(nostrEntry.checkedAt, record.updatedAt, nowMs)');
+    expect(links).toContain('recordClaimsAtprotoHandle(record.alsoKnownAs, atprotoHandle)');
+    expect(links).toContain('isNostrProfileUrlForNpub(url, hostname, path, npub)');
+    // ...and the repair flow the section used to own now hangs off the lapsed
+    // alert, so a failed check is never a dead end.
+    expect(alert).toContain("t('pageDesign.fixLapsed')");
+    expect(alert).toContain("'/verify/nostr'");
+    expect(alert).toContain("'/verify/bluesky'");
     expect(verify).not.toContain('BadgeBindingsSection');
     expect(verify).not.toContain("router.push('/verify/nostr')");
 
@@ -110,23 +163,47 @@ describe('Page surface', () => {
     expect(shareContent).toContain('onSelect(candidate)');
     expect(shareContent).toContain("t('meShare.useFormat'");
     expect([route, page, hero, links, badges].join('\n')).not.toContain('generateQrPng');
-    expect(share).toContain('export function ProfileInlineQr');
-    expect(share).toContain("shareState.kind === 'error'");
-    expect(share).toContain('setInlineRetryNonce');
+    expect(share).not.toContain('export function ProfileInlineQr');
+    // Same honesty states, now owned by the share sheet rather than an
+    // inline QR: an unresolvable share model shows an error with a retry.
+    expect(share).toContain("baseShareState.kind === 'error'");
+    expect(share).toContain('setShareRetryNonce');
     expect(share).toContain("t('meShare.modelError')");
 
+    // Motion follows the app tokens: one strong ease-out curve, entrances
+    // under 300 ms, exits faster than entrances, 40 ms stagger steps.
     expect(motion).toContain('STAGGER_MS = 40');
-    expect(page).toContain('const ENTRANCE_DURATION_MS = 240');
-    expect(page).toContain('STAGGER_MS * 2');
-    expect(page).toContain('STAGGER_MS * 3');
-    expect(share).toContain('const QR_SHEET_DURATION_MS = 240');
-    expect(share).toContain('Easing.out');
-    expect(share).toContain('scale: 0.97');
+    expect(motion).toContain('EASE_OUT = Easing.bezier(0.23, 1, 0.32, 1)');
+    expect(motion).toContain('enter: 240');
+    expect(motion).toContain('exit: 160');
+    // Page sections cascade in with the shared staggered entrance, reduced
+    // motion honoured, never the library's default-easing presets.
+    expect(page).toContain('fadeUpIn(index, reduceMotion)');
+    for (const index of [0, 1, 2, 3, 4]) {
+      expect(page).toContain(`entering={entrance(${String(index)})}`);
+    }
+    expect(page).not.toContain('FadeInDown');
+    expect(links).toContain('fadeUpIn(sectionIndex, reduceMotion)');
+    // The share sheet slides up from its own height over a fading backdrop
+    // and animates OUT before it unmounts — no zoom-in / hard-cut Modal.
+    const sheet = source('../../src/components/me/SlideUpSheet.tsx');
+    const preview = source('../../src/components/me/PublishPreviewSheet.tsx');
+    for (const surface of [share, preview]) {
+      expect(surface).toContain('<SlideUpSheet visible={visible} onClose={onClose}>');
+      expect(surface).not.toContain('zoomFadeIn');
+      expect(surface).not.toContain('<Modal');
+    }
+    expect(preview).toContain('close(onConfirm)');
+    expect(share).toContain('scaleTo={SCALE.icon}');
+    expect(sheet).toContain('withTiming(1, TIMING.enter)');
+    expect(sheet).toContain('withTiming(0, TIMING.exit');
+    expect(sheet).toContain('scheduleOnRN(finishExit)');
+    expect(sheet).toContain('(1 - progress.value) * sheetHeight.value');
+    expect(sheet).toContain('useReducedMotion()');
     expect(share).toContain('shareQrImage');
     expect(shareContent).toContain("t('meShare.shareQrImage')");
-    expect(badges).toContain('const BADGE_CROSSFADE_MS = 200');
 
-    const pageSurfaceSource = [page, share, badges, hero, links].join('\n');
+    const pageSurfaceSource = [page, share, sheet, preview, badges, hero, links].join('\n');
     expect(pageSurfaceSource).not.toMatch(/#[0-9a-f]{3,8}\b/iu);
   });
 

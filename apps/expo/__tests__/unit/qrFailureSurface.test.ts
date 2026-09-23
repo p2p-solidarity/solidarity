@@ -12,7 +12,6 @@ describe('QR failure surfaces', () => {
 
     expect(share).toContain('profileShareQrIsOversize');
     expect(share).toContain("kind: 'oversize'");
-    expect(share).toContain('{!qrBlockedBySize && imageUri ? (');
     expect(sheet).toContain("kind: 'oversize'");
     expect(sheet).toContain('const visibleQrState: ProfileShareQrState = qrBlockedBySize');
     expect(sheet).toContain("t('meShare.qrTooLarge')");

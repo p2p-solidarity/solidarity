@@ -1,10 +1,12 @@
 /**
  * SettingRow — single row with label, optional value, optional control.
- * Mirrors the Swift SettingsBlockRow pattern.
+ * Mirrors the Swift SettingsBlockRow pattern. A tappable row presses through
+ * `PressableScale` (crisp scale + haptic); a read-only row is a plain View.
  */
 import type { ReactNode } from 'react';
-import { Pressable, Switch, View } from 'react-native';
+import { Switch, View } from 'react-native';
 
+import { PressableScale } from '@/components/common/PressableScale';
 import { ThemedText } from '@/components/themed';
 
 export interface SettingRowProps {
@@ -15,6 +17,9 @@ export interface SettingRowProps {
   readonly destructive?: boolean;
 }
 
+const ROW_CLASS = 'flex-row items-center justify-between border-b border-divider bg-cardBg px-4 py-3';
+const ROW_STYLE = { borderBottomWidth: 0.5, minHeight: 52 } as const;
+
 export function SettingRow({
   label,
   value,
@@ -22,14 +27,8 @@ export function SettingRow({
   trailing,
   destructive,
 }: SettingRowProps): ReactNode {
-  return (
-    <Pressable
-      className="bg-cardBg flex-row items-center justify-between border-b border-divider px-4 py-3"
-      onPress={onPress}
-      disabled={!onPress}
-      accessibilityRole={onPress ? 'button' : undefined}
-      accessibilityLabel={label}
-    >
+  const content = (
+    <>
       <ThemedText variant="bodyLarge" tone={destructive ? 'error' : 'primary'}>
         {label}
       </ThemedText>
@@ -46,7 +45,25 @@ export function SettingRow({
           </ThemedText>
         ) : null}
       </View>
-    </Pressable>
+    </>
+  );
+
+  if (!onPress) {
+    return (
+      <View className={ROW_CLASS} style={ROW_STYLE}>
+        {content}
+      </View>
+    );
+  }
+  return (
+    <PressableScale
+      className={ROW_CLASS}
+      style={ROW_STYLE}
+      onPress={onPress}
+      accessibilityRole="button"
+      accessibilityLabel={label}>
+      {content}
+    </PressableScale>
   );
 }
 

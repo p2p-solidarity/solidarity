@@ -21,7 +21,7 @@ import { err, ok } from '@solidarity/shared';
 import type {
   PassportMRZ,
   PassportReadResult,
-} from '@solidarity/nitro-nfc-passport';
+} from '@solidarity/nitro-attest';
 
 // ---------------------------------------------------------------------------
 // Chip-snapshot helpers — mirror Swift PassportPipelineService.realNFCRead +

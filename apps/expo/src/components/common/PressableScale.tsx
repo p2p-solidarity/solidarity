@@ -6,7 +6,8 @@
  *
  * Touch-down springs the whole surface to `scaleTo` and release springs it
  * back, using the over-damped `SPRING.press` so the motion is crisp with no
- * wobble. A haptic fires on press (default `tap`; pass `haptic={false}` to
+ * wobble. With the system's Reduce Motion on, the press dims instead of
+ * scaling — feedback stays, movement goes. A haptic fires on press (default `tap`; pass `haptic={false}` to
  * silence on noisy / repeated controls).
  *
  * Layout: the scale lives on an outer `Animated.View` (so the surface's own
@@ -26,13 +27,18 @@ import {
 } from 'react-native';
 import Animated, {
   useAnimatedStyle,
+  useReducedMotion,
   useSharedValue,
   withSpring,
+  withTiming,
   type WithSpringConfig,
 } from 'react-native-reanimated';
 
 import { haptic as fireHaptic, type HapticKind } from '@/feedback/haptics';
-import { SCALE, SPRING } from '@/feedback/motion';
+import { SCALE, SPRING, TIMING } from '@/feedback/motion';
+
+/** Opacity a reduced-motion press dims to, in place of the scale. */
+const REDUCED_PRESS_OPACITY = 0.6;
 
 export interface PressableScaleProps extends Omit<PressableProps, 'style' | 'children'> {
   readonly children: ReactNode;
@@ -67,15 +73,22 @@ export function PressableScale({
   disabled,
   ...rest
 }: PressableScaleProps): ReactNode {
+  const reduceMotion = useReducedMotion();
   const scale = useSharedValue(1);
-  const animStyle = useAnimatedStyle(() => ({ transform: [{ scale: scale.value }] }));
+  const opacity = useSharedValue(1);
+  const animStyle = useAnimatedStyle(() => ({
+    opacity: opacity.value,
+    transform: [{ scale: scale.value }],
+  }));
 
   const handlePressIn = (e: GestureResponderEvent) => {
-    scale.value = withSpring(scaleTo, springConfig);
+    if (reduceMotion) opacity.value = withTiming(REDUCED_PRESS_OPACITY, TIMING.fast);
+    else scale.value = withSpring(scaleTo, springConfig);
     onPressIn?.(e);
   };
   const handlePressOut = (e: GestureResponderEvent) => {
-    scale.value = withSpring(1, springConfig);
+    if (reduceMotion) opacity.value = withTiming(1, TIMING.fast);
+    else scale.value = withSpring(1, springConfig);
     onPressOut?.(e);
   };
   const handlePress = (e: GestureResponderEvent) => {

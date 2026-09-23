@@ -73,17 +73,17 @@ const RECORD: ProfileRecord = {
 const ATPROTO_CANDIDATE: HandleShareCandidate = {
   scheme: 'atproto',
   handle: 'alice.bsky.social',
-  url: 'https://app.solidarity.gg/@alice.bsky.social',
+  url: 'https://creds.id/@alice.bsky.social',
 };
 const ENS_CANDIDATE: HandleShareCandidate = {
   scheme: 'ens',
   handle: 'alice.eth',
-  url: 'https://app.solidarity.gg/@alice.eth',
+  url: 'https://creds.id/@alice.eth',
 };
 const DNS_CANDIDATE: HandleShareCandidate = {
   scheme: 'dns',
   handle: 'example.com',
-  url: 'https://app.solidarity.gg/@dns:example.com',
+  url: 'https://creds.id/@dns:example.com',
 };
 
 afterEach(() => {

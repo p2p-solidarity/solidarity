@@ -9,16 +9,12 @@ const source = (relativePath: string): string =>
   readFileSync(new URL(relativePath, import.meta.url), 'utf8');
 
 describe('normal-mode privacy and passport surfaces', () => {
-  it('uses the global five-tap Developer Mode as the only privacy diagnostics unlock', () => {
+  it('retires the duplicate privacy prototype in favor of the real QR settings', () => {
     const disclosure = source('../../app/settings/disclosure.tsx');
 
-    expect(disclosure).toContain(
-      'const developerMode = usePreferences((state) => state.developerMode);'
-    );
-    expect(disclosure).not.toContain('const [showDevToggle');
-    expect(disclosure).not.toContain('const [tapCount');
-    expect(disclosure).not.toContain('const onZkTap');
-    expect(disclosure).toContain('{developerMode ? (');
+    expect(disclosure).toContain('return <Redirect href="/settings/share-settings" />');
+    expect(disclosure).not.toContain('usePreferences');
+    expect(disclosure).not.toContain('useState');
 
     const normalCopy = [
       en['disclosure.title'],

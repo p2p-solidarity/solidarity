@@ -48,6 +48,10 @@ interface GroupModuleSurface {
 }
 
 const kv = new Map<string, string>();
+let pauseNextDecrypt = false;
+let releaseDecrypt: (() => void) | undefined;
+let decryptStarted: Promise<void> = Promise.resolve();
+let markDecryptStarted: (() => void) | undefined;
 
 let mod: GroupModuleSurface;
 
@@ -68,6 +72,13 @@ beforeAll(async () => {
   await mock.module('@/storage/encryptionManager', () => ({
     encryptJson: async (v: unknown) => Buffer.from(JSON.stringify(v)).toString('base64'),
     decryptJson: async <T,>(s: string): Promise<T> => {
+      if (pauseNextDecrypt) {
+        pauseNextDecrypt = false;
+        markDecryptStarted?.();
+        await new Promise<void>((resolve) => {
+          releaseDecrypt = resolve;
+        });
+      }
       const raw = s.startsWith('{') ? s : Buffer.from(s, 'base64').toString('utf8');
       return JSON.parse(raw) as T;
     },
@@ -77,6 +88,10 @@ beforeAll(async () => {
 
 beforeEach(() => {
   kv.clear();
+  pauseNextDecrypt = false;
+  releaseDecrypt = undefined;
+  markDecryptStarted = undefined;
+  decryptStarted = Promise.resolve();
   mod.useGroupStore.setState({
     groups: new Map(),
     members: new Map(),
@@ -155,6 +170,16 @@ describe('groupStore.deleteGroup', () => {
     expect(mod.useGroupStore.getState().groups.has('g-1')).toBe(false);
     expect(kv.has('group:g-1')).toBe(false);
   });
+
+  it('cascades deletion to the persisted and in-memory member bucket', async () => {
+    await mod.useGroupStore.getState().upsertGroup(makeGroup());
+    await mod.useGroupStore.getState().upsertMember(makeMember());
+
+    await mod.useGroupStore.getState().deleteGroup('g-1');
+
+    expect(mod.useGroupStore.getState().members.has('g-1')).toBe(false);
+    expect(kv.has('member:m-1')).toBe(false);
+  });
 });
 
 describe('groupStore.upsertMember', () => {
@@ -215,6 +240,24 @@ describe('groupStore.canIssueCredentials / isOwner', () => {
 });
 
 describe('groupStore.hydrate', () => {
+  it('does not resurrect a group deleted while bulk hydration is decrypting', async () => {
+    await mod.useGroupStore.getState().upsertGroup(makeGroup());
+    mod.useGroupStore.setState({ groups: new Map(), members: new Map(), hydrated: false });
+
+    pauseNextDecrypt = true;
+    decryptStarted = new Promise<void>((resolve) => {
+      markDecryptStarted = resolve;
+    });
+    const hydration = mod.useGroupStore.getState().hydrate();
+    await decryptStarted;
+    await mod.useGroupStore.getState().deleteGroup('g-1');
+    releaseDecrypt?.();
+    await hydration;
+
+    expect(mod.useGroupStore.getState().groups.has('g-1')).toBe(false);
+    expect(kv.has('group:g-1')).toBe(false);
+  });
+
   it('rebuilds groups + members from MMKV after add()', async () => {
     await mod.useGroupStore.getState().upsertGroup(makeGroup());
     await mod.useGroupStore.getState().upsertMember(makeMember());

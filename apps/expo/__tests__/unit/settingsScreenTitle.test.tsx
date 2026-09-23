@@ -94,12 +94,14 @@ describe('SettingsScreenTitle', () => {
 
     expect(findText(tree, 'Settings')).toBeDefined();
 
+    // Pinned 44pt columns: the position lives on PressableScale's animated
+    // wrapper (`containerStyle`) so the press scale moves the whole target.
     const backAction = findByAccessibilityLabel(tree, 'Back');
     expect(backAction?.props?.['onPress']).toBe(onBack);
-    expect(backAction?.props?.style).toMatchObject({ left: 8, width: 44 });
+    expect(backAction?.props?.['containerStyle']).toMatchObject({ left: 8, width: 44 });
 
     const trailingAction = findByAccessibilityLabel(tree, 'Scan');
     expect(trailingAction?.props?.['onPress']).toBe(onScan);
-    expect(trailingAction?.props?.style).toMatchObject({ right: 8, width: 44 });
+    expect(trailingAction?.props?.['containerStyle']).toMatchObject({ right: 8, width: 44 });
   });
 });

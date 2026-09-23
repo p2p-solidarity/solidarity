@@ -14,22 +14,22 @@
  */
 import { useState, type ReactNode } from 'react';
 import {
-  KeyboardAvoidingView,
-  Modal,
-  Platform,
   Pressable,
-  ScrollView,
   Text,
   TextInput,
   View,
   type KeyboardTypeOptions,
   type TextInputProps,
 } from 'react-native';
+import { KeyboardAwareScrollView } from 'react-native-keyboard-controller';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { ModalSheet } from '@/components/common/ModalSheet';
 import { Colors } from '@/constants/Colors';
 import { useContactStore } from '@/contacts/repository';
+import { showError } from '@/feedback/appAlert';
 import { pushToast } from '@/feedback/toast';
+import { useTranslation } from '@/i18n';
 import { uuid, type Contact } from '@solidarity/shared';
 
 export interface ManualContactEntrySheetProps {
@@ -45,13 +45,9 @@ export function ManualContactEntrySheet({
   onSaved,
 }: ManualContactEntrySheetProps): ReactNode {
   return (
-    <Modal
-      visible={visible}
-      animationType="slide"
-      presentationStyle="formSheet"
-      onRequestClose={onClose}>
+    <ModalSheet visible={visible} presentationStyle="formSheet" onRequestClose={onClose}>
       <ManualContactEntryContent onClose={onClose} onSaved={onSaved} />
-    </Modal>
+    </ModalSheet>
   );
 }
 
@@ -67,6 +63,7 @@ function ManualContactEntryContent({
   readonly onClose: () => void;
   readonly onSaved?: (contact: Contact) => void;
 }): ReactNode {
+  const { t } = useTranslation();
   const insets = useSafeAreaInsets();
   const upsert = useContactStore((s) => s.upsert);
 
@@ -77,13 +74,15 @@ function ManualContactEntryContent({
   const [phone, setPhone] = useState('');
   const [notes, setNotes] = useState('');
   const [validationMessage, setValidationMessage] = useState<string | undefined>();
+  const [saving, setSaving] = useState(false);
 
   const trimmedName = name.trim();
   const canSave = trimmedName.length > 0;
 
   const onSave = (): void => {
+    if (saving) return;
     if (trimmedName.length === 0) {
-      setValidationMessage('Name is required.');
+      setValidationMessage(t('contactManual.nameRequired'));
       return;
     }
     const now = new Date();
@@ -120,36 +119,48 @@ function ManualContactEntryContent({
     };
 
     void (async () => {
-      // `upsert` throws on a persistence failure, so everything below runs
-      // ONLY after a successful save — including the draft reset (R10). A
-      // cancelled draft is intentionally preserved: `onClose` alone never
-      // clears these fields, so dismiss-and-reopen keeps the in-progress
-      // contact, while save-and-reopen starts fresh.
-      await upsert(contact);
-      pushToast(`Saved ${trimmedName}`, 'success');
-      onSaved?.(contact);
-      setName('');
-      setTitle('');
-      setCompany('');
-      setEmail('');
-      setPhone('');
-      setNotes('');
-      setValidationMessage(undefined);
-      onClose();
+      setSaving(true);
+      try {
+        // Everything below the await runs only after the encrypted record and
+        // manifest both persist. A rejection keeps the draft and sheet open.
+        await upsert(contact);
+        pushToast(t('contactManual.saved', { name: trimmedName }), 'success');
+        onSaved?.(contact);
+        setName('');
+        setTitle('');
+        setCompany('');
+        setEmail('');
+        setPhone('');
+        setNotes('');
+        setValidationMessage(undefined);
+        onClose();
+      } catch (error) {
+        showError({
+          context: 'People › Add Contact',
+          summary: t('contactManual.saveFailed'),
+          error,
+        });
+      } finally {
+        setSaving(false);
+      }
     })();
   };
 
   return (
-    <KeyboardAvoidingView
-      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-      style={{ flex: 1, backgroundColor: Colors.pageBg }}>
+    <View style={{ flex: 1, backgroundColor: Colors.pageBg }}>
       <View style={{ paddingTop: insets.top }}>
-        <Toolbar onCancel={onClose} onSave={onSave} canSave={canSave} />
+        <Toolbar
+          onCancel={onClose}
+          onSave={onSave}
+          canSave={canSave && !saving}
+          saving={saving}
+        />
       </View>
 
-      <ScrollView
+      <KeyboardAwareScrollView
         keyboardShouldPersistTaps="handled"
-        contentContainerStyle={{ paddingHorizontal: 16, paddingTop: 16, paddingBottom: 32 }}>
+        bottomOffset={16}
+        contentContainerStyle={{ paddingHorizontal: 16, paddingTop: 16, paddingBottom: insets.bottom + 32 }}>
         <View style={{ rowGap: 20 }}>
           <FieldRow
             label="Name"
@@ -208,8 +219,8 @@ function ManualContactEntryContent({
             </Text>
           ) : null}
         </View>
-      </ScrollView>
-    </KeyboardAvoidingView>
+      </KeyboardAwareScrollView>
+    </View>
   );
 }
 
@@ -222,16 +233,23 @@ function Toolbar({
   onCancel,
   onSave,
   canSave,
+  saving,
 }: {
   readonly onCancel: () => void;
   readonly onSave: () => void;
   readonly canSave: boolean;
+  readonly saving: boolean;
 }): ReactNode {
   return (
     <View
       className="flex-row items-center justify-between"
       style={{ paddingHorizontal: 16, height: 44 }}>
-      <Pressable accessibilityRole="button" onPress={onCancel} hitSlop={8}>
+      <Pressable
+        accessibilityRole="button"
+        onPress={onCancel}
+        disabled={saving}
+        hitSlop={8}
+      >
         <Text className="text-text1" style={{ fontSize: 16 }}>
           Cancel
         </Text>
@@ -248,7 +266,7 @@ function Toolbar({
             color: canSave ? Colors.text1 : Colors.text3,
             fontWeight: '600',
           }}>
-          Save
+          {saving ? 'Saving…' : 'Save'}
         </Text>
       </Pressable>
     </View>

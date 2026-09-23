@@ -19,9 +19,29 @@ const { withAppBuildGradle } = require('@expo/config-plugins');
 
 const MARKER = '// [withAndroidReleaseSigning]';
 
-function injectReleaseSigningConfig(src) {
-  if (src.includes(MARKER)) return src;
+// The release build type's `signingConfig` line. Expo SDK 57's template writes
+// the Gradle 9 assignment form (`signingConfig = signingConfigs.debug`); older
+// templates omit the `=`. Missing the `=` form once let a release AAB go out
+// signed with the template's debug key, which Play rejects.
+const RELEASE_BUILD_TYPE_SIGNING =
+  /(buildTypes\s*\{[\s\S]*?release\s*\{[^}]*?signingConfig)(\s*=\s*|\s+)signingConfigs\.(\w+)/;
 
+function injectReleaseSigningConfig(src) {
+  const withSigningConfig = src.includes(MARKER) ? src : insertReleaseSigningConfig(src);
+
+  // Runs on every prebuild — not only the first — so a file marked by an older
+  // plugin version whose build type was never switched gets repaired.
+  const match = withSigningConfig.match(RELEASE_BUILD_TYPE_SIGNING);
+  if (!withSigningConfig.includes(MARKER) || !match) {
+    throw new Error(
+      '[withAndroidReleaseSigning] app/build.gradle no longer matches the Expo template ' +
+        'this plugin patches; update the plugin rather than ship a debug-signed release.',
+    );
+  }
+  return withSigningConfig.replace(RELEASE_BUILD_TYPE_SIGNING, '$1$2signingConfigs.release');
+}
+
+function insertReleaseSigningConfig(src) {
   const releaseBlock = `        release {
             ${MARKER}
             def ks = System.getenv("ANDROID_KEYSTORE_PATH")
@@ -41,15 +61,9 @@ function injectReleaseSigningConfig(src) {
 
   // Insert release { } immediately after the debug { } block inside
   // signingConfigs { }. Pattern matches Expo template output.
-  const signingPatched = src.replace(
+  return src.replace(
     /(signingConfigs\s*\{\s*debug\s*\{[\s\S]*?\n\s{8}\}\n)/,
     `$1${releaseBlock}`,
-  );
-
-  // Switch release buildType to use signingConfigs.release.
-  return signingPatched.replace(
-    /(buildTypes\s*\{[\s\S]*?release\s*\{[\s\S]*?)signingConfig signingConfigs\.debug/,
-    '$1signingConfig signingConfigs.release',
   );
 }
 
@@ -67,3 +81,4 @@ function withAndroidReleaseSigning(config) {
 }
 
 module.exports = withAndroidReleaseSigning;
+module.exports.injectReleaseSigningConfig = injectReleaseSigningConfig;

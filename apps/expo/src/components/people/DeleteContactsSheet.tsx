@@ -53,16 +53,13 @@ export function DeleteContactsSheet({
             {t('peopleList.deleteCountTitle', { count: contacts.length })}
           </ThemedText>
 
-          <ThemedSurface variant="card" padded>
+          <ThemedSurface variant="inset" padded>
             <View style={{ gap: 10 }}>
               <ThemedText variant="bodyMedium" tone="secondary">
                 {t('peopleList.deleteCardsNotes')}
               </ThemedText>
               <ThemedText variant="bodyMedium" tone="secondary">
                 {t('peopleList.deleteOthersUnaffected')}
-              </ThemedText>
-              <ThemedText variant="bodyMedium" tone="error">
-                {t('peopleList.deleteNoUndo')}
               </ThemedText>
             </View>
           </ThemedSurface>
@@ -109,6 +106,7 @@ export function DeleteContactsSheet({
             label={t('peopleList.delete')}
             loading={deleting}
             disabled={contacts.length === 0}
+            accessibilityHint={t('peopleList.deleteNoUndo')}
             onPress={onConfirm}
           />
           <ThemedButton

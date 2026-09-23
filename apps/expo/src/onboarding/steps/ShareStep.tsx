@@ -12,13 +12,18 @@
  *   - otherwise (the user skipped `page`) — a brief, generic pointer to Me,
  *     never a fabricated placeholder link/QR.
  */
+import { BrandIcon } from '@/components/icons/BrandIcon';
+import { Colors } from '@/constants/Colors';
+import { usePreferences } from '@/settings/preferences';
+import { validatePublicPageUsername } from '@/onboarding/publicPageUsername';
+import { displayProfileShareUrl } from '@/components/me/meProfileModel';
 import { Image } from 'expo-image';
 import * as Clipboard from 'expo-clipboard';
 import { useEffect, useMemo, useState } from 'react';
 import { View } from 'react-native';
 
 import { generateQrPng } from '@/cards/qrCodeManager';
-import { ThemedButton, ThemedText } from '@/components/themed';
+import { ThemedButton, ThemedSurface, ThemedText } from '@/components/themed';
 import { haptic } from '@/feedback/haptics';
 import { pushToast } from '@/feedback/toast';
 import { useTranslation } from '@/i18n';
@@ -28,7 +33,7 @@ import { OnboardingScaffold } from './OnboardingScaffold';
 
 /** Mirrors `ProfileSummaryCard`'s canonical viewer URL — display text only;
  * the fragment never leaves the device (01-spec §1/§8). */
-const FRAGMENT_BASE_URL = 'https://app.solidarity.gg/#';
+const FRAGMENT_BASE_URL = 'https://creds.id/#';
 const QR_SIZE = 220;
 
 export interface ShareStepProps {
@@ -41,6 +46,10 @@ export function ShareStep({ onBack, onNext }: ShareStepProps) {
   const record = useProfileStore((s) => s.record);
   const jws = useProfileStore((s) => s.jws);
   const status = useProfileStore((s) => s.status);
+  const username = usePreferences((s) => s.publicPageRegisteredUsername);
+  const bindingReady = usePreferences((s) => s.publicPageBindingReady);
+  const usernameUrl = bindingReady && validatePublicPageUsername(username).kind === 'valid'
+    ? `https://creds.id/@${username}` : null;
   // T7: share the SHARED projection (public + link-only), not the full record.
   // Falls back to the full jws for a profile with no cached projection (safe —
   // it then has no private links).
@@ -119,11 +128,11 @@ export function ShareStep({ onBack, onNext }: ShareStepProps) {
       <View style={{ alignItems: 'center', gap: 16 }}>
         <ThemedText variant="titleMedium">{record.displayName}</ThemedText>
 
-        <View
+        <ThemedSurface
+          variant="card"
           style={{
             width: QR_SIZE,
             height: QR_SIZE,
-            backgroundColor: '#FFFFFF',
             alignItems: 'center',
             justifyContent: 'center',
             borderRadius: 2,
@@ -147,15 +156,18 @@ export function ShareStep({ onBack, onNext }: ShareStepProps) {
               {t('profileCard.generatingQr')}
             </ThemedText>
           )}
-        </View>
+        </ThemedSurface>
 
-        <ThemedText
-          variant="caption"
-          tone="secondary"
-          numberOfLines={1}
-          style={{ maxWidth: '100%' }}>
-          {fragmentUrl}
-        </ThemedText>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+          <BrandIcon name="globe" size={18} color={Colors.text2} />
+          <ThemedText
+            variant="caption"
+            tone="secondary"
+            numberOfLines={1}
+            style={{ maxWidth: '100%' }}>
+            {usernameUrl ? displayProfileShareUrl({ kind: 'username', url: usernameUrl, displayUrl: usernameUrl }) : t('links.yourPageLink')}
+          </ThemedText>
+        </View>
 
         <ThemedButton
           label={t('shareStep.copyLink')}

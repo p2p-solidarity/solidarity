@@ -5,7 +5,7 @@
  */
 import { describe, expect, it } from 'bun:test';
 
-import type { PassportMRZ } from '@solidarity/nitro-nfc-passport';
+import type { PassportMRZ } from '@solidarity/nitro-attest';
 
 import {
   initialPassportPipelineState,

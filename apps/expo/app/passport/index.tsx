@@ -28,7 +28,8 @@
 import { useLocalSearchParams } from 'expo-router';
 import { safeBack } from '@/navigation/safeBack';
 import { useCallback, useEffect, useMemo, useReducer, useState } from 'react';
-import { Modal, Pressable, ScrollView, Text, View } from 'react-native';
+import { Modal, Pressable, Text, View } from 'react-native';
+import { KeyboardAwareScrollView } from 'react-native-keyboard-controller';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { CryptoCompilingOverlay } from '@/components/common/CryptoCompilingOverlay';
@@ -107,7 +108,7 @@ import {
 import {
   didKeyForCurrentIdentity,
   publicRawP256ForCurrentIdentity,
-  requireBiometric,
+  requireSensitiveAction,
   signOpenAcDeviceBindingDigest,
 } from '@/keychain';
 import { usePreferences } from '@/settings/preferences';
@@ -117,8 +118,8 @@ import { useActiveDid, useIdentityData } from '@/identity';
 import type {
   getNfcPassport,
   PassportReadResult,
-} from '@solidarity/nitro-nfc-passport';
-import type { getPassportZk } from '@solidarity/nitro-passport-zk';
+} from '@solidarity/nitro-attest';
+import type { getPassportZk } from '@solidarity/nitro-attest';
 import { sha256Bytes, uuid } from '@solidarity/shared';
 import { loadPassportNitroModules } from '@/passport/nitroModules';
 
@@ -558,7 +559,11 @@ export default function PassportSetup() {
     // CLAUDE.md Sec rule: Face ID is required for passport save. Prepare no
     // longer signs (openac_show left the enrollment run), so this is the
     // single enrollment prompt.
-    const authorized = await requireBiometric('passportSave');
+    const gate = await requireSensitiveAction(
+      'issueCredential',
+      t('security.prompt.issueCredential')
+    );
+    const authorized = gate.success;
     if (!authorized) {
       pushToast(
         developerMode
@@ -748,7 +753,10 @@ export default function PassportSetup() {
         }
         onDone={onProofOverlayDone}
       />
-      <ScrollView contentContainerStyle={{ padding: 16, paddingBottom: 80 }}>
+      <KeyboardAwareScrollView
+        keyboardShouldPersistTaps="handled"
+        bottomOffset={16}
+        contentContainerStyle={{ padding: 16, paddingBottom: 80 }}>
         <SolidarityPlaceholderCard
           screenID={meta.id}
           title={t(meta.title)}
@@ -800,7 +808,7 @@ export default function PassportSetup() {
             onSave={() => { void onPersist(); }}
           />
         ) : null}
-      </ScrollView>
+      </KeyboardAwareScrollView>
 
       <Modal
         visible={showCamera}

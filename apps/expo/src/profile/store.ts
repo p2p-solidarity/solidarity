@@ -40,7 +40,10 @@ import { create } from 'zustand';
 // plain exports either way; importing them from the leaf module keeps this
 // store's test (`__tests__/unit/profileStore.test.ts`) import-safe without
 // any `mock.module` on `@/identity`.
-import { invalidateCachedNostrResult } from '@/badges/badgeStatusCache';
+import {
+  invalidateCachedAtprotoResult,
+  invalidateCachedNostrResult,
+} from '@/badges/badgeStatusCache';
 import { getRootDid, getRootSigner, type RootKeyError } from '@/identity/rootKey';
 import { publishProfile, updateKind0AlsoKnownAs, type PublishReport } from '@/nostr/publish';
 import { getNostrPubkey, npubEncode } from '@/nostr/userKey';
@@ -52,8 +55,6 @@ import {
   ok,
   parseProfile,
   signCompact,
-  stableJSON,
-  verifyCompact,
   type ProfileLink,
   type ProfileBadge,
   type PublicPageDesign,
@@ -144,6 +145,14 @@ export interface ProfileSaveOptions {
   readonly badges?: readonly ProfileBadge[];
   /** Signed Page layout. Local editor state never enters this value. */
   readonly page?: PublicPageDesign;
+  /**
+   * The reviewed webSign draft's own stamp (`app/websign/review.tsx`). Adopted
+   * only when it still advances the append-only clock past the previous
+   * record; otherwise the monotonic default applies. Carrying the draft's
+   * stamp keeps the published projection byte-identical to the record the
+   * website confirms against.
+   */
+  readonly updatedAt?: string;
 }
 
 /** The exact pair persisted by a successful Face-ID-gated save. */
@@ -301,6 +310,20 @@ function nextUpdatedAt(previous: string | null): string {
   return new Date(nextMs).toISOString();
 }
 
+/**
+ * A caller-supplied stamp (the webSign draft's) wins only when it is a valid
+ * ISO instant that advances past the previous record — the append-only clock
+ * never moves backwards or stalls because a website said so.
+ */
+function adoptUpdatedAt(requested: string | undefined, previous: string | null): string {
+  const fallback = nextUpdatedAt(previous);
+  if (requested === undefined) return fallback;
+  const requestedMs = Date.parse(requested);
+  if (Number.isNaN(requestedMs)) return fallback;
+  if (previous !== null && requestedMs <= Date.parse(previous)) return fallback;
+  return requested;
+}
+
 function avatarForSave(
   previous: string | null,
   override: string | null | undefined
@@ -330,7 +353,7 @@ function buildCandidateRecord(
     badges: options.badges !== undefined ? [...options.badges] : (previous?.badges ?? []),
     ...(page ? { page } : {}),
     supersededBy: previous?.supersededBy ?? null,
-    updatedAt: nextUpdatedAt(previous?.updatedAt ?? null),
+    updatedAt: adoptUpdatedAt(options.updatedAt, previous?.updatedAt ?? null),
   };
 }
 
@@ -401,21 +424,6 @@ interface ProfileState {
   /** Save only the signed public Page projection while carrying all editable
    * profile fields and their existing privacy tiers forward. */
   readonly savePageDesign: (page: PublicPageDesign) => Promise<Result<SavedProfile, string>>;
-  /**
-   * Adopt an already-root-signed `(record, jws)` pair as the current profile
-   * WITHOUT re-signing — the persistence tail of the App↔Web webSign flow
-   * (research §4 / G3): `approveWebSignRequest` has already Face-ID-gated and
-   * root-signed the EXACT reviewed draft, so re-running `saveProfile` (which
-   * mints a fresh record + fresh `updatedAt` and prompts Face ID again) would
-   * both desync from the `responseJws` binding and double-prompt. This
-   * re-validates the record shape and verifies the `jws` really is a root
-   * signature over exactly that record (a defensive guard against a caller
-   * wiring mistake — never a trust decision) before replacing the stored
-   * pair, then invalidates the cached Nostr verification (a fresh record is
-   * now ahead of any published copy). Synchronous: no biometric prompt, since
-   * the signature already exists.
-   */
-  readonly adoptSignedProfile: (record: ProfileRecord, jws: string) => Result<SavedProfile, string>;
   /**
    * Publish the signed profile to Nostr (kind 30078) AND merge the
    * user's did:key into their kind-0 `alsoKnownAs` — the two directions
@@ -517,11 +525,14 @@ export const useProfileStore = create<ProfileState>((set, get) => ({
       nostrPublishedJws: null,
       status: 'ready',
     });
-    // The record was re-signed — any published Nostr copy is now behind it,
-    // so the cached verification no longer describes this record. Clearing
-    // it makes the badge re-check honestly (typically → stale) instead of
-    // seeding the pre-edit state, which is the user's cue to republish.
+    // The record was re-signed — any published copy is now behind it, so the
+    // cached verifications no longer describe this record. Clearing them makes
+    // the checks re-run honestly (typically → stale) instead of seeding the
+    // pre-edit state, which is the user's cue to republish. Both bindings are
+    // cleared: an ATProto result left standing would keep painting a green
+    // pill for a handle this record may no longer claim.
     invalidateCachedNostrResult();
+    invalidateCachedAtprotoResult();
     return ok({ record: validated.value, jws });
   },
 
@@ -541,54 +552,6 @@ export const useProfileStore = create<ProfileState>((set, get) => ({
       },
       { page }
     );
-  },
-
-  adoptSignedProfile: (record, jws) => {
-    const localDataEpoch = captureLocalDataEpoch();
-    if (!canCommitLocalData(localDataEpoch)) {
-      return err('adoptSignedProfile: cancelled by local wipe');
-    }
-    const validated = parseProfile(record);
-    if (!validated.ok) return err(`adoptSignedProfile: ${validated.error}`);
-    // The pair MUST be internally consistent: `jws` a root signature over
-    // exactly this record. It always is when produced by
-    // `approveWebSignRequest`; this only fails on a caller wiring bug, never
-    // on a legitimate flow.
-    const verified = verifyCompact(jws, validated.value.did);
-    if (!verified.ok) return err(`adoptSignedProfile: ${verified.error}`);
-    if (stableJSON(verified.value) !== stableJSON(validated.value)) {
-      return err('adoptSignedProfile: signed payload differs from the record');
-    }
-    // The adopted record replaces the profile, so any previously-signed
-    // `shared`/`published` projections belong to the OLD record — null them so
-    // the next publish/share re-signs for THIS record (never republishes the
-    // prior public projection). The web-signed record carries no per-link
-    // visibility metadata → all links default public (empty `linkVisibility`).
-    const persisted = writePersisted({
-      record: validated.value,
-      jws,
-      linkVisibility: [],
-      shared: null,
-      published: null,
-      nostrPublishedJws: null,
-    }, localDataEpoch);
-    if (persisted === 'storageFailure') {
-      return err('adoptSignedProfile: local storage could not be updated');
-    }
-    if (persisted !== 'ok' || !canCommitLocalData(localDataEpoch)) {
-      return err('adoptSignedProfile: cancelled by local wipe');
-    }
-    set({
-      record: validated.value,
-      jws,
-      status: 'ready',
-      linkVisibility: [],
-      shared: null,
-      published: null,
-      nostrPublishedJws: null,
-    });
-    invalidateCachedNostrResult();
-    return ok({ record: validated.value, jws });
   },
 
   publishToNostr: async (confirmedRelays) => {

@@ -74,10 +74,11 @@ describe('parseDeepLink', () => {
     expect(r).toEqual({ kind: 'verifiedProfile', fragment: 'eyJhbGciOiJFUzI1NiJ9' });
   });
 
-  it('keeps creds.id to public-page routing rather than granting card or private-connect actions', () => {
-    expect(parseDeepLink('https://creds.id/c/f47ac10b-58cc-4372-a567-0e02b2c3d479').kind).toBe(
-      'unknown'
-    );
+  it('grants creds.id the full product-host link surface, /c card links included (2026-08-30 switch)', () => {
+    expect(parseDeepLink('https://creds.id/c/f47ac10b-58cc-4372-a567-0e02b2c3d479')).toEqual({
+      kind: 'card',
+      cardId: 'f47ac10b-58cc-4372-a567-0e02b2c3d479',
+    });
   });
 
   it('treats a verified-domain https link with no hash as unknown, not verifiedProfile', () => {
@@ -264,5 +265,33 @@ describe('parseDeepLink', () => {
   it('does not confuse a real Verified Page fragment link with a websign link', () => {
     // No `/websign` path segment → still routes as a Verified Page fragment.
     expect(parseDeepLink('https://solidarity.gg/#abc123').kind).toBe('verifiedProfile');
+  });
+});
+
+describe('creds.id production product host (05-spec §8-B, switched 2026-08-30)', () => {
+  const CREDS_HANDLE_URL = 'https://creds.id/@alice.bsky.social';
+  const CREDS_FRAGMENT_URL = 'https://creds.id/#nostr:npub1qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqql6verd';
+
+  it('treats creds.id as a product host WITHOUT dev mode (production default)', () => {
+    const r = parseDeepLink(CREDS_HANDLE_URL);
+    expect(r.kind).toBe('verifiedHandle');
+    if (r.kind === 'verifiedHandle') expect(r.handle).toBe('alice.bsky.social');
+  });
+
+  it('keeps the legacy app.solidarity.gg handle links routing (pre-switch shares)', () => {
+    const r = parseDeepLink('https://app.solidarity.gg/@alice.bsky.social');
+    expect(r.kind).toBe('verifiedHandle');
+    if (r.kind === 'verifiedHandle') expect(r.handle).toBe('alice.bsky.social');
+  });
+
+  it('routes a creds.id pointer fragment (self-verifying form)', () => {
+    expect(parseDeepLink(CREDS_FRAGMENT_URL).kind).toBe('verifiedPointer');
+  });
+
+  it('never admits third-party TRUSTED_HOSTS even with devProductHosts on', () => {
+    expect(parseDeepLink('https://github.com/@alice.bsky.social', { devProductHosts: true }).kind).toBe('unknown');
+    expect(
+      parseDeepLink('https://github.com/c/f47ac10b-58cc-4372-a567-0e02b2c3d479', { devProductHosts: true }).kind
+    ).toBe('unknown');
   });
 });

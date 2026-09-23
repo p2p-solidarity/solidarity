@@ -68,6 +68,7 @@
  *     (never a raw exception message — CLAUDE.md rule "Sec: ... no PII
  *     logs / return Result").
  */
+import { hostnameOf } from '@/profile/linkPresentation';
 import { err, ok, type Result } from '@solidarity/shared';
 
 export type LinkPageImportErrorReason =
@@ -327,12 +328,4 @@ function normalizeCandidates(
     if (out.length >= MAX_LINKS) break;
   }
   return out;
-}
-
-function hostnameOf(url: string): string {
-  try {
-    return new URL(url).hostname;
-  } catch {
-    return url;
-  }
 }

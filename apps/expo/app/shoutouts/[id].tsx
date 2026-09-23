@@ -32,8 +32,10 @@ import {
 import { ThemedButton } from '@/components/themed';
 import { Colors } from '@/constants/Colors';
 import { useContact, useContactStore } from '@/contacts/repository';
+import { showError } from '@/feedback/appAlert';
 import { confirmDialog } from '@/feedback/confirmDialog';
 import { pushToast } from '@/feedback/toast';
+import { useTranslation } from '@/i18n';
 import { useShoutoutStore } from '@/shoutouts/store';
 import {
   AvatarRing,
@@ -47,6 +49,7 @@ import {
 
 export default function ShoutoutDetail(): ReactNode {
   const insets = useSafeAreaInsets();
+  const { t } = useTranslation();
   const { id, name } = useLocalSearchParams<{ id: string; name?: string }>();
   const contact = useContact(id);
   const removeContact = useContactStore((s) => s.remove);
@@ -119,9 +122,17 @@ export default function ShoutoutDetail(): ReactNode {
         destructive: true,
       });
       if (!ok) return;
-      await removeContact(contact.id);
-      pushToast(`Deleted ${displayName}`, 'success');
-      safeBack();
+      try {
+        await removeContact(contact.id);
+        pushToast(`Deleted ${displayName}`, 'success');
+        safeBack();
+      } catch (error) {
+        showError({
+          context: 'Sakura Profile › Delete Contact',
+          summary: t('peopleList.deleteFailed'),
+          error,
+        });
+      }
     })();
   };
 

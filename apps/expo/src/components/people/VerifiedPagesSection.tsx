@@ -26,6 +26,10 @@
  * OWN route (`/people/declared/[id]`, not `/people/profile/[did]` — a
  * declared entry has no did to key that route on).
  */
+import { BrandIcon } from '@/components/icons/BrandIcon';
+import Animated, { useReducedMotion } from 'react-native-reanimated';
+import { fadeUpIn } from '@/feedback/motion';
+import { hostnameOf, linkDisplay } from '@/profile/linkPresentation';
 import { router } from 'expo-router';
 import type { ReactNode } from 'react';
 import { View } from 'react-native';
@@ -46,6 +50,7 @@ import { verifiedAtRelative } from '@/people/relativeVerifiedAt';
 export function VerifiedPagesSection(): ReactNode {
   const { t } = useTranslation();
   const snapshots = useSortedProfileSnapshots();
+  const reduceMotion = useReducedMotion();
 
   if (snapshots.length === 0) return null;
 
@@ -59,11 +64,12 @@ export function VerifiedPagesSection(): ReactNode {
       </ThemedText>
       <View>
         {snapshots.map((snapshot, index) => (
-          <SnapshotRow
-            key={snapshot.kind === 'verified' ? snapshot.did : snapshot.id}
-            snapshot={snapshot}
-            isLast={index === snapshots.length - 1}
-          />
+          <Animated.View key={snapshot.kind === 'verified' ? snapshot.did : snapshot.id} entering={fadeUpIn(index, reduceMotion)}>
+            <SnapshotRow
+              snapshot={snapshot}
+              isLast={index === snapshots.length - 1}
+            />
+          </Animated.View>
         ))}
       </View>
     </View>
@@ -156,16 +162,14 @@ function DeclaredPageRow({
         className="items-center justify-center overflow-hidden rounded-full bg-searchBg"
         style={{ width: 38, height: 38 }}
       >
-        <ThemedText variant="bodyMedium" tone="secondary">
-          {initial(displayTitle)}
-        </ThemedText>
+        <BrandIcon name={linkDisplay('', snapshot.sourceUrl).brand} size={20} color={Colors.text2} />
       </View>
       <View className="flex-1" style={{ gap: 2 }}>
         <ThemedText variant="bodyLarge" numberOfLines={1}>
           {displayTitle}
         </ThemedText>
         <ThemedText variant="caption" tone="tertiary" numberOfLines={1}>
-          {`${hostnameOf(snapshot.sourceUrl)} · ${relativeAtLabel(snapshot.importedAt, t)}`}
+          {`${linkDisplay('', snapshot.sourceUrl).text} · ${relativeAtLabel(snapshot.importedAt, t)}`}
         </ThemedText>
       </View>
       <View
@@ -181,13 +185,7 @@ function DeclaredPageRow({
   );
 }
 
-function hostnameOf(url: string): string {
-  try {
-    return new URL(url).hostname;
-  } catch {
-    return url;
-  }
-}
+
 
 function initial(displayName: string): string {
   const trimmed = displayName.trim();

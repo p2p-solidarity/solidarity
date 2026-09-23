@@ -7,7 +7,7 @@ import { router } from 'expo-router';
 import type { SFSymbol } from 'expo-symbols';
 import { useEffect, useMemo, type ReactNode } from 'react';
 import { ScrollView, View } from 'react-native';
-import Animated, { FadeInDown } from 'react-native-reanimated';
+import Animated, { useReducedMotion } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { useCardStore, useMyCardDetail } from '@/cards/cardManager';
@@ -23,7 +23,7 @@ import {
 } from '@/components/settings/SettingsBlocks';
 import { ThemedText } from '@/components/themed';
 import { credentialTrustDisplayFor } from '@/credentials/trustDisplay';
-import { STAGGER_MS } from '@/feedback/motion';
+import { fadeUpIn } from '@/feedback/motion';
 import { useTranslation } from '@/i18n';
 import {
   useDisplayClaims,
@@ -64,6 +64,9 @@ export function VerificationToolsScreen({
     [identityCards]
   );
   const disclosures = useDisplayClaims();
+  // Sections cascade in on mount (240 ms ease-out, 40 ms apart, 8 pt rise);
+  // Reduce Motion keeps the fade and drops the rise.
+  const reduceMotion = useReducedMotion();
 
   return (
     <View className="flex-1 bg-pageBg" style={{ paddingTop: insets.top }}>
@@ -72,11 +75,11 @@ export function VerificationToolsScreen({
 
       <ScrollView contentContainerStyle={{ paddingTop: 12, paddingBottom: 100 }}>
         <View className="gap-8">
-          <Animated.View entering={FadeInDown.duration(360)}>
+          <Animated.View entering={fadeUpIn(0, reduceMotion)}>
             <ScanEntrySection onScan={() => { router.push('/scan'); }} />
           </Animated.View>
 
-          <Animated.View entering={FadeInDown.duration(360).delay(STAGGER_MS)}>
+          <Animated.View entering={fadeUpIn(1, reduceMotion)}>
             <VerifiedCredentialsSection
               items={verifiedCreds}
               onScanIdentity={() => { router.push('/passport'); }}
@@ -87,11 +90,11 @@ export function VerificationToolsScreen({
             />
           </Animated.View>
 
-          <Animated.View entering={FadeInDown.duration(360).delay(STAGGER_MS * 2)}>
+          <Animated.View entering={fadeUpIn(2, reduceMotion)}>
             <SelectiveDisclosuresSection claims={disclosures} workContext={workContext} />
           </Animated.View>
 
-          <Animated.View entering={FadeInDown.duration(360).delay(STAGGER_MS * 3)}>
+          <Animated.View entering={fadeUpIn(3, reduceMotion)}>
             <ActionSection
               onAcquire={() => { router.push('/passport'); }}
               onImportRaw={() => { router.push('/credentials'); }}
