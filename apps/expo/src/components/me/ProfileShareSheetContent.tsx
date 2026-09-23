@@ -112,10 +112,6 @@ export function ProfileShareReadyContent({
         }}
       />
 
-      <ThemedText variant="caption" tone="tertiary" style={{ textAlign: 'center' }}>
-        {t('meShare.bioHint')}
-      </ThemedText>
-
       <OtherFormatsSection
         visible={visible}
         candidates={otherCandidates}

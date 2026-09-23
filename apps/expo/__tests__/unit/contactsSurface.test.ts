@@ -182,8 +182,8 @@ describe('v2 Contacts surface', () => {
       'peopleList.exportVCard': ['Export vCard', '匯出 vCard'],
       'peopleList.emptyTitle': ['No Contacts Yet', '還沒有聯絡人'],
       'peopleList.emptyBody': [
-        "People you've exchanged cards with appear here, and their details update themselves.",
-        '交換過的人會出現在這裡，對方改了資料會自己更新。',
+        'Cards you exchange land here and stay up to date.',
+        '交換過的名片會出現在這裡，並自動保持最新。',
       ],
       'peopleList.add': ['Add Contact', '新增聯絡人'],
       'peopleList.scanTheirQr': ['Scan Their QR', '掃描對方的 QR'],

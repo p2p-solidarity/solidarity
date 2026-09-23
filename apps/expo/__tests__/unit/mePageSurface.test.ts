@@ -150,18 +150,40 @@ describe('Page surface', () => {
     expect(share).toContain('setShareRetryNonce');
     expect(share).toContain("t('meShare.modelError')");
 
+    // Motion follows the app tokens: one strong ease-out curve, entrances
+    // under 300 ms, exits faster than entrances, 40 ms stagger steps.
     expect(motion).toContain('STAGGER_MS = 40');
-    expect(page).toContain('const ENTRANCE_DURATION_MS = 240');
-    expect(page).toContain('STAGGER_MS * 2');
-    expect(page).toContain('STAGGER_MS * 3');
-    expect(share).toContain('const QR_SHEET_DURATION_MS = 240');
-    expect(share).toContain('zoomFadeIn(QR_SHEET_DURATION_MS)');
-    expect(motion).toContain('Easing.out(Easing.cubic)');
-    expect(motion).toContain('scale: 0.97');
+    expect(motion).toContain('EASE_OUT = Easing.bezier(0.23, 1, 0.32, 1)');
+    expect(motion).toContain('enter: 240');
+    expect(motion).toContain('exit: 160');
+    // Page sections cascade in with the shared staggered entrance, reduced
+    // motion honoured, never the library's default-easing presets.
+    expect(page).toContain('fadeUpIn(index, reduceMotion)');
+    for (const index of [0, 1, 2, 3, 4]) {
+      expect(page).toContain(`entering={entrance(${String(index)})}`);
+    }
+    expect(page).not.toContain('FadeInDown');
+    expect(links).toContain('fadeUpIn(sectionIndex, reduceMotion)');
+    // The share sheet slides up from its own height over a fading backdrop
+    // and animates OUT before it unmounts — no zoom-in / hard-cut Modal.
+    const sheet = source('../../src/components/me/SlideUpSheet.tsx');
+    const preview = source('../../src/components/me/PublishPreviewSheet.tsx');
+    for (const surface of [share, preview]) {
+      expect(surface).toContain('<SlideUpSheet visible={visible} onClose={onClose}>');
+      expect(surface).not.toContain('zoomFadeIn');
+      expect(surface).not.toContain('<Modal');
+    }
+    expect(preview).toContain('close(onConfirm)');
+    expect(share).toContain('scaleTo={SCALE.icon}');
+    expect(sheet).toContain('withTiming(1, TIMING.enter)');
+    expect(sheet).toContain('withTiming(0, TIMING.exit');
+    expect(sheet).toContain('scheduleOnRN(finishExit)');
+    expect(sheet).toContain('(1 - progress.value) * sheetHeight.value');
+    expect(sheet).toContain('useReducedMotion()');
     expect(share).toContain('shareQrImage');
     expect(shareContent).toContain("t('meShare.shareQrImage')");
 
-    const pageSurfaceSource = [page, share, badges, hero, links].join('\n');
+    const pageSurfaceSource = [page, share, sheet, preview, badges, hero, links].join('\n');
     expect(pageSurfaceSource).not.toMatch(/#[0-9a-f]{3,8}\b/iu);
   });
 

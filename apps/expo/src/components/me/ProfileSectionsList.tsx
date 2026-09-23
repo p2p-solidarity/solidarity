@@ -2,7 +2,7 @@ import { useState, type ReactNode } from 'react';
 import { router } from 'expo-router';
 import { ActivityIndicator, ScrollView, Switch, View } from 'react-native';
 import { KeyboardAwareScrollView } from 'react-native-keyboard-controller';
-import Animated, { FadeIn } from 'react-native-reanimated';
+import Animated, { useReducedMotion } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { ModalSheet } from '@/components/common/ModalSheet';
@@ -13,6 +13,7 @@ import { Colors } from '@/constants/Colors';
 import { useThemeColors } from '@/constants/useThemeColors';
 import { useTranslation } from '@/i18n';
 import { haptic } from '@/feedback/haptics';
+import { fadeUpIn } from '@/feedback/motion';
 import { pushToast } from '@/feedback/toast';
 import {
   PAGE_BLOCK_CATALOG,
@@ -61,9 +62,6 @@ export interface ProfileSectionsListProps {
   /** Real page address for the preview's handle line, when one exists. */
   readonly previewHandle: string | null;
 }
-
-/** Reveal duration for the folded preview — same 240ms as the page entrance. */
-const PREVIEW_REVEAL_MS = 240;
 
 export function ProfileSectionsList({
   linkCount,
@@ -248,6 +246,7 @@ function PagePreviewDisclosure({
 }): ReactNode {
   const { t } = useTranslation();
   const c = useThemeColors();
+  const reduceMotion = useReducedMotion();
   return (
     <View style={{ gap: open ? 12 : 0 }}>
       <PressableScale
@@ -263,7 +262,8 @@ function PagePreviewDisclosure({
         <SfIcon name={open ? 'chevron.down' : 'chevron.right'} size={13} color={Colors.text3} />
       </PressableScale>
       {open ? (
-        <Animated.View entering={FadeIn.duration(PREVIEW_REVEAL_MS)}>
+        // Same entrance as the page's sections: EASE_OUT fade + small rise.
+        <Animated.View entering={fadeUpIn(0, reduceMotion)}>
           <PageLivePreview
             record={record}
             blocks={blocks}

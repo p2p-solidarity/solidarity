@@ -1,13 +1,13 @@
 import { router } from 'expo-router';
 import { useState, type ReactNode } from 'react';
 import { ScrollView, View } from 'react-native';
-import Animated, { FadeInDown } from 'react-native-reanimated';
+import Animated, { useReducedMotion } from 'react-native-reanimated';
 
 import { PressableScale } from '@/components/common/PressableScale';
 import { SfIcon } from '@/components/icons/SfIcon';
 import { ThemedText } from '@/components/themed';
 import { useThemeColors } from '@/constants/useThemeColors';
-import { STAGGER_MS } from '@/feedback/motion';
+import { fadeUpIn } from '@/feedback/motion';
 import { useTranslation } from '@/i18n';
 import type { LinkVisibility } from '@/profile/projection';
 import type { ProfileRecord } from '@solidarity/shared';
@@ -23,8 +23,6 @@ import { ProfileLinksList } from './ProfileLinksList';
 import { ProfileSectionsList } from './ProfileSectionsList';
 import { PageAppearanceSheet } from './PageAppearanceSheet';
 import { PageLapsedCheckAlert } from './PageLapsedCheckAlert';
-
-const ENTRANCE_DURATION_MS = 240;
 
 export interface MeProfilePageProps {
   /** The FULL record — the owner's own view: every link, including private
@@ -70,6 +68,7 @@ export function MeProfilePage({
 }: MeProfilePageProps): ReactNode {
   const { t } = useTranslation();
   const colors = useThemeColors();
+  const reduceMotion = useReducedMotion();
   const [appearanceOpen, setAppearanceOpen] = useState(false);
   // The preview's `.pub-handle` line shows the page's REAL address, or
   // nothing at all while one is still unpublished.
@@ -83,7 +82,9 @@ export function MeProfilePage({
   const pageHandle = shareSelection.kind === 'ready'
     ? displayProfileShareUrl(shareSelection.selected)
     : null;
-  const entrance = (delay: number) => FadeInDown.duration(ENTRANCE_DURATION_MS).delay(delay);
+  // Sections cascade in top to bottom (`fadeUpIn`: EASE_OUT, 40 ms steps);
+  // reduced motion keeps the fade and drops the rise.
+  const entrance = (index: number) => fadeUpIn(index, reduceMotion);
 
   return (
     <ScrollView
@@ -106,7 +107,7 @@ export function MeProfilePage({
 
       <PageLapsedCheckAlert record={record} nostrUploaded={nostrShortUrlReady} />
 
-      <Animated.View entering={entrance(STAGGER_MS)}>
+      <Animated.View entering={entrance(1)}>
         <ProfileLinksList
           links={record.links}
           linkVisibility={linkVisibility}
@@ -116,7 +117,7 @@ export function MeProfilePage({
         />
       </Animated.View>
 
-      <Animated.View entering={entrance(STAGGER_MS * 2)}>
+      <Animated.View entering={entrance(2)}>
         <ProfileSectionsList
           linkCount={record.links.length}
           previewRecord={publicRecord}
@@ -124,7 +125,7 @@ export function MeProfilePage({
         />
       </Animated.View>
 
-      <Animated.View entering={entrance(STAGGER_MS * 3)}>
+      <Animated.View entering={entrance(3)}>
         <View className="px-4 pb-3">
           <PageSectionLabel title={t('mePage.attestations')} />
         </View>
@@ -137,7 +138,7 @@ export function MeProfilePage({
         />
       </Animated.View>
 
-      <Animated.View entering={entrance(STAGGER_MS * 4)} className="px-4">
+      <Animated.View entering={entrance(4)} className="px-4">
         <PressableScale
           onPress={() => { router.push('/settings/passkeys'); }}
           accessibilityRole="button"

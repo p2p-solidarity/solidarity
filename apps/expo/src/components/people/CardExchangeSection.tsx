@@ -24,6 +24,7 @@ import { router } from 'expo-router';
 import { useState, type ReactNode } from 'react';
 import { View } from 'react-native';
 
+import { InfoButton } from '@/components/common/InfoSheet';
 import { SfIcon } from '@/components/icons/SfIcon';
 import { ToggleRow } from '@/components/settings/SettingRow';
 import { ThemedButton, ThemedSurface, ThemedText } from '@/components/themed';
@@ -385,9 +386,16 @@ function EnabledCardExchangeSection({ did, verifiedDisplayName }: CardExchangeSe
             exchangeFlow.start();
           }}
         />
-        <ThemedText variant="caption" tone="tertiary">
-          {t('pearExchange.mutual.subtitle', { name: peerLabel })}
-        </ThemedText>
+        {/* One line on screen; the non-atomic fine print sits behind the ⓘ. */}
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+          <ThemedText variant="caption" tone="tertiary" style={{ flex: 1 }}>
+            {t('pearExchange.mutual.subtitle', { name: peerLabel })}
+          </ThemedText>
+          <InfoButton
+            title={t('pearExchange.mutual.button')}
+            body={t('pearExchange.mutual.info')}
+          />
+        </View>
         <MutualStatusLine phase={exchangePhase} t={t} />
         {exchangePhase.kind === 'done' ? <MutualResultView phase={exchangePhase} t={t} /> : null}
       </ThemedSurface>

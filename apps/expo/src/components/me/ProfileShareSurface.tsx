@@ -1,8 +1,7 @@
 import * as Clipboard from 'expo-clipboard';
 import { router } from 'expo-router';
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
-import { Modal, ScrollView, Share, useWindowDimensions, View } from 'react-native';
-import Animated from 'react-native-reanimated';
+import { ScrollView, Share, useWindowDimensions, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { generateQrPng } from '@/cards/qrCodeManager';
@@ -11,7 +10,7 @@ import { SfIcon } from '@/components/icons/SfIcon';
 import { ThemedButton, ThemedSurface, ThemedText } from '@/components/themed';
 import { Colors } from '@/constants/Colors';
 import { haptic } from '@/feedback/haptics';
-import { SCALE, zoomFadeIn } from '@/feedback/motion';
+import { SCALE } from '@/feedback/motion';
 import { pushToast } from '@/feedback/toast';
 import { useTranslation } from '@/i18n';
 import type { ProfileRecord } from '@solidarity/shared';
@@ -25,13 +24,12 @@ import {
 } from './ProfileShareSheetContent';
 import { PageHeaderAction } from './PageHeaderAction';
 import { profileShareQrIsOversize } from './profileShareQr';
+import { SlideUpSheet } from './SlideUpSheet';
 import {
   useProfileShareSelection,
   type ProfileShareSelectionState,
 } from './useProfileShareSelection';
 import type { ProfileShareUrlCandidate, PublicPageShareSource } from './meProfileModel';
-
-const QR_SHEET_DURATION_MS = 240;
 
 type ShareModelState = ReadyProfileShareModel | Exclude<ProfileShareSelectionState, { readonly kind: 'ready' }>;
 
@@ -203,116 +201,106 @@ function ProfileQrSheet({
   };
 
   return (
-    <Modal
-      visible={visible}
-      transparent
-      statusBarTranslucent
-      animationType="none"
-      onRequestClose={onClose}>
-      <View
-        style={{
-          flex: 1,
-          justifyContent: 'flex-end',
-          backgroundColor: Colors.overlayBg,
-        }}>
-        <Animated.View
-          entering={zoomFadeIn(QR_SHEET_DURATION_MS)}>
-          <ThemedSurface
-            variant="elevated"
-            className="rounded-none px-4 pt-5"
-            style={{ maxHeight: windowHeight - Math.max(insets.top, 12) }}>
-            <View className="flex-row items-start gap-3">
-              <ThemedText variant="titleLarge" className="flex-1 pt-2">
-                {t('meShare.title')}
-              </ThemedText>
-              <PressableScale
-                haptic="tap"
-                scaleTo={SCALE.icon}
-                onPress={onClose}
-                accessibilityRole="button"
-                accessibilityLabel={t('meShare.close')}
-                style={{ width: 44, height: 44, alignItems: 'center', justifyContent: 'center' }}>
-                <SfIcon name="xmark" size={16} color={Colors.text1} />
-              </PressableScale>
-            </View>
-
-            <ScrollView
-              style={{ flexShrink: 1 }}
-              contentContainerStyle={{
-                gap: 16,
-                paddingTop: 12,
-                paddingBottom: Math.max(insets.bottom, 16),
+    <SlideUpSheet visible={visible} onClose={onClose}>
+      {(close) => (
+        <ThemedSurface
+          variant="elevated"
+          className="rounded-none px-4 pt-5"
+          style={{ maxHeight: windowHeight - Math.max(insets.top, 12) }}>
+          <View className="flex-row items-start gap-3">
+            <ThemedText variant="titleLarge" className="flex-1 pt-2">
+              {t('meShare.title')}
+            </ThemedText>
+            <PressableScale
+              haptic="tap"
+              scaleTo={SCALE.icon}
+              onPress={() => {
+                close();
               }}
-              showsVerticalScrollIndicator={false}
-              alwaysBounceVertical={false}>
-              {shareState.kind === 'ready' ? (
-                <ProfileShareReadyContent
-                  visible={visible}
-                  state={shareState}
-                  qrState={qrState}
-                  onCopy={(url) => {
-                    void copyUrl(url);
-                  }}
-                  onShare={(url) => {
-                    void shareUrl(url);
-                  }}
-                  onShareQr={(uri) => {
-                    void shareQrImage(uri);
-                  }}
-                  onSelectFormat={(candidate) => {
-                    setSelectedKind(candidate.kind);
-                  }}
-                  onRetryQr={() => {
-                    setQrState({ kind: 'loading', url: shareState.selected.url });
-                    setQrRetryNonce((value) => value + 1);
+              accessibilityRole="button"
+              accessibilityLabel={t('meShare.close')}
+              style={{ width: 44, height: 44, alignItems: 'center', justifyContent: 'center' }}>
+              <SfIcon name="xmark" size={16} color={Colors.text1} />
+            </PressableScale>
+          </View>
+
+          <ScrollView
+            style={{ flexShrink: 1 }}
+            contentContainerStyle={{
+              gap: 16,
+              paddingTop: 12,
+              paddingBottom: Math.max(insets.bottom, 16),
+            }}
+            showsVerticalScrollIndicator={false}
+            alwaysBounceVertical={false}>
+            {shareState.kind === 'ready' ? (
+              <ProfileShareReadyContent
+                visible={visible}
+                state={shareState}
+                qrState={qrState}
+                onCopy={(url) => {
+                  void copyUrl(url);
+                }}
+                onShare={(url) => {
+                  void shareUrl(url);
+                }}
+                onShareQr={(uri) => {
+                  void shareQrImage(uri);
+                }}
+                onSelectFormat={(candidate) => {
+                  setSelectedKind(candidate.kind);
+                }}
+                onRetryQr={() => {
+                  setQrState({ kind: 'loading', url: shareState.selected.url });
+                  setQrRetryNonce((value) => value + 1);
+                }}
+              />
+            ) : shareState.kind === 'unpublished' ? (
+              <ThemedSurface variant="inset" className="gap-4 rounded-none p-4">
+                <View className="flex-row items-center gap-2">
+                  <SfIcon name="icloud" size={22} color={Colors.warning} />
+                  <ThemedText variant="label">{t('meShare.unpublishedTitle')}</ThemedText>
+                </View>
+                <ThemedText variant="bodySmall" tone="secondary">
+                  {t('meShare.unpublishedBody')}
+                </ThemedText>
+                <ThemedButton
+                  label={t('meShare.publishName')}
+                  variant="primary"
+                  fullWidth
+                  onPress={() => {
+                    close(() => {
+                      router.push('/settings/username');
+                    });
                   }}
                 />
-              ) : shareState.kind === 'unpublished' ? (
-                <ThemedSurface variant="inset" className="gap-4 rounded-none p-4">
-                  <View className="flex-row items-center gap-2">
-                    <SfIcon name="icloud" size={22} color={Colors.warning} />
-                    <ThemedText variant="label">{t('meShare.unpublishedTitle')}</ThemedText>
-                  </View>
-                  <ThemedText variant="bodySmall" tone="secondary">
-                    {t('meShare.unpublishedBody')}
-                  </ThemedText>
-                  <ThemedButton
-                    label={t('meShare.publishName')}
-                    variant="primary"
-                    fullWidth
-                    onPress={() => {
-                      onClose();
-                      router.push('/settings/username');
-                    }}
-                  />
-                  <OtherFormatsSection
-                    visible={visible}
-                    candidates={shareState.candidates}
-                    verifiedHandle={shareState.verifiedHandle}
-                    onSelect={(candidate) => {
-                      setSelectedKind(candidate.kind);
-                    }}
-                  />
-                </ThemedSurface>
-              ) : (
-                <ThemedSurface variant="inset" className="items-center gap-4 rounded-none p-4">
-                  <SfIcon name="exclamationmark.triangle" size={24} color={Colors.destructive} />
-                  <ThemedText variant="bodyMedium" tone="error" style={{ textAlign: 'center' }}>
-                    {t('meShare.modelError')}
-                  </ThemedText>
-                  <ThemedButton
-                    label={t('meShare.retry')}
-                    variant="secondary"
-                    onPress={() => {
-                      setShareRetryNonce((value) => value + 1);
-                    }}
-                  />
-                </ThemedSurface>
-              )}
-            </ScrollView>
-          </ThemedSurface>
-        </Animated.View>
-      </View>
-    </Modal>
+                <OtherFormatsSection
+                  visible={visible}
+                  candidates={shareState.candidates}
+                  verifiedHandle={shareState.verifiedHandle}
+                  onSelect={(candidate) => {
+                    setSelectedKind(candidate.kind);
+                  }}
+                />
+              </ThemedSurface>
+            ) : (
+              <ThemedSurface variant="inset" className="items-center gap-4 rounded-none p-4">
+                <SfIcon name="exclamationmark.triangle" size={24} color={Colors.destructive} />
+                <ThemedText variant="bodyMedium" tone="error" style={{ textAlign: 'center' }}>
+                  {t('meShare.modelError')}
+                </ThemedText>
+                <ThemedButton
+                  label={t('meShare.retry')}
+                  variant="secondary"
+                  onPress={() => {
+                    setShareRetryNonce((value) => value + 1);
+                  }}
+                />
+              </ThemedSurface>
+            )}
+          </ScrollView>
+        </ThemedSurface>
+      )}
+    </SlideUpSheet>
   );
 }

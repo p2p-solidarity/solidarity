@@ -3,6 +3,7 @@ import { router } from 'expo-router';
 import { useMemo, useState, type ReactNode } from 'react';
 import { ActivityIndicator, View } from 'react-native';
 
+import { InfoButton } from '@/components/common/InfoSheet';
 import { PressableScale } from '@/components/common/PressableScale';
 import { PresentationSheet } from '@/components/credentials/PresentationSheet';
 import { SfIcon } from '@/components/icons/SfIcon';
@@ -241,20 +242,21 @@ function IdentityProofCard({
 
 /** The panel's contents, shared by the per-credential branch and the
  *  all-claims-filtered-out `empty` branch — the same true statement either
- *  way: the proof is real, this device just holds no key material for it. */
+ *  way: the proof is real, this device just holds no key material for it.
+ *  State (icon + title) and the fix (the button) stay on screen; the why
+ *  (keys never leave the scanning phone) sits behind the ⓘ. */
 function CannotPresentHereContent(): ReactNode {
   const { t } = useTranslation();
   return (
     <>
       <SfIcon name="exclamationmark.triangle" size={28} color={Colors.warning} />
-      <ThemedText variant="label">{t('present.rescanRequired')}</ThemedText>
-      <ThemedText
-        variant="bodySmall"
-        tone="tertiary"
-        style={{ textAlign: 'center' }}
-      >
-        {t('present.rescanRequiredBody')}
-      </ThemedText>
+      <View className="flex-row items-center" style={{ gap: 6 }}>
+        <ThemedText variant="label">{t('present.rescanRequired')}</ThemedText>
+        <InfoButton
+          title={t('present.rescanRequired')}
+          body={t('present.rescanRequiredBody')}
+        />
+      </View>
       <ThemedButton
         fullWidth
         variant="secondary"

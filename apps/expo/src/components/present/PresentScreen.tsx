@@ -8,6 +8,7 @@ import type { ProfileRecord } from '@solidarity/shared';
 import { useCardStore, useMyCardDetail } from '@/cards/cardManager';
 import { PressableScale } from '@/components/common/PressableScale';
 import { BrandIcon } from '@/components/icons/BrandIcon';
+import { SfIcon } from '@/components/icons/SfIcon';
 import { PageHeaderAction } from '@/components/me/PageHeaderAction';
 import { PageSectionLabel } from '@/components/me/PageSectionLabel';
 import { ROW_RADIUS, blockRowStyle } from '@/components/me/pageRowStyles';
@@ -415,9 +416,12 @@ function CardOnlySection({
       ) : null}
       {model.cardState.kind === 'empty' ? (
         <ThemedSurface variant="outlined" padded className="gap-4 rounded-none">
-          <ThemedText variant="bodyMedium" tone="tertiary">
-            {t('present.noCard')}
-          </ThemedText>
+          <View className="flex-row items-center" style={{ gap: 10 }}>
+            <SfIcon name="person.text.rectangle" size={20} color={Colors.text3} />
+            <ThemedText variant="bodyMedium" tone="tertiary" style={{ flex: 1 }}>
+              {t('present.noCard')}
+            </ThemedText>
+          </View>
           <ThemedButton
             label={t('present.createCard')}
             variant="secondary"

@@ -2,7 +2,7 @@
 import { router, useLocalSearchParams } from 'expo-router';
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { ActivityIndicator, ScrollView, View } from 'react-native';
-import Animated, { FadeIn } from 'react-native-reanimated';
+import Animated, { useReducedMotion } from 'react-native-reanimated';
 import { FlashList } from '@shopify/flash-list';
 import ReanimatedSwipeable, {
   SwipeDirection,
@@ -33,10 +33,16 @@ import { useContactStore, type ContactManifestEntry } from '@/contacts/repositor
 import { shareContactVCard } from '@/contacts/shareContactVCard';
 import { confirmDialog } from '@/feedback/confirmDialog';
 import { haptic } from '@/feedback/haptics';
+import { fadeUpIn } from '@/feedback/motion';
 import { pushToast } from '@/feedback/toast';
 import { useProfileSnapshotStore } from '@/people/profileSnapshots';
 import { usePeopleScreen } from '@/people/usePeopleScreen';
 import { usePreferences } from '@/settings/preferences';
+
+/** Rows (headers included) that cascade in when the list first paints — about
+ *  one screenful. Everything below the fold, and every recycled cell, just
+ *  appears: a stagger nobody can see only delays the list. */
+const ENTRANCE_ROWS = 10;
 
 export default function PeopleTab() {
   const { t } = useTranslation();
@@ -46,6 +52,7 @@ export default function PeopleTab() {
   const upsertDeclared = useProfileSnapshotStore((s) => s.upsertDeclared);
   const backupEnabled = usePreferences((s) => s.backupEnabled);
   const insets = useSafeAreaInsets();
+  const reduceMotion = useReducedMotion();
   const { edit } = useLocalSearchParams<{ edit?: string }>();
 
   const [searchQuery, setSearchQuery] = useState('');
@@ -290,7 +297,7 @@ export default function PeopleTab() {
               />
             </View>
           ) : (
-            <Animated.View entering={FadeIn.duration(280)} style={{ flex: 1 }}>
+            <View style={{ flex: 1 }}>
               <FlashList
                 data={filteredListItems}
                 keyExtractor={(item) => item.key}
@@ -301,20 +308,27 @@ export default function PeopleTab() {
                 }}
                 keyboardShouldPersistTaps="handled"
                 extraData={{ editMode, selectedIds }}
-                renderItem={({ item }) => item.kind === 'header' ? (
-                  <ContactSectionHeader title={item.title} />
-                ) : (
-                  <PeopleRow
-                    contact={item.contact}
-                    editMode={editMode}
-                    selected={selectedIds.has(item.contact.id)}
-                    onPress={() => { onSelectContact(item.contact); }}
-                    onLongPress={() => { onLongPressContact(item.contact); }}
-                    onSwipeDelete={() => { onDeleteContact(item.contact); }}
-                  />
+                renderItem={({ item, index }) => (
+                  // Always wrapped, so a recycled cell keeps the same tree;
+                  // `entering` only runs on mount, never on recycle.
+                  <Animated.View
+                    entering={index < ENTRANCE_ROWS ? fadeUpIn(index, reduceMotion) : undefined}>
+                    {item.kind === 'header' ? (
+                      <ContactSectionHeader title={item.title} />
+                    ) : (
+                      <PeopleRow
+                        contact={item.contact}
+                        editMode={editMode}
+                        selected={selectedIds.has(item.contact.id)}
+                        onPress={() => { onSelectContact(item.contact); }}
+                        onLongPress={() => { onLongPressContact(item.contact); }}
+                        onSwipeDelete={() => { onDeleteContact(item.contact); }}
+                      />
+                    )}
+                  </Animated.View>
                 )}
               />
-            </Animated.View>
+            </View>
           )}
           {editMode ? (
             <BatchActionBar

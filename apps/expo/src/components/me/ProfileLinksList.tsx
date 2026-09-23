@@ -237,6 +237,13 @@ function LinkRowsSection({
   const c = useThemeColors();
   const drag = useRowDragController();
   const reduceMotion = useReducedMotion();
+  // Rows cascade in once, when the section first paints. A reorder re-keys
+  // the moved rows; replaying the entrance there would blink them out right
+  // after the drop, so later mounts skip it.
+  const [entered, setEntered] = useState(false);
+  useEffect(() => {
+    setEntered(true);
+  }, []);
   if (entries.length === 0) return null;
   return (
     <View style={{ gap: 8 }}>
@@ -256,7 +263,9 @@ function LinkRowsSection({
                 paddingVertical: 0,
                 paddingHorizontal: 0,
               }}>
-              <Animated.View entering={fadeUpIn(sectionIndex, reduceMotion)} style={{ flex: 1, flexDirection: 'row', alignItems: 'center' }}>
+              <Animated.View
+                entering={entered ? undefined : fadeUpIn(sectionIndex, reduceMotion)}
+                style={{ flex: 1, flexDirection: 'row', alignItems: 'center' }}>
                 <RowDragHandle
                   controller={drag}
                   label={t('mePage.reorderLink', { label: linkDisplay(link.label, link.url).text })}
