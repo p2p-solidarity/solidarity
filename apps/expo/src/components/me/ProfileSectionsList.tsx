@@ -1,6 +1,6 @@
 import { useState, type ReactNode } from 'react';
 import { router } from 'expo-router';
-import { ActivityIndicator, ScrollView, Switch, View } from 'react-native';
+import { ActivityIndicator, Switch, View } from 'react-native';
 import { KeyboardAwareScrollView } from 'react-native-keyboard-controller';
 import Animated, { useReducedMotion } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -17,7 +17,6 @@ import { fadeUpIn } from '@/feedback/motion';
 import { pushToast } from '@/feedback/toast';
 import {
   PAGE_BLOCK_CATALOG,
-  MAX_PAGE_BLOCK_COUNT,
   MAX_PAGE_BLOCK_TITLE_LENGTH,
   MAX_PAGE_ITEM_PRICE_LENGTH,
   MAX_PAGE_ITEM_TITLE_LENGTH,
@@ -28,7 +27,6 @@ import {
   type PageAppearance,
   type PageBlock,
   type PageBlockItem,
-  type PageBlockType,
 } from '@/page/pageDesign';
 import { preparePageDesign, usePageDesignStore } from '@/page/pageDesignStore';
 import { useProGate } from '@/pro/useProGate';
@@ -78,7 +76,6 @@ export function ProfileSectionsList({
   const moveBlock = usePageDesignStore((state) => state.moveBlock);
   const record = useProfileStore((state) => state.record);
   const savePageDesign = useProfileStore((state) => state.savePageDesign);
-  const [pickerOpen, setPickerOpen] = useState(false);
   const [editing, setEditing] = useState<PageBlock | null>(null);
   const [publishing, setPublishing] = useState(false);
   const [previewOpen, setPreviewOpen] = useState(false);
@@ -179,13 +176,8 @@ export function ProfileSectionsList({
             ))}
           </View>
 
-          <ThemedButton
-            label={t('pageDesign.addSection')}
-            variant="secondary"
-            fullWidth
-            disabled={blocks.length >= MAX_PAGE_BLOCK_COUNT}
-            onPress={() => { setPickerOpen(true); }}
-          />
+          {/* No add button here: new sections come from the tab's single
+              "＋ 新增" sheet (PageAddSheet), which appends them to this list. */}
 
           {/* The preview lives here, folded away. Blocks are the only thing on
               this page whose effect you cannot read off the row itself, so
@@ -219,11 +211,6 @@ export function ProfileSectionsList({
         </>
       )}
 
-      <PageBlockPickerSheet
-        visible={pickerOpen}
-        onClose={() => { setPickerOpen(false); }}
-        onOpenPro={openProSettings}
-      />
       <PageBlockEditorSheet block={editing} onClose={() => { setEditing(null); }} />
     </View>
   );
@@ -349,58 +336,6 @@ function BlockRow({
         trackColor={{ true: Colors.primaryBlue }}
       />
     </DraggableRow>
-  );
-}
-
-function PageBlockPickerSheet({
-  visible,
-  onClose,
-  onOpenPro,
-}: {
-  readonly visible: boolean;
-  readonly onClose: () => void;
-  readonly onOpenPro: () => void;
-}): ReactNode {
-  const { t } = useTranslation();
-  const insets = useSafeAreaInsets();
-  const addBlock = usePageDesignStore((state) => state.addBlock);
-  const { locked } = useProGate();
-  return (
-    <ModalSheet visible={visible} onRequestClose={onClose}>
-      <View className="flex-1 bg-pageBg" style={{ paddingTop: insets.top }}>
-        <ScrollView contentContainerStyle={{ padding: 16, paddingBottom: insets.bottom + 24, gap: 12 }}>
-          <ThemedText variant="titleLarge">{t('pageDesign.addSection')}</ThemedText>
-          {PAGE_BLOCK_CATALOG.filter((entry) => entry.type !== 'links').map((entry) => {
-            const entryLocked = locked(entry.pro);
-            return (
-              <PressableScale
-                key={entry.type}
-                onPress={() => {
-                  if (entryLocked) {
-                    onClose();
-                    onOpenPro();
-                    return;
-                  }
-                  addBlock(entry.type as Exclude<PageBlockType, 'links'>, t(`pageDesign.block.${entry.type}`));
-                  onClose();
-                }}
-                accessibilityRole="button"
-                accessibilityHint={entryLocked ? t('pageDesign.proControl') : undefined}
-                className="min-h-14 flex-row items-center gap-3 rounded-2xl border border-divider bg-cardBg px-4 py-3">
-                <ThemedText variant="titleMedium">{blockSymbol(entry.type)}</ThemedText>
-                <View className="flex-1">
-                  <ThemedText variant="bodyMedium">{t(`pageDesign.block.${entry.type}`)}</ThemedText>
-                  <ThemedText variant="caption" tone="tertiary">
-                    {entryLocked ? 'PRO' : t('pageDesign.basicSection')}
-                  </ThemedText>
-                </View>
-              </PressableScale>
-            );
-          })}
-          <ThemedButton label={t('common.close')} variant="secondary" fullWidth onPress={onClose} />
-        </ScrollView>
-      </View>
-    </ModalSheet>
   );
 }
 
@@ -541,17 +476,4 @@ function PageBlockEditorContent({ block, onClose }: { readonly block: PageBlock;
       </View>
     </ModalSheet>
   );
-}
-
-function blockSymbol(type: PageBlockType): string {
-  switch (type) {
-    case 'links': return '🔗';
-    case 'text': return '¶';
-    case 'portfolio': return '▦';
-    case 'featured': return '★';
-    case 'video': return '▶';
-    case 'shop': return '◇';
-    case 'leave-card': return '↙';
-    case 'booking': return '□';
-  }
 }

@@ -69,7 +69,9 @@ describe('Page surface', () => {
     // The QR belongs to the share sheet, never inline on the Page tab
     // (mock §`#s-page`: the header's ↗ opens `#sh-share`, which holds the QR).
     expect(hero).not.toContain('ProfileInlineQr');
-    expect(links.match(/onPress=\{onAddFirstLink\}/gu)).toHaveLength(1);
+    // One add button for the whole tab: it sits where the links group ends
+    // (empty state or under the last row) and opens the shared add sheet.
+    expect(links.match(/onPress=\{onAdd\}/gu)).toHaveLength(1);
     // Rows name their actual platform (the mock's brand sprite), never a
     // borrowed stand-in symbol.
     expect(links).toContain('linkDisplay(link.label, link.url).brand');
@@ -80,7 +82,25 @@ describe('Page surface', () => {
     expect(publicHeadingIndex).toBeGreaterThan(-1);
     expect(cardOnlyHeadingIndex).toBeGreaterThan(publicHeadingIndex);
     expect(page).toContain('linkCount={record.links.length}');
-    expect(badges).toContain("t('mePage.addAttestation')");
+    // Links, sections and attestations no longer carry their own add
+    // buttons; all three start from the single "＋ 新增" sheet.
+    const addSheet = source('../../src/components/me/PageAddSheet.tsx');
+    const sections = source('../../src/components/me/ProfileSectionsList.tsx');
+    expect(badges).not.toContain('AddAttestationAction');
+    // …except the empty state, which keeps its own reminder to create one.
+    expect(badges).toContain("t('mePage.createProof')");
+    expect(page).toContain('onCreateProof={onOpenBindings}');
+    expect(sections).not.toContain('setPickerOpen');
+    expect(page).toContain('<PageAddSheet');
+    expect(page).toContain('onAddProof={onOpenBindings}');
+    expect(addSheet).toContain("t('mePage.links')");
+    expect(addSheet).toContain("t('mePage.sections')");
+    expect(addSheet).toContain("t('mePage.attestations')");
+    expect(addSheet).toContain('close(onAddLink)');
+    expect(addSheet).toContain('close(onImportLinks)');
+    expect(addSheet).toContain('close(onAddProof)');
+    expect(en['mePage.add']).toBe('Add');
+    expect(zhHant['mePage.add']).toBe('新增');
 
     expect(badges).toContain('verifyAtprotoBindingDual(record, publicRecord');
     expect(badges).toContain('verifyNostrBinding');

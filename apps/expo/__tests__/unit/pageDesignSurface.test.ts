@@ -27,9 +27,15 @@ describe('v2 Page design surface', () => {
 
   it('provides persisted add, edit, enable, remove, and reorder controls for real blocks', () => {
     const sections = source('../../src/components/me/ProfileSectionsList.tsx');
+    const addSheet = source('../../src/components/me/PageAddSheet.tsx');
 
     expect(sections).toContain('usePageDesignStore');
-    expect(sections).toContain('<PageBlockPickerSheet');
+    // Adding lives in the Page tab's single add sheet; it honours the block
+    // cap and the Pro gate the same way the old per-section picker did.
+    expect(addSheet).toContain('addBlock(type, label)');
+    expect(addSheet).toContain('blockCount >= MAX_PAGE_BLOCK_COUNT');
+    expect(addSheet).toContain('locked(entry.pro)');
+    expect(addSheet).toContain("router.push('/settings/pro')");
     expect(sections).toContain('<PageBlockEditorSheet');
     expect(sections).toContain('setBlockVisible(block.id');
     expect(sections).toContain("moveBlock(block.id, 'up')");
@@ -93,9 +99,11 @@ describe('v2 Page design surface', () => {
       appearance.indexOf('function ControlSection'),
     );
 
+    const addSheet = source('../../src/components/me/PageAddSheet.tsx');
+
     // Locked users still get a doorway to the paywall…
     expect(sections).toContain("router.push('/settings/pro')");
-    expect(sections).toContain('if (entryLocked) {');
+    expect(addSheet).toContain('if (entryLocked) {');
     expect(sections).toContain('onProPress');
     expect(appearance).toContain('openUpgrade');
     expect(appearance).toContain('if (index > 1 && proLocked) {');

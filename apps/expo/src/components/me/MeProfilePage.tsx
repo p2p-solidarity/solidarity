@@ -21,6 +21,7 @@ import { ProfileBadgeChips } from './ProfileBadgeChips';
 import { ProfileHero } from './ProfileHero';
 import { ProfileLinksList } from './ProfileLinksList';
 import { ProfileSectionsList } from './ProfileSectionsList';
+import { PageAddSheet } from './PageAddSheet';
 import { PageAppearanceSheet } from './PageAppearanceSheet';
 import { PageLapsedCheckAlert } from './PageLapsedCheckAlert';
 
@@ -70,6 +71,9 @@ export function MeProfilePage({
   const colors = useThemeColors();
   const reduceMotion = useReducedMotion();
   const [appearanceOpen, setAppearanceOpen] = useState(false);
+  // The tab's one add entry point: links, sections and attestations all start
+  // from the same "＋ 新增" sheet instead of three per-group buttons.
+  const [addOpen, setAddOpen] = useState(false);
   // The preview's `.pub-handle` line shows the page's REAL address, or
   // nothing at all while one is still unpublished.
   const shareSelection = useProfileShareSelection(
@@ -112,7 +116,9 @@ export function MeProfilePage({
           links={record.links}
           linkVisibility={linkVisibility}
           onEdit={onEdit}
-          onAddFirstLink={onAddLink}
+          onAdd={() => {
+            setAddOpen(true);
+          }}
           onImportLinks={onImportLinks}
         />
       </Animated.View>
@@ -134,7 +140,7 @@ export function MeProfilePage({
           publicRecord={publicRecord}
           jws={jws}
           nostrUploaded={nostrShortUrlReady}
-          onManageBindings={onOpenBindings}
+          onCreateProof={onOpenBindings}
         />
       </Animated.View>
 
@@ -151,6 +157,16 @@ export function MeProfilePage({
           <SfIcon name="chevron.right" size={13} color={colors.text3} />
         </PressableScale>
       </Animated.View>
+
+      <PageAddSheet
+        visible={addOpen}
+        onClose={() => {
+          setAddOpen(false);
+        }}
+        onAddLink={onAddLink}
+        onImportLinks={onImportLinks}
+        onAddProof={onOpenBindings}
+      />
 
       <PageAppearanceSheet
         visible={appearanceOpen}

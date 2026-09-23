@@ -70,7 +70,8 @@ export interface ProfileLinksListProps {
   readonly links: readonly ProfileLink[];
   readonly linkVisibility: readonly LinkVisibility[];
   readonly onEdit: () => void;
-  readonly onAddFirstLink: () => void;
+  /** Opens the tab's single "＋ 新增" sheet (links, sections, attestations). */
+  readonly onAdd: () => void;
   readonly onImportLinks?: () => void;
 }
 
@@ -78,7 +79,7 @@ export function ProfileLinksList({
   links,
   linkVisibility,
   onEdit,
-  onAddFirstLink,
+  onAdd,
   onImportLinks,
 }: ProfileLinksListProps): ReactNode {
   const { t } = useTranslation();
@@ -149,10 +150,16 @@ export function ProfileLinksList({
   const pillFor = (link: ProfileLink): RowVerificationPill | null =>
     record === null ? null : linkVerificationPill(link, websiteEvidence, record);
 
-  const addLinkAction = (
-    <AddLinkButton
-      label={links.length === 0 ? t('mePage.addFirstLink') : t('meHome.addLink')}
-      onPress={onAddFirstLink}
+  // The Page tab's only add button. It lives where the links group ends — in
+  // the empty state or under the last row — and opens one sheet for links,
+  // sections and attestations alike.
+  const addAction = (
+    <ThemedButton
+      label={t('mePage.add')}
+      leadingIcon={<SfIcon name="plus" size={15} color={c.pageBg} />}
+      haptic="tap"
+      fullWidth
+      onPress={onAdd}
     />
   );
 
@@ -162,7 +169,7 @@ export function ProfileLinksList({
         <PageEmptyState
           title={t('mePage.noLinks')}
           message={t('mePage.noLinksHint')}
-          action={addLinkAction}
+          action={addAction}
           {...(onImportLinks
             ? { secondaryAction: { label: t('mePage.importLinks'), onPress: onImportLinks } }
             : {})}
@@ -208,7 +215,7 @@ export function ProfileLinksList({
           <SfIcon name="chevron.right" size={13} color={Colors.text3} />
         </PressableScale>
       ) : null}
-      {addLinkAction}
+      {addAction}
     </View>
   );
 }
@@ -436,14 +443,4 @@ function VerificationPill({ status }: { readonly status: RowVerificationPill }):
       </ThemedText>
     </ThemedSurface>
   );
-}
-
-function AddLinkButton({
-  label,
-  onPress,
-}: {
-  readonly label: string;
-  readonly onPress: () => void;
-}): ReactNode {
-  return <ThemedButton label={label} fullWidth onPress={onPress} />;
 }

@@ -50,14 +50,16 @@ export interface ProfileBadgeChipsProps {
   readonly publicRecord: ProfileRecord;
   readonly jws: string;
   readonly nostrUploaded: boolean;
-  readonly onManageBindings: () => void;
+  /** Only the empty state's reminder uses it — adding a proof otherwise goes
+   *  through the tab's single "＋ 新增" sheet. */
+  readonly onCreateProof: () => void;
 }
 
 export function ProfileBadgeChips({
   record,
   publicRecord,
   nostrUploaded,
-  onManageBindings,
+  onCreateProof,
 }: ProfileBadgeChipsProps): ReactNode {
   const { t } = useTranslation();
   const c = useThemeColors();
@@ -183,7 +185,7 @@ export function ProfileBadgeChips({
             <ThemedButton
               label={t('mePage.createProof')}
               fullWidth
-              onPress={onManageBindings}
+              onPress={onCreateProof}
             />
           }
         />
@@ -232,7 +234,6 @@ export function ProfileBadgeChips({
           </PressableScale>
         );
       })}
-      <AddAttestationAction onPress={onManageBindings} />
     </View>
   );
 }
@@ -354,26 +355,5 @@ function ProofVisibilityPill({
         {t(visibilityLabelKey(visibility))}
       </ThemedText>
     </ThemedSurface>
-  );
-}
-
-function AddAttestationAction({ onPress }: { readonly onPress: () => void }): ReactNode {
-  const { t } = useTranslation();
-  return (
-    <PressableScale
-      haptic="tap"
-      onPress={onPress}
-      accessibilityRole="button"
-      accessibilityLabel={t('mePage.addAttestation')}
-      containerStyle={{ alignSelf: 'flex-start' }}>
-      <ThemedSurface
-        variant="inset"
-        className="min-h-11 flex-row items-center gap-2 rounded-none px-3 py-2">
-        <SfIcon name="plus" size={12} color={Colors.text3} />
-        <ThemedText variant="label" tone="tertiary">
-          {t('mePage.addAttestation')}
-        </ThemedText>
-      </ThemedSurface>
-    </PressableScale>
   );
 }
