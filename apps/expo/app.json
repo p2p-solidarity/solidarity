@@ -111,7 +111,7 @@
       [
         "expo-router",
         {
-          "origin": "https://solidarity.gg"
+          "origin": "https://creds.id"
         }
       ],
       [
@@ -176,7 +176,7 @@
     },
     "extra": {
       "router": {
-        "origin": "https://solidarity.gg"
+        "origin": "https://creds.id"
       },
       "eas": {
         "projectId": "425c3486-6541-4fad-a5d5-182bb340c7b0"

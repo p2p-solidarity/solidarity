@@ -1,6 +1,6 @@
 /**
  * Verified Page payload router — 1.3.3 Task A2.3 (US-11): recognises a
- * scanned/deep-linked Verified Page fragment (`https://solidarity.gg/#<frag>`,
+ * scanned/deep-linked Verified Page fragment (`https://creds.id/#<frag>`,
  * a bare `#<frag>` fragment, or the bare `<frag>` blob itself) and runs the
  * FULL local verification pipeline described in 01-spec §4.3/§8:
  *

@@ -150,7 +150,7 @@ function parseVerifiedDomainRoute(url: URL, devProductHosts: boolean): DeepLinkR
   }
   const handleRoute = parseVerifiedHandleRoute(productHost, segments, url.hash);
   if (handleRoute !== null) return handleRoute;
-  // Verified Page link (1.3.3 Task A2.3, US-11): `https://solidarity.gg/#<fragment>`
+  // Verified Page link (1.3.3 Task A2.3, US-11): `https://creds.id/#<fragment>`
   // — the fragment never leaves the device over the network (01-spec §1/§8),
   // so this is just recognising the shape and handing the raw fragment blob
   // to the same local-only verify pipeline the scanner uses

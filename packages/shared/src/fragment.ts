@@ -1,7 +1,7 @@
 /**
  * URL-fragment codec — the offline/QR publication surface for a signed
  * Profile Record (01-spec §4.3): `deflate(profileJws) -> base64url`,
- * embedded after `#` in `https://solidarity.gg/#<fragment>`. A URL
+ * embedded after `#` in `https://creds.id/#<fragment>`. A URL
  * fragment is never sent over the network (no server, no CDN log ever
  * sees it — 01-spec §1/§8), so this module only ever runs client-side.
  *

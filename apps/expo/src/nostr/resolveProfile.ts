@@ -2,7 +2,7 @@
  * resolveProfile.ts — resolves a `#nostr:<npub>` short-pointer share URL to
  * a verified profile (the inbound half of the short-link feature). The
  * sharer publishes their profile to Nostr (kind-30078, task A4.2) and shares
- * `https://solidarity.gg/#nostr:<their-npub>`; this decodes the npub, fetches
+ * `https://creds.id/#nostr:<their-npub>`; this decodes the npub, fetches
  * that pubkey's newest profile-pointer event across relays, and runs the
  * SAME verification the offline fragment path uses — PLUS a reverse-binding
  * check the fragment path doesn't need:
