@@ -348,8 +348,7 @@ export async function buildVpToken(
   }
 
   // Use the derived DID for binding even when the caller passed a different
-  // value (matches Swift: the active key's `did:key` is canonical).
-  void input.holderDid;
+  // `input.holderDid` (matches Swift: the active key's `did:key` is canonical).
 
   const now = input.deps?.nowSeconds?.() ?? Math.floor(Date.now() / 1000);
   const audience = input.request.request.client_id;

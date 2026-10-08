@@ -34,9 +34,8 @@
  *      a flag the user already set.
  *
  * The resolver returns both the redacted card and a manifest of included /
- * excluded fields so callers (QR generator, wallet pass builder, proximity
- * exchange) can render "shared X, redacted Y" UI without re-walking the
- * preferences object. When a policy tightening hits, `appliedPolicy`
+ * excluded fields so callers (QR generator, proximity exchange) can render
+ * "shared X, redacted Y" UI without re-walking the preferences object. When a policy tightening hits, `appliedPolicy`
  * surfaces the source + `displayReason` for the UI banner.
  */
 import type {
@@ -289,9 +288,8 @@ export function resolveCardForAudience(args: ResolveArgs): ResolvedCard {
 /**
  * Compute just the allowed-field set without redacting a card. Useful
  * for the QR scope-string builder (`ShareScopeResolver.scope(...)` in
- * Swift) and the wallet-pass builder that needs the field list ahead
- * of materialising the card payload. Applies the same policy overlay
- * as `resolveCardForAudience`.
+ * Swift), which needs the field list ahead of materialising the card
+ * payload. Applies the same policy overlay as `resolveCardForAudience`.
  */
 export function resolveEffectiveFields(args: ResolveArgs): ReadonlySet<FieldKey> {
   const { audience, perCardPrefs, groupContext, globalDefaults, groupPolicy } = args;

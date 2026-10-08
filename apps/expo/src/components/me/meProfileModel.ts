@@ -1,3 +1,4 @@
+import { linkDisplay, middleEllipsis } from '@/profile/linkPresentation';
 import { shortDid } from '@/components/id/shortDid';
 import {
   DEFAULT_HANDLE_RESOLVERS,
@@ -13,9 +14,8 @@ import {
 } from '@solidarity/shared';
 import { validatePublicPageUsername } from '@/onboarding/publicPageUsername';
 
-const PROFILE_PAGE_ORIGIN = 'https://app.solidarity.gg';
+const PROFILE_PAGE_ORIGIN = 'https://creds.id';
 const PROFILE_PAGE_URL = `${PROFILE_PAGE_ORIGIN}/#`;
-const PUBLIC_PAGE_ORIGIN = 'https://creds.id';
 
 export interface ProfileIdentityLine {
   readonly kind: 'handle' | 'did';
@@ -60,27 +60,22 @@ export function buildProfileShareModel(
   record: ProfileRecord,
   jws: string,
   publicPageUsername = '',
-  publicPage: PublicPageShareSource | null = null,
+  _publicPage: PublicPageShareSource | null = null,
 ): ProfileShareModel {
   const fragment = encodeFragment(jws);
-  const publicFragment =
-    publicPage?.record.scope === 'public' && publicPage.jws.length > 0
-      ? encodeFragment(publicPage.jws)
-      : null;
   const nostrClaim = record.alsoKnownAs.find((value) => value.startsWith('nostr:npub'));
   const validUsername = validatePublicPageUsername(publicPageUsername).kind === 'valid'
     ? publicPageUsername
     : null;
   return {
     offlineUrl: `${PROFILE_PAGE_URL}${fragment.fragment}`,
-    // Keep the signed public page in the hash so /name works offline before
-    // a resolver/backend exists. This deliberately uses ONLY `scope:public`;
-    // the QR fragment may additionally contain link-only fields.
-    usernameUrl: validUsername && publicFragment !== null && !publicFragment.oversize
-      ? `${PUBLIC_PAGE_ORIGIN}/${validUsername}#${publicFragment.fragment}`
+    // A username is exposed only after the caller's directory + kind-0
+    // readiness gate. Never append the long offline JWS to the public URL.
+    usernameUrl: validUsername
+      ? `${PROFILE_PAGE_ORIGIN}/@${validUsername}`
       : null,
-    usernameDisplayUrl: validUsername && publicFragment !== null && !publicFragment.oversize
-      ? `${PUBLIC_PAGE_ORIGIN}/${validUsername}`
+    usernameDisplayUrl: validUsername
+      ? `${PROFILE_PAGE_ORIGIN}/@${validUsername}`
       : null,
     shortUrl: nostrClaim ? `${PROFILE_PAGE_URL}${nostrClaim}` : null,
     oversize: fragment.oversize,
@@ -112,6 +107,7 @@ export type ProfileShareUrlSelection =
       readonly kind: 'ready';
       readonly candidate: ProfileShareUrlCandidate;
     }
+  | { readonly kind: 'unpublished'; readonly offline: ProfileShareUrlCandidate }
   | { readonly kind: 'error' };
 
 export function pickBestShareUrl(
@@ -129,12 +125,21 @@ export function pickBestShareUrl(
   if (short) return { kind: 'ready', candidate: short };
 
   const offline = candidates.find((candidate) => candidate.kind === 'offline');
-  return offline ? { kind: 'ready', candidate: offline } : { kind: 'error' };
+  return offline ? { kind: 'unpublished', offline } : { kind: 'error' };
 }
 
 export function displayProfileShareUrl(candidate: ProfileShareUrlCandidate): string {
   const url = candidate.kind === 'username' ? candidate.displayUrl : candidate.url;
-  return url.replace(/^https?:\/\//u, '');
+  try {
+    const parsed = new URL(url);
+    if (parsed.hash) {
+      return middleEllipsis(`${parsed.hostname.replace(/^www\./u, '')}/…${parsed.hash.slice(1).slice(-4)}`, 32);
+    }
+  } catch {
+    // Malformed legacy candidates still must not expose a fragment token.
+    return middleEllipsis(url.split('#')[0] ?? '', 32);
+  }
+  return middleEllipsis(linkDisplay('', url).text, 32);
 }
 
 /**
@@ -159,8 +164,9 @@ export interface ProfileShareUrlResolution {
 
 /**
  * Build every URL the share surface may honestly offer, then apply the
- * single global precedence rule (verified handle → confirmed Nostr pointer
- * → self-contained offline fragment). `nostrShortUrlReady` is deliberately
+ * single global precedence rule (registered username → verified handle →
+ * confirmed Nostr pointer). The self-contained fragment is retained only as
+ * an explicitly selected offline backup. `nostrShortUrlReady` is deliberately
  * supplied by the profile store's exact published-JWS marker; a retained
  * `nostr:npub` claim alone does not prove that the current page is live.
  */

@@ -1,5 +1,4 @@
 import { type ReactNode } from 'react';
-import { router } from 'expo-router';
 import { Modal, ScrollView, Switch, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -15,6 +14,7 @@ import {
   type PageTemplateId,
 } from '@/page/pageDesign';
 import { usePageDesignStore } from '@/page/pageDesignStore';
+import { useProGate } from '@/pro/useProGate';
 import type { ProfileRecord } from '@solidarity/shared';
 
 import { PageLivePreview } from './PageLivePreview';
@@ -22,6 +22,8 @@ import { PageLivePreview } from './PageLivePreview';
 export interface PageAppearanceSheetProps {
   readonly visible: boolean;
   readonly record: ProfileRecord;
+  /** Real page address for the preview's `.pub-handle` line, when one exists. */
+  readonly handle?: string | null;
   readonly onClose: () => void;
 }
 
@@ -36,106 +38,144 @@ const TEMPLATE_BACKGROUND: Readonly<Record<PageTemplateId, PageBackgroundId>> = 
   minimal: 'white',
 };
 
-export function PageAppearanceSheet({ visible, record, onClose }: PageAppearanceSheetProps): ReactNode {
+const ignoreChange = (): void => undefined;
+
+export function PageAppearanceSheet({
+  visible,
+  record,
+  handle = null,
+  onClose,
+}: PageAppearanceSheetProps): ReactNode {
   const { t } = useTranslation();
   const insets = useSafeAreaInsets();
+  // Every control in this sheet below the template picker is a Pro control.
+  // `proLocked` decides whether it is a real control or a paywall doorway —
+  // it never rewrites an appearance a subscriber already applied.
+  const { isPro, openUpgrade } = useProGate();
+  const proLocked = !isPro;
   const design = usePageDesignStore((state) => state.design);
   const setAppearance = usePageDesignStore((state) => state.setAppearance);
   const { appearance } = design;
 
   return (
-    <Modal
-      visible={visible}
-      animationType="slide"
-      presentationStyle="pageSheet"
-      onRequestClose={onClose}>
-      <View className="flex-1 bg-pageBg" style={{ paddingTop: insets.top }}>
-        <ScrollView contentContainerStyle={{ padding: 16, paddingBottom: insets.bottom + 24, gap: 20 }}>
-          <View className="flex-row items-center justify-between">
-            <ThemedText variant="titleLarge">{t('pageDesign.appearance')}</ThemedText>
-            <ThemedButton label={t('common.done')} variant="secondary" size="sm" onPress={onClose} />
-          </View>
-
-          <PageLivePreview record={record} blocks={design.blocks} appearance={appearance} />
-
-          <ControlSection title={t('pageDesign.templates')}>
-            <View className="flex-row flex-wrap gap-10">
-              {PAGE_TEMPLATE_IDS.map((template) => (
-                <ChoiceTile
-                  key={template}
-                  label={t(`pageDesign.template.${template}`)}
-                  selected={appearance.template === template}
-                  onPress={() => {
-                    setAppearance({
-                      template,
-                      background: TEMPLATE_BACKGROUND[template],
-                      customBackground: null,
-                      ...(template === 'journal' ? { font: 'serif' as const } : {}),
-                    });
-                  }}
-                />
-              ))}
-            </View>
-          </ControlSection>
-
-          <ControlSection title={t('pageDesign.font')}>
-            <View className="flex-row flex-wrap gap-2">
-              {PAGE_FONT_IDS.map((font, index) => (
-                <ChoiceTile
-                  key={font}
-                  label={t(`pageDesign.font.${font}`)}
-                  selected={appearance.font === font}
-                  pro={index > 1}
-                  onPress={() => {
-                    if (index > 1) {
-                      openProSettings();
-                      return;
-                    }
-                    setAppearance({ font });
-                  }}
-                />
-              ))}
-            </View>
-          </ControlSection>
-
-          <ControlSection title={t('pageDesign.background')}>
-            <View className="flex-row flex-wrap gap-2">
-              {PAGE_BACKGROUND_IDS.map((background) => (
-                <ChoiceTile
-                  key={background}
-                  label={t(`pageDesign.background.${background}`)}
-                  selected={appearance.background === background && appearance.customBackground === null}
-                  onPress={() => { setAppearance({ background, customBackground: null }); }}
-                />
-              ))}
-            </View>
-            <CustomColorInput
-              appearance={appearance}
-              onOpenPro={openProSettings}
-            />
-          </ControlSection>
-
-          <ControlSection title={t('pageDesign.footer')}>
-            <ThemedSurface padded className="gap-3">
-              <View className="flex-row items-center justify-between">
-                <ThemedText variant="bodyMedium">{t('pageDesign.showBrand')}</ThemedText>
-                <Switch
-                  value={appearance.showBrand}
-                  onValueChange={openProSettings}
-                  accessibilityHint={t('pageDesign.proControl')}
-                  trackColor={{ true: Colors.primaryBlue }}
-                />
-              </View>
-              <ProTextField
-                label={t('pageDesign.footerText')}
-                value={appearance.footerText}
-                maxLength={40}
-                hint={t('pageDesign.proControl')}
-                onOpenPro={openProSettings}
+    <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
+      <View className="flex-1 justify-end" style={{ backgroundColor: Colors.overlayBg }}>
+        <View className="overflow-hidden rounded-t-2xl bg-pageBg" style={{ maxHeight: '92%' }}>
+          <ScrollView
+            contentContainerStyle={{
+              padding: 16,
+              paddingTop: 20,
+              paddingBottom: insets.bottom + 24,
+              gap: 20,
+            }}>
+            <View className="flex-row items-center justify-between">
+              <ThemedText variant="titleLarge">{t('pageDesign.appearance')}</ThemedText>
+              <ThemedButton
+                label={t('common.done')}
+                variant="secondary"
+                size="sm"
+                onPress={onClose}
               />
-            </ThemedSurface>
-          </ControlSection>
-        </ScrollView>
+            </View>
+
+            <PageLivePreview
+              record={record}
+              blocks={design.blocks}
+              appearance={appearance}
+              handle={handle}
+            />
+
+            <ControlSection title={t('pageDesign.templates')}>
+              <View className="flex-row flex-wrap gap-10">
+                {PAGE_TEMPLATE_IDS.map((template) => (
+                  <ChoiceTile
+                    key={template}
+                    label={t(`pageDesign.template.${template}`)}
+                    selected={appearance.template === template}
+                    onPress={() => {
+                      setAppearance({
+                        template,
+                        background: TEMPLATE_BACKGROUND[template],
+                        customBackground: null,
+                        ...(template === 'journal' ? { font: 'serif' as const } : {}),
+                      });
+                    }}
+                  />
+                ))}
+              </View>
+            </ControlSection>
+
+            <ControlSection title={t('pageDesign.font')}>
+              <View className="flex-row flex-wrap gap-2">
+                {PAGE_FONT_IDS.map((font, index) => (
+                  <ChoiceTile
+                    key={font}
+                    label={t(`pageDesign.font.${font}`)}
+                    selected={appearance.font === font}
+                    pro={index > 1 && proLocked}
+                    onPress={() => {
+                      if (index > 1 && proLocked) {
+                        openUpgrade();
+                        return;
+                      }
+                      setAppearance({ font });
+                    }}
+                  />
+                ))}
+              </View>
+            </ControlSection>
+
+            <ControlSection title={t('pageDesign.background')}>
+              <View className="flex-row flex-wrap gap-2">
+                {PAGE_BACKGROUND_IDS.map((background) => (
+                  <ChoiceTile
+                    key={background}
+                    label={t(`pageDesign.background.${background}`)}
+                    selected={
+                      appearance.background === background && appearance.customBackground === null
+                    }
+                    onPress={() => {
+                      setAppearance({ background, customBackground: null });
+                    }}
+                  />
+                ))}
+              </View>
+              <CustomColorInput
+                appearance={appearance}
+                locked={proLocked}
+                onOpenPro={openUpgrade}
+                onChange={(customBackground) => { setAppearance({ customBackground }); }}
+              />
+            </ControlSection>
+
+            <ControlSection title={t('pageDesign.footer')}>
+              <ThemedSurface padded className="gap-3">
+                <View className="flex-row items-center justify-between">
+                  <ThemedText variant="bodyMedium">{t('pageDesign.showBrand')}</ThemedText>
+                  <Switch
+                    value={appearance.showBrand}
+                    onValueChange={
+                      proLocked
+                        ? openUpgrade
+                        : (showBrand) => { setAppearance({ showBrand }); }
+                    }
+                    accessibilityHint={proLocked ? t('pageDesign.proControl') : undefined}
+                    trackColor={{ true: Colors.primaryBlue }}
+                  />
+                </View>
+                <ProTextField
+                  label={t('pageDesign.footerText')}
+                  value={appearance.footerText}
+                  maxLength={40}
+                  hint={t('pageDesign.proControl')}
+                  locked={proLocked}
+                  onOpenPro={openUpgrade}
+                  onChangeText={(footerText) => { setAppearance({ footerText }); }}
+                />
+              </ThemedSurface>
+            </ControlSection>
+          </ScrollView>
+        </View>
       </View>
     </Modal>
   );
@@ -143,10 +183,14 @@ export function PageAppearanceSheet({ visible, record, onClose }: PageAppearance
 
 function CustomColorInput({
   appearance,
+  locked,
   onOpenPro,
+  onChange,
 }: {
   readonly appearance: ReturnType<typeof usePageDesignStore.getState>['design']['appearance'];
+  readonly locked: boolean;
   readonly onOpenPro: () => void;
+  readonly onChange: (value: string | null) => void;
 }): ReactNode {
   const { t } = useTranslation();
   return (
@@ -156,7 +200,9 @@ function CustomColorInput({
       placeholder={t('pageDesign.colorPlaceholder')}
       maxLength={7}
       hint={t('pageDesign.proControl')}
+      locked={locked}
       onOpenPro={onOpenPro}
+      onChangeText={(next) => { onChange(next.length > 0 ? next : null); }}
     />
   );
 }
@@ -167,15 +213,30 @@ function ProTextField({
   placeholder,
   maxLength,
   hint,
+  locked,
   onOpenPro,
+  onChangeText,
 }: {
   readonly label: string;
   readonly value: string;
   readonly placeholder?: string;
   readonly maxLength?: number;
   readonly hint: string;
+  readonly locked: boolean;
   readonly onOpenPro: () => void;
+  readonly onChangeText: (value: string) => void;
 }): ReactNode {
+  if (!locked) {
+    return (
+      <ThemedTextInput
+        label={label}
+        value={value}
+        onChangeText={onChangeText}
+        placeholder={placeholder}
+        maxLength={maxLength}
+      />
+    );
+  }
   return (
     <PressableScale
       onPress={onOpenPro}
@@ -188,7 +249,7 @@ function ProTextField({
         <ThemedTextInput
           label={label}
           value={value}
-          onChangeText={() => {}}
+          onChangeText={ignoreChange}
           editable={false}
           placeholder={placeholder}
           maxLength={maxLength}
@@ -199,14 +260,18 @@ function ProTextField({
   );
 }
 
-function openProSettings(): void {
-  router.push('/settings/pro');
-}
-
-function ControlSection({ title, children }: { readonly title: string; readonly children: ReactNode }): ReactNode {
+function ControlSection({
+  title,
+  children,
+}: {
+  readonly title: string;
+  readonly children: ReactNode;
+}): ReactNode {
   return (
     <View className="gap-3">
-      <ThemedText accessibilityRole="header" variant="label" tone="tertiary">{title}</ThemedText>
+      <ThemedText accessibilityRole="header" variant="label" tone="tertiary">
+        {title}
+      </ThemedText>
       {children}
     </View>
   );
@@ -232,14 +297,17 @@ function ChoiceTile({
         minHeight: 44,
         minWidth: 88,
         paddingHorizontal: 12,
-        borderRadius: 14,
+        borderRadius: 12,
         borderWidth: 1,
         borderColor: selected ? Colors.primaryBlue : Colors.divider,
         backgroundColor: selected ? Colors.chipSurface : Colors.cardBg,
         alignItems: 'center',
         justifyContent: 'center',
       }}>
-      <ThemedText variant="label">{label}{pro ? ' · PRO' : ''}</ThemedText>
+      <ThemedText variant="label">
+        {label}
+        {pro ? ' · PRO' : ''}
+      </ThemedText>
     </PressableScale>
   );
 }

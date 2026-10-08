@@ -66,8 +66,8 @@ export function resolvePinnedHashes(): readonly string[] {
   if (override && override.trim().length > 0) {
     return override
       .split(',')
-      .map((s) => s.trim())
-      .filter((s) => s.length > 0);
+      .map((s: string) => s.trim())
+      .filter((s: string) => s.length > 0);
   }
   return SAKURA_PINNED_HASHES;
 }

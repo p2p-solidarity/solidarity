@@ -15,6 +15,7 @@
 import type { OIDCAuthRequest } from '@solidarity/shared';
 
 import { resolvedProofTypeTag } from '@/credentials/presentationProof';
+import { classifyCredentialFormat } from '@/credentials/selectiveDisclosure';
 import type { StoredCredential } from '@/credentials/store';
 import type { ProvableClaimEntity } from '@/identity/entities';
 import type { ParsedOidcRequest } from '@/oidc/parseAuthRequest';
@@ -37,16 +38,23 @@ export interface PresentableClaim {
  *      itself marked non-presentable.
  *   2. `claim.claimType` must be one of the requested types — never
  *      over-disclose a claim nobody asked for.
- *   3. The claim's backing credential must exist AND resolve to
- *      `'sd-jwt-fallback'` via `resolvedProofTypeTag`. `oidc/presenter.ts`'s
- *      `buildVpToken` wraps a credential's raw JWT string verbatim into a
- *      VP; a ZK-proof-backed credential (`mopro-noir`/`semaphore-zk` tag,
- *      e.g. a passport enrolled via the openac-v3 pipeline) is not
- *      JWT-shaped, so wrapping it here would silently produce a VP the
- *      requester's `verifyVpToken` can only fail to parse. Filtering it
- *      out up front means the consent sheet never offers a claim this
- *      mechanism cannot actually present — see A5.3's report for exactly
- *      what IS presentable today given passport stays ZK-only until A10.
+ *   3. The claim's backing credential must exist, must not be declared
+ *      ZK-backed by its proof-type tag, AND must be JWT-shaped.
+ *      `oidc/presenter.ts`'s `buildVpToken` wraps a credential's raw JWT
+ *      string verbatim into a VP, so a ZK-proof-backed credential (a
+ *      passport enrolled via the openac-v3 pipeline, say) would silently
+ *      produce a VP the requester's `verifyVpToken` can only fail to parse.
+ *      This asks `classifyCredentialFormat` — the SAME authority
+ *      `resolveEmbeddedCredential` fails closed on downstream — rather than
+ *      a proof-type tag. A tag could not answer it: `resolvedProofTypeTag`
+ *      only knows `mopro-noir`/`semaphore-zk` and returns
+ *      `'sd-jwt-fallback'` for everything else, including an openac-v3
+ *      passport (tagged `passport-openac-v3`/`passport-noir`), so the gate
+ *      let exactly the credential it names straight through and the consent
+ *      sheet offered an option that always failed. Agreeing with the
+ *      downstream gate by construction keeps them from drifting again the
+ *      next time a proof type is added — see A5.3's report for what IS
+ *      presentable today given passport stays ZK-only until A10.
  */
 export function matchPresentableClaims(
   requestedClaimTypes: readonly string[],
@@ -60,7 +68,15 @@ export function matchPresentableClaims(
     if (!requested.has(claim.claimType)) continue;
     const credential = credentialById.get(claim.identityCardId);
     if (!credential) continue;
+    // Two checks, because neither alone is sufficient. The proof-type tag
+    // keeps a credential the enrollment pipeline declared ZK-backed out
+    // whatever its payload happens to look like; the format authority catches
+    // what the tag cannot see, since `resolvedProofTypeTag` only knows
+    // `mopro-noir`/`semaphore-zk` and answers `'sd-jwt-fallback'` for an
+    // openac-v3 passport too.
     if (resolvedProofTypeTag(credential.metadataTags) !== 'sd-jwt-fallback') continue;
+    const format = classifyCredentialFormat(credential.rawJwt);
+    if (format !== 'jwt-vc' && format !== 'sd-jwt') continue;
     out.push({ id: claim.id, claimType: claim.claimType, title: claim.title });
   }
   return out;

@@ -1,9 +1,8 @@
 import type { ReactNode } from 'react';
 import { View } from 'react-native';
 
-import { SfIcon } from '@/components/icons/SfIcon';
-import { ThemedButton, ThemedSurface } from '@/components/themed';
-import { Colors } from '@/constants/Colors';
+import { WelcomeFeatureArt } from '@/components/decor/CredsFeatureArt';
+import { ThemedButton } from '@/components/themed';
 import { useTranslation } from '@/i18n';
 
 import { V2OnboardingScaffold } from './V2OnboardingScaffold';
@@ -39,11 +38,8 @@ export function WelcomeStep({
         </View>
       }>
       <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
-        <ThemedSurface
-          variant="elevated"
-          className="h-28 w-28 items-center justify-center rounded-full">
-          <SfIcon name="checkmark.seal.fill" size={50} color={Colors.terminalGreen} />
-        </ThemedSurface>
+        {/* Mock ob step 0: the w-feature-2 arc-pinwheel disc, not a logo. */}
+        <WelcomeFeatureArt size={200} />
       </View>
     </V2OnboardingScaffold>
   );

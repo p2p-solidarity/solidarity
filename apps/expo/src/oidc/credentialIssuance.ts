@@ -164,7 +164,9 @@ interface ProofPayload {
 
 async function buildProofJwt(
   issuerUrl: string,
-  holderDid: string,
+  // Part of the public contract, but the active signing key is canonical (see
+  // `iss` below). Future multi-DID wallets can route on it.
+  _holderDid: string,
   cNonce: string | undefined
 ): Promise<Result<string, OidcError>> {
   try {
@@ -187,9 +189,6 @@ async function buildProofJwt(
       { alg: 'ES256', typ: 'openid4vci-proof+jwt', kid: verificationMethodId },
       payload as unknown as Record<string, unknown>
     );
-    // Silence unused-arg lint — holderDid is part of the public contract but
-    // the active key is canonical. Future multi-DID wallets can route here.
-    void holderDid;
     return ok(jws);
   } catch (e) {
     const m = e instanceof Error ? e.message : String(e);
@@ -306,7 +305,6 @@ async function executeCredentialRequest(opts: {
     fetchImpl,
     issuerUrl,
     holderDid,
-    initialCNonce,
   } = opts;
   let body = makeRequestBody(proofJwt, credentialType, credentialIdentifiers);
   let { response, text } = await postCredentialRequest(credentialUrl, accessToken, body, fetchImpl);
@@ -339,7 +337,6 @@ async function executeCredentialRequest(opts: {
         );
       }
     } else {
-      void initialCNonce;
       return err(
         oidcError(
           'credentialRequestFailed',

@@ -14,6 +14,11 @@
  * the screen must never suggest otherwise. A missing snapshot (bad/stale
  * deep link) renders an honest not-found state rather than a blank screen.
  */
+import { BrandIcon } from '@/components/icons/BrandIcon';
+import { linkDisplay, linkSecondaryLabel } from '@/profile/linkPresentation';
+import Animated, { useReducedMotion } from 'react-native-reanimated';
+import { fadeUpIn } from '@/feedback/motion';
+import { hostnameOf } from '@/profile/linkPresentation';
 import { useLocalSearchParams } from 'expo-router';
 import { safeBack } from '@/navigation/safeBack';
 import type { ReactNode } from 'react';
@@ -24,14 +29,24 @@ import { PressableScale } from '@/components/common/PressableScale';
 import { SfIcon } from '@/components/icons/SfIcon';
 import { ThemedText } from '@/components/themed';
 import { Colors } from '@/constants/Colors';
+import { appAlert } from '@/feedback/appAlert';
 import { useTranslation } from '@/i18n';
 import { useDeclaredSnapshot } from '@/people/profileSnapshots';
 
 export default function DeclaredPageDetailScreen(): ReactNode {
   const { t } = useTranslation();
+  const reduceMotion = useReducedMotion();
   const { id } = useLocalSearchParams<{ id: string }>();
   const snapshot = useDeclaredSnapshot(id);
   const insets = useSafeAreaInsets();
+  const openUrl = (url: string): void => {
+    void Linking.openURL(url).catch(() => {
+      appAlert({
+        title: t('mePage.linkErrorTitle'),
+        message: t('mePage.linkErrorMessage'),
+      });
+    });
+  };
 
   return (
     <View className="flex-1 bg-pageBg" style={{ paddingTop: insets.top }}>
@@ -54,11 +69,13 @@ export default function DeclaredPageDetailScreen(): ReactNode {
             </ThemedText>
             <PressableScale
               haptic="tap"
-              onPress={() => { void Linking.openURL(snapshot.sourceUrl).catch(() => undefined); }}
+              onPress={() => { openUrl(snapshot.sourceUrl); }}
               accessibilityRole="link"
+              style={{ minHeight: 44, flexDirection: 'row', alignItems: 'center', gap: 8 }}
             >
+              <BrandIcon name={linkDisplay('', snapshot.sourceUrl).brand} size={20} color={Colors.text2} />
               <ThemedText variant="caption" tone="tertiary" selectable>
-                {snapshot.sourceUrl}
+                {linkDisplay('', snapshot.sourceUrl).text}
               </ThemedText>
             </PressableScale>
           </View>
@@ -80,19 +97,27 @@ export default function DeclaredPageDetailScreen(): ReactNode {
               <ThemedText variant="caption" tone="tertiary">
                 {t('verifiedPage.linksHeader')}
               </ThemedText>
-              {snapshot.links.map((link) => (
-                <PressableScale
-                  key={`${link.label}-${link.url}`}
-                  haptic="tap"
-                  onPress={() => { void Linking.openURL(link.url).catch(() => undefined); }}
-                  accessibilityRole="link"
-                  style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}
-                >
-                  <SfIcon name="link" size={13} color={Colors.text2} />
-                  <ThemedText variant="bodySmall" tone="secondary" style={{ flexShrink: 1 }}>
-                    {link.label.length > 0 ? `${link.label} · ${link.url}` : link.url}
-                  </ThemedText>
-                </PressableScale>
+              {snapshot.links.map((link, index) => (
+                <Animated.View key={`${link.label}-${link.url}`} entering={fadeUpIn(index, reduceMotion)}>
+                  <PressableScale
+                    haptic="tap"
+                    onPress={() => { openUrl(link.url); }}
+                    accessibilityRole="link"
+                    style={{ minHeight: 44, flexDirection: 'row', alignItems: 'center', gap: 10 }}
+                  >
+                    <BrandIcon name={linkDisplay(link.label, link.url).brand} size={20} color={Colors.text2} />
+                    <View style={{ flex: 1, gap: 1 }}>
+                      <ThemedText variant="bodyMedium" numberOfLines={1} ellipsizeMode="middle">
+                        {linkDisplay(link.label, link.url).text}
+                      </ThemedText>
+                      {linkSecondaryLabel(link.label, link.url) ? (
+                        <ThemedText variant="caption" tone="tertiary" numberOfLines={1}>
+                          {linkSecondaryLabel(link.label, link.url)}
+                        </ThemedText>
+                      ) : null}
+                    </View>
+                  </PressableScale>
+                </Animated.View>
               ))}
             </View>
           ) : null}
@@ -107,12 +132,4 @@ export default function DeclaredPageDetailScreen(): ReactNode {
       )}
     </View>
   );
-}
-
-function hostnameOf(url: string): string {
-  try {
-    return new URL(url).hostname;
-  } catch {
-    return url;
-  }
 }

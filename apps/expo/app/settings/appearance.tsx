@@ -9,9 +9,10 @@
  *   4. Animal Theme (navigates to AnimalPicker, footer = personality)
  */
 import { safeBack } from '@/navigation/safeBack';
-import { Pressable, ScrollView, Text, View } from 'react-native';
+import { ScrollView, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { PressableScale } from '@/components/common/PressableScale';
 import { SfIcon } from '@/components/icons/SfIcon';
 import {
   SettingsBackToolbar,
@@ -19,9 +20,11 @@ import {
   SettingsBlockSection,
   SettingsBlockSectionHeader,
   SettingsBlockToggleRow,
+  SettingsEnter,
   SettingsScreenTitle,
 } from '@/components/settings/SettingsBlocks';
 import { Colors } from '@/constants/Colors';
+import { SCALE } from '@/feedback/motion';
 import { useTranslation } from '@/i18n';
 import {
   type AnimalCharacter,
@@ -96,7 +99,7 @@ export default function AppearanceSettings() {
       >
         <View className="gap-6">
           {/* Color Mode */}
-          <View className="gap-2">
+          <SettingsEnter index={0} style={{ gap: 8 }}>
             <SettingsBlockSectionHeader title={t('appearance.colorMode.header')} />
             <View className="px-4">
               <View
@@ -107,13 +110,17 @@ export default function AppearanceSettings() {
                   const active = colorScheme === value;
                   const label = t(COLOR_MODE_LABEL_KEYS[value]);
                   return (
-                    <Pressable
+                    <PressableScale
                       key={value}
+                      fill
+                      haptic="selection"
                       onPress={() => { setPref('appColorScheme', value); }}
                       accessibilityRole="button"
+                      accessibilityState={{ selected: active }}
                       accessibilityLabel={label}
-                      className="flex-1 items-center rounded-lg active:opacity-80"
+                      className="items-center justify-center rounded-lg"
                       style={{
+                        minHeight: 36,
                         paddingVertical: 8,
                         backgroundColor: active ? Colors.cardBg : 'transparent',
                       }}
@@ -127,15 +134,15 @@ export default function AppearanceSettings() {
                       >
                         {label}
                       </Text>
-                    </Pressable>
+                    </PressableScale>
                   );
                 })}
               </View>
             </View>
-          </View>
+          </SettingsEnter>
 
           {/* Card Accent */}
-          <View className="gap-2">
+          <SettingsEnter index={1} style={{ gap: 8 }}>
             <SettingsBlockSectionHeader title={t('appearance.cardAccent')} />
             <View className="px-4">
               <View
@@ -145,12 +152,16 @@ export default function AppearanceSettings() {
                 {CARD_ACCENT_PRESETS.map((hex) => {
                   const isSelected = hex.toLowerCase() === cardAccentHex.toLowerCase();
                   return (
-                    <Pressable
+                    <PressableScale
                       key={hex}
+                      haptic="selection"
+                      scaleTo={SCALE.icon}
                       onPress={() => { setPref('cardAccentHex', hex); }}
                       accessibilityRole="button"
+                      accessibilityState={{ selected: isSelected }}
                       accessibilityLabel={t('appearance.accentLabel', { hex })}
-                      className="items-center justify-center rounded-full active:opacity-80"
+                      hitSlop={4}
+                      className="items-center justify-center rounded-full"
                       style={{
                         width: 36,
                         height: 36,
@@ -162,15 +173,15 @@ export default function AppearanceSettings() {
                       {isSelected ? (
                         <SfIcon name="checkmark" size={14} weight="bold" color={Colors.cardBg} />
                       ) : null}
-                    </Pressable>
+                    </PressableScale>
                   );
                 })}
               </View>
             </View>
-          </View>
+          </SettingsEnter>
 
           {/* Effects */}
-          <SettingsBlockSection title={t('appearance.effects')}>
+          <SettingsBlockSection index={2} title={t('appearance.effects')}>
             <SettingsBlockToggleRow
               icon="sparkles"
               title={t('appearance.enableGlow')}
@@ -181,6 +192,7 @@ export default function AppearanceSettings() {
 
           {/* Animal Theme — footer shows the selected animal's personality */}
           <SettingsBlockSection
+            index={3}
             title={t('appearance.animalTheme')}
             footer={selectedAnimal ? t(ANIMAL_PERSONALITY_KEYS[selectedAnimal]) : undefined}
           >

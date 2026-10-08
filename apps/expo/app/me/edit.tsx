@@ -107,9 +107,10 @@ function toEditableLink(link: ProfileLink, visibility: LinkVisibility): Editable
 export default function MeEditScreen() {
   const insets = useSafeAreaInsets();
   const { t } = useTranslation();
-  const { add, avatar } = useLocalSearchParams<{
+  const { add, avatar, importLinks } = useLocalSearchParams<{
     readonly add?: string;
     readonly avatar?: string;
+    readonly importLinks?: string;
   }>();
   const record = useProfileStore((s) => s.record);
   const storeLinkVisibility = useProfileStore((s) => s.linkVisibility);
@@ -145,7 +146,7 @@ export default function MeEditScreen() {
     (record?.links ?? []).map((link, i) => toEditableLink(link, storeLinkVisibility[i] ?? 'public'))
   );
   const [saving, setSaving] = useState(false);
-  const [linktreeSheetOpen, setLinktreeSheetOpen] = useState(false);
+  const [linktreeSheetOpen, setLinktreeSheetOpen] = useState(() => importLinks === '1');
   const [previewOpen, setPreviewOpen] = useState(false);
   const [focusedMode, setFocusedMode] = useState(() => focusedEditorMode({ add, avatar }));
   const [hasDraftEdits, setHasDraftEdits] = useState(false);

@@ -69,6 +69,9 @@ export default function MeTab() {
           onAddLink={() => {
             router.push({ pathname: '/me/edit', params: { add: '1' } });
           }}
+          onImportLinks={() => {
+            router.push({ pathname: '/me/edit', params: { importLinks: '1' } });
+          }}
           onOpenSettings={() => {
             router.push('/settings');
           }}

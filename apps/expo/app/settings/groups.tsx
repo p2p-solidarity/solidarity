@@ -16,8 +16,8 @@
  */
 import { Redirect, router } from 'expo-router';
 import { safeBack } from '@/navigation/safeBack';
-import { useCallback, useEffect, useState } from 'react';
-import { RefreshControl, ScrollView, Text, View } from 'react-native';
+import { useEffect } from 'react';
+import { ScrollView, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { SfIcon } from '@/components/icons/SfIcon';
@@ -29,6 +29,7 @@ import {
 } from '@/components/settings/SettingsBlocks';
 import { YourGroupsSection } from '@/components/settings/YourGroupsSection';
 import { Colors } from '@/constants/Colors';
+import { showError } from '@/feedback/appAlert';
 import { confirmDialog } from '@/feedback/confirmDialog';
 import { pushToast } from '@/feedback/toast';
 import {
@@ -40,7 +41,7 @@ import { usePreferences } from '@/settings/preferences';
 
 export default function GroupManagementSettingsRoute() {
   const developerMode = usePreferences((state) => state.developerMode);
-  if (!developerMode) return <Redirect href="/settings/advanced" />;
+  if (!developerMode) return <Redirect href="/settings" />;
 
   return <GroupManagementSettings />;
 }
@@ -54,18 +55,11 @@ function GroupManagementSettings() {
   const seedFromManifest = useGroupStore((s) => s.seedFromManifest);
   const hydrate = useGroupStore((s) => s.hydrate);
   const deleteGroup = useGroupStore((s) => s.deleteGroup);
-  const [refreshing, setRefreshing] = useState(false);
 
   useEffect(() => {
     seedFromManifest();
     void hydrate();
   }, [seedFromManifest, hydrate]);
-
-  const onRefresh = useCallback(async () => {
-    setRefreshing(true);
-    await hydrate();
-    setRefreshing(false);
-  }, [hydrate]);
 
   const onOpen = (group: GroupModel) => {
     router.push({ pathname: '/groups/[id]', params: { id: group.id } });
@@ -80,13 +74,22 @@ function GroupManagementSettings() {
         destructive: true,
       });
       if (!ok) return;
-      await deleteGroup(group.id);
+      try {
+        await deleteGroup(group.id);
+        pushToast(t('settingsGroups.deleted'), 'success', 2000);
+      } catch (error) {
+        showError({
+          context: 'Groups › Delete Group',
+          summary: t('settingsGroups.deleteFailed'),
+          error,
+        });
+      }
     })();
   };
 
   const goCreate = () => { router.push('/groups/new'); };
-  const goPrivacy = () => { pushToast(t('settingsGroups.privacyToast'), 'info'); };
-  const goTerms = () => { pushToast(t('settingsGroups.termsToast'), 'info'); };
+  const goPrivacy = () => { router.push('/legal/privacy'); };
+  const goTerms = () => { router.push('/legal/terms'); };
 
   return (
     <View className="flex-1 bg-pageBg" style={{ paddingTop: insets.top }}>
@@ -95,9 +98,6 @@ function GroupManagementSettings() {
 
       <ScrollView
         className="flex-1"
-        refreshControl={
-          <RefreshControl refreshing={refreshing} onRefresh={() => { void onRefresh(); }} />
-        }
         contentContainerStyle={{ paddingTop: 24, paddingBottom: 40 + insets.bottom }}
       >
         <View className="gap-6">

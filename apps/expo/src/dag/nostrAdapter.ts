@@ -2,7 +2,7 @@
  * Nostr bridge adapter — projects DAG nodes into Nostr-event envelopes
  * and back, plus a minimal raw-WebSocket publish/subscribe client.
  *
- * Spec: docs/dev-sandbox-identity-graph.md §3.4 + §6.2 + §13.2.
+ * Spec: docs/ref/notes-dev-sandbox-identity-graph.md §3.4 + §6.2 + §13.2.
  *
  * Why no `nostr-tools` dependency: our DAG node already follows NIP-01
  * canonical serialization exactly (src/dag/node.ts), so the id + sig
@@ -207,7 +207,8 @@ export function subscribeEvents(
           typeof candidate.kind === 'number' &&
           typeof candidate.content === 'string' &&
           typeof candidate.sig === 'string' &&
-          Array.isArray(candidate.tags)
+          Array.isArray(candidate.tags) &&
+          verifyNostrEvent(candidate as NostrEvent)
         ) {
           onEvent(candidate as NostrEvent);
         }

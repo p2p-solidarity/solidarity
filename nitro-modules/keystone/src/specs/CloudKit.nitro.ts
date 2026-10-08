@@ -1,0 +1,182 @@
+/**
+ * Nitro spec — CloudKit (iOS) + Drive (Android) parity surface.
+ *
+ * Why this lives in one Nitro module instead of two:
+ *   The legacy Swift app uses CKShare for group sync (cross-device shared
+ *   zones via Apple's invite URLs). Android has no CKShare; we simulate the
+ *   same primitives over Drive (shared folder + REST `permissions.create`)
+ *   so the JS layer reads `shareId` + `url` regardless of platform.
+ *
+ * Field encoding:
+ *   `fields` is a JSON-encoded string instead of a Record<string, unknown>
+ *   because Nitrogen rejects open-ended record types — Swift bridges only
+ *   know fixed C++ structs. The JSON cost is small (records are kilobytes,
+ *   not megabytes) and lets us evolve the field schema without rerunning
+ *   nitrogen.
+ *
+ * Event listener:
+ *   `addEventListener` returns an unsubscribe function so JS callers can
+ *   detach cleanly (mirrors react-native-mmkv / Proximity ergonomics). The
+ *   iOS impl bridges CKDatabaseSubscription deliveries; the Android impl
+ *   polls via Drive `changes.list` since Drive has no push channel inside
+ *   the Nitro module's process.
+ */
+import type { HybridObject } from 'react-native-nitro-modules';
+
+export interface CloudKitRecord {
+  readonly recordId: string;
+  readonly recordType: string;
+  /** JSON-encoded fields. Caller is responsible for stable key ordering. */
+  readonly fields: string;
+  /** Optional zone (iOS only — Drive ignores). */
+  readonly zoneId?: string;
+  /** Optional share id this record belongs to. */
+  readonly shareId?: string;
+  /** Epoch ms — server modification time. 0 for unsaved records. */
+  readonly modifiedTime: number;
+}
+
+export interface CloudKitShareInvite {
+  readonly shareId: string;
+  /** Shareable URL — CKShare.url on iOS, Drive `webViewLink` on Android. */
+  readonly url: string;
+  readonly title: string;
+  /** Optional thumbnail (JPEG/PNG bytes). */
+  readonly thumbnail?: ArrayBuffer;
+}
+
+export type CloudKitEventKind =
+  | 'recordSaved'
+  | 'recordDeleted'
+  | 'shareAccepted'
+  | 'shareRevoked'
+  | 'accountChanged'
+  | 'error';
+
+/**
+ * Flattened event shape — nitrogen rejects discriminated unions with string
+ * literal discriminators, so we use one struct with all optional fields and
+ * narrow at the call site.
+ */
+export interface CloudKitEvent {
+  readonly kind: CloudKitEventKind;
+  readonly recordId?: string;
+  readonly recordType?: string;
+  readonly shareId?: string;
+  readonly errorMessage?: string;
+  readonly errorCode?: string;
+}
+
+export type FileBackupDownloadStatus =
+  /** Fully local and up to date — `readFileBackup` will succeed. */
+  | 'current'
+  /** iCloud is transferring it right now. */
+  | 'downloading'
+  /** Known to iCloud but not on this device yet; nothing in flight. */
+  | 'notDownloaded'
+  /** Local-only storage (iCloud unavailable) — there is nothing to fetch. */
+  | 'local'
+  /** No such file on this provider. */
+  | 'missing';
+
+/**
+ * Transfer state of one backup file. `readFileBackup` deliberately fails fast
+ * on a file that is not fully local (a sync pass must never block a native
+ * executor on an offline download); this is what lets JS turn that failure
+ * into "downloading, 42%" and poll instead of calling the archive unreadable.
+ */
+export interface FileBackupDownloadState {
+  readonly status: FileBackupDownloadStatus;
+  /** 0–100 while transferring, when the platform reports it. */
+  readonly percentDownloaded?: number;
+  /** The platform's last transfer error for this file, when any. */
+  readonly errorMessage?: string;
+}
+
+export interface CloudKit
+  extends HybridObject<{ ios: 'swift'; android: 'kotlin' }> {
+  // ── Container lifecycle ────────────────────────────────────────────────
+  /**
+   * Initialise the container. Returns false when the platform-equivalent
+   * account is unavailable (iCloud not signed in on iOS, no Drive session
+   * on Android).
+   */
+  initialize(containerIdentifier: string): Promise<boolean>;
+  isAvailable(): boolean;
+  currentUserId(): Promise<string>;
+
+  // ── Private DB CRUD ────────────────────────────────────────────────────
+  saveRecord(record: CloudKitRecord): Promise<CloudKitRecord>;
+  fetchRecord(recordId: string): Promise<CloudKitRecord>;
+  deleteRecord(recordId: string): Promise<void>;
+  /**
+   * Query records by type. `predicateJson` is an NSPredicate-equivalent
+   * JSON shape `{ key, op, value }`. iOS converts to NSPredicate; Drive
+   * translates to a `q=` parameter on the REST list call.
+   */
+  queryRecords(
+    recordType: string,
+    predicateJson: string
+  ): Promise<CloudKitRecord[]>;
+
+  // ── Shared DB (groups) ─────────────────────────────────────────────────
+  createShare(
+    rootRecordId: string,
+    title: string,
+    allowsPublicAccess: boolean
+  ): Promise<CloudKitShareInvite>;
+  /** Returns the share id. */
+  acceptShare(url: string): Promise<string>;
+  fetchSharedRecords(shareId: string): Promise<CloudKitRecord[]>;
+  removeShare(shareId: string): Promise<void>;
+
+  // ── Change tracking ────────────────────────────────────────────────────
+  /** Returns an unsubscribe function. */
+  addEventListener(handler: (event: CloudKitEvent) => void): () => void;
+
+  /**
+   * Push a Drive OAuth access token (Android only). iOS no-ops because
+   * CloudKit authenticates the user via the system iCloud account.
+   */
+  setDriveAccessToken(accessToken: string): void;
+
+  // ── File-based backup blobs ────────────────────────────────────────────
+  /**
+   * Backup storage that mirrors the legacy Swift app's file-based backups
+   * (`Documents/AirMeishiBackup/backup_<ts>.solbk`) rather than a custom
+   * CloudKit record type — so it needs NO production CloudKit schema and
+   * never hits the "Cannot create new type … in production schema" error.
+   *
+   * iOS: writes into the iCloud ubiquity container
+   *   (`FileManager.url(forUbiquityContainerIdentifier:)` →
+   *   `Documents/AirMeishiBackup`), falling back to the app's local
+   *   Documents/AirMeishiBackup when iCloud is unavailable (1:1 with
+   *   solidarity/Services/Backup/BackupManager.swift).
+   * Android: writes into a `Solidarity/Backups` Drive folder via the same
+   *   bearer-token Drive client used for records.
+   *
+   * `content` is base64 of the raw file bytes (a SOLB-framed AES-GCM blob),
+   * so the on-disk file stays byte-compatible with the Swift `.solbk` format.
+   */
+  writeFileBackup(filename: string, content: string): Promise<void>;
+  /** base64 of the raw file bytes. Rejects when the file is missing. */
+  readFileBackup(filename: string): Promise<string>;
+  /** Backup filenames present in the backup folder (unsorted). */
+  listFileBackups(): Promise<string[]>;
+  deleteFileBackup(filename: string): Promise<void>;
+  /** File modification time in epoch ms; 0 when unknown or missing. */
+  getFileBackupMtime(filename: string): Promise<number>;
+  /**
+   * Whether `filename` can be read right now and, when it cannot, how far the
+   * platform has got with fetching it. iOS reads iCloud's per-item transfer
+   * state; Drive has no local copy to wait for, so an existing file is always
+   * `current`.
+   */
+  getFileBackupDownloadState(filename: string): Promise<FileBackupDownloadState>;
+  /**
+   * Ask the platform to fetch `filename` onto this device (idempotent — a
+   * transfer already in flight is left alone). No-op where nothing needs
+   * fetching (local-only storage, Drive).
+   */
+  startFileBackupDownload(filename: string): Promise<void>;
+}

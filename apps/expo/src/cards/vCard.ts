@@ -1,7 +1,10 @@
 /**
  * Minimal vCard 3.0 writer — mirrors Swift BusinessCard.vCardData. Used
- * by the Share tab so the QR payload is a vCard (importable into iOS
- * Contacts / Google Contacts), not a URL.
+ * only for FILE sharing (`shareVCard` → OS share sheet / AirDrop as a
+ * .vcf importable into iOS Contacts / Google Contacts) — it is never
+ * rendered into a QR, and the scanner has no vCard parser
+ * (`scan/envelopeHandler.ts` routes `BEGIN:VCARD` to raw). See
+ * docs/ref/05-spec-qr-exchange.md §6-2.
  */
 import type { BusinessCard } from '@solidarity/shared';
 

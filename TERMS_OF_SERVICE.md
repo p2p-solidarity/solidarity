@@ -22,7 +22,6 @@ Solid(ar)ity is a **privacy-preserving, peer-to-peer business card sharing appli
 - Share business cards with nearby users via proximity-based networking (MultipeerConnectivity)
 - Exchange business cards using QR codes, AirDrop, and other sharing methods
 - Manage group memberships using zero-knowledge cryptographic proofs (Semaphore protocol)
-- Export business cards to Apple Wallet (PassKit)
 
 **Key Characteristics:**
 - **Offline-First:** The App operates entirely without internet connectivity or remote servers
@@ -114,7 +113,6 @@ Your use of Solid(ar)ity is also governed by our [Privacy Policy](PRIVACY_POLICY
 ### 7.1 Apple Services
 The App integrates with Apple's native iOS frameworks:
 - **MultipeerConnectivity** for peer-to-peer networking
-- **PassKit** for Apple Wallet integration
 - **Keychain** for secure cryptographic key storage
 
 Your use of these Apple services is subject to Apple's terms and conditions.

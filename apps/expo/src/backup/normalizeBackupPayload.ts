@@ -1,3 +1,5 @@
+import { businessCardSchema, contactSchema } from '@solidarity/shared';
+import { claimSchema, credentialSchema, identityCardSchema, validatePortableData } from './portableData';
 /**
  * normalizeRestoredPayload — shape-validate a decrypted Backup Archive before
  * restore touches it.
@@ -19,21 +21,23 @@
  *   cards      ← `cards` (Expo) or `businessCards` (Swift BackupData)
  *   exportedAt ← `exportedAt` (Expo) or `timestamp` (Swift BackupData)
  */
-import type { BusinessCard, Contact } from '@solidarity/shared';
-
 import type { IdentityCardEntity, ProvableClaimEntity } from '../identity/entities';
 import type { StoredCredential } from '../credentials/store';
 import type { BackupPayload } from './backupManager';
 
-function asArray<T>(value: unknown): readonly T[] {
-  return Array.isArray(value) ? (value as T[]) : [];
+function asArray(value: unknown): readonly unknown[] {
+  return Array.isArray(value) ? value : [];
 }
 
 export function normalizeRestoredPayload(raw: unknown): BackupPayload | null {
   if (raw === null || typeof raw !== 'object' || Array.isArray(raw)) return null;
   const o = raw as Record<string, unknown>;
+  if (Object.hasOwn(o, 'schemaVersion') && o['schemaVersion'] !== 3 && o['schemaVersion'] !== 4) {
+    throw new Error('unsupported-backup-schema');
+  }
   return {
-    schemaVersion: 3,
+    schemaVersion: o['schemaVersion'] === 4 ? 4 : 3,
+    ...(o['schemaVersion'] === 4 ? { portableData: validatePortableData(o['portableData']) } : {}),
     exportedAt:
       typeof o['exportedAt'] === 'string'
         ? o['exportedAt']
@@ -41,10 +45,13 @@ export function normalizeRestoredPayload(raw: unknown): BackupPayload | null {
           ? o['timestamp']
           : '',
     provider: (o['provider'] === 'googleDrive' ? 'googleDrive' : 'iCloud'),
-    cards: asArray<BusinessCard>(o['cards'] ?? o['businessCards']),
-    contacts: asArray<Contact>(o['contacts']),
-    identityCards: asArray<IdentityCardEntity>(o['identityCards']),
-    provableClaims: asArray<ProvableClaimEntity>(o['provableClaims']),
-    storedCredentials: asArray<StoredCredential>(o['storedCredentials']),
+    cards: asArray(o['cards'] ?? o['businessCards']).map((value) => businessCardSchema.parse(value)),
+    contacts: asArray(o['contacts']).map((value) => contactSchema.parse(value)),
+    identityCards: asArray(o['identityCards']).map((value) =>
+      identityCardSchema.parse(value) as IdentityCardEntity),
+    provableClaims: asArray(o['provableClaims']).map((value) =>
+      claimSchema.parse(value) as ProvableClaimEntity),
+    storedCredentials: asArray(o['storedCredentials']).map((value) =>
+      credentialSchema.parse(value) as StoredCredential),
   };
 }

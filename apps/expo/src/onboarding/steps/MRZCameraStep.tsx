@@ -12,7 +12,7 @@
  *                     number, nationality, DOB, expiry; Rescan + Use This.
  *   4. NavBar with Cancel button (left).
  *
- * MRZ recognition runs through the `@solidarity/nitro-mrz-ocr` plugin
+ * MRZ recognition runs through the `@solidarity/nitro-attest` plugin
  * (Vision on iOS, ML Kit Text Recognition on Android). Native now
  * returns a TD3 draft only after ICAO 9303 check-digit validation; JS only
  * drives transient scan phase UI and advances once a draft appears.
@@ -30,7 +30,7 @@ import {
   type Frame,
 } from 'react-native-vision-camera';
 
-import { getMrzOcr, type MrzOcr, type MrzScanResult } from '@solidarity/nitro-mrz-ocr';
+import { getMrzOcr, type MrzOcr, type MrzScanResult } from '@solidarity/nitro-attest';
 
 import { SfIcon } from '@/components/icons/SfIcon';
 import {

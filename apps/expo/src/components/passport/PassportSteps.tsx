@@ -19,9 +19,11 @@ import { ActivityIndicator, StyleSheet, Text, View } from 'react-native';
 import Animated, {
   Easing,
   useAnimatedStyle,
+  useReducedMotion,
   useSharedValue,
   withDelay,
   withRepeat,
+  withSpring,
   withTiming,
 } from 'react-native-reanimated';
 import Svg, { Path } from 'react-native-svg';
@@ -30,6 +32,7 @@ import { BulletGuaranteeRow } from '@/components/passport/BulletGuaranteeRow';
 import { SfIcon } from '@/components/icons/SfIcon';
 import { ThemedButton } from '@/components/themed';
 import { Colors } from '@/constants/Colors';
+import { TIMING } from '@/feedback/motion';
 import {
   credentialTrustDisplayFor,
   passportTrustLevelFromProof,
@@ -182,8 +185,12 @@ const progressStyles = StyleSheet.create({
  *                so the effect reads as a continuous ripple
  *   • busy    → same arcs, sped to 1.1s + tinted terminalGreen so the
  *                user can tell at a glance the chip read is in flight
- *   • success → arcs disappear, a single checkmark scale-ins from 0
- *                with a small bounce so the success moment lands
+ *   • success → arcs disappear, a single checkmark fades in from 0.95
+ *                on a spring with a small bounce (≤ 0.2) so the moment
+ *                lands without a pop from nothing
+ *
+ * Reduce Motion: arcs pulse in place (opacity only) and the check just
+ * fades in.
  *
  * Everything runs on the Reanimated UI thread (SharedValues + worklets);
  * the React render only fires on the three discrete state transitions.
@@ -225,6 +232,7 @@ function NfcWaveArc({
   color: string;
 }) {
   const t = useSharedValue(0);
+  const reduceMotion = useReducedMotion();
 
   useEffect(() => {
     t.value = 0;
@@ -238,9 +246,12 @@ function NfcWaveArc({
     );
   }, [delay, duration, t]);
 
+  // Each arc fades in over the first fifth of its cycle instead of
+  // appearing at full strength while tiny, then fades out as it spreads —
+  // a ripple, never a pop. Reduce Motion keeps the pulse, drops the spread.
   const animatedStyle = useAnimatedStyle(() => ({
-    transform: [{ scale: 0.4 + t.value * 1.0 }],
-    opacity: 1 - t.value,
+    transform: [{ scale: reduceMotion ? 1 : ARC_MIN_SCALE + t.value * ARC_SPREAD }],
+    opacity: t.value < ARC_FADE_IN ? t.value / ARC_FADE_IN : (1 - t.value) / (1 - ARC_FADE_IN),
   }));
 
   return (
@@ -258,16 +269,28 @@ function NfcWaveArc({
   );
 }
 
+/** Ripple geometry: arcs spread from 60 % to 130 % of their box. */
+const ARC_MIN_SCALE = 0.6;
+const ARC_SPREAD = 0.7;
+/** Fraction of a cycle spent fading an arc in. */
+const ARC_FADE_IN = 0.2;
+
+/**
+ * Completion check: from 0.95 + transparent (never from scale 0), opacity on
+ * the app's ease-out, scale on a short spring with a small bounce (damping
+ * ratio 0.8 → bounce 0.2; 200 ms perceptual ≈ 300 ms settled) so the success
+ * moment lands. Reduce Motion: fade only.
+ */
 function SuccessCheck() {
-  const scale = useSharedValue(0);
+  const reduceMotion = useReducedMotion();
+  const scale = useSharedValue(reduceMotion ? 1 : 0.95);
+  const opacity = useSharedValue(0);
   useEffect(() => {
-    scale.value = withTiming(1, {
-      duration: 400,
-      // Slight overshoot so the check "lands" with intent.
-      easing: Easing.out(Easing.back(1.5)),
-    });
-  }, [scale]);
+    opacity.value = withTiming(1, TIMING.enter);
+    if (!reduceMotion) scale.value = withSpring(1, { duration: 200, dampingRatio: 0.8 });
+  }, [opacity, reduceMotion, scale]);
   const animatedStyle = useAnimatedStyle(() => ({
+    opacity: opacity.value,
     transform: [{ scale: scale.value }],
   }));
   return (

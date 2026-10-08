@@ -13,9 +13,11 @@
  */
 import { safeBack } from '@/navigation/safeBack';
 import { useEffect, useState } from 'react';
-import { ScrollView, TextInput, View } from 'react-native';
+import { TextInput, View } from 'react-native';
+import { KeyboardAwareScrollView } from 'react-native-keyboard-controller';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { SfIcon } from '@/components/icons/SfIcon';
 import {
   SettingsBackToolbar,
   SettingsBlockInfoRow,
@@ -135,12 +137,14 @@ export default function IdentityExportSettings() {
       <SettingsBackToolbar onPress={() => { safeBack('/settings'); }} />
       <SettingsScreenTitle title={t('identityExport.title')} />
 
-      <ScrollView
-        className="flex-1"
+      <KeyboardAwareScrollView
+        style={{ flex: 1 }}
+        keyboardShouldPersistTaps="handled"
+        bottomOffset={16}
         contentContainerStyle={{ paddingTop: 24, paddingBottom: 24 + insets.bottom }}
       >
         <View className="gap-6">
-          <SettingsBlockSection title={t('identityExport.section.current')}>
+          <SettingsBlockSection index={0} title={t('identityExport.section.current')}>
             <SettingsBlockInfoRow
               icon="key.horizontal"
               title={t('identityExport.activeDid')}
@@ -148,18 +152,28 @@ export default function IdentityExportSettings() {
             />
           </SettingsBlockSection>
 
-          <SettingsBlockSection title={t('identityExport.section.export')} footer={t('identityExport.exportFooter')}>
+          {/* The footer is a warning BEFORE the reveal, and the red box is one
+              DURING it — both stay on screen (never behind an ⓘ). */}
+          <SettingsBlockSection
+            index={1}
+            title={t('identityExport.section.export')}
+            footer={t('identityExport.exportFooter')}
+          >
             {revealedWords ? (
               <View style={{ gap: 12, paddingHorizontal: 2 }}>
                 <View
                   style={{
+                    flexDirection: 'row',
+                    alignItems: 'center',
+                    gap: 8,
                     borderWidth: 1,
                     borderColor: `${Colors.destructive}66`,
                     backgroundColor: `${Colors.destructive}14`,
                     padding: 12,
                   }}
                 >
-                  <ThemedText variant="caption" tone="error">
+                  <SfIcon name="exclamationmark.triangle.fill" size={14} color={Colors.destructive} />
+                  <ThemedText variant="caption" tone="error" style={{ flex: 1 }}>
                     {t('identityExport.screenshotWarning')}
                   </ThemedText>
                 </View>
@@ -195,7 +209,11 @@ export default function IdentityExportSettings() {
             )}
           </SettingsBlockSection>
 
-          <SettingsBlockSection title={t('identityExport.section.import')} footer={t('identityExport.importFooter')}>
+          <SettingsBlockSection
+            index={2}
+            title={t('identityExport.section.import')}
+            footer={t('identityExport.importFooter')}
+          >
             <View style={{ gap: 8, paddingHorizontal: 2 }}>
               <TextInput
                 value={importText}
@@ -238,7 +256,7 @@ export default function IdentityExportSettings() {
             </View>
           </SettingsBlockSection>
         </View>
-      </ScrollView>
+      </KeyboardAwareScrollView>
     </View>
   );
 }

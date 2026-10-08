@@ -23,7 +23,7 @@
       "android": {
         "serviceAccountKeyPath": "./secrets/play-sa-key.json",
         "track": "internal",
-        "releaseStatus": "draft",
+        "releaseStatus": "completed",
         "changesNotSentForReview": false
       }
     }

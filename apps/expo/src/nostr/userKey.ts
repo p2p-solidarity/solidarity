@@ -515,6 +515,26 @@ async function loadScalar(): Promise<Result<Uint8Array, string>> {
 }
 
 /**
+ * Internal passkey-enrolment read. The caller must zero the returned bytes
+ * after sealing; this is deliberately not re-exported from the Nostr barrel.
+ */
+export async function readNostrScalarForPasskeyConnection(): Promise<
+  Result<Uint8Array | null, string>
+> {
+  const scalar = await loadScalar();
+  if (!scalar.ok) {
+    return scalar.error === 'notProvisioned' ? ok(null) : scalar;
+  }
+  try {
+    schnorr.getPublicKey(scalar.value);
+    return scalar;
+  } catch {
+    scalar.value.fill(0);
+    return err('corruptedScalar');
+  }
+}
+
+/**
  * Resolve the currently-provisioned Nostr pubkey (x-only, 64-char lowercase
  * hex — NOT npub-encoded). Returns `err('notProvisioned')` rather than
  * lazily provisioning — see module doc for the consent-gate rationale.

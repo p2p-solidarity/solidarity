@@ -1,5 +1,5 @@
-import type { getNfcPassport as getNfcPassportFn } from '@solidarity/nitro-nfc-passport';
-import type { getPassportZk as getPassportZkFn } from '@solidarity/nitro-passport-zk';
+import type { getNfcPassport as getNfcPassportFn } from '@solidarity/nitro-attest';
+import type { getPassportZk as getPassportZkFn } from '@solidarity/nitro-attest';
 
 type GetNfcPassport = typeof getNfcPassportFn;
 type GetPassportZk = typeof getPassportZkFn;
@@ -16,13 +16,13 @@ export interface PassportNitroModules {
 
 const DEFAULT_FACTORIES: PassportNitroModuleFactories = {
   getNfcPassport: () => {
-    const mod = require('@solidarity/nitro-nfc-passport') as {
+    const mod = require('@solidarity/nitro-attest') as {
       readonly getNfcPassport: GetNfcPassport;
     };
     return mod.getNfcPassport();
   },
   getPassportZk: () => {
-    const mod = require('@solidarity/nitro-passport-zk') as {
+    const mod = require('@solidarity/nitro-attest') as {
       readonly getPassportZk: GetPassportZk;
     };
     return mod.getPassportZk();

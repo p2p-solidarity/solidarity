@@ -2,7 +2,7 @@
  * Sandbox-only secp256k1 dev-key — the ONLY key allowed to sign DAG
  * nodes today.
  *
- * Spec: docs/dev-sandbox-identity-graph.md §7 + §8. Never linked to the
+ * Spec: docs/ref/notes-dev-sandbox-identity-graph.md §7 + §8. Never linked to the
  * production Spruce ed25519 DID; never exported through the public
  * backup flow; UI labels MUST call it "Sandbox key", never "Your key"
  * — see §8 naming convention.

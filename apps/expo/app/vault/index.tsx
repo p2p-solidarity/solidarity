@@ -57,16 +57,7 @@ function VaultRow({ entry, detail }: VaultRowProps): ReactNode {
   const displayName = detail?.name ?? t('vault.encryptedItem');
   const updatedDate = detail?.updatedAt ?? new Date(entry.updatedAt);
   return (
-    <Pressable
-      onPress={() => {
-        // Vault detail screen is not yet implemented; tap is a no-op
-        // and keeps the row visible with chevron parity. Wires when
-        // /vault/[id] lands.
-      }}
-      accessibilityRole="button"
-      accessibilityLabel={t('vault.openItem', { name: displayName })}
-      className="active:opacity-80"
-    >
+    <View>
       <View
         className="bg-mutedSurface rounded-xl flex-row items-center"
         style={{ paddingHorizontal: 14, paddingVertical: 14 }}
@@ -87,9 +78,8 @@ function VaultRow({ entry, detail }: VaultRowProps): ReactNode {
             })}
           </Text>
         </View>
-        <SfIcon name="chevron.right" size={12} weight="semibold" color={Colors.text3} />
       </View>
-    </Pressable>
+    </View>
   );
 }
 

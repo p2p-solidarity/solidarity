@@ -1,8 +1,9 @@
 import type { SFSymbol } from 'expo-symbols';
 import type { TFunction } from 'i18next';
 import { type ReactNode } from 'react';
-import { Pressable, View } from 'react-native';
+import { View } from 'react-native';
 
+import { PressableScale } from '@/components/common/PressableScale';
 import { SfIcon } from '@/components/icons/SfIcon';
 import { ThemedText } from '@/components/themed';
 import { Colors } from '@/constants/Colors';
@@ -57,7 +58,9 @@ export function FieldRow({
   const statusLabel = vcStatusLabel(status, descriptor.excludedFromVc ?? false, t);
 
   return (
-    <Pressable
+    <PressableScale
+      haptic="selection"
+      disabled={descriptor.locked}
       accessibilityRole="button"
       accessibilityLabel={descriptor.label}
       accessibilityState={{ selected: isOn, disabled: descriptor.locked }}
@@ -108,7 +111,7 @@ export function FieldRow({
           color={isOn ? statusColor : Colors.text3}
         />
       )}
-    </Pressable>
+    </PressableScale>
   );
 }
 
@@ -130,14 +133,13 @@ export function ProofRow({
   readonly onToggle: () => void;
 }): ReactNode {
   return (
-    <Pressable
+    <PressableScale
+      haptic="selection"
+      disabled={locked}
       accessibilityRole="button"
       accessibilityLabel={label}
       accessibilityState={{ selected: isOn, disabled: locked }}
-      onPress={() => {
-        if (locked) return;
-        onToggle();
-      }}
+      onPress={onToggle}
       className="flex-row items-center"
       style={{
         backgroundColor: Colors.searchBg,
@@ -182,7 +184,7 @@ export function ProofRow({
           color={isOn ? badgeColor : Colors.text3}
         />
       )}
-    </Pressable>
+    </PressableScale>
   );
 }
 

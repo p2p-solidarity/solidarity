@@ -5,7 +5,8 @@
  */
 import { safeBack } from '@/navigation/safeBack';
 import { useState } from 'react';
-import { ScrollView, TextInput, View } from 'react-native';
+import { TextInput, View } from 'react-native';
+import { KeyboardAwareScrollView } from 'react-native-keyboard-controller';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { useContactStore } from '@/contacts/repository';
@@ -63,81 +64,84 @@ export default function ManualContactEntry() {
   };
 
   return (
-    <ScrollView
-      className="flex-1 bg-pageBg"
-      contentContainerStyle={{ paddingBottom: insets.bottom + 24 }}>
-      <View className="px-4" style={{ paddingTop: insets.top + 12 }}>
-        <ThemedButton
-          variant="secondary"
-          size="sm"
-          label={t('contactManual.back')}
-          onPress={() => {
-            safeBack();
-          }}
-        />
-      </View>
-      <View className="px-4 py-4">
-        <ThemedText variant="headlineLarge">{t('contactManual.title')}</ThemedText>
-      </View>
-
-      {[
-        {
-          label: 'NAME',
-          displayLabel: t('contactManual.fieldName'),
-          value: name,
-          set: setName,
-          placeholder: 'Ada Lovelace',
-        },
-        {
-          label: 'EMAIL',
-          displayLabel: t('contactManual.fieldEmail'),
-          value: email,
-          set: setEmail,
-          placeholder: 'ada@solidarity.gg',
-        },
-        {
-          label: 'PHONE',
-          displayLabel: t('contactManual.fieldPhone'),
-          value: phone,
-          set: setPhone,
-          placeholder: '+1 555 0100',
-        },
-        {
-          label: 'COMPANY',
-          displayLabel: t('contactManual.fieldCompany'),
-          value: company,
-          set: setCompany,
-          placeholder: 'Solidarity',
-        },
-      ].map((f) => (
-        <ThemedSurface key={f.label} variant="card" padded className="mx-4 mb-2">
-          <ThemedText variant="caption" tone="tertiary">
-            {f.displayLabel}
-          </ThemedText>
-          <TextInput
-            value={f.value}
-            onChangeText={f.set}
-            placeholder={f.placeholder}
-            placeholderTextColor="#9C9C9C"
-            autoCapitalize={f.label === 'EMAIL' ? 'none' : 'words'}
-            keyboardType={
-              f.label === 'EMAIL' ? 'email-address' : f.label === 'PHONE' ? 'phone-pad' : 'default'
-            }
-            className="mt-1 py-1 text-text1"
+    <View className="flex-1 bg-pageBg">
+      <KeyboardAwareScrollView
+        keyboardShouldPersistTaps="handled"
+        bottomOffset={16}
+        contentContainerStyle={{ paddingBottom: insets.bottom + 24 }}>
+        <View className="px-4" style={{ paddingTop: insets.top + 12 }}>
+          <ThemedButton
+            variant="secondary"
+            size="sm"
+            label={t('contactManual.back')}
+            onPress={() => {
+              safeBack();
+            }}
           />
-        </ThemedSurface>
-      ))}
+        </View>
+        <View className="px-4 py-4">
+          <ThemedText variant="headlineLarge">{t('contactManual.title')}</ThemedText>
+        </View>
 
-      <View className="mb-10 mt-4 px-4">
-        <ThemedButton
-          label={t('contactManual.save')}
-          fullWidth
-          disabled={name.trim().length === 0}
-          onPress={() => {
-            void onSave();
-          }}
-        />
-      </View>
-    </ScrollView>
+        {[
+          {
+            label: 'NAME',
+            displayLabel: t('contactManual.fieldName'),
+            value: name,
+            set: setName,
+            placeholder: 'Ada Lovelace',
+          },
+          {
+            label: 'EMAIL',
+            displayLabel: t('contactManual.fieldEmail'),
+            value: email,
+            set: setEmail,
+            placeholder: 'ada@solidarity.gg',
+          },
+          {
+            label: 'PHONE',
+            displayLabel: t('contactManual.fieldPhone'),
+            value: phone,
+            set: setPhone,
+            placeholder: '+1 555 0100',
+          },
+          {
+            label: 'COMPANY',
+            displayLabel: t('contactManual.fieldCompany'),
+            value: company,
+            set: setCompany,
+            placeholder: 'Solidarity',
+          },
+        ].map((f) => (
+          <ThemedSurface key={f.label} variant="card" padded className="mx-4 mb-2">
+            <ThemedText variant="caption" tone="tertiary">
+              {f.displayLabel}
+            </ThemedText>
+            <TextInput
+              value={f.value}
+              onChangeText={f.set}
+              placeholder={f.placeholder}
+              placeholderTextColor="#9C9C9C"
+              autoCapitalize={f.label === 'EMAIL' ? 'none' : 'words'}
+              keyboardType={
+                f.label === 'EMAIL' ? 'email-address' : f.label === 'PHONE' ? 'phone-pad' : 'default'
+              }
+              className="mt-1 py-1 text-text1"
+            />
+          </ThemedSurface>
+        ))}
+
+        <View className="mb-10 mt-4 px-4">
+          <ThemedButton
+            label={t('contactManual.save')}
+            fullWidth
+            disabled={name.trim().length === 0}
+            onPress={() => {
+              void onSave();
+            }}
+          />
+        </View>
+      </KeyboardAwareScrollView>
+    </View>
   );
 }

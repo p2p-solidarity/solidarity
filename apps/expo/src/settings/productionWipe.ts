@@ -34,6 +34,7 @@ import {
 } from '@/nostr/userKey';
 import { stopLaneManager } from '@/pear/laneManager';
 import { preparePageDesign, usePageDesignStore } from '@/page/pageDesignStore';
+import { useProEntitlementStore } from '@/pro/entitlementStore';
 import { useProfileSnapshotStore } from '@/people/profileSnapshots';
 import { useProfileStore } from '@/profile/store';
 import {
@@ -118,6 +119,10 @@ function clearMemoryCaches(): void {
   useSharingSettings.getState().resetForLocalWipe();
   useZkIdentity.getState().resetForLocalWipe();
   usePageDesignStore.getState().resetForLocalWipe();
+  // Cached authority data, not the authority: the subscription lives in the
+  // user's store account, so a wiped device re-verifies and gets it straight
+  // back on next launch.
+  useProEntitlementStore.getState().resetForLocalWipe();
 
   useReceivedCard.getState().dismiss();
   useVerifiedPageResult.getState().dismiss();
@@ -179,6 +184,21 @@ function scrubAndVerifyPersistentData(): LocalDeletionResult {
   } catch {
     return deletionFailed();
   }
+}
+
+/**
+ * Reset App Data (Settings → Reset Options): clears every durable MMKV record
+ * and the in-memory store mirrors hydrated from them, then rehydrates the Page
+ * store so it cannot stay stuck at `loading`. Keychain-backed recovery/signing
+ * keys are deliberately preserved — that is what separates this from
+ * `wipeLocalDevice`. Ordering mirrors the wipe path: durable records first,
+ * memory second, so a racing store write-back cannot resurrect cleared data.
+ */
+export async function resetAppDataKeepingKeys(): Promise<void> {
+  clearAllData();
+  clearMemoryCaches();
+  resetPreferencesAndPolicies();
+  await preparePageDesign();
 }
 
 /** Assemble the real local stores behind the ordered wipe coordinator. */

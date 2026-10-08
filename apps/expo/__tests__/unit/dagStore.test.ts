@@ -1,6 +1,6 @@
 /**
  * DAG store — append / HEAD tracking / dup + invalid handling.
- * Spec: docs/dev-sandbox-identity-graph.md §3.2 + §6.
+ * Spec: docs/ref/notes-dev-sandbox-identity-graph.md §3.2 + §6.
  */
 import { describe, expect, test } from 'bun:test';
 import { schnorr } from '@noble/curves/secp256k1.js';

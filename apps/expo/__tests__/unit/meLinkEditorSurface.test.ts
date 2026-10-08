@@ -56,9 +56,11 @@ describe('Me link editor surface', () => {
     const editor = source('../../app/me/edit.tsx');
 
     expect(tab).toContain("params: { add: '1' }");
-    expect(page).toContain('onAddFirstLink={onAddLink}');
-    expect(links).toContain('onPress={onAddFirstLink}');
-    expect(links).toContain("t('meHome.addLink')");
+    const addSheet = source('../../src/components/me/PageAddSheet.tsx');
+    expect(page).toContain('onAddLink={onAddLink}');
+    expect(links).toContain('onPress={onAdd}');
+    expect(addSheet).toContain("t('meHome.addLink')");
+    expect(addSheet).toContain('close(onAddLink)');
     expect(editor).toContain('focusedEditorMode({ add, avatar })');
     expect(editor).toContain('shouldReturnAfterFocusedCancel(focusedMode, hasDraftEdits)');
     expect(editor).toContain('setHasDraftEdits(true)');

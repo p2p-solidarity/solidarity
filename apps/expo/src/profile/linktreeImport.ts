@@ -10,8 +10,7 @@
  * `__tests__/unit/fixtures/linktreeImport/`.
  *
  * No HTML DOM parser is available in this RN runtime, so extraction is
- * regex-based (same pragmatic style as `feedback/webhookManager.ts`'s host
- * regex) in two passes, tried in order:
+ * regex-based in two passes, tried in order:
  *
  *   1. linktr.ee-shaped: Linktree (and any Next.js-rendered page) embeds
  *      its full page data as JSON in a `<script id="__NEXT_DATA__">` tag —
@@ -68,6 +67,7 @@
  *     (never a raw exception message — CLAUDE.md rule "Sec: ... no PII
  *     logs / return Result").
  */
+import { hostnameOf } from '@/profile/linkPresentation';
 import { err, ok, type Result } from '@solidarity/shared';
 
 export type LinkPageImportErrorReason =
@@ -327,12 +327,4 @@ function normalizeCandidates(
     if (out.length >= MAX_LINKS) break;
   }
   return out;
-}
-
-function hostnameOf(url: string): string {
-  try {
-    return new URL(url).hostname;
-  } catch {
-    return url;
-  }
 }

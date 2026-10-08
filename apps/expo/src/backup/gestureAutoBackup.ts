@@ -37,10 +37,16 @@ async function fireBackup(handlers: BackupHandlers): Promise<void> {
   try {
     const outcome = await requestBackup('gesture');
     if (outcome.ran && outcome.payload) handlers.onComplete?.(outcome.payload);
-    // Skipped (disabled / pull-off / cooldown) → silent, no toast.
+    // Skipped (disabled / cooldown / fixed interval) → silent, no toast.
   } catch (err) {
     handlers.onError?.(err);
   }
+}
+
+/** Pure threshold seam: policy/cooldown behavior is tested in backupPolicy. */
+export function shouldTriggerGestureBackup(translationY: number): boolean {
+  'worklet';
+  return translationY > PULL_THRESHOLD_PX;
 }
 
 /**
@@ -51,7 +57,7 @@ async function fireBackup(handlers: BackupHandlers): Promise<void> {
 export function makeGestureAutoBackup(handlers: BackupHandlers = {}) {
   return Gesture.Pan().onEnd((event) => {
     'worklet';
-    if (event.translationY > PULL_THRESHOLD_PX) {
+    if (shouldTriggerGestureBackup(event.translationY)) {
       runOnJS(fireBackup)(handlers);
     }
   });

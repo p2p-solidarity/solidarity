@@ -133,6 +133,9 @@ export async function verifyAtprotoBinding(
       `handle resolution failed: ${resolved.error}`
     );
   }
+  if (!('did' in resolved.value)) {
+    return unresolvedResult(handle, 'declared', 'handle resolver returned a non-DID record');
+  }
   const repoDid = resolved.value.did;
 
   let fetched: Result<unknown, ResolverIoError>;

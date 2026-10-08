@@ -26,6 +26,13 @@ export type ProfileShareSelectionState =
       readonly selected: ProfileShareUrlCandidate;
       readonly verifiedHandle: HandleShareCandidate | null;
     }
+  | {
+      readonly kind: 'unpublished';
+      readonly model: ProfileShareModel;
+      readonly candidates: readonly ProfileShareUrlCandidate[];
+      readonly offline: ProfileShareUrlCandidate;
+      readonly verifiedHandle: HandleShareCandidate | null;
+    }
   | { readonly kind: 'error' };
 
 /**
@@ -42,7 +49,8 @@ export function useProfileShareSelection(
   retryNonce = 0,
   publicPage: PublicPageShareSource | null = null,
 ): ProfileShareSelectionState {
-  const publicPageUsername = usePreferences((state) => state.publicPageUsername);
+  const registeredUsername = usePreferences((state) => state.publicPageRegisteredUsername);
+  const publicPageBindingReady = usePreferences((state) => state.publicPageBindingReady);
   const cacheRevision = useSyncExternalStore(
     subscribeBadgeStatusCache,
     getBadgeStatusCacheRevision,
@@ -74,13 +82,27 @@ export function useProfileShareSelection(
   return useMemo(() => {
     if (jws.length === 0) return { kind: 'error' };
     try {
-      const model = buildProfileShareModel(record, jws, publicPageUsername, publicPage);
+      const model = buildProfileShareModel(
+        record,
+        jws,
+        publicPageBindingReady ? registeredUsername : '',
+        publicPage
+      );
       const resolved = buildProfileShareUrlSelection(
         model,
         verifiedHandle,
         nostrShortUrlReady
       );
       if (resolved.selection.kind === 'error') return { kind: 'error' };
+      if (resolved.selection.kind === 'unpublished') {
+        return {
+          kind: 'unpublished',
+          model,
+          candidates: resolved.candidates,
+          offline: resolved.selection.offline,
+          verifiedHandle,
+        };
+      }
       return {
         kind: 'ready',
         model,
@@ -96,8 +118,9 @@ export function useProfileShareSelection(
     expiryTick,
     jws,
     nostrShortUrlReady,
-    publicPageUsername,
+    publicPageBindingReady,
     publicPage,
+    registeredUsername,
     record,
     retryNonce,
     verifiedHandle,

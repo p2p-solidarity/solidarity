@@ -26,9 +26,10 @@
  * silently resolves false.
  */
 import type { ReactNode } from 'react';
-import { Modal, Pressable, StyleSheet, View } from 'react-native';
+import { Pressable, StyleSheet, View } from 'react-native';
 import { create } from 'zustand';
 
+import { WindowOverlay } from '@/components/common/WindowOverlay';
 import { ThemedButton, ThemedSurface, ThemedText } from '@/components/themed';
 
 interface ConfirmRequest {
@@ -48,6 +49,9 @@ interface ConfirmStore {
 }
 
 let nextId = 1;
+
+/** Absorbs taps on the card so they do not reach the dismiss backdrop. */
+const absorbPress = (): void => undefined;
 
 const useConfirmStore = create<ConfirmStore>((set, get) => ({
   queue: [],
@@ -94,12 +98,9 @@ export function ConfirmDialogOverlay(): ReactNode {
   const onConfirm = () => { resolveHead(true); };
 
   return (
-    <Modal
-      transparent
+    <WindowOverlay
       visible={head !== undefined}
-      animationType="fade"
       onRequestClose={onDismiss}
-      statusBarTranslucent
     >
       {head ? (
         <View style={styles.root}>
@@ -108,8 +109,7 @@ export function ConfirmDialogOverlay(): ReactNode {
             onPress={onDismiss}
             accessibilityLabel="Dismiss"
           />
-          {/* Empty onPress absorbs taps so they don't bubble to the backdrop. */}
-          <Pressable onPress={() => {}} style={styles.cardWrap}>
+          <Pressable onPress={absorbPress} style={styles.cardWrap}>
             <ThemedSurface variant="elevated" padded>
               <ThemedText variant="titleMedium" style={styles.title}>
                 {head.title}
@@ -139,7 +139,7 @@ export function ConfirmDialogOverlay(): ReactNode {
           </Pressable>
         </View>
       ) : null}
-    </Modal>
+    </WindowOverlay>
   );
 }
 

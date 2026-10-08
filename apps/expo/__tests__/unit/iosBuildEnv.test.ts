@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, test } from 'bun:test';
 import {
+  copyFileSync,
   mkdtempSync,
   mkdirSync,
   existsSync,
@@ -10,6 +11,7 @@ import {
 } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
+import { execFileSync, spawnSync } from 'node:child_process';
 import { createRequire } from 'node:module';
 
 const appDir = resolve(import.meta.dir, '../..');
@@ -18,12 +20,30 @@ const prepareScript = join(appDir, 'scripts', 'prepare-ios-workspace.sh');
 const stageOpenAcSrsScript = join(appDir, 'scripts', 'stage-openac-srs.sh');
 const normalizeSchemeScript = join(appDir, 'scripts', 'normalize-ios-scheme.sh');
 const cloudPostCloneScript = join(appDir, 'ci-scripts', 'ci_post_clone.sh');
+const precompiledResizerPluginPath = join(
+  appDir,
+  'plugins',
+  'withPrecompiledVisionCameraResizerMetal.js'
+);
+const precompiledResizerLibrary = join(
+  appDir,
+  'native-assets',
+  'VisionCameraResizer',
+  'default.metallib'
+);
+const jsiPatchesPluginPath = join(appDir, 'plugins', 'withExpoModulesJsiPatches.js');
+const appConfig = JSON.parse(readFileSync(join(appDir, 'app.json'), 'utf8')) as {
+  readonly expo: { readonly plugins: readonly (string | readonly unknown[])[] };
+};
 const prepareScriptSource = readFileSync(prepareScript, 'utf8');
 const stageOpenAcSrsScriptSource = readFileSync(stageOpenAcSrsScript, 'utf8');
 const normalizeSchemeScriptSource = readFileSync(normalizeSchemeScript, 'utf8');
 const require = createRequire(import.meta.url);
 const disableClangExplicitModulesPlugin = require(
   join(appDir, 'plugins', 'withDisableClangExplicitModules.js')
+);
+const iosDeploymentTargetPlugin = require(
+  join(appDir, 'plugins', 'withIosDeploymentTarget.js')
 );
 const generatedSchemeXml = readFileSync(
   join(appDir, 'ios', 'Solidarity.xcodeproj', 'xcshareddata', 'xcschemes', 'solidarity.xcscheme'),
@@ -187,9 +207,41 @@ end
     expect(patched).not.toContain('OTHER_SWIFT_FLAGS = #{react_native_post_install(');
   });
 
+  test('deployment-target plugin raises every older Pod target to the app minimum', () => {
+    const podfile = `platform :ios, podfile_properties['ios.deploymentTarget'] || '16.4'
+target 'Solidarity' do
+  post_install do |installer|
+    react_native_post_install(
+      installer,
+      config[:reactNativePath],
+      :mac_catalyst_enabled => false,
+    )
+  end
+end
+`;
+
+    const patched = iosDeploymentTargetPlugin._internal.patchPodfile(podfile);
+
+    expect(patched).toContain('# [withIosDeploymentTarget] BEGIN');
+    expect(patched).toContain("podfile_properties['ios.deploymentTarget'] || '17.0'");
+    expect(patched).toContain("build_settings['IPHONEOS_DEPLOYMENT_TARGET']");
+    expect(patched).toContain('Gem::Version.new(current_target) >= minimum_ios');
+    expect(iosDeploymentTargetPlugin._internal.patchPodfile(patched)).toBe(patched);
+    expect(appConfig.expo.plugins).toContain('./plugins/withIosDeploymentTarget.js');
+
+    const deploymentThenModules = disableClangExplicitModulesPlugin._internal.patchPodfile(patched);
+    const modulesThenDeployment = iosDeploymentTargetPlugin._internal.patchPodfile(
+      disableClangExplicitModulesPlugin._internal.patchPodfile(podfile)
+    );
+    for (const combined of [deploymentThenModules, modulesThenDeployment]) {
+      expect(combined).toContain('# [withIosDeploymentTarget] BEGIN');
+      expect(combined).toContain('# [withDisableClangExplicitModules] BEGIN');
+    }
+  });
+
   test('iOS project bundles the single merged OpenAC SRS resource', () => {
     expect(xcodeProject).toContain(
-      'nitro-modules/passport-zk/android/src/main/assets/passport.srs.bin'
+      'nitro-modules/attest/android/src/main/assets/passport.srs.bin'
     );
     expect(xcodeProject).toContain(
       '${TARGET_BUILD_DIR}/${UNLOCALIZED_RESOURCES_FOLDER_PATH}/passport.srs.bin'
@@ -236,7 +288,7 @@ end
     const assetsDir = join(
       fixtureRoot,
       'nitro-modules',
-      'passport-zk',
+      'attest',
       'android',
       'src',
       'main',
@@ -724,6 +776,142 @@ rm -rf "$work"
     expect(commands).toContain(`pod\t${join(fixtureApp, 'ios')}\tinstall`);
   }, 10_000);
 
+  test('VisionCameraResizer packages a precompiled Metal library without compiling source', () => {
+    expect(existsSync(precompiledResizerPluginPath), precompiledResizerPluginPath).toBe(true);
+    expect(existsSync(precompiledResizerLibrary), precompiledResizerLibrary).toBe(true);
+    if (!existsSync(precompiledResizerPluginPath) || !existsSync(precompiledResizerLibrary)) return;
+
+    const fixtureApp = makeTempDir();
+    const packageRoot = join(fixtureApp, 'node_modules', 'react-native-vision-camera-resizer');
+    const metalDir = join(packageRoot, 'ios', 'Metal');
+    const fixtureAssetDir = join(
+      fixtureApp,
+      'native-assets',
+      'VisionCameraResizer'
+    );
+    mkdirSync(metalDir, { recursive: true });
+    mkdirSync(fixtureAssetDir, { recursive: true });
+    copyFileSync(
+      join(
+        repoRoot,
+        'node_modules',
+        'react-native-vision-camera-resizer',
+        'ios',
+        'Metal',
+        'ResizerKernels.metal'
+      ),
+      join(metalDir, 'ResizerKernels.metal')
+    );
+    copyFileSync(precompiledResizerLibrary, join(fixtureAssetDir, 'default.metallib'));
+    writeFileSync(
+      join(packageRoot, 'VisionCameraResizer.podspec'),
+      '"VisionCameraResizerShaders" => ["ios/Metal/ResizerKernels.metal"],\n'
+    );
+    const plugin = require(precompiledResizerPluginPath);
+
+    plugin._internal.stagePrecompiledLibrary(fixtureApp, packageRoot);
+    plugin._internal.stagePrecompiledLibrary(fixtureApp, packageRoot);
+
+    const podspec = readFileSync(join(packageRoot, 'VisionCameraResizer.podspec'), 'utf8');
+    expect(podspec).toContain('"ios/Metal/default.metallib"');
+    expect(podspec).not.toContain('"ios/Metal/ResizerKernels.metal"');
+    expect(readFileSync(join(metalDir, 'default.metallib'))).toEqual(
+      readFileSync(precompiledResizerLibrary)
+    );
+    expect(appConfig.expo.plugins).toContain(
+      './plugins/withPrecompiledVisionCameraResizerMetal.js'
+    );
+  });
+
+  test('expo-modules-jsi patches: nested xcodebuild output cannot fail the xcframework phase', () => {
+    expect(existsSync(jsiPatchesPluginPath), jsiPatchesPluginPath).toBe(true);
+    if (!existsSync(jsiPatchesPluginPath)) return;
+
+    const plugin = require(jsiPatchesPluginPath);
+    const patch = plugin._internal.PATCHES.find(
+      (p: { name: string }) => p.name === 'nested-xcodebuild-output'
+    );
+    const original = [
+      '  log "Building framework slice for ${platform}..."',
+      '',
+      '  (cd "$PACKAGE_DIR" && env -i "${env_args[@]}" \\',
+      '    xcodebuild \\',
+      '    build \\',
+      '    -quiet \\',
+      '    SWIFT_COMPILATION_MODE=wholemodule \\',
+      '    CLANG_ENABLE_CODE_COVERAGE=NO \\',
+      '    CLANG_COVERAGE_MAPPING=NO \\',
+      '  )',
+      '',
+      '  local product_path="${BUILD_PRODUCTS_PATH}/${build_dir_name}"',
+      '',
+    ].join('\n');
+
+    const first = plugin._internal.patchSource(patch, original);
+    expect(first.status).toBe('patched');
+    expect(first.source).toContain('if ! (cd "$PACKAGE_DIR" && env -i "${env_args[@]}"');
+    expect(first.source).toContain(') > "$nested_xcodebuild_log" 2>&1; then');
+    expect(first.source).toContain('log "error: nested xcodebuild failed for ${platform}"');
+    expect(first.source).toContain("sed -E 's/^((.*: )?)error: /\\1warning: /'");
+    expect(plugin._internal.patchSource(patch, first.source).status).toBe('already-patched');
+
+    // The rewritten block must still be valid bash, and the sed replay must turn
+    // the spurious nested error line into a warning while leaving other lines alone.
+    const fixtureDir = makeTempDir();
+    const script = join(fixtureDir, 'patched.sh');
+    writeFileSync(script, `#!/usr/bin/env bash\nset -euo pipefail\nlog() { echo "$1"; }\nbuild_slice() {\n  local platform="$1"\n${first.source}}\n`);
+    expect(execFileSync('bash', ['-n', script]).toString()).toBe('');
+    const nestedLog = join(fixtureDir, 'nested.log');
+    writeFileSync(
+      nestedLog,
+      [
+        'error: the following command failed with exit code 0 but produced no further output',
+        'SwiftCompile normal arm64 (in target \'ExpoModulesJSI\' from project \'ExpoModulesJSI\')',
+        '/x/JavaScriptRuntime.swift:70:27: warning: cannot infer ownership',
+        '/x/Foo.swift:1:2: error: real diagnostic',
+        '',
+      ].join('\n')
+    );
+    // Under `bun test`, spawnSync/execFileSync report status 1 with empty output
+    // for any child that writes to stdout (even `/bin/echo hi`), so the sed replay
+    // is redirected to a file through the shell and asserted from disk.
+    const replayLog = join(fixtureDir, 'replay.log');
+    spawnSync('/bin/sh', [
+      '-c',
+      `/usr/bin/sed -E 's/^((.*: )?)error: /\\1warning: /' "$1" > "$2"`,
+      'sh',
+      nestedLog,
+      replayLog,
+    ]);
+    const replay = readFileSync(replayLog, 'utf8');
+    expect(replay).toBe(
+      [
+        'warning: the following command failed with exit code 0 but produced no further output',
+        'SwiftCompile normal arm64 (in target \'ExpoModulesJSI\' from project \'ExpoModulesJSI\')',
+        '/x/JavaScriptRuntime.swift:70:27: warning: cannot infer ownership',
+        '/x/Foo.swift:1:2: warning: real diagnostic',
+        '',
+      ].join('\n')
+    );
+  });
+
+  test('expo-modules-jsi patches apply to the installed package and are registered', () => {
+    expect(existsSync(jsiPatchesPluginPath), jsiPatchesPluginPath).toBe(true);
+    if (!existsSync(jsiPatchesPluginPath)) return;
+
+    const plugin = require(jsiPatchesPluginPath);
+    const packageRoot = join(repoRoot, 'node_modules', 'expo-modules-jsi');
+    // Every patch must still find its anchor (or its marker) in the installed
+    // package so an expo-modules-jsi upgrade fails here, not on Xcode Cloud.
+    for (const patch of plugin._internal.PATCHES) {
+      const installed = readFileSync(join(packageRoot, ...patch.file), 'utf8');
+      expect(['patched', 'already-patched'], patch.name).toContain(
+        plugin._internal.patchSource(patch, installed).status
+      );
+    }
+    expect(appConfig.expo.plugins).toContain('./plugins/withExpoModulesJsiPatches.js');
+  });
+
   test('shared prepare script stages native iOS binding xcframeworks before pod install', () => {
     const fixtureRoot = makeTempDir();
     const fixtureApp = join(fixtureRoot, 'apps', 'expo');
@@ -736,7 +924,7 @@ rm -rf "$work"
     const passportAssetsDir = join(
       fixtureRoot,
       'nitro-modules',
-      'passport-zk',
+      'attest',
       'android',
       'src',
       'main',
@@ -807,6 +995,7 @@ rm -rf "$work"
         join(
           fixtureRoot,
           'nitro-modules',
+          'attest',
           'semaphore',
           'mopro',
           'SemaphoreBindings.xcframework',
@@ -850,7 +1039,7 @@ rm -rf "$work"
     const passportAssetsDir = join(
       fixtureRoot,
       'nitro-modules',
-      'passport-zk',
+      'attest',
       'android',
       'src',
       'main',

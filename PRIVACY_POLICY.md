@@ -73,11 +73,6 @@ Solid(ar)ity enables peer-to-peer (P2P) sharing of business cards **directly bet
 - **Data Shared:** Business card data formatted as a contact file (vCard)
 - **Control:** You initiate all sharing actions
 
-### Apple Wallet (PassKit)
-- **Method:** Export business card as an Apple Wallet pass
-- **Data Shared:** Contact information stored locally in Apple Wallet
-- **Privacy:** Data remains on your device within Apple's secure Wallet app
-
 ---
 
 ## Selective Disclosure & Privacy Levels
@@ -196,7 +191,6 @@ We implement industry-standard security measures:
 
 ### Apple Native Frameworks (Built-in iOS):
 ✅ **MultipeerConnectivity**: For peer-to-peer device discovery (local network only)
-✅ **PassKit**: For Apple Wallet integration (all data stays local)
 ✅ **Keychain**: For secure cryptographic key storage (hardware-backed)
 ✅ **Core Data/FileManager**: For encrypted local data storage
 

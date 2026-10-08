@@ -11,7 +11,7 @@
  *   ✗ NATIVE crashes — a TurboModule raising an NSException on its own queue, a
  *     worklet throwing out of VisionCamera's async-runner, a C++ abort —
  *     terminate the process; JS never sees them. Those are NAMED for you in the
- *     crash report by `MrzInstallCrashDiagnostics` (nitro-modules/mrz-ocr/ios/
+ *     crash report by `MrzInstallCrashDiagnostics` (nitro-modules/attest/ios/
  *     MrzVisionGuard.mm) and must be fixed at the call site.
  *
  * We show the **component stack on screen** on purpose: a render loop used to

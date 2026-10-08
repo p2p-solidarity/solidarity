@@ -15,7 +15,8 @@ describe('v2 Page design surface', () => {
 
     expect(route).not.toContain("router.push('/settings/appearance')");
     expect(page).toContain('<PageAppearanceSheet');
-    expect(appearance).toContain('presentationStyle="pageSheet"');
+    expect(appearance).toContain('transparent');
+    expect(appearance).toContain('rounded-t-2xl');
     expect(appearance).toContain('<PageLivePreview');
     expect(appearance).toContain('PAGE_TEMPLATE_IDS.map');
     expect(appearance).toContain('PAGE_FONT_IDS.map');
@@ -26,9 +27,15 @@ describe('v2 Page design surface', () => {
 
   it('provides persisted add, edit, enable, remove, and reorder controls for real blocks', () => {
     const sections = source('../../src/components/me/ProfileSectionsList.tsx');
+    const addSheet = source('../../src/components/me/PageAddSheet.tsx');
 
     expect(sections).toContain('usePageDesignStore');
-    expect(sections).toContain('<PageBlockPickerSheet');
+    // Adding lives in the Page tab's single add sheet; it honours the block
+    // cap and the Pro gate the same way the old per-section picker did.
+    expect(addSheet).toContain('addBlock(type, label)');
+    expect(addSheet).toContain('blockCount >= MAX_PAGE_BLOCK_COUNT');
+    expect(addSheet).toContain('locked(entry.pro)');
+    expect(addSheet).toContain("router.push('/settings/pro')");
     expect(sections).toContain('<PageBlockEditorSheet');
     expect(sections).toContain('setBlockVisible(block.id');
     expect(sections).toContain("moveBlock(block.id, 'up')");
@@ -65,6 +72,7 @@ describe('v2 Page design surface', () => {
 
   it('makes every section style visibly distinct in the real-data preview', () => {
     const preview = source('../../src/components/me/PageLivePreview.tsx');
+    const items = source('../../src/components/me/PagePreviewItems.tsx');
 
     for (const style of [
       'plain',
@@ -79,11 +87,11 @@ describe('v2 Page design surface', () => {
     ]) {
       expect(preview).toContain(`case '${style}'`);
     }
-    expect(preview).toContain('item.price');
+    expect(items).toContain('item.price');
     expect(preview).toContain('<PreviewBlockItems');
   });
 
-  it('fails closed for Pro Page controls until an entitlement source exists', () => {
+  it('locks Pro Page controls only for users without an entitlement', () => {
     const sections = source('../../src/components/me/ProfileSectionsList.tsx');
     const appearance = source('../../src/components/me/PageAppearanceSheet.tsx');
     const customColor = appearance.slice(
@@ -91,18 +99,22 @@ describe('v2 Page design surface', () => {
       appearance.indexOf('function ControlSection'),
     );
 
+    const addSheet = source('../../src/components/me/PageAddSheet.tsx');
+
+    // Locked users still get a doorway to the paywall…
     expect(sections).toContain("router.push('/settings/pro')");
-    expect(sections).toContain('if (entry.pro) {');
+    expect(addSheet).toContain('if (entryLocked) {');
     expect(sections).toContain('onProPress');
-    expect(appearance).toContain("router.push('/settings/pro')");
-    expect(appearance).toContain('if (index > 1) {');
-    expect(appearance).toContain('onOpenPro');
+    expect(appearance).toContain('openUpgrade');
+    expect(appearance).toContain('if (index > 1 && proLocked) {');
     expect(appearance).toContain('editable={false}');
-    expect(appearance).not.toContain('setAppearance({ showBrand })');
-    expect(appearance).not.toContain('setAppearance({ footerText:');
-    expect(customColor).not.toContain('onValidColor');
-    expect(en['pageDesign.proControl']).toBe('Pro feature. View plan details; this app will not change your plan.');
-    expect(zhHant['pageDesign.proControl']).toBe('Pro 功能。可查看方案內容，App 內不會變更方案。');
+    // …and entitled users get the real controls.
+    expect(appearance).toContain('setAppearance({ showBrand })');
+    expect(appearance).toContain('setAppearance({ footerText })');
+    expect(customColor).toContain('locked={locked}');
+    expect(customColor).toContain('onChangeText');
+    expect(en['pageDesign.proControl']).toBe('Pro feature. Tap to see the plan.');
+    expect(zhHant['pageDesign.proControl']).toBe('Pro 功能，點一下查看方案。');
   });
 
   it('publishes Page controls into the signed profile and renders them beyond the editor sheet', () => {
@@ -117,19 +129,26 @@ describe('v2 Page design surface', () => {
     expect(store).toContain('savePageDesign: async (page)');
     expect(sections).toContain('savePageDesign(toPublicPageDesign(design))');
     expect(sections).toContain('pageDesign.publishChanges');
-    expect(page).toContain('<PageLivePreview');
+    // The preview folds into the Sections group — collapsed by default, so
+    // the Page tab stays a list until you ask what it looks like.
+    expect(sections).toContain('<PageLivePreview');
+    expect(sections).toContain('<PagePreviewDisclosure');
+    expect(sections).toContain('useState(false)');
+    expect(page).not.toContain('<PageLivePreview');
     expect(verified).toContain('record.page');
   });
 
   it('renders a signed Page as a full interactive visitor surface, not a compact editor sample', () => {
     const preview = source('../../src/components/me/PageLivePreview.tsx');
+    const items = source('../../src/components/me/PagePreviewItems.tsx');
     const verified = source('../../src/components/scan/VerifiedProfileView.tsx');
 
     expect(preview).toContain("variant === 'public' ? items : items.slice(0, 3)");
     expect(preview).toContain('<ScrollView horizontal');
-    expect(preview).toContain('accessibilityRole="link"');
-    expect(preview).toContain('isRenderableLinkUrl(item.url)');
-    expect(preview).toContain('item.media');
+    // `ItemPressable` is the single navigation boundary for every row style.
+    expect(items).toContain('accessibilityRole="link"');
+    expect(items).toContain('isRenderableLinkUrl(item.url)');
+    expect(items).toContain('item.media');
     expect(verified).toContain('variant="public"');
     expect(verified).not.toContain('{record.did}');
   });
@@ -150,7 +169,7 @@ describe('v2 Page design surface', () => {
     expect(legacyBranch).toContain('{record.displayName}');
     expect(legacyBranch).toContain('record.bio.length > 0');
     expect(legacyBranch).toContain('record.links.length > 0');
-    expect(legacyBranch).toContain('accessibilityLabel={link.label || link.url}');
+    expect(legacyBranch).toContain('accessibilityLabel={linkDisplay(link.label, link.url).text}');
   });
 
   it('keeps raw attestation and proof identifiers off the verified visitor Page', () => {

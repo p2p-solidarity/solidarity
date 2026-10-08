@@ -160,7 +160,7 @@ void mock.module('@/sakura/client', () => ({
   }),
 }));
 
-void mock.module('@solidarity/nitro-cloudkit', () => ({
+void mock.module('@solidarity/nitro-keystone', () => ({
   getCloudKit: () => ({
     initialize: (): Promise<undefined> => Promise.resolve(undefined),
     saveRecord: (rec: CloudKitRecord): Promise<void> => {
@@ -174,13 +174,11 @@ void mock.module('@solidarity/nitro-cloudkit', () => ({
     },
     setDriveAccessToken: (): void => undefined,
   }),
-}));
-
-// secretsKeychain.ts now imports `@solidarity/nitro-secrets-vault`. We
-// stub the hardware-backed driver as "unavailable" so this suite keeps
-// driving the legacy v0 raw path (the existing root-secret bytes are
-// pre-seeded into `secureStore` under the rootSecret alias).
-void mock.module('@solidarity/nitro-secrets-vault', () => ({
+  // Same module id carries the secrets-vault lane too (merged nitro-keystone
+  // package) — a second mock.module on the id would REPLACE this one, so both
+  // getters live in one registration. Hardware stubbed "unavailable" so the
+  // suite keeps driving the legacy v0 raw path (root-secret bytes pre-seeded
+  // into `secureStore` under the rootSecret alias).
   getSecretsVault: () => ({
     isHardwareAvailable: (): boolean => false,
     ensureWrappingKey: (): Promise<{ hardwareBacked: boolean }> =>

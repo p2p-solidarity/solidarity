@@ -1,3 +1,4 @@
+import { router } from 'expo-router';
 import { useEffect, useMemo, useSyncExternalStore, type ReactNode } from 'react';
 import { View } from 'react-native';
 
@@ -8,6 +9,7 @@ import {
   subscribeBadgeStatusCache,
 } from '@/badges/badgeStatusCache';
 import { PressableScale } from '@/components/common/PressableScale';
+import { SfIcon } from '@/components/icons/SfIcon';
 import { ThemedSurface, ThemedText } from '@/components/themed';
 import { Colors } from '@/constants/Colors';
 import { useTranslation } from '@/i18n';
@@ -54,15 +56,38 @@ export function PageLapsedCheckAlert({
         <ThemedText variant="bodyMedium">{t('pageDesign.lapsedTitle', { names })}</ThemedText>
         <ThemedText variant="caption" tone="secondary">{t('pageDesign.lapsedBody')}</ThemedText>
       </View>
+      {/* `.alertbar` — the mock pairs the warning with a repair affordance;
+          without it a lapsed check is a dead end. Each lapsed binding already
+          has its own re-verification screen, so this routes there rather than
+          re-implementing the flow. */}
+      <PressableScale
+        haptic="tap"
+        onPress={() => {
+          router.push(repairRouteFor(evidence[0]));
+        }}
+        accessibilityRole="button"
+        accessibilityLabel={t('pageDesign.fixLapsed')}
+        style={{ minHeight: 44, justifyContent: 'center', paddingHorizontal: 4 }}>
+        <ThemedText variant="label" style={{ color: Colors.primaryBlue }}>
+          {t('pageDesign.fixLapsed')}
+        </ThemedText>
+      </PressableScale>
       <PressableScale
         onPress={dismissLapsedAlert}
         accessibilityRole="button"
         accessibilityLabel={t('pageDesign.dismissAlert')}
         style={{ width: 44, height: 44, alignItems: 'center', justifyContent: 'center' }}>
-        <ThemedText variant="titleMedium" tone="secondary">×</ThemedText>
+        <SfIcon name="xmark" size={13} color={Colors.text2} />
       </PressableScale>
     </ThemedSurface>
   );
+}
+
+/** Which re-verification screen repairs this lapsed binding. */
+function repairRouteFor(
+  lapsed: LapsedEvidence | undefined
+): '/verify/nostr' | '/verify/bluesky' {
+  return lapsed?.id === 'bluesky' ? '/verify/bluesky' : '/verify/nostr';
 }
 
 function lapsedEvidenceFor(

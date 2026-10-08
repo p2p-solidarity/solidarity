@@ -21,14 +21,17 @@
  *     error UIs (toast for `cancelled`, error sheet for `lockedOut`,
  *     "set up Face ID" CTA for `unavailable`).
  *
- * No silent fallback: if `policy.mode === 'biometricOnly'` and the device
- * has no biometric hardware / enrollment, we return `unavailable` rather
- * than letting expo-local-authentication drop to the passcode keypad.
+ * Every prompt allows the device passcode as a fallback. The old
+ * `biometricOnly` mode (which returned `unavailable` instead of showing the
+ * passcode keypad) was removed with the per-action settings UI in 2026-09-08:
+ * it could seal a user out of their own data the moment Face ID was
+ * unenrolled or locked out, and it was never the default.
  */
 import * as LocalAuthentication from 'expo-local-authentication';
 
 import { armBiometricGrace, hasBiometricGrace } from './biometric';
 import {
+  RED_LINE_ACTIONS,
   getSensitivePolicyFor,
   type SensitiveAction,
 } from './sensitiveActionPolicy';
@@ -37,12 +40,13 @@ import {
  * Destructive / recovery-secret actions never ride the shared grace bucket
  * (aggressive policy, 2026-06-13): they re-prompt every time and their
  * success does not open the family window.
+ *
+ * This is `RED_LINE_ACTIONS` itself, not a copy of it. The two concepts are
+ * the same rule seen from two sides — an action too dangerous to ride a
+ * five-minute window is exactly an action the user's mode may not disarm — and
+ * keeping one identifier means they cannot drift apart in a later edit.
  */
-const ALWAYS_PROMPT_ACTIONS: ReadonlySet<SensitiveAction> = new Set([
-  'rotateMasterKey',
-  'revealRecoveryBundle',
-  'deleteZKIdentity',
-]);
+const ALWAYS_PROMPT_ACTIONS: ReadonlySet<SensitiveAction> = RED_LINE_ACTIONS;
 
 export type BiometricSuccessMethod = 'biometric' | 'passcode';
 
@@ -72,17 +76,44 @@ async function probeBiometricCapability(): Promise<{
   return { hasHardware, isEnrolled };
 }
 
+/**
+ * expo-local-authentication reports UNDERSCORE codes on `result.error`
+ * (`LocalAuthenticationError` = 'not_enrolled' | 'user_cancel' | 'not_available'
+ * | 'lockout' | 'passcode_not_set' | 'authentication_failed' | …), not prose.
+ * Matching only space-separated phrases meant every capability failure fell
+ * through to `cancelled` — telling a user who physically CANNOT authenticate
+ * that they cancelled, with no way forward. Exact codes are checked first; the
+ * substring pass is kept for older SDK message strings.
+ */
+const CANCEL_CODES: ReadonlySet<string> = new Set([
+  'user_cancel',
+  'app_cancel',
+  'system_cancel',
+  'user_fallback',
+]);
+const UNAVAILABLE_CODES: ReadonlySet<string> = new Set([
+  'not_enrolled',
+  'not_available',
+  'passcode_not_set',
+  'no_space',
+]);
+const LOCKOUT_CODES: ReadonlySet<string> = new Set(['lockout', 'lockout_permanent']);
+
 function classifyError(message: string | undefined): BiometricFailureReason {
   if (!message) return 'cancelled';
-  const lower = message.toLowerCase();
-  if (lower.includes('lockout') || lower.includes('locked') || lower.includes('too many')) {
+  const code = message.toLowerCase().trim();
+  if (LOCKOUT_CODES.has(code)) return 'lockedOut';
+  if (UNAVAILABLE_CODES.has(code)) return 'unavailable';
+  if (CANCEL_CODES.has(code)) return 'cancelled';
+  if (code.includes('lockout') || code.includes('locked') || code.includes('too many')) {
     return 'lockedOut';
   }
   if (
-    lower.includes('not available') ||
-    lower.includes('not enrolled') ||
-    lower.includes('no hardware') ||
-    lower.includes('unavailable')
+    code.includes('not available') ||
+    code.includes('not enrolled') ||
+    code.includes('no hardware') ||
+    code.includes('passcode not set') ||
+    code.includes('unavailable')
   ) {
     return 'unavailable';
   }
@@ -120,11 +151,7 @@ export async function requireSensitiveAction(
   const capability = await probeBiometricCapability();
   const biometricUsable = capability.hasHardware && capability.isEnrolled;
 
-  if (policy.mode === 'biometricOnly' && !biometricUsable) {
-    return { success: false, reason: 'unavailable' };
-  }
-
-  const outcome = await prompt(reason, policy.mode === 'biometricOnly');
+  const outcome = await prompt(reason);
   if (!outcome.success) {
     return { success: false, reason: classifyError(outcome.error) };
   }
@@ -142,12 +169,12 @@ export async function requireSensitiveAction(
   };
 }
 
-async function prompt(reason: string, biometricOnly: boolean): Promise<AuthenticateOutcome> {
+async function prompt(reason: string): Promise<AuthenticateOutcome> {
   const r = await LocalAuthentication.authenticateAsync({
     promptMessage: reason,
     cancelLabel: 'Cancel',
-    fallbackLabel: biometricOnly ? '' : 'Use device passcode',
-    disableDeviceFallback: biometricOnly,
+    fallbackLabel: 'Use device passcode',
+    disableDeviceFallback: false,
   });
   if (r.success) return { success: true };
   // r.error is set to e.g. 'user_cancel', 'lockout', 'not_enrolled' on newer SDKs.

@@ -15,20 +15,19 @@
  */
 import { useState, type ReactNode } from 'react';
 import {
-  KeyboardAvoidingView,
-  Modal,
-  Platform,
-  Pressable,
   Text,
   TextInput,
   View,
 } from 'react-native';
+import { KeyboardAvoidingView } from 'react-native-keyboard-controller';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { ModalSheet } from '@/components/common/ModalSheet';
 import { PressableScale } from '@/components/common/PressableScale';
 import { SfIcon } from '@/components/icons/SfIcon';
 import { Colors } from '@/constants/Colors';
 import { confirmDialog } from '@/feedback/confirmDialog';
+import { SCALE } from '@/feedback/motion';
 import { useTranslation } from '@/i18n';
 import type { Contact } from '@solidarity/shared';
 
@@ -55,12 +54,7 @@ export function PersonDetailMoreSheet({
   onClose,
 }: PersonDetailMoreSheetProps): ReactNode {
   return (
-    <Modal
-      visible={visible}
-      animationType="slide"
-      presentationStyle="formSheet"
-      onRequestClose={onClose}
-    >
+    <ModalSheet visible={visible} presentationStyle="formSheet" onRequestClose={onClose}>
       <PersonDetailMoreSheetContent
         contact={contact}
         onSave={onSave}
@@ -68,7 +62,7 @@ export function PersonDetailMoreSheet({
         onEditContact={onEditContact}
         onClose={onClose}
       />
-    </Modal>
+    </ModalSheet>
   );
 }
 
@@ -118,7 +112,8 @@ function PersonDetailMoreSheetContent({
 
   return (
     <KeyboardAvoidingView
-      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+      behavior="padding"
+      automaticOffset
       style={{ flex: 1, backgroundColor: Colors.pageBg }}
     >
       <View style={{ paddingTop: insets.top }}>
@@ -154,20 +149,23 @@ function TopBar({
       className="flex-row items-center justify-between"
       style={{ paddingHorizontal: 16, height: 56 }}
     >
-      <Pressable
+      <PressableScale
         accessibilityRole="button"
         accessibilityLabel={t('personDetail.back')}
         onPress={onClose}
-        hitSlop={8}
+        scaleTo={SCALE.icon}
+        hitSlop={10}
       >
         <SfIcon name="chevron.left" size={24} color={Colors.text1} />
-      </Pressable>
+      </PressableScale>
 
-      <Pressable
+      {/* The pill stays compact as drawn; hitSlop pads it to 44pt tall. */}
+      <PressableScale
         accessibilityRole="button"
         accessibilityLabel={t('peopleList.done')}
         onPress={onDone}
-        className="rounded-sm2 active:opacity-80"
+        hitSlop={{ top: 11, bottom: 11 }}
+        className="rounded-sm2"
         style={{
           backgroundColor: Colors.invertedButtonBg,
           paddingHorizontal: 16,
@@ -183,7 +181,7 @@ function TopBar({
         >
           {t('peopleList.done')}
         </Text>
-      </Pressable>
+      </PressableScale>
     </View>
   );
 }

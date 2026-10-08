@@ -2,6 +2,7 @@ import type { ReactNode } from 'react';
 import { View } from 'react-native';
 
 import { PressableScale } from '@/components/common/PressableScale';
+import { BrandIcon } from '@/components/icons/BrandIcon';
 import { SfIcon } from '@/components/icons/SfIcon';
 import { ThemedButton, ThemedSurface, ThemedText } from '@/components/themed';
 import { Colors } from '@/constants/Colors';
@@ -11,7 +12,7 @@ import {
   linkInputModelFor,
   linkPresetForEditableUrl,
 } from '@/profile/linkUrl';
-import { linkIconNameFor } from '@/profile/linkPresentation';
+import { brandIconForLink } from '@/profile/linkPresentation';
 
 import type { LinkSheetValue } from './AddLinkSheet';
 
@@ -87,8 +88,8 @@ export function EditableLinksList({
             <ThemedSurface
               variant="inset"
               className="h-9 w-9 items-center justify-center rounded-none">
-              <SfIcon
-                name={linkIconNameFor(link.label, link.url)}
+              <BrandIcon
+                name={brandIconForLink(link.label, link.url)}
                 size={16}
                 color={Colors.primaryBlue}
               />

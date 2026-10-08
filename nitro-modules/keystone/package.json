@@ -1,0 +1,22 @@
+{
+  "name": "@solidarity/nitro-keystone",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Device trust foundation Nitro module: hardware-backed root-secret wrapping (Secure Enclave / Android Keystore), P-256 DID signing keys + ES256 JWS, and cloud file backup (iCloud Drive / Google Drive). Merged from nitro-secrets-vault + nitro-spruce-did + nitro-cloudkit.",
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "scripts": {
+    "nitrogen": "nitrogen",
+    "lint": "eslint .",
+    "typecheck": "tsc --noEmit"
+  },
+  "react-native": {
+    "supportedPlatforms": ["ios", "android"]
+  },
+  "peerDependencies": {
+    "react-native-nitro-modules": "*"
+  },
+  "devDependencies": {
+    "react-native-nitro-modules": "^0.35.7"
+  }
+}

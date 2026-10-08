@@ -1,7 +1,10 @@
 export {
   DEFAULT_PROVIDER,
   type ProviderKind,
+  type ArchiveAvailability,
   type BackupArchiveInfo,
+  type EnsureArchiveDownloadedOptions,
+  ensureArchiveDownloaded,
   listBackupArchives,
   setProvider,
   setGoogleAccessToken,
@@ -27,3 +30,10 @@ export {
   type RestoreResult,
 } from './backupManager';
 export { makeGestureAutoBackup } from './gestureAutoBackup';
+export { startAutoBackup } from './autoBackupScheduler';
+export { MAX_RETAINED_BACKUPS } from './backupPolicy';
+export {
+  ArchiveDownloadError,
+  isDownloadPendingError,
+  type ArchiveDownloadProgress,
+} from './archiveDownload';

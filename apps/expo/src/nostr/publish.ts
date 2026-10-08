@@ -65,6 +65,7 @@ import {
 import {
   buildPublicDisclosureDTag,
   err,
+  isNip05Identifier,
   ok,
   type Result,
 } from '@solidarity/shared';
@@ -96,6 +97,11 @@ export const DEFAULT_RELAYS: readonly string[] = [
 ];
 
 export type PublishEventFn = typeof publishEvent;
+/**
+ * Test-only trusted seam for post-transport events. Production callers use
+ * `subscribeEvents`, which verifies NIP-01 ids and signatures before invoking
+ * callbacks; `fetchLatestEvent` still rechecks cheap kind/author constraints.
+ */
 export type SubscribeEventsFn = typeof subscribeEvents;
 
 /** One relay's outcome for a publish attempt. */
@@ -299,6 +305,30 @@ export interface Kind0FetchResult {
  * both delegate here so every path resolves "the newest matching event"
  * identically instead of re-implementing the WS fan-out.
  */
+/**
+ * Does this event actually answer the REQ we sent?
+ *
+ * A relay is untrusted input: `subscribeEvents` proves an event was signed by
+ * the key it names, not that it is the record we asked for. Without the tag
+ * check a relay can answer a `#d=solidarity.profile` request with the SAME
+ * author's newer kind-30078 event from a different parameterized slot, and it
+ * would be taken as the profile pointer — signature validity does not rule out
+ * substitution across an author's own records.
+ */
+export function eventMatchesFilter(event: NostrEvent, filter: NostrFilter): boolean {
+  if (filter.kinds !== undefined && !filter.kinds.includes(event.kind)) return false;
+  if (filter.authors !== undefined && !filter.authors.includes(event.pubkey)) return false;
+  for (const [key, wanted] of Object.entries(filter)) {
+    if (!key.startsWith('#') || !Array.isArray(wanted)) continue;
+    const tagName = key.slice(1);
+    const present = event.tags.some(
+      (tag) => tag[0] === tagName && tag[1] !== undefined && wanted.includes(tag[1])
+    );
+    if (!present) return false;
+  }
+  return true;
+}
+
 export async function fetchLatestEvent(
   relays: readonly string[],
   filter: NostrFilter,
@@ -333,6 +363,7 @@ export async function fetchLatestEvent(
           relay,
           filter,
           (event) => {
+            if (!eventMatchesFilter(event, filter)) return;
             if (!latest || event.created_at > latest.created_at) latest = event;
           },
           () => {
@@ -400,6 +431,8 @@ export async function fetchLatestProfilePointer(
 export interface UpdateKind0Options {
   /** The user's did:key (e.g. `ProfileRecord.did`) to bind into kind-0. */
   readonly did: string;
+  /** Optional standard NIP-05 reverse claim. Omit to preserve the existing value. */
+  readonly nip05?: string;
   /** Caller-confirmed relay list, used both to fetch the existing kind-0 and to republish it. Must be non-empty. */
   readonly relays: readonly string[];
   readonly timeoutMs?: number;
@@ -424,6 +457,9 @@ export interface UpdateKind0Options {
  */
 export async function updateKind0AlsoKnownAs(opts: UpdateKind0Options): Promise<Result<PublishReport, string>> {
   if (opts.relays.length === 0) return err('updateKind0AlsoKnownAs: relays list is empty');
+  if (opts.nip05 !== undefined && !isNip05Identifier(opts.nip05)) {
+    return err('updateKind0AlsoKnownAs: invalid NIP-05 identifier');
+  }
 
   const pubkeyResult = await getNostrPubkey();
   if (!pubkeyResult.ok) return err(pubkeyResult.error);
@@ -452,7 +488,11 @@ export async function updateKind0AlsoKnownAs(opts: UpdateKind0Options): Promise<
     : [];
   const akaSet = new Set(existingAka);
   akaSet.add(opts.did);
-  const mergedContent: Record<string, unknown> = { ...baseContent, alsoKnownAs: [...akaSet] };
+  const mergedContent: Record<string, unknown> = {
+    ...baseContent,
+    ...(opts.nip05 === undefined ? {} : { nip05: opts.nip05 }),
+    alsoKnownAs: [...akaSet],
+  };
 
   const unsigned: UnsignedNostrEvent = {
     kind: KIND_METADATA,

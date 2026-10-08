@@ -10,7 +10,6 @@
  *       – optional error banner
  *       – Group Info        (GroupInfoSection)
  *       – Merkle Tree       (MerkleTreeSection)
- *       – Invite            (InviteSection)
  *       – Members           (MembersSection)
  *       – Admin Tools       (CredentialIssuers + GroupVCIssuance + DeliverySettings — TODO)
  *       – Identity Info     (IdentityInfoSection / OIDC)
@@ -25,19 +24,15 @@ import { safeBack } from '@/navigation/safeBack';
 import { useCallback, useEffect, useState } from 'react';
 import {
   Pressable,
-  RefreshControl,
   ScrollView,
   Text,
   View,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { CredentialIssuersSection } from '@/components/groups/CredentialIssuersSection';
-import { DeliverySettingsSection } from '@/components/groups/DeliverySettingsSection';
 import {
   GroupInfoSection,
   IdentityInfoSection,
-  InviteSection,
   MerkleTreeSection,
 } from '@/components/groups/GroupDetailSections';
 import { MembersSection } from '@/components/groups/GroupMembersSection';
@@ -45,6 +40,7 @@ import { GroupVCIssuanceSection } from '@/components/groups/GroupVCIssuanceSecti
 import { SfIcon } from '@/components/icons/SfIcon';
 import { ThemedText } from '@/components/themed';
 import { Colors } from '@/constants/Colors';
+import { showError } from '@/feedback/appAlert';
 import { pushToast } from '@/feedback/toast';
 import { useTranslation } from '@/i18n';
 import {
@@ -108,9 +104,7 @@ function AdminTools({
       >
         {t('groupDetail.adminTools')}
       </Text>
-      <CredentialIssuersSection group={group} />
       <GroupVCIssuanceSection group={group} />
-      <DeliverySettingsSection group={group} />
     </View>
   );
 }
@@ -129,7 +123,6 @@ export default function GroupDetail(): React.JSX.Element {
   const members = useGroupMembers(id);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [isLoadingMembers, setIsLoadingMembers] = useState(false);
-  const [refreshing, setRefreshing] = useState(false);
 
   const loadData = useCallback(async () => {
     setIsLoadingMembers(true);
@@ -149,25 +142,47 @@ export default function GroupDetail(): React.JSX.Element {
     void loadData();
   }, [loadData]);
 
-  const onRefresh = useCallback(async () => {
-    setRefreshing(true);
-    await loadData();
-    setRefreshing(false);
-  }, [loadData]);
+  const updateMember = (
+    next: GroupMember,
+    successMessage: string,
+    tone: 'success' | 'warning' | 'info',
+  ): void => {
+    void (async () => {
+      try {
+        await upsertMember(next);
+        pushToast(successMessage, tone);
+      } catch (error) {
+        showError({
+          context: 'Groups › Update Member',
+          summary: t('groupDetail.memberUpdateFailed'),
+          error,
+        });
+      }
+    })();
+  };
 
   const onKick = (m: GroupMember) => {
-    void upsertMember({ ...m, status: 'kicked' });
-    pushToast(t('groupDetail.kicked', { member: m.userRecordID }), 'warning');
+    updateMember(
+      { ...m, status: 'kicked' },
+      t('groupDetail.kicked', { member: m.userRecordID }),
+      'warning',
+    );
   };
 
   const onApprove = (m: GroupMember) => {
-    void upsertMember({ ...m, status: 'active' });
-    pushToast(t('groupDetail.approved', { member: m.userRecordID }), 'success');
+    updateMember(
+      { ...m, status: 'active' },
+      t('groupDetail.approved', { member: m.userRecordID }),
+      'success',
+    );
   };
 
   const onReject = (m: GroupMember) => {
-    void upsertMember({ ...m, status: 'left' });
-    pushToast(t('groupDetail.rejected', { member: m.userRecordID }), 'info');
+    updateMember(
+      { ...m, status: 'left' },
+      t('groupDetail.rejected', { member: m.userRecordID }),
+      'info',
+    );
   };
 
   const displayName = group?.name ?? name ?? t('groupDetail.fallbackTitle');
@@ -192,9 +207,6 @@ export default function GroupDetail(): React.JSX.Element {
 
       <ScrollView
         className="flex-1"
-        refreshControl={
-          <RefreshControl refreshing={refreshing} onRefresh={() => { void onRefresh(); }} />
-        }
         contentContainerStyle={{ padding: 16, paddingBottom: 40 }}
       >
         <View className="gap-5">
@@ -212,8 +224,6 @@ export default function GroupDetail(): React.JSX.Element {
           <GroupInfoSection group={group} memberCount={members.length} />
 
           <MerkleTreeSection group={group} />
-
-          <InviteSection group={group} />
 
           <MembersSection
             members={members}

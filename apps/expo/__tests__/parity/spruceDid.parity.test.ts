@@ -1,7 +1,7 @@
 /**
  * Parity test — SpruceID DID Nitro module
  *
- * Exercises the JS-side wiring that talks to `@solidarity/nitro-spruce-did`
+ * Exercises the JS-side wiring that talks to `@solidarity/nitro-keystone`
  * by injecting an in-memory driver (`InMemorySpruceDidDriver`) that mimics
  * the native HybridObject's contract. We can't load the real Nitro module
  * in bun tests (no JSI), so the test isolates the surface we control:
@@ -46,7 +46,7 @@ import { p256 } from '@noble/curves/nist.js';
 import type {
   SpruceDid,
   SpruceDidEvent,
-} from '@solidarity/nitro-spruce-did';
+} from '@solidarity/nitro-keystone';
 
 /** Local alias for the HybridObject interface so `equals(other)` typechecks. */
 type HybridLike = SpruceDid;
@@ -292,7 +292,7 @@ class InMemorySecureStore {
 const sharedSecureStore = new InMemorySecureStore();
 const authCalls: string[] = [];
 
-// Replace expo-secure-store and @solidarity/nitro-spruce-did with stubs.
+// Replace expo-secure-store and @solidarity/nitro-keystone with stubs.
 // Use bun's `mock.module()` so the imports inside `signingKey.ts` resolve to
 // these stubs at test time. Note we MUST install these mocks before the
 // signingKey module gets required for the first time.
@@ -337,7 +337,7 @@ function rawBigEndianToBigInt(bytes: Uint8Array): bigint {
 // Mock the native module's `getSpruceDid()` factory so any code that
 // imports the package directly (rather than going through the
 // __SPRUCE_DID_TEST_DRIVER__ slot) still gets our stub.
-mock.module('@solidarity/nitro-spruce-did', () => ({
+mock.module('@solidarity/nitro-keystone', () => ({
   getSpruceDid: () => driver as unknown as SpruceDid,
 }));
 

@@ -32,6 +32,16 @@ export interface SolidarityQrPayloadOptions {
   readonly expirationDate?: Date;
   readonly sealedRoute?: string;
   readonly signer?: SolidarityQrSigner;
+  /**
+   * Sender's verified Nostr subscription pointer (CREDS §3.3, 05-spec §3
+   * v1.1) — attached to the SIGNED claims only (CRD1 / didSigned JWT), and
+   * only when the sender's Nostr binding is currently verified. See
+   * `cards/nostrPointerClaim.ts` for the emit/receive trust rules.
+   */
+  readonly nostrPointer?: {
+    readonly npub: string;
+    readonly relays: readonly string[];
+  };
 }
 
 export interface SolidarityQrSigner {
@@ -42,6 +52,13 @@ export interface SolidarityQrSigner {
     header: { readonly alg: 'ES256'; readonly typ?: string; readonly kid?: string },
     payload: Readonly<Record<string, unknown>>
   ) => Promise<string>;
+  /**
+   * Raw-message ES256 signer for the CRD1 COSE_Sign1 wire: returns the
+   * 64-byte r||s ECDSA-P256 signature over SHA-256(message) — exactly one
+   * hash, computed by the implementation (`signRawEs256` shape). Optional:
+   * absent → the runtime falls back to the legacy bare-JWT wire.
+   */
+  readonly signRaw?: (message: Uint8Array) => Promise<Uint8Array>;
 }
 
 export interface BusinessCardSnapshotPayload {
@@ -115,6 +132,13 @@ export interface QRSharingPayload {
   readonly createdAt: string;
   readonly maxUses?: number;
   readonly currentUses?: number;
+  /**
+   * NEVER emitted (parse-only legacy field). Old wires attached the sender's
+   * Semaphore identity commitment, which — combined with a group roster —
+   * identifies the presenter and defeats the membership proof's anonymity
+   * (lists-anonymity audit 2026-08-18 §5). Verification only ever consumed
+   * `issuerProof`; the commitment is ignored on receipt too.
+   */
   readonly issuerCommitment?: string;
   readonly issuerProof?: string;
   readonly sdProof?: SelectiveDisclosureProof;

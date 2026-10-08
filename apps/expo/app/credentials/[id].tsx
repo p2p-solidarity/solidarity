@@ -46,9 +46,12 @@ import {
   selectPresentationClaims,
 } from '@/credentials/presentationProof';
 import type { PresentationQRPage } from '@/me/presentationQrPages';
+import { showError } from '@/feedback/appAlert';
+import { confirmDialog } from '@/feedback/confirmDialog';
 import { pushToast } from '@/feedback/toast';
 import { useTranslation } from '@/i18n';
 import { useIdentityData, type ProvableClaimEntity } from '@/identity';
+import { requireSensitiveAction } from '@/keychain/biometricGatekeeper';
 import {
   filterPassportShowPresentationClaims,
   selectPassportShowPresentationClaims,
@@ -399,12 +402,18 @@ export default function CredentialDetailScreen() {
     [credential]
   );
 
+  // Narrow on the TAG alone, never on the device witness: `openac_show` can
+  // only ever disclose age/nationality, so a witness-less device must not be
+  // shown the wider set it cannot prove (the gate used to fail OPEN here).
+  const isOpenAcV3Credential =
+    credential?.metadataTags.includes('passport-openac-v3') ?? false;
+
   const presentationClaimRows = useMemo(
     () =>
-      passportShowEligible
+      isOpenAcV3Credential
         ? filterPassportShowPresentationClaims(associatedClaims)
         : associatedClaims,
-    [associatedClaims, passportShowEligible]
+    [associatedClaims, isOpenAcV3Credential]
   );
 
   const initialClaimIdsForPresentation = useMemo(
@@ -474,20 +483,38 @@ export default function CredentialDetailScreen() {
   const accent = levelAccent(trustDisplay.tone);
   const trustBadge = issuerTrustBadge(credential, t);
   const isExpired = credential.expiresAt != null && credential.expiresAt.getTime() < Date.now();
-  const presentDisabled = selectedClaimsForPresentation.length === 0;
+  // An openac-v3 credential without this device's show-witness cannot produce
+  // an honest presentation (buildPresentationProofJson refuses it). Disable the
+  // CTA rather than letting it consume a Face ID prompt and stamp
+  // `lastPresentedAt` for a presentation that provably never happens.
+  const cannotPresentWithoutWitness =
+    credential.metadataTags.includes('passport-openac-v3') && !passportShowEligible;
+  const presentDisabled =
+    selectedClaimsForPresentation.length === 0 || cannotPresentWithoutWitness;
 
   const onPresent = () => {
-    // TODO(biometric-gate): wrap in
-    //   const gate = await requireSensitiveAction(
-    //     'presentProof', 'Authenticate to present a proof.'
-    //   );
-    //   if (!gate.success) { pushToast(...); return; }
-    // so enlarging the already-visible proof QR obeys the SensitiveAction
-    // policy. See `src/keychain/biometricGatekeeper.ts`.
-    for (const claimID of selectedClaimsForPresentation.map((claim) => claim.id)) {
-      markPresented(claimID);
-    }
-    setPresenting(true);
+    void (async () => {
+      try {
+        const gate = await requireSensitiveAction(
+          'presentProof',
+          t('security.prompt.presentProof'),
+        );
+        if (!gate.success) {
+          pushToast(t(`security.error.${gate.reason}`), 'warning');
+          return;
+        }
+        for (const claimID of selectedClaimsForPresentation.map((claim) => claim.id)) {
+          markPresented(claimID);
+        }
+        setPresenting(true);
+      } catch (error) {
+        showError({
+          context: 'Attestations › Present Proof',
+          summary: t('credentialDetail.presentFailed'),
+          error,
+        });
+      }
+    })();
   };
 
   const toggleClaim = (claimID: string) => {
@@ -501,9 +528,24 @@ export default function CredentialDetailScreen() {
 
   const onRegenerate = () => {
     void (async () => {
-      await remove(credential.id);
-      pushToast(t('credentialDetail.removedToast'), 'success');
-      safeBack();
+      const approved = await confirmDialog({
+        title: t('credentialDetail.removeConfirmTitle'),
+        message: t('credentialDetail.removeConfirmMessage'),
+        confirmLabel: t('credentialDetail.removeConfirmAction'),
+        destructive: true,
+      });
+      if (!approved) return;
+      try {
+        await remove(credential.id);
+        pushToast(t('credentialDetail.removedToast'), 'success');
+        safeBack();
+      } catch (error) {
+        showError({
+          context: 'Attestations › Remove',
+          summary: t('credentialDetail.removeFailed'),
+          error,
+        });
+      }
     })();
   };
 

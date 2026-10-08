@@ -31,16 +31,21 @@ interface RepositoryModule {
     getState: () => {
       readonly manifest: readonly unknown[];
       readonly details: ReadonlyMap<string, unknown>;
+      readonly detailsHydrated: boolean;
+      readonly hydrate: () => Promise<void>;
       readonly upsert: (c: unknown) => Promise<void>;
+      readonly remove: (id: string) => Promise<void>;
     };
     setState: (s: {
       readonly manifest?: readonly unknown[];
       readonly details?: ReadonlyMap<string, unknown>;
+      readonly detailsHydrated?: boolean;
     }) => void;
   };
 }
 
 const kv = new Map<string, string>();
+const manifests = new Map<string, readonly unknown[]>();
 
 // Mutable state for the expo-contacts mock; each test rewrites these.
 type MockContact = {
@@ -58,6 +63,8 @@ type MockContact = {
 let mockPermission: 'granted' | 'denied' = 'granted';
 let mockAccessPrivileges: 'all' | 'limited' | 'none' = 'all';
 let mockContacts: readonly MockContact[] = [];
+let decryptGate: Promise<void> | null = null;
+let notifyDecryptStarted: (() => void) | null = null;
 
 let importer: ImporterModule;
 let repository: RepositoryModule;
@@ -107,8 +114,52 @@ beforeAll(async () => {
   await mock.module('@/storage/encryptionManager', () => ({
     encryptJson: async (v: unknown) => Buffer.from(JSON.stringify(v)).toString('base64'),
     decryptJson: async <T,>(s: string): Promise<T> => {
+      notifyDecryptStarted?.();
+      if (decryptGate) await decryptGate;
       const raw = s.startsWith('{') ? s : Buffer.from(s, 'base64').toString('utf8');
       return JSON.parse(raw) as T;
+    },
+  }));
+  await mock.module('@/storage', () => ({
+    ManifestStorage: {
+      get: (scope: string): readonly unknown[] | null => manifests.get(scope) ?? null,
+      set: (scope: string, entries: readonly unknown[]): void => {
+        manifests.set(scope, entries);
+      },
+      upsertById: (
+        scope: string,
+        entry: { readonly id: string },
+      ): readonly unknown[] => {
+        const current = manifests.get(scope) ?? [];
+        const index = current.findIndex((candidate) => (
+          typeof candidate === 'object'
+          && candidate !== null
+          && 'id' in candidate
+          && candidate.id === entry.id
+        ));
+        const next = index >= 0
+          ? current.map((candidate, candidateIndex) => (
+              candidateIndex === index ? entry : candidate
+            ))
+          : [...current, entry];
+        manifests.set(scope, next);
+        return next;
+      },
+      removeById: (scope: string, id: string): readonly unknown[] => {
+        const current = manifests.get(scope) ?? [];
+        const next = current.filter((candidate) => (
+          typeof candidate !== 'object'
+          || candidate === null
+          || !('id' in candidate)
+          || candidate.id !== id
+        ));
+        manifests.set(scope, next);
+        return next;
+      },
+      exists: (scope: string): boolean => manifests.has(scope),
+      clear: (scope: string): void => {
+        manifests.delete(scope);
+      },
     },
   }));
   await mock.module('expo-contacts', () => {
@@ -163,10 +214,17 @@ beforeAll(async () => {
 
 beforeEach(() => {
   kv.clear();
-  repository.useContactStore.setState({ manifest: [], details: new Map() });
+  manifests.clear();
+  repository.useContactStore.setState({
+    manifest: [],
+    details: new Map(),
+    detailsHydrated: false,
+  });
   mockPermission = 'granted';
   mockAccessPrivileges = 'all';
   mockContacts = [];
+  decryptGate = null;
+  notifyDecryptStarted = null;
 });
 
 afterEach(() => {
@@ -330,5 +388,32 @@ describe('importFromDevice — dedupe on re-import', () => {
     await importer.importFromDevice();
     const sizeAfterSecond = repository.useContactStore.getState().details.size;
     expect(sizeAfterSecond).toBe(1);
+  });
+});
+
+describe('contact repository mutation ordering', () => {
+  it('does not resurrect a contact deleted while bulk hydration is decrypting it', async () => {
+    await importer.importFromVcf(SIMPLE_VCF);
+    const id = repository.useContactStore.getState().details.keys().next().value as string;
+
+    let releaseDecrypt!: () => void;
+    decryptGate = new Promise<void>((resolve) => {
+      releaseDecrypt = resolve;
+    });
+    const decryptStarted = new Promise<void>((resolve) => {
+      notifyDecryptStarted = resolve;
+    });
+    repository.useContactStore.setState({ detailsHydrated: false });
+
+    const hydrating = repository.useContactStore.getState().hydrate();
+    await decryptStarted;
+    await repository.useContactStore.getState().remove(id);
+    releaseDecrypt();
+    await hydrating;
+
+    const state = repository.useContactStore.getState();
+    expect(state.manifest.some((entry) => (entry as { id: string }).id === id)).toBe(false);
+    expect(state.details.has(id)).toBe(false);
+    expect(kv.has(`contacts:${id}`)).toBe(false);
   });
 });

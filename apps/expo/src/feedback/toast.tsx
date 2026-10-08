@@ -5,7 +5,8 @@
  * down on enter / up on exit. Each toast auto-dismisses after `ms`
  * (default 3000). Slide + fade transitions are Reanimated 4 worklets to
  * keep animation off the JS thread when many toasts fire in quick
- * succession.
+ * succession. Motion: `TIMING.enter` in, the faster `TIMING.exit` out, both
+ * on the app's ease-out; Reduce Motion keeps the fade and drops the slide.
  *
  * Identical consecutive messages are deduped: re-pushing the same
  * (message, tone) within the live window resets its timer instead of
@@ -21,18 +22,21 @@
  */
 import type { ReactNode } from 'react';
 import { useEffect } from 'react';
-import { Pressable, StyleSheet, View } from 'react-native';
+import { StyleSheet, View } from 'react-native';
 import Animated, {
   useAnimatedStyle,
+  useReducedMotion,
   useSharedValue,
   withTiming,
 } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { create } from 'zustand';
 
+import { PressableScale } from '@/components/common/PressableScale';
 import { SfIcon } from '@/components/icons/SfIcon';
 import { ThemedText } from '@/components/themed';
 import { Colors } from '@/constants/Colors';
+import { DURATION, SCALE, TIMING } from '@/feedback/motion';
 
 export type ToastTone = 'info' | 'success' | 'warning' | 'error';
 
@@ -101,23 +105,28 @@ function splitTitleBody(message: string): { title: string; body: string | null }
   };
 }
 
+/** How far a toast travels in / out. Small: the fade does the talking. */
+const TOAST_TRAVEL_PX = 12;
+
 function ToastItem({ toast }: { readonly toast: Toast }): ReactNode {
   const pop = useToastStore((s) => s.pop);
+  const reduceMotion = useReducedMotion();
+  const travel = reduceMotion ? 0 : -TOAST_TRAVEL_PX;
   const opacity = useSharedValue(0);
-  const translateY = useSharedValue(-20);
+  const translateY = useSharedValue(travel);
   const style = toneStyle(toast.tone);
   const { title, body } = splitTitleBody(toast.message);
 
   useEffect(() => {
-    opacity.value = withTiming(1, { duration: 200 });
-    translateY.value = withTiming(0, { duration: 250 });
+    opacity.value = withTiming(1, TIMING.enter);
+    translateY.value = withTiming(0, TIMING.enter);
     const timer = setTimeout(() => {
-      opacity.value = withTiming(0, { duration: 200 });
-      translateY.value = withTiming(-20, { duration: 250 });
-      setTimeout(() => { pop(toast.id); }, 250);
+      opacity.value = withTiming(0, TIMING.exit);
+      translateY.value = withTiming(travel, TIMING.exit);
+      setTimeout(() => { pop(toast.id); }, DURATION.exit);
     }, toast.ms);
     return () => { clearTimeout(timer); };
-  }, [opacity, pop, toast.id, toast.ms, translateY]);
+  }, [opacity, pop, toast.id, toast.ms, translateY, travel]);
 
   const animStyle = useAnimatedStyle(() => ({
     opacity: opacity.value,
@@ -125,9 +134,9 @@ function ToastItem({ toast }: { readonly toast: Toast }): ReactNode {
   }));
 
   const handleClose = () => {
-    opacity.value = withTiming(0, { duration: 150 });
-    translateY.value = withTiming(-20, { duration: 200 });
-    setTimeout(() => { pop(toast.id); }, 200);
+    opacity.value = withTiming(0, TIMING.exit);
+    translateY.value = withTiming(travel, TIMING.exit);
+    setTimeout(() => { pop(toast.id); }, DURATION.exit);
   };
 
   return (
@@ -149,15 +158,17 @@ function ToastItem({ toast }: { readonly toast: Toast }): ReactNode {
             </ThemedText>
           ) : null}
         </View>
-        <Pressable
+        <PressableScale
           onPress={handleClose}
+          haptic={false}
+          scaleTo={SCALE.icon}
           accessibilityRole="button"
           accessibilityLabel="Dismiss"
-          hitSlop={8}
+          hitSlop={10}
           style={styles.close}
         >
           <SfIcon name="xmark" size={14} color={Colors.text3} />
-        </Pressable>
+        </PressableScale>
       </View>
     </Animated.View>
   );

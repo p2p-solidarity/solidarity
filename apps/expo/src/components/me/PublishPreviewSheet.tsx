@@ -5,15 +5,20 @@
  * `app/me/edit.tsx` to keep that screen focused; both are pure presentational
  * components driven by the editor's local state.
  */
-import { Modal, View } from 'react-native';
-import Animated, { Easing, ZoomIn } from 'react-native-reanimated';
+import { View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { PressableScale } from '@/components/common/PressableScale';
 import { ThemedButton, ThemedSurface, ThemedText } from '@/components/themed';
 import { Colors } from '@/constants/Colors';
 import { useTranslation } from '@/i18n';
-import { LINK_VISIBILITIES, type LinkVisibility, type VisibilitySummary } from '@/profile/projection';
+import {
+  LINK_VISIBILITIES,
+  type LinkVisibility,
+  type VisibilitySummary,
+} from '@/profile/projection';
+
+import { SlideUpSheet } from './SlideUpSheet';
 
 /** i18n keys per visibility tier — literal so the catalog test resolves them. */
 const VISIBILITY_LABEL_KEYS: Record<LinkVisibility, string> = {
@@ -51,7 +56,9 @@ export function LinkVisibilityControl({
             <PressableScale
               key={visibility}
               haptic="tap"
-              onPress={() => { onSelect(visibility); }}
+              onPress={() => {
+                onSelect(visibility);
+              }}
               accessibilityRole="button"
               accessibilityState={{ selected: active }}
               accessibilityLabel={label}
@@ -84,7 +91,9 @@ export function LinkVisibilityControl({
 /** Pre-publish preview (T7 / grill G4): an honest, non-dismissible-by-accident
  *  summary of exactly what leaves this device before the user signs — how many
  *  links go PUBLIC (to Nostr), how many are shared by QR/link only, and how
- *  many stay private. Themed sheet, no native Alert. */
+ *  many stay private. Themed sheet, no native Alert. Confirm and Cancel both
+ *  let the sheet finish sliding away before the parent acts, so the Face ID
+ *  prompt a publish raises never lands on top of a half-closed sheet. */
 export function PublishPreviewSheet({
   visible,
   summary,
@@ -103,67 +112,66 @@ export function PublishPreviewSheet({
   const { t } = useTranslation();
   const insets = useSafeAreaInsets();
   return (
-    <Modal
-      visible={visible}
-      transparent
-      statusBarTranslucent
-      animationType="none"
-      onRequestClose={onClose}>
-      <View style={{ flex: 1, justifyContent: 'flex-end', backgroundColor: Colors.overlayBg }}>
-        <Animated.View
-          entering={ZoomIn.duration(240)
-            .easing(Easing.out(Easing.cubic))
-            .withInitialValues({ opacity: 0, transform: [{ scale: 0.97 }] })}>
-          <ThemedSurface
-            variant="elevated"
-            className="gap-4 rounded-none px-4 pt-5"
-            style={{ paddingBottom: Math.max(insets.bottom, 16) }}>
-            <View className="gap-1">
-              <ThemedText variant="titleLarge">{t('meEdit.preview.title')}</ThemedText>
-              <ThemedText variant="bodySmall" tone="secondary">
-                {t(willPublish ? 'meEdit.preview.subtitlePublish' : 'meEdit.preview.subtitleShare')}
-              </ThemedText>
-            </View>
+    <SlideUpSheet visible={visible} onClose={onClose}>
+      {(close) => (
+        <ThemedSurface
+          variant="elevated"
+          className="gap-4 rounded-t-2xl px-4 pt-5"
+          style={{ paddingBottom: Math.max(insets.bottom, 16) }}>
+          <View className="gap-1">
+            <ThemedText variant="titleLarge">{t('meEdit.preview.title')}</ThemedText>
+            <ThemedText variant="bodySmall" tone="secondary">
+              {t(willPublish ? 'meEdit.preview.subtitlePublish' : 'meEdit.preview.subtitleShare')}
+            </ThemedText>
+          </View>
 
-            <ThemedSurface variant="inset" className="gap-2 rounded-none px-4 py-3">
-              <ThemedText variant="bodyMedium">
-                {summary.public === 0
-                  ? t('meEdit.preview.nonePublic')
-                  : t('meEdit.preview.publicCount', { count: summary.public, total: summary.total })}
+          <ThemedSurface variant="inset" className="gap-2 rounded-none px-4 py-3">
+            <ThemedText variant="bodyMedium">
+              {summary.public === 0
+                ? t('meEdit.preview.nonePublic')
+                : t('meEdit.preview.publicCount', {
+                    count: summary.public,
+                    total: summary.total,
+                  })}
+            </ThemedText>
+            {publicLabels.length > 0 ? (
+              <ThemedText variant="caption" tone="secondary">
+                {publicLabels.join('  ·  ')}
               </ThemedText>
-              {publicLabels.length > 0 ? (
-                <ThemedText variant="caption" tone="secondary">
-                  {publicLabels.join('  ·  ')}
-                </ThemedText>
-              ) : null}
-              {summary.linkOnly > 0 ? (
-                <ThemedText variant="caption" tone="tertiary">
-                  {t('meEdit.preview.linkOnlyCount', { count: summary.linkOnly })}
-                </ThemedText>
-              ) : null}
-              {summary.private > 0 ? (
-                <ThemedText variant="caption" tone="tertiary">
-                  {t('meEdit.preview.privateCount', { count: summary.private })}
-                </ThemedText>
-              ) : null}
-            </ThemedSurface>
-
-            <ThemedButton
-              label={t(willPublish ? 'meEdit.preview.confirmPublish' : 'meEdit.preview.confirmSave')}
-              variant="primary"
-              fullWidth
-              haptic="success"
-              onPress={onConfirm}
-            />
-            <ThemedButton
-              label={t('meEdit.preview.cancel')}
-              variant="secondary"
-              fullWidth
-              onPress={onClose}
-            />
+            ) : null}
+            {summary.linkOnly > 0 ? (
+              <ThemedText variant="caption" tone="tertiary">
+                {t('meEdit.preview.linkOnlyCount', { count: summary.linkOnly })}
+              </ThemedText>
+            ) : null}
+            {summary.private > 0 ? (
+              <ThemedText variant="caption" tone="tertiary">
+                {t('meEdit.preview.privateCount', { count: summary.private })}
+              </ThemedText>
+            ) : null}
           </ThemedSurface>
-        </Animated.View>
-      </View>
-    </Modal>
+
+          <ThemedButton
+            label={t(
+              willPublish ? 'meEdit.preview.confirmPublish' : 'meEdit.preview.confirmSave'
+            )}
+            variant="primary"
+            fullWidth
+            haptic="success"
+            onPress={() => {
+              close(onConfirm);
+            }}
+          />
+          <ThemedButton
+            label={t('meEdit.preview.cancel')}
+            variant="secondary"
+            fullWidth
+            onPress={() => {
+              close();
+            }}
+          />
+        </ThemedSurface>
+      )}
+    </SlideUpSheet>
   );
 }

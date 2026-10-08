@@ -17,6 +17,8 @@ const OTHER_PRIVATE = hexToBytes(
 const SUBJECT_DID = didKeyFromPublicKey(p256.getPublicKey(SUBJECT_PRIVATE, false));
 const OTHER_DID = didKeyFromPublicKey(p256.getPublicKey(OTHER_PRIVATE, false));
 const NPUB = ensVectors.expectedNpub;
+const NIP05_PUBKEY = '7e7e9c42a91bfef19fa929e5fda1b72e0ebc1a4c1141673e2794234d86addf4e';
+const NIP05_NPUB = 'npub10elfcs4fr0l0r8af98jlmgdh9c8tcxjvz9qkw038js35mp4dma8qzvjptg';
 
 function profile(did: string, alsoKnownAs: readonly string[]) {
   return {
@@ -52,6 +54,47 @@ function dnsIo(pointer: string): AtprotoBindingIO {
 }
 
 describe('resolveProfileByHandle', () => {
+  it('resolves a Solidarity short name through its NIP-05 directory and complete reverse binding', async () => {
+    const fetched = await verifiedResult(SUBJECT_DID, SUBJECT_PRIVATE, [`nostr:${NIP05_NPUB}`]);
+    const io: AtprotoBindingIO = {
+      dnsTxt: async () => ok([]),
+      getRecord: async () => ok(null),
+      fetchText: async (url) =>
+        url.includes('/.well-known/nostr.json')
+          ? ok(JSON.stringify({
+              names: { alice: NIP05_PUBKEY },
+              relays: { [NIP05_PUBKEY]: ['wss://relay.example'] },
+            }))
+          : ok(JSON.stringify({
+              name: 'alice',
+              status: 'active',
+              redirectTo: null,
+              redirectUntil: null,
+              rebindGeneration: 0,
+              reboundAt: null,
+            })),
+    };
+
+    const result = await resolveProfileByHandle('alice', {
+      io,
+      fetchNostrProfile: async () => fetched,
+      fetchKind0: async () => ({
+        contentJson: { nip05: 'alice@creds.id', alsoKnownAs: [SUBJECT_DID] },
+        created_at: 1_776_038_400,
+      }),
+    });
+
+    expect(result.kind).toBe('verified');
+    if (result.kind !== 'verified') return;
+    expect(result.handleBinding).toEqual({
+      scheme: 'nip05',
+      handle: 'alice',
+      state: 'verified',
+      rebindGeneration: 0,
+      reboundAt: null,
+    });
+  });
+
   it('resolves dns → source npub → matching signed profile and returns a verified DNS badge', async () => {
     const fetched = await verifiedResult(SUBJECT_DID, SUBJECT_PRIVATE, ['dns:example.com']);
     const result = await resolveProfileByHandle('dns:example.com', {

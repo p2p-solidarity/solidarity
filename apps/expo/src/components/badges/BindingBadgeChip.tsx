@@ -1,19 +1,24 @@
 import type { ReactNode } from 'react';
 import { ActivityIndicator, View } from 'react-native';
-import Animated, { Easing, FadeIn, FadeOut } from 'react-native-reanimated';
+import Animated, { FadeIn, FadeOut } from 'react-native-reanimated';
 
 import { atprotoBadgeViewModel } from '@/badges/atprotoBadgeDisplay';
 import { nostrBadgeViewModel } from '@/badges/nostrBadgeDisplay';
 import { SfIcon } from '@/components/icons/SfIcon';
 import { ThemedSurface, ThemedText } from '@/components/themed';
 import { Colors } from '@/constants/Colors';
+import { EASE_OUT } from '@/feedback/motion';
 import { useTranslation } from '@/i18n';
 import type {
   OnboardingBadgeProvider,
   OnboardingBadgeResult,
 } from '@/onboarding/badgeVerification';
 
-const BADGE_CROSSFADE_MS = 200;
+/** State crossfade: the new state arrives a touch slower than the old one
+ *  leaves, so the outgoing label is gone before the eye reads it. Opacity
+ *  only — nothing moves, so Reduce Motion needs no special case. */
+const BADGE_ENTER_MS = 200;
+const BADGE_EXIT_MS = 140;
 
 type BadgeVisual = 'loading' | 'verified' | 'declared' | 'stale';
 
@@ -67,8 +72,8 @@ function BadgeStateTransition({
   return (
     <Animated.View
       key={transitionKey}
-      entering={FadeIn.duration(BADGE_CROSSFADE_MS).easing(Easing.out(Easing.quad))}
-      exiting={FadeOut.duration(BADGE_CROSSFADE_MS).easing(Easing.out(Easing.quad))}>
+      entering={FadeIn.duration(BADGE_ENTER_MS).easing(EASE_OUT)}
+      exiting={FadeOut.duration(BADGE_EXIT_MS).easing(EASE_OUT)}>
       {children}
     </Animated.View>
   );

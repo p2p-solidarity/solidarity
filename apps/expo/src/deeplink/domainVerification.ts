@@ -55,17 +55,40 @@ export function isVerifiedDomain(host: string): boolean {
  * (`./parser.ts`) gates those two routes on `isProductHost`, not
  * `isVerifiedDomain`. See Task A5.4 code-review Finding 1.
  */
-const PRODUCT_HOSTS: ReadonlySet<string> = new Set<string>(['solidarity.gg', 'airmeishi.app']);
+const PRODUCT_HOSTS: ReadonlySet<string> = new Set<string>([
+  // `creds.id` is the product domain and default share origin (2026-08-30,
+  // supersedes the 05-spec §8-B dev-mode gate). The solidarity.gg hosts stay
+  // so links shared before the switch keep routing.
+  'creds.id',
+  'solidarity.gg',
+  'airmeishi.app',
+]);
+
+/**
+ * Hosts that count as product hosts ONLY in developer mode (05-spec §8-B
+ * mechanism). Empty since `creds.id` went production on 2026-08-30; kept so
+ * the next pre-launch domain can be exercised end-to-end behind dev mode
+ * while regular users keep the A5.4 posture (no non-product host triggers a
+ * routing side effect).
+ */
+const DEV_PRODUCT_HOSTS: ReadonlySet<string> = new Set<string>([]);
 
 /**
  * Returns true when `host` is rooted at a Solidarity/AirMeishi-owned host
  * (subdomains accepted, same matching semantics as `isVerifiedDomain`).
+ * Pass `includeDevHosts` (callers thread `developerMode` from preferences)
+ * to additionally accept `DEV_PRODUCT_HOSTS`.
  */
-export function isProductHost(host: string): boolean {
+export function isProductHost(host: string, includeDevHosts = false): boolean {
   if (!host) return false;
   const lower = host.toLowerCase();
   for (const root of PRODUCT_HOSTS) {
     if (matchesWildcard(lower, root)) return true;
+  }
+  if (includeDevHosts) {
+    for (const root of DEV_PRODUCT_HOSTS) {
+      if (matchesWildcard(lower, root)) return true;
+    }
   }
   return false;
 }

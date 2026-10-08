@@ -1,4 +1,4 @@
-import type { PassportReadResult } from '@solidarity/nitro-nfc-passport';
+import type { PassportReadResult } from '@solidarity/nitro-attest';
 
 import {
   parsePassportOpenAcV3ActiveAuthJson,

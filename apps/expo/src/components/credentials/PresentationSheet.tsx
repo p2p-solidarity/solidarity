@@ -93,7 +93,16 @@ function PresentationBody({
   const proof = useMemo<
     { readonly pages: readonly PresentationQRPage[]; readonly error?: string }
   >(() => {
-    if (passportShowEligible || selectedClaims.length === 0) return { pages: [] };
+    if (passportShowEligible) return { pages: [] };
+    // An OpenAC-v3 credential that got here is NOT show-eligible, i.e. this
+    // device has no witness. `buildPresentationProofJson` already refuses it
+    // (its envelope proves none of the selected claims); repeating the check
+    // here — ahead of the empty-selection return — only so the sheet can give
+    // the specific reason instead of a generic "no claims" placeholder.
+    if (credential.metadataTags.includes('passport-openac-v3')) {
+      return { pages: [], error: t('present.rescanRequiredBody') };
+    }
+    if (selectedClaims.length === 0) return { pages: [] };
     const result = buildPresentationProofQrPages({
       credential,
       selectedClaims,

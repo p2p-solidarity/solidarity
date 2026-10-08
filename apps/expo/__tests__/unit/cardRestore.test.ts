@@ -50,6 +50,10 @@ import {
 // ── Fixtures ─────────────────────────────────────────────────────────────────
 
 const kv = new Map<string, string>();
+let pauseNextDecrypt = false;
+let releaseDecrypt: (() => void) | undefined;
+let decryptStarted: Promise<void> = Promise.resolve();
+let markDecryptStarted: (() => void) | undefined;
 
 /**
  * Stand-in for the master signing scalar. Same fixed seed used by the
@@ -112,6 +116,8 @@ function setsToArrays(value: unknown): unknown {
 }
 
 beforeAll(async () => {
+  await mock.module('expo-file-system/legacy', () => ({}));
+
   // Mock MMKV with an in-memory map — same shape as the existing
   // groupStore / vaultEncryption tests.
   await mock.module('@/storage/mmkv', () => ({
@@ -134,6 +140,13 @@ beforeAll(async () => {
     encryptJson: async (v: unknown) =>
       Buffer.from(JSON.stringify(setsToArrays(v))).toString('base64'),
     decryptJson: async <T,>(s: string): Promise<T> => {
+      if (pauseNextDecrypt) {
+        pauseNextDecrypt = false;
+        markDecryptStarted?.();
+        await new Promise<void>((resolve) => {
+          releaseDecrypt = resolve;
+        });
+      }
       const raw = s.startsWith('{') ? s : Buffer.from(s, 'base64').toString('utf8');
       return JSON.parse(raw) as T;
     },
@@ -174,6 +187,10 @@ beforeAll(async () => {
 
 beforeEach(() => {
   kv.clear();
+  pauseNextDecrypt = false;
+  releaseDecrypt = undefined;
+  markDecryptStarted = undefined;
+  decryptStarted = Promise.resolve();
   cardMod.useCardStore.setState({
     manifest: [],
     details: new Map(),
@@ -255,6 +272,30 @@ describe('cardRestore: upsert + hydrate round trip', () => {
 });
 
 describe('cardRestore: save → wipe → restore round trip', () => {
+  it('does not resurrect a card deleted while bulk hydration is decrypting', async () => {
+    const card = makeCardInput();
+    expect((await cardMod.useCardStore.getState().upsert(card)).ok).toBe(true);
+    cardMod.useCardStore.setState({
+      manifest: [],
+      details: new Map(),
+      detailsHydrated: false,
+    });
+
+    pauseNextDecrypt = true;
+    decryptStarted = new Promise<void>((resolve) => {
+      markDecryptStarted = resolve;
+    });
+    const hydration = cardMod.useCardStore.getState().hydrate();
+    await decryptStarted;
+    await cardMod.useCardStore.getState().remove(card.id);
+    releaseDecrypt?.();
+    await hydration;
+
+    expect(cardMod.useCardStore.getState().manifest).toEqual([]);
+    expect(cardMod.useCardStore.getState().details.has(card.id)).toBe(false);
+    expect(kv.has(`cards:${card.id}`)).toBe(false);
+  });
+
   it('byte-equal: every BusinessCard field survives an MMKV-backed restore', async () => {
     const card = makeCardInput({
       id: '11111111-1111-4111-8111-111111111111',

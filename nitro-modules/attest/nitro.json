@@ -1,0 +1,53 @@
+{
+  "$schema": "https://nitro.margelo.com/schemas/nitro.schema.json",
+  "cxxNamespace": ["solidarity", "attest"],
+  "ios": {
+    "iosModuleName": "Attest"
+  },
+  "android": {
+    "androidNamespace": ["gg", "solidarity", "attest"],
+    "androidCxxLibName": "Attest"
+  },
+  "autolinking": {
+    "MrzOcr": {
+      "ios": {
+        "language": "swift",
+        "implementationClassName": "HybridMrzOcr"
+      },
+      "android": {
+        "language": "kotlin",
+        "implementationClassName": "HybridMrzOcr"
+      }
+    },
+    "NfcPassport": {
+      "ios": {
+        "language": "swift",
+        "implementationClassName": "HybridNfcPassport"
+      },
+      "android": {
+        "language": "kotlin",
+        "implementationClassName": "HybridNfcPassport"
+      }
+    },
+    "PassportZk": {
+      "ios": {
+        "language": "swift",
+        "implementationClassName": "HybridPassportZk"
+      },
+      "android": {
+        "language": "kotlin",
+        "implementationClassName": "HybridPassportZk"
+      }
+    },
+    "Semaphore": {
+      "ios": {
+        "language": "swift",
+        "implementationClassName": "HybridSemaphore"
+      },
+      "android": {
+        "language": "kotlin",
+        "implementationClassName": "HybridSemaphore"
+      }
+    }
+  }
+}

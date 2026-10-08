@@ -98,10 +98,19 @@ export async function buildSolidarityQrPayloadAsync(
  * Attaches three best-effort proofs (each independently failable):
  *   - `sdProof`            via `generateSelectiveDisclosureProof`
  *                          (when `useZK || sharingFormat==='zkProof'`)
- *   - `issuerCommitment` + `issuerProof`
- *                          via `generateIssuerProof` — Semaphore group
- *                          membership proof. Null when the user isn't a
- *                          member of any qualifying group.
+ *   - `issuerProof`        via `generateIssuerProof` — Semaphore group
+ *                          membership proof, serialised as the FULL
+ *                          `SemaphoreProof` envelope JSON (the shape
+ *                          `verifyGroupProof` consumes). Null when the user
+ *                          isn't a member of any qualifying group. The local
+ *                          `issuerCommitment` is deliberately NOT attached:
+ *                          a commitment plus the group roster identifies the
+ *                          presenter, defeating the proof's anonymity
+ *                          (lists-anonymity audit 2026-08-18 §5 — a correct
+ *                          Semaphore presentation reveals only
+ *                          root/nullifier/signal, and the scan-side verifier
+ *                          consumes only the proof envelope, never a
+ *                          commitment).
  *   - `proofClaims`        filter of `ShareSettingsStore.selectedProofClaims`
  *                          intersected with the proofs that ACTUALLY landed
  *                          (Swift `filteredProofClaims` lines 354-369).
@@ -149,7 +158,6 @@ export async function buildZKEnvelope(
   // Semaphore group-membership proof (best-effort). Skipped on platforms
   // where the native module isn't available or the user isn't in any
   // qualifying group.
-  let issuerCommitment: string | undefined;
   let issuerProof: string | undefined;
   try {
     const { generateIssuerProof, buildShareScope } = await import(
@@ -158,7 +166,6 @@ export async function buildZKEnvelope(
     const scope = buildShareScope(selectedFields);
     const issuer = await generateIssuerProof({ message: shareId, scope });
     if (issuer) {
-      issuerCommitment = issuer.commitment;
       issuerProof = issuer.proof;
     }
   } catch (err) {
@@ -181,7 +188,6 @@ export async function buildZKEnvelope(
     createdAt: formatSwiftIso8601(now),
     format: 'zkProof',
     sealedRoute: options.sealedRoute,
-    issuerCommitment,
     issuerProof,
     sdProof,
     proofClaims,

@@ -4,6 +4,7 @@ import {
   buildPresentModel,
   resolvePresentAttestationsState,
   resolvePresentCardState,
+  selectPresentCardPresets,
 } from '@/present/presentModel';
 import type { ShareFieldPreferences } from '@/cards/solidarityQrTypes';
 import type { BusinessCard } from '@solidarity/shared';
@@ -231,5 +232,27 @@ describe('resolvePresentAttestationsState', () => {
       hasError: false,
       claimCount: 2,
     })).toBe('ready');
+  });
+});
+
+describe('selectPresentCardPresets', () => {
+  it('uses one stable empty array while no preset has been saved', () => {
+    const preferences = {} as Parameters<typeof selectPresentCardPresets>[0];
+
+    expect(
+      Object.is(
+        selectPresentCardPresets(preferences),
+        selectPresentCardPresets(preferences)
+      )
+    ).toBe(true);
+  });
+
+  it('returns the stored preset array unchanged', () => {
+    const presets = [{ name: 'Conference', preferenceKeys: ['shareEmail'] }] as const;
+    const preferences = {
+      presentCardPresets: presets,
+    } as unknown as Parameters<typeof selectPresentCardPresets>[0];
+
+    expect(selectPresentCardPresets(preferences)).toBe(presets);
   });
 });

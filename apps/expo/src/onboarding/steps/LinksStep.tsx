@@ -18,6 +18,7 @@ import { useTranslation } from '@/i18n';
 import { isHttpsLinkUrl, normalizeLinkUrl } from '@/profile/linkUrl';
 import { useProfileStore } from '@/profile/store';
 import { usePreferences } from '@/settings/preferences';
+import { publishChosenPageName } from '@/nip05/publishChosenPageName';
 
 import { V2OnboardingScaffold } from './V2OnboardingScaffold';
 
@@ -41,15 +42,18 @@ function mergeLinks(
 export function LinksStep({
   onBack,
   onDone,
+  onNameTaken,
 }: {
   readonly onBack: () => void;
   readonly onDone: () => void;
+  readonly onNameTaken: () => void;
 }): ReactNode {
   const { t } = useTranslation();
   const username = usePreferences((state) => state.publicPageUsername);
   const record = useProfileStore((state) => state.record);
   const visibility = useProfileStore((state) => state.linkVisibility);
   const saveProfile = useProfileStore((state) => state.saveProfile);
+  const setPreference = usePreferences((state) => state.set);
   const [phase, setPhase] = useState<LinksPhase>('choose');
   const [importOpen, setImportOpen] = useState(false);
   const [label, setLabel] = useState('');
@@ -76,6 +80,33 @@ export function LinksStep({
         ],
       });
       if (!saved.ok) throw new Error(saved.error);
+
+      const publishedName = await publishChosenPageName(username);
+      switch (publishedName.status) {
+        case 'ready':
+          setPreference('publicPageRegisteredUsername', publishedName.name);
+          setPreference('publicPageBindingReady', true);
+          setPreference('publicPagePublishError', '');
+          setPreference('publicPageRetryAt', null);
+          break;
+        case 'registered':
+          setPreference('publicPageRegisteredUsername', publishedName.name);
+          setPreference('publicPageBindingReady', false);
+          setPreference('publicPagePublishError', publishedName.reason);
+          break;
+        case 'nameTaken':
+          setPreference('publicPagePublishError', 'name_taken');
+          haptic('error');
+          onNameTaken();
+          return;
+        case 'renameTooSoon':
+          setPreference('publicPagePublishError', 'rename_too_soon');
+          setPreference('publicPageRetryAt', publishedName.retryAt ?? null);
+          break;
+        case 'localOnly':
+          setPreference('publicPagePublishError', publishedName.reason);
+          break;
+      }
       haptic('success');
       onDone();
     } catch (error) {

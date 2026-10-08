@@ -11,7 +11,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 APP_DIR="${AIRMEISHI_EXPO_APP_DIR:-$(cd "$SCRIPT_DIR/.." && pwd)}"
 REPO_ROOT="${AIRMEISHI_REPO_ROOT:-$(cd "$APP_DIR/../.." && pwd)}"
 PASSPORT_NOIR_DIR="${AIRMEISHI_PASSPORT_NOIR_DIR:-$(cd "$REPO_ROOT/.." && pwd)/passport-noir}"
-ASSETS_DEST="${AIRMEISHI_PASSPORT_ZK_ASSETS_DIR:-$REPO_ROOT/nitro-modules/passport-zk/android/src/main/assets}"
+ASSETS_DEST="${AIRMEISHI_PASSPORT_ZK_ASSETS_DIR:-$REPO_ROOT/nitro-modules/attest/android/src/main/assets}"
 
 MERGED_FILE="passport.srs.bin"
 SRS_DIR="$PASSPORT_NOIR_DIR/mopro-binding/test-vectors/srs"

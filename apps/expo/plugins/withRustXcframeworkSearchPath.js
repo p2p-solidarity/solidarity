@@ -38,16 +38,16 @@ const HOOK_BODY = `
     #     passport-noir repo (one level above the airmeishi/ root), so we
     #     reach it via four ".." hops (../../../../).
     #   • The semaphore xcframework is now built locally from
-    #     nitro-modules/semaphore/rust/build-ios.sh and lands next to
-    #     SemaphoreBindings.podspec inside nitro-modules/semaphore/mopro/.
+    #     nitro-modules/attest/semaphore/rust/build-ios.sh and lands next to
+    #     SemaphoreBindings.podspec inside nitro-modules/attest/semaphore/mopro/.
     #     Reach the airmeishi monorepo root via three ".." hops
     #     (apps/expo/ios/ → apps/expo/ → apps/ → airmeishi/).
     airmeishi_root = File.expand_path(File.join(__dir__, '..', '..', '..'))
     solidarity_root = File.expand_path(File.join(__dir__, '..', '..', '..', '..'))
     mopro_xcf = File.join(solidarity_root, 'passport-noir', 'mopro-binding',
                           'MoproiOSBindings', 'MoproBindings.xcframework')
-    semaphore_xcf = File.join(airmeishi_root, 'nitro-modules', 'semaphore',
-                              'mopro', 'SemaphoreBindings.xcframework')
+    semaphore_xcf = File.join(airmeishi_root, 'nitro-modules', 'attest',
+                              'semaphore', 'mopro', 'SemaphoreBindings.xcframework')
 
     installer.aggregate_targets.each do |aggregate_target|
       aggregate_target.user_build_configurations.each_key do |configuration_name|

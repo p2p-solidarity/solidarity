@@ -1,7 +1,7 @@
 import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useEffect, useState, type ReactNode } from 'react';
-import { ActivityIndicator, Pressable, View } from 'react-native';
+import { ActivityIndicator, View } from 'react-native';
 import Animated, {
   SensorType,
   clamp,
@@ -14,34 +14,22 @@ import Animated, {
   withTiming,
 } from 'react-native-reanimated';
 
-import { animalImageSource } from '@/cards/animals';
+import { PressableScale } from '@/components/common/PressableScale';
 import { SfIcon } from '@/components/icons/SfIcon';
-import { ThemedText } from '@/components/themed';
-import { ON_LIGHT } from '@/components/themed/contrast';
-import { Colors } from '@/constants/Colors';
-import type { AnimalCharacter } from '@/settings/preferences';
+import { ThemedButton, ThemedText } from '@/components/themed';
+import { CardMetalColors, Colors } from '@/constants/Colors';
 
-const CARD_HEIGHT = 220;
-const CARD_RADIUS = 20;
-const CARD_QR_SIZE = 68;
-
-const ANIMAL_GRADIENT_END: Readonly<Record<AnimalCharacter, string>> = {
-  dog: Colors.cardDog,
-  horse: Colors.cardHorse,
-  pig: Colors.cardPig,
-  sheep: Colors.cardSheep,
-  dove: Colors.cardDove,
-};
+/** `.metal` — credit-card proportions and the mock's 18pt corner. */
+const CARD_ASPECT_RATIO = 1.586;
+const CARD_RADIUS = 18;
+/** `.m-qr` — 70pt plate, 5pt inset around the code. */
+const CARD_QR_SIZE = 70;
+const CARD_QR_PADDING = 5;
 
 export type CardQrState =
   | { readonly kind: 'loading' }
   | { readonly kind: 'ready'; readonly uri: string }
   | { readonly kind: 'error' };
-
-function profileInitial(name: string | null): string {
-  const initial = name?.trim().charAt(0).toUpperCase();
-  return initial === undefined || initial === '' ? '?' : initial;
-}
 
 function CardQr({ state }: { readonly state: CardQrState }): ReactNode {
   let content: ReactNode;
@@ -50,7 +38,7 @@ function CardQr({ state }: { readonly state: CardQrState }): ReactNode {
       <Image
         source={{ uri: state.uri }}
         contentFit="contain"
-        style={{ width: CARD_QR_SIZE - 8, height: CARD_QR_SIZE - 8 }}
+        style={{ width: CARD_QR_SIZE - CARD_QR_PADDING * 2, height: CARD_QR_SIZE - CARD_QR_PADDING * 2 }}
       />
     );
   } else if (state.kind === 'loading') {
@@ -64,82 +52,24 @@ function CardQr({ state }: { readonly state: CardQrState }): ReactNode {
       style={{
         width: CARD_QR_SIZE,
         height: CARD_QR_SIZE,
-        borderRadius: 10,
+        borderRadius: 7,
         alignItems: 'center',
         justifyContent: 'center',
-        backgroundColor: Colors.cardBg,
-        padding: 4,
+        backgroundColor: CardMetalColors.qrPlate,
+        padding: CARD_QR_PADDING,
       }}>
       {content}
     </View>
   );
 }
 
-function CardIdentity({
-  animal,
-  name,
-  company,
-  title,
-  skills,
-}: {
-  readonly animal: AnimalCharacter | null | undefined;
-  readonly name: string | null;
-  readonly company: string | null;
-  readonly title: string | null;
-  readonly skills: readonly string[];
-}): ReactNode {
-  return (
-    <View className="flex-1 flex-row items-center gap-4">
-      {animal ? (
-        <Image
-          source={animalImageSource(animal)}
-          contentFit="cover"
-          style={{ width: 84, height: 84, borderRadius: 18 }}
-        />
-      ) : (
-        <View
-          className="h-[84px] w-[84px] items-center justify-center rounded-[18px]"
-          style={{ backgroundColor: Colors.cardSurface }}>
-          <ThemedText variant="headlineLarge" style={{ color: Colors.primaryMauve }}>
-            {profileInitial(name)}
-          </ThemedText>
-        </View>
-      )}
-
-      <View className="min-w-0 flex-1 gap-1.5">
-        {name ? (
-          <ThemedText variant="titleLarge" numberOfLines={1} style={{ color: ON_LIGHT }}>
-            {name}
-          </ThemedText>
-        ) : null}
-        {company ? (
-          <ThemedText variant="bodyMedium" numberOfLines={1} style={{ color: ON_LIGHT }}>
-            {company}
-          </ThemedText>
-        ) : null}
-        {title ? (
-          <ThemedText variant="caption" numberOfLines={1} style={{ color: ON_LIGHT }}>
-            {title}
-          </ThemedText>
-        ) : null}
-        {skills.length > 0 ? (
-          <View className="flex-row flex-wrap gap-1.5 pt-1">
-            {skills.map((skill) => (
-              <View
-                key={skill}
-                className="rounded-full px-2 py-1"
-                style={{ backgroundColor: Colors.cardSurface }}>
-                <ThemedText variant="caption" style={{ color: ON_LIGHT }}>
-                  {skill}
-                </ThemedText>
-              </View>
-            ))}
-          </View>
-        ) : null}
-      </View>
-    </View>
-  );
-}
+/** `.etch` — engraved lettering: pale steel type with a shadow under it. */
+const ETCH_TEXT = {
+  color: CardMetalColors.etch,
+  textShadowColor: CardMetalColors.etchShadow,
+  textShadowOffset: { width: 0, height: 1 },
+  textShadowRadius: 0,
+} as const;
 
 function CardSheen({ enabled }: { readonly enabled: boolean }): ReactNode {
   const reduceMotion = useReducedMotion();
@@ -225,114 +155,147 @@ function useCardMotion(isFlipped: boolean) {
 interface PresentCardVisualProps {
   readonly resolvedAccent: string;
   readonly enableGlow: boolean;
-  readonly selectedAnimal: AnimalCharacter | null;
-  readonly animal: AnimalCharacter | null | undefined;
   readonly name: string | null;
-  readonly company: string | null;
-  readonly title: string | null;
-  readonly skills: readonly string[];
-  readonly category: string;
-  readonly summary: string;
+  /** Printed under the name in mono — the page address this card hands over. */
   readonly displayUrl: string;
+  /** What the QR carries this time, e.g. "name + 2 fields". */
+  readonly summary: string;
+  readonly scanHint: string;
   readonly qrState: CardQrState;
   readonly flipLabel: string;
+  readonly physicalCardLabel: string;
+  readonly onOpenPhysicalCard: () => void;
 }
 
 export function PresentCardVisual(props: PresentCardVisualProps): ReactNode {
   const [isFlipped, setIsFlipped] = useState(false);
   const { tiltStyle, frontStyle, backStyle } = useCardMotion(isFlipped);
-  const activeAnimal = props.animal ?? props.selectedAnimal;
-  const gradientEnd = activeAnimal
-    ? `${ANIMAL_GRADIENT_END[activeAnimal]}99`
-    : `${props.resolvedAccent}4D`;
   const faceStyle = {
     position: 'absolute' as const,
     inset: 0,
     overflow: 'hidden' as const,
     borderRadius: CARD_RADIUS,
     borderWidth: 1,
-    borderColor: `${props.resolvedAccent}59`,
+    borderColor: CardMetalColors.faceBorder,
     backfaceVisibility: 'hidden' as const,
+  };
+  const toggleFlip = () => {
+    setIsFlipped((value) => !value);
   };
 
   return (
-    <Animated.View style={tiltStyle}>
-      <Pressable
-        accessibilityRole="button"
-        accessibilityLabel={props.flipLabel}
-        accessibilityState={{ expanded: isFlipped }}
-        onPress={() => {
-          setIsFlipped((value) => !value);
-        }}
-        style={{
-          height: CARD_HEIGHT,
-          borderRadius: CARD_RADIUS,
-          shadowColor: props.enableGlow ? props.resolvedAccent : Colors.text1,
-          shadowOpacity: props.enableGlow ? 0.34 : 0.22,
-          shadowRadius: props.enableGlow ? 24 : 22,
-          shadowOffset: { width: 0, height: 12 },
-          elevation: 8,
-        }}>
-        <Animated.View style={[faceStyle, frontStyle]}>
-          <LinearGradient
-            colors={[Colors.warmCream, gradientEnd]}
-            start={{ x: 0, y: 0 }}
-            end={{ x: 1, y: 1 }}
-            style={{ flex: 1, padding: 18 }}>
-            <CardSheen enabled={props.enableGlow} />
-            <View className="flex-row items-start justify-between gap-3">
-              <View
-                className="rounded-full px-3 py-1"
-                style={{ backgroundColor: props.resolvedAccent }}>
-                <ThemedText variant="caption" style={{ color: Colors.invertedButtonText }}>
-                  {props.category}
-                </ThemedText>
+    <View style={{ gap: 12 }}>
+      <Animated.View style={tiltStyle}>
+        <PressableScale
+          haptic="tap"
+          accessibilityRole="button"
+          accessibilityLabel={props.flipLabel}
+          accessibilityState={{ expanded: isFlipped }}
+          onPress={toggleFlip}
+          style={{
+            aspectRatio: CARD_ASPECT_RATIO,
+            borderRadius: CARD_RADIUS,
+            shadowColor: props.enableGlow ? props.resolvedAccent : Colors.text1,
+            shadowOpacity: props.enableGlow ? 0.34 : 0.22,
+            shadowRadius: props.enableGlow ? 24 : 22,
+            shadowOffset: { width: 0, height: 12 },
+            elevation: 8,
+          }}>
+          <Animated.View style={[faceStyle, frontStyle]}>
+            <LinearGradient
+              colors={CardMetalColors.frontStops}
+              locations={CardMetalColors.frontLocations}
+              start={{ x: 0, y: 0.39 }}
+              end={{ x: 1, y: 0.61 }}
+              style={{ flex: 1, paddingVertical: 15, paddingHorizontal: 16 }}>
+              <CardSheen enabled={props.enableGlow} />
+              {/* `.m-nfc` — the tap-to-exchange mark, quiet in the corner. */}
+              <View style={{ position: 'absolute', top: 14, right: 15, opacity: 0.55 }}>
+                <SfIcon name="wave.3.right" size={16} color={CardMetalColors.etch} />
               </View>
-              <SfIcon name="arrow.triangle.2.circlepath" size={18} color={ON_LIGHT} />
-            </View>
-            <CardIdentity
-              animal={props.animal}
-              name={props.name}
-              company={props.company}
-              title={props.title}
-              skills={props.skills}
-            />
-            <View className="flex-row items-end justify-between gap-3">
-              <View className="min-w-0 flex-1 gap-1">
-                <ThemedText variant="caption" style={{ color: ON_LIGHT }}>
-                  {props.summary}
+              {props.name !== null ? (
+                <ThemedText variant="titleLarge" numberOfLines={1} style={ETCH_TEXT}>
+                  {props.name}
                 </ThemedText>
-                <ThemedText variant="bodySmall" numberOfLines={1} style={{ color: ON_LIGHT }}>
-                  {props.displayUrl}
-                </ThemedText>
-              </View>
-              <CardQr state={props.qrState} />
-            </View>
-          </LinearGradient>
-        </Animated.View>
-        <Animated.View style={[faceStyle, backStyle]}>
-          <LinearGradient
-            colors={[Colors.warmCream, gradientEnd]}
-            start={{ x: 1, y: 0 }}
-            end={{ x: 0, y: 1 }}
-            style={{ flex: 1, alignItems: 'center', justifyContent: 'center', gap: 10, padding: 18 }}>
-            <CardSheen enabled={props.enableGlow} />
-            <CardQr state={props.qrState} />
-            <ThemedText variant="titleMedium" style={{ color: ON_LIGHT }}>
-              {props.name}
-            </ThemedText>
-            <ThemedText variant="bodySmall" numberOfLines={1} style={{ color: ON_LIGHT }}>
-              {props.displayUrl}
-            </ThemedText>
-            <View className="flex-row items-center gap-1">
-              <SfIcon name="arrow.triangle.2.circlepath" size={12} color={ON_LIGHT} />
-              <ThemedText variant="caption" style={{ color: ON_LIGHT }}>
-                {props.flipLabel}
+              ) : null}
+              <ThemedText
+                variant="caption"
+                numberOfLines={1}
+                ellipsizeMode="middle"
+                style={{ ...ETCH_TEXT, fontFamily: 'Menlo', opacity: 0.82, marginTop: 1 }}>
+                {props.displayUrl}
               </ThemedText>
-            </View>
-          </LinearGradient>
-        </Animated.View>
-      </Pressable>
-    </Animated.View>
+              {/* `.m-row` — pinned to the bottom edge of the card. */}
+              <View
+                className="flex-row items-end"
+                style={{ gap: 12, marginTop: 'auto' }}>
+                <CardQr state={props.qrState} />
+                <View className="min-w-0 flex-1">
+                  <ThemedText variant="bodySmall" numberOfLines={1} style={ETCH_TEXT}>
+                    {props.summary}
+                  </ThemedText>
+                  <ThemedText
+                    variant="caption"
+                    numberOfLines={1}
+                    style={{ ...ETCH_TEXT, opacity: 0.72, marginTop: 2 }}>
+                    {props.scanHint}
+                  </ThemedText>
+                </View>
+              </View>
+            </LinearGradient>
+          </Animated.View>
+          <Animated.View style={[faceStyle, backStyle]}>
+            <LinearGradient
+              colors={CardMetalColors.backStops}
+              locations={CardMetalColors.backLocations}
+              start={{ x: 1, y: 0.61 }}
+              end={{ x: 0, y: 0.39 }}
+              style={{
+                flex: 1,
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: 10,
+                padding: 18,
+              }}>
+              <CardSheen enabled={props.enableGlow} />
+              <ThemedText variant="caption" style={{ ...ETCH_TEXT, fontFamily: 'Menlo', letterSpacing: 2.2 }}>
+                CREDS.ID
+              </ThemedText>
+              <View style={{ opacity: 0.6 }}>
+                <SfIcon name="wave.3.right" size={24} color={CardMetalColors.etch} />
+              </View>
+              <ThemedText
+                variant="caption"
+                numberOfLines={1}
+                ellipsizeMode="middle"
+                style={{ ...ETCH_TEXT, fontFamily: 'Menlo', opacity: 0.6 }}>
+                {props.displayUrl}
+              </ThemedText>
+            </LinearGradient>
+          </Animated.View>
+        </PressableScale>
+      </Animated.View>
+
+      {/* `.card-acts` — two equal, quiet actions below the object. Keeping
+          these in ThemedButton preserves the app-wide hit target and haptics. */}
+      <View className="flex-row" style={{ gap: 8 }}>
+        <View style={{ flex: 1 }}>
+          <ThemedButton
+            fullWidth
+            variant="secondary"
+            label={props.flipLabel}
+            onPress={toggleFlip}
+          />
+        </View>
+        <View style={{ flex: 1 }}>
+          <ThemedButton
+            fullWidth
+            variant="secondary"
+            label={props.physicalCardLabel}
+            onPress={props.onOpenPhysicalCard}
+          />
+        </View>
+      </View>
+    </View>
   );
 }

@@ -3,6 +3,7 @@ import {
   enabledFieldsFromSharePreferences,
   type ShareFieldPreferences,
 } from '@/cards/solidarityQrTypes';
+import type { Preferences } from '@/settings/preferences';
 import type { BusinessCard, BusinessCardField, ProfileLink } from '@solidarity/shared';
 
 export type PresentCardState =
@@ -43,6 +44,43 @@ export type PresentCardPreferenceKey = Exclude<
   'shareProfileImage'
 >;
 
+export interface PresentCardPreset {
+  readonly name: string;
+  readonly preferenceKeys: readonly PresentCardPreferenceKey[];
+}
+
+const NO_PRESETS: readonly PresentCardPreset[] = [];
+
+/**
+ * The persisted key is deliberately optional while the Present package owns
+ * its preferences augmentation. A shared fallback keeps zustand's snapshot
+ * referentially stable before the first preset is saved.
+ */
+export function selectPresentCardPresets(
+  state: Preferences
+): readonly PresentCardPreset[] {
+  return state.presentCardPresets ?? NO_PRESETS;
+}
+
+export type PhysicalCardMaterial = 'steel' | 'blackTitanium' | 'brass';
+
+/**
+ * WP-B owns the Present-only preferences but cannot change the shared
+ * preferences module while the other tab packages are working in parallel.
+ * Optional augmentation keeps old `prefs:v1` payloads valid while routing all
+ * new writes through `usePreferences.set`, so they use the same MMKV-backed
+ * persistence and wipe behavior as the existing share toggles.
+ */
+declare module '@/settings/preferences' {
+  interface Preferences {
+    readonly presentCardPresets?: readonly PresentCardPreset[];
+    readonly presentPhysicalCardMaterial?: PhysicalCardMaterial;
+    readonly presentPhysicalCardEngraveName?: boolean;
+    readonly presentPhysicalCardEngraveUsername?: boolean;
+    readonly presentPhysicalCardEngraveQr?: boolean;
+  }
+}
+
 const CARD_FIELD_PREFERENCE: Readonly<
   Record<PresentCardOnlyField['field'], PresentCardPreferenceKey>
 > = {
@@ -62,6 +100,10 @@ const CARD_FIELD_ORDER = [
   'socialNetworks',
   'skills',
 ] as const satisfies readonly PresentCardOnlyField['field'][];
+
+export const PRESENT_CARD_PREFERENCE_KEYS = CARD_FIELD_ORDER.map(
+  (field) => CARD_FIELD_PREFERENCE[field]
+);
 
 export interface PresentCardStateInput {
   readonly detailsHydrated: boolean;

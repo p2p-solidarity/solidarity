@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'bun:test';
 
-import type { PassportReadResult } from '@solidarity/nitro-nfc-passport';
+import type { PassportReadResult } from '@solidarity/nitro-attest';
 
 import {
   PASSPORT_NOIR_VERSION,

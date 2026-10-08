@@ -9,11 +9,13 @@
  *   • Grid (2-col) or list of contact "ShoutoutUser" rows derived from the
  *     contact repository (mirrors ShoutoutChartService.users mapping).
  *   • Floating sakura compose FAB (bottom-right) → /shoutouts/new.
+ *
+ * Every touchable presses through `PressableScale` (crisp scale + haptic);
+ * callers that already fire their own haptic pass `haptic={false}`.
  */
 import { router } from 'expo-router';
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import {
-  Pressable,
   ScrollView,
   Text,
   TextInput,
@@ -22,6 +24,7 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { SakuraIcon } from '@/components/brand/SakuraIcon';
+import { PressableScale } from '@/components/common/PressableScale';
 import { DecorativeBlobs } from '@/components/decor/DecorativeBlobs';
 import { SfIcon } from '@/components/icons/SfIcon';
 import {
@@ -36,14 +39,10 @@ import {
 import { Colors } from '@/constants/Colors';
 import { useContactListDetail } from '@/contacts/repository';
 import { haptic } from '@/feedback/haptics';
+import { SCALE } from '@/feedback/motion';
 import { useTranslation } from '@/i18n';
 import { useShoutoutChartData, useShoutoutStore } from '@/shoutouts/store';
-import {
-  initials,
-  relativeDate,
-  verificationColor,
-  verificationIcon,
-} from '@/shoutouts/ui';
+import { GridCard, ListRow } from '@/shoutouts/ui';
 import type { Contact } from '@solidarity/shared';
 
 type DisplayMode = 'grid' | 'list';
@@ -61,143 +60,6 @@ const FILTER_OPTION_KEYS: Record<FilterOption, string> = {
   'Verified Only': 'shoutouts.filter.verifiedOnly',
   'Recently Added': 'shoutouts.filter.recentlyAdded',
 };
-
-function GridCard({
-  contact,
-  onPress,
-}: {
-  readonly contact: Contact;
-  readonly onPress: () => void;
-}): ReactNode {
-  const { t } = useTranslation();
-  const { businessCard: card } = contact;
-  const subtitle = [card.title, card.company].filter(Boolean).join(' · ');
-  return (
-    <Pressable
-      onPress={onPress}
-      accessibilityRole="button"
-      accessibilityLabel={t('shoutouts.openCard', { name: card.name })}
-      style={{ flex: 1, minWidth: '47%', height: 180 }}
-      className="bg-cardBg rounded-lg border border-divider p-3"
-    >
-      <View className="flex-row items-center justify-between">
-        <View
-          className="bg-text1 items-center justify-center"
-          style={{ width: 32, height: 32, borderRadius: 16 }}
-        >
-          <Text className="text-cardBg" style={{ fontSize: 12, fontWeight: '700' }}>
-            {initials(card.name)}
-          </Text>
-        </View>
-        <Text className="text-text3" style={{ fontSize: 10 }}>
-          {relativeDate(contact.lastInteraction ?? contact.receivedAt)}
-        </Text>
-      </View>
-      <View style={{ marginTop: 8 }}>
-        <Text
-          className="text-text1"
-          numberOfLines={1}
-          style={{ fontSize: 16, fontWeight: '500' }}
-        >
-          {card.name}
-        </Text>
-        {subtitle ? (
-          <Text
-            className="text-text2"
-            numberOfLines={1}
-            style={{ fontSize: 14, marginTop: 4 }}
-          >
-            {subtitle}
-          </Text>
-        ) : null}
-      </View>
-      <View style={{ flex: 1 }} />
-      <View className="flex-row items-center">
-        <SfIcon
-          name={verificationIcon(contact.verificationStatus)}
-          size={12}
-          color={verificationColor(contact.verificationStatus)}
-        />
-        <Text className="text-text3" style={{ fontSize: 10, marginLeft: 4 }}>
-          {contact.verificationStatus}
-        </Text>
-      </View>
-    </Pressable>
-  );
-}
-
-function ListRow({
-  contact,
-  onPress,
-}: {
-  readonly contact: Contact;
-  readonly onPress: () => void;
-}): ReactNode {
-  const { t } = useTranslation();
-  const { businessCard: card } = contact;
-  const subtitle = [card.title, card.company].filter(Boolean).join(' · ');
-  return (
-    <Pressable
-      onPress={onPress}
-      accessibilityRole="button"
-      accessibilityLabel={t('shoutouts.openCard', { name: card.name })}
-    >
-      <View style={{ height: 0.5, backgroundColor: Colors.divider }} />
-      <View className="flex-row" style={{ paddingVertical: 12 }}>
-        <View
-          className="bg-text1 items-center justify-center"
-          style={{ width: 32, height: 32, borderRadius: 16, marginRight: 6 }}
-        >
-          <Text className="text-cardBg" style={{ fontSize: 12, fontWeight: '700' }}>
-            {initials(card.name)}
-          </Text>
-        </View>
-        <View className="flex-1">
-          <View className="flex-row items-start justify-between">
-            <View className="flex-1" style={{ marginRight: 8 }}>
-              <Text
-                className="text-text1"
-                numberOfLines={1}
-                style={{ fontSize: 16, fontWeight: '500' }}
-              >
-                {card.name}
-              </Text>
-              {subtitle ? (
-                <Text
-                  className="text-text2"
-                  numberOfLines={1}
-                  style={{ fontSize: 14, marginTop: 2 }}
-                >
-                  {subtitle}
-                </Text>
-              ) : null}
-            </View>
-            <View className="items-end">
-              <Text className="text-text3" style={{ fontSize: 10 }}>
-                {relativeDate(contact.lastInteraction ?? contact.receivedAt)}
-              </Text>
-              <SfIcon
-                name={verificationIcon(contact.verificationStatus)}
-                size={10}
-                color={verificationColor(contact.verificationStatus)}
-              />
-            </View>
-          </View>
-          <View
-            style={{
-              height: 0.5,
-              backgroundColor: Colors.divider,
-              marginVertical: 8,
-            }}
-          />
-          <Text className="text-text3" numberOfLines={1} style={{ fontSize: 11 }}>
-            {(card.company?.length ?? 0) > 0 ? card.company : contact.verificationStatus}
-          </Text>
-        </View>
-      </View>
-    </Pressable>
-  );
-}
 
 export default function ShoutoutsHub(): ReactNode {
   const { t } = useTranslation();
@@ -285,10 +147,14 @@ export default function ShoutoutsHub(): ReactNode {
             className="bg-searchBg flex-row"
             style={{ borderRadius: 8, overflow: 'hidden' }}
           >
-            <Pressable
+            <PressableScale
               onPress={() => { setDisplayMode('grid'); }}
+              haptic="selection"
+              scaleTo={SCALE.icon}
               accessibilityRole="button"
+              accessibilityState={{ selected: displayMode === 'grid' }}
               accessibilityLabel={t('shoutouts.gridView')}
+              hitSlop={{ top: 7, bottom: 7 }}
               style={{
                 padding: 8,
                 backgroundColor:
@@ -296,11 +162,15 @@ export default function ShoutoutsHub(): ReactNode {
               }}
             >
               <SfIcon name="square.grid.2x2" size={14} color={Colors.text1} />
-            </Pressable>
-            <Pressable
+            </PressableScale>
+            <PressableScale
               onPress={() => { setDisplayMode('list'); }}
+              haptic="selection"
+              scaleTo={SCALE.icon}
               accessibilityRole="button"
+              accessibilityState={{ selected: displayMode === 'list' }}
               accessibilityLabel={t('shoutouts.listView')}
+              hitSlop={{ top: 7, bottom: 7 }}
               style={{
                 padding: 8,
                 backgroundColor:
@@ -308,34 +178,42 @@ export default function ShoutoutsHub(): ReactNode {
               }}
             >
               <SfIcon name="list.bullet" size={14} color={Colors.text1} />
-            </Pressable>
+            </PressableScale>
           </View>
 
-          <Pressable
+          <PressableScale
             onPress={() => {
               haptic('tap');
               setSheetFilters((prev) => ({ ...prev, searchQuery }));
               setShowFiltersSheet(true);
             }}
+            haptic={false}
+            scaleTo={SCALE.icon}
             accessibilityRole="button"
             accessibilityLabel={t('shoutouts.openFilters')}
-            style={{ marginLeft: 8, padding: 4 }}
+            hitSlop={{ top: 8, bottom: 8, left: 4, right: 4 }}
+            containerStyle={{ marginLeft: 8 }}
+            style={{ padding: 4 }}
           >
             <SfIcon
               name="line.3.horizontal.decrease.circle"
               size={20}
               color={Colors.text1}
             />
-          </Pressable>
+          </PressableScale>
 
-          <Pressable
+          <PressableScale
             onPress={onRefresh}
+            haptic={false}
+            scaleTo={SCALE.icon}
             accessibilityRole="button"
             accessibilityLabel={t('shoutouts.refresh')}
-            style={{ marginLeft: 8, padding: 4 }}
+            hitSlop={{ top: 8, bottom: 8, left: 4, right: 4 }}
+            containerStyle={{ marginLeft: 8 }}
+            style={{ padding: 4 }}
           >
             <SfIcon name="arrow.triangle.2.circlepath" size={20} color={Colors.text1} />
-          </Pressable>
+          </PressableScale>
         </View>
 
         <View className="flex-row items-center" style={{ marginTop: 4, marginLeft: 36 }}>
@@ -373,19 +251,25 @@ export default function ShoutoutsHub(): ReactNode {
             style={{ flex: 1, marginLeft: 8, color: Colors.text1, fontSize: 15 }}
           />
           {searchQuery.length > 0 ? (
-            <Pressable
+            <PressableScale
               onPress={() => { setSearchQuery(''); }}
+              haptic={false}
+              scaleTo={SCALE.icon}
               accessibilityRole="button"
               accessibilityLabel={t('shoutouts.clearSearch')}
+              hitSlop={15}
             >
               <SfIcon name="xmark.circle.fill" size={14} color={Colors.text2} />
-            </Pressable>
+            </PressableScale>
           ) : null}
-          <Pressable
+          <PressableScale
             onPress={() => { setShowFilterMenu((v) => !v); }}
+            haptic="selection"
             accessibilityRole="button"
+            accessibilityState={{ expanded: showFilterMenu }}
             accessibilityLabel={t('shoutouts.filterOptions')}
-            style={{ marginLeft: 12 }}
+            hitSlop={{ top: 14, bottom: 14 }}
+            containerStyle={{ marginLeft: 12 }}
           >
             <View className="flex-row items-center">
               <SfIcon
@@ -397,7 +281,7 @@ export default function ShoutoutsHub(): ReactNode {
                 {t(FILTER_OPTION_KEYS[filterOption])}
               </Text>
             </View>
-          </Pressable>
+          </PressableScale>
         </View>
 
         {showFilterMenu ? (
@@ -412,18 +296,21 @@ export default function ShoutoutsHub(): ReactNode {
             }}
           >
             {FILTER_OPTIONS.map((opt) => (
-              <Pressable
+              <PressableScale
                 key={opt}
                 onPress={() => {
                   setFilterOption(opt);
                   setShowFilterMenu(false);
                 }}
+                haptic="selection"
                 accessibilityRole="button"
+                accessibilityState={{ selected: opt === filterOption }}
                 accessibilityLabel={t(FILTER_OPTION_KEYS[opt])}
-                className="active:opacity-80"
                 style={{
                   paddingHorizontal: 14,
                   paddingVertical: 10,
+                  minHeight: 44,
+                  justifyContent: 'center',
                   backgroundColor:
                     opt === filterOption ? `${Colors.accentRose}1F` : 'transparent',
                 }}
@@ -431,7 +318,7 @@ export default function ShoutoutsHub(): ReactNode {
                 <Text className="text-text1" style={{ fontSize: 13 }}>
                   {t(FILTER_OPTION_KEYS[opt])}
                 </Text>
-              </Pressable>
+              </PressableScale>
             ))}
           </View>
         ) : null}
@@ -488,14 +375,14 @@ export default function ShoutoutsHub(): ReactNode {
         )}
       </ScrollView>
 
-      <Pressable
+      <PressableScale
         onPress={() => { router.push('/shoutouts/new'); }}
+        scaleTo={SCALE.tile}
         accessibilityRole="button"
         accessibilityLabel="Compose Sakura"
+        containerStyle={{ position: 'absolute', right: 24, bottom: 24 + insets.bottom }}
+        hitSlop={3}
         style={{
-          position: 'absolute',
-          right: 24,
-          bottom: 24 + insets.bottom,
           width: 50,
           height: 50,
           borderRadius: 25,
@@ -510,7 +397,7 @@ export default function ShoutoutsHub(): ReactNode {
         }}
       >
         <SakuraIcon size={20} color={Colors.cardBg} animating={isSakuraAnimating} />
-      </Pressable>
+      </PressableScale>
 
       <ShoutoutFiltersSheet
         visible={showFiltersSheet}

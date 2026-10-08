@@ -10,13 +10,11 @@ const source = (relativePath: string): string =>
   readFileSync(new URL(relativePath, import.meta.url), 'utf8');
 
 describe('technical scan-flow gate', () => {
-  it('recognises only OIDC and web-sign payloads as developer-only scanner input', () => {
+  it('recognises only OIDC payloads as developer-only scanner input', () => {
     for (const payload of [
       'openid4vp://authorize?client_id=https%3A%2F%2Fverifier.example&state=abc',
       'openid-vp://verify?vp_token=token&presentation_submission=submission',
       'openid-credential-offer://?credential_offer=%7B%7D',
-      'solidarity://websign?req=header.payload.signature',
-      'https://solidarity.gg/websign#req=header.payload.signature',
     ]) {
       expect(isDeveloperOnlyScanPayload(payload)).toBe(true);
     }
@@ -30,27 +28,24 @@ describe('technical scan-flow gate', () => {
     }
   });
 
-  it('requires an explicit web-sign request before hiding an HTTP websign path', () => {
+  it('never hides a webSign request — the Page flow owns it for every user (07-plan P3)', () => {
     for (const payload of [
+      'solidarity://websign?req=header.payload.signature',
+      'https://creds.id/websign#req=header.payload.signature',
+      'https://solidarity.gg/websign#req=header.payload.signature',
+      'https://example.com/websign#req=header.payload.signature',
       'https://example.com/websign',
       'https://example.com/websign#signed-page-fragment',
       'https://example.com/websign#req=',
     ]) {
       expect(isDeveloperOnlyScanPayload(payload)).toBe(false);
     }
-
-    expect(
-      isDeveloperOnlyScanPayload('https://example.com/websign#req=header.payload.signature'),
-    ).toBe(true);
-    expect(
-      isDeveloperOnlyScanPayload('solidarity://websign?req=header.payload.signature'),
-    ).toBe(true);
   });
 
   it('keeps only technical app deep-link kinds behind Developer Options', () => {
     expect(isDeveloperOnlyDeepLinkKind('oidc')).toBe(true);
     expect(isDeveloperOnlyDeepLinkKind('credentialOffer')).toBe(true);
-    expect(isDeveloperOnlyDeepLinkKind('webSign')).toBe(true);
+    expect(isDeveloperOnlyDeepLinkKind('webSign')).toBe(false);
     expect(isDeveloperOnlyDeepLinkKind('verifiedProfile')).toBe(false);
     expect(isDeveloperOnlyDeepLinkKind('card')).toBe(false);
   });

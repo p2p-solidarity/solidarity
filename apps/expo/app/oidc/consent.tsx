@@ -33,7 +33,7 @@ function urlFromQuery(q: string): string {
 
 export default function OidcConsentRoute() {
   const developerMode = usePreferences((state) => state.developerMode);
-  if (!developerMode) return <Redirect href="/settings/advanced" />;
+  if (!developerMode) return <Redirect href="/settings" />;
 
   return <OidcConsent />;
 }
