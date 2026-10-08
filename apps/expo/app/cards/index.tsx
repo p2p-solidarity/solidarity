@@ -58,10 +58,6 @@ export default function CardsIndexScreen(): ReactNode {
     router.push({ pathname: '/cards/edit', params: { id: card.id } });
   };
 
-  const goWalletPass = (card: CardManifestEntry): void => {
-    router.push({ pathname: '/cards/wallet-pass', params: { id: card.id } });
-  };
-
   const onShare = async (card: CardManifestEntry): Promise<void> => {
     try {
       const detail = await loadDetail(card.id);
@@ -123,7 +119,6 @@ export default function CardsIndexScreen(): ReactNode {
           setActionsCard(undefined);
         }}
         onEdit={goEdit}
-        onWalletPass={goWalletPass}
         onShare={onShare}
         onDelete={onDelete}
       />

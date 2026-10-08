@@ -23,7 +23,7 @@
 | 9 | sqc1 多頁 QR | `sqc1.<session>.<i>.<n>.<sha256>.<b64url>` | 分片框架（`shared/src/qr/chunking.ts`） | 由內層 payload 決定 | 幀 ≤2,950B · 重組 ≤256KiB · ≤512 片 | VP 出示、護照 show、webSign 回應 | `QrScanner.tsx` 先重組再進分類器 | **現行**（運輸層） |
 | 10 | passport_show_v1 | JSON 內含 `gg.solidarity.passport.show-presentation.v1` | JSON→`sce1:`→sqc1 | Noir ZK proof＋裝置簽名；nonce（challenge 或 time-bucket） | challenge 有效窗 | `PassportShowPresentation` | `handlePassportShowScan`（vk 釘死；ZK 模組缺席回 `zk-unavailable` 不降級） | **現行** |
 | 11 | webSign req／res | `solidarity://websign?req=`／`https://<product-host>/websign#req=`；web 端 QR 為裸 compact JWS | — | 會話 P-256（web 拋棄式）＋root 簽最終 record | req 效期 300s | web `WebSignPanel`；app 回應走 Nostr 為主、QR 為離線後備 | app `classifyWebSignScan`（dev-mode 閘） | **現行**（dev-mode） |
-| 12 | wallet-pass 匯入串 | `solidarity://contact?name=&job=&did=` | URL | 無 | — | `passBundle.ts:346-359`（pkpass 條碼＋app 內 QR＋剪貼簿） | **無** — `deeplink/parser.ts` 沒有 `contact` host 分支 | **斷裂**（發而不收；§6-1） |
+| 12 | ~~wallet-pass 匯入串~~ | ~~`solidarity://contact?name=&job=&did=`~~ | URL | 無 | — | **無**（wallet-pass 整組已刪，2026-10-08） | 無 | **已刪除**（§6-1） |
 | 13 | vCard | `BEGIN:VCARD` | vCard 3.0 文字 | 無 | — | 僅檔案分享（share sheet／AirDrop），**不進 QR** | 實際掃描路徑直接回 unknown（`envelopeHandler.ts:80-82`「no parser exists yet」）→ raw | 半死（§6-2） |
 | 14 | `SOLIDARITY_VC::`／`AIRMEISHI_VC::` | 前綴 | — | — | — | **無**（全 repo 無建構點） | 只有 `qrCodeManager.parseQrPayload` 認得——而那整個函式**零 caller**（僅自身與一個測試引用），本列與「vCard 分類為 card」都只存在於死碼裡 | 死分類器（§6-3） |
 
@@ -100,7 +100,7 @@
 
 ## 6. 斷裂與死碼清點（處置建議，皆 S 級）
 
-1. **wallet-pass `solidarity://contact`**（#12）：pkpass 條碼／app 內 QR／剪貼簿三處發射，parser 無 `contact` 分支 —— 自家 QR 自家讀不了。`/cards` 本身在 41 路由清點中屬無入口組 → 隨無入口路由一起裁（補 parser 分支或整組刪）。
+1. ~~**wallet-pass `solidarity://contact`**（#12）：pkpass 條碼／app 內 QR／剪貼簿三處發射，parser 無 `contact` 分支 —— 自家 QR 自家讀不了。~~ **已處置（2026-10-08）：整組刪**——wallet-pass 畫面、`components/walletpass/`、卡片動作表的 Wallet Pass 項一併移除，`solidarity://contact` 不再有發射點；signserver 同步拿掉 `/sign-pass`。`/cards` 列表本身仍屬無入口組，照「17 無入口路由」批次處理。
 2. **vCard**：`vCard.ts` 模組註解原寫「Used by the Share tab so the QR payload is a vCard」——實際只走檔案分享（註解已於 08-24 修正）；掃描端無解析器，直接 raw。決定要不要真的解析第三方 vCard QR。
 3. **`qrCodeManager.parseQrPayload` 整個函式是死碼**（零 caller，僅自身與 `crd1Envelope.test.ts` 引用）——`SOLIDARITY_VC::`／`AIRMEISHI_VC::` 分支、vCard→card 分類都只活在裡面。整個函式可刪或併回真掃描口。
 4. **掃描器不吃自家 deep link**：~~印成 QR 後在 app 內掃描顯示「無法讀取」~~ **已修（2026-08-25，§8-D 裁決）**——finalize 新增「認得就轉交 deeplink router」分支（僅 card／groupInvite／pear 三種）。

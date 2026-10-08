@@ -267,7 +267,7 @@ globals. On that runtime:
 - ✅ Hand results back to JS via **SharedValues** (the one channel shared across
   runtimes), drained by a JS-thread poll. See `MRZCameraStep.tsx`
   (`acceptSeq`/`errorSeq` channel + 100 ms drain). `scheduleOnRN` IS fine on the
-  UI runtime (gestures/animations, e.g. `FocusedCardView.tsx`) — the ban is
+  UI runtime (gestures/animations, e.g. `SlideUpSheet.tsx`) — the ban is
   async-runner only.
 
 ### Native (Nitro / Vision) rules

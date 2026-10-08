@@ -4,8 +4,9 @@
  * `sha256Bytes` mirrors Swift `SHA256.hash(data:)` — passport SOD hashing,
  * JWT digest, identity commitment, etc.
  *
- * `sha1Bytes` mirrors Swift `Insecure.SHA1.hash(data:)` — only used for
- * Apple Wallet pass manifest checksums (PassKit hardcodes SHA-1 per spec).
+ * `sha1Bytes` mirrors Swift `Insecure.SHA1.hash(data:)`. Its one caller,
+ * the Apple Wallet pass manifest (PassKit hardcodes SHA-1), was removed
+ * with the wallet-pass builder; kept as public `@solidarity/shared` API.
  * Do not use for new protocols.
  */
 import { sha256 } from '@noble/hashes/sha2.js';
