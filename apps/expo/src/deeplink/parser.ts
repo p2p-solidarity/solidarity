@@ -6,7 +6,7 @@
 import { DEFAULT_HANDLE_RESOLVERS, matchHandleResolver, resolveDidKey } from '@solidarity/shared';
 
 import { WEBSIGN_DEEPLINK_HOST, WEBSIGN_REQUEST_PARAM } from '../websign/transport';
-import { isProductHost, isVerifiedDomain } from './domainVerification';
+import { isProductHost, isPublicPageHost, isVerifiedDomain } from './domainVerification';
 
 export type DeepLinkRoute =
   | { readonly kind: 'card'; readonly cardId: string }
@@ -28,8 +28,7 @@ export type DeepLinkRoute =
 const NPUB_RE = /^npub1[023456789acdefghjklmnpqrstuvwxyz]+$/u;
 const MAX_NPUB_LENGTH = 90;
 
-const UUID_RE =
-  /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/u;
+const UUID_RE = /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/u;
 
 /**
  * A real did:key:z… (P-256) is ~58 chars (`did:key:z` + base58 of 35
@@ -67,12 +66,12 @@ export function isValidPearDid(did: string): boolean {
 }
 
 function parseVerifiedHandleRoute(
-  productHost: boolean,
+  publicPageHost: boolean,
   segments: readonly string[],
   hash: string
 ): DeepLinkRoute | null {
   const segment = segments[0];
-  if (!productHost || hash.length > 0 || segments.length !== 1 || !segment?.startsWith('@')) {
+  if (!publicPageHost || hash.length > 0 || segments.length !== 1 || !segment?.startsWith('@')) {
     return null;
   }
 
@@ -146,7 +145,7 @@ function parseVerifiedDomainRoute(url: URL): DeepLinkRoute | null {
   if (productHost && segments.length === 1 && segments[0] === WEBSIGN_DEEPLINK_HOST) {
     return parseWebSignDomainRoute(url.hash);
   }
-  const handleRoute = parseVerifiedHandleRoute(productHost, segments, url.hash);
+  const handleRoute = parseVerifiedHandleRoute(isPublicPageHost(url.host), segments, url.hash);
   if (handleRoute !== null) return handleRoute;
   // Verified Page link (1.3.3 Task A2.3, US-11): `https://solidarity.gg/#<fragment>`
   // — the fragment never leaves the device over the network (01-spec §1/§8),

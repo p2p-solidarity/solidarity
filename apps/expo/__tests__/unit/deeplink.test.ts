@@ -78,6 +78,11 @@ describe('parseDeepLink', () => {
     expect(parseDeepLink('https://creds.id/c/f47ac10b-58cc-4372-a567-0e02b2c3d479').kind).toBe(
       'unknown'
     );
+    expect(
+      parseDeepLink(
+        'https://creds.id/pear/did:key:zDnaeuchQNqLi4x1P85fs3QsiMPahCH2snwHU4SaV6MQnan2Q'
+      ).kind
+    ).toBe('unknown');
   });
 
   it('treats a verified-domain https link with no hash as unknown, not verifiedProfile', () => {
@@ -95,6 +100,13 @@ describe('parseDeepLink', () => {
       expect(route.kind).toBe('verifiedHandle');
       if (route.kind === 'verifiedHandle') expect(route.handle).toBe(expectedHandle);
     }
+  });
+
+  it('parses creds.id /@handle links', () => {
+    expect(parseDeepLink('https://creds.id/@alice.bsky.social')).toEqual({
+      kind: 'verifiedHandle',
+      handle: 'alice.bsky.social',
+    });
   });
 
   it('does not route /@handle on a trusted-but-non-product host', () => {
@@ -124,7 +136,9 @@ describe('parseDeepLink', () => {
     expect(parseDeepLink('https://solidarity.gg/#nostr:not-an-npub').kind).toBe('unknown');
     expect(parseDeepLink('https://solidarity.gg/#nostr:').kind).toBe('unknown');
     // An overlong tail (DoS guard) is also rejected.
-    expect(parseDeepLink(`https://solidarity.gg/#nostr:npub1${'q'.repeat(200)}`).kind).toBe('unknown');
+    expect(parseDeepLink(`https://solidarity.gg/#nostr:npub1${'q'.repeat(200)}`).kind).toBe(
+      'unknown'
+    );
   });
 
   it('still prefers the /c/<uuid> card route over a Verified Page fragment on the same host', () => {
@@ -207,18 +221,18 @@ describe('parseDeepLink', () => {
   it('does NOT route pear/card links on the other allowlisted identity hosts', () => {
     for (const host of ['apple.com', 'google.com', 'microsoft.com', 'linkedin.com']) {
       expect(parseDeepLink(`https://${host}/pear/${REAL_DID}`).kind).toBe('unknown');
-      expect(
-        parseDeepLink(`https://${host}/c/f47ac10b-58cc-4372-a567-0e02b2c3d479`).kind
-      ).toBe('unknown');
+      expect(parseDeepLink(`https://${host}/c/f47ac10b-58cc-4372-a567-0e02b2c3d479`).kind).toBe(
+        'unknown'
+      );
     }
   });
 
   it('still routes pear/card links on both product hosts', () => {
     for (const host of ['solidarity.gg', 'airmeishi.app']) {
       expect(parseDeepLink(`https://${host}/pear/${REAL_DID}`).kind).toBe('pear');
-      expect(
-        parseDeepLink(`https://${host}/c/f47ac10b-58cc-4372-a567-0e02b2c3d479`).kind
-      ).toBe('card');
+      expect(parseDeepLink(`https://${host}/c/f47ac10b-58cc-4372-a567-0e02b2c3d479`).kind).toBe(
+        'card'
+      );
     }
   });
 

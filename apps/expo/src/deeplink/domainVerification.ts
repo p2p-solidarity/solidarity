@@ -69,3 +69,24 @@ export function isProductHost(host: string): boolean {
   }
   return false;
 }
+
+/**
+ * Hosts that serve public pages (`/@<handle>`) but must not trigger the
+ * private routes (card connect, Pear connect, websign) — creds.id, the
+ * product domain the app claims for Universal Links / App Links.
+ */
+const PUBLIC_PAGE_HOSTS: ReadonlySet<string> = new Set<string>(['creds.id']);
+
+/**
+ * Returns true when `host` may open a `/@<handle>` public page in the app:
+ * any product host, plus the public-page-only hosts above.
+ */
+export function isPublicPageHost(host: string): boolean {
+  if (isProductHost(host)) return true;
+  if (!host) return false;
+  const lower = host.toLowerCase();
+  for (const root of PUBLIC_PAGE_HOSTS) {
+    if (matchesWildcard(lower, root)) return true;
+  }
+  return false;
+}
