@@ -86,11 +86,53 @@
           "data": [
             {
               "scheme": "https",
-              "host": "solidarity.gg"
+              "host": "solidarity.gg",
+              "path": "/"
             },
             {
               "scheme": "https",
-              "host": "creds.id"
+              "host": "solidarity.gg",
+              "pathPrefix": "/@"
+            },
+            {
+              "scheme": "https",
+              "host": "solidarity.gg",
+              "pathPrefix": "/c/"
+            },
+            {
+              "scheme": "https",
+              "host": "solidarity.gg",
+              "pathPrefix": "/pear/"
+            },
+            {
+              "scheme": "https",
+              "host": "solidarity.gg",
+              "path": "/websign"
+            },
+            {
+              "scheme": "https",
+              "host": "solidarity.gg",
+              "path": "/oauth/atproto/callback"
+            }
+          ],
+          "category": [
+            "BROWSABLE",
+            "DEFAULT"
+          ],
+          "autoVerify": true
+        },
+        {
+          "action": "VIEW",
+          "data": [
+            {
+              "scheme": "https",
+              "host": "creds.id",
+              "path": "/"
+            },
+            {
+              "scheme": "https",
+              "host": "creds.id",
+              "pathPrefix": "/@"
             }
           ],
           "category": [
